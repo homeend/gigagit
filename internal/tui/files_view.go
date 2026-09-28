@@ -784,13 +784,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.sel = 0
 			return m, nil
 		}
-		if st := m.filesReview; st != nil && st.back.Hash != "" {
-			return m.openChangedFiles(st.back) // opened from this commit's @notes/: back to its files
-		}
-		ret, parked := m.filesReturnFocus, m.filesReturnLayers
-		m = m.closeFilesView()
-		m.focus = ret                             // return to the panel that opened the view (Tags/Reflog/Commits/…)
-		return m.restoreParkedLayers(parked), nil // …and to the popup that opened it, when one did
+		return m.leaveReviewView()
 	case "l":
 		ret, parked := m.filesReturnFocus, m.filesReturnLayers
 		m = m.closeFilesView()

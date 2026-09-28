@@ -222,8 +222,9 @@ func reviewReadOnlyNotice() string {
 }
 
 // reviewOverviewPopup is the review's overview: its markdown rendered, its
-// meta, and the notes the tree cannot place ("Other notes") — enter on one
-// opens that file at the commit; y copies the overview's markdown.
+// meta, and the notes the tree cannot place ("Other notes"). It is prose to
+// read, so it has no row cursor; o lists the other notes to open one, y copies
+// the overview's markdown.
 type reviewOverviewPopup struct {
 	*contentPopup
 	st *reviewViewState
@@ -237,7 +238,11 @@ func (m Model) openReviewOverview() (Model, tea.Cmd) {
 	}
 	cp := newContentPopup(i18n.T("Review: %s", reviewLabel(st.review)), reviewOverviewLines(st))
 	cp.mode = modeWrap // prose
-	cp.footer = i18n.T("[y] copy  [enter] open an other note's file")
+	cp.noCursor = true
+	cp.footer = i18n.T("[y] copy")
+	if n := len(st.other); n > 0 {
+		cp.footer += "  " + i18n.T("[o] other notes (%d)", n)
+	}
 	return m.pushLayer(&reviewOverviewPopup{contentPopup: cp, st: st}), nil
 }
 
@@ -251,13 +256,24 @@ func reviewOverviewLines(st *reviewViewState) []contentLine {
 	}
 	if len(st.other) > 0 {
 		out = append(out, contentLine{text: ""}, contentLine{text: i18n.T("Other notes"), heading: true})
-		for _, o := range st.other {
-			line := fmt.Sprint(o.Range[0])
-			if o.Side == model.NoteSideOld {
-				line = "-" + line
-			}
-			out = append(out, contentLine{text: "  " + o.Path + ":" + line + " — " + sanitizeLine(o.Summary), path: o.Path})
+		for _, l := range reviewOtherNoteLines(st) {
+			l.text = "  " + l.text
+			out = append(out, l)
 		}
+	}
+	return out
+}
+
+// reviewOtherNoteLines is one "path:line — summary" row per note the tree
+// cannot place, carrying its path.
+func reviewOtherNoteLines(st *reviewViewState) []contentLine {
+	out := make([]contentLine, 0, len(st.other))
+	for _, o := range st.other {
+		line := fmt.Sprint(o.Range[0])
+		if o.Side == model.NoteSideOld {
+			line = "-" + line
+		}
+		out = append(out, contentLine{text: o.Path + ":" + line + " — " + sanitizeLine(o.Summary), path: o.Path})
 	}
 	return out
 }
@@ -276,13 +292,34 @@ func (p *reviewOverviewPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		switch msg.String() {
 		case "y":
 			return m, m.copyToClipboardCmd(i18n.T("copied the review overview"), p.st.review.Doc.Overview)
-		case "enter":
-			vis := p.visible()
-			if p.sel >= 0 && p.sel < len(vis) && vis[p.sel].path != "" {
-				return m.openFileAtCommit(p.st.tip, vis[p.sel].path)
+		case "o":
+			if len(p.st.other) == 0 {
+				return m, nil
 			}
-			return m, nil
+			cp := newContentPopup(i18n.T("Other notes"), reviewOtherNoteLines(p.st))
+			cp.footer = i18n.T("[enter] open the file at the reviewed commit")
+			return m.pushLayer(&reviewOtherNotesPopup{contentPopup: cp, tip: p.st.tip}), nil
+		case "enter":
+			return m, nil // prose: nothing to pick
 		}
+	}
+	return p.contentPopup.update(m, msg)
+}
+
+// reviewOtherNotesPopup lists the review's notes the tree cannot place (a
+// path outside the reviewed change); enter opens that file at the commit.
+type reviewOtherNotesPopup struct {
+	*contentPopup
+	tip string
+}
+
+func (p *reviewOtherNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if !p.typing && msg.String() == "enter" {
+		vis := p.visible()
+		if p.sel >= 0 && p.sel < len(vis) && vis[p.sel].path != "" {
+			return m.openFileAtCommit(p.tip, vis[p.sel].path)
+		}
+		return m, nil
 	}
 	return p.contentPopup.update(m, msg)
 }

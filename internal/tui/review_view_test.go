@@ -368,3 +368,67 @@ func TestOpenReviewSaysItIsOpening(t *testing.T) {
 		t.Fatalf("status still %q after it opened", m.statusMsg)
 	}
 }
+
+// The overview is prose to read, not rows to pick: no "> " cursor and no
+// reverse-video band over its first paragraph.
+func TestReviewOverviewHasNoCursor(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	view := ansi.Strip(m.View())
+	if !strings.Contains(view, "Looks fine, see A.") {
+		t.Fatalf("overview not shown:\n%s", view)
+	}
+	for _, l := range strings.Split(view, "\n") {
+		if strings.Contains(l, "> Overview") || strings.Contains(l, "> Looks fine") {
+			t.Fatalf("a row cursor sits in the overview: %q", l)
+		}
+	}
+	if !strings.Contains(view, "[o] other notes (1)") {
+		t.Fatalf("footer lacks the other-notes key:\n%s", view)
+	}
+}
+
+// o lists the notes the tree cannot place; enter on one opens its file at the
+// reviewed commit, esc goes back to the overview.
+func TestReviewOverviewOtherNotesKey(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	m, _ = updateKey(m, "o")
+	p := layerOf[*reviewOtherNotesPopup](m)
+	if p == nil {
+		t.Fatalf("o: top %T, want the other-notes list", m.topLayer())
+	}
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "> zzz.go:1 — not in this commit") {
+		t.Fatalf("other-notes list lacks the selected note:\n%s", view)
+	}
+	m, _ = updateKey(m, "esc")
+	if _, ok := m.topLayer().(*reviewOverviewPopup); !ok {
+		t.Fatalf("esc from the list: top %T, want the overview", m.topLayer())
+	}
+	m, _ = updateKey(m, "o")
+	m, _ = updateKey(m, "enter")
+	if fv, ok := m.topLayer().(*fileViewer); !ok || fv.path != "zzz.go" {
+		t.Fatalf("enter on the note: top %T, want zzz.go's viewer", m.topLayer())
+	}
+}
+
+// With nothing the tree cannot place, o does nothing and the footer offers it not.
+func TestReviewOverviewNoOtherNotes(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, `{"version":1,"summary":"All good.","files":[]}`)
+	m, cmd := m.openReview(id, "Review")
+	m = drainCmds(t, m, cmd)
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	if strings.Contains(ansi.Strip(m.View()), "[o]") {
+		t.Fatal("footer offers [o] with no other notes")
+	}
+	m, _ = updateKey(m, "o")
+	if layerOf[*reviewOtherNotesPopup](m) != nil {
+		t.Fatal("o opened an empty list")
+	}
+}

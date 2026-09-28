@@ -1437,6 +1437,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil // the window closed before the list arrived
 	case allNotesMsg:
 		return m.onAllNotes(msg)
+	case storedDeletedMsg:
+		return m.onStoredDeleted(msg)
 	case remoteHeadNamesMsg:
 		p := layerOf[*remoteHeadsPopup](m)
 		if p == nil || msg.gen != m.loadGen {

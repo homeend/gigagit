@@ -323,6 +323,9 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
 		return m.popLayer(), nil
+	case tea.KeyCtrlD: // delete the review or thread under the cursor (asks first)
+		u, cmd := m.allNotesDelete(p)
+		return u.(Model), cmd
 	case tea.KeyHome:
 		p.sel = 0
 	case tea.KeyEnd:
@@ -584,14 +587,16 @@ func (p *allNotesPopup) box(m Model) string {
 	now := time.Now()
 	p.tipFull = ""
 
-	hints := wrapParts([]string{
+	keys := []string{
 		i18n.T("[↑/↓] move"),
 		i18n.T("[enter] open / fold"),
 		i18n.T("[←/→] fold"),
-		i18n.T("type to filter"),
-		i18n.T("[ctrl+t] fullscreen"),
-		i18n.T("[esc] close"),
-	}, textW, "  ")
+	}
+	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) && (vis[p.sel].kind == anNote || vis[p.sel].kind == anReview) {
+		keys = append(keys, i18n.T("[ctrl+d] delete"))
+	}
+	keys = append(keys, i18n.T("type to filter"), i18n.T("[ctrl+t] fullscreen"), i18n.T("[esc] close"))
+	hints := wrapParts(keys, textW, "  ")
 
 	header := i18n.T("All notes")
 	if n := p.count(); n > 0 {
