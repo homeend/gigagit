@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -211,5 +212,60 @@ func TestRerootWriteGuard(t *testing.T) {
 	}
 	if code := postJSON(t, ts, "/api/reroot", rerootBody(dir), "application/json", "http://evil.example", nil); code != http.StatusForbidden {
 		t.Errorf("cross-origin = %d, want 403", code)
+	}
+}
+
+type hostedResp struct {
+	Hosted bool `json:"hosted"`
+}
+
+func TestRepoInfoReportsHosted(t *testing.T) {
+	t.Parallel()
+	srv := New(domain.Open(newRepoDir(t, 1)))
+	t.Cleanup(srv.Close)
+	ts := serve(t, srv)
+	var info hostedResp
+	getJSON(t, ts, "/api/repo", &info)
+	if info.Hosted {
+		t.Fatal("a plain server is not hosted")
+	}
+	srv.hosted = true
+	getJSON(t, ts, "/api/repo", &info)
+	if !info.Hosted {
+		t.Fatal("hosted must be reported")
+	}
+}
+
+func TestRerootEndpointRefusedWhileHosted(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 1)
+	srv := New(domain.Open(dir))
+	srv.hosted = true
+	t.Cleanup(srv.Close)
+	ts := serve(t, srv)
+	code, out := postJSONRaw(t, ts, "/api/reroot", rerootBody(dir))
+	if code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", code)
+	}
+	if !strings.Contains(out["error"], "terminal owns") {
+		t.Fatalf("error = %q, want the terminal named as the owner", out["error"])
+	}
+}
+
+func TestHandleRerootUsesTheOpener(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 2)
+	wt := addWorktree(t, dir, "side")
+	srv := New(domain.Open(dir))
+	t.Cleanup(srv.Close)
+	var opened []string
+	srv.opener = func(p string) *domain.Service { opened = append(opened, p); return domain.Open(p) }
+	ts := serve(t, srv)
+	var out repoResp
+	if code := postJSON(t, ts, "/api/reroot", rerootBody(wt), "application/json", "", &out); code != http.StatusOK {
+		t.Fatalf("reroot code = %d", code)
+	}
+	if len(opened) != 1 || opened[0] != wt {
+		t.Fatalf("opener calls = %v, want [%s]", opened, wt)
 	}
 }

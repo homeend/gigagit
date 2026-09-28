@@ -740,6 +740,7 @@ $("conflict-discard").addEventListener("click", () => {
 async function loadRepo() {
   const repo = await getJSON("/api/repo");
   state.repo = repo; // {name, worktree, branch} — the palette repo-picker filters out the served root
+  state.hosted = !!repo.hosted; // the terminal owns the repo: no page-side switching
   $("repo-name").textContent = repo.name;
   $("repo-branch").textContent = repo.branch;
   $("repo-worktree").textContent = repo.worktree;

@@ -734,8 +734,9 @@ function showWorktreeMenu(w, x, y) {
     items.push({ label: "copy branch name", act: () => copyText(w.branch, "branch name " + w.branch) });
   }
   // Every row except the served worktree can be switched to (the same
-  // exemption the remove row uses).
-  if (!(state.worktree && w.path === state.worktree)) {
+  // exemption the remove row uses) — unless a TUI hosts this page and owns
+  // the switch.
+  if (!state.hosted && !(state.worktree && w.path === state.worktree)) {
     items.unshift({ label: "switch here", act: () => doReroot(w.path) });
   }
   // The served worktree's row gets no remove (the engine would refuse it

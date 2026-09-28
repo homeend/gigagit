@@ -75,7 +75,10 @@ function paletteCommands() {
   ];
   // A feature preflight turned off has nothing to open — the entry point is
   // removed rather than left to fail on click.
-  return featureDisabled("versions") ? rows.filter((r) => r.label !== "branch versions…") : rows;
+  // A TUI-hosted page has no switch of its own: the terminal owns the repo.
+  const hostedHidden = (r) => state.hosted && (r.label === "switch repo…" || r.label === "open repo (path)…");
+  const out = rows.filter((r) => !hostedHidden(r));
+  return featureDisabled("versions") ? out.filter((r) => r.label !== "branch versions…") : out;
 }
 
 
