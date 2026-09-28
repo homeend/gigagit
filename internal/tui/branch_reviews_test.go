@@ -36,8 +36,13 @@ func TestBranchRowsShowReviewSubRows(t *testing.T) {
 	if !strings.Contains(rows[1], "feature ◆1") {
 		t.Fatalf("feature row %q lacks the ◆1 marker", rows[1])
 	}
-	if !strings.Contains(rows[2], "└ ◆") || !strings.Contains(rows[2], "Claude Code") || !strings.Contains(rows[2], "Review: feature") {
-		t.Fatalf("review row %q", rows[2])
+	// "Review: <date> <agent>", indented under the branch name.
+	created := m.noteCounts.Reviews[0].Created.Local().Format("2006-01-02 15:04")
+	if want := "  └ Review: " + created + " Claude Code"; !strings.HasSuffix(strings.TrimRight(rows[2], " "), want) {
+		t.Fatalf("review row %q, want it to end %q", rows[2], want)
+	}
+	if name, sub := strings.Index(rows[1], "feature"), strings.Index(rows[2], "└"); sub <= name {
+		t.Fatalf("review row not indented past the branch name:\n%s\n%s", rows[1], rows[2])
 	}
 }
 
@@ -72,7 +77,7 @@ func TestBranchReviewRowFollowsItsBranchUnderAFilter(t *testing.T) {
 	m := reviewBranchesModel(t)
 	m.filterQuery, m.filterPanel = "feat", panelBranches
 	rows, _ := m.panelView(panelBranches)
-	if len(rows) != 2 || !strings.Contains(rows[1], "Review: feature") {
+	if len(rows) != 2 || !strings.Contains(rows[1], "└ Review:") {
 		t.Fatalf("filtered rows %q, want feature and its review", rows)
 	}
 }

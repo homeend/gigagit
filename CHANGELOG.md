@@ -66,6 +66,8 @@ branches, and the web UI.
 - **A commit's reviews** are listed under a `Reviews` heading as
   `◆ 2026-09-28 18:12 · Claude Code · Review: …` instead of a fake
   `R  review-<date>-<id>.md` file under `@notes/` (View all notes too).
+- **A Branches review sub-row** reads `└ Review: 2026-09-28 18:12 Claude Code`,
+  set in under the branch name (no age, no title).
 - **Opening a review** shows an "Opening the review…" box that holds the keys
   until it opens (esc cancels) — the read takes seconds on a slow disk.
 - **esc from a review opened from a commit's files** lands on that file tree,

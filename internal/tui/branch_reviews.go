@@ -2,7 +2,6 @@ package tui
 
 import (
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -33,18 +32,18 @@ func sameCommit(full, h string) bool {
 	return h != "" && len(h) >= 7 && strings.HasPrefix(full, h)
 }
 
-// branchReviewRowBody is "└ ◆ 2h · Claude Code · Review: feature"; the
-// Branches tab indents it to its gutter, like a session sub-row.
-func branchReviewRowBody(r domain.ReviewHead, now time.Time) string {
-	var parts []string
+// branchReviewRowBody is "  └ Review: 2026-09-28 18:12 Claude Code": the
+// Branches tab puts it at its gutter, and the two leading spaces set it in
+// under the branch name, below any session sub-rows' └.
+func branchReviewRowBody(r domain.ReviewHead) string {
+	parts := []string{i18n.T("Review:")}
 	if !r.Created.IsZero() {
-		parts = append(parts, coarseAgo(now.Sub(r.Created)))
+		parts = append(parts, r.Created.Local().Format("2006-01-02 15:04"))
 	}
 	if a := strings.TrimSpace(r.Agent); a != "" {
 		parts = append(parts, sanitizeLine(a))
 	}
-	parts = append(parts, sanitizeLine(r.Summary))
-	return "└ ◆ " + strings.Join(parts, " · ")
+	return "  └ " + strings.Join(parts, " ")
 }
 
 func (m Model) reviewHead(id string) (domain.ReviewHead, bool) {
