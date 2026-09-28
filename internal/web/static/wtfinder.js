@@ -10,12 +10,12 @@
 // files pane and #wtf-preview in the diff pane over whatever stage is up, and
 // hides the panes' own children without touching them — esc restores the
 // stage exactly as it was.
-import { $, charWidth, elidePath, esc, getJSON, postJSON, state } from "./core.js";
+import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, footOwned, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer } from "./layers.js";
 import { copyPathRows, renderCell } from "./files.js";
 import { copyFileLink, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
-import { openViewer, openWorktreeFileDiff } from "./viewer.js";
+import { imageHTML, openViewer, openWorktreeFileDiff } from "./viewer.js";
 import { opLine } from "./ops.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 import { registerHelp } from "./menus.js";
@@ -76,7 +76,16 @@ function wtStampChanged(shown, now) {
 function wtPlaceholder(body, n) {
   if (body.missing) return "(file deleted on disk)";
   if (body.too_large) return "(file too large to preview)";
+  if (body.binary) return body.image ? "" : `(binary file, ${fmtBytes(body.size || 0)} — not shown)`;
   return n ? "" : "(empty file)";
+}
+
+// wtImage is the image the preview body describes, or null (viewer.js's
+// imageOf, at the working tree).
+function wtImage(body, path) {
+  if (!body.binary || !body.image) return null;
+  const url = "/api/file-raw?src=worktree&path=" + encodeURIComponent(path) + (body.stamp ? "&stamp=" + encodeURIComponent(body.stamp) : "");
+  return { url, info: `${body.image} image ${body.width}×${body.height}, ${fmtBytes(body.size || 0)}` };
 }
 
 // wtActions is the action list of a row (enter / . / right-click): the git
@@ -325,7 +334,7 @@ async function showPreview(gen, path, keep, stamp) {
   if (!wtf.on || !wtPreviewFresh(gen, previewGen, path, (selected() || {}).path)) return;
   previewStamp = body.stamp || "";
   const lines = body.lines || [];
-  paintPreview(path, lines, wtPlaceholder(body, lines.length), keep);
+  paintPreview(path, lines, wtPlaceholder(body, lines.length), keep, wtImage(body, path));
 }
 
 // checkStamp re-stats the previewed file and reloads it when it moved (the
@@ -356,7 +365,7 @@ async function checkStamp() {
 
 // paintPreview draws path's lines (or the placeholder) at the top — or, with
 // keep, where the preview was scrolled; path "" empties the pane.
-function paintPreview(path, lines, placeholder, keep) {
+function paintPreview(path, lines, placeholder, keep, image) {
   previewPath = path;
   if (!path) previewStamp = "";
   paintPTitle(path);
@@ -364,6 +373,7 @@ function paintPreview(path, lines, placeholder, keep) {
   const at = { top: body.scrollTop, left: body.scrollLeft };
   if (!path) body.innerHTML = "";
   else if (placeholder) body.innerHTML = `<div class="notice">${esc(placeholder)}</div>`;
+  else if (image) body.innerHTML = imageHTML(image);
   else
     body.innerHTML = lines
       .map((l, i) => `<div class="vline"><span class="vno">${i + 1}</span><span class="vtext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`)

@@ -1662,3 +1662,6 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #wtf-body { flex: 1; min-height: 0; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 #wtf-body:focus { outline: none; }
 #wtf-body .notice { color: var(--dim); padding: 6px 12px; }
+
+/* An image file in the viewer / F preview: scaled to the pane, never wider. */
+.vimg { display: block; max-width: 100%; height: auto; margin: 6px 0 0 0; }

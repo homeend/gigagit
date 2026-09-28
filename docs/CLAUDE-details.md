@@ -1186,6 +1186,19 @@ for a doc in no frame routes via `openFiles.findTag` (every worktree — the
 (`internal/filewatch`, dir watches + exact-path filter) is only a WAKE-UP —
 an event zeroes `d.checked` and polls; built lazily off-thread only when
 `watchSupported`, closed with the last watched doc and on `reRoot`.
+**Web binary/image previews (2026-09-28):** `handleFileContent` runs
+`domain.IsBinary` before `contentRows` → `fileContentBody{Binary, Size}` plus
+`Image/Width/Height` from `termimg.Probe` (header only); `handleFileRaw`
+(`GET /api/file-raw`, same src/rev/path validation, `readVersion`) serves
+IMAGES ONLY (415 otherwise) with `image/<kind>`, nosniff, no-store;
+`versionLines` (steer) treats binary as nothing to land on. JS: `fmtBytes` in
+core.js; viewer.js `placeholderFor`/`imageOf`/`imageHTML` (exported;
+wtfinder.js reuses `imageHTML` via `wtPlaceholder`/`wtImage`, whose pure
+test stubs `fmtBytes` since the section runs without imports), `.vimg` in
+style.css. The web
+DIFF of an image pair still says binary (the TUI's three layouts have no web
+counterpart yet). Verified with a Playwright probe (finder + viewer, JPEG +
+a NUL blob) — see [[playwright-web-verification]].
 **Image pairs in the diff view (2026-09-28, `diff_images.go`):** the differ
 decodes a Binary pair's sides (`domain.Diff.OldImg/NewImg`, shrunk to
 `diffImagePx`, weighed by `Size`); `applyDiff` → `setImages` builds the info

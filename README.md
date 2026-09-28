@@ -1218,7 +1218,7 @@ until it comes back.
 
 `F` turns the file list into every file in the working tree (grouped under
 directory headings like a commit's files, with a status letter — `?` marks an
-untracked one), over whatever screen you are on: `/` filters (fuzzy, or `'exact` `^prefix` `suffix$` `!not`),
+untracked one), over whatever screen you are on (an image is shown as a picture scaled to the pane, any other binary as a one-line placeholder): `/` filters (fuzzy, or `'exact` `^prefix` `suffix$` `!not`),
 the diff pane previews the file under the cursor (following it on disk), and `enter` / `.` (or
 right-click) offers **view file**, **diff**, **file history**, **blame** and
 the copy rows — a double-click views the file. `ctrl+]` opens the row in the

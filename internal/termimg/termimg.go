@@ -18,6 +18,20 @@ import (
 // (width × height); a larger image is refused rather than allocated.
 const MaxPixels = 40_000_000
 
+// Probe names data's image format and pixel size from its header alone
+// (no pixel decode): what a frontend needs to describe an image it will
+// fetch raw. An image past MaxPixels, or anything else, is an error.
+func Probe(data []byte) (kind string, w, h int, err error) {
+	cfg, kind, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return "", 0, 0, err
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width*cfg.Height > MaxPixels {
+		return "", 0, 0, image.ErrFormat
+	}
+	return kind, cfg.Width, cfg.Height, nil
+}
+
 // Decode decodes data as a PNG, JPEG or GIF (by its magic bytes) and names
 // the format. An image past MaxPixels, or anything else, is an error.
 func Decode(data []byte) (image.Image, string, error) {

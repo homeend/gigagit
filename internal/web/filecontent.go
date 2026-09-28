@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/syntax"
+	"github.com/homeend/gigagit/internal/termimg"
 )
 
 // The viewer's read (open files, plan 5a): one file's lines at one version —
@@ -21,7 +22,57 @@ func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("GET /api/file-content", s.handleFileContent)
 		mux.HandleFunc("GET /api/file-stamp", s.handleFileStamp)
+		mux.HandleFunc("GET /api/file-raw", s.handleFileRaw)
 	})
+}
+
+// handleFileRaw serves one IMAGE file's bytes at one version (the same
+// src/rev/path as /api/file-content) for an <img>: the content type comes
+// from the probed format, never the name. Anything that is no image is 415 —
+// the page has no use for other raw bytes, so none are served.
+func (s *Server) handleFileRaw(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	path, src, rev := q.Get("path"), q.Get("src"), q.Get("rev")
+	if path == "" || !isGitArgSafe(path) || (rev != "" && !isGitArgSafe(rev)) || !filepath.IsLocal(filepath.FromSlash(path)) {
+		writeErr(w, http.StatusBadRequest, errors.New("invalid path/rev"))
+		return
+	}
+	switch src {
+	case "", "worktree":
+		src = "worktree"
+	case "commit", "shelf":
+		if rev == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("a "+src+" version needs rev"))
+			return
+		}
+	default:
+		writeErr(w, http.StatusBadRequest, errors.New("unknown src "+src))
+		return
+	}
+	data, err := readVersion(readCtx(r), s.service(), src, rev, path)
+	if errors.Is(err, fs.ErrNotExist) {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if len(data) > domain.MaxDiffBytes {
+		writeErr(w, http.StatusRequestEntityTooLarge, errors.New("file too large"))
+		return
+	}
+	kind, _, _, err := termimg.Probe(data)
+	if err != nil {
+		writeErr(w, http.StatusUnsupportedMediaType, errors.New("not an image"))
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "image/"+kind)
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Cache-Control", "no-store") // a working-tree file changes under the page
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 type contentRow struct {
@@ -33,6 +84,15 @@ type fileContentBody struct {
 	Lines    []contentRow `json:"lines"`
 	TooLarge bool         `json:"too_large,omitempty"`
 	Missing  bool         `json:"missing,omitempty"`
+	// Binary: the bytes are no text (the TUI's rule: a NUL or invalid
+	// UTF-8) and Lines is empty; Size is the byte count for the placeholder.
+	// Image names the format (png/jpeg/gif) with the pixel size when the
+	// binary is an image the page can fetch from /api/file-raw.
+	Binary bool   `json:"binary,omitempty"`
+	Image  string `json:"image,omitempty"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
+	Size   int    `json:"size,omitempty"`
 	// Stamp is a working-tree read's diskStamp, taken BEFORE the read: the
 	// lines are never older than it, so a change mid-read still shows.
 	Stamp string `json:"stamp,omitempty"`
@@ -115,6 +175,14 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(data) > domain.MaxDiffBytes {
 		writeJSON(w, fileContentBody{Lines: []contentRow{}, TooLarge: true, Stamp: stamp})
+		return
+	}
+	if domain.IsBinary(data) {
+		body := fileContentBody{Lines: []contentRow{}, Binary: true, Size: len(data), Stamp: stamp}
+		if kind, pw, ph, err := termimg.Probe(data); err == nil {
+			body.Image, body.Width, body.Height = kind, pw, ph
+		}
+		writeJSON(w, body)
 		return
 	}
 	writeJSON(w, fileContentBody{Lines: contentRows(path, data, svc.SyntaxHighlighting()), Stamp: stamp})

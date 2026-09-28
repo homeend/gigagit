@@ -37,7 +37,7 @@ func (s *Server) steerFiles(c steer.Command) steer.Reply {
 // that failed) — the reply then names no line, as the TUI's does.
 func (s *Server) versionLines(ctx context.Context, k ofKey) (int, bool) {
 	data, err := readVersion(ctx, s.service(), k.Src, k.Rev, k.Path)
-	if err != nil || len(data) == 0 || len(data) > domain.MaxDiffBytes {
+	if err != nil || len(data) == 0 || len(data) > domain.MaxDiffBytes || domain.IsBinary(data) {
 		return 0, false
 	}
 	return strings.Count(strings.TrimSuffix(string(data), "\n"), "\n") + 1, true

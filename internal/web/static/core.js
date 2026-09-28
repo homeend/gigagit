@@ -395,3 +395,10 @@ function runOnce(type, fn, opts = {}) {
 
 
 export { $, DANGER_OPTIONS, ROW_H, SECTIONS, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
+
+// fmtBytes is the TUI's byte count for a placeholder: "597.0 KB", "1.2 MB", "312 B".
+export function fmtBytes(n) {
+  if (n >= 1 << 20) return (n / (1 << 20)).toFixed(1) + " MB";
+  if (n >= 1 << 10) return (n / (1 << 10)).toFixed(1) + " KB";
+  return n + " B";
+}

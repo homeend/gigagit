@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: binary files and images in the finder preview and the viewer
+
+### Fixed
+
+- The web finder's preview (`F`) and the file viewer rendered a binary file's
+  bytes as text, like the TUI did. `/api/file-content` now reports a binary
+  (`binary`, `size`) with no lines, naming an image's format and pixel size
+  (`image`, `width`, `height`); the page shows `(binary file, 8 B — not
+  shown)` for other binaries. A content link is refused for a binary.
+
+### Added
+
+- **Images in the browser.** A PNG, JPEG or GIF is shown as a real `<img>`
+  scaled to the pane, with the same info line as the TUI, in both the finder
+  preview and the viewer; the bytes come from the new `GET /api/file-raw`
+  (`src`/`rev`/`path` as `/api/file-content`; images only — anything else is
+  415 — served with the probed content type, `nosniff`, `no-store`). The
+  working-tree preview re-fetches when the file's stamp changes.
+
 ## Image pairs in the diff view
 
 ### Added

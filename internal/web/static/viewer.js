@@ -1,7 +1,7 @@
 // viewer.js — the file viewer overlay (open files on the web, plan 5a): one
 // file at one version — the working tree, a commit, a shelf entry — with a
 // line cursor, the in-view search and a . menu. Content links land here.
-import { $, charWidth, elidePath, esc, getJSON, postJSON, state, tabId } from "./core.js";
+import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, state, tabId } from "./core.js";
 import { closeLayer, copyText, footOwned, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu } from "./layers.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
@@ -62,7 +62,7 @@ function keepLine(cur, count, placeholder) {
 // --- the overlay -------------------------------------------------------------
 // view is the ONE file on screen: its version, its lines, the cursor (1-based,
 // 0 = no line) and the placeholder shown instead of lines ("" = none).
-const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "" };
+const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null };
 const viewerSearch = new Search();
 const places = new Map(); // id → {cur, top}: where THIS tab left each file
 let loadSeq = 0; // bumped by every open: a reload that sees it move drops (L9)
@@ -85,7 +85,26 @@ function rememberPlace() {
 }
 
 function placeholderFor(body, lines) {
-  return body.missing ? "(file deleted on disk)" : body.too_large ? "(file too large to preview)" : lines.length ? "" : "(empty file)";
+  if (body.missing) return "(file deleted on disk)";
+  if (body.too_large) return "(file too large to preview)";
+  if (body.binary) return body.image ? "" : `(binary file, ${fmtBytes(body.size || 0)} — not shown)`;
+  return lines.length ? "" : "(empty file)";
+}
+
+// imageOf is the image a body describes ({url, info}), or null: the page
+// fetches the bytes raw and paints an <img>; the stamp busts the cache when
+// the file on disk moves.
+function imageOf(body, src, rev, path) {
+  if (!body.binary || !body.image) return null;
+  const url =
+    "/api/file-raw?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path) +
+    (body.stamp ? "&stamp=" + encodeURIComponent(body.stamp) : "");
+  return { url, info: `${body.image} image ${body.width}×${body.height}, ${fmtBytes(body.size || 0)}` };
+}
+
+// imageHTML paints an image body: its info line and the <img>.
+export function imageHTML(image) {
+  return `<div class="notice">${esc(image.info)}</div><img class="vimg" src="${esc(image.url)}" alt="">`;
 }
 
 function fetchContent(src, rev, path) {
@@ -146,6 +165,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   const f = reg.file;
   Object.assign(view, { id: f.id, src: f.source, rev: f.rev || "", path: f.path, lines: body.lines || [] });
   view.placeholder = placeholderFor(body, view.lines);
+  view.image = imageOf(body, view.src, view.rev, view.path);
   const place = line > 0 ? null : places.get(f.id);
   const want = pickLine(line, place, f.line || 0);
   const landed = line > 0 ? landLine(line, view.lines.length, f.path) : { line: view.placeholder && body.missing ? want : clampLine(want || 1, view.lines.length), notice: "" };
@@ -211,6 +231,8 @@ function renderViewer() {
   const body = $("viewer-body");
   if (view.placeholder) {
     body.innerHTML = `<div class="notice">${esc(view.placeholder)}</div>`;
+  } else if (view.image) {
+    body.innerHTML = imageHTML(view.image);
   } else {
     let html = "";
     view.lines.forEach((l, i) => {
@@ -421,7 +443,7 @@ async function copyViewerLink(flink) {
   } catch (e) {
     return opLine("copy failed: " + (e.message || e), true);
   }
-  if (disk.missing || disk.too_large || !sameLines(disk.lines || [], view.lines)) {
+  if (disk.missing || disk.too_large || disk.binary || !sameLines(disk.lines || [], view.lines)) {
     return opLine("the file on disk differs from this version — no content link", true);
   }
   copyLink(flink, linkDesc("file", view.path, ""));
@@ -490,6 +512,7 @@ async function viewerFileChanged(id) {
   const top = el.scrollTop, left = el.scrollLeft;
   view.lines = body.lines || [];
   view.placeholder = placeholderFor(body, view.lines);
+  view.image = imageOf(body, view.src, view.rev, view.path);
   view.cur = keepLine(view.cur, view.lines.length, !!body.missing);
   renderViewer();
   el.scrollTop = top;
