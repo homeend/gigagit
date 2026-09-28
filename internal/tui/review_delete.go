@@ -63,9 +63,13 @@ func (m Model) deleteReviewRow() (actionRow, bool) {
 
 // confirmStoredDelete raises the yes/no modal; Delete removes id.
 func (m Model) confirmStoredDelete(id, prompt string, review bool) (tea.Model, tea.Cmd) {
+	decisionID := "note-remove" // confirmNoteDelete's id: the same question
+	if review {
+		decisionID = "review-remove"
+	}
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
-			ID:      "review-remove",
+			ID:      decisionID,
 			Prompt:  prompt,
 			Options: []string{"Delete", "Cancel"},
 		},

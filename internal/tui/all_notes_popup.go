@@ -119,6 +119,10 @@ func (m Model) onAllNotes(msg allNotesMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	p.rows = buildAllNotesRows(msg.ov, filepath.Base(m.currentWorktree))
+	// A re-read after a delete can be shorter than the cursor: keep it on a row.
+	if n := len(p.visible()); p.sel >= n {
+		p.sel = max(n-1, 0)
+	}
 	return m, nil
 }
 

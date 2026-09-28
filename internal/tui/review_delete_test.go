@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func menuRowByID(t *testing.T, m Model, id string) (actionRow, bool) {
@@ -106,5 +108,51 @@ func TestAllNotesCtrlDDeletesAReview(t *testing.T) {
 		if r.kind == anReview {
 			t.Fatal("the deleted review is still listed")
 		}
+	}
+}
+
+// ctrl+d on a plain note thread — here the list's last row — asks with the
+// note's own question, deletes it, and leaves the cursor on a row.
+func TestAllNotesCtrlDDeletesANoteThread(t *testing.T) {
+	t.Parallel()
+	m, _ := reviewViewModel(t, reviewViewDoc)
+	sha := m.commits[0].Hash
+	added, err := m.svc.NoteAdd(context.Background(), model.Note{Source: model.NoteSourceUser, Author: "me",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: sha, Path: "a.go"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "zz stored note"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := added.ID
+	m, cmd := m.openAllNotes()
+	m = drainCmds(t, m, cmd)
+	p := layerOf[*allNotesPopup](m)
+	vis := p.visible()
+	p.sel = -1
+	for i, r := range vis {
+		if r.kind == anNote && r.note.Note.ID == id {
+			p.sel = i
+		}
+	}
+	if p.sel != len(vis)-1 {
+		t.Fatalf("the note is row %d of %d, want the last", p.sel, len(vis))
+	}
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = u.(Model)
+	if m.modal == nil || m.modal.req.ID != "note-remove" || !strings.Contains(m.modal.req.Prompt, "Delete this note?") {
+		t.Fatalf("ctrl+d on a note raised %+v", m.modal)
+	}
+	u, cmd = m.modal.onResolve(m, "Delete")
+	m = u.(Model)
+	m.modal = nil
+	m = drainCmds(t, m, cmd)
+	p = layerOf[*allNotesPopup](m)
+	for _, r := range p.rows {
+		if r.kind == anNote && r.note.Note.ID == id {
+			t.Fatal("the deleted note is still listed")
+		}
+	}
+	if n := len(p.visible()); p.sel < 0 || p.sel >= n {
+		t.Fatalf("cursor %d fell off the %d re-read rows", p.sel, n)
 	}
 }
