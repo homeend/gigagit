@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -99,18 +98,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		return 1
 	}
 
-	notesPath := ""
 	if *wantNotes {
-		// The CLI owns this file: the op only names it in the environment, and
-		// we must still be able to read it once the op returns.
-		f, terr := os.CreateTemp("", "gg-review-notes-*.json")
-		if terr != nil {
-			fmt.Fprintln(stderr, "error:", terr)
-			return 1
-		}
-		notesPath = f.Name()
-		f.Close()
-		defer os.Remove(notesPath)
 		// A note write must respect the configured entry cap even though this
 		// process is not a `gg note` verb.
 		if cfg, cerr := loadConfigFor(svc); cerr == nil {
@@ -118,17 +106,21 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		}
 	}
 
-	res, err := svc.ReviewReportNotes(ctx, target, cmd.Name, resolved, []string{"GG_TASK=review"}, notesPath)
+	res, err := svc.ReviewReport(ctx, target, cmd.Name, resolved, []string{"GG_TASK=review"})
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	io.WriteString(stdout, res.Content)
-	if !strings.HasSuffix(res.Content, "\n") {
-		io.WriteString(stdout, "\n")
-	}
+	printReview(stdout, res.Content)
 	if res.Warn != "" {
 		fmt.Fprintln(stderr, "warning:", res.Warn)
+	}
+	if !res.Structured {
+		if res.NoteID != "" {
+			fmt.Fprintln(stderr, "warning: the review is not in gg review format; stored as text")
+		} else {
+			fmt.Fprintln(stderr, "warning: the review is not in gg review format")
+		}
 	}
 	if res.NoteID != "" {
 		fmt.Fprintln(stderr, "note:", res.NoteID)
@@ -136,7 +128,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 	if !*wantNotes {
 		return 0
 	}
-	return importReviewNotes(ctx, svc, target, arg, notesPath, res.Content, cmd.Name, hunkSpec, stderr)
+	return importReviewNotes(ctx, svc, target, arg, res.Content, cmd.Name, hunkSpec, stderr)
 }
 
 // reviewImportTarget decides which diff a review's notes anchor to (§4.5):
@@ -173,9 +165,9 @@ func reviewImportTarget(ctx context.Context, svc *domain.Service, target domain.
 	return false, strings.TrimSpace(full), domain.NoteSideNewOnly, nil
 }
 
-// importReviewNotes reads the tool's notes: the sidecar file when it is
-// non-empty, else the captured report when THAT parses as agent-context v1
-// (some tools have only one output channel). Neither → exit 1.
+// importReviewNotes stores the review document's notes as ordinary notes: the
+// report must be the structured review document (agent-context v1), else
+// exit 1.
 //
 // hunkSpec is the patch a `hunk` annotation is numbered against, or nil to
 // derive it from cached/rev as before. Only --preview passes one: its notes are
@@ -183,20 +175,18 @@ func reviewImportTarget(ctx context.Context, svc *domain.Service, target domain.
 // in review land splits those two apart. It is threaded EXPLICITLY rather than
 // sniffed from the range string, which would silently renumber today's
 // `gg review A...B --notes`.
-func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg, notesPath, report, toolName string, hunkSpec *model.DiffSpec, stderr io.Writer) int {
-	data, _ := os.ReadFile(notesPath)
-	if len(strings.TrimSpace(string(data))) == 0 {
-		if s := strings.TrimSpace(report); strings.HasPrefix(s, "{") {
-			data = []byte(s)
-		}
-	}
-	if len(strings.TrimSpace(string(data))) == 0 {
-		fmt.Fprintln(stderr, "error: review tool wrote no notes (expected agent-context v1 at $GG_NOTES_FILE)")
+func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg, report, toolName string, hunkSpec *model.DiffSpec, stderr io.Writer) int {
+	doc, err := notebatch.ParseReview([]byte(report))
+	if err != nil {
+		fmt.Fprintln(stderr, "error: the review is not a gg review document, so it has no notes to import:", err)
 		return 1
 	}
-	batch, err := notebatch.Parse(data)
+	if n, _ := doc.NoteCount(); n == 0 {
+		return 0 // an overview only: nothing to import
+	}
+	batch, err := notebatch.Parse(doc.Canonical())
 	if err != nil {
-		fmt.Fprintln(stderr, "error: review tool wrote no notes (expected agent-context v1 at $GG_NOTES_FILE):", err)
+		fmt.Fprintln(stderr, "error: the review document's notes cannot be imported:", err)
 		return 1
 	}
 	for _, c := range batch.Contexts {
@@ -304,4 +294,51 @@ func selectReviewCommand(svc *domain.Service, name string, stderr io.Writer) (co
 // MCP frontend, which cannot import internal/cli, shares it.
 func loadConfigFor(svc *domain.Service) (config.Config, error) {
 	return svc.EffectiveConfig(context.Background())
+}
+
+// printReview writes a review for a terminal or a pipe: a review document as
+// its overview, its meta, then one "path:line — summary" line per note (an
+// old-side line is "-line", as in a diff); prose as it came.
+func printReview(w io.Writer, content string) {
+	doc, err := notebatch.ParseReview([]byte(content))
+	if err != nil {
+		io.WriteString(w, content)
+		if !strings.HasSuffix(content, "\n") {
+			io.WriteString(w, "\n")
+		}
+		return
+	}
+	fmt.Fprintln(w, strings.TrimRight(doc.Overview, "\n"))
+	if len(doc.Meta) > 0 {
+		fmt.Fprintf(w, "\n%s\n", metaText(doc.Meta))
+	}
+	first := true
+	for _, f := range doc.Files {
+		for _, n := range f.Notes {
+			if first {
+				fmt.Fprintln(w)
+				first = false
+			}
+			line := fmt.Sprint(n.Range[0])
+			if n.Range[1] != n.Range[0] {
+				line += fmt.Sprintf("-%d", n.Range[1])
+			}
+			if n.Side == "old" {
+				line = "-" + line
+			}
+			fmt.Fprintf(w, "%s:%s — %s", f.Path, line, n.Summary)
+			if len(n.Meta) > 0 {
+				fmt.Fprintf(w, " (%s)", metaText(n.Meta))
+			}
+			fmt.Fprintln(w)
+		}
+	}
+}
+
+func metaText(meta []notebatch.MetaKV) string {
+	parts := make([]string, len(meta))
+	for i, kv := range meta {
+		parts[i] = kv.Key + ": " + kv.Value
+	}
+	return strings.Join(parts, ", ")
 }

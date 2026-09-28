@@ -51,8 +51,9 @@ async function preflightGate() {
 function askMigration(m) {
   return new Promise((resolve) => {
     $("preflight-title").textContent = m.feature + " needs a one-time migration";
-    $("preflight-body").textContent =
-      m.consequence + "\nThis discards " + m.refs.length + " entries and cannot be undone.";
+    // A config migration removes nothing: no discard line for it.
+    $("preflight-body").textContent = m.consequence +
+      (m.refs && m.refs.length ? "\nThis discards " + m.refs.length + " entries and cannot be undone." : "");
     const migrateBtn = $("preflight-migrate");
     const skipBtn = $("preflight-skip");
     const quitBtn = $("preflight-quit");

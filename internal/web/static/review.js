@@ -1,6 +1,7 @@
 // review.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, postJSON, state } from "./core.js";
+import { mdHTML } from "./markdown.js";
 import { closeLayer, copyText, pushLayer } from "./layers.js";
 import { followOp, hideOpLine, opLine, parkedTaskText, refreshAfterOp, taskLine } from "./ops.js";
 
@@ -180,6 +181,7 @@ function reviewDone(ev, kind) {
       title,
       noteId: ev.noteId,
       report: ev.report,
+      doc: reviewDoc(ev),
       error: ev.error,
     };
     if (state.task.status === "cancelled") state.task = null; // nothing to collect
@@ -204,7 +206,7 @@ function reviewDone(ev, kind) {
       else if (!ev.still_paused) opLine((ev.op || "operation") + " completed — the agent reported no overview");
       return;
     }
-    openReport(title, ev.noteId, ev.report);
+    openReport(title, ev.noteId, ev.report, reviewDoc(ev));
     opLine(ev.summary || "review done");
     return;
   }
@@ -286,7 +288,7 @@ function collectTask() {
   const noun = t.kind === "conflict" ? "AI resolve" : "review";
   state.task = null;
   renderTaskChip(false);
-  if (t.status === "done") openReport(t.title || "Review", t.noteId, t.report);
+  if (t.status === "done") openReport(t.title || "Review", t.noteId, t.report, t.doc);
   else opLine(noun + " failed: " + (t.error || "unknown error"), true);
 }
 
@@ -435,17 +437,38 @@ $("review").addEventListener("click", (e) => {
 });
 
 
-// The report viewer: plain text, deliberately not rendered as markdown — a
-// review is prose to read, and a parser here would be a dependency and a
-// rendering bug surface for no gain.
-function openReport(title, noteId, content) {
+// reviewDoc is the structured part of a review's done event (null for a
+// conflict run's overview, which is plain text).
+function reviewDoc(ev) {
+  if (ev.structured === undefined) return null;
+  return { structured: !!ev.structured, overviewMd: ev.overviewMd, docMeta: ev.docMeta || "", notes: ev.notes || [] };
+}
+
+// The report viewer. A structured review (the gg review document) shows its
+// overview as rendered markdown — parsed server-side, as for PR bodies — then
+// its meta and one "path:line — summary" row per note; anything else is shown
+// as plain text, with a warning when a review was not the document.
+function openReport(title, noteId, content, doc) {
   $("report-title").textContent = title;
+  const structured = !!(doc && doc.structured);
+  $("report-doc").style.display = structured ? "" : "none";
+  $("report-body").style.display = structured ? "none" : "";
+  $("report-warn").style.display = doc && !structured ? "" : "none";
+  $("report-warn").textContent = doc && !structured ? "not in gg review format — shown as text" : "";
+  if (structured) {
+    $("report-md").innerHTML = mdHTML(doc.overviewMd, esc);
+    $("report-meta").textContent = doc.docMeta;
+    $("report-notes").innerHTML = doc.notes
+      .map((n) => `<li>${esc(n.path + ":" + n.line + " — " + n.summary)}${n.meta ? `<span class="meta">${esc(n.meta)}</span>` : ""}</li>`)
+      .join("");
+  }
   $("report-body").textContent = content || "";
   // A commit/branch review is stored as a note; working changes are not.
   const where = noteId ? "note " + noteId : "";
   $("report-path").textContent = where;
   $("report-path").title = where;
   $("report-body").scrollTop = 0;
+  $("report-doc").scrollTop = 0;
   pushLayer("report", $("report"));
 }
 

@@ -26,7 +26,6 @@ type ReviewChanges struct {
 	Env        []string       // caller env additions (e.g. GG_TASK=review)
 	Diff       model.DiffSpec // the range/working diff to review
 	RangeLabel string         // human range label for the summary (e.g. "main..HEAD")
-	NotesFile  string         // when set: $GG_NOTES_FILE, and the context doc asks for agent-context v1
 }
 
 var _ Operation = ReviewChanges{}
@@ -65,11 +64,6 @@ func (op ReviewChanges) Prepare(ctx context.Context, deps OpDeps) (TaskInputs, e
 		"GG_MESSAGE_FILE="+msgPath,
 		"GG_REPO="+op.Dir,
 	)
-	if op.NotesFile != "" {
-		// The CALLER owns this file: Cleanup removes only what Prepare made,
-		// and the caller must still read the notes after the run.
-		env = append(env, "GG_NOTES_FILE="+op.NotesFile)
-	}
 	return TaskInputs{Command: op.Command, Dir: op.Dir, Env: env, MessageFile: msgPath, Cleanup: tmp.cleanup}, nil
 }
 
@@ -100,21 +94,29 @@ func (op ReviewChanges) reviewSummary(diffPath, stat string, truncated bool) str
 	} else {
 		b.WriteString(strings.TrimRight(stat, "\n") + "\n")
 	}
-	if op.NotesFile != "" {
-		b.WriteString(notesInstruction(op.NotesFile))
-	}
+	b.WriteString(ReviewOutputInstruction())
 	return b.String()
 }
 
-// notesInstruction is the paragraph appended to $GG_CONTEXT_FILE when the
-// caller asked for anchored notes (spec §4.5). The wording is fixed: agents
-// trained on hunk's sidecar already emit exactly this shape, and the default
-// [[tools.command]] prompt templates are deliberately NOT changed.
-func notesInstruction(notesFile string) string {
-	return "\n## Inline notes (optional)\n" +
-		"Also write anchored notes as hunk agent-context JSON (version 1) to the\n" +
-		"file at " + notesFile + ": {\"version\":1,\"files\":[{\"path\":\"…\",\"annotations\":\n" +
-		"[{\"newRange\":[a,b],\"summary\":\"…\",\"rationale\":\"…\"}]}]}. Line numbers are\n" +
-		"1-based in the NEW version of each file. Comment on what the reader would\n" +
-		"not spot; do not annotate every hunk.\n"
+// ReviewOutputInstruction is the "Review output" section of every review
+// context document: the one shape a review agent replies in — agent-context v1
+// whose top-level summary is the markdown overview, with free-form "meta" at
+// every level. notebatch.ParseReview reads it back; the built-in review
+// templates point at this section by name.
+func ReviewOutputInstruction() string {
+	return "\n## Review output\n" +
+		"Write ONLY this JSON document (no prose around it) to the file named by\n" +
+		"$GG_MESSAGE_FILE — it replaces a free-form report:\n\n" +
+		"{\n  \"version\": 1,\n  \"summary\": \"<markdown: the overall review — what changed, what matters, the verdict>\",\n" +
+		"  \"meta\": { \"verdict\": \"approve | comment | request changes\" },\n" +
+		"  \"files\": [\n    { \"path\": \"<repo-relative path>\", \"summary\": \"<optional one line about this file>\",\n" +
+		"      \"annotations\": [\n        { \"newRange\": [<first>, <last>], \"summary\": \"<one line>\",\n" +
+		"          \"rationale\": \"<why it matters / how it fails>\",\n" +
+		"          \"meta\": { \"severity\": \"bug | risk | design | nit\", \"confidence\": \"low | medium | high\" } }\n" +
+		"      ] }\n  ]\n}\n\n" +
+		"Rules: line numbers are 1-based and inclusive; use \"newRange\" for a line in the\n" +
+		"new version of the file and \"oldRange\" for a removed line. \"meta\" is optional\n" +
+		"and free-form (string values). Annotate what a reader would not spot; leave\n" +
+		"\"files\" empty when there is nothing line-specific to say. Do not modify the\n" +
+		"repository and do not commit.\n"
 }

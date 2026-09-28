@@ -53,6 +53,12 @@ type contentLine struct {
 	status  string // model.CommitFile.Status letter ("A","M","D","R","C","T")
 	sha     string // per-line commit override (a -u stash's ^3 parent); "" = the view's hash
 	noteID  string // an @notes/ entry: the AI review (a note) it shows; "" = a real file
+	// overview is the review view's "≡ Overview" row: enter opens the
+	// review's overview, not a file.
+	overview bool
+	// dim draws the row faint: the review view's one-line file summary under
+	// its file (not a heading — the sticky line names directories only).
+	dim bool
 }
 
 // contentPopup is a generic read-only viewer popup: any list of lines with

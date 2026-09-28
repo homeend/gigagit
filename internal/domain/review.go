@@ -8,6 +8,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notebatch"
 )
 
 // ReviewKind names the three review targets.
@@ -84,25 +85,16 @@ type ReviewResult struct {
 	Content string
 	Range   string
 	Label   string
+	// Structured: the reply was the review document (Content is then its
+	// canonical form); false = prose, kept as text.
+	Structured bool
 }
 
-// ReviewReport runs resolvedCommand over target and stores the captured
-// review as a note. The three-frontend entry point; ReviewReportNotes adds
-// the optional notes sidecar. agent names the tool (the note's author).
-func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, resolvedCommand string, env []string) (ReviewResult, error) {
-	return s.ReviewReportNotes(ctx, target, agent, resolvedCommand, env, "")
-}
-
-// ReviewReportNotes is ReviewReport plus a caller-owned notes file: when
-// notesFile is non-empty the tool is told (via $GG_NOTES_FILE and one context
-// paragraph) that it may also write anchored notes as agent-context v1. The
-// FILE belongs to the caller — the op never creates or removes it — because the
-// caller reads it after the op returns.
-//
-// It runs resolvedCommand over target via engine.ReviewChanges, then stores
-// the captured review as a note on the reviewed commit (SaveReview). A
+// ReviewReport runs resolvedCommand over target via engine.ReviewChanges and
+// stores the captured review as a note on the reviewed commit (SaveReview).
+// The three-frontend entry point; agent names the tool (the note's author). A
 // working-changes review is returned but not stored: it has no commit.
-func (s *Service) ReviewReportNotes(ctx context.Context, target ReviewTarget, agent, resolvedCommand string, env []string, notesFile string) (ReviewResult, error) {
+func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, resolvedCommand string, env []string) (ReviewResult, error) {
 	label := target.DisplayLabel()
 	op := engine.ReviewChanges{
 		Command:    resolvedCommand,
@@ -110,7 +102,6 @@ func (s *Service) ReviewReportNotes(ctx context.Context, target ReviewTarget, ag
 		Env:        env,
 		Diff:       target.Diff,
 		RangeLabel: label, // the agent's "# Range:" context header — display text, not executed
-		NotesFile:  notesFile,
 	}
 	res, err := s.Execute(ctx, op, nil, nil)
 	if err != nil {
@@ -129,7 +120,9 @@ func (s *Service) ReviewReportNotes(ctx context.Context, target ReviewTarget, ag
 	if report == "" {
 		return ReviewResult{}, fmt.Errorf("review produced an empty report")
 	}
-	out := ReviewResult{Content: report, Range: target.Range, Label: label}
+	report = canonicalReview(report)
+	_, perr = notebatch.ParseReview([]byte(report))
+	out := ReviewResult{Content: report, Range: target.Range, Label: label, Structured: perr == nil}
 	if target.Kind == ReviewWorking {
 		return out, nil
 	}

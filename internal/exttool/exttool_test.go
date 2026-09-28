@@ -373,8 +373,8 @@ func TestBuiltinsReviewTemplates(t *testing.T) {
 		t.Fatal("want claude + junie review templates")
 	}
 	gc := GenerateCommandFor(*claude, "claude", "linux")
-	if !strings.Contains(gc, "/code-review <range>") {
-		t.Fatalf("claude review must run /code-review over <range>: %q", gc)
+	if !strings.HasPrefix(gc, `claude -p "`) || !strings.Contains(gc, "range <range>") || !strings.Contains(gc, `"Write"`) {
+		t.Fatalf("claude review must take the review-document prompt over <range> and may Write: %q", gc)
 	}
 	gj := GenerateCommandFor(*junie, "junie", "linux")
 	if !strings.Contains(gj, "${GG_MESSAGE_FILE}") || !strings.Contains(gj, "${GG_REVIEW_DIFF}") {

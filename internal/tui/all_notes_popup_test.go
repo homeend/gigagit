@@ -546,8 +546,8 @@ func TestAllNotesOpensReviewOfMissingCommit(t *testing.T) {
 			p.sel = i
 		}
 	}
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = u.(Model)
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = drainCmds(t, u.(Model), cmd) // the review is read off-thread, then opens
 	v, ok := m.topLayer().(*fileViewer)
 	if !ok || v.src.kind != srcNote || v.src.rev != "rev1" {
 		t.Fatalf("enter on a review must open it, top = %T (notice %q)", m.topLayer(), p.notice)

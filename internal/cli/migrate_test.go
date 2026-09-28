@@ -1,8 +1,14 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/exttool"
 )
 
 func TestMigrateListsNothingOnACurrentRepo(t *testing.T) {
@@ -119,5 +125,28 @@ func TestMigrateOnARealLegacyRepoDiscardsAndStampsFormatTwo(t *testing.T) {
 	}
 	if got := runGit(t, dir, "for-each-ref", "refs/gg/meta/versions/2"); got == "" {
 		t.Fatal("--yes did not stamp refs/gg/meta/versions/2")
+	}
+}
+
+// Serial: sets XDG_CONFIG_HOME. The structured-reviews migration rewrites
+// config and removes no refs: its listing must not claim it discards entries.
+func TestMigrateListsAConfigMigrationWithoutADiscardCount(t *testing.T) {
+	cfgHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+	dir := newRepoDir(t)
+	old := exttool.GenerateCommandFor(exttool.CommandTemplate{Command: exttool.SupersededReviewCommands[0].Old}, "claude", runtime.GOOS)
+	global := filepath.Join(cfgHome, "gg", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(global), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AppendToolCommands(global, []config.ToolCommand{{Category: "review", Name: "Claude", Mode: "capture", Command: old}}); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errb := runCLI(t, dir, "migrate")
+	if code != 0 || !strings.Contains(out, "structured-reviews") {
+		t.Fatalf("exit %d\n%s\n%s", code, out, errb)
+	}
+	if strings.Contains(out, "discards") {
+		t.Fatalf("a config migration must not claim it discards entries:\n%s", out)
 	}
 }

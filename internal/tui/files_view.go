@@ -57,6 +57,7 @@ func (m Model) closeFilesView() Model {
 	// its rows note-addressable at a stale tip. This is the single exit point.
 	m.filesPreviewSet = nil
 	m.filesPreviewCounts = nil
+	m.filesReview = nil
 	m.filesStashTag = ""
 	m.filesShelfID = ""
 	m.filesShelfLabel = ""
@@ -132,6 +133,9 @@ func filesMetaLine(c model.Commit) string {
 // modes have one date behind them — a compare has two endpoints, and
 // stash/shelf keep their own headers.
 func (m Model) filesMetaLineFor() string {
+	if m.filesReview != nil {
+		return reviewMetaLine(m.filesReview)
+	}
 	if m.filesMode != filesModeChanged && m.filesMode != filesModeFullTree {
 		return ""
 	}
@@ -454,7 +458,7 @@ func filesGeometry(vis []contentLine, sel, rowsCap int) filesGeom {
 		body--
 	}
 	g.top = windowStart(g.s1-g.s0, body, g.anchor)
-	g.headTop = g.sticky && g.s0+g.top < len(vis) && vis[g.s0+g.top].heading
+	g.headTop = g.sticky && g.s0+g.top < len(vis) && (vis[g.s0+g.top].heading || vis[g.s0+g.top].overview)
 	return g
 }
 
@@ -482,7 +486,7 @@ func (m Model) renderFileRows(wr []winRow, vis []contentLine, g filesGeom, inner
 	}
 	body, top := renderWindowTop(wr, winOpts{w: innerW, h: rowsCap - 1, mode: p.mode, anchor: g.anchor, hscroll: p.hscroll})
 	sticky := wr[top]
-	if vis[g.s0+top].heading {
+	if vis[g.s0+top].heading || vis[g.s0+top].overview {
 		// The heading itself is the sticky line; its files fill the body.
 		body, _ = renderWindowTop(wr[top+1:], winOpts{w: innerW, h: rowsCap - 1, mode: p.mode, anchor: g.anchor - top - 1, hscroll: p.hscroll})
 	} else {
@@ -675,6 +679,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
+	case "n", "p": // the review view: the next / previous file with notes
+		if m.filesReview != nil && m.filesTreeFocused {
+			m.stepReviewFile(msg.String() == "n")
+			return m, nil
+		}
 	case ".":
 		return m.openActionMenu(), nil
 	case "g": // global bookmark quick-switcher
@@ -709,8 +718,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p.hscroll = 0
 		return m, nil
 	case "a": // toggle full-tree (every file at this commit) vs the changed set
-		if m.stashView != nil || m.inCompareMode() || m.filesHash == "" {
-			return m, nil // only meaningful for a commit files view
+		if m.stashView != nil || m.inCompareMode() || m.filesHash == "" || m.filesReview != nil {
+			return m, nil // only meaningful for a commit files view (not its review mode)
 		}
 		return m.toggleFullTree()
 	// The commit-list side IS the Commits panel selection (m.focus stays
@@ -774,6 +783,9 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.query = ""
 			p.sel = 0
 			return m, nil
+		}
+		if st := m.filesReview; st != nil && st.back.Hash != "" {
+			return m.openChangedFiles(st.back) // opened from this commit's @notes/: back to its files
 		}
 		ret, parked := m.filesReturnFocus, m.filesReturnLayers
 		m = m.closeFilesView()
@@ -842,7 +854,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.focusTree(), nil
 		}
 		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) || vis[p.sel].path == "" {
+		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview) {
 			return m, nil // heading row, placeholder, or empty view
 		}
 		return m.openDiffForFileLine(vis[p.sel])
@@ -959,6 +971,16 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		m.statusMsg = i18n.T("terminal too narrow for the diff view")
 		return m, nil
 	}
+	if l.overview {
+		return m.openReviewOverview()
+	}
+	if l.noteID != "" { // an @notes/ entry: the review opens as the review view, esc comes back here
+		back := m.filesCommit
+		if back.Hash == "" {
+			back.Hash = m.filesHash
+		}
+		return m.openReviewFrom(l.noteID, reviewTitle(shortHash(m.filesHash)), back)
+	}
 	m.diffNotice = "" // drop any stale notice; the stepper re-posts its arrival notice
 	m.diffNav = diffNavTree
 	if m.diffStacked && !m.inFullTree() {
@@ -980,6 +1002,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		m = m.pushLayer(newV)
 	}
 	m.stampPreviewNotes(m.diffLayer(), l.path)
+	m.stampReviewNotes(m.diffLayer(), l.path)
 	cmd, tag, context := m.treeFileLoad(l)
 	m.diffLayer().context = context
 	m.diffTag = tag
@@ -1166,6 +1189,8 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		case l.heading:
 			prefix = ""
 			st = s.titleStyle
+		case l.dim:
+			st = s.noteDim
 		}
 		text := l.text
 		// Directory headings carry the full path; a leaf dir (e.g. .../v3/ApiObject/)

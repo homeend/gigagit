@@ -259,9 +259,9 @@ func TestReviewSingleCommitPositionalDiffsOwnChange(t *testing.T) {
 	}
 }
 
-// A tool that writes $GG_NOTES_FILE has its notes imported and the ids listed
-// on stderr; the report itself still prints and is still persisted.
-func TestReviewNotesImportsSidecarFile(t *testing.T) {
+// A tool that writes the review document to $GG_MESSAGE_FILE has its notes
+// imported and the ids listed on stderr; the review itself still prints.
+func TestReviewNotesImportsTheDocument(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses sh/printf")
 	}
@@ -276,14 +276,14 @@ func TestReviewNotesImportsSidecarFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeReviewTool(t, dir, "Echo",
-		`printf 'THE REPORT\n'; printf '{"version":1,"files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"shouty"}]}]}' > "$GG_NOTES_FILE"`)
+		`printf '{"version":1,"summary":"THE REPORT","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"shouty"}]}]}' > "$GG_MESSAGE_FILE"`)
 
 	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
 	if code != 0 {
 		t.Fatalf("exit=%d stderr=%s", code, errb)
 	}
 	if !strings.Contains(out, "THE REPORT") {
-		t.Fatalf("the freeform report must still print: %q", out)
+		t.Fatalf("the review must still print: %q", out)
 	}
 	if !strings.Contains(errb, "notes:") {
 		t.Fatalf("stderr must list the imported ids: %q", errb)
@@ -294,9 +294,8 @@ func TestReviewNotesImportsSidecarFile(t *testing.T) {
 	}
 }
 
-// When the notes file stays empty but the REPORT itself is agent-context v1,
-// that is imported instead (the report body is still the JSON).
-func TestReviewNotesFallsBackToJSONReport(t *testing.T) {
+// A tool with only stdout prints the document there; that is imported too.
+func TestReviewNotesReadsTheDocumentFromStdout(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses sh/printf")
 	}
@@ -311,7 +310,7 @@ func TestReviewNotesFallsBackToJSONReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeReviewTool(t, dir, "Echo",
-		`printf '{"version":1,"files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"from the report"}]}]}\n'`)
+		`printf '{"version":1,"summary":"ok","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"from the report"}]}]}\n'`)
 
 	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
 	if code != 0 {
@@ -319,11 +318,11 @@ func TestReviewNotesFallsBackToJSONReport(t *testing.T) {
 	}
 	_, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt")
 	if !strings.Contains(list, "from the report") {
-		t.Fatalf("a JSON report must be imported when the notes file is empty:\n%s", list)
+		t.Fatalf("a document on stdout must be imported:\n%s", list)
 	}
 }
 
-// Neither channel carried notes: exit 1, naming the contract.
+// A prose review is no document: exit 1, naming the contract.
 func TestReviewNotesNoNotesIsExit1(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses sh/printf")
@@ -336,7 +335,7 @@ func TestReviewNotesNoNotesIsExit1(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit=%d stderr=%s, want 1", code, errb)
 	}
-	if !strings.Contains(errb, "review tool wrote no notes") || !strings.Contains(errb, "GG_NOTES_FILE") {
+	if !strings.Contains(errb, "not a gg review document") {
 		t.Fatalf("stderr = %q, want the documented message", errb)
 	}
 }
@@ -360,7 +359,7 @@ func TestReviewNotesRangeAnchorsTipNewSideOnly(t *testing.T) {
 	runGit(t, dir, "commit", "-am", "shout")
 	sha := runGit(t, dir, "rev-parse", "HEAD")
 	writeReviewTool(t, dir, "Echo",
-		`printf 'R\n'; printf '{"version":1,"files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"kept"},{"oldRange":[2,2],"summary":"dropped"}]}]}' > "$GG_NOTES_FILE"`)
+		`printf '{"version":1,"summary":"R","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"kept"},{"oldRange":[2,2],"summary":"dropped"}]}]}' > "$GG_MESSAGE_FILE"`)
 
 	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--notes", "HEAD~1..HEAD")
 	if code != 0 {
@@ -375,8 +374,8 @@ func TestReviewNotesRangeAnchorsTipNewSideOnly(t *testing.T) {
 	}
 }
 
-// A --notes run that imported NOTHING (the tool wrote a batch carrying only a
-// top-level context) must not wake the window: the reload post exists to show
+// A --notes run that imported NOTHING (the document has only an overview)
+// must not wake the window: the reload post exists to show
 // new notes, and a stray wire command with none to show is noise.
 func TestReviewNotesStoringNothingPostsNoReload(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -391,7 +390,7 @@ func TestReviewNotesStoringNothingPostsNoReload(t *testing.T) {
 	}
 	livePresence(t, inbox)
 	writeReviewTool(t, dir, "Echo",
-		`printf 'THE REPORT\n'; printf '{"version":1,"summary":"nothing anchored","files":[]}' > "$GG_NOTES_FILE"`)
+		`printf '{"version":1,"summary":"nothing anchored","files":[]}' > "$GG_MESSAGE_FILE"`)
 
 	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
 	if code != 0 {
@@ -444,5 +443,48 @@ func TestReviewBranchNoteGoesWithTheBranch(t *testing.T) {
 	}
 	if revs, _ := domain.Open(dir).Reviews(ctx); len(revs) != 0 {
 		t.Fatalf("the review outlived its branch: %+v", revs)
+	}
+}
+
+// A structured review prints as its overview, then one line per note —
+// never as the JSON document.
+func TestReviewPrintsTheStructuredReview(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	writeReviewTool(t, dir, "Echo",
+		`printf '{"version":1,"summary":"## Overview\\nall good","meta":{"verdict":"approve"},"files":[{"path":"f.go","annotations":[{"newRange":[3,4],"summary":"S","meta":{"severity":"bug"}},{"oldRange":[7,7],"summary":"gone"}]}]}' > "$GG_MESSAGE_FILE"`)
+	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "HEAD")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	want := "## Overview\nall good\n\nverdict: approve\n\nf.go:3-4 — S (severity: bug)\nf.go:-7 — gone\n"
+	if out != want {
+		t.Fatalf("stdout:\n%q\nwant\n%q", out, want)
+	}
+	if !strings.Contains(errb, "note: ") || strings.Contains(errb, "warning") {
+		t.Fatalf("stderr = %q", errb)
+	}
+}
+
+// A prose review prints as it came, with a warning that it is not the
+// document.
+func TestReviewWarnsAboutAProseReview(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	writeReviewTool(t, dir, "Echo", `printf 'The advisor confirms four findings.\n'`)
+	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "HEAD")
+	if code != 0 || out != "The advisor confirms four findings.\n" {
+		t.Fatalf("exit=%d stdout=%q", code, out)
+	}
+	if !strings.Contains(errb, "warning: the review is not in gg review format; stored as text") {
+		t.Fatalf("stderr = %q", errb)
 	}
 }

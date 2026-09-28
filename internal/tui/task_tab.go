@@ -255,7 +255,7 @@ func (p *sessionsPopup) openTask(m Model, r taskRow) (Model, tea.Cmd) {
 		// A commit/range/branch review lives in its note, never in a file.
 		if id := r.noteID(); id != "" {
 			label := strings.TrimPrefix(r.key(), "review — ")
-			return m.openReviewNote(id, reviewTitle(label))
+			return m.openReview(id, reviewTitle(label))
 		}
 		if r.live != nil && r.live.SaveErr != "" {
 			m.statusMsg = i18n.T("%s — [s] retry save", r.live.SaveErr)

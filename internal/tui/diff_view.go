@@ -143,6 +143,10 @@ type diffView struct {
 	// that is the expected state, not an edge case. noteAddr still names the
 	// TIP, so every other note surface works unchanged.
 	previewSet *domain.PreviewNoteSet
+	// reviewID is set when this diff was opened from the review view: its
+	// notes are that review's (domain.ReviewNotesFor, read-only), never the
+	// store's (stampReviewNotes).
+	reviewID string
 	// search is the in-view text search (spec §4.3). It is per VIEW, not per
 	// file: stepping to another file (N/P, home/end) replaces the whole
 	// diffView, so the query does not follow — the new file is a new search.
@@ -904,7 +908,7 @@ func (v *diffView) inheritIdentity(from *diffView) {
 		return
 	}
 	v.context, v.rev = from.context, from.rev
-	v.noteAddr, v.previewSet = from.noteAddr, from.previewSet
+	v.noteAddr, v.previewSet, v.reviewID = from.noteAddr, from.previewSet, from.reviewID
 }
 
 // loadCompareDiffCmd computes one file's diff between two endpoints. Each side

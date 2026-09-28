@@ -84,7 +84,7 @@ func (m Model) showBranchReviewRow() (actionRow, bool) {
 		id:    "branch-show-review",
 		label: i18n.T("Show review"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.openReviewNote(h.ID, h.Summary)
+			return m.openReview(h.ID, h.Summary)
 		},
 	}, true
 }

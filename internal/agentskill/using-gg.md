@@ -45,11 +45,15 @@ guards against removing the worktree you are standing in.
   header plus the commit's terse stat block (default) or full patch
   (`--patch`).
 - `gg review [--tool <name>] [--working] [<rev>|<A..B>]` — runs a configured
-  AI review agent headless and prints its report to stdout. The review is
-  stored as a note on the reviewed commit (a range's last commit; a branch
-  review's tip, carrying the branch name) and `note: <id>` is printed on
-  stderr; a `--working` review has no commit and is printed only. There is
-  no report file. Flags must precede the positional (like `gg log
+  AI review agent headless. The agent replies with the gg review document
+  (JSON: a markdown overview plus per-file line notes); stdout is the
+  overview, its meta, then one `path:line — summary` line per note (`-line`
+  = a removed line). A reply that is not the document prints as it came,
+  with `warning: the review is not in gg review format` on stderr. The
+  review is stored as a note on the reviewed commit (a range's last commit;
+  a branch review's tip, carrying the branch name) and `note: <id>` is
+  printed on stderr; a `--working` review has no commit and is printed only.
+  There is no report file. Flags must precede the positional (like `gg log
   -n`). No positional reviews the current branch's work; a single `<rev>`
   reviews just that commit's own change (`rev^..rev`); an `A..B` positional
   is used as a range; `--working` reviews uncommitted changes. `--tool`
@@ -68,7 +72,7 @@ gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--
 gg note list  [<link> | --file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
 gg note rm    [<repo-link>] <note-id>
 gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
-gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]     # also import the tool's anchored notes
+gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]     # also keep the review's notes as permanent notes
 gg skill path [review|using-gg]                                  # print the bundled skill's path
 ```
 
