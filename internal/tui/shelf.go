@@ -82,21 +82,27 @@ func (m Model) focusedShelfAddress() (model.FileAddress, bool) {
 type shelfAddedMsg struct {
 	entry model.ShelfEntry
 	err   error
+	// unmark is the Status file-mark to drop on success ("" = the file was
+	// the cursor row, not a mark): a shelved mark is consumed, like a stashed
+	// one.
+	unmark string
 }
 
 // shelfAddCmd freezes addr's bytes into the default bucket off the UI thread.
-func (m Model) shelfAddCmd(addr model.FileAddress) tea.Cmd {
+// unmark names the file-mark to clear once it lands ("" for none).
+func (m Model) shelfAddCmd(addr model.FileAddress, unmark string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		e, err := svc.ShelfAdd(context.Background(), addr, "")
-		return shelfAddedMsg{entry: e, err: err}
+		return shelfAddedMsg{entry: e, err: err, unmark: unmark}
 	}
 }
 
-// shelfSetAddedMsg reports a marked SET shelved as one files entry.
+// shelfSetAddedMsg reports a marked SET shelved as one files entry. paths
+// are the members' Status paths: their marks are consumed on success.
 type shelfSetAddedMsg struct {
 	entry model.ShelfEntry
-	n     int
+	paths []string
 	err   error
 }
 
@@ -106,7 +112,11 @@ func (m Model) shelfAddFilesCmd(addrs []model.FileAddress, label string) tea.Cmd
 	svc := m.svc
 	return func() tea.Msg {
 		e, err := svc.ShelfAddFiles(context.Background(), addrs, label)
-		return shelfSetAddedMsg{entry: e, n: len(addrs), err: err}
+		paths := make([]string, 0, len(addrs))
+		for _, a := range addrs {
+			paths = append(paths, a.Path)
+		}
+		return shelfSetAddedMsg{entry: e, paths: paths, err: err}
 	}
 }
 
@@ -157,15 +167,15 @@ func (m Model) shelfAddRow() (actionRow, bool) {
 	}
 	if len(addrs) == 1 {
 		addr := addrs[0]
-		label := i18n.T("Add to shelf")
+		label, unmark := i18n.T("Add to shelf"), ""
 		if marked {
-			label = i18n.T("Add the marked file to shelf")
+			label, unmark = i18n.T("Add the marked file to shelf"), addr.Path
 		}
 		return actionRow{
 			id:    "shelf-add",
 			label: label,
 			run: func(m Model) (tea.Model, tea.Cmd) {
-				return m, m.shelfAddCmd(addr)
+				return m, m.shelfAddCmd(addr, unmark)
 			},
 		}, true
 	}

@@ -20,8 +20,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   files view's Copy to working dir restores one, `t` copies them all to a
   temp dir; `a` (cherry-pick) and the sha-based compares are refused, since
   nothing in git stands behind the bytes. One marked file away from the
-  cursor stays a plain file entry (**Add the marked file to shelf**). Marks
-  stay put after shelving. A diff, viewer, blame or history layer keeps
+  cursor stays a plain file entry (**Add the marked file to shelf**). The
+  shelved files are unmarked once the entry lands (like stashed ones); a
+  failed shelving keeps them marked. A diff, viewer, blame or history layer keeps
   shelving its own single file even while marks exist underneath. Shelving is
   atomic: one unreadable file (a deleted row) fails the whole set naming the
   path.
