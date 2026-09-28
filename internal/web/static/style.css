@@ -1697,3 +1697,10 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #openfiles-list .ofrow .glyph.run { color: #7bd88f; }
 #openfiles-list .ofrow .glyph.ex { color: var(--dim); }
 #openfiles-list .ofrow.task .glyph.run { color: #f2a65a; }
+
+/* Session sub-rows under a worktree (web attach): └ ● claude  running 12m. */
+#worktrees-list li.wsess { padding-left: 22px; cursor: pointer; color: var(--fg); font-weight: normal; }
+#worktrees-list li.wsess .glyph.run { color: #7bd88f; }
+#worktrees-list li.wsess .glyph.ex { color: var(--dim); }
+#worktrees-list li.wsess.task .glyph.run { color: #f2a65a; }
+#worktrees-list li.wsess:hover { background: var(--sel); }
