@@ -14,6 +14,8 @@ import (
 // real git repo in a t.TempDir() (convention: newTestRepo), not mocks; the
 // rare pure-unit case nil-embeds GitOps and implements only the verbs under
 // test (see writefile_test.go).
+// An op that must act on ANOTHER worktree asks OpDeps.repoAt(dir) for a
+// GitOps view (git -C <dir>); the interface itself stays single-worktree.
 type GitOps interface {
 	Status(ctx context.Context) (model.WorkingTreeStatus, error)
 	Branches(ctx context.Context) ([]model.Branch, error)
