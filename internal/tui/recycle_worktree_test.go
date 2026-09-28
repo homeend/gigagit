@@ -84,6 +84,32 @@ func TestRecyclePickerListsOtherWorktreesOnly(t *testing.T) {
 	}
 }
 
+// A long worktree path is elided in the MIDDLE to fit the menu's text width
+// with the branch name still visible at the end of the row (the menu box is
+// narrower than the screen, so the budget is the menu's, not the screen's).
+func TestRecyclePickerRowFitsTheMenuWidth(t *testing.T) {
+	t.Parallel()
+	m := recycleModel()
+	m.width, m.height = 120, 40
+	long := "/tmp/claude-1000/-mnt-t-others-gigagit/22501cfc-34d0-48fe-8b7d-ff6528344fbf/scratchpad/rc/wt"
+	m.worktrees = append(m.worktrees, model.Worktree{Path: long, Branch: "wt-branch"})
+	row, _ := rowByID(availableActions(m), "recycle-worktree")
+	nm, _ := row.run(m)
+	m = nm.(Model)
+	pick, ok := rowByID(m.actionMenu.rows, "recycle-into:"+long)
+	if !ok {
+		t.Fatal("picker row missing")
+	}
+	w, _ := m.overlayDims()
+	textW := popupTextWidth(popupInnerWidth(w))
+	if got := len([]rune(pick.label)) + 2; got > textW { // "> " prefix
+		t.Fatalf("row is %d cols, menu text width is %d: %q", got, textW, pick.label)
+	}
+	if !strings.HasSuffix(pick.label, "  wt-branch") || !strings.HasSuffix(strings.TrimSuffix(pick.label, "  wt-branch"), "/wt") {
+		t.Fatalf("label must keep the path tail and the branch: %q", pick.label)
+	}
+}
+
 func TestRecyclePickerEnterStartsTheOp(t *testing.T) {
 	t.Parallel()
 	m := recycleModel()

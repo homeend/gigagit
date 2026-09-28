@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
@@ -62,7 +63,10 @@ func (m Model) openRecyclePicker(branch string) Model {
 	for _, info := range domain.Sessions().List() {
 		live[filepath.Clean(info.Dir)] = true
 	}
-	width := max(24, m.width/2)
+	// Budget = the menu's own text width minus the "> " prefix; the branch
+	// (and a live marker) keeps its columns, the PATH is what elides.
+	w, _ := m.overlayDims()
+	textW := popupTextWidth(popupInnerWidth(w)) - 2
 	var rows []actionRow
 	for _, w := range m.recycleCandidates() {
 		dir := w.Path
@@ -70,11 +74,12 @@ func (m Model) openRecyclePicker(branch string) Model {
 		if cur == "" {
 			cur = i18n.T("detached")
 		}
-		label := elidePath(dir, width) + "  " + cur
+		suffix := "  " + cur
 		isLive := live[filepath.Clean(dir)]
 		if isLive {
-			label += "  " + i18n.T("(agent session running)")
+			suffix += "  " + i18n.T("(agent session running)")
 		}
+		label := elidePath(dir, max(12, textW-lipgloss.Width(suffix))) + suffix
 		rows = append(rows, actionRow{
 			id:    "recycle-into:" + dir,
 			label: label,
