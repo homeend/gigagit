@@ -48,6 +48,7 @@ type contentLine struct {
 	cls     []syntax.Class
 	heading bool
 	noWrap  bool   // a preformatted line (code, a table row): cut in wrap mode, never reflowed
+	elide   bool   // the text holds a path: a cut loses its MIDDLE (elidePath), never its end
 	path    string // file's (new) path
 	oldPath string // set only for renames/copies
 	status  string // model.CommitFile.Status letter ("A","M","D","R","C","T")
@@ -410,6 +411,13 @@ func (p *contentPopup) box(m Model) string {
 	}
 	for i, l := range vis {
 		wr[i].noWrap = l.noWrap
+		if l.elide {
+			wr[i].elide = true
+			// The "  " / "> " lead-in stays whole; a heading row has none.
+			if !l.heading || i == p.sel {
+				wr[i].elideHead = 2
+			}
+		}
 	}
 	capRows := m.contentPageRows()
 	// contentPageRows budgets for title + blank + hint. Anything else the box

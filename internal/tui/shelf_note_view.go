@@ -60,7 +60,7 @@ func shelfNoteLines(ns []domain.ResolvedNote) []contentLine {
 			out = append(out, contentLine{})
 		}
 		n := r.Note
-		out = append(out, contentLine{text: n.Summary, heading: true})
+		out = append(out, contentLine{text: n.Summary, heading: true, elide: true})
 		meta := n.Created.Local().Format("2006-01-02 15:04")
 		if n.Author != "" {
 			meta = n.Author + " · " + meta
@@ -68,7 +68,7 @@ func shelfNoteLines(ns []domain.ResolvedNote) []contentLine {
 		out = append(out, contentLine{text: meta, dim: true})
 		for _, l := range strings.Split(strings.TrimRight(n.Rationale, "\n"), "\n") {
 			if l != "" {
-				out = append(out, contentLine{text: l, noWrap: true})
+				out = append(out, contentLine{text: l, noWrap: true, elide: true})
 			}
 		}
 	}
