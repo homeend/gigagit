@@ -211,7 +211,21 @@ func (s *Service) ShelfRemove(ctx context.Context, entryID string) error {
 	if st == nil {
 		return ErrShelfDisabled
 	}
-	return st.Remove(entryID)
+	if err := st.Remove(entryID); err != nil {
+		return err
+	}
+	// The entry's own notes go with it (replies copy their root's address).
+	// Best effort: the entry is gone either way, and the sweep drops a note
+	// whose entry no longer exists.
+	if ns := s.notesStore(ctx); ns != nil {
+		dropped, _ := ns.Sweep(func(n model.Note) bool {
+			return !(n.IsShelfLevel() && n.Address.ShelfID == entryID)
+		})
+		if dropped > 0 {
+			s.invalidateNoteCounts()
+		}
+	}
+	return nil
 }
 
 // ShelfPatchFile materializes entryID's stored format-patch mailbox to a temp

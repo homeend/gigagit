@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/observ"
+	"github.com/homeend/gigagit/internal/shelf"
 )
 
 // notesSweepTimeout bounds the background housekeeping pass: it reads file
@@ -150,12 +151,29 @@ func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 	// Phase 1 — resolve against the snapshot, no lock held.
 	cache := map[string]noteSide{}
 	drop := map[string]bool{}
+	shelfGone := map[string]bool{}
 	for _, n := range all {
 		// A commit-level note (an AI review) has no line to re-anchor and never
 		// expires: a missing commit shows it as missing, it is not deleted
 		// behind the user's back. Its replies copy its address, so they are
 		// skipped here too.
 		if n.IsCommitLevel() {
+			continue
+		}
+		// A note on a whole shelf entry never expires either: it lives exactly
+		// as long as its entry (ShelfRemove takes it along; this catches an
+		// entry that went away some other way). Replies copy the address.
+		if n.IsShelfLevel() {
+			id := n.Address.ShelfID
+			gone, seen := shelfGone[id]
+			if !seen {
+				_, ferr := s.ShelfFind(ctx, id)
+				gone = errors.Is(ferr, shelf.ErrNotFound)
+				shelfGone[id] = gone
+			}
+			if gone {
+				drop[n.ID] = true
+			}
 			continue
 		}
 		if !cutoff.IsZero() && n.Created.Before(cutoff) {

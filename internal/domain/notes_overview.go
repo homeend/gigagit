@@ -39,6 +39,7 @@ type NoteShelfNotes struct {
 	ID      string
 	Label   string
 	Missing bool
+	Entry   []ResolvedNote // notes on the entry itself (no file), oldest first
 	Files   []NoteFileNotes
 }
 
@@ -71,6 +72,7 @@ func (o NotesOverview) Count() int {
 	}
 	for _, s := range o.Shelves {
 		count(s.Files)
+		n += len(s.Entry)
 	}
 	return n
 }
@@ -138,9 +140,28 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 
 	commits := map[string]*NoteCommitNotes{}
 	shelves := map[string]*NoteShelfNotes{}
+	shelfGroup := func(id string) *NoteShelfNotes {
+		sh := shelves[id]
+		if sh == nil {
+			sh = &NoteShelfNotes{ID: id}
+			if e, ferr := s.ShelfFind(ctx, id); ferr == nil {
+				sh.Label = e.Label
+			} else {
+				sh.Missing = true
+			}
+			shelves[id] = sh
+		}
+		return sh
+	}
 	for _, b := range buckets {
 		if err := ctx.Err(); err != nil {
 			return NotesOverview{}, err
+		}
+		if isShelfLevelAddr(b.addr) {
+			// No lines to read: an entry note is always active.
+			sh := shelfGroup(b.addr.ShelfID)
+			sh.Entry = append(sh.Entry, entryNotes(b.notes)...)
+			continue
 		}
 		oldLines, _ := s.noteSideLines(ctx, b.addr, model.NoteSideOld)
 		newLines, _ := s.noteSideLines(ctx, b.addr, model.NoteSideNew)
@@ -157,16 +178,7 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 			}
 			c.Files = append(c.Files, f)
 		case b.addr.ShelfID != "":
-			sh := shelves[b.addr.ShelfID]
-			if sh == nil {
-				sh = &NoteShelfNotes{ID: b.addr.ShelfID}
-				if e, ferr := s.ShelfFind(ctx, b.addr.ShelfID); ferr == nil {
-					sh.Label = e.Label
-				} else {
-					sh.Missing = true
-				}
-				shelves[b.addr.ShelfID] = sh
-			}
+			sh := shelfGroup(b.addr.ShelfID)
 			sh.Files = append(sh.Files, f)
 		case b.addr.State == model.StateStaged:
 			ov.Staged = append(ov.Staged, f)
