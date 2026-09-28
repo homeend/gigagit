@@ -212,6 +212,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("abort")
 	case "add":
 		return i18n.T("add")
+	case "commit":
+		return i18n.T("commit")
 	case "cancel":
 		return i18n.T("cancel")
 	case "carry changes":
@@ -222,6 +224,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("checkout-and-resolve")
 	case "commits":
 		return i18n.T("commits")
+	case "discard":
+		return i18n.T("discard")
 	case "delete":
 		return i18n.T("delete")
 	case "force":

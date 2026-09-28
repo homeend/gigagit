@@ -336,6 +336,11 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcBranches, srcWorktrees}
 	case engine.RemoveWorktree:
 		return []sourceKey{srcBranches, srcWorktrees}
+	case engine.RecycleWorktree:
+		// Another worktree's HEAD moved: Branches shows per-branch worktree
+		// markers, Worktrees shows the branch per path. Our own status is
+		// untouched.
+		return []sourceKey{srcBranches, srcWorktrees}
 	case engine.MoveWorktree:
 		// The worktree list changed; Branches shows per-branch worktree markers.
 		// (A current-worktree move chains a full reRoot before this is consulted.)
