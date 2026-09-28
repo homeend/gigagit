@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -125,6 +126,14 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 		// same set without a label, rather than printing an id nobody can read.
 		if kind, label, ok := s.savedSetLabel(ctx, l.Hint.ID); ok {
 			return kind, label, ""
+		}
+	case "version":
+		// The recorded version, when this store holds it; a miss (deleted,
+		// another machine) falls THROUGH to the pair arms below.
+		if l.Target.Pair != nil {
+			if branch, v, ok, err := s.FindVersion(ctx, l.Hint.ID, l.Target.Pair.A, l.Target.Pair.B); err == nil && ok {
+				return "version", branch + " · " + v.Op + " · " + time.Unix(v.Unix, 0).Format("2006-01-02 15:04"), ""
+			}
 		}
 	}
 	switch {

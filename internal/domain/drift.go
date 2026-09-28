@@ -16,6 +16,10 @@ type DriftReport struct {
 	Ref     string
 	Report  changeset.Report
 	Checked bool
+	// Version is the record the branch was compared against — the one Ref
+	// names — so a notice can offer its preview link without a second load.
+	// Zero when nothing was recorded.
+	Version model.BranchVersion
 }
 
 // DriftSince compares the change set a version froze against the branch's
@@ -44,6 +48,9 @@ func (s *Service) DriftSince(ctx context.Context, ref, newTip string) (DriftRepo
 			rec = &vs[i]
 			break
 		}
+	}
+	if rec != nil {
+		out.Version = *rec
 	}
 	if rec == nil || rec.Base == "" || rec.Ours == "" || rec.Other == "" || newTip == "" {
 		return out, nil // nothing recorded to compare against

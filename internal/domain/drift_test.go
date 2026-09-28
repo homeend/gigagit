@@ -70,6 +70,9 @@ func TestDriftSinceReportsResurrectionAfterRebase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DriftSince: %v", err)
 	}
+	if got.Version.Ref != ref || got.Version.Base != baseSha || got.Version.Ours != oursSha {
+		t.Fatalf("Version = %+v, want the record compared against (%s)", got.Version, ref)
+	}
 	if !got.Checked {
 		t.Fatalf("Checked = false, want true: %+v", got)
 	}
