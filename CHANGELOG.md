@@ -19,7 +19,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   flips between old and new in place — the quickest way to spot a change
   between two small thumbnails). Each side has an info line with its format,
   pixel size and byte size; the hint line names the layout; the choice lasts
-  for the session. A one-sided pair shows its one image whatever the layout.
+  for the session. An added or deleted image has one side: it shows bare (no `old:`/`new:` marker) with no layout or `tab` keys, and `[tab]` is offered only in the one-at-a-time layout.
   The stacked all-files view (`H`) keeps the placeholder for now.
 
 ## Binary files are never previewed as text; images are previewed as cells

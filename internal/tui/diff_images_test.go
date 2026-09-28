@@ -103,8 +103,11 @@ func TestDiffImageOneSidedPairShowsThatSide(t *testing.T) {
 		v.imgLayout = layout
 		lines := v.imageLines(81, 20)
 		head := ansi.Strip(lines[0])
-		if !strings.Contains(head, "new: png 10×10") || strings.Contains(head, "old: png") {
-			t.Fatalf("layout %d: %q", layout, head)
+		if !strings.HasPrefix(head, "png 10×10") || strings.Contains(head, "new:") {
+			t.Fatalf("layout %d: %q — one side needs no old/new marker", layout, head)
+		}
+		if hint := v.imageHint(); strings.Contains(hint, "[ctrl+w]") || strings.Contains(hint, "[tab]") {
+			t.Fatalf("layout %d: hint %q offers keys that do nothing on one image", layout, hint)
 		}
 		if len(lines) < 6 {
 			t.Fatalf("layout %d: the one image should fill the pane, got %d lines", layout, len(lines))
@@ -153,5 +156,20 @@ func TestDiffCtrlWCyclesImageLayoutsAndTabFlips(t *testing.T) {
 	frame := ansi.Strip(v.render(m, ""))
 	if !strings.Contains(frame, "old: png 40×20") || !strings.Contains(frame, "[tab]") {
 		t.Fatalf("the frame should show the old side and the flip hint:\n%s", frame)
+	}
+}
+
+func TestTabHintOnlyWhereTabDoesSomething(t *testing.T) {
+	t.Parallel()
+	v := imagePairView()
+	for _, layout := range []imgLayout{imgSideBySide, imgStacked} {
+		v.imgLayout = layout
+		if hint := v.imageHint(); strings.Contains(hint, "[tab]") || !strings.Contains(hint, "[ctrl+w]") {
+			t.Fatalf("layout %d: %q — both images are on screen, tab flips nothing", layout, hint)
+		}
+	}
+	v.imgLayout = imgSingle
+	if hint := v.imageHint(); !strings.Contains(hint, "[tab]") {
+		t.Fatalf("one at a time: %q should offer tab", hint)
 	}
 }
