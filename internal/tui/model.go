@@ -1313,6 +1313,21 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("shelf add: %s", msg.err.Error())
 		} else {
 			m.statusMsg = i18n.T("shelved %s → %s", msg.entry.Origin.Path, msg.entry.ID)
+			if msg.unmark != "" {
+				delete(m.fileMarks, msg.unmark) // the shelved mark is consumed (user ruling)
+			}
+		}
+		return m, nil
+	case shelfSetAddedMsg:
+		if msg.err != nil {
+			m.statusMsg = i18n.T("shelf add: %s", msg.err.Error())
+		} else {
+			m.statusMsg = i18n.T("shelved %d files as one set → %s", len(msg.paths), msg.entry.ID)
+			// The shelved marks are consumed, like stashed ones (user ruling);
+			// a mark on a file that was not part of the set stays.
+			for _, p := range msg.paths {
+				delete(m.fileMarks, p)
+			}
 		}
 		return m, nil
 	case tempExportResolvedMsg:

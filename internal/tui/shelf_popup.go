@@ -242,6 +242,11 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
+		if p.compareEntry != nil || p.compareRef != nil {
+			if nm, blocked := m.fileSetCompareNotice(e); blocked {
+				return nm, nil
+			}
+		}
 		if p.compareEntry != nil {
 			if second, ok := m.shelfEntryLink(e); ok && p.compareLink != "" {
 				// The cross flow, on links — see the bookmark switcher's twin.
@@ -271,11 +276,11 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			return m.openCompareFocusedVsShelf(*p.compareRef, p.compareLabel, e)
 		}
-		if e.IsCommit() {
-			// Browse the shelved commit's frozen files in the files view; each
-			// row diffs/copies against the working tree from there. The files
-			// view is not a layer, so the switcher is parked (not cleared)
-			// and esc/l on the tree returns to it.
+		if e.IsArchive() {
+			// Browse the shelved commit's / file set's frozen files in the
+			// files view; each row diffs/copies against the working tree from
+			// there. The files view is not a layer, so the switcher is parked
+			// (not cleared) and esc/l on the tree returns to it.
 			return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
 				return m.openShelfCommitFiles(e)
 			})
@@ -404,16 +409,30 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// commitShelfNotice sets a "not for a shelved commit" status and reports true
-// when the highlighted entry is a shelved commit (a path-less tar payload), so
-// the caller can no-op a file-only key (diff / restore / editor / mark /
-// vs-bookmark) instead of treating the tar as a file — the empty origin path
-// would otherwise resolve to the worktree root ("is a directory"). Mirrors
-// commitBookmarkNotice; [t] temp export and [x] remove stay available.
+// commitShelfNotice sets a "not for a shelved commit / file set" status and
+// reports true when the highlighted entry is an archive (a path-less tar
+// payload), so the caller can no-op a file-only key (diff / restore / editor /
+// mark / vs-bookmark) instead of treating the tar as a file — the empty origin
+// path would otherwise resolve to the worktree root ("is a directory").
+// Mirrors commitBookmarkNotice; [t] temp export and [x] remove stay available.
 func (m Model) commitShelfNotice(p *shelfPopup) (Model, bool) {
-	if e, ok := p.selected(); ok && e.IsCommit() {
-		m.statusMsg = i18n.T("not available for a shelved commit — enter browses its files, [t] copies them to a temp dir")
+	if e, ok := p.selected(); ok && e.IsArchive() {
+		m.statusMsg = i18n.T("not available for a shelved commit or file set — enter browses its files, [t] copies them to a temp dir")
 		return m, true
+	}
+	return m, false
+}
+
+// fileSetCompareNotice refuses the sha-based compare lanes for a shelved FILE
+// SET: those are defined over commit entries (a sha on each side) or single
+// file blobs, and a set is neither. enter still diffs its members against the
+// working tree.
+func (m Model) fileSetCompareNotice(es ...model.ShelfEntry) (Model, bool) {
+	for _, e := range es {
+		if e.IsArchive() && !e.IsCommit() {
+			m.statusMsg = i18n.T("compare is not available for a shelved file set — enter browses its files against the working tree")
+			return m, true
+		}
 	}
 	return m, false
 }
@@ -469,6 +488,9 @@ func (m Model) shelfPopupMark() (Model, tea.Cmd) {
 	if !okA || !okB {
 		return m, nil
 	}
+	if nm, blocked := m.fileSetCompareNotice(a, b); blocked {
+		return nm, nil
+	}
 	switch {
 	case a.IsCommit() && b.IsCommit():
 		return m.startEntryCompare(shelfEntrySide(a), shelfEntrySide(b))
@@ -489,6 +511,9 @@ func (m Model) shelfCompareAgainstBookmark() (Model, tea.Cmd) {
 	e, ok := p.selected()
 	if !ok {
 		return m, nil
+	}
+	if nm, blocked := m.fileSetCompareNotice(e); blocked {
+		return nm, nil
 	}
 	link, _ := m.shelfEntryLink(e) // "" = no link form: the second pick keeps the endpoint flow
 	if e.IsCommit() {

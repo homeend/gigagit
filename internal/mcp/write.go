@@ -13,7 +13,7 @@ import (
 
 type writeSourceIn struct {
 	Shelf    string `json:"shelf,omitempty"`    // shelf entry id
-	Member   string `json:"member,omitempty"`   // member path inside a shelved commit
+	Member   string `json:"member,omitempty"`   // member path inside a shelved commit / file set
 	Bookmark string `json:"bookmark,omitempty"` // bookmark id (file bookmark)
 }
 
@@ -57,11 +57,11 @@ func (s *Server) registerWriteTool(srv *sdk.Server) {
 				return nil, out, fmt.Errorf("shelf entry not found: %s", in.Source.Shelf)
 			}
 			switch {
-			case entry.IsCommit() && in.Source.Member == "":
-				return nil, out, fmt.Errorf("shelf entry %s is a commit — pass source.member (list members with gg_shelf_commit_files)", in.Source.Shelf)
-			case !entry.IsCommit() && in.Source.Member != "":
+			case entry.IsArchive() && in.Source.Member == "":
+				return nil, out, fmt.Errorf("shelf entry %s holds several files — pass source.member (list members with gg_shelf_commit_files)", in.Source.Shelf)
+			case !entry.IsArchive() && in.Source.Member != "":
 				return nil, out, fmt.Errorf("shelf entry %s is a file entry — omit member", in.Source.Shelf)
-			case entry.IsCommit():
+			case entry.IsArchive():
 				data, err = s.svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceShelf, Locator: in.Source.Shelf, Path: in.Source.Member})
 				if err != nil {
 					return nil, out, fmt.Errorf("reading member %q of %s: %v", in.Source.Member, in.Source.Shelf, err)

@@ -1,10 +1,15 @@
 package domain
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
+	pathpkg "path"
+	"path/filepath"
+	"time"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/shelf"
@@ -86,10 +91,54 @@ func (s *Service) ShelfAddCommit(ctx context.Context, sha, label string) (model.
 	return st.PutCommit("", addr, tar, patch, label)
 }
 
-// ShelfCommitFiles lists the files frozen in a shelved commit's tar — a header
-// scan only, no data copy. Rows carry an empty Status: A-vs-M relative to the
-// commit's original parent is not recorded in the tar. Backs the files-view
-// shelf mode.
+// ShelfAddFiles freezes several working-tree / index files into ONE durable
+// ShelfKindFiles entry — a tar with one member per address, so the set stays
+// together (browse, restore one, compare) instead of scattering into N file
+// entries. Atomic: one unreadable member (a deleted path has no bytes) fails
+// the whole call naming the path — a set the user reads as "related" is
+// complete or absent. The entry's origin is the first address without its
+// path (the callers hand over one panel's files, so state and worktree are
+// uniform). label names the set; "" is allowed.
+func (s *Service) ShelfAddFiles(ctx context.Context, addrs []model.FileAddress, label string) (model.ShelfEntry, error) {
+	st := s.shelfStore(ctx)
+	if st == nil {
+		return model.ShelfEntry{}, ErrShelfDisabled
+	}
+	if len(addrs) == 0 {
+		return model.ShelfEntry{}, errors.New("shelf: no files to shelve")
+	}
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	seen := map[string]bool{}
+	for _, a := range addrs {
+		name := pathpkg.Clean(filepath.ToSlash(a.Path))
+		if name == "" || name == "." || seen[name] {
+			return model.ShelfEntry{}, fmt.Errorf("shelf: %q is not a shelvable path", a.Path)
+		}
+		seen[name] = true
+		data, err := s.ResolveBytes(ctx, a.FileRef())
+		if err != nil {
+			return model.ShelfEntry{}, fmt.Errorf("shelf: %s: %w", a.Path, err)
+		}
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg, ModTime: time.Now()}); err != nil {
+			return model.ShelfEntry{}, err
+		}
+		if _, err := tw.Write(data); err != nil {
+			return model.ShelfEntry{}, err
+		}
+	}
+	if err := tw.Close(); err != nil {
+		return model.ShelfEntry{}, err
+	}
+	origin := addrs[0]
+	origin.Path = ""
+	return st.PutFiles("", origin, buf.Bytes(), label)
+}
+
+// ShelfCommitFiles lists the files frozen in an archive entry's tar (a
+// shelved commit or a shelved file set) — a header scan only, no data copy.
+// Rows carry an empty Status: A-vs-M relative to the commit's original parent
+// is not recorded in the tar. Backs the files-view shelf mode.
 func (s *Service) ShelfCommitFiles(ctx context.Context, entryID string) ([]model.CommitFile, error) {
 	st := s.shelfStore(ctx)
 	if st == nil {
@@ -99,8 +148,8 @@ func (s *Service) ShelfCommitFiles(ctx context.Context, entryID string) ([]model
 	if err != nil {
 		return nil, err
 	}
-	if !e.IsCommit() {
-		return nil, fmt.Errorf("shelf: entry %s is not a shelved commit", entryID)
+	if !e.IsArchive() {
+		return nil, fmt.Errorf("shelf: entry %s holds one file, not a set of files", entryID)
 	}
 	blob, err := st.Get(entryID)
 	if err != nil {
@@ -117,11 +166,11 @@ func (s *Service) ShelfCommitFiles(ctx context.Context, entryID string) ([]model
 	return out, nil
 }
 
-// shelfResolve is ResolveBytes' shelf branch: a commit entry with a path
-// resolves to that member's bytes from the tar; a commit entry without a path
-// stays the whole tar (backs export); a file entry stays the whole blob — the
-// discriminator is the ENTRY KIND, never the content (a shelved .tar *file*
-// must stay a blob).
+// shelfResolve is ResolveBytes' shelf branch: an archive entry (commit or
+// file set) with a path resolves to that member's bytes from the tar; one
+// without a path stays the whole tar (backs export); a file entry stays the
+// whole blob — the discriminator is the ENTRY KIND, never the content (a
+// shelved .tar *file* must stay a blob).
 func (s *Service) shelfResolve(ctx context.Context, entryID, path string) ([]byte, error) {
 	st := s.shelfStore(ctx)
 	if st == nil {
@@ -135,7 +184,7 @@ func (s *Service) shelfResolve(ctx context.Context, entryID, path string) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	if !e.IsCommit() || path == "" {
+	if !e.IsArchive() || path == "" {
 		return blob, nil
 	}
 	return tarMember(blob, path)

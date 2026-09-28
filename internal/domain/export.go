@@ -127,10 +127,11 @@ func tarMember(data []byte, path string) ([]byte, error) {
 }
 
 // ExportShelfEntry resolves a shelf entry into the files to write plus the
-// default target subdir name. A commit entry extracts its stored tar (durable,
-// no git); a file entry is a single ExportFile at its origin path.
+// default target subdir name. An archive entry (commit or file set) extracts
+// its stored tar (durable, no git); a file entry is a single ExportFile at its
+// origin path.
 func (s *Service) ExportShelfEntry(ctx context.Context, e model.ShelfEntry) ([]model.ExportFile, string, error) {
-	if e.IsCommit() {
+	if e.IsArchive() {
 		blob, err := s.ShelfBlob(ctx, e.ID)
 		if err != nil {
 			return nil, "", err
@@ -139,7 +140,14 @@ func (s *Service) ExportShelfEntry(ctx context.Context, e model.ShelfEntry) ([]m
 		if err != nil {
 			return nil, "", err
 		}
-		return files, commitDirName(e.Origin.Commit), nil
+		if e.IsCommit() {
+			return files, commitDirName(e.Origin.Commit), nil
+		}
+		name := e.Label
+		if name == "" {
+			name = e.ID
+		}
+		return files, sanitizeName(name), nil
 	}
 	data, err := s.ShelfBlob(ctx, e.ID)
 	if err != nil {

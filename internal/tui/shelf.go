@@ -82,29 +82,110 @@ func (m Model) focusedShelfAddress() (model.FileAddress, bool) {
 type shelfAddedMsg struct {
 	entry model.ShelfEntry
 	err   error
+	// unmark is the Status file-mark to drop on success ("" = the file was
+	// the cursor row, not a mark): a shelved mark is consumed, like a stashed
+	// one.
+	unmark string
 }
 
 // shelfAddCmd freezes addr's bytes into the default bucket off the UI thread.
-func (m Model) shelfAddCmd(addr model.FileAddress) tea.Cmd {
+// unmark names the file-mark to clear once it lands ("" for none).
+func (m Model) shelfAddCmd(addr model.FileAddress, unmark string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		e, err := svc.ShelfAdd(context.Background(), addr, "")
-		return shelfAddedMsg{entry: e, err: err}
+		return shelfAddedMsg{entry: e, err: err, unmark: unmark}
 	}
 }
 
-// shelfAddRow is the menu-only "Add to shelf" action, present wherever a single
-// file is focused. Its run handler captures the resolved address at build time.
+// shelfSetAddedMsg reports a marked SET shelved as one files entry. paths
+// are the members' Status paths: their marks are consumed on success.
+type shelfSetAddedMsg struct {
+	entry model.ShelfEntry
+	paths []string
+	err   error
+}
+
+// shelfAddFilesCmd freezes the addresses into ONE files entry (a tar with one
+// member per file) off the UI thread — the set stays together on the shelf.
+func (m Model) shelfAddFilesCmd(addrs []model.FileAddress, label string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		e, err := svc.ShelfAddFiles(context.Background(), addrs, label)
+		paths := make([]string, 0, len(addrs))
+		for _, a := range addrs {
+			paths = append(paths, a.Path)
+		}
+		return shelfSetAddedMsg{entry: e, paths: paths, err: err}
+	}
+}
+
+// onBareFilesPanel reports whether the file under focus is a Files/Staged
+// panel row itself — no viewer, blame, history, diff or files-view layer is
+// showing a file of its own. Mirrors focusedBookmark's precedence: only then
+// does the panel's marked set (m) apply.
+func (m Model) onBareFilesPanel() bool {
+	switch m.topLayer().(type) {
+	case *fileViewer, *historyView, *blameView:
+		return false
+	}
+	return m.diffLayer() == nil && m.filesView == nil && m.isFilesPanel(m.focus)
+}
+
+// shelfAddTargets resolves what "Add to shelf" freezes: the marked file set
+// restricted to the focused panel's members when any marks exist on a bare
+// Files/Staged panel (like space/stage), otherwise the single focused file.
+// Reads m.status.Files directly so an active text filter never narrows the set.
+// marked reports whether the set came from marks (the label says so: a single
+// marked file away from the cursor would otherwise read like the cursor row).
+func (m Model) shelfAddTargets() (addrs []model.FileAddress, marked bool) {
+	if len(m.fileMarks) > 0 && m.onBareFilesPanel() {
+		for i, f := range m.status.Files {
+			if m.fileMarks[f.Path] && m.memberOf(m.focus, i) {
+				addrs = append(addrs, m.panelFileBookmark(m.focus, f).Address())
+			}
+		}
+		if len(addrs) > 0 {
+			return addrs, true
+		}
+	}
+	if addr, ok := m.focusedShelfAddress(); ok {
+		return []model.FileAddress{addr}, false
+	}
+	return nil, false
+}
+
+// shelfAddRow is the menu-only "Add to shelf" action, present wherever a file
+// is focused. With several marked files on the Files/Staged panel it shelves
+// the whole set as ONE named files entry (the … says it asks for the name)
+// and says so in its label. Its run handler captures the resolved addresses at
+// build time.
 func (m Model) shelfAddRow() (actionRow, bool) {
-	addr, ok := m.focusedShelfAddress()
-	if !ok {
+	addrs, marked := m.shelfAddTargets()
+	if len(addrs) == 0 {
 		return actionRow{}, false
+	}
+	if len(addrs) == 1 {
+		addr := addrs[0]
+		label, unmark := i18n.T("Add to shelf"), ""
+		if marked {
+			label, unmark = i18n.T("Add the marked file to shelf"), addr.Path
+		}
+		return actionRow{
+			id:    "shelf-add",
+			label: label,
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				return m, m.shelfAddCmd(addr, unmark)
+			},
+		}, true
 	}
 	return actionRow{
 		id:    "shelf-add",
-		label: i18n.T("Add to shelf"),
+		label: i18n.T("Add %d marked files to shelf…", len(addrs)),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m, m.shelfAddCmd(addr)
+			// The set gets a name first (what the shelf row will say), like a
+			// shelved commit; enter in the popup fires shelfAddFilesCmd.
+			return m.pushLayer(&shelfSetNamePopup{addrs: addrs, name: newTextField("WIP on " + m.status.Branch)}), nil
 		},
 	}, true
 }
