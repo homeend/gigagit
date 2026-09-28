@@ -57,6 +57,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   alt+1…5 filter slots, and a `/` query matching a session's label keeps the
   branch it runs under in view. ◆ headless tasks stay on the Worktrees and
   Headless tabs.
+- **Sub-row footer and filter parity.** A session sub-row's footer says
+  `[enter] open` on both tabs (the parent row keeps its own `[enter] switch`
+  / `[enter] tip`), and the Worktrees `/` filter now matches a worktree
+  together with its sub-rows the way Branches does: a query naming only a
+  session's label keeps the worktree it runs in.
 
 ## The working-tree files window (`F`) is a tree
 

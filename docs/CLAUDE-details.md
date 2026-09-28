@@ -3549,7 +3549,10 @@ UTF-8 payloads correctly (the fixture test tells).
   branch whose `worktreePathOf` matches a session's `Dir` (sessions only, no
   ◆ tasks); `branchList` (viewstate.go) is entry-based like `worktreeList`
   (Name/Date = the parent's, Key = `name\x00id`, `Haystack` = the branch row
-  + all its sub-rows so a `/` query naming a session keeps the branch) and
+  + all its sub-rows so a `/` query naming a session keeps the branch —
+  `worktreeList.Haystack` follows the same unit rule since the follow-up; the
+  footer's `open-session` `[enter] open` binding is footer-only in the
+  label-coverage gate like `remove-session`) and
   implements `parented` — `displayIndices` indexes the branch-filter slot's
   per-BRANCH `hidden` verdicts through `Parent(i)`, never by row.
   `backingIndex(panelBranches)` and `rowKeyAt` refuse/key sub-rows the

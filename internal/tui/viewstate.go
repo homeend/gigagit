@@ -309,17 +309,22 @@ func (l worktreeList) Key(i int) string {
 	return k
 }
 
-// Haystack: a session row matches whatever its worktree row matches (plus
-// its own label), so a / filter never strands a sub-row without its parent.
+// Haystack: a worktree and its sub-rows match as one unit — the worktree row
+// plus every sub-row's text — so a / filter never strands a sub-row without
+// its parent, and a query naming a session keeps the worktree it runs in
+// (the Branches tab's rule).
 func (l worktreeList) Haystack(i int) string {
-	if !l.ents[i].sub() {
-		return l.rows[i]
-	}
 	p := i
-	for p > 0 && (l.ents[p].sub() || l.ents[p].wt != l.ents[i].wt) {
+	for p > 0 && l.ents[p].sub() {
 		p--
 	}
-	return l.rows[p] + " " + l.rows[i]
+	var sb strings.Builder
+	sb.WriteString(l.rows[p])
+	for q := p + 1; q < len(l.ents) && l.ents[q].sub(); q++ {
+		sb.WriteByte(' ')
+		sb.WriteString(l.rows[q])
+	}
+	return sb.String()
 }
 
 type tagList struct {
