@@ -275,9 +275,15 @@ func TestLiveStopLiveClosesStreams(t *testing.T) {
 // readLiveSSE opens /api/events and returns the first n data messages.
 func readLiveSSE(t *testing.T, ts *httptest.Server, n int, timeout time.Duration) []liveMsg {
 	t.Helper()
+	return readLiveSSEFrom(t, ts.URL, n, timeout)
+}
+
+// readLiveSSEFrom is readLiveSSE for a server known only by its URL (a Host).
+func readLiveSSEFrom(t *testing.T, base string, n int, timeout time.Duration) []liveMsg {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/api/events", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/events", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET events: %v", err)

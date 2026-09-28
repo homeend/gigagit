@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -64,43 +63,30 @@ func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *stee
 			return fmt.Errorf("start-at: %w", err)
 		}
 	}
-	ln, url, err := listen(addr)
+	h := newHostOver(srv, false)
+	url, err := h.Start(ctx, addr)
 	if err != nil {
 		return err
 	}
-	srv.startLive(ctx)        // watcher + interval ticker behind GET /api/events
-	srv.startOpenFilesWatch() // the open files follow the disk (openfiles_watch.go)
-	defer srv.Close()
-	// The live-steering claim: web.json carries THIS run's URL, so a
-	// `gg session …` in any shell on this worktree can reach the page.
-	srv.initSteerPresence(ctx, url)
-	defer srv.removeSteerPresence()
-	httpSrv := &http.Server{Handler: srv.Handler()}
+	if serveURLHook != nil {
+		serveURLHook(url)
+	}
 	fmt.Fprintln(os.Stderr, "gg web: serving", url)
 	if launch {
 		openBrowser(url)
 	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
-	// Serve returns the moment Shutdown STARTS, so the exit waits on done:
-	// the streams' last "shutdown" message must be on the wire before the
-	// process goes. The handlers return right after writing it; the timeout
-	// only bounds a stuck connection.
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		<-ctx.Done()
-		srv.announceShutdown()
-		sctx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
-		defer cancel()
-		_ = httpSrv.Shutdown(sctx)
-	}()
-	if err := httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
-		return err
-	}
-	<-done
+	<-ctx.Done()
+	// Close returns once the streams' last "shutdown" message is on the
+	// wire and the listener is down (shutdownGrace bounds a stuck one).
+	h.Close()
 	return nil
 }
+
+// serveURLHook, when set, receives the bound URL before Serve blocks (a test
+// seam: Serve otherwise reports it only on stderr). nil in production.
+var serveURLHook func(url string)
 
 // shutdownGrace bounds the wait for the /api/events streams to send their
 // last "shutdown" message on exit.
