@@ -11,9 +11,10 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// ErrReadOnlyNote is returned by every note mutation handed a forge comment's
-// id: gg reads the forge and never writes to it.
-var ErrReadOnlyNote = errors.New("forge comments are read-only")
+// ErrReadOnlyNote is returned by every note mutation handed the id of a note
+// built at read time: a forge comment (gg reads the forge and never writes to
+// it) or a review document's note (the review is the one stored note).
+var ErrReadOnlyNote = errors.New("forge comments and review notes are read-only")
 
 // PRCommentsRefresh re-reads PR n's comments from the forge and caches them
 // for the note readers below. It is the ONLY network call on this path —

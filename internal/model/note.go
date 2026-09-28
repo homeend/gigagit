@@ -27,6 +27,18 @@ const ForgeNoteIDPrefix = "forge:"
 // IsForgeNoteID reports whether id names a forge comment, not a stored note.
 func IsForgeNoteID(id string) bool { return strings.HasPrefix(id, ForgeNoteIDPrefix) }
 
+// ReviewNoteIDPrefix marks the id of a note built at read time from a stored
+// review document ("review:<review note id>:<n>"); like a forge comment it is
+// never stored, so it is read-only.
+const ReviewNoteIDPrefix = "review:"
+
+// IsReviewNoteID reports whether id names a note of a review document.
+func IsReviewNoteID(id string) bool { return strings.HasPrefix(id, ReviewNoteIDPrefix) }
+
+// IsReadOnlyNoteID reports whether id names a note built at read time — a
+// forge comment or a review's note — that no note mutation may touch.
+func IsReadOnlyNoteID(id string) bool { return IsForgeNoteID(id) || IsReviewNoteID(id) }
+
 // NoteTagResolved tags a forge thread its reviewers marked resolved.
 const NoteTagResolved = "resolved"
 
