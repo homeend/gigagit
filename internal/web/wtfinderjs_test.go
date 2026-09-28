@@ -51,13 +51,18 @@ func TestFinderFootChipKeepsTheBackslash(t *testing.T) {
 func TestFinderPreviewModelJS(t *testing.T) {
 	t.Parallel()
 	out := runPureJS(t, "wtfinder.js", wtfPureStart, wtfPureEnd, `
+function fmtBytes(n) { return n + " B"; } // core.js's, stubbed: the section is run without its imports
 const r = [];
 r.push(WT_SETTLE_MS);
 r.push(wtPreviewFresh(3, 3, "a", "a"), wtPreviewFresh(2, 3, "a", "a"), wtPreviewFresh(3, 3, "a", "b"));
 r.push(wtPlaceholder({missing: true}, 0), wtPlaceholder({too_large: true}, 0), wtPlaceholder({}, 0), wtPlaceholder({}, 4) === "");
+r.push(wtPlaceholder({binary: true, size: 8}, 0), wtPlaceholder({binary: true, image: "png", size: 8}, 0) === "");
+const img = wtImage({binary: true, image: "png", width: 4, height: 2, size: 8, stamp: "1:2"}, "a b.png");
+r.push(img.url, img.info, wtImage({binary: true, size: 8}, "x") === null);
 console.log(r.join("|"));
 `)
-	want := "150|true|false|false|(file deleted on disk)|(file too large to preview)|(empty file)|true"
+	want := "150|true|false|false|(file deleted on disk)|(file too large to preview)|(empty file)|true" +
+		"|(binary file, 8 B — not shown)|true|/api/file-raw?src=worktree&path=a%20b.png&stamp=1%3A2|png image 4×2, 8 B|true"
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
@@ -136,7 +141,7 @@ var finderWiring = []struct{ file, want, why string }{
 	{"wtfinder.js", "/api/file-stamp?path=", "the preview re-stats its file (one stat, no read) while F is up"},
 	{"wtfinder.js", "wtStampChanged(previewStamp,", "a moved stamp reloads the preview"},
 	{"wtfinder.js", "clearInterval(stampTimer)", "closing F stops the re-stat"},
-	{"wtfinder.js", "paintPreview(path, lines, wtPlaceholder(body, lines.length), keep)", "a reload keeps the preview's place"},
+	{"wtfinder.js", "paintPreview(path, lines, wtPlaceholder(body, lines.length), keep, wtImage(body, path))", "a reload keeps the preview's place"},
 	{"wtfinder.js", "new ResizeObserver(", "a width change re-cuts F's rows and title"},
 	{"wtfinder.js", "paintPTitle(previewPath)", "a resize re-cuts the preview title from the path"},
 	{"wtfinder.js", "await showPreview(gen, path, true, now)", "a reload's stamp lands only with its paint (a dropped reload retries)"},

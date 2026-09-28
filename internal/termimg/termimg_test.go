@@ -98,3 +98,13 @@ func TestShrinkBoundsTheWorkingImage(t *testing.T) {
 		t.Fatalf("a small image is returned as is, got %v", b)
 	}
 }
+
+func TestProbeNamesTheFormatAndSizeWithoutDecoding(t *testing.T) {
+	kind, w, h, err := Probe(encodePNG(t, twoTone(8, 4)))
+	if err != nil || kind != "png" || w != 8 || h != 4 {
+		t.Fatalf("Probe(png) = %q %d×%d %v", kind, w, h, err)
+	}
+	if _, _, _, err := Probe([]byte("\x00\x01 not an image")); err == nil {
+		t.Fatal("noise must not probe as an image")
+	}
+}
