@@ -1220,6 +1220,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
 			return m.openCompareFiles(msg.left, msg.right)
 		})
+	case shelfNotesMsg:
+		return m.openShelfNotes(msg), nil
 	case shelfLoadedMsg:
 		// A disabled shelf (no state dir) reports its reason but is not fatal.
 		if msg.err != nil {
