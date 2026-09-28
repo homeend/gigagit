@@ -117,10 +117,11 @@ func (s *Service) ComparePatch(ctx context.Context, left, right model.Endpoint) 
 	return s.patchPerMember(ctx, l, r)
 }
 
-// isBinaryContent reports whether data looks binary — a NUL byte, or invalid
+// IsBinary reports whether data looks binary — a NUL byte, or invalid
 // UTF-8 — the same heuristic internal/mcp's gg_compare_file uses (isBinary).
-// nil/empty data (an absent side) is never binary.
-func isBinaryContent(data []byte) bool {
+// nil/empty data (an absent side) is never binary. The file previews use it
+// too: a binary file is never rendered as text.
+func IsBinary(data []byte) bool {
 	return bytes.IndexByte(data, 0) >= 0 || !utf8.Valid(data)
 }
 

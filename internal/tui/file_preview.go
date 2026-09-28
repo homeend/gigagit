@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"image"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,6 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/syntax"
+	"github.com/homeend/gigagit/internal/termimg"
 )
 
 // filesViewSelectedLine returns the currently-selected content line in the
@@ -167,6 +169,9 @@ type fileContentMsg struct {
 	tag   string
 	lines []contentLine
 	err   error
+	// img is set when the file is an image (PNG/JPEG/GIF): lines then hold
+	// only the info line, and the document fits the cells to its box.
+	img image.Image
 	// disk is the file's stat taken just before the read (a working-tree
 	// document's load only; zero otherwise).
 	disk diskStat
@@ -192,8 +197,37 @@ func loadFileContentSrcCmd(tag, path string, syntaxOn bool, load func(context.Co
 		if len(data) > domain.MaxDiffBytes {
 			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(file too large to preview)")}}}
 		}
+		// A binary file is never shown as text: its bytes would cost a
+		// wrap layout per frame (an 11 KB "line" of a JPEG took 600 ms a
+		// render) and carry C1 controls the terminal may act on. An image
+		// is decoded and drawn as cells instead; anything else is named.
+		if domain.IsBinary(data) {
+			if img, kind, err := termimg.Decode(data); err == nil {
+				b := img.Bounds()
+				info := i18n.T("(%s image %d×%d, %s)", kind, b.Dx(), b.Dy(), fmtBytes(len(data)))
+				// The working copy is bounded (a screen is at most a few
+				// hundred cells wide): every re-fit samples it, not the photo.
+				return fileContentMsg{tag: tag, lines: []contentLine{{text: info}}, img: termimg.Shrink(img, previewImagePx, previewImagePx)}
+			}
+			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(binary file, %s — not shown)", fmtBytes(len(data)))}}}
+		}
 		return fileContentMsg{tag: tag, lines: fileContentLinesTok(data, lexPreview(path, data, syntaxOn))}
 	}
+}
+
+// previewImagePx bounds the working copy of a previewed image (each side):
+// wider than any terminal's cell count, small enough that a fit is cheap.
+const previewImagePx = 1024
+
+// fmtBytes is a byte count for a placeholder: "597.0 KB", "1.2 MB", "312 B".
+func fmtBytes(n int) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
+	}
+	return fmt.Sprintf("%d B", n)
 }
 
 // lexPreview lexes a previewed file, or returns nil (plain rendering) when the
@@ -275,7 +309,7 @@ func displayCls(raw string, toks []syntax.Tok) []syntax.Class {
 		switch {
 		case r == '\t':
 			out = append(out, classes[i], classes[i], classes[i], classes[i])
-		case r < 0x20 || r == 0x7f:
+		case dropForDisplay(r):
 			// dropped by sanitizeForDisplay: no display rune, no class
 		default:
 			out = append(out, classes[i])
@@ -402,6 +436,26 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	return m.renderPreviewBox(m.filesPreview.p, i18n.T("View %s", m.filesPreview.path), boxW, boxH, !m.filesTreeFocused, false)
 }
 
+// previewRowMark is the cursor band / selection stripe a preview row wears
+// (marked false = neither). The stripe REPLACES the band on the cursor row —
+// the stripe is the row (spec §4.7). An image row wears neither: its
+// decorator paints every cell with its own colours, which would cancel the
+// band after the first cell, and there is nothing to select on it.
+func previewRowMark(p *contentPopup, row int, cursorOff bool, l contentLine) (lipgloss.Style, bool) {
+	var rowStyle lipgloss.Style
+	if l.cells != nil {
+		return rowStyle, false
+	}
+	marked := false
+	if row == p.cur && !cursorOff {
+		rowStyle, marked = st().diffCursorRow, true
+	}
+	if p.lsel.contains(row, p.cur) {
+		rowStyle, marked = st().selectionStyle(rowStyle), true
+	}
+	return rowStyle, marked
+}
+
 // renderPreviewBox draws one file preview as a bordered box: title, the
 // windowed lines (cursor band, selection stripe, search emphasis, syntax
 // classes) and the hint line. The files view's right column and the
@@ -432,6 +486,7 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	// p.sel itself when the cursor would leave it. Top-anchor the window
 	// (anchor 0) so renderWindow can't re-center the slice and re-introduce the
 	// dead zone.
+	p.fitImage(innerW, rowsCap) // an image document: its cells for this box
 	vis := p.lines
 	start := previewClamp(p.sel, len(vis), rowsCap, p.mode)
 	end := start + rowsCap
@@ -443,6 +498,9 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	cursorOff := m.cursorStyle() == "off"
 	for i, l := range window {
 		wr[i] = winRow{text: l.text, cls: l.cls}
+		if l.cells != nil {
+			wr[i].decorate = imageRowDecorator(l.cells)
+		}
 		// The preview rows carry no prefix, so winRow.style IS the body style —
 		// no winRow.body needed here, and reverse video correctly drops the
 		// class mask on a stripe that inverts (per-token foregrounds would
@@ -451,17 +509,7 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		// [ui] diff_cursor governs the preview cursor too; "number" falls back
 		// to the band, because there is no gutter to carry a number.
 		row := start + i
-		var rowStyle lipgloss.Style
-		marked := false
-		if row == p.cur && !cursorOff {
-			rowStyle, marked = st().diffCursorRow, true
-		}
-		if p.lsel.contains(row, p.cur) {
-			// The stripe REPLACES the band on the cursor row — the stripe is
-			// the row (spec §4.7).
-			rowStyle, marked = st().selectionStyle(rowStyle), true
-		}
-		if marked {
+		if rowStyle, marked := previewRowMark(p, row, cursorOff, l); marked {
 			wr[i].style = rowStyle
 		}
 		if p.search.active() {

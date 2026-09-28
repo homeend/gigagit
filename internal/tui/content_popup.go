@@ -2,13 +2,17 @@ package tui
 
 import (
 	"fmt"
+	"image"
+	"image/color"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/syntax"
+	"github.com/homeend/gigagit/internal/termimg"
 )
 
 // contentLine is one display line of a contentPopup. heading lines are section
@@ -34,6 +38,10 @@ type contentLine struct {
 	// zero, which reads as "nothing to copy here".
 	raw string
 	src bool
+	// cells is an IMAGE row: text is one ▀ per cell and cells carry each
+	// cell's two colours (termimg); the renderer paints them with a row
+	// decorator. nil for every text row.
+	cells []termimg.Cell
 	// cls is an optional syntax class per DISPLAY RUNE of text (nil = plain),
 	// handed to winRow.cls by the renderers. Only the file preview fills it in;
 	// heading lines never carry one.
@@ -61,7 +69,14 @@ type contentPopup struct {
 	// charWrap: the content is CODE (a file's text), so wrap mode breaks at the
 	// last column instead of at spaces — see winOpts.charWrap.
 	charWrap bool
-	sel      int // cursor index into the FILTERED view — and, in the FILE PREVIEW, the TOP visible line (it is a pager)
+	// img is the decoded image when the document is one (a PNG/JPEG/GIF
+	// preview): lines are then rebuilt to the box by fitImage, cached by
+	// the size they were built for. imgInfo is the placeholder line above
+	// the cells ("(png image 640×480, 12.3 KB)").
+	img        image.Image
+	imgInfo    string
+	imgW, imgH int
+	sel        int // cursor index into the FILTERED view — and, in the FILE PREVIEW, the TOP visible line (it is a pager)
 	// cur is the FILE PREVIEW's line cursor: an index into lines (spec §4.7).
 	// It is read ONLY by renderFilePreview and the preview key paths — the help
 	// window, the files tree and the error popup share this struct and never
@@ -479,4 +494,63 @@ func (p *contentPopup) boxStyle() lipgloss.Style {
 		return st().errModal
 	}
 	return st().modalStyle
+}
+
+// fitImage rebuilds an image document's lines for a cols × rows box: the
+// info line, then the image as half-block cells (termimg.Cells) — or, on a
+// terminal with no colour, its luminance glyph ramp. Cached by size, so a
+// frame at the same size costs nothing; a resize or ctrl+t re-fits.
+func (p *contentPopup) fitImage(cols, rows int) {
+	if p.img == nil || (cols == p.imgW && rows == p.imgH) {
+		return
+	}
+	p.imgW, p.imgH = cols, rows
+	lines := []contentLine{{text: p.imgInfo}}
+	cells := termimg.Cells(p.img, cols, rows-1)
+	if lipgloss.ColorProfile() == termenv.Ascii {
+		for _, r := range termimg.Ramp(cells) {
+			lines = append(lines, contentLine{text: r})
+		}
+	} else {
+		for _, row := range cells {
+			lines = append(lines, contentLine{text: strings.Repeat("▀", len(row)), cells: row})
+		}
+	}
+	p.lines = lines
+	if p.sel >= len(lines) {
+		p.sel = 0
+	}
+	if p.cur >= len(lines) {
+		p.cur = 0
+	}
+}
+
+// imageRowDecorator paints an image row's cells: the ▀ at display column j
+// (after any horizontal scroll) takes cell hscroll+j's top colour as
+// foreground and bottom colour as background. Padding past the cells stays
+// plain.
+func imageRowDecorator(cells []termimg.Cell) rowDecorator {
+	return func(visible string, hscroll, visualLine int) string {
+		var b strings.Builder
+		b.Grow(len(visible) * 24)
+		j := hscroll
+		for _, r := range visible {
+			if r != '▀' || j >= len(cells) {
+				b.WriteRune(r)
+				continue
+			}
+			c := cells[j]
+			j++
+			b.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color(hexColor(c.Top))).
+				Background(lipgloss.Color(hexColor(c.Bottom))).
+				Render("▀"))
+		}
+		return b.String()
+	}
+}
+
+// hexColor is c as "#rrggbb".
+func hexColor(c color.RGBA) string {
+	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
 }

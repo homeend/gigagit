@@ -1186,6 +1186,20 @@ for a doc in no frame routes via `openFiles.findTag` (every worktree — the
 (`internal/filewatch`, dir watches + exact-path filter) is only a WAKE-UP —
 an event zeroes `d.checked` and polls; built lazily off-thread only when
 `watchSupported`, closed with the last watched doc and on `reRoot`.
+**Binary + image previews (2026-09-28):** `loadFileContentSrcCmd` (the ONE
+loader behind the F preview, the full-screen viewer and background docs)
+refuses binary content (`domain.IsBinary`: NUL or invalid UTF-8) — a JPEG
+rendered as text cost ~600 ms a frame (an 11 KB "line" through the charWrap
+layout) and leaked C1 controls to the terminal. An image (`termimg.Decode`,
+stdlib PNG/JPEG/GIF) rides `fileContentMsg.img` (pre-shrunk to
+`previewImagePx`); `fill` stores it on the popup and `renderPreviewBox`
+calls `p.fitImage(innerW, rowsCap)` each frame (cached by size): the info
+line + one `contentLine` per cell row (`cells` set, text = ▀ per cell) painted
+by `imageRowDecorator` (fg = top pixel, bg = bottom) — or, under
+`termenv.Ascii`, `termimg.Ramp` glyphs. Image rows have `src` false: not
+copyable, no line cursor semantics, `landPendingLine` ignores them.
+`dropForDisplay` (error_popup.go) is the shared sanitiser predicate: C0, DEL,
+C1 (U+0080–U+009F) and bidi overrides/isolates; `displayCls` mirrors it.
 **F = the working-tree files window (2026-09-25):** a files-view mode,
 `filesModeWorktree`, not a slot: it rides the left-column render, the
 right-column `m.filesPreview`, `closeFilesView` and the esc/`handOffToFilesView`

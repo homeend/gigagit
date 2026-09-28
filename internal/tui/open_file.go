@@ -135,10 +135,14 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 		d.keepPlace()
 	}
 	p := d.p
+	p.img, p.imgW, p.imgH = msg.img, 0, 0 // a re-fit at the next frame
 	if msg.err != nil {
 		p.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
 	} else {
 		p.lines = msg.lines
+		if msg.img != nil && len(msg.lines) > 0 {
+			p.imgInfo = msg.lines[0].text
+		}
 	}
 	p.cur, p.sel = 0, 0
 	p.lsel.clear()
