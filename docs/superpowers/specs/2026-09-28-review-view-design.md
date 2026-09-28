@@ -47,6 +47,8 @@ is rendered, and per-file findings are not attached to their files.
    2-stacked,3-overview-popup}.png`, local).
 7. A reply that is not valid gg JSON is stored as text and shown as a rendered
    markdown document; the run's notice says so.
+8. Config copies of the old built-in review commands are upgraded through the
+   preflight migration feature (consent, not automatic) — §2.
 
 ## 1. The document
 
@@ -134,7 +136,24 @@ A fenced block around the JSON (```` ```json … ``` ````) or a Claude
   - Each changed template's catalog entry is re-verified against the live tool
     where available; otherwise the verification date comment says "not
     re-verified".
-- A user's own `[[tools.command]]` in `.gg.toml` is not rewritten; it gets the
+- **Stored copies of the old built-ins are migrated** (ruling 8). First-run
+  detection writes the built-in templates INTO the config, so a machine that
+  ran gg before this change holds the old commands (the user's global config
+  holds the Claude `/code-review` one). A new optional preflight feature
+  `structured-reviews` declares `preflight.LegacyStore{Store:
+  "review-commands"}`; its probe (`legacyReviewCommandsPresent`) reports
+  present when the global or the active repo config holds a `review`
+  `[[tools.command]]` whose `command` is byte-identical (after trimming) to an
+  entry of `exttool.SupersededReviewCommands` — every previous built-in review
+  template, kept as a list. Its `Migration{Store: "review-commands", From: 1,
+  To: 2, Action: "upgrade-review-commands"}` is NOT lossless (it rewrites the
+  user's config), so it goes through the existing consent screens (TUI
+  notification, CLI, web) and never runs automatically. The action rewrites
+  only the matching entries' `command` to the current built-in of the same
+  catalog agent and mode, via the config package's line-edit writer; commands
+  the user edited never match and are never touched. After it the probe finds
+  nothing, so the notice does not come back in any repo.
+- A user's own (edited) `[[tools.command]]` is not rewritten; it gets the
   context-document instruction and, if it still returns prose, the fallback.
 - `internal/agentskill/reviewing-with-gg.md` documents the format;
   `agentskill.ReviewVersion` is bumped and `gg init --update` refreshes the
@@ -247,7 +266,12 @@ AI-tasks tab entries — only their enter target changes.
 - `engine.ReviewChanges`: the context document always carries the "Review
   output" section; no `$GG_NOTES_FILE`.
 - `exttool` templates: Claude no longer calls `/code-review` and allows `Write`;
-  Junie/Kimi prompts name the JSON contract.
+  Junie/Kimi prompts name the JSON contract; every previous built-in review
+  command is in `SupersededReviewCommands`.
+- Migration: the probe finds an old built-in in the global / repo config and
+  ignores an edited one; the action rewrites exactly the matching entries,
+  leaves the rest of the file byte-identical, and the feature then resolves
+  Satisfied; it is not run by `RunAutoMigrations`.
 - `domain`: `SaveReview` stores canonical JSON for a valid document and the raw
   text otherwise, reporting `Structured`; `Review.Doc` parsed on read;
   `ReviewNotesFor` anchors notes on the commit's diff, refuses edits; "other
