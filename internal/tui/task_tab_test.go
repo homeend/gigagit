@@ -46,7 +46,7 @@ func TestTaskRowText(t *testing.T) {
 // submitReview submits a headless review task running line and returns its id.
 func submitReview(t *testing.T, m Model, line string) domain.TaskID {
 	t.Helper()
-	spec, err := m.svc.ReviewTask(context.Background(), captureCmd(exttool.CatReview, line), domain.WorkingReviewTarget(), "")
+	spec, err := m.svc.ReviewTask(context.Background(), captureCmd(exttool.CatReview, line), domain.WorkingReviewTarget())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -76,7 +76,7 @@ func TestReviewTaskSpec(t *testing.T) {
 	dir, svc := newRealRepo(t)
 	tc := config.ToolCommand{Category: "review", Name: "Claude", Mode: "capture", Command: "claude -p /code-review <range>"}
 	target := ReviewTarget{Kind: ReviewRange, Range: "aaaaaaaaaaaa..bbbbbbbbbbbb", Label: "x", Diff: model.DiffSpec{Rev: "HEAD"}}
-	spec, err := svc.ReviewTask(context.Background(), tc, target, "")
+	spec, err := svc.ReviewTask(context.Background(), tc, target)
 	if err != nil {
 		t.Fatal(err)
 	}

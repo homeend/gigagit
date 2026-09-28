@@ -66,7 +66,7 @@ func TestTaskTabEnterOpensAReviewNote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec, err := m.svc.ReviewTask(context.Background(), captureCmd(exttool.CatReview, "echo from-the-agent"), tg, "")
+	spec, err := m.svc.ReviewTask(context.Background(), captureCmd(exttool.CatReview, "echo from-the-agent"), tg)
 	if err != nil {
 		t.Fatal(err)
 	}

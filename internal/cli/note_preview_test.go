@@ -206,7 +206,7 @@ func TestNoteApplyPreviewNewSideOnly(t *testing.T) {
 		t.Fatalf("only the new-side item may land on the tip:\n%s", out)
 	}
 	if !strings.Contains(out, "new:1-4") {
-		t.Fatalf("the hunk must be numbered over the preview patch:\n%s", out)
+		t.Fatalf("the note must keep its new-side range on the tip:\n%s", out)
 	}
 }
 
@@ -219,7 +219,7 @@ func TestReviewPreviewImportsNotesOntoTheTip(t *testing.T) {
 	dir := newCLIPreviewRepo(t)
 	tip := runGit(t, dir, "rev-parse", "feat")
 	writeReviewTool(t, dir, "Echo",
-		`printf 'R\n'; printf '{"comments":[{"filePath":"a.txt","hunk":1,"summary":"kept"},{"filePath":"a.txt","oldLine":1,"summary":"dropped"}]}' > "$GG_NOTES_FILE"`)
+		`printf '{"version":1,"summary":"R","files":[{"path":"a.txt","annotations":[{"newRange":[1,4],"summary":"kept"},{"oldRange":[1,1],"summary":"dropped"}]}]}' > "$GG_MESSAGE_FILE"`)
 
 	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--preview", "main...feat", "--notes")
 	if code != 0 {
@@ -236,7 +236,7 @@ func TestReviewPreviewImportsNotesOntoTheTip(t *testing.T) {
 		t.Fatalf("only the new-side note may land on the tip:\n%s", out)
 	}
 	if !strings.Contains(out, "new:1-4") {
-		t.Fatalf("the hunk must be numbered over the preview patch:\n%s", out)
+		t.Fatalf("the note must keep its new-side range on the tip:\n%s", out)
 	}
 	_, prev, _ := runCLI(t, dir, "note", "list", "--preview", "main...feat", "--file", "a.txt")
 	if !strings.Contains(prev, "kept") || !strings.Contains(prev, "active") {

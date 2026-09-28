@@ -138,8 +138,8 @@ func parseCommitMessage(captured string) (string, error) {
 	return subject + "\n\n" + body, nil
 }
 
-// ReviewTask builds a review task over target. notesFile as ReviewReportNotes.
-func (s *Service) ReviewTask(ctx context.Context, tc config.ToolCommand, target ReviewTarget, notesFile string) (TaskSpec, error) {
+// ReviewTask builds a review task over target.
+func (s *Service) ReviewTask(ctx context.Context, tc config.ToolCommand, target ReviewTarget) (TaskSpec, error) {
 	spec, top, err := s.taskBase(ctx, tc, exttool.CatReview)
 	if err != nil {
 		return TaskSpec{}, err
@@ -151,7 +151,7 @@ func (s *Service) ReviewTask(ctx context.Context, tc config.ToolCommand, target 
 	spec.Key = ReviewKey(top, target)
 	spec.Op = engine.ReviewChanges{
 		Command: resolved, Dir: top, Env: []string{"GG_TASK=review"},
-		Diff: target.Diff, RangeLabel: target.DisplayLabel(), NotesFile: notesFile,
+		Diff: target.Diff, RangeLabel: target.DisplayLabel(),
 	}
 	spec.Parse = parseReport
 	if target.Kind != ReviewWorking { // working changes have no commit: no note (spec ruling 1)

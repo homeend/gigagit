@@ -389,7 +389,7 @@ func (m Model) submitTask(p *taskLaunchPopup, row launchRow) (Model, tea.Cmd) {
 		case exttool.CatCommitMessage:
 			spec, err = svc.CommitMessageTask(ctx, tc)
 		case exttool.CatReview:
-			spec, err = svc.ReviewTask(ctx, tc, l.review, "")
+			spec, err = svc.ReviewTask(ctx, tc, l.review)
 		case exttool.CatConflict, exttool.CatConflictComplete:
 			spec, err = svc.ConflictTask(ctx, tc, l.kind == exttool.CatConflictComplete)
 		default:
