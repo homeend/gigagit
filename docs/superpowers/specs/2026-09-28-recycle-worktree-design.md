@@ -73,20 +73,31 @@ summary is printed as usual.
 
 Every op today runs on the current worktree through `deps.Repo` (a
 `GitOps`); the only dir-targeted verbs are `ResetInDir` and `ShowFileInDir`.
-Rather than add six more `XInDir` copies, `GitOps` gains
+Rather than add six more `XInDir` copies, `*git.Repo` gains
 
 ```go
 // InDir returns a view of the repository whose every git invocation runs
 // against the worktree at dir (git -C dir …). dir must be a worktree top
 // level of this repository.
-InDir(dir string) GitOps
+func (r *Repo) InDir(dir string) *Repo
 ```
 
-`*git.Repo` implements it by returning a `*Repo` with `Root = dir` and a
-`Runner` wrapper that prefixes the argv with `-C <dir>` (the wrapper lives in
-`internal/git`; `FakeRunner` therefore sees the prefix in every recorded
-argv). Nothing else about the verbs changes. `ResetInDir`/`ShowFileInDir`
-stay as they are (not in scope to migrate).
+returning a `*Repo` with `Root = dir` and a `Runner` wrapper that prefixes
+the argv with `-C <dir>` (the wrapper lives in `internal/git`; `FakeRunner`
+therefore sees the prefix in every recorded argv). Nothing else about the
+verbs changes. `ResetInDir`/`ShowFileInDir` stay as they are (not in scope
+to migrate).
+
+Ops reach the view through a new `OpDeps` seam, in the style of
+`HookRunner`/`CaptureRunner` (a `*git.Repo` method cannot return engine's
+`GitOps`, so the seam is injected rather than declared on the interface):
+
+```go
+RepoAt func(dir string) GitOps // nil ⇒ repoAt returns ErrNoRepoAt
+```
+
+`domain.Execute` sets it to `s.repo.InDir`; engine tests inject the same.
+`GitOps` itself stays single-worktree.
 
 ### `RecycleWorktree`
 
