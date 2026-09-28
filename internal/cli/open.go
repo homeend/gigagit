@@ -158,11 +158,55 @@ func openWeb(dir string, res domain.Resolved, c steer.Command, stdout, stderr io
 		}
 		fmt.Fprintln(stderr, "web: the recorded page is gone ("+err.Error()+"); starting one")
 	}
+	// A live TUI with no page: ask IT to serve, so the browser shows the
+	// TUI's own page (one process, one set of agent sessions) instead of a
+	// second server beside it.
+	if r := routeFor(dir); r.tuiOK {
+		url, ok := askTUIToServe(dir, stderr)
+		if !ok {
+			return 1
+		}
+		if c.ID == "" {
+			c.ID = steer.NewID()
+		}
+		if err := postWebSteer(url, c); err != nil {
+			fmt.Fprintln(stderr, "web:", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "web: sent")
+		fmt.Fprintln(stdout, "steered: "+res.Checkout)
+		return 0
+	}
 	if LaunchWeb == nil {
 		fmt.Fprintf(stderr, "open: no live gg web page in %s and the web launcher is unavailable\n", res.Checkout)
 		return 1
 	}
 	return LaunchWeb(res.Checkout, c)
+}
+
+// askTUIToServe (--web with a live TUI and no page): post "serve" to the
+// TUI's inbox and wait for the URL it answers with. false = printed why.
+// Never starts a second server beside a live TUI: a TUI that does not
+// answer is reported, not worked around.
+func askTUIToServe(dir string, stderr io.Writer) (string, bool) {
+	id, err := steer.Post(dir, steer.Command{Cmd: "serve", Wait: true})
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return "", false
+	}
+	rep, ok := steer.AwaitReply(dir, id, steerReplyWaitForTest)
+	switch {
+	case !ok:
+		fmt.Fprintf(stderr, "open: the TUI in %s did not start its web page\n", dir)
+		return "", false
+	case !rep.OK:
+		fmt.Fprintln(stderr, "open:", rep.Error)
+		return "", false
+	case rep.Detail == "":
+		fmt.Fprintln(stderr, "open: the TUI answered without a page URL")
+		return "", false
+	}
+	return rep.Detail, true
 }
 
 // openWebBare is the --web arm for a bare repository link: a page already
@@ -172,6 +216,13 @@ func openWebBare(ctx context.Context, svc *domain.Service, res domain.Resolved, 
 	if dir, _, err := linkSteerDir(ctx, steerDirFor(svc), svc, res); err == nil {
 		if r := routeFor(dir); r.webOK {
 			fmt.Fprintln(stdout, "web: "+r.web.URL)
+			return 0
+		} else if r.tuiOK {
+			url, ok := askTUIToServe(dir, stderr)
+			if !ok {
+				return 1
+			}
+			fmt.Fprintln(stdout, "web: "+url)
 			return 0
 		}
 	}

@@ -139,6 +139,26 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// steerServe is the "serve" inbox command (`gg open --web` with a live TUI):
+// start the hosted page if needed and answer with its URL. Never refused
+// for the user's state — it moves nothing on screen. A start already in
+// flight parks the command; onWebStarted answers it.
+func (m Model) steerServe(c steer.Command) (Model, tea.Cmd) {
+	m = m.ensureWeb()
+	switch {
+	case NewWebHost == nil:
+		return m, m.answerSteer(c, steerFail(c, "this gg cannot serve a web page"))
+	case m.web.host != nil:
+		return m, m.answerSteer(c, steerOK(c, m.web.url))
+	}
+	m.web.pendingServe = append(m.web.pendingServe, c)
+	if m.web.starting {
+		return m, nil
+	}
+	m.web.starting = true
+	return m, startWebCmd(m.svc, m.webAddr(), false)
+}
+
 // webStatusText is the Settings row value.
 func (m Model) webStatusText() string {
 	switch {

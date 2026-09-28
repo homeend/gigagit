@@ -78,7 +78,7 @@ type Line struct {
 // there is exactly one landing path.
 type Command struct {
 	ID     string  `json:"id"`
-	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus"
+	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "serve" (TUI only: serve its web page; Reply.Detail = the URL)
 	File   string  `json:"file,omitempty"` // repo-relative, git slash form
 	Target *Target `json:"target,omitempty"`
 	Commit string  `json:"commit,omitempty"` // navigate: reveal this commit, no file
