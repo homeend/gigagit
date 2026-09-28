@@ -71,9 +71,13 @@ func cmdVersions(svc *domain.Service, args []string, stdin io.Reader, stdout, st
 		if len(short) > 8 {
 			short = short[:8]
 		}
-		id := fmt.Sprintf("%d-%s", v.Unix, v.Op)
 		when := time.Unix(v.Unix, 0).Format("2006-01-02T15:04")
-		fmt.Fprintf(stdout, "%s %s %s %s\n", id, short, when, v.Subject)
+		fmt.Fprintf(stdout, "%s %s %s %s\n", v.ID(), short, when, v.Subject)
+		// A two-branch row's preview link, indented under it: <id> stays
+		// the first column and <subject> the tail for existing parsers.
+		if link, ok := versionLinkText(ctx, svc, v); ok {
+			fmt.Fprintf(stdout, "  %s\n", link)
+		}
 	}
 	return 0
 }
@@ -128,7 +132,7 @@ func versionRefForID(rows []model.BranchVersion, id string) string {
 		return ""
 	}
 	for _, v := range rows {
-		if fmt.Sprintf("%d-%s", v.Unix, v.Op) == id {
+		if v.ID() == id {
 			return v.Ref
 		}
 	}

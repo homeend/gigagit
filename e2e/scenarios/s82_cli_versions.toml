@@ -20,7 +20,7 @@ exit = 0
 [[run]]
 cmd             = ["versions"]
 exit            = 0
-stdout_contains = ["-merge", "main work"]
+stdout_contains = ["-merge", "main work", "?version="]
 
 [[run]]
 cmd  = ["versions", "restore", "main", "latest"]
