@@ -150,21 +150,88 @@ func (p *noticePopup) render(m Model, below string) string {
 	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
 }
 
+// elideNoticeRow fits an indented data row into w columns: everything up to
+// its path — the indent and a lead-in such as the drift row's status letter
+// ("  A <path>") — stays as written, and the path loses its middle so the
+// file name survives (elideRowPath, the elidePath rule). The path is the
+// first word holding a path separator; a row without one (a root-level
+// file) treats its LAST word as the path, so a bare name still keeps its
+// beginning and extension instead of being end-cut. A row that fits is
+// untouched.
+func elideNoticeRow(line string, w int) string {
+	if lipgloss.Width(line) <= w {
+		return line
+	}
+	at := strings.IndexFunc(line, func(r rune) bool { return r == '/' || r == '\\' })
+	if at < 0 {
+		at = len(strings.TrimRight(line, " \t"))
+	}
+	head := strings.LastIndexAny(line[:at], " \t") + 1 // the path word starts after the last gap
+	return elideRowPath(line, len([]rune(line[:head])), w)
+}
+
+// contentWidth is the widest raw line the box is about to show, so the frame
+// can follow its content (popupFitWidth) instead of a fixed width: the list's
+// titles or the open notice's title, detail lines and actions, plus the key
+// hint. Measured before any wrapping — a line wider than the resulting text
+// width is what wraps or elides, never what stretches the box past its cap.
+func (p *noticePopup) contentWidth(m Model) int {
+	widest := 0
+	note := func(s string) {
+		if w := lipgloss.Width(s); w > widest {
+			widest = w
+		}
+	}
+	if p.showActions {
+		if n := p.currentNotice(m); n != nil {
+			note(n.title)
+			for _, line := range n.detail {
+				note(line)
+			}
+			for _, act := range n.actions {
+				note("> " + act.label)
+			}
+		}
+		note(i18n.T("[↑/↓] select  [enter] choose  [esc] back"))
+		return widest
+	}
+	note(i18n.T("Notifications"))
+	for _, n := range m.notices {
+		note("> " + n.title)
+	}
+	note(i18n.T("[↑/↓] select  [enter] actions  [ctrl+w] mode  [s] save  [esc] close"))
+	return widest
+}
+
 // box draws the notice dialog (modal box only): the notice list, or (when
 // showActions) the selected notice's detail + action list.
 func (p *noticePopup) box(m Model) string {
 	w, h := m.overlayDims()
-	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
+	inner := popupFitWidth(w, p.maximized, popupWideInnerWidth(w), p.contentWidth(m))
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	if p.showActions {
 		if n := p.currentNotice(m); n != nil {
-			b.WriteString(n.title + "\n\n")
+			// The title wraps like the prose below it: a drift notice's title
+			// carries the branch name, and cutting it with "…" hid the very
+			// words that said what happened.
+			for _, seg := range wrapWords(n.title, textW) {
+				b.WriteString(seg + "\n")
+			}
+			b.WriteString("\n")
 			for _, line := range n.detail {
 				if lipgloss.Width(line) <= textW {
 					// short lines pass through verbatim — preserves the install
 					// table's indentation and column alignment
 					b.WriteString(line + "\n")
+					continue
+				}
+				if strings.HasPrefix(line, " ") {
+					// An indented line is a raw data row (a flagged path, a
+					// lock file), not prose: word-wrapping it dropped the
+					// indent, stranded the status letter on its own line and
+					// chunked the path mid-name.
+					b.WriteString(elideNoticeRow(line, textW) + "\n")
 					continue
 				}
 				for _, seg := range wrapWords(line, textW) {

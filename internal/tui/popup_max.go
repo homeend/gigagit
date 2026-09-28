@@ -24,6 +24,35 @@ func popupResolveWidth(w int, maximized bool, normal int) int {
 	return normal
 }
 
+// popupFitWidth is popupResolveWidth for a popup whose box follows its
+// CONTENT: contentW is the widest raw line it will show (text columns, before
+// any wrapping), normal its usual fixed inner width.
+//
+// Unmaximized, the box is the content's width floored at normal (short
+// content looks exactly as before) and capped at three quarters of the
+// terminal — "stretch a little by default". Maximized, the same content
+// width may grow on to the near-fullscreen popupFullInnerWidth, but never
+// past what the content needs and never narrower than the unmaximized box:
+// ctrl+t on a notice two thirds of the terminal wide used to paint the whole
+// screen with the last third empty. The row cap is popupResolveRowCap's
+// business, unchanged.
+func popupFitWidth(w int, maximized bool, normal, contentW int) int {
+	want := contentW + st().modalStyle.GetHorizontalPadding()
+	full := popupFullInnerWidth(w)
+	wide := w * 3 / 4
+	if wide > full {
+		wide = full
+	}
+	if wide < normal {
+		wide = normal
+	}
+	inner := clampInt(want, normal, wide)
+	if !maximized {
+		return inner
+	}
+	return clampInt(want, inner, full)
+}
+
 // popupMaxRowCap is the visible-row budget for a maximized list popup whose
 // normal budget is a small fixed constant: terminal height minus box chrome,
 // floored so a tiny terminal still shows a few rows. Mirrors gitConfigPopup's
