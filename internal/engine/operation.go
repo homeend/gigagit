@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"errors"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // Result is the outcome of an operation.
@@ -42,6 +44,13 @@ type OpDeps struct {
 	// return ErrNoRepoAt — an op that needs it fails cleanly instead of
 	// acting on the wrong tree. domain.Execute wires it to *git.Repo.InDir.
 	RepoAt func(dir string) GitOps
+	// ShelveStaged freezes the INDEX of the worktree at dir (every path that
+	// differs from HEAD) into one shelf file set labelled "WIP on <branch>",
+	// and annotates it with a note on the entry when deletions or renames
+	// cannot be carried by the set. The shelf is domain-owned, hence a seam;
+	// it runs under the op's reservation, so it must not re-enter the gate.
+	// Nil makes shelveStaged return ErrNoShelve. domain.Execute wires it.
+	ShelveStaged func(ctx context.Context, dir, branch string) (model.ShelfEntry, error)
 	// Versions governs pre-operation branch-version snapshots (see
 	// snapshotBranchTip). Zero value = disabled.
 	Versions VersionsPolicy
@@ -65,6 +74,17 @@ func (d OpDeps) captureRunner() CaptureRunner {
 
 // ErrNoRepoAt is returned by repoAt when OpDeps carries no RepoAt seam.
 var ErrNoRepoAt = errors.New("this repository handle cannot act on another worktree")
+
+// ErrNoShelve is returned by shelveStaged when OpDeps carries no ShelveStaged seam.
+var ErrNoShelve = errors.New("this repository handle cannot shelve")
+
+// shelveStaged is the nil-safe form of ShelveStaged.
+func (d OpDeps) shelveStaged(ctx context.Context, dir, branch string) (model.ShelfEntry, error) {
+	if d.ShelveStaged == nil {
+		return model.ShelfEntry{}, ErrNoShelve
+	}
+	return d.ShelveStaged(ctx, dir, branch)
+}
 
 // repoAt is the nil-safe form of RepoAt (style of hookRunner).
 func (d OpDeps) repoAt(dir string) (GitOps, error) {

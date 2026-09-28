@@ -383,6 +383,9 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 	out, opErr := op.Run(ctx, engine.OpDeps{
 		Repo:     s.repo,
 		RepoAt:   func(dir string) engine.GitOps { return s.repo.InDir(dir) },
+		// The op holds this Service's reservation: shelveStagedIn reads through
+		// the InDir repo directly, never through a (gated) domain query.
+		ShelveStaged: s.shelveStagedIn,
 		Events:   events,
 		Decider:  dec,
 		Escalate: res.Escalate,

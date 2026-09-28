@@ -107,32 +107,52 @@ func (s *Service) ShelfAddFiles(ctx context.Context, addrs []model.FileAddress, 
 	if len(addrs) == 0 {
 		return model.ShelfEntry{}, errors.New("shelf: no files to shelve")
 	}
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	seen := map[string]bool{}
+	members := make([]shelfMember, 0, len(addrs))
 	for _, a := range addrs {
-		name := pathpkg.Clean(filepath.ToSlash(a.Path))
-		if name == "" || name == "." || seen[name] {
-			return model.ShelfEntry{}, fmt.Errorf("shelf: %q is not a shelvable path", a.Path)
-		}
-		seen[name] = true
 		data, err := s.ResolveBytes(ctx, a.FileRef())
 		if err != nil {
 			return model.ShelfEntry{}, fmt.Errorf("shelf: %s: %w", a.Path, err)
 		}
-		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg, ModTime: time.Now()}); err != nil {
-			return model.ShelfEntry{}, err
-		}
-		if _, err := tw.Write(data); err != nil {
-			return model.ShelfEntry{}, err
-		}
+		members = append(members, shelfMember{name: a.Path, data: data})
 	}
-	if err := tw.Close(); err != nil {
+	tarball, err := buildShelfTar(members)
+	if err != nil {
 		return model.ShelfEntry{}, err
 	}
 	origin := addrs[0]
 	origin.Path = ""
-	return st.PutFiles("", origin, buf.Bytes(), label)
+	return st.PutFiles("", origin, tarball, label)
+}
+
+// shelfMember is one file of a shelved set: its repo-relative path and bytes.
+type shelfMember struct {
+	name string
+	data []byte
+}
+
+// buildShelfTar packs a set's members into the tar a files entry stores. A
+// member name must be a real, unique repo-relative path.
+func buildShelfTar(ms []shelfMember) ([]byte, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	seen := map[string]bool{}
+	for _, m := range ms {
+		name := pathpkg.Clean(filepath.ToSlash(m.name))
+		if name == "" || name == "." || seen[name] {
+			return nil, fmt.Errorf("shelf: %q is not a shelvable path", m.name)
+		}
+		seen[name] = true
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(m.data)), Typeflag: tar.TypeReg, ModTime: time.Now()}); err != nil {
+			return nil, err
+		}
+		if _, err := tw.Write(m.data); err != nil {
+			return nil, err
+		}
+	}
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // ShelfCommitFiles lists the files frozen in an archive entry's tar (a
