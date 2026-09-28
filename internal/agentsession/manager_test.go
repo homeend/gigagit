@@ -91,13 +91,15 @@ func TestManagerChangedOnStartAndExit(t *testing.T) {
 	t.Parallel()
 	needSh(t)
 	m := NewManager()
+	ch, cancel := m.Subscribe()
+	defer cancel()
 	s, err := m.Start(StartSpec{Dir: t.TempDir(), Argv: []string{"sh", "-c", "exit 0"}, Cols: 40, Rows: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitDone(t, s)
 	select {
-	case <-m.Changed():
+	case <-ch:
 	case <-time.After(2 * time.Second):
 		t.Fatal("no manager-level change signal")
 	}

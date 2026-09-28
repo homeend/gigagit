@@ -126,6 +126,7 @@ type Model struct {
 	wtPreviewGen  int                                      // bumped per cursor move in F's window: drops a superseded preview settle
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
+	sessWatch     *sessionWatch                            // the TUI's subscription to the session list (console.go)
 	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
 	sessionStates map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
 
@@ -437,6 +438,7 @@ var bottomTabs = []panel{panelStaged, panelReflog}
 func New(svc *domain.Service) Model {
 	m := Model{
 		svc:                    svc,
+		sessWatch:              &sessionWatch{},
 		clipWrite:              clipboard.Copy,
 		feed:                   svc.CommitFeed(),
 		loading:                true,
@@ -474,7 +476,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), waitSessionsCmd(), waitTasksCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -569,11 +571,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.console == nil || msg.id != m.console.id || msg.gen != m.console.gen {
 			return m, nil // a closed or replaced console's waiter dies here
 		}
-		s, ok := m.consoleSession()
-		if !ok {
+		if _, ok := m.consoleSession(); !ok {
 			return m, nil
 		}
-		return m, waitSessionCmd(s, msg.id, msg.gen)
+		return m, waitSessionCmd(m.console, msg.id, msg.gen)
 	case sessionsChangedMsg:
 		return m.onSessionsChanged()
 	case tasksChangedMsg:

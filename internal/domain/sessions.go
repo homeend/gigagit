@@ -20,12 +20,15 @@ import (
 // Aliases so frontends use sessions without importing agentsession
 // (archtest forbids that edge).
 type (
-	SessionID     = agentsession.ID
-	SessionInfo   = agentsession.Info
-	SessionState  = agentsession.State
-	AgentSession  = agentsession.Session
-	SessionScreen = agentsession.Screen
-	SessionKey    = agentsession.Key
+	SessionID    = agentsession.ID
+	SessionInfo  = agentsession.Info
+	SessionState = agentsession.State
+	AgentSession = agentsession.Session
+	// SessionManager is the manager type behind Sessions() (frontends hold
+	// it to notice a swapped manager, never to construct one).
+	SessionManager = agentsession.Manager
+	SessionScreen  = agentsession.Screen
+	SessionKey     = agentsession.Key
 	// The web console's frame (styled runs) and a start spec for callers
 	// that assemble one themselves (tests).
 	ScreenRuns       = agentsession.ScreenRuns

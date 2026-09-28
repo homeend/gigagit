@@ -21,22 +21,14 @@ type Manager struct {
 	next     int
 	sessions map[ID]*Session
 	bc       Broadcaster
-	changed  <-chan struct{} // Changed()'s own subscription (transitional; see Changed)
 }
 
 // NewManager returns an empty Manager.
 func NewManager() *Manager {
-	m := &Manager{sessions: map[ID]*Session{}}
-	m.changed, _ = m.bc.Subscribe()
-	return m
+	return &Manager{sessions: map[ID]*Session{}}
 }
 
 func (m *Manager) signal() { m.bc.Signal() }
-
-// Changed is the single-reader form: ONE subscription made at construction,
-// so two readers steal each other's wakeups. Kept only until every consumer
-// calls Subscribe; then it goes.
-func (m *Manager) Changed() <-chan struct{} { return m.changed }
 
 // Subscribe wakes the returned channel on every list change (start, exit,
 // remove); bursts coalesce per subscriber. cancel drops the subscription.

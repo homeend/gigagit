@@ -32,7 +32,6 @@ type Session struct {
 	closed bool
 
 	bc           Broadcaster
-	changed      <-chan struct{} // Changed()'s own subscription (transitional)
 	done         chan struct{}
 	outDone      chan struct{} // closed when pumpOut has drained the PTY
 	closeOnce    sync.Once
@@ -100,7 +99,6 @@ func start(id ID, spec StartSpec) (*Session, error) {
 		done:    make(chan struct{}),
 		outDone: make(chan struct{}),
 	}
-	s.changed, _ = s.bc.Subscribe()
 	// Callbacks run inside emu.Write under the emulator's lock: store only.
 	emu.SetCallbacks(vt.Callbacks{CursorVisibility: func(v bool) { s.cursorHidden.Store(!v) }})
 	attachJob(s)
@@ -280,10 +278,6 @@ func (s *Session) SubscriberCount() int { return s.bc.count() }
 
 // Info returns a snapshot of the session's metadata.
 func (s *Session) Info() Info { s.mu.Lock(); defer s.mu.Unlock(); return s.info }
-
-// Changed is the single-reader form (one subscription made at construction);
-// kept only until every consumer calls Subscribe.
-func (s *Session) Changed() <-chan struct{} { return s.changed }
 
 // Done is closed once the exit has been recorded.
 func (s *Session) Done() <-chan struct{} { return s.done }

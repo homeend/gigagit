@@ -84,7 +84,6 @@ type TaskManager struct {
 	max      int
 	tasks    []*task // submit order; ended ones trimmed to taskhist.Max
 	bc       agentsession.Broadcaster
-	changed  <-chan struct{} // Changed()'s own subscription (transitional)
 	wg       sync.WaitGroup
 	sessions *agentsession.Manager // nil = Sessions()
 
@@ -96,9 +95,7 @@ type TaskManager struct {
 
 // NewTaskManager returns a manager recording into hist, cap 3.
 func NewTaskManager(hist taskhist.Store) *TaskManager {
-	m := &TaskManager{max: 3, hist: hist}
-	m.changed, _ = m.bc.Subscribe()
-	return m
+	return &TaskManager{max: 3, hist: hist}
 }
 
 // SetMaxParallel sets the cap, clamped to 1..config.MaxParallelCap, and
@@ -113,10 +110,6 @@ func (m *TaskManager) SetMaxParallel(n int) {
 }
 
 func (m *TaskManager) Max() int { m.mu.Lock(); defer m.mu.Unlock(); return m.max }
-
-// Changed is the single-reader form (one subscription made at construction);
-// kept only until every consumer calls Subscribe.
-func (m *TaskManager) Changed() <-chan struct{} { return m.changed }
 
 // Subscribe wakes the returned channel on every task change; bursts coalesce
 // per subscriber. cancel drops the subscription.

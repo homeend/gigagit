@@ -238,12 +238,14 @@ func TestTasksHeadlessRealCommandInTheSubmittingWorktree(t *testing.T) {
 func TestTasksChangedSignals(t *testing.T) {
 	t.Parallel()
 	m, svc := newTestTasks(t)
+	ch, cancel := m.Subscribe()
+	defer cancel()
 	started := make(chan string, 1)
 	rel := make(chan struct{})
 	close(rel)
 	id := m.Submit(headlessSpec(svc, "k", blockOp{started: started, release: rel, key: "x", out: "r"}))
 	select {
-	case <-m.Changed():
+	case <-ch:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Submit did not signal Changed")
 	}
