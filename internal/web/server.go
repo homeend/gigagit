@@ -94,6 +94,9 @@ type Server struct {
 	// sessStop ends the agent-session list watcher (sessions_http.go).
 	sessStop     chan struct{}
 	sessStopOnce sync.Once
+	// feeds fans each shown session's screen out to its console streams
+	// (console_stream.go).
+	feeds *screenFeeds
 
 	// rt is the last remote tag listing (remotetags.go): the ▲ on the tags
 	// sidebar and the gate on "delete from remote".
@@ -110,7 +113,7 @@ type Server struct {
 }
 
 func New(svc *domain.Service) *Server {
-	s := &Server{closing: make(chan struct{}), ofs: newOpenFiles(), sessStop: make(chan struct{})}
+	s := &Server{closing: make(chan struct{}), ofs: newOpenFiles(), sessStop: make(chan struct{}), feeds: newScreenFeeds()}
 	s.svc.Store(svc)
 	go s.watchSessions(s.sessStop)
 	return s
