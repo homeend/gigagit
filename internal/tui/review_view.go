@@ -61,6 +61,7 @@ func (m Model) openReviewFrom(id, title string, back model.Commit) (Model, tea.C
 	if svc == nil {
 		return m, nil
 	}
+	m.statusMsg = i18n.T("opening the review…") // the read can take seconds on a slow disk
 	return m, func() tea.Msg {
 		ctx := context.Background()
 		out := reviewViewMsg{id: id, title: title, back: back}
@@ -79,6 +80,9 @@ func (m Model) openReviewFrom(id, title string, back model.Commit) (Model, tea.C
 // handleReviewViewMsg opens what openReview read. A popup on the stack is
 // parked (handOffToFilesView), so esc from the view returns to it.
 func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
+	if m.statusMsg == i18n.T("opening the review…") {
+		m.statusMsg = ""
+	}
 	if msg.err != nil {
 		// Gone (the viewer says "review deleted"), or its commit is gone: the
 		// review itself lives in the note, so it still opens, as text.

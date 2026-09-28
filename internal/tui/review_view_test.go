@@ -353,3 +353,18 @@ func TestReviewViewOpensFromTheBranchesTab(t *testing.T) {
 		t.Fatalf("esc: focus %v, want Branches back", m.focus)
 	}
 }
+
+// The read can take seconds on a slow disk: the status line says so at once.
+func TestOpenReviewSaysItIsOpening(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, reviewViewDoc)
+	m, _ = m.openReview(id, "Review")
+	if !strings.Contains(m.statusMsg, "opening the review") {
+		t.Fatalf("status %q", m.statusMsg)
+	}
+	m, cmd := m.openReview(id, "Review")
+	m = drainCmds(t, m, cmd)
+	if strings.Contains(m.statusMsg, "opening the review") {
+		t.Fatalf("status still %q after it opened", m.statusMsg)
+	}
+}
