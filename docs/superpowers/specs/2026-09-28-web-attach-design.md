@@ -332,6 +332,11 @@ typed while a dialog is up.
    config lists + settingDocs, badges and notices on both frontends,
    `Options` on the wire.
 
+Between plans 1 and 2 sits the stage `2026-09-28-web-hosted-in-tui-design.md`:
+the TUI process serves the page, so both frontends share one session
+manager (the plan-1 review found that `gg web` as a separate process could
+never see the TUI's sessions).
+
 Docs per plan: CHANGELOG (always), README (the web console, the popup, the
 states), CLAUDE.md package map (`agentstate` row in plan 3),
 `docs/CLAUDE-details.md` (frame protocol, size ownership, state rules),
