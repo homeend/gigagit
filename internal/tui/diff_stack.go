@@ -355,9 +355,13 @@ func (m Model) stackNotesCmd(gen, idx int, d *diffView) tea.Cmd {
 	if m.svc == nil || d == nil || d.noteAddr.Path == "" {
 		return nil
 	}
-	svc, addr, set, rows := m.svc, d.noteAddr, d.previewSet, d.full
+	svc, addr, set, rows, rid := m.svc, d.noteAddr, d.previewSet, d.full, d.reviewID
 	return func() tea.Msg {
 		dd := domain.Diff{Result: textdiff.Result{Rows: rows}}
+		if rid != "" {
+			ns, err := svc.ReviewNotesFor(context.Background(), rid, addr.Path, dd)
+			return stackNotesMsg{gen: gen, idx: idx, notes: ns, err: err}
+		}
 		if set != nil {
 			ns, err := svc.PreviewNotesFor(context.Background(), *set, addr.Path, dd)
 			return stackNotesMsg{gen: gen, idx: idx, notes: ns, err: err}
@@ -599,6 +603,7 @@ func (m Model) applyStackFile(msg stackFileMsg) (Model, tea.Cmd) {
 	f.d, f.load = msg.view, stackLoaded
 	if v.stk.src == diffNavTree {
 		m.stampPreviewNotes(f.d, f.path) // the loader inherited the STACK's (empty) address
+		m.stampReviewNotes(f.d, f.path)
 	}
 	if !f.counted && msg.view != nil {
 		f.add, f.del = countRows(msg.view.full)

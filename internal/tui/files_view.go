@@ -57,6 +57,7 @@ func (m Model) closeFilesView() Model {
 	// its rows note-addressable at a stale tip. This is the single exit point.
 	m.filesPreviewSet = nil
 	m.filesPreviewCounts = nil
+	m.filesReview = nil
 	m.filesStashTag = ""
 	m.filesShelfID = ""
 	m.filesShelfLabel = ""
@@ -132,6 +133,9 @@ func filesMetaLine(c model.Commit) string {
 // modes have one date behind them — a compare has two endpoints, and
 // stash/shelf keep their own headers.
 func (m Model) filesMetaLineFor() string {
+	if m.filesReview != nil {
+		return reviewMetaLine(m.filesReview)
+	}
 	if m.filesMode != filesModeChanged && m.filesMode != filesModeFullTree {
 		return ""
 	}
@@ -675,6 +679,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
+	case "n", "p": // the review view: the next / previous file with notes
+		if m.filesReview != nil && m.filesTreeFocused {
+			m.stepReviewFile(msg.String() == "n")
+			return m, nil
+		}
 	case ".":
 		return m.openActionMenu(), nil
 	case "g": // global bookmark quick-switcher
@@ -709,8 +718,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p.hscroll = 0
 		return m, nil
 	case "a": // toggle full-tree (every file at this commit) vs the changed set
-		if m.stashView != nil || m.inCompareMode() || m.filesHash == "" {
-			return m, nil // only meaningful for a commit files view
+		if m.stashView != nil || m.inCompareMode() || m.filesHash == "" || m.filesReview != nil {
+			return m, nil // only meaningful for a commit files view (not its review mode)
 		}
 		return m.toggleFullTree()
 	// The commit-list side IS the Commits panel selection (m.focus stays
@@ -959,6 +968,12 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		m.statusMsg = i18n.T("terminal too narrow for the diff view")
 		return m, nil
 	}
+	if l.overview {
+		return m.openReviewOverview()
+	}
+	if l.noteID != "" { // an @notes/ entry: the review opens as the review view
+		return m.openReview(l.noteID, reviewTitle(shortHash(m.filesHash)))
+	}
 	m.diffNotice = "" // drop any stale notice; the stepper re-posts its arrival notice
 	m.diffNav = diffNavTree
 	if m.diffStacked && !m.inFullTree() {
@@ -980,6 +995,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		m = m.pushLayer(newV)
 	}
 	m.stampPreviewNotes(m.diffLayer(), l.path)
+	m.stampReviewNotes(m.diffLayer(), l.path)
 	cmd, tag, context := m.treeFileLoad(l)
 	m.diffLayer().context = context
 	m.diffTag = tag

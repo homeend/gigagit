@@ -189,6 +189,9 @@ type Model struct {
 	// showing a preview. Stamped onto each diff the view opens.
 	filesPreviewSet    *domain.PreviewNoteSet
 	filesPreviewCounts map[string]int
+	// filesReview is the files view's REVIEW mode (review_view.go): set
+	// after the view opens on a structured review; nil otherwise.
+	filesReview *reviewViewState
 
 	previews []previewRow // saved merge previews + live summaries (srcPreviews)
 
@@ -647,10 +650,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A note stamp that landed on the LIVE view while this load was in
 		// flight (a commit pair's scope arrives by its own message) is newer
 		// than the identity the loader snapshotted at dispatch: keep it.
-		lateAddr, lateSet := dv.noteAddr, dv.previewSet
+		lateAddr, lateSet, lateReview := dv.noteAddr, dv.previewSet, dv.reviewID
 		*dv = *msg.view
 		if dv.noteAddr.Path == "" && lateAddr.Path != "" {
 			dv.noteAddr, dv.previewSet = lateAddr, lateSet
+		}
+		if dv.reviewID == "" {
+			dv.reviewID = lateReview
 		}
 		dv.loading = false
 		dv.compare = dv.compare || compare
@@ -861,6 +867,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.blinkOn = !m.blinkOn
 		return m, noticeBlinkCmd(msg.gen)
+	case reviewViewMsg:
+		return m.handleReviewViewMsg(msg)
 	case commitFilesMsg:
 		m.filesReadInflight = false // the outstanding per-commit read has landed; nav may issue again
 		if m.filesView == nil || msg.hash != m.filesHash {
@@ -880,6 +888,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Only lines and cursor are replaced; the search query intentionally
 		// survives the commit change (track one file through history).
+		if st := m.filesReview; st != nil && st.tip == msg.hash {
+			m.filesView.lines = reviewTreeLines(st, commitFileLines(msg.files))
+			m.filesView.sel = 0
+			m.filesContext = shortHash(msg.hash) + " " + msg.subject
+			m.filesCommit = msg.commit
+			return m.drainPendingFiles()
+		}
+		m.filesReview = nil // the commit list moved on: a plain commit view now
 		m.filesView.lines = withReviewLines(msg.reviews, commitFileLines(msg.files))
 		m.filesView.sel = 0
 		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
@@ -1010,6 +1026,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesView.lines = commitFileLines(filterCompareFiles(msg.files, m.comparePair.pathSet()))
 		} else {
 			m.filesView.lines = commitFileLines(msg.files)
+		}
+		if st := m.filesReview; st != nil {
+			m.filesView.lines = reviewTreeLines(st, m.filesView.lines)
 		}
 		m.filesView.sel = 0
 		// A re-armed merge preview keeps the file the cursor was on when its
@@ -2571,7 +2590,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelBranches {
 				// A review row under a branch opens the review.
 				if h, ok := m.selectedBranchReview(); ok {
-					return m.openReviewNote(h.ID, h.Summary)
+					return m.openReview(h.ID, h.Summary)
 				}
 				if r, ok := m.commitGotoTipRow(); ok {
 					return r.run(m)

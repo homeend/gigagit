@@ -58,6 +58,13 @@ func (s *Service) reviewRevs(ctx context.Context, r Review) (base, tip string, i
 	return ra, tip, true
 }
 
+// ReviewRevs are the two revisions review r compares (see reviewRevs): the
+// review view opens a single-commit review as that commit's files and a range
+// review as a compare of base..tip.
+func (s *Service) ReviewRevs(ctx context.Context, r Review) (base, tip string, isRange bool) {
+	return s.reviewRevs(ctx, r)
+}
+
 // ReviewFiles are the files the review view lists: the commit's changed files,
 // or for a range review the files that differ across its range.
 func (s *Service) ReviewFiles(ctx context.Context, r Review) ([]model.CommitFile, error) {
