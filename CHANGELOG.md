@@ -59,6 +59,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 Follow-ups: a `shelve` answer (after the multi-file shelf), remote-only
 branches, and the web UI.
 
+## Reviews read as reviews in a commit's files
+
+### Changed
+
+- **A commit's reviews** are listed under a `Reviews` heading as
+  `◆ 2026-09-28 18:12 · Claude Code · Review: …` instead of a fake
+  `R  review-<date>-<id>.md` file under `@notes/` (View all notes too).
+- **Opening a review** shows an "Opening the review…" box that holds the keys
+  until it opens (esc cancels) — the read takes seconds on a slow disk.
+- **esc from a review opened from a commit's files** lands on that file tree,
+  its cursor on the review's row, instead of on the commit list.
+
+### Fixed
+
+- `gg note list` printed a branch review as `review 49cd781: (branch)`.
+
 ## Review view polish: delete a review, a calmer overview
 
 ### Added

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -511,5 +512,17 @@ func TestNoteListLabelsAReview(t *testing.T) {
 		if strings.Contains(out, bad) {
 			t.Errorf("note list = %q, must not show %q for a review", out, bad)
 		}
+	}
+}
+
+// A branch review's row names the commit and the branch with no stray colon.
+func TestRenderNoteLineBranchReview(t *testing.T) {
+	n := model.Note{ID: "d8665f79", Source: model.NoteSourceAgent, Tags: []string{model.ReviewTag},
+		Address: model.FileAddress{State: model.StateCommitted, Commit: "49cd78100000000000000000000000000000000", Branch: "feature"},
+		Summary: "Review: feature"}
+	var b strings.Builder
+	renderNoteLine(&b, domain.ResolvedNote{Note: n}, false, "")
+	if got, want := b.String(), "d8665f79 [agent] review 49cd781 (feature)  Review: feature\n"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }

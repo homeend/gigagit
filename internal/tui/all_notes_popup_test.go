@@ -511,7 +511,7 @@ func TestAllNotesListsAReviewUnderItsCommit(t *testing.T) {
 			at = i
 		}
 	}
-	if at < 1 || rows[at-1].text != "@notes/" {
+	if at < 1 || rows[at-1].text != "Reviews" {
 		t.Fatalf("no review row under an @notes/ heading: %+v", rows)
 	}
 	p := &allNotesPopup{rows: rows, folded: map[string]bool{}}

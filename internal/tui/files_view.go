@@ -58,6 +58,7 @@ func (m Model) closeFilesView() Model {
 	m.filesPreviewSet = nil
 	m.filesPreviewCounts = nil
 	m.filesReview = nil
+	m.filesLandNote = ""
 	m.filesStashTag = ""
 	m.filesShelfID = ""
 	m.filesShelfLabel = ""
@@ -271,22 +272,37 @@ func commitFileLines(files []model.CommitFile) []contentLine {
 const reviewsDir = "@notes"
 
 // withReviewLines puts a commit's reviews in front of its file list as a
-// virtual @notes/ directory. The stack is built from this list, so the
+// "Reviews" heading. The stack is built from this list, so the
 // reviews read above the first real file there too.
 func withReviewLines(reviews []domain.Review, lines []contentLine) []contentLine {
 	if len(reviews) == 0 {
 		return lines
 	}
 	out := make([]contentLine, 0, len(reviews)+1+len(lines))
-	out = append(out, contentLine{text: reviewsDir + "/", heading: true})
+	out = append(out, contentLine{text: i18n.T("Reviews"), heading: true})
 	for _, r := range reviews {
+		// The path only keys the row (the stack, the sticky line); the row
+		// reads as a review, not as a file.
 		name := "review-" + r.Created.Local().Format("2006-01-02") + "-" + r.ID + ".md"
-		out = append(out, contentLine{text: "  R  " + name, path: reviewsDir + "/" + name, status: "R", noteID: r.ID})
+		out = append(out, contentLine{text: "  " + reviewRowText(r), path: reviewsDir + "/" + name, status: "R", noteID: r.ID})
 	}
 	if len(lines) == 1 && lines[0].path == "" && !lines[0].heading {
 		return out // "(no files)": the reviews are the whole list
 	}
 	return append(out, lines...)
+}
+
+// reviewRowText is a review's row: "◆ 2026-09-28 18:12 · Claude Code · Review: …".
+func reviewRowText(r domain.Review) string {
+	parts := []string{}
+	if !r.Created.IsZero() {
+		parts = append(parts, r.Created.Local().Format("2006-01-02 15:04"))
+	}
+	if a := strings.TrimSpace(r.Agent); a != "" {
+		parts = append(parts, sanitizeLine(a))
+	}
+	parts = append(parts, sanitizeLine(r.Summary))
+	return "◆ " + strings.Join(parts, " · ")
 }
 
 // fileLine renders one file row: "<letter>  <basename>"; renames show the

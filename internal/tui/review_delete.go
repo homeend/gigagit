@@ -121,7 +121,14 @@ func (m Model) onStoredDeleted(msg storedDeletedMsg) (Model, tea.Cmd) {
 // opened from, else closed onto the panel (and popup) that opened it.
 func (m Model) leaveReviewView() (Model, tea.Cmd) {
 	if st := m.filesReview; st != nil && st.back.Hash != "" {
-		return m.openChangedFiles(st.back) // opened from this commit's @notes/: back to its files
+		// Opened from this commit's Reviews: back to its files, the keys on
+		// the tree and the cursor on the review's row once the list lands.
+		id := st.id
+		m, cmd := m.openChangedFiles(st.back)
+		m.focus = panelCommits
+		m = m.focusTree()
+		m.filesLandNote = id
+		return m, cmd
 	}
 	ret, parked := m.filesReturnFocus, m.filesReturnLayers
 	m = m.closeFilesView()

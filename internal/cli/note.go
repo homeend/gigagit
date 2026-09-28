@@ -605,11 +605,11 @@ func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool, status stri
 	if r.Note.IsReviewNote() {
 		// A review is commit-level: it has no file, side or range to show,
 		// and "stale" on it would only mean "no lines to track".
-		where := "review " + noteTargetLabel(r.Note.Address)
+		where := "review " + strings.TrimSuffix(noteTargetLabel(r.Note.Address), ":")
 		if b := r.Note.Address.Branch; b != "" {
 			where += " (" + b + ")"
 		}
-		fmt.Fprintf(w, "%s [%s] %s  %s\n", r.Note.ID, r.Note.Source, strings.TrimSuffix(where, ":"), r.Note.Summary)
+		fmt.Fprintf(w, "%s [%s] %s  %s\n", r.Note.ID, r.Note.Source, where, r.Note.Summary)
 		return
 	}
 	fmt.Fprintf(w, "%s [%s] %s %s:%d-%d %s  %s\n",

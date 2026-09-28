@@ -13,11 +13,12 @@ func TestWithReviewLinesPutsReviewsFirst(t *testing.T) {
 	t.Parallel()
 	when := time.Date(2026, 9, 27, 10, 0, 0, 0, time.Local)
 	files := []contentLine{{text: ".github/", heading: true}, {text: "  M  x.yml", path: ".github/x.yml", status: "M"}}
-	lines := withReviewLines([]domain.Review{{ID: "ab12cd34", Created: when}}, files)
-	if len(lines) != 4 || lines[0].text != "@notes/" || !lines[0].heading {
-		t.Fatalf("lines %+v, want the @notes/ heading first", lines)
+	lines := withReviewLines([]domain.Review{{ID: "ab12cd34", Created: when, Agent: "Claude Code", Summary: "Review: feature"}}, files)
+	if len(lines) != 4 || lines[0].text != "Reviews" || !lines[0].heading {
+		t.Fatalf("lines %+v, want the Reviews heading first", lines)
 	}
-	if lines[1].noteID != "ab12cd34" || lines[1].path != "@notes/review-2026-09-27-ab12cd34.md" || lines[1].status != "R" {
+	// A review reads as one — its date, agent and title — not as a file.
+	if lines[1].noteID != "ab12cd34" || lines[1].text != "  ◆ 2026-09-27 10:00 · Claude Code · Review: feature" {
 		t.Fatalf("review line %+v", lines[1])
 	}
 	if got := withReviewLines(nil, files); len(got) != 2 {
@@ -44,7 +45,7 @@ func TestCommitFilesListTheReview(t *testing.T) {
 	t.Parallel()
 	m := reviewedStackModel(t, "# Verdict\nship it")
 	vis := m.filesView.visible()
-	if len(vis) < 2 || vis[0].text != "@notes/" || vis[1].noteID == "" {
+	if len(vis) < 2 || vis[0].text != "Reviews" || vis[1].noteID == "" {
 		t.Fatalf("file list does not start with the review: %+v", vis)
 	}
 }

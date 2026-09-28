@@ -193,6 +193,12 @@ type Model struct {
 	// filesReview is the files view's REVIEW mode (review_view.go): set
 	// after the view opens on a structured review; nil otherwise.
 	filesReview *reviewViewState
+	// filesLandNote is the review whose row the next commit file list puts
+	// the cursor on (esc from a review opened from that list); "" = none.
+	filesLandNote string
+	// reviewOpenGen numbers review opens: a read answers only the loading
+	// box of its own open (reviewLoadingPopup).
+	reviewOpenGen int
 
 	previews []previewRow // saved merge previews + live summaries (srcPreviews)
 
@@ -899,6 +905,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesReview = nil // the commit list moved on: a plain commit view now
 		m.filesView.lines = withReviewLines(msg.reviews, commitFileLines(msg.files))
 		m.filesView.sel = 0
+		if id := m.filesLandNote; id != "" {
+			m.filesLandNote = ""
+			for i, l := range m.filesView.visible() {
+				if l.noteID == id {
+					m.filesView.sel = i
+				}
+			}
+		}
 		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = shortHash(msg.hash) + " " + msg.subject
 		m.filesCommit = msg.commit // authoritative: also the follow-live j/k repaint
