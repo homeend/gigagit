@@ -37,7 +37,9 @@ func cmdMigrate(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 	for _, m := range pending {
 		fmt.Fprintf(stdout, "%s: format %d -> %d\n", m.Feature, m.From, m.To)
 		fmt.Fprintf(stdout, "  %s\n", m.Consequence)
-		fmt.Fprintf(stdout, "  discards %d entries\n", len(m.Refs))
+		if len(m.Refs) > 0 { // a config migration removes nothing
+			fmt.Fprintf(stdout, "  discards %d entries\n", len(m.Refs))
+		}
 	}
 	if !*yes {
 		fmt.Fprintln(stdout, "\nnothing changed; re-run with --yes to apply")

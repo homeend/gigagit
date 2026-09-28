@@ -270,3 +270,17 @@ func TestAskMigrationFramesTheMessage(t *testing.T) {
 		t.Errorf("the prompt must sit outside the box, got %q", last)
 	}
 }
+
+// A migration that removes no refs (it rewrites config) must not claim it
+// discards entries.
+func TestAskMigrationWithNoRefsClaimsNoDiscard(t *testing.T) {
+	t.Parallel()
+	m := domain.PendingMigration{Feature: "structured-reviews", Store: "review-commands", From: 1, To: 2, Consequence: "updates commands"}
+	var out strings.Builder
+	if _, err := askMigration(m, bufio.NewReader(strings.NewReader("s\n")), &out, func(domain.PendingMigration) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "discards") {
+		t.Fatalf("no refs, yet the box says it discards:\n%s", out.String())
+	}
+}

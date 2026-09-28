@@ -61,13 +61,15 @@ func Preflight(svc *domain.Service, stdin io.Reader, out io.Writer) (bool, error
 // Migrate (see domain.Features), so no real repository ever produces a
 // pending migration for an end-to-end test to exercise.
 func askMigration(m domain.PendingMigration, r *bufio.Reader, out io.Writer, run func(domain.PendingMigration) error) (bool, error) {
-	fmt.Fprint(out, migrationBox([]string{
+	paras := []string{
 		fmt.Sprintf(i18n.T("%s needs a one-time migration"), m.Feature),
 		"",
 		renderMigrationConsequence(m),
-		"",
-		fmt.Sprintf(i18n.T("This discards %d entries and cannot be undone."), len(m.Refs)),
-	}))
+	}
+	if len(m.Refs) > 0 { // a config migration removes nothing
+		paras = append(paras, "", fmt.Sprintf(i18n.T("This discards %d entries and cannot be undone."), len(m.Refs)))
+	}
+	fmt.Fprint(out, migrationBox(paras))
 	fmt.Fprintf(out, "[m] %s  [s] %s  [q] %s: ",
 		i18n.T("Migrate"), i18n.T("Skip"), i18n.T("Quit"))
 

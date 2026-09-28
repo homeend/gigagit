@@ -77,7 +77,8 @@ func (s *Service) probesFrom(ctx context.Context, formats map[string]int) (prefl
 		// marker is a git ref shared by every environment that opens this
 		// .git, and the data it would describe is not.
 		Legacy: map[string]preflight.LegacyProbe{
-			StorePreviews: {Present: s.legacyPreviewsPresent(ctx)},
+			StorePreviews:       {Present: s.legacyPreviewsPresent(ctx)},
+			StoreReviewCommands: {Present: s.legacyReviewCommandsPresent(ctx)},
 		},
 		GitVersion: ver,
 		// A snapshot, never a probe: forge detection is a network round trip
@@ -358,6 +359,8 @@ func (s *Service) migrationAction(ctx context.Context, store, action string) (en
 			return nil, err
 		}
 		return convertPreviews{Dir: s.savedCompareDir(ctx), Repo: repo}, nil
+	case "upgrade-review-commands":
+		return upgradeReviewCommands{Paths: s.reviewCommandConfigPaths(ctx)}, nil
 	case "discard-refs", "":
 		refs, err := s.storeRefs(ctx, store)
 		if err != nil {

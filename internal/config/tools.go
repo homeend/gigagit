@@ -154,3 +154,77 @@ func AppendToolCommands(path string, cmds []ToolCommand) error {
 	}
 	return atomicWriteFile(path, []byte(b.String()))
 }
+
+// ToolCommandsIn is the [[tools.command]] blocks of ONE config file, with no
+// overlay; a missing file has none.
+func ToolCommandsIn(path string) ([]ToolCommand, error) {
+	c, _, err := decodeFile(path)
+	return c.Tools.Command, err
+}
+
+// ReplaceToolCommandBodies rewrites, in place, the command body of each
+// [[tools.command]] block whose body replace accepts, and returns how many it
+// replaced. Only the ''' literal bodies gg writes (AppendToolCommands) are
+// seen; every other byte of the file is kept, and a file with no match is not
+// written at all. replace receives the body without its trailing newline; a
+// new body containing ''' is refused.
+func ReplaceToolCommandBodies(path string, replace func(body string) (string, bool)) (int, error) {
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	lines := strings.SplitAfter(string(raw), "\n")
+	var out strings.Builder
+	inTool, n := false, 0
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		out.WriteString(line)
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") {
+			inTool = trimmed == "[[tools.command]]"
+			continue
+		}
+		if !inTool || !isCommandLiteralOpen(trimmed) {
+			continue
+		}
+		end := -1
+		for j := i + 1; j < len(lines); j++ {
+			if strings.TrimRight(lines[j], "\r\n") == "'''" {
+				end = j
+				break
+			}
+		}
+		if end < 0 {
+			continue // an unterminated literal: not ours to touch
+		}
+		body := strings.TrimRight(strings.Join(lines[i+1:end], ""), "\r\n")
+		nl := "\n"
+		if strings.HasSuffix(lines[end-1], "\r\n") || strings.HasSuffix(line, "\r\n") {
+			nl = "\r\n"
+		}
+		if repl, ok := replace(body); ok {
+			if strings.Contains(repl, "'''") {
+				return 0, fmt.Errorf("config: a command must not contain ''' (TOML literal delimiter)")
+			}
+			out.WriteString(strings.ReplaceAll(strings.TrimRight(repl, "\n"), "\n", nl) + nl)
+			n++
+		} else {
+			out.WriteString(strings.Join(lines[i+1:end], ""))
+		}
+		i = end - 1 // the closing ''' line is written by the loop
+	}
+	if n == 0 {
+		return 0, nil
+	}
+	return n, atomicWriteFile(path, []byte(out.String()))
+}
+
+// isCommandLiteralOpen reports a `command = '''` line that opens a multi-line
+// literal (the body starts on the next line).
+func isCommandLiteralOpen(trimmed string) bool {
+	k, v, ok := strings.Cut(trimmed, "=")
+	return ok && strings.TrimSpace(k) == "command" && strings.TrimSpace(v) == "'''"
+}
