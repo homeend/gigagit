@@ -91,6 +91,9 @@ type Server struct {
 	// ofStop ends the open files' stat poll (openfiles_watch.go).
 	ofStop     chan struct{}
 	ofStopOnce sync.Once
+	// sessStop ends the agent-session list watcher (sessions_http.go).
+	sessStop     chan struct{}
+	sessStopOnce sync.Once
 
 	// rt is the last remote tag listing (remotetags.go): the ▲ on the tags
 	// sidebar and the gate on "delete from remote".
@@ -107,8 +110,9 @@ type Server struct {
 }
 
 func New(svc *domain.Service) *Server {
-	s := &Server{closing: make(chan struct{}), ofs: newOpenFiles()}
+	s := &Server{closing: make(chan struct{}), ofs: newOpenFiles(), sessStop: make(chan struct{})}
 	s.svc.Store(svc)
+	go s.watchSessions(s.sessStop)
 	return s
 }
 
