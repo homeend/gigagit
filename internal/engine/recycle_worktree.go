@@ -13,7 +13,8 @@ import (
 
 // RecycleDirtyDecisionID is raised when the target worktree has staged,
 // unstaged or untracked changes: commit them on the branch that is leaving,
-// discard them (untracked files are deleted, ignored files kept), or abort.
+// shelve them (one shelf file set, then discard), discard them (untracked
+// files are deleted, ignored files kept), or abort.
 const RecycleDirtyDecisionID = "recycle.dirty"
 
 // RecycleCommitLayout is the timestamp layout in the automated commit
@@ -98,10 +99,10 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 		return Result{}, err
 	}
 	c := st.Counts()
-	committed, discarded := "", false
+	committed, shelved, discarded := "", "", false
 	if c.Staged+c.Unstaged+c.Conflicted+c.Untracked > 0 {
 		resp, err := deps.decide(ctx, PromptReq(RecycleDirtyDecisionID,
-			"%s has uncommitted changes on %s", []string{"commit", "discard", "abort"}, target, old))
+			"%s has uncommitted changes on %s", []string{"commit", "shelve", "discard", "abort"}, target, old))
 		if err != nil {
 			return Result{}, err
 		}
@@ -123,22 +124,26 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 				sha = line.Hash
 			}
 			committed = sha
+		case "shelve":
+			deps.emit(ctx, Progress{Step: "shelving", Detail: target})
+			// Everything into the index first (untracked files too): the seam
+			// shelves the INDEX, the one place staged, unstaged and new work
+			// sit together. Nothing is discarded unless the set is stored.
+			if err := wt.StageAll(ctx); err != nil {
+				return Result{}, err
+			}
+			e, err := deps.shelveStaged(ctx, target, old)
+			if err != nil {
+				return Result{}, err
+			}
+			if err := discardAll(ctx, wt); err != nil {
+				return Result{}, err
+			}
+			shelved = e.Label
 		case "discard":
 			deps.emit(ctx, Progress{Step: "discarding", Detail: target})
-			// NOT Discard{All}: its `restore --worktree` deliberately keeps
-			// staged hunks, which `git switch` would then carry onto the
-			// target branch. A hard reset drops index AND tree; clean on the
-			// repo-root pathspec (without -x) then removes untracked files
-			// and keeps ignored ones. Both run even if the first fails.
-			var errs []error
-			if err := wt.Reset(ctx, "hard", "HEAD"); err != nil {
-				errs = append(errs, fmt.Errorf("reset: %w", err))
-			}
-			if err := wt.CleanUntracked(ctx, []string{":/"}); err != nil {
-				errs = append(errs, fmt.Errorf("clean: %w", err))
-			}
-			if len(errs) > 0 {
-				return Result{}, errors.Join(errs...)
+			if err := discardAll(ctx, wt); err != nil {
+				return Result{}, err
 			}
 			discarded = true
 		default:
@@ -154,9 +159,28 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	switch {
 	case committed != "":
 		res = res.AppendSummary("; committed %s", committed)
+	case shelved != "":
+		res = res.AppendSummary("; shelved as %q", shelved)
 	case discarded:
 		res = res.AppendSummary("; changes discarded")
 	}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
+}
+
+// discardAll throws away the worktree's staged, unstaged and untracked work.
+// NOT Discard{All}: its `restore --worktree` deliberately keeps staged hunks,
+// which `git switch` would then carry onto the target branch. A hard reset
+// drops index AND tree; clean on the repo-root pathspec (without -x) then
+// removes untracked files and keeps ignored ones. Both run even if the first
+// fails.
+func discardAll(ctx context.Context, wt GitOps) error {
+	var errs []error
+	if err := wt.Reset(ctx, "hard", "HEAD"); err != nil {
+		errs = append(errs, fmt.Errorf("reset: %w", err))
+	}
+	if err := wt.CleanUntracked(ctx, []string{":/"}); err != nil {
+		errs = append(errs, fmt.Errorf("clean: %w", err))
+	}
+	return errors.Join(errs...)
 }

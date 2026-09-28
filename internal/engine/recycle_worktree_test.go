@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // recycleFixture: main repo on main, a linked worktree "wt-a" on branch
@@ -155,7 +157,7 @@ func TestRecycleWorktreeUntrackedOnlyPrompts(t *testing.T) {
 	for _, e := range drain(ch) {
 		if d, ok := e.(DecisionNeeded); ok && d.Request.ID == RecycleDirtyDecisionID {
 			asked = true
-			if strings.Join(d.Request.Options, ",") != "commit,discard,abort" {
+			if strings.Join(d.Request.Options, ",") != "commit,shelve,discard,abort" {
 				t.Fatalf("options = %v", d.Request.Options)
 			}
 		}
@@ -279,5 +281,87 @@ func TestRecycleCommitMessageLayout(t *testing.T) {
 	got := RecycleCommitMessage(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
 	if got != "Committed changes due to worktree recycle 2026-01-02 03:04" {
 		t.Fatalf("message = %q", got)
+	}
+}
+
+// shelve: stage everything, hand the index to the seam (which stores it),
+// then discard and switch. At the seam call the whole tree must be staged —
+// untracked files included — because the seam reads the INDEX.
+func TestRecycleWorktreeDirtyShelve(t *testing.T) {
+	t.Parallel()
+	_, deps, wt := recycleFixture(t)
+	os.WriteFile(filepath.Join(wt, "README.md"), []byte("edited\n"), 0o644)
+	os.WriteFile(filepath.Join(wt, "new.txt"), []byte("n\n"), 0o644)
+	var gotDir, gotBranch, stagedAtCall string
+	deps.ShelveStaged = func(ctx context.Context, dir, branch string) (model.ShelfEntry, error) {
+		gotDir, gotBranch = dir, branch
+		stagedAtCall = gitOut(t, dir, "diff", "--cached", "--name-only")
+		return model.ShelfEntry{ID: "e1", Label: "WIP on " + branch}, nil
+	}
+	ch := make(chan Event, 32)
+	deps.Events = ch
+	deps.Decider = MapDecider{RecycleDirtyDecisionID: "shelve"}
+	res, err := RecycleWorktree{Dir: wt, Branch: "target", Now: fixedNow}.Run(context.Background(), deps)
+	close(ch)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !samePath(gotDir, wt) || gotBranch != "a" {
+		t.Fatalf("seam got (%q, %q), want (%q, a)", gotDir, gotBranch, wt)
+	}
+	if !strings.Contains(stagedAtCall, "README.md") || !strings.Contains(stagedAtCall, "new.txt") {
+		t.Fatalf("the index at the seam call must hold every change, got:\n%s", stagedAtCall)
+	}
+	if !strings.Contains(res.Summary, `; shelved as "WIP on a"`) {
+		t.Fatalf("summary = %q", res.Summary)
+	}
+	if got := gitOut(t, wt, "status", "--porcelain"); got != "" {
+		t.Fatalf("worktree not clean after shelve:\n%s", got)
+	}
+	if got := wtHead(t, wt); got != "target" {
+		t.Fatalf("worktree HEAD = %q, want target", got)
+	}
+	var opts []string
+	for _, e := range drain(ch) {
+		if d, ok := e.(DecisionNeeded); ok {
+			opts = d.Request.Options
+		}
+	}
+	if strings.Join(opts, ",") != "commit,shelve,discard,abort" {
+		t.Fatalf("options = %v", opts)
+	}
+}
+
+// A failed shelve discards nothing and does not switch: the work is still
+// there (staged, the only visible difference).
+func TestRecycleWorktreeShelveErrorKeepsWork(t *testing.T) {
+	t.Parallel()
+	_, deps, wt := recycleFixture(t)
+	os.WriteFile(filepath.Join(wt, "new.txt"), []byte("n\n"), 0o644)
+	deps.ShelveStaged = func(context.Context, string, string) (model.ShelfEntry, error) {
+		return model.ShelfEntry{}, errors.New("disk full")
+	}
+	deps.Decider = MapDecider{RecycleDirtyDecisionID: "shelve"}
+	if _, err := (RecycleWorktree{Dir: wt, Branch: "target"}).Run(context.Background(), deps); err == nil || !strings.Contains(err.Error(), "disk full") {
+		t.Fatalf("err = %v, want the seam's error", err)
+	}
+	if _, err := os.Stat(filepath.Join(wt, "new.txt")); err != nil {
+		t.Fatal("the work must survive a failed shelve")
+	}
+	if got := wtHead(t, wt); got != "a" {
+		t.Fatalf("worktree HEAD = %q, want a (no switch)", got)
+	}
+}
+
+func TestRecycleWorktreeShelveWithoutSeam(t *testing.T) {
+	t.Parallel()
+	_, deps, wt := recycleFixture(t)
+	os.WriteFile(filepath.Join(wt, "new.txt"), []byte("n\n"), 0o644)
+	deps.Decider = MapDecider{RecycleDirtyDecisionID: "shelve"}
+	if _, err := (RecycleWorktree{Dir: wt, Branch: "target"}).Run(context.Background(), deps); !errors.Is(err, ErrNoShelve) {
+		t.Fatalf("err = %v, want ErrNoShelve", err)
+	}
+	if _, err := os.Stat(filepath.Join(wt, "new.txt")); err != nil {
+		t.Fatal("nothing may be discarded without a shelf")
 	}
 }
