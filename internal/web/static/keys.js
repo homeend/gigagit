@@ -7,7 +7,7 @@ import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stag
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewOverview, stepCommitReviews, stepReviewFile } from "./reviews.js";
-import { addNotePrompt, clearRowSelection, cycleFilesSort, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { addNotePrompt, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
@@ -209,7 +209,11 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     toggleDiffView(); // the TUI's f: changed lines only ↔ full file
   } else if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    cycleTextMode(); // the TUI's ctrl+w (a browser owns ctrl+w itself): scroll → wrap → cutoff
+    // the TUI's ctrl+w (a browser owns ctrl+w itself): an image pair's
+    // layout when one is up, else long lines: scroll → wrap → cutoff
+    if (!cycleImageLayout()) cycleTextMode();
+  } else if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && flipImage()) {
+    e.preventDefault(); // one at a time: old ↔ new (otherwise tab stays the browser's)
   } else if (e.key === "o") {
     // the TUI's o: cycle the focused list's display order. The working-tree
     // file list is the one the keyboard can reach — the sidebar's lists cycle

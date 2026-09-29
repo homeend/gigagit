@@ -22,6 +22,7 @@ import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { leaveReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
+import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
@@ -740,7 +741,7 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
   try {
     // The notes ride ALONGSIDE the diff (openFile's rule): the ◆ rows have to
     // be in the first paint. Without a ctx fetchNotes has nothing to ask.
-    const [d] = await Promise.all([getJSON("/api/entry-diff?" + q), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff("/api/entry-diff?" + q), fetchNotes(false)]);
     if (gen !== state.detailGen) return; // superseded by a newer open or esc
     renderDiff(d);
     jumpToFirstChange();
@@ -1115,6 +1116,15 @@ function openPreviewCtx() {
 }
 
 
+// getDiff fetches a diff and keeps the url it came from: an image pair's
+// <img>s read their bytes from that same url + &img=old|new.
+async function getDiff(url) {
+  const d = await getJSON(url);
+  d.url = url;
+  return d;
+}
+
+
 // fileDiffURL is the ONE place a listed file becomes the URL its diff is read
 // from, in the screen's current mode — the single-file opens and the stacked
 // view's loader (stackview.js) both fetch through it, so the two can never
@@ -1235,7 +1245,7 @@ async function openFile(i) {
     // to be in the first paint, and a second serial round-trip would show the
     // diff without them first.
     const gen = state.detailGen; // a newer open, esc or a stack (S) supersedes this one
-    const [d] = await Promise.all([getJSON(fileDiffURL(f)), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff(fileDiffURL(f)), fetchNotes(false)]);
     if (gen !== state.detailGen) return;
     renderDiff(d);
     jumpToFirstChange();
@@ -1323,7 +1333,7 @@ async function openStatusDiff(i) {
   updateDiffNav();
   try {
     const gen = state.detailGen; // a newer open, esc or a stack (S) supersedes this one
-    const [d] = await Promise.all([getJSON(fileDiffURL(f)), fetchNotes(false)]);
+    const [d] = await Promise.all([getDiff(fileDiffURL(f)), fetchNotes(false)]);
     if (gen !== state.detailGen) return;
     // server tags eligible unstaged diffs with hunk ordinals — arm inline
     // staging BEFORE the render so the rows pick up their hk classes
@@ -1600,6 +1610,12 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   const nc = nctx || globalNoteCtx();
   const hbase = hctx ? hctx.base : 0;
   const hlines = (ls) => { if (hctx && hctx.lines) hctx.lines(ls); };
+  // An image pair: the single-file diff (the one renderDiff owns — w, tab
+  // and the chips act on it) in the chosen layout; anywhere else (a stack
+  // section, the history overlay) small and side by side, no controls.
+  // Without its url it stays a notice.
+  if (d.binary && hasImages(d) && d.url)
+    return (hlines([]), hctx || d !== state.lastDiff ? stackImageHTML(d) : imagePairHTML(d, state.diffImgLayout, state.diffImgOld));
   if (d.binary) return (hlines([]), `<div class="notice">binary file</div>`);
   if (d.too_large) return (hlines([]), `<div class="notice">diff too large</div>`);
   const rows = d.rows || [];
@@ -1784,6 +1800,7 @@ function renderDiff(d) {
   // A new diff is also a new search: the query does not follow a file step.
   if (d !== state.lastDiff) {
     state.diffFolds = new Set();
+    state.diffImgOld = false; // a new image pair opens on its new side
     diffSearchBar.reset(); // no re-render: this render is the new file's
   }
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
@@ -1792,7 +1809,78 @@ function renderDiff(d) {
   mountPanBars($("diff-body"), $("diff-hbars"));
   diffSearchBar.paint(); // the render re-found: the count must follow
   updateDiffNav();
+  footImageChip(d);
 }
+
+
+// footImageChip: while an image pair is up, the footer's w chip names what
+// w does there (the layout); otherwise it names the long-line mode again.
+function footImageChip(d) {
+  const chip = document.querySelector('#foot button[data-act="textmode"]');
+  if (!chip) return;
+  if (hasImagePair(d)) chip.textContent = "w layout";
+  else applyTextMode(state.textMode);
+}
+
+
+// imagePairUp: the single-file diff on screen is a two-sided image pair —
+// only then do w (layout) and tab / a click (flip) mean anything.
+function imagePairUp() {
+  return !state.stack && state.layout === "diff" && !conflictPick && hasImagePair(state.lastDiff);
+}
+
+// cycleImageLayout is w on an image pair: side by side → stacked → one at a
+// time. false when no pair is up (w then keeps its long-line cycle).
+function cycleImageLayout() {
+  if (!imagePairUp()) return false;
+  setImageLayout(nextLayout(state.diffImgLayout));
+  return true;
+}
+
+function setImageLayout(l) {
+  state.diffImgLayout = l;
+  renderDiff(state.lastDiff);
+}
+
+// flipImage is tab / a click in one at a time: old ↔ new. false elsewhere,
+// so tab stays the browser's.
+function flipImage() {
+  if (!imagePairUp() || state.diffImgLayout !== "single") return false;
+  state.diffImgOld = !state.diffImgOld;
+  renderDiff(state.lastDiff);
+  return true;
+}
+
+$("diff-body").addEventListener("click", (e) => {
+  const chip = e.target.closest(".dimg-chips button[data-layout]");
+  if (chip && imagePairUp()) return setImageLayout(chip.dataset.layout);
+  if (e.target.closest(".dimg-flip .dimg")) flipImage();
+});
+
+// An <img> that cannot load (the working copy stopped being an image since
+// the diff was read) falls back to the notice the diff had before images.
+// error does not bubble: listen in the capture phase, page-wide (the
+// history overlay paints pairs too).
+document.addEventListener(
+  "error",
+  (e) => {
+    const img = e.target;
+    if (!(img instanceof HTMLImageElement) || !img.classList.contains("dimg")) return;
+    const side = img.closest(".dimg-side");
+    if (side) side.innerHTML = `<div class="notice">binary file</div>`;
+  },
+  true,
+);
+
+
+registerHelp({
+  key: "w · image layout",
+  html:
+    "on an image pair the diff shows the images: <b>w</b> (or the chips above them) cycles " +
+    "<b>side by side</b> → <b>stacked</b> → <b>one at a time</b> — the TUI's ctrl+w; in one at a time " +
+    "<b>tab</b> or a click on the image flips old ↔ new. An added or deleted image shows alone, " +
+    "unmarked. The stacked view (S) shows each pair small, side by side",
+});
 
 
 // visibleChangeBlock is the ordinal of the change block the reader is looking
@@ -3689,7 +3777,7 @@ async function quietRefreshFile(scope, path, lane) {
   }
   let d;
   try {
-    d = await getJSON(fileDiffURL(f));
+    d = await getDiff(fileDiffURL(f));
   } catch (e) {
     opLine("error: " + (e.message || e), true);
     return;
@@ -4404,4 +4492,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { getDiff, cycleImageLayout, flipImage, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

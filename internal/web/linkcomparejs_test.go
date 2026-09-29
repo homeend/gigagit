@@ -67,7 +67,7 @@ func TestLinkCompareJSIsWiredEverywhere(t *testing.T) {
 	// builder (fileDiffURL, which the stacked view also fetches through)
 	// have one.
 	files := read("files.js")
-	if arm, hash := strings.Index(files, "state.compare.links) {"), strings.Index(files, "getJSON(fileDiffURL(f))"); arm < 0 || hash < 0 || arm > hash {
+	if arm, hash := strings.Index(files, "state.compare.links) {"), strings.Index(files, "getDiff(fileDiffURL(f))"); arm < 0 || hash < 0 || arm > hash {
 		t.Errorf("files.js: openFile's link-comparison arm (%d) must come before the hash lane (%d)", arm, hash)
 	}
 	if arm, hash := strings.Index(files, "(c.links || c.frozen)) {"), strings.Index(files, `q.set("left", c.aHash)`); arm < 0 || hash < 0 || arm > hash {

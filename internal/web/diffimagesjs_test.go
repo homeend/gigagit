@@ -81,3 +81,19 @@ console.log((stkOne.match(/<img /g) || []).length, stkOne.includes("new:"));
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }
+
+// The image pair reaches every diff the page paints: the fetch sites keep
+// the diff's url (getDiff), diffHTML and the stack paint the pair, and the
+// keys reach the layout / flip.
+func TestImageDiffWiring(t *testing.T) {
+	t.Parallel()
+	wiringCheck(t, "files.js", "imagePairHTML(", "stackImageHTML(", "async function getDiff(", "function cycleImageLayout(", "function flipImage(")
+	wiringCheck(t, "stackview.js", "getDiff(fileDiffURL(s.f))")
+	wiringCheck(t, "keys.js", "cycleImageLayout()", "flipImage()")
+	wiringCheck(t, "core.js", "diffImgLayout:", "diffImgOld:")
+	for _, f := range []string{"files.js", "stackview.js"} {
+		if strings.Contains(staticSrc(t, f), "getJSON(fileDiffURL(") {
+			t.Errorf("%s fetches a diff without getDiff: its image sides would have no url", f)
+		}
+	}
+}

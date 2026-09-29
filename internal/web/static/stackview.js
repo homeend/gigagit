@@ -35,6 +35,7 @@ import {
   notesFor,
   rowNoteCtx,
   fileDiffURL,
+  getDiff,
   mountPanBars,
   openFile,
   openStatusDiff,
@@ -507,7 +508,7 @@ async function load(st, s) {
   s.inLoad = true; // until the repaint below: awaitSlot waits for the rows
   st.inFlight++;
   try {
-    const d = await getJSON(fileDiffURL(s.f));
+    const d = await getDiff(fileDiffURL(s.f));
     s.diff = d;
     s.load = "ok";
     // The server tags an eligible unstaged diff with hunk ordinals and the
@@ -927,7 +928,7 @@ function reconcileStack() {
 async function quietReloadSlot(st, s) {
   let d;
   try {
-    d = await getJSON(fileDiffURL(s.f));
+    d = await getDiff(fileDiffURL(s.f));
   } catch {
     return; // best-effort: the old diff stays
   }
