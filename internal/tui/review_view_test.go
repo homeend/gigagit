@@ -59,8 +59,8 @@ func TestReviewViewTree(t *testing.T) {
 		t.Fatalf("first row %+v, want the Overview row", vis[0])
 	}
 	a, i := filesLine(t, m, "a.go")
-	if !strings.Contains(a.text, "◆1") {
-		t.Fatalf("a.go row %q, want ◆1", a.text)
+	if !strings.Contains(a.text, "◆ 1") {
+		t.Fatalf("a.go row %q, want ◆ 1", a.text)
 	}
 	if !strings.Contains(vis[i+1].text, "adds A") || vis[i+1].path != "" || !vis[i+1].dim || vis[i+1].heading {
 		t.Fatalf("row after a.go %+v, want its summary (dim, not a heading: the sticky line names directories)", vis[i+1])

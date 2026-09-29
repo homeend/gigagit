@@ -430,7 +430,7 @@ func TestPreviewRowCarriesANoteBadge(t *testing.T) {
 	}}}
 	rows := m.previewRows()
 	if len(rows) != 1 || !contains(rows[0], noteBadge(4)) {
-		t.Fatalf("want the ◆4 badge on the preview row, got %q", rows)
+		t.Fatalf("want the ◆ 4 badge on the preview row, got %q", rows)
 	}
 }
 
@@ -531,7 +531,7 @@ func TestPreviewFileListRowsCarryTheBadge(t *testing.T) {
 
 	out := m.renderFilesView(60, 20)
 	if !contains(out, "a.txt"+noteBadge(2)) {
-		t.Fatalf("the preview file row wants the ◆2 badge:\n%s", out)
+		t.Fatalf("the preview file row wants the ◆ 2 badge:\n%s", out)
 	}
 	// A file the preview counts at 0 carries NO badge: exactly one ◆ on screen.
 	if n := strings.Count(out, "◆"); n != 1 {

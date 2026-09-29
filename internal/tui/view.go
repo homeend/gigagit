@@ -1154,7 +1154,7 @@ func (m Model) branchOnlyRows() ([]string, int) {
 		gutterW = len(gutter)
 		row := string(gutter) + b.Name
 		if n := len(m.branchReviewHeads(b)); n > 0 {
-			row += " ◆" + strconv.Itoa(n)
+			row += " ◆ " + strconv.Itoa(n)
 		}
 		if b.Behind > 0 {
 			row += " (↓" + strconv.Itoa(b.Behind) + ")"

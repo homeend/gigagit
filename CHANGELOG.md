@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Note badges in the TUI
+
+### Fixed
+
+- **A commit's Files view badges the files that carry notes.** A file
+  noted at that commit shows the same trailing `◆ N` the Commits row
+  does (as the web's commit file list already did); a review tree keeps
+  its own badges.
+- **The `◆` glyph no longer eats the note count.** Badges read `◆ N`:
+  `◆` is East-Asian-ambiguous and many fonts draw it wider than its one
+  cell, over a digit glued to it (Commits, Files, Branches, previews,
+  shelves, the review view).
+
 ## Switch repositories from the TUI-hosted web page
 
 ### Changed
