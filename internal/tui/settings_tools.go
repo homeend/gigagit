@@ -33,7 +33,7 @@ func (m Model) openToolsWizard() Model {
 	p.toolRows = nil
 	home, _ := os.UserHomeDir()
 	for _, det := range exttool.Detect(exec.LookPath, os.Stat, home) {
-		for _, ct := range det.Tool.Commands {
+		for _, ct := range exttool.Pick(det.Tool, exttool.Version{}, false) {
 			key := string(ct.Category) + "\x00" + ct.Name
 			p.toolRows = append(p.toolRows, toolWizardRow{det: det, tmpl: ct, existing: have[key]})
 		}

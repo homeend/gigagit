@@ -79,7 +79,15 @@ type CommandTemplate struct {
 	// Frontends limits where the materialized command is OFFERED (config
 	// `frontends` field): "tui" / "web" / "cli"; empty = everywhere.
 	Frontends []string
-	Command   string
+	// Version is the family's template revision — the family is every row
+	// sharing (Category, Name). Bump it on ANY change to the family; the
+	// golden guard (catalog_versions.golden) fails the build otherwise.
+	// 0 in a literal = 1 (Builtins fills it).
+	Version int
+	// Range is the agent-version range this variant serves ("" = any; see
+	// ParseRange). Ranges within a family never overlap.
+	Range   string
+	Command string
 }
 
 // Tool is one catalog entry. Bins are candidate binary names probed via
@@ -90,7 +98,12 @@ type Tool struct {
 	Label       string
 	Bins        []string
 	ExtraProbes []string
-	Commands    []CommandTemplate
+	// VersionArgs reads the agent's own version (e.g. {"--version"}); nil =
+	// never probed, which only a tool without ranged variants may have.
+	VersionArgs []string
+	// VersionRe's first group is the version in that output (nil = the first X.Y[.Z]).
+	VersionRe *regexp.Regexp
+	Commands  []CommandTemplate
 }
 
 // claudeConflictPrompt is the double-quoted conflict-resolution prompt shared
@@ -446,10 +459,13 @@ const junieCompleteHeadlessCommand = `<bin> --task ` + junieCompletePrompt + ` -
 // Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
 // stage 2 added commit_message capture templates; stage 3 adds review
 // capture templates.
-func Builtins() []Tool {
+func Builtins() []Tool { return withDefaults(builtins()) }
+
+func builtins() []Tool {
 	return []Tool{
 		{
 			ID: "claude", Label: "Claude Code", Bins: []string{"claude"},
+			VersionArgs: []string{"--version"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Claude", Mode: ModeTerminal, Command: claudeConflictCommand},
 				{Category: CatConflict, Name: "Claude (yolo)", Mode: ModeTerminal, OptIn: true, Command: claudeConflictYoloCommand},
@@ -483,6 +499,7 @@ func Builtins() []Tool {
 			// gg's terminal-handover model exactly (Junie runs interactively,
 			// with the conflict prompt pre-submitted, in the real terminal).
 			ID: "junie", Label: "JetBrains Junie", Bins: []string{"junie"},
+			VersionArgs: []string{"--version"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Junie", Mode: ModeTerminal, Command: junieConflictCommand},
 				{Category: CatConflict, Name: "Junie (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieConflictYoloCommand},
@@ -501,6 +518,7 @@ func Builtins() []Tool {
 		},
 		{
 			ID: "codex", Label: "OpenAI Codex", Bins: []string{"codex"},
+			VersionArgs: []string{"--version"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Codex", Mode: ModeTerminal, Command: codexConflictCommand},
 				{Category: CatConflict, Name: "Codex (yolo)", Mode: ModeTerminal, OptIn: true, Command: codexConflictYoloCommand},
@@ -518,6 +536,7 @@ func Builtins() []Tool {
 		},
 		{
 			ID: "antigravity", Label: "Antigravity", Bins: []string{"agy"},
+			VersionArgs: []string{"--version"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Antigravity", Mode: ModeTerminal, Command: agyConflictCommand},
 				{Category: CatConflict, Name: "Antigravity (yolo)", Mode: ModeTerminal, OptIn: true, Command: agyConflictYoloCommand},
@@ -538,6 +557,7 @@ func Builtins() []Tool {
 			// PATH entry lives in a shell rc file, so a gg launched another
 			// way (desktop entry, another shell) would otherwise miss it.
 			ID: "kimi", Label: "Kimi Code", Bins: []string{"kimi"},
+			VersionArgs: []string{"--version"},
 			ExtraProbes: []string{"~/.kimi-code/bin/kimi"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Kimi", Mode: ModeCapture, Command: kimiConflictCommand},

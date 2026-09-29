@@ -109,7 +109,7 @@ func EnsureInteractiveCommands(cfg config.Config, globalPath string, detect func
 	var blocks []config.ToolCommand
 	var names []string
 	for _, det := range detect() {
-		for _, ct := range det.Tool.Commands {
+		for _, ct := range exttool.Pick(det.Tool, exttool.Version{}, false) {
 			if !need[ct.Category] || ct.Mode != exttool.ModeInteractive || ct.OptIn {
 				continue
 			}
