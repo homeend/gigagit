@@ -33,15 +33,15 @@ func RecycleCommitMessage(now time.Time) string {
 // TreeWrite reservation: the gate is keyed by the git common dir, so it
 // already covers the other worktree.
 type RecycleWorktree struct {
-	Dir    string           // target worktree top level
-	Branch string           // local branch to check out there
+	Dir    string // target worktree top level
+	Branch string // local branch to check out there
 	// RemoteRef, when set ("origin/foo"), is checked out first as Branch —
 	// SmartCheckout{Intent: Stay} inline, after the target's own refusals and
 	// before the dirty prompt: a missing Branch is created tracking it, an
 	// existing one fast-forwarded; a diverged one refuses (CheckoutDivergedError)
 	// with the target untouched. An abort at the prompt keeps the branch.
 	RemoteRef string
-	Now    func() time.Time // clock for the commit message; nil = time.Now
+	Now       func() time.Time // clock for the commit message; nil = time.Now
 }
 
 var _ Operation = RecycleWorktree{}

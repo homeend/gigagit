@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Recycle a worktree onto a remote branch
+
+### Added
+
+- **Recycle a worktree from the Remotes tab.** `.` on a remote branch
+  (`origin/foo`) offers **Recycle a worktree** whenever its local branch is
+  not checked out anywhere. The op checks the remote branch out first, the
+  way `c` does: it creates `foo` tracking `origin/foo`, or fast-forwards an
+  existing `foo`. Then it recycles the picked worktree onto `foo` (commit /
+  shelve / discard / abort for a dirty target, as before). A diverged `foo`
+  refuses with the target untouched and offers **check out as different
+  name…**; that name prompt then recycles onto the new branch. Aborting at
+  the dirty prompt keeps the checked-out branch.
+- **`gg worktree recycle <path> origin/foo`** does the same from the CLI:
+  a local branch of that name wins, otherwise a remote-tracking branch is
+  checked out first as `foo` (or `--as <name>`). A diverged branch fails
+  with a hint to retry with `--as`.
+
 ## Shelf-entry notes in the shelved set's file list
 
 ### Added

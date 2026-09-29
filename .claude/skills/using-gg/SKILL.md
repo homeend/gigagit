@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v102 -->
+<!-- gg:using-gg:v103 -->
 
 # Using gg (gigagit)
 
@@ -781,9 +781,13 @@ finds the right one here.
   busy log; a hook failure is reported but does not roll back the worktree.
 - `gg worktree prune` — drop stale worktree admin entries left behind by an
   interrupted or manually-deleted worktree (`git worktree prune`).
-- `gg worktree recycle [--on-dirty=commit|shelve|discard|abort] <path> <branch>` —
+- `gg worktree recycle [--on-dirty=commit|shelve|discard|abort] [--as <name>] <path> <branch>` —
   check an EXISTING local branch out in an existing worktree `<path>` (not
-  the one you are in), replacing what it has checked out. A dirty target
+  the one you are in), replacing what it has checked out. `<branch>` may
+  also be a remote branch (`origin/foo`, when no local branch has that
+  name): it is checked out first as `foo` (or `--as <name>`) — created
+  tracking it, or fast-forwarded if it exists; a diverged one fails with a
+  hint to use `--as`. A dirty target
   needs `--on-dirty`: `commit` commits everything there (untracked included,
   subject `Committed changes due to worktree recycle <date>`) on the branch
   that is leaving; `shelve` stages everything and stores it as ONE shelf
