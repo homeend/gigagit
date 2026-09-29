@@ -218,3 +218,35 @@ func TestReviewNotesRejectsUnsafePath(t *testing.T) {
 		t.Errorf("unknown id = %d, want 404", code)
 	}
 }
+
+// A range review (its scope spans more than the tip commit) opens as the
+// compare of its range: base is the range's start, range is true, and its
+// notes resolve against that base..tip diff.
+func TestReviewViewRange(t *testing.T) {
+	t.Parallel()
+	svc := domain.Open(newRepoDir(t, 3))
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	tip, _, _ := svc.ResolveRev(ctx, "HEAD")
+	base, _, _ := svc.ResolveRev(ctx, "HEAD~2")
+	tip, base = strings.TrimSpace(tip), strings.TrimSpace(base)
+	tg := domain.ReviewTarget{Kind: domain.ReviewRange, Range: base + ".." + tip, Label: "range"}
+	id, _, err := svc.SaveReview(ctx, domain.SaveReview{Target: tg, Agent: "Claude", Text: webReviewDoc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := serve(t, New(svc))
+	var got reviewViewResp
+	if code := getJSON(t, ts, "/api/review/"+id, &got); code != http.StatusOK {
+		t.Fatalf("GET = %d", code)
+	}
+	if !got.Range || got.Base != base || got.Tip != tip || len(got.Files) != 1 {
+		t.Fatalf("range review = range %v base %s tip %s files %+v (want %s..%s)", got.Range, got.Base, got.Tip, got.Files, base, tip)
+	}
+	var notes struct {
+		Notes []struct{ Line int } `json:"notes"`
+	}
+	if code := getJSON(t, ts, "/api/review/notes?id="+id+"&path=f.txt&status=M", &notes); code != http.StatusOK || len(notes.Notes) != 1 {
+		t.Errorf("range review notes = %d %+v, want one", code, notes.Notes)
+	}
+}
