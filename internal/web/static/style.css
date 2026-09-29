@@ -378,6 +378,8 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #drift-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; color: #f2b04a; font-weight: 600; }
 #drift-head button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 8px; font: inherit; cursor: pointer; }
 #drift-head button:hover { border-color: var(--accent); }
+#drift-actions { display: flex; gap: 6px; flex: none; }
+#drift-copy.hidden { display: none; }
 #drift-list { margin: 4px 0 0; padding: 0; list-style: none; }
 #drift-list li { padding: 1px 0; white-space: pre-wrap; word-break: break-word; }
 #drift-list li.added { color: #f2b04a; }

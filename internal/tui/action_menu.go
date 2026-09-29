@@ -29,6 +29,10 @@ type actionRow struct {
 // have their own hotkeys. Navigation (id == "") is skipped. The dynamic copy
 // rows (contextCopyRows) lead the row group.
 func availableActions(m Model) []actionRow {
+	// The Branch versions popup's version rows carry their own menu: its keys.
+	if p, ok := m.topLayer().(*versionsPopup); ok {
+		return p.actionRows()
+	}
 	// Inside a navigable content window the panel bindings don't apply (and the
 	// still-true commit-files [l] binding would, if listed, replay l and close
 	// the very window the menu was opened from). Offer only that window's copy

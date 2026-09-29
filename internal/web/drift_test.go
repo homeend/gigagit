@@ -291,6 +291,10 @@ func TestVersionsJSIsWiredForFrozenPreviewAndDrift(t *testing.T) {
 		{"ops.js", `driftPaused`, "a resume of a paused op must arm the paused trigger"},
 		{"versions.js", `paused for conflicts before completing`, "the paused-only panel needs its own wording"},
 		{"versions.js", `but the resolution is worth a look`, "the paused-only panel must say why it is worth a look"},
+		{"versions.js", `copyLink(driftLink.link, driftLink.desc)`, "the drift panel's copy button copies the compared version's preview link"},
+		{"versions.js", `$("drift-copy").classList.toggle("hidden", !driftLink)`, "the copy button shows only when the server built a link"},
+		{"index.html", `<button id="drift-copy" class="hidden">copy preview link</button>`, "the drift panel carries a hidden-by-default copy button"},
+		{"style.css", `#drift-copy.hidden { display: none; }`, "the copy button's hidden rule (per-id hiding)"},
 	}
 	for _, c := range checks {
 		if got := readPreflightStatic(t, c.file); !strings.Contains(got, c.want) {

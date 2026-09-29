@@ -76,3 +76,36 @@ func TestVersionFindHitAndMiss(t *testing.T) {
 		t.Fatalf("bad shas = %d, want 400", code)
 	}
 }
+
+// The drift check carries the compared version's preview link — the web drift
+// panel's copy button (the TUI notice's "Copy preview link") — and nothing
+// when no version was recorded.
+func TestDriftCarriesTheVersionLink(t *testing.T) {
+	t.Parallel()
+	dir := driftRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+	var none struct {
+		Link string `json:"link"`
+	}
+	if code := getJSON(t, ts, "/api/drift?branch=main", &none); code != http.StatusOK || none.Link != "" {
+		t.Fatalf("nothing recorded: %d, link %q, want none", code, none.Link)
+	}
+	runOpOK(t, ts, `{"op":"merge","branch":"feature","onto":"main"}`)
+	var list struct {
+		Versions []struct {
+			Link string `json:"link"`
+			Desc string `json:"desc"`
+		} `json:"versions"`
+	}
+	getJSON(t, ts, "/api/versions?branch=main", &list)
+	var d struct {
+		Link string `json:"link"`
+		Desc string `json:"desc"`
+	}
+	if code := getJSON(t, ts, "/api/drift?branch=main", &d); code != http.StatusOK {
+		t.Fatalf("GET /api/drift = %d", code)
+	}
+	if len(list.Versions) != 1 || d.Link == "" || d.Link != list.Versions[0].Link || d.Desc != list.Versions[0].Desc {
+		t.Fatalf("drift link %q / %q, want the version row's %+v", d.Link, d.Desc, list.Versions)
+	}
+}

@@ -181,6 +181,10 @@ func (p *versionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if p.mode == versionsModeVersions {
 				return p.onCopyLink(m)
 			}
+		case ".":
+			if p.mode == versionsModeVersions && p.sel >= 0 && p.sel < len(p.rows) {
+				return m.openActionMenu(), nil
+			}
 		}
 		return m, nil
 	}
@@ -445,7 +449,7 @@ func (p *versionsPopup) box(m Model) string {
 		// (the recorded base..ours) — or, for a fieldless one-branch record,
 		// that commit's own file view. Neither is the two-endpoint compare
 		// the old label promised.
-		hint = i18n.T("[enter] preview  [r] restore  [d] delete  [y] copy sha  [L] copy link")
+		hint = i18n.T("[enter] preview  [r] restore  [d] delete  [y] copy sha  [L] copy link  [.] menu")
 	}
 	// The box follows its widest fixed line — the key hint — the notice
 	// dialog's fit rule (popupFitWidth): the default 56 columns cut the
@@ -574,4 +578,28 @@ func (p *versionBranchNamePopup) render(m Model, below string) string {
 	b.WriteString(i18n.T("[enter] create  [esc] cancel"))
 	box := st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
+}
+
+// actionRows is the version row's . menu: the popup's own keys as rows, each
+// running exactly what its key does (the popup stays under the menu). Copy
+// link is offered only on a row that records a preview.
+func (p *versionsPopup) actionRows() []actionRow {
+	if p.mode != versionsModeVersions || p.sel < 0 || p.sel >= len(p.rows) {
+		return nil
+	}
+	row := func(id, label string, run func(*versionsPopup, Model) (Model, tea.Cmd)) actionRow {
+		return actionRow{id: id, label: label, run: func(m Model) (tea.Model, tea.Cmd) {
+			return run(p, m)
+		}}
+	}
+	rows := []actionRow{
+		row("version-preview", i18n.T("Open preview"), (*versionsPopup).onEnter),
+		row("version-restore", i18n.T("Restore version…"), (*versionsPopup).onRestore),
+		row("version-delete", i18n.T("Delete version…"), (*versionsPopup).onDelete),
+		row("version-copy-sha", i18n.T("Copy commit sha"), (*versionsPopup).onCopy),
+	}
+	if v := p.rows[p.sel]; v.Base != "" && v.Ours != "" {
+		rows = append(rows, row("version-copy-link", i18n.T("Copy link"), (*versionsPopup).onCopyLink))
+	}
+	return rows
 }

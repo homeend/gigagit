@@ -208,3 +208,41 @@ func TestVersionLinkRoundTripsThroughDiffAndResolve(t *testing.T) {
 		t.Fatalf("resolve --json exit %d out=%q err=%s", code, rout, errb)
 	}
 }
+
+// `gg link --version <branch> <id|latest>` prints the version's preview link —
+// the line `gg versions` prints under the row; a one-branch record has none,
+// an unknown id is an error, and the flag takes no other target or hint.
+func TestCmdLinkVersion(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	base, ours, other, _ := buildResurrectionFixture(t, dir, "feat", "feat")
+	fabricateVersion(t, dir, "feat", "rebase", 1753100000, base, ours, other)
+	stampVersionsFormat(t, dir)
+
+	code, out, errb := runCLI(t, dir, "link", "--version", "feat", "1753100000-rebase")
+	if code != 0 {
+		t.Fatalf("link --version exit %d: %s", code, errb)
+	}
+	want := "@" + base + ".." + ours + "?version=1753100000-rebase\n"
+	if !strings.HasPrefix(out, "gg:///") || !strings.HasSuffix(out, want) {
+		t.Fatalf("out = %q, want the local-form preview link ending %q", out, want)
+	}
+	_, list, _ := runCLI(t, dir, "versions", "feat")
+	if !strings.Contains(list, "  "+strings.TrimSpace(out)+"\n") {
+		t.Fatalf("link --version must print what `gg versions` prints:\n%s\nvs\n%s", out, list)
+	}
+
+	gitRun(t, dir, "update-ref", "refs/gg/versions/feat/1753100001-amend", ours) // one-branch, newest
+	if code, _, errb := runCLI(t, dir, "link", "--version", "feat", "latest"); code != 1 || !strings.Contains(errb, "records no preview") {
+		t.Fatalf("one-branch latest: exit %d, %q", code, errb)
+	}
+	if code, _, errb := runCLI(t, dir, "link", "--version", "feat", "1-nope"); code != 1 || !strings.Contains(errb, "no version") {
+		t.Fatalf("unknown id: exit %d, %q", code, errb)
+	}
+	if code, _, _ := runCLI(t, dir, "link", "--version", "feat"); code != 2 {
+		t.Fatalf("missing id: exit %d, want 2", code)
+	}
+	if code, _, _ := runCLI(t, dir, "link", "--version", "feat", "--rev", "HEAD", "1753100000-rebase"); code != 2 {
+		t.Fatalf("--version with --rev: exit %d, want 2", code)
+	}
+}
