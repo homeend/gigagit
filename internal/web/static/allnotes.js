@@ -538,9 +538,9 @@ registerHelp({
   key: "all notes",
   html:
     "☰ / command palette → <b>view all notes…</b>: every note this checkout can see, as a tree — " +
-    "working tree, commits (with their AI reviews), other (shelf entries) → directory → file → note, " +
+    "working tree, commits (with their AI reviews), other (shelf entries, their own notes first) → directory → file → note, " +
     "each note with its status, author, place and age. Type to filter, ←/→ fold, enter or a click opens " +
-    "a note's diff on it, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking",
+    "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking",
 });
 
 export { openAllNotes };
