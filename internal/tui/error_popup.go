@@ -50,6 +50,7 @@ func newErrorPopup(msg string) *contentPopup {
 	}
 	p := newContentPopup(title, lines)
 	p.mode = modeWrap
+	p.prose = true
 	p.danger = isErr
 	p.noCursor = true
 	p.block = true // the message is quoted text: its own band, its own margins

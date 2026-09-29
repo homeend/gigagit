@@ -616,6 +616,11 @@ git deletion in a shared repo.
 
 `[ui] wheel_step` sets the mouse-wheel scroll step in rows (default 3);
 `[ui] hscroll_step` sets the diff scroll-mode pan step in columns (default 8);
+`[ui] reading_width` caps the text column of free-text popups — the review
+overview, AI results, PR descriptions and comments, commit messages, View all
+notes — in columns (default 120, min 40): text wraps inside it and the column
+is centred, so a fullscreen (`ctrl+t`) popup never runs lines across the whole
+screen; code, diffs and file trees keep the full width;
 `[ui] search_history_size` sets how many phrases each search-history ring keeps
 (default 20, hard max 1000) — recall them while typing a search with `alt+↑/↓`;
 `[ui] reflog_limit` caps how many HEAD reflog entries the Reflog tab loads

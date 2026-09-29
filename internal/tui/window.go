@@ -54,10 +54,10 @@ type winRow struct {
 	// hang, when > 0, is the column modeWrap continuations start at, in place
 	// of the one derived from the row's leading glyphs: a table row whose
 	// last column is prose wraps under that column (View all notes' NOTE).
-	hang int
-	prefix    string
-	style     lipgloss.Style // zero value renders the text unchanged
-	decorate  rowDecorator   // optional; applied post-slice, post-pad
+	hang     int
+	prefix   string
+	style    lipgloss.Style // zero value renders the text unchanged
+	decorate rowDecorator   // optional; applied post-slice, post-pad
 	// cls is an optional syntax class per DISPLAY RUNE of text (so
 	// len(cls) == len([]rune(text)); nil = the plain path every other caller
 	// takes). The window slices it alongside the text in all three modes, so a

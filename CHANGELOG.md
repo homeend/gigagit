@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Reading width for free text
+
+### Added
+
+- **`[ui] reading_width` (default 120): free text reads in a centred
+  column.** The review overview and its other notes, AI task results and
+  prose reviews, PR descriptions and comments, the commit message view,
+  the error viewer and shelf-entry notes lay their text in a column at
+  most that wide, left-aligned inside it and centred in the popup. A
+  fullscreen (`ctrl+t`) popup keeps its frame; only the text stops
+  running across the whole screen. Code, diffs, blame, file trees and the
+  help popups keep the full width; a code or table line in markdown is
+  cut at the column (`ctrl+w` scrolls it).
+- **View all notes wraps a note instead of cutting it.** A long summary
+  continues under the NOTE column, and the table sits in the same centred
+  column; the bottom bar still spells out a WHO or WHERE its cell cut.
+
 ## Switch repositories from the TUI-hosted web page
 
 ### Changed

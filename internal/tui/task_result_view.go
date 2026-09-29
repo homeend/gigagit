@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,6 +43,7 @@ func (m Model) openReviewNote(id, title string) (Model, tea.Cmd) {
 	}
 	d.title, d.result, d.markdown = title, true, true
 	d.p.mode = modeWrap // prose
+	d.p.prose = true
 	d.p.extraHint = i18n.T("[y] copy")
 	m = m.pushLayer(&fileViewer{d})
 	m = m.registerDoc(d)
@@ -58,6 +60,7 @@ func (m Model) openResultFile(path, title string, apply func(Model) (Model, tea.
 		m = m.detachDoc(d)
 	}
 	d.title, d.result, d.apply = title, true, apply
+	d.p.prose = filepath.Ext(path) != ".log" // a review, a message: prose; an output tail is not
 	d.p.extraHint = i18n.T("[y] copy")
 	if apply != nil {
 		d.p.extraHint = i18n.T("[a] apply") + "  " + d.p.extraHint

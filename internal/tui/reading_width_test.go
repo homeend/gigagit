@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestReadingColumn(t *testing.T) {
@@ -107,4 +109,25 @@ func TestAllNotesWrapsNoteColumn(t *testing.T) {
 		return
 	}
 	t.Fatalf("summary not found:\n%s", box)
+}
+
+// The full-screen viewer lays a prose document (an AI review, a result) in the
+// reading column, word-wrapped; a file's code keeps the whole frame.
+func TestViewerProseUsesReadingColumn(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.width, m.height = 240, 30
+	p := &contentPopup{lines: []contentLine{{text: strings.Repeat("lorem ipsum dolor sit amet ", 30)}}, mode: modeWrap, prose: true}
+	box := m.renderPreviewBox(p, "Review: x", 240, 30, true, true)
+	lo, hi := textSpan(t, box)
+	if hi-lo > 120 || lo < 50 {
+		t.Fatalf("prose spans %d..%d; want ≤120 wide and centred", lo, hi)
+	}
+	if w := lipgloss.Width(strings.Split(box, "\n")[0]); w != 240 {
+		t.Fatalf("the frame must keep its full width, got %d", w)
+	}
+	p.prose = false
+	if lo, hi := textSpan(t, m.renderPreviewBox(p, "x.go", 240, 30, true, true)); hi-lo <= 120 {
+		t.Fatalf("code must keep the full frame, spans %d..%d", lo, hi)
+	}
 }
