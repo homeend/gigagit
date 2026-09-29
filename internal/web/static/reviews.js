@@ -12,7 +12,7 @@ import { opLine, showLocalConfirm } from "./ops.js";
 import { mdHTML } from "./markdown.js";
 import { registerHelp } from "./menus.js";
 import { NOTE_BADGE_COLS, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
-import { teardownStack } from "./stackview.js";
+import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
 import { focusPane } from "./keys.js";
 
@@ -208,12 +208,48 @@ function renderReviewFiles() {
 }
 
 
-// showReviewOverview puts the Overview in the diff pane: the review's
-// markdown, its meta, the notes it could not place on a line, and Copy.
+// reviewOverviewHTML is the Overview: the review's markdown, its meta, the
+// notes it could not place on a line, and Copy — a centred reading column.
+function reviewOverviewHTML() {
+  const d = state.review.data;
+  const other = d.other || [];
+  return (
+    `<div class="review-ov">` +
+    `<div class="review-ov-bar"><span class="meta">${esc(reviewMetaLine(d))}</span>` +
+    `<button id="review-copy" title="copy the review's text">copy</button></div>` +
+    (d.overviewMd ? `<div class="md">${mdHTML(d.overviewMd, esc)}</div>` : "") +
+    (d.meta ? `<div class="review-ov-meta">${esc(d.meta)}</div>` : "") +
+    (other.length
+      ? `<h4>Other notes</h4><ul class="review-other">` +
+        other.map((n) => `<li>${esc(n.path + ":" + n.line + " — " + n.summary)}</li>`).join("") +
+        `</ul>`
+      : "") +
+    `</div>`
+  );
+}
+
+
+// showReviewOverview shows the Overview: alone in the diff pane, or — with
+// the stacked view on — as the first element of the stack, above the files
+// (the TUI's stacked review view).
 function showReviewOverview() {
   const rv = state.review;
   if (!rv) return;
   rv.onOverview = true;
+  if (stackOn()) {
+    if (state.layout !== "diff") {
+      state.pane = "files";
+      setLayout("diff");
+      focusPane();
+      setReviewHeader();
+    }
+    if (state.stack && state.stack.list === state.files) {
+      $("diff-pane").scrollTop = 0; // the stack's top IS the Overview
+      renderFiles();
+      return;
+    }
+    return openStack(0); // buildStack lands on the Overview, not on file 0
+  }
   teardownStack();
   state.detailGen++; // a file diff still loading must not land over the overview
   if (state.layout !== "diff") {
@@ -226,21 +262,8 @@ function showReviewOverview() {
   state.diffRow = null;
   state.notes = [];
   state.lastDiff = null;
-  const d = rv.data;
   setDiffTitle("≡ Overview");
-  const other = d.other || [];
-  $("diff-body").innerHTML =
-    `<div class="review-ov">` +
-    `<div class="review-ov-bar"><span class="meta">${esc(reviewMetaLine(d))}</span>` +
-    `<button id="review-copy" title="copy the review's text">copy</button></div>` +
-    (d.overviewMd ? `<div class="md">${mdHTML(d.overviewMd, esc)}</div>` : "") +
-    (d.meta ? `<div class="review-ov-meta">${esc(d.meta)}</div>` : "") +
-    (other.length
-      ? `<h4>Other notes</h4><ul class="review-other">` +
-        other.map((n) => `<li>${esc(n.path + ":" + n.line + " — " + n.summary)}</li>`).join("") +
-        `</ul>`
-      : "") +
-    `</div>`;
+  $("diff-body").innerHTML = reviewOverviewHTML();
   renderFiles();
   updateDiffNav();
 }
@@ -340,7 +363,7 @@ registerHelp({
 });
 
 
-export { branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

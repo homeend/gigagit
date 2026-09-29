@@ -182,3 +182,16 @@ func TestReviewViewWiring(t *testing.T) {
 	// enter opens the selected one.
 	wiringCheck(t, "keys.js", "stepCommitReviews(delta)", "openSelectedReview()")
 }
+
+// Stacked, a review's Overview is the first element of the stack (the TUI's
+// stacked review view), and toggling the stack on the Overview keeps it.
+func TestReviewOverviewTopsTheStack(t *testing.T) {
+	t.Parallel()
+	wiringCheck(t, "stackview.js",
+		`const ov = reviewActive() ? `+"`"+`<div class="stk-ov">${reviewOverviewHTML()}</div>`+"`"+` : "";`,
+		"if (reviewActive() && state.review.onOverview) return showReviewOverview();",
+		"state.review.onOverview = top;",
+	)
+	wiringCheck(t, "reviews.js", "return openStack(0); // buildStack lands on the Overview")
+	wiringCheck(t, "style.css", ".review-ov { padding: 12px 16px; max-width: 110ch; margin: 0 auto; }")
+}

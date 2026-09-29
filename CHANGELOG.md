@@ -14,7 +14,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   under **Reviews** (`└ 2026-09-29 14:05 Claude`), and a branch's reviews of
   its current tip sit under its row (`└ Review: <date> <agent>`). Clicking
   one opens the review view: **≡ Overview** in the diff pane (the rendered
-  summary, meta, the notes it could not place on a line, copy), then the
+  summary, meta, the notes it could not place on a line, copy — a centred
+  column; with the stacked view on, it tops the stack above the files), then the
   reviewed files with ◆N and each file's one-line summary; the diffs show
   only the review's notes, read-only (`c` refuses). A range review lists its
   range's files. esc returns to the commit it was opened from with the

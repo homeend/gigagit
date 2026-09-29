@@ -1720,7 +1720,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #files-list li.rsum { color: var(--dim); cursor: default; padding-left: 36px; overflow: hidden; text-overflow: ellipsis; }
 #branches-list li.brev { color: var(--dim); padding-left: 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #branches-list li.brev:hover { color: var(--fg); }
-.review-ov { padding: 12px 16px; max-width: 110ch; }
+.review-ov { padding: 12px 16px; max-width: 110ch; margin: 0 auto; }
+.stk-ov { border-bottom: 1px solid var(--border); margin-bottom: 8px; }
 .review-ov-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .review-ov-bar .meta { color: var(--dim); flex: 1; }
 .review-ov-meta { color: var(--dim); margin-top: 10px; }
