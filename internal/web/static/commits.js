@@ -516,6 +516,8 @@ async function openCommit(i) {
   state.fileCursor = 0;
   state.fileSha = row.hash;
   state.filesMode = "commit";
+  state.commitReviews = { sha: row.hash, list: body.reviews || [] };
+  state.reviewSel = "";
   enterFilesStage();
   setCommitTitle(row.hash, row.short, row.subject);
   setFilesMeta(commitMetaLine(body), commitMetaParts(body));
@@ -544,6 +546,7 @@ async function openCommitByHash(hash, title) {
   state.fileCursor = 0;
   state.fileSha = hash;
   state.filesMode = "commit";
+  state.commitReviews = { sha: hash, list: body.reviews || [] };
   enterFilesStage();
   setCommitTitle(hash, "", title);
   setFilesMeta(commitMetaLine(body), commitMetaParts(body));
