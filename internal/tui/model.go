@@ -500,7 +500,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.startupWebCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.startupWebCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -779,7 +779,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
 	case toolStatusesMsg:
-		return m.applyToolStatuses(msg), nil
+		return m.onToolStatuses(msg)
 	case toolConfigEditedMsg:
 		if msg.err != nil {
 			m.statusMsg = i18n.T("edit: %s", msg.err.Error())
@@ -4644,6 +4644,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.versionsGen++  // drop any in-flight branch-versions popup read from the old repo
 	m.noticeSessionDismissed = map[string]bool{}
 	m.repoHealthKnown = false
+	m.toolStatuses = nil // re-read for the new repo's config (batched below)
 	m.pendingNoticeConfig = nil
 	m.refreshHealthAfterOp = false
 	m.previews = nil // the old repo's saved previews must not linger in the new one
@@ -4680,7 +4681,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// the blank-screen gate set above. The dataLoadedMsg success arm chains it
 	// instead, so it can only run once this repo's snapshot is in the model.
 	// The hosted web page follows the switch (nil when no page is served).
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc), m.webRerootCmd())
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), snapshotTargetCmd(m.svc), m.webRerootCmd())
 }
 
 // View implements tea.Model.

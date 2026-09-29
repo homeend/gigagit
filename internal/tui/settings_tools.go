@@ -133,6 +133,18 @@ func (m Model) applyToolStatuses(msg toolStatusesMsg) Model {
 	return m
 }
 
+// onToolStatuses is the toolStatusesMsg handler: store, rebuild the
+// notices, blink for a new one.
+func (m Model) onToolStatuses(msg toolStatusesMsg) (Model, tea.Cmd) {
+	if msg.gen != m.noticeGen {
+		return m, nil
+	}
+	prev := m.noticeIDs()
+	m = m.applyToolStatuses(msg)
+	m = m.rebuildNotices()
+	return m.armBlinkForNew(prev)
+}
+
 // attachToolStatuses points each configured wizard row at its status.
 func (m Model) attachToolStatuses(p *settingsPopup) {
 	byKey := map[string]*domain.ToolTemplateStatus{}

@@ -13,6 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/preflight"
+	"github.com/homeend/gigagit/internal/promptstate"
 )
 
 // The notification center: cheap health checks run on every repo load
@@ -129,11 +130,23 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	m = m.loadBranchFilterSlots()
 	m.clipAvail = msg.clipAvail
 
+	prev := m.noticeIDs()
+	m = m.rebuildNotices()
+	return m.armBlinkForNew(prev)
+}
+
+// noticeIDs is the set of current notice ids (armBlinkForNew's "before").
+func (m Model) noticeIDs() map[string]bool {
 	prev := make(map[string]bool, len(m.notices))
 	for _, n := range m.notices {
 		prev[n.id] = true
 	}
-	m = m.rebuildNotices()
+	return prev
+}
+
+// armBlinkForNew marks notices unread and arms the blink when a notice id
+// not in prev appeared.
+func (m Model) armBlinkForNew(prev map[string]bool) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	for _, n := range m.notices {
 		if !prev[n.id] {
@@ -172,6 +185,17 @@ func (m Model) rebuildNotices() Model {
 	}
 	if n := steerAskNotice(m.steerAsk, m.repoHealth.GitCommonDir); n != nil {
 		next = append(next, *n)
+	}
+	// Tool-template notices come from their own background read (not repo
+	// health), so they are derived here, outside the health half.
+	var dismissed map[string]bool
+	if m.promptStore != nil {
+		dismissed = m.promptStore.DismissedNotices(m.repoHealth.GitCommonDir)
+	}
+	for _, n := range toolTemplateNotices(m) {
+		if !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+			next = append(next, n)
+		}
 	}
 	m.notices = next
 	return m
@@ -767,4 +791,59 @@ func (m Model) noticeSegment() string {
 		return st().noticeHot.Render(seg)
 	}
 	return st().noticeDim.Render(seg)
+}
+
+// noticeToolTemplateUpdate is the tool-template offers notice's stable id.
+const noticeToolTemplateUpdate = "tool_template_update"
+
+// noticeToolAgentUnsupportedPrefix + a hash of the block key identifies one
+// unsupported-agent notice.
+const noticeToolAgentUnsupportedPrefix = "tool_agent_unsupported_"
+
+// toolTemplateNotices: one notice counting open update offers (declined ones
+// never count) and one per block whose agent is outside every range. Both
+// open Settings → External tools; nothing is written from a notice.
+func toolTemplateNotices(m Model) []notice {
+	var offers int
+	var out []notice
+	for _, st := range m.toolStatuses {
+		switch {
+		case st.Kind == domain.ToolUpdateAvailable && !m.toolOfferDeclined(st):
+			offers++
+		case st.Kind == domain.ToolUnsupported:
+			out = append(out, notice{
+				id:      noticeToolAgentUnsupportedPrefix + promptstate.ToolUpdateID(st.Block.Key())[:12],
+				repoKey: m.repoHealth.GitCommonDir,
+				title:   m.toolUpdateReason(st),
+				detail:  []string{i18n.T("The block keeps running as it is. Update the agent, or edit the block in Settings → External tools.")},
+				actions: []noticeAction{
+					{label: i18n.T("Open external tools"), run: openToolsFromNotice},
+					{label: i18n.T("Not now (ask again next load)")},
+					{label: i18n.T("Never for this repo"), never: true},
+				},
+			})
+		}
+	}
+	if offers == 0 {
+		return out
+	}
+	// Offers are counted, so there is no "Never": a new offer must be able to
+	// surface again; per-offer silence is the review's "Keep mine".
+	return append([]notice{{
+		id:      noticeToolTemplateUpdate,
+		repoKey: m.repoHealth.GitCommonDir,
+		title:   i18n.T("%d external-tool templates can be updated", offers),
+		detail:  []string{i18n.T("Newer templates exist for commands gg once wrote into your config. Nothing changes until you review each one.")},
+		actions: []noticeAction{
+			{label: i18n.T("Open external tools"), run: openToolsFromNotice},
+			{label: i18n.T("Not now (ask again next load)")},
+		},
+	}}, out...)
+}
+
+// openToolsFromNotice opens Settings on its External-tools screen.
+func openToolsFromNotice(m Model) (Model, tea.Cmd) {
+	m, cmd := m.openSettings()
+	m = m.openToolsWizard()
+	return m, tea.Batch(cmd, m.refreshToolStatusesCmd())
 }
