@@ -106,7 +106,7 @@ func TestWorktreeRecycleDirtyWithoutFlagIsRefusedInAPipeline(t *testing.T) {
 func TestWorktreeRecycleRejectsBadOnDirty(t *testing.T) {
 	dir := newCLIRepo(t)
 	var out, errb bytes.Buffer
-	code := Run(dir, []string{"worktree", "recycle", "--on-dirty=shelve", "/nowhere", "loose"}, strings.NewReader(""), &out, &errb, "")
+	code := Run(dir, []string{"worktree", "recycle", "--on-dirty=stash", "/nowhere", "loose"}, strings.NewReader(""), &out, &errb, "")
 	if code != 2 {
 		t.Fatalf("exit = %d, want 2; stderr=%s", code, errb.String())
 	}
@@ -120,5 +120,40 @@ func TestWorktreeRecycleUsage(t *testing.T) {
 	var out, errb bytes.Buffer
 	if code := Run(dir, []string{"worktree", "recycle", "only-one-arg"}, strings.NewReader(""), &out, &errb, ""); code != 2 {
 		t.Fatalf("exit = %d, want 2", code)
+	}
+}
+
+// --on-dirty=shelve parks the work as one shelf set; a deletion the set
+// cannot carry is recorded in the entry's note (gg note list --shelf).
+func TestWorktreeRecycleOnDirtyShelve(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := newCLIRepo(t)
+	exec.Command("git", "-C", dir, "branch", "loose").Run()
+	wt := cliWorktree(t, dir, "a", "wt-a")
+	os.WriteFile(filepath.Join(wt, "x.txt"), []byte("x\n"), 0o644)
+	os.Remove(filepath.Join(wt, "README.md"))
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "recycle", "--on-dirty=shelve", wt, "loose"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), `shelved as "WIP on a"`) {
+		t.Fatalf("stdout = %q", out.String())
+	}
+	if got := headOf(t, wt); got != "loose" {
+		t.Fatalf("worktree HEAD = %q, want loose", got)
+	}
+	if st, _ := exec.Command("git", "-C", wt, "status", "--porcelain").Output(); len(st) != 0 {
+		t.Fatalf("worktree not clean:\n%s", st)
+	}
+	code, list, errList := runCLI(t, dir, "shelf", "list")
+	if code != 0 || !strings.Contains(list, "WIP on a") {
+		t.Fatalf("shelf list (exit %d): %s%s", code, list, errList)
+	}
+	id := strings.Fields(list)[0]
+	code, notes, errNotes := runCLI(t, dir, "note", "list", "--shelf", id)
+	if code != 0 || !strings.Contains(notes, "    Deleted (not in this set):") || !strings.Contains(notes, "      README.md") {
+		t.Fatalf("note list --shelf %s (exit %d):\n%s%s", id, code, notes, errNotes)
 	}
 }

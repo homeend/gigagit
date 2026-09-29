@@ -134,7 +134,7 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 				mark = "•"
 			}
 			// A file entry keeps its file name: the path loses its middle.
-			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st, elide: p.items[i].Origin.Path != "", elideHead: 4}
+			wr[n] = winRow{text: prefix + mark + " " + p.rows[i] + noteBadge(m.shelfNoteCount(p.items[i].ID)), style: st, elide: p.items[i].Origin.Path != "", elideHead: 4}
 		}
 		// Wrap mode: hang-indent continuations at the row text (intrinsic to wrap
 		// the height budget counts display lines, not rows.
@@ -149,7 +149,11 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	// Wrap the hint to the text width so [ctrl+w] mode / [esc] close stay visible even
 	// on a narrow terminal, where a single-line footer would truncate them off
 	// (the reason z went undiscovered).
-	hint := []string{i18n.T("[?] keys"), i18n.T("[enter] diff/browse"), i18n.T("[e] editor"), i18n.T("[p] restore"), i18n.T("[t] temp dir"), i18n.T("[a] cherry-pick"), i18n.T("[y] copy"), i18n.T("[m] mark/compare"), i18n.T("[x] remove"), i18n.T("[c] vs bookmark"), i18n.T("[/] filter"), i18n.T("[ctrl+w] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
+	hint := []string{i18n.T("[?] keys"), i18n.T("[enter] diff/browse")}
+	if e, ok := p.selected(); ok && !p.inCompareMode() && m.shelfNoteCount(e.ID) > 0 {
+		hint = append(hint, i18n.T("[n] note"))
+	}
+	hint = append(hint, i18n.T("[e] editor"), i18n.T("[p] restore"), i18n.T("[t] temp dir"), i18n.T("[a] cherry-pick"), i18n.T("[y] copy"), i18n.T("[m] mark/compare"), i18n.T("[x] remove"), i18n.T("[c] vs bookmark"), i18n.T("[/] filter"), i18n.T("[ctrl+w] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close"))
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -325,6 +329,11 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			return m.openShelfRestore(e)
+		case "n":
+			if p.inCompareMode() {
+				return m, nil
+			}
+			return m, m.shelfNotesCmd(p)
 		case "m":
 			if p.inCompareMode() {
 				return m, nil

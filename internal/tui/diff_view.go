@@ -44,6 +44,7 @@ type diffView struct {
 	context    string         // "HEAD → working tree" or "@ <short-hash> <subject>"
 	rev        string         // commit-ish the NEW side came from; "" = working tree (used by h→history)
 	compare    bool           // two-sided compare (title is "a ↔ b", not a path): no single focused file to bookmark/shelve
+	notice     string         // shown in place of an empty body (an empty shelved file); "" = none
 	full       []textdiff.Row // immutable aligned rows (the comparison result)
 	fullBlocks []int          // immutable change-block starts into full
 	// oldTok/newTok alias the (shared, cached) domain.Diff runs — READ-ONLY.

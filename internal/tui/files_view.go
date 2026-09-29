@@ -1178,11 +1178,9 @@ func (m Model) treeFileLoad(l contentLine) (cmd tea.Cmd, tag, context string) {
 	case m.inShelfFiles():
 		// Shelf mode: the frozen member (old) against the working file (new) —
 		// the same two-ref compare the .-menu's compare-against-working-dir uses.
-		left := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: l.path}
-		right := model.FileRef{Source: model.SourceUnstaged, Path: l.path}
 		subtitle := i18n.T("%s → working tree", m.filesShelfLabel)
 		tag = "shelffile:" + m.filesShelfID + ":" + l.path
-		return m.loadCompareTwoRefsCmd(left, right, l.path, subtitle, tag), tag, subtitle
+		return m.loadShelfMemberDiffCmd(m.filesShelfID, l.path, subtitle, tag), tag, subtitle
 	}
 	hash := m.lineHash(l)
 	tag = "commit:" + hash + ":" + l.path

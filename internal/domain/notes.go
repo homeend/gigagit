@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
+	"github.com/homeend/gigagit/internal/shelf"
 )
 
 // ErrNotesDisabled means no state directory was resolvable.
@@ -56,6 +57,7 @@ type NoteCounts struct {
 	ByCommit     map[string]int // commit notes, by sha
 	Reviews      []ReviewHead   // every AI review note, newest first (Branches tab, @notes)
 	ByCommitPath map[string]int // commit notes, by "<sha>:<path>"
+	ByShelf      map[string]int // notes on a whole shelf entry, by entry id
 }
 
 // NoteAdd stores a new note, filling ID, Created/Updated and (when the caller
@@ -100,6 +102,26 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 			}
 		}
 	}
+	// A note on a whole shelf entry anchors on no line — only the entry has
+	// to exist. It still gets a real fingerprint: an OLDER gg's sweep does
+	// not know shelf-level notes and resolves one against the entry's whole
+	// stored blob, deleting it unless line 1 of that blob (immutable) matches.
+	// This build ignores the range and hash (entryNotes).
+	if n.IsShelfLevel() {
+		if _, ferr := s.ShelfFind(ctx, n.Address.ShelfID); ferr != nil {
+			if errors.Is(ferr, shelf.ErrNotFound) {
+				return model.Note{}, fmt.Errorf("shelf entry %s not found", n.Address.ShelfID)
+			}
+			return model.Note{}, ferr
+		}
+		n.Side, n.Range, n.ContextHash = model.NoteSideNew, [2]int{}, ""
+		if blob, berr := s.ShelfBlob(ctx, n.Address.ShelfID); berr == nil {
+			if lines := splitLines(blob); len(lines) > 0 {
+				n.Range = [2]int{1, 1}
+				n.ContextHash = model.NoteContextHash(anchorLines(lines, n.Range))
+			}
+		}
+	}
 	// Pin the checkout BEFORE the hash fill: noteSideLines reads the note's
 	// own worktree, and every later match is made against this value.
 	if worktreeScopedNote(n.Address) {
@@ -114,7 +136,7 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 	// note is born permanently stale and the next sweep deletes it — silently,
 	// long after the caller was told the write succeeded. So a side that cannot
 	// be read, or that is not there at all, is an error the caller sees now.
-	if n.ContextHash == "" {
+	if n.ContextHash == "" && !n.IsShelfLevel() {
 		lines, lerr := s.noteSideLines(ctx, n.Address, n.Side)
 		if lerr != nil {
 			return model.Note{}, fmt.Errorf("notes: cannot read the %s side of %s: %w", n.Side, n.Address.Path, lerr)
@@ -370,6 +392,9 @@ func keepResolved(res []ResolvedNote) []ResolvedNote {
 // method has no business naming someone else's (the HTTP handlers must never
 // take a Worktree from the wire).
 func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]ResolvedNote, error) {
+	if isShelfLevelAddr(addr) {
+		return s.ShelfNotes(ctx, addr.ShelfID)
+	}
 	mine, err := s.loadNotesAt(ctx, addr)
 	if err != nil {
 		return nil, err
@@ -410,7 +435,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 	// fail the query: commit badges need no worktree at all, so an empty cur
 	// simply leaves ByPath empty.
 	cur, _ := s.TopLevel(ctx)
-	c := NoteCounts{ByPath: map[string]int{}, ByCommit: map[string]int{}, ByCommitPath: map[string]int{}}
+	c := NoteCounts{ByPath: map[string]int{}, ByCommit: map[string]int{}, ByCommitPath: map[string]int{}, ByShelf: map[string]int{}}
 	for _, n := range all {
 		if n.IsReply() { // a badge counts THREADS
 			continue
@@ -418,6 +443,10 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		if n.IsReviewNote() {
 			c.Reviews = append(c.Reviews, ReviewHead{ID: n.ID, Commit: n.Address.Commit, Branch: n.Address.Branch,
 				Agent: n.Author, Summary: n.Summary, Created: n.Created})
+		}
+		if n.IsShelfLevel() {
+			c.ByShelf[n.Address.ShelfID]++
+			continue
 		}
 		if n.Address.State == model.StateCommitted && n.Address.Commit != "" {
 			c.ByCommit[n.Address.Commit]++

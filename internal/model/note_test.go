@@ -56,3 +56,18 @@ func TestIsReviewNote(t *testing.T) {
 		}
 	}
 }
+
+func TestShelfLevelNote(t *testing.T) {
+	n := Note{Address: FileAddress{State: StateShelf, ShelfID: "e1"}}
+	if !n.IsShelfLevel() || !n.IsEntryLevel() {
+		t.Fatal("a note on a whole shelf entry must be shelf-level and entry-level")
+	}
+	n.Address.Path = "a.go"
+	if n.IsShelfLevel() || n.IsEntryLevel() {
+		t.Fatal("a file note on a shelf entry is not entry-level")
+	}
+	c := Note{Address: FileAddress{State: StateCommitted, Commit: "abc"}}
+	if !c.IsEntryLevel() || c.IsShelfLevel() {
+		t.Fatal("a commit-level note is entry-level, not shelf-level")
+	}
+}

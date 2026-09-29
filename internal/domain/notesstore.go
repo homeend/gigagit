@@ -72,6 +72,12 @@ func (s *Service) disableNotesForTest() {
 // lock spin, so pushing it on every read would park every reader behind a
 // contended write.
 func (s *Service) notesStore(ctx context.Context) notes.Store {
+	return s.notesStoreKeyed(func() (string, error) { return s.GitCommonDir(ctx) })
+}
+
+// notesStoreKeyed is notesStore with the common-dir read supplied (see
+// shelfStoreKeyed).
+func (s *Service) notesStoreKeyed(commonDir func() (string, error)) notes.Store {
 	s.mu.Lock()
 	if s.notesOff {
 		s.mu.Unlock()
@@ -93,7 +99,7 @@ func (s *Service) notesStore(ctx context.Context) notes.Store {
 			return nil
 		}
 		key := "unknown"
-		if cd, err := s.GitCommonDir(ctx); err == nil {
+		if cd, err := commonDir(); err == nil {
 			key = repoKey(strings.TrimSpace(cd)) // reuse shelfstore.go's repoKey
 		}
 		root = filepath.Join(base, key)

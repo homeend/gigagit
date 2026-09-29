@@ -422,28 +422,28 @@ func cmdWorktreeMove(svc *domain.Service, workdir string, args []string, stdin i
 }
 
 // cmdWorktreeRecycle checks <branch> out in the existing worktree <path>
-// (which gg is not running in), committing or discarding that worktree's
-// uncommitted work first as --on-dirty says. Without the flag an interactive
+// (which gg is not running in), committing, shelving or discarding that
+// worktree's uncommitted work first as --on-dirty says. Without the flag an interactive
 // terminal is asked on stdin; a pipeline fails with the decision id so
 // nothing is destroyed unseen.
 func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("worktree recycle", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	onDirty := fs.String("on-dirty", "", "what to do with the target's uncommitted changes: commit, discard, or abort")
+	onDirty := fs.String("on-dirty", "", "what to do with the target's uncommitted changes: commit, shelve, discard, or abort")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 2 || fs.Arg(0) == "" || fs.Arg(1) == "" {
-		fmt.Fprintln(stderr, "usage: gg worktree recycle [--on-dirty=commit|discard|abort] <path> <branch>")
+		fmt.Fprintln(stderr, "usage: gg worktree recycle [--on-dirty=commit|shelve|discard|abort] <path> <branch>")
 		return 2
 	}
 	policy := map[string]string{}
 	switch *onDirty {
 	case "":
-	case "commit", "discard", "abort":
+	case "commit", "shelve", "discard", "abort":
 		policy[engine.RecycleDirtyDecisionID] = *onDirty
 	default:
-		fmt.Fprintf(stderr, "worktree recycle: --on-dirty must be commit, discard, or abort (got %q)\n", *onDirty)
+		fmt.Fprintf(stderr, "worktree recycle: --on-dirty must be commit, shelve, discard, or abort (got %q)\n", *onDirty)
 		return 2
 	}
 	wts, err := svc.Worktrees(context.Background())

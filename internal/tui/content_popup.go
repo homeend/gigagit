@@ -48,6 +48,7 @@ type contentLine struct {
 	cls     []syntax.Class
 	heading bool
 	noWrap  bool   // a preformatted line (code, a table row): cut in wrap mode, never reflowed
+	elide   bool   // the text holds a path: a cut loses its MIDDLE (elidePath), never its end
 	path    string // file's (new) path
 	oldPath string // set only for renames/copies
 	status  string // model.CommitFile.Status letter ("A","M","D","R","C","T")
@@ -73,6 +74,9 @@ type contentPopup struct {
 	lines     []contentLine // full, unfiltered content
 	query     string        // case-insensitive substring over non-heading lines
 	typing    bool          // true while /-input mode is capturing keys
+	// fitContent sizes the box by its widest line (popupFitWidth): ctrl+t then
+	// grows it only as far as the content needs, never to an empty full width.
+	fitContent bool
 	// charWrap: the content is CODE (a file's text), so wrap mode breaks at the
 	// last column instead of at spaces — see winOpts.charWrap.
 	charWrap bool
@@ -365,6 +369,9 @@ func (p *contentPopup) render(m Model, below string) string {
 func (p *contentPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, contentPopupWidth(w))
+	if p.fitContent {
+		inner = popupFitWidth(w, p.maximized, contentPopupWidth(w), p.widestLine())
+	}
 	s := st()
 	// lipgloss wraps text at Width minus the horizontal padding; truncate to
 	// that true text width so a full-width row can never spill onto a wrap line.
@@ -410,6 +417,13 @@ func (p *contentPopup) box(m Model) string {
 	}
 	for i, l := range vis {
 		wr[i].noWrap = l.noWrap
+		if l.elide {
+			wr[i].elide = true
+			// The "  " / "> " lead-in stays whole; a heading row has none.
+			if !l.heading || i == p.sel {
+				wr[i].elideHead = 2
+			}
+		}
 	}
 	capRows := m.contentPageRows()
 	// contentPageRows budgets for title + blank + hint. Anything else the box
@@ -432,6 +446,9 @@ func (p *contentPopup) box(m Model) string {
 	}
 	if p.saved != "" {
 		extra += 2
+	}
+	if p.hintGap() {
+		extra++ // the blank line above the key hints
 	}
 	if capRows-extra >= 3 {
 		capRows -= extra
@@ -499,6 +516,9 @@ func (p *contentPopup) box(m Model) string {
 			b.WriteString("\n")
 		}
 		b.WriteString(pad + truncate(p.keys, textW-gutter) + "\n")
+	}
+	if p.hintGap() {
+		b.WriteString("\n")
 	}
 	hint := i18n.T("[/] search  [ctrl+w] mode  [s] save  [ctrl+t] full  [q] close")
 	if len(vis) > capRows {
@@ -576,4 +596,24 @@ func imageRowDecorator(cells []termimg.Cell) rowDecorator {
 // hexColor is c as "#rrggbb".
 func hexColor(c color.RGBA) string {
 	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
+}
+
+// widestLine is the widest row the viewer draws, its two-column lead-in
+// included, or the title when that is wider (fitContent's measure).
+func (p *contentPopup) widestLine() int {
+	n := lipgloss.Width(p.title)
+	for _, l := range p.lines {
+		if lw := lipgloss.Width(l.text) + 2; lw > n {
+			n = lw
+		}
+	}
+	return n
+}
+
+// hintGap reports whether box must write a blank line of its own above the
+// key hints: hints always stand apart from the content. The keys line already
+// has one above it (and the hint rides directly under it), the saved-to note
+// ends with one, and block mode writes one below its band.
+func (p *contentPopup) hintGap() bool {
+	return p.keys == "" && p.saved == "" && !(p.block && p.footer == "")
 }

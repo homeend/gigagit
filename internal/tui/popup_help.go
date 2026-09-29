@@ -82,6 +82,7 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 		cheatRow("L", i18n.T("copy this entry's gg:// link (paste it into # to come back here)")),
 		cheatRow("m", i18n.T("mark one, then a second entry to compare the two (two files, or two shelved commits as a whole-tree compare)")),
 		cheatRow("c", i18n.T("compare the highlighted entry against a bookmark (file vs file, or shelved commit vs commit bookmark, or a commit against one file)")),
+		cheatRow("n", i18n.T("read the notes gg left on the entry (rows marked ◆)")),
 		cheatRow("x", i18n.T("remove from the shelf (confirms)")),
 		cheatRow("/", i18n.T("filter the list (enter keeps, esc cancels)")),
 		cheatRow("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),

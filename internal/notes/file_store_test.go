@@ -515,3 +515,24 @@ func TestQuarantineMovesTheFileAside(t *testing.T) {
 		t.Fatalf("after quarantine Load = %v, %v; want empty, nil", ns, err)
 	}
 }
+
+func TestCapExemptsShelfLevelNotes(t *testing.T) {
+	t.Parallel()
+	fs := NewFileStore(t.TempDir())
+	fs.SetPolicy(Policy{MaxEntries: 1})
+	shelfNote := noteAt("shelf000", 1)
+	shelfNote.Address = model.FileAddress{State: model.StateShelf, ShelfID: "e1"}
+	for _, n := range []model.Note{shelfNote, noteAt("mid00000", 5), noteAt("new00000", 9)} {
+		if err := fs.Put(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, _ := fs.Load()
+	if len(got) != 2 {
+		t.Fatalf("cap 1 must keep the exempt shelf note + the newest file note, got %d: %+v", len(got), got)
+	}
+	ids := got[0].ID + "," + got[1].ID
+	if !strings.Contains(ids, "shelf000") || !strings.Contains(ids, "new00000") {
+		t.Fatalf("want shelf000 and new00000 kept, got %s", ids)
+	}
+}

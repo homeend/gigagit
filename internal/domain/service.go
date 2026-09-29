@@ -381,12 +381,15 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 	// A started line with no matching completion is exactly the trace wanted.
 	observ.EmitSpan(observ.Span{Name: label + " started", Start: opStart})
 	out, opErr := op.Run(ctx, engine.OpDeps{
-		Repo:     s.repo,
-		RepoAt:   func(dir string) engine.GitOps { return s.repo.InDir(dir) },
-		Events:   events,
-		Decider:  dec,
-		Escalate: res.Escalate,
-		Versions: versions,
+		Repo:   s.repo,
+		RepoAt: func(dir string) engine.GitOps { return s.repo.InDir(dir) },
+		// The op holds this Service's reservation: shelveStagedIn reads through
+		// the InDir repo directly, never through a (gated) domain query.
+		ShelveStaged: s.shelveStagedIn,
+		Events:       events,
+		Decider:      dec,
+		Escalate:     res.Escalate,
+		Versions:     versions,
 	})
 	span := observ.Span{Name: label, Start: opStart, Duration: time.Since(opStart)}
 	if opErr != nil {

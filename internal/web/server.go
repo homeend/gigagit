@@ -174,6 +174,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/shelf", writeGuard(s.handleShelfAdd))
 	mux.HandleFunc("DELETE /api/shelf", writeGuard(s.handleShelfRemove))
 	mux.HandleFunc("GET /api/shelf/files", s.handleShelfFiles)
+	mux.HandleFunc("GET /api/shelf/notes", s.handleShelfNotes)
 	mux.HandleFunc("POST /api/solo", writeGuard(s.handleSolo))
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
 	mux.HandleFunc("GET /api/compare", s.handleCompare)

@@ -70,6 +70,7 @@ gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached |
 gg note reply [<repo-link>] <note-id> --summary "…" [--json]
 gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--json]   # agent-context v1 or a comments batch
 gg note list  [<link> | --file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
+gg note list  --shelf <entry-id>                                   # notes gg left on a whole shelf entry
 gg note rm    [<repo-link>] <note-id>
 gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
 gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]     # also keep the review's notes as permanent notes
@@ -758,13 +759,18 @@ finds the right one here.
   busy log; a hook failure is reported but does not roll back the worktree.
 - `gg worktree prune` — drop stale worktree admin entries left behind by an
   interrupted or manually-deleted worktree (`git worktree prune`).
-- `gg worktree recycle [--on-dirty=commit|discard|abort] <path> <branch>` —
+- `gg worktree recycle [--on-dirty=commit|shelve|discard|abort] <path> <branch>` —
   check an EXISTING local branch out in an existing worktree `<path>` (not
   the one you are in), replacing what it has checked out. A dirty target
   needs `--on-dirty`: `commit` commits everything there (untracked included,
   subject `Committed changes due to worktree recycle <date>`) on the branch
-  that is leaving; `discard` deletes the changes (untracked files too,
-  ignored files kept); `abort` does nothing. Without the flag a pipeline
+  that is leaving; `shelve` stages everything and stores it as ONE shelf
+  set `WIP on <branch>`, then cleans the worktree — what a set cannot hold
+  (deletions, the old side of a rename; an all-deletions change stores an
+  empty `delete.me`) is written to a note on the entry: read it with
+  `gg note list --shelf <id>` (`gg shelf list` prints the id); `discard`
+  deletes the changes (untracked files too, ignored files kept); `abort`
+  does nothing. Without the flag a pipeline
   exits 1 naming `recycle.dirty`. Refused: a paused rebase/merge, a lock
   file, a branch already checked out somewhere. Flags go BEFORE `<path>`.
 - `gg worktree rename [--force] <worktree> <new-name>` / `gg worktree move

@@ -612,6 +612,17 @@ func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool, status stri
 		fmt.Fprintf(w, "%s [%s] %s  %s\n", r.Note.ID, r.Note.Source, where, r.Note.Summary)
 		return
 	}
+	if r.Note.IsShelfLevel() {
+		// A note on a whole shelf entry: no file, side or range. Its text is
+		// the point (what the set could not carry), so it is printed too.
+		fmt.Fprintf(w, "%s [%s] shelf %s  %s\n", r.Note.ID, r.Note.Source, r.Note.Address.ShelfID, r.Note.Summary)
+		for _, l := range strings.Split(strings.TrimRight(r.Note.Rationale, "\n"), "\n") {
+			if l != "" {
+				fmt.Fprintln(w, "    "+l)
+			}
+		}
+		return
+	}
 	fmt.Fprintf(w, "%s [%s] %s %s:%d-%d %s  %s\n",
 		r.Note.ID, r.Note.Source, noteTargetLabel(r.Note.Address),
 		r.Note.Side, r.Range[0], r.Range[1], status, r.Note.Summary)
@@ -643,6 +654,7 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 	pf := addPreviewFlag(fs)
 	typ := fs.String("type", "all", "user, agent or all")
 	asJSON := fs.Bool("json", false, "emit the wire notes as a JSON array")
+	shelfID := fs.String("shelf", "", "list the notes on a shelf entry itself (its id)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -662,7 +674,17 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 	ctx := context.Background()
 	var res []domain.ResolvedNote
 	previewWords := false
-	if link != nil {
+	if id := strings.TrimSpace(*shelfID); id != "" {
+		if link != nil || pf.set() || *tf.file != "" || *tf.rev != "" || *tf.cached {
+			fmt.Fprintln(stderr, "note list: --shelf names the target (drop the link, --preview, --file, --rev and --cached)")
+			return 2
+		}
+		got, err := svc.ShelfNotes(ctx, id)
+		if err != nil {
+			return noteExit(err, stderr)
+		}
+		res = got
+	} else if link != nil {
 		// Ruling 9: a link and a preview both name a target; combining them is
 		// a usage error, never a silent override (see noteAdd's guard).
 		if pf.set() {

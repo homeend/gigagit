@@ -13,6 +13,7 @@ import { openCompare, openEntryCompare } from "./files.js";
 import { openFileHistory } from "./filehist.js";
 import { extraRows } from "./menus.js";
 import { openConsole } from "./console.js";
+import { openShelfNotes } from "./shelfnotes.js";
 import { entryGone, toast } from "./toast.js";
 import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
 import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
@@ -1227,7 +1228,10 @@ function renderShelf() {
       (e) =>
         `<li data-id="${esc(e.id)}" title="${esc(e.display)}">${mark(false)}` +
         `<span class="ekind">${e.kind === "commit" ? "◆" : e.kind === "files" ? "◈" : "▪"}</span>` +
-        `${esc(entryLabel(e))}</li>`
+        `${esc(entryLabel(e))}` +
+        // ◆N: gg left notes on the entry itself (a recycled worktree's deletions).
+        (e.notes > 0 ? `<span class="notebadge">◆${e.notes}</span>` : "") +
+        `</li>`
     )
     .join("");
 }
@@ -1447,6 +1451,10 @@ function showShelfMenu(e, x, y) {
     items.push({ label: "copy path", act: () => copyText(e.path, "path " + e.path) });
     items.push({ sep: true });
     items.push({ label: "restore to a path…", act: () => restorePrompt("shelf", e, "") });
+  }
+  if (e.notes > 0) {
+    items.push({ sep: true });
+    items.push({ label: "view note", act: () => openShelfNotes(e, entryLabel(e)) });
   }
   items.push(...extraRows("shelf", e));
   items.push({ sep: true });

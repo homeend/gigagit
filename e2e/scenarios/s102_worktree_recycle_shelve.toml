@@ -1,0 +1,36 @@
+name = "worktree recycle --on-dirty=shelve: parks the target's work on the shelf, cleans it, then checks the branch out there"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { write = "gone.txt", content = "to be deleted\n" },
+  { write = "old.txt", content = "a body long enough for git to see the rename\n" },
+  { commit = "initial" },
+  { branch = "loose" },
+  { branch = "feature/x" },
+  { worktree = "wt-x", branch = "feature/x" },
+  { write = "README.md", content = "edited\n", cwd = "wt-x" },
+  { write = "new.txt", content = "in progress\n", cwd = "wt-x" },
+  { rm = "gone.txt", cwd = "wt-x" },
+  { rm = "old.txt", cwd = "wt-x" },
+  { write = "moved.txt", content = "a body long enough for git to see the rename\n", cwd = "wt-x" },
+]
+
+[[run]]
+cmd  = ["worktree", "recycle", "--on-dirty=shelve", "../wt-x", "loose"]
+exit = 0
+stdout_contains = ["recycled", "feature/x → loose", "shelved as \"WIP on feature/x\""]
+
+[[run]]
+cmd  = ["shelf", "list"]
+exit = 0
+stdout_contains = ["WIP on feature/x"]
+
+[expect]
+branch    = "main"
+worktrees = ["wt-x"]
+
+[expect.worktree."wt-x".status]
+untracked = []
+unstaged  = []
+staged    = []

@@ -27,6 +27,7 @@ type shelfRow struct {
 	State   string `json:"state"`
 	Size    int64  `json:"size"`
 	Created string `json:"created,omitempty"`
+	Notes   int    `json:"notes,omitempty"` // notes gg left on the entry itself
 }
 
 func shelfKindName(k model.ShelfKind) string {
@@ -66,7 +67,11 @@ func (s *Server) handleShelf(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, entryByIDStatus(err), err)
 			return
 		}
-		writeJSON(w, map[string]any{"entries": []shelfRow{shelfRowFrom(e)}})
+		row := shelfRowFrom(e)
+		if counts, cerr := svc.NoteCounts(ctx); cerr == nil {
+			row.Notes = counts.ByShelf[e.ID]
+		}
+		writeJSON(w, map[string]any{"entries": []shelfRow{row}})
 		return
 	}
 	es, err := svc.ShelfList(ctx, r.URL.Query().Get("bucket"), 0, maxShelfRows)
@@ -80,9 +85,13 @@ func (s *Server) handleShelf(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// Best effort: a notes store that cannot be read just leaves no badges.
+	counts, _ := svc.NoteCounts(ctx)
 	rows := make([]shelfRow, 0, len(es))
 	for _, e := range es {
-		rows = append(rows, shelfRowFrom(e))
+		row := shelfRowFrom(e)
+		row.Notes = counts.ByShelf[e.ID]
+		rows = append(rows, row)
 	}
 	buckets := []string{}
 	if bs, berr := svc.ShelfBuckets(ctx); berr == nil {
@@ -158,4 +167,39 @@ func (s *Server) handleShelfFiles(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, f.Path)
 	}
 	writeJSON(w, map[string]any{"files": paths})
+}
+
+// shelfNoteWire is one note on a whole shelf entry, read-only on the wire.
+type shelfNoteWire struct {
+	ID        string `json:"id"`
+	Source    string `json:"source"`
+	Author    string `json:"author,omitempty"`
+	Summary   string `json:"summary"`
+	Rationale string `json:"rationale,omitempty"`
+	Created   string `json:"created"`
+}
+
+// handleShelfNotes answers GET /api/shelf/notes?id=: the notes gg left on the
+// entry itself. There is no write route — users read these, they do not
+// author them.
+func (s *Server) handleShelfNotes(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("id required"))
+		return
+	}
+	ns, err := s.service().ShelfNotes(readCtx(r), id)
+	if err != nil && !errors.Is(err, domain.ErrNotesDisabled) {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	out := make([]shelfNoteWire, 0, len(ns))
+	for _, n := range ns {
+		out = append(out, shelfNoteWire{
+			ID: n.Note.ID, Source: string(n.Note.Source), Author: n.Note.Author,
+			Summary: n.Note.Summary, Rationale: n.Note.Rationale,
+			Created: n.Note.Created.UTC().Format(time.RFC3339),
+		})
+	}
+	writeJSON(w, map[string]any{"notes": out})
 }

@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Recycle a worktree: shelve the target's work
+
+### Added
+
+- **`shelve` answer when the recycled worktree is dirty.** Next to `commit`,
+  `discard` and `abort`: gg stages everything there (untracked files too),
+  stores it as ONE shelf file set named `WIP on <leaving branch>`, then
+  cleans the worktree and switches. Nothing is discarded unless the set is
+  stored. CLI: `gg worktree recycle --on-dirty=shelve <path> <branch>`.
+- **Notes on a whole shelf entry.** A set holds file contents only, so what
+  it cannot carry — deleted files, the old side of a rename — is written to
+  a note on the entry (when every change was a deletion the set holds one
+  empty `delete.me` placeholder, and the note says so). gg writes these
+  notes; users read them: the `G` shelf switcher marks such rows `◆N` and
+  `n` opens the note, `gg web`'s shelf rows carry the same badge with a
+  "view note" menu row, and `gg note list --shelf <id>` prints it. A shelf
+  entry's notes are removed with the entry and never expire before it.
+
 ## Notice dialog follows its content
 
 ### Fixed
