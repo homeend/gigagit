@@ -153,6 +153,7 @@ function setLayout(mode) {
   // layout, where the commits pane is off-screen and / finds text instead.
   const fchip = document.querySelector('#foot button[data-act="filter"]');
   if (fchip) fchip.textContent = mode === "diff" ? "/ find" : "/ filter";
+  footImageChip(); // w is the image layout only in the diff stage
   // The commits pane is display:none in the diff stage: that drops its
   // scroll position, and any render while hidden (a live refresh, r, a notes
   // count) sizes the virtual window for a zero-height pane — ten rows, which
@@ -1809,16 +1810,17 @@ function renderDiff(d) {
   mountPanBars($("diff-body"), $("diff-hbars"));
   diffSearchBar.paint(); // the render re-found: the count must follow
   updateDiffNav();
-  footImageChip(d);
+  footImageChip();
 }
 
 
 // footImageChip: while an image pair is up, the footer's w chip names what
 // w does there (the layout); otherwise it names the long-line mode again.
-function footImageChip(d) {
+// Called wherever that can change: a diff paint, a layout change, a stack.
+function footImageChip() {
   const chip = document.querySelector('#foot button[data-act="textmode"]');
   if (!chip) return;
-  if (hasImagePair(d)) chip.textContent = "w layout";
+  if (imagePairUp()) chip.textContent = "w layout";
   else applyTextMode(state.textMode);
 }
 
@@ -4492,4 +4494,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { getDiff, cycleImageLayout, flipImage, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

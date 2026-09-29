@@ -36,6 +36,7 @@ import {
   rowNoteCtx,
   fileDiffURL,
   getDiff,
+  footImageChip,
   mountPanBars,
   openFile,
   openStatusDiff,
@@ -101,6 +102,7 @@ async function buildStack(list, group, anchorIdx) {
   // moves the target; the first paint lands on it.
   const st = { list, group, slots, near: new Set(), anchor: 0, pickK: -1, inFlight: 0, painted: false, want: anchorIdx };
   state.stack = st;
+  footImageChip(); // no image pair is up in a stack: w is long lines again
   // Counts FIRST: they size every placeholder. Painted with no counts, all
   // sections are a few rows tall, the whole change set sits "near" the
   // viewport, and the loader fetches the first three files wherever the
