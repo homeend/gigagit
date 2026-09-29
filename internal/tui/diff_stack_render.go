@@ -37,6 +37,11 @@ func (m Model) stackRow(v *diffView, dr dRow, w int, onCursor bool) string {
 			return colouredLine("  ", row.text, row.cls, nil, style, nil, w)
 		}
 		return ""
+	case lineImage: // a row of an image file's thumbnail pair
+		if j, rows := v.lines[dr.line].prose, f.d.stackImageLines(w); j >= 0 && j < len(rows) {
+			return rows[j]
+		}
+		return ""
 	}
 	if dr.kind == linePlace {
 		return truncate(s.diffFold.Render(placeText(f)), w)

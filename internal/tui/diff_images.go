@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"image"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -115,6 +116,34 @@ func (v *diffView) imageLines(w, h int) []string {
 	}
 	v.imgKey, v.imgLines = key, lines
 	return lines
+}
+
+// stackImageRows caps a stacked image file's thumbnail, its info line
+// included: the stack is a list of files, not an image viewer.
+const stackImageRows = 12
+
+// stackImageRowCount is how many stream lines a stacked image file takes:
+// the info line plus its taller side at two pixels a row (a thumbnail is
+// never scaled up), within stackImageRows. Known before the width is — a
+// narrow pane only leaves some of the rows blank.
+func (v *diffView) stackImageRowCount() int {
+	rows := 0
+	for _, img := range []image.Image{v.imgOld, v.imgNew} {
+		if img != nil {
+			rows = max(rows, (img.Bounds().Dy()+1)/2)
+		}
+	}
+	return min(1+rows, stackImageRows)
+}
+
+// stackImageLines is a stacked image file's thumbnail: the pair side by side
+// (one image alone when one-sided) in stackImageRowCount rows, whatever
+// layout the single-file view last used — the stack has no layout keys.
+func (v *diffView) stackImageLines(w int) []string {
+	layout, showOld := v.imgLayout, v.imgShowOld
+	v.imgLayout, v.imgShowOld = imgSideBySide, false
+	defer func() { v.imgLayout, v.imgShowOld = layout, showOld }()
+	return v.imageLines(w, v.stackImageRowCount())
 }
 
 // paintImageRows renders cell rows as painted ▀ lines — or, on a terminal

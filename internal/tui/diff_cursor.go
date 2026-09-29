@@ -127,7 +127,7 @@ func (v *diffView) moveCursor(delta, body int) {
 // setCursorDisp moves the cursor to the line that owns display row `row`
 // (a click). A fold row or an out-of-range row leaves the cursor alone.
 func (v *diffView) setCursorDisp(row, body int) {
-	if row < 0 || row >= len(v.disp) || v.disp[row].fold > 0 || v.disp[row].kind == linePlace {
+	if row < 0 || row >= len(v.disp) || v.disp[row].fold > 0 || v.disp[row].kind == linePlace || v.disp[row].kind == lineImage {
 		return
 	}
 	v.curLine = v.disp[row].line

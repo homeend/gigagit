@@ -37,6 +37,7 @@ const (
 	lineGap                    // the blank line that opens a stacked file
 	lineRule                   // the rule under a stacked file's header
 	lineProse                  // one rendered row of the review view's overview (diffLine.prose indexes it)
+	lineImage                  // one row of a stacked image file's small side-by-side pair (diffLine.prose indexes it)
 )
 
 // diffLine is one logical line of the diff stream. It embeds textdiff.Line, so
@@ -47,7 +48,7 @@ type diffLine struct {
 	textdiff.Line
 	file  int
 	kind  lineKind
-	prose int // lineProse: the row of stackFile.prose it shows
+	prose int // lineProse: the row of stackFile.prose it shows; lineImage: the row of the pair
 }
 
 // isBody reports whether this line carries a real aligned row — the lines the
@@ -232,6 +233,14 @@ func (v *diffView) spliceStack() {
 			} else {
 				body, fileBlocks = textdiff.Expand(d.full), d.fullBlocks
 			}
+		}
+		if d := f.d; !f.conflict && d != nil && d.err == nil && d.hasImages() {
+			// An image file shows its pair as a thumbnail in place of the
+			// binary placeholder (never a cursor stop, no layout keys).
+			for j := range d.stackImageRowCount() {
+				v.lines = append(v.lines, diffLine{file: i, kind: lineImage, prose: j})
+			}
+			continue
 		}
 		if len(body) == 0 {
 			v.lines = append(v.lines, diffLine{file: i, kind: linePlace})
