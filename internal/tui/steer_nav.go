@@ -58,7 +58,9 @@ type pendingHint struct {
 const pendingHintTTL = 5 * time.Second
 
 // expirePendingHint gives up on a parked hint reveal whose load never
-// arrived. Called from the same heartbeat expirePendingSteer is (fix F3).
+// arrived. Called from the heartbeat arm itself (fix F3) — not from
+// drainSteer, which returns early with steering off while a pasted link or
+// an --at landing has staged a pending all the same.
 func (m Model) expirePendingHint(now time.Time) (Model, tea.Cmd) {
 	ph := m.pendingHint
 	if ph == nil || now.Sub(ph.at) < pendingHintTTL {
@@ -67,6 +69,12 @@ func (m Model) expirePendingHint(now time.Time) (Model, tea.Cmd) {
 	m.pendingHint = nil
 	if ph.mustAnswer {
 		return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "the "+ph.cmd.HintKind+" list did not load in time"))
+	}
+	if ph.cmd.HintKind == "version" {
+		// The link landed and the steer command was answered; only the
+		// reveal is lost, so say so rather than leave the compare open with
+		// no word (a lookup that arrives later is dropped: pending is nil).
+		m.statusMsg = i18n.T("version lookup timed out; the link still landed")
 	}
 	return m, nil
 }

@@ -3207,9 +3207,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.maybeWriteSnapshot()
 		m.touchSteerPresence()
 		m = m.tendKeptInboxes()
+		// A parked hint reveal expires here, not inside drainSteer: the #
+		// prompt's pasted link and the --at landing stage one too, and with
+		// steering off drainSteer returns before it would look.
+		var hexp tea.Cmd
+		m, hexp = m.expirePendingHint(time.Now())
 		var scmd tea.Cmd
 		m, scmd = m.drainSteer()
-		return m, tea.Batch(cmd, scmd, heartbeatCmd())
+		return m, tea.Batch(cmd, hexp, scmd, heartbeatCmd())
 
 	case steerStartedMsg:
 		if msg.gen != m.steerGen || !m.steerActive() {

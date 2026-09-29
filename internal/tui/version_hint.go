@@ -62,13 +62,20 @@ func (m Model) loadVersionForHintCmd(c steer.Command, gen int) tea.Cmd {
 // versions popup on that row, PARKED under the compare the link opened (esc
 // on the compare restores it — "popup → enter" in reverse), or pushed live
 // when the compare has since closed. A miss is a notice; a stale generation
-// is dropped. The hint degrades, it never fails.
+// is dropped, a failed read is its own notice. The hint degrades, it never
+// fails.
 func (m Model) versionHintLoaded(msg versionHintLoadedMsg) (Model, tea.Cmd) {
 	ph := m.pendingHint
 	if ph == nil || ph.cmd.HintKind != "version" || msg.gen != ph.tag {
 		return m, nil
 	}
 	m.pendingHint = nil
+	if msg.err != nil {
+		// A failed read is not a miss: it must not claim the version is
+		// unrecorded here.
+		m.statusMsg = i18n.T("could not look up version %s; the link still landed", ph.cmd.HintID)
+		return m, nil
+	}
 	if !msg.found {
 		m.statusMsg = i18n.T("version %s is not recorded here; the link still landed", ph.cmd.HintID)
 		return m, nil

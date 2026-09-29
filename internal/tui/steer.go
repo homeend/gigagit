@@ -165,11 +165,6 @@ func (m Model) drainSteer() (Model, tea.Cmd) {
 	if exp != nil {
 		cmds = append(cmds, exp)
 	}
-	var hexp tea.Cmd
-	m, hexp = m.expirePendingHint(time.Now())
-	if hexp != nil {
-		cmds = append(cmds, hexp)
-	}
 	dirs := []string{m.steerDir}
 	for dir := range m.keptSteer {
 		if dir != m.steerDir {

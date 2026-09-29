@@ -57,6 +57,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Machine-local: version refs are never pushed. The versions popup now
   sizes to its key hint instead of cutting it.
 
+### Fixed
+
+- **A version link's lookup that never returns is no longer silent.** The
+  TUI's `?version=` reveal gives up after 5 s with *version lookup timed
+  out; the link still landed* instead of leaving the diff open with no
+  word, and a failed read (a git error) says *could not look up version …*
+  rather than claiming the version is not recorded here.
+
 ## Recycle a worktree: shelve the target's work
 
 ### Added

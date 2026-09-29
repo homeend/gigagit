@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -108,3 +111,79 @@ func TestVersionHintStaleGenerationIsDropped(t *testing.T) {
 }
 
 var _ tea.Msg = versionHintLoadedMsg{}
+
+// A lookup that outlives pendingHintTTL used to expire silently: the diff
+// stayed open with no popup and no word. It is a notice now.
+func TestVersionHintExpiryIsANotice(t *testing.T) {
+	t.Parallel()
+	m := landedVersionModel(t)
+	m, _ = m.navigateLanded(versionCmd("1753100000-rebase"), "opened")
+	at := m.pendingHint.at
+	m, cmd := m.expirePendingHint(at.Add(pendingHintTTL))
+	if cmd != nil {
+		t.Fatal("a with-address version hint never answers the steer command twice")
+	}
+	if m.pendingHint != nil {
+		t.Fatal("the expired pending must be cleared")
+	}
+	if want := i18n.T("version lookup timed out; the link still landed"); m.statusMsg != want {
+		t.Fatalf("status = %q, want %q", m.statusMsg, want)
+	}
+	if len(m.filesReturnLayers) != 0 || layerOf[*versionsPopup](m) != nil {
+		t.Fatal("an expiry must not park or push anything")
+	}
+}
+
+// Under the TTL the reveal is still parked: no notice, pending kept.
+func TestVersionHintExpiryWaitsOutTheTTL(t *testing.T) {
+	t.Parallel()
+	m := landedVersionModel(t)
+	m, _ = m.navigateLanded(versionCmd("1753100000-rebase"), "opened")
+	at := m.pendingHint.at
+	m, _ = m.expirePendingHint(at.Add(pendingHintTTL - time.Millisecond))
+	if m.pendingHint == nil {
+		t.Fatal("the pending must survive until the TTL")
+	}
+	if m.statusMsg != "" {
+		t.Fatalf("status = %q, want none before the TTL", m.statusMsg)
+	}
+}
+
+// A FAILED lookup (a git error) is not a miss: it must not claim the
+// version is unrecorded here.
+func TestVersionHintLookupErrorIsItsOwnNotice(t *testing.T) {
+	t.Parallel()
+	m := landedVersionModel(t)
+	m, _ = m.navigateLanded(versionCmd("1753100000-rebase"), "opened")
+	m, _ = m.versionHintLoaded(versionHintLoadedMsg{gen: m.hintGen, err: errors.New("boom")})
+	if want := i18n.T("could not look up version %s; the link still landed", "1753100000-rebase"); m.statusMsg != want {
+		t.Fatalf("status = %q, want %q", m.statusMsg, want)
+	}
+	if strings.Contains(m.statusMsg, "not recorded") {
+		t.Fatalf("status = %q must not read as a miss", m.statusMsg)
+	}
+	if m.pendingHint != nil || len(m.filesReturnLayers) != 0 || layerOf[*versionsPopup](m) != nil {
+		t.Fatal("an error must clear the pending and park or push nothing")
+	}
+}
+
+// The heartbeat expires the reveal even with steering OFF (steerDir ""):
+// the # prompt's pasted link and the --at landing stage the same pending,
+// and drainSteer — which used to own the expiry — returns early for them.
+func TestVersionHintHeartbeatExpiresWithSteeringOff(t *testing.T) {
+	t.Parallel()
+	m := landedVersionModel(t)
+	m, _ = m.navigateLanded(versionCmd("1753100000-rebase"), "opened")
+	if m.steerActive() {
+		t.Fatal("fixture: steering must be off for this test")
+	}
+	m.pendingHint.at = time.Now().Add(-pendingHintTTL - time.Second)
+	tm, _ := m.Update(heartbeatMsg{})
+	m = tm.(Model)
+	if m.pendingHint != nil {
+		t.Fatal("the heartbeat must expire the pending without a steer inbox")
+	}
+	if want := i18n.T("version lookup timed out; the link still landed"); m.statusMsg != want {
+		t.Fatalf("status = %q, want %q", m.statusMsg, want)
+	}
+}
