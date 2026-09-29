@@ -52,17 +52,22 @@ func TestReviewRowTexts(t *testing.T) {
 	got := runReviewsPure(t, `
 const r = { created: "2026-09-29T14:05:09Z", agent: " claude ", summary: "sum" };
 console.log(reviewRowText(r));
-console.log(branchReviewText(r));
+console.log(branchReviewText(r, new Date("2026-10-01T00:00:00Z")));
 console.log(reviewRowText({ created: "", agent: "claude" }));
 console.log(reviewRowText({ created: "bad", agent: "", summary: "just the summary" }));
 console.log(reviewStamp(""));
+const now = new Date("2026-12-01T10:00:00Z");
+console.log(branchReviewText({ created: "2026-09-28T23:37:00Z", agent: "Claude Code" }, now));
+console.log(branchReviewText({ created: "2025-12-31T08:05:00Z", agent: "Claude Code" }, now));
 `)
 	want := strings.Join([]string{
 		"└ 2026-09-29 14:05 claude",
-		"└ Review: 2026-09-29 14:05 claude",
+		"└ Review: 09-29 14:05 claude",
 		"└ claude",
 		"└ just the summary",
 		"",
+		"└ Review: 09-28 23:37 Claude Code",      // a branch sub-row drops the CURRENT year only
+		"└ Review: 2025-12-31 08:05 Claude Code", // …and keeps an older one
 	}, "\n")
 	if got != strings.TrimSpace(want) {
 		t.Errorf("row texts:\n%s\nwant:\n%s", got, want)
@@ -194,4 +199,12 @@ func TestReviewOverviewTopsTheStack(t *testing.T) {
 	)
 	wiringCheck(t, "reviews.js", "return openStack(0); // buildStack lands on the Overview")
 	wiringCheck(t, "style.css", ".review-ov { padding: 12px 16px; max-width: 110ch; margin: 0 auto; }")
+}
+
+// A reviewed commit carries ✎ in the commit list, from the note counts the
+// page already holds (no read per row), and the list repaints when they change.
+func TestCommitRowsMarkReviewed(t *testing.T) {
+	t.Parallel()
+	wiringCheck(t, "commits.js", "reviewedHashes().has(row.hash)", `class="rvmark"`)
+	wiringCheck(t, "files.js", "renderCommits(); // the ✎ on reviewed commits")
 }

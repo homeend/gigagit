@@ -1736,3 +1736,4 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 .review-ov-meta { color: var(--dim); margin-top: 10px; }
 .review-ov h4 { margin: 14px 0 6px; }
 .review-other { margin: 0; padding-left: 18px; }
+.crow .rvmark { color: var(--accent); margin-right: 6px; }

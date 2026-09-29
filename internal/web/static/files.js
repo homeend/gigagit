@@ -2302,6 +2302,7 @@ async function refreshNoteCounts() {
   }
   renderFiles();
   renderBranches(); // a review deleted anywhere leaves its branch sub-row
+  renderCommits(); // the ✎ on reviewed commits
   // A preview's totals ride fetchPreviews; a pair has no such ride, so a note
   // written elsewhere reaches its badges from here.
   loadPairCounts();

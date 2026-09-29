@@ -25,8 +25,12 @@ func (r wipRow) text() string {
 const commitIdentW = 16
 
 // commitMarkerW is the display width of the tip-marker prefix on a commit
-// identity token: two glyph cells (local ↓, remote ↑) plus one separator space.
-const commitMarkerW = 3
+// identity token: two glyph cells (local ↓, remote ↑), the review cell (✎)
+// and one separator space.
+const commitMarkerW = 4
+
+// markerReview marks a commit that has a stored AI review.
+const markerReview = "✎"
 
 const (
 	markerLocal  = "↓" // tip of a local branch (pull-down)
@@ -63,26 +67,36 @@ func countBadge(n int) string {
 	return string(supRunes[n])
 }
 
-// markerField is the fixed 3-cell marker area, laid out as
-// [marker1][marker2-or-badge][separator]. The count badge (≥2 local tips) fills
+// markerField is the fixed 4-cell marker area, laid out as
+// [marker1][marker2-or-badge][review][separator]. The count badge (≥2 local tips) fills
 // the FILLER cell next to a lone ↓ so it reads "↓³ "; when BOTH a local and a
 // remote marker are present there is no room, so the badge is dropped (the count
-// still shows via the decoration group / (+N)). Always exactly commitMarkerW (3)
-// display cells.
+// still shows via the decoration group / (+N)). The review cell holds ✎ on a
+// reviewed commit. Always exactly commitMarkerW (4) display cells.
 func (id commitIdent) markerField() string {
+	rv := " "
+	if id.reviewed {
+		rv = markerReview
+	}
+	return id.tipCells() + rv + " "
+}
+
+// tipCells is the marker field's first two cells: the tip markers, or a lone
+// ↓ with its count badge.
+func (id commitIdent) tipCells() string {
 	badge := countBadge(id.count) // "" when <2
 	switch {
 	case id.tip && id.remoteTip:
-		return markerLocal + markerRemote + " " // "↓↑ " — no room for the badge
+		return markerLocal + markerRemote // "↓↑" — no room for the badge
 	case id.tip:
 		if badge == "" {
-			return markerLocal + "  " // "↓  "
+			return markerLocal + " " // "↓ "
 		}
-		return markerLocal + badge + " " // "↓³ " — badge in the filler cell
+		return markerLocal + badge // "↓³" — badge in the filler cell
 	case id.remoteTip:
-		return markerRemote + "  " // "↑  "
+		return markerRemote + " " // "↑ "
 	default:
-		return "   " // lineage row
+		return "  " // lineage row
 	}
 }
 
@@ -116,6 +130,7 @@ type commitIdent struct {
 	extra     []string // additional local-branch tips at this commit (multi-tip)
 	tags      []string // tag names at this commit (RefTag), rendered in the deco group
 	count     int      // number of local-branch tips at this commit (for the count badge)
+	reviewed  bool     // the commit has a stored AI review (✎)
 }
 
 // commitIdentOf derives the identity from a commit's local refs (a tip) or, when

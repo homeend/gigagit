@@ -71,10 +71,27 @@ function renderCommits() {
 }
 
 
+// reviewedHashes is the set of commits with a stored AI review, rebuilt only
+// when the note counts bring a new list — rowHTML runs per visible row.
+let revSrc = null;
+let revSet = new Set();
+function reviewedHashes() {
+  const rs = (state.noteCounts && state.noteCounts.reviews) || [];
+  if (rs !== revSrc) {
+    revSrc = rs;
+    revSet = new Set(rs.map((r) => r.commit));
+  }
+  return revSet;
+}
+
+
 function rowHTML(row, i, flat) {
   const sel = i === state.cursor ? " sel" : "";
   const fl = row.hash === state.flashHash ? " flash" : "";
-  const mark = state.cmarks.has(row.hash) ? "◉ " : "";
+  // ◉ marked for a batch action; ✎ has an AI review (the TUI's marker).
+  const mark =
+    (state.cmarks.has(row.hash) ? "◉ " : "") +
+    (reviewedHashes().has(row.hash) ? `<span class="rvmark" title="has an AI review — open the commit to read it">✎</span>` : "");
   const refs = (row.refs || [])
     .map((r) => `<span class="ref ${r.kind}${r.head ? " head" : ""}">${esc(r.name)}</span>`)
     .join("");

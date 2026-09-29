@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -32,13 +33,24 @@ func sameCommit(full, h string) bool {
 	return h != "" && len(h) >= 7 && strings.HasPrefix(full, h)
 }
 
-// branchReviewRowBody is "  └ Review: 2026-09-28 18:12 Claude Code": the
+// reviewStampAt is a review's local time for a Branches sub-row: "09-28 23:37"
+// for a review made in now's year, "2025-12-31 08:05" for an older one — the
+// short form lets "└ Review: <date> <agent>" fit the tab's default width.
+func reviewStampAt(t, now time.Time) string {
+	t = t.Local()
+	if t.Year() == now.Local().Year() {
+		return t.Format("01-02 15:04")
+	}
+	return t.Format("2006-01-02 15:04")
+}
+
+// branchReviewRowBody is "  └ Review: 09-28 18:12 Claude Code": the
 // Branches tab puts it at its gutter, and the two leading spaces set it in
 // under the branch name, below any session sub-rows' └.
 func branchReviewRowBody(r domain.ReviewHead) string {
 	parts := []string{i18n.T("Review:")}
 	if !r.Created.IsZero() {
-		parts = append(parts, r.Created.Local().Format("2006-01-02 15:04"))
+		parts = append(parts, reviewStampAt(r.Created, time.Now()))
 	}
 	if a := strings.TrimSpace(r.Agent); a != "" {
 		parts = append(parts, sanitizeLine(a))
@@ -86,4 +98,19 @@ func (m Model) showBranchReviewRow() (actionRow, bool) {
 			return m.openReview(h.ID, h.Summary)
 		},
 	}, true
+}
+
+// commitReviewed reports whether commit hash has a stored AI review — the
+// Commits list's ✎. It reads the note counts the list already holds, so a
+// scroll costs no read.
+func (m Model) commitReviewed(hash string) bool {
+	if hash == "" {
+		return false
+	}
+	for _, r := range m.noteCounts.Reviews {
+		if r.Commit == hash {
+			return true
+		}
+	}
+	return false
 }
