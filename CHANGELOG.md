@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review sub-rows fit the Branches tab
+
+### Changed
+
+- A branch's review sub-row drops the year when the review is from the
+  current year — `└ Review: 09-28 23:37 Claude Code` — so it fits the
+  Branches tab at its default width (TUI and `gg web`); an older review
+  keeps its full date.
+
 ## View all notes in the browser
 
 ### Added

@@ -38,9 +38,15 @@ function reviewRowText(r) {
   return "└ " + reviewWords(r);
 }
 
-// branchReviewText is a branch's review sub-row: "└ Review: <stamp> <agent>".
-function branchReviewText(r) {
-  return "└ Review: " + reviewWords(r);
+// branchReviewText is a branch's review sub-row: "└ Review: 09-28 23:37
+// Claude Code" — the year only when it is not now's (the TUI's rule), so the
+// row fits the sidebar.
+function branchReviewText(r, now = new Date()) {
+  const d = new Date(r.created || "");
+  let stamp = reviewStamp(r.created);
+  if (stamp && d.getFullYear() === now.getFullYear()) stamp = stamp.slice(5);
+  const parts = [stamp, (r.agent || "").trim()].filter(Boolean);
+  return "└ Review: " + (parts.length ? parts.join(" ") : (r.summary || "").trim());
 }
 
 // branchReviews is b's reviews of its CURRENT tip, newest first as given. The
