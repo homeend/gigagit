@@ -191,13 +191,23 @@ func (m Model) applyReviewResult(info domain.TaskInfo) (Model, tea.Cmd) {
 	if info.SaveErr != "" {
 		return m.stickyNotice(i18n.T("%s: %s — ctrl+\\ to retry", info.Key, info.SaveErr))
 	}
-	if !m.canShowResult(info) {
-		return m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
-	}
 	if info.NoteID == "" { // a working-changes review: not a note (spec ruling 1)
+		if !m.canShowResult(info) {
+			return m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
+		}
 		return m.openResultViewer(info.ID, ".md", reviewTitle(label), info.Result, nil)
 	}
-	return m.openReview(info.NoteID, reviewTitle(label))
+	// The review is a saved note now: the Commits review marker and the
+	// Branches ◆N read noteCounts.Reviews, which only a srcNotes reload
+	// refreshes — shown here or not.
+	var counts, shown tea.Cmd
+	m, counts = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+	if !m.canShowResult(info) {
+		m, shown = m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
+	} else {
+		m, shown = m.openReview(info.NoteID, reviewTitle(label))
+	}
+	return m, tea.Batch(counts, shown)
 }
 
 // canShowResult: a result may open its viewer now — it belongs to the

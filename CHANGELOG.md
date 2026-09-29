@@ -18,6 +18,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `◆` is East-Asian-ambiguous and many fonts draw it wider than its one
   cell, over a digit glued to it (Commits, Files, Branches, previews,
   shelves, the review view).
+- **A finished AI review shows up at once in Commits and Branches.** Its
+  review marker and the branch's `◆ N` used to wait for an unrelated
+  refresh; the saved review now reloads the note counts, whether or not
+  its viewer opens.
 
 ## Switch repositories from the TUI-hosted web page
 
