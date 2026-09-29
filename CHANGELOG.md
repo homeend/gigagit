@@ -22,6 +22,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## Shelf-entry notes in the browser's file list
 
+### Fixed
+
+- **`gg web`: a shelved entry's files show `-` in the status column**, so
+  their names line up with the Notes rows above them (a frozen member has
+  no change letter of its own).
+- **`gg web`: the note popup fits its content** (up to 92% of the window)
+  and wraps long lines instead of scrolling sideways. Firefox's overlay
+  scrollbar painted over the last line.
+
 ### Added
 
 - **`gg web`: a shelved set's notes lead its file list.** Opening a shelf

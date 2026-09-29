@@ -15,14 +15,17 @@ function injectStyle() {
 }
 #gg-shelf-notes .box {
   background: var(--panel, #1b1d22); border: 1px solid var(--line, #3a3f47);
-  border-radius: 6px; padding: 14px; min-width: 380px; max-width: min(760px, 92vw);
+  border-radius: 6px; padding: 14px; min-width: 380px; width: max-content; max-width: 92vw;
   max-height: 80vh; display: flex; flex-direction: column; gap: 10px;
 }
 #gg-shelf-notes h3 { margin: 0; font-size: 13px; font-weight: 600; }
 #gg-shelf-notes .notes { overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+#gg-shelf-notes .notes > * { flex-shrink: 0; }
 #gg-shelf-notes .summary { font-weight: 600; }
 #gg-shelf-notes .meta { opacity: .65; font-size: 11px; }
-#gg-shelf-notes pre { margin: 4px 0 0; white-space: pre; overflow-x: auto; }
+/* wrapped, never scrolled sideways: an overlay scrollbar (Firefox on Windows
+   11) paints over the last line of a scrolling <pre> */
+#gg-shelf-notes pre { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 #gg-shelf-notes .row { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 #gg-shelf-notes .hint { opacity: .7; font-size: 11px; margin-right: auto; }
 `;

@@ -1441,7 +1441,9 @@ async function openShelfEntry(e) {
   openEntryCompare({
     left: { label: "shelf: " + entryLabel(e), spec: "shelf:" + e.id },
     right: { label: "working tree", spec: "worktree" },
-    files: (got.files || []).map((p) => ({ path: p, status: "" })),
+    // A frozen member has no change of its own to show: "-" holds the
+    // status column, so the names line up with the Notes rows above them.
+    files: (got.files || []).map((p) => ({ path: p, status: "-" })),
     frozen: true,
     frozen_note: "the files frozen with this shelved commit",
     shelf_notes: (notes && notes.notes) || [],

@@ -64,6 +64,15 @@ func TestShelfNoteRowsWiring(t *testing.T) {
 		{"the stack leads with the notes", stack, `stk-notes`},
 		{"the first file lands on the top, notes in sight", stack, `k === 0 && document\.querySelector\("#diff-body \.stk-notes"\)\) pane\.scrollTop = 0`},
 		{"stackview imports noteHTML", stack, `import \{[^}]*\bnoteHTML\b[^}]*\} from "\./shelfnotes\.js"`},
+		// A frozen member has no status of its own: "-" fills the status
+		// column, so the files do not look indented against the Notes rows.
+		{"frozen members show - as their status", sidebar, `(?s)async function openShelfEntry.*?status: "-"`},
+		// The popup fits its content (up to the window) and WRAPS the note
+		// text: an overlay scrollbar (Firefox on Windows 11) paints over the
+		// last line of a sideways-scrolling <pre>.
+		{"the popup sizes to its content", notes, `#gg-shelf-notes \.box \{[^}]*width: max-content;[^}]*max-width: 92vw;`},
+		{"the popup wraps its note text", notes, `#gg-shelf-notes pre \{[^}]*white-space: pre-wrap;`},
+		{"the notes never shrink under the height cap", notes, `#gg-shelf-notes \.notes > \* \{ flex-shrink: 0; \}`},
 	}
 	for _, c := range checks {
 		if !regexp.MustCompile(c.pattern).MatchString(c.src) {
