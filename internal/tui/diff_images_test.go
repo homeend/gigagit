@@ -173,3 +173,75 @@ func TestTabHintOnlyWhereTabDoesSomething(t *testing.T) {
 		t.Fatalf("one at a time: %q should offer tab", hint)
 	}
 }
+
+// stackWithImage is a stack of two files: an image pair, then a text file.
+func stackWithImage(t *testing.T) *diffView {
+	t.Helper()
+	v := stackViewOf(t, nil, sameRowsTUI(1))
+	v.stk.files[0].path, v.stk.files[0].d, v.stk.files[0].load = "shot.png", imagePairView(), stackLoaded
+	v.rebuild()
+	return v
+}
+
+// A stacked image file shows its pair small and side by side in the stream,
+// in place of the "(binary file)" placeholder; the cursor never rests there.
+func TestStackImageFileShowsThePairSideBySide(t *testing.T) {
+	t.Parallel()
+	v := stackWithImage(t)
+	var imgLines int
+	for _, l := range v.lines {
+		if l.kind == linePlace && l.file == 0 {
+			t.Fatal("an image file must not collapse to the binary placeholder")
+		}
+		if l.kind == lineImage {
+			imgLines++
+			if l.isStop() {
+				t.Fatal("the cursor must never rest on an image row")
+			}
+		}
+	}
+	// The info line + the taller side's 30 px at 2 px a row, within the cap.
+	if want := min(1+15, stackImageRows); imgLines != want {
+		t.Fatalf("got %d image rows, want %d", imgLines, want)
+	}
+	m := diffModel()
+	m.height, m.width = 40, 120
+	m = m.pushLayer(v)
+	out := ansi.Strip(m.renderDiffView())
+	if strings.Contains(out, "(binary file)") {
+		t.Fatalf("the stack still shows the binary placeholder:\n%s", out)
+	}
+	if !strings.Contains(out, "old: png 40×20") || !strings.Contains(out, "new: png 60×30") || !strings.Contains(out, "......") {
+		t.Fatalf("the stack should draw both sides of the pair (ramp glyphs: no colour in tests):\n%s", out)
+	}
+}
+
+// A tall image is capped to a thumbnail: the stack is a list, not a viewer.
+func TestStackImageIsCappedInHeight(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, nil)
+	d := &diffView{title: "tall.png", binary: true}
+	applyDiff(d, domain.Diff{Binary: true, NewImg: flat(40, 400, color.RGBA{0, 255, 0, 255}), NewKind: "png", NewDim: image.Point{40, 400}}, 20)
+	v.stk.files[0].d, v.stk.files[0].load = d, stackLoaded
+	v.rebuild()
+	n := 0
+	for _, l := range v.lines {
+		if l.kind == lineImage {
+			n++
+		}
+	}
+	if n != stackImageRows {
+		t.Fatalf("got %d image rows, want the cap %d", n, stackImageRows)
+	}
+}
+
+// The file-history pane draws an image pair instead of "(binary file)".
+func TestHistoryPaneShowsImages(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	h := &historyView{diff: imagePairView()}
+	out := ansi.Strip(h.renderRightPane(m, 81, 20))
+	if strings.Contains(out, "(binary file)") || !strings.Contains(out, "old: png 40×20") {
+		t.Fatalf("the history pane should draw the image pair:\n%s", out)
+	}
+}

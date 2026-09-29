@@ -259,12 +259,17 @@ func (h *historyView) renderRightPane(m Model, w, body int) string {
 		return padBox(i18n.T("  (loading…)"), w, body)
 	case v.err != nil:
 		return padBox(truncate(i18n.T("  error: %s", v.err.Error()), w), w, body)
-	case v.binary:
+	case v.binary && !v.hasImages():
 		return padBox(i18n.T("  (binary file)"), w, body)
 	case v.tooLarge:
 		return padBox(i18n.T("  (file too large)"), w, body)
 	}
-	lines := m.diffPaneLines(v, w, body, 0, 0, "off")
+	var lines []string
+	if v.hasImages() {
+		lines = v.imageLines(w, body)
+	} else {
+		lines = m.diffPaneLines(v, w, body, 0, 0, "off")
+	}
 	for len(lines) < body {
 		lines = append(lines, "")
 	}

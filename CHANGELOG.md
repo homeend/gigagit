@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Images in the TUI's stacked diff and file history
+
+### Fixed
+
+- **An image file in the stacked diff (`S`) shows its pair** — a small
+  side-by-side thumbnail (one image alone for an added, deleted or untracked
+  file), at most 12 rows, instead of `(binary file)`; the cursor passes over
+  it, and the layout keys stay the single-file view's. The file history's
+  diff pane draws an image pair too.
+
 ## Branch-version links: web drift copy, versions `.` menu, `gg link --version`
 
 ### Added
