@@ -41,4 +41,9 @@ type Store interface {
 	TaskLaunchChoice(kind string) (TaskLaunch, bool)
 	// SetTaskLaunchChoice persists it.
 	SetTaskLaunchChoice(kind string, c TaskLaunch) error
+	// DeclinedToolUpdates is the set of ToolUpdateID(offerKey) answered
+	// "Keep mine" in the tool-template review.
+	DeclinedToolUpdates() map[string]bool
+	// DeclineToolUpdate records one "Keep mine" (idempotent).
+	DeclineToolUpdate(offerKey string) error
 }
