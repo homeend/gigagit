@@ -35,6 +35,8 @@ import {
   notesFor,
   rowNoteCtx,
   fileDiffURL,
+  getDiff,
+  footImageChip,
   mountPanBars,
   openFile,
   openStatusDiff,
@@ -100,6 +102,7 @@ async function buildStack(list, group, anchorIdx) {
   // moves the target; the first paint lands on it.
   const st = { list, group, slots, near: new Set(), anchor: 0, pickK: -1, inFlight: 0, painted: false, want: anchorIdx };
   state.stack = st;
+  footImageChip(); // no image pair is up in a stack: w is long lines again
   // Counts FIRST: they size every placeholder. Painted with no counts, all
   // sections are a few rows tall, the whole change set sits "near" the
   // viewport, and the loader fetches the first three files wherever the
@@ -507,7 +510,7 @@ async function load(st, s) {
   s.inLoad = true; // until the repaint below: awaitSlot waits for the rows
   st.inFlight++;
   try {
-    const d = await getJSON(fileDiffURL(s.f));
+    const d = await getDiff(fileDiffURL(s.f));
     s.diff = d;
     s.load = "ok";
     // The server tags an eligible unstaged diff with hunk ordinals and the
@@ -927,7 +930,7 @@ function reconcileStack() {
 async function quietReloadSlot(st, s) {
   let d;
   try {
-    d = await getJSON(fileDiffURL(s.f));
+    d = await getDiff(fileDiffURL(s.f));
   } catch {
     return; // best-effort: the old diff stays
   }

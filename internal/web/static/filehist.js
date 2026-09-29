@@ -6,7 +6,7 @@ import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { rev } from "./review.js";
 import { openCommitByHash } from "./commits.js";
-import { cycleTextMode, diffHTML, mountPanBars, renderCell, scrollKey, toggleDiffView } from "./files.js";
+import { cycleTextMode, diffHTML, getDiff, mountPanBars, renderCell, scrollKey, toggleDiffView } from "./files.js";
 import { registerHelp } from "./menus.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
@@ -147,7 +147,7 @@ async function openHistoryDiff(i) {
   if (r.old_path) q.set("old", r.old_path);
   $("history-diff").innerHTML = `<div class="notice">loading…</div>`;
   try {
-    const d = await getJSON("/api/diff?" + q);
+    const d = await getDiff("/api/diff?" + q); // an image pair's <img>s read from its url
     // Stale-response guard: rapid j/k can land responses out of order, so a
     // slow response for a commit the selection has since moved past must not
     // clobber a newer diff already on screen — same overlay (gen) AND the

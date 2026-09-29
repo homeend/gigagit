@@ -71,3 +71,21 @@ func TestDiffReportsTheOriginalPixelSize(t *testing.T) {
 		t.Fatalf("NewDim = %v, want the original 2000×100", out.NewDim)
 	}
 }
+
+func TestDiffKeepsTheOriginalBytesOfImageSidesOnly(t *testing.T) {
+	t.Parallel()
+	oldB := pngBytes(t, 8, 4, color.RGBA{255, 0, 0, 255})
+	newB := pngBytes(t, 16, 8, color.RGBA{0, 0, 255, 255})
+	out, _ := plainDiffer{}.Diff(context.Background(), Request{Old: fixed(oldB), New: fixed(newB)})
+	if !bytes.Equal(out.OldRaw, oldB) || !bytes.Equal(out.NewRaw, newB) {
+		t.Fatalf("raw bytes not kept: old=%d new=%d", len(out.OldRaw), len(out.NewRaw))
+	}
+	small := Diff{Binary: true, OldImg: out.OldImg, NewImg: out.NewImg}
+	if out.Size() < small.Size()+len(oldB)+len(newB) {
+		t.Fatalf("Size() = %d must count the raw bytes", out.Size())
+	}
+	out, _ = plainDiffer{}.Diff(context.Background(), Request{Old: fixed([]byte("\x00\x01")), New: fixed(newB)})
+	if out.OldRaw != nil || out.NewRaw == nil {
+		t.Fatalf("a non-image side keeps no bytes: old=%v", out.OldRaw)
+	}
+}

@@ -140,7 +140,7 @@ func TestTextModeIsWiredEverywhere(t *testing.T) {
 		{"style.css", `body.lm-cut .btext { overflow: hidden; text-overflow: ellipsis; }`, "blame cutoff mode"},
 		{"files.js", `const TEXT_MODES = ["scroll", "wrap", "cutoff"];`, "the TUI's ctrl+w order"},
 		{"files.js", `saveUI({ text_mode: state.textMode });`, "the cycle must persist"},
-		{"keys.js", `cycleTextMode(); // the TUI's ctrl+w`, "the w key"},
+		{"keys.js", `if (!cycleImageLayout()) cycleTextMode();`, "the w key (an image pair takes it first)"},
 		{"keys.js", `case "textmode": cycleTextMode(); break;`, "the footer chip acts"},
 		{"filehist.js", "if (e.key === \"w\" && !e.ctrlKey && !e.metaKey && !e.altKey) {\n    cycleTextMode();", "w inside the history overlay"},
 		{"filehist.js", `pushLayer("blame", $("blame"), { onKey: blameKey })`, "the blame overlay routes keys through blameKey"},

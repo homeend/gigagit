@@ -65,6 +65,8 @@ const state = {
   filesHidden: false, // the file list's » control: folded to a strip (a stored preference, /api/uistate)
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
+  diffImgLayout: "side", // an image pair's layout (w): side | stacked | single — page memory, the TUI's session default
+  diffImgOld: false,     // one at a time: the OLD side is up (tab / a click flips; reset per diff)
   stack: null, // the stacked diff view's live stack (stackview.js), else null
   diffPartial: false,      // the f toggle: true = changed lines only (a stored preference, /api/uistate)
   textMode: "wrap",        // the w cycle: how long lines show — scroll | wrap | cutoff (a stored preference, /api/uistate)

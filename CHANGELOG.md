@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Image diffs in the browser
+
+### Added
+
+- **`gg web` draws image diffs.** A diff of a PNG/JPEG/GIF pair shows the
+  images instead of `binary file`, in the TUI's three layouts: `w` (or the
+  chips) cycles side by side → stacked → one at a time, where `tab` or a
+  click flips old ↔ new. Full-resolution bytes, fitted to the pane and never
+  enlarged; an added or deleted image shows alone with no `old:`/`new:`
+  marker. The stacked view (`S`) and the file-history overlay show each pair
+  small, side by side. On a text diff `w` still cycles long lines.
+- **`/api/diff` and `/api/entry-diff` name a pair's image sides** (`images`:
+  format, original pixels, bytes) and serve a side's bytes at the same URL
+  with `&img=old|new` (`image/<kind>`, nosniff, no-store; 404 for a side
+  that is no image) — every diff source, one route.
+
 ## A backgrounded file stays open on esc
 
 ### Changed

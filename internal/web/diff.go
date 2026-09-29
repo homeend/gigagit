@@ -206,7 +206,7 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeDiffJSON(w, d, nil)
+	writeDiffJSON(w, r, d, nil)
 }
 
 // oldPathFor is the OLD side's path for a domain.Request: empty unless it
@@ -283,7 +283,7 @@ func (s *Server) handleRevDiff(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeDiffJSON(w, d, nil)
+	writeDiffJSON(w, r, d, nil)
 }
 
 // handleWorktreeDiff serves the wt=unstaged|staged forms: the working
@@ -304,6 +304,21 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 	}
 	if path == "" || !isGitArgSafe(path) || !isGitArgSafe(oldPath) {
 		writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
+		return
+	}
+	if side := q.Get("img"); side != "" {
+		// An image side's bytes: the diff alone, no staging doc to build.
+		d, _, err := worktreeDiff(r.Context(), svc, wt, path, oldPath, nil, false)
+		if err != nil {
+			var bad errBadLane
+			if errors.As(err, &bad) {
+				writeErr(w, http.StatusBadRequest, err)
+				return
+			}
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeDiffImage(w, d, side)
 		return
 	}
 	d, err := worktreeDiffPayload(r.Context(), svc, wt, path, oldPath, nil)
@@ -333,6 +348,16 @@ type heldSides struct{ old, nw []byte }
 // pre, those bytes are the two sides; otherwise they are read here — ONCE,
 // for both the alignment and the staging doc.
 func worktreeDiffPayload(ctx context.Context, svc *domain.Service, wt, path, oldPath string, pre *heldSides) (map[string]any, error) {
+	d, hunks, err := worktreeDiff(ctx, svc, wt, path, oldPath, pre, true)
+	if err != nil {
+		return nil, err
+	}
+	return diffPayload(d, hunks), nil
+}
+
+// worktreeDiff is worktreeDiffPayload's diff step: the aligned diff and —
+// when wantHunks — its staging tags (nil when ineligible).
+func worktreeDiff(ctx context.Context, svc *domain.Service, wt, path, oldPath string, pre *heldSides, wantHunks bool) (domain.Diff, *diffHunksMeta, error) {
 	var oldRead, newRead func(context.Context) ([]byte, error)
 	switch wt {
 	case "unstaged":
@@ -350,7 +375,7 @@ func worktreeDiffPayload(ctx context.Context, svc *domain.Service, wt, path, old
 			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: path})
 		}
 	default:
-		return nil, errBadLane{}
+		return domain.Diff{}, nil, errBadLane{}
 	}
 	if pre != nil {
 		o, n := pre.old, pre.nw
@@ -363,7 +388,7 @@ func worktreeDiffPayload(ctx context.Context, svc *domain.Service, wt, path, old
 	oldSide, newSide := &memoSide{read: oldRead}, &memoSide{read: newRead}
 	d, err := svc.Differ().Diff(ctx, domain.Request{Key: "", Path: path, OldPath: oldPathFor(oldPath, path), Old: lenient(oldSide.get), New: lenient(newSide.get)})
 	if err != nil {
-		return nil, err
+		return domain.Diff{}, nil, err
 	}
 	// Inline-hunk tagging, both lanes (the unstaged diff stages rows, the
 	// staged diff unstages them), for an eligible file (no rename — the hunk
@@ -371,7 +396,7 @@ func worktreeDiffPayload(ctx context.Context, svc *domain.Service, wt, path, old
 	// truncated alignment) just yields an untagged diff — the client then
 	// simply offers no staging for it.
 	var hunks *diffHunksMeta
-	if oldPath == path && !d.Binary && !d.TooLarge && !d.Result.Truncated {
+	if wantHunks && oldPath == path && !d.Binary && !d.TooLarge && !d.Result.Truncated {
 		lane := hunkLane(wt)
 		var doc *hunkpick.Doc
 		var brows [][]blockRow
@@ -396,7 +421,7 @@ func worktreeDiffPayload(ctx context.Context, svc *domain.Service, wt, path, old
 			}
 		}
 	}
-	return diffPayload(d, hunks), nil
+	return d, hunks, nil
 }
 
 // memoSide reads one side of a diff at most once.
@@ -434,10 +459,66 @@ func lenient(src domain.ByteSource) domain.ByteSource {
 }
 
 // writeDiffJSON converts an aligned diff into the /api/diff JSON contract.
-// Shared by the commit (sha=) and working-tree (wt=) branches; a non-nil
-// hunks adds inline hunk ordinals + the staging freshness hash.
-func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
+// Shared by every diff form; a non-nil hunks adds inline hunk ordinals + the
+// staging freshness hash. With img=old|new it answers that image side's
+// bytes instead (writeDiffImage).
+func writeDiffJSON(w http.ResponseWriter, r *http.Request, d domain.Diff, hunks *diffHunksMeta) {
+	if side := r.URL.Query().Get("img"); side != "" {
+		writeDiffImage(w, d, side)
+		return
+	}
 	writeJSON(w, diffPayload(d, hunks))
+}
+
+// imageMeta is one image side on the wire: its format, ORIGINAL pixel size
+// and byte count.
+type imageMeta struct {
+	Kind   string `json:"kind"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	Size   int    `json:"size"`
+}
+
+// imagesOf names a binary pair's image sides; nil when neither is one.
+func imagesOf(d domain.Diff) map[string]imageMeta {
+	m := map[string]imageMeta{}
+	if d.OldRaw != nil {
+		m["old"] = imageMeta{d.OldKind, d.OldDim.X, d.OldDim.Y, len(d.OldRaw)}
+	}
+	if d.NewRaw != nil {
+		m["new"] = imageMeta{d.NewKind, d.NewDim.X, d.NewDim.Y, len(d.NewRaw)}
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
+// writeDiffImage answers img=old|new: that side's original bytes when it is
+// an image, 404 when it is not, 400 for any other value. The page's <img>
+// reads the very bytes the diff compared, whatever the diff's source.
+func writeDiffImage(w http.ResponseWriter, d domain.Diff, side string) {
+	var raw []byte
+	var kind string
+	switch side {
+	case "old":
+		raw, kind = d.OldRaw, d.OldKind
+	case "new":
+		raw, kind = d.NewRaw, d.NewKind
+	default:
+		writeErr(w, http.StatusBadRequest, errors.New("img must be old or new"))
+		return
+	}
+	if raw == nil {
+		writeErr(w, http.StatusNotFound, errors.New("that side is no image"))
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "image/"+kind)
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw)
 }
 
 // diffPayload is the /api/diff JSON body of an aligned diff.
@@ -475,6 +556,9 @@ func diffPayload(d domain.Diff, hunks *diffHunksMeta) map[string]any {
 		"binary":    d.Binary,
 		"too_large": d.TooLarge,
 		"truncated": d.Result.Truncated,
+	}
+	if im := imagesOf(d); im != nil {
+		payload["images"] = im
 	}
 	if hunks != nil {
 		payload["hunks"] = map[string]any{"count": hunks.count, "hash": hunks.hash, "lane": hunks.lane}

@@ -14,7 +14,7 @@ func TestFileDiffURLIsShared(t *testing.T) {
 	if !strings.Contains(files, "function fileDiffURL(f)") {
 		t.Fatal("files.js: fileDiffURL is gone")
 	}
-	if n := strings.Count(files, "getJSON(fileDiffURL("); n < 2 {
+	if n := strings.Count(files, "getDiff(fileDiffURL("); n < 2 {
 		t.Errorf("single-file opens use fileDiffURL %d times, want >= 2 (commit/compare and working tree)", n)
 	}
 	if strings.Contains(files, `getJSON("/api/diff?" + q)`) {
@@ -42,7 +42,7 @@ func TestStackViewWired(t *testing.T) {
 		"new IntersectionObserver(",
 		"STACK_MAX_IN_FLIGHT",
 		`getJSON("/api/numstat?"`,
-		"getJSON(fileDiffURL(",
+		"getDiff(fileDiffURL(",
 		"state.ui && state.ui.stacked_diff",
 		"saveUI({ stacked_diff:",
 	} {
