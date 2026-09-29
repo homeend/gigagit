@@ -19,6 +19,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   refuses with the target untouched and offers **check out as different
   name…**; that name prompt then recycles onto the new branch. Aborting at
   the dirty prompt keeps the checked-out branch.
+  The summary names the remote before the worktree path
+  (`recycled a → foo from origin/foo in <path>`), so the status bar's end
+  cut drops the path, not the remote.
 - **`gg worktree recycle <path> origin/foo`** does the same from the CLI:
   a local branch of that name wins, otherwise a remote-tracking branch is
   checked out first as `foo` (or `--as <name>`). A diverged branch fails

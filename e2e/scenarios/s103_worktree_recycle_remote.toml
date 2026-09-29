@@ -20,7 +20,7 @@ steps = [
 [[run]]
 cmd  = ["worktree", "recycle", "../wt-x", "origin/foo"]
 exit = 0
-stdout_contains = ["recycled", "feature/x → foo", "from origin/foo"]
+stdout_contains = ["recycled feature/x → foo from origin/foo in "]
 
 [expect]
 branch    = "main"

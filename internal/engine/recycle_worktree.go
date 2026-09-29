@@ -170,9 +170,11 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	if err := wt.Switch(ctx, op.Branch); err != nil {
 		return Result{}, err
 	}
+	// The remote rides with the branch pair, before the path: a status-bar
+	// end-cut drops the path (the user just picked it), never the remote.
 	res := Result{Changed: true}.WithSummary("recycled %s → %s in %s", old, op.Branch, target)
 	if op.RemoteRef != "" {
-		res = res.AppendSummary(" from %s", op.RemoteRef)
+		res = Result{Changed: true}.WithSummary("recycled %s → %s from %s in %s", old, op.Branch, op.RemoteRef, target)
 	}
 	switch {
 	case committed != "":

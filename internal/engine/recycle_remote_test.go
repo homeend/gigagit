@@ -37,8 +37,8 @@ func TestRecycleRemoteCreatesTrackingBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !strings.HasPrefix(res.Summary, "recycled a → foo in ") || !strings.Contains(res.Summary, "from origin/foo") {
-		t.Fatalf("summary = %q", res.Summary)
+	if !strings.HasPrefix(res.Summary, "recycled a → foo from origin/foo in ") {
+		t.Fatalf("summary = %q; the remote rides with the pair, before the path a status-bar end-cut drops", res.Summary)
 	}
 	if got := wtHead(t, wt); got != "foo" {
 		t.Fatalf("worktree HEAD = %q, want foo", got)
