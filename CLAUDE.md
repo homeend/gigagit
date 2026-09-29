@@ -13,10 +13,13 @@ Module: `github.com/homeend/gigagit` · Go 1.26.
 
 ## Workflow
 
-**NEVER USE SUB AGENTS.** Do every task in the main session yourself — no
-Agent/Task tool, no parallel implementer fan-out, no "dispatch to a
-subagent" step. Plans are executed sequentially by the one session that
-wrote them.
+**NO IMPLEMENTER SUB AGENTS.** Do every implementation task in the main
+session yourself — no parallel implementer fan-out, no "dispatch to a
+subagent" step for writing code. Plans are executed sequentially by the one
+session that wrote them. **Exception: REVIEW subagents are fine** — the
+final whole-branch review (and any other read-only review pass) may run as a
+fresh subagent on the most capable model; it must stay read-only (no edits,
+no commits, no test runs that write into the worktree).
 
 **Always develop features in a worktree.** Create a dedicated worktree with a
 feature branch (`gg branch create <feat/...>` + `gg worktree add --branch
