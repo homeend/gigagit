@@ -197,16 +197,38 @@ func (p *contentPopup) visible() []contentLine {
 	return out
 }
 
-// move shifts the cursor by delta, clamped to the visible range.
+// move shifts the cursor by delta, clamped to the visible range. A popup
+// without a cursor is a pager whose p.sel counts display LINES, which a
+// wrapped row outnumbers, so only render knows its end: pagerWindow clamps it.
 func (p *contentPopup) move(delta int) {
 	n := len(p.visible())
 	p.sel += delta
-	if p.sel > n-1 {
+	if p.sel > n-1 && !p.noCursor {
 		p.sel = n - 1
 	}
 	if p.sel < 0 {
 		p.sel = 0
 	}
+}
+
+// pagerWindow lays out a popup without a row cursor as a pager: p.sel is the
+// TOP display line, not a row, so every ↑/↓ scrolls the text by one line. An
+// invisible cursor used to anchor the window instead, and the text moved only
+// once it passed the middle of the box. The whole text is laid out once —
+// these popups hold a message, a review overview or a pull request's comments,
+// not a 40k-row list — and p.sel is clamped to the last screenful and written
+// back, so ↑ at the end scrolls at once. It returns the shown lines and the
+// text's total display lines.
+func (p *contentPopup) pagerWindow(wr []winRow, o winOpts, capRows int) ([]string, int) {
+	total := wrapContentLines(wr, o, 1<<30)
+	if total < 1 {
+		total = 1
+	}
+	h := min(total, capRows)
+	o.h, o.anchor = total, 0
+	all := renderWindow(wr, o)
+	p.sel = max(0, min(p.sel, total-h))
+	return all[p.sel : p.sel+h], total
 }
 
 // contentFastStep is the ctrl+↑/↓ jump (the mouse-wheel tick is the
@@ -472,8 +494,18 @@ func (p *contentPopup) box(m Model) string {
 	// one blank line renderWindow substitutes (git's stderr separates its
 	// paragraphs with blank lines, so the tail used to fall off the window).
 	o := winOpts{w: bodyW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, charWrap: p.charWrap}
-	o.h = wrapContentLines(wr, o, capRows)
-	win := renderWindow(wr, o)
+	var win []string
+	overflow := len(vis) > capRows
+	pos, of := p.sel+1, len(vis)
+	if p.noCursor {
+		var total int
+		win, total = p.pagerWindow(wr, o, capRows)
+		overflow = total > len(win)
+		pos, of = p.sel+1, total
+	} else {
+		o.h = wrapContentLines(wr, o, capRows)
+		win = renderWindow(wr, o)
+	}
 
 	var b strings.Builder
 	// The /-search input rides its own line beneath the title (replacing the
@@ -527,8 +559,8 @@ func (p *contentPopup) box(m Model) string {
 		b.WriteString("\n")
 	}
 	hint := i18n.T("[/] search  [ctrl+w] mode  [s] save  [ctrl+t] full  [q] close")
-	if len(vis) > capRows {
-		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
+	if overflow {
+		hint = fmt.Sprintf("%d/%d  %s", pos, of, hint)
 	}
 	b.WriteString(pad + truncate(hint, textW-gutter))
 	return p.boxStyle().Width(inner).Render(b.String()) + "\n"

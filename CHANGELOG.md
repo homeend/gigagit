@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Text popups scroll on the first key press
+
+### Fixed
+
+- **The review Overview, the pull-request hub and the Last error / Full
+  message viewer scroll on every ↑/↓.** These popups have no row cursor, yet
+  ↓ still moved an invisible one: the text only started to move once it
+  passed the middle of the box, and at the end ↑ had to walk it back before
+  the text moved again. They are now pagers — every ↓/↑ scrolls one display
+  line (a wrapped paragraph line by line), ↓ stops at the last screenful, and
+  the `N/M` counter in the hint counts display lines.
+
 ## Branch-version links: web drift copy, versions `.` menu, `gg link --version`
 
 ### Added
