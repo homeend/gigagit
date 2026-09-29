@@ -33,8 +33,8 @@ func TestBranchRowsShowReviewSubRows(t *testing.T) {
 	if len(rows) != 3 {
 		t.Fatalf("rows %q, want main, feature and its review", rows)
 	}
-	if !strings.Contains(rows[1], "feature ◆1") {
-		t.Fatalf("feature row %q lacks the ◆1 marker", rows[1])
+	if !strings.Contains(rows[1], "feature ◆ 1") {
+		t.Fatalf("feature row %q lacks the ◆ 1 marker", rows[1])
 	}
 	// "Review: <date> <agent>", indented under the branch name.
 	created := reviewStampAt(m.noteCounts.Reviews[0].Created, time.Now())
@@ -110,7 +110,7 @@ func TestBranchReviewMatchesAShortBranchHash(t *testing.T) {
 	m := reviewBranchesModel(t)
 	m.branches[1].Hash = strings.Repeat("b", 7)
 	rows, _ := m.panelView(panelBranches)
-	if len(rows) != 3 || !strings.Contains(rows[1], "◆1") {
+	if len(rows) != 3 || !strings.Contains(rows[1], "◆ 1") {
 		t.Fatalf("rows %q, want the review under feature", rows)
 	}
 }

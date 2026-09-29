@@ -177,9 +177,7 @@ func reviewTreeLines(st *reviewViewState, files []contentLine) []contentLine {
 			out = append(out, l)
 			continue
 		}
-		if n := st.counts[l.path]; n > 0 {
-			l.text += fmt.Sprintf("  ◆%d", n)
-		}
+		l.text += noteBadge(st.counts[l.path])
 		out = append(out, l)
 		if s := summaries[l.path]; s != "" {
 			indent := strings.Repeat(" ", len(l.text)-len(strings.TrimLeft(l.text, " "))+3)

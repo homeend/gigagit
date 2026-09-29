@@ -35,6 +35,13 @@ func (m Model) inCompareMode() bool { return m.filesMode == filesModeCompare }
 func (m Model) inFullTree() bool    { return m.filesMode == filesModeFullTree }
 func (m Model) inShelfFiles() bool  { return m.filesMode == filesModeShelf }
 
+// filesCommitBadges reports whether the files view lists ONE commit's files
+// whose rows take its ByCommitPath ◆ badges. A review tree paints its own.
+func (m Model) filesCommitBadges() bool {
+	return m.filesHash != "" && m.filesReview == nil &&
+		(m.filesMode == filesModeChanged || m.filesMode == filesModeFullTree)
+}
+
 // closeFilesView closes the view and zeroes the ENTIRE cluster — the single
 // place that defines "no files view is open". Replaces the per-site partial
 // resets (esc, l, narrow-close, repo-switch) that each cleared a different subset.
@@ -1394,6 +1401,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		// (which matches l.text) never matches a file by its note count.
 		if m.filesPreviewSet != nil && l.path != "" {
 			text += noteBadge(m.filesPreviewCounts[l.path])
+		} else if l.path != "" && m.filesCommitBadges() {
+			// A commit's files: the notes anchored on the file AT this commit.
+			text += noteBadge(m.noteCounts.ByCommitPath[m.filesHash+":"+l.path])
 		}
 		// A file row cuts the middle of its path, never the name (headings
 		// were pre-elided above); a review row is prose and cuts at its end.

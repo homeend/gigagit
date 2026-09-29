@@ -28,12 +28,12 @@ func TestShelfRowShowsNoteBadge(t *testing.T) {
 	out := m.renderShelfPopupBox(m.shelfSwitcher())
 	var withBadge []string
 	for _, l := range strings.Split(out, "\n") {
-		if strings.Contains(l, "◆1") {
+		if strings.Contains(l, "◆ 1") {
 			withBadge = append(withBadge, l)
 		}
 	}
 	if len(withBadge) != 1 || !strings.Contains(withBadge[0], "y.go") {
-		t.Fatalf("only the noted entry's row carries ◆1, got %q:\n%s", withBadge, out)
+		t.Fatalf("only the noted entry's row carries ◆ 1, got %q:\n%s", withBadge, out)
 	}
 }
 

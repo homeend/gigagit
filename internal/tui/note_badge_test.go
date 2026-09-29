@@ -17,8 +17,8 @@ func TestStatusRowBadgeIsDisplayOnly(t *testing.T) {
 		notes: map[string]int{"a/b.go": 3},
 	}
 	row := l.Row(0)
-	if !strings.Contains(row, "◆3") {
-		t.Fatalf("row = %q, want a ◆3 badge", row)
+	if !strings.Contains(row, "◆ 3") {
+		t.Fatalf("row = %q, want a ◆ 3 badge", row)
 	}
 	// The filter haystack must NOT carry the badge: typing "3" must not match
 	// a file because of its note count (the sanitize-DISPLAY-not-HAYSTACK rule).
@@ -46,8 +46,8 @@ func TestCommitRowShowsNoteBadge(t *testing.T) {
 	m.noteCounts = domain.NoteCounts{ByCommit: map[string]int{"c0ffeeaa": 2}}
 	i := m.wipCount() // the first REAL commit's unified index
 	row := m.commitIdentRowAt(i, m.commitIdentWidth(), false, -1)
-	if !strings.Contains(row, "◆2") {
-		t.Fatalf("commit row = %q, want a ◆2 badge", row)
+	if !strings.Contains(row, "◆ 2") {
+		t.Fatalf("commit row = %q, want a ◆ 2 badge", row)
 	}
 	// The Commits filter reads commitHaystackAt, which must stay badge-free.
 	if strings.Contains(m.commitHaystackAt(i), "◆") {
@@ -88,12 +88,12 @@ func TestListForCarriesNoteCounts(t *testing.T) {
 		l := m.listFor(p)
 		var seen bool
 		for i := 0; i < l.Len(); i++ {
-			if strings.Contains(l.Row(i), "mod.txt") && strings.Contains(l.Row(i), "◆4") {
+			if strings.Contains(l.Row(i), "mod.txt") && strings.Contains(l.Row(i), "◆ 4") {
 				seen = true
 			}
 		}
 		if !seen {
-			t.Fatalf("panel %v: mod.txt row carries no ◆4 badge", p)
+			t.Fatalf("panel %v: mod.txt row carries no ◆ 4 badge", p)
 		}
 	}
 }
@@ -106,7 +106,34 @@ func TestNoteBadgeFormat(t *testing.T) {
 	if got := noteBadge(-1); got != "" {
 		t.Fatalf("noteBadge(-1) = %q, want empty", got)
 	}
-	if got := noteBadge(12); got != "  ◆12" {
+	if got := noteBadge(12); got != "  ◆ 12" {
 		t.Fatalf("noteBadge(12) = %q", got)
+	}
+}
+
+// A commit's Files view badges each file row with the notes anchored on that
+// file AT that commit (ByCommitPath), the same "◆ N" the Commits row carries.
+func TestCommitFilesViewShowsNoteBadge(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}, {text: "b.go", path: "b.go"}}}
+	m.filesMode = filesModeChanged
+	m.filesHash = "c0ffeeaa"
+	m.noteCounts = domain.NoteCounts{ByCommitPath: map[string]int{"c0ffeeaa:a.go": 3, "deadbeef:b.go": 5}}
+	out := m.renderFilesView(40, 12)
+	if !strings.Contains(out, "a.go"+noteBadge(3)) {
+		t.Fatalf("a.go row wants the ◆ 3 badge:\n%s", out)
+	}
+	if strings.Contains(out, noteBadge(5)) {
+		t.Fatalf("b.go's notes sit on ANOTHER commit; no badge here:\n%s", out)
+	}
+}
+
+// The glyph and the count are separate cells: ◆ is East-Asian-ambiguous and
+// many fonts draw it wider than its cell, over a digit glued to it.
+func TestNoteBadgeSpacesGlyphFromCount(t *testing.T) {
+	t.Parallel()
+	if got := noteBadge(4); got != "  ◆ 4" {
+		t.Fatalf("noteBadge(4) = %q, want %q", got, "  ◆ 4")
 	}
 }

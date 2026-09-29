@@ -604,15 +604,16 @@ func noteWrap(line string, w int) []string {
 	return out
 }
 
-// noteBadge is the trailing "◆N" a Files/Commits row carries when its target
-// has notes. Display only — never part of a filter haystack. n <= 0 (a missing
+// noteBadge is the trailing "◆ N" a Files/Commits row carries when its target
+// has notes. The space is load-bearing: ◆ is East-Asian-ambiguous and many
+// fonts draw it wider than its one cell, over a digit glued to it. Display only — never part of a filter haystack. n <= 0 (a missing
 // map entry, or a NoteCounts that failed to load) yields "", so rows in a repo
 // without notes stay byte-identical.
 func noteBadge(n int) string {
 	if n <= 0 {
 		return ""
 	}
-	return "  ◆" + strconv.Itoa(n)
+	return "  ◆ " + strconv.Itoa(n)
 }
 
 // noteCollapseRows are the . menu's collapse rows (keys o / O; the diff footer
