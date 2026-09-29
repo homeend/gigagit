@@ -2,7 +2,8 @@
 // every note this checkout can see, as the TUI's tree — group (working tree /
 // commits / other) → state, commit or shelf entry → directory → file → note —
 // each note row laid out in fixed columns (status, who, where, when, note).
-// Enter or a click on a note opens its diff and lands on it, on a review the
+// Enter or a click on a note opens its diff and lands on it, on a shelf
+// entry's own note (a recycle's) that note's text, on a review the
 // review view; esc on that diff (or out of the review) comes back here.
 // ctrl+d deletes the thread or review under the cursor after asking. One read of GET /api/notes/overview; deletes reuse
 // POST /api/notes/remove (the same domain call as the TUI's).
@@ -13,6 +14,7 @@ import { opLine, showLocalConfirm } from "./ops.js";
 import { openCommitByHash } from "./commits.js";
 import { landNote, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
 import { openReview } from "./reviews.js";
+import { openShelfNotes } from "./shelfnotes.js";
 
 // This module builds its own DOM: index.html's `hidden` class has NO global
 // rule — the overlay ships its own `#allnotes.hidden` selector. z-index 21:
@@ -131,7 +133,15 @@ function anBuildRows(ov) {
   if (shelves.length) {
     group("other", "Other");
     for (const s of shelves) {
-      sub("s:" + s.id, "shelf  " + (s.label || s.id));
+      const name = s.label || s.id;
+      sub("s:" + s.id, "shelf  " + name);
+      // The entry's own notes (a recycle's "deleted …", "renamed …") head
+      // its files, oldest first; enter reads one.
+      for (const n of s.entry || []) {
+        rows.push({ kind: "note", depth: 2, note: n, status: s.missing ? "missing" : n.status,
+          target: { shelf: s.id, label: name, missing: s.missing },
+          filter: (n.summary + "\0" + (n.author || "") + "\0" + name).toLowerCase() });
+      }
       files(2, s.files || [], { missing: s.missing });
     }
   }
@@ -186,6 +196,7 @@ function noteCells(r, now) {
   let where = (n.side || "new") + ":" + range[0];
   if (range[1] !== range[0]) where += "-" + range[1];
   if (n.file_level) where = "file";
+  if (r.target && r.target.shelf) where = "shelf";
   const when = n.created ? anAgo(now - Date.parse(n.created)) : "";
   const replies = (n.replies || []).length;
   return { status: STATUS_WORD[r.status] || r.status, who, where, when, summary: n.summary, tail: replies ? "  ↩" + replies : "" };
@@ -353,6 +364,12 @@ function activate(i) {
       openTarget(r.target, "");
       return;
     case "note":
+      if (r.target.shelf) {
+        // The note is its own text: the read-only window reads it even when
+        // the entry is gone; esc comes back here.
+        openShelfNotes({ id: r.target.shelf }, r.target.label, r.note.id);
+        return;
+      }
       openTarget(r.target, r.note.id);
       return;
     case "review":

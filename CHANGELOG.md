@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Shelf entry notes in View all notes
+
+### Fixed
+- **View all notes** (TUI and `gg web`) now lists a shelf entry's own notes —
+  a recycled worktree's "deleted …" / "renamed …" — right under the entry,
+  before its files. They were counted in the header but never shown. `enter`
+  (or a click in the web) reads the note in the read-only note window; `esc`
+  comes back to the list. `GET /api/notes/overview` carries them as each
+  shelf's `entry` list.
+
 ## Branch-version links: web drift copy, versions `.` menu, `gg link --version`
 
 ### Added

@@ -52,6 +52,7 @@ type overviewShelfWire struct {
 	ID      string             `json:"id"`
 	Label   string             `json:"label"`
 	Missing bool               `json:"missing"`
+	Entry   []domain.WireNote  `json:"entry"` // notes on the entry itself (a recycle's), oldest first
 	Files   []overviewFileWire `json:"files"`
 }
 
@@ -123,8 +124,12 @@ func (s *Server) handleNotesOverview(w http.ResponseWriter, r *http.Request) {
 		out.Commits = append(out.Commits, cw)
 	}
 	for _, sh := range ov.Shelves {
-		out.Shelves = append(out.Shelves, overviewShelfWire{ID: sh.ID, Label: sh.Label, Missing: sh.Missing,
-			Files: overviewFiles(sh.Files, "shelf")})
+		sw := overviewShelfWire{ID: sh.ID, Label: sh.Label, Missing: sh.Missing,
+			Entry: make([]domain.WireNote, 0, len(sh.Entry)), Files: overviewFiles(sh.Files, "shelf")}
+		for _, n := range sh.Entry {
+			sw.Entry = append(sw.Entry, domain.ToWireNote(n))
+		}
+		out.Shelves = append(out.Shelves, sw)
 	}
 	writeJSON(w, out)
 }

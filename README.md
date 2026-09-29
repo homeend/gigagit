@@ -252,7 +252,9 @@ this checkout can see as one tree — working tree (unstaged / staged /
 untracked), then commits newest first, then shelf entries, each down to its
 directory and file — with a status column (active, stale, orphaned, or missing
 when the commit is gone); type to filter, `enter` on a note opens its diff on
-that line and `esc` comes back to the list. `gg web` has the same list under
+that line and `esc` comes back to the list. A shelf entry's own notes (a
+recycled worktree's "deleted …" / "renamed …") sit right under the entry,
+before its files; `enter` on one reads it. `gg web` has the same list under
 **view all notes…** in its command palette (`ctrl+k`) — same tree, columns,
 filter, `←`/`→` folds, a click or `enter` on a note opens its diff on it, on a
 review the review view (`esc` returns), `ctrl+d` deletes the thread or review under the cursor after asking. `gg review --notes` does not replace the text report — it still

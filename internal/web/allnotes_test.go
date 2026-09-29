@@ -3,10 +3,13 @@ package web
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // The web "View all notes" inventory: one read of domain.NotesOverview,
@@ -68,5 +71,48 @@ func TestNotesOverviewEmptyIsArrays(t *testing.T) {
 		if !strings.Contains(string(raw), want) {
 			t.Fatalf("body %s lacks %s", raw, want)
 		}
+	}
+}
+
+// A shelf entry's own notes (a recycle's) ride the overview as the shelf's
+// entry list, so the page can show every thread the count includes.
+func TestNotesOverviewCarriesShelfEntryNotes(t *testing.T) {
+	isolateState(t)
+	dir := newRepoDir(t, 1)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := domain.Open(dir)
+	svc.UseNotesDir(t.TempDir())
+	ts := serve(t, New(svc))
+	if code := postJSON(t, ts, "/api/shelf", `{"path":"f.txt","state":"unstaged"}`, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("shelf add: code = %d", code)
+	}
+	var list struct {
+		Entries []struct {
+			ID string `json:"id"`
+		} `json:"entries"`
+	}
+	getJSON(t, ts, "/api/shelf", &list)
+	id := list.Entries[0].ID
+	if _, err := svc.NoteAdd(context.Background(), model.Note{
+		Source: model.NoteSourceAgent, Author: "gg", Address: domain.ShelfEntryNote(id),
+		Summary: "Recycled from /x (main)", Rationale: "Deleted (not in this set):\n  gone.txt",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var got notesOverviewWire
+	if code := getJSON(t, ts, "/api/notes/overview", &got); code != http.StatusOK {
+		t.Fatalf("GET /api/notes/overview = %d", code)
+	}
+	if len(got.Shelves) != 1 || got.Shelves[0].ID != id {
+		t.Fatalf("shelves = %+v", got.Shelves)
+	}
+	e := got.Shelves[0].Entry
+	if len(e) != 1 || e[0].Summary != "Recycled from /x (main)" || e[0].ID == "" {
+		t.Fatalf("entry notes = %+v", e)
+	}
+	if got.Count != 1 {
+		t.Fatalf("count = %d, want 1", got.Count)
 	}
 }
