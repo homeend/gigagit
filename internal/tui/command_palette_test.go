@@ -98,6 +98,7 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"Find", "F"},
 		{"Git config explorer", ""},
 		{"Open gg:// link…", "#"},
+		{"Open in browser", ""},
 		{"Open repo", ""},
 		{"Open shell", "ctrl+o"},
 		{"Run shell command…", ""},

@@ -59,6 +59,7 @@ const (
 	settingsMenuRemoteTags    = "Auto remote-tag refresh"
 	settingsMenuRates         = "Refresh rates"
 	settingsMenuOpsHist       = "Operations history"
+	settingsMenuWeb           = "Web page"
 	settingsMenuCommitSort    = "Commit sort"
 	settingsMenuShowGraph     = "Show graph"
 	settingsMenuLanguage      = "Language"
@@ -69,7 +70,7 @@ const (
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuBranchFilters, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuTheme, settingsMenuThemeColours, settingsMenuRepoLoc, settingsMenuCommitGraph}
+var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuBranchFilters, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuWeb, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuTheme, settingsMenuThemeColours, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -104,6 +105,8 @@ func settingsMenuTitle(entry string) string {
 		return i18n.T("Refresh rates")
 	case settingsMenuOpsHist:
 		return i18n.T("Operations history")
+	case settingsMenuWeb:
+		return i18n.T("Web page")
 	case settingsMenuCommitSort:
 		return i18n.T("Commit sort")
 	case settingsMenuShowGraph:
@@ -178,6 +181,8 @@ func settingsMenuLabel(m Model, i int) string {
 		return fmt.Sprintf("%s: %d — %s", title, n, path)
 	case settingsMenuAutoRefresh:
 		return title + ": " + onOff(m.cfg.Refresh.Enabled)
+	case settingsMenuWeb:
+		return title + ": " + m.webStatusText()
 	case settingsMenuRemoteTags:
 		return title + ": " + onOff(!m.cfg.Refresh.DisableRemoteTagsAuto)
 	case settingsMenuCommitSort:
@@ -579,6 +584,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				p.sel = 0
 				p.hscroll = 0
 				return m, nil
+			case settingsMenuWeb:
+				return m.openWebSettings(), nil
 			case settingsMenuOpsHist:
 				p.opsHistView = true
 				p.opsHistSel = 0

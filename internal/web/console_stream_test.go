@@ -186,3 +186,24 @@ func TestSessionScreenExitedSessionReportsExitOnce(t *testing.T) {
 		t.Fatalf("exited ×%d, events %+v", n, evs)
 	}
 }
+
+// A removal reaches the stream on the manager's signal, not on a poll.
+func TestSessionScreenGoneArrivesWithoutPolling(t *testing.T) {
+	s := testSession(t, `exit 0`)
+	<-s.Done()
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	var removed time.Time
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		removed = time.Now()
+		_ = domain.Sessions().Remove(s.Info().ID)
+	}()
+	evs := readConsoleSSE(t, ts, string(s.Info().ID), 20, 5*time.Second)
+	took := time.Since(removed)
+	if len(evs) == 0 || evs[len(evs)-1].Name != "gone" {
+		t.Fatalf("events %+v", evs)
+	}
+	if took > 400*time.Millisecond {
+		t.Fatalf("gone took %v after the remove; it must ride the manager signal, not a 1 s poll", took)
+	}
+}

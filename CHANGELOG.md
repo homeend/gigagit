@@ -105,6 +105,44 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   box; the row cap still lifts). `popupFitWidth` (`popup_max.go`) is the
   shared rule for any content-fit popup.
 
+## The TUI serves its own web page — the browser and the terminal share agent sessions
+
+### Added
+
+- **Open in browser** (command palette, `ctrl+p`): the TUI serves the gg web
+  page from its own process and opens the browser on it. The page shows the
+  TERMINAL's agent sessions (`ctrl+\` → Agents, `enter` → a live console) —
+  `gg web` as a separate process could never see them, because a session is
+  process memory. A second use reopens the browser; the URL sits in the
+  status line and under Settings (`,`) → **Web page**.
+- `[web] serve = true` serves at TUI startup (browser not opened);
+  `[web] addr = "127.0.0.1:7777"` fixes the address (default: a random
+  loopback port per run). The launch flags `gg --web` and
+  `gg --web-addr <host:port>` do the same for one run (flag > config).
+  Settings → **Web page** toggles the setting and edits the address.
+- `gg open --web <link>` with a TUI live in that checkout and no page asks
+  the TUI to serve (a new `serve` inbox command answered with the URL), then
+  sends the link to that page — no second server beside a live TUI. A TUI
+  that does not answer within the steer wait is reported (exit 1).
+
+### Changed
+
+- The hosted page follows the TUI's repository: a repo or worktree switch in
+  the terminal re-roots the page (tabs reconnect on the new repo). The page
+  hides its own switching while hosted (palette **switch repo…** / **open
+  repo (path)…**, ☰ → repositories, a worktree row's **switch here**, the
+  locks bar's **go to worktree**), and `POST /api/reroot` answers 409. A
+  TUI-hosted page refuses to start over another live page's `web.json`
+  (status line names its URL) instead of stealing the presence. Standalone
+  `gg web` is unchanged.
+- Quitting the TUI ends the page: open tabs get the shutdown message and
+  paint their server-down veil. No new quit prompt.
+- Change signals are fanned out: `agentsession.Broadcaster` gives every
+  subscriber (the TUI's consoles and list, the web's streams and list
+  watcher, the task tracker) its own coalescing wakeup. The old one-slot
+  `Changed()` channels — which let two readers in one process steal each
+  other's signals — are gone, and the web console's one-second removal poll
+  went with them (removal now rides the manager signal).
 ## Shelve several marked files as ONE set
 
 ### Fixed

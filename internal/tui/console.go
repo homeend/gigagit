@@ -23,7 +23,31 @@ type consoleState struct {
 	focused   bool
 	maximized bool
 	gen       int
-	highHalf  rune // a UTF-16 high surrogate waiting for its low half (Windows input)
+	highHalf  rune            // a UTF-16 high surrogate waiting for its low half (Windows input)
+	screen    <-chan struct{} // this console's own subscription to its session's screen
+	cancel    func()          // drops it; every path that clears m.console goes through dropConsole
+}
+
+// sessionWatch is the TUI's subscription to the session LIST, on a pointer
+// field so the value-receiver Model shares it. It follows the manager the
+// TUI reads now (tests swap it), re-subscribing when that changes.
+type sessionWatch struct {
+	mgr    *domain.SessionManager
+	ch     <-chan struct{}
+	cancel func()
+}
+
+// current returns the list channel for the live manager.
+func (w *sessionWatch) current() <-chan struct{} {
+	mgr := domain.Sessions()
+	if w.mgr != mgr {
+		if w.cancel != nil {
+			w.cancel()
+		}
+		w.mgr = mgr
+		w.ch, w.cancel = mgr.Subscribe()
+	}
+	return w.ch
 }
 
 type consoleChangedMsg struct {
@@ -63,15 +87,28 @@ func (m Model) openConsole(id domain.SessionID) (Model, tea.Cmd) {
 	// suspend — the console is a peer of the commit list, not a surface the
 	// pin yields to (fullscreenYielded).
 	m.fullMaxed = false
-	m.console = &consoleState{id: id, focused: true, gen: gen}
+	m = m.dropConsole()
+	screen, cancel := s.Subscribe()
+	m.console = &consoleState{id: id, focused: true, gen: gen, screen: screen, cancel: cancel}
 	m.focus = panelCommits
 	m = m.syncConsoleSize()
-	return m, waitSessionCmd(s, id, gen)
+	return m, waitSessionCmd(m.console, id, gen)
+}
+
+// dropConsole clears the console and its screen subscription. Every place
+// that sets m.console = nil goes through it, so a closed console never
+// leaves a subscriber behind on its session.
+func (m Model) dropConsole() Model {
+	if m.console != nil && m.console.cancel != nil {
+		m.console.cancel()
+	}
+	m.console = nil
+	return m
 }
 
 // closeConsole hides the console; the session keeps running.
 func (m Model) closeConsole() Model {
-	m.console = nil
+	m = m.dropConsole()
 	m.focus = m.lastLeftPanel
 	return m.reconcileFullscreenFocus()
 }
@@ -118,19 +155,28 @@ func (m Model) syncConsoleSizeIfFocused() Model {
 	return m.syncConsoleSize()
 }
 
-// waitSessionCmd blocks until session s changes, then waits out the repaint
-// spacing (absorbing further changes) before asking for a frame.
-func waitSessionCmd(s *domain.AgentSession, id domain.SessionID, gen int) tea.Cmd {
+// waitSessionCmd blocks until the console's session changes, then waits out
+// the repaint spacing (absorbing further changes) before asking for a frame.
+// The channel is the console's own subscription: a browser console on the
+// same session in this process has its own and neither steals a wakeup.
+func waitSessionCmd(c *consoleState, id domain.SessionID, gen int) tea.Cmd {
+	ch := c.screen
+	if ch == nil {
+		return nil // a console built as a literal (tests) has no session behind it
+	}
 	return func() tea.Msg {
-		<-s.Changed()
+		<-ch
 		time.Sleep(consoleRepaint)
 		return consoleChangedMsg{id: id, gen: gen}
 	}
 }
 
 // waitSessionsCmd reports list-level changes (start, exit, remove).
-func waitSessionsCmd() tea.Cmd {
-	ch := domain.Sessions().Changed()
+func (m Model) waitSessionsCmd() tea.Cmd {
+	if m.sessWatch == nil {
+		return nil // a Model built as a literal (tests)
+	}
+	ch := m.sessWatch.current()
 	return func() tea.Msg {
 		<-ch
 		return sessionsChangedMsg{}
@@ -217,12 +263,12 @@ func (m Model) onSessionsChanged() (Model, tea.Cmd) {
 			if m.console.focused {
 				m = m.closeConsole()
 			} else {
-				m.console = nil
+				m = m.dropConsole()
 				m = m.reconcileFullscreenFocus()
 			}
 		}
 	}
-	return m, waitSessionsCmd()
+	return m, m.waitSessionsCmd()
 }
 
 // runningSessionIn reports a running agent session whose cwd is dir.

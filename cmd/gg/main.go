@@ -31,6 +31,7 @@ func main() {
 	cwdFile, args := extractCwdFile(os.Args[1:])
 	timeTrack, args := extractTimeTrack(args)
 	recordPath, args := extractRecord(args)
+	webOn, webAddr, args := extractWebFlags(args)
 	// `gg open <link>` with no live session in the link's checkout launches the
 	// TUI there. internal/cli must not import internal/tui, so the launcher is
 	// installed here — and it is the SAME launchTUI the no-subcommand path runs,
@@ -39,8 +40,13 @@ func main() {
 	// still records under `gg --record` and still cd's the shell on exit under
 	// the `gg shell-init` wrapper after a worktree switch.
 	cli.LaunchTUI = func(checkout string, at model.Link) int {
-		return launchTUI(checkout, at, recordPath, cwdFile)
+		return launchTUI(checkout, at, recordPath, cwdFile, false, "")
 	}
+	// The TUI's own web page: the same server `gg web` runs, hosted in the
+	// TUI process so the browser and the terminal share agent sessions.
+	// Services the hosted server opens itself take the TUI's ssh-batch
+	// runner, so no ssh prompt can reach the raw-mode terminal.
+	tui.NewWebHost = func(svc *domain.Service) tui.WebHost { return web.NewHost(svc, domain.OpenTUI, true) }
 	// `gg open --web <link>` with no live page in the link's checkout starts
 	// gg web there — the same runWeb the `web` subcommand runs, browser opened,
 	// the resolved command as the page's start-at (zero = a bare link).
@@ -115,7 +121,7 @@ func main() {
 		os.Exit(2)
 	}
 	// No subcommand: launch the TUI in the current directory.
-	os.Exit(launchTUI(".", model.Link{}, recordPath, cwdFile))
+	os.Exit(launchTUI(".", model.Link{}, recordPath, cwdFile, webOn, webAddr))
 }
 
 // runWeb runs `gg web` for dir: the always-on error log, then web.Serve on
@@ -151,7 +157,7 @@ func runWeb(dir, addr string, open bool, startAt *steer.Command) int {
 // positioned at `at` (the zero Link = nowhere in particular). It is shared by
 // the no-subcommand path and by `gg open`'s launcher seam, so a checkout
 // reached either way gets the same startup.
-func launchTUI(dir string, at model.Link, recordPath, cwdFile string) int {
+func launchTUI(dir string, at model.Link, recordPath, cwdFile string, webOn bool, webAddr string) int {
 	if dir != "" && dir != "." {
 		if err := os.Chdir(dir); err != nil {
 			fmt.Fprintln(os.Stderr, "gg:", err)
@@ -205,7 +211,7 @@ func launchTUI(dir string, at model.Link, recordPath, cwdFile string) int {
 			return 2
 		}
 	}
-	cwd, err := tui.Run(svc, recordPath, at)
+	cwd, err := tui.Run(svc, tui.RunOptions{RecordPath: recordPath, At: at, Web: webOn, WebAddr: webAddr})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
 		return 1
@@ -239,6 +245,34 @@ func extractCwdFile(args []string) (string, []string) {
 		}
 	}
 	return path, rest
+}
+
+// extractWebFlags pulls the TUI launch flags --web (serve the web page from
+// this process at startup) and --web-addr <host:port> (its listen address;
+// implies --web) out of args, returning them and the remaining args. A
+// trailing "--web-addr" with no value is dropped. `gg web --addr` is a
+// different flag and passes through untouched.
+func extractWebFlags(args []string) (web bool, addr string, rest []string) {
+	rest = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--web":
+			web = true
+		case a == "--web-addr":
+			if i+1 < len(args) {
+				addr = args[i+1]
+				web = true
+				i++
+			}
+		case strings.HasPrefix(a, "--web-addr="):
+			addr = strings.TrimPrefix(a, "--web-addr=")
+			web = true
+		default:
+			rest = append(rest, a)
+		}
+	}
+	return web, addr, rest
 }
 
 // extractTimeTrack pulls the global --time-track flag (in either

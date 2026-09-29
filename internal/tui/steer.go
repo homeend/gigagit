@@ -362,6 +362,8 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 	switch {
 	case c.Cmd == "files":
 		return m.steerFiles(c)
+	case c.Cmd == "serve":
+		return m.steerServe(c)
 	case c.Cmd == "navigate" && c.Background:
 		return m.steerNavigateBackground(c)
 	}

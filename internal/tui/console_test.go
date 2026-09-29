@@ -236,6 +236,51 @@ func TestConsolePushesItsSizeWhenItGainsFocus(t *testing.T) {
 	}
 }
 
+// A console holds its own screen subscription and drops it when it closes;
+// opening another console over it drops the first one's too.
+func TestConsoleCloseCancelsItsScreenSubscription(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	base := s.SubscriberCount()
+	m, _ = m.openConsole(s.Info().ID)
+	if m.console == nil || m.console.cancel == nil {
+		t.Fatal("an open console holds a screen subscription")
+	}
+	if n := s.SubscriberCount(); n != base+1 {
+		t.Fatalf("subscribers after open = %d, want %d", n, base+1)
+	}
+	m, _ = m.openConsole(s.Info().ID) // re-open over itself: one subscription, not two
+	if n := s.SubscriberCount(); n != base+1 {
+		t.Fatalf("subscribers after re-open = %d, want %d", n, base+1)
+	}
+	m = m.closeConsole()
+	if n := s.SubscriberCount(); n != base {
+		t.Fatalf("subscribers after close = %d, want %d", n, base)
+	}
+}
+
+// The list wait subscribes to the manager the TUI reads at ARM time (tests
+// swap it): a session started after arming wakes the waiter.
+func TestSessionsWaitFollowsTheCurrentManager(t *testing.T) {
+	m := loadedModel(t)
+	first := startTestSession(t, m, `sleep 5`) // swaps in the test manager
+	cmd := m.waitSessionsCmd()
+	done := make(chan tea.Msg, 1)
+	go func() { done <- cmd() }()
+	if _, err := domain.Sessions().Start(sessionSpecForTest("second", first.Info().Dir)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case msg := <-done:
+		if _, ok := msg.(sessionsChangedMsg); !ok {
+			t.Fatalf("msg = %T", msg)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the list waiter never woke for a session on the current manager")
+	}
+}
+
 // ctrl+t on a left panel fullscreens it even while an agent console is docked
 // in the Commits column: the console is a right-column occupant like the
 // commit list, not a surface the pin must yield to. The console hides with the

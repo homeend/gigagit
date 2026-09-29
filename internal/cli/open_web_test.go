@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -49,33 +49,79 @@ func TestOpenWebSteersOnlyTheLivePage(t *testing.T) {
 
 // Only a TUI live: --web still means a browser, so a new gg web is started
 // there positioned on the link (the TUI is untouched).
-func TestOpenWebStartsAServerBesideALiveTUI(t *testing.T) {
+func TestOpenWebAsksALiveTUIToServe(t *testing.T) {
 	dir := previewRepo(t)
 	svc := openCLIService(t, dir)
 	inbox := steerDirFor(svc)
 	livePresence(t, inbox)
 	t.Cleanup(func() { steer.Discard(inbox) })
-	var gotCheckout string
-	var gotAt steer.Command
-	LaunchWeb = func(checkout string, at steer.Command) int {
-		gotCheckout, gotAt = checkout, at
-		return 0
-	}
+	fake, srv := newSteerServer(t, http.StatusAccepted, "")
+	// A stand-in TUI: answer the serve command with the page's URL and claim
+	// web.json, as the real one does.
+	stop := answerServe(t, inbox, srv.URL)
+	defer stop()
+	calls := 0
+	LaunchWeb = func(string, steer.Command) int { calls++; return 0 }
 	t.Cleanup(func() { LaunchWeb = nil })
 	var out, errb strings.Builder
 	if code := cmdOpen(svc, []string{"--web", previewLinkFor(dir, "a.txt") + "#1"}, &out, &errb); code != 0 {
 		t.Fatalf("exit = %d: %s", code, errb.String())
 	}
-	if !domain.SamePath(gotCheckout, dir) {
-		t.Errorf("checkout = %q, want %q", gotCheckout, dir)
+	if !strings.Contains(out.String(), "web: sent") {
+		t.Errorf("stdout = %q", out.String())
 	}
-	// The #hunk is lowered to a line before the page ever sees it, exactly
-	// as for a steered page.
-	if gotAt.Cmd != "navigate" || gotAt.File != "a.txt" || gotAt.Target == nil || gotAt.Target.State != "preview" || gotAt.Line == nil || gotAt.Line.No != 1 {
-		t.Errorf("start-at = %+v", gotAt)
+	got := fake.commands()
+	if len(got) != 1 || got[0].Cmd != "navigate" || got[0].File != "a.txt" || got[0].Line == nil || got[0].Line.No != 1 {
+		t.Fatalf("posted to the page = %+v, want one navigate at line 1", got)
 	}
-	if left := steer.Drain(inbox); len(left) != 0 {
-		t.Errorf("the live TUI must be left alone, posted %+v", left)
+	if calls != 0 {
+		t.Error("a live TUI serves the page; no standalone server is started")
+	}
+}
+
+// answerServe plays the TUI's side of "serve": drain the inbox until the
+// command arrives, claim web.json with url, reply OK with the URL.
+func answerServe(t *testing.T, inbox, url string) func() {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			for _, c := range steer.Drain(inbox) {
+				if c.Cmd == "serve" {
+					liveWebPresence(t, inbox, url)
+					_ = steer.PostReply(inbox, steer.Reply{ID: c.ID, OK: true, Detail: url})
+					return
+				}
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
+	return func() { close(done) }
+}
+
+// A live TUI that never answers: no second server beside it, exit 1.
+func TestOpenWebServeTimeoutExitsOne(t *testing.T) {
+	dir := previewRepo(t)
+	svc := openCLIService(t, dir)
+	inbox := steerDirFor(svc)
+	livePresence(t, inbox)
+	t.Cleanup(func() { steer.Discard(inbox) })
+	old := steerReplyWaitForTest
+	steerReplyWaitForTest = 200 * time.Millisecond
+	t.Cleanup(func() { steerReplyWaitForTest = old })
+	calls := 0
+	LaunchWeb = func(string, steer.Command) int { calls++; return 0 }
+	t.Cleanup(func() { LaunchWeb = nil })
+	var out, errb strings.Builder
+	code := cmdOpen(svc, []string{"--web", previewLinkFor(dir, "a.txt") + "#1"}, &out, &errb)
+	if code != 1 || !strings.Contains(errb.String(), "did not start its web page") || calls != 0 {
+		t.Fatalf("exit=%d stderr=%q calls=%d", code, errb.String(), calls)
 	}
 }
 

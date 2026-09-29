@@ -18,6 +18,24 @@ type taskTrack struct {
 	fg      map[domain.TaskID]bool   // foreground: open its console once the session exists
 	removed map[domain.TaskID]bool   // x'd in the Headless tab
 	capWarn string                   // the last max_parallel warning shown
+	// The TUI's own subscription to Tasks(); follows the manager the TUI
+	// reads now (tests swap it). Pointer struct: the value copies share it.
+	mgr    *domain.TaskManager
+	ch     <-chan struct{}
+	cancel func()
+}
+
+// current returns the task-change channel for the live manager.
+func (tr *taskTrack) current() <-chan struct{} {
+	mgr := domain.Tasks()
+	if tr.mgr != mgr {
+		if tr.cancel != nil {
+			tr.cancel()
+		}
+		tr.mgr = mgr
+		tr.ch, tr.cancel = mgr.Subscribe()
+	}
+	return tr.ch
 }
 
 func newTaskTrack() *taskTrack {
@@ -37,12 +55,15 @@ func (m Model) ensureTaskTrack() Model {
 	return m
 }
 
-// tasksChangedMsg: something in Tasks() changed. waitTasksCmd is the ONE
-// reader of the coalesced Changed channel; onTasksChanged re-arms it.
+// tasksChangedMsg: something in Tasks() changed. waitTasksCmd waits on the
+// tracker's own subscription; onTasksChanged re-arms it.
 type tasksChangedMsg struct{}
 
-func waitTasksCmd() tea.Cmd {
-	ch := domain.Tasks().Changed()
+func (m Model) waitTasksCmd() tea.Cmd {
+	if m.taskTrack == nil {
+		return nil // a Model built as a literal (tests); ensureTaskTrack runs on the first change
+	}
+	ch := m.taskTrack.current()
 	return func() tea.Msg {
 		<-ch
 		return tasksChangedMsg{}
@@ -90,7 +111,7 @@ func (m Model) onTasksChanged() (Model, tea.Cmd) {
 		m, c = m.stickyNotice(i18n.T("AI task history could not be saved (%s) — this session keeps it in memory", err.Error()))
 		cmds = append(cmds, c)
 	}
-	return m, tea.Batch(append(cmds, waitTasksCmd())...)
+	return m, tea.Batch(append(cmds, m.waitTasksCmd())...)
 }
 
 // taskEnded reports an end that has no result of its own to show: a

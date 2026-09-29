@@ -163,7 +163,7 @@ func (m Model) openPreview(hash, path string) (Model, tea.Cmd) {
 // the UI thread. Backs both the commit preview (ShowFile) and the
 // shelf-member preview (ResolveBytes).
 func (m Model) openPreviewSrc(src fileSource, path string, load func(context.Context) ([]byte, error)) (Model, tea.Cmd) {
-	m.console = nil // one right-column owner at a time; the session keeps running
+	m = m.dropConsole() // one right-column owner at a time; the session keeps running
 	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
 	reused := d != nil
 	if reused {

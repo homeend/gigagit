@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,6 +58,11 @@ func expandHome(path, home string) string {
 // their repos in the TUI, and the preflight below still runs BEFORE the
 // swap, so a garbage path is a 409 and the old root keeps serving.
 func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
+	if s.hosted {
+		// The SPA hides its switch affordances when hosted; this is the belt.
+		writeErr(w, http.StatusConflict, errors.New("the terminal owns the current repository — switch there"))
+		return
+	}
 	var req rerootRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
@@ -153,15 +159,39 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 	// Preflight BEFORE swapping: a broken target must never take down a
 	// working server (the startup preflight, reused — same friendly
 	// cross-environment error).
-	cand := domain.Open(target)
+	cand := s.open(target)
 	if err := preflight(r.Context(), cand, target); err != nil {
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
-	// Swap under opMu in one critical section with the live-op check:
-	// startOp holds opMu too, so no op can begin mid-swap. The finished op
-	// record is dropped — a late SSE read of the previous repo's op 404s,
-	// which is correct (that op belongs to the old root).
+	// The new root's [versions]/[ui] policies (the serve-boot re-apply
+	// point). Standalone only: a TUI host's Reroot hands over a Service the
+	// TUI has already configured.
+	applyUIPolicies(r.Context(), cand, s.activeRepoConfigPathOr(r.Context(), cand))
+	if err := s.adoptService(r.Context(), cand); err != nil {
+		if errors.Is(err, ErrPageLive) {
+			// Unreachable for a standalone page (the refusal is hosted-only)
+			// and the swap already happened: report the repo, not a failure.
+			s.writeRepoInfo(w, r, cand)
+			return
+		}
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	s.writeRepoInfo(w, r, cand)
+}
+
+// adoptService makes svc the served repository: the swap under opMu in one
+// critical section with the live-op check (startOp holds opMu too, so no op
+// can begin mid-swap), the dropped op record (a late SSE read of the
+// previous repo's op 404s — that op belongs to the old root) and feed, a
+// fresh live hub for the new root (the watcher pointed at the OLD .git;
+// streams close, tabs reconnect and re-hello), the MRU touch (the new root
+// becomes navigable-back-to forever) and the presence re-home (the inbox is
+// per WORKTREE: the old repo's web.json must not keep pointing at a page
+// that now shows something else). handleReroot and a TUI host's Reroot both
+// end here. errOpBusy when an operation is live.
+func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	s.opMu.Lock()
 	if s.cur != nil {
 		s.cur.mu.Lock()
@@ -169,26 +199,19 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 		s.cur.mu.Unlock()
 		if live {
 			s.opMu.Unlock()
-			writeErr(w, http.StatusConflict, errOpBusy)
-			return
+			return errOpBusy
 		}
 	}
-	s.svc.Store(cand)
+	s.svc.Store(svc)
 	s.cur = nil
 	s.opMu.Unlock()
 	s.mu.Lock()
 	s.feed = nil
 	s.mu.Unlock()
-	// The watcher points at the OLD .git; rebuild the live hub for the new
-	// root (streams close, tabs reconnect and re-hello).
-	s.restartLive(r.Context())
-	// The new root's [versions]/[ui] policies (the serve-boot re-apply point).
-	applyUIPolicies(r.Context(), cand, s.activeRepoConfigPathOr(r.Context(), cand))
-	// The new root becomes navigable-back-to forever (touchMRU on serve
-	// covers the original root).
-	touchMRU(r.Context(), cand, s.reposStatePath())
-	// The inbox is per WORKTREE: the old repo's web.json must not keep
-	// pointing at a page that is now showing something else.
-	s.rehomeSteerPresence(r.Context(), cand)
-	writeRepoInfo(w, r, cand)
+	s.restartLive(ctx)
+	touchMRU(ctx, svc, s.reposStatePath())
+	// The swap is done whatever the presence says: a refused claim (a hosted
+	// page landing where another page serves) leaves the page serving the
+	// new repo with no web.json there, and the caller shows the other URL.
+	return s.rehomeSteerPresence(ctx, svc)
 }

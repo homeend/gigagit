@@ -78,7 +78,7 @@ async function startMove(w, dest, label) {
     // carries the cross-environment repair offer, so a worktree linked for
     // the other environment fails with the message that already explains it
     // rather than a new one invented here.
-    if (served) doReroot(to);
+    if (served && !state.hosted) doReroot(to);
     else refreshAfterOp();
   });
 }

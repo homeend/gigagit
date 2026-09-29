@@ -75,7 +75,10 @@ function paletteCommands() {
   ];
   // A feature preflight turned off has nothing to open — the entry point is
   // removed rather than left to fail on click.
-  return featureDisabled("versions") ? rows.filter((r) => r.label !== "branch versions…") : rows;
+  // A TUI-hosted page has no switch of its own: the terminal owns the repo.
+  const hostedHidden = (r) => state.hosted && (r.label === "switch repo…" || r.label === "open repo (path)…");
+  const out = rows.filter((r) => !hostedHidden(r));
+  return featureDisabled("versions") ? out.filter((r) => r.label !== "branch versions…") : out;
 }
 
 
@@ -396,8 +399,8 @@ function openGlobalMenu() {
     { header: "Search" },
     { label: "filter the commit list… (\\)", act: () => openFeedFilter() },
     { label: "files in the working tree… (F)", act: () => openFinder() },
-    { header: "Repositories" },
-    { label: "switch repo…", act: () => openPalette("repo") },
+    // A TUI-hosted page has no repo switch: the terminal owns the repo.
+    ...(state.hosted ? [] : [{ header: "Repositories" }, { label: "switch repo…", act: () => openPalette("repo") }]),
     { header: "UI" },
     { label: "command palette…", act: () => openPalette("cmd") },
     { label: "refresh", act: () => manualRefresh() },

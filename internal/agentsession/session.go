@@ -31,7 +31,7 @@ type Session struct {
 	ioMu   sync.Mutex
 	closed bool
 
-	changed      chan struct{}
+	bc           Broadcaster
 	done         chan struct{}
 	outDone      chan struct{} // closed when pumpOut has drained the PTY
 	closeOnce    sync.Once
@@ -96,7 +96,6 @@ func start(id ID, spec StartSpec) (*Session, error) {
 		info: Info{ID: id, Label: spec.Label, AgentID: spec.AgentID, Repo: spec.Repo, Dir: spec.Dir,
 			Started: time.Now(), State: Running},
 		pty: p, emu: emu, cmd: cmd, trace: trace, traceEv: traceEv,
-		changed: make(chan struct{}, 1),
 		done:    make(chan struct{}),
 		outDone: make(chan struct{}),
 	}
@@ -266,19 +265,19 @@ func (s *Session) withEmu(f func()) {
 }
 
 // signal marks the screen dirty without ever blocking the pump.
-func (s *Session) signal() {
-	select {
-	case s.changed <- struct{}{}:
-	default:
-	}
-}
+func (s *Session) signal() { s.bc.Signal() }
+
+// Subscribe wakes the returned channel when the screen (or state) changed
+// since the last receive; bursts coalesce per subscriber. cancel drops the
+// subscription — a viewer holds one for as long as it shows the session.
+func (s *Session) Subscribe() (<-chan struct{}, func()) { return s.bc.Subscribe() }
+
+// SubscriberCount reports the live screen subscriptions (a test hook for the
+// viewers' cancel discipline).
+func (s *Session) SubscriberCount() int { return s.bc.count() }
 
 // Info returns a snapshot of the session's metadata.
 func (s *Session) Info() Info { s.mu.Lock(); defer s.mu.Unlock(); return s.info }
-
-// Changed receives a value when the screen (or state) changed since the
-// last receive; bursts coalesce into one pending signal.
-func (s *Session) Changed() <-chan struct{} { return s.changed }
 
 // Done is closed once the exit has been recorded.
 func (s *Session) Done() <-chan struct{} { return s.done }

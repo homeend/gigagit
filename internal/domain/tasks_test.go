@@ -238,12 +238,14 @@ func TestTasksHeadlessRealCommandInTheSubmittingWorktree(t *testing.T) {
 func TestTasksChangedSignals(t *testing.T) {
 	t.Parallel()
 	m, svc := newTestTasks(t)
+	ch, cancel := m.Subscribe()
+	defer cancel()
 	started := make(chan string, 1)
 	rel := make(chan struct{})
 	close(rel)
 	id := m.Submit(headlessSpec(svc, "k", blockOp{started: started, release: rel, key: "x", out: "r"}))
 	select {
-	case <-m.Changed():
+	case <-ch:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Submit did not signal Changed")
 	}
@@ -251,6 +253,26 @@ func TestTasksChangedSignals(t *testing.T) {
 	if l := m.List(); len(l) != 1 || l[0].ID != id {
 		t.Fatalf("List = %+v", l)
 	}
+}
+
+func TestTasksSubscribeWakesTwoSubscribers(t *testing.T) {
+	t.Parallel()
+	m, svc := newTestTasks(t)
+	a, cancelA := m.Subscribe()
+	defer cancelA()
+	b, cancelB := m.Subscribe()
+	defer cancelB()
+	rel := make(chan struct{})
+	close(rel)
+	id := m.Submit(headlessSpec(svc, "k", blockOp{started: make(chan string, 1), release: rel, key: "x", out: "r"}))
+	for _, ch := range []<-chan struct{}{a, b} {
+		select {
+		case <-ch:
+		case <-time.After(5 * time.Second):
+			t.Fatal("Submit must wake every subscriber")
+		}
+	}
+	waitInfo(t, m, id, "done", stateIs(TaskDone))
 }
 
 func TestTasksLiveAndLoad(t *testing.T) {

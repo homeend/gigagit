@@ -348,3 +348,34 @@ func TestSetGlobalUITheme(t *testing.T) {
 		t.Fatalf("second write must replace, not append:\n%s", raw)
 	}
 }
+
+func TestSetWebServeAndAddr(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.toml")
+	none := filepath.Join(t.TempDir(), "none.toml")
+	if err := SetWebServe(p, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetWebAddr(p, "127.0.0.1:7777"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(p, none)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Web.Serve || cfg.Web.Addr != "127.0.0.1:7777" {
+		t.Fatalf("written config = %+v", cfg.Web)
+	}
+	if err := SetWebAddr(p, ""); err != nil { // clearing = back to a random port
+		t.Fatal(err)
+	}
+	if err := SetWebServe(p, false); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(p, none)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Web.Addr != "" || cfg.Web.Serve {
+		t.Fatalf("after clearing = %+v", cfg.Web)
+	}
+}

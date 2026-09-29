@@ -103,15 +103,17 @@ func (s *Server) broadcastSessions() {
 	}
 }
 
-// watchSessions forwards the manager's coalesced change signal to the tabs
-// until stop closes. Started by New, stopped by Close. It is the ONLY web
-// receiver of Sessions().Changed(): a second one would steal its signals.
+// watchSessions forwards the manager's change signal to the tabs until stop
+// closes. Started by New, stopped by Close. Its own subscription: the TUI in
+// the same process has one too, and neither steals the other's wakeups.
 func (s *Server) watchSessions(stop <-chan struct{}) {
+	ch, cancel := domain.Sessions().Subscribe()
+	defer cancel()
 	for {
 		select {
 		case <-stop:
 			return
-		case <-domain.Sessions().Changed():
+		case <-ch:
 			s.broadcastSessions()
 		}
 	}

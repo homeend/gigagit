@@ -84,12 +84,14 @@ func TestChangedCoalesces(t *testing.T) {
 	t.Parallel()
 	needSh(t)
 	s := startSh(t, "i=0; while [ $i -lt 2000 ]; do echo line$i; i=$((i+1)); done; sleep 0.2")
+	ch, cancel := s.Subscribe()
+	defer cancel()
 	waitDone(t, s)
 	n := 0
 drain:
 	for {
 		select {
-		case <-s.Changed():
+		case <-ch:
 			n++
 		default:
 			break drain

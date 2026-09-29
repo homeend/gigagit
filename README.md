@@ -330,7 +330,7 @@ gg session navigate gg://gigagit/a.go:42
 gg link --preview login a.go:12         # a link to a place in a merge preview
 gg open  gg://gigagit/a.go@main...feat/login:12   # show it in the user's gg
 gg open  gg://gigagit                             # just open gg in that checkout
-gg open --web gg://gigagit/a.go@main...feat/login:12   # …in the browser: steer a live gg web page or start one (foreground)
+gg open --web gg://gigagit/a.go@main...feat/login:12   # …in the browser: steer a live page, ask a live TUI to serve one, or start gg web (foreground)
 ```
 
 A **change-set** link (`@<a>..<b>`) names a bounded set of files, so the verbs
@@ -1349,7 +1349,11 @@ sessions_key = "ctrl+\\"
 
 ### Agent consoles in `gg web`
 
-The web page shows the agent sessions of its `gg web` process. `ctrl+\` is
+The web page shows the agent sessions of the process that serves it — so
+serve it FROM THE TUI: **Open in browser** in the command palette
+(`ctrl+p`) starts the page inside the running gg and opens the browser; the
+sessions you started in the terminal are the ones the page lists. (A
+standalone `gg web` is its own process and shows only its own.) `ctrl+\` is
 a tabbed switcher — **Agents** (every repo, grouped repo → worktree), **AI
 tasks** (read-only for now) and **Open files** — and `enter` on a session
 opens it as a live console over the panes, painted from the server's screen
@@ -1363,6 +1367,22 @@ size; the others scroll. Every worktree row in the sidebar lists its
 sessions beneath it (`└ ● claude running 12m`, `○` when exited); a click
 opens one, and an exit raises a toast. Starting, killing and removing
 sessions from the web is not built yet.
+
+The hosted page follows the terminal: switch repo or worktree in the TUI
+and the page re-roots with it, so its own repo switching is hidden (the
+terminal owns the current repository); quitting gg ends the page and open
+tabs show a server-down veil. Serve at startup with `[web] serve = true`
+or `gg --web`, pin the address with `[web] addr` or `gg --web-addr
+127.0.0.1:7777` (default: a random loopback port each run — a fixed one
+keeps the browser's per-page preferences). Settings (`,`) → **Web page**
+shows the URL and edits both. `gg open --web <link>` with a TUI live in
+that checkout asks it to serve instead of starting a second server.
+
+```toml
+[web]
+serve = false            # serve the page when the TUI starts (browser not opened)
+addr  = "127.0.0.1:0"    # loopback only; :0 = a random port each run
+```
 
 ### Environment
 

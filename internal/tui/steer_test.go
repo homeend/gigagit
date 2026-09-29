@@ -444,3 +444,54 @@ func TestSteerPresenceJSONShape(t *testing.T) {
 		}
 	}
 }
+
+// `serve` (gg open --web with a live TUI): start the hosted page and answer
+// with its URL; already serving answers at once.
+func TestSteerServeStartsTheHostAndRepliesWithTheURL(t *testing.T) {
+	f := installFakeHost(t)
+	m, dir := steerModel(t)
+	nm, cmd := m.applySteer(steer.Command{ID: "c-s", Cmd: "serve", Wait: true})
+	if cmd == nil {
+		t.Fatal("serve starts the host")
+	}
+	u, reply := nm.Update(cmd()) // webStartedMsg → the reply cmd
+	nm = u.(Model)
+	runSteerCmd(t, reply)
+	rep, ok := steer.AwaitReply(dir, "c-s", time.Second)
+	if !ok || !rep.OK || rep.Detail != "http://127.0.0.1:4242" || f.starts != 1 {
+		t.Fatalf("reply = %+v ok=%v starts=%d", rep, ok, f.starts)
+	}
+	nm, cmd = nm.applySteer(steer.Command{ID: "c-s2", Cmd: "serve", Wait: true})
+	runSteerCmd(t, cmd)
+	rep, ok = steer.AwaitReply(dir, "c-s2", time.Second)
+	if !ok || !rep.OK || rep.Detail != "http://127.0.0.1:4242" || f.starts != 1 || f.opens != 0 {
+		t.Fatalf("second reply = %+v ok=%v starts=%d opens=%d", rep, ok, f.starts, f.opens)
+	}
+}
+
+// A busy TUI (an operation running) still starts serving: nothing moves on
+// screen.
+func TestSteerServeIgnoresTheBusyRefusal(t *testing.T) {
+	installFakeHost(t)
+	m, dir := steerModel(t)
+	m.loading = true
+	nm, cmd := m.applySteer(steer.Command{ID: "c-b", Cmd: "serve", Wait: true})
+	if cmd == nil {
+		t.Fatal("serve starts the host")
+	}
+	_, reply := nm.Update(cmd())
+	runSteerCmd(t, reply)
+	if rep, ok := steer.AwaitReply(dir, "c-b", time.Second); !ok || !rep.OK {
+		t.Fatalf("reply = %+v ok=%v", rep, ok)
+	}
+}
+
+func TestSteerServeWithoutASeamFails(t *testing.T) {
+	m, dir := steerModel(t)
+	_, cmd := m.applySteer(steer.Command{ID: "c-n", Cmd: "serve", Wait: true})
+	runSteerCmd(t, cmd)
+	rep, ok := steer.AwaitReply(dir, "c-n", time.Second)
+	if !ok || rep.OK || !strings.Contains(rep.Error, "cannot serve") {
+		t.Fatalf("reply = %+v ok=%v", rep, ok)
+	}
+}

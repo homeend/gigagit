@@ -83,7 +83,7 @@ type TaskManager struct {
 	mu       sync.Mutex
 	max      int
 	tasks    []*task // submit order; ended ones trimmed to taskhist.Max
-	changed  chan struct{}
+	bc       agentsession.Broadcaster
 	wg       sync.WaitGroup
 	sessions *agentsession.Manager // nil = Sessions()
 
@@ -95,7 +95,7 @@ type TaskManager struct {
 
 // NewTaskManager returns a manager recording into hist, cap 3.
 func NewTaskManager(hist taskhist.Store) *TaskManager {
-	return &TaskManager{max: 3, hist: hist, changed: make(chan struct{}, 1)}
+	return &TaskManager{max: 3, hist: hist}
 }
 
 // SetMaxParallel sets the cap, clamped to 1..config.MaxParallelCap, and
@@ -111,15 +111,11 @@ func (m *TaskManager) SetMaxParallel(n int) {
 
 func (m *TaskManager) Max() int { m.mu.Lock(); defer m.mu.Unlock(); return m.max }
 
-// Changed is a coalesced "something changed" signal (the Sessions pattern).
-func (m *TaskManager) Changed() <-chan struct{} { return m.changed }
+// Subscribe wakes the returned channel on every task change; bursts coalesce
+// per subscriber. cancel drops the subscription.
+func (m *TaskManager) Subscribe() (<-chan struct{}, func()) { return m.bc.Subscribe() }
 
-func (m *TaskManager) signal() {
-	select {
-	case m.changed <- struct{}{}:
-	default:
-	}
-}
+func (m *TaskManager) signal() { m.bc.Signal() }
 
 func (m *TaskManager) sessionMgr() *agentsession.Manager {
 	if m.sessions != nil {

@@ -478,14 +478,23 @@ func (s *Server) removeSteerPresence() {
 	steer.Remove(dir, steer.WebPresence)
 }
 
-// rehomeSteerPresence moves the presence to the new repo on POST /api/reroot.
-func (s *Server) rehomeSteerPresence(ctx context.Context, svc *domain.Service) {
+// rehomeSteerPresence moves the presence to the new repo (a re-root). A
+// HOSTED page never takes a live foreign web.json (another page serves that
+// worktree): it keeps serving with no presence there and the error names
+// the other URL; standalone keeps the old "a new run replaces the file" rule.
+func (s *Server) rehomeSteerPresence(ctx context.Context, svc *domain.Service) error {
 	s.removeSteerPresence()
 	dir, wt := resolveSteerDir(ctx, svc)
+	if s.hosted && dir != "" {
+		if p, live := steer.Live(dir, steer.WebPresence); live && p.PID != os.Getpid() {
+			return fmt.Errorf("%w at %s", ErrPageLive, p.URL)
+		}
+	}
 	s.steerMu.Lock()
 	s.steerDir, s.steerWorktree = dir, wt
 	s.steerMu.Unlock()
 	s.claimSteerPresence()
+	return nil
 }
 
 // steerInbox reads the current inbox under the lock — "" means steering is off.

@@ -106,6 +106,15 @@ type Server struct {
 	// prBudget overrides prLoadBudget (tests); zero = the default.
 	prBudget time.Duration
 
+	// hosted marks a page served by a TUI from its own process: the terminal
+	// owns the current repository, so the page's own re-root is refused and
+	// the SPA hides its switch affordances (/api/repo reports it).
+	hosted bool
+	// opener builds a Service for a path this server opens ITSELF
+	// (handleReroot's target). A TUI host passes domain.OpenTUI so an ssh
+	// prompt can never reach its raw-mode terminal; nil = domain.Open.
+	opener func(string) *domain.Service
+
 	// closing is closed once by announceShutdown: every /api/events stream
 	// then sends a last "shutdown" message and ends (live.go).
 	closing     chan struct{}
@@ -122,6 +131,14 @@ func New(svc *domain.Service) *Server {
 // service returns the current domain service. Read it once at the top of a
 // handler and use the local for the whole request.
 func (s *Server) service() *domain.Service { return s.svc.Load() }
+
+// open builds a Service for a path this server chose itself (see opener).
+func (s *Server) open(path string) *domain.Service {
+	if s.opener != nil {
+		return s.opener(path)
+	}
+	return domain.Open(path)
+}
 
 // Handler returns the full route mux.
 func (s *Server) Handler() http.Handler {
@@ -215,7 +232,7 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
-	writeRepoInfo(w, r, s.service())
+	s.writeRepoInfo(w, r, s.service())
 }
 
 // readCtx detaches a boot-critical read from its request's lifetime.
@@ -235,7 +252,7 @@ func readCtx(r *http.Request) context.Context {
 
 // writeRepoInfo writes the repo-identity payload for svc — shared by GET
 // /api/repo and the POST /api/reroot success response.
-func writeRepoInfo(w http.ResponseWriter, r *http.Request, svc *domain.Service) {
+func (s *Server) writeRepoInfo(w http.ResponseWriter, r *http.Request, svc *domain.Service) {
 	top, err := svc.TopLevel(readCtx(r))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -257,6 +274,7 @@ func writeRepoInfo(w http.ResponseWriter, r *http.Request, svc *domain.Service) 
 		"worktree":  top,
 		"branch":    branch,
 		"link_repo": linkRepo,
+		"hosted":    s.hosted,
 	})
 }
 
