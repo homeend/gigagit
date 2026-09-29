@@ -15,11 +15,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   tree unstaged / staged / untracked, commits newest first with their AI
   reviews, shelf entries → directory → file → note) with STATUS / WHO /
   WHERE / WHEN / NOTE columns. Type to filter, `←`/`→` fold, `enter` or a
-  click on a note opens its diff and lands on it; `esc` on that diff returns
-  to the list, filter and cursor kept. `ctrl+d` deletes the thread or review
-  under the cursor after asking. Served by `GET /api/notes/overview` (one
-  `domain.NotesOverview` read). A review row does not open yet — the web's
-  review view is still to come.
+  click on a note opens its diff and lands on it, on a review the review
+  view; `esc` out of either returns to the list, filter and cursor kept.
+  `ctrl+d` deletes the thread or review under the cursor after asking. Served
+  by `GET /api/notes/overview` (one `domain.NotesOverview` read).
+
+## Reviews in the browser
+
+### Added
+
+- **`gg web`: stored AI reviews.** A commit's reviews head its file list
+  under **Reviews** (`└ 2026-09-29 14:05 Claude`), and a branch's reviews of
+  its current tip sit under its row (`└ Review: <date> <agent>`). Clicking
+  one opens the review view: **≡ Overview** in the diff pane (the rendered
+  summary, meta, the notes it could not place on a line, copy — a centred
+  column; with the stacked view on, it tops the stack above the files), then the
+  reviewed files with ◆N and each file's one-line summary; the diffs show
+  only the review's notes, read-only (`c` refuses). A range review lists its
+  range's files. esc returns to the commit it was opened from with the
+  review row selected. Right-click a review row or the Overview →
+  **Delete review** (confirm; esc cancels).
 
 ## Recycle a worktree from the browser
 

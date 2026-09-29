@@ -57,6 +57,9 @@ func ToWireNote(r ResolvedNote) WireNote {
 		w.Resolved = model.NoteHasTag(r.Note, model.NoteTagResolved)
 		w.FileLevel = r.Range == [2]int{}
 	}
+	if model.IsReviewNoteID(r.Note.ID) {
+		w.ReadOnly = true // built from a review document at read time, never stored
+	}
 	if !r.Note.Created.IsZero() {
 		w.Created = r.Note.Created.UTC().Format(time.RFC3339)
 	}

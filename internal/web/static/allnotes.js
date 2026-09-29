@@ -2,9 +2,9 @@
 // every note this checkout can see, as the TUI's tree — group (working tree /
 // commits / other) → state, commit or shelf entry → directory → file → note —
 // each note row laid out in fixed columns (status, who, where, when, note).
-// Enter or a click on a note opens its diff and lands on it; esc on that diff
-// comes back here. ctrl+d deletes the thread or review under the cursor after
-// asking. One read of GET /api/notes/overview; deletes reuse
+// Enter or a click on a note opens its diff and lands on it, on a review the
+// review view; esc on that diff (or out of the review) comes back here.
+// ctrl+d deletes the thread or review under the cursor after asking. One read of GET /api/notes/overview; deletes reuse
 // POST /api/notes/remove (the same domain call as the TUI's).
 import { $, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
@@ -12,6 +12,7 @@ import { registerHelp } from "./menus.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { openCommitByHash } from "./commits.js";
 import { landNote, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
+import { openReview } from "./reviews.js";
 
 // This module builds its own DOM: index.html's `hidden` class has NO global
 // rule — the overlay ships its own `#allnotes.hidden` selector. z-index 21:
@@ -355,9 +356,10 @@ function activate(i) {
       openTarget(r.target, r.note.id);
       return;
     case "review":
-      // The web has no review view yet (feat/web-reviews): say so here.
-      an.notice = "Reviews open in the terminal (gg's review view).";
-      render();
+      // The review lives in the note: it opens even when the commit is gone.
+      // esc from the review view comes back here.
+      hide();
+      openReview(r.review.id, { kind: "popup", run: reshow });
       return;
   }
   render();
@@ -401,13 +403,17 @@ async function openTarget(t, id) {
   } else {
     return notice("Shelf notes open from gg note list.");
   }
-  setDiffBack(() => {
-    if (an) {
-      show();
-      load(); // the notes may have changed while the diff was open
-    }
-  });
+  setDiffBack(reshow);
   if (id && !(await landNote(id))) opLine("the note is not in this diff now", true);
+}
+
+// reshow brings the popup back from a diff or review it opened, re-read: the
+// notes may have changed meanwhile.
+function reshow() {
+  if (an) {
+    show();
+    load();
+  }
 }
 
 // deleteSelected is ctrl+d: the review or thread under the cursor, after a
@@ -509,7 +515,7 @@ registerHelp({
     "☰ / command palette → <b>view all notes…</b>: every note this checkout can see, as a tree — " +
     "working tree, commits (with their AI reviews), other (shelf entries) → directory → file → note, " +
     "each note with its status, author, place and age. Type to filter, ←/→ fold, enter or a click opens " +
-    "a note's diff on it (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking",
+    "a note's diff on it, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking",
 });
 
 export { openAllNotes };

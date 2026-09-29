@@ -1305,9 +1305,9 @@ registers `setDiffBack` (files.js): the diff's esc (`drillOut`) calls the
 popup back only while `noteCollapseKey(state.diffCtx)` still names the diff
 it opened — stepping to another file drops the return. `landNote(id)` polls
 ~4 s for the `tr.note[data-note]` row (notes paint after the diff; a stack
-loads lazily) and lands like `}`/`{` (`landNoteRow`). Review rows list and
-delete but do not open until the web review view (`feat/web-reviews`)
-supplies `openReview` — wire it there, with a back kind that reopens the popup.
+loads lazily) and lands like `}`/`{` (`landNoteRow`). A review row opens
+`openReview(id, {kind: "popup", run})` (reviews.js): `goBack` puts the commit
+list under it and runs `run`, which reopens and re-reads the popup.
 **Web open files (5b, 2026-09-26):** the list lives on the `Server`
 (`ofs`, `openfiles.go`, pure core + mutex), keyed by `svc.Root()` — NOT on the
 live hub, which `startLive` replaces on every re-root and settings write. A
@@ -3971,6 +3971,23 @@ Spec: `docs/superpowers/specs/2026-09-28-review-view-design.md`; plan
 - **Test isolation:** domain, cli, mcp and web `TestMain`s pin
   `XDG_CONFIG_HOME` — preflight reads the global config, and a
   `gg migrate --yes` test once rewrote a developer's own.
+- **Web (2026-09-29, `internal/web/reviews.go`, `static/reviews.js`):**
+  `/api/notes/counts` carries `reviews` (heads → a branch's `li.brev`
+  sub-rows, matched on `branch` + tip hash prefix); `/api/commit/{sha}`
+  carries the commit's `reviews` (read on an explicit open only);
+  `/api/review/{id}` is the whole view (files, counts, summaries, overview
+  markdown tree, meta, other notes, raw text; 404 when gone);
+  `/api/review/notes` rebuilds the SAME Differ request `/api/diff` makes
+  for the review's revs and returns `ReviewNotesFor` (wire `read_only`: set
+  by `ToWireNote` for every `review:` id). The page does NOT add a files
+  mode: `state.review` overlays commit mode (tip) or compare mode
+  (base..tip, `previewBar` for the bar) and is live only while
+  `state.files` / `state.compare` is the object it opened
+  (`reviewActiveIn`), so every other open lapses it untouched. Its note
+  lane (`ctx.review`) is exclusive and `c` refuses. Review rows carry
+  `data-review` and never `data-i`/`data-n`. No n/p (web `p` = pull).
+  Delete = `POST /api/notes/remove` behind `showLocalConfirm(…,
+  ["cancel","delete"])`.
 
 ## Review notes (AI reviews stored as notes, 2026-09-27)
 

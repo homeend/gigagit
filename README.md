@@ -253,8 +253,8 @@ directory and file — with a status column (active, stale, orphaned, or missing
 when the commit is gone); type to filter, `enter` on a note opens its diff on
 that line and `esc` comes back to the list. `gg web` has the same list under
 **view all notes…** in its command palette (`ctrl+k`) — same tree, columns,
-filter, `←`/`→` folds, a click or `enter` on a note opens its diff on it (`esc`
-returns), `ctrl+d` deletes the thread or review under the cursor after asking. `gg review --notes` does not replace the text report — it still
+filter, `←`/`→` folds, a click or `enter` on a note opens its diff on it, on a
+review the review view (`esc` returns), `ctrl+d` deletes the thread or review under the cursor after asking. `gg review --notes` does not replace the text report — it still
 prints and saves that — but ALSO asks the tool for anchored notes and imports
 them. `--preview <id|label|<target>...<source>>` targets a saved merge
 preview instead of a single commit (on `gg diff --hunks`, `gg note
@@ -1188,7 +1188,11 @@ files the commit does not change; stacked, the overview is the first element.
 `o` in the overview lists those other notes to open one. Its diffs show only
 the review's notes, read-only — `gg review --notes` keeps them as your own.
 "Delete review" in the `.` menu (in the review view or on a Branches review
-row) or `ctrl+d` in View all notes deletes a review, after asking. A reply that is not the document is kept as text and opens
+row) or `ctrl+d` in View all notes deletes a review, after asking. The
+browser UI (`gg web`) shows the same reviews: a commit's under **Reviews**
+above its files, a branch's under its row; clicking one opens the review
+view (Overview in the diff pane, read-only review notes in the diffs), and a
+right-click offers **Delete review**. A reply that is not the document is kept as text and opens
 rendered as markdown. Catalog defaults ship for Claude Code, Codex, Junie,
 Kimi Code and Antigravity; their documents come back through
 `$GG_MESSAGE_FILE`, fed the diff via `$GG_REVIEW_DIFF`. Review commands an
