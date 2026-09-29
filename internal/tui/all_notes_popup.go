@@ -56,6 +56,7 @@ type anTarget struct {
 	oldPath string
 	change  string // the commit's own change letter; "" = unchanged there
 	missing bool   // the commit or shelf entry is gone
+	shelf   string // a shelf entry's own note: the entry's display name
 }
 
 type anRow struct {
@@ -216,6 +217,18 @@ func buildAllNotesRows(ov domain.NotesOverview, worktree string) []anRow {
 				name = s.ID
 			}
 			sub("s:"+s.ID, i18n.T("shelf")+"  "+sanitizeLine(name))
+			// The entry's own notes (a recycle's "deleted …", "renamed …")
+			// head its files, oldest first; enter reads one.
+			for i := range s.Entry {
+				r := &s.Entry[i]
+				status := string(r.Status)
+				if s.Missing {
+					status = "missing"
+				}
+				rows = append(rows, anRow{kind: anNote, depth: 2, note: r, status: status,
+					target: anTarget{missing: s.Missing, shelf: sanitizeLine(name)},
+					filter: strings.ToLower(r.Note.Summary + "\x00" + r.Note.Author + "\x00" + name)})
+			}
 			files(2, s.Files, anTarget{missing: s.Missing})
 		}
 	}
@@ -353,6 +366,12 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case anFile:
 			return m.openAllNotesTarget(p, r.target, "")
 		case anNote:
+			if r.note.Note.IsShelfLevel() {
+				// The note is its own text: the read-only window reads it
+				// even when the entry is gone; esc comes back here.
+				return m.openShelfNotes(shelfNotesMsg{id: r.note.Note.Address.ShelfID, label: r.target.shelf,
+					notes: []domain.ResolvedNote{*r.note}}), nil
+			}
 			return m.openAllNotesTarget(p, r.target, r.note.Note.ID)
 		case anReview:
 			// The review lives in the note: it opens (as text) even when the
@@ -466,6 +485,9 @@ func anNoteParts(r anRow, now time.Time) (head, summary, tail string) {
 	if isFileLevelNote(*r.note) {
 		where = i18n.T("file")
 	}
+	if n.IsShelfLevel() {
+		where = i18n.T("shelf")
+	}
 	when := ""
 	if !n.Created.IsZero() {
 		when = coarseAgo(now.Sub(n.Created))
@@ -524,6 +546,11 @@ func anNoteColumns(r anRow, w int, now time.Time) string {
 	budget := w - lipgloss.Width(head) - lipgloss.Width(tail)
 	if budget < 1 {
 		return truncate(head+tail, w)
+	}
+	if r.note.Note.IsShelfLevel() {
+		// A recycle's "Recycled from <dir> (<branch>)": the path loses its
+		// middle, the branch stays.
+		return head + elideNoteSummary(summary, budget) + tail
 	}
 	return head + truncate(summary, budget) + tail
 }

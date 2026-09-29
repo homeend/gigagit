@@ -553,3 +553,106 @@ func TestAllNotesOpensReviewOfMissingCommit(t *testing.T) {
 		t.Fatalf("enter on a review must open it, top = %T (notice %q)", m.topLayer(), p.notice)
 	}
 }
+
+// shelfEntryNotesModel opens the popup over a shelf entry that carries two
+// entry notes (a recycle's) and one file note.
+func shelfEntryNotesModel(t *testing.T) (Model, *allNotesPopup) {
+	t.Helper()
+	at := time.Now().Add(-2 * time.Hour)
+	entry := func(id, summary, text string) domain.ResolvedNote {
+		return domain.ResolvedNote{Note: model.Note{ID: id, Summary: summary, Rationale: text, Author: "gg",
+			Source: model.NoteSourceAgent, Created: at, Side: model.NoteSideNew,
+			Address: domain.ShelfEntryNote("sh1")}, Status: model.NoteActive, Range: [2]int{1, 1}}
+	}
+	file := rootNote("f1", 4, "check this", "", model.NoteSourceUser, model.NoteActive)
+	ov := domain.NotesOverview{Shelves: []domain.NoteShelfNotes{{
+		ID: "sh1", Label: "WIP on foo",
+		Entry: []domain.ResolvedNote{entry("e1", "deleted 2 files", "a.go\nb.go"), entry("e2", "renamed 1 file", "c.go → d.go")},
+		Files: []domain.NoteFileNotes{{Addr: model.FileAddress{State: model.StateShelf, ShelfID: "sh1", Path: "src/x.go"},
+			Notes: []domain.ResolvedNote{file}}},
+	}}}
+	m := footerModel()
+	m, _ = m.openAllNotes()
+	u, _ := m.Update(allNotesMsg{ov: ov, gen: m.loadGen})
+	m = u.(Model)
+	return m, layerOf[*allNotesPopup](m)
+}
+
+func TestAllNotesListsAShelfEntrysOwnNotes(t *testing.T) {
+	t.Parallel()
+	m, p := shelfEntryNotesModel(t)
+	if got, want := p.count(), 3; got != want {
+		t.Fatalf("the list must show every counted thread: %d rows, want %d", got, want)
+	}
+	screen := strings.Join(allNotesScreen(m), "\n")
+	iShelf := strings.Index(screen, "WIP on foo")
+	iE1, iE2 := strings.Index(screen, "deleted 2 files"), strings.Index(screen, "renamed 1 file")
+	iDir := strings.Index(screen, "src/")
+	if iShelf < 0 || iE1 < 0 || iE2 < 0 || iDir < 0 {
+		t.Fatalf("shelf row, both entry notes and the file's directory must show:\n%s", screen)
+	}
+	if !(iShelf < iE1 && iE1 < iE2 && iE2 < iDir) {
+		t.Fatalf("entry notes must sit right under the shelf row, oldest first, before its files:\n%s", screen)
+	}
+	for _, l := range allNotesScreen(m) {
+		if strings.Contains(l, "deleted 2 files") && !strings.Contains(l, "shelf") {
+			t.Fatalf("an entry note's WHERE is the shelf, not a line: %q", l)
+		}
+	}
+}
+
+func TestAllNotesFilterFindsAShelfEntryNote(t *testing.T) {
+	t.Parallel()
+	_, p := shelfEntryNotesModel(t)
+	p.setQuery("renamed")
+	var ids []string
+	for _, r := range p.visible() {
+		if r.note != nil {
+			ids = append(ids, r.note.Note.ID)
+		}
+	}
+	if strings.Join(ids, ",") != "e2" {
+		t.Fatalf("the query must keep only the matching entry note, got %v", ids)
+	}
+}
+
+func TestAllNotesEnterReadsAShelfEntryNote(t *testing.T) {
+	t.Parallel()
+	m, p := shelfEntryNotesModel(t)
+	selectNote(t, p, "e1")
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+	if _, ok := m.topLayer().(*contentPopup); !ok {
+		t.Fatalf("enter on an entry note must open the note window, top = %T", m.topLayer())
+	}
+	screen := strings.Join(allNotesScreen(m), "\n")
+	if !strings.Contains(screen, "deleted 2 files") || !strings.Contains(screen, "b.go") {
+		t.Fatalf("the window must show that note's summary and text:\n%s", screen)
+	}
+	if strings.Contains(screen, "renamed 1 file") {
+		t.Fatalf("the window must show only the chosen note:\n%s", screen)
+	}
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = u.(Model)
+	if _, ok := m.topLayer().(*allNotesPopup); !ok {
+		t.Fatalf("esc must return to View all notes, top = %T", m.topLayer())
+	}
+}
+
+// A recycle's summary is "Recycled from <dir> (<branch>)": a cut row loses
+// the path's middle, never the branch at its end.
+func TestAllNotesCutsAShelfEntryNoteInTheMiddle(t *testing.T) {
+	t.Parallel()
+	m, p := shelfEntryNotesModel(t)
+	long := "Recycled from /home/someone/work/" + strings.Repeat("deep/", 20) + "wt (feat/x)"
+	p.rows[2].note.Note.Summary = long // group, shelf, then its first entry note
+	for _, l := range allNotesScreen(m) {
+		if strings.Contains(l, "Recycled from") {
+			if !strings.Contains(l, "wt (feat/x)") || strings.Contains(l, long) {
+				t.Fatalf("the row must keep the branch and cut the path's middle: %q", l)
+			}
+			return
+		}
+	}
+	t.Fatal("no row for the entry note")
+}

@@ -2,17 +2,19 @@
 // every note this checkout can see, as the TUI's tree — group (working tree /
 // commits / other) → state, commit or shelf entry → directory → file → note —
 // each note row laid out in fixed columns (status, who, where, when, note).
-// Enter or a click on a note opens its diff and lands on it, on a review the
+// Enter or a click on a note opens its diff and lands on it, on a shelf
+// entry's own note (a recycle's) that note's text, on a review the
 // review view; esc on that diff (or out of the review) comes back here.
 // ctrl+d deletes the thread or review under the cursor after asking. One read of GET /api/notes/overview; deletes reuse
 // POST /api/notes/remove (the same domain call as the TUI's).
-import { $, esc, getJSON, postJSON, state } from "./core.js";
+import { $, charWidth, elideNoteSummary, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { openCommitByHash } from "./commits.js";
 import { landNote, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
 import { openReview } from "./reviews.js";
+import { openShelfNotes } from "./shelfnotes.js";
 
 // This module builds its own DOM: index.html's `hidden` class has NO global
 // rule — the overlay ships its own `#allnotes.hidden` selector. z-index 21:
@@ -131,7 +133,15 @@ function anBuildRows(ov) {
   if (shelves.length) {
     group("other", "Other");
     for (const s of shelves) {
-      sub("s:" + s.id, "shelf  " + (s.label || s.id));
+      const name = s.label || s.id;
+      sub("s:" + s.id, "shelf  " + name);
+      // The entry's own notes (a recycle's "deleted …", "renamed …") head
+      // its files, oldest first; enter reads one.
+      for (const n of s.entry || []) {
+        rows.push({ kind: "note", depth: 2, note: n, status: s.missing ? "missing" : n.status,
+          target: { shelf: s.id, label: name, missing: s.missing },
+          filter: (n.summary + "\0" + (n.author || "") + "\0" + name).toLowerCase() });
+      }
       files(2, s.files || [], { missing: s.missing });
     }
   }
@@ -186,6 +196,7 @@ function noteCells(r, now) {
   let where = (n.side || "new") + ":" + range[0];
   if (range[1] !== range[0]) where += "-" + range[1];
   if (n.file_level) where = "file";
+  if (r.target && r.target.shelf) where = "shelf";
   const when = n.created ? anAgo(now - Date.parse(n.created)) : "";
   const replies = (n.replies || []).length;
   return { status: STATUS_WORD[r.status] || r.status, who, where, when, summary: n.summary, tail: replies ? "  ↩" + replies : "" };
@@ -234,11 +245,19 @@ function render() {
   if (!an.rows.length) return void (list.innerHTML = `<li class="empty">No notes in this repository.</li>`);
   if (!vis.length) return void (list.innerHTML = `<li class="empty">(no matching notes)</li>`);
   const now = Date.now();
+  // The NOTE column's width in characters: the row less its padding (10px
+  // each side + the 10ch indent) and the 37ch of fixed columns.
+  const sumCols = Math.floor((list.clientWidth - 20) / charWidth()) - 10 - 37 - 1;
   list.innerHTML = vis
     .map((r, i) => {
       const sel = i === an.sel ? " sel" : "";
       if (r.kind === "note" || r.kind === "review") {
         const c = r.kind === "note" ? noteCells(r, now) : reviewCells(r, now);
+        if (r.kind === "note" && r.target.shelf && sumCols - c.tail.length > 4) {
+          // A recycle's "Recycled from <dir> (<branch>)": the path loses its
+          // middle, the branch stays (the TUI's elideNoteSummary).
+          c.summary = elideNoteSummary(c.summary, sumCols - c.tail.length);
+        }
         const whoCls = r.kind === "review" || r.note.source === "agent" ? "agent" : "user";
         const { html, title } = columnsHTML(c, whoCls, r.kind === "note" && r.status !== "active");
         return `<li class="an-${r.kind}${sel}" data-i="${i}" title="${esc(title)}">${html}</li>`;
@@ -353,6 +372,12 @@ function activate(i) {
       openTarget(r.target, "");
       return;
     case "note":
+      if (r.target.shelf) {
+        // The note is its own text: the read-only window reads it even when
+        // the entry is gone; esc comes back here.
+        openShelfNotes({ id: r.target.shelf }, r.target.label, r.note.id);
+        return;
+      }
       openTarget(r.target, r.note.id);
       return;
     case "review":
@@ -513,9 +538,9 @@ registerHelp({
   key: "all notes",
   html:
     "☰ / command palette → <b>view all notes…</b>: every note this checkout can see, as a tree — " +
-    "working tree, commits (with their AI reviews), other (shelf entries) → directory → file → note, " +
+    "working tree, commits (with their AI reviews), other (shelf entries, their own notes first) → directory → file → note, " +
     "each note with its status, author, place and age. Type to filter, ←/→ fold, enter or a click opens " +
-    "a note's diff on it, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking",
+    "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking",
 });
 
 export { openAllNotes };

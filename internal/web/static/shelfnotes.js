@@ -28,6 +28,9 @@ function injectStyle() {
 #gg-shelf-notes pre { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 #gg-shelf-notes .row { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 #gg-shelf-notes .hint { opacity: .7; font-size: 11px; margin-right: auto; }
+/* the dialog buttons' look (style.css #modal-options button) */
+#gg-shelf-notes button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
+#gg-shelf-notes button:hover { border-color: var(--accent); }
 `;
   const el = document.createElement("style");
   el.textContent = css;

@@ -28,7 +28,9 @@ const ov = {
     { hash: "0000000aaaaaa", subject: "", time: 0, missing: true,
       reviews: [], files: [{ path: "q.go", state: "commit", notes: [note("n4", "gone", "you")] }] },
   ],
-  shelves: [{ id: "s1", label: "", missing: false, files: [{ path: "s.go", state: "shelf", notes: [note("n5", "shelved", "you")] }] }],
+  shelves: [{ id: "s1", label: "", missing: false, entry: [note("e1", "deleted 2 files", "gg"), note("e2", "renamed 1 file", "gg")],
+               files: [{ path: "s.go", state: "shelf", notes: [note("n5", "shelved", "you")] }] },
+            { id: "s2", label: "gone", missing: true, entry: [note("e3", "old recycle", "gg")], files: [] }],
 };
 const rows = anBuildRows(ov);
 const shape = rows.map((r) => r.kind + ":" + r.depth + ":" + (r.kind === "note" ? r.note.id + "/" + r.status : r.kind === "review" ? r.review.id : r.text));
@@ -36,7 +38,8 @@ const spans = rows.map((r) => r.span);
 const q = anVisible(rows, "why", {}).map((r) => r.kind === "note" ? r.note.id : r.text);
 const folded = anVisible(rows, "", { commits: true }).map((r) => r.kind);
 const reviewQ = anVisible(rows, "claude", {}).map((r) => r.kind);
-console.log(JSON.stringify({ shape, spans, q, folded, reviewQ,
+const entryQ = anVisible(rows, "renamed", {}).map((r) => r.kind === "note" ? r.note.id + "@" + r.target.shelf : r.text);
+console.log(JSON.stringify({ shape, spans, q, folded, reviewQ, entryQ,
   ago: [anAgo(5000), anAgo(120000), anAgo(7200000), anAgo(3 * 86400000)] }));
 `
 
@@ -65,6 +68,7 @@ func TestAllNotesRowsMatchTheTUITree(t *testing.T) {
 		Q       []string `json:"q"`
 		Folded  []string `json:"folded"`
 		ReviewQ []string `json:"reviewQ"`
+		EntryQ  []string `json:"entryQ"`
 		Ago     []string `json:"ago"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &got); err != nil {
@@ -90,8 +94,12 @@ func TestAllNotesRowsMatchTheTUITree(t *testing.T) {
 		"note:4:n4/missing",
 		"group:0:Other",
 		"sub:1:shelf  s1",
+		"note:2:e1/active",
+		"note:2:e2/active",
 		"file:3:s.go",
 		"note:4:n5/active",
+		"sub:1:shelf  gone",
+		"note:2:e3/missing",
 	}
 	if strings.Join(got.Shape, "\n") != strings.Join(wantShape, "\n") {
 		t.Fatalf("rows:\n%s\nwant:\n%s", strings.Join(got.Shape, "\n"), strings.Join(wantShape, "\n"))
@@ -104,11 +112,16 @@ func TestAllNotesRowsMatchTheTUITree(t *testing.T) {
 	if strings.Join(got.Q, ",") != "Commits,abcdef1  c2,a/,y.go,n2" {
 		t.Fatalf("query rows = %v", got.Q)
 	}
-	if strings.Join(got.Folded, ",") != "group,sub,dir,file,note,group,group,sub,file,note" {
+	if strings.Join(got.Folded, ",") != "group,sub,dir,file,note,group,group,sub,note,note,file,note,sub,note" {
 		t.Fatalf("folded rows = %v", got.Folded)
 	}
 	if strings.Join(got.ReviewQ, ",") != "group,sub,dir,review" {
 		t.Fatalf("review query rows = %v", got.ReviewQ)
+	}
+	// A shelf entry's own notes head its files and are found by a query; the
+	// row knows its entry (enter reads the note there).
+	if strings.Join(got.EntryQ, ",") != "Other,shelf  s1,e2@s1" {
+		t.Fatalf("entry query rows = %v", got.EntryQ)
 	}
 	if strings.Join(got.Ago, ",") != "5s,2m,2h,3d" {
 		t.Fatalf("ago = %v", got.Ago)
