@@ -78,6 +78,7 @@ type Model struct {
 	reflog                 []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree        string
 	recycleBranch          string // branch captured when the Recycle-a-worktree picker opened
+	recycleRemote          string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
 
 	notices                []notice               // session notice list (see notify.go)
 	driftNotices           []driftNoticeSource    // post-op drift/paused-resume findings; rebuildNotices re-renders these too
@@ -404,12 +405,15 @@ type Model struct {
 // CheckoutDivergedError at opFinishedMsg can offer "check out as different
 // name…". base seeds the -2/-3 suggestion (the name whose ff just failed).
 // Captured-and-cleared unconditionally at opFinishedMsg and cleared by reRoot
-// (the pendingPushTags pattern). Stale-safe: only SmartCheckout produces the
-// typed error, and every checkout dispatch overwrites this field.
+// (the pendingPushTags pattern). Stale-safe: only SmartCheckout (alone or
+// inside a remote RecycleWorktree) produces the typed error, and every such
+// dispatch overwrites this field. recycleDir != "" = the checkout was the
+// first half of recycling that worktree: the rename re-dispatches the recycle.
 type pendingCheckout struct {
-	remoteRef string
-	base      string
-	intent    engine.CheckoutIntent
+	remoteRef  string
+	base       string
+	intent     engine.CheckoutIntent
+	recycleDir string
 }
 
 type panel int

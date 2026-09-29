@@ -16,9 +16,10 @@ import (
 // this popup IS the confirmation; esc cancels. Mirrors commitNamePopup.
 type checkoutAsPopup struct {
 	popupMax
-	remoteRef string // short remote ref, e.g. "origin/foo"
-	intent    engine.CheckoutIntent
-	name      textfield
+	remoteRef  string // short remote ref, e.g. "origin/foo"
+	intent     engine.CheckoutIntent
+	name       textfield
+	recycleDir string // set: enter recycles this worktree onto the named branch
 }
 
 func (p *checkoutAsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -32,11 +33,15 @@ func (p *checkoutAsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if name == "" {
 			return m, nil // a local branch needs a name; esc cancels
 		}
-		remoteRef, intent := p.remoteRef, p.intent
+		remoteRef, intent, dir := p.remoteRef, p.intent, p.recycleDir
 		m = m.popLayer()
 		// Arm the diverged-recovery hook for THIS dispatch: base is the typed
 		// name, so a re-collision suggests name-2, not the original branch-2.
-		m.pendingCheckout = pendingCheckout{remoteRef: remoteRef, base: name, intent: intent}
+		m.pendingCheckout = pendingCheckout{remoteRef: remoteRef, base: name, intent: intent, recycleDir: dir}
+		if dir != "" {
+			m.recycleBranch, m.recycleRemote = name, remoteRef
+			return m.startOp(recycleOpFor(dir, name, remoteRef))
+		}
 		return m.startOp(engine.SmartCheckout{RemoteRef: remoteRef, Local: name, Intent: intent})
 	default:
 		p.name.HandleEditKey(msg)
@@ -48,6 +53,9 @@ func (p *checkoutAsPopup) render(m Model, below string) string {
 	verb := i18n.T("check out")
 	if p.intent == engine.CheckoutSwitch {
 		verb = i18n.T("switch")
+	}
+	if p.recycleDir != "" {
+		verb = i18n.T("recycle")
 	}
 	w, h := m.overlayDims()
 	var b strings.Builder
@@ -93,7 +101,11 @@ func (m Model) checkoutDivergedModal(pc pendingCheckout) *decisionState {
 		},
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 			if opt == "check out as different name…" {
-				return m.openCheckoutAsPopup(pc.remoteRef, suggestLocalName(m.branches, pc.base), pc.intent), nil
+				m = m.openCheckoutAsPopup(pc.remoteRef, suggestLocalName(m.branches, pc.base), pc.intent)
+				if p, ok := m.topLayer().(*checkoutAsPopup); ok {
+					p.recycleDir = pc.recycleDir
+				}
+				return m, nil
 			}
 			return m, nil
 		},

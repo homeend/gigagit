@@ -251,6 +251,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.remoteSwitchAsRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.remoteRecycleRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.bookmarkAddRow(); ok {
 		out = append(out, r)
 	}
