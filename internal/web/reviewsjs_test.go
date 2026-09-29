@@ -208,3 +208,35 @@ func TestCommitRowsMarkReviewed(t *testing.T) {
 	wiringCheck(t, "commits.js", "reviewedHashes().has(row.hash)", `class="rvmark"`)
 	wiringCheck(t, "files.js", "renderCommits(); // the ✎ on reviewed commits")
 }
+
+// `,` / `.` on a review's file list step to the previous / next file the
+// review notes, from the Overview (-1) too, and stay put at the ends (the
+// TUI's stepReviewFile).
+func TestNextNotedFile(t *testing.T) {
+	t.Parallel()
+	got := runReviewsPure(t, `
+const fs = [{ path: "a" }, { path: "b" }, { path: "c" }, { path: "d" }];
+const counts = { b: 2, d: 1 };
+console.log([
+  nextNotedFile(fs, counts, -1, 1), nextNotedFile(fs, counts, 1, 1), nextNotedFile(fs, counts, 3, 1),
+  nextNotedFile(fs, counts, 3, -1), nextNotedFile(fs, counts, 1, -1), nextNotedFile(fs, {}, -1, 1),
+].join(","));`)
+	if got != "1,3,-1,1,-1,-1" {
+		t.Fatalf("nextNotedFile = %s, want 1,3,-1,1,-1,-1", got)
+	}
+}
+
+// The keys route `,` / `.` to the noted-file step on a review's file list,
+// before the diff's change-step arm.
+func TestReviewFileStepKeyWiring(t *testing.T) {
+	t.Parallel()
+	keys := staticSrc(t, "keys.js")
+	i := strings.Index(keys, "stepReviewFile(e.key === \".\" ? 1 : -1)")
+	j := strings.Index(keys, "stepChange(e.key === \".\" ? 1 : -1)")
+	if i < 0 || j < 0 || i > j {
+		t.Fatalf("keys.js: the review file step must come before the change step (%d, %d)", i, j)
+	}
+	if !strings.Contains(keys[:i], `reviewActive() && state.layout === "files"`) {
+		t.Fatal("keys.js: the review file step is not gated on a review's file list")
+	}
+}
