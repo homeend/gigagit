@@ -66,7 +66,7 @@ console.log(branchReviewText({ created: "2025-12-31T08:05:00Z", agent: "Claude C
 		"└ claude",
 		"└ just the summary",
 		"",
-		"└ Review: 09-28 23:37 Claude Code",      // a branch sub-row drops the CURRENT year only
+		"└ Review: 09-28 23:37 Claude Code", // a branch sub-row drops the CURRENT year only
 		"└ Review: 2025-12-31 08:05 Claude Code", // …and keeps an older one
 	}, "\n")
 	if got != strings.TrimSpace(want) {
