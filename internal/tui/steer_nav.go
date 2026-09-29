@@ -68,6 +68,12 @@ func (m Model) expirePendingHint(now time.Time) (Model, tea.Cmd) {
 	if ph.mustAnswer {
 		return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "the "+ph.cmd.HintKind+" list did not load in time"))
 	}
+	if ph.cmd.HintKind == "version" {
+		// The link landed and the steer command was answered; only the
+		// reveal is lost, so say so rather than leave the compare open with
+		// no word (a lookup that arrives later is dropped: pending is nil).
+		m.statusMsg = i18n.T("version lookup timed out; the link still landed")
+	}
 	return m, nil
 }
 
