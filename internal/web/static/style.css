@@ -1679,6 +1679,21 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 
 /* An image file in the viewer / F preview: scaled to the pane, never wider. */
 .vimg { display: block; max-width: 100%; height: auto; margin: 6px 0 0 0; }
+/* An image pair in the diff (diffimages.js): the layout chips, then the
+   images — each fits its box and is never enlarged past its own size. */
+.dimg-wrap { padding: 6px 12px; }
+.dimg-chips { display: flex; gap: 4px; align-items: center; margin-bottom: 6px; }
+.dimg-chips button { background: none; border: 1px solid var(--border); color: var(--fg); border-radius: 3px; padding: 1px 8px; cursor: pointer; font: inherit; }
+.dimg-chips button.on { border-color: var(--accent); color: var(--accent); }
+.dimg-hint { margin-left: 8px; color: var(--dim); }
+.dimg-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.dimg-stacked { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.dimg-side { min-width: 0; }
+.dimg-side .notice { color: var(--dim); padding: 0; }
+.dimg { display: block; max-width: 100%; height: auto; margin-top: 4px; }
+.dimg-flip .dimg { cursor: pointer; }
+.dimg-stk { padding: 6px 12px; }
+.dimg-stk .dimg { max-height: 240px; }
 /* The agent console (console.js, web attach): a layer over the panes right
    of the sidebar — the server's screen painted as styled runs. Hidden by id. */
 #console { position: fixed; background: var(--bg-alt); display: flex; flex-direction: column; z-index: 20; border-left: 1px solid var(--border); }
