@@ -832,7 +832,7 @@ func toolTemplateNotices(m Model) []notice {
 	return append([]notice{{
 		id:      noticeToolTemplateUpdate,
 		repoKey: m.repoHealth.GitCommonDir,
-		title:   i18n.T("%d external-tool templates can be updated", offers),
+		title:   i18n.T("External-tool template updates available: %d", offers),
 		detail:  []string{i18n.T("Newer templates exist for commands gg once wrote into your config. Nothing changes until you review each one.")},
 		actions: []noticeAction{
 			{label: i18n.T("Open external tools"), run: openToolsFromNotice},

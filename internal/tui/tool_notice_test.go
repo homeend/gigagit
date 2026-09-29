@@ -27,7 +27,7 @@ func TestToolTemplateNoticeCountsOffers(t *testing.T) {
 	nm, _ := m.Update(toolStatusesMsg{gen: m.noticeGen, sts: []domain.ToolTemplateStatus{a, b}})
 	m = nm.(Model)
 	n := findNotice(m, noticeToolTemplateUpdate)
-	if n == nil || !strings.Contains(n.title, "2") {
+	if n == nil || !strings.HasSuffix(n.title, ": 2") {
 		t.Fatalf("want a 2-offer notice, got %+v", m.notices)
 	}
 	if !m.noticesUnread {
