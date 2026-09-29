@@ -1,6 +1,6 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, SECTIONS, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, state } from "./core.js";
+import { $, SECTIONS, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
@@ -42,6 +42,19 @@ function worktreeSessionRows(sessions, path, now) {
       label: s.label,
       meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : "running " + sessAge(s.started, now),
       task: !!s.task,
+    }));
+}
+// recycleCandidates: the worktrees the recycle row can pick — every
+// one but the worktree the page is on and bare ones (the TUI's
+// recycleCandidates). branch reads "detached" for a detached HEAD; live
+// marks a RUNNING agent session there (an exited one is history).
+function recycleCandidates(worktrees, current, sessions) {
+  return (worktrees || [])
+    .filter((w) => w.path && !w.bare && w.path !== current)
+    .map((w) => ({
+      path: w.path,
+      branch: w.branch || "detached",
+      live: (sessions || []).some((s) => s.worktree === w.path && s.state !== "exited"),
     }));
 }
 // --- end sidebar model ---
@@ -454,6 +467,14 @@ function showBranchMenu(b, x, y) {
           onSubmit: (path) => startOp({ op: "create-worktree", branch: b.name, path }, "creating worktree " + path),
         }),
     });
+    // The reuse counterpart: check the branch out in an existing idle
+    // worktree instead of adding one (the TUI's "Recycle a worktree").
+    if (recycleCandidates(state.worktrees, state.worktree, state.sessions).length) {
+      items.push({
+        label: "recycle a worktree…",
+        act: () => openRecyclePicker({ branch: b.name }, b.name, x, y),
+      });
+    }
   }
   // Not gated on "does this branch have versions" — that would cost a read
   // on every menu open; the popup shows the empty state instead (the TUI's
@@ -644,6 +665,41 @@ $("remotes-list").addEventListener("click", (e) => {
 });
 
 
+// openRecyclePicker turns the menu into one row per candidate worktree (the
+// TUI's picker): the path cut in the MIDDLE and padded to one column, then
+// the branch it has now. target is the op's branch half ({branch} or
+// {ref, name}); onto names the branch the worktree ends on. A worktree with a
+// running agent session asks once before the op starts.
+function openRecyclePicker(target, onto, x, y) {
+  const cands = recycleCandidates(state.worktrees, state.worktree, state.sessions);
+  // Non-breaking: a menu button collapses runs of plain spaces, which would
+  // undo both the gap and the column padding.
+  const NBSP = "\u00a0";
+  const gap = NBSP + NBSP;
+  const suffix = (c) => gap + c.branch + (c.live ? gap + "(agent session running)" : "");
+  const pathCols = Math.max(12, 72 - Math.max(...cands.map((c) => runes(suffix(c)).length)));
+  const paths = cands.map((c) => elidePath(c.path, pathCols));
+  const col = Math.max(...paths.map((p) => runes(p).length));
+  const items = [{ header: "recycle a worktree onto " + onto }];
+  cands.forEach((c, i) => {
+    const start = () =>
+      startOp({ op: "recycle-worktree", path: c.path, ...target }, "recycling " + c.path + " → " + onto);
+    items.push({
+      label: paths[i] + NBSP.repeat(col - runes(paths[i]).length) + suffix(c),
+      act: () =>
+        c.live
+          ? showLocalConfirm("An agent session is running in " + c.path + ". Recycle it anyway?", ["recycle", "cancel"], (o) => {
+              if (o === "recycle") start();
+            })
+          : start(),
+    });
+  });
+  // The menu that picked the row is closing; open the picker on the next tick
+  // so its own close does not take the new one with it.
+  setTimeout(() => showCtxMenu(items, x, y), 0);
+}
+
+
 function showRemoteMenu(rb, x, y) {
   const cur = state.branches.find((x) => x.is_head);
   const items = [
@@ -670,6 +726,21 @@ function showRemoteMenu(rb, x, y) {
         }),
     },
   ];
+  // Recycle onto the remote branch: the op checks it out first under the
+  // prompted local name (created tracking it, or fast-forwarded — a diverged
+  // one fails; rerun with another name), then recycles the picked worktree.
+  // Hidden when that name is already checked out somewhere.
+  if (!worktreePathForBranch(rb.branch) && recycleCandidates(state.worktrees, state.worktree, state.sessions).length) {
+    items.push({
+      label: "recycle a worktree…",
+      act: () =>
+        openPrompt({
+          title: "Recycle a worktree onto " + rb.name + ", as local branch:",
+          value: rb.branch,
+          onSubmit: (name) => openRecyclePicker({ ref: rb.name, name }, name, x, y),
+        }),
+    });
+  }
   if (cur) {
     items.push({
       label: "merge " + rb.name + " into current (" + cur.name + ")",

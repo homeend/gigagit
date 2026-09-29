@@ -173,7 +173,7 @@ marker from `domain.Sessions()`.
   target's refusals, then recycles; diverged → the check-out recovery modal,
   whose rename re-dispatches the recycle. Original note: (`origin/foo` with no local branch): create the
   tracking branch, then recycle.
-- **Web UI**: the same row on the branch context menu, a worktree picker, and
+- **Web UI** — DONE (2026-09-29, `feat/web-recycle`): registered op `recycle-worktree` (`internal/web/recycle.go`, allowlisted path/branch/ref), branch + remote menu rows, a ctx-menu worktree picker, the generic parking modal for `recycle.dirty`; a remote row prompts the local name first (no rename-after-failure modal, the web's own "check out as…" is prompt-first). Original note: the same row on the branch context menu, a worktree picker, and
   the `recycle.dirty` decision through the parking web Decider.
 
 ## Testing

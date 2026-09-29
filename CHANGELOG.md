@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Recycle a worktree from the browser
+
+### Added
+
+- **`gg web`: recycle a worktree.** Right-click a branch that no worktree
+  has checked out → **recycle a worktree…** turns the menu into a picker of
+  the other worktrees (path cut in the middle, the branch each has now; a
+  worktree with a running agent session asks first). A dirty target brings
+  up the usual commit / shelve / discard / abort prompt. The same row on a
+  **remote** branch asks for the local name first (pre-filled), then checks
+  the remote branch out under it and recycles onto it; a diverged local
+  branch fails — rerun with another name. The server resolves the worktree,
+  branch and remote ref against its own lists before anything runs.
+
 ## Recycle a worktree onto a remote branch
 
 ### Added
