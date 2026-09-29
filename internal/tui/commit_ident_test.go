@@ -213,3 +213,25 @@ func TestCommitIdentTokenSingleMarkerWidth(t *testing.T) {
 		}
 	}
 }
+
+// A reviewed commit carries ✎ in its own marker cell, after the tip markers
+// and any count badge, so a reviewed row shows at a glance and no other
+// marker has to give way.
+func TestMarkerFieldReviewCell(t *testing.T) {
+	cases := []struct {
+		id   commitIdent
+		want string
+	}{
+		{commitIdent{}, "    "},
+		{commitIdent{reviewed: true}, "  ✎ "},
+		{commitIdent{tip: true, reviewed: true}, "↓ ✎ "},
+		{commitIdent{tip: true, count: 3, reviewed: true}, "↓³✎ "},
+		{commitIdent{tip: true, remoteTip: true, reviewed: true}, "↓↑✎ "},
+		{commitIdent{tip: true, remoteTip: true}, "↓↑  "},
+	}
+	for _, c := range cases {
+		if got := c.id.markerField(); got != c.want || lipgloss.Width(got) != commitMarkerW {
+			t.Errorf("markerField(%+v) = %q, want %q (width %d)", c.id, got, c.want, commitMarkerW)
+		}
+	}
+}

@@ -1188,7 +1188,8 @@ files the commit does not change; stacked, the overview is the first element.
 `o` in the overview lists those other notes to open one. Its diffs show only
 the review's notes, read-only — `gg review --notes` keeps them as your own.
 "Delete review" in the `.` menu (in the review view or on a Branches review
-row) or `ctrl+d` in View all notes deletes a review, after asking. The
+row) or `ctrl+d` in View all notes deletes a review, after asking. A
+reviewed commit carries `✎` in the Commits list (after its tip markers). The
 browser UI (`gg web`) shows the same reviews: a commit's under **Reviews**
 above its files, a branch's under its row; clicking one opens the review
 view (Overview in the diff pane, read-only review notes in the diffs), and a

@@ -142,3 +142,22 @@ func TestReviewStampDropsOnlyTheCurrentYear(t *testing.T) {
 		t.Errorf("last year's stamp = %q, want 2025-12-31 08:05", got)
 	}
 }
+
+// The Commits list marks a reviewed commit with ✎ (its reviews come from the
+// note counts the list already holds — no read per row).
+func TestCommitRowShowsReviewMarker(t *testing.T) {
+	t.Parallel()
+	m := reviewBranchesModel(t)
+	m.commits = []model.Commit{
+		{Hash: strings.Repeat("b", 40), Subject: "reviewed one"},
+		{Hash: strings.Repeat("c", 40), Subject: "plain one"},
+	}
+	rev := m.commitIdentRowAt(m.wipCount(), commitIdentW, false, -1)
+	plain := m.commitIdentRowAt(m.wipCount()+1, commitIdentW, false, -1)
+	if !strings.Contains(rev, "✎") {
+		t.Errorf("reviewed row %q lacks ✎", rev)
+	}
+	if strings.Contains(plain, "✎") {
+		t.Errorf("unreviewed row %q carries ✎", plain)
+	}
+}

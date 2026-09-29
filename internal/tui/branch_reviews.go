@@ -99,3 +99,18 @@ func (m Model) showBranchReviewRow() (actionRow, bool) {
 		},
 	}, true
 }
+
+// commitReviewed reports whether commit hash has a stored AI review — the
+// Commits list's ✎. It reads the note counts the list already holds, so a
+// scroll costs no read.
+func (m Model) commitReviewed(hash string) bool {
+	if hash == "" {
+		return false
+	}
+	for _, r := range m.noteCounts.Reviews {
+		if r.Commit == hash {
+			return true
+		}
+	}
+	return false
+}

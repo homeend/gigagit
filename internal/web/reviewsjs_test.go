@@ -200,3 +200,11 @@ func TestReviewOverviewTopsTheStack(t *testing.T) {
 	wiringCheck(t, "reviews.js", "return openStack(0); // buildStack lands on the Overview")
 	wiringCheck(t, "style.css", ".review-ov { padding: 12px 16px; max-width: 110ch; margin: 0 auto; }")
 }
+
+// A reviewed commit carries ✎ in the commit list, from the note counts the
+// page already holds (no read per row), and the list repaints when they change.
+func TestCommitRowsMarkReviewed(t *testing.T) {
+	t.Parallel()
+	wiringCheck(t, "commits.js", "reviewedHashes().has(row.hash)", `class="rvmark"`)
+	wiringCheck(t, "files.js", "renderCommits(); // the ✎ on reviewed commits")
+}
