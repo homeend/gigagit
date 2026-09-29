@@ -379,6 +379,10 @@ func TestRerootRestartsLive(t *testing.T) {
 	if after == nil || after == before {
 		t.Fatal("reroot must build a fresh hub for the new root")
 	}
+	// The old hub's last word is the switch; then its streams close.
+	if m, ok := <-chOld; !ok || m.Reason != "switched" || m.Worktree != b {
+		t.Fatalf("old hub's last message = %+v ok=%v, want switched to %s", m, ok, b)
+	}
 	if _, ok := <-chOld; ok {
 		t.Fatal("old hub's streams must be closed on reroot")
 	}

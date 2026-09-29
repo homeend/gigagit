@@ -1,5 +1,9 @@
 # The TUI serves its own web page — design
 
+> **Superseded in part (2026-09-29):** rule 7 (the hosted page hides its own
+> switching) is replaced — a hosted page switch now asks the TUI to switch.
+> See `docs/CLAUDE-details.md` (hosted rules).
+
 Date: 2026-09-28. Status: agreed in brainstorming, ready for the plan.
 Amends `2026-09-28-web-attach-design.md` (web attach): this is the stage
 between its plan 1 (watch and type, merged `e1d839e5`) and its plan 2

@@ -12,6 +12,7 @@ import { reconcileStatusView, stage } from "./files.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { fetchHealth } from "./bigrepo.js";
 import { checkDrift, hideDrift } from "./versions.js";
+import { baseOf } from "./locks.js";
 import { clearHelpSearch, helpSearchKey, openHelpSearch } from "./helpsearch.js";
 
 // --- op transport client ---
@@ -359,14 +360,43 @@ async function doPush() {
 // doReroot points the server at another root. The whole client state is
 // repo-scoped, so a clean reload is the honest reset on success
 // (localStorage prefs survive); errors land on the status strip.
+// The repo-switch veil: shown from the request until the reload replaces the
+// page (a hosted page's switch also waits for the terminal to switch), taken
+// down on any failure so the page is usable again.
+function showSwitching(path) {
+  $("switching-to").textContent = baseOf(path) || path;
+  $("switching").classList.remove("hidden");
+}
+function hideSwitching() {
+  if (switchReloading) return; // the page is going away onto the new repo
+  $("switching").classList.add("hidden");
+}
+// reloadForSwitch: the one way a switch reloads. Once it runs, a request the
+// reload aborts (doReroot's own POST, when the live "switched" message beat
+// its reply) must not take the veil down on its way out.
+let switchReloading = false;
+function reloadForSwitch() {
+  switchReloading = true;
+  location.reload();
+}
+function isSwitching() {
+  return !$("switching").classList.contains("hidden");
+}
+// Keys under the veil would act on the repo being left: swallow them (the
+// server-down veil's rule, serverdown.js).
+window.addEventListener("keydown", (e) => { if (isSwitching()) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+
 async function doReroot(path) {
   closeCommitFilter();
   state.gotoGen++;
   if (opBusy()) return;
+  showSwitching(path);
   try {
     await postJSON("/api/reroot", { path });
-    location.reload();
+    reloadForSwitch();
   } catch (e) {
+    if (switchReloading) return;
+    hideSwitching();
     // Cross-environment worktree (WSL path seen from Windows gg, or vice
     // versa): the server answers 409 repairable and waits for an explicit
     // confirm — repairing rebinds the link records, so the worktree stops
@@ -377,9 +407,14 @@ async function doReroot(path) {
         ["repair", "cancel"],
         (opt) => {
           if (opt !== "repair") return;
+          showSwitching(path);
           postJSON("/api/reroot", { path, repair: true })
-            .then(() => location.reload())
-            .catch((err) => opLine("error: " + (err.message || err), true));
+            .then(() => reloadForSwitch())
+            .catch((err) => {
+              if (switchReloading) return;
+              hideSwitching();
+              opLine("error: " + (err.message || err), true);
+            });
         }
       );
       return;
@@ -740,7 +775,7 @@ $("conflict-discard").addEventListener("click", () => {
 async function loadRepo() {
   const repo = await getJSON("/api/repo");
   state.repo = repo; // {name, worktree, branch} — the palette repo-picker filters out the served root
-  state.hosted = !!repo.hosted; // the terminal owns the repo: no page-side switching
+  state.hosted = !!repo.hosted; // a switch here asks the terminal, which switches too
   $("repo-name").textContent = repo.name;
   $("repo-branch").textContent = repo.branch;
   $("repo-worktree").textContent = repo.worktree;
@@ -792,4 +827,4 @@ function openCreateBranchPrompt(start, seed, label) {
 }
 
 
-export { applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar, applyCommitRows };
+export { reloadForSwitch, showSwitching, applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar, applyCommitRows };

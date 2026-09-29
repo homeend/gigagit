@@ -73,6 +73,10 @@ type liveMsg struct {
 	// exit, remove — and, from plan 3, an agent-state change). It bypasses
 	// the op gate: a session exiting mid-op must still show.
 	Sessions []sessionWire `json:"sessions,omitempty"`
+	// Worktree is the served worktree: on every hello, and on Reason
+	// "switched" (adoptService — the repo changed under the tab, from the
+	// page itself or from the terminal hosting it) the one just adopted.
+	Worktree string `json:"worktree,omitempty"`
 }
 
 type liveHub struct {
@@ -569,7 +573,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 	}
-	writeLiveSSE(w, liveMsg{Changed: []string{}, Reason: "hello", Live: &live, Watch: &watch})
+	writeLiveSSE(w, liveMsg{Changed: []string{}, Reason: "hello", Live: &live, Watch: &watch, Worktree: s.service().Root()})
 	fl.Flush()
 
 	ping := time.NewTicker(liveKeepalive)

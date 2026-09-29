@@ -19,7 +19,7 @@ import { revealVersion } from "./versions.js";
 import { fetchPRs, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
-import { loadRepo, opLine } from "./ops.js";
+import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
 import { switcherOpenFiles, switcherSessions } from "./openfiles.js";
 import { consoleSessions } from "./console.js";
 import { openViewer, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
@@ -43,6 +43,18 @@ const pending = new Set();
 let timer = null;
 let connected = false; // a second hello is a RECONNECT → full refresh
 let liveES = null;
+let liveWorktree = ""; // the served worktree as the first hello named it
+
+// The repo changed under this tab — the terminal hosting the page switched
+// (or this page did): veil the page and reload onto the new repo, the same
+// path a switch made here takes. Once per tab: the reload replaces it.
+let switching = false;
+function followSwitch(worktree) {
+  if (switching) return;
+  switching = true;
+  showSwitching(worktree);
+  reloadForSwitch();
+}
 
 function connectLive() {
   const es = new EventSource("/api/events?tab=" + encodeURIComponent(tabId));
@@ -60,7 +72,22 @@ function connectLive() {
       serverShutdown();
       return;
     }
+    // "switched": the server adopted another repo and is about to end this
+    // stream — the swap is done, so the reload lands on the new repo.
+    if (msg.reason === "switched") {
+      if (msg.worktree && msg.worktree !== liveWorktree) followSwitch(msg.worktree);
+      return;
+    }
     if (msg.reason === "hello") {
+      // A hello naming another worktree than the first one: the repo changed
+      // while this tab was not listening (the "switched" message was lost).
+      if (msg.worktree) {
+        if (liveWorktree && msg.worktree !== liveWorktree) {
+          followSwitch(msg.worktree);
+          return;
+        }
+        liveWorktree = msg.worktree;
+      }
       // A hello is a sign of life. It must clear the veil BEFORE the full
       // refresh below is scheduled: a flush while down drops its sources.
       serverSeen();

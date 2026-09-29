@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Switch repositories from the TUI-hosted web page
+
+### Changed
+
+- **The web page a TUI serves can switch repositories again, and the
+  terminal switches with it.** Palette `switch repo…`/`open repo (path)…`,
+  the ☰ Repositories entry, a worktree's `switch here` and the locks'
+  `go to worktree` are back on the hosted page. The page resolves and
+  preflights the target, then asks the TUI to switch; the TUI re-roots
+  (status "switched from the web page") and the page follows it — one
+  switch point, so the shell's `cd` on exit, the MRU and the steering
+  inbox behave as for a terminal switch. While the TUI is busy (an
+  operation, a decision, a popup, typing) the page shows "the terminal is
+  busy: …" and nothing moves. A TUI switch still moves the page.
+- **A switch from the web page veils it until the new repo loads.** A
+  "switching to <name>…" overlay with a spinner covers the page from the
+  request to the reload (keys are swallowed meanwhile); a refused or failed
+  switch takes it down and shows the reason. Standalone `gg web` gets it too.
+  A switch made in the TUI veils every open tab the same way and reloads it
+  onto the new repo (the server says `switched` before ending the tabs'
+  streams; a tab that missed it notices the new worktree on its reconnect's
+  hello).
+
 ## Text popups scroll on the first key press
 
 ### Fixed

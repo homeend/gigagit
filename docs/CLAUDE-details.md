@@ -3682,13 +3682,34 @@ web attach plans 1 and 2.
   runs `newHostOver(srv, false)` — `serveURLHook` is its test seam. The
   hosted server does NOT `applyUIPolicies` at start: the TUI already pushes
   them onto the shared Service (`load.go`).
-- **Hosted rules:** `Server.hosted` → `/api/repo` `hosted:true`,
-  `POST /api/reroot` 409 "the terminal owns the current repository"; the
-  page gates four affordances on `state.hosted` (palette `switch repo…` and
-  `open repo (path)…`, ☰ Repositories, the worktree menu's `switch here`,
-  locks' `go to worktree`) — `hostedjs_test.go` pins the strings.
+- **Hosted rules:** `Server.hosted` → `/api/repo` `hosted:true`. The page
+  keeps every switch affordance (palette `switch repo…`/`open repo (path)…`,
+  ☰ Repositories, worktree `switch here`, locks' `go to worktree`;
+  `hostedjs_test.go` forbids a `state.hosted` gate coming back). A hosted
+  `POST /api/reroot` resolves + repairs + preflights as standalone, then —
+  instead of `adoptService` — calls the TUI's switcher
+  (`Host.SetSwitcher`): the terminal re-roots, its `webRerootCmd` moves the
+  page, and only then does the switcher return, so the reply's repo info and
+  the page's reload see the new Service. A refusal is a 409 with the TUI's
+  reason ("the terminal is busy: …"); `ErrPageLive` is not a failure (the
+  swap happened). No switcher installed → the old 409 "the terminal owns
+  the current repository". `doReroot` (ops.js) raises the `#switching` veil
+  (z 99, under server-down's 100; keys swallowed in capture) before the POST
+  and drops it on any failure; success leaves it up until `reloadForSwitch()`
+  (after which an aborted request cannot drop it). `adoptService` fans
+  `{reason:"switched", worktree}` out on the OLD hub before `restartLive`
+  closes it, and every hello carries `worktree`; live.js `followSwitch`
+  veils + reloads on either (a hello naming another worktree than the tab's
+  first). That is how a TUI-made switch reaches the page.
 - **TUI (`webhost.go`):** `Model.web *webHostState` (host, url, starting,
-  `pendingServe`), `webOpts` (the flags); `openInBrowser` (palette entry
+  `pendingServe`, and the page-switch lane: `switches` chan + `stop` +
+  `pendingSwitch` replies), `webOpts` (the flags); `startWebCmd` installs
+  `switcherFor(w)` on the host; `onWebStarted` arms `waitWebSwitchCmd`;
+  `onWebSwitchRequest` refuses on `steerRefusal()` (busy: op, modal, typing,
+  any popup layer — the commit popup included) else `reRoot`s with status
+  "switched from the web page" and parks the reply until `onWebReroot`
+  answers it; `closeWeb` closes `stop` (the wait returns nil, late requests
+  get "the terminal is closing"); `openInBrowser` (palette entry
   gated on `NewWebHost != nil`; first use starts, later uses reopen);
   `startupWebCmd` in `Init` when `[web] serve` or `--web`; `webAddr()` =
   flag > `[web] addr` > "" (random); `reRoot` batches `webRerootCmd`;

@@ -1399,9 +1399,12 @@ sessions beneath it (`└ ● claude running 12m`, `○` when exited); a click
 opens one, and an exit raises a toast. Starting, killing and removing
 sessions from the web is not built yet.
 
-The hosted page follows the terminal: switch repo or worktree in the TUI
-and the page re-roots with it, so its own repo switching is hidden (the
-terminal owns the current repository); quitting gg ends the page and open
+The hosted page and the terminal switch together: switch repo or worktree
+in the TUI and the page re-roots with it; switch from the page (palette
+`switch repo…`/`open repo (path)…`, a worktree's `switch here`) and the TUI
+switches too. While the terminal is busy (an operation running, a popup or
+prompt open, text being typed) the page's switch is refused with the
+reason; quitting gg ends the page and open
 tabs show a server-down veil. Serve at startup with `[web] serve = true`
 or `gg --web`, pin the address with `[web] addr` or `gg --web-addr
 127.0.0.1:7777` (default: a random loopback port each run — a fixed one

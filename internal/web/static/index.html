@@ -17,6 +17,11 @@
     <div id="server-down-hint" class="hidden">Still nothing. <code>gg web</code> picks a new port on every start unless you start it with <code>--addr 127.0.0.1:&lt;port&gt;</code> — if it is running again, open the URL it printed and close this tab.</div>
   </div>
 </div>
+<!-- The repo-switch veil (ops.js doReroot): from the switch request until
+     the reload paints the new repo. Below the server-down veil. -->
+<div id="switching" class="hidden" role="status" aria-live="polite">
+  <div id="switching-box"><span class="lc-spin"></span><span>switching to <b id="switching-to"></b>…</span></div>
+</div>
 <div id="preflight" class="hidden">
   <div id="preflight-box">
     <div id="preflight-title">this repository needs a one-time migration</div>

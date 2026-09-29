@@ -5,17 +5,44 @@ import (
 	"testing"
 )
 
-// A TUI-hosted page hides its four repo-switch affordances; the strings
-// below are the wiring pins (the logic is one `state.hosted` gate each).
-func TestHostedPageHidesRepoSwitching(t *testing.T) {
+// A TUI-hosted page keeps its four repo-switch affordances (the server asks
+// the terminal, which switches too): no `state.hosted` gate may hide them.
+func TestHostedPageKeepsRepoSwitching(t *testing.T) {
+	t.Parallel()
+	for _, f := range []string{"palette.js", "sidebar.js", "locks.js"} {
+		if src := readStatic(t, f); strings.Contains(src, "state.hosted") {
+			t.Errorf("%s: a state.hosted gate is back — the hosted page must keep its switch affordances", f)
+		}
+	}
+	cases := []struct{ file, want string }{
+		{"palette.js", `{ label: "switch repo…", act: () => openPalette("repo") },`},
+		{"sidebar.js", `items.unshift({ label: "switch here", act: () => doReroot(w.path) });`},
+		{"locks.js", "if (served) doReroot(to);"},
+	}
+	for _, c := range cases {
+		if !strings.Contains(readStatic(t, c.file), c.want) {
+			t.Errorf("%s: missing %q", c.file, c.want)
+		}
+	}
+}
+
+// A switch veils the page from the request until the reload, and a failed
+// switch takes the veil down again (a refusal must leave the page usable).
+func TestRepoSwitchVeilWiring(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ file, want string }{
-		{"core.js", "hosted: false,"},
-		{"ops.js", "state.hosted = !!repo.hosted;"},
-		{"palette.js", `state.hosted && (r.label === "switch repo…" || r.label === "open repo (path)…")`},
-		{"palette.js", `...(state.hosted ? [] : [{ header: "Repositories" }, { label: "switch repo…", act: () => openPalette("repo") }]),`},
-		{"sidebar.js", "if (!state.hosted && !(state.worktree && w.path === state.worktree))"},
-		{"locks.js", "if (served && !state.hosted) doReroot(to);"},
+		{"index.html", `<div id="switching" class="hidden" role="status" aria-live="polite">`},
+		{"style.css", "#switching.hidden { display: none; }"},
+		{"ops.js", "  showSwitching(path);\n  try {\n    await postJSON(\"/api/reroot\", { path });"},
+		{"ops.js", "  } catch (e) {\n    if (switchReloading) return;\n    hideSwitching();"},
+		// A switch the terminal made: "switched" (or a hello naming another
+		// worktree) veils the tab and reloads it.
+		{"live.js", `if (msg.reason === "switched") {`},
+		{"live.js", "if (msg.worktree && msg.worktree !== liveWorktree) followSwitch(msg.worktree);"},
+		{"live.js", "if (liveWorktree && msg.worktree !== liveWorktree) {\n          followSwitch(msg.worktree);"},
+		{"live.js", "  showSwitching(worktree);\n  reloadForSwitch();"},
+		{"ops.js", "              if (switchReloading) return;\n              hideSwitching();\n              opLine("},
+		{"ops.js", "if (isSwitching()) { e.preventDefault(); e.stopImmediatePropagation(); }"},
 	}
 	for _, c := range cases {
 		if !strings.Contains(readStatic(t, c.file), c.want) {

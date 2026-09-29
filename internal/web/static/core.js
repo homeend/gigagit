@@ -17,7 +17,7 @@ const tabId =
 const state = {
   rows: [],
   sessions: [], // the agent sessions of this gg (sidebar sub-rows, web attach)
-  hosted: false, // /api/repo: a TUI serves this page from its own process and owns the repo — switching is hidden
+  hosted: false, // /api/repo: a TUI serves this page from its own process — a switch here switches the terminal too
   canLoadMore: false,
   loadingMore: false,
   cursor: 0,

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -18,6 +19,10 @@ import (
 type WebHost interface {
 	Start(ctx context.Context, addr string) (string, error)
 	Reroot(ctx context.Context, svc *domain.Service) error
+	// SetSwitcher installs the page's way to switch the terminal: the
+	// page's own re-root calls fn, which re-roots the TUI (and, through
+	// Reroot, the page) before returning, or refuses with a reason.
+	SetSwitcher(fn func(ctx context.Context, path string) error)
 	URL() string
 	OpenBrowser()
 	Close()
@@ -35,6 +40,21 @@ type webHostState struct {
 	// pendingServe: `serve` inbox commands waiting for the start in flight
 	// (steer.go); answered by onWebStarted.
 	pendingServe []steer.Command
+	// switches carries the page's switch requests from the host's HTTP
+	// goroutine into Update (waitWebSwitchCmd); stop ends that wait and
+	// refuses late requests once the page is closed.
+	switches chan webSwitchRequestMsg
+	stop     chan struct{}
+	// pendingSwitch: answers owed to page switches whose re-root is done
+	// but whose host follow (webRerootMsg) has not landed yet.
+	pendingSwitch []chan error
+}
+
+// webSwitchRequestMsg is the page asking the terminal to switch to path.
+// reply is buffered: Update never blocks answering it.
+type webSwitchRequestMsg struct {
+	path  string
+	reply chan error
 }
 
 // webLaunchOptions carries `gg --web` / `--web-addr` for this run.
@@ -54,11 +74,90 @@ type webStartedMsg struct {
 // webRerootMsg reports the host following a re-root.
 type webRerootMsg struct{ err error }
 
+func newWebHostState() *webHostState {
+	return &webHostState{switches: make(chan webSwitchRequestMsg), stop: make(chan struct{})}
+}
+
 func (m Model) ensureWeb() Model {
 	if m.web == nil {
-		m.web = &webHostState{}
+		m.web = newWebHostState()
 	}
 	return m
+}
+
+// switcherFor is the function the host calls when the page switches: it
+// hands the request to Update and waits for the answer (bounded by the
+// page's request context).
+func switcherFor(w *webHostState) func(ctx context.Context, path string) error {
+	switches, stop := w.switches, w.stop
+	return func(ctx context.Context, path string) error {
+		reply := make(chan error, 1)
+		select {
+		case switches <- webSwitchRequestMsg{path: path, reply: reply}:
+		case <-stop:
+			return errors.New("the terminal is closing")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		select {
+		case err := <-reply:
+			return err
+		case <-stop:
+			return errors.New("the terminal is closing")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// waitWebSwitchCmd waits for the page's next switch request; nil once the
+// page is closed.
+func waitWebSwitchCmd(w *webHostState) tea.Cmd {
+	switches, stop := w.switches, w.stop
+	return func() tea.Msg {
+		select {
+		case req := <-switches:
+			return req
+		case <-stop:
+			return nil
+		}
+	}
+}
+
+// onWebSwitchRequest is the page switching the terminal: refused (with the
+// steer refusal's English reason, shown on the page) while the terminal is
+// busy, else the ordinary reRoot — which moves the page along — with the
+// answer held until the host has followed (webRerootMsg).
+func (m Model) onWebSwitchRequest(msg webSwitchRequestMsg) (Model, tea.Cmd) {
+	if !m.webServing() {
+		msg.reply <- errors.New("the terminal is not serving this page")
+		return m, nil
+	}
+	rearm := waitWebSwitchCmd(m.web)
+	if why := m.steerRefusal(); why != "" {
+		msg.reply <- errors.New("the terminal is busy: " + why)
+		return m, rearm
+	}
+	m.web.pendingSwitch = append(m.web.pendingSwitch, msg.reply)
+	nm, cmd := m.reRoot(msg.path)
+	m = nm.(Model)
+	m.statusMsg = i18n.T("switched from the web page")
+	return m, tea.Batch(cmd, rearm)
+}
+
+// onWebReroot is the host having followed a re-root: answer the page
+// switches waiting on it.
+func (m Model) onWebReroot(msg webRerootMsg) (Model, tea.Cmd) {
+	if msg.err != nil {
+		m.statusMsg = i18n.T("web page: %s", msg.err.Error())
+	}
+	if m.web != nil {
+		for _, r := range m.web.pendingSwitch {
+			r <- msg.err
+		}
+		m.web.pendingSwitch = nil
+	}
+	return m, nil
 }
 
 // webAddr is the address to bind: the launch flag, else [web] addr, else ""
@@ -73,9 +172,11 @@ func (m Model) webAddr() string {
 // webServing reports a running hosted page.
 func (m Model) webServing() bool { return m.web != nil && m.web.host != nil }
 
-func startWebCmd(svc *domain.Service, addr string, open bool) tea.Cmd {
+func startWebCmd(svc *domain.Service, w *webHostState, addr string, open bool) tea.Cmd {
+	switcher := switcherFor(w)
 	return func() tea.Msg {
 		h := NewWebHost(svc)
+		h.SetSwitcher(switcher)
 		url, err := h.Start(context.Background(), addr)
 		if err != nil {
 			return webStartedMsg{err: err, open: open}
@@ -102,7 +203,7 @@ func (m Model) openInBrowser() (Model, tea.Cmd) {
 	}
 	m.web.starting = true
 	m.statusMsg = i18n.T("web page: starting…")
-	return m, startWebCmd(m.svc, m.webAddr(), true)
+	return m, startWebCmd(m.svc, m.web, m.webAddr(), true)
 }
 
 // startupWebCmd serves at launch when [web] serve or --web asks for it (the
@@ -112,7 +213,7 @@ func (m Model) startupWebCmd() tea.Cmd {
 		return nil
 	}
 	m.web.starting = true // a pointer: the flag survives the value copy
-	return startWebCmd(m.svc, m.webAddr(), false)
+	return startWebCmd(m.svc, m.web, m.webAddr(), false)
 }
 
 func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
@@ -136,6 +237,7 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	for _, c := range pending {
 		cmds = append(cmds, m.answerSteer(c, steerOK(c, msg.url)))
 	}
+	cmds = append(cmds, waitWebSwitchCmd(m.web)) // the page may now switch the terminal
 	return m, tea.Batch(cmds...)
 }
 
@@ -156,7 +258,7 @@ func (m Model) steerServe(c steer.Command) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.web.starting = true
-	return m, startWebCmd(m.svc, m.webAddr(), false)
+	return m, startWebCmd(m.svc, m.web, m.webAddr(), false)
 }
 
 // webStatusText is the Settings row value.
@@ -188,5 +290,12 @@ func (m Model) webRerootCmd() tea.Cmd {
 func (m Model) closeWeb() {
 	if m.webServing() {
 		m.web.host.Close()
+	}
+	if m.web != nil && m.web.stop != nil {
+		select {
+		case <-m.web.stop:
+		default:
+			close(m.web.stop)
+		}
 	}
 }

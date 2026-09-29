@@ -58,8 +58,10 @@ func expandHome(path, home string) string {
 // their repos in the TUI, and the preflight below still runs BEFORE the
 // swap, so a garbage path is a 409 and the old root keeps serving.
 func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
-	if s.hosted {
-		// The SPA hides its switch affordances when hosted; this is the belt.
+	// A hosted page asks the terminal (below, after the preflight); with no
+	// switcher installed there is no one to ask.
+	switcher := s.terminalSwitcher()
+	if s.hosted && switcher == nil {
 		writeErr(w, http.StatusConflict, errors.New("the terminal owns the current repository — switch there"))
 		return
 	}
@@ -164,6 +166,20 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
+	if s.hosted {
+		// The terminal owns the repository: it re-roots itself and moves
+		// this page along (Host.Reroot) before answering — so the reply
+		// reports the Service it handed over, not cand. A refusal (the
+		// terminal is busy) is its reason, verbatim.
+		// ErrPageLive: the swap happened, only the presence stayed with the
+		// other page — report the repo, as the standalone lane does.
+		if err := switcher(r.Context(), target); err != nil && !errors.Is(err, ErrPageLive) {
+			writeErr(w, http.StatusConflict, err)
+			return
+		}
+		s.writeRepoInfo(w, r, s.service())
+		return
+	}
 	// The new root's [versions]/[ui] policies (the serve-boot re-apply
 	// point). Standalone only: a TUI host's Reroot hands over a Service the
 	// TUI has already configured.
@@ -205,6 +221,13 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	s.svc.Store(svc)
 	s.cur = nil
 	s.opMu.Unlock()
+	// Tell the open tabs BEFORE their streams end (restartLive below): a
+	// switch the terminal made has no request of the page's own to wait on,
+	// and EventSource only reconnects after its retry delay. The swap is
+	// done, so a tab reloading on this sees the new repo.
+	if h := s.liveHubRef(); h != nil {
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "switched", Worktree: svc.Root()})
+	}
 	s.mu.Lock()
 	s.feed = nil
 	s.mu.Unlock()
