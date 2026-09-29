@@ -540,7 +540,7 @@ func (s *Server) handleEntryDiff(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, derr)
 		return
 	}
-	writeDiffJSON(w, d, nil)
+	writeDiffJSON(w, r, d, nil)
 }
 
 // maybeLenient softens only the LIVE sides: an absent working-tree file is an
