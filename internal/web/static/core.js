@@ -312,6 +312,35 @@ function tailWidth(s, w) {
 }
 
 
+// elideNoteSummary fits a shelf note's summary ("Recycled from /x/wt-a
+// (feat/y)") into n columns: the trailing "(branch)" group stays whole — a
+// branch's slashes are not a path to cut — the words before the path stay
+// whole while the path keeps a few columns, and the path itself is cut in its
+// middle. Port of the TUI's elideNoteSummary (shelf_note_view.go).
+function elideNoteSummary(s, n) {
+  if (runes(s).length <= n) return s;
+  const i = s.lastIndexOf(" (");
+  if (i > 0 && s.endsWith(")")) {
+    const group = s.slice(i);
+    const room = n - runes(group).length;
+    if (room >= 2) {
+      const body = s.slice(0, i);
+      const j = body.search(/[/\\]/);
+      if (j > 0) {
+        const left = room - runes(body.slice(0, j)).length;
+        if (left >= 8) return body.slice(0, j) + elidePath(body.slice(j), left) + group;
+      }
+      return elidePath(body, room) + group;
+    }
+    // Not even the group fits: the worktree's name says more than a sliver of
+    // the branch would ("…/x)").
+    return elidePath(s.slice(0, i), n);
+  }
+  return elidePath(s, n);
+}
+// --- end path elision ---
+
+
 // charWidth measures one monospace column in CSS pixels, so a pixel budget can
 // be turned into the column count elidePath takes. Measured once against the
 // body font and cached; the probe is removed immediately.
@@ -401,7 +430,7 @@ function runOnce(type, fn, opts = {}) {
 // --- end single-flight task gate ---
 
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
 
 // fmtBytes is the TUI's byte count for a placeholder: "597.0 KB", "1.2 MB", "312 B".
 export function fmtBytes(n) {

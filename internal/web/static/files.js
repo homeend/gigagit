@@ -1,6 +1,6 @@
 // files.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, attnKey, charWidth, elidePath, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
+import { $, attnKey, charWidth, elideNoteSummary, elidePath, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
 import { extraRows, registerHelp } from "./menus.js";
@@ -19,6 +19,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
+import { openShelfNotes } from "./shelfnotes.js";
 import { leaveReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -571,6 +572,11 @@ function openEntryCompare(body) {
     originsError: "",
     frozen: !!body.frozen,
     note: body.frozen_note || "",
+    // A shelf entry's own notes (a recycled worktree's deletions): rows above
+    // the files and prose blocks atop the stack — never part of state.files.
+    shelfNotes: body.shelf_notes || [],
+    shelfEntry: body.shelf_entry || null,
+    shelfLabel: body.shelf_label || "",
   };
   state.filesMode = "compare";
   state.fileSha = null;
@@ -757,7 +763,7 @@ function applyCompareFilter() {
     // The empty state must live in the FILE LIST: in the files stage the
     // diff pane is not on screen, and stepping back there from an open
     // diff must not strand a stale one.
-    $("files-list").innerHTML = `<li class="sect">${
+    $("files-list").innerHTML = shelfNoteRowsHTML(c) + `<li class="sect">${
       c.all.length ? "no files match this filter" : c.frozen || c.links ? "nothing differs" : "the two branches are identical"
     }</li>`;
     // The symmetric view's esc LEAVES the comparison (it has no files-only
@@ -939,6 +945,42 @@ function fileCols(extra) {
 }
 
 
+// shelfNoteRowsHTML is a shelf entry's notes as rows above its files, the
+// TUI's Notes block (files_view.go withShelfNoteLines): a heading, then
+// "└ <date> <summary>" per note. Only the summary is cut — in its middle, the
+// "(branch)" group whole — and the full text is the tooltip. The rows carry
+// data-note, not data-i: the file cursor, staging and every index-keyed
+// handler never see them.
+const NOTE_LEAD = "└ ";
+function shelfNoteRowsHTML(c) {
+  const ns = (c && c.shelfNotes) || [];
+  if (!ns.length) return "";
+  const budget = fileCols(0) + FILE_ST_COLS;
+  return (
+    `<li class="sect shelfnotes-head">Notes</li>` +
+    ns
+      .map((n) => {
+        const lead = NOTE_LEAD + (n.created ? noteStamp(n.created) + " " : "");
+        const room = budget - runes(lead).length;
+        const text = budget && room > 0 ? elideNoteSummary(n.summary, room) : n.summary;
+        return (
+          `<li class="shelfnote" data-note="${esc(n.id)}" title="${esc(n.summary)}">` +
+          `<span class="shelfnote-lead">${esc(lead)}</span>${esc(text)}</li>`
+        );
+      })
+      .join("")
+  );
+}
+
+// noteStamp is the TUI's "2006-01-02 15:04" in local time.
+function noteStamp(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  const p = (x) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+
 // filePathHTML renders one row's path, middle-elided to the budget, carrying
 // the full path as the row's tooltip so nothing is actually lost.
 function filePathHTML(path, cols) {
@@ -976,8 +1018,9 @@ function renderFiles() {
     const anyBadge = state.files.some((f) => badge(f) !== "");
     const cols = fileCols(anyBadge ? NOTE_BADGE_COLS : 0);
     // A commit's AI reviews head its files (reviews.js); "" when it has none.
+    // A shelf entry's own notes head a frozen compare's files.
     const revs = reviewRowsHTML();
-    $("files-list").innerHTML = revs + state.files
+    $("files-list").innerHTML = revs + (cmp ? shelfNoteRowsHTML(state.compare) : "") + state.files
       .map(
         (f, i) =>
           `<li class="${i === state.fileCursor && !state.reviewSel ? "sel" : ""}" data-i="${i}">` +
@@ -4074,6 +4117,11 @@ $("files-list").addEventListener("click", (e) => {
     return;
   }
   const li = e.target.closest("li");
+  if (li && li.dataset.note && state.filesMode === "compare" && state.compare && state.compare.shelfEntry) {
+    const c = state.compare;
+    openShelfNotes(c.shelfEntry, c.shelfLabel, li.dataset.note);
+    return;
+  }
   // A commit's review row opens the review; the review view's Overview row
   // shows the Overview. Neither is a file (no data-i).
   if (li && li.dataset.review) {

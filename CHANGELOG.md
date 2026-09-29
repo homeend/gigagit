@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Shelf-entry notes in the browser's file list
+
+### Added
+
+- **`gg web`: a shelved set's notes lead its file list.** Opening a shelf
+  entry that carries notes (◆N — a recycled worktree's deletions and
+  renames) lists them under a **Notes** heading above the frozen files, one
+  `└ <date> <summary>` row each, as the TUI does. The summary is cut in its
+  middle with the `(branch)` group kept whole; the full text is the row's
+  tooltip. Clicking a row opens that one note. The stacked view opens with
+  each note as a prose block above the first file.
+
 ## Reviews in the browser
 
 ### Added

@@ -194,6 +194,9 @@ failures do; the shelf entry stays (the work is safe).
   the switcher. Built as a Notes section (path-less `shelfNote` rows, enter =
   the note popup) plus a prose element per note in the stacked view (user
   ruling: "add notes to stack view, same as review overview").
+  **Web: DONE (feat/web-shelf-note-rows)** — the same rows above a shelved
+  entry's frozen files in `gg web` (click = that note) and a prose block per
+  note atop its stack.
 - Users adding/editing shelf-entry notes; notes on other entry kinds
   (bookmarks, saved compares).
 - MCP read of shelf-entry notes.

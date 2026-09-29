@@ -1434,12 +1434,19 @@ async function openShelfEntry(e) {
     entryGone(entryLabel(e), err.message || String(err));
     return;
   }
+  // The entry's own notes (what the set could not carry — a recycled
+  // worktree's deletions) lead its file list, as in the TUI. Best-effort: the
+  // files open either way.
+  const notes = e.notes > 0 ? await getJSON("/api/shelf/notes?id=" + encodeURIComponent(e.id)).catch(() => null) : null;
   openEntryCompare({
     left: { label: "shelf: " + entryLabel(e), spec: "shelf:" + e.id },
     right: { label: "working tree", spec: "worktree" },
     files: (got.files || []).map((p) => ({ path: p, status: "" })),
     frozen: true,
     frozen_note: "the files frozen with this shelved commit",
+    shelf_notes: (notes && notes.notes) || [],
+    shelf_entry: e,
+    shelf_label: entryLabel(e),
   });
 }
 
