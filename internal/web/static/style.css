@@ -1408,6 +1408,17 @@ body.lm-scroll #blame-body .bline.brecent .bgut, body.lm-scroll #blame-body .bli
 #exttools-box .xok { color: #7dbd7d; font-size: 11px; }
 #exttools-box .xcmdline { color: var(--dim); font-size: 11px; font-family: inherit; margin: 2px 0 0 12px; overflow-wrap: anywhere; }
 #exttools-box .xproblem { color: var(--err, #e66); font-size: 11px; margin: 2px 0 0 12px; }
+/* template-update answers: the app's dark button recipe, never the UA default */
+#exttools-box button {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 12px; font: inherit; font-size: 12px; cursor: pointer;
+}
+#exttools-box button:hover { border-color: var(--accent); }
+#exttools-box .xoffer { margin: 6px 0 10px; }
+#exttools-box .xoffer .pbtns { margin-left: auto; display: flex; gap: 6px; }
+#exttools-box .xwarn { color: var(--accent); font-size: 11px; }
+#exttools-box .xreason { color: var(--dim); font-size: 11px; margin: 2px 0 0 12px; }
+#exttools-box .xnewtext { color: var(--fg); font-size: 11px; margin: 6px 0 0 12px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; }
 #exttools-box .xtmpl { margin-left: 12px; }
 /* session-errors overlay: compact rows, red detail line, source badge */
 #sesserrors-box .erow { margin: 6px 0; }

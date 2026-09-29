@@ -1,22 +1,29 @@
 package web
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/template"
 )
 
-// The external-tools VIEW: a read-only inventory of the configured
-// [[tools.command]] blocks (every category, every frontend — including rows
-// this web frontend itself would filter out at run time) plus which catalog
-// tools are detected on this machine. Adding/editing stays in the TUI
-// Settings wizard for now; this surface answers "what is configured, is it
-// approved, and what could I add".
+// The external-tools VIEW: an inventory of the configured [[tools.command]]
+// blocks (every category, every frontend — including rows this web frontend
+// itself would filter out at run time) plus which catalog tools are detected
+// on this machine. Adding/editing stays in the TUI Settings wizard; the one
+// write here is answering a tool-template update offer (take new / keep
+// mine), resolved by an offer id against a fresh status read — the wire never
+// names a path or a command.
 
 type extToolCmdRow struct {
 	Category  string   `json:"category"`
@@ -102,5 +109,119 @@ func (s *Server) handleExtTools(w http.ResponseWriter, r *http.Request) {
 		"commands":           cmds,
 		"detected":           dets,
 		"global_config_path": config.DefaultGlobalPath(),
+		"template_offers":    s.templateOffers(r.Context()),
 	})
+}
+
+// extToolOfferRow is one tool-template status worth showing: an update
+// offer or an unsupported agent.
+type extToolOfferRow struct {
+	Category string `json:"category"`
+	Name     string `json:"name"`
+	Status   string `json:"status"` // "update" | "unsupported"
+	Reason   string `json:"reason"`
+	NewText  string `json:"new_text"` // the block as it would be written ("update" only)
+	Path     string `json:"path"`     // display only; never read back from the wire
+	OfferID  string `json:"offer_id"`
+	Declined bool   `json:"declined"` // answered "Keep mine" earlier
+}
+
+func (s *Server) toolStatusesFor(ctx context.Context) []domain.ToolTemplateStatus {
+	if s.toolStatuses != nil {
+		return s.toolStatuses(ctx)
+	}
+	return s.service().ToolTemplateStatuses(ctx)
+}
+
+func (s *Server) templateOffers(ctx context.Context) []extToolOfferRow {
+	var declined map[string]bool
+	if store := s.promptStore(); store != nil {
+		declined = store.DeclinedToolUpdates()
+	}
+	out := []extToolOfferRow{}
+	for _, st := range s.toolStatusesFor(ctx) {
+		row := extToolOfferRow{Category: st.Block.Category, Name: st.Block.Name, Reason: toolReason(st), Path: st.Path}
+		switch st.Kind {
+		case domain.ToolUpdateAvailable:
+			row.Status = "update"
+			row.NewText = config.RenderToolCommand(st.New)
+			row.OfferID = promptstate.ToolUpdateID(st.OfferKey())
+			row.Declined = declined[row.OfferID]
+		case domain.ToolUnsupported:
+			row.Status = "unsupported"
+		default:
+			continue
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// toolReason is the TUI's offer-reason line in English (the web is not
+// localised).
+func toolReason(st domain.ToolTemplateStatus) string {
+	if st.Kind == domain.ToolUnsupported {
+		return fmt.Sprintf("%s %s is outside every version range this template supports", st.ToolLabel, st.AgentVersion)
+	}
+	var parts []string
+	switch {
+	case st.FromVersion == 0:
+		parts = append(parts, fmt.Sprintf("written before template versions — current template v%d", st.ToVersion))
+	case st.FromVersion < st.ToVersion:
+		parts = append(parts, fmt.Sprintf("template updated (v%d → v%d)", st.FromVersion, st.ToVersion))
+	}
+	if st.FromVersion > 0 && st.FromRange != st.ToRange && st.AgentVersion != "" {
+		parts = append(parts, fmt.Sprintf("%s %s detected — this block was written for %s", st.ToolLabel, st.AgentVersion, st.FromRange))
+	}
+	if st.Edited && st.FromVersion > 0 {
+		parts = append(parts, "you changed this block")
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (s *Server) handleExtToolsUpdate(w http.ResponseWriter, r *http.Request) {
+	st, ok := s.offerByID(w, r)
+	if !ok {
+		return
+	}
+	if err := domain.ApplyToolUpdate(st); err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (s *Server) handleExtToolsKeep(w http.ResponseWriter, r *http.Request) {
+	st, ok := s.offerByID(w, r)
+	if !ok {
+		return
+	}
+	store := s.promptStore()
+	if store == nil {
+		writeErr(w, http.StatusServiceUnavailable, errors.New("no state directory: cannot remember the answer"))
+		return
+	}
+	if err := store.DeclineToolUpdate(st.OfferKey()); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// offerByID resolves a wire offer id against a FRESH status read.
+func (s *Server) offerByID(w http.ResponseWriter, r *http.Request) (domain.ToolTemplateStatus, bool) {
+	var req struct {
+		OfferID string `json:"offer_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return domain.ToolTemplateStatus{}, false
+	}
+	for _, st := range s.toolStatusesFor(r.Context()) {
+		if st.Kind == domain.ToolUpdateAvailable && promptstate.ToolUpdateID(st.OfferKey()) == req.OfferID {
+			return st, true
+		}
+	}
+	writeErr(w, http.StatusNotFound, errors.New("no such update offer"))
+	return domain.ToolTemplateStatus{}, false
 }
