@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Versioned external-tool templates
+
+### Added
+
+- **gg offers newer tool templates for commands it once wrote into your
+  config.** Blocks the Settings wizard (and first-run auto-configure) writes
+  now carry a stamp — `template_version`, `agent_range`, and a normalised
+  `fingerprint` (spaces, blank lines and comments don't count as edits).
+  When the catalog ships a newer template, gg shows a notice, marks the row
+  **(update available — u)** in Settings → External tools, and lists it in
+  the web page's external-tools overlay. The review shows the reason and
+  the new block's full text: **take new** rewrites just that block in place
+  (global or repo file), **keep mine** stops offering that exact update,
+  **edit** opens the config. Nothing is written without an answer. Blocks
+  written before this release are offered the current template too.
+- **Templates can depend on the agent's own version.** A catalog entry can
+  have variants for ranges of the agent's version (`>=2.1`, `>=1.8 <2.1`);
+  gg reads `<agent> --version` in the background (3 s cap, cached per
+  binary) and offers the variant that fits. An agent outside every range
+  gets a notice; its block keeps running unchanged.
+
+### Fixed
+
+- **A tool block written before a catalog change is no longer stuck with
+  the old settings.** E.g. "Claude — resolve & complete (yolo, headless)"
+  written while it was web-only never appeared in the TUI conflict menu;
+  it is now offered the current template (`frontends = ["tui", "web"]`).
+
 ## Switch repositories from the TUI-hosted web page
 
 ### Changed

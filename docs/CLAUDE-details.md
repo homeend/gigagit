@@ -3544,6 +3544,57 @@ spike findings), plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-1-c
   Ctrl/Alt/Win key-down into `KeyRunes{0}` (only Shift is filtered) — drop
   NUL-only rune messages; batched `KeyRunes` go through `SendText`.
 
+### Versioned external-tool templates (2026-09-30)
+
+Spec `docs/superpowers/specs/2026-09-30-tool-template-versions-design.md`.
+
+- **Families, not rows.** Catalog rows sharing (Category, Name) are one
+  family; each row is a VARIANT with an agent-version `Range` (half-open
+  `>=X.Y <X.Y`, "" = any, alone). `Builtins` fills `Version` 0→1.
+  `exttool.Pick(tool, v, known)` = one row per family (unknown version →
+  the variant with the highest lower bound); `Variant(...)` resolves a
+  block (known version → its range, else the stamp's `agent_range`, else
+  the family's only variant).
+- **Guard.** `TestCatalogVersionBumpGuard` +
+  `testdata/catalog_versions.golden` (version + normalised fingerprint per
+  family, Range and OptIn included): a changed family with an unraised
+  Version fails, a stale golden fails; `-update` rewrites it.
+- **Stamp.** `config.ToolCommand.{TemplateVersion,AgentRange,Fingerprint}`;
+  `AppendToolCommands` / `ReplaceToolCommand` compute the fingerprint from
+  the block being written (so a test that wants an "edited" block must edit
+  the FILE after writing). `ToolFingerprint` = mode, per_file, when_op,
+  sorted frontends, command with whitespace runs collapsed and blank lines
+  dropped. Unstamped = edited. Every catalog writer goes through
+  `domain.NewToolBlock`.
+- **Status** (`domain.ToolTemplateStatuses(ctx, paths, dets)`; the Service
+  method = global + active repo file + real detection): only EFFECTIVE
+  blocks (repo shadows global) of a DETECTED family. Kinds: current,
+  customised (stamped, edited, template unchanged — silent), update
+  available (behind, or an unstamped block that differs from the target),
+  unsupported (known agent version outside every range). No automatic
+  writes, ever (user ruling). `ApplyToolUpdate` refuses when the file's
+  block no longer fingerprints equal to the status's.
+- **Agent version.** `domain.AgentVersion` runs `<bin> --version` (3 s,
+  stdin closed), cached per (resolved path, mtime). Test seams:
+  `agentVersionRun`, and `domain.ToolStatusesDisabled` (set in the tui and
+  web TestMains — no frontend test may probe the machine's real agents).
+- **Keep mine** = `promptstate.DeclineToolUpdate(OfferKey)` where OfferKey =
+  block key + fingerprint of the OFFERED block, stored hashed
+  (`ToolUpdateID`) — a later template change is a new offer.
+- **TUI.** `toolStatusesMsg` (gen-guarded by `noticeGen`, batched beside
+  the repo-health read on startup/reRoot; reRoot clears the list); the
+  notices (`tool_template_update`, counted, no "Never"; and
+  `tool_agent_unsupported_<hash>`) are derived in `rebuildNotices` OUTSIDE
+  the health half. Settings → External tools rows show the suffix; `u`
+  opens `toolUpdatePopup` (template text scrolls so the answer keys never
+  leave the screen; the fingerprint line is hard-split by cells). Take new /
+  Keep mine settle the status immediately (`settleToolStatus`,
+  `rebuildNotices`) — the re-read runs `--version` and lands late.
+- **Web.** `GET /api/exttools` → `template_offers`; `POST
+  /api/exttools/update|keep {offer_id}` resolve the id against a FRESH
+  status read (the wire never names a path or a command). Seam:
+  `Server.toolStatuses`.
+
 ### Agent console in the TUI (plan 2, 2026-09-24)
 
 Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
