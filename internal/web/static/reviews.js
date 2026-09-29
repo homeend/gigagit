@@ -62,6 +62,17 @@ function reviewActiveIn(st) {
   if (!rv || st.layout === "list") return false;
   return rv.cmp ? st.filesMode === "compare" && st.compare === rv.cmp : st.filesMode === "commit" && st.files === rv.files;
 }
+// nextNotedFile is the index of the next (dir 1) or previous (dir -1) file
+// after from that the review places notes on, or -1 when there is none that
+// way (the TUI's stepReviewFile stays put at the ends). from -1 = the Overview.
+function nextNotedFile(files, counts, from, dir) {
+  for (let i = from + dir; i >= 0 && i < files.length; i += dir) {
+    if ((counts[files[i].path] || 0) > 0) return i;
+  }
+  return -1;
+}
+
+
 // --- end reviews pure ---
 
 
@@ -362,18 +373,32 @@ function deleteReview(id) {
 }
 
 
+// stepReviewFile is `,` / `.` on a review's file list (the TUI's p / n there):
+// the cursor goes to the previous / next file with notes; it does not open it.
+function stepReviewFile(dir) {
+  const rv = state.review;
+  const from = rv.onOverview ? -1 : state.fileCursor;
+  const i = nextNotedFile(state.files, (rv.data && rv.data.counts) || {}, from, dir);
+  if (i < 0) return;
+  rv.onOverview = false;
+  state.fileCursor = i;
+  renderFiles();
+}
+
+
 registerHelp({
   key: "reviews",
   html:
     "an AI review is stored with the commit it reviewed: a commit's reviews head its file list under " +
     "<b>Reviews</b>, and a branch's reviews of its current tip sit under its row. Click one to open the review " +
     "— <b>≡ Overview</b> (the summary, meta and notes it could not place), then the files, ◆N on each the review " +
-    "notes, with the review's notes in the diffs, read-only. esc goes back; right-click a review row or the " +
+    "notes, with the review's notes in the diffs, read-only. On the review's file list <b>,</b> / <b>.</b> move to " +
+    "the previous / next file the review notes. esc goes back; right-click a review row or the " +
     "Overview for <b>Delete review</b>",
 });
 
 
-export { reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

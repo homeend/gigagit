@@ -6,7 +6,7 @@ import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
-import { openSelectedReview, reviewActive, showReviewOverview, stepCommitReviews } from "./reviews.js";
+import { openSelectedReview, reviewActive, showReviewOverview, stepCommitReviews, stepReviewFile } from "./reviews.js";
 import { addNotePrompt, clearRowSelection, cycleFilesSort, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
@@ -243,6 +243,11 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "_" && state.stack) {
     e.preventDefault();
     toggleAllCollapsed();
+  } else if ((e.key === "," || e.key === ".") && reviewActive() && state.layout === "files" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // a review's file list: the TUI's p / n there, the previous / next file
+    // the review notes.
+    e.preventDefault();
+    stepReviewFile(e.key === "." ? 1 : -1);
   } else if ((e.key === "," || e.key === ".") && state.layout === "diff" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     // the TUI's p / n (p is pull here, - folds a stacked file): the ‹/›
     // change buttons, stepping from the viewport after a free scroll.

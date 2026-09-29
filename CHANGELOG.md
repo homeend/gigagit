@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Step between a review's noted files in the browser
+
+### Added
+
+- **`gg web`: `,` / `.` on a review's file list** move the cursor to the
+  previous / next file the review places notes on (the TUI review view's
+  `p` / `n`), from the ≡ Overview too; at the first / last noted file it
+  stays. Inside a diff `,` / `.` still step changes.
+
 ## View all notes in the browser
 
 ### Added
