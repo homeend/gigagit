@@ -7,7 +7,7 @@
 // review view; esc on that diff (or out of the review) comes back here.
 // ctrl+d deletes the thread or review under the cursor after asking. One read of GET /api/notes/overview; deletes reuse
 // POST /api/notes/remove (the same domain call as the TUI's).
-import { $, esc, getJSON, postJSON, state } from "./core.js";
+import { $, charWidth, elideNoteSummary, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { opLine, showLocalConfirm } from "./ops.js";
@@ -245,11 +245,19 @@ function render() {
   if (!an.rows.length) return void (list.innerHTML = `<li class="empty">No notes in this repository.</li>`);
   if (!vis.length) return void (list.innerHTML = `<li class="empty">(no matching notes)</li>`);
   const now = Date.now();
+  // The NOTE column's width in characters: the row less its padding (10px
+  // each side + the 10ch indent) and the 37ch of fixed columns.
+  const sumCols = Math.floor((list.clientWidth - 20) / charWidth()) - 10 - 37 - 1;
   list.innerHTML = vis
     .map((r, i) => {
       const sel = i === an.sel ? " sel" : "";
       if (r.kind === "note" || r.kind === "review") {
         const c = r.kind === "note" ? noteCells(r, now) : reviewCells(r, now);
+        if (r.kind === "note" && r.target.shelf && sumCols - c.tail.length > 4) {
+          // A recycle's "Recycled from <dir> (<branch>)": the path loses its
+          // middle, the branch stays (the TUI's elideNoteSummary).
+          c.summary = elideNoteSummary(c.summary, sumCols - c.tail.length);
+        }
         const whoCls = r.kind === "review" || r.note.source === "agent" ? "agent" : "user";
         const { html, title } = columnsHTML(c, whoCls, r.kind === "note" && r.status !== "active");
         return `<li class="an-${r.kind}${sel}" data-i="${i}" title="${esc(title)}">${html}</li>`;
