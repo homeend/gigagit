@@ -1,0 +1,32 @@
+name = "worktree recycle onto a remote-only branch: creates the tracking branch, then checks it out there"
+
+[input]
+steps = [
+  { branch = "feature/x" },
+  { worktree = "wt-x", branch = "feature/x" },
+]
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+  { branch = "foo" },
+  { switch = "foo" },
+  { write = "g.txt", content = "foo\n" },
+  { commit = "foo-c2" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd  = ["worktree", "recycle", "../wt-x", "origin/foo"]
+exit = 0
+stdout_contains = ["recycled", "feature/x → foo", "from origin/foo"]
+
+[expect]
+branch    = "main"
+branches  = ["feature/x", "foo", "main"]
+worktrees = ["wt-x"]
+
+[[expect.log]]
+branch   = "foo"
+subjects = ["foo-c2", "c1"]

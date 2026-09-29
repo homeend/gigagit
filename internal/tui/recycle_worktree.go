@@ -35,7 +35,29 @@ func (m Model) recycleWorktreeRow() (actionRow, bool) {
 	return actionRow{
 		id:    "recycle-worktree",
 		label: i18n.T("Recycle a worktree"),
-		run:   func(m Model) (tea.Model, tea.Cmd) { return m.openRecyclePicker(name), nil },
+		run:   func(m Model) (tea.Model, tea.Cmd) { return m.openRecyclePicker(name, ""), nil },
+	}, true
+}
+
+// remoteRecycleRow offers the same "Recycle a worktree" on the Remotes tab:
+// the op checks the remote branch out first (creating or fast-forwarding its
+// local branch) and recycles onto that. Hidden when the local branch of that
+// name is already checked out somewhere — the recycle would refuse it.
+func (m Model) remoteRecycleRow() (actionRow, bool) {
+	rb, ok := m.selectedRemoteForAction()
+	if !ok || rb.Branch == "" {
+		return actionRow{}, false
+	}
+	if _, has := m.worktreeAbsPathForBranch(rb.Branch); has {
+		return actionRow{}, false
+	}
+	if len(m.recycleCandidates()) == 0 {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "recycle-worktree",
+		label: i18n.T("Recycle a worktree"),
+		run:   func(m Model) (tea.Model, tea.Cmd) { return m.openRecyclePicker(rb.Branch, rb.Name), nil },
 	}, true
 }
 
@@ -57,8 +79,8 @@ func (m Model) recycleCandidates() []model.Worktree {
 // background refresh may move the Branches cursor before the user picks,
 // and a Model field (not a closure) keeps the capture test-observable. A
 // worktree with a running agent session asks once before the op starts.
-func (m Model) openRecyclePicker(branch string) Model {
-	m.recycleBranch = branch
+func (m Model) openRecyclePicker(branch, remoteRef string) Model {
+	m.recycleBranch, m.recycleRemote = branch, remoteRef
 	live := map[string]bool{}
 	for _, info := range domain.Sessions().List() {
 		live[filepath.Clean(info.Dir)] = true
@@ -107,15 +129,20 @@ func (m Model) openRecyclePicker(branch string) Model {
 }
 
 // recycleOpFor is the one place the op is built from a picked dir and the
-// captured branch (pure, so tests pin the pairing).
-func recycleOpFor(dir, branch string) engine.RecycleWorktree {
-	return engine.RecycleWorktree{Dir: dir, Branch: branch}
+// captured branch and remote ref (pure, so tests pin the pairing).
+func recycleOpFor(dir, branch, remoteRef string) engine.RecycleWorktree {
+	return engine.RecycleWorktree{Dir: dir, Branch: branch, RemoteRef: remoteRef}
 }
 
 // recycleInto dispatches the op for the picked worktree; a live agent
 // session there gets the yes/no gate first.
 func (m Model) recycleInto(dir string, live bool) (tea.Model, tea.Cmd) {
-	op := recycleOpFor(dir, m.recycleBranch)
+	op := recycleOpFor(dir, m.recycleBranch, m.recycleRemote)
+	if op.RemoteRef != "" {
+		// A diverged local branch lands in the checkout recovery modal, whose
+		// rename re-dispatches this recycle under the new name.
+		m.pendingCheckout = pendingCheckout{remoteRef: op.RemoteRef, base: op.Branch, intent: engine.CheckoutStay, recycleDir: dir}
+	}
 	if live {
 		return m.mustConfirmOp(op, i18n.T("An agent session is running in %s. Recycle it anyway?", dir))
 	}

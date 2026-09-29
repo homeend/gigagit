@@ -168,7 +168,10 @@ marker from `domain.Sessions()`.
   session is adding it). It would be: shelve every changed file of the
   target, then discard, then switch — a domain step before the op, since the
   shelf store is domain-owned.
-- **Remote-only branches** (`origin/foo` with no local branch): create the
+- **Remote-only branches** — DONE (2026-09-29, `feat/recycle-remote`): the op
+  runs the Remotes-tab check-out (`SmartCheckout` stay) inline after the
+  target's refusals, then recycles; diverged → the check-out recovery modal,
+  whose rename re-dispatches the recycle. Original note: (`origin/foo` with no local branch): create the
   tracking branch, then recycle.
 - **Web UI**: the same row on the branch context menu, a worktree picker, and
   the `recycle.dirty` decision through the parking web Decider.

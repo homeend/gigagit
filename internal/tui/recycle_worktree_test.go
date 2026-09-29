@@ -150,7 +150,7 @@ func TestRecyclePickerUsesCapturedBranch(t *testing.T) {
 	}
 	// recycleInto is the one dispatch path; it reads m.recycleBranch, so the
 	// op carried "loose" — pin that on the pure builder too.
-	if op := recycleOpFor("/repo-wt/other", m.recycleBranch); op.Branch != "loose" || op.Dir != "/repo-wt/other" {
+	if op := recycleOpFor("/repo-wt/other", m.recycleBranch, m.recycleRemote); op.Branch != "loose" || op.Dir != "/repo-wt/other" {
 		t.Fatalf("recycleOpFor = %+v", op)
 	}
 }
