@@ -456,6 +456,7 @@ func TestSteerServeStartsTheHostAndRepliesWithTheURL(t *testing.T) {
 	}
 	u, reply := nm.Update(cmd()) // webStartedMsg → the reply cmd
 	nm = u.(Model)
+	close(nm.web.stop) // the batch also arms the page-switch wait: end it so runSteerCmd returns
 	runSteerCmd(t, reply)
 	rep, ok := steer.AwaitReply(dir, "c-s", time.Second)
 	if !ok || !rep.OK || rep.Detail != "http://127.0.0.1:4242" || f.starts != 1 {
@@ -479,7 +480,8 @@ func TestSteerServeIgnoresTheBusyRefusal(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("serve starts the host")
 	}
-	_, reply := nm.Update(cmd())
+	u, reply := nm.Update(cmd())
+	close(u.(Model).web.stop) // the page-switch wait in the batch returns at once
 	runSteerCmd(t, reply)
 	if rep, ok := steer.AwaitReply(dir, "c-b", time.Second); !ok || !rep.OK {
 		t.Fatalf("reply = %+v ok=%v", rep, ok)
