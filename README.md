@@ -251,7 +251,10 @@ this checkout can see as one tree — working tree (unstaged / staged /
 untracked), then commits newest first, then shelf entries, each down to its
 directory and file — with a status column (active, stale, orphaned, or missing
 when the commit is gone); type to filter, `enter` on a note opens its diff on
-that line and `esc` comes back to the list. `gg review --notes` does not replace the text report — it still
+that line and `esc` comes back to the list. `gg web` has the same list under
+**view all notes…** in its command palette (`ctrl+k`) — same tree, columns,
+filter, `←`/`→` folds, a click or `enter` on a note opens its diff on it, on a
+review the review view (`esc` returns), `ctrl+d` deletes the thread or review under the cursor after asking. `gg review --notes` does not replace the text report — it still
 prints and saves that — but ALSO asks the tool for anchored notes and imports
 them. `--preview <id|label|<target>...<source>>` targets a saved merge
 preview instead of a single commit (on `gg diff --hunks`, `gg note

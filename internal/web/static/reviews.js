@@ -140,7 +140,8 @@ function setReviewHeader() {
 
 // openReview opens review id as the review view. back says where esc from
 // its file list returns: {kind: "commit", sha, short, subject, reviewId} (a
-// commit's Reviews row) or {kind: "list"}.
+// commit's Reviews row), {kind: "popup", run} (View all notes: run reopens
+// it) or {kind: "list"}.
 async function openReview(id, back) {
   const gen = ++state.detailGen; // a newer open or esc supersedes this one
   state.review = null;
@@ -269,8 +270,17 @@ function showReviewOverview() {
 }
 
 
-// goBack returns to where a review was opened from.
+// goBack returns to where a review was opened from. A popup (View all
+// notes) gets the commit list back under it, then reopens itself.
 function goBack(back) {
+  if (back && back.kind === "popup") {
+    state.detailGen++;
+    state.pane = "commits";
+    setLayout("list");
+    focusPane();
+    back.run();
+    return;
+  }
   if (back && back.kind === "commit" && back.sha) {
     state.reviewSel = back.reviewId || "";
     openCommitByHash(back.sha, back.subject || "").then((ok) => {

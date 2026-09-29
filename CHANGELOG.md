@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## View all notes in the browser
+
+### Added
+
+- **`gg web`: view all notes…** (command palette, `ctrl+k`): the TUI's View
+  all notes popup — every note this checkout can see as one tree (working
+  tree unstaged / staged / untracked, commits newest first with their AI
+  reviews, shelf entries → directory → file → note) with STATUS / WHO /
+  WHERE / WHEN / NOTE columns. Type to filter, `←`/`→` fold, `enter` or a
+  click on a note opens its diff and lands on it, on a review the review
+  view; `esc` out of either returns to the list, filter and cursor kept.
+  `ctrl+d` deletes the thread or review under the cursor after asking. Served
+  by `GET /api/notes/overview` (one `domain.NotesOverview` read).
+
 ## Shelf-entry notes in the browser's file list
 
 ### Added

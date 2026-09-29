@@ -1294,6 +1294,20 @@ import viewer.js). Content links land via live.js's `steerNavigateContent`
 land-then-reveal pair); `#` takes a `gg://` link through
 `GET /api/link-command` (linknav → `toSteerWire`, or `{checkout}` for another
 checkout). The `toSteerWire` and `gg open --web` content refusals are gone.
+**Web View all notes (2026-09-29):** `GET /api/notes/overview` (`allnotes.go`)
+flattens one `domain.NotesOverview` (notes via `ToWireNote`, every group an
+array, 409 when notes are disabled) for `static/allnotes.js`, a
+`mountOverlay("allnotes")` layer at z-index 21 (under `#modal`, which the
+`ctrl+d` confirm raises over it). `anBuildRows`/`anVisible`/`anAgo` are the
+TUI's `buildAllNotesRows`/`visible`/`coarseAgo` ported one to one (node test
+`allnotesjs_test.go`). Opening a row HIDES the popup (state kept) and
+registers `setDiffBack` (files.js): the diff's esc (`drillOut`) calls the
+popup back only while `noteCollapseKey(state.diffCtx)` still names the diff
+it opened — stepping to another file drops the return. `landNote(id)` polls
+~4 s for the `tr.note[data-note]` row (notes paint after the diff; a stack
+loads lazily) and lands like `}`/`{` (`landNoteRow`). A review row opens
+`openReview(id, {kind: "popup", run})` (reviews.js): `goBack` puts the commit
+list under it and runs `run`, which reopens and re-reads the popup.
 **Web open files (5b, 2026-09-26):** the list lives on the `Server`
 (`ofs`, `openfiles.go`, pure core + mutex), keyed by `svc.Root()` — NOT on the
 live hub, which `startLive` replaces on every re-root and settings write. A
