@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -430,11 +431,12 @@ func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, std
 	fs := flag.NewFlagSet("worktree recycle", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	onDirty := fs.String("on-dirty", "", "what to do with the target's uncommitted changes: commit, shelve, discard, or abort")
+	asName := fs.String("as", "", "local name for a remote branch (default: the name without the remote)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 2 || fs.Arg(0) == "" || fs.Arg(1) == "" {
-		fmt.Fprintln(stderr, "usage: gg worktree recycle [--on-dirty=commit|shelve|discard|abort] <path> <branch>")
+		fmt.Fprintln(stderr, "usage: gg worktree recycle [--on-dirty=commit|shelve|discard|abort] [--as <name>] <path> <branch|remote/branch>")
 		return 2
 	}
 	policy := map[string]string{}
@@ -456,9 +458,54 @@ func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, std
 		fmt.Fprintf(stderr, "worktree recycle: no worktree at %q\n", fs.Arg(0))
 		return 1
 	}
+	branch, remoteRef, err := resolveRecycleBranch(svc, fs.Arg(1), *asName)
+	if err != nil {
+		fmt.Fprintln(stderr, "worktree recycle:", err)
+		return 2
+	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
-	res, err := runOperation(context.Background(), svc, engine.RecycleWorktree{Dir: match.Path, Branch: fs.Arg(1)}, dec, stderr)
-	return finish(res, err, stdout, stderr)
+	res, err := runOperation(context.Background(), svc, engine.RecycleWorktree{Dir: match.Path, Branch: branch, RemoteRef: remoteRef}, dec, stderr)
+	code := finish(res, err, stdout, stderr)
+	var div engine.CheckoutDivergedError
+	if remoteRef != "" && *asName == "" && errors.As(err, &div) {
+		fmt.Fprintln(stderr, "hint: retry with --as <name> to check it out under a different local name")
+	}
+	return code
+}
+
+// resolveRecycleBranch reads the recycle's <branch> argument: a local branch
+// wins as is; otherwise a remote-tracking branch ("origin/foo") is checked
+// out first as its name without the remote (or --as). A name that is
+// neither goes through as a local branch, so git's own error reports it.
+func resolveRecycleBranch(svc *domain.Service, arg, as string) (branch, remoteRef string, err error) {
+	ctx := context.Background()
+	if as == "" {
+		locals, err := svc.Branches(ctx)
+		if err != nil {
+			return "", "", err
+		}
+		for _, b := range locals {
+			if b.Name == arg {
+				return arg, "", nil
+			}
+		}
+	}
+	remotes, err := svc.RemoteBranches(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	for _, rb := range remotes {
+		if rb.Name == arg {
+			if as != "" {
+				return as, rb.Name, nil
+			}
+			return rb.Branch, rb.Name, nil
+		}
+	}
+	if as != "" {
+		return "", "", fmt.Errorf("--as names the local branch for a remote branch; %q is not one", arg)
+	}
+	return arg, "", nil
 }
 
 // matchWorktreeArg resolves a worktree argument the way `worktree remove`
