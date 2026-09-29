@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A backgrounded file stays open on esc
+
+### Changed
+
+- **TUI: esc on a file that has been in the background sends it back
+  there.** Once a file was sent to the background (`ctrl+]`, the `.`
+  menu's Send to background, or `ctrl+]` in the F window), esc in its
+  full-screen viewer or the files view's preview backgrounds it again
+  instead of closing it — every time, until it is closed. `X` closes it
+  for good (the viewer and the preview; `x` in the `ctrl+\` Open files
+  tab still does too). The hint line reads `[esc] background  [X] close`
+  for such a file. A file never backgrounded closes on esc as before
+  (`X` closes it too).
+
 ## Headless conflict resolution with Claude Code and Junie in the TUI
 
 ### Added

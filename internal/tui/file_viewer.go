@@ -82,6 +82,8 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	scroll := func(delta int) { p.sel = previewClamp(p.sel+delta, len(p.lines), rows, p.mode) }
 	switch msg.String() {
 	case "esc":
+		return m.escDoc(fv.openFile), nil
+	case "X":
 		return m.closeDoc(fv.openFile), nil
 	case "ctrl+]":
 		return m.backgroundDoc(fv.openFile), nil

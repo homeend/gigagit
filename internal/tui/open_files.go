@@ -167,13 +167,23 @@ func docLoaded(d *openFile) bool { return len(d.p.lines) > 0 && d.p.lines[0].src
 // backgroundDoc takes d off the screen and keeps it open (ctrl+]): the screen
 // returns to whatever was beneath it.
 func (m Model) backgroundDoc(d *openFile) Model {
+	d.backgrounded = true
 	m = m.detachDoc(d)
 	m.statusMsg = i18n.T("%s is in the background — ctrl+\\ lists open files", d.path)
 	return m
 }
 
-// closeDoc closes d for good (esc on it, x in the switcher): off the screen
-// and out of the list.
+// escDoc is esc on an open file's frame: a file that has been in the
+// background goes back there, any other one closes.
+func (m Model) escDoc(d *openFile) Model {
+	if d.backgrounded {
+		return m.backgroundDoc(d)
+	}
+	return m.closeDoc(d)
+}
+
+// closeDoc closes d for good (X or esc on it, x in the switcher): off the
+// screen and out of the list.
 func (m Model) closeDoc(d *openFile) Model {
 	m = m.detachDoc(d)
 	m.openFiles.remove(m.currentWorktree, d)
