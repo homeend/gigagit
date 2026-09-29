@@ -1,6 +1,7 @@
 package web
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,7 @@ var recycleWiring = []struct{ file, want, why string }{
 	{"sidebar.js", `op: "recycle-worktree"`, "a pick starts the op"},
 	{"sidebar.js", "elidePath(", "picker paths are cut in the middle"},
 	{"sidebar.js", "An agent session is running in ", "a live session asks first"},
+	{"sidebar.js", `const NBSP = "\u00a0"`, "the picker's gaps and column padding survive HTML whitespace collapsing"},
 }
 
 func TestRecycleWired(t *testing.T) {
@@ -43,6 +45,16 @@ func TestRecycleWired(t *testing.T) {
 	for _, c := range recycleWiring {
 		if !strings.Contains(readStatic(t, c.file), c.want) {
 			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
+		}
+	}
+	// The picker measures with runes() and cuts with elidePath(); sidebar.js
+	// is an ES module, so a helper it does not import is a ReferenceError the
+	// moment the row is clicked (seen in the browser, invisible to the pure
+	// section above).
+	src := readStatic(t, "sidebar.js")
+	for _, name := range []string{"runes", "elidePath"} {
+		if !regexp.MustCompile(`import \{[^}]*\b` + name + `\b[^}]*\} from "\./core\.js"`).MatchString(src) {
+			t.Errorf("sidebar.js does not import %s from core.js", name)
 		}
 	}
 	// Both menus carry the row: the branch menu and the remote menu.

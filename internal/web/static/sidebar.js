@@ -1,6 +1,6 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, SECTIONS, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, state } from "./core.js";
+import { $, SECTIONS, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
@@ -672,7 +672,11 @@ $("remotes-list").addEventListener("click", (e) => {
 // running agent session asks once before the op starts.
 function openRecyclePicker(target, onto, x, y) {
   const cands = recycleCandidates(state.worktrees, state.worktree, state.sessions);
-  const suffix = (c) => "  " + c.branch + (c.live ? "  (agent session running)" : "");
+  // Non-breaking: a menu button collapses runs of plain spaces, which would
+  // undo both the gap and the column padding.
+  const NBSP = "\u00a0";
+  const gap = NBSP + NBSP;
+  const suffix = (c) => gap + c.branch + (c.live ? gap + "(agent session running)" : "");
   const pathCols = Math.max(12, 72 - Math.max(...cands.map((c) => runes(suffix(c)).length)));
   const paths = cands.map((c) => elidePath(c.path, pathCols));
   const col = Math.max(...paths.map((p) => runes(p).length));
@@ -681,7 +685,7 @@ function openRecyclePicker(target, onto, x, y) {
     const start = () =>
       startOp({ op: "recycle-worktree", path: c.path, ...target }, "recycling " + c.path + " → " + onto);
     items.push({
-      label: paths[i] + " ".repeat(col - runes(paths[i]).length) + suffix(c),
+      label: paths[i] + NBSP.repeat(col - runes(paths[i]).length) + suffix(c),
       act: () =>
         c.live
           ? showLocalConfirm("An agent session is running in " + c.path + ". Recycle it anyway?", ["recycle", "cancel"], (o) => {
