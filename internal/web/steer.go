@@ -226,7 +226,8 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		}
 	}
 	// The hint's closed set (model.LinkHint's grammar already closed it:
-	// "bookmark", "shelf" or "stash") is validated regardless of Cmd, like
+	// "bookmark", "shelf", "stash", "preview", "version" or "view") is
+	// validated regardless of Cmd, like
 	// Target/Line above — an unknown kind is a wire refusal, never a notice,
 	// because the grammar already closed that set (S13 point 2).
 	if c.HintKind != "" {

@@ -258,6 +258,13 @@ func (m Model) navigateLanded(c steer.Command, detail string) (Model, tea.Cmd) {
 		// No load to wait for: the Previews rows are a startup source, and a
 		// start-at landing already waits for that fan-out.
 		return m.revealSavedSet(c), reply
+	case "version":
+		// The versions rows are not a startup source: the record is looked
+		// up off the Update thread (one for-each-ref) and the popup parked
+		// under the landed compare when it arrives (version_hint.go).
+		m.hintGen++
+		m.pendingHint = &pendingHint{cmd: c, tag: m.hintGen, at: time.Now()}
+		return m, tea.Batch(reply, m.loadVersionForHintCmd(c, m.hintGen))
 	case model.ContentHintKind:
 		// The landing IS the hint: the viewer is already open.
 		return m, reply

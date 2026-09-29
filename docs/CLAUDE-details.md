@@ -817,7 +817,7 @@ gg://<repo>                                       the repository
 <repo>   = <name>  remote-named    | /<absolute checkout path>  local
 <target> = <7..64 hex> | staged | ref:<name> | <a>..<b> | <target>...<source>
            | (absent) = the working tree
-<hint>   = <kind>=<id>,  kind ∈ {bookmark, shelf, stash}
+<hint>   = <kind>=<id>,  kind ∈ {bookmark, shelf, stash, preview, version, view}
 ```
 
 (64, not 40: a sha-256 repository's commit ids are 64 hex characters and every
@@ -917,6 +917,24 @@ Address-less is refused in `finishLink` by name. Both steer validators ask
 `model.LinkHintKindOK` instead of retyping the set. `DescribeLink` reads the
 hinted link as `preview: <label>` / `pair: <label>` when saved, else falls
 through to the address arms.
+
+**`?version=<unix>-<op>` — a recorded branch version's frozen preview**
+(`docs/superpowers/specs/2026-09-28-version-links-design.md`). The address is
+the pair the record froze (`@<base>..<ours>`); the id is the ref's last
+element and carries no branch (hint ids reject `/`). `domain.FindVersion`
+is the ONE lookup (one `for-each-ref` over the store): a record with this id
+AND this pair, else this id, else the newest record freezing this pair, else
+a miss — the tie-break matters because a pull records both of its branches
+in the same second under one token. Producers (`tui.versionLinkFor`,
+`cli.versionLinkText`, `web.versionLink`) validate both shas with
+`CommitEndpoint` first: the ref trailer is never sha-checked on write. The
+TUI lands the pair as usual and then parks a `versionsPopup` on the row
+under the open compare (`filesReturnLayers`, esc restores it) — or pushes it
+live if the compare has closed; the web pushes its versions layer on TOP of
+the landed compare (it has no "under") with the row flashed. The drift
+notice's *Copy preview link* is the first `noticeAction{keep: true}`: acting
+no longer always removes the notice. Machine-local: version refs are never
+pushed and `Ours` is a rewritten tip.
 
 **Presence is checked in two layers, deliberately.** `domain.Resolved` is a
 value with no notice channel, so it cannot report a degraded hint. A link

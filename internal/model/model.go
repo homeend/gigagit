@@ -114,6 +114,11 @@ type BranchVersion struct {
 	Source, Target    string
 }
 
+// ID is the version's token as `gg versions` prints it and a ?version= hint
+// carries it: "<unix>-<op>", the last element of Ref. The ONE spelling — the
+// CLI's id lookup and every link producer use it.
+func (v BranchVersion) ID() string { return fmt.Sprintf("%d-%s", v.Unix, v.Op) }
+
 // VersionedBranch summarizes one branch's recorded versions.
 type VersionedBranch struct {
 	Branch     string

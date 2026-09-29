@@ -1,0 +1,38 @@
+name = "version links: gg versions prints the preview link under each two-branch row"
+
+[input]
+steps = [
+  { write = "a.txt", content = "A\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "b.txt", content = "B\n" },
+  { commit = "feat work" },
+  { switch = "main" },
+  { write = "c.txt", content = "C\n" },
+  { commit = "main work" },
+]
+
+[[run]]
+cmd  = ["merge", "feat"]
+exit = 0
+
+# The producer: the pair is the frozen preview, the hint is the id column.
+# The sandbox repo has no remote, so the link is the LOCAL form, indented
+# under its row. (The harness cannot feed one run's stdout into the next;
+# the link's own gg diff / gg link resolve round trip is pinned by
+# TestVersionLinkRoundTripsThroughDiffAndResolve in internal/cli.)
+[[run]]
+cmd             = ["versions", "main"]
+exit            = 0
+stdout_contains = ["-merge", "\n  gg:///", "?version="]
+
+# A one-branch record prints no link: the restore snapshot below is one.
+[[run]]
+cmd  = ["versions", "restore", "main", "latest"]
+exit = 0
+
+[[run]]
+cmd             = ["versions", "main"]
+exit            = 0
+stdout_contains = ["-restore", "?version="]

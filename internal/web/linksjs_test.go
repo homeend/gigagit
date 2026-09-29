@@ -59,6 +59,14 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 		{"links.js", "preview: ctx.preview", "the file contributor must forward the pair it was given"},
 		{"files.js", "preview: po ?", "the file-row call site must hand the open preview's pair to the file contributor"},
 		{"files.js", "row.dataset.rno", "the diff-line path must prefer a context row's new-side number over dropping the line"},
+		// Version links (2026-09-29): the kind gate must admit the new kind,
+		// the versions row must copy the server-built link, and the landing
+		// must route to the versions layer before the entry reveal's
+		// "cannot reveal" path.
+		{"links.js", `kind === "version"`, "linkHintKindOK must admit the version kind (model.linkHintKinds' twin)"},
+		{"versions.js", "copy gg link", "the versions row menu must offer the preview link"},
+		{"versions.js", "export async function revealVersion(s)", "the version reveal must exist"},
+		{"live.js", `s.hint_kind === "version"`, "revealHint must route a version hint to the versions layer"},
 		// The ◆ note menu (2026-09-16): a note has no address of its own, so
 		// the row copies its ANCHOR's link — the same string the line under it
 		// yields. This substring exists only after that branch was added.

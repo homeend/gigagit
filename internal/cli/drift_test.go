@@ -114,6 +114,9 @@ func TestCmdRebaseReportsChangeSetDrift(t *testing.T) {
 	if !strings.Contains(out, "absorbed upstream: M f3.txt") {
 		t.Fatalf("stdout missing the quiet Removed line for f3.txt:\n%s", out)
 	}
+	if !strings.Contains(out, "  recorded version: gg:///") || !strings.Contains(out, "?version=9999999999-rebase") {
+		t.Fatalf("stdout missing the recorded version's preview link:\n%s", out)
+	}
 	if strings.Contains(out, "f4.txt") {
 		t.Fatalf("stdout alarmed on f4.txt, which did not drift (added on both sides):\n%s", out)
 	}

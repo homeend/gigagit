@@ -113,7 +113,14 @@ func (h LinkHint) String() string {
 // "view" is not a surface the link was copied FROM but the one it lands ON:
 // view=content opens the file's working-tree content in the viewer instead
 // of its diff. Only a working-tree file link may carry it (ParseLink).
-var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true, "view": true}
+//
+// "version" names a RECORDED BRANCH VERSION (refs/gg/versions/<branch>/<id>)
+// whose frozen preview the link's pair IS: the id is the ref's last element
+// (<unix>-<op>, BranchVersion.ID) and carries no branch, because hint ids
+// reject '/'. A lookup key like "preview": the consumer finds the record by
+// id, tie-broken by the pair, else by the pair alone. Machine-local by
+// nature — version refs are never pushed.
+var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true, "view": true, "version": true}
 
 // The content hint: gg://<repo>/<path>[:<line>]?view=content names a file's
 // CONTENT on disk in the worktree — never a diff, never a commit.
@@ -575,7 +582,7 @@ func parseLinkHint(s string) (LinkHint, error) {
 	}
 	kind, id := s[:i], s[i+1:]
 	if !LinkHintKindOK(kind) {
-		return LinkHint{}, fmt.Errorf("%w: unknown hint kind %q (want bookmark, shelf, stash, preview or view)", ErrLink, kind)
+		return LinkHint{}, fmt.Errorf("%w: unknown hint kind %q (want bookmark, shelf, stash, preview, version or view)", ErrLink, kind)
 	}
 	if id == "" {
 		return LinkHint{}, fmt.Errorf("%w: hint %q has no id", ErrLink, kind)

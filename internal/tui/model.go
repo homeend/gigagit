@@ -1390,6 +1390,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("bookmarked %s → %s", msg.bm.Path, msg.bm.ID)
 		}
 		return m, nil
+	case versionHintLoadedMsg:
+		return m.versionHintLoaded(msg)
 	case bookmarksLoadedMsg:
 		if msg.err != nil {
 			m.statusMsg = i18n.T("bookmarks: %s", msg.err.Error())

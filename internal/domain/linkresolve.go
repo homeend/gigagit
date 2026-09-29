@@ -537,6 +537,11 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 			// where it was copied from — so without one the link names
 			// nothing, whether or not this store holds the id.
 			return Resolved{}, fmt.Errorf("%w: a preview hint needs the set it names (@<target>...<source> or @<a>..<b>); %q alone names nothing", model.ErrLink, l.Hint.ID)
+		case "version":
+			// A recorded version IS its frozen pair — the hint only says
+			// which record the pair came from — so without one the link
+			// names nothing, whether or not this store holds the id.
+			return Resolved{}, fmt.Errorf("%w: a version hint needs the preview it names (@<base>..<ours>); %q alone names nothing", model.ErrLink, l.Hint.ID)
 		case model.ContentHintKind:
 			// A content link names a FILE's content; with no path it names
 			// nothing. (The remote form is refused by ParseLink already; the

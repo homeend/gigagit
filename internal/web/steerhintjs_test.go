@@ -192,3 +192,30 @@ func TestRevealSavedSetTargetHasAFlashRule(t *testing.T) {
 		t.Error("live.js: revealHint no longer routes a preview hint to revealSavedSet")
 	}
 }
+
+// The version reveal flashes a row of #versions-list; the rule must exist or
+// the reveal is invisible (the revealSavedSet gate's twin).
+func TestRevealVersionTargetHasAFlashRule(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile(filepath.Join("static", "versions.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	css, err := os.ReadFile(filepath.Join("static", "style.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := strings.Index(string(src), "export async function revealVersion(s) {")
+	if i < 0 {
+		t.Fatal("versions.js: revealVersion is gone")
+	}
+	j := strings.Index(string(src)[i:], "\n}\n")
+	body := string(src)[i : i+j]
+	m := regexp.MustCompile(`\$\("([a-z]+-list)"\)`).FindStringSubmatch(body)
+	if m == nil || !strings.Contains(body, `classList.add("flash")`) {
+		t.Fatalf("versions.js: revealVersion no longer flashes a *-list row")
+	}
+	if !regexp.MustCompile(`#` + m[1] + `\s+li\.flash\b`).Match(css) {
+		t.Errorf("style.css has no `#%s li.flash` rule — the reveal would flash invisibly", m[1])
+	}
+}

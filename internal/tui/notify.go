@@ -37,6 +37,9 @@ type noticeAction struct {
 	label string
 	run   func(Model) (Model, tea.Cmd)
 	never bool
+	// keep leaves the notice standing after run: a copy is not a dismissal,
+	// and removing the notice would delete the list the copy is about.
+	keep bool
 }
 
 // noticeCommitGraph is the commit-graph recommendation's stable id.
@@ -608,14 +611,31 @@ func driftNotice(branch string, report domain.DriftReport, paused bool, repoKey 
 		}
 	}
 	detail = append(detail, i18n.T("Open Branch versions to compare it against what gg recorded before this operation."))
+	actions := []noticeAction{{label: i18n.T("Dismiss")}}
+	if report.Version.Base != "" && report.Version.Ours != "" {
+		// The recorded version's preview link — what the branch contributed
+		// BEFORE the operation — for a chat or `gg diff`. keep: the copy
+		// must not remove the very list the user is about to research.
+		v := report.Version
+		actions = append([]noticeAction{{
+			label: i18n.T("Copy preview link"),
+			keep:  true,
+			run: func(m Model) (Model, tea.Cmd) {
+				text, ok := m.versionLinkFor(v)
+				if !ok {
+					m.statusMsg = i18n.T("the recorded commit is not usable")
+					return m, nil
+				}
+				return m, m.copyToClipboardCmd(i18n.T("Copied link: %s", text), text)
+			},
+		}}, actions...)
+	}
 	return &notice{
 		id:      driftNoticeID(branch, report),
 		repoKey: repoKey,
 		title:   title,
 		detail:  detail,
-		actions: []noticeAction{
-			{label: i18n.T("Dismiss")},
-		},
+		actions: actions,
 	}
 }
 

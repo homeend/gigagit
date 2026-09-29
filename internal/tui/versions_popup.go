@@ -177,6 +177,10 @@ func (p *versionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if p.mode == versionsModeVersions {
 				return p.onCopy(m)
 			}
+		case "L":
+			if p.mode == versionsModeVersions {
+				return p.onCopyLink(m)
+			}
 		}
 		return m, nil
 	}
@@ -383,6 +387,26 @@ func (p *versionsPopup) onCopy(m Model) (Model, tea.Cmd) {
 	return m, m.copyToClipboardCmd(i18n.T("copied %s", short), full)
 }
 
+// onCopyLink copies the row's preview link — what enter opens, addressed:
+// gg://<repo>@<base>..<ours>?version=<id>. A one-branch record has no
+// preview to link; an unusable record declines the way onEnter does.
+func (p *versionsPopup) onCopyLink(m Model) (Model, tea.Cmd) {
+	if p.sel < 0 || p.sel >= len(p.rows) {
+		return m, nil
+	}
+	v := p.rows[p.sel]
+	if v.Base == "" || v.Ours == "" {
+		m.statusMsg = i18n.T("this version records no preview")
+		return m, nil
+	}
+	text, ok := m.versionLinkFor(v)
+	if !ok {
+		m.statusMsg = i18n.T("the recorded commit is not usable")
+		return m, nil
+	}
+	return m, m.copyToClipboardCmd(i18n.T("Copied link: %s", text), text)
+}
+
 // versionRowText renders one versions-mode row:
 // "2026-07-21 14:03 · rebase · a1b2c3d4 <subject>".
 func versionRowText(v model.BranchVersion) string {
@@ -415,7 +439,18 @@ func (p *versionsPopup) render(m Model, below string) string {
 // box draws the popup box (modal box only).
 func (p *versionsPopup) box(m Model) string {
 	w, termH := m.overlayDims()
-	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
+	hint := i18n.T("[enter] versions")
+	if p.mode == versionsModeVersions {
+		// "preview", not "compare": enter opens the version's FROZEN preview
+		// (the recorded base..ours) — or, for a fieldless one-branch record,
+		// that commit's own file view. Neither is the two-endpoint compare
+		// the old label promised.
+		hint = i18n.T("[enter] preview  [r] restore  [d] delete  [y] copy sha  [L] copy link")
+	}
+	// The box follows its widest fixed line — the key hint — the notice
+	// dialog's fit rule (popupFitWidth): the default 56 columns cut the
+	// hint after [y], so the L it advertises was never seen.
+	inner := popupFitWidth(w, p.maximized, popupInnerWidth(w), lipgloss.Width(hint))
 	textW := popupTextWidth(inner)
 
 	title := i18n.T("Branch versions")
@@ -433,15 +468,6 @@ func (p *versionsPopup) box(m Model) string {
 		bodyLines = p.branchBodyLines(termH, textW)
 	default:
 		bodyLines = p.versionsBodyLines(termH, textW)
-	}
-
-	hint := i18n.T("[enter] versions")
-	if p.mode == versionsModeVersions {
-		// "preview", not "compare": enter opens the version's FROZEN preview
-		// (the recorded base..ours) — or, for a fieldless one-branch record,
-		// that commit's own file view. Neither is the two-endpoint compare
-		// the old label promised.
-		hint = i18n.T("[enter] preview  [r] restore  [d] delete  [y] copy sha")
 	}
 
 	parts := []string{title, ""}

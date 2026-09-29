@@ -125,8 +125,9 @@ gg://<repo>@<target>...<source>            a merge preview: the Previews tab ent
 gg://<repo>/<path>@<target>...<source>[:<line>]   a file (or new-side line) in that preview
 gg://<repo>/<path>@<target>...<source>#<hunk>     a hunk of that preview's patch
 gg:///abs/checkout/path/file.go:12         a repo with no remote: its absolute path
-gg://<repo>@<sha>?bookmark=<id>            a trailing ?<kind>=<id> hint: bookmark | shelf | stash | preview
+gg://<repo>@<sha>?bookmark=<id>            a trailing ?<kind>=<id> hint: bookmark | shelf | stash | preview | version
 gg://<repo>@<a>..<b>?preview=<id>          a SAVED pair (or, on a <target>...<source> link, a saved merge preview)
+gg://<repo>@<base>..<ours>?version=<unix>-<op>   a RECORDED BRANCH VERSION's frozen preview (the id `gg versions` prints)
 ```
 
 `@ref:<name>` keeps the NAME on purpose: it addresses the branch, not
@@ -146,6 +147,14 @@ differently. `?preview=<id>` marks a link copied off a SAVED Previews entry
 then reveals the saved row — by id, else by the entry holding the same set,
 else a "not saved here" notice. The id is a lookup key, never a checksum, and
 a `?preview=` hint with no `@…` address is refused (it names nothing).
+`?version=<id>` marks a link copied off a recorded BRANCH VERSION (the
+snapshot gg takes before a merge/rebase/pull): the address is that version's
+frozen preview `@<base>..<ours>`, so `gg diff` on it shows what the branch
+contributed BEFORE the operation, and a TUI/web landing reveals the Branch
+versions row it came from. The id is `<unix>-<op>` with no branch (ids reject
+`/`); the consumer finds the record by id, tie-broken by the pair. These
+links are MACHINE-LOCAL: version refs are never pushed and `<ours>` is a
+rewritten tip, so on another checkout the pair itself will not resolve.
 `gg link resolve` takes both: a `@ref:` link answers with `ref <name>` plus
 the tip it resolves to HERE, a `@a..b` link with `pair <a>..<b>`, and
 `--json` carries `ref` / `pair_a` + `pair_b` beside the address fields. The
@@ -575,6 +584,12 @@ finds the right one here.
 - `gg versions [<branch>]` — list a branch's recorded pre-operation
   snapshots (taken automatically before merges, rebases, resets, amends,
   and branch deletion), newest first: `<id> <short-sha> <time> <subject>`.
+  A two-branch row is followed by one indented line holding its preview
+  link (`gg://<repo>@<base>..<ours>?version=<id>`) — paste it to `gg diff`,
+  or into a chat, to hand someone the pre-operation change set. One-branch
+  rows have none. The post-operation drift report (`! this operation
+  changed <branch>'s change set`) ends with the same link as
+  `recorded version: gg://…`.
 - `gg versions show <branch> <id|latest>` — print the frozen change set a
   two-branch version recorded (`<status>\t<path>` lines, its own
   Base...Ours diff at operation time — never a live diff against whatever

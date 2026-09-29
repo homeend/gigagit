@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Links to branch versions
+
+### Added
+
+- **Copy a link to a recorded branch version.** A version's preview — what
+  `enter` opens in Branch versions — has a link:
+  `gg://<repo>@<base>..<ours>?version=<unix>-<op>`. `L` in the versions popup
+  and *Copy preview link* on the drift notice copy it (the notice stays
+  open); `gg versions <branch>` prints it under each two-branch row, the
+  CLI's post-operation drift report names it, and the web versions row menu
+  offers *copy gg link*. Opening the link lands on the pair's diff and
+  reveals the Branch versions popup (web: layer) on that row — by id,
+  tie-broken by the pair (a pull records two branches under one id), else
+  by the pair; a deleted record degrades to the plain diff and a notice.
+  Machine-local: version refs are never pushed. The versions popup now
+  sizes to its key hint instead of cutting it.
+
 ## Recycle a worktree: shelve the target's work
 
 ### Added

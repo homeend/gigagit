@@ -54,7 +54,8 @@ type linkResolveOut struct {
 	Side          string `json:"side,omitempty"`
 	Hunk          int    `json:"hunk,omitempty"`
 	// HintKind/HintID name the UI surface the link was copied from
-	// ("bookmark", "shelf" or "stash"). A hint never changes WHERE the link
+	// ("bookmark", "shelf", "stash", "preview", "version" or "view"). A
+	// hint never changes WHERE the link
 	// points — only which row a consumer reveals there (spec §3.3).
 	HintKind string `json:"hint_kind,omitempty"`
 	HintID   string `json:"hint_id,omitempty"`

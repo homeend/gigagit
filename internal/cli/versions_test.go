@@ -134,3 +134,77 @@ func TestCmdVersionsRestoreDirtyRequiresDiscard(t *testing.T) {
 		t.Fatalf("README.md = %q err=%v, want restored content %q", got, err, "hi\n")
 	}
 }
+
+// A two-branch version row is followed by its preview link on an indented
+// continuation line; a one-branch row (no Base/Ours) is not.
+func TestCmdVersionsPrintsThePreviewLinkUnderTwoBranchRows(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	base, ours, other, _ := buildResurrectionFixture(t, dir, "feat", "feat")
+	fabricateVersion(t, dir, "feat", "rebase", 1753100000, base, ours, other)
+	gitRun(t, dir, "update-ref", "refs/gg/versions/feat/1753100001-amend", ours) // one-branch: no preview
+	stampVersionsFormat(t, dir)
+
+	code, out, errb := runCLI(t, dir, "versions", "feat")
+	if code != 0 {
+		t.Fatalf("versions exit %d: %s", code, errb)
+	}
+	want := "\n  gg:///" // the sandbox has no remote: local form, indented
+	if !strings.Contains(out, want) || !strings.Contains(out, "@"+base+".."+ours+"?version=1753100000-rebase") {
+		t.Fatalf("missing the continuation link line:\n%s", out)
+	}
+	if strings.Contains(out, "?version=1753100001-amend") {
+		t.Fatalf("a one-branch row must not get a link:\n%s", out)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 3 || !strings.HasPrefix(lines[0], "1753100001-amend ") || !strings.HasPrefix(lines[1], "1753100000-rebase ") || !strings.HasPrefix(lines[2], "  gg://") {
+		t.Fatalf("rows must stay `<id> …` first, link indented under its row:\n%s", out)
+	}
+}
+
+// A checkout whose path holds a character the grammar cannot carry has no
+// link form: the rows print, the link line is simply absent.
+func TestCmdVersionsNoLinkFormPrintsRowsOnly(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "odd?name")
+	if err := os.Rename(newRepoDir(t), dir); err != nil {
+		t.Skip("cannot create a '?' path here: " + err.Error())
+	}
+	base, ours, other, _ := buildResurrectionFixture(t, dir, "feat", "feat")
+	fabricateVersion(t, dir, "feat", "rebase", 1753100000, base, ours, other)
+	stampVersionsFormat(t, dir)
+	code, out, errb := runCLI(t, dir, "versions", "feat")
+	if code != 0 {
+		t.Fatalf("versions exit %d: %s", code, errb)
+	}
+	if !strings.Contains(out, "1753100000-rebase") || strings.Contains(out, "gg://") {
+		t.Fatalf("want the row without a link line:\n%s", out)
+	}
+}
+
+// The printed link drives gg diff and gg link resolve --json carries the hint.
+func TestVersionLinkRoundTripsThroughDiffAndResolve(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	base, ours, other, _ := buildResurrectionFixture(t, dir, "feat", "feat")
+	fabricateVersion(t, dir, "feat", "rebase", 1753100000, base, ours, other)
+	stampVersionsFormat(t, dir)
+	_, out, _ := runCLI(t, dir, "versions", "feat")
+	var link string
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.HasPrefix(ln, "  gg://") {
+			link = strings.TrimSpace(ln)
+		}
+	}
+	if link == "" {
+		t.Fatalf("no link line in:\n%s", out)
+	}
+	if code, dout, errb := runCLI(t, dir, "diff", link); code != 0 || !strings.Contains(dout, "f3.txt") {
+		t.Fatalf("diff <link> exit %d out=%q err=%s", code, dout, errb)
+	}
+	code, rout, errb := runCLI(t, dir, "link", "resolve", "--json", link)
+	if code != 0 || !strings.Contains(rout, `"hint_kind":"version"`) || !strings.Contains(rout, `"hint_id":"1753100000-rebase"`) {
+		t.Fatalf("resolve --json exit %d out=%q err=%s", code, rout, errb)
+	}
+}
