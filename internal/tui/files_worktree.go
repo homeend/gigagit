@@ -385,6 +385,7 @@ func (m Model) wtBackgroundPreview() Model {
 	if open := m.openFiles.find(m.currentWorktree, d.key()); open != nil {
 		d = open
 	}
+	d.backgrounded = true
 	m.statusMsg = ""
 	m = m.registerDoc(d)
 	if m.statusMsg == "" {
@@ -412,6 +413,7 @@ func (m Model) wtBackgroundRow() (Model, tea.Cmd) {
 		d = newOpenFile(src, path)
 		load = m.loadDoc(d)
 	}
+	d.backgrounded = true
 	m.statusMsg = ""
 	m = m.registerDoc(d)
 	if m.statusMsg == "" {

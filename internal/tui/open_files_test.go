@@ -211,6 +211,70 @@ func TestEscClosesTheViewersFile(t *testing.T) {
 	}
 }
 
+// TestEscSendsABackgroundedFileBack: a file that has been in the background
+// (ctrl+]) goes back there on esc every time it is brought forward; X closes
+// it for good.
+func TestEscSendsABackgroundedFileBack(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "sticky.txt", "x\n", 0)
+	tm, _ := m.Update(keyCtrlBracket())
+	m = tm.(Model)
+	for range 2 { // sticky: not only the first esc after coming back
+		m, _ = m.bringToFront(fv.openFile)
+		if layerOf[*fileViewer](m) == nil {
+			t.Fatal("bringToFront did not show the viewer")
+		}
+		tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		m = tm.(Model)
+		if layerOf[*fileViewer](m) != nil || m.openFiles.find(m.currentWorktree, fv.key()) != fv.openFile {
+			t.Fatal("esc on a backgrounded file must send it back, not close it")
+		}
+	}
+	m, _ = m.bringToFront(fv.openFile)
+	if v := m.View(); !strings.Contains(v, "[esc] background  [X] close") {
+		t.Errorf("the viewer's hint does not say esc backgrounds and X closes:\n%s", v)
+	}
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("X")})
+	m = tm.(Model)
+	if layerOf[*fileViewer](m) != nil || m.openFiles.find(m.currentWorktree, fv.key()) != nil {
+		t.Fatal("X must close the viewer AND drop the file from the list")
+	}
+}
+
+// TestXClosesAFreshViewer: X closes a file that was never in the background
+// too — the same as its esc.
+func TestXClosesAFreshViewer(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "fresh.txt", "x\n", 0)
+	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("X")})
+	m = tm.(Model)
+	if layerOf[*fileViewer](m) != nil || m.openFiles.find(m.currentWorktree, fv.key()) != nil {
+		t.Fatal("X must close the viewer AND drop the file from the list")
+	}
+}
+
+// TestPreviewEscSendsABackgroundedFileBack: the files view's preview obeys
+// the same rule — esc backgrounds a once-backgrounded file, X closes it.
+func TestPreviewEscSendsABackgroundedFileBack(t *testing.T) {
+	t.Parallel()
+	m := linkPreviewModel(t, "a\nb\n", 0)
+	d := m.filesPreview
+	m = m.registerDoc(d)
+	m = m.backgroundDoc(d)
+	m.filesPreview, m.filesTreeFocused = d, false
+	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = tm.(Model)
+	if m.filesPreview != nil || m.openFiles.find(m.currentWorktree, d.key()) != d {
+		t.Fatal("esc on a backgrounded preview must send it back, not close it")
+	}
+	m.filesPreview, m.filesTreeFocused = d, false
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("X")})
+	m = tm.(Model)
+	if m.filesPreview != nil || m.openFiles.find(m.currentWorktree, d.key()) != nil {
+		t.Fatal("X must close the preview AND drop the file from the list")
+	}
+}
+
 func TestPreviewCtrlBracketAndEsc(t *testing.T) {
 	t.Parallel()
 	m := linkPreviewModel(t, "a\nb\n", 0)

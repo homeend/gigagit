@@ -283,6 +283,9 @@ func (m Model) footerOverride() (string, bool) {
 			if m.filesPreview.p.lsel.on {
 				return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 			}
+			if m.filesPreview.backgrounded {
+				return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+w] view  [←/tab] back to tree  [esc] background  [X] close"), true
+			}
 			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab] back to tree  [esc] close preview"), true
 		}
 		// i shows the displayed commit's message — only when canShowFilesViewMessage

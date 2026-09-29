@@ -585,6 +585,11 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	hint := i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	if viewer { // the full-screen viewer can also step aside, keeping the file open
 		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] close  [ctrl+]] background  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+	}
+	if d, ok := m.focusedDoc(); ok && d.p == p && d.backgrounded { // esc steps aside, X closes
+		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] background  [X] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+	}
+	if viewer {
 		if p.extraHint != "" {
 			hint = p.extraHint + "  " + hint
 		}

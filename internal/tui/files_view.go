@@ -944,8 +944,16 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.backgroundDoc(m.filesPreview), nil
 		}
 		return m, nil
+	case "X":
+		if m.filesPreview != nil && !m.filesTreeFocused { // close the file for good
+			return m.closePreview(), nil
+		}
+		return m, nil
 	case "esc":
 		if m.filesPreview != nil { // the preview is the topmost surface — close it first
+			if m.filesPreview.backgrounded { // it has been in the background: back there
+				return m.backgroundDoc(m.filesPreview), nil
+			}
 			m = m.closePreview() // returns focus to the tree (the source of View file)
 			return m, nil
 		}

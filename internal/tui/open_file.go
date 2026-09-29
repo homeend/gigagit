@@ -72,6 +72,9 @@ type openFile struct {
 	loading bool
 	// fills counts the loads that landed (see fileContentMsg.fillsAt).
 	fills int
+	// backgrounded is set once the file has been sent to the background
+	// (ctrl+]): from then on esc sends it back there and only X closes it.
+	backgrounded bool
 }
 
 // keepPlace makes the next fill — a reload of a file the user is reading —
