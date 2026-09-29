@@ -150,9 +150,17 @@ func ApplyToolUpdate(st ToolTemplateStatus) error {
 	return ErrToolBlockChanged
 }
 
+// ToolStatusesDisabled is a TEST seam (the ForgeDisabled precedent): a
+// frontend test binary sets it in TestMain so no Service ever detects the
+// machine's real agents or runs their --version.
+var ToolStatusesDisabled bool
+
 // ToolTemplateStatuses is the frontends' entry: the global file then the
 // active repo file, against the tools detected on this machine.
 func (s *Service) ToolTemplateStatuses(ctx context.Context) []ToolTemplateStatus {
+	if ToolStatusesDisabled {
+		return nil
+	}
 	home, _ := os.UserHomeDir()
 	return ToolTemplateStatuses(ctx, s.toolConfigPaths(ctx), exttool.Detect(exec.LookPath, os.Stat, home))
 }

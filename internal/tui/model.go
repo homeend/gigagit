@@ -95,10 +95,13 @@ type Model struct {
 	pendingNoticeConfig    *engine.SetGitConfig   // chained after WriteCommitGraph succeeds
 	refreshHealthAfterOp   bool                   // re-read repo health once the op (incl. its chain) finishes
 
-	cfg          config.Config
-	opLog        *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
-	promptStore  promptstate.Store // related-prompt suppressions; nil = no state dir
-	toolNoted    map[string]bool   // tool-config blocks already failure-noted this session (Key())
+	cfg         config.Config
+	opLog       *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
+	promptStore promptstate.Store // related-prompt suppressions; nil = no state dir
+	// toolStatuses is the last tool-template status read (Settings → External
+	// tools suffixes, the review popup, the tool-template notice).
+	toolStatuses []domain.ToolTemplateStatus
+	toolNoted    map[string]bool // tool-config blocks already failure-noted this session (Key())
 	gitCommonDir string
 
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
@@ -775,6 +778,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cleared
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
+	case toolStatusesMsg:
+		return m.applyToolStatuses(msg), nil
+	case toolConfigEditedMsg:
+		if msg.err != nil {
+			m.statusMsg = i18n.T("edit: %s", msg.err.Error())
+		}
+		return m.reloadToolConfig(), m.refreshToolStatusesCmd()
 	case driftCheckMsg:
 		if msg.gen != m.noticeGen {
 			return m, nil // stale: a repo switch superseded this branch's drift check
