@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Headless conflict resolution with Claude Code and Junie in the TUI
+
+### Added
+
+- **Headless resolve rows for Claude Code and Junie.** The conflict
+  window's `t` picker can now run either agent in the background (gg keeps
+  its TUI up with the "Running … [esc] cancel" box) instead of handing over
+  the terminal:
+  - `Claude (yolo, headless)` / `Junie (headless)` resolve and stage the
+    conflicts, leaving the operation paused for you to continue;
+  - `Claude — resolve & complete (yolo, headless)` (previously web-only)
+    and the new `Junie — resolve & complete (headless)` also drive the
+    `--continue` rounds and open their overview in the report viewer.
+
+  All four are live-verified against a paused merge and a multi-round
+  rebase. Add them from Settings → External tools… (the complete rows are
+  unchecked by default). If you already added the Claude headless complete
+  row, its saved block is still tagged `frontends = ["web"]`: delete that
+  block and re-run the wizard to get it in the TUI.
+
+### Changed
+
+- Junie's `--task` mode turned out to approve its own edits and git
+  commands without `--brave`, so the "Junie has no headless variant" rule
+  is gone. An unauthenticated Junie still exits 0 after printing "Cannot
+  find authorization" — the conflicts simply remain.
+
 ## Step between a review's noted files in the browser
 
 ### Added
