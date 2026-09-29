@@ -360,7 +360,7 @@ func (s *Service) migrationAction(ctx context.Context, store, action string) (en
 		}
 		return convertPreviews{Dir: s.savedCompareDir(ctx), Repo: repo}, nil
 	case "upgrade-review-commands":
-		return upgradeReviewCommands{Paths: s.reviewCommandConfigPaths(ctx)}, nil
+		return upgradeReviewCommands{Paths: s.toolConfigPaths(ctx)}, nil
 	case "discard-refs", "":
 		refs, err := s.storeRefs(ctx, store)
 		if err != nil {

@@ -108,10 +108,7 @@ func EnsureSessionCommands(cfg config.Config, globalPath string, detect func() [
 			if ct.Category != exttool.CatSession || ct.OptIn {
 				continue
 			}
-			blocks = append(blocks, config.ToolCommand{
-				Category: string(ct.Category), Name: ct.Name, Mode: string(ct.Mode),
-				Frontends: ct.Frontends, Command: exttool.GenerateCommand(ct, det.Bin),
-			})
+			blocks = append(blocks, NewToolBlock(det, ct))
 			names = append(names, ct.Name)
 		}
 	}
