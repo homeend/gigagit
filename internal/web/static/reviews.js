@@ -88,6 +88,37 @@ function reviewRowsHTML() {
 }
 
 
+// stepCommitReviews moves the file cursor through a commit's Reviews rows,
+// which sit above its first file: k on the first file enters them, j on the
+// last leaves them for the first file. true = the key was the rows'.
+function stepCommitReviews(delta) {
+  const cr = state.commitReviews;
+  if (state.filesMode !== "commit" || !cr || cr.sha !== state.fileSha || !cr.list.length) return false;
+  const at = cr.list.findIndex((r) => r.id === state.reviewSel);
+  if (at < 0) {
+    if (delta >= 0 || state.fileCursor !== 0) return false;
+    state.reviewSel = cr.list[cr.list.length - 1].id;
+  } else if (at + delta >= cr.list.length) {
+    state.reviewSel = ""; // onto the first file
+    state.fileCursor = 0;
+  } else {
+    state.reviewSel = cr.list[Math.max(0, at + delta)].id;
+  }
+  renderFiles();
+  return true;
+}
+
+
+// openSelectedReview is enter on a selected Reviews row; false when none is.
+function openSelectedReview() {
+  const cr = state.commitReviews;
+  if (!state.reviewSel || state.filesMode !== "commit" || !cr || cr.sha !== state.fileSha) return false;
+  if (!cr.list.some((r) => r.id === state.reviewSel)) return false;
+  openReview(state.reviewSel, reviewBackFromCommit(state.reviewSel));
+  return true;
+}
+
+
 // reviewMetaLine is the line under the review's title: agent · date · how
 // many notes on how many files (the TUI's reviewMetaLine, with a date).
 function reviewMetaLine(d) {
@@ -309,7 +340,7 @@ registerHelp({
 });
 
 
-export { branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

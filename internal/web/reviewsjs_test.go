@@ -178,4 +178,7 @@ func TestReviewViewWiring(t *testing.T) {
 		"cr.list = state.noteCounts.reviews.filter(", // the open commit's rows follow the counts
 	)
 	wiringCheck(t, "commits.js", "state.commitReviews = { sha:")
+	// The keyboard reaches a commit's Reviews rows: k above the first file,
+	// enter opens the selected one.
+	wiringCheck(t, "keys.js", "stepCommitReviews(delta)", "openSelectedReview()")
 }
