@@ -35,6 +35,12 @@ func RecycleCommitMessage(now time.Time) string {
 type RecycleWorktree struct {
 	Dir    string           // target worktree top level
 	Branch string           // local branch to check out there
+	// RemoteRef, when set ("origin/foo"), is checked out first as Branch —
+	// SmartCheckout{Intent: Stay} inline, after the target's own refusals and
+	// before the dirty prompt: a missing Branch is created tracking it, an
+	// existing one fast-forwarded; a diverged one refuses (CheckoutDivergedError)
+	// with the target untouched. An abort at the prompt keeps the branch.
+	RemoteRef string
 	Now    func() time.Time // clock for the commit message; nil = time.Now
 }
 
@@ -86,6 +92,12 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	// there; common-dir locks belong to whoever holds the reservation now.
 	if locks := git.LockFiles(gitDir); len(locks) > 0 {
 		return Result{}, fmt.Errorf("%s is locked (%s)", target, locks[0].Name)
+	}
+
+	if op.RemoteRef != "" {
+		if _, err := (SmartCheckout{RemoteRef: op.RemoteRef, Local: op.Branch, Intent: CheckoutStay}).Run(ctx, deps); err != nil {
+			return Result{}, err
+		}
 	}
 
 	// The leaving branch comes from the worktree list (no extra git call;
@@ -147,6 +159,9 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 			}
 			discarded = true
 		default:
+			if op.RemoteRef != "" {
+				return Result{Changed: true}.WithSummary("recycle cancelled; checked out %s as %s", op.RemoteRef, op.Branch), nil
+			}
 			return Result{}.WithSummary("recycle cancelled"), nil
 		}
 	}
@@ -156,6 +171,9 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 		return Result{}, err
 	}
 	res := Result{Changed: true}.WithSummary("recycled %s → %s in %s", old, op.Branch, target)
+	if op.RemoteRef != "" {
+		res = res.AppendSummary(" from %s", op.RemoteRef)
+	}
 	switch {
 	case committed != "":
 		res = res.AppendSummary("; committed %s", committed)
