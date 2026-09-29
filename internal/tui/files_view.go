@@ -63,6 +63,7 @@ func (m Model) closeFilesView() Model {
 	m.filesStashTag = ""
 	m.filesShelfID = ""
 	m.filesShelfLabel = ""
+	m.filesShelfNotes = nil
 	m.filesTreeFocused = false
 	m.filesReadInflight = false
 	m.filesPreview = nil
@@ -182,15 +183,19 @@ func (m Model) openShelfCommitFiles(e model.ShelfEntry) (Model, tea.Cmd) {
 type shelfFilesMsg struct {
 	id    string
 	files []model.CommitFile
+	notes []domain.ResolvedNote // the entry's own notes (a Notes section above the members)
 	err   error
 }
 
-// loadShelfFilesCmd lists the shelved commit's tar members off the UI thread.
+// loadShelfFilesCmd lists the shelved commit's tar members off the UI thread,
+// with the entry's own notes. A notes read that fails only drops the section.
 func (m Model) loadShelfFilesCmd(entryID string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		files, err := svc.ShelfCommitFiles(context.Background(), entryID)
-		return shelfFilesMsg{id: entryID, files: files, err: err}
+		ctx := context.Background()
+		files, err := svc.ShelfCommitFiles(ctx, entryID)
+		notes, _ := svc.ShelfNotes(ctx, entryID)
+		return shelfFilesMsg{id: entryID, files: files, notes: notes, err: err}
 	}
 }
 
@@ -291,6 +296,36 @@ func withReviewLines(reviews []domain.Review, lines []contentLine) []contentLine
 		return out // "(no files)": the reviews are the whole list
 	}
 	return append(out, lines...)
+}
+
+// withShelfNoteLines puts a shelved set's own notes in front of its members as
+// a "Notes" heading — the way withReviewLines lists a commit's reviews. A note
+// row has no path: it is not a file, so every file action passes it by.
+func withShelfNoteLines(notes []domain.ResolvedNote, lines []contentLine) []contentLine {
+	if len(notes) == 0 {
+		return lines
+	}
+	out := make([]contentLine, 0, len(notes)+1+len(lines))
+	out = append(out, contentLine{text: i18n.T("Notes"), heading: true})
+	for _, r := range notes {
+		lead, summary := shelfNoteRowText(r.Note)
+		out = append(out, contentLine{text: "  " + lead + summary, shelfNote: r.Note.ID, elideHead: len([]rune("  " + lead))})
+	}
+	if len(lines) == 1 && lines[0].path == "" && !lines[0].heading {
+		return out // "(no files)": the notes are the whole list
+	}
+	return append(out, lines...)
+}
+
+// shelfNoteRowText is a note's row under the Notes heading, split into its
+// lead and its summary: "└ 2026-09-29 14:02 " + "Recycled from /x/wt-a (feat)".
+// A narrow list cuts only the summary (which names a path) in its middle.
+func shelfNoteRowText(n model.Note) (lead, summary string) {
+	lead = "└ "
+	if !n.Created.IsZero() {
+		lead += n.Created.Local().Format("2006-01-02 15:04") + " "
+	}
+	return lead, sanitizeLine(n.Summary)
 }
 
 // reviewRowText is a review's row under the Reviews heading:
@@ -983,7 +1018,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.focusTree(), nil
 		}
 		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview) {
+		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview && vis[p.sel].shelfNote == "") {
 			return m, nil // heading row, placeholder, or empty view
 		}
 		return m.openDiffForFileLine(vis[p.sel])
@@ -1102,6 +1137,14 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	}
 	if l.overview {
 		return m.openReviewOverview()
+	}
+	if l.shelfNote != "" { // a shelved set's note: the read-only note popup, esc comes back here
+		for _, r := range m.filesShelfNotes {
+			if r.Note.ID == l.shelfNote {
+				return m.openShelfNotes(shelfNotesMsg{id: m.filesShelfID, label: m.filesContext, notes: []domain.ResolvedNote{r}}), nil
+			}
+		}
+		return m, nil
 	}
 	if l.noteID != "" { // an @notes/ entry: the review opens as the review view, esc comes back here
 		back := m.filesCommit
@@ -1328,6 +1371,14 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		// won't re-cut it.
 		if l.heading && p.mode == modeCutoff {
 			text = elidePath(l.text, innerW-lipgloss.Width(prefix))
+		}
+		// A shelved set's note row: the "└ date " lead stays whole and the
+		// summary loses its middle, keeping its "(branch)" group (pre-cut to
+		// fit, like the headings above).
+		if l.shelfNote != "" && p.mode == modeCutoff {
+			r := []rune(l.text)
+			lead := string(r[:l.elideHead])
+			text = lead + elideNoteSummary(string(r[l.elideHead:]), innerW-lipgloss.Width(prefix)-lipgloss.Width(lead))
 		}
 		// An open merge preview badges its file rows with the notes gathered
 		// along the branch. Painted here rather than baked into l.text so the

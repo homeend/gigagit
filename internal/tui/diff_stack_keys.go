@@ -20,6 +20,12 @@ func (m Model) buildTreeStack() []stackFile {
 	}
 	var out []stackFile
 	for _, l := range m.filesView.visible() {
+		if l.shelfNote != "" { // a shelved set's note: its text reads in place, like a review's overview
+			if f, ok := m.shelfNoteStackFile(l.shelfNote); ok {
+				out = append(out, f)
+			}
+			continue
+		}
 		if l.path == "" { // a heading row or the placeholder
 			continue
 		}
@@ -266,7 +272,7 @@ func (m Model) stackJumpMenu(v *diffView) Model {
 		idx := i
 		label := f.status + "  " + f.path
 		if f.overview {
-			label = "≡ " + i18n.T("Overview")
+			label = "≡ " + f.overviewLabel()
 		}
 		rows = append(rows, actionRow{
 			id:    "stack-file",

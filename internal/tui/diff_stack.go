@@ -111,6 +111,17 @@ type stackFile struct {
 	// is built. Never loaded (load stays stackLoaded with a nil d).
 	overview bool
 	prose    []mdRow
+	// label names a prose element that is not the review's overview — a
+	// shelved set's note, by its summary; "" = "Overview".
+	label string
+}
+
+// overviewLabel is a prose element's header text.
+func (f stackFile) overviewLabel() string {
+	if f.label != "" {
+		return f.label
+	}
+	return i18n.T("Overview")
 }
 
 // diffStack is the open stack: which list it came from and its files.
@@ -677,7 +688,7 @@ func (v *diffView) syncStackTitle() {
 	f := v.stk.files[v.curFile()]
 	v.title = f.path
 	if f.overview {
-		v.title = i18n.T("Overview")
+		v.title = f.overviewLabel()
 	}
 }
 
