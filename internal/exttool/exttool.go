@@ -127,6 +127,14 @@ const claudeConflictCommand = `<bin> ` + claudeConflictPrompt + ` \
 // after <bin> (same ordering contract as claudeConflictCommand).
 const claudeConflictYoloCommand = `<bin> ` + claudeConflictPrompt + ` --dangerously-skip-permissions`
 
+// claudeConflictHeadlessCommand is the headless (capture) resolve-only row:
+// same prompt under `-p`, bypass flag after it. Live-verified 2026-09-29
+// (Claude Code 2.1.284, a paused 4-hunk merge): resolved + staged, the merge
+// left paused. The permission-gated shape does NOT work headless — `-p`
+// auto-denied every git command even with --allowedTools, so the file was
+// edited but never staged — hence no cautious headless variant.
+const claudeConflictHeadlessCommand = `<bin> -p ` + claudeConflictPrompt + ` --dangerously-skip-permissions`
+
 // junieConflictPrompt is the double-quoted conflict-resolution prompt shared
 // by both Junie conflict templates. Same shape and injection posture as
 // claudeConflictPrompt (generation-time <env:...> tokens only), but shipped
@@ -143,6 +151,15 @@ const junieConflictCommand = `<bin> --prompt ` + junieConflictPrompt
 // only — and gg always runs conflict commands under terminal handover, i.e.
 // exactly Junie's interactive mode).
 const junieConflictYoloCommand = junieConflictCommand + ` --brave`
+
+// junieConflictHeadlessCommand is the headless (capture) resolve-only row:
+// `--task` is Junie's non-interactive mode, which approves its own edits and
+// git commands with no flag (--brave is interactive-only and not needed).
+// Live-verified 2026-09-29 (Junie 26.9.22, a paused 4-hunk merge): resolved +
+// staged, the merge left paused. An UNAUTHENTICATED Junie prints "Cannot
+// find authorization" and still exits 0 — the conflict window then simply
+// still shows the conflicts.
+const junieConflictHeadlessCommand = `<bin> --task ` + junieConflictPrompt + ` --skip-update-check`
 
 // claudeCommitPrompt: capture-lane commit-message prompt. Dynamic content via
 // <env:...> only (injection posture). Prompt is the FIRST arg after `<bin> -p`.
@@ -410,14 +427,21 @@ const interactiveReviewPrompt = `"` + structuredReviewTask + ` Overwrite the fil
 // the agent's overview with its final chat message); agy -p +
 // --dangerously-skip-permissions (probe-verified for the commit lane
 // 2026-07-20: bypass lifts headless auto-deny for reads AND the message-file
-// write). Junie has NO headless variant: --brave is interactive-only, so a
-// headless Junie cannot approve its own edits and cannot honestly attempt
-// the task.
+// write). Junie's `--task` mode approves its own edits and git commands with
+// no flag (live-verified 2026-09-29, Junie 26.9.22: a paused merge completed
+// in 1 round and a paused rebase through 4 continue rounds, overview written
+// both times) — so it is not OptIn, like Kimi's print mode. Claude's and
+// Junie's rows are offered in the TUI too (Claude verified the same day: a
+// merge completed; a rebase ran 3 rounds, then stopped on a judgment call
+// and left the rebase paused as the prompt allows); codex/antigravity stay
+// web-only until verified there.
 const claudeCompleteHeadlessCommand = `<bin> -p ` + claudeCompletePrompt + ` --dangerously-skip-permissions`
 
 const codexCompleteHeadlessCommand = `<bin> exec ` + codexCompletePrompt + ` --dangerously-bypass-approvals-and-sandbox`
 
 const agyCompleteHeadlessCommand = `<bin> -p ` + agyCompletePrompt + ` --dangerously-skip-permissions`
+
+const junieCompleteHeadlessCommand = `<bin> --task ` + junieCompletePrompt + ` --skip-update-check`
 
 // Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
 // stage 2 added commit_message capture templates; stage 3 adds review
@@ -430,7 +454,8 @@ func Builtins() []Tool {
 				{Category: CatConflict, Name: "Claude", Mode: ModeTerminal, Command: claudeConflictCommand},
 				{Category: CatConflict, Name: "Claude (yolo)", Mode: ModeTerminal, OptIn: true, Command: claudeConflictYoloCommand},
 				{Category: CatConflictComplete, Name: "Claude — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Frontends: []string{"tui"}, Command: claudeCompleteCommand},
-				{Category: CatConflictComplete, Name: "Claude — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"web"}, Command: claudeCompleteHeadlessCommand},
+				{Category: CatConflict, Name: "Claude (yolo, headless)", Mode: ModeCapture, OptIn: true, Command: claudeConflictHeadlessCommand},
+				{Category: CatConflictComplete, Name: "Claude — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"tui", "web"}, Command: claudeCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Claude", Mode: ModeCapture, Command: claudeCommitCommand},
 				{Category: CatReview, Name: "Claude", Mode: ModeCapture, Command: claudeReviewCommand},
 				{Category: CatCommitMessage, Name: "Claude (interactive)", Mode: ModeInteractive, Command: `<bin> ` + interactiveCommitPrompt},
@@ -461,7 +486,9 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Junie", Mode: ModeTerminal, Command: junieConflictCommand},
 				{Category: CatConflict, Name: "Junie (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieConflictYoloCommand},
+				{Category: CatConflict, Name: "Junie (headless)", Mode: ModeCapture, Command: junieConflictHeadlessCommand},
 				{Category: CatConflictComplete, Name: "Junie — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Frontends: []string{"tui"}, Command: junieCompleteCommand},
+				{Category: CatConflictComplete, Name: "Junie — resolve & complete (headless)", Mode: ModeCapture, Frontends: []string{"tui", "web"}, Command: junieCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Junie", Mode: ModeCapture, Command: junieCommitCommand},
 				{Category: CatReview, Name: "Junie", Mode: ModeCapture, Command: junieReviewCommand},
 				{Category: CatCommitMessage, Name: "Junie (interactive)", Mode: ModeInteractive, Command: `<bin> --prompt ` + interactiveCommitPrompt},

@@ -1085,7 +1085,8 @@ temp **context file** — the paused op, source, target, and the conflicted
 paths, one per line — exposed as `<context-file>`/`GG_CONTEXT_FILE` plus ten
 more `GG_*` env vars, and either hand over the terminal (interactive agents
 like Claude Code and Junie) or run **headless in the background** (`mode =
-"capture"` — Kimi Code, whose `kimi -p` draws no terminal UI of its own)
+"capture"` — Kimi Code, whose `kimi -p` draws no terminal UI of its own, and
+the opt-in "Claude (yolo, headless)" and "Junie (headless)" rows)
 while gg keeps its TUI up with a "Running … [esc] cancel" box; a failed
 capture run shows the tail of the agent's output in the error box. Per-file
 commands (Meld) are listed when the focused file is a both-sides conflict and
@@ -1119,7 +1120,10 @@ via `$GG_MESSAGE_FILE`, which gg opens in a read-only report viewer on a
 clean exit (the conflict window closes first). Catalog defaults ship for
 Claude Code, Junie, Codex, and Antigravity (terminal handover with their
 bypass-permissions flag) and Kimi Code (headless capture, since `kimi -p`
-has no bypass flag to combine with). Every row is deliberately **yolo-only
+has no bypass flag to combine with). Claude Code and Junie also ship a
+**headless** resolve-and-complete row for the TUI and web (`claude -p …
+--dangerously-skip-permissions`, `junie --task …`); Codex and Antigravity's
+headless rows are web-only. Every row is deliberately **yolo-only
 and unchecked by default** in the wizard — completing your paused operation
 autonomously is an explicit opt-in, checked or not.
 

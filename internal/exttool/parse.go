@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ErrEmptyMessage means the tool produced no usable message and no explicit error.
@@ -117,7 +119,10 @@ func ParseCaptureReport(captured string) (string, error) {
 		// malformed JSON that failed to unmarshal: fall through to raw-text
 		// handling and treat the input verbatim as the report.
 	}
-	return t, nil
+	// Raw stdout (an agent that wrote no $GG_MESSAGE_FILE) may carry terminal
+	// styling — Junie's --task output is colour-coded even through a pipe —
+	// and the report renders as markdown, where escapes are noise.
+	return strings.TrimSpace(ansi.Strip(t)), nil
 }
 
 // SplitMessage splits a commit message into (subject, body): the first line is

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -594,8 +595,9 @@ func conflictTemplate(t *testing.T, toolID, name string) (CommandTemplate, bool)
 // permission-bypass flag present (Junie's is --brave). Web needs a headless
 // counterpart because a browser has no terminal to hand over: claude/codex/
 // antigravity additionally get exactly ONE ModeCapture row (same bypass-flag
-// posture); Junie gets none (--brave is interactive-only, so a headless
-// Junie cannot approve its own edits). Kimi has no interactive-with-prompt
+// posture); Junie's is a plain `--task` run (its non-interactive mode
+// approves its own edits and git commands — no flag needed, so not OptIn;
+// live-verified 2026-09-29). Kimi has no interactive-with-prompt
 // mode at all, so it is ModeCapture-only (its existing single row, no bypass
 // flag — print mode approves its own edits). Every row's prompt must (a)
 // instruct the matching --continue command, (b) forbid --abort, and (c)
@@ -616,6 +618,7 @@ func TestConflictCompleteTemplates(t *testing.T) {
 		flag  string
 	}{
 		"claude":      {true, "--dangerously-skip-permissions"},
+		"junie":       {false, "--task"},
 		"codex":       {true, "--dangerously-bypass-approvals-and-sandbox"},
 		"antigravity": {true, "--dangerously-skip-permissions"},
 		"kimi":        {false, ""},
@@ -706,27 +709,71 @@ func TestConflictCompleteFrontendTags(t *testing.T) {
 }
 
 // TestHeadlessCompleteRows pins which tools get a web-visible (ModeCapture)
-// conflict_complete row: claude/codex/antigravity/kimi have a headless
-// bypass posture that can honestly attempt the task; Junie does not
-// (--brave is interactive-only).
+// conflict_complete row: claude/junie/codex/antigravity/kimi all have a
+// headless posture that can honestly attempt the task. Claude's, Junie's and
+// Kimi's are offered in the TUI too (headless resolve in the TUI, user ask
+// 2026-09-29); codex/antigravity stay web-only until live-verified there.
 func TestHeadlessCompleteRows(t *testing.T) {
-	want := map[string]bool{ // tool ID -> expects a web-tagged capture complete row
-		"claude": true, "codex": true, "antigravity": true, "kimi": true,
-		"junie": false, // no headless bypass flag — cannot honestly attempt the task
+	want := map[string]bool{ // tool ID -> the capture complete row is offered in the TUI
+		"claude": true, "junie": true, "kimi": true,
+		"codex": false, "antigravity": false,
 	}
 	for _, tl := range Builtins() {
-		expect, tracked := want[tl.ID]
+		inTUI, tracked := want[tl.ID]
 		if !tracked {
 			continue
 		}
-		got := false
+		var rows []CommandTemplate
 		for _, ct := range tl.Commands {
 			if ct.Category == CatConflictComplete && ct.Mode == ModeCapture {
-				got = true
+				rows = append(rows, ct)
 			}
 		}
-		if got != expect {
-			t.Errorf("%s: capture conflict_complete row present=%v want %v", tl.ID, got, expect)
+		if len(rows) != 1 {
+			t.Fatalf("%s: want exactly one capture conflict_complete row, got %d", tl.ID, len(rows))
+		}
+		if got := slices.Contains(rows[0].Frontends, "tui"); got != inTUI {
+			t.Errorf("%s/%s: offered in the TUI = %v, want %v (frontends %v)", tl.ID, rows[0].Name, got, inTUI, rows[0].Frontends)
+		}
+	}
+}
+
+// TestHeadlessConflictRows pins the headless resolve-only (conflict, capture)
+// rows for Claude and Junie, live-verified 2026-09-29 against a paused
+// multi-hunk merge (resolved, staged, operation left paused):
+//   - Claude needs the bypass flag headless: the permission-gated
+//     acceptEdits/allowedTools shape edited the markers out but every git
+//     command was auto-denied, so nothing got staged. Prompt first (the
+//     variadic-flag ordering contract), OptIn.
+//   - Junie's --task mode approves its own edits and git commands with no
+//     flag, so the row is not OptIn and carries no --brave (interactive only).
+//
+// Both keep the sequencer boundary: stage only, never commit or --continue.
+func TestHeadlessConflictRows(t *testing.T) {
+	cl := findTemplate(t, CatConflict, "Claude (yolo, headless)")
+	if cl.Mode != ModeCapture || !cl.OptIn || cl.PerFile || len(cl.Frontends) != 0 {
+		t.Errorf("Claude (yolo, headless) = %+v, want an OptIn capture row offered everywhere", cl)
+	}
+	if want := `<bin> -p ` + claudeConflictPrompt + ` --dangerously-skip-permissions`; cl.Command != want {
+		t.Errorf("Claude (yolo, headless) command = %q, want %q", cl.Command, want)
+	}
+
+	ju := findTemplate(t, CatConflict, "Junie (headless)")
+	if ju.Mode != ModeCapture || ju.OptIn || ju.PerFile || len(ju.Frontends) != 0 {
+		t.Errorf("Junie (headless) = %+v, want a plain capture row offered everywhere", ju)
+	}
+	if want := `<bin> --task ` + junieConflictPrompt + ` --skip-update-check`; ju.Command != want {
+		t.Errorf("Junie (headless) command = %q, want %q", ju.Command, want)
+	}
+
+	for _, ct := range []CommandTemplate{cl, ju} {
+		if !strings.Contains(ct.Command, "Do NOT run git commit") {
+			t.Errorf("%s: prompt must keep the sequencer-boundary clause", ct.Name)
+		}
+		for _, goos := range []string{"linux", "windows"} {
+			if err := template.ValidateCommandTokens(GenerateCommandFor(ct, "agent", goos), ct.PerFile); err != nil {
+				t.Errorf("%s GenerateCommandFor(%s): %v", ct.Name, goos, err)
+			}
 		}
 	}
 }

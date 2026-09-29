@@ -92,3 +92,15 @@ func TestParseCaptureMessage(t *testing.T) {
 		})
 	}
 }
+
+// TestParseCaptureReportStripsTerminalStyling: an agent that writes no
+// $GG_MESSAGE_FILE falls back to its captured stdout, and Junie's --task
+// stdout is colour-styled even through a pipe. The report is shown as
+// markdown, so the SGR escapes must go (live-captured shape, 2026-09-29).
+func TestParseCaptureReportStripsTerminalStyling(t *testing.T) {
+	in := "\x1b[38;5;78m●\x1b[0m \x1b[1mTASK RESULT\x1b[0m\n\x1b[38;5;247m### Summary\x1b[0m\n"
+	got, err := ParseCaptureReport(in)
+	if err != nil || got != "● TASK RESULT\n### Summary" {
+		t.Fatalf("got (%q, %v), want the text without escapes", got, err)
+	}
+}
