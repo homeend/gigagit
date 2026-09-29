@@ -265,6 +265,10 @@ $("vbranches").addEventListener("click", (e) => {
 // blocks the rest of the page while it stands, and a later op or an
 // explicit dismiss clears it.
 
+// driftLink is the shown panel's {link, desc}; the copy keeps the panel open —
+// the list is what the reader is about to research.
+let driftLink = null;
+
 function hideDrift() {
   $("drift-panel").classList.add("hidden");
   $("drift-list").innerHTML = "";
@@ -298,6 +302,10 @@ async function checkDrift(branch, paused) {
     hideDrift();
     return;
   }
+  // The compared version's preview link (the TUI notice's "Copy preview
+  // link"): offered only when the server could build one.
+  driftLink = body.link ? { link: body.link, desc: body.desc || "" } : null;
+  $("drift-copy").classList.toggle("hidden", !driftLink);
   if (drifted) {
     $("drift-title").textContent = branch + "'s change set may have drifted from its recorded version:";
     const added = (body.added || [])
@@ -322,6 +330,10 @@ async function checkDrift(branch, paused) {
 
 
 $("drift-dismiss").addEventListener("click", hideDrift);
+
+$("drift-copy").addEventListener("click", () => {
+  if (driftLink) copyLink(driftLink.link, driftLink.desc);
+});
 
 
 // revealVersion honours a landed ?version= hint: the server finds the

@@ -79,13 +79,23 @@ func (s *Server) handleDrift(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, map[string]any{
+	body := map[string]any{
 		"ref":     rep.Ref,
 		"checked": rep.Checked,
 		"drifted": rep.Checked && rep.Report.Drifted(),
 		"added":   driftEntryRows(rep.Report.Added),
 		"removed": driftEntryRows(rep.Report.Removed),
-	})
+	}
+	// The compared version's preview link — the drift panel's copy button,
+	// the TUI notice's "Copy preview link". Absent for a one-branch record
+	// or nothing recorded (the button is then not offered).
+	if rep.Version.Base != "" {
+		repo, repoErr := s.service().LinkRepo(r.Context())
+		if link, ok := versionLink(repo, repoErr, rep.Version); ok {
+			body["link"], body["desc"] = link.String(), domain.VersionLinkDesc(branch, rep.Version)
+		}
+	}
+	writeJSON(w, body)
 }
 
 // Branch versions — the operations history. Every destructive op snapshots
