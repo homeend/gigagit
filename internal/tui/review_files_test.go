@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/homeend/gigagit/internal/domain"
 )
 
@@ -13,11 +15,12 @@ func TestWithReviewLinesPutsReviewsFirst(t *testing.T) {
 	t.Parallel()
 	when := time.Date(2026, 9, 27, 10, 0, 0, 0, time.Local)
 	files := []contentLine{{text: ".github/", heading: true}, {text: "  M  x.yml", path: ".github/x.yml", status: "M"}}
-	lines := withReviewLines([]domain.Review{{ID: "ab12cd34", Created: when}}, files)
-	if len(lines) != 4 || lines[0].text != "@notes/" || !lines[0].heading {
-		t.Fatalf("lines %+v, want the @notes/ heading first", lines)
+	lines := withReviewLines([]domain.Review{{ID: "ab12cd34", Created: when, Agent: "Claude Code", Summary: "Review: feature"}}, files)
+	if len(lines) != 4 || lines[0].text != "Reviews" || !lines[0].heading {
+		t.Fatalf("lines %+v, want the Reviews heading first", lines)
 	}
-	if lines[1].noteID != "ab12cd34" || lines[1].path != "@notes/review-2026-09-27-ab12cd34.md" || lines[1].status != "R" {
+	// Under the Reviews heading a review is "└ <date> <agent>", not a file.
+	if lines[1].noteID != "ab12cd34" || lines[1].text != "  └ 2026-09-27 10:00 Claude Code" {
 		t.Fatalf("review line %+v", lines[1])
 	}
 	if got := withReviewLines(nil, files); len(got) != 2 {
@@ -44,7 +47,7 @@ func TestCommitFilesListTheReview(t *testing.T) {
 	t.Parallel()
 	m := reviewedStackModel(t, "# Verdict\nship it")
 	vis := m.filesView.visible()
-	if len(vis) < 2 || vis[0].text != "@notes/" || vis[1].noteID == "" {
+	if len(vis) < 2 || vis[0].text != "Reviews" || vis[1].noteID == "" {
 		t.Fatalf("file list does not start with the review: %+v", vis)
 	}
 }
@@ -111,4 +114,26 @@ func TestReviewEntryActions(t *testing.T) {
 	if !strings.Contains(b.String(), "ship it") {
 		t.Fatalf("preview text:\n%s", b.String())
 	}
+}
+
+// A review row is prose, not a path: cut at its end, never in the middle.
+func TestReviewRowCutsAtItsEnd(t *testing.T) {
+	t.Parallel()
+	m := reviewedStackModel(t, "# Verdict\nship it")
+	for i, l := range m.filesView.lines {
+		if l.noteID != "" {
+			m.filesView.lines[i].text = "  └ 2026-09-28 20:16 Claude Code " + strings.Repeat("long agent ", 20) + "END"
+		}
+	}
+	m.filesTreeFocused = false // no reveal over the row
+	view := ansi.Strip(m.View())
+	for _, l := range strings.Split(view, "\n") {
+		if strings.Contains(l, "└ 2026-09-28") {
+			if strings.Contains(l, "END") || !strings.Contains(l, "20:16 Claude Code") {
+				t.Fatalf("review row cut in the middle: %q", l)
+			}
+			return
+		}
+	}
+	t.Fatalf("no review row on screen:\n%s", view)
 }

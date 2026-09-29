@@ -412,9 +412,50 @@ func (s *Service) ShowFile(ctx context.Context, rev, path string) ([]byte, error
 // CommitFiles returns the files changed by commit hash, under a Read
 // reservation, coalesced per hash.
 func (s *Service) CommitFiles(ctx context.Context, hash string) ([]model.CommitFile, error) {
-	return query(ctx, s, "commit-files:"+hash, func(ctx context.Context) ([]model.CommitFile, error) {
-		return s.repo.CommitFiles(ctx, hash)
+	// A commit's file list never changes for its hash, so it is cached for
+	// the session: the files view's follow-live steps (one git call each, a
+	// slideshow on a slow disk) become hits once PrefetchCommitFiles has
+	// warmed the commits around the cursor. Callers get the shared slice.
+	v, err := s.factory.Cache("commit-files").GetOrLoad("commit-files:"+hash, func() (any, error) {
+		return query(ctx, s, "commit-files:"+hash, func(ctx context.Context) ([]model.CommitFile, error) {
+			return s.repo.CommitFiles(ctx, hash)
+		})
 	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]model.CommitFile), nil
+}
+
+// CommitFilesCached reports whether hash's file list is already cached.
+func (s *Service) CommitFilesCached(hash string) bool {
+	_, ok := s.factory.Cache("commit-files").Get("commit-files:" + hash)
+	return ok
+}
+
+// PrefetchCommitFiles warms the file lists of hashes that are not cached
+// yet, at most parallel git calls at a time (the process-wide LimitRunner
+// caps them too); it returns when they are all in. Errors are dropped: a
+// miss simply reads on demand later.
+func (s *Service) PrefetchCommitFiles(ctx context.Context, hashes []string, parallel int) {
+	if parallel < 1 {
+		parallel = 1
+	}
+	sem := make(chan struct{}, parallel)
+	var wg sync.WaitGroup
+	for _, h := range hashes {
+		if h == "" || s.CommitFilesCached(h) {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(h string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			s.CommitFiles(ctx, h) //nolint:errcheck // a warm-up
+		}(h)
+	}
+	wg.Wait()
 }
 
 // CommitMeta returns one commit's metadata (author, AUTHOR time, subject, refs)

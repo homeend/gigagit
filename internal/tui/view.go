@@ -1083,11 +1083,10 @@ func (m Model) branchRowsFor(ents []brEntry) []string {
 	rows, gutterW := m.branchOnlyRows()
 	out := make([]string, 0, len(ents))
 	indent := strings.Repeat(" ", gutterW)
-	now := time.Now()
 	for _, e := range ents {
 		if e.review != "" {
 			if h, ok := m.reviewHead(e.review); ok {
-				out = append(out, indent+branchReviewRowBody(h, now))
+				out = append(out, indent+branchReviewRowBody(h))
 			} else {
 				out = append(out, indent+"└ ?")
 			}

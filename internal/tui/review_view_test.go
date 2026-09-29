@@ -326,6 +326,14 @@ func TestReviewFromNotesEntryEscReturnsToTheCommitFiles(t *testing.T) {
 	if !found {
 		t.Fatal("esc did not return to the commit's file list (no @notes/ entry)")
 	}
+	// Back where the review was opened: the keys on the file tree, its
+	// cursor on the review's row.
+	if !m.filesTreeFocused || m.focus != panelCommits {
+		t.Fatalf("esc left focus off the tree (tree=%v focus=%v)", m.filesTreeFocused, m.focus)
+	}
+	if vis := m.filesView.visible(); m.filesView.sel >= len(vis) || vis[m.filesView.sel].noteID != id {
+		t.Fatalf("cursor on row %d, want the review's", m.filesView.sel)
+	}
 	m, _ = updateKey(m, "esc")
 	if m.filesView != nil {
 		t.Fatal("a second esc closes the commit's files")
@@ -351,21 +359,6 @@ func TestReviewViewOpensFromTheBranchesTab(t *testing.T) {
 	m, _ = updateKey(m, "esc")
 	if m.focus != panelBranches {
 		t.Fatalf("esc: focus %v, want Branches back", m.focus)
-	}
-}
-
-// The read can take seconds on a slow disk: the status line says so at once.
-func TestOpenReviewSaysItIsOpening(t *testing.T) {
-	t.Parallel()
-	m, id := reviewViewModel(t, reviewViewDoc)
-	m, _ = m.openReview(id, "Review")
-	if !strings.Contains(m.statusMsg, "opening the review") {
-		t.Fatalf("status %q", m.statusMsg)
-	}
-	m, cmd := m.openReview(id, "Review")
-	m = drainCmds(t, m, cmd)
-	if strings.Contains(m.statusMsg, "opening the review") {
-		t.Fatalf("status still %q after it opened", m.statusMsg)
 	}
 }
 
@@ -515,5 +508,45 @@ func TestFooterFollowsTheTreeBesideADockedConsole(t *testing.T) {
 	m.console = &consoleState{id: "s1"}
 	if got := m.footerLine(); strings.Contains(got, "agent console") {
 		t.Fatalf("footer %q advertises the console while the tree has the keys", got)
+	}
+}
+
+// Opening a review can take seconds: a loading box says so and holds the
+// keys until the review shows.
+func TestOpeningAReviewShowsALoadingBoxThatBlocksKeys(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, reviewViewDoc)
+	m, cmd := m.openReview(id, "Review")
+	if layerOf[*reviewLoadingPopup](m) == nil {
+		t.Fatalf("no loading box while the review is read; top %T", m.topLayer())
+	}
+	if !strings.Contains(ansi.Strip(m.View()), "Opening the review") {
+		t.Fatal("the loading box does not say what is happening")
+	}
+	focus := m.focus
+	for _, k := range []string{"down", "enter", "tab", "q"} {
+		m, _ = updateKey(m, k)
+	}
+	if m.focus != focus || layerOf[*reviewLoadingPopup](m) == nil {
+		t.Fatalf("a key got past the loading box (focus %v, top %T)", m.focus, m.topLayer())
+	}
+	m = drainCmds(t, m, cmd)
+	if layerOf[*reviewLoadingPopup](m) != nil || m.filesReview == nil {
+		t.Fatalf("the review did not replace the loading box (top %T)", m.topLayer())
+	}
+}
+
+// esc cancels: the box goes, and the read landing later opens nothing.
+func TestReviewLoadingEscCancels(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, reviewViewDoc)
+	m, cmd := m.openReview(id, "Review")
+	m, _ = updateKey(m, "esc")
+	if layerOf[*reviewLoadingPopup](m) != nil {
+		t.Fatal("esc did not close the loading box")
+	}
+	m = drainCmds(t, m, cmd)
+	if m.filesReview != nil {
+		t.Fatal("a cancelled open still opened the review")
 	}
 }

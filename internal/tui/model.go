@@ -193,6 +193,15 @@ type Model struct {
 	// filesReview is the files view's REVIEW mode (review_view.go): set
 	// after the view opens on a structured review; nil otherwise.
 	filesReview *reviewViewState
+	// filesLandNote is the review whose row the next commit file list puts
+	// the cursor on (esc from a review opened from that list); "" = none.
+	filesLandNote string
+	// reviewsFollowGen numbers follow-live list landings: only the latest
+	// one's pause reads the commit's reviews (reviewsFollowMsg).
+	reviewsFollowGen int
+	// reviewOpenGen numbers review opens: a read answers only the loading
+	// box of its own open (reviewLoadingPopup).
+	reviewOpenGen int
 
 	previews []previewRow // saved merge previews + live summaries (srcPreviews)
 
@@ -870,6 +879,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, noticeBlinkCmd(msg.gen)
 	case reviewViewMsg:
 		return m.handleReviewViewMsg(msg)
+	case reviewsFollowMsg:
+		return m.onReviewsFollow(msg)
+	case commitReviewsMsg:
+		return m.onCommitReviews(msg)
 	case commitFilesMsg:
 		m.filesReadInflight = false // the outstanding per-commit read has landed; nav may issue again
 		if m.filesView == nil || msg.hash != m.filesHash {
@@ -899,10 +912,24 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesReview = nil // the commit list moved on: a plain commit view now
 		m.filesView.lines = withReviewLines(msg.reviews, commitFileLines(msg.files))
 		m.filesView.sel = 0
+		var after tea.Cmd
+		if msg.noReviews { // a follow-live list: its reviews come once the cursor rests
+			m, after = m.reviewsFollowCmd(msg.hash)
+		}
+		after = tea.Batch(after, m.prefetchFilesCmd()) // the next steps: cache hits
+		if id := m.filesLandNote; id != "" {
+			m.filesLandNote = ""
+			for i, l := range m.filesView.visible() {
+				if l.noteID == id {
+					m.filesView.sel = i
+				}
+			}
+		}
 		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = shortHash(msg.hash) + " " + msg.subject
 		m.filesCommit = msg.commit // authoritative: also the follow-live j/k repaint
-		return m.drainPendingFiles()
+		m, pending := m.drainPendingFiles()
+		return m, tea.Batch(pending, after)
 	case shelfFilesMsg:
 		if m.filesView == nil || !m.inShelfFiles() || msg.id != m.filesShelfID {
 			return m, nil // view closed, or a stale result for another entry

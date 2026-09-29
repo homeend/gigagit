@@ -198,7 +198,7 @@ func buildAllNotesRows(ov domain.NotesOverview, worktree string) []anRow {
 			}
 			sub("c:"+c.Hash, label)
 			if len(c.Reviews) > 0 {
-				rows = append(rows, anRow{kind: anDir, depth: 2, text: reviewsDir + "/"})
+				rows = append(rows, anRow{kind: anDir, depth: 2, text: i18n.T("Reviews")})
 				for i := range c.Reviews {
 					r := &c.Reviews[i]
 					rows = append(rows, anRow{kind: anReview, depth: 3, review: r,

@@ -43,6 +43,7 @@ type reviewViewMsg struct {
 	base, tip string
 	isRange   bool
 	back      model.Commit
+	gen       int // the loading box it answers (reviewLoadingPopup.gen)
 	err       error
 }
 
@@ -61,10 +62,14 @@ func (m Model) openReviewFrom(id, title string, back model.Commit) (Model, tea.C
 	if svc == nil {
 		return m, nil
 	}
-	m.statusMsg = i18n.T("opening the review…") // the read can take seconds on a slow disk
+	// The read can take seconds on a slow disk: a box says so and holds the
+	// keys until the review shows (esc cancels).
+	m.reviewOpenGen++
+	gen := m.reviewOpenGen
+	m = m.pushLayer(&reviewLoadingPopup{gen: gen})
 	return m, func() tea.Msg {
 		ctx := context.Background()
-		out := reviewViewMsg{id: id, title: title, back: back}
+		out := reviewViewMsg{id: id, title: title, back: back, gen: gen}
 		if out.review, out.err = svc.Review(ctx, id); out.err != nil || out.review.Doc == nil {
 			return out
 		}
@@ -80,9 +85,10 @@ func (m Model) openReviewFrom(id, title string, back model.Commit) (Model, tea.C
 // handleReviewViewMsg opens what openReview read. A popup on the stack is
 // parked (handOffToFilesView), so esc from the view returns to it.
 func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
-	if m.statusMsg == i18n.T("opening the review…") {
-		m.statusMsg = ""
+	if !m.hasReviewLoading(msg.gen) {
+		return m, nil // cancelled (esc on the loading box), or superseded
 	}
+	m = m.dropReviewLoading()
 	if msg.err != nil {
 		// Gone (the viewer says "review deleted"), or its commit is gone: the
 		// review itself lives in the note, so it still opens, as text.
@@ -336,4 +342,42 @@ func (m Model) openFileAtCommit(rev, path string) (Model, tea.Cmd) {
 	m = m.pushLayer(&fileViewer{d})
 	m = m.registerDoc(d)
 	return m, m.loadDoc(d)
+}
+
+// reviewLoadingPopup is the box shown while a review is read: it holds the
+// keys (nothing else may start meanwhile) until the review shows; esc cancels.
+type reviewLoadingPopup struct{ gen int }
+
+func (p *reviewLoadingPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if msg.String() == "esc" {
+		return m.popLayer(), nil // the read lands later and opens nothing
+	}
+	return m, nil
+}
+
+func (p *reviewLoadingPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	body := i18n.T("Opening the review…") + "\n\n" + i18n.T("[esc] cancel")
+	return overlayCenter(clipToHeight(below, h), popupBox(popupInnerWidth(w), body)+"\n", w, h)
+}
+
+// hasReviewLoading reports the loading box of open gen still up.
+func (m Model) hasReviewLoading(gen int) bool {
+	p := layerOf[*reviewLoadingPopup](m)
+	return p != nil && p.gen == gen
+}
+
+// dropReviewLoading takes the loading box off the stack.
+func (m Model) dropReviewLoading() Model {
+	if m.layers == nil {
+		return m
+	}
+	for i, l := range m.layers.entries {
+		if _, ok := l.(*reviewLoadingPopup); ok {
+			entries := append([]layer{}, m.layers.entries[:i]...)
+			m.layers = &layerStack{entries: append(entries, m.layers.entries[i+1:]...)}
+			return m
+		}
+	}
+	return m
 }

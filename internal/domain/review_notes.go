@@ -304,11 +304,14 @@ func (s *Service) Review(ctx context.Context, id string) (Review, error) {
 
 // ReviewsForCommit is every review stored on commit sha, newest first.
 func (s *Service) ReviewsForCommit(ctx context.Context, sha string) ([]Review, error) {
-	all, err := s.Reviews(ctx)
+	// Filter the notes first: building a Review parses its document and may
+	// resolve its branch tip (a git call), which only this commit's need.
+	ns, err := s.reviewNotes(ctx)
+	tips := map[string]string{}
 	var out []Review
-	for _, r := range all {
-		if r.Commit == sha {
-			out = append(out, r)
+	for _, n := range ns {
+		if n.Address.Commit == sha {
+			out = append(out, s.reviewOf(ctx, n, tips))
 		}
 	}
 	return out, err
