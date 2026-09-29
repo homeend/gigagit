@@ -24,6 +24,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   "switching to <name>…" overlay with a spinner covers the page from the
   request to the reload (keys are swallowed meanwhile); a refused or failed
   switch takes it down and shows the reason. Standalone `gg web` gets it too.
+  A switch made in the TUI veils every open tab the same way and reloads it
+  onto the new repo (the server says `switched` before ending the tabs'
+  streams; a tab that missed it notices the new worktree on its reconnect's
+  hello).
 
 ## Image diffs in the browser
 

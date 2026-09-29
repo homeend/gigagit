@@ -34,8 +34,14 @@ func TestRepoSwitchVeilWiring(t *testing.T) {
 		{"index.html", `<div id="switching" class="hidden" role="status" aria-live="polite">`},
 		{"style.css", "#switching.hidden { display: none; }"},
 		{"ops.js", "  showSwitching(path);\n  try {\n    await postJSON(\"/api/reroot\", { path });"},
-		{"ops.js", "  } catch (e) {\n    hideSwitching();"},
-		{"ops.js", "              hideSwitching();\n              opLine("},
+		{"ops.js", "  } catch (e) {\n    if (switchReloading) return;\n    hideSwitching();"},
+		// A switch the terminal made: "switched" (or a hello naming another
+		// worktree) veils the tab and reloads it.
+		{"live.js", `if (msg.reason === "switched") {`},
+		{"live.js", "if (msg.worktree && msg.worktree !== liveWorktree) followSwitch(msg.worktree);"},
+		{"live.js", "if (liveWorktree && msg.worktree !== liveWorktree) {\n          followSwitch(msg.worktree);"},
+		{"live.js", "  showSwitching(worktree);\n  reloadForSwitch();"},
+		{"ops.js", "              if (switchReloading) return;\n              hideSwitching();\n              opLine("},
 		{"ops.js", "if (isSwitching()) { e.preventDefault(); e.stopImmediatePropagation(); }"},
 	}
 	for _, c := range cases {

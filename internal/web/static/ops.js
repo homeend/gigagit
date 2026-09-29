@@ -368,7 +368,16 @@ function showSwitching(path) {
   $("switching").classList.remove("hidden");
 }
 function hideSwitching() {
+  if (switchReloading) return; // the page is going away onto the new repo
   $("switching").classList.add("hidden");
+}
+// reloadForSwitch: the one way a switch reloads. Once it runs, a request the
+// reload aborts (doReroot's own POST, when the live "switched" message beat
+// its reply) must not take the veil down on its way out.
+let switchReloading = false;
+function reloadForSwitch() {
+  switchReloading = true;
+  location.reload();
 }
 function isSwitching() {
   return !$("switching").classList.contains("hidden");
@@ -384,8 +393,9 @@ async function doReroot(path) {
   showSwitching(path);
   try {
     await postJSON("/api/reroot", { path });
-    location.reload();
+    reloadForSwitch();
   } catch (e) {
+    if (switchReloading) return;
     hideSwitching();
     // Cross-environment worktree (WSL path seen from Windows gg, or vice
     // versa): the server answers 409 repairable and waits for an explicit
@@ -399,8 +409,9 @@ async function doReroot(path) {
           if (opt !== "repair") return;
           showSwitching(path);
           postJSON("/api/reroot", { path, repair: true })
-            .then(() => location.reload())
+            .then(() => reloadForSwitch())
             .catch((err) => {
+              if (switchReloading) return;
               hideSwitching();
               opLine("error: " + (err.message || err), true);
             });
@@ -816,4 +827,4 @@ function openCreateBranchPrompt(start, seed, label) {
 }
 
 
-export { applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar, applyCommitRows };
+export { reloadForSwitch, showSwitching, applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar, applyCommitRows };

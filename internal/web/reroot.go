@@ -221,6 +221,13 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	s.svc.Store(svc)
 	s.cur = nil
 	s.opMu.Unlock()
+	// Tell the open tabs BEFORE their streams end (restartLive below): a
+	// switch the terminal made has no request of the page's own to wait on,
+	// and EventSource only reconnects after its retry delay. The swap is
+	// done, so a tab reloading on this sees the new repo.
+	if h := s.liveHubRef(); h != nil {
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "switched", Worktree: svc.Root()})
+	}
 	s.mu.Lock()
 	s.feed = nil
 	s.mu.Unlock()

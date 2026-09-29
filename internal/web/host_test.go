@@ -240,3 +240,32 @@ func TestServeStandaloneIsNotHosted(t *testing.T) {
 		t.Fatal("Serve did not return after cancel")
 	}
 }
+
+// A switch the terminal makes reaches every open tab before its stream
+// ends: "switched" names the new worktree (the page veils and reloads), and
+// the reconnect's hello carries it too (a tab that missed the message still
+// sees the repo changed).
+func TestHostRerootAnnouncesTheSwitchToTheTabs(t *testing.T) {
+	isolateGlobal(t)
+	isolateState(t)
+	dir := newRepoDir(t, 2)
+	wt := addWorktree(t, dir, "side")
+	svc := domain.Open(dir)
+	h, url := startHost(t, svc)
+	got := make(chan []liveMsg, 1)
+	go func() { got <- readLiveSSEFrom(t, url, 2, 10*time.Second) }()
+	time.Sleep(300 * time.Millisecond) // after the hello went out
+	if err := h.Reroot(context.Background(), domain.Open(wt)); err != nil {
+		t.Fatal(err)
+	}
+	msgs := <-got
+	if msgs[0].Reason != "hello" || msgs[0].Worktree != svc.Root() {
+		t.Fatalf("hello = %+v, want it to carry %s", msgs[0], svc.Root())
+	}
+	if msgs[1].Reason != "switched" || msgs[1].Worktree != wt {
+		t.Fatalf("second message = %+v, want switched to %s", msgs[1], wt)
+	}
+	if again := readLiveSSEFrom(t, url, 1, 5*time.Second); again[0].Worktree != wt {
+		t.Fatalf("hello after the switch = %+v, want %s", again[0], wt)
+	}
+}
