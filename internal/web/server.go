@@ -107,9 +107,15 @@ type Server struct {
 	prBudget time.Duration
 
 	// hosted marks a page served by a TUI from its own process: the terminal
-	// owns the current repository, so the page's own re-root is refused and
-	// the SPA hides its switch affordances (/api/repo reports it).
+	// owns the current repository, so the page never adopts a repo itself —
+	// its re-root asks the terminal through switcher (/api/repo reports it).
 	hosted bool
+	// switcher is the terminal's switch (Host.SetSwitcher): a hosted
+	// re-root hands it the resolved, preflighted path; the terminal
+	// re-roots itself and moves this page along (Host.Reroot) before it
+	// returns, or refuses with a reason. nil while hosted = the re-root is
+	// refused. Guarded by mu.
+	switcher func(ctx context.Context, path string) error
 	// opener builds a Service for a path this server opens ITSELF
 	// (handleReroot's target). A TUI host passes domain.OpenTUI so an ssh
 	// prompt can never reach its raw-mode terminal; nil = domain.Open.
@@ -126,6 +132,19 @@ func New(svc *domain.Service) *Server {
 	s.svc.Store(svc)
 	go s.watchSessions(s.sessStop)
 	return s
+}
+
+// SetSwitcher installs the terminal's switch (see Server.switcher).
+func (s *Server) SetSwitcher(fn func(ctx context.Context, path string) error) {
+	s.mu.Lock()
+	s.switcher = fn
+	s.mu.Unlock()
+}
+
+func (s *Server) terminalSwitcher() func(ctx context.Context, path string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.switcher
 }
 
 // service returns the current domain service. Read it once at the top of a

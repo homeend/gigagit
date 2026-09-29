@@ -95,6 +95,15 @@ func (h *Host) Reroot(ctx context.Context, svc *domain.Service) error {
 	return h.srv.adoptService(ctx, svc)
 }
 
+// SetSwitcher installs the terminal's switch: the page's own re-root
+// (palette, worktree menu, locks) resolves and preflights the target, then
+// calls fn, which re-roots the terminal and — through Reroot — this page
+// before returning, or refuses with a reason the page shows. Without it a
+// hosted page's re-root is refused.
+func (h *Host) SetSwitcher(fn func(ctx context.Context, path string) error) {
+	h.srv.SetSwitcher(fn)
+}
+
 // URL is the served address ("" before Start).
 func (h *Host) URL() string {
 	h.mu.Lock()

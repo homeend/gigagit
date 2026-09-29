@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -19,7 +20,10 @@ type fakeWebHost struct {
 	reroots               []*domain.Service
 	url                   string
 	startErr              error
+	switcher              func(ctx context.Context, path string) error
 }
+
+func (f *fakeWebHost) SetSwitcher(fn func(ctx context.Context, path string) error) { f.switcher = fn }
 
 func (f *fakeWebHost) Start(_ context.Context, addr string) (string, error) {
 	f.starts++
@@ -165,9 +169,7 @@ func runLeaves(cmd tea.Cmd) []tea.Msg {
 	}
 	var out []tea.Msg
 	for _, c := range batch {
-		if c != nil {
-			out = append(out, c())
-		}
+		out = append(out, runLeaves(c)...) // nested batches too
 	}
 	return out
 }
@@ -223,5 +225,114 @@ func TestCloseWebEndsTheHost(t *testing.T) {
 	m.closeWeb()
 	if f.closes != 1 {
 		t.Fatalf("closes = %d", f.closes)
+	}
+}
+
+// askSwitch plays the page: the host calls the TUI's switcher on its own
+// goroutine and waits for the answer.
+func askSwitch(t *testing.T, f *fakeWebHost, path string) <-chan error {
+	t.Helper()
+	if f.switcher == nil {
+		t.Fatal("the TUI installs a switcher before the host serves")
+	}
+	done := make(chan error, 1)
+	go func() { done <- f.switcher(context.Background(), path) }()
+	return done
+}
+
+func servingModel(t *testing.T, f *fakeWebHost) Model {
+	t.Helper()
+	m := loadedModel(t)
+	m, cmd := m.openInBrowser()
+	return runOne(t, m, cmd)
+}
+
+// A switch asked from the page re-roots the TUI, and the page's answer waits
+// until the host has followed.
+func TestPageSwitchReRootsTheTUI(t *testing.T) {
+	f := installFakeHost(t)
+	m := servingModel(t, f)
+	done := askSwitch(t, f, m.currentWorktree)
+	msg := waitWebSwitchCmd(m.web)()
+	req, ok := msg.(webSwitchRequestMsg)
+	if !ok || req.path != m.currentWorktree {
+		t.Fatalf("msg = %#v, want the page's switch request", msg)
+	}
+	old := m.svc
+	nm, cmd := m.Update(req)
+	m = nm.(Model)
+	if m.svc == old || m.switchTarget != m.currentWorktree {
+		t.Fatal("the TUI must re-root on the page's request")
+	}
+	if m.statusMsg != "switched from the web page" {
+		t.Fatalf("status = %q", m.statusMsg)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("answered (%v) before the host followed", err)
+	default:
+	}
+	// The re-armed wait is one of the leaves: feed it a throwaway request so
+	// runLeaves does not block on it (closing stop would refuse the switch).
+	go func() { m.web.switches <- webSwitchRequestMsg{path: "unused", reply: make(chan error, 1)} }()
+	var rr tea.Msg
+	for _, lm := range runLeaves(cmd) {
+		if r, ok := lm.(webRerootMsg); ok {
+			rr = r
+		}
+	}
+	if rr == nil || len(f.reroots) != 1 || f.reroots[0] != m.svc {
+		t.Fatalf("host reroots = %d, want the new service", len(f.reroots))
+	}
+	nm, _ = m.Update(rr)
+	m = nm.(Model)
+	if err := <-done; err != nil {
+		t.Fatalf("switch = %v", err)
+	}
+	if m.statusMsg != "switched from the web page" {
+		t.Fatalf("a clean follow keeps the status, got %q", m.statusMsg)
+	}
+}
+
+// A busy terminal refuses with its reason and stays where it is.
+func TestPageSwitchRefusedWhileTheTUIIsBusy(t *testing.T) {
+	f := installFakeHost(t)
+	m := servingModel(t, f)
+	m.modal = &decisionState{}
+	done := askSwitch(t, f, m.currentWorktree)
+	req := waitWebSwitchCmd(m.web)()
+	old := m.svc
+	nm, cmd := m.Update(req)
+	m = nm.(Model)
+	err := <-done
+	if err == nil || !strings.Contains(err.Error(), "a decision is waiting") {
+		t.Fatalf("switch = %v, want the busy reason", err)
+	}
+	if m.svc != old || len(f.reroots) != 0 {
+		t.Fatal("a refused switch must not re-root")
+	}
+	if cmd == nil {
+		t.Fatal("the wait must re-arm after a refusal")
+	}
+}
+
+// Quit ends the wait: the armed command returns instead of blocking.
+func TestCloseWebEndsTheSwitchWait(t *testing.T) {
+	f := installFakeHost(t)
+	m := servingModel(t, f)
+	m.closeWeb()
+	got := make(chan tea.Msg, 1)
+	go func() { got <- waitWebSwitchCmd(m.web)() }()
+	select {
+	case msg := <-got:
+		if msg != nil {
+			t.Fatalf("msg = %#v, want nil after close", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the switch wait outlived the page")
+	}
+	// A page asking after the close gets an answer too, never a hang.
+	if err := <-askSwitch(t, f, m.currentWorktree); err == nil {
+		t.Fatal("a closed terminal must refuse")
 	}
 }

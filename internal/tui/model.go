@@ -459,7 +459,7 @@ func New(svc *domain.Service) Model {
 	m := Model{
 		svc:                    svc,
 		sessWatch:              &sessionWatch{},
-		web:                    &webHostState{},
+		web:                    newWebHostState(),
 		clipWrite:              clipboard.Copy,
 		feed:                   svc.CommitFeed(),
 		loading:                true,
@@ -601,10 +601,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case webStartedMsg:
 		return m.onWebStarted(msg)
 	case webRerootMsg:
-		if msg.err != nil {
-			m.statusMsg = i18n.T("web page: %s", msg.err.Error())
-		}
-		return m, nil
+		return m.onWebReroot(msg)
+	case webSwitchRequestMsg:
+		return m.onWebSwitchRequest(msg)
 	case tasksChangedMsg:
 		return m.onTasksChanged()
 	case taskLaunchReadyMsg:
@@ -4616,7 +4615,10 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// gitConfigGen above): a commit popup can't be open across a repo switch
 	// today — while generating it swallows every key but esc, and reRoot's
 	// call sites (repo switcher, worktree switch, etc.) are all
-	// keyboard-gated, so no popup survives to receive a stale result. If a
+	// keyboard-gated, so no popup survives to receive a stale result. The one
+	// non-keyboard site, a switch asked from the hosted web page
+	// (onWebSwitchRequest), is refused by steerRefusal while any popup layer
+	// — the commit popup included — is open. If a
 	// future refactor makes reRoot reachable while a commitPopup layer is
 	// open, this assumption must be revisited (genGen would need bumping too,
 	// mirroring genCancel's cancel-and-clear above).

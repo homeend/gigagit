@@ -1,6 +1,8 @@
 package web
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -267,5 +269,70 @@ func TestHandleRerootUsesTheOpener(t *testing.T) {
 	}
 	if len(opened) != 1 || opened[0] != wt {
 		t.Fatalf("opener calls = %v, want [%s]", opened, wt)
+	}
+}
+
+// A hosted page with a switcher asks the terminal: the switcher gets the
+// resolved path, and the answer is the repo the terminal handed back.
+func TestRerootWhileHostedAsksTheSwitcher(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 2)
+	wt := addWorktree(t, dir, "side")
+	srv := New(domain.Open(dir))
+	srv.hosted = true
+	t.Cleanup(srv.Close)
+	var asked []string
+	srv.SetSwitcher(func(ctx context.Context, path string) error {
+		asked = append(asked, path)
+		return srv.adoptService(ctx, domain.Open(path)) // the TUI's reRoot → Host.Reroot
+	})
+	ts := serve(t, srv)
+	var out repoResp
+	if code := postJSON(t, ts, "/api/reroot", rerootBody(wt), "application/json", "", &out); code != http.StatusOK {
+		t.Fatalf("reroot code = %d", code)
+	}
+	if len(asked) != 1 || asked[0] != wt {
+		t.Fatalf("switcher calls = %v, want [%s]", asked, wt)
+	}
+	if out.Worktree != wt || out.Branch != "side" {
+		t.Fatalf("reroot resp = %+v, want the terminal's new repo", out)
+	}
+}
+
+// The terminal refusing (busy) is a 409 carrying its reason; nothing moves.
+func TestRerootWhileHostedReportsTheTerminalsRefusal(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 2)
+	wt := addWorktree(t, dir, "side")
+	srv := New(domain.Open(dir))
+	srv.hosted = true
+	t.Cleanup(srv.Close)
+	srv.SetSwitcher(func(context.Context, string) error { return errors.New("an operation is running") })
+	ts := serve(t, srv)
+	code, out := postJSONRaw(t, ts, "/api/reroot", rerootBody(wt))
+	if code != http.StatusConflict || !strings.Contains(out["error"], "an operation is running") {
+		t.Fatalf("status = %d error = %q, want 409 with the terminal's reason", code, out["error"])
+	}
+	var repo repoResp
+	getJSON(t, ts, "/api/repo", &repo)
+	if repo.Worktree == wt {
+		t.Fatal("a refused switch must not move the page")
+	}
+}
+
+// A broken target never reaches the terminal: the preflight answers first.
+func TestRerootWhileHostedPreflightsBeforeAsking(t *testing.T) {
+	t.Parallel()
+	srv := New(domain.Open(newRepoDir(t, 1)))
+	srv.hosted = true
+	t.Cleanup(srv.Close)
+	asked := false
+	srv.SetSwitcher(func(context.Context, string) error { asked = true; return nil })
+	ts := serve(t, srv)
+	if code, _ := postJSONRaw(t, ts, "/api/reroot", rerootBody(t.TempDir())); code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", code)
+	}
+	if asked {
+		t.Fatal("a target failing preflight must not reach the terminal")
 	}
 }

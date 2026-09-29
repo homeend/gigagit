@@ -58,8 +58,10 @@ func expandHome(path, home string) string {
 // their repos in the TUI, and the preflight below still runs BEFORE the
 // swap, so a garbage path is a 409 and the old root keeps serving.
 func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
-	if s.hosted {
-		// The SPA hides its switch affordances when hosted; this is the belt.
+	// A hosted page asks the terminal (below, after the preflight); with no
+	// switcher installed there is no one to ask.
+	switcher := s.terminalSwitcher()
+	if s.hosted && switcher == nil {
 		writeErr(w, http.StatusConflict, errors.New("the terminal owns the current repository — switch there"))
 		return
 	}
@@ -162,6 +164,20 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 	cand := s.open(target)
 	if err := preflight(r.Context(), cand, target); err != nil {
 		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	if s.hosted {
+		// The terminal owns the repository: it re-roots itself and moves
+		// this page along (Host.Reroot) before answering — so the reply
+		// reports the Service it handed over, not cand. A refusal (the
+		// terminal is busy) is its reason, verbatim.
+		// ErrPageLive: the swap happened, only the presence stayed with the
+		// other page — report the repo, as the standalone lane does.
+		if err := switcher(r.Context(), target); err != nil && !errors.Is(err, ErrPageLive) {
+			writeErr(w, http.StatusConflict, err)
+			return
+		}
+		s.writeRepoInfo(w, r, s.service())
 		return
 	}
 	// The new root's [versions]/[ui] policies (the serve-boot re-apply

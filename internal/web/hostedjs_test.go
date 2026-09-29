@@ -5,17 +5,19 @@ import (
 	"testing"
 )
 
-// A TUI-hosted page hides its four repo-switch affordances; the strings
-// below are the wiring pins (the logic is one `state.hosted` gate each).
-func TestHostedPageHidesRepoSwitching(t *testing.T) {
+// A TUI-hosted page keeps its four repo-switch affordances (the server asks
+// the terminal, which switches too): no `state.hosted` gate may hide them.
+func TestHostedPageKeepsRepoSwitching(t *testing.T) {
 	t.Parallel()
+	for _, f := range []string{"palette.js", "sidebar.js", "locks.js"} {
+		if src := readStatic(t, f); strings.Contains(src, "state.hosted") {
+			t.Errorf("%s: a state.hosted gate is back — the hosted page must keep its switch affordances", f)
+		}
+	}
 	cases := []struct{ file, want string }{
-		{"core.js", "hosted: false,"},
-		{"ops.js", "state.hosted = !!repo.hosted;"},
-		{"palette.js", `state.hosted && (r.label === "switch repo…" || r.label === "open repo (path)…")`},
-		{"palette.js", `...(state.hosted ? [] : [{ header: "Repositories" }, { label: "switch repo…", act: () => openPalette("repo") }]),`},
-		{"sidebar.js", "if (!state.hosted && !(state.worktree && w.path === state.worktree))"},
-		{"locks.js", "if (served && !state.hosted) doReroot(to);"},
+		{"palette.js", `{ label: "switch repo…", act: () => openPalette("repo") },`},
+		{"sidebar.js", `items.unshift({ label: "switch here", act: () => doReroot(w.path) });`},
+		{"locks.js", "if (served) doReroot(to);"},
 	}
 	for _, c := range cases {
 		if !strings.Contains(readStatic(t, c.file), c.want) {
