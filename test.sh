@@ -18,6 +18,15 @@ cd "$(dirname "$0")"
 RACE=""
 VERBOSE=""
 
+# -count=1 turns go's test cache off. With the cache on, every test binary
+# logs each file it stats/opens (the TUI suite logs ~700k entries, mostly
+# PATH probes) and cmd/go re-checks every entry against the module root
+# after the run — resolving the root's symlinks each time. With the checkout
+# on a 9p mount (/mnt/<drive> under WSL) that phase alone ran for many
+# minutes with no test process alive. The big packages rerun on every
+# change anyway, so the cache buys little here.
+NOCACHE="-count=1"
+
 gates() {
 	echo "== quality gates: go vet + gofmt =="
 	go vet ./...
@@ -40,10 +49,10 @@ gates() {
 # code is go test's (pipefail is set), so failures still stop the script.
 run_tests() {
 	if [[ -n "${VERBOSE}" ]]; then
-		go test -timeout 30m ${RACE} ${VERBOSE} "$@"
+		go test -timeout 30m ${NOCACHE} ${RACE} ${VERBOSE} "$@"
 		return
 	fi
-	go test -timeout 30m ${RACE} -json "$@" | awk '
+	go test -timeout 30m ${NOCACHE} ${RACE} -json "$@" | awk '
 	function pkgOf(line,   p) {
 		if (match(line, /"Package":"[^"]*"/) == 0) return ""
 		p = substr(line, RSTART + 11, RLENGTH - 12)

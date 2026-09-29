@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Faster test runs on a 9p checkout
+
+### Changed
+
+- **`./test.sh` runs with `-count=1` (no go test cache).** With the cache
+  on, each test binary logs every file it touches (~700k entries for the
+  TUI suite) and cmd/go re-checks each one against the module root after the
+  run — minutes of 9p round-trips with no test running when the checkout
+  sits on `/mnt/<drive>` under WSL.
+- **git's PATH lookup is cached per PATH** (`gitexec.resolveBinary`), so
+  a git invocation no longer stats every PATH directory. The cached path is
+  dropped when PATH changes; a missing git still fails exactly as before.
+
 ## test.sh failure reports
 
 ### Fixed

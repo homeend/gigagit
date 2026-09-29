@@ -180,7 +180,7 @@ func (r *ExecRunner) Run(ctx context.Context, name string, argv []string) (Resul
 
 func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string) (Result, error) {
 	start := r.now()
-	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
+	cmd := exec.CommandContext(ctx, resolveBinary(r.gitPath), argv...)
 	r.prepare(cmd, env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -210,7 +210,7 @@ func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string
 
 func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (Result, error) {
 	start := r.now()
-	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
+	cmd := exec.CommandContext(ctx, resolveBinary(r.gitPath), argv...)
 	r.prepare(cmd, nil)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
