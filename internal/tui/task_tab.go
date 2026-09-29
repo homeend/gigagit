@@ -18,9 +18,12 @@ import (
 // disk. enter shows a result (or a running agent's console, or a failure's
 // output); k twice cancels; x removes an ended record.
 
+// The ctrl+\ popup's tabs, in the web switcher's order: Agents, AI tasks,
+// Open files.
 const (
 	tabSessions = iota
 	tabTasks
+	tabFiles
 )
 
 // taskRow is one row: a task this process knows, or a history record.
@@ -372,8 +375,17 @@ func (p *sessionsPopup) taskHint() string {
 			parts = append(parts, i18n.T("[x] remove"))
 		}
 	}
-	parts = append(parts, i18n.T("[/] filter  [tab] sessions  [ctrl+t] full  [esc] close"))
+	parts = append(parts, p.tasksTabHint())
 	return strings.Join(parts, "  ")
+}
+
+// tasksTabHint names where tab goes next: Open files, or Agents in quit mode
+// (which has no Open files tab).
+func (p *sessionsPopup) tasksTabHint() string {
+	if p.quitMode {
+		return i18n.T("[/] filter  [tab] sessions  [ctrl+t] full  [esc] close")
+	}
+	return i18n.T("[/] filter  [tab] open files  [ctrl+t] full  [esc] close")
 }
 
 // noteID is the note a review run was stored as ("" = none).

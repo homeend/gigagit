@@ -291,14 +291,20 @@ func TestSwitcherListsOpenFiles(t *testing.T) {
 	m = pumpAll(t, m, cmd)
 	m = m.backgroundDoc(layerOf[*fileViewer](m).openFile)
 	m, p := openSwitcher(t, m)
+	if p.tab != tabFiles {
+		t.Fatalf("no sessions, open files: the popup opens on tab %d, want Open files", p.tab)
+	}
 	joined := strings.Join(p.rows, "\n")
-	for _, want := range []string{"Open files", "● shown.txt  :2  working tree", "○ a.txt  :1  working tree"} {
+	for _, want := range []string{"● shown.txt  :2  working tree", "○ a.txt  :1  working tree"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("rows lack %q:\n%s", want, joined)
 		}
 	}
-	if !strings.Contains(m.View(), "Agents & files") {
-		t.Error("the popup title does not name the open files")
+	if p.rows[0] != "● shown.txt  :2  working tree" && p.rows[0] != "○ a.txt  :1  working tree" {
+		t.Errorf("the Open files tab has a header or an indent: %q", p.rows[0])
+	}
+	if v := m.View(); !strings.Contains(v, "[Open files 2]") || strings.Contains(v, "Agents & files") {
+		t.Errorf("the tab strip does not show the Open files tab:\n%s", v)
 	}
 	p.query = "shown"
 	p.refresh(m)
@@ -368,6 +374,50 @@ func TestQuitModeListsNoFiles(t *testing.T) {
 	for _, d := range p.files {
 		if d != nil {
 			t.Fatalf("quit mode lists the file %s", d.path)
+		}
+	}
+	if strings.Contains(m.View(), "Open files") {
+		t.Error("quit mode shows the Open files tab")
+	}
+	for range 3 {
+		m, _ = updateKey(m, "tab")
+		if p.tab == tabFiles {
+			t.Fatal("tab reaches the Open files tab in quit mode")
+		}
+	}
+}
+
+// TestSwitcherTabsCycle: tab steps Agents → AI tasks → Open files → Agents
+// (the web's order), shift+tab steps back, and each list keeps its cursor.
+func TestSwitcherTabsCycle(t *testing.T) {
+	t.Parallel()
+	m, _ := viewerAt(t, "one.txt", "x\n", 0)
+	m, cmd := m.openFileViewer("two.txt", 0)
+	m = pumpAll(t, m, cmd)
+	m = m.backgroundDoc(layerOf[*fileViewer](m).openFile)
+	m, p := openSwitcher(t, m)
+	m, _ = updateKey(m, "down")
+	fileSel := p.sel
+	for _, want := range []int{tabSessions, tabTasks, tabFiles} {
+		m, _ = updateKey(m, "tab")
+		if p.tab != want {
+			t.Fatalf("tab → %d, want %d", p.tab, want)
+		}
+	}
+	if p.sel != fileSel {
+		t.Errorf("back on Open files the cursor is %d, want %d", p.sel, fileSel)
+	}
+	m, _ = updateKey(m, "shift+tab")
+	if p.tab != tabTasks {
+		t.Fatalf("shift+tab → %d, want AI tasks", p.tab)
+	}
+	m, _ = updateKey(m, "shift+tab")
+	if p.tab != tabSessions {
+		t.Fatalf("shift+tab → %d, want Agents", p.tab)
+	}
+	for _, d := range p.files {
+		if d != nil {
+			t.Fatalf("the Agents tab lists the file %s", d.path)
 		}
 	}
 }
