@@ -55,6 +55,9 @@ type Diff struct {
 	OldKind, NewKind   string
 	OldBytes, NewBytes int
 	OldDim, NewDim     image.Point // the ORIGINAL pixel size (the working copy is shrunk)
+	// OldRaw/NewRaw are the ORIGINAL bytes of a side that decoded as an
+	// image (nil otherwise): the web serves them at full resolution.
+	OldRaw, NewRaw []byte
 	// OldTok/NewTok hold syntax runs per SOURCE line (index = line number − 1,
 	// the Row.LeftNo/RightNo numbering), so no row mapping is needed and the
 	// shared rows stay untouched. nil when highlighting is off, the language
@@ -72,7 +75,7 @@ type Diff struct {
 // in-place mutation of a cached Row or Tok slice would corrupt the cache for
 // all later opens.
 func (d Diff) Size() int {
-	n := 0
+	n := len(d.OldRaw) + len(d.NewRaw)
 	for _, img := range []image.Image{d.OldImg, d.NewImg} {
 		if img != nil {
 			b := img.Bounds()
@@ -155,6 +158,12 @@ func (d plainDiffer) Diff(ctx context.Context, req Request) (Diff, error) {
 		out := Diff{Binary: true, OldBytes: len(old), NewBytes: len(newB)}
 		out.OldImg, out.OldKind, out.OldDim = decodeImage(old)
 		out.NewImg, out.NewKind, out.NewDim = decodeImage(newB)
+		if out.OldImg != nil {
+			out.OldRaw = old
+		}
+		if out.NewImg != nil {
+			out.NewRaw = newB
+		}
 		return out, nil
 	}
 	out := Diff{Result: textdiff.Compare(old, newB, textdiff.Options{Enhanced: d.enhanced})}
