@@ -1,6 +1,6 @@
 # Versioned external-tool templates with agent-version variants — design
 
-Status: agreed in conversation 2026-09-30, awaiting spec review.
+Status: agreed 2026-09-30; open questions ruled (see end).
 
 ## Problem
 
@@ -114,10 +114,10 @@ parsed fields only — `mode`, `per_file`, `when_op`, sorted `frontends`,
 - comments, key order, quoting style and indentation never reach it (they do
   not survive TOML parsing).
 
-A whitespace change inside a quoted prompt therefore reads as "not edited";
-the worst case is an unasked replacement by a template that differs only in
-meaningful content from what was there — accepted. Any normalisation miss
-errs the other way: an "update available" offer instead of a silent update.
+A whitespace change inside a quoted prompt therefore reads as "not edited".
+Since no update is ever applied without consent, the fingerprint only
+decides "customised" (silent) vs. "you changed this block" in the offer
+reason; a normalisation miss costs at most a wrong word in that line.
 
 ## Agent version probe (`internal/domain`)
 
@@ -148,15 +148,22 @@ version `v` (possibly unknown):
 | Stamp | Edited? | Behind? | Status | Action |
 |---|---|---|---|---|
 | stamped | no | no | current | none |
-| stamped | no | yes | outdated | auto-update + notice (see open question 1) |
+| stamped | no | yes | update available | offer — never automatic (user ruling 2026-09-30) |
 | stamped | yes | no | customised | none |
-| stamped | yes | yes | update available | offer (diff) |
-| none | — | — | if equal (normalised) to the target rendering: current; else update available | offer (diff) — user ruling 2026-09-30 |
+| stamped | yes | yes | update available | offer |
+| none | — | — | if equal (normalised) to the target rendering: current; else update available | offer — user ruling 2026-09-30 |
 | any | — | — | unsupported (known `v` outside every range) | notice: "Claude 1.2 is outside every range the <name> template supports"; block keeps running as is |
 
 Blocks whose key matches no family (user-authored) are never touched.
-Unstamped blocks are never written without consent — not even to add a
-stamp.
+No block — stamped or not, edited or not — is ever written without the
+user's consent, not even to add a stamp. "Edited?" therefore only decides
+whether a block is "customised" (current template, user changes: silent) —
+it never unlocks an automatic write.
+
+**The offer reason** is one line derived from the status, shared by the
+notice and the review popup: "template updated (v2 → v3)", "Claude 2.3
+detected — this block was written for `<2.1`", or both; plus "you changed
+this block" when it is edited.
 
 **The offered rendering** is the target variant generated with
 `GenerateCommand` for the currently detected binary. A family whose tool is
@@ -169,9 +176,11 @@ not detected gets no offer.
 opening Settings → External tools.
 
 **Settings → External tools (TUI):** an installed row shows its status
-suffix (`update available` / `outdated` / `unsupported`). `enter` on an
-update-available row opens a review popup: the block as it is vs. the new
-rendering, changed lines marked, and three answers:
+suffix (`update available` / `unsupported`). `enter` on an
+update-available row opens a review popup (user ruling 2026-09-30): the
+offer reason (the notification line above) and the **full text of the new
+template** as it would be written — no side-by-side diff, no history of old
+template texts — and three answers:
 
 - **Take new** — replace the block in place with the new rendering + a fresh
   stamp;
@@ -213,10 +222,11 @@ mechanism, and `SupersededReviewCommands` stops growing.
 - e2e: a scenario with an unstamped web-only Claude headless block →
   status "update available" → take new → the TUI conflict picker offers it.
 
-## Open questions for review
+## User rulings (2026-09-30)
 
-1. A stamped, **unedited** block that falls behind: update it automatically
-   with a notice (proposed), or always ask like an edited one?
-2. Should the review popup also show *what changed in the template* since the
-   block's version (needs old template texts kept in the catalog), or is
-   "yours vs new" enough? Proposed: yours vs new only.
+1. Unstamped blocks: offer the update (never stamp silently).
+2. Overlapping variant ranges: forbidden (catalog test), not first-match.
+3. A stamped, unedited block that falls behind: **always ask** — no
+   automatic updates at all.
+4. The review popup shows the offer reason (the notification line) and the
+   new template's full text; no diff, no old template texts kept.
