@@ -1222,6 +1222,18 @@ headless tasks.
 max_parallel = 3
 ```
 
+### Image diffs in `gg web`
+
+A diff of **images** (a modified, added or deleted PNG/JPEG/GIF) shows the
+pictures instead of `binary file`, at full resolution, fitted to the pane and
+never enlarged. `w` (or the chips above them) cycles **side by side** →
+**stacked** → **one at a time**, where `tab` or a click on the image flips
+old ↔ new; each side's info line names its format, pixel and byte size. An
+added or deleted image shows alone, unmarked. The stacked view (`S`) and the
+file-history overlay show each pair small and side by side. Every diff source
+works alike — a commit, the working tree or index, a branch or link
+comparison.
+
 ### The file viewer in `gg web`
 
 Right-click (or `.`) a file in the browser's working-tree list, a commit's
