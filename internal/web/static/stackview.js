@@ -15,6 +15,7 @@ import { saveUI } from "./uistate.js";
 import { registerHelp } from "./menus.js";
 import { focusPane } from "./keys.js";
 import { seedCollapsed } from "./notebox.js";
+import { noteHTML } from "./shelfnotes.js";
 import {
   activeFileList,
   changeStepTarget,
@@ -177,7 +178,7 @@ function sectionHTML(s, k) {
 
 function paintStack(st) {
   const body = $("diff-body");
-  body.innerHTML = `<div class="stk">${st.slots.map(sectionHTML).join("")}</div>`;
+  body.innerHTML = `<div class="stk">${stackNotesHTML()}${st.slots.map(sectionHTML).join("")}</div>`;
   measureChrome();
   const n = st.slots.length;
   $("diff-title").textContent = `${n} file${n === 1 ? "" : "s"} · stacked`;
@@ -201,6 +202,17 @@ function paintStack(st) {
   for (const el of body.querySelectorAll(".stk-file")) mountSlotBars(el);
   syncStackChrome();
   updateDiffNav();
+}
+
+// stackNotesHTML leads a shelf entry's stack with its own notes, one prose
+// block each (the TUI's review-overview blocks): what the frozen files could
+// not carry reads before them. Not a .stk-file — the loader, the counts and
+// n/p never see it.
+function stackNotesHTML() {
+  const c = state.filesMode === "compare" ? state.compare : null;
+  const ns = (c && c.shelfNotes) || [];
+  if (!ns.length) return "";
+  return `<div class="stk-notes"><div class="stk-notes-head">Notes</div>${ns.map(noteHTML).join("")}</div>`;
 }
 
 // measureChrome sizes what the stack lays out around: the file headers stick
@@ -681,7 +693,10 @@ function scrollToFile(st, i, expand = true) {
   state.fileCursor = i;
   const pane = $("diff-pane");
   const el = sectionEl(k);
-  if (el) {
+  // The first file of a stack led by a shelf entry's notes lands on the top:
+  // aligning its header would scroll the notes out of sight above it.
+  if (k === 0 && document.querySelector("#diff-body .stk-notes")) pane.scrollTop = 0;
+  else if (el) {
     pane.scrollTop +=
       el.getBoundingClientRect().top - pane.getBoundingClientRect().top - $("diff-header").offsetHeight;
   }

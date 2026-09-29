@@ -62,10 +62,12 @@ function noteHTML(n) {
   );
 }
 
-// openShelfNotes shows entry e's notes (e is a /api/shelf row).
-async function openShelfNotes(e, label) {
+// openShelfNotes shows entry e's notes (e is a /api/shelf row) — only the one
+// with id noteId when given (a note row of the entry's file list).
+async function openShelfNotes(e, label, noteId) {
   const got = await getJSON("/api/shelf/notes?id=" + encodeURIComponent(e.id)).catch(() => null);
-  const notes = (got && got.notes) || [];
+  let notes = (got && got.notes) || [];
+  if (noteId) notes = notes.filter((n) => n.id === noteId);
   const el = buildDialog();
   $("gg-shelf-notes-title").textContent = "Notes on " + label;
   $("gg-shelf-notes-body").innerHTML = notes.length ? notes.map(noteHTML).join("") : `<div class="meta">no notes</div>`;
@@ -80,4 +82,4 @@ async function openShelfNotes(e, label) {
   });
 }
 
-export { openShelfNotes };
+export { noteHTML, openShelfNotes };

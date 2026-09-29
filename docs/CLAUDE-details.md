@@ -4010,3 +4010,15 @@ Spec: `docs/superpowers/specs/2026-09-27-review-notes-design.md`.
   out once at the stack width. Summaries cut via `elideNoteSummary`: the
   trailing "(branch)" group stays whole (a branch holds slashes — elidePath
   alone left "…/x)"), then the worktree name when even the group cannot fit.
+- **Web half:** `openShelfEntry` (sidebar.js) reads `/api/shelf/notes` when
+  `e.notes > 0` and hands them to `openEntryCompare` (`shelf_notes`,
+  `shelf_entry`, `shelf_label` → `state.compare.shelfNotes`/…).
+  `shelfNoteRowsHTML` (files.js) prepends the heading + `li.shelfnote` rows
+  carrying `data-note`, NEVER `data-i` — `state.files`, the cursor, staging
+  and the context menu are index-keyed and never see them; the list click
+  opens `openShelfNotes(entry, label, noteId)` filtered to that note.
+  `elideNoteSummary` is ported into core.js's path-elision section (its node
+  test pins the TUI's exact outputs). The stack's `stackNotesHTML` leads the
+  `.stk` with a `.stk-notes` block (not a `.stk-file`, so the loader, counts
+  and n/p skip it); `scrollToFile` lands file 0 at scrollTop 0 when that
+  block exists, else aligning the header scrolls the notes out of sight.

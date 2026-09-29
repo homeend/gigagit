@@ -269,6 +269,9 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #compare-bar button.on { border-color: var(--accent); color: var(--accent); }
 #compare-bar button:disabled { opacity: .45; cursor: default; }
 #files-list li.sect { color: var(--dim); font-weight: bold; cursor: default; padding-top: 6px; }
+/* a shelf entry's own notes, above its files (files.js shelfNoteRowsHTML) */
+#files-list li.shelfnote { white-space: pre; }
+#files-list li.shelfnote .shelfnote-lead { color: var(--dim); }
 #files-list li button.act {
   float: right; background: none; color: var(--dim); border: 1px solid var(--border);
   border-radius: 3px; width: 1.8em; font: inherit; cursor: pointer;
@@ -1597,6 +1600,12 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 .stk { padding: 4px 6px 24px; }
 .stk::after { content: ""; display: block; height: var(--stk-tail, 0px); } /* any header can reach the top */
 .stk-file { border: 1px solid var(--border); border-radius: 4px; margin: 8px 0; }
+/* a shelf entry's own notes lead its stack (stackview.js stackNotesHTML) */
+.stk-notes { border: 1px solid var(--border); border-radius: 4px; margin: 8px 0; padding: 6px 10px; display: flex; flex-direction: column; gap: 10px; }
+.stk-notes-head { color: var(--dim); font-weight: bold; }
+.stk-notes .summary { font-weight: 600; }
+.stk-notes .meta { opacity: .65; font-size: 11px; }
+.stk-notes pre { margin: 4px 0 0; white-space: pre-wrap; }
 .stk-head {
   position: sticky; top: var(--diff-head-h, 0px); z-index: 1;
   display: flex; align-items: center; gap: 8px; padding: 4px 8px;
