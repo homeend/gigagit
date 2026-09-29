@@ -27,13 +27,18 @@ type sessionsPopup struct {
 	hscroll     int
 	confirmKill domain.SessionID // a running session asks once before k kills it
 
-	tab           int                 // tabSessions | tabTasks (task_tab.go)
+	tab           int                 // tabSessions | tabTasks | tabFiles (task_tab.go)
+	agentSel      int                 // the Agents tab's cursor while another tab shows
+	fileSel       int                 // the Open files tab's cursor while another tab shows
+	nAgentRows    int                 // the Agents tab's row count (headers included)
+	nSessions     int                 // the Agents tab's session rows
+	nFiles        int                 // the Open files tab's row count
 	taskRows      []taskRow           // the Headless tab's rows
 	taskSel       int                 // its cursor
 	hist          []domain.TaskRecord // the task history, read on open and on each task change (disk I/O: never per frame)
 	confirmCancel domain.TaskID       // a live task asks once before k cancels it
 
-	rows  []string           // rendered rows, headers included
+	rows  []string           // the Agents or Open files tab's rows, headers included
 	ids   []domain.SessionID // parallel to rows; "" = not a session row
 	files []*openFile        // parallel to rows; nil = not an open-file row
 }
@@ -105,6 +110,8 @@ func (m Model) openSessionsPopup(quitMode bool) (Model, tea.Cmd) {
 		}
 	case len(domain.Sessions().List()) == 0 && len(m.openFiles.list(m.currentWorktree)) == 0:
 		p.tab = tabTasks // only tasks to show
+	case len(domain.Sessions().List()) == 0:
+		p.tab = tabFiles // no sessions, some open files
 	case newestTaskTime(hist).After(newestSessionTime()):
 		p.tab = tabTasks // the freshest thing is a task
 	}
@@ -113,8 +120,9 @@ func (m Model) openSessionsPopup(quitMode bool) (Model, tea.Cmd) {
 	return m.pushLayer(p), nil
 }
 
-// refresh re-derives the rows from the live session list and — outside quit
-// mode, which is only about ending sessions — the worktree's open files.
+// refresh re-derives the rows: the live session list on the Agents tab, the
+// worktree's open files on the Open files tab (never in quit mode, which is
+// only about ending sessions). Both counts are kept for the tab strip.
 func (p *sessionsPopup) refresh(m Model) {
 	var removed map[domain.TaskID]bool
 	if m.taskTrack != nil {
@@ -124,25 +132,29 @@ func (p *sessionsPopup) refresh(m Model) {
 	if p.taskSel >= len(p.taskRows) {
 		p.taskSel = max(len(p.taskRows)-1, 0)
 	}
-	p.rows, p.ids = sessionsPopupRows(domain.Sessions().List(), p.query)
-	p.files = make([]*openFile, len(p.rows))
+	agentRows, agentIDs := sessionsPopupRows(domain.Sessions().List(), p.query)
+	var fileRows []string
+	var docs []*openFile
 	if !p.quitMode {
-		var fileRows []string
-		var docs []*openFile
 		q := strings.ToLower(p.query)
 		for _, d := range m.openFiles.list(m.currentWorktree) {
 			row := openFileRowText(d, m.docShown(d))
 			if q != "" && !strings.Contains(strings.ToLower(row), q) {
 				continue
 			}
-			fileRows, docs = append(fileRows, "  "+row), append(docs, d)
+			fileRows, docs = append(fileRows, row), append(docs, d)
 		}
-		if len(docs) > 0 {
-			p.rows, p.ids, p.files = append(p.rows, i18n.T("Open files")), append(p.ids, ""), append(p.files, nil)
-			for i := range docs {
-				p.rows, p.ids, p.files = append(p.rows, fileRows[i]), append(p.ids, ""), append(p.files, docs[i])
-			}
+	}
+	p.nAgentRows, p.nFiles, p.nSessions = len(agentRows), len(docs), 0
+	for _, id := range agentIDs {
+		if id != "" {
+			p.nSessions++
 		}
+	}
+	if p.tab == tabFiles {
+		p.rows, p.ids, p.files = fileRows, make([]domain.SessionID, len(docs)), docs
+	} else {
+		p.rows, p.ids, p.files = agentRows, agentIDs, make([]*openFile, len(agentRows))
 	}
 	if p.sel >= len(p.rows) || (p.sel >= 0 && !p.selectable(p.sel)) {
 		p.sel = p.nextSelectable(-1, +1)
@@ -236,9 +248,12 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.refresh(m)
 		return m, nil
 	}
-	if key == "tab" {
-		p.tab = 1 - p.tab
-		p.confirmKill, p.confirmCancel = "", ""
+	if key == "tab" || key == "shift+tab" {
+		dir := +1
+		if key == "shift+tab" {
+			dir = -1
+		}
+		p.switchTab(m, dir)
 		return m, nil
 	}
 	if p.tab == tabTasks && !p.quitMode {
@@ -348,9 +363,9 @@ func (p *sessionsPopup) render(m Model, below string) string {
 	}
 	head = append(head, strip, s.dim.Render(strings.Repeat("─", textW)))
 
-	// Fixed height: both tabs get the taller tab's row count, so switching
+	// Fixed height: every tab gets the tallest tab's row count, so switching
 	// never resizes the box.
-	rowsH := min(max(p.sessionRowCount(), p.taskRowCount(), 1), max(h-10, 3))
+	rowsH := min(max(p.sessionRowCount(), p.taskRowCount(), p.fileRowCount(), 1), max(h-10, 3))
 	if p.maxed() { // maximised: every row the screen holds
 		rowsH = max(h-11, 3)
 		if p.quitMode {
@@ -358,12 +373,16 @@ func (p *sessionsPopup) render(m Model, below string) string {
 		}
 	}
 	var body, hints []string
-	if p.tab == tabTasks {
+	switch p.tab {
+	case tabTasks:
 		body = p.renderTaskRows(m, textW, rowsH)
 		hints = []string{p.taskHint()}
-	} else {
+	case tabFiles:
 		body = p.renderSessionRows(textW, rowsH)
-		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove/close  [/] filter  [z] mode  [tab] AI tasks  [ctrl+t] full  [esc] close")}
+		hints = []string{i18n.T("[enter] open  [x] close  [/] filter  [z] mode  [tab] agents  [ctrl+t] full  [esc] close")}
+	default:
+		body = p.renderSessionRows(textW, rowsH)
+		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove  [/] filter  [z] mode  [tab] AI tasks  [ctrl+t] full  [esc] close")}
 	}
 	if p.quitMode {
 		hints = append(hints, i18n.T("[Q] kill all and quit  [esc] cancel"))
@@ -377,44 +396,82 @@ func (p *sessionsPopup) render(m Model, below string) string {
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 
-// tabStrip is "[Agents 2]  AI tasks 5" with the active tab bold and the
-// other dim ("Agents & files" once this worktree has open files).
+// tabs is the popup's tab cycle: quit mode has no Open files tab.
+func (p *sessionsPopup) tabs() []int {
+	if p.quitMode {
+		return []int{tabSessions, tabTasks}
+	}
+	return []int{tabSessions, tabTasks, tabFiles}
+}
+
+// switchTab steps dir tabs along the cycle; the Agents and Open files tabs
+// each keep their own cursor.
+func (p *sessionsPopup) switchTab(m Model, dir int) {
+	switch p.tab {
+	case tabSessions:
+		p.agentSel = p.sel
+	case tabFiles:
+		p.fileSel = p.sel
+	}
+	tabs := p.tabs()
+	i := 0
+	for j, t := range tabs {
+		if t == p.tab {
+			i = j
+		}
+	}
+	p.tab = tabs[(i+dir+len(tabs))%len(tabs)]
+	p.confirmKill, p.confirmCancel = "", ""
+	switch p.tab {
+	case tabSessions:
+		p.sel = p.agentSel
+	case tabFiles:
+		p.sel = p.fileSel
+	}
+	p.refresh(m)
+}
+
+// tabStrip is "[Agents 2]  AI tasks 5  Open files 3" with the active tab
+// bold and bracketed, the others dim.
 func (p *sessionsPopup) tabStrip(s *styles) string {
-	agents := i18n.T("Agents %d", p.sessionCount())
-	for _, d := range p.files {
-		if d != nil {
-			agents = i18n.T("Agents & files %d", p.sessionCount())
-			break
-		}
-	}
-	tasks := i18n.T("AI tasks %d", len(p.taskRows))
 	bold := lipgloss.NewStyle().Bold(true)
-	if p.tab == tabTasks {
-		return s.dim.Render(" "+agents+" ") + " " + bold.Render("["+tasks+"]")
-	}
-	return bold.Render("["+agents+"]") + " " + s.dim.Render(" "+tasks+" ")
-}
-
-// sessionCount counts the sessions tab's selectable rows (sessions and open
-// files, not headers).
-func (p *sessionsPopup) sessionCount() int {
-	n := 0
-	for i := range p.rows {
-		if p.selectable(i) {
-			n++
+	var parts []string
+	for _, t := range p.tabs() {
+		var label string
+		switch t {
+		case tabSessions:
+			label = i18n.T("Agents %d", p.sessionCount())
+		case tabTasks:
+			label = i18n.T("AI tasks %d", len(p.taskRows))
+		default:
+			label = i18n.T("Open files %d", p.nFiles)
+		}
+		if t == p.tab {
+			parts = append(parts, bold.Render("["+label+"]"))
+		} else {
+			parts = append(parts, s.dim.Render(" "+label+" "))
 		}
 	}
-	return n
+	return strings.Join(parts, " ")
 }
 
-// sessionRowCount / taskRowCount are each tab's body height (1 for the
-// empty-state line).
-func (p *sessionsPopup) sessionRowCount() int { return max(len(p.rows), 1) }
-func (p *sessionsPopup) taskRowCount() int    { return max(len(p.taskRows), 1) }
+// sessionCount counts the Agents tab's sessions (not the repo and worktree
+// headers), whichever tab shows.
+func (p *sessionsPopup) sessionCount() int { return p.nSessions }
 
-// renderSessionRows lays out the sessions tab's rows in rowsH lines.
+// sessionRowCount / taskRowCount / fileRowCount are each tab's body height
+// (1 for the empty-state line).
+func (p *sessionsPopup) sessionRowCount() int { return max(p.nAgentRows, 1) }
+func (p *sessionsPopup) taskRowCount() int    { return max(len(p.taskRows), 1) }
+func (p *sessionsPopup) fileRowCount() int    { return max(p.nFiles, 1) }
+
+// renderSessionRows lays out the Agents or Open files tab's rows in rowsH
+// lines.
 func (p *sessionsPopup) renderSessionRows(textW, rowsH int) []string {
 	if len(p.rows) == 0 {
+		if p.tab == tabFiles {
+			return []string{padRight(i18n.T("  (no open files)"), textW)}
+		}
 		return []string{padRight(i18n.T("  (no agent sessions)"), textW)}
 	}
 	s := st()

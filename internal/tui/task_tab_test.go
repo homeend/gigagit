@@ -135,13 +135,11 @@ func TestTaskTabTabSwitches(t *testing.T) {
 	if p.tab != tabTasks || !strings.Contains(p.render(m, ""), "review — ") {
 		t.Fatalf("only tasks: the popup opens on the tasks tab, got %d", p.tab)
 	}
-	m, _ = updateKey(m, "tab")
-	if p.tab != tabSessions {
-		t.Fatal("tab → sessions")
-	}
-	m, _ = updateKey(m, "tab")
-	if p.tab != tabTasks {
-		t.Fatal("tab back → tasks")
+	for _, want := range []int{tabFiles, tabSessions, tabTasks} {
+		m, _ = updateKey(m, "tab")
+		if p.tab != want {
+			t.Fatalf("tab → %d, want %d", p.tab, want)
+		}
 	}
 }
 
@@ -162,13 +160,15 @@ func TestAgentsPopupFixedHeightAndTabStrip(t *testing.T) {
 		t.Fatalf("tab strip missing:\n%s", tasksOut)
 	}
 	tasksH := lines()
-	m, _ = updateKey(m, "tab")
-	sessOut := ansi.Strip(p.render(m, ""))
-	if !strings.Contains(sessOut, "[Agents 0]") {
-		t.Fatalf("active tab not bracketed:\n%s", sessOut)
-	}
-	if got := lines(); got != tasksH {
-		t.Fatalf("height changed with the tab: tasks %d, agents %d", tasksH, got)
+	for _, want := range []string{"[Open files 0]", "[Agents 0]"} {
+		m, _ = updateKey(m, "tab")
+		out := ansi.Strip(p.render(m, ""))
+		if !strings.Contains(out, want) {
+			t.Fatalf("active tab not bracketed (want %s):\n%s", want, out)
+		}
+		if got := lines(); got != tasksH {
+			t.Fatalf("height changed with the tab: tasks %d, %s %d", tasksH, want, got)
+		}
 	}
 }
 

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The ctrl+\ popup gets its own Open files tab
+
+### Changed
+
+- **TUI `ctrl+\`: three tabs — Agents · AI tasks · Open files** (the web
+  switcher's order). The former "Agents & files" tab split in two: Agents
+  lists only the agent sessions, Open files only this worktree's open
+  files (enter brings one back, x closes it, an empty tab says so). `tab`
+  steps forward, `shift+tab` back, and Agents and Open files each keep
+  their own cursor. With no sessions but open files the popup opens on
+  Open files; quit mode has no Open files tab.
+
 ## Step between a review's noted files in the browser
 
 ### Added
