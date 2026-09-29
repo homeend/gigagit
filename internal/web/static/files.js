@@ -57,8 +57,13 @@ function drillOut() {
     return;
   }
   if (state.layout === "diff") {
+    // A diff opened from a popup (View all notes) returns to that popup —
+    // but only while it is still the diff the popup opened.
+    const back = diffBack && state.diffCtx && noteCollapseKey(state.diffCtx) === diffBack.key ? diffBack.run : null;
+    diffBack = null;
     enterFilesStage(); // also clears the diff a late fetch may repaint
     focusPane();
+    if (back) back();
     return;
   }
   if (state.layout !== "files") return;
@@ -66,6 +71,14 @@ function drillOut() {
   state.pane = "commits";
   setLayout("list");
   focusPane();
+}
+
+// diffBack is the popup an open diff returns to on esc: {key, run}, key being
+// the diff it was set for (noteCollapseKey), so opening another file drops it.
+let diffBack = null;
+
+function setDiffBack(run) {
+  diffBack = state.diffCtx ? { key: noteCollapseKey(state.diffCtx), run } : null;
 }
 
 $("back-btn").addEventListener("click", drillOut);
@@ -2503,6 +2516,13 @@ function stepNote(dir) {
       target = before.length ? before[before.length - 1] : els[els.length - 1];
     }
   }
+  landNoteRow(target);
+}
+
+
+// landNoteRow scrolls to one ◆ row, flashes it and re-anchors on the diff row
+// it hangs off, so `E`/`R` and the next }/{ start from it.
+function landNoteRow(target) {
   target.scrollIntoView({ block: "center" });
   target.classList.add("flash");
   setTimeout(() => target.classList.remove("flash"), 600);
@@ -2510,6 +2530,22 @@ function stepNote(dir) {
   while (p && !p.dataset.no) p = p.previousElementSibling;
   if (p) markDiffRow(p); // clears noteStepId…
   noteStepId = target.dataset.note; // …which the step then claims for itself
+}
+
+
+// landNote lands the open diff on thread id once its notes have painted
+// (they arrive after the diff, and a stack loads its files lazily): it polls
+// for the row for a few seconds and reports whether it got there.
+async function landNote(id) {
+  for (let i = 0; i < 40; i++) {
+    const el = noteRowEls().find((r) => r.dataset.note === id);
+    if (el) {
+      landNoteRow(el);
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
 }
 
 
@@ -4265,4 +4301,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { SECTION_LABELS, landNote, setDiffBack, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

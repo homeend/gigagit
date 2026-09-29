@@ -23,6 +23,7 @@ import { openAgentSetup } from "./agentsetup.js";
 import { openFeedFilter } from "./search.js";
 import { openFinder } from "./wtfinder.js";
 import { openRemoteHeads } from "./remoteheads.js";
+import { openAllNotes } from "./allnotes.js";
 import { openLinkCompareDialog } from "./linkcompare.js";
 import { locateCurrentBranch } from "./sidebar.js";
 import { featureDisabled } from "./preflight.js";
@@ -53,6 +54,7 @@ function paletteCommands() {
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "go to current branch", detail: "", run: () => locateCurrentBranch() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
+    { label: "view all notes…", detail: "", run: () => openAllNotes() },
     { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
     { label: "file blame…", detail: "", run: () => openPrompt({ title: "File blame — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileBlame(p, "") }) },
     { label: "review working changes (AI)…", detail: "", run: () => startReview("working", "") },
