@@ -166,3 +166,24 @@ func TestVersionHintLookupErrorIsItsOwnNotice(t *testing.T) {
 		t.Fatal("an error must clear the pending and park or push nothing")
 	}
 }
+
+// The heartbeat expires the reveal even with steering OFF (steerDir ""):
+// the # prompt's pasted link and the --at landing stage the same pending,
+// and drainSteer — which used to own the expiry — returns early for them.
+func TestVersionHintHeartbeatExpiresWithSteeringOff(t *testing.T) {
+	t.Parallel()
+	m := landedVersionModel(t)
+	m, _ = m.navigateLanded(versionCmd("1753100000-rebase"), "opened")
+	if m.steerActive() {
+		t.Fatal("fixture: steering must be off for this test")
+	}
+	m.pendingHint.at = time.Now().Add(-pendingHintTTL - time.Second)
+	tm, _ := m.Update(heartbeatMsg{})
+	m = tm.(Model)
+	if m.pendingHint != nil {
+		t.Fatal("the heartbeat must expire the pending without a steer inbox")
+	}
+	if want := i18n.T("version lookup timed out; the link still landed"); m.statusMsg != want {
+		t.Fatalf("status = %q, want %q", m.statusMsg, want)
+	}
+}
