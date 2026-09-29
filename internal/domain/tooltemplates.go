@@ -96,7 +96,13 @@ func ToolTemplateStatuses(ctx context.Context, paths []string, dets []exttool.De
 func blockStatus(ctx context.Context, path string, tc config.ToolCommand, det exttool.Detection, fv int) (ToolTemplateStatus, bool) {
 	st := ToolTemplateStatus{Path: path, Block: tc, FromVersion: tc.TemplateVersion, ToVersion: fv,
 		FromRange: tc.AgentRange, Edited: tc.Edited(), ToolLabel: det.Tool.Label}
-	v, known := AgentVersion(ctx, det.Tool, det.Bin)
+	// The agent's own version only matters when the tool has ranged
+	// variants: never spawn it otherwise (spec).
+	var v exttool.Version
+	var known bool
+	if exttool.HasRanged(det.Tool) {
+		v, known = AgentVersion(ctx, det.Tool, det.Bin)
+	}
 	if known {
 		st.AgentVersion = v.String()
 	}

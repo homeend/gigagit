@@ -160,3 +160,25 @@ func TestApplyToolUpdateWritesAndRefusesStale(t *testing.T) {
 		t.Fatalf("after apply: %+v", got[0])
 	}
 }
+
+// Spec: the agent's --version is read only for a tool with ranged variants —
+// a catalog without ranges must never spawn the agent.
+func TestToolTemplateStatusNoProbeWithoutRanges(t *testing.T) {
+	resetAgentVersionCache()
+	calls := 0
+	old := agentVersionRun
+	agentVersionRun = func(context.Context, string, []string) ([]byte, error) {
+		calls++
+		return []byte("fake 9.9.9"), nil
+	}
+	t.Cleanup(func() { agentVersionRun = old; resetAgentVersionCache() })
+	v1 := fakeDet(1, exttool.CommandTemplate{Command: "<bin> one"})
+	path := writeBlocks(t, NewToolBlock(v1, v1.Tool.Commands[0]))
+	sts := ToolTemplateStatuses(context.Background(), []string{path}, []exttool.Detection{v1})
+	if len(sts) != 1 || sts[0].Kind != ToolCurrent {
+		t.Fatalf("status: %+v", sts)
+	}
+	if calls != 0 {
+		t.Fatalf("probed the agent %d time(s) with no ranged variant", calls)
+	}
+}
