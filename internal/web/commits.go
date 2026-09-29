@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/commitgraph"
 	"github.com/homeend/gigagit/internal/config"
@@ -300,6 +301,15 @@ func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 	// commit is one round trip. Best-effort like the date.
 	if msg, merr := svc.CommitMessage(r.Context(), sha); merr == nil {
 		body["message"] = msg
+	}
+	// The commit's AI reviews head its file list ("Reviews" rows). Read only
+	// here — on an explicit open, never while a cursor walks the list — and
+	// keyed on the FULL sha a review note is stored under. Best-effort too.
+	body["reviews"] = []reviewHeadWire{}
+	if full, ok, rerr := svc.ResolveRev(r.Context(), sha); rerr == nil && ok {
+		if rs, err := svc.ReviewsForCommit(r.Context(), strings.TrimSpace(full)); err == nil {
+			body["reviews"] = reviewHeadsOf(rs)
+		}
 	}
 	writeJSON(w, body)
 }

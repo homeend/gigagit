@@ -14,6 +14,7 @@ import { $, esc, getJSON, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { registerHelp } from "./menus.js";
 import { focusPane } from "./keys.js";
+import { reviewActive, reviewOverviewHTML, showReviewOverview } from "./reviews.js";
 import { seedCollapsed } from "./notebox.js";
 import { noteHTML } from "./shelfnotes.js";
 import {
@@ -109,6 +110,14 @@ async function buildStack(list, group, anchorIdx) {
   if (state.stack !== st) return; // superseded while the counts loaded
   paintStack(st);
   st.painted = true;
+  // A review's stack opened on its Overview stays at the top, where it is.
+  if (reviewActive() && state.review.onOverview) {
+    $("diff-pane").scrollTop = 0;
+    renderFiles();
+    updateDiffNav();
+    pump(st);
+    return;
+  }
   scrollToFile(st, st.want);
 }
 
@@ -178,7 +187,10 @@ function sectionHTML(s, k) {
 
 function paintStack(st) {
   const body = $("diff-body");
-  body.innerHTML = `<div class="stk">${stackNotesHTML()}${st.slots.map(sectionHTML).join("")}</div>`;
+  // A review's stack starts with its Overview (reviews.js), above the files;
+  // a shelf entry's, with its own notes.
+  const ov = reviewActive() ? `<div class="stk-ov">${reviewOverviewHTML()}</div>` : "";
+  body.innerHTML = `<div class="stk">${ov}${stackNotesHTML()}${st.slots.map(sectionHTML).join("")}</div>`;
   measureChrome();
   const n = st.slots.length;
   $("diff-title").textContent = `${n} file${n === 1 ? "" : "s"} · stacked`;
@@ -736,6 +748,20 @@ function syncCursor() {
   syncRaf = 0;
   const st = state.stack;
   if (!st) return;
+  // In a review's stack the Overview is what is read until the first file's
+  // header reaches the line: the list highlights ≡ Overview meanwhile.
+  if (reviewActive()) {
+    const first = document.querySelector("#diff-body .stk-file");
+    const line = $("diff-pane").getBoundingClientRect().top + $("diff-header").offsetHeight + 1;
+    const top = !first || first.getBoundingClientRect().top > line;
+    if (top !== state.review.onOverview) {
+      state.review.onOverview = top;
+      st.anchor = -1; // re-claimed below once a file is read
+      renderFiles();
+      followInList();
+    }
+    if (top) return;
+  }
   const k = topSlot();
   if (k < 0 || k === st.anchor) return;
   st.anchor = k;
@@ -940,6 +966,8 @@ function toggleStacked() {
   syncStackChrome();
   if (state.layout !== "diff" || !activeFileList().length) return; // an empty symmetric view has nothing to show
   if (!on) teardownStack();
+  // A review on its Overview keeps the Overview: alone, or atop the stack.
+  if (reviewActive() && state.review.onOverview) return showReviewOverview();
   openFile(state.fileCursor);
 }
 

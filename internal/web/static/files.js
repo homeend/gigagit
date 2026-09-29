@@ -20,6 +20,8 @@ import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
+import { leaveReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
+import { renderBranches } from "./sidebar.js";
 import { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
@@ -59,10 +61,13 @@ function drillOut() {
   }
   if (state.layout === "diff") {
     enterFilesStage(); // also clears the diff a late fetch may repaint
+    if (reviewActive()) setReviewHeader(); // the stage cleared the review's title and meta
     focusPane();
     return;
   }
   if (state.layout !== "files") return;
+  // A review view goes back where it was opened from (its commit's list).
+  if (reviewActive()) return leaveReview();
   state.detailGen++; // invalidate any in-flight detail fetch
   state.pane = "commits";
   setLayout("list");
@@ -992,6 +997,7 @@ function renderFiles() {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
     $("conflict-note").classList.add("hidden");
+    if (reviewActive()) return renderReviewFiles(); // ≡ Overview + the reviewed files (reviews.js)
     if (symActive()) return renderSymLists(); // two aligned lists (symcompare.js)
     // A commit file's notes are keyed "<sha>:<path>" — the sha this row's diff
     // would open. A COMPARISON gets no badge at all: its diff is not
@@ -1011,10 +1017,13 @@ function renderFiles() {
         : noteBadgeHTML(state.noteCounts.by_commit_path[(f.sha || state.fileSha) + ":" + f.path]);
     const anyBadge = state.files.some((f) => badge(f) !== "");
     const cols = fileCols(anyBadge ? NOTE_BADGE_COLS : 0);
-    $("files-list").innerHTML = (cmp ? shelfNoteRowsHTML(state.compare) : "") + state.files
+    // A commit's AI reviews head its files (reviews.js); "" when it has none.
+    // A shelf entry's own notes head a frozen compare's files.
+    const revs = reviewRowsHTML();
+    $("files-list").innerHTML = revs + (cmp ? shelfNoteRowsHTML(state.compare) : "") + state.files
       .map(
         (f, i) =>
-          `<li class="${i === state.fileCursor ? "sel" : ""}" data-i="${i}">` +
+          `<li class="${i === state.fileCursor && !state.reviewSel ? "sel" : ""}" data-i="${i}">` +
           `<span class="st ${esc(f.status)}">${esc(f.status)}</span>` +
           filePathHTML(f.path, cols) +
           badge(f) +
@@ -1139,6 +1148,8 @@ function fileDiffURL(f) {
 
 async function openFile(i) {
   clearDiffHunks();
+  if (reviewActive()) state.review.onOverview = false; // a file, not the Overview, is on screen now
+  state.reviewSel = "";
   // The layout switch sits in the SYNC prefix: an esc during a slow diff
   // load steps back to the files stage, and the fetch completing later
   // must not be able to undo that.
@@ -1231,6 +1242,11 @@ async function openFile(i) {
 // written in a stack would be filed against a different address than the same
 // note written one file at a time.
 function commitDiffCtx(f) {
+  // A review view's lane is the review's own notes, read-only: its diffs show
+  // those and nothing else (the TUI's review mode).
+  if (reviewActive()) {
+    return { path: f.path, rev: state.review.data.tip, state: "commit", notes: true, review: state.review.id, status: f.status, old: f.old_path || "", compare: false };
+  }
   const cmp = state.filesMode === "compare";
   const prev = openPreviewCtx();
   return {
@@ -1267,6 +1283,7 @@ function statusDiffCtx(f) {
 // that names its own right side, and every symmetric row.
 function rowNoteCtx(f) {
   if (state.filesMode === "status") return statusDiffCtx(f);
+  if (reviewActive()) return commitDiffCtx(f); // before the compare arms: a range review IS a compare
   if (state.filesMode === "compare" && state.compare && state.compare.links) {
     if (symActive()) return null;
     // A pair's row is note-addressable when its new side IS the file at b.
@@ -2118,6 +2135,15 @@ function notesArmed(ctx = state.diffCtx) {
 function noteQuery(ctx = state.diffCtx) {
   if (!notesArmed(ctx)) return null;
   const q = new URLSearchParams({ path: ctx.path });
+  if (ctx.review) {
+    // A review's notes are built from its document against the diff on
+    // screen: the server re-makes that diff, so it needs the row's status and
+    // old path — never a rev (the review names its own).
+    q.set("id", ctx.review);
+    if (ctx.status) q.set("status", ctx.status);
+    if (ctx.old) q.set("old", ctx.old);
+    return q;
+  }
   if (ctx.preview && ctx.preview.pr) {
     // A pull request is named by its NUMBER, never by its sides: those are
     // display text (the head may live in a fork). rev and state ride along for
@@ -2181,6 +2207,7 @@ async function notesFor(ctx) {
   // endpoint resolves branch NAMES, and a PR's are display text (a fork's
   // branch, or worse a same-named local one).
   const pv = ctx.preview;
+  if (ctx.review) return await getJSON("/api/review/notes?" + q);
   const url = !pv ? "/api/notes?" : pv.pr ? "/api/pr/notes?" : pv.pair ? "/api/pair/notes?" : "/api/preview/notes?";
   return await getJSON(url + q);
 }
@@ -2248,14 +2275,20 @@ async function refreshNoteCounts() {
       by_path: c.by_path || {},
       by_commit: c.by_commit || {},
       by_commit_path: c.by_commit_path || {},
+      reviews: c.reviews || [], // the Branches' review sub-rows
     };
+    // The open commit's Reviews rows follow the same list, so a review saved
+    // or deleted anywhere (the TUI, another tab) shows up without a reopen.
+    const cr = state.commitReviews;
+    if (cr && cr.sha && cr.sha.length >= 7) cr.list = state.noteCounts.reviews.filter((r) => (r.commit || "").startsWith(cr.sha));
   } catch {
     // Counts are decoration, but a STALE badge is worse than none: a failed
     // fetch means we no longer know, so draw no ◆ at all until the next one
     // succeeds.
-    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {} };
+    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, reviews: [] };
   }
   renderFiles();
+  renderBranches(); // a review deleted anywhere leaves its branch sub-row
   // A preview's totals ride fetchPreviews; a pair has no such ride, so a note
   // written elsewhere reaches its badges from here.
   loadPairCounts();
@@ -2574,6 +2607,10 @@ function noteWrite(label, path, body) {
 // shape) and anchors the note on the clicked row, else the first changed row.
 function addNotePrompt() {
   const ad = activeDiff();
+  if (ad.ctx && ad.ctx.review) {
+    opLine("a review's notes are read-only", true);
+    return;
+  }
   const q = noteQuery(ad.ctx);
   if (!q) return;
   const scope = noteScope();
@@ -2620,7 +2657,7 @@ function addNotePrompt() {
 // never edits, answers or removes them.
 function readOnlyNote(n) {
   if (!n.read_only) return false;
-  opLine("forge review comments are read-only", true);
+  opLine(String(n.id).startsWith("review:") ? "a review's notes are read-only" : "forge review comments are read-only", true);
   return true;
 }
 
@@ -4085,6 +4122,17 @@ $("files-list").addEventListener("click", (e) => {
     openShelfNotes(c.shelfEntry, c.shelfLabel, li.dataset.note);
     return;
   }
+  // A commit's review row opens the review; the review view's Overview row
+  // shows the Overview. Neither is a file (no data-i).
+  if (li && li.dataset.review) {
+    openReview(li.dataset.review, reviewBackFromCommit(li.dataset.review));
+    return;
+  }
+  if (li && li.dataset.ov && reviewActive()) {
+    state.pane = "files";
+    showReviewOverview();
+    return;
+  }
   if (li && li.dataset.i !== undefined && (e.ctrlKey || e.metaKey) && state.filesMode === "status") {
     const f = state.statusEntries[Number(li.dataset.i)];
     if (f) toggleMark(f.path);
@@ -4122,6 +4170,13 @@ function fileExt(path) {
 // opening its diff.
 $("files-list").addEventListener("contextmenu", (e) => {
   const li = e.target.closest("li");
+  // A review row (a commit's, or the review view's Overview): Delete review.
+  const rid = li && (li.dataset.review || (li.dataset.ov && reviewActive() ? state.review.id : ""));
+  if (rid) {
+    e.preventDefault();
+    reviewMenu(rid, e.clientX, e.clientY);
+    return;
+  }
   if (!li || li.dataset.i === undefined) return;
   if (state.filesMode !== "status") {
     // commit / compare rows: read-only file actions. rev picks what "here"
@@ -4312,4 +4367,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

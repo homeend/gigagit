@@ -6,6 +6,7 @@ import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
+import { openSelectedReview, reviewActive, showReviewOverview, stepCommitReviews } from "./reviews.js";
 import { addNotePrompt, clearRowSelection, cycleFilesSort, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
@@ -26,6 +27,23 @@ function moveCursor(delta) {
     stepCommitCursor(delta);
   } else {
     const list = state.filesMode === "status" ? state.statusEntries : state.files;
+    // The review view's ≡ Overview sits above its first file.
+    if (reviewActive()) {
+      const rv = state.review;
+      if (rv.onOverview && delta > 0 && list.length) {
+        rv.onOverview = false;
+        state.fileCursor = 0;
+      } else if (!rv.onOverview && delta < 0 && state.fileCursor === 0) {
+        if (state.layout === "diff") return showReviewOverview();
+        rv.onOverview = true;
+        return renderFiles();
+      } else if (rv.onOverview) return;
+      else state.fileCursor = Math.max(0, Math.min(list.length - 1, state.fileCursor + delta));
+      if (state.stack && state.layout === "diff") return openFile(state.fileCursor);
+      return renderFiles();
+    }
+    // A commit's Reviews rows sit above its first file.
+    if (state.layout !== "diff" && stepCommitReviews(delta)) return;
     if (!list.length) return;
     state.fileCursor = Math.max(0, Math.min(list.length - 1, state.fileCursor + delta));
     // In a stack j/k walk the sections: the cursor's file scrolls into view.
@@ -149,7 +167,9 @@ document.addEventListener("keydown", (e) => {
       // A zero-match filter leaves state.cursor pointing at an invisible
       // row (or the hint row) — nothing there to open.
       if (!(state.cfilter && state.cfilter.matches.length === 0)) openCommit(state.cursor);
-    } else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
+    } else if (reviewActive() && state.review.onOverview) showReviewOverview();
+    else if (openSelectedReview()) return;
+    else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
   } else if (e.key === "Escape") {
     // The filter bar can be open with its input unfocused (a click landed
     // back on a commit row) — drillOut() no-ops in list layout, so Escape

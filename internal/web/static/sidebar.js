@@ -14,6 +14,7 @@ import { openFileHistory } from "./filehist.js";
 import { extraRows } from "./menus.js";
 import { openConsole } from "./console.js";
 import { openShelfNotes } from "./shelfnotes.js";
+import { branchReviewText, branchReviews, openReview, reviewMenu } from "./reviews.js";
 import { entryGone, toast } from "./toast.js";
 import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
 import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
@@ -176,7 +177,12 @@ function renderBranches() {
         (path ? ` title="${esc(path)}"` : "") + `>` +
         `${mark(b.is_head)}${esc(b.name)}${exemptMark}` +
         (wt ? `<span class="wpath">${esc(wt)}</span>` : "") +
-        `${ab ? `<span class="ab">${ab}</span>` : ""}</li>`
+        `${ab ? `<span class="ab">${ab}</span>` : ""}</li>` +
+        // The branch's AI reviews of its current tip, as sub-rows: no
+        // data-n and not draggable, so the branch menu and drops skip them.
+        branchReviews(state.noteCounts.reviews, b)
+          .map((r) => `<li class="brev" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(branchReviewText(r))}</li>`)
+          .join("")
       );
     })
     .join("");
@@ -531,6 +537,7 @@ function showBranchMenu(b, x, y) {
 
 $("branches-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
+  if (li && li.dataset.review) return openReview(li.dataset.review, { kind: "list" });
   if (!li || !li.dataset.n) return;
   const b = state.branches.find((x) => x.name === li.dataset.n);
   if (b) gotoBranchTip(b);
@@ -538,6 +545,10 @@ $("branches-list").addEventListener("click", (e) => {
 
 $("branches-list").addEventListener("contextmenu", (e) => {
   const li = e.target.closest("li");
+  if (li && li.dataset.review) {
+    e.preventDefault();
+    return reviewMenu(li.dataset.review, e.clientX, e.clientY);
+  }
   if (!li || !li.dataset.n) return;
   e.preventDefault();
   const b = state.branches.find((x) => x.name === li.dataset.n);

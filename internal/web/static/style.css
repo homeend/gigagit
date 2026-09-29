@@ -1357,8 +1357,8 @@ body.lm-scroll #blame-body .bline.brecent .bgut, body.lm-scroll #blame-body .bli
 #review-body li .detail { color: var(--dim); display: block; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #review-actions, #report-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); }
 #review-hint, #report-path { margin-right: auto; color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#review-actions button, #report-actions button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 14px; font: inherit; cursor: pointer; }
-#review-actions button:hover, #report-actions button:hover { border-color: var(--accent); }
+#review-actions button, #report-actions button, #review-copy { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 14px; font: inherit; cursor: pointer; }
+#review-actions button:hover, #report-actions button:hover, #review-copy:hover { border-color: var(--accent); }
 #review-actions button.hidden { display: none; }
 #report-box { margin-top: 8vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; max-width: 900px; display: flex; flex-direction: column; }
 #report-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
@@ -1720,3 +1720,19 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #worktrees-list li.wsess .glyph.ex { color: var(--dim); }
 #worktrees-list li.wsess.task .glyph.run { color: #f2a65a; }
 #worktrees-list li.wsess:hover { background: var(--sel); }
+
+/* Stored AI reviews (reviews.js): a commit's review rows, the review view's
+   Overview row and per-file summaries, a branch's review sub-rows, and the
+   Overview pane. */
+#files-list li.rev { color: var(--accent); }
+#files-list li.rov { font-weight: bold; }
+#files-list li.rsum { color: var(--dim); cursor: default; padding-left: 36px; overflow: hidden; text-overflow: ellipsis; }
+#branches-list li.brev { color: var(--dim); padding-left: 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#branches-list li.brev:hover { color: var(--fg); }
+.review-ov { padding: 12px 16px; max-width: 110ch; margin: 0 auto; }
+.stk-ov { border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.review-ov-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.review-ov-bar .meta { color: var(--dim); flex: 1; }
+.review-ov-meta { color: var(--dim); margin-top: 10px; }
+.review-ov h4 { margin: 14px 0 6px; }
+.review-other { margin: 0; padding-left: 18px; }

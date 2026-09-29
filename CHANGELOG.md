@@ -18,6 +18,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   tooltip. Clicking a row opens that one note. The stacked view opens with
   each note as a prose block above the first file.
 
+## Reviews in the browser
+
+### Added
+
+- **`gg web`: stored AI reviews.** A commit's reviews head its file list
+  under **Reviews** (`└ 2026-09-29 14:05 Claude`), and a branch's reviews of
+  its current tip sit under its row (`└ Review: <date> <agent>`). Clicking
+  one opens the review view: **≡ Overview** in the diff pane (the rendered
+  summary, meta, the notes it could not place on a line, copy — a centred
+  column; with the stacked view on, it tops the stack above the files), then the
+  reviewed files with ◆N and each file's one-line summary; the diffs show
+  only the review's notes, read-only (`c` refuses). A range review lists its
+  range's files. esc returns to the commit it was opened from with the
+  review row selected. Right-click a review row or the Overview →
+  **Delete review** (confirm; esc cancels).
+
 ## Recycle a worktree from the browser
 
 ### Added
