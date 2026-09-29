@@ -817,3 +817,25 @@ func TestWebLayers(t *testing.T) {
 		t.Fatalf("repo over global = %+v", cfg.Web)
 	}
 }
+
+func TestUIReadingWidthLayers(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.ReadingWidth != 120 {
+		t.Errorf("default reading_width = %d, want 120", cfg.UI.ReadingWidth)
+	}
+	g := filepath.Join(dir, "global.toml")
+	writeFile(t, g, "[ui]\nreading_width = 90\n")
+	r := filepath.Join(dir, "repo.toml")
+	writeFile(t, r, "[ui]\nreading_width = 0\n")
+	if cfg, err = Load(g, missing); err != nil || cfg.UI.ReadingWidth != 90 {
+		t.Errorf("global reading_width = %d (%v), want 90", cfg.UI.ReadingWidth, err)
+	}
+	if cfg, err = Load(g, r); err != nil || cfg.UI.ReadingWidth != 90 {
+		t.Errorf("a zero repo value is unset: got %d (%v), want 90", cfg.UI.ReadingWidth, err)
+	}
+}

@@ -31,6 +31,7 @@ type WorktreeConfig struct {
 type UIConfig struct {
 	WheelStep     int      `toml:"wheel_step"`     // rows per mouse-wheel tick; <=0 = unset
 	HScrollStep   int      `toml:"hscroll_step"`   // diff scroll-mode pan columns per ←/→; <=0 = unset
+	ReadingWidth  int      `toml:"reading_width"`  // widest text column of a prose popup (centred); <=0 = unset
 	FooterActions []string `toml:"footer_actions"` // action ids shown in the footer; empty = all (default)
 	MenuActions   []string `toml:"menu_actions"`   // action ids shown in the . menu; empty = all (default)
 
@@ -235,7 +236,7 @@ func Defaults() Config {
 			PathTemplate:          "../<repo>.worktrees/<branch>",
 			DefaultBranchTemplate: "<parent-branch>-<date:yyyy-MM-dd_HH-mm>",
 		},
-		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
+		UI: UIConfig{WheelStep: 3, HScrollStep: 8, ReadingWidth: 120, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
 			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", DiffCursor: "row", ShowGraph: "on", Theme: "terminal", AgentSteering: "on"},
 		Versions: VersionsConfig{MaxAgeDays: 90},
 		Notes:    NotesConfig{MaxAgeDays: 30, MaxEntries: 2000},
@@ -349,6 +350,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.HScrollStep > 0 {
 		dst.HScrollStep = src.HScrollStep
+	}
+	if src.ReadingWidth > 0 {
+		dst.ReadingWidth = src.ReadingWidth
 	}
 	if len(src.FooterActions) > 0 {
 		dst.FooterActions = src.FooterActions

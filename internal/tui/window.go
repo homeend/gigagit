@@ -51,6 +51,10 @@ type winRow struct {
 	// the path is the rest.
 	elide     bool
 	elideHead int
+	// hang, when > 0, is the column modeWrap continuations start at, in place
+	// of the one derived from the row's leading glyphs: a table row whose
+	// last column is prose wraps under that column (View all notes' NOTE).
+	hang int
 	prefix    string
 	style     lipgloss.Style // zero value renders the text unchanged
 	decorate  rowDecorator   // optional; applied post-slice, post-pad
@@ -106,7 +110,12 @@ type winOpts struct {
 // wrapRow is modeWrap's layout of one row under o: its display segments and
 // the hang indent they were laid out with. renderWindow and wrapContentLines
 // both go through it, so a line count can never disagree with the layout.
-func wrapRow(text string, bodyW int, o winOpts) ([]string, int) {
+func wrapRow(text string, bodyW int, o winOpts, hang int) ([]string, int) {
+	// An explicit hang still leaves the column 20 cells of text; past that
+	// the derived indent takes over (a very narrow popup).
+	if hang > 0 && !o.charWrap && hang <= bodyW-20 {
+		return wrapHangWords(text, bodyW, hang), hang
+	}
 	if o.charWrap {
 		indent := wrapAlignIndent(text, bodyW)
 		return wrapHang(text, bodyW, indent, 1<<20), indent // huge cap => clean full wrap, no ellipsis
@@ -248,7 +257,7 @@ func renderWindowTop(rows []winRow, o winOpts) ([]string, int) {
 		switch rowMode {
 		case modeWrap:
 			var indent int
-			segs, indent = wrapRow(r.text, bodyW, o)
+			segs, indent = wrapRow(r.text, bodyW, o, r.hang)
 			if rcls != nil {
 				segCls = wrapSegMask(r.text, rcls, segs, indent, bodyW)
 			}
@@ -695,7 +704,7 @@ func wrapContentLines(rows []winRow, o winOpts, max int) int {
 	for _, r := range rows {
 		segs := 1
 		if !r.noWrap {
-			laid, _ := wrapRow(r.text, w-pw, o)
+			laid, _ := wrapRow(r.text, w-pw, o, r.hang)
 			segs = len(laid)
 		}
 		if segs == 0 {

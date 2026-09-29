@@ -52,7 +52,7 @@ func naiveWrapWindow(rows []winRow, o winOpts) []string {
 	}
 	var dl []dline
 	for ri, r := range rows {
-		segs, _ := wrapRow(r.text, bodyW, o) // the prose wrap, or the column wrap under o.charWrap
+		segs, _ := wrapRow(r.text, bodyW, o, r.hang) // the prose wrap, or the column wrap under o.charWrap
 		if len(segs) == 0 {
 			segs = []string{""}
 		}

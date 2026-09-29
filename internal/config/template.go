@@ -31,6 +31,7 @@ var settingDocs = []settingDoc{
 
 	{"ui", "wheel_step", 3, "mouse-wheel scroll step, in rows"},
 	{"ui", "hscroll_step", 8, "diff scroll-mode horizontal pan step, in columns"},
+	{"ui", "reading_width", 120, "widest text column of a prose popup (review overview, AI results, PR text, View all notes), centred; min 40"},
 	{"ui", "footer_actions", nil, "action ids shown in the footer bar (default: empty = show all)"},
 	{"ui", "menu_actions", nil, "action ids shown in the . menu (default: empty = show all)"},
 	{"ui", "search_history_size", 20, "phrases kept per search-history ring (max 1000)"},

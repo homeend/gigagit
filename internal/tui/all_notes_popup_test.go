@@ -422,6 +422,13 @@ func TestAllNotesElidesALongDirectoryInTheMiddle(t *testing.T) {
 func TestAllNotesTooltipRevealsCutText(t *testing.T) {
 	t.Parallel()
 	m, p, dir, subject, summary := longNotesModel(t)
+	// A note's summary wraps whole now; what the bar still reveals is a fixed
+	// column the layout cut — here a WHERE too long for its cell.
+	for _, r := range p.rows {
+		if r.note != nil && r.note.Note.ID == "c1" {
+			r.note.Range = [2]int{4200, 4299}
+		}
+	}
 	for _, tc := range []struct {
 		name string
 		pick func(r anRow) bool
@@ -429,7 +436,7 @@ func TestAllNotesTooltipRevealsCutText(t *testing.T) {
 	}{
 		{"directory", func(r anRow) bool { return r.kind == anDir }, dir + "/"},
 		{"commit heading", func(r anRow) bool { return r.kind == anSub && strings.Contains(r.text, "variant B") }, "tighten the retry budget END"},
-		{"note", func(r anRow) bool { return r.note != nil && r.note.Note.ID == "c1" }, summary},
+		{"note", func(r anRow) bool { return r.note != nil && r.note.Note.ID == "c1" }, "new:4200-4299 · "},
 	} {
 		joined := strings.Join(allNotesScreen(m), "\n")
 		if strings.Contains(joined, tc.full) {
@@ -461,6 +468,11 @@ func TestAllNotesTooltipRevealsCutText(t *testing.T) {
 		p.sel = 0
 	}
 	_ = subject
+	// The summary itself is never cut: its last word is on screen.
+	words := strings.Fields(summary)
+	if !strings.Contains(strings.Join(allNotesScreen(m), "\n"), words[len(words)-2]) {
+		t.Fatalf("the note summary must wrap whole, not be cut")
+	}
 }
 
 // The bottom bar is quiet: the terminal's own colours, never the tooltip's
@@ -474,9 +486,11 @@ func TestAllNotesBottomBarIsNotHighlighted(t *testing.T) {
 	defer setTheme(prevTheme)
 	setTheme(theme.Dark)
 
-	m, p, _, _, summary := longNotesModel(t)
+	m, p, _, _, _ := longNotesModel(t)
+	summary := "new:4200-4299"
 	for i, r := range p.visible() {
 		if r.note != nil {
+			r.note.Range = [2]int{4200, 4299} // a WHERE cut by its cell
 			p.sel = i
 		}
 	}

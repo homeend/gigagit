@@ -86,6 +86,9 @@ type contentPopup struct {
 	// charWrap: the content is CODE (a file's text), so wrap mode breaks at the
 	// last column instead of at spaces — see winOpts.charWrap.
 	charWrap bool
+	// prose: the content is free text, laid in the centred reading column
+	// (reading_width.go) — never code, a tree or a table of keys.
+	prose bool
 	// img is the decoded image when the document is one (a PNG/JPEG/GIF
 	// preview): lines are then rebuilt to the box by fitImage, cached by
 	// the size they were built for. imgInfo is the placeholder line above
@@ -404,6 +407,10 @@ func (p *contentPopup) box(m Model) string {
 	// lipgloss wraps text at Width minus the horizontal padding; truncate to
 	// that true text width so a full-width row can never spill onto a wrap line.
 	textW := inner - s.modalStyle.GetHorizontalPadding()
+	margin := 0
+	if p.prose {
+		textW, margin = readingColumn(textW, m.readingWidth())
+	}
 
 	// In block mode the indent sits OUTSIDE the window: rows are laid out at
 	// bodyW and the gutter is added to each finished line here. That keeps a
@@ -563,7 +570,7 @@ func (p *contentPopup) box(m Model) string {
 		hint = fmt.Sprintf("%d/%d  %s", pos, of, hint)
 	}
 	b.WriteString(pad + truncate(hint, textW-gutter))
-	return p.boxStyle().Width(inner).Render(b.String()) + "\n"
+	return p.boxStyle().Width(inner).Render(indentBlock(b.String(), margin)) + "\n"
 }
 
 // boxStyle picks the frame: the ordinary yellow modal border, or a red one
