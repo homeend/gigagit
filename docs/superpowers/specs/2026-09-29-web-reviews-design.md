@@ -72,8 +72,12 @@ are built at read time with read-only ids `review:<id>:<n>`
 - Click opens the review; right-click → **Delete review**.
 
 ### Review mode
-- New `state.filesMode = "review"` with `state.review` = the `/api/review/{id}`
-  payload plus `back` (where esc returns). While loading, the files pane shows
+- `state.review` (the `/api/review/{id}` payload plus `back`, where esc
+  returns) OVERLAYS the existing files modes: a single-commit review is the
+  commit mode on `tip`, a range review the compare mode on `base..tip`, so
+  diff URLs, numstat and the S stack need no new arm. The overlay is live
+  only while `state.files` (commit) / `state.compare` (range) is the object
+  the review opened — any other open replaces it and the overlay lapses. While loading, the files pane shows
   "Opening the review…"; `detailGen` makes a newer open or esc supersede it.
 - Title: `Review <label>`; meta line: `agent · date · N notes on M files`.
 - List: **≡ Overview** (index 0 in a `reviewRows` list), then the files; a
