@@ -25,3 +25,22 @@ func TestHostedPageKeepsRepoSwitching(t *testing.T) {
 		}
 	}
 }
+
+// A switch veils the page from the request until the reload, and a failed
+// switch takes the veil down again (a refusal must leave the page usable).
+func TestRepoSwitchVeilWiring(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ file, want string }{
+		{"index.html", `<div id="switching" class="hidden" role="status" aria-live="polite">`},
+		{"style.css", "#switching.hidden { display: none; }"},
+		{"ops.js", "  showSwitching(path);\n  try {\n    await postJSON(\"/api/reroot\", { path });"},
+		{"ops.js", "  } catch (e) {\n    hideSwitching();"},
+		{"ops.js", "              hideSwitching();\n              opLine("},
+		{"ops.js", "if (isSwitching()) { e.preventDefault(); e.stopImmediatePropagation(); }"},
+	}
+	for _, c := range cases {
+		if !strings.Contains(readStatic(t, c.file), c.want) {
+			t.Errorf("%s: missing %q", c.file, c.want)
+		}
+	}
+}

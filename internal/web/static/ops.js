@@ -12,6 +12,7 @@ import { reconcileStatusView, stage } from "./files.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { fetchHealth } from "./bigrepo.js";
 import { checkDrift, hideDrift } from "./versions.js";
+import { baseOf } from "./locks.js";
 import { clearHelpSearch, helpSearchKey, openHelpSearch } from "./helpsearch.js";
 
 // --- op transport client ---
@@ -359,14 +360,33 @@ async function doPush() {
 // doReroot points the server at another root. The whole client state is
 // repo-scoped, so a clean reload is the honest reset on success
 // (localStorage prefs survive); errors land on the status strip.
+// The repo-switch veil: shown from the request until the reload replaces the
+// page (a hosted page's switch also waits for the terminal to switch), taken
+// down on any failure so the page is usable again.
+function showSwitching(path) {
+  $("switching-to").textContent = baseOf(path) || path;
+  $("switching").classList.remove("hidden");
+}
+function hideSwitching() {
+  $("switching").classList.add("hidden");
+}
+function isSwitching() {
+  return !$("switching").classList.contains("hidden");
+}
+// Keys under the veil would act on the repo being left: swallow them (the
+// server-down veil's rule, serverdown.js).
+window.addEventListener("keydown", (e) => { if (isSwitching()) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+
 async function doReroot(path) {
   closeCommitFilter();
   state.gotoGen++;
   if (opBusy()) return;
+  showSwitching(path);
   try {
     await postJSON("/api/reroot", { path });
     location.reload();
   } catch (e) {
+    hideSwitching();
     // Cross-environment worktree (WSL path seen from Windows gg, or vice
     // versa): the server answers 409 repairable and waits for an explicit
     // confirm — repairing rebinds the link records, so the worktree stops
@@ -377,9 +397,13 @@ async function doReroot(path) {
         ["repair", "cancel"],
         (opt) => {
           if (opt !== "repair") return;
+          showSwitching(path);
           postJSON("/api/reroot", { path, repair: true })
             .then(() => location.reload())
-            .catch((err) => opLine("error: " + (err.message || err), true));
+            .catch((err) => {
+              hideSwitching();
+              opLine("error: " + (err.message || err), true);
+            });
         }
       );
       return;

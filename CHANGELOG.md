@@ -20,6 +20,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   inbox behave as for a terminal switch. While the TUI is busy (an
   operation, a decision, a popup, typing) the page shows "the terminal is
   busy: …" and nothing moves. A TUI switch still moves the page.
+- **A switch from the web page veils it until the new repo loads.** A
+  "switching to <name>…" overlay with a spinner covers the page from the
+  request to the reload (keys are swallowed meanwhile); a refused or failed
+  switch takes it down and shows the reason. Standalone `gg web` gets it too.
 
 ## Image diffs in the browser
 

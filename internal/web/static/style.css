@@ -1586,6 +1586,12 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 #linkcmp-busy.hidden { display: none; }
 .lc-spin { width: 10px; height: 10px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: lcspin .8s linear infinite; }
 @keyframes lcspin { to { transform: rotate(360deg); } }
+/* The repo-switch veil (ops.js doReroot). z-index 99: over every overlay,
+   under the server-down veil (100). */
+#switching { position: fixed; inset: 0; z-index: 99; background: rgba(20, 22, 26, 0.55); cursor: wait; display: flex; align-items: center; justify-content: center; }
+#switching.hidden { display: none; }
+#switching-box { display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 12px 18px; background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.5); font-size: 13px; }
+#switching-box b { color: var(--accent); overflow-wrap: anywhere; }
 #linkcmp-go:disabled { opacity: .5; cursor: wait; }
 /* the files header says WHAT KIND of screen a comparison is */
 #files-kind { display: inline-block; margin-right: 6px; padding: 0 6px; border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); font-size: 11px; vertical-align: 1px; white-space: nowrap; }

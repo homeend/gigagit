@@ -3693,7 +3693,9 @@ web attach plans 1 and 2.
   the page's reload see the new Service. A refusal is a 409 with the TUI's
   reason ("the terminal is busy: …"); `ErrPageLive` is not a failure (the
   swap happened). No switcher installed → the old 409 "the terminal owns
-  the current repository".
+  the current repository". `doReroot` (ops.js) raises the `#switching` veil
+  (z 99, under server-down's 100; keys swallowed in capture) before the POST
+  and drops it on any failure; success leaves it up until `location.reload()`.
 - **TUI (`webhost.go`):** `Model.web *webHostState` (host, url, starting,
   `pendingServe`, and the page-switch lane: `switches` chan + `stop` +
   `pendingSwitch` replies), `webOpts` (the flags); `startWebCmd` installs
