@@ -186,6 +186,7 @@ gg branch delete [--force] <name>
 gg versions [<branch>]                 # list a branch's recorded pre-operation snapshots, newest first (default: current branch)
 gg versions show <branch> <id|latest>  # print the frozen change set a two-branch version recorded (Base...Ours)
 gg versions restore [--discard] <branch> <id|latest>  # restore a branch to a recorded version; --discard answers the dirty-tree prompt
+gg link --version <branch> <id|latest> # print one version's preview link (gg://…?version=<id>)
 gg unlock [--yes]                      # list (or with --yes remove) stranded .git/*.lock files; exit 1 while locks are present
 gg migrate [--yes]                     # list pending store migrations and what they'd discard; changes nothing without --yes
 gg merge [--into <target>] [--on-conflict=keep|abort] [--no-ff] [-m <msg> | -F <file>] <source>  # -m/-F (- = stdin) set the merge commit message and imply --no-ff
@@ -319,6 +320,7 @@ gg link --ref main                      # …the branch tip, kept as a name
 gg link --pair HEAD~3..HEAD             # …the last 3 commits' change-set (both halves = full shas)
 gg link --ref main --bookmark b1        # …with a landing hint appended
 gg link --content README.md             # …the file's CONTENT on disk (?view=content), no commit
+gg link --version main latest           # …a branch version's frozen preview (?version=<id>)
 gg link resolve gg://gigagit/a.go:3     # which checkout on this machine?
 gg links                                # the links copied here, newest first
 
@@ -1020,7 +1022,9 @@ picks any branch that has recorded versions — including a **deleted** one
 `enter` opens that frozen preview (or the commit view for a one-branch
 record), `r` restores it (reset the branch in place, or start a new branch
 at that version instead — a non-destructive alternative), `d` deletes just
-that snapshot, `y` copies its sha. Settings (`,`) → **"Operations history"**
+that snapshot, `y` copies its sha, `L` copies its preview link
+(`gg://<repo>@<base>..<ours>?version=<id>`), and `.` lists all of these as an
+action menu. Settings (`,`) → **"Operations history"**
 shows and edits the retention window and toggles recording on/off.
 
 After a rebase, merge, or pull completes, gg compares what the branch
@@ -1034,7 +1038,8 @@ identical fix, a cherry-pick landed it already) — never alarmed, and silent
 when nothing changed. The CLI prints this summary right after `gg
 rebase`/`gg merge`/`gg pull`; the TUI raises a notice on drift (or when an
 operation completed after pausing for conflicts); `gg web` shows it in a
-drift panel.
+drift panel. The notice and the panel both copy the compared version's
+preview link (**Copy preview link** / **copy preview link**).
 
 Scriptable: `gg versions [<branch>]` lists a branch's recorded versions,
 newest first (default: current branch); `gg versions show <branch>

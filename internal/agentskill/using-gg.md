@@ -592,6 +592,10 @@ finds the right one here.
   rows have none. The post-operation drift report (`! this operation
   changed <branch>'s change set`) ends with the same link as
   `recorded version: gg://…`.
+- `gg link --version <branch> <id|latest>` — print ONE version's preview
+  link alone (the same line `gg versions` prints under its row), recorded in
+  `gg links`. A one-branch record has none (exit 1, "records no preview");
+  an unknown id exits 1; it takes no path and no other target or hint flag.
 - `gg versions show <branch> <id|latest>` — print the frozen change set a
   two-branch version recorded (`<status>\t<path>` lines, its own
   Base...Ours diff at operation time — never a live diff against whatever

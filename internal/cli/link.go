@@ -21,6 +21,7 @@ import (
 // hunk link silently loses its hunk. gg deliberately applies no heuristic —
 // it says so here instead.
 const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --ref <branch|tag> | --pair <a>..<b> | --content] [--bookmark <id> | --shelf <id>]\n" +
+	"       gg link --version <branch> <id|latest>  (a branch version's preview link)\n" +
 	"       gg link resolve <gg://…> [--json]\n" +
 	"       gg links [--json]  (this repo's copied-link history)\n" +
 	"quote links that carry #<hunk> — an unquoted # starts a shell comment"
@@ -48,10 +49,24 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	bookmark := fs.String("bookmark", "", "attach a ?bookmark=<id> landing hint")
 	shelf := fs.String("shelf", "", "attach a ?shelf=<id> landing hint")
 	content := fs.Bool("content", false, "address the file's CONTENT on disk (?view=content), not a diff")
+	version := fs.String("version", "", "a branch VERSION's preview link: --version <branch> <id|latest> (ids from `gg versions`)")
 	pf := addPreviewFlag(fs)
 	pos, err := parseSteerFlags(fs, args)
 	if err != nil {
 		return 2
+	}
+	if *version != "" {
+		// A version's link is its own place: the recorded pair plus the
+		// ?version= hint. No path, no other target or landing composes with it.
+		if *cached || *rev != "" || pf.set() || *ref != "" || *pair != "" || *bookmark != "" || *shelf != "" || *content {
+			fmt.Fprintf(stderr, "link: --version names its own target and landing; it takes no other flag\n%s\n", linkUsage)
+			return 2
+		}
+		if len(pos) != 1 {
+			fmt.Fprintf(stderr, "link: --version needs a version id (or latest) after the branch\n%s\n", linkUsage)
+			return 2
+		}
+		return linkVersion(svc, *version, pos[0], stdout, stderr)
 	}
 	if len(pos) > 1 {
 		fmt.Fprintf(stderr, "link: unexpected argument %q\n%s\n", pos[1], linkUsage)
@@ -657,4 +672,40 @@ func savedSetID(ctx context.Context, svc *domain.Service, spec string) (string, 
 		return p.ID, true
 	}
 	return "", false
+}
+
+// linkVersion is `gg link --version <branch> <id|latest>`: the version's
+// preview link, exactly the line `gg versions <branch>` prints under its row,
+// recorded in the copied-link history like every printed link.
+func linkVersion(svc *domain.Service, branch, id string, stdout, stderr io.Writer) int {
+	ctx := context.Background()
+	rows, err := svc.BranchVersions(ctx, branch)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	ref := versionRefForID(rows, id)
+	var v model.BranchVersion
+	for _, r := range rows {
+		if r.Ref == ref {
+			v = r
+		}
+	}
+	if ref == "" {
+		fmt.Fprintf(stderr, "error: no version %q of branch %s (try `gg versions %s`)\n", id, branch, branch)
+		return 1
+	}
+	if v.Base == "" || v.Ours == "" {
+		fmt.Fprintf(stderr, "error: version %s of %s records no preview (a one-branch operation) — no link\n", v.ID(), branch)
+		return 1
+	}
+	repo, repoErr := svc.LinkRepo(ctx)
+	text, ok := versionLinkText(repo, repoErr, v)
+	if !ok {
+		fmt.Fprintf(stderr, "error: version %s of %s cannot be expressed as a gg link\n", v.ID(), branch)
+		return 1
+	}
+	svc.RecordLink(ctx, text, domain.VersionLinkDesc(branch, v))
+	fmt.Fprintln(stdout, text)
+	return 0
 }

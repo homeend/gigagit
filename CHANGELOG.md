@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Branch-version links: web drift copy, versions `.` menu, `gg link --version`
+
+### Added
+
+- **`gg web` drift panel: copy preview link.** Beside **dismiss**, when the
+  compared version records a preview, the button copies its link
+  (`gg://<repo>@<base>..<ours>?version=<id>`) into the link history; the
+  panel stays open (the TUI notice's **Copy preview link**).
+- **`.` on a Branch versions row** opens the action menu: Open preview,
+  Restore version…, Delete version…, Copy commit sha and — on a row that
+  records a preview — Copy link; each runs what its key does and the popup
+  stays. The key hint shows `[.] menu`.
+- **`gg link --version <branch> <id|latest>`** prints one version's preview
+  link (the line `gg versions` prints under its row) and records it in
+  `gg links`; a one-branch record has none (exit 1).
+
 ## Headless conflict resolution with Claude Code and Junie in the TUI
 
 ### Added
