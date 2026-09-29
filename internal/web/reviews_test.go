@@ -105,3 +105,116 @@ func TestCommitFilesCarryReviews(t *testing.T) {
 		t.Errorf("the parent's body = %s, want \"reviews\":[]", b)
 	}
 }
+
+type reviewViewResp struct {
+	ID         string `json:"id"`
+	Agent      string `json:"agent"`
+	Label      string `json:"label"`
+	Structured bool   `json:"structured"`
+	Base       string `json:"base"`
+	Tip        string `json:"tip"`
+	Range      bool   `json:"range"`
+	Files      []struct {
+		Path string `json:"path"`
+	} `json:"files"`
+	Counts     map[string]int    `json:"counts"`
+	Summaries  map[string]string `json:"summaries"`
+	OverviewMd any               `json:"overviewMd"`
+	Meta       string            `json:"meta"`
+	Text       string            `json:"text"`
+	Notes      int               `json:"notes"`
+	NoteFiles  int               `json:"note_files"`
+	Other      []struct {
+		Path, Line, Summary string
+	} `json:"other"`
+}
+
+func TestReviewViewShape(t *testing.T) {
+	t.Parallel()
+	ts, _, sha, id := reviewServer(t, webReviewDoc)
+	var got reviewViewResp
+	if code := getJSON(t, ts, "/api/review/"+id, &got); code != http.StatusOK {
+		t.Fatalf("GET /api/review/{id} = %d", code)
+	}
+	if got.ID != id || !got.Structured || got.Range || got.Tip != sha || got.Agent != "Claude" {
+		t.Fatalf("head fields = %+v", got)
+	}
+	if len(got.Files) != 1 || got.Files[0].Path != "f.txt" {
+		t.Errorf("files = %+v, want the commit's f.txt", got.Files)
+	}
+	if got.Counts["f.txt"] != 1 || got.Summaries["f.txt"] != "adds A" {
+		t.Errorf("counts %v / summaries %v", got.Counts, got.Summaries)
+	}
+	if len(got.Other) != 1 || got.Other[0].Path != "zzz.go" || got.Other[0].Line != "1" {
+		t.Errorf("other notes = %+v, want zzz.go:1", got.Other)
+	}
+	if got.Notes != 2 || got.NoteFiles != 2 || got.OverviewMd == nil || got.Meta != "verdict: approve" {
+		t.Errorf("notes %d on %d files, overview %v, meta %q", got.Notes, got.NoteFiles, got.OverviewMd, got.Meta)
+	}
+	if !strings.Contains(got.Text, `"summary"`) || got.Label != sha[:7] {
+		t.Errorf("text %q / label %q", got.Text, got.Label)
+	}
+}
+
+func TestReviewViewProse(t *testing.T) {
+	t.Parallel()
+	ts, _, _, id := reviewServer(t, "just prose")
+	var got reviewViewResp
+	if code := getJSON(t, ts, "/api/review/"+id, &got); code != http.StatusOK {
+		t.Fatalf("GET = %d", code)
+	}
+	if got.Structured || len(got.Files) != 0 || got.Text != "just prose" || got.OverviewMd == nil {
+		t.Errorf("prose review = %+v", got)
+	}
+}
+
+func TestReviewViewUnknown404(t *testing.T) {
+	t.Parallel()
+	ts, _, _, _ := reviewServer(t, webReviewDoc)
+	if code := getJSON(t, ts, "/api/review/nope", nil); code != http.StatusNotFound {
+		t.Errorf("unknown review = %d, want 404", code)
+	}
+}
+
+func TestReviewNotesReadOnlyOnFile(t *testing.T) {
+	t.Parallel()
+	ts, _, _, id := reviewServer(t, webReviewDoc)
+	var got struct {
+		Notes []struct {
+			ID       string `json:"id"`
+			Line     int    `json:"line"`
+			Summary  string `json:"summary"`
+			ReadOnly bool   `json:"read_only"`
+		} `json:"notes"`
+	}
+	if code := getJSON(t, ts, "/api/review/notes?id="+id+"&path=f.txt&status=M", &got); code != http.StatusOK {
+		t.Fatalf("GET /api/review/notes = %d", code)
+	}
+	if len(got.Notes) != 1 {
+		t.Fatalf("notes = %+v, want one", got.Notes)
+	}
+	n := got.Notes[0]
+	if !n.ReadOnly || !strings.HasPrefix(n.ID, "review:") || n.Line != 1 || n.Summary != "A is unused" {
+		t.Errorf("note = %+v", n)
+	}
+	// Another path gets none of them (the fresh value: getJSON leaves its
+	// target untouched on a non-200, which must read as "no notes" too).
+	var other struct {
+		Notes []struct{ ID string } `json:"notes"`
+	}
+	getJSON(t, ts, "/api/review/notes?id="+id+"&path=g.txt&status=A", &other)
+	if len(other.Notes) != 0 {
+		t.Errorf("another path's notes = %+v, want none", other.Notes)
+	}
+}
+
+func TestReviewNotesRejectsUnsafePath(t *testing.T) {
+	t.Parallel()
+	ts, _, _, id := reviewServer(t, webReviewDoc)
+	if code := getJSON(t, ts, "/api/review/notes?id="+id+"&path=-x", nil); code != http.StatusBadRequest {
+		t.Errorf("unsafe path = %d, want 400", code)
+	}
+	if code := getJSON(t, ts, "/api/review/notes?id=nope&path=f.txt", nil); code != http.StatusNotFound {
+		t.Errorf("unknown id = %d, want 404", code)
+	}
+}
