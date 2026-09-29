@@ -148,6 +148,7 @@ type Model struct {
 	filesStashTag     string                 // when the files tree is showing a stash: its ref (gates stash-file loads)
 	filesShelfID      string                 // shelf mode: the shelved-commit entry id (gates shelf-file loads, keys member refs)
 	filesShelfLabel   string                 // shelf mode: "shelf #<short>" display label for diff contexts
+	filesShelfNotes   []domain.ResolvedNote  // shelf mode: the entry's own notes, listed above its members (a Notes section) and read by enter on their rows
 	filesReturnFocus  panel                  // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
 	filesReturnLayers []layer                // layer stack parked by a popup that handed off to the files view (handOffToFilesView); esc/l restore it, every other teardown drops it (closeFilesView zeroes it)
 	filesTreeFocused  bool                   // true = the tree side owns vertical movement (←/→/tab)
@@ -941,7 +942,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		m.filesView.lines = commitFileLines(msg.files)
+		m.filesShelfNotes = msg.notes
+		m.filesView.lines = withShelfNoteLines(msg.notes, commitFileLines(msg.files))
 		m.filesView.sel = 0
 		return m, nil
 	case treeFilesMsg:

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -117,4 +118,58 @@ func (m Model) loadShelfMemberDiffCmd(id, path, subtitle, tag string) tea.Cmd {
 		applyDiff(v, out, body)
 		return diffMsg{tag: tag, view: v}
 	}
+}
+
+// shelfNoteStackFile is note id of the open shelved set as a stack element: a
+// prose block labelled by the note's summary, holding "author · date" and the
+// note's text. The text is a list of paths, laid out once at the stack's width
+// with each over-long line cut in its MIDDLE (the file name survives).
+func (m Model) shelfNoteStackFile(id string) (stackFile, bool) {
+	for _, r := range m.filesShelfNotes {
+		if r.Note.ID != id {
+			continue
+		}
+		n := r.Note
+		w, _ := m.overlayDims()
+		w -= 4
+		meta := n.Created.Local().Format("2006-01-02 15:04")
+		if n.Author != "" {
+			meta = n.Author + " · " + meta
+		}
+		prose := []mdRow{{text: meta, cls: nil}, {}}
+		for _, l := range strings.Split(strings.TrimRight(n.Rationale, "\n"), "\n") {
+			prose = append(prose, mdRow{text: elidePath(sanitizeLine(l), w), pre: true})
+		}
+		return stackFile{overview: true, load: stackLoaded, label: sanitizeLine(n.Summary), prose: prose}, true
+	}
+	return stackFile{}, false
+}
+
+// elideNoteSummary fits a note's summary into n columns. A recycle's summary
+// is "Recycled from <dir> (<branch>)", and a branch holds slashes: a trailing
+// "(…)" group stays whole, so do the words before the path while there is
+// room, and only the path between them loses its middle.
+// Anything else is an ordinary path cut (elidePath).
+func elideNoteSummary(s string, n int) string {
+	if lipgloss.Width(s) <= n {
+		return s
+	}
+	if i := strings.LastIndex(s, " ("); i > 0 && strings.HasSuffix(s, ")") {
+		group := s[i:]
+		if room := n - lipgloss.Width(group); room >= 2 {
+			body := s[:i]
+			// The words before the path ("Recycled from ") stay whole
+			// while the path still gets a few columns of its own.
+			if j := strings.IndexAny(body, `/\`); j > 0 {
+				if left := room - lipgloss.Width(body[:j]); left >= 8 {
+					return body[:j] + elidePath(body[j:], left) + group
+				}
+			}
+			return elidePath(body, room) + group
+		}
+		// Not even the group fits: the worktree's name says more than a
+		// sliver of the branch would ("…/x)").
+		return elidePath(s[:i], n)
+	}
+	return elidePath(s, n)
 }

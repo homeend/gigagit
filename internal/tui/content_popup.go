@@ -54,6 +54,12 @@ type contentLine struct {
 	status  string // model.CommitFile.Status letter ("A","M","D","R","C","T")
 	sha     string // per-line commit override (a -u stash's ^3 parent); "" = the view's hash
 	noteID  string // an @notes/ entry: the AI review (a note) it shows; "" = a real file
+	// shelfNote is a shelved set's note row (its note id): no path, so every
+	// file action passes it by; enter reads the note, the stack shows its text.
+	shelfNote string
+	// elideHead is how many leading runes of text an elided row keeps whole
+	// (a note row's "└ date " lead): the middle-cut starts after them.
+	elideHead int
 	// overview is the review view's "≡ Overview" row: enter opens the
 	// review's overview, not a file.
 	overview bool

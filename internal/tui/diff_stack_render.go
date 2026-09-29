@@ -51,7 +51,10 @@ func (m Model) stackRow(v *diffView, dr dRow, w int, onCursor bool) string {
 	}
 	text := mark + " " + f.status + "  " + name
 	if f.overview {
-		text = mark + " ≡ " + i18n.T("Overview")
+		// A note's summary names a worktree path: a cut loses its middle,
+		// never the "(branch)" group at its end.
+		head := mark + " ≡ "
+		text = head + elideNoteSummary(f.overviewLabel(), w-lipgloss.Width(head))
 	}
 	switch {
 	case f.conflict:

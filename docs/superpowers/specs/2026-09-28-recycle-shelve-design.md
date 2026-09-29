@@ -187,11 +187,13 @@ failures do; the shelf entry stays (the work is safe).
 
 ## Out of scope / follow-ups
 
-- **Shelf-entry notes in the file tree (user, 2026-09-29).** Browsing a shelved
+- **DONE (feat/shelf-note-rows):** **Shelf-entry notes in the file tree (user, 2026-09-29).** Browsing a shelved
   set (`G` → enter) should list the entry's notes as rows of its file tree,
   the way a commit's AI reviews appear there (the `@notes/` rows of the
   commit files view), so the note is read in place — not only via `n` in
-  the switcher.
+  the switcher. Built as a Notes section (path-less `shelfNote` rows, enter =
+  the note popup) plus a prose element per note in the stacked view (user
+  ruling: "add notes to stack view, same as review overview").
 - Users adding/editing shelf-entry notes; notes on other entry kinds
   (bookmarks, saved compares).
 - MCP read of shelf-entry notes.

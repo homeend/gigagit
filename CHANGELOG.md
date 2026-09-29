@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Shelf-entry notes in the shelved set's file list
+
+### Added
+
+- **A shelved set lists its notes above its files.** Browsing a shelved set
+  or commit (`G` → enter) shows the entry's own notes under a **Notes**
+  heading, one `└ <date> <summary>` row each — the way a commit's AI reviews
+  read above its files. `enter` on a row opens that note (the same read-only,
+  fit-width viewer as `n` in the switcher; esc returns to the list). A note
+  row is not a file: blame, history, copy path, bookmark and restore pass it
+  by. The stacked view carries each note as a prose block above the files,
+  labelled with its summary, like a review's overview. A narrow list keeps
+  the row's date, cuts the summary's path in its middle and keeps its
+  `(branch)` group whole — or, with no room for the group, the worktree's
+  name.
+
 ## Links to branch versions
 
 ### Added

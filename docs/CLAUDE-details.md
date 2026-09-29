@@ -3929,3 +3929,14 @@ Spec: `docs/superpowers/specs/2026-09-27-review-notes-design.md`.
   all-added, uncached, non-note-addressable file. Branches tab is entry-based
   (`brEntry`, the Worktrees sub-row pattern): the branch filter maps entry →
   branch, `backingIndex` refuses a review row.
+- **Shelf-entry notes in a shelved set's list:** `withShelfNoteLines` prepends
+  a "Notes" heading + one row per entry-level note (`contentLine.shelfNote`,
+  NO path — so every path-keyed file action skips it without a guard; enter
+  is let through explicitly and opens `openShelfNotes` for that one note).
+  `shelfFilesMsg` carries the notes (`loadShelfFilesCmd` reads `ShelfNotes`
+  beside the members; a failed read only drops the section) and
+  `Model.filesShelfNotes` keeps them. `buildTreeStack` turns each row into a
+  prose `stackFile` (the review-overview element, `overview` + `label`), laid
+  out once at the stack width. Summaries cut via `elideNoteSummary`: the
+  trailing "(branch)" group stays whole (a branch holds slashes — elidePath
+  alone left "…/x)"), then the worktree name when even the group cannot fit.
