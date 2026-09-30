@@ -76,7 +76,7 @@ anchorTarget { path string; start, end int; note string }  // note = "t<n>"
   already skips documents with notes; it also skips overviews).
 - **No disk.** `onDisk()` is false: never watched, never polled, never
   re-read. Every load builds its rows from `text` (see Layout).
-- **Limits.** Text ≤ 64 KiB; at most 200 anchors (links past the 200th are
+- **Limits.** Text ≤ 64 KiB; at most 100 anchors (links past the 100th are
   plain text); at most 20 overviews per worktree (a 21st `add` is refused).
   The title is one line, ≤ 200 runes.
 
