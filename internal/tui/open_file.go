@@ -146,6 +146,11 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 		d.keepPlace()
 	}
 	p := d.p
+	var before []string
+	reanchor := len(d.notes) > 0
+	if reanchor && docLoaded(d) {
+		before = rawOf(p.lines)
+	}
 	p.img, p.imgW, p.imgH = msg.img, 0, 0 // a re-fit at the next frame
 	if msg.err != nil {
 		p.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
@@ -154,6 +159,9 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 		if msg.img != nil && len(msg.lines) > 0 {
 			p.imgInfo = msg.lines[0].text
 		}
+	}
+	if reanchor && docLoaded(d) && msg.img == nil {
+		d.reanchorNotes(before, rawOf(p.lines))
 	}
 	p.cur, p.sel = 0, 0
 	p.lsel.clear()

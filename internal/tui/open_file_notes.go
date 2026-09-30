@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"unicode/utf8"
+
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // Temporary notes on an open file: remarks an agent puts on the lines of a
@@ -137,4 +139,111 @@ func (m Model) findFileNote(id string) (*openFile, *fileNote) {
 		}
 	}
 	return nil, nil
+}
+
+// rawOf is the source text of content lines.
+func rawOf(lines []contentLine) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = l.raw
+	}
+	return out
+}
+
+// reanchorNotes moves every note to where its lines are in cur, the content
+// that just landed. old is the content shown before (nil when that was a
+// placeholder — a file deleted on disk, a failed read).
+//
+// A live note follows the line alignment: it moves when every one of its
+// lines survived unchanged and still sits together. Otherwise it goes
+// outdated and keeps its numbers, clamped to the file. An outdated note —
+// and any note when there is nothing to align against — comes back only
+// when its remembered text is at its old place again, or sits at exactly
+// ONE place in the file: a lone "}" must never adopt some other brace.
+func (d *openFile) reanchorNotes(old, cur []string) {
+	var to []int
+	if old != nil {
+		to = sameLineMap(old, cur)
+	}
+	for _, n := range d.notes {
+		if !n.outdated && to != nil {
+			if s, ok := mapRange(to, n.start, n.end); ok {
+				n.start, n.end = s, s+(n.end-n.start)
+				continue
+			}
+		} else if s := relocate(cur, n.anchor, n.start); s > 0 {
+			n.start, n.end, n.outdated = s, s+len(n.anchor)-1, false
+			continue
+		}
+		n.outdated = true
+		if n.end > len(cur) {
+			n.end = len(cur)
+		}
+		if n.start > n.end {
+			n.start = n.end
+		}
+		if n.start < 1 {
+			n.start, n.end = 1, 1
+		}
+	}
+	d.sortNotes()
+}
+
+// sameLineMap maps each old line (1-based index) to the new line it survived
+// as, unchanged; 0 = edited or gone.
+func sameLineMap(old, cur []string) []int {
+	res := textdiff.Compare([]byte(strings.Join(old, "\n")+"\n"), []byte(strings.Join(cur, "\n")+"\n"), textdiff.Options{})
+	to := make([]int, len(old)+1)
+	for _, r := range res.Rows {
+		if r.Kind == textdiff.Same && r.LeftNo >= 1 && r.LeftNo <= len(old) {
+			to[r.LeftNo] = r.RightNo
+		}
+	}
+	return to
+}
+
+// mapRange maps old lines start..end through to: ok only when every line
+// survived and they are still consecutive.
+func mapRange(to []int, start, end int) (int, bool) {
+	if start < 1 || end >= len(to) || to[start] == 0 {
+		return 0, false
+	}
+	for i := start; i <= end; i++ {
+		if to[i] != to[start]+(i-start) {
+			return 0, false
+		}
+	}
+	return to[start], true
+}
+
+// relocate finds anchor in cur: at start when it is there, else at its one
+// and only occurrence. 0 = not found, or found more than once.
+func relocate(cur, anchor []string, start int) int {
+	if len(anchor) == 0 {
+		return 0
+	}
+	at := func(s int) bool { // s is 1-based
+		if s < 1 || s+len(anchor)-1 > len(cur) {
+			return false
+		}
+		for i, a := range anchor {
+			if cur[s-1+i] != a {
+				return false
+			}
+		}
+		return true
+	}
+	if at(start) {
+		return start
+	}
+	found := 0
+	for s := 1; s+len(anchor)-1 <= len(cur); s++ {
+		if at(s) {
+			if found != 0 {
+				return 0
+			}
+			found = s
+		}
+	}
+	return found
 }
