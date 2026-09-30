@@ -1,9 +1,7 @@
 package tui
 
 import (
-	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -126,113 +124,15 @@ func (p *repoPopup) visible() []repos.Entry {
 		}
 	}
 	if p.grouped {
-		out = groupRepos(out, p.projects())
+		out = repos.Group(out, p.projects())
 	}
 	return out
 }
 
-// repoProj is an entry's project in the grouped view: key tells projects
-// apart, label names one on its head row.
-type repoProj struct{ key, label string }
-
-// projects maps each entry's path to its project. Two entries are one project
-// when they share a git common dir (a checkout and its linked worktrees — known
-// once the async probe lands) or a remote repository name (separate clones).
-// It is computed over ALL entries, so a filter hiding the entry that bridges
-// two others never splits their group. An entry with neither — an unprobed
-// entry with no usable remote — is absent and never joins a group. The label
-// is a member's remote name, else the main checkout's directory name.
-func (p *repoPopup) projects() map[string]repoProj {
-	parent := make([]int, len(p.entries))
-	for i := range parent {
-		parent[i] = i
-	}
-	var find func(int) int
-	find = func(i int) int {
-		if parent[i] != i {
-			parent[i] = find(parent[i])
-		}
-		return parent[i]
-	}
-	has := make([]bool, len(p.entries))
-	firstBy := make(map[string]int) // "c:"+common dir / "r:"+remote → first entry
-	join := func(i int, key string) {
-		has[i] = true
-		if j, ok := firstBy[key]; ok {
-			if ri, rj := find(i), find(j); ri != rj {
-				parent[max(ri, rj)] = min(ri, rj) // the MRU-earliest stays root
-			}
-			return
-		}
-		firstBy[key] = i
-	}
-	for i, e := range p.entries {
-		if c := p.common[e.Path]; c != "" {
-			if runtime.GOOS == "windows" {
-				c = strings.ToLower(c) // drive-letter and path case vary
-			}
-			join(i, "c:"+c)
-		}
-		if e.Remote != "" && e.Remote != repos.NoRemote {
-			join(i, "r:"+e.Remote)
-		}
-	}
-	label := make(map[int]string)
-	for i, e := range p.entries { // a remote name wins, in MRU order
-		if r := find(i); has[i] && label[r] == "" && e.Remote != "" && e.Remote != repos.NoRemote {
-			label[r] = e.Remote
-		}
-	}
-	for i, e := range p.entries {
-		if r := find(i); has[i] && label[r] == "" {
-			label[r] = commonDirLabel(p.common[e.Path])
-		}
-	}
-	out := make(map[string]repoProj, len(p.entries))
-	for i, e := range p.entries {
-		if has[i] {
-			r := find(i)
-			out[e.Path] = repoProj{key: strconv.Itoa(r), label: label[r]}
-		}
-	}
-	return out
-}
-
-// commonDirLabel names a project after its git common dir: the main
-// checkout's directory for <checkout>/.git, the repository's own name for a
-// bare <name>.git or a submodule's .git/modules/<name>.
-func commonDirLabel(dir string) string {
-	if base := filepath.Base(dir); base != ".git" {
-		return strings.TrimSuffix(base, ".git")
-	}
-	return filepath.Base(filepath.Dir(dir))
-}
-
-// groupRepos reorders MRU-sorted entries so each project's checkouts sit
-// together: the first entry of a project heads its group and the project's
-// later entries move up under it, in their MRU order. Groups are therefore
-// ordered by their most recently opened checkout. The input is not modified.
-func groupRepos(entries []repos.Entry, proj map[string]repoProj) []repos.Entry {
-	out := make([]repos.Entry, 0, len(entries))
-	seen := make(map[string]bool)
-	for i, e := range entries {
-		pr, ok := proj[e.Path]
-		if !ok {
-			out = append(out, e)
-			continue
-		}
-		if seen[pr.key] {
-			continue // already pulled up under its head
-		}
-		seen[pr.key] = true
-		out = append(out, e)
-		for _, later := range entries[i+1:] {
-			if lp, ok := proj[later.Path]; ok && lp.key == pr.key {
-				out = append(out, later)
-			}
-		}
-	}
-	return out
+// projects is the grouping of ALL entries (see repos.Projects) with the
+// common dirs the probe has read so far.
+func (p *repoPopup) projects() map[string]repos.Project {
+	return repos.Projects(p.entries, p.common)
 }
 
 // rowName is the name cell of row i in vis. Grouped, the head of a project
@@ -253,13 +153,13 @@ func (p *repoPopup) rowName(vis []repos.Entry, i int) string {
 			return false
 		}
 		o, ok := proj[vis[j].Path]
-		return ok && o.key == pr.key
+		return ok && o.Key == pr.Key
 	}
 	switch {
 	case sameProject(i - 1):
 		return ""
 	case sameProject(i + 1):
-		return pr.label
+		return pr.Label
 	}
 	return repos.Name(vis[i])
 }
@@ -559,7 +459,7 @@ func (p *repoPopup) tableCols(textW int) (nameW, slowW, pathW int) {
 		// A group head shows the project name instead; sizing for both keeps
 		// the columns still across the ctrl+g toggle.
 		if pr, ok := proj[e.Path]; ok {
-			if w := lipgloss.Width(pr.label); w > nameW {
+			if w := lipgloss.Width(pr.Label); w > nameW {
 				nameW = w
 			}
 		}
