@@ -354,3 +354,38 @@ func TestOpenConsoleClearsFullscreenPin(t *testing.T) {
 		t.Fatalf("emulator %dx%d, want %dx%d", sc.Cols, sc.Rows, cols, rows)
 	}
 }
+
+// Enter on a plain branch row jumps the Commits cursor to the branch's tip.
+// While a console is docked it covers the Commits column, so taking that
+// column's focus would hand the keyboard to the agent window — only a session
+// sub-row may do that.
+func TestBranchEnterLeavesDockedConsoleUnfocused(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	if len(m.branches) == 0 || len(m.commits) < 1 {
+		t.Fatalf("fixture: %d branches, %d commits", len(m.branches), len(m.commits))
+	}
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	mm, _ := m.Update(ctrlBracket()) // step out: docked, unfocused
+	m = mm.(Model)
+	m = m.activateTab(panelBranches)
+	m.sel[panelBranches] = 0
+	if _, ok := m.selectedSession(); ok {
+		t.Fatal("fixture: the cursor must sit on a branch row, not a session sub-row")
+	}
+	m.sel[panelCommits] = -1 // prove the jump still moves the cursor
+	for range 2 {            // a second enter must not reach the console either
+		mm, _ = m.Update(keyMsg("enter"))
+		m = mm.(Model)
+		if m.focus != panelBranches {
+			t.Fatalf("focus = %v, want panelBranches", m.focus)
+		}
+		if m.console == nil || m.console.focused {
+			t.Fatalf("console = %+v, want docked and unfocused", m.console)
+		}
+	}
+	if m.sel[panelCommits] < 0 {
+		t.Fatal("the Commits cursor must still move to the branch tip")
+	}
+}

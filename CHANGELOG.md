@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Docked agent console keeps out of commit jumps
+
+### Fixed
+
+- **Enter on a branch no longer focuses a docked agent console.** Enter on a
+  Branches row jumps the Commits cursor to the branch's tip and focuses the
+  Commits column — which a docked console occupies, so the agent window took
+  the keyboard and the next enter typed into it. While a console is docked
+  the jump now moves the cursor only and focus stays where it was; the row is
+  selected when the console closes. The same holds for every other jump into
+  the Commits feed (a tag's enter and Solo, `ctrl+f` deep search, Commits
+  touching this, `gg session focus commits`). Enter on a session sub-row is
+  still the way into the console.
+
 ## Repo switcher: group by project, copy path
 
 ### Added

@@ -4164,6 +4164,7 @@ func (m Model) activateTab(p panel) Model {
 // skipped while a surface (files view/stash list/file preview) suspends the
 // pin: that surface's own close path restores its own remembered focus, and
 // rewriting the pin now would go live later under a mismatched restore.
+// A docked agent console makes the whole call a no-op (see below).
 func (m Model) focusCommitsPanel() Model {
 	// Every caller means "land the user in the Commits feed". While the stash
 	// list covers that column, focusing panelCommits would hand focus (and key
@@ -4172,6 +4173,14 @@ func (m Model) focusCommitsPanel() Model {
 	// suspended pin, and the assignments below then take over.
 	if m.stashView != nil {
 		m = m.closeStashView()
+	}
+	// A docked agent console covers that column too, but it is a peer of the
+	// feed, not a view of it: focusing panelCommits would hand the keyboard to
+	// the agent window, which only a session row's enter may do. Focus stays
+	// put; the caller has already moved the cursor, so the feed shows the
+	// landed-on row once the console closes.
+	if m.console != nil {
+		return m
 	}
 	m.focus = panelCommits
 	if m.fullMaxed && !m.fullscreenYielded() {
