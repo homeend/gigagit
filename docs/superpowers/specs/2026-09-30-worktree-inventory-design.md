@@ -102,6 +102,7 @@ worktree:
 
 | Reason | When |
 |---|---|
+| `missing` | the worktree's directory or git dir is gone (a prunable worktree) |
 | `main` | the main checkout, unless `[agents] allow_main = true` |
 | `detached` | no branch checked out (also bare) |
 | `paused-op` | merge / rebase / cherry-pick / revert in progress (`PausedOpIn`) |
@@ -110,7 +111,8 @@ worktree:
 | `claimed` | a live claim exists |
 | `tui` | a live registry names this worktree as its TUI's own |
 | `session` | a live registry lists a running session with this dir |
-| `dirty-recent` | dirty and `last_change` newer than `[agents] stale_after` |
+| `dirty-recent` | dirty and `last_change` newer than `[agents] stale_after` (or no datable path) |
+| `status-failed` | `git status` failed — never read as clean |
 
 `--free` keeps only free worktrees: clean first, then stale-dirty by oldest
 `last_change`. `--free` without `--json` prints the text format.
@@ -122,7 +124,19 @@ free after those, in parallel under the existing `LimitRunner` cap. Without
 (its `dirty` is `null`) — status on a 20 GB checkout is seconds, and a
 blocked worktree's dirt answers nothing the overseer needs.
 
-Paths compare through `domain.SameCheckout` (WSL/Windows notation).
+Paths compare through `domain.SameCheckout` (slash-normalised, case-folded on
+Windows — it does NOT translate WSL `/mnt/…` notation; harmless here because
+WSL and Windows gg keep separate state dirs).
+
+`git-lock` probes the worktree's own git dir only (`index.lock`, `HEAD.lock`):
+common-dir locks (`packed-refs.lock` during a fetch) would block every
+worktree at once and say nothing about this one. A transient `index.lock` from
+another reader's `git status` can block a worktree for one listing —
+self-healing, documented in the skill.
+
+**Review revision (2026-10-01):** a Fable review of spec + plan added `missing`,
+`status-failed`, the claim lock, the live-session check at claim time, the
+process-alive guard, single-target claims and repo-only `reserved` below.
 
 ### 3. Session registry
 
@@ -132,7 +146,9 @@ New DAG-leaf package **`sessionreg`** (stdlib only):
   state base (`$XDG_STATE_HOME` first, as every store).
 - Content: `{ pid, started, worktree, sessions: [ {id, dir, agent, label,
   state, started} ] }` (`id` in the full `<proc>/<id>` form).
-- `Write` = temp+rename; `Touch` = chtimes; `Live()` returns every registry
+- `Write` = temp+rename (the publisher keeps a dirty flag and retries a
+  failed write on its next tick — on Windows a rename over a file a reader
+  holds open fails); `Touch` = chtimes; `Live()` returns every registry
   whose mtime is within a live window (5 s, same as `steer.LiveWindow`) and
   sweeps older or unparsable files, exactly like `steer.Live`.
 - `Remove` on clean shutdown.
@@ -145,10 +161,17 @@ already has the 1 s tick and the session subscription pattern); it survives
 func.
 
 A session is **alive** iff some live registry lists it with state running.
+A session is **dead** iff its process's registry is live and does not list it
+running, OR no live registry exists for its process AND that process (the pid
+in `<proc>`) is gone. A registry that merely went stale while its process is
+alive (suspend/resume, a frozen host) never kills a claim.
 
 ### 4. Claims
 
-New DAG-leaf package **`wtclaim`** (stdlib + `filelock`):
+New DAG-leaf package **`wtclaim`** (stdlib + `filelock`); every
+check-then-write (create, sweep, release) runs under `filelock` on
+`gg-claim.lock` beside the claim, so a sweeper can never delete a claim
+someone created after it read the old one:
 
 - File: `<git-common-dir>/worktrees/<name>/gg-claim` for a linked worktree,
   `<git-common-dir>/gg-claim` for the main one. It disappears with
@@ -159,14 +182,19 @@ New DAG-leaf package **`wtclaim`** (stdlib + `filelock`):
 
 Domain:
 
-- `ClaimWorktree(ctx, path, sessionID, note)`: refuses an empty session id;
-  computes the inventory entry; refuses when not free (returns the
-  `blocked_by` list); otherwise `wtclaim.Create`. A dead claim found in the
-  way is removed first, then the create is retried once.
+- `ClaimWorktree(ctx, path, sessionID, note)`: refuses an empty session id
+  AND a session that is not alive (a stale env or copied id — the claim would
+  be swept at once); computes the inventory entry for THAT worktree only (no
+  `git status` fan-out); refuses when not free (returns the `blocked_by`
+  list); otherwise, under the claim lock, sweeps a dead claim and creates.
+  The claim's `agent` comes from the session's registry entry (the tool id the
+  TUI shows), not from the environment.
 - `ReleaseWorktree(ctx, path, sessionID, force)`: removes the claim when the
   caller's session id matches, or when `force`.
-- **Dead-claim sweep:** any domain read of a claim whose session is not alive
-  removes the file and reports no claim. So a crashed TUI, a killed or
+- **Dead-claim sweep:** any domain read of a claim whose session is dead
+  (§3) removes the file under the claim lock, re-checking it is the same
+  claim, and reports no claim. An empty claim file (a claimer that crashed
+  between O_EXCL and write) is dead once its mtime is 10 s old. So a crashed TUI, a killed or
   exited session, or a removed session never leaves a claim behind.
 - One session may hold several claims.
 
@@ -182,13 +210,16 @@ CLI:
 ### 5. Reserve
 
 - Config: `[agents] reserved = ["<path>", …]` in the active repo config file
-  (committed or machine-private); paths relative to the main worktree (or
+  (committed or machine-private) — REPO ONLY: a global `reserved` is ignored,
+  since paths belong to one repo and a globally reserved path could never be
+  unreserved; the file is anchored on the MAIN worktree, never the cwd
+  worktree's copy of `.gg.toml`; paths relative to the main worktree (or
   absolute). Also `[agents] stale_after = "14d"` and `[agents] allow_main =
   false`. Config entries follow the `adding-config-entries` checklist
   (settings registry doc, overlay, defaults).
 - `gg worktree reserve <path>` / `gg worktree unreserve <path>` write through
-  the existing scoped config writers (via the config op, not a raw file
-  edit).
+  the existing scoped config writers (`config.SetAgentsReserved`, called
+  directly — the same path the branch-filter popup writes through).
 
 ### 6. TUI
 
@@ -209,6 +240,7 @@ CLI:
 | Situation | Exit |
 |---|---|
 | `claim` without `GG_SESSION_ID` | 2 — "only an agent running inside gg can claim" |
+| `claim` by a session not running in any gg | 2 — "session <id> is not running in any gg" |
 | `claim` on a non-free worktree | 1 — prints `blocked_by` |
 | `release` by a non-holder without `--force` | 1 |
 | unknown worktree path | 1 |
@@ -226,6 +258,7 @@ CHANGELOG + README.
 
 - `sessionreg`, `wtclaim`: unit tests (live window via backdated mtime,
   unparsable sweep, O_EXCL race with two goroutines → one winner).
+- `domain`: `missing` (deleted worktree dir) refuses claims and never writes `gg-claim` into the cwd; a stalled registry of a live process keeps its claim; an old empty claim file is dead; claims by a non-running session are refused.
 - `domain`: real git worktrees in `t.TempDir()`; one test per `blocked_by`
   reason; stale threshold via backdated dirty-file mtimes; `--free` order;
   status skipped for blocked worktrees (FakeRunner argv or runner count);

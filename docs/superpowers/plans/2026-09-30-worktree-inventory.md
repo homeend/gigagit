@@ -10,30 +10,37 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-30-worktree-inventory-design.md`
 
+**Revision 2026-10-01:** revised after a Fable review (missing/status-failed reasons, claim lock, live-session check at claim time, process-alive guard, single-target claim, repo-only `reserved`, test isolation).
+
 ## Global Constraints
 
-- Only agents with `GG_SESSION_ID` set may claim; claim without it exits **2** with `only an agent running inside gg can claim`.
+- Only agents with `GG_SESSION_ID` set may claim; claim without it exits **2** with `only an agent running inside gg can claim`; claim by a session that is not alive exits **2** with `session <id> is not running in any gg`.
 - `GG_SESSION_ID` value = `<pid>-<process start unixnano>/<session id>`.
-- A claim has **no TTL, no heartbeat**; it is dead iff its session is not listed as running in any live registry (or the in-process manager). Dead claims are deleted by whoever reads them.
+- A claim has **no TTL, no heartbeat**. A session is dead iff its process's registry is live and does not list it running, OR its process has no live registry AND the pid (from `<pid>-<start>/…`) is gone. A stale registry of a LIVE process never kills a claim. Dead claims are deleted by whoever reads them — under the claim lock, after re-reading.
+- Every claim create / sweep / release runs under `filelock.Acquire(<gitDir>/gg-claim.lock)`.
+- The claim's `agent` comes from the session's registry entry, not the environment.
+- An empty claim file (crashed mid-write) is dead once its mtime is 10 s old.
 - Registry live window = **5 s** (same as `steer.LiveWindow`); file `<state>/gg/sessions/<proc>.json`, `<state>` resolved via `stateBaseDir` (XDG_STATE_HOME first).
 - Claim file: `<worktree git dir>/gg-claim` (linked: `<common>/worktrees/<name>/gg-claim`; main: `<main>/.git/gg-claim`), TOML keys `session`, `agent`, `since`, `note`.
-- `[agents] stale_after` default `"14d"` (parsed by `branchfilter.ParseAge`), `[agents] reserved` list (relative to main worktree or absolute), `[agents] allow_main` default false.
-- `blocked_by` reason strings exactly: `main`, `detached`, `paused-op`, `git-lock`, `reserved`, `claimed`, `tui`, `session`, `dirty-recent`.
+- `[agents] stale_after` default `"14d"` (parsed by `branchfilter.ParseAge`), `[agents] reserved` list (REPO file only — a global value is ignored; relative to main worktree or absolute), `[agents] allow_main` default false. Repo config is anchored on the MAIN worktree (`wts[0].Path`), never the cwd worktree.
+- `blocked_by` reason strings exactly: `missing`, `main`, `detached`, `paused-op`, `git-lock`, `reserved`, `claimed`, `tui`, `session`, `dirty-recent`, `status-failed`.
+- `git-lock` probes the worktree's own git dir only (documented choice).
+- `sessionreg` and `wtclaim` are frontend-forbidden in `internal/archtest` (CLI tests write registry JSON by hand).
 - `recycle`: `"none"` clean, `"shelve"` stale-dirty, JSON `null` when not free.
 - `--free` order: clean first, then stale-dirty by oldest `last_change`.
 - `git status` runs only for worktrees not already blocked by the file-level checks.
 - Paths compare via `domain.SameCheckout`.
 - Every user-visible TUI string goes through `i18n.T` with a literal key in all four bundles (ja/ko/zh/ru); decision option values stay English.
 - `internal/tui` and `internal/cli` never import `internal/git`.
-- Tests use real git in `t.TempDir()`, call `t.Parallel()` where they do not `t.Setenv`.
+- Tests use real git in `t.TempDir()`, call `t.Parallel()` where they do not `t.Setenv`. The domain and cli `TestMain`s pin `XDG_STATE_HOME` (the tui one already does) so no test reads or sweeps the developer's real registry. `sh`/`sleep` session tests `t.Skip` on Windows like the existing ones.
 
 ## Review Focus
 
 1. **Worktree path given in another notation** (relative, trailing slash, WSL `/mnt/…` vs Windows) — `claim`/`release`/`reserve` must resolve it to the listed worktree via `matchWorktreeArg`/`SameCheckout`, never write a claim next to a non-worktree. Test: Task 8 `TestWorktreeClaimRelativePath`.
-2. **Claim while the owning TUI crashed** — a stale registry (mtime > 5 s) must make the claim dead and swept, and a new claim must then succeed. Test: Task 7 `TestClaimSweepsClaimOfDeadRegistry`.
+2. **Owner TUI crashed vs. merely stalled** — a stale registry whose process is gone makes the claim dead (swept, a new claim succeeds); a stale registry whose process is ALIVE keeps the claim. Tests: Task 7 `TestClaimSweepsClaimOfDeadRegistry`, `TestStalledRegistryKeepsClaim`.
 3. **Deleted file among dirty paths** — `last_change` must ignore unstat-able paths rather than failing the whole inventory. Test: Task 6 `TestInventoryLastChangeSkipsDeletedPaths`.
 4. **Malformed `stale_after`** in config — the CLI must report the config error (exit 1), not panic or treat everything as fresh. Test: Task 8 `TestWorktreeListBadStaleAfter`.
-5. **Releasing an unclaimed worktree** — exit 0 with `no claim` (agent cleanup never fails). Test: Task 8 `TestWorktreeReleaseNoClaim`.
+5. **A worktree whose directory was deleted** (prunable) — must be `missing`, never free, and a claim on it must be refused instead of writing `gg-claim` into the cwd. Tests: Task 6 `TestInventoryMissingWorktree`, Task 7 `TestClaimRefusesMissingWorktree`.
 
 ---
 
@@ -44,8 +51,10 @@
 | `internal/git/headfile.go` (modify) | add `GitDirAt(dir)`; `HeadAt` uses it |
 | `internal/agentsession/proctag.go` (create) | `ProcTag()` — `<pid>-<start unixnano>`, once per process |
 | `internal/agentsession/session.go` (modify) | child env `GG_SESSION_ID=<ProcTag()>/<id>` |
-| `internal/sessionreg/sessionreg.go` (create) | registry file types + `Write`/`Touch`/`Remove`/`Live` |
-| `internal/wtclaim/wtclaim.go` (create) | claim file `Create`/`Read`/`Remove` |
+| `internal/sessionreg/sessionreg.go` (create) | registry file types + `Write`/`Touch`/`Remove`/`Live`, `PIDOf`, `ProcOf` |
+| `internal/sessionreg/procalive_unix.go`, `procalive_windows.go` (create) | `ProcAlive(pid)` |
+| `internal/archtest/import_guard_test.go` (modify) | forbid `sessionreg`/`wtclaim` in frontends |
+| `internal/wtclaim/wtclaim.go` (create) | claim file `Create`/`Read`/`Remove`/`Age`, `WithLock` |
 | `internal/config/config.go`, `template.go`, `write.go` (modify) | `[agents]` section, settingDocs, `SetAgentsReserved` |
 | `internal/domain/sessionpublish.go` (create) | `PublishSessions`, `SessionRegistryDir`, `liveSessions` |
 | `internal/domain/wtinventory.go` (create) | `InventoryPolicy`, `WorktreeInfo`, `WorktreeInventory` |
@@ -175,15 +184,19 @@ git commit -m "feat(agentsession): process-unique GG_SESSION_ID; git.GitDirAt"
 ### Task 2: `sessionreg` — the published session registry
 
 **Files:**
-- Create: `internal/sessionreg/sessionreg.go`
+- Create: `internal/sessionreg/sessionreg.go`, `internal/sessionreg/procalive_unix.go`, `internal/sessionreg/procalive_windows.go`
+- Modify: `internal/archtest/import_guard_test.go` (two `forbidden` rows)
 - Test: `internal/sessionreg/sessionreg_test.go`
 
 **Interfaces:**
 - Produces:
 ```go
 type Entry struct { ID, Dir, Agent, Label, State, Started string }  // State "running"|"exited"; ID = "<proc>/<id>"
-type Registry struct { PID int; Started, Worktree string; Sessions []Entry }
+type Registry struct { Proc string /* from the file name, not stored */; PID int; Started, Worktree string; Sessions []Entry }
 const LiveWindow = 5 * time.Second
+func PIDOf(sessionID string) int      // "<pid>-<start>/<id>" -> pid; 0 if malformed
+func ProcOf(sessionID string) string  // "<pid>-<start>/<id>" -> "<pid>-<start>"
+func ProcAlive(pid int) bool          // false for pid <= 0
 func Write(dir, proc string, r Registry) error
 func Touch(dir, proc string) error
 func Remove(dir, proc string)
@@ -252,6 +265,42 @@ func TestLiveMissingDir(t *testing.T) {
 	t.Parallel()
 	if got := Live(filepath.Join(t.TempDir(), "nope")); got != nil {
 		t.Fatalf("Live = %+v", got)
+	}
+}
+
+func TestLiveFillsProc(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	Write(dir, "123-456", Registry{PID: 123})
+	if got := Live(dir); len(got) != 1 || got[0].Proc != "123-456" {
+		t.Fatalf("Live = %+v", got)
+	}
+}
+
+func TestPIDOfAndProcOf(t *testing.T) {
+	t.Parallel()
+	if PIDOf("4711-99/s3") != 4711 || ProcOf("4711-99/s3") != "4711-99" {
+		t.Fatal("parse")
+	}
+	if PIDOf("p/s1") != 0 || PIDOf("") != 0 {
+		t.Fatal("malformed must be 0")
+	}
+}
+
+func TestProcAlive(t *testing.T) {
+	t.Parallel()
+	if !ProcAlive(os.Getpid()) {
+		t.Fatal("self must be alive")
+	}
+	if ProcAlive(0) || ProcAlive(-1) {
+		t.Fatal("non-positive pid must be dead")
+	}
+	c := exec.Command(os.Args[0], "-test.run=^$") // exits at once
+	if err := c.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if ProcAlive(c.Process.Pid) {
+		t.Skip("pid reused already — cannot assert on this machine")
 	}
 }
 ```
@@ -349,7 +398,7 @@ func Live(dir string) []Registry {
 			continue
 		}
 		p := filepath.Join(dir, name)
-		st, err := os.Stat(p)
+		st, err := e.Info()
 		if err != nil {
 			continue
 		}
@@ -366,21 +415,98 @@ func Live(dir string) []Registry {
 			os.Remove(p)
 			continue
 		}
+		r.Proc = strings.TrimSuffix(name, ".json")
 		out = append(out, r)
 	}
 	return out
 }
+
+// ProcOf is the "<pid>-<start>" part of a session id — its registry's name.
+func ProcOf(sessionID string) string {
+	proc, _, _ := strings.Cut(sessionID, "/")
+	return proc
+}
+
+// PIDOf is the pid inside a session id; 0 when the id is malformed.
+func PIDOf(sessionID string) int {
+	pid, _, _ := strings.Cut(ProcOf(sessionID), "-")
+	n, err := strconv.Atoi(pid)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+```
+
+`Registry.Proc` carries `json:"-"`. Add `strconv` to the imports.
+
+```go
+// procalive_unix.go
+//go:build !windows
+
+package sessionreg
+
+import (
+	"errors"
+	"syscall"
+)
+
+// ProcAlive reports whether a process with pid exists (signal 0; EPERM means
+// it exists but belongs to someone else).
+func ProcAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
+}
+```
+
+```go
+// procalive_windows.go
+//go:build windows
+
+package sessionreg
+
+import "golang.org/x/sys/windows"
+
+const stillActive = 259 // STILL_ACTIVE
+
+func ProcAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return errors.Is(err, windows.ERROR_ACCESS_DENIED)
+	}
+	defer windows.CloseHandle(h)
+	var code uint32
+	if windows.GetExitCodeProcess(h, &code) != nil {
+		return true
+	}
+	return code == stillActive
+}
+```
+
+(add `"errors"` to the Windows file's imports). The package doc changes to "DAG leaf: stdlib + x/sys". Cross-compile check: `GOOS=windows go vet ./internal/sessionreg`.
+
+`internal/archtest/import_guard_test.go` `forbidden` map — add:
+
+```go
+		"github.com/homeend/gigagit/internal/sessionreg": "frontends must reach the session registry through internal/domain",
+		"github.com/homeend/gigagit/internal/wtclaim":    "frontends must reach worktree claims through internal/domain",
 ```
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `go test ./internal/sessionreg`
+Run: `go test ./internal/sessionreg ./internal/archtest && GOOS=windows go vet ./internal/sessionreg`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-gg add internal/sessionreg
+gg add internal/sessionreg internal/archtest/import_guard_test.go
 git commit -m "feat(sessionreg): machine-wide registry of live agent sessions"
 ```
 
@@ -401,6 +527,8 @@ const FileName = "gg-claim"
 func Create(gitDir string, c Claim) error      // ErrClaimed when present
 func Read(gitDir string) (Claim, bool, error)  // ok=false when absent
 func Remove(gitDir string) error               // nil when absent
+func Age(gitDir string) (time.Duration, bool)  // time since the claim file's mtime
+func WithLock(gitDir string, fn func() error) error  // filelock on <gitDir>/gg-claim.lock
 ```
 
 - [ ] **Step 1: Write the failing tests**
@@ -423,8 +551,11 @@ func TestCreateReadRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, ok, err := Read(d)
-	if err != nil || !ok || got != c {
+	if err != nil || !ok || got.Session != c.Session || got.Agent != c.Agent || got.Note != c.Note || !got.Since.Equal(c.Since) {
 		t.Fatalf("Read = %+v %v %v", got, ok, err)
+	}
+	if a, ok := Age(d); !ok || a > time.Minute {
+		t.Fatalf("Age = %v %v", a, ok)
 	}
 	if err := Create(d, c); !errors.Is(err, ErrClaimed) {
 		t.Fatalf("second Create = %v, want ErrClaimed", err)
@@ -438,6 +569,42 @@ func TestCreateReadRemove(t *testing.T) {
 	if err := Remove(d); err != nil {
 		t.Fatalf("Remove absent = %v", err)
 	}
+}
+
+func TestWithLockSerialises(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	var mu sync.Mutex
+	inside, max := 0, 0
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			WithLock(d, func() error {
+				mu.Lock()
+				inside++
+				max = maxInt(max, inside)
+				mu.Unlock()
+				time.Sleep(10 * time.Millisecond)
+				mu.Lock()
+				inside--
+				mu.Unlock()
+				return nil
+			})
+		}()
+	}
+	wg.Wait()
+	if max != 1 {
+		t.Fatalf("max concurrent = %d, want 1", max)
+	}
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func TestCreateRaceOneWinner(t *testing.T) {
@@ -541,9 +708,32 @@ func Remove(gitDir string) error {
 	}
 	return err
 }
+
+// Age is how long ago the claim file was last written.
+func Age(gitDir string) (time.Duration, bool) {
+	st, err := os.Stat(path(gitDir))
+	if err != nil {
+		return 0, false
+	}
+	return time.Since(st.ModTime()), true
+}
+
+// WithLock runs fn holding the cross-process lock beside the claim, so a
+// check-then-write (claim over a dead claim, sweep, release) can never
+// remove a claim someone else created after fn's read.
+func WithLock(gitDir string, fn func() error) error {
+	release, err := filelock.Acquire(filepath.Join(gitDir, FileName+".lock"))
+	if err != nil {
+		return err
+	}
+	defer release()
+	return fn()
+}
 ```
 
-Note on the racing reader: a reader that hits the file between `OpenFile` and `Write` gets an empty file → `toml.Unmarshal` of "" yields a zero `Claim` with `ok=true`. The domain treats a claim with an empty `Session` as "being written" and alive (never swept) — see Task 7.
+Add `"github.com/homeend/gigagit/internal/filelock"` to the imports.
+
+Note on the racing reader: a reader that hits the file between `OpenFile` and `Write` gets an empty file → `toml.Unmarshal` of "" yields a zero `Claim` with `ok=true`. The domain treats a claim with an empty `Session` as mid-write and alive until its `Age` passes 10 s — see Task 7.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -596,6 +786,11 @@ func TestAgentsLayers(t *testing.T) {
 	}
 	if c.Agents.StaleAfter != "7d" || !c.Agents.AllowMain || len(c.Agents.Reserved) != 2 || c.Agents.Reserved[0] != "b" {
 		t.Fatalf("Agents = %+v", c.Agents)
+	}
+	os.WriteFile(repo, []byte("[agents]\nallow_main = true\n"), 0o644)
+	c, _ = Load(global, repo)
+	if len(c.Agents.Reserved) != 0 {
+		t.Fatalf("a GLOBAL reserved list must be ignored, got %q", c.Agents.Reserved)
 	}
 	if Defaults().Agents.StaleAfter != "14d" {
 		t.Fatalf("default stale_after = %q", Defaults().Agents.StaleAfter)
@@ -668,7 +863,7 @@ func overlayAgents(dst *AgentsConfig, src AgentsConfig) {
 }
 ```
 
-Add `Agents AgentsConfig \`toml:"agents"\`` to `Config`; `Agents: AgentsConfig{StaleAfter: "14d"}` in `Defaults()`; call `overlayAgents(&cfg.Agents, layer.Agents)` in `Load` for both layers exactly where `overlayTasks` is called.
+Add `Agents AgentsConfig \`toml:"agents"\`` to `Config`; `Agents: AgentsConfig{StaleAfter: "14d"}` in `Defaults()`; call `overlayAgents(&cfg.Agents, layer.Agents)` in `Load` for both layers exactly where `overlayTasks` is called, and right after the GLOBAL layer's call add `cfg.Agents.Reserved = nil` with the comment `// reserved is repo-only: paths belong to one repo, and a global entry could never be unreserved from it`.
 
 Reserved clearing: because overlay ignores an empty slice, `SetAgentsReserved(path, nil)` must REMOVE the line — an empty `reserved = []` in the repo file would be ignored and a global list would win anyway, which is the documented overlay rule.
 
@@ -690,7 +885,7 @@ func SetAgentsReserved(path string, paths []string) error {
 
 If `write.go` has no `removeScalarLine`, add it next to `setScalarLine`, reusing its section/key line scan: find the `key = …` line inside `[section]` and drop it; missing file or key → nil. (`strconv.Quote` output is a valid TOML basic string for these paths: backslashes and quotes are escaped the same way.)
 
-`template.go`: add three `settingDoc` entries for `agents.reserved`, `agents.stale_after`, `agents.allow_main`, copying the shape of the `tasks.max_parallel` entry (section, key, default rendering, one-line comment).
+`template.go`: add `"agents"` to `Template()`'s explicit section list (`template.go:188`, after `"tasks"`), and add three `settingDoc` entries for `agents.reserved`, `agents.stale_after`, `agents.allow_main`, copying the shape of the `tasks.max_parallel` entry (section, key, default rendering, one-line comment).
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -710,6 +905,7 @@ git commit -m "feat(config): [agents] reserved / stale_after / allow_main"
 
 **Files:**
 - Create: `internal/domain/sessionpublish.go`
+- Modify: `internal/domain/main_test.go` (pin `XDG_STATE_HOME`)
 - Test: `internal/domain/sessionpublish_test.go`
 
 **Interfaces:**
@@ -720,11 +916,14 @@ func SessionRegistryDir() string                               // stateBaseDir("
 func PublishSessions(ctx context.Context, dir string, worktree func() string)
 type liveView struct {
 	running map[string]bool     // full session id -> running
+	agents  map[string]string   // full session id -> agent tool id
+	procs   map[string]bool     // procs with a LIVE registry (plus this process)
 	byDir   map[string][]SessionRef
 	tuis    []string            // TUI worktrees
 }
 type SessionRef struct { ID, Agent, State string }
 func readLive(dir string) liveView                             // registries + this process's Sessions()
+func sessionDead(id string, lv liveView) bool
 ```
 
 - [ ] **Step 1: Write the failing test**
@@ -732,6 +931,9 @@ func readLive(dir string) liveView                             // registries + t
 ```go
 func TestPublishSessionsWritesAndRemoves(t *testing.T) {
 	// Not parallel: swaps the process-global session manager.
+	if runtime.GOOS == "windows" {
+		t.Skip("sleep-based session")
+	}
 	mgr := agentsession.NewManager()
 	defer UseSessionManager(mgr)()
 	dir := t.TempDir()
@@ -775,6 +977,41 @@ func waitFor(t *testing.T, cond func() bool) {
 
 (Check first with `grep -rn 'func waitFor' internal/domain` and reuse an existing helper.)
 
+```go
+func TestSessionDead(t *testing.T) {
+	t.Parallel()
+	self := fmt.Sprintf("%d-1", os.Getpid())
+	lv := liveView{
+		running: map[string]bool{"live-1/s1": true, "live-1/s2": false},
+		procs:   map[string]bool{"live-1": true},
+	}
+	cases := map[string]bool{
+		"live-1/s1":    false, // listed running
+		"live-1/s2":    true,  // its registry is live and says exited
+		"live-1/s9":    true,  // its registry is live and does not list it
+		self + "/s1":   false, // no live registry, but the process is alive (stalled TUI)
+		"0-1/s1":       true,  // no registry, no process
+		"garbage":      true,
+	}
+	for id, want := range cases {
+		if got := sessionDead(id, lv); got != want {
+			t.Errorf("sessionDead(%q) = %v, want %v", id, got, want)
+		}
+	}
+}
+```
+
+Pin the state dir in `internal/domain/main_test.go` next to `XDG_CONFIG_HOME`:
+
+```go
+	state, err := os.MkdirTemp("", "gg-domain-state")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_STATE_HOME", state)
+	// … after m.Run(): os.RemoveAll(state)
+```
+
 - [ ] **Step 2: Run to verify failure**
 
 Run: `go test ./internal/domain -run TestPublishSessions`
@@ -811,7 +1048,11 @@ func PublishSessions(ctx context.Context, dir string, worktree func() string) {
 	started := time.Now().UTC().Format(time.RFC3339)
 	changed, stop := Sessions().Subscribe()
 	defer stop()
-	write := func() { _ = sessionreg.Write(dir, proc, snapshotRegistry(started, worktree())) }
+	// dirty: the last write failed (on Windows a rename over a file a reader
+	// holds open fails) — retried on the next tick so a new session is never
+	// left unlisted until the NEXT change.
+	dirty := false
+	write := func() { dirty = sessionreg.Write(dir, proc, snapshotRegistry(started, worktree())) != nil }
 	write()
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
@@ -824,7 +1065,7 @@ func PublishSessions(ctx context.Context, dir string, worktree func() string) {
 		case <-changed:
 			write()
 		case <-tick.C:
-			if wt := worktree(); wt != lastWT {
+			if wt := worktree(); wt != lastWT || dirty {
 				lastWT = wt
 				write()
 			} else if sessionreg.Touch(dir, proc) != nil {
@@ -854,20 +1095,41 @@ func sessionStateName(s agentsession.State) string {
 
 type liveView struct {
 	running map[string]bool
+	agents  map[string]string
+	procs   map[string]bool
 	byDir   map[string][]SessionRef
 	tuis    []string
+}
+
+// sessionDead: its process's registry is live and does not list it running,
+// or its process has no live registry and is gone. A registry that only went
+// stale while its process lives (suspend, a frozen host) never kills.
+func sessionDead(id string, lv liveView) bool {
+	if lv.running[id] {
+		return false
+	}
+	proc := sessionreg.ProcOf(id)
+	if proc == "" || proc == id {
+		return true // malformed
+	}
+	if lv.procs[proc] {
+		return true
+	}
+	return !sessionreg.ProcAlive(sessionreg.PIDOf(id))
 }
 
 // readLive merges every live registry with THIS process's own sessions (so a
 // TUI's marks are right before its first registry write, and a registry
 // swept during a stall never hides our own sessions).
 func readLive(dir string) liveView {
-	lv := liveView{running: map[string]bool{}, byDir: map[string][]SessionRef{}}
+	lv := liveView{running: map[string]bool{}, agents: map[string]string{},
+		procs: map[string]bool{agentsession.ProcTag(): true}, byDir: map[string][]SessionRef{}}
 	add := func(e sessionreg.Entry) {
 		if _, dup := lv.running[e.ID]; dup {
 			return
 		}
 		lv.running[e.ID] = e.State == "running"
+		lv.agents[e.ID] = e.Agent
 		d := filepath.Clean(e.Dir)
 		lv.byDir[d] = append(lv.byDir[d], SessionRef{ID: e.ID, Agent: e.Agent, State: e.State})
 	}
@@ -876,6 +1138,7 @@ func readLive(dir string) liveView {
 	}
 	if dir != "" {
 		for _, r := range sessionreg.Live(dir) {
+			lv.procs[r.Proc] = true
 			if r.Worktree != "" {
 				lv.tuis = append(lv.tuis, r.Worktree)
 			}
@@ -892,13 +1155,13 @@ Check `Sessions().Subscribe()` signature matches `Manager.Subscribe() (<-chan st
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `go test ./internal/domain -run TestPublishSessions -count=1`
+Run: `go test ./internal/domain -run 'TestPublishSessions|TestSessionDead' -count=1`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-gg add internal/domain/sessionpublish.go internal/domain/sessionpublish_test.go
+gg add internal/domain/sessionpublish.go internal/domain/sessionpublish_test.go internal/domain/main_test.go
 git commit -m "feat(domain): publish live agent sessions to the session registry"
 ```
 
@@ -938,6 +1201,7 @@ type WorktreeInfo struct {
 	Recycle string // "none" | "shelve" | "" (not free)
 }
 func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, freeOnly bool) ([]WorktreeInfo, error)
+func (s *Service) inventory(ctx context.Context, pol InventoryPolicy, only string) ([]WorktreeInfo, error) // only != "": that worktree alone (claim path — no status fan-out)
 func (s *Service) UseSessionRegistryDir(dir string)   // test seam; "" = SessionRegistryDir()
 ```
 
@@ -1107,6 +1371,34 @@ func firstTrackedFile(t *testing.T, dir string) string {
 	return strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
 }
 
+func TestInventoryMissingWorktree(t *testing.T) {
+	t.Parallel()
+	main, svc, _ := inventoryRepo(t)
+	wt := addWT(t, main, "gone")
+	if err := os.RemoveAll(wt); err != nil {
+		t.Fatal(err)
+	}
+	infos, err := svc.WorktreeInventory(context.Background(), pol(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := find(t, infos, wt)
+	if w.Free || !slices.Equal(w.BlockedBy, []string{"missing"}) {
+		t.Fatalf("missing worktree = %+v", w)
+	}
+}
+
+func TestInventoryOnlyOneWorktree(t *testing.T) {
+	t.Parallel()
+	main, svc, _ := inventoryRepo(t)
+	a := addWT(t, main, "a")
+	addWT(t, main, "b")
+	infos, err := svc.inventory(context.Background(), pol(), a)
+	if err != nil || len(infos) != 1 || !SameCheckout(infos[0].Path, a) {
+		t.Fatalf("inventory(only) = %+v %v", infos, err)
+	}
+}
+
 func TestPolicyFromConfigBadAge(t *testing.T) {
 	t.Parallel()
 	if _, err := PolicyFromConfig(config.AgentsConfig{StaleAfter: "soon"}); err == nil {
@@ -1159,6 +1451,26 @@ func PolicyFromConfig(c config.AgentsConfig) (InventoryPolicy, error) {
 }
 
 func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, freeOnly bool) ([]WorktreeInfo, error) {
+	out, err := s.inventory(ctx, pol, "")
+	if err != nil || !freeOnly {
+		return out, err
+	}
+	out = slices.DeleteFunc(out, func(w WorktreeInfo) bool { return !w.Free })
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i].Dirty, out[j].Dirty
+		ac, bc := a == nil || a.LastChange == nil, b == nil || b.LastChange == nil
+		if ac != bc {
+			return ac // clean first
+		}
+		if ac {
+			return false
+		}
+		return a.LastChange.Before(*b.LastChange) // oldest change first
+	})
+	return out, nil
+}
+
+func (s *Service) inventory(ctx context.Context, pol InventoryPolicy, only string) ([]WorktreeInfo, error) {
 	wts, err := s.Worktrees(ctx)
 	if err != nil {
 		return nil, err
@@ -1175,7 +1487,7 @@ func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, fr
 	reserved := resolveReserved(mainPath, pol.Reserved)
 	out := make([]WorktreeInfo, 0, len(wts))
 	for i, w := range wts {
-		if w.Bare || w.Path == "" {
+		if w.Bare || w.Path == "" || (only != "" && !SameCheckout(w.Path, only)) {
 			continue
 		}
 		out = append(out, s.cheapInfo(w, i == 0, pol, lv, reserved))
@@ -1206,20 +1518,6 @@ func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, fr
 			w.Recycle = "none"
 		}
 	}
-	if freeOnly {
-		out = slices.DeleteFunc(out, func(w WorktreeInfo) bool { return !w.Free })
-		sort.SliceStable(out, func(i, j int) bool {
-			a, b := out[i].Dirty, out[j].Dirty
-			ac, bc := a == nil || a.LastChange == nil, b == nil || b.LastChange == nil
-			if ac != bc {
-				return ac // clean first
-			}
-			if ac {
-				return false
-			}
-			return a.LastChange.Before(*b.LastChange) // oldest change first
-		})
-	}
 	return out, nil
 }
 
@@ -1239,19 +1537,26 @@ func (s *Service) cheapInfo(w model.Worktree, isMain bool, pol InventoryPolicy, 
 	info := WorktreeInfo{Path: w.Path, Branch: w.Branch, Head: w.Head, Main: isMain, Detached: w.Detached || w.Branch == ""}
 	block := func(r string) { info.BlockedBy = append(info.BlockedBy, r) }
 	gitDir := git.GitDirAt(w.Path)
+	if gitDir == "" {
+		// The directory (or its .git) is gone: a prunable worktree. Nothing
+		// else is knowable, and a claim would have nowhere to live.
+		block("missing")
+		return info
+	}
 	if isMain && !pol.AllowMain {
 		block("main")
 	}
 	if info.Detached {
 		block("detached")
 	}
-	if gitDir != "" {
-		if info.PausedOp = git.PausedOpIn(gitDir); info.PausedOp != "" {
-			block("paused-op")
-		}
-		if info.GitLock = len(git.LockFiles(gitDir)) > 0; info.GitLock {
-			block("git-lock")
-		}
+	if info.PausedOp = git.PausedOpIn(gitDir); info.PausedOp != "" {
+		block("paused-op")
+	}
+	// This worktree's own git dir only: common-dir locks (packed-refs.lock
+	// during a fetch) would block every worktree at once and say nothing
+	// about this one.
+	if info.GitLock = len(git.LockFiles(gitDir)) > 0; info.GitLock {
+		block("git-lock")
 	}
 	for _, r := range reserved {
 		if SameCheckout(r, w.Path) {
@@ -1288,7 +1593,10 @@ func (s *Service) cheapInfo(w model.Worktree, isMain bool, pol InventoryPolicy, 
 func (s *Service) fillDirty(ctx context.Context, w *WorktreeInfo, staleAfter time.Duration, now time.Time) {
 	st, err := s.repo.InDir(w.Path).Status(ctx)
 	if err != nil {
-		return // Dirty stays nil; the worktree still reads as free-by-facts
+		// Never read a failed status as "clean": that would hand an agent a
+		// worktree whose changes we could not see.
+		w.BlockedBy = append(w.BlockedBy, "status-failed")
+		return
 	}
 	c := st.Counts()
 	d := &DirtyInfo{Staged: c.Staged, Unstaged: c.Unstaged, Untracked: c.Untracked}
@@ -1355,13 +1663,14 @@ git commit -m "feat(domain): worktree inventory with free verdict for agents"
 - Produces:
 ```go
 var ErrNotAgent = errors.New("only an agent running inside gg can claim")
+type SessionNotLiveError struct{ ID string }                 // Error(): "session <id> is not running in any gg"
 var ErrNotHolder = errors.New("the claim belongs to another session")
 type NotFreeError struct{ Path string; BlockedBy []string }   // Error(): "<path> is not free: a, b"
 var ErrUnknownWorktree = errors.New("no such worktree")
-func (s *Service) ClaimWorktree(ctx context.Context, path, sessionID, agent, note string, pol InventoryPolicy) error
+func (s *Service) ClaimWorktree(ctx context.Context, path, sessionID, note string, pol InventoryPolicy) error
 func (s *Service) ReleaseWorktree(ctx context.Context, path, sessionID string, force bool) (released bool, err error)
 type WorktreeMark struct { Reserved bool; Claim *ClaimInfo }
-func (s *Service) WorktreeMarks(ctx context.Context, reserved []string) map[string]WorktreeMark  // key = worktree Path as listed
+func (s *Service) WorktreeMarks(wts []model.Worktree, reserved []string) map[string]WorktreeMark  // key = worktree Path as listed; wts = the list the caller just loaded
 func (s *Service) SetWorktreeReserved(ctx context.Context, cfgPath string, current []string, path string, on bool) error
 ```
 
@@ -1372,21 +1681,21 @@ func TestClaimAndRelease(t *testing.T) {
 	t.Parallel()
 	main, svc, reg := inventoryRepo(t)
 	wt := addWT(t, main, "c")
-	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, State: "running"}}})
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, Agent: "claude", State: "running"}}})
 	ctx := context.Background()
-	if err := svc.ClaimWorktree(ctx, wt, "", "claude", "", pol()); !errors.Is(err, ErrNotAgent) {
+	if err := svc.ClaimWorktree(ctx, wt, "", "", pol()); !errors.Is(err, ErrNotAgent) {
 		t.Fatalf("no session = %v", err)
 	}
-	if err := svc.ClaimWorktree(ctx, wt, "p/s1", "claude", "https://x/1", pol()); err != nil {
+	if err := svc.ClaimWorktree(ctx, wt, "p/s1", "https://x/1", pol()); err != nil {
 		t.Fatal(err)
 	}
 	var nf *NotFreeError
-	if err := svc.ClaimWorktree(ctx, wt, "p/s1", "claude", "", pol()); !errors.As(err, &nf) || !slices.Contains(nf.BlockedBy, "claimed") {
+	if err := svc.ClaimWorktree(ctx, wt, "p/s1", "", pol()); !errors.As(err, &nf) || !slices.Contains(nf.BlockedBy, "claimed") {
 		t.Fatalf("second claim = %v", err)
 	}
 	infos, _ := svc.WorktreeInventory(ctx, pol(), false)
-	if w := find(t, infos, wt); w.Claim == nil || w.Claim.Note != "https://x/1" {
-		t.Fatalf("claim = %+v", w.Claim)
+	if w := find(t, infos, wt); w.Claim == nil || w.Claim.Note != "https://x/1" || w.Claim.Agent != "claude" {
+		t.Fatalf("claim = %+v (agent must come from the registry entry)", w.Claim)
 	}
 	if _, err := svc.ReleaseWorktree(ctx, wt, "p/s9", false); !errors.Is(err, ErrNotHolder) {
 		t.Fatalf("non-holder release = %v", err)
@@ -1405,14 +1714,78 @@ func TestClaimSweepsClaimOfDeadRegistry(t *testing.T) {
 	wt := addWT(t, main, "d")
 	sessionreg.Write(reg, "dead", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "dead/s1", Dir: main, State: "running"}}})
 	ctx := context.Background()
-	if err := svc.ClaimWorktree(ctx, wt, "dead/s1", "claude", "", pol()); err != nil {
+	if err := svc.ClaimWorktree(ctx, wt, "dead/s1", "", pol()); err != nil {
 		t.Fatal(err)
 	}
 	past := time.Now().Add(-2 * sessionreg.LiveWindow)
 	os.Chtimes(filepath.Join(reg, "dead.json"), past, past)
 	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 2, Sessions: []sessionreg.Entry{{ID: "p/s2", Dir: main, State: "running"}}})
-	if err := svc.ClaimWorktree(ctx, wt, "p/s2", "codex", "", pol()); err != nil {
+	if err := svc.ClaimWorktree(ctx, wt, "p/s2", "", pol()); err != nil {
 		t.Fatalf("claim over a dead claim = %v", err)
+	}
+}
+
+func TestStalledRegistryKeepsClaim(t *testing.T) {
+	t.Parallel()
+	main, svc, reg := inventoryRepo(t)
+	wt := addWT(t, main, "stall")
+	proc := fmt.Sprintf("%d-1", os.Getpid()) // a live process, not this one's ProcTag
+	sessionreg.Write(reg, proc, sessionreg.Registry{PID: os.Getpid(), Sessions: []sessionreg.Entry{{ID: proc + "/s1", Dir: main, State: "running"}}})
+	ctx := context.Background()
+	if err := svc.ClaimWorktree(ctx, wt, proc+"/s1", "", pol()); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-2 * sessionreg.LiveWindow)
+	os.Chtimes(filepath.Join(reg, proc+".json"), past, past) // the TUI froze
+	infos, _ := svc.WorktreeInventory(ctx, pol(), false)
+	if w := find(t, infos, wt); w.Claim == nil {
+		t.Fatal("a stalled registry of a LIVE process must keep its claim")
+	}
+}
+
+func TestClaimRefusesDeadSession(t *testing.T) {
+	t.Parallel()
+	main, svc, _ := inventoryRepo(t)
+	wt := addWT(t, main, "nolive")
+	var nl *SessionNotLiveError
+	if err := svc.ClaimWorktree(context.Background(), wt, "0-1/s1", "", pol()); !errors.As(err, &nl) {
+		t.Fatalf("claim by a dead session = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(git.GitDirAt(wt), wtclaim.FileName)); !os.IsNotExist(err) {
+		t.Fatal("no claim file may be written")
+	}
+}
+
+func TestClaimRefusesMissingWorktree(t *testing.T) {
+	t.Parallel()
+	main, svc, reg := inventoryRepo(t)
+	wt := addWT(t, main, "gone")
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, State: "running"}}})
+	os.RemoveAll(wt)
+	var nf *NotFreeError
+	if err := svc.ClaimWorktree(context.Background(), wt, "p/s1", "", pol()); !errors.As(err, &nf) || !slices.Contains(nf.BlockedBy, "missing") {
+		t.Fatalf("claim on a missing worktree = %v", err)
+	}
+	if _, err := os.Stat(wtclaim.FileName); !os.IsNotExist(err) {
+		t.Fatal("gg-claim written into the cwd")
+	}
+}
+
+func TestEmptyClaimFileDiesAfterGrace(t *testing.T) {
+	t.Parallel()
+	main, svc, _ := inventoryRepo(t)
+	wt := addWT(t, main, "empty")
+	f := filepath.Join(git.GitDirAt(wt), wtclaim.FileName)
+	os.WriteFile(f, nil, 0o644)
+	infos, _ := svc.WorktreeInventory(context.Background(), pol(), false)
+	if find(t, infos, wt).Claim == nil {
+		t.Fatal("a fresh empty claim is mid-write: alive")
+	}
+	past := time.Now().Add(-time.Minute)
+	os.Chtimes(f, past, past)
+	infos, _ = svc.WorktreeInventory(context.Background(), pol(), false)
+	if find(t, infos, wt).Claim != nil {
+		t.Fatal("an old empty claim is a crashed claimer's: dead")
 	}
 }
 
@@ -1422,7 +1795,7 @@ func TestExitedSessionClaimIsDead(t *testing.T) {
 	wt := addWT(t, main, "e")
 	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, State: "running"}}})
 	ctx := context.Background()
-	svc.ClaimWorktree(ctx, wt, "p/s1", "claude", "", pol())
+	svc.ClaimWorktree(ctx, wt, "p/s1", "", pol())
 	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, State: "exited"}}})
 	infos, _ := svc.WorktreeInventory(ctx, pol(), false)
 	if w := find(t, infos, wt); w.Claim != nil || !w.Free {
@@ -1439,7 +1812,7 @@ func TestReleaseForce(t *testing.T) {
 	wt := addWT(t, main, "f")
 	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, State: "running"}}})
 	ctx := context.Background()
-	svc.ClaimWorktree(ctx, wt, "p/s1", "claude", "", pol())
+	svc.ClaimWorktree(ctx, wt, "p/s1", "", pol())
 	if ok, err := svc.ReleaseWorktree(ctx, wt, "", true); err != nil || !ok {
 		t.Fatalf("force release = %v %v", ok, err)
 	}
@@ -1459,8 +1832,15 @@ func TestWorktreeMarksAndReserve(t *testing.T) {
 	if !slices.Equal(c.Agents.Reserved, []string{filepath.ToSlash(rel)}) {
 		t.Fatalf("reserved = %q, want relative %q", c.Agents.Reserved, rel)
 	}
-	marks := svc.WorktreeMarks(ctx, c.Agents.Reserved)
-	if !marks[wt].Reserved {
+	wts, _ := svc.Worktrees(ctx)
+	marks := svc.WorktreeMarks(wts, c.Agents.Reserved)
+	reservedSeen := false
+	for p, mk := range marks {
+		if SameCheckout(p, wt) && mk.Reserved {
+			reservedSeen = true
+		}
+	}
+	if !reservedSeen {
 		t.Fatalf("marks = %+v", marks)
 	}
 	if err := svc.SetWorktreeReserved(ctx, cfg, c.Agents.Reserved, wt, false); err != nil {
@@ -1473,7 +1853,7 @@ func TestWorktreeMarksAndReserve(t *testing.T) {
 }
 ```
 
-(`marks[wt]` keys on the path `svc.Worktrees` lists; if git reports a symlink-resolved temp path on macOS, look the key up via `SameCheckout` instead — write the lookup that way from the start: iterate `marks` and match.)
+
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -1494,6 +1874,10 @@ var (
 	ErrUnknownWorktree = errors.New("no such worktree")
 )
 
+type SessionNotLiveError struct{ ID string }
+
+func (e *SessionNotLiveError) Error() string { return "session " + e.ID + " is not running in any gg" }
+
 type NotFreeError struct {
 	Path      string
 	BlockedBy []string
@@ -1508,9 +1892,21 @@ type WorktreeMark struct {
 	Claim    *ClaimInfo
 }
 
-// liveClaim reports gitDir's claim when its session is alive; a dead one is
-// removed on the spot. A claim with no session is mid-write (O_EXCL created,
-// not yet written) and counts as alive.
+// emptyClaimGrace: a claim file with no session is a claimer between O_EXCL
+// and its write — alive this long, then a crashed claimer's.
+const emptyClaimGrace = 10 * time.Second
+
+func claimDead(c wtclaim.Claim, gitDir string, lv liveView) bool {
+	if c.Session == "" {
+		age, ok := wtclaim.Age(gitDir)
+		return ok && age > emptyClaimGrace
+	}
+	return sessionDead(c.Session, lv)
+}
+
+// liveClaim reports gitDir's claim when alive. A dead one is removed under
+// the claim lock after a re-read, so a sweeper never deletes a claim someone
+// created after its first read.
 func liveClaim(gitDir string, lv liveView) (ClaimInfo, bool) {
 	if gitDir == "" {
 		return ClaimInfo{}, false
@@ -1519,74 +1915,117 @@ func liveClaim(gitDir string, lv liveView) (ClaimInfo, bool) {
 	if err != nil || !ok {
 		return ClaimInfo{}, false
 	}
-	if c.Session != "" && !lv.running[c.Session] {
+	if claimDead(c, gitDir, lv) {
+		_ = wtclaim.WithLock(gitDir, func() error {
+			again, ok, err := wtclaim.Read(gitDir)
+			if err == nil && ok && again == c && claimDead(again, gitDir, lv) {
+				return wtclaim.Remove(gitDir)
+			}
+			return nil
+		})
+		return ClaimInfo{}, false
+	}
+	return ClaimInfo{Session: c.Session, Agent: c.Agent, Since: c.Since, Note: c.Note}, true
+}
+
+func (s *Service) worktreeAt(ctx context.Context, path string) (model.Worktree, error) {
+	wts, err := s.Worktrees(ctx)
+	if err != nil {
+		return model.Worktree{}, err
+	}
+	for _, w := range wts {
+		if SameCheckout(w.Path, path) {
+			return w, nil
+		}
+	}
+	return model.Worktree{}, ErrUnknownWorktree
+}
+
+func (s *Service) ClaimWorktree(ctx context.Context, path, sessionID, note string, pol InventoryPolicy) error {
+	if sessionID == "" {
+		return ErrNotAgent
+	}
+	lv := readLive(s.registryDir())
+	if !lv.running[sessionID] {
+		return &SessionNotLiveError{ID: sessionID}
+	}
+	infos, err := s.inventory(ctx, pol, path) // this worktree only; sweeps a dead claim
+	if err != nil {
+		return err
+	}
+	if len(infos) == 0 {
+		return ErrUnknownWorktree
+	}
+	target := infos[0]
+	if !target.Free {
+		return &NotFreeError{Path: target.Path, BlockedBy: target.BlockedBy}
+	}
+	gitDir := git.GitDirAt(target.Path)
+	if gitDir == "" {
+		return &NotFreeError{Path: target.Path, BlockedBy: []string{"missing"}}
+	}
+	return wtclaim.WithLock(gitDir, func() error {
+		// Between the inventory read and the lock a dead claim may have
+		// appeared dead-then-live or been swept; decide again, locked.
+		if c, ok, err := wtclaim.Read(gitDir); err == nil && ok {
+			if !claimDead(c, gitDir, lv) {
+				return &NotFreeError{Path: target.Path, BlockedBy: []string{"claimed"}}
+			}
+			if err := wtclaim.Remove(gitDir); err != nil {
+				return err
+			}
+		}
+		err := wtclaim.Create(gitDir, wtclaim.Claim{Session: sessionID, Agent: lv.agents[sessionID],
+			Since: time.Now().UTC().Truncate(time.Second), Note: note})
+		if errors.Is(err, wtclaim.ErrClaimed) {
+			return &NotFreeError{Path: target.Path, BlockedBy: []string{"claimed"}}
+		}
+		return err
+	})
+}
+
+func (s *Service) ReleaseWorktree(ctx context.Context, path, sessionID string, force bool) (bool, error) {
+	w, err := s.worktreeAt(ctx, path)
+	if err != nil {
+		return false, err
+	}
+	gitDir := git.GitDirAt(w.Path)
+	if gitDir == "" {
+		return false, nil
+	}
+	released := false
+	err = wtclaim.WithLock(gitDir, func() error {
+		c, ok := liveClaimLocked(gitDir, readLive(s.registryDir()))
+		if !ok {
+			return nil
+		}
+		if !force && c.Session != sessionID {
+			return ErrNotHolder
+		}
+		released = true
+		return wtclaim.Remove(gitDir)
+	})
+	return released, err
+}
+
+// liveClaimLocked is liveClaim for a caller already holding the claim lock
+// (filelock is not re-entrant).
+func liveClaimLocked(gitDir string, lv liveView) (ClaimInfo, bool) {
+	c, ok, err := wtclaim.Read(gitDir)
+	if err != nil || !ok {
+		return ClaimInfo{}, false
+	}
+	if claimDead(c, gitDir, lv) {
 		_ = wtclaim.Remove(gitDir)
 		return ClaimInfo{}, false
 	}
 	return ClaimInfo{Session: c.Session, Agent: c.Agent, Since: c.Since, Note: c.Note}, true
 }
 
-func (s *Service) worktreeAt(ctx context.Context, path string) (model.Worktree, bool, error) {
-	wts, err := s.Worktrees(ctx)
-	if err != nil {
-		return model.Worktree{}, false, err
-	}
-	for i, w := range wts {
-		if SameCheckout(w.Path, path) {
-			return w, i == 0, nil
-		}
-	}
-	return model.Worktree{}, false, ErrUnknownWorktree
-}
-
-func (s *Service) ClaimWorktree(ctx context.Context, path, sessionID, agent, note string, pol InventoryPolicy) error {
-	if sessionID == "" {
-		return ErrNotAgent
-	}
-	infos, err := s.WorktreeInventory(ctx, pol, false) // sweeps dead claims as it reads
-	if err != nil {
-		return err
-	}
-	var target *WorktreeInfo
-	for i := range infos {
-		if SameCheckout(infos[i].Path, path) {
-			target = &infos[i]
-		}
-	}
-	if target == nil {
-		return ErrUnknownWorktree
-	}
-	if !target.Free {
-		return &NotFreeError{Path: target.Path, BlockedBy: target.BlockedBy}
-	}
-	err = wtclaim.Create(git.GitDirAt(target.Path), wtclaim.Claim{Session: sessionID, Agent: agent, Since: time.Now().UTC().Truncate(time.Second), Note: note})
-	if errors.Is(err, wtclaim.ErrClaimed) {
-		return &NotFreeError{Path: target.Path, BlockedBy: []string{"claimed"}}
-	}
-	return err
-}
-
-func (s *Service) ReleaseWorktree(ctx context.Context, path, sessionID string, force bool) (bool, error) {
-	w, _, err := s.worktreeAt(ctx, path)
-	if err != nil {
-		return false, err
-	}
-	gitDir := git.GitDirAt(w.Path)
-	c, ok := liveClaim(gitDir, readLive(s.registryDir()))
-	if !ok {
-		return false, nil
-	}
-	if !force && c.Session != sessionID {
-		return false, ErrNotHolder
-	}
-	return true, wtclaim.Remove(gitDir)
-}
-
 // WorktreeMarks is the TUI's cheap view: reserve + live claim per worktree,
-// no git status.
-func (s *Service) WorktreeMarks(ctx context.Context, reserved []string) map[string]WorktreeMark {
-	wts, err := s.Worktrees(ctx)
-	if err != nil || len(wts) == 0 {
+// no git status, over the list the caller just loaded.
+func (s *Service) WorktreeMarks(wts []model.Worktree, reserved []string) map[string]WorktreeMark {
+	if len(wts) == 0 {
 		return nil
 	}
 	res := resolveReserved(wts[0].Path, reserved)
@@ -1610,11 +2049,11 @@ func (s *Service) WorktreeMarks(ctx context.Context, reserved []string) map[stri
 }
 
 // SetWorktreeReserved adds (on) or removes path in [agents] reserved of the
-// repo config at cfgPath. current is the configured list; new entries are
-// stored relative to the main worktree (slash-separated) so a committed
-// .gg.toml works on every machine.
+// repo config at cfgPath. current is the configured (repo-only) list; new
+// entries are stored relative to the main worktree (slash-separated) so a
+// committed .gg.toml works on every machine.
 func (s *Service) SetWorktreeReserved(ctx context.Context, cfgPath string, current []string, path string, on bool) error {
-	w, _, err := s.worktreeAt(ctx, path)
+	w, err := s.worktreeAt(ctx, path)
 	if err != nil {
 		return err
 	}
@@ -1638,6 +2077,8 @@ func (s *Service) SetWorktreeReserved(ctx context.Context, cfgPath string, curre
 }
 ```
 
+`wtclaim.Claim` holds only comparable fields, so `again == c` compiles; the TOML round trip of the same bytes yields equal `time.Time` values.
+
 Note `resolveReserved` must handle slash-separated relative entries on Windows: `filepath.Join` accepts `/` there, so no change needed.
 
 - [ ] **Step 4: Run to verify pass**
@@ -1659,6 +2100,7 @@ git commit -m "feat(domain): session-bound worktree claims with dead-claim sweep
 **Files:**
 - Modify: `internal/cli/worktree.go` (dispatch + `cmdWorktreeList` flags + usage strings)
 - Create: `internal/cli/worktree_agents.go`
+- Modify: `internal/cli/main_test.go` (pin `XDG_STATE_HOME`, same shape as Task 5's domain TestMain)
 - Test: `internal/cli/worktree_agents_test.go`
 
 **Interfaces:**
@@ -1676,8 +2118,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/homeend/gigagit/internal/sessionreg"
 )
 
 // agentEnv pins XDG_STATE_HOME (the CLI reads the registry from
@@ -1687,7 +2127,13 @@ func agentEnv(t *testing.T, dir string) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
 	reg := filepath.Join(state, "gg", "sessions")
-	if err := sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: dir, State: "running"}}}); err != nil {
+	// Written by hand: the frontends may not import sessionreg (archtest).
+	body, _ := json.Marshal(map[string]any{"pid": 1, "worktree": "", "sessions": []map[string]string{
+		{"id": "p/s1", "dir": dir, "agent": "claude", "state": "running"}}})
+	if err := os.MkdirAll(reg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(reg, "p.json"), body, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("GG_SESSION_ID", "p/s1")
@@ -1742,6 +2188,17 @@ func TestWorktreeClaimWithoutSession(t *testing.T) {
 	code, _, errb := runCLI(t, dir, "worktree", "claim", wt)
 	if code != 2 || !strings.Contains(errb, "only an agent running inside gg can claim") {
 		t.Fatalf("claim = %d %q", code, errb)
+	}
+}
+
+func TestWorktreeClaimDeadSession(t *testing.T) {
+	dir := newCLIRepo(t)
+	agentEnv(t, dir)
+	wt := cliWorktree(t, dir, "a", "wt-a")
+	t.Setenv("GG_SESSION_ID", "0-1/s9")
+	code, _, errb := runCLI(t, dir, "worktree", "claim", wt)
+	if code != 2 || !strings.Contains(errb, "is not running in any gg") {
+		t.Fatalf("claim by a dead session = %d %q", code, errb)
 	}
 }
 
@@ -1830,18 +2287,17 @@ package cli
 // (imports: context, encoding/json, errors, flag, fmt, io, os, path/filepath,
 //  time, config, domain)
 
-// agentsConfig loads [agents] plus the active repo config path it came from.
+// agentsConfig loads [agents] plus the active repo config path it came
+// from — anchored on the MAIN worktree, never the cwd worktree's copy of
+// .gg.toml (reserve writes must land in one place for the whole repo).
 func agentsConfig(svc *domain.Service) (config.AgentsConfig, string, error) {
 	ctx := context.Background()
-	top, err := svc.TopLevel(ctx)
-	if err != nil {
-		return config.AgentsConfig{}, "", err
-	}
 	wts, err := svc.Worktrees(ctx)
 	if err != nil || len(wts) == 0 {
 		return config.AgentsConfig{}, "", fmt.Errorf("no worktrees: %v", err)
 	}
-	path := config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), config.PrivateRepoPath(wts[0].Path))
+	mainPath := wts[0].Path
+	path := config.ActiveRepoConfigPath(filepath.Join(mainPath, ".gg.toml"), config.PrivateRepoPath(mainPath))
 	cfg, err := config.Load(config.DefaultGlobalPath(), path)
 	if err != nil {
 		return config.AgentsConfig{}, "", err
@@ -1998,9 +2454,12 @@ func cmdWorktreeClaim(svc *domain.Service, args []string, stdout, stderr io.Writ
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	agent := os.Getenv("GG_AGENT")
-	if err := svc.ClaimWorktree(context.Background(), path, sid, agent, *note, pol); err != nil {
+	if err := svc.ClaimWorktree(context.Background(), path, sid, *note, pol); err != nil {
 		fmt.Fprintln(stderr, "worktree claim:", err)
+		var nl *domain.SessionNotLiveError
+		if errors.As(err, &nl) {
+			return 2
+		}
 		return 1
 	}
 	fmt.Fprintf(stdout, "claimed %s\n", path)
@@ -2058,14 +2517,19 @@ func cmdWorktreeReserve(svc *domain.Service, args []string, stdout, stderr io.Wr
 	return 0
 }
 
-// resolveWorktreeArg maps a user/agent-typed path to the listed worktree.
-func resolveWorktreeArg(svc *domain.Service, arg, verb string, stderr io.Writer) (string, int) {
+// resolveWorktreeArg maps a user/agent-typed path to the listed worktree. A
+// relative arg is taken against workdir (the CLI's "here"), never the
+// process cwd — matchWorktreeArg's own filepath.Abs uses the latter.
+func resolveWorktreeArg(svc *domain.Service, workdir, arg, verb string, stderr io.Writer) (string, int) {
 	wts, err := svc.Worktrees(context.Background())
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return "", 1
 	}
-	m := matchWorktreeArg(wts, arg)
+	if !filepath.IsAbs(arg) {
+		arg = filepath.Join(workdir, arg)
+	}
+	m := matchWorktreeArg(wts, filepath.Clean(arg))
 	if m == nil {
 		fmt.Fprintf(stderr, "worktree %s: no worktree at %q\n", verb, arg)
 		return "", 1
@@ -2074,7 +2538,7 @@ func resolveWorktreeArg(svc *domain.Service, arg, verb string, stderr io.Writer)
 }
 ```
 
-Delete the old `cmdWorktreeList(svc, stdout, stderr)` in `worktree.go`. Check `matchWorktreeArg`'s signature (`grep -n 'func matchWorktreeArg' internal/cli/worktree.go`) — it returns `*model.Worktree`; it must resolve relative args against the CLI's workdir: if it does not accept a workdir, make `resolveWorktreeArg` absolutise `arg` against the CLI workdir first (thread `workdir` from `cmdWorktree` into these functions, as `cmdWorktreeAdd` does). `GG_AGENT` is the harness name `gg note` already reads (`note.go:189`); an empty agent is fine.
+Delete the old `cmdWorktreeList(svc, stdout, stderr)` in `worktree.go`. Thread `workdir` from `cmdWorktree` into `cmdWorktreeClaim`/`Release`/`Reserve` (as `cmdWorktreeAdd` receives it) and pass it to every `resolveWorktreeArg` call; the function signatures above gain a leading `workdir string` parameter accordingly (e.g. `cmdWorktreeClaim(svc, workdir, args, stdout, stderr)`). `matchWorktreeArg` compares `wts[i].Path == target` exactly, so the cleaned absolute arg matches. Imports gain `errors`; `os` stays (for `GG_SESSION_ID`).
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -2180,7 +2644,7 @@ git commit -m "feat(gitwatch): a worktree claim file refreshes the Worktrees sou
 - Test: `internal/tui/worktree_marks_test.go`
 
 **Interfaces:**
-- Consumes: `domain.PublishSessions`, `domain.SessionRegistryDir`, `svc.WorktreeMarks`, `svc.ReleaseWorktree`, `svc.SetWorktreeReserved`, `m.cfg.Agents.Reserved`, `m.repoConfigPath`.
+- Consumes: `domain.PublishSessions`, `domain.SessionRegistryDir`, `svc.WorktreeMarks(wts, reserved)`, `svc.ReleaseWorktree`, `svc.SetWorktreeReserved`, `m.cfg.Agents.Reserved`, `m.repoConfigPath` (verify it is the main-worktree-anchored ACTIVE repo config; if it follows the cwd worktree, resolve the main one the way Task 8's `agentsConfig` does).
 - Produces: `func (m Model) worktreeMarkPrefix(path string) string`, `func (m Model) worktreeClaimHint() string`, `func (m Model) worktreeMarkRows(wt model.Worktree) []actionRow`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -2220,6 +2684,20 @@ func TestWorktreeMarkMenuRows(t *testing.T) {
 	m.sel[panelWorktrees] = 2 // the reserved one
 	if ids := rowIDs(m.sessionMenuRows()); !slices.Contains(ids, "worktree-unreserve") {
 		t.Fatalf("ids = %v", ids)
+	}
+}
+
+func TestRecyclePickerMarksClaimedAndReserved(t *testing.T) {
+	t.Parallel()
+	m := worktreeMarksModel(t)
+	m = m.openRecyclePicker("loose", "")
+	var labels []string
+	for _, r := range m.actionMenu.rows {
+		labels = append(labels, r.label)
+	}
+	joined := strings.Join(labels, "\n")
+	if !strings.Contains(joined, "(claimed by claude)") || !strings.Contains(joined, "(reserved)") {
+		t.Fatalf("picker rows = %q", labels)
 	}
 }
 
@@ -2390,7 +2868,7 @@ The reserve write changes the repo config; confirm the TUI reloads `m.cfg` after
 
 `view.go worktreeRows`: `out = append(out, marker+m.worktreeMarkPrefix(w.Path)+branch+"  "+w.Path)`. Bottom bar: `add(m.worktreeClaimHint())` right after `add(m.commitBranchHint())`.
 
-Data: `source.go` `worktreesPayload` gains `marks map[string]domain.WorktreeMark`; in the `srcWorktrees` loader add `marks := svc.WorktreeMarks(ctx, reserved)` where `reserved` is captured from `m.cfg.Agents.Reserved` when the load cmd is built (the loader closure already captures model state — follow how it captures `svc`). `model.go:1923` apply: `m.worktreeMarks = p.marks`. `load.go`: same for the initial snapshot (`dataLoadedMsg.worktreeMarks`, filled next to `worktrees` using `cfg.Agents.Reserved`, applied at `model.go:1695`).
+Data: `source.go` `worktreesPayload` gains `marks map[string]domain.WorktreeMark`; in the `srcWorktrees` loader add `marks := svc.WorktreeMarks(wts, reserved)` (the list the loader just read — no second `git worktree list`) where `reserved` is captured from `m.cfg.Agents.Reserved` when the load cmd is built (the loader closure already captures model state — follow how it captures `svc`). `model.go:1923` apply: `m.worktreeMarks = p.marks`. `load.go`: same for the initial snapshot (`dataLoadedMsg.worktreeMarks`, filled next to `worktrees` using `cfg.Agents.Reserved`, applied at `model.go:1695`).
 
 Session changes must refresh marks: in the existing sessions-changed handler (`waitSessionsCmd` result), add `srcWorktrees` to the reload when the session count or states changed — find it with `grep -n 'waitSessionsCmd' internal/tui/*.go`.
 
@@ -2455,6 +2933,8 @@ Only an agent running inside gg (it has `GG_SESSION_ID`) can claim.
 
 A claim ends by itself when your session ends. `gg worktree list --json`
 without `--free` lists every worktree with `blocked_by` reasons.
+`git-lock` can appear for one listing while another reader's `git status`
+holds `index.lock` — list again before giving up on a worktree.
 ```
 
 - [ ] **Step 2: bump `agentskill.Version`**, CHANGELOG entry (new section at the top, matching the file's format), README, CLAUDE.md rows:
