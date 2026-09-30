@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -323,6 +324,27 @@ func steerEnumRefusal(c steer.Command) string {
 			return "background needs a content link"
 		}
 	}
+	switch c.Cmd {
+	case "note_add":
+		switch {
+		case c.FileID == "" && c.File == "":
+			return "note_add needs a file"
+		case c.Start < 1:
+			return "a line number is 1-based"
+		case c.End < c.Start:
+			return "the range ends before it starts"
+		case strings.TrimSpace(c.Summary) == "":
+			return "a note needs a summary"
+		}
+	case "note_show":
+		if c.NoteID == "" {
+			return "note_show needs a note id"
+		}
+	case "note_rm":
+		if c.NoteID == "" && c.FileID == "" && c.File == "" {
+			return "note_rm needs a note id or a file"
+		}
+	}
 	if c.Cmd == "file_focus" && c.FileID == "" && c.File == "" {
 		return "file_focus needs an id or a path"
 	}
@@ -358,8 +380,11 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
 	// The open-files list verbs never move the screen, so nothing the user
-	// is doing refuses them (steer_files.go).
+	// is doing refuses them (steer_files.go) — and neither do an agent's
+	// temporary notes (steer_file_notes.go).
 	switch {
+	case strings.HasPrefix(c.Cmd, "note_"):
+		return m.steerFileNote(c)
 	case c.Cmd == "files":
 		return m.steerFiles(c)
 	case c.Cmd == "serve":

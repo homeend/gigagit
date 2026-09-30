@@ -78,7 +78,7 @@ type Line struct {
 // there is exactly one landing path.
 type Command struct {
 	ID     string  `json:"id"`
-	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "serve" (TUI only: serve its web page; Reply.Detail = the URL)
+	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "note_add" | "note_list" | "note_show" | "note_rm" | "serve" (TUI only: serve its web page; Reply.Detail = the URL)
 	File   string  `json:"file,omitempty"` // repo-relative, git slash form
 	Target *Target `json:"target,omitempty"`
 	Commit string  `json:"commit,omitempty"` // navigate: reveal this commit, no file
@@ -103,6 +103,13 @@ type Command struct {
 	// `gg session files` lists it); File names one by path instead. Not
 	// ID: that is the command's own id.
 	FileID string `json:"file_id,omitempty"`
+	// NoteID names a temporary open-file note ("t<n>") for note_show and
+	// note_rm. Summary/Rationale/Author are note_add's text; File/FileID
+	// name its file and Start/End its 1-based line range.
+	NoteID    string `json:"note_id,omitempty"`
+	Summary   string `json:"summary,omitempty"`
+	Rationale string `json:"rationale,omitempty"`
+	Author    string `json:"author,omitempty"`
 	// HintKind/HintID name the UI surface a navigate's link was copied from
 	// ("bookmark", "shelf", "stash", "preview", "version" or "view" —
 	// model.LinkHint's closed set, spec
@@ -135,17 +142,36 @@ type Reply struct {
 	// Files is the files command's answer: the TUI's open files, most
 	// recently shown first.
 	Files []OpenFile `json:"files,omitempty"`
+	// Notes is the note verbs' answer: the note added, the notes listed, or
+	// the one shown (with Text).
+	Notes []FileNote `json:"notes,omitempty"`
+}
+
+// FileNote is one temporary note on a file open in a live TUI. It lives in
+// that TUI's memory only and is gone when the file is closed. Protocol data.
+type FileNote struct {
+	ID        string   `json:"id"`      // "t<n>"
+	FileID    string   `json:"file_id"` // the open file's "f<n>"
+	Path      string   `json:"path"`
+	Start     int      `json:"start"` // 1-based, as the lines sit NOW
+	End       int      `json:"end"`
+	Summary   string   `json:"summary"`
+	Rationale string   `json:"rationale,omitempty"`
+	Author    string   `json:"author,omitempty"`
+	Outdated  bool     `json:"outdated,omitempty"` // its lines are gone from the file
+	Text      []string `json:"text,omitempty"`     // note_show only: the lines it sits on
 }
 
 // OpenFile is one file open in a live TUI: a row of `gg session files` and of
 // the session snapshot's open_files. Protocol data, never display text.
 type OpenFile struct {
-	ID     string `json:"id"`             // "f<n>" — what `gg session files focus` takes
-	Path   string `json:"path"`           // repo-relative, git slash form
-	Source string `json:"source"`         // "worktree" | "commit" | "shelf"
-	Rev    string `json:"rev,omitempty"`  // the commit sha / the shelf entry id
-	Line   int    `json:"line,omitempty"` // the cursor, 1-based; 0 = not loaded
-	State  string `json:"state"`          // "shown" | "background"
+	ID     string `json:"id"`              // "f<n>" — what `gg session files focus` takes
+	Path   string `json:"path"`            // repo-relative, git slash form
+	Source string `json:"source"`          // "worktree" | "commit" | "shelf"
+	Rev    string `json:"rev,omitempty"`   // the commit sha / the shelf entry id
+	Line   int    `json:"line,omitempty"`  // the cursor, 1-based; 0 = not loaded
+	State  string `json:"state"`           // "shown" | "background"
+	Notes  int    `json:"notes,omitempty"` // temporary notes an agent left on it
 }
 
 // Presence records a live session. PID is display-only: liveness is decided by

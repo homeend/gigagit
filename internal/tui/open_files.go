@@ -284,6 +284,7 @@ func (m Model) openFilesProto() []steer.OpenFile {
 		if m.docShown(d) {
 			f.State = "shown"
 		}
+		f.Notes = len(d.notes)
 		out = append(out, f)
 	}
 	return out
