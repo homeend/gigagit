@@ -57,7 +57,7 @@ func Summary(src string) (summary, rest, rawFirst string) {
 	if strings.Contains(first, "|") {
 		lines := strings.SplitN(body, "\n", 3)
 		if len(lines) > 1 {
-			if _, _, ok := parseTable(lines[:2], 0); ok {
+			if _, _, ok := parseTable(lines[:2], 0, Options{}); ok {
 				return LabelTable, body, ""
 			}
 		}

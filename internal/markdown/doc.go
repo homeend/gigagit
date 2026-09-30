@@ -10,7 +10,8 @@
 // input, deep nesting and very wide tables degrade to plain paragraphs. Raw
 // HTML is never interpreted; it is ordinary text. A link or image destination
 // survives only when it is http(s) (see safeURL), so no consumer ever holds
-// another scheme in Inline.URL.
+// another scheme in an InLink's or InImage's URL. ParseWith lets one caller
+// keep other destinations it accepts — as InAnchor, never as a link.
 //
 // Pure: stdlib + internal/syntax (fenced code colouring). No git, domain, TUI
 // or web imports.
@@ -38,7 +39,18 @@ const (
 	InImage  = "image"
 	InRef    = "ref" // an @mention or a #123 reference: styled, never an action
 	InBreak  = "br"
+	// InAnchor is a link whose destination the caller's Options.Anchor
+	// accepted (ParseWith only): URL is the destination as written, In the
+	// label. The parser leaves Text empty — a consumer may number anchors there.
+	InAnchor = "anchor"
 )
+
+// Options tunes ParseWith. The zero value is Parse.
+type Options struct {
+	// Anchor is asked about every link destination that is not http(s) and
+	// not a dropped scheme; a destination it accepts becomes an InAnchor.
+	Anchor func(dest string) bool
+}
 
 // Task states of a list item.
 const (
