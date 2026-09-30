@@ -742,14 +742,12 @@ func foldSeparator(n, w int, marked bool) string {
 	return st().diffFold.Render(strings.Repeat("─", left) + label + strings.Repeat("─", right))
 }
 
-// noteRowCells paints one box row as a full diff row: the box in the pane the
-// note belongs to (old = left, new = right) and blank space in the other, so
-// the note visibly hangs off one version of the file. The text was wrapped to
-// the pane when the rows were laid out; truncate is only a guard against a
-// width the layout has not caught up with. Frame rows draw the rounded rule
-// (the title sits in the top one), summary rows bold, rationale rows dim, and
-// a stale box is grey throughout.
-func noteRowCells(nl noteLine, paneW int) string {
+// noteBoxCell paints one box row paneW columns wide — the box alone. The
+// diff view sets it in a pane (noteRowCells); the file preview draws it
+// under a line (open_file_notes.go). Frame rows draw the rounded rule (the
+// title sits in the top one), summary rows bold, rationale rows dim, and a
+// stale box is grey throughout.
+func noteBoxCell(nl noteLine, paneW int) string {
 	if paneW < 4 {
 		paneW = 4
 	}
@@ -795,6 +793,19 @@ func noteRowCells(nl noteLine, paneW int) string {
 		}
 		cell = frame.Render("│ ") + painted + frame.Render(" │")
 	}
+	return cell
+}
+
+// noteRowCells paints one box row as a full diff row: the box in the pane the
+// note belongs to (old = left, new = right) and blank space in the other, so
+// the note visibly hangs off one version of the file. The text was wrapped to
+// the pane when the rows were laid out; truncate is only a guard against a
+// width the layout has not caught up with.
+func noteRowCells(nl noteLine, paneW int) string {
+	if paneW < 4 {
+		paneW = 4
+	}
+	cell := noteBoxCell(nl, paneW)
 	blank := strings.Repeat(" ", paneW)
 	if nl.side == model.NoteSideOld {
 		return cell + "│" + blank

@@ -79,6 +79,9 @@ type openFile struct {
 	// (open_file_notes.go), ordered by start line then age. They live and
 	// die with the document: nothing stores them.
 	notes []*fileNote
+	// noteW is the width the note boxes were last drawn at (0 = never):
+	// the pager counts their rows with it between frames.
+	noteW int
 }
 
 // keepPlace makes the next fill — a reload of a file the user is reading —
@@ -170,7 +173,7 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 		d.keep.line, d.keep.top = 0, 0
 		if keep.line > 0 && d.pendingLine == 0 {
 			p.cur = min(keep.line, len(p.lines)) - 1
-			p.sel = previewClamp(keep.top, len(p.lines), rows, p.mode)
+			p.sel = p.clampTop(keep.top, rows)
 		}
 	}
 	notice = d.landPendingLine(rows)
@@ -199,6 +202,9 @@ func (d *openFile) landPendingLine(rows int) (notice string) {
 		line = n
 	}
 	p.cur = line - 1
-	p.sel = previewClamp(p.cur-rows/2, n, rows, p.mode)
+	p.sel = p.clampTop(p.cur-rows/2, rows)
+	if p.extraRows != nil {
+		p.ensureCursorVisible(rows) // a note box above may have pushed the line out
+	}
 	return notice
 }

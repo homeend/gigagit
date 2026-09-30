@@ -9,6 +9,9 @@ import (
 	"sync/atomic"
 	"unicode/utf8"
 
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -77,6 +80,7 @@ func (d *openFile) addNote(start, end int, summary, rationale, author string) (*
 	d.notes = append(d.notes, n)
 	d.sortNotes()
 	d.backgrounded = true // esc steps aside; only X closes (and drops the notes)
+	d.syncNoteRows()
 	return n, nil
 }
 
@@ -105,6 +109,7 @@ func (d *openFile) removeNote(id string) bool {
 	for i, n := range d.notes {
 		if n.id == id {
 			d.notes = append(d.notes[:i], d.notes[i+1:]...)
+			d.syncNoteRows()
 			return true
 		}
 	}
@@ -115,6 +120,7 @@ func (d *openFile) removeNote(id string) bool {
 func (d *openFile) clearNotes() int {
 	n := len(d.notes)
 	d.notes = nil
+	d.syncNoteRows()
 	return n
 }
 
@@ -246,4 +252,98 @@ func relocate(cur, anchor []string, start int) int {
 		}
 	}
 	return found
+}
+
+// noteGutterW is the column an annotated file's lines give up on the left
+// for the range mark ("│ " on a line a note covers).
+const noteGutterW = 2
+
+// gutterW is the width of d's range-mark gutter: none without notes, so an
+// ordinary file is laid out exactly as before.
+func (d *openFile) gutterW() int {
+	if len(d.notes) == 0 || !docLoaded(d) || d.p.img != nil {
+		return 0
+	}
+	return noteGutterW
+}
+
+// title is the box's top-rule text: who, which note, which lines.
+func (n *fileNote) title() string {
+	switch {
+	case n.outdated && n.start == n.end:
+		return i18n.T("%s · %s · line %d · outdated", n.author, n.id, n.start)
+	case n.outdated:
+		return i18n.T("%s · %s · lines %d-%d · outdated", n.author, n.id, n.start, n.end)
+	case n.start == n.end:
+		return i18n.T("%s · %s · line %d", n.author, n.id, n.start)
+	}
+	return i18n.T("%s · %s · lines %d-%d", n.author, n.id, n.start, n.end)
+}
+
+// boxLines lays the note out as the diff view's note box, innerW columns of
+// text inside the frame (<= 0: no wrapping). The body rows are the diff's
+// own (noteBodyLines), so a remark reads the same in both places.
+func (n *fileNote) boxLines(innerW int) []noteLine {
+	frame := func(kind noteRowKind, text string) noteLine {
+		return noteLine{id: n.id, rootID: n.id, kind: kind, side: model.NoteSideNew, text: text, stale: n.outdated, agent: true}
+	}
+	r := domain.ResolvedNote{Note: model.Note{
+		ID: n.id, Source: model.NoteSourceAgent, Author: n.author, Side: model.NoteSideNew,
+		Summary: n.summary, Rationale: n.rationale,
+	}}
+	rows := []noteLine{frame(noteRowTop, n.title()), frame(noteRowBlank, "")}
+	rows = append(rows, noteBodyLines(r, n.id, 0, innerW, n.outdated)...)
+	return append(rows, frame(noteRowBlank, ""), frame(noteRowBottom, ""))
+}
+
+// noteRowsUnder is the rows the boxes under lines [from, to) take (0-based
+// line indexes): a box hangs under the line its note ENDS on.
+func (d *openFile) noteRowsUnder(from, to int) int {
+	rows := 0
+	for _, n := range d.notes {
+		if i := n.end - 1; i >= from && i < to {
+			rows += len(n.boxLines(d.noteW - noteBoxFrame))
+		}
+	}
+	return rows
+}
+
+// syncNoteRows installs the pager's row-count hook while d has notes and
+// takes it away when the last one goes, so a file without notes is back on
+// the plain one-row-per-line path.
+func (d *openFile) syncNoteRows() {
+	if len(d.notes) == 0 {
+		d.p.extraRows = nil
+		return
+	}
+	d.p.extraRows = d.noteRowsUnder
+}
+
+// previewDoc is the open document p belongs to — a viewer on the stack or
+// the files view's preview — or nil (the help window, F's live preview).
+func (m Model) previewDoc(p *contentPopup) *openFile {
+	if d := m.filesPreview; d != nil && d.p == p {
+		return d
+	}
+	if m.layers != nil {
+		for _, l := range m.layers.entries {
+			if fv, ok := l.(*fileViewer); ok && fv.p == p {
+				return fv.openFile
+			}
+		}
+	}
+	return nil
+}
+
+// fileNoteRow is one box row as a preview window row: blank text the window
+// pads to its width, painted by a decorator — so the box ignores the
+// horizontal scroll and is never reflowed by wrap mode. A box narrower than
+// its own frame can carry is a blank row.
+func fileNoteRow(nl noteLine, w, gut int) winRow {
+	if w-gut < 8 {
+		return winRow{noWrap: true}
+	}
+	return winRow{noWrap: true, decorate: func(string, int, int) string {
+		return strings.Repeat(" ", gut) + noteBoxCell(nl, w-gut)
+	}}
 }

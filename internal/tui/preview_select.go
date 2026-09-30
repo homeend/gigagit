@@ -16,12 +16,67 @@ import (
 func (m Model) activePreview() (p *contentPopup, rows, innerW int, ok bool) {
 	if fv, isViewer := m.topLayer().(*fileViewer); isViewer {
 		rows, innerW = fv.geom(m)
-		return fv.p, rows, innerW, true
+		return fv.p, rows, max(innerW-fv.gutterW(), 1), true
 	}
 	if m.filesPreview != nil && !m.filesTreeFocused {
-		return m.filesPreview.p, m.filePreviewRowsCap(), m.filePreviewInnerW(), true
+		return m.filesPreview.p, m.filePreviewRowsCap(), max(m.filePreviewInnerW()-m.filesPreview.gutterW(), 1), true
 	}
 	return nil, 0, 0, false
+}
+
+// rowsSpan is how many display rows lines [from, to) take in a one-row-per-
+// line mode: one each, plus whatever hangs under them (extraRows).
+func (p *contentPopup) rowsSpan(from, to int) int {
+	if to <= from {
+		return 0
+	}
+	n := to - from
+	if p.extraRows != nil {
+		n += p.extraRows(from, to)
+	}
+	return n
+}
+
+// clampTop clamps a pager top line for this preview. It is previewClamp,
+// except that rows hanging under lines count: the last screenful is the
+// lowest top from which everything to the end of the file still fits, so a
+// note under the last line can be scrolled fully into view.
+func (p *contentPopup) clampTop(top, rowsCap int) int {
+	n := len(p.lines)
+	if p.extraRows == nil || p.mode == modeWrap {
+		return previewClamp(top, n, rowsCap, p.mode)
+	}
+	maxTop, used := n, 0
+	for maxTop > 0 {
+		need := p.rowsSpan(maxTop-1, maxTop)
+		if used+need > rowsCap {
+			break
+		}
+		used += need
+		maxTop--
+	}
+	if maxTop > n-1 { // even the last line with its notes is taller than the window
+		maxTop = n - 1
+	}
+	if top > maxTop {
+		top = maxTop
+	}
+	if top < 0 {
+		top = 0
+	}
+	return top
+}
+
+// lastVisible is the last line whose own row is inside a rowsCap-row window
+// starting at sel.
+func (p *contentPopup) lastVisible(rowsCap int) int {
+	last := p.sel + rowsCap - 1
+	if p.extraRows != nil {
+		for last > p.sel && p.rowsSpan(p.sel, last)+1 > rowsCap {
+			last--
+		}
+	}
+	return last
 }
 
 // ensureCursorVisible scrolls the pager's top line (sel) the minimum needed for
@@ -39,7 +94,11 @@ func (p *contentPopup) ensureCursorVisible(rowsCap int) {
 	if p.cur >= p.sel+rowsCap {
 		p.sel = p.cur - rowsCap + 1
 	}
-	p.sel = previewClamp(p.sel, len(p.lines), rowsCap, p.mode)
+	// Rows hanging under the lines above the cursor push it down further.
+	for p.extraRows != nil && p.sel < p.cur && p.rowsSpan(p.sel, p.cur)+1 > rowsCap {
+		p.sel++
+	}
+	p.sel = p.clampTop(p.sel, rowsCap)
 }
 
 // movePreviewCursor steps the focused preview's line cursor by delta, clamps it
@@ -59,8 +118,8 @@ func (m Model) movePreviewCursor(delta int) {
 		p.cur = p.sel
 		return
 	}
-	if p.cur >= p.sel+rowsCap {
-		p.cur = p.sel + rowsCap - 1
+	if last := p.lastVisible(rowsCap); p.cur > last {
+		p.cur = last
 		if p.cur > len(p.lines)-1 {
 			p.cur = len(p.lines) - 1
 		}
