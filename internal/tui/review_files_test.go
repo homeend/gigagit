@@ -67,18 +67,24 @@ func TestReviewEntryOpensTheReview(t *testing.T) {
 	}
 }
 
-func TestStackShowsTheReviewAboveTheFiles(t *testing.T) {
+// A review is not a file: a stack opened from one of the commit's files holds
+// its three files and nothing else — the review's raw text used to lead it
+// as an all-added "@notes/…" file (user ruling 2026-09-30). The review opens
+// from its own row (TestReviewEntryOpensTheReview).
+func TestStackLeavesTheReviewOut(t *testing.T) {
 	t.Parallel()
 	m := reviewedStackModel(t, "# Verdict\nship it")
 	m = m.setStackedPref(true)
-	u, cmd := m.openDiffForFileLine(m.filesView.visible()[2]) // a.go: the stack still starts with the review
+	u, cmd := m.openDiffForFileLine(m.filesView.visible()[2]) // a.go
 	m = drainCmds(t, u.(Model), cmd)
 	v := m.diffLayer()
-	if v == nil || v.stk == nil || len(v.stk.files) != 4 {
-		t.Fatalf("stack %+v", v)
+	if v == nil || v.stk == nil || len(v.stk.files) != 3 {
+		t.Fatalf("stack %+v, want the commit's 3 files", v)
 	}
-	if v.stk.files[0].line.noteID == "" || v.stk.files[0].load != stackLoaded {
-		t.Fatalf("first stack file %+v, want the loaded review", v.stk.files[0])
+	for i, f := range v.stk.files {
+		if f.line.noteID != "" || strings.HasPrefix(f.path, reviewsDir) {
+			t.Fatalf("stack file %d is the review %+v", i, f)
+		}
 	}
 }
 
