@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/template"
@@ -109,7 +110,7 @@ func EnsureInteractiveCommands(cfg config.Config, globalPath string, detect func
 	var blocks []config.ToolCommand
 	var names []string
 	for _, det := range detect() {
-		for _, ct := range exttool.Pick(det.Tool, exttool.Version{}, false) {
+		for _, ct := range InstallTemplates(context.Background(), det, true) {
 			if !need[ct.Category] || ct.Mode != exttool.ModeInteractive || ct.OptIn {
 				continue
 			}

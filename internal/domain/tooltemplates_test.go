@@ -219,3 +219,44 @@ func TestApplyToolUpdateTakesTheEffectiveDuplicate(t *testing.T) {
 		t.Fatalf("after take: %+v", got)
 	}
 }
+
+// Installers write the variant that fits the installed agent. probe=false
+// (a UI-thread caller) never spawns the agent and uses only a cached
+// version; the cache is warmed by the background status read.
+func TestInstallTemplatesUsesAgentVersion(t *testing.T) {
+	det := fakeDet(1,
+		exttool.CommandTemplate{Range: ">=2.1", Command: "<bin> new"},
+		exttool.CommandTemplate{Range: ">=1.8 <2.1", Command: "<bin> old"})
+	stubVersion(t, "fake 1.9.0")
+	calls := 0
+	inner := agentVersionRun
+	agentVersionRun = func(ctx context.Context, b string, a []string) ([]byte, error) {
+		calls++
+		return inner(ctx, b, a)
+	}
+
+	if got := InstallTemplates(context.Background(), det, false); len(got) != 1 || got[0].Command != "<bin> new" || calls != 0 {
+		t.Fatalf("cold cache, no probe: %+v (probes %d)", got, calls)
+	}
+	if got := InstallTemplates(context.Background(), det, true); len(got) != 1 || got[0].Command != "<bin> old" || calls != 1 {
+		t.Fatalf("probe: %+v (probes %d)", got, calls)
+	}
+	if got := InstallTemplates(context.Background(), det, false); len(got) != 1 || got[0].Command != "<bin> old" || calls != 1 {
+		t.Fatalf("warm cache, no probe: %+v (probes %d)", got, calls)
+	}
+}
+
+// The background status read warms the cache for every detected ranged
+// tool — even one with no configured block yet — so the Settings wizard
+// installs the fitting variant without spawning anything itself.
+func TestToolTemplateStatusesWarmTheVersionCache(t *testing.T) {
+	det := fakeDet(1,
+		exttool.CommandTemplate{Range: ">=2.1", Command: "<bin> new"},
+		exttool.CommandTemplate{Range: ">=1.8 <2.1", Command: "<bin> old"})
+	stubVersion(t, "fake 1.9.0")
+	empty := filepath.Join(t.TempDir(), "none.toml")
+	ToolTemplateStatuses(context.Background(), []string{empty}, []exttool.Detection{det})
+	if got := InstallTemplates(context.Background(), det, false); len(got) != 1 || got[0].Command != "<bin> old" {
+		t.Fatalf("cache not warmed: %+v", got)
+	}
+}

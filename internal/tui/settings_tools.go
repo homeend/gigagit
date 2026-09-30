@@ -40,7 +40,8 @@ func (m Model) openToolsWizard() Model {
 	p.toolRows = nil
 	home, _ := os.UserHomeDir()
 	for _, det := range exttool.Detect(exec.LookPath, os.Stat, home) {
-		for _, ct := range exttool.Pick(det.Tool, exttool.Version{}, false) {
+		// UI thread: cache only — the background status read warms it.
+		for _, ct := range domain.InstallTemplates(context.Background(), det, false) {
 			key := string(ct.Category) + "\x00" + ct.Name
 			p.toolRows = append(p.toolRows, toolWizardRow{det: det, tmpl: ct, existing: have[key]})
 		}

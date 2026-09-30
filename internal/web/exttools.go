@@ -97,7 +97,7 @@ func (s *Server) handleExtTools(w http.ResponseWriter, r *http.Request) {
 	dets := make([]extToolDetectedRow, 0, 4)
 	for _, det := range s.detections() {
 		row := extToolDetectedRow{ID: det.Tool.ID, Label: det.Tool.Label, Bin: det.Bin}
-		for _, ct := range exttool.Pick(det.Tool, exttool.Version{}, false) {
+		for _, ct := range domain.InstallTemplates(r.Context(), det, true) {
 			row.Templates = append(row.Templates, extToolTemplateRow{
 				Category: string(ct.Category), Name: ct.Name, OptIn: ct.OptIn,
 				Configured: have[string(ct.Category)+"\x00"+ct.Name],

@@ -23,6 +23,25 @@ func NewToolBlock(det exttool.Detection, ct exttool.CommandTemplate) config.Tool
 	}
 }
 
+// InstallTemplates is what an installer (the Settings wizard, first-run
+// auto-configure) offers for a detected tool: one row per family, the
+// variant that fits the installed agent's version (exttool.PickBest). probe
+// false never spawns the agent — a UI-thread caller relies on the cache the
+// background status read warms.
+func InstallTemplates(ctx context.Context, det exttool.Detection, probe bool) []exttool.CommandTemplate {
+	if !exttool.HasRanged(det.Tool) {
+		return exttool.Pick(det.Tool, exttool.Version{}, false)
+	}
+	var v exttool.Version
+	var known bool
+	if probe {
+		v, known = AgentVersion(ctx, det.Tool, det.Bin)
+	} else {
+		v, known = AgentVersionCached(det.Tool, det.Bin)
+	}
+	return exttool.PickBest(det.Tool, v, known)
+}
+
 // ToolStatusKind is a catalog block's standing against the catalog.
 type ToolStatusKind int
 
@@ -75,6 +94,14 @@ func ToolTemplateStatuses(ctx context.Context, paths []string, dets []exttool.De
 				order = append(order, tc.Key())
 			}
 			eff[tc.Key()] = located{p, tc}
+		}
+	}
+	// Warm the version cache for every detected tool with ranged variants,
+	// configured or not, so a UI-thread installer (InstallTemplates with
+	// probe false) finds its agent's version.
+	for _, det := range dets {
+		if exttool.HasRanged(det.Tool) {
+			AgentVersion(ctx, det.Tool, det.Bin)
 		}
 	}
 	var out []ToolTemplateStatus

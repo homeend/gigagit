@@ -93,3 +93,24 @@ func Pick(tl Tool, v Version, known bool) []CommandTemplate {
 	}
 	return out
 }
+
+// PickBest is the install-time pick: one row per family, in catalog order —
+// the variant whose range holds a known version, else (unknown version, or
+// a known one outside every range) the family's newest variant, so an
+// installer never hides a family.
+func PickBest(tl Tool, v Version, known bool) []CommandTemplate {
+	newest := Pick(tl, Version{}, false)
+	if !known {
+		return newest
+	}
+	fit := map[string]CommandTemplate{}
+	for _, ct := range Pick(tl, v, true) {
+		fit[ct.Key()] = ct
+	}
+	for i, ct := range newest {
+		if f, ok := fit[ct.Key()]; ok {
+			newest[i] = f
+		}
+	}
+	return newest
+}

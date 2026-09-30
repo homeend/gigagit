@@ -49,14 +49,7 @@ func AgentVersion(ctx context.Context, tl exttool.Tool, bin string) (exttool.Ver
 	if len(tl.VersionArgs) == 0 {
 		return exttool.Version{}, false
 	}
-	path := bin
-	if p, err := exec.LookPath(bin); err == nil {
-		path = p
-	}
-	key := agentVerKey{path: path}
-	if fi, err := os.Stat(path); err == nil {
-		key.mtime = fi.ModTime()
-	}
+	key := agentVerKeyFor(bin)
 	agentVerMu.Lock()
 	if v, hit := agentVerCache[key]; hit {
 		agentVerMu.Unlock()
@@ -72,4 +65,30 @@ func AgentVersion(ctx context.Context, tl exttool.Tool, bin string) (exttool.Ver
 	agentVerCache[key] = val
 	agentVerMu.Unlock()
 	return val.v, val.ok
+}
+
+// agentVerKeyFor is the cache key: the resolved binary and its mtime.
+func agentVerKeyFor(bin string) agentVerKey {
+	path := bin
+	if p, err := exec.LookPath(bin); err == nil {
+		path = p
+	}
+	key := agentVerKey{path: path}
+	if fi, err := os.Stat(path); err == nil {
+		key.mtime = fi.ModTime()
+	}
+	return key
+}
+
+// AgentVersionCached is AgentVersion without ever spawning the agent: a
+// cache hit or unknown (for a caller on the UI thread).
+func AgentVersionCached(tl exttool.Tool, bin string) (exttool.Version, bool) {
+	if len(tl.VersionArgs) == 0 {
+		return exttool.Version{}, false
+	}
+	key := agentVerKeyFor(bin) // stat outside the lock
+	agentVerMu.Lock()
+	defer agentVerMu.Unlock()
+	v := agentVerCache[key]
+	return v.v, v.ok
 }

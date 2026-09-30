@@ -84,3 +84,22 @@ func TestBuiltinsFamilyInvariants(t *testing.T) {
 		}
 	}
 }
+
+// PickBest is the install-time pick: the variant for the agent's version,
+// and — where no variant fits a known version — still the family's newest,
+// so the wizard never hides a family (the status then says unsupported).
+func TestPickBest(t *testing.T) {
+	t.Parallel()
+	got := PickBest(testTool(), Version{2, 0, 0}, true)
+	if len(got) != 2 || got[0].Command != "<bin> old" {
+		t.Fatalf("PickBest(2.0) = %+v", got)
+	}
+	got = PickBest(testTool(), Version{1, 0, 0}, true)
+	if len(got) != 2 || got[0].Command != "<bin> new" || got[1].Name != "B" {
+		t.Fatalf("PickBest(1.0, outside every range) = %+v", got)
+	}
+	got = PickBest(testTool(), Version{}, false)
+	if len(got) != 2 || got[0].Command != "<bin> new" {
+		t.Fatalf("PickBest(unknown) = %+v", got)
+	}
+}
