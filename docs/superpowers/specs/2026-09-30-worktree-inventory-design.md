@@ -57,6 +57,51 @@ any other `gg` process.
 
 ## Design
 
+### 0. Worktree guards (user ruling 2026-10-01)
+
+"May this worktree be taken?" needs many data sources (git state, claims,
+sessions, TUIs, config). No consumer hardwires them. One leaf interface,
+many providers, one composition:
+
+- **`wtguard`** (new DAG leaf, stdlib only): `Target{Dir, Branch, Main,
+  Detached, CallerSession}`, `Blocker{Reason, Detail, Hard}`,
+  `Result{Blocker *Blocker; Fact any}`, `Guard{Reason(), FactKey(), Cheap(),
+  Check(ctx, Target) (Result, error)}`, `Report{Blockers, Facts}` and
+  `Run(ctx, guards, target) Report` — every cheap guard runs; the expensive
+  ones run only when no cheap guard blocked (their facts stay `nil`). A guard
+  error becomes a hard `check-failed` blocker.
+- **Providers** (domain, one per data source, each knowing only its own):
+  `missing`, `main`, `detached`, `paused-op`, `git-lock`, `reserved`,
+  `claimed` (passes for the claim's own holder = `CallerSession`), `tui`,
+  `session`, and the expensive `dirty-recent` (`git status`; a failed status
+  is a hard `status-failed`). Each contributes its JSON fact (`dirty`,
+  `claim`, `sessions`, `tui`, `reserved`, `paused_op`, `git_lock`).
+- **Hard** (never overridable): `missing`, `paused-op`, `git-lock`,
+  `status-failed`, `check-failed`. Everything else is overridable by a human
+  or `--force`.
+- **Consumers take guards, not sources:** `WorktreeInventory` (blockers →
+  `blocked_by`, facts → the JSON fields), `ClaimWorktree` (one target; any
+  blocker refuses — a claim has no force), and **`RecycleWorktree`** through
+  a new `OpDeps.Guards` seam (`func(ctx, wtguard.Target) (wtguard.Report,
+  error)`; nil = no guards, so engine tests are unaffected). Recycle fails
+  on a hard blocker and raises ONE decision `recycle.blocked` listing every
+  overridable reason, options `recycle anyway` / `abort`; its own
+  `recycle.dirty` flow (commit/shelve/discard) is unchanged. The op gains
+  `CallerSession`.
+- **One set everywhere (user ruling):** the TUI, CLI, web and MCP all get
+  the FULL guard set; the TUI answers `recycle.blocked` in its decision
+  modal (the picker's own "agent session running" confirm is dropped — the
+  `session` guard covers it); the CLI answers it with `--force`, and without
+  it a pipeline is refused as with `recycle.dirty`.
+- **Composition** lives in ONE function, `domain.StandardWorktreeGuards`
+  (its own file), behind the process-wide `domain.WorktreeGuardSet` hook the
+  composition root (`cmd/gg`) may replace. Services are opened in many places
+  (CLI, TUI reRoot, web, MCP) and CLI tests call `cli.Run` without `main`, so
+  a default composition must exist inside domain; consumers never name a
+  provider.
+- Known cost: recycle's guard run and its own dirty check each run `git
+  status` once (a follow-up can reuse the guard's fact).
+
 ### 1. Session identity: `GG_SESSION_ID`
 
 `agentsession.Manager.Start` mints the session id; it now also appends
@@ -89,7 +134,11 @@ worktree:
 }
 ```
 
-- `dirty` is `null` when `git status` was skipped (§ cost); `last_change` is
+- `dirty` is `null` when `git status` was skipped (§ cost). An untracked
+  directory is listed by git as `dir/` and dated by the directory's own
+  mtime (entry churn, not file edits) — it may under-date a worktree, which
+  at worst recycles it with `shelve` (non-destructive); `-uall` is not used
+  because it walks every untracked file on a huge checkout; `last_change` is
   the newest mtime among the dirty paths (deleted paths contribute nothing),
   `null` when clean.
 - `claim` is `null` when there is no LIVE claim (dead claims are swept, §4).
@@ -102,7 +151,7 @@ worktree:
 
 | Reason | When |
 |---|---|
-| `missing` | the worktree's directory or git dir is gone (a prunable worktree) |
+| `missing` | the worktree's directory (or its `.git` file) is gone — a prunable worktree git still lists |
 | `main` | the main checkout, unless `[agents] allow_main = true` |
 | `detached` | no branch checked out (also bare) |
 | `paused-op` | merge / rebase / cherry-pick / revert in progress (`PausedOpIn`) |
@@ -153,7 +202,7 @@ New DAG-leaf package **`sessionreg`** (stdlib only):
   sweeps older or unparsable files, exactly like `steer.Live`.
 - `Remove` on clean shutdown.
 
-Domain owns the writer: `domain.PublishSessions(ctx, worktree func() string)`
+Domain owns the writer: `domain.PublishSessions(ctx, dir string, worktree func() string)`
 subscribes to `Sessions()`'s `Broadcaster`, rewrites on every change, touches
 every second, removes the file when ctx ends. The TUI starts it at boot (it
 already has the 1 s tick and the session subscription pattern); it survives
@@ -182,7 +231,7 @@ someone created after it read the old one:
 
 Domain:
 
-- `ClaimWorktree(ctx, path, sessionID, note)`: refuses an empty session id
+- `ClaimWorktree(ctx, path, sessionID, note, pol)`: refuses an empty session id
   AND a session that is not alive (a stale env or copied id — the claim would
   be swept at once); computes the inventory entry for THAT worktree only (no
   `git status` fan-out); refuses when not free (returns the `blocked_by`
@@ -219,7 +268,10 @@ CLI:
   (settings registry doc, overlay, defaults).
 - `gg worktree reserve <path>` / `gg worktree unreserve <path>` write through
   the existing scoped config writers (`config.SetAgentsReserved`, called
-  directly — the same path the branch-filter popup writes through).
+  directly — the same path the branch-filter popup writes through). CLI and
+  TUI both resolve the file through ONE domain helper,
+  `Service.AgentsConfig`, anchored on the main worktree (the TUI's own
+  `repoTOML` follows the cwd worktree's committed `.gg.toml`).
 
 ### 6. TUI
 

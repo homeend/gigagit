@@ -4,7 +4,7 @@
 
 **Goal:** An agent running inside gg can list worktrees with a computed `free` verdict, claim one atomically, and release it; the user reserves worktrees against agents and sees/removes reserves and claims in the TUI.
 
-**Architecture:** Two new DAG-leaf packages — `sessionreg` (each TUI publishes its live agent sessions to a machine-wide state file, mtime liveness) and `wtclaim` (an O_EXCL claim file in a worktree's git admin dir). `domain` composes them with stat-level git probes and per-worktree `git status` into `WorktreeInventory`, `ClaimWorktree`, `ReleaseWorktree`, `WorktreeMarks`. The CLI exposes `gg worktree list --json/--free`, `claim`, `release`, `reserve`, `unreserve`; the TUI publishes its registry and shows marks + menu rows.
+**Architecture:** One guard interface (`wtguard`, leaf) answers "may this worktree be taken?"; domain providers implement it per data source and ONE composition (`domain.WorktreeGuardSet`) feeds the inventory, claims and the recycle op (`OpDeps.Guards`) alike. Two more DAG-leaf packages — `sessionreg` (each TUI publishes its live agent sessions to a machine-wide state file, mtime liveness) and `wtclaim` (an O_EXCL claim file in a worktree's git admin dir). `domain` composes them with stat-level git probes and per-worktree `git status` into `WorktreeInventory`, `ClaimWorktree`, `ReleaseWorktree`, `WorktreeMarks`. The CLI exposes `gg worktree list --json/--free`, `claim`, `release`, `reserve`, `unreserve`; the TUI publishes its registry and shows marks + menu rows.
 
 **Tech Stack:** Go 1.26, `github.com/pelletier/go-toml/v2`, Bubble Tea v1, real `git` in tests.
 
@@ -28,7 +28,9 @@
 - `sessionreg` and `wtclaim` are frontend-forbidden in `internal/archtest` (CLI tests write registry JSON by hand).
 - `recycle`: `"none"` clean, `"shelve"` stale-dirty, JSON `null` when not free.
 - `--free` order: clean first, then stale-dirty by oldest `last_change`.
-- `git status` runs only for worktrees not already blocked by the file-level checks.
+- `git status` runs only for worktrees not already blocked by the file-level checks (`wtguard.Run`: cheap guards first).
+- Guards (user ruling 2026-10-01): consumers take guards, never sources; the full set everywhere (TUI, CLI, web, MCP). Hard blockers: `missing`, `paused-op`, `git-lock`, `status-failed`, `check-failed`; the rest are overridable in recycle via ONE `recycle.blocked` decision (`recycle anyway`/`abort`; CLI `--force`), except `dirty-recent`, which recycle's own `recycle.dirty` answers. A claim has no override.
+- `GuardReport` runs inside ops: ungated reads only (`s.repo`, never `s.Worktrees`).
 - Paths compare via `domain.SameCheckout`.
 - Every user-visible TUI string goes through `i18n.T` with a literal key in all four bundles (ja/ko/zh/ru); decision option values stay English.
 - `internal/tui` and `internal/cli` never import `internal/git`.
@@ -57,7 +59,11 @@
 | `internal/wtclaim/wtclaim.go` (create) | claim file `Create`/`Read`/`Remove`/`Age`, `WithLock` |
 | `internal/config/config.go`, `template.go`, `write.go` (modify) | `[agents]` section, settingDocs, `SetAgentsReserved` |
 | `internal/domain/sessionpublish.go` (create) | `PublishSessions`, `SessionRegistryDir`, `liveSessions` |
-| `internal/domain/wtinventory.go` (create) | `InventoryPolicy`, `WorktreeInfo`, `WorktreeInventory` |
+| `internal/wtguard/wtguard.go` (create) | `Guard`/`Target`/`Blocker`/`Report`, `Run` |
+| `internal/domain/wtguards.go` (create) | one provider per data source |
+| `internal/domain/wtguard_set.go` (create) | `WorktreeGuardSet` hook + `StandardWorktreeGuards` — the only place naming providers |
+| `internal/domain/wtinventory.go` (create) | `InventoryPolicy`, `WorktreeInfo` (facts), `WorktreeInventory`, `GuardReport`, `AgentsConfig` |
+| `internal/engine/operation.go`, `recycle_worktree.go` (modify) | `OpDeps.Guards`, `recycle.blocked`, `CallerSession` |
 | `internal/domain/wtclaim.go` (create) | `ClaimWorktree`, `ReleaseWorktree`, `WorktreeMarks`, `SetWorktreeReserved` |
 | `internal/cli/worktree.go` (modify) + `internal/cli/worktree_agents.go` (create) | list flags + claim/release/reserve/unreserve |
 | `internal/gitwatch/plan.go` (modify) | claim-file groups → `Worktrees` |
@@ -438,7 +444,7 @@ func PIDOf(sessionID string) int {
 }
 ```
 
-`Registry.Proc` carries `json:"-"`. Add `strconv` to the imports.
+`Registry.Proc` carries `json:"-"`. Add `strconv` to the imports; the test file imports `os/exec` too.
 
 ```go
 // procalive_unix.go
@@ -863,7 +869,17 @@ func overlayAgents(dst *AgentsConfig, src AgentsConfig) {
 }
 ```
 
-Add `Agents AgentsConfig \`toml:"agents"\`` to `Config`; `Agents: AgentsConfig{StaleAfter: "14d"}` in `Defaults()`; call `overlayAgents(&cfg.Agents, layer.Agents)` in `Load` for both layers exactly where `overlayTasks` is called, and right after the GLOBAL layer's call add `cfg.Agents.Reserved = nil` with the comment `// reserved is repo-only: paths belong to one repo, and a global entry could never be unreserved from it`.
+Add `Agents AgentsConfig \`toml:"agents"\`` to `Config`; `Agents: AgentsConfig{StaleAfter: "14d"}` in `Defaults()`; call `overlayAgents(&cfg.Agents, layer.Agents)` in `Load` for both layers exactly where `overlayTasks` is called, and reset the global layer's list right after its overlay. `Load`'s loop is `for _, path := range []string{globalPath, repoPath}` — change it to `for i, path := range …` and add, after `overlayAgents`:
+
+```go
+			if i == 0 {
+				// reserved is repo-only: paths belong to one repo, and a
+				// global entry could never be unreserved from it.
+				cfg.Agents.Reserved = nil
+			}
+```
+
+`internal/config/template_test.go` `TestSettingDocsCoverAllFields` enumerates sections explicitly — add `check("agents", reflect.TypeOf(AgentsConfig{}))` after the `web` line, or the gate cannot fire.
 
 Reserved clearing: because overlay ignores an empty slice, `SetAgentsReserved(path, nil)` must REMOVE the line — an empty `reserved = []` in the repo file would be ignored and a global list would win anyway, which is the documented overlay rule.
 
@@ -873,7 +889,7 @@ Reserved clearing: because overlay ignores an empty slice, `SetAgentsReserved(pa
 // file, preserving comments; an empty list removes the key.
 func SetAgentsReserved(path string, paths []string) error {
 	if len(paths) == 0 {
-		return removeScalarLine(path, "agents", "reserved")
+		return setLineInSection(path, "agents", "reserved", "", true)
 	}
 	q := make([]string, len(paths))
 	for i, p := range paths {
@@ -883,7 +899,7 @@ func SetAgentsReserved(path string, paths []string) error {
 }
 ```
 
-If `write.go` has no `removeScalarLine`, add it next to `setScalarLine`, reusing its section/key line scan: find the `key = …` line inside `[section]` and drop it; missing file or key → nil. (`strconv.Quote` output is a valid TOML basic string for these paths: backslashes and quotes are escaped the same way.)
+`setLineInSection(path, section, key, rendered, remove)` (`write.go:337`) already removes a key when `remove` is true. (`strconv.Quote` output is a valid TOML basic string for these paths: backslashes and quotes are escaped the same way.)
 
 `template.go`: add `"agents"` to `Template()`'s explicit section list (`template.go:188`, after `"tasks"`), and add three `settingDoc` entries for `agents.reserved`, `agents.stale_after`, `agents.allow_main`, copying the shape of the `tasks.max_parallel` entry (section, key, default rendering, one-line comment).
 
@@ -1035,7 +1051,11 @@ import (
 // SessionRegistryDir is where every TUI publishes its live sessions.
 func SessionRegistryDir() string { return stateBaseDir("sessions") }
 
-type SessionRef struct{ ID, Agent, State string }
+type SessionRef struct {
+	ID    string `json:"id"`
+	Agent string `json:"agent"`
+	State string `json:"state"`
+}
 
 // PublishSessions keeps this process's registry current until ctx ends:
 // rewritten on every session-list change, touched every second, removed on
@@ -1167,48 +1187,332 @@ git commit -m "feat(domain): publish live agent sessions to the session registry
 
 ---
 
-### Task 6: Domain — `WorktreeInventory`
+### Task 5b: `wtguard` — the guard interface
 
 **Files:**
-- Create: `internal/domain/wtinventory.go`
-- Test: `internal/domain/wtinventory_test.go`
+- Create: `internal/wtguard/wtguard.go`
+- Modify: `internal/archtest/import_guard_test.go` (a leaf test like `TestLinkhistIsALeaf`: `wtguard` imports stdlib only)
+- Test: `internal/wtguard/wtguard_test.go`
 
 **Interfaces:**
-- Consumes: `readLive` (Task 5), `git.GitDirAt` (Task 1), `wtclaim.Read` (Task 3), `config.AgentsConfig` (Task 4), `git.PausedOpIn`, `git.LockFiles`, `branchfilter.ParseAge`, `SameCheckout`.
 - Produces:
 ```go
-type InventoryPolicy struct {
-	StaleAfter time.Duration
-	Reserved   []string   // as configured (relative to main or absolute)
-	AllowMain  bool
-	Now        func() time.Time // nil = time.Now
+type Target struct { Dir, Branch string; Main, Detached bool; CallerSession string }
+type Blocker struct { Reason, Detail string; Hard bool }
+type Result struct { Blocker *Blocker; Fact any }
+type Guard interface {
+	Reason() string  // the blocked_by string it produces
+	FactKey() string // JSON key of its fact; "" = none
+	Cheap() bool     // stat-level; expensive guards run only when no cheap one blocked
+	Check(ctx context.Context, t Target) (Result, error)
 }
-func PolicyFromConfig(c config.AgentsConfig) (InventoryPolicy, error)
-type DirtyInfo struct { Staged, Unstaged, Untracked int; LastChange *time.Time }
-type ClaimInfo struct { Session, Agent string; Since time.Time; Note string }
-type WorktreeInfo struct {
-	Path, Branch, Head string
-	Main, Detached bool
-	Dirty *DirtyInfo
-	PausedOp string
-	GitLock bool
-	TUI bool
-	Sessions []SessionRef
-	Reserved bool
-	Claim *ClaimInfo
-	Free bool
-	BlockedBy []string
-	Recycle string // "none" | "shelve" | "" (not free)
-}
-func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, freeOnly bool) ([]WorktreeInfo, error)
-func (s *Service) inventory(ctx context.Context, pol InventoryPolicy, only string) ([]WorktreeInfo, error) // only != "": that worktree alone (claim path — no status fan-out)
-func (s *Service) UseSessionRegistryDir(dir string)   // test seam; "" = SessionRegistryDir()
+type Report struct { Blockers []Blocker; Facts map[string]any }
+func Run(ctx context.Context, gs []Guard, t Target) Report
+func (r Report) Reasons() []string
+func (r Report) Hard() []Blocker
+func (r Report) Overridable() []Blocker
 ```
 
 - [ ] **Step 1: Write the failing tests**
 
 ```go
-// helper: a repo with linked worktrees, a per-Service registry dir.
+package wtguard
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"testing"
+)
+
+type fake struct {
+	reason, key string
+	cheap       bool
+	block, hard bool
+	fact        any
+	err         error
+	ran         *int
+}
+
+func (f fake) Reason() string  { return f.reason }
+func (f fake) FactKey() string { return f.key }
+func (f fake) Cheap() bool     { return f.cheap }
+func (f fake) Check(context.Context, Target) (Result, error) {
+	if f.ran != nil {
+		*f.ran++
+	}
+	if f.err != nil {
+		return Result{}, f.err
+	}
+	r := Result{Fact: f.fact}
+	if f.block {
+		r.Blocker = &Blocker{Reason: f.reason, Hard: f.hard}
+	}
+	return r, nil
+}
+
+func TestRunCheapBlocksSkipExpensive(t *testing.T) {
+	t.Parallel()
+	ran := 0
+	r := Run(context.Background(), []Guard{
+		fake{reason: "claimed", key: "claim", cheap: true, block: true, fact: "c"},
+		fake{reason: "dirty-recent", key: "dirty", cheap: false, ran: &ran},
+	}, Target{Dir: "/x"})
+	if ran != 0 {
+		t.Fatal("expensive guard ran although a cheap one blocked")
+	}
+	if !slices.Equal(r.Reasons(), []string{"claimed"}) || r.Facts["claim"] != "c" {
+		t.Fatalf("report = %+v", r)
+	}
+	if v, ok := r.Facts["dirty"]; !ok || v != nil {
+		t.Fatalf("a skipped guard's fact must be present and nil, got %v %v", v, ok)
+	}
+}
+
+func TestRunAllCheapThenExpensive(t *testing.T) {
+	t.Parallel()
+	ran := 0
+	r := Run(context.Background(), []Guard{
+		fake{reason: "a", cheap: true},
+		fake{reason: "dirty-recent", key: "dirty", ran: &ran, block: true, fact: 3},
+	}, Target{})
+	if ran != 1 || !slices.Equal(r.Reasons(), []string{"dirty-recent"}) || r.Facts["dirty"] != 3 {
+		t.Fatalf("ran=%d report=%+v", ran, r)
+	}
+}
+
+func TestRunErrorIsHardCheckFailed(t *testing.T) {
+	t.Parallel()
+	r := Run(context.Background(), []Guard{fake{reason: "x", cheap: true, err: errors.New("boom")}}, Target{})
+	if len(r.Hard()) != 1 || r.Hard()[0].Reason != "check-failed" {
+		t.Fatalf("report = %+v", r)
+	}
+}
+
+func TestReportSplitsHardAndOverridable(t *testing.T) {
+	t.Parallel()
+	r := Run(context.Background(), []Guard{
+		fake{reason: "missing", cheap: true, block: true, hard: true},
+		fake{reason: "reserved", cheap: true, block: true},
+	}, Target{})
+	if len(r.Hard()) != 1 || len(r.Overridable()) != 1 || r.Overridable()[0].Reason != "reserved" {
+		t.Fatalf("report = %+v", r)
+	}
+}
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `go test ./internal/wtguard`
+Expected: FAIL — undefined symbols.
+
+- [ ] **Step 3: Implement**
+
+```go
+// Package wtguard is the one question "may this worktree be taken?" asked
+// of many independent data sources. A Guard answers for its own source
+// (git state, a claim, a session registry, config…); consumers (the
+// inventory, claims, the recycle op) take a []Guard and know none of the
+// sources; the composition root decides which guards exist. DAG leaf:
+// stdlib only.
+package wtguard
+
+import "context"
+
+type Target struct {
+	Dir, Branch    string
+	Main, Detached bool
+	CallerSession  string // "" = a human / not an agent; the claim guard exempts its holder
+}
+
+type Blocker struct {
+	Reason string
+	Detail string
+	Hard   bool // never overridable (a human or --force cannot proceed)
+}
+
+type Result struct {
+	Blocker *Blocker
+	Fact    any
+}
+
+type Guard interface {
+	Reason() string
+	FactKey() string
+	Cheap() bool
+	Check(ctx context.Context, t Target) (Result, error)
+}
+
+type Report struct {
+	Blockers []Blocker
+	Facts    map[string]any
+}
+
+// Run asks every cheap guard, then — only when none blocked — the
+// expensive ones (a `git status` on a 20 GB checkout is seconds; a blocked
+// worktree's dirt answers nothing). A skipped guard's fact is present and
+// nil. A guard error is a hard check-failed blocker: never read "could not
+// tell" as "free".
+func Run(ctx context.Context, gs []Guard, t Target) Report {
+	r := Report{Facts: map[string]any{}}
+	ask := func(g Guard) {
+		res, err := g.Check(ctx, t)
+		if err != nil {
+			r.Blockers = append(r.Blockers, Blocker{Reason: "check-failed", Detail: g.Reason() + ": " + err.Error(), Hard: true})
+			return
+		}
+		if k := g.FactKey(); k != "" {
+			r.Facts[k] = res.Fact
+		}
+		if res.Blocker != nil {
+			r.Blockers = append(r.Blockers, *res.Blocker)
+		}
+	}
+	for _, g := range gs {
+		if g.Cheap() {
+			ask(g)
+		}
+	}
+	blocked := len(r.Blockers) > 0
+	for _, g := range gs {
+		if g.Cheap() {
+			continue
+		}
+		if blocked {
+			if k := g.FactKey(); k != "" {
+				r.Facts[k] = nil
+			}
+			continue
+		}
+		ask(g)
+	}
+	return r
+}
+
+func (r Report) Reasons() []string {
+	out := make([]string, 0, len(r.Blockers))
+	for _, b := range r.Blockers {
+		out = append(out, b.Reason)
+	}
+	return out
+}
+
+func (r Report) Hard() []Blocker        { return r.filter(true) }
+func (r Report) Overridable() []Blocker { return r.filter(false) }
+
+func (r Report) filter(hard bool) []Blocker {
+	var out []Blocker
+	for _, b := range r.Blockers {
+		if b.Hard == hard {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+```
+
+Archtest leaf test (copy `TestLinkhistIsALeaf`'s shape): every direct import of `internal/wtguard` must be stdlib (no `github.com/homeend/gigagit/` prefix).
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `go test ./internal/wtguard ./internal/archtest`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+gg add internal/wtguard internal/archtest/import_guard_test.go
+git commit -m "feat(wtguard): one guard interface for 'may this worktree be taken?'"
+```
+
+---
+
+### Task 6: Domain — guard providers, composition, `WorktreeInventory`
+
+**Files:**
+- Create: `internal/domain/wtguards.go` (providers), `internal/domain/wtguard_set.go` (the ONE composition), `internal/domain/wtinventory.go` (inventory over guards)
+- Modify: `internal/domain/service.go` (`sessRegDir` field + `UseSessionRegistryDir`)
+- Test: `internal/domain/wtinventory_test.go`, `internal/domain/wtguards_test.go`
+
+**Interfaces:**
+- Consumes: `wtguard` (Task 5b), `readLive`/`sessionDead` (Task 5), `git.GitDirAt` (Task 1), `wtclaim` (Task 3), `config.AgentsConfig` (Task 4), `git.PausedOpIn`, `git.LockFiles`, `branchfilter.ParseAge`, `SameCheckout`.
+- Produces:
+```go
+type InventoryPolicy struct {
+	StaleAfter time.Duration
+	Reserved   []string // as configured (relative to main or absolute)
+	AllowMain  bool
+	Now        func() time.Time // nil = time.Now
+}
+func PolicyFromConfig(c config.AgentsConfig) (InventoryPolicy, error)
+
+// Facts (JSON-tagged; the CLI prints them as-is)
+type DirtyInfo struct {
+	Staged     int        `json:"staged"`
+	Unstaged   int        `json:"unstaged"`
+	Untracked  int        `json:"untracked"`
+	LastChange *time.Time `json:"last_change"`
+}
+type ClaimInfo struct {
+	Session string    `json:"session"`
+	Agent   string    `json:"agent"`
+	Since   time.Time `json:"since"`
+	Note    string    `json:"note"`
+}
+// SessionRef (Task 5) gains json tags: `json:"id"`, `json:"agent"`, `json:"state"`.
+
+// GuardSources is one guard run's snapshot of the non-git sources.
+type GuardSources struct {
+	Policy   InventoryPolicy
+	Reserved []string // resolved: absolute, cleaned
+	Live     liveView // unexported type; providers are built inside domain
+	Svc      *Service
+}
+var WorktreeGuardSet = StandardWorktreeGuards // composition hook; cmd/gg may replace it
+func StandardWorktreeGuards(src GuardSources) []wtguard.Guard
+
+type WorktreeInfo struct {
+	Path, Branch, Head string
+	Main, Detached     bool
+	Facts              map[string]any
+	Blockers           []wtguard.Blocker
+	BlockedBy          []string
+	Free               bool
+	Recycle            string // "none" | "shelve" | "" (not free)
+}
+func (w WorktreeInfo) Dirty() *DirtyInfo
+func (w WorktreeInfo) Claim() *ClaimInfo
+
+func (s *Service) guardSources(ctx context.Context, pol InventoryPolicy, wts []model.Worktree) GuardSources
+func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, freeOnly bool) ([]WorktreeInfo, error)
+func (s *Service) inventory(ctx context.Context, pol InventoryPolicy, only string) ([]WorktreeInfo, error)
+func (s *Service) GuardReport(ctx context.Context, t wtguard.Target) (wtguard.Report, error) // for OpDeps.Guards (Task 7b)
+func (s *Service) UseSessionRegistryDir(dir string)
+func (s *Service) AgentsConfig(ctx context.Context) (config.AgentsConfig, string, error) // anchored on the MAIN worktree — the ONE source for CLI and TUI
+```
+
+Provider list (each `Cheap()` unless noted; `Hard` as marked):
+
+| Provider | Reason | FactKey | Blocks when | Hard |
+|---|---|---|---|---|
+| `missingGuard` | `missing` | — | `GitDirAt(dir) == ""` | yes |
+| `mainGuard{allow}` | `main` | — | `t.Main && !allow` | no |
+| `detachedGuard` | `detached` | — | `t.Detached` | no |
+| `pausedOpGuard` | `paused-op` | `paused_op` | `PausedOpIn(gitDir) != ""` | yes |
+| `gitLockGuard` | `git-lock` | `git_lock` | `LockFiles(gitDir)` non-empty (own git dir only) | yes |
+| `reservedGuard{abs}` | `reserved` | `reserved` | path in resolved list | no |
+| `claimGuard{lv}` | `claimed` | `claim` | live claim held by someone other than `t.CallerSession` | no |
+| `tuiGuard{lv}` | `tui` | `tui` | a live registry's worktree is `dir` | no |
+| `sessionGuard{lv}` | `session` | `sessions` | a running session's dir is `dir` | no |
+| `dirtyGuard{svc, stale, now}` (expensive) | `dirty-recent` | `dirty` | dirty and `last_change` newer than stale (or undatable); status error → `status-failed` | status-failed only |
+
+Guards on a missing worktree get `gitDir == ""` and return an empty `Result` (the `missing` blocker already stops the run of the expensive one).
+
+- [ ] **Step 1: Write the failing tests**
+
+`wtinventory_test.go` — the helpers and the reason tests from the earlier revision, adapted to the facts accessors:
+
+```go
 func inventoryRepo(t *testing.T) (main string, svc *Service, reg string) {
 	t.Helper()
 	main, svc = newRealRepo(t)
@@ -1256,7 +1560,7 @@ func TestInventoryReasons(t *testing.T) {
 	os.WriteFile(filepath.Join(git.GitDirAt(locked), "index.lock"), nil, 0o644)
 
 	p := pol()
-	p.Reserved = []string{clean} // absolute form
+	p.Reserved = []string{clean}
 	infos, err := svc.WorktreeInventory(context.Background(), p, false)
 	if err != nil {
 		t.Fatal(err)
@@ -1271,152 +1575,70 @@ func TestInventoryReasons(t *testing.T) {
 		}
 	}
 	s := find(t, infos, stale)
-	if !s.Free || s.Recycle != "shelve" || s.Dirty == nil || s.Dirty.Untracked != 1 {
+	if !s.Free || s.Recycle != "shelve" || s.Dirty() == nil || s.Dirty().Untracked != 1 {
 		t.Fatalf("stale = %+v", s)
 	}
-}
-
-func TestInventoryReservedRelativeToMain(t *testing.T) {
-	t.Parallel()
-	main, svc, _ := inventoryRepo(t)
-	wt := addWT(t, main, "rel")
-	rel, _ := filepath.Rel(main, wt)
-	p := pol()
-	p.Reserved = []string{rel}
-	infos, _ := svc.WorktreeInventory(context.Background(), p, false)
-	if w := find(t, infos, wt); !w.Reserved || w.Free {
-		t.Fatalf("rel reserved = %+v", w)
-	}
-}
-
-func TestInventoryPausedOp(t *testing.T) {
-	t.Parallel()
-	main, svc, _ := inventoryRepo(t)
-	wt := addWT(t, main, "paused")
-	os.WriteFile(filepath.Join(git.GitDirAt(wt), "MERGE_HEAD"), []byte("0000000000000000000000000000000000000000\n"), 0o644)
-	infos, _ := svc.WorktreeInventory(context.Background(), pol(), false)
-	if got := find(t, infos, wt).BlockedBy; !slices.Equal(got, []string{"paused-op"}) {
-		t.Fatalf("blocked_by = %v", got)
-	}
-}
-
-func TestInventorySessionAndTUIFromRegistry(t *testing.T) {
-	t.Parallel()
-	main, svc, reg := inventoryRepo(t)
-	a := addWT(t, main, "a")
-	b := addWT(t, main, "b")
-	sessionreg.Write(reg, "other", sessionreg.Registry{PID: 9, Worktree: b,
-		Sessions: []sessionreg.Entry{{ID: "other/s1", Dir: a, Agent: "claude", State: "running"}}})
-	infos, _ := svc.WorktreeInventory(context.Background(), pol(), false)
-	if got := find(t, infos, a).BlockedBy; !slices.Equal(got, []string{"session"}) {
-		t.Fatalf("a blocked_by = %v", got)
-	}
-	if got := find(t, infos, b).BlockedBy; !slices.Equal(got, []string{"tui"}) {
-		t.Fatalf("b blocked_by = %v", got)
-	}
-	if find(t, infos, a).Dirty != nil {
-		t.Fatal("status must be skipped for a blocked worktree")
-	}
-}
-
-func TestInventoryFreeOrder(t *testing.T) {
-	t.Parallel()
-	main, svc, _ := inventoryRepo(t)
-	s1 := addWT(t, main, "s1")
-	s2 := addWT(t, main, "s2")
-	c := addWT(t, main, "c")
-	for i, wt := range []string{s1, s2} {
-		f := filepath.Join(wt, "d.txt")
-		os.WriteFile(f, []byte("x"), 0o644)
-		at := time.Now().Add(-time.Duration(20+i*10) * 24 * time.Hour) // s2 older
-		os.Chtimes(f, at, at)
-	}
-	infos, _ := svc.WorktreeInventory(context.Background(), pol(), true)
-	var got []string
-	for _, w := range infos {
-		got = append(got, filepath.Base(w.Path))
-	}
-	if want := []string{filepath.Base(c), "s2", "s1"}; !slices.Equal(got, want) {
-		t.Fatalf("free order = %v, want %v", got, want)
-	}
-}
-
-func TestInventoryLastChangeSkipsDeletedPaths(t *testing.T) {
-	t.Parallel()
-	main, svc, _ := inventoryRepo(t)
-	wt := addWT(t, main, "del")
-	// BasicRepo commits a tracked file; delete it and add an old untracked one.
-	tracked := firstTrackedFile(t, wt)
-	os.Remove(filepath.Join(wt, tracked))
-	f := filepath.Join(wt, "o.txt")
-	os.WriteFile(f, []byte("x"), 0o644)
-	old := time.Now().Add(-30 * 24 * time.Hour)
-	os.Chtimes(f, old, old)
-	infos, err := svc.WorktreeInventory(context.Background(), pol(), false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w := find(t, infos, wt)
-	if w.Dirty == nil || w.Dirty.LastChange == nil || w.Dirty.LastChange.After(time.Now().Add(-29*24*time.Hour)) {
-		t.Fatalf("dirty = %+v", w.Dirty)
-	}
-}
-
-func firstTrackedFile(t *testing.T, dir string) string {
-	t.Helper()
-	out, err := exec.Command("git", "-C", dir, "ls-files").Output()
-	if err != nil || len(out) == 0 {
-		t.Fatalf("ls-files: %v", err)
-	}
-	return strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
-}
-
-func TestInventoryMissingWorktree(t *testing.T) {
-	t.Parallel()
-	main, svc, _ := inventoryRepo(t)
-	wt := addWT(t, main, "gone")
-	if err := os.RemoveAll(wt); err != nil {
-		t.Fatal(err)
-	}
-	infos, err := svc.WorktreeInventory(context.Background(), pol(), false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w := find(t, infos, wt)
-	if w.Free || !slices.Equal(w.BlockedBy, []string{"missing"}) {
-		t.Fatalf("missing worktree = %+v", w)
-	}
-}
-
-func TestInventoryOnlyOneWorktree(t *testing.T) {
-	t.Parallel()
-	main, svc, _ := inventoryRepo(t)
-	a := addWT(t, main, "a")
-	addWT(t, main, "b")
-	infos, err := svc.inventory(context.Background(), pol(), a)
-	if err != nil || len(infos) != 1 || !SameCheckout(infos[0].Path, a) {
-		t.Fatalf("inventory(only) = %+v %v", infos, err)
-	}
-}
-
-func TestPolicyFromConfigBadAge(t *testing.T) {
-	t.Parallel()
-	if _, err := PolicyFromConfig(config.AgentsConfig{StaleAfter: "soon"}); err == nil {
-		t.Fatal("want error")
+	if find(t, infos, locked).Facts["git_lock"] != true {
+		t.Fatal("git_lock fact")
 	}
 }
 ```
 
+Plus, with the same bodies as the earlier revision but `w.Dirty` → `w.Dirty()`, `w.Reserved` → `w.Facts["reserved"] == true`: `TestInventoryReservedRelativeToMain`, `TestInventoryPausedOp`, `TestInventorySessionAndTUIFromRegistry` (its "status must be skipped" check becomes `find(t, infos, a).Facts["dirty"] != nil` → fail), `TestInventoryFreeOrder`, `TestInventoryLastChangeSkipsDeletedPaths` (+ `firstTrackedFile`), `TestInventoryMissingWorktree`, `TestInventoryOnlyOneWorktree`, `TestPolicyFromConfigBadAge`.
+
+`wtguards_test.go` — the composition is swappable and consumers never name a provider:
+
+```go
+func TestInventoryUsesTheGuardSetHook(t *testing.T) {
+	// Not parallel: swaps the process-wide composition hook.
+	main, svc, _ := inventoryRepo(t)
+	wt := addWT(t, main, "hooked")
+	prev := WorktreeGuardSet
+	WorktreeGuardSet = func(GuardSources) []wtguard.Guard { return []wtguard.Guard{alwaysBlocks{}} }
+	defer func() { WorktreeGuardSet = prev }()
+	infos, _ := svc.WorktreeInventory(context.Background(), pol(), false)
+	if got := find(t, infos, wt).BlockedBy; !slices.Equal(got, []string{"test-block"}) {
+		t.Fatalf("blocked_by = %v", got)
+	}
+}
+
+type alwaysBlocks struct{}
+
+func (alwaysBlocks) Reason() string  { return "test-block" }
+func (alwaysBlocks) FactKey() string { return "" }
+func (alwaysBlocks) Cheap() bool     { return true }
+func (alwaysBlocks) Check(context.Context, wtguard.Target) (wtguard.Result, error) {
+	return wtguard.Result{Blocker: &wtguard.Blocker{Reason: "test-block"}}, nil
+}
+
+func TestClaimGuardExemptsHolder(t *testing.T) {
+	t.Parallel()
+	main, svc, reg := inventoryRepo(t)
+	wt := addWT(t, main, "held")
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, State: "running"}}})
+	wtclaim.Create(git.GitDirAt(wt), wtclaim.Claim{Session: "p/s1", Since: time.Now()})
+	ctx := context.Background()
+	holder, _ := svc.GuardReport(ctx, wtguard.Target{Dir: wt, Branch: "held", CallerSession: "p/s1"})
+	other, _ := svc.GuardReport(ctx, wtguard.Target{Dir: wt, Branch: "held", CallerSession: "p/s2"})
+	if slices.Contains(holder.Reasons(), "claimed") || !slices.Contains(other.Reasons(), "claimed") {
+		t.Fatalf("holder=%v other=%v", holder.Reasons(), other.Reasons())
+	}
+}
+```
+
+`TestInventoryUsesTheGuardSetHook` must not run in parallel with other inventory tests: give it its own name prefix and no `t.Parallel()`; Go runs non-parallel tests before parallel ones resume, so the swap cannot leak.
+
 - [ ] **Step 2: Run to verify failure**
 
-Run: `go test ./internal/domain -run 'TestInventory|TestPolicyFromConfig'`
+Run: `go test ./internal/domain -run 'TestInventory|TestPolicyFromConfig|TestClaimGuard'`
 Expected: FAIL — undefined `WorktreeInventory`.
 
 - [ ] **Step 3: Implement**
 
-Add to `Service` struct: `sessRegDir string // UseSessionRegistryDir override; "" = SessionRegistryDir()` and:
+`service.go`: add `sessRegDir string` to `Service` and:
 
 ```go
+// UseSessionRegistryDir points this Service's registry reads at dir (tests).
 func (s *Service) UseSessionRegistryDir(dir string) { s.mu.Lock(); s.sessRegDir = dir; s.mu.Unlock() }
 
 func (s *Service) registryDir() string {
@@ -1429,12 +1651,245 @@ func (s *Service) registryDir() string {
 }
 ```
 
+`wtguards.go` (providers):
+
 ```go
-// wtinventory.go
 package domain
 
-// (imports: context, fmt, os, path/filepath, slices, sort, sync, time,
-//  branchfilter, config, git, model, wtclaim)
+// (imports: context, os, path/filepath, slices, time, git, wtguard)
+
+type missingGuard struct{}
+
+func (missingGuard) Reason() string  { return "missing" }
+func (missingGuard) FactKey() string { return "" }
+func (missingGuard) Cheap() bool     { return true }
+func (missingGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result, error) {
+	if git.GitDirAt(t.Dir) == "" {
+		return wtguard.Result{Blocker: &wtguard.Blocker{Reason: "missing", Detail: "the worktree directory is gone", Hard: true}}, nil
+	}
+	return wtguard.Result{}, nil
+}
+
+type mainGuard struct{ allow bool }
+
+func (mainGuard) Reason() string  { return "main" }
+func (mainGuard) FactKey() string { return "" }
+func (mainGuard) Cheap() bool     { return true }
+func (g mainGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result, error) {
+	if t.Main && !g.allow {
+		return wtguard.Result{Blocker: &wtguard.Blocker{Reason: "main", Detail: "the main checkout"}}, nil
+	}
+	return wtguard.Result{}, nil
+}
+
+type detachedGuard struct{}
+
+func (detachedGuard) Reason() string  { return "detached" }
+func (detachedGuard) FactKey() string { return "" }
+func (detachedGuard) Cheap() bool     { return true }
+func (detachedGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result, error) {
+	if t.Detached {
+		return wtguard.Result{Blocker: &wtguard.Blocker{Reason: "detached", Detail: "no branch checked out"}}, nil
+	}
+	return wtguard.Result{}, nil
+}
+
+type pausedOpGuard struct{}
+
+func (pausedOpGuard) Reason() string  { return "paused-op" }
+func (pausedOpGuard) FactKey() string { return "paused_op" }
+func (pausedOpGuard) Cheap() bool     { return true }
+func (pausedOpGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result, error) {
+	gd := git.GitDirAt(t.Dir)
+	if gd == "" {
+		return wtguard.Result{Fact: ""}, nil
+	}
+	op := git.PausedOpIn(gd)
+	r := wtguard.Result{Fact: op}
+	if op != "" {
+		r.Blocker = &wtguard.Blocker{Reason: "paused-op", Detail: "a " + op + " is in progress", Hard: true}
+	}
+	return r, nil
+}
+
+type gitLockGuard struct{}
+
+func (gitLockGuard) Reason() string  { return "git-lock" }
+func (gitLockGuard) FactKey() string { return "git_lock" }
+func (gitLockGuard) Cheap() bool     { return true }
+func (gitLockGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result, error) {
+	gd := git.GitDirAt(t.Dir)
+	if gd == "" {
+		return wtguard.Result{Fact: false}, nil
+	}
+	// This worktree's own git dir only: common-dir locks (packed-refs.lock
+	// during a fetch) would block every worktree at once.
+	locks := git.LockFiles(gd)
+	if len(locks) == 0 {
+		return wtguard.Result{Fact: false}, nil
+	}
+	return wtguard.Result{Fact: true, Blocker: &wtguard.Blocker{Reason: "git-lock", Detail: locks[0].Name, Hard: true}}, nil
+}
+
+type reservedGuard struct{ abs []string }
+
+func (reservedGuard) Reason() string  { return "reserved" }
+func (reservedGuard) FactKey() string { return "reserved" }
+func (reservedGuard) Cheap() bool     { return true }
+func (g reservedGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result, error) {
+	for _, r := range g.abs {
+		if SameCheckout(r, t.Dir) {
+			return wtguard.Result{Fact: true, Blocker: &wtguard.Blocker{Reason: "reserved", Detail: "reserved against agents"}}, nil
+		}
+	}
+	return wtguard.Result{Fact: false}, nil
+}
+
+type claimGuard struct{ lv liveView }
+
+func (claimGuard) Reason() string  { return "claimed" }
+func (claimGuard) FactKey() string { return "claim" }
+func (claimGuard) Cheap() bool     { return true }
+func (g claimGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result, error) {
+	c, ok := liveClaim(git.GitDirAt(t.Dir), g.lv) // sweeps a dead claim (Task 7)
+	if !ok {
+		return wtguard.Result{Fact: (*ClaimInfo)(nil)}, nil
+	}
+	r := wtguard.Result{Fact: &c}
+	if c.Session != t.CallerSession || t.CallerSession == "" {
+		detail := c.Agent + " since " + c.Since.Local().Format("2006-01-02 15:04")
+		if c.Note != "" {
+			detail += " · " + c.Note
+		}
+		r.Blocker = &wtguard.Blocker{Reason: "claimed", Detail: detail}
+	}
+	return r, nil
+}
+
+type tuiGuard struct{ lv liveView }
+
+func (tuiGuard) Reason() string  { return "tui" }
+func (tuiGuard) FactKey() string { return "tui" }
+func (tuiGuard) Cheap() bool     { return true }
+func (g tuiGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result, error) {
+	for _, w := range g.lv.tuis {
+		if SameCheckout(w, t.Dir) {
+			return wtguard.Result{Fact: true, Blocker: &wtguard.Blocker{Reason: "tui", Detail: "a gg TUI is open here"}}, nil
+		}
+	}
+	return wtguard.Result{Fact: false}, nil
+}
+
+type sessionGuard struct{ lv liveView }
+
+func (sessionGuard) Reason() string  { return "session" }
+func (sessionGuard) FactKey() string { return "sessions" }
+func (sessionGuard) Cheap() bool     { return true }
+func (g sessionGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result, error) {
+	refs := []SessionRef{}
+	var running []string
+	for d, rs := range g.lv.byDir {
+		if !SameCheckout(d, t.Dir) {
+			continue
+		}
+		refs = append(refs, rs...)
+		for _, r := range rs {
+			if r.State == "running" {
+				running = append(running, r.Agent)
+			}
+		}
+	}
+	res := wtguard.Result{Fact: refs}
+	if len(running) > 0 {
+		res.Blocker = &wtguard.Blocker{Reason: "session", Detail: "agent session running: " + strings.Join(running, ", ")}
+	}
+	return res, nil
+}
+
+type dirtyGuard struct {
+	svc   *Service
+	stale time.Duration
+	now   func() time.Time
+}
+
+func (dirtyGuard) Reason() string  { return "dirty-recent" }
+func (dirtyGuard) FactKey() string { return "dirty" }
+func (dirtyGuard) Cheap() bool     { return false }
+func (g dirtyGuard) Check(ctx context.Context, t wtguard.Target) (wtguard.Result, error) {
+	st, err := g.svc.repo.InDir(t.Dir).Status(ctx)
+	if err != nil {
+		// Never read a failed status as clean.
+		return wtguard.Result{Fact: (*DirtyInfo)(nil), Blocker: &wtguard.Blocker{Reason: "status-failed", Detail: err.Error(), Hard: true}}, nil
+	}
+	c := st.Counts()
+	d := &DirtyInfo{Staged: c.Staged, Unstaged: c.Unstaged, Untracked: c.Untracked}
+	for _, f := range st.Files {
+		fi, err := os.Stat(filepath.Join(t.Dir, f.Path))
+		if err != nil {
+			continue // deleted in the tree: nothing to date
+		}
+		if mt := fi.ModTime(); d.LastChange == nil || mt.After(*d.LastChange) {
+			d.LastChange = &mt
+		}
+	}
+	r := wtguard.Result{Fact: d}
+	if len(st.Files) > 0 && (d.LastChange == nil || g.now().Sub(*d.LastChange) < g.stale) {
+		r.Blocker = &wtguard.Blocker{Reason: "dirty-recent", Detail: "uncommitted changes touched recently"}
+	}
+	return r, nil
+}
+```
+
+(add `strings` to the imports.) The dirty fact is a `*DirtyInfo` even for a clean tree (all zero, `LastChange` nil) — `Recycle` distinguishes clean from dirty by the counts.
+
+`wtguard_set.go` — the composition, the ONLY place that names providers:
+
+```go
+package domain
+
+// GuardSources is one run's snapshot of every non-git source a guard needs.
+type GuardSources struct {
+	Policy   InventoryPolicy
+	Reserved []string
+	Live     liveView
+	Svc      *Service
+}
+
+// WorktreeGuardSet composes the guards every "may this worktree be taken?"
+// question runs — the inventory, claims and the recycle op alike (user
+// ruling: one full set everywhere). The composition root may replace it;
+// consumers never name a provider.
+var WorktreeGuardSet = StandardWorktreeGuards
+
+// StandardWorktreeGuards: cheap before expensive is wtguard.Run's job; this
+// order is the blocked_by order.
+func StandardWorktreeGuards(src GuardSources) []wtguard.Guard {
+	now := src.Policy.Now
+	if now == nil {
+		now = time.Now
+	}
+	return []wtguard.Guard{
+		missingGuard{},
+		mainGuard{allow: src.Policy.AllowMain},
+		detachedGuard{},
+		pausedOpGuard{},
+		gitLockGuard{},
+		reservedGuard{abs: src.Reserved},
+		claimGuard{lv: src.Live},
+		tuiGuard{lv: src.Live},
+		sessionGuard{lv: src.Live},
+		dirtyGuard{svc: src.Svc, stale: src.Policy.StaleAfter, now: now},
+	}
+}
+```
+
+`wtinventory.go`:
+
+```go
+package domain
+
+// (imports: context, fmt, path/filepath, slices, sort, sync, time,
+//  branchfilter, config, model, wtguard)
 
 func PolicyFromConfig(c config.AgentsConfig) (InventoryPolicy, error) {
 	p := InventoryPolicy{Reserved: c.Reserved, AllowMain: c.AllowMain}
@@ -1450,6 +1905,32 @@ func PolicyFromConfig(c config.AgentsConfig) (InventoryPolicy, error) {
 	return p, nil
 }
 
+func (w WorktreeInfo) Dirty() *DirtyInfo { d, _ := w.Facts["dirty"].(*DirtyInfo); return d }
+func (w WorktreeInfo) Claim() *ClaimInfo { c, _ := w.Facts["claim"].(*ClaimInfo); return c }
+
+func resolveReserved(mainPath string, list []string) []string {
+	out := make([]string, 0, len(list))
+	for _, p := range list {
+		if !filepath.IsAbs(p) && mainPath != "" {
+			p = filepath.Join(mainPath, p)
+		}
+		out = append(out, filepath.Clean(p))
+	}
+	return out
+}
+
+func (s *Service) guardSources(pol InventoryPolicy, wts []model.Worktree) GuardSources {
+	mainPath := ""
+	if len(wts) > 0 {
+		mainPath = wts[0].Path
+	}
+	return GuardSources{Policy: pol, Reserved: resolveReserved(mainPath, pol.Reserved), Live: readLive(s.registryDir()), Svc: s}
+}
+
+func targetOf(w model.Worktree, isMain bool, caller string) wtguard.Target {
+	return wtguard.Target{Dir: w.Path, Branch: w.Branch, Main: isMain, Detached: w.Detached || w.Branch == "", CallerSession: caller}
+}
+
 func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, freeOnly bool) ([]WorktreeInfo, error) {
 	out, err := s.inventory(ctx, pol, "")
 	if err != nil || !freeOnly {
@@ -1457,7 +1938,7 @@ func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, fr
 	}
 	out = slices.DeleteFunc(out, func(w WorktreeInfo) bool { return !w.Free })
 	sort.SliceStable(out, func(i, j int) bool {
-		a, b := out[i].Dirty, out[j].Dirty
+		a, b := out[i].Dirty(), out[j].Dirty()
 		ac, bc := a == nil || a.LastChange == nil, b == nil || b.LastChange == nil
 		if ac != bc {
 			return ac // clean first
@@ -1470,160 +1951,120 @@ func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, fr
 	return out, nil
 }
 
+// inventory runs the composed guard set per worktree (only != "": that one
+// alone — the claim path, no status fan-out), in parallel; the Runner's
+// LimitRunner caps the concurrent git processes.
 func (s *Service) inventory(ctx context.Context, pol InventoryPolicy, only string) ([]WorktreeInfo, error) {
 	wts, err := s.Worktrees(ctx)
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now
-	if pol.Now != nil {
-		now = pol.Now
-	}
-	lv := readLive(s.registryDir())
-	mainPath := ""
-	if len(wts) > 0 {
-		mainPath = wts[0].Path
-	}
-	reserved := resolveReserved(mainPath, pol.Reserved)
-	out := make([]WorktreeInfo, 0, len(wts))
+	guards := WorktreeGuardSet(s.guardSources(pol, wts))
+	var out []WorktreeInfo
+	var targets []wtguard.Target
 	for i, w := range wts {
 		if w.Bare || w.Path == "" || (only != "" && !SameCheckout(w.Path, only)) {
 			continue
 		}
-		out = append(out, s.cheapInfo(w, i == 0, pol, lv, reserved))
+		t := targetOf(w, i == 0, "")
+		out = append(out, WorktreeInfo{Path: w.Path, Branch: w.Branch, Head: w.Head, Main: t.Main, Detached: t.Detached})
+		targets = append(targets, t)
 	}
-	// git status only for the still-free ones, in parallel (the Runner's
-	// LimitRunner caps concurrent git processes).
 	var wg sync.WaitGroup
 	for i := range out {
-		if len(out[i].BlockedBy) > 0 {
-			continue
-		}
 		wg.Add(1)
-		go func(w *WorktreeInfo) {
+		go func(w *WorktreeInfo, t wtguard.Target) {
 			defer wg.Done()
-			s.fillDirty(ctx, w, pol.StaleAfter, now())
-		}(&out[i])
+			r := wtguard.Run(ctx, guards, t)
+			w.Facts, w.Blockers, w.BlockedBy = r.Facts, r.Blockers, r.Reasons()
+			w.Free = len(r.Blockers) == 0
+			switch d := w.Dirty(); {
+			case !w.Free:
+				w.Recycle = ""
+			case d != nil && d.Staged+d.Unstaged+d.Untracked > 0:
+				w.Recycle = "shelve"
+			default:
+				w.Recycle = "none"
+			}
+		}(&out[i], targets[i])
 	}
 	wg.Wait()
-	for i := range out {
-		w := &out[i]
-		w.Free = len(w.BlockedBy) == 0
-		switch {
-		case !w.Free:
-			w.Recycle = ""
-		case w.Dirty != nil && w.Dirty.Staged+w.Dirty.Unstaged+w.Dirty.Untracked > 0:
-			w.Recycle = "shelve"
-		default:
-			w.Recycle = "none"
-		}
-	}
 	return out, nil
 }
 
-// resolveReserved turns configured paths into absolute cleaned ones.
-func resolveReserved(mainPath string, list []string) []string {
-	out := make([]string, 0, len(list))
-	for _, p := range list {
-		if !filepath.IsAbs(p) && mainPath != "" {
-			p = filepath.Join(mainPath, p)
-		}
-		out = append(out, filepath.Clean(p))
-	}
-	return out
-}
-
-func (s *Service) cheapInfo(w model.Worktree, isMain bool, pol InventoryPolicy, lv liveView, reserved []string) WorktreeInfo {
-	info := WorktreeInfo{Path: w.Path, Branch: w.Branch, Head: w.Head, Main: isMain, Detached: w.Detached || w.Branch == ""}
-	block := func(r string) { info.BlockedBy = append(info.BlockedBy, r) }
-	gitDir := git.GitDirAt(w.Path)
-	if gitDir == "" {
-		// The directory (or its .git) is gone: a prunable worktree. Nothing
-		// else is knowable, and a claim would have nowhere to live.
-		block("missing")
-		return info
-	}
-	if isMain && !pol.AllowMain {
-		block("main")
-	}
-	if info.Detached {
-		block("detached")
-	}
-	if info.PausedOp = git.PausedOpIn(gitDir); info.PausedOp != "" {
-		block("paused-op")
-	}
-	// This worktree's own git dir only: common-dir locks (packed-refs.lock
-	// during a fetch) would block every worktree at once and say nothing
-	// about this one.
-	if info.GitLock = len(git.LockFiles(gitDir)) > 0; info.GitLock {
-		block("git-lock")
-	}
-	for _, r := range reserved {
-		if SameCheckout(r, w.Path) {
-			info.Reserved = true
-			block("reserved")
-			break
-		}
-	}
-	if c, ok := liveClaim(gitDir, lv); ok {
-		info.Claim = &c
-		block("claimed")
-	}
-	for _, t := range lv.tuis {
-		if SameCheckout(t, w.Path) {
-			info.TUI = true
-			block("tui")
-			break
-		}
-	}
-	for d, refs := range lv.byDir {
-		if !SameCheckout(d, w.Path) {
-			continue
-		}
-		info.Sessions = append(info.Sessions, refs...)
-		for _, r := range refs {
-			if r.State == "running" && !slices.Contains(info.BlockedBy, "session") {
-				block("session")
-			}
-		}
-	}
-	return info
-}
-
-func (s *Service) fillDirty(ctx context.Context, w *WorktreeInfo, staleAfter time.Duration, now time.Time) {
-	st, err := s.repo.InDir(w.Path).Status(ctx)
+// GuardReport runs the composed guards on one worktree as caller sees it
+// (the claim guard exempts the caller's own claim). It backs OpDeps.Guards.
+//
+// It runs INSIDE an op that already holds this repo's reservation, so it
+// never goes through a gated query (s.Worktrees would wait on the op itself
+// — writer-preferring gate): it reads through s.repo directly, as
+// shelveStagedIn does.
+func (s *Service) GuardReport(ctx context.Context, t wtguard.Target) (wtguard.Report, error) {
+	wts, err := s.repo.Worktrees(ctx)
 	if err != nil {
-		// Never read a failed status as "clean": that would hand an agent a
-		// worktree whose changes we could not see.
-		w.BlockedBy = append(w.BlockedBy, "status-failed")
-		return
+		return wtguard.Report{}, err
 	}
-	c := st.Counts()
-	d := &DirtyInfo{Staged: c.Staged, Unstaged: c.Unstaged, Untracked: c.Untracked}
-	for _, f := range st.Files {
-		fi, err := os.Stat(filepath.Join(w.Path, f.Path))
-		if err != nil {
-			continue // deleted in the tree: nothing to date
+	ac, _, err := agentsConfigFrom(wts)
+	if err != nil {
+		return wtguard.Report{}, err
+	}
+	pol, err := PolicyFromConfig(ac)
+	if err != nil {
+		return wtguard.Report{}, err
+	}
+	for i, w := range wts {
+		if SameCheckout(w.Path, t.Dir) {
+			tt := targetOf(w, i == 0, t.CallerSession)
+			return wtguard.Run(ctx, WorktreeGuardSet(s.guardSources(pol, wts)), tt), nil
 		}
-		if mt := fi.ModTime(); d.LastChange == nil || mt.After(*d.LastChange) {
-			d.LastChange = &mt
-		}
 	}
-	w.Dirty = d
-	if len(st.Files) > 0 && (d.LastChange == nil || now.Sub(*d.LastChange) < staleAfter) {
-		w.BlockedBy = append(w.BlockedBy, "dirty-recent")
-	}
+	return wtguard.Report{}, ErrUnknownWorktree
 }
 ```
 
-A dirty tree whose every path is deleted has `LastChange == nil`: it blocks as `dirty-recent` (no evidence it is old — safer). The free-order sort treats "no LastChange" as clean, which only matters for free worktrees, where every dirty one has a date.
-
-Conflicted files count in `len(st.Files)` but not in Staged/Unstaged/Untracked — a conflicted tree is already blocked as `paused-op`, so the `recycle` switch never sees one.
-
-`liveClaim` is defined in Task 7; for this task add a stub in `wtclaim.go` of the domain that Task 7 replaces:
+Also in `wtinventory.go`:
 
 ```go
-// liveClaim reports gitDir's claim when its session is alive (Task 7 adds the sweep).
+// AgentsConfig is [agents] plus the active repo config path it came from,
+// anchored on the MAIN worktree: a TUI or CLI running in a linked worktree
+// must read and write the same file the rest of the repo uses (the TUI's
+// own repoTOML follows the cwd worktree's committed .gg.toml).
+func (s *Service) AgentsConfig(ctx context.Context) (config.AgentsConfig, string, error) {
+	wts, err := s.Worktrees(ctx)
+	if err != nil {
+		return config.AgentsConfig{}, "", err
+	}
+	return agentsConfigFrom(wts)
+}
+
+// agentsConfigFrom is AgentsConfig over an already-read worktree list (the
+// ungated GuardReport path).
+func agentsConfigFrom(wts []model.Worktree) (config.AgentsConfig, string, error) {
+	if len(wts) == 0 || wts[0].Path == "" {
+		return config.AgentsConfig{}, "", ErrUnknownWorktree
+	}
+	mainPath := wts[0].Path
+	path := config.ActiveRepoConfigPath(filepath.Join(mainPath, ".gg.toml"), config.PrivateRepoPath(mainPath))
+	cfg, err := config.Load(config.DefaultGlobalPath(), path)
+	if err != nil {
+		return config.AgentsConfig{}, "", err
+	}
+	return cfg.Agents, path, nil
+}
+```
+
+`GuardReport` reads the repo's `[agents]` config itself (via `AgentsConfig`, Task 7), so the recycle op needs no policy plumbing. Its `Branch/Main/Detached` come from the worktree list, not from the caller.
+
+Hand-check that `readLive` runs ONCE per inventory (inside `guardSources`), not per worktree.
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `go test ./internal/domain -run 'TestInventory|TestPolicyFromConfig|TestClaimGuard' -count=1`
+Expected: PASS (`TestClaimGuardExemptsHolder` needs Task 7's `liveClaim` sweep semantics — if it runs before Task 7, it passes with the stub below too).
+
+A Task 6 stub for `liveClaim` (replaced in Task 7) goes in `internal/domain/wtclaim.go`:
+
+```go
 func liveClaim(gitDir string, lv liveView) (ClaimInfo, bool) {
 	if gitDir == "" {
 		return ClaimInfo{}, false
@@ -1636,18 +2077,13 @@ func liveClaim(gitDir string, lv liveView) (ClaimInfo, bool) {
 }
 ```
 
-Verify `model.FileStatus` has `.Path` (used by `statusRows` — yes) and that untracked directories come back as the dir path (stat works on a dir).
-
-- [ ] **Step 4: Run to verify pass**
-
-Run: `go test ./internal/domain -run 'TestInventory|TestPolicyFromConfig' -count=1`
-Expected: PASS.
+(`AgentsConfig` above belongs to this task; Task 7 only tests it.)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-gg add internal/domain/wtinventory.go internal/domain/wtinventory_test.go internal/domain/wtclaim.go internal/domain/service.go
-git commit -m "feat(domain): worktree inventory with free verdict for agents"
+gg add internal/domain/wtguards.go internal/domain/wtguard_set.go internal/domain/wtinventory.go internal/domain/wtinventory_test.go internal/domain/wtguards_test.go internal/domain/wtclaim.go internal/domain/service.go
+git commit -m "feat(domain): worktree guard providers + one composition; inventory over guards"
 ```
 
 ---
@@ -1672,6 +2108,7 @@ func (s *Service) ReleaseWorktree(ctx context.Context, path, sessionID string, f
 type WorktreeMark struct { Reserved bool; Claim *ClaimInfo }
 func (s *Service) WorktreeMarks(wts []model.Worktree, reserved []string) map[string]WorktreeMark  // key = worktree Path as listed; wts = the list the caller just loaded
 func (s *Service) SetWorktreeReserved(ctx context.Context, cfgPath string, current []string, path string, on bool) error
+// AgentsConfig: defined in Task 6
 ```
 
 - [ ] **Step 1: Write the failing tests**
@@ -1694,8 +2131,8 @@ func TestClaimAndRelease(t *testing.T) {
 		t.Fatalf("second claim = %v", err)
 	}
 	infos, _ := svc.WorktreeInventory(ctx, pol(), false)
-	if w := find(t, infos, wt); w.Claim == nil || w.Claim.Note != "https://x/1" || w.Claim.Agent != "claude" {
-		t.Fatalf("claim = %+v (agent must come from the registry entry)", w.Claim)
+	if w := find(t, infos, wt); w.Claim() == nil || w.Claim().Note != "https://x/1" || w.Claim().Agent != "claude" {
+		t.Fatalf("claim = %+v (agent must come from the registry entry)", w.Claim())
 	}
 	if _, err := svc.ReleaseWorktree(ctx, wt, "p/s9", false); !errors.Is(err, ErrNotHolder) {
 		t.Fatalf("non-holder release = %v", err)
@@ -1738,7 +2175,7 @@ func TestStalledRegistryKeepsClaim(t *testing.T) {
 	past := time.Now().Add(-2 * sessionreg.LiveWindow)
 	os.Chtimes(filepath.Join(reg, proc+".json"), past, past) // the TUI froze
 	infos, _ := svc.WorktreeInventory(ctx, pol(), false)
-	if w := find(t, infos, wt); w.Claim == nil {
+	if w := find(t, infos, wt); w.Claim() == nil {
 		t.Fatal("a stalled registry of a LIVE process must keep its claim")
 	}
 }
@@ -1778,14 +2215,42 @@ func TestEmptyClaimFileDiesAfterGrace(t *testing.T) {
 	f := filepath.Join(git.GitDirAt(wt), wtclaim.FileName)
 	os.WriteFile(f, nil, 0o644)
 	infos, _ := svc.WorktreeInventory(context.Background(), pol(), false)
-	if find(t, infos, wt).Claim == nil {
+	if find(t, infos, wt).Claim() == nil {
 		t.Fatal("a fresh empty claim is mid-write: alive")
 	}
 	past := time.Now().Add(-time.Minute)
 	os.Chtimes(f, past, past)
 	infos, _ = svc.WorktreeInventory(context.Background(), pol(), false)
-	if find(t, infos, wt).Claim != nil {
+	if find(t, infos, wt).Claim() != nil {
 		t.Fatal("an old empty claim is a crashed claimer's: dead")
+	}
+}
+
+func TestUnparsableClaimDiesAfterGrace(t *testing.T) {
+	t.Parallel()
+	main, svc, reg := inventoryRepo(t)
+	wt := addWT(t, main, "garbled")
+	f := filepath.Join(git.GitDirAt(wt), wtclaim.FileName)
+	os.WriteFile(f, []byte("not = [toml"), 0o644)
+	past := time.Now().Add(-time.Minute)
+	os.Chtimes(f, past, past)
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, State: "running"}}})
+	if err := svc.ClaimWorktree(context.Background(), wt, "p/s1", "", pol()); err != nil {
+		t.Fatalf("claim over an old garbled claim = %v", err)
+	}
+}
+
+func TestAgentsConfigAnchoredOnMain(t *testing.T) {
+	t.Parallel()
+	main, svc, _ := inventoryRepo(t)
+	wt := addWT(t, main, "lnk")
+	os.WriteFile(filepath.Join(main, ".gg.toml"), []byte("[agents]\nreserved = [\"x\"]\n"), 0o644)
+	os.WriteFile(filepath.Join(wt, ".gg.toml"), []byte("[agents]\nreserved = [\"y\"]\n"), 0o644)
+	linked := New(&git.Repo{Runner: gitexec.NewExecRunner("git", wt, observ.NewRing(50))})
+	linked.UseSessionRegistryDir(t.TempDir())
+	ac, path, err := linked.AgentsConfig(context.Background())
+	if err != nil || !SameCheckout(filepath.Dir(path), main) || !slices.Equal(ac.Reserved, []string{"x"}) {
+		t.Fatalf("AgentsConfig from a linked worktree = %+v %q %v", ac, path, err)
 	}
 }
 
@@ -1798,7 +2263,7 @@ func TestExitedSessionClaimIsDead(t *testing.T) {
 	svc.ClaimWorktree(ctx, wt, "p/s1", "", pol())
 	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, State: "exited"}}})
 	infos, _ := svc.WorktreeInventory(ctx, pol(), false)
-	if w := find(t, infos, wt); w.Claim != nil || !w.Free {
+	if w := find(t, infos, wt); w.Claim() != nil || !w.Free {
 		t.Fatalf("exited-session claim must be dead: %+v", w)
 	}
 	if _, err := os.Stat(filepath.Join(git.GitDirAt(wt), wtclaim.FileName)); !os.IsNotExist(err) {
@@ -1896,6 +2361,26 @@ type WorktreeMark struct {
 // and its write — alive this long, then a crashed claimer's.
 const emptyClaimGrace = 10 * time.Second
 
+// readClaim reads gitDir's claim. An unparsable file (hand-edited, torn by
+// a crash) reads as an EMPTY claim, so it gets the same grace-then-dead
+// treatment instead of blocking the worktree forever.
+func readClaim(gitDir string) (wtclaim.Claim, bool) {
+	c, ok, err := wtclaim.Read(gitDir)
+	if err != nil {
+		if _, exists := wtclaim.Age(gitDir); exists {
+			return wtclaim.Claim{}, true
+		}
+		return wtclaim.Claim{}, false
+	}
+	return c, ok
+}
+
+// sameClaim: field-wise, with time.Equal — a numeric-offset timestamp parses
+// to a fresh *Location each read, so == would never match it.
+func sameClaim(a, b wtclaim.Claim) bool {
+	return a.Session == b.Session && a.Agent == b.Agent && a.Note == b.Note && a.Since.Equal(b.Since)
+}
+
 func claimDead(c wtclaim.Claim, gitDir string, lv liveView) bool {
 	if c.Session == "" {
 		age, ok := wtclaim.Age(gitDir)
@@ -1911,14 +2396,14 @@ func liveClaim(gitDir string, lv liveView) (ClaimInfo, bool) {
 	if gitDir == "" {
 		return ClaimInfo{}, false
 	}
-	c, ok, err := wtclaim.Read(gitDir)
-	if err != nil || !ok {
+	c, ok := readClaim(gitDir)
+	if !ok {
 		return ClaimInfo{}, false
 	}
 	if claimDead(c, gitDir, lv) {
 		_ = wtclaim.WithLock(gitDir, func() error {
-			again, ok, err := wtclaim.Read(gitDir)
-			if err == nil && ok && again == c && claimDead(again, gitDir, lv) {
+			again, ok := readClaim(gitDir)
+			if ok && sameClaim(again, c) && claimDead(again, gitDir, lv) {
 				return wtclaim.Remove(gitDir)
 			}
 			return nil
@@ -1967,7 +2452,7 @@ func (s *Service) ClaimWorktree(ctx context.Context, path, sessionID, note strin
 	return wtclaim.WithLock(gitDir, func() error {
 		// Between the inventory read and the lock a dead claim may have
 		// appeared dead-then-live or been swept; decide again, locked.
-		if c, ok, err := wtclaim.Read(gitDir); err == nil && ok {
+		if c, ok := readClaim(gitDir); ok {
 			if !claimDead(c, gitDir, lv) {
 				return &NotFreeError{Path: target.Path, BlockedBy: []string{"claimed"}}
 			}
@@ -2011,8 +2496,8 @@ func (s *Service) ReleaseWorktree(ctx context.Context, path, sessionID string, f
 // liveClaimLocked is liveClaim for a caller already holding the claim lock
 // (filelock is not re-entrant).
 func liveClaimLocked(gitDir string, lv liveView) (ClaimInfo, bool) {
-	c, ok, err := wtclaim.Read(gitDir)
-	if err != nil || !ok {
+	c, ok := readClaim(gitDir)
+	if !ok {
 		return ClaimInfo{}, false
 	}
 	if claimDead(c, gitDir, lv) {
@@ -2077,7 +2562,9 @@ func (s *Service) SetWorktreeReserved(ctx context.Context, cfgPath string, curre
 }
 ```
 
-`wtclaim.Claim` holds only comparable fields, so `again == c` compiles; the TOML round trip of the same bytes yields equal `time.Time` values.
+`AgentsConfig` is defined in Task 6 (the guard run needs it).
+
+(`gitexec` and `observ` in the anchored-config test come from the same imports `compare_test.go`'s `newRealRepo` uses.)
 
 Note `resolveReserved` must handle slash-separated relative entries on Windows: `filepath.Join` accepts `/` there, so no change needed.
 
@@ -2091,6 +2578,234 @@ Expected: PASS (whole package — the inventory tests from Task 6 now run with t
 ```bash
 gg add internal/domain/wtclaim.go internal/domain/wtclaim_test.go
 git commit -m "feat(domain): session-bound worktree claims with dead-claim sweep; reserve marks"
+```
+
+---
+
+### Task 7b: Recycle takes the guards (`OpDeps.Guards`, `recycle.blocked`, `--force`)
+
+**Files:**
+- Modify: `internal/engine/operation.go` (`OpDeps.Guards`), `internal/engine/recycle_worktree.go` (`CallerSession`, `RecycleBlockedDecisionID`, the guard step)
+- Modify: `internal/domain/service.go:383` (wire `Guards: s.GuardReport`)
+- Modify: `internal/cli/worktree.go` `cmdWorktreeRecycle` (`--force`, `CallerSession`)
+- Modify: `internal/i18n/lang/{ja,ko,zh,ru}.toml` (the prompt format + the two options)
+- Test: `internal/engine/recycle_guards_test.go`, `internal/cli/worktree_recycle_test.go`
+
+**Interfaces:**
+- Consumes: `wtguard.Report` (Task 5b), `Service.GuardReport` (Task 6).
+- Produces:
+```go
+// OpDeps
+Guards func(ctx context.Context, t wtguard.Target) (wtguard.Report, error) // nil = no guards
+const RecycleBlockedDecisionID = "recycle.blocked" // options "recycle anyway" | "abort"
+// RecycleWorktree gains: CallerSession string
+```
+
+**Rule:** a hard blocker fails the op before anything changes; overridable blockers become ONE decision. `dirty-recent` is NOT part of that decision — recycle's own `recycle.dirty` question (commit/shelve/discard/abort) already answers dirt, so asking twice would be noise; the guard's verdict still reaches the inventory and claims unchanged.
+
+- [ ] **Step 1: Write the failing tests**
+
+```go
+package engine
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/homeend/gigagit/internal/wtguard"
+)
+
+func guardsReturning(bs ...wtguard.Blocker) func(context.Context, wtguard.Target) (wtguard.Report, error) {
+	return func(context.Context, wtguard.Target) (wtguard.Report, error) {
+		return wtguard.Report{Blockers: bs, Facts: map[string]any{}}, nil
+	}
+}
+
+func TestRecycleHardBlockerFailsUntouched(t *testing.T) {
+	t.Parallel()
+	_, deps, wt := recycleFixture(t)
+	deps.Guards = guardsReturning(wtguard.Blocker{Reason: "missing", Hard: true})
+	_, err := RecycleWorktree{Dir: wt, Branch: "target", Now: fixedNow}.Run(context.Background(), deps)
+	if err == nil || !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := wtHead(t, wt); got != "a" {
+		t.Fatalf("HEAD = %q, want a (untouched)", got)
+	}
+}
+
+func TestRecycleOverridableBlockersAskOnce(t *testing.T) {
+	t.Parallel()
+	_, deps, wt := recycleFixture(t)
+	deps.Guards = guardsReturning(
+		wtguard.Blocker{Reason: "claimed", Detail: "claude"},
+		wtguard.Blocker{Reason: "reserved"},
+	)
+	deps.Decider = MapDecider{RecycleBlockedDecisionID: "abort"}
+	res, err := RecycleWorktree{Dir: wt, Branch: "target", Now: fixedNow}.Run(context.Background(), deps)
+	if err != nil || !strings.Contains(res.Summary, "cancelled") || wtHead(t, wt) != "a" {
+		t.Fatalf("abort: res=%+v err=%v head=%s", res, err, wtHead(t, wt))
+	}
+	deps.Decider = MapDecider{RecycleBlockedDecisionID: "recycle anyway"}
+	if _, err := (RecycleWorktree{Dir: wt, Branch: "target", Now: fixedNow}).Run(context.Background(), deps); err != nil {
+		t.Fatal(err)
+	}
+	if wtHead(t, wt) != "target" {
+		t.Fatal("recycle anyway must proceed")
+	}
+}
+
+func TestRecycleDirtyRecentIsLeftToTheDirtyQuestion(t *testing.T) {
+	t.Parallel()
+	_, deps, wt := recycleFixture(t)
+	deps.Guards = guardsReturning(wtguard.Blocker{Reason: "dirty-recent"})
+	deps.Decider = MapDecider{} // any decision would fail with ErrDecisionRequired
+	if _, err := (RecycleWorktree{Dir: wt, Branch: "target", Now: fixedNow}).Run(context.Background(), deps); errors.Is(err, ErrDecisionRequired) {
+		t.Fatal("dirty-recent alone must not raise recycle.blocked")
+	}
+}
+
+func TestRecyclePassesCallerSession(t *testing.T) {
+	t.Parallel()
+	_, deps, wt := recycleFixture(t)
+	var got wtguard.Target
+	deps.Guards = func(_ context.Context, tg wtguard.Target) (wtguard.Report, error) {
+		got = tg
+		return wtguard.Report{Facts: map[string]any{}}, nil
+	}
+	RecycleWorktree{Dir: wt, Branch: "target", CallerSession: "p/s1", Now: fixedNow}.Run(context.Background(), deps)
+	if got.CallerSession != "p/s1" || got.Dir == "" {
+		t.Fatalf("target = %+v", got)
+	}
+}
+```
+
+(Check `recycleFixture`'s worktree starts on branch `a` — `TestRecycleWorktreeDirtyCommit` commits onto `a`, so it does.)
+
+`internal/cli/worktree_recycle_test.go`:
+
+```go
+func TestWorktreeRecycleReservedNeedsForce(t *testing.T) {
+	dir := newCLIRepo(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	exec.Command("git", "-C", dir, "branch", "loose").Run()
+	wt := cliWorktree(t, dir, "a", "wt-a")
+	if code, _, errb := runCLI(t, dir, "worktree", "reserve", wt); code != 0 {
+		t.Fatalf("reserve: %s", errb)
+	}
+	code, _, errb := runCLI(t, dir, "worktree", "recycle", wt, "loose")
+	if code == 0 || !strings.Contains(errb, "reserved") {
+		t.Fatalf("recycle of a reserved worktree without --force = %d %q", code, errb)
+	}
+	if code, _, errb := runCLI(t, dir, "worktree", "recycle", "--force", wt, "loose"); code != 0 {
+		t.Fatalf("recycle --force = %d %q", code, errb)
+	}
+}
+```
+
+The existing recycle CLI tests must stay green unchanged: their targets are clean or answered by `--on-dirty`, not main, not reserved, and the pinned state dir holds no registry.
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `go test ./internal/engine -run TestRecycle ./internal/cli -run TestWorktreeRecycle`
+Expected: FAIL — `deps.Guards undefined`, unknown flag `--force`.
+
+- [ ] **Step 3: Implement**
+
+`operation.go` `OpDeps`, after `ShelveStaged`:
+
+```go
+	// Guards answers "may this worktree be taken?" from every composed
+	// source (git state, claims, sessions, config — domain.WorktreeGuardSet).
+	// The engine knows none of them. Nil = no guards (direct engine use).
+	Guards func(ctx context.Context, t wtguard.Target) (wtguard.Report, error)
+```
+
+`recycle_worktree.go`:
+
+```go
+// RecycleBlockedDecisionID is raised when the target worktree is in use by
+// something a human may override (a claim, a running agent, a reserve, the
+// main checkout…): one question listing every reason.
+const RecycleBlockedDecisionID = "recycle.blocked"
+```
+
+`RecycleWorktree` gains `CallerSession string // the calling agent's GG_SESSION_ID; its own claim does not block`. In `Run`, right after the "cannot recycle the worktree you are in" refusal and BEFORE `op.RemoteRef`'s checkout (so an abort changes nothing):
+
+```go
+	if deps.Guards != nil {
+		rep, err := deps.Guards(ctx, wtguard.Target{Dir: target, CallerSession: op.CallerSession})
+		if err != nil {
+			return Result{}, err
+		}
+		if hard := rep.Hard(); len(hard) > 0 {
+			return Result{}, fmt.Errorf("cannot recycle %s: %s", target, describeBlockers(hard))
+		}
+		var soft []wtguard.Blocker
+		for _, b := range rep.Overridable() {
+			if b.Reason != "dirty-recent" { // recycle.dirty below answers dirt
+				soft = append(soft, b)
+			}
+		}
+		if len(soft) > 0 {
+			resp, err := deps.decide(ctx, PromptReq(RecycleBlockedDecisionID,
+				"%s is in use: %s", []string{"recycle anyway", "abort"}, target, describeBlockers(soft)))
+			if err != nil {
+				return Result{}, err
+			}
+			if resp.Option != "recycle anyway" {
+				return Result{}.WithSummary("recycle cancelled"), nil
+			}
+		}
+	}
+```
+
+```go
+func describeBlockers(bs []wtguard.Blocker) string {
+	parts := make([]string, 0, len(bs))
+	for _, b := range bs {
+		if b.Detail != "" {
+			parts = append(parts, b.Reason+" ("+b.Detail+")")
+		} else {
+			parts = append(parts, b.Reason)
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+```
+
+The inline `PausedOpIn`/`LockFiles` refusals stay: they cover direct engine use (nil `Guards`) and cost two stats.
+
+`domain/service.go` `engine.OpDeps{…}`: add `Guards: s.GuardReport,` with the comment `// ungated reads: the op holds the reservation (see ShelveStaged)`. `GuardReport` (Task 6) already reads through `s.repo`, never the gated `s.Worktrees` (`query.go:305`). Add a domain test that runs `RecycleWorktree` through `svc.Execute` on a reserved worktree with a `MapDecider{recycle.blocked: "abort"}` and a 5 s context: it must return "recycle cancelled", not time out (a deadlock would).
+
+`cli/worktree.go` `cmdWorktreeRecycle`:
+
+```go
+	force := fs.Bool("force", false, "recycle even though the worktree is claimed, reserved, has a running agent or is the main checkout")
+	…
+	if *force {
+		policy[engine.RecycleBlockedDecisionID] = "recycle anyway"
+	}
+	…
+	op := engine.RecycleWorktree{Dir: match.Path, Branch: branch, RemoteRef: remoteRef, CallerSession: os.Getenv("GG_SESSION_ID")}
+```
+
+Update the recycle usage string to include `[--force]`.
+
+i18n: add the prompt format `%s is in use: %s` and the options `recycle anyway`, `abort` (if not already present) to all four bundles — the `engine_prose_test`/`options_vocab_test` gates list what they need.
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `go test ./internal/engine ./internal/cli ./internal/domain ./internal/tui -count=1`
+Expected: PASS (the TUI recycle tests are updated in Task 10; if one fails here because the op now asks `recycle.blocked` for a live session, move straight to Task 10's change).
+
+- [ ] **Step 5: Commit**
+
+```bash
+gg add internal/engine internal/domain/service.go internal/cli/worktree.go internal/cli/worktree_recycle_test.go internal/i18n
+git commit -m "feat(engine): recycle asks the composed worktree guards; gg worktree recycle --force"
 ```
 
 ---
@@ -2287,80 +3002,31 @@ package cli
 // (imports: context, encoding/json, errors, flag, fmt, io, os, path/filepath,
 //  time, config, domain)
 
-// agentsConfig loads [agents] plus the active repo config path it came
-// from — anchored on the MAIN worktree, never the cwd worktree's copy of
-// .gg.toml (reserve writes must land in one place for the whole repo).
+// agentsConfig is the domain's main-anchored [agents] view (one source for
+// the CLI and the TUI).
 func agentsConfig(svc *domain.Service) (config.AgentsConfig, string, error) {
-	ctx := context.Background()
-	wts, err := svc.Worktrees(ctx)
-	if err != nil || len(wts) == 0 {
-		return config.AgentsConfig{}, "", fmt.Errorf("no worktrees: %v", err)
-	}
-	mainPath := wts[0].Path
-	path := config.ActiveRepoConfigPath(filepath.Join(mainPath, ".gg.toml"), config.PrivateRepoPath(mainPath))
-	cfg, err := config.Load(config.DefaultGlobalPath(), path)
-	if err != nil {
-		return config.AgentsConfig{}, "", err
-	}
-	return cfg.Agents, path, nil
+	return svc.AgentsConfig(context.Background())
 }
 
-type jsonDirty struct {
-	Staged     int        `json:"staged"`
-	Unstaged   int        `json:"unstaged"`
-	Untracked  int        `json:"untracked"`
-	LastChange *time.Time `json:"last_change"`
-}
-type jsonSession struct {
-	ID    string `json:"id"`
-	Agent string `json:"agent"`
-	State string `json:"state"`
-}
-type jsonClaim struct {
-	Session string    `json:"session"`
-	Agent   string    `json:"agent"`
-	Since   time.Time `json:"since"`
-	Note    string    `json:"note"`
-}
-type jsonWorktree struct {
-	Path      string        `json:"path"`
-	Branch    string        `json:"branch"`
-	Head      string        `json:"head"`
-	Main      bool          `json:"main"`
-	Detached  bool          `json:"detached"`
-	Dirty     *jsonDirty    `json:"dirty"`
-	PausedOp  string        `json:"paused_op"`
-	GitLock   bool          `json:"git_lock"`
-	TUI       bool          `json:"tui"`
-	Sessions  []jsonSession `json:"sessions"`
-	Reserved  bool          `json:"reserved"`
-	Claim     *jsonClaim    `json:"claim"`
-	Free      bool          `json:"free"`
-	BlockedBy []string      `json:"blocked_by"`
-	Recycle   *string       `json:"recycle"`
-}
-
-func toJSON(w domain.WorktreeInfo) jsonWorktree {
-	j := jsonWorktree{Path: w.Path, Branch: w.Branch, Head: w.Head, Main: w.Main, Detached: w.Detached,
-		PausedOp: w.PausedOp, GitLock: w.GitLock, TUI: w.TUI, Reserved: w.Reserved, Free: w.Free,
-		BlockedBy: w.BlockedBy, Sessions: []jsonSession{}}
-	if j.BlockedBy == nil {
-		j.BlockedBy = []string{}
+// toJSON: the fixed identity fields, then every guard's fact under its own
+// key (dirty, claim, sessions, tui, reserved, paused_op, git_lock) — a new
+// guard in the composition shows up here with no CLI change.
+func toJSON(w domain.WorktreeInfo) map[string]any {
+	out := map[string]any{
+		"path": w.Path, "branch": w.Branch, "head": w.Head,
+		"main": w.Main, "detached": w.Detached,
+		"free": w.Free, "blocked_by": w.BlockedBy, "recycle": nil,
 	}
-	if d := w.Dirty; d != nil {
-		j.Dirty = &jsonDirty{Staged: d.Staged, Unstaged: d.Unstaged, Untracked: d.Untracked, LastChange: d.LastChange}
-	}
-	for _, s := range w.Sessions {
-		j.Sessions = append(j.Sessions, jsonSession{ID: s.ID, Agent: s.Agent, State: s.State})
-	}
-	if c := w.Claim; c != nil {
-		j.Claim = &jsonClaim{Session: c.Session, Agent: c.Agent, Since: c.Since, Note: c.Note}
+	if w.BlockedBy == nil {
+		out["blocked_by"] = []string{}
 	}
 	if w.Recycle != "" {
-		r := w.Recycle
-		j.Recycle = &r
+		out["recycle"] = w.Recycle
 	}
-	return j
+	for k, v := range w.Facts {
+		out[k] = v
+	}
+	return out
 }
 
 func cmdWorktreeList(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
@@ -2399,7 +3065,7 @@ func cmdWorktreeList(svc *domain.Service, args []string, stdout, stderr io.Write
 		return 1
 	}
 	if *asJSON {
-		out := make([]jsonWorktree, 0, len(infos))
+		out := make([]map[string]any, 0, len(infos))
 		for _, w := range infos {
 			out = append(out, toJSON(w))
 		}
@@ -2424,7 +3090,7 @@ func printWorktreeLine(w io.Writer, branch, path string) {
 	fmt.Fprintf(w, "%s\t%s\n", branch, path)
 }
 
-func cmdWorktreeClaim(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func cmdWorktreeClaim(svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("worktree claim", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	note := fs.String("note", "", "why the worktree is taken (e.g. the issue URL); shown in the TUI")
@@ -2440,7 +3106,7 @@ func cmdWorktreeClaim(svc *domain.Service, args []string, stdout, stderr io.Writ
 		fmt.Fprintln(stderr, "worktree claim: "+domain.ErrNotAgent.Error())
 		return 2
 	}
-	path, code := resolveWorktreeArg(svc, fs.Arg(0), "claim", stderr)
+	path, code := resolveWorktreeArg(svc, workdir, fs.Arg(0), "claim", stderr)
 	if code != 0 {
 		return code
 	}
@@ -2466,7 +3132,7 @@ func cmdWorktreeClaim(svc *domain.Service, args []string, stdout, stderr io.Writ
 	return 0
 }
 
-func cmdWorktreeRelease(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func cmdWorktreeRelease(svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("worktree release", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	force := fs.Bool("force", false, "release a claim held by another session")
@@ -2477,7 +3143,7 @@ func cmdWorktreeRelease(svc *domain.Service, args []string, stdout, stderr io.Wr
 		fmt.Fprintln(stderr, "usage: gg worktree release [--force] <path>")
 		return 2
 	}
-	path, code := resolveWorktreeArg(svc, fs.Arg(0), "release", stderr)
+	path, code := resolveWorktreeArg(svc, workdir, fs.Arg(0), "release", stderr)
 	if code != 0 {
 		return code
 	}
@@ -2494,13 +3160,13 @@ func cmdWorktreeRelease(svc *domain.Service, args []string, stdout, stderr io.Wr
 	return 0
 }
 
-func cmdWorktreeReserve(svc *domain.Service, args []string, stdout, stderr io.Writer, on bool) int {
+func cmdWorktreeReserve(svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer, on bool) int {
 	verb := map[bool]string{true: "reserve", false: "unreserve"}[on]
 	if len(args) != 1 {
 		fmt.Fprintf(stderr, "usage: gg worktree %s <path>\n", verb)
 		return 2
 	}
-	path, code := resolveWorktreeArg(svc, args[0], verb, stderr)
+	path, code := resolveWorktreeArg(svc, workdir, args[0], verb, stderr)
 	if code != 0 {
 		return code
 	}
@@ -2538,7 +3204,7 @@ func resolveWorktreeArg(svc *domain.Service, workdir, arg, verb string, stderr i
 }
 ```
 
-Delete the old `cmdWorktreeList(svc, stdout, stderr)` in `worktree.go`. Thread `workdir` from `cmdWorktree` into `cmdWorktreeClaim`/`Release`/`Reserve` (as `cmdWorktreeAdd` receives it) and pass it to every `resolveWorktreeArg` call; the function signatures above gain a leading `workdir string` parameter accordingly (e.g. `cmdWorktreeClaim(svc, workdir, args, stdout, stderr)`). `matchWorktreeArg` compares `wts[i].Path == target` exactly, so the cleaned absolute arg matches. Imports gain `errors`; `os` stays (for `GG_SESSION_ID`).
+Delete the old `cmdWorktreeList(svc, stdout, stderr)` in `worktree.go`. Dispatch: `case "claim": return cmdWorktreeClaim(svc, workdir, args[1:], stdout, stderr)`, `case "release": return cmdWorktreeRelease(svc, workdir, args[1:], stdout, stderr)`, `case "reserve": return cmdWorktreeReserve(svc, workdir, args[1:], stdout, stderr, true)`, `case "unreserve": return cmdWorktreeReserve(svc, workdir, args[1:], stdout, stderr, false)`. `matchWorktreeArg` compares `wts[i].Path == target` exactly, so the cleaned absolute arg matches. Imports: `context`, `encoding/json`, `errors`, `flag`, `fmt`, `io`, `os` (for `GG_SESSION_ID`), `path/filepath`, `config`, `domain`. JSON object keys come out alphabetically (a Go map) — agents read keys, not order. A missing worktree has no `dirty`/`claim`/… facts beyond what its cheap guards set; `TestWorktreeListJSONAndFree`'s key check runs on a healthy worktree, where every key is present.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -2644,7 +3310,7 @@ git commit -m "feat(gitwatch): a worktree claim file refreshes the Worktrees sou
 - Test: `internal/tui/worktree_marks_test.go`
 
 **Interfaces:**
-- Consumes: `domain.PublishSessions`, `domain.SessionRegistryDir`, `svc.WorktreeMarks(wts, reserved)`, `svc.ReleaseWorktree`, `svc.SetWorktreeReserved`, `m.cfg.Agents.Reserved`, `m.repoConfigPath` (verify it is the main-worktree-anchored ACTIVE repo config; if it follows the cwd worktree, resolve the main one the way Task 8's `agentsConfig` does).
+- Consumes: `domain.PublishSessions`, `domain.SessionRegistryDir`, `svc.WorktreeMarks(wts, reserved)`, `svc.ReleaseWorktree`, `svc.SetWorktreeReserved`, `svc.AgentsConfig(ctx)`. NOT `m.repoConfigPath`/`m.cfg.Agents` — the TUI's `repoTOML` follows the CURRENT worktree's committed `.gg.toml` (`load.go:71-82`), so a TUI in a linked worktree would reserve into a file the CLI never reads.
 - Produces: `func (m Model) worktreeMarkPrefix(path string) string`, `func (m Model) worktreeClaimHint() string`, `func (m Model) worktreeMarkRows(wt model.Worktree) []actionRow`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -2850,11 +3516,12 @@ func (m Model) confirmReleaseClaim(path, agent string) Model {
 }
 
 func (m Model) setReserved(path string, on bool) (tea.Model, tea.Cmd) {
-	if m.repoConfigPath == "" {
-		m.statusMsg = i18n.T("no repo config to write")
-		return m, nil
+	ctx := context.Background()
+	ac, cfgPath, err := m.svc.AgentsConfig(ctx)
+	if err == nil {
+		err = m.svc.SetWorktreeReserved(ctx, cfgPath, ac.Reserved, path, on)
 	}
-	if err := m.svc.SetWorktreeReserved(context.Background(), m.repoConfigPath, m.cfg.Agents.Reserved, path, on); err != nil {
+	if err != nil {
 		m.statusMsg = i18n.T("reserve: %s", err.Error())
 		return m, nil
 	}
@@ -2862,13 +3529,23 @@ func (m Model) setReserved(path string, on bool) (tea.Model, tea.Cmd) {
 }
 ```
 
-The reserve write changes the repo config; confirm the TUI reloads `m.cfg` after a config write (the Settings writers do — follow what the branch-filter popup does after `config.SetBranchFilter`, `branch_filter_popup.go:325`) so `m.cfg.Agents.Reserved` and the marks agree. The `svc` captured in `confirmReleaseClaim` must be the live one at resolve time — prefer `m.svc` inside `onResolve` (it receives the current `m`).
+The marks never read `m.cfg`, so no config reload is needed after a reserve write — the Worktrees reload re-reads `svc.AgentsConfig`. The `svc` captured in `confirmReleaseClaim` must be the live one at resolve time — prefer `m.svc` inside `onResolve` (it receives the current `m`).
 
 `sessionMenuRows` (`agent_start_popup.go`), in the final `if wt, ok := m.selectedWorktree(); ok && wt.Path != ""` branch: append `m.worktreeMarkRows(wt)...` to the returned rows.
 
 `view.go worktreeRows`: `out = append(out, marker+m.worktreeMarkPrefix(w.Path)+branch+"  "+w.Path)`. Bottom bar: `add(m.worktreeClaimHint())` right after `add(m.commitBranchHint())`.
 
-Data: `source.go` `worktreesPayload` gains `marks map[string]domain.WorktreeMark`; in the `srcWorktrees` loader add `marks := svc.WorktreeMarks(wts, reserved)` (the list the loader just read — no second `git worktree list`) where `reserved` is captured from `m.cfg.Agents.Reserved` when the load cmd is built (the loader closure already captures model state — follow how it captures `svc`). `model.go:1923` apply: `m.worktreeMarks = p.marks`. `load.go`: same for the initial snapshot (`dataLoadedMsg.worktreeMarks`, filled next to `worktrees` using `cfg.Agents.Reserved`, applied at `model.go:1695`).
+Data: `source.go` `worktreesPayload` gains `marks map[string]domain.WorktreeMark`; in the `srcWorktrees` loader add:
+
+```go
+			reserved := []string(nil)
+			if ac, _, err := svc.AgentsConfig(ctx); err == nil {
+				reserved = ac.Reserved
+			}
+			marks := svc.WorktreeMarks(wts, reserved) // the list just read — no second git worktree list
+```
+
+`model.go:1923` apply: `m.worktreeMarks = p.marks`. `load.go`: the same three lines for the initial snapshot (`dataLoadedMsg.worktreeMarks`, applied at `model.go:1695`). The `worktreeMarksModel` test helper injects marks directly and needs no config. Drop the `no repo config to write` i18n key from the list below.
 
 Session changes must refresh marks: in the existing sessions-changed handler (`waitSessionsCmd` result), add `srcWorktrees` to the reload when the session count or states changed — find it with `grep -n 'waitSessionsCmd' internal/tui/*.go`.
 
@@ -2890,11 +3567,11 @@ func publishedWorktree() string { s, _ := publishedWT.Load().(string); return s 
 
 with `publishedWT.Store(m.currentWorktree)` right after each of the two assignments (`model.go:1612`, `:1670`). Tests never call `Run`, so no registry is written by the suite.
 
-Recycle picker (`recycle_worktree.go openRecyclePicker`): after the `(agent session running)` suffix, append `"  " + i18n.T("(claimed by %s)", agent)` for a live claim and `"  " + i18n.T("(reserved)")` for a reserve; pass a `guarded` bool (live || claimed || reserved) into `recycleInto`, whose confirm prompt becomes `i18n.T("%s is in use (%s). Recycle it anyway?", dir, reason)` for claimed/reserved, keeping the existing session prompt unchanged.
+Recycle picker (`recycle_worktree.go openRecyclePicker`): after the `(agent session running)` suffix, append `"  " + i18n.T("(claimed by %s)", agent)` for a live claim and `"  " + i18n.T("(reserved)")` for a reserve; and DELETE `recycleInto`'s own `if live { return m.mustConfirmOp(…) }` confirm: the op now raises `recycle.blocked` (Task 7b) for a running session, a claim, a reserve or the main checkout, and the TUI's decision modal shows it — one question, one place. `recycleInto(dir string, live bool)` drops the `live` parameter. Update `recycle_worktree_test.go`'s live-session test to expect a modal whose request id is `recycle.blocked` (options `recycle anyway`/`abort`), instead of the old confirm.
 
 Footer/help: add `[.] reserve / release claim` to the Worktrees footer and help the way `[x] remove` was added for session sub-rows (see memory: footer-only ids in the action-menu coverage gate — run `go test ./internal/tui -run 'Coverage|Footer|Help'` and add `worktree-reserve`, `worktree-unreserve`, `worktree-release-claim` wherever that gate lists menu-only ids).
 
-i18n: add every new key to `internal/i18n/lang/{ja,ko,zh,ru}.toml`: `agent`, `⊘ reserved: agents never take this worktree`, `⚑ claimed by %s since %s`, `Release claim (%s)`, `Unreserve`, `Reserve (no agents)`, `%s is working in %s. Release its claim?`, `Release`, `release claim: %s`, `released the claim on %s`, `no repo config to write`, `reserve: %s`, `(claimed by %s)`, `(reserved)`, `%s is in use (%s). Recycle it anyway?`, plus the footer/help strings. Follow the `adding-translations` skill (verb agreement gate).
+i18n: add every new key to `internal/i18n/lang/{ja,ko,zh,ru}.toml`: `agent`, `⊘ reserved: agents never take this worktree`, `⚑ claimed by %s since %s`, `Release claim (%s)`, `Unreserve`, `Reserve (no agents)`, `%s is working in %s. Release its claim?`, `Release`, `release claim: %s`, `released the claim on %s`, `reserve: %s`, `(claimed by %s)`, `(reserved)`, plus the footer/help strings. Follow the `adding-translations` skill (verb agreement gate).
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -2934,7 +3611,10 @@ Only an agent running inside gg (it has `GG_SESSION_ID`) can claim.
 A claim ends by itself when your session ends. `gg worktree list --json`
 without `--free` lists every worktree with `blocked_by` reasons.
 `git-lock` can appear for one listing while another reader's `git status`
-holds `index.lock` — list again before giving up on a worktree.
+holds `index.lock` — list again before giving up on a worktree. A `claim`
+that exits 2 right after your session started can mean gg has not published
+it yet: retry once after a second. A claim whose owner crashed can outlive
+it on Windows if the pid is reused — the user releases it from the TUI.
 ```
 
 - [ ] **Step 2: bump `agentskill.Version`**, CHANGELOG entry (new section at the top, matching the file's format), README, CLAUDE.md rows:
@@ -2942,6 +3622,7 @@ holds `index.lock` — list again before giving up on a worktree.
 ```
 | `sessionreg` | Machine-wide registry of live agent sessions: each TUI publishes `<proc>.json` (sessions + its worktree) under XDG state, mtime liveness + sweep (the steer presence precedent). DAG leaf. |
 | `wtclaim` | An agent's claim on a worktree: one O_EXCL TOML file (`gg-claim`) in the worktree's git dir; liveness is the caller's question. DAG leaf. |
+| `wtguard` | "May this worktree be taken?": the `Guard` interface + `Run` (cheap guards first, facts + blockers); domain providers implement it per source, `domain.WorktreeGuardSet` composes them for the inventory, claims and recycle. DAG leaf. |
 ```
 
 - [ ] **Step 3: Sync the dogfood skill**: `go build -o bin/gg ./cmd/gg && ./bin/gg init --update` (in the worktree; never `git add -A` — `bin/` holds the binary).
