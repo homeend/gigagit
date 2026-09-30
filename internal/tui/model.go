@@ -2089,6 +2089,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+p" && m.paletteReachable() {
 			return m.openCommandPalette()
 		}
+		// ctrl+a opens the last-used running agent session (a focused console
+		// kept it for the agent above). Base panels only: a window or popup
+		// on top would hide the console it docks.
+		if msg.String() == "ctrl+a" && m.topLayer() == nil && !m.filterTyping {
+			return m.openLastSession()
+		}
 		// The layer stack (full-screen surfaces + centered popups) is global: its
 		// top owns the keyboard above the diff view (mirrors the action menu and
 		// render()). History/blame/rebase editors and the bookmark/shelf switchers,

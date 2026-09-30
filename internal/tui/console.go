@@ -88,6 +88,7 @@ func (m Model) openConsole(id domain.SessionID) (Model, tea.Cmd) {
 	// pin yields to (fullscreenYielded).
 	m.fullMaxed = false
 	m = m.dropConsole()
+	s.Touch() // showing it is using it: ctrl+a's "last used" order
 	screen, cancel := s.Subscribe()
 	m.console = &consoleState{id: id, focused: true, gen: gen, screen: screen, cancel: cancel}
 	m.focus = panelCommits
@@ -281,6 +282,34 @@ func runningSessionIn(dir string) (domain.SessionInfo, bool) {
 	return domain.SessionInfo{}, false
 }
 
+// lastUsedRunningSession is the running session used most recently
+// (Info.LastUsed); an exited one is never picked, so the next most recent
+// stands in for it.
+func lastUsedRunningSession(list []domain.SessionInfo) (domain.SessionInfo, bool) {
+	var best domain.SessionInfo
+	found := false
+	for _, info := range list {
+		if info.State != domain.SessionRunning {
+			continue
+		}
+		if !found || info.LastUsed.After(best.LastUsed) {
+			best, found = info, true
+		}
+	}
+	return best, found
+}
+
+// openLastSession is ctrl+a: the last-used running agent session, docked
+// and focused.
+func (m Model) openLastSession() (Model, tea.Cmd) {
+	info, ok := lastUsedRunningSession(domain.Sessions().List())
+	if !ok {
+		m.statusMsg = i18n.T("no running agent session — start one from the . menu of a worktree or a checked-out branch")
+		return m, nil
+	}
+	return m.openConsole(info.ID)
+}
+
 // shortWorktreeName is the worktree's directory name, for titles and rows.
 func shortWorktreeName(path string) string { return filepath.Base(path) }
 
@@ -313,7 +342,7 @@ func (m Model) sessionsKey() string {
 var consolePassthrough = map[string]bool{
 	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
 	"q": true, "ctrl+c": true, "?": true, ".": true, "ctrl+p": true, "ctrl+o": true,
-	"R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
+	"ctrl+a": true, "R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
 

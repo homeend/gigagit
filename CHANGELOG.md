@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Last-used agent session key
+
+### Added
+
+- **`ctrl+a` opens the last-used running agent session** in its console,
+  focused. "Used" means you typed into it (TUI or web) or opened its
+  console; an exited session is skipped, so the one used before it stands
+  in. Inside a focused console `ctrl+a` still goes to the agent. The footer
+  shows `[ctrl+a] last agent` while a session runs.
+
 ## Open-file notes
 
 ### Added

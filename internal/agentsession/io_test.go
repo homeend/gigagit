@@ -143,3 +143,30 @@ func TestScreenWithCursorOnWideGlyphContinuation(t *testing.T) {
 		t.Fatalf("cursor must reverse the whole glyph: %q", sc.Lines[0])
 	}
 }
+
+func TestLastUsedStartsAtStartAndMovesOnInputAndTouch(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	s := startSh(t, `sleep 5`)
+	info := s.Info()
+	if !info.LastUsed.Equal(info.Started) {
+		t.Fatalf("LastUsed = %v, want Started %v", info.LastUsed, info.Started)
+	}
+	prev := info.LastUsed
+	for _, use := range []struct {
+		name string
+		f    func()
+	}{
+		{"SendText", func() { s.SendText("x") }},
+		{"SendKey", func() { s.SendKey(uv.KeyPressEvent{Code: 'y', Text: "y"}) }},
+		{"Paste", func() { s.Paste("z") }},
+		{"Touch", s.Touch},
+	} {
+		time.Sleep(2 * time.Millisecond)
+		use.f()
+		if got := s.Info().LastUsed; !got.After(prev) {
+			t.Fatalf("%s: LastUsed %v did not move past %v", use.name, got, prev)
+		}
+		prev = s.Info().LastUsed
+	}
+}

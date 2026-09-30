@@ -3,6 +3,7 @@ package agentsession
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -22,6 +23,10 @@ type Screen struct {
 
 func (s *Session) running() bool { return s.Info().State == Running }
 
+// Touch marks the session as used now (Info.LastUsed) — a frontend showing
+// it to the user; input sent to it touches it on its own.
+func (s *Session) Touch() { s.mu.Lock(); s.info.LastUsed = time.Now(); s.mu.Unlock() }
+
 // SendKey encodes k for the child. A no-op once the session has exited.
 // Modified special keys (ctrl+arrow, shift+home, …) are encoded here —
 // the emulator drops them (see encodeModifiedKey); everything else takes
@@ -30,6 +35,7 @@ func (s *Session) SendKey(k Key) {
 	if !s.running() {
 		return
 	}
+	s.Touch()
 	if seq, ok := encodeModifiedKey(k); ok {
 		s.withEmu(func() { s.emu.SendText(seq) })
 		return
@@ -40,6 +46,7 @@ func (s *Session) SendKey(k Key) {
 // SendText sends literal text (no paste bracketing).
 func (s *Session) SendText(text string) {
 	if s.running() {
+		s.Touch()
 		s.withEmu(func() { s.emu.SendText(text) })
 	}
 }
@@ -47,6 +54,7 @@ func (s *Session) SendText(text string) {
 // Paste sends text bracketed when the child enabled bracketed paste.
 func (s *Session) Paste(text string) {
 	if s.running() {
+		s.Touch()
 		s.withEmu(func() { s.emu.Paste(text) })
 	}
 }

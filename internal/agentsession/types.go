@@ -17,12 +17,16 @@ const (
 
 // Info is a copied snapshot of a session's metadata.
 type Info struct {
-	ID       ID
-	Label    string    // menu label, e.g. "Claude" / "Claude (yolo)"
-	AgentID  string    // exttool tool id ("claude"), "" for a custom command
-	Repo     string    // repository NAME for grouping (caller-computed)
-	Dir      string    // worktree path = the child's cwd
-	Started  time.Time // when Start returned
+	ID      ID
+	Label   string    // menu label, e.g. "Claude" / "Claude (yolo)"
+	AgentID string    // exttool tool id ("claude"), "" for a custom command
+	Repo    string    // repository NAME for grouping (caller-computed)
+	Dir     string    // worktree path = the child's cwd
+	Started time.Time // when Start returned
+	// LastUsed is the last time someone used the session: input sent to it
+	// (SendKey/SendText/Paste) or a frontend showing it (Touch). Starts at
+	// Started; the TUI's ctrl+a opens the running session with the latest.
+	LastUsed time.Time
 	State    State
 	ExitCode int // valid when State == Exited; -1 = killed by a signal / unknown
 }
