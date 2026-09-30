@@ -126,7 +126,7 @@ function openPalette(mode, fromCmd) {
 
 
 // ---- repo mode: the switcher table ---------------------------------------
-// Five columns — branch · name · slow-fs · path · age — each starting at one
+// Five columns — name · branch · slow-fs · path · age — each starting at one
 // shared column, the TUI's R switcher laid out with the room a browser has.
 // The list paints from /api/repos alone; branch and slow-fs verdicts land
 // later from /api/repos/details (a checkout on a hung mount would otherwise
@@ -197,7 +197,7 @@ function layoutRepoTable() {
   $("palette-box").style.maxWidth = "none"; // the stylesheet caps the cmd list at 560px
   $("palette-list").style.setProperty(
     "--repo-cols",
-    `${cols.branch}ch ${cols.name}ch ${cols.slow}ch ${cols.path}ch ${cols.age}ch`
+    `${cols.name}ch ${cols.branch}ch ${cols.slow}ch ${cols.path}ch ${cols.age}ch`
   );
 }
 
@@ -318,8 +318,8 @@ function repoRowHTML(r, i) {
   const branch = r.pending ? "…" : r.branchText || "";
   const title = r.pathText !== r.path ? ` title="${esc(r.path)}"` : "";
   return `<li class="repo${sel}" data-i="${i}">` +
-    `<span class="rbranch${r.pending ? " dim" : ""}">${esc(branch)}</span>` +
     `<span class="rname">${esc(r.nameText ?? r.label)}</span>` +
+    `<span class="rbranch${r.pending ? " dim" : ""}">${esc(branch)}</span>` +
     `<span class="rslow">${r.slow ? SLOW_FS : ""}</span>` +
     `<span class="rpath"${title}>${esc(r.pathText || r.path)}</span>` +
     `<span class="rage">(${esc(r.age)})</span></li>`;

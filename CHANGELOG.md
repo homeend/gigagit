@@ -20,6 +20,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   frontends share one implementation; `/api/repos` groups by remote name at
   once and `/api/repos/details` adds the common dirs as the probes land.
 
+### Changed
+
+- **The switch-repo table leads with the name**, then the branch (name ·
+  branch · slow-fs · path · last opened), so a group's project name heads
+  its rows.
+
 ## Repo switcher groups worktrees without a remote
 
 ### Fixed

@@ -800,7 +800,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #palette-list li { display: flex; justify-content: space-between; gap: 14px; padding: 5px 14px; cursor: pointer; }
 #palette-list li.sel { background: var(--sel); }
 #palette-list li .detail { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
-/* repo mode: a five-column table (branch · name · slow-fs · path · age) whose
+/* repo mode: a five-column table (name · branch · slow-fs · path · age) whose
    column widths palette.js sets in ch on --repo-cols. Cells never ellipsize:
    a too-long path is already middle-cut in JS (elidePath), so a CSS tail cut
    here would chop the leaf the whole layout exists to show. */
@@ -1138,7 +1138,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #palette-list li { display: flex; justify-content: space-between; gap: 14px; padding: 5px 14px; cursor: pointer; }
 #palette-list li.sel { background: var(--sel); }
 #palette-list li .detail { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
-/* repo mode: a five-column table (branch · name · slow-fs · path · age) whose
+/* repo mode: a five-column table (name · branch · slow-fs · path · age) whose
    column widths palette.js sets in ch on --repo-cols. Cells never ellipsize:
    a too-long path is already middle-cut in JS (elidePath), so a CSS tail cut
    here would chop the leaf the whole layout exists to show. */
