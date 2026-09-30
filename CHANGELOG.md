@@ -34,6 +34,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `◆` is East-Asian-ambiguous and many fonts draw it wider than its one
   cell, over a digit glued to it (Commits, Files, Branches, previews,
   shelves, the review view).
+- **A commit's `◆ N` no longer counts its AI review.** The review has its
+  own `✎` marker; `◆ N` counts the notes a diff can show, so a reviewed
+  commit with no line notes is no longer badged with a note you cannot
+  find.
 - **A finished AI review shows up at once in Commits and Branches.** Its
   review marker and the branch's `◆ N` used to wait for an unrelated
   refresh; the saved review now reloads the note counts, whether or not

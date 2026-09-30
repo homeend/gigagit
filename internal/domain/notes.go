@@ -441,8 +441,11 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 			continue
 		}
 		if n.IsReviewNote() {
+			// A review has its own marker (✎ in Commits, ◆ in Branches):
+			// it is never counted in the ◆N note badges.
 			c.Reviews = append(c.Reviews, ReviewHead{ID: n.ID, Commit: n.Address.Commit, Branch: n.Address.Branch,
 				Agent: n.Author, Summary: n.Summary, Created: n.Created})
+			continue
 		}
 		if n.IsShelfLevel() {
 			c.ByShelf[n.Address.ShelfID]++
