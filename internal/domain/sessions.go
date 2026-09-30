@@ -164,7 +164,7 @@ func (s *Service) StartTerminal(ctx context.Context, shell, worktreeDir, cwd str
 		repo = filepath.Base(worktreeDir)
 	}
 	return Sessions().Start(agentsession.StartSpec{
-		Label: "Terminal", Repo: repo, Dir: worktreeDir, Cwd: cwd,
+		Label: "Terminal", Terminal: true, Repo: repo, Dir: worktreeDir, Cwd: cwd,
 		Argv: terminalShell(runtime.GOOS, os.Getenv, exec.LookPath, shell), Env: env,
 		Cols: cols, Rows: rows,
 		TracePath: sessionTracePath(os.Getenv("GG_SESSION_TRACE"), "Terminal", time.Now()),

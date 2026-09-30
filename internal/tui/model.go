@@ -2089,6 +2089,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+p" && m.paletteReachable() {
 			return m.openCommandPalette()
 		}
+		// alt+a / alt+t cycle the running agents / terminals by last use,
+		// shown unfocused (a focused console kept the key for its program
+		// above). Base panels only: a window or popup on top would hide the
+		// console it docks.
+		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.topLayer() == nil && !m.filterTyping {
+			return m.cycleSessions(k == "alt+t")
+		}
 		// The layer stack (full-screen surfaces + centered popups) is global: its
 		// top owns the keyboard above the diff view (mirrors the action menu and
 		// render()). History/blame/rebase editors and the bookmark/shelf switchers,

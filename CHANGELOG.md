@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Cycle agents and terminals by last use
+
+### Added
+
+- **`alt+a` / `alt+t` cycle the running agent sessions / terminals** by last
+  use, like alt-tab. The first press docks the most recently used one in the
+  Commits column unfocused; each further press shows the one used before it
+  (wrapping, exited ones skipped, `N of M` on the status line). `enter`
+  focuses the shown one and makes it the most recent. "Used" means focused in
+  the TUI or typed into (TUI or web). Inside a focused console the keys go to its
+  program. The footer shows `[alt+a] last agent` / `[alt+t] last terminal`
+  while one of each runs. (Not `ctrl+a`: a common tmux prefix, gg never sees
+  it.)
+
 ## Open-file notes
 
 ### Added
