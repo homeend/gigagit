@@ -469,8 +469,21 @@ func (p *allNotesPopup) render(m Model, below string) string {
 // reply count (tail); anNoteColumns lays them out to a width, the tooltip
 // joins them uncut.
 func anNoteParts(r anRow, now time.Time) (head, summary, tail string) {
+	status, who, where, when := anNoteCells(r, now)
+	head = padRight(truncate(status, anStatusW-1), anStatusW) +
+		padRight(truncate(who, anWhoW-1), anWhoW) +
+		padRight(truncate(where, anWhereW-1), anWhereW) +
+		padRight(truncate(when, anWhenW-1), anWhenW)
+	if len(r.note.Replies) > 0 {
+		tail = "  ↩" + strconv.Itoa(len(r.note.Replies))
+	}
+	return head, sanitizeLine(r.note.Note.Summary), tail
+}
+
+// anNoteCells is a note row's column values, uncut.
+func anNoteCells(r anRow, now time.Time) (status, who, where, when string) {
 	n := r.note.Note
-	who := n.Author
+	who = n.Author
 	if who == "" {
 		if n.Source == model.NoteSourceAgent {
 			who = i18n.T("agent")
@@ -478,7 +491,7 @@ func anNoteParts(r anRow, now time.Time) (head, summary, tail string) {
 			who = i18n.T("you")
 		}
 	}
-	where := string(n.Side) + ":" + strconv.Itoa(r.note.Range[0])
+	where = string(n.Side) + ":" + strconv.Itoa(r.note.Range[0])
 	if r.note.Range[1] != r.note.Range[0] {
 		where += "-" + strconv.Itoa(r.note.Range[1])
 	}
@@ -488,18 +501,17 @@ func anNoteParts(r anRow, now time.Time) (head, summary, tail string) {
 	if n.IsShelfLevel() {
 		where = i18n.T("shelf")
 	}
-	when := ""
 	if !n.Created.IsZero() {
 		when = coarseAgo(now.Sub(n.Created))
 	}
-	head = padRight(truncate(anStatusLabel(r.status), anStatusW-1), anStatusW) +
-		padRight(truncate(sanitizeLine(who), anWhoW-1), anWhoW) +
-		padRight(truncate(where, anWhereW-1), anWhereW) +
-		padRight(truncate(when, anWhenW-1), anWhenW)
-	if len(r.note.Replies) > 0 {
-		tail = "  ↩" + strconv.Itoa(len(r.note.Replies))
-	}
-	return head, sanitizeLine(n.Summary), tail
+	return anStatusLabel(r.status), sanitizeLine(who), where, when
+}
+
+// anNoteFull is a note row's cells uncut: the bottom bar's text when a
+// wrapped row had a fixed column cut (its summary never is).
+func anNoteFull(r anRow, now time.Time) string {
+	status, who, where, when := anNoteCells(r, now)
+	return strings.Join([]string{status, who, where, when, sanitizeLine(r.note.Note.Summary)}, " · ")
 }
 
 // anReviewParts is a review row's columns, laid out like a note's: STATUS
@@ -614,7 +626,9 @@ func (p *allNotesPopup) anRowFull(r anRow, now time.Time) string {
 func (p *allNotesPopup) box(m Model) string {
 	w, h := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
-	textW := popupTextWidth(inner)
+	// The table lives in the centred reading column (reading_width.go): a
+	// maximized popup keeps its frame, not 200-column rows.
+	textW, margin := readingColumn(popupTextWidth(inner), m.readingWidth())
 	now := time.Now()
 	p.tipFull = ""
 
@@ -666,6 +680,10 @@ func (p *allNotesPopup) box(m Model) string {
 				style = lipgloss.NewStyle().Bold(true)
 			}
 			rows[i] = winRow{text: prefix + p.anRowText(r, textW-2, now), style: style}
+			if text, hang, ok := anWrappedRow(r, now); ok {
+				// Its NOTE is prose: whole, wrapping under its own column.
+				rows[i].text, rows[i].hang = prefix+text, len(prefix)+hang
+			}
 			// The selected row is reverse video: a foreground there would
 			// paint a per-glyph background, so it stays plain.
 			if i != p.sel && r.kind == anNote {
@@ -679,10 +697,19 @@ func (p *allNotesPopup) box(m Model) string {
 		// and the box border; the list gets what is left of the terminal.
 		room := h - (len(parts) + 1 + 1 + len(hints) + 2)
 		cap := min(popupResolveRowCap(p.maximized, h, allNotesRows), max(room, 3))
-		winH := min(len(rows), cap)
-		body = renderWindow(rows, winOpts{w: textW, anchor: p.sel, h: winH})
+		o := winOpts{w: textW, anchor: p.sel, mode: modeWrap}
+		o.h = wrapContentLines(rows, o, cap)
+		body = renderWindow(rows, o)
 		if p.sel >= 0 && p.sel < len(vis) {
-			if r := vis[p.sel]; rowTruncated(p.anRowFull(r, now), textW-2) {
+			r := vis[p.sel]
+			switch {
+			case rows[p.sel].hang > 0:
+				// A wrapped row shows its summary whole; only a fixed
+				// column (WHO, WHERE) can have been cut.
+				if anHeadCut(r, now) {
+					p.tipFull = anWrappedFull(r, now)
+				}
+			case rowTruncated(p.anRowFull(r, now), textW-2):
 				p.tipFull = anBarText(r, now)
 			}
 		}
@@ -693,7 +720,44 @@ func (p *allNotesPopup) box(m Model) string {
 	}
 	parts = append(parts, "")
 	parts = append(parts, hints...)
-	return popupBox(inner, strings.Join(parts, "\n"))
+	return popupBox(inner, indentBlock(strings.Join(parts, "\n"), margin))
+}
+
+// anHeadCut reports whether a note/review row's fixed columns cut a value.
+func anHeadCut(r anRow, now time.Time) bool {
+	var head string
+	if r.kind == anReview {
+		head, _ = anReviewParts(r, now)
+	} else {
+		head, _, _ = anNoteParts(r, now)
+	}
+	return strings.Contains(head, "…")
+}
+
+// anWrappedFull is the bottom bar's text for a wrapped row.
+func anWrappedFull(r anRow, now time.Time) string {
+	if r.kind == anReview {
+		return anReviewFull(r, now)
+	}
+	return anNoteFull(r, now)
+}
+
+// anWrappedRow is a note or review row laid out whole for wrapping (without
+// the cursor prefix): the indent, the fixed columns, the uncut summary and
+// the reply count, with hang the column the summary starts at. ok is false
+// for every other row, and for a shelf-level note, whose one-line summary
+// loses its middle instead (anNoteColumns).
+func anWrappedRow(r anRow, now time.Time) (text string, hang int, ok bool) {
+	indent := strings.Repeat(" ", anNoteIndent)
+	switch {
+	case r.kind == anNote && !r.note.Note.IsShelfLevel():
+		head, summary, tail := anNoteParts(r, now)
+		return indent + head + summary + tail, anNoteIndent + lipgloss.Width(head), true
+	case r.kind == anReview:
+		head, summary := anReviewParts(r, now)
+		return indent + head + summary, anNoteIndent + lipgloss.Width(head), true
+	}
+	return "", 0, false
 }
 
 // anNoteDecorator paints a note row's WHO cell in its author's frame colour

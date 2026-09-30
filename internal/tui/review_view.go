@@ -243,6 +243,7 @@ func (m Model) openReviewOverview() (Model, tea.Cmd) {
 	cp := newContentPopup(i18n.T("Review: %s", reviewLabel(st.review)), reviewOverviewLines(st))
 	cp.mode = modeWrap // prose
 	cp.noCursor = true
+	cp.prose = true
 	cp.keys = i18n.T("[y] copy")
 	if n := len(st.other); n > 0 {
 		cp.keys += "  " + i18n.T("[o] other notes (%d)", n)
@@ -301,6 +302,7 @@ func (p *reviewOverviewPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			cp := newContentPopup(i18n.T("Other notes"), reviewOtherNoteLines(p.st))
+			cp.prose = true
 			cp.keys = i18n.T("[enter] open the file at the reviewed commit")
 			return m.pushLayer(&reviewOtherNotesPopup{contentPopup: cp, tip: p.st.tip}), nil
 		case "enter":

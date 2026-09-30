@@ -53,6 +53,7 @@ func (m Model) openCommitMessagePopup(c model.Commit) (Model, tea.Cmd) {
 	// line thousands of characters long, unreadable as a cutoff row. Open
 	// wrapped (the error popup's precedent); z still cycles the modes.
 	cp.mode = modeWrap
+	cp.prose = true
 	cp.footer = commitFooterLine(c)
 	m = m.pushLayer(cp)
 	return m, m.loadCommitMessageCmd(c, short)

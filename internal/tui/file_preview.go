@@ -501,6 +501,13 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	if innerW < 1 {
 		innerW = 1
 	}
+	// A prose document in the full-screen viewer (an AI review, a result)
+	// lays out in the centred reading column (reading_width.go); frameW is
+	// the frame's own width, which every finished line is padded back to.
+	frameW, margin := innerW, 0
+	if viewer && p.prose {
+		innerW, margin = readingColumn(innerW, m.readingWidth())
+	}
 	// The title line, and — in the full-screen viewer only, which has no
 	// bottom bar under it — a hint line. In the files view the keys are the
 	// app's bottom bar's (footerOverride).
@@ -562,7 +569,7 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate(i18n.T("  (empty)"), innerW), innerW))
 	} else {
-		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll, charWrap: true})
+		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll, charWrap: !p.prose})
 		lines = append(lines, win...)
 	}
 	if !viewer {
@@ -598,6 +605,12 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
 	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
+	if margin > 0 {
+		pad := strings.Repeat(" ", margin)
+		for i, l := range lines {
+			lines[i] = padRight(pad+l, frameW)
+		}
+	}
 
 	style := st().bluredPanel
 	if focused {

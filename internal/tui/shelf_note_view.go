@@ -52,6 +52,7 @@ func (m Model) openShelfNotes(msg shelfNotesMsg) Model {
 	}
 	cp := newContentPopup(i18n.T("Notes on %s", msg.label), shelfNoteLines(msg.notes))
 	cp.fitContent = true
+	cp.prose = true
 	return m.pushLayer(cp)
 }
 
