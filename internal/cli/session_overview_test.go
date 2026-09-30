@@ -145,3 +145,24 @@ func TestSessionOverviewNeedsATUI(t *testing.T) {
 		t.Fatalf("exit %d stderr %q", code, errs)
 	}
 }
+
+// A background add or an eviction is news the agent must see in plain mode:
+// the reply's detail follows the id when it says more than "showing <id>".
+func TestSessionOverviewAddPrintsANewsworthyDetail(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ detail, want string }{
+		{"showing f7", "f7\nunresolved: gone.go:4\n"},
+		{"added f7 in the background (the action menu is open); closed a.go (20 files open)",
+			"f7\nunresolved: gone.go:4\nadded f7 in the background (the action menu is open); closed a.go (20 files open)\n"},
+	} {
+		dir := t.TempDir()
+		livePresence(t, dir)
+		answer(t, dir, func(c steer.Command) steer.Reply {
+			return steer.Reply{ID: c.ID, OK: true, Detail: tc.detail, Overviews: []steer.Overview{tourWire}}
+		})
+		code, out, errs := runOverview(t, dir, "x", "add", "--title", "T")
+		if code != 0 || out != tc.want {
+			t.Errorf("detail %q: exit %d stdout %q stderr %q, want %q", tc.detail, code, out, errs, tc.want)
+		}
+	}
+}

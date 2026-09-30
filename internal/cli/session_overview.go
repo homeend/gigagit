@@ -138,6 +138,11 @@ func sessionOverviewWrite(dir string, svc *domain.Service, verb string, args []s
 	for _, u := range o.Unresolved {
 		fmt.Fprintln(stdout, "unresolved: "+u)
 	}
+	// The detail is news when it says more than the id already does: the
+	// overview waits in the background, or a file was pushed out for it.
+	if d := r.Detail; d != "" && d != "showing "+o.ID && d != "set "+o.ID {
+		fmt.Fprintln(stdout, d)
+	}
 	return 0
 }
 
