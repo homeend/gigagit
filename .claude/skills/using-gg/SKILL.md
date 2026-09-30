@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v106 -->
+<!-- gg:using-gg:v107 -->
 
 # Using gg (gigagit)
 
@@ -280,6 +280,36 @@ When the user's message holds `gg note t<n> <path>:<lines>`, they copied a
 reference to one of your notes: run `gg session note show t<n>` to see which
 remark they mean (if it answers `no note t<n>`, the user closed it — the path
 and lines still say where it was).
+
+**Overviews — a guided tour through several files.** When the user asks to be
+shown or walked through something that spans several files, write an
+overview: a short markdown document that lives in the gg TUI's memory, whose
+links are ANCHORS. The user tabs from anchor to anchor, presses enter to open
+one (the real file comes to the front at the place you named), and backspace
+brings them back to the overview on the anchor they left.
+
+- Anchor destinations: `[label](path)` (the file), `[label](path:120)` (the
+  line), `[label](path:120-140)` (the range, selected), `[label](note:t7)` (the
+  file one of your temporary notes sits on, at the note). `path` is
+  repo-relative; http(s) links stay ordinary links; anything else is plain text.
+- `gg session overview add --title "…" [--file <md>] [--background] [--json]`
+  — the markdown from `--file` or stdin (≤ 64 KiB, ≤ 100 anchors, 20 overviews
+  per worktree). Shows it unless `--background` (or the user is busy — then it
+  waits in the background and the answer says so). Prints its id (`f<n>`, an
+  open file's id) and one `unresolved: <dest>` line per anchor whose file or
+  note was not found — fix those with `set`.
+- `gg session overview set <id> [--title "…"] [--file <md>]` — replace the
+  text; the user's selected anchor stays selected when its destination is
+  still there.
+- `gg session overview list [--json]` · `show <id> [--json]` · `rm <id>`;
+  `gg session files focus <id>` brings one to the front.
+
+Combine with notes: `gg session note add` the remarks first, then link them
+from the overview (`[why this lock](note:t7)`). Order the anchors in the order
+you would explain them — tab walks them top to bottom. Like notes, overviews
+are temporary (gone on X or quit) and need a live gg TUI. When the user's
+message holds `gg overview f<n> "<title>" → <dest>`, they copied a reference to
+that anchor: that is the step they are asking about.
 
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout
