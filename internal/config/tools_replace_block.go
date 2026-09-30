@@ -16,7 +16,8 @@ var ErrToolBlockNotFound = errors.New("config: tool block not found")
 
 // ReplaceToolCommand rewrites, in place, the one [[tools.command]] block
 // whose (category, name) is key with tc, keeping the file's line ending and
-// every byte outside the block. A block spans from its header to the line
+// every byte outside the block (with the key twice, the last — effective —
+// block is the one rewritten). A block spans from its header to the line
 // before the next table header, minus trailing blank and comment lines
 // (they belong to what follows). Headers are found by a TOML-aware scan
 // (multi-line strings, quoted values and comments are skipped), and the
@@ -37,7 +38,10 @@ func ReplaceToolCommand(path, key string, tc ToolCommand) (bool, error) {
 	}
 	lines := strings.SplitAfter(string(raw), "\n")
 	starts, tools := tomlHeaders(lines)
-	for si, s := range starts {
+	// Walk from the end: with the same key twice, the LAST block is the
+	// effective one (the overlay rule) and the one a status describes.
+	for si := len(starts) - 1; si >= 0; si-- {
+		s := starts[si]
 		if !tools[si] {
 			continue
 		}

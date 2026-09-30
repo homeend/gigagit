@@ -153,3 +153,19 @@ func TestSameOutsideToolBlockRefusesLoss(t *testing.T) {
 		}
 	}
 }
+
+// Two blocks with the same key: the LAST one is effective (the overlay
+// rule), so it is the one a replace rewrites.
+func TestReplaceToolCommandRewritesTheEffectiveDuplicate(t *testing.T) {
+	t.Parallel()
+	in := "[[tools.command]]\ncategory = \"review\"\nname = \"A\"\ncommand = \"first\"\n\n[[tools.command]]\ncategory = \"review\"\nname = \"A\"\ncommand = \"second\"\n"
+	path := writeFixture(t, in)
+	nb := ToolCommand{Category: "review", Name: "A", Mode: "capture", Command: "new", TemplateVersion: 2}
+	if ok, err := ReplaceToolCommand(path, nb.Key(), nb); err != nil || !ok {
+		t.Fatalf("replace: %v %v", ok, err)
+	}
+	got, _ := ToolCommandsIn(path)
+	if len(got) != 2 || strings.TrimSpace(got[0].Command) != "first" || strings.TrimSpace(got[1].Command) != "new" {
+		t.Fatalf("want first kept, second replaced: %+v", got)
+	}
+}

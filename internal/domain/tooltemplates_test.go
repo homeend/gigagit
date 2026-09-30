@@ -199,3 +199,23 @@ func TestApplyToolUpdateReportsUnlocatableBlock(t *testing.T) {
 		t.Fatal("an unlocatable block must be an error")
 	}
 }
+
+// A file holding the same block twice: the effective (last) one is offered
+// and taking the offer rewrites it — never a "changed since" loop.
+func TestApplyToolUpdateTakesTheEffectiveDuplicate(t *testing.T) {
+	stubVersion(t, "")
+	v2 := fakeDet(2, exttool.CommandTemplate{Command: "<bin> two"})
+	path := filepath.Join(t.TempDir(), "config.toml")
+	os.WriteFile(path, []byte("[[tools.command]]\ncategory = \"review\"\nname = \"Fake\"\nmode = \"capture\"\ncommand = \"fake first\"\n\n[[tools.command]]\ncategory = \"review\"\nname = \"Fake\"\nmode = \"capture\"\ncommand = \"fake second\"\n"), 0o644)
+	sts := ToolTemplateStatuses(context.Background(), []string{path}, []exttool.Detection{v2})
+	if len(sts) != 1 || strings.TrimSpace(sts[0].Block.Command) != "fake second" {
+		t.Fatalf("status must describe the effective block: %+v", sts)
+	}
+	if err := ApplyToolUpdate(sts[0]); err != nil {
+		t.Fatalf("take: %v", err)
+	}
+	got, _ := config.ToolCommandsIn(path)
+	if len(got) != 2 || strings.TrimSpace(got[0].Command) != "fake first" || strings.TrimSpace(got[1].Command) != "fake two" {
+		t.Fatalf("after take: %+v", got)
+	}
+}

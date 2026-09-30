@@ -144,7 +144,9 @@ func ApplyToolUpdate(st ToolTemplateStatus) error {
 	if err != nil {
 		return err
 	}
-	for _, tc := range blocks {
+	// The last same-key block is the effective one (what the status read).
+	for i := len(blocks) - 1; i >= 0; i-- {
+		tc := blocks[i]
 		if tc.Key() != st.Block.Key() {
 			continue
 		}
