@@ -992,6 +992,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesContext = i18n.T("%s (all files) %s", shortHash(msg.hash), msg.subject)
 		m.filesCommit = msg.commit
 		return m, nil
+	case noteLandedMsg:
+		return m.noteLanded(msg)
 	case contentLandedMsg:
 		tm, fill := m.Update(msg.load)
 		m = tm.(Model)

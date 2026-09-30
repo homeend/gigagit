@@ -53,7 +53,7 @@ func sessionInboxDir(svc *domain.Service) (string, error) {
 // The dir is a parameter so tests can point it at t.TempDir() and stay parallel.
 func runSession(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files> [flags]")
+		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files|note> [flags]")
 		return 2
 	}
 	switch args[0] {
@@ -69,6 +69,8 @@ func runSession(dir string, svc *domain.Service, args []string, stdout, stderr i
 		return sessionHighlight(dir, svc, args[1:], stdout, stderr)
 	case "files":
 		return sessionFiles(dir, args[1:], stdout, stderr)
+	case "note":
+		return sessionNote(dir, svc, args[1:], stdout, stderr)
 	}
 	fmt.Fprintf(stderr, "session: unknown subcommand %q\n", args[0])
 	return 2

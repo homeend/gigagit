@@ -72,6 +72,7 @@ func availableActions(m Model) []actionRow {
 		if r, ok := m.backgroundRow(); ok {
 			rows = append(rows, r)
 		}
+		rows = append(rows, m.fileNoteRows()...)
 		// A history/blame surface on top is a single file at a rev, not the files
 		// view underneath it. It owns the "Open in external editor" action
 		// (surfaceExternalRow); the files-view view/open rows and — below — the

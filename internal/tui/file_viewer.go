@@ -77,9 +77,12 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if nm, cmd, ok := m.previewSearchKey(msg); ok {
 		return nm, cmd
 	}
+	if nm, cmd, ok := m.previewNoteKey(msg); ok {
+		return nm, cmd
+	}
 	p := fv.p
 	rows, _ := fv.geom(m)
-	scroll := func(delta int) { p.sel = previewClamp(p.sel+delta, len(p.lines), rows, p.mode) }
+	scroll := func(delta int) { p.scrollBy(delta, rows) }
 	switch msg.String() {
 	case "esc":
 		return m.escDoc(fv.openFile), nil
@@ -112,7 +115,7 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "home":
 		p.sel = 0
 	case "end":
-		p.sel = previewClamp(len(p.lines), len(p.lines), rows, p.mode)
+		p.sel = p.clampTop(len(p.lines), rows)
 	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0

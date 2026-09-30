@@ -103,6 +103,11 @@ type contentPopup struct {
 	// look at it, so the zero value is inert for them. ↑/↓ and the wheel still
 	// scroll sel alone; alt+↑/↓ move cur and scroll minimally.
 	cur int
+	// extraRows reports the display rows hanging UNDER lines [from, to) that
+	// are not lines themselves — an open file's note boxes. nil (every
+	// window but an annotated file preview) = none, and the pager math is
+	// then exactly the plain one-row-per-line arithmetic.
+	extraRows func(from, to int) int
 	// lsel is the preview's line selection over lines (space/space/enter).
 	lsel    lineSel
 	mode    dispMode // text display mode; z cycles

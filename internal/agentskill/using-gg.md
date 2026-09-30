@@ -238,6 +238,42 @@ Walking the user through several files: open A, B and C with `--background`
 first (they load while you think), then `gg session files focus <id>:<line>`
 each one in turn as you explain it.
 
+**Temporary notes — explain on the code itself.** When the user says "show me
+on the files", put short remarks on the lines you are talking about. The user
+reads each one in a box under its lines in the gg TUI.
+
+- `gg session note add <path>:<start>[-<end>] --summary "…" [--rationale "…"]
+  [--author <name>] [--json]` — put a note on those lines of the file AS IT IS
+  ON DISK. A file that is not open is opened in the background first. Answers
+  `noted <path>:<lines> as t<n>`. `<path>` is repo-relative; an open file's id
+  (`f3:10-12`) works too. Limits: 50 notes per file, summary 500 characters,
+  rationale 4000 — an over-limit note is refused, never cut.
+- `gg session note list [<path>|<file-id>] [--json]` —
+  `<id>\t<path>\t<start>-<end>\t<summary>`; `(outdated)` marks a note whose
+  lines have since changed.
+- `gg session note show <note-id> [--json]` — the note and the lines it sits on
+  now.
+- `gg session note rm <note-id>` / `gg session note clear <path>|<file-id>`.
+
+These notes are TEMPORARY: they live in the running gg TUI's memory, follow
+their lines when the file changes, and are gone when the user closes the file
+(X) or quits gg. They are not `gg note` review notes and never reach the notes
+store. They need a live gg TUI (exit 1 otherwise; `gg web` alone cannot hold
+them).
+
+The walkthrough: `gg session note add` on each file (that opens them), then
+`gg session files focus <id>:<line>` one file at a time as you explain it.
+Keep a summary to one sentence; put the reasoning in `--rationale`. A note
+taller than half the user's window is cut in place (they press enter to read
+it all), so prefer several short notes on the exact lines over one long one.
+A note is placed on the file as it is on disk at that moment — add notes
+AFTER your edits, not before.
+
+When the user's message holds `gg note t<n> <path>:<lines>`, they copied a
+reference to one of your notes: run `gg session note show t<n>` to see which
+remark they mean (if it answers `no note t<n>`, the user closed it — the path
+and lines still say where it was).
+
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout
 finds the right one here.

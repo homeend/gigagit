@@ -75,6 +75,16 @@ type openFile struct {
 	// backgrounded is set once the file has been sent to the background
 	// (ctrl+]): from then on esc sends it back there and only X closes it.
 	backgrounded bool
+	// notes are the temporary remarks an agent left on this file
+	// (open_file_notes.go), ordered by start line then age. They live and
+	// die with the document: nothing stores them.
+	notes []*fileNote
+	// noteW is the width the note boxes were last drawn at (0 = never):
+	// the pager counts their rows with it between frames.
+	noteW int
+	// noteH is the most rows one box may take in the frame last drawn
+	// (0 = never drawn: no cap). A taller note is cut to it (boxLines).
+	noteH int
 }
 
 // keepPlace makes the next fill — a reload of a file the user is reading —
@@ -142,6 +152,11 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 		d.keepPlace()
 	}
 	p := d.p
+	var before []string
+	reanchor := len(d.notes) > 0
+	if reanchor && docLoaded(d) {
+		before = rawOf(p.lines)
+	}
 	p.img, p.imgW, p.imgH = msg.img, 0, 0 // a re-fit at the next frame
 	if msg.err != nil {
 		p.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
@@ -151,6 +166,9 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 			p.imgInfo = msg.lines[0].text
 		}
 	}
+	if reanchor && docLoaded(d) && msg.img == nil {
+		d.reanchorNotes(before, rawOf(p.lines))
+	}
 	p.cur, p.sel = 0, 0
 	p.lsel.clear()
 	if docLoaded(d) {
@@ -158,7 +176,7 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 		d.keep.line, d.keep.top = 0, 0
 		if keep.line > 0 && d.pendingLine == 0 {
 			p.cur = min(keep.line, len(p.lines)) - 1
-			p.sel = previewClamp(keep.top, len(p.lines), rows, p.mode)
+			p.sel = p.clampTop(keep.top, rows)
 		}
 	}
 	notice = d.landPendingLine(rows)
@@ -187,6 +205,9 @@ func (d *openFile) landPendingLine(rows int) (notice string) {
 		line = n
 	}
 	p.cur = line - 1
-	p.sel = previewClamp(p.cur-rows/2, n, rows, p.mode)
+	p.sel = p.clampTop(p.cur-rows/2, rows)
+	if p.extraRows != nil {
+		p.ensureCursorVisible(rows) // a note box above may have pushed the line out
+	}
 	return notice
 }

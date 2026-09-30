@@ -448,13 +448,7 @@ func (p *contentPopup) snapHit(rowsCap, innerW int) {
 	// The hit LANDS the cursor (spec §4.7), so ]/[ and the next search step
 	// measure from where the user is actually looking.
 	p.cur = h.row
-	switch {
-	case h.row < p.sel:
-		p.sel = h.row
-	case h.row >= p.sel+rowsCap:
-		p.sel = h.row - rowsCap + 1
-	}
-	p.sel = previewClamp(p.sel, len(p.lines), rowsCap, p.mode)
+	p.ensureCursorVisible(rowsCap)
 	if p.mode == modeScroll && h.row < len(p.lines) {
 		cs, ce := hitCols(p.lines[h.row].text, h)
 		p.hscroll = panFor(p.hscroll, innerW, cs, ce)
@@ -527,18 +521,24 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	// dead zone.
 	p.fitImage(innerW, rowsCap) // an image document: its cells for this box
 	vis := p.lines
-	start := previewClamp(p.sel, len(vis), rowsCap, p.mode)
-	end := start + rowsCap
-	if end > len(vis) {
-		end = len(vis)
+	// An annotated file: its notes are VIRTUAL rows — never in p.lines, so
+	// every line index (cursor, selection, search hit) stays a file line —
+	// and its lines give up noteGutterW columns for the range mark.
+	var notes []*fileNote
+	gut, boxH := 0, 0
+	if d := m.previewDoc(p); d != nil && d.gutterW() > 0 {
+		boxH = noteBoxMaxRows(rowsCap)
+		notes, gut = d.notes, d.gutterW()
+		d.noteW, d.noteH = max(innerW-gut, 4), noteBoxMaxRows(rowsCap)
 	}
-	window := vis[start:end]
-	wr := make([]winRow, len(window))
+	start := p.clampTop(p.sel, rowsCap)
+	wr := make([]winRow, 0, rowsCap)
 	cursorOff := m.cursorStyle() == "off"
-	for i, l := range window {
-		wr[i] = winRow{text: l.text, cls: l.cls}
+	for row := start; row < len(vis) && len(wr) < rowsCap; row++ {
+		l := vis[row]
+		r := winRow{text: l.text, cls: l.cls}
 		if l.cells != nil {
-			wr[i].decorate = imageRowDecorator(l.cells)
+			r.decorate = imageRowDecorator(l.cells)
 		}
 		// The preview rows carry no prefix, so winRow.style IS the body style —
 		// no winRow.body needed here, and reverse video correctly drops the
@@ -547,13 +547,26 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		//
 		// [ui] diff_cursor governs the preview cursor too; "number" falls back
 		// to the band, because there is no gutter to carry a number.
-		row := start + i
 		if rowStyle, marked := previewRowMark(p, row, cursorOff, l); marked {
-			wr[i].style = rowStyle
+			r.style = rowStyle
 		}
 		if p.search.active() {
 			if hs := p.search.hitsOn(row, 0); len(hs) > 0 {
-				wr[i].emph = overlayHits(nil, 0, len([]rune(l.text)), hs)
+				r.emph = overlayHits(nil, 0, len([]rune(l.text)), hs)
+			}
+		}
+		for _, n := range notes {
+			if n.start <= row+1 && row+1 <= n.end {
+				r.prefix = "│ " // the range mark: this line is under a note
+				break
+			}
+		}
+		wr = append(wr, r)
+		for _, n := range notes {
+			if n.end == row+1 {
+				for _, nl := range n.boxLines(innerW-gut-noteBoxFrame, boxH) {
+					wr = append(wr, fileNoteRow(nl, innerW, gut))
+				}
 			}
 		}
 	}
@@ -569,7 +582,7 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate(i18n.T("  (empty)"), innerW), innerW))
 	} else {
-		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll, charWrap: !p.prose})
+		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll, charWrap: !p.prose, prefixW: gut})
 		lines = append(lines, win...)
 	}
 	if !viewer {
@@ -600,6 +613,11 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		if p.extraHint != "" {
 			hint = p.extraHint + "  " + hint
 		}
+	}
+	if d := m.previewDoc(p); d != nil && len(d.notes) > 0 {
+		// An annotated file's own hint: the note keys, then the two exits —
+		// all inside an 80-column viewer — and the everyday keys last.
+		hint = i18n.T("%d/%d  [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [↑/↓] scroll", start+1, len(vis))
 	}
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))

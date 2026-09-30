@@ -1329,6 +1329,19 @@ work against a running TUI or `gg web` (they never start one): the web page's
 server answers from its shared list, and a focus brings the file up in every
 open tab.
 
+An agent can also **explain itself on the code**: `gg session note add
+<path>:<start>[-<end>] --summary "…" [--rationale "…"]` puts a temporary note
+on those lines of an open file (opening it in the background first when
+needed). You read it in a box under the lines; `}` / `{` step through the
+notes (and on to the next open file that has any), `d` dismisses the one under
+the cursor, and `r` copies a reference — `gg note t7 <path>:<lines>` — to paste
+back to the agent when you want to ask about that remark. A note taller than
+half the window is cut in place; `enter` opens it in full. `gg session note
+list|show|rm|clear` are the agent's other verbs. The notes are temporary: they
+follow their lines as the file changes, a file carrying them stays open on esc,
+and closing it (X) drops them. They need a running TUI; `gg web` does not show
+them yet.
+
 ### Agent sessions (embedded consoles)
 
 On a **Worktrees** row, the `.` menu's **Start agent** runs an interactive

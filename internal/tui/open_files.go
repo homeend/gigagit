@@ -44,7 +44,8 @@ func (r *openFilesReg) find(wt, key string) *openFile {
 
 // touch puts d first in wt's list, adding it when new. Over the cap it drops
 // the least recently shown document that is not on screen (shown reports
-// that) and returns it; nil when nothing was dropped.
+// that) and carries no notes — an agent's remarks are never pushed out — and
+// returns it; nil when nothing was dropped (the list then grows past the cap).
 func (r *openFilesReg) touch(wt string, d *openFile, shown func(*openFile) bool) (evicted *openFile) {
 	if r.byWT == nil {
 		r.byWT = map[string][]*openFile{}
@@ -57,7 +58,7 @@ func (r *openFilesReg) touch(wt string, d *openFile, shown func(*openFile) bool)
 	}
 	if len(l) > maxOpenFiles {
 		for i := len(l) - 1; i > 0; i-- {
-			if !shown(l[i]) {
+			if !shown(l[i]) && len(l[i].notes) == 0 {
 				evicted = l[i]
 				l = append(l[:i], l[i+1:]...)
 				break
@@ -283,6 +284,7 @@ func (m Model) openFilesProto() []steer.OpenFile {
 		if m.docShown(d) {
 			f.State = "shown"
 		}
+		f.Notes = len(d.notes)
 		out = append(out, f)
 	}
 	return out

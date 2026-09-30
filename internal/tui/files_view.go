@@ -823,6 +823,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if nm, cmd, handled := m.previewSearchKey(msg); handled {
 		return nm, cmd
 	}
+	// …then the focused preview's notes: } { step, d / r act on the note
+	// under the cursor. It declines a key it has nothing to do with.
+	if nm, cmd, handled := m.previewNoteKey(msg); handled {
+		return nm, cmd
+	}
 	if m.inWorktreeFiles() {
 		return m.updateWorktreeFilesKey(msg)
 	}
@@ -1256,7 +1261,7 @@ func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 		// to a cursor range and is shared with the tree/help window) so every press,
 		// keyboard or wheel, scrolls the viewport.
 		p := m.filesPreview.p
-		p.sel = previewClamp(p.sel+delta, len(p.lines), m.filePreviewRowsCap(), p.mode)
+		p.scrollBy(delta, m.filePreviewRowsCap())
 		return m, nil
 	}
 	if m.stashView != nil {
