@@ -50,6 +50,8 @@ function saveUI(patch) {
     files_hidden: false,
     sym_compare: false,
     stacked_diff: false,
+    commit_tall: false,
+    repo_grouped: false,
     sidebar_width: 0,
     files_width: 0,
     graph: "svg",

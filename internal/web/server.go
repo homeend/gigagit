@@ -52,7 +52,7 @@ type Server struct {
 	// (repodetails.go); probeRepo and probeDeadline are its test seams
 	// (nil/zero = probeRepoDisk and defaultProbeDeadline).
 	probes        repoProbes
-	probeRepo     func(path string) (branch string, slow bool)
+	probeRepo     func(path string) repoVerdict
 	probeDeadline time.Duration
 
 	// Live steering (steer.go): steerDir is this worktree's inbox and

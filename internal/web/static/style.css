@@ -800,7 +800,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #palette-list li { display: flex; justify-content: space-between; gap: 14px; padding: 5px 14px; cursor: pointer; }
 #palette-list li.sel { background: var(--sel); }
 #palette-list li .detail { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
-/* repo mode: a five-column table (branch · name · slow-fs · path · age) whose
+/* repo mode: a five-column table (name · branch · slow-fs · path · age) whose
    column widths palette.js sets in ch on --repo-cols. Cells never ellipsize:
    a too-long path is already middle-cut in JS (elidePath), so a CSS tail cut
    here would chop the leaf the whole layout exists to show. */
@@ -812,6 +812,11 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #palette-list li.repo .rslow { color: var(--lane1); }
 #palette-list li.repo .rpath, #palette-list li.repo .rage { color: var(--dim); }
 #palette-list li.empty { color: var(--dim); cursor: default; }
+/* repo mode's key line under the table (palette.js renderRepoHint) */
+#palette-hint { display: flex; gap: 2ch; padding: 5px 14px 7px; border-top: 1px solid var(--border); color: var(--dim); }
+#palette-hint.hidden { display: none; }
+#palette-hint button { background: none; border: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
+#palette-hint .on { color: var(--fg); }
 #menu-btn { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--fg); font: inherit; padding: 1px 8px; margin-right: 10px; cursor: pointer; }
 #menu-btn:hover { border-color: var(--accent); }
 
@@ -1133,7 +1138,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #palette-list li { display: flex; justify-content: space-between; gap: 14px; padding: 5px 14px; cursor: pointer; }
 #palette-list li.sel { background: var(--sel); }
 #palette-list li .detail { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
-/* repo mode: a five-column table (branch · name · slow-fs · path · age) whose
+/* repo mode: a five-column table (name · branch · slow-fs · path · age) whose
    column widths palette.js sets in ch on --repo-cols. Cells never ellipsize:
    a too-long path is already middle-cut in JS (elidePath), so a CSS tail cut
    here would chop the leaf the whole layout exists to show. */

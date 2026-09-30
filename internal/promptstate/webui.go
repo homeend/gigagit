@@ -25,6 +25,9 @@ type WebUI struct {
 	// everyday three lines for a tall box, and the choice is remembered here
 	// (a random port makes browser storage useless).
 	CommitTall bool `toml:"commit_tall,omitempty"`
+	// RepoGrouped is gg web's switch-repo table grouped by project (ctrl+g),
+	// independent of the TUI switcher's own tui_repo_grouped.
+	RepoGrouped bool `toml:"repo_grouped,omitempty"`
 	// SidebarWidth / FilesWidth are the dragged pane widths in CSS pixels;
 	// 0 means "never dragged, use the default".
 	SidebarWidth int `toml:"sidebar_width"`

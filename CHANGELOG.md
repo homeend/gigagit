@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Web switch-repo table groups by project
+
+### Added
+
+- **`ctrl+g` groups gg web's switch-repo table by project**, as the TUI's `R`
+  switcher does: a checkout with its linked worktrees (shared git common dir)
+  plus clones of the same remote, under the project's name, the rows beneath
+  it with a blank name. A hint line under the table shows the key, clickable,
+  and whether the table is grouped. The choice is remembered in the web's own
+  layout state (`repo_grouped`), independent of the TUI's. The server decides
+  the projects — the grouping logic moved into the `repos` package, so both
+  frontends share one implementation; `/api/repos` groups by remote name at
+  once and `/api/repos/details` adds the common dirs as the probes land.
+
+### Changed
+
+- **The switch-repo table leads with the name**, then the branch (name ·
+  branch · slow-fs · path · last opened), so a group's project name heads
+  its rows.
+
 ## Repo switcher groups worktrees without a remote
 
 ### Fixed
