@@ -3652,6 +3652,15 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   sessions live and `!m.quitConfirmed` → the quit-mode popup; `Q` sets
   `quitConfirmed` and runs `killAllAndQuitCmd`. `Run()` kills whatever is left
   after the program ends (safety net).
+- **ctrl+a = last-used session** (2026-09-30): `agentsession.Info.LastUsed`
+  starts at `Started` and moves on `SendKey`/`SendText`/`Paste` and on
+  `Session.Touch()` — called by `openConsole` and by the web's screen stream
+  (`handleSessionScreen`) when a page shows the session. `openLastSession`
+  picks the RUNNING session with the newest `LastUsed`
+  (`lastUsedRunningSession`). The key sits next to ctrl+p in `Update`, gated to
+  no layer and no `/` typing; a focused console keeps it for the agent
+  (readline's start-of-line), an unfocused one lets it through
+  (`consolePassthrough`). Not configurable and not in the web (select-all).
 - **Probe recipe**: `tui-capture.sh` sets only XDG_STATE_HOME and a tmux
   server hands sessions its own env, so point gg at a scratch config with a
   `--gg` wrapper script that exports `XDG_CONFIG_HOME` and `exec`s the binary;

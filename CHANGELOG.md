@@ -11,8 +11,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Added
 
 - **`ctrl+a` opens the last-used running agent session** in its console,
-  focused. "Used" means you typed into it (TUI or web) or opened its
-  console; an exited session is skipped, so the one used before it stands
+  focused. "Used" means you typed into it or showed its console (TUI or
+  web); an exited session is skipped, so the one used before it stands
   in. Inside a focused console `ctrl+a` still goes to the agent. The footer
   shows `[ctrl+a] last agent` while a session runs.
 
