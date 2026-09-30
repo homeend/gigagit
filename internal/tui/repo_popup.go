@@ -25,6 +25,10 @@ type repoPopup struct {
 	now     time.Time
 	mode    dispMode // text display mode; z cycles (cutoff default = no wrapping)
 	hscroll int      // modeScroll horizontal offset
+	// grouped gathers the checkouts of one project under its most recent one
+	// (ctrl+g). Seeded from — and mirrored to — Model.repoGrouped, so the choice
+	// outlives this popup for the session.
+	grouped bool
 
 	// foreign holds the async slow-filesystem verdicts (path → true when the
 	// repo sits on a network/OS-bridge mount where switching crawls). nil until
@@ -84,24 +88,101 @@ func (m Model) openRepoPopup() (Model, tea.Cmd, bool) {
 		m.statusMsg = i18n.T("no known repositories yet (gg records them as you open repos)")
 		return m, nil, false
 	}
-	m = m.pushLayer(&repoPopup{entries: entries, now: time.Now()})
+	m = m.pushLayer(&repoPopup{entries: entries, now: time.Now(), grouped: m.repoGrouped})
 	return m, probeReposCmd(entries), true
 }
 
-// visible returns the filtered entries in display order.
+// visible returns the filtered entries in display order: MRU, regrouped by
+// project when grouped is on.
 func (p *repoPopup) visible() []repos.Entry {
-	if p.query == "" {
-		return p.entries
+	out := p.entries
+	if p.query != "" {
+		q := strings.ToLower(p.query)
+		out = make([]repos.Entry, 0, len(p.entries))
+		for _, e := range p.entries {
+			if strings.Contains(strings.ToLower(repos.Name(e)), q) ||
+				strings.Contains(strings.ToLower(e.Path), q) {
+				out = append(out, e)
+			}
+		}
 	}
-	q := strings.ToLower(p.query)
-	out := make([]repos.Entry, 0, len(p.entries))
-	for _, e := range p.entries {
-		if strings.Contains(strings.ToLower(repos.Name(e)), q) ||
-			strings.Contains(strings.ToLower(e.Path), q) {
+	if p.grouped {
+		out = groupRepos(out)
+	}
+	return out
+}
+
+// repoProject is the project an entry belongs to: its remote repository name,
+// which every checkout of one repository (worktrees, and separate clones)
+// shares. ok is false for an entry with no usable name — unknown, or the
+// NoRemote sentinel — which therefore never joins a group.
+func repoProject(e repos.Entry) (name string, ok bool) {
+	if e.Remote == "" || e.Remote == repos.NoRemote {
+		return "", false
+	}
+	return e.Remote, true
+}
+
+// groupRepos reorders MRU-sorted entries so each project's checkouts sit
+// together: the first entry of a project heads its group and the project's
+// later entries move up under it, in their MRU order. Groups are therefore
+// ordered by their most recently opened checkout. The input is not modified.
+func groupRepos(entries []repos.Entry) []repos.Entry {
+	out := make([]repos.Entry, 0, len(entries))
+	seen := make(map[string]bool)
+	for i, e := range entries {
+		name, ok := repoProject(e)
+		if !ok {
 			out = append(out, e)
+			continue
+		}
+		if seen[name] {
+			continue // already pulled up under its head
+		}
+		seen[name] = true
+		out = append(out, e)
+		for _, later := range entries[i+1:] {
+			if n, ok := repoProject(later); ok && n == name {
+				out = append(out, later)
+			}
 		}
 	}
 	return out
+}
+
+// rowName is the name cell of row i in vis. Grouped, a project's head shows
+// the project name and the rows under it show none; an entry outside any
+// project, and every row of the flat list, shows its directory name.
+func (p *repoPopup) rowName(vis []repos.Entry, i int) string {
+	if !p.grouped {
+		return repos.Name(vis[i])
+	}
+	name, ok := repoProject(vis[i])
+	if !ok {
+		return repos.Name(vis[i])
+	}
+	if i > 0 {
+		if prev, ok := repoProject(vis[i-1]); ok && prev == name {
+			return ""
+		}
+	}
+	return name
+}
+
+// toggleGrouped flips the grouping and keeps the cursor on the row it was on.
+func (p *repoPopup) toggleGrouped() {
+	at := ""
+	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) {
+		at = vis[p.sel].Path
+	}
+	p.grouped = !p.grouped
+	p.sel = 0
+	for i, e := range p.visible() {
+		if e.Path == at {
+			p.sel = i
+			break
+		}
+	}
 }
 
 // update handles all keys while the picker is open. It swallows everything (no
@@ -120,6 +201,19 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	// Display-mode + pan keys are chords, so they never collide with the query.
 	switch msg.String() {
+	case "ctrl+g":
+		p.toggleGrouped()
+		m.repoGrouped = p.grouped
+		return m, nil
+	case "ctrl+p":
+		// Copy the selected row's absolute path; the switcher stays open (the
+		// palette, ctrl+p elsewhere, is not reachable from a popup).
+		vis := p.visible()
+		if p.sel < 0 || p.sel >= len(vis) {
+			return m, nil
+		}
+		path := vis[p.sel].Path
+		return m, m.copyToClipboardCmd(i18n.T("Copied absolute path: %s", path), path)
 	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0
@@ -280,6 +374,9 @@ func (p *repoPopup) box(m Model) string {
 	if p.query != "" {
 		header += "  " + p.query + "█"
 	}
+	if p.grouped {
+		header += "  " + i18n.T("[grouped]")
+	}
 
 	vis := p.visible()
 	var bodyLines []string
@@ -317,7 +414,7 @@ func (p *repoPopup) box(m Model) string {
 				path = elidePath(path, pathW)
 			}
 			row := prefix + marker +
-				padRight(truncate(repos.Name(e), nameW), nameW) + "  " +
+				padRight(truncate(p.rowName(vis, i), nameW), nameW) + "  " +
 				padRight(slow, slowW) + "  " +
 				padRight(path, pathW) + "  (" + ageString(p.now, e.LastOpened) + ")"
 			wr[i] = winRow{text: row, style: st}
@@ -331,7 +428,7 @@ func (p *repoPopup) box(m Model) string {
 		bodyLines = renderWindow(wr, o)
 	}
 
-	hint := []string{i18n.T("[enter] switch"), i18n.T("[ctrl+d] forget"), i18n.T("type to filter"), i18n.T("[ctrl+w] mode"), i18n.T("[esc] close")}
+	hint := []string{i18n.T("[enter] switch"), i18n.T("[ctrl+g] group"), i18n.T("[ctrl+p] copy path"), i18n.T("[ctrl+d] forget"), i18n.T("type to filter"), i18n.T("[ctrl+w] mode"), i18n.T("[esc] close")}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
@@ -350,6 +447,13 @@ func (p *repoPopup) tableCols(textW int) (nameW, slowW, pathW int) {
 	for _, e := range p.entries {
 		if w := lipgloss.Width(repos.Name(e)); w > nameW {
 			nameW = w
+		}
+		// A group head shows the project name instead; sizing for both keeps
+		// the columns still across the ctrl+g toggle.
+		if n, ok := repoProject(e); ok {
+			if w := lipgloss.Width(n); w > nameW {
+				nameW = w
+			}
 		}
 		if w := lipgloss.Width(e.Path); w > pathW {
 			pathW = w

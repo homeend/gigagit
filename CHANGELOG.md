@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Repo switcher: group by project, copy path
+
+### Added
+
+- **`ctrl+g` groups the repo switcher (`R`) by project.** The most recently
+  opened checkout of each project leads, named after the project, and the
+  project's other checkouts and worktrees move up under it with a blank name
+  column; the next project left in the list starts the next group. So the
+  project you last switched to — or whose worktree you last switched to — is
+  on top. A project is the remote repository name gg already stores, so
+  grouping costs no git call; an entry with no remote stays a row of its own.
+  Typing filters first and groups what is left. The flat list stays the
+  default; the choice is remembered for the session.
+- **`ctrl+p` copies the selected repository's absolute path** from the
+  switcher, which stays open (every plain key there is a filter character).
+
 ## Cached git PATH lookup
 
 ### Changed
