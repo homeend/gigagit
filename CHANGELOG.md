@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## test.sh failure reports
+
+### Fixed
+
+- **`./test.sh` names what failed.** A failing package printed its whole
+  captured output — thousands of passing-test lines, each garbled with a
+  `","OutputType":"frame` tail from newer `go test -json` — so the failing
+  test scrolled out of view. It now prints only the failing tests' output
+  (named, in failure order), then any test cut off mid-run (a panic, the
+  timeout) and the package-level output.
+
 ## Versioned external-tool templates
 
 ### Added

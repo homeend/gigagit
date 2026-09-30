@@ -33,9 +33,11 @@ gates() {
 # run_tests streams one line per package AS IT FINISHES (ok/FAIL/no-tests,
 # with elapsed time and test count), so a long stage shows live progress
 # instead of minutes of silence followed by one burst. A failing package
-# dumps its full captured output right under its FAIL line. Verbose mode
-# keeps go test's own raw -v stream. The pipeline's exit code is go test's
-# (pipefail is set), so failures still stop the script.
+# prints, right under its FAIL line, the output of each test that FAILED
+# (named, in failure order) and then its package-level output — a panic, a
+# race report, a timeout — never the thousands of lines its passing tests
+# wrote. Verbose mode keeps go test's own raw -v stream. The pipeline's exit
+# code is go test's (pipefail is set), so failures still stop the script.
 run_tests() {
 	if [[ -n "${VERBOSE}" ]]; then
 		go test -timeout 30m ${RACE} ${VERBOSE} "$@"
@@ -48,36 +50,70 @@ run_tests() {
 		sub(/^github\.com\/homeend\/gigagit\//, "", p)
 		return p
 	}
+	function testOf(line) {
+		if (match(line, /"Test":"[^"]*"/) == 0) return ""
+		return substr(line, RSTART + 8, RLENGTH - 9)
+	}
+	# outputOf decodes an output event'"'"'s text. Newer go test -json events
+	# carry more fields after "Output" (e.g. "OutputType":"frame"), so the
+	# value ends at the first unescaped quote, not at the closing brace.
+	function outputOf(line,   out, i, c, s) {
+		if (match(line, /"Output":"/) == 0) return ""
+		out = substr(line, RSTART + 10)
+		s = ""
+		for (i = 1; i <= length(out); i++) {
+			c = substr(out, i, 1)
+			if (c == "\\") {
+				c = substr(out, ++i, 1)
+				if (c == "n") s = s "\n"
+				else if (c == "t") s = s "\t"
+				else if (c == "u") { s = s "?"; i += 4 } # \u00XX: control/HTML-escaped rune
+				else s = s c
+				continue
+			}
+			if (c == "\"") break
+			s = s c
+		}
+		return s
+	}
 	{
 		pkg = pkgOf($0)
 		if (pkg == "") next
-		isTest = ($0 ~ /"Test":"/)
+		test = testOf($0)
 		if ($0 ~ /"Action":"output"/) {
-			# Buffer package output (decoded) so a FAIL can replay it.
-			if (match($0, /"Output":"/)) {
-				out = substr($0, RSTART + 10)
-				sub(/"\}[[:space:]]*$/, "", out)
-				gsub(/\\n/, "\n", out); gsub(/\\t/, "\t", out)
-				gsub(/\\"/, "\"", out); gsub(/\\\\/, "\\", out)
-				buf[pkg] = buf[pkg] out
-			}
+			out = outputOf($0)
+			if (out ~ /\(cached\)/) cached[pkg] = 1
+			# Per test, so a FAIL replays only the failing tests; package
+			# output (no Test) is its own buffer.
+			if (test != "") tbuf[pkg, test] = tbuf[pkg, test] out
+			else pbuf[pkg] = pbuf[pkg] out
 			next
 		}
-		if (isTest) {
+		if (test != "") {
 			if ($0 ~ /"Action":"pass"/) tests[pkg]++
+			if ($0 ~ /"Action":"fail"/) failed[pkg] = failed[pkg] tbuf[pkg, test]
+			if ($0 ~ /"Action":"(pass|fail|skip)"/) delete tbuf[pkg, test]
 			next
 		}
 		# Package-level verdicts stream in completion order — the progress.
 		if ($0 ~ /"Action":"pass"/) {
 			el = ""
 			if (match($0, /"Elapsed":[0-9.]+/)) el = substr($0, RSTART + 10, RLENGTH - 10) "s"
-			if (buf[pkg] ~ /\(cached\)/) el = "(cached)"
+			if (cached[pkg]) el = "(cached)"
 			printf "ok   %-28s %8s  %d tests\n", pkg, el, tests[pkg]
-			delete buf[pkg]; fflush()
+			delete pbuf[pkg]; fflush()
 		} else if ($0 ~ /"Action":"fail"/) {
 			printf "FAIL %s\n", pkg
-			printf "%s", buf[pkg]
-			delete buf[pkg]; fflush()
+			printf "%s", failed[pkg]
+			# A test still running when the package died (a panic in
+			# another goroutine, the -timeout) never got its own verdict:
+			# its output is where the story is.
+			for (k in tbuf) {
+				split(k, kp, SUBSEP)
+				if (kp[1] == pkg) { printf "%s", tbuf[k]; delete tbuf[k] }
+			}
+			printf "%s", pbuf[pkg]
+			delete pbuf[pkg]; delete failed[pkg]; fflush()
 		} else if ($0 ~ /"Action":"skip"/) {
 			printf "--   %-28s (no test files)\n", pkg
 			fflush()
