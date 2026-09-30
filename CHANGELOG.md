@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Open-file notes
+
+### Added
+
+- **An agent can explain itself on the code.** `gg session note add
+  <path>:<start>[-<end>] --summary "…" [--rationale "…"]` puts a temporary
+  remark on the lines of a file open in the TUI (opening it in the
+  background when it is not). The remark is drawn in a box under its lines —
+  the diff view's note box — and the covered lines carry a `│` mark.
+  `gg session note list|show|rm|clear` are the agent's other verbs;
+  `gg session files` reports each file's note count.
+- **Reading them.** `}` / `{` step to the next / previous note, then on to
+  the next open file that has notes; `d` dismisses the note under the cursor;
+  `r` copies a reference (`gg note t7 <path>:<lines>`) to paste back to the
+  agent. The same actions are in the `.` menu, and the ctrl+\ Open files tab
+  shows a count per file.
+- **They are temporary.** The notes live in the running TUI only: they follow
+  their lines when the file changes on disk (edited lines mark a note
+  `outdated`; it recovers when the text returns), and closing the file (X)
+  drops them. A file that carries notes stays open on esc and is never pushed
+  out by the 20-file cap. Nothing is written to the review-notes store.
+- Skill `using-gg` v106 teaches the verbs and the walkthrough.
+
 ## Cached git PATH lookup
 
 ### Changed

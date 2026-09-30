@@ -4137,3 +4137,33 @@ Spec: `docs/superpowers/specs/2026-09-27-review-notes-design.md`.
   `.stk` with a `.stk-notes` block (not a `.stk-file`, so the loader, counts
   and n/p skip it); `scrollToFile` lands file 0 at scrollTop 0 when that
   block exists, else aligning the header scrolls the notes out of sight.
+
+### Open-file notes (temporary agent remarks, 2026-09-30)
+
+Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
+
+- **Memory only.** `openFile.notes` (`internal/tui/open_file_notes.go`); never
+  `internal/notes`. Working-tree documents only. `addNote` sets
+  `backgrounded` (esc steps aside, X closes and drops them) and
+  `openFilesReg.touch` never evicts a document with notes (the list may grow
+  past 20).
+- **Virtual rows.** Note boxes are NEVER in `contentPopup.lines`: every line
+  index (cursor, selection, search hit, pending line) stays a file line.
+  `renderPreviewBox` emits the box rows under the line a note ENDS on
+  (`fileNoteRow`, painted by `noteBoxCell` — the diff view's box). The only
+  row math that knows about them is `contentPopup.extraRows` +
+  `rowsSpan`/`clampTop`/`lastVisible`/`ensureCursorVisible`; with the hook nil
+  (no notes) the pager is the plain one-row-per-line arithmetic. New preview
+  scroll code must clamp through `p.clampTop`, not `previewClamp`.
+- **Gutter.** While a document has notes its lines give up `noteGutterW` (2)
+  columns (`winOpts.prefixW`); covered lines carry `│ `. `activePreview`
+  subtracts it from the width search/pan use.
+- **Re-anchoring** (`reanchorNotes`, called from `fill`): a live note follows
+  the `textdiff` alignment when all its lines survived unchanged and
+  contiguous, else it goes `outdated` (numbers kept, clamped). An outdated
+  note — or any note after a placeholder fill — returns only when its anchor
+  text is at its old place or at exactly ONE place in the file.
+- **Steer.** `note_add|list|show|rm` run before `steerRefusal` (they never
+  move the screen); `note_add` on a file that is not open/loaded rides
+  `noteLandedMsg`. The CLI (`gg session note`) posts to a TUI only.
+
