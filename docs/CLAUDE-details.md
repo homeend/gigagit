@@ -3652,15 +3652,20 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   sessions live and `!m.quitConfirmed` → the quit-mode popup; `Q` sets
   `quitConfirmed` and runs `killAllAndQuitCmd`. `Run()` kills whatever is left
   after the program ends (safety net).
-- **ctrl+a = last-used session** (2026-09-30): `agentsession.Info.LastUsed`
-  starts at `Started` and moves on `SendKey`/`SendText`/`Paste` and on
-  `Session.Touch()` — called by `openConsole` and by the web's screen stream
-  (`handleSessionScreen`) when a page shows the session. `openLastSession`
-  picks the RUNNING session with the newest `LastUsed`
-  (`lastUsedRunningSession`). The key sits next to ctrl+p in `Update`, gated to
-  no layer and no `/` typing; a focused console keeps it for the agent
-  (readline's start-of-line), an unfocused one lets it through
-  (`consolePassthrough`). Not configurable and not in the web (select-all).
+- **alt+a / alt+t = cycle by last use** (2026-10-01): `agentsession.Info`
+  carries `LastUsed` (starts at `Started`; moves on `SendKey`/`SendText`/
+  `Paste` and `Session.Touch()`) and `Terminal` (set by `StartTerminal` via
+  `StartSpec.Terminal`). `sessionsByLastUsed(list, terminal)` = running
+  sessions of one kind, newest use first. `cycleSessions` shows the head
+  UNFOCUSED via `showConsole(id, false)`, or — when an unfocused console of
+  that list is docked — the entry after it (wrapping). Only a FOCUSED show is a
+  use: `openConsole` and the unfocused console's `enter`/`ctrl+t`
+  (`touchConsole`) Touch; the unfocused show must not, or the walk would
+  reorder itself. The web counts through typing only (a page's screen stream
+  may reattach on its own, so attaching is not a use). The keys sit next to ctrl+p in `Update`, gated to no layer and no `/` typing; a
+  focused console keeps them for its program, an unfocused one lets them
+  through (`consolePassthrough`). Not ctrl+a (a common tmux prefix — gg never
+  sees it) nor ctrl+l (Commits' load-more). Not configurable; not in the web.
 - **Probe recipe**: `tui-capture.sh` sets only XDG_STATE_HOME and a tmux
   server hands sessions its own env, so point gg at a scratch config with a
   `--gg` wrapper script that exports `XDG_CONFIG_HOME` and `exec`s the binary;

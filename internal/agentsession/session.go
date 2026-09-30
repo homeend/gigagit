@@ -95,7 +95,7 @@ func start(id ID, spec StartSpec) (*Session, error) {
 	now := time.Now()
 	s := &Session{
 		info: Info{ID: id, Label: spec.Label, AgentID: spec.AgentID, Repo: spec.Repo, Dir: spec.Dir,
-			Started: now, LastUsed: now, State: Running},
+			Started: now, LastUsed: now, Terminal: spec.Terminal, State: Running},
 		pty: p, emu: emu, cmd: cmd, trace: trace, traceEv: traceEv,
 		done:    make(chan struct{}),
 		outDone: make(chan struct{}),

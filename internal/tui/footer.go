@@ -216,8 +216,11 @@ func globalBindings() []footerBinding {
 		{"agents-files", "ctrl+\\", i18n.T("[ctrl+\\] agents & files"), func(m Model) bool {
 			return len(m.openFiles.list(m.currentWorktree)) > 0
 		}, scopeGlobal},
-		{"last-agent", "ctrl+a", i18n.T("[ctrl+a] last agent"), func(Model) bool {
-			return domain.Sessions().LiveCount() > 0
+		{"last-agent", "alt+a", i18n.T("[alt+a] last agent"), func(Model) bool {
+			return len(sessionsByLastUsed(domain.Sessions().List(), false)) > 0
+		}, scopeGlobal},
+		{"last-terminal", "alt+t", i18n.T("[alt+t] last terminal"), func(Model) bool {
+			return len(sessionsByLastUsed(domain.Sessions().List(), true)) > 0
 		}, scopeGlobal},
 		{"notices", "!", i18n.T("[!] notices"), func(m Model) bool { return len(m.notices) > 0 }, scopeGlobal},
 		{"last-error", "E", i18n.T("[E] full message"), func(m Model) bool { return m.lastError != "" }, scopeGlobal},

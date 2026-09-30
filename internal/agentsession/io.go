@@ -28,7 +28,7 @@ func (s *Session) running() bool { return s.Info().State == Running }
 func (s *Session) Touch() { s.mu.Lock(); s.info.LastUsed = time.Now(); s.mu.Unlock() }
 
 // SendKey encodes k for the child. A no-op once the session has exited.
-// Modified special keys (ctrl+arrow, shift+home, …) are encoded here —
+// Modified special keys (alt+arrow, shift+home, …) are encoded here —
 // the emulator drops them (see encodeModifiedKey); everything else takes
 // the emulator's mode-aware path.
 func (s *Session) SendKey(k Key) {

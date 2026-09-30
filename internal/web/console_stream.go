@@ -238,7 +238,6 @@ func (s *Server) handleSessionScreen(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	ch, cancel := s.feeds.attach(sess)
 	defer cancel()
-	sess.Touch() // the page showing it counts as using it (the TUI's ctrl+a order)
 	last := sess.ScreenRuns()
 	writeSSEEvent(w, "hello", map[string]any{"frame": diffFrame(nil, last), "palette": palette16()})
 	if info := sess.Info(); info.State == domain.SessionExited {

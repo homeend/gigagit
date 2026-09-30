@@ -24,9 +24,10 @@ type Info struct {
 	Dir     string    // worktree path = the child's cwd
 	Started time.Time // when Start returned
 	// LastUsed is the last time someone used the session: input sent to it
-	// (SendKey/SendText/Paste) or a frontend showing it (Touch). Starts at
-	// Started; the TUI's ctrl+a opens the running session with the latest.
+	// (SendKey/SendText/Paste) or a frontend focusing it (Touch). Starts at
+	// Started; the TUI's alt+a / alt+t cycle running sessions by it.
 	LastUsed time.Time
+	Terminal bool // an interactive shell (Open terminal), not an agent
 	State    State
 	ExitCode int // valid when State == Exited; -1 = killed by a signal / unknown
 }
@@ -34,6 +35,7 @@ type Info struct {
 // StartSpec describes the program to run.
 type StartSpec struct {
 	Label, AgentID, Repo, Dir string
+	Terminal                  bool // an interactive shell (Open terminal), not an agent
 	// Cwd is where the process runs when that differs from Dir — a worktree
 	// git recorded under the other environment's notation, reached through
 	// its translated path. Dir stays the identity frontends group by. "" = Dir.
