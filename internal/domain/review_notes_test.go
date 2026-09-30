@@ -211,8 +211,10 @@ func TestNoteCountsListsReviewHeads(t *testing.T) {
 	if len(c.Reviews) != 1 || c.Reviews[0].ID != id || c.Reviews[0].Branch != "feature" || c.Reviews[0].Commit != tip {
 		t.Fatalf("Reviews = %+v", c.Reviews)
 	}
-	if c.ByCommit[tip] != 1 {
-		t.Fatalf("ByCommit[tip] = %d, want 1 (the ◆ badge counts reviews)", c.ByCommit[tip])
+	// A review has its own marker (✎); the ◆ badge counts the notes a diff
+	// can show, so a review alone leaves the commit unbadged.
+	if n := c.ByCommit[tip]; n != 0 {
+		t.Fatalf("ByCommit[tip] = %d, want 0 (the ◆ badge never counts a review)", n)
 	}
 }
 
