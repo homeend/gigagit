@@ -109,6 +109,7 @@ type Model struct {
 
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
 	statePath           string // repo-registry location; "" disables recording (tests)
+	repoGrouped         bool   // repo switcher's ctrl+g grouping, remembered for the session
 	linkRepoName        string // remote repository name for gg:// links; "" = the local (absolute-path) form
 	pendingSeqBump      []string
 	pendingSwitch       bool

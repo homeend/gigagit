@@ -357,6 +357,8 @@ func helpContent() []contentLine {
 		r("ctrl+c", i18n.T("quit")),
 		h(i18n.T("Repo switcher (R)")),
 		r("enter", i18n.T("switch to the selected repository")),
+		r("ctrl+g", i18n.T("group the list by project: each project's most recently opened checkout leads, with its other checkouts and worktrees under it (press again for the flat list)")),
+		r("ctrl+p", i18n.T("copy the selected repository's absolute path")),
 		r("ctrl+d", i18n.T("forget the selected repository")),
 		r("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 		r("esc", i18n.T("close (type to filter)")),
