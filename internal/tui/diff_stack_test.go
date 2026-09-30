@@ -285,8 +285,7 @@ func tempPromptStore(t *testing.T, m Model) Model {
 	// New() read the MACHINE's store before this one replaced it, so the
 	// session flag has to come from the temp store too — otherwise a test
 	// passes or fails by whether the developer left the stacked view on.
-	m.diffStacked = m.promptStore.StackedDiff()
-	return m
+	return m.loadPrefs()
 }
 
 // S stacks the open diff around the file being read — keeping that file, its

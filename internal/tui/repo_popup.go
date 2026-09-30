@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/fsprobe"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/worktree"
 )
 
 // repoPopup is the transient repo-switcher picker opened with R. It holds an
@@ -26,44 +30,59 @@ type repoPopup struct {
 	mode    dispMode // text display mode; z cycles (cutoff default = no wrapping)
 	hscroll int      // modeScroll horizontal offset
 	// grouped gathers the checkouts of one project under its most recent one
-	// (ctrl+g). Seeded from — and mirrored to — Model.repoGrouped, so the choice
-	// outlives this popup for the session.
+	// (ctrl+g). Seeded from — and mirrored to — Model.repoGrouped, which is
+	// persisted, so the choice outlives this popup and the session.
 	grouped bool
 
 	// foreign holds the async slow-filesystem verdicts (path → true when the
 	// repo sits on a network/OS-bridge mount where switching crawls). nil until
 	// repoFSMsg lands; rows gain a marker and the selected row a warning then.
 	foreign map[string]bool
+	// common holds each entry's git common dir (path → dir), read by the same
+	// async probe; grouping joins a checkout with its linked worktrees through
+	// it. nil until repoFSMsg lands — grouping then goes by remote name alone.
+	common map[string]string
 }
 
-// repoFSMsg carries the async slow-filesystem verdicts for the switcher rows.
-type repoFSMsg struct{ foreign map[string]bool }
+// repoFSMsg carries the async per-entry probe results for the switcher rows:
+// the slow-filesystem verdicts and the git common dirs.
+type repoFSMsg struct {
+	foreign map[string]bool
+	common  map[string]string
+}
 
-// probeReposCmd probes each entry's filesystem off-thread. One goroutine per
-// entry under a shared deadline: statfs on a dead network mount can block
-// indefinitely, and a wedged entry must cost the popup its marker, not its
-// responsiveness (unanswered entries simply stay unmarked).
+// probeReposCmd probes each entry's filesystem and git common dir off-thread.
+// One goroutine per entry under a shared deadline: statfs on a dead network
+// mount can block indefinitely, and a wedged entry must cost the popup its
+// marker, not its responsiveness (unanswered entries simply stay unmarked and
+// group by remote name alone).
 func probeReposCmd(entries []repos.Entry) tea.Cmd {
 	return func() tea.Msg {
 		type verdict struct {
 			path    string
 			foreign bool
+			common  string
 		}
 		ch := make(chan verdict, len(entries))
 		for _, e := range entries {
-			go func(p string) { ch <- verdict{p, fsprobe.Foreign(p)} }(e.Path)
+			go func(p string) {
+				ch <- verdict{p, fsprobe.Foreign(p), worktree.CommonDirAt(runtime.GOOS, p)}
+			}(e.Path)
 		}
-		out := make(map[string]bool, len(entries))
+		out := repoFSMsg{foreign: make(map[string]bool, len(entries)), common: make(map[string]string, len(entries))}
 		deadline := time.After(time.Second)
 		for range entries {
 			select {
 			case v := <-ch:
-				out[v.path] = v.foreign
+				out.foreign[v.path] = v.foreign
+				if v.common != "" {
+					out.common[v.path] = v.common
+				}
 			case <-deadline:
-				return repoFSMsg{foreign: out}
+				return out
 			}
 		}
-		return repoFSMsg{foreign: out}
+		return out
 	}
 }
 
@@ -107,42 +126,108 @@ func (p *repoPopup) visible() []repos.Entry {
 		}
 	}
 	if p.grouped {
-		out = groupRepos(out)
+		out = groupRepos(out, p.projects())
 	}
 	return out
 }
 
-// repoProject is the project an entry belongs to: its remote repository name,
-// which every checkout of one repository (worktrees, and separate clones)
-// shares. ok is false for an entry with no usable name — unknown, or the
-// NoRemote sentinel — which therefore never joins a group.
-func repoProject(e repos.Entry) (name string, ok bool) {
-	if e.Remote == "" || e.Remote == repos.NoRemote {
-		return "", false
+// repoProj is an entry's project in the grouped view: key tells projects
+// apart, label names one on its head row.
+type repoProj struct{ key, label string }
+
+// projects maps each entry's path to its project. Two entries are one project
+// when they share a git common dir (a checkout and its linked worktrees — known
+// once the async probe lands) or a remote repository name (separate clones).
+// It is computed over ALL entries, so a filter hiding the entry that bridges
+// two others never splits their group. An entry with neither — an unprobed
+// entry with no usable remote — is absent and never joins a group. The label
+// is a member's remote name, else the main checkout's directory name.
+func (p *repoPopup) projects() map[string]repoProj {
+	parent := make([]int, len(p.entries))
+	for i := range parent {
+		parent[i] = i
 	}
-	return e.Remote, true
+	var find func(int) int
+	find = func(i int) int {
+		if parent[i] != i {
+			parent[i] = find(parent[i])
+		}
+		return parent[i]
+	}
+	has := make([]bool, len(p.entries))
+	firstBy := make(map[string]int) // "c:"+common dir / "r:"+remote → first entry
+	join := func(i int, key string) {
+		has[i] = true
+		if j, ok := firstBy[key]; ok {
+			if ri, rj := find(i), find(j); ri != rj {
+				parent[max(ri, rj)] = min(ri, rj) // the MRU-earliest stays root
+			}
+			return
+		}
+		firstBy[key] = i
+	}
+	for i, e := range p.entries {
+		if c := p.common[e.Path]; c != "" {
+			if runtime.GOOS == "windows" {
+				c = strings.ToLower(c) // drive-letter and path case vary
+			}
+			join(i, "c:"+c)
+		}
+		if e.Remote != "" && e.Remote != repos.NoRemote {
+			join(i, "r:"+e.Remote)
+		}
+	}
+	label := make(map[int]string)
+	for i, e := range p.entries { // a remote name wins, in MRU order
+		if r := find(i); has[i] && label[r] == "" && e.Remote != "" && e.Remote != repos.NoRemote {
+			label[r] = e.Remote
+		}
+	}
+	for i, e := range p.entries {
+		if r := find(i); has[i] && label[r] == "" {
+			label[r] = commonDirLabel(p.common[e.Path])
+		}
+	}
+	out := make(map[string]repoProj, len(p.entries))
+	for i, e := range p.entries {
+		if has[i] {
+			r := find(i)
+			out[e.Path] = repoProj{key: strconv.Itoa(r), label: label[r]}
+		}
+	}
+	return out
+}
+
+// commonDirLabel names a project after its git common dir: the main
+// checkout's directory for <checkout>/.git, the repository's own name for a
+// bare <name>.git or a submodule's .git/modules/<name>.
+func commonDirLabel(dir string) string {
+	if base := filepath.Base(dir); base != ".git" {
+		return strings.TrimSuffix(base, ".git")
+	}
+	return filepath.Base(filepath.Dir(dir))
 }
 
 // groupRepos reorders MRU-sorted entries so each project's checkouts sit
 // together: the first entry of a project heads its group and the project's
 // later entries move up under it, in their MRU order. Groups are therefore
 // ordered by their most recently opened checkout. The input is not modified.
-func groupRepos(entries []repos.Entry) []repos.Entry {
+func groupRepos(entries []repos.Entry, proj map[string]repoProj) []repos.Entry {
 	out := make([]repos.Entry, 0, len(entries))
 	seen := make(map[string]bool)
 	for i, e := range entries {
-		name, ok := repoProject(e)
+		pr, ok := proj[e.Path]
 		if !ok {
 			out = append(out, e)
 			continue
 		}
-		if seen[name] {
+		if seen[pr.key] {
 			continue // already pulled up under its head
 		}
-		seen[name] = true
+		seen[pr.key] = true
 		out = append(out, e)
 		for _, later := range entries[i+1:] {
-			if n, ok := repoProject(later); ok && n == name {
+			if lp, ok := proj[later.Path]; ok && lp.key == pr.key {
 				out = append(out, later)
 			}
 		}
@@ -158,7 +243,8 @@ func (p *repoPopup) rowName(vis []repos.Entry, i int) string {
 	if !p.grouped {
 		return repos.Name(vis[i])
 	}
-	name, ok := repoProject(vis[i])
+	proj := p.projects()
+	pr, ok := proj[vis[i].Path]
 	if !ok {
 		return repos.Name(vis[i])
 	}
@@ -166,25 +252,31 @@ func (p *repoPopup) rowName(vis []repos.Entry, i int) string {
 		if j < 0 || j >= len(vis) {
 			return false
 		}
-		n, ok := repoProject(vis[j])
-		return ok && n == name
+		o, ok := proj[vis[j].Path]
+		return ok && o.key == pr.key
 	}
 	switch {
 	case sameProject(i - 1):
 		return ""
 	case sameProject(i + 1):
-		return name
+		return pr.label
 	}
 	return repos.Name(vis[i])
 }
 
 // toggleGrouped flips the grouping and keeps the cursor on the row it was on.
 func (p *repoPopup) toggleGrouped() {
+	p.keepSel(func() { p.grouped = !p.grouped })
+}
+
+// keepSel applies change (anything that reorders the view) and puts the
+// cursor back on the row it was on.
+func (p *repoPopup) keepSel(change func()) {
 	at := ""
 	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) {
 		at = vis[p.sel].Path
 	}
-	p.grouped = !p.grouped
+	change()
 	p.sel = 0
 	for i, e := range p.visible() {
 		if e.Path == at {
@@ -213,6 +305,12 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+g":
 		p.toggleGrouped()
 		m.repoGrouped = p.grouped
+		if m.promptStore != nil {
+			// A store that refuses only costs the memory, never the flip.
+			if err := m.promptStore.SetRepoGrouped(p.grouped); err != nil {
+				m.statusMsg = i18n.T("could not remember the grouping choice: %s", err.Error())
+			}
+		}
 		return m, nil
 	case "ctrl+p":
 		// Copy the selected row's absolute path; the switcher stays open (the
@@ -453,14 +551,15 @@ func (p *repoPopup) box(m Model) string {
 func (p *repoPopup) tableCols(textW int) (nameW, slowW, pathW int) {
 	slowW = lipgloss.Width(i18n.T("(slow fs)"))
 	ageW := 0
+	proj := p.projects()
 	for _, e := range p.entries {
 		if w := lipgloss.Width(repos.Name(e)); w > nameW {
 			nameW = w
 		}
 		// A group head shows the project name instead; sizing for both keeps
 		// the columns still across the ctrl+g toggle.
-		if n, ok := repoProject(e); ok {
-			if w := lipgloss.Width(n); w > nameW {
+		if pr, ok := proj[e.Path]; ok {
+			if w := lipgloss.Width(pr.label); w > nameW {
 				nameW = w
 			}
 		}

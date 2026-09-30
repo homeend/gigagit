@@ -26,6 +26,8 @@ type records struct {
 	BranchFilter map[string]branchFilterRecord `toml:"branch_filter,omitempty"`
 	// StackedDiff is the TUI diff view's stacked mode (see stacked.go).
 	StackedDiff bool `toml:"tui_stacked_diff,omitempty"`
+	// RepoGrouped is the TUI repo switcher's ctrl+g grouping (see repogrouped.go).
+	RepoGrouped bool `toml:"tui_repo_grouped,omitempty"`
 	// TaskLaunch is the AI-task launch dialog's last choice per kind.
 	TaskLaunch map[string]TaskLaunch `toml:"task_launch,omitempty"`
 	// DeclinedToolUpdates holds ToolUpdateID values answered "Keep mine".
