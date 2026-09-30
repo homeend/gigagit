@@ -1,8 +1,12 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -18,6 +22,14 @@ type ToolCommand struct {
 	WhenOp    string   `toml:"when_op"`   // "" = any paused op; else merge|rebase|cherry-pick|revert
 	Frontends []string `toml:"frontends"` // limits which frontends offer this command: any of "tui", "web", "cli". Empty = everywhere.
 	Command   string   `toml:"command"`   // shell command with <token> placeholders
+
+	// The template stamp (written only on blocks gg generated from the
+	// catalog): the family's template version, the variant's agent range,
+	// and ToolFingerprint of the block as written — a later mismatch means
+	// the user edited it. Older gg binaries ignore these keys.
+	TemplateVersion int    `toml:"template_version"`
+	AgentRange      string `toml:"agent_range"`
+	Fingerprint     string `toml:"fingerprint"`
 }
 
 // ToolsConfig is the [tools] section.
@@ -27,6 +39,33 @@ type ToolsConfig struct {
 
 // Key identifies a command for the overlay collision rule.
 func (tc ToolCommand) Key() string { return tc.Category + "\x00" + tc.Name }
+
+// Stamped reports a block gg generated from the catalog.
+func (tc ToolCommand) Stamped() bool { return tc.TemplateVersion > 0 }
+
+// Edited reports a block whose content no longer matches its stamp; an
+// unstamped block always counts as edited.
+func (tc ToolCommand) Edited() bool { return !tc.Stamped() || ToolFingerprint(tc) != tc.Fingerprint }
+
+// ToolFingerprint hashes a block's MEANING, not its text: mode, per_file,
+// when_op, sorted frontends and the command with line ends normalised,
+// every run of spaces/tabs collapsed, lines trimmed and blank lines dropped.
+func ToolFingerprint(tc ToolCommand) string {
+	fr := append([]string(nil), tc.Frontends...)
+	sort.Strings(fr)
+	var lines []string
+	for _, ln := range strings.Split(strings.ReplaceAll(tc.Command, "\r\n", "\n"), "\n") {
+		if ln = strings.Join(strings.Fields(ln), " "); ln != "" {
+			lines = append(lines, ln)
+		}
+	}
+	h := sha256.New()
+	for _, part := range []string{tc.Mode, strconv.FormatBool(tc.PerFile), tc.WhenOp, strings.Join(fr, ","), strings.Join(lines, "\n")} {
+		h.Write([]byte(part))
+		h.Write([]byte{0})
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
+}
 
 // overlayTools implements the tools-list overlay: CONCATENATE global + repo,
 // repo winning a (category,name) collision in place. This is a deliberate
@@ -121,6 +160,11 @@ func AppendToolCommands(path string, cmds []ToolCommand) error {
 			return fmt.Errorf("config: %s: command must not contain ''' (TOML literal delimiter)", tc.Name)
 		}
 	}
+	release, err := lockToolConfig(path)
+	if err != nil {
+		return err
+	}
+	defer release()
 	raw, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -135,24 +179,44 @@ func AppendToolCommands(path string, cmds []ToolCommand) error {
 				b.WriteString("\n\n")
 			}
 		}
-		fmt.Fprintf(&b, "[[tools.command]]\n")
-		fmt.Fprintf(&b, "category = %q\n", tc.Category)
-		fmt.Fprintf(&b, "name = %q\n", tc.Name)
-		fmt.Fprintf(&b, "mode = %q\n", tc.Mode)
-		fmt.Fprintf(&b, "per_file = %t\n", tc.PerFile)
-		fmt.Fprintf(&b, "when_op = %q\n", tc.WhenOp)
-		if len(tc.Frontends) > 0 {
-			quoted := make([]string, len(tc.Frontends))
-			for i, f := range tc.Frontends {
-				quoted[i] = fmt.Sprintf("%q", f)
-			}
-			fmt.Fprintf(&b, "frontends = [%s]\n", strings.Join(quoted, ", "))
-		}
-		b.WriteString("command = '''\n")
-		b.WriteString(strings.TrimRight(tc.Command, "\n"))
-		b.WriteString("\n'''\n")
+		renderToolCommand(&b, tc)
 	}
 	return atomicWriteFile(path, []byte(b.String()))
+}
+
+// renderToolCommand writes one [[tools.command]] block (no leading blank
+// line). A stamped block gets its three stamp keys, the fingerprint
+// computed here from the block being written.
+func renderToolCommand(b *strings.Builder, tc ToolCommand) {
+	fmt.Fprintf(b, "[[tools.command]]\n")
+	fmt.Fprintf(b, "category = %q\n", tc.Category)
+	fmt.Fprintf(b, "name = %q\n", tc.Name)
+	fmt.Fprintf(b, "mode = %q\n", tc.Mode)
+	fmt.Fprintf(b, "per_file = %t\n", tc.PerFile)
+	fmt.Fprintf(b, "when_op = %q\n", tc.WhenOp)
+	if len(tc.Frontends) > 0 {
+		quoted := make([]string, len(tc.Frontends))
+		for i, f := range tc.Frontends {
+			quoted[i] = fmt.Sprintf("%q", f)
+		}
+		fmt.Fprintf(b, "frontends = [%s]\n", strings.Join(quoted, ", "))
+	}
+	if tc.Stamped() {
+		fmt.Fprintf(b, "template_version = %d\n", tc.TemplateVersion)
+		fmt.Fprintf(b, "agent_range = %q\n", tc.AgentRange)
+		fmt.Fprintf(b, "fingerprint = %q\n", ToolFingerprint(tc))
+	}
+	b.WriteString("command = '''\n")
+	b.WriteString(strings.TrimRight(tc.Command, "\n"))
+	b.WriteString("\n'''\n")
+}
+
+// RenderToolCommand is the block text the config writer lays out for tc,
+// stamp keys included (the review popup shows exactly this).
+func RenderToolCommand(tc ToolCommand) string {
+	var b strings.Builder
+	renderToolCommand(&b, tc)
+	return b.String()
 }
 
 // ToolCommandsIn is the [[tools.command]] blocks of ONE config file, with no
@@ -169,6 +233,11 @@ func ToolCommandsIn(path string) ([]ToolCommand, error) {
 // written at all. replace receives the body without its trailing newline; a
 // new body containing the literal's delimiter is refused.
 func ReplaceToolCommandBodies(path string, replace func(body string) (string, bool)) (int, error) {
+	release, err := lockToolConfig(path)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return 0, nil
@@ -179,26 +248,35 @@ func ReplaceToolCommandBodies(path string, replace func(body string) (string, bo
 	lines := strings.SplitAfter(string(raw), "\n")
 	var out strings.Builder
 	inTool, n := false, 0
+	state := "" // multi-line string state (scanTOMLLine): a "[" line inside one is body, not a header
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		out.WriteString(line)
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "[") {
-			inTool = trimmed == "[[tools.command]]"
+		if state == "" && strings.HasPrefix(trimmed, "[") {
+			name := strings.ReplaceAll(strings.TrimSpace(stripTOMLComment(trimmed)), " ", "")
+			inTool = name == "[[tools.command]]"
+			state = scanTOMLLine(line, state)
 			continue
 		}
-		if !inTool || !isCommandLiteralOpen(trimmed) {
+		if state != "" || !inTool || !isCommandLiteralOpen(trimmed) {
+			state = scanTOMLLine(line, state)
 			continue
 		}
-		end := -1
+		// A gg-shaped literal: the body runs to the line where the literal
+		// really closes, and that line must be a bare '\'\'\''. Any other
+		// close (on a content line, indented, with a comment) is a
+		// hand-written block — not ours to touch.
+		end, st := -1, `'''`
 		for j := i + 1; j < len(lines); j++ {
-			if strings.TrimRight(lines[j], "\r\n") == "'''" {
+			if st = scanTOMLLine(lines[j], st); st == "" {
 				end = j
 				break
 			}
 		}
-		if end < 0 {
-			continue // an unterminated literal: not ours to touch
+		if end < 0 || strings.TrimRight(lines[end], "\r\n") != `'''` {
+			state = `'''`
+			continue // not ours: scanning resumes inside the literal
 		}
 		body := strings.TrimRight(strings.Join(lines[i+1:end], ""), "\r\n")
 		nl := "\n"
@@ -206,7 +284,7 @@ func ReplaceToolCommandBodies(path string, replace func(body string) (string, bo
 			nl = "\r\n"
 		}
 		if repl, ok := replace(body); ok {
-			if strings.Contains(repl, "'''") {
+			if strings.Contains(repl, `'''`) {
 				return 0, fmt.Errorf("config: a command must not contain ''' (TOML literal delimiter)")
 			}
 			out.WriteString(strings.ReplaceAll(strings.TrimRight(repl, "\n"), "\n", nl) + nl)
@@ -214,10 +292,14 @@ func ReplaceToolCommandBodies(path string, replace func(body string) (string, bo
 		} else {
 			out.WriteString(strings.Join(lines[i+1:end], ""))
 		}
-		i = end - 1 // the closing ''' line is written by the loop
+		out.WriteString(lines[end]) // the closing ''' — consumed here, never re-scanned as an opener
+		i = end
 	}
 	if n == 0 {
 		return 0, nil
+	}
+	if err := sameExceptToolCommandBodies(raw, []byte(out.String())); err != nil {
+		return 0, err
 	}
 	return n, atomicWriteFile(path, []byte(out.String()))
 }

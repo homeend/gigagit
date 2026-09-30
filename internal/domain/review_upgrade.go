@@ -14,9 +14,9 @@ import (
 // commands are upgraded to the current templates (exttool.UpgradeReviewCommand)
 // in the global config and the active repo config.
 
-// reviewCommandConfigPaths are the config files that may hold review commands:
+// toolConfigPaths are the config files that may hold tool commands:
 // the global file and the repo file EffectiveConfig reads.
-func (s *Service) reviewCommandConfigPaths(ctx context.Context) []string {
+func (s *Service) toolConfigPaths(ctx context.Context) []string {
 	paths := []string{config.DefaultGlobalPath()}
 	if p, err := s.activeRepoConfigPath(ctx); err == nil && p != "" {
 		paths = append(paths, p)
@@ -28,7 +28,7 @@ func (s *Service) reviewCommandConfigPaths(ctx context.Context) []string {
 // command identical to an old built-in. An unreadable file reads as absent:
 // the probe fails open, like every legacy probe.
 func (s *Service) legacyReviewCommandsPresent(ctx context.Context) bool {
-	for _, p := range s.reviewCommandConfigPaths(ctx) {
+	for _, p := range s.toolConfigPaths(ctx) {
 		cmds, err := config.ToolCommandsIn(p)
 		if err != nil {
 			continue

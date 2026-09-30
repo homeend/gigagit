@@ -1090,6 +1090,21 @@ which ones to write as default commands into the **global** config
 skipped, so the wizard never overwrites an edited command. Manual commands
 use the same shape, in either the global config or the repo `.gg.toml`.
 
+Blocks the wizard writes carry a **template stamp** (`template_version`,
+`agent_range`, `fingerprint`). When a newer gg ships a better template — or
+your agent's own version now needs a different one — gg offers it: a notice
+("External-tool template updates available"), an **(update available — u)**
+mark on the row in Settings → External tools, and the web page's external
+tools overlay. **`u`** shows why and the new block's full text; **take new**
+rewrites just that block in the file that holds it, **keep mine** leaves it
+and stops offering that update until the template changes again, **edit**
+opens the config in your editor. Nothing is ever rewritten without your
+answer; formatting-only edits (spaces, comments) don't count as edits, and
+blocks you wrote yourself are never touched. gg reads each agent's version
+with `<agent> --version` in the background; if an installed agent is outside
+every version range a template supports, a notice says so and the block
+keeps running as is.
+
 In the conflict window (`x`), press **`t`** (shown only when at least one
 `conflict` command is configured) to pick one: repo-level agent commands
 (Claude Code, Junie, Kimi Code) are always listed while an op is paused, get a per-run

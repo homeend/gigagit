@@ -28,6 +28,8 @@ type records struct {
 	StackedDiff bool `toml:"tui_stacked_diff,omitempty"`
 	// TaskLaunch is the AI-task launch dialog's last choice per kind.
 	TaskLaunch map[string]TaskLaunch `toml:"task_launch,omitempty"`
+	// DeclinedToolUpdates holds ToolUpdateID values answered "Keep mine".
+	DeclinedToolUpdates []string `toml:"declined_tool_updates,omitempty"`
 }
 
 // read loads the file; a missing or malformed file reads as empty (UX memory

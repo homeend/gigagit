@@ -37,6 +37,24 @@ is owned by `defining-agentic-tasks`; consult it when the tool is an agent.
      `CatReview` — both headless `mode = "capture"`, stage 2 and stage 3
      respectively).
 
+   - `VersionArgs` — how to read the agent's own version (`{"--version"}`
+     for every AI agent; nil for mergetools). `VersionRe` only when the
+     output's first `X.Y[.Z]` is not the version.
+
+2b. **Changing a template = raising its `Version`.** A family is every row
+   sharing (Category, Name). Any change to a family — command, mode,
+   frontends, when_op, per_file, OptIn, or a Range — needs `Version: N`
+   raised on EVERY row of the family, then
+   `go test ./internal/exttool -run TestCatalogVersionBumpGuard -update`.
+   The guard fails the build otherwise: users' config blocks carry a stamp
+   (`template_version`, `agent_range`, `fingerprint`) and only a raised
+   Version makes gg offer them the new text (Settings → External tools `u`,
+   the notice, the web overlay — never written without consent). When an
+   agent's own CLI changes between ITS releases, add a new variant row with
+   a disjoint `Range` (`">=2.1"`, `">=1.8 <2.1"`) instead of editing the old
+   one; ranges in a family never overlap (`TestBuiltinsFamilyInvariants`).
+   New config writers go through `domain.NewToolBlock` so the stamp is set.
+
 3. **Command template rules** (all enforced by tests — see §4):
    - Start from `<bin>` (replaced at generation).
    - **Prompt BEFORE variadic flags.** Claude's `--allowedTools`/

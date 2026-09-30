@@ -1,15 +1,19 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/promptstate"
 )
 
 // toolWizardRow is one detected tool × catalog command template pairing shown
@@ -18,6 +22,9 @@ type toolWizardRow struct {
 	det      exttool.Detection
 	tmpl     exttool.CommandTemplate
 	existing bool // a (category,name) block already in config — shown, never rewritten
+	// status is the configured block's standing against the catalog (nil
+	// until the background read lands, or for an unconfigured row).
+	status *domain.ToolTemplateStatus
 }
 
 // openToolsWizard detects installed catalog tools and builds the wizard rows.
@@ -33,12 +40,14 @@ func (m Model) openToolsWizard() Model {
 	p.toolRows = nil
 	home, _ := os.UserHomeDir()
 	for _, det := range exttool.Detect(exec.LookPath, os.Stat, home) {
-		for _, ct := range det.Tool.Commands {
+		// UI thread: cache only — the background status read warms it.
+		for _, ct := range domain.InstallTemplates(context.Background(), det, false) {
 			key := string(ct.Category) + "\x00" + ct.Name
 			p.toolRows = append(p.toolRows, toolWizardRow{det: det, tmpl: ct, existing: have[key]})
 		}
 	}
 	p.toolChecked = defaultToolChecked(p.toolRows)
+	m.attachToolStatuses(p)
 	p.sel = 0
 	p.toolsView = true
 	return m
@@ -70,15 +79,7 @@ func (m Model) applyToolsWizard(rows []toolWizardRow, checked []bool, globalPath
 		if i >= len(checked) || !checked[i] || row.existing {
 			continue
 		}
-		blocks = append(blocks, config.ToolCommand{
-			Category:  string(row.tmpl.Category),
-			Name:      row.tmpl.Name,
-			Mode:      string(row.tmpl.Mode),
-			PerFile:   row.tmpl.PerFile,
-			WhenOp:    row.tmpl.WhenOp,
-			Frontends: row.tmpl.Frontends,
-			Command:   exttool.GenerateCommand(row.tmpl, row.det.Bin),
-		})
+		blocks = append(blocks, domain.NewToolBlock(row.det, row.tmpl))
 	}
 	if len(blocks) == 0 {
 		return m, 0, nil
@@ -91,6 +92,78 @@ func (m Model) applyToolsWizard(rows []toolWizardRow, checked []bool, globalPath
 		m = m.applyBranchFilterConfig()
 	}
 	return m, len(blocks), nil
+}
+
+// reloadToolConfig re-reads the effective config after a tools write.
+func (m Model) reloadToolConfig() Model {
+	if cfg, err := config.Load(config.DefaultGlobalPath(), m.repoConfigPath); err == nil {
+		m.cfg = cfg
+		m = m.applyBranchFilterConfig()
+	}
+	return m
+}
+
+// toolStatusesMsg carries a background tool-template status read.
+type toolStatusesMsg struct {
+	gen int
+	sts []domain.ToolTemplateStatus
+}
+
+// refreshToolStatusesCmd re-reads the tool-template statuses off the UI
+// thread (agent version probes spawn processes).
+func (m Model) refreshToolStatusesCmd() tea.Cmd {
+	gen, svc := m.noticeGen, m.svc
+	if svc == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		return toolStatusesMsg{gen: gen, sts: svc.ToolTemplateStatuses(context.Background())}
+	}
+}
+
+// applyToolStatuses stores a status read and re-attaches it to an open
+// External-tools screen.
+func (m Model) applyToolStatuses(msg toolStatusesMsg) Model {
+	if msg.gen != m.noticeGen {
+		return m // stale: a repo switch superseded this read
+	}
+	m.toolStatuses = msg.sts
+	m.declinedToolUpdates = nil
+	if m.promptStore != nil {
+		m.declinedToolUpdates = m.promptStore.DeclinedToolUpdates()
+	}
+	if p := layerOf[*settingsPopup](m); p != nil && p.toolsView {
+		m.attachToolStatuses(p)
+	}
+	return m
+}
+
+// onToolStatuses is the toolStatusesMsg handler: store, rebuild the
+// notices, blink for a new one.
+func (m Model) onToolStatuses(msg toolStatusesMsg) (Model, tea.Cmd) {
+	if msg.gen != m.noticeGen {
+		return m, nil
+	}
+	prev := m.noticeIDs()
+	m = m.applyToolStatuses(msg)
+	m = m.rebuildNotices()
+	return m.armBlinkForNew(prev)
+}
+
+// attachToolStatuses points each configured wizard row at its status.
+func (m Model) attachToolStatuses(p *settingsPopup) {
+	byKey := map[string]*domain.ToolTemplateStatus{}
+	for i := range m.toolStatuses {
+		byKey[m.toolStatuses[i].Block.Key()] = &m.toolStatuses[i]
+	}
+	for i := range p.toolRows {
+		p.toolRows[i].status = byKey[p.toolRows[i].tmpl.Key()]
+	}
+}
+
+// toolOfferDeclined reports an offer the user answered "Keep mine".
+func (m Model) toolOfferDeclined(st domain.ToolTemplateStatus) bool {
+	return m.declinedToolUpdates[promptstate.ToolUpdateID(st.OfferKey())]
 }
 
 // toolDetailHeights sizes the wizard's detail block ONCE for the whole row

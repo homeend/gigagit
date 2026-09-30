@@ -54,3 +54,27 @@ func TestReplaceToolCommandBodiesRefusesADelimiter(t *testing.T) {
 		t.Fatal("a body with ''' must be refused")
 	}
 }
+
+// A hand-written block whose literal closes on its content line (TOML-legal)
+// must not make the body writer swallow the blocks after it; a "[" line
+// inside a literal is body, not a header.
+func TestReplaceToolCommandBodiesRespectsTOMLStrings(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "c.toml")
+	in := "[[tools.command]]\ncategory = \"review\"\nname = \"Mine\"\ncommand = '''\nMINE'''\n\n[ui]\ntheme = \"dark\"\n\n[[tools.command]]\ncategory = \"review\"\nname = \"Claude\"\ncommand = '''\n[not a header]\nOLD\n'''\n"
+	if err := os.WriteFile(p, []byte(in), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var seen []string
+	n, err := ReplaceToolCommandBodies(p, func(b string) (string, bool) {
+		seen = append(seen, b)
+		return "NEW", true // accept-all: the writer alone must keep structure
+	})
+	got, _ := os.ReadFile(p)
+	if err != nil || !strings.Contains(string(got), `theme = "dark"`) {
+		t.Fatalf("%d %v: [ui] lost:\n%s", n, err, got)
+	}
+	cmds, derr := ToolCommandsIn(p)
+	if derr != nil || len(cmds) != 2 || strings.TrimSpace(cmds[1].Command) != "NEW" || strings.TrimSpace(cmds[0].Command) != "MINE" {
+		t.Fatalf("seen %q; after: %v %+v\n%s", seen, derr, cmds, got)
+	}
+}

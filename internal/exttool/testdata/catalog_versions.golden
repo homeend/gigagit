@@ -1,0 +1,57 @@
+antigravity	commit_message	Antigravity	1	=sha256:583bac8780fedf464975b98f80ab6ee4be2dc3edcbe47ba28b26d2c2b94a7941;optin=true
+antigravity	commit_message	Antigravity (interactive)	1	=sha256:fd96360f51589e946f42f5c6c65ec2db4f51abd286daf21b424e72cd0b43f13b;optin=false
+antigravity	commit_message	Antigravity (interactive, yolo)	1	=sha256:d9360ef71164e7bd4a55aa40992dd8c5e485641e246bded06a28290c61143bfb;optin=true
+antigravity	conflict	Antigravity	1	=sha256:ee5bda3c8b55ad129650f58b05113d3e30233b9bfe9bb65dd68408b9452650d2;optin=false
+antigravity	conflict	Antigravity (yolo)	1	=sha256:51cd2184d358801d5ae85351f695f3cc6c9b2ebc886ba838d07b87db5046244a;optin=true
+antigravity	conflict_complete	Antigravity — resolve & complete (yolo)	1	=sha256:50713454259f1e87258854d2def79f0b2948c8dfeeb92ea856ee37afcc5045c1;optin=true
+antigravity	conflict_complete	Antigravity — resolve & complete (yolo, headless)	1	=sha256:9630d05c0f3105ae553bc1bbce72625a1c1c9c5f1661abb10ac8a36509b1b1ce;optin=true
+antigravity	review	Antigravity	1	=sha256:5e25444960818e42e0c6642de612f10b1f8a6e5ea4250ff2d80c419f4ef98a72;optin=true
+antigravity	review	Antigravity (interactive)	1	=sha256:cf71c76a1873a26475c28c524e3e9b8ec013ec0002fc3dd803703ad9307f5766;optin=false
+antigravity	review	Antigravity (interactive, yolo)	1	=sha256:ceb9a365ab8c688e26dbdc0ee61b2fd92b4c7d401a015fed8f777eb70338873c;optin=true
+antigravity	session	Antigravity	1	=sha256:c953d5442e05b2370f9ee417cba95d00925c3ec997d7806887a76cdb062f36ae;optin=false
+antigravity	session	Antigravity (yolo)	1	=sha256:2aa6870f993558b57a09aad9bc3f5f0e3c6dc4201284ee7c24fb004ff3849dcf;optin=true
+claude	commit_message	Claude	1	=sha256:8b9b126fdf24c8164e648adeb54f578fdcb8998be66d0fee0f2670baecebac18;optin=false
+claude	commit_message	Claude (interactive)	1	=sha256:5c1687d23fb56cc32b2482d39b773641952ae4ab18f5d77ed0e32ad87e1a4e5a;optin=false
+claude	commit_message	Claude (interactive, yolo)	1	=sha256:3e3088d9a14afd1d2d521f771bd553cb3d757e41444deed0150fe45c2a730f5b;optin=true
+claude	conflict	Claude	1	=sha256:43bbe8ce4e5c58cfacef8d7ac94209c0742b6a62b8e1c5bf8453d32d162c5e63;optin=false
+claude	conflict	Claude (yolo)	1	=sha256:12eb1e6b64a37db119e61036950eef0e077b608ff16c6071d8ee82bba7937b14;optin=true
+claude	conflict	Claude (yolo, headless)	1	=sha256:61e84bda655a02a6d084289be108981b8db06af47f33c434da7e29b2c9007469;optin=true
+claude	conflict_complete	Claude — resolve & complete (yolo)	1	=sha256:f8798296167e946e4a26b1269d4db16c937cfbeeb40c1f22c2a67a14a3577f9f;optin=true
+claude	conflict_complete	Claude — resolve & complete (yolo, headless)	1	=sha256:3770e9acf215e9df05cb506839e7fe086df2225c0bb0eb71882a1f94d2d9bedb;optin=true
+claude	review	Claude	1	=sha256:f8dc7e60bcd235125310b338c29c78e6513eff5ff4f5a8562f39f5b4afe29365;optin=false
+claude	review	Claude (interactive)	1	=sha256:255112f35722b46ed2ede7b261dc2c65a264a11f393defe6854feb8550362289;optin=false
+claude	review	Claude (interactive, yolo)	1	=sha256:0439c0373f79405381ff728b7c86ed24ea5966ae5e83f526240debbde9f10dad;optin=true
+claude	session	Claude	1	=sha256:c953d5442e05b2370f9ee417cba95d00925c3ec997d7806887a76cdb062f36ae;optin=false
+claude	session	Claude (yolo)	1	=sha256:2aa6870f993558b57a09aad9bc3f5f0e3c6dc4201284ee7c24fb004ff3849dcf;optin=true
+codex	commit_message	Codex	1	=sha256:f4419c90131be6e40b042d99b677fe5831bb6f580de73d0b5cfa2f0a016b427b;optin=false
+codex	commit_message	Codex (interactive)	1	=sha256:5c1687d23fb56cc32b2482d39b773641952ae4ab18f5d77ed0e32ad87e1a4e5a;optin=false
+codex	commit_message	Codex (interactive, yolo)	1	=sha256:4b1fc33eeec4382cb5d2ffe7f29cf64d836f06b4fd18ccdc44b863f2a4d7f4e8;optin=true
+codex	conflict	Codex	1	=sha256:c732ca6d19e00b2db421309e858808a999a1b26802635c7cccc47b7440d1c23b;optin=false
+codex	conflict	Codex (yolo)	1	=sha256:5bb6e4a5db8fcd9d6409d764e1780ebc123451e3fd8b7b0efbaefedc07944a41;optin=true
+codex	conflict_complete	Codex — resolve & complete (yolo)	1	=sha256:84000f26857a18c13a85ce0b49717bbb23c23a8c7d0e2687b0e3ef9b0d8d8b78;optin=true
+codex	conflict_complete	Codex — resolve & complete (yolo, headless)	1	=sha256:c3b523866ab8ba62bbc9196d21693f20a704fb69ccbbd049886c0d6403a64892;optin=true
+codex	review	Codex	1	=sha256:7e95677261a1516afc4459ba82ef1bd95c85e6369224300ee5a771ccc9870c5c;optin=false
+codex	review	Codex (interactive)	1	=sha256:255112f35722b46ed2ede7b261dc2c65a264a11f393defe6854feb8550362289;optin=false
+codex	review	Codex (interactive, yolo)	1	=sha256:2a95940d8d6ef3d3141136eb962b8488144599e98ed0138c1435e2b5f87cb5c2;optin=true
+codex	session	Codex	1	=sha256:c953d5442e05b2370f9ee417cba95d00925c3ec997d7806887a76cdb062f36ae;optin=false
+codex	session	Codex (yolo)	1	=sha256:d70519172e7a84ab24cb974cd20da23c47f920652086e81ce5926f2688a4bcb6;optin=true
+junie	commit_message	Junie	1	=sha256:a54e3b0e8308d4354562ecfd7f9e536c0c828de484951ffab683b2f247237277;optin=false
+junie	commit_message	Junie (interactive)	1	=sha256:964620ecb4d2b60501b1ca091751e54d6da3f194262f503fcd753caae7a817aa;optin=false
+junie	commit_message	Junie (interactive, yolo)	1	=sha256:2f9298d5fdc2acddc77e102bccc918f980baa97fdabbb1c06c264679d6d98d1b;optin=true
+junie	conflict	Junie	1	=sha256:58a8174e61a2429221de4a71b4875978749bba987730a6565be78c5b29f6785c;optin=false
+junie	conflict	Junie (headless)	1	=sha256:aded8250d6eb7e266e8fd6d37e0bef4a1aa4c3a4f0ae8760eb1cff05d66df137;optin=false
+junie	conflict	Junie (yolo)	1	=sha256:b4958f21f968693f1f162057ca52f818becc04972ff941b5a576bf75f57384af;optin=true
+junie	conflict_complete	Junie — resolve & complete (headless)	1	=sha256:6b7f8e95a01d6517d1febb012d34d46c0b056cc2ebdd3e83231580924bd62aad;optin=false
+junie	conflict_complete	Junie — resolve & complete (yolo)	1	=sha256:19abd40fa8c62cc75ded7b604a7f3687353365dde8706ec229902fa27513446b;optin=true
+junie	review	Junie	1	=sha256:7d8bfe766caf1fa229ceff57b4d71dcdf8c579b5d0fa2497abfe9c41ca3c6608;optin=false
+junie	review	Junie (interactive)	1	=sha256:027973fdaf8aaad5db6d9972749f364d85d26ab94c1eed7c156ce6ffb257fe8f;optin=false
+junie	review	Junie (interactive, yolo)	1	=sha256:b9d81de13437d8a421b1436dceef557c8ba84425b123ac9079c1c178dfe707fb;optin=true
+junie	session	Junie	1	=sha256:c953d5442e05b2370f9ee417cba95d00925c3ec997d7806887a76cdb062f36ae;optin=false
+junie	session	Junie (yolo)	1	=sha256:db840d833252a7e2341d9864b10500a745a8abd31d89c34694c4c2aa48b9e76e;optin=true
+kimi	commit_message	Kimi	1	=sha256:204b073dc3a2db2b853c89115a9a7c0e3527db0bb9e1506817e418d583ebb2a5;optin=false
+kimi	conflict	Kimi	1	=sha256:8173bf70c715817568874a3053d8b1466fb3c74b29bf4c427e5ea7b2f1583d43;optin=false
+kimi	conflict_complete	Kimi — resolve & complete	1	=sha256:cbc5aea74ea7f1e31cb484f01ada084df0a430397a6b2c0ea6ed26cb86052497;optin=false
+kimi	review	Kimi	1	=sha256:1e23c7403d8fd7577cc207f29120c057aca97f2117bea9763888f2f401247e83;optin=false
+kimi	session	Kimi	1	=sha256:c953d5442e05b2370f9ee417cba95d00925c3ec997d7806887a76cdb062f36ae;optin=false
+kimi	session	Kimi (yolo)	1	=sha256:652c94b9fcca6e2038948d743dbb4d79f2cff0d8ad1c91889d61cf001332625f;optin=true
+meld	conflict	Meld	1	=sha256:517715e9adea51bace080e8147c08b259ea91c43a00022359ec6f0adce405c66;optin=false

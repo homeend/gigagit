@@ -68,6 +68,8 @@ func TestMain(m *testing.M) {
 	// No test may shell out to the real gh: a test that means to exercise pull
 	// requests injects a provider (prServe).
 	domain.ForgeDisabled = true
+	// No test may detect the machine's real agents or run their --version.
+	domain.ToolStatusesDisabled = true
 	// Preflight reads the global config (stored old review commands): no test
 	// may read or migrate the developer's own. A test that needs its own
 	// config dir overrides it with t.Setenv.

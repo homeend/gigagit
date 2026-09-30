@@ -44,7 +44,8 @@ import (
 func TestMain(m *testing.M) {
 	domain.NotesDisabled = true
 	domain.PreviewsDisabled = true
-	domain.ForgeDisabled = true // no test may shell out to the real gh; see pr_read_serial_test.go
+	domain.ToolStatusesDisabled = true // never probe the machine's real agents
+	domain.ForgeDisabled = true        // no test may shell out to the real gh; see pr_read_serial_test.go
 	dir, err := os.MkdirTemp("", "gg-tui-xdg")
 	if err != nil {
 		panic(err)

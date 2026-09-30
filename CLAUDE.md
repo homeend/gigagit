@@ -13,10 +13,13 @@ Module: `github.com/homeend/gigagit` · Go 1.26.
 
 ## Workflow
 
-**NEVER USE SUB AGENTS.** Do every task in the main session yourself — no
-Agent/Task tool, no parallel implementer fan-out, no "dispatch to a
-subagent" step. Plans are executed sequentially by the one session that
-wrote them.
+**NO IMPLEMENTER SUB AGENTS.** Do every implementation task in the main
+session yourself — no parallel implementer fan-out, no "dispatch to a
+subagent" step for writing code. Plans are executed sequentially by the one
+session that wrote them. **Exception: REVIEW subagents are fine** — the
+final whole-branch review (and any other read-only review pass) may run as a
+fresh subagent on the most capable model; it must stay read-only (no edits,
+no commits, no test runs that write into the worktree).
 
 **Always develop features in a worktree.** Create a dedicated worktree with a
 feature branch (`gg branch create <feat/...>` + `gg worktree add --branch
@@ -88,9 +91,9 @@ feature; keep THIS file's map to one line per package.
 | `repos`      | Machine-local MRU registry of opened repositories (XDG state) behind the repo switcher. Entries carry the remote repository NAME (computed by the caller — this package stays a DAG leaf) so `domain.ResolveLink` can find a `gg://` link's checkout. |
 | `agentskill` | Two embedded skills ("using-gg", "reviewing-with-gg") behind a Skill value type (go:embed + per-skill version marker) that teach AI agents the gg CLI and the review-notes lane. |
 | `agentinit`  | Hardcoded agent registry + detect/status/install behind `gg init` and the TUI Settings popup. |
-| `exttool`    | Catalog of external tools/AI agents gg can run per task category (`conflict`, `commit_message`, `review`, `conflict_complete`, `session`) and modes (`terminal`, `capture`, `interactive`, `session`); template generation + detection; `$GG_MESSAGE_FILE`-wins-over-stdout capture contract. |
+| `exttool`    | Catalog of external tools/AI agents gg can run per task category (`conflict`, `commit_message`, `review`, `conflict_complete`, `session`) and modes (`terminal`, `capture`, `interactive`, `session`); template generation + detection; `$GG_MESSAGE_FILE`-wins-over-stdout capture contract; template families (`Version` + agent-version `Range` variants, `Pick`/`Variant`) behind a golden version-bump guard. |
 | `agentsession` | Interactive programs (AI agents) in PTYs (`x/xpty`: creack/pty, ConPTY) with an in-memory `x/vt` emulator: `Manager` (Start/List/Kill/Remove/KillAll), `Session` (SendKey/Paste/Resize/Screen, raw `Tap`), a `Broadcaster` behind `Manager.Subscribe`/`Session.Subscribe` (per-subscriber coalescing wakeups — never a shared channel), process-group / job-object kill, 10k-line scrollback. DAG leaf; the one process-global manager is `domain.Sessions()` (survives `reRoot`). |
-| `config`     | TOML config (`.gg.toml`), field-level overlay (defaults→global→repo), `<seq>` counters, `[[tools.command]]` and `[[branches.filter]]` blocks, scoped line-edit writers. Repo config may live committed or machine-private (one active file). |
+| `config`     | TOML config (`.gg.toml`), field-level overlay (defaults→global→repo), `<seq>` counters, `[[tools.command]]` (with a template stamp + normalised fingerprint; `ReplaceToolCommand` rewrites one block) and `[[branches.filter]]` blocks, scoped line-edit writers. Repo config may live committed or machine-private (one active file). |
 | `template`   | Pure token resolver for branch/path templates and external-tool commands (per-token-kind quoting; validation makes bad templates inert); `FlattenForCmd` cmd.exe repair; shared conflict-context doc rendering. |
 | `textdiff`   | Pure line-alignment engine (Myers + guards) behind the side-by-side diff; optional word-level intraline spans. |
 | `markdown`   | Pure parser for the GitHub markdown subset forge text is written in: `Parse` → a bounded JSON block tree (the web's wire shape) with chroma token runs on fenced code, `Summary` (the review-thread summary/rationale split), http(s)-only link destinations. DAG leaf: stdlib + `syntax`. The web paints the tree (`static/markdown.js`) and the TUI lays it out in rows (`tui/md_render.go`); neither parses. |

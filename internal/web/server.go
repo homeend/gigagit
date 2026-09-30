@@ -76,6 +76,10 @@ type Server struct {
 	// nil = exttool.Detect against the real machine.
 	detectTools func() []exttool.Detection
 
+	// toolStatuses overrides the tool-template status read (test seam);
+	// nil = the service's read against the real machine.
+	toolStatuses func(context.Context) []domain.ToolTemplateStatus
+
 	// packThreshold overrides bigRepoPackBytes for /api/health's "big"
 	// verdict (test seam); 0 = the production const.
 	packThreshold int64
@@ -192,6 +196,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/profiles", writeGuard(s.handleProfileAdd))
 	mux.HandleFunc("POST /api/profiles/remove", writeGuard(s.handleProfileRemove))
 	mux.HandleFunc("GET /api/exttools", s.handleExtTools)
+	mux.HandleFunc("POST /api/exttools/update", writeGuard(s.handleExtToolsUpdate))
+	mux.HandleFunc("POST /api/exttools/keep", writeGuard(s.handleExtToolsKeep))
 	mux.HandleFunc("GET /api/session-errors", s.handleSessionErrors)
 	mux.HandleFunc("GET /api/prefixes", s.handlePrefixes)
 	mux.HandleFunc("POST /api/prefixes", writeGuard(s.handlePrefixAdd))

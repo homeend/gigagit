@@ -95,11 +95,17 @@ type Model struct {
 	pendingNoticeConfig    *engine.SetGitConfig   // chained after WriteCommitGraph succeeds
 	refreshHealthAfterOp   bool                   // re-read repo health once the op (incl. its chain) finishes
 
-	cfg          config.Config
-	opLog        *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
-	promptStore  promptstate.Store // related-prompt suppressions; nil = no state dir
-	toolNoted    map[string]bool   // tool-config blocks already failure-noted this session (Key())
-	gitCommonDir string
+	cfg         config.Config
+	opLog       *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
+	promptStore promptstate.Store // related-prompt suppressions; nil = no state dir
+	// toolStatuses is the last tool-template status read (Settings → External
+	// tools suffixes, the review popup, the tool-template notice).
+	toolStatuses []domain.ToolTemplateStatus
+	// declinedToolUpdates is the "Keep mine" set, read once per status read
+	// (never per row per frame) and updated in place on a Keep mine.
+	declinedToolUpdates map[string]bool
+	toolNoted           map[string]bool // tool-config blocks already failure-noted this session (Key())
+	gitCommonDir        string
 
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
 	statePath           string // repo-registry location; "" disables recording (tests)
@@ -497,7 +503,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.startupWebCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.startupWebCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -775,6 +781,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cleared
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
+	case toolStatusesMsg:
+		return m.onToolStatuses(msg)
+	case toolConfigEditedMsg:
+		if msg.err != nil {
+			m.statusMsg = i18n.T("edit: %s", msg.err.Error())
+		}
+		return m.reloadToolConfig(), m.refreshToolStatusesCmd()
 	case driftCheckMsg:
 		if msg.gen != m.noticeGen {
 			return m, nil // stale: a repo switch superseded this branch's drift check
@@ -4634,6 +4647,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.versionsGen++  // drop any in-flight branch-versions popup read from the old repo
 	m.noticeSessionDismissed = map[string]bool{}
 	m.repoHealthKnown = false
+	m.toolStatuses = nil // re-read for the new repo's config (batched below)
 	m.pendingNoticeConfig = nil
 	m.refreshHealthAfterOp = false
 	m.previews = nil // the old repo's saved previews must not linger in the new one
@@ -4670,7 +4684,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// the blank-screen gate set above. The dataLoadedMsg success arm chains it
 	// instead, so it can only run once this repo's snapshot is in the model.
 	// The hosted web page follows the switch (nil when no page is served).
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc), m.webRerootCmd())
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), snapshotTargetCmd(m.svc), m.webRerootCmd())
 }
 
 // View implements tea.Model.

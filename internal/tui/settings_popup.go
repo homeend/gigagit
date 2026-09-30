@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/agentinit"
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/observ"
@@ -533,7 +534,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			switch settingsMenu[vis[p.menuSel]] {
 			case settingsMenuTools:
-				return m.openToolsWizard(), nil
+				m = m.openToolsWizard()
+				return m, m.refreshToolStatusesCmd()
 			case settingsMenuIdentity:
 				return m.openIdentityView()
 			case settingsMenuPrefixes:
@@ -758,6 +760,14 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case tea.KeySpace:
 			if p.sel >= 0 && p.sel < len(p.toolChecked) {
 				p.toolChecked[p.sel] = !p.toolChecked[p.sel]
+			}
+		case tea.KeyRunes:
+			// u reviews an update offer — a declined one too (its suffix hides,
+			// the key still reopens it, so "Keep mine" is never a trap).
+			if string(msg.Runes) == "u" && p.sel >= 0 && p.sel < len(p.toolRows) {
+				if s := p.toolRows[p.sel].status; s != nil && s.Kind == domain.ToolUpdateAvailable {
+					return m.pushLayer(&toolUpdatePopup{st: *s}), nil
+				}
 			}
 		case tea.KeyEnter:
 			m2, n, err := m.applyToolsWizard(p.toolRows, p.toolChecked, config.DefaultGlobalPath())
@@ -1021,7 +1031,7 @@ func (p *settingsPopup) box(m Model) string {
 		// hint is computed up front (not just written at the end) because the
 		// command-preview height budget below needs its line count to know how
 		// much room is actually left over.
-		hintParts := []string{i18n.T("[space] toggle"), i18n.T("[enter] write to global config"), i18n.T("[ctrl+w] mode"), i18n.T("[esc] back")}
+		hintParts := []string{i18n.T("[space] toggle"), i18n.T("[u] review update"), i18n.T("[enter] write to global config"), i18n.T("[ctrl+w] mode"), i18n.T("[esc] back")}
 		hintLines := wrapParts(hintParts, textW, "  ")
 
 		b.WriteString(i18n.T("External tools — detected") + "\n\n")
@@ -1045,6 +1055,14 @@ func (p *settingsPopup) box(m Model) string {
 				var deco rowDecorator
 				if row.existing {
 					suffix = " " + i18n.T("(configured)")
+					if s := row.status; s != nil {
+						switch {
+						case s.Kind == domain.ToolUpdateAvailable && !m.toolOfferDeclined(*s):
+							suffix = " " + i18n.T("(update available — u)")
+						case s.Kind == domain.ToolUnsupported:
+							suffix = " " + i18n.T("(agent version unsupported)")
+						}
+					}
 					text = base + suffix
 					deco = toolConfiguredSuffixDecorator(lipgloss.Width(base), lipgloss.Width(suffix))
 				}
