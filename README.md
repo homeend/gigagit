@@ -1349,7 +1349,8 @@ range `path:120-140`, or one of its notes `note:t7`. `tab` / `shift+tab`
 select the next / previous anchor, `enter` (or a double click) opens it — the
 file comes to the front at that line, a range selected — and `backspace` in
 that file brings you back to the overview on the same anchor; the file stays
-open in the background. `r` copies a reference to the anchor for the agent,
+open in the background. `r` copies a reference to the anchor for the agent
+(`gg overview f12 "Tour" → internal/tui/open_files.go:220`),
 `y` the whole text. `gg session overview set|list|show|rm` are the agent's
 other verbs; an overview is an open file (esc backgrounds it, X closes it, the
 ctrl+\\ switcher lists it).

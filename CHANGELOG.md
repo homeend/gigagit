@@ -24,7 +24,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   overviews per worktree. The `using-gg` skill (v107) teaches the verbs.
 - `markdown.ParseWith` keeps link destinations a caller accepts as anchors;
   `steer.MaxCommandBytes` rose to 512 KiB for an overview's text; `gg session
-  files` rows carry a `title` and the `overview` source.
+  files --json` rows carry a `title`, and overviews show the `overview` source.
+
+### Changed
+
+- **Every full-screen viewer shows a message on its title line.** The viewer
+  covers the status bar, so a missing anchor, a copy or a dismissed note used
+  to leave no trace; the message now sits right-aligned on the title line
+  until the next key (an op's "working…" message stays in the status bar).
+- Landing on a line where an agent's note starts brings the note's box into
+  view.
 
 ## Open-file notes
 

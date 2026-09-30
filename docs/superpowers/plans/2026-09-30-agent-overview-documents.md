@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-30-agent-overview-documents-design.md`
 
+> **Executed 2026-09-30.** Drift from the code, kept for the record: `fillOverview` / `relayout` became one `layOut(rows, width)`; `anchorBack` returns `(Model, tea.Cmd, bool)` and clears a dead `from`; `anchorsCheckedMsg` is `{tag, missing map[string]bool, cmd, detail}`; `list` output is tab-separated; the review pass added inert shift+←/→, the title-line status message, `[bksp] back` during a range selection, eviction in the add reply, and a note landing that shows its box. The spec is current; where this plan disagrees, the spec and the code win.
+
 ## Global Constraints
 
 - Every user-visible TUI string goes through `i18n.T` with a literal key present in `internal/i18n/lang/{ja,ko,zh,ru}.toml`; prose never in an argument. Steer reply / CLI prose stays English.
@@ -78,7 +80,7 @@ func parseAnchorDest(dest string) (anchorTarget, bool)
 func overviewLines(text string, width int) ([]contentLine, []anchor)
 func (ov *overview) paint(lines []contentLine) // re-classes every span: mdAnchor / mdAnchorSel (i == sel) / mdAnchorGone (missing)
 ```
-Ruling (ledger): anchors capped at 100, not the spec's 200 — per-anchor ids ride the `uint8` class mask (150..249); links past the 100th render as plain label text. Cost if wrong: a very long overview loses anchors past 100.
+(Anchors are capped at 100: the per-anchor ids ride the `uint8` class mask.)
 
 Layout rules: `markdown.ParseWith(text, markdown.Options{Anchor: func(d) bool { _, ok := parseAnchorDest(d); return ok }})`; walk the tree in document order, numbering `InAnchor`s into `Text` (`strconv.Itoa(i)`); past 100 → replace with `InText` of the flattened label. `mdInlineRuns` `InAnchor`: `n, err := strconv.Atoi(n.Text)`; class `mdAnchorID0+n` (err → `mdLink`); label flattened (`mdFlat`) so emphasis cannot overwrite the id. `mdRows(doc, width)` → each row becomes `contentLine{text, raw: row.text, src: true, cls, noWrap: true}`; then scan each line's cls: runs of `mdAnchorID0+k` → `anchors[k].spans` (a wrapped label yields a span per row), class rewritten to `mdAnchor`. An anchor with no span (clipped away) keeps `spans == nil`. Empty text → one placeholder line `(empty overview)` (i18n, `src: false`).
 

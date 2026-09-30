@@ -4197,7 +4197,13 @@ selection, laid-out width); never on disk, never evicted, created
 - **Open/back.** `openAnchor` opens the file (`openFileViewerEv`, a range
   via `pendingEnd` → a fixed `lineSel`) or brings a note's file to the front;
   the file gets `from` (latest jump wins) and `backgrounded`. backspace
-  (`anchorBack`) backgrounds it and `bringToFront`s `from`.
+  (`anchorBack`) backgrounds it and `bringToFront`s `from`; when `from` is no
+  longer in the list it says so and clears `from`. `overview_set` keeps the
+  selection by `dest`.
+- **Viewer-wide side effects.** The full-screen viewer draws `m.statusMsg` on
+  its TITLE line (right side; not while `m.running`, not a `stickyMsg`) for
+  every document — it covers the status bar. `landPendingLine` pulls the box
+  of a note starting at the landed line into view, as `}` does.
 - **Steer.** `overview_add|set|list|show|rm` run before `steerRefusal`; an add
   the screen cannot take lands in the background. add/set stat path anchors
   off-thread (`anchorsCheckedMsg`) and answer with the unresolved ones.

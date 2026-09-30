@@ -59,10 +59,11 @@ overview {
     w       int           // the width the rows were laid out at (0 = never)
 }
 anchor {
+    dest    string        // the destination as written
     target  anchorTarget  // what it opens
-    label   string        // its text as shown
     spans   []anchorSpan  // where it sits: line index + rune range (a wrapped
-                          // label has one span per row)
+                          // label has one span per row; nil when a narrow
+                          // table clipped it away — tab and clicks skip it)
     missing bool          // its file was not found when last checked
 }
 anchorTarget { path string; start, end int; note string }  // note = "t<n>"
@@ -116,12 +117,14 @@ straight to a line and a column:
   through wrapping, then the anchor spans read off the rows. Anchor text
   wears a new class `mdAnchor` (underlined); the selected anchor wears
   `mdAnchorSel` (reverse video + bold); a missing one `mdAnchorGone`
-  (faint + strikethrough).
+  (faint + strikethrough). A label is flattened: emphasis inside it renders
+  plain, so the anchor's own style wins.
 - The document is re-laid out when the frame's width changes (checked when
   the viewer draws, like the note boxes' `noteW`); the selected anchor stays
   selected and on screen.
 - Rows are `noWrap` (code and tables are clipped exactly as today); the
-  viewer shows the overview in `modeScroll`, and ctrl+w is inert for it.
+  viewer shows the overview in `modeScroll`; ctrl+w and shift+←/→ are inert
+  for it (there is nothing to wrap or pan, and a pan would skew clicks).
 
 ## Keys (the full-screen viewer showing an overview)
 
@@ -134,8 +137,14 @@ straight to a line and a column:
 | `y` | copy the overview's markdown |
 | esc / X / ctrl+] / `.` / `/` / ↑↓ / pgup/pgdn | as in every open file |
 
-The hint line of an overview leads with `[tab] next  [enter] open  [esc]
-background  [X] close`.
+The hint line of an overview reads `N/M  [tab] next  [enter] open  [r]
+reference  [esc] background  [X] close  [/] find  [↑/↓] scroll`.
+
+**Messages in the full-screen viewer.** The viewer covers the status bar, so
+a message for the user (a missing anchor, a copy, a dismissed note) sits on
+the viewer's title line, right-aligned, until the next key clears it. An
+op's "working…" message and a sticky message stay in the status bar. This
+applies to every full-screen viewer, not only overviews.
 
 **Opening an anchor.**
 
@@ -144,12 +153,13 @@ background  [X] close`.
   selects its lines (a fixed `lineSel`, set when the load lands — a new
   `pendingEnd` beside `pendingLine`).
 - A note anchor brings the note's file to the front with the cursor on the
-  note's first line.
+  note's first line and its note box scrolled into view as far as that keeps
+  the line on screen.
 - The opened file is marked `backgrounded` (esc keeps it open) and remembers
   where it came from (`openFile.from`, see Back).
 - An anchor whose target cannot be opened — its file missing, its note gone
-  (dismissed, or its file closed) — does not open: the status line says why
-  (`no file <path>`, `note t7 is gone`), and it is drawn as missing.
+  (dismissed, or its file closed) — does not open: the viewer's title line
+  says why (`no file <path>`, `note t7 is gone`), and it is drawn as missing.
 
 **Reference (`r`).** `gg overview f12 "<title>" → <dest>` goes to the
 clipboard, so the user can paste it to the agent ("explain this step").
@@ -165,8 +175,10 @@ viewer showing that file, **backspace**:
 
 The file keeps `from` until another anchor opens it (the latest jump wins).
 Backspace in a file with no `from` does nothing. If the overview was closed
-in the meantime, backspace says `the overview was closed` and leaves the
-file on screen. The hint of a file with a `from` leads with `[bksp] back`.
+in the meantime, backspace says `the overview was closed`, leaves the file on
+screen and clears `from` — the way back is not offered again. The hint of a
+file with a `from` leads with `[bksp] back`, also while a landed range is
+selected.
 
 esc on such a file (backgrounded) also reveals the overview beneath it when
 the file was opened over it; backspace is the key that finds the overview
@@ -194,7 +206,9 @@ because the user is busy), web-refused like the note verbs:
 - `overview_add` shows the overview in the full-screen viewer unless
   `Background` is set, or unless the screen cannot move right now
   (`steerRefusal` would refuse a navigate) — then it is added in the
-  background and the reply's `Detail` says so.
+  background and the reply's `Detail` says so (`added f<n> in the background
+  (<why>)`). When registering it pushed a file over the 20-file cap, `Detail`
+  ends with `; closed <path> (20 files open)`.
 - `overview_set` keeps the reader's place: the selected anchor stays
   selected when an anchor with the same destination exists in the new text,
   else the selection is cleared; the scroll position is kept (clamped).
@@ -215,7 +229,11 @@ gg session overview show <id> [--json]
 gg session overview rm <id>
 ```
 
-`add` prints the id and one `unresolved: <dest>` line per unresolved anchor.
+`add` and `set` print the id, one `unresolved: <dest>` line per unresolved
+anchor, and then the reply's `Detail` when it says more than the id (the
+overview waits in the background, a file was pushed out). `list` prints
+`<id>\t<state>\t<n> anchors\t<title>`; `show` prints `<id>\t<title>`, a
+blank line and the text; `rm` prints `closed <id>`.
 The CLI checks the text size and the title before posting (exit 2 on
 misuse). Like the note verbs it needs a TUI: a web-only worktree gets
 `overviews need a gg TUI` (exit 1).
@@ -230,12 +248,17 @@ the verbs. `agentskill.Version` bumps.
 ## Switcher and lists
 
 - The ctrl+\\ switcher row of an overview: `<title>  overview · <n> anchors`.
-- `gg session files` shows it with source `overview` and its title.
+- `gg session files` shows it with source `overview` (path
+  `overview-<n>.md`); its title is in `--json` only.
 
 ## Errors and edge cases
 
 - Empty text → refused (`an overview needs text`). Text over 64 KiB or a
-  21st overview → refused with the limit named.
+  21st overview → refused with the limit named (`the text is over 64 KiB`,
+  `20 overviews are open; remove one first`).
+- An add from another worktree → `gg is showing worktree <a>, not <b>`.
+- The overview closed while its anchors were being checked → `the overview
+  was closed before its anchors were checked`.
 - An overview with no anchors is allowed (a plain note to the user); tab
   does nothing.
 - A worktree switch: overviews stay in their worktree's list, like every

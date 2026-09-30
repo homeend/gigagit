@@ -290,19 +290,33 @@ brings them back to the overview on the anchor they left.
 
 - Anchor destinations: `[label](path)` (the file), `[label](path:120)` (the
   line), `[label](path:120-140)` (the range, selected), `[label](note:t7)` (the
-  file one of your temporary notes sits on, at the note). `path` is
-  repo-relative; http(s) links stay ordinary links; anything else is plain text.
+  file one of your temporary notes sits on, at the note). `path` is relative
+  to the worktree gg is showing, in slash form; lines are 1-based and `N-M`
+  needs M ≥ N; a directory does not resolve. http(s) links stay ordinary
+  links. Any other destination is not an anchor: it renders as the label plus
+  the destination in dim text. Links past the 100th anchor become plain label
+  text with no warning.
 - `gg session overview add --title "…" [--file <md>] [--background] [--json]`
   — the markdown from `--file` or stdin (≤ 64 KiB, ≤ 100 anchors, 20 overviews
-  per worktree). Shows it unless `--background` (or the user is busy — then it
-  waits in the background and the answer says so). Prints its id (`f<n>`, an
-  open file's id) and one `unresolved: <dest>` line per anchor whose file or
-  note was not found — fix those with `set`.
-- `gg session overview set <id> [--title "…"] [--file <md>]` — replace the
-  text; the user's selected anchor stays selected when its destination is
-  still there.
-- `gg session overview list [--json]` · `show <id> [--json]` · `rm <id>`;
-  `gg session files focus <id>` brings one to the front.
+  per worktree). Shows it unless `--background`. Prints its id (`f<n>`, an
+  open file's id), one `unresolved: <dest>` line per anchor whose file or
+  note was not found — fix those with `set` — and a last line when there is
+  news: `added f<n> in the background (<why>)` when the user was busy (it
+  waits; `gg session files focus f<n>` shows it later), `; closed <path> (20
+  files open)` when a file was pushed out to make room. With `--json`, read
+  `state` (`shown` / `background`).
+- `gg session overview set <id> [--title "…"] [--file <md>] [--json]` —
+  replace the text; the user's selected anchor stays selected when its
+  destination is still there.
+- `gg session overview list [--json]` — `<id>\t<state>\t<n> anchors\t<title>`;
+  `show <id> [--json]` — `<id>\t<title>`, a blank line, the text; `rm <id>` —
+  `closed <id>`. `gg session files focus <id>` brings one to the front.
+- Answers you may get (exit 1): `no gg session for this worktree` (start gg
+  first); `overviews need a gg TUI (only gg web is live for this worktree)`;
+  `no overview f<n>` (the user closed it — add a new one); `20 overviews are
+  open; remove one first`; `gg is showing worktree <a>, not <b>` (the TUI is
+  on another checkout). Exit 2 is misuse: `--title is required`, `the text is
+  empty` (nothing on stdin), `the text is over 64 KiB`.
 
 Combine with notes: `gg session note add` the remarks first, then link them
 from the overview (`[why this lock](note:t7)`). Order the anchors in the order
