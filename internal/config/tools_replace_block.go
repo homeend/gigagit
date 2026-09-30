@@ -8,11 +8,16 @@ import (
 	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
+
+	"github.com/homeend/gigagit/internal/filelock"
 )
 
 // ErrToolBlockNotFound: the file holds no [[tools.command]] block with the
 // key (or none gg can safely rewrite).
 var ErrToolBlockNotFound = errors.New("config: tool block not found")
+
+// ErrToolBlockChanged: the block no longer holds what the caller expected.
+var ErrToolBlockChanged = errors.New("the block changed since the offer was made — reopen to see the current offer")
 
 // ReplaceToolCommand rewrites, in place, the one [[tools.command]] block
 // whose (category, name) is key with tc, keeping the file's line ending and
@@ -25,9 +30,21 @@ var ErrToolBlockNotFound = errors.New("config: tool block not found")
 // must parse back identical, or nothing is written. false, nil when no
 // block has that key.
 func ReplaceToolCommand(path, key string, tc ToolCommand) (bool, error) {
+	return ReplaceToolCommandIf(path, key, "", tc)
+}
+
+// ReplaceToolCommandIf is ReplaceToolCommand that first checks, under the
+// write's lock, that the block still has ToolFingerprint want ("" = any):
+// ErrToolBlockChanged otherwise, and nothing is written.
+func ReplaceToolCommandIf(path, key, want string, tc ToolCommand) (bool, error) {
 	if strings.Contains(tc.Command, "'''") {
 		return false, fmt.Errorf("config: %s: command must not contain ''' (TOML literal delimiter)", tc.Name)
 	}
+	release, err := lockToolConfig(path)
+	if err != nil {
+		return false, err
+	}
+	defer release()
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
@@ -64,6 +81,9 @@ func ReplaceToolCommand(path, key string, tc ToolCommand) (bool, error) {
 		}
 		if one.Tools.Command[0].Key() != key {
 			continue
+		}
+		if want != "" && ToolFingerprint(one.Tools.Command[0]) != want {
+			return false, ErrToolBlockChanged
 		}
 		index := 0 // this block's position among the file's tool blocks
 		for j := 0; j < si; j++ {
@@ -251,4 +271,11 @@ func ToolBlockLine(path, key string) int {
 		}
 	}
 	return 0
+}
+
+// lockToolConfig serialises the [[tools.command]] writers' read-modify-write
+// of one config file — across processes and within one (the TUI and the web
+// page it hosts) — with the shared O_EXCL lock file beside it.
+func lockToolConfig(path string) (func(), error) {
+	return filelock.Acquire(path + ".lock")
 }

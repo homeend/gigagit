@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -182,5 +183,25 @@ func TestToolBlockLineFindsTheEffectiveBlock(t *testing.T) {
 	}
 	if got := ToolBlockLine(path, "review\x00Z"); got != 0 {
 		t.Fatalf("missing key: line %d, want 0", got)
+	}
+}
+
+// The expected-content check runs under the write's lock: a block that no
+// longer matches is refused and the file is left alone.
+func TestReplaceToolCommandIfRefusesAChangedBlock(t *testing.T) {
+	t.Parallel()
+	path := writeFixture(t, replaceFixture)
+	got, _ := ToolCommandsIn(path)
+	cur := ToolFingerprint(got[0])
+	nb := ToolCommand{Category: "review", Name: "A", Mode: "capture", Command: "new a", TemplateVersion: 2}
+	if _, err := ReplaceToolCommandIf(path, nb.Key(), "sha256:stale", nb); !errors.Is(err, ErrToolBlockChanged) {
+		t.Fatalf("stale expectation: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	if string(raw) != replaceFixture {
+		t.Fatal("a refused replace must not touch the file")
+	}
+	if ok, err := ReplaceToolCommandIf(path, nb.Key(), cur, nb); err != nil || !ok {
+		t.Fatalf("matching expectation: %v %v", ok, err)
 	}
 }

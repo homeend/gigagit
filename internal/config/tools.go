@@ -160,6 +160,11 @@ func AppendToolCommands(path string, cmds []ToolCommand) error {
 			return fmt.Errorf("config: %s: command must not contain ''' (TOML literal delimiter)", tc.Name)
 		}
 	}
+	release, err := lockToolConfig(path)
+	if err != nil {
+		return err
+	}
+	defer release()
 	raw, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -228,6 +233,11 @@ func ToolCommandsIn(path string) ([]ToolCommand, error) {
 // written at all. replace receives the body without its trailing newline; a
 // new body containing the literal's delimiter is refused.
 func ReplaceToolCommandBodies(path string, replace func(body string) (string, bool)) (int, error) {
+	release, err := lockToolConfig(path)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return 0, nil

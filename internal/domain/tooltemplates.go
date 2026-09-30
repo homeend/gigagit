@@ -2,7 +2,6 @@ package domain
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -162,34 +161,22 @@ func blockStatus(ctx context.Context, path string, tc config.ToolCommand, det ex
 }
 
 // ErrToolBlockChanged: the block changed on disk since its status was computed.
-var ErrToolBlockChanged = errors.New("the block changed since the offer was made — reopen to see the current offer")
+var ErrToolBlockChanged = config.ErrToolBlockChanged
 
-// ApplyToolUpdate writes st.New over st.Block in st.Path, after checking the
-// file still holds that block (same meaning — a formatting-only edit is fine).
+// ApplyToolUpdate writes st.New over st.Block in st.Path. The check that the
+// file still holds that block (same meaning — a formatting-only edit is
+// fine) runs under the write's lock, so a concurrent writer cannot slip in
+// between. With the key twice in the file, the last (effective) block is
+// the one checked and rewritten.
 func ApplyToolUpdate(st ToolTemplateStatus) error {
-	blocks, err := config.ToolCommandsIn(st.Path)
+	ok, err := config.ReplaceToolCommandIf(st.Path, st.Block.Key(), config.ToolFingerprint(st.Block), st.New)
 	if err != nil {
 		return err
 	}
-	// The last same-key block is the effective one (what the status read).
-	for i := len(blocks) - 1; i >= 0; i-- {
-		tc := blocks[i]
-		if tc.Key() != st.Block.Key() {
-			continue
-		}
-		if config.ToolFingerprint(tc) != config.ToolFingerprint(st.Block) {
-			return ErrToolBlockChanged
-		}
-		ok, err := config.ReplaceToolCommand(st.Path, tc.Key(), st.New)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return fmt.Errorf("%w in %s — edit it by hand", config.ErrToolBlockNotFound, st.Path)
-		}
-		return nil
+	if !ok {
+		return fmt.Errorf("%w in %s — edit it by hand", config.ErrToolBlockNotFound, st.Path)
 	}
-	return ErrToolBlockChanged
+	return nil
 }
 
 // ToolStatusesDisabled is a TEST seam (the ForgeDisabled precedent): a
