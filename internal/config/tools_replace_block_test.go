@@ -97,3 +97,59 @@ func TestReplaceToolCommandRefusesDelimiterAndMissing(t *testing.T) {
 		t.Fatal("a refused/missed replace must not touch the file")
 	}
 }
+
+// Hand-written blocks close or open their strings in every place TOML
+// allows. A replace must never lose a byte outside the block — and when it
+// cannot find the block it must say so, not report success.
+func TestReplaceToolCommandNeverLosesOtherTables(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"close on content line": "[[tools.command]]\ncategory = \"review\"\nname = \"A\"\nmode = \"capture\"\ncommand = '''\nold a'''\n\n[ui]\ntheme = \"dark\"\n",
+		"indented close":        "[[tools.command]]\ncategory = \"review\"\nname = \"A\"\nmode = \"capture\"\ncommand = '''\nold a\n  '''\n\n[ui]\ntheme = \"dark\"\n",
+		"close with comment":    "[[tools.command]]\ncategory = \"review\"\nname = \"A\"\nmode = \"capture\"\ncommand = '''\nold a\n''' # c\n\n[ui]\ntheme = \"dark\"\n",
+		"basic multiline":       "[[tools.command]]\ncategory = \"review\"\nname = \"A\"\nmode = \"capture\"\ncommand = \"\"\"\n[x]\nold a\n\"\"\"\n\n[ui]\ntheme = \"dark\"\n",
+		"content on open line":  "[[tools.command]]\ncategory = \"review\"\nname = \"A\"\nmode = \"capture\"\ncommand = '''old\n[x]\n'''\n\n[ui]\ntheme = \"dark\"\n",
+		"header comment":        "[[tools.command]] # mine\ncategory = \"review\"\nname = \"A\"\nmode = \"capture\"\ncommand = \"old a\"\n\n[ui]\ntheme = \"dark\"\n",
+		"spaced header":         "[[ tools.command ]]\ncategory = \"review\"\nname = \"A\"\nmode = \"capture\"\ncommand = \"old a\"\n\n[ui]\ntheme = \"dark\"\n",
+	}
+	for name, in := range cases {
+		path := writeFixture(t, in)
+		nb := ToolCommand{Category: "review", Name: "A", Mode: "capture", Command: "new a", TemplateVersion: 2}
+		ok, err := ReplaceToolCommand(path, nb.Key(), nb)
+		raw, _ := os.ReadFile(path)
+		if !strings.Contains(string(raw), `theme = "dark"`) {
+			t.Errorf("%s: [ui] lost:\n%s", name, raw)
+			continue
+		}
+		if err == nil && !ok {
+			t.Errorf("%s: silent no-op (ok=false, err=nil)", name)
+			continue
+		}
+		if ok {
+			got, derr := ToolCommandsIn(path)
+			if derr != nil || len(got) != 1 || strings.TrimSpace(got[0].Command) != "new a" {
+				t.Errorf("%s: after replace: %v %+v\n%s", name, derr, got, raw)
+			}
+		}
+	}
+}
+
+// The safety net on its own: a result that loses a table, changes another
+// tool block, or drops a block is refused.
+func TestSameOutsideToolBlockRefusesLoss(t *testing.T) {
+	t.Parallel()
+	before := "[[tools.command]]\nname = \"A\"\ncommand = \"a\"\n\n[[tools.command]]\nname = \"B\"\ncommand = \"b\"\n\n[ui]\ntheme = \"dark\"\n"
+	ok := strings.Replace(before, `command = "a"`, `command = "new"`, 1)
+	if err := sameOutsideToolBlock([]byte(before), []byte(ok), 0); err != nil {
+		t.Fatalf("a change inside block 0 must pass: %v", err)
+	}
+	for name, after := range map[string]string{
+		"lost table":      strings.Replace(before, "\n[ui]\ntheme = \"dark\"\n", "", 1),
+		"other block":     strings.Replace(before, `command = "b"`, `command = "x"`, 1),
+		"dropped a block": strings.Replace(before, "[[tools.command]]\nname = \"B\"\ncommand = \"b\"\n\n", "", 1),
+	} {
+		if err := sameOutsideToolBlock([]byte(before), []byte(after), 0); err == nil {
+			t.Errorf("%s: must be refused", name)
+		}
+	}
+}

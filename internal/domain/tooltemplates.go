@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -150,8 +151,14 @@ func ApplyToolUpdate(st ToolTemplateStatus) error {
 		if config.ToolFingerprint(tc) != config.ToolFingerprint(st.Block) {
 			return ErrToolBlockChanged
 		}
-		_, err := config.ReplaceToolCommand(st.Path, tc.Key(), st.New)
-		return err
+		ok, err := config.ReplaceToolCommand(st.Path, tc.Key(), st.New)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("%w in %s — edit it by hand", config.ErrToolBlockNotFound, st.Path)
+		}
+		return nil
 	}
 	return ErrToolBlockChanged
 }

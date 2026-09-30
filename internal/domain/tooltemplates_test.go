@@ -182,3 +182,20 @@ func TestToolTemplateStatusNoProbeWithoutRanges(t *testing.T) {
 		t.Fatalf("probed the agent %d time(s) with no ranged variant", calls)
 	}
 }
+
+// A block the writer cannot locate is an error, never a reported success.
+func TestApplyToolUpdateReportsUnlocatableBlock(t *testing.T) {
+	stubVersion(t, "")
+	v2 := fakeDet(2, exttool.CommandTemplate{Command: "<bin> two"})
+	path := filepath.Join(t.TempDir(), "config.toml")
+	// A valid, unstamped block gg's writer cannot address: its header is
+	// quoted-key spelled (TOML-legal, never written by gg).
+	os.WriteFile(path, []byte("[[\"tools\".\"command\"]]\ncategory = \"review\"\nname = \"Fake\"\nmode = \"capture\"\ncommand = \"fake one\"\n"), 0o644)
+	sts := ToolTemplateStatuses(context.Background(), []string{path}, []exttool.Detection{v2})
+	if len(sts) != 1 || sts[0].Kind != ToolUpdateAvailable {
+		t.Fatalf("precondition: %+v", sts)
+	}
+	if err := ApplyToolUpdate(sts[0]); err == nil {
+		t.Fatal("an unlocatable block must be an error")
+	}
+}
