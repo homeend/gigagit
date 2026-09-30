@@ -131,8 +131,7 @@ func (m Model) shelfNoteStackFile(id string) (stackFile, bool) {
 			continue
 		}
 		n := r.Note
-		w, _ := m.overlayDims()
-		w -= 4
+		w := m.stackProseWidth()
 		meta := n.Created.Local().Format("2006-01-02 15:04")
 		if n.Author != "" {
 			meta = n.Author + " · " + meta

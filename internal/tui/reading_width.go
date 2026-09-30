@@ -51,3 +51,23 @@ func indentBlock(s string, margin int) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// stackProseWidth is the column a stacked diff's prose section (a review's
+// Overview, a shelved set's note) is laid out at: the screen less the row's
+// margins, capped at the reading width.
+func (m Model) stackProseWidth() int {
+	w, _ := m.overlayDims()
+	col, _ := readingColumn(w-4, m.readingWidth())
+	return col
+}
+
+// stackProseLead is the lead a prose row draws before its text in a stack
+// row w wide: the usual two-column indent plus the margin centring a col-wide
+// column.
+func stackProseLead(w, col int) string {
+	margin := 0
+	if w-4 > col {
+		margin = (w - 4 - col) / 2
+	}
+	return "  " + strings.Repeat(" ", margin)
+}

@@ -19,6 +19,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   running across the whole screen. Code, diffs, blame, file trees and the
   help popups keep the full width; a code or table line in markdown is
   cut at the column (`ctrl+w` scrolls it).
+- **The stacked diff's Overview reads in the same column.** A review's
+  overview section (and a shelved set's note) at the top of the stacked
+  diff wraps at `reading_width` and is centred, instead of running the
+  whole screen.
 - **View all notes wraps a note instead of cutting it.** A long summary
   continues under the NOTE column, and the table sits in the same centred
   column; the bottom bar still spells out a WHO or WHERE its cell cut.
