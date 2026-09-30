@@ -82,7 +82,7 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	p := fv.p
 	rows, _ := fv.geom(m)
-	scroll := func(delta int) { p.sel = p.clampTop(p.sel+delta, rows) }
+	scroll := func(delta int) { p.scrollBy(delta, rows) }
 	switch msg.String() {
 	case "esc":
 		return m.escDoc(fv.openFile), nil

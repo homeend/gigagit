@@ -274,7 +274,7 @@ func (m Model) footerOverride() (string, bool) {
 		case m.filesPreview != nil && !m.filesTreeFocused && m.filesPreview.p.lsel.on:
 			return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 		case m.filesPreview != nil && !m.filesTreeFocused:
-			return m.noteHint(m.filesPreview, i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab/esc] back to list")), true
+			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab/esc] back to list"), true
 		}
 		return i18n.T("files: [↑/↓] move  [enter/.] actions  [/] filter  [→] preview  [ctrl+]] background  [ctrl+t] full  [ctrl+w] view  [esc] close"), true
 	}

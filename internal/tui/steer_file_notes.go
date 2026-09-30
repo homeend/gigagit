@@ -66,14 +66,18 @@ func (m Model) steerNoteAdd(c steer.Command) (Model, tea.Cmd) {
 	} else {
 		d = m.openFiles.find(m.currentWorktree, docKey(src, c.File))
 	}
-	if d != nil && docLoaded(d) && !d.loading {
+	// The note goes on the file AS IT IS ON DISK: a loaded copy is good only
+	// while the disk still matches what was read (the agent may have edited
+	// the file a moment ago, ahead of the watcher); otherwise re-read first.
+	if d != nil && docLoaded(d) && !d.loading && m.docCurrent(d) {
 		return m.finishNoteAdd(c, d, "")
 	}
 	path := c.File
 	if d != nil {
 		path = d.path
 	}
-	if d == nil {
+	isNew := d == nil
+	if isNew {
 		ctx, cancel := updateThreadCtx(updateThreadGitTimeout)
 		defer cancel()
 		present, err := m.svc.WorktreeFilesPresent(ctx, []string{path})
@@ -87,12 +91,15 @@ func (m Model) steerNoteAdd(c steer.Command) (Model, tea.Cmd) {
 	} else {
 		d.keepPlace()
 	}
-	status := m.statusMsg
-	m, ev := m.registerDocEv(d)
-	m.statusMsg = status // an agent's note never takes over the status line
 	lead := ""
-	if p := evictedPath(ev); p != "" {
-		lead = "; closed " + p + " (" + strconv.Itoa(maxOpenFiles) + " files open)"
+	if isNew {
+		status := m.statusMsg
+		var ev *openFile
+		m, ev = m.registerDocEv(d)
+		m.statusMsg = status // an agent's note never takes over the status line
+		if p := evictedPath(ev); p != "" {
+			lead = "; closed " + p + " (" + strconv.Itoa(maxOpenFiles) + " files open)"
+		}
 	}
 	load, tag := m.loadDoc(d), d.tag
 	return m, func() tea.Msg {
@@ -187,4 +194,11 @@ func (m Model) steerNoteRm(c steer.Command) (Model, tea.Cmd) {
 		return m, m.answerSteer(c, steerFail(c, "no open file "+name))
 	}
 	return m, m.answerSteer(c, steerOK(c, "removed "+strconv.Itoa(d.clearNotes())+" notes from "+d.path))
+}
+
+// docCurrent reports whether a working-tree document's lines are what the
+// disk holds right now: one stat against the state its bytes were read at.
+func (m Model) docCurrent(d *openFile) bool {
+	abs := m.docAbs(d)
+	return d.src.kind == srcWorktree && abs != "" && d.disk.known && statDisk(abs).same(d.disk)
 }

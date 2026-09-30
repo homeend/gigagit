@@ -263,7 +263,11 @@ them).
 
 The walkthrough: `gg session note add` on each file (that opens them), then
 `gg session files focus <id>:<line>` one file at a time as you explain it.
-Keep a summary to one sentence; put the reasoning in `--rationale`.
+Keep a summary to one sentence; put the reasoning in `--rationale`. A note
+taller than half the user's window is cut in place (they press enter to read
+it all), so prefer several short notes on the exact lines over one long one.
+A note is placed on the file as it is on disk at that moment — add notes
+AFTER your edits, not before.
 
 When the user's message holds `gg note t<n> <path>:<lines>`, they copied a
 reference to one of your notes: run `gg session note show t<n>` to see which

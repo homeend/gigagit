@@ -298,7 +298,7 @@ func (m Model) updateWorktreePreviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	p := d.p
 	rows := m.filePreviewRowsCap()
-	scroll := func(delta int) { p.sel = previewClamp(p.sel+delta, len(p.lines), rows, p.mode) }
+	scroll := func(delta int) { p.scrollBy(delta, rows) }
 	switch msg.String() {
 	case "left", "tab", "shift+tab", "esc":
 		m = m.focusTree()
@@ -321,7 +321,7 @@ func (m Model) updateWorktreePreviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "home":
 		p.sel = 0
 	case "end":
-		p.sel = previewClamp(len(p.lines), len(p.lines), rows, p.mode)
+		p.sel = p.clampTop(len(p.lines), rows)
 	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0

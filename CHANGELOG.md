@@ -20,7 +20,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Reading them.** `}` / `{` step to the next / previous note, then on to
   the next open file that has notes; `d` dismisses the note under the cursor;
   `r` copies a reference (`gg note t7 <path>:<lines>`) to paste back to the
-  agent. The same actions are in the `.` menu, and the ctrl+\ Open files tab
+  agent; `enter` opens the whole note in its own window (a note taller than
+  half the window is cut in place). The same actions are in the `.` menu, and the ctrl+\ Open files tab
   shows a count per file.
 - **They are temporary.** The notes live in the running TUI only: they follow
   their lines when the file changes on disk (edited lines mark a note

@@ -4155,6 +4155,15 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
   `rowsSpan`/`clampTop`/`lastVisible`/`ensureCursorVisible`; with the hook nil
   (no notes) the pager is the plain one-row-per-line arithmetic. New preview
   scroll code must clamp through `p.clampTop`, not `previewClamp`.
+- **Tall boxes.** A box takes at most `noteBoxMaxRows(rowsCap)` rows (half
+  the window); the rest is "… N more lines" and `enter` opens the whole note
+  (`openFileNote`). The pager's unit is a file line, so an uncapped box could
+  never be scrolled through. Scroll sites go through `p.scrollBy` (a page
+  never skips lines the boxes left no room for).
+- **Cross-file `}`/`{`** walks annotated files by `openFile.seq`, never the
+  MRU list (`bringToFront` reorders it on every step).
+- **`note_add` reads the disk first** unless `docCurrent` (one stat) says the
+  loaded lines are still what the disk holds.
 - **Gutter.** While a document has notes its lines give up `noteGutterW` (2)
   columns (`winOpts.prefixW`); covered lines carry `│ `. `activePreview`
   subtracts it from the width search/pan use.

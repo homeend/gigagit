@@ -82,6 +82,9 @@ type openFile struct {
 	// noteW is the width the note boxes were last drawn at (0 = never):
 	// the pager counts their rows with it between frames.
 	noteW int
+	// noteH is the most rows one box may take in the frame last drawn
+	// (0 = never drawn: no cap). A taller note is cut to it (boxLines).
+	noteH int
 }
 
 // keepPlace makes the next fill — a reload of a file the user is reading —

@@ -525,10 +525,11 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	// every line index (cursor, selection, search hit) stays a file line —
 	// and its lines give up noteGutterW columns for the range mark.
 	var notes []*fileNote
-	gut := 0
+	gut, boxH := 0, 0
 	if d := m.previewDoc(p); d != nil && d.gutterW() > 0 {
+		boxH = noteBoxMaxRows(rowsCap)
 		notes, gut = d.notes, d.gutterW()
-		d.noteW = max(innerW-gut, 4)
+		d.noteW, d.noteH = max(innerW-gut, 4), noteBoxMaxRows(rowsCap)
 	}
 	start := p.clampTop(p.sel, rowsCap)
 	wr := make([]winRow, 0, rowsCap)
@@ -563,7 +564,7 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		wr = append(wr, r)
 		for _, n := range notes {
 			if n.end == row+1 {
-				for _, nl := range n.boxLines(innerW - gut - noteBoxFrame) {
+				for _, nl := range n.boxLines(innerW-gut-noteBoxFrame, boxH) {
 					wr = append(wr, fileNoteRow(nl, innerW, gut))
 				}
 			}
@@ -613,7 +614,11 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 			hint = p.extraHint + "  " + hint
 		}
 	}
-	hint = m.noteHint(m.previewDoc(p), hint)
+	if d := m.previewDoc(p); d != nil && len(d.notes) > 0 {
+		// An annotated file's own hint: the note keys, then the two exits —
+		// all inside an 80-column viewer — and the everyday keys last.
+		hint = i18n.T("%d/%d  [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [↑/↓] scroll", start+1, len(vis))
+	}
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
 	}

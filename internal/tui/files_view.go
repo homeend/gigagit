@@ -1261,7 +1261,7 @@ func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 		// to a cursor range and is shared with the tree/help window) so every press,
 		// keyboard or wheel, scrolls the viewport.
 		p := m.filesPreview.p
-		p.sel = p.clampTop(p.sel+delta, m.filePreviewRowsCap())
+		p.scrollBy(delta, m.filePreviewRowsCap())
 		return m, nil
 	}
 	if m.stashView != nil {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"sort"
 	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -52,6 +53,10 @@ func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 			m.statusMsg = i18n.T("note %s dismissed", n.id)
 			return m, nil, true
 		}
+	case "enter":
+		if n := d.noteAt(d.p.cur + 1); n != nil {
+			return m.openFileNote(n), nil, true
+		}
 	case "r":
 		if n := d.noteAt(d.p.cur + 1); n != nil {
 			return m, m.copyToClipboardCmd(i18n.T("Copied note reference %s", n.id), n.reference(d.path)), true
@@ -85,17 +90,29 @@ func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 		}
 		return m, nil, true
 	}
-	l := m.openFiles.list(m.currentWorktree)
-	at := 0
-	for i, e := range l {
-		if e == d {
-			at = i
+	// The other annotated files, in the order they were opened — NOT the
+	// list's most-recently-shown order, which every step here would reshuffle
+	// (a third file would never come up).
+	var others []*openFile
+	for _, e := range m.openFiles.list(m.currentWorktree) {
+		if e != d && len(e.notes) > 0 {
+			others = append(others, e)
 		}
 	}
-	for i := 1; i < len(l); i++ {
-		e := l[((at+dir*i)%len(l)+len(l))%len(l)]
-		if len(e.notes) == 0 {
-			continue
+	sort.Slice(others, func(i, j int) bool { return others[i].seq < others[j].seq })
+	if len(others) > 0 {
+		e := others[0]
+		if dir < 0 {
+			e = others[len(others)-1]
+		}
+		for _, o := range others { // the next one after d; else wrap around
+			if dir > 0 && o.seq > d.seq {
+				e = o
+				break
+			}
+			if dir < 0 && o.seq < d.seq {
+				e = o // keep going: the LAST one before d
+			}
 		}
 		target := e.notes[0]
 		if dir < 0 {
@@ -137,6 +154,9 @@ func (m Model) fileNoteRows() []actionRow {
 	if n == nil {
 		n = d.notes[0] // the menu has no cursor of its own: offer the first note
 	}
+	rows = append(rows, actionRow{id: "note-show", key: "enter", label: i18n.T("Show full note"), run: func(m Model) (tea.Model, tea.Cmd) {
+		return m.openFileNote(n), nil
+	}})
 	ref := m.copyRow("copy-note-ref", i18n.T("Copy note reference"), i18n.T("Copied note reference %s", n.id), n.reference(d.path))
 	ref.key = "r"
 	return append(rows, ref, actionRow{id: "note-dismiss", key: "d", label: i18n.T("Dismiss note"), run: func(m Model) (tea.Model, tea.Cmd) {
@@ -146,10 +166,12 @@ func (m Model) fileNoteRows() []actionRow {
 	}})
 }
 
-// noteHint leads hint with the note keys while d carries notes.
+// noteHint is the bottom bar's hint for the files view's focused preview
+// while d carries notes: the note keys, then the exits, then the rest — in
+// place of hint, so the exits are never pushed off the line.
 func (m Model) noteHint(d *openFile, hint string) string {
 	if d == nil || len(d.notes) == 0 {
 		return hint
 	}
-	return i18n.T("[}/{] notes  [d] dismiss  [r] reference") + "  " + hint
+	return i18n.T("file: [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [←/tab] back to tree")
 }

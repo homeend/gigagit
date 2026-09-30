@@ -43,12 +43,13 @@ func TestNoteAddOpensTheFileInTheBackgroundAndAnswersWithTheNote(t *testing.T) {
 	}
 }
 
-func TestNoteAddOnAnOpenLoadedFileAnswersAtOnce(t *testing.T) {
+func TestNoteAddOnAnOpenFileKeepsTheReadersPlace(t *testing.T) {
 	t.Parallel()
 	m, d := notedViewer(t)
+	d.p.cur = 9 // (the 40-line file fits the window: the top stays line 1)
 	top, cur := d.p.sel, d.p.cur
 	nm, cmd := m.applySteer(noteAddCmd("n-2", "a.txt", 5, 5, "s"))
-	runSteerCmd(t, cmd)
+	nm = pumpAll(t, nm, cmd) // its lines were never read from disk: re-read first
 	r := awaitNote(t, nm, "n-2")
 	if !r.OK || len(d.notes) != 1 || d.p.sel != top || d.p.cur != cur {
 		t.Fatalf("reply=%+v notes=%d top=%d cur=%d — want one note, the reader's place untouched", r, len(d.notes), d.p.sel, d.p.cur)

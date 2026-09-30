@@ -280,10 +280,17 @@ func (n *fileNote) title() string {
 	return i18n.T("%s · %s · lines %d-%d", n.author, n.id, n.start, n.end)
 }
 
+// noteBoxMaxRows is the most rows a note box may take in a rowsCap-row
+// window: half of it, so the code the note is about stays on screen and the
+// pager — whose unit is a file line — can always scroll past the box.
+func noteBoxMaxRows(rowsCap int) int { return max(rowsCap/2, 6) }
+
 // boxLines lays the note out as the diff view's note box, innerW columns of
 // text inside the frame (<= 0: no wrapping). The body rows are the diff's
-// own (noteBodyLines), so a remark reads the same in both places.
-func (n *fileNote) boxLines(innerW int) []noteLine {
+// own (noteBodyLines), so a remark reads the same in both places. A box
+// taller than maxRows (> 0) keeps its first rows and says how many more
+// there are; enter opens the whole note (openFileNote).
+func (n *fileNote) boxLines(innerW, maxRows int) []noteLine {
 	frame := func(kind noteRowKind, text string) noteLine {
 		return noteLine{id: n.id, rootID: n.id, kind: kind, side: model.NoteSideNew, text: text, stale: n.outdated, agent: true}
 	}
@@ -291,9 +298,30 @@ func (n *fileNote) boxLines(innerW int) []noteLine {
 		ID: n.id, Source: model.NoteSourceAgent, Author: n.author, Side: model.NoteSideNew,
 		Summary: n.summary, Rationale: n.rationale,
 	}}
+	body := noteBodyLines(r, n.id, 0, innerW, n.outdated)
+	if keep := max(maxRows-5, 1); maxRows > 0 && len(body)+4 > maxRows && len(body) > keep {
+		more := frame(noteRowText, i18n.T("… %d more lines — [enter] full note", len(body)-keep))
+		body = append(body[:keep:keep], more)
+	}
 	rows := []noteLine{frame(noteRowTop, n.title()), frame(noteRowBlank, "")}
-	rows = append(rows, noteBodyLines(r, n.id, 0, innerW, n.outdated)...)
+	rows = append(rows, body...)
 	return append(rows, frame(noteRowBlank, ""), frame(noteRowBottom, ""))
+}
+
+// openFileNote shows one note in full in a window of its own — a box cut to
+// the file window has more to say than fits under its line. esc returns.
+func (m Model) openFileNote(n *fileNote) Model {
+	lines := []contentLine{{text: sanitizeLine(n.summary)}}
+	if n.rationale != "" {
+		lines = append(lines, contentLine{})
+		for _, l := range strings.Split(n.rationale, "\n") {
+			lines = append(lines, contentLine{text: sanitizeLine(l)})
+		}
+	}
+	cp := newContentPopup(n.title(), lines)
+	cp.fitContent = true
+	cp.prose = true
+	return m.pushLayer(cp)
 }
 
 // noteRowsUnder is the rows the boxes under lines [from, to) take (0-based
@@ -302,7 +330,7 @@ func (d *openFile) noteRowsUnder(from, to int) int {
 	rows := 0
 	for _, n := range d.notes {
 		if i := n.end - 1; i >= from && i < to {
-			rows += len(n.boxLines(d.noteW - noteBoxFrame))
+			rows += len(n.boxLines(d.noteW-noteBoxFrame, d.noteH))
 		}
 	}
 	return rows

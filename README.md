@@ -1335,7 +1335,8 @@ on those lines of an open file (opening it in the background first when
 needed). You read it in a box under the lines; `}` / `{` step through the
 notes (and on to the next open file that has any), `d` dismisses the one under
 the cursor, and `r` copies a reference — `gg note t7 <path>:<lines>` — to paste
-back to the agent when you want to ask about that remark. `gg session note
+back to the agent when you want to ask about that remark. A note taller than
+half the window is cut in place; `enter` opens it in full. `gg session note
 list|show|rm|clear` are the agent's other verbs. The notes are temporary: they
 follow their lines as the file changes, a file carrying them stays open on esc,
 and closing it (X) drops them. They need a running TUI; `gg web` does not show

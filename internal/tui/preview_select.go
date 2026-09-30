@@ -67,6 +67,31 @@ func (p *contentPopup) clampTop(top, rowsCap int) int {
 	return top
 }
 
+// scrollBy moves the pager top by delta lines — a line, a wheel notch, a
+// page — but never past what the window had room for: rows hanging under
+// lines (note boxes) mean a window shows fewer lines than it has rows, and a
+// page must not skip the ones that did not fit.
+func (p *contentPopup) scrollBy(delta, rowsCap int) {
+	top := p.sel + delta
+	if p.extraRows != nil && p.mode != modeWrap {
+		if delta > 0 {
+			if lim := p.lastVisible(rowsCap) + 1; top > lim {
+				top = lim
+			}
+		}
+		if delta < 0 {
+			lim := p.sel
+			for lim > 0 && p.rowsSpan(lim-1, p.sel) <= rowsCap {
+				lim--
+			}
+			if top < lim {
+				top = lim
+			}
+		}
+	}
+	p.sel = p.clampTop(top, rowsCap)
+}
+
 // lastVisible is the last line whose own row is inside a rowsCap-row window
 // starting at sel.
 func (p *contentPopup) lastVisible(rowsCap int) int {
