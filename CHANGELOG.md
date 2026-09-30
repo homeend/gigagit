@@ -21,6 +21,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   disk WSL shares (`gitdir: T:/…`) are followed through their `/mnt/t/…`
   spelling, and the other way round.
 
+### Changed
+
+- **The switcher's `ctrl+g` grouping is remembered across sessions** (it
+  was forgotten when gg quit). It is machine-local UX memory beside the
+  diff view's stacked mode, and the flat list is still the default for a
+  new machine.
+
 ## Cycle agents and terminals by last use
 
 ### Added

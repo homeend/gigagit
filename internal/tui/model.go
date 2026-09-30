@@ -109,7 +109,7 @@ type Model struct {
 
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
 	statePath           string // repo-registry location; "" disables recording (tests)
-	repoGrouped         bool   // repo switcher's ctrl+g grouping, remembered for the session
+	repoGrouped         bool   // repo switcher's ctrl+g grouping, persisted in promptStore
 	linkRepoName        string // remote repository name for gg:// links; "" = the local (absolute-path) form
 	pendingSeqBump      []string
 	pendingSwitch       bool
@@ -494,10 +494,16 @@ func New(svc *domain.Service) Model {
 		pendingCommitMsg:       map[string]pendingMessage{},
 		keptSteer:              map[string]bool{},
 	}
-	// The stacked-diff pref is machine-global, so it is read once here rather
-	// than per repo (no state dir → nil store → the single-file default).
+	return m.loadPrefs()
+}
+
+// loadPrefs seeds the session from the machine-global TUI preferences. They
+// are read once here rather than per repo (no state dir → nil store → the
+// defaults: single-file diffs, a flat repo switcher).
+func (m Model) loadPrefs() Model {
 	if m.promptStore != nil {
 		m.diffStacked = m.promptStore.StackedDiff()
+		m.repoGrouped = m.promptStore.RepoGrouped()
 	}
 	return m
 }

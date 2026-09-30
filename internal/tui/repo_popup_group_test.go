@@ -136,6 +136,7 @@ func TestRepoPopupGroupedFilterNamesWhatIsLeft(t *testing.T) {
 func TestRepoPopupCtrlGTogglesAndIsRemembered(t *testing.T) {
 	t.Parallel()
 	m, state, _ := seededModel(t)
+	m = tempPromptStore(t, m)
 	now := time.Now()
 	for _, e := range []struct{ dir, remote string }{{"proj-wt", "proj"}, {"filler", "filler"}, {"proj-main", "proj"}} {
 		dir := t.TempDir() + "/" + e.dir
@@ -183,10 +184,24 @@ func TestRepoPopupCtrlGTogglesAndIsRemembered(t *testing.T) {
 	if p = layerOf[*repoPopup](m); p == nil || !p.grouped {
 		t.Fatal("grouped mode should survive closing and reopening the switcher")
 	}
+	// It is remembered across sessions too: a new TUI over the same
+	// machine-local store opens the switcher grouped.
+	if !m.promptStore.RepoGrouped() {
+		t.Fatal("ctrl+g must persist the grouping")
+	}
+	next := New(m.svc)
+	next.promptStore = m.promptStore
+	next = next.loadPrefs()
+	if !next.repoGrouped {
+		t.Fatal("a new session must start grouped")
+	}
 	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
 	m = u.(Model)
 	if layerOf[*repoPopup](m).grouped {
 		t.Fatal("a second ctrl+g should return to the flat list")
+	}
+	if m.promptStore.RepoGrouped() {
+		t.Fatal("the flat choice must persist too")
 	}
 }
 

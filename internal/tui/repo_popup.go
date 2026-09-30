@@ -30,8 +30,8 @@ type repoPopup struct {
 	mode    dispMode // text display mode; z cycles (cutoff default = no wrapping)
 	hscroll int      // modeScroll horizontal offset
 	// grouped gathers the checkouts of one project under its most recent one
-	// (ctrl+g). Seeded from — and mirrored to — Model.repoGrouped, so the choice
-	// outlives this popup for the session.
+	// (ctrl+g). Seeded from — and mirrored to — Model.repoGrouped, which is
+	// persisted, so the choice outlives this popup and the session.
 	grouped bool
 
 	// foreign holds the async slow-filesystem verdicts (path → true when the
@@ -305,6 +305,12 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+g":
 		p.toggleGrouped()
 		m.repoGrouped = p.grouped
+		if m.promptStore != nil {
+			// A store that refuses only costs the memory, never the flip.
+			if err := m.promptStore.SetRepoGrouped(p.grouped); err != nil {
+				m.statusMsg = i18n.T("could not remember the grouping choice: %s", err.Error())
+			}
+		}
 		return m, nil
 	case "ctrl+p":
 		// Copy the selected row's absolute path; the switcher stays open (the
