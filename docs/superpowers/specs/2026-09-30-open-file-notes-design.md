@@ -143,11 +143,11 @@ looks the same in both surfaces:
 ```
 
 - The title reads `<author> · <id> · line N` / `lines N-M`, plus ` · outdated`
-  for an outdated note. The summary is the first paragraph, the rationale
-  follows after a blank line. Text wraps to the box; it is never cut.
-- The lines a note covers wear a range mark in the note colour (one style,
-  chosen at plan time from the existing theme roles — no new role), so the
-  range is visible without reading the title.
+  for an outdated note. Summary then rationale, laid out by the diff box's
+  own body builder. Text wraps to the box; it is never cut.
+- While a file has notes its lines give up a 2-column gutter on the left;
+  the lines a note covers carry `│ ` there, so the range is visible without
+  reading the title. A file without notes has no gutter.
 - Note rows take no cursor, no selection stripe and no search hit.
 - `previewClamp`, `ensureCursorVisible` and the page step count display rows
   through one helper (`previewRowsBetween(p, from, to)`) that adds the note
@@ -246,13 +246,14 @@ gg session note clear <path>|<file-id>
 - Exit 0 on success; 1 when no gg TUI is live for the worktree, when only
   `gg web` is live (`temporary notes need a gg TUI`), or when the TUI
   refuses; 2 on a usage error.
-- `<path>` is repo-relative or relative to the cwd, resolved like
-  `gg session files focus` resolves it.
+- `<path>` is repo-relative in git slash form, passed as-is (as
+  `gg session files focus` takes it); an open file's id (`f3:10-12`) works
+  too.
 - `gg note` is unchanged and keeps refusing content links: stored notes and
   temporary notes are different things with different verbs.
 
-`gg web`'s steer endpoint answers the four commands with a failed reply, so a
-hosted page never half-handles them.
+The CLI never posts a note command to a `gg web` page (it exits 1 there),
+so the web needs no change.
 
 ### Skill
 
