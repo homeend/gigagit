@@ -25,13 +25,13 @@ var steerReplyWaitForTest = 2 * time.Second
 
 // cmdSession is `gg session`: post a steering command to whatever gg session is
 // showing this worktree.
-func cmdSession(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func cmdSession(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	dir, err := sessionInboxDir(svc)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	return runSession(dir, svc, args, stdout, stderr)
+	return runSessionIn(dir, svc, args, stdin, stdout, stderr)
 }
 
 // sessionInboxDir resolves this worktree's inbox. "" (no state home) is not an
@@ -52,8 +52,14 @@ func sessionInboxDir(svc *domain.Service) (string, error) {
 // runSession dispatches one session subcommand against an explicit inbox dir.
 // The dir is a parameter so tests can point it at t.TempDir() and stay parallel.
 func runSession(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	return runSessionIn(dir, svc, args, nil, stdout, stderr)
+}
+
+// runSessionIn is runSession with stdin (nil = none): an overview's text may
+// be piped in.
+func runSessionIn(dir string, svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files|note> [flags]")
+		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files|note|overview> [flags]")
 		return 2
 	}
 	switch args[0] {
@@ -71,6 +77,8 @@ func runSession(dir string, svc *domain.Service, args []string, stdout, stderr i
 		return sessionFiles(dir, args[1:], stdout, stderr)
 	case "note":
 		return sessionNote(dir, svc, args[1:], stdout, stderr)
+	case "overview":
+		return sessionOverview(dir, svc, args[1:], stdin, stdout, stderr)
 	}
 	fmt.Fprintf(stderr, "session: unknown subcommand %q\n", args[0])
 	return 2

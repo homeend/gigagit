@@ -64,6 +64,10 @@ func (m Model) loadDoc(d *openFile) tea.Cmd { return m.loadDocWith(d, m.docLoade
 // placeholder, not as a read error.
 func (m Model) loadDocWith(d *openFile, load func(context.Context) ([]byte, error)) tea.Cmd {
 	d.loading = true
+	if d.ov != nil { // an overview is in memory: the frame lays it out (layOut)
+		tag, loadNo := d.tag, d.fills+1
+		return func() tea.Msg { return fileContentMsg{tag: tag, loadNo: loadNo} }
+	}
 	read := loadFileContentSrcCmd(d.tag, d.path, m.cfg.UI.SyntaxOn(), load)
 	if d.markdown {
 		read = loadMarkdownSrcCmd(d.tag, load)

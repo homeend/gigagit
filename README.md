@@ -1343,6 +1343,19 @@ follow their lines as the file changes, a file carrying them stays open on esc,
 and closing it (X) drops them. They need a running TUI; `gg web` does not show
 them yet.
 
+For a **guided tour** the agent writes an overview: `gg session overview add
+--title "…" < tour.md` shows a markdown document that lives only in the TUI,
+whose links are anchors — `[the loader](internal/tui/open_files.go:220)`, a
+range `path:120-140`, or one of its notes `note:t7`. `tab` / `shift+tab`
+select the next / previous anchor, `enter` (or a double click) opens it — the
+file comes to the front at that line, a range selected — and `backspace` in
+that file brings you back to the overview on the same anchor; the file stays
+open in the background. `r` copies a reference to the anchor for the agent
+(`gg overview f12 "Tour" → internal/tui/open_files.go:220`),
+`y` the whole text. `gg session overview set|list|show|rm` are the agent's
+other verbs; an overview is an open file (esc backgrounds it, X closes it, the
+ctrl+\\ switcher lists it).
+
 ### Agent sessions (embedded consoles)
 
 On a **Worktrees** row, the `.` menu's **Start agent** runs an interactive

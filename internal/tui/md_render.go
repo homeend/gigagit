@@ -38,7 +38,20 @@ const (
 	mdRef // @mention, #123
 	mdHeading
 	mdQuote
+	mdAnchor     // an overview's anchor (overview.go)
+	mdAnchorSel  // the selected anchor
+	mdAnchorGone // an anchor whose file or note is gone
 	mdClassEnd
+)
+
+// mdAnchorID0 is the first of the TEMPORARY per-anchor classes: while an
+// overview is laid out, anchor k's runes wear mdAnchorID0+k so its spans can
+// be read off the rows after wrapping (overviewLines), and are then rewritten
+// to mdAnchor. They never reach a style. The class mask is a uint8, which is
+// what caps an overview at overviewMaxAnchors.
+const (
+	mdAnchorID0        syntax.Class = 150
+	overviewMaxAnchors              = 100
 )
 
 // mdStyle is base with one markdown pseudo-class applied.
@@ -63,6 +76,12 @@ func (s *styles) mdStyle(base lipgloss.Style, c syntax.Class) lipgloss.Style {
 		return base.Faint(true)
 	case mdHeading:
 		return base.Bold(true).Underline(true)
+	case mdAnchor:
+		return base.Underline(true)
+	case mdAnchorSel:
+		return base.Reverse(true).Bold(true)
+	case mdAnchorGone:
+		return base.Faint(true).Strikethrough(true)
 	}
 	return base
 }
@@ -396,6 +415,14 @@ func mdInlineRuns(in []markdown.Inline, base syntax.Class) []mdRun {
 			if label != n.URL {
 				text(" ("+n.URL+")", mdDim)
 			}
+		case markdown.InAnchor:
+			// An overview's anchor, numbered in Text by overviewLines: the label
+			// is flattened so an emphasis inside it cannot overwrite the id.
+			c := mdLink
+			if k, err := strconv.Atoi(n.Text); err == nil && k >= 0 && k < overviewMaxAnchors {
+				c = mdAnchorID0 + syntax.Class(k)
+			}
+			text(mdFlat(n.In), c)
 		case markdown.InImage:
 			label := i18n.T("[image]")
 			if n.Text != "" {

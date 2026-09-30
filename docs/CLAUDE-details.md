@@ -4190,3 +4190,36 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
   move the screen); `note_add` on a file that is not open/loaded rides
   `noteLandedMsg`. The CLI (`gg session note`) posts to a TUI only.
 
+#### Overview documents (`overview*.go`, `steer_overview.go`)
+
+Spec `2026-09-30-agent-overview-documents-design.md`. An overview is an
+`openFile` of kind `srcOverview` carrying `ov *overview` (text, anchors,
+selection, laid-out width); never on disk, never evicted, created
+`backgrounded`.
+
+- **Anchors come from the one parser.** `markdown.ParseWith(src,
+  Options{Anchor})` turns a link whose destination the caller accepts into
+  `InAnchor` (`Parse` never does, so forge/web rendering is untouched).
+  `parseAnchorDest` is the grammar: `path`, `path:N`, `path:N-M`, `note:t<n>`;
+  absolute paths, `..`, schemes and drives are not anchors.
+- **gg lays the rows out itself** (`overviewLines` at the viewer's reading
+  column): one display row = one line, so a click maps to a line and a rune.
+  Spans are recovered after wrapping through TEMPORARY classes
+  `mdAnchorID0+k` (the class mask is `uint8` → at most 100 anchors), rewritten
+  to `mdAnchor`; `paint` re-classes Sel/Gone. `renderPreviewBox` re-lays out
+  when the width changes (`ov.w`), keeping the selected anchor.
+- **Open/back.** `openAnchor` opens the file (`openFileViewerEv`, a range
+  via `pendingEnd` → a fixed `lineSel`) or brings a note's file to the front;
+  the file gets `from` (latest jump wins) and `backgrounded`. backspace
+  (`anchorBack`) backgrounds it and `bringToFront`s `from`; when `from` is no
+  longer in the list it says so and clears `from`. `overview_set` keeps the
+  selection by `dest`.
+- **Viewer-wide side effects.** The full-screen viewer draws `m.statusMsg` on
+  its TITLE line (right side; not while `m.running`, not a `stickyMsg`) for
+  every document — it covers the status bar. `landPendingLine` pulls the box
+  of a note starting at the landed line into view, as `}` does.
+- **Steer.** `overview_add|set|list|show|rm` run before `steerRefusal`; an add
+  the screen cannot take lands in the background. add/set stat path anchors
+  off-thread (`anchorsCheckedMsg`) and answer with the unresolved ones.
+  `steer.MaxCommandBytes` is 512 KiB for the 64 KiB text.
+

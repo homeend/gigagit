@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overview documents
+
+### Added
+
+- **An agent can walk you through several files.** `gg session overview add
+  --title "…" [--file <md>] [--background]` (text on stdin by default) shows a
+  markdown overview that lives only in the running TUI. Its links are anchors
+  — a file, `path:N`, a range `path:N-M`, or one of the agent's temporary notes
+  (`note:t7`). `tab` / `shift+tab` select the next / previous anchor, `enter`
+  or a double click opens it (the file at that line, a range selected), and
+  `backspace` in that file returns to the overview on the same anchor; the
+  file stays open in the background. `r` copies a reference to the anchor,
+  `y` the text. `set` replaces the text (the selection stays when its
+  destination survives), `list` / `show` / `rm` manage them; `add` and `set`
+  name the anchors that do not resolve. Limits: 64 KiB, 100 anchors, 20
+  overviews per worktree. The `using-gg` skill (v107) teaches the verbs.
+- `markdown.ParseWith` keeps link destinations a caller accepts as anchors;
+  `steer.MaxCommandBytes` rose to 512 KiB for an overview's text; `gg session
+  files --json` rows carry a `title`, and overviews show the `overview` source.
+
+### Changed
+
+- **Every full-screen viewer shows a message on its title line.** The viewer
+  covers the status bar, so a missing anchor, a copy or a dismissed note used
+  to leave no trace; the message now sits right-aligned on the title line
+  until the next key (an op's "working…" message stays in the status bar).
+- Landing on a line where an agent's note starts brings the note's box into
+  view.
+
 ## Cycle agents and terminals by last use
 
 ### Added

@@ -15,18 +15,19 @@ const (
 
 // ParseInline parses one run of inline markdown (a paragraph, a heading, a
 // table cell). Newlines become hard breaks, as they do in GitHub comments.
-func ParseInline(s string) []Inline { return parseInline(s) }
+func ParseInline(s string) []Inline { return parseInline(s, Options{}) }
 
-func parseInline(s string) []Inline {
+func parseInline(s string, o Options) []Inline {
 	if s == "" {
 		return nil
 	}
-	return newInliner(s, 0).run()
+	return newInliner(s, 0, o).run()
 }
 
 type inliner struct {
 	s     string
 	depth int
+	o     Options
 	out   []Inline
 	text  strings.Builder
 	// Failed searches, remembered: whether a closer exists depends on the
@@ -35,8 +36,8 @@ type inliner struct {
 	noTicks  map[int]bool
 }
 
-func newInliner(s string, depth int) *inliner {
-	return &inliner{s: s, depth: depth, noCloser: map[[2]int]bool{}, noTicks: map[int]bool{}}
+func newInliner(s string, depth int, o Options) *inliner {
+	return &inliner{s: s, depth: depth, o: o, noCloser: map[[2]int]bool{}, noTicks: map[int]bool{}}
 }
 
 func (p *inliner) flush() {
@@ -73,7 +74,7 @@ func (p *inliner) child(s string) []Inline {
 	if p.depth+1 > MaxDepth {
 		return []Inline{{Kind: InText, Text: s}}
 	}
-	return newInliner(s, p.depth+1).run()
+	return newInliner(s, p.depth+1, p.o).run()
 }
 
 func (p *inliner) run() []Inline {
@@ -316,6 +317,13 @@ func (p *inliner) link(i int, image bool) int {
 		return end
 	}
 	inner := p.child(label)
+	if d := strings.TrimSpace(dest); verdict == urlShow && p.o.Anchor != nil && p.o.Anchor(d) {
+		if len(inner) == 0 {
+			inner = []Inline{{Kind: InText, Text: d}}
+		}
+		p.add(Inline{Kind: InAnchor, URL: d, In: inner})
+		return end
+	}
 	switch verdict {
 	case urlOK:
 		if len(inner) == 0 {
