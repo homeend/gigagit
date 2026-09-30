@@ -1557,7 +1557,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case repoFSMsg:
 		if p := layerOf[*repoPopup](m); p != nil {
-			p.foreign = msg.foreign
+			// The common dirs can regroup the list: keep the cursor's row.
+			p.keepSel(func() { p.foreign, p.common = msg.foreign, msg.common })
 		}
 		return m, nil // popup closed before the probe returned: drop it
 	case filePathLsMsg:

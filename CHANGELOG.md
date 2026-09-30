@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Repo switcher groups worktrees without a remote
+
+### Fixed
+
+- **The `R` switcher's `ctrl+g` grouping now joins a checkout with its linked
+  worktrees even when the repository has no remote.** Grouping went by the
+  remote repository name alone, so a local-only repository's worktrees were
+  scattered through the list as separate rows. A project is now also every
+  checkout sharing one git common dir (read from each entry's `.git` file —
+  no git call — by the same background probe that marks slow filesystems);
+  the remote name still joins separate clones. A group with no remote is named
+  after its main checkout's directory. Worktrees created from Windows on a
+  disk WSL shares (`gitdir: T:/…`) are followed through their `/mnt/t/…`
+  spelling, and the other way round.
+
 ## Cycle agents and terminals by last use
 
 ### Added
