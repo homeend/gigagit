@@ -242,7 +242,7 @@ func TestOverviewMenuRows(t *testing.T) {
 }
 
 // The full-screen viewer covers the status bar: a message for the user (a
-// missing anchor, a copy) takes the hint line until the next key.
+// missing anchor, a copy) sits on its title line until the next key.
 func TestViewerShowsTheStatusMessageOnItsHintLine(t *testing.T) {
 	t.Parallel()
 	m, d, _ := tourModel(t)

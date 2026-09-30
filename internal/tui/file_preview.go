@@ -580,6 +580,12 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	if !viewer && len(vis) > rowsCap {
 		right = strings.TrimSpace(right + "  " + fmt.Sprintf("%d/%d", start+1, len(vis)))
 	}
+	if viewer && m.statusMsg != "" {
+		// The full-screen viewer covers the status bar: a message for the user
+		// (a missing anchor, a copy, a dismissed note) sits on the title line
+		// until the next key clears it.
+		right = strings.TrimSpace(m.statusMsg + "  " + right)
+	}
 	lines := make([]string, 0, contentH)
 	lines = append(lines, titleWithRight(title, right, innerW, true))
 	if len(vis) == 0 {
@@ -630,12 +636,6 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	}
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
-	}
-	if viewer && m.statusMsg != "" {
-		// The full-screen viewer covers the status bar: a message for the user
-		// (a missing anchor, a copy, a dismissed note) takes the hint line
-		// until the next key clears it.
-		hint = m.statusMsg
 	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 	if margin > 0 {
