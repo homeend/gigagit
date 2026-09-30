@@ -149,7 +149,7 @@ func (m Model) diffFileSequence(dir int) []string {
 		}
 		vis := m.filesView.visible()
 		for i := m.filesView.sel + dir; i >= 0 && i < len(vis); i += dir {
-			if vis[i].path != "" {
+			if vis[i].path != "" && vis[i].noteID == "" { // an @notes/ review is not a file
 				out = append(out, vis[i].path)
 			}
 		}
@@ -187,10 +187,11 @@ func (m Model) stepDiffFile(dir int) (tea.Model, tea.Cmd) {
 
 // nextFileRow returns the index of the first real file row (path != "") reached
 // from index `from` moving in direction dir (excluding `from` itself), or -1 if
-// none remains. It skips heading rows and the placeholder.
+// none remains. It skips heading rows, the placeholder and an @notes/ review
+// (a virtual path, not a file).
 func nextFileRow(vis []contentLine, from, dir int) int {
 	for i := from + dir; i >= 0 && i < len(vis); i += dir {
-		if vis[i].path != "" {
+		if vis[i].path != "" && vis[i].noteID == "" {
 			return i
 		}
 	}
