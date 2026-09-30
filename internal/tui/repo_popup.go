@@ -150,9 +150,10 @@ func groupRepos(entries []repos.Entry) []repos.Entry {
 	return out
 }
 
-// rowName is the name cell of row i in vis. Grouped, a project's head shows
-// the project name and the rows under it show none; an entry outside any
-// project, and every row of the flat list, shows its directory name.
+// rowName is the name cell of row i in vis. Grouped, the head of a project
+// with several rows shows the project name and the rows under it show none.
+// A project left with a single row is no group, so — like an entry outside
+// any project, and every row of the flat list — it shows its directory name.
 func (p *repoPopup) rowName(vis []repos.Entry, i int) string {
 	if !p.grouped {
 		return repos.Name(vis[i])
@@ -161,12 +162,20 @@ func (p *repoPopup) rowName(vis []repos.Entry, i int) string {
 	if !ok {
 		return repos.Name(vis[i])
 	}
-	if i > 0 {
-		if prev, ok := repoProject(vis[i-1]); ok && prev == name {
-			return ""
+	sameProject := func(j int) bool {
+		if j < 0 || j >= len(vis) {
+			return false
 		}
+		n, ok := repoProject(vis[j])
+		return ok && n == name
 	}
-	return name
+	switch {
+	case sameProject(i - 1):
+		return ""
+	case sameProject(i + 1):
+		return name
+	}
+	return repos.Name(vis[i])
 }
 
 // toggleGrouped flips the grouping and keeps the cursor on the row it was on.

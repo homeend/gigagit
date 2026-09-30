@@ -19,7 +19,7 @@ func groupFixture(now time.Time) []repos.Entry {
 	at := func(min int) time.Time { return now.Add(-time.Duration(min) * time.Minute) }
 	return []repos.Entry{
 		{Path: "/r/wt/recycle", Remote: "gigagit", LastOpened: at(1)},
-		{Path: "/r/lazygit", Remote: "lazygit", LastOpened: at(2)},
+		{Path: "/r/lazy-dir", Remote: "lazygit", LastOpened: at(2)},
 		{Path: "/r/unknown-a", Remote: "", LastOpened: at(3)},
 		{Path: "/r/gigagit", Remote: "gigagit", LastOpened: at(4)},
 		{Path: "/r/unknown-b", Remote: "", LastOpened: at(5)},
@@ -59,7 +59,7 @@ func TestRepoPopupGroupedOrder(t *testing.T) {
 	p := &repoPopup{entries: groupFixture(now), now: now, grouped: true}
 	want := []string{
 		"/r/wt/recycle", "/r/gigagit", // the group of the most recent entry leads
-		"/r/lazygit",
+		"/r/lazy-dir",
 		"/r/unknown-a", "/r/unknown-b", // MRU order; NOT a group
 		"/r/bare-a", "/r/bare-b",
 	}
@@ -67,7 +67,7 @@ func TestRepoPopupGroupedOrder(t *testing.T) {
 		t.Fatalf("grouped order =\n%v\nwant\n%v", got, want)
 	}
 	p.grouped = false
-	if got := visiblePaths(p); got[1] != "/r/lazygit" || got[3] != "/r/gigagit" {
+	if got := visiblePaths(p); got[1] != "/r/lazy-dir" || got[3] != "/r/gigagit" {
 		t.Fatalf("flat mode must keep plain MRU order, got %v", got)
 	}
 }
@@ -99,28 +99,36 @@ func TestRepoPopupGroupedRowsNameOnlyTheHead(t *testing.T) {
 	if name := nameCell(rows[1]); name != "" {
 		t.Errorf("member row must not repeat the name, got %q", name)
 	}
-	// Entries without a usable remote each keep their own name.
-	for i, want := range map[int]string{3: "unknown-a", 4: "unknown-b", 5: "bare-a", 6: "bare-b"} {
+	// A project with a single row is no group: it keeps its directory name, as
+	// in the flat list, and so does every entry without a usable remote.
+	for i, want := range map[int]string{2: "lazy-dir", 3: "unknown-a", 4: "unknown-b", 5: "bare-a", 6: "bare-b"} {
 		if name := nameCell(rows[i]); name != want {
 			t.Errorf("row %d name = %q, want %q", i, name, want)
 		}
 	}
 }
 
-func TestRepoPopupGroupedFilterKeepsANamedHead(t *testing.T) {
+func TestRepoPopupGroupedFilterNamesWhatIsLeft(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
 	m := Model{width: 120, height: 40}
-	// "/r/gigagit" is the only match: the group's usual head is filtered out,
-	// so the survivor must carry the name.
-	p := &repoPopup{entries: groupFixture(now), now: now, grouped: true, query: "/r/giga"}
+	entries := append(groupFixture(now), repos.Entry{Path: "/r/wt/other", Remote: "gigagit", LastOpened: now.Add(-time.Hour)})
+	// "/r/wt/" drops the group's /r/gigagit row: the two survivors still form a
+	// group, and the first of them carries the project name.
+	p := &repoPopup{entries: entries, now: now, grouped: true, query: "/r/wt/"}
 	m = m.pushLayer(p)
 	rows := dataRows(p, m)
-	if len(rows) != 1 {
-		t.Fatalf("want 1 row, got %d:\n%s", len(rows), strings.Join(rows, "\n"))
+	if len(rows) != 2 {
+		t.Fatalf("want 2 rows, got %d:\n%s", len(rows), strings.Join(rows, "\n"))
 	}
-	if nameCell(rows[0]) != "gigagit" {
-		t.Errorf("the first surviving row of a group must be named:\n%s", rows[0])
+	if nameCell(rows[0]) != "gigagit" || nameCell(rows[1]) != "" {
+		t.Errorf("the surviving rows must read as one named group:\n%s", strings.Join(rows, "\n"))
+	}
+	// Narrowed to one row, it is a group no longer and shows its own name.
+	p.query = "recycle"
+	rows = dataRows(p, m)
+	if len(rows) != 1 || nameCell(rows[0]) != "recycle" {
+		t.Errorf("a lone surviving row must show its directory name:\n%s", strings.Join(rows, "\n"))
 	}
 }
 

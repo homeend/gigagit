@@ -13,7 +13,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **`ctrl+g` groups the repo switcher (`R`) by project.** The most recently
   opened checkout of each project leads, named after the project, and the
   project's other checkouts and worktrees move up under it with a blank name
-  column; the next project left in the list starts the next group. So the
+  column; the next project left in the list starts the next group. A project
+  with a single row keeps its directory name, as in the flat list. So the
   project you last switched to — or whose worktree you last switched to — is
   on top. A project is the remote repository name gg already stores, so
   grouping costs no git call; an entry with no remote stays a row of its own.
