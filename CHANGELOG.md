@@ -74,6 +74,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `◆` is East-Asian-ambiguous and many fonts draw it wider than its one
   cell, over a digit glued to it (Commits, Files, Branches, previews,
   shelves, the review view).
+- **A commit's review is no longer a "file" in its diff.** Opening a file
+  of a reviewed commit stacked the review's raw text first, as an
+  all-added `@notes/review-….md`, and `N`/`P` stepped onto it. The
+  `@notes/` row opens the review view and nothing else.
 - **A commit's `◆ N` no longer counts its AI review.** The review has its
   own `✎` marker; `◆ N` counts the notes a diff can show, so a reviewed
   commit with no line notes is no longer badged with a note you cannot
