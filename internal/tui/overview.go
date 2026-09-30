@@ -198,3 +198,61 @@ func (ov *overview) paint(lines []contentLine) {
 		}
 	}
 }
+
+// newOverviewDoc is an overview document holding text, not yet laid out. It
+// starts backgrounded: esc steps aside, only X closes it.
+func newOverviewDoc(title, text string) *openFile {
+	d := newOpenFile(fileSource{kind: srcOverview}, "")
+	d.path = "overview-" + strconv.FormatInt(d.seq, 10) + ".md" // named by its own id
+	d.tag = d.key() + "#" + strconv.FormatInt(d.seq, 10)
+	d.p.title = d.path
+	d.title, d.backgrounded = title, true
+	d.p.prose, d.p.mode = true, modeScroll
+	d.ov = &overview{text: text, sel: -1}
+	return d
+}
+
+// overviewWidth is the width an overview is laid out at in a full-screen
+// viewer whose content is innerW wide: its reading column.
+func (m Model) overviewWidth(innerW int) int {
+	w, _ := readingColumn(innerW, m.readingWidth())
+	return w
+}
+
+// layOut lays the overview out at width for a rows-row frame — its first
+// load, a new width, a new text. The reader's place is kept: the selected
+// anchor when there is one, else the cursor line and the window top.
+func (d *openFile) layOut(rows, width int) {
+	ov := d.ov
+	lines, anchors := overviewLines(ov.text, width)
+	if len(anchors) == len(ov.anchors) { // the same text: keep what a check found
+		for i := range anchors {
+			if anchors[i].dest == ov.anchors[i].dest {
+				anchors[i].missing = ov.anchors[i].missing
+			}
+		}
+	}
+	ov.anchors, ov.w = anchors, width
+	if ov.sel >= len(anchors) {
+		ov.sel = -1
+	}
+	d.fill(fileContentMsg{tag: d.tag, lines: lines, reload: docLoaded(d)}, rows, width)
+	if ov.sel >= 0 {
+		d.selectAnchor(ov.sel, rows)
+		return
+	}
+	ov.paint(d.p.lines)
+}
+
+// selectAnchor selects anchor i: the cursor goes to its first row, which is
+// scrolled into view. An anchor clipped out of every row is selected where
+// the cursor is.
+func (d *openFile) selectAnchor(i, rows int) {
+	ov := d.ov
+	ov.sel = i
+	if i >= 0 && i < len(ov.anchors) && len(ov.anchors[i].spans) > 0 {
+		d.p.cur = ov.anchors[i].spans[0].line
+		d.p.ensureCursorVisible(rows)
+	}
+	ov.paint(d.p.lines)
+}

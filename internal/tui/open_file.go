@@ -19,6 +19,7 @@ const (
 	srcShelf                          // a shelf member's frozen bytes (rev = entry id)
 	srcExternal                       // a file outside the repository (an AI task's result); path is absolute
 	srcNote                           // an AI review stored as a note; rev = note id, path = "review-<id>.md"
+	srcOverview                       // an agent's overview, held in memory (openFile.ov); path = "overview-<n>.md"
 )
 
 // fileSource names one version of a file: the working tree, a commit or a
@@ -85,6 +86,14 @@ type openFile struct {
 	// noteH is the most rows one box may take in the frame last drawn
 	// (0 = never drawn: no cap). A taller note is cut to it (boxLines).
 	noteH int
+	// ov makes the document an overview (overview.go): its text and anchors.
+	ov *overview
+	// from is the overview whose anchor opened this file last (nil = none):
+	// backspace returns to it.
+	from *openFile
+	// pendingEnd is the last line (1-based) of the range a link asked for
+	// (0 = none): landPendingLine selects pendingLine..pendingEnd.
+	pendingEnd int
 }
 
 // keepPlace makes the next fill — a reload of a file the user is reading —
@@ -193,8 +202,8 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 // too large, load failed) is not a line of the file: the request is dropped.
 // Either way it is consumed.
 func (d *openFile) landPendingLine(rows int) (notice string) {
-	line := d.pendingLine
-	d.pendingLine = 0
+	line, end := d.pendingLine, d.pendingEnd
+	d.pendingLine, d.pendingEnd = 0, 0
 	p := d.p
 	if line <= 0 || len(p.lines) == 0 || !p.lines[0].src {
 		return ""
@@ -206,6 +215,9 @@ func (d *openFile) landPendingLine(rows int) (notice string) {
 	}
 	p.cur = line - 1
 	p.sel = p.clampTop(p.cur-rows/2, rows)
+	if end > line { // a range: its lines selected, as two spaces would
+		p.lsel = lineSel{on: true, anchor: p.cur, end: min(end, n) - 1, fixed: true}
+	}
 	if p.extraRows != nil {
 		p.ensureCursorVisible(rows) // a note box above may have pushed the line out
 	}

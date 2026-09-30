@@ -80,6 +80,9 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if nm, cmd, ok := m.previewNoteKey(msg); ok {
 		return nm, cmd
 	}
+	if nm, cmd, ok := m.overviewKey(fv.openFile, msg); ok {
+		return nm, cmd
+	}
 	p := fv.p
 	rows, _ := fv.geom(m)
 	scroll := func(delta int) { p.scrollBy(delta, rows) }
@@ -88,6 +91,10 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.escDoc(fv.openFile), nil
 	case "X":
 		return m.closeDoc(fv.openFile), nil
+	case "backspace":
+		if nm, cmd, ok := m.anchorBack(fv.openFile); ok {
+			return nm, cmd
+		}
 	case "ctrl+]":
 		return m.backgroundDoc(fv.openFile), nil
 	case ".":
@@ -117,6 +124,9 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "end":
 		p.sel = p.clampTop(len(p.lines), rows)
 	case "ctrl+w":
+		if fv.ov != nil {
+			break // laid out by gg at the reading width: nothing to wrap or cut
+		}
 		p.mode = p.mode.next()
 		p.hscroll = 0
 	case "shift+left":
@@ -146,7 +156,7 @@ func (fv *fileViewer) title() string {
 		return i18n.T("View %s @ %s", fv.path, shortHash(fv.src.rev))
 	case srcShelf:
 		return i18n.T("View %s (shelf)", fv.path)
-	case srcExternal, srcNote:
+	case srcExternal, srcNote, srcOverview:
 		if fv.openFile.title != "" {
 			return fv.openFile.title
 		}

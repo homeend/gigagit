@@ -994,6 +994,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case noteLandedMsg:
 		return m.noteLanded(msg)
+	case anchorsCheckedMsg:
+		return m.anchorsChecked(msg)
 	case contentLandedMsg:
 		tm, fill := m.Update(msg.load)
 		m = tm.(Model)
@@ -1014,6 +1016,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil // the watcher was closed: its listen loop ends here
 	case fileContentMsg:
 		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
+			if d.ov != nil {
+				d.layOut(rows, m.overviewWidth(inner))
+				return m, nil
+			}
 			if n := d.fill(msg, rows, inner); n != "" {
 				m.statusMsg = n
 			}

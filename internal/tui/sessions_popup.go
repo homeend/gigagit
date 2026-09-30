@@ -168,6 +168,9 @@ func openFileRowText(d *openFile, shown bool) string {
 	if shown {
 		mark = "● "
 	}
+	if d.ov != nil {
+		return mark + d.title + "  " + i18n.T("overview · %d anchors", len(d.ov.anchors))
+	}
 	if d.src.kind == srcExternal || d.src.kind == srcNote {
 		name := d.title
 		if name == "" {

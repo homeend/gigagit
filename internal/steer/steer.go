@@ -31,9 +31,10 @@ const (
 	WebPresence = "web.json"
 
 	// MaxCommandBytes caps one command file. A larger file is deleted unread:
-	// nothing legitimate approaches 16 KiB, and parsing an unbounded file a
-	// stranger dropped in the state dir is not worth the risk.
-	MaxCommandBytes = 16 << 10
+	// the largest legitimate command is an overview (64 KiB of markdown, at
+	// worst six bytes a rune once JSON-escaped), and parsing an unbounded file
+	// a stranger dropped in the state dir is not worth the risk.
+	MaxCommandBytes = 512 << 10
 
 	// LiveWindow is how fresh a presence file's mtime must be to count as a
 	// live session. Sessions re-touch theirs on a 1 s tick, so five seconds is
@@ -78,7 +79,7 @@ type Line struct {
 // there is exactly one landing path.
 type Command struct {
 	ID     string  `json:"id"`
-	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "note_add" | "note_list" | "note_show" | "note_rm" | "serve" (TUI only: serve its web page; Reply.Detail = the URL)
+	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus" | "note_add" | "note_list" | "note_show" | "note_rm" | "overview_add" | "overview_set" | "overview_list" | "overview_show" | "overview_rm" | "serve" (TUI only: serve its web page; Reply.Detail = the URL)
 	File   string  `json:"file,omitempty"` // repo-relative, git slash form
 	Target *Target `json:"target,omitempty"`
 	Commit string  `json:"commit,omitempty"` // navigate: reveal this commit, no file
@@ -110,6 +111,10 @@ type Command struct {
 	Summary   string `json:"summary,omitempty"`
 	Rationale string `json:"rationale,omitempty"`
 	Author    string `json:"author,omitempty"`
+	// Title and Text are an overview's (overview_add, overview_set): a one-line
+	// name and its markdown. FileID names the overview for set/show/rm.
+	Title string `json:"title,omitempty"`
+	Text  string `json:"text,omitempty"`
 	// HintKind/HintID name the UI surface a navigate's link was copied from
 	// ("bookmark", "shelf", "stash", "preview", "version" or "view" —
 	// model.LinkHint's closed set, spec
@@ -145,6 +150,20 @@ type Reply struct {
 	// Notes is the note verbs' answer: the note added, the notes listed, or
 	// the one shown (with Text).
 	Notes []FileNote `json:"notes,omitempty"`
+	// Overviews is the overview verbs' answer: the one added, set or shown
+	// (Text only on show), or every one listed.
+	Overviews []Overview `json:"overviews,omitempty"`
+}
+
+// Overview is an agent's overview open in a live TUI: an in-memory markdown
+// document whose links are anchors to files, lines and notes. Protocol data.
+type Overview struct {
+	ID         string   `json:"id"` // "f<n>" — an open file's id
+	Title      string   `json:"title"`
+	State      string   `json:"state"` // "shown" | "background"
+	Anchors    int      `json:"anchors"`
+	Unresolved []string `json:"unresolved,omitempty"` // destinations whose file or note was not found
+	Text       string   `json:"text,omitempty"`
 }
 
 // FileNote is one temporary note on a file open in a live TUI. It lives in
@@ -167,7 +186,8 @@ type FileNote struct {
 type OpenFile struct {
 	ID     string `json:"id"`              // "f<n>" — what `gg session files focus` takes
 	Path   string `json:"path"`            // repo-relative, git slash form
-	Source string `json:"source"`          // "worktree" | "commit" | "shelf"
+	Source string `json:"source"`          // "worktree" | "commit" | "shelf" | "result" | "review" | "overview"
+	Title  string `json:"title,omitempty"` // an AI result's, a review's or an overview's name
 	Rev    string `json:"rev,omitempty"`   // the commit sha / the shelf entry id
 	Line   int    `json:"line,omitempty"`  // the cursor, 1-based; 0 = not loaded
 	State  string `json:"state"`           // "shown" | "background"
