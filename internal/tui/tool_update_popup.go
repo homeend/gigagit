@@ -84,7 +84,8 @@ func (p *toolUpdatePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.rebuildNotices(), m.refreshToolStatusesCmd()
 		case "e":
 			m = m.popLayer()
-			return m, handover(editorCommandAt(resolveEditor(), p.st.Path, 0), func(err error) tea.Msg {
+			line := config.ToolBlockLine(p.st.Path, p.st.Block.Key())
+			return m, handover(editorCommandAt(resolveEditor(), p.st.Path, line), func(err error) tea.Msg {
 				return toolConfigEditedMsg{err: err}
 			})
 		}

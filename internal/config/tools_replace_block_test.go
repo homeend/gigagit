@@ -169,3 +169,18 @@ func TestReplaceToolCommandRewritesTheEffectiveDuplicate(t *testing.T) {
 		t.Fatalf("want first kept, second replaced: %+v", got)
 	}
 }
+
+func TestToolBlockLineFindsTheEffectiveBlock(t *testing.T) {
+	t.Parallel()
+	in := "# tools\n[ui]\ntheme = \"dark\"\n\n[[tools.command]]\ncategory = \"review\"\nname = \"A\"\ncommand = '''\n[not a header]\n'''\n\n[[tools.command]]\ncategory = \"review\"\nname = \"B\"\ncommand = \"b\"\n\n[[tools.command]]\ncategory = \"review\"\nname = \"A\"\ncommand = \"a2\"\n"
+	path := writeFixture(t, in)
+	if got := ToolBlockLine(path, "review\x00A"); got != 17 {
+		t.Fatalf("A (last) at line %d, want 17", got)
+	}
+	if got := ToolBlockLine(path, "review\x00B"); got != 12 {
+		t.Fatalf("B at line %d, want 12", got)
+	}
+	if got := ToolBlockLine(path, "review\x00Z"); got != 0 {
+		t.Fatalf("missing key: line %d, want 0", got)
+	}
+}

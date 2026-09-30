@@ -223,3 +223,32 @@ func dropToolCommands(doc map[string]any) {
 		}
 	}
 }
+
+// ToolBlockLine is the 1-based line of the effective (last) [[tools.command]]
+// header whose (category, name) is key in the file at path; 0 when there is
+// none or the file cannot be read. The review's "edit" opens the editor here.
+func ToolBlockLine(path, key string) int {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	lines := strings.SplitAfter(string(raw), "\n")
+	starts, tools := tomlHeaders(lines)
+	for si := len(starts) - 1; si >= 0; si-- {
+		if !tools[si] {
+			continue
+		}
+		end := len(lines)
+		if si+1 < len(starts) {
+			end = starts[si+1]
+		}
+		var one struct {
+			Tools ToolsConfig `toml:"tools"`
+		}
+		if toml.Unmarshal([]byte(strings.Join(lines[starts[si]:end], "")), &one) == nil &&
+			len(one.Tools.Command) == 1 && one.Tools.Command[0].Key() == key {
+			return starts[si] + 1
+		}
+	}
+	return 0
+}
