@@ -33,6 +33,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the old settings.** E.g. "Claude — resolve & complete (yolo, headless)"
   written while it was web-only never appeared in the TUI conflict menu;
   it is now offered the current template (`frontends = ["tui", "web"]`).
+- **Rewriting a tool block can no longer touch anything else in the file.**
+  gg's config writers read TOML strings properly (a hand-written block may
+  close its `'''` on a content line, indent it, or add a comment; headers may
+  be spaced or commented), refuse a write that would change anything outside
+  the block, rewrite the effective block when a key appears twice, and hold
+  the config's file lock — the TUI and the web page it hosts no longer
+  overwrite each other's answer. The same applies to the review-command
+  migration.
 
 ## Switch repositories from the TUI-hosted web page
 

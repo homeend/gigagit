@@ -3590,6 +3590,18 @@ Spec `docs/superpowers/specs/2026-09-30-tool-template-versions-design.md`.
   leave the screen; the fingerprint line is hard-split by cells). Take new /
   Keep mine settle the status immediately (`settleToolStatus`,
   `rebuildNotices`) — the re-read runs `--version` and lands late.
+- **Writers.** `ReplaceToolCommand(If)` / `ReplaceToolCommandBodies` find
+  headers with `tomlHeaders`/`scanTOMLLine` (multi-line strings, quoted
+  values, comments), target the LAST same-key block (the effective one),
+  and refuse a result whose decoded document differs outside the block
+  (`sameOutsideToolBlock` / `sameExceptToolCommandBodies`). Every tool
+  writer holds `filelock` on `<config>.lock`; `ApplyToolUpdate`'s
+  "same block?" check (`ReplaceToolCommandIf`, fingerprint) runs under it.
+  `ToolBlockLine` positions the review's editor.
+- **Installers** (wizard, `Ensure*`) use `domain.InstallTemplates` →
+  `exttool.PickBest` (the variant for the agent's version; out of range →
+  newest). The wizard is on the UI thread: `probe=false`, cache only — the
+  background status read warms the cache for every detected ranged tool.
 - **Web.** `GET /api/exttools` → `template_offers`; `POST
   /api/exttools/update|keep {offer_id}` resolve the id against a FRESH
   status read (the wire never names a path or a command). Seam:
