@@ -2,12 +2,14 @@ package web
 
 import (
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/fsprobe"
 	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/worktree"
 )
 
 // The switch-repo picker's second lane. GET /api/repos answers from the
@@ -26,12 +28,18 @@ const (
 	probeMemo            = 5 * time.Second
 )
 
-// repoProbe is one entry's in-flight or finished verdict.
-type repoProbe struct {
-	done   chan struct{}
+// repoVerdict is what one probe of a checkout's disk reads.
+type repoVerdict struct {
 	branch string
 	slow   bool
-	at     time.Time // completion time; zero while running
+	common string // git common dir ("" unknown) — groups a checkout with its worktrees
+}
+
+// repoProbe is one entry's in-flight or finished verdict.
+type repoProbe struct {
+	done chan struct{}
+	repoVerdict
+	at time.Time // completion time; zero while running
 }
 
 // repoProbes is the per-path singleflight + memo behind /api/repos/details.
@@ -42,7 +50,7 @@ type repoProbes struct {
 
 // get returns the probe for path, starting one when none is running or the
 // memoised verdict is older than probeMemo.
-func (rp *repoProbes) get(path string, run func(string) (string, bool), now time.Time) *repoProbe {
+func (rp *repoProbes) get(path string, run func(string) repoVerdict, now time.Time) *repoProbe {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
 	if rp.m == nil {
@@ -61,17 +69,21 @@ func (rp *repoProbes) get(path string, run func(string) (string, bool), now time
 	p := &repoProbe{done: make(chan struct{})}
 	rp.m[path] = p
 	go func() {
-		p.branch, p.slow = run(path)
+		p.repoVerdict = run(path)
 		p.at = time.Now()
 		close(p.done)
 	}()
 	return p
 }
 
-// probeRepoDisk is the production probe: HEAD from file stats, then the
-// foreign-mount classification. Both are fail-open.
-func probeRepoDisk(path string) (branch string, slow bool) {
-	return domain.RepoHead(path), fsprobe.Foreign(path)
+// probeRepoDisk is the production probe: HEAD and the git common dir from
+// file reads, then the foreign-mount classification. All are fail-open.
+func probeRepoDisk(path string) repoVerdict {
+	return repoVerdict{
+		branch: domain.RepoHead(path),
+		slow:   fsprobe.Foreign(path),
+		common: worktree.CommonDirAt(runtime.GOOS, path),
+	}
 }
 
 func (s *Server) handleRepoDetails(w http.ResponseWriter, r *http.Request) {
@@ -95,6 +107,7 @@ func (s *Server) handleRepoDetails(w http.ResponseWriter, r *http.Request) {
 	stop := time.AfterFunc(deadline, func() { close(expired) })
 	defer stop.Stop()
 	rows := make([]map[string]any, 0, len(entries))
+	common := make(map[string]string, len(entries))
 	for i, e := range entries {
 		p := probes[i]
 		select {
@@ -107,9 +120,28 @@ func (s *Server) handleRepoDetails(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-p.done:
 			row["branch"], row["slow"], row["pending"] = p.branch, p.slow, false
+			if p.common != "" {
+				common[e.Path] = p.common
+			}
 		default:
 		}
 		rows = append(rows, row)
 	}
+	// The project grouping needs every entry's common dir at once (one entry
+	// can bridge two others), so it is computed after the walk, over what has
+	// landed; a pending entry groups by its remote name until it lands.
+	proj := repos.Projects(entries, common)
+	for i, e := range entries {
+		rows[i]["project"] = projectOrNil(proj, e.Path)
+	}
 	writeJSON(w, map[string]any{"repos": rows})
+}
+
+// projectOrNil is path's project for the wire: null for an entry that belongs
+// to none (the switcher leaves it ungrouped).
+func projectOrNil(proj map[string]repos.Project, path string) any {
+	if pr, ok := proj[path]; ok {
+		return pr
+	}
+	return nil
 }

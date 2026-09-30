@@ -27,6 +27,7 @@ import { openAllNotes } from "./allnotes.js";
 import { openLinkCompareDialog } from "./linkcompare.js";
 import { locateCurrentBranch } from "./sidebar.js";
 import { featureDisabled } from "./preflight.js";
+import { saveUI } from "./uistate.js";
 
 // ---- command palette + global ☰ menu (wave 3) ----------------------------
 // The palette is a layer with an input INSIDE it: onKey consumes nav keys
@@ -36,7 +37,7 @@ import { featureDisabled } from "./preflight.js";
 // go through closePalette() — the input.blur() is load-bearing: a focused
 // input after close would trap all global keys in the form-field guard.
 
-let pal = null; // {mode: "cmd"|"repo", fromCmd, rows, filtered, sel}
+let pal = null; // {mode: "cmd"|"repo", fromCmd, rows, filtered, sel, grouped}
 
 
 function paletteCommands() {
@@ -83,7 +84,7 @@ function paletteCommands() {
 
 function openPalette(mode, fromCmd) {
   const already = !!pal;
-  pal = { mode, fromCmd: !!fromCmd, rows: [], filtered: [], sel: 0, gen: ++palGen };
+  pal = { mode, fromCmd: !!fromCmd, rows: [], filtered: [], sel: 0, gen: ++palGen, grouped: !!(state.ui && state.ui.repo_grouped) };
   if (!already) pushLayer("palette", $("palette"), { onKey: paletteKey });
   $("palette-input").value = "";
   $("palette-input").placeholder = mode === "repo" ? "type a repo, branch or path…" : "type a command…";
@@ -94,6 +95,7 @@ function openPalette(mode, fromCmd) {
   $("palette-box").style.maxWidth = "";
   $("palette-list").style.removeProperty("--repo-cols");
   $("palette-list").classList.remove("repo");
+  renderRepoHint();
   if (mode === "cmd") {
     pal.rows = paletteCommands();
     filterPalette();
@@ -109,7 +111,7 @@ function openPalette(mode, fromCmd) {
         // the list — picking it re-rooted onto the repo already open.
         pal.rows = (j.repos || [])
           .filter((r) => !r.current)
-          .map((r) => ({ label: r.name, path: r.path, branch: "", slow: false, pending: true, age: ageString(r.last_opened) }));
+          .map((r) => ({ label: r.name, path: r.path, branch: "", slow: false, pending: true, age: ageString(r.last_opened), project: r.project || null }));
         layoutRepoTable();
         filterPalette();
         pollRepoDetails(pal.gen, 0);
@@ -161,7 +163,9 @@ function layoutRepoTable() {
   const w = (s) => runes(s || "").length;
   const cols = {
     branch: Math.min(BRANCH_MAX, Math.max(w("…"), ...rows.map((r) => w(r.branch)))),
-    name: Math.max(1, ...rows.map((r) => w(r.label))),
+    // A group head shows its project's name instead: sizing for both keeps
+    // the columns still across the ctrl+g toggle.
+    name: Math.max(1, ...rows.map((r) => Math.max(w(r.label), w(r.project && r.project.label)))),
     slow: w(SLOW_FS),
     path: Math.max(1, ...rows.map((r) => w(r.path))),
     age: Math.max(1, ...rows.map((r) => w(`(${r.age})`))),
@@ -198,12 +202,70 @@ function layoutRepoTable() {
 }
 
 
-// elideRepoRow cuts one row's cells to the current column widths.
+// elideRepoRow cuts one row's cells to the current column widths. The name
+// cell depends on the row's neighbours when grouped, so filterPalette cuts it.
 function elideRepoRow(r) {
   const cols = pal.cols;
   r.pathText = elidePath(r.path, cols.path);
   r.branchText = elidePath(r.branch, cols.branch);
-  r.nameText = elidePath(r.label, cols.name);
+}
+
+
+// ---- repo mode: grouped by project (ctrl+g) -------------------------------
+// The TUI switcher's ctrl+g. The SERVER says which project each row belongs
+// to (repos.Projects: a checkout with its linked worktrees through their git
+// common dir, clones through their remote name) — /api/repos from the remote
+// names at once, /api/repos/details once the common dirs are read. Here the
+// filtered rows are only reordered (repos.Group) and named: a group's head
+// shows the project, the rows under it a blank name, and a project left with
+// one row is no group and keeps its directory name. The choice is remembered
+// in the server-side UI state (repo_grouped).
+
+// groupRepoRows pulls each project's later rows up under its first (MRU) one.
+function groupRepoRows(rows) {
+  const out = [];
+  const seen = new Set();
+  rows.forEach((r, i) => {
+    const key = r.project && r.project.key;
+    if (!key) { out.push(r); return; }
+    if (seen.has(key)) return; // already pulled up under its head
+    seen.add(key);
+    out.push(r);
+    for (const later of rows.slice(i + 1)) if (later.project && later.project.key === key) out.push(later);
+  });
+  return out;
+}
+
+
+// repoRowName is the name cell of row i in the displayed rows.
+function repoRowName(rows, i) {
+  const r = rows[i];
+  if (!pal.grouped || !r.project) return r.label;
+  const same = (j) => j >= 0 && j < rows.length && !!rows[j].project && rows[j].project.key === r.project.key;
+  if (same(i - 1)) return "";
+  if (same(i + 1)) return r.project.label;
+  return r.label;
+}
+
+
+function toggleRepoGrouped() {
+  pal.grouped = !pal.grouped;
+  saveUI({ repo_grouped: pal.grouped });
+  renderRepoHint();
+  refilterKeepingCursor();
+}
+
+
+// renderRepoHint shows the repo table's key line (repo mode only): the
+// grouping toggle, clickable, and whether the list is grouped now.
+function renderRepoHint() {
+  const hint = $("palette-hint");
+  const on = !!pal && pal.mode === "repo";
+  hint.classList.toggle("hidden", !on);
+  if (!on) return;
+  hint.innerHTML = `<button type="button" data-act="group">ctrl+g ${pal.grouped ? "flat list" : "group by project"}</button>` +
+    (pal.grouped ? `<span class="on">grouped</span>` : "") +
+    `<span>enter switch</span><span>esc back</span>`;
 }
 
 
@@ -224,6 +286,7 @@ function pollRepoDetails(gen, n) {
         const d = byPath.get(r.path);
         if (!d) { r.pending = false; continue; }
         r.pending = !!d.pending;
+        r.project = d.project || null; // the common dirs can regroup the list
         if (!r.pending) { r.branch = d.branch || ""; r.slow = !!d.slow; }
         pending ||= r.pending;
       }
@@ -256,7 +319,7 @@ function repoRowHTML(r, i) {
   const title = r.pathText !== r.path ? ` title="${esc(r.path)}"` : "";
   return `<li class="repo${sel}" data-i="${i}">` +
     `<span class="rbranch${r.pending ? " dim" : ""}">${esc(branch)}</span>` +
-    `<span class="rname">${esc(r.nameText || r.label)}</span>` +
+    `<span class="rname">${esc(r.nameText ?? r.label)}</span>` +
     `<span class="rslow">${r.slow ? SLOW_FS : ""}</span>` +
     `<span class="rpath"${title}>${esc(r.pathText || r.path)}</span>` +
     `<span class="rage">(${esc(r.age)})</span></li>`;
@@ -277,6 +340,15 @@ function filterPalette() {
     (r) => !q || r.label.toLowerCase().includes(q) || (r.detail || "").toLowerCase().includes(q) ||
       (r.path || "").toLowerCase().includes(q) || (r.branch || "").toLowerCase().includes(q)
   );
+  if (pal.mode === "repo") {
+    // Filter first, then group what is left (the TUI's order).
+    if (pal.grouped) pal.filtered = groupRepoRows(pal.filtered);
+    const nameW = pal.cols ? pal.cols.name : 0;
+    pal.filtered.forEach((r, i) => {
+      const name = repoRowName(pal.filtered, i);
+      r.nameText = nameW ? elidePath(name, nameW) : name;
+    });
+  }
   pal.sel = 0;
   renderPalette(pal.filtered.length ? pal.filtered : [{ label: pal.mode === "repo" ? "no other repos" : "no match", empty: true }]);
 }
@@ -339,6 +411,11 @@ function paletteKey(e) {
     e.preventDefault();
     return true;
   }
+  if (pal.mode === "repo" && e.ctrlKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "g") {
+    toggleRepoGrouped(); // preventDefault also keeps the browser's find-next off
+    e.preventDefault();
+    return true;
+  }
   return false; // typing lands in the focused input; its input event re-filters
 }
 
@@ -348,6 +425,12 @@ $("palette-input").addEventListener("input", filterPalette);
 $("palette").addEventListener("click", closePalette); // backdrop
 
 $("palette-box").addEventListener("click", (e) => e.stopPropagation());
+
+$("palette-hint").addEventListener("click", (e) => {
+  if (!pal || !e.target.closest('button[data-act="group"]')) return;
+  toggleRepoGrouped();
+  $("palette-input").focus(); // typing keeps filtering after a click
+});
 
 $("palette-list").addEventListener("click", (e) => {
   const li = e.target.closest("li[data-i]");

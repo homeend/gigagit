@@ -50,6 +50,8 @@ type uiStateWire struct {
 	// CommitTall is the commit message box's size: false = three lines (the
 	// everyday size), true = the tall box the ⤢ control opens.
 	CommitTall bool `json:"commit_tall"`
+	// RepoGrouped is the switch-repo table's ctrl+g grouping by project.
+	RepoGrouped bool `json:"repo_grouped"`
 	// TextMode is the long-line display mode shared by the diff pane, the
 	// history overlay and blame: "wrap" (the default), "scroll" or "cutoff".
 	TextMode string `json:"text_mode"`
@@ -84,6 +86,7 @@ func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 		SymCompare:    st.SymCompare,
 		StackedDiff:   st.StackedDiff,
 		CommitTall:    st.CommitTall,
+		RepoGrouped:   st.RepoGrouped,
 		SidebarWidth:  st.SidebarWidth,
 		FilesWidth:    st.FilesWidth,
 		Graph:         st.Graph,
@@ -111,6 +114,7 @@ func (s *Server) handleUIStateSet(w http.ResponseWriter, r *http.Request) {
 		SymCompare:    in.SymCompare,
 		StackedDiff:   in.StackedDiff,
 		CommitTall:    in.CommitTall,
+		RepoGrouped:   in.RepoGrouped,
 		SidebarWidth:  clampPaneWidth(in.SidebarWidth),
 		FilesWidth:    clampPaneWidth(in.FilesWidth),
 		Graph:         allowedGraph(in.Graph),

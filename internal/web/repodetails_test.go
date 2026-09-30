@@ -13,10 +13,11 @@ import (
 
 type repoDetailsResp struct {
 	Repos []struct {
-		Path    string `json:"path"`
-		Branch  string `json:"branch"`
-		Slow    bool   `json:"slow"`
-		Pending bool   `json:"pending"`
+		Path    string         `json:"path"`
+		Branch  string         `json:"branch"`
+		Slow    bool           `json:"slow"`
+		Pending bool           `json:"pending"`
+		Project *repos.Project `json:"project"`
 	} `json:"repos"`
 }
 
@@ -105,10 +106,10 @@ func TestRepoDetailsPendingThenJoins(t *testing.T) {
 	}
 	release := make(chan struct{})
 	var starts atomic.Int32
-	srv.probeRepo = func(path string) (string, bool) {
+	srv.probeRepo = func(path string) repoVerdict {
 		starts.Add(1)
 		<-release
-		return "slow-branch", true
+		return repoVerdict{branch: "slow-branch", slow: true}
 	}
 	srv.probeDeadline = 50 * time.Millisecond
 	ts := serve(t, srv)
@@ -141,5 +142,60 @@ func TestRepoDetailsPendingThenJoins(t *testing.T) {
 	}
 	if n := starts.Load(); n != 1 {
 		t.Fatalf("probe started %d times, want 1 (re-polls must join)", n)
+	}
+}
+
+// The switcher groups a checkout with its linked worktrees: the details carry
+// each entry's project, computed from the common dirs the probes read — a
+// repository with no remote groups too, named after its main checkout. An
+// entry the list alone can already place (a remote name) carries its project
+// in /api/repos, before any probe.
+func TestRepoDetailsCarryProjects(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 1)
+	wt := addWorktree(t, dir, "side")
+	other := newRepoDir(t, 1)
+	cloneA, cloneB := newRepoDir(t, 1), newRepoDir(t, 1)
+	srv := New(domain.Open(other))
+	srv.reposPath = filepath.Join(t.TempDir(), "repos.toml")
+	now := time.Now()
+	for i, e := range []struct{ path, remote string }{
+		{dir, repos.NoRemote}, {wt, ""}, {other, repos.NoRemote}, {cloneA, "proj"}, {cloneB, "proj"},
+	} {
+		if err := repos.Touch(srv.reposPath, e.path, e.remote, now.Add(-time.Duration(i)*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ts := serve(t, srv)
+
+	var list struct {
+		Repos []struct {
+			Path    string         `json:"path"`
+			Project *repos.Project `json:"project"`
+		} `json:"repos"`
+	}
+	getJSON(t, ts, "/api/repos", &list)
+	byPath := map[string]*repos.Project{}
+	for _, r := range list.Repos {
+		byPath[r.Path] = r.Project
+	}
+	if a, b := byPath[cloneA], byPath[cloneB]; a == nil || b == nil || a.Key != b.Key || a.Label != "proj" {
+		t.Errorf("the list must already group the clones by remote: %+v %+v", a, b)
+	}
+
+	var out repoDetailsResp
+	if code := getJSON(t, ts, "/api/repos/details", &out); code != http.StatusOK {
+		t.Fatalf("code = %d", code)
+	}
+	proj := map[string]*repos.Project{}
+	for _, r := range out.Repos {
+		proj[r.Path] = r.Project
+	}
+	a, b := proj[dir], proj[wt]
+	if a == nil || b == nil || a.Key != b.Key || a.Label != filepath.Base(dir) {
+		t.Fatalf("checkout + worktree = %+v / %+v, want one project named %s", a, b, filepath.Base(dir))
+	}
+	if o := proj[other]; o == nil || o.Key == a.Key {
+		t.Errorf("an unrelated repo must be a project of its own, got %+v", o)
 	}
 }
