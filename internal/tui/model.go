@@ -101,8 +101,11 @@ type Model struct {
 	// toolStatuses is the last tool-template status read (Settings → External
 	// tools suffixes, the review popup, the tool-template notice).
 	toolStatuses []domain.ToolTemplateStatus
-	toolNoted    map[string]bool // tool-config blocks already failure-noted this session (Key())
-	gitCommonDir string
+	// declinedToolUpdates is the "Keep mine" set, read once per status read
+	// (never per row per frame) and updated in place on a Keep mine.
+	declinedToolUpdates map[string]bool
+	toolNoted           map[string]bool // tool-config blocks already failure-noted this session (Key())
+	gitCommonDir        string
 
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
 	statePath           string // repo-registry location; "" disables recording (tests)

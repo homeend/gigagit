@@ -10,6 +10,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/promptstate"
 )
 
 // toolUpdatePopup reviews one tool-template offer: the reason and the new
@@ -80,6 +81,13 @@ func (p *toolUpdatePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+			// Copy-on-write: the map is shared with earlier Model copies.
+			declined := make(map[string]bool, len(m.declinedToolUpdates)+1)
+			for k := range m.declinedToolUpdates {
+				declined[k] = true
+			}
+			declined[promptstate.ToolUpdateID(p.st.OfferKey())] = true
+			m.declinedToolUpdates = declined
 			m.statusMsg = i18n.T("external tools: kept your %s — not offered again until the template changes", p.st.Block.Name)
 			return m.rebuildNotices(), m.refreshToolStatusesCmd()
 		case "e":

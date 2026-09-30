@@ -127,6 +127,10 @@ func (m Model) applyToolStatuses(msg toolStatusesMsg) Model {
 		return m // stale: a repo switch superseded this read
 	}
 	m.toolStatuses = msg.sts
+	m.declinedToolUpdates = nil
+	if m.promptStore != nil {
+		m.declinedToolUpdates = m.promptStore.DeclinedToolUpdates()
+	}
 	if p := layerOf[*settingsPopup](m); p != nil && p.toolsView {
 		m.attachToolStatuses(p)
 	}
@@ -158,7 +162,7 @@ func (m Model) attachToolStatuses(p *settingsPopup) {
 
 // toolOfferDeclined reports an offer the user answered "Keep mine".
 func (m Model) toolOfferDeclined(st domain.ToolTemplateStatus) bool {
-	return m.promptStore != nil && m.promptStore.DeclinedToolUpdates()[promptstate.ToolUpdateID(st.OfferKey())]
+	return m.declinedToolUpdates[promptstate.ToolUpdateID(st.OfferKey())]
 }
 
 // toolDetailHeights sizes the wizard's detail block ONCE for the whole row

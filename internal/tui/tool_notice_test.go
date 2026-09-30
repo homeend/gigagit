@@ -33,9 +33,11 @@ func TestToolTemplateNoticeCountsOffers(t *testing.T) {
 	if !m.noticesUnread {
 		t.Fatal("a new tool-template notice must mark notices unread")
 	}
+	// Declined elsewhere (e.g. the web page): the next status read sees it.
 	m.promptStore.DeclineToolUpdate(a.OfferKey())
 	m.promptStore.DeclineToolUpdate(b.OfferKey())
-	m = m.rebuildNotices()
+	nm, _ = m.Update(toolStatusesMsg{gen: m.noticeGen, sts: []domain.ToolTemplateStatus{a, b}})
+	m = nm.(Model)
 	if findNotice(m, noticeToolTemplateUpdate) != nil {
 		t.Fatal("declined offers must not be counted")
 	}
@@ -86,5 +88,42 @@ func TestTakeNewMakesHeadlessCompleteVisibleInTUI(t *testing.T) {
 	m = sendKey(m, keyRunes("t"))
 	if len(m.toolCommands("conflict_complete")) != 1 {
 		t.Fatal("after take new the TUI must offer the headless complete tool")
+	}
+}
+
+// countingStore counts reads of the declined-offers set (a disk read each).
+type countingStore struct {
+	*promptstate.FileStore
+	reads *int
+}
+
+func (c countingStore) DeclinedToolUpdates() map[string]bool {
+	*c.reads++
+	return c.FileStore.DeclinedToolUpdates()
+}
+
+// The declined set is read once per status read — never per row per frame.
+func TestDeclinedOffersReadOncePerStatusRead(t *testing.T) {
+	t.Parallel()
+	m := newTestModel(t)
+	reads := 0
+	m.promptStore = countingStore{promptstate.NewFileStore(filepath.Join(t.TempDir(), "prompts.toml")), &reads}
+	a, b := sampleToolStatus(t), sampleToolStatus(t)
+	b.Block.Name, b.New.Name = "Other", "Other"
+	nm, _ := m.Update(toolStatusesMsg{gen: m.noticeGen, sts: []domain.ToolTemplateStatus{a, b}})
+	m = nm.(Model)
+	before := reads
+	for i := 0; i < 5; i++ {
+		m = m.rebuildNotices()
+		_ = m.toolOfferDeclined(a)
+	}
+	if reads != before {
+		t.Fatalf("rebuilds/renders read the store %d more time(s)", reads-before)
+	}
+	// Keep mine still takes effect at once, without a re-read.
+	m = m.pushLayer(&toolUpdatePopup{st: a})
+	m = sendKey(m, keyRunes("k"))
+	if !m.toolOfferDeclined(a) || m.toolOfferDeclined(b) {
+		t.Fatal("keep mine must mark exactly that offer declined")
 	}
 }
