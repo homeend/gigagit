@@ -220,6 +220,14 @@ func (d *openFile) landPendingLine(rows int) (notice string) {
 	}
 	if p.extraRows != nil {
 		p.ensureCursorVisible(rows) // a note box above may have pushed the line out
+		for _, nt := range d.notes { // landing on a note (an overview's anchor): bring its box in, as } does
+			if nt.start == line {
+				for p.sel < p.cur && p.rowsSpan(p.sel, nt.end) > rows {
+					p.sel++
+				}
+				break
+			}
+		}
 	}
 	return notice
 }

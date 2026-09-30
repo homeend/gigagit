@@ -255,3 +255,28 @@ func TestViewerShowsTheStatusMessageOnItsHintLine(t *testing.T) {
 		t.Fatalf("the notice outlived the next key:\n%s", v)
 	}
 }
+
+// A note anchor lands on the note's first line AND brings its box in, as far
+// as the line stays on screen — a note under a long range must not open with
+// its box below the window.
+func TestNoteAnchorBringsTheBoxIntoView(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	m.height = 20
+	nm, cmd := m.applySteer(noteAddCmd("box-n", "a.txt", 5, 30, "a long range"))
+	m = pumpAll(t, nm, cmd)
+	id := awaitNote(t, m, "box-n").Notes[0].ID
+	d := newOverviewDoc("Tour", "[n](note:"+id+")")
+	m = m.registerDoc(d)
+	m, cmd = m.bringToFront(d)
+	m = pumpAll(t, m, cmd)
+	m = openNth(t, m, d, 0)
+	f := topDoc(m)
+	rows, _ := m.viewerGeom()
+	if f.p.cur != 4 || f.p.cur < f.p.sel || f.p.cur > f.p.lastVisible(rows) {
+		t.Fatalf("cur=%d top=%d, want line 5 on screen", f.p.cur, f.p.sel)
+	}
+	if f.p.sel != 4 {
+		t.Fatalf("top=%d, want the note's first line at the top so its box comes as far in as it can", f.p.sel)
+	}
+}
