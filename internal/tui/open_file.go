@@ -75,6 +75,10 @@ type openFile struct {
 	// backgrounded is set once the file has been sent to the background
 	// (ctrl+]): from then on esc sends it back there and only X closes it.
 	backgrounded bool
+	// notes are the temporary remarks an agent left on this file
+	// (open_file_notes.go), ordered by start line then age. They live and
+	// die with the document: nothing stores them.
+	notes []*fileNote
 }
 
 // keepPlace makes the next fill — a reload of a file the user is reading —
