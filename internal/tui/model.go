@@ -4173,6 +4173,14 @@ func (m Model) focusCommitsPanel() Model {
 	if m.stashView != nil {
 		m = m.closeStashView()
 	}
+	// A docked agent console covers that column too, but it is a peer of the
+	// feed, not a view of it: focusing panelCommits would hand the keyboard to
+	// the agent window, which only a session row's enter may do. Focus stays
+	// put; the caller has already moved the cursor, so the feed shows the
+	// landed-on row once the console closes.
+	if m.console != nil {
+		return m
+	}
 	m.focus = panelCommits
 	if m.fullMaxed && !m.fullscreenYielded() {
 		m.fullMax = panelCommits
