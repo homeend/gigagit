@@ -34,7 +34,9 @@ func (m Model) stackRow(v *diffView, dr dRow, w int, onCursor bool) string {
 			if onCursor {
 				style = s.diffCursorRow
 			}
-			return colouredLine("  ", row.text, row.cls, nil, style, nil, w)
+			// Laid out at the reading column (stackProseWidth), which the
+			// lead centres in the row.
+			return colouredLine(stackProseLead(w, m.stackProseWidth()), row.text, row.cls, nil, style, nil, w)
 		}
 		return ""
 	case lineImage: // a row of an image file's thumbnail pair

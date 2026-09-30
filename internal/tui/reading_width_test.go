@@ -131,3 +131,25 @@ func TestViewerProseUsesReadingColumn(t *testing.T) {
 		t.Fatalf("code must keep the full frame, spans %d..%d", lo, hi)
 	}
 }
+
+// The stacked diff's review Overview section wraps at the reading width and
+// reads centred, like the overview popup (it used to run the whole screen).
+func TestStackOverviewUsesReadingColumn(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.width, m.height = 240, 40
+	if got := m.stackProseWidth(); got != 120 {
+		t.Fatalf("stackProseWidth at 240 = %d, want 120", got)
+	}
+	lead := stackProseLead(236, 120)
+	if n := len(lead); n < 50 {
+		t.Fatalf("lead %d columns: the column is not centred", n)
+	}
+	m.width = 90
+	if got := m.stackProseWidth(); got != 86 {
+		t.Fatalf("a narrow screen keeps its width: got %d, want 86", got)
+	}
+	if lead := stackProseLead(86, 86); lead != "  " {
+		t.Fatalf("no margin when the column fills the row: %q", lead)
+	}
+}
