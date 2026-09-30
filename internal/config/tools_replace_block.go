@@ -279,3 +279,35 @@ func ToolBlockLine(path, key string) int {
 func lockToolConfig(path string) (func(), error) {
 	return filelock.Acquire(path + ".lock")
 }
+
+// sameExceptToolCommandBodies is ReplaceToolCommandBodies' safety net:
+// before and after decode to the same document except the command values
+// of tool blocks.
+func sameExceptToolCommandBodies(before, after []byte) error {
+	var a, b map[string]any
+	if err := toml.Unmarshal(before, &a); err != nil {
+		return fmt.Errorf("config: refusing to rewrite: %w", err)
+	}
+	if err := toml.Unmarshal(after, &b); err != nil {
+		return fmt.Errorf("config: refusing to rewrite: the result would not parse: %w", err)
+	}
+	ca, cb := toolCommandList(a), toolCommandList(b)
+	if len(ca) != len(cb) {
+		return fmt.Errorf("config: refusing to rewrite: the tool block count would change")
+	}
+	for i := range ca {
+		ea, _ := ca[i].(map[string]any)
+		eb, _ := cb[i].(map[string]any)
+		delete(ea, "command")
+		delete(eb, "command")
+		if !reflect.DeepEqual(ea, eb) {
+			return fmt.Errorf("config: refusing to rewrite: a tool block would change beyond its command")
+		}
+	}
+	dropToolCommands(a)
+	dropToolCommands(b)
+	if !reflect.DeepEqual(a, b) {
+		return fmt.Errorf("config: refusing to rewrite: settings outside the tool blocks would change")
+	}
+	return nil
+}

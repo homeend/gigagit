@@ -248,26 +248,35 @@ func ReplaceToolCommandBodies(path string, replace func(body string) (string, bo
 	lines := strings.SplitAfter(string(raw), "\n")
 	var out strings.Builder
 	inTool, n := false, 0
+	state := "" // multi-line string state (scanTOMLLine): a "[" line inside one is body, not a header
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		out.WriteString(line)
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "[") {
-			inTool = trimmed == "[[tools.command]]"
+		if state == "" && strings.HasPrefix(trimmed, "[") {
+			name := strings.ReplaceAll(strings.TrimSpace(stripTOMLComment(trimmed)), " ", "")
+			inTool = name == "[[tools.command]]"
+			state = scanTOMLLine(line, state)
 			continue
 		}
-		if !inTool || !isCommandLiteralOpen(trimmed) {
+		if state != "" || !inTool || !isCommandLiteralOpen(trimmed) {
+			state = scanTOMLLine(line, state)
 			continue
 		}
-		end := -1
+		// A gg-shaped literal: the body runs to the line where the literal
+		// really closes, and that line must be a bare '\'\'\''. Any other
+		// close (on a content line, indented, with a comment) is a
+		// hand-written block — not ours to touch.
+		end, st := -1, `'''`
 		for j := i + 1; j < len(lines); j++ {
-			if strings.TrimRight(lines[j], "\r\n") == "'''" {
+			if st = scanTOMLLine(lines[j], st); st == "" {
 				end = j
 				break
 			}
 		}
-		if end < 0 {
-			continue // an unterminated literal: not ours to touch
+		if end < 0 || strings.TrimRight(lines[end], "\r\n") != `'''` {
+			state = `'''`
+			continue // not ours: scanning resumes inside the literal
 		}
 		body := strings.TrimRight(strings.Join(lines[i+1:end], ""), "\r\n")
 		nl := "\n"
@@ -275,7 +284,7 @@ func ReplaceToolCommandBodies(path string, replace func(body string) (string, bo
 			nl = "\r\n"
 		}
 		if repl, ok := replace(body); ok {
-			if strings.Contains(repl, "'''") {
+			if strings.Contains(repl, `'''`) {
 				return 0, fmt.Errorf("config: a command must not contain ''' (TOML literal delimiter)")
 			}
 			out.WriteString(strings.ReplaceAll(strings.TrimRight(repl, "\n"), "\n", nl) + nl)
@@ -283,10 +292,14 @@ func ReplaceToolCommandBodies(path string, replace func(body string) (string, bo
 		} else {
 			out.WriteString(strings.Join(lines[i+1:end], ""))
 		}
-		i = end - 1 // the closing ''' line is written by the loop
+		out.WriteString(lines[end]) // the closing ''' — consumed here, never re-scanned as an opener
+		i = end
 	}
 	if n == 0 {
 		return 0, nil
+	}
+	if err := sameExceptToolCommandBodies(raw, []byte(out.String())); err != nil {
+		return 0, err
 	}
 	return n, atomicWriteFile(path, []byte(out.String()))
 }
