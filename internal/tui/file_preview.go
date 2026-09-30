@@ -580,7 +580,7 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	if !viewer && len(vis) > rowsCap {
 		right = strings.TrimSpace(right + "  " + fmt.Sprintf("%d/%d", start+1, len(vis)))
 	}
-	if viewer && m.statusMsg != "" {
+	if viewer && m.statusMsg != "" && !m.running && m.statusMsg != m.stickyMsg {
 		// The full-screen viewer covers the status bar: a message for the user
 		// (a missing anchor, a copy, a dismissed note) sits on the title line
 		// until the next key clears it.
@@ -631,11 +631,11 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		// all inside an 80-column viewer — and the everyday keys last.
 		hint = i18n.T("%d/%d  [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [↑/↓] scroll", start+1, len(vis))
 	}
-	if d := m.previewDoc(p); d != nil && d.from != nil {
-		hint = i18n.T("[bksp] back") + "  " + hint // the way back to the overview leads
-	}
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
+	}
+	if d := m.previewDoc(p); d != nil && d.from != nil {
+		hint = i18n.T("[bksp] back") + "  " + hint // the way back to the overview leads
 	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 	if margin > 0 {

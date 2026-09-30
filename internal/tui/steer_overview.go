@@ -127,8 +127,11 @@ func (m Model) steerOverviewAdd(c steer.Command) (Model, tea.Cmd) {
 		detail = "showing " + d.id()
 	}
 	status := m.statusMsg
-	m = m.registerDoc(d)
+	m, ev := m.registerDocEv(d)
 	m.statusMsg = status // an agent's overview never takes over the status line
+	if p := evictedPath(ev); p != "" {
+		detail += "; closed " + p + " (" + strconv.Itoa(maxOpenFiles) + " files open)"
+	}
 	return m, m.checkAnchorsCmd(d, c, detail)
 }
 

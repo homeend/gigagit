@@ -130,12 +130,18 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.mode = p.mode.next()
 		p.hscroll = 0
 	case "shift+left":
+		if fv.ov != nil {
+			break // laid out to fit: nothing to pan, and a pan would skew clicks
+		}
 		if p.mode == modeScroll && p.hscroll > 0 {
 			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
 				p.hscroll = 0
 			}
 		}
 	case "shift+right":
+		if fv.ov != nil {
+			break
+		}
 		if p.mode == modeScroll {
 			p.hscroll += m.hscrollStep()
 		}

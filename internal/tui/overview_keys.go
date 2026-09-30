@@ -139,6 +139,7 @@ func (m Model) anchorBack(d *openFile) (Model, tea.Cmd, bool) {
 			return nm, cmd, true
 		}
 	}
+	d.from = nil // the way back is gone for good: stop offering it
 	m.statusMsg = i18n.T("the overview was closed")
 	return m, nil, true
 }

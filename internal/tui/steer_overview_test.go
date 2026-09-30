@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -131,5 +132,22 @@ func TestOverviewListShowRm(t *testing.T) {
 	m, x := applyOverview(t, m, steer.Command{ID: "x-4", Cmd: "overview_rm", FileID: id, Wait: true})
 	if !x.OK || x.Detail != "closed "+id || topDoc(m) != nil || m.findOpenFile(id, "") != nil {
 		t.Fatalf("rm = %+v", x)
+	}
+}
+
+func TestOverviewAddNamesTheFileItPushedOut(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	var first *openFile
+	for i := 0; i < maxOpenFiles; i++ {
+		d := newOpenFile(fileSource{kind: srcWorktree}, "f"+strconv.Itoa(i)+".txt")
+		if i == 0 {
+			first = d
+		}
+		m = m.registerDoc(d)
+	}
+	_, r := applyOverview(t, m, overviewAddCmd("ev-1", "Tour", tourText))
+	if !r.OK || !strings.Contains(r.Detail, "; closed "+first.path+" (20 files open)") {
+		t.Fatalf("reply = %+v", r)
 	}
 }

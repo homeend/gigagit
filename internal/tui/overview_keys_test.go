@@ -280,3 +280,48 @@ func TestNoteAnchorBringsTheBoxIntoView(t *testing.T) {
 		t.Fatalf("top=%d, want the note's first line at the top so its box comes as far in as it can", f.p.sel)
 	}
 }
+
+func TestShiftArrowsDoNotSlideAnOverview(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyShiftRight})
+	if d.p.hscroll != 0 {
+		t.Fatalf("hscroll = %d: an overview is laid out to fit, nothing to pan", d.p.hscroll)
+	}
+}
+
+func TestBackspaceForgetsAClosedOverview(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 1)
+	f := topDoc(m)
+	m.openFiles.remove(m.currentWorktree, d)
+	m = fvKeys(t, m, keyMsg("backspace"))
+	if f.from != nil || strings.Contains(m.View(), "[bksp] back") {
+		t.Fatal("the dead way back is still offered")
+	}
+}
+
+func TestRangeLandingStillShowsTheWayBack(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 2)
+	m.statusMsg = ""
+	if v := m.View(); !strings.Contains(v, "[bksp] back") {
+		t.Fatalf("a landed range hides the way back:\n%s", v)
+	}
+}
+
+func TestViewerTitleSkipsTheRunningAndStickyMessages(t *testing.T) {
+	t.Parallel()
+	m, _, _ := tourModel(t)
+	m.statusMsg, m.running = "working on it", true
+	if strings.Contains(m.View(), "working on it") {
+		t.Fatal("an op's working message sits in the viewer title")
+	}
+	m.running = false
+	m.stickyMsg = "working on it"
+	if strings.Contains(m.View(), "working on it") {
+		t.Fatal("a sticky message sits in the viewer title")
+	}
+}
