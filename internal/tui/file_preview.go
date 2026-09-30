@@ -613,6 +613,7 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 			hint = p.extraHint + "  " + hint
 		}
 	}
+	hint = m.noteHint(m.previewDoc(p), hint)
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
 	}

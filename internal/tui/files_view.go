@@ -823,6 +823,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if nm, cmd, handled := m.previewSearchKey(msg); handled {
 		return nm, cmd
 	}
+	// …then the focused preview's notes: } { step, d / r act on the note
+	// under the cursor. It declines a key it has nothing to do with.
+	if nm, cmd, handled := m.previewNoteKey(msg); handled {
+		return nm, cmd
+	}
 	if m.inWorktreeFiles() {
 		return m.updateWorktreeFilesKey(msg)
 	}

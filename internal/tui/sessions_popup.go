@@ -182,6 +182,12 @@ func openFileRowText(d *openFile, shown bool) string {
 	if docLoaded(d) {
 		row += fmt.Sprintf("  :%d", d.p.cur+1)
 	}
+	switch n := len(d.notes); {
+	case n == 1:
+		row += "  " + i18n.T("1 note")
+	case n > 1:
+		row += "  " + i18n.T("%d notes", n)
+	}
 	switch d.src.kind {
 	case srcCommit:
 		return row + "  " + i18n.T("@ %s", shortHash(d.src.rev))

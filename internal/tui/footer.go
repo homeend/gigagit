@@ -274,7 +274,7 @@ func (m Model) footerOverride() (string, bool) {
 		case m.filesPreview != nil && !m.filesTreeFocused && m.filesPreview.p.lsel.on:
 			return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 		case m.filesPreview != nil && !m.filesTreeFocused:
-			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab/esc] back to list"), true
+			return m.noteHint(m.filesPreview, i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab/esc] back to list")), true
 		}
 		return i18n.T("files: [↑/↓] move  [enter/.] actions  [/] filter  [→] preview  [ctrl+]] background  [ctrl+t] full  [ctrl+w] view  [esc] close"), true
 	}
@@ -284,9 +284,9 @@ func (m Model) footerOverride() (string, bool) {
 				return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 			}
 			if m.filesPreview.backgrounded {
-				return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+w] view  [←/tab] back to tree  [esc] background  [X] close"), true
+				return m.noteHint(m.filesPreview, i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+w] view  [←/tab] back to tree  [esc] background  [X] close")), true
 			}
-			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab] back to tree  [esc] close preview"), true
+			return m.noteHint(m.filesPreview, i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab] back to tree  [esc] close preview")), true
 		}
 		// i shows the displayed commit's message — only when canShowFilesViewMessage
 		// holds (same gate as the handler, so the footer never advertises a dead i).

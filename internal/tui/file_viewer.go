@@ -77,6 +77,9 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if nm, cmd, ok := m.previewSearchKey(msg); ok {
 		return nm, cmd
 	}
+	if nm, cmd, ok := m.previewNoteKey(msg); ok {
+		return nm, cmd
+	}
 	p := fv.p
 	rows, _ := fv.geom(m)
 	scroll := func(delta int) { p.sel = p.clampTop(p.sel+delta, rows) }
