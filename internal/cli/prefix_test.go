@@ -3,6 +3,7 @@ package cli
 import (
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -122,5 +123,33 @@ func TestPrefixResolveSeqPeekAndBump(t *testing.T) {
 	}
 	if code, out, _ := runCLI(t, dir, "prefix", "resolve", id); code != 0 || out != "fix-002-\n" {
 		t.Fatalf("after bump = %d %q", code, out)
+	}
+}
+
+// Agents naming branches at once: each --bump prints the number it consumed.
+func TestPrefixResolveConcurrentBumpsPrintDistinctNames(t *testing.T) {
+	dir := prefixRepo(t)
+	const n = 8
+	names := make(chan string, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			code, out, errb := runCLI(t, dir, "prefix", "resolve", "--bump", "--template", "fix-<seq:fix:2>")
+			if code != 0 {
+				t.Errorf("bump = %d %q", code, errb)
+			}
+			names <- out
+		}()
+	}
+	wg.Wait()
+	close(names)
+	seen := map[string]bool{}
+	for s := range names {
+		if seen[s] {
+			t.Fatalf("%q printed twice", s)
+		}
+		seen[s] = true
 	}
 }

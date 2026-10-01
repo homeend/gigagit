@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -101,5 +102,37 @@ func TestBumpSeqEmptyDirErrors(t *testing.T) {
 	if _, statErr := os.Stat("gg"); statErr == nil {
 		_ = os.RemoveAll("gg")
 		t.Fatal("BumpSeq wrote a stray gg/ directory in the CWD")
+	}
+}
+
+// Several processes (agents) bump one counter at once: each must get its
+// own number.
+func TestBumpSeqConcurrentHandsOutDistinctNumbers(t *testing.T) {
+	gitDir := t.TempDir()
+	const n = 16
+	got := make(chan int, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			v, err := BumpSeq(gitDir, "issue")
+			if err != nil {
+				t.Error(err)
+			}
+			got <- v
+		}()
+	}
+	wg.Wait()
+	close(got)
+	seen := map[int]bool{}
+	for v := range got {
+		if seen[v] {
+			t.Fatalf("number %d handed out twice", v)
+		}
+		seen[v] = true
+	}
+	if PeekSeq(gitDir, "issue") != n+1 {
+		t.Fatalf("next = %d, want %d", PeekSeq(gitDir, "issue"), n+1)
 	}
 }

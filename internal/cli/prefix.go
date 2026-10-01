@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"strings"
+	"time"
 
 	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/config"
@@ -191,23 +192,38 @@ func prefixResolve(svc *domain.Service, args []string, stdout, stderr io.Writer)
 	if wts, werr := svc.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
 		mainTop = wts[0].Path // <repo> anchors on the main worktree, as everywhere
 	}
-	tctx := template.Ctx{
-		ParentBranch: *parent,
-		Repo:         worktree.RepoName(mainTop),
-		Now:          clock.Now,
-		Rand:         rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
+	// One now and one seed: with --bump the template resolves twice, and both
+	// passes must agree on <date> and <random-*> (the popup pattern).
+	now, seed := clock.Now(), rand.Uint64()
+	tctx := func(seqs map[string]int) template.Ctx {
+		return template.Ctx{
+			ParentBranch: *parent,
+			Repo:         worktree.RepoName(mainTop),
+			Seqs:         seqs,
+			Now:          func() time.Time { return now },
+			Rand:         rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15)),
+		}
 	}
-	name, seqs, err := worktree.ResolvePrefix(value, inputs, tctx, gitCommonDir)
+	name, seqs, err := worktree.ResolvePrefix(value, inputs, tctx(nil), gitCommonDir)
 	if err != nil {
 		fmt.Fprintln(stderr, "prefix resolve:", err)
 		return 2
 	}
-	if *bump {
+	if *bump && len(seqs) > 0 {
+		// Print the numbers this run CONSUMED, not the peeked ones: another
+		// agent may bump between the peek and here.
+		taken := map[string]int{}
 		for _, n := range seqs {
-			if _, err := config.BumpSeq(gitCommonDir, n); err != nil {
+			v, err := config.BumpSeq(gitCommonDir, n)
+			if err != nil {
 				fmt.Fprintln(stderr, "prefix resolve: could not advance <seq:"+n+">:", err)
 				return 1
 			}
+			taken[n] = v
+		}
+		if name, _, err = worktree.ResolvePrefix(value, inputs, tctx(taken), gitCommonDir); err != nil {
+			fmt.Fprintln(stderr, "prefix resolve:", err)
+			return 1
 		}
 	}
 	fmt.Fprintln(stdout, name)

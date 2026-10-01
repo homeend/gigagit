@@ -13,8 +13,9 @@ steps = [
 cmd   = ["prefix", "add", "me/MTHR-<user:issue-number>-<seq:mthr:2>_<date:yyyy-MM-dd_HH-mm>"]
 exit  = 0
 
+# The stored prefix, by the id gg prefix ls prints.
 [[run]]
-cmd             = ["prefix", "resolve", "--template", "me/MTHR-<user:issue-number>-<seq:mthr:2>_<date:yyyy-MM-dd_HH-mm>", "--set", "issue-number=1234"]
+cmd             = ["prefix", "resolve", "me-mthr-user-issue-number-seq-mthr-2-date-yyyy-mm-dd-hh-mm", "--set", "issue-number=1234"]
 exit            = 0
 stdout_contains = ["me/MTHR-1234-01_2026-01-02_00-00"]
 

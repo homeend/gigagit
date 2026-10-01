@@ -512,8 +512,8 @@ func (p *worktreePopup) consumedSeqNames() []string {
 	return appendDistinctAll(base, p.prefixSeqNames)
 }
 
-// resolvePrefix resolves a prefix value against this popup's fixed ctx, peeking
-// any prefix-only <seq> counters into the ctx snapshot so the result is stable.
+// resolvePrefix resolves a prefix value against this popup's fixed ctx;
+// worktree.ResolvePrefix peeks any prefix-only <seq> counter from disk.
 func (p *worktreePopup) resolvePrefix() func(string, map[string]string) (string, []string, error) {
 	return func(value string, inputs map[string]string) (string, []string, error) {
 		return worktree.ResolvePrefix(value, inputs, p.tctx(), p.gitCommonDir)
