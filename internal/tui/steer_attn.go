@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
@@ -208,37 +209,61 @@ func (m Model) steerReload(c steer.Command) (Model, tea.Cmd) {
 	if len(names) == 0 {
 		names = []string{"notes"}
 	}
+	// Dir set: an agent's gg verb changed that worktree — status there is
+	// not this TUI's to re-read (a git status of a huge tree for nothing).
+	elsewhere := c.Dir != "" && !domain.SameCheckout(c.Dir, m.currentWorktree)
 	var srcs []sourceKey
+	var changed []string
 	all := false
 	dropMarks := false
 	for _, n := range names {
-		switch n {
-		case "notes":
-			srcs = append(srcs, srcNotes)
-		case "status":
-			srcs = append(srcs, srcStatus)
-			dropMarks = true
-		case "worktrees":
-			// An agent's gg worktree claim/release: the ⚑ marks follow.
-			srcs = append(srcs, srcWorktrees)
-		case "all":
-			all = true
-			dropMarks = true
-		default:
+		if n == "all" {
+			all, dropMarks = true, true
+			changed = append(changed, i18n.T("all"))
+			continue
+		}
+		s, ok := sourceByName(n)
+		if !ok || s == srcIdentity {
 			return m, m.answerSteer(c, steerFail(c, "unknown reload source "+strconv.Quote(n)))
 		}
+		if s == srcStatus {
+			if elsewhere {
+				continue
+			}
+			dropMarks = true
+		}
+		srcs = append(srcs, s)
+		changed = append(changed, sourceDisplayName(s))
 	}
 	if dropMarks {
 		m.attention = map[attentionKey][]steerMark{}
 	}
 	var cmd tea.Cmd
-	if all {
+	switch {
+	case all:
 		m, cmd = m.reloadAllCmd(reloadOpts{manual: true, hardFeed: true})
-	} else {
+	case len(srcs) > 0:
 		m, cmd = m.reloadSourcesCmd(srcs, reloadOpts{})
 	}
-	m = m.steerNotice(i18n.T("▸ agent asked for a reload"))
+	switch {
+	case len(changed) == 0:
+		// only another worktree's status: nothing here moved
+	case c.Dir != "":
+		m = m.steerNotice(i18n.T("▸ an agent changed %s", strings.Join(changed, ", ")))
+	default:
+		m = m.steerNotice(i18n.T("▸ agent asked for a reload"))
+	}
 	return m, tea.Batch(cmd, m.answerSteer(c, steerOK(c, "reloaded "+strings.Join(names, ", "))))
+}
+
+// sourceByName is sourceNames read backwards (the steer protocol's names).
+func sourceByName(name string) (sourceKey, bool) {
+	for s, n := range sourceNames {
+		if n == name {
+			return s, true
+		}
+	}
+	return 0, false
 }
 
 // steerNotice posts a transient "an agent did this" line — on the diff view's

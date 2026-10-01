@@ -96,13 +96,16 @@ type Command struct {
 	// is never refused for want of a line.
 	Line    *Line    `json:"line,omitempty"`
 	Step    string   `json:"step,omitempty"`    // "next_note" | "prev_note"
-	Sources []string `json:"sources,omitempty"` // reload: "notes" | "status" | "all"
-	Panel   string   `json:"panel,omitempty"`   // focus: a protocol panel name
-	Side    string   `json:"side,omitempty"`    // highlight: "new" | "old"
-	Start   int      `json:"start,omitempty"`
-	End     int      `json:"end,omitempty"`
-	Tone    string   `json:"tone,omitempty"` // "info" | "warn" | "error"
-	Wait    bool     `json:"wait,omitempty"`
+	Sources []string `json:"sources,omitempty"` // reload: a TUI source name ("notes", "status", "branches", "commits", "worktrees", …) or "all"
+	// Dir (reload): the worktree an agent's gg verb changed. Set, the reload
+	// is that change's notice, and the TUI skips "status" for another tree.
+	Dir   string `json:"dir,omitempty"`
+	Panel string `json:"panel,omitempty"` // focus: a protocol panel name
+	Side  string `json:"side,omitempty"`  // highlight: "new" | "old"
+	Start int    `json:"start,omitempty"`
+	End   int    `json:"end,omitempty"`
+	Tone  string `json:"tone,omitempty"` // "info" | "warn" | "error"
+	Wait  bool   `json:"wait,omitempty"`
 	// Background (navigate, a content link only): load the file into the
 	// TUI's open-files list without showing it — nothing on screen moves.
 	Background bool `json:"background,omitempty"`

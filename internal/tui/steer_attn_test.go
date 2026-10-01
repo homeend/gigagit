@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 	"time"
@@ -396,4 +397,40 @@ func TestSteerReloadWorktrees(t *testing.T) {
 		t.Fatalf("reply = %+v, want ok:true naming worktrees", r)
 	}
 	_ = m
+}
+
+// An agent's mutating gg verb names what it changed: every source name the
+// TUI knows is accepted, "commits" being the feed.
+func TestSteerReloadAcceptsEverySourceName(t *testing.T) {
+	t.Parallel()
+	m, _ := steerModel(t)
+	m = m.initSteerInbox()
+	m.ready = true
+	m, _ = m.applySteer(steer.Command{ID: "r-all", Cmd: "reload", Sources: []string{"branches", "remotes", "tags", "reflog", "commits", "worktrees", "previews"}})
+	for _, s := range []sourceKey{srcBranches, srcRemotes, srcTags, srcReflog, srcFeed, srcWorktrees, srcPreviews} {
+		if !m.srcInflight[s] {
+			t.Errorf("%s was not reloaded", sourceNames[s])
+		}
+	}
+}
+
+// A worker committing in ITS worktree must not cost a git status of the tree
+// the TUI shows: status is skipped when the change was made elsewhere.
+func TestSteerReloadSkipsStatusForAnotherWorktree(t *testing.T) {
+	t.Parallel()
+	m, _ := steerModel(t)
+	m = m.initSteerInbox()
+	m.ready = true
+	m.currentWorktree = t.TempDir()
+	elsewhere, _ := m.applySteer(steer.Command{ID: "r-o", Cmd: "reload", Sources: []string{"status", "branches"}, Dir: t.TempDir()})
+	if elsewhere.srcInflight[srcStatus] || !elsewhere.srcInflight[srcBranches] {
+		t.Fatalf("another worktree: status inflight=%v branches=%v", elsewhere.srcInflight[srcStatus], elsewhere.srcInflight[srcBranches])
+	}
+	here, _ := m.applySteer(steer.Command{ID: "r-h", Cmd: "reload", Sources: []string{"status"}, Dir: m.currentWorktree})
+	if !here.srcInflight[srcStatus] {
+		t.Fatal("the TUI's own worktree: status must reload")
+	}
+	if !strings.Contains(ansi.Strip(here.statusMsg), "an agent changed status") {
+		t.Fatalf("notice = %q", here.statusMsg)
+	}
 }

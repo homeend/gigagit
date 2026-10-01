@@ -101,22 +101,22 @@ func TestNoArgsReturnsUsage(t *testing.T) {
 }
 
 // TestEverySwitchCaseIsRegistered guards against the recurring drift where a
-// subcommand gains a `case "x":` arm in runOne but is forgotten in the commands
+// subcommand gains a `case "x":` arm in dispatchOne but is forgotten in the commands
 // map — so the real gg binary (which gates CLI vs TUI on IsCommand) prints
 // "unknown command" while in-process tests, which call Run directly, never
-// notice. It parses runOne's switch and asserts every case string is a command.
+// notice. It parses dispatchOne's switch and asserts every case string is a command.
 func TestEverySwitchCaseIsRegistered(t *testing.T) {
 	t.Parallel()
 	for _, c := range runSwitchCases(t) {
 		if !IsCommand(c) {
-			t.Errorf("runOne handles case %q but it is missing from the commands map "+
+			t.Errorf("dispatchOne handles case %q but it is missing from the commands map "+
 				"(IsCommand returns false → the real gg binary will say %q is unknown)", c, c)
 		}
 	}
 }
 
 // runSwitchCases parses cli.go and returns the string literals of every `case`
-// arm in runOne's top-level `switch cmd` statement.
+// arm in dispatchOne's top-level `switch cmd` statement.
 func runSwitchCases(t *testing.T) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -126,13 +126,13 @@ func runSwitchCases(t *testing.T) []string {
 	}
 	var runOne *ast.FuncDecl
 	for _, d := range f.Decls {
-		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == "runOne" {
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == "dispatchOne" {
 			runOne = fn
 			break
 		}
 	}
 	if runOne == nil {
-		t.Fatal("could not find func runOne in cli.go")
+		t.Fatal("could not find func dispatchOne in cli.go")
 	}
 	var cases []string
 	ast.Inspect(runOne, func(n ast.Node) bool {
@@ -148,7 +148,7 @@ func runSwitchCases(t *testing.T) []string {
 		return true
 	})
 	if len(cases) == 0 {
-		t.Fatal("no switch cases found in runOne — parser change?")
+		t.Fatal("no switch cases found in dispatchOne — parser change?")
 	}
 	return cases
 }

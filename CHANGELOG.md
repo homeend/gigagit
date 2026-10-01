@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The TUI follows an agent's gg changes
+
+### Fixed
+
+- **TUI:** a `gg` command that changes git from inside a gg console (an
+  agent's `gg branch create`, `gg worktree recycle`, `gg commit`, …) now
+  refreshes the panels it touched in the TUI hosting that console — before,
+  only a worktree claim did, and with the watchers off by default the
+  Branches tab kept its old list. A status read is skipped when the change
+  was in another worktree, and the notice says what changed.
+- **TUI:** a worker started by an agent shows on the Branches tab at once
+  (its session sub-row under the branch), not only on the Worktrees tab.
+
 ## Branches sub-row indent
 
 ### Fixed

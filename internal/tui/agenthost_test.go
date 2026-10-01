@@ -50,6 +50,11 @@ func TestAgentSpawnRequestRoundTrip(t *testing.T) {
 	if !strings.Contains(nm2.statusMsg, "Claude") || nm2.focus != focus {
 		t.Fatalf("status %q, focus %v→%v: a spawned worker never takes focus", nm2.statusMsg, focus, nm2.focus)
 	}
+	// The worker's session sub-row hangs under its worktree (Worktrees tab)
+	// AND under that worktree's branch (Branches tab): both lists re-read.
+	if !nm2.srcInflight[srcWorktrees] || !nm2.srcInflight[srcBranches] {
+		t.Fatalf("spawn reload: worktrees=%v branches=%v", nm2.srcInflight[srcWorktrees], nm2.srcInflight[srcBranches])
+	}
 }
 
 func TestStarterRefusesWhenClosing(t *testing.T) {
