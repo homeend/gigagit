@@ -81,6 +81,8 @@ func TestLayeringDAG(t *testing.T) {
 		"template": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"theme":    {"config", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "syntax", "i18n"},
 		"web":      {"tui", "cli", "mcp", "app"},
+		// agentlink is a leaf: the agent-channel client knows no gigagit layer.
+		"agentlink": {"config", "model", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "steer", "agentsession", "sessionreg"},
 	}
 	const root = "github.com/homeend/gigagit/internal/"
 	for pkg, forbidden := range cases {
