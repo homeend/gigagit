@@ -78,3 +78,16 @@ func TestRootPlaceholderMasksACutRoot(t *testing.T) {
 		t.Fatalf("normalizeRoot(cut) = %q: the pid must be masked at the same width", got)
 	}
 }
+
+// -update on Windows would write goldens with Windows paths (and goldens
+// are never compared there): it is refused, everywhere else allowed.
+func TestUpdateRefusedOnWindows(t *testing.T) {
+	if err := updateRefused("windows"); err == nil {
+		t.Error("-update on windows must be refused")
+	}
+	for _, goos := range []string{"linux", "darwin"} {
+		if err := updateRefused(goos); err != nil {
+			t.Errorf("-update on %s refused: %v", goos, err)
+		}
+	}
+}

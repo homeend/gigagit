@@ -89,8 +89,9 @@ screen_excludes = ["@notes/"]
 
 - **Keys** are the recorder's tokens: `enter esc space tab up down left
   right bspace delete home end pgup pgdown`, `C-x`, `M-x` (alt), or a
-  literal (`.`, `foo` = one press per rune). A step without `name` only
-  moves; a named step's whole screen is compared.
+  literal (`.`, `foo` = one press per rune). A `C-`/`M-` token is always
+  a chord: a mistyped one (`C-xyz`) fails the step. A step without `name`
+  only moves; a named step's whole screen is compared.
 - **Settling has no clock.** Each key's commands run to a fixed point;
   timers (notice expiry, debounces, the heartbeat) are PARKED, so a plain
   step shows the screen right after the keys (a sticky notice is still
@@ -115,8 +116,8 @@ screen_excludes = ["@notes/"]
 - **Cannot be checkpointed:** AI-task surfaces (shared task history), the
   tool-update notice (agents are never probed), agent consoles, terminal
   handovers (an editor or merge tool — the step fails), mouse input.
-- Golden bytes are not compared on Windows (paths differ);
-  `screen_contains`/`screen_excludes` run everywhere.
+- Golden bytes are not compared on Windows (paths differ), and `-update`
+  is refused there; `screen_contains`/`screen_excludes` run everywhere.
 
 **When to write one**
 - **A bug seen in a real repo** (e.g. test-1): find a scenario with that

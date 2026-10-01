@@ -44,3 +44,10 @@ keys = ["esc", "esc"]
 name = "overview"
 keys = ["right", "enter", "down", "enter", "enter", "C-t"]
 screen_contains = ["Overview", "Verdict"]
+
+# S in the review view stacks its files under the review's Overview, whose
+# prose wraps in the same centred 120-column reading column.
+[[tui.step]]
+name = "stack-overview"
+keys = ["esc", "down", "enter", "S"]
+screen_contains = ["Verdict", "a.txt", "b.txt"]

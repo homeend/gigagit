@@ -41,7 +41,7 @@ size = "160x40"
 [[tui.step]]
 name = "commits"
 keys = ["right"]
-screen_contains = ["✎ *feature deleted a b", "add a b  ◆ 1"]
+screen_contains = ["✎ *feature deleted a b", "add a b  ◆ 1", "feature ◆ 1"]
 screen_excludes = ["deleted a b  ◆"]
 
 [[tui.step]]
@@ -68,3 +68,14 @@ name = "stack"
 keys = ["S"]
 screen_contains = ["a.txt", "b.txt"]
 screen_excludes = ["@notes/"]
+
+# Back to the Commits list, then the noted commit's Files view: a.txt carries
+# the note anchored on it AT this commit as "◆ 1" — glyph and count apart.
+[[tui.step]]
+keys = ["esc", "esc", "esc"]
+
+[[tui.step]]
+name = "noted-files"
+keys = ["down", "enter"]
+screen_contains = ["A  a.txt  ◆ 1"]
+screen_excludes = ["A  b.txt  ◆"]
