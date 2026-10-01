@@ -477,3 +477,21 @@ func TestCommandCarriesTheAnchor(t *testing.T) {
 		t.Fatalf("line = %+v", c.Line)
 	}
 }
+
+func TestCommandAndAtLinkCarryARange(t *testing.T) {
+	t.Parallel()
+	res := domain.Resolved{
+		Checkout: "/repo", Line: 3, End: 5, Side: model.NoteSideOld,
+		Addr: model.FileAddress{State: model.StateUnstaged, Worktree: "/repo", Path: "a.go"},
+	}
+	c, err := Command(context.Background(), nil, res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Line == nil || c.Line.No != 3 || c.Line.End != 5 || c.Line.Side != "old" {
+		t.Fatalf("line = %+v", c.Line)
+	}
+	if got := AtLink(res, c).String(); !strings.HasSuffix(got, "/a.go:old:3-5") {
+		t.Errorf("AtLink = %s", got)
+	}
+}
