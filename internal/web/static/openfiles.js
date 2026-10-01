@@ -23,6 +23,7 @@ function switcherRows(files, mine) {
     line: f.line > 0 ? ":" + f.line : "",
     source: f.source,
     rev: f.rev || "",
+    notes: f.notes || 0,
   }));
 }
 
@@ -210,7 +211,7 @@ function renderSwitcher() {
     const rows = switcherRows(sw.files, viewerFileId());
     html = rows
       .map((r, i) => {
-        const meta = r.line + "  " + versionLabel(r.source, r.rev);
+        const meta = r.line + "  " + versionLabel(r.source, r.rev) + (r.notes ? "  · " + r.notes + (r.notes === 1 ? " note" : " notes") : "");
         const room = cols - 2 - meta.length;
         return (
           `<div class="ofrow${i === sw.sel ? " sel" : ""}" data-i="${i}" title="${esc(r.path)}">` +

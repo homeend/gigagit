@@ -59,10 +59,53 @@ function keepLine(cur, count, placeholder) {
 }
 // --- end viewer model ---
 
+// --- note model (pure; guarded against Go) ---
+// An agent's temporary notes on the file (agentdocs): {id, start, end,
+// summary, rationale, author, outdated, ref}, lines 1-based.
+function noteBoxTitle(n) {
+  const at = n.start === n.end ? "line " + n.start : "lines " + n.start + "–" + n.end;
+  return "note " + n.id + " · " + n.author + " · " + at + (n.outdated ? " · outdated" : "");
+}
+
+// noteAtLine is the first note covering line, or null.
+function noteAtLine(notes, line) {
+  return notes.find((n) => n.start <= line && line <= n.end) || null;
+}
+
+// boxesAfter is the notes whose box hangs under 0-based line i: those that
+// end on it.
+function boxesAfter(notes, i) {
+  return notes.filter((n) => n.end - 1 === i);
+}
+
+// nextNoteLine is the start of the next (dir > 0) or previous note strictly
+// past cur; 0 = none (the TUI's } / { inside one file).
+function nextNoteLine(notes, cur, dir) {
+  let hit = 0;
+  for (const n of notes) {
+    if (dir > 0 && n.start > cur) return n.start;
+    if (dir < 0 && n.start < cur) hit = n.start;
+  }
+  return hit;
+}
+
+// nextNotedFile is the next (previous) OTHER open file with notes, in the
+// order the files were opened — their id numbers, as the TUI orders by seq
+// — wrapping around; "" = none.
+function nextNotedFile(files, mine, dir) {
+  const num = (id) => Number(String(id).slice(1));
+  const others = files.filter((f) => f.notes > 0 && f.id !== mine).sort((a, b) => num(a.id) - num(b.id));
+  if (!others.length) return "";
+  if (dir > 0) return (others.find((f) => num(f.id) > num(mine)) || others[0]).id;
+  const before = others.filter((f) => num(f.id) < num(mine));
+  return (before.length ? before[before.length - 1] : others[others.length - 1]).id;
+}
+// --- end note model ---
+
 // --- the overlay -------------------------------------------------------------
 // view is the ONE file on screen: its version, its lines, the cursor (1-based,
 // 0 = no line) and the placeholder shown instead of lines ("" = none).
-const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null };
+const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null, notes: [] };
 const viewerSearch = new Search();
 const places = new Map(); // id → {cur, top}: where THIS tab left each file
 let loadSeq = 0; // bumped by every open: a reload that sees it move drops (L9)
@@ -133,6 +176,12 @@ viewerRoot.addEventListener("click", (e) => {
   if (e.target.id === "viewer") closeViewer(); // backdrop closes, box does not
 });
 $("viewer-body").addEventListener("click", (e) => {
+  const act = e.target.closest("button[data-nact]");
+  if (act) {
+    const n = view.notes.find((x) => x.id === act.closest(".vnote")?.dataset.note);
+    if (n) act.dataset.nact === "dismiss" ? dismissNote(n.id) : copyNoteRef(n);
+    return;
+  }
   const row = e.target.closest(".vline[data-i]");
   if (!row) return;
   view.cur = Number(row.dataset.i) + 1;
@@ -164,6 +213,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   if (seq !== loadSeq) return { ok: false, notice: "" }; // a newer open won
   const f = reg.file;
   Object.assign(view, { id: f.id, src: f.source, rev: f.rev || "", path: f.path, lines: body.lines || [] });
+  view.notes = notesOf(body, view.src);
   view.placeholder = placeholderFor(body, view.lines);
   view.image = imageOf(body, view.src, view.rev, view.path);
   const place = line > 0 ? null : places.get(f.id);
@@ -236,13 +286,86 @@ function renderViewer() {
   } else {
     let html = "";
     view.lines.forEach((l, i) => {
+      const noted = noteAtLine(view.notes, i + 1) ? " vnoted" : "";
       html +=
-        `<div class="vline${i + 1 === view.cur ? " vcur" : ""}" data-i="${i}"><span class="vno">${i + 1}</span>` +
+        `<div class="vline${i + 1 === view.cur ? " vcur" : ""}${noted}" data-i="${i}"><span class="vno">${i + 1}</span>` +
         `<span class="vtext">${renderCell(l.text, null, l.tok, "", viewerSearch.query ? viewerSearch.hitsOn(i, 0) : null) || " "}</span></div>`;
+      for (const n of boxesAfter(view.notes, i)) html += noteBoxHTML(n);
     });
     body.innerHTML = html;
   }
   viewerSearchBar.paint();
+}
+
+// ---- an agent's notes (agentdocs) ---------------------------------------
+// notesOf is a body's notes: only a working-tree read carries any.
+function notesOf(body, src) {
+  return src === "worktree" ? body.notes || [] : [];
+}
+
+function noteBoxHTML(n) {
+  return (
+    `<div class="vnote${n.outdated ? " outdated" : ""}" data-note="${esc(n.id)}">` +
+    `<div class="vnote-title">${esc(noteBoxTitle(n))}</div>` +
+    `<div class="vnote-sum">${esc(n.summary)}</div>` +
+    (n.rationale ? `<div class="vnote-why">${esc(n.rationale)}</div>` : "") +
+    `<div class="vnote-acts"><button data-nact="dismiss">dismiss</button><button data-nact="ref">copy reference</button></div></div>`
+  );
+}
+
+// rerenderKeepingScroll repaints the lines where the reader is.
+function rerenderKeepingScroll() {
+  const body = $("viewer-body");
+  const top = body.scrollTop, left = body.scrollLeft;
+  renderViewer();
+  body.scrollTop = top;
+  body.scrollLeft = left;
+}
+
+// dismissNote removes a note everywhere (every tab, and a TUI hosting this
+// page, hear it from the store).
+async function dismissNote(id) {
+  try {
+    await postJSON("/api/file-notes", { op: "dismiss", id });
+  } catch (e) {
+    return opLine("dismiss failed: " + (e.message || e), true);
+  }
+  view.notes = view.notes.filter((n) => n.id !== id);
+  rerenderKeepingScroll();
+  swapFoot(true);
+  opLine("note " + id + " dismissed", false);
+}
+
+function copyNoteRef(n) {
+  copyText(n.ref, "note reference " + n.id);
+}
+
+// stepNote is } / {: the next note in this file, then the next open file
+// with notes, landing on its first (last) note.
+async function stepNote(dir) {
+  const line = nextNoteLine(view.notes, view.cur, dir);
+  if (line) {
+    view.cur = line;
+    paintCursor();
+    for (const b of $("viewer-body").querySelectorAll(".vnote")) {
+      if (noteAtLine(view.notes, line)?.id === b.dataset.note) b.scrollIntoView({ block: "nearest" });
+    }
+    cursorRow()?.scrollIntoView({ block: "nearest" });
+    return;
+  }
+  let files = [];
+  try {
+    files = (await getJSON("/api/open-files")).files || [];
+  } catch {}
+  const id = nextNotedFile(files, view.id, dir);
+  if (!id) return opLine(view.notes.length ? "no more notes" : "no notes", false);
+  const r = await openViewer({ id });
+  const t = dir > 0 ? view.notes[0] : view.notes[view.notes.length - 1];
+  if (r.ok && t) {
+    view.cur = t.start;
+    paintCursor();
+    centerCursor();
+  }
 }
 
 function cursorRow() {
@@ -305,7 +428,13 @@ function viewerKey(e) {
     case "End": case "G": view.cur = view.lines.length; paintCursor(); break;
     case "w": cycleTextMode(); break;
     case ".": menuAtCursor(); break;
-    case "Escape": closeViewer(); break;
+    case "d": { const n = noteAtLine(view.notes, view.cur); if (!n) return false; dismissNote(n.id); break; }
+    case "r": { const n = noteAtLine(view.notes, view.cur); if (!n) return false; copyNoteRef(n); break; }
+    case "}": stepNote(1); break;
+    case "{": stepNote(-1); break;
+    // A noted file steps aside on esc (the TUI's rule); the server decides
+    // the same for a note that landed after this read.
+    case "Escape": closeViewer(view.notes.length ? "background" : "close"); break;
     default: return false;
   }
   e.preventDefault();
@@ -377,12 +506,19 @@ function viewerSearchKey(e) {
 // ---- the bottom bar -------------------------------------------------------
 // The viewer's keys go in the app's footer, not inside the box: while the
 // viewer is open #foot shows them, and gets its own chips back on close.
-const VIEWER_FOOT =
-  `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` +
-  `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\\ open files</button><button data-vact="close">esc close</button>`;
+// viewerFoot is the chips; a file with an agent's notes adds theirs.
+function viewerFoot() {
+  const notes = view.notes.length
+    ? `<span>} { notes</span><button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>`
+    : "";
+  return (
+    `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
+    `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\\ open files</button><button data-vact="close">esc close</button>`
+  );
+}
 
 function swapFoot(on) {
-  if (on) pushFoot("viewer", VIEWER_FOOT);
+  if (on) pushFoot("viewer", viewerFoot());
   else popFoot("viewer");
 }
 
@@ -395,7 +531,9 @@ $("foot").addEventListener("click", (e) => {
     case "menu": menuAtCursor(); break;
     case "bg": backgroundViewer(); break;
     case "files": openSwitcher(); break;
-    case "close": closeViewer(); break;
+    case "close": closeViewer(view.notes.length ? "background" : "close"); break;
+    case "dismiss": { const n = noteAtLine(view.notes, view.cur); if (n) dismissNote(n.id); else opLine("no note on this line", false); break; }
+    case "ref": { const n = noteAtLine(view.notes, view.cur); if (n) copyNoteRef(n); else opLine("no note on this line", false); break; }
   }
 });
 
@@ -511,12 +649,23 @@ async function viewerFileChanged(id) {
   const el = $("viewer-body");
   const top = el.scrollTop, left = el.scrollLeft;
   view.lines = body.lines || [];
+  view.notes = body.missing ? view.notes : notesOf(body, view.src); // a deleted file keeps its notes for its return
   view.placeholder = placeholderFor(body, view.lines);
   view.image = imageOf(body, view.src, view.rev, view.path);
   view.cur = keepLine(view.cur, view.lines.length, !!body.missing);
   renderViewer();
   el.scrollTop = top;
   el.scrollLeft = left;
+  if (isOpen()) swapFoot(true);
+}
+
+// viewerAgentDocs: the agent-docs store changed (a note added, dismissed or
+// moved — here, in another tab, or in the TUI hosting this page). A file
+// this viewer shows that left the list goes; one that stays is re-read,
+// which aligns its notes to the lines it gets back.
+function viewerAgentDocs(files) {
+  viewerOpenFiles(files);
+  if (viewerFileId()) viewerFileChanged(viewerFileId());
 }
 
 // ---- entry points ---------------------------------------------------------
@@ -539,7 +688,8 @@ registerHelp({
   key: "view file",
   html:
     "a file row's or a shelved file's <b>view file</b> (right-click / <b>.</b>), or a pasted content link, opens the file full-page: " +
-    "<b>↑↓ j k</b> line, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close",
+    "<b>↑↓ j k</b> line, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close; " +
+    "an agent's notes (<code>gg session note</code>) sit under their lines: <b>} {</b> next / previous note, <b>d</b> dismiss, <b>r</b> copy its reference",
 });
 
-export { closeViewer, dropViewer, openViewer, openWorktreeFileDiff, versionLabel, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };
+export { closeViewer, dropViewer, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };

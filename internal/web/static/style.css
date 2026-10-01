@@ -1660,6 +1660,15 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 .vline.vcur { background: var(--sel); }
 body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 .vno { flex: none; width: 4em; text-align: right; color: var(--dim); padding-right: 10px; }
+/* an agent's notes (agentdocs): the range mark and the box under its last line */
+.vline.vnoted .vno { box-shadow: inset -3px 0 0 var(--accent); }
+.vnote { margin: 4px 0 6px 4.6em; padding: 6px 10px; border: 1px solid var(--accent); border-radius: 4px; background: var(--bg-alt); white-space: pre-wrap; }
+.vnote.outdated { opacity: .6; }
+.vnote-title { color: var(--accent); font-size: .9em; margin-bottom: 4px; }
+.vnote-why { margin-top: 6px; color: var(--dim); }
+.vnote-acts { margin-top: 6px; display: flex; gap: 8px; }
+.vnote-acts button { font: inherit; font-size: .9em; color: var(--fg); background: none; border: 1px solid var(--border); border-radius: 3px; padding: 1px 8px; cursor: pointer; }
+.vnote-acts button:hover { border-color: var(--accent); color: var(--accent); }
 .vtext { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 #viewer-body .hit { background: var(--hit-bg); color: inherit; }
 #viewer-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
