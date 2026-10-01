@@ -103,3 +103,22 @@ console.log(JSON.stringify({
 		}
 	}
 }
+
+// The file viewer's own "copy file link (line N)" fingerprints its cursor
+// line too — from the viewer's raw line text, and only while it shows the
+// DISK's version (the link names the file on disk).
+func TestViewerFileLinkFingerprintsTheDiskLine(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile(filepath.Join("static", "viewer.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`const text = line && view.src === "worktree" && view.lines[line - 1] ? view.lines[line - 1].text : "";`,
+		`hint: { kind: "view", id: "content" } }, "new", line, text);`,
+	} {
+		if !strings.Contains(string(src), want) {
+			t.Errorf("viewer.js: missing %q", want)
+		}
+	}
+}

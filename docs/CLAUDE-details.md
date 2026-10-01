@@ -826,7 +826,11 @@ the web's op line); the TUI's `anchorNotice` is its translated twin, added in
 6th argument (web, from `d.rows[tr.dataset.i]` — never the rendered cell;
 `lineFingerprint` spells Go's trim as a regex because `String.trim` differs on
 U+FEFF and U+0085). `gg open`'s `--at` startup lands on the resolved line
-without the on-screen note (stderr already said it).
+without the on-screen note (stderr already said it). A `#` paste that
+SWITCHES checkout carries the anchor beside the plain at-link
+(`gotoLinkSwitch.line` → `Model.startAtAnchor` → `consumeStartAt` re-attaches
+it to the rebuilt command when the line still matches). The web file viewer
+fingerprints its cursor line only while `view.src === "worktree"`.
 
 **Grammar** (`model.ParseLink` / `Link.String()`, the only place it lives):
 

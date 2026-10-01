@@ -392,3 +392,36 @@ func TestGotoLinkSwitchRefusesAnUnreachableCheckout(t *testing.T) {
 		t.Errorf("a refused switch must leave the session in place: root=%q pending=%v loading=%v", m.svc.Root(), m.startAtPending, m.loading)
 	}
 }
+
+// A fingerprinted link into ANOTHER checkout keeps what became of its line
+// across the switch: the landing there says the line moved or changed, as a
+// same-checkout landing does.
+func TestGotoLinkOtherCheckoutKeepsTheAnchorAcrossTheSwitch(t *testing.T) {
+	t.Parallel()
+	m, _ := gotoLinkModel(t)
+	other := otherCheckout(t, m)
+	m, cmd := pasteLink(t, m, linkTo(other, "/a.txt:18~00000000")) // no line has that text
+	m, _ = send(m, cmd())
+	p := layerOf[*gotoCommitPopup](m)
+	if p == nil || p.pending == nil {
+		t.Fatal("a link into another checkout must ask before switching")
+	}
+	m, _ = send(m, keyType(tea.KeyEnter))
+	if !m.startAtPending {
+		t.Fatal("the landing must be armed")
+	}
+	m, sc := m.consumeStartAt()
+	if sc == nil {
+		t.Fatal("consumeStartAt returned no command")
+	}
+	msg, ok := sc().(startAtMsg)
+	if !ok || msg.cmd.Line == nil {
+		t.Fatalf("startAt message = %#v", sc())
+	}
+	if l := msg.cmd.Line; l.No != 18 || l.Asked != 18 || l.Anchor != domain.AnchorChanged {
+		t.Errorf("line = %+v, want line 18 asked 18 changed", l)
+	}
+	if m.startAtAnchor != nil {
+		t.Error("the anchor is consumed with the landing")
+	}
+}

@@ -68,6 +68,7 @@ type Model struct {
 	pendingHint            *pendingHint                   // navigate whose hint (steer_nav.go) is being revealed; drained by bookmarksLoadedMsg/shelfLoadedMsg
 	hintGen                int                            // generation guard for pendingHint (fix F3): bumped on every stage, stamped into the hint's OWN load so an unrelated bookmark/shelf load in flight can never be mistaken for it
 	startAt                model.Link                     // --at: where to land once the preconditions below have landed
+	startAtAnchor          *steer.Line                    // what became of startAt's fingerprinted line (a # paste that switched checkout); nil = nothing to say
 	startAtPending         bool                           // consumed exactly once, by startAtReady's last precondition
 	startAtPreviewsSeen    bool                           // the srcPreviews read has landed at least once since startup
 	pendingCheckout        pendingCheckout                // arms the diverged-checkout recovery modal; zero remoteRef = none

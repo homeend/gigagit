@@ -191,8 +191,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **A link to an uncommitted line carries a fingerprint of that line**:
   `gg://repo/path:33~9f2c41aa` (also `@staged` and `?view=content` links).
   The copy paths add it — `L`, the `.` menu's Copy link and Copy file link,
-  the web's *copy gg link to this line*, `gg link` (not yet the web file
-  viewer's own "copy file link", which still copies the plain form). When the link is opened
+  the web's *copy gg link to this line* and its file viewer's *copy file
+  link (line N)*, `gg link`. When the link is opened
   after the file has moved on, gg finds the text again: it lands on the line
   where the text is now and says `line 33 moved to 41` (or, when several
   lines match, `nearest of N matching lines`). When the text is gone it lands
@@ -204,6 +204,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `anchor` (`same` | `moved` | `changed`) and `anchor_matches`; `line` is
   where the text is now.
 - **`gg link --no-fingerprint`** prints the plain form.
+
+### Fixed
+
+- **A fingerprinted link pasted into `#` that names another checkout** kept
+  its line but lost the note across the switch: the landing in the other
+  checkout now says the line moved or changed, like any other landing.
+- **gg web's file viewer** copied the plain `:N?view=content` form; its
+  *copy file link (line N)* now carries the line's fingerprint while the
+  viewer shows the file on disk (a commit's or a shelf's version of the line
+  is not what the link names, so it stays plain there).
 
 ### Changed
 
