@@ -92,6 +92,9 @@ func (m Model) drainStackLanding(idx, body int) (Model, bool) {
 		return m, false
 	}
 	v.setCursorLine(li, body)
+	if land.dir == 0 {
+		v.landOnSide(land.side == model.NoteSideOld)
+	}
 	v.revealCursorNotes(body)
 	v.noteVisited = true
 	v.syncStackTitle()

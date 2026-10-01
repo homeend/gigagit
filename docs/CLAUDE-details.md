@@ -1127,6 +1127,17 @@ middle-elided. A compare's FILE-TREE row copies the pair's file form
 `path@<b>`); web: the file menu passes `cmpPair`. `tui.Headless` stubs `clipWrite`: e2e never touches the
 machine's clipboard.
 
+**Follow-ups (2026-10-01).** A steered landing sets the PANE too
+(`diffView.landOnSide`, from `landSteer` and a parked stack landing; a live
+selection keeps its side) — the side is part of the address. Web: a diff
+with no note context still links its lines through a link-only context
+(`sidesLinkCtx`/`rowLinkCtx` → `ctx.cmpSides`, the entry-diff lane's two side
+specs); `state.diffLinkCtx` is tied to `detailGen` so a stale one never names
+a later diff's rows, and `diffLinkCtx(row)` is the one door the row menu
+reads. `linkFor` lowers `cmpSides` onto the existing shapes (pair, or the
+clicked side's own version). A browser probe that reuses a state dir inherits
+the STACKED preference — a "single-file" run may really be a stack.
+
 **Web preview links lift `ctx.compare` for ONE case.** `links.js`'s `linkFor`
 refuses any compare ctx unless it also carries `ctx.preview = {source,
 target}` — an open merge preview is the one compare with an address (git's
@@ -4398,7 +4409,16 @@ selection, laid-out width); never on disk, never evicted, created
   pushes ONE history entry (`ownBack`, `{gg: "back"}`, re-read from
   `history.state` on load); `popstate` runs `anchorBack` when the file came
   from an anchor; backspace leaves the entry for the next open, so a Back
-  after backspace came back is used up instead of leaving gg web. The
+  after backspace came back is used up instead of leaving gg web (`popstate`
+  re-reads `ownBack` from `history.state`, so a Forward that restored the
+  entry is reused, never doubled — `armBack`); a Back while a popup sits on
+  the file (`topLayer()` is not the viewer) leaves both alone and re-arms;
+  a Back whose list fetch failed re-arms with `view.from`. An open that did
+  not land — failed, or left by esc meanwhile — reports what the tab shows
+  (`reportShown`, unless a newer open started: `openSeq`, which a close
+  does not bump), and the next open awaits that report (`ofSync`). An
+  anchor whose re-check lost a race to a re-open says nothing; one the
+  re-check removed says `that anchor is no longer in the overview`. The
   document's type grows with a large window (`.vdoc` font-size clamp
   12–17px; the 100ch column grows with it).
 

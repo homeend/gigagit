@@ -2,7 +2,7 @@
 // file at one version — the working tree, a commit, a shelf entry — with a
 // line cursor, the in-view search and a . menu. Content links land here.
 import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, state, tabId } from "./core.js";
-import { closeLayer, copyText, footOwned, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu } from "./layers.js";
+import { closeLayer, copyText, footOwned, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer } from "./layers.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
@@ -218,6 +218,15 @@ let ovLastSeq = 0; // … and its place (an open's own fetch takes one too)
 // backspace. Never more than one; a Back with no way back just uses it up
 // instead of leaving the page.
 let ownBack = history.state?.gg === "back";
+let openSeq = 0; // the loadSeq of the last open started (a close bumps loadSeq, not this)
+let ofSync = Promise.resolve(); // a failed open's report to the server, which the next open waits for
+
+// armBack gives the browser's Back its one entry (ownBack).
+function armBack() {
+  if (ownBack) return;
+  history.pushState({ gg: "back" }, "");
+  ownBack = true;
+}
 let cursorTimer = null;
 
 function ofPost(body) {
@@ -320,21 +329,25 @@ $("viewer-body").addEventListener("contextmenu", (e) => {
 // screen, which stays open in the background.
 async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "" }) {
   const seq = ++loadSeq;
+  openSeq = seq;
   if (isOpen()) rememberPlace();
   let reg, body, ov, ovMine;
   try {
+    await ofSync; // a failed open's report reaches the server first
     reg = id ? await ofPost({ op: "focus", id }) : await ofPost({ op: "open", src, rev, path, line });
     if (reg.file.source === "overview") {
       ovMine = ++ovSeq; // a refresh started before this fetch is older than its answer
       ov = await fetchOverview(reg.file.id);
     } else body = await fetchContent(reg.file.source, reg.file.rev || "", reg.file.path);
   } catch (e) {
-    const back = seq === loadSeq ? releaseAfterFailedOpen(reg && reg.file.id, isOpen() ? view.id : "") : null;
-    if (back) ofPost(back).catch(() => {}); // the server moved this tab to a file it never showed
+    reportShown(seq, reg);
     opLine("view failed: " + (e.message || e), true);
     return { ok: false, notice: "" };
   }
-  if (seq !== loadSeq) return { ok: false, notice: "" }; // a newer open won
+  if (seq !== loadSeq) { // a newer open won, or the viewer closed meanwhile
+    reportShown(seq, reg);
+    return { ok: false, notice: "" };
+  }
   const f = reg.file;
   view.from = view.range = null; // an anchor's open sets them after
   // A refresh that started after this fetch and landed first is newer: keep it.
@@ -365,6 +378,14 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   if (landed.notice) opLine(landed.notice, false);
   if (reg.evicted) opLine(evictedText(reg.evicted, reg.cap), false);
   return { ok: true, notice: landed.notice };
+}
+
+// reportShown: open seq did not land, though the server already moved this
+// tab to reg's file — unless a newer open is under way (it reports itself),
+// tell the server what the tab really shows; the next open waits for it.
+function reportShown(seq, reg) {
+  const back = seq === openSeq ? releaseAfterFailedOpen(reg && reg.file.id, viewerFileId()) : null;
+  if (back) ofSync = ofPost(back).catch(() => {});
 }
 
 // showOverview puts overview ov (entry f) on screen in document mode, where
@@ -511,15 +532,17 @@ async function refreshOverviewAs(mine) {
 // missing one says why and opens nothing. Backspace there comes back.
 async function openAnchorAt(i) {
   if (!view.ov || !view.ov.anchors[i]) return;
-  const id = view.id;
+  const id = view.id, seq0 = loadSeq;
   selectAnchor(i);
   if (!(await refreshOverview())) { // keeps the selection by its destination
-    // Nothing re-checked the list since the click: open nothing on the old one.
-    if (view.ov && view.id === id) opLine("could not re-check the overview — try the anchor again", true);
+    // Nothing re-checked the list since the click: open nothing on the old
+    // one. A re-open meanwhile (loadSeq moved) is no failure: it won.
+    if (view.ov && view.id === id && loadSeq === seq0) opLine("could not re-check the overview — try the anchor again", true);
     return;
   }
-  const a = view.ov && view.id === id ? view.ov.anchors[view.ov.sel] : null;
-  if (!a) return;
+  if (!view.ov || view.id !== id) return;
+  const a = view.ov.anchors[view.ov.sel];
+  if (!a) return opLine("that anchor is no longer in the overview", false);
   const from = { id, sel: view.ov.sel, dest: a.dest };
   if (a.missing) return opLine(anchorStatus(a), false);
   const t = anchorTarget(a);
@@ -527,10 +550,7 @@ async function openAnchorAt(i) {
   const r = await openViewer({ src: "worktree", path: t.path, line: t.line });
   if (!r.ok) return;
   view.from = from;
-  if (!ownBack) {
-    history.pushState({ gg: "back" }, "");
-    ownBack = true;
-  }
+  armBack();
   view.range = t.end > t.line ? { start: t.line, end: t.end } : null;
   rerenderKeepingScroll();
   swapFoot(true);
@@ -538,8 +558,10 @@ async function openAnchorAt(i) {
 }
 
 window.addEventListener("popstate", () => {
-  ownBack = false;
-  if (view.from && isOpen()) anchorBack();
+  ownBack = history.state?.gg === "back"; // Forward can put it back on top
+  if (!view.from || !isOpen()) return;
+  if (topLayer()?.id !== "viewer") return armBack(); // a popup is over the file: Back leaves both alone
+  anchorBack();
 });
 
 // anchorBack is backspace (or the browser's Back) in a file an anchor
@@ -559,6 +581,7 @@ async function anchorBack() {
     case "error":
       if (view.id === id && !view.from) {
         view.from = f; // a failed fetch is no answer: the way back stays
+        armBack(); // the way back stays, for Back too
         swapFoot(true);
       }
       return opLine("back failed: " + (err.message || err), true);

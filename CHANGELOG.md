@@ -32,6 +32,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   command list; `gg agent list` works outside a console. The using-gg
   skill is v120.
 
+## Overviews in gg web: the last minors
+
+### Fixed
+
+- **gg web, browser Back:** Back, Forward and another anchor no longer take
+  two Backs to leave gg web; Back while the open-files switcher (or another
+  popup) is over the file leaves both as they are; after a Back that could
+  not fetch the open-files list, the next Back still comes back.
+- **gg web:** pressing esc while a file is still loading (or a load that
+  fails) no longer leaves `gg session files` saying that file is shown, and
+  that correction can no longer overwrite the next file you open.
+- **gg web, anchors:** a re-open of the overview during an anchor's re-check
+  is no longer reported as "could not re-check"; an anchor the agent removed
+  meanwhile says `that anchor is no longer in the overview` instead of
+  nothing.
+
 ## Overviews in gg web: browser Back, large screens, follow-ups
 
 ### Added
@@ -82,6 +98,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (`gg agent list` outside gg lists the running TUIs from their registry
   files). **`gg init --mcp`** registers gg's MCP server with Claude Code
   (`claude mcp add -s user`). The using-gg skill is v118.
+
+## Line links: the landing pane, the web's other comparisons, the help line
+
+### Changed
+
+- **A link to an old-side line lands in the old pane.** Pasting a
+  `:old:<line>` link (or `gg session navigate --old-line`) put the cursor on
+  the right row but left it in the new pane; it now sits in the old one, in
+  the single-file and the stacked view, so `L` right after copies the link
+  that brought you there. A new-side landing brings it back.
+- **gg web:** *copy gg link to this line* also works in a comparison
+  addressed by its two sides (Compare with link…, a stored copy against a
+  file), single-file and stacked: two commits give the pair link, otherwise
+  the clicked side is linked as the version it shows — the working file,
+  `@staged`, or that commit. A bookmark or shelf side has no link.
+- **`?` help:** the `L` entry says it works in a comparison, on the side the
+  cursor is on.
 
 ## A link to a line of any two-commit comparison
 
