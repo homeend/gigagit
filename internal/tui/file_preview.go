@@ -520,6 +520,9 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	// (anchor 0) so renderWindow can't re-center the slice and re-introduce the
 	// dead zone.
 	p.fitImage(innerW, rowsCap) // an image document: its cells for this box
+	if d := m.previewDoc(p); d != nil && d.ov != nil && d.ov.w != innerW && docLoaded(d) {
+		d.layOut(rowsCap, innerW) // the frame's width changed: gg wraps an overview itself
+	}
 	vis := p.lines
 	// An annotated file: its notes are VIRTUAL rows — never in p.lines, so
 	// every line index (cursor, selection, search hit) stays a file line —
@@ -577,6 +580,12 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	if !viewer && len(vis) > rowsCap {
 		right = strings.TrimSpace(right + "  " + fmt.Sprintf("%d/%d", start+1, len(vis)))
 	}
+	if viewer && m.statusMsg != "" && !m.running && m.statusMsg != m.stickyMsg {
+		// The full-screen viewer covers the status bar: a message for the user
+		// (a missing anchor, a copy, a dismissed note) sits on the title line
+		// until the next key clears it.
+		right = strings.TrimSpace(m.statusMsg + "  " + right)
+	}
 	lines := make([]string, 0, contentH)
 	lines = append(lines, titleWithRight(title, right, innerW, true))
 	if len(vis) == 0 {
@@ -609,6 +618,9 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	if d, ok := m.focusedDoc(); ok && d.p == p && d.backgrounded { // esc steps aside, X closes
 		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] background  [X] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	}
+	if d := m.previewDoc(p); d != nil && d.ov != nil {
+		hint = i18n.T("%d/%d  [tab] next  [enter] open  [r] reference  [esc] background  [X] close  [/] find  [↑/↓] scroll", start+1, len(vis))
+	}
 	if viewer {
 		if p.extraHint != "" {
 			hint = p.extraHint + "  " + hint
@@ -621,6 +633,9 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	}
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
+	}
+	if d := m.previewDoc(p); d != nil && d.from != nil {
+		hint = i18n.T("[bksp] back") + "  " + hint // the way back to the overview leads
 	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 	if margin > 0 {

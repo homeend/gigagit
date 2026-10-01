@@ -316,9 +316,9 @@ func steerEnumRefusal(c steer.Command) string {
 			return "unknown target state " + strconv.Quote(c.Target.State)
 		}
 	}
-	if c.Background {
+	if c.Background && c.Cmd != "overview_add" {
 		if c.Cmd != "navigate" {
-			return "background applies to navigate only"
+			return "background applies to navigate and overview_add only"
 		}
 		if c.HintKind != model.ContentHintKind {
 			return "background needs a content link"
@@ -381,10 +381,13 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 	}
 	// The open-files list verbs never move the screen, so nothing the user
 	// is doing refuses them (steer_files.go) — and neither do an agent's
-	// temporary notes (steer_file_notes.go).
+	// temporary notes (steer_file_notes.go), nor its overviews
+	// (steer_overview.go: an add the screen cannot take lands in the background).
 	switch {
 	case strings.HasPrefix(c.Cmd, "note_"):
 		return m.steerFileNote(c)
+	case strings.HasPrefix(c.Cmd, "overview_"):
+		return m.steerOverview(c)
 	case c.Cmd == "files":
 		return m.steerFiles(c)
 	case c.Cmd == "serve":

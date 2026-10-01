@@ -47,6 +47,91 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (`<pid>-<start>/<id>`), and each TUI publishes its sessions to
   `<state>/gg/sessions/` so other gg processes can see them.
 
+## Web switch-repo table groups by project
+
+### Added
+
+- **`ctrl+g` groups gg web's switch-repo table by project**, as the TUI's `R`
+  switcher does: a checkout with its linked worktrees (shared git common dir)
+  plus clones of the same remote, under the project's name, the rows beneath
+  it with a blank name. A hint line under the table shows the key, clickable,
+  and whether the table is grouped. The choice is remembered in the web's own
+  layout state (`repo_grouped`), independent of the TUI's. The server decides
+  the projects — the grouping logic moved into the `repos` package, so both
+  frontends share one implementation; `/api/repos` groups by remote name at
+  once and `/api/repos/details` adds the common dirs as the probes land.
+
+### Changed
+
+- **The switch-repo table leads with the name**, then the branch (name ·
+  branch · slow-fs · path · last opened), so a group's project name heads
+  its rows.
+
+## Repo switcher groups worktrees without a remote
+
+### Fixed
+
+- **The `R` switcher's `ctrl+g` grouping now joins a checkout with its linked
+  worktrees even when the repository has no remote.** Grouping went by the
+  remote repository name alone, so a local-only repository's worktrees were
+  scattered through the list as separate rows. A project is now also every
+  checkout sharing one git common dir (read from each entry's `.git` file —
+  no git call — by the same background probe that marks slow filesystems);
+  the remote name still joins separate clones. A group with no remote is named
+  after its main checkout's directory. Worktrees created from Windows on a
+  disk WSL shares (`gitdir: T:/…`) are followed through their `/mnt/t/…`
+  spelling, and the other way round.
+
+### Changed
+
+- **The switcher's `ctrl+g` grouping is remembered across sessions** (it
+  was forgotten when gg quit). It is machine-local UX memory beside the
+  diff view's stacked mode, and the flat list is still the default for a
+  new machine.
+
+## Overview documents
+
+### Added
+
+- **An agent can walk you through several files.** `gg session overview add
+  --title "…" [--file <md>] [--background]` (text on stdin by default) shows a
+  markdown overview that lives only in the running TUI. Its links are anchors
+  — a file, `path:N`, a range `path:N-M`, or one of the agent's temporary notes
+  (`note:t7`). `tab` / `shift+tab` select the next / previous anchor, `enter`
+  or a double click opens it (the file at that line, a range selected), and
+  `backspace` in that file returns to the overview on the same anchor; the
+  file stays open in the background. `r` copies a reference to the anchor,
+  `y` the text. `set` replaces the text (the selection stays when its
+  destination survives), `list` / `show` / `rm` manage them; `add` and `set`
+  name the anchors that do not resolve. Limits: 64 KiB, 100 anchors, 20
+  overviews per worktree. The `using-gg` skill (v107) teaches the verbs.
+- `markdown.ParseWith` keeps link destinations a caller accepts as anchors;
+  `steer.MaxCommandBytes` rose to 512 KiB for an overview's text; `gg session
+  files --json` rows carry a `title`, and overviews show the `overview` source.
+
+### Changed
+
+- **Every full-screen viewer shows a message on its title line.** The viewer
+  covers the status bar, so a missing anchor, a copy or a dismissed note used
+  to leave no trace; the message now sits right-aligned on the title line
+  until the next key (an op's "working…" message stays in the status bar).
+- Landing on a line where an agent's note starts brings the note's box into
+  view.
+
+## Cycle agents and terminals by last use
+
+### Added
+
+- **`alt+a` / `alt+t` cycle the running agent sessions / terminals** by last
+  use, like alt-tab. The first press docks the most recently used one in the
+  Commits column unfocused; each further press shows the one used before it
+  (wrapping, exited ones skipped, `N of M` on the status line). `enter`
+  focuses the shown one and makes it the most recent. "Used" means focused in
+  the TUI or typed into (TUI or web). Inside a focused console the keys go to its
+  program. The footer shows `[alt+a] last agent` / `[alt+t] last terminal`
+  while one of each runs. (Not `ctrl+a`: a common tmux prefix, gg never sees
+  it.)
+
 ## Open-file notes
 
 ### Added

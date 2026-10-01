@@ -3,6 +3,7 @@ package tui
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -135,6 +136,7 @@ func TestRepoPopupGroupedFilterNamesWhatIsLeft(t *testing.T) {
 func TestRepoPopupCtrlGTogglesAndIsRemembered(t *testing.T) {
 	t.Parallel()
 	m, state, _ := seededModel(t)
+	m = tempPromptStore(t, m)
 	now := time.Now()
 	for _, e := range []struct{ dir, remote string }{{"proj-wt", "proj"}, {"filler", "filler"}, {"proj-main", "proj"}} {
 		dir := t.TempDir() + "/" + e.dir
@@ -182,10 +184,24 @@ func TestRepoPopupCtrlGTogglesAndIsRemembered(t *testing.T) {
 	if p = layerOf[*repoPopup](m); p == nil || !p.grouped {
 		t.Fatal("grouped mode should survive closing and reopening the switcher")
 	}
+	// It is remembered across sessions too: a new TUI over the same
+	// machine-local store opens the switcher grouped.
+	if !m.promptStore.RepoGrouped() {
+		t.Fatal("ctrl+g must persist the grouping")
+	}
+	next := New(m.svc)
+	next.promptStore = m.promptStore
+	next = next.loadPrefs()
+	if !next.repoGrouped {
+		t.Fatal("a new session must start grouped")
+	}
 	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
 	m = u.(Model)
 	if layerOf[*repoPopup](m).grouped {
 		t.Fatal("a second ctrl+g should return to the flat list")
+	}
+	if m.promptStore.RepoGrouped() {
+		t.Fatal("the flat choice must persist too")
 	}
 }
 
@@ -232,5 +248,105 @@ func TestRepoPopupHintsAdvertiseGroupAndCopy(t *testing.T) {
 		if !strings.Contains(box, want) {
 			t.Errorf("hint line is missing %q", want)
 		}
+	}
+}
+
+// commonFixture: two checkouts of a repository with NO remote (the main one and
+// a linked worktree), split by an unrelated entry, plus a third checkout that
+// shares the common dir of a remote-named clone group.
+func commonFixture(now time.Time) ([]repos.Entry, map[string]string) {
+	at := func(min int) time.Time { return now.Add(-time.Duration(min) * time.Minute) }
+	entries := []repos.Entry{
+		{Path: "/r/test-1", Remote: repos.NoRemote, LastOpened: at(1)},
+		{Path: "/r/other", Remote: repos.NoRemote, LastOpened: at(2)},
+		{Path: "/r/test-1.worktrees/a", Remote: "", LastOpened: at(3)},
+		{Path: "/r/clone", Remote: "proj", LastOpened: at(4)},
+		{Path: "/r/clone-wt", Remote: "", LastOpened: at(5)},
+		{Path: "/r/clone2", Remote: "proj", LastOpened: at(6)},
+	}
+	common := map[string]string{
+		"/r/test-1":             "/r/test-1/.git",
+		"/r/other":              "/r/other/.git",
+		"/r/test-1.worktrees/a": "/r/test-1/.git",
+		"/r/clone":              "/r/clone/.git",
+		"/r/clone-wt":           "/r/clone/.git",
+		"/r/clone2":             "/r/clone2/.git",
+	}
+	return entries, common
+}
+
+// A checkout and its linked worktrees group by their shared git common dir
+// even with no remote; the group is named after the main checkout's directory.
+// A remote name still bridges separate clones, and a worktree with no recorded
+// remote joins its clone's group through the common dir.
+func TestRepoPopupGroupsByCommonDir(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	entries, common := commonFixture(now)
+	m := Model{width: 120, height: 40}
+	p := &repoPopup{entries: entries, now: now, grouped: true, common: common}
+	m = m.pushLayer(p)
+	want := []string{
+		"/r/test-1", "/r/test-1.worktrees/a",
+		"/r/other",
+		"/r/clone", "/r/clone-wt", "/r/clone2",
+	}
+	if got := visiblePaths(p); strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("grouped order =\n%v\nwant\n%v", got, want)
+	}
+	rows := dataRows(p, m)
+	for i, want := range []string{"test-1", "", "other", "proj", "", ""} {
+		if name := nameCell(rows[i]); name != want {
+			t.Errorf("row %d name = %q, want %q\n%s", i, name, want, strings.Join(rows, "\n"))
+		}
+	}
+}
+
+// The probe's common dirs land after the popup opened: the regrouping must
+// keep the cursor on the row it was on.
+func TestRepoPopupFSMsgRegroupKeepsTheCursor(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	entries, common := commonFixture(now)
+	m := Model{width: 120, height: 40}
+	p := &repoPopup{entries: entries, now: now, grouped: true}
+	m = m.pushLayer(p)
+	for i, e := range p.visible() {
+		if e.Path == "/r/test-1.worktrees/a" {
+			p.sel = i
+		}
+	}
+	u, _ := m.Update(repoFSMsg{foreign: map[string]bool{}, common: common})
+	m = u.(Model)
+	p = layerOf[*repoPopup](m)
+	if got := p.visible()[p.sel].Path; got != "/r/test-1.worktrees/a" {
+		t.Fatalf("cursor moved to %q when the common dirs landed", got)
+	}
+	if p.sel != 1 {
+		t.Fatalf("the worktree should now sit under its checkout, sel=%d %v", p.sel, visiblePaths(p))
+	}
+}
+
+// End to end over a real repository: the probe reads a linked worktree's
+// common dir, and the switcher then groups it with its checkout.
+func TestRepoPopupProbeGroupsARealWorktree(t *testing.T) {
+	t.Parallel()
+	m, state, _ := seededModel(t)
+	wt := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, m.currentWorktree, "worktree", "add", "-q", "-b", "side", wt)
+	if err := repos.Touch(state, wt, repos.NoRemote, time.Unix(500, 0)); err != nil {
+		t.Fatal(err)
+	}
+	mm, cmd, ok := m.openRepoPopup()
+	if !ok {
+		t.Fatal("openRepoPopup refused")
+	}
+	u, _ := mm.Update(cmd())
+	m = u.(Model)
+	p := layerOf[*repoPopup](m)
+	p.grouped = true
+	vis := p.visible()
+	if len(vis) != 3 || !samePathTUI(vis[1].Path, wt) {
+		t.Fatalf("the linked worktree should sit under its checkout: %v", visiblePaths(p))
 	}
 }

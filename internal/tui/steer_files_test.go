@@ -41,7 +41,7 @@ func TestSteerOpenFilesMalformedCommandsAreRefused(t *testing.T) {
 		c    steer.Command
 		want string
 	}{
-		{steer.Command{Cmd: "focus", Panel: "files", Background: true}, "background applies to navigate only"},
+		{steer.Command{Cmd: "focus", Panel: "files", Background: true}, "background applies to navigate and overview_add only"},
 		{steer.Command{Cmd: "navigate", File: "a.txt", Background: true}, "background needs a content link"},
 		{steer.Command{Cmd: "file_focus"}, "file_focus needs an id or a path"},
 		{steer.Command{Cmd: "file_focus", FileID: "f1", Line: &steer.Line{No: -1}}, "a line number is 1-based"},

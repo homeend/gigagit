@@ -284,3 +284,19 @@ func TestOpenFilesVerbsRoundTrip(t *testing.T) {
 		t.Fatalf("reply = %+v ok=%v, want the list back", r, ok)
 	}
 }
+
+// An overview's text rides a command: 64 KiB of markdown, JSON-escaped
+// (worst case six bytes a rune for <, > and &), must fit under the cap.
+func TestOverviewSizedCommandRoundTrips(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	text := strings.Repeat("<", 64<<10)
+	id, err := Post(dir, Command{Cmd: "overview_add", Title: "T", Text: text})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := Drain(dir)
+	if len(got) != 1 || got[0].ID != id || got[0].Text != text {
+		t.Fatalf("Drain = %d commands, want the overview back whole", len(got))
+	}
+}

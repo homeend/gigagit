@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -67,6 +68,13 @@ func (m Model) consoleSession() (*domain.AgentSession, bool) {
 // openConsole shows session id docked in the Commits column with keyboard
 // focus. The left panel that had focus is remembered for closeConsole.
 func (m Model) openConsole(id domain.SessionID) (Model, tea.Cmd) {
+	return m.showConsole(id, true)
+}
+
+// showConsole docks session id in the Commits column, focused or not (alt+a /
+// alt+t show one unfocused). Only a focused show is a use of the session
+// (Touch): cycling through them must not reorder the list it walks.
+func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 	s, ok := domain.Sessions().Get(id)
 	if !ok {
 		m.statusMsg = i18n.T("that agent session is gone")
@@ -88,10 +96,13 @@ func (m Model) openConsole(id domain.SessionID) (Model, tea.Cmd) {
 	// pin yields to (fullscreenYielded).
 	m.fullMaxed = false
 	m = m.dropConsole()
+	if focused {
+		s.Touch()
+	}
 	screen, cancel := s.Subscribe()
-	m.console = &consoleState{id: id, focused: true, gen: gen, screen: screen, cancel: cancel}
+	m.console = &consoleState{id: id, focused: focused, gen: gen, screen: screen, cancel: cancel}
 	m.focus = panelCommits
-	m = m.syncConsoleSize()
+	m = m.syncConsoleSizeIfFocused()
 	return m, waitSessionCmd(m.console, id, gen)
 }
 
@@ -284,6 +295,48 @@ func runningSessionIn(dir string) (domain.SessionInfo, bool) {
 	return domain.SessionInfo{}, false
 }
 
+// sessionsByLastUsed is the running sessions of one kind (terminals or
+// agents), most recently used first.
+func sessionsByLastUsed(list []domain.SessionInfo, terminal bool) []domain.SessionInfo {
+	var out []domain.SessionInfo
+	for _, info := range list {
+		if info.State == domain.SessionRunning && info.Terminal == terminal {
+			out = append(out, info)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].LastUsed.After(out[j].LastUsed) })
+	return out
+}
+
+// cycleSessions is alt+a (agents) / alt+t (terminals): show the most recently
+// used session of that kind, unfocused; pressed again while one of them is
+// shown unfocused, the next one back in last-used order (wrapping). enter
+// then focuses it, which makes it the most recent.
+func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
+	list := sessionsByLastUsed(domain.Sessions().List(), terminal)
+	if len(list) == 0 {
+		if terminal {
+			m.statusMsg = i18n.T("no running terminal — open one from the . menu of a worktree or a checked-out branch")
+		} else {
+			m.statusMsg = i18n.T("no running agent session — start one from the . menu of a worktree or a checked-out branch")
+		}
+		return m, nil
+	}
+	next := 0
+	if m.console != nil && !m.console.focused {
+		for i, info := range list {
+			if info.ID == m.console.id {
+				next = (i + 1) % len(list)
+				break
+			}
+		}
+	}
+	info := list[next]
+	m, cmd := m.showConsole(info.ID, false)
+	m.statusMsg = i18n.T("%s in %s — %d of %d by last use  [enter] focus", info.Label, shortWorktreeName(info.Dir), next+1, len(list))
+	return m, cmd
+}
+
 // shortWorktreeName is the worktree's directory name, for titles and rows.
 func shortWorktreeName(path string) string { return filepath.Base(path) }
 
@@ -316,7 +369,7 @@ func (m Model) sessionsKey() string {
 var consolePassthrough = map[string]bool{
 	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
 	"q": true, "ctrl+c": true, "?": true, ".": true, "ctrl+p": true, "ctrl+o": true,
-	"R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
+	"alt+a": true, "alt+t": true, "R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
 
@@ -388,9 +441,11 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	switch key {
 	case "enter":
 		m.console.focused = true
+		m.touchConsole()
 		return m.syncConsoleSize(), nil, true // gaining focus takes the size back
 	case "ctrl+t":
 		m.console.maximized, m.console.focused = true, true
+		m.touchConsole()
 		return m.syncConsoleSize(), nil, true
 	case "esc":
 		return m.closeConsole(), nil, true
@@ -399,6 +454,13 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	return m, nil, true
+}
+
+// touchConsole marks the docked console's session used — it just gained focus.
+func (m Model) touchConsole() {
+	if s, ok := m.consoleSession(); ok {
+		s.Touch()
+	}
 }
 
 // killSession signals a session's process group and says so at once; the

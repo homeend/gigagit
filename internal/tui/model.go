@@ -110,7 +110,7 @@ type Model struct {
 
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
 	statePath           string // repo-registry location; "" disables recording (tests)
-	repoGrouped         bool   // repo switcher's ctrl+g grouping, remembered for the session
+	repoGrouped         bool   // repo switcher's ctrl+g grouping, persisted in promptStore
 	linkRepoName        string // remote repository name for gg:// links; "" = the local (absolute-path) form
 	pendingSeqBump      []string
 	pendingSwitch       bool
@@ -495,10 +495,16 @@ func New(svc *domain.Service) Model {
 		pendingCommitMsg:       map[string]pendingMessage{},
 		keptSteer:              map[string]bool{},
 	}
-	// The stacked-diff pref is machine-global, so it is read once here rather
-	// than per repo (no state dir → nil store → the single-file default).
+	return m.loadPrefs()
+}
+
+// loadPrefs seeds the session from the machine-global TUI preferences. They
+// are read once here rather than per repo (no state dir → nil store → the
+// defaults: single-file diffs, a flat repo switcher).
+func (m Model) loadPrefs() Model {
 	if m.promptStore != nil {
 		m.diffStacked = m.promptStore.StackedDiff()
+		m.repoGrouped = m.promptStore.RepoGrouped()
 	}
 	return m
 }
@@ -995,6 +1001,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case noteLandedMsg:
 		return m.noteLanded(msg)
+	case anchorsCheckedMsg:
+		return m.anchorsChecked(msg)
 	case contentLandedMsg:
 		tm, fill := m.Update(msg.load)
 		m = tm.(Model)
@@ -1015,6 +1023,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil // the watcher was closed: its listen loop ends here
 	case fileContentMsg:
 		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
+			if d.ov != nil {
+				d.layOut(rows, m.overviewWidth(inner))
+				return m, nil
+			}
 			if n := d.fill(msg, rows, inner); n != "" {
 				m.statusMsg = n
 			}
@@ -1558,7 +1570,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case repoFSMsg:
 		if p := layerOf[*repoPopup](m); p != nil {
-			p.foreign = msg.foreign
+			// The common dirs can regroup the list: keep the cursor's row.
+			p.keepSel(func() { p.foreign, p.common = msg.foreign, msg.common })
 		}
 		return m, nil // popup closed before the probe returned: drop it
 	case filePathLsMsg:
@@ -2093,6 +2106,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// excluded by paletteReachable) still block it.
 		if msg.String() == "ctrl+p" && m.paletteReachable() {
 			return m.openCommandPalette()
+		}
+		// alt+a / alt+t cycle the running agents / terminals by last use,
+		// shown unfocused (a focused console kept the key for its program
+		// above). Base panels only: a window or popup on top would hide the
+		// console it docks.
+		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.topLayer() == nil && !m.filterTyping {
+			return m.cycleSessions(k == "alt+t")
 		}
 		// The layer stack (full-screen surfaces + centered popups) is global: its
 		// top owns the keyboard above the diff view (mirrors the action menu and

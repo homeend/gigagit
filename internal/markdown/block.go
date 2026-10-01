@@ -6,7 +6,10 @@ import (
 
 // Parse turns forge text into a block tree. It is total: any input yields a
 // Doc, and nothing in the input can make it fail or panic.
-func Parse(src string) Doc {
+func Parse(src string) Doc { return ParseWith(src, Options{}) }
+
+// ParseWith is Parse with options: see Options.
+func ParseWith(src string, o Options) Doc {
 	src = normalise(src)
 	if strings.TrimSpace(src) == "" {
 		return Doc{Blocks: []Block{}}
@@ -14,7 +17,7 @@ func Parse(src string) Doc {
 	if len(src) > MaxInput {
 		return Doc{Blocks: plainParagraphs(src)}
 	}
-	return Doc{Blocks: parseBlocks(strings.Split(src, "\n"), 0)}
+	return Doc{Blocks: parseBlocks(strings.Split(src, "\n"), 0, o)}
 }
 
 // normalise folds line endings to \n, drops NULs and expands each line's
@@ -67,12 +70,12 @@ func indentOf(ln string) int {
 // parseBlocks parses one container's lines. depth counts the containers
 // (quotes and list items) above it; at MaxDepth no further container opens
 // and their markers stay literal text.
-func parseBlocks(lines []string, depth int) []Block {
+func parseBlocks(lines []string, depth int, o Options) []Block {
 	var out []Block
 	var para []string
 	flush := func() {
 		if len(para) > 0 {
-			out = append(out, Block{Kind: KindPara, Inline: parseInline(strings.Join(para, "\n"))})
+			out = append(out, Block{Kind: KindPara, Inline: parseInline(strings.Join(para, "\n"), o)})
 			para = nil
 		}
 	}
@@ -92,7 +95,7 @@ func parseBlocks(lines []string, depth int) []Block {
 		}
 		if level, text, ok := atxHeading(ln); ok {
 			flush()
-			out = append(out, Block{Kind: KindHeading, Level: level, Inline: parseInline(text)})
+			out = append(out, Block{Kind: KindHeading, Level: level, Inline: parseInline(text, o)})
 			i++
 			continue
 		}
@@ -107,19 +110,19 @@ func parseBlocks(lines []string, depth int) []Block {
 				flush()
 				var inner []string
 				inner, i = gatherQuote(lines, i)
-				out = append(out, Block{Kind: KindQuote, Blocks: parseBlocks(inner, depth+1)})
+				out = append(out, Block{Kind: KindQuote, Blocks: parseBlocks(inner, depth+1, o)})
 				continue
 			}
 			if m, ok := listMarker(ln); ok && (len(para) == 0 || m.interrupts()) {
 				flush()
 				var b Block
-				b, i = parseList(lines, i, m, depth)
+				b, i = parseList(lines, i, m, depth, o)
 				out = append(out, b)
 				continue
 			}
 		}
 		if i+1 < len(lines) && strings.Contains(ln, "|") {
-			if b, next, ok := parseTable(lines, i); ok {
+			if b, next, ok := parseTable(lines, i, o); ok {
 				flush()
 				out = append(out, b)
 				i = next
@@ -398,7 +401,7 @@ func listMarker(ln string) (marker, bool) {
 }
 
 // parseList consumes the list whose first marker is at lines[i].
-func parseList(lines []string, i int, first marker, depth int) (Block, int) {
+func parseList(lines []string, i int, first marker, depth int, o Options) (Block, int) {
 	b := Block{Kind: KindList, Ordered: first.ordered}
 	if first.ordered {
 		b.Start = first.num
@@ -411,7 +414,7 @@ func parseList(lines []string, i int, first marker, depth int) (Block, int) {
 		if len(item) > 0 {
 			it.Task, item[0] = taskMarker(item[0])
 		}
-		it.Blocks = parseBlocks(item, depth+1)
+		it.Blocks = parseBlocks(item, depth+1, o)
 		if it.Blocks == nil {
 			it.Blocks = []Block{}
 		}
@@ -490,7 +493,7 @@ func taskMarker(s string) (string, string) {
 // parseTable tries a pipe table whose header is lines[i]. The header and its
 // delimiter row must agree on the column count; body rows are padded or cut to
 // it. The table ends at a blank line or a line without a pipe.
-func parseTable(lines []string, i int) (Block, int, bool) {
+func parseTable(lines []string, i int, o Options) (Block, int, bool) {
 	head := splitCells(lines[i])
 	if len(head) == 0 || len(head) > MaxTableCols {
 		return Block{}, i, false
@@ -501,7 +504,7 @@ func parseTable(lines []string, i int) (Block, int, bool) {
 	}
 	b := Block{Kind: KindTable, Align: align, Rows: [][][]Inline{}}
 	for _, c := range head {
-		b.Head = append(b.Head, cellInline(c))
+		b.Head = append(b.Head, cellInline(c, o))
 	}
 	i += 2
 	for ; i < len(lines); i++ {
@@ -513,7 +516,7 @@ func parseTable(lines []string, i int) (Block, int, bool) {
 		row := make([][]Inline, len(head))
 		for c := range row {
 			if c < len(cells) {
-				row[c] = cellInline(cells[c])
+				row[c] = cellInline(cells[c], o)
 			} else {
 				row[c] = []Inline{}
 			}
@@ -523,8 +526,8 @@ func parseTable(lines []string, i int) (Block, int, bool) {
 	return b, i, true
 }
 
-func cellInline(s string) []Inline {
-	in := parseInline(s)
+func cellInline(s string, o Options) []Inline {
+	in := parseInline(s, o)
 	if in == nil {
 		return []Inline{}
 	}
