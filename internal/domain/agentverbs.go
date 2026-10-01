@@ -200,7 +200,7 @@ func ServiceForDir(dir string) *Service {
 	if s, ok := svcCache[key]; ok {
 		return s
 	}
-	s := Open(key)
+	s := OpenTUI(key) // the TUI hosts every spawn: ssh must never prompt on its raw terminal
 	svcCache[key] = s
 	return s
 }

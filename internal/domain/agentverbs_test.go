@@ -255,3 +255,23 @@ func TestResolveWorktreeArg(t *testing.T) {
 		t.Error("an unknown name resolved")
 	}
 }
+
+// A spawn runs inside the TUI: its Service must never let ssh prompt on the
+// TUI's raw terminal (OpenTUI's BatchMode runner).
+func TestServiceForDirIsTheTUIOpener(t *testing.T) {
+	t.Setenv("GIT_SSH_COMMAND", "")
+	dir := t.TempDir()
+	svc := ServiceForDir(dir)
+	t.Cleanup(func() {
+		svcCacheMu.Lock()
+		delete(svcCache, filepath.Clean(dir))
+		svcCacheMu.Unlock()
+	})
+	res, err := svc.repo.Runner.Run(context.Background(), "gsc", []string{"-c", "alias.gsc=!echo ssh=$GIT_SSH_COMMAND", "gsc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(res.Stdout); !strings.Contains(got, "BatchMode=yes") {
+		t.Fatalf("GIT_SSH_COMMAND = %q, want ssh BatchMode", got)
+	}
+}
