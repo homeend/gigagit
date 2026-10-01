@@ -60,6 +60,7 @@ type Service struct {
 	// lives. Tests inject per-Service so they stay parallel; the process-wide
 	// PreviewStatePath global remains for the frontends' TestMain seams.
 	savedCompareRoot string
+	sessRegDir       string      // UseSessionRegistryDir override; "" = SessionRegistryDir()
 	noteCounts       *NoteCounts // cached badge counts; nil = cold, invalidated by every mutation
 	// previewCounts caches PreviewNoteCounts per (tip, base) pair. It follows
 	// BOTH clocks: a new tip is a new key, and every note mutation drops the
