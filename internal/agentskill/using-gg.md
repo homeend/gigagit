@@ -128,6 +128,7 @@ you can hand straight back to gg:
 gg://<repo>/<path>[@<target>][:<line>]     <target> = a full/short sha, "staged", or absent = the working tree
 gg://<repo>/<path>[@<target>]#<hunk>       hunk numbers are `gg diff --hunks`'s
 gg://<repo>/<path>@<sha>:old:<n>           the old side of that diff
+gg://<repo>/<path>[@staged]:[old:]<n>~<fp>  an UNCOMMITTED line + its 8-hex fingerprint: gg re-finds the text
 gg://<repo>@<sha>                          a commit, no file
 gg://<repo>@ref:<branch|tag>               a branch or tag TIP: the whole tree there
 gg://<repo>@<a>..<b>                       a CHANGE-SET: only what differs between a and b
@@ -167,6 +168,18 @@ versions row it came from. The id is `<unix>-<op>` with no branch (ids reject
 `/`); the consumer finds the record by id, tie-broken by the pair. These
 links are MACHINE-LOCAL: version refs are never pushed and `<ours>` is a
 rewritten tip, so on another checkout the pair itself will not resolve.
+A link to an UNCOMMITTED line (the working tree, `@staged`, `?view=content`)
+ends `:<n>~<fp>`: a fingerprint of that line's text, added by every copy path
+(`gg link` too; `--no-fingerprint` prints the plain form). The file may have
+moved on since the human copied it, so gg re-finds the text and tells you on
+stderr — the verb still runs, on the line where the text is NOW:
+`gg: line 33 moved to 41` (follow it; `(nearest of N matching lines)` means
+the text is not unique, so check the line), or `gg: line 33 has changed since
+this link was copied` (the line the human meant no longer exists as written —
+say so rather than answer about whatever sits on line 33 now). `gg link
+resolve --json` and `gg_link_resolve` report `line` (now), `asked_line` and
+`anchor` (`same` | `moved` | `changed`). A commit, pair, preview or ref link
+never carries a fingerprint (it is refused): those already name fixed content.
 `gg link resolve` takes both: a `@ref:` link answers with `ref <name>` plus
 the tip it resolves to HERE, a `@a..b` link with `pair <a>..<b>`, and
 `--json` carries `ref` / `pair_a` + `pair_b` beside the address fields. The

@@ -99,6 +99,33 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   files). **`gg init --mcp`** registers gg's MCP server with Claude Code
   (`claude mcp add -s user`). The using-gg skill is v118.
 
+## Links to uncommitted lines follow their text
+
+### Added
+
+- **A link to an uncommitted line carries a fingerprint of that line**:
+  `gg://repo/path:33~9f2c41aa` (also `@staged` and `?view=content` links).
+  Every copy path adds it — `L`, the `.` menu's Copy link and Copy file link,
+  the web's *copy gg link to this line*, `gg link`. When the link is opened
+  after the file has moved on, gg finds the text again: it lands on the line
+  where the text is now and says `line 33 moved to 41` (or, when several
+  lines match, `nearest of N matching lines`). When the text is gone it lands
+  on the original line and says `line 33 has changed since this link was
+  copied`. It never refuses. The note shows in the diff's notice box, on the
+  web's op line, on stderr for `gg diff` / `gg note add` / `gg open` / `gg
+  session navigate`, and in the steer reply.
+- **`gg link resolve --json` and MCP `gg_link_resolve`** report `asked_line`,
+  `anchor` (`same` | `moved` | `changed`) and `anchor_matches`; `line` is
+  where the text is now.
+- **`gg link --no-fingerprint`** prints the plain form.
+
+### Changed
+
+- A blank line gets no fingerprint, and a commit, pair, preview or ref link
+  never carries one (`~<fp>` on those is refused): they already name fixed
+  content.
+- A gg build older than this one refuses a fingerprinted link as malformed.
+
 ## Line links: the landing pane, the web's other comparisons, the help line
 
 ### Changed
