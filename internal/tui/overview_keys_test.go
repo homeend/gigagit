@@ -30,7 +30,7 @@ func tourModel(t *testing.T) (Model, *openFile, agentdocs.Note) {
 		"- [the note](note:" + n.ID + ")\n" +
 		"- [missing](missing.txt)\n" +
 		"- [gone note](note:t999999)\n"
-	d := newOverviewDoc("Tour", text)
+	d := storeOverview(t, m, "Tour", text)
 	m = m.registerDoc(d)
 	m, cmd = m.bringToFront(d)
 	return pumpAll(t, m, cmd), d, n
@@ -168,7 +168,7 @@ func TestLatestJumpWins(t *testing.T) {
 	m, d, _ := tourModel(t)
 	m = openNth(t, m, d, 1)
 	m = fvKeys(t, m, keyMsg("backspace"))
-	d2 := newOverviewDoc("Second", "[again](a.txt:3)")
+	d2 := storeOverview(t, m, "Second", "[again](a.txt:3)")
 	m = m.registerDoc(d2)
 	var cmd tea.Cmd
 	m, cmd = m.bringToFront(d2)
@@ -269,7 +269,7 @@ func TestNoteAnchorBringsTheBoxIntoView(t *testing.T) {
 	nm, cmd := m.applySteer(noteAddCmd("box-n", "a.txt", 5, 30, "a long range"))
 	m = pumpAll(t, nm, cmd)
 	id := awaitNote(t, m, "box-n").Notes[0].ID
-	d := newOverviewDoc("Tour", "[n](note:"+id+")")
+	d := storeOverview(t, m, "Tour", "[n](note:"+id+")")
 	m = m.registerDoc(d)
 	m, cmd = m.bringToFront(d)
 	m = pumpAll(t, m, cmd)

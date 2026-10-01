@@ -29,3 +29,24 @@ func NoteWire(n Note, fileID string, text []string) steer.FileNote {
 	return steer.FileNote{ID: n.ID, FileID: fileID, Path: n.Path, Start: n.Start, End: n.End,
 		Summary: n.Summary, Rationale: n.Rationale, Author: n.Author, Outdated: n.Outdated, Text: text}
 }
+
+// AnchorReference is what r copies about an anchor: enough for the agent to
+// know which overview and which step the user means.
+func AnchorReference(o Overview, a Anchor) string {
+	return "gg overview " + o.ID + " " + strconv.Quote(o.Title) + " → " + a.Dest
+}
+
+// OverviewWire is the overview in its protocol form; state is the asking
+// side's ("shown" | "background"), withText adds the markdown.
+func OverviewWire(o Overview, state string, withText bool) steer.Overview {
+	w := steer.Overview{ID: o.ID, Title: o.Title, State: state, Anchors: len(o.Anchors)}
+	for _, a := range o.Anchors {
+		if a.Missing {
+			w.Unresolved = append(w.Unresolved, a.Dest)
+		}
+	}
+	if withText {
+		w.Text = o.Text
+	}
+	return w
+}

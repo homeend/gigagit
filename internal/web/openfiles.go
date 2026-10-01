@@ -58,9 +58,11 @@ type ofEntry struct {
 	line    int
 	disk    diskStat
 	checked time.Time
-	// pinned: an agent's notes are on it (agentdocs_follow.go) — never
-	// evicted, and a plain close (esc) backgrounds it instead.
+	// pinned: an agent's notes are on it, or it is an overview
+	// (agentdocs_follow.go) — never evicted, and a plain close (esc)
+	// backgrounds it instead.
 	pinned bool
+	title  string // an overview's
 }
 
 type openFiles struct {
@@ -101,7 +103,7 @@ func (r *openFiles) wireLocked(e *ofEntry) steer.OpenFile {
 	if r.shownLocked(e.id) {
 		st = "shown"
 	}
-	return steer.OpenFile{ID: e.id, Path: e.key.Path, Source: e.key.Src, Rev: e.key.Rev, Line: e.line, State: st}
+	return steer.OpenFile{ID: e.id, Path: e.key.Path, Source: e.key.Src, Rev: e.key.Rev, Line: e.line, State: st, Title: e.title}
 }
 
 // frontLocked moves e first in wt's list (adding it when new) and, over the
@@ -170,14 +172,66 @@ func (r *openFiles) ensureOpen(wt string, k ofKey, pinned bool) (steer.OpenFile,
 	return r.wireLocked(e), ev, true
 }
 
+// ensureOpenID is ensureOpen for an entry whose id is given (an overview's,
+// from the store), pinned, titled title — kept up to date when listed.
+func (r *openFiles) ensureOpenID(wt string, k ofKey, id, title string) (steer.OpenFile, string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, e := r.findLocked(wt, id); e != nil {
+		e.pinned, e.title = true, title
+		return r.wireLocked(e), "", false
+	}
+	e := &ofEntry{id: id, key: k, pinned: true, title: title}
+	ev := r.frontLocked(wt, e)
+	return r.wireLocked(e), ev, true
+}
+
+// removeID drops wt's entry id, in every tab; false when there was none.
+func (r *openFiles) removeID(wt, id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	i, e := r.findLocked(wt, id)
+	if e == nil {
+		return false
+	}
+	for t, v := range r.tabShows {
+		if v == id {
+			delete(r.tabShows, t)
+		}
+	}
+	r.byWT[wt] = append(r.byWT[wt][:i:i], r.byWT[wt][i+1:]...)
+	return true
+}
+
+// ids are wt's entry ids from source src.
+func (r *openFiles) ids(wt, src string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for _, e := range r.byWT[wt] {
+		if e.key.Src == src {
+			out = append(out, e.id)
+		}
+	}
+	return out
+}
+
+// shown reports whether a tab shows id.
+func (r *openFiles) shown(id string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.shownLocked(id)
+}
+
 // setPinned pins wt's working-tree entries whose path is in paths and
-// unpins every other one; true when anything changed.
+// unpins every other one (an overview stays pinned); true when anything
+// changed.
 func (r *openFiles) setPinned(wt string, paths map[string]bool) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	changed := false
 	for _, e := range r.byWT[wt] {
-		if want := e.key.Src == "worktree" && paths[e.key.Path]; e.pinned != want {
+		if want := e.key.Src == "overview" || e.key.Src == "worktree" && paths[e.key.Path]; e.pinned != want {
 			e.pinned, changed = want, true
 		}
 	}

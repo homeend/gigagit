@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v111 -->
+<!-- gg:using-gg:v112 -->
 
 # Using gg (gigagit)
 
@@ -287,8 +287,10 @@ and lines still say where it was).
 
 **Overviews — a guided tour through several files.** When the user asks to be
 shown or walked through something that spans several files, write an
-overview: a short markdown document that lives in the gg TUI's memory, whose
-links are ANCHORS. The user tabs from anchor to anchor, presses enter to open
+overview: a short markdown document that lives in gg's memory — the TUI's, or
+a gg web page's when no TUI runs (a TUI serving its own page shares one set
+with it: same ids, closing one in either closes it in both) — whose links
+are ANCHORS. The user tabs from anchor to anchor, presses enter to open
 one (the real file comes to the front at the place you named), and backspace
 brings them back to the overview on the anchor they left.
 
@@ -316,18 +318,18 @@ brings them back to the overview on the anchor they left.
   `show <id> [--json]` — `<id>\t<title>`, a blank line, the text; `rm <id>` —
   `closed <id>`. `gg session files focus <id>` brings one to the front.
 - Answers you may get (exit 1): `no gg session for this worktree` (start gg
-  first); `overviews need a gg TUI (only gg web is live for this worktree)`;
-  `no overview f<n>` (the user closed it — add a new one); `20 overviews are
-  open; remove one first`; `gg is showing worktree <a>, not <b>` (the TUI is
-  on another checkout). Exit 2 is misuse: `--title is required`, `the text is
-  empty` (nothing on stdin), `the text is over 64 KiB`.
+  first); `no overview f<n>` (the user closed it — add a new one); `20
+  overviews are open; remove one first`; `gg is showing worktree <a>, not
+  <b>` (the TUI is on another checkout; gg web says `gg web is showing
+  worktree …`). Exit 2 is misuse: `--title is required`, `the text is empty`
+  (nothing on stdin), `the text is over 64 KiB`.
 
 Combine with notes: `gg session note add` the remarks first, then link them
 from the overview (`[why this lock](note:t7)`). Order the anchors in the order
 you would explain them — tab walks them top to bottom. Like notes, overviews
-are temporary (gone on X or quit) and need a live gg TUI. When the user's
-message holds `gg overview f<n> "<title>" → <dest>`, they copied a reference to
-that anchor: that is the step they are asking about.
+are temporary (gone on X or quit) and need a live gg TUI or gg web page. When
+the user's message holds `gg overview f<n> "<title>" → <dest>`, they copied a
+reference to that anchor: that is the step they are asking about.
 
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout

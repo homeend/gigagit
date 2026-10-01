@@ -6,6 +6,7 @@ import { closeLayer, copyText, footOwned, mountOverlay, popFoot, pushFoot, pushL
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
+import { mdHTML } from "./markdown.js";
 import { clearOpLine, opLine } from "./ops.js";
 import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
@@ -40,6 +41,7 @@ function sameLines(a, b) {
 function versionLabel(src, rev) {
   if (src === "commit") return "@ " + String(rev || "").slice(0, 7);
   if (src === "shelf") return "shelf";
+  if (src === "overview") return "overview";
   return "working tree";
 }
 // pickLine is where a (re)opened file lands (ruling L8): a link's line, else
@@ -102,10 +104,60 @@ function nextNotedFile(files, mine, dir) {
 }
 // --- end note model ---
 
+// --- overview model (pure; guarded against Go) ---
+// An agent's overview (agentdocs): markdown whose links are anchors —
+// {dest, path, start, end, note, missing, ref}, in document order.
+
+// stepAnchor is tab (dir 1) / shift+tab (-1) from sel (-1 = none),
+// wrapping; -1 when there are none.
+function stepAnchor(anchors, sel, dir) {
+  const n = anchors.length;
+  if (!n) return -1;
+  if (sel < 0) return dir > 0 ? 0 : n - 1;
+  return (((sel + dir) % n) + n) % n;
+}
+
+// anchorStatus is what opening a missing anchor says ("" = it opens).
+function anchorStatus(a) {
+  if (!a.missing) return "";
+  return a.note ? "note " + a.note + " is gone" : "no file " + a.path;
+}
+
+// anchorTarget is where an anchor lands: a file at a line (0 = its top) to
+// end, or a note — whose file and lines the server fills while it lives.
+function anchorTarget(a) {
+  if (a.note && !a.path) return { note: a.note };
+  const t = { path: a.path, line: a.start || 0, end: a.end || 0 };
+  if (a.note) t.note = a.note;
+  return t;
+}
+
+// keepAnchor is the selection after the text changed: the anchor at the same
+// place with the same destination, else the first with it, else none.
+function keepAnchor(next, prev, sel) {
+  if (sel < 0 || !prev[sel]) return -1;
+  const dest = prev[sel].dest;
+  if (next[sel] && next[sel].dest === dest) return sel;
+  return next.findIndex((a) => a.dest === dest);
+}
+// backAnchor is the anchor backspace returns to: the one with the
+// destination it left from (a set may have moved it), else the same place
+// while it is in range, else none.
+function backAnchor(anchors, from) {
+  const i = anchors.findIndex((a) => a.dest === from.dest);
+  if (i >= 0) return i;
+  return from.sel < anchors.length ? from.sel : -1;
+}
+// --- end overview model ---
+
 // --- the overlay -------------------------------------------------------------
 // view is the ONE file on screen: its version, its lines, the cursor (1-based,
-// 0 = no line) and the placeholder shown instead of lines ("" = none).
-const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null, notes: [] };
+// 0 = no line) and the placeholder shown instead of lines ("" = none). An
+// overview shows in document mode: ov holds it ({title, text, blocks,
+// anchors, sel}). from is the way back to the overview an anchor opened this
+// file from ({id, sel}, one step deep, this tab's); range the lines that
+// anchor named.
+const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null, notes: [], ov: null, from: null, range: null };
 const viewerSearch = new Search();
 const places = new Map(); // id → {cur, top}: where THIS tab left each file
 let loadSeq = 0; // bumped by every open: a reload that sees it move drops (L9)
@@ -150,6 +202,10 @@ export function imageHTML(image) {
   return `<div class="notice">${esc(image.info)}</div><img class="vimg" src="${esc(image.url)}" alt="">`;
 }
 
+function fetchOverview(id) {
+  return getJSON("/api/overview?id=" + encodeURIComponent(id));
+}
+
 function fetchContent(src, rev, path) {
   return getJSON("/api/file-content?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path));
 }
@@ -176,6 +232,12 @@ viewerRoot.addEventListener("click", (e) => {
   if (e.target.id === "viewer") closeViewer(); // backdrop closes, box does not
 });
 $("viewer-body").addEventListener("click", (e) => {
+  const anc = e.target.closest("a.md-anchor");
+  if (anc) {
+    e.preventDefault(); // a single click opens (ruling 2)
+    openAnchorAt(Number(anc.dataset.a));
+    return;
+  }
   const act = e.target.closest("button[data-nact]");
   if (act) {
     const n = view.notes.find((x) => x.id === act.closest(".vnote")?.dataset.note);
@@ -202,16 +264,20 @@ $("viewer-body").addEventListener("contextmenu", (e) => {
 async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "" }) {
   const seq = ++loadSeq;
   if (isOpen()) rememberPlace();
-  let reg, body;
+  let reg, body, ov;
   try {
     reg = id ? await ofPost({ op: "focus", id }) : await ofPost({ op: "open", src, rev, path, line });
-    body = await fetchContent(reg.file.source, reg.file.rev || "", reg.file.path);
+    if (reg.file.source === "overview") ov = await fetchOverview(reg.file.id);
+    else body = await fetchContent(reg.file.source, reg.file.rev || "", reg.file.path);
   } catch (e) {
     opLine("view failed: " + (e.message || e), true);
     return { ok: false, notice: "" };
   }
   if (seq !== loadSeq) return { ok: false, notice: "" }; // a newer open won
   const f = reg.file;
+  view.from = view.range = null; // an anchor's open sets them after
+  if (ov) return showOverview(f, ov);
+  view.ov = null;
   Object.assign(view, { id: f.id, src: f.source, rev: f.rev || "", path: f.path, lines: body.lines || [] });
   view.notes = notesOf(body, view.src);
   view.placeholder = placeholderFor(body, view.lines);
@@ -236,6 +302,23 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   if (landed.notice) opLine(landed.notice, false);
   if (reg.evicted) opLine("closed " + reg.evicted + " (20 files open)", false);
   return { ok: true, notice: landed.notice };
+}
+
+// showOverview puts overview ov (entry f) on screen in document mode, where
+// this tab left it.
+function showOverview(f, ov) {
+  Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], cur: 0, placeholder: "", image: null });
+  view.ov = { ...ov, sel: -1 };
+  const place = places.get(f.id);
+  viewerSearchBar.reset();
+  viewerRoot.style.bottom = $("foot").offsetHeight + "px";
+  pushLayer("viewer", viewerRoot, { onKey: viewerKey });
+  swapFoot(true);
+  paintTitle();
+  renderViewer();
+  $("viewer-body").scrollTop = place ? place.top : 0;
+  $("viewer-body").focus({ preventScroll: true });
+  return { ok: true, notice: "" };
 }
 
 // closeViewer takes the viewer down. "close" (esc, the backdrop) lets go of
@@ -270,6 +353,11 @@ function backgroundViewer() {
 // paintTitle cuts the PATH in the middle, never the file name, to fit.
 function paintTitle() {
   const el = $("viewer-title");
+  if (view.ov) {
+    el.title = view.ov.title;
+    el.textContent = "Overview " + view.id + " · " + view.ov.title;
+    return;
+  }
   const lead = "View ", tail = " (" + versionLabel(view.src, view.rev) + ")";
   const cols = Math.floor((el.clientWidth - 28) / charWidth()) - lead.length - tail.length;
   el.title = view.path;
@@ -279,7 +367,10 @@ function paintTitle() {
 function renderViewer() {
   if (viewerSearch.query) viewerSearch.refind(view.lines.map((l, i) => ({ row: i, side: 0, text: l.text || "" })));
   const body = $("viewer-body");
-  if (view.placeholder) {
+  if (view.ov) {
+    body.innerHTML = `<div class="vdoc md">${mdHTML({ blocks: view.ov.blocks }, esc, { anchors: true })}</div>`;
+    paintAnchors();
+  } else if (view.placeholder) {
     body.innerHTML = `<div class="notice">${esc(view.placeholder)}</div>`;
   } else if (view.image) {
     body.innerHTML = imageHTML(view.image);
@@ -287,14 +378,128 @@ function renderViewer() {
     let html = "";
     view.lines.forEach((l, i) => {
       const noted = noteAtLine(view.notes, i + 1) ? " vnoted" : "";
+      const ranged = view.range && view.range.start <= i + 1 && i + 1 <= view.range.end ? " vrange" : "";
       html +=
-        `<div class="vline${i + 1 === view.cur ? " vcur" : ""}${noted}" data-i="${i}"><span class="vno">${i + 1}</span>` +
+        `<div class="vline${i + 1 === view.cur ? " vcur" : ""}${noted}${ranged}" data-i="${i}"><span class="vno">${i + 1}</span>` +
         `<span class="vtext">${renderCell(l.text, null, l.tok, "", viewerSearch.query ? viewerSearch.hitsOn(i, 0) : null) || " "}</span></div>`;
       for (const n of boxesAfter(view.notes, i)) html += noteBoxHTML(n);
     });
     body.innerHTML = html;
   }
   viewerSearchBar.paint();
+}
+
+// ---- an agent's overview (agentdocs) ---------------------------------------
+// paintAnchors marks the selected anchor and the missing ones.
+function paintAnchors() {
+  for (const el of $("viewer-body").querySelectorAll("a.md-anchor")) {
+    const a = view.ov.anchors[Number(el.dataset.a)];
+    el.classList.toggle("asel", Number(el.dataset.a) === view.ov.sel);
+    el.classList.toggle("agone", !!(a && a.missing));
+  }
+}
+
+function anchorEl(i) {
+  return $("viewer-body").querySelector(`a.md-anchor[data-a="${i}"]`);
+}
+
+function selectAnchor(i) {
+  view.ov.sel = i;
+  paintAnchors();
+  anchorEl(i)?.scrollIntoView({ block: "nearest" });
+}
+
+// refreshOverview re-reads the overview on screen (the server re-checks its
+// anchors), keeping the selected anchor by its destination; false when it
+// is gone or another open won meanwhile.
+async function refreshOverview() {
+  if (!view.ov || !viewerFileId()) return false;
+  const id = view.id, seq = loadSeq;
+  let ov;
+  try {
+    ov = await fetchOverview(id);
+  } catch {
+    return false;
+  }
+  if (seq !== loadSeq || id !== view.id || !view.ov) return false;
+  view.ov = { ...ov, sel: keepAnchor(ov.anchors || [], view.ov.anchors, view.ov.sel) };
+  paintTitle();
+  rerenderKeepingScroll();
+  return true;
+}
+
+// openAnchorAt opens anchor i in front — a file at its line, its range
+// tinted, or a note's file at the note — after the server re-checked it; a
+// missing one says why and opens nothing. Backspace there comes back.
+async function openAnchorAt(i) {
+  if (!view.ov || !view.ov.anchors[i]) return;
+  const id = view.id;
+  selectAnchor(i);
+  await refreshOverview(); // keeps the selection by its destination
+  const a = view.ov && view.id === id ? view.ov.anchors[view.ov.sel] : null;
+  if (!a) return;
+  const from = { id, sel: view.ov.sel, dest: a.dest };
+  if (a.missing) return opLine(anchorStatus(a), false);
+  const t = anchorTarget(a);
+  if (!t.path) return opLine("note " + t.note + " is gone", false);
+  const r = await openViewer({ src: "worktree", path: t.path, line: t.line });
+  if (!r.ok) return;
+  view.from = from;
+  view.range = t.end > t.line ? { start: t.line, end: t.end } : null;
+  rerenderKeepingScroll();
+  swapFoot(true);
+  if (t.note) $("viewer-body").querySelector(`.vnote[data-note="${t.note}"]`)?.scrollIntoView({ block: "nearest" });
+}
+
+// anchorBack is backspace in a file an anchor opened: the overview comes
+// back with that anchor selected; the file stays open. One step deep.
+async function anchorBack() {
+  const f = view.from;
+  view.from = null;
+  swapFoot(true);
+  let files = [];
+  try {
+    files = (await getJSON("/api/open-files")).files || [];
+  } catch {}
+  if (!files.some((x) => x.id === f.id)) return opLine("the overview was closed", false);
+  rememberPlace();
+  ofPost({ op: "background", id: view.id, line: view.cur }).catch(() => {});
+  const r = await openViewer({ id: f.id });
+  if (r.ok && view.ov) selectAnchor(backAnchor(view.ov.anchors, f));
+}
+
+function copyAnchorRef() {
+  const a = view.ov.anchors[view.ov.sel];
+  if (!a) return opLine("no anchor selected — tab selects one", false);
+  copyText(a.ref, "anchor reference");
+}
+
+function scrollDoc(dy) {
+  $("viewer-body").scrollBy({ top: dy });
+}
+
+// overviewKey is a key in document mode; false = not the overview's.
+function overviewKey(e) {
+  const body = $("viewer-body");
+  switch (e.key) {
+    case "Tab": selectAnchor(stepAnchor(view.ov.anchors, view.ov.sel, e.shiftKey ? -1 : 1)); break;
+    case "Enter":
+      if (view.ov.sel >= 0) openAnchorAt(view.ov.sel);
+      else opLine("no anchor selected — tab selects one", false);
+      break;
+    case "r": copyAnchorRef(); break;
+    case "y": copyText(view.ov.text, "overview text"); break;
+    case "ArrowDown": case "j": scrollDoc(40); break;
+    case "ArrowUp": case "k": scrollDoc(-40); break;
+    case "PageDown": case " ": scrollDoc(body.clientHeight - 40); break;
+    case "PageUp": scrollDoc(-(body.clientHeight - 40)); break;
+    case "Home": case "g": body.scrollTop = 0; break;
+    case "End": case "G": body.scrollTop = body.scrollHeight; break;
+    case "Escape": closeViewer("background"); break; // an overview steps aside; x closes it
+    default: return false;
+  }
+  e.preventDefault();
+  return true;
 }
 
 // ---- an agent's notes (agentdocs) ---------------------------------------
@@ -418,8 +623,10 @@ function viewerKey(e) {
     return true;
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (view.ov) return overviewKey(e);
   if (viewerSearchKey(e)) return true;
   switch (e.key) {
+    case "Backspace": if (!view.from) return false; anchorBack(); break;
     case "ArrowDown": case "j": moveCursor(1); break;
     case "ArrowUp": case "k": moveCursor(-1); break;
     case "PageDown": case " ": moveCursor(pageRows()); break;
@@ -508,11 +715,18 @@ function viewerSearchKey(e) {
 // viewer is open #foot shows them, and gets its own chips back on close.
 // viewerFoot is the chips; a file with an agent's notes adds theirs.
 function viewerFoot() {
+  if (view.ov) {
+    return (
+      `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button><button data-vact="aref">r reference</button>` +
+      `<button data-vact="ytext">y copy text</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
+    );
+  }
+  const back = view.from ? `<button data-vact="back">bksp back</button>` : "";
   const notes = view.notes.length
     ? `<span>} { notes</span><button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>`
     : "";
   return (
-    `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
+    back + `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
     `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\\ open files</button><button data-vact="close">esc close</button>`
   );
 }
@@ -534,6 +748,10 @@ $("foot").addEventListener("click", (e) => {
     case "close": closeViewer(view.notes.length ? "background" : "close"); break;
     case "dismiss": { const n = noteAtLine(view.notes, view.cur); if (n) dismissNote(n.id); else opLine("no note on this line", false); break; }
     case "ref": { const n = noteAtLine(view.notes, view.cur); if (n) copyNoteRef(n); else opLine("no note on this line", false); break; }
+    case "aopen": if (view.ov && view.ov.sel >= 0) openAnchorAt(view.ov.sel); else opLine("no anchor selected — tab selects one", false); break;
+    case "aref": if (view.ov) copyAnchorRef(); break;
+    case "ytext": if (view.ov) copyText(view.ov.text, "overview text"); break;
+    case "back": if (view.from) anchorBack(); break;
   }
 });
 
@@ -628,16 +846,16 @@ function viewerHello() {
 function viewerOpenFiles(files) {
   const id = viewerFileId();
   if (!id || files.some((f) => f.id === id)) return;
-  const path = view.path;
+  const name = view.ov ? "overview " + id : view.path;
   places.delete(id);
   dropViewer();
-  opLine(path + " was closed in another tab", false);
+  opLine(name + " was closed in another tab", false);
 }
 
 // viewerFileChanged: the file on disk changed — re-read it keeping this
 // tab's place (L9). A newer open (a link landing) wins over the reload.
 async function viewerFileChanged(id) {
-  if (!id || id !== viewerFileId()) return;
+  if (!id || id !== viewerFileId() || view.ov) return;
   const seq = loadSeq;
   let body;
   try {
@@ -660,12 +878,21 @@ async function viewerFileChanged(id) {
 }
 
 // viewerAgentDocs: the agent-docs store changed (a note added, dismissed or
-// moved — here, in another tab, or in the TUI hosting this page). A file
-// this viewer shows that left the list goes; one that stays is re-read,
-// which aligns its notes to the lines it gets back.
-function viewerAgentDocs(files) {
+// moved, an overview added, set or closed — here, in another tab, or in the
+// TUI hosting this page). An overview on screen that left the store closes;
+// a file this viewer shows that left the list goes; one that stays is
+// re-read, which aligns its notes (or re-checks its anchors).
+function viewerAgentDocs(files, closed = []) {
+  const id = viewerFileId();
+  if (id && view.ov && closed.includes(id)) {
+    places.delete(id);
+    dropViewer();
+    return opLine("overview " + id + " was closed", false);
+  }
   viewerOpenFiles(files);
-  if (viewerFileId()) viewerFileChanged(viewerFileId());
+  if (!viewerFileId()) return;
+  if (view.ov) refreshOverview();
+  else viewerFileChanged(viewerFileId());
 }
 
 // ---- entry points ---------------------------------------------------------
@@ -689,7 +916,9 @@ registerHelp({
   html:
     "a file row's or a shelved file's <b>view file</b> (right-click / <b>.</b>), or a pasted content link, opens the file full-page: " +
     "<b>↑↓ j k</b> line, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close; " +
-    "an agent's notes (<code>gg session note</code>) sit under their lines: <b>} {</b> next / previous note, <b>d</b> dismiss, <b>r</b> copy its reference",
+    "an agent's notes (<code>gg session note</code>) sit under their lines: <b>} {</b> next / previous note, <b>d</b> dismiss, <b>r</b> copy its reference; " +
+    "an agent's overview (<code>gg session overview</code>) opens as a document: <b>tab / shift+tab</b> select an anchor, <b>enter</b> or a click opens it, " +
+    "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> in the file an anchor opened comes back",
 });
 
 export { closeViewer, dropViewer, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };

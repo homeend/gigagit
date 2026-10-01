@@ -217,3 +217,13 @@ func TestReviewSkillTeachesTheReviewDocument(t *testing.T) {
 		t.Error("the notes sidecar is gone")
 	}
 }
+
+// Since agent docs reached gg web, overviews (like notes) work with only a
+// gg web page live: the skill must not tell an agent they need a TUI.
+func TestUsingGGOverviewsDoNotNeedATUI(t *testing.T) {
+	for _, stale := range []string{"overviews need a gg TUI", "need a live gg TUI. When"} {
+		if strings.Contains(UsingGG.Body(), stale) {
+			t.Errorf("using-gg.md still says %q", stale)
+		}
+	}
+}

@@ -2,8 +2,10 @@ package web
 
 import (
 	"context"
+	"strconv"
 	"sync"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -17,33 +19,40 @@ import (
 // TUI's key — computed once per service (svc.Root() is the directory the
 // service was opened at, which may be a subdirectory).
 type docsRootCache struct {
-	mu   sync.Mutex
-	svc  *domain.Service
-	root string
+	mu        sync.Mutex
+	svc       *domain.Service
+	root, top string
 }
 
-// docsRoot is the root the served worktree's notes are filed under. The git
-// call runs OUTSIDE the cache's lock (it may wait behind a running op), and
-// only a successful answer is cached: the fallback — the directory the
-// service was opened at — holds for this call alone.
+// docsRoot is the root the served worktree's notes are filed under.
 func (s *Server) docsRoot(ctx context.Context) string {
+	root, _ := s.docsDirs(ctx)
+	return root
+}
+
+// docsDirs is docsRoot plus the toplevel on disk it keys (an overview's
+// file anchors are checked there). The git call runs OUTSIDE the cache's
+// lock (it may wait behind a running op), and only a successful answer is
+// cached: the fallback — the directory the service was opened at — holds
+// for this call alone.
+func (s *Server) docsDirs(ctx context.Context) (root, top string) {
 	svc := s.service()
 	s.rootc.mu.Lock()
 	if s.rootc.svc == svc {
-		root := s.rootc.root
+		root, top = s.rootc.root, s.rootc.top
 		s.rootc.mu.Unlock()
-		return root
+		return root, top
 	}
 	s.rootc.mu.Unlock()
 	top, err := svc.TopLevel(ctx)
 	if err != nil {
-		return domain.CheckoutKey(svc.Root())
+		return domain.CheckoutKey(svc.Root()), svc.Root()
 	}
-	root := domain.CheckoutKey(top)
+	root = domain.CheckoutKey(top)
 	s.rootc.mu.Lock()
-	s.rootc.svc, s.rootc.root = svc, root
+	s.rootc.svc, s.rootc.root, s.rootc.top = svc, root, top
 	s.rootc.mu.Unlock()
-	return root
+	return root, top
 }
 
 // ofList is wt's open files with each working-tree file's note count.
@@ -59,11 +68,13 @@ func (s *Server) ofList(wt string) []steer.OpenFile {
 }
 
 // followDocs is one pass over the store: list every noted file the page
-// lacks (in the background, pinned), pin exactly the noted ones, and tell
-// the tabs — through fanOut, which the op gate never drops.
+// lacks (in the background, pinned), pin exactly the noted ones, list every
+// overview under the store's id (pinned) and drop the ones that left it, and
+// tell the tabs — through fanOut, which the op gate never drops.
 func (s *Server) followDocs() {
 	wt := s.service().Root()
-	paths := s.docs.NotedPaths(s.docsRoot(context.Background()))
+	root := s.docsRoot(context.Background())
+	paths := s.docs.NotedPaths(root)
 	noted := make(map[string]bool, len(paths))
 	for _, p := range paths {
 		noted[p] = true
@@ -73,9 +84,25 @@ func (s *Server) followDocs() {
 		}
 	}
 	s.ofs.setPinned(wt, noted)
-	if h := s.liveHubRef(); h != nil {
-		h.fanOut(liveMsg{Changed: []string{}, Reason: "agentdocs", Files: s.ofList(wt)})
+	inStore := map[string]bool{}
+	for _, o := range s.docs.Overviews(root) {
+		inStore[o.ID] = true
+		s.ofs.ensureOpenID(wt, overviewKey(o), o.ID, o.Title)
 	}
+	var closed []string
+	for _, id := range s.ofs.ids(wt, "overview") {
+		if !inStore[id] && s.ofs.removeID(wt, id) {
+			closed = append(closed, id)
+		}
+	}
+	if h := s.liveHubRef(); h != nil {
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "agentdocs", Files: s.ofList(wt), Closed: closed})
+	}
+}
+
+// overviewKey is an overview's list key: the TUI's display name.
+func overviewKey(o agentdocs.Overview) ofKey {
+	return ofKey{Src: "overview", Path: "overview-" + strconv.FormatInt(o.Seq, 10) + ".md"}
 }
 
 // startDocsFollow runs a pass now and after every store change until Close

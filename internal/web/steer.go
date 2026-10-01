@@ -349,6 +349,12 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, s.steerNote(readCtx(r), c))
 		return
 	}
+	// So are the overview verbs (an add that would move the screen while an
+	// op is in flight lands in the background instead — steerOverviewAdd).
+	if isOverviewVerb(c.Cmd) {
+		writeJSON(w, s.steerOverview(readCtx(r), c))
+		return
+	}
 	wire, err := toSteerWire(c)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)

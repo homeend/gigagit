@@ -246,6 +246,13 @@ func driveChain(t *testing.T, m Model, cmd tea.Cmd) Model {
 			queue = append(queue, b...)
 			continue
 		}
+		if _, ok := msg.(noticeBlinkMsg); ok {
+			// The blink re-arms for as long as a notice is unread (the merge
+			// continue raises one): a timer, never the chain — following it
+			// would spin 400 ticks of 800ms whenever no notice was already
+			// blinking before the op (none at load on this machine).
+			continue
+		}
 		u, next := m.Update(msg)
 		m = u.(Model)
 		queue = append(queue, next)

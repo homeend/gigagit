@@ -12,12 +12,15 @@
 //   - an href is written only for an http(s) URL — checked HERE as well as in
 //     the parser, so a tree that did not come from the parser is inert too;
 //   - an image is a link to its URL, never an <img>: the page fetches nothing;
-//   - a node kind this file does not know paints as its escaped text.
+//   - a node kind this file does not know paints as its escaped text;
+//   - an overview's anchor (kind "anchor") is a link only with opts.anchors,
+//     and then only to "#": its data-a is the anchor's number, digits only.
 // Every value is type-checked before use: the tree is JSON off the wire.
 
 const HTTP = /^https?:\/\/[^\s\u0000-\u001f]+$/i;
 const LANG = /^[A-Za-z0-9_+#.-]{1,32}$/;
 const TOK = /^[a-z]{1,4}$/;
+const NUM = /^[0-9]{1,4}$/;
 const ALIGN = { left: 1, center: 1, right: 1 };
 const MAX_DEPTH = 24; // far past the parser's own cap; a guard, not a feature
 
@@ -25,12 +28,13 @@ const str = (v) => (typeof v === "string" ? v : "");
 const arr = (v) => (Array.isArray(v) ? v : []);
 
 // mdInlineHTML paints one inline run (a summary line, a paragraph's content).
-export function mdInlineHTML(inl, esc, depth = 0) {
+// opts.anchors paints an overview's anchors as links (mdHTML).
+export function mdInlineHTML(inl, esc, depth = 0, opts) {
   if (depth > MAX_DEPTH) return "";
   let out = "";
   for (const n of arr(inl)) {
     if (!n || typeof n !== "object") continue;
-    const kids = () => mdInlineHTML(n.in, esc, depth + 1);
+    const kids = () => mdInlineHTML(n.in, esc, depth + 1, opts);
     switch (n.k) {
       case "text": out += esc(str(n.t)); break;
       case "br": out += "<br>"; break;
@@ -41,6 +45,9 @@ export function mdInlineHTML(inl, esc, depth = 0) {
       case "del": out += `<del>${kids()}</del>`; break;
       case "link": out += anchor(n.url, kids(), esc); break;
       case "image": out += anchor(n.url, esc(str(n.t) ? `[image: ${str(n.t)}]` : "[image]"), esc); break;
+      case "anchor":
+        out += opts && opts.anchors && NUM.test(str(n.t)) ? `<a class="md-anchor" data-a="${str(n.t)}" href="#">${kids()}</a>` : kids();
+        break;
       default: out += esc(str(n.t)) + kids();
     }
   }
@@ -57,12 +64,13 @@ function anchor(url, inner, esc) {
 // mdHTML paints a whole parsed text ({blocks: [...]}); "" for anything else.
 // opts.skipFirstCaption drops the "suggestion" caption of a LEADING suggestion
 // block: a note whose bold summary already reads "suggestion" would say it twice.
+// opts.anchors paints an overview's anchors as links.
 export function mdHTML(doc, esc, opts) {
   if (!doc || typeof doc !== "object") return "";
-  return blocksHTML(doc.blocks, esc, 0, "", !!(opts && opts.skipFirstCaption));
+  return blocksHTML(doc.blocks, esc, 0, "", !!(opts && opts.skipFirstCaption), opts);
 }
 
-function blocksHTML(blocks, esc, depth, lead = "", noFirstCap = false) {
+function blocksHTML(blocks, esc, depth, lead = "", noFirstCap = false, opts) {
   if (depth > MAX_DEPTH) return "";
   let out = "";
   let first = true;
@@ -71,14 +79,14 @@ function blocksHTML(blocks, esc, depth, lead = "", noFirstCap = false) {
     // lead is a task item's box: it sits inside the item's first paragraph.
     const head = first ? lead : "";
     switch (b.k) {
-      case "p": out += `<p>${head}${mdInlineHTML(b.in, esc)}</p>`; break;
-      case "h": out += head + headingHTML(b, esc); break;
-      case "list": out += head + listHTML(b, esc, depth); break;
-      case "quote": out += `${head}<blockquote class="md-q">${blocksHTML(b.blocks, esc, depth + 1)}</blockquote>`; break;
+      case "p": out += `<p>${head}${mdInlineHTML(b.in, esc, 0, opts)}</p>`; break;
+      case "h": out += head + headingHTML(b, esc, opts); break;
+      case "list": out += head + listHTML(b, esc, depth, opts); break;
+      case "quote": out += `${head}<blockquote class="md-q">${blocksHTML(b.blocks, esc, depth + 1, "", false, opts)}</blockquote>`; break;
       case "code": out += head + codeHTML(b, esc, first && noFirstCap); break;
-      case "table": out += head + tableHTML(b, esc); break;
+      case "table": out += head + tableHTML(b, esc, opts); break;
       case "hr": out += `${head}<hr class="md-hr">`; break;
-      default: out += `<p>${head}${mdInlineHTML(b.in, esc)}</p>`;
+      default: out += `<p>${head}${mdInlineHTML(b.in, esc, 0, opts)}</p>`;
     }
     first = false;
   }
@@ -87,13 +95,13 @@ function blocksHTML(blocks, esc, depth, lead = "", noFirstCap = false) {
 
 // A heading keeps its LEVEL as a class but never paints an h1/h2: those belong
 // to the overlay that hosts the text.
-function headingHTML(b, esc) {
+function headingHTML(b, esc, opts) {
   const level = Math.min(6, Math.max(1, Number.isInteger(b.level) ? b.level : 1));
   const tag = "h" + Math.min(6, level + 2);
-  return `<${tag} class="md-h md-h${level}">${mdInlineHTML(b.in, esc)}</${tag}>`;
+  return `<${tag} class="md-h md-h${level}">${mdInlineHTML(b.in, esc, 0, opts)}</${tag}>`;
 }
 
-function listHTML(b, esc, depth) {
+function listHTML(b, esc, depth, opts) {
   const ordered = b.ordered === true;
   const start = ordered && Number.isInteger(b.start) && b.start >= 0 && b.start !== 1 ? ` start="${b.start}"` : "";
   let items = "";
@@ -101,7 +109,7 @@ function listHTML(b, esc, depth) {
     if (!it || typeof it !== "object") continue;
     const task = it.task === "done" ? "☑" : it.task === "open" ? "☐" : "";
     const lead = task ? `<span class="md-box">${task}</span> ` : "";
-    items += `<li${task ? ' class="md-task"' : ""}>${blocksHTML(it.blocks, esc, depth + 1, lead)}</li>`;
+    items += `<li${task ? ' class="md-task"' : ""}>${blocksHTML(it.blocks, esc, depth + 1, lead, false, opts)}</li>`;
   }
   const tag = ordered ? "ol" : "ul";
   return `<${tag} class="md-list"${start}>${items}</${tag}>`;
@@ -132,11 +140,11 @@ function codeLineHTML(l, esc) {
   return out + esc(runes.slice(pos).join(""));
 }
 
-function tableHTML(b, esc) {
+function tableHTML(b, esc, opts) {
   const align = arr(b.align);
   const cls = (i) => (ALIGN[align[i]] === 1 ? ` class="md-al-${align[i]}"` : "");
   const row = (cells, tag) =>
-    "<tr>" + arr(cells).map((c, i) => `<${tag}${cls(i)}>${mdInlineHTML(c, esc)}</${tag}>`).join("") + "</tr>";
+    "<tr>" + arr(cells).map((c, i) => `<${tag}${cls(i)}>${mdInlineHTML(c, esc, 0, opts)}</${tag}>`).join("") + "</tr>";
   const body = arr(b.rows).map((r) => row(r, "td")).join("");
   return `<div class="md-tablewrap"><table class="md-table"><thead>${row(b.head, "th")}</thead><tbody>${body}</tbody></table></div>`;
 }

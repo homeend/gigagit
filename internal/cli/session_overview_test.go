@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,13 +137,21 @@ func TestSessionOverviewMisuse(t *testing.T) {
 	}
 }
 
-func TestSessionOverviewNeedsATUI(t *testing.T) {
+// With only gg web live the page answers the overview verbs itself.
+func TestSessionOverviewGoesToAWebOnlySession(t *testing.T) {
 	t.Parallel()
+	if code, _, errs := runOverview(t, t.TempDir(), "", "list"); code != 1 || !strings.Contains(errs, "no gg session for this worktree") {
+		t.Fatalf("nothing live: exit %d stderr %q", code, errs)
+	}
+	srv, ts := newSteerServer(t, http.StatusOK, `{"id":"x","ok":true,"detail":"showing f1","overviews":[{"id":"f1","title":"T","state":"shown","anchors":1}]}`)
 	dir := t.TempDir()
-	liveWebPresence(t, dir, "http://127.0.0.1:1")
-	code, _, errs := runOverview(t, dir, "", "list")
-	if code != 1 || !strings.Contains(errs, "overviews need a gg TUI") {
-		t.Fatalf("exit %d stderr %q", code, errs)
+	liveWebPresence(t, dir, ts.URL)
+	code, out, errs := runOverview(t, dir, "[a](a.go:2)", "add", "--title", "T")
+	if code != 0 || out != "f1\n" {
+		t.Fatalf("web only: exit %d stdout %q stderr %q", code, out, errs)
+	}
+	if got := srv.commands(); len(got) != 1 || got[0].Cmd != "overview_add" || got[0].Text != "[a](a.go:2)" {
+		t.Fatalf("posted %+v", got)
 	}
 }
 

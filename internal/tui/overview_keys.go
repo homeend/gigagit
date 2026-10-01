@@ -3,11 +3,11 @@ package tui
 import (
 	"os"
 	"path/filepath"
-	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -84,33 +84,36 @@ func (d *openFile) stepAnchor(dir, rows int) {
 // that is gone is marked and named in the status line instead.
 func (m Model) openAnchor(ov *openFile, i int) (Model, tea.Cmd) {
 	a := &ov.ov.anchors[i]
-	gone := func(msg string) (Model, tea.Cmd) {
-		a.missing = true
+	// mark records what the open found, here and in the store (the page).
+	mark := func(missing bool) {
+		a.missing = missing
+		m.docs.SetAnchorMissing(ov.id(), i, missing)
 		ov.ov.paint(ov.p.lines)
+	}
+	gone := func(msg string) (Model, tea.Cmd) {
+		mark(true)
 		m.statusMsg = msg
 		return m, nil
 	}
-	if id := a.target.note; id != "" {
+	if id := a.target.Note; id != "" {
 		d, n := m.findFileNote(id)
 		if n == nil {
 			return gone(i18n.T("note %s is gone", id))
 		}
-		a.missing = false
-		ov.ov.paint(ov.p.lines)
+		mark(false)
 		d.pendingLine, d.pendingEnd = n.Start, 0
 		d.from, d.backgrounded = ov, true
 		return m.bringToFront(d)
 	}
 	t := a.target
-	if st, err := os.Stat(filepath.Join(m.currentWorktree, filepath.FromSlash(t.path))); err != nil || st.IsDir() {
-		return gone(i18n.T("no file %s", t.path))
+	if st, err := os.Stat(filepath.Join(m.currentWorktree, filepath.FromSlash(t.Path))); err != nil || st.IsDir() {
+		return gone(i18n.T("no file %s", t.Path))
 	}
-	a.missing = false
-	ov.ov.paint(ov.p.lines)
-	m, cmd, _ := m.openFileViewerEv(t.path, t.start)
+	mark(false)
+	m, cmd, _ := m.openFileViewerEv(t.Path, t.Start)
 	if d := topDoc(m); d != nil {
-		if t.end > t.start {
-			d.pendingEnd = t.end
+		if t.End > t.Start {
+			d.pendingEnd = t.End
 		}
 		d.from, d.backgrounded = ov, true
 	}
@@ -147,7 +150,7 @@ func (m Model) anchorBack(d *openFile) (Model, tea.Cmd, bool) {
 // anchorReference is what r copies: enough for the agent to know which
 // overview and which step the user means.
 func anchorReference(ov *openFile, a anchor) string {
-	return "gg overview " + ov.id() + " " + strconv.Quote(ov.title) + " → " + a.dest
+	return agentdocs.AnchorReference(ov.overviewCopy(), agentdocs.Anchor{Dest: a.dest})
 }
 
 // overviewClick is a left click in the viewer showing overview fv: on an

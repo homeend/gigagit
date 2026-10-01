@@ -1,5 +1,6 @@
 // Package agentdocs holds what an agent shows the user beside the code: the
-// temporary notes it puts on lines of open working-tree files. Memory only.
+// temporary notes it puts on lines of open working-tree files, and its
+// overview documents whose links are anchors into the code. Memory only.
 // One Store per process is shared by the TUI and the gg web page it hosts,
 // so the two show one set of notes; a standalone gg web keeps its own.
 // Callers file everything under a worktree root they normalised with
@@ -13,17 +14,20 @@ import "sync"
 // Store is the shared state. All of it sits behind one mutex and leaves only
 // as copies; a change signals every subscriber after the lock is released.
 type Store struct {
-	mu      sync.Mutex
-	fileSeq int64
-	noteSeq int64
-	files   map[fileKey]*fileNotes
-	b       broadcaster
+	mu        sync.Mutex
+	fileSeq   int64
+	noteSeq   int64
+	files     map[fileKey]*fileNotes
+	overviews map[string]*ovEntry // by id
+	b         broadcaster
 }
 
 type fileKey struct{ root, path string }
 
 // New is an empty store (a standalone gg web, every test).
-func New() *Store { return &Store{files: map[fileKey]*fileNotes{}} }
+func New() *Store {
+	return &Store{files: map[fileKey]*fileNotes{}, overviews: map[string]*ovEntry{}}
+}
 
 var (
 	sharedOnce sync.Once

@@ -1,0 +1,53 @@
+name = "session overview with only gg web live: the web server answers from its store"
+
+[input]
+web = true
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\n" },
+  { commit = "seed" },
+]
+
+[[run]]
+cmd             = ["session", "overview", "add", "--title", "T", "--background"]
+stdin           = "[a](a.txt:2) and [gone](nope.txt)\n"
+exit            = 0
+stdout_contains = ["f1", "unresolved: nope.txt", "added f1 in the background"]
+
+[[run]]
+cmd             = ["session", "overview", "list"]
+exit            = 0
+stdout_contains = ["f1\tbackground\t2 anchors\tT"]
+
+[[run]]
+cmd             = ["session", "files"]
+exit            = 0
+stdout_contains = ["f1\toverview-1.md\toverview"]
+
+[[run]]
+cmd             = ["session", "overview", "show", "f1"]
+exit            = 0
+stdout_contains = ["f1\tT", "[a](a.txt:2)"]
+
+[[run]]
+cmd             = ["session", "overview", "set", "f1", "--title", "T2"]
+stdin           = "[b](a.txt:3)\n"
+exit            = 0
+stdout_contains = ["f1"]
+
+[[run]]
+cmd             = ["session", "overview", "list"]
+exit            = 0
+stdout_contains = ["f1\tbackground\t1 anchors\tT2"]
+
+[[run]]
+cmd             = ["session", "overview", "rm", "f1"]
+exit            = 0
+stdout_contains = ["closed f1"]
+
+[[run]]
+cmd             = ["session", "overview", "rm", "f1"]
+exit            = 1
+stderr_contains = ["no overview f1"]
+
+[expect]
+branch = "main"

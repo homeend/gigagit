@@ -122,7 +122,7 @@ function connectLive() {
     // An agent's notes changed (agentdocs): the noted files' list and the
     // shown file's notes, re-read with its lines.
     if (msg.reason === "agentdocs") {
-      viewerAgentDocs(msg.files || []);
+      viewerAgentDocs(msg.files || [], msg.closed || []);
       switcherOpenFiles(msg.files || []);
       return;
     }

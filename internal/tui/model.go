@@ -1697,7 +1697,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.worktreeMarks = msg.worktreeMarks
 			// The worktree's open files may have missed store changes while
 			// another worktree was current (a dismiss in the browser).
-			docsCmd := m.syncDocNotes()
+			var docsCmd tea.Cmd
+			m, docsCmd = m.syncAgentDocs()
 			m.linkRepoName = msg.repoName
 			m.cfg = msg.cfg
 			m = m.applyBranchFilterConfig()

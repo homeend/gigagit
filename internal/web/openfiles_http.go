@@ -66,6 +66,8 @@ func ofKeyOf(q ofReq) (ofKey, error) {
 		if k.Rev == "" {
 			return k, errors.New("a " + k.Src + " version needs rev")
 		}
+	case "overview":
+		return k, errors.New("an overview opens by id")
 	default:
 		return k, errors.New("unknown src " + k.Src)
 	}
@@ -117,8 +119,12 @@ func (s *Server) handleOpenFilesPost(w http.ResponseWriter, r *http.Request) {
 			ok = s.ofs.background(wt, q.ID, q.Tab, q.Line)
 		default:
 			ok = s.ofs.close(wt, q.ID, q.Tab, q.Everywhere)
-			if ok && q.Everywhere && k.Src == "worktree" {
+			switch {
+			case !ok || !q.Everywhere:
+			case k.Src == "worktree":
 				s.docs.ClearPath(s.docsRoot(r.Context()), k.Path)
+			case k.Src == "overview":
+				s.docs.RemoveOverview(q.ID) // in a hosting TUI too
 			}
 		}
 	case "cursor":
