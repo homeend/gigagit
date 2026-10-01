@@ -30,6 +30,10 @@ func NoteWire(n Note, fileID string, text []string) steer.FileNote {
 		Summary: n.Summary, Rationale: n.Rationale, Author: n.Author, Outdated: n.Outdated, Text: text}
 }
 
+// OverviewName is how a reply names an overview: its id and title (the
+// display name overview-<n>.md is the frontends' own).
+func OverviewName(id, title string) string { return "overview " + id + " " + strconv.Quote(title) }
+
 // AnchorReference is what r copies about an anchor: enough for the agent to
 // know which overview and which step the user means.
 func AnchorReference(o Overview, a Anchor) string {

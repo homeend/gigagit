@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -121,7 +122,11 @@ func (s *Server) steerFileFocus(ctx context.Context, c steer.Command, wire steer
 	}
 	k, _ := s.ofs.entryKey(wt, f.ID)
 	n, known := s.versionLines(ctx, k)
-	detail := steerLanded("focused "+f.Path, line, n, known, "")
+	name := f.Path
+	if f.Source == "overview" {
+		name = agentdocs.OverviewName(f.ID, f.Title)
+	}
+	detail := steerLanded("focused "+name, line, n, known, "")
 	if s.ofs.liveTabs() == 0 {
 		detail += "; no gg web tab is open to show it"
 	}

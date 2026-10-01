@@ -3,6 +3,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/steer"
@@ -95,6 +96,9 @@ func (m Model) steerFileFocus(c steer.Command) (Model, tea.Cmd) {
 	d.pendingLine = line
 	m, load := m.bringToFront(d)
 	lead := "focused " + d.path
+	if d.ov != nil {
+		lead = "focused " + agentdocs.OverviewName(d.id(), d.title)
+	}
 	if load == nil {
 		rows, _ := m.viewerGeom()
 		if m.filesPreview == d {

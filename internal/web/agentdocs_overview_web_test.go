@@ -196,3 +196,15 @@ func TestAnOverviewDoesNotOpenByPath(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// files focus on an overview names it by id and title, as the TUI does.
+func TestFileFocusOnAnOverviewNamesItByIDAndTitle(t *testing.T) {
+	t.Parallel()
+	s, root := noteSrv(t)
+	o, _ := s.docs.AddOverview(root, s.service().Root(), "The tour", "x")
+	s.followDocs()
+	_, rep := steerAsk(t, s, `{"id":"1","cmd":"file_focus","file_id":"`+o.ID+`"}`)
+	if want := "focused overview " + o.ID + ` "The tour"`; !rep.OK || !strings.HasPrefix(rep.Detail, want) {
+		t.Fatalf("rep = %+v, want detail starting %q", rep, want)
+	}
+}
