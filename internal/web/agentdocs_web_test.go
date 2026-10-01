@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -280,4 +281,34 @@ func TestFollowPassesRunOneAtATime(t *testing.T) {
 	}
 	s.followMu.Unlock()
 	<-done
+}
+
+// A note that lists its file over the cap names the file it pushed out both
+// to the agent and to the tabs — whichever lists it, the steer or a pass.
+func TestANoteOverTheCapTellsTheAgentAndTheTabs(t *testing.T) {
+	isolateGlobal(t)
+	s, _ := noteSrv(t)
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	wt := s.service().Root()
+	for i := 0; i < maxOpenFiles; i++ {
+		s.ofs.open(wt, ofKey{Src: "worktree", Path: fmt.Sprintf("p%d", i)}, "", 0)
+	}
+	_, rep := steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":1,"summary":"look"}`)
+	if !rep.OK || !strings.HasSuffix(rep.Detail, "; closed p0 (20 files open)") {
+		t.Fatalf("reply = %+v", rep)
+	}
+	for {
+		m := next()
+		if m.Reason == "agentdocs" {
+			if m.Evicted != "p0" {
+				t.Fatalf("event = %+v, want p0 named", m)
+			}
+			return
+		}
+	}
 }

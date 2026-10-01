@@ -2,6 +2,8 @@ package agentdocs
 
 import (
 	"errors"
+	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"sort"
@@ -353,4 +355,31 @@ func (s *Store) SetAnchorMissing(id string, i int, missing bool) bool {
 	s.mu.Unlock()
 	s.b.signal()
 	return true
+}
+
+// OverviewStamp fingerprints what a viewer draws of overview id — its title,
+// text, the anchors' missing flags and where each anchored note sits — so a
+// tab can skip re-fetching (and re-checking) an overview a store change did
+// not touch. "" for no such overview.
+func (s *Store) OverviewStamp(id string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.overviews[id]
+	if e == nil {
+		return ""
+	}
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%q %q", e.Title, e.Text)
+	for _, a := range e.Anchors {
+		fmt.Fprintf(h, " %t", a.Missing)
+		if a.Note == "" {
+			continue
+		}
+		if _, n := s.findLocked(a.Note); n != nil && n.Root == e.Root {
+			fmt.Fprintf(h, " %q:%d-%d", n.Path, n.Start, n.End)
+		} else {
+			h.Write([]byte(" -"))
+		}
+	}
+	return strconv.FormatUint(h.Sum64(), 36)
 }

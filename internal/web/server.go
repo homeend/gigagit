@@ -129,11 +129,13 @@ type Server struct {
 	// docs is the agent-docs store (agentdocs_follow.go): this server's own
 	// for a standalone gg web, agentdocs.Shared() for a page a TUI hosts
 	// (NewHost) — set before Start, never after. rootc caches the root its
-	// notes are filed under. followMu gives the follow passes one turn
-	// each (followDocs).
+	// notes are filed under. followMu gives the follow passes (followDocs)
+	// and a steer's own listing (listDocs) one turn each; evicted, under it,
+	// is what such a listing pushed out, for the next pass to tell the tabs.
 	docs     *agentdocs.Store
 	rootc    docsRootCache
 	followMu sync.Mutex
+	evicted  []string
 
 	// closing is closed once by announceShutdown: every /api/events stream
 	// then sends a last "shutdown" message and ends (live.go).

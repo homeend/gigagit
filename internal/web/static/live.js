@@ -122,7 +122,10 @@ function connectLive() {
     // An agent's notes changed (agentdocs): the noted files' list and the
     // shown file's notes, re-read with its lines.
     if (msg.reason === "agentdocs") {
-      viewerAgentDocs(msg.files || [], msg.closed || []);
+      // No tab asked for this list change, so every tab names a file the
+      // agent's addition pushed out over the cap.
+      if (msg.evicted) opLine("closed " + msg.evicted + " (20 files open)", false);
+      viewerAgentDocs(msg.files || [], msg.closed || [], msg.stamps);
       switcherOpenFiles(msg.files || []);
       return;
     }

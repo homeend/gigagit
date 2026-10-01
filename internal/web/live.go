@@ -72,6 +72,10 @@ type liveMsg struct {
 	// Closed names the overviews that left the agent-docs store (Reason
 	// "agentdocs"): a tab showing one closes its viewer.
 	Closed []string `json:"closed,omitempty"`
+	// Stamps fingerprint each listed overview (Reason "agentdocs",
+	// agentdocs.OverviewStamp): a tab showing one re-fetches it only when
+	// its stamp moved.
+	Stamps map[string]string `json:"stamps,omitempty"`
 	// Sessions is the whole agent-session list on Reason "sessions" (start,
 	// exit, remove — and, from plan 3, an agent-state change). It bypasses
 	// the op gate: a session exiting mid-op must still show.

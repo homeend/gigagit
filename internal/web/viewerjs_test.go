@@ -128,7 +128,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", `op: "cursor"`, "the cursor line is reported"},
 	{"viewer.js", "closed in another tab", "x in another tab closes this viewer"},
 	{"viewer.js", "files open)", "an eviction names the file (the TUI's words)"},
-	{"viewer.js", `opLine(path + " is in the background", false)`, "ctrl+] says where the file went (the key hint lives in #foot)"},
+	{"viewer.js", `opLine(name + " is in the background", false)`, "ctrl+] says where the file went (the key hint lives in #foot)"},
 	// Plan 5b Task 5: events.
 	{"live.js", `msg.reason === "open_files"`, "the list's broadcast reaches the page"},
 	{"live.js", "viewerOpenFiles(msg.files || [])", "an empty list arrives as no files (omitempty)"},
@@ -161,7 +161,13 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", "the overview was closed", "back from a closed overview says so"},
 	{"viewer.js", " vrange", "a range anchor highlights its lines"},
 	{"viewer.js", `" was closed"`, "an overview closed elsewhere closes this viewer"},
-	{"live.js", "viewerAgentDocs(msg.files || [], msg.closed || [])", "the tabs hear which overview closed"},
+	{"live.js", "viewerAgentDocs(msg.files || [], msg.closed || [], msg.stamps)", "the tabs hear which overview closed, and which moved"},
+	// Agent docs minors.
+	{"viewer.js", "closeViewer(escHow(!!view.ov, view.notes.length)); // the backdrop is esc", "the backdrop leaves a document as esc does"},
+	{"viewer.js", "const name = docName(view);\n  closeViewer(\"background\")", "ctrl+] names an overview by id and title"},
+	{"viewer.js", `opLine("back failed: "`, "a failed list fetch on backspace is an error, not a closed overview"},
+	{"viewer.js", "overviewStale(stamps, view.id, view.ov.stamp)", "an overview re-fetches only when its stamp moved"},
+	{"live.js", `if (msg.evicted) opLine("closed " + msg.evicted`, "every tab names a file the follow pass pushed out"},
 	{"style.css", ".md-anchor.asel", "the selected anchor is styled"},
 	{"style.css", ".md-anchor.agone", "a missing anchor is styled"},
 	{"style.css", ".vline.vrange", "the range is tinted"},

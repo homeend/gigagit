@@ -81,7 +81,8 @@ func (s *Server) followDocs() {
 	root := s.docsRoot(context.Background())
 	paths := s.docs.NotedPaths(root)
 	noted := make(map[string]bool, len(paths))
-	var evicted []string
+	evicted := s.evicted // what a steer's own listing pushed out (listDocs)
+	s.evicted = nil
 	for _, p := range paths {
 		noted[p] = true
 		k := ofKey{Src: "worktree", Path: p}
@@ -95,8 +96,10 @@ func (s *Server) followDocs() {
 	}
 	s.ofs.setPinned(wt, noted)
 	inStore := map[string]bool{}
+	stamps := map[string]string{}
 	for _, o := range s.docs.Overviews(root) {
 		inStore[o.ID] = true
+		stamps[o.ID] = s.docs.OverviewStamp(o.ID)
 		if _, ev, _ := s.ofs.ensureOpenID(wt, overviewKey(o), o.ID, o.Title); ev != "" {
 			evicted = append(evicted, ev)
 		}
@@ -109,8 +112,21 @@ func (s *Server) followDocs() {
 	}
 	if h := s.liveHubRef(); h != nil {
 		h.fanOut(liveMsg{Changed: []string{}, Reason: "agentdocs", Files: s.ofList(wt), Closed: closed,
-			Evicted: strings.Join(evicted, ", ")})
+			Evicted: strings.Join(evicted, ", "), Stamps: stamps})
 	}
+}
+
+// listDocs runs add — a steer's store write and the entry it lists — in
+// the follow passes' turn, so no pass lists that entry first, then runs a
+// pass that tells the tabs, naming what add's listing pushed out over the
+// cap (add returns it; the agent's reply names it too).
+func (s *Server) listDocs(add func() (evicted string)) {
+	s.followMu.Lock()
+	if ev := add(); ev != "" {
+		s.evicted = append(s.evicted, ev)
+	}
+	s.followMu.Unlock()
+	s.followDocs()
 }
 
 // overviewKey is an overview's list key: the TUI's display name.
