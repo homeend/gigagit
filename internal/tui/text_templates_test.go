@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -158,5 +160,129 @@ func TestTextTemplatesDataMsgSelectsRow(t *testing.T) {
 	out, _ = mm.Update(textTemplatesDataMsg{items: ttItems(2)})
 	if v := layerOf[*textTemplatesView](out.(Model)); v.sel != 1 {
 		t.Fatalf("sel after shrink = %d", v.sel)
+	}
+}
+
+func TestTextTemplatesEnterWithVariablesOpensFill(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}
+	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "A", Body: "<user:one> if a < b <user:two>"}}}
+	_, cmd := v.update(m, keyMsg("enter"))
+	if v.mode != ttFill || cmd != nil || len(v.fill.labels) != 2 || v.fill.labels[1] != "two" {
+		t.Fatalf("mode %v labels %v", v.mode, v.fill.labels)
+	}
+	box := plain(v.box(m))
+	for _, want := range []string{"A — fill variables (1/2)", "> one:", "[enter/tab] next"} {
+		if !strings.Contains(box, want) {
+			t.Errorf("fill box misses %q\n%s", want, box)
+		}
+	}
+	v.update(m, keyMsg("x"))
+	_, cmd = v.update(m, keyMsg("enter")) // to the second field
+	if cmd != nil || !strings.Contains(plain(v.box(m)), "A — fill variables (2/2)") {
+		t.Fatalf("enter on the first field must move on:\n%s", plain(v.box(m)))
+	}
+	_, cmd = v.update(m, keyMsg("enter")) // the last field: render
+	if cmd == nil || v.fill.inputs()["one"] != "x" {
+		t.Fatalf("enter on the last field must render (inputs %v)", v.fill.inputs())
+	}
+	v.update(m, keyMsg("esc"))
+	if v.mode != ttBrowse {
+		t.Fatalf("esc: mode %v", v.mode)
+	}
+}
+
+func TestTextTemplatesEnterWithoutVariablesRenders(t *testing.T) {
+	t.Parallel()
+	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "A", Body: "plain"}}}
+	_, cmd := v.update(Model{}, keyMsg("enter"))
+	if v.mode != ttBrowse || cmd == nil {
+		t.Fatalf("no variables: want a render command (mode %v, cmd nil %v)", v.mode, cmd == nil)
+	}
+	// Nothing selected: nothing happens.
+	if _, cmd := (&textTemplatesView{}).update(Model{}, keyMsg("enter")); cmd != nil {
+		t.Fatal("enter on an empty list issued a command")
+	}
+}
+
+func TestTextTemplateRenderedMsgShowsText(t *testing.T) {
+	t.Parallel()
+	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "A", Body: "x"}}}
+	m := Model{width: 100, height: 40}.pushLayer(v)
+	out, _ := m.Update(textTemplateRenderedMsg{text: "Hello Ann\nsecond", seqNames: []string{"n"}})
+	if v.mode != ttRendered {
+		t.Fatalf("mode %v", v.mode)
+	}
+	box := plain(v.box(out.(Model)))
+	for _, want := range []string{"A — rendered", "Hello Ann", "second", "[y] copy and close"} {
+		if !strings.Contains(box, want) {
+			t.Errorf("rendered box misses %q\n%s", want, box)
+		}
+	}
+}
+
+func TestTextTemplateRenderErrorOffersOnlyEsc(t *testing.T) {
+	t.Parallel()
+	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "A", Body: "x"}}}
+	m := Model{width: 100, height: 40}.pushLayer(v)
+	out, _ := m.Update(textTemplateRenderedMsg{err: errors.New("template: boom")})
+	box := plain(v.box(out.(Model)))
+	if !strings.Contains(box, "boom") || strings.Contains(box, "template: boom") || strings.Contains(box, "[y]") {
+		t.Fatalf("error box:\n%s", box)
+	}
+	mm, cmd := v.update(out.(Model), keyMsg("y"))
+	if cmd != nil || layerOf[*textTemplatesView](mm) == nil {
+		t.Fatal("y on an error must do nothing")
+	}
+}
+
+// y copies and closes the WHOLE window (user ruling).
+func TestTextTemplatesYCopiesAndCloses(t *testing.T) {
+	t.Parallel()
+	var copied string
+	v := &textTemplatesView{mode: ttRendered, rendered: "final text", items: []model.TextTemplate{{ID: "a", Title: "A"}}}
+	m := Model{clipWrite: func(_ io.Writer, s string) (string, error) { copied = s; return "", nil }}.pushLayer(v)
+	out, cmd := v.update(m, keyMsg("y"))
+	if layerOf[*textTemplatesView](out) != nil {
+		t.Fatal("the window is still open after y")
+	}
+	if cmd == nil {
+		t.Fatal("no copy command")
+	}
+	var ok string
+	for _, msg := range runCmds(cmd) {
+		if c, is := msg.(clipboardCopiedMsg); is {
+			ok = c.ok
+		}
+	}
+	if copied != "final text" || ok == "" {
+		t.Fatalf("copied %q, status %q", copied, ok)
+	}
+}
+
+func TestTextTemplatesRenderedEscReturnsToBrowse(t *testing.T) {
+	t.Parallel()
+	v := &textTemplatesView{mode: ttRendered, rendered: "x", items: ttItems(1)}
+	m := Model{}.pushLayer(v)
+	out, _ := v.update(m, keyMsg("esc"))
+	if v.mode != ttBrowse || layerOf[*textTemplatesView](out) == nil {
+		t.Fatalf("esc: mode %v", v.mode)
+	}
+}
+
+func TestTextTemplatesRenderedScrolls(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 30}
+	var b strings.Builder
+	for i := 0; i < 80; i++ {
+		fmt.Fprintf(&b, "row %02d\n", i)
+	}
+	v := &textTemplatesView{mode: ttRendered, rendered: b.String(), items: ttItems(1)}
+	if box := plain(v.box(m)); !strings.Contains(box, "row 00") || len(strings.Split(box, "\n")) > 31 {
+		t.Fatalf("rendered box must fit and start at the top:\n%s", box)
+	}
+	v.update(m, keyMsg("down"))
+	if box := plain(v.box(m)); strings.Contains(box, "row 00") {
+		t.Fatalf("down did not scroll:\n%s", box)
 	}
 }

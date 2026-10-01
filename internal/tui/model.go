@@ -3598,6 +3598,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case textTemplateRenderedMsg:
+		if v := layerOf[*textTemplatesView](m); v != nil {
+			v.onRendered(msg)
+		}
+		return m, nil
+
 	case prefixDataMsg:
 		if v := layerOf[*prefixSettingsView](m); v != nil {
 			v.loading = false

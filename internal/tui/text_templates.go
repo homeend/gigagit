@@ -28,6 +28,13 @@ type textTemplatesView struct {
 	sel        int
 	bodyScroll int // first shown display line of the body pane
 	mode       ttMode
+
+	// fill / rendered
+	fill      templateFill
+	rendered  string
+	renderErr string
+	seqNames  []string // counters the rendered text consumes when taken
+	rScroll   int
 }
 
 type ttMode int
@@ -89,6 +96,12 @@ func (v *textTemplatesView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	switch v.mode {
+	case ttFill:
+		return v.updateFill(m, msg)
+	case ttRendered:
+		return v.updateRendered(m, msg)
+	}
 	return v.updateBrowse(m, msg)
 }
 
@@ -102,6 +115,16 @@ func (v *textTemplatesView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.Cm
 	case tea.KeyDown:
 		v.moveSel(1)
 		return m, nil
+	case tea.KeyEnter:
+		t, ok := v.selected()
+		if !ok {
+			return m, nil
+		}
+		if labels, _ := domain.TextTemplateTokens(t.Body); len(labels) > 0 {
+			v.fill, v.mode = newTemplateFillLabels(labels), ttFill
+			return m, nil
+		}
+		return m, m.renderTextTemplateCmd(t.Body, map[string]string{})
 	case tea.KeyPgDown:
 		v.bodyScroll += v.geometry(m).bodyH // box() clamps
 		return m, nil
@@ -218,7 +241,138 @@ func (v *textTemplatesView) render(m Model, below string) string {
 }
 
 func (v *textTemplatesView) box(m Model) string {
+	switch v.mode {
+	case ttFill:
+		return v.fillBox(m)
+	case ttRendered:
+		return v.renderedBox(m)
+	}
 	return v.browseBox(m)
+}
+
+// textTemplateRenderedMsg is a template resolved for the rendered step.
+type textTemplateRenderedMsg struct {
+	text     string
+	seqNames []string
+	err      error
+}
+
+func (m Model) renderTextTemplateCmd(body string, inputs map[string]string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		text, seqs, err := svc.RenderTextTemplate(context.Background(), body, inputs)
+		return textTemplateRenderedMsg{text: text, seqNames: seqs, err: err}
+	}
+}
+
+// onRendered shows the resolved text (or why it could not be resolved).
+func (v *textTemplatesView) onRendered(msg textTemplateRenderedMsg) {
+	v.mode, v.rScroll = ttRendered, 0
+	v.rendered, v.seqNames, v.renderErr = msg.text, msg.seqNames, ""
+	if msg.err != nil {
+		// The user filled a text template, not called the template package.
+		v.rendered, v.seqNames = "", nil
+		v.renderErr = strings.Replace(msg.err.Error(), "template: ", "", 1)
+	}
+}
+
+func (v *textTemplatesView) updateFill(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	done, cancel := v.fill.handleKey(msg)
+	switch {
+	case cancel:
+		v.mode = ttBrowse
+	case done:
+		if t, ok := v.selected(); ok {
+			return m, m.renderTextTemplateCmd(t.Body, v.fill.inputs())
+		}
+		v.mode = ttBrowse
+	}
+	return m, nil
+}
+
+func (v *textTemplatesView) updateRendered(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	page := v.renderedRows(m)
+	switch msg.Type {
+	case tea.KeyEsc:
+		v.mode = ttBrowse
+		return m, nil
+	case tea.KeyUp:
+		v.rScroll = max(0, v.rScroll-1)
+		return m, nil
+	case tea.KeyDown:
+		v.rScroll++ // box() clamps
+		return m, nil
+	case tea.KeyPgUp:
+		v.rScroll = max(0, v.rScroll-page)
+		return m, nil
+	case tea.KeyPgDown:
+		v.rScroll += page
+		return m, nil
+	}
+	switch msg.String() {
+	case "k":
+		v.rScroll = max(0, v.rScroll-1)
+	case "j":
+		v.rScroll++
+	case "y":
+		if v.renderErr != "" {
+			return m, nil
+		}
+		// The text is taken: copy it, consume its counters, close the window.
+		svc, names := m.svc, v.seqNames
+		bump := func() tea.Msg {
+			if svc != nil && len(names) > 0 {
+				_ = svc.BumpPrefixSeqs(context.Background(), names)
+			}
+			return nil
+		}
+		return m.popLayer(), tea.Batch(m.copyToClipboardCmd(i18n.T("copied the rendered text"), v.rendered), bump)
+	}
+	return m, nil
+}
+
+// selTitle is the selected template's title ("" with nothing selected).
+func (v *textTemplatesView) selTitle() string {
+	t, _ := v.selected()
+	return t.Title
+}
+
+func (v *textTemplatesView) fillBox(m Model) string {
+	g := v.geometry(m)
+	parts := []string{i18n.T("%s — fill variables (%d/%d)", v.selTitle(), v.fill.idx+1, len(v.fill.labels)), ""}
+	parts = append(parts, v.fill.view(g.textW)...)
+	parts = append(parts, "", i18n.T("[enter/tab] next  [esc] back"))
+	return popupBox(g.inner, strings.Join(parts, "\n"))
+}
+
+// renderedRows is the rendered step's text height: the whole text when it
+// fits, else what the terminal leaves (16 rows unless maximized).
+func (v *textTemplatesView) renderedRows(m Model) int {
+	g := v.geometry(m)
+	_, termH := m.overlayDims()
+	// title + blank, the rule, blank + one hint line, the frame.
+	room := max(3, termH-2-1-2-st().modalStyle.GetVerticalFrameSize()-2)
+	if !v.maximized {
+		room = min(room, 16)
+	}
+	return max(1, min(room, len(ttWrapText(v.rendered, g.textW))))
+}
+
+func (v *textTemplatesView) renderedBox(m Model) string {
+	g := v.geometry(m)
+	parts := []string{i18n.T("%s — rendered", v.selTitle()), ""}
+	if v.renderErr != "" {
+		parts = append(parts, wrapWidth(v.renderErr, g.textW, 6)...)
+		for i := 2; i < len(parts); i++ {
+			parts[i] = st().errorText.Render(parts[i])
+		}
+		parts = append(parts, "", i18n.T("[esc] back to templates"))
+		return popupBox(g.inner, strings.Join(parts, "\n"))
+	}
+	rows, rule := ttTextPane(v.rendered, g.textW, v.renderedRows(m), &v.rScroll)
+	parts = append(parts, rows...)
+	parts = append(parts, rule, "", i18n.T("[y] copy and close  [↑/↓] scroll  [esc] back to templates"))
+	return popupBox(g.inner, strings.Join(parts, "\n"))
 }
 
 func (v *textTemplatesView) browseBox(m Model) string {
