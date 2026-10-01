@@ -61,3 +61,22 @@ func TestHeadAtNotARepo(t *testing.T) {
 		t.Fatalf("HeadAt with a dangling gitdir = %q, want empty", got)
 	}
 }
+
+func TestGitDirAtMainAndLinked(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "x\n")
+	if got := GitDirAt(dir); got != filepath.Join(dir, ".git") {
+		t.Fatalf("main GitDirAt = %q", got)
+	}
+	wt := filepath.Join(t.TempDir(), "wt")
+	if out, err := exec.Command("git", "-C", dir, "worktree", "add", "-b", "b", wt).CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	got := GitDirAt(wt)
+	if filepath.Base(filepath.Dir(got)) != "worktrees" {
+		t.Fatalf("linked GitDirAt = %q, want <common>/worktrees/<name>", got)
+	}
+	if GitDirAt(t.TempDir()) != "" {
+		t.Fatal("non-repo must be empty")
+	}
+}
