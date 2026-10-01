@@ -646,3 +646,22 @@ func TestStartAtCarriesAContentLink(t *testing.T) {
 		t.Fatalf("setStartAt refused a content link: %v", err)
 	}
 }
+
+// A fingerprinted link's moved or changed line reaches the page as one
+// sentence; a plain line carries none.
+func TestSteerWireCarriesTheAnchorNote(t *testing.T) {
+	t.Parallel()
+	c := steer.Command{Cmd: "navigate", File: "a.txt", Target: &steer.Target{State: "unstaged"},
+		Line: &steer.Line{Side: "new", No: 18, Asked: 12, Anchor: "moved", Matches: 1}}
+	w, err := toSteerWire(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Line != 18 || w.AnchorNote != "line 12 moved to 18" {
+		t.Errorf("wire = line %d note %q", w.Line, w.AnchorNote)
+	}
+	c.Line = &steer.Line{Side: "new", No: 18}
+	if w, _ = toSteerWire(c); w.AnchorNote != "" {
+		t.Errorf("a plain line carries a note: %q", w.AnchorNote)
+	}
+}

@@ -459,3 +459,21 @@ func TestCommandHintOnlyRevealsWithNoAddress(t *testing.T) {
 		t.Errorf("AtLink must not adopt the bookmark's own stored address (S12): %+v", at)
 	}
 }
+
+// A re-anchored resolution's line carries what the link asked for, so the
+// consumer can say the line moved.
+func TestCommandCarriesTheAnchor(t *testing.T) {
+	t.Parallel()
+	res := domain.Resolved{
+		Addr: model.FileAddress{Path: "f.txt", State: model.StateUnstaged},
+		Line: 41, Side: model.NoteSideNew,
+		Anchor: domain.LineAnchor{Asked: 33, State: domain.AnchorMoved, Matches: 2},
+	}
+	c, err := Command(context.Background(), nil, res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Line == nil || c.Line.No != 41 || c.Line.Asked != 33 || c.Line.Anchor != "moved" || c.Line.Matches != 2 {
+		t.Fatalf("line = %+v", c.Line)
+	}
+}
