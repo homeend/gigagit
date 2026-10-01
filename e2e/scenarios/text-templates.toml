@@ -1,0 +1,38 @@
+name = "gg template: add a text template from a file, render it with a variable, the frozen date and a consumed sequence"
+
+# A text template is a titled multi-line text with the branch-prefix tokens.
+# An unknown <…> (<br>) is literal text; render consumes the <seq:…> counter
+# unless --peek.
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" },
+  { commit = "c1" },
+  { write = "body.md", content = "Hello <user:name>\n<br> <date> #<seq:tt:2>\n" },
+]
+
+[[run]]
+cmd             = ["template", "add", "--title", "Greeting", "-F", "body.md"]
+exit            = 0
+stdout_contains = ["greeting"]
+
+[[run]]
+cmd             = ["template", "list"]
+exit            = 0
+stdout_contains = ["greeting\trepo\tGreeting"]
+
+# A missing variable names the flag to pass.
+[[run]]
+cmd             = ["template", "render", "greeting"]
+exit            = 2
+stderr_contains = ["--set name="]
+
+[[run]]
+cmd             = ["template", "render", "greeting", "--set", "name=Ann"]
+exit            = 0
+stdout_contains = ["Hello Ann", "<br> 2026-01-02 #01"]
+
+# The render above consumed 01; a peek shows the next number.
+[[run]]
+cmd             = ["template", "render", "greeting", "--set", "name=Ann", "--peek"]
+exit            = 0
+stdout_contains = ["#02"]

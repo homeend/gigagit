@@ -152,6 +152,10 @@ func dispatchOne(svc *domain.Service, workdir, cmd string, rest []string, stdin 
 		return cmdLog(svc, rest, stdout, stderr)
 	case "prefix":
 		return cmdPrefix(svc, rest, stdout, stderr)
+	case "template":
+		return cmdTemplate(svc, workdir, rest, stdin, stdout, stderr)
+	case "templates":
+		return cmdTemplate(svc, workdir, append([]string{"list"}, rest...), stdin, stdout, stderr)
 	case "merge":
 		return cmdMerge(svc, rest, stdin, stdout, stderr)
 	case "rebase":
@@ -209,7 +213,7 @@ var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
 	"switch": true, "checkout": true, "branch": true, "stash": true, "undo": true, "merge": true, "rebase": true, "worktree": true,
 	"cherry-pick": true, "revert": true, "reset": true, "fast-forward": true,
-	"discard": true, "add": true, "unstage": true, "shelf": true, "bookmark": true, "log": true, "prefix": true,
+	"discard": true, "add": true, "unstage": true, "shelf": true, "bookmark": true, "log": true, "prefix": true, "template": true, "templates": true,
 	"remote": true, "tag": true, "compare": true, "preview": true, "pr": true, "diff": true, "show": true,
 	"inspect": true, "repo": true, "init": true, "config": true, "batch": true,
 	"review": true, "apply": true, "versions": true, "unlock": true, "migrate": true,
