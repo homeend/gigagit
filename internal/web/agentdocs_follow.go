@@ -125,13 +125,14 @@ func (s *Server) followDocs() {
 type ofEvicted struct{ wt, path string }
 
 // listDocs runs add — a steer's store write and the entry it lists — in
-// the follow passes' turn, so no pass lists that entry first, then runs a
+// the follow passes' turn, so no pass lists that entry first (wt is the
+// list add lists in — the caller's, read before), then runs a
 // pass that tells the tabs, naming what add's listing pushed out over the
 // cap (add returns it; the agent's reply names it too).
-func (s *Server) listDocs(add func() (evicted string)) {
+func (s *Server) listDocs(wt string, add func() (evicted string)) {
 	s.followMu.Lock()
 	if ev := add(); ev != "" {
-		s.evicted = append(s.evicted, ofEvicted{wt: s.service().Root(), path: ev})
+		s.evicted = append(s.evicted, ofEvicted{wt: wt, path: ev})
 	}
 	s.followMu.Unlock()
 	s.followDocs()

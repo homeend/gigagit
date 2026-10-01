@@ -94,7 +94,7 @@ func (s *Server) steerNoteAdd(ctx context.Context, c steer.Command) steer.Reply 
 		ev    string
 		added bool
 	)
-	s.listDocs(func() string {
+	s.listDocs(wt, func() string {
 		if n, err = s.docs.AddNote(root, path, lines, c.Start, c.End, c.Summary, c.Rationale, c.Author); err != nil {
 			return "" // before the list: a refused note lists nothing
 		}

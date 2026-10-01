@@ -170,7 +170,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"live.js", "if (msg.evicted) opLine(evictedText(msg.evicted, msg.cap), false)", "every tab names a file the follow pass pushed out"},
 	{"viewer.js", "if (reg.evicted) opLine(evictedText(reg.evicted, reg.cap), false)", "an open names the file it pushed out, with the server's cap"},
 	{"wtfinder.js", "evictedText(ans.evicted, ans.cap)", "a background open from the finder names the file it pushed out, with the server's cap"},
-	{"viewer.js", "if (mine !== ovSeq) return false", "an overview refresh older than the last one started is dropped"},
+	{"viewer.js", "if (mine !== ovSeq) return ovLast", "an overview refresh older than the last one started is dropped and answers with the newer one"},
 	{"style.css", ".md-anchor.asel", "the selected anchor is styled"},
 	{"style.css", ".md-anchor.agone", "a missing anchor is styled"},
 	{"style.css", ".vline.vrange", "the range is tinted"},

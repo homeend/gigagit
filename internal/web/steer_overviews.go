@@ -88,7 +88,7 @@ func (s *Server) steerOverviewAdd(ctx context.Context, c steer.Command) steer.Re
 		ev  string
 		err error
 	)
-	s.listDocs(func() string {
+	s.listDocs(wt, func() string {
 		if o, err = s.docs.AddOverview(root, top, c.Title, c.Text); err != nil {
 			return ""
 		}

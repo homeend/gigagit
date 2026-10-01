@@ -340,3 +340,21 @@ func TestANoteOverTheCapTellsTheAgentAndTheTabs(t *testing.T) {
 		}
 	}
 }
+
+// listDocs files an eviction under the worktree its caller listed in, not
+// whatever the server shows by the time the closure returns (a reRoot in
+// between would otherwise announce the old list's eviction on the new one).
+func TestListDocsFilesTheEvictionUnderTheCallersWorktree(t *testing.T) {
+	isolateGlobal(t)
+	s, _ := noteSrv(t)
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	s.listDocs("/the/worktree/the/caller/listed/in", func() string { return "old.txt" })
+	if m := next(); m.Reason != "agentdocs" || m.Evicted != "" {
+		t.Fatalf("event = %+v, want the other worktree's eviction dropped", m)
+	}
+}

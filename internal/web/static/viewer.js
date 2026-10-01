@@ -195,6 +195,7 @@ const viewerSearch = new Search();
 const places = new Map(); // id → {cur, top}: where THIS tab left each file
 let loadSeq = 0; // bumped by every open: a reload that sees it move drops (L9)
 let ovSeq = 0; // bumped by every overview refresh: an older answer landing late drops
+let ovLast = Promise.resolve(false); // the last refresh started (refreshOverview)
 let cursorTimer = null;
 
 function ofPost(body) {
@@ -445,17 +446,24 @@ function selectAnchor(i) {
 
 // refreshOverview re-reads the overview on screen (the server re-checks its
 // anchors), keeping the selected anchor by its destination; false when it
-// is gone or another open won meanwhile.
-async function refreshOverview() {
-  if (!view.ov || !viewerFileId()) return false;
-  const id = view.id, seq = loadSeq, mine = ++ovSeq;
+// is gone or another open won meanwhile. Refreshes may overlap: only the
+// last one started applies, and an earlier one answers with the last one's
+// result — so a caller (openAnchorAt) always resumes on a re-checked list.
+function refreshOverview() {
+  if (!view.ov || !viewerFileId()) return Promise.resolve(false);
+  ovLast = refreshOverviewAs(++ovSeq);
+  return ovLast;
+}
+
+async function refreshOverviewAs(mine) {
+  const id = view.id, seq = loadSeq;
   let ov;
   try {
     ov = await fetchOverview(id);
   } catch {
     return false;
   }
-  if (mine !== ovSeq) return false; // a later refresh is under way: its answer is newer
+  if (mine !== ovSeq) return ovLast; // a later refresh is under way: its answer is newer
   if (seq !== loadSeq || id !== view.id || !view.ov) return false;
   view.ov = { ...ov, sel: keepAnchor(ov.anchors || [], view.ov.anchors, view.ov.sel) };
   paintTitle();
