@@ -1108,8 +1108,24 @@ is the single producer behind the key, the menu row and the snapshot's
 **Web rows use `act`, never `run`.** `showCtxMenu`'s click handler
 (`internal/web/static/layers.js`) calls `menu._items[i].act()` with no guard;
 `run` belongs to the command palette's separate dispatcher. The diff-line row
-gates on `notesArmed()`, which is exactly where the rows carry
-`data-side`/`data-no`.
+is offered wherever `linkFor` yields a link — NOT gated on `notesArmed()`: a
+plain two-commit compare has no notes yet its lines are addressable.
+
+**A compare with no note scope still links its lines (2026-10-01).** The
+compare loader stamps `diffView.cmp` (the two endpoints + both paths);
+`compareLinkText` reads it when `diffNoteAddress` refuses. Two commits → the
+pair `@<a>..<b>` with `:<line>` or `:old:<line>` (`linkAnchorAtCursor`: a
+PAIR's old side is commit a and travels, a merge preview's is the merge base
+and does not — saved pairs follow the same rule). Any other compare addresses
+the cursor side as the version it shows (working tree / `@staged` / that
+commit); a shelf or link-member side refuses. Web twin: `ctx.cmpPair` from
+`commitDiffCtx` (plain `openCompare` lane only, never an `aSpec` entry
+compare), and the stack renders `data-no`/`data-lno` for such a slot. A copy
+made in the full-screen diff confirms in `diffNotice` (`clipboardCopiedMsg`),
+middle-elided. A compare's FILE-TREE row copies the pair's file form
+(`contextLinkText` arm 3a', before `focusedBookmark`, which would answer
+`path@<b>`); web: the file menu passes `cmpPair`. `tui.Headless` stubs `clipWrite`: e2e never touches the
+machine's clipboard.
 
 **Web preview links lift `ctx.compare` for ONE case.** `links.js`'s `linkFor`
 refuses any compare ctx unless it also carries `ctx.preview = {source,

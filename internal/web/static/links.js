@@ -73,13 +73,13 @@ function linkHintIDOK(id) {
 // no usable repo identity, a path holding a grammar separator, a commit
 // target whose rev is not a full sha (ruling P9: >= 40 hex, never a hard ===
 // 40 — a sha256 repo's commits are 64 hex characters), a line with no path,
-// or ctx.compare set without a preview. That last refusal is a PRODUCER gap,
-// not a grammar one: the grammar now has `@<a>..<b>` for exactly this pair
-// (internal/model.LinkPair), so a compare view is addressable — emitting one
-// from the browser is deferred UI scope. What must not happen meanwhile is
-// falling back to `path@bHash`, which reads as bHash^ → bHash, not the
-// aHash → bHash pair actually on screen; the TUI's contextLinkText carries
-// the same note.
+// or ctx.compare set with neither a preview nor a ctx.cmpPair. A plain
+// two-commit compare carries ctx.cmpPair = {a, b} (two full shas) and is
+// addressed as `@<a>..<b>` (internal/model.LinkPair) with the line on either
+// side; a compare with any other side (the working tree, a stored entry)
+// refuses. What must never happen is falling back to `path@bHash`, which
+// reads as bHash^ → bHash, not the aHash → bHash pair actually on screen; the
+// TUI twin is contextLinkText / compareLinkText.
 //
 // ctx.preview = {source, target} names an open merge preview: the ONE compare
 // that has an address of its own, git's three-dot pair
@@ -96,13 +96,16 @@ function linkHintIDOK(id) {
 // hint silently.
 function linkFor(repo, worktree, ctx, side, no) {
   let preview = (ctx && ctx.preview) || null;
-  if (ctx && ctx.compare && !preview) return "";
+  // A plain two-commit compare has no preview and no note scope; its pair
+  // rides ctx.cmpPair (files.js commitDiffCtx). Any other compare refuses.
+  const cmpPair = (ctx && !preview && ctx.cmpPair) || null;
+  if (ctx && ctx.compare && !preview && !cmpPair) return "";
   // A COMMIT PAIR rides the same slot with no names at all (files.js hands it
   // over as preview.pair): it is asked for FIRST, because everything below
   // reads source/target — Go's "ask IsPair() before the names". Two full ids
   // or nothing: a producer always knows them, and an abbreviation would grow
   // ambiguous as history does.
-  const pair = (preview && preview.pair) || null;
+  const pair = (preview && preview.pair) || cmpPair;
   if (pair) {
     if ((pair.a || "").length < 40 || (pair.b || "").length < 40) return "";
     preview = null;
@@ -131,10 +134,9 @@ function linkFor(repo, worktree, ctx, side, no) {
   if (path && !linkPathOK(path)) return "";
   let s = head + (path ? "/" + path : "");
   if (pair) {
-    // `@<a>..<b>` (internal/model.LinkPair). Like a preview, a pair link has
-    // no old side: a line there degrades to the file form.
+    // `@<a>..<b>` (internal/model.LinkPair). Unlike a preview, a pair has an
+    // old side — commit a — so an old-side line travels as `:old:N` below.
     s += "@" + pair.a + ".." + pair.b;
-    if (side === "old") no = 0;
   } else if (preview) {
     s += "@" + preview.target + "..." + preview.source;
     if (side === "old") no = 0;
@@ -261,6 +263,7 @@ registerRows("file", (ctx) => {
     state: st,
     compare: ctx.compare,
     preview: ctx.preview || null,
+    cmpPair: ctx.cmpPair || null,
   });
   // "copy file link": the file's CONTENT link — no commit, the file as it is
   // on disk — copied only after the server says the file is there.

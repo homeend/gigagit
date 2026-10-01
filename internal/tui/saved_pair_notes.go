@@ -112,9 +112,9 @@ func (m Model) pairNotesRefreshCmd() tea.Cmd {
 // names its BRANCH pair (it travels, and follows the tips), a commit pair's
 // names its two frozen shas. The two scopes can cover the very same commits,
 // so the kind — never the commits — picks the grammar.
-func (m Model) scopeLinkFor(set *domain.PreviewNoteSet, path string, line int) (string, bool) {
+func (m Model) scopeLinkFor(set *domain.PreviewNoteSet, path string, side model.NoteSide, line int) (string, bool) {
 	if set.IsPair() {
-		return m.pairFileLinkFor(set.Base, set.Tip, path, line)
+		return m.pairFileLinkFor(set.Base, set.Tip, path, side, line)
 	}
 	return m.previewLinkFor(set.Source, set.Target, path, line)
 }

@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A link to a line of any two-commit comparison
+
+### Added
+
+- **`L` (and the `.` menu's Copy link) in a comparison of two commits**
+  copies a `gg://` link to the cursor line, in the single-file and the
+  stacked view: `gg://<repo>/<path>@<a>..<b>:<line>`, or `:old:<line>` when
+  the cursor is on the older side — a removed line included. Before, a
+  comparison opened by hand had no link at all ("no gg link for this
+  place"). No notes are turned on for it.
+- **A comparison against the working tree or the index** (TUI) links each
+  side as the version it shows: the working file, `@staged`, or the commit.
+- **gg web:** right-click → *copy gg link to this line* in a two-commit
+  comparison, single-file and stacked.
+
+### Fixed
+
+- **Copy link on a file row of a two-commit comparison** (TUI) copied the
+  newer commit's own link (`path@<b>`, its parent → it) instead of the
+  comparison's; it now copies `path@<a>..<b>`. gg web offered no link on
+  that row and now offers the same one.
+
+### Changed
+
+- **A saved commit pair's old side keeps its line** (`:old:<line>`) instead
+  of degrading to a link to the file. A merge preview is unchanged: its old
+  side is the merge base, which no link names.
+- **A copy made in the full-screen diff confirms in the diff's notice box**
+  (it draws no status bar, so `L` and the copy rows used to confirm
+  nowhere); a long link is cut in the middle, keeping its line.
+
 ## Agent docs: a failed overview reload keeps the older answer
 
 ### Fixed
