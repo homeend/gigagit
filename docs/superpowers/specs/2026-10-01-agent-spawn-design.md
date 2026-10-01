@@ -65,24 +65,26 @@ inbox is a later, separate stage.
 
 | Unit | Where | Responsibility |
 |------|-------|----------------|
-| Spawn registry | `internal/domain/agentspawn.go` | Process-global, mutex-guarded: `token → session id`, `session id → {Parent, Brief, Worktree, Spawned bool}`. Mints a token per started session (`crypto/rand`, 32 bytes hex). Answers `Descends(target, caller)`, `Parent(id)`, `LiveSpawned()`. Entries are removed when the session is removed from `Sessions()`. |
+| Spawn registry | `internal/domain/agentspawn.go` | Process-global, mutex-guarded: `token → session id`, `session id → {Parent, Brief, Worktree, Spawned bool}`. Mints a token per started AGENT session (`crypto/rand`, 32 bytes hex). Answers `Descends(target, caller)`, `Parent(id)`, `LiveSpawned()`, `Verify(token) (session id, ok)` (false for an unbound token and for a session no longer RUNNING — a killed worker's token stops working at once). Entries are dropped by a domain goroutine that diffs `Sessions().Subscribe()` wakeups against the registry (the Manager has no removal hook). |
 | Agent verbs | `internal/domain/agentverbs.go` | `AgentList`, `AgentScreen`, `AgentSend`, `AgentKill`, `AgentTask` over `Sessions()` + the registry, with the reach rule; `AgentStartCheck` (allow-list, prompt slot, cap, nesting, worktree resolution + guards) used by the TUI before it starts anything. |
 | Claim handover | `internal/domain/wtclaim.go`, `internal/wtclaim` | `Claim.Parent` field; `HandOverWorktree(ctx, path, from, to, parent, note, pol)` under the claim lock; `liveClaim` rewrites a dead holder with a live `Parent` to that parent instead of sweeping. |
-| Prompt slot | `internal/template` | `<prompt>` / `<prompt:FLAG>` command token: empty on a manual start, `[FLAG ]"<kick-off>"` when `CmdCtx.Prompt` is set (quoted per the existing per-token-kind rules). `template.HasPromptSlot(cmd)`. |
+| Prompt slot | `internal/template` | `<prompt>` / `<prompt:FLAG>` command token (added to `commandTokens`, so `ValidateCommandTokens` accepts it): empty on a manual start, `[FLAG ]"<kick-off>"` when `CmdCtx.Prompt` is set. `CmdCtx.Prompt` is only ever the domain constant `AgentKickoff` (never caller text), so the plain `quoteArgFor` quoting is safe on cmd.exe too; a test pins that the constant holds no `"`, `%`, `!`, `^` or `&`. `template.HasPromptSlot(cmd)`. |
 | Built-in session rows | `internal/exttool` | Claude/Codex `<bin> <prompt>`, Junie `<bin> <prompt:--prompt>`, Antigravity `<bin> <prompt:--prompt-interactive>` (yolo rows likewise, flag order kept); Kimi unchanged. Family `Version` bumped (golden guard). |
-| Agent MCP host | `internal/mcp/agenthost.go` | `NewAgentHost(svc, starter)` → `Start()/URL()/Close()`. Streamable HTTP via `sdk.NewStreamableHTTPHandler(getServer, …)`; `getServer` reads `Authorization: Bearer <token>`, maps it through the registry, and returns a per-caller `*sdk.Server` whose tools close over the caller id; an unknown token → 401. Loopback listener, the web host's Host/Origin guards. |
+| Session-row migration | `internal/exttool`, `internal/domain` | `exttool.UpgradeSessionCommand(old) (new, ok)`: a stored session command identical to a previous built-in (`<bin>`, `<bin> --brave`, …) maps to its `<prompt>` successor. A Lossless preflight migration (the `review_upgrade.go` precedent: global + active repo config, `ReplaceToolCommand`) rewrites them. A user-edited block is left alone; `agent_start` then refuses it with "<name> has no <prompt> slot — add <prompt> to its command (see gg help agents)". |
+| Agent MCP host | `internal/mcp/agenthost.go` | `NewAgentHost(starter)` → `Start()/URL()/Close()`. ONE `*sdk.Server` behind `sdk.NewStreamableHTTPHandler`, wrapped in go-sdk's `auth.RequireBearerToken` with a verifier that calls the domain registry's `Verify` on EVERY request and returns `TokenInfo{UserID: <session id>, Expiration: now+24h}` (the SDK rejects a zero expiration); a missing/unknown/dead token → 401. Tool handlers read the caller from `req.Extra.TokenInfo.UserID`; the SDK's own hijack check pins an MCP session to that user id. Loopback listener (`127.0.0.1:0`); the SDK's automatic loopback Host check plus an explicit Origin refusal (any `Origin` header that is not absent → 403) — the bearer token is the real guard. Reaches sessions only through domain (archtest: `mcp` never imports `agentsession`/`sessionreg`/`wtclaim`). |
 | Agent tools | `internal/mcp/agenttools.go` | `agent_start`, `agent_list`, `agent_screen`, `agent_send`, `agent_kill`, `agent_task` — one registration function shared by the host (direct) and the stdio forwarder. |
-| Stdio forwarder | `internal/mcp/server.go` | When `GG_MCP_URL` + `GG_SESSION_TOKEN` are set, `gg mcp` opens an MCP client (`sdk.StreamableClientTransport`, bearer header) to the TUI host and registers forwarding versions of the agent tools next to its own repo tools. Unset → the agent tools are absent; a host that cannot be reached → each agent tool returns an error naming the cause. |
+| Stdio forwarder | `internal/mcp/server.go` | When `GG_MCP_URL` + `GG_SESSION_TOKEN` are set, `gg mcp` registers forwarding versions of the agent tools next to its own repo tools and connects LAZILY on the first agent-tool call (`sdk.StreamableClientTransport` with an `HTTPClient` whose transport adds the bearer header), reconnecting once on a failed call — a 401 on `initialize` fails `Connect`, so an eager connect at startup would fail the whole server. Unset → the agent tools are absent; an unreachable host → each agent tool returns an error naming the cause. Agent tools work even when `gg mcp` runs outside a repo (only the repo tools report the repo error). |
 | TUI seam | `internal/tui/agenthost.go` | `AgentHost` interface (`Start(starter) error`, `URL() string`, `Close()`) on `tui.RunOptions`, set by `cmd/gg` — the `WebHost` precedent; `tui` never imports `mcp`. The starter is a function the host calls for `agent_start`; it posts a request into the Update loop and waits on a reply channel (the `webhost.go` switch precedent), timeout 30 s. |
-| TUI start handler | `internal/tui/agent_spawn.go` | In the loop: the console size, `childEnv()` + `GG_PARENT_SESSION` + `GG_MCP_URL` + `GG_SESSION_TOKEN`, `svc.StartSession` with `CmdCtx.Prompt`, `childInbox` bookkeeping, registry record, claim handover, status line. Every session the TUI starts (manual too) gets `GG_MCP_URL` + a token, so a manually started overseer can spawn. |
+| TUI start handler | `internal/tui/agent_spawn.go` | In the loop: the cap and nesting checks (re-run here so two racing overseers cannot both pass), the console size, `childEnv()` + `GG_PARENT_SESSION` + `GG_MCP_URL` + `GG_SESSION_TOKEN`, `StartSession` on the CALLER's repo service with `CmdCtx.Prompt`, `childInbox` bookkeeping, registry record, claim handover, status line. Every AGENT session the TUI starts (manual too) gets `GG_MCP_URL` + a token, so a manually started overseer can spawn; an Open-terminal shell gets neither. |
 | Discovery field | `internal/sessionreg`, `internal/steer` | `Registry.MCP` and `Presence.MCP` (URL only). |
-| CLI twins | `internal/cli/agent.go` | `gg agent start|list|screen|send|kill|task`, MCP clients through the same env. |
+| CLI twins | `internal/cli/agent.go` | `gg agent start|list|screen|send|kill|task`, MCP clients through the same env (the forwarder's client code, shared). Outside gg, `gg agent list` reads the registry files through a domain query (`cli` never imports `sessionreg`). |
 | Config | `internal/config` | Global-only `[agents] spawn` (list of session command names) and `max_spawned` (default 4, clamp 1..16); a repo-file value is ignored, as `reserved` ignores the global one. Settings registry entry. |
-| Registration | `internal/agentinit` | `gg init` writes Claude Code's user-scope MCP entry for `gg mcp` (via `claude mcp add -s user gg -- gg mcp` when `claude` is on PATH); an existing `gg` entry is left alone and reported. Other agents: documented manual step. |
+| Registration | `internal/agentinit` | `gg init` writes Claude Code's user-scope MCP entry for `gg mcp` (via `claude mcp add -s user gg -- <gg>` where `<gg>` is the running binary's absolute path, and `claude` is found with `exec.LookPath`, which resolves the `.cmd` shim on Windows); an existing `gg` entry is left alone and reported. Other agents: documented manual step. |
 
 ### 3.2 Environment every gg-started session gets
 
 `GG_INBOX` (existing), `GG_SESSION_ID` (existing, `<ProcTag>/<id>`),
+and — agent sessions only, never an Open-terminal shell —
 `GG_MCP_URL`, `GG_SESSION_TOKEN`; a spawned worker also gets
 `GG_PARENT_SESSION` (display/diagnostic only — authority comes from the
 registry, never from env the caller could change). `agentsession.childEnv`
@@ -93,7 +95,14 @@ The session id and token exist only once `Manager.Start` returns, but the
 env is fixed at start: the TUI mints the token BEFORE `StartSession`, passes
 it in env, and binds `token → id` right after `Start` returns. A tool call
 racing that gap (impossible in practice — the agent has not booted) gets
-401 and the client retries.
+401; the forwarder's lazy connect makes the first real call well after it.
+
+**Ambient authority.** The token is inherited by everything the agent runs
+(its shells, the repo's build scripts). A holder can do what the agent can:
+read any session's screen and list (ruling 7), read its own brief, and
+start/send/kill within the agent's own reach. That is the same authority
+the agent already has over the user's machine; the token adds no reach
+beyond the TUI's sessions. It is never written to disk by gg.
 
 ## 4. Tools
 
@@ -119,23 +128,39 @@ gg console and that a worker's first act is `agent_task`.
 2. Nesting: refuse when the registry says the caller was spawned.
 3. Allow-list: `tool` must name a session command (frontend `tui`) whose
    name is in `[agents] spawn`; empty list → "spawning is off — add the
-   command name to [agents] spawn in the global config".
+   command name to [agents] spawn in the global config". The resolved
+   block's command TEXT must also be approved in promptstate
+   (`CommandHash`, the same approval the Start agent popup asks for once):
+   a name-only allow-list would otherwise admit a block a cloned repo's
+   `.gg.toml` redefined under that name. Unapproved → "approve <name> once
+   by starting it from the TUI". The allow-list replaces the per-spawn
+   prompt; it never bypasses the one-time approval of the command text.
 4. Prompt slot: refuse a command without `<prompt>` ("<name> takes no
    initial prompt").
 5. Cap: refuse when live spawned sessions ≥ `max_spawned`.
-6. Worktree: resolve (path, or a worktree's directory name / branch), then
+6. Worktree: resolve in the CALLER's repository — the host opens (and
+   caches by git common dir) a domain service for the caller session's
+   `Dir`, so a TUI that switched repos still resolves where the overseer
+   works. A path, or a worktree's directory name or branch name; an
+   ambiguous name refuses listing the candidates. Then
    the claim step: caller holds the claim → keep it (re-stamped in step 9);
    no claim → `ClaimWorktree` for the CALLER with the full guard set (a
    blocked worktree refuses with the guard reason); a foreign claim →
    refuse naming the holder. The caller's own session in that worktree does
-   not block (it is the caller).
+   not block: `sessionGuard` gains the `CallerSession` exemption
+   `claimedGuard` already has (stage-1 change: `gg worktree list --free`
+   run by an agent now lists its own worktree when nothing else blocks).
 7. Start: in the TUI loop, `StartSession` with the kick-off prompt
    `You were started by gg as a worker agent. Call the gg MCP tool agent_task to read your task, then do it.`
-   A start failure leaves the claim with the caller and returns the error.
+   A start failure returns the error; a claim step 6 CREATED is released,
+   a claim the caller already held stays.
 8. Record: registry `{Parent: caller, Brief, Worktree, Spawned: true}`,
    bind the token.
 9. Handover: `HandOverWorktree(path, from: caller, to: worker, parent:
    caller)` — the claim file now names the worker and `Parent = caller`.
+   A handover failure leaves the worker running and the claim with the
+   caller (safe: nobody else can take it); the tool result carries a
+   `warning` and the status line says so.
 10. Status line "<tool> started in <worktree> by <caller label>"; no focus
     change; `reload worktrees` so the ⚑ mark shows the worker.
 
@@ -143,10 +168,18 @@ gg console and that a worker's first act is `agent_task`.
 
 `liveClaim` (stage 1's locked sweep) gains one branch: a claim whose holder
 is dead and whose `Parent` is a live session is rewritten to
-`{Session: Parent, Parent: "", Since: now}` instead of removed. A dead
-parent too → removed as before. A foreign-host claim is never judged dead
-(unchanged). The revert is lazy (on the next inventory/claim read), so it
-needs no exit hook and cannot race a sweep.
+`{Session: Parent, Agent: <the parent's agent name>, Parent: "", Since:
+now}` instead of removed. A dead parent too → removed as before. A
+foreign-host claim is never judged dead (unchanged). The revert is lazy (on
+the next inventory/claim read) and idempotent under the lock (`sameClaim`).
+
+**Young-claim grace.** The session registry is written asynchronously, so
+another gg process could read a fresh worker claim before the registry
+lists the worker and judge it dead. `claimDead` therefore treats a claim
+younger than `sessionreg.LiveWindow` whose owning process is live as alive
+(the stage-1 `emptyClaimGrace` precedent). A worker may still release its
+own claim (`gg worktree release`); then nothing reverts — that is the
+worker's choice.
 
 ## 5. Reach rule
 
@@ -170,8 +203,11 @@ sessions from the registry files (read-only, no MCP call — it has no token).
   is not running".
 - `agent_start` loop request times out (30 s, TUI wedged) → tool error; a
   late start still records itself, so `agent_list` shows it.
-- Repo switch (`reRoot`): sessions survive (process-global manager); the
-  registry and host are process-global too, so nothing changes.
+- Repo switch (`reRoot`): sessions, the registry and the host survive
+  (process-global). The host holds no `*domain.Service`: repo-bound work
+  (worktree resolution, guards, claims, `StartSession`) runs on a service
+  for the caller session's `Dir` (§4.1 step 6); `list/screen/send/kill/task`
+  need no repo at all.
 - TUI quit with live sessions: existing quit guard; host closes after.
 
 ## 8. Testing
@@ -192,11 +228,24 @@ sessions from the registry files (read-only, no MCP call — it has no token).
 - CLI: `gg agent` twins against an in-process host; outside gg → exit 2.
 - e2e: one scenario for `gg agent list` outside gg (registry files).
 - Task 0 (throwaway spike, STOP and report): Claude's stdio `gg mcp` child
-  inherits `GG_MCP_URL`/`GG_SESSION_TOKEN`; go-sdk v1.6.1 calls `getServer`
-  once per MCP session and a later request with a different token in the
-  same session is refused (or document how to enforce it).
+  inherits `GG_MCP_URL`/`GG_SESSION_TOKEN` from the agent's environment.
+  (Token enforcement needs no spike: `auth.RequireBearerToken` verifies
+  every request — pinned by the loopback HTTP test, including a killed
+  session's token → 401.)
 
-## 9. Docs
+## 9. Plans
+
+Two plans on the one branch, merged together after plan B:
+
+- **Plan A — core:** domain registry + verbs + handover/revert/grace +
+  `sessionGuard` exemption, template token + exttool rows + migration,
+  config, agent MCP host + tools, TUI seam + start handler. Tested over
+  in-memory transports and loopback HTTP.
+- **Plan B — reach:** Task 0 spike first, then the stdio forwarder,
+  `gg agent` CLI twins, discovery field + outside-gg `gg agent list`,
+  `gg init` registration, docs.
+
+## 10. Docs
 
 CHANGELOG, README (Agents and worktrees), using-gg skill (agent tools +
 `gg agent`, version bump), CLAUDE-details section, CLAUDE.md map rows only
