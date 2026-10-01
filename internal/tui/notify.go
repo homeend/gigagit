@@ -108,8 +108,8 @@ type noticeBlinkMsg struct{ gen int }
 
 // noticeBlinkCmd schedules the next blink flip (~800ms; only re-armed while
 // unread notices exist, so the tick self-stops).
-func noticeBlinkCmd(gen int) tea.Cmd {
-	return tea.Tick(800*time.Millisecond, func(time.Time) tea.Msg { return noticeBlinkMsg{gen: gen} })
+func (m Model) noticeBlinkCmd(gen int) tea.Cmd {
+	return m.tick(800*time.Millisecond, func(time.Time) tea.Msg { return noticeBlinkMsg{gen: gen} })
 }
 
 // applyRepoHealth is the repoHealthMsg Update case: store the snapshot,
@@ -153,7 +153,7 @@ func (m Model) armBlinkForNew(prev map[string]bool) (Model, tea.Cmd) {
 		if !prev[n.id] {
 			if !m.noticesUnread {
 				m.blinkGen++
-				cmd = noticeBlinkCmd(m.blinkGen)
+				cmd = m.noticeBlinkCmd(m.blinkGen)
 			}
 			m.noticesUnread = true
 			m.blinkOn = true
@@ -766,7 +766,7 @@ func (m Model) applyDriftReport(branch string, report domain.DriftReport, paused
 	var cmd tea.Cmd
 	if !m.noticesUnread {
 		m.blinkGen++
-		cmd = noticeBlinkCmd(m.blinkGen)
+		cmd = m.noticeBlinkCmd(m.blinkGen)
 	}
 	m.noticesUnread = true
 	m.blinkOn = true

@@ -178,8 +178,8 @@ type opFinishedMsg struct {
 type heartbeatMsg struct{}
 
 // heartbeatCmd schedules the next heartbeat tick.
-func heartbeatCmd() tea.Cmd {
-	return tea.Tick(time.Second, func(time.Time) tea.Msg { return heartbeatMsg{} })
+func (m Model) heartbeatCmd() tea.Cmd {
+	return m.tick(time.Second, func(time.Time) tea.Msg { return heartbeatMsg{} })
 }
 
 // decisionState holds an in-flight modal decision. Engine-driven decisions

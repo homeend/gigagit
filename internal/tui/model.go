@@ -313,6 +313,7 @@ type Model struct {
 	opMsgs    chan tea.Msg
 	modal     *decisionState
 	recorder  *recorder // keystroke recorder (nil unless gg --record)
+	quiet     bool      // headless golden-screen driver: no never-ending commands, virtual timers (headless.go)
 
 	// Session snapshot (agent-facing; see session_snapshot.go). snapshotPath
 	// "" = disabled (no repo / no state root). lastSnapshot is the last
@@ -505,7 +506,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.startupWebCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.startupWebCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -906,7 +907,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // stale lane or read: stop re-arming
 		}
 		m.blinkOn = !m.blinkOn
-		return m, noticeBlinkCmd(msg.gen)
+		return m, m.noticeBlinkCmd(msg.gen)
 	case reviewViewMsg:
 		return m.handleReviewViewMsg(msg)
 	case reviewsFollowMsg:
@@ -3254,7 +3255,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, hexp = m.expirePendingHint(time.Now())
 		var scmd tea.Cmd
 		m, scmd = m.drainSteer()
-		return m, tea.Batch(cmd, hexp, scmd, heartbeatCmd())
+		return m, tea.Batch(cmd, hexp, scmd, m.heartbeatCmd())
 
 	case steerStartedMsg:
 		if msg.gen != m.steerGen || !m.steerActive() {

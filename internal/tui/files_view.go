@@ -449,7 +449,7 @@ type commitReviewsMsg struct {
 func (m Model) reviewsFollowCmd(hash string) (Model, tea.Cmd) {
 	m.reviewsFollowGen++
 	gen := m.reviewsFollowGen
-	return m, tea.Tick(reviewsFollowDelay, func(time.Time) tea.Msg { return reviewsFollowMsg{gen: gen, hash: hash} })
+	return m, m.tick(reviewsFollowDelay, func(time.Time) tea.Msg { return reviewsFollowMsg{gen: gen, hash: hash} })
 }
 
 // onReviewsFollow reads the rested cursor's reviews.

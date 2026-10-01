@@ -42,7 +42,7 @@ func (m Model) askSteerSwitch(c steer.Command) (Model, tea.Cmd) {
 	var blink tea.Cmd
 	if !m.noticesUnread {
 		m.blinkGen++
-		blink = noticeBlinkCmd(m.blinkGen)
+		blink = m.noticeBlinkCmd(m.blinkGen)
 	}
 	m.noticesUnread = true
 	m.blinkOn = true
