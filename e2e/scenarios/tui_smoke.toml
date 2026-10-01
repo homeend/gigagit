@@ -1,0 +1,15 @@
+name = "tui smoke: the TUI starts on a two-commit repo and draws the Commits list"
+
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" }, { commit = "first" },
+  { write = "a.txt", content = "b\n" }, { commit = "second" },
+]
+
+[tui]
+size = "120x30"
+
+[[tui.step]]
+name = "start"
+keys = ["right"]
+screen_contains = ["second", "first"]

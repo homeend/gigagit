@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -19,7 +20,61 @@ type Scenario struct {
 	Name   string `toml:"name"`
 	Input  Input  `toml:"input"`
 	Runs   []Run  `toml:"run"`
+	TUI    *TUI   `toml:"tui"`
 	Expect Expect `toml:"expect"`
+	// fileStem is the scenario file's base name without .toml (the TUI
+	// scenarios' fixed sandbox root and golden directory derive from it).
+	fileStem string
+}
+
+// TUI drives the real TUI (tui.Headless) after the [[run]]s and checks the
+// rendered screens: every named step is a checkpoint compared with
+// <scenario>.screens/NN-<name>.txt (docs/superpowers/specs/2026-10-01-tui-e2e-golden-screens-design.md).
+type TUI struct {
+	Size  string    `toml:"size"` // "COLSxROWS"; "" = 160x40
+	Steps []TUIStep `toml:"step"`
+}
+
+// TUIStep presses keys (each followed by a settle), optionally fires the
+// parked timers (wait), then checks the screen.
+type TUIStep struct {
+	Name           string   `toml:"name"`
+	Keys           []string `toml:"keys"`
+	Wait           bool     `toml:"wait"`
+	ScreenContains []string `toml:"screen_contains"`
+	ScreenExcludes []string `toml:"screen_excludes"`
+}
+
+var (
+	tuiSizeRe = regexp.MustCompile(`^[1-9][0-9]*x[1-9][0-9]*$`)
+	tuiNameRe = regexp.MustCompile(`^[a-z0-9-]+$`)
+)
+
+// validate checks the [tui] block's shape.
+func (u *TUI) validate() error {
+	if u.Size != "" && !tuiSizeRe.MatchString(u.Size) {
+		return fmt.Errorf("tui.size %q: want COLSxROWS, e.g. 160x40", u.Size)
+	}
+	if len(u.Steps) == 0 {
+		return fmt.Errorf("[tui] needs at least one [[tui.step]]")
+	}
+	seen := map[string]bool{}
+	for i, st := range u.Steps {
+		if len(st.Keys) == 0 && !st.Wait {
+			return fmt.Errorf("tui.step[%d] %q: needs keys or wait = true", i, st.Name)
+		}
+		if st.Name == "" {
+			continue
+		}
+		if !tuiNameRe.MatchString(st.Name) {
+			return fmt.Errorf("tui.step[%d] name %q: want [a-z0-9-]+", i, st.Name)
+		}
+		if seen[st.Name] {
+			return fmt.Errorf("tui.step[%d] name %q: names must be unique", i, st.Name)
+		}
+		seen[st.Name] = true
+	}
+	return nil
 }
 
 // Input declares the repository state a scenario starts from.
@@ -246,6 +301,12 @@ func LoadScenario(path string) (*Scenario, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseScenario(data, path)
+}
+
+// parseScenario decodes and validates one scenario file's bytes; path names
+// it in errors and gives it its file stem.
+func parseScenario(data []byte, path string) (*Scenario, error) {
 	dec := toml.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var s Scenario
@@ -259,6 +320,7 @@ func LoadScenario(path string) (*Scenario, error) {
 	if err := s.validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	s.fileStem = strings.TrimSuffix(filepath.Base(path), ".toml")
 	return &s, nil
 }
 
@@ -302,8 +364,13 @@ func (s *Scenario) validate() error {
 			return fmt.Errorf("input.steps needs at least one commit step (the harness-injected .gg.toml must be committed)")
 		}
 	}
-	if len(s.Runs) == 0 {
-		return fmt.Errorf("at least one [[run]] is required")
+	if s.TUI != nil {
+		if err := s.TUI.validate(); err != nil {
+			return err
+		}
+	}
+	if len(s.Runs) == 0 && s.TUI == nil {
+		return fmt.Errorf("at least one [[run]] (or a [tui] block) is required")
 	}
 	for i, r := range s.Runs {
 		if len(r.Cmd) == 0 {

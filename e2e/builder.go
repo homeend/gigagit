@@ -64,7 +64,7 @@ func (b *Sandbox) dir(rel string) string {
 // buildSandbox constructs the scenario's input state.
 func buildSandbox(t *testing.T, sc *Scenario) *Sandbox {
 	t.Helper()
-	sb := &Sandbox{Root: t.TempDir()}
+	sb := &Sandbox{Root: sandboxRoot(t, sc)}
 	sb.LocalDir = filepath.Join(sb.Root, "local")
 	if sc.Input.Origin != nil {
 		buildOrigin(t, sb, sc) // implemented with the remote-topology task
@@ -213,4 +213,21 @@ func buildOrigin(t *testing.T, sb *Sandbox, sc *Scenario) {
 		sb.OriginURL = srv.URL + "/origin"
 	}
 	sb.git(t, sb.Root, "clone", sb.OriginURL, "local")
+}
+
+// sandboxRoot is a fresh temp dir, or — for a TUI scenario, whose screens
+// show the path — a fixed $TMPDIR/gg-tui/<scenario> recreated per run, so
+// the path renders identically every time.
+func sandboxRoot(t *testing.T, sc *Scenario) string {
+	t.Helper()
+	if sc.TUI == nil {
+		return t.TempDir()
+	}
+	root := filepath.Join(os.TempDir(), "gg-tui", sc.fileStem)
+	_ = os.RemoveAll(root)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	return root
 }
