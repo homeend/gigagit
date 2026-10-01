@@ -1191,9 +1191,16 @@ func (m Model) consumeStartAt() (Model, tea.Cmd) {
 		return m, func() tea.Msg { return startAtMsg{cmd: c} }
 	}
 	c, ok := steerCommandForLink(m.startAt)
+	anchor := m.startAtAnchor
+	m.startAtAnchor = nil
 	if !ok {
 		m.statusMsg = i18n.T("that gg link names no place gg can open")
 		return m, nil
+	}
+	// The link was resolved before the switch: what became of its
+	// fingerprinted line is said on THIS landing, the same line it names.
+	if anchor != nil && c.Line != nil && c.Line.No == anchor.No {
+		c.Line.Asked, c.Line.Anchor, c.Line.Matches = anchor.Asked, anchor.Anchor, anchor.Matches
 	}
 	return m, func() tea.Msg { return startAtMsg{cmd: c} }
 }
