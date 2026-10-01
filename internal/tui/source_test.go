@@ -362,18 +362,21 @@ func TestOpAffectedSources(t *testing.T) {
 		op   engine.Operation
 		want []sourceKey // nil = expect nil (all)
 	}{
-		{engine.Commit{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
+		{engine.Commit{}, []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}},
 		{engine.Push{}, []sourceKey{srcBranches, srcRemotes, srcFeed}},
 		{engine.Fetch{}, []sourceKey{srcRemotes}},
 		{engine.CreateWorktree{}, []sourceKey{srcBranches, srcWorktrees}},
 		{engine.RemoveWorktree{}, []sourceKey{srcBranches, srcWorktrees}},
 		{engine.SetIdentity{}, []sourceKey{srcIdentity}},
-		{engine.SmartMerge{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
-		{engine.SmartRebase{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
-		{engine.CherryPick{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
-		{engine.ApplyPatch{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
+		{engine.SmartMerge{}, []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}},
+		{engine.SmartRebase{}, []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}},
+		{engine.CherryPick{}, []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}},
+		{engine.ApplyPatch{}, []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}},
 		{engine.DeleteBranch{}, []sourceKey{srcBranches, srcFeed, srcNotes}},
-		{engine.RenameBranch{}, []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees, srcNotes}},
+		{engine.RenameBranch{}, []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees, srcNotes, srcReflog}},
+		{engine.FastForward{}, []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}},
+		{engine.CheckoutRemoteBranch{}, []sourceKey{srcStatus, srcBranches, srcRemotes, srcFeed, srcReflog}},
+		{engine.RestoreBranchVersion{}, []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees, srcReflog}},
 		{engine.Stash{}, nil}, // unmapped → all (safe default)
 	}
 	for _, tc := range cases {
