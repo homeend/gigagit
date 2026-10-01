@@ -1,0 +1,22 @@
+name = "cli: gg agent outside a gg console"
+
+[input]
+steps = [
+  { write = "a.txt", content = "A\n" },
+  { commit = "base" },
+]
+
+[[run]]
+cmd             = ["agent", "task"]
+exit            = 2
+stderr_contains = ["inside a gg console"]
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"a.txt" = "A\n"
+
+[[expect.log]]
+subjects = ["base"]
