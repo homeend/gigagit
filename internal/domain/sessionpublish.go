@@ -100,6 +100,9 @@ func sessionDead(id string, lv liveView) bool {
 	if lv.procs[proc] {
 		return true
 	}
+	if start, ok := sessionreg.StartOf(id); ok {
+		return !sessionreg.ProcAliveSince(sessionreg.PIDOf(id), start)
+	}
 	return !sessionreg.ProcAlive(sessionreg.PIDOf(id))
 }
 

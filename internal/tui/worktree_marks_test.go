@@ -111,3 +111,18 @@ func TestRecycleIntoStartsTheOpWithoutItsOwnConfirm(t *testing.T) {
 		t.Fatalf("modal=%v running=%v cmd=%v, want the op running and no TUI confirm", got.modal != nil, got.running, cmd != nil)
 	}
 }
+
+// While an op holds the repo, the reserve/release rows (gated domain reads
+// on the Update goroutine) are not offered — they would freeze the UI.
+func TestWorktreeMarkRowsHiddenWhileAnOpRuns(t *testing.T) {
+	t.Parallel()
+	m := worktreeMarksModel()
+	m.focus = panelWorktrees
+	m.sel[panelWorktrees] = 1
+	m.running = true
+	for _, id := range rowIDs(m.sessionMenuRows()) {
+		if strings.HasPrefix(id, "worktree-") {
+			t.Fatalf("row %q offered while an op runs", id)
+		}
+	}
+}

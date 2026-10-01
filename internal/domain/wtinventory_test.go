@@ -201,7 +201,7 @@ func TestInventoryOnlyOneWorktree(t *testing.T) {
 	main, svc, _ := inventoryRepo(t)
 	a := addWT(t, main, "a")
 	addWT(t, main, "b")
-	infos, err := svc.inventory(context.Background(), pol(), a)
+	infos, err := svc.inventory(context.Background(), pol(), a, "")
 	if err != nil || len(infos) != 1 || !SameCheckout(infos[0].Path, a) {
 		t.Fatalf("inventory(only) = %+v %v", infos, err)
 	}

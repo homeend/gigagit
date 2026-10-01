@@ -65,6 +65,9 @@ func (m Model) worktreeClaimHint() string {
 
 // worktreeMarkRows are the Worktrees row's reserve / release-claim rows.
 func (m Model) worktreeMarkRows(wt model.Worktree) []actionRow {
+	if !m.opsIdle() {
+		return nil // they read through the gate on the Update goroutine
+	}
 	path := wt.Path
 	mk := m.worktreeMarks[path]
 	var rows []actionRow

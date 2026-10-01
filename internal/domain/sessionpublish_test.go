@@ -59,18 +59,19 @@ func TestPublishSessionsWritesAndRemoves(t *testing.T) {
 
 func TestSessionDead(t *testing.T) {
 	t.Parallel()
-	self := fmt.Sprintf("%d-1", os.Getpid())
+	self := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano()) // a real tag: this process started before now
 	lv := liveView{
 		running: map[string]bool{"live-1/s1": true, "live-1/s2": false},
 		procs:   map[string]bool{"live-1": true},
 	}
 	cases := map[string]bool{
-		"live-1/s1":  false, // listed running
-		"live-1/s2":  true,  // its registry is live and says exited
-		"live-1/s9":  true,  // its registry is live and does not list it
-		self + "/s1": false, // no live registry, but the process is alive (stalled TUI)
-		"0-1/s1":     true,  // no registry, no process
-		"garbage":    true,
+		"live-1/s1":                         false, // listed running
+		"live-1/s2":                         true,  // its registry is live and says exited
+		"live-1/s9":                         true,  // its registry is live and does not list it
+		self + "/s1":                        false, // no live registry, but the process is alive (stalled TUI)
+		"0-1/s1":                            true,  // no registry, no process
+		fmt.Sprintf("%d-1/s1", os.Getpid()): true,  // alive pid, but it started after the tag: a reused pid
+		"garbage":                           true,
 	}
 	for id, want := range cases {
 		if got := sessionDead(id, lv); got != want {

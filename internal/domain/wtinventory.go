@@ -115,7 +115,7 @@ func targetOf(w model.Worktree, isMain bool, caller string) wtguard.Target {
 // WorktreeInventory runs the composed guards over every worktree; freeOnly
 // keeps the free ones, clean first, then stale-dirty by oldest change.
 func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, freeOnly bool) ([]WorktreeInfo, error) {
-	out, err := s.inventory(ctx, pol, "")
+	out, err := s.inventory(ctx, pol, "", "")
 	if err != nil || !freeOnly {
 		return out, err
 	}
@@ -137,7 +137,7 @@ func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, fr
 // inventory runs the composed guard set per worktree (only != "": that one
 // alone — the claim path, no status fan-out), in parallel; the Runner's
 // LimitRunner caps the concurrent git processes.
-func (s *Service) inventory(ctx context.Context, pol InventoryPolicy, only string) ([]WorktreeInfo, error) {
+func (s *Service) inventory(ctx context.Context, pol InventoryPolicy, only, caller string) ([]WorktreeInfo, error) {
 	wts, err := s.Worktrees(ctx)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func (s *Service) inventory(ctx context.Context, pol InventoryPolicy, only strin
 		if w.Bare || w.Path == "" || (only != "" && !SameCheckout(w.Path, only)) {
 			continue
 		}
-		t := targetOf(w, i == 0, "")
+		t := targetOf(w, i == 0, caller)
 		out = append(out, WorktreeInfo{Path: w.Path, Branch: w.Branch, Head: w.Head, Main: t.Main, Detached: t.Detached})
 		targets = append(targets, t)
 	}

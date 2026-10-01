@@ -96,3 +96,23 @@ func TestProcAlive(t *testing.T) {
 		t.Skip("pid reused already — cannot assert on this machine")
 	}
 }
+
+// A pid alive now but started AFTER the tag's start time is a reused pid:
+// the process that minted the tag is gone.
+func TestProcAliveSinceRejectsAReusedPid(t *testing.T) {
+	t.Parallel()
+	if !ProcAliveSince(os.Getpid(), time.Now().Add(time.Minute)) {
+		t.Fatal("this process started before now: alive")
+	}
+	c := exec.Command("sleep", "5")
+	if err := c.Start(); err != nil {
+		t.Skip("no sleep binary")
+	}
+	defer c.Process.Kill()
+	if !procStartKnown() {
+		t.Skip("process start time unknown on this OS")
+	}
+	if ProcAliveSince(c.Process.Pid, time.Now().Add(-time.Hour)) {
+		t.Fatal("a process started after the tag must not count as the tag's owner")
+	}
+}

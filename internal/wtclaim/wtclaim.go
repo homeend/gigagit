@@ -28,6 +28,10 @@ type Claim struct {
 	Agent   string    `toml:"agent"`
 	Since   time.Time `toml:"since"`
 	Note    string    `toml:"note"`
+	// Host is "<hostname>/<GOOS>" of the gg that wrote it: a repo shared
+	// between WSL and Windows has two pid namespaces and two state dirs, so
+	// only the writing host can judge its liveness.
+	Host string `toml:"host"`
 }
 
 func path(gitDir string) string { return filepath.Join(gitDir, FileName) }

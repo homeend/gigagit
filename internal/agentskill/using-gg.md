@@ -853,7 +853,8 @@ finds the right one here.
   running inside gg (it has `GG_SESSION_ID`) can claim; outside gg, or with
   a session gg is not running, claim exits 2. Atomic: of two agents racing
   for one worktree exactly one wins, the other exits 1 with the reasons —
-  pick the next. A claim ends by itself when your session ends; `release`
+  pick the next. Claiming a worktree you already hold succeeds (safe to
+  retry). A claim ends by itself when your session ends; `release`
   exits 0 even with no claim. `--note` (e.g. the issue URL) shows in the
   user's TUI.
 - `gg worktree reserve <path>` / `gg worktree unreserve <path>` — keep a
@@ -871,8 +872,9 @@ finds the right one here.
 `git-lock` can appear for one listing while another reader's `git status`
 holds `index.lock` — list again before giving up on a worktree. A `claim`
 that exits 2 right after your session started can mean gg has not published
-it yet: retry once after a second. A claim whose owner crashed can outlive
-it on Windows if the pid is reused — the user releases it from the TUI.
+it yet: retry once after a second. A claim made by gg on the other side of
+a WSL/Windows pair (one repo, two hosts) is never judged dead from this side
+— only its own side or the user releases it.
 - `gg worktree rename [--force] <worktree> <new-name>` / `gg worktree move
   [--force] <worktree> <new-path>` — relocate a linked worktree's directory
   (`git worktree move`); `rename` is a same-parent move computed from just

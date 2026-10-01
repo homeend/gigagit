@@ -19,8 +19,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Claims.** `gg worktree claim [--note <url>] <path>` lets an agent running
   inside gg take a free worktree atomically (of two racing agents exactly one
   wins); `gg worktree release` gives it back, and a claim ends by itself when
-  its agent session ends — a crashed TUI's claims die with it, a merely
-  stalled one keeps them.
+  its agent session ends — a crashed TUI's claims die with it (a reused pid
+  is told apart by its start time), a merely stalled one keeps them. A
+  claim records the host that wrote it, so a WSL gg never sweeps a Windows
+  gg's claim on a shared repo (or the reverse). Re-claiming a worktree you
+  hold succeeds.
 - **Reserves.** `gg worktree reserve|unreserve <path>` (or the TUI Worktrees
   `.` menu) keeps a worktree away from agents (`[agents] reserved`, repo
   config only). New `[agents] stale_after` (default `14d`) and `allow_main`.

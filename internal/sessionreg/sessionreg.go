@@ -129,3 +129,34 @@ func PIDOf(sessionID string) int {
 	}
 	return n
 }
+
+// procStartSlack absorbs /proc's whole-second boot time and tick rounding.
+const procStartSlack = 2 * time.Second
+
+// ProcAliveSince reports whether pid is alive AND is the process that was
+// already running at notAfter (a session id's <start>): a live pid that
+// started later is a reused pid, and the tag's owner is gone. Where the
+// start time is unknown, liveness is the pid alone.
+func ProcAliveSince(pid int, notAfter time.Time) bool {
+	if !ProcAlive(pid) {
+		return false
+	}
+	start, ok := procStart(pid)
+	if !ok {
+		return true
+	}
+	return !start.After(notAfter.Add(procStartSlack))
+}
+
+// StartOf is the <start> inside a session id; ok is false when malformed.
+func StartOf(sessionID string) (time.Time, bool) {
+	_, start, ok := strings.Cut(ProcOf(sessionID), "-")
+	if !ok {
+		return time.Time{}, false
+	}
+	n, err := strconv.ParseInt(start, 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(0, n), true
+}

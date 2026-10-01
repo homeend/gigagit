@@ -25,7 +25,10 @@ func TestClaimAndRelease(t *testing.T) {
 	t.Parallel()
 	main, svc, reg := inventoryRepo(t)
 	wt := addWT(t, main, "c")
-	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, Agent: "claude", State: "running"}}})
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{
+		{ID: "p/s1", Dir: main, Agent: "claude", State: "running"},
+		{ID: "p/s2", Dir: main, Agent: "codex", State: "running"},
+	}})
 	ctx := context.Background()
 	if err := svc.ClaimWorktree(ctx, wt, "", "", pol()); !errors.Is(err, ErrNotAgent) {
 		t.Fatalf("no session = %v", err)
@@ -34,8 +37,8 @@ func TestClaimAndRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	var nf *NotFreeError
-	if err := svc.ClaimWorktree(ctx, wt, "p/s1", "", pol()); !errors.As(err, &nf) || !slices.Contains(nf.BlockedBy, "claimed") {
-		t.Fatalf("second claim = %v", err)
+	if err := svc.ClaimWorktree(ctx, wt, "p/s2", "", pol()); !errors.As(err, &nf) || !slices.Contains(nf.BlockedBy, "claimed") {
+		t.Fatalf("a second session's claim = %v", err)
 	}
 	infos, _ := svc.WorktreeInventory(ctx, pol(), false)
 	if w := find(t, infos, wt); w.Claim() == nil || w.Claim().Note != "https://x/1" || w.Claim().Agent != "claude" {
@@ -73,7 +76,7 @@ func TestStalledRegistryKeepsClaim(t *testing.T) {
 	t.Parallel()
 	main, svc, reg := inventoryRepo(t)
 	wt := addWT(t, main, "stall")
-	proc := fmt.Sprintf("%d-1", os.Getpid()) // a live process, not this one's ProcTag
+	proc := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano()) // a live process (started before now), not this one's ProcTag
 	sessionreg.Write(reg, proc, sessionreg.Registry{PID: os.Getpid(), Sessions: []sessionreg.Entry{{ID: proc + "/s1", Dir: main, State: "running"}}})
 	ctx := context.Background()
 	if err := svc.ClaimWorktree(ctx, wt, proc+"/s1", "", pol()); err != nil {
@@ -259,5 +262,50 @@ func TestClaimAgentFallsBackToSessionLabel(t *testing.T) {
 	infos, _ := svc.WorktreeInventory(context.Background(), pol(), false)
 	if c := find(t, infos, wt).Claim(); c == nil || c.Agent != "Terminal" {
 		t.Fatalf("claim = %+v, want agent Terminal", c)
+	}
+}
+
+// A claim written by gg on another host (Windows gg on a WSL /mnt repo) is
+// never judged by this host's pids or registries: only a user releases it.
+func TestForeignHostClaimIsNeverSwept(t *testing.T) {
+	t.Parallel()
+	main, svc, _ := inventoryRepo(t)
+	wt := addWT(t, main, "foreign")
+	if err := wtclaim.Create(git.GitDirAt(wt), wtclaim.Claim{Session: "0-1/s1", Agent: "claude", Host: "otherbox/windows", Since: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	infos, _ := svc.WorktreeInventory(context.Background(), pol(), false)
+	if find(t, infos, wt).Claim() == nil {
+		t.Fatal("a foreign host's claim must stay")
+	}
+}
+
+// Claims written by this host carry its host stamp.
+func TestClaimStampsHost(t *testing.T) {
+	t.Parallel()
+	main, svc, reg := inventoryRepo(t)
+	wt := addWT(t, main, "stamp")
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, State: "running"}}})
+	if err := svc.ClaimWorktree(context.Background(), wt, "p/s1", "", pol()); err != nil {
+		t.Fatal(err)
+	}
+	c, ok, _ := wtclaim.Read(git.GitDirAt(wt))
+	if !ok || c.Host != localHost() {
+		t.Fatalf("claim host = %q, want %q", c.Host, localHost())
+	}
+}
+
+// An orchestrator retrying a claim it already holds succeeds.
+func TestReclaimBySameSessionSucceeds(t *testing.T) {
+	t.Parallel()
+	main, svc, reg := inventoryRepo(t)
+	wt := addWT(t, main, "again")
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, State: "running"}}})
+	ctx := context.Background()
+	if err := svc.ClaimWorktree(ctx, wt, "p/s1", "", pol()); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ClaimWorktree(ctx, wt, "p/s1", "", pol()); err != nil {
+		t.Fatalf("re-claim by the holder = %v", err)
 	}
 }

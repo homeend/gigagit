@@ -3,7 +3,9 @@ package domain
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -57,10 +59,19 @@ func readClaim(gitDir string) (wtclaim.Claim, bool) {
 // sameClaim: field-wise, with time.Equal — a numeric-offset timestamp parses
 // to a fresh *Location each read, so == would never match it.
 func sameClaim(a, b wtclaim.Claim) bool {
-	return a.Session == b.Session && a.Agent == b.Agent && a.Note == b.Note && a.Since.Equal(b.Since)
+	return a.Session == b.Session && a.Agent == b.Agent && a.Note == b.Note && a.Host == b.Host && a.Since.Equal(b.Since)
+}
+
+// localHost names this machine + OS for claim stamps.
+func localHost() string {
+	h, _ := os.Hostname()
+	return h + "/" + runtime.GOOS
 }
 
 func claimDead(c wtclaim.Claim, gitDir string, lv liveView) bool {
+	if c.Host != "" && c.Host != localHost() {
+		return false // another host's pids and registries: only a user releases it
+	}
 	if c.Session == "" {
 		age, ok := wtclaim.Age(gitDir)
 		return ok && age > emptyClaimGrace
@@ -113,7 +124,7 @@ func (s *Service) ClaimWorktree(ctx context.Context, path, sessionID, note strin
 	if !lv.running[sessionID] {
 		return &SessionNotLiveError{ID: sessionID}
 	}
-	infos, err := s.inventory(ctx, pol, path) // this worktree only; sweeps a dead claim
+	infos, err := s.inventory(ctx, pol, path, sessionID) // this worktree only, as the caller sees it; sweeps a dead claim
 	if err != nil {
 		return err
 	}
@@ -133,6 +144,9 @@ func (s *Service) ClaimWorktree(ctx context.Context, path, sessionID, note strin
 		// appeared dead-then-live or been swept; decide again, locked.
 		if c, ok := readClaim(gitDir); ok {
 			if !claimDead(c, gitDir, lv) {
+				if c.Session == sessionID {
+					return nil // a retry of a claim we already hold
+				}
 				return &NotFreeError{Path: target.Path, BlockedBy: []string{"claimed"}}
 			}
 			if err := wtclaim.Remove(gitDir); err != nil {
@@ -140,7 +154,7 @@ func (s *Service) ClaimWorktree(ctx context.Context, path, sessionID, note strin
 			}
 		}
 		err := wtclaim.Create(gitDir, wtclaim.Claim{Session: sessionID, Agent: lv.agents[sessionID],
-			Since: time.Now().UTC().Truncate(time.Second), Note: note})
+			Since: time.Now().UTC().Truncate(time.Second), Note: note, Host: localHost()})
 		if errors.Is(err, wtclaim.ErrClaimed) {
 			return &NotFreeError{Path: target.Path, BlockedBy: []string{"claimed"}}
 		}
