@@ -1,0 +1,141 @@
+package domain
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/texttmpl"
+)
+
+func textSvc(t *testing.T) *Service {
+	t.Helper()
+	_, svc := newRealRepo(t)
+	svc.SetTextTemplateStores(
+		texttmpl.NewFileStore(t.TempDir(), model.ProfileScopeGlobal),
+		texttmpl.NewFileStore(t.TempDir(), model.ProfileScopeRepo))
+	return svc
+}
+
+func TestTextTemplatesAddListScopes(t *testing.T) {
+	t.Parallel()
+	svc, ctx := textSvc(t), context.Background()
+	if _, err := svc.AddTextTemplate(ctx, model.TextTemplate{Title: "G", Body: "g", Scope: model.ProfileScopeGlobal}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddTextTemplate(ctx, model.TextTemplate{Title: " R ", Body: "r\n\n", Scope: model.ProfileScopeRepo}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := svc.TextTemplates(ctx)
+	if err != nil || len(list) != 2 || list[0].Title != "G" || list[1].Scope != model.ProfileScopeRepo {
+		t.Fatalf("list = %+v, %v", list, err)
+	}
+	if list[1].Title != "R" || list[1].Body != "r" {
+		t.Fatalf("title/body not trimmed: %+v", list[1])
+	}
+}
+
+func TestTextTemplateUpdateRemoveAndErrorKinds(t *testing.T) {
+	t.Parallel()
+	svc, ctx := textSvc(t), context.Background()
+	g := model.ProfileScopeGlobal
+	a, _ := svc.AddTextTemplate(ctx, model.TextTemplate{Title: "A", Body: "a", Scope: g})
+	_, _ = svc.AddTextTemplate(ctx, model.TextTemplate{Title: "B", Body: "b", Scope: g})
+
+	up, err := svc.UpdateTextTemplate(ctx, g, a.ID, model.TextTemplate{Title: "A2", Body: "new"})
+	if err != nil || up.ID != "a2" || up.Body != "new" {
+		t.Fatalf("update = %+v, %v", up, err)
+	}
+	if _, err := svc.UpdateTextTemplate(ctx, g, "a2", model.TextTemplate{Title: "B", Body: "x"}); !IsTextTemplateDuplicate(err) {
+		t.Fatalf("rename onto B: %v", err)
+	}
+	if _, err := svc.AddTextTemplate(ctx, model.TextTemplate{Title: "b", Body: "x", Scope: g}); !IsTextTemplateDuplicate(err) {
+		t.Fatalf("duplicate add: %v", err)
+	}
+	if err := svc.RemoveTextTemplate(ctx, g, "nope"); !IsTextTemplateNotFound(err) {
+		t.Fatalf("remove unknown: %v", err)
+	}
+	if err := svc.RemoveTextTemplate(ctx, g, "a2"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateTextTemplate(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("x", MaxTextTemplateBody+1)
+	for name, tc := range map[string]struct{ title, body string }{
+		"empty title":     {"  ", "b"},
+		"two-line title":  {"a\nb", "b"},
+		"long title":      {strings.Repeat("t", 81), "b"},
+		"empty body":      {"t", " \n\t"},
+		"oversized body":  {"t", long},
+		"malformed token": {"t", "x <seq> y"},
+	} {
+		if err := ValidateTextTemplate(tc.title, tc.body); err == nil {
+			t.Errorf("%s: want an error", name)
+		}
+	}
+	if err := ValidateTextTemplate("t", "ok <br> <user:a> <branch>"); err != nil {
+		t.Fatalf("valid template refused: %v", err)
+	}
+}
+
+func TestTextTemplateTokens(t *testing.T) {
+	t.Parallel()
+	labels, auto := TextTemplateTokens("<user:a> <date> <br> <user:b>")
+	if len(labels) != 2 || labels[1] != "b" || len(auto) != 1 || auto[0] != "<date>" {
+		t.Fatalf("labels %v auto %v", labels, auto)
+	}
+}
+
+func TestRenderPeeksTakeConsumes(t *testing.T) {
+	t.Parallel()
+	svc, ctx := textSvc(t), context.Background()
+	body := "n=<seq:tt:2> <user:who> on <branch>"
+	in := map[string]string{"who": "me"}
+	for i := 0; i < 2; i++ { // two previews: the same number
+		got, seqs, err := svc.RenderTextTemplate(ctx, body, in)
+		if err != nil || got != "n=01 me on main" || len(seqs) != 1 || seqs[0] != "tt" {
+			t.Fatalf("render %d = %q %v %v", i, got, seqs, err)
+		}
+	}
+	if got, err := svc.TakeTextTemplate(ctx, body, in); err != nil || got != "n=01 me on main" {
+		t.Fatalf("take = %q, %v", got, err)
+	}
+	if got, _, _ := svc.RenderTextTemplate(ctx, body, in); got != "n=02 me on main" {
+		t.Fatalf("after take the preview = %q, want n=02 …", got)
+	}
+	// A take that cannot resolve consumes nothing.
+	if _, err := svc.TakeTextTemplate(ctx, body, nil); err == nil {
+		t.Fatal("take without the input must fail")
+	}
+	if got, _, _ := svc.RenderTextTemplate(ctx, body, in); got != "n=02 me on main" {
+		t.Fatalf("a failed take consumed a number: %q", got)
+	}
+}
+
+func TestFindTextTemplate(t *testing.T) {
+	t.Parallel()
+	svc, ctx := textSvc(t), context.Background()
+	_, _ = svc.AddTextTemplate(ctx, model.TextTemplate{Title: "Note", Body: "global", Scope: model.ProfileScopeGlobal})
+	_, _ = svc.AddTextTemplate(ctx, model.TextTemplate{Title: "Note", Body: "repo", Scope: model.ProfileScopeRepo})
+	_, _ = svc.AddTextTemplate(ctx, model.TextTemplate{Title: "Notice", Body: "n", Scope: model.ProfileScopeGlobal})
+
+	if got, err := svc.FindTextTemplate(ctx, "note", nil); err != nil || got.Body != "repo" {
+		t.Fatalf("exact id, repo wins: %+v, %v", got, err)
+	}
+	g := model.ProfileScopeGlobal
+	if got, err := svc.FindTextTemplate(ctx, "note", &g); err != nil || got.Body != "global" {
+		t.Fatalf("explicit scope: %+v, %v", got, err)
+	}
+	if got, err := svc.FindTextTemplate(ctx, "notic", nil); err != nil || got.Title != "Notice" {
+		t.Fatalf("unique prefix: %+v, %v", got, err)
+	}
+	if _, err := svc.FindTextTemplate(ctx, "no", nil); err == nil || IsTextTemplateNotFound(err) {
+		t.Fatalf("ambiguous prefix must be an ambiguity error: %v", err)
+	}
+	if _, err := svc.FindTextTemplate(ctx, "zzz", nil); !IsTextTemplateNotFound(err) {
+		t.Fatalf("unknown id: %v", err)
+	}
+}
