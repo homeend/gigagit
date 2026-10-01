@@ -95,6 +95,24 @@ function linkHintIDOK(id) {
 // id that cannot round-trip refuses the whole link rather than dropping the
 // hint silently.
 function linkFor(repo, worktree, ctx, side, no) {
+  // A compare addressed by two side SPECS (the entry-diff lane): two commits
+  // are the pair; any other compare names the clicked side as the VERSION it
+  // shows — the working file, the index, or that commit's own text (hence the
+  // new side of its link). A stored entry has no link. The TUI twin is
+  // compareLinkText.
+  if (ctx && ctx.cmpSides && !ctx.preview) {
+    const commitOf = (spec) => (/^commit:[0-9a-f]+$/.test(spec || "") ? spec.slice(7) : "");
+    const { left, right } = ctx.cmpSides;
+    if (commitOf(left) && commitOf(right))
+      return linkFor(repo, worktree, { path: ctx.path, compare: true, cmpPair: { a: commitOf(left), b: commitOf(right) } }, side, no);
+    const old = side === "old" && no > 0;
+    const spec = old ? left : right;
+    const path = (old && ctx.oldPath) || ctx.path;
+    if (spec === "worktree") return linkFor(repo, worktree, { path, state: "unstaged" }, "new", no);
+    if (spec === "staged") return linkFor(repo, worktree, { path, state: "staged" }, "new", no);
+    if (commitOf(spec)) return linkFor(repo, worktree, { path, state: "commit", rev: commitOf(spec) }, "new", no);
+    return "";
+  }
   let preview = (ctx && ctx.preview) || null;
   // A plain two-commit compare has no preview and no note scope; its pair
   // rides ctx.cmpPair (files.js commitDiffCtx). Any other compare refuses.

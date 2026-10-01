@@ -478,6 +478,19 @@ func TestSteerNavigateLandsOnTheOldSide(t *testing.T) {
 	if !ok || row.LeftNo != 18 {
 		t.Errorf("cursor row = %+v ok=%v, want OLD line 18", row, ok)
 	}
+	if !v.onOld {
+		t.Error("an old-side landing must put the cursor in the OLD pane")
+	}
+	// A new-side landing brings it back: the pane follows the link, both ways.
+	m, cmd = m.applySteer(steer.Command{
+		ID: "n-12b", Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "unstaged"},
+		Line:   &steer.Line{Side: "new", No: 18},
+	})
+	m = pumpDiff(t, m, cmd)
+	if v = m.diffLayer(); v == nil || v.onOld {
+		t.Errorf("a new-side landing must put the cursor in the NEW pane (view %v)", v)
+	}
 	r, ok := steer.AwaitReply(dir, "n-12", 2*time.Second)
 	if !ok || !r.OK || !strings.Contains(r.Detail, "a.txt:18") {
 		t.Fatalf("reply = %+v ok=%v, want ok:true detailing a.txt:18", r, ok)

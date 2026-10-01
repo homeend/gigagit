@@ -73,6 +73,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   files). **`gg init --mcp`** registers gg's MCP server with Claude Code
   (`claude mcp add -s user`). The using-gg skill is v118.
 
+## Line links: the landing pane, the web's other comparisons, the help line
+
+### Changed
+
+- **A link to an old-side line lands in the old pane.** Pasting a
+  `:old:<line>` link (or `gg session navigate --old-line`) put the cursor on
+  the right row but left it in the new pane; it now sits in the old one, in
+  the single-file and the stacked view, so `L` right after copies the link
+  that brought you there. A new-side landing brings it back.
+- **gg web:** *copy gg link to this line* also works in a comparison
+  addressed by its two sides (Compare with link…, a stored copy against a
+  file), single-file and stacked: two commits give the pair link, otherwise
+  the clicked side is linked as the version it shows — the working file,
+  `@staged`, or that commit. A bookmark or shelf side has no link.
+- **`?` help:** the `L` entry says it works in a comparison, on the side the
+  cursor is on.
+
 ## A link to a line of any two-commit comparison
 
 ### Added

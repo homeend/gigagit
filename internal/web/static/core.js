@@ -75,6 +75,7 @@ const state = {
   blameRecent: { on: false, f: null, last: "7d" },
   diffFolds: new Set(),    // fold start indexes the reader unfolded in the open diff (reset per diff)
   diffCtx: null, // {path, rev, state} — the file the diff pane currently shows, else null
+  diffLinkCtx: null, // {path, oldPath, cmpSides, gen} — a link-only context for a diff with no diffCtx (an entry compare)
   notes: [],                 // resolved notes for the open diff (GET /api/notes)
   noteCounts: { by_path: {}, by_commit: {}, by_commit_path: {}, reviews: [] },
   // Stored AI reviews (reviews.js): the open commit's review rows, the review
