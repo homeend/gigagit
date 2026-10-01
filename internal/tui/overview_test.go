@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/agentdocs"
 )
 
 func spanText(lines []contentLine, s anchorSpan) string {
@@ -20,41 +22,6 @@ func anchorText(lines []contentLine, a anchor) string {
 	return strings.Join(parts, " ")
 }
 
-func TestParseAnchorDest(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		dest string
-		want anchorTarget
-		ok   bool
-	}{
-		{"a/b.go", anchorTarget{path: "a/b.go"}, true},
-		{"./a.go:12", anchorTarget{path: "a.go", start: 12, end: 12}, true},
-		{"a.go:3-9", anchorTarget{path: "a.go", start: 3, end: 9}, true},
-		{" a.go:3 ", anchorTarget{path: "a.go", start: 3, end: 3}, true},
-		{"a:b.go", anchorTarget{path: "a:b.go"}, true},
-		{"Makefile:4", anchorTarget{path: "Makefile", start: 4, end: 4}, true},
-		{"note:t7", anchorTarget{note: "t7"}, true},
-		{"a.go:9-3", anchorTarget{}, false},
-		{"a.go:0", anchorTarget{}, false},
-		{"note:x", anchorTarget{}, false},
-		{"/etc/passwd", anchorTarget{}, false},
-		{"../x", anchorTarget{}, false},
-		{"a/../b", anchorTarget{}, false},
-		{"a\\b", anchorTarget{}, false},
-		{"C:/x", anchorTarget{}, false},
-		{"http://x", anchorTarget{}, false},
-		{"ftp://x/a", anchorTarget{}, false},
-		{"a b.go", anchorTarget{}, false},
-		{"", anchorTarget{}, false},
-		{"./", anchorTarget{}, false},
-	} {
-		got, ok := parseAnchorDest(tc.dest)
-		if ok != tc.ok || got != tc.want {
-			t.Errorf("parseAnchorDest(%q) = %+v, %v; want %+v, %v", tc.dest, got, ok, tc.want, tc.ok)
-		}
-	}
-}
-
 func TestOverviewLinesSpansInAParagraph(t *testing.T) {
 	t.Parallel()
 	lines, as := overviewLines("See [open files](internal/tui/open_files.go:20) and [x](a.go).", 80)
@@ -64,7 +31,7 @@ func TestOverviewLinesSpansInAParagraph(t *testing.T) {
 	if got := anchorText(lines, as[0]); got != "open files" {
 		t.Fatalf("anchor 0 text = %q", got)
 	}
-	if as[0].target != (anchorTarget{path: "internal/tui/open_files.go", start: 20, end: 20}) || as[0].dest != "internal/tui/open_files.go:20" {
+	if as[0].target != (agentdocs.Anchor{Dest: "internal/tui/open_files.go:20", Path: "internal/tui/open_files.go", Start: 20, End: 20}) || as[0].dest != "internal/tui/open_files.go:20" {
 		t.Fatalf("anchor 0 = %+v", as[0])
 	}
 	if got := anchorText(lines, as[1]); got != "x" {
@@ -133,14 +100,14 @@ func TestOverviewLinesEmphasisInALabel(t *testing.T) {
 func TestOverviewLinesCapsAnchors(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
-	for i := 0; i <= overviewMaxAnchors; i++ {
+	for i := 0; i <= agentdocs.MaxAnchors; i++ {
 		fmt.Fprintf(&b, "- [label%d](f%d.go)\n", i, i)
 	}
 	lines, as := overviewLines(b.String(), 80)
-	if len(as) != overviewMaxAnchors {
-		t.Fatalf("anchors = %d, want %d", len(as), overviewMaxAnchors)
+	if len(as) != agentdocs.MaxAnchors {
+		t.Fatalf("anchors = %d, want %d", len(as), agentdocs.MaxAnchors)
 	}
-	last := fmt.Sprintf("label%d", overviewMaxAnchors)
+	last := fmt.Sprintf("label%d", agentdocs.MaxAnchors)
 	found := false
 	for _, l := range lines {
 		if strings.Contains(l.text, last) {

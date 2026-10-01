@@ -5,6 +5,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // The TUI's side of the agent-docs store (spec 2026-10-01-agent-docs-web):
@@ -41,7 +42,60 @@ func (m Model) waitDocsCmd() tea.Cmd {
 // onAgentDocsChanged refreshes the current worktree's documents from the
 // store and waits for the next change.
 func (m Model) onAgentDocsChanged() (Model, tea.Cmd) {
-	return m, tea.Batch(m.syncDocNotes(), m.waitDocsCmd())
+	m, cmd := m.syncAgentDocs()
+	return m, tea.Batch(cmd, m.waitDocsCmd())
+}
+
+// syncAgentDocs brings the current worktree's documents up to the store:
+// their notes, and the overviews.
+func (m Model) syncAgentDocs() (Model, tea.Cmd) {
+	cmd := m.syncDocNotes()
+	return m.syncOverviews(), cmd
+}
+
+// syncOverviews follows the store's overviews of this worktree: one that left
+// it (closed in the browser) closes here — on screen, with a word in the
+// status line; one whose text, title or check changed is laid out or painted
+// again; one this list lacks joins it in the background.
+func (m Model) syncOverviews() Model {
+	if m.docs == nil || m.openFiles == nil {
+		return m
+	}
+	rows, inner := m.viewerGeom()
+	width := m.overviewWidth(inner)
+	listed := map[string]bool{}
+	var gone []*openFile
+	for _, d := range m.openFiles.list(m.currentWorktree) {
+		if d.ov == nil {
+			continue
+		}
+		o, ok := m.docs.Overview(d.id())
+		if !ok {
+			gone = append(gone, d)
+			continue
+		}
+		listed[o.ID] = true
+		d.adoptOverview(o, rows, width)
+	}
+	for _, d := range gone {
+		shown := m.docShown(d)
+		m = m.closeDoc(d)
+		if shown {
+			m.statusMsg = i18n.T("overview %s was closed in the browser", d.id())
+		}
+	}
+	for _, o := range m.docs.Overviews(domain.CheckoutKey(m.currentWorktree)) {
+		if listed[o.ID] {
+			continue
+		}
+		d := newOverviewDocFrom(o)
+		d.layOut(rows, width)
+		d.adoptOverview(o, rows, width)
+		status := m.statusMsg
+		m = m.registerDoc(d)
+		m.statusMsg = status // an agent's overview never takes over the status line
+	}
+	return m
 }
 
 // syncDocNotes re-reads every open document's notes; one whose notes sit on

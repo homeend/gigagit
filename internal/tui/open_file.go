@@ -118,14 +118,20 @@ func (d *openFile) keepPlace() {
 // newOpenFile is a document for path at src, showing the loading placeholder
 // until its load arrives.
 func newOpenFile(src fileSource, path string) *openFile {
+	// The shared store numbers documents: a gg web page this TUI hosts
+	// draws its ids from the same counter, so an id never names two files.
+	return newOpenFileSeq(src, path, agentdocs.Shared().NextFileSeq())
+}
+
+// newOpenFileSeq is newOpenFile under a number the store already handed out
+// (an overview's).
+func newOpenFileSeq(src fileSource, path string, seq int64) *openFile {
 	d := &openFile{
 		src:  src,
 		path: path,
 		p:    &contentPopup{title: path, lines: []contentLine{{text: i18n.T("(loading…)")}}},
+		seq:  seq,
 	}
-	// The shared store numbers documents: a gg web page this TUI hosts
-	// draws its ids from the same counter, so an id never names two files.
-	d.seq = agentdocs.Shared().NextFileSeq()
 	d.tag = fmt.Sprintf("%s#%d", d.key(), d.seq)
 	return d
 }

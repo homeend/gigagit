@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -73,7 +74,7 @@ func TestOverviewAddLimits(t *testing.T) {
 		name, title, text, want string
 	}{
 		{"empty", "T", "  \n", "an overview needs text"},
-		{"too big", "T", strings.Repeat("x", overviewMaxBytes+1), "the text is over 64 KiB"},
+		{"too big", "T", strings.Repeat("x", agentdocs.MaxOverviewBytes+1), "the text is over 64 KiB"},
 		{"no title", " ", "x", "an overview needs a title"},
 		{"two-line title", "a\nb", "x", "the title must be one line of at most 200 characters"},
 	} {
@@ -83,8 +84,8 @@ func TestOverviewAddLimits(t *testing.T) {
 		}
 	}
 	m := loadedNavModel(t)
-	for i := 0; i < overviewMaxPerWorktree; i++ {
-		m = m.registerDoc(newOverviewDoc("T", "x"))
+	for i := 0; i < agentdocs.MaxOverviewsPerRoot; i++ {
+		m = m.registerDoc(storeOverview(t, m, "T", "x"))
 	}
 	if _, r := applyOverview(t, m, overviewAddCmd("l-21", "T", "x")); r.OK || r.Error != "20 overviews are open; remove one first" {
 		t.Errorf("21st: reply = %+v", r)

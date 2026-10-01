@@ -2,10 +2,9 @@ package tui
 
 import (
 	"strconv"
-	"strings"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/i18n"
-	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/syntax"
 )
 
@@ -17,21 +16,16 @@ import (
 // gg lays the rows out itself, at the frame's reading width, so one display
 // row is one line and a click maps straight to a line and a column.
 
-// anchorTarget is what an anchor opens: a file (start 0: no line), a line or
-// range in it (1-based), or a note ("t<n>").
-type anchorTarget struct {
-	path       string
-	start, end int
-	note       string
-}
-
 // anchorSpan is where an anchor sits: runes [from, to) of line. A label
 // wrapped over two rows has a span on each.
 type anchorSpan struct{ line, from, to int }
 
+// anchor is the TUI's copy of a store anchor plus where it was laid out.
+// target is what it opens: a file (Start 0: no line), a line or range in it,
+// or a note (Note "t<n>"); its Missing is not read — missing is.
 type anchor struct {
 	dest    string // the destination as written
-	target  anchorTarget
+	target  agentdocs.Anchor
 	spans   []anchorSpan // nil: clipped away (a wide table)
 	missing bool         // its file or note was not found when last checked
 }
@@ -44,114 +38,14 @@ type overview struct {
 	w       int // the width the rows were laid out at; 0 = never
 }
 
-// parseAnchorDest reads a link destination as an anchor: `note:t<n>`, or a
-// repo-relative slash path with an optional `:N` / `:N-M` line suffix. Anything
-// that could leave the repository or is not a plain path is not an anchor.
-func parseAnchorDest(dest string) (anchorTarget, bool) {
-	d := strings.TrimSpace(dest)
-	if id, ok := strings.CutPrefix(d, "note:"); ok {
-		if len(id) > 1 && id[0] == 't' && allDigits(id[1:]) {
-			return anchorTarget{note: id}, true
-		}
-		return anchorTarget{}, false
-	}
-	d = strings.TrimPrefix(d, "./")
-	if d == "" || strings.HasPrefix(d, "/") || strings.Contains(d, "\\") || strings.Contains(d, "://") {
-		return anchorTarget{}, false
-	}
-	if len(d) >= 2 && d[1] == ':' && (len(d) == 2 || d[2] == '/') && (d[0]|0x20) >= 'a' && (d[0]|0x20) <= 'z' {
-		return anchorTarget{}, false // a Windows drive
-	}
-	for _, r := range d {
-		if r <= ' ' || r == 0x7f {
-			return anchorTarget{}, false
-		}
-	}
-	t := anchorTarget{path: d}
-	if i := strings.LastIndexByte(d, ':'); i >= 0 {
-		lo, hi, ranged := d[i+1:], "", false
-		if j := strings.IndexByte(lo, '-'); j >= 0 {
-			lo, hi, ranged = lo[:j], lo[j+1:], true
-		}
-		if allDigits(lo) && (!ranged || allDigits(hi)) {
-			s, _ := strconv.Atoi(lo)
-			e := s
-			if ranged {
-				e, _ = strconv.Atoi(hi)
-			}
-			if s < 1 || e < s {
-				return anchorTarget{}, false
-			}
-			t = anchorTarget{path: d[:i], start: s, end: e}
-		}
-	}
-	if t.path == "" {
-		return anchorTarget{}, false
-	}
-	for _, seg := range strings.Split(t.path, "/") {
-		if seg == ".." {
-			return anchorTarget{}, false
-		}
-	}
-	return t, true
-}
-
-func allDigits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
-
-func isAnchorDest(d string) bool { _, ok := parseAnchorDest(d); return ok }
-
 // overviewLines lays text out at width: the rows, and the anchors in document
-// order with their spans. Links past overviewMaxAnchors become plain text.
+// order with their spans. Links past agentdocs.MaxAnchors are plain text.
 func overviewLines(text string, width int) ([]contentLine, []anchor) {
-	doc := markdown.ParseWith(text, markdown.Options{Anchor: isAnchorDest})
-	var anchors []anchor
-	var number func([]markdown.Inline)
-	number = func(in []markdown.Inline) {
-		for i := range in {
-			n := &in[i]
-			if n.Kind == markdown.InAnchor {
-				if len(anchors) >= overviewMaxAnchors {
-					*n = markdown.Inline{Kind: markdown.InText, Text: mdFlat(n.In)}
-					continue
-				}
-				t, _ := parseAnchorDest(n.URL)
-				n.Text = strconv.Itoa(len(anchors))
-				anchors = append(anchors, anchor{dest: n.URL, target: t})
-				continue
-			}
-			number(n.In)
-		}
+	doc, as := agentdocs.ParseOverview(text)
+	anchors := make([]anchor, len(as))
+	for i, a := range as {
+		anchors[i] = anchor{dest: a.Dest, target: a}
 	}
-	var blocks func([]markdown.Block)
-	blocks = func(bs []markdown.Block) {
-		for i := range bs {
-			b := &bs[i]
-			number(b.Inline)
-			blocks(b.Blocks)
-			for j := range b.Items {
-				blocks(b.Items[j].Blocks)
-			}
-			for _, c := range b.Head {
-				number(c)
-			}
-			for _, r := range b.Rows {
-				for _, c := range r {
-					number(c)
-				}
-			}
-		}
-	}
-	blocks(doc.Blocks)
 	rows := mdRows(doc, width)
 	if len(rows) == 0 {
 		return []contentLine{{text: i18n.T("(empty overview)")}}, nil
@@ -199,17 +93,55 @@ func (ov *overview) paint(lines []contentLine) {
 	}
 }
 
-// newOverviewDoc is an overview document holding text, not yet laid out. It
-// starts backgrounded: esc steps aside, only X closes it.
-func newOverviewDoc(title, text string) *openFile {
-	d := newOpenFile(fileSource{kind: srcOverview}, "")
-	d.path = "overview-" + strconv.FormatInt(d.seq, 10) + ".md" // named by its own id
-	d.tag = d.key() + "#" + strconv.FormatInt(d.seq, 10)
-	d.p.title = d.path
-	d.title, d.backgrounded = title, true
+// newOverviewDocFrom is the TUI's document for a store overview, under the
+// store's id, not yet laid out. It starts backgrounded: esc steps aside, only
+// X closes it.
+func newOverviewDocFrom(o agentdocs.Overview) *openFile {
+	d := newOpenFileSeq(fileSource{kind: srcOverview}, "overview-"+strconv.FormatInt(o.Seq, 10)+".md", o.Seq) // named by its id
+	d.title, d.backgrounded = o.Title, true
 	d.p.prose, d.p.mode = true, modeScroll
-	d.ov = &overview{text: text, sel: -1}
+	d.ov = &overview{text: o.Text, sel: -1}
 	return d
+}
+
+// overviewCopy is d as a store overview, from the TUI's copy (the wire, r).
+func (d *openFile) overviewCopy() agentdocs.Overview {
+	o := agentdocs.Overview{ID: d.id(), Seq: d.seq, Title: d.title, Text: d.ov.text}
+	for _, a := range d.ov.anchors {
+		t := a.target
+		t.Dest, t.Missing = a.dest, a.missing
+		o.Anchors = append(o.Anchors, t)
+	}
+	return o
+}
+
+// adoptOverview brings d's copy up to the store's o: a new text or title is
+// laid out again (the selected anchor kept by its destination), and the
+// missing flags follow the last check.
+func (d *openFile) adoptOverview(o agentdocs.Overview, rows, width int) {
+	if o.Text != d.ov.text || o.Title != d.title {
+		ov := d.ov
+		old := ""
+		if ov.sel >= 0 && ov.sel < len(ov.anchors) {
+			old = ov.anchors[ov.sel].dest
+		}
+		ov.text, ov.sel, d.title = o.Text, -1, o.Title
+		d.layOut(rows, width)
+		for i, a := range ov.anchors {
+			if old != "" && a.dest == old {
+				d.selectAnchor(i, rows)
+				break
+			}
+		}
+	}
+	if len(o.Anchors) == len(d.ov.anchors) {
+		for i, a := range o.Anchors {
+			if a.Dest == d.ov.anchors[i].dest {
+				d.ov.anchors[i].missing = a.Missing
+			}
+		}
+	}
+	d.ov.paint(d.p.lines)
 }
 
 // overviewWidth is the width an overview is laid out at in a full-screen

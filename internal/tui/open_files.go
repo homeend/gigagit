@@ -191,6 +191,9 @@ func (m Model) closeDoc(d *openFile) Model {
 	if len(d.notes) > 0 {
 		d.clearNotes() // X drops the notes — in every frontend the store shows
 	}
+	if d.ov != nil && m.docs != nil {
+		m.docs.RemoveOverview(d.id()) // and the overview, in the page too
+	}
 	m = m.detachDoc(d)
 	m.openFiles.remove(m.currentWorktree, d)
 	return m

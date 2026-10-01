@@ -6,16 +6,30 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/homeend/gigagit/internal/agentdocs"
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 const tourText = "# Tour\n\nStart at [the file](a.txt), then [line 12](a.txt:12).\n"
+
+// storeOverview files an overview in m's store, as an agent's add does, and
+// returns its document (not yet registered or laid out).
+func storeOverview(t *testing.T, m Model, title, text string) *openFile {
+	t.Helper()
+	o, err := m.docs.AddOverview(domain.CheckoutKey(m.currentWorktree), m.currentWorktree, title, text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return newOverviewDocFrom(o)
+}
 
 // shownOverview is loadedNavModel with an overview in the full-screen viewer,
 // its rows laid out.
 func shownOverview(t *testing.T, text string) (Model, *openFile) {
 	t.Helper()
 	m := loadedNavModel(t)
-	d := newOverviewDoc("Tour", text)
+	d := storeOverview(t, m, "Tour", text)
 	m = m.registerDoc(d)
 	m, cmd := m.bringToFront(d)
 	return pumpAll(t, m, cmd), d
@@ -23,7 +37,14 @@ func shownOverview(t *testing.T, text string) (Model, *openFile) {
 
 func TestOverviewDocIsABackgroundedInMemoryOpenFile(t *testing.T) {
 	t.Parallel()
-	d := newOverviewDoc("Tour", tourText)
+	o, err := agentdocs.New().AddOverview("/r", "/r", "Tour", tourText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := newOverviewDocFrom(o)
+	if d.id() != o.ID {
+		t.Fatalf("id = %q, want the store's %q", d.id(), o.ID)
+	}
 	if d.src.kind != srcOverview || !d.backgrounded || d.onDisk() || d.ov == nil || d.ov.sel != -1 || d.title != "Tour" {
 		t.Fatalf("doc = %+v", d)
 	}
@@ -49,7 +70,7 @@ func TestOverviewDocLoadsFromMemory(t *testing.T) {
 func TestOverviewNeverEvictedByTheCap(t *testing.T) {
 	t.Parallel()
 	m := loadedNavModel(t)
-	ov := newOverviewDoc("Tour", tourText)
+	ov := storeOverview(t, m, "Tour", tourText)
 	m = m.registerDoc(ov)
 	for i := 0; i < maxOpenFiles+5; i++ {
 		m = m.registerDoc(newOpenFile(fileSource{kind: srcWorktree}, fmt.Sprintf("f%d.txt", i)))

@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/syntax"
@@ -48,11 +49,8 @@ const (
 // overview is laid out, anchor k's runes wear mdAnchorID0+k so its spans can
 // be read off the rows after wrapping (overviewLines), and are then rewritten
 // to mdAnchor. They never reach a style. The class mask is a uint8, which is
-// what caps an overview at overviewMaxAnchors.
-const (
-	mdAnchorID0        syntax.Class = 150
-	overviewMaxAnchors              = 100
-)
+// what caps an overview at agentdocs.MaxAnchors (150+100 < 256).
+const mdAnchorID0 syntax.Class = 150
 
 // mdStyle is base with one markdown pseudo-class applied.
 func (s *styles) mdStyle(base lipgloss.Style, c syntax.Class) lipgloss.Style {
@@ -419,7 +417,7 @@ func mdInlineRuns(in []markdown.Inline, base syntax.Class) []mdRun {
 			// An overview's anchor, numbered in Text by overviewLines: the label
 			// is flattened so an emphasis inside it cannot overwrite the id.
 			c := mdLink
-			if k, err := strconv.Atoi(n.Text); err == nil && k >= 0 && k < overviewMaxAnchors {
+			if k, err := strconv.Atoi(n.Text); err == nil && k >= 0 && k < agentdocs.MaxAnchors {
 				c = mdAnchorID0 + syntax.Class(k)
 			}
 			text(mdFlat(n.In), c)
