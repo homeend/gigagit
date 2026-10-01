@@ -144,3 +144,24 @@ func TestIdleAgentSessionsExpire(t *testing.T) {
 		t.Fatal("an idle session must be closed by the TUI (a gg mcp that was killed never says goodbye)")
 	}
 }
+
+func TestCloseDoesNotWaitOnAnOpenStream(t *testing.T) {
+	_, tok, _ := hostEnv(t, nil)
+	h := NewAgentHost()
+	url, err := h.Start(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := &sdk.StreamableClientTransport{Endpoint: url, HTTPClient: &http.Client{Transport: bearer{tok}}, MaxRetries: -1}
+	cs, err := sdk.NewClient(&sdk.Implementation{Name: "t", Version: "0"}, nil).Connect(context.Background(), tr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	time.Sleep(100 * time.Millisecond) // let the standalone SSE stream open
+	start := time.Now()
+	h.Close()
+	if d := time.Since(start); d > 500*time.Millisecond {
+		t.Fatalf("Close took %v: an idle SSE stream must not hold the TUI's quit", d)
+	}
+}
