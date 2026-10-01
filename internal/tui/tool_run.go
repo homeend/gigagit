@@ -24,11 +24,20 @@ import (
 // file and the two frontends cannot import each other.
 func toolCommandHash(command string) string { return promptstate.CommandHash(command) }
 
-// toolRepoKey scopes approvals per repo: the git common dir when the repo
-// health probe has resolved it (startup/reRoot), else the worktree path.
+// toolRepoKey scopes approvals per repo: the git common dir — from the repo
+// health probe once it has landed, else asked of the Service (approvals are
+// rare user acts, and agent_start looks them up by the common dir only); the
+// worktree path only when neither can say.
 func (m Model) toolRepoKey() string {
 	if m.repoHealth.GitCommonDir != "" {
 		return m.repoHealth.GitCommonDir
+	}
+	if m.svc != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if dir, err := m.svc.GitCommonDir(ctx); err == nil && dir != "" {
+			return dir
+		}
 	}
 	return m.currentWorktree
 }
