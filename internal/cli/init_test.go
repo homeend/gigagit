@@ -183,3 +183,15 @@ func TestInitNothingDetected(t *testing.T) {
 		t.Fatalf("nothing detected should exit 0 and say so: %d\n%s", code, out.String())
 	}
 }
+
+func TestInitMCPFlag(t *testing.T) {
+	prevL, prevR, prevE := initLookPath, initRun, initExecutable
+	t.Cleanup(func() { initLookPath, initRun, initExecutable = prevL, prevR, prevE })
+	initLookPath = func(string) (string, error) { return "/c", nil }
+	initExecutable = func() (string, error) { return "/gg", nil }
+	initRun = func(string, ...string) ([]byte, error) { return nil, nil } // get succeeds = present
+	code, out, _ := runCLI(t, newRepoDir(t), "init", "--mcp")
+	if code != 0 || !strings.Contains(out, "already registered") {
+		t.Fatalf("init --mcp = %d %q", code, out)
+	}
+}

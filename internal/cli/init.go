@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,6 +18,13 @@ import (
 // cmdInit implements `gg init`: detect AI agents, ask which to set up, and
 // install/refresh the two embedded skills (using-gg, reviewing-with-gg).
 // Pure file I/O — no git, no engine, works outside a repository.
+// Seams for gg init --mcp (tests).
+var (
+	initLookPath   = exec.LookPath
+	initRun        = func(name string, args ...string) ([]byte, error) { return exec.Command(name, args...).CombinedOutput() }
+	initExecutable = os.Executable
+)
+
 func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -23,9 +32,24 @@ func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.W
 	update := fs.Bool("update", false, "refresh every already-installed target (the checked defaults)")
 	agents := fs.String("agents", "", "comma-separated agent IDs to install for")
 	list := fs.Bool("list", false, "print detected agents and exit")
+	mcpReg := fs.Bool("mcp", false, "register gg's MCP server with Claude Code (claude mcp add -s user gg -- <this gg> mcp), so agents in gg consoles get the agent tools")
 	to := fs.String("to", "", "install both skills at a custom path for an unsupported agent (file → managed block, one per skill; directory → <dir>/using-gg/SKILL.md + <dir>/reviewing-with-gg/SKILL.md); remembered and refreshed by --update")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if *mcpReg {
+		bin, err := initExecutable()
+		if err != nil {
+			fmt.Fprintln(stderr, "init --mcp:", err)
+			return 1
+		}
+		st, err := agentinit.RegisterClaudeMCP(initLookPath, initRun, bin)
+		if err != nil {
+			fmt.Fprintln(stderr, "init --mcp:", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "Claude Code: gg MCP server "+st)
+		return 0
 	}
 
 	if *to != "" {
