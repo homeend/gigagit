@@ -49,13 +49,13 @@ func (d *openFile) syncNotes() (stale bool) {
 	if d.docs != nil && d.src.kind == srcWorktree {
 		ns, fp = d.docs.Notes(d.root, d.path)
 	}
+	if len(ns) > 0 {
+		d.backgrounded = true // however the notes came (the page it hosts): esc steps aside, only X closes — stale or not
+	}
 	if len(ns) > 0 && docLoaded(d) && d.p.img == nil && fp != agentdocs.Print(rawOf(d.p.lines)) {
 		return true
 	}
 	d.notes = ns
-	if len(ns) > 0 {
-		d.backgrounded = true // however the notes came (the page it hosts): esc steps aside, only X closes
-	}
 	d.syncNoteRows()
 	return false
 }

@@ -180,3 +180,24 @@ func TestTheCapKeepsAFileWhoseNotesAreNotCopiedYet(t *testing.T) {
 		t.Fatal("a noted file was pushed out over the cap")
 	}
 }
+
+// esc during a pending re-read steps aside like any noted file: the store's
+// notes (not yet in the copy) survive, and so does the document.
+func TestEscDuringAReReadKeepsTheStoresNotes(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 5)
+	d.backgrounded = false // opened in the foreground
+	m = m.pushLayer(&fileViewer{d})
+	if _, err := m.docs.AddNote(d.root, d.path, append([]string{"NEW"}, rawOf(d.p.lines)...), 2, 2, "s", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.onAgentDocsChanged()
+	if len(d.notes) != 0 {
+		t.Fatalf("copy adopted notes for other content: %+v", d.notes)
+	}
+	m = m.escDoc(d)
+	if m.openFiles.find(m.currentWorktree, d.key()) != d || m.docs.NoteCount(d.root, d.path) != 1 {
+		t.Fatal("esc during a re-read closed the file and dropped the agent's notes")
+	}
+}
