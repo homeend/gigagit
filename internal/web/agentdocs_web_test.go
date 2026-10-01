@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
@@ -223,4 +224,60 @@ func TestDocsRootDoesNotCacheAFailedLookup(t *testing.T) {
 	if s.rootc.svc != nil {
 		t.Fatal("a failed lookup was cached")
 	}
+}
+
+// A note the store refuses lists nothing: the file is checked before it
+// joins the page's list (no tab would hear of an entry added on a failure).
+func TestARefusedNoteDoesNotListTheFile(t *testing.T) {
+	t.Parallel()
+	s, _ := noteSrv(t)
+	if _, rep := steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":9,"summary":"x"}`); rep.OK {
+		t.Fatalf("past the end accepted: %+v", rep)
+	}
+	if l := s.ofs.list(s.service().Root()); len(l) != 0 {
+		t.Fatalf("a refused note listed %+v", l)
+	}
+}
+
+// The follow pass names a plain file it pushed out over the cap, as an open
+// does — the tabs would otherwise see it leave the list unexplained.
+func TestFollowPassNamesTheFileItPushedOut(t *testing.T) {
+	isolateGlobal(t)
+	s, root := noteSrv(t)
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	wt := s.service().Root()
+	for i := 0; i < maxOpenFiles; i++ {
+		s.ofs.open(wt, ofKey{Src: "worktree", Path: fmt.Sprintf("p%d", i)}, "", 0)
+	}
+	if _, err := s.docs.AddOverview(root, wt, "T", "x"); err != nil {
+		t.Fatal(err)
+	}
+	s.followDocs()
+	if m := next(); m.Reason != "agentdocs" || m.Evicted != "p0" {
+		t.Fatalf("event = %+v, want p0 named as pushed out", m)
+	}
+}
+
+// Passes run one at a time: each reads the store inside the turn, so the
+// last one leaves the pins the store has now (two interleaved passes could
+// leave a pin the store no longer holds).
+func TestFollowPassesRunOneAtATime(t *testing.T) {
+	t.Parallel()
+	s, _ := noteSrv(t)
+	s.followMu.Lock()
+	done := make(chan struct{})
+	go func() { s.followDocs(); close(done) }()
+	select {
+	case <-done:
+		s.followMu.Unlock()
+		t.Fatal("a pass ran while another held the turn")
+	case <-time.After(100 * time.Millisecond):
+	}
+	s.followMu.Unlock()
+	<-done
 }
