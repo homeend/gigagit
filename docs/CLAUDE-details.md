@@ -4417,9 +4417,9 @@ selection, laid-out width); never on disk, never evicted, created
   back); a Back whose list fetch or overview open failed re-arms with
   `view.from`. An open that did not land — failed, or left by esc
   meanwhile — reports what the tab shows (`reportShown`, unless a newer
-  open started: `openSeq`, which a close does not bump); every post about
-  what the tab shows (that report, a close, a background) goes through
-  `ofQueue`, one after another on `ofSync`, and the next open awaits them.
+  open started: `openSeq`, which a close does not bump); that report, a
+  close, a background and a failed Back's re-focus go through `ofQueue`,
+  one after another on `ofSync`, and the next open awaits them.
   The switcher's x on a file not on screen records it (`viewerClosedFile`
   → `closedAt`, the loadSeq at the close), so an open of it still loading
   here drops. An anchor whose re-check lost a race to a re-open or a close

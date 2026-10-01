@@ -207,6 +207,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", "if (back) ofQueue(back);", "r4: a failed open's report joins the queue"},
 	{"viewer.js", "closedAt.get(reg.file.id) >= seq", "r5: a file x closed while it loaded here does not land"},
 	{"openfiles.js", "else viewerClosedFile(f.id);", "r5: x on a file still loading here tells the viewer"},
+	{"viewer.js", `ofQueue({ op: "focus", id }); // Back sent it to the background`, "r1 (review): a failed Back tells the server the file on screen is shown again"},
 }
 
 // viewerGone pins what the open-files minors removed.

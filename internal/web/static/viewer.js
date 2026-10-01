@@ -618,6 +618,7 @@ async function anchorBack() {
   // The overview did not come back and nothing else opened or closed since:
   // the file is still on screen, and so is its way back.
   if (loadSeq === seq && isOpen() && view.id === id && !view.from) {
+    ofQueue({ op: "focus", id }); // Back sent it to the background; a failed focus post reported nothing
     view.from = f;
     armBack(); // the overview did not come back: the way back stays
     swapFoot(true);
