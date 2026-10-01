@@ -4364,5 +4364,7 @@ selection, laid-out width); never on disk, never evicted, created
   overview refresh's answer drops only when a newer answer already applied
   (`ovSeq`/`ovApplied`, `ovAnswerApplies`) — a newer refresh that merely
   started may fail, and then the older answer still lands; a refresh whose
-  fetch fails answers with the last one started (`ovLast`), so
-  `openAnchorAt` resumes on a re-checked list when one is under way.
+  fetch fails answers with the last one started (`ovLast`) when a newer one
+  is under way (false when none is), so `openAnchorAt` usually resumes on a
+  re-checked list — fail/fail/succeed orderings can still resume it on the
+  list from before the click (a lone failure always did).

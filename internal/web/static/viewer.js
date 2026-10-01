@@ -457,8 +457,9 @@ function selectAnchor(i) {
 // is gone or another open won meanwhile. Refreshes may overlap: an answer
 // applies unless a newer one already did (a newer refresh that fails keeps
 // the older answer), and a refresh whose fetch fails answers with the last
-// one started — so a caller (openAnchorAt) always resumes on a re-checked
-// list when one is to be had.
+// one started when a newer one is under way (false when none is) — so a
+// caller (openAnchorAt) resumes on a list re-checked after its call unless
+// every refresh it could wait on fails.
 function refreshOverview() {
   if (!view.ov || !viewerFileId()) return Promise.resolve(false);
   ovLast = refreshOverviewAs(++ovSeq);
