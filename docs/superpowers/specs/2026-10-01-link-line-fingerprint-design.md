@@ -135,7 +135,7 @@ is agent-facing protocol), reused everywhere:
 | consumer | where the note goes |
 |----------|---------------------|
 | `gg diff`, `gg show`, `gg note add`, `gg session highlight add` | one line on stderr, prefixed `gg: `; the verb then acts on the resolved line |
-| `gg link --json`, MCP `gg_link_resolve` | fields `asked_line`, `anchor` (the state), `anchor_matches`; `line` is the resolved line |
+| `gg link resolve --json`, MCP `gg_link_resolve` | fields `asked_line`, `anchor` (the state), `anchor_matches`; `line` is the resolved line |
 | `gg open`, `gg session navigate` | the navigate lands on the resolved line; the reply detail ends with the note |
 | TUI `#` prompt / a steered landing | the diff / viewer notice box shows the opened notice plus the note, translated through `i18n.T` like the opened notice itself (four bundles); the steer REPLY detail carries the English `AnchorNote` |
 | Web landing | the op line shows the note |
@@ -172,7 +172,7 @@ resolver is tested against a real repo.
   changed / past end); `ResolveLink` on a real repo for the working tree, the
   index and `HEAD` sides.
 - **cli** — `gg link` emits the fingerprint; `--no-fingerprint`; `gg diff
-  <link>` prints the note on stderr; `gg link --json` fields.
+  <link>` prints the note on stderr; `gg link resolve --json` fields.
 - **tui** — `L` on a working-tree diff, both sides, and a blank line; a
   steered landing on a moved line lands there and says so.
 - **e2e** — one scenario: copy a working-tree line link, edit the file so the
