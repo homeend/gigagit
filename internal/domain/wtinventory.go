@@ -22,7 +22,7 @@ var ErrUnknownWorktree = errors.New("no such worktree")
 // InventoryPolicy is the [agents] config in effect for one inventory.
 type InventoryPolicy struct {
 	StaleAfter time.Duration
-	StaleErr   string // a stale_after that did not parse: every dirty worktree counts as recent
+	StaleErr   string   // a stale_after that did not parse: every dirty worktree counts as recent
 	Reserved   []string // as configured (relative to main or absolute)
 	AllowMain  bool
 	Now        func() time.Time // nil = time.Now

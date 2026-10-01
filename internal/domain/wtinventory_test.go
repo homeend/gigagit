@@ -12,8 +12,8 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/git"
-	"github.com/homeend/gigagit/internal/wtguard"
 	"github.com/homeend/gigagit/internal/sessionreg"
+	"github.com/homeend/gigagit/internal/wtguard"
 )
 
 func inventoryRepo(t *testing.T) (main string, svc *Service, reg string) {
