@@ -32,6 +32,7 @@ func TestNoRawTimersOutsideTick(t *testing.T) {
 	allowed := map[string]string{
 		"tick.go":       "the one tea.Tick call",
 		"console.go":    "waitSessionCmd's sleep: agent consoles never open in quiet mode",
+		"headless.go":   "the driver's own settle guard: it bounds a blocking command, it is never a UI timer",
 		"repo_popup.go": "probeReposCmd's 1 s deadline only bounds wedged fs probes; it returns as soon as every probe answers",
 	}
 	files, _ := filepath.Glob("*.go")
