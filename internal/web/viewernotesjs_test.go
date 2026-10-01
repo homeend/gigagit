@@ -21,9 +21,12 @@ console.log([
   keepAnchor([{dest: "x"}, {dest: "b"}, {dest: "b"}], [{dest: "a"}, {dest: "b"}], 1),
   keepAnchor([{dest: "x"}], [{dest: "a"}, {dest: "b"}], 1),
   keepAnchor([{dest: "x"}], [{dest: "a"}], -1),
+  backAnchor([{dest: "new"}, {dest: "a"}, {dest: "lock"}], {sel: 1, dest: "lock"}),
+  backAnchor([{dest: "a"}, {dest: "b"}], {sel: 1, dest: "gone"}),
+  backAnchor([{dest: "a"}], {sel: 3, dest: "gone"}),
 ].join("|"));
 `)
-	want := `0|2|0|2|2|-1|no file nope.txt|note t9 is gone|true|{"path":"a.go","line":2,"end":3}|{"path":"a.go","line":0,"end":0}|{"path":"b.go","line":4,"end":6,"note":"t9"}|{"note":"t9"}|1|-1|-1`
+	want := `0|2|0|2|2|-1|no file nope.txt|note t9 is gone|true|{"path":"a.go","line":2,"end":3}|{"path":"a.go","line":0,"end":0}|{"path":"b.go","line":4,"end":6,"note":"t9"}|{"note":"t9"}|1|-1|-1|2|1|-1`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}

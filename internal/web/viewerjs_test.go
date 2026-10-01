@@ -165,6 +165,8 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"style.css", ".md-anchor.asel", "the selected anchor is styled"},
 	{"style.css", ".md-anchor.agone", "a missing anchor is styled"},
 	{"style.css", ".vline.vrange", "the range is tinted"},
+	{"viewer.js", "selectAnchor(backAnchor(view.ov.anchors, f))", "back finds the anchor by its destination (a set may have moved it)"},
+	{"viewer.js", "dest: a.dest }", "the way back carries the anchor's destination"},
 }
 
 // viewerGone pins what the open-files minors removed.

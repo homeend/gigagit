@@ -140,6 +140,14 @@ function keepAnchor(next, prev, sel) {
   if (next[sel] && next[sel].dest === dest) return sel;
   return next.findIndex((a) => a.dest === dest);
 }
+// backAnchor is the anchor backspace returns to: the one with the
+// destination it left from (a set may have moved it), else the same place
+// while it is in range, else none.
+function backAnchor(anchors, from) {
+  const i = anchors.findIndex((a) => a.dest === from.dest);
+  if (i >= 0) return i;
+  return from.sel < anchors.length ? from.sel : -1;
+}
 // --- end overview model ---
 
 // --- the overlay -------------------------------------------------------------
@@ -430,7 +438,7 @@ async function openAnchorAt(i) {
   await refreshOverview(); // keeps the selection by its destination
   const a = view.ov && view.id === id ? view.ov.anchors[view.ov.sel] : null;
   if (!a) return;
-  const from = { id, sel: view.ov.sel };
+  const from = { id, sel: view.ov.sel, dest: a.dest };
   if (a.missing) return opLine(anchorStatus(a), false);
   const t = anchorTarget(a);
   if (!t.path) return opLine("note " + t.note + " is gone", false);
@@ -457,7 +465,7 @@ async function anchorBack() {
   rememberPlace();
   ofPost({ op: "background", id: view.id, line: view.cur }).catch(() => {});
   const r = await openViewer({ id: f.id });
-  if (r.ok && view.ov) selectAnchor(f.sel < view.ov.anchors.length ? f.sel : -1);
+  if (r.ok && view.ov) selectAnchor(backAnchor(view.ov.anchors, f));
 }
 
 function copyAnchorRef() {

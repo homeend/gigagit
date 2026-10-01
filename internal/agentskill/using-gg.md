@@ -320,9 +320,9 @@ brings them back to the overview on the anchor they left.
 Combine with notes: `gg session note add` the remarks first, then link them
 from the overview (`[why this lock](note:t7)`). Order the anchors in the order
 you would explain them — tab walks them top to bottom. Like notes, overviews
-are temporary (gone on X or quit) and need a live gg TUI. When the user's
-message holds `gg overview f<n> "<title>" → <dest>`, they copied a reference to
-that anchor: that is the step they are asking about.
+are temporary (gone on X or quit) and need a live gg TUI or gg web page. When
+the user's message holds `gg overview f<n> "<title>" → <dest>`, they copied a
+reference to that anchor: that is the step they are asking about.
 
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout
