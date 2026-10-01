@@ -404,7 +404,7 @@ async function openTarget(t, id) {
   if (t.state === "commit") {
     if (t.missing) return notice("That commit no longer exists.");
     hide();
-    if (!(await openCommitByHash(t.commit, t.subject))) return show();
+    if (!(await openCommitByHash(t.commit, t.subject, { thenFile: true }))) return show();
     const i = state.files.findIndex((f) => f.path === t.path);
     if (i < 0) {
       show();

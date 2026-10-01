@@ -77,7 +77,7 @@ const state = {
   diffCtx: null, // {path, rev, state} — the file the diff pane currently shows, else null
   diffLinkCtx: null, // {path, oldPath, cmpSides, gen} — a link-only context for a diff with no diffCtx (an entry compare)
   notes: [],                 // resolved notes for the open diff (GET /api/notes)
-  noteCounts: { by_path: {}, by_commit: {}, by_commit_path: {}, reviews: [] },
+  noteCounts: { by_path: {}, by_commit: {}, by_commit_path: {}, scopes_by_commit: {}, reviews: [] },
   // Stored AI reviews (reviews.js): the open commit's review rows, the review
   // row esc returned to, and the review view's overlay on the files screen.
   commitReviews: null,

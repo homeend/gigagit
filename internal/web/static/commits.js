@@ -7,7 +7,7 @@ import { wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { rev, startReview } from "./review.js";
 import { addCommitEntry } from "./sidebar.js";
-import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta } from "./files.js";
+import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { extraRows } from "./menus.js";
 import { entryGone } from "./toast.js";
@@ -535,6 +535,7 @@ async function openCommit(i) {
   state.filesMode = "commit";
   state.commitReviews = { sha: row.hash, list: body.reviews || [] };
   state.reviewSel = "";
+  unfoldFilesForOpen(); // a commit opens onto its files: never onto the folded strip
   enterFilesStage();
   setCommitTitle(row.hash, row.short, row.subject);
   setFilesMeta(commitMetaLine(body), commitMetaParts(body));
@@ -545,8 +546,9 @@ async function openCommit(i) {
 
 
 // openCommitByHash enters commit detail without a feed row — the path for
-// sidebar tags (and future non-feed jump-ins).
-async function openCommitByHash(hash, title) {
+// sidebar tags (and future non-feed jump-ins). opts.thenFile: the caller goes
+// straight on to one file's diff, so a folded file list stays folded.
+async function openCommitByHash(hash, title, opts) {
   const gen = ++state.detailGen;
   let body;
   try {
@@ -564,6 +566,7 @@ async function openCommitByHash(hash, title) {
   state.fileSha = hash;
   state.filesMode = "commit";
   state.commitReviews = { sha: hash, list: body.reviews || [] };
+  if (!(opts && opts.thenFile)) unfoldFilesForOpen(); // …unless a file's diff opens next
   enterFilesStage();
   setCommitTitle(hash, "", title);
   setFilesMeta(commitMetaLine(body), commitMetaParts(body));

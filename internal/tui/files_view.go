@@ -327,14 +327,8 @@ func notedElsewhere(plain map[string]int, hash string, files []model.CommitFile)
 	return out
 }
 
-// scopeLabel names a note scope (model.Note.Preview) the Previews panel's way
-// round: a merge preview as "source → target", a commit pair as its "a..b".
-func scopeLabel(scope string) string {
-	if target, source, ok := strings.Cut(scope, "..."); ok {
-		return source + " → " + target
-	}
-	return scope
-}
+// scopeLabel names a note scope the Previews panel's way round.
+func scopeLabel(scope string) string { return domain.NoteScopeLabel(scope) }
 
 // withScopeLines puts a commit's range reviews in front of its list under a
 // "Range reviews" heading: one row per scope its notes were written in. A

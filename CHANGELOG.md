@@ -27,8 +27,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   written outside any range on a file the commit does not change keep their
   "Notes" row. `domain.NoteCounts` carries `ScopesByCommit` and
   `PlainByCommitPath` (replacing `PreviewsByCommitPath`);
-  `domain.ScopeAtCommit` resolves a scope from the commit. TUI only — the
-  web page has no such list yet.
+  `domain.ScopeAtCommit` resolves a scope from the commit.
+- **The web page lists a commit's range reviews too.** A commit's file list
+  shows the same **Range reviews** rows above its files (after its Reviews);
+  click or enter opens the range frozen at that commit — every file with its
+  ◆ N, the notes on their lines — and esc returns to the commit, the cursor
+  on the row. `/api/notes/counts` carries `scopes_by_commit`; the new
+  `GET /api/scope-range?commit=&scope=` resolves one (only a scope the
+  commit's own notes name) to the two commits the page opens as a pair
+  landing. Before, the page could not reach those notes from the commit at
+  all.
+
+### Fixed
+
+- **Opening a commit in the web page brings a folded file list back.** With
+  the file list folded to its strip (the » control, remembered per machine),
+  clicking a commit showed nothing but the strip. Opening a commit now
+  unfolds the list (and stores that); only an opener that goes straight on
+  to one file's diff — a steered link, the viewer's diff, View all notes —
+  keeps the fold, since it exists to give the diff room.
 
 ## The TUI follows an agent's gg changes
 

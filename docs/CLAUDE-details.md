@@ -1841,7 +1841,20 @@ them on a file row.
   `leaveReviewView`, which reopens the commit's files and sets
   `filesLandScope` AFTER `openChangedFiles` so the cursor lands on the row.
   Any other re-open inside the range view drops the way back; esc then closes.
-- TUI only: the web page has no such list.
+- The web port (2026-10-02): `/api/notes/counts` carries `scopes_by_commit`
+  (`{scope, label, n}`, the label from `domain.NoteScopeLabel` — the one
+  wording both frontends print); `reviews.js` draws the rows after the Reviews
+  ones and shares their cursor (`state.reviewSel = "scope:<scope>"`,
+  `headRowIds`). `openRangeReview` asks `GET /api/scope-range` (the scope is
+  allowlisted against the commit's own counts before it reaches git), opens
+  `/api/compare-links?a=&b=` — a pair landing, so the pair note lane arms
+  itself — and hangs the way back on the comparison (`state.compare.back`);
+  `drillOut` asks `leaveRangeReview` before leaving the files stage.
+- `unfoldFilesForOpen` (files.js): opening a commit (`openCommit`,
+  `openCommitByHash`) unfolds a folded file list and stores it — a commit
+  opens onto its files, never onto the strip. The exception is a caller going
+  straight on to one file's diff (`openCommitByHash(…, {thenFile: true})`: a
+  steered link, the viewer's diff, View all notes), where the fold stays.
 
 ### Review notes inside a stack (plan 4a, 2026-09-23)
 

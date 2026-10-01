@@ -135,6 +135,16 @@ func (s *Service) pairScope(ctx context.Context, a, b string) (PreviewNoteSet, e
 	return PreviewNoteSet{}, fmt.Errorf("preview: missing commit: %s", missing)
 }
 
+// NoteScopeLabel names a note scope (model.Note.Preview) the Previews panel's
+// way round: a merge preview as "source → target", a commit pair as its
+// "a..b". One wording for every frontend's Range review row.
+func NoteScopeLabel(scope string) string {
+	if target, source, ok := strings.Cut(scope, "..."); ok {
+		return source + " → " + target
+	}
+	return scope
+}
+
 // ScopeAtCommit turns a scope a note names (Note.Preview) into the frozen
 // commit range it opens as from commit, the commit holding the note:
 //

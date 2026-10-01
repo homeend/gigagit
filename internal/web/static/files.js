@@ -20,7 +20,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { leaveReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
+import { leaveRangeReview, leaveReview, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -74,6 +74,8 @@ function drillOut() {
   if (state.layout !== "files") return;
   // A review view goes back where it was opened from (its commit's list).
   if (reviewActive()) return leaveReview();
+  // …and so does a range opened from a commit's Range review row.
+  if (leaveRangeReview()) return;
   state.detailGen++; // invalidate any in-flight detail fetch
   state.pane = "commits";
   setLayout("list");
@@ -109,6 +111,18 @@ function applyFilesHidden(hidden) {
   if (symOffered()) return symReapply();
   if (state.layout === "diff") rerenderDiffKeepingPlace();
   else renderCommits();
+}
+
+
+// unfoldFilesForOpen brings a folded file list back when a commit is opened:
+// the fold exists to give a DIFF room, and a commit opens onto its file list
+// — folded, the click would show nothing but the slim strip. The one opener
+// that keeps the fold is the one going straight on to a file's diff
+// (openCommitByHash's thenFile). Call it BEFORE the stage is entered.
+function unfoldFilesForOpen() {
+  if (!state.filesHidden) return;
+  applyFilesHidden(false);
+  saveUI({ files_hidden: false });
 }
 
 
@@ -2434,6 +2448,7 @@ async function refreshNoteCounts() {
       by_path: c.by_path || {},
       by_commit: c.by_commit || {},
       by_commit_path: c.by_commit_path || {},
+      scopes_by_commit: c.scopes_by_commit || {}, // a commit's Range review rows
       reviews: c.reviews || [], // the Branches' review sub-rows
     };
     // The open commit's Reviews rows follow the same list, so a review saved
@@ -2444,7 +2459,7 @@ async function refreshNoteCounts() {
     // Counts are decoration, but a STALE badge is worse than none: a failed
     // fetch means we no longer know, so draw no ◆ at all until the next one
     // succeeds.
-    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, reviews: [] };
+    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, scopes_by_commit: {}, reviews: [] };
   }
   renderFiles();
   renderBranches(); // a review deleted anywhere leaves its branch sub-row
@@ -4324,6 +4339,11 @@ $("files-list").addEventListener("click", (e) => {
     openReview(li.dataset.review, reviewBackFromCommit(li.dataset.review));
     return;
   }
+  // A commit's Range review row opens the range its notes were written in.
+  if (li && li.dataset.scope) {
+    openRangeReview(li.dataset.scope);
+    return;
+  }
   if (li && li.dataset.ov && reviewActive()) {
     state.pane = "files";
     showReviewOverview();
@@ -4565,4 +4585,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
