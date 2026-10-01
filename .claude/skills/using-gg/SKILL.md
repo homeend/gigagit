@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v113 -->
+<!-- gg:using-gg:v114 -->
 
 # Using gg (gigagit)
 
@@ -114,7 +114,9 @@ checkout's own working-tree notes plus EVERY commit note in the store
   session overview add --to web …` shows the tour in the browser and leaves
   the terminal alone (a TUI serving its own page still lists it). A side that is not running: exit 1 `no gg TUI for this
   worktree (gg web is live)` / `no gg web page for this worktree (a gg TUI is
-  live)`.
+  live)`. Give `--to` once, after the verb (`-to` before it or a second
+  `--to` exits 2). `--` ends a session verb's flags: what follows is an
+  argument even when it starts with `-` (`gg session files focus -- -x.go`).
 
 Inside a console gg started (an agent or an Open terminal), `$GG_INBOX` names
 THAT gg, and every `gg session` verb talks to it first — even when gg now
