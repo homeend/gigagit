@@ -68,6 +68,7 @@ func TestValidateTextTemplate(t *testing.T) {
 		"empty title":     {"  ", "b"},
 		"two-line title":  {"a\nb", "b"},
 		"long title":      {strings.Repeat("t", 81), "b"},
+		"symbol title":    {"!!!", "b"},
 		"empty body":      {"t", " \n\t"},
 		"oversized body":  {"t", long},
 		"malformed token": {"t", "x <seq> y"},

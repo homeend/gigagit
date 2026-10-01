@@ -8,6 +8,7 @@ import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openSettings } from "./settings.js";
 import { openIdentityView } from "./identity.js";
 import { openPrefixesView } from "./prefixes.js";
+import { openTextTemplates } from "./texttemplates.js";
 import { openExtToolsView } from "./exttools.js";
 import { openSessionErrorsView } from "./sessionerrors.js";
 import { startReview } from "./review.js";
@@ -49,6 +50,7 @@ function paletteCommands() {
     { label: "settings…", detail: "", run: () => openSettings() },
     { label: "identity & profiles…", detail: "", run: () => openIdentityView() },
     { label: "branch prefixes…", detail: "", run: () => openPrefixesView() },
+    { label: "text templates…", detail: "alt+x", run: () => openTextTemplates() },
     { label: "external tools…", detail: "", run: () => openExtToolsView() },
     { label: "session errors…", detail: "", run: () => openSessionErrorsView() },
     { label: "compare with link…", detail: "", run: () => openLinkCompareDialog() },
@@ -452,6 +454,7 @@ function openGlobalMenu() {
     { label: "review working changes (AI)…", act: () => startReview("working", "") },
     { label: "undo last commit", act: () => undoLastCommit() },
     { label: "apply a patch…", act: () => applyPatchPrompt() },
+    { label: "text templates…", act: () => openTextTemplates() },
     {
       label: "copy a bookmark or shelf entry to a directory…",
       // The ☰ button is the anchor this menu opened from, so the picker

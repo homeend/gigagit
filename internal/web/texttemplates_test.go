@@ -1,0 +1,116 @@
+package web
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/homeend/gigagit/internal/domain"
+)
+
+type textTemplatesWire struct {
+	Templates []textTemplateRow `json:"templates"`
+}
+
+func getTextTemplates(t *testing.T, ts *httptest.Server) []textTemplateRow {
+	t.Helper()
+	var got textTemplatesWire
+	if code := getJSON(t, ts, "/api/text-templates", &got); code != http.StatusOK {
+		t.Fatalf("GET /api/text-templates code = %d", code)
+	}
+	return got.Templates
+}
+
+func ttPost(t *testing.T, ts *httptest.Server, path, body string, out any) int {
+	t.Helper()
+	return postJSON(t, ts, "/api/text-templates"+path, body, "application/json", "", out)
+}
+
+func TestTextTemplatesAddListUpdateRemove(t *testing.T) {
+	isolatePrefixes(t)
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+
+	if got := getTextTemplates(t, ts); got == nil || len(got) != 0 {
+		t.Fatalf("a fresh list must be an empty array, got %#v", got)
+	}
+	var row textTemplateRow
+	if code := ttPost(t, ts, "", `{"title":"Note","body":"Hi <user:n> <br> <date>\n","scope":"global"}`, &row); code != http.StatusOK {
+		t.Fatalf("add code = %d", code)
+	}
+	if row.ID != "note" || row.Scope != "global" || len(row.UserLabels) != 1 || row.UserLabels[0] != "n" || len(row.Automatic) != 1 || row.Automatic[0] != "<date>" {
+		t.Fatalf("added row = %+v", row)
+	}
+	if got := getTextTemplates(t, ts); len(got) != 1 || got[0].Body != "Hi <user:n> <br> <date>" {
+		t.Fatalf("list = %+v", got)
+	}
+	if code := ttPost(t, ts, "/update", `{"id":"note","scope":"global","title":"Memo","body":"plain"}`, &row); code != http.StatusOK || row.ID != "memo" || row.UserLabels == nil || len(row.UserLabels) != 0 {
+		t.Fatalf("update code = %d row = %+v", code, row)
+	}
+	if code := ttPost(t, ts, "/remove", `{"id":"memo","scope":"global"}`, nil); code != http.StatusOK {
+		t.Fatalf("remove code = %d", code)
+	}
+	if got := getTextTemplates(t, ts); len(got) != 0 {
+		t.Fatalf("after remove = %+v", got)
+	}
+}
+
+func TestTextTemplatesRefusals(t *testing.T) {
+	isolatePrefixes(t)
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	if code := ttPost(t, ts, "", `{"title":"Note","body":"x","scope":"repo"}`, nil); code != http.StatusOK {
+		t.Fatalf("seed add code = %d", code)
+	}
+	for name, c := range map[string]struct {
+		path, body string
+		want       int
+	}{
+		"bad scope":          {"", `{"title":"A","body":"x","scope":"nope"}`, http.StatusBadRequest},
+		"empty title":        {"", `{"title":" ","body":"x","scope":"repo"}`, http.StatusBadRequest},
+		"malformed token":    {"", `{"title":"A","body":"x <seq> y","scope":"repo"}`, http.StatusBadRequest},
+		"symbol-only title":  {"", `{"title":"!!!","body":"x","scope":"repo"}`, http.StatusBadRequest},
+		"duplicate title":    {"", `{"title":"note","body":"x","scope":"repo"}`, http.StatusConflict},
+		"update unknown":     {"/update", `{"id":"zzz","scope":"repo","title":"Z","body":"x"}`, http.StatusNotFound},
+		"update other scope": {"/update", `{"id":"note","scope":"global","title":"Z","body":"x"}`, http.StatusNotFound},
+		"remove unknown":     {"/remove", `{"id":"zzz","scope":"repo"}`, http.StatusNotFound},
+		"render unknown":     {"/render", `{"id":"zzz","scope":"repo"}`, http.StatusNotFound},
+		"render id prefix":   {"/render", `{"id":"no","scope":"repo"}`, http.StatusNotFound},
+		"take bad name":      {"/take", `{"seq_names":["../x"]}`, http.StatusBadRequest},
+	} {
+		if code := ttPost(t, ts, c.path, c.body, nil); code != c.want {
+			t.Errorf("%s: code = %d, want %d", name, code, c.want)
+		}
+	}
+	// A write without the JSON content type is refused by the guard.
+	if code := postJSON(t, ts, "/api/text-templates", `{"title":"B","body":"x","scope":"repo"}`, "text/plain", "", nil); code != http.StatusUnsupportedMediaType {
+		t.Errorf("guard: code = %d", code)
+	}
+	if got := getTextTemplates(t, ts); len(got) != 1 {
+		t.Fatalf("a refusal stored something: %+v", got)
+	}
+}
+
+func TestTextTemplateRenderPeeksTakeBumps(t *testing.T) {
+	isolatePrefixes(t)
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	if code := ttPost(t, ts, "", `{"title":"Seq","body":"#<seq:w:2> <user:n>","scope":"repo"}`, nil); code != http.StatusOK {
+		t.Fatalf("add code = %d", code)
+	}
+	var out struct {
+		Text     string   `json:"text"`
+		SeqNames []string `json:"seq_names"`
+	}
+	for i := 0; i < 2; i++ {
+		if code := ttPost(t, ts, "/render", `{"id":"seq","scope":"repo","inputs":{"n":"a"}}`, &out); code != http.StatusOK || out.Text != "#01 a" || len(out.SeqNames) != 1 || out.SeqNames[0] != "w" {
+			t.Fatalf("render %d: code %d out %+v", i, code, out)
+		}
+	}
+	if code := ttPost(t, ts, "/take", `{"seq_names":["w"]}`, nil); code != http.StatusOK {
+		t.Fatalf("take code = %d", code)
+	}
+	if code := ttPost(t, ts, "/render", `{"id":"seq","scope":"repo","inputs":{"n":"a"}}`, &out); code != http.StatusOK || out.Text != "#02 a" {
+		t.Fatalf("after take: code %d out %+v", code, out)
+	}
+	if code := ttPost(t, ts, "/render", `{"id":"seq","scope":"repo","inputs":{}}`, nil); code != http.StatusBadRequest {
+		t.Fatalf("missing input: code = %d", code)
+	}
+}

@@ -158,6 +158,8 @@ func ValidateTextTemplate(title, body string) error {
 		return fmt.Errorf("invalid text template: the title must be one line")
 	case utf8.RuneCountInString(title) > MaxTextTemplateTitle:
 		return fmt.Errorf("invalid text template: the title is longer than %d characters", MaxTextTemplateTitle)
+	case texttmpl.ID(title) == "":
+		return fmt.Errorf("invalid text template: the title needs a letter or a digit")
 	case strings.TrimSpace(body) == "":
 		return fmt.Errorf("invalid text template: the text is empty")
 	case len(body) > MaxTextTemplateBody:
