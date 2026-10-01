@@ -22,8 +22,9 @@ type SessionRef struct {
 
 // PublishSessions keeps this process's registry current until ctx ends:
 // rewritten on every session-list change, touched every second, removed on
-// return. worktree reports the TUI's current worktree (it changes on reRoot).
-func PublishSessions(ctx context.Context, dir string, worktree func() string) {
+// return. worktree reports the TUI's current worktree (it changes on reRoot);
+// mcpURL is the TUI's agent channel ("" = none), published for discovery.
+func PublishSessions(ctx context.Context, dir string, worktree func() string, mcpURL string) {
 	if dir == "" {
 		return
 	}
@@ -35,7 +36,7 @@ func PublishSessions(ctx context.Context, dir string, worktree func() string) {
 	// holds open fails) — retried on the next tick so a new session is never
 	// left unlisted until the NEXT change.
 	dirty := false
-	write := func() { dirty = sessionreg.Write(dir, proc, snapshotRegistry(started, worktree())) != nil }
+	write := func() { dirty = sessionreg.Write(dir, proc, snapshotRegistry(started, worktree(), mcpURL)) != nil }
 	write()
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
@@ -58,8 +59,8 @@ func PublishSessions(ctx context.Context, dir string, worktree func() string) {
 	}
 }
 
-func snapshotRegistry(started, wt string) sessionreg.Registry {
-	r := sessionreg.Registry{PID: os.Getpid(), Started: started, Worktree: wt}
+func snapshotRegistry(started, wt, mcpURL string) sessionreg.Registry {
+	r := sessionreg.Registry{PID: os.Getpid(), Started: started, Worktree: wt, MCP: mcpURL}
 	for _, in := range Sessions().List() {
 		r.Sessions = append(r.Sessions, sessionreg.Entry{
 			ID: agentsession.ProcTag() + "/" + string(in.ID), Dir: in.Dir, Agent: in.AgentID,
@@ -126,7 +127,7 @@ func readLive(dir string) liveView {
 		d := filepath.Clean(e.Dir)
 		lv.byDir[d] = append(lv.byDir[d], SessionRef{ID: e.ID, Agent: e.Agent, State: e.State})
 	}
-	for _, e := range snapshotRegistry("", "").Sessions {
+	for _, e := range snapshotRegistry("", "", "").Sessions {
 		add(e)
 	}
 	if dir != "" {
@@ -141,4 +142,40 @@ func readLive(dir string) liveView {
 		}
 	}
 	return lv
+}
+
+// AgentHostInfo is one live gg TUI as its registry file describes it.
+type AgentHostInfo struct {
+	PID      int                `json:"pid"`
+	Worktree string             `json:"worktree"`
+	MCP      string             `json:"mcp,omitempty"`
+	Sessions []AgentHostSession `json:"sessions"`
+}
+
+// AgentHostSession is one session a live TUI hosts.
+type AgentHostSession struct {
+	ID    string `json:"id"`
+	Agent string `json:"agent,omitempty"`
+	Label string `json:"label,omitempty"`
+	Dir   string `json:"dir"`
+	State string `json:"state"`
+}
+
+// LiveAgentHosts lists every live gg TUI on this machine (read-only, no
+// channel call): what `gg agent list` shows outside a gg console.
+func (s *Service) LiveAgentHosts() []AgentHostInfo { return liveAgentHostsIn(s.registryDir()) }
+
+func liveAgentHostsIn(dir string) []AgentHostInfo {
+	if dir == "" {
+		return nil
+	}
+	var out []AgentHostInfo
+	for _, r := range sessionreg.Live(dir) {
+		h := AgentHostInfo{PID: r.PID, Worktree: r.Worktree, MCP: r.MCP}
+		for _, e := range r.Sessions {
+			h.Sessions = append(h.Sessions, AgentHostSession{ID: e.ID, Agent: e.Agent, Label: e.Label, Dir: e.Dir, State: e.State})
+		}
+		out = append(out, h)
+	}
+	return out
 }

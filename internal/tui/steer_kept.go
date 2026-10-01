@@ -67,6 +67,7 @@ func (m Model) tendKeptInboxes() Model {
 			PID:      os.Getpid(),
 			Worktree: m.snapshotWorktree,
 			Started:  time.Now().UTC().Format(time.RFC3339),
+			MCP:      m.agentURL(),
 		})
 		kept[dir] = true
 	}

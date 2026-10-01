@@ -100,10 +100,11 @@ func Run(svc *domain.Service, opts RunOptions) (string, error) {
 	}
 	// The inbox is keyed by worktree under the session dir the snapshot just
 	// resolved; the watcher itself starts from Init().
-	m.steerDir = steerDirFor(m.snapshotCommonDir, m.snapshotWorktree)
-	m = m.initSteerInbox()
+	// The agent channel first: the presence initSteerInbox writes names it.
 	m = m.startAgentHost()
 	defer m.closeAgentHost() // after Run's KillAll; also on an early p.Run error
+	m.steerDir = steerDirFor(m.snapshotCommonDir, m.snapshotWorktree)
+	m = m.initSteerInbox()
 	if recordPath != "" {
 		repo := ""
 		if top, err := svc.TopLevel(context.Background()); err == nil {
@@ -120,7 +121,7 @@ func Run(svc *domain.Service, opts RunOptions) (string, error) {
 	publishedWT.Store(m.currentWorktree)
 	pubCtx, pubCancel := context.WithCancel(context.Background())
 	defer pubCancel()
-	go domain.PublishSessions(pubCtx, domain.SessionRegistryDir(), publishedWorktree)
+	go domain.PublishSessions(pubCtx, domain.SessionRegistryDir(), publishedWorktree, m.agentURL())
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithFilter(quitFilter))
 	// Wrap off for the TUI's lifetime (see autowrapOff): a glyph the terminal
 	// draws wider than gg measured must clip at the right edge, never wrap

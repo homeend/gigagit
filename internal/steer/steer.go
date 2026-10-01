@@ -202,6 +202,7 @@ type Presence struct {
 	Worktree string `json:"worktree"`
 	Started  string `json:"started,omitempty"` // RFC3339
 	URL      string `json:"url,omitempty"`     // web.json only
+	MCP      string `json:"mcp,omitempty"`     // tui.json: the agent channel URL (never a token)
 }
 
 // NewID returns a command id that sorts by post time: <unixnano>-<pid>.
