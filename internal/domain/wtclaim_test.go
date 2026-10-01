@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/observ"
@@ -218,5 +221,28 @@ func TestWorktreeMarksAndReserve(t *testing.T) {
 	c, _ = config.Load("", cfg)
 	if len(c.Agents.Reserved) != 0 {
 		t.Fatalf("reserved after unreserve = %q", c.Agents.Reserved)
+	}
+}
+
+// TestRecycleThroughExecuteAsksTheGuards proves the OpDeps.Guards wiring and
+// that GuardReport never waits on the reservation the op itself holds (a
+// gated read inside the op would deadlock until the context expired).
+func TestRecycleThroughExecuteAsksTheGuards(t *testing.T) {
+	t.Parallel()
+	main, svc, _ := inventoryRepo(t)
+	wt := addWT(t, main, "res")
+	if out, err := exec.Command("git", "-C", main, "branch", "loose").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	cfg := filepath.Join(main, ".gg.toml")
+	if err := svc.SetWorktreeReserved(context.Background(), cfg, nil, wt, true); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	res, err := svc.Execute(ctx, engine.RecycleWorktree{Dir: wt, Branch: "loose"}, nil,
+		engine.MapDecider{engine.RecycleBlockedDecisionID: "abort"})
+	if err != nil || !strings.Contains(res.Summary, "cancelled") {
+		t.Fatalf("recycle of a reserved worktree = %+v, %v (a timeout means GuardReport waited on the gate)", res, err)
 	}
 }

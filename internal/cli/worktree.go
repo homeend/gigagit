@@ -432,11 +432,12 @@ func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, std
 	fs.SetOutput(stderr)
 	onDirty := fs.String("on-dirty", "", "what to do with the target's uncommitted changes: commit, shelve, discard, or abort")
 	asName := fs.String("as", "", "local name for a remote branch (default: the name without the remote)")
+	force := fs.Bool("force", false, "recycle even though the worktree is claimed, reserved, has a running agent or is the main checkout")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 2 || fs.Arg(0) == "" || fs.Arg(1) == "" {
-		fmt.Fprintln(stderr, "usage: gg worktree recycle [--on-dirty=commit|shelve|discard|abort] [--as <name>] <path> <branch|remote/branch>")
+		fmt.Fprintln(stderr, "usage: gg worktree recycle [--on-dirty=commit|shelve|discard|abort] [--force] [--as <name>] <path> <branch|remote/branch>")
 		return 2
 	}
 	policy := map[string]string{}
@@ -447,6 +448,9 @@ func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, std
 	default:
 		fmt.Fprintf(stderr, "worktree recycle: --on-dirty must be commit, shelve, discard, or abort (got %q)\n", *onDirty)
 		return 2
+	}
+	if *force {
+		policy[engine.RecycleBlockedDecisionID] = "recycle anyway"
 	}
 	wts, err := svc.Worktrees(context.Background())
 	if err != nil {
@@ -464,7 +468,7 @@ func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, std
 		return 2
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
-	res, err := runOperation(context.Background(), svc, engine.RecycleWorktree{Dir: match.Path, Branch: branch, RemoteRef: remoteRef}, dec, stderr)
+	res, err := runOperation(context.Background(), svc, engine.RecycleWorktree{Dir: match.Path, Branch: branch, RemoteRef: remoteRef, CallerSession: os.Getenv("GG_SESSION_ID")}, dec, stderr)
 	code := finish(res, err, stdout, stderr)
 	var div engine.CheckoutDivergedError
 	if remoteRef != "" && *asName == "" && errors.As(err, &div) {

@@ -387,10 +387,12 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 		// The op holds this Service's reservation: shelveStagedIn reads through
 		// the InDir repo directly, never through a (gated) domain query.
 		ShelveStaged: s.shelveStagedIn,
-		Events:       events,
-		Decider:      dec,
-		Escalate:     res.Escalate,
-		Versions:     versions,
+		// Ungated reads: the op holds the reservation (see ShelveStaged).
+		Guards:   s.GuardReport,
+		Events:   events,
+		Decider:  dec,
+		Escalate: res.Escalate,
+		Versions: versions,
 	})
 	span := observ.Span{Name: label, Start: opStart, Duration: time.Since(opStart)}
 	if opErr != nil {

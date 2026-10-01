@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/wtguard"
 )
 
 // RecycleDirtyDecisionID is raised when the target worktree has staged,
@@ -16,6 +18,11 @@ import (
 // shelve them (one shelf file set, then discard), discard them (untracked
 // files are deleted, ignored files kept), or abort.
 const RecycleDirtyDecisionID = "recycle.dirty"
+
+// RecycleBlockedDecisionID is raised when the target worktree is in use by
+// something a human may override (a claim, a running agent, a reserve, the
+// main checkout…): one question listing every reason.
+const RecycleBlockedDecisionID = "recycle.blocked"
 
 // RecycleCommitLayout is the timestamp layout in the automated commit
 // subject (local time).
@@ -42,6 +49,9 @@ type RecycleWorktree struct {
 	// with the target untouched. An abort at the prompt keeps the branch.
 	RemoteRef string
 	Now       func() time.Time // clock for the commit message; nil = time.Now
+	// CallerSession is the calling agent's GG_SESSION_ID ("" = a human): its
+	// own claim on the target does not block.
+	CallerSession string
 }
 
 var _ Operation = RecycleWorktree{}
@@ -75,6 +85,33 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	// can still name it, so refuse here (style of RemoveWorktree).
 	if top, err := deps.Repo.TopLevel(ctx); err == nil && samePath(target, top) {
 		return Result{}, fmt.Errorf("cannot recycle the worktree you are in (%s)", target)
+	}
+	if deps.Guards != nil {
+		rep, err := deps.Guards(ctx, wtguard.Target{Dir: target, CallerSession: op.CallerSession})
+		if err != nil {
+			return Result{}, err
+		}
+		if hard := rep.Hard(); len(hard) > 0 {
+			return Result{}, fmt.Errorf("cannot recycle %s: %s", target, describeBlockers(hard))
+		}
+		var soft []wtguard.Blocker
+		for _, b := range rep.Overridable() {
+			// Recycle handles these itself: recycle.dirty below answers dirt,
+			// and a detached target is recycled by design.
+			if b.Reason != "dirty-recent" && b.Reason != "detached" {
+				soft = append(soft, b)
+			}
+		}
+		if len(soft) > 0 {
+			resp, err := deps.decide(ctx, PromptReq(RecycleBlockedDecisionID,
+				"%s is in use: %s", []string{"recycle anyway", "abort"}, target, describeBlockers(soft)))
+			if err != nil {
+				return Result{}, err
+			}
+			if resp.Option != "recycle anyway" {
+				return Result{}.WithSummary("recycle cancelled"), nil
+			}
+		}
 	}
 
 	wt, err := deps.repoAt(target)
@@ -203,4 +240,18 @@ func discardAll(ctx context.Context, wt GitOps) error {
 		errs = append(errs, fmt.Errorf("clean: %w", err))
 	}
 	return errors.Join(errs...)
+}
+
+// describeBlockers renders blockers as "reason (detail); …" — agent-facing
+// protocol text inside the prompt args, like paths and branch names.
+func describeBlockers(bs []wtguard.Blocker) string {
+	parts := make([]string, 0, len(bs))
+	for _, b := range bs {
+		if b.Detail != "" {
+			parts = append(parts, b.Reason+" ("+b.Detail+")")
+		} else {
+			parts = append(parts, b.Reason)
+		}
+	}
+	return strings.Join(parts, "; ")
 }

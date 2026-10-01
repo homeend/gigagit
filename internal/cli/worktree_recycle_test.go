@@ -239,3 +239,31 @@ func TestWorktreeRecycleAsNeedsRemoteBranch(t *testing.T) {
 		t.Fatalf("code = %d, want 2 (--as only renames a remote branch); stderr = %s", code, errb.String())
 	}
 }
+
+func TestWorktreeRecycleReservedNeedsForce(t *testing.T) {
+	dir := newCLIRepo(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	exec.Command("git", "-C", dir, "branch", "loose").Run()
+	wt := cliWorktree(t, dir, "a", "wt-a")
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte("[agents]\nreserved = [\""+filepath.ToSlash(wt)+"\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, _, errb := runCLI(t, dir, "worktree", "recycle", wt, "loose")
+	if code == 0 || !strings.Contains(errb, "recycle.blocked") || !strings.Contains(errb, "reserved") {
+		t.Fatalf("recycle of a reserved worktree without --force = %d %q", code, errb)
+	}
+	if code, _, errb := runCLI(t, dir, "worktree", "recycle", "--force", wt, "loose"); code != 0 {
+		t.Fatalf("recycle --force = %d %q", code, errb)
+	}
+}
+
+func TestWorktreeRecycleDetachedNeedsNoForce(t *testing.T) {
+	dir := newCLIRepo(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	exec.Command("git", "-C", dir, "branch", "loose").Run()
+	wt := cliWorktree(t, dir, "a", "wt-a")
+	exec.Command("git", "-C", wt, "checkout", "--detach").Run()
+	if code, _, errb := runCLI(t, dir, "worktree", "recycle", wt, "loose"); code != 0 {
+		t.Fatalf("recycle of a detached worktree = %d %q", code, errb)
+	}
+}
