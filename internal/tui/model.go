@@ -2141,6 +2141,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.topLayer() == nil && !m.filterTyping {
 			return m.cycleSessions(k == "alt+t")
 		}
+		// alt+x opens the text templates window (base panels only, like
+		// alt+a/alt+t; a focused console kept the key for its program above).
+		if msg.String() == "alt+x" && m.topLayer() == nil && !m.filterTyping {
+			return m.openTextTemplates()
+		}
 		// The layer stack (full-screen surfaces + centered popups) is global: its
 		// top owns the keyboard above the diff view (mirrors the action menu and
 		// render()). History/blame/rebase editors and the bookmark/shelf switchers,
@@ -3581,6 +3586,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			prCmd = tea.Batch(prCmd, listCmd)
 		}
 		return m, tea.Batch(healthCmd, cmd, driftCmd, prCmd)
+
+	case textTemplatesDataMsg:
+		if v := layerOf[*textTemplatesView](m); v != nil {
+			v.onData(msg)
+		}
+		if msg.err != nil {
+			m.statusMsg = i18n.T("text templates: %s", msg.err.Error())
+		} else if msg.status != "" {
+			m.statusMsg = msg.status
+		}
+		return m, nil
 
 	case prefixDataMsg:
 		if v := layerOf[*prefixSettingsView](m); v != nil {
