@@ -79,8 +79,8 @@ func (c *Client) session(ctx context.Context) (*sdk.ClientSession, error) {
 
 // Call runs tool with args EXACTLY once — never retried, since agent_start
 // or agent_send repeated would duplicate a worker or a keystroke. A tool
-// refusal comes back as a result with IsError set; an error means the
-// channel itself failed.
+// refusal comes back as a result with IsError set; an error is ErrProtocol
+// (the channel answered with a JSON-RPC error) or ErrUnreachable.
 func (c *Client) Call(ctx context.Context, tool string, args any) (*sdk.CallToolResult, error) {
 	cs, err := c.session(ctx)
 	if err != nil {

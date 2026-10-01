@@ -224,8 +224,8 @@ func (m Model) reloadConfigAfterBranchFilterWrite() Model {
 
 // bfRepoKey is the promptstate scope for this feature: the git common dir
 // the health probe resolved, and ONLY that — the web keys the same record by
-// svc.GitCommonDir, so the worktree-path fallback toolRepoKey uses would
-// split the two frontends' memory. "" until the probe has run.
+// svc.GitCommonDir, so a worktree-path fallback (toolRepoKey's last resort)
+// would split the two frontends' memory. "" until the probe has run.
 //
 // The repoHealthKnown gate is load-bearing, not belt-and-braces: reRoot does
 // NOT clear m.repoHealth (only the flag), so between a repo switch and the

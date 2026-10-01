@@ -21,3 +21,17 @@ func TestToolRepoKeyBeforeRepoHealthIsTheCommonDir(t *testing.T) {
 		t.Fatalf("toolRepoKey = %q, want the common dir %q", got, want)
 	}
 }
+
+// Right after a repo switch the old repo's health lingers until the new
+// probe lands (repoHealthKnown is false): it must not key the new repo's
+// approvals.
+func TestToolRepoKeyIgnoresTheOldReposHealthAfterASwitch(t *testing.T) {
+	t.Parallel()
+	m := newTestModel(t)
+	m.repoHealth.GitCommonDir = "/elsewhere/.git"
+	m.repoHealthKnown = false
+	want, _ := m.svc.GitCommonDir(context.Background())
+	if got := m.toolRepoKey(); !domain.SameCheckout(got, want) {
+		t.Fatalf("toolRepoKey = %q, want this repo's common dir %q", got, want)
+	}
+}

@@ -237,4 +237,8 @@ func TestPolicyFromConfigBadAgeBlocksOnlyDirty(t *testing.T) {
 	if r, err := svc.GuardReport(context.Background(), wtguard.Target{Dir: clean, Branch: "clean"}); err != nil || len(r.Blockers) != 0 {
 		t.Fatalf("guard report under a bad stale_after = %+v %v", r, err)
 	}
+	r, err := svc.GuardReport(context.Background(), wtguard.Target{Dir: stale, Branch: "stale"})
+	if err != nil || !slices.Equal(r.Reasons(), []string{"dirty-recent"}) || !strings.Contains(r.Blockers[0].Detail, "stale_after") {
+		t.Fatalf("a dirty worktree's guard report under a bad stale_after = %+v %v", r, err)
+	}
 }
