@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg prefix resolve
+
+### Added
+
+- **CLI:** `gg prefix resolve <id> [--set label=value]… [--parent <branch>]
+  [--bump]` prints a branch prefix resolved exactly as the TUI's prefix
+  picker does — `<user:…>` labels from `--set` (a missing one exits 2 naming
+  the flag), `<date:…>`, `<repo>`, `<parent-branch>`, `<seq:…>`.
+  Read-only unless `--bump`, which advances the prefix's `<seq>` counters
+  once, as creating the branch in the TUI does. `--template <value>`
+  resolves a raw template. An agent can now name a branch by the user's
+  scheme. The using-gg skill is v121.
+
 ## Agent spawn follow-ups
 
 ### Fixed
