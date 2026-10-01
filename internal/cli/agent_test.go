@@ -59,6 +59,23 @@ func TestAgentOutsideGG(t *testing.T) {
 	}
 }
 
+// Inside a gg console (GG_SESSION_ID set) with no channel: say that, not
+// "run this inside a gg console".
+func TestAgentInsideAConsoleWithoutChannel(t *testing.T) {
+	prev := agentGetenv
+	agentGetenv = func(k string) string {
+		if k == "GG_SESSION_ID" {
+			return "p/s1"
+		}
+		return ""
+	}
+	t.Cleanup(func() { agentGetenv = prev })
+	code, _, errOut := runAgentCLI(t, newRepoDir(t), "", "task")
+	if code != 2 || !strings.Contains(errOut, "no agent channel") || strings.Contains(errOut, "run this inside") {
+		t.Fatalf("task in a console without a channel = %d %q", code, errOut)
+	}
+}
+
 func TestAgentStartReadsPromptFromStdin(t *testing.T) {
 	gotCh := make(chan domain.AgentStartRequest, 1)
 	dir, _ := agentEnvFor(t, func(_ context.Context, r domain.AgentStartRequest) (domain.AgentStartResult, error) {
