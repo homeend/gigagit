@@ -118,6 +118,7 @@ feature; keep THIS file's map to one line per package.
 | `profile`    | Named git-identity presets, global + per-repo scoped. Owned by `domain`. |
 | `promptstate`| Machine-local UX memory: suppressed prompts, dismissed notices, approved external-tool command hashes (`CommandHash` shared by TUI and web), the active branch-filter slot per repo per list. |
 | `prefix`     | Templated branch-name prefix registry, global + per-repo scoped. Owned by `domain`. |
+| `texttmpl`   | Writable two-scope registry of text templates (titled multi-line texts with the prefix token grammar; records only, TOML under XDG state). Owned by `domain`; frontends never import it. |
 | `shellinit`  | `gg shell-init [bash|zsh|fish]` wrappers (cd-on-switch via `--cwd-file`). |
 | `observ`     | Observability: span ring buffer + sink (operation log), redaction, panic dump, session failure ring + `errors.log`. |
 | `clock`      | One freezable "now" for STORED and DRAWN times (ages, dates, creation stamps); timing code keeps `time.Now`. Frozen by the e2e harness. Stdlib-only DAG leaf. |
