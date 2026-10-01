@@ -45,9 +45,9 @@ func reviewStampAt(t, now time.Time) string {
 	return t.Format("2006-01-02 15:04")
 }
 
-// branchReviewRowBody is "  └ Review: 09-28 18:12 Claude Code": the
-// Branches tab puts it at its gutter, and the two leading spaces set it in
-// under the branch name, below any session sub-rows' └.
+// branchReviewRowBody is a review sub-row without its indent: "└ Review:
+// 09-28 18:12 Claude Code". The Branches tab sets it in under the branch
+// name, in the session sub-rows' column.
 func branchReviewRowBody(r domain.ReviewHead) string {
 	parts := []string{i18n.T("Review:")}
 	if !r.Created.IsZero() {
@@ -56,7 +56,7 @@ func branchReviewRowBody(r domain.ReviewHead) string {
 	if a := strings.TrimSpace(r.Agent); a != "" {
 		parts = append(parts, sanitizeLine(a))
 	}
-	return "  └ " + strings.Join(parts, " ")
+	return "└ " + strings.Join(parts, " ")
 }
 
 func (m Model) reviewHead(id string) (domain.ReviewHead, bool) {

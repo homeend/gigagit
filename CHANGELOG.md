@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Branches sub-row indent
+
+### Fixed
+
+- **TUI:** on the Branches tab a branch's review sub-row was drawn two
+  columns deeper than its agent-session sub-row, so starting an agent made
+  the review look like the session's child. Session and review sub-rows now
+  share one column under the branch name.
+
 ## Console: ctrl+] twice
 
 ### Changed

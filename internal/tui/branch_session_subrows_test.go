@@ -306,3 +306,36 @@ func TestCapitalXKillsAndRemovesRunningSession(t *testing.T) {
 		t.Fatalf("footer still advertises X with no session row: %q", m.footerLine())
 	}
 }
+
+// Serial: installs a process-global session manager.
+//
+// A branch's session and its review are both sub-rows of the BRANCH: their └
+// share one column, so a review never reads as a child of the session above it.
+func TestBranchSessionAndReviewSubRowsShareAColumn(t *testing.T) {
+	m := loadedModel(t)
+	s := startTestSession(t, m, `sleep 0.3`)
+	m.focus, m.activeLeftTab = panelBranches, panelBranches
+	bi := branchRowIndex(m, m.status.Branch)
+	if bi < 0 {
+		t.Fatalf("branch %q not listed", m.status.Branch)
+	}
+	var tip string
+	for _, b := range m.branches {
+		if b.Name == m.status.Branch {
+			tip = b.Hash
+		}
+	}
+	m.noteCounts.Reviews = []domain.ReviewHead{{ID: "r1", Branch: m.status.Branch,
+		Commit: tip, Agent: "Claude Code", Created: time.Now()}}
+
+	si := branchSubRowIndex(m, s.Info().ID)
+	rows, _ := m.panelView(panelBranches)
+	if si != bi+1 || len(rows) <= si+1 || !strings.Contains(rows[si+1], "└ Review:") {
+		t.Fatalf("want the session then the review under the branch, got %q", rows)
+	}
+	sess, rev := strings.Index(rows[si], "└"), strings.Index(rows[si+1], "└")
+	if sess != rev {
+		t.Fatalf("session └ at %d, review └ at %d — the review reads as the session's child:\n%s\n%s",
+			sess, rev, rows[si], rows[si+1])
+	}
+}
