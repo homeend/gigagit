@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v119 -->
+<!-- gg:using-gg:v120 -->
 
 # Using gg (gigagit)
 
@@ -936,52 +936,6 @@ finds the right one here.
   user's TUI.
 - `gg worktree reserve <path>` / `gg worktree unreserve <path>` — keep a
   worktree away from agents (`[agents] reserved` in the repo config).
-
-### Picking a worktree for another agent
-
-1. `gg worktree list --free --json` — free worktrees, best first.
-2. `gg worktree claim --note <issue-url> <path>` — exit 1 means someone got
-   there first: take the next one.
-3. `gg worktree recycle [--on-dirty=shelve] <path> <branch>` (pass
-   `--on-dirty` only when its `recycle` is `shelve`).
-4. When done: `gg worktree release <path>`.
-
-`git-lock` can appear for one listing while another reader's `git status`
-holds `index.lock` — list again before giving up on a worktree. A `claim`
-that exits 2 right after your session started can mean gg has not published
-it yet: retry once after a second. A claim made by gg on the other side of
-a WSL/Windows pair (one repo, two hosts) is never judged dead from this side
-— only its own side or the user releases it.
-
-### Starting another agent
-
-Inside a gg console you have gg's agent tools (MCP, via `gg mcp`) and their
-CLI twins. Outside a gg console they do not exist (`gg agent` exits 2).
-
-- `agent_start {worktree, tool, prompt, note?}` / `gg agent start --worktree
-  <path|name|branch> --tool <name> --prompt-file <file|-> [--note <url>]` —
-  starts a worker in that worktree with your task as its brief; prints its
-  id. Your claim on the worktree (or a fresh one) passes to the worker and
-  returns to you when it ends. `tool` is a session command named in the
-  user's `[agents] spawn`.
-- `agent_list` / `gg agent list [--json]` — every session of this gg;
-  `mine` marks the agents you started.
-- `agent_screen {id}` / `gg agent screen <id>` — its visible console text.
-- `agent_send {id, text?, enter?, keys?}` / `gg agent send <id> [text…]
-  [--no-enter] [--key esc]…` — paste text, then Enter (default when there is
-  text), then keys (`enter esc tab up down … ctrl+c 1 space`). Only agents
-  you started.
-- `agent_kill {id, remove?}` / `gg agent kill <id> [--remove]` — only agents
-  you started.
-- `agent_task` / `gg agent task` — **a worker's first act**: your task.
-
-Refusals and what to do: "spawning is off" / "not in [agents] spawn" — ask
-the user to allow the command in the global config; "has no <prompt> slot" —
-the user accepts the command's update in Settings → External tools;
-"approve … once" — the user starts that command from Start agent once;
-"max_spawned cap" — wait for or kill a worker; "a spawned agent may not
-start agents" — you are a worker: report back instead; "is not free:
-claimed/…" — pick another worktree (`gg worktree list --free`).
 - `gg worktree rename [--force] <worktree> <new-name>` / `gg worktree move
   [--force] <worktree> <new-path>` — relocate a linked worktree's directory
   (`git worktree move`); `rename` is a same-parent move computed from just
@@ -1018,6 +972,55 @@ gives an agent in a gg console the agent tools.
 - `--time-track <file>` (global; combine with any command) — append one JSON
   span per process start, git subprocess, and operation to `<file>` for
   performance analysis.
+
+### Picking a worktree for another agent
+
+1. `gg worktree list --free --json` — free worktrees, best first.
+2. `gg worktree claim --note <issue-url> <path>` — exit 1 means someone got
+   there first: take the next one.
+3. `gg worktree recycle [--on-dirty=shelve] <path> <branch>` (pass
+   `--on-dirty` only when its `recycle` is `shelve`).
+4. When done: `gg worktree release <path>`.
+
+`git-lock` can appear for one listing while another reader's `git status`
+holds `index.lock` — list again before giving up on a worktree. A `claim`
+that exits 2 right after your session started can mean gg has not published
+it yet: retry once after a second. A claim made by gg on the other side of
+a WSL/Windows pair (one repo, two hosts) is never judged dead from this side
+— only its own side or the user releases it.
+
+### Starting another agent
+
+Inside a gg console you have gg's agent tools (MCP, via `gg mcp`) and their
+CLI twins. Outside a gg console they do not exist: `gg agent` exits 2,
+except `gg agent list`, which lists the sessions of the running gg TUIs.
+
+- `agent_start {worktree, tool, prompt, note?}` / `gg agent start --worktree
+  <path|name|branch> --tool <name> (--prompt <text> | --prompt-file <file|->)
+  [--note <url>]` — starts a worker in that worktree with your task as its
+  brief (up to 256 KiB; the note up to 1 KiB); prints its id. Your claim on the worktree (or a fresh one) passes to the worker and
+  returns to you when it ends. `tool` is a session command named in the
+  user's `[agents] spawn`.
+- `agent_list` / `gg agent list [--json]` — every session of this gg;
+  `mine` marks the agents you started.
+- `agent_screen {id}` / `gg agent screen <id>` — its visible console text.
+- `agent_send {id, text?, enter?, keys?}` / `gg agent send <id> [text…]
+  [--no-enter] [--key esc]…` — paste text (up to 64 KiB), then Enter (default
+  when there is text), then keys (`enter esc tab up down … ctrl+c 1 space`). Only agents
+  you started.
+- `agent_kill {id, remove?}` / `gg agent kill <id> [--remove]` — only agents
+  you started.
+- `agent_task` / `gg agent task` — **a worker's first act**: your task.
+
+Refusals and what to do: "spawning is off" / "not in [agents] spawn" — ask
+the user to allow the command in the global config; "has no <prompt> slot" —
+the user accepts the command's update in Settings → External tools;
+"approve … once" — the user starts that command from Start agent once;
+"max_spawned cap" — wait for or kill a worker; "a spawned agent may not
+start agents" — you are a worker: report back instead; "is not free:
+claimed/…" — pick another worktree (`gg worktree list --free`); "this gg
+console has no agent channel" — tell the user (an Open terminal never has
+one).
 
 ## The rule that matters for agents
 

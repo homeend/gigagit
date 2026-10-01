@@ -59,6 +59,23 @@ func TestAgentOutsideGG(t *testing.T) {
 	}
 }
 
+// Inside a gg console (GG_SESSION_ID set) with no channel: say that, not
+// "run this inside a gg console".
+func TestAgentInsideAConsoleWithoutChannel(t *testing.T) {
+	prev := agentGetenv
+	agentGetenv = func(k string) string {
+		if k == "GG_SESSION_ID" {
+			return "p/s1"
+		}
+		return ""
+	}
+	t.Cleanup(func() { agentGetenv = prev })
+	code, _, errOut := runAgentCLI(t, newRepoDir(t), "", "task")
+	if code != 2 || !strings.Contains(errOut, "no agent channel") || strings.Contains(errOut, "run this inside") {
+		t.Fatalf("task in a console without a channel = %d %q", code, errOut)
+	}
+}
+
 func TestAgentStartReadsPromptFromStdin(t *testing.T) {
 	gotCh := make(chan domain.AgentStartRequest, 1)
 	dir, _ := agentEnvFor(t, func(_ context.Context, r domain.AgentStartRequest) (domain.AgentStartResult, error) {
@@ -72,6 +89,17 @@ func TestAgentStartReadsPromptFromStdin(t *testing.T) {
 	got := <-gotCh
 	if got.Prompt != "fix issue 7\nsecond line\n" || got.Worktree != "job" || got.Tool != "Claude" || got.Note != "n" {
 		t.Fatalf("request %+v", got)
+	}
+}
+
+func TestAgentStartRefusesBothPromptFlags(t *testing.T) {
+	dir, _ := agentEnvFor(t, func(context.Context, domain.AgentStartRequest) (domain.AgentStartResult, error) {
+		t.Error("the starter must not run")
+		return domain.AgentStartResult{}, nil
+	})
+	code, _, errOut := runAgentCLI(t, dir, "from stdin", "start", "--worktree", "job", "--tool", "Claude", "--prompt", "inline", "--prompt-file", "-")
+	if code != 2 || !strings.Contains(errOut, "not both") {
+		t.Fatalf("--prompt with --prompt-file = %d %q", code, errOut)
 	}
 }
 

@@ -15,11 +15,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ErrUnreachable wraps every failure to reach the channel.
 var ErrUnreachable = errors.New("gg's agent channel is not reachable")
+
+// ErrProtocol wraps a JSON-RPC error the channel answered with.
+var ErrProtocol = errors.New("gg's agent channel rejected the call")
 
 type Client struct {
 	url, token string
@@ -75,8 +79,8 @@ func (c *Client) session(ctx context.Context) (*sdk.ClientSession, error) {
 
 // Call runs tool with args EXACTLY once — never retried, since agent_start
 // or agent_send repeated would duplicate a worker or a keystroke. A tool
-// refusal comes back as a result with IsError set; an error means the
-// channel itself failed.
+// refusal comes back as a result with IsError set; an error is ErrProtocol
+// (the channel answered with a JSON-RPC error) or ErrUnreachable.
 func (c *Client) Call(ctx context.Context, tool string, args any) (*sdk.CallToolResult, error) {
 	cs, err := c.session(ctx)
 	if err != nil {
@@ -84,6 +88,10 @@ func (c *Client) Call(ctx context.Context, tool string, args any) (*sdk.CallTool
 	}
 	res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: tool, Arguments: args})
 	if err != nil {
+		var wire *jsonrpc.Error
+		if errors.As(err, &wire) {
+			return nil, fmt.Errorf("%w: %s", ErrProtocol, wire.Message)
+		}
 		return nil, fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
 	return res, nil

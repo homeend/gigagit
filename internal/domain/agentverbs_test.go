@@ -84,6 +84,7 @@ func TestSpawnRefusals(t *testing.T) {
 		"unapproved":   {func(sp *SpawnSpec) { sp.Approved = func(string, string) bool { return false } }, "approve Sleeper once"},
 		"empty prompt": {func(sp *SpawnSpec) { sp.Req.Prompt = "" }, "prompt is empty"},
 		"huge prompt":  {func(sp *SpawnSpec) { sp.Req.Prompt = strings.Repeat("x", MaxBriefBytes+1) }, "prompt is larger than"},
+		"huge note":    {func(sp *SpawnSpec) { sp.Req.Note = strings.Repeat("n", MaxNoteBytes+1) }, "note is larger than"},
 		"bad worktree": {func(sp *SpawnSpec) { sp.Req.Worktree = "nowhere" }, "no worktree"},
 	}
 	for name, c := range cases {
@@ -137,6 +138,31 @@ func TestFailedWorkerClaimRevertsToOverseer(t *testing.T) {
 	}
 }
 
+// The worker's process sees the channel URL, its own token and its parent.
+func TestSpawnedWorkerGetsChannelEnv(t *testing.T) {
+	_, wt, _, ov := spawnFixture(t, 4)
+	os.WriteFile(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "gg", "config.toml"), []byte(
+		"[agents]\nspawn = [\"Env\"]\n\n[[tools.command]]\ncategory = \"session\"\nname = \"Env\"\nmode = \"session\"\n"+
+			"command = \"sh -c 'echo \\\"u=$GG_MCP_URL p=$GG_PARENT_SESSION t=${#GG_SESSION_TOKEN}\\\"; sleep 600' <prompt>\"\n"), 0o644)
+	res, _, err := SpawnAgent(context.Background(), SpawnSpec{Req: AgentStartRequest{Caller: ov, Worktree: wt, Tool: "Env", Prompt: "x"},
+		Cols: 80, Rows: 24, MCPURL: "http://127.0.0.1:9/mcp", Approved: approveAll})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "u=http://127.0.0.1:9/mcp p=" + ov + " t=64"
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, text, _ := AgentScreen(res.ID)
+		if strings.Contains(text, want) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the worker's env line never showed %q:\n%s", want, text)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 func TestAgentSendTypesAndEnters(t *testing.T) {
 	_, wt, svc, ov := spawnFixture(t, 4)
 	shTool := sleeper()
@@ -168,6 +194,34 @@ func TestAgentSendTypesAndEnters(t *testing.T) {
 	}
 	if err := AgentKill(target, ov, false); err == nil {
 		t.Fatal("kill of a non-descendant must refuse")
+	}
+}
+
+func TestAgentSendRefusesHugeText(t *testing.T) {
+	_, wt, svc, ov := spawnFixture(t, 4)
+	child, _, err := svc.StartAgentSession(context.Background(), sleeper(), wt, "", 80, 24, nil, "http://x", SpawnRecord{Parent: ov, Spawned: true}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := FullSessionID(child.Info().ID)
+	if err := AgentSend(ov, target, strings.Repeat("x", MaxSendBytes+1), true, nil); err == nil || !strings.Contains(err.Error(), "text is larger than") {
+		t.Fatalf("huge send = %v", err)
+	}
+	if err := AgentSend(ov, target, strings.Repeat("x", MaxSendBytes), false, nil); err != nil {
+		t.Fatalf("a send at the cap = %v", err)
+	}
+}
+
+func TestReachNamesAnUnknownSession(t *testing.T) {
+	_, _, _, ov := spawnFixture(t, 4)
+	ghost := ov[:strings.LastIndex(ov, "/")+1] + "s999"
+	for name, err := range map[string]error{
+		"send": AgentSend(ov, ghost, "x", true, nil),
+		"kill": AgentKill(ov, ghost, false),
+	} {
+		if err == nil || !strings.Contains(err.Error(), "no session "+ghost) || strings.Contains(err.Error(), "started by") {
+			t.Errorf("%s to an unknown id = %v, want \"no session %s\"", name, err, ghost)
+		}
 	}
 }
 
@@ -224,5 +278,25 @@ func TestResolveWorktreeArg(t *testing.T) {
 	}
 	if _, err := svc.ResolveWorktreeArg(context.Background(), "nope"); err == nil {
 		t.Error("an unknown name resolved")
+	}
+}
+
+// A spawn runs inside the TUI: its Service must never let ssh prompt on the
+// TUI's raw terminal (OpenTUI's BatchMode runner).
+func TestServiceForDirIsTheTUIOpener(t *testing.T) {
+	t.Setenv("GIT_SSH_COMMAND", "")
+	dir := t.TempDir()
+	svc := ServiceForDir(dir)
+	t.Cleanup(func() {
+		svcCacheMu.Lock()
+		delete(svcCache, filepath.Clean(dir))
+		svcCacheMu.Unlock()
+	})
+	res, err := svc.repo.Runner.Run(context.Background(), "gsc", []string{"-c", "alias.gsc=!echo ssh=$GIT_SSH_COMMAND", "gsc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(res.Stdout); !strings.Contains(got, "BatchMode=yes") {
+		t.Fatalf("GIT_SSH_COMMAND = %q, want ssh BatchMode", got)
 	}
 }

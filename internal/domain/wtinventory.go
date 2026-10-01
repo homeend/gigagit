@@ -22,13 +22,16 @@ var ErrUnknownWorktree = errors.New("no such worktree")
 // InventoryPolicy is the [agents] config in effect for one inventory.
 type InventoryPolicy struct {
 	StaleAfter time.Duration
+	StaleErr   string   // a stale_after that did not parse: every dirty worktree counts as recent
 	Reserved   []string // as configured (relative to main or absolute)
 	AllowMain  bool
 	Now        func() time.Time // nil = time.Now
 }
 
-// PolicyFromConfig parses [agents] into an InventoryPolicy.
-func PolicyFromConfig(c config.AgentsConfig) (InventoryPolicy, error) {
+// PolicyFromConfig parses [agents] into an InventoryPolicy. A stale_after
+// typo never fails the inventory or a recycle: it only keeps dirty worktrees
+// from counting as stale (StaleErr says why).
+func PolicyFromConfig(c config.AgentsConfig) InventoryPolicy {
 	p := InventoryPolicy{Reserved: c.Reserved, AllowMain: c.AllowMain}
 	age := c.StaleAfter
 	if age == "" {
@@ -36,10 +39,11 @@ func PolicyFromConfig(c config.AgentsConfig) (InventoryPolicy, error) {
 	}
 	d, err := branchfilter.ParseAge(age)
 	if err != nil {
-		return p, fmt.Errorf("[agents] stale_after: %w", err)
+		p.StaleErr = fmt.Sprintf("[agents] stale_after %q: %v", age, err)
+		return p
 	}
 	p.StaleAfter = d
-	return p, nil
+	return p
 }
 
 // DirtyInfo is the dirty guard's fact.
@@ -191,10 +195,7 @@ func (s *Service) GuardReport(ctx context.Context, t wtguard.Target) (wtguard.Re
 	if err != nil {
 		return wtguard.Report{}, err
 	}
-	pol, err := PolicyFromConfig(ac)
-	if err != nil {
-		return wtguard.Report{}, err
-	}
+	pol := PolicyFromConfig(ac)
 	for i, w := range wts {
 		if SameCheckout(w.Path, t.Dir) {
 			return wtguard.Run(ctx, WorktreeGuardSet(s.guardSources(pol, wts)), targetOf(w, i == 0, t.CallerSession)), nil

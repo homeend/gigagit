@@ -163,9 +163,10 @@ func (g sessionGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result
 }
 
 type dirtyGuard struct {
-	svc   *Service
-	stale time.Duration
-	now   func() time.Time
+	svc      *Service
+	stale    time.Duration
+	staleErr string // stale_after did not parse: no dirty worktree is stale
+	now      func() time.Time
 }
 
 func (dirtyGuard) Reason() string  { return "dirty-recent" }
@@ -189,7 +190,9 @@ func (g dirtyGuard) Check(ctx context.Context, t wtguard.Target) (wtguard.Result
 		}
 	}
 	r := wtguard.Result{Fact: d}
-	if len(st.Files) > 0 && (d.LastChange == nil || g.now().Sub(*d.LastChange) < g.stale) {
+	if len(st.Files) > 0 && g.staleErr != "" {
+		r.Blocker = &wtguard.Blocker{Reason: "dirty-recent", Detail: "uncommitted changes; " + g.staleErr}
+	} else if len(st.Files) > 0 && (d.LastChange == nil || g.now().Sub(*d.LastChange) < g.stale) {
 		r.Blocker = &wtguard.Blocker{Reason: "dirty-recent", Detail: "uncommitted changes touched recently"}
 	}
 	return r, nil

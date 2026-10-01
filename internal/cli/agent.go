@@ -19,6 +19,10 @@ var agentGetenv = os.Getenv
 
 const outsideGG = "run this inside a gg console (GG_MCP_URL and GG_SESSION_TOKEN are unset)"
 
+// noChannel: a gg console (GG_SESSION_ID set) that was given no channel.
+const noChannel = "this gg console has no agent channel — an Open terminal never gets one; " +
+	"for an agent, its gg could not start the channel (see its status line; restart gg)"
+
 func cmdAgent(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: gg agent <start|list|screen|send|kill|task> [args]")
@@ -30,7 +34,11 @@ func cmdAgent(svc *domain.Service, args []string, stdin io.Reader, stdout, stder
 		return agentListOutside(svc, rest, stdout, stderr)
 	}
 	if !inside {
-		fmt.Fprintln(stderr, "agent "+verb+": "+outsideGG)
+		why := outsideGG
+		if agentGetenv("GG_SESSION_ID") != "" {
+			why = noChannel
+		}
+		fmt.Fprintln(stderr, "agent "+verb+": "+why)
 		return 2
 	}
 	defer c.Close()
@@ -84,6 +92,10 @@ func agentStart(ctx context.Context, c *agentlink.Client, args []string, stdin i
 	file := fs.String("prompt-file", "", "read the task from this file (- = stdin)")
 	note := fs.String("note", "", "note on the worktree claim (e.g. the issue URL)")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *prompt != "" && *file != "" {
+		fmt.Fprintln(stderr, "agent start: pass --prompt or --prompt-file, not both")
 		return 2
 	}
 	text := *prompt

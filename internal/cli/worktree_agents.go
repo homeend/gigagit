@@ -67,11 +67,8 @@ func cmdWorktreeList(svc *domain.Service, args []string, stdout, stderr io.Write
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	pol, err := domain.PolicyFromConfig(ac)
-	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
-	}
+	pol := domain.PolicyFromConfig(ac)
+	warnStaleAfter(stderr, pol)
 	infos, err := svc.WorktreeInventory(ctx, pol, *freeOnly)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
@@ -128,11 +125,8 @@ func cmdWorktreeClaim(svc *domain.Service, workdir string, args []string, stdout
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	pol, err := domain.PolicyFromConfig(ac)
-	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
-	}
+	pol := domain.PolicyFromConfig(ac)
+	warnStaleAfter(stderr, pol)
 	if err := svc.ClaimWorktree(context.Background(), path, sid, *note, pol); err != nil {
 		fmt.Fprintln(stderr, "worktree claim:", err)
 		var nl *domain.SessionNotLiveError
@@ -224,5 +218,12 @@ func resolveWorktreeArg(svc *domain.Service, workdir, arg, verb string, stderr i
 func nudgeOwnTUI() {
 	if inbox := os.Getenv("GG_INBOX"); inbox != "" {
 		_, _ = steer.Post(inbox, steer.Command{Cmd: "reload", Sources: []string{"worktrees"}})
+	}
+}
+
+// warnStaleAfter names a stale_after typo: it holds back every dirty worktree.
+func warnStaleAfter(stderr io.Writer, pol domain.InventoryPolicy) {
+	if pol.StaleErr != "" {
+		fmt.Fprintln(stderr, "warning:", pol.StaleErr, "— every dirty worktree counts as recently changed")
 	}
 }

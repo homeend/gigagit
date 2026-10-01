@@ -2,6 +2,7 @@ package agentinit
 
 import (
 	"errors"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -41,5 +42,28 @@ func TestRegisterClaudeMCPAddsOnce(t *testing.T) {
 	st, err = RegisterClaudeMCP(look, run, "/opt/gg")
 	if err != nil || st != "already registered" || len(calls) != 3 {
 		t.Fatalf("second = %q %v calls %v", st, err, calls)
+	}
+}
+
+func TestRegisterClaudeMCPHintQuotesThePath(t *testing.T) {
+	_, err := RegisterClaudeMCP(func(string) (string, error) { return "", errors.New("not found") },
+		func(string, ...string) ([]byte, error) { return nil, nil }, "/home/me/my tools/gg")
+	if err == nil || !strings.Contains(err.Error(), "-- "+shellArg("/home/me/my tools/gg", runtime.GOOS == "windows")+" mcp") {
+		t.Fatalf("err = %v", err)
+	}
+	for _, c := range []struct {
+		in      string
+		windows bool
+		want    string
+	}{
+		{"/opt/gg", false, "/opt/gg"},
+		{"/my tools/gg", false, "'/my tools/gg'"},
+		{"/it's/gg", false, `'/it'\''s/gg'`},
+		{`C:\Program Files\gg.exe`, true, `"C:\Program Files\gg.exe"`},
+		{`C:\gg\gg.exe`, true, `C:\gg\gg.exe`},
+	} {
+		if got := shellArg(c.in, c.windows); got != c.want {
+			t.Errorf("shellArg(%q, %v) = %s, want %s", c.in, c.windows, got, c.want)
+		}
 	}
 }

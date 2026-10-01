@@ -84,10 +84,11 @@ func (h *AgentHost) Start(starter Starter) (string, error) {
 
 func (h *AgentHost) URL() string { return h.url }
 
+// Close drops every connection at once: a client's standalone SSE stream is
+// never idle, so a graceful Shutdown would only wait out its timeout, and the
+// agents it serves die with the TUI anyway.
 func (h *AgentHost) Close() {
 	if h.srv != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		_ = h.srv.Shutdown(ctx)
+		_ = h.srv.Close()
 	}
 }
