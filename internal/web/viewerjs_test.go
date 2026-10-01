@@ -183,6 +183,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", `history.pushState({ gg: "back" }, "")`, "an anchor's open gives the browser's Back a way back (one entry)"},
 	{"viewer.js", `window.addEventListener("popstate", () => {`, "the browser's Back in an anchored file returns to the overview"},
 	{"viewer.js", "let ownBack = history.state?.gg === \"back\"", "a reload keeps knowing its own Back entry"},
+	{"style.css", ".vdoc { max-width: 100ch; margin: 0 auto; padding: 8px 16px; white-space: normal; font-size: clamp(12px, 0.45vw + 6.6px, 17px); line-height: 1.5; }", "an overview's type and column grow with a large window"},
 	{"style.css", ".md-anchor.asel", "the selected anchor is styled"},
 	{"style.css", ".md-anchor.agone", "a missing anchor is styled"},
 	{"style.css", ".vline.vrange", "the range is tinted"},
