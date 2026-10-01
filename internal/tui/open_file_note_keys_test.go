@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/homeend/gigagit/internal/agentdocs"
 )
 
 func TestNoteReferenceText(t *testing.T) {
@@ -13,10 +15,10 @@ func TestNoteReferenceText(t *testing.T) {
 	d := notedDoc(t, 10)
 	a, _ := d.addNote(3, 4, "s", "", "")
 	b, _ := d.addNote(7, 7, "s", "", "")
-	if got, want := a.reference("dir/f.go"), "gg note "+a.id+" dir/f.go:3-4"; got != want {
+	if got, want := agentdocs.NoteReference(*a), "gg note "+a.ID+" f.go:3-4"; got != want {
 		t.Errorf("reference = %q, want %q", got, want)
 	}
-	if got, want := b.reference("f.go"), "gg note "+b.id+" f.go:7"; got != want {
+	if got, want := agentdocs.NoteReference(*b), "gg note "+b.ID+" f.go:7"; got != want {
 		t.Errorf("reference = %q, want %q", got, want)
 	}
 }
@@ -57,7 +59,7 @@ func TestBraceKeyMovesToTheNextOpenFileWithNotes(t *testing.T) {
 	// version; the note is planted directly — only the stepping is under test.)
 	other := newOpenFile(fileSource{kind: srcCommit, rev: "abc"}, "b.txt")
 	other.fill(fileContentMsg{lines: docLines(10)}, 10, 80)
-	other.notes = []*fileNote{{id: "t-x", seq: 1 << 40, start: 3, end: 3, summary: "in other", author: "agent"}}
+	other.notes = []agentdocs.Note{{ID: "t-x", Seq: 1 << 40, Start: 3, End: 3, Summary: "in other", Author: "agent"}}
 	other.syncNoteRows()
 	m.openFiles.touch(m.currentWorktree, other, m.docShown)
 	m.openFiles.touch(m.currentWorktree, d, m.docShown) // d is the most recent again
@@ -73,13 +75,14 @@ func TestDismissAndReferenceActOnTheCursorLinesNote(t *testing.T) {
 	m, d := notedViewer(t)
 	copied := new(string)
 	m.clipWrite = func(_ io.Writer, s string) (string, error) { *copied = s; return "fake", nil }
-	n, _ := d.addNote(5, 6, "first", "", "")
+	np, _ := d.addNote(5, 6, "first", "", "")
+	n := *np
 	m = fvKeys(t, m, key("r"), key("d")) // cursor on line 1: no note there
 	if *copied != "" || len(d.notes) != 1 {
 		t.Fatal("r/d acted on a line that carries no note")
 	}
 	m = fvKeys(t, m, key("}"), key("r"))
-	if want := n.reference("a.txt"); *copied != want {
+	if want := agentdocs.NoteReference(n); *copied != want {
 		t.Fatalf("copied %q, want %q", *copied, want)
 	}
 	m = fvKeys(t, m, key("d"))

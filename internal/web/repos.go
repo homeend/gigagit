@@ -16,6 +16,10 @@ import (
 func (s *Server) handleRepos(w http.ResponseWriter, r *http.Request) {
 	served, _ := s.service().TopLevel(r.Context()) // "" on error: nothing is marked current
 	entries := repos.Load(s.reposStatePath())
+	// Registry-only, so the list paints at once: this grouping knows the
+	// remote names; the details lane adds the common dirs (a checkout with
+	// its worktrees).
+	proj := repos.Projects(entries, nil)
 	rows := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
 		rows = append(rows, map[string]any{
@@ -23,6 +27,7 @@ func (s *Server) handleRepos(w http.ResponseWriter, r *http.Request) {
 			"name":        repos.Name(e),
 			"current":     served != "" && sameRepoPath(e.Path, served),
 			"last_opened": e.LastOpened,
+			"project":     projectOrNil(proj, e.Path),
 		})
 	}
 	writeJSON(w, map[string]any{"repos": rows})

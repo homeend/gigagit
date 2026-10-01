@@ -679,8 +679,9 @@ $("remotes-list").addEventListener("click", (e) => {
 // openRecyclePicker turns the menu into one row per candidate worktree (the
 // TUI's picker): the path cut in the MIDDLE and padded to one column, then
 // the branch it has now. target is the op's branch half ({branch} or
-// {ref, name}); onto names the branch the worktree ends on. A worktree with a
-// running agent session asks once before the op starts.
+// {ref, name}); onto names the branch the worktree ends on. A worktree in use
+// (a running agent session, a claim, a reserve) is the op's own
+// recycle.blocked question, answered in the decision modal.
 function openRecyclePicker(target, onto, x, y) {
   const cands = recycleCandidates(state.worktrees, state.worktree, state.sessions);
   // Non-breaking: a menu button collapses runs of plain spaces, which would
@@ -697,12 +698,7 @@ function openRecyclePicker(target, onto, x, y) {
       startOp({ op: "recycle-worktree", path: c.path, ...target }, "recycling " + c.path + " → " + onto);
     items.push({
       label: paths[i] + NBSP.repeat(col - runes(paths[i]).length) + suffix(c),
-      act: () =>
-        c.live
-          ? showLocalConfirm("An agent session is running in " + c.path + ". Recycle it anyway?", ["recycle", "cancel"], (o) => {
-              if (o === "recycle") start();
-            })
-          : start(),
+      act: start,
     });
   });
   // The menu that picked the row is closing; open the picker on the next tick

@@ -27,6 +27,7 @@ func diskDoc(t *testing.T, m Model, name string, n int) *openFile {
 	}
 	d := newOpenFile(fileSource{kind: srcWorktree}, name)
 	d.fill(fileContentMsg{lines: docLines(n)}, 10, 80)
+	m.adoptDoc(d)
 	m.openFiles.touch(m.currentWorktree, d, m.docShown)
 	return d
 }
@@ -121,8 +122,8 @@ func TestNoteAddReadsTheDiskFirstWhenItChanged(t *testing.T) {
 	if !ok || !r.OK || d == nil || len(d.notes) != 1 {
 		t.Fatalf("reply=%+v ok=%v doc=%v", r, ok, d)
 	}
-	if n := d.notes[0]; n.start != 1 || len(n.anchor) != 1 || n.anchor[0] != "NEW TOP" {
-		t.Fatalf("note = line %d anchor %q, want line 1 anchored on the disk's NEW TOP", n.start, n.anchor)
+	if n := d.notes[0]; n.Start != 1 || len(d.docs.NoteText(n.ID)) != 1 || d.docs.NoteText(n.ID)[0] != "NEW TOP" {
+		t.Fatalf("note = line %d text %q, want line 1 on the disk's NEW TOP", n.Start, d.docs.NoteText(n.ID))
 	}
 }
 
@@ -154,6 +155,7 @@ func TestPageDownStopsAtTheFirstLineNotYetShown(t *testing.T) {
 	m := loadedNavModel(t)
 	d := newOpenFile(fileSource{kind: srcWorktree}, "long.txt") // far longer than the window
 	d.fill(fileContentMsg{lines: docLines(200)}, 10, 80)
+	m.adoptDoc(d)
 	m.openFiles.touch(m.currentWorktree, d, m.docShown)
 	m = m.pushLayer(&fileViewer{d})
 	if _, err := d.addNote(2, 2, "tall", numbered("r", 80), ""); err != nil {

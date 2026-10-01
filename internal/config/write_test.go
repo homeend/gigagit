@@ -379,3 +379,32 @@ func TestSetWebServeAndAddr(t *testing.T) {
 		t.Fatalf("after clearing = %+v", cfg.Web)
 	}
 }
+
+func TestSetAgentsReservedRoundTrip(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	p := filepath.Join(d, ".gg.toml")
+	missing := filepath.Join(d, "missing.toml")
+	os.WriteFile(p, []byte("# keep me\n[ui]\ntheme = \"dark\"\n"), 0o644)
+	if err := SetAgentsReserved(p, []string{"../wt a", `C:\x`}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(missing, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Agents.Reserved) != 2 || c.Agents.Reserved[0] != "../wt a" || c.Agents.Reserved[1] != `C:\x` {
+		t.Fatalf("Reserved = %q", c.Agents.Reserved)
+	}
+	raw, _ := os.ReadFile(p)
+	if !strings.Contains(string(raw), "# keep me") {
+		t.Fatal("comment lost")
+	}
+	if err := SetAgentsReserved(p, nil); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load(missing, p)
+	if len(c.Agents.Reserved) != 0 {
+		t.Fatalf("Reserved after clear = %q", c.Agents.Reserved)
+	}
+}

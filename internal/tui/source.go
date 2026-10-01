@@ -79,6 +79,17 @@ type statusPayload struct {
 type worktreesPayload struct {
 	worktrees []model.Worktree
 	headTimes map[string]int64
+	marks     map[string]domain.WorktreeMark
+}
+
+// worktreeMarksFor reads the live claims and reserves over a worktree list
+// the caller just loaded (no second git worktree list).
+func worktreeMarksFor(svc *domain.Service, wts []model.Worktree) map[string]domain.WorktreeMark {
+	var reserved []string
+	if ac, _, err := domain.AgentsConfigFrom(wts); err == nil {
+		reserved = ac.Reserved
+	}
+	return svc.WorktreeMarks(wts, reserved)
 }
 
 // feedPayload carries the initial commit feed page produced by LoadInitial.
@@ -192,7 +203,7 @@ func (m Model) readSourceCmd(ctx context.Context, s sourceKey, opts reloadOpts) 
 			if times == nil {
 				times = map[string]int64{}
 			}
-			out.value = worktreesPayload{worktrees: wts, headTimes: times}
+			out.value = worktreesPayload{worktrees: wts, headTimes: times, marks: worktreeMarksFor(svc, wts)}
 		case srcFeed:
 			// Automatic refreshes RECONCILE: the fresh page 0 merges into what is
 			// already loaded, so a background tick never throws away the pages a

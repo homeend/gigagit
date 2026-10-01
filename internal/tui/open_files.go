@@ -148,6 +148,7 @@ func (m Model) registerDocEv(d *openFile) (Model, *openFile) {
 	if m.openFiles == nil {
 		return m, nil
 	}
+	m.adoptDoc(d)
 	ev := m.openFiles.touch(m.currentWorktree, d, m.docShown)
 	if ev != nil {
 		m.statusMsg = i18n.T("closed %s (%d files open)", ev.path, maxOpenFiles)
@@ -187,6 +188,9 @@ func (m Model) escDoc(d *openFile) Model {
 // closeDoc closes d for good (X or esc on it, x in the switcher): off the
 // screen and out of the list.
 func (m Model) closeDoc(d *openFile) Model {
+	if len(d.notes) > 0 {
+		d.clearNotes() // X drops the notes — in every frontend the store shows
+	}
 	m = m.detachDoc(d)
 	m.openFiles.remove(m.currentWorktree, d)
 	return m

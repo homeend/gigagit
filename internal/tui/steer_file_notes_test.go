@@ -35,10 +35,10 @@ func TestNoteAddOpensTheFileInTheBackgroundAndAnswersWithTheNote(t *testing.T) {
 	}
 	r := awaitNote(t, nm, "n-1")
 	n := d.notes[0]
-	if !r.OK || r.Detail != "noted a.txt:18-19 as "+n.id || len(r.Notes) != 1 {
+	if !r.OK || r.Detail != "noted a.txt:18-19 as "+n.ID || len(r.Notes) != 1 {
 		t.Fatalf("reply = %+v", r)
 	}
-	if w := r.Notes[0]; w.ID != n.id || w.FileID != d.id() || w.Path != "a.txt" || w.Start != 18 || w.End != 19 || w.Summary != "the edited line" || w.Author != "agent" {
+	if w := r.Notes[0]; w.ID != n.ID || w.FileID != d.id() || w.Path != "a.txt" || w.Start != 18 || w.End != 19 || w.Summary != "the edited line" || w.Author != "agent" {
 		t.Fatalf("wire note = %+v", w)
 	}
 }
@@ -119,28 +119,28 @@ func TestNoteListShowAndRemove(t *testing.T) {
 
 	nm, cmd := m.applySteer(steer.Command{ID: "l-1", Cmd: "note_list", Wait: true})
 	runSteerCmd(t, cmd)
-	if r := awaitNote(t, nm, "l-1"); !r.OK || len(r.Notes) != 2 || r.Notes[0].ID != a.id || r.Notes[1].Author != "claude" {
+	if r := awaitNote(t, nm, "l-1"); !r.OK || len(r.Notes) != 2 || r.Notes[0].ID != a.ID || r.Notes[1].Author != "claude" {
 		t.Fatalf("list = %+v", r)
 	}
 	if got := nm.openFilesProto(); len(got) != 1 || got[0].Notes != 2 {
 		t.Fatalf("open files = %+v, want the note count 2", got)
 	}
 
-	nm, cmd = nm.applySteer(steer.Command{ID: "s-1", Cmd: "note_show", NoteID: a.id, Wait: true})
+	nm, cmd = nm.applySteer(steer.Command{ID: "s-1", Cmd: "note_show", NoteID: a.ID, Wait: true})
 	runSteerCmd(t, cmd)
 	r := awaitNote(t, nm, "s-1")
 	if !r.OK || len(r.Notes) != 1 || len(r.Notes[0].Text) != 2 || r.Notes[0].Text[0] != "line 2" || r.Notes[0].Rationale != "why" {
 		t.Fatalf("show = %+v", r)
 	}
 
-	nm, cmd = nm.applySteer(steer.Command{ID: "d-1", Cmd: "note_rm", NoteID: a.id, Wait: true})
+	nm, cmd = nm.applySteer(steer.Command{ID: "d-1", Cmd: "note_rm", NoteID: a.ID, Wait: true})
 	runSteerCmd(t, cmd)
-	if r := awaitNote(t, nm, "d-1"); !r.OK || r.Detail != "removed "+a.id || len(d.notes) != 1 {
+	if r := awaitNote(t, nm, "d-1"); !r.OK || r.Detail != "removed "+a.ID || len(d.notes) != 1 {
 		t.Fatalf("rm = %+v notes=%d", r, len(d.notes))
 	}
-	nm, cmd = nm.applySteer(steer.Command{ID: "s-2", Cmd: "note_show", NoteID: a.id, Wait: true})
+	nm, cmd = nm.applySteer(steer.Command{ID: "s-2", Cmd: "note_show", NoteID: a.ID, Wait: true})
 	runSteerCmd(t, cmd)
-	if r := awaitNote(t, nm, "s-2"); r.OK || r.Error != "no note "+a.id {
+	if r := awaitNote(t, nm, "s-2"); r.OK || r.Error != "no note "+a.ID {
 		t.Fatalf("show of a removed note = %+v", r)
 	}
 	nm, cmd = nm.applySteer(steer.Command{ID: "d-2", Cmd: "note_rm", File: "a.txt", Wait: true})

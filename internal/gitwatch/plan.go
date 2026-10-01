@@ -39,6 +39,18 @@ func Plan(commonDir, worktreeDir string, enabled []Source) []Group {
 			Dir:   filepath.Join(commonDir, "worktrees"),
 			Match: func(base string) []Source { return []Source{Worktrees} },
 		})
+		claim := func(base string) []Source {
+			if base == "gg-claim" {
+				return []Source{Worktrees}
+			}
+			return nil
+		}
+		// An agent's claim lives in the worktree's own git dir; index and
+		// HEAD churn in the same dirs match nothing.
+		groups = append(groups,
+			Group{Dir: filepath.Join(commonDir, "worktrees"), Recursive: true, Match: claim},
+			Group{Dir: commonDir, Match: claim},
+		)
 	}
 	if on[Branches] {
 		groups = append(groups, Group{

@@ -36,7 +36,6 @@ var recycleWiring = []struct{ file, want, why string }{
 	{"sidebar.js", "function openRecyclePicker(", "the row opens the worktree picker"},
 	{"sidebar.js", `op: "recycle-worktree"`, "a pick starts the op"},
 	{"sidebar.js", "elidePath(", "picker paths are cut in the middle"},
-	{"sidebar.js", "An agent session is running in ", "a live session asks first"},
 	{"sidebar.js", `const NBSP = "\u00a0"`, "the picker's gaps and column padding survive HTML whitespace collapsing"},
 }
 
@@ -60,5 +59,15 @@ func TestRecycleWired(t *testing.T) {
 	// Both menus carry the row: the branch menu and the remote menu.
 	if n := strings.Count(readStatic(t, "sidebar.js"), `"recycle a worktree…"`); n != 2 {
 		t.Errorf("recycle row appears %d times in sidebar.js, want 2 (branch + remote menu)", n)
+	}
+}
+
+// A live session (or a claim, a reserve, the main checkout) is the op's own
+// recycle.blocked question, answered in the parking decision modal — the
+// picker must not ask a second time first.
+func TestRecyclePickerAsksNothingItself(t *testing.T) {
+	t.Parallel()
+	if strings.Contains(readStatic(t, "sidebar.js"), "An agent session is running in ") {
+		t.Fatal("sidebar.js still confirms a live session itself; the op asks recycle.blocked")
 	}
 }

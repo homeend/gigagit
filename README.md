@@ -93,7 +93,7 @@ this session is also kept in Settings `,` → Session errors.
 | `ctrl+l` | on the Commits panel: load the next batch of history on demand (without waiting to scroll to the bottom) |
 | `Home`/`End` | jump to the top / bottom of any navigable list; **End** on the Commits panel also loads the next history batch — press again to walk deeper |
 | `ctrl+f` | on the Commits panel: **eager search** — pages unloaded history for the next match of the active `/` filter or `@` highlight query and jumps to it. Every press digs past the already-loaded commits (a hit already on screen doesn't stop it), and gg asks before loading many more pages; the `/` filter stays engaged just like `@` (the query stays visible in the bar), and the last query is remembered so `ctrl+f` keeps digging even after you esc-clear the search |
-| `R` | switch repository — a fullscreen table of known repos (name, slow-fs marker, path, last opened, each in its own aligned column; over-long paths middle-elide so both ends stay readable): type to filter by name or path (no `/` needed; `esc` clears the filter first, closes on the next press), `enter` switches, `ctrl+d` forgets, `ctrl+p` copies the selected row's absolute path, and `ctrl+g` groups the list by project — each project's most recently opened checkout leads under the project name, with its other checkouts and worktrees beneath it; a project with a single row keeps its directory name (press again for the flat list; remembered for the session). The browser UI (`gg web`, ☰ → *repositories* → *switch repo*, or the palette's **switch repo…**) shows the same table with a **branch** column first (branch · name · slow-fs · path · last opened); the box grows to fit the longest path, and when even the viewport is too narrow the path is cut from the **middle** by the same rule (leaf, its parent and the root survive; hover shows the full path), never from the right. The branch and slow-fs verdicts arrive a moment after the list — a checkout on a hung network mount never delays the others — and typing filters on branch, name and path |
+| `R` | switch repository — a fullscreen table of known repos (name, slow-fs marker, path, last opened, each in its own aligned column; over-long paths middle-elide so both ends stay readable): type to filter by name or path (no `/` needed; `esc` clears the filter first, closes on the next press), `enter` switches, `ctrl+d` forgets, `ctrl+p` copies the selected row's absolute path, and `ctrl+g` groups the list by project — a checkout with its linked worktrees (they share one git common dir), plus any clone of the same remote repository; each project's most recently opened checkout leads under the project name (the remote's, else the main checkout's directory), with its other checkouts and worktrees beneath it; a project with a single row keeps its directory name (press again for the flat list; the choice is remembered across sessions). The browser UI (`gg web`, ☰ → *repositories* → *switch repo*, or the palette's **switch repo…**) shows the same table with a **branch** column after the name (name · branch · slow-fs · path · last opened); the box grows to fit the longest path, and when even the viewport is too narrow the path is cut from the **middle** by the same rule (leaf, its parent and the root survive; hover shows the full path), never from the right. The branch and slow-fs verdicts arrive a moment after the list — a checkout on a hung network mount never delays the others — and typing filters on branch, name and path; `ctrl+g` (or the clickable hint under the table) groups it by project exactly as the TUI does, remembered in the web's own layout state |
 | `ctrl+o` | **shell escape** — the emergency hatch: suspends gg into an interactive `$SHELL` (`%COMSPEC%` on Windows) in the current worktree, from **any** surface, including mid conflict-resolve or any other window — `exit` returns to gg with a full reload. Never swallowed by whatever window is open, but it waits for a running gg operation to finish first |
 | `ctrl+p` | **command palette** — a launcher for commands that don't have (or don't need) their own dedicated key; just start typing to filter the list (`↑`/`↓` move, `enter` runs, `esc` clears the filter, then closes): **Show commit** (`#`), **File history** / **File blame** (type a path — relative, absolute, or `./`-prefixed, normalized to repo-relative — then opens the same `h`/`b` view), **Find** (`F`, the working-tree files window), **Open repo** (type a path to a repo not already open; `~` expands to home; an invalid path shows an inline error instead of switching), **Apply patch…** (an editable path popup — applies a patch file to the working tree as unstaged changes, conflicts landing as markers for `x`; a `git format-patch` mailbox offers to recreate its commits instead — see `gg apply` below), **Browse remote branches** (list branches on the remote that a narrowed fetch refspec left unfetched — one `ls-remote`, `/` filters — and check one out, staying put or switching, adding a per-branch fetch mapping first), **Git config explorer**, **Set up agent skills**, **Open shell** (same as `ctrl+o`), and **Run shell command…** (type one command, run it in the worktree with a press-enter-to-return pause so the output stays on screen; `alt+↓`/`alt+↑` recalls previous commands); `↑`/`↓` select, `enter` runs, `esc` closes |
 | `,` | settings: **Identity & profiles** — view/edit the git `user.name`/`user.email` (global vs repo-local, kept distinct) and manage named identity **profiles** (global or per-repo presets; `enter`/`e` prompts *apply to this repo or globally*) — **Branch prefixes**, **Branch filters…** (browse/edit/remove the five `alt+1…5` slots, global or per-repo), the **Operation log** toggle, and **Session errors**: a viewer of this session's failed git operations (also written to an always-on `errors.log` in the gg state dir). The menu is type-to-filter like `ctrl+p`: any character narrows the list, `↑`/`↓` + `enter` opens/toggles, `esc` clears the filter first and closes on the next press. (Set up agent skills and the Git config explorer moved to the command palette — see `ctrl+p`.) |
@@ -211,6 +211,14 @@ gg prefix add [--global] <value>          # add a branch prefix (default scope: 
 gg prefix rm [--global] <value>           # remove a branch prefix
 gg undo
 gg worktree list
+gg worktree list --json | --free [--json]
+                                      # for orchestrating agents: every worktree's facts (dirty + last change,
+                                      # claim, sessions, tui, reserved, paused op, git lock), a free verdict and
+                                      # blocked_by reasons; --free = only free ones, clean first, then stale-dirty
+gg worktree claim [--note <text>] <path>   # an agent running inside gg ($GG_SESSION_ID) takes a free worktree;
+                                      # atomic, ends with the session; outside gg it exits 2
+gg worktree release [--force] <path>  # give a claim back (exit 0 with no claim)
+gg worktree reserve|unreserve <path>  # keep a worktree away from agents ([agents] reserved)
 gg worktree add [<start-point>]
 gg worktree add --branch <name> [<path>]  # existing branch; <path> (cwd-relative) overrides the path template
 gg worktree add --from <commit> [--keep staged|unstaged] [<branch-name>]
@@ -930,6 +938,28 @@ real default and a one-line description, and can be edited right there:
 text field. Everything else is read-only browsing (use `git config` for
 exotic keys). `/` filters as you type; `ctrl+t` maximizes the popup to a near-fullscreen box; `esc` closes.
 
+### Agents and worktrees
+
+`[agents]` governs which worktrees an orchestrating agent may take
+(`gg worktree list --free`, `gg worktree claim`, and the guard every
+`gg worktree recycle` asks):
+
+```toml
+[agents]
+reserved = ["../gigagit-main-work"]  # never handed to an agent; REPO file only, relative to the main worktree
+stale_after = "14d"                  # a dirty worktree untouched this long may be recycled (its changes shelved)
+allow_main = false                   # let agents take the main checkout
+```
+
+A worktree is free when it is not the main checkout, has a branch checked
+out, no paused merge/rebase, no git lock, is not reserved or claimed, has no
+running agent session and no gg TUI open in it, and is clean or dirty but
+untouched for `stale_after`. Recycling one that is in use (claimed by another
+agent, reserved, a running session, the main checkout…) asks first — the TUI
+shows the question, the CLI needs `--force`. In the TUI Worktrees tab ⚑
+marks a claimed row (the bottom bar says who, since when, and why) and ⊘ a
+reserved one; the `.` menu reserves, unreserves and releases claims.
+
 ### Post-worktree hook
 
 After `gg` creates a worktree it can run a per-repo shell script — handy for
@@ -1340,8 +1370,12 @@ back to the agent when you want to ask about that remark. A note taller than
 half the window is cut in place; `enter` opens it in full. `gg session note
 list|show|rm|clear` are the agent's other verbs. The notes are temporary: they
 follow their lines as the file changes, a file carrying them stays open on esc,
-and closing it (X) drops them. They need a running TUI; `gg web` does not show
-them yet.
+and closing it (X) drops them. The gg web page shows them too: a box under
+the lines in its file viewer, with `d` / `r` / `}` / `{` and **dismiss** and
+**copy reference** buttons, and `· N notes` on the file's switcher row. A TUI
+that serves its own web page (`[web]`, `gg --web`) shows the same notes in
+both — dismiss one in the browser and it leaves the terminal. A standalone
+`gg web` answers `gg session note` itself when no TUI is running.
 
 For a **guided tour** the agent writes an overview: `gg session overview add
 --title "…" < tour.md` shows a markdown document that lives only in the TUI,

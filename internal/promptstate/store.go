@@ -37,6 +37,10 @@ type Store interface {
 	StackedDiff() bool
 	// SetStackedDiff persists it.
 	SetStackedDiff(on bool) error
+	// RepoGrouped reports whether the TUI repo switcher opens grouped (ctrl+g).
+	RepoGrouped() bool
+	// SetRepoGrouped persists it.
+	SetRepoGrouped(on bool) error
 	// TaskLaunchChoice returns the AI-task launch dialog's last choice for kind.
 	TaskLaunchChoice(kind string) (TaskLaunch, bool)
 	// SetTaskLaunchChoice persists it.

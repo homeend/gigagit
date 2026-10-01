@@ -58,18 +58,23 @@ type ofEntry struct {
 	line    int
 	disk    diskStat
 	checked time.Time
+	// pinned: an agent's notes are on it (agentdocs_follow.go) — never
+	// evicted, and a plain close (esc) backgrounds it instead.
+	pinned bool
 }
 
 type openFiles struct {
-	mu       sync.Mutex
-	seq      int
+	mu sync.Mutex
+	// next numbers entries: the agent-docs store's NextFileSeq, so an id a
+	// TUI hosting this page hands out never names a different file here.
+	next     func() int64
 	byWT     map[string][]*ofEntry
 	tabShows map[string]string // tab → the id its viewer shows
 	streams  map[string]int    // tab → its live /api/events streams
 }
 
-func newOpenFiles() *openFiles {
-	return &openFiles{byWT: map[string][]*ofEntry{}, tabShows: map[string]string{}, streams: map[string]int{}}
+func newOpenFiles(next func() int64) *openFiles {
+	return &openFiles{next: next, byWT: map[string][]*ofEntry{}, tabShows: map[string]string{}, streams: map[string]int{}}
 }
 
 // shownLocked reports whether any tab shows id.
@@ -100,7 +105,8 @@ func (r *openFiles) wireLocked(e *ofEntry) steer.OpenFile {
 }
 
 // frontLocked moves e first in wt's list (adding it when new) and, over the
-// cap, drops the least recently shown entry no tab shows.
+// cap, drops the least recently shown entry no tab shows and no agent's
+// notes pin; with none to drop the list grows past the cap.
 func (r *openFiles) frontLocked(wt string, e *ofEntry) (evicted string) {
 	l := []*ofEntry{e}
 	for _, o := range r.byWT[wt] {
@@ -110,7 +116,7 @@ func (r *openFiles) frontLocked(wt string, e *ofEntry) (evicted string) {
 	}
 	if len(l) > maxOpenFiles {
 		for i := len(l) - 1; i > 0; i-- {
-			if !r.shownLocked(l[i].id) {
+			if !r.shownLocked(l[i].id) && !l[i].pinned {
 				evicted = l[i].key.Path
 				l = append(l[:i], l[i+1:]...)
 				break
@@ -134,8 +140,7 @@ func (r *openFiles) open(wt string, k ofKey, tab string, line int) (steer.OpenFi
 		}
 	}
 	if e == nil {
-		r.seq++
-		e = &ofEntry{id: "f" + strconv.Itoa(r.seq), key: k}
+		e = &ofEntry{id: "f" + strconv.FormatInt(r.next(), 10), key: k}
 	}
 	if line > 0 {
 		e.line = line
@@ -145,6 +150,48 @@ func (r *openFiles) open(wt string, k ofKey, tab string, line int) (steer.OpenFi
 	}
 	ev := r.frontLocked(wt, e)
 	return r.wireLocked(e), ev
+}
+
+// ensureOpen lists k when it is not listed yet — first, as every open is,
+// with pinned set before any eviction is weighed — and reports the entry,
+// the path an addition pushed out ("" = none) and whether it was added. A
+// listed entry is left where it is (pinned is only ever added here).
+func (r *openFiles) ensureOpen(wt string, k ofKey, pinned bool) (steer.OpenFile, string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.byWT[wt] {
+		if e.key == k {
+			e.pinned = e.pinned || pinned
+			return r.wireLocked(e), "", false
+		}
+	}
+	e := &ofEntry{id: "f" + strconv.FormatInt(r.next(), 10), key: k, pinned: pinned}
+	ev := r.frontLocked(wt, e)
+	return r.wireLocked(e), ev, true
+}
+
+// setPinned pins wt's working-tree entries whose path is in paths and
+// unpins every other one; true when anything changed.
+func (r *openFiles) setPinned(wt string, paths map[string]bool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	changed := false
+	for _, e := range r.byWT[wt] {
+		if want := e.key.Src == "worktree" && paths[e.key.Path]; e.pinned != want {
+			e.pinned, changed = want, true
+		}
+	}
+	return changed
+}
+
+// pinnedEntry is id's key and pinned flag; found is false for no such id.
+func (r *openFiles) pinnedEntry(wt, id string) (k ofKey, pinned, found bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, e := r.findLocked(wt, id); e != nil {
+		return e.key, e.pinned, true
+	}
+	return ofKey{}, false, false
 }
 
 // focus makes id what tab shows and moves it first.

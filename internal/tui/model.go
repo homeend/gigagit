@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/clock"
@@ -52,31 +53,32 @@ type Model struct {
 	commits   []model.Commit
 
 	worktrees              []model.Worktree
-	tags                   []model.Tag         // refs/tags; shown by the Tags tab in the middle slot
-	remoteTagNames         map[string]bool     // tag names known on the default remote (▲); nil until a lookup runs
-	pendingRemoteTagSet    string              // tag to add to remoteTagNames on next op success (optimistic push)
-	pendingRemoteTagUnset  string              // tag to drop from remoteTagNames on next op success (optimistic delete-remote)
-	pendingPushTags        []string            // tip tags to push after a successful branch Push (chained as PushTags op)
-	pendingRepairSwitch    string              // translated worktree path to switch to after a successful RepairWorktree (chained in opFinishedMsg)
-	pendingWorktreeMoveOld string              // old path of a just-moved worktree; MRU registry cleanup in opFinishedMsg
-	pendingDriftBranch     string              // branch to DriftAfter-check once this op finishes (armed by startOp for rebase/merge/pull/ContinueOp)
-	pendingDriftPaused     bool                // true when the armed op is resuming a merge/rebase paused for conflicts (see notify.go's driftNotice)
-	pendingGotoTip         string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
-	pendingSteer           *pendingSteer       // parked navigate (steer_nav.go); drained by the load it waits on
-	pendingHint            *pendingHint        // navigate whose hint (steer_nav.go) is being revealed; drained by bookmarksLoadedMsg/shelfLoadedMsg
-	hintGen                int                 // generation guard for pendingHint (fix F3): bumped on every stage, stamped into the hint's OWN load so an unrelated bookmark/shelf load in flight can never be mistaken for it
-	startAt                model.Link          // --at: where to land once the preconditions below have landed
-	startAtPending         bool                // consumed exactly once, by startAtReady's last precondition
-	startAtPreviewsSeen    bool                // the srcPreviews read has landed at least once since startup
-	pendingCheckout        pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
-	pendingScopeClear      bool                // armed by startOp for checkout-family ops; a Changed success drops the solo/scope (the reRoot precedent, but for a same-worktree switch)
-	pendingRemoteTagAdds   []string            // tags to optimistically add to remoteTagNames on PushTags success
-	pushCheckGen           int                 // generation guard for the async pre-push remote-tag check
-	pickGen                int                 // generation guard for the async cherry-pick commit probe
-	entryCompareGen        int                 // drops stale commit-entry compare resolves (the pickGen pattern)
-	linkHistGen            int                 // drops a copied-link history load a newer host has superseded
-	pickPatchTemp          string              // patch lane's temp file; removed when its op finishes
-	reflog                 []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
+	worktreeMarks          map[string]domain.WorktreeMark // path -> live claim / reserve (Worktrees ⚑ / ⊘)
+	tags                   []model.Tag                    // refs/tags; shown by the Tags tab in the middle slot
+	remoteTagNames         map[string]bool                // tag names known on the default remote (▲); nil until a lookup runs
+	pendingRemoteTagSet    string                         // tag to add to remoteTagNames on next op success (optimistic push)
+	pendingRemoteTagUnset  string                         // tag to drop from remoteTagNames on next op success (optimistic delete-remote)
+	pendingPushTags        []string                       // tip tags to push after a successful branch Push (chained as PushTags op)
+	pendingRepairSwitch    string                         // translated worktree path to switch to after a successful RepairWorktree (chained in opFinishedMsg)
+	pendingWorktreeMoveOld string                         // old path of a just-moved worktree; MRU registry cleanup in opFinishedMsg
+	pendingDriftBranch     string                         // branch to DriftAfter-check once this op finishes (armed by startOp for rebase/merge/pull/ContinueOp)
+	pendingDriftPaused     bool                           // true when the armed op is resuming a merge/rebase paused for conflicts (see notify.go's driftNotice)
+	pendingGotoTip         string                         // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
+	pendingSteer           *pendingSteer                  // parked navigate (steer_nav.go); drained by the load it waits on
+	pendingHint            *pendingHint                   // navigate whose hint (steer_nav.go) is being revealed; drained by bookmarksLoadedMsg/shelfLoadedMsg
+	hintGen                int                            // generation guard for pendingHint (fix F3): bumped on every stage, stamped into the hint's OWN load so an unrelated bookmark/shelf load in flight can never be mistaken for it
+	startAt                model.Link                     // --at: where to land once the preconditions below have landed
+	startAtPending         bool                           // consumed exactly once, by startAtReady's last precondition
+	startAtPreviewsSeen    bool                           // the srcPreviews read has landed at least once since startup
+	pendingCheckout        pendingCheckout                // arms the diverged-checkout recovery modal; zero remoteRef = none
+	pendingScopeClear      bool                           // armed by startOp for checkout-family ops; a Changed success drops the solo/scope (the reRoot precedent, but for a same-worktree switch)
+	pendingRemoteTagAdds   []string                       // tags to optimistically add to remoteTagNames on PushTags success
+	pushCheckGen           int                            // generation guard for the async pre-push remote-tag check
+	pickGen                int                            // generation guard for the async cherry-pick commit probe
+	entryCompareGen        int                            // drops stale commit-entry compare resolves (the pickGen pattern)
+	linkHistGen            int                            // drops a copied-link history load a newer host has superseded
+	pickPatchTemp          string                         // patch lane's temp file; removed when its op finishes
+	reflog                 []model.ReflogEntry            // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree        string
 	recycleBranch          string // branch captured when the Recycle-a-worktree picker opened
 	recycleRemote          string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
@@ -110,7 +112,7 @@ type Model struct {
 
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
 	statePath           string // repo-registry location; "" disables recording (tests)
-	repoGrouped         bool   // repo switcher's ctrl+g grouping, remembered for the session
+	repoGrouped         bool   // repo switcher's ctrl+g grouping, persisted in promptStore
 	linkRepoName        string // remote repository name for gg:// links; "" = the local (absolute-path) form
 	pendingSeqBump      []string
 	pendingSwitch       bool
@@ -130,6 +132,8 @@ type Model struct {
 
 	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
+	docs          *agentdocs.Store                         // the store the open files' notes live in: agentdocs.Shared(), which a hosted gg web page reads too
+	docsSub       *docsTrack                               // the TUI's one subscription to docs (agentdocs_track.go)
 	wtFiles       *worktreeFiles                           // F's working-tree mode of the files view (nil otherwise)
 	filesFull     bool                                     // ctrl+t: the files view spans the whole body
 	previewFull   bool                                     // ctrl+t on a focused preview: it spans the whole body
@@ -491,22 +495,30 @@ func New(svc *domain.Service) Model {
 		branchFilterSlot:       map[panel]int{},
 		bfMemo:                 &branchFilterMemos{},
 		openFiles:              &openFilesReg{},
+		docs:                   agentdocs.Shared(),
 		childInbox:             map[domain.SessionID]string{},
 		taskTrack:              newTaskTrack(),
 		pendingCommitMsg:       map[string]pendingMessage{},
 		keptSteer:              map[string]bool{},
 	}
-	// The stacked-diff pref is machine-global, so it is read once here rather
-	// than per repo (no state dir → nil store → the single-file default).
+	m.docsSub = newDocsTrack(m.docs)
+	return m.loadPrefs()
+}
+
+// loadPrefs seeds the session from the machine-global TUI preferences. They
+// are read once here rather than per repo (no state dir → nil store → the
+// defaults: single-file diffs, a flat repo switcher).
+func (m Model) loadPrefs() Model {
 	if m.promptStore != nil {
 		m.diffStacked = m.promptStore.StackedDiff()
+		m.repoGrouped = m.promptStore.RepoGrouped()
 	}
 	return m
 }
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.startupWebCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -615,6 +627,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onWebSwitchRequest(msg)
 	case tasksChangedMsg:
 		return m.onTasksChanged()
+	case agentDocsChangedMsg:
+		return m.onAgentDocsChanged()
 	case taskLaunchReadyMsg:
 		return m.applyTaskLaunchReady(msg)
 	case taskSubmittedMsg:
@@ -1022,6 +1036,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				d.layOut(rows, m.overviewWidth(inner))
 				return m, nil
 			}
+			m.alignDocNotes(d, msg)
 			if n := d.fill(msg, rows, inner); n != "" {
 				m.statusMsg = n
 			}
@@ -1565,7 +1580,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case repoFSMsg:
 		if p := layerOf[*repoPopup](m); p != nil {
-			p.foreign = msg.foreign
+			// The common dirs can regroup the list: keep the cursor's row.
+			p.keepSel(func() { p.foreign, p.common = msg.foreign, msg.common })
 		}
 		return m, nil // popup closed before the probe returned: drop it
 	case filePathLsMsg:
@@ -1618,6 +1634,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the first repo switch (R). msg.top is exactly Snapshot.CurrentWorktree.
 		if msg.top != "" {
 			m.currentWorktree = msg.top
+			publishedWT.Store(msg.top)
 		}
 		m.linkRepoName = msg.repoName
 		// Seed refreshLastRun so the first heartbeat tick is one interval out
@@ -1676,6 +1693,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tags = msg.tags
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
+			publishedWT.Store(msg.currentWorktree)
+			m.worktreeMarks = msg.worktreeMarks
+			// The worktree's open files may have missed store changes while
+			// another worktree was current (a dismiss in the browser).
+			docsCmd := m.syncDocNotes()
 			m.linkRepoName = msg.repoName
 			m.cfg = msg.cfg
 			m = m.applyBranchFilterConfig()
@@ -1756,14 +1778,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m, reload = m.startFeedReload()
 				var forgeCmd tea.Cmd
 				m, forgeCmd = m.kickForgeProbe()
-				return m, tea.Batch(themeCmd, reload, previewsCmd, steerCmd, forgeCmd)
+				return m, tea.Batch(themeCmd, reload, previewsCmd, steerCmd, forgeCmd, docsCmd)
 			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
 			var forgeCmd tea.Cmd
 			m, forgeCmd = m.kickForgeProbe()
-			return m, tea.Batch(themeCmd, previewsCmd, steerCmd, forgeCmd)
+			return m, tea.Batch(themeCmd, previewsCmd, steerCmd, forgeCmd, docsCmd)
 		}
 	case dataAvailableMsg:
 		// Free the background lane the moment its active read's message arrives —
@@ -1930,6 +1952,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyBr := m.panelSelKey(panelBranches)
 			p := msg.value.(worktreesPayload)
 			m.worktrees = p.worktrees
+			m.worktreeMarks = p.marks
 			m.bfMemo.invalidate() // worktree checkouts are exemptions (see the dataLoadedMsg site)
 			m.headTimes = p.headTimes
 			m = m.restorePanelSel(panelWorktrees, keyWT)

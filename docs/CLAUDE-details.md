@@ -4181,14 +4181,85 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
 - **Gutter.** While a document has notes its lines give up `noteGutterW` (2)
   columns (`winOpts.prefixW`); covered lines carry `│ `. `activePreview`
   subtracts it from the width search/pan use.
-- **Re-anchoring** (`reanchorNotes`, called from `fill`): a live note follows
-  the `textdiff` alignment when all its lines survived unchanged and
-  contiguous, else it goes `outdated` (numbers kept, clamped). An outdated
-  note — or any note after a placeholder fill — returns only when its anchor
-  text is at its old place or at exactly ONE place in the file.
+- **The store.** Notes live in `internal/agentdocs` (spec
+  `2026-10-01-agent-docs-web-design.md`), filed under
+  `domain.CheckoutKey(<toplevel>)` + path. `tui.New` holds
+  `agentdocs.Shared()`; a page the TUI hosts (`web.NewHost(…, true)`) holds
+  the same one, so both show ONE set (same `t<n>`, a dismiss anywhere is a
+  dismiss everywhere). A document keeps a COPY (`openFile.notes
+  []agentdocs.Note`) that View draws; `agentDocsChangedMsg` (one
+  subscription, `agentdocs_track.go`) re-reads the copies. Open-file ids
+  come from `Shared().NextFileSeq()` (the hosted page's list uses the same
+  counter).
+- **Re-anchoring** (`agentdocs` `reanchor`, via `Store.Align`): the Model
+  aligns the store to a working-tree load's lines BEFORE `fill`
+  (`alignDocNotes`); `fill` then `syncNotes`. A live note follows the
+  `textdiff` alignment when all its lines survived unchanged and contiguous,
+  else it goes `outdated` (numbers kept, clamped). An outdated note returns
+  only when its anchor text is at its old place or at exactly ONE place in
+  the file. `Align` is idempotent per content fingerprint; a document whose
+  lines are not the content the notes sit on (the browser read a newer file)
+  does not adopt them and is re-read (`syncNotes` → stale).
 - **Steer.** `note_add|list|show|rm` run before `steerRefusal` (they never
   move the screen); `note_add` on a file that is not open/loaded rides
-  `noteLandedMsg`. The CLI (`gg session note`) posts to a TUI only.
+  `noteLandedMsg`. The CLI (`gg session note`) posts to the TUI when one is
+  live, else to gg web (`steerLive(both=false)`).
+- **Web side** (`internal/web`: `agentdocs_follow.go`, `steer_notes.go`,
+  `file_notes.go`). The server keeps its own store unless hosted. A follow
+  goroutine (started by `Host.Start`, also run by `adoptService`) lists every
+  noted file in the page's list (`ensureOpen`, background) and pins it
+  (`ofEntry.pinned`: never evicted; a plain `close` op — esc — backgrounds
+  it; `everywhere` — x — clears its notes), then fans out
+  `Reason: "agentdocs"`. `/api/file-content` aligns + returns `notes`
+  (working tree only) — the page never pairs notes with lines from another
+  read. `POST /api/file-notes {op:"dismiss"}`. `handleSteer` answers the
+  note verbs BEFORE `toSteerWire` (its 400 "unknown command") and the 409.
+  The web root is `TopLevel` (cached per service), never `svc.Root()`.
+- **Known limits.** A TUI plus a SEPARATE-process `gg web` on one worktree:
+  the verbs go to the TUI and that page shows none. Line numbers are over
+  canonical lines (`agentdocs.Lines`, the TUI's split: CR and CRLF break
+  lines); the web viewer splits only on LF, so a file with bare CRs shows
+  its boxes off by the CRs.
+
+
+## Worktree inventory, claims and guards (agent orchestration stage 1)
+
+Spec `docs/superpowers/specs/2026-09-30-worktree-inventory-design.md`.
+
+- **Guards.** `wtguard` (leaf) is the one interface; domain providers in
+  `domain/wtguards.go` (one per source: missing, main, detached, paused-op,
+  git-lock, reserved, claimed, tui, session, dirty-recent); the ONLY place
+  naming them is `domain/wtguard_set.go` (`WorktreeGuardSet` hook — a
+  composition root may wrap `StandardWorktreeGuards`; `GuardSources` holds
+  the unexported `liveView`, so only domain builds sources). `wtguard.Run`
+  asks cheap guards first and the expensive `git status` guard only when
+  nothing blocked; a skipped guard's fact is present and nil.
+- **Hard vs overridable.** Hard: missing, paused-op, git-lock,
+  status-failed, check-failed. The rest are overridable in recycle via ONE
+  `recycle.blocked` decision (`recycle anyway`/`abort`; CLI `--force`),
+  EXCEPT `dirty-recent` and `detached`, which recycle handles natively
+  (`recycle.dirty`; a detached target by design). A claim has no override.
+- **GuardReport runs inside ops** (`OpDeps.Guards`): it must never take the
+  repo gate — it reads `s.repo.Worktrees` and `AgentsConfigFrom(wts)`, not
+  `s.Worktrees`/`s.AgentsConfig` (gated: the op would wait on itself).
+  `TestRecycleThroughExecuteAsksTheGuards` pins it with a 5 s context.
+- **Sessions across processes.** `GG_SESSION_ID = <ProcTag>/<id>`
+  (`agentsession.ProcTag` = `<pid>-<start unixnano>`); each TUI publishes
+  `<state>/gg/sessions/<ProcTag>.json` (`domain.PublishSessions`, started in
+  `tui.Run`). A session is dead iff its proc's registry is live and does not
+  list it running, OR no live registry exists for its proc AND the pid is
+  gone — a stalled TUI (suspend/resume) keeps its claims.
+- **Claims** live in `<worktree git dir>/gg-claim` (O_EXCL); every
+  create/sweep/release runs under `filelock` on `gg-claim.lock` and re-reads
+  before removing (`sameClaim` is field-wise with `time.Equal`). An empty or
+  unparsable claim file is a crashed claimer's once it is 10 s old. Only a
+  running gg session may claim (`SessionNotLiveError` → CLI exit 2).
+- **Config.** `[agents] reserved` is REPO-only (`Load` drops the global
+  layer's list) and anchored on the MAIN worktree via
+  `Service.AgentsConfig` — the TUI must not use `m.repoConfigPath`, which
+  follows the cwd worktree's committed `.gg.toml`.
+- **Tests** that reach the registry must pin `XDG_STATE_HOME` (domain, cli
+  and tui TestMains do): `sessionreg.Live` deletes stale files.
 
 #### Overview documents (`overview*.go`, `steer_overview.go`)
 
@@ -4222,4 +4293,3 @@ selection, laid-out width); never on disk, never evicted, created
   the screen cannot take lands in the background. add/set stat path anchors
   off-thread (`anchorsCheckedMsg`) and answer with the unresolved ones.
   `steer.MaxCommandBytes` is 512 KiB for the 64 KiB text.
-

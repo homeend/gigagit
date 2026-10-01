@@ -22,6 +22,112 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **`internal/clock`**: one freezable "now" for stored and drawn times, so
   a frozen test clock renders ages and dates identically on every run.
 - **`gg --record` records alt keys** as `M-<key>` (they were comments).
+## Agent notes in gg web
+
+### Added
+
+- **An agent's temporary notes show in gg web.** `gg session note add` now
+  reaches a gg web page too: the file viewer draws each note in a box under
+  its last line, marks the lines it covers, and offers `d` (dismiss), `r`
+  (copy the `gg note t<n> <path>:<lines>` reference), `}` / `{` (next /
+  previous note, then the next file with notes) and **dismiss** / **copy
+  reference** buttons; the switcher's row says `· N notes`. A noted file is
+  pinned in the page's list (never pushed out at 20 files) and esc sends it
+  to the background; x closes it and drops its notes.
+- **One set of notes when the TUI serves the page.** The notes live in a new
+  process-wide store (`internal/agentdocs`) that the TUI and the page it
+  hosts share: same ids, a dismiss in either is gone from the other, and a
+  note follows its lines whichever side reads the changed file first.
+- **A standalone `gg web` answers `gg session note add|list|show|rm|clear`**
+  itself when no TUI is running (with the TUI's reply text).
+
+### Changed
+
+- `gg session note` no longer refuses with "temporary notes need a gg TUI"
+  when only gg web is live. Skill `using-gg` v111.
+
+## Worktree inventory for agents
+
+### Added
+
+- **An agent can find a worktree to work in.** `gg worktree list --json`
+  reports every worktree's facts — uncommitted changes and when they were
+  last touched, a claim, agent sessions, an open gg TUI, a reserve, a paused
+  merge/rebase, a git lock — with a `free` verdict and `blocked_by` reasons;
+  `--free` keeps the free ones, clean first, then stale-dirty by oldest
+  change, and says which `--on-dirty` a recycle needs.
+- **Claims.** `gg worktree claim [--note <url>] <path>` lets an agent running
+  inside gg take a free worktree atomically (of two racing agents exactly one
+  wins); `gg worktree release` gives it back, and a claim ends by itself when
+  its agent session ends — a crashed TUI's claims die with it (a reused pid
+  is told apart by its start time), a merely stalled one keeps them. A
+  claim records the host that wrote it, so a WSL gg never sweeps a Windows
+  gg's claim on a shared repo (or the reverse). Re-claiming a worktree you
+  hold succeeds.
+- **Reserves.** `gg worktree reserve|unreserve <path>` (or the TUI Worktrees
+  `.` menu) keeps a worktree away from agents (`[agents] reserved`, repo
+  config only). New `[agents] stale_after` (default `14d`) and `allow_main`.
+- **TUI.** ⚑ `<agent>` marks a claimed Worktrees row and ⊘ a reserved one;
+  the bottom bar shows who claimed it, since when, and the note; the `.` menu
+  reserves, unreserves and releases a claim (asking first). The recycle
+  picker shows the same marks.
+
+### Changed
+
+- **Recycle asks before taking a worktree in use.** Recycling a worktree
+  that another agent claimed, that is reserved, that has a running agent
+  session or a gg TUI open, or that is the main checkout raises one
+  `recycle.blocked` question (recycle anyway / abort) — the TUI's decision
+  modal, `gg worktree recycle --force` in a pipeline. It replaces the TUI's
+  own "agent session running" confirm. One set of worktree guards answers
+  this for the inventory, claims and recycle alike.
+- A CLI pipeline that hits a decision now prints the question with the
+  decision id, so an agent learns why it was refused.
+- Agent sessions get a machine-unique `GG_SESSION_ID`
+  (`<pid>-<start>/<id>`), and each TUI publishes its sessions to
+  `<state>/gg/sessions/` so other gg processes can see them.
+
+## Web switch-repo table groups by project
+
+### Added
+
+- **`ctrl+g` groups gg web's switch-repo table by project**, as the TUI's `R`
+  switcher does: a checkout with its linked worktrees (shared git common dir)
+  plus clones of the same remote, under the project's name, the rows beneath
+  it with a blank name. A hint line under the table shows the key, clickable,
+  and whether the table is grouped. The choice is remembered in the web's own
+  layout state (`repo_grouped`), independent of the TUI's. The server decides
+  the projects — the grouping logic moved into the `repos` package, so both
+  frontends share one implementation; `/api/repos` groups by remote name at
+  once and `/api/repos/details` adds the common dirs as the probes land.
+
+### Changed
+
+- **The switch-repo table leads with the name**, then the branch (name ·
+  branch · slow-fs · path · last opened), so a group's project name heads
+  its rows.
+
+## Repo switcher groups worktrees without a remote
+
+### Fixed
+
+- **The `R` switcher's `ctrl+g` grouping now joins a checkout with its linked
+  worktrees even when the repository has no remote.** Grouping went by the
+  remote repository name alone, so a local-only repository's worktrees were
+  scattered through the list as separate rows. A project is now also every
+  checkout sharing one git common dir (read from each entry's `.git` file —
+  no git call — by the same background probe that marks slow filesystems);
+  the remote name still joins separate clones. A group with no remote is named
+  after its main checkout's directory. Worktrees created from Windows on a
+  disk WSL shares (`gitdir: T:/…`) are followed through their `/mnt/t/…`
+  spelling, and the other way round.
+
+### Changed
+
+- **The switcher's `ctrl+g` grouping is remembered across sessions** (it
+  was forgotten when gg quit). It is machine-local UX memory beside the
+  diff view's stacked mode, and the flat list is still the default for a
+  new machine.
 
 ## Overview documents
 

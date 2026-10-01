@@ -97,7 +97,7 @@ func (m Model) openAnchor(ov *openFile, i int) (Model, tea.Cmd) {
 		}
 		a.missing = false
 		ov.ov.paint(ov.p.lines)
-		d.pendingLine, d.pendingEnd = n.start, 0
+		d.pendingLine, d.pendingEnd = n.Start, 0
 		d.from, d.backgrounded = ov, true
 		return m.bringToFront(d)
 	}

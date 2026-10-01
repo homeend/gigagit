@@ -128,7 +128,8 @@ func TestSessionMenuRows(t *testing.T) {
 		return strings.Join(out, ",")
 	}
 	m.sel[panelWorktrees] = 0
-	if got := ids(); got != "start-agent,open-terminal" {
+	// worktree-reserve: the Worktrees row's agent reserve toggle (no claim here).
+	if got := ids(); got != "start-agent,open-terminal,worktree-reserve" {
 		t.Fatalf("worktree row: %s", got)
 	}
 	m.sel[panelWorktrees] = 1

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/homeend/gigagit/internal/agentdocs"
 )
 
 func wtKey(p string) ofKey { return ofKey{Src: "worktree", Path: p} }
@@ -20,7 +22,7 @@ func ids(r *openFiles, wt string) string {
 
 func TestOpenFilesOrderReuseAndState(t *testing.T) {
 	t.Parallel()
-	r := newOpenFiles()
+	r := newOpenFiles(agentdocs.New().NextFileSeq)
 	a, _ := r.open("/wt", wtKey("a.txt"), "t1", 0)
 	b, _ := r.open("/wt", wtKey("b.txt"), "t1", 7) // t1 now shows b; a is background
 	if a.ID != "f1" || b.ID != "f2" || b.Line != 7 {
@@ -44,7 +46,7 @@ func TestOpenFilesOrderReuseAndState(t *testing.T) {
 
 func TestOpenFilesReuseAcrossTabs(t *testing.T) {
 	t.Parallel()
-	r := newOpenFiles()
+	r := newOpenFiles(agentdocs.New().NextFileSeq)
 	x, _ := r.open("/wt", wtKey("a.txt"), "t1", 0)
 	y, _ := r.open("/wt", wtKey("a.txt"), "t2", 0)
 	if x.ID != y.ID || len(r.list("/wt")) != 1 {
@@ -63,7 +65,7 @@ func TestOpenFilesReuseAcrossTabs(t *testing.T) {
 
 func TestOpenFilesCloseEverywhereAndUnknown(t *testing.T) {
 	t.Parallel()
-	r := newOpenFiles()
+	r := newOpenFiles(agentdocs.New().NextFileSeq)
 	f, _ := r.open("/wt", wtKey("a.txt"), "t1", 0)
 	if !r.close("/wt", f.ID, "t2", true) || len(r.list("/wt")) != 0 {
 		t.Fatal("everywhere removes even while another tab shows it")
@@ -78,7 +80,7 @@ func TestOpenFilesCloseEverywhereAndUnknown(t *testing.T) {
 
 func TestOpenFilesBackgroundFocusCursorShown(t *testing.T) {
 	t.Parallel()
-	r := newOpenFiles()
+	r := newOpenFiles(agentdocs.New().NextFileSeq)
 	a, _ := r.open("/wt", wtKey("a.txt"), "t1", 0)
 	r.open("/wt", wtKey("b.txt"), "", 0)
 	if !r.background("/wt", a.ID, "t1", 12) || ids(r, "/wt") != "f2:background f1:background " {
@@ -103,7 +105,7 @@ func TestOpenFilesBackgroundFocusCursorShown(t *testing.T) {
 
 func TestOpenFilesStreamDropsShown(t *testing.T) {
 	t.Parallel()
-	r := newOpenFiles()
+	r := newOpenFiles(agentdocs.New().NextFileSeq)
 	r.streamOpened("t1")
 	r.streamOpened("t1") // a reconnect racing the old stream's end
 	r.open("/wt", wtKey("a.txt"), "t1", 0)
@@ -120,7 +122,7 @@ func TestOpenFilesStreamDropsShown(t *testing.T) {
 
 func TestOpenFilesCapEvictsLeastRecentNotShown(t *testing.T) {
 	t.Parallel()
-	r := newOpenFiles()
+	r := newOpenFiles(agentdocs.New().NextFileSeq)
 	first, _ := r.open("/wt", wtKey("p0.txt"), "t9", 0) // t9 keeps showing p0
 	for i := 1; i < maxOpenFiles; i++ {
 		r.open("/wt", wtKey(fmt.Sprintf("p%d.txt", i)), "", 0)
@@ -133,7 +135,7 @@ func TestOpenFilesCapEvictsLeastRecentNotShown(t *testing.T) {
 		t.Fatal("the shown file survived")
 	}
 	// Every entry shown: nothing can go, the list grows past the cap.
-	r2 := newOpenFiles()
+	r2 := newOpenFiles(agentdocs.New().NextFileSeq)
 	for i := 0; i <= maxOpenFiles; i++ {
 		_, ev := r2.open("/wt", wtKey(fmt.Sprintf("q%d.txt", i)), fmt.Sprintf("tab%d", i), 0)
 		if ev != "" {
@@ -147,7 +149,7 @@ func TestOpenFilesCapEvictsLeastRecentNotShown(t *testing.T) {
 
 func TestOpenFilesDueAndApplyStat(t *testing.T) {
 	t.Parallel()
-	r := newOpenFiles()
+	r := newOpenFiles(agentdocs.New().NextFileSeq)
 	now := time.Unix(1000, 0)
 	shown, _ := r.open("/wt", wtKey("s.txt"), "t1", 0)
 	bg, _ := r.open("/wt", wtKey("b.txt"), "", 0)
@@ -202,7 +204,7 @@ func TestStatDisk(t *testing.T) {
 
 func TestOpenFilesLookup(t *testing.T) {
 	t.Parallel()
-	r := newOpenFiles()
+	r := newOpenFiles(agentdocs.New().NextFileSeq)
 	k := ofKey{Src: "worktree", Path: "a.txt"}
 	if _, ok := r.lookup("/w", k); ok {
 		t.Fatal("lookup found a file never opened")
@@ -219,7 +221,7 @@ func TestOpenFilesLookup(t *testing.T) {
 
 func TestOpenFilesResolveAndLiveTabs(t *testing.T) {
 	t.Parallel()
-	r := newOpenFiles()
+	r := newOpenFiles(agentdocs.New().NextFileSeq)
 	r.open("/w", ofKey{Src: "worktree", Path: "a.txt"}, "", 0)
 	r.open("/w", ofKey{Src: "worktree", Path: "b.txt"}, "", 0)
 	for _, tc := range []struct{ id, path, want string }{

@@ -218,6 +218,9 @@ func (m Model) steerReload(c steer.Command) (Model, tea.Cmd) {
 		case "status":
 			srcs = append(srcs, srcStatus)
 			dropMarks = true
+		case "worktrees":
+			// An agent's gg worktree claim/release: the ⚑ marks follow.
+			srcs = append(srcs, srcWorktrees)
 		case "all":
 			all = true
 			dropMarks = true

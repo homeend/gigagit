@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/wtguard"
 )
 
 // Result is the outcome of an operation.
@@ -51,6 +52,10 @@ type OpDeps struct {
 	// it runs under the op's reservation, so it must not re-enter the gate.
 	// Nil makes shelveStaged return ErrNoShelve. domain.Execute wires it.
 	ShelveStaged func(ctx context.Context, dir, branch string) (model.ShelfEntry, error)
+	// Guards answers "may this worktree be taken?" from every composed
+	// source (git state, claims, sessions, config — domain.WorktreeGuardSet).
+	// The engine knows none of them. Nil = no guards (direct engine use).
+	Guards func(ctx context.Context, t wtguard.Target) (wtguard.Report, error)
 	// Versions governs pre-operation branch-version snapshots (see
 	// snapshotBranchTip). Zero value = disabled.
 	Versions VersionsPolicy
