@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -168,27 +167,23 @@ func (s *Server) handleTextTemplateRender(w http.ResponseWriter, r *http.Request
 	writeJSON(w, map[string]any{"text": text, "seq_names": seqNames})
 }
 
-// seqNameRe bounds a counter name arriving on the wire.
-var seqNameRe = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
-
 // handleTextTemplateTake consumes the counters of a rendered text the page
-// has just copied (the TUI's bump on y).
+// has just copied (the TUI's bump on y). The counter names come from the
+// STORED text of the template (id, scope) names — never from the wire — so
+// the page cannot advance a counter no template of this repo uses.
 func (s *Server) handleTextTemplateTake(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		SeqNames []string `json:"seq_names"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, err)
+	req, scope, ok := decodeTextTemplateReq(w, r)
+	if !ok {
 		return
 	}
-	for _, n := range req.SeqNames {
-		if !seqNameRe.MatchString(n) {
-			writeErr(w, http.StatusBadRequest, errors.New("bad counter name"))
-			return
-		}
+	svc := s.service()
+	t, err := svc.FindTextTemplate(r.Context(), req.ID, &scope)
+	if err != nil || t.ID != req.ID {
+		writeErr(w, http.StatusNotFound, errors.New("unknown text template"))
+		return
 	}
-	if len(req.SeqNames) > 0 {
-		if err := s.service().BumpPrefixSeqs(r.Context(), req.SeqNames); err != nil {
+	if names := domain.TextTemplateSeqNames(t.Body); len(names) > 0 {
+		if err := svc.BumpPrefixSeqs(r.Context(), names); err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}

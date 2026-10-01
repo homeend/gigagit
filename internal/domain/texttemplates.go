@@ -188,6 +188,16 @@ func TextTemplateTokens(body string) (userLabels, automatic []string) {
 	return set.UserLabels, set.Automatic
 }
 
+// TextTemplateSeqNames returns the <seq:…> counters a body consumes when its
+// rendered text is taken.
+func TextTemplateSeqNames(body string) []string {
+	return template.TextTokens(body).SeqNames
+}
+
+// TextTemplateID is the id a title is stored under ("" when the title has no
+// letter or digit) — what makes two titles the same template in a scope.
+func TextTemplateID(title string) string { return texttmpl.ID(title) }
+
 // textCtx is the resolve context for this repo: <branch> and <parent-branch>
 // are the current branch ("" when detached), <repo> the main worktree's
 // directory name. It also returns the git common dir the counters live in.

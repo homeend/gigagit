@@ -3613,6 +3613,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case textTemplateSaveFailedMsg:
+		if v := layerOf[*textTemplatesView](m); v != nil {
+			v.onSaveFailed(msg)
+		} else {
+			m.statusMsg = i18n.T("text template not saved: %s", msg.err.Error())
+		}
+		return m, nil
+
 	case textTemplateRenderedMsg:
 		if v := layerOf[*textTemplatesView](m); v != nil {
 			v.onRendered(msg)

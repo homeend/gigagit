@@ -195,7 +195,7 @@ lines, a fill dialog, the rendered text with a Copy button
 dialog with a title field, scope select and a `<textarea>`. Endpoints,
 beside `web/prefixes.go`: `GET /api/text-templates`, `POST …/add`,
 `POST …/update`, `POST …/remove`, `POST …/render` (`{id, scope, inputs}`,
-peeks) and `POST …/take` (`{seq_names}`, bumps; the page calls it after a
+peeks) and `POST …/take` (`{id, scope}`, bumps the stored text's counters; the page calls it after a
 successful Copy). Mutating
 routes carry the same guards as the prefix routes. Opened from the palette
 and `alt+x`.

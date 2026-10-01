@@ -16,7 +16,8 @@ import { opLine } from "./ops.js";
 
 let data = null; // last GET /api/text-templates payload
 let sel = 0; // index into data.templates
-// null = browse · {kind:"fill", t} · {kind:"rendered", t, text, seqNames}
+// null = browse · {kind:"fill", t} · {kind:"rendering", t} (a render is in
+// flight: keys are swallowed, Escape gives up on it) · {kind:"rendered", t, text}
 // · {kind:"form", t|null} · {kind:"confirm", t}
 let mode = null;
 
@@ -155,14 +156,23 @@ function submitFill() {
 }
 
 async function renderTemplate(t, inputs) {
+  // The wait is its own mode: a result lands only if the overlay still
+  // waits for THIS request (Escape, or anything that replaced the mode,
+  // drops it instead of yanking the user into the rendered view).
+  const back = mode;
+  const waiting = { kind: "rendering", t };
+  mode = waiting;
   let out;
   try {
     out = await postJSON("/api/text-templates/render", { id: t.id, scope: t.scope, inputs });
   } catch (e) {
+    if (mode !== waiting) return;
+    mode = back;
     showErr("not rendered: " + e.message);
     return;
   }
-  mode = { kind: "rendered", t, text: out.text, seqNames: out.seq_names || [] };
+  if (mode !== waiting) return;
+  mode = { kind: "rendered", t, text: out.text };
   render();
 }
 
@@ -172,9 +182,11 @@ function copyRendered() {
   const m = mode;
   navigator.clipboard.writeText(m.text).then(
     () => {
-      if (m.seqNames.length) postJSON("/api/text-templates/take", { seq_names: m.seqNames }).catch(() => {});
       close();
       opLine("copied the rendered text");
+      postJSON("/api/text-templates/take", { id: m.t.id, scope: m.t.scope }).catch((err) =>
+        opLine("copied, but its <seq> counters did not advance: " + err.message, true),
+      );
     },
     () => showErr("copy failed (clipboard unavailable) — select the text and copy it by hand"),
   );
@@ -284,6 +296,7 @@ function confirmHTML() {
 
 function render() {
   if (!data) return;
+  if (mode && mode.kind === "rendering") return; // keep the screen while waiting
   const box = $("texttemplates-box");
   let body;
   switch (mode && mode.kind) {

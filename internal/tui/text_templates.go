@@ -31,7 +31,11 @@ type textTemplatesView struct {
 	mode       ttMode
 
 	// fill / rendered
-	fill      templateFill
+	fill templateFill
+	// rendering: a render is in flight. Keys are swallowed (esc gives up on
+	// it) and only the result of request renderGen may land.
+	rendering bool
+	renderGen int
 	rendered  string
 	renderErr string
 	seqNames  []string // counters the rendered text consumes when taken
@@ -107,6 +111,15 @@ func (v *textTemplatesView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	if v.rendering {
+		if msg.Type == tea.KeyEsc {
+			v.rendering = false
+		}
+		return m, nil
+	}
+	if v.loading && v.mode == ttBrowse && msg.Type != tea.KeyEsc {
+		return m, nil // the list is being replaced: nothing to act on yet
+	}
 	switch v.mode {
 	case ttFill:
 		return v.updateFill(m, msg)
@@ -139,7 +152,7 @@ func (v *textTemplatesView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.Cm
 			v.fill, v.mode = newTemplateFillLabels(labels), ttFill
 			return m, nil
 		}
-		return m, m.renderTextTemplateCmd(t.Body, map[string]string{})
+		return m, v.startRender(m, t.Body, map[string]string{})
 	case tea.KeyPgDown:
 		v.bodyScroll += v.geometry(m).bodyH // box() clamps
 		return m, nil
@@ -285,21 +298,29 @@ func (v *textTemplatesView) box(m Model) string {
 
 // textTemplateRenderedMsg is a template resolved for the rendered step.
 type textTemplateRenderedMsg struct {
+	gen      int // the request it answers (textTemplatesView.renderGen)
 	text     string
 	seqNames []string
 	err      error
 }
 
-func (m Model) renderTextTemplateCmd(body string, inputs map[string]string) tea.Cmd {
-	svc := m.svc
+// startRender asks for body resolved with inputs and waits for the answer.
+func (v *textTemplatesView) startRender(m Model, body string, inputs map[string]string) tea.Cmd {
+	v.renderGen++
+	v.rendering = true
+	svc, gen := m.svc, v.renderGen
 	return func() tea.Msg {
 		text, seqs, err := svc.RenderTextTemplate(context.Background(), body, inputs)
-		return textTemplateRenderedMsg{text: text, seqNames: seqs, err: err}
+		return textTemplateRenderedMsg{gen: gen, text: text, seqNames: seqs, err: err}
 	}
 }
 
 // onRendered shows the resolved text (or why it could not be resolved).
 func (v *textTemplatesView) onRendered(msg textTemplateRenderedMsg) {
+	if !v.rendering || msg.gen != v.renderGen {
+		return // the user gave up on that render, or asked for another
+	}
+	v.rendering = false
 	v.mode, v.rScroll = ttRendered, 0
 	v.rendered, v.seqNames, v.renderErr = msg.text, msg.seqNames, ""
 	if msg.err != nil {
@@ -316,7 +337,7 @@ func (v *textTemplatesView) updateFill(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 		v.mode = ttBrowse
 	case done:
 		if t, ok := v.selected(); ok {
-			return m, m.renderTextTemplateCmd(t.Body, v.fill.inputs())
+			return m, v.startRender(m, t.Body, v.fill.inputs())
 		}
 		v.mode = ttBrowse
 	}
@@ -476,8 +497,16 @@ func (v *textTemplatesView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 		v.formErr = ""
 		before := ""
 		for _, t := range v.items {
-			if v.editID != "" && t.ID == v.editID && t.Scope == v.scope {
+			if t.Scope != v.scope {
+				continue
+			}
+			if v.editID != "" && t.ID == v.editID {
 				before = t.Body
+			} else if t.ID == domain.TextTemplateID(title) {
+				// Refused here, before the editor: a text written for a
+				// title that cannot be saved would be wasted work.
+				v.formErr = i18n.T("a text template with this title already exists in that scope")
+				return m, nil
 			}
 		}
 		seed := before
@@ -643,11 +672,26 @@ func (m Model) saveTextTemplateCmd(d textTemplateDraftMsg, body string) tea.Cmd 
 			saved, err = svc.UpdateTextTemplate(ctx, d.scope, d.editID, t)
 		}
 		if err != nil {
-			return textTemplatesDataMsg{err: err}
+			return textTemplateSaveFailedMsg{err: err, body: body}
 		}
 		items, lerr := svc.TextTemplates(ctx)
 		return textTemplatesDataMsg{items: items, err: lerr, selectID: saved.ID, status: i18n.T("saved text template %s", saved.Title)}
 	}
+}
+
+// textTemplateSaveFailedMsg: the store refused a text the editor returned
+// (a title taken meanwhile, a row removed by another gg).
+type textTemplateSaveFailedMsg struct {
+	err  error
+	body string
+}
+
+// onSaveFailed reopens the form — it still holds the title and scope — with
+// the reason and the written text as the next draft, so nothing typed in the
+// editor is lost.
+func (v *textTemplatesView) onSaveFailed(msg textTemplateSaveFailedMsg) {
+	v.loading = false
+	v.mode, v.formErr, v.draft = ttForm, ttErrText(msg.err), msg.body
 }
 
 func (v *textTemplatesView) updateConfirm(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {

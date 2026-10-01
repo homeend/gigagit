@@ -189,6 +189,10 @@ func TestTextTemplatesEnterWithVariablesOpensFill(t *testing.T) {
 	if cmd == nil || v.fill.inputs()["one"] != "x" {
 		t.Fatalf("enter on the last field must render (inputs %v)", v.fill.inputs())
 	}
+	v.update(m, keyMsg("esc")) // gives up on the render, back in the fields
+	if v.mode != ttFill || v.rendering {
+		t.Fatalf("esc while rendering: mode %v rendering %v", v.mode, v.rendering)
+	}
 	v.update(m, keyMsg("esc"))
 	if v.mode != ttBrowse {
 		t.Fatalf("esc: mode %v", v.mode)
@@ -210,9 +214,9 @@ func TestTextTemplatesEnterWithoutVariablesRenders(t *testing.T) {
 
 func TestTextTemplateRenderedMsgShowsText(t *testing.T) {
 	t.Parallel()
-	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "A", Body: "x"}}}
+	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "A", Body: "x"}}, rendering: true, renderGen: 3}
 	m := Model{width: 100, height: 40}.pushLayer(v)
-	out, _ := m.Update(textTemplateRenderedMsg{text: "Hello Ann\nsecond", seqNames: []string{"n"}})
+	out, _ := m.Update(textTemplateRenderedMsg{gen: 3, text: "Hello Ann\nsecond", seqNames: []string{"n"}})
 	if v.mode != ttRendered {
 		t.Fatalf("mode %v", v.mode)
 	}
@@ -226,7 +230,7 @@ func TestTextTemplateRenderedMsgShowsText(t *testing.T) {
 
 func TestTextTemplateRenderErrorOffersOnlyEsc(t *testing.T) {
 	t.Parallel()
-	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "A", Body: "x"}}}
+	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "A", Body: "x"}}, rendering: true}
 	m := Model{width: 100, height: 40}.pushLayer(v)
 	out, _ := m.Update(textTemplateRenderedMsg{err: errors.New("template: boom")})
 	box := plain(v.box(out.(Model)))
@@ -456,8 +460,10 @@ func TestTextTemplatesSaveRoundTrip(t *testing.T) {
 	m = m.pushLayer(v)
 	title := "Round trip " + t.Name()
 
+	// The repo scope: each test repo has its own store file, while the
+	// global one is shared by every parallel test (last writer wins).
 	msg := ttEdited(t, "Hello <user:x>\n\n")
-	msg.title = title
+	msg.title, msg.scope = title, model.ProfileScopeRepo
 	out, cmd := m.Update(msg)
 	if cmd == nil || !v.loading {
 		t.Fatal("no save command")
@@ -474,7 +480,7 @@ func TestTextTemplatesSaveRoundTrip(t *testing.T) {
 
 	// Edit: a new title renames, the body changes.
 	edit := ttEdited(t, "Bye\n")
-	edit.title, edit.editID, edit.before = title+" 2", saved.ID, saved.Body
+	edit.title, edit.editID, edit.before, edit.scope = title+" 2", saved.ID, saved.Body, model.ProfileScopeRepo
 	_, cmd = out.(Model).Update(edit)
 	data = cmd().(textTemplatesDataMsg)
 	all, _ := m.svc.TextTemplates(context.Background())
@@ -564,5 +570,120 @@ func TestAltXIgnoredUnderALayer(t *testing.T) {
 	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}, Alt: true})
 	if layerOf[*textTemplatesView](out.(Model)) != nil {
 		t.Fatal("alt+x opened the window over another layer")
+	}
+}
+
+// A render result lands only while the view still waits for THAT render:
+// moving on (esc, another row, the form) must not be yanked into "rendered".
+func TestTextTemplateStaleRenderIsDropped(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}
+	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "A", Body: "plain"}, {ID: "b", Title: "B", Body: "other"}}}
+	mm := m.pushLayer(v)
+	_, cmd := v.update(mm, keyMsg("enter"))
+	if cmd == nil || !v.rendering {
+		t.Fatal("enter must start a render and wait for it")
+	}
+	gen := v.renderGen
+	// While waiting, keys other than esc are swallowed.
+	v.update(mm, keyMsg("down"))
+	v.update(mm, keyMsg("n"))
+	if v.sel != 0 || v.mode != ttBrowse {
+		t.Fatalf("keys leaked while rendering: sel %d mode %v", v.sel, v.mode)
+	}
+	// esc gives up on the render; its late result is dropped.
+	v.update(mm, keyMsg("esc"))
+	if v.rendering || layerOf[*textTemplatesView](mm) == nil {
+		t.Fatal("esc must cancel the wait and keep the window")
+	}
+	mm.Update(textTemplateRenderedMsg{gen: gen, text: "late"})
+	if v.mode != ttBrowse || v.rendered != "" {
+		t.Fatalf("a canceled render landed: mode %v text %q", v.mode, v.rendered)
+	}
+	// A result of an older request is dropped too.
+	v.update(mm, keyMsg("enter"))
+	mm.Update(textTemplateRenderedMsg{gen: gen, text: "old"})
+	if v.mode != ttBrowse || !v.rendering {
+		t.Fatalf("an old render landed: mode %v", v.mode)
+	}
+	mm.Update(textTemplateRenderedMsg{gen: v.renderGen, text: "fresh"})
+	if v.mode != ttRendered || v.rendered != "fresh" || v.rendering {
+		t.Fatalf("the awaited render did not land: mode %v text %q", v.mode, v.rendered)
+	}
+}
+
+// A save the store refuses keeps the form open with the written text as the
+// next draft — the text from the editor is never thrown away.
+func TestTextTemplateSaveFailureKeepsText(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	v := &textTemplatesView{}
+	m = m.pushLayer(v)
+	title := "Dup " + t.Name()
+	first := ttEdited(t, "first body\n")
+	first.title, first.scope = title, model.ProfileScopeRepo // a per-test store file
+	_, cmd := m.Update(first)
+	saved := cmd()
+	if d, ok := saved.(textTemplatesDataMsg); !ok || d.err != nil {
+		t.Fatalf("the first save failed: %#v", saved)
+	}
+	out, _ := m.Update(saved)
+
+	// The row vanishes from this view's list (another gg removed it) while
+	// it is still stored: an add of the same title now reaches the store.
+	v.items = nil
+	v.openForm(model.TextTemplate{Scope: model.ProfileScopeRepo})
+	v.fTitle = newTextField(title)
+	second := ttEdited(t, "a long text written in the editor\n")
+	second.title, second.scope = title, model.ProfileScopeRepo
+	_, cmd = out.(Model).Update(second)
+	msg := cmd()
+	if _, ok := msg.(textTemplateSaveFailedMsg); !ok {
+		t.Fatalf("a refused save must report as a save failure, got %T", msg)
+	}
+	res, _ := out.(Model).Update(msg)
+	if v.mode != ttForm || v.loading || v.draft != "a long text written in the editor" || !strings.Contains(v.formErr, "already exists") || strings.Contains(v.formErr, "text template:") {
+		t.Fatalf("mode %v loading %v draft %q err %q", v.mode, v.loading, v.draft, v.formErr)
+	}
+	// The window is usable again: esc leaves the form.
+	v.update(res.(Model), keyMsg("esc"))
+	if v.mode != ttBrowse || v.draft != "" {
+		t.Fatalf("esc after a failed save: mode %v draft %q", v.mode, v.draft)
+	}
+}
+
+// A title already used in the scope is refused in the form, before the editor.
+func TestTextTemplatesFormRefusesDuplicateTitle(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}
+	v := &textTemplatesView{items: []model.TextTemplate{
+		{ID: "pr-description", Title: "PR description", Scope: model.ProfileScopeGlobal},
+		{ID: "note", Title: "Note", Scope: model.ProfileScopeGlobal},
+	}}
+	v.update(m, keyMsg("n"))
+	ttType(v, m, "pr description")
+	if _, cmd := v.update(m, keyMsg("enter")); cmd != nil || !strings.Contains(v.formErr, "already exists") {
+		t.Fatalf("duplicate title: cmd nil %v err %q", cmd == nil, v.formErr)
+	}
+	// The other scope is free.
+	v.update(m, keyMsg("down"))
+	v.update(m, keyMsg("right"))
+	_, cmd := v.update(m, keyMsg("enter"))
+	if cmd == nil {
+		t.Fatalf("the same title in the other scope must be allowed (err %q)", v.formErr)
+	}
+	os.Remove(cmd().(textTemplateDraftMsg).path)
+	// Editing a template under its own title is not a duplicate; onto another's is.
+	v.sel = 1
+	v.update(m, keyMsg("esc"))
+	v.update(m, keyMsg("e"))
+	if _, cmd := v.update(m, keyMsg("enter")); cmd == nil {
+		t.Fatalf("keeping the title while editing was refused: %q", v.formErr)
+	} else {
+		os.Remove(cmd().(textTemplateDraftMsg).path)
+	}
+	v.fTitle = newTextField("PR Description")
+	if _, cmd := v.update(m, keyMsg("enter")); cmd != nil || v.formErr == "" {
+		t.Fatal("a rename onto another template's title must be refused in the form")
 	}
 }

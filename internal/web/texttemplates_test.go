@@ -92,7 +92,7 @@ func TestTextTemplatesRefusals(t *testing.T) {
 func TestTextTemplateRenderPeeksTakeBumps(t *testing.T) {
 	isolatePrefixes(t)
 	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
-	if code := ttPost(t, ts, "", `{"title":"Seq","body":"#<seq:w:2> <user:n>","scope":"repo"}`, nil); code != http.StatusOK {
+	if code := ttPost(t, ts, "", `{"title":"Seq","body":"#<seq:my w:2> <user:n>","scope":"repo"}`, nil); code != http.StatusOK {
 		t.Fatalf("add code = %d", code)
 	}
 	var out struct {
@@ -100,11 +100,13 @@ func TestTextTemplateRenderPeeksTakeBumps(t *testing.T) {
 		SeqNames []string `json:"seq_names"`
 	}
 	for i := 0; i < 2; i++ {
-		if code := ttPost(t, ts, "/render", `{"id":"seq","scope":"repo","inputs":{"n":"a"}}`, &out); code != http.StatusOK || out.Text != "#01 a" || len(out.SeqNames) != 1 || out.SeqNames[0] != "w" {
+		if code := ttPost(t, ts, "/render", `{"id":"seq","scope":"repo","inputs":{"n":"a"}}`, &out); code != http.StatusOK || out.Text != "#01 a" || len(out.SeqNames) != 1 || out.SeqNames[0] != "my w" {
 			t.Fatalf("render %d: code %d out %+v", i, code, out)
 		}
 	}
-	if code := ttPost(t, ts, "/take", `{"seq_names":["w"]}`, nil); code != http.StatusOK {
+	// The names come from the stored text, never from the wire: a counter the
+	// template does not use cannot be bumped through /take.
+	if code := ttPost(t, ts, "/take", `{"id":"seq","scope":"repo","seq_names":["other"]}`, nil); code != http.StatusOK {
 		t.Fatalf("take code = %d", code)
 	}
 	if code := ttPost(t, ts, "/render", `{"id":"seq","scope":"repo","inputs":{"n":"a"}}`, &out); code != http.StatusOK || out.Text != "#02 a" {
