@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -35,6 +36,16 @@ type textTemplatesView struct {
 	renderErr string
 	seqNames  []string // counters the rendered text consumes when taken
 	rScroll   int
+
+	// form (add / edit)
+	fTitle  textfield
+	scope   model.ProfileScope
+	field   int    // 0 = title, 1 = scope
+	formErr string // inline validation error; "" = none
+	editID  string // the template being edited; "" = adding
+	// draft is text the editor returned that could not be saved (a malformed
+	// token): the next editor run starts from it, not from the stored text.
+	draft string
 }
 
 type ttMode int
@@ -101,6 +112,10 @@ func (v *textTemplatesView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return v.updateFill(m, msg)
 	case ttRendered:
 		return v.updateRendered(m, msg)
+	case ttForm:
+		return v.updateForm(m, msg)
+	case ttConfirmDelete:
+		return v.updateConfirm(m, msg)
 	}
 	return v.updateBrowse(m, msg)
 }
@@ -137,6 +152,16 @@ func (v *textTemplatesView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.Cm
 		v.moveSel(1)
 	case "k":
 		v.moveSel(-1)
+	case "n", "a":
+		v.openForm(model.TextTemplate{Scope: model.ProfileScopeGlobal})
+	case "e":
+		if t, ok := v.selected(); ok {
+			v.openForm(t)
+		}
+	case "d":
+		if _, ok := v.selected(); ok {
+			v.mode = ttConfirmDelete
+		}
 	}
 	return m, nil
 }
@@ -246,6 +271,14 @@ func (v *textTemplatesView) box(m Model) string {
 		return v.fillBox(m)
 	case ttRendered:
 		return v.renderedBox(m)
+	case ttForm:
+		return v.formBox(m)
+	case ttConfirmDelete:
+		g := v.geometry(m)
+		return popupBox(g.inner, strings.Join([]string{
+			i18n.T("Delete text template %s?", v.selTitle()), "",
+			i18n.T("[y] delete  [n] keep"),
+		}, "\n"))
 	}
 	return v.browseBox(m)
 }
@@ -412,4 +445,227 @@ func (v *textTemplatesView) browseBox(m Model) string {
 	parts = append(parts, "")
 	parts = append(parts, g.hintLines...)
 	return popupBox(g.inner, strings.Join(parts, "\n"))
+}
+
+// openForm opens the add form (t.ID == "") or the edit form seeded from t.
+func (v *textTemplatesView) openForm(t model.TextTemplate) {
+	v.fTitle = newTextField(t.Title)
+	v.scope, v.editID = t.Scope, t.ID
+	v.field, v.formErr, v.draft = 0, "", ""
+	v.mode = ttForm
+}
+
+func (v *textTemplatesView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		v.mode, v.draft, v.formErr = ttBrowse, "", ""
+		return m, nil
+	case tea.KeyUp:
+		v.field = 0
+		return m, nil
+	case tea.KeyDown, tea.KeyTab:
+		v.field = 1
+		return m, nil
+	case tea.KeyEnter:
+		title := strings.TrimSpace(v.fTitle.Value())
+		// The title alone: a placeholder text keeps the text checks quiet.
+		if err := domain.ValidateTextTemplate(title, "x"); err != nil {
+			v.formErr = ttErrText(err)
+			return m, nil
+		}
+		v.formErr = ""
+		before := ""
+		for _, t := range v.items {
+			if v.editID != "" && t.ID == v.editID && t.Scope == v.scope {
+				before = t.Body
+			}
+		}
+		seed := before
+		if v.draft != "" {
+			seed = v.draft
+		}
+		return m, textTemplateDraftCmd(textTemplateDraftMsg{title: title, scope: v.scope, editID: v.editID, before: before}, seed)
+	}
+	if v.field == 1 {
+		// A template's scope is where it is stored: fixed once it exists.
+		if v.editID == "" {
+			switch msg.String() {
+			case "left", "right", " ", "h", "l":
+				if v.scope == model.ProfileScopeGlobal {
+					v.scope = model.ProfileScopeRepo
+				} else {
+					v.scope = model.ProfileScopeGlobal
+				}
+			}
+		}
+		return m, nil
+	}
+	v.fTitle.HandleEditKey(msg)
+	return m, nil
+}
+
+// ttErrText is a validation error as the form shows it: the user is editing
+// a text template, not calling the domain or template packages.
+func ttErrText(err error) string {
+	s := strings.TrimPrefix(err.Error(), "invalid text template: ")
+	s = strings.TrimPrefix(s, "text template: ")
+	return strings.Replace(s, "template: ", "", 1)
+}
+
+func (v *textTemplatesView) formBox(m Model) string {
+	g := v.geometry(m)
+	title := i18n.T("Add text template")
+	if v.editID != "" {
+		title = i18n.T("Edit text template")
+	}
+	cur, scopeCur := "  ", "  "
+	if v.field == 0 {
+		cur = "> "
+	} else {
+		scopeCur = "> "
+	}
+	scopeVal := i18n.T("global (every repo)")
+	if v.scope == model.ProfileScopeRepo {
+		scopeVal = i18n.T("this repo only")
+	}
+	scopeLine := scopeCur + i18n.T("scope: ") + scopeVal
+	hint := i18n.T("[↑/↓] field  [←/→] scope  [enter] edit text in $EDITOR  [esc] back")
+	if v.editID != "" {
+		scopeLine = st().dim.Render(scopeLine)
+		hint = i18n.T("[↑/↓] field  [enter] edit text in $EDITOR  [esc] back")
+	}
+	parts := []string{title, "", viewField(cur+i18n.T("title: "), v.fTitle, v.field == 0, g.textW), scopeLine}
+	if v.formErr != "" {
+		parts = append(parts, "")
+		for _, l := range wrapWidth(v.formErr, g.textW, 4) {
+			parts = append(parts, st().errorText.Render(l))
+		}
+	}
+	parts = append(parts, "")
+	parts = append(parts, wrapParts(strings.Split(i18n.T("Tokens: <user:LABEL> <date> <date:FMT> <branch> <parent-branch> <repo> <seq:NAME:N> <random-*>"), " "), g.textW, " ")...)
+	parts = append(parts, "")
+	parts = append(parts, wrapParts(strings.Split(hint, "  "), g.textW, "  ")...)
+	return popupBox(g.inner, strings.Join(parts, "\n"))
+}
+
+// textTemplateDraftMsg is a text handed to the editor: the temp file that
+// holds it and what the form said about the template it belongs to.
+type textTemplateDraftMsg struct {
+	path   string
+	title  string
+	scope  model.ProfileScope
+	editID string // "" = a new template
+	before string // the stored text ("" for a new template)
+	err    error
+}
+
+// textTemplateEditedMsg: the editor closed on the draft's file (err is the
+// editor's exit error).
+type textTemplateEditedMsg struct{ textTemplateDraftMsg }
+
+// textTemplateDraftCmd writes seed to a private temp file ending in .md (so
+// the editor highlights it) and yields the draft; the Model then hands the
+// file to the editor.
+func textTemplateDraftCmd(d textTemplateDraftMsg, seed string) tea.Cmd {
+	return func() tea.Msg {
+		f, err := os.CreateTemp("", "gg-*-template.md")
+		if err != nil {
+			d.err = err
+			return d
+		}
+		d.path = f.Name()
+		_, werr := f.WriteString(seed)
+		if cerr := f.Close(); werr == nil {
+			werr = cerr
+		}
+		if werr != nil {
+			removeTempFile(d.path)
+			d.path, d.err = "", werr
+		}
+		return d
+	}
+}
+
+// editTextTemplateCmd suspends the TUI on the draft's file in the user's
+// editor; on exit it yields a textTemplateEditedMsg.
+func editTextTemplateCmd(d textTemplateDraftMsg) tea.Cmd {
+	cmd := editorCommandAt(resolveEditor(), d.path, 0)
+	return handover(cmd, func(err error) tea.Msg {
+		d.err = err
+		return textTemplateEditedMsg{d}
+	})
+}
+
+// onEdited reads the text the editor left and saves it — or says why not.
+// The caller has already removed the temp file. A text that cannot be saved
+// (a malformed token) keeps the form open with the text as the next draft.
+func (v *textTemplatesView) onEdited(m Model, msg textTemplateEditedMsg, data []byte, readErr error) (Model, tea.Cmd) {
+	body := strings.TrimRight(string(data), " \t\r\n")
+	oldTitle := ""
+	for _, t := range v.items {
+		if msg.editID != "" && t.ID == msg.editID && t.Scope == msg.scope {
+			oldTitle = t.Title
+		}
+	}
+	done := func(status string) (Model, tea.Cmd) {
+		v.mode, v.draft, v.formErr = ttBrowse, "", ""
+		m.statusMsg = status
+		return m, nil
+	}
+	switch {
+	case msg.err != nil:
+		return done(i18n.T("text template not saved: %s", msg.err.Error()))
+	case readErr != nil:
+		return done(i18n.T("text template not saved: %s", readErr.Error()))
+	case strings.TrimSpace(body) == "":
+		return done(i18n.T("text template not saved: the text is empty"))
+	case msg.editID != "" && body == strings.TrimRight(msg.before, " \t\r\n") && msg.title == oldTitle:
+		return done(i18n.T("text template unchanged"))
+	}
+	if err := domain.ValidateTextTemplate(msg.title, body); err != nil {
+		v.mode, v.formErr, v.draft = ttForm, ttErrText(err), body
+		return m, nil
+	}
+	v.mode, v.draft, v.loading = ttBrowse, "", true
+	return m, m.saveTextTemplateCmd(msg.textTemplateDraftMsg, body)
+}
+
+func (m Model) saveTextTemplateCmd(d textTemplateDraftMsg, body string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		ctx := context.Background()
+		t := model.TextTemplate{Title: d.title, Body: body, Scope: d.scope}
+		var saved model.TextTemplate
+		var err error
+		if d.editID == "" {
+			saved, err = svc.AddTextTemplate(ctx, t)
+		} else {
+			saved, err = svc.UpdateTextTemplate(ctx, d.scope, d.editID, t)
+		}
+		if err != nil {
+			return textTemplatesDataMsg{err: err}
+		}
+		items, lerr := svc.TextTemplates(ctx)
+		return textTemplatesDataMsg{items: items, err: lerr, selectID: saved.ID, status: i18n.T("saved text template %s", saved.Title)}
+	}
+}
+
+func (v *textTemplatesView) updateConfirm(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	v.mode = ttBrowse
+	if t, ok := v.selected(); ok && msg.String() == "y" {
+		return m, m.removeTextTemplateCmd(t)
+	}
+	return m, nil
+}
+
+func (m Model) removeTextTemplateCmd(t model.TextTemplate) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		ctx := context.Background()
+		if err := svc.RemoveTextTemplate(ctx, t.Scope, t.ID); err != nil {
+			return textTemplatesDataMsg{err: err}
+		}
+		items, err := svc.TextTemplates(ctx)
+		return textTemplatesDataMsg{items: items, err: err, status: i18n.T("deleted text template %s", t.Title)}
+	}
 }

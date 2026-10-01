@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -284,5 +287,237 @@ func TestTextTemplatesRenderedScrolls(t *testing.T) {
 	v.update(m, keyMsg("down"))
 	if box := plain(v.box(m)); strings.Contains(box, "row 00") {
 		t.Fatalf("down did not scroll:\n%s", box)
+	}
+}
+
+func ttType(v *textTemplatesView, m Model, text string) {
+	for _, r := range text {
+		v.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+}
+
+func TestTextTemplatesFormAddFlow(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}
+	v := &textTemplatesView{items: ttItems(1)}
+	v.update(m, keyMsg("n"))
+	if v.mode != ttForm || v.editID != "" || v.scope != model.ProfileScopeGlobal {
+		t.Fatalf("n: mode %v editID %q scope %v", v.mode, v.editID, v.scope)
+	}
+	if box := plain(v.box(m)); !strings.Contains(box, "Add text template") || !strings.Contains(box, "$EDITOR") {
+		t.Fatalf("form box:\n%s", box)
+	}
+	// An empty title is refused inline, no editor.
+	_, cmd := v.update(m, keyMsg("enter"))
+	if cmd != nil || v.formErr == "" {
+		t.Fatalf("empty title: cmd nil %v err %q", cmd == nil, v.formErr)
+	}
+	ttType(v, m, "Standup")
+	v.update(m, keyMsg("down"))  // to scope
+	v.update(m, keyMsg("right")) // → this repo
+	if v.scope != model.ProfileScopeRepo {
+		t.Fatalf("scope toggle: %v", v.scope)
+	}
+	_, cmd = v.update(m, keyMsg("enter"))
+	if cmd == nil || v.formErr != "" {
+		t.Fatalf("valid title must prepare the editor (err %q)", v.formErr)
+	}
+	draft, ok := cmd().(textTemplateDraftMsg)
+	if !ok || draft.err != nil || draft.title != "Standup" || draft.scope != model.ProfileScopeRepo || draft.editID != "" {
+		t.Fatalf("draft = %+v", draft)
+	}
+	defer os.Remove(draft.path)
+	if data, err := os.ReadFile(draft.path); err != nil || len(data) != 0 || !strings.HasSuffix(draft.path, ".md") {
+		t.Fatalf("a new template starts from an empty .md file: %q %v %s", data, err, draft.path)
+	}
+	// esc leaves the form.
+	v.update(m, keyMsg("esc"))
+	if v.mode != ttBrowse {
+		t.Fatalf("esc: mode %v", v.mode)
+	}
+}
+
+func TestTextTemplatesEditSeedsFormAndLocksScope(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}
+	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "Alpha", Body: "the body", Scope: model.ProfileScopeRepo}}}
+	v.update(m, keyMsg("e"))
+	if v.mode != ttForm || v.editID != "a" || v.fTitle.Value() != "Alpha" || v.scope != model.ProfileScopeRepo {
+		t.Fatalf("e: mode %v id %q title %q scope %v", v.mode, v.editID, v.fTitle.Value(), v.scope)
+	}
+	v.update(m, keyMsg("down"))
+	v.update(m, keyMsg("right"))
+	if v.scope != model.ProfileScopeRepo {
+		t.Fatal("the scope must be fixed while editing")
+	}
+	_, cmd := v.update(m, keyMsg("enter"))
+	draft := cmd().(textTemplateDraftMsg)
+	defer os.Remove(draft.path)
+	if data, _ := os.ReadFile(draft.path); string(data) != "the body" || draft.before != "the body" || draft.editID != "a" {
+		t.Fatalf("the editor must be seeded with the stored text: %q %+v", data, draft)
+	}
+	// e on an empty list does nothing.
+	empty := &textTemplatesView{}
+	empty.update(m, keyMsg("e"))
+	empty.update(m, keyMsg("d"))
+	if empty.mode != ttBrowse {
+		t.Fatalf("e/d on an empty list: mode %v", empty.mode)
+	}
+}
+
+func TestTextTemplateDraftMsgError(t *testing.T) {
+	t.Parallel()
+	v := &textTemplatesView{mode: ttForm}
+	out, cmd := Model{}.pushLayer(v).Update(textTemplateDraftMsg{err: errors.New("disk full")})
+	if cmd != nil || !strings.Contains(out.(Model).statusMsg, "disk full") {
+		t.Fatalf("status %q", out.(Model).statusMsg)
+	}
+}
+
+func ttEdited(t *testing.T, content string) textTemplateEditedMsg {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "gg-x-template.md")
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return textTemplateEditedMsg{textTemplateDraftMsg: textTemplateDraftMsg{path: p, title: "New", scope: model.ProfileScopeGlobal}}
+}
+
+// Nothing is saved, the temp file goes, the window stays usable.
+func TestTextTemplateEditedNothingToSave(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		content string
+		mut     func(*textTemplateEditedMsg)
+	}{
+		"empty body":     {" \n\n", func(*textTemplateEditedMsg) {}},
+		"editor failed":  {"text", func(m *textTemplateEditedMsg) { m.err = errors.New("exit status 1") }},
+		"unchanged edit": {"same\n", func(m *textTemplateEditedMsg) { m.editID, m.before = "new", "same" }},
+	} {
+		msg := ttEdited(t, tc.content)
+		tc.mut(&msg)
+		v := &textTemplatesView{mode: ttForm, items: []model.TextTemplate{{ID: "new", Title: "New", Body: "same"}}}
+		out, cmd := Model{}.pushLayer(v).Update(msg)
+		if cmd != nil {
+			t.Errorf("%s: a save command was issued", name)
+		}
+		if _, err := os.Stat(msg.path); !os.IsNotExist(err) {
+			t.Errorf("%s: the temp file was not removed", name)
+		}
+		mm := out.(Model)
+		if layerOf[*textTemplatesView](mm) == nil || v.mode != ttBrowse || mm.statusMsg == "" {
+			t.Errorf("%s: window gone, or mode %v, or no status %q", name, v.mode, mm.statusMsg)
+		}
+	}
+}
+
+// The file is removed even when the window was closed meanwhile.
+func TestTextTemplateEditedWithoutWindowRemovesFile(t *testing.T) {
+	t.Parallel()
+	msg := ttEdited(t, "text")
+	if _, cmd := (Model{}).Update(msg); cmd != nil {
+		t.Fatal("no window: nothing to save")
+	}
+	if _, err := os.Stat(msg.path); !os.IsNotExist(err) {
+		t.Fatal("the temp file was not removed")
+	}
+}
+
+func TestTextTemplateEditedInvalidBodyKeepsFormAndDraft(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}
+	msg := ttEdited(t, "bad <seq> token\n")
+	v := &textTemplatesView{mode: ttForm, fTitle: newTextField("New")}
+	out, cmd := m.pushLayer(v).Update(msg)
+	if cmd != nil || v.mode != ttForm || !strings.Contains(v.formErr, "seq") || strings.Contains(v.formErr, "template:") {
+		t.Fatalf("cmd nil %v mode %v err %q", cmd == nil, v.mode, v.formErr)
+	}
+	if v.draft != "bad <seq> token" {
+		t.Fatalf("the rejected text must be kept for the next editor run: %q", v.draft)
+	}
+	// enter reopens the editor on the rejected text, not on the old body.
+	_, cmd = v.update(out.(Model), keyMsg("enter"))
+	draft := cmd().(textTemplateDraftMsg)
+	defer os.Remove(draft.path)
+	if data, _ := os.ReadFile(draft.path); string(data) != "bad <seq> token" {
+		t.Fatalf("editor reseeded with %q", data)
+	}
+	// esc drops the draft.
+	v.update(out.(Model), keyMsg("esc"))
+	if v.draft != "" {
+		t.Fatal("esc must drop the draft")
+	}
+}
+
+func TestTextTemplatesSaveRoundTrip(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	v := &textTemplatesView{mode: ttForm}
+	m = m.pushLayer(v)
+	title := "Round trip " + t.Name()
+
+	msg := ttEdited(t, "Hello <user:x>\n\n")
+	msg.title = title
+	out, cmd := m.Update(msg)
+	if cmd == nil || !v.loading {
+		t.Fatal("no save command")
+	}
+	data, ok := cmd().(textTemplatesDataMsg)
+	if !ok || data.err != nil || data.selectID == "" || data.status == "" {
+		t.Fatalf("save = %+v", data)
+	}
+	out, _ = out.(Model).Update(data)
+	saved, ok := v.selected()
+	if !ok || saved.Title != title || saved.Body != "Hello <user:x>" || v.mode != ttBrowse {
+		t.Fatalf("after save: %+v mode %v", saved, v.mode)
+	}
+
+	// Edit: a new title renames, the body changes.
+	edit := ttEdited(t, "Bye\n")
+	edit.title, edit.editID, edit.before = title+" 2", saved.ID, saved.Body
+	_, cmd = out.(Model).Update(edit)
+	data = cmd().(textTemplatesDataMsg)
+	all, _ := m.svc.TextTemplates(context.Background())
+	var titles []string
+	for _, tt := range all {
+		titles = append(titles, tt.Title)
+	}
+	if data.err != nil || !strings.Contains(strings.Join(titles, "|"), title+" 2") || strings.Contains(strings.Join(titles, "|")+"|", title+"|") {
+		t.Fatalf("rename: err %v titles %v", data.err, titles)
+	}
+
+	// Delete (after the confirm) removes it.
+	v.onData(data)
+	v.update(out.(Model), keyMsg("d"))
+	_, cmd = v.update(out.(Model), keyMsg("y"))
+	if data = cmd().(textTemplatesDataMsg); data.err != nil || data.status == "" {
+		t.Fatalf("remove = %+v", data)
+	}
+	for _, tt := range data.items {
+		if tt.Title == title+" 2" {
+			t.Fatal("still stored after delete")
+		}
+	}
+}
+
+func TestTextTemplatesDeleteNeedsConfirm(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}
+	v := &textTemplatesView{items: ttItems(2), sel: 1}
+	_, cmd := v.update(m, keyMsg("d"))
+	if v.mode != ttConfirmDelete || cmd != nil {
+		t.Fatalf("d: mode %v", v.mode)
+	}
+	if box := plain(v.box(m)); !strings.Contains(box, "Delete text template Template 01?") {
+		t.Fatalf("confirm box:\n%s", box)
+	}
+	_, cmd = v.update(m, keyMsg("n"))
+	if v.mode != ttBrowse || cmd != nil {
+		t.Fatal("n must cancel")
+	}
+	v.update(m, keyMsg("d"))
+	_, cmd = v.update(m, keyMsg("y"))
+	if v.mode != ttBrowse || cmd == nil {
+		t.Fatal("y must issue the remove command")
 	}
 }
