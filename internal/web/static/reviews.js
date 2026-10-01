@@ -15,6 +15,7 @@ import { NOTE_BADGE_COLS, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML
 import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
 import { focusPane } from "./keys.js";
+import { runLinkCompare } from "./linkcompare.js";
 
 // --- reviews pure (guarded against Go) ---
 // reviewStamp is a review's time as the TUI prints it: local
@@ -89,49 +90,125 @@ function reviewActive() {
 }
 
 
-// reviewRowsHTML is a commit's "Reviews" section, in front of its files — ""
-// when the commit on screen has none, so such a list renders as before. The
-// rows carry data-review and no data-i: they are not files, so the cursor,
-// staging, the stack and every file action pass them by.
-function reviewRowsHTML() {
+// commitReviewList is the open commit's reviews; [] off a commit's file list.
+function commitReviewList() {
   const cr = state.commitReviews;
-  if (state.filesMode !== "commit" || !cr || cr.sha !== state.fileSha || !cr.list.length) return "";
+  return state.filesMode === "commit" && cr && cr.sha === state.fileSha ? cr.list : [];
+}
+
+
+// commitScopes is the open commit's range reviews: the scopes (a merge
+// preview, a commit pair) its notes were written in — [{scope, label, n}].
+// Such notes all sit on the range's newest commit, mostly on files it does not
+// change, so the commit lists the review as ONE row instead of those files.
+function commitScopes() {
+  if (state.filesMode !== "commit" || !state.fileSha) return [];
+  return (state.noteCounts.scopes_by_commit || {})[state.fileSha] || [];
+}
+
+// A Range review row shares the Reviews rows' cursor (state.reviewSel), under
+// an id no review can have.
+const scopeSel = (scope) => "scope:" + scope;
+
+
+// headRowIds are the rows above a commit's first file, top to bottom.
+function headRowIds() {
+  return commitReviewList()
+    .map((r) => r.id)
+    .concat(commitScopes().map((sc) => scopeSel(sc.scope)));
+}
+
+
+// reviewRowsHTML is a commit's "Reviews" and "Range reviews" sections, in
+// front of its files — "" when the commit on screen has neither, so such a
+// list renders as before. The rows carry data-review / data-scope and no
+// data-i: they are not files, so the cursor, staging, the stack and every
+// file action pass them by.
+function reviewRowsHTML() {
+  const revs = commitReviewList();
+  const scopes = commitScopes();
   return (
-    `<li class="sect">Reviews</li>` +
-    cr.list
-      .map((r) => `<li class="rev${state.reviewSel === r.id ? " sel" : ""}" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(reviewRowText(r))}</li>`)
-      .join("")
+    (revs.length
+      ? `<li class="sect">Reviews</li>` +
+        revs
+          .map((r) => `<li class="rev${state.reviewSel === r.id ? " sel" : ""}" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(reviewRowText(r))}</li>`)
+          .join("")
+      : "") +
+    (scopes.length
+      ? `<li class="sect">Range reviews</li>` +
+        scopes
+          .map(
+            (sc) =>
+              `<li class="rev${state.reviewSel === scopeSel(sc.scope) ? " sel" : ""}" data-scope="${esc(sc.scope)}" ` +
+              `title="open the range these notes were written in">${esc(sc.label)}${noteBadgeHTML(sc.n)}</li>`
+          )
+          .join("")
+      : "")
   );
 }
 
 
-// stepCommitReviews moves the file cursor through a commit's Reviews rows,
-// which sit above its first file: k on the first file enters them, j on the
-// last leaves them for the first file. true = the key was the rows'.
+// stepCommitReviews moves the file cursor through a commit's head rows, which
+// sit above its first file: k on the first file enters them, j on the last
+// leaves them for the first file. true = the key was the rows'.
 function stepCommitReviews(delta) {
-  const cr = state.commitReviews;
-  if (state.filesMode !== "commit" || !cr || cr.sha !== state.fileSha || !cr.list.length) return false;
-  const at = cr.list.findIndex((r) => r.id === state.reviewSel);
+  const ids = headRowIds();
+  if (!ids.length) return false;
+  const at = ids.indexOf(state.reviewSel);
   if (at < 0) {
     if (delta >= 0 || state.fileCursor !== 0) return false;
-    state.reviewSel = cr.list[cr.list.length - 1].id;
-  } else if (at + delta >= cr.list.length) {
+    state.reviewSel = ids[ids.length - 1];
+  } else if (at + delta >= ids.length) {
     state.reviewSel = ""; // onto the first file
     state.fileCursor = 0;
   } else {
-    state.reviewSel = cr.list[Math.max(0, at + delta)].id;
+    state.reviewSel = ids[Math.max(0, at + delta)];
   }
   renderFiles();
   return true;
 }
 
 
-// openSelectedReview is enter on a selected Reviews row; false when none is.
+// openSelectedReview is enter on a selected head row; false when none is.
 function openSelectedReview() {
-  const cr = state.commitReviews;
-  if (!state.reviewSel || state.filesMode !== "commit" || !cr || cr.sha !== state.fileSha) return false;
-  if (!cr.list.some((r) => r.id === state.reviewSel)) return false;
-  openReview(state.reviewSel, reviewBackFromCommit(state.reviewSel));
+  if (!state.reviewSel || !headRowIds().includes(state.reviewSel)) return false;
+  const sc = commitScopes().find((x) => scopeSel(x.scope) === state.reviewSel);
+  if (sc) openRangeReview(sc.scope);
+  else openReview(state.reviewSel, reviewBackFromCommit(state.reviewSel));
+  return true;
+}
+
+
+// openRangeReview opens a Range review row of the commit on screen: the range
+// its notes were written in, frozen at this commit (/api/scope-range), as a
+// pair landing — every file of the range with its ◆N, the notes on their
+// lines. esc from that file list comes back to the commit (leaveRangeReview).
+async function openRangeReview(scope) {
+  const back = reviewBackFromCommit(scopeSel(scope));
+  if (state.filesMode !== "commit" || !back.sha) return;
+  let d;
+  try {
+    d = await getJSON("/api/scope-range?" + new URLSearchParams({ commit: back.sha, scope }));
+  } catch (e) {
+    opLine("range review: " + (e.message || e), true);
+    return;
+  }
+  if (state.filesMode !== "commit" || state.fileSha !== back.sha) return; // the reader moved on
+  if (!(await runLinkCompare("a=" + d.a + "&b=" + d.b))) return;
+  const c = state.compare;
+  if (!c || !c.pair || c.pair.a !== d.a || c.pair.b !== d.b) return; // superseded
+  c.back = back;
+  $("files-title").textContent = "Range review: " + d.label;
+}
+
+
+// leaveRangeReview is esc on a range opened from a commit's Range review row:
+// back to that commit's files, the cursor on the row. false when the screen
+// is no such range.
+function leaveRangeReview() {
+  const back = state.filesMode === "compare" && state.compare && state.compare.back;
+  if (!back) return false;
+  goBack(back);
   return true;
 }
 
@@ -400,11 +477,13 @@ registerHelp({
     "— <b>≡ Overview</b> (the summary, meta and notes it could not place), then the files, ◆N on each the review " +
     "notes, with the review's notes in the diffs, read-only. On the review's file list <b>,</b> / <b>.</b> move to " +
     "the previous / next file the review notes. esc goes back; right-click a review row or the " +
-    "Overview for <b>Delete review</b>",
+    "Overview for <b>Delete review</b>. Notes written in a merge preview or a commit pair are stored on the " +
+    "range's newest commit: that commit lists them as one row under <b>Range reviews</b> (◆N) — click it to " +
+    "open the range the notes were written in, every file with its notes; esc returns to the commit",
 });
 
 
-export { nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

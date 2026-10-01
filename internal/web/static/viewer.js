@@ -990,7 +990,7 @@ async function viewerDiffWorktree(path) {
 async function viewerDiffCommit(rev, path) {
   closeViewer("background");
   closeFinder();
-  if (!(await openCommitByHash(rev, rev.slice(0, 8)))) return;
+  if (!(await openCommitByHash(rev, rev.slice(0, 8), { thenFile: true }))) return;
   const i = state.files.findIndex((f) => f.path === path);
   if (i < 0) return opLine(path + " is not changed in " + rev.slice(0, 8), false);
   await openFile(i);

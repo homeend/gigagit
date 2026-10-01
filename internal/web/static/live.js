@@ -520,7 +520,7 @@ async function steerNavigateLand(s) {
       opLine("gg link: cannot place " + s.ref + " in this repository", true);
       return;
     }
-    if (!(await openCommitByHash(sha, s.ref))) return;
+    if (!(await openCommitByHash(sha, s.ref, { thenFile: !!s.file }))) return;
     if (!s.file) return; // a file-less ref navigate only reveals the tree
     if (!(await openNamedFile(state.files, s, s.ref))) return;
   } else if (s.state === "pair") {
@@ -538,7 +538,7 @@ async function steerNavigateLand(s) {
     if (s.commit) await openCommitByHash(s.commit, s.commit.slice(0, 8));
     return;
   } else if (s.state === "commit") {
-    if (!(await openCommitByHash(s.commit, s.commit.slice(0, 8)))) return;
+    if (!(await openCommitByHash(s.commit, s.commit.slice(0, 8), { thenFile: true }))) return;
     if (!(await openNamedFile(state.files, s, "commit " + s.commit.slice(0, 8)))) return;
   } else {
     // The working-tree stage, entered the way the palette enters it (0 = the
