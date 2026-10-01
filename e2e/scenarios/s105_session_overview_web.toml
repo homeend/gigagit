@@ -21,7 +21,7 @@ stdout_contains = ["f1\tbackground\t2 anchors\tT"]
 [[run]]
 cmd             = ["session", "files"]
 exit            = 0
-stdout_contains = ["f1\toverview-1.md\toverview"]
+stdout_contains = ["f1\t\"T\"\toverview"]
 
 [[run]]
 cmd             = ["session", "overview", "show", "f1"]
