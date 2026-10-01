@@ -78,16 +78,13 @@ func (p *branchPopup) resolvePrefix(m Model) func(string, map[string]string) (st
 	now := clock.Now()
 	seed := rand.Uint64()
 	return func(value string, inputs map[string]string) (string, []string, error) {
-		names := worktree.Templates{Branch: value}.SeqNames()
 		ctx := template.Ctx{
 			ParentBranch: parent,
 			Repo:         repo,
-			Seqs:         worktree.PeekSeqs(gitDir, names),
 			Now:          func() time.Time { return now },
 			Rand:         rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15)),
 		}
-		out, err := template.Resolve(value, inputs, ctx)
-		return out, names, err
+		return worktree.ResolvePrefix(value, inputs, ctx, gitDir)
 	}
 }
 

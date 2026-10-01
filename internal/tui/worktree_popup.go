@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/clock"
-	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/template"
@@ -517,18 +516,7 @@ func (p *worktreePopup) consumedSeqNames() []string {
 // any prefix-only <seq> counters into the ctx snapshot so the result is stable.
 func (p *worktreePopup) resolvePrefix() func(string, map[string]string) (string, []string, error) {
 	return func(value string, inputs map[string]string) (string, []string, error) {
-		names := worktree.Templates{Branch: value}.SeqNames()
-		ctx := p.tctx()
-		for _, n := range names {
-			if _, ok := ctx.Seqs[n]; !ok {
-				if ctx.Seqs == nil {
-					ctx.Seqs = map[string]int{}
-				}
-				ctx.Seqs[n] = config.PeekSeq(p.gitCommonDir, n)
-			}
-		}
-		out, err := template.Resolve(value, inputs, ctx)
-		return out, names, err
+		return worktree.ResolvePrefix(value, inputs, p.tctx(), p.gitCommonDir)
 	}
 }
 

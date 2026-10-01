@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/template"
 )
 
@@ -60,5 +61,23 @@ func TestLabelsAndSeqNamesUnionInOrder(t *testing.T) {
 func TestRepoName(t *testing.T) {
 	if got := RepoName("/work/acme-monorepo"); got != "acme-monorepo" {
 		t.Fatalf("RepoName = %q, want acme-monorepo", got)
+	}
+}
+
+func TestResolvePrefixPeeksMissingSeqsOnly(t *testing.T) {
+	gitDir := t.TempDir()
+	if _, err := config.BumpSeq(gitDir, "fix"); err != nil { // fix: next = 2
+		t.Fatal(err)
+	}
+	ctx := testCtx() // carries issue = 7 already
+	got, names, err := ResolvePrefix("x/<seq:issue>-<seq:fix:3>-<user:n>-<date:yyyy-MM-dd_HH-mm>", map[string]string{"n": "42"}, ctx, gitDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "x/7-002-42-2026-06-11_00-00" || !reflect.DeepEqual(names, []string{"issue", "fix"}) {
+		t.Fatalf("got %q names %v", got, names)
+	}
+	if _, ok := ctx.Seqs["fix"]; ok {
+		t.Fatal("ResolvePrefix must not write into the caller's Seqs map")
 	}
 }
