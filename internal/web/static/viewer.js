@@ -213,6 +213,11 @@ let ovSeq = 0; // bumped by every overview refresh (refreshOverview)
 let ovApplied = 0; // the refresh whose answer applied last: an older answer landing later drops
 let ovLast = Promise.resolve(false); // the last refresh started …
 let ovLastSeq = 0; // … and its place (an open's own fetch takes one too)
+// ownBack: the one browser-history entry an anchor's open adds, so the
+// browser's Back (its button, Alt+←, a mouse's back button) comes back like
+// backspace. Never more than one; a Back with no way back just uses it up
+// instead of leaving the page.
+let ownBack = history.state?.gg === "back";
 let cursorTimer = null;
 
 function ofPost(body) {
@@ -520,14 +525,24 @@ async function openAnchorAt(i) {
   const r = await openViewer({ src: "worktree", path: t.path, line: t.line });
   if (!r.ok) return;
   view.from = from;
+  if (!ownBack) {
+    history.pushState({ gg: "back" }, "");
+    ownBack = true;
+  }
   view.range = t.end > t.line ? { start: t.line, end: t.end } : null;
   rerenderKeepingScroll();
   swapFoot(true);
   if (t.note) $("viewer-body").querySelector(`.vnote[data-note="${t.note}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
-// anchorBack is backspace in a file an anchor opened: the overview comes
-// back with that anchor selected; the file stays open. One step deep.
+window.addEventListener("popstate", () => {
+  ownBack = false;
+  if (view.from && isOpen()) anchorBack();
+});
+
+// anchorBack is backspace (or the browser's Back) in a file an anchor
+// opened: the overview comes back with that anchor selected; the file stays
+// open. One step deep.
 async function anchorBack() {
   const f = view.from, id = view.id;
   view.from = null;
@@ -807,7 +822,7 @@ function viewerFoot() {
       `<button data-vact="ytext">y copy text</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
-  const back = view.from ? `<button data-vact="back">bksp back</button>` : "";
+  const back = view.from ? `<button data-vact="back" title="or your browser's Back">bksp back</button>` : "";
   const notes = view.notes.length
     ? `<span>} { notes</span><button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>`
     : "";
@@ -1007,7 +1022,7 @@ registerHelp({
     "<b>↑↓ j k</b> line, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close; " +
     "an agent's notes (<code>gg session note</code>) sit under their lines: <b>} {</b> next / previous note, <b>d</b> dismiss, <b>r</b> copy its reference; " +
     "an agent's overview (<code>gg session overview</code>) opens as a document: <b>tab / shift+tab</b> select an anchor, <b>enter</b> or a click opens it, " +
-    "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> in the file an anchor opened comes back",
+    "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> (or the browser's Back) in the file an anchor opened comes back",
 });
 
 export { closeViewer, dropViewer, evictedText, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };
