@@ -329,11 +329,7 @@ func SpawnAgent(ctx context.Context, sp SpawnSpec) (AgentStartResult, *AgentSess
 		if aerr != nil {
 			return AgentStartResult{}, nil, aerr
 		}
-		pol, perr := PolicyFromConfig(ac)
-		if perr != nil {
-			return AgentStartResult{}, nil, perr
-		}
-		if err := svc.ClaimWorktree(ctx, path, req.Caller, req.Note, pol); err != nil {
+		if err := svc.ClaimWorktree(ctx, path, req.Caller, req.Note, PolicyFromConfig(ac)); err != nil {
 			return AgentStartResult{}, nil, err
 		}
 		created = true

@@ -157,7 +157,7 @@ func TestWorktreeListBadStaleAfter(t *testing.T) {
 	dir := newCLIRepo(t)
 	os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte("[agents]\nstale_after = \"soon\"\n"), 0o644)
 	code, _, errb := runCLI(t, dir, "worktree", "list", "--json")
-	if code != 1 || !strings.Contains(errb, "stale_after") {
+	if code != 0 || !strings.Contains(errb, "warning: [agents] stale_after") {
 		t.Fatalf("bad stale_after = %d %q", code, errb)
 	}
 }

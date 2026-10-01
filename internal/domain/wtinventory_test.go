@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/wtguard"
 	"github.com/homeend/gigagit/internal/sessionreg"
 )
 
@@ -207,9 +208,33 @@ func TestInventoryOnlyOneWorktree(t *testing.T) {
 	}
 }
 
-func TestPolicyFromConfigBadAge(t *testing.T) {
+// A typo in stale_after must not fail every inventory and recycle: a clean
+// worktree stays free, and only a dirty one is held back (as recent, with
+// the reason), however old its changes.
+func TestPolicyFromConfigBadAgeBlocksOnlyDirty(t *testing.T) {
 	t.Parallel()
-	if _, err := PolicyFromConfig(config.AgentsConfig{StaleAfter: "soon"}); err == nil {
-		t.Fatal("want error")
+	p := PolicyFromConfig(config.AgentsConfig{StaleAfter: "soon"})
+	main, svc, _ := inventoryRepo(t)
+	clean := addWT(t, main, "clean")
+	stale := addWT(t, main, "stale")
+	f := filepath.Join(stale, "old.txt")
+	os.WriteFile(f, []byte("x"), 0o644)
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	os.Chtimes(f, old, old)
+	infos, err := svc.WorktreeInventory(context.Background(), p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := find(t, infos, clean); !c.Free {
+		t.Fatalf("clean = %+v", c)
+	}
+	s := find(t, infos, stale)
+	if s.Free || !slices.Equal(s.BlockedBy, []string{"dirty-recent"}) || !strings.Contains(s.Blockers[0].Detail, "stale_after") {
+		t.Fatalf("stale under a bad stale_after = %+v", s)
+	}
+	// The recycle op's guard report reads the repo config itself.
+	os.WriteFile(filepath.Join(main, ".gg.toml"), []byte("[agents]\nstale_after = \"soon\"\n"), 0o644)
+	if r, err := svc.GuardReport(context.Background(), wtguard.Target{Dir: clean, Branch: "clean"}); err != nil || len(r.Blockers) != 0 {
+		t.Fatalf("guard report under a bad stale_after = %+v %v", r, err)
 	}
 }

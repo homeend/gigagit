@@ -39,6 +39,6 @@ func StandardWorktreeGuards(src GuardSources) []wtguard.Guard {
 		claimGuard{lv: src.Live},
 		tuiGuard{lv: src.Live},
 		sessionGuard{lv: src.Live},
-		dirtyGuard{svc: src.Svc, stale: src.Policy.StaleAfter, now: now},
+		dirtyGuard{svc: src.Svc, stale: src.Policy.StaleAfter, staleErr: src.Policy.StaleErr, now: now},
 	}
 }
