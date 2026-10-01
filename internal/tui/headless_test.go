@@ -143,3 +143,52 @@ func TestHeadlessRefusesGlobalChanges(t *testing.T) {
 		t.Fatalf("Press after a theme change = %v, want a theme error", err)
 	}
 }
+
+// An op with no decision finishes inside the step: the loop reads the op
+// waiter while the op works.
+func TestHeadlessWaitsForAnOpToFinish(t *testing.T) {
+	t.Parallel()
+	dir := headlessRepo(t)
+	h := newHeadless(t, dir)
+	for _, k := range headlessSwitchKeys {
+		if err := h.Press(k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if h.m.running || h.opWaitHeld() {
+		t.Fatalf("the switch must have finished inside the step, screen:\n%s", h.Screen())
+	}
+	out, _ := exec.Command("git", "-C", dir, "branch", "--show-current").Output()
+	if strings.TrimSpace(string(out)) != "feature" {
+		t.Fatalf("current branch = %q, want feature; screen:\n%s", out, h.Screen())
+	}
+}
+
+// An op blocked on an engine decision settles with the modal on screen;
+// the next key answers it and the op resumes (the spec review's blocker:
+// a synchronous loop deadlocked on the op waiter here).
+func TestHeadlessSettlesOnADecision(t *testing.T) {
+	t.Parallel()
+	h := newHeadless(t, headlessRepo(t))
+	// d on "feature" runs DeleteBranch, which asks "delete-branch" through
+	// the engine Decider (a real engine decision, not a frontend confirm).
+	for _, k := range []string{"up", "d"} {
+		if err := h.Press(k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !h.m.awaitingDecision() {
+		t.Fatalf("want an open decision, screen:\n%s", h.Screen())
+	}
+	if err := h.Press("esc"); err != nil { // esc = abort
+		t.Fatal(err)
+	}
+	if h.m.awaitingDecision() || h.m.running {
+		t.Fatalf("esc must answer the decision and let the op end, screen:\n%s", h.Screen())
+	}
+}
+
+// headlessSwitchKeys switches to "feature" from the start screen: the
+// Branches panel is focused on main, feature is the row above it, s
+// switches (SmartSwitch) after a y/n confirm.
+var headlessSwitchKeys = []string{"up", "s", "y"}

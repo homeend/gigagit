@@ -268,12 +268,27 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	m.statusMsg = i18n.T("working…")
 	m.opMsgs = msgs
 	m.opCancel = cancel
-	return m, waitForOp(msgs)
+	return m, m.waitForOp(msgs)
 }
 
-// waitForOp blocks (off the UI thread) for the next op message.
-func waitForOp(msgs chan tea.Msg) tea.Cmd {
+// waitForOp blocks (off the UI thread) for the next op message. In quiet
+// mode it is a descriptor instead (opWaitMsg): the headless loop reads the
+// channel only while the op works — a decision blocks the op goroutine
+// until a key answers, so reading it then would deadlock the loop.
+func (m Model) waitForOp(msgs chan tea.Msg) tea.Cmd {
+	if m.quiet {
+		return func() tea.Msg { return opWaitMsg{ch: msgs} }
+	}
 	return func() tea.Msg { return <-msgs }
+}
+
+// opWaitMsg is the op waiter in quiet mode (headless.go holds it).
+type opWaitMsg struct{ ch chan tea.Msg }
+
+// awaitingDecision: an engine decision is open — the op is blocked on it.
+// A frontend-only modal (onResolve, no reply) is not one.
+func (m Model) awaitingDecision() bool {
+	return m.modal != nil && m.modal.reply != nil
 }
 
 // irebaseLoadedMsg carries the range commits for the interactive-rebase editor.

@@ -289,8 +289,6 @@ func (h *Headless) Close() {
 	}
 }
 
-// opWaitMsg / awaitingDecision: placeholders until the op waiter becomes a
-// descriptor (Task 6 of the plan moves both to op.go).
-type opWaitMsg struct{ ch chan tea.Msg }
-
-func (m Model) awaitingDecision() bool { return false }
+// opWaitHeld: an op waiter is held (an op is running, or blocked on a
+// decision).
+func (h *Headless) opWaitHeld() bool { return h.opWait != nil }

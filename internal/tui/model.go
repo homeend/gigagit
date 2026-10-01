@@ -3157,10 +3157,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case engine.Done:
 			m.statusMsg = renderSummary(e.Result)
 		}
-		return m, waitForOp(m.opMsgs)
+		return m, m.waitForOp(m.opMsgs)
 	case opDecisionMsg:
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
-		return m, waitForOp(m.opMsgs)
+		return m, m.waitForOp(m.opMsgs)
 	case prsLoadedMsg:
 		return m.handlePRsLoaded(msg)
 
