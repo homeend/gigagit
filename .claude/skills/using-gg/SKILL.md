@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v116 -->
+<!-- gg:using-gg:v117 -->
 
 # Using gg (gigagit)
 
@@ -304,7 +304,8 @@ a gg web page's when no TUI runs (a TUI serving its own page shares one set
 with it: same ids, closing one in either closes it in both) — whose links
 are ANCHORS. The user tabs from anchor to anchor, presses enter to open
 one (the real file comes to the front at the place you named), and backspace
-brings them back to the overview on the anchor they left.
+(in gg web also the browser's Back) brings them back to the overview on the
+anchor they left.
 
 - Anchor destinations: `[label](path)` (the file), `[label](path:120)` (the
   line), `[label](path:120-140)` (the range, selected), `[label](note:t7)` (the
@@ -322,10 +323,13 @@ brings them back to the overview on the anchor they left.
   news: `added f<n> in the background (<why>)` when the user was busy (it
   waits; `gg session files focus f<n>` shows it later), `; closed <path> (20
   files open)` when a file was pushed out to make room. With `--json`, read
-  `state` (`shown` / `background`).
+  `state` (`shown` / `background`). On gg web, `shown` means the open tabs
+  were told to show it; `gg session files` says whether a tab really shows
+  it (a tab that could not load it does not count).
 - `gg session overview set <id> [--title "…"] [--file <md>] [--json]` —
   replace the text; the user's selected anchor stays selected when its
-  destination is still there.
+  destination is still there (on gg web it is selected again when a later
+  `set` brings that destination back).
 - `gg session overview list [--json]` — `<id>\t<state>\t<n> anchors\t<title>`;
   `show <id> [--json]` — `<id>\t<title>`, a blank line, the text; `rm <id>` —
   `closed <id>`. `gg session files focus <id>` brings one to the front.
