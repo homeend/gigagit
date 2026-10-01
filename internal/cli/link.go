@@ -181,7 +181,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 				fmt.Fprintln(stderr, "error:", rerr)
 				return 1
 			}
-			if n := contentLineCount(data); l.Line > n {
+			if n := contentLineCount(data); max(l.Line, l.End) > n {
 				fmt.Fprintf(stderr, "error: %s has %d lines\n", l.Path, n)
 				return 1
 			}
@@ -189,8 +189,14 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	}
 	// An uncommitted line carries its fingerprint, so whoever opens the link
 	// later is told when the line moved or changed (domain.ResolveLink).
+	// A range carries its whole block's, which the resolver only checks: a
+	// block that changed makes the link stale.
 	if !*noFP {
-		l.Fingerprint = svc.LinkLineFingerprint(ctx, l)
+		if l.End > l.Line {
+			l.Fingerprint = svc.LinkBlockFingerprint(ctx, l)
+		} else {
+			l.Fingerprint = svc.LinkLineFingerprint(ctx, l)
+		}
 	}
 	// Best-effort, after the link is known good: a history that cannot be
 	// written must never fail the copy the user asked for, and must never
@@ -269,7 +275,7 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 		if rel == "" && (probe.Line > 0 || probe.Hunk > 0) {
 			return model.Link{}, fmt.Errorf("%w: a line or a hunk needs a file path", model.ErrLink)
 		}
-		l.Path, l.Side, l.Line, l.Hunk = rel, probe.Side, probe.Line, probe.Hunk
+		l.Path, l.Side, l.Line, l.End, l.Hunk = rel, probe.Side, probe.Line, probe.End, probe.Hunk
 	}
 
 	switch {
@@ -482,6 +488,8 @@ type wireResolvedLink struct {
 	Worktree string `json:"worktree,omitempty"`
 	Side     string `json:"side,omitempty"`
 	Line     int    `json:"line,omitempty"`
+	// EndLine is the last line of a range link (…:A-B); absent for one line.
+	EndLine int `json:"end_line,omitempty"`
 	// AskedLine / Anchor / AnchorMatches describe a fingerprinted link
 	// (…:N~<fp>): Line is where the text is NOW, AskedLine the line the link
 	// named, Anchor "same" | "moved" | "changed".
@@ -539,7 +547,7 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 		w := wireResolvedLink{
 			Checkout: res.Checkout, State: res.Addr.State.String(), Path: res.Addr.Path,
 			Commit: res.Addr.Commit, Worktree: res.Addr.Worktree,
-			Side: string(res.Side), Line: res.Line, Hunk: res.Hunk,
+			Side: string(res.Side), Line: res.Line, EndLine: res.End, Hunk: res.Hunk,
 		}
 		if res.Preview != nil {
 			w.Source, w.Target = res.Preview.Source, res.Preview.Target
@@ -586,6 +594,9 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 		line += fmt.Sprintf(" hunk %d", res.Hunk)
 	case res.Line > 0:
 		line += fmt.Sprintf(" %s:%d", res.Side, res.Line)
+		if res.End > res.Line {
+			line += fmt.Sprintf("-%d", res.End)
+		}
 		if n := res.AnchorNote(); n != "" {
 			line += " (" + n + ")"
 		}
