@@ -20,6 +20,7 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/searchhist":   "frontends must reach the search-history store through internal/domain",
 		"github.com/homeend/gigagit/internal/profile":      "frontends must reach the profile store through internal/domain",
 		"github.com/homeend/gigagit/internal/prefix":       "frontends must reach the prefix store through internal/domain",
+		"github.com/homeend/gigagit/internal/texttmpl":     "frontends must reach the text-template store through internal/domain",
 		"github.com/homeend/gigagit/internal/linkhist":     "frontends must reach the copied-link history store through internal/domain",
 		"github.com/homeend/gigagit/internal/savedcompare": "frontends must reach the saved-comparison store through internal/domain",
 		"github.com/homeend/gigagit/internal/agentsession": "frontends must reach agent sessions through internal/domain",
