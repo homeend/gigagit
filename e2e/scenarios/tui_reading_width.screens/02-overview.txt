@@ -1,0 +1,45 @@
+local  branch main                                                                                                                                                   {{root}}_____________________/local
+╭────────────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Review: b4b8643                                                ││ Commits (all) 2                                                                                                                    │
+│ fake · just now · 1 notes on 1 files                           ││   ●  ↓ ✎ *main deleted a b                                                                                                         │
+│ > ≡ Overview                                                   ││   ●      main  add a b  ◆ 1                                                                                                        │
+│   D  a.txt  ◆ 1                                                ││                                                                                                                                    │
+│      deleted                                                   ││                                                                                                                                    │
+│   D  b.txt                                                     ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│  ╔════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗  │
+│  ║                                                                                                                                                                                                ║  │
+│  ║                                    Review: b4b8643                                                                                                                                             ║  │
+│  ║                                                                                                                                                                                                ║  │
+│  ║                                      Overview                                                                                                                                                  ║  │
+│  ║                                                                                                                                                                                                ║  │
+│  ║                                      The change deletes a.txt and b.txt, which nothing else in the repository reads any more, so the removal is safe; the                                      ║  │
+│  ║                                      remaining risk is a script outside the repository that still expects them, which this review cannot see.                                                  ║  │
+│  ║                                                                                                                                                                                                ║  │
+│  ║                                      Verdict                                                                                                                                                   ║  │
+│  ║                                                                                                                                                                                                ║  │
+│  ║                                      Approve: the deletion is complete and consistent.                                                                                                         ║  │
+│  ║                                                                                                                                                                                                ║  │
+│  ║                                      verdict: approve                                                                                                                                          ║  │
+│  ║                                                                                                                                                                                                ║  │
+│  ║                                    [y] copy                                                                                                                                                    ║  │
+│  ║                                    [/] search  [ctrl+w] mode  [s] save  [ctrl+t] full  [q] close                                                                                               ║  │
+│  ║                                                                                                                                                                                                ║  │
+│  ╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝  │
+│                                                                                                                                                                                                      │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+╰────────────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+tree: [↑/↓] move  [enter] diff  [a] all files  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view  [ctrl+t] full  [i] msg  [esc/l] close
+⎇ main · # b4b8643 · @ gg-e2e
