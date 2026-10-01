@@ -108,3 +108,32 @@ func TestResolveLinkReanchorsOnTheRightText(t *testing.T) {
 		t.Errorf("deleted file: line=%d anchor=%+v err=%v", res.Line, res.Anchor, err)
 	}
 }
+
+// A staged RENAME's old side is HEAD's text at the OLD path: the link names
+// the new path, so the resolver has to follow the rename or every such link
+// would read "changed" the moment it was copied.
+func TestResolveLinkStagedRenameOldSideReadsTheOldPath(t *testing.T) {
+	t.Parallel()
+	dir := linkRepoWithRemote(t, "gigagit")
+	if err := os.WriteFile(filepath.Join(dir, "old.txt"), []byte("alpha\nbeta\ngamma\ndelta\nepsilon\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitIn(t, dir, "add", "old.txt")
+	runGitIn(t, dir, "commit", "-m", "c1")
+	runGitIn(t, dir, "mv", "old.txt", "new.txt")
+	svc := Open(dir)
+	l := model.Link{Repo: model.LinkRepo{Name: "gigagit"}, Path: "new.txt", Side: model.NoteSideOld, Line: 2,
+		Target: model.LinkTarget{State: model.StateStaged}, Fingerprint: model.LineFingerprint("beta")}
+	res, err := ResolveLink(context.Background(), l, ResolveOpts{Cwd: svc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Line != 2 || res.Anchor.State != AnchorSame {
+		t.Errorf("line=%d anchor=%+v, want line 2 same (HEAD:old.txt)", res.Line, res.Anchor)
+	}
+	// The producer reads the same text.
+	l.Fingerprint = ""
+	if got := svc.LinkLineFingerprint(context.Background(), l); got != model.LineFingerprint("beta") {
+		t.Errorf("LinkLineFingerprint = %q, want beta's", got)
+	}
+}

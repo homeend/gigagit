@@ -88,6 +88,14 @@ func linkSideLines(ctx context.Context, svc *Service, l model.Link, path string)
 		ref.Source = model.SourceStaged
 	}
 	data, err := svc.ResolveBytes(ctx, ref)
+	if err != nil && staged && old {
+		// A staged RENAME: the diff's old side is HEAD's text at the OLD path,
+		// while the link names the new one.
+		if orig := stagedRenameSource(ctx, svc, path); orig != "" {
+			ref.Path = orig
+			data, err = svc.ResolveBytes(ctx, ref)
+		}
+	}
 	if err != nil || strings.IndexByte(string(data), 0) >= 0 {
 		return nil, false
 	}
@@ -97,6 +105,21 @@ func linkSideLines(ctx context.Context, svc *Service, l model.Link, path string)
 		return nil, true
 	}
 	return strings.Split(text, "\n"), true
+}
+
+// stagedRenameSource is the path a staged rename moved path FROM ("" when
+// path is not one).
+func stagedRenameSource(ctx context.Context, svc *Service, path string) string {
+	st, err := svc.Status(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, f := range st.Files {
+		if f.Path == path && f.OrigPath != "" {
+			return f.OrigPath
+		}
+	}
+	return ""
 }
 
 // LinkLineFingerprint is the fingerprint a PRODUCER puts on an uncommitted

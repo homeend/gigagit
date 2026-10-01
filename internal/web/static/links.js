@@ -182,7 +182,10 @@ function linkFor(repo, worktree, ctx, side, no, text) {
     if (side === "old") no = 0;
   } else {
     const st = (ctx && ctx.state) || "unstaged";
-    if (st !== "commit") fp = lineFingerprint(text);
+    // A line that was not valid UTF-8 arrives with U+FFFD in place of its
+    // bytes (JSON cannot carry them): its fingerprint would be of different
+    // bytes than the file's and read "changed" forever, so the link is plain.
+    if (st !== "commit" && !(text || "").includes("\ufffd")) fp = lineFingerprint(text);
     if (st === "staged") {
       s += "@staged";
     } else if (st === "commit") {

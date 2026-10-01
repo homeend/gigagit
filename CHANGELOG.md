@@ -105,8 +105,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 - **A link to an uncommitted line carries a fingerprint of that line**:
   `gg://repo/path:33~9f2c41aa` (also `@staged` and `?view=content` links).
-  Every copy path adds it — `L`, the `.` menu's Copy link and Copy file link,
-  the web's *copy gg link to this line*, `gg link`. When the link is opened
+  The copy paths add it — `L`, the `.` menu's Copy link and Copy file link,
+  the web's *copy gg link to this line*, `gg link` (not yet the web file
+  viewer's own "copy file link", which still copies the plain form). When the link is opened
   after the file has moved on, gg finds the text again: it lands on the line
   where the text is now and says `line 33 moved to 41` (or, when several
   lines match, `nearest of N matching lines`). When the text is gone it lands
@@ -125,6 +126,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   never carries one (`~<fp>` on those is refused): they already name fixed
   content.
 - A gg build older than this one refuses a fingerprinted link as malformed.
+- gg web copies the plain form for a line that is not valid UTF-8 (the page
+  never sees its real bytes).
 
 ## Line links: the landing pane, the web's other comparisons, the help line
 

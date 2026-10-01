@@ -52,6 +52,10 @@ func TestLineFingerprintJSMatchesGo(t *testing.T) {
 		{Name: "sides: the working side", Ctx: map[string]any{"path": "a.go", "compare": true, "cmpSides": map[string]any{"left": "commit:" + a40, "right": "worktree"}}, Side: "new", No: 7, Text: "x := 1", want: "gg://gigagit/a.go:7~" + fp},
 		{Name: "sides: the commit side", Ctx: map[string]any{"path": "a.go", "compare": true, "cmpSides": map[string]any{"left": "commit:" + a40, "right": "worktree"}}, Side: "old", No: 7, Text: "x := 1", want: "gg://gigagit/a.go@" + a40 + ":7"},
 		{Name: "sides: the index side", Ctx: map[string]any{"path": "a.go", "compare": true, "cmpSides": map[string]any{"left": "commit:" + a40, "right": "staged"}}, Side: "new", No: 7, Text: "x := 1", want: "gg://gigagit/a.go@staged:7~" + fp},
+		// A line that was not valid UTF-8 reaches the page with U+FFFD in place
+		// of its bytes: its fingerprint would be of different bytes than the
+		// file's, so the link stays plain.
+		{Name: "a line holding U+FFFD is plain", Ctx: map[string]any{"path": "a.go", "state": "unstaged"}, Side: "new", No: 7, Text: "caf\ufffd := 1", want: "gg://gigagit/a.go:7"},
 		{Name: "content", Ctx: map[string]any{"path": "a.go", "state": "unstaged", "hint": map[string]any{"kind": "view", "id": "content"}}, Side: "new", No: 3, Text: "alpha", want: "gg://gigagit/a.go:3~5d8b6dab?view=content"},
 	}
 	dir := t.TempDir()
