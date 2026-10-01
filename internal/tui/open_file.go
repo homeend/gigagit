@@ -2,11 +2,12 @@ package tui
 
 import (
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
 	"strconv"
-	"sync/atomic"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -76,10 +77,17 @@ type openFile struct {
 	// backgrounded is set once the file has been sent to the background
 	// (ctrl+]): from then on esc sends it back there and only X closes it.
 	backgrounded bool
-	// notes are the temporary remarks an agent left on this file
-	// (open_file_notes.go), ordered by start line then age. They live and
-	// die with the document: nothing stores them.
-	notes []*fileNote
+	// notes are a COPY of the temporary remarks an agent left on this file
+	// (open_file_notes.go), ordered by start line then age. They live in the
+	// agentdocs store; View draws this copy, never the store, so a change
+	// made in the browser cannot shift the rows mid-frame.
+	notes []agentdocs.Note
+	// docs/root are the store the document's notes live in and the root
+	// they are filed under, set when it joins the open-files list
+	// (adoptDoc); nil for a document no list holds (F's live preview), which
+	// carries no notes.
+	docs *agentdocs.Store
+	root string
 	// noteW is the width the note boxes were last drawn at (0 = never):
 	// the pager counts their rows with it between frames.
 	noteW int
@@ -107,10 +115,6 @@ func (d *openFile) keepPlace() {
 	d.keep.line, d.keep.top = d.p.cur+1, d.p.sel
 }
 
-// openFileSeq numbers documents for their tags. Process-global: a tag only
-// has to be unique among documents alive at once.
-var openFileSeq atomic.Int64
-
 // newOpenFile is a document for path at src, showing the loading placeholder
 // until its load arrives.
 func newOpenFile(src fileSource, path string) *openFile {
@@ -119,7 +123,9 @@ func newOpenFile(src fileSource, path string) *openFile {
 		path: path,
 		p:    &contentPopup{title: path, lines: []contentLine{{text: i18n.T("(loading…)")}}},
 	}
-	d.seq = openFileSeq.Add(1)
+	// The shared store numbers documents: a gg web page this TUI hosts
+	// draws its ids from the same counter, so an id never names two files.
+	d.seq = agentdocs.Shared().NextFileSeq()
 	d.tag = fmt.Sprintf("%s#%d", d.key(), d.seq)
 	return d
 }
@@ -161,11 +167,6 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 		d.keepPlace()
 	}
 	p := d.p
-	var before []string
-	reanchor := len(d.notes) > 0
-	if reanchor && docLoaded(d) {
-		before = rawOf(p.lines)
-	}
 	p.img, p.imgW, p.imgH = msg.img, 0, 0 // a re-fit at the next frame
 	if msg.err != nil {
 		p.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
@@ -175,9 +176,7 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 			p.imgInfo = msg.lines[0].text
 		}
 	}
-	if reanchor && docLoaded(d) && msg.img == nil {
-		d.reanchorNotes(before, rawOf(p.lines))
-	}
+	d.syncNotes() // the Model aligned the store to these lines before the fill (alignDocNotes)
 	p.cur, p.sel = 0, 0
 	p.lsel.clear()
 	if docLoaded(d) {
@@ -221,8 +220,8 @@ func (d *openFile) landPendingLine(rows int) (notice string) {
 	if p.extraRows != nil {
 		p.ensureCursorVisible(rows)  // a note box above may have pushed the line out
 		for _, nt := range d.notes { // landing on a note (an overview's anchor): bring its box in, as } does
-			if nt.start == line {
-				for p.sel < p.cur && p.rowsSpan(p.sel, nt.end) > rows {
+			if nt.Start == line {
+				for p.sel < p.cur && p.rowsSpan(p.sel, nt.End) > rows {
 					p.sel++
 				}
 				break

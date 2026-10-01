@@ -2,27 +2,16 @@ package tui
 
 import (
 	"sort"
-	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // The user's side of an open file's temporary notes: } / { step through
 // them (then on to the next open file that has any — the diff view's rule),
 // d dismisses the note under the cursor, r copies a reference to it.
-
-// reference is what the user pastes to the agent to talk about this note:
-// the id (gg session note show resolves it) plus path:lines, which still
-// mean something once the note is gone.
-func (n *fileNote) reference(path string) string {
-	ref := "gg note " + n.id + " " + path + ":" + strconv.Itoa(n.start)
-	if n.end != n.start {
-		ref += "-" + strconv.Itoa(n.end)
-	}
-	return ref
-}
 
 // anyFileNotes reports whether any open file of this worktree has notes.
 func (m Model) anyFileNotes() bool {
@@ -49,17 +38,18 @@ func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		return m.stepFileNote(d, -1)
 	case "d":
 		if n := d.noteAt(d.p.cur + 1); n != nil {
-			d.removeNote(n.id)
-			m.statusMsg = i18n.T("note %s dismissed", n.id)
+			id := n.ID // the copy n points into is rebuilt by the removal
+			d.removeNote(id)
+			m.statusMsg = i18n.T("note %s dismissed", id)
 			return m, nil, true
 		}
 	case "enter":
 		if n := d.noteAt(d.p.cur + 1); n != nil {
-			return m.openFileNote(n), nil, true
+			return m.openFileNote(*n), nil, true
 		}
 	case "r":
 		if n := d.noteAt(d.p.cur + 1); n != nil {
-			return m, m.copyToClipboardCmd(i18n.T("Copied note reference %s", n.id), n.reference(d.path)), true
+			return m, m.copyToClipboardCmd(i18n.T("Copied note reference %s", n.ID), agentdocs.NoteReference(*n)), true
 		}
 	}
 	return m, nil, false
@@ -70,22 +60,23 @@ func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 // notes comes to the front on its first (last) note.
 func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 	line := d.p.cur + 1
-	var hit *fileNote
-	for _, n := range d.notes {
-		if dir > 0 && n.start > line {
+	var hit *agentdocs.Note
+	for i := range d.notes {
+		n := &d.notes[i]
+		if dir > 0 && n.Start > line {
 			hit = n
 			break
 		}
-		if dir < 0 && n.start < line {
+		if dir < 0 && n.Start < line {
 			hit = n // keep going: the LAST one above the cursor
 		}
 	}
 	if hit != nil {
 		_, rows, _, _ := m.activePreview()
-		d.p.cur = hit.start - 1
+		d.p.cur = hit.Start - 1
 		d.p.ensureCursorVisible(rows)
 		// Bring the box in too, as far as that keeps the cursor line on screen.
-		for d.p.sel < d.p.cur && d.p.rowsSpan(d.p.sel, hit.end) > rows {
+		for d.p.sel < d.p.cur && d.p.rowsSpan(d.p.sel, hit.End) > rows {
 			d.p.sel++
 		}
 		return m, nil, true
@@ -118,7 +109,7 @@ func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 		if dir < 0 {
 			target = e.notes[len(e.notes)-1]
 		}
-		e.pendingLine = target.start
+		e.pendingLine = target.Start
 		nm, load := m.bringToFront(e)
 		if load == nil { // already loaded and not re-read: land the line now
 			rows, _ := nm.viewerGeom()
@@ -150,18 +141,18 @@ func (m Model) fileNoteRows() []actionRow {
 			return nm, cmd
 		}},
 	}
-	n := d.noteAt(d.p.cur + 1)
-	if n == nil {
-		n = d.notes[0] // the menu has no cursor of its own: offer the first note
+	n := d.notes[0] // the menu has no cursor of its own: offer the first note
+	if at := d.noteAt(d.p.cur + 1); at != nil {
+		n = *at
 	}
 	rows = append(rows, actionRow{id: "note-show", key: "enter", label: i18n.T("Show full note"), run: func(m Model) (tea.Model, tea.Cmd) {
 		return m.openFileNote(n), nil
 	}})
-	ref := m.copyRow("copy-note-ref", i18n.T("Copy note reference"), i18n.T("Copied note reference %s", n.id), n.reference(d.path))
+	ref := m.copyRow("copy-note-ref", i18n.T("Copy note reference"), i18n.T("Copied note reference %s", n.ID), agentdocs.NoteReference(n))
 	ref.key = "r"
 	return append(rows, ref, actionRow{id: "note-dismiss", key: "d", label: i18n.T("Dismiss note"), run: func(m Model) (tea.Model, tea.Cmd) {
-		d.removeNote(n.id)
-		m.statusMsg = i18n.T("note %s dismissed", n.id)
+		d.removeNote(n.ID)
+		m.statusMsg = i18n.T("note %s dismissed", n.ID)
 		return m, nil
 	}})
 }

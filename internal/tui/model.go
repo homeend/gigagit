@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/commitgraph"
@@ -129,6 +130,8 @@ type Model struct {
 
 	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
+	docs          *agentdocs.Store                         // the store the open files' notes live in: agentdocs.Shared(), which a hosted gg web page reads too
+	docsSub       *docsTrack                               // the TUI's one subscription to docs (agentdocs_track.go)
 	wtFiles       *worktreeFiles                           // F's working-tree mode of the files view (nil otherwise)
 	filesFull     bool                                     // ctrl+t: the files view spans the whole body
 	previewFull   bool                                     // ctrl+t on a focused preview: it spans the whole body
@@ -489,11 +492,13 @@ func New(svc *domain.Service) Model {
 		branchFilterSlot:       map[panel]int{},
 		bfMemo:                 &branchFilterMemos{},
 		openFiles:              &openFilesReg{},
+		docs:                   agentdocs.Shared(),
 		childInbox:             map[domain.SessionID]string{},
 		taskTrack:              newTaskTrack(),
 		pendingCommitMsg:       map[string]pendingMessage{},
 		keptSteer:              map[string]bool{},
 	}
+	m.docsSub = newDocsTrack(m.docs)
 	return m.loadPrefs()
 }
 
@@ -510,7 +515,7 @@ func (m Model) loadPrefs() Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.startupWebCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -619,6 +624,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onWebSwitchRequest(msg)
 	case tasksChangedMsg:
 		return m.onTasksChanged()
+	case agentDocsChangedMsg:
+		return m.onAgentDocsChanged()
 	case taskLaunchReadyMsg:
 		return m.applyTaskLaunchReady(msg)
 	case taskSubmittedMsg:
@@ -1026,6 +1033,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				d.layOut(rows, m.overviewWidth(inner))
 				return m, nil
 			}
+			m.alignDocNotes(d, msg)
 			if n := d.fill(msg, rows, inner); n != "" {
 				m.statusMsg = n
 			}
@@ -1681,6 +1689,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tags = msg.tags
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
+			// The worktree's open files may have missed store changes while
+			// another worktree was current (a dismiss in the browser).
+			docsCmd := m.syncDocNotes()
 			m.linkRepoName = msg.repoName
 			m.cfg = msg.cfg
 			m = m.applyBranchFilterConfig()
@@ -1761,14 +1772,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m, reload = m.startFeedReload()
 				var forgeCmd tea.Cmd
 				m, forgeCmd = m.kickForgeProbe()
-				return m, tea.Batch(themeCmd, reload, previewsCmd, steerCmd, forgeCmd)
+				return m, tea.Batch(themeCmd, reload, previewsCmd, steerCmd, forgeCmd, docsCmd)
 			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
 			var forgeCmd tea.Cmd
 			m, forgeCmd = m.kickForgeProbe()
-			return m, tea.Batch(themeCmd, previewsCmd, steerCmd, forgeCmd)
+			return m, tea.Batch(themeCmd, previewsCmd, steerCmd, forgeCmd, docsCmd)
 		}
 	case dataAvailableMsg:
 		// Free the background lane the moment its active read's message arrives —
