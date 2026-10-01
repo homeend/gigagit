@@ -163,7 +163,7 @@ func AgentDescends(target, caller string) bool {
 	return false
 }
 
-// reserveSpawnSlot takes one of cap slots (live spawned + pending). The
+// reserveSpawnSlot takes one of limit slots (live spawned + pending). The
 // returned release(started) frees the pending slot; a started session then
 // counts through its record instead.
 func reserveSpawnSlot(limit int) (func(started bool), bool) {
