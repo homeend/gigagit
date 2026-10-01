@@ -111,13 +111,15 @@ func start(id ID, spec StartSpec) (*Session, error) {
 
 // childEnv drops the variables that describe gg's own host terminal rather
 // than the console the child runs in: an agent seeing TMUX assumes it is a
-// tmux pane (Claude prints tmux scroll hints). TERM is set explicitly.
+// tmux pane (Claude prints tmux scroll hints). TERM is set explicitly. A gg
+// started inside a gg console must not hand ITS agent-channel identity
+// (GG_SESSION_ID, GG_MCP_URL, GG_SESSION_TOKEN, GG_PARENT_SESSION) on.
 func childEnv(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
 		switch k {
-		case "TMUX", "TMUX_PANE", "TERM", "GG_SESSION_ID":
+		case "TMUX", "TMUX_PANE", "TERM", "GG_SESSION_ID", "GG_MCP_URL", "GG_SESSION_TOKEN", "GG_PARENT_SESSION":
 			continue
 		}
 		out = append(out, kv)

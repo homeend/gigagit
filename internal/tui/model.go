@@ -144,6 +144,7 @@ type Model struct {
 	sessWatch     *sessionWatch                            // the TUI's subscription to the session list (console.go)
 	web           *webHostState                            // the gg web page served from this process (webhost.go)
 	webOpts       webLaunchOptions                         // gg --web / --web-addr for this run
+	agentHost     *agentHostState                          // the agent MCP channel (agenthost.go); pointer: survives the value copy
 	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
 	sessionStates map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
 
@@ -519,7 +520,7 @@ func (m Model) loadPrefs() Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd(), waitAgentSpawnCmd(m.agentHost))
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -626,6 +627,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onWebReroot(msg)
 	case webSwitchRequestMsg:
 		return m.onWebSwitchRequest(msg)
+	case agentSpawnRequestMsg:
+		return m.onAgentSpawnRequest(msg)
+	case agentSpawnedMsg:
+		return m.onAgentSpawned(msg)
 	case tasksChangedMsg:
 		return m.onTasksChanged()
 	case agentDocsChangedMsg:

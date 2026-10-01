@@ -131,11 +131,41 @@ func EnsureSessionCommands(cfg config.Config, globalPath string, detect func() [
 // session's identity. env is appended to the child's environment (the
 // frontend's GG_INBOX).
 func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, worktreeDir, cwd string, cols, rows int, env []string) (*AgentSession, error) {
-	resolved, err := template.ResolveCommand(tc.Command, nil, template.CmdCtx{Repo: worktreeDir})
+	return s.startSessionPrompt(ctx, tc, worktreeDir, cwd, cols, rows, env, "")
+}
+
+func (s *Service) startSessionPrompt(ctx context.Context, tc config.ToolCommand, worktreeDir, cwd string, cols, rows int, env []string, prompt string) (*AgentSession, error) {
+	resolved, err := template.ResolveCommand(tc.Command, nil, template.CmdCtx{Repo: worktreeDir, Prompt: prompt})
 	if err != nil {
 		return nil, err
 	}
 	return s.startLine(ctx, Sessions(), tc.Name, agentIDFor(tc), resolved, worktreeDir, cwd, cols, rows, env)
+}
+
+// StartAgentSession is StartSession for an AGENT the agent channel can
+// reach: with mcpURL set the child gets GG_MCP_URL and a fresh
+// GG_SESSION_TOKEN, bound to the new session with rec. prompt fills the
+// command's <prompt> slot (AgentKickoff for a spawned worker, "" for a
+// manual start). Returns the token ("" without a URL).
+func (s *Service) StartAgentSession(ctx context.Context, tc config.ToolCommand, dir, cwd string, cols, rows int, env []string, mcpURL string, rec SpawnRecord, prompt string) (*AgentSession, string, error) {
+	tok := ""
+	if mcpURL != "" {
+		tok = mintToken()
+		env = append(append([]string(nil), env...), "GG_MCP_URL="+mcpURL, "GG_SESSION_TOKEN="+tok)
+	}
+	if rec.Parent != "" {
+		env = append(env, "GG_PARENT_SESSION="+rec.Parent)
+	}
+	sess, err := s.startSessionPrompt(ctx, tc, dir, cwd, cols, rows, env, prompt)
+	if err != nil {
+		return nil, "", err
+	}
+	full := FullSessionID(sess.Info().ID)
+	bindRecord(full, rec)
+	if tok != "" {
+		bindToken(tok, full)
+	}
+	return sess, tok, nil
 }
 
 // startLine runs an already-resolved command line as a session on mgr (the

@@ -32,6 +32,10 @@ type Claim struct {
 	// between WSL and Windows has two pid namespaces and two state dirs, so
 	// only the writing host can judge its liveness.
 	Host string `toml:"host"`
+	// Parent is the session that handed this claim to its holder (an agent
+	// that spawned a worker); when the holder dies and the parent lives, the
+	// claim reverts to the parent instead of being swept. "" = none.
+	Parent string `toml:"parent"`
 }
 
 func path(gitDir string) string { return filepath.Join(gitDir, FileName) }
@@ -55,6 +59,34 @@ func Create(gitDir string, c Claim) error {
 		return err
 	}
 	return f.Close()
+}
+
+// Replace writes c over any existing claim in one step (temp file + rename),
+// so a rewrite — a handover, a revert to the parent — never leaves the
+// worktree without a claim. The caller holds the claim lock.
+func Replace(gitDir string, c Claim) error {
+	data, err := toml.Marshal(c)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(gitDir, FileName+".*.tmp")
+	if err != nil {
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Rename(tmp.Name(), path(gitDir)); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return nil
 }
 
 // Read returns the claim; ok is false when there is none. A reader racing a

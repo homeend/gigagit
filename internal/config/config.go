@@ -270,11 +270,16 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayThemes(&cfg.Themes, layer.Themes)
 			overlayConsole(&cfg.Console, layer.Console)
 			overlayTasks(&cfg.Tasks, layer.Tasks)
+			spawn, maxSpawned := cfg.Agents.Spawn, cfg.Agents.MaxSpawned
 			overlayAgents(&cfg.Agents, layer.Agents)
 			if i == 0 {
 				// reserved is repo-only: paths belong to one repo, and a
 				// global entry could never be unreserved from it.
 				cfg.Agents.Reserved = nil
+			} else {
+				// spawn and max_spawned are global-only: a cloned repo's
+				// .gg.toml must never let agents start agents.
+				cfg.Agents.Spawn, cfg.Agents.MaxSpawned = spawn, maxSpawned
 			}
 			overlayWeb(&cfg.Web, layer.Web)
 		}
@@ -706,6 +711,26 @@ type AgentsConfig struct {
 	StaleAfter string `toml:"stale_after"`
 	// AllowMain lets agents take the main checkout.
 	AllowMain bool `toml:"allow_main"`
+	// Spawn names the session commands (by their `name`) an agent running
+	// inside gg may start as a worker (`agent_start`). Empty = spawning off.
+	// Read from the GLOBAL file only: a cloned repo must not enable it.
+	Spawn []string `toml:"spawn"`
+	// MaxSpawned caps live agent-spawned sessions per TUI (default 4,
+	// clamped 1..16). Global file only.
+	MaxSpawned int `toml:"max_spawned"`
+}
+
+// SpawnCap is MaxSpawned clamped to 1..16; unset (0) is the default 4.
+func (c AgentsConfig) SpawnCap() int {
+	switch {
+	case c.MaxSpawned == 0:
+		return 4
+	case c.MaxSpawned < 1:
+		return 1
+	case c.MaxSpawned > 16:
+		return 16
+	}
+	return c.MaxSpawned
 }
 
 func overlayAgents(dst *AgentsConfig, src AgentsConfig) {
@@ -717,6 +742,12 @@ func overlayAgents(dst *AgentsConfig, src AgentsConfig) {
 	}
 	if src.AllowMain {
 		dst.AllowMain = true
+	}
+	if len(src.Spawn) > 0 {
+		dst.Spawn = src.Spawn
+	}
+	if src.MaxSpawned != 0 {
+		dst.MaxSpawned = src.MaxSpawned
 	}
 }
 

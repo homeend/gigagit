@@ -808,3 +808,21 @@ func TestSessionBuiltins(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionRowsHavePromptSlot(t *testing.T) {
+	want := map[string]bool{"claude": true, "junie": true, "codex": true, "antigravity": true, "kimi": false}
+	for _, tl := range Builtins() {
+		w, ok := want[tl.ID]
+		if !ok {
+			continue
+		}
+		for _, ct := range tl.Commands {
+			if ct.Category != CatSession {
+				continue
+			}
+			if got := template.HasPromptSlot(ct.Command); got != w {
+				t.Errorf("%s / %s: prompt slot = %t, want %t (%q)", tl.ID, ct.Name, got, w, ct.Command)
+			}
+		}
+	}
+}

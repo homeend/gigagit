@@ -960,6 +960,31 @@ shows the question, the CLI needs `--force`. In the TUI Worktrees tab ⚑
 marks a claimed row (the bottom bar says who, since when, and why) and ⊘ a
 reserved one; the `.` menu reserves, unreserves and releases claims.
 
+#### Agents starting agents
+
+An agent running in a gg console (started from Start agent) can start a
+worker agent in another worktree and hand it a task. Allow it in the
+**global** config (a repo `.gg.toml` cannot):
+
+```toml
+[agents]
+spawn = ["Claude (yolo)"]  # session command names agents may start; empty = off
+max_spawned = 4            # live agent-started sessions per TUI (1..16)
+```
+
+Then, once and in this order: accept that command's update in Settings →
+External tools if it offers one (the command needs `<prompt>`; the update
+changes its text), start it yourself from Start agent (the one-time approval
+of that text), and run `gg init --mcp` so Claude Code loads gg's MCP
+server. The overseer then calls the `agent_start` tool — or
+`gg agent start --worktree <path|name> --tool "Claude (yolo)" --prompt-file
+brief.md` — and the worker appears as a sub-row with a status line; your
+focus stays where it is. The worker reads its task with `agent_task`. The
+overseer's worktree claim moves to the worker and comes back when it ends. A
+worker cannot start workers, and `agent_send` / `agent_kill` (`gg agent send`
+/ `kill`) reach only the agents you started; `agent_list` / `agent_screen`
+read every session of the TUI.
+
 ### Post-worktree hook
 
 After `gg` creates a worktree it can run a per-repo shell script — handy for
