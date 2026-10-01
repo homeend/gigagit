@@ -4357,5 +4357,8 @@ selection, laid-out width); never on disk, never evicted, created
   **Turns:** `followDocs` holds `followMu`; a steer's own add + listing
   runs in the same turn (`listDocs`), and what its listing pushed out over
   the cap is fanned out (`evicted`) by the pass that follows, so the agent's
-  reply and every tab name it. A web `note_add` lists the file only after
-  the store took the note.
+  reply and every tab name it (a recorded eviction carries its worktree; a
+  pass over another drops it). A web `note_add` lists the file — and takes
+  its baseline stat — inside that turn, only after the store took the note.
+  Eviction lines word the cap the server sends (`cap`, `evictedText`); an
+  overview refresh older than the last started drops its answer (`ovSeq`).
