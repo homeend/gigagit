@@ -13,6 +13,7 @@ import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openCommitByHash } from "./commits.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
+import { closeConsole } from "./console.js";
 import { closeFinder } from "./wtfinder.js";
 
 // --- viewer model (pure; guarded against Go) ---
@@ -219,7 +220,8 @@ let ovLastSeq = 0; // … and its place (an open's own fetch takes one too)
 // instead of leaving the page.
 let ownBack = history.state?.gg === "back";
 let openSeq = 0; // the loadSeq of the last open started (a close bumps loadSeq, not this)
-let ofSync = Promise.resolve(); // a failed open's report to the server, which the next open waits for
+let ofSync = Promise.resolve(); // this tab's posts about what it shows, in order (ofQueue); the next open waits for them
+const closedAt = new Map(); // id → loadSeq when x closed it everywhere while it was not on screen (an open of it in flight drops)
 
 // armBack gives the browser's Back its one entry (ownBack).
 function armBack() {
@@ -231,6 +233,13 @@ let cursorTimer = null;
 
 function ofPost(body) {
   return postJSON("/api/open-files", { tab: tabId, ...body });
+}
+
+// ofQueue posts what this tab shows after every such post before it: a
+// failed open's report and a close or background right after it must not
+// reach the server the other way round.
+function ofQueue(body) {
+  ofSync = ofSync.then(() => ofPost(body)).catch(() => {});
 }
 
 function isOpen() {
@@ -330,6 +339,7 @@ $("viewer-body").addEventListener("contextmenu", (e) => {
 async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "" }) {
   const seq = ++loadSeq;
   openSeq = seq;
+  for (const [k, at] of closedAt) if (at < seq) closedAt.delete(k); // closed before this open: no open in flight can land
   if (isOpen()) rememberPlace();
   let reg, body, ov, ovMine;
   try {
@@ -344,7 +354,9 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
     opLine("view failed: " + (e.message || e), true);
     return { ok: false, notice: "" };
   }
-  if (seq !== loadSeq) { // a newer open won, or the viewer closed meanwhile
+  // A newer open won, the viewer closed, or x closed this file everywhere
+  // while it loaded here.
+  if (seq !== loadSeq || closedAt.get(reg.file.id) >= seq) {
     reportShown(seq, reg);
     return { ok: false, notice: "" };
   }
@@ -385,7 +397,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
 // tell the server what the tab really shows; the next open waits for it.
 function reportShown(seq, reg) {
   const back = seq === openSeq ? releaseAfterFailedOpen(reg && reg.file.id, viewerFileId()) : null;
-  if (back) ofSync = ofPost(back).catch(() => {});
+  if (back) ofQueue(back);
 }
 
 // showOverview puts overview ov (entry f) on screen in document mode, where
@@ -414,9 +426,15 @@ function closeViewer(how = "close") {
   if (id) {
     rememberPlace();
     if (how === "close") places.delete(id);
-    ofPost(how === "close" ? { op: "close", id } : { op: "background", id, line }).catch(() => {});
+    ofQueue(how === "close" ? { op: "close", id } : { op: "background", id, line });
   }
   dropViewer();
+}
+
+// viewerClosedFile: x closed id everywhere while it was not on screen
+// here — an open of it still loading in this tab must not land.
+function viewerClosedFile(id) {
+  closedAt.set(id, loadSeq);
 }
 
 // dropViewer takes the viewer down WITHOUT telling the server — the file is
@@ -534,10 +552,10 @@ async function openAnchorAt(i) {
   if (!view.ov || !view.ov.anchors[i]) return;
   const id = view.id, seq0 = loadSeq;
   selectAnchor(i);
-  if (!(await refreshOverview())) { // keeps the selection by its destination
-    // Nothing re-checked the list since the click: open nothing on the old
-    // one. A re-open meanwhile (loadSeq moved) is no failure: it won.
-    if (view.ov && view.id === id && loadSeq === seq0) opLine("could not re-check the overview — try the anchor again", true);
+  const fresh = await refreshOverview(); // keeps the selection by its destination
+  if (loadSeq !== seq0) return; // a re-open or a close meanwhile owns the screen
+  if (!fresh) { // nothing re-checked the list since the click: open nothing on the old one
+    if (view.ov && view.id === id) opLine("could not re-check the overview — try the anchor again", true);
     return;
   }
   if (!view.ov || view.id !== id) return;
@@ -560,6 +578,7 @@ async function openAnchorAt(i) {
 window.addEventListener("popstate", () => {
   ownBack = history.state?.gg === "back"; // Forward can put it back on top
   if (!view.from || !isOpen()) return;
+  if (topLayer()?.id === "console") { closeConsole(); return armBack(); } // the agent keeps running; the next Back comes back
   if (topLayer()?.id !== "viewer") return armBack(); // a popup is over the file: Back leaves both alone
   anchorBack();
 });
@@ -589,9 +608,20 @@ async function anchorBack() {
       return opLine("the overview was closed", false);
   }
   rememberPlace();
-  ofPost({ op: "background", id: view.id, line: view.cur }).catch(() => {});
+  ofQueue({ op: "background", id: view.id, line: view.cur });
+  const seq = loadSeq + 1; // the open below takes it
   const r = await openViewer({ id: f.id });
-  if (r.ok && view.ov) selectAnchor(backAnchor(view.ov.anchors, f));
+  if (r.ok) {
+    if (view.ov) selectAnchor(backAnchor(view.ov.anchors, f));
+    return;
+  }
+  // The overview did not come back and nothing else opened or closed since:
+  // the file is still on screen, and so is its way back.
+  if (loadSeq === seq && isOpen() && view.id === id && !view.from) {
+    view.from = f;
+    armBack(); // the overview did not come back: the way back stays
+    swapFoot(true);
+  }
 }
 
 function copyAnchorRef() {
@@ -1050,4 +1080,4 @@ registerHelp({
     "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> (or the browser's Back) in the file an anchor opened comes back",
 });
 
-export { closeViewer, dropViewer, evictedText, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };
+export { closeViewer, dropViewer, evictedText, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerClosedFile, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };

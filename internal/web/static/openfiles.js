@@ -10,7 +10,7 @@
 import { $, charWidth, elidePath, esc, getJSON, postJSON, tabId } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
-import { dropViewer, openViewer, versionLabel, viewerFileId } from "./viewer.js";
+import { dropViewer, openViewer, versionLabel, viewerClosedFile, viewerFileId } from "./viewer.js";
 import { registerHelp } from "./menus.js";
 import { consoleSessionId, openConsole } from "./console.js";
 
@@ -293,6 +293,7 @@ async function closeSelected() {
   const f = sw.files[sw.sel];
   if (!f) return;
   if (f.id === viewerFileId()) dropViewer();
+  else viewerClosedFile(f.id); // still loading here, perhaps: it must not land
   let ans;
   try {
     ans = await postJSON("/api/open-files", { op: "close", id: f.id, tab: tabId, everywhere: true });

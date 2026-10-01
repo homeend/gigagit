@@ -4412,12 +4412,18 @@ selection, laid-out width); never on disk, never evicted, created
   after backspace came back is used up instead of leaving gg web (`popstate`
   re-reads `ownBack` from `history.state`, so a Forward that restored the
   entry is reused, never doubled — `armBack`); a Back while a popup sits on
-  the file (`topLayer()` is not the viewer) leaves both alone and re-arms;
-  a Back whose list fetch failed re-arms with `view.from`. An open that did
-  not land — failed, or left by esc meanwhile — reports what the tab shows
-  (`reportShown`, unless a newer open started: `openSeq`, which a close
-  does not bump), and the next open awaits that report (`ofSync`). An
-  anchor whose re-check lost a race to a re-open says nothing; one the
+  the file (`topLayer()` is not the viewer) leaves both alone and re-arms,
+  except an agent console, which Back closes (re-armed: the next Back comes
+  back); a Back whose list fetch or overview open failed re-arms with
+  `view.from`. An open that did not land — failed, or left by esc
+  meanwhile — reports what the tab shows (`reportShown`, unless a newer
+  open started: `openSeq`, which a close does not bump); every post about
+  what the tab shows (that report, a close, a background) goes through
+  `ofQueue`, one after another on `ofSync`, and the next open awaits them.
+  The switcher's x on a file not on screen records it (`viewerClosedFile`
+  → `closedAt`, the loadSeq at the close), so an open of it still loading
+  here drops. An anchor whose re-check lost a race to a re-open or a close
+  (`loadSeq` moved) says nothing, whatever the re-check answered; one the
   re-check removed says `that anchor is no longer in the overview`. The
   document's type grows with a large window (`.vdoc` font-size clamp
   12–17px; the 100ch column grows with it).

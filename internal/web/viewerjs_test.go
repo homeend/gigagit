@@ -172,7 +172,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"wtfinder.js", "evictedText(ans.evicted, ans.cap)", "a background open from the finder names the file it pushed out, with the server's cap"},
 	{"viewer.js", "if (!ovAnswerApplies(mine, ovApplied)) return true", "an overview refresh drops only when a newer answer already applied"},
 	{"viewer.js", "return ovLastSeq > mine ? ovLast : false", "a failed re-check answers with a newer refresh under way, never with itself"},
-	{"viewer.js", "if (!(await refreshOverview())) {", "an anchor whose re-check failed opens nothing (follow-up 1)"},
+	{"viewer.js", "if (!fresh) { // nothing re-checked the list since the click", "an anchor whose re-check failed opens nothing (follow-up 1)"},
 	{"viewer.js", `opLine("could not re-check the overview — try the anchor again", true)`, "a failed re-check says so"},
 	{"viewer.js", "ovMine = ++ovSeq; // a refresh started before this fetch is older than its answer", "a re-open's own overview fetch takes a place in the refresh order (follow-up 3)"},
 	{"viewer.js", "ovApplied = Math.max(ovApplied, mine);", "an open's overview counts as applied"},
@@ -190,19 +190,32 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", "armBack(); // the way back stays, for Back too", "m3: a failed Back keeps a Back entry"},
 	{"viewer.js", "const back = seq === openSeq ? releaseAfterFailedOpen(reg && reg.file.id, viewerFileId()) : null", "m4: an open that failed or was left still reports what the tab shows"},
 	{"viewer.js", "await ofSync; // a failed open's report reaches the server first", "m5: the next open waits for that report"},
-	{"viewer.js", "if (view.ov && view.id === id && loadSeq === seq0) opLine(\"could not re-check", "m6: a re-open during the re-check is not a failure"},
+	{"viewer.js", "if (view.ov && view.id === id) opLine(\"could not re-check", "m6: a re-open during the re-check is not a failure (r2's return comes first)"},
 	{"viewer.js", `if (!a) return opLine("that anchor is no longer in the overview", false);`, "m7: an anchor the re-check removed says so"},
 	{"style.css", ".md-anchor.asel", "the selected anchor is styled"},
 	{"style.css", ".md-anchor.agone", "a missing anchor is styled"},
 	{"style.css", ".vline.vrange", "the range is tinted"},
 	{"viewer.js", "selectAnchor(backAnchor(view.ov.anchors, f))", "back finds the anchor by its destination (a set may have moved it)"},
 	{"viewer.js", "dest: a.dest }", "the way back carries the anchor's destination"},
+	// Overview minors, round 2 (r1–r5).
+	{"viewer.js", "armBack(); // the overview did not come back: the way back stays", "r1: a Back whose overview fetch fails keeps the way back"},
+	{"viewer.js", "if (loadSeq !== seq0) return; // a re-open or a close meanwhile owns the screen", "r2: a re-open during the re-check never reads the reset selection"},
+	{"viewer.js", `if (topLayer()?.id === "console") { closeConsole(); return armBack(); }`, "r3: Back over an agent console closes the console, the file stays"},
+	{"viewer.js", "ofSync = ofSync.then(() => ofPost(body)).catch(() => {});", "r4: this tab's posts about what it shows reach the server in order"},
+	{"viewer.js", `ofQueue(how === "close" ? { op: "close", id } : { op: "background", id, line });`, "r4: a close or background waits for a failed open's report"},
+	{"viewer.js", `ofQueue({ op: "background", id: view.id, line: view.cur });`, "r4: Back's background waits for a failed open's report"},
+	{"viewer.js", "if (back) ofQueue(back);", "r4: a failed open's report joins the queue"},
+	{"viewer.js", "closedAt.get(reg.file.id) >= seq", "r5: a file x closed while it loaded here does not land"},
+	{"openfiles.js", "else viewerClosedFile(f.id);", "r5: x on a file still loading here tells the viewer"},
 }
 
 // viewerGone pins what the open-files minors removed.
 var viewerGone = []struct{ file, want, why string }{
 	{"viewer.js", "lists open files", "key hints live in #foot, never in a notice"},
 	{"index.html", "<span>Problem</span>", "the hidden head's words leaked into every notice's text"},
+	{"viewer.js", `ofPost(how === "close"`, "r4: a close or background posts through ofQueue"},
+	{"viewer.js", `ofPost({ op: "background", id: view.id`, "r4: Back's background posts through ofQueue"},
+	{"viewer.js", "if (back) ofSync = ofPost(back)", "r4: a failed open's report posts through ofQueue"},
 }
 
 func TestViewerJSDroppedLeaks(t *testing.T) {
