@@ -21,6 +21,11 @@ const ggTOML = "[worktree]\npath_template = \"../wt/<branch>\"\ndefault_branch_t
 // dateBase is the frozen clock: each builder git call advances it by 1s.
 var dateBase = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
+// frozenNow is "now" for the whole e2e run (TestMain freezes internal/clock
+// at it and pins gg-made commit dates to it): one day after the builder's
+// history, so ages render as days.
+var frozenNow = dateBase.Add(24 * time.Hour)
+
 // Sandbox is one scenario's isolated environment.
 type Sandbox struct {
 	Root      string            // temp root; all relative dirs resolve against it
@@ -107,7 +112,7 @@ func (b *Sandbox) runSteps(t *testing.T, steps []Step, defaultDir string) {
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(p, []byte(st.Content), 0o644); err != nil {
+			if err := os.WriteFile(p, []byte(ExpandText(st.Content)), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		case "rm":

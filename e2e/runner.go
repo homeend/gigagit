@@ -3,6 +3,7 @@ package e2e
 import (
 	"io"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/cli"
@@ -41,7 +42,22 @@ func ExpandArgs(argv []string, dir string) []string {
 	}
 	out := make([]string, len(argv))
 	for i, a := range argv {
-		out[i] = strings.ReplaceAll(a, "{{cwd}}", slash)
+		out[i] = ExpandText(strings.ReplaceAll(a, "{{cwd}}", slash))
 	}
 	return out
+}
+
+// ExpandText substitutes {{ggfake}} — the fake agent TestMain builds, quoted
+// for the shell a capture command runs through — in scenario-supplied text:
+// a [[run]] argument, or an [input] write's content (a .gg.toml naming the
+// fake review tool).
+func ExpandText(s string) string {
+	return strings.ReplaceAll(s, "{{ggfake}}", shellQuote(ggFakeBin))
+}
+
+func shellQuote(p string) string {
+	if runtime.GOOS == "windows" {
+		return `"` + p + `"`
+	}
+	return "'" + strings.ReplaceAll(p, "'", `'\''`) + "'"
 }

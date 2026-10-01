@@ -1,10 +1,15 @@
 package e2e
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/forge/forgetest"
 )
 
@@ -42,9 +47,42 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv(forgetest.EnvBin, fakeGH)
 	os.Unsetenv(forgetest.EnvFixtures)
+	// The fake agent (e2e/internal/ggfake), built once; scenarios name it as
+	// {{ggfake}} in a capture tool's command.
+	ggFakeBin = filepath.Join(dir, "ggfake"+exeSuffix())
+	if out, err := exec.Command("go", "build", "-o", ggFakeBin, "./internal/ggfake").CombinedOutput(); err != nil {
+		panic(fmt.Sprintf("build ggfake: %v\n%s", err, out))
+	}
+	review, err := filepath.Abs(filepath.Join("fixtures", "review.json"))
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("GGFAKE_REVIEW", review)
+	// Capture commands run through $SHELL (engine/capture_runner.go): a
+	// developer's zsh or fish must not decide how a scenario's command parses.
+	if runtime.GOOS != "windows" {
+		os.Setenv("SHELL", "/bin/sh")
+	}
+	// One frozen "now" for every stored or drawn time, and one date for every
+	// commit gg itself makes: scenarios run in parallel in one process, so
+	// neither can be per scenario (the TUI golden-screens spec, §4). The
+	// builder's own git calls pass their dates per command and are unaffected.
+	clock.Freeze(frozenNow)
+	os.Setenv("GIT_AUTHOR_DATE", frozenNow.Format(time.RFC3339))
+	os.Setenv("GIT_COMMITTER_DATE", frozenNow.Format(time.RFC3339))
 	code := func() int {
 		defer os.RemoveAll(dir)
 		return m.Run()
 	}()
 	os.Exit(code)
+}
+
+// ggFakeBin is the fake agent TestMain builds (e2e/internal/ggfake).
+var ggFakeBin string
+
+func exeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
 }
