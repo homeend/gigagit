@@ -29,6 +29,9 @@
 - R3: only manual Start agent sessions and spawned workers get a token; interactive AI-task sessions (`domain.Tasks()`) do not — they are not overseers. Cost if wrong: an AI task cannot spawn (add the env in `domain/tasks` later).
 - R4: the approval lookup uses the CALLER repo's git common dir as the promptstate key (the TUI's own `toolRepoKey` would be wrong after a repo switch).
 
+- R5: every check (allow-list, prompt slot, approval, cap, nesting) runs in `SpawnAgent` off the UI thread; the cap is made race-free by the atomic `reserveSpawnSlot`, so NO second cap/nesting check goes into `onAgentSpawnRequest` (spec §3.1 said "re-run in the loop" — the slot counter replaces it).
+- R6: `youngClaimGrace = 2 * sessionreg.LiveWindow` (10 s) instead of the spec's `LiveWindow`: one missed registry write plus the Windows retry fits; cost if wrong: a crashed handover's claim lives 5 s longer.
+
 ## Review Focus
 
 1. Two overseers calling `agent_start` at once with one slot left — exactly one starts (slot counter, Task 5 test `TestSpawnSlotsAreRaceFree`).
@@ -96,6 +99,8 @@ func TestAgentsSpawnIsGlobalOnly(t *testing.T) {
 	}
 }
 ```
+
+(`config_test.go` needs `"slices"` added to its imports.)
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -460,6 +465,8 @@ func TestSessionGuardExemptsTheCaller(t *testing.T) {
 }
 ```
 
+(`wtguards_test.go` needs `"path/filepath"` added to its imports.)
+
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `go test ./internal/domain -run 'HandOver|RevertsToParent|YoungClaim|ExemptsTheCaller'`
@@ -540,8 +547,10 @@ func liveClaim(gitDir string, lv liveView) (ClaimInfo, bool) {
 		again, ok := readClaim(gitDir)
 		switch {
 		case !ok:
-		case !sameClaim(again, c) || !claimDead(again, gitDir, lv):
-			info, kept = claimInfoOf(again), true // someone re-claimed meanwhile
+		case !sameClaim(again, c):
+			if !claimDead(again, gitDir, lv) {
+				info, kept = claimInfoOf(again), true // someone re-claimed meanwhile
+			}
 		default:
 			info, kept = settleDeadClaim(gitDir, again, lv)
 		}
@@ -1551,6 +1560,9 @@ func SpawnAgent(ctx context.Context, sp SpawnSpec) (AgentStartResult, *AgentSess
 	if err != nil {
 		return AgentStartResult{}, nil, err
 	}
+	if len(cfg.Agents.Spawn) == 0 {
+		return AgentStartResult{}, nil, errors.New("spawning is off — add the command name to [agents] spawn in the global config")
+	}
 	var tc *config.ToolCommand
 	for _, c := range SessionCommands(cfg, "tui") {
 		if strings.EqualFold(c.Name, req.Tool) {
@@ -1561,9 +1573,6 @@ func SpawnAgent(ctx context.Context, sp SpawnSpec) (AgentStartResult, *AgentSess
 	}
 	if tc == nil {
 		return AgentStartResult{}, nil, fmt.Errorf("no session command named %q", req.Tool)
-	}
-	if len(cfg.Agents.Spawn) == 0 {
-		return AgentStartResult{}, nil, errors.New("spawning is off — add the command name to [agents] spawn in the global config")
 	}
 	allowed := false
 	for _, n := range cfg.Agents.Spawn {
@@ -1716,9 +1725,9 @@ func hostEnv(t *testing.T, starter Starter) (url, tok, full string) {
 }
 
 func TestAgentToolsOverHTTP(t *testing.T) {
-	var got domain.AgentStartRequest
+	gotCh := make(chan domain.AgentStartRequest, 1) // the handler runs on the server's goroutine
 	url, tok, full := hostEnv(t, func(_ context.Context, r domain.AgentStartRequest) (domain.AgentStartResult, error) {
-		got = r
+		gotCh <- r
 		return domain.AgentStartResult{ID: "p/s9", Worktree: "/w", Tool: r.Tool}, nil
 	})
 	cs, err := agentClient(t, url, tok)
@@ -1731,6 +1740,7 @@ func TestAgentToolsOverHTTP(t *testing.T) {
 	if err != nil || res.IsError {
 		t.Fatalf("agent_start = %v %+v", err, res)
 	}
+	got := <-gotCh
 	if got.Caller != full || got.Tool != "Claude" || got.Prompt != "do it" || got.Note != "n" {
 		t.Fatalf("the starter must receive the AUTHENTICATED caller: %+v", got)
 	}
@@ -2081,7 +2091,8 @@ func TestAgentSpawnRequestRoundTrip(t *testing.T) {
 
 func TestStarterRefusesWhenClosing(t *testing.T) {
 	st := newAgentHostState()
-	close(st.stop)
+	Model{agentHost: st}.closeAgentHost()
+	Model{agentHost: st}.closeAgentHost() // idempotent: no double close
 	if _, err := starterFor(st)(context.Background(), domain.AgentStartRequest{}); err == nil {
 		t.Fatal("a closing TUI must refuse")
 	}
@@ -2103,6 +2114,8 @@ package tui
 import (
 	"context"
 	"errors"
+	"sync"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -2128,6 +2141,7 @@ type agentHostState struct {
 	url      string
 	requests chan agentSpawnRequestMsg
 	stop     chan struct{}
+	once     sync.Once // closeAgentHost runs at most once
 }
 
 type agentSpawnReply struct {
@@ -2155,6 +2169,10 @@ func newAgentHostState() *agentHostState {
 // starterFor hands an agent_start into Update and waits for the answer.
 func starterFor(st *agentHostState) func(context.Context, domain.AgentStartRequest) (domain.AgentStartResult, error) {
 	return func(ctx context.Context, req domain.AgentStartRequest) (domain.AgentStartResult, error) {
+		// A wedged TUI must not hang the agent's call (spec §7); a late
+		// spawn still records itself — reply is buffered, the send never blocks.
+		ctx, cancel := context.WithTimeout(ctx, agentStartTimeout)
+		defer cancel()
 		reply := make(chan agentSpawnReply, 1)
 		select {
 		case st.requests <- agentSpawnRequestMsg{req: req, reply: reply}:
@@ -2169,10 +2187,13 @@ func starterFor(st *agentHostState) func(context.Context, domain.AgentStartReque
 		case <-st.stop:
 			return domain.AgentStartResult{}, errors.New("gg is closing")
 		case <-ctx.Done():
-			return domain.AgentStartResult{}, ctx.Err()
+			return domain.AgentStartResult{}, errors.New("gg did not answer in time; agent_list shows whether the worker started")
 		}
 	}
 }
+
+// agentStartTimeout bounds one agent_start round trip through Update.
+const agentStartTimeout = 30 * time.Second
 
 func waitAgentSpawnCmd(st *agentHostState) tea.Cmd {
 	if st == nil {
@@ -2206,10 +2227,16 @@ func (m Model) startAgentHost() Model {
 }
 
 func (m Model) closeAgentHost() {
-	if m.agentHost != nil && m.agentHost.host != nil {
-		close(m.agentHost.stop)
-		m.agentHost.host.Close()
+	st := m.agentHost
+	if st == nil {
+		return
 	}
+	st.once.Do(func() {
+		close(st.stop)
+		if st.host != nil {
+			st.host.Close()
+		}
+	})
 }
 
 func (m Model) agentURL() string {
@@ -2274,7 +2301,14 @@ Notes for this step:
 		return m.onAgentSpawned(msg)
 ```
 
-`run.go`: after `m = m.initSteerInbox()` add `m = m.startAgentHost()`; in the tail after `fm.closeWeb()` add `fm.closeAgentHost()`. If the program errors before `final` is a Model, close via the pre-run `m`: add `defer m.closeAgentHost()` right after starting it instead, and drop the tail call (one close path; `close(st.stop)` must run once — guard with a `sync.Once` field `closed` in `agentHostState`).
+`run.go`: after `m = m.initSteerInbox()` add
+
+```go
+	m = m.startAgentHost()
+	defer m.closeAgentHost() // after Run's KillAll; also on an early p.Run error
+```
+
+and nothing in the tail (ONE close path).
 
 `agent_start_popup.go` `start`: capture `url := m.agentURL()` and replace the `StartSession` call with
 
