@@ -1,0 +1,45 @@
+local  branch main                                                                                                                                          {{root}}______________________________/local
+╭────────────────────────────────────────────────────────────────╮╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ [Branches] R W P ·date↓                                        ││ Commits (all) 2                                                                                                                    │
+│ > * main ({{root}}______________________________/local)        ││   ●  ↓ ✎ *main deleted a b                                                                                                         │
+│                                                                ││   ●      main  add a b  ◆ 1                                                                                                        │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│  ╔════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗  │
+╰──║                                                                                                                                                                                                ║  │
+╭──║                                    All notes  2                                                                                                                                                ║  │
+│ [║                                                                                                                                                                                                ║  │
+│  ║                                                STATUS   WHO       WHERE     WHEN    NOTE                                                                                                       ║  │
+│  ║                                    > ▾ Commits                                                                                                                                                 ║  │
+│  ║                                        ▾ b4b8643  deleted a b  · 2026-01-01 00:00                                                                                                              ║  │
+│  ║                                            Reviews                                                                                                                                             ║  │
+│  ║                                                review   fake      commit    0s      Review: HEAD (HEAD^..HEAD)                                                                                 ║  │
+│  ║                                        ▾ dc4bb26  add a b  · 2026-01-01 00:00                                                                                                                  ║  │
+│  ║                                              a.txt                                                                                                                                             ║  │
+│  ║                                                active   agent     new:1     0s      This note is deliberately long so that the NOTE column cannot hold it                                      ║  │
+│  ║                                                                                     on one line even at full width: it must wrap under its own column,                                         ║  │
+│  ║                                                                                     inside the centred reading column, and end with the word TAILWORD                                          ║  │
+│  ║                                                                                                                                                                                                ║  │
+╰──║                                    [↑/↓] move  [enter] open / fold  [←/→] fold  type to filter  [ctrl+t] fullscreen  [esc] close                                                               ║  │
+╭──║                                                                                                                                                                                                ║  │
+│ [╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝  │
+│                                                                                                                                                                                                      │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+│                                                                ││                                                                                                                                    │
+╰────────────────────────────────────────────────────────────────╯╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+[b]ranch [w]orktree [enter] tip [ctrl+g] solo+tip [m]ark [f]ind current [t] max [ctrl+t] full  •  [C] amend [p]ull [P]ush [S]tashes [u]ndo [g] bookmarks [G] shelf [F] find file [o]rder … [?] help
+

@@ -28,7 +28,7 @@ func (m Model) stickyNotice(text string) (Model, tea.Cmd) {
 	m.stickyMsg = text
 	m.stickyGen++
 	gen := m.stickyGen
-	return m, tea.Tick(stickyNoticeFor, func(time.Time) tea.Msg { return stickyExpiredMsg{gen: gen} })
+	return m, m.tick(stickyNoticeFor, func(time.Time) tea.Msg { return stickyExpiredMsg{gen: gen} })
 }
 
 // expireSticky handles stickyExpiredMsg.

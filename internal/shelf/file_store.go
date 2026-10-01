@@ -9,10 +9,10 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -165,7 +165,7 @@ func (fs *FileStore) Put(bucket string, addr model.FileAddress, data []byte) (mo
 		Origin:  addr,
 		SHA:     sha,
 		Size:    int64(len(data)),
-		Created: time.Now(),
+		Created: clock.Now(),
 	})
 }
 
@@ -205,7 +205,7 @@ func (fs *FileStore) PutCommit(bucket string, addr model.FileAddress, tar, patch
 		Size:      int64(len(tar)),
 		PatchSHA:  patchSHA,
 		PatchSize: patchSize,
-		Created:   time.Now(),
+		Created:   clock.Now(),
 	})
 }
 
@@ -231,7 +231,7 @@ func (fs *FileStore) PutFiles(bucket string, addr model.FileAddress, tar []byte,
 		Label:   label,
 		SHA:     sha,
 		Size:    int64(len(tar)),
-		Created: time.Now(),
+		Created: clock.Now(),
 	})
 }
 

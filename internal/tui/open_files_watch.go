@@ -269,6 +269,9 @@ func closeDocWatch(w *filewatch.Watcher) {
 // not WSL's /mnt drives, where the poll alone serves). Every syscall runs
 // off the UI thread.
 func (m Model) syncDocWatch() (Model, tea.Cmd) {
+	if m.quiet {
+		return m, nil // headless: no file watching (headless.go)
+	}
 	if !m.watchSupported || m.docWatch.broken {
 		return m, nil
 	}

@@ -112,6 +112,9 @@ type toolStatusesMsg struct {
 // refreshToolStatusesCmd re-reads the tool-template statuses off the UI
 // thread (agent version probes spawn processes).
 func (m Model) refreshToolStatusesCmd() tea.Cmd {
+	if m.quiet {
+		return nil // headless: never-ending (headless.go)
+	}
 	gen, svc := m.noticeGen, m.svc
 	if svc == nil {
 		return nil

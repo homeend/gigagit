@@ -41,9 +41,10 @@ func TestKeyToken(t *testing.T) {
 		// this is what let a Delete/odd key vanish from a bug report before
 		// this vocabulary grew explicit named support for it.
 		{"f1-fallback", tea.KeyMsg{Type: tea.KeyF1}, "<f1>", true},
-		{"alt-down", tea.KeyMsg{Type: tea.KeyDown, Alt: true}, "", false},
-		{"alt-left", tea.KeyMsg{Type: tea.KeyLeft, Alt: true}, "", false},
-		{"alt-rune", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Alt: true}, "", false},
+		{"alt-down", tea.KeyMsg{Type: tea.KeyDown, Alt: true}, "M-down", true},
+		{"alt-left", tea.KeyMsg{Type: tea.KeyLeft, Alt: true}, "M-left", true},
+		{"alt-rune", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Alt: true}, "M-a", true},
+		{"alt-ctrl", tea.KeyMsg{Type: tea.KeyCtrlT, Alt: true}, "", false},
 		{"hash-literal", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("#")}, "#", true},
 	}
 	for _, c := range cases {
@@ -126,16 +127,16 @@ func TestRecorderHeaderBodyAndDroppedQuit(t *testing.T) {
 	}
 }
 
-// An Alt-modified key is the one remaining case keyToken refuses outright
-// (alt+arrow/rune does not round-trip reliably through tmux) — everything
-// else now lands a real token (named or bracketed), so this is the only
-// example left that still produces a "# unrecorded key:" comment.
+// An Alt-modified key records as M-<token> (the headless driver and
+// tui-capture.sh both accept it); only alt+ctrl and alt+<unnamed> keys still
+// produce a "# unrecorded key:" comment.
 func TestRecorderCommentsUnsupportedKey(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "scenario.keys")
 	r, _ := newRecorder(path, "repo")
 	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	r.note(tea.KeyMsg{Type: tea.KeyDown, Alt: true}) // unsupported -> comment
+	r.note(tea.KeyMsg{Type: tea.KeyDown, Alt: true})  // recorded as M-down
+	r.note(tea.KeyMsg{Type: tea.KeyCtrlT, Alt: true}) // unsupported -> comment
 	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")}) // quit
 	r.close()
@@ -145,8 +146,8 @@ func TestRecorderCommentsUnsupportedKey(t *testing.T) {
 	if !strings.Contains(s, "# unrecorded key:") {
 		t.Errorf("expected an unrecorded-key comment, got:\n%s", s)
 	}
-	if body := nonCommentLines(s); !reflect.DeepEqual(body, []string{"a", "b"}) {
-		t.Errorf("body = %v, want [a b]", body)
+	if body := nonCommentLines(s); !reflect.DeepEqual(body, []string{"a", "M-down", "b"}) {
+		t.Errorf("body = %v, want [a M-down b]", body)
 	}
 }
 

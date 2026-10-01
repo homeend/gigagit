@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -318,7 +319,7 @@ func (p *sessionsPopup) openTask(m Model, r taskRow) (Model, tea.Cmd) {
 func (p *sessionsPopup) renderTaskRows(m Model, textW, rowsH int) []string {
 	s := st()
 	head := []string{i18n.T("Task"), i18n.T("Agent"), i18n.T("State"), i18n.T("Age")}
-	now := time.Now()
+	now := clock.Now()
 	cells := make([][4]string, len(p.taskRows))
 	ws := [4]int{}
 	for c := 1; c < 4; c++ {

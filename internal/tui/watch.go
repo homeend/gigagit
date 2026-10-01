@@ -104,6 +104,9 @@ func enabledWatchSources(cfg config.RefreshConfig) []gitwatch.Source {
 // source is enabled — constructs the watcher. Always returns a watchReadyMsg
 // (watcher may be nil).
 func (m Model) startWatchCmd(gen int) tea.Cmd {
+	if m.quiet {
+		return nil // headless: never-ending (headless.go)
+	}
 	svc := m.svc
 	cfg := m.cfg.Refresh
 	return func() tea.Msg {

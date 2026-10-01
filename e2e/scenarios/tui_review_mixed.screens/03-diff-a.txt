@@ -1,0 +1,40 @@
+diff: a.txt  @ 1290a1e deleted a b                                                                                            old line 1  change 1/1  rows 1–1/1
+  1 a                                                                          │···············································································
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ╭────────────────╮
+  │▸ NN → next file│
+  ╰────────────────╯
+[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] scroll  [←→] pan  [h/b] hist  [esc] back

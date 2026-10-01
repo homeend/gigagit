@@ -1,0 +1,70 @@
+name = "tui: a branch review, a commit review and a line note on one screen — what marks what"
+
+# The trigger case (2026-09-30, test-1): a commit with an AI review, a branch
+# review on the same tip, and a line note on the commit before it. The
+# Commits list must mark the review with ✎ and NOT count it in ◆ N; the
+# reviewed commit's Files view lists the review under Reviews but never
+# stacks it as an "@notes/" file, and N/P never step onto it.
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[tools.command]]
+category = "review"
+name = "fake"
+mode = "capture"
+command = "{{ggfake}} review"
+''' },
+  { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
+  { commit = "add a b" },
+  { branch = "feature" }, { switch = "feature" },
+  { rm = "a.txt" }, { rm = "b.txt" },
+  { commit = "deleted a b" },
+]
+
+[[run]]
+cmd = ["note", "add", "--rev", "HEAD~1", "--file", "a.txt", "--new-line", "1", "--summary", "why a?"]
+exit = 0
+
+[[run]]
+cmd = ["review", "--tool", "fake", "HEAD"]
+exit = 0
+
+[[run]]
+cmd = ["review", "--tool", "fake"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+# The reviewed tip is marked ✎ and carries no ◆ (a review is not a note);
+# the commit before it carries the line note's ◆ 1.
+[[tui.step]]
+name = "commits"
+keys = ["right"]
+screen_contains = ["✎ *feature deleted a b", "add a b  ◆ 1"]
+screen_excludes = ["deleted a b  ◆"]
+
+[[tui.step]]
+name = "files"
+keys = ["enter"]
+screen_contains = ["Reviews", "D  a.txt"]
+
+# a.txt is the commit's first FILE: P (previous file) has nowhere to go —
+# the review row above it is not a file.
+[[tui.step]]
+name = "diff-a"
+keys = ["down", "down", "down", "enter"]
+screen_contains = ["a.txt"]
+screen_excludes = ["@notes/"]
+
+[[tui.step]]
+name = "step-back"
+keys = ["P"]
+screen_excludes = ["@notes/"]
+
+# S stacks every file of the list: the two deletions, never the review.
+[[tui.step]]
+name = "stack"
+keys = ["S"]
+screen_contains = ["a.txt", "b.txt"]
+screen_excludes = ["@notes/"]

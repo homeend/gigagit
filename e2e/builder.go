@@ -21,6 +21,11 @@ const ggTOML = "[worktree]\npath_template = \"../wt/<branch>\"\ndefault_branch_t
 // dateBase is the frozen clock: each builder git call advances it by 1s.
 var dateBase = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
+// frozenNow is "now" for the whole e2e run (TestMain freezes internal/clock
+// at it and pins gg-made commit dates to it): one day after the builder's
+// history, so ages render as days.
+var frozenNow = dateBase.Add(24 * time.Hour)
+
 // Sandbox is one scenario's isolated environment.
 type Sandbox struct {
 	Root      string            // temp root; all relative dirs resolve against it
@@ -59,7 +64,7 @@ func (b *Sandbox) dir(rel string) string {
 // buildSandbox constructs the scenario's input state.
 func buildSandbox(t *testing.T, sc *Scenario) *Sandbox {
 	t.Helper()
-	sb := &Sandbox{Root: t.TempDir()}
+	sb := &Sandbox{Root: sandboxRoot(t, sc)}
 	sb.LocalDir = filepath.Join(sb.Root, "local")
 	if sc.Input.Origin != nil {
 		buildOrigin(t, sb, sc) // implemented with the remote-topology task
@@ -107,7 +112,7 @@ func (b *Sandbox) runSteps(t *testing.T, steps []Step, defaultDir string) {
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(p, []byte(st.Content), 0o644); err != nil {
+			if err := os.WriteFile(p, []byte(ExpandText(st.Content)), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		case "rm":
@@ -208,4 +213,28 @@ func buildOrigin(t *testing.T, sb *Sandbox, sc *Scenario) {
 		sb.OriginURL = srv.URL + "/origin"
 	}
 	sb.git(t, sb.Root, "clone", sb.OriginURL, "local")
+}
+
+// sandboxRoot is a fresh temp dir, or — for a TUI scenario, whose screens
+// show the path — tuiRoot, recreated per run, so the path renders with the
+// same width every time (normalizeRoot then hides its text).
+func sandboxRoot(t *testing.T, sc *Scenario) string {
+	t.Helper()
+	if sc.TUI == nil {
+		return t.TempDir()
+	}
+	root := tuiRoot(os.Getpid(), sc.fileStem)
+	_ = os.RemoveAll(root)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	return root
+}
+
+// tuiRoot is $TMPDIR/gg-tui-<pid, 8 digits>/<scenario>: unique per e2e
+// process, so two concurrent runs never delete each other's sandbox, and of
+// one width for every pid, so a golden's layout does not depend on it.
+func tuiRoot(pid int, stem string) string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("gg-tui-%08d", pid%100000000), stem)
 }

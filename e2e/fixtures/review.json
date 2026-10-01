@@ -1,0 +1,2 @@
+{"version":1,"summary":"## Overview\nThe change deletes a.txt and b.txt, which nothing else in the repository reads any more, so the removal is safe; the remaining risk is a script outside the repository that still expects them, which this review cannot see.\n\n## Verdict\nApprove: the deletion is complete and consistent.","meta":{"verdict":"approve"},"files":[
+ {"path":"a.txt","summary":"deleted","annotations":[{"oldRange":[1,1],"summary":"the only line of a.txt goes with it"}]}]}

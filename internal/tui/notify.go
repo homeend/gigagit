@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/clipboard"
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -107,8 +108,8 @@ type noticeBlinkMsg struct{ gen int }
 
 // noticeBlinkCmd schedules the next blink flip (~800ms; only re-armed while
 // unread notices exist, so the tick self-stops).
-func noticeBlinkCmd(gen int) tea.Cmd {
-	return tea.Tick(800*time.Millisecond, func(time.Time) tea.Msg { return noticeBlinkMsg{gen: gen} })
+func (m Model) noticeBlinkCmd(gen int) tea.Cmd {
+	return m.tick(800*time.Millisecond, func(time.Time) tea.Msg { return noticeBlinkMsg{gen: gen} })
 }
 
 // applyRepoHealth is the repoHealthMsg Update case: store the snapshot,
@@ -152,7 +153,7 @@ func (m Model) armBlinkForNew(prev map[string]bool) (Model, tea.Cmd) {
 		if !prev[n.id] {
 			if !m.noticesUnread {
 				m.blinkGen++
-				cmd = noticeBlinkCmd(m.blinkGen)
+				cmd = m.noticeBlinkCmd(m.blinkGen)
 			}
 			m.noticesUnread = true
 			m.blinkOn = true
@@ -213,7 +214,7 @@ func (m Model) rebuildHealthNotices() []notice {
 	var next []notice
 	// Stale locks first: they block every subsequent operation, so they
 	// outrank any advisory below them in the list.
-	if n := staleLockNotice(m.repoHealth, time.Now()); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+	if n := staleLockNotice(m.repoHealth, clock.Now()); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
 		next = append(next, *n)
 	}
 	if n := commitGraphNotice(m.repoHealth); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
@@ -765,7 +766,7 @@ func (m Model) applyDriftReport(branch string, report domain.DriftReport, paused
 	var cmd tea.Cmd
 	if !m.noticesUnread {
 		m.blinkGen++
-		cmd = noticeBlinkCmd(m.blinkGen)
+		cmd = m.noticeBlinkCmd(m.blinkGen)
 	}
 	m.noticesUnread = true
 	m.blinkOn = true

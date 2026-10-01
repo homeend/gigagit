@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -300,7 +301,7 @@ func (b *blameView) render(m Model, _ string) string {
 		gw = 0
 	}
 
-	now := time.Now()
+	now := clock.Now()
 	// Build a winRow only for the lines renderWindow can actually show — a
 	// full-file blame is thousands of lines, and building+lex-mapping every
 	// one of them on every frame (most of it never rendered) is wasted work.

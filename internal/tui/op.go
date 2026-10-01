@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -177,8 +178,8 @@ type opFinishedMsg struct {
 type heartbeatMsg struct{}
 
 // heartbeatCmd schedules the next heartbeat tick.
-func heartbeatCmd() tea.Cmd {
-	return tea.Tick(time.Second, func(time.Time) tea.Msg { return heartbeatMsg{} })
+func (m Model) heartbeatCmd() tea.Cmd {
+	return m.tick(time.Second, func(time.Time) tea.Msg { return heartbeatMsg{} })
 }
 
 // decisionState holds an in-flight modal decision. Engine-driven decisions
@@ -263,16 +264,31 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	}()
 	m.running = true
 	m.opName = engine.OpName(op)
-	m.opStart = time.Now() // the perpetual heartbeat (Init) reads this to show elapsed time
+	m.opStart = clock.Now() // the perpetual heartbeat (Init) reads this to show elapsed time
 	m.statusMsg = i18n.T("working…")
 	m.opMsgs = msgs
 	m.opCancel = cancel
-	return m, waitForOp(msgs)
+	return m, m.waitForOp(msgs)
 }
 
-// waitForOp blocks (off the UI thread) for the next op message.
-func waitForOp(msgs chan tea.Msg) tea.Cmd {
+// waitForOp blocks (off the UI thread) for the next op message. In quiet
+// mode it is a descriptor instead (opWaitMsg): the headless loop reads the
+// channel only while the op works — a decision blocks the op goroutine
+// until a key answers, so reading it then would deadlock the loop.
+func (m Model) waitForOp(msgs chan tea.Msg) tea.Cmd {
+	if m.quiet {
+		return func() tea.Msg { return opWaitMsg{ch: msgs} }
+	}
 	return func() tea.Msg { return <-msgs }
+}
+
+// opWaitMsg is the op waiter in quiet mode (headless.go holds it).
+type opWaitMsg struct{ ch chan tea.Msg }
+
+// awaitingDecision: an engine decision is open — the op is blocked on it.
+// A frontend-only modal (onResolve, no reply) is not one.
+func (m Model) awaitingDecision() bool {
+	return m.modal != nil && m.modal.reply != nil
 }
 
 // irebaseLoadedMsg carries the range commits for the interactive-rebase editor.

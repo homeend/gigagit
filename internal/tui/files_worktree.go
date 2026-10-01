@@ -351,7 +351,7 @@ func (m Model) wtCursorMoved() (Model, tea.Cmd) {
 		return m, nil
 	}
 	gen := m.wtPreviewGen
-	return m, tea.Tick(wtPreviewSettle, func(time.Time) tea.Msg { return wtPreviewMsg{gen: gen, path: path} })
+	return m, m.tick(wtPreviewSettle, func(time.Time) tea.Msg { return wtPreviewMsg{gen: gen, path: path} })
 }
 
 // wtPreviewSettled shows the settled row's working-tree file in the right

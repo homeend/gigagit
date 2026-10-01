@@ -28,6 +28,9 @@ func newDocsTrack(s *agentdocs.Store) *docsTrack {
 type agentDocsChangedMsg struct{}
 
 func (m Model) waitDocsCmd() tea.Cmd {
+	if m.quiet {
+		return nil // headless: never-ending (headless.go)
+	}
 	if m.docsSub == nil {
 		return nil // a Model built as a literal (tests)
 	}

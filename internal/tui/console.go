@@ -184,6 +184,9 @@ func waitSessionCmd(c *consoleState, id domain.SessionID, gen int) tea.Cmd {
 
 // waitSessionsCmd reports list-level changes (start, exit, remove).
 func (m Model) waitSessionsCmd() tea.Cmd {
+	if m.quiet {
+		return nil // headless: never-ending (headless.go)
+	}
 	if m.sessWatch == nil {
 		return nil // a Model built as a literal (tests)
 	}

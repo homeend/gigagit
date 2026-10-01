@@ -47,9 +47,11 @@ terminating quit is not written. Hand that file straight to
 line by line (one keystroke per step; no `;`/`label:` splitting, so a
 recorded `:` or `;` keystroke round-trips as a literal) — pointing `--repo`
 at the header's repo, to replay it and capture a snapshot of every screen.
-Mouse clicks and alt-modified keys are not recorded (they appear as
-`# unrecorded key:` comments); keep scenarios keyboard-driven with the
-vocabulary above. A key with no name in that vocabulary (a function key, or
+Mouse clicks and alt+ctrl keys are not recorded (they appear as
+`# unrecorded key:` comments); an alt key records as `M-<token>`. Keep
+scenarios keyboard-driven with the vocabulary above. For a screen that must
+stay pinned, write an e2e TUI scenario instead (writing-e2e-scenarios → TUI
+scenarios): it drives the same TUI in-process, without tmux or timing. A key with no name in that vocabulary (a function key, or
 anything else `tui-capture.sh` has not grown a named case for) is still
 recorded — as a bracketed `<...>` line (e.g. `<f1>`) — rather than silently
 dropped, but `tui-capture.sh` treats that shape as diagnostic-only and skips

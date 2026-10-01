@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI golden-screen tests
+
+### Added
+
+- **e2e scenarios can drive the TUI and pin its screens.** A `[tui]` block
+  presses keys in the real TUI (`tui.Headless`: the real model in a
+  deterministic in-process loop, drawn through a virtual terminal) and
+  compares each named step's screen with a committed golden file;
+  `go test ./e2e -update` writes them. No tmux, no timing: a step settles
+  when every command it started has finished, timers fire only when a step
+  says `wait`, and an operation's question settles with its prompt on
+  screen. First scenarios pin a commit with reviews and a line note (what
+  `✎` and `◆ N` mark, no review stacked as a file) and the reading width.
+- **`internal/clock`**: one freezable "now" for stored and drawn times, so
+  a frozen test clock renders ages and dates identically on every run.
+- **`gg --record` records alt keys** as `M-<key>` (they were comments).
 ## Agent notes in gg web
 
 ### Added

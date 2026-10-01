@@ -30,32 +30,31 @@ type RunOptions struct {
 	WebAddr    string     // --web-addr: the page's listen address (beats [web] addr)
 }
 
-func Run(svc *domain.Service, opts RunOptions) (string, error) {
-	recordPath, at := opts.RecordPath, opts.At
-	m := New(svc)
-	m.webOpts = webLaunchOptions{Web: opts.Web, WebAddr: opts.WebAddr}
-	if at.Repo.Name != "" || at.Repo.Abs != "" {
-		m.startAt, m.startAtPending = at, true
-	}
-	m.statePath = repos.DefaultStatePath()
-	if home, err := os.UserHomeDir(); err == nil {
-		m.initHomeDir = home
-	}
-	// Honor [debug] log_operations at startup. Wired here — the real entry point
-	// that unit tests bypass (like statePath above) — rather than in loadCmd, so
-	// enabling the operation log never performs a global SetSpanSink side effect
-	// during a test's model load. The , Settings toggle drives it thereafter.
+// prepareModel is the model set-up tui.Run and the headless driver share
+// (headless.go), so the two cannot drift: config, theme, branch filters,
+// tasks config, snapshot target. It also returns the startup config, which
+// Run reads for the operation log.
+func prepareModel(svc *domain.Service) (Model, config.Config) {
+	cfg := startupConfig(svc)
+	return prepareModelWith(svc, cfg), cfg
+}
+
+// startupConfig is the config the first frame is painted with: the repo's
+// .gg.toml over the global one, defaults when neither loads.
+func startupConfig(svc *domain.Service) config.Config {
 	cfg := config.Defaults()
 	if top, err := svc.TopLevel(context.Background()); err == nil && top != "" {
 		if c, cerr := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); cerr == nil {
 			cfg = c
 		}
 	}
-	if cfg.Debug.LogOperations {
-		if err := m.opLog.enable(); err != nil {
-			m.statusMsg = i18n.T("operation log: %s", err.Error())
-		}
-	}
+	return cfg
+}
+
+// prepareModelWith is prepareModel over an already-loaded startup config
+// (the headless driver checks it before anything applies it).
+func prepareModelWith(svc *domain.Service, cfg config.Config) Model {
+	m := New(svc)
 	// Paint the very first frame in the configured theme, with its
 	// [themes.<name>] overrides — mirroring applyTheme so startup and the
 	// configReadyMsg that follows never disagree for a frame. Complaints
@@ -76,6 +75,29 @@ func Run(svc *domain.Service, opts RunOptions) (string, error) {
 	m = m.applyBranchFilterConfig()
 	m, _ = m.applyTasksConfig() // a warning comes back with configReadyMsg
 	m = m.initSnapshotTarget()
+	return m
+}
+
+func Run(svc *domain.Service, opts RunOptions) (string, error) {
+	recordPath, at := opts.RecordPath, opts.At
+	m, cfg := prepareModel(svc)
+	m.webOpts = webLaunchOptions{Web: opts.Web, WebAddr: opts.WebAddr}
+	if at.Repo.Name != "" || at.Repo.Abs != "" {
+		m.startAt, m.startAtPending = at, true
+	}
+	m.statePath = repos.DefaultStatePath()
+	if home, err := os.UserHomeDir(); err == nil {
+		m.initHomeDir = home
+	}
+	// Honor [debug] log_operations at startup. Wired here — the real entry point
+	// that unit tests bypass (like statePath above) — rather than in loadCmd, so
+	// enabling the operation log never performs a global SetSpanSink side effect
+	// during a test's model load. The , Settings toggle drives it thereafter.
+	if cfg.Debug.LogOperations {
+		if err := m.opLog.enable(); err != nil {
+			m.statusMsg = i18n.T("operation log: %s", err.Error())
+		}
+	}
 	// The inbox is keyed by worktree under the session dir the snapshot just
 	// resolved; the watcher itself starts from Init().
 	m.steerDir = steerDirFor(m.snapshotCommonDir, m.snapshotWorktree)

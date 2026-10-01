@@ -111,6 +111,9 @@ func (m Model) closeSteerInbox() Model {
 // heartbeat poll already drains the inbox once a second, so a missing watcher
 // costs latency, not the feature.
 func (m Model) startSteerCmd(gen int) tea.Cmd {
+	if m.quiet {
+		return nil // headless: never-ending (headless.go)
+	}
 	if !m.steerActive() {
 		return nil
 	}

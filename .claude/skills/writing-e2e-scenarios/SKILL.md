@@ -1,6 +1,6 @@
 ---
 name: writing-e2e-scenarios
-description: Use when adding or modifying e2e test scenarios in e2e/scenarios/ — gigagit's declarative TOML tests that build a real repo, run gg commands, and assert user-visible state. Covers the schema, the operation contracts, and the mistakes that produce wrong expectations.
+description: Use when adding or modifying e2e test scenarios in e2e/scenarios/ — gigagit's declarative TOML tests that build a real repo, run gg commands, and assert user-visible state — including TUI scenarios that drive the real TUI and compare golden screens. Covers the schema, the operation contracts, the TUI golden-screen workflow, and the mistakes that produce wrong expectations.
 ---
 
 # Writing gg e2e scenarios
@@ -65,3 +65,67 @@ usage error = 2.
 4. Re-read the contract row for your command: where does it END? what is
    stashed? what is the exit code for *your* path through the decision tree?
 5. `go test ./e2e -run 'TestScenarios/<your-file>' -v` passes.
+
+## TUI scenarios (golden screens)
+
+(design: `docs/superpowers/specs/2026-10-01-tui-e2e-golden-screens-design.md`)
+
+A `[tui]` block drives the real TUI (`tui.Headless`: the real `Model` in a
+deterministic in-process loop, drawn through an `x/vt` terminal) after the
+`[[run]]`s, and compares screens with golden files. `[[run]]` is optional
+in a TUI scenario; `exit` stays required on every run.
+
+```toml
+[tui]
+size = "160x40"                  # COLSxROWS, default 160x40
+
+[[tui.step]]
+name = "commits"                 # checkpoint → <scenario>.screens/01-commits.txt
+keys = ["right"]                 # keyscript tokens (gg --record writes these)
+wait = false                     # true: fire the parked timers once (a "pause")
+screen_contains = ["✎"]          # checked on every OS
+screen_excludes = ["@notes/"]
+```
+
+- **Keys** are the recorder's tokens: `enter esc space tab up down left
+  right bspace delete home end pgup pgdown`, `C-x`, `M-x` (alt), or a
+  literal (`.`, `foo` = one press per rune). A step without `name` only
+  moves; a named step's whole screen is compared.
+- **Settling has no clock.** Each key's commands run to a fixed point;
+  timers (notice expiry, debounces, the heartbeat) are PARKED, so a plain
+  step shows the screen right after the keys (a sticky notice is still
+  there). Use `wait = true` for a screen that appears after a debounce.
+- **Non-git state** comes from `[[run]]`s through the real CLI: `gg note
+  add …`, and `gg review --tool fake …` with the fake agent declared in the
+  scenario's own `.gg.toml` (an `[input]` write, as in `tui_review_mixed`):
+  `command = "{{ggfake}} review"` prints `e2e/fixtures/review.json`.
+- **Write goldens with** `go test ./e2e -run 'TestScenarios/<name>' -update`,
+  then **READ every new or changed golden in full** before committing — a
+  golden is an expectation; copying a wrong screen pins the bug. A mismatch
+  writes `<golden>.actual` beside it (gitignored); a golden no checkpoint
+  produces fails as stale (`-update` deletes it).
+- **Determinism is the harness's job:** frozen `internal/clock` (ages,
+  dates), one fixed date for gg-made commits, `time.Local = UTC`, a fixed
+  sandbox root shown as `{{root}}`, the fake agent on PATH. If two
+  `-update` runs give different goldens, find the varying input — never
+  loosen the comparison.
+- **Prove it bites:** with the fix under test removed (a reversible edit —
+  never `git checkout` a file holding uncommitted work), the scenario must
+  fail.
+- **Cannot be checkpointed:** AI-task surfaces (shared task history), the
+  tool-update notice (agents are never probed), agent consoles, terminal
+  handovers (an editor or merge tool — the step fails), mouse input.
+- Golden bytes are not compared on Windows (paths differ);
+  `screen_contains`/`screen_excludes` run everywhere.
+
+**When to write one**
+- **A bug seen in a real repo** (e.g. test-1): find a scenario with that
+  repo's shape, or extend the closest one, or add one; reproduce the bug as
+  a failing screen first; then fix.
+- **A feature with a TUI surface** ships at least one scenario with golden
+  screens of that surface.
+- **Mix features the way users do:** features that meet on one screen
+  (reviews, notes, branch markers on one Commits list) belong in ONE
+  scenario, so their interaction is pinned. Separate repo definitions are
+  the default; share one only when a shape is copied a third time.
+

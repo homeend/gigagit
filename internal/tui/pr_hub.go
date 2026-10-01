@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/markdown"
@@ -53,7 +54,7 @@ func (m Model) openPRHub(p model.PullRequest) (Model, tea.Cmd) {
 }
 
 func prHubLoading(p model.PullRequest) []contentLine {
-	return append(prHubHeader(p, time.Now()), contentLine{text: i18n.T("(loading…)")})
+	return append(prHubHeader(p, clock.Now()), contentLine{text: i18n.T("(loading…)")})
 }
 
 func (m Model) loadPRHubCmd(n int) tea.Cmd {
@@ -79,7 +80,7 @@ func (m Model) handlePRHubMsg(msg prHubMsg) (Model, tea.Cmd) {
 	if hub == nil || hub.pr.Number != msg.number {
 		return m, nil
 	}
-	now := time.Now()
+	now := clock.Now()
 	if msg.err != nil {
 		// The retry key is already on the footer line ([r] reload).
 		hub.lines = append(prHubHeader(hub.pr, now),

@@ -50,6 +50,9 @@ func TestScenarios(t *testing.T) {
 				}
 				t.Logf("run[%d] gg %s → exit %d ✓", i, strings.Join(argv, " "), code)
 			}
+			if sc.TUI != nil {
+				runTUI(t, sb, sc, file)
+			}
 			assertExpect(t, sb, &sc.Expect)
 		})
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/clipboard"
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/commitgraph"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -316,6 +317,7 @@ type Model struct {
 	opMsgs    chan tea.Msg
 	modal     *decisionState
 	recorder  *recorder // keystroke recorder (nil unless gg --record)
+	quiet     bool      // headless golden-screen driver: no never-ending commands, virtual timers (headless.go)
 
 	// Session snapshot (agent-facing; see session_snapshot.go). snapshotPath
 	// "" = disabled (no repo / no state root). lastSnapshot is the last
@@ -516,7 +518,7 @@ func (m Model) loadPrefs() Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -919,7 +921,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // stale lane or read: stop re-arming
 		}
 		m.blinkOn = !m.blinkOn
-		return m, noticeBlinkCmd(msg.gen)
+		return m, m.noticeBlinkCmd(msg.gen)
 	case reviewViewMsg:
 		return m.handleReviewViewMsg(msg)
 	case reviewsFollowMsg:
@@ -3178,10 +3180,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case engine.Done:
 			m.statusMsg = renderSummary(e.Result)
 		}
-		return m, waitForOp(m.opMsgs)
+		return m, m.waitForOp(m.opMsgs)
 	case opDecisionMsg:
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
-		return m, waitForOp(m.opMsgs)
+		return m, m.waitForOp(m.opMsgs)
 	case prsLoadedMsg:
 		return m.handlePRsLoaded(msg)
 
@@ -3260,6 +3262,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// unconditional inbox poll. The poll is the safety net for a watcher that
 		// failed to start; it is NOT gated on gitwatch.Supported, which probes the
 		// REPO's filesystem while the inbox lives in the state dir.
+		if m.quiet {
+			// Headless (headless.go): the scheduler, polls, snapshot and
+			// steering all run on wall-clock time; a golden screen pins
+			// rendering, not background refresh. The tick only re-parks.
+			return m, m.heartbeatCmd()
+		}
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
 		var prcCmd, docCmd tea.Cmd
@@ -3276,7 +3284,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, hexp = m.expirePendingHint(time.Now())
 		var scmd tea.Cmd
 		m, scmd = m.drainSteer()
-		return m, tea.Batch(cmd, hexp, scmd, heartbeatCmd())
+		return m, tea.Batch(cmd, hexp, scmd, m.heartbeatCmd())
 
 	case steerStartedMsg:
 		if msg.gen != m.steerGen || !m.steerActive() {
@@ -3406,7 +3414,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.opIsFetch {
 			m.opIsFetch = false
 			if msg.err == nil {
-				m = m.recordDuration(fetchItem, time.Since(m.opStart))
+				m = m.recordDuration(fetchItem, clock.Since(m.opStart))
 			}
 		}
 		switchTo := ""

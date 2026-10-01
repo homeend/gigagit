@@ -4,10 +4,10 @@ import (
 	"context"
 	"path/filepath"
 	"sync"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -135,7 +135,7 @@ func (m Model) loadCmd() tea.Cmd {
 			// extra git reads are free here — unlike the one-shot CLI.
 			name, _ := svc.RepoName(ctx)
 			out.repoName = name
-			_ = repos.Touch(statePath, snap.CurrentWorktree, name, time.Now())
+			_ = repos.Touch(statePath, snap.CurrentWorktree, name, clock.Now())
 			if n := cfg.UI.ReflogLimit; n > 0 {
 				if rl, err := svc.Reflog(ctx, n); err == nil {
 					out.reflog = rl

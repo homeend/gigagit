@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -46,8 +47,8 @@ func (m Model) commitBoxWaitOn(id domain.TaskID) (Model, tea.Cmd) {
 	p.generating = true
 	p.genGen++
 	p.spinFrame = 0
-	p.genStart = time.Now()
-	return m, spinTickCmd(p.genGen)
+	p.genStart = clock.Now()
+	return m, m.spinTickCmd(p.genGen)
 }
 
 // genSpinMsg advances the in-flight generate spinner; gen guards it against a
@@ -55,8 +56,8 @@ func (m Model) commitBoxWaitOn(id domain.TaskID) (Model, tea.Cmd) {
 type genSpinMsg struct{ gen int }
 
 // spinTickCmd schedules the next spinner frame ~100ms out.
-func spinTickCmd(gen int) tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg { return genSpinMsg{gen: gen} })
+func (m Model) spinTickCmd(gen int) tea.Cmd {
+	return m.tick(100*time.Millisecond, func(time.Time) tea.Msg { return genSpinMsg{gen: gen} })
 }
 
 // tickGenSpinner advances the spinner and reschedules while a matching run is
@@ -71,7 +72,7 @@ func (m Model) tickGenSpinner(msg genSpinMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	p.spinFrame++
-	return m, spinTickCmd(msg.gen)
+	return m, m.spinTickCmd(msg.gen)
 }
 
 // escGenerate cancels the box's own task (esc keeps its meaning: stop).

@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
@@ -175,7 +176,7 @@ func (p *commitPopup) box(m Model) string {
 		// and the cancel hint, not the full (inert) key list.
 		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		frame := frames[p.spinFrame%len(frames)]
-		elapsed := int(time.Since(p.genStart).Seconds())
+		elapsed := int(clock.Since(p.genStart).Seconds())
 		footer = i18n.T("%c generating message… %ds  ([esc] cancel  [b] background)", frame, elapsed)
 		if info, ok := domain.Tasks().Get(p.genTask); ok && info.State == domain.TaskQueued {
 			footer = i18n.T("%c queued…  ([esc] cancel  [b] background)", frame)

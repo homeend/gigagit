@@ -1,0 +1,46 @@
+name = "tui: free text reads in the centred 120-column reading column when maximized"
+
+# On a 200-column terminal a maximized (ctrl+t) View all notes and review
+# overview keep their full frame, but their text sits in a column at most
+# [ui] reading_width (120) wide, centred; a long note wraps under the NOTE
+# column instead of being cut (2026-09-30).
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[tools.command]]
+category = "review"
+name = "fake"
+mode = "capture"
+command = "{{ggfake}} review"
+''' },
+  { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
+  { commit = "add a b" },
+  { rm = "a.txt" }, { rm = "b.txt" },
+  { commit = "deleted a b" },
+]
+
+[[run]]
+cmd = ["note", "add", "--rev", "HEAD~1", "--file", "a.txt", "--new-line", "1", "--summary", "This note is deliberately long so that the NOTE column cannot hold it on one line even at full width: it must wrap under its own column, inside the centred reading column, and end with the word TAILWORD"]
+exit = 0
+
+[[run]]
+cmd = ["review", "--tool", "fake", "HEAD"]
+exit = 0
+
+[tui]
+size = "200x45"
+
+[[tui.step]]
+name = "all-notes"
+keys = ["C-p", "all", "space", "notes", "enter", "C-t"]
+screen_contains = ["All notes", "TAILWORD"]
+
+[[tui.step]]
+keys = ["esc", "esc"]
+
+# The reviewed commit's Files view → its review row → the review view's
+# ≡ Overview → enter shows the overview, ctrl+t maximizes it.
+[[tui.step]]
+name = "overview"
+keys = ["right", "enter", "down", "enter", "enter", "C-t"]
+screen_contains = ["Overview", "Verdict"]
