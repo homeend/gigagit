@@ -143,9 +143,13 @@ type Link struct {
 	Target LinkTarget
 	Side   NoteSide // NoteSideNew unless the link said "old:"
 	Line   int      // 1-based; 0 = none
+	// End is the last line of a RANGE (1-based, > Line); 0 = a single line.
+	End int
 	// Fingerprint is LineFingerprint of the line the link was copied from
 	// ("" = none). Only an uncommitted line link carries one: the resolver
-	// re-finds the line by it when the file has moved on.
+	// re-finds the line by it when the file has moved on. On a range it is
+	// BlockFingerprint of the whole block, which the resolver only CHECKS: a
+	// block that changed makes the link stale.
 	Fingerprint string
 	Hunk        int      // 1-based; 0 = none
 	Hint        LinkHint // "" Kind = no hint; the UI surface a link was copied from
@@ -262,6 +266,10 @@ func (l Link) String() string {
 			b.WriteString("old:")
 		}
 		b.WriteString(strconv.Itoa(l.Line))
+		if l.End > l.Line {
+			b.WriteByte('-')
+			b.WriteString(strconv.Itoa(l.End))
+		}
 		if l.Fingerprint != "" {
 			b.WriteByte('~')
 			b.WriteString(l.Fingerprint)
@@ -276,7 +284,7 @@ func (l Link) String() string {
 
 // ParseLink reads the strict grammar:
 //
-//	gg://<repo>/<path>[@<target>][:<line>][?<hint>]   file / line
+//	gg://<repo>/<path>[@<target>][:<line>[-<end>]][?<hint>]   file / line / range
 //	gg://<repo>/<path>[@<target>]#<hunk>[?<hint>]     hunk (git @@ order, 1-based)
 //	gg://<repo>@<commit>[?<hint>]                     a commit, no path
 //	gg://<repo>[/<path>]@<target>...<source>[:<line>|#<hunk>][?<hint>]  a merge preview
@@ -290,7 +298,8 @@ func (l Link) String() string {
 // <target> is "staged", 7..64 hex (64 covers a sha-256 repository, whose
 // commit ids every producer writes in full), "ref:<name>" (a branch or tag
 // tip) or "<a>..<b>" (a change-set, each half a sha or a refname); absent
-// means the working tree. <line> is "<n>" (new side) or "old:<n>". <hint> is
+// means the working tree. <line> is "<n>" (new side) or "old:<n>"; "-<end>"
+// makes it a range of lines on that one side. <hint> is
 // "<kind>=<id>" naming the UI surface the link was copied from ("bookmark",
 // "shelf" or "stash"); it never changes what the link addresses. Errors are
 // English and wrap ErrLink.
@@ -338,19 +347,19 @@ func ParseLink(s string) (Link, error) {
 
 	// The line rides the tail when there is a target, the head otherwise.
 	var side NoteSide
-	var line int
+	var line, end int
 	var fp string
 	var err error
 	if hasTarget {
-		tail, side, line, fp, err = splitLinkLine(tail)
+		tail, side, line, end, fp, err = splitLinkLine(tail)
 	} else {
-		head, side, line, fp, err = splitLinkLine(head)
+		head, side, line, end, fp, err = splitLinkLine(head)
 	}
 	if err != nil {
 		return Link{}, err
 	}
 	if line > 0 {
-		l.Side, l.Line, l.Fingerprint = side, line, fp
+		l.Side, l.Line, l.End, l.Fingerprint = side, line, end, fp
 	}
 	if l.Line > 0 && l.Hunk > 0 {
 		return linkErr("a link carries a line or a hunk, not both")
@@ -494,43 +503,79 @@ func ParseLink(s string) (Link, error) {
 	return l, nil
 }
 
-// splitLinkLine strips a trailing ":<n>" or ":old:<n>" from t, with its
-// optional "~<fp>" line fingerprint. A colon whose
-// tail is not a number is left alone — that is how a Windows drive letter
-// ("/C:/src/repo/f.go") survives.
-func splitLinkLine(t string) (rest string, side NoteSide, line int, fp string, err error) {
+// splitLinkLine strips a trailing ":<n>", ":<a>-<b>" or ":old:…" from t, with
+// its optional "~<fp>" fingerprint. A colon whose tail is not a number (or a
+// number range) is left alone — that is how a Windows drive letter
+// ("/C:/src/repo/f.go") survives. A range of one line (a == b) is a single
+// line: end comes back 0.
+func splitLinkLine(t string) (rest string, side NoteSide, line, end int, fp string, err error) {
 	i := strings.LastIndexByte(t, ':')
 	if i < 0 {
-		return t, NoteSideNew, 0, "", nil
+		return t, NoteSideNew, 0, 0, "", nil
 	}
 	num := t[i+1:]
 	hasFP := false
 	if j := strings.IndexByte(num, '~'); j >= 0 {
-		// "<n>~<fp>" — only when what precedes the '~' is a number: a path
-		// segment like "b~c.go" after a drive colon is left alone, exactly as
-		// a non-numeric tail always was.
-		if _, nerr := strconv.Atoi(num[:j]); nerr == nil {
+		// "<n>~<fp>" — only when what precedes the '~' is a number or a range:
+		// a path segment like "b~c.go" after a drive colon is left alone,
+		// exactly as a non-numeric tail always was.
+		if linkLineSpec(num[:j]) {
 			num, fp, hasFP = num[:j], num[j+1:], true
 		}
 	}
-	n, cerr := strconv.Atoi(num)
+	first, last, isRange := num, "", false
+	if j := strings.IndexByte(num, '-'); j > 0 {
+		if _, nerr := strconv.Atoi(num[:j]); nerr == nil {
+			first, last, isRange = num[:j], num[j+1:], true
+		}
+	}
+	n, cerr := strconv.Atoi(first)
 	if cerr != nil {
 		if num == "" {
-			return "", "", 0, "", fmt.Errorf("%w: a line number is missing after \":\"", ErrLink)
+			return "", "", 0, 0, "", fmt.Errorf("%w: a line number is missing after \":\"", ErrLink)
 		}
-		return t, NoteSideNew, 0, "", nil
+		return t, NoteSideNew, 0, 0, "", nil
+	}
+	if isRange {
+		if last == "" {
+			return "", "", 0, 0, "", fmt.Errorf("%w: a line number is missing after \"-\"", ErrLink)
+		}
+		m, merr := strconv.Atoi(last)
+		if merr != nil {
+			return t, NoteSideNew, 0, 0, "", nil // "3-7x.go": a path, not a range
+		}
+		if m < n {
+			return "", "", 0, 0, "", fmt.Errorf("%w: a range ends before it starts, got %q", ErrLink, num)
+		}
+		if m > n {
+			end = m
+		}
 	}
 	if n < 1 {
-		return "", "", 0, "", fmt.Errorf("%w: a line must be a 1-based number, got %q", ErrLink, num)
+		return "", "", 0, 0, "", fmt.Errorf("%w: a line must be a 1-based number, got %q", ErrLink, num)
 	}
 	if hasFP && !LinkFingerprintOK(fp) {
-		return "", "", 0, "", fmt.Errorf("%w: a line fingerprint is 8 lowercase hex characters, got %q", ErrLink, fp)
+		return "", "", 0, 0, "", fmt.Errorf("%w: a line fingerprint is 8 lowercase hex characters, got %q", ErrLink, fp)
 	}
 	rest, side = t[:i], NoteSideNew
 	if j := strings.LastIndexByte(rest, ':'); j >= 0 && rest[j+1:] == "old" {
 		rest, side = rest[:j], NoteSideOld
 	}
-	return rest, side, n, fp, nil
+	return rest, side, n, end, fp, nil
+}
+
+// linkLineSpec reports whether s is "<n>" or "<a>-<b>" (or the unfinished
+// "<a>-", which splitLinkLine then refuses by name).
+func linkLineSpec(s string) bool {
+	a, b, isRange := strings.Cut(s, "-")
+	if _, err := strconv.Atoi(a); err != nil {
+		return false
+	}
+	if !isRange || b == "" {
+		return true
+	}
+	_, err := strconv.Atoi(b)
+	return err == nil
 }
 
 // RepoNameFromURL takes the repository name out of a git remote URL: the last
