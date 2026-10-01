@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v107 -->
+<!-- gg:using-gg:v108 -->
 
 # Using gg (gigagit)
 
@@ -247,7 +247,8 @@ each one in turn as you explain it.
 
 **Temporary notes — explain on the code itself.** When the user says "show me
 on the files", put short remarks on the lines you are talking about. The user
-reads each one in a box under its lines in the gg TUI.
+reads each one in a box under its lines in the gg TUI and in the gg web
+page's file viewer.
 
 - `gg session note add <path>:<start>[-<end>] --summary "…" [--rationale "…"]
   [--author <name>] [--json]` — put a note on those lines of the file AS IT IS
@@ -262,11 +263,14 @@ reads each one in a box under its lines in the gg TUI.
   now.
 - `gg session note rm <note-id>` / `gg session note clear <path>|<file-id>`.
 
-These notes are TEMPORARY: they live in the running gg TUI's memory, follow
-their lines when the file changes, and are gone when the user closes the file
-(X) or quits gg. They are not `gg note` review notes and never reach the notes
-store. They need a live gg TUI (exit 1 otherwise; `gg web` alone cannot hold
-them).
+These notes are TEMPORARY: they live in the running gg's memory, follow their
+lines when the file changes, and are gone when the user closes the file (X in
+the TUI, x in the web switcher) or quits gg. They are not `gg note` review
+notes and never reach the notes store. They need a live gg TUI or gg web page
+(exit 1 when neither is live). A gg TUI that serves its own web page shows the
+SAME notes in both — a note dismissed in one is gone from the other; with a
+TUI live, the TUI answers. A standalone `gg web` answers on its own (with the
+TUI's reply text, except `gg web is showing worktree …` for another worktree).
 
 The walkthrough: `gg session note add` on each file (that opens them), then
 `gg session files focus <id>:<line>` one file at a time as you explain it.

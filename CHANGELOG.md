@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent notes in gg web
+
+### Added
+
+- **An agent's temporary notes show in gg web.** `gg session note add` now
+  reaches a gg web page too: the file viewer draws each note in a box under
+  its last line, marks the lines it covers, and offers `d` (dismiss), `r`
+  (copy the `gg note t<n> <path>:<lines>` reference), `}` / `{` (next /
+  previous note, then the next file with notes) and **dismiss** / **copy
+  reference** buttons; the switcher's row says `· N notes`. A noted file is
+  pinned in the page's list (never pushed out at 20 files) and esc sends it
+  to the background; x closes it and drops its notes.
+- **One set of notes when the TUI serves the page.** The notes live in a new
+  process-wide store (`internal/agentdocs`) that the TUI and the page it
+  hosts share: same ids, a dismiss in either is gone from the other, and a
+  note follows its lines whichever side reads the changed file first.
+- **A standalone `gg web` answers `gg session note add|list|show|rm|clear`**
+  itself when no TUI is running (with the TUI's reply text).
+
+### Changed
+
+- `gg session note` no longer refuses with "temporary notes need a gg TUI"
+  when only gg web is live. Skill `using-gg` v108.
+
 ## Web switch-repo table groups by project
 
 ### Added

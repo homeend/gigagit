@@ -4181,14 +4181,45 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
 - **Gutter.** While a document has notes its lines give up `noteGutterW` (2)
   columns (`winOpts.prefixW`); covered lines carry `│ `. `activePreview`
   subtracts it from the width search/pan use.
-- **Re-anchoring** (`reanchorNotes`, called from `fill`): a live note follows
-  the `textdiff` alignment when all its lines survived unchanged and
-  contiguous, else it goes `outdated` (numbers kept, clamped). An outdated
-  note — or any note after a placeholder fill — returns only when its anchor
-  text is at its old place or at exactly ONE place in the file.
+- **The store.** Notes live in `internal/agentdocs` (spec
+  `2026-10-01-agent-docs-web-design.md`), filed under
+  `domain.CheckoutKey(<toplevel>)` + path. `tui.New` holds
+  `agentdocs.Shared()`; a page the TUI hosts (`web.NewHost(…, true)`) holds
+  the same one, so both show ONE set (same `t<n>`, a dismiss anywhere is a
+  dismiss everywhere). A document keeps a COPY (`openFile.notes
+  []agentdocs.Note`) that View draws; `agentDocsChangedMsg` (one
+  subscription, `agentdocs_track.go`) re-reads the copies. Open-file ids
+  come from `Shared().NextFileSeq()` (the hosted page's list uses the same
+  counter).
+- **Re-anchoring** (`agentdocs` `reanchor`, via `Store.Align`): the Model
+  aligns the store to a working-tree load's lines BEFORE `fill`
+  (`alignDocNotes`); `fill` then `syncNotes`. A live note follows the
+  `textdiff` alignment when all its lines survived unchanged and contiguous,
+  else it goes `outdated` (numbers kept, clamped). An outdated note returns
+  only when its anchor text is at its old place or at exactly ONE place in
+  the file. `Align` is idempotent per content fingerprint; a document whose
+  lines are not the content the notes sit on (the browser read a newer file)
+  does not adopt them and is re-read (`syncNotes` → stale).
 - **Steer.** `note_add|list|show|rm` run before `steerRefusal` (they never
   move the screen); `note_add` on a file that is not open/loaded rides
-  `noteLandedMsg`. The CLI (`gg session note`) posts to a TUI only.
+  `noteLandedMsg`. The CLI (`gg session note`) posts to the TUI when one is
+  live, else to gg web (`steerLive(both=false)`).
+- **Web side** (`internal/web`: `agentdocs_follow.go`, `steer_notes.go`,
+  `file_notes.go`). The server keeps its own store unless hosted. A follow
+  goroutine (started by `Host.Start`, also run by `adoptService`) lists every
+  noted file in the page's list (`ensureOpen`, background) and pins it
+  (`ofEntry.pinned`: never evicted; a plain `close` op — esc — backgrounds
+  it; `everywhere` — x — clears its notes), then fans out
+  `Reason: "agentdocs"`. `/api/file-content` aligns + returns `notes`
+  (working tree only) — the page never pairs notes with lines from another
+  read. `POST /api/file-notes {op:"dismiss"}`. `handleSteer` answers the
+  note verbs BEFORE `toSteerWire` (its 400 "unknown command") and the 409.
+  The web root is `TopLevel` (cached per service), never `svc.Root()`.
+- **Known limits.** A TUI plus a SEPARATE-process `gg web` on one worktree:
+  the verbs go to the TUI and that page shows none. Line numbers are over
+  canonical lines (`agentdocs.Lines`, the TUI's split: CR and CRLF break
+  lines); the web viewer splits only on LF, so a file with bare CRs shows
+  its boxes off by the CRs.
 
 #### Overview documents (`overview*.go`, `steer_overview.go`)
 

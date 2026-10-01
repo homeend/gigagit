@@ -1,0 +1,46 @@
+name = "session note with only gg web live: the web server answers from its store"
+
+[input]
+web = true
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\n" },
+  { commit = "seed" },
+]
+
+[[run]]
+cmd             = ["session", "note", "add", "a.txt:2", "--summary", "look at bravo"]
+exit            = 0
+stdout_contains = ["noted a.txt:2 as t1"]
+
+[[run]]
+cmd             = ["session", "note", "list"]
+exit            = 0
+stdout_contains = ["t1\ta.txt\t2-2\tlook at bravo"]
+
+[[run]]
+cmd             = ["session", "files"]
+exit            = 0
+stdout_contains = ["f1\ta.txt\tworktree"]
+
+[[run]]
+cmd             = ["session", "note", "show", "t1"]
+exit            = 0
+stdout_contains = ["2\tbravo"]
+
+[[run]]
+cmd             = ["session", "note", "add", "a.txt:9", "--summary", "too far"]
+exit            = 1
+stderr_contains = ["line 9 is past the end of a.txt (3 lines)"]
+
+[[run]]
+cmd             = ["session", "note", "rm", "t1"]
+exit            = 0
+stdout_contains = ["removed t1"]
+
+[[run]]
+cmd             = ["session", "note", "rm", "t1"]
+exit            = 1
+stderr_contains = ["no note t1"]
+
+[expect]
+branch = "main"

@@ -1340,8 +1340,12 @@ back to the agent when you want to ask about that remark. A note taller than
 half the window is cut in place; `enter` opens it in full. `gg session note
 list|show|rm|clear` are the agent's other verbs. The notes are temporary: they
 follow their lines as the file changes, a file carrying them stays open on esc,
-and closing it (X) drops them. They need a running TUI; `gg web` does not show
-them yet.
+and closing it (X) drops them. The gg web page shows them too: a box under
+the lines in its file viewer, with `d` / `r` / `}` / `{` and **dismiss** and
+**copy reference** buttons, and `· N notes` on the file's switcher row. A TUI
+that serves its own web page (`[web]`, `gg --web`) shows the same notes in
+both — dismiss one in the browser and it leaves the terminal. A standalone
+`gg web` answers `gg session note` itself when no TUI is running.
 
 For a **guided tour** the agent writes an overview: `gg session overview add
 --title "…" < tour.md` shows a markdown document that lives only in the TUI,
