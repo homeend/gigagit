@@ -114,3 +114,16 @@ func TestCallNeverRetriesAToolCall(t *testing.T) {
 		t.Fatalf("the tool ran %d times: a retried agent_start would start two workers", n)
 	}
 }
+
+// The channel answered: a JSON-RPC error is not "unreachable".
+func TestProtocolErrorIsNotUnreachable(t *testing.T) {
+	ts := channel(t)
+	c := New(ts.URL, "good")
+	defer c.Close()
+	for _, tool := range []string{"boom", "nope"} {
+		_, err := c.Call(context.Background(), tool, struct{}{})
+		if err == nil || errors.Is(err, ErrUnreachable) || strings.Contains(err.Error(), "not reachable") {
+			t.Errorf("%s: err = %v, want a protocol error, not unreachable", tool, err)
+		}
+	}
+}
