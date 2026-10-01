@@ -24,12 +24,12 @@ import (
 // cmdWorktree dispatches `gg worktree <sub>`.
 func cmdWorktree(svc *domain.Service, workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove|move|rename|prune|recycle> [args]")
+		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove|move|rename|prune|recycle|claim|release|reserve|unreserve> [args]")
 		return 2
 	}
 	switch args[0] {
 	case "list":
-		return cmdWorktreeList(svc, stdout, stderr)
+		return cmdWorktreeList(svc, args[1:], stdout, stderr)
 	case "add":
 		return cmdWorktreeAdd(svc, workdir, args[1:], stdin, stdout, stderr, cwdFile)
 	case "remove":
@@ -43,26 +43,18 @@ func cmdWorktree(svc *domain.Service, workdir string, args []string, stdin io.Re
 		return finish(res, err, stdout, stderr)
 	case "recycle":
 		return cmdWorktreeRecycle(svc, args[1:], stdin, stdout, stderr)
+	case "claim":
+		return cmdWorktreeClaim(svc, workdir, args[1:], stdout, stderr)
+	case "release":
+		return cmdWorktreeRelease(svc, workdir, args[1:], stdout, stderr)
+	case "reserve":
+		return cmdWorktreeReserve(svc, workdir, args[1:], stdout, stderr, true)
+	case "unreserve":
+		return cmdWorktreeReserve(svc, workdir, args[1:], stdout, stderr, false)
 	default:
-		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, remove, move, rename, prune, or recycle)\n", args[0])
+		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, remove, move, rename, prune, recycle, claim, release, reserve, or unreserve)\n", args[0])
 		return 2
 	}
-}
-
-func cmdWorktreeList(svc *domain.Service, stdout, stderr io.Writer) int {
-	wts, err := svc.Worktrees(context.Background())
-	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
-	}
-	for _, w := range wts {
-		branch := w.Branch
-		if branch == "" {
-			branch = "(detached)"
-		}
-		fmt.Fprintf(stdout, "%s\t%s\n", branch, w.Path)
-	}
-	return 0
 }
 
 func cmdWorktreeAdd(svc *domain.Service, workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
