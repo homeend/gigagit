@@ -15,11 +15,12 @@ exit            = 0
 stdout_contains = ["gg:///", "/f1.txt?view=content"]
 stdout_excludes = ["@"]
 
-# A :<line> focuses the viewer's cursor; the file has one line.
+# A :<line> focuses the viewer's cursor; the file has one line ("dirty"),
+# and an uncommitted line carries its fingerprint.
 [[run]]
 cmd             = ["link", "--content", "f1.txt:1"]
 exit            = 0
-stdout_contains = ["/f1.txt:1?view=content"]
+stdout_contains = ["/f1.txt:1~9f000e9b?view=content"]
 
 # A line the file does not have is a link to nowhere.
 [[run]]
