@@ -87,8 +87,9 @@ func TestDiffViewLKeyCopiesTheCursorLink(t *testing.T) {
 
 	// focusBlock(0, body) anchors the cursor on the first change block
 	// (index 20; sameRowsTUI marks it Changed with Left/RightNo == 21), so
-	// the default anchor is the NEW side, line 21.
-	want := "gg://gigagit/a.txt:21"
+	// the default anchor is the NEW side, line 21 — an uncommitted line, so
+	// the link carries the fingerprint of its text ("y").
+	want := "gg://gigagit/a.txt:21~" + model.LineFingerprint("y")
 	got, ok := m.contextLinkText()
 	if !ok {
 		t.Fatal("contextLinkText refused with a diff open")
@@ -238,7 +239,7 @@ func TestContextLinkTextOldSide(t *testing.T) {
 	if !has || side != model.NoteSideOld || line != 21 {
 		t.Fatalf("noteAnchorAtCursor = side=%v line=%d has=%v, want old/21/true", side, line, has)
 	}
-	want := "gg://gigagit/a.txt:old:21"
+	want := "gg://gigagit/a.txt:old:21~" + model.LineFingerprint("gone")
 	got, ok := m.contextLinkText()
 	if !ok {
 		t.Fatal("contextLinkText refused with a diff open")

@@ -234,8 +234,13 @@ func TestFileViewerCopyFileLinkCarriesTheCursorLine(t *testing.T) {
 	m, _ := viewerModel(t)
 	m = fvKeys(t, m, altDown(), altDown())
 	m, copied := runFileLinkRow(t, m, true)
-	if !strings.HasSuffix(copied, "/main.go:3?view=content") {
-		t.Fatalf("copied %q, want …/main.go:3?view=content", copied)
+	// The line is on disk and uncommitted: the link carries its fingerprint.
+	d, ok := m.focusedDoc()
+	if !ok || len(d.p.lines) < 3 {
+		t.Fatal("no focused viewer with three lines")
+	}
+	if want := "/main.go:3~" + model.LineFingerprint(d.p.lines[2].raw) + "?view=content"; !strings.HasSuffix(copied, want) {
+		t.Fatalf("copied %q, want …%s", copied, want)
 	}
 	if l, err := model.ParseLink(copied); err != nil || l.Line != 3 || !l.IsContent() {
 		t.Fatalf("ParseLink(%q) = %+v, %v", copied, l, err)
