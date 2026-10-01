@@ -104,6 +104,33 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - `gg session overview` no longer refuses with "overviews need a gg TUI"
   when only gg web is live. The using-gg skill is v112.
 
+## Preview notes remember their preview
+
+### Added
+
+- **A note written in a merge preview (or a commit pair) remembers it.** The
+  note is still stored on the tip, now with `preview = "<target>...<source>"`
+  (`"<a7>..<b7>"` for a pair). The tip's Files view names it on the Notes
+  row — `a.txt  ◆ 1  (preview: feature → main)` — and `gg note … --json`,
+  MCP and the web carry `"preview"`. Stamped by `gg note add|apply
+  --preview` (and a preview link), MCP, the TUI's note form and the web
+  page (the server resolves the name and stamps only when the preview's tip
+  is the note's commit) and `gg review --preview --notes`. A pull request's
+  diff records none (its names are forge refs). The name is a label kept as
+  written: renaming the branch later does not rewrite it. Notes written
+  before this carry no name.
+- **More golden screens:** the stash window and an untracked-including
+  stash's files (`tui_stash`), a paused rebase and the conflict process
+  (`tui_rebase_conflict`), the commit dialog and its result
+  (`tui_commit_dialog`).
+
+### Fixed
+
+- **The Reflog tab counts a commit at once.** Commit, merge, rebase,
+  fast-forward, cherry-pick, patch apply, remote-branch checkout, branch
+  rename and version restore did not reload the reflog, and with
+  auto-refresh off (the default) it stayed one entry behind.
+
 ## TUI golden-screen tests
 
 ### Added

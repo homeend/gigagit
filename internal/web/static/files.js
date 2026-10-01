@@ -2509,6 +2509,16 @@ function fileNoteRowsHTML(cols, nctx = null) {
 
 // previewCtx is the slice of state.previewOpen a diff context carries: the
 // display pair, the PR number, and — for a PR — the pair its gg:// link names.
+// noteScopeSpec names the scope a note is written in, the way the CLI's
+// --preview spells it: a merge preview "<target>...<source>", a commit pair
+// "<a>..<b>". A pull request's names are display names, never refs: none.
+// The server resolves it and stamps the note only when its tip matches.
+function noteScopeSpec(pv) {
+  if (!pv || pv.pr) return "";
+  if (pv.pair) return `${pv.pair.a}..${pv.pair.b}`;
+  return pv.source && pv.target ? `${pv.target}...${pv.source}` : "";
+}
+
 function previewCtx(po) {
   return { source: po.source, target: po.target, pr: po.pr || 0, linkSource: po.linkSource || "", linkTarget: po.linkTarget || "" };
 }
@@ -2773,6 +2783,7 @@ function addNotePrompt() {
         line: at.no,
         summary,
         rationale,
+        preview: noteScopeSpec(ad.ctx.preview),
       }),
   });
 }

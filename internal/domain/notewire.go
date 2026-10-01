@@ -33,6 +33,9 @@ type WireNote struct {
 	Resolved  bool   `json:"resolved,omitempty"`
 	FileLevel bool   `json:"file_level,omitempty"`
 	Created   string `json:"created,omitempty"` // RFC 3339; empty when unknown
+	// Preview is the scope the note was written in (model.Note.Preview):
+	// "<target>...<source>" or "<a7>..<b7>"; empty for any other note.
+	Preview string `json:"preview,omitempty"`
 	// MD is a FORGE note's rationale parsed as markdown and SummaryMD its
 	// summary line's inline tree; a page paints them instead of the plain
 	// strings above. Only ToWireNoteRendered fills them, and never for a
@@ -51,6 +54,7 @@ func ToWireNote(r ResolvedNote) WireNote {
 		Author: r.Note.Author, Path: r.Note.Address.Path, Rev: r.Note.Address.Commit,
 		Side: string(r.Note.Side), Line: r.Range[1], Range: r.Range,
 		Summary: r.Note.Summary, Rationale: r.Note.Rationale, Status: string(r.Status),
+		Preview: r.Note.Preview,
 	}
 	if r.Note.Source == model.NoteSourceForge {
 		w.ReadOnly = true

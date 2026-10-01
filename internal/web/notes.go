@@ -174,6 +174,9 @@ type noteReq struct {
 	Summary   string `json:"summary"`
 	Rationale string `json:"rationale"`
 	Author    string `json:"author"`
+	// Preview is the scope the page wrote the note in ("<target>...<source>"
+	// or "<a>..<b>"); stamped only when it resolves to the note's own commit.
+	Preview string `json:"preview"`
 }
 
 func decodeNoteReq(w http.ResponseWriter, r *http.Request) (noteReq, bool) {
@@ -197,6 +200,21 @@ func (s *Server) noteAuthor(ctx context.Context, given string) string {
 		return strings.TrimSpace(id.EffectiveName)
 	}
 	return ""
+}
+
+// notePreview is the scope a page-written note records: the named preview or
+// pair, resolved here (the wire value is never stored as sent), and only when
+// its tip is the note's commit — the one place such a note is written. Any
+// failure just leaves the note unstamped: the stamp is a label, not a gate.
+func (s *Server) notePreview(ctx context.Context, spec string, addr model.FileAddress) string {
+	if spec = strings.TrimSpace(spec); spec == "" || addr.State != model.StateCommitted {
+		return ""
+	}
+	set, err := s.service().NoteScopeResolve(ctx, spec)
+	if err != nil || set.Tip != addr.Commit {
+		return ""
+	}
+	return set.Pair()
 }
 
 func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
@@ -223,6 +241,7 @@ func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 		Source: model.NoteSourceUser, Author: s.noteAuthor(r.Context(), req.Author), Address: addr,
 		Side: side, Range: [2]int{req.Line, req.Line},
 		Summary: summary, Rationale: strings.TrimSpace(req.Rationale),
+		Preview: s.notePreview(r.Context(), req.Preview, addr),
 	}
 	// ContextHash is left empty on purpose: domain fills it from the side text
 	// (the browser has the rendered row, but the server is the authority here).

@@ -320,7 +320,10 @@ func (m Model) reloadAllCmd(opts reloadOpts) (Model, tea.Cmd) {
 func opAffectedSources(op engine.Operation) []sourceKey {
 	switch op.(type) {
 	case engine.Commit:
-		return []sourceKey{srcStatus, srcFeed, srcBranches}
+		// srcReflog (here and on every HEAD-moving op below): a HEAD reflog
+		// entry the Reflog tab counts — with auto-refresh off (the default)
+		// nothing else reloads it.
+		return []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}
 	case engine.Push:
 		// A push moves the remote-tracking ref, so the feed's %D decorations
 		// and ↓/↑ local/remote tip markers change — refresh it too. NOT tags:
@@ -343,7 +346,7 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 	case engine.CheckoutRemoteBranch:
 		// Map + fetch + local tracking branch, possibly a HEAD move (switch
 		// intent): everything AddFetchMappings touches plus status.
-		return []sourceKey{srcStatus, srcBranches, srcRemotes, srcFeed}
+		return []sourceKey{srcStatus, srcBranches, srcRemotes, srcFeed, srcReflog}
 	case engine.CreateWorktree, engine.CreateWorktreeForBranch:
 		return []sourceKey{srcBranches, srcWorktrees}
 	case engine.RemoveWorktree:
@@ -379,23 +382,23 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// auto-fire the srcTags remote-tags network probe.
 		return []sourceKey{srcStatus}
 	case engine.SmartMerge, engine.SmartRebase:
-		return []sourceKey{srcStatus, srcFeed, srcBranches}
+		return []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}
 	case engine.FastForward:
 		// Moves a branch tip (and the working tree when it is the current
 		// branch); no remote or tag state changes. Mapped so it doesn't fall
 		// through to "all sources" and auto-fire the srcTags remote probe.
-		return []sourceKey{srcStatus, srcFeed, srcBranches}
+		return []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}
 	case engine.CherryPick:
 		// Moves the branch tip and may leave conflicts, same shape as
 		// SmartMerge/SmartRebase. Mapping it avoids falling through to "all
 		// sources", which would auto-fire the srcTags-arrival remote-tags
 		// probe (a needless network round-trip) after every cherry-pick.
-		return []sourceKey{srcStatus, srcFeed, srcBranches}
+		return []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}
 	case engine.ApplyPatch:
 		// Commits mode moves the branch tip and adds commits; working-tree
 		// mode changes status (possibly to conflicted). One op covers both,
 		// so refresh the union.
-		return []sourceKey{srcStatus, srcFeed, srcBranches}
+		return []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}
 	case engine.DeleteBranch:
 		// Branch-only ref change: refresh the Branches panel and the feed (its
 		// %D ref decorations and tip markers move). NOT tags — leaving these
@@ -418,7 +421,7 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// both, so refresh the union.
 		// srcNotes: gg deletes/renames the branch's AI reviews with it
 		// (domain reviewsFollowBranchOp) — the ◆ counts and review rows move.
-		return []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees, srcNotes}
+		return []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees, srcNotes, srcReflog}
 	case engine.DeleteRemoteBranch:
 		// The remote-tracking ref vanishes (Remotes panel + the feed's %D
 		// decorations/tip markers), and a local branch tracking it loses its
@@ -434,7 +437,7 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// deleted branch — refresh status, the branch list, the feed (%D
 		// decorations/tip markers), and worktrees (a recreated branch could
 		// be one a worktree tracks).
-		return []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees}
+		return []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees, srcReflog}
 	case engine.DeleteBranchVersion:
 		// Removes a refs/gg/versions/... ref only — no panel shows these,
 		// so nothing needs a reload.

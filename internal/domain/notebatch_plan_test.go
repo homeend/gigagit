@@ -133,7 +133,7 @@ func TestPlanNoteBatchInUsesTheGivenHunkSpec(t *testing.T) {
 		t.Fatal(err)
 	}
 	planned, skipped, err := svc.PlanNoteBatchIn(ctx, b,
-		NoteBatchTarget{Rev: tip, Hunks: &spec}, "ada", NoteSideNewOnly)
+		NoteBatchTarget{Rev: tip, Hunks: &spec, Preview: set.Pair()}, "ada", NoteSideNewOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,6 +146,9 @@ func TestPlanNoteBatchInUsesTheGivenHunkSpec(t *testing.T) {
 	}
 	if got.Side != model.NoteSideNew {
 		t.Fatalf("new side only, got %s", got.Side)
+	}
+	if got.Preview != "main...feat" {
+		t.Fatalf("a batch note remembers its preview, got %q", got.Preview)
 	}
 	// The preview's first hunk covers the merge-base..tip change, which reaches
 	// line 4 (DELTA → ECHO) — the tip's OWN first hunk would not.

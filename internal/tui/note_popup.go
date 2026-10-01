@@ -43,6 +43,7 @@ type notePopup struct {
 	line     int
 	hash     string
 	author   string
+	preview  string // add in a preview or pair diff: the scope (PreviewNoteSet.Pair) the note records
 }
 
 // openNotePopup pushes the form for mode, anchored at the cursor (add) or at
@@ -72,6 +73,11 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 		}
 		p.setPick(0)
 		p.summary, p.rationale = newTextField(""), newTextField("")
+		// A pull request's diff is a preview over forge refs (refs/gg/pr/N),
+		// not branch names: its notes record none (the web page agrees).
+		if set := m.previewNoteSet(); set != nil && (m.previewOpen == nil || m.previewOpen.prNumber == 0) {
+			p.preview = set.Pair()
+		}
 	case noteEdit, noteReply:
 		return m.withEditableNoteTarget(func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
 			return m.openNotePopupFor(mode, t)
@@ -251,7 +257,7 @@ func (m Model) noteSubmitCmd(p *notePopup) tea.Cmd {
 	rationale := strings.TrimSpace(p.rationale.Value())
 	mode, id := p.mode, p.targetID
 	n := model.Note{
-		Source: model.NoteSourceUser, Author: p.author, Address: p.addr,
+		Source: model.NoteSourceUser, Author: p.author, Address: p.addr, Preview: p.preview,
 		Side: p.side, Range: [2]int{p.line, p.line}, ContextHash: p.hash,
 		Summary: summary, Rationale: rationale,
 	}

@@ -153,3 +153,41 @@ func TestPreviewRowsCarryTheNoteTotal(t *testing.T) {
 		t.Fatalf("want notes:1 on the row, got %+v", body.Entries)
 	}
 }
+
+// A note the page adds in a preview names it ("preview": target...source):
+// the server stamps it only when that preview's tip is the note's commit, so
+// a page cannot attach a preview the note was not written in.
+func TestNoteAddInAPreviewRecordsThePreview(t *testing.T) {
+	t.Parallel()
+	ts, dir := newPreviewServer(t)
+	tip := gitRun(t, dir, "rev-parse", "feat")
+	older := gitRun(t, dir, "rev-parse", "feat~1") // on the branch, not its tip
+	add := func(rev, preview string) string {
+		t.Helper()
+		code, b := postJSONRaw(t, ts, "/api/notes/add",
+			`{"path":"a.txt","rev":"`+rev+`","state":"commit","side":"new","line":1,"summary":"s","preview":"`+preview+`"}`)
+		if code != http.StatusOK {
+			t.Fatalf("POST = %d (%v)", code, b)
+		}
+		return b["id"]
+	}
+	var got struct {
+		Notes []struct {
+			ID, Preview string
+		} `json:"notes"`
+	}
+	stamped, foreign := add(tip, "main...feat"), add(older, "main...feat")
+	if code := getJSON(t, ts, "/api/notes?path=a.txt&rev="+tip+"&state=commit", &got); code != http.StatusOK {
+		t.Fatalf("status %d", code)
+	}
+	if len(got.Notes) != 1 || got.Notes[0].ID != stamped || got.Notes[0].Preview != "main...feat" {
+		t.Fatalf("tip notes = %+v, want %s with preview main...feat", got.Notes, stamped)
+	}
+	got.Notes = nil
+	if code := getJSON(t, ts, "/api/notes?path=a.txt&rev="+older+"&state=commit", &got); code != http.StatusOK {
+		t.Fatalf("status %d", code)
+	}
+	if len(got.Notes) != 1 || got.Notes[0].ID != foreign || got.Notes[0].Preview != "" {
+		t.Fatalf("a note off the preview's tip must not be stamped: %+v", got.Notes)
+	}
+}

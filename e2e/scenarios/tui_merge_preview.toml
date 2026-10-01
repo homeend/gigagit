@@ -45,14 +45,16 @@ screen_excludes = ["b.txt"]
 
 # The tip "add c" counts ◆ 2: its own c.txt note and the preview's a.txt note.
 # a.txt is not a file of this commit, so its Files view lists it under a
-# Notes heading — every counted note is reachable from the commit.
+# Notes heading — every counted note is reachable from the commit — and
+# names the preview it was written in (the --rev note on c.txt names none).
 [[tui.step]]
 keys = ["esc", "right"]
 
 [[tui.step]]
 name = "tip-files"
 keys = ["enter"]
-screen_contains = ["Notes", "a.txt  ◆ 1", "A  c.txt  ◆ 1"]
+screen_contains = ["Notes", "a.txt  ◆ 1  (preview: feature → main)", "A  c.txt  ◆ 1  "]
+screen_excludes = ["c.txt  ◆ 1  (preview"]
 
 # enter on the noted row reads its notes.
 [[tui.step]]

@@ -2,7 +2,10 @@ package tui
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -35,5 +38,36 @@ func TestWithNotedLines(t *testing.T) {
 	}
 	if got := withNotedLines(nil, commitFileLines(nil)); len(got) != 1 {
 		t.Fatalf("no notes: the list is unchanged: %+v", got)
+	}
+}
+
+// The tag reads the Previews panel's way round; a pair keeps its a..b.
+func TestNotedPreviewTag(t *testing.T) {
+	t.Parallel()
+	if got := notedPreviewTag(nil); got != "" {
+		t.Fatalf("no previews: %q", got)
+	}
+	if got, want := notedPreviewTag([]string{"main...feature", "aaaaaaa..bbbbbbb"}), "  (preview: feature → main, aaaaaaa..bbbbbbb)"; got != want {
+		t.Fatalf("tag = %q, want %q", got, want)
+	}
+}
+
+// A narrow column cuts the preview tag before the path, and never the file
+// name: the name and its badge stay, the tag gives way.
+func TestNotedRowTextKeepsTheFileName(t *testing.T) {
+	t.Parallel()
+	const tag = "  (preview: feature/login-rework → main, aaaaaaa..bbbbbbb)"
+	wide := notedRowText("src/auth/session.go", "  ◆ 2", tag, 200)
+	if wide != "src/auth/session.go  ◆ 2"+tag {
+		t.Fatalf("room for all: %q", wide)
+	}
+	for _, w := range []int{60, 40, 30, 24} {
+		got := notedRowText("src/auth/session.go", "  ◆ 2", tag, w)
+		if lipgloss.Width(got) > w {
+			t.Fatalf("w=%d: %q is %d wide", w, got, lipgloss.Width(got))
+		}
+		if !strings.Contains(got, "session.go  ◆ 2") {
+			t.Fatalf("w=%d: the name and badge must stay: %q", w, got)
+		}
 	}
 }

@@ -625,7 +625,9 @@ finds the right one here.
   [--hunks [--json]]` prints the preview's own patch and numbers its hunks,
   and `gg note add --preview P --file F (--new-line N | --hunk H) --summary …`
   anchors a note on it. A preview note is stored on the SOURCE TIP and shows
-  on that commit's own view too; the old side (the merge base) is not
+  on that commit's own view too (and remembers the preview: `--json` carries
+  `"preview": "<target>...<source>"`, or `"<a7>..<b7>"` for a pair — the
+  TUI names it on the tip's Files view); the old side (the merge base) is not
   addressable, so `--old-line` is refused. `gg note list --preview P [--file F]
   [--json]` lists the notes gathered along the whole branch — a note written
   against an earlier commit whose lines a later commit changed is reported

@@ -53,6 +53,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 	// hunkSpec is the patch a `hunk` annotation is numbered against; only
 	// --preview has one of its own (nil = derive it from the target as before).
 	var hunkSpec *model.DiffSpec
+	var preview string // the scope the imported notes record (a --preview review)
 	switch {
 	case pf.set():
 		if *working || fs.NArg() >= 1 {
@@ -72,7 +73,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		target = domain.ReviewTarget{Kind: domain.ReviewRange, Range: tgt.Spec.Rev,
 			Label: scopeName(tgt.Set), Diff: tgt.Spec}
 		spec := tgt.Spec
-		hunkSpec = &spec
+		hunkSpec, preview = &spec, tgt.Set.Pair()
 	case *working:
 		target = domain.WorkingReviewTarget()
 	case fs.NArg() >= 1:
@@ -128,7 +129,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 	if !*wantNotes {
 		return 0
 	}
-	return importReviewNotes(ctx, svc, target, arg, res.Content, cmd.Name, hunkSpec, stderr)
+	return importReviewNotes(ctx, svc, target, arg, res.Content, cmd.Name, hunkSpec, preview, stderr)
 }
 
 // reviewImportTarget decides which diff a review's notes anchor to (§4.5):
@@ -175,7 +176,7 @@ func reviewImportTarget(ctx context.Context, svc *domain.Service, target domain.
 // in review land splits those two apart. It is threaded EXPLICITLY rather than
 // sniffed from the range string, which would silently renumber today's
 // `gg review A...B --notes`.
-func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg, report, toolName string, hunkSpec *model.DiffSpec, stderr io.Writer) int {
+func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg, report, toolName string, hunkSpec *model.DiffSpec, preview string, stderr io.Writer) int {
 	doc, err := notebatch.ParseReview([]byte(report))
 	if err != nil {
 		fmt.Fprintln(stderr, "error: the review is not a gg review document, so it has no notes to import:", err)
@@ -198,7 +199,7 @@ func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.R
 		return 1
 	}
 	planned, skipped, err := svc.PlanNoteBatchIn(ctx, batch,
-		domain.NoteBatchTarget{Cached: cached, Rev: rev, Hunks: hunkSpec},
+		domain.NoteBatchTarget{Cached: cached, Rev: rev, Hunks: hunkSpec, Preview: preview},
 		noteAuthorDefault(toolName), rule)
 	if err != nil {
 		return noteExit(err, stderr)
