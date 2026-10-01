@@ -60,3 +60,21 @@ func TestStarterRefusesWhenClosing(t *testing.T) {
 		t.Fatal("a closing TUI must refuse")
 	}
 }
+
+func TestAgentSpawnHasADeadline(t *testing.T) {
+	st := newAgentHostState()
+	m := sizedModel(t, 120, 40)
+	m.agentHost = st
+	var deadline time.Time
+	var ok bool
+	agentSpawn = func(ctx context.Context, sp domain.SpawnSpec) (domain.AgentStartResult, *domain.AgentSession, error) {
+		deadline, ok = ctx.Deadline()
+		return domain.AgentStartResult{}, nil, context.Canceled
+	}
+	t.Cleanup(func() { agentSpawn = domain.SpawnAgent })
+	_, cmd := m.onAgentSpawnRequest(agentSpawnRequestMsg{reply: make(chan agentSpawnReply, 1)})
+	cmd().(tea.BatchMsg)[0]()
+	if !ok || time.Until(deadline) <= agentStartTimeout {
+		t.Fatalf("a spawn must be bounded, and outlive the caller's %v wait so a late start still records: deadline ok=%v in %v", agentStartTimeout, ok, time.Until(deadline))
+	}
+}

@@ -61,6 +61,34 @@ func Create(gitDir string, c Claim) error {
 	return f.Close()
 }
 
+// Replace writes c over any existing claim in one step (temp file + rename),
+// so a rewrite — a handover, a revert to the parent — never leaves the
+// worktree without a claim. The caller holds the claim lock.
+func Replace(gitDir string, c Claim) error {
+	data, err := toml.Marshal(c)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(gitDir, FileName+".*.tmp")
+	if err != nil {
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Rename(tmp.Name(), path(gitDir)); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return nil
+}
+
 // Read returns the claim; ok is false when there is none. A reader racing a
 // Create may see an empty file: that decodes to a zero Claim with ok=true.
 func Read(gitDir string) (Claim, bool, error) {

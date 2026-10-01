@@ -84,6 +84,9 @@ func starterFor(st *agentHostState) func(context.Context, domain.AgentStartReque
 // agentStartTimeout bounds one agent_start round trip through Update.
 const agentStartTimeout = 30 * time.Second
 
+// agentSpawnTimeout bounds the spawn itself (git, claim, session start).
+const agentSpawnTimeout = 5 * time.Minute
+
 func waitAgentSpawnCmd(st *agentHostState) tea.Cmd {
 	if st == nil {
 		return nil
@@ -148,7 +151,11 @@ func (m Model) onAgentSpawnRequest(msg agentSpawnRequestMsg) (Model, tea.Cmd) {
 		}}
 	inbox := m.childInboxDir()
 	spawn := func() tea.Msg {
-		res, sess, err := agentSpawn(context.Background(), sp)
+		// Bounded: a git call hung on a slow mount must not hold a cap slot
+		// forever; longer than agentStartTimeout so a late start still records.
+		ctx, cancel := context.WithTimeout(context.Background(), agentSpawnTimeout)
+		defer cancel()
+		res, sess, err := agentSpawn(ctx, sp)
 		out := agentSpawnedMsg{res: res, err: err, reply: msg.reply, inbox: inbox}
 		if sess != nil {
 			out.id = sess.Info().ID

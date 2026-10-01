@@ -96,10 +96,10 @@ func settleDeadClaim(gitDir string, c wtclaim.Claim, lv liveView) (ClaimInfo, bo
 	if c.Parent != "" && !sessionDead(c.Parent, lv) {
 		back := wtclaim.Claim{Session: c.Parent, Agent: lv.agents[c.Parent],
 			Since: time.Now().UTC().Truncate(time.Second), Note: c.Note, Host: c.Host}
-		if wtclaim.Remove(gitDir) == nil && wtclaim.Create(gitDir, back) == nil {
+		if wtclaim.Replace(gitDir, back) == nil {
 			return claimInfoOf(back), true
 		}
-		return ClaimInfo{}, false
+		return claimInfoOf(c), true // the rewrite failed: keep the old claim, never drop it
 	}
 	_ = wtclaim.Remove(gitDir)
 	return ClaimInfo{}, false
@@ -258,10 +258,7 @@ func (s *Service) HandOverWorktree(ctx context.Context, path, from, to string) e
 		if !ok || c.Session != from {
 			return ErrNotHolder
 		}
-		if err := wtclaim.Remove(gitDir); err != nil {
-			return err
-		}
-		return wtclaim.Create(gitDir, wtclaim.Claim{Session: to, Agent: lv.agents[to], Parent: from,
+		return wtclaim.Replace(gitDir, wtclaim.Claim{Session: to, Agent: lv.agents[to], Parent: from,
 			Since: time.Now().UTC().Truncate(time.Second), Note: c.Note, Host: localHost()})
 	})
 }
