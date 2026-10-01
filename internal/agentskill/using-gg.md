@@ -850,6 +850,15 @@ finds the right one here.
   `<random-*>`; `<branch>` is rejected). In the TUI, the create-branch popup
   (`ctrl+p`) and create-worktree popup (`p`) let you pick one, fill any
   `<user:…>` labels, and append the rest of the name.
+- `gg prefix resolve <id> [--set label=value]… [--parent <branch>] [--bump]`
+  — print a prefix (its id from `gg prefix ls`) resolved exactly as the TUI's
+  picker does: `--set issue-number=1234` fills `<user:issue-number>` (a
+  missing label exits 2 naming the flag), `<date:…>` is now, `<repo>` the
+  main worktree's name, `<parent-branch>` `--parent` or the current branch.
+  Read-only: a `<seq:…>` counter prints its next number every time; pass
+  `--bump` ONCE, for the name you will create, to advance it. Append the rest
+  of the name yourself (`me/MTHR-1234` + `-fix-login`). `--template <value>`
+  resolves a raw template instead of a stored id.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` (plain: `branch<TAB>path`) / `gg worktree add [<start-point>]` /
   `gg worktree add --branch <name> [<path>]` /
@@ -971,9 +980,12 @@ gives an agent in a gg console the agent tools.
 1. `gg worktree list --free --json` — free worktrees, best first.
 2. `gg worktree claim --note <issue-url> <path>` — exit 1 means someone got
    there first: take the next one.
-3. `gg worktree recycle [--on-dirty=shelve] <path> <branch>` (pass
+3. Name the branch by the user's scheme: `gg prefix resolve <id> --set
+   <label>=<value> --bump` (ids from `gg prefix ls`), append the rest, then
+   `gg branch create <name> <start-point>`.
+4. `gg worktree recycle [--on-dirty=shelve] <path> <branch>` (pass
    `--on-dirty` only when its `recycle` is `shelve`).
-4. When done: `gg worktree release <path>`.
+5. When done: `gg worktree release <path>`.
 
 `git-lock` can appear for one listing while another reader's `git status`
 holds `index.lock` — list again before giving up on a worktree. A `claim`

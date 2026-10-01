@@ -1,0 +1,37 @@
+name = "gg prefix resolve: a stored prefix resolved exactly as the TUI's picker does — labels, date, seq peek and bump"
+
+# An agent naming a branch by the user's scheme: the prefix's <user:…> label
+# comes from the ticket, <date:…> from the (frozen) clock, <seq:…> from the
+# repo's counter — read-only until --bump.
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" },
+  { commit = "c1" },
+]
+
+[[run]]
+cmd   = ["prefix", "add", "me/MTHR-<user:issue-number>-<seq:mthr:2>_<date:yyyy-MM-dd_HH-mm>"]
+exit  = 0
+
+# The stored prefix, by the id gg prefix ls prints.
+[[run]]
+cmd             = ["prefix", "resolve", "me-mthr-user-issue-number-seq-mthr-2-date-yyyy-mm-dd-hh-mm", "--set", "issue-number=1234"]
+exit            = 0
+stdout_contains = ["me/MTHR-1234-01_2026-01-02_00-00"]
+
+# A missing label names the flag to pass.
+[[run]]
+cmd             = ["prefix", "resolve", "--template", "me/MTHR-<user:issue-number>"]
+exit            = 2
+stderr_contains = ["--set issue-number="]
+
+# --bump hands out 01 once; the next resolve peeks 02.
+[[run]]
+cmd             = ["prefix", "resolve", "--bump", "--template", "x-<seq:mthr:2>"]
+exit            = 0
+stdout_contains = ["x-01"]
+
+[[run]]
+cmd             = ["prefix", "resolve", "--template", "x-<seq:mthr:2>"]
+exit            = 0
+stdout_contains = ["x-02"]

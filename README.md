@@ -209,6 +209,8 @@ gg bookmark paste [--force] <id> <dest>   # write the bookmark's CURRENT bytes t
 gg prefix ls                              # list branch prefixes (global + repo)
 gg prefix add [--global] <value>          # add a branch prefix (default scope: this repo)
 gg prefix rm [--global] <value>           # remove a branch prefix
+gg prefix resolve <id> [--set label=value]... [--parent <branch>] [--bump]
+                                          # print a prefix resolved as the TUI's picker does (--template <value> for a raw one)
 gg undo
 gg worktree list
 gg worktree list --json | --free [--json]
