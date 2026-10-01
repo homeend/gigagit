@@ -50,8 +50,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the Branches review badge, and a review view's stack, whose Overview
   wraps in the centred 120-column reading column.
 
+- **Shelves, merge previews and branch filters have golden screens:** G's
+  quick-switcher and a shelved commit's files (`tui_shelves`), a saved
+  merge preview's row and its files with the notes gathered along the branch
+  (`tui_merge_preview`), and alt+1/alt+2 hiding and show-only on the Branches
+  panel with the checked-out branch exempt (`tui_branch_filter`).
+
 ### Fixed
 
+- **`gg shelf commit HEAD` records the commit, not the word "HEAD".** The
+  entry showed as `commit / commit` and its id held `HEAD`; it named another
+  commit as soon as HEAD moved. Any rev is now resolved to its sha first.
+- **`gg --record` keeps alt+<** (it took the `<` key for its `<...>`
+  diagnostic and dropped it).
+- **The raw-timer guard allow-lists lines, not files**: a second wall-clock
+  timer in console.go or headless.go is caught.
 - **A mistyped chord fails the step.** `C-xyz` used to be pressed as the
   letters `C`, `-`, `x`, … ; any `C-`/`M-` token is now a chord or an error.
 - **`go test ./e2e -update` is refused on Windows**, where screens show

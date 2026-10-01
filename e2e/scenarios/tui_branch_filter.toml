@@ -1,0 +1,47 @@
+name = "tui: branch filter slots hide and show-only on the Branches panel"
+
+# Two [[branches.filter]] slots from the repo config: alt+1 hides the wip/
+# branches, alt+2 shows ONLY the feat/ ones — the checked-out main stays
+# listed under both (it is exempt). The commit's ref list still names every
+# branch: a filter narrows the Branches panel only. (Excludes match the panel
+# row "│     wip/…", never the commit's "(wip/spike, …)".)
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[branches.filter]]
+slot = 1
+name = "no wip"
+mode = "hide"
+prefix = "wip/"
+
+[[branches.filter]]
+slot = 2
+name = "features"
+mode = "show"
+prefix = "feat/"
+''' },
+  { write = "a.txt", content = "a\n" },
+  { commit = "add a" },
+  { branch = "feat/login" }, { branch = "feat/search" },
+  { branch = "wip/spike" }, { branch = "wip/old-idea" },
+]
+
+[tui]
+size = "160x30"
+
+[[tui.step]]
+name = "all-branches"
+keys = ["left"]
+screen_contains = ["feat/login", "feat/search", "wip/spike", "wip/old-idea"]
+
+[[tui.step]]
+name = "hide-wip"
+keys = ["M-1"]
+screen_contains = ["▾1 no wip · 2 hidden", "feat/login", "feat/search"]
+screen_excludes = ["│     wip/spike", "│     wip/old-idea"]
+
+[[tui.step]]
+name = "only-features"
+keys = ["M-2"]
+screen_contains = ["▾2 features · 2 hidden", "feat/login", "feat/search", "* main"]
+screen_excludes = ["│     wip/spike", "│     wip/old-idea"]

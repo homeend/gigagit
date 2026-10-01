@@ -116,6 +116,12 @@ screen_excludes = ["@notes/"]
 - **Cannot be checkpointed:** AI-task surfaces (shared task history), the
   tool-update notice (agents are never probed), agent consoles, terminal
   handovers (an editor or merge tool — the step fails), mouse input.
+- **Goldens carry no colour.** A focused row too long for its panel draws
+  its full-text reveal (black on yellow in a terminal) over the panel's right
+  border — in a golden it reads like an overflow. It is not one.
+- **Excludes match anywhere on the screen**: `wip/spike` also matches the
+  commit's ref list `(wip/spike, …)`; pin the row's own shape
+  (`"│     wip/spike"`).
 - Golden bytes are not compared on Windows (paths differ), and `-update`
   is refused there; `screen_contains`/`screen_excludes` run everywhere.
 
