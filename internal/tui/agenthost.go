@@ -183,6 +183,6 @@ func (m Model) onAgentSpawned(msg agentSpawnedMsg) (Model, tea.Cmd) {
 		m.statusMsg += " — " + i18n.T("its worktree claim stayed with the agent that started it")
 	}
 	var cmd tea.Cmd
-	m, cmd = m.reloadSourcesCmd([]sourceKey{srcWorktrees}, reloadOpts{})
+	m, cmd = m.reloadSourcesCmd([]sourceKey{srcWorktrees, srcBranches}, reloadOpts{})
 	return m, cmd
 }
