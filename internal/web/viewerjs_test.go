@@ -176,6 +176,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", `opLine("could not re-check the overview — try the anchor again", true)`, "a failed re-check says so"},
 	{"viewer.js", "ovMine = ++ovSeq; // a refresh started before this fetch is older than its answer", "a re-open's own overview fetch takes a place in the refresh order (follow-up 3)"},
 	{"viewer.js", "ovApplied = Math.max(ovApplied, mine);", "an open's overview counts as applied"},
+	{"viewer.js", "if (ov && view.ov && view.id === f.id && !ovAnswerApplies(ovMine, ovApplied)) ov = view.ov;", "a re-open's late answer keeps the newer text already on screen"},
 	{"viewer.js", "want: view.ov.want", "the selected destination survives a refresh (follow-up 4)"},
 	{"viewer.js", "view.ov.want = view.ov.anchors[i]?.dest || \"\"", "selecting an anchor remembers its destination"},
 	{"viewer.js", `const back = seq === loadSeq ? releaseAfterFailedOpen(reg && reg.file.id, isOpen() ? view.id : "") : null`, "a failed open gives the server back what this tab shows (follow-up 5)"},

@@ -4370,7 +4370,8 @@ selection, laid-out width); never on disk, never evicted, created
   overview — try the anchor again` (fail-closed: no anchor opens on the list
   from before the click). An open's own overview fetch takes a place in the
   same order (`ovMine`) and counts as applied in `showOverview`, so a refresh
-  started before it drops when it lands later. The selected anchor's
+  started before it drops when it lands later — and when a refresh started
+  after it landed first, the re-open keeps that newer text on screen. The selected anchor's
   destination (`view.ov.want`, set by `selectAnchor`) outlives a refresh
   that drops it: `keepAnchor(next, want, sel)` selects it again when a later
   text brings it back. A failed open the server already moved the tab to

@@ -337,6 +337,8 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   if (seq !== loadSeq) return { ok: false, notice: "" }; // a newer open won
   const f = reg.file;
   view.from = view.range = null; // an anchor's open sets them after
+  // A refresh that started after this fetch and landed first is newer: keep it.
+  if (ov && view.ov && view.id === f.id && !ovAnswerApplies(ovMine, ovApplied)) ov = view.ov;
   if (ov) return showOverview(f, ov, ovMine);
   view.ov = null;
   Object.assign(view, { id: f.id, src: f.source, rev: f.rev || "", path: f.path, lines: body.lines || [] });
