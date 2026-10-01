@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/vt"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // Headless drives the real Model without a terminal, for the e2e golden
@@ -27,6 +28,9 @@ type Headless struct {
 	timers []timerMsg
 	opWait *opWaitMsg // the held op waiter (op.go), nil when no op runs
 	quit   bool
+	// The process-global theme and language at start: parallel scenarios
+	// share them, so a step that changes either fails.
+	theme, lang string
 }
 
 // HeadlessOptions sizes the terminal and isolates machine-global state.
@@ -51,7 +55,7 @@ func NewHeadless(svc *domain.Service, opts HeadlessOptions) (*Headless, error) {
 	m, _ := prepareModel(svc)
 	m.quiet = true
 	m.statePath = opts.StatePath
-	h := &Headless{m: m, w: w, h: hgt}
+	h := &Headless{m: m, w: w, h: hgt, theme: activeTheme().Name, lang: i18n.ActiveCode()}
 	if err := h.settle([]tea.Cmd{h.m.Init()}); err != nil {
 		return nil, fmt.Errorf("start-up: %w", err)
 	}
@@ -109,7 +113,21 @@ func (h *Headless) deliver(msg tea.Msg) error {
 	if err != nil {
 		return err
 	}
-	return h.settle([]tea.Cmd{cmd})
+	if err := h.settle([]tea.Cmd{cmd}); err != nil {
+		return err
+	}
+	return h.checkGlobals()
+}
+
+// checkGlobals fails when the theme or the UI language changed since start.
+func (h *Headless) checkGlobals() error {
+	if now := activeTheme().Name; now != h.theme {
+		return fmt.Errorf("the step changed the process-global theme (%q → %q); scenarios may not", h.theme, now)
+	}
+	if now := i18n.ActiveCode(); now != h.lang {
+		return fmt.Errorf("the step changed the process-global language (%q → %q); scenarios may not", h.lang, now)
+	}
+	return nil
 }
 
 // update applies quitFilter as the real program does, then Update.

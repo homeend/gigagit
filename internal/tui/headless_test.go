@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/theme"
 )
 
 // headlessRepo is a two-commit repo on main plus a "feature" branch at the
@@ -124,5 +125,21 @@ func TestPaintClipsWideLines(t *testing.T) {
 	want := "xxxxxxxxxx\nsecond\n\n"
 	if got != want {
 		t.Fatalf("paint = %q, want %q", got, want)
+	}
+}
+
+// A scenario may not change the process-global theme or language: parallel
+// scenarios share them. Not parallel: it changes the global theme.
+func TestHeadlessRefusesGlobalChanges(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	h := newHeadless(t, headlessRepo(t))
+	other := theme.Dark
+	if prev.Name == other.Name {
+		other = theme.Light
+	}
+	setTheme(other)
+	if err := h.Press("down"); err == nil || !strings.Contains(err.Error(), "theme") {
+		t.Fatalf("Press after a theme change = %v, want a theme error", err)
 	}
 }
