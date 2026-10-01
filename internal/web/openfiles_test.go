@@ -240,3 +240,18 @@ func TestOpenFilesResolveAndLiveTabs(t *testing.T) {
 		t.Fatal("liveTabs misses t1")
 	}
 }
+
+// Twenty overviews (pinned, never evicted) leave the user's own files room:
+// the cap is 100 (user ruling 2026-10-01), not a squeeze to one free slot.
+func TestOpenFilesCapLeavesRoomBeside20Overviews(t *testing.T) {
+	t.Parallel()
+	r := newOpenFiles(agentdocs.New().NextFileSeq)
+	for i := 0; i < 20; i++ {
+		r.ensureOpenID("/wt", ofKey{Src: "overview", Path: fmt.Sprintf("overview-%d.md", i)}, fmt.Sprintf("f%d", 900+i), "T")
+	}
+	for i := 0; i < 30; i++ {
+		if _, ev := r.open("/wt", wtKey(fmt.Sprintf("u%d.txt", i)), "", 0); ev != "" {
+			t.Fatalf("file %d pushed %s out with 20 overviews open", i, ev)
+		}
+	}
+}

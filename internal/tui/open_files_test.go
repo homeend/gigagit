@@ -126,7 +126,7 @@ func TestTheTwentyFirstOpenDropsTheOldest(t *testing.T) {
 	if len(l) != maxOpenFiles || m.openFiles.find(m.currentWorktree, wtDoc("f00.txt").key()) != nil {
 		t.Fatalf("len=%d, f00 still listed=%v", len(l), m.openFiles.find(m.currentWorktree, wtDoc("f00.txt").key()) != nil)
 	}
-	if m.statusMsg != "closed f00.txt (20 files open)" {
+	if m.statusMsg != "closed f00.txt (100 files open)" {
 		t.Errorf("statusMsg = %q", m.statusMsg)
 	}
 }

@@ -284,15 +284,6 @@ func TestNoteAnchorBringsTheBoxIntoView(t *testing.T) {
 	}
 }
 
-func TestShiftArrowsDoNotSlideAnOverview(t *testing.T) {
-	t.Parallel()
-	m, d, _ := tourModel(t)
-	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyShiftRight})
-	if d.p.hscroll != 0 {
-		t.Fatalf("hscroll = %d: an overview is laid out to fit, nothing to pan", d.p.hscroll)
-	}
-}
-
 func TestBackspaceForgetsAClosedOverview(t *testing.T) {
 	t.Parallel()
 	m, d, _ := tourModel(t)

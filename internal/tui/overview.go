@@ -3,6 +3,8 @@ package tui
 import (
 	"strconv"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/syntax"
@@ -34,19 +36,24 @@ type anchor struct {
 type overview struct {
 	text    string // the agent's markdown, as sent
 	anchors []anchor
-	sel     int // the selected anchor; -1 = none
-	w       int // the width the rows were laid out at; 0 = never
+	sel     int      // the selected anchor; -1 = none
+	w       int      // the width the rows were laid out at; 0 = never
+	mode    dispMode // the view they were laid out for (ctrl+w)
 }
 
-// overviewLines lays text out at width: the rows, and the anchors in document
-// order with their spans. Links past agentdocs.MaxAnchors are plain text.
-func overviewLines(text string, width int) ([]contentLine, []anchor) {
+// overviewLines lays text out at width for view mode: the rows, and the
+// anchors in document order with their spans. Prose wraps at width; a code
+// or table row past it follows the view, as every TUI text does — cut
+// (an ellipsis, anchors past it have no span), wrapped onto more rows, or
+// kept whole for the horizontal scroll. Links past agentdocs.MaxAnchors are
+// plain text.
+func overviewLines(text string, width int, mode dispMode) ([]contentLine, []anchor) {
 	doc, as := agentdocs.ParseOverview(text)
 	anchors := make([]anchor, len(as))
 	for i, a := range as {
 		anchors[i] = anchor{dest: a.Dest, target: a}
 	}
-	rows := mdRows(doc, width)
+	rows := overviewView(mdRowsWide(doc, width), width, mode)
 	if len(rows) == 0 {
 		return []contentLine{{text: i18n.T("(empty overview)")}}, nil
 	}
@@ -71,6 +78,37 @@ func overviewLines(text string, width int) ([]contentLine, []anchor) {
 		lines[i] = contentLine{text: row.text, raw: row.text, src: true, cls: cls, noWrap: true}
 	}
 	return lines, anchors
+}
+
+// overviewView fits the rows wider than width to mode: cut with an
+// ellipsis, split into width-wide rows, or left whole (modeScroll).
+func overviewView(rows []mdRow, width int, mode dispMode) []mdRow {
+	if width <= 0 || mode == modeScroll {
+		return rows
+	}
+	var out []mdRow
+	for _, row := range rows {
+		if lipgloss.Width(row.text) <= width {
+			out = append(out, row)
+			continue
+		}
+		if mode == modeCutoff {
+			cut := mdClip(row, width-1)
+			out = append(out, mdRow{text: cut.text + "…", cls: append(cut.cls, mdDim), pre: row.pre})
+			continue
+		}
+		for rest := row; rest.text != ""; {
+			piece := mdClip(rest, width)
+			if piece.text == "" { // a glyph wider than the whole column
+				piece = mdRow{text: string([]rune(rest.text)[:1]), cls: rest.cls[:1]}
+			}
+			piece.pre = row.pre
+			out = append(out, piece)
+			n := len([]rune(piece.text))
+			rest = mdRow{text: string([]rune(rest.text)[n:]), cls: rest.cls[n:]}
+		}
+	}
+	return out
 }
 
 // paint gives every anchor span its class: selected, gone, or plain.
@@ -160,7 +198,7 @@ func (m Model) overviewWidth(innerW int) int {
 // anchor when there is one, else the cursor line and the window top.
 func (d *openFile) layOut(rows, width int) {
 	ov := d.ov
-	lines, anchors := overviewLines(ov.text, width)
+	lines, anchors := overviewLines(ov.text, width, d.p.mode)
 	if len(anchors) == len(ov.anchors) { // the same text: keep what a check found
 		for i := range anchors {
 			if anchors[i].dest == ov.anchors[i].dest {
@@ -168,7 +206,7 @@ func (d *openFile) layOut(rows, width int) {
 			}
 		}
 	}
-	ov.anchors, ov.w = anchors, width
+	ov.anchors, ov.w, ov.mode = anchors, width, d.p.mode
 	if ov.sel >= len(anchors) {
 		ov.sel = -1
 	}
@@ -181,14 +219,45 @@ func (d *openFile) layOut(rows, width int) {
 }
 
 // selectAnchor selects anchor i: the cursor goes to its first row, which is
-// scrolled into view. An anchor clipped out of every row is selected where
-// the cursor is.
+// scrolled into view — across too, in the horizontal-scroll view. An anchor
+// cut out of every row is selected where the cursor is.
 func (d *openFile) selectAnchor(i, rows int) {
 	ov := d.ov
 	ov.sel = i
 	if i >= 0 && i < len(ov.anchors) && len(ov.anchors[i].spans) > 0 {
-		d.p.cur = ov.anchors[i].spans[0].line
+		s := ov.anchors[i].spans[0]
+		d.p.cur = s.line
 		d.p.ensureCursorVisible(rows)
+		if d.p.mode == modeScroll && s.line < len(d.p.lines) {
+			r := []rune(d.p.lines[s.line].text)
+			from, to := lipgloss.Width(string(r[:s.from])), lipgloss.Width(string(r[:s.to]))
+			d.p.hscroll = panTo(d.p.hscroll, from, to, ov.w)
+		}
 	}
 	ov.paint(d.p.lines)
+}
+
+// panTo is the horizontal offset that shows columns [from, to) in a
+// width-wide window at hscroll: unchanged when they show, else the least pan
+// that brings them in (back to 0 when they fit the first screen).
+func panTo(hscroll, from, to, width int) int {
+	switch {
+	case width <= 0 || (from >= hscroll && to <= hscroll+width):
+		return hscroll
+	case to <= width:
+		return 0
+	case to-from > width:
+		return from
+	}
+	return to - width
+}
+
+// selectAnchorAt selects anchor i with the cursor on line, one of its rows
+// the user clicked: already on screen, so nothing scrolls and a second click
+// on the same spot lands on it again.
+func (d *openFile) selectAnchorAt(i, line, rows int) {
+	d.ov.sel = i
+	d.p.cur = line
+	d.p.ensureCursorVisible(rows)
+	d.ov.paint(d.p.lines)
 }

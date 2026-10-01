@@ -24,7 +24,7 @@ func anchorText(lines []contentLine, a anchor) string {
 
 func TestOverviewLinesSpansInAParagraph(t *testing.T) {
 	t.Parallel()
-	lines, as := overviewLines("See [open files](internal/tui/open_files.go:20) and [x](a.go).", 80)
+	lines, as := overviewLines("See [open files](internal/tui/open_files.go:20) and [x](a.go).", 80, modeScroll)
 	if len(as) != 2 {
 		t.Fatalf("anchors = %+v, want 2", as)
 	}
@@ -50,7 +50,7 @@ func TestOverviewLinesSpansInAParagraph(t *testing.T) {
 
 func TestOverviewLinesWrappedLabelHasTwoSpans(t *testing.T) {
 	t.Parallel()
-	lines, as := overviewLines("[alpha beta gamma delta epsilon](a.go)", 20)
+	lines, as := overviewLines("[alpha beta gamma delta epsilon](a.go)", 20, modeScroll)
 	if len(as) != 1 || len(as[0].spans) < 2 {
 		t.Fatalf("anchors = %+v, want one anchor over two rows", as)
 	}
@@ -66,7 +66,7 @@ func TestOverviewLinesWrappedLabelHasTwoSpans(t *testing.T) {
 
 func TestOverviewLinesAdjacentAnchorsStayApart(t *testing.T) {
 	t.Parallel()
-	lines, as := overviewLines("[a](x.go)[b](y.go)", 80)
+	lines, as := overviewLines("[a](x.go)[b](y.go)", 80, modeScroll)
 	if len(as) != 2 || len(as[0].spans) != 1 || len(as[1].spans) != 1 {
 		t.Fatalf("anchors = %+v, want two", as)
 	}
@@ -78,7 +78,7 @@ func TestOverviewLinesAdjacentAnchorsStayApart(t *testing.T) {
 func TestOverviewLinesAnchorsInListTableQuote(t *testing.T) {
 	t.Parallel()
 	src := "- see [the list](l.go)\n\n| h |\n|---|\n| [cell](t.go) |\n\n> [quoted](q.go)\n"
-	lines, as := overviewLines(src, 80)
+	lines, as := overviewLines(src, 80, modeScroll)
 	if len(as) != 3 {
 		t.Fatalf("anchors = %+v, want 3", as)
 	}
@@ -91,7 +91,7 @@ func TestOverviewLinesAnchorsInListTableQuote(t *testing.T) {
 
 func TestOverviewLinesEmphasisInALabel(t *testing.T) {
 	t.Parallel()
-	lines, as := overviewLines("[**bold** label](a.go)", 80)
+	lines, as := overviewLines("[**bold** label](a.go)", 80, modeScroll)
 	if len(as) != 1 || anchorText(lines, as[0]) != "bold label" {
 		t.Fatalf("anchors = %+v", as)
 	}
@@ -103,7 +103,7 @@ func TestOverviewLinesCapsAnchors(t *testing.T) {
 	for i := 0; i <= agentdocs.MaxAnchors; i++ {
 		fmt.Fprintf(&b, "- [label%d](f%d.go)\n", i, i)
 	}
-	lines, as := overviewLines(b.String(), 80)
+	lines, as := overviewLines(b.String(), 80, modeScroll)
 	if len(as) != agentdocs.MaxAnchors {
 		t.Fatalf("anchors = %d, want %d", len(as), agentdocs.MaxAnchors)
 	}
@@ -126,7 +126,7 @@ func TestOverviewLinesCapsAnchors(t *testing.T) {
 
 func TestOverviewPaintMarksSelectedAndMissing(t *testing.T) {
 	t.Parallel()
-	lines, as := overviewLines("[a](x.go) [b](y.go) [c](z.go)", 80)
+	lines, as := overviewLines("[a](x.go) [b](y.go) [c](z.go)", 80, modeScroll)
 	ov := &overview{anchors: as, sel: 1}
 	ov.anchors[0].missing = true
 	ov.paint(lines)
@@ -143,7 +143,7 @@ func TestOverviewPaintMarksSelectedAndMissing(t *testing.T) {
 
 func TestOverviewLinesEmptyText(t *testing.T) {
 	t.Parallel()
-	lines, as := overviewLines("  \n", 80)
+	lines, as := overviewLines("  \n", 80, modeScroll)
 	if len(as) != 0 || len(lines) != 1 || lines[0].src {
 		t.Fatalf("lines=%+v anchors=%+v, want one placeholder", lines, as)
 	}

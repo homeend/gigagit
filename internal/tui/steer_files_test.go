@@ -87,7 +87,7 @@ func TestBackgroundNavigateClampsAndNamesTheEviction(t *testing.T) {
 	nm, cmd := m.applySteer(bgNav("b-2", "a.txt", 99))
 	nm = pumpAll(t, nm, cmd)
 	r, ok := steer.AwaitReply(nm.steerDir, "b-2", time.Second)
-	want := "opened a.txt in the background at line 40 (line 99 is past the end, 40 lines); closed f0.txt (20 files open)"
+	want := "opened a.txt in the background at line 40 (line 99 is past the end, 40 lines); closed f0.txt (100 files open)"
 	if !ok || !r.OK || r.Detail != want {
 		t.Fatalf("reply = %+v ok=%v, want %q", r, ok, want)
 	}

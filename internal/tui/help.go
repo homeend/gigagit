@@ -94,6 +94,7 @@ func helpContent() []contentLine {
 		r("enter", i18n.T("in a file viewer or preview, on a line under an agent's note: open the whole note in a window of its own (a note taller than half the window is cut in place)")),
 		r("tab / enter", i18n.T("in an agent's overview (gg session overview): tab / shift+tab select the next / previous anchor, enter or a double click opens it — the file at its line, a range selected, or the file a note sits on; r copies a reference to the anchor, y the overview's text")),
 		r("backspace", i18n.T("in a file an overview's anchor opened: back to the overview, on the anchor you opened; the file stays open in the background")),
+		r("ctrl+w", i18n.T("in an agent's overview: ctrl+w switches how a code or table row wider than the window shows — scrolled (the default: shift+←/→ pan, tab pans to an anchor), cut (tab skips anchors past the cut) or wrapped")),
 		r("", i18n.T("Start agent (.-menu on a Worktrees row, or on a Branches row checked out in a worktree): run a configured agent in that worktree in a console over the Commits column; the first run detects installed agents and adds them to the global config. Unfocused console: enter types, ctrl+t maximises, esc closes (the agent keeps running). Keys: [console] step_out_key / sessions_key")),
 		r("", i18n.T("◆ rows under a worktree are its queued or running headless AI tasks: enter opens them in ctrl+\\'s AI tasks tab, the . menu cancels one or shows its result")),
 		h(i18n.T("AI tasks")),

@@ -105,11 +105,40 @@ func (m Model) openAnchor(ov *openFile, i int) (Model, tea.Cmd) {
 		d.from, d.backgrounded = ov, true
 		return m.bringToFront(d)
 	}
-	t := a.target
-	if st, err := os.Stat(filepath.Join(m.currentWorktree, filepath.FromSlash(t.Path))); err != nil || st.IsDir() {
-		return gone(i18n.T("no file %s", t.Path))
+	// The file is stat'ed off the UI thread (a slow mount must not freeze the
+	// screen); anchorStatted opens it if the overview is still in front.
+	path, tag, dest := filepath.Join(m.currentWorktree, filepath.FromSlash(a.target.Path)), ov.tag, a.dest
+	return m, func() tea.Msg {
+		st, err := os.Stat(path)
+		return anchorStatMsg{tag: tag, i: i, dest: dest, ok: err == nil && !st.IsDir()}
 	}
-	mark(false)
+}
+
+// anchorStatMsg is openAnchor's file check: anchor i (dest) of the overview
+// tagged tag is a file (ok) or is gone.
+type anchorStatMsg struct {
+	tag  string
+	i    int
+	dest string
+	ok   bool
+}
+
+// anchorStatted finishes openAnchor once its file check is in: nothing when
+// the overview left the front or its anchors changed meanwhile.
+func (m Model) anchorStatted(msg anchorStatMsg) (Model, tea.Cmd) {
+	ov := topDoc(m)
+	if ov == nil || ov.tag != msg.tag || ov.ov == nil || msg.i >= len(ov.ov.anchors) || ov.ov.anchors[msg.i].dest != msg.dest {
+		return m, nil
+	}
+	a := &ov.ov.anchors[msg.i]
+	a.missing = !msg.ok
+	m.docs.SetAnchorMissing(ov.id(), msg.i, a.missing)
+	ov.ov.paint(ov.p.lines)
+	t := a.target
+	if !msg.ok {
+		m.statusMsg = i18n.T("no file %s", t.Path)
+		return m, nil
+	}
 	m, cmd, _ := m.openFileViewerEv(t.Path, t.Start)
 	if d := topDoc(m); d != nil {
 		if t.End > t.Start {
@@ -156,7 +185,7 @@ func anchorReference(ov *openFile, a anchor) string {
 // overviewClick is a left click in the viewer showing overview fv: on an
 // anchor it selects it, and a second click on the same anchor (a double
 // click) opens it. gg laid the rows out itself, so row y is a line and
-// column x a rune — no wrapping to undo.
+// column x a rune — no wrapping to undo, only the horizontal scroll's pan.
 func (m Model) overviewClick(fv *fileViewer, x, y int) (Model, tea.Cmd) {
 	d := fv.openFile
 	w, _ := m.overlayDims()
@@ -165,6 +194,9 @@ func (m Model) overviewClick(fv *fileViewer, x, y int) (Model, tea.Cmd) {
 	row, col := y-2, x-2-margin // border + title line; border + padding + margin
 	if row < 0 || row >= rows || col < 0 {
 		return m, nil
+	}
+	if d.p.mode == modeScroll {
+		col += d.p.hscroll
 	}
 	line := d.p.clampTop(d.p.sel, rows) + row
 	if line >= len(d.p.lines) {
@@ -186,7 +218,7 @@ func (m Model) overviewClick(fv *fileViewer, x, y int) (Model, tea.Cmd) {
 				if m, double = m.registerClick(clickTarget{zone: zoneLayer, layer: fv, row: i}); double {
 					return m.openAnchor(d, i)
 				}
-				d.selectAnchor(i, rows)
+				d.selectAnchorAt(i, line, rows) // where it was clicked: no scroll under the second click
 				return m, nil
 			}
 		}

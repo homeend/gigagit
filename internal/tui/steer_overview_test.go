@@ -148,7 +148,27 @@ func TestOverviewAddNamesTheFileItPushedOut(t *testing.T) {
 		m = m.registerDoc(d)
 	}
 	_, r := applyOverview(t, m, overviewAddCmd("ev-1", "Tour", tourText))
-	if !r.OK || !strings.Contains(r.Detail, "; closed "+first.path+" (20 files open)") {
+	if !r.OK || !strings.Contains(r.Detail, "; closed "+first.path+" (100 files open)") {
 		t.Fatalf("reply = %+v", r)
+	}
+}
+
+// set, show and rm from an agent in another worktree are refused, as add is.
+func TestOverviewVerbsRefuseAnotherWorktree(t *testing.T) {
+	t.Parallel()
+	c := overviewAddCmd("w-1", "Tour", tourText)
+	c.Background = true
+	m, r := applyOverview(t, loadedNavModel(t), c)
+	id := r.Overviews[0].ID
+	for _, verb := range []string{"overview_set", "overview_show", "overview_rm"} {
+		c := steer.Command{ID: "w-" + verb, Cmd: verb, FileID: id, Text: "x", Worktree: "/somewhere/else", Wait: true}
+		var r steer.Reply
+		m, r = applyOverview(t, m, c)
+		if r.OK || !strings.HasPrefix(r.Error, "gg is showing worktree ") {
+			t.Errorf("%s: %+v", verb, r)
+		}
+	}
+	if d, _ := m.findOverview(id); d == nil {
+		t.Fatal("an rm from another worktree closed the overview")
 	}
 }

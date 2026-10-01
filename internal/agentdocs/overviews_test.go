@@ -271,3 +271,18 @@ func TestOverviewStampFollowsWhatATabDraws(t *testing.T) {
 	step("the title", true, func() { s.SetOverview(o.ID, "U", "[a](a.go) [n](note:"+n.ID+")") })
 	step("the text", true, func() { s.SetOverview(o.ID, "", "[a](a.go)") })
 }
+
+// A link past the cap turns into its label as plain text — a label over a
+// line break keeps the space between its words.
+func TestParseOverviewPlainLabelPastTheCapKeepsTheBreakSpace(t *testing.T) {
+	t.Parallel()
+	text := strings.Repeat("[x](a.go) ", MaxAnchors) + "[two\nwords](a.go)"
+	doc, as := ParseOverview(text)
+	if len(as) != MaxAnchors {
+		t.Fatalf("%d anchors", len(as))
+	}
+	in := doc.Blocks[0].Inline
+	if last := in[len(in)-1]; last.Kind != markdown.InText || !strings.HasSuffix(last.Text, "two words") {
+		t.Fatalf("last inline = %+v", last)
+	}
+}

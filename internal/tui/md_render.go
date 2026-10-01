@@ -107,8 +107,21 @@ const mdRuleWidth = 20 // a thematic break when nothing bounds it
 // continuation under its row's text).
 func mdRows(doc markdown.Doc, width int) []mdRow {
 	rows := mdBlocks(doc.Blocks, width, false)
-	for i := range rows { // a prefix on a degenerate width: never past the bound
+	for i := range rows { // code and table rows, and a prefix on a degenerate width: never past the bound
 		rows[i] = mdClip(rows[i], width)
+	}
+	return rows
+}
+
+// mdRowsWide is mdRows that leaves preformatted rows (code, tables) whole:
+// the host decides how a row past width shows (an overview follows its
+// view — cut, wrapped or scrolled).
+func mdRowsWide(doc markdown.Doc, width int) []mdRow {
+	rows := mdBlocks(doc.Blocks, width, false)
+	for i := range rows {
+		if !rows[i].pre {
+			rows[i] = mdClip(rows[i], width)
+		}
 	}
 	return rows
 }
@@ -149,9 +162,9 @@ func mdBlock(b markdown.Block, width int) []mdRow {
 		}
 		return mdPrefix(inner, "│ ", "│ ", mdQuote)
 	case markdown.KindCode:
-		return mdCodeBlock(b, width)
+		return mdCodeBlock(b)
 	case markdown.KindTable:
-		return mdTable(b, width)
+		return mdTable(b)
 	case markdown.KindRule:
 		n := mdRuleWidth
 		if width > 0 {
@@ -217,8 +230,8 @@ func mdList(b markdown.Block, width int) []mdRow {
 }
 
 // mdCodeBlock: a caption for a suggestion, then each line indented two
-// columns with its token runs. Never wrapped: clipped to width.
-func mdCodeBlock(b markdown.Block, width int) []mdRow {
+// columns with its token runs. Never wrapped: preformatted (mdRows clips).
+func mdCodeBlock(b markdown.Block) []mdRow {
 	var out []mdRow
 	if strings.EqualFold(b.Lang, markdown.LangSuggestion) {
 		out = append(out, mdPlainRow(i18n.T("suggestion"), mdDim))
@@ -236,8 +249,7 @@ func mdCodeBlock(b markdown.Block, width int) []mdRow {
 				cls[k] = c
 			}
 		}
-		row := mdRow{text: "  " + string(disp), cls: append([]syntax.Class{syntax.Plain, syntax.Plain}, cls...), pre: true}
-		out = append(out, mdClip(row, width))
+		out = append(out, mdRow{text: "  " + string(disp), cls: append([]syntax.Class{syntax.Plain, syntax.Plain}, cls...), pre: true})
 	}
 	return out
 }
@@ -296,7 +308,7 @@ func mdClip(row mdRow, width int) mdRow {
 }
 
 // mdTable lays a table out in aligned columns sized to their widest cell.
-func mdTable(b markdown.Block, width int) []mdRow {
+func mdTable(b markdown.Block) []mdRow {
 	cols := len(b.Head)
 	if cols == 0 {
 		return nil
@@ -366,7 +378,7 @@ func mdTable(b markdown.Block, width int) []mdRow {
 		}
 		line := join(parts, " │ ")
 		line.pre = true
-		out = append(out, mdClip(line, width))
+		out = append(out, line)
 		if i == 0 {
 			rules := make([]mdRow, cols)
 			for c := range rules {
@@ -374,7 +386,7 @@ func mdTable(b markdown.Block, width int) []mdRow {
 			}
 			rule := join(rules, "─┼─")
 			rule.pre = true
-			out = append(out, mdClip(rule, width))
+			out = append(out, rule)
 		}
 	}
 	return out
@@ -447,6 +459,10 @@ func mdMix(outer, inner syntax.Class) syntax.Class {
 func mdFlat(in []markdown.Inline) string {
 	var sb strings.Builder
 	for _, n := range in {
+		if n.Kind == markdown.InBreak { // a label over a line break reads as two words
+			sb.WriteByte(' ')
+			continue
+		}
 		sb.WriteString(n.Text)
 		sb.WriteString(mdFlat(n.In))
 	}

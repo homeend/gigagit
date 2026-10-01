@@ -213,3 +213,27 @@ func TestFileFocusOnAnOverviewNamesItByIDAndTitle(t *testing.T) {
 		t.Fatalf("rep = %+v, want detail starting %q", rep, want)
 	}
 }
+
+// set, show and rm from an agent in another worktree are refused, as add is:
+// the overview ids it names are this worktree's.
+func TestSteerOverviewVerbsRefuseAnotherWorktree(t *testing.T) {
+	t.Parallel()
+	s, _ := noteSrv(t)
+	_, rep := steerAsk(t, s, `{"id":"1","cmd":"overview_add","title":"T","text":"x","background":true}`)
+	id := rep.Overviews[0].ID
+	s.steerMu.Lock()
+	s.steerWorktree = s.service().Root()
+	s.steerMu.Unlock()
+	for _, c := range []string{
+		`{"id":"2","cmd":"overview_set","file_id":"` + id + `","text":"y","worktree":"/somewhere/else"}`,
+		`{"id":"3","cmd":"overview_show","file_id":"` + id + `","worktree":"/somewhere/else"}`,
+		`{"id":"4","cmd":"overview_rm","file_id":"` + id + `","worktree":"/somewhere/else"}`,
+	} {
+		if _, rep := steerAsk(t, s, c); rep.OK || !strings.HasPrefix(rep.Error, "gg web is showing worktree ") {
+			t.Errorf("%s: %+v", c, rep)
+		}
+	}
+	if _, ok := s.docs.Overview(id); !ok {
+		t.Fatal("an rm from another worktree removed the overview")
+	}
+}

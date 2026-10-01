@@ -54,6 +54,31 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   command list; `gg agent list` works outside a console. The using-gg
   skill is v120.
 
+## Overviews in the TUI: the deferred minors
+
+### Changed
+
+- **TUI overviews follow ctrl+w like any other text.** A table or code row
+  wider than the window scrolls sideways by default (shift+←/→ pan, and tab
+  pans to an anchor out of sight); ctrl+w switches to cut (an ellipsis; tab
+  skips anchors past the cut) or wrapped (the row breaks onto more rows).
+  Before, the row was cut and its anchors could not be reached.
+- **Up to 100 open files per worktree** (was 20), in the TUI and gg web:
+  overviews are never pushed out, so 20 of them used to leave room for about
+  one of your own files. The using-gg skill is v123.
+
+### Fixed
+
+- **`gg session overview add|set`** with neither `--file` nor piped text no
+  longer waits on the terminal: it says `give the text with --file or on
+  stdin` (exit 2).
+- **`gg session overview set|show|rm`** from another worktree are refused
+  (`gg is showing worktree …`), as `add` was, in the TUI and gg web.
+- **TUI overviews:** an anchor label over a line break shows its two words
+  apart; checking an anchor's file no longer blocks the screen on a slow
+  disk; a double click on an anchor whose first row was scrolled off no
+  longer misses.
+
 ## Overviews in gg web: the last minors, round 2
 
 ### Fixed

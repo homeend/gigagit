@@ -36,9 +36,9 @@ func sessionOverview(dir sessDir, svc *domain.Service, args []string, stdin io.R
 	case "list":
 		return sessionOverviewList(dir, args[1:], stdout, stderr)
 	case "show":
-		return sessionOverviewShow(dir, args[1:], stdout, stderr)
+		return sessionOverviewShow(dir, svc, args[1:], stdout, stderr)
 	case "rm":
-		return sessionOverviewRm(dir, args[1:], stdout, stderr)
+		return sessionOverviewRm(dir, svc, args[1:], stdout, stderr)
 	}
 	fmt.Fprintln(stderr, overviewUsage)
 	return 2
@@ -93,7 +93,9 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 		defer f.Close()
 		src = f
 	}
-	if src == nil {
+	// A terminal on stdin means nothing was piped: waiting there would hang
+	// an agent that forgot --file.
+	if src == nil || readerIsTerminal(src) {
 		return misuse("give the text with --file or on stdin")
 	}
 	data, err := io.ReadAll(io.LimitReader(src, overviewMaxBytes+1))
@@ -109,9 +111,7 @@ func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []
 	if verb == "set" {
 		c.FileID = pos[0]
 	}
-	if svc != nil {
-		c.Worktree = callerWorktree(svc)
-	}
+	c.Worktree = overviewCaller(svc)
 	r, code, ok := steerOverviews(dir, c, stdout, stderr)
 	if !ok {
 		return code
@@ -169,7 +169,7 @@ func sessionOverviewList(dir sessDir, args []string, stdout, stderr io.Writer) i
 	return 0
 }
 
-func sessionOverviewShow(dir sessDir, args []string, stdout, stderr io.Writer) int {
+func sessionOverviewShow(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session overview show", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print the overview as JSON")
@@ -181,7 +181,7 @@ func sessionOverviewShow(dir sessDir, args []string, stdout, stderr io.Writer) i
 		fmt.Fprintln(stderr, overviewUsage)
 		return 2
 	}
-	r, code, ok := steerOverviews(dir, steer.Command{Cmd: "overview_show", FileID: pos[0]}, stdout, stderr)
+	r, code, ok := steerOverviews(dir, steer.Command{Cmd: "overview_show", FileID: pos[0], Worktree: overviewCaller(svc)}, stdout, stderr)
 	if !ok {
 		return code
 	}
@@ -199,7 +199,7 @@ func sessionOverviewShow(dir sessDir, args []string, stdout, stderr io.Writer) i
 	return 0
 }
 
-func sessionOverviewRm(dir sessDir, args []string, stdout, stderr io.Writer) int {
+func sessionOverviewRm(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session overview rm", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	pos, err := parseSteerFlags(fs, args)
@@ -210,10 +210,20 @@ func sessionOverviewRm(dir sessDir, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, overviewUsage)
 		return 2
 	}
-	r, code, ok := steerOverviews(dir, steer.Command{Cmd: "overview_rm", FileID: pos[0]}, stdout, stderr)
+	r, code, ok := steerOverviews(dir, steer.Command{Cmd: "overview_rm", FileID: pos[0], Worktree: overviewCaller(svc)}, stdout, stderr)
 	if !ok {
 		return code
 	}
 	fmt.Fprintln(stdout, r.Detail)
 	return 0
+}
+
+// overviewCaller is the worktree an overview verb names (none without a
+// service): an overview id belongs to one worktree, so a session showing
+// another refuses.
+func overviewCaller(svc *domain.Service) string {
+	if svc == nil {
+		return ""
+	}
+	return callerWorktree(svc)
 }

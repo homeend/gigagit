@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -172,6 +173,26 @@ func TestSessionOverviewAddPrintsANewsworthyDetail(t *testing.T) {
 		code, out, errs := runOverview(t, dir, "x", "add", "--title", "T")
 		if code != 0 || out != tc.want {
 			t.Errorf("detail %q: exit %d stdout %q stderr %q, want %q", tc.detail, code, out, errs, tc.want)
+		}
+	}
+}
+
+// set, show and rm name the caller's worktree, so a live session showing
+// another one refuses instead of acting on its own overview of that id.
+func TestSessionOverviewVerbsSendTheCallersWorktree(t *testing.T) {
+	t.Parallel()
+	repo := newCLIRepo(t)
+	svc := domain.Open(repo)
+	dir := t.TempDir()
+	livePresence(t, dir)
+	for _, args := range [][]string{{"set", "f7", "--title", "T"}, {"show", "f7"}, {"rm", "f7"}} {
+		seen := answer(t, dir, func(c steer.Command) steer.Reply {
+			return steer.Reply{ID: c.ID, OK: true, Detail: "ok", Overviews: []steer.Overview{tourWire}}
+		})
+		var out, errb bytes.Buffer
+		runSessionIn(dir, svc, append([]string{"overview"}, args...), strings.NewReader("x"), &out, &errb)
+		if c := <-seen; c.Worktree == "" {
+			t.Errorf("%v posted no worktree: %+v", args, c)
 		}
 	}
 }
