@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent spawn follow-ups
+
+### Fixed
+
+- **Agent channel:** `agent_send` text is capped at 64 KiB and the
+  `agent_start` note at 1 KiB; a send or kill to an id that names no
+  session says "no session …" instead of "started by the user".
+- **TUI:** quitting no longer waits a second for an agent's open channel
+  stream.
+- **Agent spawn:** a spawn's git calls run with ssh BatchMode, like the
+  TUI's own, so an ssh prompt can never land on the TUI's raw terminal.
+- **TUI:** a tool command approved before the repo's health probe landed
+  is remembered for the repository, so `agent_start` sees the approval.
+- **Worktrees:** a typo in `[agents] stale_after` no longer fails every
+  recycle and worktree listing — it keeps only dirty worktrees from
+  counting as stale, and `gg worktree list`/`claim` warn about it.
+- **CLI:** `gg agent start` refuses `--prompt` together with
+  `--prompt-file` (the file used to win silently); `gg agent` in a gg
+  console that has no agent channel says so instead of "run this inside
+  a gg console"; an error the channel answers with is reported as
+  rejected, not "not reachable"; the `gg init --mcp` manual hint quotes a
+  gg path with spaces.
+- **Skill:** the worktree-picking and agent sections no longer split the
+  command list; `gg agent list` works outside a console. The using-gg
+  skill is v120.
+
 ## Overviews in gg web: browser Back, large screens, follow-ups
 
 ### Added
