@@ -15,8 +15,8 @@ local  branch main                                                              
 │ [Files 1] Tags 0             ║                                                                                                ║                              │
 │   M a.txt                    ║  Shelf                                                                                         ║                              │
 │                              ║                                                                                                ║                              │
-│                              ║  >   wt:local / unstaged / a.txt                                                               ║                              │
-│                              ║      commit / cc2b480 — the b and c change                                                     ║                              │
+│                              ║  >   commit / cc2b480 — the b and c change                                                     ║                              │
+│                              ║      wt:local / unstaged / a.txt                                                               ║                              │
 │                              ║                                                                                                ║                              │
 │                              ║  [?] keys  [enter] diff/browse  [e] editor  [p] restore  [t] temp dir  [a] cherry-pick         ║                              │
 │                              ║  [y] copy  [m] mark/compare  [x] remove  [c] vs bookmark  [/] filter  [ctrl+w] mode            ║                              │

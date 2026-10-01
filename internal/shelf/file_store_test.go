@@ -1,8 +1,11 @@
 package shelf
 
 import (
+	"time"
+
 	"bytes"
 	"errors"
+	"github.com/homeend/gigagit/internal/clock"
 	"os"
 	"strings"
 	"testing"
@@ -358,5 +361,24 @@ func TestPutFilesStoresFilesKind(t *testing.T) {
 	got, err := st.Find(e.ID)
 	if err != nil || got.Kind != model.ShelfKindFiles {
 		t.Fatalf("Find = %+v err=%v: the kind must round-trip through the index", got, err)
+	}
+}
+
+// Newest first holds for entries made in the same instant too (a frozen
+// clock, a coarse filesystem clock): the later one lists first.
+func TestListNewestFirstOnATie(t *testing.T) {
+	defer clock.Freeze(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))()
+	s := newStore(t)
+	for _, p := range []string{"older", "newer"} {
+		if _, err := s.Put("", addr(p), []byte(p)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	es, err := s.List("", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(es) != 2 || es[0].Origin.Path != "newer" {
+		t.Fatalf("list = %+v, want newer first", es)
 	}
 }

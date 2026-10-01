@@ -75,6 +75,11 @@ func (s *Service) ShelfAddCommit(ctx context.Context, sha, label string) (model.
 		return model.ShelfEntry{}, err
 	}
 	if !found {
+		// rev-parse -q is silent about WHY: an ambiguous short sha would read
+		// as a typo. git's own reading of the rev names the cause.
+		if _, err := s.commitChangedPaths(ctx, sha); err != nil {
+			return model.ShelfEntry{}, err
+		}
 		return model.ShelfEntry{}, fmt.Errorf("shelf: unknown commit %s", sha)
 	}
 	sha = full

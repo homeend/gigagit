@@ -1,7 +1,8 @@
 name = "tui: shelved files and a shelved commit in the shelf quick-switcher"
 
 # A frozen copy of a working file and a named shelved commit sit side by
-# side in G's quick-switcher; enter on the commit entry opens its frozen
+# side in G's quick-switcher, newest first (the commit, shelved last, even
+# though the frozen clock gives both one instant); enter opens its frozen
 # files. `gg shelf commit HEAD` records the commit HEAD named, so the entry
 # shows its sha — it once stored the word "HEAD" and read "commit / commit".
 [input]
@@ -32,6 +33,6 @@ screen_excludes = ["commit / commit"]
 
 [[tui.step]]
 name = "commit-entry"
-keys = ["down", "enter"]
+keys = ["enter"]
 screen_contains = ["b.txt", "c.txt"]
 screen_excludes = ["a.txt"]
