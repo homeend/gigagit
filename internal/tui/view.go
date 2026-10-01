@@ -467,6 +467,7 @@ func (m Model) renderInterface() string {
 		add(markHint)
 		add(notice)
 		add(m.commitBranchHint())
+		add(m.worktreeClaimHint())
 		add(m.statusMsg)
 		add(m.bgRefreshHint())
 	}
@@ -1216,7 +1217,7 @@ func (m Model) worktreeRows(ents []wtEntry) []string {
 		if branch == "" {
 			branch = "(detached)"
 		}
-		out = append(out, marker+branch+"  "+w.Path)
+		out = append(out, marker+m.worktreeMarkPrefix(w.Path)+branch+"  "+w.Path)
 	}
 	return out
 }

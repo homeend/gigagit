@@ -95,7 +95,6 @@ func (m Model) openRecyclePicker(branch, remoteRef string) Model {
 	textW := popupTextWidth(popupFullInnerWidth(w)) - 2
 	cands := m.recycleCandidates()
 	suffixes := make([]string, len(cands))
-	lives := make([]bool, len(cands))
 	maxSuffix := 0
 	for i, w := range cands {
 		cur := w.Branch
@@ -103,8 +102,16 @@ func (m Model) openRecyclePicker(branch, remoteRef string) Model {
 			cur = i18n.T("detached")
 		}
 		suffixes[i] = "  " + cur
-		if lives[i] = live[filepath.Clean(w.Path)]; lives[i] {
+		if live[filepath.Clean(w.Path)] {
 			suffixes[i] += "  " + i18n.T("(agent session running)")
+		}
+		if mk, ok := m.worktreeMarks[w.Path]; ok {
+			if mk.Claim != nil {
+				suffixes[i] += "  " + i18n.T("(claimed by %s)", mk.Claim.Agent)
+			}
+			if mk.Reserved {
+				suffixes[i] += "  " + i18n.T("(reserved)")
+			}
 		}
 		maxSuffix = max(maxSuffix, lipgloss.Width(suffixes[i]))
 	}
@@ -117,11 +124,11 @@ func (m Model) openRecyclePicker(branch, remoteRef string) Model {
 	}
 	rows := make([]actionRow, 0, len(cands))
 	for i, w := range cands {
-		dir, isLive := w.Path, lives[i]
+		dir := w.Path
 		rows = append(rows, actionRow{
 			id:    "recycle-into:" + dir,
 			label: padRight(paths[i], col) + suffixes[i],
-			run:   func(m Model) (tea.Model, tea.Cmd) { return m.recycleInto(dir, isLive) },
+			run:   func(m Model) (tea.Model, tea.Cmd) { return m.recycleInto(dir) },
 		})
 	}
 	m.actionMenu = &actionMenu{rows: rows}
@@ -134,17 +141,16 @@ func recycleOpFor(dir, branch, remoteRef string) engine.RecycleWorktree {
 	return engine.RecycleWorktree{Dir: dir, Branch: branch, RemoteRef: remoteRef}
 }
 
-// recycleInto dispatches the op for the picked worktree; a live agent
-// session there gets the yes/no gate first.
-func (m Model) recycleInto(dir string, live bool) (tea.Model, tea.Cmd) {
+// recycleInto dispatches the op for the picked worktree. A running agent, a
+// claim, a reserve or the main checkout is the op's own recycle.blocked
+// question (the composed worktree guards), shown in the decision modal —
+// the TUI asks nothing itself.
+func (m Model) recycleInto(dir string) (tea.Model, tea.Cmd) {
 	op := recycleOpFor(dir, m.recycleBranch, m.recycleRemote)
 	if op.RemoteRef != "" {
 		// A diverged local branch lands in the checkout recovery modal, whose
 		// rename re-dispatches this recycle under the new name.
 		m.pendingCheckout = pendingCheckout{remoteRef: op.RemoteRef, base: op.Branch, intent: engine.CheckoutStay, recycleDir: dir}
-	}
-	if live {
-		return m.mustConfirmOp(op, i18n.T("An agent session is running in %s. Recycle it anyway?", dir))
 	}
 	mm, cmd := m.startOp(op)
 	return mm, cmd

@@ -104,6 +104,8 @@ func helpContent() []contentLine {
 		r("X", i18n.T("on a running agent/terminal session sub-row: kill it (confirms) and remove it from the list once it has exited (on an exited one, x)")),
 		r("e", i18n.T("rename the selected worktree directory (git worktree move; the current worktree follows the move)")),
 		r(".", i18n.T("Move worktree (.-menu): relocate the selected worktree to any path")),
+		r(".", i18n.T("Reserve (no agents) / Unreserve (.-menu): keep a worktree away from orchestrating agents (gg worktree list --free / claim); ⊘ marks a reserved row")),
+		r(".", i18n.T("Release claim (.-menu): take a worktree back from the agent that claimed it (asks first); ⚑ <agent> marks a claimed row and the bottom bar shows since when and why")),
 		h(i18n.T("Previews panel")),
 		r("", i18n.T("saved (source → target) branch pairs; each row shows its label, the pair and its live state (file/commit counts, merged, missing, no common base)")),
 		r("", i18n.T("saved commit pairs list here too: <a>..<b> between two FROZEN commits with the changed-file count (missing commit when one is gone). enter opens the diff, e renames, d removes, s saves the reversed pair; save one from the Commits panel (m, m, then . → Save to previews) or with gg preview add <a>..<b>")),

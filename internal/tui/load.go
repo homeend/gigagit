@@ -38,6 +38,7 @@ type dataLoadedMsg struct {
 	remoteBranches  []model.RemoteBranch
 	commits         []model.Commit
 	worktrees       []model.Worktree
+	worktreeMarks   map[string]domain.WorktreeMark
 	tags            []model.Tag
 	reflog          []model.ReflogEntry
 	currentWorktree string
@@ -113,6 +114,7 @@ func (m Model) loadCmd() tea.Cmd {
 			branches:         snap.Branches,
 			remoteBranches:   snap.RemoteBranches,
 			worktrees:        snap.Worktrees,
+			worktreeMarks:    worktreeMarksFor(svc, snap.Worktrees),
 			tags:             snap.Tags,
 			reflog:           snap.Reflog,
 			currentWorktree:  snap.CurrentWorktree,
