@@ -86,6 +86,10 @@ func agentStart(ctx context.Context, c *agentlink.Client, args []string, stdin i
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if *prompt != "" && *file != "" {
+		fmt.Fprintln(stderr, "agent start: pass --prompt or --prompt-file, not both")
+		return 2
+	}
 	text := *prompt
 	if *file != "" {
 		var data []byte

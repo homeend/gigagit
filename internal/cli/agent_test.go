@@ -75,6 +75,17 @@ func TestAgentStartReadsPromptFromStdin(t *testing.T) {
 	}
 }
 
+func TestAgentStartRefusesBothPromptFlags(t *testing.T) {
+	dir, _ := agentEnvFor(t, func(context.Context, domain.AgentStartRequest) (domain.AgentStartResult, error) {
+		t.Error("the starter must not run")
+		return domain.AgentStartResult{}, nil
+	})
+	code, _, errOut := runAgentCLI(t, dir, "from stdin", "start", "--worktree", "job", "--tool", "Claude", "--prompt", "inline", "--prompt-file", "-")
+	if code != 2 || !strings.Contains(errOut, "not both") {
+		t.Fatalf("--prompt with --prompt-file = %d %q", code, errOut)
+	}
+}
+
 func TestAgentListAndRefusal(t *testing.T) {
 	dir, full := agentEnvFor(t, nil)
 	code, out, _ := runAgentCLI(t, dir, "", "list")
