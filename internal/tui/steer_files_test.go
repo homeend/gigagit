@@ -250,3 +250,19 @@ func TestFileFocusByIDLoadErrorNamesThePath(t *testing.T) {
 		t.Fatalf("reply = %+v ok=%v, want an error naming adir", r, ok)
 	}
 }
+
+// files focus on an overview names it the way the agent does — its id and
+// title — not by the TUI's internal display name.
+func TestFileFocusOnAnOverviewNamesItByIDAndTitle(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	d := storeOverview(t, m, "The tour", "see [a](a.txt)")
+	m.adoptDoc(d)
+	m.openFiles.touch(m.currentWorktree, d, m.docShown)
+	nm, cmd := m.applySteer(steer.Command{ID: "ff-ov", Cmd: "file_focus", FileID: d.id(), Wait: true})
+	nm = pumpAll(t, nm, cmd)
+	r, ok := steer.AwaitReply(nm.steerDir, "ff-ov", time.Second)
+	if want := "focused overview " + d.id() + ` "The tour"`; !ok || !r.OK || r.Detail != want {
+		t.Fatalf("reply = %+v ok=%v, want detail %q", r, ok, want)
+	}
+}

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
@@ -120,5 +121,83 @@ func TestEscKeepsAFileWhoseNotesCameFromTheStore(t *testing.T) {
 	m = m.escDoc(d)
 	if m.openFiles.find(m.currentWorktree, d.key()) != d || m.docs.NoteCount(d.root, d.path) != 1 {
 		t.Fatal("esc closed a noted file and dropped its notes")
+	}
+}
+
+// A plain file draws its number from the model's store, the counter its
+// overviews use, so a file and an overview never share an f<n>.
+func TestOpenFilesNumberFromTheModelsStore(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	o, err := m.docs.AddOverview("r", "", "T", "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := m.newOpenFile(fileSource{kind: srcWorktree}, "a.txt")
+	if d.seq == o.Seq || m.docs.NextFileSeq() != d.seq+1 {
+		t.Fatalf("file f%d, overview f%d: numbered outside the model's store", d.seq, o.Seq)
+	}
+}
+
+// staleNotedDoc is an open file whose notes the store holds aligned to newer
+// content (the page read the file after an edit): its copy is still empty
+// while the re-read is in flight.
+func staleNotedDoc(t *testing.T, m Model, path string) *openFile {
+	t.Helper()
+	d := bgDoc(m, fileSource{kind: srcWorktree}, path, 5)
+	if _, err := m.docs.AddNote(d.root, d.path, append([]string{"NEW"}, rawOf(d.p.lines)...), 2, 2, "s", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	m.onAgentDocsChanged()
+	if len(d.notes) != 0 {
+		t.Fatalf("copy adopted notes for other content: %+v", d.notes)
+	}
+	return d
+}
+
+// X during a pending re-read drops the notes the store holds, not just the
+// (empty) copy's.
+func TestXDuringAReReadClearsTheStoresNotes(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	d := staleNotedDoc(t, m, "a.txt")
+	m = m.closeDoc(d)
+	if got := m.docs.NoteCount(d.root, d.path); got != 0 {
+		t.Fatalf("store still holds %d notes after X", got)
+	}
+}
+
+// The cap never pushes out a file the store holds notes for, even while its
+// copy is still empty.
+func TestTheCapKeepsAFileWhoseNotesAreNotCopiedYet(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	d := staleNotedDoc(t, m, "a.txt")
+	for i := 0; i < maxOpenFiles; i++ {
+		bgDoc(m, fileSource{kind: srcWorktree}, fmt.Sprintf("f%d.txt", i), 1)
+	}
+	if m.openFiles.find(m.currentWorktree, d.key()) != d {
+		t.Fatal("a noted file was pushed out over the cap")
+	}
+}
+
+// esc during a pending re-read steps aside like any noted file: the store's
+// notes (not yet in the copy) survive, and so does the document.
+func TestEscDuringAReReadKeepsTheStoresNotes(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 5)
+	d.backgrounded = false // opened in the foreground
+	m = m.pushLayer(&fileViewer{d})
+	if _, err := m.docs.AddNote(d.root, d.path, append([]string{"NEW"}, rawOf(d.p.lines)...), 2, 2, "s", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.onAgentDocsChanged()
+	if len(d.notes) != 0 {
+		t.Fatalf("copy adopted notes for other content: %+v", d.notes)
+	}
+	m = m.escDoc(d)
+	if m.openFiles.find(m.currentWorktree, d.key()) != d || m.docs.NoteCount(d.root, d.path) != 1 {
+		t.Fatal("esc during a re-read closed the file and dropped the agent's notes")
 	}
 }

@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent docs: the deferred minors
+
+### Fixed
+
+- **gg web, overviews:** a click on the backdrop leaves an overview (or a
+  file with an agent's notes) as esc does — in the background, the tab's
+  place kept. ctrl+] says `overview f5 "Title" is in the background`.
+  Backspace whose list request fails says `back failed` and keeps the way
+  back, instead of reading as "the overview was closed". A tab re-reads the
+  overview it shows (re-checking up to 100 anchors) only when that overview
+  or a note it points at changed, not on every note anywhere; a file deleted
+  on disk shows as gone on the next anchor click or reopen.
+- **gg web, open files:** when an agent's note or overview pushes a plain
+  file out of the 20-file list, every tab says `closed <path> (20 files
+  open)` — also when the TUI that hosts the page answered the agent. A note
+  the page refuses no longer leaves its file in the list; two store passes
+  no longer race to a stale pin.
+- **`gg session files focus` on an overview** answers `focused overview f5
+  "Title"` (TUI and web), not its internal file name.
+- **`gg session --to`:** `-to web` before the verb and a repeated `--to`
+  are refused (exit 2). `--` now ends a session verb's flags, so a file
+  named `-x.go` can be named. The using-gg skill is v114.
+- **TUI:** X on a file whose notes arrived while it was being re-read drops
+  them from the store too, and the 20-file cap never pushes such a file
+  out. Plain files and overviews draw ids from one counter in every model.
+
 ## Choose the TUI or the page for a session verb
 
 ### Added

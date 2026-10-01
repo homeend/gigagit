@@ -4206,7 +4206,10 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
   live, else to gg web (`steerLive(both=false)`). `--to tui|web` (cut from
   the args by `runSessionIn`'s `cutTo`, carried in `sessDir.to`) restricts
   `sessDir.target()` to one side; `$GG_INBOX` wins only while that side is
-  live there (`preferredInboxFor`). `status` refuses `--to`.
+  live there (`preferredInboxFor`). `status` refuses `--to`, as does a
+  `--to` before the verb (`-to` too) or given twice. Past `--` nothing is a
+  flag: `cutTo` leaves a `--to` there and `parseSteerFlags` hands everything
+  after `--` out as positional (a file named `-x.go`).
 - **Web side** (`internal/web`: `agentdocs_follow.go`, `steer_notes.go`,
   `file_notes.go`). The server keeps its own store unless hosted. A follow
   goroutine (started by `Host.Start`, also run by `adoptService`) lists every
@@ -4329,4 +4332,16 @@ selection, laid-out width); never on disk, never evicted, created
   data-a="k">` only with `{anchors: true}` (plain text otherwise); tab /
   shift+tab select, enter or a SINGLE click opens (after a re-fetch that
   re-checks), a range tints `.vline.vrange`, backspace (`view.from`, one
-  step, per tab) comes back with the anchor selected.
+  step, per tab) comes back with the anchor selected — a failed list fetch
+  there says `back failed` and keeps `view.from` (`backOutcome`). The
+  backdrop leaves a document as esc does (`escHow`). **Freshness:**
+  `Store.OverviewStamp` fingerprints title, text, missing flags and every
+  anchored note's place; `/api/overview` returns it (taken BEFORE the copy)
+  and the `agentdocs` fan-out carries `stamps`, so a tab re-fetches only
+  when its overview's stamp moved — a file deleted on disk shows as gone on
+  the next anchor click or reopen, not on an unrelated store change.
+  **Turns:** `followDocs` holds `followMu`; a steer's own add + listing
+  runs in the same turn (`listDocs`), and what its listing pushed out over
+  the cap is fanned out (`evicted`) by the pass that follows, so the agent's
+  reply and every tab name it. A web `note_add` lists the file only after
+  the store took the note.

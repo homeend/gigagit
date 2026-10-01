@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
@@ -70,24 +71,38 @@ func (s *Server) ofList(wt string) []steer.OpenFile {
 // followDocs is one pass over the store: list every noted file the page
 // lacks (in the background, pinned), pin exactly the noted ones, list every
 // overview under the store's id (pinned) and drop the ones that left it, and
-// tell the tabs — through fanOut, which the op gate never drops.
+// tell the tabs — through fanOut, which the op gate never drops — naming any
+// plain file an addition pushed out over the cap. Passes take turns: each
+// reads the store inside its turn, so the last leaves the store's pins.
 func (s *Server) followDocs() {
+	s.followMu.Lock()
+	defer s.followMu.Unlock()
 	wt := s.service().Root()
 	root := s.docsRoot(context.Background())
 	paths := s.docs.NotedPaths(root)
 	noted := make(map[string]bool, len(paths))
+	evicted := s.evicted // what a steer's own listing pushed out (listDocs)
+	s.evicted = nil
 	for _, p := range paths {
 		noted[p] = true
 		k := ofKey{Src: "worktree", Path: p}
-		if f, _, added := s.ofs.ensureOpen(wt, k, true); added {
+		f, ev, added := s.ofs.ensureOpen(wt, k, true)
+		if added {
 			s.baseline(wt, f.ID, k)
+		}
+		if ev != "" {
+			evicted = append(evicted, ev)
 		}
 	}
 	s.ofs.setPinned(wt, noted)
 	inStore := map[string]bool{}
+	stamps := map[string]string{}
 	for _, o := range s.docs.Overviews(root) {
 		inStore[o.ID] = true
-		s.ofs.ensureOpenID(wt, overviewKey(o), o.ID, o.Title)
+		stamps[o.ID] = s.docs.OverviewStamp(o.ID)
+		if _, ev, _ := s.ofs.ensureOpenID(wt, overviewKey(o), o.ID, o.Title); ev != "" {
+			evicted = append(evicted, ev)
+		}
 	}
 	var closed []string
 	for _, id := range s.ofs.ids(wt, "overview") {
@@ -96,8 +111,22 @@ func (s *Server) followDocs() {
 		}
 	}
 	if h := s.liveHubRef(); h != nil {
-		h.fanOut(liveMsg{Changed: []string{}, Reason: "agentdocs", Files: s.ofList(wt), Closed: closed})
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "agentdocs", Files: s.ofList(wt), Closed: closed,
+			Evicted: strings.Join(evicted, ", "), Stamps: stamps})
 	}
+}
+
+// listDocs runs add — a steer's store write and the entry it lists — in
+// the follow passes' turn, so no pass lists that entry first, then runs a
+// pass that tells the tabs, naming what add's listing pushed out over the
+// cap (add returns it; the agent's reply names it too).
+func (s *Server) listDocs(add func() (evicted string)) {
+	s.followMu.Lock()
+	if ev := add(); ev != "" {
+		s.evicted = append(s.evicted, ev)
+	}
+	s.followMu.Unlock()
+	s.followDocs()
 }
 
 // overviewKey is an overview's list key: the TUI's display name.

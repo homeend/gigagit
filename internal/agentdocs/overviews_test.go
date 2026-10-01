@@ -241,3 +241,33 @@ func TestOverviewReplyProse(t *testing.T) {
 		t.Fatalf("wire with text = %+v", w)
 	}
 }
+
+// The stamp changes exactly when what a tab draws of the overview does: its
+// title or text, an anchor's missing flag, or where an anchored note sits —
+// and not on a note no anchor names.
+func TestOverviewStampFollowsWhatATabDraws(t *testing.T) {
+	t.Parallel()
+	s := New()
+	n, _ := s.AddNote("/r", "a.go", []string{"x", "y"}, 1, 1, "s", "", "")
+	o, _ := s.AddOverview("/r", "/r", "T", "[a](a.go) [n](note:"+n.ID+")")
+	st := s.OverviewStamp(o.ID)
+	step := func(what string, changes bool, do func()) {
+		t.Helper()
+		do()
+		got := s.OverviewStamp(o.ID)
+		if (got != st) != changes {
+			t.Fatalf("%s: stamp changed = %v, want %v", what, got != st, changes)
+		}
+		st = got
+	}
+	if st == "" || s.OverviewStamp("f99") != "" {
+		t.Fatalf("stamp %q, unknown %q", st, s.OverviewStamp("f99"))
+	}
+	step("an unrelated note", false, func() { s.AddNote("/r", "b.go", []string{"x"}, 1, 1, "s", "", "") })
+	step("an unrelated note in another root", false, func() { s.AddNote("/o", "a.go", []string{"x"}, 1, 1, "s", "", "") })
+	step("a missing flag", true, func() { s.SetAnchorMissing(o.ID, 0, true) })
+	step("the anchored note moves", true, func() { s.Align("/r", "a.go", []string{"new", "x", "y"}) })
+	step("the anchored note goes", true, func() { s.RemoveNote(n.ID) })
+	step("the title", true, func() { s.SetOverview(o.ID, "U", "[a](a.go) [n](note:"+n.ID+")") })
+	step("the text", true, func() { s.SetOverview(o.ID, "", "[a](a.go)") })
+}

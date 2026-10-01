@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"flag"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -114,6 +116,10 @@ func TestSessionToMisuse(t *testing.T) {
 		{"reload", "--to="},
 		{"status", "--to", "web"},
 		{"--to", "web"},
+		{"-to", "web", "reload"},
+		{"-to=web", "reload"},
+		{"reload", "--to", "web", "--to", "tui"},
+		{"reload", "--to=web", "-to", "web"},
 	} {
 		var out, errb bytes.Buffer
 		if code := runSession(t.TempDir(), nil, args, &out, &errb); code != 2 {
@@ -176,5 +182,27 @@ func TestSessionToWebPassesAGGInboxWithoutAPage(t *testing.T) {
 	}
 	if left := steer.Drain(own); len(left) != 0 {
 		t.Fatalf("$GG_INBOX's TUI got %+v", left)
+	}
+}
+
+// Past "--" nothing is a flag: a --to there is an argument, left in place.
+func TestCutToStopsAtDashDash(t *testing.T) {
+	t.Parallel()
+	rest, to, err := cutTo([]string{"files", "open", "--", "--to", "web"})
+	if err != nil || to != "" || strings.Join(rest, " ") != "files open -- --to web" {
+		t.Fatalf("rest %q to %q err %v", rest, to, err)
+	}
+}
+
+// "--" ends the flags of a session verb: what follows is positional, even
+// when it looks like a flag (a file named -x.go).
+func TestParseSteerFlagsHonoursDashDash(t *testing.T) {
+	t.Parallel()
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	noWait := fs.Bool("no-wait", false, "")
+	pos, err := parseSteerFlags(fs, []string{"a.go", "--no-wait", "--", "-x.go", "--no-wait"})
+	if err != nil || !*noWait || strings.Join(pos, " ") != "a.go -x.go --no-wait" {
+		t.Fatalf("pos %q noWait %v err %v", pos, *noWait, err)
 	}
 }

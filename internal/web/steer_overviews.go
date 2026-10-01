@@ -81,22 +81,34 @@ func (s *Server) steerOverviewAdd(ctx context.Context, c steer.Command) steer.Re
 		return steerFail(c, "gg web is showing worktree "+shown+", not "+c.Worktree)
 	}
 	root, top := s.docsDirs(ctx)
-	o, err := s.docs.AddOverview(root, top, c.Title, c.Text)
+	wt := s.service().Root()
+	front := !c.Background && !s.opInFlight()
+	var (
+		o   agentdocs.Overview
+		ev  string
+		err error
+	)
+	s.listDocs(func() string {
+		if o, err = s.docs.AddOverview(root, top, c.Title, c.Text); err != nil {
+			return ""
+		}
+		s.docs.CheckAnchors(o.ID)
+		_, ev, _ = s.ofs.ensureOpenID(wt, overviewKey(o), o.ID, o.Title)
+		if front {
+			s.ofs.focus(wt, o.ID, "")
+		}
+		return ev
+	})
 	if err != nil {
 		return steerFail(c, err.Error())
 	}
-	s.docs.CheckAnchors(o.ID)
-	wt := s.service().Root()
-	_, ev, _ := s.ofs.ensureOpenID(wt, overviewKey(o), o.ID, o.Title)
 	var detail string
-	front := false
 	switch {
 	case c.Background:
 		detail = "added " + o.ID + " in the background"
-	case s.opInFlight():
+	case !front:
 		detail = "added " + o.ID + " in the background (operation in flight)"
 	default:
-		front = true
 		detail = "showing " + o.ID
 		if s.ofs.liveTabs() == 0 {
 			detail += "; no gg web tab is open to show it"
@@ -105,10 +117,6 @@ func (s *Server) steerOverviewAdd(ctx context.Context, c steer.Command) steer.Re
 	if ev != "" {
 		detail += "; closed " + ev + " (" + strconv.Itoa(maxOpenFiles) + " files open)"
 	}
-	if front {
-		s.ofs.focus(wt, o.ID, "")
-	}
-	s.followDocs()
 	if front {
 		if h := s.liveHubRef(); h != nil {
 			h.emitSteer(liveMsg{Changed: []string{}, Reason: "steer", Steer: &steerWire{Cmd: "file_focus", FileID: o.ID}})

@@ -117,10 +117,15 @@ func (d *openFile) keepPlace() {
 
 // newOpenFile is a document for path at src, showing the loading placeholder
 // until its load arrives.
-func newOpenFile(src fileSource, path string) *openFile {
-	// The shared store numbers documents: a gg web page this TUI hosts
-	// draws its ids from the same counter, so an id never names two files.
-	return newOpenFileSeq(src, path, agentdocs.Shared().NextFileSeq())
+func (m Model) newOpenFile(src fileSource, path string) *openFile {
+	// The model's store numbers documents — its overviews too, and a gg web
+	// page this TUI hosts draws from the same counter — so an id never
+	// names two files.
+	docs := m.docs
+	if docs == nil {
+		docs = agentdocs.Shared()
+	}
+	return newOpenFileSeq(src, path, docs.NextFileSeq())
 }
 
 // newOpenFileSeq is newOpenFile under a number the store already handed out

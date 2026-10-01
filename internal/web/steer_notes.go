@@ -82,18 +82,30 @@ func (s *Server) steerNoteAdd(ctx context.Context, c steer.Command) steer.Reply 
 	if err != nil {
 		return steerFail(c, "reading "+path+": "+err.Error())
 	}
-	k := ofKey{Src: "worktree", Path: path}
-	f, ev, added := s.ofs.ensureOpen(wt, k, false) // the follow pass pins it once the note exists
-	if added {
-		s.baseline(wt, f.ID, k)
-	}
 	var lines []string // a file too large or binary has none to note
 	if len(data) <= domain.MaxDiffBytes && !domain.IsBinary(data) {
 		lines = agentdocs.Lines(data)
 	}
-	n, err := s.docs.AddNote(s.docsRoot(ctx), path, lines, c.Start, c.End, c.Summary, c.Rationale, c.Author)
+	root := s.docsRoot(ctx)
+	k := ofKey{Src: "worktree", Path: path}
+	var (
+		n     agentdocs.Note
+		f     steer.OpenFile
+		ev    string
+		added bool
+	)
+	s.listDocs(func() string {
+		if n, err = s.docs.AddNote(root, path, lines, c.Start, c.End, c.Summary, c.Rationale, c.Author); err != nil {
+			return "" // before the list: a refused note lists nothing
+		}
+		f, ev, added = s.ofs.ensureOpen(wt, k, true)
+		return ev
+	})
 	if err != nil {
 		return steerFail(c, err.Error())
+	}
+	if added {
+		s.baseline(wt, f.ID, k)
 	}
 	lead := ""
 	if ev != "" {

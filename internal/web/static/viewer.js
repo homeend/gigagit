@@ -148,6 +148,33 @@ function backAnchor(anchors, from) {
   if (i >= 0) return i;
   return from.sel < anchors.length ? from.sel : -1;
 }
+
+// escHow is how esc (and a click on the backdrop) leaves a document: an
+// overview or a file with an agent's notes steps aside, any other closes.
+function escHow(isOverview, noteCount) {
+  return isOverview || noteCount > 0 ? "background" : "close";
+}
+
+// docName is how a status line names the document v shows: an overview by
+// its id and title (the agent's words — the server's OverviewName), a file
+// by its path.
+function docName(v) {
+  return v.ov ? "overview " + v.id + " " + JSON.stringify(v.ov.title) : v.path;
+}
+
+// backOutcome is what backspace's list fetch means: "error" (no list —
+// the way back stays), "ok" (the overview is listed) or "closed".
+function backOutcome(files, fromId) {
+  if (!files) return "error";
+  return files.some((x) => x.id === fromId) ? "ok" : "closed";
+}
+
+// overviewStale reports whether the overview id on screen (stamp shown)
+// needs a re-fetch after an agentdocs change carrying stamps; no stamp for
+// it re-fetches.
+function overviewStale(stamps, id, shown) {
+  return !stamps || !(id in stamps) || stamps[id] !== shown;
+}
 // --- end overview model ---
 
 // --- the overlay -------------------------------------------------------------
@@ -229,7 +256,7 @@ viewerRoot.innerHTML =
   `<div id="viewer-body" tabindex="-1"></div></div>`;
 
 viewerRoot.addEventListener("click", (e) => {
-  if (e.target.id === "viewer") closeViewer(); // backdrop closes, box does not
+  if (e.target.id === "viewer") closeViewer(escHow(!!view.ov, view.notes.length)); // the backdrop is esc; the box is not
 });
 $("viewer-body").addEventListener("click", (e) => {
   const anc = e.target.closest("a.md-anchor");
@@ -321,7 +348,7 @@ function showOverview(f, ov) {
   return { ok: true, notice: "" };
 }
 
-// closeViewer takes the viewer down. "close" (esc, the backdrop) lets go of
+// closeViewer takes the viewer down. "close" (esc, the backdrop — see escHow) lets go of
 // the file — gone from the list unless another tab shows it; "background"
 // (ctrl+], the . menu's hand-offs) keeps it open (ruling L4).
 function closeViewer(how = "close") {
@@ -345,9 +372,9 @@ function dropViewer() {
 }
 
 function backgroundViewer() {
-  const path = view.path;
+  const name = docName(view);
   closeViewer("background");
-  opLine(path + " is in the background", false);
+  opLine(name + " is in the background", false);
 }
 
 // paintTitle cuts the PATH in the middle, never the file name, to fit.
@@ -454,14 +481,25 @@ async function openAnchorAt(i) {
 // anchorBack is backspace in a file an anchor opened: the overview comes
 // back with that anchor selected; the file stays open. One step deep.
 async function anchorBack() {
-  const f = view.from;
+  const f = view.from, id = view.id;
   view.from = null;
   swapFoot(true);
-  let files = [];
+  let files = null, err = null;
   try {
     files = (await getJSON("/api/open-files")).files || [];
-  } catch {}
-  if (!files.some((x) => x.id === f.id)) return opLine("the overview was closed", false);
+  } catch (e) {
+    err = e;
+  }
+  switch (backOutcome(files, f.id)) {
+    case "error":
+      if (view.id === id && !view.from) {
+        view.from = f; // a failed fetch is no answer: the way back stays
+        swapFoot(true);
+      }
+      return opLine("back failed: " + (err.message || err), true);
+    case "closed":
+      return opLine("the overview was closed", false);
+  }
   rememberPlace();
   ofPost({ op: "background", id: view.id, line: view.cur }).catch(() => {});
   const r = await openViewer({ id: f.id });
@@ -495,7 +533,7 @@ function overviewKey(e) {
     case "PageUp": scrollDoc(-(body.clientHeight - 40)); break;
     case "Home": case "g": body.scrollTop = 0; break;
     case "End": case "G": body.scrollTop = body.scrollHeight; break;
-    case "Escape": closeViewer("background"); break; // an overview steps aside; x closes it
+    case "Escape": closeViewer(escHow(true, 0)); break; // an overview steps aside; x closes it
     default: return false;
   }
   e.preventDefault();
@@ -641,7 +679,7 @@ function viewerKey(e) {
     case "{": stepNote(-1); break;
     // A noted file steps aside on esc (the TUI's rule); the server decides
     // the same for a note that landed after this read.
-    case "Escape": closeViewer(view.notes.length ? "background" : "close"); break;
+    case "Escape": closeViewer(escHow(false, view.notes.length)); break;
     default: return false;
   }
   e.preventDefault();
@@ -745,7 +783,7 @@ $("foot").addEventListener("click", (e) => {
     case "menu": menuAtCursor(); break;
     case "bg": backgroundViewer(); break;
     case "files": openSwitcher(); break;
-    case "close": closeViewer(view.notes.length ? "background" : "close"); break;
+    case "close": closeViewer(escHow(!!view.ov, view.notes.length)); break;
     case "dismiss": { const n = noteAtLine(view.notes, view.cur); if (n) dismissNote(n.id); else opLine("no note on this line", false); break; }
     case "ref": { const n = noteAtLine(view.notes, view.cur); if (n) copyNoteRef(n); else opLine("no note on this line", false); break; }
     case "aopen": if (view.ov && view.ov.sel >= 0) openAnchorAt(view.ov.sel); else opLine("no anchor selected — tab selects one", false); break;
@@ -846,7 +884,7 @@ function viewerHello() {
 function viewerOpenFiles(files) {
   const id = viewerFileId();
   if (!id || files.some((f) => f.id === id)) return;
-  const name = view.ov ? "overview " + id : view.path;
+  const name = docName(view);
   places.delete(id);
   dropViewer();
   opLine(name + " was closed in another tab", false);
@@ -881,18 +919,21 @@ async function viewerFileChanged(id) {
 // moved, an overview added, set or closed — here, in another tab, or in the
 // TUI hosting this page). An overview on screen that left the store closes;
 // a file this viewer shows that left the list goes; one that stays is
-// re-read, which aligns its notes (or re-checks its anchors).
-function viewerAgentDocs(files, closed = []) {
+// re-read, which aligns its notes (or re-checks its anchors — only when its
+// stamp moved: a change elsewhere in the store leaves it as it is).
+function viewerAgentDocs(files, closed = [], stamps = undefined) {
   const id = viewerFileId();
   if (id && view.ov && closed.includes(id)) {
+    const name = docName(view);
     places.delete(id);
     dropViewer();
-    return opLine("overview " + id + " was closed", false);
+    return opLine(name + " was closed", false);
   }
   viewerOpenFiles(files);
   if (!viewerFileId()) return;
-  if (view.ov) refreshOverview();
-  else viewerFileChanged(viewerFileId());
+  if (view.ov) {
+    if (overviewStale(stamps, view.id, view.ov.stamp)) refreshOverview();
+  } else viewerFileChanged(viewerFileId());
 }
 
 // ---- entry points ---------------------------------------------------------
