@@ -24,6 +24,8 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/savedcompare": "frontends must reach the saved-comparison store through internal/domain",
 		"github.com/homeend/gigagit/internal/agentsession": "frontends must reach agent sessions through internal/domain",
 		"github.com/homeend/gigagit/internal/taskhist":     "frontends must reach the AI-task history through internal/domain",
+		"github.com/homeend/gigagit/internal/sessionreg":   "frontends must reach the session registry through internal/domain",
+		"github.com/homeend/gigagit/internal/wtclaim":      "frontends must reach worktree claims through internal/domain",
 	}
 	for _, pkg := range []string{
 		"github.com/homeend/gigagit/internal/tui",
