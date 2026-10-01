@@ -33,6 +33,7 @@ func TestMain(m *testing.M) {
 	// A suite run inside a gg console must not reach that console's TUI.
 	os.Unsetenv("GG_MCP_URL")
 	os.Unsetenv("GG_SESSION_TOKEN")
+	os.Unsetenv("GG_INBOX") // every successful mutating verb would nudge it
 	os.Setenv("GIT_CONFIG_GLOBAL", gcfg)
 	os.Setenv("GIT_AUTHOR_NAME", "gg-e2e")
 	os.Setenv("GIT_AUTHOR_EMAIL", "e2e@gg")

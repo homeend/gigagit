@@ -26,6 +26,7 @@ func TestMain(m *testing.M) {
 	// A suite run inside a gg console must not reach that console's TUI.
 	os.Unsetenv("GG_MCP_URL")
 	os.Unsetenv("GG_SESSION_TOKEN")
+	os.Unsetenv("GG_INBOX") // every successful mutating verb would nudge it
 	code := m.Run()
 	os.RemoveAll(state)
 	os.RemoveAll(dir)
