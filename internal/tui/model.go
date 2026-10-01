@@ -216,6 +216,11 @@ type Model struct {
 	// filesLandNote is the review whose row the next commit file list puts
 	// the cursor on (esc from a review opened from that list); "" = none.
 	filesLandNote string
+	// filesLandScope is its twin for a Range review row (the scope it names).
+	filesLandScope string
+	// filesBack is set while a range opened from a commit's Range review row
+	// shows: esc returns to that commit's files, the cursor on the row.
+	filesBack *scopeBack
 	// reviewsFollowGen numbers follow-live list landings: only the latest
 	// one's pause reads the commit's reviews (reviewsFollowMsg).
 	reviewsFollowGen int
@@ -962,7 +967,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.drainPendingFiles()
 		}
 		m.filesReview = nil // the commit list moved on: a plain commit view now
-		m.filesView.lines = withReviewLines(msg.reviews, withNotedLines(notedElsewhere(m.noteCounts.ByCommitPath, msg.hash, msg.files), commitFileLines(msg.files)))
+		m.filesView.lines = withReviewLines(msg.reviews, withScopeLines(m.noteCounts.ScopesByCommit[msg.hash],
+			withNotedLines(notedElsewhere(m.noteCounts.PlainByCommitPath, msg.hash, msg.files), commitFileLines(msg.files))))
 		m.filesView.sel = 0
 		var after tea.Cmd
 		if msg.noReviews { // a follow-live list: its reviews come once the cursor rests
@@ -973,6 +979,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesLandNote = ""
 			for i, l := range m.filesView.visible() {
 				if l.noteID == id {
+					m.filesView.sel = i
+				}
+			}
+		}
+		if sc := m.filesLandScope; sc != "" {
+			m.filesLandScope = ""
+			for i, l := range m.filesView.visible() {
+				if l.noteScope == sc {
 					m.filesView.sel = i
 				}
 			}
@@ -1164,6 +1178,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePRSearchMsg(msg)
 	case previewMutatedMsg:
 		return m.handlePreviewMutatedMsg(msg)
+	case scopeOpenMsg:
+		return m.handleScopeOpenMsg(msg)
 	case pairOpenMsg:
 		return m.handlePairOpenMsg(msg)
 	case pairNotesMsg:

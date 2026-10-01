@@ -1812,6 +1812,37 @@ scrolled to the file.
   its `.` menu and help rows) and "notes" lost its plural; the stacked view
   has its OWN footer line. `diffHintFor(long, stacked)`.
 
+### Range review rows in a commit's Files view (2026-10-02)
+
+A note written in a merge preview or a commit pair is an ordinary committed
+note on the range's NEWEST commit, stamped with its scope (`Note.Preview`:
+`<target>...<source>` by branch names, `<a7>..<b7>` for a pair). Most such
+notes sit on files that commit does not change, so its Files view cannot put
+them on a file row.
+
+- `domain.NoteCounts.ScopesByCommit[sha]` groups the commit's notes by scope
+  (sorted, thread counts); `PlainByCommitPath["<sha>:<path>"]` counts the notes
+  written in NO scope. They replaced `PreviewsByCommitPath`.
+- The commit's list is `withReviewLines(withScopeLines(withNotedLines(files)))`:
+  a "Range reviews" heading with one `noteScope` row per scope (◆ N = every
+  note of that scope on the commit, changed files included — the row stands
+  for the whole review), then "Notes" for plain notes on unchanged files
+  (`notedElsewhere` reads `PlainByCommitPath`).
+- enter → `openScopeRow` → `domain.ScopeAtCommit(scope, commit)`: a pair is its
+  own two commits (short shas resolved); a merge preview is
+  `merge-base(target, commit)..commit` — frozen at the commit, whatever the
+  branch did since. A missing target, or a commit already in the target (the
+  branch was merged: the merge base IS the commit), is an error shown on the
+  status line — never an empty diff. Then `PairOpen` + `openCompareFiles` +
+  `pairNotesCmd`, exactly a saved pair's open, so the view is a PAIR scope
+  and gathers every note along the range, not only that scope's.
+- The way back is `m.filesBack` (`scopeBack{commit, scope}`): set AFTER
+  `openCompareFiles` (which runs `closeFilesView` and zeroes it), read by
+  `leaveReviewView`, which reopens the commit's files and sets
+  `filesLandScope` AFTER `openChangedFiles` so the cursor lands on the row.
+  Any other re-open inside the range view drops the way back; esc then closes.
+- TUI only: the web page has no such list.
+
 ### Review notes inside a stack (plan 4a, 2026-09-23)
 
 Spec §11 item 1, plan `docs/superpowers/plans/2026-09-22-stacked-notes.md`.
