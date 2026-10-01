@@ -18,15 +18,17 @@ console.log([
   JSON.stringify(anchorTarget({dest: "a.go", path: "a.go"})),
   JSON.stringify(anchorTarget({dest: "note:t9", note: "t9", path: "b.go", start: 4, end: 6})),
   JSON.stringify(anchorTarget({dest: "note:t9", note: "t9"})),
-  keepAnchor([{dest: "x"}, {dest: "b"}, {dest: "b"}], [{dest: "a"}, {dest: "b"}], 1),
-  keepAnchor([{dest: "x"}], [{dest: "a"}, {dest: "b"}], 1),
-  keepAnchor([{dest: "x"}], [{dest: "a"}], -1),
+  keepAnchor([{dest: "x"}, {dest: "b"}, {dest: "b"}], "b", 1),
+  keepAnchor([{dest: "x"}], "b", 1),
+  keepAnchor([{dest: "x"}], "", -1),
+  keepAnchor([{dest: "a"}, {dest: "b"}], "b", -1),
+  keepAnchor([{dest: "b"}, {dest: "a"}, {dest: "b"}], "b", 2),
   backAnchor([{dest: "new"}, {dest: "a"}, {dest: "lock"}], {sel: 1, dest: "lock"}),
   backAnchor([{dest: "a"}, {dest: "b"}], {sel: 1, dest: "gone"}),
   backAnchor([{dest: "a"}], {sel: 3, dest: "gone"}),
 ].join("|"));
 `)
-	want := `0|2|0|2|2|-1|no file nope.txt|note t9 is gone|true|{"path":"a.go","line":2,"end":3}|{"path":"a.go","line":0,"end":0}|{"path":"b.go","line":4,"end":6,"note":"t9"}|{"note":"t9"}|1|-1|-1|2|1|-1`
+	want := `0|2|0|2|2|-1|no file nope.txt|note t9 is gone|true|{"path":"a.go","line":2,"end":3}|{"path":"a.go","line":0,"end":0}|{"path":"b.go","line":4,"end":6,"note":"t9"}|{"note":"t9"}|1|-1|-1|1|2|2|1|-1`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
@@ -86,6 +88,18 @@ func TestOvAnswerAppliesJS(t *testing.T) {
 	t.Parallel()
 	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `console.log([ovAnswerApplies(1, 0), ovAnswerApplies(1, 2), ovAnswerApplies(2, 2), ovAnswerApplies(3, 2)].join("|"));`)
 	if want := "true|false|false|true"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+// A tab whose open failed after the server moved it there gives the server
+// back what it really shows: the file still on screen, else nothing.
+func TestReleaseAfterFailedOpenJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `console.log([
+  releaseAfterFailedOpen("f2", "f1"), releaseAfterFailedOpen("f2", ""), releaseAfterFailedOpen("f2", "f2"), releaseAfterFailedOpen("", "f1"),
+].map((x) => JSON.stringify(x)).join("|"));`)
+	if want := `{"op":"focus","id":"f1"}|{"op":"background","id":"f2"}|null|null`; out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
