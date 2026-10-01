@@ -4398,7 +4398,16 @@ selection, laid-out width); never on disk, never evicted, created
   pushes ONE history entry (`ownBack`, `{gg: "back"}`, re-read from
   `history.state` on load); `popstate` runs `anchorBack` when the file came
   from an anchor; backspace leaves the entry for the next open, so a Back
-  after backspace came back is used up instead of leaving gg web. The
+  after backspace came back is used up instead of leaving gg web (`popstate`
+  re-reads `ownBack` from `history.state`, so a Forward that restored the
+  entry is reused, never doubled — `armBack`); a Back while a popup sits on
+  the file (`topLayer()` is not the viewer) leaves both alone and re-arms;
+  a Back whose list fetch failed re-arms with `view.from`. An open that did
+  not land — failed, or left by esc meanwhile — reports what the tab shows
+  (`reportShown`, unless a newer open started: `openSeq`, which a close
+  does not bump), and the next open awaits that report (`ofSync`). An
+  anchor whose re-check lost a race to a re-open says nothing; one the
+  re-check removed says `that anchor is no longer in the overview`. The
   document's type grows with a large window (`.vdoc` font-size clamp
   12–17px; the 100ch column grows with it).
 
