@@ -62,9 +62,10 @@ func keyMsgFor(tok string) (tea.KeyMsg, error) {
 
 // splitLiteral turns a step's token into presses: a named key or chord is
 // one press, a multi-rune literal is one press per rune (as the recorder
-// writes it).
+// writes it). A C-/M- token is always a chord, so a mistyped one fails in
+// keyMsgFor instead of being pressed as letters.
 func splitLiteral(tok string) []string {
-	if _, err := keyMsgFor(tok); err == nil {
+	if _, err := keyMsgFor(tok); err == nil || isChord(tok) {
 		return []string{tok}
 	}
 	var out []string
@@ -72,4 +73,8 @@ func splitLiteral(tok string) []string {
 		out = append(out, string(r))
 	}
 	return out
+}
+
+func isChord(tok string) bool {
+	return len(tok) > 2 && (strings.HasPrefix(tok, "C-") || strings.HasPrefix(tok, "M-"))
 }

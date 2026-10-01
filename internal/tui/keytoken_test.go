@@ -59,3 +59,18 @@ func TestSplitLiteral(t *testing.T) {
 		}
 	}
 }
+
+// A mistyped chord (C-xyz, M-foo) stays ONE token so Press fails naming it,
+// instead of quietly pressing "C", "-", "x", … as letters.
+func TestMalformedChordIsAnError(t *testing.T) {
+	t.Parallel()
+	for _, bad := range []string{"C-xyz", "M-foo", "M-C-xyz"} {
+		got := splitLiteral(bad)
+		if len(got) != 1 || got[0] != bad {
+			t.Errorf("splitLiteral(%q) = %q, want the one token", bad, got)
+		}
+		if _, err := keyMsgFor(bad); err == nil {
+			t.Errorf("keyMsgFor(%q) must fail", bad)
+		}
+	}
+}

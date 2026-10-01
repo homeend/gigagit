@@ -22,6 +22,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **`internal/clock`**: one freezable "now" for stored and drawn times, so
   a frozen test clock renders ages and dates identically on every run.
 - **`gg --record` records alt keys** as `M-<key>` (they were comments).
+- **More screens pinned:** a noted commit's Files view (`A  a.txt  ◆ 1`),
+  the Branches review badge, and a review view's stack, whose Overview
+  wraps in the centred 120-column reading column.
+
+### Fixed
+
+- **A mistyped chord fails the step.** `C-xyz` used to be pressed as the
+  letters `C`, `-`, `x`, … ; any `C-`/`M-` token is now a chord or an error.
+- **`go test ./e2e -update` is refused on Windows**, where screens show
+  Windows paths and goldens are never compared.
 ## Agent notes in gg web
 
 ### Added

@@ -21,6 +21,11 @@ var update = flag.Bool("update", false, "rewrite the TUI golden screens of the s
 // compares every named checkpoint with <scenario>.screens/NN-<name>.txt.
 func runTUI(t *testing.T, sb *Sandbox, sc *Scenario, file string) {
 	t.Helper()
+	if *update {
+		if err := updateRefused(runtime.GOOS); err != nil {
+			t.Fatal(err)
+		}
+	}
 	w, h := parseSize(sc.TUI.Size)
 	svc := domain.OpenTUI(sb.LocalDir)
 	hd, err := tui.NewHeadless(svc, tui.HeadlessOptions{Width: w, Height: h, StatePath: filepath.Join(sb.Root, "state", "repos.toml")})
@@ -99,6 +104,15 @@ func normalizeRoot(screen, root string) string {
 
 // pidSegment is tuiRoot's per-process directory name, whole or cut.
 var pidSegment = regexp.MustCompile(`gg-tui-[0-9]{1,8}`)
+
+// updateRefused refuses -update on Windows: its screens show Windows paths,
+// and goldens are compared only elsewhere.
+func updateRefused(goos string) error {
+	if goos == "windows" {
+		return fmt.Errorf("-update is refused on windows: its screens show windows paths; write goldens on linux or macOS")
+	}
+	return nil
+}
 
 // compareGolden checks a checkpoint's screen against its golden file, or
 // writes it under -update. A mismatch writes <golden>.actual beside it.
