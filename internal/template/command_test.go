@@ -172,3 +172,25 @@ func TestResolveRangeToken(t *testing.T) {
 		t.Fatalf("<range> should be a valid token: %v", err)
 	}
 }
+
+func TestPromptToken(t *testing.T) {
+	cases := []struct{ tmpl, prompt, goos, want string }{
+		{"claude <prompt>", "", "linux", "claude "},
+		{"claude <prompt>", "do it", "linux", "claude 'do it'"},
+		{"junie <prompt:--prompt>", "", "linux", "junie "},
+		{"junie <prompt:--prompt> --brave", "do it", "linux", "junie --prompt 'do it' --brave"},
+		{"agy <prompt:--prompt-interactive>", "do it", "windows", `agy --prompt-interactive "do it"`},
+	}
+	for _, c := range cases {
+		got, err := resolveCommandFor(c.tmpl, nil, CmdCtx{Prompt: c.prompt}, c.goos)
+		if err != nil || got != c.want {
+			t.Errorf("%q/%q/%s = %q, %v; want %q", c.tmpl, c.prompt, c.goos, got, err, c.want)
+		}
+	}
+	if err := ValidateCommandTokens("junie <prompt:--prompt>", false); err != nil {
+		t.Fatalf("<prompt> must validate: %v", err)
+	}
+	if !HasPromptSlot("x <prompt:--p> y") || !HasPromptSlot("x <prompt>") || HasPromptSlot("x <repo>") {
+		t.Fatal("HasPromptSlot")
+	}
+}

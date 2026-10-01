@@ -16,12 +16,14 @@ import (
 // error. ContextFile is the per-run context-file path (op/source/target plus
 // the conflicted paths, byte-exact — see internal/tui's toolContextFile);
 // empty ContextFile makes <context-file> an error too, since every
-// conflict-category run creates one.
+// conflict-category run creates one. Prompt is an agent's kick-off line
+// for the <prompt> slot (shell-quoted); "" leaves the slot empty.
 type CmdCtx struct {
 	Op, Source, Target, Range, Repo   string
 	ConflictedFiles                   []string
 	File, Local, Base, Remote, Merged string
 	ContextFile                       string
+	Prompt                            string
 }
 
 // ResolveCommand substitutes every <...> token in an external-tool command.
@@ -86,6 +88,15 @@ func resolveCommandToken(body string, inputs map[string]string, ctx CmdCtx, goos
 			return "", fmt.Errorf("template: missing input for <user:%s>", rest)
 		}
 		return v, nil
+	case "prompt":
+		if ctx.Prompt == "" {
+			return "", nil // a manual start: the slot vanishes
+		}
+		q := quoteArgFor(ctx.Prompt, goos)
+		if hasColon && rest != "" {
+			return rest + " " + q, nil
+		}
+		return q, nil
 	case "bin":
 		return "", fmt.Errorf("template: <bin> is resolved when the command is generated — replace it with the tool binary")
 	case "env":
@@ -98,7 +109,7 @@ func resolveCommandToken(body string, inputs map[string]string, ctx CmdCtx, goos
 // commandTokens is the runtime vocabulary; the bool marks per-file-only tokens.
 var commandTokens = map[string]bool{
 	"op": false, "source": false, "target": false, "range": false, "conflicted-files": false,
-	"repo": false, "context-file": false, "user": false,
+	"repo": false, "context-file": false, "user": false, "prompt": false,
 	"file": true, "local": true, "base": true, "remote": true, "merged": true,
 }
 
@@ -124,6 +135,17 @@ func ValidateCommandTokens(tmpl string, perFile bool) error {
 		}
 	}
 	return nil
+}
+
+// HasPromptSlot reports whether a command template carries a <prompt> slot —
+// the one way an agent's kick-off line reaches a spawned worker.
+func HasPromptSlot(tmpl string) bool {
+	for _, m := range tokenRe.FindAllStringSubmatch(tmpl, -1) {
+		if p, _, _ := cutColon(m[1]); p == "prompt" {
+			return true
+		}
+	}
+	return false
 }
 
 // quoteArgFor shell-quotes one argv value: POSIX single-quoting with each
