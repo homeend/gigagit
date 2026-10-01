@@ -35,13 +35,26 @@ type RunOptions struct {
 // tasks config, snapshot target. It also returns the startup config, which
 // Run reads for the operation log.
 func prepareModel(svc *domain.Service) (Model, config.Config) {
-	m := New(svc)
+	cfg := startupConfig(svc)
+	return prepareModelWith(svc, cfg), cfg
+}
+
+// startupConfig is the config the first frame is painted with: the repo's
+// .gg.toml over the global one, defaults when neither loads.
+func startupConfig(svc *domain.Service) config.Config {
 	cfg := config.Defaults()
 	if top, err := svc.TopLevel(context.Background()); err == nil && top != "" {
 		if c, cerr := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); cerr == nil {
 			cfg = c
 		}
 	}
+	return cfg
+}
+
+// prepareModelWith is prepareModel over an already-loaded startup config
+// (the headless driver checks it before anything applies it).
+func prepareModelWith(svc *domain.Service, cfg config.Config) Model {
+	m := New(svc)
 	// Paint the very first frame in the configured theme, with its
 	// [themes.<name>] overrides — mirroring applyTheme so startup and the
 	// configReadyMsg that follows never disagree for a frame. Complaints
@@ -62,7 +75,7 @@ func prepareModel(svc *domain.Service) (Model, config.Config) {
 	m = m.applyBranchFilterConfig()
 	m, _ = m.applyTasksConfig() // a warning comes back with configReadyMsg
 	m = m.initSnapshotTarget()
-	return m, cfg
+	return m
 }
 
 func Run(svc *domain.Service, opts RunOptions) (string, error) {

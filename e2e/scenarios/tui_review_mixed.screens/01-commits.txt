@@ -1,7 +1,7 @@
-local  branch feature                                                                                                         {{root}}____________________/local
+local  branch feature                                                                                                {{root}}_____________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ [Branches] R W P ·date↓                           ││ Commits (all) 2                                                                                         │
-│   * feature ◆ 1 ({{root}}____________________/lo… ││ > ●  ↓ ✎ *feature deleted a b                                                                           │
+│   * feature ◆ 1 (/tmp/gg-tui-########/tui_review… ││ > ●  ↓ ✎ *feature deleted a b                                                                           │
 │       └ Review: 01-02 00:00 fake                  ││   ●  ↓   main     add a b  ◆ 1                                                                          │
 │     main                                          ││                                                                                                         │
 │                                                   ││                                                                                                         │

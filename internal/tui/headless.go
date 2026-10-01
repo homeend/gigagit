@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/promptstate"
+	"github.com/homeend/gigagit/internal/theme"
 )
 
 // Headless drives the real Model without a terminal, for the e2e golden
@@ -36,7 +39,7 @@ type Headless struct {
 // HeadlessOptions sizes the terminal and isolates machine-global state.
 type HeadlessOptions struct {
 	Width, Height int    // 0 → 160x40
-	StatePath     string // repos.toml (and prompts.toml beside it); "" → none
+	StatePath     string // repos.toml, and prompts.toml beside it; "" → neither persists
 }
 
 const (
@@ -52,10 +55,28 @@ func NewHeadless(svc *domain.Service, opts HeadlessOptions) (*Headless, error) {
 	if w <= 0 || hgt <= 0 {
 		w, hgt = 160, 40
 	}
-	m, _ := prepareModel(svc)
+	// The theme and language are process globals that parallel scenarios
+	// share: a config naming others is refused BEFORE anything applies it.
+	baseTheme, baseLang := activeTheme().Name, i18n.ActiveCode()
+	cfg := startupConfig(svc)
+	if th, _ := theme.Lookup(cfg.UI.Theme); th.Name != baseTheme {
+		return nil, fmt.Errorf("the scenario's config sets theme %q (active: %q); scenarios share the process-global theme and may not change it", th.Name, baseTheme)
+	}
+	if lang := cfg.UI.Language; lang != "" && lang != baseLang {
+		return nil, fmt.Errorf("the scenario's config sets language %q (active: %q); scenarios share the process-global language and may not change it", lang, baseLang)
+	}
+	m := prepareModelWith(svc, cfg)
 	m.quiet = true
 	m.statePath = opts.StatePath
-	h := &Headless{m: m, w: w, h: hgt, theme: activeTheme().Name, lang: i18n.ActiveCode()}
+	// Prompt memory (dismissed prompts, the stacked-diff preference) lives
+	// beside StatePath too: New opened the machine-global store, which
+	// parallel scenarios would share.
+	m.promptStore, m.diffStacked = nil, false
+	if opts.StatePath != "" {
+		ps := promptstate.NewFileStore(filepath.Join(filepath.Dir(opts.StatePath), "prompts.toml"))
+		m.promptStore, m.diffStacked = ps, ps.StackedDiff()
+	}
+	h := &Headless{m: m, w: w, h: hgt, theme: baseTheme, lang: baseLang}
 	if err := h.settle([]tea.Cmd{h.m.Init()}); err != nil {
 		return nil, fmt.Errorf("start-up: %w", err)
 	}

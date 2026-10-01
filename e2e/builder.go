@@ -216,18 +216,25 @@ func buildOrigin(t *testing.T, sb *Sandbox, sc *Scenario) {
 }
 
 // sandboxRoot is a fresh temp dir, or — for a TUI scenario, whose screens
-// show the path — a fixed $TMPDIR/gg-tui/<scenario> recreated per run, so
-// the path renders identically every time.
+// show the path — tuiRoot, recreated per run, so the path renders with the
+// same width every time (normalizeRoot then hides its text).
 func sandboxRoot(t *testing.T, sc *Scenario) string {
 	t.Helper()
 	if sc.TUI == nil {
 		return t.TempDir()
 	}
-	root := filepath.Join(os.TempDir(), "gg-tui", sc.fileStem)
+	root := tuiRoot(os.Getpid(), sc.fileStem)
 	_ = os.RemoveAll(root)
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	return root
+}
+
+// tuiRoot is $TMPDIR/gg-tui-<pid, 8 digits>/<scenario>: unique per e2e
+// process, so two concurrent runs never delete each other's sandbox, and of
+// one width for every pid, so a golden's layout does not depend on it.
+func tuiRoot(pid int, stem string) string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("gg-tui-%08d", pid%100000000), stem)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -88,8 +89,16 @@ func normalizeRoot(screen, root string) string {
 	case len(ph) > n:
 		ph = ph[:n]
 	}
-	return strings.ReplaceAll(screen, root, ph)
+	screen = strings.ReplaceAll(screen, root, ph)
+	// A cell elided through the root (a middle-cut path) keeps a raw prefix
+	// with the per-process pid segment (tuiRoot): mask its digits in place.
+	return pidSegment.ReplaceAllStringFunc(screen, func(m string) string {
+		return "gg-tui-" + strings.Repeat("#", len(m)-len("gg-tui-"))
+	})
 }
+
+// pidSegment is tuiRoot's per-process directory name, whole or cut.
+var pidSegment = regexp.MustCompile(`gg-tui-[0-9]{1,8}`)
 
 // compareGolden checks a checkpoint's screen against its golden file, or
 // writes it under -update. A mismatch writes <golden>.actual beside it.

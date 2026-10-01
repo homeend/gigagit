@@ -192,3 +192,43 @@ func TestHeadlessSettlesOnADecision(t *testing.T) {
 // Branches panel is focused on main, feature is the row above it, s
 // switches (SmartSwitch) after a y/n confirm.
 var headlessSwitchKeys = []string{"up", "s", "y"}
+
+// Prompt memory (the stacked-diff preference among it) lives beside
+// StatePath, so one scenario's S never decides how the next one opens a
+// diff (final review, Important 1).
+func TestHeadlessPromptMemoryFollowsStatePath(t *testing.T) {
+	t.Parallel()
+	dir := headlessRepo(t)
+	a := newHeadless(t, dir)
+	a.m = a.m.setStackedPref(true)
+	b := newHeadless(t, dir)
+	if b.m.diffStacked {
+		t.Fatal("a second Headless with its own StatePath must not inherit the first one's stacked preference")
+	}
+}
+
+// A scenario config that names another theme or a language is refused
+// before anything applies it — the global would otherwise flip under every
+// parallel scenario (final review, Important 2). Not parallel: on failure it
+// would change the global theme.
+func TestHeadlessRefusesAConfigThatChangesGlobals(t *testing.T) {
+	base := activeTheme()
+	defer setTheme(base)
+	want := "dark"
+	if base.Name == "dark" {
+		want = "light"
+	}
+	for _, cfg := range []string{"[ui]\ntheme = \"" + want + "\"\n", "[ui]\nlanguage = \"ja\"\n"} {
+		dir := headlessRepo(t)
+		if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte(cfg), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := NewHeadless(domain.OpenTUI(dir), HeadlessOptions{Width: 80, Height: 20})
+		if err == nil {
+			t.Fatalf("config %q: NewHeadless must refuse", cfg)
+		}
+		if got := activeTheme().Name; got != base.Name {
+			t.Fatalf("config %q: the global theme changed to %q before the refusal", cfg, got)
+		}
+	}
+}
