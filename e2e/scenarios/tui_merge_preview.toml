@@ -4,7 +4,8 @@ name = "tui: a saved merge preview with a note in it and a note on a branch comm
 # "what feature brings into main" lists both files; its rows carry the notes
 # gathered along the branch — the one written inside the preview (a.txt) and
 # the one on the commit that added c.txt — as ◆ N. (A preview note is stored
-# on the source TIP, so Commits shows the tip "add c" with ◆ 2.)
+# on the source TIP: Commits marks the tip "add c" as reviewed, ✎, and counts
+# only its own c.txt note as ◆ 1.)
 [input]
 steps = [
   { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
@@ -43,8 +44,8 @@ keys = ["enter"]
 screen_contains = ["a.txt  ◆ 1", "c.txt  ◆ 1"]
 screen_excludes = ["b.txt"]
 
-# The tip "add c" counts ◆ 2: its own c.txt note and the preview's a.txt note.
-# a.txt is not a file of this commit, so its Files view lists the preview the
+# The tip "add c" holds two notes: its own c.txt note and the preview's a.txt
+# note. a.txt is not a file of this commit, so its Files view lists the preview the
 # note was written in as one Range review row — never a loose a.txt row — and
 # every counted note stays reachable from the commit.
 [[tui.step]]

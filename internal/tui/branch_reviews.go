@@ -101,12 +101,16 @@ func (m Model) showBranchReviewRow() (actionRow, bool) {
 	}, true
 }
 
-// commitReviewed reports whether commit hash has a stored AI review — the
-// Commits list's ✎. It reads the note counts the list already holds, so a
-// scroll costs no read.
+// commitReviewed reports whether commit hash holds a review — the Commits
+// list's ✎: a stored AI review, or a range review (notes written in a merge
+// preview or a commit pair, which sit on the range's newest commit). It reads
+// the note counts the list already holds, so a scroll costs no read.
 func (m Model) commitReviewed(hash string) bool {
 	if hash == "" {
 		return false
+	}
+	if len(m.noteCounts.ScopesByCommit[hash]) > 0 {
+		return true
 	}
 	for _, r := range m.noteCounts.Reviews {
 		if r.Commit == hash {

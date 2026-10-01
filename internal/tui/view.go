@@ -1531,12 +1531,14 @@ func (m Model) commitIdentRowAt(i, w int, full bool, budget int) string {
 		tok, _ = id.token(w)
 	}
 	group, _, _ := commitDecoGroup(id, budget)
+	// ◆N counts the notes written outside any range: a range review's notes
+	// are the commit's ✎ (commitReviewed), as an AI review's are.
 	// The ◆N badge is appended LAST so it never shifts the identity, deco or
 	// graph columns (commitDecorators' spans are prefix-anchored) and never
 	// reaches the filter — commitHaystackAt builds its own string. A row long
 	// enough to be truncated at the panel edge loses the badge; that is the
 	// same trade every trailing decoration on this row makes.
-	row := tok + group + " " + safeRowText(c.Subject) + noteBadge(m.noteCounts.ByCommit[c.Hash])
+	row := tok + group + " " + safeRowText(c.Subject) + noteBadge(m.noteCounts.PlainCommitNotes(c.Hash))
 	switch {
 	case m.commitListMode:
 		row = "● " + row

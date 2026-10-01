@@ -240,3 +240,47 @@ func TestReviewFileStepKeyWiring(t *testing.T) {
 		t.Fatal("keys.js: the review file step is not gated on a review's file list")
 	}
 }
+
+// A commit row earns the ✎ for an AI review and for a range review of either
+// form — a merge preview ("branch review") or a commit pair — and for nothing
+// else: plain notes are not a review.
+func TestReviewMarkTitle(t *testing.T) {
+	t.Parallel()
+	got := runReviewsPure(t, `
+const scopes = {
+  tip: [{ scope: "main...feature", label: "feature → main", n: 3 }],
+  mid: [{ scope: "aaaaaaa..bbbbbbb", label: "aaaaaaa..bbbbbbb", n: 1 }],
+  none: [],
+};
+console.log(reviewMarkTitle("tip", false, scopes));
+console.log(reviewMarkTitle("mid", false, scopes));
+console.log(reviewMarkTitle("mid", true, scopes));
+console.log(reviewMarkTitle("ai", true, scopes));
+console.log("[" + reviewMarkTitle("none", false, scopes) + "]");
+console.log("[" + reviewMarkTitle("plain", false, scopes) + "]");
+console.log("[" + reviewMarkTitle("plain", false, undefined) + "]");
+`)
+	want := strings.Join([]string{
+		"has a range review — open the commit to read it",
+		"has a range review — open the commit to read it",
+		"has an AI review and a range review — open the commit to read them",
+		"has an AI review — open the commit to read it",
+		"[]", "[]", "[]",
+	}, "\n")
+	if got != want {
+		t.Errorf("mark titles:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// The commit row draws its ✎ from reviewMarkTitle and from nothing else: a
+// second, AI-review-only test beside it would drop the range review's mark.
+func TestCommitRowMarkGoesThroughReviewMarkTitle(t *testing.T) {
+	t.Parallel()
+	src := staticSrc(t, "commits.js")
+	if !strings.Contains(src, "reviewMarkTitle(row.hash, reviewedHashes().has(row.hash), state.noteCounts && state.noteCounts.scopes_by_commit)") {
+		t.Fatal("commits.js: the row's ✎ must be decided by reviewMarkTitle over the reviews and scopes_by_commit")
+	}
+	if n := strings.Count(src, `class="rvmark"`); n != 1 {
+		t.Fatalf("commits.js: %d rvmark sites, want the one in rowHTML", n)
+	}
+}
