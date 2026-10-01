@@ -341,6 +341,25 @@ func notedPreviewTag(ps []string) string {
 	return "  " + i18n.T("(preview: %s)", strings.Join(names, ", "))
 }
 
+// notedRowText lays a Notes row out in w columns: the path, its ◆ badge,
+// then the preview tag. Short of room the TAG gives way first (cut at its
+// end, or dropped), then the path loses its middle — the file name and its
+// badge always stay.
+func notedRowText(file, badge, tag string, w int) string {
+	fw, bw, tw := lipgloss.Width(file), lipgloss.Width(badge), lipgloss.Width(tag)
+	if fw+bw+tw <= w {
+		return file + badge + tag
+	}
+	keep := fw // the path's share: whole if the tag can shrink around it
+	if fw+bw > w {
+		keep = max(lipgloss.Width(path.Base(file)), w-bw)
+	}
+	if room := w - keep - bw; room > len("  (…") {
+		return elidePath(file, keep) + badge + truncate(tag, room)
+	}
+	return elidePath(file, keep) + badge
+}
+
 // withNotedLines puts those paths in front of a commit's files under a
 // "Notes" heading (the way withReviewLines lists its reviews).
 func withNotedLines(paths []string, lines []contentLine) []contentLine {
@@ -1467,13 +1486,12 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 			// A commit's Notes row: its badge and the previews its notes were
 			// written in stay whole; the path before them loses its middle.
 			k := m.filesHash + ":" + l.notedPath
-			tail := noteBadge(m.noteCounts.ByCommitPath[k]) + notedPreviewTag(m.noteCounts.PreviewsByCommitPath[k])
+			badge, tag := noteBadge(m.noteCounts.ByCommitPath[k]), notedPreviewTag(m.noteCounts.PreviewsByCommitPath[k])
 			if p.mode == modeCutoff {
-				text = "  " + elidePath(l.notedPath, innerW-lipgloss.Width(prefix)-2-lipgloss.Width(tail))
+				text = "  " + notedRowText(l.notedPath, badge, tag, innerW-lipgloss.Width(prefix)-2)
 			} else {
-				elide = true
+				text, elide = text+badge+tag, true
 			}
-			text += tail
 		} else if l.path != "" && m.filesCommitBadges() {
 			// A commit's files: the notes anchored on the file AT this commit.
 			text += noteBadge(m.noteCounts.ByCommitPath[m.filesHash+":"+l.path])

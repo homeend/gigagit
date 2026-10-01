@@ -73,7 +73,9 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 		}
 		p.setPick(0)
 		p.summary, p.rationale = newTextField(""), newTextField("")
-		if set := m.previewNoteSet(); set != nil {
+		// A pull request's diff is a preview over forge refs (refs/gg/pr/N),
+		// not branch names: its notes record none (the web page agrees).
+		if set := m.previewNoteSet(); set != nil && (m.previewOpen == nil || m.previewOpen.prNumber == 0) {
 			p.preview = set.Pair()
 		}
 	case noteEdit, noteReply:

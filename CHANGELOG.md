@@ -62,7 +62,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   MCP and the web carry `"preview"`. Stamped by `gg note add|apply
   --preview` (and a preview link), MCP, the TUI's note form and the web
   page (the server resolves the name and stamps only when the preview's tip
-  is the note's commit). Notes written before this carry no name.
+  is the note's commit) and `gg review --preview --notes`. A pull request's
+  diff records none (its names are forge refs). The name is a label kept as
+  written: renaming the branch later does not rewrite it. Notes written
+  before this carry no name.
 - **More golden screens:** the stash window and an untracked-including
   stash's files (`tui_stash`), a paused rebase and the conflict process
   (`tui_rebase_conflict`), the commit dialog and its result

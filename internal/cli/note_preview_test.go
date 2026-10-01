@@ -242,6 +242,10 @@ func TestReviewPreviewImportsNotesOntoTheTip(t *testing.T) {
 	if !strings.Contains(prev, "kept") || !strings.Contains(prev, "active") {
 		t.Fatalf("the preview must show its own imported note as active:\n%s", prev)
 	}
+	_, js, _ := runCLI(t, dir, "note", "list", "--json", "--rev", tip, "--file", "a.txt")
+	if !strings.Contains(js, `"preview":"main...feat"`) {
+		t.Fatalf("a review's notes remember the preview they were imported in:\n%s", js)
+	}
 }
 
 func TestReviewPreviewRefusesWorking(t *testing.T) {
