@@ -83,7 +83,7 @@ var settingDocs = []settingDoc{
 	{"notes", "max_age_days", 30, "prune review notes older than this many days (the sweep at every gg start also drops notes whose anchor is gone); -1 = keep forever"},
 	{"notes", "max_entries", 2000, "cap on stored review notes, enforced on every write (oldest thread dropped first); -1 = uncapped"},
 
-	{"console", "step_out_key", "ctrl+]", "agent console: step out one level (focused → unfocused, maximised → docked); a Bubble Tea key name"},
+	{"console", "step_out_key", "ctrl+]", "agent console: step out one level (focused → unfocused, maximised → docked; on an unfocused console: close it, as esc does); a Bubble Tea key name"},
 	{"console", "sessions_key", "ctrl+\\", "agent console: open the agent-sessions popup from anywhere; a Bubble Tea key name"},
 	{"console", "shell", "", "Open terminal (Worktrees . menu): the shell to run; empty = $SHELL (else sh) on Unix, pwsh → powershell → cmd on Windows"},
 
