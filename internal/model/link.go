@@ -143,8 +143,12 @@ type Link struct {
 	Target LinkTarget
 	Side   NoteSide // NoteSideNew unless the link said "old:"
 	Line   int      // 1-based; 0 = none
-	Hunk   int      // 1-based; 0 = none
-	Hint   LinkHint // "" Kind = no hint; the UI surface a link was copied from
+	// Fingerprint is LineFingerprint of the line the link was copied from
+	// ("" = none). Only an uncommitted line link carries one: the resolver
+	// re-finds the line by it when the file has moved on.
+	Fingerprint string
+	Hunk        int      // 1-based; 0 = none
+	Hint        LinkHint // "" Kind = no hint; the UI surface a link was copied from
 }
 
 // IsLocal reports whether the link names its repository by absolute path.
@@ -258,6 +262,10 @@ func (l Link) String() string {
 			b.WriteString("old:")
 		}
 		b.WriteString(strconv.Itoa(l.Line))
+		if l.Fingerprint != "" {
+			b.WriteByte('~')
+			b.WriteString(l.Fingerprint)
+		}
 	}
 	if h := l.Hint.String(); h != "" {
 		b.WriteByte('?')
@@ -331,17 +339,18 @@ func ParseLink(s string) (Link, error) {
 	// The line rides the tail when there is a target, the head otherwise.
 	var side NoteSide
 	var line int
+	var fp string
 	var err error
 	if hasTarget {
-		tail, side, line, err = splitLinkLine(tail)
+		tail, side, line, fp, err = splitLinkLine(tail)
 	} else {
-		head, side, line, err = splitLinkLine(head)
+		head, side, line, fp, err = splitLinkLine(head)
 	}
 	if err != nil {
 		return Link{}, err
 	}
 	if line > 0 {
-		l.Side, l.Line = side, line
+		l.Side, l.Line, l.Fingerprint = side, line, fp
 	}
 	if l.Line > 0 && l.Hunk > 0 {
 		return linkErr("a link carries a line or a hunk, not both")
@@ -401,6 +410,10 @@ func ParseLink(s string) (Link, error) {
 			return linkErr("target must be \"staged\", a commit sha of 7 to 64 hex characters, \"ref:<name>\", <a>..<b> or <target>...<source>, got %q", tail)
 		}
 		l.Target = LinkTarget{State: StateCommitted, Commit: tail}
+	}
+
+	if l.Fingerprint != "" && l.Target.State == StateCommitted {
+		return linkErr("a commit already names fixed content; drop \"~%s\"", l.Fingerprint)
 	}
 
 	// A content link names the file ON DISK: no target, no diff side, no hunk.
@@ -481,30 +494,43 @@ func ParseLink(s string) (Link, error) {
 	return l, nil
 }
 
-// splitLinkLine strips a trailing ":<n>" or ":old:<n>" from t. A colon whose
+// splitLinkLine strips a trailing ":<n>" or ":old:<n>" from t, with its
+// optional "~<fp>" line fingerprint. A colon whose
 // tail is not a number is left alone — that is how a Windows drive letter
 // ("/C:/src/repo/f.go") survives.
-func splitLinkLine(t string) (rest string, side NoteSide, line int, err error) {
+func splitLinkLine(t string) (rest string, side NoteSide, line int, fp string, err error) {
 	i := strings.LastIndexByte(t, ':')
 	if i < 0 {
-		return t, NoteSideNew, 0, nil
+		return t, NoteSideNew, 0, "", nil
 	}
 	num := t[i+1:]
+	hasFP := false
+	if j := strings.IndexByte(num, '~'); j >= 0 {
+		// "<n>~<fp>" — only when what precedes the '~' is a number: a path
+		// segment like "b~c.go" after a drive colon is left alone, exactly as
+		// a non-numeric tail always was.
+		if _, nerr := strconv.Atoi(num[:j]); nerr == nil {
+			num, fp, hasFP = num[:j], num[j+1:], true
+		}
+	}
 	n, cerr := strconv.Atoi(num)
 	if cerr != nil {
 		if num == "" {
-			return "", "", 0, fmt.Errorf("%w: a line number is missing after \":\"", ErrLink)
+			return "", "", 0, "", fmt.Errorf("%w: a line number is missing after \":\"", ErrLink)
 		}
-		return t, NoteSideNew, 0, nil
+		return t, NoteSideNew, 0, "", nil
 	}
 	if n < 1 {
-		return "", "", 0, fmt.Errorf("%w: a line must be a 1-based number, got %q", ErrLink, num)
+		return "", "", 0, "", fmt.Errorf("%w: a line must be a 1-based number, got %q", ErrLink, num)
+	}
+	if hasFP && !LinkFingerprintOK(fp) {
+		return "", "", 0, "", fmt.Errorf("%w: a line fingerprint is 8 lowercase hex characters, got %q", ErrLink, fp)
 	}
 	rest, side = t[:i], NoteSideNew
 	if j := strings.LastIndexByte(rest, ':'); j >= 0 && rest[j+1:] == "old" {
 		rest, side = rest[:j], NoteSideOld
 	}
-	return rest, side, n, nil
+	return rest, side, n, fp, nil
 }
 
 // RepoNameFromURL takes the repository name out of a git remote URL: the last

@@ -20,7 +20,7 @@ import (
 // is load-bearing: '#' starts a comment in every POSIX shell, so an unquoted
 // hunk link silently loses its hunk. gg deliberately applies no heuristic —
 // it says so here instead.
-const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --ref <branch|tag> | --pair <a>..<b> | --content] [--bookmark <id> | --shelf <id>]\n" +
+const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --ref <branch|tag> | --pair <a>..<b> | --content] [--bookmark <id> | --shelf <id>] [--no-fingerprint]\n" +
 	"       gg link --version <branch> <id|latest>  (a branch version's preview link)\n" +
 	"       gg link resolve <gg://…> [--json]\n" +
 	"       gg links [--json]  (this repo's copied-link history)\n" +
@@ -49,6 +49,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	bookmark := fs.String("bookmark", "", "attach a ?bookmark=<id> landing hint")
 	shelf := fs.String("shelf", "", "attach a ?shelf=<id> landing hint")
 	content := fs.Bool("content", false, "address the file's CONTENT on disk (?view=content), not a diff")
+	noFP := fs.Bool("no-fingerprint", false, "omit the ~<fingerprint> an uncommitted line link carries")
 	version := fs.String("version", "", "a branch VERSION's preview link: --version <branch> <id|latest> (ids from `gg versions`)")
 	pf := addPreviewFlag(fs)
 	pos, err := parseSteerFlags(fs, args)
@@ -185,6 +186,11 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 				return 1
 			}
 		}
+	}
+	// An uncommitted line carries its fingerprint, so whoever opens the link
+	// later is told when the line moved or changed (domain.ResolveLink).
+	if !*noFP {
+		l.Fingerprint = svc.LinkLineFingerprint(ctx, l)
 	}
 	// Best-effort, after the link is known good: a history that cannot be
 	// written must never fail the copy the user asked for, and must never
@@ -476,7 +482,13 @@ type wireResolvedLink struct {
 	Worktree string `json:"worktree,omitempty"`
 	Side     string `json:"side,omitempty"`
 	Line     int    `json:"line,omitempty"`
-	Hunk     int    `json:"hunk,omitempty"`
+	// AskedLine / Anchor / AnchorMatches describe a fingerprinted link
+	// (…:N~<fp>): Line is where the text is NOW, AskedLine the line the link
+	// named, Anchor "same" | "moved" | "changed".
+	AskedLine     int    `json:"asked_line,omitempty"`
+	Anchor        string `json:"anchor,omitempty"`
+	AnchorMatches int    `json:"anchor_matches,omitempty"`
+	Hunk          int    `json:"hunk,omitempty"`
 	// Ref is the branch or tag NAME when the link named a tip (@ref:<name>);
 	// Commit carries the tip as it resolved HERE. PairA/PairB are the
 	// change-set's ends when it named one (@<a>..<b>), each a full sha.
@@ -537,6 +549,9 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 			w.PairA, w.PairB = p.A, p.B
 		}
 		w.HintKind, w.HintID = res.Hint.Kind, res.Hint.ID
+		if res.Anchor.State != "" {
+			w.AskedLine, w.Anchor, w.AnchorMatches = res.Anchor.Asked, res.Anchor.State, res.Anchor.Matches
+		}
 		if err := json.NewEncoder(stdout).Encode(w); err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
@@ -571,6 +586,9 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 		line += fmt.Sprintf(" hunk %d", res.Hunk)
 	case res.Line > 0:
 		line += fmt.Sprintf(" %s:%d", res.Side, res.Line)
+		if n := res.AnchorNote(); n != "" {
+			line += " (" + n + ")"
+		}
 	}
 	fmt.Fprintln(stdout, line)
 	return 0
@@ -649,6 +667,14 @@ func resolveLinkArg(ctx context.Context, svc *domain.Service, s string, allow li
 		return domain.Resolved{}, fmt.Errorf("%w: a content link names a file's content, not a diff, so %s cannot take it; hand it to `gg open`", model.ErrLink, verb)
 	}
 	return res, nil
+}
+
+// warnAnchor says, once, on stderr, that a fingerprinted link's line moved or
+// changed. The verb then acts on the RESOLVED line.
+func warnAnchor(stderr io.Writer, res domain.Resolved) {
+	if n := res.AnchorNote(); n != "" {
+		fmt.Fprintln(stderr, "gg: "+n)
+	}
 }
 
 // linkResolveOpts wires the resolver to this process (linknav.Opts): the MRU

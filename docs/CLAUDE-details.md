@@ -807,6 +807,27 @@ panics there.
 
 ### gg links (`gg://`, `internal/model/link.go` + `internal/domain/linkresolve.go`)
 
+**Line fingerprints (2026-10-01).** An UNCOMMITTED line link (working tree,
+`@staged`, `?view=content`) may end `:<n>~<fp>`: `model.LineFingerprint` =
+8 hex of FNV-1a 32 over the `TrimSpace`d line ("" for a blank line; NOT
+`NoteContextHash` — the browser builds links synchronously). It is parsed out
+of the tail after the LAST `:` only when a NUMBER precedes the `~`, so a path
+may still hold `~`; on a committed target it is refused. `domain.ResolveLink`
+re-finds it once for every consumer (`anchorLink` → `linkSideLines`: the
+working file, the index for `:old:` / `@staged`, `HEAD` for `@staged:old:`)
+and sets `Resolved.Anchor` (`same` | `moved` nearest-wins | `changed`),
+never an error, and ONLY for a fingerprinted link (no checkout is opened
+otherwise — `TestResolveLinkCwdMatchStopsBeforeTheRegistryWalk`).
+`domain.AnchorNote` is the one English sentence (stderr `gg: …`, steer reply,
+the web's op line); the TUI's `anchorNotice` is its translated twin, added in
+`navigateLanded` — the single landing funnel. `steer.Line` carries
+`asked`/`anchor`/`matches`. Producers: `Service.LinkLineFingerprint` (CLI),
+`buildLinkFor`'s `text` (TUI, from the row / `contentLine.raw`), `linkFor`'s
+6th argument (web, from `d.rows[tr.dataset.i]` — never the rendered cell;
+`lineFingerprint` spells Go's trim as a regex because `String.trim` differs on
+U+FEFF and U+0085). `gg open`'s `--at` startup lands on the resolved line
+without the on-screen note (stderr already said it).
+
 **Grammar** (`model.ParseLink` / `Link.String()`, the only place it lives):
 
 ```text

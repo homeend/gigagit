@@ -434,6 +434,7 @@ async function steerNavigateContent(s) {
     present = true;
   }
   if (!present) return navMiss(s.file + " is not in the working tree");
+  if (s.anchor_note) opLine(s.anchor_note, s.anchor_note.includes("changed"));
   await openViewer({ src: "worktree", path: s.file, line: s.line || 0 });
 }
 
@@ -547,6 +548,9 @@ async function steerNavigateLand(s) {
     if (!(await openNamedFile(state.statusEntries, s, "the working-tree diff"))) return;
   }
   if (!s.line) return;
+  // A fingerprinted link whose line moved or changed says so (the server's
+  // domain.AnchorNote); s.line is already where the text is now.
+  if (s.anchor_note) opLine(s.anchor_note, s.anchor_note.includes("changed"));
   const side = s.side; // the server fills it whenever a line is present
   // A side-by-side `change` row anchors on its NEW side, so an old-side
   // landing falls back to the row carrying that left number; a line the

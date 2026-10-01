@@ -116,7 +116,7 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 			return c, nil // reveal the Previews entry
 		}
 		c.File = res.Addr.Path
-		line := steer.Line{Side: string(res.Side), No: res.Line}
+		line := lineOf(res)
 		if res.Hunk > 0 {
 			// PreviewHunkAnchor, never HunkLine: the numbering is the PREVIEW's
 			// patch (merge-base → tip), and a delete-only hunk has no new side
@@ -155,7 +155,7 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 		// ref target is always StateCommitted (ParseLink sets it, finishLink's
 		// ref arm never touches Addr.State), so that expression was
 		// always-false and read as though staging were reachable here.
-		line := steer.Line{Side: string(res.Side), No: res.Line}
+		line := lineOf(res)
 		if res.Hunk > 0 {
 			l, err := HunkLine(ctx, svc, false, res.Commit, res.Addr.Path, res.Hunk)
 			if err != nil {
@@ -188,7 +188,7 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 		// already takes. The preview arm above needs PreviewHunkAnchor for the
 		// same reason: its numbering is merge-base → tip, not the tip's own
 		// change.
-		line := steer.Line{Side: string(res.Side), No: res.Line}
+		line := lineOf(res)
 		if res.Hunk > 0 {
 			l, err := HunkLine(ctx, svc, false, p.A+".."+p.B, res.Addr.Path, res.Hunk)
 			if err != nil {
@@ -216,7 +216,7 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 		return c, nil
 	}
 	c.File, c.Target = res.Addr.Path, TargetOf(res.Addr)
-	line := steer.Line{Side: string(res.Side), No: res.Line}
+	line := lineOf(res)
 	if res.Hunk > 0 {
 		// No StateUntracked guard here: the grammar has no untracked target, so
 		// ParseLink (the only source of a Resolved) never produces one — an
@@ -237,6 +237,14 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 		c.Line = &line
 	}
 	return c, nil
+}
+
+// lineOf is the landing line of a resolution, anchor included: a
+// fingerprinted link's line is where its text is NOW, and the consumer says
+// so from Asked/Anchor.
+func lineOf(res domain.Resolved) steer.Line {
+	return steer.Line{Side: string(res.Side), No: res.Line,
+		Asked: res.Anchor.Asked, Anchor: res.Anchor.State, Matches: res.Anchor.Matches}
 }
 
 // AtLink is the link handed to a TUI launcher (`gg open`, or the paste

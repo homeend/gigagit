@@ -46,7 +46,7 @@ func (m Model) linkRepoFor(worktree string) (model.LinkRepo, bool) {
 // TUI hunk-picker producer without a signature change, matching the CLI/web
 // producers' shape (spec §7).
 func (m Model) linkFor(addr model.FileAddress, side model.NoteSide, line, hunk int) (string, bool) {
-	return m.buildLinkFor(addr, side, line, hunk, model.LinkHint{})
+	return m.buildLinkFor(addr, side, line, hunk, model.LinkHint{}, "")
 }
 
 // hintedLinkFor is linkFor plus a landing hint: the link a bookmark or shelf
@@ -60,11 +60,19 @@ func (m Model) hintedLinkFor(addr model.FileAddress, hint model.LinkHint) (strin
 	if !model.LinkHintKindOK(hint.Kind) || !model.LinkHintIDOK(hint.ID) {
 		return "", false
 	}
-	return m.buildLinkFor(addr, model.NoteSideNew, 0, 0, hint)
+	return m.buildLinkFor(addr, model.NoteSideNew, 0, 0, hint, "")
 }
 
-// buildLinkFor is the one builder behind linkFor and hintedLinkFor.
-func (m Model) buildLinkFor(addr model.FileAddress, side model.NoteSide, line, hunk int, hint model.LinkHint) (string, bool) {
+// lineLinkFor is linkFor for a LINE whose text is known: the text becomes the
+// link's fingerprint when the address is uncommitted.
+func (m Model) lineLinkFor(addr model.FileAddress, side model.NoteSide, line int, text string) (string, bool) {
+	return m.buildLinkFor(addr, side, line, 0, model.LinkHint{}, text)
+}
+
+// buildLinkFor is the one builder behind linkFor, lineLinkFor and
+// hintedLinkFor. text is the RAW text of the line the link names ("" = not
+// known): an uncommitted line link carries its fingerprint.
+func (m Model) buildLinkFor(addr model.FileAddress, side model.NoteSide, line, hunk int, hint model.LinkHint, text string) (string, bool) {
 	if addr.Path != "" && !model.LinkPathOK(addr.Path) {
 		return "", false
 	}
@@ -98,6 +106,11 @@ func (m Model) buildLinkFor(addr model.FileAddress, side model.NoteSide, line, h
 	}
 	if l.Path == "" && (line > 0 || hunk > 0) {
 		return "", false
+	}
+	// An uncommitted line carries its fingerprint, so the link can be re-found
+	// (or reported changed) once the file moves on. A commit is fixed already.
+	if line > 0 && l.Target.State != model.StateCommitted {
+		l.Fingerprint = model.LineFingerprint(text)
 	}
 	return l.String(), true
 }
@@ -220,9 +233,9 @@ func (m Model) contextLinkText() (string, bool) {
 		return "", false
 	}
 	if _, ok := m.topLayer().(*diffView); ok {
-		side, line, has := m.linkAnchorAtCursor()
+		side, line, text, has := m.linkAnchorAtCursor()
 		if !has {
-			side, line = model.NoteSideNew, 0
+			side, line, text = model.NoteSideNew, 0, ""
 		}
 		if addr, ok := m.diffNoteAddress(); ok {
 			// A scope's diff rows are note-addressable at the tip, but the
@@ -233,9 +246,9 @@ func (m Model) contextLinkText() (string, bool) {
 			if set := m.previewNoteSet(); set != nil {
 				return m.scopeLinkFor(set, addr.Path, side, line)
 			}
-			return m.linkFor(addr, side, line, 0)
+			return m.lineLinkFor(addr, side, line, text)
 		}
-		return m.compareLinkText(side, line)
+		return m.compareLinkText(side, line, text)
 	}
 	// A preview's file list: the row is a file IN THE PREVIEW, not a file of
 	// the tip commit — checked before focusedBookmark, which answers with the
@@ -297,30 +310,31 @@ func (m Model) contextLinkText() (string, bool) {
 
 // linkAnchorAtCursor is the side and line a link to the cursor row carries:
 // the cursor side's line, or the other side's when the cursor side is a gap —
-// noteAnchorsAtCursor's order. It differs from the note anchor in one place: a
+// noteAnchorsAtCursor's order — with that line's raw text, which an
+// uncommitted link fingerprints. It differs from the note anchor in one place: a
 // COMMIT PAIR's old side is commit a, which a link can name (`:old:<line>`)
 // although no note can hang off it. A merge preview's old side is the merge
 // base, which nothing names.
-func (m Model) linkAnchorAtCursor() (model.NoteSide, int, bool) {
+func (m Model) linkAnchorAtCursor() (model.NoteSide, int, string, bool) {
 	v := m.diffLayer()
 	if v == nil {
-		return "", 0, false
+		return "", 0, "", false
 	}
 	r, ok := v.cursorRow()
 	if !ok {
-		return "", 0, false
+		return "", 0, "", false
 	}
 	set := m.previewNoteSet()
 	oldOK := r.LeftNo > 0 && (set == nil || set.IsPair())
 	switch {
 	case v.onOld && oldOK:
-		return model.NoteSideOld, r.LeftNo, true
+		return model.NoteSideOld, r.LeftNo, r.Left, true
 	case r.RightNo > 0:
-		return model.NoteSideNew, r.RightNo, true
+		return model.NoteSideNew, r.RightNo, r.Right, true
 	case oldOK:
-		return model.NoteSideOld, r.LeftNo, true
+		return model.NoteSideOld, r.LeftNo, r.Left, true
 	}
-	return "", 0, false
+	return "", 0, "", false
 }
 
 // compareLinkText is the link for the cursor line of a two-sided compare, read
@@ -329,7 +343,7 @@ func (m Model) linkAnchorAtCursor() (model.NoteSide, int, bool) {
 // line is addressed as the VERSION it sits in: the working tree, the index, or
 // a commit (that commit's own text, hence the new side of its link). A side no
 // link names — a shelf entry, a link member with its own source — refuses.
-func (m Model) compareLinkText(side model.NoteSide, line int) (string, bool) {
+func (m Model) compareLinkText(side model.NoteSide, line int, text string) (string, bool) {
 	v := m.diffLayer().curNoteView()
 	if v == nil || v.cmp == nil {
 		return "", false
@@ -356,7 +370,7 @@ func (m Model) compareLinkText(side model.NoteSide, line int) (string, bool) {
 	default:
 		return "", false
 	}
-	return m.linkFor(addr, model.NoteSideNew, line, 0)
+	return m.lineLinkFor(addr, model.NoteSideNew, line, text)
 }
 
 // contextLinkRow is the `.` menu's "Copy link". It is a separate row rather

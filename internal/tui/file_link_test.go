@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func rowIndex(rows []actionRow, id string) (int, bool) {
@@ -121,8 +123,9 @@ func TestCopyFileLinkFromThePreviewCarriesTheCursorLine(t *testing.T) {
 	}
 	m = linkPreviewModel(t, string(disk), 2)
 	_, copied := runFileLinkRow(t, m, false)
-	if !strings.HasSuffix(copied, "/a.txt:3?view=content") {
-		t.Fatalf("copied %q, want …/a.txt:3?view=content", copied)
+	want := "/a.txt:3~" + model.LineFingerprint(strings.Split(string(disk), "\n")[2]) + "?view=content"
+	if !strings.HasSuffix(copied, want) {
+		t.Fatalf("copied %q, want …%s", copied, want)
 	}
 }
 

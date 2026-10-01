@@ -30,9 +30,12 @@ type Resolved struct {
 	Checkout string            // absolute top level of the chosen checkout
 	Addr     model.FileAddress // Worktree = Checkout for the working-tree states
 	Line     int
-	Side     model.NoteSide
-	Hunk     int
-	Commit   string // the FULL sha when the link named a commit
+	// Anchor says what became of a FINGERPRINTED link's line (model.Link's
+	// ~<fp>): Line is then where the text is NOW. Zero for every other link.
+	Anchor LineAnchor
+	Side   model.NoteSide
+	Hunk   int
+	Commit string // the FULL sha when the link named a commit
 	// Preview is the resolved merge-preview scope when the link named a pair
 	// (gg://<repo>@<target>...<source>). Addr and Commit then point at the
 	// preview's SOURCE TIP — the write target for a preview note (spec §1.1) —
@@ -626,6 +629,11 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 		res.Commit, res.Addr.Commit = full, full
 	default:
 		res.Addr.Worktree = c.checkout
+	}
+	// Only a fingerprinted link reads anything: every other link must not
+	// even open the checkout here.
+	if l.Fingerprint != "" {
+		anchorLink(ctx, opts.OpenFn(c.checkout), l, &res)
 	}
 	return res, nil
 }

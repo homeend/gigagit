@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+
+	"github.com/homeend/gigagit/internal/model"
 	"strings"
 	"testing"
 )
@@ -390,5 +392,29 @@ func TestCompareLinksIsTotalOverTheReversedPair(t *testing.T) {
 	ff, bf := fwd[0].(map[string]any), bck[0].(map[string]any)
 	if ff["path"] != bf["path"] {
 		t.Fatalf("paths differ: %v vs %v", ff["path"], bf["path"])
+	}
+}
+
+// A fingerprinted link is re-anchored: line is where the text is NOW, and the
+// link's own line and what became of it are reported beside it.
+func TestLinkResolveReportsAFingerprintedLinesAnchor(t *testing.T) {
+	e := newTestEnv(t)
+	if err := os.WriteFile(filepath.Join(e.dir, "a.txt"), []byte("first\nsecond\nthird\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := e.call(t, "gg_link_resolve", map[string]any{"link": linkTo(e, "/a.txt:1~"+model.LineFingerprint("third"))})
+	if out["line"].(float64) != 3 || out["asked_line"].(float64) != 1 || out["anchor"] != "moved" || out["anchor_matches"].(float64) != 1 {
+		t.Errorf("moved: %v", out)
+	}
+	out = e.call(t, "gg_link_resolve", map[string]any{"link": linkTo(e, "/a.txt:2~00000000")})
+	if out["line"].(float64) != 2 || out["anchor"] != "changed" {
+		t.Errorf("changed: %v", out)
+	}
+	out = e.call(t, "gg_link_resolve", map[string]any{"link": linkTo(e, "/a.txt:2")})
+	if _, ok := out["anchor"]; ok {
+		t.Errorf("a plain link reports an anchor: %v", out)
+	}
+	if _, ok := out["asked_line"]; ok {
+		t.Errorf("a plain link reports asked_line: %v", out)
 	}
 }

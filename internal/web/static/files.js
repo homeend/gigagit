@@ -1329,6 +1329,18 @@ function rowLinkCtx(f) {
 }
 
 
+// rowRawText is the RAW text of a diff row's side, read from the diff's own
+// rows (tr[data-i] indexes d.rows) — the DOM cell holds RENDERED text, and an
+// uncommitted line's link fingerprints what the file really says. "" when the
+// row cannot be found (the link is then the plain form).
+function rowRawText(tr, side) {
+  const sec = state.stack ? tr.closest(".stk-file") : null;
+  const d = sec ? (state.stack.slots[Number(sec.dataset.k)] || {}).diff : state.lastDiff;
+  const r = d && d.rows ? d.rows[Number(tr.dataset.i)] : null;
+  return r ? (side === "old" ? r.left : r.right) || "" : "";
+}
+
+
 // diffLinkCtx is the context "copy gg link to this line" builds from for a
 // diff row: the row's own slot in a stack, else the single-file view's — its
 // note context when it has one, the link-only one otherwise.
@@ -2985,7 +2997,7 @@ $("diff-body").addEventListener("contextmenu", (e) => {
         const rn = Number(row.dataset.rno || 0);
         if (rn) { side = "new"; no = rn; }
       }
-      const link = linkFor(state.repo, state.worktree, rowCtx, side, no);
+      const link = linkFor(state.repo, state.worktree, rowCtx, side, no, rowRawText(row, side));
       // Recorded like every other copy (Task 9): copyLink, never copyText.
       // The Desc names the FILE — a line link's row in `gg links` has to be
       // recognisable, and the line number is already in the link text.

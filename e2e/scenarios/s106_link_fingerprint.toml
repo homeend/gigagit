@@ -1,0 +1,46 @@
+name = "link fingerprint: an uncommitted line link follows its text and says when it changed"
+
+[input]
+steps = [
+  { write = "f.txt", content = "alpha\nbeta\ngamma\n" },
+  { commit = "c1" },
+  { write = "f.txt", content = "alpha\nbeta\ngamma\nmore\n" },
+]
+
+[[run]]
+cmd             = ["link", "f.txt:2"]
+exit            = 0
+stdout_contains = ["/f.txt:2~af81e4c7"]
+
+[[run]]
+cmd             = ["link", "--no-fingerprint", "f.txt:2"]
+exit            = 0
+stdout_excludes = ["~"]
+
+[[run]]
+cmd             = ["link", "resolve", "gg://{{cwd}}/f.txt:2~af81e4c7"]
+exit            = 0
+stdout_contains = ["new:2"]
+stdout_excludes = ["moved", "changed"]
+
+# the text is on line 2, the link says line 1: it follows the text
+[[run]]
+cmd             = ["link", "resolve", "gg://{{cwd}}/f.txt:1~af81e4c7"]
+exit            = 0
+stdout_contains = ["new:2 (line 1 moved to 2)"]
+
+[[run]]
+cmd             = ["diff", "gg://{{cwd}}/f.txt:1~af81e4c7"]
+exit            = 0
+stderr_contains = ["gg: line 1 moved to 2"]
+
+# no line has that text
+[[run]]
+cmd             = ["diff", "gg://{{cwd}}/f.txt:2~00000000"]
+exit            = 0
+stderr_contains = ["gg: line 2 has changed since this link was copied"]
+
+# a commit link takes no fingerprint
+[[run]]
+cmd  = ["link", "resolve", "gg://{{cwd}}/f.txt@0123456789abcdef0123456789abcdef01234567:2~af81e4c7"]
+exit = 2

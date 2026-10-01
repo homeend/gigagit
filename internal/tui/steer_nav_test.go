@@ -1004,3 +1004,45 @@ func TestSteerNavigateRefWithAFileOpensByHash(t *testing.T) {
 		t.Error("c.txt's diff must be open: the command named a file")
 	}
 }
+
+// A fingerprinted link whose line moved or changed says so where the reader
+// is looking (the diff's notice box, translated) and in the steer reply
+// (English, for the agent).
+func TestSteerNavigateSaysALineMovedOrChanged(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		id, anchor, want string
+		matches          int
+	}{
+		{"n-fp1", "moved", "line 12 moved to 18", 1},
+		{"n-fp2", "moved", "line 12 moved to 18 (nearest of 3 matching lines)", 3},
+		{"n-fp3", "changed", "line 12 has changed since this link was copied", 0},
+		{"n-fp4", "same", "", 1},
+	} {
+		m := loadedNavModel(t)
+		dir := m.steerDir
+		m, cmd := m.applySteer(steer.Command{
+			ID: c.id, Cmd: "navigate", File: "a.txt",
+			Target: &steer.Target{State: "unstaged"},
+			Line:   &steer.Line{Side: "new", No: 18, Asked: 12, Anchor: c.anchor, Matches: c.matches},
+			Wait:   true,
+		})
+		m = pumpDiff(t, m, cmd)
+		r, ok := steer.AwaitReply(dir, c.id, 2*time.Second)
+		if !ok || !r.OK {
+			t.Fatalf("%s: reply = %+v ok=%v", c.id, r, ok)
+		}
+		if c.want == "" {
+			if strings.Contains(m.diffNotice, "line 12") || strings.Contains(r.Detail, "line 12") {
+				t.Errorf("%s: notice %q / detail %q, want nothing said", c.id, m.diffNotice, r.Detail)
+			}
+			continue
+		}
+		if !strings.Contains(m.diffNotice, c.want) {
+			t.Errorf("%s: diffNotice = %q, want %q in it", c.id, m.diffNotice, c.want)
+		}
+		if !strings.Contains(r.Detail, c.want) {
+			t.Errorf("%s: reply detail = %q, want %q in it", c.id, r.Detail, c.want)
+		}
+	}
+}
