@@ -1,0 +1,31 @@
+name = "tui: L in a compare of two commits copies the pair link to the cursor line, stacked too"
+
+# Three commits over two files. The first and the last are marked and compared:
+# an ad-hoc compare carries no notes, yet L names the cursor line — the pair
+# a..b, and :old:<line> on a line only the older commit has.
+[input]
+steps = [
+  { write = "a.txt", content = "one\ntwo\nthree\nfour\n" }, { write = "b.txt", content = "b\n" },
+  { commit = "first" },
+  { write = "a.txt", content = "one\nthree\nfour\n" }, { commit = "second" },
+  { write = "b.txt", content = "b changed\n" }, { commit = "third" },
+]
+
+[tui]
+size = "200x40"
+
+[[tui.step]]
+name = "compare-files"
+keys = ["right", "m", "down", "down", "m", ".", "Compare the 2", "enter"]
+screen_contains = ["a.txt", "b.txt"]
+
+[[tui.step]]
+name = "deleted-line-link"
+keys = ["enter", "L"]
+screen_contains = ["Copied link: gg://", ":old:2"]
+
+[[tui.step]]
+name = "stacked-second-file-link"
+keys = ["S", "N", "j", "j", "j", "L"]
+screen_contains = ["Copied link: gg://", "b.txt@", "3f47:1│"]
+screen_excludes = [":old:"]

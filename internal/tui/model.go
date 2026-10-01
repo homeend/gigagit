@@ -4005,6 +4005,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.statusMsg = msg.ok
 		}
+		// The full-screen diff draws no status bar: its own notice box says
+		// it. Cut in the MIDDLE — a copied link ends in the line it names.
+		if v := m.diffLayer(); v != nil && m.topLayer() == layer(v) {
+			w, _ := m.overlayDims()
+			m.diffNotice = elideMiddle("▸ "+m.statusMsg, max(w-6, 1))
+		}
 		return m, nil
 	case contentSavedMsg:
 		if msg.err != nil {

@@ -144,6 +144,12 @@ type diffView struct {
 	// that is the expected state, not an edge case. noteAddr still names the
 	// TIP, so every other note surface works unchanged.
 	previewSet *domain.PreviewNoteSet
+	// cmp is set by the two-sided compare loader: the two endpoints it read
+	// and the file's path on each side. It is what `L` builds a link from on a
+	// compare that carries no note address (compareLinkText); notes stay inert.
+	// Like noteAddr it is the LOADER's stamp, never Model state at key time —
+	// a link compare's row may read its own sources (compareSides).
+	cmp *compareStamp
 	// reviewID is set when this diff was opened from the review view: its
 	// notes are that review's (domain.ReviewNotesFor, read-only), never the
 	// store's (stampReviewNotes).
@@ -898,6 +904,13 @@ func compareDiffKey(left, right model.Endpoint, path string) string {
 	return left.CacheTag() + ".." + right.CacheTag() + ":" + path
 }
 
+// compareStamp names the two sides of a compare diff: the endpoints and the
+// file's path on each (oldPath is "" unless the file was renamed).
+type compareStamp struct {
+	left, right   model.Endpoint
+	path, oldPath string
+}
+
 // inheritIdentity carries the OPENER's identity onto a freshly built view.
 // The loaders construct their view with no Model to ask, and diffMsg replaces
 // the whole value (`*dv = *msg.view`), so anything the opener stamped — the
@@ -928,6 +941,7 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + line.path
 	v := &diffView{title: line.path, partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, width: width}
 	v.inheritIdentity(m.diffLayer())
+	v.cmp = &compareStamp{left: left, right: right, path: line.path, oldPath: line.oldPath}
 	key := compareDiffKey(left, right, line.path)
 
 	oldP := line.path

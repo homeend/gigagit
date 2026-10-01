@@ -185,15 +185,12 @@ func (m Model) refLinkFor(name string) (string, bool) {
 //  1. history/blame on top → that surface's file link (full sha; no line —
 //     neither surface exposes a cursor line that maps onto a diff row).
 //  2. else the diff view itself on top → the cursor LINE (the point of the
-//     feature); a diff with no note address (a two-sided compare, or any
-//     other view the loader never stamped) refuses outright rather than
-//     falling through to a lower-precedence surface underneath it. That
-//     refusal is a PRODUCER gap, not a grammar one: the grammar now has
-//     `@<a>..<b>` for exactly a two-revision pair (model.LinkPair), so a
-//     compare view IS addressable — emitting one from here is deferred UI
-//     scope. What must not happen meanwhile is falling back to the newer
-//     side's own commit link, which describes parent→b, not a→b. The web
-//     twin (internal/web/static/links.js, linkFor) carries the same note.
+//     feature). A two-sided compare has no note address, and is addressed by
+//     its loader's stamp instead (compareLinkText): two commits are the pair
+//     `@<a>..<b>`, never the newer side's own commit link, which describes
+//     parent→b, not a→b. A view no loader stamped refuses outright rather
+//     than falling through to a lower-precedence surface underneath it. The
+//     web twin is internal/web/static/links.js, linkFor.
 //     2a. a preview's diff → the PREVIEW form with the cursor line: the diff's
 //     note address is a commit on the tip, but the place the user is looking
 //     at is the preview, and that is the address that travels.
@@ -221,21 +218,22 @@ func (m Model) contextLinkText() (string, bool) {
 		return "", false
 	}
 	if _, ok := m.topLayer().(*diffView); ok {
+		side, line, has := m.linkAnchorAtCursor()
+		if !has {
+			side, line = model.NoteSideNew, 0
+		}
 		if addr, ok := m.diffNoteAddress(); ok {
-			side, line, _, has := m.noteAnchorAtCursor()
-			if !has {
-				side, line = model.NoteSideNew, 0
-			}
-			// A preview diff's rows are note-addressable at the tip, but the
-			// PLACE is the preview. noteAnchorAtCursor already refuses the old
-			// side inside a preview, so `has == false` on a deletion row is
-			// exactly the "line 0, new side" the spec asks for.
+			// A scope's diff rows are note-addressable at the tip, but the
+			// PLACE is the preview or the pair. linkAnchorAtCursor already
+			// refuses the old side inside a merge preview, so `has == false`
+			// on a deletion row there is exactly the "line 0, new side" the
+			// spec asks for; a commit pair's old side is commit a and travels.
 			if set := m.previewNoteSet(); set != nil {
-				return m.scopeLinkFor(set, addr.Path, line)
+				return m.scopeLinkFor(set, addr.Path, side, line)
 			}
 			return m.linkFor(addr, side, line, 0)
 		}
-		return "", false
+		return m.compareLinkText(side, line)
 	}
 	// A preview's file list: the row is a file IN THE PREVIEW, not a file of
 	// the tip commit — checked before focusedBookmark, which answers with the
@@ -245,9 +243,9 @@ func (m Model) contextLinkText() (string, bool) {
 	// the branches below: every row here belongs to the open preview.
 	if set := m.filesPreviewSet; set != nil && m.filesView != nil {
 		if b, ok := m.focusedBookmark(); ok {
-			return m.scopeLinkFor(set, b.Path, 0)
+			return m.scopeLinkFor(set, b.Path, model.NoteSideNew, 0)
 		}
-		return m.scopeLinkFor(set, "", 0)
+		return m.scopeLinkFor(set, "", model.NoteSideNew, 0)
 	}
 	if b, ok := m.focusedBookmark(); ok {
 		return m.linkFor(b.Address(), model.NoteSideNew, 0, 0)
@@ -282,6 +280,70 @@ func (m Model) contextLinkText() (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// linkAnchorAtCursor is the side and line a link to the cursor row carries:
+// the cursor side's line, or the other side's when the cursor side is a gap —
+// noteAnchorsAtCursor's order. It differs from the note anchor in one place: a
+// COMMIT PAIR's old side is commit a, which a link can name (`:old:<line>`)
+// although no note can hang off it. A merge preview's old side is the merge
+// base, which nothing names.
+func (m Model) linkAnchorAtCursor() (model.NoteSide, int, bool) {
+	v := m.diffLayer()
+	if v == nil {
+		return "", 0, false
+	}
+	r, ok := v.cursorRow()
+	if !ok {
+		return "", 0, false
+	}
+	set := m.previewNoteSet()
+	oldOK := r.LeftNo > 0 && (set == nil || set.IsPair())
+	switch {
+	case v.onOld && oldOK:
+		return model.NoteSideOld, r.LeftNo, true
+	case r.RightNo > 0:
+		return model.NoteSideNew, r.RightNo, true
+	case oldOK:
+		return model.NoteSideOld, r.LeftNo, true
+	}
+	return "", 0, false
+}
+
+// compareLinkText is the link for the cursor line of a two-sided compare, read
+// off the loader's stamp (diffView.cmp). Two commits are the pair `@<a>..<b>`
+// with the line on either side. Any other compare has no pair form, so the
+// line is addressed as the VERSION it sits in: the working tree, the index, or
+// a commit (that commit's own text, hence the new side of its link). A side no
+// link names — a shelf entry, a link member with its own source — refuses.
+func (m Model) compareLinkText(side model.NoteSide, line int) (string, bool) {
+	v := m.diffLayer().curNoteView()
+	if v == nil || v.cmp == nil {
+		return "", false
+	}
+	c := v.cmp
+	if c.left.Kind() == model.EndpointCommit && c.right.Kind() == model.EndpointCommit {
+		return m.pairFileLinkFor(c.left.Hash(), c.right.Hash(), c.path, side, line)
+	}
+	ep, path := c.right, c.path
+	if side == model.NoteSideOld {
+		ep = c.left
+		if c.oldPath != "" {
+			path = c.oldPath
+		}
+	}
+	addr := model.FileAddress{Worktree: m.currentWorktree, Path: path}
+	switch ep.Kind() {
+	case model.EndpointWorkTree:
+		addr.State = model.StateUnstaged
+	case model.EndpointIndex:
+		addr.State = model.StateStaged
+	case model.EndpointCommit:
+		addr.State, addr.Commit = model.StateCommitted, ep.Hash()
+	default:
+		return "", false
+	}
+	return m.linkFor(addr, model.NoteSideNew, line, 0)
 }
 
 // contextLinkRow is the `.` menu's "Copy link". It is a separate row rather

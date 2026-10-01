@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -67,6 +68,9 @@ func NewHeadless(svc *domain.Service, opts HeadlessOptions) (*Headless, error) {
 	}
 	m := prepareModelWith(svc, cfg)
 	m.quiet = true
+	// A headless run never touches the machine's clipboard: a copy succeeds
+	// and goes nowhere, so its confirmation is the same on every machine.
+	m.clipWrite = func(io.Writer, string) (string, error) { return "", nil }
 	m.statePath = opts.StatePath
 	// Prompt memory (dismissed prompts, the stacked-diff preference) lives
 	// beside StatePath too: New opened the machine-global store, which

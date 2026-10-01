@@ -131,6 +131,8 @@ gg://<repo>/<path>@<sha>:old:<n>           the old side of that diff
 gg://<repo>@<sha>                          a commit, no file
 gg://<repo>@ref:<branch|tag>               a branch or tag TIP: the whole tree there
 gg://<repo>@<a>..<b>                       a CHANGE-SET: only what differs between a and b
+gg://<repo>/<path>@<a>..<b>[:<line>]       a file (or line of b's text) in that change-set
+gg://<repo>/<path>@<a>..<b>:old:<n>        a line of a's text there — e.g. one the change-set removed
 gg://<repo>@<target>...<source>            a merge preview: the Previews tab entry
 gg://<repo>/<path>@<target>...<source>[:<line>]   a file (or new-side line) in that preview
 gg://<repo>/<path>@<target>...<source>#<hunk>     a hunk of that preview's patch
