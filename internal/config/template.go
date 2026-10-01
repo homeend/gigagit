@@ -91,6 +91,8 @@ var settingDocs = []settingDoc{
 	{"agents", "reserved", nil, "worktrees never handed to an orchestrating agent (gg worktree list --free / claim): a list of paths relative to the main worktree, or absolute; REPO file only (a global value is ignored); edit with gg worktree reserve|unreserve or the TUI Worktrees . menu"},
 	{"agents", "stale_after", "14d", "how long a dirty worktree must sit untouched before an agent may recycle it (its changes are shelved): <n>d|w|m|y"},
 	{"agents", "allow_main", false, "let agents take the main checkout"},
+	{"agents", "spawn", nil, "session command names (Settings → External tools, category session) an agent running inside gg may start as a worker through the agent_start MCP tool / gg agent start; empty = spawning off; each command must also have been approved once by starting it from the TUI and must contain <prompt>; GLOBAL file only (a repo value is ignored)"},
+	{"agents", "max_spawned", 4, "live agent-spawned sessions per TUI (agents you start yourself are not counted); clamped to 1..16; GLOBAL file only"},
 	{"web", "serve", nil, "serve the gg web page from the TUI process at startup, so the browser and the terminal share agent sessions (default: false — start it on demand with the command palette's Open in browser)"},
 	{"web", "addr", nil, "listen address for the TUI-hosted web page, loopback only (default: 127.0.0.1:0 = a random port each run; set e.g. \"127.0.0.1:7777\" for a stable bookmark; `gg --web-addr` overrides it for one run)"},
 
