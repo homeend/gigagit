@@ -1079,12 +1079,14 @@ func (m Model) worktreePathOf(branch string) (string, bool) {
 // the session sub-rows of its checkout (branchEntries).
 func (m Model) branchRows() []string { return m.branchRowsFor(m.branchEntries()) }
 
-// branchRowsFor renders one row per entry: a branch, or an agent session
-// sub-row under it, indented to the gutter so └ sits under the name.
+// branchRowsFor renders one row per entry: a branch, or a sub-row under it
+// (an agent session, a review). Every sub-row is set in two columns past the
+// gutter, so └ sits under the name and the sub-rows read as siblings — a
+// review is the branch's, never the session's above it.
 func (m Model) branchRowsFor(ents []brEntry) []string {
 	rows, gutterW := m.branchOnlyRows()
 	out := make([]string, 0, len(ents))
-	indent := strings.Repeat(" ", gutterW)
+	indent := strings.Repeat(" ", gutterW+2)
 	for _, e := range ents {
 		if e.review != "" {
 			if h, ok := m.reviewHead(e.review); ok {
