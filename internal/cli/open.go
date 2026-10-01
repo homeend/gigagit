@@ -68,6 +68,7 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return linkExit("open", err, stderr)
 	}
+	warnAnchor(stderr, res)
 	if *background && res.Hint.Kind != model.ContentHintKind {
 		fmt.Fprintln(stderr, "open: "+backgroundNeedsContent)
 		return 2

@@ -583,6 +583,7 @@ func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, st
 		if err != nil {
 			return linkExit("session navigate", err, stderr)
 		}
+		warnAnchor(stderr, res)
 		if *background && res.Hint.Kind != model.ContentHintKind {
 			fmt.Fprintln(stderr, "session navigate: "+backgroundNeedsContent)
 			return 2
@@ -873,6 +874,7 @@ func sessionHighlightAdd(dir sessDir, svc *domain.Service, args []string, stdout
 		if err != nil {
 			return linkExit("session highlight add", err, stderr)
 		}
+		warnAnchor(stderr, res)
 		if res.Pair != nil && res.Side == model.NoteSideOld {
 			// The band is keyed on commit b; a pair's old side is commit a's
 			// text, which that key does not name.

@@ -74,32 +74,56 @@ func (r Resolved) AnchorNote() string {
 	return AnchorNote(r.Anchor.Asked, r.Line, r.Anchor.State, r.Anchor.Matches)
 }
 
-// anchorLink re-finds a fingerprinted link's line in the text its side names:
-// the working file (new side, or a content link), the index (the unstaged
-// diff's old side, the staged diff's new side) or HEAD (the staged diff's old
-// side). Text that cannot be read — a deleted or binary file — is "changed".
+// linkSideLines reads the text an uncommitted line link's side names, split
+// into lines: the working file (new side, or a content link), the index (the
+// unstaged diff's old side, the staged diff's new side) or HEAD (the staged
+// diff's old side). false when it cannot be read — a deleted or binary file.
+func linkSideLines(ctx context.Context, svc *Service, l model.Link, path string) ([]string, bool) {
+	ref := model.FileRef{Source: model.SourceUnstaged, Path: path}
+	staged, old := l.Target.State == model.StateStaged, l.Side == model.NoteSideOld
+	switch {
+	case staged && old:
+		ref = model.FileRef{Source: model.SourceCommit, Locator: "HEAD", Path: path}
+	case staged || old:
+		ref.Source = model.SourceStaged
+	}
+	data, err := svc.ResolveBytes(ctx, ref)
+	if err != nil || strings.IndexByte(string(data), 0) >= 0 {
+		return nil, false
+	}
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	text = strings.TrimRight(strings.ReplaceAll(text, "\r", "\n"), "\n")
+	if text == "" {
+		return nil, true
+	}
+	return strings.Split(text, "\n"), true
+}
+
+// LinkLineFingerprint is the fingerprint a PRODUCER puts on an uncommitted
+// line link: that of the line l names, read from the side l names. "" for a
+// link with no line, a committed target, an unreadable file, a line past the
+// end or a blank line — the plain form is then the link.
+func (s *Service) LinkLineFingerprint(ctx context.Context, l model.Link) string {
+	if l.Line <= 0 || l.Path == "" || l.Target.State == model.StateCommitted {
+		return ""
+	}
+	lines, ok := linkSideLines(ctx, s, l, l.Path)
+	if !ok || l.Line > len(lines) {
+		return ""
+	}
+	return model.LineFingerprint(lines[l.Line-1])
+}
+
+// anchorLink re-finds a fingerprinted link's line in the text its side names
+// (linkSideLines). Text that cannot be read is "changed".
 func anchorLink(ctx context.Context, svc *Service, l model.Link, res *Resolved) {
 	if l.Fingerprint == "" || l.Line <= 0 || res.Addr.Path == "" || l.Target.State == model.StateCommitted {
 		return
 	}
-	ref := model.FileRef{Source: model.SourceUnstaged, Path: res.Addr.Path}
-	staged, old := l.Target.State == model.StateStaged, l.Side == model.NoteSideOld
-	switch {
-	case staged && old:
-		ref = model.FileRef{Source: model.SourceCommit, Locator: "HEAD", Path: res.Addr.Path}
-	case staged || old:
-		ref.Source = model.SourceStaged
-	}
 	res.Anchor = LineAnchor{Asked: l.Line, State: AnchorChanged}
-	data, err := svc.ResolveBytes(ctx, ref)
-	if err != nil || strings.IndexByte(string(data), 0) >= 0 {
+	lines, ok := linkSideLines(ctx, svc, l, res.Addr.Path)
+	if !ok {
 		return
-	}
-	text := strings.ReplaceAll(string(data), "\r\n", "\n")
-	text = strings.TrimRight(strings.ReplaceAll(text, "\r", "\n"), "\n")
-	var lines []string
-	if text != "" {
-		lines = strings.Split(text, "\n")
 	}
 	res.Line, res.Anchor.State, res.Anchor.Matches = anchorLine(lines, l.Line, l.Fingerprint)
 }
