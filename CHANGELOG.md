@@ -12,11 +12,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 - **gg web, browser Back:** Back, Forward and another anchor no longer take
   two Backs to leave gg web; Back while the open-files switcher (or another
-  popup) is over the file leaves both as they are; after a failed Back the
-  next Back still comes back.
-- **gg web:** pressing esc while a file is still loading (and the load then
+  popup) is over the file leaves both as they are; after a Back that could
+  not fetch the open-files list, the next Back still comes back.
+- **gg web:** pressing esc while a file is still loading (or a load that
   fails) no longer leaves `gg session files` saying that file is shown, and
-  that report can no longer overwrite the next file you open.
+  that correction can no longer overwrite the next file you open.
 - **gg web, anchors:** a re-open of the overview during an anchor's re-check
   is no longer reported as "could not re-check"; an anchor the agent removed
   meanwhile says `that anchor is no longer in the overview` instead of
