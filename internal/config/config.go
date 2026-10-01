@@ -658,7 +658,7 @@ func SessionSteerDir(commonDir, worktree string) string {
 // keys (Bubble Tea key names, e.g. "ctrl+]"). Every other key goes to the
 // agent while its console is focused.
 type ConsoleConfig struct {
-	StepOutKey  string `toml:"step_out_key"` // step out one level (focused → unfocused, maximised → docked)
+	StepOutKey  string `toml:"step_out_key"` // step out one level (focused → unfocused, maximised → docked, unfocused → closed)
 	SessionsKey string `toml:"sessions_key"` // the agent-sessions popup, from anywhere
 	Shell       string `toml:"shell"`        // Open terminal's shell; "" = $SHELL / pwsh → powershell → cmd
 }

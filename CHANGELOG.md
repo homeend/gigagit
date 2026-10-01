@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Console: ctrl+] twice
+
+### Changed
+
+- **TUI + web:** the step-out key (`ctrl+]`, or `[console] step_out_key`)
+  pressed on an UNFOCUSED agent console now closes it, as `esc` does — so
+  pressing it twice puts a focused console in the background. The session
+  keeps running.
+
 ## gg prefix resolve
 
 ### Added

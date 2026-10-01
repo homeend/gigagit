@@ -3672,7 +3672,8 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   BEFORE `ctrl+o`/`ctrl+p`/`proc`/the layer stack: a focused console must get
   the chords agents use (Claude: ctrl+o, esc, ctrl+t…). Only `stepOutKey()` /
   `sessionsKey()` are intercepted. Unfocused (its column focused), it claims
-  enter/ctrl+t/esc, lets `consolePassthrough` (focus moves, quit, help, menu,
+  enter/ctrl+t/esc and the step-out key (it closes, as esc does — so the key
+  twice backgrounds a focused console), lets `consolePassthrough` (focus moves, quit, help, menu,
   palette, repo-wide globals) through, and swallows the rest so j/k, /, o…
   never act on the hidden Commits list.
 - **Key encoding** (`encodeConsoleKey`): runes → `SendText` (batched typing is

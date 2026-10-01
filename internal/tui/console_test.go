@@ -389,3 +389,28 @@ func TestBranchEnterLeavesDockedConsoleUnfocused(t *testing.T) {
 		t.Fatal("the Commits cursor must still move to the branch tip")
 	}
 }
+
+// The step-out key pressed twice puts the console in the background: the
+// first press unfocuses it, the second closes it as esc does.
+func TestStepOutKeyTwiceClosesConsole(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlCloseBracket})
+	m = mm.(Model)
+	if m.console == nil || m.console.focused {
+		t.Fatalf("first press must only step out, console = %+v", m.console)
+	}
+	if f, ok := m.footerOverride(); !ok || !strings.Contains(f, "[esc/ctrl+]] close") {
+		t.Fatalf("unfocused footer = %q", f)
+	}
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlCloseBracket})
+	m = mm.(Model)
+	if m.console != nil {
+		t.Fatal("second press must close the console")
+	}
+	if s.Info().State != domain.SessionRunning {
+		t.Fatal("closing the console must not end the session")
+	}
+}
