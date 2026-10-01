@@ -30,6 +30,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	// A suite run inside a gg console must not reach that console's TUI.
+	os.Unsetenv("GG_MCP_URL")
+	os.Unsetenv("GG_SESSION_TOKEN")
 	os.Setenv("GIT_CONFIG_GLOBAL", gcfg)
 	os.Setenv("GIT_AUTHOR_NAME", "gg-e2e")
 	os.Setenv("GIT_AUTHOR_EMAIL", "e2e@gg")

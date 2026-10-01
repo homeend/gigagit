@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -861,5 +862,32 @@ func TestAgentsLayers(t *testing.T) {
 	}
 	if Defaults().Agents.StaleAfter != "14d" {
 		t.Fatalf("default stale_after = %q", Defaults().Agents.StaleAfter)
+	}
+}
+
+func TestAgentsSpawnIsGlobalOnly(t *testing.T) {
+	dir := t.TempDir()
+	global := filepath.Join(dir, "global.toml")
+	repo := filepath.Join(dir, "repo.toml")
+	os.WriteFile(global, []byte("[agents]\nspawn = [\"Claude\"]\nmax_spawned = 2\n"), 0o644)
+	os.WriteFile(repo, []byte("[agents]\nspawn = [\"Evil\"]\nmax_spawned = 16\nstale_after = \"7d\"\n"), 0o644)
+	cfg, err := Load(global, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(cfg.Agents.Spawn, []string{"Claude"}) || cfg.Agents.MaxSpawned != 2 {
+		t.Fatalf("repo must not change spawn/max_spawned: %+v", cfg.Agents)
+	}
+	if cfg.Agents.StaleAfter != "7d" {
+		t.Fatalf("other [agents] keys still overlay: %+v", cfg.Agents)
+	}
+	d, _ := Load("", "")
+	if d.Agents.SpawnCap() != 4 || len(d.Agents.Spawn) != 0 {
+		t.Fatalf("defaults: %+v cap %d", d.Agents, d.Agents.SpawnCap())
+	}
+	for in, want := range map[int]int{-3: 1, 0: 4, 1: 1, 9: 9, 99: 16} {
+		if got := (AgentsConfig{MaxSpawned: in}).SpawnCap(); got != want {
+			t.Errorf("SpawnCap(%d) = %d, want %d", in, got, want)
+		}
 	}
 }

@@ -12,6 +12,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/homeend/gigagit/internal/agentlink"
 	"github.com/homeend/gigagit/internal/buildinfo"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -29,6 +30,10 @@ type Server struct {
 	// updates. "" = no inbox (no state home, or repo resolution failed).
 	// Overridable by tests.
 	steerDir string
+
+	// agent is the agent channel of the TUI that started this gg mcp
+	// (GG_MCP_URL + GG_SESSION_TOKEN); nil outside gg.
+	agent *agentlink.Client
 }
 
 // New resolves the repo identity once. A failure is remembered, not fatal:
@@ -36,6 +41,10 @@ type Server struct {
 // opaque client-side failure) and every tool reports the problem clearly.
 func New(svc *domain.Service) *Server {
 	s := &Server{svc: svc}
+	// Before the repo resolution: the agent tools work outside a repo too.
+	if c, ok := agentlink.FromEnv(agentEnv); ok {
+		s.agent = c
+	}
 	ctx := context.Background()
 	cd, err := svc.GitCommonDir(ctx)
 	if err != nil {
@@ -65,7 +74,11 @@ func (s *Server) repoCheck() error { return s.repoErr }
 
 // sdkServer builds the SDK server with every stage-1 tool registered.
 func (s *Server) sdkServer() *sdk.Server {
-	srv := sdk.NewServer(&sdk.Implementation{Name: "gg", Version: buildinfo.Version}, nil)
+	var opts *sdk.ServerOptions
+	if s.agent != nil {
+		opts = &sdk.ServerOptions{Instructions: agentInstructions}
+	}
+	srv := sdk.NewServer(&sdk.Implementation{Name: "gg", Version: buildinfo.Version}, opts)
 	s.registerStateTool(srv)
 	s.registerBookmarkTools(srv)
 	s.registerShelfTools(srv)
@@ -76,6 +89,7 @@ func (s *Server) sdkServer() *sdk.Server {
 	s.registerCherryPickTool(srv)
 	s.registerWriteTool(srv)
 	s.registerNoteTools(srv)
+	s.registerAgentForwarders(srv)
 	return srv
 }
 
@@ -94,5 +108,9 @@ func Serve(ctx context.Context, workdir string) error {
 	if err := svc.PreflightRequired(ctx); err != nil {
 		return err
 	}
-	return New(svc).sdkServer().Run(ctx, &sdk.StdioTransport{})
+	s := New(svc)
+	if s.agent != nil {
+		defer s.agent.Close() // tell the TUI this session is over (a kill skips it; the TUI's idle timeout covers that)
+	}
+	return s.sdkServer().Run(ctx, &sdk.StdioTransport{})
 }

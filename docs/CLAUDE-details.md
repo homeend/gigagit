@@ -1108,8 +1108,24 @@ is the single producer behind the key, the menu row and the snapshot's
 **Web rows use `act`, never `run`.** `showCtxMenu`'s click handler
 (`internal/web/static/layers.js`) calls `menu._items[i].act()` with no guard;
 `run` belongs to the command palette's separate dispatcher. The diff-line row
-gates on `notesArmed()`, which is exactly where the rows carry
-`data-side`/`data-no`.
+is offered wherever `linkFor` yields a link — NOT gated on `notesArmed()`: a
+plain two-commit compare has no notes yet its lines are addressable.
+
+**A compare with no note scope still links its lines (2026-10-01).** The
+compare loader stamps `diffView.cmp` (the two endpoints + both paths);
+`compareLinkText` reads it when `diffNoteAddress` refuses. Two commits → the
+pair `@<a>..<b>` with `:<line>` or `:old:<line>` (`linkAnchorAtCursor`: a
+PAIR's old side is commit a and travels, a merge preview's is the merge base
+and does not — saved pairs follow the same rule). Any other compare addresses
+the cursor side as the version it shows (working tree / `@staged` / that
+commit); a shelf or link-member side refuses. Web twin: `ctx.cmpPair` from
+`commitDiffCtx` (plain `openCompare` lane only, never an `aSpec` entry
+compare), and the stack renders `data-no`/`data-lno` for such a slot. A copy
+made in the full-screen diff confirms in `diffNotice` (`clipboardCopiedMsg`),
+middle-elided. A compare's FILE-TREE row copies the pair's file form
+(`contextLinkText` arm 3a', before `focusedBookmark`, which would answer
+`path@<b>`); web: the file menu passes `cmpPair`. `tui.Headless` stubs `clipWrite`: e2e never touches the
+machine's clipboard.
 
 **Web preview links lift `ctx.compare` for ONE case.** `links.js`'s `linkFor`
 refuses any compare ctx unless it also carries `ctx.preview = {source,
@@ -4385,3 +4401,55 @@ selection, laid-out width); never on disk, never evicted, created
   after backspace came back is used up instead of leaving gg web. The
   document's type grows with a large window (`.vdoc` font-size clamp
   12–17px; the 100ch column grows with it).
+
+## Agent spawn (agent orchestration stage 2)
+
+Spec `docs/superpowers/specs/2026-10-01-agent-spawn-design.md`, plans A
+(core) and B (reach) under `docs/superpowers/plans/2026-10-01-agent-spawn-*`.
+
+- **Channels.** Inbox/registry FILES are discovery only (`sessionreg`
+  `Registry.MCP`, `steer.Presence.MCP` = the URL, never a token). The MAIN
+  channel is MCP served by the TUI process: `mcp.AgentHost` (loopback
+  `127.0.0.1:0`, `/mcp`, streamable HTTP) behind go-sdk's
+  `auth.RequireBearerToken`, whose verifier calls `domain.VerifyAgentToken`
+  on EVERY request (`TokenInfo.UserID` = the caller's full session id;
+  expiration must be non-zero). Any `Origin` header → 403. The TUI owns it
+  through the `tui.AgentHost` seam set by `cmd/gg` (`agentHostAdapter`);
+  `startAgentHost` runs before `initSteerInbox` so the presence names it;
+  one `defer closeAgentHost` (sync.Once).
+- **Tokens.** `domain.StartAgentSession` mints 32 random bytes per AGENT
+  session (manual Start agent and spawned workers; never Open terminal or AI
+  tasks — R3), passes `GG_MCP_URL` + `GG_SESSION_TOKEN` (+
+  `GG_PARENT_SESSION` for a worker) and binds token → session after
+  `Manager.Start`. A token dies with its session (Verify checks RUNNING).
+  `agentsession.childEnv` strips inherited channel vars. Ambient authority:
+  everything the agent runs inherits the token.
+- **Spawn registry** (`domain/agentspawn.go`, process-global like
+  `Sessions()`): records {Parent, Brief, Worktree, Spawned}, lazy prune on
+  read (R2), `AgentDescends` = the reach rule, `reserveSpawnSlot` = the cap
+  (live spawned + pending, atomic — R5).
+- **`SpawnAgent` order** (`domain/agentverbs.go`): caller running here → not
+  spawned (no nesting) → prompt non-empty ≤ 256 KiB → caller-repo service
+  (`ServiceForDir`, cached — R4: approval key = that repo's common dir) →
+  spawn list non-empty → tool by name → in `[agents] spawn` → `<prompt>`
+  slot → approved command TEXT (a repo `.gg.toml` can redefine a name) →
+  slot → worktree resolve → claim (held by caller: keep; none: claim for the
+  caller with the full guard set) → `StartAgentSession` with
+  `AgentKickoff` → `HandOverWorktree` (failure = a `Warning`, the claim
+  stays with the caller). The TUI only adds console size, child env and the
+  status line (`onAgentSpawnRequest`, 30 s caller wait, 5 min spawn ctx).
+- **Claims.** `wtclaim.Claim.Parent`; `wtclaim.Replace` (temp + rename) for
+  every rewrite; `settleDeadClaim` reverts a dead holder's claim to a live
+  Parent (a failed rewrite keeps the old claim); `youngClaimGrace` (2×
+  `LiveWindow`, R6) keeps a fresh claim whose session its live process does
+  not list yet; `sessionGuard` exempts `CallerSession`.
+- **Reach.** `agentlink` (stdlib + go-sdk) pings a cached session, re-dials a
+  dead one, and calls each tool exactly once. `gg mcp` registers forwarders
+  (`addForward[In]`, same input structs and definition funcs as the host)
+  only when both env vars are set — before repo resolution, so they work
+  outside a repo. `gg agent` parses send/kill flags anywhere; `list` outside
+  gg reads `Service.LiveAgentHosts()`. `gg init --mcp` runs `claude mcp add
+  -s user gg -- <gg> mcp` unless `claude mcp get gg` succeeds (R7).
+- **Enter.** `agent_send` presses Enter by default only after text.
+- **Tests** that swap `UseSessionManager` / `agentEnv` / `agentGetenv` or
+  `t.Setenv` are serial; cli/mcp/e2e TestMains unset the channel env.

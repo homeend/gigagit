@@ -56,6 +56,7 @@ func (m Model) initSteerInbox() Model {
 		PID:      os.Getpid(),
 		Worktree: m.snapshotWorktree,
 		Started:  time.Now().UTC().Format(time.RFC3339),
+		MCP:      m.agentURL(),
 	})
 	m.steerClaimed = true
 	return m
@@ -151,6 +152,7 @@ func (m Model) touchSteerPresence() {
 		PID:      os.Getpid(),
 		Worktree: m.snapshotWorktree,
 		Started:  time.Now().UTC().Format(time.RFC3339),
+		MCP:      m.agentURL(),
 	})
 }
 

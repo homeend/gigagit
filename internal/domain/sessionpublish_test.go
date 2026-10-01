@@ -40,7 +40,7 @@ func TestPublishSessionsWritesAndRemoves(t *testing.T) {
 	defer mgr.KillAll(context.Background())
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { PublishSessions(ctx, dir, func() string { return "/tui/wt" }); close(done) }()
+	go func() { PublishSessions(ctx, dir, func() string { return "/tui/wt" }, ""); close(done) }()
 	id := agentsession.ProcTag() + "/" + string(s.Info().ID)
 	waitFor(t, func() bool { return len(sessionreg.Live(dir)) == 1 })
 	lv := readLive(dir)
@@ -78,4 +78,27 @@ func TestSessionDead(t *testing.T) {
 			t.Errorf("sessionDead(%q) = %v, want %v", id, got, want)
 		}
 	}
+}
+
+func TestRegistryCarriesTheChannelURL(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		PublishSessions(ctx, dir, func() string { return "/wt" }, "http://127.0.0.1:9/mcp")
+		close(done)
+	}()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		hosts := liveAgentHostsIn(dir)
+		if len(hosts) == 1 && hosts[0].MCP == "http://127.0.0.1:9/mcp" && hosts[0].Worktree == "/wt" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("hosts = %+v", hosts)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-done
 }

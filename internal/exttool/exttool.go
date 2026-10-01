@@ -478,8 +478,8 @@ func builtins() []Tool {
 				{Category: CatCommitMessage, Name: "Claude (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> ` + interactiveCommitPrompt + ` --dangerously-skip-permissions`},
 				{Category: CatReview, Name: "Claude (interactive)", Mode: ModeInteractive, Command: `<bin> ` + interactiveReviewPrompt},
 				{Category: CatReview, Name: "Claude (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> ` + interactiveReviewPrompt + ` --dangerously-skip-permissions`},
-				{Category: CatSession, Name: "Claude", Mode: ModeSession, Command: "<bin>"},
-				{Category: CatSession, Name: "Claude (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --dangerously-skip-permissions"},
+				{Category: CatSession, Name: "Claude", Mode: ModeSession, Version: 2, Command: "<bin> <prompt>"},
+				{Category: CatSession, Name: "Claude (yolo)", Mode: ModeSession, OptIn: true, Version: 2, Command: "<bin> --dangerously-skip-permissions <prompt>"},
 			},
 		},
 		{
@@ -512,8 +512,8 @@ func builtins() []Tool {
 				{Category: CatCommitMessage, Name: "Junie (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> --prompt ` + interactiveCommitPrompt + ` --brave`},
 				{Category: CatReview, Name: "Junie (interactive)", Mode: ModeInteractive, Command: `<bin> --prompt ` + interactiveReviewPrompt},
 				{Category: CatReview, Name: "Junie (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> --prompt ` + interactiveReviewPrompt + ` --brave`},
-				{Category: CatSession, Name: "Junie", Mode: ModeSession, Command: "<bin>"},
-				{Category: CatSession, Name: "Junie (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --brave"},
+				{Category: CatSession, Name: "Junie", Mode: ModeSession, Version: 2, Command: "<bin> <prompt:--prompt>"},
+				{Category: CatSession, Name: "Junie (yolo)", Mode: ModeSession, OptIn: true, Version: 2, Command: "<bin> --brave <prompt:--prompt>"},
 			},
 		},
 		{
@@ -530,8 +530,8 @@ func builtins() []Tool {
 				{Category: CatCommitMessage, Name: "Codex (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> ` + interactiveCommitPrompt + ` --dangerously-bypass-approvals-and-sandbox`},
 				{Category: CatReview, Name: "Codex (interactive)", Mode: ModeInteractive, Command: `<bin> ` + interactiveReviewPrompt},
 				{Category: CatReview, Name: "Codex (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> ` + interactiveReviewPrompt + ` --dangerously-bypass-approvals-and-sandbox`},
-				{Category: CatSession, Name: "Codex", Mode: ModeSession, Command: "<bin>"},
-				{Category: CatSession, Name: "Codex (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --dangerously-bypass-approvals-and-sandbox"},
+				{Category: CatSession, Name: "Codex", Mode: ModeSession, Version: 2, Command: "<bin> <prompt>"},
+				{Category: CatSession, Name: "Codex (yolo)", Mode: ModeSession, OptIn: true, Version: 2, Command: "<bin> --dangerously-bypass-approvals-and-sandbox <prompt>"},
 			},
 		},
 		{
@@ -548,8 +548,8 @@ func builtins() []Tool {
 				{Category: CatCommitMessage, Name: "Antigravity (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> --prompt-interactive ` + interactiveCommitPrompt + ` --dangerously-skip-permissions`},
 				{Category: CatReview, Name: "Antigravity (interactive)", Mode: ModeInteractive, Command: `<bin> --prompt-interactive ` + interactiveReviewPrompt},
 				{Category: CatReview, Name: "Antigravity (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> --prompt-interactive ` + interactiveReviewPrompt + ` --dangerously-skip-permissions`},
-				{Category: CatSession, Name: "Antigravity", Mode: ModeSession, Command: "<bin>"},
-				{Category: CatSession, Name: "Antigravity (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --dangerously-skip-permissions"},
+				{Category: CatSession, Name: "Antigravity", Mode: ModeSession, Version: 2, Command: "<bin> <prompt:--prompt-interactive>"},
+				{Category: CatSession, Name: "Antigravity (yolo)", Mode: ModeSession, OptIn: true, Version: 2, Command: "<bin> --dangerously-skip-permissions <prompt:--prompt-interactive>"},
 			},
 		},
 		{

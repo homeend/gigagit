@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -46,5 +47,19 @@ func TestClaimGuardExemptsHolder(t *testing.T) {
 	other, _ := svc.GuardReport(ctx, wtguard.Target{Dir: wt, Branch: "held", CallerSession: "p/s2"})
 	if slices.Contains(holder.Reasons(), "claimed") || !slices.Contains(other.Reasons(), "claimed") {
 		t.Fatalf("holder=%v other=%v", holder.Reasons(), other.Reasons())
+	}
+}
+
+func TestSessionGuardExemptsTheCaller(t *testing.T) {
+	t.Parallel()
+	lv := liveView{byDir: map[string][]SessionRef{filepath.Clean("/w"): {{ID: "p/s1", Agent: "claude", State: "running"}}}}
+	g := sessionGuard{lv: lv}
+	r, _ := g.Check(context.Background(), wtguard.Target{Dir: "/w", CallerSession: "p/s1"})
+	if r.Blocker != nil {
+		t.Fatalf("the caller's own session must not block: %+v", r.Blocker)
+	}
+	r, _ = g.Check(context.Background(), wtguard.Target{Dir: "/w", CallerSession: "p/s9"})
+	if r.Blocker == nil {
+		t.Fatal("another session must still block")
 	}
 }

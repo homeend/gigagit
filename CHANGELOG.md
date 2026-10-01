@@ -25,7 +25,68 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **gg web:** the selected anchor is selected again when the agent removes
   it and adds it back.
 - **gg web:** a tab that could not load an overview no longer counts as
-  showing it in `gg session files`. The using-gg skill is v117.
+  showing it in `gg session files`. The using-gg skill is v119.
+
+## Agents start agents (orchestration stage 2)
+
+### Added
+
+- **An agent running in a gg console can start another agent.** The TUI now
+  hosts an agent channel: an MCP server on loopback that only sessions gg
+  started can use — each agent session gets `GG_MCP_URL` and its own
+  `GG_SESSION_TOKEN` (checked on every request; it stops working when the
+  session exits). Six tools: `agent_start` (a worker in a worktree, with a
+  free-form task), `agent_list`, `agent_screen`, `agent_send`, `agent_kill`
+  and `agent_task` (a worker reads its task). The worker starts the way
+  Start agent starts one — same session command, a sub-row, a status line,
+  no focus change — with `GG_PARENT_SESSION` set.
+- **Allow-list and limits:** `[agents] spawn` names the session commands an
+  agent may start and `[agents] max_spawned` (default 4) caps them; both are
+  read from the GLOBAL config only. Each command must also have been approved
+  once from Start agent. A worker may not start workers; `agent_send` and
+  `agent_kill` reach only the agents you started.
+- **Claims follow the work:** the overseer's worktree claim passes to the
+  worker, and goes back to the overseer when the worker ends.
+- **Session commands take a `<prompt>` slot** (Claude, Codex, Junie,
+  Antigravity): empty on a manual start, a one-line "call agent_task" kick-off
+  on a spawn. Settings → External tools offers the update to existing
+  configs.
+- **`gg mcp` inside a gg console forwards the agent tools**, and
+  **`gg agent start|list|screen|send|kill|task`** are their CLI twins
+  (`gg agent list` outside gg lists the running TUIs from their registry
+  files). **`gg init --mcp`** registers gg's MCP server with Claude Code
+  (`claude mcp add -s user`). The using-gg skill is v118.
+
+## A link to a line of any two-commit comparison
+
+### Added
+
+- **`L` (and the `.` menu's Copy link) in a comparison of two commits**
+  copies a `gg://` link to the cursor line, in the single-file and the
+  stacked view: `gg://<repo>/<path>@<a>..<b>:<line>`, or `:old:<line>` when
+  the cursor is on the older side — a removed line included. Before, a
+  comparison opened by hand had no link at all ("no gg link for this
+  place"). No notes are turned on for it.
+- **A comparison against the working tree or the index** (TUI) links each
+  side as the version it shows: the working file, `@staged`, or the commit.
+- **gg web:** right-click → *copy gg link to this line* in a two-commit
+  comparison, single-file and stacked.
+
+### Fixed
+
+- **Copy link on a file row of a two-commit comparison** (TUI) copied the
+  newer commit's own link (`path@<b>`, its parent → it) instead of the
+  comparison's; it now copies `path@<a>..<b>`. gg web offered no link on
+  that row and now offers the same one.
+
+### Changed
+
+- **A saved commit pair's old side keeps its line** (`:old:<line>`) instead
+  of degrading to a link to the file. A merge preview is unchanged: its old
+  side is the merge base, which no link names.
+- **A copy made in the full-screen diff confirms in the diff's notice box**
+  (it draws no status bar, so `L` and the copy rows used to confirm
+  nowhere); a long link is cut in the middle, keeping its line.
 
 ## Agent docs: a failed overview reload keeps the older answer
 

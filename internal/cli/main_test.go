@@ -23,6 +23,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("XDG_STATE_HOME", state)
+	// A suite run inside a gg console must not reach that console's TUI.
+	os.Unsetenv("GG_MCP_URL")
+	os.Unsetenv("GG_SESSION_TOKEN")
 	code := m.Run()
 	os.RemoveAll(state)
 	os.RemoveAll(dir)

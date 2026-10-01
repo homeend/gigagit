@@ -309,3 +309,85 @@ func TestReclaimBySameSessionSucceeds(t *testing.T) {
 		t.Fatalf("re-claim by the holder = %v", err)
 	}
 }
+
+func TestHandOverAndRevertToParent(t *testing.T) {
+	t.Parallel()
+	main, svc, reg := inventoryRepo(t)
+	wt := addWT(t, main, "ho")
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{
+		{ID: "p/s1", Dir: main, Agent: "claude", State: "running"},
+		{ID: "p/s2", Dir: main, Agent: "codex", State: "running"}, // not in wt: a session there blocks the claim
+	}})
+	ctx := context.Background()
+	if err := svc.ClaimWorktree(ctx, wt, "p/s1", "issue 7", pol()); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.HandOverWorktree(ctx, wt, "p/s9", "p/s2"); !errors.Is(err, ErrNotHolder) {
+		t.Fatalf("handover by a non-holder = %v", err)
+	}
+	if err := svc.HandOverWorktree(ctx, wt, "p/s1", "p/s2"); err != nil {
+		t.Fatal(err)
+	}
+	c, ok, _ := wtclaim.Read(git.GitDirAt(wt))
+	if !ok || c.Session != "p/s2" || c.Parent != "p/s1" || c.Agent != "codex" || c.Note != "issue 7" {
+		t.Fatalf("after handover: %+v", c)
+	}
+	// The worker exits; the parent lives: the claim goes back to the parent.
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{
+		{ID: "p/s1", Dir: main, Agent: "claude", State: "running"},
+		{ID: "p/s2", Dir: main, Agent: "codex", State: "exited"},
+	}})
+	infos, _ := svc.WorktreeInventory(ctx, pol(), false)
+	if w := find(t, infos, wt); w.Claim() == nil || w.Claim().Session != "p/s1" || w.Claim().Agent != "claude" {
+		t.Fatalf("claim must revert to the live parent: %+v", w.Claim())
+	}
+	c, _, _ = wtclaim.Read(git.GitDirAt(wt))
+	if c.Parent != "" || c.Note != "issue 7" {
+		t.Fatalf("reverted claim: %+v", c)
+	}
+	// Now the parent exits too: swept.
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{
+		{ID: "p/s1", Dir: main, State: "exited"}, {ID: "p/s2", Dir: main, State: "exited"},
+	}})
+	infos, _ = svc.WorktreeInventory(ctx, pol(), false)
+	if w := find(t, infos, wt); w.Claim() != nil {
+		t.Fatalf("both dead: claim must be swept, got %+v", w.Claim())
+	}
+}
+
+func TestDeadWorkerClaimRevertsToParent(t *testing.T) {
+	t.Parallel()
+	main, svc, reg := inventoryRepo(t)
+	wt := addWT(t, main, "rv")
+	gd := git.GitDirAt(wt)
+	if err := wtclaim.Create(gd, wtclaim.Claim{Session: "p/s2", Parent: "p/s1", Agent: "codex",
+		Since: time.Now().Add(-time.Hour).UTC().Truncate(time.Second), Host: localHost()}); err != nil {
+		t.Fatal(err)
+	}
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{
+		{ID: "p/s1", Dir: main, Agent: "claude", State: "running"},
+	}})
+	ok, err := svc.ReleaseWorktree(context.Background(), wt, "p/s1", false)
+	if err != nil || !ok {
+		t.Fatalf("the parent owns the reverted claim, so it can release it: %v %v", ok, err)
+	}
+}
+
+func TestYoungClaimGraceKeepsUnlistedSession(t *testing.T) {
+	t.Parallel()
+	main, svc, reg := inventoryRepo(t)
+	wt := addWT(t, main, "young")
+	proc := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
+	sessionreg.Write(reg, proc, sessionreg.Registry{PID: os.Getpid(), Sessions: []sessionreg.Entry{
+		{ID: proc + "/s1", Dir: main, State: "running"},
+	}})
+	// A worker claim written before its TUI's registry lists the worker.
+	if err := wtclaim.Create(git.GitDirAt(wt), wtclaim.Claim{Session: proc + "/s2", Parent: proc + "/s1",
+		Since: time.Now().UTC().Truncate(time.Second), Host: localHost()}); err != nil {
+		t.Fatal(err)
+	}
+	infos, _ := svc.WorktreeInventory(context.Background(), pol(), false)
+	if w := find(t, infos, wt); w.Claim() == nil || w.Claim().Session != proc+"/s2" {
+		t.Fatalf("a fresh claim of an unlisted session in a live registry must survive: %+v", w.Claim())
+	}
+}

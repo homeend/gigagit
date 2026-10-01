@@ -1288,6 +1288,10 @@ function commitDiffCtx(f) {
     // carrying it here means the diff-LINE copy-link path uses that documented
     // guard too, instead of relying on notesArmed() to happen to be off.
     compare: cmp,
+    // A plain compare of two commits has no notes, but its lines still have
+    // an address: the pair (links.js linkFor). Two full shas or nothing, and
+    // never a stored-entry compare (aSpec): its bytes need not be a commit's.
+    cmpPair: cmp && !prev && !state.compare.aSpec && state.compare.aHash && state.compare.bHash ? { a: state.compare.aHash, b: state.compare.bHash } : null,
   };
 }
 
@@ -2927,7 +2931,9 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     // In a stack the link must name the ROW's own file, not whichever slot was
     // active: a right-click is itself a "this line" gesture.
     const rowCtx = rowSlotCtx(row) || state.diffCtx;
-    if (row && notesArmed(rowCtx)) {
+    // Not gated on notesArmed: a plain compare has no notes, yet its lines are
+    // addressable. linkFor refuses what has no address.
+    if (row && rowCtx) {
       const td = e.target.closest("td");
       let { side, no } = rowSideAndLine(row, td);
       // A preview has no old side. A context row's LEFT cell still names a
@@ -2935,7 +2941,7 @@ $("diff-body").addEventListener("contextmenu", (e) => {
       // a deletion row has none, and linkFor degrades the link to the file
       // form (the user's ruling, 2026-09-16 — the TUI's cursor on a deletion
       // row copies the same file link).
-      if (side === "old" && rowCtx.preview) {
+      if (side === "old" && rowCtx.preview && !rowCtx.preview.pair) {
         const rn = Number(row.dataset.rno || 0);
         if (rn) { side = "new"; no = rn; }
       }
@@ -4356,8 +4362,8 @@ $("files-list").addEventListener("contextmenu", (e) => {
         ...copyPathRows(f.path),
         // A compare row's rev is bHash, but the diff on screen is aHash →
         // bHash, not bHash^ → bHash — a commit-state link would misdescribe
-        // the place, so the file contributor is told to refuse outright.
-        // The exception is an open merge preview: its rows are files IN THE
+        // the place, so the file contributor refuses unless it is handed the
+        // pair (cmpPair, two commits) or an open merge preview: its rows are files IN THE
         // PREVIEW, and the pair (source, target) is their address — the same
         // file form the TUI's preview file tree copies.
         ...extraRows("file", {
@@ -4366,6 +4372,8 @@ $("files-list").addEventListener("contextmenu", (e) => {
           section: "commit",
           compare: state.filesMode === "compare",
           preview: po ? previewCtx(po) : pairCtx() ? pairNoteCtx(pairCtx()) : null,
+          // A plain two-commit compare: the row is a file in the pair.
+          cmpPair: commitDiffCtx(f).cmpPair || null,
         }),
       ],
       e.clientX,

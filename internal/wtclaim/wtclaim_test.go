@@ -2,6 +2,7 @@ package wtclaim
 
 import (
 	"errors"
+	"os"
 	"strconv"
 	"sync"
 	"testing"
@@ -83,5 +84,23 @@ func TestCreateRaceOneWinner(t *testing.T) {
 	close(wins)
 	if n := len(wins); n != 1 {
 		t.Fatalf("winners = %d, want 1", n)
+	}
+}
+
+func TestReplaceSwapsTheClaimInOneStep(t *testing.T) {
+	dir := t.TempDir()
+	if err := Replace(dir, Claim{Session: "p/s1"}); err != nil {
+		t.Fatalf("replace with no claim: %v", err)
+	}
+	if err := Replace(dir, Claim{Session: "p/s2", Parent: "p/s1"}); err != nil {
+		t.Fatal(err)
+	}
+	c, ok, err := Read(dir)
+	if err != nil || !ok || c.Session != "p/s2" || c.Parent != "p/s1" {
+		t.Fatalf("after replace: %+v %v %v", c, ok, err)
+	}
+	ents, _ := os.ReadDir(dir)
+	if len(ents) != 1 {
+		t.Fatalf("a temp file was left behind: %v", ents)
 	}
 }
