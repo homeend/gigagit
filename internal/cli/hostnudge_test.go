@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -12,37 +13,53 @@ import (
 )
 
 func TestHostReloadSources(t *testing.T) {
+	head := []string{"status", "commits", "branches", "reflog"}
 	cases := []struct {
 		args []string
 		want []string
+		fail bool // also after exit 1 (a conflict leaves the tree changed)
 	}{
-		{[]string{"status"}, nil},
-		{[]string{"log"}, nil},
-		{[]string{"branch", "ls"}, nil},
-		{[]string{"branch", "create", "x"}, []string{"branches", "worktrees"}},
-		{[]string{"worktree", "list", "--json"}, nil},
-		{[]string{"worktree", "recycle", "/w", "b"}, []string{"worktrees", "branches"}},
-		{[]string{"worktree", "claim", "/w"}, []string{"worktrees", "branches"}},
-		{[]string{"commit", "-m", "x"}, []string{"status", "commits", "branches"}},
-		{[]string{"add", "a.txt"}, []string{"status"}},
-		{[]string{"switch", "main"}, []string{"status", "commits", "branches", "worktrees"}},
-		{[]string{"remote", "ls"}, nil},
-		{[]string{"remote", "fetch"}, []string{"remotes", "branches", "commits"}},
-		{[]string{"tag", "list"}, nil},
-		{[]string{"tag", "create", "v1"}, []string{"tags"}},
-		{[]string{"stash", "list"}, nil},
-		{[]string{"stash", "-m", "x"}, []string{"status"}},
-		{[]string{"shelf", "list"}, nil},
-		{[]string{"shelf", "restore", "1"}, []string{"status"}},
-		{[]string{"compare", "--list"}, nil},
-		{[]string{"compare", "--save", "a", "b"}, []string{"previews"}},
-		{[]string{"note", "add"}, nil}, // notes post their own reload
-		{[]string{"agent", "start"}, nil},
-		{[]string{"prefix", "resolve", "--bump", "x"}, nil},
+		{[]string{"status"}, nil, false},
+		{[]string{"log"}, nil, false},
+		{[]string{"branch", "ls"}, nil, false},
+		{[]string{"branch", "create", "x"}, []string{"branches"}, false},
+		{[]string{"branch", "delete", "x"}, []string{"branches", "commits", "notes"}, false},
+		{[]string{"branch", "rename", "a", "b"}, []string{"status", "branches", "commits", "worktrees", "notes", "reflog"}, false},
+		{[]string{"worktree", "list", "--json"}, nil, false},
+		{[]string{"worktree", "claim", "/w"}, []string{"worktrees", "branches"}, false},
+		{[]string{"worktree", "recycle", "/w", "b"}, []string{"worktrees", "branches", "commits", "notes"}, true},
+		{[]string{"commit", "-m", "x"}, head, true},
+		{[]string{"merge", "x"}, head, true},
+		{[]string{"apply", "--am", "p"}, head, true},
+		{[]string{"pull"}, []string{"status", "commits", "branches", "reflog", "remotes"}, true},
+		{[]string{"push"}, []string{"branches", "remotes", "commits"}, false},
+		{[]string{"add", "a.txt"}, []string{"status"}, false},
+		{[]string{"switch", "main"}, []string{"status", "commits", "branches", "reflog", "worktrees"}, true},
+		{[]string{"remote", "ls"}, nil, false},
+		{[]string{"remote", "fetch"}, []string{"remotes"}, false},
+		{[]string{"remote", "remove", "o/x"}, []string{"branches", "remotes", "commits", "notes"}, false},
+		{[]string{"tag", "list"}, nil, false},
+		{[]string{"tag", "rm", "v1"}, []string{"tags", "commits"}, false},
+		{[]string{"tag", "co", "v1"}, []string{"status", "commits", "branches", "reflog", "worktrees"}, true},
+		{[]string{"stash", "list"}, nil, false},
+		{[]string{"stash", "pop"}, []string{"status"}, true},
+		{[]string{"shelf", "list"}, nil, false},
+		{[]string{"shelf", "add", "a.txt"}, nil, false}, // a copy into the store: the tree is untouched
+		{[]string{"shelf", "restore", "1"}, []string{"status"}, false},
+		{[]string{"shelf", "cherry-pick", "1"}, head, true},
+		{[]string{"bookmark", "paste", "1"}, []string{"status"}, false},
+		{[]string{"unlock", "--yes"}, []string{"status"}, false},
+		{[]string{"versions", "restore", "x"}, []string{"status", "branches", "commits", "worktrees", "reflog"}, true},
+		{[]string{"compare", "--list"}, nil, false},
+		{[]string{"compare", "--save", "a", "b"}, []string{"previews"}, false},
+		{[]string{"note", "add"}, nil, false}, // notes post their own reload
+		{[]string{"agent", "start"}, nil, false},
+		{[]string{"prefix", "resolve", "--bump", "x"}, nil, false},
 	}
 	for _, c := range cases {
-		if got := hostReloadSources(c.args[0], c.args[1:]); !slices.Equal(got, c.want) {
-			t.Errorf("%v → %v, want %v", c.args, got, c.want)
+		got, fail := hostReloadSources(c.args[0], c.args[1:])
+		if !slices.Equal(got, c.want) || fail != c.fail {
+			t.Errorf("%v → %v (after exit 1: %v), want %v (%v)", c.args, got, fail, c.want, c.fail)
 		}
 	}
 }
@@ -94,5 +111,35 @@ func TestNoNudgeOutsideAConsole(t *testing.T) {
 	t.Setenv("GG_INBOX", "")
 	if code, _, errb := runCLI(t, dir, "branch", "create", "job"); code != 0 {
 		t.Fatalf("branch create: %s", errb)
+	}
+}
+
+// A merge that stops on conflicts exits 1 with MERGE_HEAD and markers in the
+// tree: the TUI must hear of it like of a clean merge.
+func TestConflictedMergeStillNudges(t *testing.T) {
+	dir := newCLIRepo(t)
+	inbox := t.TempDir()
+	t.Setenv("GG_INBOX", inbox)
+	git := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	os.WriteFile(filepath.Join(dir, "c.txt"), []byte("base\n"), 0o644)
+	git("add", "c.txt")
+	git("commit", "-qm", "base")
+	git("checkout", "-qb", "other")
+	os.WriteFile(filepath.Join(dir, "c.txt"), []byte("other\n"), 0o644)
+	git("commit", "-qam", "other")
+	git("checkout", "-q", "-")
+	os.WriteFile(filepath.Join(dir, "c.txt"), []byte("mine\n"), 0o644)
+	git("commit", "-qam", "mine")
+	code, _, errb := runCLI(t, dir, "merge", "other")
+	if code != 1 {
+		t.Fatalf("a conflicted merge = %d %q, want exit 1", code, errb)
+	}
+	if rs := inboxReloads(t, inbox); len(rs) != 1 || !slices.Contains(rs[0].Sources, "status") {
+		t.Fatalf("reloads after a conflicted merge = %+v", rs)
 	}
 }

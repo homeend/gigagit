@@ -219,7 +219,7 @@ func (m Model) steerReload(c steer.Command) (Model, tea.Cmd) {
 	for _, n := range names {
 		if n == "all" {
 			all, dropMarks = true, true
-			changed = append(changed, n)
+			changed = append(changed, i18n.T("all"))
 			continue
 		}
 		s, ok := sourceByName(n)
@@ -233,7 +233,7 @@ func (m Model) steerReload(c steer.Command) (Model, tea.Cmd) {
 			dropMarks = true
 		}
 		srcs = append(srcs, s)
-		changed = append(changed, n)
+		changed = append(changed, sourceDisplayName(s))
 	}
 	if dropMarks {
 		m.attention = map[attentionKey][]steerMark{}

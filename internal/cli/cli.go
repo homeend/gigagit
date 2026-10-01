@@ -96,12 +96,10 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 // is shared by Run (one command per process) and cmdBatch (a script of
 // commands against one service). stdin is what interactive prompts read;
 // batch passes an empty reader so a command can never block on input. A verb
-// that succeeds inside a gg console tells the hosting TUI what it changed.
+// that changed git inside a gg console tells the hosting TUI what it changed.
 func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	code := dispatchOne(svc, workdir, cmd, rest, stdin, stdout, stderr, cwdFile)
-	if code == 0 {
-		nudgeHostTUI(svc, cmd, rest)
-	}
+	nudgeHostTUI(svc, cmd, rest, code)
 	return code
 }
 
