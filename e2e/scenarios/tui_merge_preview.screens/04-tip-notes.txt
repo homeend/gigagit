@@ -3,7 +3,7 @@ local  branch main                                                              
 │ Files acfc46c add c                               ││ Commits (all) 3                                                                                         │
 │ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓   feature add c  ◆ 2                                                                             │
 │ Notes                                             ││   ●      feature grow a                                                                                 │
-│ >   a.txt  ◆ 1                                    ││   ●  ↓   *main   add a b                                                                                │
+│ >   a.txt  ◆ 1  (preview: feature → main)         ││   ●  ↓   *main   add a b                                                                                │
 │   A  c.txt  ◆ 1                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

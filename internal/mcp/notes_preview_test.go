@@ -74,6 +74,9 @@ func TestNoteAddWithAPreviewStoresOnTheTip(t *testing.T) {
 	if stored.Side != model.NoteSideNew {
 		t.Fatalf("side = %q, want new", stored.Side)
 	}
+	if stored.Preview != "main...feat" || note["preview"] != "main...feat" {
+		t.Fatalf("the note must remember its preview: stored %q, reply %v", stored.Preview, note["preview"])
+	}
 
 	if got := steer.Drain(e.srv.steerDir); len(got) == 0 {
 		t.Fatalf("gg_note_add --preview must fire the notes-changed reload post like any other target")

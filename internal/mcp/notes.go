@@ -168,11 +168,13 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		var addr model.FileAddress
 		var side model.NoteSide
 		var rng [2]int
+		var preview string // the scope the note is written in
 		if in.Preview != "" {
 			set, perr := s.previewSet(ctx, in.noteTargetIn)
 			if perr != nil {
 				return nil, out, perr
 			}
+			preview = set.Pair()
 			if in.File == "" {
 				return nil, out, fmt.Errorf("preview needs file")
 			}
@@ -227,7 +229,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		}
 		author := domain.NoteAuthorDefault(in.Author)
 		stored, err := s.svc.NoteAdd(ctx, model.Note{
-			Source: model.NoteSourceAgent, Author: author, Address: addr,
+			Source: model.NoteSourceAgent, Author: author, Address: addr, Preview: preview,
 			Side: side, Range: rng, Summary: in.Summary, Rationale: in.Rationale,
 		})
 		if err != nil {
@@ -284,7 +286,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 				return nil, out, perr
 			}
 			spec := set.DiffSpec()
-			target = domain.NoteBatchTarget{Rev: set.Tip, Hunks: &spec}
+			target = domain.NoteBatchTarget{Rev: set.Tip, Hunks: &spec, Preview: set.Pair()}
 			rule = domain.NoteSideNewOnly
 		}
 		planned, skipped, err := s.svc.PlanNoteBatchIn(ctx, batch, target, author, rule)

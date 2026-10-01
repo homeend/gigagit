@@ -32,6 +32,7 @@ func TestPutLoadRoundTrip(t *testing.T) {
 	n.Rationale = "because"
 	n.Tags = []string{"perf", "api"}
 	n.Confidence = 0.5
+	n.Preview = "main...feat"
 	if err := fs.Put(n); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
@@ -42,7 +43,8 @@ func TestPutLoadRoundTrip(t *testing.T) {
 	if got[0].Summary != "saaaaaaaa" || got[0].Rationale != "because" ||
 		got[0].Tags[1] != "api" || got[0].Confidence != 0.5 ||
 		got[0].Address.Path != "a/b.go" || got[0].Side != model.NoteSideNew ||
-		got[0].Range != [2]int{2, 2} || !got[0].Created.Equal(n.Created) {
+		got[0].Range != [2]int{2, 2} || !got[0].Created.Equal(n.Created) ||
+		got[0].Preview != "main...feat" {
 		t.Fatalf("round trip lost data: %+v", got[0])
 	}
 	// Put by an existing ID REPLACES.

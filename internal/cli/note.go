@@ -315,6 +315,7 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 	var addr model.FileAddress
 	var side model.NoteSide
 	var rng [2]int
+	var preview string // the scope a preview or pair note was written in
 	if link != nil {
 		// Ruling 9: a link and a preview are two ways of naming a target, so
 		// one overriding the other silently is never right — without this
@@ -331,6 +332,9 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 		pv, isPreview, perr := noteScopeFromLink(ctx, svc, *link)
 		if perr != nil {
 			return noteExit(perr, stderr)
+		}
+		if isPreview {
+			preview = pv.Set.Pair()
 		}
 		if isPreview && link.Side == model.NoteSideOld {
 			// Only a change-set link can say :old: (a preview link refuses it
@@ -403,7 +407,7 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 		if aerr != nil {
 			return noteExit(aerr, stderr)
 		}
-		addr = a
+		addr, preview = a, tgt.Set.Pair()
 		if *newLine != 0 {
 			if *newLine < 1 {
 				fmt.Fprintln(stderr, "note add: --new-line must be a 1-based line number")
@@ -439,7 +443,7 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 		addr, side, rng = a, s, r
 	}
 	stored, err := svc.NoteAdd(ctx, model.Note{
-		Source: src, Author: noteAuthorDefault(*author), Address: addr,
+		Source: src, Author: noteAuthorDefault(*author), Address: addr, Preview: preview,
 		Side: side, Range: rng,
 		Summary: strings.TrimSpace(*summary), Rationale: strings.TrimSpace(*rationale),
 	})

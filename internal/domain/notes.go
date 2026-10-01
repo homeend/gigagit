@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -53,11 +54,14 @@ type ResolvedNote struct {
 //
 // The maps are the cached instance, shared by every caller: READ-ONLY.
 type NoteCounts struct {
-	ByPath       map[string]int // working-tree notes, by repo-relative path
-	ByCommit     map[string]int // commit notes, by sha
-	Reviews      []ReviewHead   // every AI review note, newest first (Branches tab, @notes)
-	ByCommitPath map[string]int // commit notes, by "<sha>:<path>"
-	ByShelf      map[string]int // notes on a whole shelf entry, by entry id
+	ByPath   map[string]int // working-tree notes, by repo-relative path
+	ByCommit map[string]int // commit notes, by sha
+	// PreviewsByCommitPath names, sorted and distinct, the scopes (Note.Preview)
+	// the notes at "<sha>:<path>" were written in; absent when none was.
+	PreviewsByCommitPath map[string][]string
+	Reviews              []ReviewHead   // every AI review note, newest first (Branches tab, @notes)
+	ByCommitPath         map[string]int // commit notes, by "<sha>:<path>"
+	ByShelf              map[string]int // notes on a whole shelf entry, by entry id
 }
 
 // NoteAdd stores a new note, filling ID, Created/Updated and (when the caller
@@ -454,7 +458,14 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		if n.Address.State == model.StateCommitted && n.Address.Commit != "" {
 			c.ByCommit[n.Address.Commit]++
 			if n.Address.Path != "" {
-				c.ByCommitPath[n.Address.Commit+":"+n.Address.Path]++
+				k := n.Address.Commit + ":" + n.Address.Path
+				c.ByCommitPath[k]++
+				if n.Preview != "" && !slices.Contains(c.PreviewsByCommitPath[k], n.Preview) {
+					if c.PreviewsByCommitPath == nil {
+						c.PreviewsByCommitPath = map[string][]string{}
+					}
+					c.PreviewsByCommitPath[k] = append(c.PreviewsByCommitPath[k], n.Preview)
+				}
 			}
 			continue
 		}
@@ -467,6 +478,9 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 			continue
 		}
 		c.ByPath[n.Address.Path]++
+	}
+	for _, ps := range c.PreviewsByCommitPath {
+		sort.Strings(ps)
 	}
 	sort.SliceStable(c.Reviews, func(a, b int) bool { return c.Reviews[a].Created.After(c.Reviews[b].Created) })
 	s.mu.Lock()

@@ -315,3 +315,20 @@ func TestNoteApplyPreviewRefusesRev(t *testing.T) {
 		t.Fatalf("want exit 2 + one-target message, got %d %q", code, errb)
 	}
 }
+
+// A note written in a preview remembers it: --json prints "preview", the
+// pair by branch names (a saved label resolves to the same names).
+func TestNoteAddPreviewRecordsThePreview(t *testing.T) {
+	dir := newCLIPreviewRepo(t)
+	code, out, errb := runCLI(t, dir, "note", "add", "--json", "--preview", "main...feat", "--file", "a.txt",
+		"--new-line", "1", "--summary", "alpha stands")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb)
+	}
+	var w struct {
+		Preview string `json:"preview"`
+	}
+	if err := json.Unmarshal([]byte(out), &w); err != nil || w.Preview != "main...feat" {
+		t.Fatalf("note add --json = %q (%v), want preview main...feat", out, err)
+	}
+}

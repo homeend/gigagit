@@ -92,7 +92,12 @@ type Note struct {
 	Tags        []string    `toml:"tags,omitempty"`
 	Confidence  float64     `toml:"confidence,omitempty"`
 	// Scope is the reviewed range (hex "a..b") of a review note; "" otherwise.
-	Scope   string    `toml:"scope,omitempty"`
+	Scope string `toml:"scope,omitempty"`
+	// Preview names the scope a note was written in, when it was written in
+	// one: a merge preview "<target>...<source>" by branch NAMES, a commit
+	// pair "<a7>..<b7>". Such a note is stored on the tip like any commit
+	// note; this is how the tip's Files view can say where it came from.
+	Preview string    `toml:"preview,omitempty"`
 	Created time.Time `toml:"created"`
 	Updated time.Time `toml:"updated"`
 }

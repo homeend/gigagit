@@ -49,6 +49,9 @@ type NoteBatchTarget struct {
 	Cached bool
 	Rev    string          // the address target ("" = working tree)
 	Hunks  *model.DiffSpec // nil = derive from Cached/Rev through HunkDiffSpec
+	// Preview stamps the batch's root notes (model.Note.Preview): the scope
+	// they are written in, PreviewNoteSet.Pair(); "" outside one.
+	Preview string
 }
 
 // PlanNoteBatch is PlanNoteBatchIn for the targets whose address and patch
@@ -88,6 +91,7 @@ func (s *Service) PlanNoteBatchIn(ctx context.Context, b notebatch.Batch, bt Not
 			planned = append(planned, PlannedNote{Note: n, ReplyTo: it.ReplyTo})
 			continue
 		}
+		n.Preview = bt.Preview
 		addr, ok := addrCache[it.Path]
 		if !ok {
 			addr, err = s.NoteTarget(ctx, it.Path, bt.Cached, bt.Rev)

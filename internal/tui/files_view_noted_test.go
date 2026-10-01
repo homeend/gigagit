@@ -37,3 +37,14 @@ func TestWithNotedLines(t *testing.T) {
 		t.Fatalf("no notes: the list is unchanged: %+v", got)
 	}
 }
+
+// The tag reads the Previews panel's way round; a pair keeps its a..b.
+func TestNotedPreviewTag(t *testing.T) {
+	t.Parallel()
+	if got := notedPreviewTag(nil); got != "" {
+		t.Fatalf("no previews: %q", got)
+	}
+	if got, want := notedPreviewTag([]string{"main...feature", "aaaaaaa..bbbbbbb"}), "  (preview: feature → main, aaaaaaa..bbbbbbb)"; got != want {
+		t.Fatalf("tag = %q, want %q", got, want)
+	}
+}
