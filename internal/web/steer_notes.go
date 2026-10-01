@@ -94,18 +94,17 @@ func (s *Server) steerNoteAdd(ctx context.Context, c steer.Command) steer.Reply 
 		ev    string
 		added bool
 	)
-	s.listDocs(func() string {
+	s.listDocs(wt, func() string {
 		if n, err = s.docs.AddNote(root, path, lines, c.Start, c.End, c.Summary, c.Rationale, c.Author); err != nil {
 			return "" // before the list: a refused note lists nothing
 		}
-		f, ev, added = s.ofs.ensureOpen(wt, k, true)
+		if f, ev, added = s.ofs.ensureOpen(wt, k, true); added {
+			s.baseline(wt, f.ID, k) // stat before the pass tells the tabs (L5)
+		}
 		return ev
 	})
 	if err != nil {
 		return steerFail(c, err.Error())
-	}
-	if added {
-		s.baseline(wt, f.ID, k)
 	}
 	lead := ""
 	if ev != "" {

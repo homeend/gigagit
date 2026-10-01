@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v114 -->
+<!-- gg:using-gg:v115 -->
 
 # Using gg (gigagit)
 
@@ -241,8 +241,10 @@ that list:
   link. When a 21st file pushes one out, the answer ends
   `; closed <path> (20 files open)`.
 - `gg session files [--json]` — the open files, one per line:
-  `<id>\t<path>\t<source>\t<:line|->\t<shown|background>` (`--json`: `id,
-  path, source, rev, line, state`). Also in `gg_ui_state` as `open_files`.
+  `<id>\t<path>\t<source>\t<:line|->\t<shown|background>` — an overview's
+  row shows its quoted title in the path column — focus it by its id, column
+  1 (`--json`: `id, path, source, rev, line, state, title`). Also in
+  `gg_ui_state` as `open_files`.
 - `gg session files focus <id|path>[:<line>]` — bring one to the front,
   optionally at a line; exit 1 `no open file <x>`. A foreground `gg open` of
   a working-tree file already reuses its open copy; `files focus` is how you

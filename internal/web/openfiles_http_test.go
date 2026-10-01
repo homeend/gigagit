@@ -18,6 +18,7 @@ import (
 type ofAns struct {
 	File    *steer.OpenFile  `json:"file"`
 	Evicted string           `json:"evicted"`
+	Cap     int              `json:"cap"`
 	Files   []steer.OpenFile `json:"files"`
 }
 
@@ -87,8 +88,8 @@ func TestOpenFilesHTTPEvictionNamed(t *testing.T) {
 		postOpenFiles(t, ts, `{"op":"open","src":"commit","rev":"HEAD","path":"p`+strconv.Itoa(i)+`.txt"}`)
 	}
 	_, a := postOpenFiles(t, ts, `{"op":"open","src":"commit","rev":"HEAD","path":"last.txt"}`)
-	if a.Evicted != "p0.txt" {
-		t.Fatalf("evicted %q", a.Evicted)
+	if a.Evicted != "p0.txt" || a.Cap != maxOpenFiles {
+		t.Fatalf("evicted %q cap %d", a.Evicted, a.Cap)
 	}
 }
 

@@ -20,6 +20,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   live agent in its AI tasks tab) switches to that repository first, then
   opens the console; refused while another window still owns the screen.
 
+## Agent docs: the last leftovers
+
+### Fixed
+
+- **Overviews are named by id and title everywhere.** The TUI's ctrl+] now
+  says `overview f5 "Title" is in the background`, its closed-in-the-browser
+  line carries the title, and `gg session files` prints an overview's
+  quoted title instead of `overview-5.md`. The using-gg skill is v115.
+- **gg web:** a late answer to an older overview refresh no longer
+  overwrites a newer one; a repo switch no longer shows the old list's
+  "closed … (20 files open)" line; eviction lines take the cap from the
+  server; a web note's file is stat'ed before the tabs hear of it.
+
 ## Agent docs: the deferred minors
 
 ### Fixed

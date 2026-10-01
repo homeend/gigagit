@@ -201,3 +201,15 @@ func TestEscDuringAReReadKeepsTheStoresNotes(t *testing.T) {
 		t.Fatal("esc during a re-read closed the file and dropped the agent's notes")
 	}
 }
+
+// The bgDoc fixture numbers from its model's store, so a test mixing it with
+// storeOverview in a private model never gets two documents named f<n>.
+func TestBgDocNumbersFromTheModelsStore(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	o := storeOverview(t, m, "T", "x")
+	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 1)
+	if d.seq == o.seq || m.docs.NextFileSeq() != d.seq+1 {
+		t.Fatalf("bgDoc f%d beside overview f%d: numbered outside the model's store", d.seq, o.seq)
+	}
+}

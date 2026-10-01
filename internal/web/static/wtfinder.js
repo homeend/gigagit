@@ -15,7 +15,7 @@ import { closeLayer, footOwned, popFoot, pushFoot, pushLayer, showCtxMenu, topLa
 import { copyPathRows, renderCell } from "./files.js";
 import { copyFileLink, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
-import { imageHTML, openViewer, openWorktreeFileDiff } from "./viewer.js";
+import { evictedText, imageHTML, openViewer, openWorktreeFileDiff } from "./viewer.js";
 import { opLine } from "./ops.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 import { registerHelp } from "./menus.js";
@@ -452,7 +452,7 @@ async function backgroundRow() {
     opLine("background failed: " + (e.message || e), true);
     return;
   }
-  opLine(f.path + " opened in the background" + (ans.evicted ? " — closed " + ans.evicted + " (20 files open)" : ""), false);
+  opLine(f.path + " opened in the background" + (ans.evicted ? " — " + evictedText(ans.evicted, ans.cap) : ""), false);
 }
 
 function openSearch() {

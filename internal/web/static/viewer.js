@@ -175,6 +175,12 @@ function backOutcome(files, fromId) {
 function overviewStale(stamps, id, shown) {
   return !stamps || !(id in stamps) || stamps[id] !== shown;
 }
+
+// evictedText is the line naming a file an open pushed out of the list; cap
+// is the server's (sent beside the eviction).
+function evictedText(path, cap) {
+  return "closed " + path + " (" + cap + " files open)";
+}
 // --- end overview model ---
 
 // --- the overlay -------------------------------------------------------------
@@ -188,6 +194,8 @@ const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, pl
 const viewerSearch = new Search();
 const places = new Map(); // id → {cur, top}: where THIS tab left each file
 let loadSeq = 0; // bumped by every open: a reload that sees it move drops (L9)
+let ovSeq = 0; // bumped by every overview refresh: an older answer landing late drops
+let ovLast = Promise.resolve(false); // the last refresh started (refreshOverview)
 let cursorTimer = null;
 
 function ofPost(body) {
@@ -327,7 +335,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   if (landed.line !== (f.line || 0)) reportCursor();
   clearOpLine(f.path + " opened in the background"); // it is in front now
   if (landed.notice) opLine(landed.notice, false);
-  if (reg.evicted) opLine("closed " + reg.evicted + " (20 files open)", false);
+  if (reg.evicted) opLine(evictedText(reg.evicted, reg.cap), false);
   return { ok: true, notice: landed.notice };
 }
 
@@ -438,9 +446,16 @@ function selectAnchor(i) {
 
 // refreshOverview re-reads the overview on screen (the server re-checks its
 // anchors), keeping the selected anchor by its destination; false when it
-// is gone or another open won meanwhile.
-async function refreshOverview() {
-  if (!view.ov || !viewerFileId()) return false;
+// is gone or another open won meanwhile. Refreshes may overlap: only the
+// last one started applies, and an earlier one answers with the last one's
+// result — so a caller (openAnchorAt) always resumes on a re-checked list.
+function refreshOverview() {
+  if (!view.ov || !viewerFileId()) return Promise.resolve(false);
+  ovLast = refreshOverviewAs(++ovSeq);
+  return ovLast;
+}
+
+async function refreshOverviewAs(mine) {
   const id = view.id, seq = loadSeq;
   let ov;
   try {
@@ -448,6 +463,7 @@ async function refreshOverview() {
   } catch {
     return false;
   }
+  if (mine !== ovSeq) return ovLast; // a later refresh is under way: its answer is newer
   if (seq !== loadSeq || id !== view.id || !view.ov) return false;
   view.ov = { ...ov, sel: keepAnchor(ov.anchors || [], view.ov.anchors, view.ov.sel) };
   paintTitle();
@@ -962,4 +978,4 @@ registerHelp({
     "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> in the file an anchor opened comes back",
 });
 
-export { closeViewer, dropViewer, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };
+export { closeViewer, dropViewer, evictedText, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };

@@ -79,3 +79,12 @@ console.log([
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
+
+// An eviction line carries the cap the server sent, not a number of its own.
+func TestEvictedTextJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `console.log([evictedText("a.go", 20), evictedText("b.go", 7)].join("|"));`)
+	if want := "closed a.go (20 files open)|closed b.go (7 files open)"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
