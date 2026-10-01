@@ -36,6 +36,7 @@ type textTemplatesView struct {
 	// it) and only the result of request renderGen may land.
 	rendering bool
 	renderGen int
+	copying   bool // y's copy is running; the window closes when it worked
 	rendered  string
 	renderErr string
 	seqNames  []string // counters the rendered text consumes when taken
@@ -369,21 +370,28 @@ func (v *textTemplatesView) updateRendered(m Model, msg tea.KeyMsg) (Model, tea.
 	case "j":
 		v.rScroll++
 	case "y":
-		if v.renderErr != "" {
+		if v.renderErr != "" || v.copying {
 			return m, nil
 		}
-		// The text is taken: copy it, consume its counters, close the window.
+		// The text is taken once it is on the clipboard: only then are its
+		// counters consumed and the window closed. A failed copy (no
+		// clipboard) keeps the text on screen.
+		v.copying = true
 		svc, names := m.svc, v.seqNames
-		bump := func() tea.Msg {
-			if svc != nil && len(names) > 0 {
+		copyCmd := m.copyToClipboardCmd(i18n.T("copied the rendered text"), v.rendered)
+		return m, func() tea.Msg {
+			res, _ := copyCmd().(clipboardCopiedMsg)
+			if res.err == nil && svc != nil && len(names) > 0 {
 				_ = svc.BumpPrefixSeqs(context.Background(), names)
 			}
-			return nil
+			return textTemplateCopiedMsg{res}
 		}
-		return m.popLayer(), tea.Batch(m.copyToClipboardCmd(i18n.T("copied the rendered text"), v.rendered), bump)
 	}
 	return m, nil
 }
+
+// textTemplateCopiedMsg is the outcome of y's copy of the rendered text.
+type textTemplateCopiedMsg struct{ clipboardCopiedMsg }
 
 // selTitle is the selected template's title ("" with nothing selected).
 func (v *textTemplatesView) selTitle() string {

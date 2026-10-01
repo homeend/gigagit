@@ -243,27 +243,49 @@ func TestTextTemplateRenderErrorOffersOnlyEsc(t *testing.T) {
 	}
 }
 
-// y copies and closes the WHOLE window (user ruling).
+// y copies and closes the WHOLE window (user ruling) — once the copy worked;
+// only then are the text's <seq:…> counters consumed.
 func TestTextTemplatesYCopiesAndCloses(t *testing.T) {
 	t.Parallel()
 	var copied string
-	v := &textTemplatesView{mode: ttRendered, rendered: "final text", items: []model.TextTemplate{{ID: "a", Title: "A"}}}
-	m := Model{clipWrite: func(_ io.Writer, s string) (string, error) { copied = s; return "", nil }}.pushLayer(v)
+	m := loadedModel(t)
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "", nil }
+	v := &textTemplatesView{mode: ttRendered, rendered: "final text", seqNames: []string{"ycopy"}, items: []model.TextTemplate{{ID: "a", Title: "A"}}}
+	m = m.pushLayer(v)
 	out, cmd := v.update(m, keyMsg("y"))
-	if layerOf[*textTemplatesView](out) != nil {
-		t.Fatal("the window is still open after y")
-	}
-	if cmd == nil {
+	if cmd == nil || !v.copying {
 		t.Fatal("no copy command")
 	}
-	var ok string
-	for _, msg := range runCmds(cmd) {
-		if c, is := msg.(clipboardCopiedMsg); is {
-			ok = c.ok
-		}
+	// A second y while the copy runs does nothing.
+	if _, again := v.update(out, keyMsg("y")); again != nil {
+		t.Fatal("y repeated while copying")
 	}
-	if copied != "final text" || ok == "" {
-		t.Fatalf("copied %q, status %q", copied, ok)
+	res, _ := out.Update(cmd())
+	mm := res.(Model)
+	if copied != "final text" || layerOf[*textTemplatesView](mm) != nil || mm.statusMsg == "" {
+		t.Fatalf("copied %q, window open %v, status %q", copied, layerOf[*textTemplatesView](mm) != nil, mm.statusMsg)
+	}
+	if next, _, _ := m.svc.RenderTextTemplate(context.Background(), "<seq:ycopy>", nil); next != "2" {
+		t.Fatalf("the counter was not consumed: next = %q", next)
+	}
+}
+
+// A failed copy (no clipboard) keeps the window and the text, and consumes
+// no counter.
+func TestTextTemplatesYCopyFailureKeepsWindow(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.clipWrite = func(io.Writer, string) (string, error) { return "", errors.New("no clipboard") }
+	v := &textTemplatesView{mode: ttRendered, rendered: "final text", seqNames: []string{"yfail"}, items: []model.TextTemplate{{ID: "a", Title: "A"}}}
+	m = m.pushLayer(v)
+	out, cmd := v.update(m, keyMsg("y"))
+	res, _ := out.Update(cmd())
+	mm := res.(Model)
+	if layerOf[*textTemplatesView](mm) == nil || v.mode != ttRendered || v.copying || !strings.Contains(mm.statusMsg, "no clipboard") {
+		t.Fatalf("window open %v mode %v copying %v status %q", layerOf[*textTemplatesView](mm) != nil, v.mode, v.copying, mm.statusMsg)
+	}
+	if next, _, _ := m.svc.RenderTextTemplate(context.Background(), "<seq:yfail>", nil); next != "1" {
+		t.Fatalf("a failed copy consumed the counter: next = %q", next)
 	}
 }
 

@@ -3621,6 +3621,21 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case textTemplateCopiedMsg:
+		v := layerOf[*textTemplatesView](m)
+		if v != nil {
+			v.copying = false
+		}
+		if msg.err != nil {
+			m.statusMsg = i18n.T("copy failed: %s", msg.err.Error())
+			return m, nil
+		}
+		if v != nil && m.topLayer() == layer(v) {
+			m = m.popLayer()
+		}
+		m.statusMsg = msg.ok
+		return m, nil
+
 	case textTemplateRenderedMsg:
 		if v := layerOf[*textTemplatesView](m); v != nil {
 			v.onRendered(msg)
