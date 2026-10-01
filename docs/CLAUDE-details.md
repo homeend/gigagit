@@ -4268,11 +4268,27 @@ Spec `2026-09-30-agent-overview-documents-design.md`. An overview is an
 selection, laid-out width); never on disk, never evicted, created
 `backgrounded`.
 
+- **The store owns it** (since agent-docs web plan 2): text, title, anchors
+  and their `Missing` flags live in `agentdocs` (`AddOverview(root, dir, …)`
+  — the key plus the worktree on disk the anchors are stat'ed under —
+  `SetOverview`, `RemoveOverview`, `CheckAnchors`, `SetAnchorMissing`, the
+  limits and their errors). The overview's `f<n>` IS the store's
+  (`NextFileSeq`); `newOverviewDocFrom(o)` builds the TUI document under it.
+  The TUI keeps a COPY (`d.ov.text`, `d.title`, `anchor.missing`) plus its
+  own layout, selection and `from`; `syncOverviews` (in `syncAgentDocs`, on
+  every store change and a worktree switch) re-lays out a changed text
+  (`adoptOverview`, selection kept by dest), paints new missing flags, adds a
+  store overview the list lacks (background), and closes one that left the
+  store — on screen with `overview f7 was closed in the browser`. X
+  (`closeDoc`) removes it from the store.
+
 - **Anchors come from the one parser.** `markdown.ParseWith(src,
   Options{Anchor})` turns a link whose destination the caller accepts into
   `InAnchor` (`Parse` never does, so forge/web rendering is untouched).
-  `parseAnchorDest` is the grammar: `path`, `path:N`, `path:N-M`, `note:t<n>`;
-  absolute paths, `..`, schemes and drives are not anchors.
+  `agentdocs.ParseAnchorDest` is the grammar: `path`, `path:N`, `path:N-M`,
+  `note:t<n>`; absolute paths, `..`, schemes and drives are not anchors.
+  `agentdocs.ParseOverview` numbers the anchor inlines (`Text` = index) and
+  turns links past `MaxAnchors` into text; the TUI and the web share it.
 - **gg lays the rows out itself** (`overviewLines` at the viewer's reading
   column): one display row = one line, so a click maps to a line and a rune.
   Spans are recovered after wrapping through TEMPORARY classes
@@ -4290,6 +4306,24 @@ selection, laid-out width); never on disk, never evicted, created
   every document — it covers the status bar. `landPendingLine` pulls the box
   of a note starting at the landed line into view, as `}` does.
 - **Steer.** `overview_add|set|list|show|rm` run before `steerRefusal`; an add
-  the screen cannot take lands in the background. add/set stat path anchors
-  off-thread (`anchorsCheckedMsg`) and answer with the unresolved ones.
-  `steer.MaxCommandBytes` is 512 KiB for the 64 KiB text.
+  the screen cannot take lands in the background. add/set have the store
+  check the anchors off-thread (`CheckAnchors` in a cmd → `anchorsCheckedMsg`)
+  and answer with the unresolved ones. `steer.MaxCommandBytes` is 512 KiB for
+  the 64 KiB text. The CLI posts to the TUI when one is live, else to gg web.
+- **Web side** (`internal/web`: `agentdocs_follow.go`, `overview_http.go`,
+  `steer_overviews.go`; page `viewer.js` document mode). The follow pass lists
+  every overview of the served root under the STORE's id (`ensureOpenID`,
+  key `{overview, overview-<seq>.md}`, pinned, title kept current) and
+  removes entries whose overview left the store, naming them in the
+  `agentdocs` fan-out (`closed`) so a tab showing one closes its viewer.
+  `GET /api/overview?id=` runs `CheckAnchors` in the request and serves the
+  `ParseOverview` tree plus anchor rows (a live note anchor carries its
+  note's path/lines — the page has no note index). The verbs are answered
+  before `toSteerWire`; a foreground add has the tabs `file_focus` it, or
+  lands in the background while an op is in flight (`(operation in
+  flight)`). x on an overview entry → `RemoveOverview`; esc backgrounds it.
+  The page: `markdown.js` paints `anchor` as `<a class="md-anchor"
+  data-a="k">` only with `{anchors: true}` (plain text otherwise); tab /
+  shift+tab select, enter or a SINGLE click opens (after a re-fetch that
+  re-checks), a range tints `.vline.vrange`, backspace (`view.from`, one
+  step, per tab) comes back with the anchor selected.

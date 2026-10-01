@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overviews in gg web
+
+### Added
+
+- **An agent's overview shows in gg web.** `gg session overview add` now
+  reaches a gg web page too: the viewer opens the overview as a document,
+  `tab` / `shift+tab` select an anchor, `enter` or a single click opens it (a
+  file at its line, a range tinted, a note's file at its box), `backspace` in
+  that file comes back with the anchor selected, `r` copies the anchor's
+  reference and `y` the text. A missing anchor is struck through and says
+  why. The switcher lists an overview by its title; esc steps aside, x
+  closes it.
+- **One set of overviews when the TUI serves the page.** Overviews moved
+  into the shared store (`internal/agentdocs`): the page lists the TUI's
+  overviews under the TUI's ids, and closing one in either closes it in the
+  other (`overview f7 was closed in the browser` in the terminal).
+- **A standalone `gg web` answers `gg session overview add|set|list|show|rm`**
+  itself when no TUI is running (with the TUI's reply text).
+
+### Changed
+
+- `gg session overview` no longer refuses with "overviews need a gg TUI"
+  when only gg web is live. The using-gg skill is v112.
+
 ## Agent notes in gg web
 
 ### Added

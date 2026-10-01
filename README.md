@@ -1378,7 +1378,7 @@ both — dismiss one in the browser and it leaves the terminal. A standalone
 `gg web` answers `gg session note` itself when no TUI is running.
 
 For a **guided tour** the agent writes an overview: `gg session overview add
---title "…" < tour.md` shows a markdown document that lives only in the TUI,
+--title "…" < tour.md` shows a markdown document that lives in memory,
 whose links are anchors — `[the loader](internal/tui/open_files.go:220)`, a
 range `path:120-140`, or one of its notes `note:t7`. `tab` / `shift+tab`
 select the next / previous anchor, `enter` (or a double click) opens it — the
@@ -1388,7 +1388,12 @@ open in the background. `r` copies a reference to the anchor for the agent
 (`gg overview f12 "Tour" → internal/tui/open_files.go:220`),
 `y` the whole text. `gg session overview set|list|show|rm` are the agent's
 other verbs; an overview is an open file (esc backgrounds it, X closes it, the
-ctrl+\\ switcher lists it).
+ctrl+\\ switcher lists it). gg web shows overviews too: the viewer opens one
+as a document, `tab` / `shift+tab` / `enter` / `r` / `y` / `backspace` work
+the same, and a single click opens an anchor. A TUI serving its own page
+shares one set of overviews with it (same ids; close one in either and it
+closes in both), and a standalone `gg web` answers `gg session overview`
+itself.
 
 ### Agent sessions (embedded consoles)
 
