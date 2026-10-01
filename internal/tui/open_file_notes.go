@@ -60,6 +60,16 @@ func (d *openFile) syncNotes() (stale bool) {
 	return false
 }
 
+// hasNotes reports whether d carries notes: its copy, or the store's while a
+// re-read is still to adopt them (syncNotes refused content d does not show).
+// Close and the cap decide by this, never by the copy alone.
+func (d *openFile) hasNotes() bool {
+	if len(d.notes) > 0 {
+		return true
+	}
+	return d.docs != nil && d.src.kind == srcWorktree && d.docs.NoteCount(d.root, d.path) > 0
+}
+
 // noteByID is d's copy of the note with that id, or nil.
 func (d *openFile) noteByID(id string) *agentdocs.Note {
 	for i := range d.notes {
