@@ -32,6 +32,10 @@ type Claim struct {
 	// between WSL and Windows has two pid namespaces and two state dirs, so
 	// only the writing host can judge its liveness.
 	Host string `toml:"host"`
+	// Parent is the session that handed this claim to its holder (an agent
+	// that spawned a worker); when the holder dies and the parent lives, the
+	// claim reverts to the parent instead of being swept. "" = none.
+	Parent string `toml:"parent"`
 }
 
 func path(gitDir string) string { return filepath.Join(gitDir, FileName) }

@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/sessionreg"
 	"github.com/homeend/gigagit/internal/wtclaim"
 )
 
@@ -42,6 +43,11 @@ type WorktreeMark struct {
 // and its write — alive this long, then a crashed claimer's.
 const emptyClaimGrace = 10 * time.Second
 
+// youngClaimGrace: a claim this fresh whose session its LIVE process does not
+// list yet is a handover racing the registry write (sessionpublish writes
+// asynchronously) — alive, not dead.
+const youngClaimGrace = 2 * sessionreg.LiveWindow
+
 // readClaim reads gitDir's claim. An unparsable file (hand-edited, torn by
 // a crash) reads as an EMPTY claim, so it gets the same grace-then-dead
 // treatment instead of blocking the worktree forever.
@@ -59,7 +65,7 @@ func readClaim(gitDir string) (wtclaim.Claim, bool) {
 // sameClaim: field-wise, with time.Equal — a numeric-offset timestamp parses
 // to a fresh *Location each read, so == would never match it.
 func sameClaim(a, b wtclaim.Claim) bool {
-	return a.Session == b.Session && a.Agent == b.Agent && a.Note == b.Note && a.Host == b.Host && a.Since.Equal(b.Since)
+	return a.Session == b.Session && a.Agent == b.Agent && a.Note == b.Note && a.Host == b.Host && a.Parent == b.Parent && a.Since.Equal(b.Since)
 }
 
 // localHost names this machine + OS for claim stamps.
@@ -76,7 +82,31 @@ func claimDead(c wtclaim.Claim, gitDir string, lv liveView) bool {
 		age, ok := wtclaim.Age(gitDir)
 		return ok && age > emptyClaimGrace
 	}
+	if _, listed := lv.running[c.Session]; !listed && lv.procs[sessionreg.ProcOf(c.Session)] &&
+		!c.Since.IsZero() && time.Since(c.Since) < youngClaimGrace {
+		return false
+	}
 	return sessionDead(c.Session, lv)
+}
+
+// settleDeadClaim runs under the claim lock on a claim already judged dead:
+// it reverts to a live Parent (the worker died, its overseer lives) or
+// removes it. ok reports a claim that is still there (reverted).
+func settleDeadClaim(gitDir string, c wtclaim.Claim, lv liveView) (ClaimInfo, bool) {
+	if c.Parent != "" && !sessionDead(c.Parent, lv) {
+		back := wtclaim.Claim{Session: c.Parent, Agent: lv.agents[c.Parent],
+			Since: time.Now().UTC().Truncate(time.Second), Note: c.Note, Host: c.Host}
+		if wtclaim.Remove(gitDir) == nil && wtclaim.Create(gitDir, back) == nil {
+			return claimInfoOf(back), true
+		}
+		return ClaimInfo{}, false
+	}
+	_ = wtclaim.Remove(gitDir)
+	return ClaimInfo{}, false
+}
+
+func claimInfoOf(c wtclaim.Claim) ClaimInfo {
+	return ClaimInfo{Session: c.Session, Agent: c.Agent, Since: c.Since, Note: c.Note, Parent: c.Parent}
 }
 
 // liveClaim reports gitDir's claim when alive. A dead one is removed under
@@ -90,17 +120,25 @@ func liveClaim(gitDir string, lv liveView) (ClaimInfo, bool) {
 	if !ok {
 		return ClaimInfo{}, false
 	}
-	if claimDead(c, gitDir, lv) {
-		_ = wtclaim.WithLock(gitDir, func() error {
-			again, ok := readClaim(gitDir)
-			if ok && sameClaim(again, c) && claimDead(again, gitDir, lv) {
-				return wtclaim.Remove(gitDir)
-			}
-			return nil
-		})
-		return ClaimInfo{}, false
+	if !claimDead(c, gitDir, lv) {
+		return claimInfoOf(c), true
 	}
-	return ClaimInfo{Session: c.Session, Agent: c.Agent, Since: c.Since, Note: c.Note}, true
+	var info ClaimInfo
+	var kept bool
+	_ = wtclaim.WithLock(gitDir, func() error {
+		again, ok := readClaim(gitDir)
+		switch {
+		case !ok:
+		case !sameClaim(again, c):
+			if !claimDead(again, gitDir, lv) {
+				info, kept = claimInfoOf(again), true // someone re-claimed meanwhile
+			}
+		default:
+			info, kept = settleDeadClaim(gitDir, again, lv)
+		}
+		return nil
+	})
+	return info, kept
 }
 
 func (s *Service) worktreeAt(ctx context.Context, path string) (model.Worktree, error) {
@@ -149,8 +187,11 @@ func (s *Service) ClaimWorktree(ctx context.Context, path, sessionID, note strin
 				}
 				return &NotFreeError{Path: target.Path, BlockedBy: []string{"claimed"}}
 			}
-			if err := wtclaim.Remove(gitDir); err != nil {
-				return err
+			if info, kept := settleDeadClaim(gitDir, c, lv); kept {
+				if info.Session == sessionID {
+					return nil // reverted to us
+				}
+				return &NotFreeError{Path: target.Path, BlockedBy: []string{"claimed"}}
 			}
 		}
 		err := wtclaim.Create(gitDir, wtclaim.Claim{Session: sessionID, Agent: lv.agents[sessionID],
@@ -194,10 +235,45 @@ func liveClaimLocked(gitDir string, lv liveView) (ClaimInfo, bool) {
 		return ClaimInfo{}, false
 	}
 	if claimDead(c, gitDir, lv) {
-		_ = wtclaim.Remove(gitDir)
-		return ClaimInfo{}, false
+		return settleDeadClaim(gitDir, c, lv)
 	}
-	return ClaimInfo{Session: c.Session, Agent: c.Agent, Since: c.Since, Note: c.Note}, true
+	return claimInfoOf(c), true
+}
+
+// HandOverWorktree moves path's claim from the session holding it to `to`,
+// recording `from` as the claim's Parent (an overseer handing a worktree to
+// the worker it spawned). ErrNotHolder when from does not hold a live claim.
+func (s *Service) HandOverWorktree(ctx context.Context, path, from, to string) error {
+	w, err := s.worktreeAt(ctx, path)
+	if err != nil {
+		return err
+	}
+	gitDir := git.GitDirAt(w.Path)
+	if gitDir == "" {
+		return ErrUnknownWorktree
+	}
+	lv := readLive(s.registryDir())
+	return wtclaim.WithLock(gitDir, func() error {
+		c, ok := liveClaimLocked(gitDir, lv)
+		if !ok || c.Session != from {
+			return ErrNotHolder
+		}
+		if err := wtclaim.Remove(gitDir); err != nil {
+			return err
+		}
+		return wtclaim.Create(gitDir, wtclaim.Claim{Session: to, Agent: lv.agents[to], Parent: from,
+			Since: time.Now().UTC().Truncate(time.Second), Note: c.Note, Host: localHost()})
+	})
+}
+
+// claimHeldBy reports whether session holds path's live claim.
+func (s *Service) claimHeldBy(ctx context.Context, path, session string) (bool, error) {
+	w, err := s.worktreeAt(ctx, path)
+	if err != nil {
+		return false, err
+	}
+	c, ok := liveClaim(git.GitDirAt(w.Path), readLive(s.registryDir()))
+	return ok && c.Session == session, nil
 }
 
 // WorktreeMarks is the TUI's cheap view: reserve + live claim per worktree,

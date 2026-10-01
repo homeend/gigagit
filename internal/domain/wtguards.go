@@ -150,8 +150,8 @@ func (g sessionGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result
 		}
 		refs = append(refs, rs...)
 		for _, r := range rs {
-			if r.State == "running" {
-				running = append(running, r.Agent)
+			if r.State == "running" && (t.CallerSession == "" || r.ID != t.CallerSession) {
+				running = append(running, r.Agent) // the caller's own session never blocks it
 			}
 		}
 	}

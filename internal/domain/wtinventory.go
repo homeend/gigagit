@@ -56,6 +56,7 @@ type ClaimInfo struct {
 	Agent   string    `json:"agent"`
 	Since   time.Time `json:"since"`
 	Note    string    `json:"note"`
+	Parent  string    `json:"parent,omitempty"` // the agent that handed it over
 }
 
 // WorktreeInfo is one worktree's inventory row: identity, every guard's
