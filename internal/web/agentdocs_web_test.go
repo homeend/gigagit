@@ -264,23 +264,51 @@ func TestFollowPassNamesTheFileItPushedOut(t *testing.T) {
 	}
 }
 
-// Passes run one at a time: each reads the store inside the turn, so the
+// Passes run one at a time: each reads the store inside its turn, so the
 // last one leaves the pins the store has now (two interleaved passes could
-// leave a pin the store no longer holds).
+// leave a pin the store no longer holds). A pass started while another holds
+// the turn has no effect until the turn is free.
 func TestFollowPassesRunOneAtATime(t *testing.T) {
 	t.Parallel()
-	s, _ := noteSrv(t)
+	s, root := noteSrv(t)
+	wt := s.service().Root()
 	s.followMu.Lock()
+	if _, err := s.docs.AddNote(root, "f.txt", []string{"content 1"}, 1, 1, "s", "", ""); err != nil {
+		s.followMu.Unlock()
+		t.Fatal(err)
+	}
 	done := make(chan struct{})
 	go func() { s.followDocs(); close(done) }()
-	select {
-	case <-done:
-		s.followMu.Unlock()
-		t.Fatal("a pass ran while another held the turn")
-	case <-time.After(100 * time.Millisecond):
-	}
+	time.Sleep(100 * time.Millisecond)
+	_, listed := s.ofs.lookup(wt, ofKey{Src: "worktree", Path: "f.txt"})
 	s.followMu.Unlock()
+	if listed {
+		t.Fatal("a pass listed the noted file while another held the turn")
+	}
 	<-done
+	if _, ok := s.ofs.lookup(wt, ofKey{Src: "worktree", Path: "f.txt"}); !ok {
+		t.Fatal("the pass did not list the noted file once the turn was free")
+	}
+}
+
+// An eviction a steer recorded for one worktree is not announced by a pass
+// over another (a repo switch between the steer's turn and the pass).
+func TestAnEvictionDoesNotCrossAWorktreeSwitch(t *testing.T) {
+	isolateGlobal(t)
+	s, _ := noteSrv(t)
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	s.followMu.Lock()
+	s.evicted = append(s.evicted, ofEvicted{wt: "/a/worktree/no/longer/shown", path: "old.txt"})
+	s.followMu.Unlock()
+	s.followDocs()
+	if m := next(); m.Reason != "agentdocs" || m.Evicted != "" {
+		t.Fatalf("event = %+v, want no eviction from another worktree", m)
+	}
 }
 
 // A note that lists its file over the cap names the file it pushed out both
@@ -305,7 +333,7 @@ func TestANoteOverTheCapTellsTheAgentAndTheTabs(t *testing.T) {
 	for {
 		m := next()
 		if m.Reason == "agentdocs" {
-			if m.Evicted != "p0" {
+			if m.Evicted != "p0" || m.Cap != maxOpenFiles {
 				t.Fatalf("event = %+v, want p0 named", m)
 			}
 			return

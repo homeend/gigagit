@@ -39,7 +39,17 @@ type ofReq struct {
 type ofAnswer struct {
 	File    *steer.OpenFile  `json:"file,omitempty"`
 	Evicted string           `json:"evicted,omitempty"`
+	Cap     int              `json:"cap,omitempty"` // the list's cap, beside Evicted
 	Files   []steer.OpenFile `json:"files"`
+}
+
+// capIf is the list's cap when an answer names an eviction (0 = omitted):
+// the page words "(<cap> files open)" from it rather than a number its own.
+func capIf(evicted bool) int {
+	if evicted {
+		return maxOpenFiles
+	}
+	return 0
 }
 
 func (s *Server) handleOpenFilesGet(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +106,7 @@ func (s *Server) handleOpenFilesPost(w http.ResponseWriter, r *http.Request) {
 		}
 		f, ev := s.ofs.open(wt, k, q.Tab, q.Line)
 		s.baseline(wt, f.ID, k)
-		ans.File, ans.Evicted = &f, ev
+		ans.File, ans.Evicted, ans.Cap = &f, ev, capIf(ev != "")
 	case "focus":
 		var f steer.OpenFile
 		if f, ok = s.ofs.focus(wt, q.ID, q.Tab); ok {
@@ -162,7 +172,7 @@ func (s *Server) broadcastOpenFiles(wt, evicted string) { s.broadcastOpened(wt, 
 // open just added, so every tab can say so.
 func (s *Server) broadcastOpened(wt, evicted, opened string) {
 	if h := s.liveHubRef(); h != nil {
-		h.fanOut(liveMsg{Changed: []string{}, Reason: "open_files", Files: s.ofList(wt), Evicted: evicted, Opened: opened})
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "open_files", Files: s.ofList(wt), Evicted: evicted, Cap: capIf(evicted != ""), Opened: opened})
 	}
 }
 

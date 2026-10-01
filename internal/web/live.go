@@ -65,6 +65,7 @@ type liveMsg struct {
 	// changed file on Reason "file_changed".
 	Files   []steer.OpenFile `json:"files,omitempty"`
 	Evicted string           `json:"evicted,omitempty"`
+	Cap     int              `json:"cap,omitempty"` // the list's cap, beside Evicted
 	FileID  string           `json:"file_id,omitempty"`
 	// Opened names the file an agent just opened in the background
 	// ("open_files"): every tab says so.

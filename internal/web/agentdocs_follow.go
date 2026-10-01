@@ -81,7 +81,12 @@ func (s *Server) followDocs() {
 	root := s.docsRoot(context.Background())
 	paths := s.docs.NotedPaths(root)
 	noted := make(map[string]bool, len(paths))
-	evicted := s.evicted // what a steer's own listing pushed out (listDocs)
+	var evicted []string
+	for _, e := range s.evicted { // what a steer's own listing pushed out (listDocs)
+		if e.wt == wt { // a repo switch since: that list is not the tabs' now
+			evicted = append(evicted, e.path)
+		}
+	}
 	s.evicted = nil
 	for _, p := range paths {
 		noted[p] = true
@@ -112,9 +117,12 @@ func (s *Server) followDocs() {
 	}
 	if h := s.liveHubRef(); h != nil {
 		h.fanOut(liveMsg{Changed: []string{}, Reason: "agentdocs", Files: s.ofList(wt), Closed: closed,
-			Evicted: strings.Join(evicted, ", "), Stamps: stamps})
+			Evicted: strings.Join(evicted, ", "), Cap: capIf(len(evicted) > 0), Stamps: stamps})
 	}
 }
+
+// ofEvicted is a path a steer's listing pushed out of worktree wt's list.
+type ofEvicted struct{ wt, path string }
 
 // listDocs runs add — a steer's store write and the entry it lists — in
 // the follow passes' turn, so no pass lists that entry first, then runs a
@@ -123,7 +131,7 @@ func (s *Server) followDocs() {
 func (s *Server) listDocs(add func() (evicted string)) {
 	s.followMu.Lock()
 	if ev := add(); ev != "" {
-		s.evicted = append(s.evicted, ev)
+		s.evicted = append(s.evicted, ofEvicted{wt: s.service().Root(), path: ev})
 	}
 	s.followMu.Unlock()
 	s.followDocs()

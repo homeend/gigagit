@@ -135,7 +135,7 @@ type Server struct {
 	docs     *agentdocs.Store
 	rootc    docsRootCache
 	followMu sync.Mutex
-	evicted  []string
+	evicted  []ofEvicted
 
 	// closing is closed once by announceShutdown: every /api/events stream
 	// then sends a last "shutdown" message and ends (live.go).
