@@ -66,6 +66,27 @@ func RepoName(worktreeRoot string) string {
 	return filepath.Base(worktreeRoot)
 }
 
+// ResolvePrefix resolves a branch-prefix template against ctx — the one
+// resolver behind the TUI's prefix picker and gg prefix resolve. A <seq>
+// counter ctx does not carry yet is peeked from gitCommonDir (never into the
+// caller's map). It returns the name and the prefix's counter names, which
+// the caller bumps once the name is used.
+func ResolvePrefix(value string, inputs map[string]string, ctx template.Ctx, gitCommonDir string) (string, []string, error) {
+	names := Templates{Branch: value}.SeqNames()
+	seqs := make(map[string]int, len(ctx.Seqs)+len(names))
+	for k, v := range ctx.Seqs {
+		seqs[k] = v
+	}
+	for _, n := range names {
+		if _, ok := seqs[n]; !ok {
+			seqs[n] = config.PeekSeq(gitCommonDir, n)
+		}
+	}
+	ctx.Seqs = seqs
+	out, err := template.Resolve(value, inputs, ctx)
+	return out, names, err
+}
+
 // PeekSeqs reads the next value of each named counter (no mutation).
 func PeekSeqs(gitCommonDir string, names []string) map[string]int {
 	out := make(map[string]int, len(names))

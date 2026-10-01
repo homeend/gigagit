@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/homeend/gigagit/internal/filelock"
 )
 
 // seqState is the on-disk shape of <gitDir>/gg/state.toml. Each counter value is
@@ -49,15 +51,20 @@ func PeekSeq(gitDir, name string) int {
 }
 
 // BumpSeq increments the named counter and persists it atomically, returning the
-// newly consumed number (which equals the PeekSeq value taken just before).
-// Concurrent bumps of the same counter from multiple processes are out of scope
-// (gigagit assumes a single interactive user).
+// newly consumed number. The read-modify-write runs under the state file's
+// cross-process lock, so concurrent bumps (agents naming branches at once)
+// each get their own number.
 func BumpSeq(gitDir, name string) (int, error) {
 	if gitDir == "" {
 		// No common git dir was resolved; refuse to write rather than create a
 		// stray gg/state.toml relative to the process working directory.
 		return 0, fmt.Errorf("config: no git dir; refusing to write seq state")
 	}
+	release, err := filelock.Acquire(statePath(gitDir) + ".lock")
+	if err != nil {
+		return 0, err
+	}
+	defer release()
 	st, err := readSeqState(gitDir)
 	if err != nil {
 		return 0, err

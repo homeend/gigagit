@@ -76,23 +76,26 @@ const steerPresenceTick = time.Second
 // field has passed the same allowlists the notes lane uses, so the page can
 // hand these values straight to its openers.
 type steerWire struct {
-	Cmd     string   `json:"cmd"`
-	File    string   `json:"file,omitempty"`
-	State   string   `json:"state,omitempty"`
-	Commit  string   `json:"commit,omitempty"`
-	Source  string   `json:"source,omitempty"`
-	Target  string   `json:"target,omitempty"`
-	Ref     string   `json:"ref,omitempty"`
-	A       string   `json:"a,omitempty"`
-	B       string   `json:"b,omitempty"`
-	Side    string   `json:"side,omitempty"`
-	Line    int      `json:"line,omitempty"`
-	Step    string   `json:"step,omitempty"`
-	Sources []string `json:"sources,omitempty"`
-	Panel   string   `json:"panel,omitempty"`
-	Start   int      `json:"start,omitempty"`
-	End     int      `json:"end,omitempty"`
-	Tone    string   `json:"tone,omitempty"`
+	Cmd    string `json:"cmd"`
+	File   string `json:"file,omitempty"`
+	State  string `json:"state,omitempty"`
+	Commit string `json:"commit,omitempty"`
+	Source string `json:"source,omitempty"`
+	Target string `json:"target,omitempty"`
+	Ref    string `json:"ref,omitempty"`
+	A      string `json:"a,omitempty"`
+	B      string `json:"b,omitempty"`
+	Side   string `json:"side,omitempty"`
+	Line   int    `json:"line,omitempty"`
+	// AnchorNote says a fingerprinted link's line moved or changed
+	// (domain.AnchorNote); the page shows it on its op line.
+	AnchorNote string   `json:"anchor_note,omitempty"`
+	Step       string   `json:"step,omitempty"`
+	Sources    []string `json:"sources,omitempty"`
+	Panel      string   `json:"panel,omitempty"`
+	Start      int      `json:"start,omitempty"`
+	End        int      `json:"end,omitempty"`
+	Tone       string   `json:"tone,omitempty"`
 	// HintKind/HintID name the UI surface a navigate's link was copied from
 	// (spec §3.3) — "bookmark", "shelf" or "stash", the closed set
 	// model.LinkHint's grammar already validated, so the page can reveal it
@@ -221,6 +224,7 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 			return w, errors.New("line must be 1-based")
 		}
 		w.Side, w.Line = c.Line.Side, c.Line.No
+		w.AnchorNote = domain.AnchorNote(c.Line.Asked, c.Line.No, c.Line.Anchor, c.Line.Matches)
 		if w.Side == "" {
 			w.Side = "new"
 		}

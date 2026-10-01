@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg prefix resolve
+
+### Added
+
+- **CLI:** `gg prefix resolve <id> [--set label=value]… [--parent <branch>]
+  [--bump]` prints a branch prefix resolved exactly as the TUI's prefix
+  picker does — `<user:…>` labels from `--set` (a missing one exits 2 naming
+  the flag), `<date:…>`, `<repo>`, `<parent-branch>`, `<seq:…>`.
+  Read-only unless `--bump`, which advances the prefix's `<seq>` counters
+  once, as creating the branch in the TUI does. `--template <value>`
+  resolves a raw template. An agent can now name a branch by the user's
+  scheme. The using-gg skill is v121.
+
 ## Agent spawn follow-ups
 
 ### Fixed
@@ -43,7 +56,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Before, the row was cut and its anchors could not be reached.
 - **Up to 100 open files per worktree** (was 20), in the TUI and gg web:
   overviews are never pushed out, so 20 of them used to leave room for about
-  one of your own files. The using-gg skill is v121.
+  one of your own files. The using-gg skill is v123.
 
 ### Fixed
 
@@ -139,6 +152,36 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (`gg agent list` outside gg lists the running TUIs from their registry
   files). **`gg init --mcp`** registers gg's MCP server with Claude Code
   (`claude mcp add -s user`). The using-gg skill is v118.
+
+## Links to uncommitted lines follow their text
+
+### Added
+
+- **A link to an uncommitted line carries a fingerprint of that line**:
+  `gg://repo/path:33~9f2c41aa` (also `@staged` and `?view=content` links).
+  The copy paths add it — `L`, the `.` menu's Copy link and Copy file link,
+  the web's *copy gg link to this line*, `gg link` (not yet the web file
+  viewer's own "copy file link", which still copies the plain form). When the link is opened
+  after the file has moved on, gg finds the text again: it lands on the line
+  where the text is now and says `line 33 moved to 41` (or, when several
+  lines match, `nearest of N matching lines`). When the text is gone it lands
+  on the original line and says `line 33 has changed since this link was
+  copied`. It never refuses. The note shows in the diff's notice box, on the
+  web's op line, on stderr for `gg diff` / `gg note add` / `gg open` / `gg
+  session navigate`, and in the steer reply.
+- **`gg link resolve --json` and MCP `gg_link_resolve`** report `asked_line`,
+  `anchor` (`same` | `moved` | `changed`) and `anchor_matches`; `line` is
+  where the text is now.
+- **`gg link --no-fingerprint`** prints the plain form.
+
+### Changed
+
+- A blank line gets no fingerprint, and a commit, pair, preview or ref link
+  never carries one (`~<fp>` on those is refused): they already name fixed
+  content.
+- A gg build older than this one refuses a fingerprinted link as malformed.
+- gg web copies the plain form for a line that is not valid UTF-8 (the page
+  never sees its real bytes).
 
 ## Line links: the landing pane, the web's other comparisons, the help line
 

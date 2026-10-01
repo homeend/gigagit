@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
@@ -250,6 +251,20 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 // load (fix F3): a `g`/`G` press already in flight when this lands must not
 // be mistaken for this reveal's arrival, nor swallow it.
 func (m Model) navigateLanded(c steer.Command, detail string) (Model, tea.Cmd) {
+	// A fingerprinted link whose line moved or changed: the reply says it in
+	// English (the agent reads it), the screen in the reader's language — in
+	// the diff's notice box, which the landing has just written, or the
+	// status bar when no diff is on top.
+	if c.Line != nil {
+		if n := domain.AnchorNote(c.Line.Asked, c.Line.No, c.Line.Anchor, c.Line.Matches); n != "" {
+			detail += "; " + n
+			if v := m.diffLayer(); v != nil && m.topLayer() == layer(v) && m.diffNotice != "" {
+				m.diffNotice += " — " + anchorNotice(c.Line)
+			} else {
+				m.statusMsg = anchorNotice(c.Line)
+			}
+		}
+	}
 	reply := m.answerSteer(c, steerOK(c, detail))
 	switch c.HintKind {
 	case "":
@@ -906,6 +921,25 @@ func (v *diffView) landOnSide(old bool) {
 		return
 	}
 	v.onOld = old
+}
+
+// anchorNotice is the TRANSLATED sentence for a re-anchored landing ("" when
+// the line is where the link said). The steer reply carries the English twin
+// (domain.AnchorNote).
+func anchorNotice(l *steer.Line) string {
+	if l == nil {
+		return ""
+	}
+	switch l.Anchor {
+	case domain.AnchorMoved:
+		if l.Matches > 1 {
+			return i18n.T("line %d moved to %d (nearest of %d matching lines)", l.Asked, l.No, l.Matches)
+		}
+		return i18n.T("line %d moved to %d", l.Asked, l.No)
+	case domain.AnchorChanged:
+		return i18n.T("line %d has changed since this link was copied", l.Asked)
+	}
+	return ""
 }
 
 // failPending answers and clears whatever is parked. Every failure branch of

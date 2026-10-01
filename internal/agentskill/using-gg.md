@@ -128,6 +128,7 @@ you can hand straight back to gg:
 gg://<repo>/<path>[@<target>][:<line>]     <target> = a full/short sha, "staged", or absent = the working tree
 gg://<repo>/<path>[@<target>]#<hunk>       hunk numbers are `gg diff --hunks`'s
 gg://<repo>/<path>@<sha>:old:<n>           the old side of that diff
+gg://<repo>/<path>[@staged]:[old:]<n>~<fp>  an UNCOMMITTED line + its 8-hex fingerprint: gg re-finds the text
 gg://<repo>@<sha>                          a commit, no file
 gg://<repo>@ref:<branch|tag>               a branch or tag TIP: the whole tree there
 gg://<repo>@<a>..<b>                       a CHANGE-SET: only what differs between a and b
@@ -167,6 +168,18 @@ versions row it came from. The id is `<unix>-<op>` with no branch (ids reject
 `/`); the consumer finds the record by id, tie-broken by the pair. These
 links are MACHINE-LOCAL: version refs are never pushed and `<ours>` is a
 rewritten tip, so on another checkout the pair itself will not resolve.
+A link to an UNCOMMITTED line (the working tree, `@staged`, `?view=content`)
+ends `:<n>~<fp>`: a fingerprint of that line's text, added by every copy path
+(`gg link` too; `--no-fingerprint` prints the plain form). The file may have
+moved on since the human copied it, so gg re-finds the text and tells you on
+stderr — the verb still runs, on the line where the text is NOW:
+`gg: line 33 moved to 41` (follow it; `(nearest of N matching lines)` means
+the text is not unique, so check the line), or `gg: line 33 has changed since
+this link was copied` (the line the human meant no longer exists as written —
+say so rather than answer about whatever sits on line 33 now). `gg link
+resolve --json` and `gg_link_resolve` report `line` (now), `asked_line` and
+`anchor` (`same` | `moved` | `changed`). A commit, pair, preview or ref link
+never carries a fingerprint (it is refused): those already name fixed content.
 `gg link resolve` takes both: a `@ref:` link answers with `ref <name>` plus
 the tip it resolves to HERE, a `@a..b` link with `pair <a>..<b>`, and
 `--json` carries `ref` / `pair_a` + `pair_b` beside the address fields. The
@@ -852,6 +865,15 @@ finds the right one here.
   `<random-*>`; `<branch>` is rejected). In the TUI, the create-branch popup
   (`ctrl+p`) and create-worktree popup (`p`) let you pick one, fill any
   `<user:…>` labels, and append the rest of the name.
+- `gg prefix resolve <id> [--set label=value]… [--parent <branch>] [--bump]`
+  — print a prefix (its id from `gg prefix ls`) resolved exactly as the TUI's
+  picker does: `--set issue-number=1234` fills `<user:issue-number>` (a
+  missing label exits 2 naming the flag), `<date:…>` is now, `<repo>` the
+  main worktree's name, `<parent-branch>` `--parent` or the current branch.
+  Read-only: a `<seq:…>` counter prints its next number every time; pass
+  `--bump` ONCE, for the name you will create, to advance it. Append the rest
+  of the name yourself (`me/MTHR-1234` + `-fix-login`). `--template <value>`
+  resolves a raw template instead of a stored id.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` (plain: `branch<TAB>path`) / `gg worktree add [<start-point>]` /
   `gg worktree add --branch <name> [<path>]` /
@@ -973,9 +995,12 @@ gives an agent in a gg console the agent tools.
 1. `gg worktree list --free --json` — free worktrees, best first.
 2. `gg worktree claim --note <issue-url> <path>` — exit 1 means someone got
    there first: take the next one.
-3. `gg worktree recycle [--on-dirty=shelve] <path> <branch>` (pass
+3. Name the branch by the user's scheme: `gg prefix resolve <id> --set
+   <label>=<value> --bump` (ids from `gg prefix ls`), append the rest, then
+   `gg branch create <name> <start-point>`.
+4. `gg worktree recycle [--on-dirty=shelve] <path> <branch>` (pass
    `--on-dirty` only when its `recycle` is `shelve`).
-4. When done: `gg worktree release <path>`.
+5. When done: `gg worktree release <path>`.
 
 `git-lock` can appear for one listing while another reader's `git status`
 holds `index.lock` — list again before giving up on a worktree. A `claim`

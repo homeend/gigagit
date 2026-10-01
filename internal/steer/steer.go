@@ -72,6 +72,12 @@ type Target struct {
 type Line struct {
 	Side string `json:"side"` // "new" | "old"
 	No   int    `json:"no"`
+	// Asked / Anchor / Matches describe a FINGERPRINTED link's line: No is
+	// where its text is now, Asked the line the link named, Anchor "same" |
+	// "moved" | "changed". Empty for every other command.
+	Asked   int    `json:"asked,omitempty"`
+	Anchor  string `json:"anchor,omitempty"`
+	Matches int    `json:"matches,omitempty"`
 }
 
 // Command is one steering command. The consumer sees only file + target +

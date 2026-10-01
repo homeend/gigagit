@@ -27,25 +27,25 @@ type fileLinkCheckedMsg struct {
 // commit row). A files-view row deleted in its commit still counts: its
 // "Copy file link" then says the file is not in the working tree, which is
 // the answer the user asked for.
-func (m Model) fileRowPath() (string, int, bool) {
+func (m Model) fileRowPath() (path string, line int, text string, ok bool) {
 	if d, ok := m.focusedDoc(); ok {
 		p := d.p
 		if p.cur < 0 || p.cur >= len(p.lines) || !p.lines[p.cur].src {
 			// Still loading, or a placeholder: no line to name. The disk file
 			// itself is still linkable; another version cannot be checked.
-			return d.path, 0, d.src.kind == srcWorktree
+			return d.path, 0, "", d.src.kind == srcWorktree
 		}
-		return d.path, p.cur + 1, true
+		return d.path, p.cur + 1, p.lines[p.cur].raw, true
 	}
 	switch m.topLayer().(type) {
 	case *historyView, *blameView:
-		return "", 0, false
+		return "", 0, "", false
 	}
 	if m.diffLayer() != nil {
-		return "", 0, false
+		return "", 0, "", false
 	}
-	path, ok := m.fileListRowPath()
-	return path, 0, ok
+	path, ok = m.fileListRowPath()
+	return path, 0, "", ok
 }
 
 // focusedFilesPreview is the files view's View-file preview when it holds
@@ -109,11 +109,11 @@ func (m Model) fileListRowPath() (string, bool) {
 // link (?view=content) — no commit, the file as it is on disk — copied only
 // after a stat proves the file is there.
 func (m Model) contextFileLinkRow() (actionRow, bool) {
-	path, line, ok := m.fileRowPath()
+	path, line, raw, ok := m.fileRowPath()
 	if !ok {
 		return actionRow{}, false
 	}
-	text, ok := m.buildLinkFor(model.FileAddress{State: model.StateUnstaged, Worktree: m.currentWorktree, Path: path}, model.NoteSideNew, line, 0, model.ContentHint)
+	text, ok := m.buildLinkFor(model.FileAddress{State: model.StateUnstaged, Worktree: m.currentWorktree, Path: path}, model.NoteSideNew, line, 0, model.ContentHint, raw)
 	if !ok {
 		return actionRow{}, false
 	}

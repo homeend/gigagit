@@ -99,8 +99,8 @@ func TestLinkContentWithLine(t *testing.T) {
 		t.Fatalf("exit = %d (stderr %q)", code, errb)
 	}
 	got := strings.TrimSpace(out)
-	if !strings.HasSuffix(got, "/README.md:1?view=content") {
-		t.Fatalf("stdout = %q, want …/README.md:1?view=content", got)
+	if want := "/README.md:1~" + model.LineFingerprint("hi") + "?view=content"; !strings.HasSuffix(got, want) {
+		t.Fatalf("stdout = %q, want …%s", got, want)
 	}
 	l, err := model.ParseLink(got)
 	if err != nil || !l.IsContent() || l.Line != 1 {

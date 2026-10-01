@@ -228,8 +228,14 @@ func TestLinkAbsoluteArgumentWithAColonInTheCheckoutPath(t *testing.T) {
 		t.Fatalf("exit = %d (stderr %q)", code, errb)
 	}
 	got := strings.TrimSpace(out)
-	if !strings.HasSuffix(got, "/README.md:2") {
-		t.Errorf("stdout = %q, want a link ending /README.md:2", got)
+	// An uncommitted line carries its fingerprint (the file's own line 2).
+	data, err := os.ReadFile(filepath.Join(top, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "/README.md:2~" + model.LineFingerprint(strings.Split(string(data), "\n")[1])
+	if !strings.HasSuffix(got, want) {
+		t.Errorf("stdout = %q, want a link ending %s", got, want)
 	}
 	// The checkout path itself carries the colon; the link must still reparse.
 	if _, err := model.ParseLink(got); err != nil {

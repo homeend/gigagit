@@ -51,6 +51,12 @@ type linkResolveOut struct {
 	PreviewSource string `json:"preview_source,omitempty"`
 	PreviewTarget string `json:"preview_target,omitempty"`
 	Line          int    `json:"line,omitempty"`
+	// AskedLine / Anchor / AnchorMatches: a fingerprinted link's line as the
+	// link named it, and what became of it ("same" | "moved" | "changed").
+	// Line is where the text is NOW.
+	AskedLine     int    `json:"asked_line,omitempty"`
+	Anchor        string `json:"anchor,omitempty"`
+	AnchorMatches int    `json:"anchor_matches,omitempty"`
 	Side          string `json:"side,omitempty"`
 	Hunk          int    `json:"hunk,omitempty"`
 	// HintKind/HintID name the UI surface the link was copied from
@@ -106,7 +112,8 @@ func (s *Server) registerLinkTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name: "gg_link_resolve",
 		Description: "Take apart a gg:// link: which checkout, path, state, commit, branch tip, change-set, line, side, hunk and landing hint it names. " +
-			"Use this when a human hands you a gg:// link and you need the place it points at.",
+			"Use this when a human hands you a gg:// link and you need the place it points at. " +
+			"A link ending :N~<fingerprint> is re-anchored: line is where that text is now, asked_line what the link named, anchor same|moved|changed.",
 		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in linkResolveIn) (*sdk.CallToolResult, linkResolveOut, error) {
 		out := linkResolveOut{Repo: s.repoInfo()}
@@ -129,6 +136,9 @@ func (s *Server) registerLinkTools(srv *sdk.Server) {
 			out.PreviewSource, out.PreviewTarget = pv.Source, pv.Target
 		}
 		out.Line = res.Line
+		if res.Anchor.State != "" {
+			out.AskedLine, out.Anchor, out.AnchorMatches = res.Anchor.Asked, res.Anchor.State, res.Anchor.Matches
+		}
 		if res.Line > 0 {
 			out.Side = string(res.Side)
 		}

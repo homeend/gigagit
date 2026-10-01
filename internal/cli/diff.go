@@ -93,6 +93,7 @@ func cmdDiff(svc *domain.Service, dir string, args []string, stdout, stderr io.W
 		if err != nil {
 			return linkExit("diff", err, stderr)
 		}
+		warnAnchor(stderr, res)
 		// Run against the checkout the link named, wherever the cwd is.
 		svc = openLinkTarget(res)
 		spec, err := linkDiffSpec(ctx, svc, res)

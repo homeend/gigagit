@@ -47,6 +47,7 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 		if err != nil {
 			return linkExit("note "+sub, err, stderr)
 		}
+		warnAnchor(stderr, res)
 		if msg := noteLinkShape(sub, res); msg != "" {
 			fmt.Fprintf(stderr, "note %s: %s\n", sub, msg)
 			return 2
