@@ -450,7 +450,7 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		m.console.maximized, m.console.focused = true, true
 		m.touchConsole()
 		return m.syncConsoleSize(), nil, true
-	case "esc":
+	case "esc", m.stepOutKey(): // the step-out key twice = out, then away
 		return m.closeConsole(), nil, true
 	}
 	if consolePassthrough[key] {

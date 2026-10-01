@@ -95,8 +95,8 @@ const grid = $("console-grid");
 const cursor = $("console-cursor");
 
 const FOOT_FOCUSED = `<button data-cact="out">ctrl+] step out</button><button data-cact="sessions">ctrl+\\ sessions</button><span class="cwarn">ctrl+w · ctrl+t · ctrl+n stay with the browser</span>`;
-const FOOT_UNFOCUSED = `<button data-cact="focus">enter focus</button><button data-cact="max">m maximize</button><button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc close</button>`;
-const FOOT_EXITED = `<button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc close</button>`;
+const FOOT_UNFOCUSED = `<button data-cact="focus">enter focus</button><button data-cact="max">m maximize</button><button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
+const FOOT_EXITED = `<button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
 
 // openSwitcher is the ctrl+\ popup (openfiles.js); a document event keeps
 // the two modules from importing each other.
@@ -252,6 +252,7 @@ function consoleKey(e) {
     e.preventDefault();
     if (e.code === "Backslash" || e.key === "\\") askSwitcher();
     else if (con.focused) stepOut();
+    else closeConsole(); // ctrl+] twice = out, then away
     return true;
   }
   if (con.focused) {
@@ -354,7 +355,7 @@ registerHelp({
   html:
     "<b>ctrl+\\</b> lists the agent sessions of this gg (Agents tab); <b>enter</b> opens one as a live console over the panes. " +
     "A focused console sends every key to the agent except <b>ctrl+]</b> (step out) and <b>ctrl+\\</b>; ctrl+w, ctrl+t and ctrl+n stay with the browser. " +
-    "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>esc</b> close (the session keeps running). The viewer that has the console focused sets its size.",
+    "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running). The viewer that has the console focused sets its size.",
 });
 
 export { closeConsole, consoleSessionId, consoleSessions, openConsole };

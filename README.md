@@ -1436,7 +1436,7 @@ included — except two:
 
 | Key | Focused console | Unfocused console (its column focused) |
 |-----|-----------------|-----------------------------------------|
-| `ctrl+]` | step out (a maximised console shrinks back to the Commits column) | — |
+| `ctrl+]` | step out (a maximised console shrinks back to the Commits column) | close the console, as `esc` does — so `ctrl+]` twice puts a focused console in the background |
 | `ctrl+\` | the agent-sessions popup | the agent-sessions popup |
 | `alt+a` / `alt+t` | → agent | show the next agent / terminal by last use (see the key table) |
 | `enter` | → agent | focus the console (type again) |
@@ -1509,7 +1509,7 @@ opens it as a live console over the panes, painted from the server's screen
 a focused console sends every key to the agent except `ctrl+]` (step out)
 and `ctrl+\`; the browser keeps `ctrl+w`, `ctrl+t`, `ctrl+n` and friends
 (the bottom bar says so). Unfocused: `enter` focus, `m` maximize over the
-sidebar, `esc` close — the session keeps running. Whichever viewer has the
+sidebar, `esc` or `ctrl+]` again close — the session keeps running. Whichever viewer has the
 console focused — this tab, another tab, or the TUI — sets the session's
 size; the others scroll. Every worktree row in the sidebar lists its
 sessions beneath it (`└ ● claude running 12m`, `○` when exited); a click
