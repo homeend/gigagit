@@ -170,7 +170,7 @@ func (m Model) openPreviewSrc(src fileSource, path string, load func(context.Con
 	if reused {
 		m = m.detachDoc(d)
 	} else {
-		d = newOpenFile(src, path)
+		d = m.newOpenFile(src, path)
 	}
 	m.filesPreview = d
 	m.filesTreeFocused = false // land in the preview to scroll

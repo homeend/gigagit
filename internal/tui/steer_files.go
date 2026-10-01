@@ -56,7 +56,7 @@ func (m Model) steerNavigateBackground(c steer.Command) (Model, tea.Cmd) {
 		line = c.Line.No
 	}
 	if d == nil {
-		d = newOpenFile(src, c.File)
+		d = m.newOpenFile(src, c.File)
 	} else if line == 0 {
 		d.keepPlace()
 	}

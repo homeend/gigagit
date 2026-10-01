@@ -122,3 +122,18 @@ func TestEscKeepsAFileWhoseNotesCameFromTheStore(t *testing.T) {
 		t.Fatal("esc closed a noted file and dropped its notes")
 	}
 }
+
+// A plain file draws its number from the model's store, the counter its
+// overviews use, so a file and an overview never share an f<n>.
+func TestOpenFilesNumberFromTheModelsStore(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	o, err := m.docs.AddOverview("r", "", "T", "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := m.newOpenFile(fileSource{kind: srcWorktree}, "a.txt")
+	if d.seq == o.Seq || m.docs.NextFileSeq() != d.seq+1 {
+		t.Fatalf("file f%d, overview f%d: numbered outside the model's store", d.seq, o.Seq)
+	}
+}

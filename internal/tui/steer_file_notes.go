@@ -87,7 +87,7 @@ func (m Model) steerNoteAdd(c steer.Command) (Model, tea.Cmd) {
 		if !present[path] {
 			return m, m.answerSteer(c, steerFail(c, path+" is not in the working tree"))
 		}
-		d = newOpenFile(src, path)
+		d = m.newOpenFile(src, path)
 	} else {
 		d.keepPlace()
 	}

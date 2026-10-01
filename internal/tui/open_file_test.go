@@ -152,3 +152,8 @@ func TestOpenFileReloadKeepsPlace(t *testing.T) {
 		t.Fatalf("cur=%d, want 0 (no place kept)", d.p.cur)
 	}
 }
+
+// newOpenFile is a document outside any model: numbered by the shared store.
+func newOpenFile(src fileSource, path string) *openFile {
+	return Model{}.newOpenFile(src, path)
+}
