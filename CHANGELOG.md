@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Web: copy the worktree path
+
+### Added
+
+- **gg web's worktree path (top right) copies.** A double-click copies the
+  whole path; a right-click opens a menu with **copy path** (plus **copy
+  selection** when part of it is highlighted). The help overlay lists it.
+
 ## TUI golden-screen tests
 
 ### Added

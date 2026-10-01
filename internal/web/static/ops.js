@@ -1,7 +1,7 @@
 // ops.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, runOnce, state } from "./core.js";
-import { closeLayer, closePrompt, openPrompt, pushLayer } from "./layers.js";
+import { closeLayer, closePrompt, copyText, openPrompt, pushLayer, showCtxMenu } from "./layers.js";
 import { openPrefixPicker } from "./prefixes.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { saveUI } from "./uistate.js";
@@ -782,6 +782,25 @@ async function loadRepo() {
   document.title = "gg web — " + repo.name;
   state.worktree = repo.worktree;
 }
+
+// The worktree path at the top right copies: a double-click copies it whole
+// (and drops the one word the browser just highlighted), a right-click offers
+// the same as a menu row — plus the highlighted part, when there is one.
+$("repo-worktree").addEventListener("dblclick", () => {
+  if (!state.worktree) return;
+  window.getSelection()?.removeAllRanges();
+  copyText(state.worktree, "path");
+});
+$("repo-worktree").addEventListener("contextmenu", (e) => {
+  if (!state.worktree) return; // nothing loaded yet: the browser's own menu
+  // Read now: clicking a menu row moves focus and clears the selection.
+  const sel = window.getSelection();
+  const text = sel && !sel.isCollapsed && $("repo-worktree").contains(sel.anchorNode) ? sel.toString() : "";
+  e.preventDefault();
+  const rows = [{ label: "copy path", act: () => copyText(state.worktree, "path") }];
+  if (text && text !== state.worktree) rows.push({ label: "copy selection", act: () => copyText(text, "selection") });
+  showCtxMenu(rows, e.clientX, e.clientY);
+});
 
 
 // openCreateBranchPrompt: the one create-branch dialog — ☰/palette start from
