@@ -9,10 +9,10 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -94,7 +94,7 @@ func AddressID(b model.Bookmark) string {
 func (fs *FileStore) Add(b model.Bookmark) (model.Bookmark, error) {
 	b.ID = AddressID(b)
 	if b.Created.IsZero() {
-		b.Created = time.Now()
+		b.Created = clock.Now()
 	}
 	idx := fs.read()
 	for i := range idx.Bookmarks {

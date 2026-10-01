@@ -3,11 +3,11 @@ package tui
 import (
 	"context"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -151,7 +151,7 @@ func (v *prefixSettingsView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 		}
 		return m, nil
 	case tea.KeyCtrlD:
-		return m.pushLayer(newContentPopup(prefixTokensHelpTitle(), prefixTokensHelp(time.Now()))), nil
+		return m.pushLayer(newContentPopup(prefixTokensHelpTitle(), prefixTokensHelp(clock.Now()))), nil
 	case tea.KeyEnter:
 		p, ok := v.formPrefix()
 		if !ok {

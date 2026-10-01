@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/repos"
@@ -83,7 +83,7 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	// backfills an entry that still has none.
 	if RepoStatePath != "" && cmd != "repo" {
 		if top, err := svc.TopLevel(context.Background()); err == nil {
-			_ = repos.Touch(RepoStatePath, top, "", time.Now())
+			_ = repos.Touch(RepoStatePath, top, "", clock.Now())
 		}
 	}
 	if cmd == "batch" {

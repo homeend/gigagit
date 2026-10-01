@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -50,7 +51,7 @@ func reviewStampAt(t, now time.Time) string {
 func branchReviewRowBody(r domain.ReviewHead) string {
 	parts := []string{i18n.T("Review:")}
 	if !r.Created.IsZero() {
-		parts = append(parts, reviewStampAt(r.Created, time.Now()))
+		parts = append(parts, reviewStampAt(r.Created, clock.Now()))
 	}
 	if a := strings.TrimSpace(r.Agent); a != "" {
 		parts = append(parts, sanitizeLine(a))

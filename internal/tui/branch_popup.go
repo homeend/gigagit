@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/template"
@@ -74,7 +75,7 @@ func (p *branchPopup) resolvePrefix(m Model) func(string, map[string]string) (st
 	gitDir := m.gitCommonDir
 	parent := p.startPoint
 	repo := worktree.RepoName(m.mainWorktreeRoot())
-	now := time.Now()
+	now := clock.Now()
 	seed := rand.Uint64()
 	return func(value string, inputs map[string]string) (string, []string, error) {
 		names := worktree.Templates{Branch: value}.SeqNames()

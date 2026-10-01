@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/fsprobe"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -88,7 +89,7 @@ func (m Model) openRepoPopup() (Model, tea.Cmd, bool) {
 		m.statusMsg = i18n.T("no known repositories yet (gg records them as you open repos)")
 		return m, nil, false
 	}
-	m = m.pushLayer(&repoPopup{entries: entries, now: time.Now(), grouped: m.repoGrouped})
+	m = m.pushLayer(&repoPopup{entries: entries, now: clock.Now(), grouped: m.repoGrouped})
 	return m, probeReposCmd(entries), true
 }
 

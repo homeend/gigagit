@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/agentsession"
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
@@ -126,7 +127,7 @@ func (m *TaskManager) sessionMgr() *agentsession.Manager {
 
 // Submit queues spec and starts it when its key is free and a slot is.
 func (m *TaskManager) Submit(spec TaskSpec) TaskID {
-	now := time.Now()
+	now := clock.Now()
 	t := &task{spec: spec, info: TaskInfo{
 		ID: TaskID(taskhist.NewID(now)), Key: spec.Key, Kind: spec.Kind, Agent: spec.Agent,
 		Repo: spec.Repo, Worktree: spec.Worktree, Mode: spec.Mode, State: TaskQueued, Submitted: now,
@@ -170,7 +171,7 @@ func (m *TaskManager) startLocked(t *task) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.cancel = cancel
 	t.info.State = TaskRunning
-	t.info.Started = time.Now()
+	t.info.Started = clock.Now()
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
@@ -312,7 +313,7 @@ func (m *TaskManager) finish(t *task, end taskEnd) {
 	m.mu.Lock()
 	info := t.info // the runner is done: no setResult can race this copy
 	m.mu.Unlock()
-	info.State, info.Ended = end.state, time.Now()
+	info.State, info.Ended = end.state, clock.Now()
 	info.ExitCode, info.Err, info.Tail = end.exit, end.err, end.tail
 	result := info.Result
 	if t.spec.Store != nil {
@@ -412,7 +413,7 @@ func (m *TaskManager) Cancel(id TaskID) error {
 	switch {
 	case t.info.State == TaskQueued:
 		t.info.State = TaskCancelled
-		t.info.Ended = time.Now()
+		t.info.Ended = clock.Now()
 		rec := recordOf(t.info)
 		m.pumpLocked()
 		m.mu.Unlock()

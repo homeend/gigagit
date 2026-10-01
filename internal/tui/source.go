@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
@@ -486,7 +487,7 @@ func (m Model) bootstrapCmd() tea.Cmd {
 			name, _ := svc.RepoName(ctx)
 			linkRepoName = name
 			if statePath != "" {
-				_ = repos.Touch(statePath, top, name, time.Now())
+				_ = repos.Touch(statePath, top, name, clock.Now())
 			}
 		}
 		feed.SetPageSizes(cfg.UI.CommitInitialCount, cfg.UI.CommitBatchSize)

@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -263,7 +264,7 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	}()
 	m.running = true
 	m.opName = engine.OpName(op)
-	m.opStart = time.Now() // the perpetual heartbeat (Init) reads this to show elapsed time
+	m.opStart = clock.Now() // the perpetual heartbeat (Init) reads this to show elapsed time
 	m.statusMsg = i18n.T("working…")
 	m.opMsgs = msgs
 	m.opCancel = cancel

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -477,7 +478,7 @@ func (m Model) renderInterface() string {
 		// emits no events) visibly advances instead of looking frozen. The
 		// heartbeat tick re-renders this once a second.
 		if !m.opStart.IsZero() {
-			statusLine += " · " + formatElapsed(time.Since(m.opStart))
+			statusLine += " · " + formatElapsed(clock.Since(m.opStart))
 		}
 	}
 	if m.anySourceLoading() && !m.running {

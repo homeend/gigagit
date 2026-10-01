@@ -3,11 +3,11 @@ package tui
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/markdown"
@@ -537,7 +537,7 @@ func (v *diffView) forgeNoteTitle(r domain.ResolvedNote) string {
 		parts = append(parts, r.Note.Author)
 	}
 	if !r.Note.Created.IsZero() {
-		parts = append(parts, ageString(time.Now(), r.Note.Created))
+		parts = append(parts, ageString(clock.Now(), r.Note.Created))
 	}
 	where := v.noteAddr.Path
 	switch {

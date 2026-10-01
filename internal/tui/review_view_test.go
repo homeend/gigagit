@@ -4,9 +4,11 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -548,5 +550,19 @@ func TestReviewLoadingEscCancels(t *testing.T) {
 	m = drainCmds(t, m, cmd)
 	if m.filesReview != nil {
 		t.Fatal("a cancelled open still opened the review")
+	}
+}
+
+// The review view's meta line draws the review's age from clock.Now, so a
+// frozen clock makes it the same text on every run (the golden screens rely
+// on this). Not parallel: it freezes the process-global clock.
+func TestReviewAgeUsesTheFrozenClock(t *testing.T) {
+	at := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	restore := clock.Freeze(at)
+	defer restore()
+	created := time.Date(2026, 2, 27, 12, 0, 0, 0, time.UTC)
+	got := reviewMetaLine(&reviewViewState{review: domain.Review{Created: created, Agent: "a"}})
+	if want := ageString(at, created); !strings.Contains(got, want) {
+		t.Fatalf("reviewMetaLine = %q, want the age %q against the frozen clock", got, want)
 	}
 }

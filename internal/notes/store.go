@@ -11,8 +11,8 @@ package notes
 
 import (
 	"errors"
-	"time"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -21,7 +21,7 @@ var ErrNotFound = errors.New("notes: not found")
 
 // Now is the clock seam (the snapshotNow pattern): tests override it to make
 // expiry deterministic. Package-level, so tests that set it run SERIALLY.
-var Now = time.Now
+var Now = clock.Now
 
 // Policy is the write-time budget. MaxEntries <= 0 means uncapped.
 type Policy struct{ MaxEntries int }

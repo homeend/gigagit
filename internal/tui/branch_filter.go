@@ -3,9 +3,9 @@ package tui
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -110,7 +110,7 @@ func (m Model) branchFilterHidden(p panel) (hidden, exempt []bool, count int) {
 		rows = domain.RemoteBranchRows(m.remoteBranches)
 		ex = domain.ExemptRemoteBranches(m.remoteBranches, m.branches)
 	}
-	v, cnt := branchfilter.Apply(*c, rows, ex, time.Now())
+	v, cnt := branchfilter.Apply(*c, rows, ex, clock.Now())
 	hidden = make([]bool, len(v))
 	exempt = make([]bool, len(v))
 	for i, vv := range v {

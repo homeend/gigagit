@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/linkhist"
 )
 
@@ -76,7 +77,7 @@ func (s *Service) RecordLink(ctx context.Context, link, desc string) {
 	if st == nil {
 		return
 	}
-	_ = st.Record(linkhist.Entry{Link: link, Desc: desc, Created: time.Now().UTC().Format(time.RFC3339)})
+	_ = st.Record(linkhist.Entry{Link: link, Desc: desc, Created: clock.Now().UTC().Format(time.RFC3339)})
 }
 
 // LinkHistory returns the ring newest-first; nil on any failure (history

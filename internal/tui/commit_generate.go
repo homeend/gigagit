@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -46,7 +47,7 @@ func (m Model) commitBoxWaitOn(id domain.TaskID) (Model, tea.Cmd) {
 	p.generating = true
 	p.genGen++
 	p.spinFrame = 0
-	p.genStart = time.Now()
+	p.genStart = clock.Now()
 	return m, spinTickCmd(p.genGen)
 }
 

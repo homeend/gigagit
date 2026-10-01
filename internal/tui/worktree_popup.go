@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -181,7 +182,7 @@ func (m Model) openWorktreePopup(switchOnCreate bool) (Model, bool) {
 		seqs:           worktree.PeekSeqs(m.gitCommonDir, seqNames),
 		gitCommonDir:   m.gitCommonDir,
 		seed:           rand.Uint64(),
-		now:            time.Now(),
+		now:            clock.Now(),
 		runHook:        true,
 	}
 	for _, l := range labels {
@@ -223,7 +224,7 @@ func (m Model) worktreeAtPopup(startPoint, prefillBranch string) *worktreePopup 
 		seqs:         worktree.PeekSeqs(m.gitCommonDir, seqNames),
 		gitCommonDir: m.gitCommonDir,
 		seed:         rand.Uint64(),
-		now:          time.Now(),
+		now:          clock.Now(),
 		state:        stEdit,                      // user edits the branch name immediately
 		editBuf:      newTextField(prefillBranch), // seeded default (e.g. the tag name)
 		runHook:      true,

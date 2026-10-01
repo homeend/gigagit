@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -153,7 +153,7 @@ func reviewMetaLine(st *reviewViewState) string {
 		parts = append(parts, st.review.Agent)
 	}
 	if !st.review.Created.IsZero() {
-		parts = append(parts, ageString(time.Now(), st.review.Created))
+		parts = append(parts, ageString(clock.Now(), st.review.Created))
 	}
 	parts = append(parts, i18n.T("%d notes on %d files", notes, files))
 	return strings.Join(parts, " · ")

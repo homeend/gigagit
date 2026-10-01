@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/filelock"
 )
 
@@ -134,7 +134,7 @@ func (fs *FileStore) Add(e Entry) (Entry, error) {
 		e.Label = e.DefaultLabel()
 	}
 	if e.Created.IsZero() {
-		e.Created = time.Now().UTC()
+		e.Created = clock.Now().UTC()
 	}
 	var existing *Entry
 	err := fs.mutate(func(es []Entry) ([]Entry, error) {

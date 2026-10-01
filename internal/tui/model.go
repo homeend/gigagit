@@ -15,6 +15,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/clipboard"
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/commitgraph"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -3383,7 +3384,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.opIsFetch {
 			m.opIsFetch = false
 			if msg.err == nil {
-				m = m.recordDuration(fetchItem, time.Since(m.opStart))
+				m = m.recordDuration(fetchItem, clock.Since(m.opStart))
 			}
 		}
 		switchTo := ""
