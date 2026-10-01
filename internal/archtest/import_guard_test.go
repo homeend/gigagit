@@ -123,17 +123,18 @@ func TestSteerIsAStdlibLeaf(t *testing.T) {
 }
 
 // TestAgentdocsIsALeaf pins internal/agentdocs: the TUI and the web share
-// it, so it may reach no gigagit layer but the protocol and the pure
-// alignment engine.
+// it, so it may reach no gigagit layer but the protocol, the pure alignment
+// engine and the pure markdown parser (overview anchors).
 func TestAgentdocsIsALeaf(t *testing.T) {
 	t.Parallel()
 	ok := map[string]bool{
+		"github.com/homeend/gigagit/internal/markdown": true,
 		"github.com/homeend/gigagit/internal/steer":    true,
 		"github.com/homeend/gigagit/internal/textdiff": true,
 	}
 	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/agentdocs") {
 		if strings.HasPrefix(imp, "github.com/homeend/gigagit/") && !ok[imp] {
-			t.Errorf("internal/agentdocs imports %s — only steer and textdiff are allowed", imp)
+			t.Errorf("internal/agentdocs imports %s — only markdown, steer and textdiff are allowed", imp)
 		}
 	}
 }
