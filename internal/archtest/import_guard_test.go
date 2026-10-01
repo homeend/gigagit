@@ -24,6 +24,8 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/savedcompare": "frontends must reach the saved-comparison store through internal/domain",
 		"github.com/homeend/gigagit/internal/agentsession": "frontends must reach agent sessions through internal/domain",
 		"github.com/homeend/gigagit/internal/taskhist":     "frontends must reach the AI-task history through internal/domain",
+		"github.com/homeend/gigagit/internal/sessionreg":   "frontends must reach the session registry through internal/domain",
+		"github.com/homeend/gigagit/internal/wtclaim":      "frontends must reach worktree claims through internal/domain",
 	}
 	for _, pkg := range []string{
 		"github.com/homeend/gigagit/internal/tui",
@@ -259,6 +261,18 @@ func TestTaskhistIsALeaf(t *testing.T) {
 		}
 		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
 			t.Errorf("internal/taskhist imports %s — only stdlib, internal/filelock and go-toml are allowed", imp)
+		}
+	}
+}
+
+// TestWtguardIsALeaf pins internal/wtguard to the standard library: it is
+// the interface engine AND domain share for "may this worktree be taken?",
+// so it may know none of the sources its guards read.
+func TestWtguardIsALeaf(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/wtguard") {
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/wtguard imports %s — only stdlib is allowed", imp)
 		}
 	}
 }

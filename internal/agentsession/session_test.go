@@ -62,7 +62,7 @@ func TestSessionEnvAndDir(t *testing.T) {
 	}
 	waitDone(t, s)
 	got := s.screenText()
-	if !strings.Contains(got, "envid|xterm-256color|") || !strings.Contains(got, dir) {
+	if !strings.Contains(got, ProcTag()+"/envid|xterm-256color|") || !strings.Contains(got, dir) {
 		t.Fatalf("screen = %q", got)
 	}
 }

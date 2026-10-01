@@ -211,6 +211,14 @@ gg prefix add [--global] <value>          # add a branch prefix (default scope: 
 gg prefix rm [--global] <value>           # remove a branch prefix
 gg undo
 gg worktree list
+gg worktree list --json | --free [--json]
+                                      # for orchestrating agents: every worktree's facts (dirty + last change,
+                                      # claim, sessions, tui, reserved, paused op, git lock), a free verdict and
+                                      # blocked_by reasons; --free = only free ones, clean first, then stale-dirty
+gg worktree claim [--note <text>] <path>   # an agent running inside gg ($GG_SESSION_ID) takes a free worktree;
+                                      # atomic, ends with the session; outside gg it exits 2
+gg worktree release [--force] <path>  # give a claim back (exit 0 with no claim)
+gg worktree reserve|unreserve <path>  # keep a worktree away from agents ([agents] reserved)
 gg worktree add [<start-point>]
 gg worktree add --branch <name> [<path>]  # existing branch; <path> (cwd-relative) overrides the path template
 gg worktree add --from <commit> [--keep staged|unstaged] [<branch-name>]
@@ -929,6 +937,28 @@ real default and a one-line description, and can be edited right there:
 (you pick which set scope); boolean and enum keys offer a picker, the rest a
 text field. Everything else is read-only browsing (use `git config` for
 exotic keys). `/` filters as you type; `ctrl+t` maximizes the popup to a near-fullscreen box; `esc` closes.
+
+### Agents and worktrees
+
+`[agents]` governs which worktrees an orchestrating agent may take
+(`gg worktree list --free`, `gg worktree claim`, and the guard every
+`gg worktree recycle` asks):
+
+```toml
+[agents]
+reserved = ["../gigagit-main-work"]  # never handed to an agent; REPO file only, relative to the main worktree
+stale_after = "14d"                  # a dirty worktree untouched this long may be recycled (its changes shelved)
+allow_main = false                   # let agents take the main checkout
+```
+
+A worktree is free when it is not the main checkout, has a branch checked
+out, no paused merge/rebase, no git lock, is not reserved or claimed, has no
+running agent session and no gg TUI open in it, and is clean or dirty but
+untouched for `stale_after`. Recycling one that is in use (claimed by another
+agent, reserved, a running session, the main checkout…) asks first — the TUI
+shows the question, the CLI needs `--force`. In the TUI Worktrees tab ⚑
+marks a claimed row (the bottom bar says who, since when, and why) and ⊘ a
+reserved one; the `.` menu reserves, unreserves and releases claims.
 
 ### Post-worktree hook
 

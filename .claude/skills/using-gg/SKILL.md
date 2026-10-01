@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v107 -->
+<!-- gg:using-gg:v110 -->
 
 # Using gg (gigagit)
 
@@ -104,7 +104,7 @@ checkout's own working-tree notes plus EVERY commit note in the store
   [--cached | --rev <sha>]` — put the open window on that line; `--rev <sha>`
   alone reveals a commit, `--next-comment` / `--prev-comment` step the open
   diff. Add `--no-wait` to skip the 2s wait for the window's answer.
-- `gg session reload [notes|status|all]`, `gg session focus <panel>`,
+- `gg session reload [notes|status|worktrees|all]`, `gg session focus <panel>`,
   `gg session highlight add|clear` — refresh, switch panel, or paint an
   attention band. See the `reviewing-with-gg` skill for when to use them.
 
@@ -832,7 +832,7 @@ finds the right one here.
   (`ctrl+p`) and create-worktree popup (`p`) let you pick one, fill any
   `<user:…>` labels, and append the rest of the name.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
-- `gg worktree list` / `gg worktree add [<start-point>]` /
+- `gg worktree list` (plain: `branch<TAB>path`) / `gg worktree add [<start-point>]` /
   `gg worktree add --branch <name> [<path>]` /
   `gg worktree remove [--with-branch] [--force] <path>` — linked worktrees;
   `add` resolves branch/path templates from `.gg.toml` and may prompt on stdin
@@ -867,7 +867,7 @@ finds the right one here.
   busy log; a hook failure is reported but does not roll back the worktree.
 - `gg worktree prune` — drop stale worktree admin entries left behind by an
   interrupted or manually-deleted worktree (`git worktree prune`).
-- `gg worktree recycle [--on-dirty=commit|shelve|discard|abort] [--as <name>] <path> <branch>` —
+- `gg worktree recycle [--on-dirty=commit|shelve|discard|abort] [--force] [--as <name>] <path> <branch>` —
   check an EXISTING local branch out in an existing worktree `<path>` (not
   the one you are in), replacing what it has checked out. `<branch>` may
   also be a remote branch (`origin/foo`, when no local branch has that
@@ -884,7 +884,48 @@ finds the right one here.
   deletes the changes (untracked files too, ignored files kept); `abort`
   does nothing. Without the flag a pipeline
   exits 1 naming `recycle.dirty`. Refused: a paused rebase/merge, a lock
-  file, a branch already checked out somewhere. Flags go BEFORE `<path>`.
+  file, a branch already checked out somewhere. A worktree in use — claimed
+  by another agent, reserved, an agent session running there, a gg TUI open
+  there, or the main checkout — asks `recycle.blocked`; a pipeline exits 1
+  naming it and the reasons, `--force` recycles anyway (your OWN claim
+  never blocks you). Flags go BEFORE `<path>`.
+- `gg worktree list --json` / `gg worktree list --free [--json]` — every
+  worktree with its facts (`dirty` counts + `last_change`, `claim`,
+  `sessions`, `tui`, `reserved`, `paused_op`, `git_lock`), a `free` verdict
+  and `blocked_by` reasons (`missing`, `main`, `detached`, `paused-op`,
+  `git-lock`, `reserved`, `claimed`, `tui`, `session`, `dirty-recent`,
+  `status-failed`, `check-failed`); `--free` keeps the free ones, clean
+  first, then stale-dirty (untouched longer than `[agents] stale_after`,
+  default 14d) by oldest change. `recycle` says which `--on-dirty` to pass:
+  `none` (clean — omit the flag) or `shelve`. A blocked worktree's `dirty`
+  is `null` (its `git status` is skipped).
+- `gg worktree claim [--note <text>] <path>` / `gg worktree release [--force] <path>`
+  — take a free worktree for yourself and give it back. Only an agent
+  running inside gg (it has `GG_SESSION_ID`) can claim; outside gg, or with
+  a session gg is not running, claim exits 2. Atomic: of two agents racing
+  for one worktree exactly one wins, the other exits 1 with the reasons —
+  pick the next. Claiming a worktree you already hold succeeds (safe to
+  retry). A claim ends by itself when your session ends; `release`
+  exits 0 even with no claim. `--note` (e.g. the issue URL) shows in the
+  user's TUI.
+- `gg worktree reserve <path>` / `gg worktree unreserve <path>` — keep a
+  worktree away from agents (`[agents] reserved` in the repo config).
+
+### Picking a worktree for another agent
+
+1. `gg worktree list --free --json` — free worktrees, best first.
+2. `gg worktree claim --note <issue-url> <path>` — exit 1 means someone got
+   there first: take the next one.
+3. `gg worktree recycle [--on-dirty=shelve] <path> <branch>` (pass
+   `--on-dirty` only when its `recycle` is `shelve`).
+4. When done: `gg worktree release <path>`.
+
+`git-lock` can appear for one listing while another reader's `git status`
+holds `index.lock` — list again before giving up on a worktree. A `claim`
+that exits 2 right after your session started can mean gg has not published
+it yet: retry once after a second. A claim made by gg on the other side of
+a WSL/Windows pair (one repo, two hosts) is never judged dead from this side
+— only its own side or the user releases it.
 - `gg worktree rename [--force] <worktree> <new-name>` / `gg worktree move
   [--force] <worktree> <new-path>` — relocate a linked worktree's directory
   (`git worktree move`); `rename` is a same-parent move computed from just

@@ -4190,6 +4190,46 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
   move the screen); `note_add` on a file that is not open/loaded rides
   `noteLandedMsg`. The CLI (`gg session note`) posts to a TUI only.
 
+
+## Worktree inventory, claims and guards (agent orchestration stage 1)
+
+Spec `docs/superpowers/specs/2026-09-30-worktree-inventory-design.md`.
+
+- **Guards.** `wtguard` (leaf) is the one interface; domain providers in
+  `domain/wtguards.go` (one per source: missing, main, detached, paused-op,
+  git-lock, reserved, claimed, tui, session, dirty-recent); the ONLY place
+  naming them is `domain/wtguard_set.go` (`WorktreeGuardSet` hook — a
+  composition root may wrap `StandardWorktreeGuards`; `GuardSources` holds
+  the unexported `liveView`, so only domain builds sources). `wtguard.Run`
+  asks cheap guards first and the expensive `git status` guard only when
+  nothing blocked; a skipped guard's fact is present and nil.
+- **Hard vs overridable.** Hard: missing, paused-op, git-lock,
+  status-failed, check-failed. The rest are overridable in recycle via ONE
+  `recycle.blocked` decision (`recycle anyway`/`abort`; CLI `--force`),
+  EXCEPT `dirty-recent` and `detached`, which recycle handles natively
+  (`recycle.dirty`; a detached target by design). A claim has no override.
+- **GuardReport runs inside ops** (`OpDeps.Guards`): it must never take the
+  repo gate — it reads `s.repo.Worktrees` and `AgentsConfigFrom(wts)`, not
+  `s.Worktrees`/`s.AgentsConfig` (gated: the op would wait on itself).
+  `TestRecycleThroughExecuteAsksTheGuards` pins it with a 5 s context.
+- **Sessions across processes.** `GG_SESSION_ID = <ProcTag>/<id>`
+  (`agentsession.ProcTag` = `<pid>-<start unixnano>`); each TUI publishes
+  `<state>/gg/sessions/<ProcTag>.json` (`domain.PublishSessions`, started in
+  `tui.Run`). A session is dead iff its proc's registry is live and does not
+  list it running, OR no live registry exists for its proc AND the pid is
+  gone — a stalled TUI (suspend/resume) keeps its claims.
+- **Claims** live in `<worktree git dir>/gg-claim` (O_EXCL); every
+  create/sweep/release runs under `filelock` on `gg-claim.lock` and re-reads
+  before removing (`sameClaim` is field-wise with `time.Equal`). An empty or
+  unparsable claim file is a crashed claimer's once it is 10 s old. Only a
+  running gg session may claim (`SessionNotLiveError` → CLI exit 2).
+- **Config.** `[agents] reserved` is REPO-only (`Load` drops the global
+  layer's list) and anchored on the MAIN worktree via
+  `Service.AgentsConfig` — the TUI must not use `m.repoConfigPath`, which
+  follows the cwd worktree's committed `.gg.toml`.
+- **Tests** that reach the registry must pin `XDG_STATE_HOME` (domain, cli
+  and tui TestMains do): `sessionreg.Live` deletes stale files.
+
 #### Overview documents (`overview*.go`, `steer_overview.go`)
 
 Spec `2026-09-30-agent-overview-documents-design.md`. An overview is an
@@ -4222,4 +4262,3 @@ selection, laid-out width); never on disk, never evicted, created
   the screen cannot take lands in the background. add/set stat path anchors
   off-thread (`anchorsCheckedMsg`) and answer with the unresolved ones.
   `steer.MaxCommandBytes` is 512 KiB for the 64 KiB text.
-

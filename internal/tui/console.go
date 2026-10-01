@@ -279,7 +279,10 @@ func (m Model) onSessionsChanged() (Model, tea.Cmd) {
 			}
 		}
 	}
-	return m, m.waitSessionsCmd()
+	// A session started, exited or went: the Worktrees claim marks (a claim
+	// dies with its session) and the picker's live markers follow.
+	m, reload := m.reloadSourcesCmd([]sourceKey{srcWorktrees}, reloadOpts{})
+	return m, tea.Batch(m.waitSessionsCmd(), reload)
 }
 
 // runningSessionIn reports a running agent session whose cwd is dir.

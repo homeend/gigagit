@@ -24,12 +24,12 @@ import (
 // cmdWorktree dispatches `gg worktree <sub>`.
 func cmdWorktree(svc *domain.Service, workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove|move|rename|prune|recycle> [args]")
+		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove|move|rename|prune|recycle|claim|release|reserve|unreserve> [args]")
 		return 2
 	}
 	switch args[0] {
 	case "list":
-		return cmdWorktreeList(svc, stdout, stderr)
+		return cmdWorktreeList(svc, args[1:], stdout, stderr)
 	case "add":
 		return cmdWorktreeAdd(svc, workdir, args[1:], stdin, stdout, stderr, cwdFile)
 	case "remove":
@@ -43,26 +43,18 @@ func cmdWorktree(svc *domain.Service, workdir string, args []string, stdin io.Re
 		return finish(res, err, stdout, stderr)
 	case "recycle":
 		return cmdWorktreeRecycle(svc, args[1:], stdin, stdout, stderr)
+	case "claim":
+		return cmdWorktreeClaim(svc, workdir, args[1:], stdout, stderr)
+	case "release":
+		return cmdWorktreeRelease(svc, workdir, args[1:], stdout, stderr)
+	case "reserve":
+		return cmdWorktreeReserve(svc, workdir, args[1:], stdout, stderr, true)
+	case "unreserve":
+		return cmdWorktreeReserve(svc, workdir, args[1:], stdout, stderr, false)
 	default:
-		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, remove, move, rename, prune, or recycle)\n", args[0])
+		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, remove, move, rename, prune, recycle, claim, release, reserve, or unreserve)\n", args[0])
 		return 2
 	}
-}
-
-func cmdWorktreeList(svc *domain.Service, stdout, stderr io.Writer) int {
-	wts, err := svc.Worktrees(context.Background())
-	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
-	}
-	for _, w := range wts {
-		branch := w.Branch
-		if branch == "" {
-			branch = "(detached)"
-		}
-		fmt.Fprintf(stdout, "%s\t%s\n", branch, w.Path)
-	}
-	return 0
 }
 
 func cmdWorktreeAdd(svc *domain.Service, workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
@@ -432,11 +424,12 @@ func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, std
 	fs.SetOutput(stderr)
 	onDirty := fs.String("on-dirty", "", "what to do with the target's uncommitted changes: commit, shelve, discard, or abort")
 	asName := fs.String("as", "", "local name for a remote branch (default: the name without the remote)")
+	force := fs.Bool("force", false, "recycle even though the worktree is claimed, reserved, has a running agent or is the main checkout")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 2 || fs.Arg(0) == "" || fs.Arg(1) == "" {
-		fmt.Fprintln(stderr, "usage: gg worktree recycle [--on-dirty=commit|shelve|discard|abort] [--as <name>] <path> <branch|remote/branch>")
+		fmt.Fprintln(stderr, "usage: gg worktree recycle [--on-dirty=commit|shelve|discard|abort] [--force] [--as <name>] <path> <branch|remote/branch>")
 		return 2
 	}
 	policy := map[string]string{}
@@ -447,6 +440,9 @@ func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, std
 	default:
 		fmt.Fprintf(stderr, "worktree recycle: --on-dirty must be commit, shelve, discard, or abort (got %q)\n", *onDirty)
 		return 2
+	}
+	if *force {
+		policy[engine.RecycleBlockedDecisionID] = "recycle anyway"
 	}
 	wts, err := svc.Worktrees(context.Background())
 	if err != nil {
@@ -464,7 +460,7 @@ func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, std
 		return 2
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
-	res, err := runOperation(context.Background(), svc, engine.RecycleWorktree{Dir: match.Path, Branch: branch, RemoteRef: remoteRef}, dec, stderr)
+	res, err := runOperation(context.Background(), svc, engine.RecycleWorktree{Dir: match.Path, Branch: branch, RemoteRef: remoteRef, CallerSession: os.Getenv("GG_SESSION_ID")}, dec, stderr)
 	code := finish(res, err, stdout, stderr)
 	var div engine.CheckoutDivergedError
 	if remoteRef != "" && *asName == "" && errors.As(err, &div) {

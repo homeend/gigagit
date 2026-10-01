@@ -297,7 +297,7 @@ func (m Model) sessionMenuRows() []actionRow {
 	}
 	if wt, ok := m.selectedWorktree(); ok && wt.Path != "" {
 		path := wt.Path
-		return []actionRow{
+		rows := []actionRow{
 			{id: "start-agent", label: i18n.T("Start agent"), run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.startAgentFor(path)
 			}},
@@ -305,6 +305,7 @@ func (m Model) sessionMenuRows() []actionRow {
 				return m.openTerminal(path)
 			}},
 		}
+		return append(rows, m.worktreeMarkRows(wt)...)
 	}
 	return nil
 }

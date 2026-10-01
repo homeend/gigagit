@@ -228,6 +228,10 @@ func optionDisplayName(value string) string {
 		return i18n.T("discard")
 	case "shelve":
 		return i18n.T("shelve")
+	case "recycle anyway":
+		return i18n.T("recycle anyway")
+	case "Release":
+		return i18n.T("Release")
 	case "delete":
 		return i18n.T("delete")
 	case "force":

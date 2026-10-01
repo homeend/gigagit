@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Worktree inventory for agents
+
+### Added
+
+- **An agent can find a worktree to work in.** `gg worktree list --json`
+  reports every worktree's facts — uncommitted changes and when they were
+  last touched, a claim, agent sessions, an open gg TUI, a reserve, a paused
+  merge/rebase, a git lock — with a `free` verdict and `blocked_by` reasons;
+  `--free` keeps the free ones, clean first, then stale-dirty by oldest
+  change, and says which `--on-dirty` a recycle needs.
+- **Claims.** `gg worktree claim [--note <url>] <path>` lets an agent running
+  inside gg take a free worktree atomically (of two racing agents exactly one
+  wins); `gg worktree release` gives it back, and a claim ends by itself when
+  its agent session ends — a crashed TUI's claims die with it (a reused pid
+  is told apart by its start time), a merely stalled one keeps them. A
+  claim records the host that wrote it, so a WSL gg never sweeps a Windows
+  gg's claim on a shared repo (or the reverse). Re-claiming a worktree you
+  hold succeeds.
+- **Reserves.** `gg worktree reserve|unreserve <path>` (or the TUI Worktrees
+  `.` menu) keeps a worktree away from agents (`[agents] reserved`, repo
+  config only). New `[agents] stale_after` (default `14d`) and `allow_main`.
+- **TUI.** ⚑ `<agent>` marks a claimed Worktrees row and ⊘ a reserved one;
+  the bottom bar shows who claimed it, since when, and the note; the `.` menu
+  reserves, unreserves and releases a claim (asking first). The recycle
+  picker shows the same marks.
+
+### Changed
+
+- **Recycle asks before taking a worktree in use.** Recycling a worktree
+  that another agent claimed, that is reserved, that has a running agent
+  session or a gg TUI open, or that is the main checkout raises one
+  `recycle.blocked` question (recycle anyway / abort) — the TUI's decision
+  modal, `gg worktree recycle --force` in a pipeline. It replaces the TUI's
+  own "agent session running" confirm. One set of worktree guards answers
+  this for the inventory, claims and recycle alike.
+- A CLI pipeline that hits a decision now prints the question with the
+  decision id, so an agent learns why it was refused.
+- Agent sessions get a machine-unique `GG_SESSION_ID`
+  (`<pid>-<start>/<id>`), and each TUI publishes its sessions to
+  `<state>/gg/sessions/` so other gg processes can see them.
+
 ## Web switch-repo table groups by project
 
 ### Added

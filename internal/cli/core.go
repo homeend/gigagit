@@ -29,8 +29,8 @@ func (d cliDecider) Decide(ctx context.Context, req engine.DecisionRequest) (eng
 	}
 	if !d.interactive || d.in == nil {
 		return engine.DecisionResponse{}, fmt.Errorf(
-			"%s needs a decision (options: %s); rerun with the matching flag",
-			req.ID, strings.Join(req.Options, ", "))
+			"%s needs a decision: %s (options: %s); rerun with the matching flag",
+			req.ID, req.Prompt, strings.Join(req.Options, ", "))
 	}
 	fmt.Fprintf(d.out, "%s\n  options: %s\n> ", req.Prompt, strings.Join(req.Options, ", "))
 	// The blocking stdin read runs in its own goroutine so a cancelled ctx

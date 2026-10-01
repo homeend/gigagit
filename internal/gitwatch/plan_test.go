@@ -2,6 +2,8 @@ package gitwatch
 
 import (
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -108,5 +110,29 @@ func TestPlanBranchesWatchesHEADOnWorktreeDir(t *testing.T) {
 	g := groupFor(t, groups, w)
 	if !hasSource(g.Match("HEAD"), Branches) {
 		t.Error("HEAD change should affect Branches (current-branch line)")
+	}
+}
+
+func TestPlanWorktreesWatchesClaims(t *testing.T) {
+	t.Parallel()
+	groups := Plan("/c", "/c", []Source{Worktrees})
+	hit := func(dir, base string) bool {
+		for _, g := range groups {
+			if g.Dir == dir || (g.Recursive && strings.HasPrefix(dir, g.Dir+string(filepath.Separator))) {
+				if slices.Contains(g.Match(base), Worktrees) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	if !hit(filepath.Join("/c", "worktrees", "wt-a"), "gg-claim") {
+		t.Fatal("a linked worktree's gg-claim must refresh Worktrees")
+	}
+	if !hit("/c", "gg-claim") {
+		t.Fatal("the main worktree's gg-claim must refresh Worktrees")
+	}
+	if hit(filepath.Join("/c", "worktrees", "wt-a"), "index") {
+		t.Fatal("index churn must not refresh Worktrees")
 	}
 }
