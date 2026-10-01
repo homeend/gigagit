@@ -47,17 +47,10 @@ func sessionNote(dir string, svc *domain.Service, args []string, stdout, stderr 
 	return 2
 }
 
-// steerNotes posts a note command to the live TUI and waits for its answer.
-// A gg web page is never asked: it has no notes to answer with.
+// steerNotes posts a note command to the live session and waits for its
+// answer: the TUI when one is live, else gg web, which answers from its own
+// store (steerLive's routing).
 func steerNotes(dir string, c steer.Command, stdout, stderr io.Writer) (steer.Reply, int, bool) {
-	if r := routeFor(preferredInbox(dir)); !r.tuiOK {
-		if r.webOK {
-			fmt.Fprintln(stderr, "temporary notes need a gg TUI (only gg web is live for this worktree)")
-		} else {
-			fmt.Fprintln(stderr, "no gg session for this worktree")
-		}
-		return steer.Reply{}, 1, false
-	}
 	rep, code, ok := steerLive(dir, c, false, false, stdout, stderr)
 	if ok && !rep.OK {
 		fmt.Fprintln(stderr, rep.Error)

@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -40,13 +41,12 @@ func (m Model) steerFileNote(c steer.Command) (Model, tea.Cmd) {
 }
 
 // fileNoteProto is a note in its wire form; text adds the lines it sits on.
-func fileNoteProto(d *openFile, n *fileNote, text bool) steer.FileNote {
-	w := steer.FileNote{ID: n.id, FileID: d.id(), Path: d.path, Start: n.start, End: n.end,
-		Summary: n.summary, Rationale: n.rationale, Author: n.author, Outdated: n.outdated}
+func fileNoteProto(d *openFile, n agentdocs.Note, text bool) steer.FileNote {
+	var lines []string
 	if text && docLoaded(d) {
-		w.Text = d.rawLines(n.start, n.end)
+		lines = d.rawLines(n.Start, n.End)
 	}
-	return w
+	return agentdocs.NoteWire(n, d.id(), lines)
 }
 
 // steerNoteAdd puts a note on an open working-tree file, opening the file
@@ -113,12 +113,8 @@ func (m Model) finishNoteAdd(c steer.Command, d *openFile, lead string) (Model, 
 	if err != nil {
 		return m, m.answerSteer(c, steerFail(c, err.Error()))
 	}
-	where := d.path + ":" + strconv.Itoa(n.start)
-	if n.end != n.start {
-		where += "-" + strconv.Itoa(n.end)
-	}
-	r := steerOK(c, "noted "+where+" as "+n.id+lead)
-	r.Notes = []steer.FileNote{fileNoteProto(d, n, false)}
+	r := steerOK(c, agentdocs.NotedDetail(*n, lead))
+	r.Notes = []steer.FileNote{fileNoteProto(d, *n, false)}
 	return m, m.answerSteer(c, r)
 }
 
@@ -171,7 +167,7 @@ func (m Model) steerNoteShow(c steer.Command) (Model, tea.Cmd) {
 		return m, m.answerSteer(c, steerFail(c, "no note "+c.NoteID))
 	}
 	r := steerOK(c, "")
-	r.Notes = []steer.FileNote{fileNoteProto(d, n, true)}
+	r.Notes = []steer.FileNote{fileNoteProto(d, *n, true)}
 	return m, m.answerSteer(c, r)
 }
 
@@ -182,8 +178,9 @@ func (m Model) steerNoteRm(c steer.Command) (Model, tea.Cmd) {
 		if n == nil {
 			return m, m.answerSteer(c, steerFail(c, "no note "+c.NoteID))
 		}
-		d.removeNote(n.id)
-		return m, m.answerSteer(c, steerOK(c, "removed "+n.id))
+		id := n.ID
+		d.removeNote(id)
+		return m, m.answerSteer(c, steerOK(c, "removed "+id))
 	}
 	d := m.findOpenFile(c.FileID, c.File)
 	if d == nil {

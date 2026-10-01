@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 )
@@ -125,6 +126,13 @@ type Server struct {
 	// prompt can never reach its raw-mode terminal; nil = domain.Open.
 	opener func(string) *domain.Service
 
+	// docs is the agent-docs store (agentdocs_follow.go): this server's own
+	// for a standalone gg web, agentdocs.Shared() for a page a TUI hosts
+	// (NewHost) — set before Start, never after. rootc caches the root its
+	// notes are filed under.
+	docs  *agentdocs.Store
+	rootc docsRootCache
+
 	// closing is closed once by announceShutdown: every /api/events stream
 	// then sends a last "shutdown" message and ends (live.go).
 	closing     chan struct{}
@@ -132,7 +140,8 @@ type Server struct {
 }
 
 func New(svc *domain.Service) *Server {
-	s := &Server{closing: make(chan struct{}), ofs: newOpenFiles(), sessStop: make(chan struct{}), feeds: newScreenFeeds()}
+	s := &Server{closing: make(chan struct{}), sessStop: make(chan struct{}), feeds: newScreenFeeds(), docs: agentdocs.New()}
+	s.ofs = newOpenFiles(func() int64 { return s.docs.NextFileSeq() })
 	s.svc.Store(svc)
 	go s.watchSessions(s.sessStop)
 	return s

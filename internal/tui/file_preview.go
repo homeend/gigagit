@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -527,7 +528,7 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	// An annotated file: its notes are VIRTUAL rows — never in p.lines, so
 	// every line index (cursor, selection, search hit) stays a file line —
 	// and its lines give up noteGutterW columns for the range mark.
-	var notes []*fileNote
+	var notes []agentdocs.Note
 	gut, boxH := 0, 0
 	if d := m.previewDoc(p); d != nil && d.gutterW() > 0 {
 		boxH = noteBoxMaxRows(rowsCap)
@@ -559,15 +560,15 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 			}
 		}
 		for _, n := range notes {
-			if n.start <= row+1 && row+1 <= n.end {
+			if n.Start <= row+1 && row+1 <= n.End {
 				r.prefix = "│ " // the range mark: this line is under a note
 				break
 			}
 		}
 		wr = append(wr, r)
 		for _, n := range notes {
-			if n.end == row+1 {
-				for _, nl := range n.boxLines(innerW-gut-noteBoxFrame, boxH) {
+			if n.End == row+1 {
+				for _, nl := range noteBoxLines(n, innerW-gut-noteBoxFrame, boxH) {
 					wr = append(wr, fileNoteRow(nl, innerW, gut))
 				}
 			}

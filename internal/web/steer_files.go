@@ -25,7 +25,7 @@ func steerFail(c steer.Command, msg string) steer.Reply {
 // most recently shown first.
 func (s *Server) steerFiles(c steer.Command) steer.Reply {
 	r := steerOK(c, "")
-	r.Files = s.ofs.list(s.service().Root())
+	r.Files = s.ofList(s.service().Root())
 	if len(r.Files) == 0 {
 		r.Detail = "no open files"
 	}

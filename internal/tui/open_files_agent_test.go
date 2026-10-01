@@ -15,9 +15,10 @@ func bgDoc(m Model, src fileSource, path string, n int) *openFile {
 	d := newOpenFile(src, path)
 	lines := make([]contentLine, n)
 	for i := range lines {
-		lines[i] = contentLine{text: "x", src: true}
+		lines[i] = contentLine{text: "x", raw: fmt.Sprintf("x%d", i+1), src: true}
 	}
 	d.p.lines = lines
+	m.adoptDoc(d)
 	m.openFiles.touch(m.currentWorktree, d, m.docShown)
 	return d
 }

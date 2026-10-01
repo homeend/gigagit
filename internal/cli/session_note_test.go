@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -144,17 +145,22 @@ func TestSessionNoteRefusedExitsOne(t *testing.T) {
 	}
 }
 
-func TestSessionNoteNeedsALiveTUI(t *testing.T) {
+func TestSessionNoteGoesToAWebOnlySession(t *testing.T) {
 	t.Parallel()
 	var out, errb bytes.Buffer
 	if code := runSession(t.TempDir(), nil, []string{"note", "list"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "no gg session for this worktree") {
 		t.Fatalf("nothing live: exit=%d stderr=%q", code, errb.String())
 	}
+	srv, ts := newSteerServer(t, http.StatusOK, `{"id":"x","ok":true,"notes":[{"id":"t1","file_id":"f1","path":"a.go","start":2,"end":2,"summary":"hi"}]}`)
 	dir := t.TempDir()
-	liveWebPresence(t, dir, "http://127.0.0.1:1") // only gg web: never posted to
+	liveWebPresence(t, dir, ts.URL)
+	out.Reset()
 	errb.Reset()
-	if code := runSession(dir, nil, []string{"note", "list"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "temporary notes need a gg TUI") {
-		t.Fatalf("web only: exit=%d stderr=%q", code, errb.String())
+	if code := runSession(dir, nil, []string{"note", "list"}, &out, &errb); code != 0 || !strings.Contains(out.String(), "t1\ta.go\t2-2\thi") {
+		t.Fatalf("web only: exit=%d out=%q err=%q", code, out.String(), errb.String())
+	}
+	if got := srv.commands(); len(got) != 1 || got[0].Cmd != "note_list" {
+		t.Fatalf("posted %+v", got)
 	}
 }
 

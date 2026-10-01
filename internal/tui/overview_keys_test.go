@@ -6,25 +6,28 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/agentdocs"
 )
 
 // tourModel is loadedNavModel with a note on a.txt:20 and an overview whose
 // anchors are, in order: the file, line 12, lines 5-8, the note, a missing
 // file, a gone note.
-func tourModel(t *testing.T) (Model, *openFile, *fileNote) {
+func tourModel(t *testing.T) (Model, *openFile, agentdocs.Note) {
 	t.Helper()
 	m := loadedNavModel(t)
 	nm, cmd := m.applySteer(noteAddCmd("tour-n", "a.txt", 20, 20, "look here"))
 	m = pumpAll(t, nm, cmd)
-	_, n := m.findFileNote(awaitNote(t, m, "tour-n").Notes[0].ID)
-	if n == nil {
+	_, np := m.findFileNote(awaitNote(t, m, "tour-n").Notes[0].ID)
+	if np == nil {
 		t.Fatal("the fixture note was not added")
 	}
+	n := *np
 	text := "# Tour\n\n" +
 		"- [the file](a.txt)\n" +
 		"- [line twelve](a.txt:12)\n" +
 		"- [five to eight](a.txt:5-8)\n" +
-		"- [the note](note:" + n.id + ")\n" +
+		"- [the note](note:" + n.ID + ")\n" +
 		"- [missing](missing.txt)\n" +
 		"- [gone note](note:t999999)\n"
 	d := newOverviewDoc("Tour", text)

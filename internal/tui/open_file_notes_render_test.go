@@ -14,6 +14,7 @@ func notedViewer(t *testing.T) (Model, *openFile) {
 	m := loadedNavModel(t)
 	d := newOpenFile(fileSource{kind: srcWorktree}, "a.txt")
 	d.fill(fileContentMsg{lines: docLines(40)}, 10, 80)
+	m.adoptDoc(d)
 	m.openFiles.touch(m.currentWorktree, d, m.docShown)
 	return m.pushLayer(&fileViewer{d}), d
 }
@@ -37,7 +38,7 @@ func TestFileWithoutNotesRendersExactlyAsBefore(t *testing.T) {
 	d.backgrounded = true // a note makes the file stay open on esc, and that outlives the note
 	before := m.renderPreviewBox(d.p, "a.txt", 80, 20, true, true)
 	n, _ := d.addNote(2, 2, "s", "", "")
-	d.removeNote(n.id)
+	d.removeNote(n.ID)
 	d.syncNoteRows()
 	if after := m.renderPreviewBox(d.p, "a.txt", 80, 20, true, true); after != before {
 		t.Fatal("a file whose notes are gone renders differently from one that never had any")
@@ -72,7 +73,7 @@ func TestOutdatedFileNoteSaysSoInItsTitle(t *testing.T) {
 	t.Parallel()
 	m, d := notedViewer(t)
 	n, _ := d.addNote(2, 2, "s", "", "")
-	n.outdated = true
+	n.Outdated = true // on the copy the frame draws
 	out := boxText(m, d, 80, 24)
 	if i := indexOf(out, "outdated"); i < 0 || !strings.Contains(out[i], "line 2") {
 		t.Fatalf("no `… line 2 · outdated` title:\n%s", strings.Join(out, "\n"))

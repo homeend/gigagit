@@ -232,6 +232,7 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	s.feed = nil
 	s.mu.Unlock()
 	s.restartLive(ctx)
+	s.followDocs() // the new worktree's noted files join the list (agentdocs_follow.go)
 	touchMRU(ctx, svc, s.reposStatePath())
 	// The swap is done whatever the presence says: a refused claim (a hosted
 	// page landing where another page serves) leaves the page serving the
