@@ -194,13 +194,27 @@ func TestFilelockIsAStdlibLeaf(t *testing.T) {
 	}
 }
 
+// TestClockIsAStdlibLeaf pins internal/clock to the standard library: it is
+// the one freezable "now" that leaf stores (savedcompare, shelf, bookmark,
+// notes) stamp their records with, so it must never grow a dependency that
+// would pull anything into them.
+func TestClockIsAStdlibLeaf(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/clock") {
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/clock imports %s — it must stay stdlib only", imp)
+		}
+	}
+}
+
 // TestSavedCompareIsALeaf pins internal/savedcompare's dependency budget: a
 // records-only registry of saved comparisons, owned by internal/domain. Like
 // linkhist it takes an explicit root — XDG resolution is domain's job — so it
 // must never reach for internal/config or internal/git to find its own
 // directory. Its whole budget is stdlib, internal/model (the gg:// Link it
 // stores), the shared file lock, and the same TOML library every other store
-// already uses.
+// already uses — plus internal/clock, the stdlib-only leaf that stamps a
+// saved entry's creation time (frozen in the e2e golden screens).
 //
 // internal/model in particular: an entry holds model.Link values, not link
 // STRINGS, so the package that owns the grammar is a legitimate dependency
@@ -208,6 +222,7 @@ func TestFilelockIsAStdlibLeaf(t *testing.T) {
 func TestSavedCompareIsALeaf(t *testing.T) {
 	t.Parallel()
 	allowed := map[string]bool{
+		"github.com/homeend/gigagit/internal/clock":    true,
 		"github.com/homeend/gigagit/internal/filelock": true,
 		"github.com/homeend/gigagit/internal/model":    true,
 		"github.com/pelletier/go-toml/v2":              true,
@@ -217,7 +232,7 @@ func TestSavedCompareIsALeaf(t *testing.T) {
 			continue
 		}
 		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
-			t.Errorf("internal/savedcompare imports %s — only stdlib, internal/model, internal/filelock and go-toml are allowed", imp)
+			t.Errorf("internal/savedcompare imports %s — only stdlib, internal/model, internal/filelock, internal/clock and go-toml are allowed", imp)
 		}
 	}
 }
