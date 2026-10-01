@@ -742,6 +742,11 @@ func samePathLink(a, b string) bool {
 // different repository from the checkout at "c:/src".
 func SameCheckout(a, b string) bool { return samePathLink(a, b) }
 
+// CheckoutKey is the key SameCheckout compares: a checkout path cleaned,
+// slash-normalised and case-folded where the filesystem is. agentdocs files
+// an agent's notes under it, so the TUI and a page it hosts meet on one key.
+func CheckoutKey(p string) string { return linkPathKey(filepath.Clean(p)) }
+
 // SamePath reports whether two absolute paths name the same place on this
 // machine (filepath.Clean + slash-form + case-folded where the filesystem is
 // case-insensitive). Exported so Task 6's CLI can reuse the exact rule this
