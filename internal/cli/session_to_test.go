@@ -3,10 +3,12 @@ package cli
 import (
 	"bytes"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -117,5 +119,62 @@ func TestSessionToMisuse(t *testing.T) {
 		if code := runSession(t.TempDir(), nil, args, &out, &errb); code != 2 {
 			t.Errorf("%v: exit %d, want 2 (stderr %q)", args, code, errb.String())
 		}
+	}
+}
+
+// A link-resolved verb carries --to through the link's inbox: a content
+// link's background open (to both by default) reaches the TUI only.
+func TestSessionToTUIOnALinkBackgroundOpen(t *testing.T) {
+	t.Parallel()
+	repo := newCLIRepo(t)
+	dir, srv := bothLive(t, `{}`)
+	seen := answer(t, dir, func(c steer.Command) steer.Reply { return steer.Reply{ID: c.ID, OK: true, Detail: "opened"} })
+	link := "gg://" + filepath.ToSlash(repo) + "/README.md?view=content"
+	var out, errb bytes.Buffer
+	if code := runSession(dir, domain.Open(repo), []string{"navigate", "--background", link, "--to", "tui"}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d stderr %q", code, errb.String())
+	}
+	if c := <-seen; !c.Background || c.File != "README.md" {
+		t.Fatalf("TUI got %+v", c)
+	}
+	if got := srv.commands(); len(got) != 0 {
+		t.Fatalf("the page got %+v", got)
+	}
+}
+
+// files focus goes to both by default; --to web lets the page answer alone.
+func TestSessionToWebOnFilesFocus(t *testing.T) {
+	t.Parallel()
+	dir, srv := bothLive(t, `{"id":"x","ok":true,"detail":"focused a.go"}`)
+	var out, errb bytes.Buffer
+	if code := runSession(dir, nil, []string{"files", "focus", "f2", "--to", "web"}, &out, &errb); code != 0 || !strings.Contains(out.String(), "focused a.go") {
+		t.Fatalf("exit %d stdout %q stderr %q", code, out.String(), errb.String())
+	}
+	if got := srv.commands(); len(got) != 1 || got[0].FileID != "f2" {
+		t.Fatalf("the page got %+v", got)
+	}
+	if left := steer.Drain(dir); len(left) != 0 {
+		t.Fatalf("the TUI's inbox got %+v", left)
+	}
+}
+
+// $GG_INBOX names a gg whose TUI alone is live: --to web skips it for the
+// worktree's own page.
+func TestSessionToWebPassesAGGInboxWithoutAPage(t *testing.T) {
+	own := t.TempDir()
+	livePresence(t, own)
+	withGGInbox(t, own)
+	srv, ts := newSteerServer(t, http.StatusOK, `{"id":"x","ok":true,"notes":[]}`)
+	cwd := t.TempDir()
+	liveWebPresence(t, cwd, ts.URL)
+	var out, errb bytes.Buffer
+	if code := runSession(cwd, nil, []string{"note", "list", "--to", "web"}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d stderr %q", code, errb.String())
+	}
+	if got := srv.commands(); len(got) != 1 || got[0].Cmd != "note_list" {
+		t.Fatalf("the worktree's page got %+v", got)
+	}
+	if left := steer.Drain(own); len(left) != 0 {
+		t.Fatalf("$GG_INBOX's TUI got %+v", left)
 	}
 }

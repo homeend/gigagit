@@ -12,7 +12,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 - **`gg session <verb> --to tui|web`** picks which live session gets the
   command, even while the TUI and a gg web page both run (by default the TUI
-  answers, and screen moves reach the browser too). `gg session overview add
+  answers, and navigate, reload, focus, highlight and background opens reach
+  the browser too). `gg session overview add
   --to web …` shows the tour in the browser and leaves the terminal where it
   is. A side that is not running says so (exit 1); `status` refuses `--to`.
   The using-gg skill is v113.
