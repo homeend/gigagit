@@ -67,6 +67,8 @@ func (m Model) closeFilesView() Model {
 	m.filesPreviewCounts = nil
 	m.filesReview = nil
 	m.filesLandNote = ""
+	m.filesLandScope = ""
+	m.filesBack = nil
 	m.filesStashTag = ""
 	m.filesShelfID = ""
 	m.filesShelfLabel = ""
@@ -306,15 +308,16 @@ func withReviewLines(reviews []domain.Review, lines []contentLine) []contentLine
 }
 
 // notedElsewhere lists, sorted, the paths with notes at commit hash that the
-// commit does not change — counted in its Commits ◆ N (a merge preview's note
-// is stored on the source tip), so its Files view must reach them too.
-func notedElsewhere(byCommitPath map[string]int, hash string, files []model.CommitFile) []string {
+// commit does not change — counted in its Commits ◆ N, so its Files view must
+// reach them too. plain counts only the notes written in NO scope: a range
+// review's notes are its own row (withScopeLines), never loose paths here.
+func notedElsewhere(plain map[string]int, hash string, files []model.CommitFile) []string {
 	changed := make(map[string]bool, len(files))
 	for _, f := range files {
 		changed[f.Path] = true
 	}
 	var out []string
-	for k, n := range byCommitPath {
+	for k, n := range plain {
 		p, ok := strings.CutPrefix(k, hash+":")
 		if ok && n > 0 && !changed[p] {
 			out = append(out, p)
@@ -324,40 +327,38 @@ func notedElsewhere(byCommitPath map[string]int, hash string, files []model.Comm
 	return out
 }
 
-// notedPreviewTag names the previews a Notes row's notes were written in
-// (model.Note.Preview), the Previews panel's way round: "source → target";
-// a commit pair as its "a..b". "" when none was.
-func notedPreviewTag(ps []string) string {
-	if len(ps) == 0 {
-		return ""
+// scopeLabel names a note scope the Previews panel's way round.
+func scopeLabel(scope string) string { return domain.NoteScopeLabel(scope) }
+
+// withScopeLines puts a commit's range reviews in front of its list under a
+// "Range reviews" heading: one row per scope its notes were written in. A
+// merge preview's or a commit pair's notes all sit on the range's newest
+// commit, mostly on files that commit does not change — so the row stands
+// for the whole review (every note of the scope at this commit, whichever
+// file), and enter opens the range where each note is on its file.
+func withScopeLines(scopes []domain.NoteScopeCount, lines []contentLine) []contentLine {
+	if len(scopes) == 0 {
+		return lines
 	}
-	names := make([]string, len(ps))
-	for i, p := range ps {
-		names[i] = p
-		if target, source, ok := strings.Cut(p, "..."); ok {
-			names[i] = source + " → " + target
-		}
+	out := make([]contentLine, 0, len(scopes)+1+len(lines))
+	out = append(out, contentLine{text: i18n.T("Range reviews"), heading: true})
+	for _, sc := range scopes {
+		out = append(out, contentLine{text: "  " + scopeLabel(sc.Scope), noteScope: sc.Scope})
 	}
-	return "  " + i18n.T("(preview: %s)", strings.Join(names, ", "))
+	if len(lines) == 1 && lines[0].path == "" && !lines[0].heading {
+		return out // "(no files)": the reviews are the whole list
+	}
+	return append(out, lines...)
 }
 
-// notedRowText lays a Notes row out in w columns: the path, its ◆ badge,
-// then the preview tag. Short of room the TAG gives way first (cut at its
-// end, or dropped), then the path loses its middle — the file name and its
-// badge always stay.
-func notedRowText(file, badge, tag string, w int) string {
-	fw, bw, tw := lipgloss.Width(file), lipgloss.Width(badge), lipgloss.Width(tag)
-	if fw+bw+tw <= w {
-		return file + badge + tag
+// scopeNoteCount is how many notes of scope the commit holds.
+func scopeNoteCount(c domain.NoteCounts, hash, scope string) int {
+	for _, sc := range c.ScopesByCommit[hash] {
+		if sc.Scope == scope {
+			return sc.N
+		}
 	}
-	keep := fw // the path's share: whole if the tag can shrink around it
-	if fw+bw > w {
-		keep = max(lipgloss.Width(path.Base(file)), w-bw)
-	}
-	if room := w - keep - bw; room > len("  (…") {
-		return elidePath(file, keep) + badge + truncate(tag, room)
-	}
-	return elidePath(file, keep) + badge
+	return 0
 }
 
 // withNotedLines puts those paths in front of a commit's files under a
@@ -1110,7 +1111,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.focusTree(), nil
 		}
 		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview && vis[p.sel].shelfNote == "" && vis[p.sel].notedPath == "") {
+		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview && vis[p.sel].shelfNote == "" && vis[p.sel].notedPath == "" && vis[p.sel].noteScope == "") {
 			return m, nil // heading row, placeholder, or empty view
 		}
 		return m.openDiffForFileLine(vis[p.sel])
@@ -1237,6 +1238,9 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
+	if l.noteScope != "" { // a commit's Range review row: the range opens, esc comes back here
+		return m.openScopeRow(l.noteScope)
 	}
 	if l.notedPath != "" { // a commit's Notes row: its notes read in the viewer, esc comes back here
 		return m, m.commitNotesCmd(m.filesHash, l.notedPath)
@@ -1482,16 +1486,13 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		elide := l.path != "" && !l.heading && l.noteID == ""
 		if m.filesPreviewSet != nil && l.path != "" {
 			text += noteBadge(m.filesPreviewCounts[l.path])
+		} else if l.noteScope != "" && m.filesCommitBadges() {
+			// A commit's Range review row: every note of the scope here.
+			text += noteBadge(scopeNoteCount(m.noteCounts, m.filesHash, l.noteScope))
 		} else if l.notedPath != "" && m.filesCommitBadges() {
-			// A commit's Notes row: its badge and the previews its notes were
-			// written in stay whole; the path before them loses its middle.
-			k := m.filesHash + ":" + l.notedPath
-			badge, tag := noteBadge(m.noteCounts.ByCommitPath[k]), notedPreviewTag(m.noteCounts.PreviewsByCommitPath[k])
-			if p.mode == modeCutoff {
-				text = "  " + notedRowText(l.notedPath, badge, tag, innerW-lipgloss.Width(prefix)-2)
-			} else {
-				text, elide = text+badge+tag, true
-			}
+			// A commit's Notes row: the notes written outside any range; the
+			// path before the badge loses its middle.
+			text, elide = text+noteBadge(m.noteCounts.PlainByCommitPath[m.filesHash+":"+l.notedPath]), true
 		} else if l.path != "" && m.filesCommitBadges() {
 			// A commit's files: the notes anchored on the file AT this commit.
 			text += noteBadge(m.noteCounts.ByCommitPath[m.filesHash+":"+l.path])

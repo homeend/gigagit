@@ -134,3 +134,68 @@ func (s *Service) pairScope(ctx context.Context, a, b string) (PreviewNoteSet, e
 	}
 	return PreviewNoteSet{}, fmt.Errorf("preview: missing commit: %s", missing)
 }
+
+// NoteScopeLabel names a note scope (model.Note.Preview) the Previews panel's
+// way round: a merge preview as "source → target", a commit pair as its
+// "a..b". One wording for every frontend's Range review row.
+func NoteScopeLabel(scope string) string {
+	if target, source, ok := strings.Cut(scope, "..."); ok {
+		return source + " → " + target
+	}
+	return scope
+}
+
+// ScopeAtCommit turns a scope a note names (Note.Preview) into the frozen
+// commit range it opens as from commit, the commit holding the note:
+//
+//	<a>..<b>              the pair itself (stored as short shas)
+//	<target>...<source>   where commit left the target .. commit
+//
+// A merge preview's names move on; the range read from the commit does not,
+// so the review opens as it was written however far the branch went since.
+// A commit already in the target (the branch was merged) has no such range
+// left: that is an error, never an empty diff.
+func (s *Service) ScopeAtCommit(ctx context.Context, scope, commit string) (a, b string, err error) {
+	full := func(rev string) (string, error) {
+		sha, ok, err := s.ResolveRev(ctx, rev)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "", fmt.Errorf("missing: %s", rev)
+		}
+		return strings.TrimSpace(sha), nil
+	}
+	scope = strings.TrimSpace(scope)
+	if target, _, ok := strings.Cut(scope, "..."); ok {
+		target = strings.TrimSpace(target)
+		if target == "" {
+			return "", "", errPreviewPairShape
+		}
+		if b, err = full(commit); err != nil {
+			return "", "", err
+		}
+		if _, err = full(target); err != nil {
+			return "", "", err
+		}
+		base, err := s.repo.MergeBase(ctx, target, b)
+		if err != nil {
+			return "", "", err
+		}
+		if base == b {
+			return "", "", fmt.Errorf("%s is already in %s", shortSHA(b), target)
+		}
+		return base, b, nil
+	}
+	l, r, ok := strings.Cut(scope, "..")
+	if !ok || strings.TrimSpace(l) == "" || strings.TrimSpace(r) == "" {
+		return "", "", errPreviewPairShape
+	}
+	if a, err = full(strings.TrimSpace(l)); err != nil {
+		return "", "", err
+	}
+	if b, err = full(strings.TrimSpace(r)); err != nil {
+		return "", "", err
+	}
+	return a, b, nil
+}

@@ -27,6 +27,46 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Web:** the same view in `gg web` — `alt+x`, ☰ → **text templates…** or
   the palette: list, text, variables, a fill dialog, the rendered text with
   **copy and close**, and add/edit in a text box.
+## A range review is one row of the commit that holds it
+
+### Changed
+
+- **A commit's Files view lists a range review as one row, not as loose
+  files.** Notes written in a merge preview or a commit pair are all stored
+  on the range's newest commit, mostly on files that commit does not change;
+  its Files view used to list those files one by one under "Notes" (with a
+  `(preview: …)` tag a narrow column dropped), and enter showed the note
+  text without its code. Now the commit shows a **Range reviews** heading
+  with one row per range — `feature → main  ◆ 3`, `8350e12..124d84b  ◆ 1`,
+  counting every note of that range on the commit — and **enter opens the
+  range the notes were written in, frozen at this commit**: a commit pair as
+  its own two commits, a merge preview as where the commit left the target
+  up to the commit, however far the branch moved since. Every file of the
+  range is listed with its ◆ N and the notes sit on their lines; esc returns
+  to the commit's files, the cursor on the row. A commit already merged into
+  the preview's target has no range left: the status line says so. Notes
+  written outside any range on a file the commit does not change keep their
+  "Notes" row. `domain.NoteCounts` carries `ScopesByCommit` and
+  `PlainByCommitPath` (replacing `PreviewsByCommitPath`);
+  `domain.ScopeAtCommit` resolves a scope from the commit.
+- **The web page lists a commit's range reviews too.** A commit's file list
+  shows the same **Range reviews** rows above its files (after its Reviews);
+  click or enter opens the range frozen at that commit — every file with its
+  ◆ N, the notes on their lines — and esc returns to the commit, the cursor
+  on the row. `/api/notes/counts` carries `scopes_by_commit`; the new
+  `GET /api/scope-range?commit=&scope=` resolves one (only a scope the
+  commit's own notes name) to the two commits the page opens as a pair
+  landing. Before, the page could not reach those notes from the commit at
+  all.
+
+### Fixed
+
+- **Opening a commit in the web page brings a folded file list back.** With
+  the file list folded to its strip (the » control, remembered per machine),
+  clicking a commit showed nothing but the strip. Opening a commit now
+  unfolds the list (and stores that); only an opener that goes straight on
+  to one file's diff — a steered link, the viewer's diff, View all notes —
+  keeps the fold, since it exists to give the diff room.
 
 ## The TUI follows an agent's gg changes
 
@@ -232,6 +272,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **A fingerprinted link pasted into `#` that names another checkout** kept
   its line but lost the note across the switch: the landing in the other
   checkout now says the line moved or changed, like any other landing.
+- **A text file with a stray NUL byte past its first 8000 bytes** got
+  fingerprinted links that always read "has changed": the resolver called
+  the file binary where the diff calls it text. It now uses the diff's rule
+  (a NUL in the first 8000 bytes), and its size cap too — a file over 10 MB
+  is not scanned and gets no fingerprint.
 - **gg web's file viewer** copied the plain `:N?view=content` form; its
   *copy file link (line N)* now carries the line's fingerprint while the
   viewer shows the file on disk (a commit's or a shelf's version of the line

@@ -61,6 +61,10 @@ type contentLine struct {
 	// the commit does not change (a merge preview's note on the source tip).
 	// No path, so every file action passes it by; enter reads its notes.
 	notedPath string
+	// noteScope is a commit's Range review row: the scope (Note.Preview) some
+	// of the commit's notes were written in. No path, so every file action
+	// passes it by; enter opens that range, frozen at the commit.
+	noteScope string
 	// elideHead is how many leading runes of text an elided row keeps whole
 	// (a note row's "└ date " lead): the middle-cut starts after them.
 	elideHead int

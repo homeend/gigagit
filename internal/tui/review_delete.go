@@ -130,6 +130,16 @@ func (m Model) leaveReviewView() (Model, tea.Cmd) {
 		m.filesLandNote = id
 		return m, cmd
 	}
+	if b := m.filesBack; b != nil {
+		// A range opened from a commit's Range review row: back to that
+		// commit's files, the cursor on the row once the list lands.
+		scope := b.scope
+		m, cmd := m.openChangedFiles(b.commit)
+		m.focus = panelCommits
+		m = m.focusTree()
+		m.filesLandScope = scope
+		return m, cmd
+	}
 	ret, parked := m.filesReturnFocus, m.filesReturnLayers
 	m = m.closeFilesView()
 	m.focus = ret                             // return to the panel that opened the view (Tags/Reflog/Commits/…)

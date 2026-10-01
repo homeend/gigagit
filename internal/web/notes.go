@@ -122,7 +122,9 @@ func (s *Server) handleNoteCounts(w http.ResponseWriter, r *http.Request) {
 		"by_path":        orEmptyCounts(c.ByPath),
 		"by_commit":      orEmptyCounts(c.ByCommit),
 		"by_commit_path": orEmptyCounts(c.ByCommitPath),
-		"reviews":        reviewHeads(c.Reviews), // the Branches' review sub-rows
+		// The ranges each commit's notes were written in: its Range review rows.
+		"scopes_by_commit": wireScopes(c.ScopesByCommit),
+		"reviews":          reviewHeads(c.Reviews), // the Branches' review sub-rows
 	})
 }
 
