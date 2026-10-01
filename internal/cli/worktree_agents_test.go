@@ -17,7 +17,8 @@ func agentEnv(t *testing.T, dir string) {
 	reg := filepath.Join(state, "gg", "sessions")
 	// Written by hand: the frontends may not import sessionreg (archtest).
 	body, _ := json.Marshal(map[string]any{"pid": 1, "worktree": "", "sessions": []map[string]string{
-		{"id": "p/s1", "dir": dir, "agent": "claude", "state": "running"}}})
+		{"id": "p/s1", "dir": dir, "agent": "claude", "state": "running"},
+		{"id": "p/s2", "dir": dir, "agent": "codex", "state": "running"}}})
 	if err := os.MkdirAll(reg, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -60,10 +61,15 @@ func TestWorktreeClaimReleaseRoundTrip(t *testing.T) {
 	if code, _, errb := runCLI(t, dir, "worktree", "claim", "--note", "https://x/1", wt); code != 0 {
 		t.Fatalf("claim exit %d: %s", code, errb)
 	}
+	if code, _, errb := runCLI(t, dir, "worktree", "claim", wt); code != 0 {
+		t.Fatalf("a re-claim by the holder = %d %q, want success (safe to retry)", code, errb)
+	}
+	t.Setenv("GG_SESSION_ID", "p/s2")
 	code, _, errb := runCLI(t, dir, "worktree", "claim", wt)
 	if code != 1 || !strings.Contains(errb, "claimed") {
-		t.Fatalf("second claim = %d %q", code, errb)
+		t.Fatalf("a second session's claim = %d %q", code, errb)
 	}
+	t.Setenv("GG_SESSION_ID", "p/s1")
 	if code, out, _ := runCLI(t, dir, "worktree", "release", wt); code != 0 || !strings.Contains(out, "released") {
 		t.Fatalf("release = %d %q", code, out)
 	}
