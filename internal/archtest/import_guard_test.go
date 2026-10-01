@@ -264,3 +264,15 @@ func TestTaskhistIsALeaf(t *testing.T) {
 		}
 	}
 }
+
+// TestWtguardIsALeaf pins internal/wtguard to the standard library: it is
+// the interface engine AND domain share for "may this worktree be taken?",
+// so it may know none of the sources its guards read.
+func TestWtguardIsALeaf(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/wtguard") {
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/wtguard imports %s — only stdlib is allowed", imp)
+		}
+	}
+}
