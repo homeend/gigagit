@@ -77,6 +77,10 @@ console.log(JSON.stringify({
   capOff: mdHTML(trees.thread, esc, { skipFirstCaption: true }),
   capFirst: mdHTML({ blocks: [{ k: "code", lang: "suggestion", lines: [{ t: "a" }] }, { k: "code", lang: "suggestion", lines: [{ t: "b" }] }] }, esc, { skipFirstCaption: true }),
   inline: mdInlineHTML([{ k: "text", t: "Rename " }, { k: "code", t: "<x>" }, { k: "strong", in: [{ k: "text", t: "now" }] }], esc),
+  anchorPlain: mdInlineHTML([{ k: "anchor", url: "a.go:3", t: "0", in: [{ k: "text", t: "go" }] }], esc),
+  anchorOn: mdHTML({ blocks: [{ k: "p", in: [{ k: "anchor", url: "a.go:3", t: "0", in: [{ k: "strong", in: [{ k: "text", t: "go" }] }] }] },
+    { k: "list", items: [{ blocks: [{ k: "p", in: [{ k: "anchor", t: '1" onclick="x', in: [{ k: "text", t: "two" }] }] }] }] },
+    { k: "table", head: [[{ k: "anchor", t: "2", in: [{ k: "text", t: "cell" }] }]], rows: [] }] }, esc, { anchors: true }),
 }));
 `
 	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(runner), 0o644); err != nil {
@@ -93,6 +97,8 @@ console.log(JSON.stringify({
 		Empty            []string
 		Inline           string
 		CapOff, CapFirst string
+		AnchorPlain      string
+		AnchorOn         string
 	}
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("%v\n%s", err, out)
@@ -172,6 +178,18 @@ console.log(JSON.stringify({
 	}
 	if want := `Rename <code class="md-ic">&lt;x&gt;</code><strong>now</strong>`; got.Inline != want {
 		t.Errorf("inline = %s", got.Inline)
+	}
+	// An overview's anchors: plain text without the option (PR and review
+	// text never changes), a numbered link with it — in lists and tables too,
+	// the number escaped.
+	if got.AnchorPlain != "go" {
+		t.Errorf("anchor without the option = %q, want plain text", got.AnchorPlain)
+	}
+	for _, sub := range []string{`<a class="md-anchor" data-a="0" href="#"><strong>go</strong></a>`,
+		`<li><p>two</p></li>`, `<a class="md-anchor" data-a="2" href="#">cell</a>`} {
+		if !strings.Contains(got.AnchorOn, sub) {
+			t.Errorf("anchors on: missing %s\n%s", sub, got.AnchorOn)
+		}
 	}
 	if strings.Contains(string(src), "import ") || strings.Contains(string(src), "innerHTML") || strings.Contains(string(src), "document") {
 		t.Error("markdown.js stays import-free and DOM-free: it returns strings")

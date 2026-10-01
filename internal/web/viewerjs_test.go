@@ -153,6 +153,18 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"ops.js", "function clearOpLine(", "a notice can be taken down when it no longer holds"},
 	{"viewer.js", `clearOpLine(f.path + " opened in the background")`, "focusing a background-opened file drops its notice"},
 	{"style.css", `#op-line.err #op-head::before { content: "Problem"; }`, "the error head's words are CSS, not text a notice carries"},
+	// Agent docs plan 2: overviews.
+	{"viewer.js", `"/api/overview?id="`, "an overview reads through its own endpoint"},
+	{"viewer.js", "{ anchors: true }", "an overview paints its anchors as links"},
+	{"viewer.js", `closest("a.md-anchor")`, "a single click opens an anchor"},
+	{"viewer.js", `case "Backspace":`, "backspace goes back to the overview"},
+	{"viewer.js", "the overview was closed", "back from a closed overview says so"},
+	{"viewer.js", " vrange", "a range anchor highlights its lines"},
+	{"viewer.js", `" was closed"`, "an overview closed elsewhere closes this viewer"},
+	{"live.js", "viewerAgentDocs(msg.files || [], msg.closed || [])", "the tabs hear which overview closed"},
+	{"style.css", ".md-anchor.asel", "the selected anchor is styled"},
+	{"style.css", ".md-anchor.agone", "a missing anchor is styled"},
+	{"style.css", ".vline.vrange", "the range is tinted"},
 }
 
 // viewerGone pins what the open-files minors removed.

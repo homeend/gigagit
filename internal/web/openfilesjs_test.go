@@ -28,6 +28,19 @@ console.log(JSON.stringify(rows) + "|" + [clampSel(5, 2), clampSel(-1, 2), clamp
 // The viewer's footer is built in a template literal, where "\ " is an escape
 // for a plain space: the chip must write "\\" or the page shows "ctrl+ open
 // files" (found by the 5c browser check).
+// An overview's row names it by its title (its path is the TUI's display
+// name, overview-<n>.md).
+func TestSwitcherOverviewRowJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "openfiles.js", ofPureStart, ofPureEnd, `
+const r = switcherRows([{id: "f4", path: "overview-4.md", source: "overview", title: "The tour", line: 0}], "")[0];
+console.log(r.path + "|" + r.source);
+`)
+	if out != "The tour|overview" {
+		t.Fatalf("got %s", out)
+	}
+}
+
 func TestViewerFootChipKeepsTheBackslash(t *testing.T) {
 	t.Parallel()
 	b, err := os.ReadFile(filepath.Join("static", "viewer.js"))

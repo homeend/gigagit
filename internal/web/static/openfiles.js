@@ -15,11 +15,13 @@ import { registerHelp } from "./menus.js";
 import { consoleSessionId, openConsole } from "./console.js";
 
 // --- switcher model (pure; guarded against Go) ---
+// An overview's row names it by its title (its path is the TUI's display
+// name); its meta says overview.
 function switcherRows(files, mine) {
   return files.map((f) => ({
     id: f.id,
     mark: f.id === mine ? "●" : "○",
-    path: f.path,
+    path: f.source === "overview" ? f.title || f.path : f.path,
     line: f.line > 0 ? ":" + f.line : "",
     source: f.source,
     rev: f.rev || "",
