@@ -68,6 +68,16 @@ func (s *Service) ShelfAddCommit(ctx context.Context, sha, label string) (model.
 	if st == nil {
 		return model.ShelfEntry{}, ErrShelfDisabled
 	}
+	// The entry records the commit it froze, never the rev it was named by
+	// ("HEAD" would read as another commit once HEAD moves).
+	full, found, err := s.ResolveRev(ctx, sha)
+	if err != nil {
+		return model.ShelfEntry{}, err
+	}
+	if !found {
+		return model.ShelfEntry{}, fmt.Errorf("shelf: unknown commit %s", sha)
+	}
+	sha = full
 	paths, err := s.commitChangedPaths(ctx, sha)
 	if err != nil {
 		return model.ShelfEntry{}, err

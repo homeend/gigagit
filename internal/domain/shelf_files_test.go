@@ -208,3 +208,20 @@ func TestShelfAddFilesIsAtomic(t *testing.T) {
 		t.Fatalf("a failed set must store nothing, shelf has %d entries", len(all))
 	}
 }
+
+// A shelved commit records the commit it froze, never the rev it was named
+// by: "HEAD" would read as a different commit once HEAD moves (and showed
+// as "commit / commit" for want of a sha).
+func TestShelfAddCommitResolvesTheRev(t *testing.T) {
+	t.Parallel()
+	repoDir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	sha := commitTwoFiles(t, repoDir)
+	e, err := svc.ShelfAddCommit(context.Background(), "HEAD", "")
+	if err != nil {
+		t.Fatalf("ShelfAddCommit: %v", err)
+	}
+	if e.Origin.Commit != sha || strings.Contains(e.ID, "HEAD") {
+		t.Fatalf("entry %q origin commit = %q, want %q", e.ID, e.Origin.Commit, sha)
+	}
+}

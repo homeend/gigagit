@@ -1,0 +1,37 @@
+name = "tui: shelved files and a shelved commit in the shelf quick-switcher"
+
+# A frozen copy of a working file and a named shelved commit sit side by
+# side in G's quick-switcher; enter on the commit entry opens its frozen
+# files. `gg shelf commit HEAD` records the commit HEAD named, so the entry
+# shows its sha — it once stored the word "HEAD" and read "commit / commit".
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
+  { commit = "add a b" },
+  { write = "b.txt", content = "b\nmore b\n" }, { write = "c.txt", content = "c\n" },
+  { commit = "grow b, add c" },
+  { write = "a.txt", content = "a draft\n" },
+]
+
+[[run]]
+cmd = ["shelf", "add", "a.txt"]
+exit = 0
+
+[[run]]
+cmd = ["shelf", "commit", "--name", "the b and c change", "HEAD"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "switcher"
+keys = ["G"]
+screen_contains = ["wt:local / unstaged / a.txt", "commit / cc2b480 — the b and c change"]
+screen_excludes = ["commit / commit"]
+
+[[tui.step]]
+name = "commit-entry"
+keys = ["down", "enter"]
+screen_contains = ["b.txt", "c.txt"]
+screen_excludes = ["a.txt"]
