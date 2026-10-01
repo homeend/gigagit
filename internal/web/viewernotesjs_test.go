@@ -80,6 +80,16 @@ console.log([
 	}
 }
 
+// An overview refresh's answer applies unless a newer one already did: a
+// newer refresh merely started (it may fail) does not drop it.
+func TestOvAnswerAppliesJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `console.log([ovAnswerApplies(1, 0), ovAnswerApplies(1, 2), ovAnswerApplies(2, 2), ovAnswerApplies(3, 2)].join("|"));`)
+	if want := "true|false|false|true"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
 // An eviction line carries the cap the server sent, not a number of its own.
 func TestEvictedTextJS(t *testing.T) {
 	t.Parallel()

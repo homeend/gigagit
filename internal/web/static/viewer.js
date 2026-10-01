@@ -181,6 +181,13 @@ function overviewStale(stamps, id, shown) {
 function evictedText(path, cap) {
   return "closed " + path + " (" + cap + " files open)";
 }
+
+// ovAnswerApplies reports whether overview refresh mine's answer may apply
+// when refresh applied's answer is the last one that did: only a newer
+// answer having applied drops it — a newer refresh merely started may fail.
+function ovAnswerApplies(mine, applied) {
+  return mine > applied;
+}
 // --- end overview model ---
 
 // --- the overlay -------------------------------------------------------------
@@ -194,8 +201,9 @@ const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, pl
 const viewerSearch = new Search();
 const places = new Map(); // id → {cur, top}: where THIS tab left each file
 let loadSeq = 0; // bumped by every open: a reload that sees it move drops (L9)
-let ovSeq = 0; // bumped by every overview refresh: an older answer landing late drops
-let ovLast = Promise.resolve(false); // the last refresh started (refreshOverview)
+let ovSeq = 0; // bumped by every overview refresh (refreshOverview)
+let ovApplied = 0; // the refresh whose answer applied last: an older answer landing later drops
+let ovLast = Promise.resolve(false); // the last refresh started
 let cursorTimer = null;
 
 function ofPost(body) {
@@ -446,9 +454,11 @@ function selectAnchor(i) {
 
 // refreshOverview re-reads the overview on screen (the server re-checks its
 // anchors), keeping the selected anchor by its destination; false when it
-// is gone or another open won meanwhile. Refreshes may overlap: only the
-// last one started applies, and an earlier one answers with the last one's
-// result — so a caller (openAnchorAt) always resumes on a re-checked list.
+// is gone or another open won meanwhile. Refreshes may overlap: an answer
+// applies unless a newer one already did (a newer refresh that fails keeps
+// the older answer), and a refresh whose fetch fails answers with the last
+// one started — so a caller (openAnchorAt) always resumes on a re-checked
+// list when one is to be had.
 function refreshOverview() {
   if (!view.ov || !viewerFileId()) return Promise.resolve(false);
   ovLast = refreshOverviewAs(++ovSeq);
@@ -461,10 +471,11 @@ async function refreshOverviewAs(mine) {
   try {
     ov = await fetchOverview(id);
   } catch {
-    return false;
+    return mine !== ovSeq ? ovLast : false;
   }
-  if (mine !== ovSeq) return ovLast; // a later refresh is under way: its answer is newer
   if (seq !== loadSeq || id !== view.id || !view.ov) return false;
+  if (!ovAnswerApplies(mine, ovApplied)) return true; // a newer answer is on screen
+  ovApplied = mine;
   view.ov = { ...ov, sel: keepAnchor(ov.anchors || [], view.ov.anchors, view.ov.sel) };
   paintTitle();
   rerenderKeepingScroll();

@@ -4361,4 +4361,8 @@ selection, laid-out width); never on disk, never evicted, created
   pass over another drops it). A web `note_add` lists the file — and takes
   its baseline stat — inside that turn, only after the store took the note.
   Eviction lines word the cap the server sends (`cap`, `evictedText`); an
-  overview refresh older than the last started drops its answer (`ovSeq`).
+  overview refresh's answer drops only when a newer answer already applied
+  (`ovSeq`/`ovApplied`, `ovAnswerApplies`) — a newer refresh that merely
+  started may fail, and then the older answer still lands; a refresh whose
+  fetch fails answers with the last one started (`ovLast`), so
+  `openAnchorAt` resumes on a re-checked list when one is under way.

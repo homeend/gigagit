@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent docs: a failed overview reload keeps the older answer
+
+### Fixed
+
+- **gg web:** when an agent changes an overview twice quickly and the
+  second reload fails, the first reload's answer now shows instead of being
+  dropped — the overview no longer stays on its old text until it changes
+  again. A late older answer still never overwrites a newer one.
+
 ## Agent consoles belong to their repository
 
 ### Changed
