@@ -886,6 +886,7 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 	body := m.diffBodyRows()
 	v.setCursorLine(li, body)
 	v.alignCursor(alignCenter, body)
+	v.landOnSide(old)
 
 	m.diffNotice = steerOpenedNotice(c, no)
 
@@ -894,6 +895,17 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 		detail += "; clamped to line " + strconv.Itoa(no)
 	}
 	return m.navigateLanded(c, detail)
+}
+
+// landOnSide puts the cursor in the pane a landing names: the side is part of
+// the address (`:old:<line>`), so L right after the landing copies the link
+// that brought the reader here. A live selection is locked to its side and
+// keeps it.
+func (v *diffView) landOnSide(old bool) {
+	if v.lsel.on {
+		return
+	}
+	v.onOld = old
 }
 
 // failPending answers and clears whatever is parked. Every failure branch of

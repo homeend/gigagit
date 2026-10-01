@@ -172,8 +172,8 @@ func TestCopyInTheDiffViewConfirmsInItsNoticeBox(t *testing.T) {
 	}
 }
 
-// The round trip: an old-side pair link pasted back lands on that line's row,
-// and L on its old pane copies the very same link.
+// The round trip: an old-side pair link pasted back lands on that line, in the
+// old pane, and L there copies the very same link.
 func TestOldSidePairLinkLandsWhereItWasCopied(t *testing.T) {
 	t.Parallel()
 	dir, c1, _, _ := refPairRepo(t)
@@ -204,8 +204,9 @@ func TestOldSidePairLinkLandsWhereItWasCopied(t *testing.T) {
 	if row, ok := v.cursorRow(); !ok || row.LeftNo != 1 {
 		t.Fatalf("cursor row = %+v ok=%v, want the row of OLD line 1", row, ok)
 	}
-	// A landing places the ROW; the pane is the reader's (alt+left).
-	v.onOld = true
+	if !v.onOld {
+		t.Fatal("an old-side landing must put the cursor in the OLD pane")
+	}
 	m.linkRepoName = "gigagit" // only the copy reads it: the landing resolves a real repo
 	wantLink(t, m, want)
 }
