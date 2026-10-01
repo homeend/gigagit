@@ -166,7 +166,7 @@ func AgentDescends(target, caller string) bool {
 // reserveSpawnSlot takes one of cap slots (live spawned + pending). The
 // returned release(started) frees the pending slot; a started session then
 // counts through its record instead.
-func reserveSpawnSlot(cap int) (func(started bool), bool) {
+func reserveSpawnSlot(limit int) (func(started bool), bool) {
 	r := registry()
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -177,7 +177,7 @@ func reserveSpawnSlot(cap int) (func(started bool), bool) {
 			live++
 		}
 	}
-	if live+r.pending >= cap {
+	if live+r.pending >= limit {
 		return nil, false
 	}
 	r.pending++

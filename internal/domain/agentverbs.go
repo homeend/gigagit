@@ -19,6 +19,12 @@ import (
 // MaxBriefBytes caps an agent_start prompt (the brief).
 const MaxBriefBytes = 256 << 10
 
+// MaxSendBytes caps an agent_send text; MaxNoteBytes an agent_start note.
+const (
+	MaxSendBytes = 64 << 10
+	MaxNoteBytes = 1 << 10
+)
+
 type AgentEntry struct {
 	ID       string    `json:"id"`
 	Parent   string    `json:"parent,omitempty"`
@@ -75,6 +81,9 @@ func reach(caller, target string) error {
 	if AgentDescends(target, caller) {
 		return nil
 	}
+	if _, err := sessionOf(target); err != nil {
+		return err
+	}
 	by := "the user"
 	if rec, ok := AgentRecord(target); ok && rec.Parent != "" {
 		by = rec.Parent
@@ -87,6 +96,9 @@ func reach(caller, target string) error {
 func AgentSend(caller, target, text string, enter bool, keys []string) error {
 	if err := reach(caller, target); err != nil {
 		return err
+	}
+	if len(text) > MaxSendBytes {
+		return fmt.Errorf("the text is larger than %d bytes", MaxSendBytes)
 	}
 	s, err := sessionOf(target)
 	if err != nil {
@@ -260,6 +272,9 @@ func SpawnAgent(ctx context.Context, sp SpawnSpec) (AgentStartResult, *AgentSess
 	}
 	if len(req.Prompt) > MaxBriefBytes {
 		return AgentStartResult{}, nil, fmt.Errorf("the prompt is larger than %d bytes", MaxBriefBytes)
+	}
+	if len(req.Note) > MaxNoteBytes {
+		return AgentStartResult{}, nil, fmt.Errorf("the note is larger than %d bytes", MaxNoteBytes)
 	}
 	svc := ServiceForDir(callerSess.Info().Dir)
 	cfg, err := svc.EffectiveConfig(ctx)

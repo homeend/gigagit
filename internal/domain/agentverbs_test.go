@@ -84,6 +84,7 @@ func TestSpawnRefusals(t *testing.T) {
 		"unapproved":   {func(sp *SpawnSpec) { sp.Approved = func(string, string) bool { return false } }, "approve Sleeper once"},
 		"empty prompt": {func(sp *SpawnSpec) { sp.Req.Prompt = "" }, "prompt is empty"},
 		"huge prompt":  {func(sp *SpawnSpec) { sp.Req.Prompt = strings.Repeat("x", MaxBriefBytes+1) }, "prompt is larger than"},
+		"huge note":    {func(sp *SpawnSpec) { sp.Req.Note = strings.Repeat("n", MaxNoteBytes+1) }, "note is larger than"},
 		"bad worktree": {func(sp *SpawnSpec) { sp.Req.Worktree = "nowhere" }, "no worktree"},
 	}
 	for name, c := range cases {
@@ -168,6 +169,34 @@ func TestAgentSendTypesAndEnters(t *testing.T) {
 	}
 	if err := AgentKill(target, ov, false); err == nil {
 		t.Fatal("kill of a non-descendant must refuse")
+	}
+}
+
+func TestAgentSendRefusesHugeText(t *testing.T) {
+	_, wt, svc, ov := spawnFixture(t, 4)
+	child, _, err := svc.StartAgentSession(context.Background(), sleeper(), wt, "", 80, 24, nil, "http://x", SpawnRecord{Parent: ov, Spawned: true}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := FullSessionID(child.Info().ID)
+	if err := AgentSend(ov, target, strings.Repeat("x", MaxSendBytes+1), true, nil); err == nil || !strings.Contains(err.Error(), "text is larger than") {
+		t.Fatalf("huge send = %v", err)
+	}
+	if err := AgentSend(ov, target, strings.Repeat("x", MaxSendBytes), false, nil); err != nil {
+		t.Fatalf("a send at the cap = %v", err)
+	}
+}
+
+func TestReachNamesAnUnknownSession(t *testing.T) {
+	_, _, _, ov := spawnFixture(t, 4)
+	ghost := ov[:strings.LastIndex(ov, "/")+1] + "s999"
+	for name, err := range map[string]error{
+		"send": AgentSend(ov, ghost, "x", true, nil),
+		"kill": AgentKill(ov, ghost, false),
+	} {
+		if err == nil || !strings.Contains(err.Error(), "no session "+ghost) || strings.Contains(err.Error(), "started by") {
+			t.Errorf("%s to an unknown id = %v, want \"no session %s\"", name, err, ghost)
+		}
 	}
 }
 
