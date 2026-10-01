@@ -60,3 +60,41 @@ console.log([
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
+
+// The page-side minors: how esc / the backdrop leave a document, how a
+// document is named in a status line, what backspace's list fetch means,
+// and when an agentdocs change re-fetches the overview on screen.
+func TestViewerDocumentHelpersJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `
+console.log([
+  escHow(true, 0), escHow(false, 2), escHow(false, 0),
+  docName({ov: {title: "The \"tour\""}, id: "f5", path: "overview-5.md"}), docName({ov: null, id: "f2", path: "a/b.go"}),
+  backOutcome(null, "f5"), backOutcome([{id: "f5"}], "f5"), backOutcome([{id: "f2"}], "f5"),
+  overviewStale({f5: "a"}, "f5", "a"), overviewStale({f5: "b"}, "f5", "a"), overviewStale(undefined, "f5", "a"), overviewStale({}, "f5", "a"),
+].join("|"));
+`)
+	want := `background|background|close|overview f5 "The \"tour\""|a/b.go|error|ok|closed|false|true|true|true`
+	if out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+// An overview refresh's answer applies unless a newer one already did: a
+// newer refresh merely started (it may fail) does not drop it.
+func TestOvAnswerAppliesJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `console.log([ovAnswerApplies(1, 0), ovAnswerApplies(1, 2), ovAnswerApplies(2, 2), ovAnswerApplies(3, 2)].join("|"));`)
+	if want := "true|false|false|true"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+// An eviction line carries the cap the server sent, not a number of its own.
+func TestEvictedTextJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `console.log([evictedText("a.go", 20), evictedText("b.go", 7)].join("|"));`)
+	if want := "closed a.go (20 files open)|closed b.go (7 files open)"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}

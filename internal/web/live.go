@@ -65,6 +65,7 @@ type liveMsg struct {
 	// changed file on Reason "file_changed".
 	Files   []steer.OpenFile `json:"files,omitempty"`
 	Evicted string           `json:"evicted,omitempty"`
+	Cap     int              `json:"cap,omitempty"` // the list's cap, beside Evicted
 	FileID  string           `json:"file_id,omitempty"`
 	// Opened names the file an agent just opened in the background
 	// ("open_files"): every tab says so.
@@ -72,6 +73,10 @@ type liveMsg struct {
 	// Closed names the overviews that left the agent-docs store (Reason
 	// "agentdocs"): a tab showing one closes its viewer.
 	Closed []string `json:"closed,omitempty"`
+	// Stamps fingerprint each listed overview (Reason "agentdocs",
+	// agentdocs.OverviewStamp): a tab showing one re-fetches it only when
+	// its stamp moved.
+	Stamps map[string]string `json:"stamps,omitempty"`
 	// Sessions is the whole agent-session list on Reason "sessions" (start,
 	// exit, remove — and, from plan 3, an agent-state change). It bypasses
 	// the op gate: a session exiting mid-op must still show.

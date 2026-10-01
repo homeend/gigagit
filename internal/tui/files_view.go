@@ -305,6 +305,78 @@ func withReviewLines(reviews []domain.Review, lines []contentLine) []contentLine
 	return append(out, lines...)
 }
 
+// notedElsewhere lists, sorted, the paths with notes at commit hash that the
+// commit does not change — counted in its Commits ◆ N (a merge preview's note
+// is stored on the source tip), so its Files view must reach them too.
+func notedElsewhere(byCommitPath map[string]int, hash string, files []model.CommitFile) []string {
+	changed := make(map[string]bool, len(files))
+	for _, f := range files {
+		changed[f.Path] = true
+	}
+	var out []string
+	for k, n := range byCommitPath {
+		p, ok := strings.CutPrefix(k, hash+":")
+		if ok && n > 0 && !changed[p] {
+			out = append(out, p)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// notedPreviewTag names the previews a Notes row's notes were written in
+// (model.Note.Preview), the Previews panel's way round: "source → target";
+// a commit pair as its "a..b". "" when none was.
+func notedPreviewTag(ps []string) string {
+	if len(ps) == 0 {
+		return ""
+	}
+	names := make([]string, len(ps))
+	for i, p := range ps {
+		names[i] = p
+		if target, source, ok := strings.Cut(p, "..."); ok {
+			names[i] = source + " → " + target
+		}
+	}
+	return "  " + i18n.T("(preview: %s)", strings.Join(names, ", "))
+}
+
+// notedRowText lays a Notes row out in w columns: the path, its ◆ badge,
+// then the preview tag. Short of room the TAG gives way first (cut at its
+// end, or dropped), then the path loses its middle — the file name and its
+// badge always stay.
+func notedRowText(file, badge, tag string, w int) string {
+	fw, bw, tw := lipgloss.Width(file), lipgloss.Width(badge), lipgloss.Width(tag)
+	if fw+bw+tw <= w {
+		return file + badge + tag
+	}
+	keep := fw // the path's share: whole if the tag can shrink around it
+	if fw+bw > w {
+		keep = max(lipgloss.Width(path.Base(file)), w-bw)
+	}
+	if room := w - keep - bw; room > len("  (…") {
+		return elidePath(file, keep) + badge + truncate(tag, room)
+	}
+	return elidePath(file, keep) + badge
+}
+
+// withNotedLines puts those paths in front of a commit's files under a
+// "Notes" heading (the way withReviewLines lists its reviews).
+func withNotedLines(paths []string, lines []contentLine) []contentLine {
+	if len(paths) == 0 {
+		return lines
+	}
+	out := make([]contentLine, 0, len(paths)+1+len(lines))
+	out = append(out, contentLine{text: i18n.T("Notes"), heading: true})
+	for _, p := range paths {
+		out = append(out, contentLine{text: "  " + p, notedPath: p})
+	}
+	if len(lines) == 1 && lines[0].path == "" && !lines[0].heading {
+		return out // "(no files)": the notes are the whole list
+	}
+	return append(out, lines...)
+}
+
 // withShelfNoteLines puts a shelved set's own notes in front of its members as
 // a "Notes" heading — the way withReviewLines lists a commit's reviews. A note
 // row has no path: it is not a file, so every file action passes it by.
@@ -1038,7 +1110,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.focusTree(), nil
 		}
 		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview && vis[p.sel].shelfNote == "") {
+		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview && vis[p.sel].shelfNote == "" && vis[p.sel].notedPath == "") {
 			return m, nil // heading row, placeholder, or empty view
 		}
 		return m.openDiffForFileLine(vis[p.sel])
@@ -1165,6 +1237,9 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
+	if l.notedPath != "" { // a commit's Notes row: its notes read in the viewer, esc comes back here
+		return m, m.commitNotesCmd(m.filesHash, l.notedPath)
 	}
 	if l.noteID != "" { // an @notes/ entry: the review opens as the review view, esc comes back here
 		back := m.filesCommit
@@ -1404,15 +1479,26 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		// along the branch. Painted here rather than baked into l.text so the
 		// badge tracks a counts refresh with no rebuild, and so the `/` filter
 		// (which matches l.text) never matches a file by its note count.
+		elide := l.path != "" && !l.heading && l.noteID == ""
 		if m.filesPreviewSet != nil && l.path != "" {
 			text += noteBadge(m.filesPreviewCounts[l.path])
+		} else if l.notedPath != "" && m.filesCommitBadges() {
+			// A commit's Notes row: its badge and the previews its notes were
+			// written in stay whole; the path before them loses its middle.
+			k := m.filesHash + ":" + l.notedPath
+			badge, tag := noteBadge(m.noteCounts.ByCommitPath[k]), notedPreviewTag(m.noteCounts.PreviewsByCommitPath[k])
+			if p.mode == modeCutoff {
+				text = "  " + notedRowText(l.notedPath, badge, tag, innerW-lipgloss.Width(prefix)-2)
+			} else {
+				text, elide = text+badge+tag, true
+			}
 		} else if l.path != "" && m.filesCommitBadges() {
 			// A commit's files: the notes anchored on the file AT this commit.
 			text += noteBadge(m.noteCounts.ByCommitPath[m.filesHash+":"+l.path])
 		}
 		// A file row cuts the middle of its path, never the name (headings
 		// were pre-elided above); a review row is prose and cuts at its end.
-		wr[i] = winRow{text: prefix + text, style: st, elide: l.path != "" && !l.heading && l.noteID == "", elideHead: len([]rune(prefix))}
+		wr[i] = winRow{text: prefix + text, style: st, elide: elide, elideHead: len([]rune(prefix))}
 	}
 
 	lines := make([]string, 0, contentH)

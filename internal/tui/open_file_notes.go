@@ -49,15 +49,25 @@ func (d *openFile) syncNotes() (stale bool) {
 	if d.docs != nil && d.src.kind == srcWorktree {
 		ns, fp = d.docs.Notes(d.root, d.path)
 	}
+	if len(ns) > 0 {
+		d.backgrounded = true // however the notes came (the page it hosts): esc steps aside, only X closes — stale or not
+	}
 	if len(ns) > 0 && docLoaded(d) && d.p.img == nil && fp != agentdocs.Print(rawOf(d.p.lines)) {
 		return true
 	}
 	d.notes = ns
-	if len(ns) > 0 {
-		d.backgrounded = true // however the notes came (the page it hosts): esc steps aside, only X closes
-	}
 	d.syncNoteRows()
 	return false
+}
+
+// hasNotes reports whether d carries notes: its copy, or the store's while a
+// re-read is still to adopt them (syncNotes refused content d does not show).
+// Close and the cap decide by this, never by the copy alone.
+func (d *openFile) hasNotes() bool {
+	if len(d.notes) > 0 {
+		return true
+	}
+	return d.docs != nil && d.src.kind == srcWorktree && d.docs.NoteCount(d.root, d.path) > 0
 }
 
 // noteByID is d's copy of the note with that id, or nil.

@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
@@ -222,5 +224,137 @@ func TestDocsRootDoesNotCacheAFailedLookup(t *testing.T) {
 	}
 	if s.rootc.svc != nil {
 		t.Fatal("a failed lookup was cached")
+	}
+}
+
+// A note the store refuses lists nothing: the file is checked before it
+// joins the page's list (no tab would hear of an entry added on a failure).
+func TestARefusedNoteDoesNotListTheFile(t *testing.T) {
+	t.Parallel()
+	s, _ := noteSrv(t)
+	if _, rep := steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":9,"summary":"x"}`); rep.OK {
+		t.Fatalf("past the end accepted: %+v", rep)
+	}
+	if l := s.ofs.list(s.service().Root()); len(l) != 0 {
+		t.Fatalf("a refused note listed %+v", l)
+	}
+}
+
+// The follow pass names a plain file it pushed out over the cap, as an open
+// does — the tabs would otherwise see it leave the list unexplained.
+func TestFollowPassNamesTheFileItPushedOut(t *testing.T) {
+	isolateGlobal(t)
+	s, root := noteSrv(t)
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	wt := s.service().Root()
+	for i := 0; i < maxOpenFiles; i++ {
+		s.ofs.open(wt, ofKey{Src: "worktree", Path: fmt.Sprintf("p%d", i)}, "", 0)
+	}
+	if _, err := s.docs.AddOverview(root, wt, "T", "x"); err != nil {
+		t.Fatal(err)
+	}
+	s.followDocs()
+	if m := next(); m.Reason != "agentdocs" || m.Evicted != "p0" {
+		t.Fatalf("event = %+v, want p0 named as pushed out", m)
+	}
+}
+
+// Passes run one at a time: each reads the store inside its turn, so the
+// last one leaves the pins the store has now (two interleaved passes could
+// leave a pin the store no longer holds). A pass started while another holds
+// the turn has no effect until the turn is free.
+func TestFollowPassesRunOneAtATime(t *testing.T) {
+	t.Parallel()
+	s, root := noteSrv(t)
+	wt := s.service().Root()
+	s.followMu.Lock()
+	if _, err := s.docs.AddNote(root, "f.txt", []string{"content 1"}, 1, 1, "s", "", ""); err != nil {
+		s.followMu.Unlock()
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { s.followDocs(); close(done) }()
+	time.Sleep(100 * time.Millisecond)
+	_, listed := s.ofs.lookup(wt, ofKey{Src: "worktree", Path: "f.txt"})
+	s.followMu.Unlock()
+	if listed {
+		t.Fatal("a pass listed the noted file while another held the turn")
+	}
+	<-done
+	if _, ok := s.ofs.lookup(wt, ofKey{Src: "worktree", Path: "f.txt"}); !ok {
+		t.Fatal("the pass did not list the noted file once the turn was free")
+	}
+}
+
+// An eviction a steer recorded for one worktree is not announced by a pass
+// over another (a repo switch between the steer's turn and the pass).
+func TestAnEvictionDoesNotCrossAWorktreeSwitch(t *testing.T) {
+	isolateGlobal(t)
+	s, _ := noteSrv(t)
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	s.followMu.Lock()
+	s.evicted = append(s.evicted, ofEvicted{wt: "/a/worktree/no/longer/shown", path: "old.txt"})
+	s.followMu.Unlock()
+	s.followDocs()
+	if m := next(); m.Reason != "agentdocs" || m.Evicted != "" {
+		t.Fatalf("event = %+v, want no eviction from another worktree", m)
+	}
+}
+
+// A note that lists its file over the cap names the file it pushed out both
+// to the agent and to the tabs — whichever lists it, the steer or a pass.
+func TestANoteOverTheCapTellsTheAgentAndTheTabs(t *testing.T) {
+	isolateGlobal(t)
+	s, _ := noteSrv(t)
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	wt := s.service().Root()
+	for i := 0; i < maxOpenFiles; i++ {
+		s.ofs.open(wt, ofKey{Src: "worktree", Path: fmt.Sprintf("p%d", i)}, "", 0)
+	}
+	_, rep := steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":1,"summary":"look"}`)
+	if !rep.OK || !strings.HasSuffix(rep.Detail, "; closed p0 (20 files open)") {
+		t.Fatalf("reply = %+v", rep)
+	}
+	for {
+		m := next()
+		if m.Reason == "agentdocs" {
+			if m.Evicted != "p0" || m.Cap != maxOpenFiles {
+				t.Fatalf("event = %+v, want p0 named", m)
+			}
+			return
+		}
+	}
+}
+
+// listDocs files an eviction under the worktree its caller listed in, not
+// whatever the server shows by the time the closure returns (a reRoot in
+// between would otherwise announce the old list's eviction on the new one).
+func TestListDocsFilesTheEvictionUnderTheCallersWorktree(t *testing.T) {
+	isolateGlobal(t)
+	s, _ := noteSrv(t)
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	s.listDocs("/the/worktree/the/caller/listed/in", func() string { return "old.txt" })
+	if m := next(); m.Reason != "agentdocs" || m.Evicted != "" {
+		t.Fatalf("event = %+v, want the other worktree's eviction dropped", m)
 	}
 }

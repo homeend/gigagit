@@ -284,9 +284,11 @@ func (fs *FileStore) Find(entryID string) (model.ShelfEntry, error) {
 func (fs *FileStore) List(bucket string, skip, limit int) ([]model.ShelfEntry, error) {
 	bucket = normalizeBucket(bucket)
 	idx := fs.read()
+	// Walked newest-added first, so the stable sort keeps a tie (entries made
+	// in the same instant) newest first too.
 	var es []model.ShelfEntry
-	for _, e := range idx.Entries {
-		if e.Bucket == bucket {
+	for i := len(idx.Entries) - 1; i >= 0; i-- {
+		if e := idx.Entries[i]; e.Bucket == bucket {
 			es = append(es, e)
 		}
 	}

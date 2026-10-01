@@ -102,36 +102,46 @@ type sessDir struct {
 	to    string
 }
 
-// cutTo takes --to <tui|web> (or --to=<…>) out of a session verb's args,
-// wherever it sits after the verb.
+// cutTo takes --to <tui|web> (or --to=<…>; one dash works too) out of a
+// session verb's args, wherever it sits after the verb. Past "--" nothing is
+// a flag, so a --to there stays put (parseSteerFlags hands it out as an
+// argument). Given twice, --to is refused rather than last-wins.
 func cutTo(args []string) (rest []string, to string, err error) {
-	if len(args) > 0 && strings.HasPrefix(args[0], "--to") {
+	if len(args) > 0 && isToFlag(args[0]) {
 		return nil, "", errors.New("--to goes after the verb: gg session <verb> --to tui|web …")
 	}
+	seen := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
+		case a == "--":
+			rest = append(rest, args[i:]...)
+			return rest, to, nil
+		case !isToFlag(a):
+			rest = append(rest, a)
+			continue
+		case seen:
+			return nil, "", errors.New("--to given twice: name one side")
 		case a == "--to" || a == "-to":
 			if i+1 >= len(args) {
 				return nil, "", errors.New("--to needs tui or web")
 			}
 			to = args[i+1]
 			i++
-		case strings.HasPrefix(a, "--to=") || strings.HasPrefix(a, "-to="):
-			to = a[strings.IndexByte(a, '=')+1:]
-		case a == "--":
-			rest = append(rest, args[i:]...)
-			i = len(args)
-			continue
 		default:
-			rest = append(rest, a)
-			continue
+			to = a[strings.IndexByte(a, '=')+1:]
 		}
+		seen = true
 		if to != "tui" && to != "web" {
 			return nil, "", fmt.Errorf("--to %q: want tui or web", to)
 		}
 	}
 	return rest, to, nil
+}
+
+// isToFlag reports whether a is --to in any of its spellings.
+func isToFlag(a string) bool {
+	return a == "--to" || a == "-to" || strings.HasPrefix(a, "--to=") || strings.HasPrefix(a, "-to=")
 }
 
 // target is where a command goes: the inbox, who is live there — only the
@@ -730,18 +740,24 @@ func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, st
 // parseSteerFlags parses fs allowing flags to follow positional arguments. Go's
 // flag package stops at the first non-flag token, so `gg session focus commits
 // --no-wait` would otherwise leave --no-wait unparsed and silently wait two
-// seconds for an answer the caller said it did not want.
+// seconds for an answer the caller said it did not want. A "--" ends the
+// flags: everything after it is positional (a file named -x.go). A flag whose
+// value is a literal "--" reads the same way — a value nobody means.
 func parseSteerFlags(fs *flag.FlagSet, args []string) ([]string, error) {
 	var pos []string
 	for {
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
-		if fs.NArg() == 0 {
+		rest := fs.Args()
+		if n := len(args) - len(rest); n > 0 && args[n-1] == "--" {
+			return append(pos, rest...), nil // "--" ends the flags
+		}
+		if len(rest) == 0 {
 			return pos, nil
 		}
-		pos = append(pos, fs.Arg(0))
-		args = fs.Args()[1:]
+		pos = append(pos, rest[0])
+		args = rest[1:]
 	}
 }
 

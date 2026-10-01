@@ -1,0 +1,33 @@
+name = "tui: a rebase paused on a conflict — the conflicted file and the conflict process"
+
+# feature and main both change line 1 of a.txt; rebasing feature onto main
+# with --on-conflict=keep leaves the rebase paused. The TUI shows the paused
+# rebase and the conflicted file; x enters the conflict process.
+[input]
+steps = [
+  { write = "a.txt", content = "base\n" },
+  { commit = "add a" },
+  { branch = "feature" },
+  { write = "a.txt", content = "main side\n" },
+  { commit = "main changes a" },
+  { switch = "feature" },
+  { write = "a.txt", content = "feature side\n" },
+  { commit = "feature changes a" },
+]
+
+[[run]]
+cmd = ["rebase", "--on-conflict=keep", "main"]
+exit = 1
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "paused"
+keys = ["left"]
+screen_contains = ["U a.txt", "1 conflict rebasing feature onto main", "[x] resolve"]
+
+[[tui.step]]
+name = "conflict-process"
+keys = ["x"]
+screen_contains = ["Resolve conflicts", "rebasing feature onto main", "> a.txt"]

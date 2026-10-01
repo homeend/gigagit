@@ -22,7 +22,7 @@ import { focusPane } from "./keys.js";
 import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
 import { switcherOpenFiles, switcherSessions } from "./openfiles.js";
 import { consoleSessions } from "./console.js";
-import { openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
+import { evictedText, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
 import { closeFinder } from "./wtfinder.js";
 
 const COALESCE_MS = 150; // one burst of watcher events → one refresh
@@ -122,7 +122,10 @@ function connectLive() {
     // An agent's notes changed (agentdocs): the noted files' list and the
     // shown file's notes, re-read with its lines.
     if (msg.reason === "agentdocs") {
-      viewerAgentDocs(msg.files || [], msg.closed || []);
+      // No tab asked for this list change, so every tab names a file the
+      // agent's addition pushed out over the cap.
+      if (msg.evicted) opLine(evictedText(msg.evicted, msg.cap), false);
+      viewerAgentDocs(msg.files || [], msg.closed || [], msg.stamps);
       switcherOpenFiles(msg.files || []);
       return;
     }

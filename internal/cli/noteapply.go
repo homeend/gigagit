@@ -119,7 +119,7 @@ func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin 
 			// The same three facts --preview sets: stored on the tip, hunk
 			// numbers from the PREVIEW's patch, new side only.
 			spec := pv.Spec
-			target = domain.NoteBatchTarget{Rev: pv.Set.Tip, Hunks: &spec}
+			target = domain.NoteBatchTarget{Rev: pv.Set.Tip, Hunks: &spec, Preview: pv.Set.Pair()}
 			rule = domain.NoteSideNewOnly
 			previewed = true
 		}
@@ -136,7 +136,7 @@ func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin 
 		spec := tgt.Spec
 		// Stored on the tip, numbered over the preview's own patch, new side
 		// only — old-side items are SKIPPED with one warning (the --working rule).
-		target = domain.NoteBatchTarget{Rev: tgt.Set.Tip, Hunks: &spec}
+		target = domain.NoteBatchTarget{Rev: tgt.Set.Tip, Hunks: &spec, Preview: tgt.Set.Pair()}
 		rule = domain.NoteSideNewOnly
 		previewed = true
 	}

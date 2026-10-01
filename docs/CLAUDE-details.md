@@ -1108,8 +1108,24 @@ is the single producer behind the key, the menu row and the snapshot's
 **Web rows use `act`, never `run`.** `showCtxMenu`'s click handler
 (`internal/web/static/layers.js`) calls `menu._items[i].act()` with no guard;
 `run` belongs to the command palette's separate dispatcher. The diff-line row
-gates on `notesArmed()`, which is exactly where the rows carry
-`data-side`/`data-no`.
+is offered wherever `linkFor` yields a link — NOT gated on `notesArmed()`: a
+plain two-commit compare has no notes yet its lines are addressable.
+
+**A compare with no note scope still links its lines (2026-10-01).** The
+compare loader stamps `diffView.cmp` (the two endpoints + both paths);
+`compareLinkText` reads it when `diffNoteAddress` refuses. Two commits → the
+pair `@<a>..<b>` with `:<line>` or `:old:<line>` (`linkAnchorAtCursor`: a
+PAIR's old side is commit a and travels, a merge preview's is the merge base
+and does not — saved pairs follow the same rule). Any other compare addresses
+the cursor side as the version it shows (working tree / `@staged` / that
+commit); a shelf or link-member side refuses. Web twin: `ctx.cmpPair` from
+`commitDiffCtx` (plain `openCompare` lane only, never an `aSpec` entry
+compare), and the stack renders `data-no`/`data-lno` for such a slot. A copy
+made in the full-screen diff confirms in `diffNotice` (`clipboardCopiedMsg`),
+middle-elided. A compare's FILE-TREE row copies the pair's file form
+(`contextLinkText` arm 3a', before `focusedBookmark`, which would answer
+`path@<b>`); web: the file menu passes `cmpPair`. `tui.Headless` stubs `clipWrite`: e2e never touches the
+machine's clipboard.
 
 **Web preview links lift `ctx.compare` for ONE case.** `links.js`'s `linkFor`
 refuses any compare ctx unless it also carries `ctx.preview = {source,
@@ -3666,6 +3682,20 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   focused console keeps them for its program, an unfocused one lets them
   through (`consolePassthrough`). Not ctrl+a (a common tmux prefix — gg never
   sees it) nor ctrl+l (Commits' load-more). Not configurable; not in the web.
+- **A console is repo-scoped** (2026-10-01, `console_scope.go`): it shows
+  only a session whose `Dir` is one of `m.worktrees` (`inRepo`, the Worktrees
+  sub-rows' `filepath.Clean` rule). `reRoot` arms `consoleSwitch`; the
+  dataLoadedMsg success arm runs `settleConsoleAfterSwitch` once the NEW
+  worktrees are in the model (reRoot itself cannot know them — no git on the
+  Update goroutine; the blank-screen gate hides the console meanwhile): a
+  foreign console closes (session untouched, status says ctrl+\ brings it
+  back), a same-repo worktree switch keeps it. alt+a/alt+t and their footer
+  hints cycle `repoSessions` only. The ctrl+\ popup still lists every repo;
+  enter (and the AI tasks tab's live console) on a foreign session goes
+  through `openSessionAnywhere` = reRoot to the session's worktree +
+  `consoleSwitch.open`, refused while `steerRefusal` says something owns the
+  screen (the hosted-web switch precedent). This reversed `7a27e2dc`'s
+  "popup opens another repo's session without reRoot".
 - **Probe recipe**: `tui-capture.sh` sets only XDG_STATE_HOME and a tmux
   server hands sessions its own env, so point gg at a scratch config with a
   `--gg` wrapper script that exports `XDG_CONFIG_HOME` and `exec`s the binary;
@@ -4206,7 +4236,10 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
   live, else to gg web (`steerLive(both=false)`). `--to tui|web` (cut from
   the args by `runSessionIn`'s `cutTo`, carried in `sessDir.to`) restricts
   `sessDir.target()` to one side; `$GG_INBOX` wins only while that side is
-  live there (`preferredInboxFor`). `status` refuses `--to`.
+  live there (`preferredInboxFor`). `status` refuses `--to`, as does a
+  `--to` before the verb (`-to` too) or given twice. Past `--` nothing is a
+  flag: `cutTo` leaves a `--to` there and `parseSteerFlags` hands everything
+  after `--` out as positional (a file named `-x.go`).
 - **Web side** (`internal/web`: `agentdocs_follow.go`, `steer_notes.go`,
   `file_notes.go`). The server keeps its own store unless hosted. A follow
   goroutine (started by `Host.Start`, also run by `adoptService`) lists every
@@ -4329,7 +4362,28 @@ selection, laid-out width); never on disk, never evicted, created
   data-a="k">` only with `{anchors: true}` (plain text otherwise); tab /
   shift+tab select, enter or a SINGLE click opens (after a re-fetch that
   re-checks), a range tints `.vline.vrange`, backspace (`view.from`, one
-  step, per tab) comes back with the anchor selected.
+  step, per tab) comes back with the anchor selected — a failed list fetch
+  there says `back failed` and keeps `view.from` (`backOutcome`). The
+  backdrop leaves a document as esc does (`escHow`). **Freshness:**
+  `Store.OverviewStamp` fingerprints title, text, missing flags and every
+  anchored note's place; `/api/overview` returns it (taken BEFORE the copy)
+  and the `agentdocs` fan-out carries `stamps`, so a tab re-fetches only
+  when its overview's stamp moved — a file deleted on disk shows as gone on
+  the next anchor click or reopen, not on an unrelated store change.
+  **Turns:** `followDocs` holds `followMu`; a steer's own add + listing
+  runs in the same turn (`listDocs`), and what its listing pushed out over
+  the cap is fanned out (`evicted`) by the pass that follows, so the agent's
+  reply and every tab name it (a recorded eviction carries its worktree; a
+  pass over another drops it). A web `note_add` lists the file — and takes
+  its baseline stat — inside that turn, only after the store took the note.
+  Eviction lines word the cap the server sends (`cap`, `evictedText`); an
+  overview refresh's answer drops only when a newer answer already applied
+  (`ovSeq`/`ovApplied`, `ovAnswerApplies`) — a newer refresh that merely
+  started may fail, and then the older answer still lands; a refresh whose
+  fetch fails answers with the last one started (`ovLast`) when a newer one
+  is under way (false when none is), so `openAnchorAt` usually resumes on a
+  re-checked list — fail/fail/succeed orderings can still resume it on the
+  list from before the click (a lone failure always did).
 
 ## Agent spawn (agent orchestration stage 2)
 
@@ -4382,4 +4436,3 @@ Spec `docs/superpowers/specs/2026-10-01-agent-spawn-design.md`, plans A
 - **Enter.** `agent_send` presses Enter by default only after text.
 - **Tests** that swap `UseSessionManager` / `agentEnv` / `agentGetenv` or
   `t.Setenv` are serial; cli/mcp/e2e TestMains unset the channel env.
-

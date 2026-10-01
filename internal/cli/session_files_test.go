@@ -256,3 +256,20 @@ func TestSessionNavigateBackgroundRefusals(t *testing.T) {
 		t.Fatalf("no TUI: exit=%d stderr=%q", code, errb.String())
 	}
 }
+
+// An overview's row names it by its title, not its internal file name.
+func TestSessionFilesNamesAnOverviewByItsTitle(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	livePresence(t, dir)
+	answer(t, dir, func(c steer.Command) steer.Reply {
+		return steer.Reply{ID: c.ID, OK: true, Files: []steer.OpenFile{{ID: "f5", Path: "overview-5.md", Source: "overview", Title: "The tour", State: "shown"}}}
+	})
+	var out, errb bytes.Buffer
+	if code := runSession(dir, nil, []string{"files"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d (stderr %q)", code, errb.String())
+	}
+	if want := "f5\t\"The tour\"\toverview\t-\tshown\n"; out.String() != want {
+		t.Errorf("stdout = %q, want %q", out.String(), want)
+	}
+}

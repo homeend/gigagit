@@ -1,0 +1,70 @@
+name = "tui: a saved merge preview with a note in it and a note on a branch commit"
+
+# feature changes a.txt and adds c.txt in two commits. The saved preview
+# "what feature brings into main" lists both files; its rows carry the notes
+# gathered along the branch — the one written inside the preview (a.txt) and
+# the one on the commit that added c.txt — as ◆ N. (A preview note is stored
+# on the source TIP, so Commits shows the tip "add c" with ◆ 2.)
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
+  { commit = "add a b" },
+  { branch = "feature" }, { switch = "feature" },
+  { write = "a.txt", content = "a\nmore a\n" },
+  { commit = "grow a" },
+  { write = "c.txt", content = "c\n" },
+  { commit = "add c" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd = ["preview", "add", "--label", "feature into main", "feature", "main"]
+exit = 0
+
+[[run]]
+cmd = ["note", "add", "--preview", "feature into main", "--file", "a.txt", "--new-line", "2", "--summary", "why more a?"]
+exit = 0
+
+[[run]]
+cmd = ["note", "add", "--rev", "feature", "--file", "c.txt", "--new-line", "1", "--summary", "c is new"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "previews"
+keys = ["C-right", "C-right", "C-right"]
+screen_contains = ["feature into main"]
+
+[[tui.step]]
+name = "preview-files"
+keys = ["enter"]
+screen_contains = ["a.txt  ◆ 1", "c.txt  ◆ 1"]
+screen_excludes = ["b.txt"]
+
+# The tip "add c" counts ◆ 2: its own c.txt note and the preview's a.txt note.
+# a.txt is not a file of this commit, so its Files view lists it under a
+# Notes heading — every counted note is reachable from the commit — and
+# names the preview it was written in (the --rev note on c.txt names none).
+[[tui.step]]
+keys = ["esc", "right"]
+
+[[tui.step]]
+name = "tip-files"
+keys = ["enter"]
+screen_contains = ["Notes", "a.txt  ◆ 1  (preview: feature → main)", "A  c.txt  ◆ 1  "]
+screen_excludes = ["c.txt  ◆ 1  (preview"]
+
+# enter on the noted row reads its notes.
+[[tui.step]]
+name = "tip-notes"
+keys = ["down", "enter"]
+screen_contains = ["Notes on a.txt", "why more a?"]
+
+# Not a file of the commit: S stacks c.txt alone.
+[[tui.step]]
+name = "tip-stack"
+keys = ["esc", "down", "enter", "S"]
+screen_contains = ["▾ A  c.txt"]
+screen_excludes = ["a.txt"]

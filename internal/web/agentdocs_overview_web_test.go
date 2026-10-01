@@ -55,7 +55,8 @@ func TestFollowPassTellsTheTabsWhichOverviewClosed(t *testing.T) {
 	next() // hello
 	o, _ := s.docs.AddOverview(root, s.service().Root(), "T", "x")
 	s.followDocs()
-	if m := next(); m.Reason != "agentdocs" || len(m.Files) != 1 || m.Files[0].ID != o.ID || len(m.Closed) != 0 {
+	if m := next(); m.Reason != "agentdocs" || len(m.Files) != 1 || m.Files[0].ID != o.ID || len(m.Closed) != 0 ||
+		m.Stamps[o.ID] == "" || m.Stamps[o.ID] != s.docs.OverviewStamp(o.ID) {
 		t.Fatalf("add event = %+v", m)
 	}
 	s.docs.RemoveOverview(o.ID)
@@ -77,6 +78,7 @@ func TestOverviewEndpointServesTheTreeAndTheAnchors(t *testing.T) {
 		ID      string          `json:"id"`
 		Title   string          `json:"title"`
 		Text    string          `json:"text"`
+		Stamp   string          `json:"stamp"`
 		Blocks  json.RawMessage `json:"blocks"`
 		Anchors []struct {
 			Dest    string `json:"dest"`
@@ -93,6 +95,9 @@ func TestOverviewEndpointServesTheTreeAndTheAnchors(t *testing.T) {
 	}
 	if body.ID != o.ID || body.Title != "Tour" || len(body.Anchors) != 3 || body.Anchors[0].Missing || !body.Anchors[1].Missing {
 		t.Fatalf("body = %+v", body)
+	}
+	if body.Stamp == "" || body.Stamp != s.docs.OverviewStamp(o.ID) {
+		t.Fatalf("stamp %q, the store's (after the check) %q", body.Stamp, s.docs.OverviewStamp(o.ID))
 	}
 	if a := body.Anchors[2]; a.Missing || a.Note != n.ID || a.Path != "f.txt" || a.Start != 1 || a.End != 1 {
 		t.Fatalf("note anchor = %+v (want its note's file and lines)", a)
@@ -194,5 +199,17 @@ func TestAnOverviewDoesNotOpenByPath(t *testing.T) {
 	t.Parallel()
 	if _, err := ofKeyOf(ofReq{Src: "overview", Path: "overview-1.md"}); err == nil || err.Error() != "an overview opens by id" {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// files focus on an overview names it by id and title, as the TUI does.
+func TestFileFocusOnAnOverviewNamesItByIDAndTitle(t *testing.T) {
+	t.Parallel()
+	s, root := noteSrv(t)
+	o, _ := s.docs.AddOverview(root, s.service().Root(), "The tour", "x")
+	s.followDocs()
+	_, rep := steerAsk(t, s, `{"id":"1","cmd":"file_focus","file_id":"`+o.ID+`"}`)
+	if want := "focused overview " + o.ID + ` "The tour"`; !rep.OK || !strings.HasPrefix(rep.Detail, want) {
+		t.Fatalf("rep = %+v, want detail starting %q", rep, want)
 	}
 }

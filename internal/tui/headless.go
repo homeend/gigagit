@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -67,6 +68,9 @@ func NewHeadless(svc *domain.Service, opts HeadlessOptions) (*Headless, error) {
 	}
 	m := prepareModelWith(svc, cfg)
 	m.quiet = true
+	// A headless run never touches the machine's clipboard: a copy succeeds
+	// and goes nowhere, so its confirmation is the same on every machine.
+	m.clipWrite = func(io.Writer, string) (string, error) { return "", nil }
 	m.statePath = opts.StatePath
 	// Prompt memory (dismissed prompts, the stacked-diff preference) lives
 	// beside StatePath too: New opened the machine-global store, which
@@ -89,7 +93,7 @@ func NewHeadless(svc *domain.Service, opts HeadlessOptions) (*Headless, error) {
 // Press sends one step token (a multi-rune literal is one press per rune),
 // settling after each press.
 func (h *Headless) Press(tok string) error {
-	if len(tok) > 2 && strings.HasPrefix(tok, "<") && strings.HasSuffix(tok, ">") {
+	if isDiagnostic(tok) {
 		return fmt.Errorf("%q is a recorder diagnostic, not a key (keyToken's <...> fallback)", tok)
 	}
 	for _, t := range splitLiteral(tok) {

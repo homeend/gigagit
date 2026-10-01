@@ -335,7 +335,7 @@ func (m Model) openFileAtCommit(rev, path string) (Model, tea.Cmd) {
 	src := fileSource{kind: srcCommit, rev: rev}
 	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
 	if d == nil {
-		d = newOpenFile(src, path)
+		d = m.newOpenFile(src, path)
 	} else {
 		m = m.detachDoc(d)
 	}

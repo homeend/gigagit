@@ -1,0 +1,29 @@
+name = "tui: the commit dialog commits the staged index with a typed title"
+
+# a.txt is staged, b.txt only edited. c opens the dialog; the typed title
+# commits a.txt alone and b.txt stays an unstaged change. The commit adds a
+# HEAD reflog entry: the Reflog tab counts 2 at once (it said 1 until a manual
+# refresh — the commit op did not reload the reflog).
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
+  { commit = "add a b" },
+  { write = "a.txt", content = "a v2\n" }, { write = "b.txt", content = "b v2\n" },
+]
+
+[[run]]
+cmd = ["add", "a.txt"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "dialog"
+keys = ["c", "update", "space", "a"]
+screen_contains = ["update a"]
+
+[[tui.step]]
+name = "committed"
+keys = ["C-s"]
+screen_contains = ["*main update a", "M b.txt", "[Staged 0] Reflog 2"]

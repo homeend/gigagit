@@ -59,7 +59,7 @@ func (r *openFilesReg) touch(wt string, d *openFile, shown func(*openFile) bool)
 	}
 	if len(l) > maxOpenFiles {
 		for i := len(l) - 1; i > 0; i-- {
-			if !shown(l[i]) && len(l[i].notes) == 0 && l[i].ov == nil {
+			if !shown(l[i]) && !l[i].hasNotes() && l[i].ov == nil {
 				evicted = l[i]
 				l = append(l[:i], l[i+1:]...)
 				break
@@ -172,7 +172,11 @@ func docLoaded(d *openFile) bool { return len(d.p.lines) > 0 && d.p.lines[0].src
 func (m Model) backgroundDoc(d *openFile) Model {
 	d.backgrounded = true
 	m = m.detachDoc(d)
-	m.statusMsg = i18n.T("%s is in the background — ctrl+\\ lists open files", d.path)
+	if d.ov != nil {
+		m.statusMsg = i18n.T("overview %s is in the background — ctrl+\\ lists open files", d.overviewLabel())
+	} else {
+		m.statusMsg = i18n.T("%s is in the background — ctrl+\\ lists open files", d.path)
+	}
 	return m
 }
 
@@ -188,7 +192,7 @@ func (m Model) escDoc(d *openFile) Model {
 // closeDoc closes d for good (X or esc on it, x in the switcher): off the
 // screen and out of the list.
 func (m Model) closeDoc(d *openFile) Model {
-	if len(d.notes) > 0 {
+	if d.hasNotes() {
 		d.clearNotes() // X drops the notes — in every frontend the store shows
 	}
 	if d.ov != nil && m.docs != nil {

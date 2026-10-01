@@ -1,0 +1,40 @@
+name = "tui: the stash window lists stashes newest first and opens one's files"
+
+# Two stashes: an untracked-including setup stash, then a named one of a
+# tracked edit. S lists both, newest first; enter opens the newer one's files,
+# and the older one lists its untracked new.txt beside the tracked a.txt.
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
+  { commit = "add a b" },
+  { write = "a.txt", content = "a edited\n" }, { write = "new.txt", content = "new\n" },
+  { stash = "first: a and new" },
+  { write = "b.txt", content = "b edited\n" },
+]
+
+[[run]]
+cmd = ["stash", "-m", "second: b"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "stash-list"
+keys = ["S"]
+screen_contains = ["second: b", "first: a and new"]
+
+[[tui.step]]
+name = "stash-files"
+keys = ["enter"]
+screen_contains = ["b.txt"]
+screen_excludes = ["new.txt"]
+
+[[tui.step]]
+keys = ["esc"]
+
+[[tui.step]]
+name = "untracked-stash-files"
+keys = ["down", "enter"]
+screen_contains = ["a.txt", "new.txt"]
+screen_excludes = ["b.txt"]

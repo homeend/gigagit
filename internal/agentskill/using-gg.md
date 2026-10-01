@@ -107,7 +107,9 @@ checkout's own working-tree notes plus EVERY commit note in the store
   session overview add --to web …` shows the tour in the browser and leaves
   the terminal alone (a TUI serving its own page still lists it). A side that is not running: exit 1 `no gg TUI for this
   worktree (gg web is live)` / `no gg web page for this worktree (a gg TUI is
-  live)`.
+  live)`. Give `--to` once, after the verb (`-to` before it or a second
+  `--to` exits 2). `--` ends a session verb's flags: what follows is an
+  argument even when it starts with `-` (`gg session files focus -- -x.go`).
 
 Inside a console gg started (an agent or an Open terminal), `$GG_INBOX` names
 THAT gg, and every `gg session` verb talks to it first — even when gg now
@@ -129,6 +131,8 @@ gg://<repo>/<path>@<sha>:old:<n>           the old side of that diff
 gg://<repo>@<sha>                          a commit, no file
 gg://<repo>@ref:<branch|tag>               a branch or tag TIP: the whole tree there
 gg://<repo>@<a>..<b>                       a CHANGE-SET: only what differs between a and b
+gg://<repo>/<path>@<a>..<b>[:<line>]       a file (or line of b's text) in that change-set
+gg://<repo>/<path>@<a>..<b>:old:<n>        a line of a's text there — e.g. one the change-set removed
 gg://<repo>@<target>...<source>            a merge preview: the Previews tab entry
 gg://<repo>/<path>@<target>...<source>[:<line>]   a file (or new-side line) in that preview
 gg://<repo>/<path>@<target>...<source>#<hunk>     a hunk of that preview's patch
@@ -232,8 +236,10 @@ that list:
   link. When a 21st file pushes one out, the answer ends
   `; closed <path> (20 files open)`.
 - `gg session files [--json]` — the open files, one per line:
-  `<id>\t<path>\t<source>\t<:line|->\t<shown|background>` (`--json`: `id,
-  path, source, rev, line, state`). Also in `gg_ui_state` as `open_files`.
+  `<id>\t<path>\t<source>\t<:line|->\t<shown|background>` — an overview's
+  row shows its quoted title in the path column — focus it by its id, column
+  1 (`--json`: `id, path, source, rev, line, state, title`). Also in
+  `gg_ui_state` as `open_files`.
 - `gg session files focus <id|path>[:<line>]` — bring one to the front,
   optionally at a line; exit 1 `no open file <x>`. A foreground `gg open` of
   a working-tree file already reuses its open copy; `files focus` is how you
@@ -621,7 +627,9 @@ finds the right one here.
   [--hunks [--json]]` prints the preview's own patch and numbers its hunks,
   and `gg note add --preview P --file F (--new-line N | --hunk H) --summary …`
   anchors a note on it. A preview note is stored on the SOURCE TIP and shows
-  on that commit's own view too; the old side (the merge base) is not
+  on that commit's own view too (and remembers the preview: `--json` carries
+  `"preview": "<target>...<source>"`, or `"<a7>..<b7>"` for a pair — the
+  TUI names it on the tip's Files view); the old side (the merge base) is not
   addressable, so `--old-line` is refused. `gg note list --preview P [--file F]
   [--json]` lists the notes gathered along the whole branch — a note written
   against an earlier commit whose lines a later commit changed is reported

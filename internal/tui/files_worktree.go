@@ -365,7 +365,7 @@ func (m Model) wtPreviewSettled(msg wtPreviewMsg) (Model, tea.Cmd) {
 	if d := m.filesPreview; d != nil && d.path == msg.path {
 		return m, nil
 	}
-	d := newOpenFile(fileSource{kind: srcWorktree}, msg.path)
+	d := m.newOpenFile(fileSource{kind: srcWorktree}, msg.path)
 	m.filesPreview = d
 	return m, m.loadDoc(d)
 }
@@ -410,7 +410,7 @@ func (m Model) wtBackgroundRow() (Model, tea.Cmd) {
 	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
 	var load tea.Cmd
 	if d == nil {
-		d = newOpenFile(src, path)
+		d = m.newOpenFile(src, path)
 		load = m.loadDoc(d)
 	}
 	d.backgrounded = true

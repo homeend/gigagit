@@ -78,3 +78,9 @@ func splitLiteral(tok string) []string {
 func isChord(tok string) bool {
 	return len(tok) > 2 && (strings.HasPrefix(tok, "C-") || strings.HasPrefix(tok, "M-"))
 }
+
+// isDiagnostic reports keyToken's "<...>" fallback for a key with no name —
+// not the "<" key itself.
+func isDiagnostic(tok string) bool {
+	return len(tok) > 2 && strings.HasPrefix(tok, "<") && strings.HasSuffix(tok, ">")
+}

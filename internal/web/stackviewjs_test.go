@@ -243,7 +243,10 @@ func TestStackNoteContextIsShared(t *testing.T) {
 	if !strings.Contains(files, "function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null, hctx = null, kctx = null)") {
 		t.Fatal("files.js: diffHTML must take the note, search AND hunk contexts as parameters")
 	}
-	if !strings.Contains(view, "diffHTML(s.diff, $(\"diff-pane\").clientWidth, notesArmed(nc.ctx), s.folds, nc, hctx, kctx)") {
+	// Its rows are anchored (data-no / data-lno) when ITS context has notes or
+	// is a plain two-commit compare, whose lines are link-addressable.
+	if !strings.Contains(view, "const anchored = notesArmed(nc.ctx) || !!(nc.ctx && nc.ctx.cmpPair);") ||
+		!strings.Contains(view, "diffHTML(s.diff, $(\"diff-pane\").clientWidth, anchored, s.folds, nc, hctx, kctx)") {
 		t.Fatal("stackview.js: a slot must paint with its own note context")
 	}
 

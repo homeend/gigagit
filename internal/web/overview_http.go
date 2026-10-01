@@ -45,6 +45,10 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.docs.CheckAnchors(id)
+	// The stamp is taken BEFORE the copy: a change in between leaves the
+	// tab a copy newer than its stamp, which the next fan-out refreshes —
+	// never a stamp newer than its copy, which would skip that refresh.
+	stamp := s.docs.OverviewStamp(id)
 	o, ok := s.docs.Overview(id)
 	if !ok {
 		writeErr(w, http.StatusNotFound, errors.New("no overview "+id))
@@ -66,7 +70,8 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		ID      string           `json:"id"`
 		Title   string           `json:"title"`
 		Text    string           `json:"text"`
+		Stamp   string           `json:"stamp"`
 		Blocks  []markdown.Block `json:"blocks"`
 		Anchors []overviewAnchor `json:"anchors"`
-	}{o.ID, o.Title, o.Text, doc.Blocks, anchors})
+	}{o.ID, o.Title, o.Text, stamp, doc.Blocks, anchors})
 }

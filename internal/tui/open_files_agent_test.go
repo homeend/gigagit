@@ -12,7 +12,7 @@ import (
 
 // bgDoc registers a loaded background document in m's current worktree.
 func bgDoc(m Model, src fileSource, path string, n int) *openFile {
-	d := newOpenFile(src, path)
+	d := m.newOpenFile(src, path)
 	lines := make([]contentLine, n)
 	for i := range lines {
 		lines[i] = contentLine{text: "x", raw: fmt.Sprintf("x%d", i+1), src: true}

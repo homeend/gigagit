@@ -31,7 +31,7 @@ func (m Model) openFileViewerEv(path string, line int) (Model, tea.Cmd, *openFil
 	src := fileSource{kind: srcWorktree}
 	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
 	if d == nil {
-		d = newOpenFile(src, path)
+		d = m.newOpenFile(src, path)
 	} else {
 		// Already open: this is the same document, brought to the front and
 		// reloaded (the disk may have moved on) at the reader's place.

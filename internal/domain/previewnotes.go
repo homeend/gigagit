@@ -47,6 +47,19 @@ type PreviewNoteSet struct {
 // OK reports whether the pair resolved to a previewable range.
 func (set PreviewNoteSet) OK() bool { return set.Tip != "" }
 
+// Pair names the set for model.Note.Preview: a merge preview by its branch
+// names "<target>...<source>", a commit pair by its shas "<a7>..<b7>"; "" for
+// the zero set.
+func (set PreviewNoteSet) Pair() string {
+	switch {
+	case !set.OK():
+		return ""
+	case set.Source != "":
+		return set.Target + "..." + set.Source
+	}
+	return shortSHA(set.Base) + ".." + shortSHA(set.Tip)
+}
+
 // DiffSpec is THE preview's patch: merge-base → source tip. Every surface that
 // numbers hunks under --preview (the CLI's `gg diff --preview --hunks`, the
 // note verbs' --hunk N, the batch planner, MCP) builds it from here and

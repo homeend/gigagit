@@ -14,13 +14,13 @@ import (
 // knows them, and a pair is a fixed pair of commits by definition (plan 1b
 // ruling R2), so nothing positional or abbreviated may ride one.
 func (m Model) pairLinkFor(a, b string) (string, bool) {
-	return m.pairFileLinkFor(a, b, "", 0)
+	return m.pairFileLinkFor(a, b, "", model.NoteSideNew, 0)
 }
 
 // pairFileLinkFor is pairLinkFor at a place INSIDE the change-set: a file, and
-// optionally a new-side line of it (line 0 = the file). The old side is never
-// produced: commit a's text is not addressable through a pair.
-func (m Model) pairFileLinkFor(a, b, path string, line int) (string, bool) {
+// optionally a line of it (line 0 = the file). side picks the version the line
+// is in: new is commit b's text, old is commit a's (`:old:<line>`).
+func (m Model) pairFileLinkFor(a, b, path string, side model.NoteSide, line int) (string, bool) {
 	if len(a) < 40 || len(b) < 40 {
 		return "", false
 	}
@@ -38,7 +38,7 @@ func (m Model) pairFileLinkFor(a, b, path string, line int) (string, bool) {
 		Repo:   repo,
 		Path:   path,
 		Target: model.LinkTarget{State: model.StateCommitted, Pair: &model.LinkPair{A: a, B: b}},
-		Side:   model.NoteSideNew,
+		Side:   side,
 		Line:   line,
 	}
 	return l.String(), true

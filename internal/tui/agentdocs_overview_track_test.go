@@ -36,7 +36,7 @@ func TestAnOverviewRemovedElsewhereClosesInTheTUI(t *testing.T) {
 	if m.openFiles.find(m.currentWorktree, d.key()) != nil || topDoc(m) == d {
 		t.Fatal("the overview is still open in the TUI")
 	}
-	if !strings.Contains(m.statusMsg, "overview "+d.id()+" was closed in the browser") {
+	if !strings.Contains(m.statusMsg, "overview "+d.id()+` "Tour" was closed in the browser`) {
 		t.Fatalf("status = %q", m.statusMsg)
 	}
 }
@@ -109,5 +109,17 @@ func TestXOnAnOverviewRemovesItFromTheStore(t *testing.T) {
 	m = m.closeDoc(d)
 	if _, ok := m.docs.Overview(d.id()); ok {
 		t.Fatal("the store still has the overview after X")
+	}
+}
+
+// ctrl+] on an overview names it by id and title, as the page and the
+// agent's replies do — not by its internal file name.
+func TestBackgroundingAnOverviewNamesItByIDAndTitle(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	m, d := addOverviewViaSteer(t, m, "Tour", "[a](a.txt:3)")
+	m = m.backgroundDoc(d)
+	if want := "overview " + d.id() + ` "Tour" is in the background`; !strings.Contains(m.statusMsg, want) {
+		t.Fatalf("status = %q, want %q", m.statusMsg, want)
 	}
 }

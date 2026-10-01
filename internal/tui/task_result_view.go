@@ -37,7 +37,7 @@ func (m Model) openReviewNote(id, title string) (Model, tea.Cmd) {
 	path := "review-" + id + ".md"
 	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
 	if d == nil {
-		d = newOpenFile(src, path)
+		d = m.newOpenFile(src, path)
 	} else {
 		m = m.detachDoc(d)
 	}
@@ -55,7 +55,7 @@ func (m Model) openResultFile(path, title string, apply func(Model) (Model, tea.
 	src := fileSource{kind: srcExternal}
 	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
 	if d == nil {
-		d = newOpenFile(src, path)
+		d = m.newOpenFile(src, path)
 	} else {
 		m = m.detachDoc(d)
 	}

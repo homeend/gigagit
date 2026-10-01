@@ -551,3 +551,46 @@ func TestPreviewFileListRowsCarryTheBadge(t *testing.T) {
 		t.Fatal("a plain compare file list carries no preview badges")
 	}
 }
+
+// A note added in a preview diff remembers the preview: the form carries the
+// set's Pair, which the write stamps on the note.
+func TestPreviewDiffNoteRemembersThePreview(t *testing.T) {
+	t.Parallel()
+	m := previewDiffModel(t, nil)
+	v := m.diffLayer()
+	for i, ln := range v.lines {
+		if ln.Row.RightNo == 2 {
+			v.curLine = i
+		}
+	}
+	tm, _ := m.openNotePopup(noteAdd)
+	p, ok := tm.(Model).topLayer().(*notePopup)
+	if !ok {
+		t.Fatal("the note form must open on a new-side preview row")
+	}
+	if p.preview != "main...feat" {
+		t.Fatalf("form preview = %q, want main...feat", p.preview)
+	}
+}
+
+// A pull request's diff is a preview whose names are forge refs, not
+// branches: its notes record no preview (the web page agrees).
+func TestPRDiffNoteRecordsNoPreview(t *testing.T) {
+	t.Parallel()
+	m := previewDiffModel(t, nil)
+	m.previewOpen = &previewOpenState{prNumber: 42}
+	v := m.diffLayer()
+	for i, ln := range v.lines {
+		if ln.Row.RightNo == 2 {
+			v.curLine = i
+		}
+	}
+	tm, _ := m.openNotePopup(noteAdd)
+	p, ok := tm.(Model).topLayer().(*notePopup)
+	if !ok {
+		t.Fatal("the note form must open")
+	}
+	if p.preview != "" {
+		t.Fatalf("a PR diff's note recorded preview %q", p.preview)
+	}
+}

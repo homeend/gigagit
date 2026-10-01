@@ -34,7 +34,100 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   **`gg agent start|list|screen|send|kill|task`** are their CLI twins
   (`gg agent list` outside gg lists the running TUIs from their registry
   files). **`gg init --mcp`** registers gg's MCP server with Claude Code
-  (`claude mcp add -s user`). The using-gg skill is v114.
+  (`claude mcp add -s user`). The using-gg skill is v118.
+
+## A link to a line of any two-commit comparison
+
+### Added
+
+- **`L` (and the `.` menu's Copy link) in a comparison of two commits**
+  copies a `gg://` link to the cursor line, in the single-file and the
+  stacked view: `gg://<repo>/<path>@<a>..<b>:<line>`, or `:old:<line>` when
+  the cursor is on the older side — a removed line included. Before, a
+  comparison opened by hand had no link at all ("no gg link for this
+  place"). No notes are turned on for it.
+- **A comparison against the working tree or the index** (TUI) links each
+  side as the version it shows: the working file, `@staged`, or the commit.
+- **gg web:** right-click → *copy gg link to this line* in a two-commit
+  comparison, single-file and stacked.
+
+### Fixed
+
+- **Copy link on a file row of a two-commit comparison** (TUI) copied the
+  newer commit's own link (`path@<b>`, its parent → it) instead of the
+  comparison's; it now copies `path@<a>..<b>`. gg web offered no link on
+  that row and now offers the same one.
+
+### Changed
+
+- **A saved commit pair's old side keeps its line** (`:old:<line>`) instead
+  of degrading to a link to the file. A merge preview is unchanged: its old
+  side is the merge base, which no link names.
+- **A copy made in the full-screen diff confirms in the diff's notice box**
+  (it draws no status bar, so `L` and the copy rows used to confirm
+  nowhere); a long link is cut in the middle, keeping its line.
+
+## Agent docs: a failed overview reload keeps the older answer
+
+### Fixed
+
+- **gg web:** when an agent changes an overview twice quickly and the
+  second reload fails, the first reload's answer now shows instead of being
+  dropped — the overview no longer stays on its old text until it changes
+  again. A late older answer still never overwrites a newer one.
+
+## Agent consoles belong to their repository
+
+### Changed
+
+- **A console shows only the repository's own sessions.** Switching to a
+  repository that does not own the shown agent or terminal closes its screen
+  (the session keeps running; the status line says `ctrl+\` brings it back);
+  switching between worktrees of the same repository keeps it.
+- **`alt+a` / `alt+t` cycle this repository's sessions only**, and their
+  footer hints show only when it has one.
+- **`enter` on another repository's session in the `ctrl+\` popup** (or a
+  live agent in its AI tasks tab) switches to that repository first, then
+  opens the console; refused while another window still owns the screen.
+
+## Agent docs: the last leftovers
+
+### Fixed
+
+- **Overviews are named by id and title everywhere.** The TUI's ctrl+] now
+  says `overview f5 "Title" is in the background`, its closed-in-the-browser
+  line carries the title, and `gg session files` prints an overview's
+  quoted title instead of `overview-5.md`. The using-gg skill is v115.
+- **gg web:** a late answer to an older overview refresh no longer
+  overwrites a newer one; a repo switch no longer shows the old list's
+  "closed … (20 files open)" line; eviction lines take the cap from the
+  server; a web note's file is stat'ed before the tabs hear of it.
+
+## Agent docs: the deferred minors
+
+### Fixed
+
+- **gg web, overviews:** a click on the backdrop leaves an overview (or a
+  file with an agent's notes) as esc does — in the background, the tab's
+  place kept. ctrl+] says `overview f5 "Title" is in the background`.
+  Backspace whose list request fails says `back failed` and keeps the way
+  back, instead of reading as "the overview was closed". A tab re-reads the
+  overview it shows (re-checking up to 100 anchors) only when that overview
+  or a note it points at changed, not on every note anywhere; a file deleted
+  on disk shows as gone on the next anchor click or reopen.
+- **gg web, open files:** when an agent's note or overview pushes a plain
+  file out of the 20-file list, every tab says `closed <path> (20 files
+  open)` — also when the TUI that hosts the page answered the agent. A note
+  the page refuses no longer leaves its file in the list; two store passes
+  no longer race to a stale pin.
+- **`gg session files focus` on an overview** answers `focused overview f5
+  "Title"` (TUI and web), not its internal file name.
+- **`gg session --to`:** `-to web` before the verb and a repeated `--to`
+  are refused (exit 2). `--` now ends a session verb's flags, so a file
+  named `-x.go` can be named. The using-gg skill is v114.
+- **TUI:** X on a file whose notes arrived while it was being re-read drops
+  them from the store too, and the 20-file cap never pushes such a file
+  out. Plain files and overviews draw ids from one counter in every model.
 
 ## Choose the TUI or the page for a session verb
 
@@ -81,6 +174,33 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - `gg session overview` no longer refuses with "overviews need a gg TUI"
   when only gg web is live. The using-gg skill is v112.
 
+## Preview notes remember their preview
+
+### Added
+
+- **A note written in a merge preview (or a commit pair) remembers it.** The
+  note is still stored on the tip, now with `preview = "<target>...<source>"`
+  (`"<a7>..<b7>"` for a pair). The tip's Files view names it on the Notes
+  row — `a.txt  ◆ 1  (preview: feature → main)` — and `gg note … --json`,
+  MCP and the web carry `"preview"`. Stamped by `gg note add|apply
+  --preview` (and a preview link), MCP, the TUI's note form and the web
+  page (the server resolves the name and stamps only when the preview's tip
+  is the note's commit) and `gg review --preview --notes`. A pull request's
+  diff records none (its names are forge refs). The name is a label kept as
+  written: renaming the branch later does not rewrite it. Notes written
+  before this carry no name.
+- **More golden screens:** the stash window and an untracked-including
+  stash's files (`tui_stash`), a paused rebase and the conflict process
+  (`tui_rebase_conflict`), the commit dialog and its result
+  (`tui_commit_dialog`).
+
+### Fixed
+
+- **The Reflog tab counts a commit at once.** Commit, merge, rebase,
+  fast-forward, cherry-pick, patch apply, remote-branch checkout, branch
+  rename and version restore did not reload the reflog, and with
+  auto-refresh off (the default) it stayed one entry behind.
+
 ## TUI golden-screen tests
 
 ### Added
@@ -101,8 +221,29 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the Branches review badge, and a review view's stack, whose Overview
   wraps in the centred 120-column reading column.
 
+- **Shelves, merge previews and branch filters have golden screens:** G's
+  quick-switcher and a shelved commit's files (`tui_shelves`), a saved
+  merge preview's row and its files with the notes gathered along the branch
+  (`tui_merge_preview`), and alt+1/alt+2 hiding and show-only on the Branches
+  panel with the checked-out branch exempt (`tui_branch_filter`).
+
+- **A commit's Files view lists the notes its ◆ N counts on files it does
+  not change**, under a **Notes** heading (`a.txt  ◆ 1`). A note written in
+  a merge preview is stored on the branch's tip, so the tip commit counted
+  it while its Files view showed nothing; enter on the row reads the notes.
+
 ### Fixed
 
+- **`gg shelf commit HEAD` records the commit, not the word "HEAD".** The
+  entry showed as `commit / commit` and its id held `HEAD`; it named another
+  commit as soon as HEAD moved. Any rev is now resolved to its sha first;
+  an ambiguous short sha says so (it read "unknown commit").
+- **Shelf entries made in the same instant list newest first** (the stable
+  sort kept them oldest first).
+- **`gg --record` keeps alt+<** (it took the `<` key for its `<...>`
+  diagnostic and dropped it).
+- **The raw-timer guard allow-lists lines, not files**: a second wall-clock
+  timer in console.go or headless.go is caught.
 - **A mistyped chord fails the step.** `C-xyz` used to be pressed as the
   letters `C`, `-`, `x`, … ; any `C-`/`M-` token is now a chord or an error.
 - **`go test ./e2e -update` is refused on Windows**, where screens show
