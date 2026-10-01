@@ -79,7 +79,11 @@ func sessionFiles(dir sessDir, args []string, stdout, stderr io.Writer) int {
 		if f.Line > 0 {
 			line = ":" + strconv.Itoa(f.Line)
 		}
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\n", f.ID, f.Path, src, line, f.State)
+		name := f.Path
+		if f.Source == "overview" && f.Title != "" {
+			name = strconv.Quote(f.Title) // overview-<n>.md is the frontends' own name
+		}
+		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\n", f.ID, name, src, line, f.State)
 	}
 	return 0
 }

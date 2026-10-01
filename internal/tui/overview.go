@@ -104,6 +104,10 @@ func newOverviewDocFrom(o agentdocs.Overview) *openFile {
 	return d
 }
 
+// overviewLabel is how a status line names overview d after the word
+// "overview": its id and quoted title (agentdocs.OverviewName's words).
+func (d *openFile) overviewLabel() string { return d.id() + " " + strconv.Quote(d.title) }
+
 // overviewCopy is d as a store overview, from the TUI's copy (the wire, r).
 func (d *openFile) overviewCopy() agentdocs.Overview {
 	o := agentdocs.Overview{ID: d.id(), Seq: d.seq, Title: d.title, Text: d.ov.text}

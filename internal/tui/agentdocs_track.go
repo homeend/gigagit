@@ -84,7 +84,7 @@ func (m Model) syncOverviews() Model {
 		shown := m.docShown(d)
 		m = m.closeDoc(d)
 		if shown {
-			m.statusMsg = i18n.T("overview %s was closed in the browser", d.id())
+			m.statusMsg = i18n.T("overview %s was closed in the browser", d.overviewLabel())
 		}
 	}
 	for _, o := range m.docs.Overviews(domain.CheckoutKey(m.currentWorktree)) {
