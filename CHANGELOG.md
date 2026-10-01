@@ -210,6 +210,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **A fingerprinted link pasted into `#` that names another checkout** kept
   its line but lost the note across the switch: the landing in the other
   checkout now says the line moved or changed, like any other landing.
+- **A text file with a stray NUL byte past its first 8000 bytes** got
+  fingerprinted links that always read "has changed": the resolver called
+  the file binary where the diff calls it text. It now uses the diff's rule
+  (a NUL in the first 8000 bytes), and its size cap too — a file over 10 MB
+  is not scanned and gets no fingerprint.
 - **gg web's file viewer** copied the plain `:N?view=content` form; its
   *copy file link (line N)* now carries the line's fingerprint while the
   viewer shows the file on disk (a commit's or a shelf's version of the line

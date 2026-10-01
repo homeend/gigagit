@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -135,5 +136,63 @@ func TestResolveLinkStagedRenameOldSideReadsTheOldPath(t *testing.T) {
 	l.Fingerprint = ""
 	if got := svc.LinkLineFingerprint(context.Background(), l); got != model.LineFingerprint("beta") {
 		t.Errorf("LinkLineFingerprint = %q, want beta's", got)
+	}
+}
+
+// The resolver reads what the DIFF shows: a file the diff treats as text (a
+// NUL only past git's 8000-byte window) keeps its fingerprints, one it calls
+// binary or too large does not.
+func TestLinkSideLinesAgreesWithTheDiffOnBinaryAndSize(t *testing.T) {
+	t.Parallel()
+	dir := linkRepoWithRemote(t, "gigagit")
+	svc := Open(dir)
+	ctx := context.Background()
+	link := func(path string) model.Link {
+		return model.Link{Repo: model.LinkRepo{Name: "gigagit"}, Path: path, Side: model.NoteSideNew, Line: 1,
+			Target: model.LinkTarget{State: model.StateUnstaged}}
+	}
+	write := func(name string, body []byte) {
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pad := strings.Repeat("x", 99) + "\n"
+
+	// A stray NUL beyond the first 8000 bytes: text, as far as the diff goes.
+	write("late.txt", []byte("alpha\n"+strings.Repeat(pad, 100)+"nul\x00here\n"))
+	if got := svc.LinkLineFingerprint(ctx, link("late.txt")); got != model.LineFingerprint("alpha") {
+		t.Errorf("late NUL: LinkLineFingerprint = %q, want alpha's", got)
+	}
+	l := link("late.txt")
+	l.Fingerprint = model.LineFingerprint("alpha")
+	if res, err := ResolveLink(ctx, l, ResolveOpts{Cwd: svc}); err != nil || res.Anchor.State != AnchorSame {
+		t.Errorf("late NUL: anchor=%+v err=%v, want same", res.Anchor, err)
+	}
+
+	// A NUL inside that window: binary. No fingerprint; a link that has one is "changed".
+	write("bin.dat", []byte("alpha\n\x00\x01\x02\n"))
+	if got := svc.LinkLineFingerprint(ctx, link("bin.dat")); got != "" {
+		t.Errorf("binary: LinkLineFingerprint = %q, want none", got)
+	}
+	l = link("bin.dat")
+	l.Fingerprint = model.LineFingerprint("alpha")
+	if res, err := ResolveLink(ctx, l, ResolveOpts{Cwd: svc}); err != nil || res.Anchor.State != AnchorChanged || res.Line != 1 {
+		t.Errorf("binary: line=%d anchor=%+v err=%v, want changed at 1", res.Line, res.Anchor, err)
+	}
+
+	// Over the diff's size cap: not scanned at all.
+	big := make([]byte, 0, MaxDiffBytes+200)
+	big = append(big, "alpha\n"...)
+	for len(big) <= MaxDiffBytes {
+		big = append(big, pad...)
+	}
+	write("big.txt", big)
+	if got := svc.LinkLineFingerprint(ctx, link("big.txt")); got != "" {
+		t.Errorf("too large: LinkLineFingerprint = %q, want none", got)
+	}
+	l = link("big.txt")
+	l.Fingerprint = model.LineFingerprint("alpha")
+	if res, err := ResolveLink(ctx, l, ResolveOpts{Cwd: svc}); err != nil || res.Anchor.State != AnchorChanged || res.Line != 1 {
+		t.Errorf("too large: line=%d anchor=%+v err=%v, want changed at 1", res.Line, res.Anchor, err)
 	}
 }

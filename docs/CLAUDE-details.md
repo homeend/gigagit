@@ -830,7 +830,9 @@ without the on-screen note (stderr already said it). A `#` paste that
 SWITCHES checkout carries the anchor beside the plain at-link
 (`gotoLinkSwitch.line` → `Model.startAtAnchor` → `consumeStartAt` re-attaches
 it to the rebuilt command when the line still matches). The web file viewer
-fingerprints its cursor line only while `view.src === "worktree"`.
+fingerprints its cursor line only while `view.src === "worktree"`. `linkSideLines`
+applies the Differ's own two rules (`MaxDiffBytes`, `textdiff.IsBinary`) so
+the resolver and the view a link was copied from agree on what is text.
 
 **Grammar** (`model.ParseLink` / `Link.String()`, the only place it lives):
 
