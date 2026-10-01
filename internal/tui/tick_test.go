@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -24,30 +25,55 @@ func TestTickInQuietModeIsADescriptor(t *testing.T) {
 	}
 }
 
+// rawTimerAllowed lists each raw timer LINE (file → trimmed line → reason)
+// that may sleep on the wall clock. Keyed by line, not file, so a second
+// timer added to an allow-listed file is still caught.
+var rawTimerAllowed = map[string]map[string]string{
+	"tick.go":       {"return tea.Tick(d, fn)": "the one tea.Tick call"},
+	"console.go":    {"time.Sleep(consoleRepaint)": "waitSessionCmd's sleep: agent consoles never open in quiet mode"},
+	"headless.go":   {"case <-time.After(d):": "the driver's own settle guard: it bounds a blocking command, it is never a UI timer"},
+	"repo_popup.go": {"deadline := time.After(time.Second)": "probeReposCmd's 1 s deadline only bounds wedged fs probes; it returns as soon as every probe answers"},
+}
+
+var rawTimer = regexp.MustCompile(`tea\.(Tick|Every)\(|time\.(After|Sleep)\(`)
+
+// rawTimers reports each raw timer line of src not on the allow-list.
+func rawTimers(file, src string) []string {
+	var out []string
+	for i, line := range strings.Split(src, "\n") {
+		l := strings.TrimSpace(line)
+		if !rawTimer.MatchString(l) || strings.HasPrefix(l, "//") || rawTimerAllowed[file][l] != "" {
+			continue
+		}
+		out = append(out, fmt.Sprintf("%s:%d: raw timer %q — use m.tick (or allow-list the line with a reason)", file, i+1, l))
+	}
+	return out
+}
+
 // Every timer goes through m.tick, and no TUI command sleeps on the wall
 // clock outside the allow-list — or a headless settle would wait on time.
 func TestNoRawTimersOutsideTick(t *testing.T) {
 	t.Parallel()
-	raw := regexp.MustCompile(`tea\.(Tick|Every)\(|time\.(After|Sleep)\(`)
-	allowed := map[string]string{
-		"tick.go":       "the one tea.Tick call",
-		"console.go":    "waitSessionCmd's sleep: agent consoles never open in quiet mode",
-		"headless.go":   "the driver's own settle guard: it bounds a blocking command, it is never a UI timer",
-		"repo_popup.go": "probeReposCmd's 1 s deadline only bounds wedged fs probes; it returns as soon as every probe answers",
-	}
 	files, _ := filepath.Glob("*.go")
 	for _, f := range files {
-		if strings.HasSuffix(f, "_test.go") || allowed[f] != "" {
+		if strings.HasSuffix(f, "_test.go") {
 			continue
 		}
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for i, line := range strings.Split(string(b), "\n") {
-			if raw.MatchString(line) && !strings.HasPrefix(strings.TrimSpace(line), "//") {
-				t.Errorf("%s:%d: raw timer %q — use m.tick (or allow-list it with a reason)", f, i+1, strings.TrimSpace(line))
-			}
+		for _, v := range rawTimers(f, string(b)) {
+			t.Error(v)
 		}
+	}
+}
+
+// A second timer in an allow-listed file is not covered by the first's entry.
+func TestRawTimerAllowListIsPerLine(t *testing.T) {
+	t.Parallel()
+	src := "\ttime.Sleep(consoleRepaint)\n\ttime.Sleep(time.Second)\n"
+	if got := rawTimers("console.go", src); len(got) != 1 || !strings.Contains(got[0], "console.go:2") {
+		t.Fatalf("rawTimers = %q, want only line 2", got)
 	}
 }

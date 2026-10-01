@@ -89,7 +89,7 @@ func NewHeadless(svc *domain.Service, opts HeadlessOptions) (*Headless, error) {
 // Press sends one step token (a multi-rune literal is one press per rune),
 // settling after each press.
 func (h *Headless) Press(tok string) error {
-	if len(tok) > 2 && strings.HasPrefix(tok, "<") && strings.HasSuffix(tok, ">") {
+	if isDiagnostic(tok) {
 		return fmt.Errorf("%q is a recorder diagnostic, not a key (keyToken's <...> fallback)", tok)
 	}
 	for _, t := range splitLiteral(tok) {

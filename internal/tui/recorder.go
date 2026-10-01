@@ -116,7 +116,7 @@ func keyToken(msg tea.KeyMsg) (string, bool) {
 		plain := msg
 		plain.Alt = false
 		tok, ok := keyToken(plain)
-		if !ok || strings.HasPrefix(tok, "<") || strings.HasPrefix(tok, "C-") {
+		if !ok || isDiagnostic(tok) || strings.HasPrefix(tok, "C-") {
 			return "", false // alt+ctrl and alt+<unnamed> stay unrecorded
 		}
 		return "M-" + tok, true

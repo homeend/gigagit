@@ -2,7 +2,9 @@ package domain
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -206,5 +208,64 @@ func TestShelfAddFilesIsAtomic(t *testing.T) {
 	all, _ := svc.ShelfList(ctx, "", 0, 0)
 	if len(all) != 0 {
 		t.Fatalf("a failed set must store nothing, shelf has %d entries", len(all))
+	}
+}
+
+// A shelved commit records the commit it froze, never the rev it was named
+// by: "HEAD" would read as a different commit once HEAD moves (and showed
+// as "commit / commit" for want of a sha).
+func TestShelfAddCommitResolvesTheRev(t *testing.T) {
+	t.Parallel()
+	repoDir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	sha := commitTwoFiles(t, repoDir)
+	e, err := svc.ShelfAddCommit(context.Background(), "HEAD", "")
+	if err != nil {
+		t.Fatalf("ShelfAddCommit: %v", err)
+	}
+	if e.Origin.Commit != sha || strings.Contains(e.ID, "HEAD") {
+		t.Fatalf("entry %q origin commit = %q, want %q", e.ID, e.Origin.Commit, sha)
+	}
+}
+
+// An ambiguous short sha says so — git's own reason, not "unknown commit":
+// rev-parse -q is silent about ambiguity, the user would hunt a typo.
+func TestShelfAddCommitAmbiguousShaSaysSo(t *testing.T) {
+	t.Parallel()
+	repoDir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	// 1000 commits in one fast-import (fixed dates: the same shas every run)
+	// make a 4-hex prefix shared by two commits all but certain.
+	var b strings.Builder
+	for i := 0; i < 1000; i++ {
+		fmt.Fprintf(&b, "commit refs/heads/many\nmark :%d\ncommitter t <t@t> %d +0000\ndata 2\nc\n", i+1, 1700000000+i)
+		if i > 0 {
+			fmt.Fprintf(&b, "from :%d\n", i)
+		}
+		fmt.Fprintf(&b, "M 644 inline f.txt\ndata %d\n%d\n", len(fmt.Sprint(i))+1, i)
+	}
+	cmd := exec.Command("git", "fast-import", "--quiet")
+	cmd.Dir, cmd.Stdin = repoDir, strings.NewReader(b.String())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fast-import: %v\n%s", err, out)
+	}
+	out, err := exec.Command("git", "-C", repoDir, "rev-list", "many").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen, prefix := map[string]bool{}, ""
+	for _, sha := range strings.Fields(string(out)) {
+		if seen[sha[:4]] {
+			prefix = sha[:4]
+			break
+		}
+		seen[sha[:4]] = true
+	}
+	if prefix == "" {
+		t.Skip("no shared 4-hex prefix among the commits")
+	}
+	_, err = svc.ShelfAddCommit(context.Background(), prefix, "")
+	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("ShelfAddCommit(%q) = %v, want git's ambiguity reason", prefix, err)
 	}
 }
