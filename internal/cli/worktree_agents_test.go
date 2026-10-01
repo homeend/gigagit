@@ -155,3 +155,24 @@ func TestWorktreeListBadStaleAfter(t *testing.T) {
 		t.Fatalf("bad stale_after = %d %q", code, errb)
 	}
 }
+
+func TestWorktreeClaimNudgesItsOwnTUI(t *testing.T) {
+	dir := newCLIRepo(t)
+	agentEnv(t, dir)
+	inbox := t.TempDir()
+	t.Setenv("GG_INBOX", inbox)
+	wt := cliWorktree(t, dir, "a", "wt-a")
+	if code, _, errb := runCLI(t, dir, "worktree", "claim", wt); code != 0 {
+		t.Fatalf("claim: %s", errb)
+	}
+	ents, _ := os.ReadDir(inbox)
+	found := false
+	for _, e := range ents {
+		if b, err := os.ReadFile(filepath.Join(inbox, e.Name())); err == nil && strings.Contains(string(b), `"worktrees"`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no reload worktrees command in GG_INBOX (%d files)", len(ents))
+	}
+}

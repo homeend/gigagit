@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v107 -->
+<!-- gg:using-gg:v108 -->
 
 # Using gg (gigagit)
 
@@ -104,7 +104,7 @@ checkout's own working-tree notes plus EVERY commit note in the store
   [--cached | --rev <sha>]` — put the open window on that line; `--rev <sha>`
   alone reveals a commit, `--next-comment` / `--prev-comment` step the open
   diff. Add `--no-wait` to skip the 2s wait for the window's answer.
-- `gg session reload [notes|status|all]`, `gg session focus <panel>`,
+- `gg session reload [notes|status|worktrees|all]`, `gg session focus <panel>`,
   `gg session highlight add|clear` — refresh, switch panel, or paint an
   attention band. See the `reviewing-with-gg` skill for when to use them.
 

@@ -114,7 +114,12 @@ func readLive(dir string) liveView {
 			return
 		}
 		lv.running[e.ID] = e.State == "running"
-		lv.agents[e.ID] = e.Agent
+		// A terminal or custom command has no tool id: name it by its label.
+		agent := e.Agent
+		if agent == "" {
+			agent = e.Label
+		}
+		lv.agents[e.ID] = agent
 		d := filepath.Clean(e.Dir)
 		lv.byDir[d] = append(lv.byDir[d], SessionRef{ID: e.ID, Agent: e.Agent, State: e.State})
 	}

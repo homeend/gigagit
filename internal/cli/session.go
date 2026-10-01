@@ -676,13 +676,13 @@ func sessionReload(dir string, args []string, stdout, stderr io.Writer) int {
 	case 1:
 		src = pos[0]
 	default:
-		fmt.Fprintln(stderr, "usage: gg session reload [notes|status|all] [--no-wait]")
+		fmt.Fprintln(stderr, "usage: gg session reload [notes|status|worktrees|all] [--no-wait]")
 		return 2
 	}
 	switch src {
-	case "notes", "status", "all":
+	case "notes", "status", "worktrees", "all":
 	default:
-		fmt.Fprintf(stderr, "session reload: unknown source %q (notes, status or all)\n", src)
+		fmt.Fprintf(stderr, "session reload: unknown source %q (notes, status, worktrees or all)\n", src)
 		return 2
 	}
 	return sendSteer(dir, steer.Command{Cmd: "reload", Sources: []string{src}}, *noWait, stdout, stderr)

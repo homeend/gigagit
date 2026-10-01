@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // agentsConfig is the domain's main-anchored [agents] view (one source for
@@ -140,6 +141,7 @@ func cmdWorktreeClaim(svc *domain.Service, workdir string, args []string, stdout
 		}
 		return 1
 	}
+	nudgeOwnTUI()
 	fmt.Fprintf(stdout, "claimed %s\n", path)
 	return 0
 }
@@ -168,6 +170,7 @@ func cmdWorktreeRelease(svc *domain.Service, workdir string, args []string, stdo
 		fmt.Fprintf(stdout, "no claim on %s\n", path)
 		return 0
 	}
+	nudgeOwnTUI()
 	fmt.Fprintf(stdout, "released %s\n", path)
 	return 0
 }
@@ -213,4 +216,13 @@ func resolveWorktreeArg(svc *domain.Service, workdir, arg, verb string, stderr i
 		return "", 1
 	}
 	return m.Path, 0
+}
+
+// nudgeOwnTUI asks the TUI that hosts this agent (GG_INBOX) to reload its
+// Worktrees panel, so a claim's ⚑ shows at once — auto-refresh is off by
+// default. Best effort, never waited on: no inbox (outside gg) is fine.
+func nudgeOwnTUI() {
+	if inbox := os.Getenv("GG_INBOX"); inbox != "" {
+		_, _ = steer.Post(inbox, steer.Command{Cmd: "reload", Sources: []string{"worktrees"}})
+	}
 }

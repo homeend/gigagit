@@ -381,3 +381,19 @@ func TestFileStateProtoCoversEveryTargetState(t *testing.T) {
 		}
 	}
 }
+
+// An agent's gg worktree claim/release posts reload worktrees to its own TUI
+// (auto-refresh is off by default), so the ⚑ mark appears at once.
+func TestSteerReloadWorktrees(t *testing.T) {
+	t.Parallel()
+	m, dir := steerModel(t)
+	m = m.initSteerInbox()
+	m.ready = true
+	m, cmd := m.applySteer(steer.Command{ID: "r-wt", Cmd: "reload", Sources: []string{"worktrees"}, Wait: true})
+	runSteerCmd(t, cmd)
+	r, _ := steer.AwaitReply(dir, "r-wt", time.Second)
+	if !r.OK || !strings.Contains(r.Detail, "worktrees") {
+		t.Fatalf("reply = %+v, want ok:true naming worktrees", r)
+	}
+	_ = m
+}

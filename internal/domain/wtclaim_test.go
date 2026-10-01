@@ -246,3 +246,18 @@ func TestRecycleThroughExecuteAsksTheGuards(t *testing.T) {
 		t.Fatalf("recycle of a reserved worktree = %+v, %v (a timeout means GuardReport waited on the gate)", res, err)
 	}
 }
+
+// A terminal session has no tool id: the claim names it by its label.
+func TestClaimAgentFallsBackToSessionLabel(t *testing.T) {
+	t.Parallel()
+	main, svc, reg := inventoryRepo(t)
+	wt := addWT(t, main, "lbl")
+	sessionreg.Write(reg, "p", sessionreg.Registry{PID: 1, Sessions: []sessionreg.Entry{{ID: "p/s1", Dir: main, Label: "Terminal", State: "running"}}})
+	if err := svc.ClaimWorktree(context.Background(), wt, "p/s1", "", pol()); err != nil {
+		t.Fatal(err)
+	}
+	infos, _ := svc.WorktreeInventory(context.Background(), pol(), false)
+	if c := find(t, infos, wt).Claim(); c == nil || c.Agent != "Terminal" {
+		t.Fatalf("claim = %+v, want agent Terminal", c)
+	}
+}
