@@ -630,7 +630,11 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 	default:
 		res.Addr.Worktree = c.checkout
 	}
-	anchorLink(ctx, opts.OpenFn(c.checkout), l, &res)
+	// Only a fingerprinted link reads anything: every other link must not
+	// even open the checkout here.
+	if l.Fingerprint != "" {
+		anchorLink(ctx, opts.OpenFn(c.checkout), l, &res)
+	}
 	return res, nil
 }
 
