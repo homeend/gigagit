@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -98,11 +99,19 @@ func linkSideLines(ctx context.Context, svc *Service, l model.Link, path string)
 			data, err = svc.ResolveBytes(ctx, ref)
 		}
 	}
-	// The diff's own two rules, so the resolver never disagrees with the view
-	// the link was copied from: a side over MaxDiffBytes is not aligned (and
-	// not scanned here), and "binary" is a NUL in git's first 8000 bytes — a
-	// stray NUL further down is still text.
-	if err != nil || len(data) > MaxDiffBytes || textdiff.IsBinary(data) {
+	if err != nil {
+		return nil, false
+	}
+	return splitTextLines(data)
+}
+
+// splitTextLines splits file bytes into the lines a link numbers, by the
+// diff's own two rules, so the resolver never disagrees with the view the
+// link was copied from: a side over MaxDiffBytes is not aligned (and not
+// scanned here), and "binary" is a NUL in git's first 8000 bytes — a stray
+// NUL further down is still text. false for either.
+func splitTextLines(data []byte) ([]string, bool) {
+	if len(data) > MaxDiffBytes || textdiff.IsBinary(data) {
 		return nil, false
 	}
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
@@ -143,16 +152,45 @@ func (s *Service) LinkLineFingerprint(ctx context.Context, l model.Link) string 
 	return model.LineFingerprint(lines[l.Line-1])
 }
 
+// ErrLinkStale means a RANGE link's block no longer holds the text it was
+// copied from. A range is never re-found: the link is refused.
+var ErrLinkStale = errors.New("the link is no longer valid")
+
+// LinkBlockFingerprint is the fingerprint a PRODUCER puts on an uncommitted
+// range link: that of lines l.Line..l.End, read from the side l names. "" for
+// a link with no range, a committed target, an unreadable file, a range past
+// the end or an all-blank block — the plain form is then the link.
+func (s *Service) LinkBlockFingerprint(ctx context.Context, l model.Link) string {
+	if l.Line <= 0 || l.End <= l.Line || l.Path == "" || l.Target.State == model.StateCommitted {
+		return ""
+	}
+	lines, ok := linkSideLines(ctx, s, l, l.Path)
+	if !ok || l.End > len(lines) {
+		return ""
+	}
+	return model.BlockFingerprint(lines[l.Line-1 : l.End])
+}
+
 // anchorLink re-finds a fingerprinted link's line in the text its side names
-// (linkSideLines). Text that cannot be read is "changed".
-func anchorLink(ctx context.Context, svc *Service, l model.Link, res *Resolved) {
+// (linkSideLines); text that cannot be read is "changed". A RANGE is only
+// checked, never re-found: a block that is not byte-for-trimmed-byte where
+// the link says is ErrLinkStale (the user's ruling: do not guess).
+func anchorLink(ctx context.Context, svc *Service, l model.Link, res *Resolved) error {
 	if l.Fingerprint == "" || l.Line <= 0 || res.Addr.Path == "" || l.Target.State == model.StateCommitted {
-		return
+		return nil
+	}
+	lines, ok := linkSideLines(ctx, svc, l, res.Addr.Path)
+	if l.End > l.Line {
+		if !ok || l.End > len(lines) || model.BlockFingerprint(lines[l.Line-1:l.End]) != l.Fingerprint {
+			return fmt.Errorf("%w: lines %d-%d of %s have changed since it was copied", ErrLinkStale, l.Line, l.End, res.Addr.Path)
+		}
+		res.Anchor = LineAnchor{Asked: l.Line, State: AnchorSame, Matches: 1}
+		return nil
 	}
 	res.Anchor = LineAnchor{Asked: l.Line, State: AnchorChanged}
-	lines, ok := linkSideLines(ctx, svc, l, res.Addr.Path)
 	if !ok {
-		return
+		return nil
 	}
 	res.Line, res.Anchor.State, res.Anchor.Matches = anchorLine(lines, l.Line, l.Fingerprint)
+	return nil
 }
