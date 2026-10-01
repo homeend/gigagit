@@ -94,7 +94,28 @@ function linkHintIDOK(id) {
 // because '?' opens the final segment of the grammar. An unknown kind or an
 // id that cannot round-trip refuses the whole link rather than dropping the
 // hint silently.
-function linkFor(repo, worktree, ctx, side, no) {
+// lineFingerprint is internal/model.LineFingerprint: FNV-1a 32-bit over the
+// UTF-8 bytes of the trimmed line, 8 lowercase hex; "" for a blank line. The
+// trim is Go's strings.TrimSpace, spelled out — String.prototype.trim also
+// strips U+FEFF (a file's BOM) and keeps U+0085, and the two must agree on
+// every byte. TestLineFingerprintJSMatchesGo pins the pair.
+const GO_SPACE = "[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]";
+const GO_TRIM = new RegExp("^" + GO_SPACE + "+|" + GO_SPACE + "+$", "g");
+function lineFingerprint(text) {
+  const t = (text || "").replace(GO_TRIM, "");
+  if (!t) return "";
+  let h = 0x811c9dc5;
+  for (const b of new TextEncoder().encode(t)) {
+    h ^= b;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+// text is the RAW text of the line the link names (optional): an uncommitted
+// line link carries its fingerprint (`:N~<fp>`), a commit / pair / preview
+// link never does.
+function linkFor(repo, worktree, ctx, side, no, text) {
   // A compare addressed by two side SPECS (the entry-diff lane): two commits
   // are the pair; any other compare names the clicked side as the VERSION it
   // shows — the working file, the index, or that commit's own text (hence the
@@ -108,8 +129,8 @@ function linkFor(repo, worktree, ctx, side, no) {
     const old = side === "old" && no > 0;
     const spec = old ? left : right;
     const path = (old && ctx.oldPath) || ctx.path;
-    if (spec === "worktree") return linkFor(repo, worktree, { path, state: "unstaged" }, "new", no);
-    if (spec === "staged") return linkFor(repo, worktree, { path, state: "staged" }, "new", no);
+    if (spec === "worktree") return linkFor(repo, worktree, { path, state: "unstaged" }, "new", no, text);
+    if (spec === "staged") return linkFor(repo, worktree, { path, state: "staged" }, "new", no, text);
     if (commitOf(spec)) return linkFor(repo, worktree, { path, state: "commit", rev: commitOf(spec) }, "new", no);
     return "";
   }
@@ -151,6 +172,7 @@ function linkFor(repo, worktree, ctx, side, no) {
   const path = (ctx && ctx.path) || "";
   if (path && !linkPathOK(path)) return "";
   let s = head + (path ? "/" + path : "");
+  let fp = ""; // only the working tree and the index: a commit is fixed already
   if (pair) {
     // `@<a>..<b>` (internal/model.LinkPair). Unlike a preview, a pair has an
     // old side — commit a — so an old-side line travels as `:old:N` below.
@@ -160,6 +182,7 @@ function linkFor(repo, worktree, ctx, side, no) {
     if (side === "old") no = 0;
   } else {
     const st = (ctx && ctx.state) || "unstaged";
+    if (st !== "commit") fp = lineFingerprint(text);
     if (st === "staged") {
       s += "@staged";
     } else if (st === "commit") {
@@ -176,7 +199,7 @@ function linkFor(repo, worktree, ctx, side, no) {
   // pair the resolver reads for it anyway (index → file).
   if (no > 0) {
     if (!path) return "";
-    s += ":" + (side === "old" ? "old:" : "") + no;
+    s += ":" + (side === "old" ? "old:" : "") + no + (fp ? "~" + fp : "");
   }
   // Last, always: '?' opens the grammar's final segment, so anything after it
   // would be read as part of the hint id.
