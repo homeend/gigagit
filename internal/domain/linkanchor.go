@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // The states of a fingerprinted line link once resolved.
@@ -77,7 +78,8 @@ func (r Resolved) AnchorNote() string {
 // linkSideLines reads the text an uncommitted line link's side names, split
 // into lines: the working file (new side, or a content link), the index (the
 // unstaged diff's old side, the staged diff's new side) or HEAD (the staged
-// diff's old side). false when it cannot be read — a deleted or binary file.
+// diff's old side). false when it cannot be read — a deleted, binary or
+// over-cap file.
 func linkSideLines(ctx context.Context, svc *Service, l model.Link, path string) ([]string, bool) {
 	ref := model.FileRef{Source: model.SourceUnstaged, Path: path}
 	staged, old := l.Target.State == model.StateStaged, l.Side == model.NoteSideOld
@@ -96,7 +98,11 @@ func linkSideLines(ctx context.Context, svc *Service, l model.Link, path string)
 			data, err = svc.ResolveBytes(ctx, ref)
 		}
 	}
-	if err != nil || strings.IndexByte(string(data), 0) >= 0 {
+	// The diff's own two rules, so the resolver never disagrees with the view
+	// the link was copied from: a side over MaxDiffBytes is not aligned (and
+	// not scanned here), and "binary" is a NUL in git's first 8000 bytes — a
+	// stray NUL further down is still text.
+	if err != nil || len(data) > MaxDiffBytes || textdiff.IsBinary(data) {
 		return nil, false
 	}
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
