@@ -25,7 +25,7 @@ const overviewMaxBytes = 64 << 10
 // sessionOverview is `gg session overview …`: an agent's in-memory markdown
 // overview whose links are anchors to files, lines and notes. It lives in a
 // live gg TUI's memory — so only a TUI can answer.
-func sessionOverview(dir string, svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func sessionOverview(dir sessDir, svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, overviewUsage)
 		return 2
@@ -46,7 +46,7 @@ func sessionOverview(dir string, svc *domain.Service, args []string, stdin io.Re
 
 // steerOverviews posts an overview command to the live session and waits for
 // its answer: the TUI when one is live, else the gg web page.
-func steerOverviews(dir string, c steer.Command, stdout, stderr io.Writer) (steer.Reply, int, bool) {
+func steerOverviews(dir sessDir, c steer.Command, stdout, stderr io.Writer) (steer.Reply, int, bool) {
 	rep, code, ok := steerLive(dir, c, false, false, stdout, stderr)
 	if ok && !rep.OK {
 		fmt.Fprintln(stderr, rep.Error)
@@ -56,7 +56,7 @@ func steerOverviews(dir string, c steer.Command, stdout, stderr io.Writer) (stee
 }
 
 // sessionOverviewWrite is add and set: the text from --file, else stdin.
-func sessionOverviewWrite(dir string, svc *domain.Service, verb string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func sessionOverviewWrite(dir sessDir, svc *domain.Service, verb string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session overview "+verb, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	title := fs.String("title", "", "the overview's name, one line")
@@ -138,7 +138,7 @@ func sessionOverviewWrite(dir string, svc *domain.Service, verb string, args []s
 	return 0
 }
 
-func sessionOverviewList(dir string, args []string, stdout, stderr io.Writer) int {
+func sessionOverviewList(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session overview list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print the overviews as JSON")
@@ -169,7 +169,7 @@ func sessionOverviewList(dir string, args []string, stdout, stderr io.Writer) in
 	return 0
 }
 
-func sessionOverviewShow(dir string, args []string, stdout, stderr io.Writer) int {
+func sessionOverviewShow(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session overview show", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print the overview as JSON")
@@ -199,7 +199,7 @@ func sessionOverviewShow(dir string, args []string, stdout, stderr io.Writer) in
 	return 0
 }
 
-func sessionOverviewRm(dir string, args []string, stdout, stderr io.Writer) int {
+func sessionOverviewRm(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session overview rm", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	pos, err := parseSteerFlags(fs, args)

@@ -108,12 +108,12 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		c.Worktree = res.Checkout
 	}
 	if *background {
-		return sendBackground(dir, c, *noWait, stdout, stderr)
+		return sendBackground(sessDir{inbox: dir}, c, *noWait, stdout, stderr)
 	}
 	if r := routeFor(preferredInbox(dir)); r.tuiOK || r.webOK {
 		// sendSteer is the whole routing table — a live web page is reached over
 		// HTTP exactly as `gg session navigate` reaches it.
-		code := sendSteer(dir, c, *noWait, stdout, stderr)
+		code := sendSteer(sessDir{inbox: dir}, c, *noWait, stdout, stderr)
 		if code == 0 {
 			fmt.Fprintln(stdout, "steered: "+res.Checkout)
 		}

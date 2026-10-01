@@ -57,14 +57,24 @@ func runSession(dir string, svc *domain.Service, args []string, stdout, stderr i
 
 // runSessionIn is runSession with stdin (nil = none): an overview's text may
 // be piped in.
-func runSessionIn(dir string, svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func runSessionIn(inbox string, svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files|note|overview> [flags]")
+		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files|note|overview> [--to tui|web] [flags]")
 		return 2
 	}
+	args, to, err := cutTo(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	dir := sessDir{inbox: inbox, to: to}
 	switch args[0] {
 	case "status":
-		return sessionStatus(dir, svc, args[1:], stdout, stderr)
+		if to != "" {
+			fmt.Fprintln(stderr, "--to does not apply to status: it reports both")
+			return 2
+		}
+		return sessionStatus(inbox, svc, args[1:], stdout, stderr)
 	case "navigate":
 		return sessionNavigate(dir, svc, args[1:], stdout, stderr)
 	case "reload":
@@ -82,6 +92,69 @@ func runSessionIn(dir string, svc *domain.Service, args []string, stdin io.Reade
 	}
 	fmt.Fprintf(stderr, "session: unknown subcommand %q\n", args[0])
 	return 2
+}
+
+// sessDir is where a session verb is delivered: the worktree's inbox, and
+// --to's choice of side ("" = the routing table; "tui" or "web" = that side
+// alone, even while the other is live).
+type sessDir struct {
+	inbox string
+	to    string
+}
+
+// cutTo takes --to <tui|web> (or --to=<…>) out of a session verb's args,
+// wherever it sits after the verb.
+func cutTo(args []string) (rest []string, to string, err error) {
+	if len(args) > 0 && strings.HasPrefix(args[0], "--to") {
+		return nil, "", errors.New("--to goes after the verb: gg session <verb> --to tui|web …")
+	}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--to" || a == "-to":
+			if i+1 >= len(args) {
+				return nil, "", errors.New("--to needs tui or web")
+			}
+			to = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--to=") || strings.HasPrefix(a, "-to="):
+			to = a[strings.IndexByte(a, '=')+1:]
+		case a == "--":
+			rest = append(rest, args[i:]...)
+			i = len(args)
+			continue
+		default:
+			rest = append(rest, a)
+			continue
+		}
+		if to != "tui" && to != "web" {
+			return nil, "", fmt.Errorf("--to %q: want tui or web", to)
+		}
+	}
+	return rest, to, nil
+}
+
+// target is where a command goes: the inbox, who is live there — only the
+// side --to named — and, when nothing can take it, why (printed, exit 1).
+func (d sessDir) target() (inbox string, r sessionRoute, why string) {
+	inbox = preferredInboxFor(d.inbox, d.to)
+	r = routeFor(inbox)
+	switch {
+	case d.to == "tui" && !r.tuiOK && r.webOK:
+		why = "no gg TUI for this worktree (gg web is live)"
+	case d.to == "web" && !r.webOK && r.tuiOK:
+		why = "no gg web page for this worktree (a gg TUI is live)"
+	}
+	switch d.to {
+	case "tui":
+		r.webOK = false
+	case "web":
+		r.tuiOK = false
+	}
+	if why == "" && !r.tuiOK && !r.webOK {
+		why = "no gg session for this worktree"
+	}
+	return inbox, r, why
 }
 
 // sessionRoute is who is live for this worktree right now.
@@ -103,11 +176,10 @@ func routeFor(dir string) sessionRoute {
 // sendSteer applies the routing table: no live session is exit 1, a live web
 // page gets a POST, a live TUI gets the inbox file, and when both are live the
 // TUI's reply decides the exit code.
-func sendSteer(dir string, c steer.Command, noWait bool, stdout, stderr io.Writer) int {
-	dir = preferredInbox(dir)
-	r := routeFor(dir)
-	if !r.tuiOK && !r.webOK {
-		fmt.Fprintln(stderr, "no gg session for this worktree")
+func sendSteer(d sessDir, c steer.Command, noWait bool, stdout, stderr io.Writer) int {
+	dir, r, why := d.target()
+	if why != "" {
+		fmt.Fprintln(stderr, why)
 		return 1
 	}
 	// One id for BOTH deliveries: Post honours a preset id, so a command that
@@ -159,7 +231,7 @@ const backgroundNeedsContent = "--background needs a content link (gg link --con
 // sendBackground posts a background open to the live session(s): it loads
 // the file into the open-files list without touching the screen. With nothing
 // live it never launches one — a launch IS the screen.
-func sendBackground(dir string, c steer.Command, noWait bool, stdout, stderr io.Writer) int {
+func sendBackground(dir sessDir, c steer.Command, noWait bool, stdout, stderr io.Writer) int {
 	c.Background = true
 	rep, code, ok := steerLive(dir, c, true, noWait, stdout, stderr)
 	if !ok {
@@ -188,11 +260,10 @@ func printSteerReply(rep steer.Reply, stdout, stderr io.Writer) int {
 // printed labelled "web:". ok is true when a reply came; otherwise code is
 // the exit status, the reason already printed (nothing live, --no-wait's id,
 // a timeout's "queued", which is exit 0 as in sendSteer).
-func steerLive(dir string, c steer.Command, both, noWait bool, stdout, stderr io.Writer) (rep steer.Reply, code int, ok bool) {
-	dir = preferredInbox(dir)
-	r := routeFor(dir)
-	if !r.tuiOK && !r.webOK {
-		fmt.Fprintln(stderr, "no gg session for this worktree")
+func steerLive(d sessDir, c steer.Command, both, noWait bool, stdout, stderr io.Writer) (rep steer.Reply, code int, ok bool) {
+	dir, r, why := d.target()
+	if why != "" {
+		fmt.Fprintln(stderr, why)
 		return rep, 1, false
 	}
 	if c.ID == "" {
@@ -242,12 +313,16 @@ var sessionGetenv = os.Getenv
 // started this process named in $GG_INBOX, while a TUI or web page there is
 // live — so an agent in worktree B reaches the gg showing A that launched it
 // — else dir (this worktree's, or a link's checkout's).
-func preferredInbox(dir string) string {
+func preferredInbox(dir string) string { return preferredInboxFor(dir, "") }
+
+// preferredInboxFor is preferredInbox for --to's side: $GG_INBOX wins only
+// while that side ("" = either) is live there.
+func preferredInboxFor(dir, to string) string {
 	if own := sessionGetenv("GG_INBOX"); own != "" {
-		if _, ok := steer.Live(own, steer.TUIPresence); ok {
+		if _, ok := steer.Live(own, steer.TUIPresence); ok && to != "web" {
 			return own
 		}
-		if _, ok := steer.Live(own, steer.WebPresence); ok {
+		if _, ok := steer.Live(own, steer.WebPresence); ok && to != "tui" {
 			return own
 		}
 	}
@@ -465,7 +540,7 @@ func navExit(verb string, err error, stderr io.Writer) int {
 
 // sessionNavigate is the navigate verb: a file + a line, a commit to reveal, or
 // a note step.
-func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session navigate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	tf := addTargetFlags(fs)
@@ -502,7 +577,7 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 			fmt.Fprintln(stderr, "session navigate: "+backgroundNeedsContent)
 			return 2
 		}
-		dir, target, err := linkSteerDir(ctx, dir, svc, res)
+		inbox, target, err := linkSteerDir(ctx, dir.inbox, svc, res)
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
@@ -514,6 +589,7 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 		if c.File != "" || c.Target != nil {
 			c.Worktree = res.Checkout
 		}
+		dir := sessDir{inbox: inbox, to: dir.to}
 		if *background {
 			return sendBackground(dir, c, *noWait, stdout, stderr)
 		}
@@ -670,7 +746,7 @@ func parseSteerFlags(fs *flag.FlagSet, args []string) ([]string, error) {
 }
 
 // sessionReload re-reads one or more of the TUI's sources.
-func sessionReload(dir string, args []string, stdout, stderr io.Writer) int {
+func sessionReload(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session reload", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	noWait := fs.Bool("no-wait", false, "post the command and exit without waiting for an answer")
@@ -697,7 +773,7 @@ func sessionReload(dir string, args []string, stdout, stderr io.Writer) int {
 }
 
 // sessionFocus switches the TUI (or the web page) to a named panel.
-func sessionFocus(dir string, args []string, stdout, stderr io.Writer) int {
+func sessionFocus(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session focus", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	noWait := fs.Bool("no-wait", false, "post the command and exit without waiting for an answer")
@@ -713,7 +789,7 @@ func sessionFocus(dir string, args []string, stdout, stderr io.Writer) int {
 }
 
 // sessionHighlight adds or clears the attention bands an agent paints.
-func sessionHighlight(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func sessionHighlight(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: gg session highlight <add|clear> [flags]")
 		return 2
@@ -728,7 +804,7 @@ func sessionHighlight(dir string, svc *domain.Service, args []string, stdout, st
 	return 2
 }
 
-func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func sessionHighlightAdd(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session highlight add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	tf := addTargetFlags(fs)
@@ -791,11 +867,12 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 			fmt.Fprintln(stderr, "session highlight add: the link needs a file and a line or hunk (gg://<repo>/<path>[@<target>]:<line>[-<end>] or #<hunk>)")
 			return 2
 		}
-		dir, target, err := linkSteerDir(ctx, dir, svc, res)
+		inbox, target, err := linkSteerDir(ctx, dir.inbox, svc, res)
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
+		dir := sessDir{inbox: inbox, to: dir.to}
 		sideVal, first, last := string(res.Side), res.Line, *end
 		switch {
 		case res.Hunk > 0:
@@ -882,7 +959,7 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 	}, *noWait, stdout, stderr)
 }
 
-func sessionHighlightClear(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func sessionHighlightClear(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session highlight clear", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	tf := addTargetFlags(fs)

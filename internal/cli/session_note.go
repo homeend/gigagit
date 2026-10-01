@@ -26,7 +26,7 @@ var (
 
 // sessionNote is `gg session note …`: temporary notes on the files open in a
 // live gg TUI. They live in that TUI's memory — so only a TUI can answer.
-func sessionNote(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func sessionNote(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, noteUsage)
 		return 2
@@ -50,7 +50,7 @@ func sessionNote(dir string, svc *domain.Service, args []string, stdout, stderr 
 // steerNotes posts a note command to the live session and waits for its
 // answer: the TUI when one is live, else gg web, which answers from its own
 // store (steerLive's routing).
-func steerNotes(dir string, c steer.Command, stdout, stderr io.Writer) (steer.Reply, int, bool) {
+func steerNotes(dir sessDir, c steer.Command, stdout, stderr io.Writer) (steer.Reply, int, bool) {
 	rep, code, ok := steerLive(dir, c, false, false, stdout, stderr)
 	if ok && !rep.OK {
 		fmt.Fprintln(stderr, rep.Error)
@@ -67,7 +67,7 @@ func fileTarget(s string) (id, path string) {
 	return "", s
 }
 
-func sessionNoteAdd(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func sessionNoteAdd(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session note add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	summary := fs.String("summary", "", "the remark, one short paragraph")
@@ -122,7 +122,7 @@ func sessionNoteAdd(dir string, svc *domain.Service, args []string, stdout, stde
 	return 0
 }
 
-func sessionNoteList(dir string, args []string, stdout, stderr io.Writer) int {
+func sessionNoteList(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session note list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print the notes as JSON")
@@ -161,7 +161,7 @@ func sessionNoteList(dir string, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func sessionNoteShow(dir string, args []string, stdout, stderr io.Writer) int {
+func sessionNoteShow(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session note show", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print the note as JSON")
@@ -207,7 +207,7 @@ func sessionNoteShow(dir string, args []string, stdout, stderr io.Writer) int {
 
 // sessionNoteRm is `note rm <note-id>` and, with file set, `note clear
 // <path>|<file-id>` — every note of one open file.
-func sessionNoteRm(dir string, args []string, file bool, stdout, stderr io.Writer) int {
+func sessionNoteRm(dir sessDir, args []string, file bool, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session note rm", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	pos, err := parseSteerFlags(fs, args)
