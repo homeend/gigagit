@@ -290,7 +290,7 @@ func (p *sessionsPopup) openTask(m Model, r taskRow) (Model, tea.Cmd) {
 	}
 	if r.live != nil && r.live.Session != "" && r.live.State.Live() {
 		m = m.popLayer()
-		return m.openConsole(r.live.Session)
+		return m.openSessionAnywhere(r.live.Session)
 	}
 	if r.state() == domain.TaskFailed {
 		tail := ""

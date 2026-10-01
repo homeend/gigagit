@@ -140,6 +140,7 @@ type Model struct {
 	wtPreviewGen  int                                      // bumped per cursor move in F's window: drops a superseded preview settle
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
+	consoleSwitch consoleSwitch                            // a repo switch's console settle, run when its snapshot lands (console_scope.go)
 	sessWatch     *sessionWatch                            // the TUI's subscription to the session list (console.go)
 	web           *webHostState                            // the gg web page served from this process (webhost.go)
 	webOpts       webLaunchOptions                         // gg --web / --web-addr for this run
@@ -1710,7 +1711,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, steerCmd = m.reconcileSteer()
 			var tasksCmd tea.Cmd
 			m, tasksCmd = m.applyTasksConfig()
-			steerCmd = tea.Batch(steerCmd, tasksCmd)
+			var consoleCmd tea.Cmd
+			m, consoleCmd = m.settleConsoleAfterSwitch() // m.worktrees now lists THIS repo's worktrees
+			steerCmd = tea.Batch(steerCmd, tasksCmd, consoleCmd)
 			// Rebind the per-repo Settings write target on the legacy load path —
 			// configReadyMsg only covers app startup. Without this, every Settings
 			// write after a repo switch ("Show graph", "Commit sort", refresh
@@ -4677,6 +4680,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingWorktreeMoveOld = ""                // a repo switch must not fire a stale move cleanup
 	m.pendingGotoTip = ""                        // a repo switch must not fire a stale tip jump
 	m.pendingSteer = nil                         // the repo it referred to is gone; its inbox went with it
+	m.consoleSwitch.armed = true                 // the console keeps only a session the new repo owns
+	m.consoleSwitch.open = ""                    // a console asked for across an earlier switch is moot
 	m.pendingHint = nil                          // ditto: its navigate referred to the old repo
 	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
 	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one

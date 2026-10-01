@@ -311,17 +311,17 @@ func sessionsByLastUsed(list []domain.SessionInfo, terminal bool) []domain.Sessi
 	return out
 }
 
-// cycleSessions is alt+a (agents) / alt+t (terminals): show the most recently
-// used session of that kind, unfocused; pressed again while one of them is
-// shown unfocused, the next one back in last-used order (wrapping). enter
-// then focuses it, which makes it the most recent.
+// cycleSessions is alt+a (agents) / alt+t (terminals): show this
+// repository's most recently used session of that kind, unfocused; pressed
+// again while one of them is shown unfocused, the next one back in last-used
+// order (wrapping). enter then focuses it, which makes it the most recent.
 func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
-	list := sessionsByLastUsed(domain.Sessions().List(), terminal)
+	list := sessionsByLastUsed(m.repoSessions(domain.Sessions().List()), terminal)
 	if len(list) == 0 {
 		if terminal {
-			m.statusMsg = i18n.T("no running terminal — open one from the . menu of a worktree or a checked-out branch")
+			m.statusMsg = i18n.T("no running terminal in this repository — open one from the . menu of a worktree or a checked-out branch")
 		} else {
-			m.statusMsg = i18n.T("no running agent session — start one from the . menu of a worktree or a checked-out branch")
+			m.statusMsg = i18n.T("no running agent session in this repository — start one from the . menu of a worktree or a checked-out branch")
 		}
 		return m, nil
 	}

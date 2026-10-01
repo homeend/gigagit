@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent consoles belong to their repository
+
+### Changed
+
+- **A console shows only the repository's own sessions.** Switching to a
+  repository that does not own the shown agent or terminal closes its screen
+  (the session keeps running; the status line says `ctrl+\` brings it back);
+  switching between worktrees of the same repository keeps it.
+- **`alt+a` / `alt+t` cycle this repository's sessions only**, and their
+  footer hints show only when it has one.
+- **`enter` on another repository's session in the `ctrl+\` popup** (or a
+  live agent in its AI tasks tab) switches to that repository first, then
+  opens the console; refused while another window still owns the screen.
+
 ## Choose the TUI or the page for a session verb
 
 ### Added
