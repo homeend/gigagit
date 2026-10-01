@@ -15,11 +15,13 @@ func TestGGFakePrintsTheReview(t *testing.T) {
 	}
 }
 
-// {{ggfake}} expands to the fake agent's path, quoted for the shell capture
-// commands run through.
+// {{ggfake}} expands to the bare name of the fake agent on PATH.
 func TestExpandTextGGFake(t *testing.T) {
 	t.Parallel()
-	if got := ExpandText("{{ggfake}} review"); got != shellQuote(ggFakeBin)+" review" || ggFakeBin == "" {
-		t.Fatalf("ExpandText = %q (ggFakeBin %q)", got, ggFakeBin)
+	if got := ExpandText("{{ggfake}} review"); got != "ggfake review" {
+		t.Fatalf("ExpandText = %q", got)
+	}
+	if p, err := exec.LookPath("ggfake"); err != nil || p != ggFakeBin {
+		t.Fatalf("ggfake on PATH = %q, %v; want %q", p, err, ggFakeBin)
 	}
 }

@@ -58,6 +58,10 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("GGFAKE_REVIEW", review)
+	// On PATH, so {{ggfake}} expands to the bare name: the expansion lands in
+	// committed files (.gg.toml), and a temp-dir path would change the
+	// commit's SHA on every run.
+	os.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	// Capture commands run through $SHELL (engine/capture_runner.go): a
 	// developer's zsh or fish must not decide how a scenario's command parses.
 	if runtime.GOOS != "windows" {
@@ -68,6 +72,8 @@ func TestMain(m *testing.M) {
 	// neither can be per scenario (the TUI golden-screens spec, §4). The
 	// builder's own git calls pass their dates per command and are unaffected.
 	clock.Freeze(frozenNow)
+	// Dates render in local time; the machine's zone must not reach a golden.
+	time.Local = time.UTC
 	os.Setenv("GIT_AUTHOR_DATE", frozenNow.Format(time.RFC3339))
 	os.Setenv("GIT_COMMITTER_DATE", frozenNow.Format(time.RFC3339))
 	code := func() int {
