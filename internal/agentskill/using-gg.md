@@ -100,10 +100,18 @@ checkout's own working-tree notes plus EVERY commit note in the store
 - `gg session reload [notes|status|worktrees|all]`, `gg session focus <panel>`,
   `gg session highlight add|clear` — refresh, switch panel, or paint an
   attention band. See the `reviewing-with-gg` skill for when to use them.
+- Who gets a verb: with a TUI live, the TUI answers — and every screen verb
+  (navigate, reload, focus, highlight, `files focus`, a background open) also
+  reaches every gg web tab; with only gg web live, the page does. `--to tui`
+  or `--to web` after the verb picks one side even while both run — e.g. `gg
+  session overview add --to web …` shows the tour in the browser and leaves
+  the terminal alone (a TUI serving its own page still lists it). A side that is not running: exit 1 `no gg TUI for this
+  worktree (gg web is live)` / `no gg web page for this worktree (a gg TUI is
+  live)`.
 
 Inside a console gg started (an agent or an Open terminal), `$GG_INBOX` names
 THAT gg, and every `gg session` verb talks to it first — even when gg now
-shows another worktree. A navigate to a file or a highlight sent from a
+shows another worktree (with `--to`, only while that side is live there). A navigate to a file or a highlight sent from a
 worktree gg is not showing is NOT applied: exit 1 `gg is showing worktree <a>;
 asked the user to switch to <b>`. gg raised a notice; tell the user and wait —
 do not retry in a loop.

@@ -4203,7 +4203,10 @@ Spec `docs/superpowers/specs/2026-09-30-open-file-notes-design.md`.
 - **Steer.** `note_add|list|show|rm` run before `steerRefusal` (they never
   move the screen); `note_add` on a file that is not open/loaded rides
   `noteLandedMsg`. The CLI (`gg session note`) posts to the TUI when one is
-  live, else to gg web (`steerLive(both=false)`).
+  live, else to gg web (`steerLive(both=false)`). `--to tui|web` (cut from
+  the args by `runSessionIn`'s `cutTo`, carried in `sessDir.to`) restricts
+  `sessDir.target()` to one side; `$GG_INBOX` wins only while that side is
+  live there (`preferredInboxFor`). `status` refuses `--to`.
 - **Web side** (`internal/web`: `agentdocs_follow.go`, `steer_notes.go`,
   `file_notes.go`). The server keeps its own store unless hosted. A follow
   goroutine (started by `Host.Start`, also run by `adoptService`) lists every

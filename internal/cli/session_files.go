@@ -35,7 +35,7 @@ func parseFileTarget(s string) (id, path string, line int) {
 
 // sessionFiles is `gg session files [--json]` — the live session's open files
 // (the TUI's, else gg web's) for the worktree it shows — and `gg session files focus`.
-func sessionFiles(dir string, args []string, stdout, stderr io.Writer) int {
+func sessionFiles(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "focus" {
 		return sessionFilesFocus(dir, args[1:], stdout, stderr)
 	}
@@ -86,7 +86,7 @@ func sessionFiles(dir string, args []string, stdout, stderr io.Writer) int {
 
 // sessionFilesFocus is `gg session files focus <id|path>[:<line>]`: bring an
 // open file to the front, optionally at a line.
-func sessionFilesFocus(dir string, args []string, stdout, stderr io.Writer) int {
+func sessionFilesFocus(dir sessDir, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("session files focus", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	noWait := fs.Bool("no-wait", false, "post the command and exit without waiting for an answer")

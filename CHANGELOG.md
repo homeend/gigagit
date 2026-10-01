@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Choose the TUI or the page for a session verb
+
+### Added
+
+- **`gg session <verb> --to tui|web`** picks which live session gets the
+  command, even while the TUI and a gg web page both run (by default the TUI
+  answers, and navigate, reload, focus, highlight and background opens reach
+  the browser too). `gg session overview add
+  --to web …` shows the tour in the browser and leaves the terminal where it
+  is. A side that is not running says so (exit 1); `status` refuses `--to`.
+  The using-gg skill is v113.
+
 ## Web: copy the worktree path
 
 ### Added
@@ -13,6 +25,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **gg web's worktree path (top right) copies.** A double-click copies the
   whole path; a right-click opens a menu with **copy path** (plus **copy
   selection** when part of it is highlighted). The help overlay lists it.
+
 
 ## Overviews in gg web
 

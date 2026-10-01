@@ -1393,7 +1393,10 @@ as a document, `tab` / `shift+tab` / `enter` / `r` / `y` / `backspace` work
 the same, and a single click opens an anchor. A TUI serving its own page
 shares one set of overviews with it (same ids; close one in either and it
 closes in both), and a standalone `gg web` answers `gg session overview`
-itself.
+itself. With both running, a `gg session` verb goes to the TUI (navigate, reload,
+focus, highlight and background opens reach the browser too); `--to web` or `--to tui` after the verb picks one
+side — `gg session overview add --to web …` puts the tour in the browser and
+leaves the terminal where it is.
 
 ### Agent sessions (embedded consoles)
 
