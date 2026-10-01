@@ -4380,10 +4380,27 @@ selection, laid-out width); never on disk, never evicted, created
   overview refresh's answer drops only when a newer answer already applied
   (`ovSeq`/`ovApplied`, `ovAnswerApplies`) — a newer refresh that merely
   started may fail, and then the older answer still lands; a refresh whose
-  fetch fails answers with the last one started (`ovLast`) when a newer one
-  is under way (false when none is), so `openAnchorAt` usually resumes on a
-  re-checked list — fail/fail/succeed orderings can still resume it on the
-  list from before the click (a lone failure always did).
+  fetch fails answers with the last one started (`ovLast`, `ovLastSeq`) when
+  a newer one is under way, else false — never with itself. `openAnchorAt`
+  reads that answer: false opens nothing and says `could not re-check the
+  overview — try the anchor again` (fail-closed: no anchor opens on the list
+  from before the click). An open's own overview fetch takes a place in the
+  same order (`ovMine`) and counts as applied in `showOverview`, so a refresh
+  started before it drops when it lands later — and when a refresh started
+  after it landed first, the re-open keeps that newer text on screen. The selected anchor's
+  destination (`view.ov.want`, set by `selectAnchor`) outlives a refresh
+  that drops it: `keepAnchor(next, want, sel)` selects it again when a later
+  text brings it back. A failed open the server already moved the tab to
+  gives the server back what the tab shows (`releaseAfterFailedOpen`: focus
+  the file still on screen, else background), so `gg session files` never
+  says `shown` for an overview no tab could load; the steer reply's `shown`
+  still means "the tabs were told". **Browser Back:** an anchor's open
+  pushes ONE history entry (`ownBack`, `{gg: "back"}`, re-read from
+  `history.state` on load); `popstate` runs `anchorBack` when the file came
+  from an anchor; backspace leaves the entry for the next open, so a Back
+  after backspace came back is used up instead of leaving gg web. The
+  document's type grows with a large window (`.vdoc` font-size clamp
+  12–17px; the 100ch column grows with it).
 
 ## Agent spawn (agent orchestration stage 2)
 

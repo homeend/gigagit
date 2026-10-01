@@ -134,11 +134,10 @@ function anchorTarget(a) {
 
 // keepAnchor is the selection after the text changed: the anchor at the same
 // place with the same destination, else the first with it, else none.
-function keepAnchor(next, prev, sel) {
-  if (sel < 0 || !prev[sel]) return -1;
-  const dest = prev[sel].dest;
-  if (next[sel] && next[sel].dest === dest) return sel;
-  return next.findIndex((a) => a.dest === dest);
+function keepAnchor(next, want, sel) {
+  if (!want) return -1;
+  if (next[sel] && next[sel].dest === want) return sel;
+  return next.findIndex((a) => a.dest === want);
 }
 // backAnchor is the anchor backspace returns to: the one with the
 // destination it left from (a set may have moved it), else the same place
@@ -188,6 +187,15 @@ function evictedText(path, cap) {
 function ovAnswerApplies(mine, applied) {
   return mine > applied;
 }
+
+// releaseAfterFailedOpen is what a tab tells the server after an open the
+// server already moved it to (regId) failed to load: the file it still shows
+// (shownId) is in front again, else it shows nothing; null when it still
+// shows regId or the server never heard of the open.
+function releaseAfterFailedOpen(regId, shownId) {
+  if (!regId || regId === shownId) return null;
+  return shownId ? { op: "focus", id: shownId } : { op: "background", id: regId };
+}
 // --- end overview model ---
 
 // --- the overlay -------------------------------------------------------------
@@ -203,7 +211,13 @@ const places = new Map(); // id → {cur, top}: where THIS tab left each file
 let loadSeq = 0; // bumped by every open: a reload that sees it move drops (L9)
 let ovSeq = 0; // bumped by every overview refresh (refreshOverview)
 let ovApplied = 0; // the refresh whose answer applied last: an older answer landing later drops
-let ovLast = Promise.resolve(false); // the last refresh started
+let ovLast = Promise.resolve(false); // the last refresh started …
+let ovLastSeq = 0; // … and its place (an open's own fetch takes one too)
+// ownBack: the one browser-history entry an anchor's open adds, so the
+// browser's Back (its button, Alt+←, a mouse's back button) comes back like
+// backspace. Never more than one; a Back with no way back just uses it up
+// instead of leaving the page.
+let ownBack = history.state?.gg === "back";
 let cursorTimer = null;
 
 function ofPost(body) {
@@ -307,19 +321,25 @@ $("viewer-body").addEventListener("contextmenu", (e) => {
 async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "" }) {
   const seq = ++loadSeq;
   if (isOpen()) rememberPlace();
-  let reg, body, ov;
+  let reg, body, ov, ovMine;
   try {
     reg = id ? await ofPost({ op: "focus", id }) : await ofPost({ op: "open", src, rev, path, line });
-    if (reg.file.source === "overview") ov = await fetchOverview(reg.file.id);
-    else body = await fetchContent(reg.file.source, reg.file.rev || "", reg.file.path);
+    if (reg.file.source === "overview") {
+      ovMine = ++ovSeq; // a refresh started before this fetch is older than its answer
+      ov = await fetchOverview(reg.file.id);
+    } else body = await fetchContent(reg.file.source, reg.file.rev || "", reg.file.path);
   } catch (e) {
+    const back = seq === loadSeq ? releaseAfterFailedOpen(reg && reg.file.id, isOpen() ? view.id : "") : null;
+    if (back) ofPost(back).catch(() => {}); // the server moved this tab to a file it never showed
     opLine("view failed: " + (e.message || e), true);
     return { ok: false, notice: "" };
   }
   if (seq !== loadSeq) return { ok: false, notice: "" }; // a newer open won
   const f = reg.file;
   view.from = view.range = null; // an anchor's open sets them after
-  if (ov) return showOverview(f, ov);
+  // A refresh that started after this fetch and landed first is newer: keep it.
+  if (ov && view.ov && view.id === f.id && !ovAnswerApplies(ovMine, ovApplied)) ov = view.ov;
+  if (ov) return showOverview(f, ov, ovMine);
   view.ov = null;
   Object.assign(view, { id: f.id, src: f.source, rev: f.rev || "", path: f.path, lines: body.lines || [] });
   view.notes = notesOf(body, view.src);
@@ -348,10 +368,11 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
 }
 
 // showOverview puts overview ov (entry f) on screen in document mode, where
-// this tab left it.
-function showOverview(f, ov) {
+// this tab left it; mine is its fetch's place in the refresh order.
+function showOverview(f, ov, mine) {
   Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], cur: 0, placeholder: "", image: null });
-  view.ov = { ...ov, sel: -1 };
+  view.ov = { ...ov, sel: -1, want: "" };
+  ovApplied = Math.max(ovApplied, mine);
   const place = places.get(f.id);
   viewerSearchBar.reset();
   viewerRoot.style.bottom = $("foot").offsetHeight + "px";
@@ -448,6 +469,7 @@ function anchorEl(i) {
 
 function selectAnchor(i) {
   view.ov.sel = i;
+  view.ov.want = view.ov.anchors[i]?.dest || ""; // kept while a refresh drops it, back when it returns
   paintAnchors();
   anchorEl(i)?.scrollIntoView({ block: "nearest" });
 }
@@ -462,7 +484,8 @@ function selectAnchor(i) {
 // every refresh it could wait on fails.
 function refreshOverview() {
   if (!view.ov || !viewerFileId()) return Promise.resolve(false);
-  ovLast = refreshOverviewAs(++ovSeq);
+  ovLastSeq = ++ovSeq;
+  ovLast = refreshOverviewAs(ovLastSeq);
   return ovLast;
 }
 
@@ -472,12 +495,12 @@ async function refreshOverviewAs(mine) {
   try {
     ov = await fetchOverview(id);
   } catch {
-    return mine !== ovSeq ? ovLast : false;
+    return ovLastSeq > mine ? ovLast : false;
   }
   if (seq !== loadSeq || id !== view.id || !view.ov) return false;
   if (!ovAnswerApplies(mine, ovApplied)) return true; // a newer answer is on screen
   ovApplied = mine;
-  view.ov = { ...ov, sel: keepAnchor(ov.anchors || [], view.ov.anchors, view.ov.sel) };
+  view.ov = { ...ov, sel: keepAnchor(ov.anchors || [], view.ov.want, view.ov.sel), want: view.ov.want };
   paintTitle();
   rerenderKeepingScroll();
   return true;
@@ -490,7 +513,11 @@ async function openAnchorAt(i) {
   if (!view.ov || !view.ov.anchors[i]) return;
   const id = view.id;
   selectAnchor(i);
-  await refreshOverview(); // keeps the selection by its destination
+  if (!(await refreshOverview())) { // keeps the selection by its destination
+    // Nothing re-checked the list since the click: open nothing on the old one.
+    if (view.ov && view.id === id) opLine("could not re-check the overview — try the anchor again", true);
+    return;
+  }
   const a = view.ov && view.id === id ? view.ov.anchors[view.ov.sel] : null;
   if (!a) return;
   const from = { id, sel: view.ov.sel, dest: a.dest };
@@ -500,14 +527,24 @@ async function openAnchorAt(i) {
   const r = await openViewer({ src: "worktree", path: t.path, line: t.line });
   if (!r.ok) return;
   view.from = from;
+  if (!ownBack) {
+    history.pushState({ gg: "back" }, "");
+    ownBack = true;
+  }
   view.range = t.end > t.line ? { start: t.line, end: t.end } : null;
   rerenderKeepingScroll();
   swapFoot(true);
   if (t.note) $("viewer-body").querySelector(`.vnote[data-note="${t.note}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
-// anchorBack is backspace in a file an anchor opened: the overview comes
-// back with that anchor selected; the file stays open. One step deep.
+window.addEventListener("popstate", () => {
+  ownBack = false;
+  if (view.from && isOpen()) anchorBack();
+});
+
+// anchorBack is backspace (or the browser's Back) in a file an anchor
+// opened: the overview comes back with that anchor selected; the file stays
+// open. One step deep.
 async function anchorBack() {
   const f = view.from, id = view.id;
   view.from = null;
@@ -787,7 +824,7 @@ function viewerFoot() {
       `<button data-vact="ytext">y copy text</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
-  const back = view.from ? `<button data-vact="back">bksp back</button>` : "";
+  const back = view.from ? `<button data-vact="back" title="or your browser's Back">bksp back</button>` : "";
   const notes = view.notes.length
     ? `<span>} { notes</span><button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>`
     : "";
@@ -987,7 +1024,7 @@ registerHelp({
     "<b>↑↓ j k</b> line, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close; " +
     "an agent's notes (<code>gg session note</code>) sit under their lines: <b>} {</b> next / previous note, <b>d</b> dismiss, <b>r</b> copy its reference; " +
     "an agent's overview (<code>gg session overview</code>) opens as a document: <b>tab / shift+tab</b> select an anchor, <b>enter</b> or a click opens it, " +
-    "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> in the file an anchor opened comes back",
+    "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> (or the browser's Back) in the file an anchor opened comes back",
 });
 
 export { closeViewer, dropViewer, evictedText, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };

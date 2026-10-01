@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overviews in gg web: browser Back, large screens, follow-ups
+
+### Added
+
+- **gg web:** the browser's Back (its button, Alt+←, a mouse's back button)
+  in a file an anchor opened returns to the overview, like backspace —
+  before, it left gg web.
+- **gg web:** an overview's text and reading column grow with a large
+  window (12px up to ~1200px wide, at most 17px).
+
+### Fixed
+
+- **gg web:** an anchor whose re-check failed opens nothing and says so,
+  instead of opening on the list from before the click.
+- **gg web:** re-opening the overview on screen while it changes no longer
+  lets an older reload's text land over the fresher one.
+- **gg web:** the selected anchor is selected again when the agent removes
+  it and adds it back.
+- **gg web:** a tab that could not load an overview no longer counts as
+  showing it in `gg session files`. The using-gg skill is v119.
+
 ## Agents start agents (orchestration stage 2)
 
 ### Added
