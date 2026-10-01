@@ -12,7 +12,7 @@ func TestKeyTokenRoundTrip(t *testing.T) {
 	toks := []string{"enter", "esc", "space", "tab", "up", "down", "left", "right",
 		"bspace", "delete", "home", "end", "pgup", "pgdown",
 		"C-t", "C-g", "C-c", "C-\\", "C-]", "M-a", "M-t", "M-down",
-		"a", ".", "?", "#", "D", " "}
+		"a", ".", "?", "#", "D", " ", "<", "M-<", "M->"}
 	for _, tok := range toks {
 		msg, err := keyMsgFor(tok)
 		if err != nil {
