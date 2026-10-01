@@ -88,6 +88,9 @@ var settingDocs = []settingDoc{
 	{"console", "shell", "", "Open terminal (Worktrees . menu): the shell to run; empty = $SHELL (else sh) on Unix, pwsh → powershell → cmd on Windows"},
 
 	{"tasks", "max_parallel", 3, "AI tasks (commit message, review, conflict agents) running at once, headless and interactive counted together; clamped to 1..10; agent sessions you start yourself and terminals are not counted"},
+	{"agents", "reserved", nil, "worktrees never handed to an orchestrating agent (gg worktree list --free / claim): a list of paths relative to the main worktree, or absolute; REPO file only (a global value is ignored); edit with gg worktree reserve|unreserve or the TUI Worktrees . menu"},
+	{"agents", "stale_after", "14d", "how long a dirty worktree must sit untouched before an agent may recycle it (its changes are shelved): <n>d|w|m|y"},
+	{"agents", "allow_main", false, "let agents take the main checkout"},
 	{"web", "serve", nil, "serve the gg web page from the TUI process at startup, so the browser and the terminal share agent sessions (default: false — start it on demand with the command palette's Open in browser)"},
 	{"web", "addr", nil, "listen address for the TUI-hosted web page, loopback only (default: 127.0.0.1:0 = a random port each run; set e.g. \"127.0.0.1:7777\" for a stable bookmark; `gg --web-addr` overrides it for one run)"},
 
@@ -185,7 +188,7 @@ func Template() string {
 	b.WriteString("# gg configuration — every setting with its default.\n")
 	b.WriteString("# Uncomment a line to override the default. Values shown are gg's built-in\n")
 	b.WriteString("# defaults; leaving a line commented keeps tracking the default across versions.\n")
-	for _, section := range []string{"worktree", "ui", "debug", "refresh", "versions", "notes", "branches", "tools", "console", "tasks", "web"} {
+	for _, section := range []string{"worktree", "ui", "debug", "refresh", "versions", "notes", "branches", "tools", "console", "tasks", "agents", "web"} {
 		b.WriteString("\n[" + section + "]\n")
 		for _, d := range settingDocs {
 			if d.section != section {

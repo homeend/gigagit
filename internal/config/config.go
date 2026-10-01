@@ -219,6 +219,7 @@ type Config struct {
 	Branches BranchesConfig `toml:"branches"`
 	Console  ConsoleConfig  `toml:"console"`
 	Tasks    TasksConfig    `toml:"tasks"`
+	Agents   AgentsConfig   `toml:"agents"`
 	Web      WebConfig      `toml:"web"`
 
 	// Themes holds per-theme colour overrides, one [themes.<name>] table per
@@ -242,6 +243,7 @@ func Defaults() Config {
 		Notes:    NotesConfig{MaxAgeDays: 30, MaxEntries: 2000},
 		Console:  ConsoleConfig{StepOutKey: "ctrl+]", SessionsKey: "ctrl+\\"},
 		Tasks:    TasksConfig{MaxParallel: 3},
+		Agents:   AgentsConfig{StaleAfter: "14d"},
 	}
 }
 
@@ -251,7 +253,7 @@ func Defaults() Config {
 func Load(globalPath, repoPath string) (Config, error) {
 	cfg := Defaults()
 
-	for _, path := range []string{globalPath, repoPath} {
+	for i, path := range []string{globalPath, repoPath} {
 		layer, ok, err := decodeFile(path)
 		if err != nil {
 			return Config{}, err
@@ -268,6 +270,12 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayThemes(&cfg.Themes, layer.Themes)
 			overlayConsole(&cfg.Console, layer.Console)
 			overlayTasks(&cfg.Tasks, layer.Tasks)
+			overlayAgents(&cfg.Agents, layer.Agents)
+			if i == 0 {
+				// reserved is repo-only: paths belong to one repo, and a
+				// global entry could never be unreserved from it.
+				cfg.Agents.Reserved = nil
+			}
 			overlayWeb(&cfg.Web, layer.Web)
 		}
 	}
@@ -687,6 +695,31 @@ func (t TasksConfig) Parallel() (int, string) {
 }
 
 // overlayTasks copies the set (non-zero) [tasks] fields.
+// AgentsConfig governs which worktrees an orchestrating agent may take
+// (`gg worktree list --free`, `gg worktree claim`).
+type AgentsConfig struct {
+	// Reserved worktrees are never handed to an agent: paths relative to the
+	// main worktree, or absolute. Read from the repo file only.
+	Reserved []string `toml:"reserved"`
+	// StaleAfter is how long a dirty worktree must sit untouched before an
+	// agent may recycle it (shelving its changes): "<n>d|w|m|y".
+	StaleAfter string `toml:"stale_after"`
+	// AllowMain lets agents take the main checkout.
+	AllowMain bool `toml:"allow_main"`
+}
+
+func overlayAgents(dst *AgentsConfig, src AgentsConfig) {
+	if len(src.Reserved) > 0 {
+		dst.Reserved = src.Reserved
+	}
+	if src.StaleAfter != "" {
+		dst.StaleAfter = src.StaleAfter
+	}
+	if src.AllowMain {
+		dst.AllowMain = true
+	}
+}
+
 func overlayTasks(dst *TasksConfig, src TasksConfig) {
 	if src.MaxParallel != 0 {
 		dst.MaxParallel = src.MaxParallel

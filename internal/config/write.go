@@ -671,3 +671,17 @@ func ActiveRepoConfigPath(committedPath, privatePath string) string {
 	}
 	return committedPath
 }
+
+// SetAgentsReserved persists `[agents] reserved` to the given (repo) config
+// file, preserving comments; an empty list removes the key (an empty array
+// would be ignored by the overlay anyway).
+func SetAgentsReserved(path string, paths []string) error {
+	if len(paths) == 0 {
+		return setLineInSection(path, "agents", "reserved", "", true)
+	}
+	q := make([]string, len(paths))
+	for i, p := range paths {
+		q[i] = strconv.Quote(p)
+	}
+	return setScalarLine(path, "agents", "reserved", "["+strings.Join(q, ", ")+"]")
+}

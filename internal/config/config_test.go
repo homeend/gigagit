@@ -839,3 +839,27 @@ func TestUIReadingWidthLayers(t *testing.T) {
 		t.Errorf("a zero repo value is unset: got %d (%v), want 90", cfg.UI.ReadingWidth, err)
 	}
 }
+
+func TestAgentsLayers(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	global := filepath.Join(d, "g.toml")
+	repo := filepath.Join(d, "r.toml")
+	os.WriteFile(global, []byte("[agents]\nstale_after = \"7d\"\nreserved = [\"a\"]\n"), 0o644)
+	os.WriteFile(repo, []byte("[agents]\nreserved = [\"b\", \"c\"]\nallow_main = true\n"), 0o644)
+	c, err := Load(global, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Agents.StaleAfter != "7d" || !c.Agents.AllowMain || len(c.Agents.Reserved) != 2 || c.Agents.Reserved[0] != "b" {
+		t.Fatalf("Agents = %+v", c.Agents)
+	}
+	os.WriteFile(repo, []byte("[agents]\nallow_main = true\n"), 0o644)
+	c, _ = Load(global, repo)
+	if len(c.Agents.Reserved) != 0 {
+		t.Fatalf("a GLOBAL reserved list must be ignored, got %q", c.Agents.Reserved)
+	}
+	if Defaults().Agents.StaleAfter != "14d" {
+		t.Fatalf("default stale_after = %q", Defaults().Agents.StaleAfter)
+	}
+}
