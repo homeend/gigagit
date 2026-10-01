@@ -218,6 +218,7 @@ func globalBindings() []footerBinding {
 		}, scopeGlobal},
 		{"last-agent", "alt+a", i18n.T("[alt+a] last agent"), func(m Model) bool { return m.hasRepoSessions(false) }, scopeGlobal},
 		{"last-terminal", "alt+t", i18n.T("[alt+t] last terminal"), func(m Model) bool { return m.hasRepoSessions(true) }, scopeGlobal},
+		{"text-templates", "alt+x", i18n.T("[alt+x] templates"), Model.opsIdle, scopeGlobal},
 		{"notices", "!", i18n.T("[!] notices"), func(m Model) bool { return len(m.notices) > 0 }, scopeGlobal},
 		{"last-error", "E", i18n.T("[E] full message"), func(m Model) bool { return m.lastError != "" }, scopeGlobal},
 		{"find", "F", i18n.T("[F] find file"), Model.opsIdle, scopeGlobal},

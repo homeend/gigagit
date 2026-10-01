@@ -1,0 +1,50 @@
+name = "tui: text templates window — browse, fill the variables, rendered text"
+
+# alt+x opens the window: the titles (global rows, then this repo's), the
+# selected template's text and the variables it asks for. enter collects the
+# <user:…> values one by one; the rendered text resolves <branch> and the
+# (frozen) <date> and leaves an unknown <br> as written.
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" },
+  { commit = "add a" },
+  { write = "pr.md", content = "## <user:title>\n\nBranch: <branch> · <date>\nTicket: <user:ticket>\n\n### What changed<br>\n- first point\n" },
+  { write = "standup.md", content = "Yesterday:\nToday:\n" },
+]
+
+[[run]]
+cmd  = ["template", "add", "--global", "--title", "PR description", "-F", "pr.md"]
+exit = 0
+
+[[run]]
+cmd  = ["template", "add", "--title", "Standup note", "-F", "standup.md"]
+exit = 0
+
+[tui]
+size = "120x36"
+
+[[tui.step]]
+name = "browse"
+keys = ["M-x"]
+screen_contains = ["Text templates", "> PR description", "[global]", "Standup note", "[this repo]", "## <user:title>", "Variables: title · ticket", "Automatic: <branch> · <date>", "[enter] fill"]
+
+[[tui.step]]
+name = "fill"
+keys = ["enter", "Hello"]
+screen_contains = ["PR description — fill variables (1/2)", "> title: Hello", "ticket:"]
+
+[[tui.step]]
+name = "rendered"
+keys = ["enter", "GG-1", "enter"]
+screen_contains = ["PR description — rendered", "## Hello", "Branch: main · 2026-01-02", "Ticket: GG-1", "### What changed<br>", "[y] copy and close"]
+
+[[tui.step]]
+name = "back-to-browse"
+keys = ["esc", "down"]
+screen_contains = ["> Standup note", "Yesterday:"]
+screen_excludes = ["Variables:"]
+
+[[tui.step]]
+name = "closed"
+keys = ["esc"]
+screen_excludes = ["Text templates"]

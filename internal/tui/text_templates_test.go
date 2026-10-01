@@ -521,3 +521,48 @@ func TestTextTemplatesDeleteNeedsConfirm(t *testing.T) {
 		t.Fatal("y must issue the remove command")
 	}
 }
+
+func TestTextTemplatesAdvertised(t *testing.T) {
+	t.Parallel()
+	var help strings.Builder
+	for _, l := range helpContent() {
+		help.WriteString(l.text + "\n")
+	}
+	if !strings.Contains(help.String(), "alt+x") {
+		t.Error("alt+x is missing from help")
+	}
+	var entry *paletteCommand
+	for _, c := range paletteCommands() {
+		if c.keyHint == "alt+x" {
+			entry = &c
+		}
+	}
+	if entry == nil {
+		t.Fatal("the command palette has no text templates entry")
+	}
+	// Running it from the palette closes the palette and opens the window.
+	m := loadedModel(t)
+	m, _ = m.openCommandPalette()
+	out, cmd := entry.run(m)
+	if layerOf[*textTemplatesView](out) == nil || layerOf[*commandPalette](out) != nil || cmd == nil {
+		t.Fatal("the palette entry must swap the palette for the window")
+	}
+	footer := false
+	for _, b := range globalBindings() {
+		if b.key == "alt+x" {
+			footer = true
+		}
+	}
+	if !footer {
+		t.Error("alt+x is missing from the footer bindings")
+	}
+}
+
+func TestAltXIgnoredUnderALayer(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t).pushLayer(&prefixSettingsView{})
+	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}, Alt: true})
+	if layerOf[*textTemplatesView](out.(Model)) != nil {
+		t.Fatal("alt+x opened the window over another layer")
+	}
+}
