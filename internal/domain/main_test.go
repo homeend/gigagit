@@ -15,7 +15,15 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("XDG_CONFIG_HOME", dir)
+	// The session registry lives under XDG state: no test may read (or
+	// sweep) the developer's real one.
+	state, err := os.MkdirTemp("", "gg-domain-state")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_STATE_HOME", state)
 	code := m.Run()
+	os.RemoveAll(state)
 	os.RemoveAll(dir)
 	os.Exit(code)
 }

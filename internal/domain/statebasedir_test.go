@@ -20,6 +20,7 @@ func TestStateBaseDirKinds(t *testing.T) {
 		"previews",
 		"profile",
 		"search",
+		"sessions",
 		"shelf",
 		"linkhist",
 		"tasks",
