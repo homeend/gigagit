@@ -117,12 +117,12 @@ type noteRow struct {
 // notesFor aligns path's notes to data, the working-tree bytes just read,
 // and returns them for the page (nil when path has none).
 func (s *Server) notesFor(ctx context.Context, path string, data []byte) []noteRow {
-	root := s.docsRoot(ctx)
-	if s.docs.NoteCount(root, path) == 0 {
+	// One store call aligns and reads: positions for exactly these bytes,
+	// even while a hosting TUI aligns the same path to another read.
+	ns := s.docs.AlignedNotes(s.docsRoot(ctx), path, agentdocs.Lines(data))
+	if len(ns) == 0 {
 		return nil
 	}
-	s.docs.Align(root, path, agentdocs.Lines(data))
-	ns, _ := s.docs.Notes(root, path)
 	out := make([]noteRow, len(ns))
 	for i, n := range ns {
 		out[i] = noteRow{ID: n.ID, Start: n.Start, End: n.End, Summary: n.Summary, Rationale: n.Rationale,

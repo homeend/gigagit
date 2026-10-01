@@ -209,3 +209,18 @@ func TestPinnedEntriesAreNeverEvicted(t *testing.T) {
 		t.Fatalf("list = %d, want the cap held by evicting the others", got)
 	}
 }
+
+// A failed TopLevel falls back to the opened directory for this call only:
+// a cached fallback would file this page's notes under a key the TUI never
+// uses, for good.
+func TestDocsRootDoesNotCacheAFailedLookup(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir() // not a repository: TopLevel fails
+	s := New(domain.Open(dir))
+	if got := s.docsRoot(context.Background()); got != domain.CheckoutKey(dir) {
+		t.Fatalf("root = %q, want the fallback %q", got, domain.CheckoutKey(dir))
+	}
+	if s.rootc.svc != nil {
+		t.Fatal("a failed lookup was cached")
+	}
+}

@@ -157,6 +157,33 @@ func (s *Store) Align(root, path string, lines []string) bool {
 	return changed
 }
 
+// AlignedNotes is Align then Notes under ONE lock: the positions returned
+// are for exactly these lines, whatever another side aligns meanwhile (the
+// web reads a file and answers with its lines and notes together). No
+// lines, or a path without notes, is nil.
+func (s *Store) AlignedNotes(root, path string, lines []string) []Note {
+	lines = canon(lines)
+	if len(lines) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	f := s.files[fileKey{root, path}]
+	if f == nil {
+		s.mu.Unlock()
+		return nil
+	}
+	changed := f.align(lines)
+	out := make([]Note, len(f.notes))
+	for i, n := range f.notes {
+		out[i] = n.Note
+	}
+	s.mu.Unlock()
+	if changed {
+		s.b.signal()
+	}
+	return out
+}
+
 func (f *fileNotes) align(cur []string) bool {
 	p := Print(cur)
 	if p == f.print {

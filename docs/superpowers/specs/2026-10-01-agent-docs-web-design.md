@@ -300,7 +300,7 @@ already says).
   to the store and runs one **follow pass** at start, on every signal, and
   from `adoptService` (`reroot.go`, shared by the hosted `Reroot` and the
   standalone re-root) right after the new service is adopted. A pass reads
-  the served root live (`CheckoutKey(s.service().Root())`) and, for that
+  the served root live (`CheckoutKey` of the served worktree's TOPLEVEL — `svc.Root()` may be a subdirectory) and, for that
   root: opens every path in `NotedPaths` that has no entry in the page's
   list in the background (the TUI's note_add rule) and marks noted entries
   `pinned`, clearing `pinned` on entries whose notes are gone (plan 2 adds

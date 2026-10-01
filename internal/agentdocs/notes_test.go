@@ -263,3 +263,22 @@ func TestNotedPathsAndRootsAreSeparate(t *testing.T) {
 		t.Fatalf("NotedPaths = %s", got)
 	}
 }
+
+// AlignedNotes aligns and reads under one lock: the positions it returns
+// are always for the lines it was handed, whatever else aligns meanwhile.
+func TestAlignedNotesReturnsPositionsForTheLinesGiven(t *testing.T) {
+	t.Parallel()
+	s := New()
+	n := addOn(t, s, abc(), 3, 4)
+	newer := []string{"NEW", "a", "b", "c", "d", "e"}
+	ns := s.AlignedNotes(root, "f.go", newer)
+	if len(ns) != 1 || ns[0].ID != n.ID || ns[0].Start != 4 {
+		t.Fatalf("notes = %+v, want 4-5 for the newer lines", ns)
+	}
+	if ns := s.AlignedNotes(root, "f.go", nil); ns != nil {
+		t.Fatalf("no lines (a placeholder) must answer no notes, got %+v", ns)
+	}
+	if ns := s.AlignedNotes(root, "other.go", abc()); ns != nil {
+		t.Fatalf("a path without notes: %+v", ns)
+	}
+}

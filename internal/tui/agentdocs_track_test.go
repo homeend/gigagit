@@ -103,3 +103,22 @@ func TestAReloadAlignsTheNotesThroughTheStore(t *testing.T) {
 		t.Fatalf("note = %+v, want 4-5", g)
 	}
 }
+
+// A file whose notes arrive through the store (filed by the page it hosts)
+// follows the TUI's rule all the same: esc steps aside, only X closes.
+func TestEscKeepsAFileWhoseNotesCameFromTheStore(t *testing.T) {
+	t.Parallel()
+	m := privateDocsModel(t)
+	src := fileSource{kind: srcWorktree}
+	d := bgDoc(m, src, "a.txt", 5)
+	d.backgrounded = false // opened in the foreground
+	m = m.pushLayer(&fileViewer{d})
+	if _, err := m.docs.AddNote(d.root, d.path, rawOf(d.p.lines), 2, 2, "from elsewhere", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.onAgentDocsChanged()
+	m = m.escDoc(d)
+	if m.openFiles.find(m.currentWorktree, d.key()) != d || m.docs.NoteCount(d.root, d.path) != 1 {
+		t.Fatal("esc closed a noted file and dropped its notes")
+	}
+}

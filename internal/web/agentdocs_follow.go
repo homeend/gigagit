@@ -22,19 +22,28 @@ type docsRootCache struct {
 	root string
 }
 
-// docsRoot is the root the served worktree's notes are filed under.
+// docsRoot is the root the served worktree's notes are filed under. The git
+// call runs OUTSIDE the cache's lock (it may wait behind a running op), and
+// only a successful answer is cached: the fallback — the directory the
+// service was opened at — holds for this call alone.
 func (s *Server) docsRoot(ctx context.Context) string {
 	svc := s.service()
 	s.rootc.mu.Lock()
-	defer s.rootc.mu.Unlock()
-	if s.rootc.svc != svc {
-		top, err := svc.TopLevel(ctx)
-		if err != nil {
-			top = svc.Root()
-		}
-		s.rootc.svc, s.rootc.root = svc, domain.CheckoutKey(top)
+	if s.rootc.svc == svc {
+		root := s.rootc.root
+		s.rootc.mu.Unlock()
+		return root
 	}
-	return s.rootc.root
+	s.rootc.mu.Unlock()
+	top, err := svc.TopLevel(ctx)
+	if err != nil {
+		return domain.CheckoutKey(svc.Root())
+	}
+	root := domain.CheckoutKey(top)
+	s.rootc.mu.Lock()
+	s.rootc.svc, s.rootc.root = svc, root
+	s.rootc.mu.Unlock()
+	return root
 }
 
 // ofList is wt's open files with each working-tree file's note count.

@@ -53,6 +53,9 @@ func (d *openFile) syncNotes() (stale bool) {
 		return true
 	}
 	d.notes = ns
+	if len(ns) > 0 {
+		d.backgrounded = true // however the notes came (the page it hosts): esc steps aside, only X closes
+	}
 	d.syncNoteRows()
 	return false
 }
