@@ -60,6 +60,9 @@ func (m Model) ensureTaskTrack() Model {
 type tasksChangedMsg struct{}
 
 func (m Model) waitTasksCmd() tea.Cmd {
+	if m.quiet {
+		return nil // headless: never-ending (headless.go)
+	}
 	if m.taskTrack == nil {
 		return nil // a Model built as a literal (tests); ensureTaskTrack runs on the first change
 	}

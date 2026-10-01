@@ -209,6 +209,9 @@ func (m Model) openInBrowser() (Model, tea.Cmd) {
 // startupWebCmd serves at launch when [web] serve or --web asks for it (the
 // browser is not opened). nil otherwise.
 func (m Model) startupWebCmd() tea.Cmd {
+	if m.quiet {
+		return nil // headless: never-ending (headless.go)
+	}
 	if NewWebHost == nil || !(m.cfg.Web.Serve || m.webOpts.Web) || m.web == nil || m.web.host != nil || m.web.starting {
 		return nil
 	}
@@ -279,6 +282,9 @@ func rerootWebCmd(h WebHost, svc *domain.Service) tea.Cmd {
 
 // webRerootCmd is reRoot's hook: nil when no page is served.
 func (m Model) webRerootCmd() tea.Cmd {
+	if m.quiet {
+		return nil // headless: never-ending (headless.go)
+	}
 	if !m.webServing() {
 		return nil
 	}

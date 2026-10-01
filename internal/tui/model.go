@@ -3239,6 +3239,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// unconditional inbox poll. The poll is the safety net for a watcher that
 		// failed to start; it is NOT gated on gitwatch.Supported, which probes the
 		// REPO's filesystem while the inbox lives in the state dir.
+		if m.quiet {
+			// Headless (headless.go): the scheduler, polls, snapshot and
+			// steering all run on wall-clock time; a golden screen pins
+			// rendering, not background refresh. The tick only re-parks.
+			return m, m.heartbeatCmd()
+		}
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
 		var prcCmd, docCmd tea.Cmd
