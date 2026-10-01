@@ -63,8 +63,9 @@ browser — and, when the TUI hosts the page, is the **same** data in both.
                      overviews per root · f<n>/t<n> counters · signal
 ```
 
-The store is a DAG leaf: stdlib + `internal/markdown` + `internal/steer`
-(wire types only) and their closures (`markdown` pulls `syntax`/chroma). The
+The store is a DAG leaf: stdlib + `internal/steer` (wire types only) +
+`internal/textdiff` (the alignment engine) + `internal/markdown` (plan 2)
+and their closures (`markdown` pulls `syntax`/chroma). The
 TUI and the web import it directly (as they import `steer`); it holds no git
 state, so it is not reached through `domain`. It lives outside every
 `domain.Service`, so it survives the TUI's re-root.
@@ -310,9 +311,9 @@ already says).
   and the response gains `notes: [{id, start, end, summary, rationale,
   author, outdated, ref}]` (`ref` = `NoteReference`). Commit and shelf
   versions never carry notes; the F finder's preview ignores the field.
-- **`GET /api/file-notes?path=`** — the current notes of a working-tree
-  path (after a dismiss in the terminal the page re-fetches notes without
-  re-reading the file).
+- **No separate notes GET.** On an `agentdocs` live message the page
+  re-reads `/api/file-content` (which aligns and returns lines + notes in
+  one answer), so notes are never paired with lines from another read.
 - **`POST /api/file-notes {op:"dismiss", id}`** (write guard) —
   `RemoveNote`; 404-style refusal text `no note <id>` when gone.
 - **Closing — decided by the server.** The page's esc and backdrop click
