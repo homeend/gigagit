@@ -30,7 +30,8 @@ written exactly like `prefix.FileStore` (same root per scope, same atomic
 rewrite). DAG position as `prefix`: owned by `domain`, frontends never
 import it.
 
-- The ID is derived from the title (as `PrefixID` derives from the value). A
+- Rows list alphabetically by title. The ID is a slug of the title (letters
+  and digits of any script; a title with neither is refused). A
   title is unique within a scope; adding a duplicate title is an error.
   `Update` keeps the ID when only the body changes; a title change re-derives
   it. Moving a template between scopes is remove + add.
@@ -149,8 +150,8 @@ The rendered step shows the resolved text, soft-wrapped and scrollable:
 ```
 
 - `y` copies through the existing clipboard path, bumps the consumed
-  sequences, pops the whole window, and sets a "copied" status message. A
-  failed copy keeps the window open and shows the clipboard error.
+  sequences and pops the whole window; the outcome ("copied" or the
+  clipboard error) is the status line, as for every other copy action.
 - `esc` returns to browse (the fill values are dropped).
 - A resolve error is shown in place of the text; only `esc` is offered.
 
@@ -170,17 +171,20 @@ All strings go through `i18n.T` with keys in the four bundles.
 
 `gg template` (alias `gg templates` for `list`), mirroring `cli/prefix.go`:
 
-- `list` — `id  [scope]  title`, one per line.
+- `list` — `id<TAB>scope<TAB>title`, one per line.
 - `show <id>` — the raw body, then the variables.
-- `render <id> [--var label=value …]` — the resolved text on stdout. A
-  missing `--var` is an error naming the label; consumes sequences.
-- `add --title <t> [--repo] [-F <file>]` — body from the file, or stdin.
-- `edit <id> [--title <t>] [-F <file>]` — body from the file, or stdin when
-  piped; with neither, only the title changes.
-- `remove <id> [--repo]`.
+- `render <id> [--set label=value …] [--peek]` — the resolved text on
+  stdout. A missing `--set` is an error naming the label; consumes
+  sequences unless `--peek`.
+- `add --title <t> [--global] -F <file|->` — body from the file, `-` =
+  stdin.
+- `edit <id> [--title <t>] [-F <file|->]` — at least one of the two.
+- `rm <id>`.
 
-An id may be given as a unique prefix; the repo scope wins a tie between
-scopes unless `--global` is passed. `internal/agentskill/using-gg.md` gains
+Flags mirror `gg prefix`: the scope defaults to this repo, `--global`
+selects the global one, variables are `--set label=value`. An id may be
+given as a unique prefix; the repo scope wins a tie between scopes unless
+`--global` is passed. `internal/agentskill/using-gg.md` gains
 the verbs (bump `agentskill.Version`).
 
 ## Web
@@ -190,8 +194,9 @@ lines, a fill dialog, the rendered text with a Copy button
 (`navigator.clipboard`, the existing copy helper). Add and edit use a
 dialog with a title field, scope select and a `<textarea>`. Endpoints,
 beside `web/prefixes.go`: `GET /api/text-templates`, `POST …/add`,
-`POST …/update`, `POST …/remove`, `POST …/render` (`{id, scope, inputs,
-take}` — `take: true` bumps sequences; the page calls it on Copy). Mutating
+`POST …/update`, `POST …/remove`, `POST …/render` (`{id, scope, inputs}`,
+peeks) and `POST …/take` (`{seq_names}`, bumps; the page calls it after a
+successful Copy). Mutating
 routes carry the same guards as the prefix routes. Opened from the palette
 and `alt+x`.
 
