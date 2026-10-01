@@ -305,6 +305,42 @@ func withReviewLines(reviews []domain.Review, lines []contentLine) []contentLine
 	return append(out, lines...)
 }
 
+// notedElsewhere lists, sorted, the paths with notes at commit hash that the
+// commit does not change — counted in its Commits ◆ N (a merge preview's note
+// is stored on the source tip), so its Files view must reach them too.
+func notedElsewhere(byCommitPath map[string]int, hash string, files []model.CommitFile) []string {
+	changed := make(map[string]bool, len(files))
+	for _, f := range files {
+		changed[f.Path] = true
+	}
+	var out []string
+	for k, n := range byCommitPath {
+		p, ok := strings.CutPrefix(k, hash+":")
+		if ok && n > 0 && !changed[p] {
+			out = append(out, p)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// withNotedLines puts those paths in front of a commit's files under a
+// "Notes" heading (the way withReviewLines lists its reviews).
+func withNotedLines(paths []string, lines []contentLine) []contentLine {
+	if len(paths) == 0 {
+		return lines
+	}
+	out := make([]contentLine, 0, len(paths)+1+len(lines))
+	out = append(out, contentLine{text: i18n.T("Notes"), heading: true})
+	for _, p := range paths {
+		out = append(out, contentLine{text: "  " + p, notedPath: p, elideHead: 2})
+	}
+	if len(lines) == 1 && lines[0].path == "" && !lines[0].heading {
+		return out // "(no files)": the notes are the whole list
+	}
+	return append(out, lines...)
+}
+
 // withShelfNoteLines puts a shelved set's own notes in front of its members as
 // a "Notes" heading — the way withReviewLines lists a commit's reviews. A note
 // row has no path: it is not a file, so every file action passes it by.
@@ -1038,7 +1074,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.focusTree(), nil
 		}
 		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview && vis[p.sel].shelfNote == "") {
+		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview && vis[p.sel].shelfNote == "" && vis[p.sel].notedPath == "") {
 			return m, nil // heading row, placeholder, or empty view
 		}
 		return m.openDiffForFileLine(vis[p.sel])
@@ -1165,6 +1201,9 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
+	if l.notedPath != "" { // a commit's Notes row: its notes read in the viewer, esc comes back here
+		return m, m.commitNotesCmd(m.filesHash, l.notedPath)
 	}
 	if l.noteID != "" { // an @notes/ entry: the review opens as the review view, esc comes back here
 		back := m.filesCommit
@@ -1406,13 +1445,14 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		// (which matches l.text) never matches a file by its note count.
 		if m.filesPreviewSet != nil && l.path != "" {
 			text += noteBadge(m.filesPreviewCounts[l.path])
-		} else if l.path != "" && m.filesCommitBadges() {
-			// A commit's files: the notes anchored on the file AT this commit.
-			text += noteBadge(m.noteCounts.ByCommitPath[m.filesHash+":"+l.path])
+		} else if np := l.path + l.notedPath; np != "" && m.filesCommitBadges() {
+			// A commit's files (and its Notes rows): the notes anchored on
+			// the file AT this commit.
+			text += noteBadge(m.noteCounts.ByCommitPath[m.filesHash+":"+np])
 		}
 		// A file row cuts the middle of its path, never the name (headings
 		// were pre-elided above); a review row is prose and cuts at its end.
-		wr[i] = winRow{text: prefix + text, style: st, elide: l.path != "" && !l.heading && l.noteID == "", elideHead: len([]rune(prefix))}
+		wr[i] = winRow{text: prefix + text, style: st, elide: (l.path != "" || l.notedPath != "") && !l.heading && l.noteID == "", elideHead: len([]rune(prefix))}
 	}
 
 	lines := make([]string, 0, contentH)

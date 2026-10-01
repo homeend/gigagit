@@ -56,11 +56,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (`tui_merge_preview`), and alt+1/alt+2 hiding and show-only on the Branches
   panel with the checked-out branch exempt (`tui_branch_filter`).
 
+- **A commit's Files view lists the notes its ◆ N counts on files it does
+  not change**, under a **Notes** heading (`a.txt  ◆ 1`). A note written in
+  a merge preview is stored on the branch's tip, so the tip commit counted
+  it while its Files view showed nothing; enter on the row reads the notes.
+
 ### Fixed
 
 - **`gg shelf commit HEAD` records the commit, not the word "HEAD".** The
   entry showed as `commit / commit` and its id held `HEAD`; it named another
-  commit as soon as HEAD moved. Any rev is now resolved to its sha first.
+  commit as soon as HEAD moved. Any rev is now resolved to its sha first;
+  an ambiguous short sha says so (it read "unknown commit").
+- **Shelf entries made in the same instant list newest first** (the stable
+  sort kept them oldest first).
 - **`gg --record` keeps alt+<** (it took the `<` key for its `<...>`
   diagnostic and dropped it).
 - **The raw-timer guard allow-lists lines, not files**: a second wall-clock

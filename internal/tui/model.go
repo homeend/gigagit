@@ -955,7 +955,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.drainPendingFiles()
 		}
 		m.filesReview = nil // the commit list moved on: a plain commit view now
-		m.filesView.lines = withReviewLines(msg.reviews, commitFileLines(msg.files))
+		m.filesView.lines = withReviewLines(msg.reviews, withNotedLines(notedElsewhere(m.noteCounts.ByCommitPath, msg.hash, msg.files), commitFileLines(msg.files)))
 		m.filesView.sel = 0
 		var after tea.Cmd
 		if msg.noReviews { // a follow-live list: its reviews come once the cursor rests
@@ -1304,6 +1304,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 	case shelfNotesMsg:
 		return m.openShelfNotes(msg), nil
+	case commitNotesMsg:
+		return m.openCommitNotes(msg), nil
 	case shelfLoadedMsg:
 		// A disabled shelf (no state dir) reports its reason but is not fatal.
 		if msg.err != nil {

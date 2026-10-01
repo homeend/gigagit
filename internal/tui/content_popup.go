@@ -57,6 +57,10 @@ type contentLine struct {
 	// shelfNote is a shelved set's note row (its note id): no path, so every
 	// file action passes it by; enter reads the note, the stack shows its text.
 	shelfNote string
+	// notedPath is a commit's Notes row: a path with notes AT the commit that
+	// the commit does not change (a merge preview's note on the source tip).
+	// No path, so every file action passes it by; enter reads its notes.
+	notedPath string
 	// elideHead is how many leading runes of text an elided row keeps whole
 	// (a note row's "└ date " lead): the middle-cut starts after them.
 	elideHead int
