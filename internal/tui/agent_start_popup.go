@@ -147,11 +147,11 @@ func (p *agentStartPopup) start(m Model) (tea.Model, tea.Cmd) {
 	m = m.popLayer()
 	g := m.layout()
 	cols, rows := consoleInner(g.rightW, g.boxH[panelCommits])
-	svc, tc, dir, env, inbox := m.svc, p.pick, p.worktree, m.childEnv(), m.childInboxDir()
+	svc, tc, dir, env, inbox, url := m.svc, p.pick, p.worktree, m.childEnv(), m.childInboxDir(), m.agentURL()
 	cwd, note, _ := sessionPlace(dir)
 	m.statusMsg = i18n.T("starting %s…", tc.Name)
 	return m, func() tea.Msg {
-		s, err := svc.StartSession(context.Background(), tc, dir, cwd, cols, rows, env)
+		s, _, err := svc.StartAgentSession(context.Background(), tc, dir, cwd, cols, rows, env, url, domain.SpawnRecord{}, "")
 		if err != nil {
 			return agentStartedMsg{name: tc.Name, err: err}
 		}

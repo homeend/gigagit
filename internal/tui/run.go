@@ -102,6 +102,8 @@ func Run(svc *domain.Service, opts RunOptions) (string, error) {
 	// resolved; the watcher itself starts from Init().
 	m.steerDir = steerDirFor(m.snapshotCommonDir, m.snapshotWorktree)
 	m = m.initSteerInbox()
+	m = m.startAgentHost()
+	defer m.closeAgentHost() // after Run's KillAll; also on an early p.Run error
 	if recordPath != "" {
 		repo := ""
 		if top, err := svc.TopLevel(context.Background()); err == nil {

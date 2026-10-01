@@ -47,6 +47,7 @@ func main() {
 	// Services the hosted server opens itself take the TUI's ssh-batch
 	// runner, so no ssh prompt can reach the raw-mode terminal.
 	tui.NewWebHost = func(svc *domain.Service) tui.WebHost { return web.NewHost(svc, domain.OpenTUI, true) }
+	tui.NewAgentHost = func() tui.AgentHost { return agentHostAdapter{mcp.NewAgentHost()} }
 	// `gg open --web <link>` with no live page in the link's checkout starts
 	// gg web there — the same runWeb the `web` subcommand runs, browser opened,
 	// the resolved command as the page's start-at (zero = a bare link).
@@ -389,3 +390,13 @@ func runInspect(args []string) {
 		os.Exit(1)
 	}
 }
+
+// agentHostAdapter converts the TUI's starter func to mcp.Starter (the two
+// frontends never import each other).
+type agentHostAdapter struct{ h *mcp.AgentHost }
+
+func (a agentHostAdapter) Start(s func(context.Context, domain.AgentStartRequest) (domain.AgentStartResult, error)) (string, error) {
+	return a.h.Start(mcp.Starter(s))
+}
+
+func (a agentHostAdapter) Close() { a.h.Close() }
