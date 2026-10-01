@@ -126,7 +126,7 @@ func TestSteerLandedWords(t *testing.T) {
 		{3, 5, true, "", "focused a at line 3"},
 		{9, 5, true, "", "focused a at line 5 (line 9 is past the end, 5 lines)"},
 		{3, 0, false, "", "focused a"},
-		{0, 5, true, "b.txt", "focused a; closed b.txt (20 files open)"},
+		{0, 5, true, "b.txt", "focused a; closed b.txt (100 files open)"},
 	} {
 		if got := steerLanded("focused a", tc.line, tc.n, tc.known, tc.ev); got != tc.want {
 			t.Errorf("steerLanded(%d,%d,%v,%q) = %q, want %q", tc.line, tc.n, tc.known, tc.ev, got, tc.want)

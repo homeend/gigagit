@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v120 -->
+<!-- gg:using-gg:v121 -->
 
 # Using gg (gigagit)
 
@@ -231,7 +231,7 @@ page is steered, a live TUI is asked to serve one, else one is started). Every o
 to build: `gg link --content <path>[:<line>]` → `gg open <link>`.
 
 **Open files — let the user read along.** The TUI and `gg web` each keep up
-to 20 files open per worktree (the ctrl+\ switcher lists them). You can use
+to 100 files open per worktree (the ctrl+\ switcher lists them). You can use
 that list:
 
 - `gg open <content-link> --background` (or `gg session navigate <link>
@@ -240,8 +240,8 @@ that list:
   left alone (`<path> is already open on screen`). Needs a live TUI or `gg web`
   page (exit 1 otherwise — it never launches one); with both live it goes to
   both and the TUI's answer decides (the page's is printed `web: …`); exit 2 for a link that is not a content
-  link. When a 21st file pushes one out, the answer ends
-  `; closed <path> (20 files open)`.
+  link. When a 101st file pushes one out, the answer ends
+  `; closed <path> (100 files open)`.
 - `gg session files [--json]` — the open files, one per line:
   `<id>\t<path>\t<source>\t<:line|->\t<shown|background>` — an overview's
   row shows its quoted title in the path column — focus it by its id, column
@@ -318,12 +318,13 @@ anchor they left.
   the destination in dim text. Links past the 100th anchor become plain label
   text with no warning.
 - `gg session overview add --title "…" [--file <md>] [--background] [--json]`
-  — the markdown from `--file` or stdin (≤ 64 KiB, ≤ 100 anchors, 20 overviews
+  — the markdown from `--file` or piped stdin — a terminal on stdin is
+  refused, never waited on (≤ 64 KiB, ≤ 100 anchors, 20 overviews
   per worktree). Shows it unless `--background`. Prints its id (`f<n>`, an
   open file's id), one `unresolved: <dest>` line per anchor whose file or
   note was not found — fix those with `set` — and a last line when there is
   news: `added f<n> in the background (<why>)` when the user was busy (it
-  waits; `gg session files focus f<n>` shows it later), `; closed <path> (20
+  waits; `gg session files focus f<n>` shows it later), `; closed <path> (100
   files open)` when a file was pushed out to make room. With `--json`, read
   `state` (`shown` / `background`). On gg web, `shown` means the open tabs
   were told to show it; `gg session files` says whether a tab really shows
@@ -338,9 +339,10 @@ anchor they left.
 - Answers you may get (exit 1): `no gg session for this worktree` (start gg
   first); `no overview f<n>` (the user closed it — add a new one); `20
   overviews are open; remove one first`; `gg is showing worktree <a>, not
-  <b>` (the TUI is on another checkout; gg web says `gg web is showing
-  worktree …`). Exit 2 is misuse: `--title is required`, `the text is empty`
-  (nothing on stdin), `the text is over 64 KiB`.
+  <b>` (the TUI is on another checkout — add, set, show and rm all check; gg web
+  says `gg web is showing worktree …`). Exit 2 is misuse: `--title is required`, `the text is empty`
+  (nothing on stdin), `give the text with --file or on stdin` (a terminal on
+  stdin), `the text is over 64 KiB`.
 
 Combine with notes: `gg session note add` the remarks first, then link them
 from the overview (`[why this lock](note:t7)`). Order the anchors in the order

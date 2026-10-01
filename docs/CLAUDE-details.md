@@ -1198,7 +1198,8 @@ the preview — never "the topmost viewer" (that dropped the first of two
 files opened in a row), then (plan 3) the open-files list by tag; a closed
 document is not found: its load is stale. `key()` (source + path) is the reuse key for the open-files list.
 **Open-files list (plan 2):** `m.openFiles` (`open_files.go`) is
-per worktree (`m.currentWorktree`), most recently shown first, cap 20;
+per worktree (`m.currentWorktree`), most recently shown first, cap 100
+(20 until 2026-10-01: overviews, never evicted, squeezed the user's files; gg web's `maxOpenFiles` matches);
 `touch` evicts the least recently shown doc that `docShown` says is in no
 frame (a covered viewer counts as shown). A doc leaves the list ONLY via
 `closeDoc` (esc in the viewer, `closePreview`, `x` in the switcher) or
@@ -4341,8 +4342,20 @@ selection, laid-out width); never on disk, never evicted, created
   Spans are recovered after wrapping through TEMPORARY classes
   `mdAnchorID0+k` (the class mask is `uint8` → at most 100 anchors), rewritten
   to `mdAnchor`; `paint` re-classes Sel/Gone. `renderPreviewBox` re-lays out
-  when the width changes (`ov.w`), keeping the selected anchor.
-- **Open/back.** `openAnchor` opens the file (`openFileViewerEv`, a range
+  when the width (`ov.w`) or the view (`ov.mode`) changes, keeping the
+  selected anchor. Prose wraps at the column; code and table rows
+  (`mdRowsWide` leaves `pre` rows whole) follow ctrl+w like every TUI text
+  (`overviewView`): `modeScroll` (default) keeps them whole — the renderer
+  pans by `hscroll`, `selectAnchor` pans to the anchor (`panTo`), a click adds
+  `hscroll`; `modeCutoff` cuts at width-1 + "…", so an anchor past the cut has
+  no span and tab skips it (the user chose to cut it); `modeWrap` splits the
+  row into width-wide rows, so every anchor has a span. A click selects
+  with the cursor on the CLICKED row (`selectAnchorAt`): nothing scrolls under
+  the double click's second press. A label over a line break flattens with a
+  space (`mdFlat`, `agentdocs.flat`).
+- **Open/back.** `openAnchor` stats a path anchor's file OFF the UI thread
+  (`anchorStatMsg` → `anchorStatted`, which acts only if that overview is
+  still in front and the anchor's dest unchanged), then opens the file (`openFileViewerEv`, a range
   via `pendingEnd` → a fixed `lineSel`) or brings a note's file to the front;
   the file gets `from` (latest jump wins) and `backgrounded`. backspace
   (`anchorBack`) backgrounds it and `bringToFront`s `from`; when `from` is no
@@ -4353,7 +4366,10 @@ selection, laid-out width); never on disk, never evicted, created
   every document — it covers the status bar. `landPendingLine` pulls the box
   of a note starting at the landed line into view, as `}` does.
 - **Steer.** `overview_add|set|list|show|rm` run before `steerRefusal`; an add
-  the screen cannot take lands in the background. add/set have the store
+  the screen cannot take lands in the background. add/set/show/rm refuse a
+  caller in another worktree (the CLI sends `Worktree` for all four; gg web
+  checks the same in `steerOverview`). The CLI refuses a terminal on stdin
+  (`readerIsTerminal`) instead of waiting on it. add/set have the store
   check the anchors off-thread (`CheckAnchors` in a cmd → `anchorsCheckedMsg`)
   and answer with the unresolved ones. `steer.MaxCommandBytes` is 512 KiB for
   the 64 KiB text. The CLI posts to the TUI when one is live, else to gg web.

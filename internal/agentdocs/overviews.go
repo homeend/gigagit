@@ -180,6 +180,10 @@ func ParseOverview(text string) (markdown.Doc, []Anchor) {
 func flat(in []markdown.Inline) string {
 	var sb strings.Builder
 	for _, n := range in {
+		if n.Kind == markdown.InBreak { // a label over a line break reads as two words
+			sb.WriteByte(' ')
+			continue
+		}
 		sb.WriteString(n.Text)
 		sb.WriteString(flat(n.In))
 	}

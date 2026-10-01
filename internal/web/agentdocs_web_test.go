@@ -327,7 +327,7 @@ func TestANoteOverTheCapTellsTheAgentAndTheTabs(t *testing.T) {
 		s.ofs.open(wt, ofKey{Src: "worktree", Path: fmt.Sprintf("p%d", i)}, "", 0)
 	}
 	_, rep := steerAsk(t, s, `{"id":"1","cmd":"note_add","file":"f.txt","start":1,"end":1,"summary":"look"}`)
-	if !rep.OK || !strings.HasSuffix(rep.Detail, "; closed p0 (20 files open)") {
+	if !rep.OK || !strings.HasSuffix(rep.Detail, "; closed p0 (100 files open)") {
 		t.Fatalf("reply = %+v", rep)
 	}
 	for {

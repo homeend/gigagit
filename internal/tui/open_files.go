@@ -14,7 +14,7 @@ import (
 )
 
 // maxOpenFiles is how many files one worktree keeps open (spec ruling 4).
-const maxOpenFiles = 20
+const maxOpenFiles = 100
 
 // openFilesReg is the open-files list: per worktree, the documents the user
 // or an agent opened, most recently shown first. A document leaves it only

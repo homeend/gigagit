@@ -521,8 +521,8 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	// (anchor 0) so renderWindow can't re-center the slice and re-introduce the
 	// dead zone.
 	p.fitImage(innerW, rowsCap) // an image document: its cells for this box
-	if d := m.previewDoc(p); d != nil && d.ov != nil && d.ov.w != innerW && docLoaded(d) {
-		d.layOut(rowsCap, innerW) // the frame's width changed: gg wraps an overview itself
+	if d := m.previewDoc(p); d != nil && d.ov != nil && (d.ov.w != innerW || d.ov.mode != p.mode) && docLoaded(d) {
+		d.layOut(rowsCap, innerW) // the frame's width or view changed: gg wraps an overview itself
 	}
 	vis := p.lines
 	// An annotated file: its notes are VIRTUAL rows — never in p.lines, so
@@ -620,7 +620,7 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] background  [X] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	}
 	if d := m.previewDoc(p); d != nil && d.ov != nil {
-		hint = i18n.T("%d/%d  [tab] next  [enter] open  [r] reference  [esc] background  [X] close  [/] find  [↑/↓] scroll", start+1, len(vis))
+		hint = i18n.T("%d/%d  [tab] next  [enter] open  [r] reference  [esc] background  [X] close  [/] find  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	}
 	if viewer {
 		if p.extraHint != "" {

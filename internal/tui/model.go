@@ -1018,6 +1018,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.noteLanded(msg)
 	case anchorsCheckedMsg:
 		return m.anchorsChecked(msg)
+	case anchorStatMsg:
+		return m.anchorStatted(msg)
 	case contentLandedMsg:
 		tm, fill := m.Update(msg.load)
 		m = tm.(Model)

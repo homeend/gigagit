@@ -20,7 +20,7 @@ import (
 // drive it. Lives as long as the process (the TUI's openFilesReg).
 
 // maxOpenFiles is how many files one worktree keeps open (the TUI's cap).
-const maxOpenFiles = 20
+const maxOpenFiles = 100
 
 // ofKey is an entry's identity: a version of a path. Src is "worktree",
 // "commit" (Rev = the sha) or "shelf" (Rev = the entry id).

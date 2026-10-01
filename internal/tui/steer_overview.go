@@ -25,6 +25,14 @@ type anchorsCheckedMsg struct {
 
 func (m Model) steerOverview(c steer.Command) (Model, tea.Cmd) {
 	switch c.Cmd {
+	case "overview_add", "overview_set", "overview_show", "overview_rm":
+		// An overview id is this worktree's: an agent in another one names
+		// some other overview.
+		if c.Worktree != "" && !domain.SameCheckout(c.Worktree, m.snapshotWorktree) {
+			return m, m.answerSteer(c, steerFail(c, "gg is showing worktree "+m.snapshotWorktree+", not "+c.Worktree))
+		}
+	}
+	switch c.Cmd {
 	case "overview_add":
 		return m.steerOverviewAdd(c)
 	case "overview_set":
@@ -68,9 +76,6 @@ func (m Model) findOverview(id string) (*openFile, string) {
 }
 
 func (m Model) steerOverviewAdd(c steer.Command) (Model, tea.Cmd) {
-	if c.Worktree != "" && !domain.SameCheckout(c.Worktree, m.snapshotWorktree) {
-		return m, m.answerSteer(c, steerFail(c, "gg is showing worktree "+m.snapshotWorktree+", not "+c.Worktree))
-	}
 	o, err := m.docs.AddOverview(domain.CheckoutKey(m.currentWorktree), m.currentWorktree, c.Title, c.Text)
 	if err != nil {
 		return m, m.answerSteer(c, steerFail(c, err.Error()))

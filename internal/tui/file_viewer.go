@@ -124,24 +124,19 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "end":
 		p.sel = p.clampTop(len(p.lines), rows)
 	case "ctrl+w":
-		if fv.ov != nil {
-			break // laid out by gg at the reading width: nothing to wrap or cut
-		}
 		p.mode = p.mode.next()
 		p.hscroll = 0
-	case "shift+left":
-		if fv.ov != nil {
-			break // laid out to fit: nothing to pan, and a pan would skew clicks
+		if fv.ov != nil { // gg lays an overview out itself: again, for the new view
+			_, inner := fv.geom(m)
+			fv.layOut(rows, m.overviewWidth(inner))
 		}
+	case "shift+left":
 		if p.mode == modeScroll && p.hscroll > 0 {
 			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
 				p.hscroll = 0
 			}
 		}
 	case "shift+right":
-		if fv.ov != nil {
-			break
-		}
 		if p.mode == modeScroll {
 			p.hscroll += m.hscrollStep()
 		}

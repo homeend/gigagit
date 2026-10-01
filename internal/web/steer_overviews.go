@@ -23,6 +23,14 @@ func isOverviewVerb(cmd string) bool {
 }
 
 func (s *Server) steerOverview(ctx context.Context, c steer.Command) steer.Reply {
+	if c.Cmd != "overview_list" { // an overview id is this worktree's
+		s.steerMu.Lock()
+		shown := s.steerWorktree
+		s.steerMu.Unlock()
+		if c.Worktree != "" && shown != "" && !domain.SameCheckout(c.Worktree, shown) {
+			return steerFail(c, "gg web is showing worktree "+shown+", not "+c.Worktree)
+		}
+	}
 	switch c.Cmd {
 	case "overview_add":
 		return s.steerOverviewAdd(ctx, c)
@@ -74,12 +82,6 @@ func (s *Server) overviewWire(o agentdocs.Overview, text bool) steer.Overview {
 // unless asked for the background or an op is in flight — has every tab show
 // it, as a file_focus would.
 func (s *Server) steerOverviewAdd(ctx context.Context, c steer.Command) steer.Reply {
-	s.steerMu.Lock()
-	shown := s.steerWorktree
-	s.steerMu.Unlock()
-	if c.Worktree != "" && shown != "" && !domain.SameCheckout(c.Worktree, shown) {
-		return steerFail(c, "gg web is showing worktree "+shown+", not "+c.Worktree)
-	}
 	root, top := s.docsDirs(ctx)
 	wt := s.service().Root()
 	front := !c.Background && !s.opInFlight()

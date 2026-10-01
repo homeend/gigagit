@@ -93,7 +93,7 @@ func TestLandedDetailNamesTheLineClampAndEviction(t *testing.T) {
 		{"opened a.txt", 0, "", "opened a.txt"},
 		{"opened a.txt in the background", 2, "", "opened a.txt in the background at line 2"},
 		{"focused a.txt", 9, "", "focused a.txt at line 2 (line 9 is past the end, 2 lines)"},
-		{"opened a.txt", 1, "old.go", "opened a.txt at line 1; closed old.go (20 files open)"},
+		{"opened a.txt", 1, "old.go", "opened a.txt at line 1; closed old.go (100 files open)"},
 	} {
 		if got := landedDetail(tc.lead, tc.line, lines, tc.evicted); got != tc.want {
 			t.Errorf("landedDetail(%q,%d,%q) = %q, want %q", tc.lead, tc.line, tc.evicted, got, tc.want)
@@ -117,7 +117,7 @@ func TestForegroundContentNavigateNamesTheEvictedFile(t *testing.T) {
 	nm, cmd := m.applySteer(c)
 	nm = pumpAll(t, nm, cmd)
 	r, ok := steer.AwaitReply(nm.steerDir, "c-ev", time.Second)
-	if !ok || !r.OK || r.Detail != "opened a.txt; closed f0.txt (20 files open)" {
+	if !ok || !r.OK || r.Detail != "opened a.txt; closed f0.txt (100 files open)" {
 		t.Fatalf("reply = %+v ok=%v", r, ok)
 	}
 }
