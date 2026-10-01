@@ -930,7 +930,11 @@ document.addEventListener("keyup", () => {
 function openViewerMenu(x, y) {
   const line = view.placeholder ? 0 : view.cur;
   const items = [];
-  const flink = linkFor(state.repo, state.worktree, { path: view.path, state: "unstaged", hint: { kind: "view", id: "content" } }, "new", line);
+  // The link names the file ON DISK, so the line's fingerprint is taken only
+  // when the viewer is showing the disk's text — a commit's or a shelf's
+  // version of the line may say something else.
+  const text = line && view.src === "worktree" && view.lines[line - 1] ? view.lines[line - 1].text : "";
+  const flink = linkFor(state.repo, state.worktree, { path: view.path, state: "unstaged", hint: { kind: "view", id: "content" } }, "new", line, text);
   if (flink) items.push({ label: "copy file link" + (line ? " (line " + line + ")" : ""), act: () => copyViewerLink(flink) });
   if (line && view.lines[line - 1]) items.push({ label: "copy line", act: () => copyText(view.lines[line - 1].text, "line " + line) });
   items.push({ sep: true });

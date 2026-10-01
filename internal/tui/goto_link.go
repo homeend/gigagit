@@ -45,6 +45,10 @@ type gotoLinkSwitch struct {
 	checkout string
 	bare     bool
 	at       model.Link
+	// line is the resolved landing line WITH its anchor (asked / moved /
+	// changed): `at` is a plain link and cannot carry what became of a
+	// fingerprinted line, so it rides beside it across the switch.
+	line *steer.Line
 }
 
 // resolveLinkCmd resolves text against this machine (the repo registry, this
@@ -95,7 +99,7 @@ func (m Model) resolvedGotoLink(p *gotoCommitPopup, msg gotoLinkResolvedMsg) (Mo
 		return m, nil
 	}
 	if !msg.same {
-		p.pending = &gotoLinkSwitch{checkout: msg.checkout, bare: msg.bare, at: msg.at}
+		p.pending = &gotoLinkSwitch{checkout: msg.checkout, bare: msg.bare, at: msg.at, line: msg.cmd.Line}
 		return m, nil
 	}
 	m = m.popGotoPrompt()
@@ -144,6 +148,7 @@ func (m Model) switchToLink(p *gotoCommitPopup, sw gotoLinkSwitch) (Model, tea.C
 	m = nm.(Model)
 	if !sw.bare {
 		m.startAt, m.startAtPending, m.startAtPreviewsSeen = sw.at, true, false
+		m.startAtAnchor = sw.line
 	}
 	return m, cmd
 }
