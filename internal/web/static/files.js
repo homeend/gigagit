@@ -731,6 +731,10 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
   }
   clearDiffHunks();
   state.diffCtx = ctx || null; // history/blame need a rev; a stored copy has none
+  // No note context, yet the lines may still have an address (links.js
+  // cmpSides). Tied to THIS open's generation: every other open bumps
+  // detailGen, so a stale one can never name a later diff's rows.
+  state.diffLinkCtx = ctx ? null : { ...sidesLinkCtx(left, right, path, oldPath), gen };
   state.diffRow = null; // …and the previous diff's marked row must not paint a row of this one
   state.notes = [];
   setDiffTitle(path, leftLabel + " ↔ " + rightLabel + " · ");
@@ -1301,6 +1305,42 @@ function commitDiffCtx(f) {
 function statusDiffCtx(f) {
   if (f.section === "conflicts") return null;
   return { path: f.path, rev: "", state: sectionNoteState(f.section) };
+}
+
+
+// sidesLinkCtx is the LINK-only context of a diff addressed by two side specs
+// (the entry-diff lane): no notes, no rev — only what linkFor needs to name a
+// line of it.
+function sidesLinkCtx(left, right, path, oldPath) {
+  return { path, oldPath: oldPath || "", compare: true, notes: false, cmpSides: { left, right } };
+}
+
+
+// rowLinkCtx is sidesLinkCtx for a file-list row whose diff has no note
+// context: the sides fileDiffURL reads for that very row. null elsewhere.
+function rowLinkCtx(f) {
+  const c = state.compare;
+  if (state.filesMode !== "compare" || !c || !(c.links || c.frozen)) return null;
+  if (c.links && symActive()) {
+    const p = symPair(f, c);
+    return p ? sidesLinkCtx(p.left, p.right, f.path, "") : null;
+  }
+  return sidesLinkCtx((c.links && f.left_spec) || c.aSpec, (c.links && f.right_spec) || c.bSpec, f.path, (c.links && f.old_path) || "");
+}
+
+
+// diffLinkCtx is the context "copy gg link to this line" builds from for a
+// diff row: the row's own slot in a stack, else the single-file view's — its
+// note context when it has one, the link-only one otherwise.
+function diffLinkCtx(row) {
+  if (state.stack) {
+    const sec = row && row.closest(".stk-file");
+    const s = sec ? state.stack.slots[Number(sec.dataset.k)] : null;
+    return s ? s.ctx || rowLinkCtx(s.f) : null;
+  }
+  if (state.diffCtx) return state.diffCtx;
+  const l = state.diffLinkCtx;
+  return l && l.gen === state.detailGen ? l : null;
 }
 
 
@@ -2930,7 +2970,7 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     const row = e.target.closest("tr[data-no]");
     // In a stack the link must name the ROW's own file, not whichever slot was
     // active: a right-click is itself a "this line" gesture.
-    const rowCtx = rowSlotCtx(row) || state.diffCtx;
+    const rowCtx = diffLinkCtx(row);
     // Not gated on notesArmed: a plain compare has no notes, yet its lines are
     // addressable. linkFor refuses what has no address.
     if (row && rowCtx) {
@@ -4513,4 +4553,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

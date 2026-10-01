@@ -32,6 +32,7 @@ import {
   globalNoteCtx,
   hunkEligible,
   notesArmed,
+  rowLinkCtx,
   notesFor,
   rowNoteCtx,
   fileDiffURL,
@@ -172,9 +173,10 @@ function bodyHTML(s) {
     // and the search and the paint provably share a fold set.
     const hctx = { search: diffSearch, base: slotBase(s), lines: (ls) => (s.lines = ls) };
     const kctx = s.hunks ? { sel: s.hunks.sel } : null;
-    // A plain compare has no notes, but its rows still carry their line
-    // numbers: "copy gg link to this line" reads them (ctx.cmpPair).
-    const anchored = notesArmed(nc.ctx) || !!(nc.ctx && nc.ctx.cmpPair);
+    // A compare has no notes, but its rows still carry their line numbers:
+    // "copy gg link to this line" reads them (ctx.cmpPair, or rowLinkCtx for
+    // a slot addressed by side specs).
+    const anchored = notesArmed(nc.ctx) || !!(nc.ctx && nc.ctx.cmpPair) || (!nc.ctx && !!rowLinkCtx(s.f));
     return diffHTML(s.diff, $("diff-pane").clientWidth, anchored, s.folds, nc, hctx, kctx);
   }
   return `<div class="stk-ph" style="height:${estimateHeight(s, ROW_PX)}px">loading…</div>`;

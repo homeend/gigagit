@@ -295,6 +295,30 @@ func TestSteerNavigateLandsOnALineInsideAStack(t *testing.T) {
 	}
 }
 
+// An old-side navigate lands in the OLD pane inside a stack too.
+func TestSteerNavigateLandsInTheOldPaneInsideAStack(t *testing.T) {
+	m := loadedNavModel(t)
+	m = tempPromptStore(t, m)
+	m = m.setStackedPref(true)
+	m, cmd := m.applySteer(steer.Command{
+		ID: "sn-1o", Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "unstaged"},
+		Line:   &steer.Line{Side: "old", No: 18},
+		Wait:   true,
+	})
+	m = pumpDiff(t, m, cmd)
+	v := m.diffLayer()
+	if v == nil || v.stk == nil {
+		t.Fatalf("the navigate must open a stack (view %v)", v)
+	}
+	if row, ok := v.cursorRow(); !ok || row.LeftNo != 18 {
+		t.Fatalf("cursor row = %+v ok=%v, want OLD line 18", row, ok)
+	}
+	if !v.onOld {
+		t.Fatal("an old-side landing must put the cursor in the OLD pane")
+	}
+}
+
 // Leaving a stack with S keeps the LINE being read, not the file's first
 // change block.
 func TestSKeepsTheLineWhenLeavingAStack(t *testing.T) {
