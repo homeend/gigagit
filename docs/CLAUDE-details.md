@@ -3666,6 +3666,20 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   focused console keeps them for its program, an unfocused one lets them
   through (`consolePassthrough`). Not ctrl+a (a common tmux prefix — gg never
   sees it) nor ctrl+l (Commits' load-more). Not configurable; not in the web.
+- **A console is repo-scoped** (2026-10-01, `console_scope.go`): it shows
+  only a session whose `Dir` is one of `m.worktrees` (`inRepo`, the Worktrees
+  sub-rows' `filepath.Clean` rule). `reRoot` arms `consoleSwitch`; the
+  dataLoadedMsg success arm runs `settleConsoleAfterSwitch` once the NEW
+  worktrees are in the model (reRoot itself cannot know them — no git on the
+  Update goroutine; the blank-screen gate hides the console meanwhile): a
+  foreign console closes (session untouched, status says ctrl+\ brings it
+  back), a same-repo worktree switch keeps it. alt+a/alt+t and their footer
+  hints cycle `repoSessions` only. The ctrl+\ popup still lists every repo;
+  enter (and the AI tasks tab's live console) on a foreign session goes
+  through `openSessionAnywhere` = reRoot to the session's worktree +
+  `consoleSwitch.open`, refused while `steerRefusal` says something owns the
+  screen (the hosted-web switch precedent). This reversed `7a27e2dc`'s
+  "popup opens another repo's session without reRoot".
 - **Probe recipe**: `tui-capture.sh` sets only XDG_STATE_HOME and a tmux
   server hands sessions its own env, so point gg at a scratch config with a
   `--gg` wrapper script that exports `XDG_CONFIG_HOME` and `exec`s the binary;

@@ -314,7 +314,7 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		if id, ok := p.current(); ok {
 			m = m.popLayer()
-			return m.openConsole(id)
+			return m.openSessionAnywhere(id) // another repo's session switches there first
 		}
 	case "k", "y":
 		id, ok := p.current()

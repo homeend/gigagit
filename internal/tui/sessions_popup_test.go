@@ -112,30 +112,3 @@ func TestSessionsPopupEmpty(t *testing.T) {
 		t.Fatalf("empty: top=%T status=%q", m.topLayer(), m.statusMsg)
 	}
 }
-
-func TestPopupOpensSessionFromOtherRepoWithoutReRoot(t *testing.T) {
-	m := loadedModel(t)
-	m.width, m.height = 120, 40
-	startTestSession(t, m, `sleep 5`)
-	other := t.TempDir()
-	s, err := domain.Sessions().Start(sessionSpecForTest("Other", other))
-	if err != nil {
-		t.Fatal(err)
-	}
-	before, svc := m.currentWorktree, m.svc
-	m, _ = m.openSessionsPopup(false)
-	p := m.topLayer().(*sessionsPopup)
-	for i, id := range p.ids {
-		if id == s.Info().ID {
-			p.sel = i
-		}
-	}
-	mm, _ := m.Update(keyMsg("enter"))
-	m = mm.(Model)
-	if m.console == nil || m.console.id != s.Info().ID {
-		t.Fatal("the other repo's session must open")
-	}
-	if m.currentWorktree != before || m.svc != svc {
-		t.Fatal("opening a session must not reRoot")
-	}
-}
