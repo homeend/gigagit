@@ -205,6 +205,8 @@ func (m Model) refLinkFor(name string) (string, bool) {
 //     (unfocused, a heading row, or a deleted file) the row still belongs to
 //     the open preview, so this returns the PAIR's own link rather than
 //     falling through to a lower-precedence surface.
+//     3a'. a two-commit compare's FILE TREE → the pair's file form, for the
+//     same reason: the row is a file in the comparison.
 //     3b. the Previews panel row → the pair's own link.
 //     3c. a Branches / Remotes / Tags row → the ref's own link (`@ref:<name>`),
 //     gated on !inContentWindow() exactly like the Commits arm below: a files
@@ -246,6 +248,17 @@ func (m Model) contextLinkText() (string, bool) {
 			return m.scopeLinkFor(set, b.Path, model.NoteSideNew, 0)
 		}
 		return m.scopeLinkFor(set, "", model.NoteSideNew, 0)
+	}
+	// A two-commit compare's file list: the row is a file IN the comparison,
+	// so it is the pair's file form — focusedBookmark would answer with the
+	// newer commit's own link, which describes parent→b, not a→b.
+	if v := m.filesView; v != nil && m.filesTreeFocused && m.inCompareMode() {
+		if vis := v.visible(); v.sel >= 0 && v.sel < len(vis) && vis[v.sel].path != "" {
+			left, right := m.compareSides(vis[v.sel])
+			if left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointCommit {
+				return m.pairFileLinkFor(left.Hash(), right.Hash(), vis[v.sel].path, model.NoteSideNew, 0)
+			}
+		}
 	}
 	if b, ok := m.focusedBookmark(); ok {
 		return m.linkFor(b.Address(), model.NoteSideNew, 0, 0)

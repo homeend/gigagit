@@ -4362,8 +4362,8 @@ $("files-list").addEventListener("contextmenu", (e) => {
         ...copyPathRows(f.path),
         // A compare row's rev is bHash, but the diff on screen is aHash →
         // bHash, not bHash^ → bHash — a commit-state link would misdescribe
-        // the place, so the file contributor is told to refuse outright.
-        // The exception is an open merge preview: its rows are files IN THE
+        // the place, so the file contributor refuses unless it is handed the
+        // pair (cmpPair, two commits) or an open merge preview: its rows are files IN THE
         // PREVIEW, and the pair (source, target) is their address — the same
         // file form the TUI's preview file tree copies.
         ...extraRows("file", {
@@ -4372,6 +4372,8 @@ $("files-list").addEventListener("contextmenu", (e) => {
           section: "commit",
           compare: state.filesMode === "compare",
           preview: po ? previewCtx(po) : pairCtx() ? pairNoteCtx(pairCtx()) : null,
+          // A plain two-commit compare: the row is a file in the pair.
+          cmpPair: commitDiffCtx(f).cmpPair || null,
         }),
       ],
       e.clientX,

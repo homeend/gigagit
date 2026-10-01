@@ -16,10 +16,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the cursor is on the older side — a removed line included. Before, a
   comparison opened by hand had no link at all ("no gg link for this
   place"). No notes are turned on for it.
-- **A comparison against the working tree or the index** links each side as
-  the version it shows: the working file, `@staged`, or the commit.
+- **A comparison against the working tree or the index** (TUI) links each
+  side as the version it shows: the working file, `@staged`, or the commit.
 - **gg web:** right-click → *copy gg link to this line* in a two-commit
   comparison, single-file and stacked.
+
+### Fixed
+
+- **Copy link on a file row of a two-commit comparison** (TUI) copied the
+  newer commit's own link (`path@<b>`, its parent → it) instead of the
+  comparison's; it now copies `path@<a>..<b>`. gg web offered no link on
+  that row and now offers the same one.
 
 ### Changed
 

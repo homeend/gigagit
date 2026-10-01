@@ -19,6 +19,13 @@ name = "compare-files"
 keys = ["right", "m", "down", "down", "m", ".", "Compare the 2", "enter"]
 screen_contains = ["a.txt", "b.txt"]
 
+# The file row itself is a file IN the comparison: the pair, never the newer
+# commit's own link (which would mean its parent → it).
+[[tui.step]]
+name = "file-row-link"
+keys = [".", "Copy link", "enter"]
+screen_contains = ["Copied link: gg://", "a.txt@67921e7cb373de794e96823fc090aa375d4a5633..3352555a301cae359ba5ec0282f47f28f01e3f47"]
+
 [[tui.step]]
 name = "deleted-line-link"
 keys = ["enter", "L"]

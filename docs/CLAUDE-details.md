@@ -1122,7 +1122,9 @@ commit); a shelf or link-member side refuses. Web twin: `ctx.cmpPair` from
 `commitDiffCtx` (plain `openCompare` lane only, never an `aSpec` entry
 compare), and the stack renders `data-no`/`data-lno` for such a slot. A copy
 made in the full-screen diff confirms in `diffNotice` (`clipboardCopiedMsg`),
-middle-elided. `tui.Headless` stubs `clipWrite`: e2e never touches the
+middle-elided. A compare's FILE-TREE row copies the pair's file form
+(`contextLinkText` arm 3a', before `focusedBookmark`, which would answer
+`path@<b>`); web: the file menu passes `cmpPair`. `tui.Headless` stubs `clipWrite`: e2e never touches the
 machine's clipboard.
 
 **Web preview links lift `ctx.compare` for ONE case.** `links.js`'s `linkFor`

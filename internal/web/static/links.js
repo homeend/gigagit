@@ -263,6 +263,7 @@ registerRows("file", (ctx) => {
     state: st,
     compare: ctx.compare,
     preview: ctx.preview || null,
+    cmpPair: ctx.cmpPair || null,
   });
   // "copy file link": the file's CONTENT link — no commit, the file as it is
   // on disk — copied only after the server says the file is there.
