@@ -972,10 +972,11 @@ spawn = ["Claude (yolo)"]  # session command names agents may start; empty = off
 max_spawned = 4            # live agent-started sessions per TUI (1..16)
 ```
 
-Then, once: start that command yourself from Start agent (its one-time
-approval), accept its update in Settings → External tools if it offers one
-(the command needs `<prompt>`), and run `gg init --mcp` so Claude Code loads
-gg's MCP server. The overseer then calls the `agent_start` tool — or
+Then, once and in this order: accept that command's update in Settings →
+External tools if it offers one (the command needs `<prompt>`; the update
+changes its text), start it yourself from Start agent (the one-time approval
+of that text), and run `gg init --mcp` so Claude Code loads gg's MCP
+server. The overseer then calls the `agent_start` tool — or
 `gg agent start --worktree <path|name> --tool "Claude (yolo)" --prompt-file
 brief.md` — and the worker appears as a sub-row with a status line; your
 focus stays where it is. The worker reads its task with `agent_task`. The

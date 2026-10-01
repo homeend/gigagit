@@ -125,3 +125,22 @@ func TestOriginHeaderRefused(t *testing.T) {
 		t.Fatalf("a browser Origin = %v %v", resp.StatusCode, err)
 	}
 }
+
+func TestIdleAgentSessionsExpire(t *testing.T) {
+	prev := agentSessionTimeout
+	agentSessionTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { agentSessionTimeout = prev })
+	url, tok, _ := hostEnv(t, nil)
+	cs, err := agentClient(t, url, tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	if _, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_list", Arguments: map[string]any{}}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(600 * time.Millisecond)
+	if _, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_list", Arguments: map[string]any{}}); err == nil {
+		t.Fatal("an idle session must be closed by the TUI (a gg mcp that was killed never says goodbye)")
+	}
+}

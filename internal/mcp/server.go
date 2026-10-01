@@ -108,5 +108,9 @@ func Serve(ctx context.Context, workdir string) error {
 	if err := svc.PreflightRequired(ctx); err != nil {
 		return err
 	}
-	return New(svc).sdkServer().Run(ctx, &sdk.StdioTransport{})
+	s := New(svc)
+	if s.agent != nil {
+		defer s.agent.Close() // tell the TUI this session is over (a kill skips it; the TUI's idle timeout covers that)
+	}
+	return s.sdkServer().Run(ctx, &sdk.StdioTransport{})
 }

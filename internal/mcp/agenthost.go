@@ -27,6 +27,11 @@ type AgentHost struct {
 
 func NewAgentHost() *AgentHost { return &AgentHost{} }
 
+// agentSessionTimeout closes an MCP session the TUI has not heard from in
+// this long: a gg mcp killed with its agent never sends its goodbye, and the
+// client re-dials an expired session once (agentlink), so nothing is lost.
+var agentSessionTimeout = time.Hour
+
 const agentInstructions = "gg agent channel. These tools exist only for an agent running inside a gg console. " +
 	"A worker agent's first act is agent_task (its brief). agent_start starts a worker in a worktree " +
 	"(the gg [agents] spawn allow-list governs which session commands); agent_send/agent_kill reach only agents you started."
@@ -36,7 +41,8 @@ func (h *AgentHost) Handler(starter Starter) http.Handler {
 	srv := sdk.NewServer(&sdk.Implementation{Name: "gg-agents", Version: buildinfo.Version},
 		&sdk.ServerOptions{Instructions: agentInstructions})
 	RegisterAgentTools(srv, callerFromToken, starter)
-	mcpH := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return srv }, nil)
+	mcpH := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return srv },
+		&sdk.StreamableHTTPOptions{SessionTimeout: agentSessionTimeout})
 	authed := auth.RequireBearerToken(verifyToken, nil)(mcpH)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Origin") != "" {
