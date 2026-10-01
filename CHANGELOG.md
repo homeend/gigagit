@@ -45,6 +45,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   command list; `gg agent list` works outside a console. The using-gg
   skill is v120.
 
+## Overviews in gg web: the last minors, round 2
+
+### Fixed
+
+- **gg web, browser Back:** a Back (or backspace) whose overview could not
+  be fetched keeps the way back — the next one returns to the overview
+  instead of leaving gg web. Back while an agent console sits over a file
+  an anchor opened closes the console (the agent keeps running); the next
+  Back returns to the overview.
+- **gg web, anchors:** an anchor clicked while the same overview is
+  re-opened no longer says `that anchor is no longer in the overview`.
+- **gg web:** a close or background right after a failed open no longer
+  leaves `gg session files` saying the file is shown; x in the open-files
+  switcher on a file still loading in this tab no longer shows it once it
+  loads.
+
 ## Overviews in gg web: the last minors
 
 ### Fixed
