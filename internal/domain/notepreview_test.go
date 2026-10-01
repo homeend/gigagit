@@ -25,9 +25,10 @@ func TestPreviewNoteSetPair(t *testing.T) {
 	}
 }
 
-// NoteCounts names, per commit:path, the scopes its notes were written in —
-// what a commit's Notes row shows beside a file the commit does not change.
-func TestNoteCountsPreviewsByCommitPath(t *testing.T) {
+// NoteCounts groups a commit's notes by the scope they were written in — the
+// commit's Range review rows — and counts apart the ones written in none:
+// only those keep a Notes row beside a file the commit does not change.
+func TestNoteCountsScopesByCommit(t *testing.T) {
 	t.Parallel()
 	svc, dir := newPreviewRepo(t)
 	ctx := context.Background()
@@ -43,17 +44,51 @@ func TestNoteCountsPreviewsByCommitPath(t *testing.T) {
 		}
 	}
 	add("a.txt", "main...feat")
-	add("a.txt", "main...feat") // one name, however many notes
-	add("a.txt", "other...feat")
+	add("b.txt", "main...feat") // one scope, whichever file
+	add("a.txt", "aaaaaaa..bbbbbbb")
 	add("b.txt", "") // written outside a preview
 	c, err := svc.NoteCounts(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := c.PreviewsByCommitPath[tip+":a.txt"], []string{"main...feat", "other...feat"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("a.txt previews = %q, want %q", got, want)
+	want := []NoteScopeCount{{Scope: "aaaaaaa..bbbbbbb", N: 1}, {Scope: "main...feat", N: 2}}
+	if got := c.ScopesByCommit[tip]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("scopes = %+v, want %+v", got, want)
 	}
-	if got := c.PreviewsByCommitPath[tip+":b.txt"]; got != nil {
-		t.Fatalf("b.txt previews = %q, want none", got)
+	if got := c.PlainByCommitPath[tip+":b.txt"]; got != 1 {
+		t.Fatalf("b.txt plain notes = %d, want 1", got)
+	}
+	if got := c.PlainByCommitPath[tip+":a.txt"]; got != 0 {
+		t.Fatalf("a.txt plain notes = %d, want 0", got)
+	}
+}
+
+// A scope opens from the commit that holds its notes as a frozen range: a
+// commit pair as its own two commits (stored short), a merge preview as where
+// the commit left the target .. the commit — whatever the branch did since.
+func TestScopeAtCommit(t *testing.T) {
+	t.Parallel()
+	svc, dir := newPreviewRepo(t)
+	ctx := context.Background()
+	base, tip, mid := revParse(t, dir, "main"), revParse(t, dir, "feat"), revParse(t, dir, "feat~1")
+
+	a, b, err := svc.ScopeAtCommit(ctx, "main...feat", mid)
+	if err != nil || a != base || b != mid {
+		t.Fatalf("merge preview at feat~1 = %s..%s, %v; want %s..%s", a, b, err, base, mid)
+	}
+	a, b, err = svc.ScopeAtCommit(ctx, mid[:7]+".."+tip[:7], tip)
+	if err != nil || a != mid || b != tip {
+		t.Fatalf("pair = %s..%s, %v; want %s..%s", a, b, err, mid, tip)
+	}
+	if _, _, err := svc.ScopeAtCommit(ctx, "gone...feat", tip); err == nil {
+		t.Fatal("a target that is not here must be an error")
+	}
+	// The commit is already in the target (the branch was merged): no range
+	// is left to show, and an empty diff must not open in its place.
+	if _, _, err := svc.ScopeAtCommit(ctx, "feat...other", mid); err == nil {
+		t.Fatal("a commit already in the target must be an error")
+	}
+	if _, _, err := svc.ScopeAtCommit(ctx, "", tip); err == nil {
+		t.Fatal("no scope must be an error")
 	}
 }

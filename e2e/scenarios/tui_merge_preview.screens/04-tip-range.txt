@@ -1,10 +1,9 @@
 local  branch main                                                                                                  {{root}}______________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Files acfc46c add c                               ││ Commits (all) 3                                                                                         │
-│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓   feature add c  ◆ 2                                                                             │
-│ Notes                                             ││   ●      feature grow a                                                                                 │
-│ >   a.txt  ◆ 1  (preview: feature → main)         ││   ●  ↓   *main   add a b                                                                                │
-│   A  c.txt  ◆ 1                                   ││                                                                                                         │
+│ Range review: feature → main                      ││ Commits (all) 3                                                                                         │
+│ .                                                 ││   ●  ↓   feature add c  ◆ 2                                                                             │
+│ > M  a.txt  ◆ 1                                   ││   ●      feature grow a                                                                                 │
+│   A  c.txt  ◆ 1                                   ││   ●  ↓   *main   add a b                                                                                │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
@@ -12,17 +11,18 @@ local  branch main                                                              
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
-│                            ╔════════════════════════════════════════════════════════════════════════════════════════════════════╗                            │
-│                            ║                                                                                                    ║                            │
-│                            ║  Notes on a.txt @ acfc46c                                                                          ║                            │
-│                            ║                                                                                                    ║                            │
-│                            ║  > why more a?                                                                                     ║                            │
-│                            ║    agent · 2026-01-02 00:00                                                                        ║                            │
-│                            ║                                                                                                    ║                            │
-│                            ║  [/] search  [ctrl+w] mode  [s] save  [ctrl+t] full  [q] close                                     ║                            │
-│                            ║                                                                                                    ║                            │
-│                            ╚════════════════════════════════════════════════════════════════════════════════════════════════════╝                            │
-│                                                                                                                                                              │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
@@ -36,5 +36,5 @@ local  branch main                                                              
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 ╰───────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-tree: [↑/↓] move  [enter] diff  [a] all files  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view  [ctrl+t] full  [i] msg  [esc/l] close
+tree: [↑/↓] move  [enter] diff  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view  [ctrl+t] full  [esc/l] close
 ⎇ feature · # acfc46c · @ gg-e2e

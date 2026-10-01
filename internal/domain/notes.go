@@ -56,12 +56,23 @@ type ResolvedNote struct {
 type NoteCounts struct {
 	ByPath   map[string]int // working-tree notes, by repo-relative path
 	ByCommit map[string]int // commit notes, by sha
-	// PreviewsByCommitPath names, sorted and distinct, the scopes (Note.Preview)
-	// the notes at "<sha>:<path>" were written in; absent when none was.
-	PreviewsByCommitPath map[string][]string
-	Reviews              []ReviewHead   // every AI review note, newest first (Branches tab, @notes)
-	ByCommitPath         map[string]int // commit notes, by "<sha>:<path>"
-	ByShelf              map[string]int // notes on a whole shelf entry, by entry id
+	// ScopesByCommit groups a commit's notes by the scope (Note.Preview) they
+	// were written in, sorted by scope: its Range review rows. A note written
+	// in no scope is in none of them.
+	ScopesByCommit map[string][]NoteScopeCount
+	// PlainByCommitPath counts the commit notes written in NO scope, by
+	// "<sha>:<path>": the ones a commit's Notes rows are for.
+	PlainByCommitPath map[string]int
+	Reviews           []ReviewHead   // every AI review note, newest first (Branches tab, @notes)
+	ByCommitPath      map[string]int // commit notes, by "<sha>:<path>"
+	ByShelf           map[string]int // notes on a whole shelf entry, by entry id
+}
+
+// NoteScopeCount is one scope's share of a commit's notes: the scope as the
+// notes name it (Note.Preview) and how many threads were written in it there.
+type NoteScopeCount struct {
+	Scope string
+	N     int
 }
 
 // NoteAdd stores a new note, filling ID, Created/Updated and (when the caller
@@ -460,11 +471,23 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 			if n.Address.Path != "" {
 				k := n.Address.Commit + ":" + n.Address.Path
 				c.ByCommitPath[k]++
-				if n.Preview != "" && !slices.Contains(c.PreviewsByCommitPath[k], n.Preview) {
-					if c.PreviewsByCommitPath == nil {
-						c.PreviewsByCommitPath = map[string][]string{}
+				switch {
+				case n.Preview == "":
+					if c.PlainByCommitPath == nil {
+						c.PlainByCommitPath = map[string]int{}
 					}
-					c.PreviewsByCommitPath[k] = append(c.PreviewsByCommitPath[k], n.Preview)
+					c.PlainByCommitPath[k]++
+				default:
+					if c.ScopesByCommit == nil {
+						c.ScopesByCommit = map[string][]NoteScopeCount{}
+					}
+					sc := c.ScopesByCommit[n.Address.Commit]
+					i := slices.IndexFunc(sc, func(e NoteScopeCount) bool { return e.Scope == n.Preview })
+					if i < 0 {
+						sc, i = append(sc, NoteScopeCount{Scope: n.Preview}), len(sc)
+					}
+					sc[i].N++
+					c.ScopesByCommit[n.Address.Commit] = sc
 				}
 			}
 			continue
@@ -479,8 +502,8 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		}
 		c.ByPath[n.Address.Path]++
 	}
-	for _, ps := range c.PreviewsByCommitPath {
-		sort.Strings(ps)
+	for _, sc := range c.ScopesByCommit {
+		sort.Slice(sc, func(a, b int) bool { return sc[a].Scope < sc[b].Scope })
 	}
 	sort.SliceStable(c.Reviews, func(a, b int) bool { return c.Reviews[a].Created.After(c.Reviews[b].Created) })
 	s.mu.Lock()

@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A range review is one row of the commit that holds it
+
+### Changed
+
+- **A commit's Files view lists a range review as one row, not as loose
+  files.** Notes written in a merge preview or a commit pair are all stored
+  on the range's newest commit, mostly on files that commit does not change;
+  its Files view used to list those files one by one under "Notes" (with a
+  `(preview: …)` tag a narrow column dropped), and enter showed the note
+  text without its code. Now the commit shows a **Range reviews** heading
+  with one row per range — `feature → main  ◆ 3`, `8350e12..124d84b  ◆ 1`,
+  counting every note of that range on the commit — and **enter opens the
+  range the notes were written in, frozen at this commit**: a commit pair as
+  its own two commits, a merge preview as where the commit left the target
+  up to the commit, however far the branch moved since. Every file of the
+  range is listed with its ◆ N and the notes sit on their lines; esc returns
+  to the commit's files, the cursor on the row. A commit already merged into
+  the preview's target has no range left: the status line says so. Notes
+  written outside any range on a file the commit does not change keep their
+  "Notes" row. `domain.NoteCounts` carries `ScopesByCommit` and
+  `PlainByCommitPath` (replacing `PreviewsByCommitPath`);
+  `domain.ScopeAtCommit` resolves a scope from the commit. TUI only — the
+  web page has no such list yet.
+
 ## The TUI follows an agent's gg changes
 
 ### Fixed
