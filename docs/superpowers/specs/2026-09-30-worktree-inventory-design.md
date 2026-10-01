@@ -86,8 +86,12 @@ many providers, one composition:
   error)`; nil = no guards, so engine tests are unaffected). Recycle fails
   on a hard blocker and raises ONE decision `recycle.blocked` listing every
   overridable reason, options `recycle anyway` / `abort`; its own
-  `recycle.dirty` flow (commit/shelve/discard) is unchanged. The op gains
-  `CallerSession`.
+  `recycle.dirty` flow (commit/shelve/discard) is unchanged. `dirty-recent`
+  and `detached` are left out of that question because recycle handles both
+  natively (dirt via `recycle.dirty`; a detached target by design) — the
+  guards still run and still feed the inventory and claims. The op gains
+  `CallerSession`. A CLI pipeline refusal now names the prompt, so an agent
+  learns WHY (`recycle.blocked needs a decision: … is in use: reserved …`).
 - **One set everywhere (user ruling):** the TUI, CLI, web and MCP all get
   the FULL guard set; the TUI answers `recycle.blocked` in its decision
   modal (the picker's own "agent session running" confirm is dropped — the

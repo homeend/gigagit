@@ -348,6 +348,7 @@ type Entry struct {
 }
 
 type Registry struct {
+	Proc     string  `json:"-"` // from the file name (Live fills it)
 	PID      int     `json:"pid"`
 	Started  string  `json:"started,omitempty"`
 	Worktree string  `json:"worktree"` // the TUI's own worktree
@@ -1468,7 +1469,7 @@ type GuardSources struct {
 	Live     liveView // unexported type; providers are built inside domain
 	Svc      *Service
 }
-var WorktreeGuardSet = StandardWorktreeGuards // composition hook; cmd/gg may replace it
+var WorktreeGuardSet = StandardWorktreeGuards // composition hook; cmd/gg may replace it — by WRAPPING StandardWorktreeGuards (appending/filtering guards): GuardSources carries the unexported liveView, so only domain builds sources
 func StandardWorktreeGuards(src GuardSources) []wtguard.Guard
 
 type WorktreeInfo struct {
@@ -1483,12 +1484,13 @@ type WorktreeInfo struct {
 func (w WorktreeInfo) Dirty() *DirtyInfo
 func (w WorktreeInfo) Claim() *ClaimInfo
 
-func (s *Service) guardSources(ctx context.Context, pol InventoryPolicy, wts []model.Worktree) GuardSources
+func (s *Service) guardSources(pol InventoryPolicy, wts []model.Worktree) GuardSources
 func (s *Service) WorktreeInventory(ctx context.Context, pol InventoryPolicy, freeOnly bool) ([]WorktreeInfo, error)
 func (s *Service) inventory(ctx context.Context, pol InventoryPolicy, only string) ([]WorktreeInfo, error)
 func (s *Service) GuardReport(ctx context.Context, t wtguard.Target) (wtguard.Report, error) // for OpDeps.Guards (Task 7b)
 func (s *Service) UseSessionRegistryDir(dir string)
 func (s *Service) AgentsConfig(ctx context.Context) (config.AgentsConfig, string, error) // anchored on the MAIN worktree — the ONE source for CLI and TUI
+func AgentsConfigFrom(wts []model.Worktree) (config.AgentsConfig, string, error)    // same, over a list the caller already read
 ```
 
 Provider list (each `Cheap()` unless noted; `Hard` as marked):
@@ -2004,7 +2006,7 @@ func (s *Service) GuardReport(ctx context.Context, t wtguard.Target) (wtguard.Re
 	if err != nil {
 		return wtguard.Report{}, err
 	}
-	ac, _, err := agentsConfigFrom(wts)
+	ac, _, err := AgentsConfigFrom(wts)
 	if err != nil {
 		return wtguard.Report{}, err
 	}
@@ -2034,12 +2036,12 @@ func (s *Service) AgentsConfig(ctx context.Context) (config.AgentsConfig, string
 	if err != nil {
 		return config.AgentsConfig{}, "", err
 	}
-	return agentsConfigFrom(wts)
+	return AgentsConfigFrom(wts)
 }
 
-// agentsConfigFrom is AgentsConfig over an already-read worktree list (the
-// ungated GuardReport path).
-func agentsConfigFrom(wts []model.Worktree) (config.AgentsConfig, string, error) {
+// AgentsConfigFrom is AgentsConfig over an already-read worktree list (the
+// ungated GuardReport path, and the TUI loader that just read the list).
+func AgentsConfigFrom(wts []model.Worktree) (config.AgentsConfig, string, error) {
 	if len(wts) == 0 || wts[0].Path == "" {
 		return config.AgentsConfig{}, "", ErrUnknownWorktree
 	}
@@ -2242,7 +2244,7 @@ func TestUnparsableClaimDiesAfterGrace(t *testing.T) {
 
 func TestAgentsConfigAnchoredOnMain(t *testing.T) {
 	t.Parallel()
-	main, svc, _ := inventoryRepo(t)
+	main, _, _ := inventoryRepo(t)
 	wt := addWT(t, main, "lnk")
 	os.WriteFile(filepath.Join(main, ".gg.toml"), []byte("[agents]\nreserved = [\"x\"]\n"), 0o644)
 	os.WriteFile(filepath.Join(wt, ".gg.toml"), []byte("[agents]\nreserved = [\"y\"]\n"), 0o644)
@@ -2587,7 +2589,7 @@ git commit -m "feat(domain): session-bound worktree claims with dead-claim sweep
 **Files:**
 - Modify: `internal/engine/operation.go` (`OpDeps.Guards`), `internal/engine/recycle_worktree.go` (`CallerSession`, `RecycleBlockedDecisionID`, the guard step)
 - Modify: `internal/domain/service.go:383` (wire `Guards: s.GuardReport`)
-- Modify: `internal/cli/worktree.go` `cmdWorktreeRecycle` (`--force`, `CallerSession`)
+- Modify: `internal/cli/worktree.go` `cmdWorktreeRecycle` (`--force`, `CallerSession`), `internal/cli/core.go` (the pipeline refusal carries the prompt), `internal/cli/main_test.go` (pin `XDG_STATE_HOME` HERE — from this task on every `Execute` reads the registry dir, and an unpinned run would sweep the developer's real `~/.local/state/gg/sessions`)
 - Modify: `internal/i18n/lang/{ja,ko,zh,ru}.toml` (the prompt format + the two options)
 - Test: `internal/engine/recycle_guards_test.go`, `internal/cli/worktree_recycle_test.go`
 
@@ -2601,7 +2603,7 @@ const RecycleBlockedDecisionID = "recycle.blocked" // options "recycle anyway" |
 // RecycleWorktree gains: CallerSession string
 ```
 
-**Rule:** a hard blocker fails the op before anything changes; overridable blockers become ONE decision. `dirty-recent` is NOT part of that decision — recycle's own `recycle.dirty` question (commit/shelve/discard/abort) already answers dirt, so asking twice would be noise; the guard's verdict still reaches the inventory and claims unchanged.
+**Rule:** a hard blocker fails the op before anything changes; overridable blockers become ONE decision. Two reasons are NOT part of that decision, because recycle handles them natively: `dirty-recent` (its own `recycle.dirty` question answers dirt) and `detached` (the op recycles a detached target by design — `TestRecycleWorktreeDetachedTargetCommits`). Both guards still run and still feed the inventory and claims unchanged.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2667,6 +2669,16 @@ func TestRecycleDirtyRecentIsLeftToTheDirtyQuestion(t *testing.T) {
 	}
 }
 
+func TestRecycleDetachedIsNotAsked(t *testing.T) {
+	t.Parallel()
+	_, deps, wt := recycleFixture(t)
+	deps.Guards = guardsReturning(wtguard.Blocker{Reason: "detached"})
+	deps.Decider = MapDecider{}
+	if _, err := (RecycleWorktree{Dir: wt, Branch: "target", Now: fixedNow}).Run(context.Background(), deps); errors.Is(err, ErrDecisionRequired) {
+		t.Fatal("detached alone must not raise recycle.blocked")
+	}
+}
+
 func TestRecyclePassesCallerSession(t *testing.T) {
 	t.Parallel()
 	_, deps, wt := recycleFixture(t)
@@ -2696,11 +2708,24 @@ func TestWorktreeRecycleReservedNeedsForce(t *testing.T) {
 		t.Fatalf("reserve: %s", errb)
 	}
 	code, _, errb := runCLI(t, dir, "worktree", "recycle", wt, "loose")
-	if code == 0 || !strings.Contains(errb, "reserved") {
+	if code == 0 || !strings.Contains(errb, "recycle.blocked") || !strings.Contains(errb, "reserved") {
 		t.Fatalf("recycle of a reserved worktree without --force = %d %q", code, errb)
 	}
 	if code, _, errb := runCLI(t, dir, "worktree", "recycle", "--force", wt, "loose"); code != 0 {
 		t.Fatalf("recycle --force = %d %q", code, errb)
+	}
+}
+```
+
+```go
+func TestWorktreeRecycleDetachedNeedsNoForce(t *testing.T) {
+	dir := newCLIRepo(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	exec.Command("git", "-C", dir, "branch", "loose").Run()
+	wt := cliWorktree(t, dir, "a", "wt-a")
+	exec.Command("git", "-C", wt, "checkout", "--detach").Run()
+	if code, _, errb := runCLI(t, dir, "worktree", "recycle", wt, "loose"); code != 0 {
+		t.Fatalf("recycle of a detached worktree = %d %q", code, errb)
 	}
 }
 ```
@@ -2745,7 +2770,9 @@ const RecycleBlockedDecisionID = "recycle.blocked"
 		}
 		var soft []wtguard.Blocker
 		for _, b := range rep.Overridable() {
-			if b.Reason != "dirty-recent" { // recycle.dirty below answers dirt
+			// Recycle handles these itself: recycle.dirty below answers dirt,
+			// and a detached target is recycled by design.
+			if b.Reason != "dirty-recent" && b.Reason != "detached" {
 				soft = append(soft, b)
 			}
 		}
@@ -2776,9 +2803,23 @@ func describeBlockers(bs []wtguard.Blocker) string {
 }
 ```
 
+`describeBlockers` puts English reason/detail text into the prompt args — agent-facing protocol text, like other engine prose args (paths, branch names); the prompt FORMAT and options are translated. A translated per-reason label in the TUI modal is a possible follow-up, not part of this stage.
+
 The inline `PausedOpIn`/`LockFiles` refusals stay: they cover direct engine use (nil `Guards`) and cost two stats.
 
 `domain/service.go` `engine.OpDeps{…}`: add `Guards: s.GuardReport,` with the comment `// ungated reads: the op holds the reservation (see ShelveStaged)`. `GuardReport` (Task 6) already reads through `s.repo`, never the gated `s.Worktrees` (`query.go:305`). Add a domain test that runs `RecycleWorktree` through `svc.Execute` on a reserved worktree with a `MapDecider{recycle.blocked: "abort"}` and a 5 s context: it must return "recycle cancelled", not time out (a deadlock would).
+
+`cli/core.go` `cliDecider.Decide`: the non-interactive refusal names WHY, so an orchestrating agent can act on it:
+
+```go
+	if !d.interactive || d.in == nil {
+		return engine.DecisionResponse{}, fmt.Errorf(
+			"%s needs a decision: %s (options: %s); rerun with the matching flag",
+			req.ID, req.Prompt, strings.Join(req.Options, ", "))
+	}
+```
+
+(`TestWorktreeRecycleDirtyWithoutFlagIsRefusedInAPipeline` asserts only the id and stays green; grep the cli tests for `needs a decision (options` and update any exact-match assertion.)
 
 `cli/worktree.go` `cmdWorktreeRecycle`:
 
@@ -2815,8 +2856,7 @@ git commit -m "feat(engine): recycle asks the composed worktree guards; gg workt
 **Files:**
 - Modify: `internal/cli/worktree.go` (dispatch + `cmdWorktreeList` flags + usage strings)
 - Create: `internal/cli/worktree_agents.go`
-- Modify: `internal/cli/main_test.go` (pin `XDG_STATE_HOME`, same shape as Task 5's domain TestMain)
-- Test: `internal/cli/worktree_agents_test.go`
+- Test: `internal/cli/worktree_agents_test.go` (the cli `TestMain` already pins `XDG_STATE_HOME` since Task 7b)
 
 **Interfaces:**
 - Consumes: Tasks 6–7 domain API; `matchWorktreeArg(wts, arg)` (exists in `worktree.go`).
@@ -3539,7 +3579,7 @@ Data: `source.go` `worktreesPayload` gains `marks map[string]domain.WorktreeMark
 
 ```go
 			reserved := []string(nil)
-			if ac, _, err := svc.AgentsConfig(ctx); err == nil {
+			if ac, _, err := domain.AgentsConfigFrom(wts); err == nil {
 				reserved = ac.Reserved
 			}
 			marks := svc.WorktreeMarks(wts, reserved) // the list just read — no second git worktree list
@@ -3567,7 +3607,7 @@ func publishedWorktree() string { s, _ := publishedWT.Load().(string); return s 
 
 with `publishedWT.Store(m.currentWorktree)` right after each of the two assignments (`model.go:1612`, `:1670`). Tests never call `Run`, so no registry is written by the suite.
 
-Recycle picker (`recycle_worktree.go openRecyclePicker`): after the `(agent session running)` suffix, append `"  " + i18n.T("(claimed by %s)", agent)` for a live claim and `"  " + i18n.T("(reserved)")` for a reserve; and DELETE `recycleInto`'s own `if live { return m.mustConfirmOp(…) }` confirm: the op now raises `recycle.blocked` (Task 7b) for a running session, a claim, a reserve or the main checkout, and the TUI's decision modal shows it — one question, one place. `recycleInto(dir string, live bool)` drops the `live` parameter. Update `recycle_worktree_test.go`'s live-session test to expect a modal whose request id is `recycle.blocked` (options `recycle anyway`/`abort`), instead of the old confirm.
+Recycle picker (`recycle_worktree.go openRecyclePicker`): after the `(agent session running)` suffix, append `"  " + i18n.T("(claimed by %s)", agent)` for a live claim and `"  " + i18n.T("(reserved)")` for a reserve; and DELETE `recycleInto`'s own `if live { return m.mustConfirmOp(…) }` confirm: the op now raises `recycle.blocked` (Task 7b) for a running session, a claim, a reserve or the main checkout, and the TUI's decision modal shows it — one question, one place. `recycleInto(dir string, live bool)` drops the `live` parameter. No existing test covers the old confirm. Add one to `recycle_worktree_test.go`: a real repo with a linked worktree, a running `sh` session in it (skip on Windows like the other session tests), open the picker, press enter on that worktree, drain the op's events, and assert the model's modal request id is `recycle.blocked` with options `recycle anyway`/`abort`.
 
 Footer/help: add `[.] reserve / release claim` to the Worktrees footer and help the way `[x] remove` was added for session sub-rows (see memory: footer-only ids in the action-menu coverage gate — run `go test ./internal/tui -run 'Coverage|Footer|Help'` and add `worktree-reserve`, `worktree-unreserve`, `worktree-release-claim` wherever that gate lists menu-only ids).
 
