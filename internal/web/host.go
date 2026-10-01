@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -45,6 +46,9 @@ func NewHost(svc *domain.Service, opener func(string) *domain.Service, hosted bo
 	s := New(svc)
 	s.opener = opener
 	s.hosted = hosted
+	if hosted {
+		s.docs = agentdocs.Shared() // the terminal's store: one set of agent notes
+	}
 	return newHostOver(s, hosted)
 }
 
@@ -78,6 +82,7 @@ func (h *Host) Start(ctx context.Context, addr string) (string, error) {
 	h.mu.Unlock()
 	h.srv.startLive(ctx)        // watcher + interval ticker behind GET /api/events
 	h.srv.startOpenFilesWatch() // the open files follow the disk (openfiles_watch.go)
+	h.srv.startDocsFollow()     // …and the agent-docs store (agentdocs_follow.go)
 	// The live-steering claim: web.json carries THIS run's URL, so a
 	// `gg session …`/`gg open --web` in any shell on this worktree can reach
 	// the page.

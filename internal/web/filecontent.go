@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/termimg"
@@ -96,6 +97,38 @@ type fileContentBody struct {
 	// Stamp is a working-tree read's diskStamp, taken BEFORE the read: the
 	// lines are never older than it, so a change mid-read still shows.
 	Stamp string `json:"stamp,omitempty"`
+	// Notes are an agent's notes on a working-tree file, aligned to the
+	// bytes just read (agentdocs): lines and notes come from ONE read.
+	Notes []noteRow `json:"notes,omitempty"`
+}
+
+// noteRow is one agent note as the viewer draws it; Ref is what r copies.
+type noteRow struct {
+	ID        string `json:"id"`
+	Start     int    `json:"start"`
+	End       int    `json:"end"`
+	Summary   string `json:"summary"`
+	Rationale string `json:"rationale,omitempty"`
+	Author    string `json:"author"`
+	Outdated  bool   `json:"outdated,omitempty"`
+	Ref       string `json:"ref"`
+}
+
+// notesFor aligns path's notes to data, the working-tree bytes just read,
+// and returns them for the page (nil when path has none).
+func (s *Server) notesFor(ctx context.Context, path string, data []byte) []noteRow {
+	root := s.docsRoot(ctx)
+	if s.docs.NoteCount(root, path) == 0 {
+		return nil
+	}
+	s.docs.Align(root, path, agentdocs.Lines(data))
+	ns, _ := s.docs.Notes(root, path)
+	out := make([]noteRow, len(ns))
+	for i, n := range ns {
+		out[i] = noteRow{ID: n.ID, Start: n.Start, End: n.End, Summary: n.Summary, Rationale: n.Rationale,
+			Author: n.Author, Outdated: n.Outdated, Ref: agentdocs.NoteReference(n)}
+	}
+	return out
 }
 
 // diskStamp names a stat for the page to compare: "<size>:<mtime ns>",
@@ -185,7 +218,11 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, body)
 		return
 	}
-	writeJSON(w, fileContentBody{Lines: contentRows(path, data, svc.SyntaxHighlighting()), Stamp: stamp})
+	body := fileContentBody{Lines: contentRows(path, data, svc.SyntaxHighlighting()), Stamp: stamp}
+	if src == "" || src == "worktree" {
+		body.Notes = s.notesFor(ctx, path, data)
+	}
+	writeJSON(w, body)
 }
 
 // readVersion reads path at one version: the bytes ON DISK (a missing file is

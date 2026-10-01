@@ -342,6 +342,13 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	// The note verbs are answered HERE from the agent-docs store: they never
+	// move a screen, so neither the wire check (which knows only the hub's
+	// verbs) nor the op gate below applies.
+	if isNoteVerb(c.Cmd) {
+		writeJSON(w, s.steerNote(readCtx(r), c))
+		return
+	}
 	wire, err := toSteerWire(c)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)

@@ -43,7 +43,7 @@ type ofAnswer struct {
 }
 
 func (s *Server) handleOpenFilesGet(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"files": s.ofs.list(s.service().Root())})
+	writeJSON(w, map[string]any{"files": s.ofList(s.service().Root())})
 }
 
 // ofAbs is where a working-tree path lives on disk.
@@ -106,7 +106,21 @@ func (s *Server) handleOpenFilesPost(w http.ResponseWriter, r *http.Request) {
 	case "background":
 		ok = s.ofs.background(wt, q.ID, q.Tab, q.Line)
 	case "close":
-		ok = s.ofs.close(wt, q.ID, q.Tab, q.Everywhere)
+		// The server decides, not the page: a note may have landed after the
+		// page read the file. A plain close (esc) of a noted file steps
+		// aside, as in the TUI; close everywhere (x) drops its notes too.
+		k, pinned, found := s.ofs.pinnedEntry(wt, q.ID)
+		switch {
+		case !found:
+			ok = false
+		case pinned && !q.Everywhere:
+			ok = s.ofs.background(wt, q.ID, q.Tab, q.Line)
+		default:
+			ok = s.ofs.close(wt, q.ID, q.Tab, q.Everywhere)
+			if ok && q.Everywhere && k.Src == "worktree" {
+				s.docs.ClearPath(s.docsRoot(r.Context()), k.Path)
+			}
+		}
 	case "cursor":
 		ok, broadcast = s.ofs.cursor(wt, q.ID, q.Line), false
 	case "shown":
@@ -122,7 +136,7 @@ func (s *Server) handleOpenFilesPost(w http.ResponseWriter, r *http.Request) {
 	if broadcast {
 		s.broadcastOpenFiles(wt, ans.Evicted)
 	}
-	ans.Files = s.ofs.list(wt)
+	ans.Files = s.ofList(wt)
 	writeJSON(w, ans)
 }
 
@@ -142,7 +156,7 @@ func (s *Server) broadcastOpenFiles(wt, evicted string) { s.broadcastOpened(wt, 
 // open just added, so every tab can say so.
 func (s *Server) broadcastOpened(wt, evicted, opened string) {
 	if h := s.liveHubRef(); h != nil {
-		h.fanOut(liveMsg{Changed: []string{}, Reason: "open_files", Files: s.ofs.list(wt), Evicted: evicted, Opened: opened})
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "open_files", Files: s.ofList(wt), Evicted: evicted, Opened: opened})
 	}
 }
 
