@@ -302,3 +302,35 @@ func TestStartTerminalRunsTheShell(t *testing.T) {
 	s.SendText("echo \"T-$GG_INBOX\"\r")
 	waitSessionText(t, s, "T-/tmp/inbox-t")
 }
+
+func TestSessionProgram(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ cmd, want string }{
+		{"claude --resume", "claude"},
+		{`"C:\Program Files\Claude\claude.exe" --x`, `C:\Program Files\Claude\claude.exe`},
+		{"  codex  ", "codex"},
+		{"", ""},
+	} {
+		if got := SessionProgram(config.ToolCommand{Command: c.cmd}); got != c.want {
+			t.Errorf("SessionProgram(%q) = %q, want %q", c.cmd, got, c.want)
+		}
+	}
+}
+
+// A caller holding a STALE config (the file gained session commands since it
+// loaded — another frontend's first run) must not append them a second time.
+func TestEnsureSessionCommandsRechecksTheFile(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if _, err := EnsureSessionCommands(config.Config{}, path, fakeDetect); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(path)
+	added, err := EnsureSessionCommands(config.Config{}, path, fakeDetect) // stale: still empty
+	if err != nil || added != nil {
+		t.Fatalf("stale caller: added=%v err=%v, want nothing", added, err)
+	}
+	if after, _ := os.ReadFile(path); string(after) != string(before) {
+		t.Fatalf("the file was appended to again:\n%s", after)
+	}
+}

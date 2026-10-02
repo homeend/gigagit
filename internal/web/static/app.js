@@ -18,6 +18,7 @@ import "./filehist.js";
 import "./viewer.js";
 import "./openfiles.js";
 import "./console.js";
+import "./sessions.js";
 import "./wtfinder.js";
 import "./review.js";
 import { syncStackChrome } from "./stackview.js";

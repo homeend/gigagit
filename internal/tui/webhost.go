@@ -23,6 +23,9 @@ type WebHost interface {
 	// page's own re-root calls fn, which re-roots the TUI (and, through
 	// Reroot, the page) before returning, or refuses with a reason.
 	SetSwitcher(fn func(ctx context.Context, path string) error)
+	// SetSessionStarter installs the page's way to start a session: the
+	// terminal starts it (its inbox, its agent channel) and returns the id.
+	SetSessionStarter(fn func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error))
 	URL() string
 	OpenBrowser()
 	Close()
@@ -44,6 +47,9 @@ type webHostState struct {
 	// goroutine into Update (waitWebSwitchCmd); stop ends that wait and
 	// refuses late requests once the page is closed.
 	switches chan webSwitchRequestMsg
+	// sessions carries the page's start requests, HTTP goroutine → Update
+	// (waitWebSessionCmd, websession.go).
+	sessions chan webSessionRequestMsg
 	stop     chan struct{}
 	// pendingSwitch: answers owed to page switches whose re-root is done
 	// but whose host follow (webRerootMsg) has not landed yet.
@@ -75,7 +81,7 @@ type webStartedMsg struct {
 type webRerootMsg struct{ err error }
 
 func newWebHostState() *webHostState {
-	return &webHostState{switches: make(chan webSwitchRequestMsg), stop: make(chan struct{})}
+	return &webHostState{switches: make(chan webSwitchRequestMsg), sessions: make(chan webSessionRequestMsg), stop: make(chan struct{})}
 }
 
 func (m Model) ensureWeb() Model {
@@ -173,10 +179,11 @@ func (m Model) webAddr() string {
 func (m Model) webServing() bool { return m.web != nil && m.web.host != nil }
 
 func startWebCmd(svc *domain.Service, w *webHostState, addr string, open bool) tea.Cmd {
-	switcher := switcherFor(w)
+	switcher, starter := switcherFor(w), sessionStarterFor(w)
 	return func() tea.Msg {
 		h := NewWebHost(svc)
 		h.SetSwitcher(switcher)
+		h.SetSessionStarter(starter)
 		url, err := h.Start(context.Background(), addr)
 		if err != nil {
 			return webStartedMsg{err: err, open: open}
@@ -240,7 +247,8 @@ func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
 	for _, c := range pending {
 		cmds = append(cmds, m.answerSteer(c, steerOK(c, msg.url)))
 	}
-	cmds = append(cmds, waitWebSwitchCmd(m.web)) // the page may now switch the terminal
+	cmds = append(cmds, waitWebSwitchCmd(m.web))  // the page may now switch the terminal
+	cmds = append(cmds, waitWebSessionCmd(m.web)) // …and start sessions in it
 	return m, tea.Batch(cmds...)
 }
 

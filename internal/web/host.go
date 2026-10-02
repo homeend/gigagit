@@ -109,6 +109,14 @@ func (h *Host) SetSwitcher(fn func(ctx context.Context, path string) error) {
 	h.srv.SetSwitcher(fn)
 }
 
+// SetSessionStarter installs the terminal's session start: the page's Start
+// agent / Open terminal is validated and approved here, then fn starts it
+// the way the terminal does (its inbox, its agent channel) and returns the
+// new session's id. Without it the page's server starts sessions itself.
+func (h *Host) SetSessionStarter(fn func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error)) {
+	h.srv.SetSessionStarter(fn)
+}
+
 // URL is the served address ("" before Start).
 func (h *Host) URL() string {
 	h.mu.Lock()

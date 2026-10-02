@@ -1767,6 +1767,20 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #console-cursor { position: absolute; margin: 6px 0 0 8px; background: var(--fg); mix-blend-mode: difference; pointer-events: none; }
 #console-cursor.outline { background: none; border: 1px solid var(--dim); mix-blend-mode: normal; box-sizing: border-box; }
 #console-cursor.hidden { display: none; }
+
+/* The Start agent dialog (sessions.js, web attach plan 2). */
+#sessstart { position: fixed; top: 0; left: 0; right: 0; bottom: var(--foot-h, 25px); background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 14vh; z-index: 23; }
+#sessstart.hidden { display: none; }
+#sessstart-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: min(640px, 92vw); max-height: 60vh; display: flex; flex-direction: column; }
+#sessstart-title { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+#sessstart-body { overflow: auto; padding: 6px 0; font-family: ui-monospace, monospace; font-size: 12px; }
+#sessstart-body ul { list-style: none; margin: 0; padding: 0; }
+#sessstart-body li { padding: 2px 12px; cursor: pointer; white-space: pre; }
+#sessstart-body li.sel { background: var(--sel); }
+#sessstart-body li .detail { color: var(--dim); margin-left: 2ch; }
+#sessstart-body .rcmd { margin: 6px 12px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+#sessstart-body .rnote { margin: 6px 12px; color: var(--dim); }
+#sessstart-body button { margin: 4px 12px 8px; }
 #foot .cwarn { margin-left: auto; color: #e0c06c; }
 
 /* The ctrl+\ switcher's tabs (Agents · AI tasks · Open files). */

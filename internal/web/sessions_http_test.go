@@ -13,16 +13,22 @@ import (
 // testSession starts `sh -c script` under a private manager and returns it.
 func testSession(t *testing.T, script string) *domain.AgentSession {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("sh-based")
-	}
-	restore := domain.UseSessionManager(agentsession.NewManager())
-	t.Cleanup(func() { domain.Sessions().KillAll(t.Context()); restore() })
+	testSessionManager(t)
 	s, err := domain.Sessions().Start(domain.SessionStartSpec{Label: "sh", AgentID: "sh", Repo: "r", Dir: t.TempDir(), Argv: []string{"sh", "-c", script}, Cols: 40, Rows: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s
+}
+
+// testSessionManager installs a private manager for the test.
+func testSessionManager(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	restore := domain.UseSessionManager(agentsession.NewManager())
+	t.Cleanup(func() { domain.Sessions().KillAll(t.Context()); restore() })
 }
 
 func TestSessionsListsEverySession(t *testing.T) {

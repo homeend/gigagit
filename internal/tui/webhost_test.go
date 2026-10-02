@@ -21,6 +21,11 @@ type fakeWebHost struct {
 	url                   string
 	startErr              error
 	switcher              func(ctx context.Context, path string) error
+	starter               func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error)
+}
+
+func (f *fakeWebHost) SetSessionStarter(fn func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error)) {
+	f.starter = fn
 }
 
 func (f *fakeWebHost) SetSwitcher(fn func(ctx context.Context, path string) error) { f.switcher = fn }

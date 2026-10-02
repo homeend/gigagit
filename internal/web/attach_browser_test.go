@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -13,8 +14,9 @@ import (
 
 // TestAttachBrowserHost is not a test of anything by itself: with
 // GG_BROWSER_CHECK=1 it hosts a real page, a real `sh` session and a real
-// stream for the playwright check (web attach plan 1 has no web start
-// path), prints the URL, and holds until the file GG_BROWSER_DONE names
+// stream for the playwright checks (plan 1's attach, plan 2's lifecycle —
+// which starts its own session from the seeded "Shell" command), prints the
+// URL, and holds until the file GG_BROWSER_DONE names
 // appears. Skipped otherwise.
 func TestAttachBrowserHost(t *testing.T) {
 	if os.Getenv("GG_BROWSER_CHECK") != "1" {
@@ -23,7 +25,18 @@ func TestAttachBrowserHost(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("sh-based")
 	}
-	isolateGlobal(t)
+	global := isolateGlobal(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir()) // the approval store
+	if err := os.MkdirAll(filepath.Dir(global), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A session command that needs no detection and no real agent (the
+	// lifecycle check starts it from the worktree menu).
+	const seeded = "[[tools.command]]\ncategory = \"session\"\nmode = \"session\"\nname = \"Shell\"\n" +
+		"command = '''sh -c 'while true; do printf \"$ \"; read l || exit 0; eval \"$l\"; done' '''\n"
+	if err := os.WriteFile(global, []byte(seeded), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	restore := domain.UseSessionManager(agentsession.NewManager())
 	t.Cleanup(func() { domain.Sessions().KillAll(t.Context()); restore() })
 	dir := newRepoDir(t, 1)
