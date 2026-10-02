@@ -123,3 +123,16 @@ func TestOpDiscardConflicted(t *testing.T) {
 		t.Errorf("error = %v", out)
 	}
 }
+
+// postJSONAny is postJSONRaw for bodies that are not all strings.
+func postJSONAny(t *testing.T, ts *httptest.Server, path, body string) (int, map[string]any) {
+	t.Helper()
+	resp, err := http.Post(ts.URL+path, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s: %v", path, err)
+	}
+	defer resp.Body.Close()
+	out := map[string]any{}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out
+}

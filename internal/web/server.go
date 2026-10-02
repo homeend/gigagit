@@ -123,6 +123,15 @@ type Server struct {
 	// returns, or refuses with a reason. nil while hosted = the re-root is
 	// refused. Guarded by mu.
 	switcher func(ctx context.Context, path string) error
+	// starter starts a session for the page (Host.SetSessionStarter): the
+	// terminal's own start when a TUI hosts the page, so a web-started agent
+	// gets the terminal's inbox and agent channel. nil = this server starts
+	// it itself (standalone gg web). Guarded by mu.
+	starter func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error)
+	// placeStat / placeGOOS: the reachability probe's seams (tests); zero =
+	// os.Stat and runtime.GOOS.
+	placeStat func(string) error
+	placeGOOS string
 	// opener builds a Service for a path this server opens ITSELF
 	// (handleReroot's target). A TUI host passes domain.OpenTUI so an ssh
 	// prompt can never reach its raw-mode terminal; nil = domain.Open.
@@ -158,6 +167,19 @@ func (s *Server) SetSwitcher(fn func(ctx context.Context, path string) error) {
 	s.mu.Lock()
 	s.switcher = fn
 	s.mu.Unlock()
+}
+
+// SetSessionStarter installs the terminal's start (see starter).
+func (s *Server) SetSessionStarter(fn func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error)) {
+	s.mu.Lock()
+	s.starter = fn
+	s.mu.Unlock()
+}
+
+func (s *Server) sessionStarter() func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.starter
 }
 
 func (s *Server) terminalSwitcher() func(ctx context.Context, path string) error {
