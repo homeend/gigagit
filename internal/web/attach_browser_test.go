@@ -55,6 +55,20 @@ func TestAttachBrowserHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A "Claude" that draws a Claude-shaped screen (web attach plan 3): the
+	// idle box, then on Enter a question dialog, then the box again. No
+	// grace and a 2 s stall so the notices are observable.
+	t.Cleanup(domain.UseStateTiming(0, 2*time.Second))
+	domain.SessionStates()
+	_, err = domain.Sessions().Start(domain.SessionStartSpec{
+		Label: "Claude", AgentID: "claude", Repo: "r", Dir: root, Cols: 80, Rows: 24,
+		Argv: []string{"sh", "-c", `printf '%s\n' '────────────────────' '❯ '; read l;` +
+			` printf '\033[2J\033[H%s\n' ' Do you want to proceed?' ' ❯ 1. Yes' '   2. No' ' Esc to cancel'; read l;` +
+			` printf '\033[2J\033[H%s\n' '────────────────────' '❯ '; read l`},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	fmt.Printf("ATTACH_URL=%s\n", ts.URL)
 	done := os.Getenv("GG_BROWSER_DONE")
 	deadline := time.Now().Add(10 * time.Minute)
