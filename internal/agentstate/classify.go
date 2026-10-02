@@ -50,8 +50,21 @@ var defaults = map[string][3][]string{
 		// · <cwd>". A user message echoed in the transcript also starts
 		// with › but is followed by other text. Captured live 2026-09-08
 		// (codex 0.153.4).
-		{`^›[^\n]*\n[^\n]*· /`},
+		// At startup (codex 0.160.0, captured 2026-10-03) the status line is
+		// not there yet: the box sits over "? for shortcuts".
+		{`^›[^\n]*\n[^\n]*· /`, `^›[^\n]*\n\s*\? for shortcuts`},
 		{`\(y/n\)`, `\[Y/n\]`, `Press Enter`, `^\s*[›>] \d+\.`},
+	},
+	// Antigravity CLI 1.2.15, captured live from gg's emulator 2026-10-03: a
+	// braille spinner line ("⢿  Generating...", "⡿  Running command...");
+	// the input box is a ">" line BETWEEN two rules (the echoed user
+	// message has a rule above it only); dialogs are the trust question
+	// and the command permission ("Run this command?", "> 1. Yes, run
+	// command") with the "↑/↓ Navigate" hint.
+	"antigravity": {
+		{`^[⠁-⣿] `},
+		{`^─{8,}\n>[^\n]*\n─{8,}`},
+		{`Do you trust the contents`, `Run this command\?`, `↑/↓ Navigate`, `^\s*> \d+\. `},
 	},
 	// Junie and kimi: erbrus's agent presets (live captures 2026-09-08/09).
 	// Any junie spinner line is working — "Running <cmd>" carries no "esc

@@ -61,10 +61,11 @@ here.
    The watcher exposes `Subscribe()` (a broadcaster), `Get`/`All` snapshots
    and `Notices(after uint64)` — a numbered ring; each frontend keeps its own
    cursor.
-3. **Agent ids are gg's:** `claude`, `codex`, `junie`, `kimi`, `""` generic.
-   `antigravity` (binary `agy`) has no verified rules in erbrus → generic. A
-   domain test pins that every session-capable `exttool.Builtins()` id
-   resolves to a rule set.
+3. **Agent ids are gg's:** `claude`, `codex`, `junie`, `kimi`, `antigravity`,
+   `""` generic. erbrus had no rules for `antigravity` (binary `agy`); Task 8's
+   live run captured its screens and gave it a verified set. A domain test
+   pins that every session-capable `exttool.Builtins()` id resolves to a
+   rule set.
 4. **The watcher wakes on output.** The manager's signal fires only on
    start/exit/remove, so the watcher subscribes to each running session,
    coalesces 300 ms, then reads `Text()`. The 2 s tick serves the stall clock.

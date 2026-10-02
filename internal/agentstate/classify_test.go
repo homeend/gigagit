@@ -243,15 +243,15 @@ func TestClassifyJunieAndKimi(t *testing.T) {
 }
 
 func TestHasDefaultsAndGenericFallback(t *testing.T) {
-	for _, id := range []string{"claude", "codex", "junie", "kimi"} {
+	for _, id := range []string{"claude", "codex", "junie", "kimi", "antigravity"} {
 		if !HasDefaults(id) {
 			t.Errorf("%s has no rules", id)
 		}
 	}
-	if HasDefaults("") || HasDefaults("antigravity") {
+	if HasDefaults("") || HasDefaults("mystery") {
 		t.Error("generic ids must not claim dedicated rules")
 	}
-	if got := Classify(DefaultRules("antigravity"), Tail("continue? (y/n)", 5)); got != Question {
+	if got := Classify(DefaultRules("mystery"), Tail("continue? (y/n)", 5)); got != Question {
 		t.Errorf("generic fallback: %q", got)
 	}
 }

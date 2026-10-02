@@ -195,7 +195,7 @@ func TestStatesStalledOncePerStretch(t *testing.T) {
 func TestStatesStallFromUnknownNeedsDedicatedRules(t *testing.T) {
 	t.Parallel()
 	now := actT0.Add(10 * time.Minute)
-	for agent, want := range map[string]bool{"claude": true, "antigravity": false} {
+	for agent, want := range map[string]bool{"claude": true, "mystery": false} {
 		w, f := oneSession(agent)
 		f.text["s1"] = actNoise
 		f.last["s1"] = now.Add(-5 * time.Minute)
