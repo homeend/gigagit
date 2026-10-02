@@ -407,7 +407,7 @@ func (v *textTemplatesView) updateRendered(m Model, msg tea.KeyMsg) (Model, tea.
 		return m, func() tea.Msg {
 			res, _ := copyCmd().(clipboardCopiedMsg)
 			if res.err == nil && svc != nil && len(names) > 0 {
-				_ = svc.BumpPrefixSeqs(context.Background(), names)
+				_ = svc.TakeTextTemplateSeqs(context.Background(), names)
 			}
 			return textTemplateCopiedMsg{res}
 		}
@@ -446,7 +446,13 @@ func (v *textTemplatesView) fillBox(m Model) string {
 		top := max(0, min(v.fill.idx-room/2, len(fields)-room))
 		fields = fields[top : top+room]
 	}
-	parts := []string{i18n.T("%s — fill variables (%d/%d)", v.selTitle(), v.fill.idx+1, len(v.fill.labels)), ""}
+	// The step's position must stay readable: a title too long for the line
+	// is cut to what the rest leaves, and shown whole on the bottom bar.
+	title, at, n := v.selTitle(), v.fill.idx+1, len(v.fill.labels)
+	if titleW := max(1, g.textW-lipgloss.Width(i18n.T("%s — fill variables (%d/%d)", "", at, n))); rowTruncated(title, titleW) {
+		v.tipFull, title = title, truncate(title, titleW)
+	}
+	parts := []string{i18n.T("%s — fill variables (%d/%d)", title, at, n), ""}
 	parts = append(parts, fields...)
 	parts = append(parts, "")
 	parts = append(parts, hints...)
@@ -757,10 +763,17 @@ func (v *textTemplatesView) onSaveFailed(msg textTemplateSaveFailedMsg) {
 	v.mode, v.formErr, v.draft = ttForm, ttErrText(msg.err), msg.body
 }
 
+// updateConfirm answers the delete question: y deletes, n or esc keeps. Any
+// other key leaves the question open — a stray key must not answer it.
 func (v *textTemplatesView) updateConfirm(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
-	v.mode = ttBrowse
-	if t, ok := v.selected(); ok && msg.String() == "y" {
-		return m, m.removeTextTemplateCmd(t)
+	switch {
+	case msg.Type == tea.KeyEsc || msg.String() == "n":
+		v.mode = ttBrowse
+	case msg.String() == "y":
+		v.mode = ttBrowse
+		if t, ok := v.selected(); ok {
+			return m, m.removeTextTemplateCmd(t)
+		}
 	}
 	return m, nil
 }

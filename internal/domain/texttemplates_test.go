@@ -220,3 +220,19 @@ func TestTextTemplatesDamagedScopeKeepsTheOther(t *testing.T) {
 		t.Fatalf("find a missing id with a damaged scope: %v", err)
 	}
 }
+
+// The counters of a text that was taken advance together, each once — a name
+// listed twice is one counter.
+func TestTakeTextTemplateSeqsAdvancesEachOnce(t *testing.T) {
+	t.Parallel()
+	svc, ctx := textSvc(t), context.Background()
+	if err := svc.TakeTextTemplateSeqs(ctx, []string{"one", "two", "one"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, err := svc.RenderTextTemplate(ctx, "<seq:one>/<seq:two>", nil); err != nil || got != "2/2" {
+		t.Fatalf("next = %q, %v; want 2/2", got, err)
+	}
+	if err := svc.TakeTextTemplateSeqs(ctx, nil); err != nil {
+		t.Fatalf("no counters: %v", err)
+	}
+}

@@ -229,3 +229,32 @@ func TestTemplateOversizedFileNeverStoredTruncated(t *testing.T) {
 		t.Fatalf("edit: exit %d err %q", code, errb)
 	}
 }
+
+// A store file that cannot be read is not the caller's mistake: exit 1, with
+// the reason. Exit 2 stays for an id that is unknown or names several rows.
+func TestTemplateDamagedStoreExitsOne(t *testing.T) {
+	dir := prefixRepo(t)
+	for _, title := range []string{"Alpha one", "Alpha two"} {
+		if code, _, errb := runCLIStdin(t, dir, "text\n", "template", "add", "--title", title, "-F", "-"); code != 0 {
+			t.Fatalf("add exit %d: %s", code, errb)
+		}
+	}
+	if code, _, errb := runCLI(t, dir, "template", "show", "alpha"); code != 2 || !strings.Contains(errb, "matches 2") {
+		t.Fatalf("ambiguous id: exit %d err %q", code, errb)
+	}
+	store := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gg", "texttemplates", "global", "texttemplates.toml")
+	if err := os.WriteFile(store, []byte("[[templates]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"template", "show", "alpha-one"},
+		{"template", "render", "alpha-one"},
+		{"template", "edit", "alpha-one", "--title", "Beta"},
+		{"template", "rm", "alpha-one"},
+	} {
+		code, _, errb := runCLI(t, dir, args...)
+		if code != 1 || !strings.Contains(errb, "damaged") {
+			t.Errorf("%v: exit %d err %q; want 1 and the damage", args, code, errb)
+		}
+	}
+}

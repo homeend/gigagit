@@ -190,11 +190,10 @@ func (s *Server) handleTextTemplateTake(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusNotFound, errors.New("unknown text template"))
 		return
 	}
-	if names := domain.TextTemplateSeqNames(t.Body); len(names) > 0 {
-		if err := svc.BumpPrefixSeqs(r.Context(), names); err != nil {
-			writeErr(w, http.StatusInternalServerError, err)
-			return
-		}
+	// One write: the text's counters advance together or not at all.
+	if err := svc.TakeTextTemplateSeqs(r.Context(), domain.TextTemplateSeqNames(t.Body)); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
 	}
 	writeJSON(w, map[string]bool{"ok": true})
 }

@@ -907,3 +907,57 @@ func TestTextTemplatesCutTitleDoesNotHideAnOutcome(t *testing.T) {
 		t.Fatalf("after an unchanged edit the bottom row = %q", got)
 	}
 }
+
+// y takes the counters in one step: a name the view holds twice is consumed
+// once.
+func TestTextTemplatesYTakesEachCounterOnce(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.clipWrite = func(io.Writer, string) (string, error) { return "", nil }
+	v := &textTemplatesView{mode: ttRendered, rendered: "final text", seqNames: []string{"ydup", "ydup"}, items: []model.TextTemplate{{ID: "a", Title: "A"}}}
+	m = m.pushLayer(v)
+	out, cmd := v.update(m, keyMsg("y"))
+	out.Update(cmd())
+	if next, _, _ := m.svc.RenderTextTemplate(context.Background(), "<seq:ydup>", nil); next != "2" {
+		t.Fatalf("next = %q, want 2", next)
+	}
+}
+
+// The delete question is answered by y, n or esc only: any other key leaves
+// it open.
+func TestTextTemplatesDeleteConfirmIgnoresOtherKeys(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}
+	v := &textTemplatesView{items: ttItems(2), sel: 1, mode: ttConfirmDelete}
+	for _, k := range []string{"x", "enter", "tab", "d", "Y"} {
+		if _, cmd := v.update(m, keyMsg(k)); v.mode != ttConfirmDelete || cmd != nil {
+			t.Fatalf("%q answered the question: mode %v cmd %v", k, v.mode, cmd != nil)
+		}
+	}
+	if _, cmd := v.update(m, keyMsg("esc")); v.mode != ttBrowse || cmd != nil {
+		t.Fatalf("esc must cancel: mode %v", v.mode)
+	}
+}
+
+// A long title gives way to the fill step's position: "(n/m)" stays on the
+// title line, and the whole title goes to the bottom bar.
+func TestTextTemplatesFillKeepsPositionWithLongTitle(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 60, height: 30}
+	title := strings.Repeat("Long title ", 7) + "END"
+	v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: title, Body: "<user:one> <user:two>"}}}
+	v.update(m, keyMsg("enter"))
+	box := plain(v.box(m))
+	if !strings.Contains(box, "fill variables (1/2)") {
+		t.Fatalf("the position is cut:\n%s", box)
+	}
+	ttBoxFits(t, "fill", box, 60, 30, "[enter/tab] next")
+	if v.tipFull != title {
+		t.Fatalf("tipFull = %q, want the whole title", v.tipFull)
+	}
+	// A title that fits is drawn whole and needs no bottom bar.
+	v.items[0].Title = "Short"
+	if box := plain(v.box(m)); !strings.Contains(box, "Short — fill variables (1/2)") || v.tipFull != "" {
+		t.Fatalf("short title: tipFull %q\n%s", v.tipFull, box)
+	}
+}
