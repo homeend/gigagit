@@ -661,14 +661,17 @@ finds the right one here.
   Notes live inside a preview: `gg diff --preview <id|label|<target>...<source>>
   [--hunks [--json]]` prints the preview's own patch and numbers its hunks,
   and `gg note add --preview P --file F (--new-line N | --hunk H) --summary …`
-  anchors a note on it. A preview note is stored on the SOURCE TIP and shows
-  on that commit's own view too (and remembers the preview: `--json` carries
-  `"preview": "<target>...<source>"`, or `"<a7>..<b7>"` for a pair — the
-  TUI names it on the tip's Files view); the old side (the merge base) is not
-  addressable, so `--old-line` is refused. `gg note list --preview P [--file F]
-  [--json]` lists the notes gathered along the whole branch — a note written
-  against an earlier commit whose lines a later commit changed is reported
-  `outdated` rather than dropped. `gg note apply --preview P --stdin` imports
+  anchors a note on it. A preview note is stored on the SOURCE TIP and
+  remembers the preview (`--json` carries `"preview": "<target>...<source>"`,
+  or `"<a7>..<b7>"` for a pair); the TUI and the web page show it in the
+  review — a Range reviews row on the tip, ✎ in Commits — not on the commit's
+  own files. The old side (the merge base) is not addressable, so `--old-line`
+  is refused. `gg note list --preview P [--file F] [--json]` lists the notes
+  written IN that preview or pair, on any commit of the branch — one written
+  when an earlier commit was the tip, whose lines a later commit changed, is
+  reported `outdated` rather than dropped. A note written with `--rev` is its
+  commit's own note: `--preview` does not list it (`gg note list --rev`
+  does, and `--rev` still lists every note at that address). `gg note apply --preview P --stdin` imports
   a batch onto the tip (old-side items skipped), and `gg review --preview P
   [--notes]` reviews the pair.
 - `gg branch current` — just the branch name (HEAD's short sha when

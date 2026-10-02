@@ -131,6 +131,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   landing. Before, the page could not reach those notes from the commit at
   all.
 
+- **A preview or a pair shows the notes written in it, and no others.** The
+  rule a review opened from a commit's Range reviews row already followed
+  now holds for every scope: a saved merge preview or commit pair (the
+  Previews tab, a pair link, `gg note list --preview`, MCP's preview reads)
+  lists the notes written IN it — on whichever commit of the branch was its
+  tip at the time, `outdated` when later commits changed the lines — and no
+  longer the plain notes of the commits it covers, nor another review's.
+  General notes are read where they were written: on their commit. A pull
+  request's view is unchanged (its local notes carry no portable name).
+  Notes written in a preview before 2026-10-01 carry no preview name and now
+  read as their commit's notes. `PreviewNoteSet.scope`; skill v127.
 - **A range review's notes show in the review, and only there.** Notes
   written in a merge preview (a branch review) or a commit pair no longer
   appear in the commit's own view: a file the commit changes is not badged

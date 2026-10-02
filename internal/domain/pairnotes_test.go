@@ -10,11 +10,16 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// pairNoteOn stores one new-side (or old-side) note for the pair tests.
-func pairNoteOn(t *testing.T, svc *Service, commit, path string, side model.NoteSide, summary string) {
+// pairName is the scope a note written in the pair a..b carries: a pair shows
+// the notes written IN it.
+func pairName(a, b string) string { return a[:7] + ".." + b[:7] }
+
+// pairNoteOn stores one new-side (or old-side) note written in scope, for the
+// pair tests.
+func pairNoteOn(t *testing.T, svc *Service, scope, commit, path string, side model.NoteSide, summary string) {
 	t.Helper()
 	if _, err := svc.NoteAdd(context.Background(), model.Note{
-		Source: model.NoteSourceAgent, Author: "ada",
+		Source: model.NoteSourceAgent, Author: "ada", Preview: scope,
 		Address: model.FileAddress{State: model.StateCommitted, Commit: commit, Path: path},
 		Side:    side, Range: [2]int{1, 1}, Summary: summary,
 	}); err != nil {
@@ -77,7 +82,7 @@ func TestPairNotesReversedPairStillHoldsItsTip(t *testing.T) {
 	svc, dir := newPreviewRepo(t)
 	ctx := context.Background()
 	older, newer := revParse(t, dir, "main"), revParse(t, dir, "feat")
-	pairNoteOn(t, svc, older, "a.txt", model.NoteSideNew, "on the reversed pair's tip")
+	pairNoteOn(t, svc, pairName(newer, older), older, "a.txt", model.NoteSideNew, "on the reversed pair's tip")
 
 	set, err := svc.PairNotes(ctx, newer, older)
 	if err != nil {
@@ -116,10 +121,10 @@ func TestPairNotesGathersNewSideOnly(t *testing.T) {
 	ctx := context.Background()
 	a, b := revParse(t, dir, "main"), revParse(t, dir, "feat")
 	mid := revParse(t, dir, "feat~1")
-	pairNoteOn(t, svc, b, "b.txt", model.NoteSideNew, "on B")
-	pairNoteOn(t, svc, mid, "a.txt", model.NoteSideNew, "on the middle commit")
-	pairNoteOn(t, svc, b, "a.txt", model.NoteSideOld, "old side of B")
-	pairNoteOn(t, svc, a, "a.txt", model.NoteSideNew, "on A")
+	pairNoteOn(t, svc, pairName(a, b), b, "b.txt", model.NoteSideNew, "on B")
+	pairNoteOn(t, svc, pairName(a, b), mid, "a.txt", model.NoteSideNew, "on the middle commit")
+	pairNoteOn(t, svc, pairName(a, b), b, "a.txt", model.NoteSideOld, "old side of B")
+	pairNoteOn(t, svc, pairName(a, b), a, "a.txt", model.NoteSideNew, "on A")
 
 	set, err := svc.PairNotes(ctx, a, b)
 	if err != nil {

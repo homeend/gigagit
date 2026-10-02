@@ -50,8 +50,10 @@ func newPreviewServer(t *testing.T) (*httptest.Server, string) {
 	svc.UsePreviewsDir(t.TempDir())
 	svc.UseNotesDir(t.TempDir())
 	ctx := context.Background()
+	// Written in the preview while c1 was its tip: a preview shows the notes
+	// written IN it, however far the branch moved since.
 	if _, err := svc.NoteAdd(ctx, model.Note{
-		Source: model.NoteSourceAgent, Author: "ada",
+		Source: model.NoteSourceAgent, Author: "ada", Preview: "main...feat",
 		Address: model.FileAddress{State: model.StateCommitted, Commit: c1, Path: "a.txt"},
 		Side:    model.NoteSideNew, Range: [2]int{4, 4}, Summary: "why DELTA",
 	}); err != nil {

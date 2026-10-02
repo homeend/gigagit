@@ -1903,8 +1903,14 @@ them on a file row.
   it, and `Pair()` returns it so a note written there joins the review (TUI
   `pairNotesCmd(a, b, only)`; web `state.compare.pair.scope` →
   `/api/pair/notes?scope=`, and `notePreview` accepts a scope the commit
-  already holds without resolving it). A saved preview/pair from the Previews
-  tab leaves `Only` empty and gathers everything. CLI/MCP stay unfiltered.
+  already holds without resolving it). Since the user's second ruling (2026-10-02)
+  EVERY scope does: `PreviewNoteSet.scope()` is `Only`, else the set's own
+  `Pair()` name, and `loadPreviewNotes` keeps the roots whose `Note.Preview`
+  equals it plus their replies — a saved preview/pair, a pair link, CLI
+  `--preview` and MCP preview reads included. Only a pull request's set
+  (source `refs/gg/pr/<n>`) is exempt: its local notes carry no portable
+  name. A note that must show in a preview has to be WRITTEN in it (test
+  fixtures stamp `Preview`); address reads (`--rev`, `NotesAt`) stay whole.
 - `unfoldFilesForOpen` (files.js): opening a commit (`openCommit`,
   `openCommitByHash`) unfolds a folded file list and stores it — a commit
   opens onto its files, never onto the strip. The exception is a caller going

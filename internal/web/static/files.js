@@ -2342,7 +2342,7 @@ function noteQuery(ctx = state.diffCtx) {
     return q;
   }
   if (ctx.preview) {
-    // The preview gathers notes along the branch, so the READ is keyed on the
+    // The preview gathers ITS notes along the branch, so the READ is keyed on the
     // PAIR: a note written against an older commit still belongs here. rev and
     // state ride along unchanged because they are what the WRITE needs — a
     // preview note is an ordinary commit note on the source tip, and

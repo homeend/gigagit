@@ -14,7 +14,7 @@ import (
 // name the range there and /api/scope-range turns it into its two commits.
 func TestScopeRangeOpensARangeReviewFromItsCommit(t *testing.T) {
 	t.Parallel()
-	ts, svc, c := pairNotesRepo(t)
+	ts, svc, c := plainPairNotesRepo(t)
 	scope := c[0][:7] + ".." + c[2][:7]
 	if _, err := svc.NoteAdd(context.Background(), model.Note{
 		Source: model.NoteSourceAgent, Author: "ada", Preview: scope,
@@ -54,7 +54,7 @@ func TestScopeRangeOpensARangeReviewFromItsCommit(t *testing.T) {
 // name is resolved, and the commit must be a full id.
 func TestScopeRangeGuardsItsWireValues(t *testing.T) {
 	t.Parallel()
-	ts, _, c := pairNotesRepo(t)
+	ts, _, c := plainPairNotesRepo(t)
 	for name, tc := range map[string]struct {
 		q    url.Values
 		code int
@@ -76,7 +76,7 @@ func TestScopeRangeGuardsItsWireValues(t *testing.T) {
 // for every note (scoped=1).
 func TestCommitNotesLeaveOutRangeReviewNotes(t *testing.T) {
 	t.Parallel()
-	ts, svc, c := pairNotesRepo(t) // one plain note on a.txt at each commit
+	ts, svc, c := plainPairNotesRepo(t) // one plain note on a.txt at each commit
 	scope := c[0][:7] + ".." + c[2][:7]
 	if _, err := svc.NoteAdd(context.Background(), model.Note{
 		Source: model.NoteSourceAgent, Author: "ada", Preview: scope,
@@ -106,14 +106,14 @@ func TestCommitNotesLeaveOutRangeReviewNotes(t *testing.T) {
 	if got := summaries("&scoped=1"); len(got) != 2 {
 		t.Fatalf("scoped=1 must return every note at the address: %q", got)
 	}
-	// The review opened from its row reads ITS notes only: the pair's read
-	// narrowed by scope leaves the three plain notes out.
+	// The review reads ITS notes only — the three plain notes are their
+	// commits' — whether the pair is named by itself or by the row's scope.
 	var pair struct {
 		Total int `json:"total"`
 	}
 	pq := url.Values{"a": {c[0]}, "b": {c[2]}}
-	if code := getJSON(t, ts, "/api/pair/notes?"+pq.Encode(), &pair); code != http.StatusOK || pair.Total != 3 {
-		t.Fatalf("the whole pair = %d notes (status %d), want 3", pair.Total, code)
+	if code := getJSON(t, ts, "/api/pair/notes?"+pq.Encode(), &pair); code != http.StatusOK || pair.Total != 1 {
+		t.Fatalf("the pair = %d notes (status %d), want its own 1", pair.Total, code)
 	}
 	pq.Set("scope", scope)
 	if code := getJSON(t, ts, "/api/pair/notes?"+pq.Encode(), &pair); code != http.StatusOK || pair.Total != 1 {

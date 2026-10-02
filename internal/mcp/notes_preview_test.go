@@ -88,13 +88,16 @@ func TestNoteAddWithAPreviewStoresOnTheTip(t *testing.T) {
 // on an OLDER commit on the branch, once resolved against the tip.
 func TestNotesListWithAPreviewReportsOutdated(t *testing.T) {
 	e := newTestEnv(t)
-	_, older := seedPreviewBranch(t, e)
+	tip, older := seedPreviewBranch(t, e)
 
-	// An ordinary committed note on the older commit, anchored to the text
-	// ("WORLD") that the tip's own commit later rewrote to "EARTH".
+	// A note written IN the preview while the older commit was its tip,
+	// anchored to the text ("WORLD") that the tip's own commit later rewrote
+	// to "EARTH": a preview lists the notes written in it.
+	gitRun(t, e.dir, "branch", "-f", "feat", older)
 	e.call(t, "gg_note_add", map[string]any{
-		"rev": older, "file": "a.txt", "new_line": 2, "summary": "about WORLD",
+		"preview": "main...feat", "file": "a.txt", "new_line": 2, "summary": "about WORLD",
 	})
+	gitRun(t, e.dir, "branch", "-f", "feat", tip)
 
 	out := e.call(t, "gg_notes_list", map[string]any{"preview": "main...feat", "file": "a.txt"})
 	notes, _ := out["notes"].([]any)
