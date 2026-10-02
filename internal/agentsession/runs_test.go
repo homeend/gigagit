@@ -62,3 +62,15 @@ func TestScreenRunsBlankRowIsEmpty(t *testing.T) {
 		t.Fatalf("row 5 = %+v, want no runs", sr.Lines[5].Runs)
 	}
 }
+
+// A wide glyph is its OWN run, marked with its cell width: the page gives it
+// a two-cell box, because a browser's fallback font draws it at any width.
+func TestScreenRunsWideGlyphCarriesItsWidth(t *testing.T) {
+	t.Parallel()
+	s := startSh(t, `printf 'a你好b'; sleep 5`)
+	waitText(t, s, "好") // Text() pads a wide glyph's second cell
+	row := s.ScreenRuns().Lines[0].Runs
+	if len(row) != 4 || row[0] != (Run{Text: "a"}) || row[1] != (Run{Text: "你", W: 2}) || row[2] != (Run{Text: "好", W: 2}) || row[3] != (Run{Text: "b"}) {
+		t.Fatalf("row = %+v", row)
+	}
+}

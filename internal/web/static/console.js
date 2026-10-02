@@ -47,12 +47,35 @@ function escRun(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
+// BOXED: a stretch of glyphs the monospace font may not have — blocks, box
+// drawing, powerline and Nerd Font icons, symbols. A browser takes them from
+// a fallback font at THAT font's width, and every later column drifts; so
+// the stretch sits in a box of whole cells (one per code point). Latin
+// (through U+024F) and zero-width marks stay plain text.
+const BOXED = /[^\u0000-\u024f\u0300-\u036f\u200b-\u200d\ufe00-\ufe0f]+/gu;
+
+function cellBox(text, cells) {
+  return `<span class="cg" style="width:calc(var(--cw) * ${cells})">${escRun(text)}</span>`;
+}
+
+// textHTML: a run's text with its boxed stretches; run.w marks a run that is
+// one wide glyph (the server's cell width for it).
+function textHTML(run) {
+  if (run.w) return cellBox(run.t, run.w);
+  let out = "", at = 0;
+  for (const m of run.t.matchAll(BOXED)) {
+    out += escRun(run.t.slice(at, m.index)) + cellBox(m[0], [...m[0]].length);
+    at = m.index + m[0].length;
+  }
+  return out + escRun(run.t.slice(at));
+}
+
 function runHTML(run) {
   const st = [];
   if (run.fg) st.push("color:" + run.fg);
   if (run.bg) st.push("background:" + run.bg);
   const cls = ["b", "i", "u", "r", "d", "s"].filter((f) => run[f]).join(" ");
-  return `<span${st.length ? ` style="${st.join(";")}"` : ""}${cls ? ` class="${cls}"` : ""}>${escRun(run.t)}</span>`;
+  return `<span${st.length ? ` style="${st.join(";")}"` : ""}${cls ? ` class="${cls}"` : ""}>${textHTML(run)}</span>`;
 }
 
 function rowHTML(runs) {
@@ -122,14 +145,20 @@ $("foot").addEventListener("click", (e) => {
   })[b.dataset.cact]();
 });
 
+// measureCell: the cell is a ROW's height (not the font's content box, which
+// is shorter — the grid then asked for more rows than fit and scrolled) and
+// a twentieth of twenty M's. The width also sizes the glyph boxes (--cw).
 function measureCell() {
-  const probe = document.createElement("span");
-  probe.textContent = "M".repeat(20);
+  const probe = document.createElement("div");
+  probe.className = "conrow";
   probe.style.visibility = "hidden";
+  const m = document.createElement("span");
+  m.textContent = "M".repeat(20);
+  probe.append(m);
   grid.append(probe);
-  const r = probe.getBoundingClientRect();
+  con.cell = { w: m.getBoundingClientRect().width / 20, h: probe.getBoundingClientRect().height };
   probe.remove();
-  con.cell = { w: r.width / 20, h: r.height };
+  grid.style.setProperty("--cw", con.cell.w + "px");
 }
 
 // layout puts the layer over the panes right of the sidebar (over the whole
@@ -144,7 +173,7 @@ function layout() {
 }
 
 function paint() {
-  grid.innerHTML = con.rows.map((r) => `<div class="crow">${r || " "}</div>`).join("");
+  grid.innerHTML = con.rows.map((r) => `<div class="conrow">${r || " "}</div>`).join("");
   paintCursor();
 }
 
@@ -260,6 +289,7 @@ document.addEventListener("paste", (e) => {
 });
 
 function consoleKey(e) {
+  outsideClick = 0; // typing here: a later background refresh is not the user's navigation
   if (isReserved(e)) {
     e.preventDefault();
     if (e.code === "Backslash" || e.key === "\\") askSwitcher();
@@ -315,6 +345,7 @@ function maximize() {
 }
 
 async function openConsole(id) {
+  outsideClick = 0;
   let body;
   try {
     body = await getJSON("/api/sessions");
@@ -390,6 +421,34 @@ function consoleSessions(list) {
   con.info = Object.assign({}, con.info, info);
   retitle();
 }
+
+// The console lies over the panes. When the user asks the page for something
+// else it gives way (the session runs on; ctrl+\ brings it back):
+//  - a click on a sidebar row navigates the panes (a session sub-row opens a
+//    console instead, and openConsole replaces this one);
+//  - "gg:panes" — a pane navigation (files.js setLayout), a surface opening
+//    under the console, an agent's navigate. A plain navigation counts only
+//    shortly after a click OUTSIDE the console: background refreshes move
+//    the panes too, and must never close a console the user is typing in.
+const GIVE_WAY_MS = 10000;
+let outsideClick = 0;
+
+document.addEventListener("click", (e) => {
+  if (!con.id) return;
+  if (root.contains(e.target)) {
+    outsideClick = 0;
+    return;
+  }
+  if ($("foot").contains(e.target)) return; // the console's own foot buttons
+  outsideClick = Date.now();
+  const li = e.target.closest("#branches-pane li");
+  if (li && !li.classList.contains("wsess")) closeConsole();
+}, true);
+
+document.addEventListener("gg:panes", (e) => {
+  if (!con.id) return;
+  if ((e.detail && e.detail.force) || Date.now() - outsideClick < GIVE_WAY_MS) closeConsole();
+});
 
 grid.addEventListener("mousedown", () => {
   if (con.id && !con.focused) focusConsole();

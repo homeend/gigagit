@@ -498,6 +498,10 @@ async function openNamedFile(list, s, where) {
 // `else if (!s.file)` branch below and lands on nothing — the reveal above
 // IS its landing (ruling S13).
 async function steerNavigateLand(s) {
+  // An agent (or `gg session navigate`) is showing the user a place on the
+  // panes: a console lying over them gives way. (A content link opens the
+  // viewer, which sits over the console, and never comes here.)
+  document.dispatchEvent(new CustomEvent("gg:panes", { detail: { force: true } }));
   if (s.step) {
     stepNote(s.step === "next_note" ? 1 : -1);
     return;

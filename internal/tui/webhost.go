@@ -140,8 +140,15 @@ func (m Model) onWebSwitchRequest(msg webSwitchRequestMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	rearm := waitWebSwitchCmd(m.web)
+	m = m.closeIdleSettings()
 	if why := m.steerRefusal(); why != "" {
-		msg.reply <- errors.New("the terminal is busy: " + why)
+		// A window or a prompt goes away with esc; a running operation or an
+		// interactive process does not — no such advice for those.
+		hint := ""
+		if m.opsIdle() && m.proc == nil {
+			hint = " — press esc in the terminal, then switch again"
+		}
+		msg.reply <- errors.New("the terminal is busy: " + why + hint)
 		return m, rearm
 	}
 	m.web.pendingSwitch = append(m.web.pendingSwitch, msg.reply)
@@ -149,6 +156,29 @@ func (m Model) onWebSwitchRequest(msg webSwitchRequestMsg) (Model, tea.Cmd) {
 	m = nm.(Model)
 	m.statusMsg = i18n.T("switched from the web page")
 	return m, tea.Batch(cmd, rearm)
+}
+
+// closeIdleSettings pops the Settings windows (the menu and its Web page
+// popup) off the top of the layer stack before a page's switch, unless a
+// field is being typed into there. The user typically read the page's URL in
+// Settings and went to the browser: that window must not refuse the page.
+// Every other window still does (steerRefusal).
+func (m Model) closeIdleSettings() Model {
+	for {
+		switch l := m.topLayer().(type) {
+		case *webSettingsPopup:
+			if l.editing {
+				return m
+			}
+		case *settingsPopup:
+			if l.ratesEditing || l.opsHistEditing {
+				return m
+			}
+		default:
+			return m
+		}
+		m = m.popLayer()
+	}
 }
 
 // onWebReroot is the host having followed a re-root: answer the page

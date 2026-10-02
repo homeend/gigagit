@@ -1756,8 +1756,14 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #console-label.exited { color: var(--dim); }
 #console-size { margin-left: auto; color: var(--dim); }
 #console-body { flex: 1; overflow: auto; position: relative; padding: 6px 8px; }
-#console-grid { font: 12px/16px ui-monospace, Menlo, Consolas, monospace; white-space: pre; display: inline-block; min-width: 100%; }
-#console-grid .crow { height: 16px; }
+/* The font stack ends in the Nerd Fonts a prompt's icons come from (private-
+   use glyphs): the browser picks per glyph, so text keeps the first font and
+   only the icons fall through. Install one of them to see the icons. */
+#console-grid { font: 12px/16px ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace, "MesloLGS NF", "MesloLGS Nerd Font", "JetBrainsMono Nerd Font", "JetBrainsMono NF", "CaskaydiaCove Nerd Font", "CaskaydiaCove NF", "FiraCode Nerd Font", "Hack Nerd Font", "Symbols Nerd Font Mono", "Symbols Nerd Font"; white-space: pre; display: inline-block; min-width: 100%; }
+/* .conrow, never .crow: that is the commit row (flex, nowrap, 6px padding) —
+   it collapsed the spaces and shifted every column. */
+#console-grid .conrow { height: 16px; line-height: 16px; white-space: pre; }
+#console-grid .cg { display: inline-block; vertical-align: top; height: 16px; white-space: pre; overflow: visible; }
 #console-grid .b { font-weight: bold; }
 #console-grid .i { font-style: italic; }
 #console-grid .u { text-decoration: underline; }
@@ -1780,7 +1786,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #sessstart-body li .detail { color: var(--dim); margin-left: 2ch; }
 #sessstart-body .rcmd { margin: 6px 12px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
 #sessstart-body .rnote { margin: 6px 12px; color: var(--dim); }
-#sessstart-body button { margin: 4px 12px 8px; }
+#sessstart-body button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; margin: 4px 12px 8px; }
+#sessstart-body button:hover { border-color: var(--accent); }
 #foot .cwarn { margin-left: auto; color: #e0c06c; }
 
 /* The ctrl+\ switcher's tabs (Agents · AI tasks · Open files). */
@@ -1790,7 +1797,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #openfiles-tabs i { font-style: normal; font-size: 11px; margin-left: 4px; }
 #openfiles-query { margin: 6px 12px 2px; padding: 2px 6px; border: 1px solid var(--border); background: var(--bg); color: var(--dim); font-family: ui-monospace, monospace; font-size: 12px; }
 #openfiles-query.hidden { display: none; }
-#openfiles-list .grp { color: var(--dim); font-size: 11px; text-transform: uppercase; padding: 3px 12px; }
+/* A repository name, shown as written (uppercased, "b" read as a stray B). */
+#openfiles-list .grp { color: var(--dim); font-size: 11px; padding: 3px 12px; }
 #openfiles-list .grp2 { color: var(--dim); padding: 2px 20px; }
 #openfiles-list .ofempty { color: var(--dim); padding: 6px 12px; }
 #openfiles-list .ofrow .glyph.run { color: #7bd88f; }
@@ -1803,6 +1811,11 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #worktrees-list li.wsess .glyph.ex { color: var(--dim); }
 #worktrees-list li.wsess.task .glyph.run { color: #f2a65a; }
 #worktrees-list li.wsess:hover { background: var(--sel); }
+#branches-list li.wsess { padding-left: 22px; cursor: pointer; color: var(--fg); font-weight: normal; }
+#branches-list li.wsess .glyph.run { color: #7bd88f; }
+#branches-list li.wsess .glyph.ex { color: var(--dim); }
+#branches-list li.wsess.task .glyph.run { color: #f2a65a; }
+#branches-list li.wsess:hover { background: var(--sel); }
 
 /* Stored AI reviews (reviews.js): a commit's review rows, the review view's
    Overview row and per-file summaries, a branch's review sub-rows, and the

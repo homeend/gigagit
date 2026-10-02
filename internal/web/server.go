@@ -322,6 +322,16 @@ func readCtx(r *http.Request) context.Context {
 
 // writeRepoInfo writes the repo-identity payload for svc — shared by GET
 // /api/repo and the POST /api/reroot success response.
+// repoDisplayName names the repository by its main checkout's directory, so
+// a page served from a linked worktree says which repository it is (the
+// worktree's own path is beside it).
+func repoDisplayName(ctx context.Context, svc *domain.Service, top string) string {
+	if name := svc.MainCheckoutName(ctx); name != "" {
+		return name
+	}
+	return filepath.Base(top)
+}
+
 func (s *Server) writeRepoInfo(w http.ResponseWriter, r *http.Request, svc *domain.Service) {
 	top, err := svc.TopLevel(readCtx(r))
 	if err != nil {
@@ -340,7 +350,7 @@ func (s *Server) writeRepoInfo(w http.ResponseWriter, r *http.Request, svc *doma
 	// swallowed instead of turning the whole /api/repo read into a 500.
 	linkRepo, _ := svc.RepoName(readCtx(r))
 	writeJSON(w, map[string]any{
-		"name":      filepath.Base(top),
+		"name":      repoDisplayName(readCtx(r), svc, top),
 		"worktree":  top,
 		"branch":    branch,
 		"link_repo": linkRepo,

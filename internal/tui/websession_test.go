@@ -164,3 +164,56 @@ func TestStartAgentAfterThePageDetected(t *testing.T) {
 		t.Fatal("the global config was appended to again")
 	}
 }
+
+// servedModel is a loaded model whose fake page is serving.
+func servedModel(t *testing.T) Model {
+	t.Helper()
+	installFakeHost(t)
+	m := loadedModel(t)
+	m, cmd := m.openInBrowser()
+	return runOne(t, m, cmd)
+}
+
+// The page switches repository while the terminal still shows Settings (the
+// user read the URL there and went to the browser): Settings closes and the
+// switch goes through.
+func TestWebSwitchClosesAnIdleSettingsWindow(t *testing.T) {
+	m := servedModel(t)
+	m = m.pushLayer(&settingsPopup{})
+	m = m.pushLayer(&webSettingsPopup{})
+	reply := make(chan error, 1)
+	m, _ = m.onWebSwitchRequest(webSwitchRequestMsg{path: modelTop(t, m), reply: reply})
+	select {
+	case err := <-reply:
+		t.Fatalf("the switch was answered at once (refused?): %v", err)
+	default:
+	}
+	if len(m.web.pendingSwitch) != 1 {
+		t.Fatalf("pendingSwitch = %d, want the switch in flight", len(m.web.pendingSwitch))
+	}
+	switch m.topLayer().(type) {
+	case *settingsPopup, *webSettingsPopup:
+		t.Fatal("Settings is still open")
+	}
+}
+
+// …but never while a field is being typed into there: the refusal names the
+// way out.
+func TestWebSwitchKeepsASettingsFieldBeingEdited(t *testing.T) {
+	m := servedModel(t)
+	m = m.pushLayer(&settingsPopup{})
+	m = m.pushLayer(&webSettingsPopup{editing: true})
+	reply := make(chan error, 1)
+	m, _ = m.onWebSwitchRequest(webSwitchRequestMsg{path: modelTop(t, m), reply: reply})
+	select {
+	case err := <-reply:
+		if err == nil || !strings.Contains(err.Error(), "press esc in the terminal") {
+			t.Fatalf("refusal = %v", err)
+		}
+	default:
+		t.Fatal("a switch over a field being edited was not refused")
+	}
+	if _, ok := m.topLayer().(*webSettingsPopup); !ok {
+		t.Fatal("the edited popup was closed")
+	}
+}

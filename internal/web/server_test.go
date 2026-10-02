@@ -361,3 +361,19 @@ func TestStaticServing(t *testing.T) {
 		}
 	}
 }
+
+// The page names the REPOSITORY (its main checkout), not the directory of
+// the worktree it happens to serve.
+func TestRepoNameIsTheMainCheckouts(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	wt := filepath.Join(t.TempDir(), "b")
+	gitRun(t, dir, "worktree", "add", "-q", "-b", "side", wt)
+	ts := serve(t, New(domain.Open(wt)))
+	var got struct{ Name, Worktree string }
+	if code := getJSON(t, ts, "/api/repo", &got); code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	if got.Name != filepath.Base(dir) || filepath.Base(got.Worktree) != "b" {
+		t.Fatalf("name = %q worktree = %q, want name %q", got.Name, got.Worktree, filepath.Base(dir))
+	}
+}

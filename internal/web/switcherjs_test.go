@@ -53,6 +53,7 @@ func TestSwitcherTabsWired(t *testing.T) {
 
 var switcherLifecycleWiring = []struct{ file, want, why string }{
 	{"openfiles.js", "killSession(", "k / X on the Agents tab kill"},
+	{"style.css", "#openfiles-list .grp { color: var(--dim); font-size: 11px; padding: 3px 12px; }", "a repository group header shows the name as written, never uppercased"},
 	{"openfiles.js", "removeSession(", "x on the Agents tab removes an exited session"},
 	{"openfiles.js", `k kill`, "the Agents foot offers kill"},
 	{"openfiles.js", `x remove`, "…and remove"},
