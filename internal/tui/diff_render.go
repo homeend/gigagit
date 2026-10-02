@@ -34,6 +34,24 @@ type cellMark struct {
 	sel  bool
 	base lipgloss.Style
 	gut  lipgloss.Style
+	// note marks a cell inside a NOTE's range (a note about several lines):
+	// the gutter's separator column carries a bar in noteBar's colour, so the
+	// lines the note is about read as one block above its box. Never the
+	// body — that is the selection's and the attention band's.
+	note    bool
+	noteBar lipgloss.Style
+}
+
+// noteBarGlyph is the bar a ranged note draws beside its lines.
+const noteBarGlyph = "▎"
+
+// gutterCell renders the gutter column: the number (or blanks) and the one
+// separator column, which a note's range fills with its bar.
+func (mk cellMark) gutterCell(num string, gut int) string {
+	if !mk.note || gut < 1 {
+		return mk.gut.Render(truncate(num, gut+1))
+	}
+	return mk.gut.Render(truncate(num, gut)) + mk.noteBar.Render(noteBarGlyph)
 }
 
 // noMark is a function, not a package var: it reads st(), and package-level
@@ -466,6 +484,7 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 	gut := v.gutter()
 	s := st()
 
+	spans := v.noteSpans()
 	out := make([]string, 0, body)
 	for i := v.offset; i < v.offset+body && i < len(v.disp); i++ {
 		dr := v.disp[i]
@@ -509,6 +528,13 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 			} else {
 				mkR = cm
 			}
+		}
+		// A note about several lines marks them, on its own side.
+		if bar, ok := spans.at(dr.file, true, r.LeftNo); ok && r.Kind != textdiff.Add {
+			mkL.note, mkL.noteBar = true, bar
+		}
+		if bar, ok := spans.at(dr.file, false, r.RightNo); ok && r.Kind != textdiff.Del {
+			mkR.note, mkR.noteBar = true, bar
 		}
 		// The stripe rides on the CURSOR side only, and only where that side
 		// actually has a line — an absent cell is not selected, and the range
@@ -614,7 +640,7 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 	if pad := tw - lipgloss.Width(string(seg.disp)); pad > 0 {
 		body += base.Render(strings.Repeat(" ", pad))
 	}
-	return mk.gut.Render(truncate(num, gut+1)) + body
+	return mk.gutterCell(num, gut) + body
 }
 
 // scrollCell renders one pane's line through a horizontal window starting at
@@ -696,7 +722,7 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 		b.WriteString(st().diffGutter.Render("›"))
 	}
 	num := fmt.Sprintf("%*d ", gut, no)
-	return mk.gut.Render(truncate(num, gut+1)) + b.String()
+	return mk.gutterCell(num, gut) + b.String()
 }
 
 // maxCellWidth is the widest single cell (either side, gap sides skipped)
@@ -864,7 +890,7 @@ func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgl
 			bodyTxt = base.Render(bodyTxt)
 		}
 	}
-	return mk.gut.Render(truncate(num, gut+1)) + bodyTxt
+	return mk.gutterCell(num, gut) + bodyTxt
 }
 
 // hotEmphBody renders an enriched cell's text into a tw-column body: sanitized
