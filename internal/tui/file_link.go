@@ -113,7 +113,23 @@ func (m Model) contextFileLinkRow() (actionRow, bool) {
 	if !ok {
 		return actionRow{}, false
 	}
+	label := i18n.T("Copy file link")
+	// A live selection in the viewer or the preview: the link names its lines.
+	var block []string
+	last := 0
+	if d, ok := m.focusedDoc(); ok && d.p.lsel.on {
+		if lo, hi, ok := d.p.lsel.bounds(d.p.cur); ok && lo >= 0 && hi < len(d.p.lines) && d.p.lines[lo].src && d.p.lines[hi].src {
+			line, last, raw = lo+1, hi+1, d.p.lines[lo].raw
+			for _, cl := range d.p.lines[lo : hi+1] {
+				block = append(block, cl.raw)
+			}
+		}
+	}
 	text, ok := m.buildLinkFor(model.FileAddress{State: model.StateUnstaged, Worktree: m.currentWorktree, Path: path}, model.NoteSideNew, line, 0, model.ContentHint, raw)
+	if ok && last > line {
+		label = i18n.T("Copy link to selected lines (%d)", last-line+1)
+		text, ok = rangeLink(text, last, block)
+	}
 	if !ok {
 		return actionRow{}, false
 	}
@@ -126,7 +142,7 @@ func (m Model) contextFileLinkRow() (actionRow, bool) {
 	svc := m.svc
 	return actionRow{
 		id:    "copy-file-link",
-		label: i18n.T("Copy file link"),
+		label: label,
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				ctx := context.Background()
