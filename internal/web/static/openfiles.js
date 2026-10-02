@@ -1,6 +1,7 @@
 // openfiles.js — the ctrl+\ switcher: a tabbed popup like the TUI's.
 //   Agents     the agent sessions of this gg (every repo), grouped repo →
-//              worktree; enter opens one as a console (console.js).
+//              worktree; enter opens one as a console (console.js), k kills,
+//              X kills and removes, x removes an exited one.
 //   AI tasks   the AI-task list (read-only for now); enter on a running
 //              interactive task opens its console.
 //   Open files the worktree's open files, shared by every tab of this gg web,
@@ -12,7 +13,7 @@ import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer } from "./layers
 import { opLine } from "./ops.js";
 import { dropViewer, openViewer, versionLabel, viewerClosedFile, viewerFileId } from "./viewer.js";
 import { registerHelp } from "./menus.js";
-import { consoleSessionId, openConsole } from "./console.js";
+import { consoleSessionId, killSession, openConsole, removeSession } from "./console.js";
 
 // --- switcher model (pure; guarded against Go) ---
 // An overview's row names it by its title (its path is the TUI's display
@@ -79,6 +80,15 @@ function freshestTab(sessions, tasks, files) {
   if (files.length) return "files";
   return "agents";
 }
+
+// agentKey: what k / X / x mean on a session row (the TUI popup's keys, plus
+// its X). An exited row cannot be killed; X on one is x.
+function agentKey(key, st) {
+  if (key === "k") return st === "exited" ? "none" : "kill";
+  if (key === "X") return st === "exited" ? "remove" : "killrm";
+  if (key === "x") return st === "exited" ? "remove" : "refuse-remove";
+  return "none";
+}
 // --- end switcher model ---
 
 const TABS = ["agents", "tasks", "files"];
@@ -106,7 +116,8 @@ const FOOT_FILES =
   `<span>↑↓ j k move</span><button data-oact="enter">enter bring back</button>` +
   `<button data-oact="x">x close file</button><button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`;
 const FOOT_AGENTS =
-  `<span>↑↓ j k move</span><button data-oact="enter">enter open console</button>` +
+  `<span>↑↓ j move</span><button data-oact="enter">enter open console</button>` +
+  `<button data-oact="kill">k kill</button><button data-oact="killrm">X kill + remove</button><button data-oact="x">x remove</button>` +
   `<button data-oact="filter">/ filter</button><button data-oact="tab">tab next tab</button><button data-oact="esc">esc close</button>`;
 const FOOT_TASKS =
   `<span>↑↓ j k move</span><button data-oact="enter">enter open its console</button>` +
@@ -116,7 +127,9 @@ $("foot").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-oact]");
   if (!b) return;
   if (b.dataset.oact === "enter") activate();
-  else if (b.dataset.oact === "x") closeSelected();
+  else if (b.dataset.oact === "x") sw.tab === "agents" ? agentAct("x") : closeSelected();
+  else if (b.dataset.oact === "kill") agentAct("k");
+  else if (b.dataset.oact === "killrm") agentAct("X");
   else if (b.dataset.oact === "tab") showTab(TABS[(TABS.indexOf(sw.tab) + 1) % TABS.length]);
   else if (b.dataset.oact === "filter") startFilter();
   else closeSwitcher();
@@ -239,7 +252,7 @@ function renderSwitcher() {
         );
       })
       .join("");
-    if (!rows.length) html = `<div class="ofempty">${sw.query ? "no session matches" : "no agent sessions"}</div>`;
+    if (!rows.length) html = `<div class="ofempty">${sw.query ? "no session matches" : "no agent sessions — a worktree's menu starts one"}</div>`;
   } else {
     const rows = taskRows(sw.tasks, Date.now());
     html = rows
@@ -305,6 +318,20 @@ async function closeSelected() {
   renderSwitcher();
 }
 
+// agentAct: k / X / x on the selected session. A kill asks through the
+// modal, so the switcher closes first — one layer asks at a time; a removed
+// row leaves through the live sessions event (switcherSessions).
+function agentAct(key) {
+  const s = visibleSessions()[sw.sel];
+  if (!s) return;
+  const what = agentKey(key, s.state);
+  if (what === "kill" || what === "killrm") {
+    closeSwitcher();
+    killSession(s, what === "killrm");
+  } else if (what === "remove") removeSession(s);
+  else if (what === "refuse-remove") opLine("only an exited session can be removed — kill it first (k)", true);
+}
+
 function startFilter() {
   if (sw.tab !== "agents") return;
   sw.typing = true;
@@ -343,10 +370,15 @@ function switcherKey(e) {
   }
   switch (e.key) {
     case "ArrowDown": case "j": sw.sel = clampSel(sw.sel + 1, currentCount()); renderSwitcher(); break;
-    case "ArrowUp": case "k": sw.sel = clampSel(sw.sel - 1, currentCount()); renderSwitcher(); break;
+    case "ArrowUp": sw.sel = clampSel(sw.sel - 1, currentCount()); renderSwitcher(); break;
+    case "k": // the TUI popup's kill on the Agents tab; "up" on the others
+      if (sw.tab === "agents") agentAct("k");
+      else { sw.sel = clampSel(sw.sel - 1, currentCount()); renderSwitcher(); }
+      break;
+    case "X": if (sw.tab === "agents") agentAct("X"); break;
     case "Tab": showTab(TABS[(TABS.indexOf(sw.tab) + (e.shiftKey ? TABS.length - 1 : 1)) % TABS.length]); break;
     case "Enter": activate(); break;
-    case "x": closeSelected(); break;
+    case "x": if (sw.tab === "agents") agentAct("x"); else closeSelected(); break;
     case "/": startFilter(); break;
     case "Escape": closeSwitcher(); break;
     default:

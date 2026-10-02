@@ -50,3 +50,29 @@ func TestSwitcherTabsWired(t *testing.T) {
 		}
 	}
 }
+
+var switcherLifecycleWiring = []struct{ file, want, why string }{
+	{"openfiles.js", "killSession(", "k / X on the Agents tab kill"},
+	{"openfiles.js", "removeSession(", "x on the Agents tab removes an exited session"},
+	{"openfiles.js", `k kill`, "the Agents foot offers kill"},
+	{"openfiles.js", `x remove`, "…and remove"},
+}
+
+func TestSwitcherLifecycleWired(t *testing.T) {
+	t.Parallel()
+	for _, c := range switcherLifecycleWiring {
+		if !strings.Contains(readStatic(t, c.file), c.want) {
+			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
+		}
+	}
+}
+
+func TestSwitcherAgentKeyJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "openfiles.js", "// --- switcher model (pure; guarded against Go) ---", "// --- end switcher model ---", `
+console.log([agentKey("k", "running"), agentKey("X", "running"), agentKey("x", "exited"), agentKey("x", "running"), agentKey("k", "exited"), agentKey("X", "exited"), agentKey("j", "running")].join("|"));
+`)
+	if want := "kill|killrm|remove|refuse-remove|none|remove|none"; out != want {
+		t.Fatalf("got %s want %s", out, want)
+	}
+}
