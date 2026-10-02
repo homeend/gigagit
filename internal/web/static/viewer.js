@@ -321,8 +321,22 @@ $("viewer-body").addEventListener("click", (e) => {
   }
   const row = e.target.closest(".vline[data-i]");
   if (!row) return;
+  // Shift+click on a line NUMBER marks the lines from the cursor to it (the
+  // cursor stays): the range "copy file link" then names.
+  if (e.shiftKey && e.target.closest(".vno")) {
+    const hit = Number(row.dataset.i) + 1;
+    getSelection().removeAllRanges();
+    view.rangeOwn = true; // the reader's own range: a click or esc clears it
+    view.range = viewerRange(Math.min(view.cur || hit, hit), Math.max(view.cur || hit, hit), view.lines.length);
+    rerenderKeepingScroll();
+    return;
+  }
   view.cur = Number(row.dataset.i) + 1;
+  if (clearViewerRange()) return;
   paintCursor();
+});
+$("viewer-body").addEventListener("mousedown", (e) => {
+  if (e.shiftKey && e.target.closest(".vno")) e.preventDefault(); // no text selection from the old caret
 });
 $("viewer-body").addEventListener("contextmenu", (e) => {
   const row = e.target.closest(".vline[data-i]");
@@ -362,6 +376,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   }
   const f = reg.file;
   view.from = view.range = null; // an anchor's open sets them after
+  view.rangeOwn = false;
   // A refresh that started after this fetch and landed first is newer: keep it.
   if (ov && view.ov && view.id === f.id && !ovAnswerApplies(ovMine, ovApplied)) ov = view.ov;
   if (ov) return showOverview(f, ov, ovMine);
@@ -570,6 +585,7 @@ async function openAnchorAt(i) {
   view.from = from;
   armBack();
   view.range = t.end > t.line ? { start: t.line, end: t.end } : null;
+  view.rangeOwn = false;
   rerenderKeepingScroll();
   swapFoot(true);
   if (t.note) $("viewer-body").querySelector(`.vnote[data-note="${t.note}"]`)?.scrollIntoView({ block: "nearest" });
@@ -798,7 +814,7 @@ function viewerKey(e) {
     case "{": stepNote(-1); break;
     // A noted file steps aside on esc (the TUI's rule); the server decides
     // the same for a note that landed after this read.
-    case "Escape": closeViewer(escHow(false, view.notes.length)); break;
+    case "Escape": if (!clearViewerRange()) closeViewer(escHow(false, view.notes.length)); break;
     default: return false;
   }
   e.preventDefault();
@@ -923,6 +939,31 @@ document.addEventListener("keyup", () => {
   }
 });
 
+// viewerRange is the band for lines line..end of a file of len lines: none
+// for a single line or a range starting past the end (the TUI's rule), the
+// end clamped to the last line. Pure — TestViewerRangeDecisions runs it.
+function viewerRange(line, end, len) {
+  if (!(end > line) || line < 1 || line > len) return null;
+  return { start: line, end: Math.min(end, len) };
+}
+
+// markViewerRange bands a range link's lines in the open file.
+function markViewerRange(line, end) {
+  view.range = viewerRange(line, end, view.lines.length);
+  view.rangeOwn = true;
+  if (view.range) rerenderKeepingScroll();
+}
+
+// clearViewerRange drops a range marked by hand or by a link (an overview
+// anchor's band stays until its file is left); false when there was none.
+function clearViewerRange() {
+  if (!view.range || !view.rangeOwn) return false;
+  view.range = null;
+  rerenderKeepingScroll();
+  paintCursor();
+  return true;
+}
+
 // openViewerMenu is the viewer's . menu (and right-click): the content link
 // and the text of the cursor line, then the file's diff, history and blame at
 // this version. The surfaces it opens replace the viewer — one full-page
@@ -935,7 +976,15 @@ function openViewerMenu(x, y) {
   // version of the line may say something else.
   const text = line && view.src === "worktree" && view.lines[line - 1] ? view.lines[line - 1].text : "";
   const flink = linkFor(state.repo, state.worktree, { path: view.path, state: "unstaged", hint: { kind: "view", id: "content" } }, "new", line, text);
-  if (flink) items.push({ label: "copy file link" + (line ? " (line " + line + ")" : ""), act: () => copyViewerLink(flink) });
+  // A marked range: the link names its lines, fingerprinted as one block
+  // (again only for the disk's text).
+  const rg = view.placeholder ? null : view.range;
+  const block = rg ? view.lines.slice(rg.start - 1, rg.end).map((l) => l.text) : null;
+  const rlink = rg
+    ? linkFor(state.repo, state.worktree, { path: view.path, state: "unstaged", hint: { kind: "view", id: "content" } }, "new", rg.start, "", rg.end, view.src === "worktree" ? block : null)
+    : "";
+  if (rlink) items.push({ label: "copy file link (lines " + rg.start + "-" + rg.end + ")", act: () => copyViewerLink(rlink) });
+  else if (flink) items.push({ label: "copy file link" + (line ? " (line " + line + ")" : ""), act: () => copyViewerLink(flink) });
   if (line && view.lines[line - 1]) items.push({ label: "copy line", act: () => copyText(view.lines[line - 1].text, "line " + line) });
   items.push({ sep: true });
   if (view.src === "worktree") items.push({ label: "diff (working tree changes)", act: () => viewerDiffWorktree(view.path) });
@@ -1085,4 +1134,4 @@ registerHelp({
     "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> (or the browser's Back) in the file an anchor opened comes back",
 });
 
-export { closeViewer, dropViewer, evictedText, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerClosedFile, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };
+export { closeViewer, dropViewer, evictedText, markViewerRange, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerClosedFile, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };

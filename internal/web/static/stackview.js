@@ -29,6 +29,7 @@ import {
   enterFilesStage,
   goToDiffHit,
   markDiffRow,
+  setDiffRange,
   globalNoteCtx,
   hunkEligible,
   notesArmed,
@@ -87,7 +88,7 @@ async function buildStack(list, group, anchorIdx) {
   closeConflictPick();
   state.lastDiff = null; // resize / f / live refresh must not repaint a single diff here
   state.diffCtx = null;
-  state.diffRow = null;
+  state.diffRow = state.diffRange = null;
   state.notes = [];
   if (state.layout !== "diff") {
     state.pane = "files";
@@ -167,7 +168,7 @@ function bodyHTML(s) {
   if (s.load === "error") return `<div class="notice">error: ${esc(s.error)}</div>`;
   // a kept slot re-fetching after a refresh paints its old diff until the new one lands
   if (s.diff) {
-    const nc = { ctx: s.ctx || null, notes: s.notes || [], row: s.row || null };
+    const nc = { ctx: s.ctx || null, notes: s.notes || [], row: s.row || null, range: s.range || null };
     // The slot paints the stack-wide search and reports the rows it painted,
     // which is what refindStack searches next time — one collapse per slot,
     // and the search and the paint provably share a fold set.
@@ -603,7 +604,9 @@ async function refreshStackNotes() {
 // stack (every file has a line 12), so the row is looked for inside that
 // file's own section, never in the pane at large; a folded file unfolds and an
 // unread one is fetched first, because its rows do not exist yet.
-async function landStackLine(path, side, line) {
+// end > line bands the range line..end (a range link); the answer is then
+// {held}: how many of those lines the file's diff holds.
+async function landStackLine(path, side, line, end = 0) {
   const st = state.stack;
   if (!st) return false;
   const k = st.slots.findIndex((s) => s.path === path);
@@ -622,6 +625,12 @@ async function landStackLine(path, side, line) {
     (side === "old" ? sec.querySelector(`tr[data-lno="${line}"]`) : null);
   if (!tr) return false;
   markDiffRow(tr, side, line);
+  if (end > line) {
+    const held = setDiffRange(tr, { side, first: line, last: end });
+    const again = sectionEl(k) && sectionEl(k).querySelector(`tr[data-side="${side}"][data-no="${line}"], tr[data-lno="${line}"]`);
+    (again || tr).scrollIntoView({ block: "center" });
+    return { held };
+  }
   tr.scrollIntoView({ block: "center" });
   return true;
 }

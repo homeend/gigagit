@@ -12,7 +12,7 @@ import { isServerDown, onServerUp, serverSeen, serverShutdown, suspectServerDown
 import { fetchStatus, wtCount } from "./status.js";
 import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
 import { landStackLine } from "./stackview.js";
-import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
+import { fetchNotes, markDiffRow, setDiffRange, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches, takeSessions, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
 import { revealVersion } from "./versions.js";
@@ -22,7 +22,7 @@ import { focusPane } from "./keys.js";
 import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
 import { switcherOpenFiles, switcherSessions } from "./openfiles.js";
 import { consoleSessions } from "./console.js";
-import { evictedText, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
+import { evictedText, markViewerRange, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
 import { closeFinder } from "./wtfinder.js";
 
 const COALESCE_MS = 150; // one burst of watcher events → one refresh
@@ -435,7 +435,8 @@ async function steerNavigateContent(s) {
   }
   if (!present) return navMiss(s.file + " is not in the working tree");
   if (s.anchor_note) opLine(s.anchor_note, s.anchor_note.includes("changed"));
-  await openViewer({ src: "worktree", path: s.file, line: s.line || 0 });
+  const r = await openViewer({ src: "worktree", path: s.file, line: s.line || 0 });
+  if (r && r.ok && s.end_line > s.line) markViewerRange(s.line, s.end_line);
 }
 
 // steerFileFocus brings an open file up in THIS tab — every tab gets the
@@ -560,8 +561,9 @@ async function steerNavigateLand(s) {
   const line = s.line;
   const file = s.file;
   if (state.stack) {
-    const landed = await landStackLine(s.file, side, s.line);
+    const landed = await landStackLine(s.file, side, s.line, s.end_line || 0);
     if (!landed) navMiss("line " + line + " is not in " + file + "'s diff");
+    else if (s.end_line > line) rangeLanded(landed.held, line, s.end_line, file);
     return;
   }
   const tr = revealDiffRow(side, line);
@@ -570,7 +572,20 @@ async function steerNavigateLand(s) {
     return;
   }
   markDiffRow(tr, side, s.line);
+  // A range link: band its lines (the band's rows are never folded away, so
+  // the repaint also unfolds what hid them) and find the first row again.
+  if (s.end_line > line) {
+    rangeLanded(setDiffRange(tr, { side, first: line, last: s.end_line }), line, s.end_line, file);
+    (revealDiffRow(side, line) || tr).scrollIntoView({ block: "center" });
+    return;
+  }
   tr.scrollIntoView({ block: "center" });
+}
+
+// rangeLanded says so when the diff holds only part of a range link's lines
+// (held of first..last): the band shows what is there.
+function rangeLanded(held, first, last, file) {
+  if (held < last - first + 1) opLine("lines " + first + "-" + last + ": only " + held + " of them are in " + file + "'s diff", false);
 }
 
 // applyStartAt lands the page where `gg open --web <link>` started this server

@@ -7,7 +7,7 @@ import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stag
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewOverview, stepCommitReviews, stepReviewFile } from "./reviews.js";
-import { addNotePrompt, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { addNotePrompt, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
@@ -152,6 +152,8 @@ document.addEventListener("keydown", (e) => {
   // step it, and esc clears a kept query BEFORE it would leave the diff.
   // A row selection is the most transient thing on screen: esc drops it
   // first, before a search or the diff itself.
+  // …and a marked range of lines goes before that.
+  if (e.key === "Escape" && clearDiffRange()) return;
   if (e.key === "Escape" && clearRowSelection()) return;
   if (diffSearchKey(e)) return;
   // The symmetric comparison view's own keys (v, x, 1–4), only while one is up.

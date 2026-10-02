@@ -1459,6 +1459,14 @@ body.lm-scroll #blame-body .bline.brecent .bgut, body.lm-scroll #blame-body .bli
    invisible on exactly the rows a reviewer marks. */
 table.diff tr.cur > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 table.diff tr.cur > td.no { color: var(--accent); }
+/* The marked range of lines (shift+click a line number; a range link's
+   landing): a band on its own side. The unified layout's context row has one
+   text cell with no side class. */
+table.diff tr.rng-l > td.l, table.diff tr.rng-r > td.r,
+table.diff tr.same.rng-l > td.side:not(.l):not(.r), table.diff tr.same.rng-r > td.side:not(.l):not(.r) { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+/* The lines a note covers when it covers several: a bar on the inner edge of
+   that side's line number. */
+table.diff tr.nbar-l > td.no.l, table.diff tr.nbar-r > td.no.r { box-shadow: inset -3px 0 0 var(--accent); }
 /* Review notes: hunk-style boxes. A rounded frame in the pane of the note's
    side (blue for a person's note, purple for an agent's, grey when stale),
    the title riding the top border, the summary bold, the rationale dim. The

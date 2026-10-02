@@ -450,7 +450,7 @@ function showReviewOverview() {
     setReviewHeader(); // setLayout may have cleared nothing, but the title must say where we are
   }
   state.diffCtx = null;
-  state.diffRow = null;
+  state.diffRow = state.diffRange = null;
   state.notes = [];
   state.lastDiff = null;
   setDiffTitle("≡ Overview");

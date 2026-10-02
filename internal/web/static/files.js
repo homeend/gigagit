@@ -752,7 +752,7 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
   // cmpSides). Tied to THIS open's generation: every other open bumps
   // detailGen, so a stale one can never name a later diff's rows.
   state.diffLinkCtx = ctx ? null : { ...sidesLinkCtx(left, right, path, oldPath), gen };
-  state.diffRow = null; // …and the previous diff's marked row must not paint a row of this one
+  state.diffRow = state.diffRange = null; // …and the previous diff's marked row must not paint a row of this one
   state.notes = [];
   setDiffTitle(path, leftLabel + " ↔ " + rightLabel + " · ");
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
@@ -1258,7 +1258,7 @@ async function openFile(i) {
   // content (the source tip), so its rows ARE note-addressable — at the tip,
   // new side only. Every other compare stays notes:false.
   state.diffCtx = commitDiffCtx(f);
-  state.diffRow = null;
+  state.diffRow = state.diffRange = null;
   state.notes = [];
   setDiffTitle(f.path);
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
@@ -1442,7 +1442,7 @@ async function openStatusDiff(i) {
   clearDiffHunks();
   const f = state.statusEntries[i];
   state.diffCtx = statusDiffCtx(f);
-  state.diffRow = null;
+  state.diffRow = state.diffRange = null;
   state.notes = [];
   setDiffTitle(f.path);
   if (f.section === "conflicts") return openConflictPicker(f);
@@ -1764,6 +1764,19 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
     return "";
   };
   const attnClsBoth = (r) => attnCls("new", r.right_no) || attnCls("old", r.left_no);
+  // The marked range (a band on its side) and the bar beside the lines of a
+  // note that covers several. In the render for the reason above: the table
+  // is rebuilt on every notes refresh. `only` names the one side a unified
+  // layout's del/add row shows.
+  const rng = nc.range || null;
+  const rngRows = rng ? new Set(rangeRows(rows, rng.side, rng.first, rng.last).idx.map((i) => rows[i])) : null;
+  const bars = notesOn && notesArmed(nc.ctx) ? noteBars(nc.notes.filter(noteShown)) : null;
+  const markCls = (r, only) => {
+    let c = rngRows && rngRows.has(r) ? (rng.side === "old" ? " rng-l" : " rng-r") : "";
+    if (bars && only !== "new" && r.left_no && bars.old.has(r.left_no)) c += " nbar-l";
+    if (bars && only !== "old" && r.right_no && bars.new.has(r.right_no)) c += " nbar-r";
+    return c;
+  };
   const after = (cols, ...pairs) => {
     if (!notesOn) return "";
     let out = "";
@@ -1782,7 +1795,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   let items = rows;
   if (state.diffPartial) {
     const noted = (side, no) => !!no && nc.notes.some((n) => n.side === side && n.line === no);
-    const pinned = (r) => noted("new", r.right_no) || noted("old", r.left_no) || !!attnClsBoth(r);
+    const pinned = (r) => noted("new", r.right_no) || noted("old", r.left_no) || !!attnClsBoth(r) || !!(rngRows && rngRows.has(r));
     items = collapseDiffRows(rows, open, notesOn ? pinned : null);
     if (items === null) {
       const lead = notesOn ? fileNoteRowsHTML(1, nc) : "";
@@ -1842,7 +1855,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
       const toks = pureAdd ? r.right_tok : r.left_tok;
       const hits = pureAdd ? hitsR(r) : hitsL(r);
       html +=
-        `<tr class="${r.kind}${hkCls(r)}${curCls(nside, no)}${attnCls(nside, no)}"${hkAttr(r)}${anchor(nside, no)} data-i="${ri(r)}">` +
+        `<tr class="${r.kind}${hkCls(r)}${curCls(nside, no)}${attnCls(nside, no)}${markCls(r)}"${hkAttr(r)}${anchor(nside, no)} data-i="${ri(r)}">` +
         `<td class="no ${side}">${no || ""}</td>` +
         `<td class="side ${side}"><span class="pan">${renderCell(text, spans, toks, side, hits)}</span></td></tr>` +
         after(2, [nside, no]);
@@ -1859,7 +1872,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
       }
       if (r.kind === "same") {
         html +=
-          `<tr class="same${curCls("new", r.right_no)}${attnClsBoth(r)}"${anchor("new", r.right_no)} data-i="${ri(r)}">` +
+          `<tr class="same${curCls("new", r.right_no)}${attnClsBoth(r)}${markCls(r)}"${anchor("new", r.right_no)} data-i="${ri(r)}">` +
           `<td class="no l">${r.left_no || ""}</td>` +
           `<td class="no r">${r.right_no || ""}</td>` +
           `<td class="side"><span class="pan">${renderCell(r.right, null, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
@@ -1867,13 +1880,13 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
       } else {
         if (r.kind !== "add")
           html +=
-            `<tr class="del${hkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}"${hkAttr(r)}${anchor("old", r.left_no)} data-i="${ri(r)}">` +
+            `<tr class="del${hkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}${markCls(r, "old")}"${hkAttr(r)}${anchor("old", r.left_no)} data-i="${ri(r)}">` +
             `<td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
             `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l", hitsL(r))}</span></td></tr>` +
             after(3, ["old", r.left_no]);
         if (r.kind !== "del")
           html +=
-            `<tr class="add${hkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}"${hkAttr(r)}${anchor("new", r.right_no)} data-i="${ri(r)}">` +
+            `<tr class="add${hkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}${markCls(r, "new")}"${hkAttr(r)}${anchor("new", r.right_no)} data-i="${ri(r)}">` +
             `<td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
             `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
             after(3, ["new", r.right_no]);
@@ -1895,7 +1908,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
       // default anchor is the new side.
       const both = notesOn ? ` data-lno="${r.left_no || 0}" data-rno="${r.right_no || 0}"` : "";
       html +=
-        `<tr class="${r.kind}${hkCls(r)}${curClsBoth(r)}${attnClsBoth(r)}"${hkAttr(r)}${anchor(aside, ano)}${both} data-i="${ri(r)}">` +
+        `<tr class="${r.kind}${hkCls(r)}${curClsBoth(r)}${attnClsBoth(r)}${markCls(r)}"${hkAttr(r)}${anchor(aside, ano)}${both} data-i="${ri(r)}">` +
         `<td class="no l">${r.left_no || ""}</td>` +
         `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l", hitsL(r))}</span></td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
@@ -2586,7 +2599,7 @@ function rowSlotCtx(el) {
 // the shape a stack's slot carries. activeDiff() (stackview.js) returns this
 // or the cursor slot's own.
 function globalNoteCtx() {
-  return { ctx: state.diffCtx, notes: state.notes || [], row: state.diffRow };
+  return { ctx: state.diffCtx, notes: state.notes || [], row: state.diffRow, range: state.diffRange };
 }
 
 
@@ -2597,6 +2610,15 @@ function globalNoteCtx() {
 // note visibly hangs off one version; the single-column layouts span the row.
 // With the agent layer off, agent-written parts drop out row by row; a thread
 // with nothing left renders nothing.
+// noteShown: the thread draws a box (noteBoxHTML's own rule — with the agent
+// layer off a thread of agent parts only renders nothing). A note with no box
+// has no bar either.
+function noteShown(n) {
+  const hidden = (x) => state.notesAgentOff && x.source === "agent" && !x.read_only;
+  return !hidden(n) || (n.replies || []).some((r) => !hidden(r));
+}
+
+
 function noteBoxHTML(n, cols, nctx = null) {
   const nc = nctx || globalNoteCtx();
   const off = state.notesAgentOff;
@@ -2701,7 +2723,7 @@ function collapseNearestNote() {
 // markDiffRow makes tr the anchor `c` writes against. It toggles ONE class
 // rather than re-rendering: a full renderDiff would reset diffBlockIdx (the
 // ‹/› change stepper) and jolt the scroll position.
-function markDiffRow(tr, side, no) {
+function markDiffRow(tr, side, no, keepRange = false) {
   side = side || tr.dataset.side;
   no = no || Number(tr.dataset.no);
   if (!no) return;
@@ -2728,6 +2750,54 @@ function markDiffRow(tr, side, no) {
   // previous }/{ landing for nearestNote. stepNote re-claims the id right
   // after its own call.
   noteStepId = null;
+  // A plain mark is a new "here": the marked range goes (last — the repaint
+  // replaces the rows, and the mark above is repainted from the state).
+  if (!keepRange) clearDiffRange();
+}
+
+
+// rowDiff is the diff (full rows) of the file a rendered row belongs to.
+function rowDiff(tr) {
+  const sec = state.stack ? tr.closest(".stk-file") : null;
+  return sec ? (state.stack.slots[Number(sec.dataset.k)] || {}).diff : state.lastDiff;
+}
+
+
+// rowRange is the marked range of the file a rendered row belongs to, or null.
+function rowRange(tr) {
+  if (!state.stack) return state.diffRange;
+  const sec = tr && tr.closest(".stk-file");
+  const s = sec ? state.stack.slots[Number(sec.dataset.k)] : null;
+  return (s && s.range) || null;
+}
+
+
+// setDiffRange marks lines first..last on one side of the file tr is in (one
+// range at a time, stack-wide) and repaints — the repaint REPLACES the rows,
+// so a caller that still needs one finds it again. A one-line range is no
+// range. Returns how many of the range's lines the diff holds (a landing says
+// so when that is fewer than asked).
+function setDiffRange(tr, range) {
+  const r = range && range.last > range.first ? range : null;
+  const held = r ? rangeRows((rowDiff(tr) || {}).rows, r.side, r.first, r.last).block.length : 0;
+  if (state.stack) {
+    const sec = tr.closest(".stk-file");
+    const own = sec ? state.stack.slots[Number(sec.dataset.k)] : null;
+    for (const o of state.stack.slots) o.range = o === own ? r : null;
+  } else state.diffRange = r;
+  rerenderDiffKeepingPlace(true);
+  return held;
+}
+
+
+// clearDiffRange drops the marked range; false when there was none (esc then
+// falls through to what it did before).
+function clearDiffRange() {
+  let had = !!state.diffRange;
+  state.diffRange = null;
+  if (state.stack) for (const o of state.stack.slots) { had = had || !!o.range; o.range = null; }
+  if (had) rerenderDiffKeepingPlace(true);
+  return had;
 }
 
 
@@ -3016,6 +3086,37 @@ function rowSideAndLine(tr, td) {
 }
 
 
+// Shift+click on a LINE NUMBER extends the mark to a range of lines on that
+// number's side — the browser's twin of the TUI's space / move / space. Only
+// the number cell: shift+click on a changed row's code stays the staging
+// selection, and the staging handlers skip this gesture (rangeGesture), so
+// the two never fire together.
+function rangeGesture(e) {
+  return e.shiftKey && !e.ctrlKey && !e.metaKey && !!e.target.closest && !!e.target.closest("#diff-body td.no");
+}
+$("diff-body").addEventListener("mousedown", (e) => {
+  if (rangeGesture(e)) e.preventDefault(); // no text selection from the old caret
+});
+$("diff-body").addEventListener("click", (e) => {
+  if (!rangeGesture(e)) return;
+  const td = e.target.closest("td.no");
+  const tr = td.closest("tr[data-i]");
+  const d = tr && rowDiff(tr);
+  const r = d && d.rows ? d.rows[Number(tr.dataset.i)] : null;
+  if (!r || !diffLinkCtx(tr)) return;
+  const side = td.classList.contains("l") ? "old" : "new";
+  const no = side === "old" ? r.left_no : r.right_no;
+  if (!no) return;
+  getSelection().removeAllRanges();
+  const sec = state.stack ? tr.closest(".stk-file") : null;
+  const mark = sec ? (state.stack.slots[Number(sec.dataset.k)] || {}).row : state.diffRow;
+  const range = extendRange(mark, { side, no });
+  // Nothing to extend: the clicked line becomes the mark (and no range).
+  if (range.first === range.last && tr.dataset.no) return markDiffRow(tr, side, no);
+  setDiffRange(tr, range);
+});
+
+
 // A click on a diff row marks it as the note anchor; a right-click on a ◆ row
 // opens that note's own menu. The anchor is a NOTE affordance, so it follows
 // notesArmed: on a comparison a marked row would promise a `c` that is inert.
@@ -3024,6 +3125,7 @@ $("diff-body").addEventListener("click", (e) => {
   // The gate is the clicked ROW's own file in a stack (each carries its own
   // address), and the single-file view's context otherwise — reading the
   // global one here would leave every row unmarkable inside a stack.
+  if (rangeGesture(e)) return;
   const handle = e.target.closest(".notetitle[data-collapse]");
   if (!notesArmed(rowSlotCtx(handle || e.target.closest("tr")) || state.diffCtx)) return;
   // A note's title line is its fold handle.
@@ -3089,13 +3191,23 @@ $("diff-body").addEventListener("contextmenu", (e) => {
         const rn = Number(row.dataset.rno || 0);
         if (rn) { side = "new"; no = rn; }
       }
-      const link = linkFor(state.repo, state.worktree, rowCtx, side, no, rowRawText(row, side));
+      let link = linkFor(state.repo, state.worktree, rowCtx, side, no, rowRawText(row, side));
+      let linkLabel = "copy gg link to this line";
+      // Inside the marked range the row offers the RANGE's link — when the
+      // diff holds every one of its lines (the block is what an uncommitted
+      // range is fingerprinted over).
+      const rg = rowRange(row);
+      if (rg && rg.side === side && no >= rg.first && no <= rg.last) {
+        const blk = rangeRows((rowDiff(row) || {}).rows, side, rg.first, rg.last).block;
+        const rlink = blk.length === rg.last - rg.first + 1 ? linkFor(state.repo, state.worktree, rowCtx, side, rg.first, blk[0], rg.last, blk) : "";
+        if (rlink) [link, linkLabel] = [rlink, `copy gg link to lines ${rg.first}-${rg.last}`];
+      }
       // Recorded like every other copy (Task 9): copyLink, never copyText.
       // The Desc names the FILE — a line link's row in `gg links` has to be
       // recognisable, and the line number is already in the link text.
       if (link)
         rows.push({
-          label: "copy gg link to this line",
+          label: linkLabel,
           act: () => copyLink(link, linkDesc("file", (rowCtx && rowCtx.path) || "", "")),
         });
     }
@@ -3726,6 +3838,7 @@ $("diff-body").addEventListener("mousedown", (e) => {
 
 
 $("diff-body").addEventListener("click", (e) => {
+  if (rangeGesture(e)) return; // a line-number shift+click marks a range, never a staging row
   const tr = e.target.closest("tr[data-hunk][data-hr]");
   if (!tr) return;
   // a double-click's first click reselects; the double-click acts on what
@@ -3752,6 +3865,7 @@ document.addEventListener(
     // a copy gesture, not a click outside (plan 4d, D4). A double-click's
     // second click (detail 2) has selected a word and still clears.
     if (e.detail <= 1 && !getSelection().isCollapsed && $("diff-body").contains(e.target)) return;
+    if (rangeGesture(e)) return; // marking a range of lines leaves the staging selection alone
     if (e.target.closest && e.target.closest("tr[data-hunk][data-hr], #ctx-menu")) return;
     clearRowSelection();
   },
@@ -4667,4 +4781,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

@@ -293,13 +293,13 @@ func TestStackLineLandingIsPerFile(t *testing.T) {
 	t.Parallel()
 	view := readStatic(t, "stackview.js")
 	live := readStatic(t, "live.js")
-	if !strings.Contains(view, "async function landStackLine(path, side, line)") {
+	if !strings.Contains(view, "async function landStackLine(path, side, line, end = 0)") {
 		t.Fatal("stackview.js: landStackLine is the stack's line landing")
 	}
 	if !strings.Contains(view, "const sec = sectionEl(k);") || !strings.Contains(view, "sec.querySelector(`tr[data-side=") {
 		t.Fatal("stackview.js: the row must be looked for inside the target file's OWN section")
 	}
-	if !strings.Contains(live, "await landStackLine(s.file, side, s.line);") {
+	if !strings.Contains(live, "await landStackLine(s.file, side, s.line, s.end_line || 0);") {
 		t.Fatal("live.js: a landing with a line must go through the stack's own lander")
 	}
 }

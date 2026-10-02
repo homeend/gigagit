@@ -85,3 +85,52 @@ func TestRangeMarkDecisions(t *testing.T) {
 		t.Errorf("range decisions:\n got %s\nwant %s", got, want)
 	}
 }
+
+// The viewer's band for a range link: none for one line or a range starting
+// past the end, the end clamped to the file's last line.
+func TestViewerRangeDecisions(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	dir := t.TempDir()
+	src := jsFunc(t, "viewer.js", "viewerRange") + "\nconsole.log(JSON.stringify([viewerRange(2, 4, 10), viewerRange(2, 2, 10), viewerRange(9, 14, 10), viewerRange(11, 14, 10), viewerRange(0, 3, 10)]));\n"
+	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, filepath.Join(dir, "run.mjs")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	if got, want := strings.TrimSpace(string(out)), `[{"start":2,"end":4},null,{"start":9,"end":10},null,null]`; got != want {
+		t.Errorf("viewerRange: got %s, want %s", got, want)
+	}
+}
+
+// The gestures and their guards, pinned at the source: shift+click on a line
+// number is the range gesture and nothing else — the note anchor and the
+// staging selection both stand aside — and esc drops the range first.
+func TestRangeGestureGuards(t *testing.T) {
+	t.Parallel()
+	files, keys, viewer, live := readStatic(t, "files.js"), readStatic(t, "keys.js"), readStatic(t, "viewer.js"), readStatic(t, "live.js")
+	for _, c := range []struct{ src, want, why string }{
+		{files, `return e.shiftKey && !e.ctrlKey && !e.metaKey && !!e.target.closest && !!e.target.closest("#diff-body td.no");`, "the range gesture is shift+click on a line number"},
+		{files, "if (rangeGesture(e)) return; // a line-number shift+click marks a range, never a staging row", "the staging click must skip the range gesture"},
+		{files, "if (rangeGesture(e)) return; // marking a range of lines leaves the staging selection alone", "the outside-click clear must skip the range gesture"},
+		{files, "  if (rangeGesture(e)) return;\n  const handle = e.target.closest(\".notetitle[data-collapse]\");", "the note-anchor click must skip the range gesture"},
+		{files, "if (!keepRange) clearDiffRange();", "a plain mark drops the range"},
+		{files, "`copy gg link to lines ${rg.first}-${rg.last}`", "the menu names the range"},
+		{keys, "if (e.key === \"Escape\" && clearDiffRange()) return;\n  if (e.key === \"Escape\" && clearRowSelection()) return;", "esc drops the range before the staging selection"},
+		{viewer, `case "Escape": if (!clearViewerRange()) closeViewer(`, "esc drops the viewer's range before closing"},
+		{viewer, `"copy file link (lines " + rg.start + "-" + rg.end + ")"`, "the viewer's menu names the range"},
+		{viewer, `view.src === "worktree" ? block : null)`, "the viewer fingerprints only the disk's text"},
+		{live, "if (r && r.ok && s.end_line > s.line) markViewerRange(s.line, s.end_line);", "a content range link bands the viewer"},
+		{live, "setDiffRange(tr, { side, first: line, last: s.end_line })", "a range link bands the diff"},
+		{live, "landStackLine(s.file, side, s.line, s.end_line || 0)", "a range link bands the stack"},
+	} {
+		if !strings.Contains(c.src, c.want) {
+			t.Errorf("%s — missing %q", c.why, c.want)
+		}
+	}
+}
