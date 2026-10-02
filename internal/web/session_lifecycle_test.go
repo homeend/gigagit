@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
@@ -247,4 +248,65 @@ func TestSessionStartIsWriteGuarded(t *testing.T) {
 	if n := len(domain.Sessions().List()); n != 0 {
 		t.Fatalf("%d sessions started", n)
 	}
+}
+
+func waitExited(t *testing.T, s *domain.AgentSession) {
+	t.Helper()
+	select {
+	case <-s.Done():
+	case <-time.After(10 * time.Second):
+		t.Fatal("the session never exited")
+	}
+}
+
+// Review focus 4: a verb on a session in the wrong state is refused in words.
+func TestSessionKillAndRemoveRules(t *testing.T) {
+	s := testSession(t, "sleep 60")
+	id := string(s.Info().ID)
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	body := `{"id":` + strconv.Quote(id) + `}`
+
+	code, b := postJSONAny(t, ts, "/api/session-remove", body)
+	if msg, _ := b["error"].(string); code != http.StatusConflict || !strings.Contains(msg, "only an exited session can be removed") {
+		t.Fatalf("remove of a running session = %d %v", code, b)
+	}
+	if code, b = postJSONAny(t, ts, "/api/session-kill", body); code != http.StatusOK {
+		t.Fatalf("kill = %d %v", code, b)
+	}
+	waitExited(t, s)
+	if _, ok := domain.Sessions().Get(s.Info().ID); !ok {
+		t.Fatal("a plain kill removed the session")
+	}
+	code, b = postJSONAny(t, ts, "/api/session-kill", body)
+	if msg, _ := b["error"].(string); code != http.StatusConflict || !strings.Contains(msg, "already exited") {
+		t.Fatalf("kill of an exited session = %d %v", code, b)
+	}
+	if code, b = postJSONAny(t, ts, "/api/session-remove", body); code != http.StatusOK {
+		t.Fatalf("remove = %d %v", code, b)
+	}
+	for _, path := range []string{"/api/session-kill", "/api/session-remove"} {
+		if code, _ := postJSONAny(t, ts, path, body); code != http.StatusNotFound {
+			t.Errorf("%s on a removed id = %d, want 404", path, code)
+		}
+		if code, _ := postJSONAny(t, ts, path, `{`); code != http.StatusBadRequest {
+			t.Errorf("%s bad body = %d, want 400", path, code)
+		}
+	}
+}
+
+func TestSessionKillAndRemoveInOne(t *testing.T) {
+	s := testSession(t, "sleep 60")
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	if code, b := postJSONAny(t, ts, "/api/session-kill", `{"id":`+strconv.Quote(string(s.Info().ID))+`,"remove":true}`); code != http.StatusOK {
+		t.Fatalf("%d %v", code, b)
+	}
+	waitExited(t, s)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, ok := domain.Sessions().Get(s.Info().ID); !ok {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("kill+remove left the session listed")
 }

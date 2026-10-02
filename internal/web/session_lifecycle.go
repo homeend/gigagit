@@ -24,6 +24,8 @@ func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("GET /api/session-commands", s.handleSessionCommands)
 		mux.HandleFunc("POST /api/session-start", writeGuard(s.handleSessionStart))
+		mux.HandleFunc("POST /api/session-kill", writeGuard(s.handleSessionKill))
+		mux.HandleFunc("POST /api/session-remove", writeGuard(s.handleSessionRemove))
 	})
 }
 
@@ -258,4 +260,62 @@ func (s *Server) handleSessionStart(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeErr(w, http.StatusInternalServerError, errors.New("the session ended before it could be shown"))
+}
+
+// handleSessionKill ends a running session; remove also forgets it once its
+// exit is recorded (the TUI's X). The list change reaches every tab through
+// the manager's signal.
+func (s *Server) handleSessionKill(w http.ResponseWriter, r *http.Request) {
+	var q struct {
+		ID     string `json:"id"`
+		Remove bool   `json:"remove"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	sess, ok := sessionByID(w, q.ID)
+	if !ok {
+		return
+	}
+	if sess.Info().State != domain.SessionRunning {
+		writeErr(w, http.StatusConflict, errors.New("the session has already exited"))
+		return
+	}
+	id := domain.SessionID(q.ID)
+	var err error
+	if q.Remove {
+		err = domain.Sessions().KillAndRemove(id)
+	} else {
+		err = domain.Sessions().Kill(id)
+	}
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err) // removed between the lookup and the kill
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// handleSessionRemove forgets an exited session.
+func (s *Server) handleSessionRemove(w http.ResponseWriter, r *http.Request) {
+	var q struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	sess, ok := sessionByID(w, q.ID)
+	if !ok {
+		return
+	}
+	if sess.Info().State == domain.SessionRunning {
+		writeErr(w, http.StatusConflict, errors.New("only an exited session can be removed — kill it first"))
+		return
+	}
+	if err := domain.Sessions().Remove(domain.SessionID(q.ID)); err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
 }
