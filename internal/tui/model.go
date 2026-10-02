@@ -4048,7 +4048,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		doc := hunkpick.FromDiff(msg.index, msg.work)
-		doc.SetAll(hunkpick.TakeCurrent) // default: nothing staged
+		doc.StartUntouched() // nothing picked: every hunk stays unstaged
 		if len(doc.Blocks()) == 0 {
 			m.statusMsg = i18n.T("stage hunks: nothing to stage")
 			return m, nil
@@ -4067,7 +4067,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		doc := hunkpick.FromDiff(msg.index, msg.head)
-		doc.SetAll(hunkpick.TakeCurrent) // default: everything stays staged
+		doc.StartUntouched() // nothing picked: every hunk stays staged
 		if len(doc.Blocks()) == 0 {
 			m.statusMsg = i18n.T("unstage hunks: nothing to unstage")
 			return m, nil

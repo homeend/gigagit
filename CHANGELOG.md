@@ -23,6 +23,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   way. Shift+click and opening a range link get the same speed-up; shrinking
   a band no longer folds back the lines it had opened.
 
+## Hunk staging opens with nothing ticked
+
+### Changed
+
+- **TUI: the `H` stage / unstage window opens with nothing ticked.** It used
+  to open with every index-side (left) line ticked — the "nothing staged yet"
+  default drawn as a selection. Now no line on either side is ticked until
+  you tick it, and a hunk you never touch is left as it is (unstaged in the
+  stage window, staged in the unstage window). The first tick in a hunk
+  starts from nothing: exactly the ticked lines, in the order ticked, become
+  the hunk. Removing a hunk's last tick returns it to untouched instead of
+  staging an empty hunk, and `s` does the same in one key. A hunk with no
+  line on the right side (a pure deletion) has nothing to tick: `i` on it
+  takes the empty side — it reads `— removed` — and `i` again lets go; `I`
+  takes those too. The conflict resolver is unchanged.
+
 ## Start, kill and remove agent sessions from the browser
 
 ### Added

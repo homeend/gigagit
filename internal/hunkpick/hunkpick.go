@@ -22,6 +22,10 @@ const (
 	TakeCurrent
 	TakeIncoming
 	LineByLine
+	// Untouched is the staging pickers' starting state: the block resolves to
+	// its Current lines (the hunk is left as it is) but nothing on it reads as
+	// picked, and the first pick starts from an empty list.
+	Untouched
 )
 
 // Pick is one line chosen in line-by-line mode: a side and an index into that
@@ -101,7 +105,7 @@ func (b *Block) EnsurePicks() {
 		b.Picks = fullPicks(Incoming, len(b.Incoming))
 	case LineByLine:
 		return
-	default:
+	default: // Undecided, Untouched: the first pick starts from nothing
 		b.Picks = nil
 	}
 	b.Mode = LineByLine
@@ -197,7 +201,7 @@ func (b *Block) ResolvedLines() ([]string, bool) {
 // line's prepared form instead of re-deriving it from the assembled strings.
 func (b *Block) ResolvedPicks() ([]Pick, bool) {
 	switch b.Mode {
-	case TakeCurrent:
+	case TakeCurrent, Untouched:
 		return fullPicks(Current, len(b.Current)), true
 	case TakeIncoming:
 		return fullPicks(Incoming, len(b.Incoming)), true
@@ -218,7 +222,7 @@ func (b *Block) ResolvedPicks() ([]Pick, bool) {
 // the block is still Undecided.
 func (b *Block) resolved(out []string) ([]string, bool) {
 	switch b.Mode {
-	case TakeCurrent:
+	case TakeCurrent, Untouched:
 		return append(out, b.Current...), true
 	case TakeIncoming:
 		return append(out, b.Incoming...), true
@@ -255,6 +259,11 @@ type Doc struct {
 	// shipped with). ParseConflict leaves it "" on purpose: its lines
 	// keep their own \r (it splits on \n without trimming).
 	EOL string
+
+	// Rest is the mode a block with nothing decided on it sits in: Undecided
+	// (the zero value — a conflict must be decided) or Untouched (staging — a
+	// hunk left alone keeps its Current lines). StartUntouched sets it.
+	Rest Mode
 }
 
 // Blocks returns the decidable blocks in file order (pointers into Items).
@@ -286,14 +295,23 @@ func (d *Doc) SetAll(m Mode) {
 	}
 }
 
+// StartUntouched puts every block in the Untouched state and makes that the
+// document's rest mode — how the staging pickers open: nothing picked, every
+// hunk left as it is.
+func (d *Doc) StartUntouched() {
+	d.Rest = Untouched
+	d.SetAll(Untouched)
+}
+
 // ToggleSideAll is ToggleSide across the document: if every block that has
 // s-lines is fully picked on s, it clears s from those blocks; otherwise it
 // completes s on every block that has s-lines.
 //
 // A block WITHOUT s-lines has nothing to offer "take s": the completing pass
-// marks it skipped if it is still Undecided (so the document reads as fully
-// decided and can be applied), and the clearing pass returns a skipped one to
-// Undecided — the master toggle resets everything it touched. Such a block
+// marks it skipped if it is still at rest (Undecided, or Untouched in a
+// staging document — so "take all incoming" takes a pure deletion's empty
+// side too), and the clearing pass returns a skipped one to rest — the master
+// toggle resets everything it touched. Such a block
 // the user already decided (picks, or a skip when clearing does not apply)
 // is never overwritten on the completing pass.
 func (d *Doc) ToggleSideAll(s Side) {
@@ -313,8 +331,10 @@ func (d *Doc) ToggleSideAll(s Side) {
 	for _, b := range d.Blocks() {
 		if len(b.lines(s)) == 0 {
 			if allFull {
-				b.Unskip()
-			} else if b.Mode == Undecided {
+				if b.Skipped() {
+					b.Mode = d.Rest
+				}
+			} else if b.Mode == d.Rest {
 				b.Skip()
 			}
 			continue

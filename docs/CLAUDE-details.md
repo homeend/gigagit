@@ -114,6 +114,16 @@ and the "View file" preview (`lexPreview` + `fileContentLinesTok`); both refuse
 a file holding a bare `\r` (`domain.HasBareCR`), which they turn into a line
 break and `syntax.Lex` does not.
 
+The staging pickers (`H`) open **untouched**: the loaders call
+`hunkpick.Doc.StartUntouched()`, which puts every block in `Untouched` (it
+resolves to its Current lines, yet `SideState`/`LinePicked` read nothing as
+picked and `EnsurePicks` starts from an empty list) and sets `Doc.Rest`, the
+mode `ToggleSideAll` returns a cleared one-sided block to. The picker adds the
+staging-only rules (`toggleSide`/`settle` in `conflict_picker.go`): a hunk left
+with no tick goes back to `Untouched`, and `i` on a hunk with no right-side
+line toggles the taken-empty state (`Skipped()`, drawn `— removed`). The
+conflict picker (`requireAll`) never holds `Untouched`.
+
 The **hunk picker** (conflict resolver + hunk staging/unstaging) reaches the
 same colouring through **`winCell.mask`** — a `runMask{cls, emph}` per display
 rune that `cellPieces` slices alongside the body in all three modes and
