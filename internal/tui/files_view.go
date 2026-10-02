@@ -1494,8 +1494,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 			// path before the badge loses its middle.
 			text, elide = text+noteBadge(m.noteCounts.PlainByCommitPath[m.filesHash+":"+l.notedPath]), true
 		} else if l.path != "" && m.filesCommitBadges() {
-			// A commit's files: the notes anchored on the file AT this commit.
-			text += noteBadge(m.noteCounts.ByCommitPath[m.filesHash+":"+l.path])
+			// A commit's files: the notes anchored on the file AT this commit,
+			// written outside any range — a range review's are its row's.
+			text += noteBadge(m.noteCounts.PlainByCommitPath[m.filesHash+":"+l.path])
 		}
 		// A file row cuts the middle of its path, never the name (headings
 		// were pre-elided above); a review row is prose and cuts at its end.

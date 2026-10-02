@@ -84,7 +84,7 @@ func (m Model) handleScopeOpenMsg(msg scopeOpenMsg) (Model, tea.Cmd) {
 	// After openCompareFiles: it tore the commit's view down (and with it any
 	// earlier way back), and bumped previewGen, which the command stamps.
 	m.filesBack = &scopeBack{commit: msg.back, scope: msg.scope}
-	if nc := m.pairNotesCmd(msg.a, msg.b); nc != nil {
+	if nc := m.pairNotesCmd(msg.a, msg.b, msg.scope); nc != nil {
 		cmd = tea.Batch(cmd, nc)
 	}
 	return m, cmd

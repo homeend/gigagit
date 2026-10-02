@@ -58,11 +58,13 @@ screen_contains = ["Range reviews", "feature → main  ◆ 1", "A  c.txt  ◆ 1 
 screen_excludes = ["a.txt"]
 
 # enter on the row opens the range the note was written in, frozen at this
-# commit: both files of the branch, each with its notes.
+# commit: both files of the branch, with the REVIEW's notes only — c.txt's
+# note was written on the commit, outside the review, and stays the commit's.
 [[tui.step]]
 name = "tip-range"
 keys = ["down", "enter"]
-screen_contains = ["Range review: feature → main", "a.txt  ◆ 1", "c.txt  ◆ 1"]
+screen_contains = ["Range review: feature → main", "a.txt  ◆ 1", "A  c.txt"]
+screen_excludes = ["c.txt  ◆"]
 
 # esc returns to the commit, the cursor on the row. a.txt is not a file of
 # the commit: S stacks c.txt alone.

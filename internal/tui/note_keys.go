@@ -132,7 +132,7 @@ func (m Model) loadNotesCmd() tea.Cmd {
 	svc, tag, rows := m.svc, m.diffTag, v.full
 	// A preview gathers its notes along the branch and resolves them against
 	// the tip's content; every other view reads the address's own notes.
-	set, rid := v.previewSet, v.reviewID
+	set, rid, all := v.previewSet, v.reviewID, v.rangeNotes
 	return func() tea.Msg {
 		d := domain.Diff{Result: textdiff.Result{Rows: rows}}
 		if rid != "" {
@@ -144,6 +144,9 @@ func (m Model) loadNotesCmd() tea.Cmd {
 			return notesLoadedMsg{tag: tag, notes: ns, err: err}
 		}
 		ns, err := svc.NotesFor(context.Background(), addr, d)
+		if !all { // a range review's notes show in the review, not here
+			ns = domain.PlainNotes(ns)
+		}
 		return notesLoadedMsg{tag: tag, notes: ns, err: err}
 	}
 }
@@ -588,7 +591,7 @@ func (m Model) notedFilePath(path string) bool {
 		return !m.previewPathGoneAtTip(path)
 	}
 	if v := m.diffLayer(); v != nil && v.rev != "" {
-		return m.noteCounts.ByCommitPath[v.rev+":"+path] > 0
+		return m.noteCounts.PlainByCommitPath[v.rev+":"+path] > 0
 	}
 	return m.noteCounts.ByPath[path] > 0
 }

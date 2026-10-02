@@ -223,6 +223,11 @@ func TestAllNotesEnterOpensTheCommitDiffAndLands(t *testing.T) {
 	if _, ok := m.topLayer().(*diffView); !ok {
 		t.Fatalf("enter must push the diff, top = %T", m.topLayer())
 	}
+	// The note opens where it is stored: this diff draws a range review's
+	// notes too, which a commit's own diff leaves to the review.
+	if !m.topLayer().(*diffView).rangeNotes {
+		t.Fatal("a diff opened from View all notes must draw range-review notes")
+	}
 	if want := "commit:" + anLiveSHA + ":internal/domain/tasks.go"; m.diffTag != want {
 		t.Fatalf("diffTag = %q, want %q", m.diffTag, want)
 	}

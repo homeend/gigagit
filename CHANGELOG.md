@@ -95,6 +95,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   landing. Before, the page could not reach those notes from the commit at
   all.
 
+- **A range review's notes show in the review, and only there.** Notes
+  written in a merge preview (a branch review) or a commit pair no longer
+  appear in the commit's own view: a file the commit changes is not badged
+  ◆ N for them, and the commit's own diff of that file (single file and
+  stacked) does not draw them — in the TUI and in the web page. They are the
+  review's: counted on its **Range reviews** row and drawn when the review is
+  opened from it. The opened review in turn shows **its own notes only** —
+  not a plain note on a commit of the range, not another review's — so the
+  per-file counts add up to the row's ◆ N, and a note written there joins the
+  review. View all notes still opens a note where it is stored, with the
+  range notes drawn. Notes written outside any range are unchanged. (A saved
+  merge preview or commit pair opened from the Previews tab still gathers
+  every note along its range.) `domain.PlainNotes`, `PreviewNoteSet.Only`;
+  the web's `/api/notes` leaves range notes out unless `scoped=1`,
+  `/api/notes/counts` carries `plain_by_commit_path`, `/api/pair/notes`
+  takes `scope`. CLI and MCP reads are unchanged — an agent still sees
+  every note at an address.
 - **A commit holding a range review reads as reviewed: ✎.** In the TUI's
   Commits list and in the web page's commit list, a commit whose notes were
   written in a merge preview (a branch review) or a commit pair carries the

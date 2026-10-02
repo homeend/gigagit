@@ -119,7 +119,7 @@ func TestCommitFilesViewShowsNoteBadge(t *testing.T) {
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}, {text: "b.go", path: "b.go"}}}
 	m.filesMode = filesModeChanged
 	m.filesHash = "c0ffeeaa"
-	m.noteCounts = domain.NoteCounts{ByCommitPath: map[string]int{"c0ffeeaa:a.go": 3, "deadbeef:b.go": 5}}
+	m.noteCounts = domain.NoteCounts{PlainByCommitPath: map[string]int{"c0ffeeaa:a.go": 3, "deadbeef:b.go": 5}}
 	out := m.renderFilesView(40, 12)
 	if !strings.Contains(out, "a.go"+noteBadge(3)) {
 		t.Fatalf("a.go row wants the ◆ 3 badge:\n%s", out)

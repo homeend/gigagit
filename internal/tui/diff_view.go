@@ -117,6 +117,10 @@ type diffView struct {
 	// srcNotes refresh. relayout turns them into synthetic display rows;
 	// nothing here ever touches the shared cached textdiff rows.
 	notes []domain.ResolvedNote
+	// rangeNotes also draws the notes written in a range review. A commit's
+	// own diff leaves them to the review (domain.PlainNotes); View all notes
+	// opens a note where it is stored, so its diff sets this.
+	rangeNotes bool
 	// hideAgent mirrors Model.notesAgentOff onto the view, because relayout
 	// (called by rebuild, ctrl+w and every resize) has no Model to ask.
 	hideAgent bool

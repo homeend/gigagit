@@ -1890,6 +1890,21 @@ them on a file row.
   reviews.js's pure section (web ✎ + tooltip; commits.js's one `rvmark` site
   goes through it). The TUI row's ◆ N is `NoteCounts.PlainCommitNotes` — the
   notes written in no scope — so a range review is never counted twice.
+- Review notes show ONLY in the review (2026-10-02, user ruling): a note with
+  a scope (`Note.Preview`) is the review's, never the commit's own view's.
+  `domain.PlainNotes` filters a commit's own reads — the TUI's `loadNotesCmd`
+  / `stackNotesCmd` / the Notes-row popup, the web's `/api/notes` (unless
+  `scoped=1`) — and every commit-view badge / note-step predicate reads
+  `PlainByCommitPath` (web: `plain_by_commit_path`). View all notes opens a
+  note where it is stored: its diff sets `diffView.rangeNotes` (web:
+  `showRangeNotes()` → `diffCtx.scoped`). The other half: a range opened from
+  a Range review row narrows its set with `PreviewNoteSet.Only = <scope>` —
+  `loadPreviewNotes` keeps that scope's notes alone, the counts cache keys on
+  it, and `Pair()` returns it so a note written there joins the review (TUI
+  `pairNotesCmd(a, b, only)`; web `state.compare.pair.scope` →
+  `/api/pair/notes?scope=`, and `notePreview` accepts a scope the commit
+  already holds without resolving it). A saved preview/pair from the Previews
+  tab leaves `Only` empty and gathers everything. CLI/MCP stay unfiltered.
 - `unfoldFilesForOpen` (files.js): opening a commit (`openCommit`,
   `openCommitByHash`) unfolds a folded file list and stores it — a commit
   opens onto its files, never onto the strip. The exception is a caller going

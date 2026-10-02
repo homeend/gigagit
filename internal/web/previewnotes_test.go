@@ -177,7 +177,8 @@ func TestNoteAddInAPreviewRecordsThePreview(t *testing.T) {
 		} `json:"notes"`
 	}
 	stamped, foreign := add(tip, "main...feat"), add(older, "main...feat")
-	if code := getJSON(t, ts, "/api/notes?path=a.txt&rev="+tip+"&state=commit", &got); code != http.StatusOK {
+	// scoped=1: the commit's own view leaves a range review's notes out.
+	if code := getJSON(t, ts, "/api/notes?path=a.txt&rev="+tip+"&state=commit&scoped=1", &got); code != http.StatusOK {
 		t.Fatalf("status %d", code)
 	}
 	if len(got.Notes) != 1 || got.Notes[0].ID != stamped || got.Notes[0].Preview != "main...feat" {

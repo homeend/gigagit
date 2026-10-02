@@ -57,7 +57,7 @@ func (m Model) notedStackFile(v *diffView, i int) bool {
 		return m.filesPreviewCounts[f.path] > 0 && !m.previewPathGoneAtTip(f.path)
 	}
 	if v.rev != "" {
-		return m.noteCounts.ByCommitPath[v.rev+":"+f.path] > 0
+		return m.noteCounts.PlainByCommitPath[v.rev+":"+f.path] > 0
 	}
 	return m.noteCounts.ByPath[f.path] > 0
 }
