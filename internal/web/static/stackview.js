@@ -848,7 +848,7 @@ function toggleSlot(k) {
   if (!s) return;
   s.collapsed = !s.collapsed;
   if (s.collapsed && s.hunks) s.hunks.sel = new Set(); // nothing hidden stays selected
-  if (s.collapsed) s.range = null; // …nor marked: `c` must never write over a band nobody sees
+  if (s.collapsed) s.range = s.row = null; // …nor marked: `c` must never write over a band nobody sees
   repaintSlot(st, k);
   pump(st);
 }
@@ -865,7 +865,7 @@ function toggleAllCollapsed() {
   for (const s of st.slots) {
     s.collapsed = !expand;
     if (s.collapsed && s.hunks) s.hunks.sel = new Set(); // nothing hidden stays selected
-    if (s.collapsed) s.range = null;
+    if (s.collapsed) s.range = s.row = null;
   }
   const at = st.slots[st.anchor] ? st.slots[st.anchor].idx : 0;
   paintStack(st);

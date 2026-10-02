@@ -90,7 +90,8 @@ func TestRangeKeySteps(t *testing.T) {
 		`{"side":"old","first":2,"last":4,"end":4},` +
 		// nothing marked
 		`null,` +
-		// the next line the diff holds, across a gap between hunks
+		// the next line the rows hold (a defensive case: a diff's rows hold
+		// every line of both files, so a real gap does not occur)
 		`{"side":"new","first":2,"last":41,"end":41},` +
 		// the viewer: from the cursor, which stays
 		`{"range":{"start":5,"end":6},"end":6},` +
@@ -101,8 +102,8 @@ func TestRangeKeySteps(t *testing.T) {
 		// the cursor is the band's last line: its first one moves
 		`{"range":{"start":2,"end":5},"end":2},` +
 		`null,null,` +
-		// a cursor inside the band: the band's start is the anchor
-		`{"range":{"start":3,"end":8},"end":8}` +
+		// the cursor walked off the band's ends: marking starts over from it
+		`{"range":{"start":5,"end":6},"end":6}` +
 		`]`
 	if got := strings.TrimSpace(string(out)); got != want {
 		t.Errorf("range key steps:\n got %s\nwant %s", got, want)
@@ -126,6 +127,10 @@ func TestRangeKeysWiring(t *testing.T) {
 		{files, `const got = row ? diffRowLink(row, row.querySelector(side === "old" ? "td.no.l" : "td.no.r")) : null;`, "L reads the mark's own side"},
 		{viewer, "stepViewerRange(e.key === \"ArrowDown\" ? 1 : -1);", "shift+↓/↑ mark in the viewer"},
 		{viewer, "const here = viewerLinkHere();", "the viewer's menu and L share one link builder"},
+		{files, "const s = st.slots.find((o) => o.range) || st.slots[st.anchor];", "the keys start in c's file: the band's, else the cursor's"},
+		{files, "if (mark.side === \"old\" && ctx.preview && !ctx.preview.pair) {", "a preview starts on the new side"},
+		{files, "are not all in this diff: no link names them", "L says so for a partly held range"},
+		{files, "|| !!(rngRows && rngRows.has(r)) || marked(r);", "the marked row is never folded away"},
 	} {
 		if !strings.Contains(c.src, c.pin) {
 			t.Errorf("%s: lost %q", c.why, c.pin)

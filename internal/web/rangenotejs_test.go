@@ -85,7 +85,7 @@ func TestRangeNoteWiring(t *testing.T) {
 		t.Error("stackview.js: rangeDiff no longer looks for the slot that holds the range")
 	}
 	// A folded section's band is not on screen, so it must not take a note.
-	if strings.Count(view, "if (s.collapsed) s.range = null;") != 2 {
+	if strings.Count(view, "if (s.collapsed) s.range = s.row = null;") != 2 {
 		t.Error("stackview.js: folding a section (one or all) must drop its marked range")
 	}
 	// The key is live for the file that will take the note.

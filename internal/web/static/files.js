@@ -1842,7 +1842,9 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   let items = rows;
   if (state.diffPartial) {
     const noted = (side, no) => !!no && nc.notes.some((n) => n.side === side && n.line === no);
-    const pinned = (r) => noted("new", r.right_no) || noted("old", r.left_no) || !!attnClsBoth(r) || !!(rngRows && rngRows.has(r));
+    // …nor the marked row: L and shift+↓/↑ read it.
+    const marked = (r) => !!nc.row && (nc.row.side === "old" ? r.left_no : r.right_no) === nc.row.no;
+    const pinned = (r) => noted("new", r.right_no) || noted("old", r.left_no) || !!attnClsBoth(r) || !!(rngRows && rngRows.has(r)) || marked(r);
     items = collapseDiffRows(rows, open, notesOn ? pinned : null);
     if (items === null) {
       const lead = notesOn ? fileNoteRowsHTML(1, nc) : "";
@@ -3251,18 +3253,19 @@ function diffRowLink(row, td) {
 
 
 // markHere is the file the keyboard marks in and where its mark stands: the
-// band's file, else the marked row's, else the file under the cursor (a
-// stack's active slot). {root, rows, mark, range}; null when no diff is up.
+// band's file, else the file under the cursor (a stack's active slot) with
+// its own marked row — `c`'s rule, so the keys start where c would land.
+// {root, rows, mark, range}; null when no text diff is up.
 function markHere() {
   const st = state.stack;
   if (!st) {
-    if (!state.lastDiff) return null;
+    if (!state.lastDiff || !(state.lastDiff.rows || []).length) return null;
     return { root: $("diff-body"), rows: state.lastDiff.rows, mark: state.diffRow, range: state.diffRange };
   }
-  const s = st.slots.find((o) => o.range) || st.slots.find((o) => o.row) || st.slots[st.anchor];
+  const s = st.slots.find((o) => o.range) || st.slots[st.anchor];
   const k = st.slots.indexOf(s);
   const root = k >= 0 ? document.querySelector(`#diff-body .stk-file[data-k="${k}"]`) : null;
-  if (!s || !s.diff || s.collapsed || !root) return null;
+  if (!s || !s.diff || !(s.diff.rows || []).length || s.collapsed || !root) return null;
   return { root, rows: s.diff.rows, mark: s.row, range: s.range, k };
 }
 
@@ -3278,8 +3281,16 @@ function stepDiffRange(dir) {
   let mark = h.mark;
   if (!mark && !h.range) {
     mark = firstChangedRow(h.root);
-    const tr = mark ? diffRowAt(h.root, mark.side, mark.no) : null;
-    if (!tr || !diffLinkCtx(tr)) return;
+    let tr = mark ? diffRowAt(h.root, mark.side, mark.no) : null;
+    const ctx = tr && diffLinkCtx(tr);
+    if (!ctx) return;
+    // A preview's old side is the merge base, which no link or note names:
+    // start on the new side instead (addNotePrompt's fall-forward).
+    if (mark.side === "old" && ctx.preview && !ctx.preview.pair) {
+      mark = firstNewSideRow(h.root);
+      tr = mark ? diffRowAt(h.root, mark.side, mark.no) : null;
+      if (!tr) return;
+    }
     markDiffRow(tr, mark.side, mark.no);
   }
   const next = stepRange(h.rows, mark, h.range, dir);
@@ -3303,6 +3314,10 @@ function copyMarkLink() {
     return;
   }
   const side = h.range ? h.range.side : h.mark.side;
+  if (h.range && rangeRows(h.rows, side, h.range.first, h.range.last).block.length < h.range.last - h.range.first + 1) {
+    opLine(`lines ${h.range.first}-${h.range.last} are not all in this diff: no link names them`, true);
+    return;
+  }
   const no = h.range ? h.range.first : h.mark.no;
   const row = diffRowAt(h.root, side, no);
   const got = row ? diffRowLink(row, row.querySelector(side === "old" ? "td.no.l" : "td.no.r")) : null;
@@ -3318,6 +3333,7 @@ function copyMarkLink() {
 // mark, L copies the link. True when it acted.
 function rangeKey(e) {
   if (state.layout !== "diff" || conflictPick || e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (!markHere()) return false; // an image, binary or empty diff: the keys keep their old meaning
   if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
     e.preventDefault(); // no page scroll, no text selection growing
     stepDiffRange(e.key === "ArrowDown" ? 1 : -1);

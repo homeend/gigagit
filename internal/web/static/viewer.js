@@ -965,10 +965,13 @@ function viewerRange(line, end, len) {
 
 // viewerStep is one shift+↓ (dir 1) / shift+↑ (dir -1) in the viewer: the
 // band (own: the reader's, or null) grows or shrinks at the end away from the
-// cursor, which stays put. {range, end}: range null = back to the one line;
+// cursor, which stays put (a band the cursor left starts over from it).
+// {range, end}: range null = back to the one line;
 // null when the moving end is already at the file's edge. Pure.
 function viewerStep(own, cur, len, dir) {
   if (!len || cur < 1) return null;
+  // A band the cursor has walked away from is not "from the cursor": start over.
+  if (own && cur !== own.start && cur !== own.end) own = null;
   const anchor = own && cur === own.end ? own.end : own ? own.start : cur;
   const end = own ? (anchor === own.start ? own.end : own.start) : cur;
   const next = Math.min(Math.max(end + dir, 1), len);

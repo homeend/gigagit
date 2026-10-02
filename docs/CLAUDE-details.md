@@ -883,7 +883,11 @@ row's, else the cursor slot; pure `stepRange` moves the end AWAY from the
 mark to the next line the side holds) and the viewer's `stepViewerRange`
 (pure `viewerStep`, the cursor is the anchor); `L` = `copyMarkLink` /
 `copyViewerLinkHere`, sharing `diffRowLink` / `viewerLinkHere` with the
-menus. `rangeKey` runs before `diffScrollKey`. Narrow layout: a context row
+menus. `markHere` follows `c`: the band's slot, else the anchor slot and ITS
+`.row` (collapsing a slot drops its `.row` and `.range`); a preview starts
+on the new side; the marked row is pinned against folding; a viewer band
+the cursor walked off restarts from the cursor. Tests:
+`rangekeysjs_test.go`. `rangeKey` runs before `diffScrollKey`. Narrow layout: a context row
 carries `data-ono` (its old line — NOT data-lno, which means "split layout"
 to the click code); `diffRowAt` is the one (side, line) → row lookup. Tests: `rangenotejs_test.go`, `TestNotesAddRange`.
 
