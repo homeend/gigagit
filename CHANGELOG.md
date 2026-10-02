@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Text templates: follow-up fixes
+
+### Changed
+
+- **CLI:** `gg template add` stores the template **globally** (every repo),
+  like the TUI window and the web view; `--repo` stores it for this repo only.
+- **CLI:** `gg template render --set label=value` with a label the template
+  does not ask for exits 2 naming it (it was ignored); `gg template list` and
+  `gg templates` refuse arguments.
+- A title that collides with another says which **id** is taken and which
+  title holds it (`"bug-report"` is the id of `"Bug report"`).
+
+### Fixed
+
+- A damaged `texttemplates.toml` is reported and left untouched; it was read
+  as an empty list and replaced by the next save.
+- `<branch:…>` (it takes no argument) and `<user:>` (no label) are refused
+  when a template is saved; a title may not hold a tab.
+- A template's `<seq>` counters are consumed together, in one write.
+- `gg template show no` and the other verbs: an id prefix that names one
+  template held by both scopes resolves to this repo's row.
+- `gg template add -F` stops reading at the 64 KiB limit.
+- **TUI:** the fill step scrolls when a template asks for more variables than
+  fit; the fill and rendered key hints wrap on a narrow terminal; a title cut
+  in the list is shown whole on the bottom bar; a second `enter` in the form
+  no longer queues a second editor; after a save the cursor lands on the saved
+  row even when both scopes hold the title.
+- **Web:** leaving the add/edit form with unsaved text asks once (`esc` again
+  discards — also the cancel button and a click outside); the delete question
+  is answered only by `y`, `n` or `esc`; after a save the saved row is
+  selected even when both scopes hold the title.
+
 ## Text templates
 
 ### Added
