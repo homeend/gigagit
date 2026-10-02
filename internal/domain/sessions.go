@@ -190,14 +190,40 @@ func (s *Service) StartAgentSession(ctx context.Context, tc config.ToolCommand, 
 	return sess, tok, nil
 }
 
+// MainCheckoutName is the repository's local name: the directory of its MAIN
+// checkout, whichever worktree this Service sits in (git lists the main
+// worktree first). Falls back to this worktree's own directory, "" when
+// even that is unknown.
+func (s *Service) MainCheckoutName(ctx context.Context) string {
+	if wts, err := s.Worktrees(ctx); err == nil && len(wts) > 0 && wts[0].Path != "" {
+		// A foreign backslash-notation record ends in \.git (see reroot).
+		p := strings.TrimSuffix(strings.TrimSuffix(wts[0].Path, `\.git`), "/.git")
+		return path.Base(strings.ReplaceAll(p, `\`, "/"))
+	}
+	if top, err := s.TopLevel(ctx); err == nil && top != "" {
+		return filepath.Base(top)
+	}
+	return ""
+}
+
+// sessionRepo is the name a session is grouped under: the remote's
+// repository name, else the main checkout's directory — never the linked
+// worktree's own, or one repository's sessions would split per worktree.
+func (s *Service) sessionRepo(ctx context.Context, worktreeDir string) string {
+	if repo, err := s.RepoName(ctx); err == nil && repo != "" {
+		return repo
+	}
+	if name := s.MainCheckoutName(ctx); name != "" {
+		return name
+	}
+	return filepath.Base(worktreeDir)
+}
+
 // startLine runs an already-resolved command line as a session on mgr (the
 // AI-task path hands it a line Prepare resolved against its temp files —
 // resolving it again would misread any <…> in a path).
 func (s *Service) startLine(ctx context.Context, mgr *agentsession.Manager, label, agentID, line, worktreeDir, cwd string, cols, rows int, env []string) (*AgentSession, error) {
-	repo, err := s.RepoName(ctx)
-	if err != nil || repo == "" {
-		repo = filepath.Base(worktreeDir)
-	}
+	repo := s.sessionRepo(ctx, worktreeDir)
 	argv, cmdline := sessionShell(line, runtime.GOOS, os.Getenv)
 	return mgr.Start(agentsession.StartSpec{
 		Label: label, AgentID: agentID, Repo: repo, Dir: worktreeDir,
@@ -211,10 +237,7 @@ func (s *Service) startLine(ctx context.Context, mgr *agentsession.Manager, labe
 // program. shell is the [console] shell override ("" = pick one); cwd and env
 // as for StartSession.
 func (s *Service) StartTerminal(ctx context.Context, shell, worktreeDir, cwd string, cols, rows int, env []string) (*AgentSession, error) {
-	repo, err := s.RepoName(ctx)
-	if err != nil || repo == "" {
-		repo = filepath.Base(worktreeDir)
-	}
+	repo := s.sessionRepo(ctx, worktreeDir)
 	return Sessions().Start(agentsession.StartSpec{
 		Label: "Terminal", Terminal: true, Repo: repo, Dir: worktreeDir, Cwd: cwd,
 		Argv: terminalShell(runtime.GOOS, os.Getenv, exec.LookPath, shell), Env: env,

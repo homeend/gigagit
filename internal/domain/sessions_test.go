@@ -334,3 +334,45 @@ func TestEnsureSessionCommandsRechecksTheFile(t *testing.T) {
 		t.Fatalf("the file was appended to again:\n%s", after)
 	}
 }
+
+// A repository is named after its MAIN checkout, whichever worktree gg sits
+// in: every worktree's sessions group under one name.
+func TestMainCheckoutNameFromALinkedWorktree(t *testing.T) {
+	t.Parallel()
+	main := cleanDir(t)
+	wt := filepath.Join(t.TempDir(), "b")
+	gitRunDir(t, main, "", "worktree", "add", "-q", "-b", "side", wt)
+	want := filepath.Base(main)
+	if got := Open(wt).MainCheckoutName(context.Background()); got != want {
+		t.Fatalf("from the linked worktree: %q, want %q", got, want)
+	}
+	if got := Open(main).MainCheckoutName(context.Background()); got != want {
+		t.Fatalf("from the main checkout: %q, want %q", got, want)
+	}
+}
+
+// Serial: installs a process-global manager.
+func TestSessionInALinkedWorktreeIsGroupedUnderTheRepository(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	restore := UseSessionManager(agentsession.NewManager())
+	defer restore()
+	defer Sessions().KillAll(context.Background())
+	main := cleanDir(t)
+	wt := filepath.Join(t.TempDir(), "b")
+	gitRunDir(t, main, "", "worktree", "add", "-q", "-b", "side", wt)
+	svc := Open(wt)
+	tc := config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: "sleep 30"}
+	s, err := svc.StartSession(context.Background(), tc, wt, "", 80, 10, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	term, err := svc.StartTerminal(context.Background(), "/bin/sh", wt, "", 80, 10, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Base(main); s.Info().Repo != want || term.Info().Repo != want {
+		t.Fatalf("repo = %q / %q, want %q (not the worktree's directory)", s.Info().Repo, term.Info().Repo, want)
+	}
+}

@@ -1797,7 +1797,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #openfiles-tabs i { font-style: normal; font-size: 11px; margin-left: 4px; }
 #openfiles-query { margin: 6px 12px 2px; padding: 2px 6px; border: 1px solid var(--border); background: var(--bg); color: var(--dim); font-family: ui-monospace, monospace; font-size: 12px; }
 #openfiles-query.hidden { display: none; }
-#openfiles-list .grp { color: var(--dim); font-size: 11px; text-transform: uppercase; padding: 3px 12px; }
+/* A repository name, shown as written (uppercased, "b" read as a stray B). */
+#openfiles-list .grp { color: var(--dim); font-size: 11px; padding: 3px 12px; }
 #openfiles-list .grp2 { color: var(--dim); padding: 2px 20px; }
 #openfiles-list .ofempty { color: var(--dim); padding: 6px 12px; }
 #openfiles-list .ofrow .glyph.run { color: #7bd88f; }

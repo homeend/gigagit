@@ -58,6 +58,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   ends in the common Nerd Fonts (MesloLGS NF, JetBrainsMono, CaskaydiaCove,
   FiraCode, Hack, Symbols Nerd Font): with one installed, the icons draw.
 - **The Start agent dialog's run button** had the browser's default look.
+- **A repository is named after its main checkout, not the worktree you are
+  in.** A repository without a remote took its name from the current
+  worktree's directory, so the sessions popup grouped the sessions of one
+  repository under a different name per worktree (`b` for
+  `test-1.worktrees/b`) and gg web's top bar and tab title said the same.
+  Both now say the main checkout's directory (`test-1`); a repository with
+  a remote keeps the remote's name for its sessions.
+- **The sessions popup in gg web shows a repository name as written** — it
+  was uppercased, so a repository called `b` read as a stray `B`.
 
 ### Added
 
