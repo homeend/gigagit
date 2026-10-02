@@ -1967,6 +1967,23 @@ them on a file row.
   section) over `plain_by_commit_path`; rows carry `data-noted`, share the
   head-row cursor (`state.reviewSel = "noted:<path>"`), and open
   `openNotesWindow` (shelfnotes.js) with `/api/notes` for that path.
+- WHERE a review shows (user rulings, 2026-10-02) — three kinds, each in one
+  place: (1) a PREVIEW's review (scope `<target>...<source>`,
+  `domain.IsPreviewScope`) shows in its preview and NEVER on a commit — not
+  in `ScopesShownOn`, so no ✎ and no row; it is listed in View all notes and
+  opens there as "Preview review". (2) a RANGE review (a commit pair) and
+  (3) a BRANCH's AI review (`Review.Branch`) show only on the branch they
+  were created on: `domain.ReviewShownOn(reviewBranch, viewing)`, where
+  viewing = `Model.viewBranches()` / reviews.js `viewBranches()` — the solo
+  scope, else the checked-out branch; empty (detached) shows everything, and
+  so does a review with no branch recorded. `NoteAdd` → `stampReview` writes
+  `Note.PreviewBranch` (pair: the checked-out branch) and `Note.PreviewBase`
+  (preview: the merge base at write time; `ScopeAtCommit` prefers it, so the
+  range opens after a merge). Filters: `NoteCounts.ScopesShownOn`,
+  `ReviewsShownOn`, `NotesOverview.ShownOn` (TUI `onAllNotes`; web
+  `/api/notes/overview?on=<branch>`). `PlainCommitNotes` still subtracts
+  every scope, so a hidden review never turns into the commit's ◆ N. Test
+  fixtures that expect a range review row must be ON the review's branch.
 - `unfoldFilesForOpen` (files.js): opening a commit (`openCommit`,
   `openCommitByHash`) unfolds a folded file list and stores it — a commit
   opens onto its files, never onto the strip. The exception is a caller going

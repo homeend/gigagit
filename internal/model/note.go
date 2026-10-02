@@ -97,9 +97,18 @@ type Note struct {
 	// one: a merge preview "<target>...<source>" by branch NAMES, a commit
 	// pair "<a7>..<b7>". Such a note is stored on the tip like any commit
 	// note; this is how the tip's Files view can say where it came from.
-	Preview string    `toml:"preview,omitempty"`
-	Created time.Time `toml:"created"`
-	Updated time.Time `toml:"updated"`
+	Preview string `toml:"preview,omitempty"`
+	// PreviewBranch is the branch a commit pair's note (a range review) was
+	// written on: such a review is shown on that branch and no other
+	// (domain.ReviewShownOn). Empty for a merge preview's note — a preview
+	// review belongs to its preview, not to a branch.
+	PreviewBranch string `toml:"preview_branch,omitempty"`
+	// PreviewBase is where a merge preview's range began when the note was
+	// written (the merge base, full sha): the range still opens from it once
+	// the branch was merged and git can no longer tell.
+	PreviewBase string    `toml:"preview_base,omitempty"`
+	Created     time.Time `toml:"created"`
+	Updated     time.Time `toml:"updated"`
 }
 
 // IsReply reports whether n hangs off another note.

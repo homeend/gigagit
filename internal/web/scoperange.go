@@ -7,8 +7,9 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 )
 
-// A commit's Range review rows. Notes written in a merge preview or a commit
-// pair sit on the range's newest commit, mostly on files it does not change;
+// A commit's Range review rows. Notes written over a commit pair sit on the
+// pair's newer commit, mostly on files it does not change (a merge preview's
+// review is the preview's and is never a commit's row);
 // /api/notes/counts names the ranges per commit (scopes_by_commit) and this
 // route turns one into the two commits it opens as, frozen at that commit
 // (domain.ScopeAtCommit) — the page then opens them as a pair landing
@@ -25,6 +26,11 @@ type wireScope struct {
 	Scope string `json:"scope"`
 	Label string `json:"label"`
 	N     int    `json:"n"`
+	// Branch is the branch a range review was written on ("" = none known):
+	// the page shows it on that branch only. Preview marks a merge preview's
+	// review, which a commit never shows.
+	Branch  string `json:"branch,omitempty"`
+	Preview bool   `json:"preview,omitempty"`
 }
 
 // wireScopes keeps the field an OBJECT on the wire (orEmptyCounts' reason).
@@ -32,7 +38,8 @@ func wireScopes(m map[string][]domain.NoteScopeCount) map[string][]wireScope {
 	out := make(map[string][]wireScope, len(m))
 	for sha, scs := range m {
 		for _, sc := range scs {
-			out[sha] = append(out[sha], wireScope{Scope: sc.Scope, Label: domain.NoteScopeLabel(sc.Scope), N: sc.N})
+			out[sha] = append(out[sha], wireScope{Scope: sc.Scope, Label: domain.NoteScopeLabel(sc.Scope), N: sc.N,
+				Branch: sc.Branch, Preview: domain.IsPreviewScope(sc.Scope)})
 		}
 	}
 	return out

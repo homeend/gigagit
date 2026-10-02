@@ -69,10 +69,39 @@ type NoteCounts struct {
 }
 
 // NoteScopeCount is one scope's share of a commit's notes: the scope as the
-// notes name it (Note.Preview) and how many threads were written in it there.
+// notes name it (Note.Preview), how many threads were written in it there,
+// the branch a range review was written on (NoteReviewBranch; "" = none) and the
+// recorded start of its range (Note.PreviewBase; "" = not recorded).
 type NoteScopeCount struct {
-	Scope string
-	N     int
+	Scope  string
+	N      int
+	Branch string
+	Base   string
+}
+
+// ScopesShownOn are the reviews a COMMIT shows the reader on the viewing
+// branches: its range reviews (commit pairs) written on one of those branches
+// (ReviewShownOn). A merge preview's review is never among them — it is the
+// preview's and shows there. The slice is the cached one when nothing is
+// filtered out: READ-ONLY.
+func (c NoteCounts) ScopesShownOn(hash string, viewing []string) []NoteScopeCount {
+	all := c.ScopesByCommit[hash]
+	var out []NoteScopeCount
+	for i, sc := range all {
+		if !IsPreviewScope(sc.Scope) && ReviewShownOn(sc.Branch, viewing) {
+			if out != nil {
+				out = append(out, sc)
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]NoteScopeCount, 0, len(all)), all[:i]...)
+		}
+	}
+	if out == nil {
+		return all
+	}
+	return out
 }
 
 // PlainNotes drops the threads written in a range (a merge preview or a
@@ -144,6 +173,7 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 			}
 		}
 	}
+	s.stampReview(ctx, &n)
 	// A note on a whole shelf entry anchors on no line — only the entry has
 	// to exist. It still gets a real fingerprint: an OLDER gg's sweep does
 	// not know shelf-level notes and resolves one against the entry's whole
@@ -514,6 +544,12 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 						sc, i = append(sc, NoteScopeCount{Scope: n.Preview}), len(sc)
 					}
 					sc[i].N++
+					if sc[i].Branch == "" {
+						sc[i].Branch = NoteReviewBranch(n)
+					}
+					if sc[i].Base == "" {
+						sc[i].Base = n.PreviewBase
+					}
 					c.ScopesByCommit[n.Address.Commit] = sc
 				}
 			}

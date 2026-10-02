@@ -163,3 +163,42 @@ func TestCommitFileBadgeCountsPlainNotes(t *testing.T) {
 		t.Fatal("allnotes.js: a note opened from View all notes must ask for the range notes")
 	}
 }
+
+// View all notes lists what was created on a branch on that branch only: the
+// page names the branch it is on and the server leaves the others' range
+// reviews out. A preview's note stays — it opens in its preview.
+func TestNotesOverviewFollowsTheViewedBranch(t *testing.T) {
+	t.Parallel()
+	ts, svc, c := plainPairNotesRepo(t) // three plain notes
+	add := func(preview, branch, summary string) {
+		t.Helper()
+		if _, err := svc.NoteAdd(context.Background(), model.Note{
+			Source: model.NoteSourceAgent, Author: "ada", Preview: preview, PreviewBranch: branch,
+			Address: model.FileAddress{State: model.StateCommitted, Commit: c[2], Path: "a.txt"},
+			Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: summary,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(c[0][:7]+".."+c[2][:7], "feat", "range on feat")
+	add("main...feat", "", "preview note")
+	count := func(q string) int {
+		t.Helper()
+		var got struct {
+			Count int `json:"count"`
+		}
+		if code := getJSON(t, ts, "/api/notes/overview"+q, &got); code != http.StatusOK {
+			t.Fatalf("overview%s = %d", q, code)
+		}
+		return got.Count
+	}
+	if n := count("?on=feat"); n != 5 {
+		t.Fatalf("on feat: %d notes, want all 5", n)
+	}
+	if n := count("?on=main"); n != 4 {
+		t.Fatalf("on main: %d notes, want 4 (the range review of feat left out)", n)
+	}
+	if n := count(""); n != 5 {
+		t.Fatalf("no branch named: %d notes, want all 5", n)
+	}
+}

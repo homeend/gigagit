@@ -51,7 +51,9 @@ func TestNoteCountsScopesByCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []NoteScopeCount{{Scope: "aaaaaaa..bbbbbbb", N: 1}, {Scope: "main...feat", N: 2}}
+	// A range review records the branch it was written on (main is checked
+	// out here), a preview review where its range began.
+	want := []NoteScopeCount{{Scope: "aaaaaaa..bbbbbbb", N: 1, Branch: "main"}, {Scope: "main...feat", N: 2, Base: revParse(t, dir, "main")}}
 	if got := c.ScopesByCommit[tip]; !reflect.DeepEqual(got, want) {
 		t.Fatalf("scopes = %+v, want %+v", got, want)
 	}

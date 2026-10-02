@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/homeend/gigagit/internal/model"
 	"slices"
 	"strings"
 )
@@ -156,17 +157,22 @@ func NoteScopeLabel(scope string) string {
 // A commit already in the target (the branch was merged) has no such range
 // left: that is an error, never an empty diff.
 func (s *Service) ScopeAtCommit(ctx context.Context, scope, commit string) (a, b string, err error) {
-	full := func(rev string) (string, error) {
-		sha, ok, err := s.ResolveRev(ctx, rev)
-		if err != nil {
-			return "", err
-		}
-		if !ok {
-			return "", fmt.Errorf("missing: %s", rev)
-		}
-		return strings.TrimSpace(sha), nil
-	}
+	full := func(rev string) (string, error) { return s.fullRev(ctx, rev) }
 	scope = strings.TrimSpace(scope)
+	// The start the notes recorded when they were written wins: git can no
+	// longer work it out once the branch was merged into its target.
+	if c, cerr := s.NoteCounts(ctx); cerr == nil {
+		if full, ferr := full(commit); ferr == nil {
+			for _, sc := range c.ScopesByCommit[full] {
+				if sc.Scope != scope || sc.Base == "" {
+					continue
+				}
+				if base, berr := s.fullRev(ctx, sc.Base); berr == nil && base != full {
+					return base, full, nil
+				}
+			}
+		}
+	}
 	if target, _, ok := strings.Cut(scope, "..."); ok {
 		target = strings.TrimSpace(target)
 		if target == "" {
@@ -198,4 +204,91 @@ func (s *Service) ScopeAtCommit(ctx context.Context, scope, commit string) (a, b
 		return "", "", err
 	}
 	return a, b, nil
+}
+
+// fullRev resolves rev to its full commit id; a rev that is not here is an
+// error naming it.
+func (s *Service) fullRev(ctx context.Context, rev string) (string, error) {
+	sha, ok, err := s.ResolveRev(ctx, rev)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("missing: %s", rev)
+	}
+	return strings.TrimSpace(sha), nil
+}
+
+// stampReview records, on a note written in a scope, what later reads cannot
+// work out any more:
+//
+//   - a commit PAIR's note (a range review) gets the branch it was written on
+//     — the checked-out one — because a range review is shown on that branch
+//     and no other (ReviewShownOn);
+//   - a merge PREVIEW's note gets where its range began (the merge base): the
+//     review still opens from it once the branch was merged and git can no
+//     longer tell. It gets no branch: a preview review is the preview's, not a
+//     branch's.
+//
+// Best-effort: a caller that already set them, a runner that cannot resolve,
+// a detached HEAD just leave the fields as they are.
+func (s *Service) stampReview(ctx context.Context, n *model.Note) {
+	if n.Preview == "" || n.IsReply() || n.Address.State != model.StateCommitted {
+		return
+	}
+	target, _, merge := strings.Cut(n.Preview, "...")
+	if !merge {
+		if n.PreviewBranch == "" {
+			if b, err := s.CurrentBranch(ctx); err == nil {
+				n.PreviewBranch = strings.TrimSpace(b)
+			}
+		}
+		return
+	}
+	if n.PreviewBase == "" && isFullSHA(n.Address.Commit) {
+		if base, err := s.repo.MergeBase(ctx, strings.TrimSpace(target), n.Address.Commit); err == nil && isFullSHA(base) && base != n.Address.Commit {
+			n.PreviewBase = base
+		}
+	}
+}
+
+// shortBranch drops a refs/heads/ prefix.
+func shortBranch(name string) string { return strings.TrimPrefix(name, "refs/heads/") }
+
+// IsPreviewScope reports a merge preview's scope name ("<target>...<source>")
+// as opposed to a commit pair's ("<a>..<b>"). A preview review belongs to its
+// preview: it is shown there and never on a commit.
+func IsPreviewScope(scope string) bool { return strings.Contains(scope, "...") }
+
+// NoteReviewBranch is the branch a note's RANGE review was written on (the
+// one a commit pair's note recorded). "" for a plain note, for a preview's
+// note — a preview review is not a branch's — and for a pair note older than
+// the record.
+func NoteReviewBranch(n model.Note) string {
+	if IsPreviewScope(n.Preview) {
+		return ""
+	}
+	return n.PreviewBranch
+}
+
+// ReviewShownOn reports whether a review created on reviewBranch shows while
+// the reader is on the viewing branches (the checked-out branch, or the ones
+// the commit list is narrowed to). What was created on a branch is shown on
+// that branch and on no other — not on the target it was merged into. It also
+// shows when either side is unknown: a review with no branch recorded, or no
+// branch being viewed (a detached HEAD).
+//
+// The names match exactly, or as a branch and its remote-tracking spelling
+// (feat ~ origin/feat).
+func ReviewShownOn(reviewBranch string, viewing []string) bool {
+	if reviewBranch == "" || len(viewing) == 0 {
+		return true
+	}
+	for _, v := range viewing {
+		v = shortBranch(v)
+		if v == reviewBranch || strings.HasSuffix(reviewBranch, "/"+v) || strings.HasSuffix(v, "/"+reviewBranch) {
+			return true
+		}
+	}
+	return false
 }

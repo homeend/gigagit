@@ -973,7 +973,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.drainPendingFiles()
 		}
 		m.filesReview = nil // the commit list moved on: a plain commit view now
-		m.filesView.lines = withReviewLines(msg.reviews, withScopeLines(m.noteCounts.ScopesByCommit[msg.hash],
+		m.filesView.lines = withReviewLines(domain.ReviewsShownOn(msg.reviews, m.viewBranches()), withScopeLines(m.shownScopes(msg.hash),
 			withNotedLines(notedElsewhere(m.noteCounts.PlainByCommitPath, msg.hash, msg.files), commitFileLines(msg.files))))
 		m.filesView.sel = 0
 		var after tea.Cmd

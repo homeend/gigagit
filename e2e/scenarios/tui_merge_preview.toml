@@ -4,9 +4,9 @@ name = "tui: a saved merge preview with a note in it and a note on a branch comm
 # "what feature brings into main" lists both files; its rows carry the notes
 # written IN the preview — the one on a.txt — as ◆ N. The note written on the
 # commit that added c.txt (--rev, outside the preview) is that commit's own:
-# the preview does not show it. (A preview note is stored on the source TIP:
-# Commits marks the tip "add c" as reviewed, ✎, and counts only its own c.txt
-# note as ◆ 1.)
+# the preview does not show it. And the preview's review is the preview's: it
+# is stored on the source TIP, but that commit shows nothing of it — no ✎, no
+# review row — only its own c.txt note, ◆ 1.
 [input]
 steps = [
   { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
@@ -45,32 +45,21 @@ keys = ["enter"]
 screen_contains = ["a.txt  ◆ 1", "A  c.txt"]
 screen_excludes = ["b.txt", "c.txt  ◆"]
 
-# The tip "add c" holds two notes: its own c.txt note and the preview's a.txt
-# note. a.txt is not a file of this commit, so its Files view lists the preview the
-# note was written in as one Range review row — never a loose a.txt row — and
-# every counted note stays reachable from the commit.
+# The tip "add c" stores two notes: its own c.txt note and the preview's a.txt
+# note. Its Files view shows the commit's own only: the preview's review is
+# read in the preview, never on a commit.
 [[tui.step]]
 keys = ["esc", "right"]
 
 [[tui.step]]
 name = "tip-files"
 keys = ["enter"]
-screen_contains = ["Range reviews", "feature → main  ◆ 1", "A  c.txt  ◆ 1  "]
-screen_excludes = ["a.txt"]
+screen_contains = ["A  c.txt  ◆ 1  "]
+screen_excludes = ["a.txt", "Range reviews", "feature → main  ◆"]
 
-# enter on the row opens the range the note was written in, frozen at this
-# commit: both files of the branch, with the REVIEW's notes only — c.txt's
-# note was written on the commit, outside the review, and stays the commit's.
-[[tui.step]]
-name = "tip-range"
-keys = ["down", "enter"]
-screen_contains = ["Range review: feature → main", "a.txt  ◆ 1", "A  c.txt"]
-screen_excludes = ["c.txt  ◆"]
-
-# esc returns to the commit, the cursor on the row. a.txt is not a file of
-# the commit: S stacks c.txt alone.
+# a.txt is not a file of the commit: S stacks c.txt alone, with its own note.
 [[tui.step]]
 name = "tip-stack"
-keys = ["esc", "down", "enter", "S"]
-screen_contains = ["▾ A  c.txt"]
-screen_excludes = ["a.txt"]
+keys = ["down", "enter", "S"]
+screen_contains = ["▾ A  c.txt", "c is new"]
+screen_excludes = ["a.txt", "why more a?"]

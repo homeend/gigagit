@@ -37,7 +37,14 @@ type scopeOpenMsg struct {
 	err   error
 }
 
-func scopeTitle(scope string) string { return i18n.T("Range review: %s", scopeLabel(scope)) }
+// scopeTitle names an opened review: a commit pair's is a range review, a
+// merge preview's (reached from View all notes) a preview review.
+func scopeTitle(scope string) string {
+	if domain.IsPreviewScope(scope) {
+		return i18n.T("Preview review: %s", scopeLabel(scope))
+	}
+	return i18n.T("Range review: %s", scopeLabel(scope))
+}
 
 // openScopeRow is enter on a Range review row of the commit on screen.
 func (m Model) openScopeRow(scope string) (Model, tea.Cmd) {

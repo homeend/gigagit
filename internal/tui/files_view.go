@@ -331,11 +331,12 @@ func notedElsewhere(plain map[string]int, hash string, files []model.CommitFile)
 func scopeLabel(scope string) string { return domain.NoteScopeLabel(scope) }
 
 // withScopeLines puts a commit's range reviews in front of its list under a
-// "Range reviews" heading: one row per scope its notes were written in. A
-// merge preview's or a commit pair's notes all sit on the range's newest
-// commit, mostly on files that commit does not change — so the row stands
-// for the whole review (every note of the scope at this commit, whichever
-// file), and enter opens the range where each note is on its file.
+// "Range reviews" heading: one row per commit pair its notes were written in
+// (the caller passes the ones the viewed branch shows — Model.shownScopes).
+// A pair's notes all sit on its newer commit, mostly on files that commit
+// does not change — so the row stands for the whole review (every note of
+// the scope at this commit, whichever file), and enter opens the range where
+// each note is on its file.
 func withScopeLines(scopes []domain.NoteScopeCount, lines []contentLine) []contentLine {
 	if len(scopes) == 0 {
 		return lines
@@ -541,6 +542,8 @@ func (m Model) onReviewsFollow(msg reviewsFollowMsg) (Model, tea.Cmd) {
 // the tree cursor on the row it was on.
 func (m Model) onCommitReviews(msg commitReviewsMsg) (Model, tea.Cmd) {
 	p := m.filesView
+	// A branch's review shows on that branch only (domain.ReviewsShownOn).
+	msg.reviews = domain.ReviewsShownOn(msg.reviews, m.viewBranches())
 	if p == nil || msg.hash != m.filesHash || m.filesReview != nil || m.filesMode != filesModeChanged || len(msg.reviews) == 0 {
 		return m, nil
 	}

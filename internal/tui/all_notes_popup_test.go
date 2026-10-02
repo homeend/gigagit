@@ -556,6 +556,7 @@ func TestAllNotesOpensReviewOfMissingCommit(t *testing.T) {
 	t.Parallel()
 	m := footerModel()
 	m.currentWorktree = "/repo"
+	m.status.Branch = "feature" // a branch's review is listed on that branch
 	m, _ = m.openAllNotes()
 	u, _ := m.Update(allNotesMsg{ov: reviewsFixture(), gen: m.loadGen})
 	m = u.(Model)

@@ -1,0 +1,68 @@
+name = "tui: on another branch — after the merge too — a branch's range review is not shown"
+
+# The same notes as tui_range_review_marker, written on feature. Then feature
+# is merged into main and main is what the reader is on. What was created on
+# feature is feature's: on main its commits are history, and a review of them
+# is noise — no ✎, no Range reviews row, and View all notes leaves the range
+# review's note out. The plain notes are untouched; nothing is deleted (the
+# first scenario shows the review, on its own branch).
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
+  { commit = "add a b" },
+  { branch = "feature" }, { switch = "feature" },
+  { write = "a.txt", content = "a\nmore a\n" },
+  { commit = "grow a" },
+  { write = "c.txt", content = "c\n" },
+  { commit = "add c" },
+]
+
+[[run]]
+cmd = ["note", "add", "--preview", "main..feature~1", "--file", "a.txt", "--new-line", "2", "--summary", "range: is this needed?"]
+exit = 0
+
+[[run]]
+cmd = ["note", "add", "--rev", "feature", "--file", "c.txt", "--new-line", "1", "--summary", "c is new"]
+exit = 0
+
+[[run]]
+cmd = ["switch", "main"]
+exit = 0
+
+[[run]]
+cmd = ["merge", "-m", "Merge feature", "feature"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+# main's Commits: the merged commits carry no ✎; the plain note keeps its ◆ 1.
+[[tui.step]]
+name = "commits-on-main"
+keys = ["right"]
+screen_contains = ["Merge feature", "grow a", "add c  ◆ 1"]
+screen_excludes = ["✎"]
+
+# "grow a" holds the range review's note: on main its Files view lists no
+# review row and a.txt carries no ◆.
+[[tui.step]]
+keys = ["down", "down"]
+
+[[tui.step]]
+name = "no-review-row-on-main"
+keys = ["enter"]
+screen_contains = ["grow a", "M  a.txt"]
+screen_excludes = ["Range reviews", "a.txt  ◆"]
+
+# View all notes on main: the plain note, not the range review's.
+[[tui.step]]
+keys = ["esc"]
+
+[[tui.step]]
+name = "all-notes-on-main"
+keys = ["C-p", "all", "space", "notes", "enter"]
+screen_contains = ["c is new"]
+screen_excludes = ["range: is this needed?"]
+
+[expect]
+branch = "main"

@@ -81,13 +81,31 @@ function nextNotedFile(files, counts, from, dir) {
 }
 
 
+// reviewShownOn says whether what was created on reviewBranch shows while the
+// reader is on the viewing branches (domain.ReviewShownOn): on that branch
+// and no other — not on the target it was merged into. Unknown on either side
+// (no branch recorded, a detached HEAD) shows. Names match exactly, or as a
+// branch and its remote-tracking spelling (feat ~ origin/feat).
+function reviewShownOn(reviewBranch, viewing) {
+  if (!reviewBranch || !viewing || !viewing.length) return true;
+  return viewing.some((v) => v === reviewBranch || reviewBranch.endsWith("/" + v) || v.endsWith("/" + reviewBranch));
+}
+
+// shownScopes are the range reviews a COMMIT shows on the viewing branches
+// (domain.NoteCounts.ScopesShownOn): the commit pairs written on one of them.
+// A merge preview's review is never among them — it shows in its preview.
+function shownScopes(scopes, viewing) {
+  return (scopes || []).filter((sc) => !sc.preview && reviewShownOn(sc.branch, viewing));
+}
+
 // reviewMarkTitle is the tooltip of a commit row's ✎ — "" for a commit that
 // earns no mark. A commit is REVIEWED when it has a stored AI review, or when
-// it holds a range review: notes written in a merge preview ("branch
-// review") or a commit pair, which /api/notes/counts lists per commit
-// (scopes_by_commit). The TUI's commitReviewed.
-function reviewMarkTitle(hash, hasReview, scopes) {
-  const ranges = ((scopes || {})[hash] || []).length;
+// it holds a range review (notes written over a commit pair, which
+// /api/notes/counts lists per commit: scopes_by_commit) — created on the
+// branch being viewed. The TUI's commitReviewed; hasReview is already the
+// branch-filtered answer.
+function reviewMarkTitle(hash, hasReview, scopes, viewing) {
+  const ranges = shownScopes((scopes || {})[hash], viewing).length;
   if (hasReview && ranges) return "has an AI review and a range review — open the commit to read them";
   if (hasReview) return "has an AI review — open the commit to read it";
   if (ranges) return "has a range review — open the commit to read it";
@@ -119,20 +137,32 @@ function reviewActive() {
 }
 
 
-// commitReviewList is the open commit's reviews; [] off a commit's file list.
-function commitReviewList() {
-  const cr = state.commitReviews;
-  return state.filesMode === "commit" && cr && cr.sha === state.fileSha ? cr.list : [];
+// viewBranches are the branches the reader is ON: the one the commit list is
+// narrowed to (solo), else the checked-out one. [] when neither is known.
+function viewBranches() {
+  if (state.solo) return [state.solo];
+  const b = state.repo && state.repo.branch;
+  return b ? [b] : [];
 }
 
 
-// commitScopes is the open commit's range reviews: the scopes (a merge
-// preview, a commit pair) its notes were written in — [{scope, label, n}].
+// commitReviewList is the open commit's AI reviews as the viewed branch sees
+// them (a branch's review shows on that branch only); [] off a commit's list.
+function commitReviewList() {
+  const cr = state.commitReviews;
+  if (state.filesMode !== "commit" || !cr || cr.sha !== state.fileSha) return [];
+  const view = viewBranches();
+  return cr.list.filter((r) => reviewShownOn(r.branch, view));
+}
+
+
+// commitScopes is the open commit's range reviews as the viewed branch sees
+// them: the commit pairs its notes were written in — [{scope, label, n}].
 // Such notes all sit on the range's newest commit, mostly on files it does not
 // change, so the commit lists the review as ONE row instead of those files.
 function commitScopes() {
   if (state.filesMode !== "commit" || !state.fileSha) return [];
-  return (state.noteCounts.scopes_by_commit || {})[state.fileSha] || [];
+  return shownScopes((state.noteCounts.scopes_by_commit || {})[state.fileSha], viewBranches());
 }
 
 // A Range review row shares the Reviews rows' cursor (state.reviewSel), under
@@ -573,14 +603,17 @@ registerHelp({
     "— <b>≡ Overview</b> (the summary, meta and notes it could not place), then the files, ◆N on each the review " +
     "notes, with the review's notes in the diffs, read-only. On the review's file list <b>,</b> / <b>.</b> move to " +
     "the previous / next file the review notes. esc goes back; right-click a review row or the " +
-    "Overview for <b>Delete review</b>. Notes written in a merge preview or a commit pair are stored on the " +
-    "range's newest commit: it carries <b>✎</b> in the commit list like an AI-reviewed one, and lists them as one row under <b>Range reviews</b> (◆N) — click it to " +
-    "open the range the notes were written in, every file with its notes; esc returns to the commit. Notes written " +
+    "Overview for <b>Delete review</b>. A <b>range review</b> — notes written over a commit pair — is stored on the " +
+    "pair's newer commit: it carries <b>✎</b> in the commit list like an AI-reviewed one, and lists them as one row under <b>Range reviews</b> (◆N) — click it to " +
+    "open the range, every file with its notes; esc returns to the commit. What was created on a branch shows on " +
+    "that branch only: on another branch — the one it was merged into included — a range review and a branch's AI " +
+    "review leave no ✎ and no row, and View all notes leaves them out (nothing is deleted; solo the branch to see " +
+    "them). A merge preview's review is the preview's: it shows in the preview, never on a commit. Notes written " +
     "outside any review on a file the commit does not change are listed under <b>Notes</b>; click one to read them",
 });
 
 
-export { openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

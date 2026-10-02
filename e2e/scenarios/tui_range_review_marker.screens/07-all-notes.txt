@@ -1,34 +1,34 @@
-local  branch main                                                                                            {{root}}____________________________________/local
+local  branch feature                                                                                         {{root}}____________________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ [Branches] R W P ·date↓                           ││ Commits (all) 3                                                                                         │
-│     feature                                       ││   ●  ↓ ✎ feature add c                                                                                  │
-│   * main (/tmp/gg-tui-########/tui_range_review_… ││ > ●    ✎ feature grow a                                                                                 │
-│                                                   ││   ●  ↓   *main   add a b  ◆ 1                                                                           │
+│   * feature (/tmp/gg-tui-########/tui_range_revi… ││   ●  ↓   *feature add c                                                                                 │
+│     main                                          ││ > ●    ✎ feature  grow a                                                                                │
+│                                                   ││   ●  ↓   main     add a b  ◆ 1                                                                          │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-╰──────────────────────────────╔════════════════════════════════════════════════════════════════════════════════════════════════╗                              │
-╭──────────────────────────────║                                                                                                ║                              │
-│ [Files 0] Tags 0             ║  All notes  4  more█                                                                           ║                              │
-│   (none)                     ║                                                                                                ║                              │
-│                              ║              STATUS   WHO       WHERE     WHEN    NOTE                                         ║                              │
-│                              ║    ▾ Commits                                                                                   ║                              │
-│                              ║      ▾ acfc46c  add c  · 2026-01-01 00:00                                                      ║                              │
-│                              ║            a.txt                                                                               ║                              │
-│                              ║  >           active   agent     new:2     0s      why more a?                                  ║                              │
+│                              ╔════════════════════════════════════════════════════════════════════════════════════════════════╗                              │
 │                              ║                                                                                                ║                              │
-│                              ║  [↑/↓] move  [enter] open / fold  [←/→] fold  [ctrl+d] delete  type to filter                  ║                              │
-│                              ║  [ctrl+t] fullscreen  [esc] close                                                              ║                              │
-╰──────────────────────────────║                                                                                                ║                              │
-╭──────────────────────────────╚════════════════════════════════════════════════════════════════════════════════════════════════╝                              │
-│ [Staged 0] Reflog 5                                                                                                                                          │
-│   (none)                                          ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
+│                              ║  All notes  4                                                                                  ║                              │
+│                              ║                                                                                                ║                              │
+╰──────────────────────────────║              STATUS   WHO       WHERE     WHEN    NOTE                                         ║                              │
+╭──────────────────────────────║  > ▾ Commits                                                                                   ║                              │
+│ [Files 0] Tags 0             ║      ▾ acfc46c  add c  · 2026-01-01 00:00                                                      ║                              │
+│   (none)                     ║            a.txt                                                                               ║                              │
+│                              ║              active   agent     new:2     0s      preview: why more a?                         ║                              │
+│                              ║            c.txt                                                                               ║                              │
+│                              ║              active   agent     new:1     0s      preview: why c?                              ║                              │
+│                              ║      ▾ cb762ac  grow a  · 2026-01-01 00:00                                                     ║                              │
+│                              ║            a.txt                                                                               ║                              │
+│                              ║              active   agent     new:2     0s      range: is this needed?                       ║                              │
+│                              ║      ▾ 049ab7a  add a b  · 2026-01-01 00:00                                                    ║                              │
+│                              ║            b.txt                                                                               ║                              │
+╰──────────────────────────────║              active   agent     new:1     0s      b is terse                                   ║                              │
+╭──────────────────────────────║                                                                                                ║                              │
+│ [Staged 0] Reflog 4          ║  [↑/↓] move  [enter] open / fold  [←/→] fold  type to filter  [ctrl+t] fullscreen              ║                              │
+│   (none)                     ║  [esc] close                                                                                   ║                              │
+│                              ║                                                                                                ║                              │
+│                              ╚════════════════════════════════════════════════════════════════════════════════════════════════╝                              │
+│                                                                                                                                                              │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

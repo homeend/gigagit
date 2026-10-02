@@ -1,9 +1,9 @@
-local  branch main                                                                                            {{root}}____________________________________/local
+local  branch feature                                                                                         {{root}}____________________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ [Branches] R W P ·date↓                           ││ Commits (all) 3                                                                                         │
-│     feature                                       ││ > ●  ↓ ✎ feature add c                                                                                  │
-│   * main (/tmp/gg-tui-########/tui_range_review_… ││   ●    ✎ feature grow a                                                                                 │
-│                                                   ││   ●  ↓   *main   add a b  ◆ 1                                                                           │
+│   * feature (/tmp/gg-tui-########/tui_range_revi… ││ > ●  ↓   *feature add c                                                                                 │
+│     main                                          ││   ●    ✎ feature  grow a                                                                                │
+│                                                   ││   ●  ↓   main     add a b  ◆ 1                                                                          │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
@@ -24,7 +24,7 @@ local  branch main                                                              
 │                                                   ││                                                                                                         │
 ╰───────────────────────────────────────────────────╯│                                                                                                         │
 ╭───────────────────────────────────────────────────╮│                                                                                                         │
-│ [Staged 0] Reflog 5                               ││                                                                                                         │
+│ [Staged 0] Reflog 4                               ││                                                                                                         │
 │   (none)                                          ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

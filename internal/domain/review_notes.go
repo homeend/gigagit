@@ -332,7 +332,8 @@ func (s *Service) ReviewsForBranch(ctx context.Context, name string) ([]Review, 
 
 // reviewsFollowBranchOp keeps review notes in step with a branch op that
 // just succeeded: a deleted branch takes its reviews, a renamed one keeps
-// them under the new name. Only review notes are touched — a line note's
+// them under the new name — and so do a range review's notes (their
+// PreviewBranch). Otherwise only review notes are touched: a line note's
 // Address.Branch is left alone. Best-effort: the op already happened.
 func (s *Service) reviewsFollowBranchOp(ctx context.Context, op engine.Operation) {
 	var drop, from, to string
@@ -356,6 +357,14 @@ func (s *Service) reviewsFollowBranchOp(ctx context.Context, op engine.Operation
 	}
 	changed := false
 	for _, n := range all {
+		// A range review's notes are shown on the branch they were written on
+		// (Note.PreviewBranch): they keep that under the branch's new name. A
+		// deleted branch's are left in the store, as every line note is.
+		if from != "" && n.PreviewBranch == from {
+			n.PreviewBranch = to
+			changed = st.Put(n) == nil || changed
+			continue
+		}
 		if n.IsReply() || !n.IsReviewNote() {
 			continue
 		}

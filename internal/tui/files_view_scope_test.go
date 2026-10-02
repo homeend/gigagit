@@ -37,9 +37,13 @@ func TestWithScopeLines(t *testing.T) {
 	}
 }
 
-// scopeReviewModel: main, then feat/x = "add a" + "add b". A note written in
-// the merge preview feat/x → main sits on the tip, on a.txt — a file the tip
-// commit ("add b") does not change. The tip's files view is open, tree side.
+// rangeScope is the name of the commit pair base..tip as its notes carry it.
+func rangeScope(base, tip string) string { return base[:7] + ".." + tip[:7] }
+
+// scopeReviewModel: main, then feat/x = "add a" + "add b", checked out — a
+// review shows on the branch it was created on. A RANGE review's note (the
+// commit pair base..tip) sits on the tip, on a.txt — a file the tip commit
+// ("add b") does not change. The tip's files view is open, tree side.
 func scopeReviewModel(t *testing.T) (m Model, base, tip string) {
 	t.Helper()
 	dir, repo := newRepoDir(t)
@@ -53,12 +57,11 @@ func scopeReviewModel(t *testing.T) (m Model, base, tip string) {
 		runGit(t, dir, "commit", "-q", "-m", "add "+f)
 	}
 	tip = strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
-	runGit(t, dir, "checkout", "-q", "main")
 	svc := domain.New(repo)
 	svc.UsePreviewsDir(t.TempDir())
 	svc.UseNotesDir(t.TempDir())
 	if _, err := svc.NoteAdd(context.Background(), model.Note{
-		Source: model.NoteSourceAgent, Author: "ada", Preview: "main...feat/x",
+		Source: model.NoteSourceAgent, Author: "ada", Preview: rangeScope(base, tip),
 		Address: model.FileAddress{State: model.StateCommitted, Commit: tip, Path: "a.txt"},
 		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "why a?",
 	}); err != nil {
@@ -92,7 +95,7 @@ func rangeRowIndex(t *testing.T, m Model) int {
 // loose Notes rows for the files that commit does not change.
 func TestCommitFilesListARangeReviewRow(t *testing.T) {
 	t.Parallel()
-	m, _, _ := scopeReviewModel(t)
+	m, base, tip := scopeReviewModel(t)
 	rangeRowIndex(t, m)
 	for _, l := range m.filesView.lines {
 		if l.notedPath != "" {
@@ -100,7 +103,7 @@ func TestCommitFilesListARangeReviewRow(t *testing.T) {
 		}
 	}
 	v := m.View()
-	if !strings.Contains(v, "Range reviews") || !strings.Contains(v, "feat/x → main  ◆ 1") {
+	if !strings.Contains(v, "Range reviews") || !strings.Contains(v, rangeScope(base, tip)+"  ◆ 1") {
 		t.Fatalf("the row must name the range and count its notes:\n%s", v)
 	}
 }
@@ -116,7 +119,7 @@ func TestRangeReviewRowOpensTheRangeAndEscReturns(t *testing.T) {
 	if !m.showsCommitPair(base, tip) {
 		t.Fatalf("enter must open %s..%s (status %q, mode %v)", base[:7], tip[:7], m.statusMsg, m.filesMode)
 	}
-	if !strings.Contains(m.filesTitle, "feat/x → main") {
+	if !strings.Contains(m.filesTitle, rangeScope(base, tip)) {
 		t.Fatalf("title = %q", m.filesTitle)
 	}
 	if m.filesPreviewSet == nil || m.filesPreviewCounts["a.txt"] != 1 {
@@ -127,7 +130,7 @@ func TestRangeReviewRowOpensTheRangeAndEscReturns(t *testing.T) {
 	if m.filesView == nil || m.inCompareMode() || m.filesHash != tip {
 		t.Fatalf("esc must return to the commit's files: view %v hash %q", m.filesView != nil, m.filesHash)
 	}
-	if got := m.filesView.visible()[m.filesView.sel]; got.noteScope != "main...feat/x" {
+	if got := m.filesView.visible()[m.filesView.sel]; got.noteScope != rangeScope(base, tip) {
 		t.Fatalf("the cursor must land on the row it left: %+v", got)
 	}
 	// esc again closes the view as it always did.
@@ -154,7 +157,7 @@ func TestRangeReviewRowUnresolvableSaysSo(t *testing.T) {
 // still is, and earns no ✎.
 func TestCommitRowMarksARangeReview(t *testing.T) {
 	t.Parallel()
-	m, base, tip := scopeReviewModel(t) // a merge-preview note on the tip
+	m, base, tip := scopeReviewModel(t) // a range review's note on the tip
 	ctx := context.Background()
 	mid, _, err := m.svc.ResolveRev(ctx, tip+"~1")
 	if err != nil {
@@ -171,8 +174,8 @@ func TestCommitRowMarksARangeReview(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	add(mid, base[:7]+".."+mid[:7]) // a commit-pair note on "add a"
-	add(mid, "")                    // …and a plain note beside it
+	add(mid, "main...feat/x") // a PREVIEW's note on "add a": the preview's, never the commit's mark
+	add(mid, "")              // …and a plain note beside it
 	m.svc.InvalidateNoteCounts()
 	m, cmd := m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{manual: true})
 	m = drainMsgs(t, m, cmd, 4)
@@ -186,9 +189,9 @@ func TestCommitRowMarksARangeReview(t *testing.T) {
 		mark       bool
 		badge, not string
 	}{
-		"merge preview on the tip": {tip, true, "", "◆"},
-		"commit pair + plain note": {mid, true, "◆ 1", "◆ 2"},
-		"no notes":                 {base, false, "", "◆"},
+		"a range review on the tip":   {tip, true, "", "◆"},
+		"a preview note + plain note": {mid, false, "◆ 1", "◆ 2"},
+		"no notes":                    {base, false, "", "◆"},
 	} {
 		row := rows[tc.hash]
 		if got := m.commitReviewed(tc.hash); got != tc.mark {
@@ -212,7 +215,7 @@ func TestCommitRowMarksARangeReview(t *testing.T) {
 // review's notes show when the range is opened from its row.
 func TestRangeNotesStayOutOfTheCommitsOwnView(t *testing.T) {
 	t.Parallel()
-	m, _, tip := scopeReviewModel(t) // tip = "add b": it changes b.txt
+	m, base, tip := scopeReviewModel(t) // tip = "add b": it changes b.txt
 	ctx := context.Background()
 	add := func(preview, summary string) {
 		t.Helper()
@@ -224,7 +227,7 @@ func TestRangeNotesStayOutOfTheCommitsOwnView(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	add("main...feat/x", "review: why b?")
+	add(rangeScope(base, tip), "review: why b?")
 	add("", "plain: b is terse")
 	m.svc.InvalidateNoteCounts()
 	m, cmd := m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{manual: true})
@@ -234,7 +237,7 @@ func TestRangeNotesStayOutOfTheCommitsOwnView(t *testing.T) {
 	if !strings.Contains(v, "b.txt  ◆ 1") || strings.Contains(v, "b.txt  ◆ 2") {
 		t.Fatalf("the file row must count the plain note only:\n%s", v)
 	}
-	if !strings.Contains(v, "feat/x → main  ◆ 2") {
+	if !strings.Contains(v, rangeScope(base, tip)+"  ◆ 2") {
 		t.Fatalf("the review row counts both of its notes:\n%s", v)
 	}
 	// The commit's own diff of b.txt.
@@ -271,7 +274,7 @@ func TestRangeNotesStayOutOfTheCommitsOwnView(t *testing.T) {
 	if m.filesPreviewSet == nil || m.filesPreviewCounts["b.txt"] != 1 || m.filesPreviewCounts["a.txt"] != 1 {
 		t.Fatalf("the review must carry its own notes, per file: %v", m.filesPreviewCounts)
 	}
-	if got := m.filesPreviewSet.Pair(); got != "main...feat/x" {
+	if got := m.filesPreviewSet.Pair(); got != rangeScope(base, tip) {
 		t.Fatalf("a note written in the opened review must join it: scope %q", got)
 	}
 }
@@ -309,13 +312,13 @@ func TestAllNotesOpensAReviewNoteInItsReview(t *testing.T) {
 	if want := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":a.txt"; m.diffTag != want {
 		t.Fatalf("diffTag = %q, want the range's diff %q", m.diffTag, want)
 	}
-	if dv.previewSet == nil || dv.previewSet.Only != "main...feat/x" {
+	if dv.previewSet == nil || dv.previewSet.Only != rangeScope(base, tip) {
 		t.Fatalf("the diff must be the review's: set %+v", dv.previewSet)
 	}
 	if len(dv.notes) != 1 || dv.notes[0].Note.Summary != "why a?" {
 		t.Fatalf("the review's note must be drawn: %+v", dv.notes)
 	}
-	if !strings.Contains(dv.context, "feat/x → main") {
+	if !strings.Contains(dv.context, rangeScope(base, tip)) {
 		t.Fatalf("the diff must say which review it shows: %q", dv.context)
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -359,5 +362,124 @@ func TestNotedRowKeepsNameAndBadgeWhenNarrow(t *testing.T) {
 		if w >= 100 && !strings.Contains(row, "JunieV2AgentSession.kt  ◆ 1") {
 			t.Errorf("width %d: the whole name fits and must stay: %q", w, row)
 		}
+	}
+}
+
+// What was created on a branch shows on that branch and on no other: not on
+// main — before or after the branch is merged into it — where it is another
+// branch's history. There the commit has no ✎ and no review row, and View all
+// notes leaves the review's notes out. Narrowing the commit list to the
+// branch brings it back; nothing is deleted.
+func TestReviewShowsOnItsBranchOnly(t *testing.T) {
+	t.Parallel()
+	m, _, tip := scopeReviewModel(t) // on feat/x, where the range review was written
+	listed := func(m Model) bool {
+		m = m.closeFilesView()
+		m, cmd := m.openAllNotes()
+		m = drainMsgs(t, m, cmd, 4)
+		for _, r := range layerOf[*allNotesPopup](m).visible() {
+			if r.note != nil && r.note.Note.Summary == "why a?" {
+				return true
+			}
+		}
+		return false
+	}
+	rows := func(m Model) int {
+		m, cmd := m.openChangedFiles(model.Commit{Hash: tip})
+		m = drainMsgs(t, m, cmd, 6)
+		n := 0
+		for _, l := range m.filesView.lines {
+			if l.noteScope != "" {
+				n++
+			}
+		}
+		return n
+	}
+	if !m.commitReviewed(tip) || rows(m) != 1 || !listed(m) {
+		t.Fatalf("on its own branch the review must show: ✎ %v rows %d listed %v", m.commitReviewed(tip), rows(m), listed(m))
+	}
+
+	m.status.Branch = "main" // the same repository, seen from main
+	if m.commitReviewed(tip) || rows(m) != 0 || listed(m) {
+		t.Fatalf("on main the review must not show: ✎ %v rows %d listed %v", m.commitReviewed(tip), rows(m), listed(m))
+	}
+	if got := m.noteCounts.PlainCommitNotes(tip); got != 0 {
+		t.Fatalf("a hidden review's notes must not turn into the commit's ◆ N: %d", got)
+	}
+
+	m.commitScopeBranches = []string{"feat/x"} // main checked out, the list narrowed to feat/x
+	if !m.commitReviewed(tip) || rows(m) != 1 || !listed(m) {
+		t.Fatalf("narrowed to its branch the review must show again: ✎ %v rows %d listed %v", m.commitReviewed(tip), rows(m), listed(m))
+	}
+}
+
+// A preview's review is the preview's: its notes never mark the commit they
+// are stored on nor list a row there, on any branch. View all notes still
+// lists them — they open in their preview.
+func TestPreviewReviewNeverShowsOnACommit(t *testing.T) {
+	t.Parallel()
+	m, _, tip := scopeReviewModel(t)
+	ctx := context.Background()
+	mid, _, err := m.svc.ResolveRev(ctx, tip+"~1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mid = strings.TrimSpace(mid)
+	if _, err := m.svc.NoteAdd(ctx, model.Note{
+		Source: model.NoteSourceAgent, Author: "ada", Preview: "main...feat/x",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: mid, Path: "a.txt"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "preview: why a?",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m.svc.InvalidateNoteCounts()
+	m, cmd := m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{manual: true})
+	m = drainMsgs(t, m, cmd, 4)
+	for _, view := range []string{"feat/x", "main"} {
+		m.status.Branch = view
+		if m.commitReviewed(mid) {
+			t.Errorf("on %s: a preview's review must not mark its commit", view)
+		}
+		fm, cmd := m.openChangedFiles(model.Commit{Hash: mid})
+		fm = drainMsgs(t, fm, cmd, 6)
+		for _, l := range fm.filesView.lines {
+			if l.noteScope != "" || l.notedPath != "" {
+				t.Errorf("on %s: a preview's review must list no row on its commit: %+v", view, l)
+			}
+		}
+		am := m.closeFilesView()
+		am, cmd = am.openAllNotes()
+		am = drainMsgs(t, am, cmd, 4)
+		found := false
+		for _, r := range layerOf[*allNotesPopup](am).visible() {
+			found = found || (r.note != nil && r.note.Note.Summary == "preview: why a?")
+		}
+		if !found {
+			t.Errorf("on %s: View all notes must still list the preview's note", view)
+		}
+	}
+}
+
+// A branch's AI review marks its commit on that branch only; a review with no
+// branch (a commit's own) marks it anywhere.
+func TestBranchAIReviewMarksItsCommitOnItsBranchOnly(t *testing.T) {
+	t.Parallel()
+	m := footerModel() // on main
+	m.noteCounts = domain.NoteCounts{Reviews: []domain.ReviewHead{
+		{ID: "r1", Commit: "aaaa", Branch: "feat"},
+		{ID: "r2", Commit: "bbbb"},
+	}}
+	if m.commitReviewed("aaaa") {
+		t.Fatal("on main, a review of branch feat must not mark its commit")
+	}
+	if !m.commitReviewed("bbbb") {
+		t.Fatal("a commit's own review marks it on any branch")
+	}
+	m.status.Branch = "feat"
+	if !m.commitReviewed("aaaa") {
+		t.Fatal("on feat, its review must mark the commit")
+	}
+	if got := domain.ReviewsShownOn([]domain.Review{{ID: "r1", Branch: "feat"}, {ID: "r2"}}, []string{"main"}); len(got) != 1 || got[0].ID != "r2" {
+		t.Fatalf("the commit's Reviews rows on main: %+v", got)
 	}
 }
