@@ -482,16 +482,28 @@ func TestSessionStartUnknownToolAndBadBody(t *testing.T) {
 	}
 }
 
-// Review focus 2: an unreachable worktree is refused in words; one recorded
-// under the other environment's notation starts in its translated path.
+// Review focus 2: an unreachable worktree is refused in words — BEFORE the
+// approval question — and one recorded under the other environment's
+// notation runs in its translated path.
 func TestSessionStartPlace(t *testing.T) {
-	srv, root := lifecycleServer(t, "")
-	t.Setenv("SHELL", "/bin/sh")
+	srv, root := lifecycleServer(t, shSessionTool)
 	srv.placeStat = func(string) error { return os.ErrNotExist }
 	ts := serve(t, srv)
-	code, body := postJSONAny(t, ts, "/api/session-start", startBody(root, `,"terminal":true`))
-	if code != http.StatusConflict || !strings.Contains(body["error"].(string), "is not reachable from here") {
-		t.Fatalf("unreachable = %d %v", code, body)
+	code, body := postJSONAny(t, ts, "/api/session-start", startBody(root, `,"tool":"Shell"`))
+	if code != http.StatusConflict || !strings.Contains(body["error"].(string), "is not reachable from here") || body["needs_approval"] == true {
+		t.Fatalf("unreachable = %d %v (want 409 before any approval question)", code, body)
+	}
+	// Foreign notation: a Windows gg seeing a WSL record. Only the translated
+	// path "exists"; the session's identity stays the recorded path.
+	srv.placeGOOS = "windows"
+	srv.placeStat = func(p string) error {
+		if strings.HasPrefix(p, `T:\`) {
+			return nil
+		}
+		return os.ErrNotExist
+	}
+	if cwd, err := srv.sessionPlace("/mnt/t/others/wt"); err != nil || cwd != `T:\others\wt` {
+		t.Fatalf("sessionPlace(foreign) = %q, %v", cwd, err)
 	}
 }
 
@@ -681,6 +693,13 @@ func (s *Server) handleSessionStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// Reachability first: nobody should approve a command and then be told
+	// the worktree is not there (the TUI's startAgentFor order).
+	cwd, err := s.sessionPlace(dir)
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
 	req := domain.SessionStartRequest{Worktree: dir, Terminal: q.Terminal}
 	req.Cols, req.Rows = startSize(q.Cols, q.Rows)
 	if !q.Terminal {
@@ -717,11 +736,6 @@ func (s *Server) handleSessionStart(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	cwd, err := s.sessionPlace(dir)
-	if err != nil {
-		writeErr(w, http.StatusConflict, err)
-		return
-	}
 	var id domain.SessionID
 	if start := s.sessionStarter(); start != nil {
 		id, err = start(r.Context(), req)
@@ -742,7 +756,7 @@ func (s *Server) handleSessionStart(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-Imports grow by `encoding/json`, `fmt`, `os`, `runtime`, `internal/worktree`. The place probe runs **before** the starter in both modes so the page's refusal sentence is the same; the terminal re-derives `cwd` itself (Task 5). `context.WithoutCancel` is only belt-and-braces: check that `StartAgentSession` does not tie the child to `ctx` (it passes it to `RepoName` only) and keep the comment honest.
+Imports grow by `encoding/json`, `fmt`, `os`, `runtime`, `internal/worktree`. The place probe runs before the approval gate and before the starter, in both modes, so the page's refusal sentence is the same and nobody approves a command for an unreachable worktree; the terminal re-derives `cwd` itself (Task 5). `context.WithoutCancel` is only belt-and-braces: check that `StartAgentSession` does not tie the child to `ctx` (it passes it to `RepoName` only) and keep the comment honest.
 
 - [ ] **Step 4: Run** `rtk go test ./internal/web -run 'TestSessionStart|TestSessionCommands'` → PASS. Then `rtk go test ./internal/archtest` → PASS (web → worktree is already an edge: `reroot.go`).
 
@@ -903,7 +917,7 @@ func (s *Server) handleSessionRemove(w http.ResponseWriter, r *http.Request) {
 - Consumes: `domain.SessionStartRequest`; the TUI's `sessionPlace`, `m.childEnv()`, `m.childInboxDir()`, `m.agentURL()`, `m.cfg.Console.Shell`.
 - Produces: `WebHost.SetSessionStarter(fn func(ctx context.Context, req domain.SessionStartRequest) (domain.SessionID, error))` (satisfied by `*web.Host` from Task 3 — `cmd/gg` needs no change).
 
-- [ ] **Step 1: Write the failing tests** — `internal/tui/websession_test.go`. Use the package's existing model fixture for webhost tests (read `webhost_test.go` first: its constructor for a Model with `fakeWebHost` and how it runs a returned `tea.Cmd` **leaf by leaf** — never `drainCmds` on a batch holding a blocking wait).
+- [ ] **Step 1: Write the failing tests** — `internal/tui/websession_test.go`. Fixtures already in the package: `loadedModel(t)` (a Model over a real temp repo), `installFakeHost(t)` and `runOne` (`webhost_test.go`). The start cmd is a `tea.Batch` whose second child is a blocking wait — never `drainCmds` it; the tests below call the start leaf directly through `webSessionStartLeaf`, a tiny seam the implementation exposes for this.
 
 ```go
 package tui
@@ -929,14 +943,18 @@ func TestWebSessionRequestStartsLikeTheTerminal(t *testing.T) {
 	}
 	restore := domain.UseSessionManager(agentsession.NewManager())
 	t.Cleanup(func() { domain.Sessions().KillAll(context.Background()); restore() })
-	m := newWebHostTestModel(t) // the webhost_test.go fixture: a served fake host
+	installFakeHost(t)
+	m := loadedModel(t)
+	m = m.ensureWeb()
 	dir := m.svc.Root()
 	reply := make(chan webSessionReply, 1)
 	req := domain.SessionStartRequest{Worktree: dir, Cols: 90, Rows: 30,
 		Command: config.ToolCommand{Name: "Shell", Category: "session", Mode: "session", Command: "sh -c 'sleep 30'"}}
-	m, cmd := m.onWebSessionRequest(webSessionRequestMsg{req: req, reply: reply})
-	msg := runLeaf(t, cmd, func(x any) bool { _, ok := x.(webSessionStartedMsg); return ok })
-	m, _ = m.onWebSessionStarted(msg.(webSessionStartedMsg))
+	m, leaf, why := m.webSessionStartLeaf(webSessionRequestMsg{req: req, reply: reply})
+	if why != "" {
+		t.Fatal(why)
+	}
+	m, _ = m.onWebSessionStarted(leaf().(webSessionStartedMsg))
 	r := <-reply
 	if r.err != nil || r.id == "" {
 		t.Fatalf("reply = %+v", r)
@@ -945,8 +963,11 @@ func TestWebSessionRequestStartsLikeTheTerminal(t *testing.T) {
 	if !ok || s.Info().Label != "Shell" || s.Info().Dir != dir {
 		t.Fatalf("session = %+v", s)
 	}
-	if m.console != nil && m.consoleOpen() {
+	if m.console != nil {
 		t.Fatal("a web start opened the terminal's console")
+	}
+	if got := m.childInbox[r.id]; got != m.childInboxDir() {
+		t.Fatalf("childInbox = %q, want the terminal's inbox %q", got, m.childInboxDir())
 	}
 	if !strings.Contains(m.statusMsg, "Shell") || !strings.Contains(m.statusMsg, "web page") {
 		t.Fatalf("status = %q", m.statusMsg)
@@ -954,7 +975,7 @@ func TestWebSessionRequestStartsLikeTheTerminal(t *testing.T) {
 }
 
 func TestWebSessionRequestRefusesAnUnreachableWorktree(t *testing.T) {
-	m := newWebHostTestModel(t)
+	m := loadedModel(t).ensureWeb()
 	old := guardStat
 	guardStat = func(string) error { return errors.New("gone") }
 	t.Cleanup(func() { guardStat = old })
@@ -983,9 +1004,45 @@ func TestSessionStarterEndsWhenTheTerminalCloses(t *testing.T) {
 }
 ```
 
-Adapt `newWebHostTestModel`, `runLeaf` and the console-open probe to the names `webhost_test.go` / `console_test.go` actually use (e.g. the existing "is a console docked" predicate); if no leaf-runner helper exists, execute the batch's children by hand as the web-hosted tests do (memory: a blocking wait in a drained batch hangs).
+Add the stale-config test (the page's first-run detect wrote the global config from the web request; the terminal must not detect and append a second time):
 
-- [ ] **Step 2: Run** `rtk go test ./internal/tui -run 'TestWebSession|TestSessionStarter'` → FAIL (undefined).
+```go
+// The page's first-run detect wrote session commands the terminal has not
+// loaded: a web start reloads the terminal's config, so its own Start agent
+// lists them instead of detecting (and appending) again.
+func TestWebSessionRequestReloadsAStaleConfig(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	restore := domain.UseSessionManager(agentsession.NewManager())
+	t.Cleanup(func() { domain.Sessions().KillAll(context.Background()); restore() })
+	m := loadedModel(t).ensureWeb()
+	global := filepath.Join(t.TempDir(), "config.toml")
+	old := agentGlobalConfigPath
+	agentGlobalConfigPath = func() string { return global }
+	t.Cleanup(func() { agentGlobalConfigPath = old })
+	tc := config.ToolCommand{Name: "Shell", Category: "session", Mode: "session", Command: "sh -c 'sleep 30'"}
+	if err := config.AppendToolCommands(global, []config.ToolCommand{tc}); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(domain.SessionCommands(m.cfg, "tui")); n != 0 {
+		t.Fatalf("fixture: the model already has %d session commands", n)
+	}
+	reply := make(chan webSessionReply, 1)
+	m, leaf, why := m.webSessionStartLeaf(webSessionRequestMsg{req: domain.SessionStartRequest{Worktree: m.svc.Root(), Command: tc, Cols: 80, Rows: 24}, reply: reply})
+	if why != "" {
+		t.Fatal(why)
+	}
+	m, _ = m.onWebSessionStarted(leaf().(webSessionStartedMsg))
+	if n := len(domain.SessionCommands(m.cfg, "tui")); n != 1 {
+		t.Fatalf("the terminal still sees %d session commands", n)
+	}
+}
+```
+
+(imports grow by `path/filepath`). `loadedModel`'s steering may be off in tests — then `m.childInboxDir()` is "" and the inbox assertion compares "" with a missing map entry, which holds.
+
+- [ ] **Step 2: Run** `rtk go test ./internal/tui -run 'TestWebSession|TestSessionStarter'` → FAIL (undefined). After Step 3, see the reload test fail for the right reason once: comment the `if !hasSessionCommand(m.cfg) {…}` block out, run it (FAIL: "still sees 0"), restore it by re-typing the block (never `git checkout --`).
 
 - [ ] **Step 3: Implement** `internal/tui/websession.go`:
 
@@ -1076,11 +1133,40 @@ func (m Model) onWebSessionRequest(msg webSessionRequestMsg) (Model, tea.Cmd) {
 	if m.web != nil {
 		rearm = waitWebSessionCmd(m.web)
 	}
-	req := msg.req
-	cwd, _, why := sessionPlace(req.Worktree)
+	m, start, why := m.webSessionStartLeaf(msg)
 	if why != "" {
-		msg.reply <- webSessionReply{err: errors.New("cannot start here: " + req.Worktree + " is not reachable from here")}
+		msg.reply <- webSessionReply{err: errors.New(why)}
 		return m, rearm
+	}
+	return m, tea.Batch(start, rearm)
+}
+
+// hasSessionCommand: EnsureSessionCommands' own "already configured" test.
+func hasSessionCommand(cfg config.Config) bool {
+	for _, tc := range cfg.Tools.Command {
+		if tc.Category == string(exttool.CatSession) {
+			return true
+		}
+	}
+	return false
+}
+
+// webSessionStartLeaf builds the start itself (no wait attached — tests run
+// it directly); why is the English refusal for the page. The page's first
+// start on a machine may have just WRITTEN the session commands (its
+// first-run detect runs in the web request): a terminal that still sees
+// none reloads its config here, or its own Start agent would detect and
+// append them a second time.
+func (m Model) webSessionStartLeaf(msg webSessionRequestMsg) (Model, tea.Cmd, string) {
+	req := msg.req
+	if !hasSessionCommand(m.cfg) {
+		if nc, err := config.Load(agentGlobalConfigPath(), m.repoConfigPath); err == nil {
+			m.cfg = nc
+		}
+	}
+	cwd, _, refusal := sessionPlace(req.Worktree)
+	if refusal != "" {
+		return m, nil, "cannot start here: " + req.Worktree + " is not reachable from here"
 	}
 	svc, shell, env, inbox, url := m.svc, m.cfg.Console.Shell, m.childEnv(), m.childInboxDir(), m.agentURL()
 	name := req.Command.Name
@@ -1106,7 +1192,7 @@ func (m Model) onWebSessionRequest(msg webSessionRequestMsg) (Model, tea.Cmd) {
 		out.id = s.Info().ID
 		return out
 	}
-	return m, tea.Batch(start, rearm)
+	return m, start, ""
 }
 
 // onWebSessionStarted answers the page and keeps the child's inbox answered.
@@ -1127,7 +1213,7 @@ func (m Model) onWebSessionStarted(msg webSessionStartedMsg) (Model, tea.Cmd) {
 }
 ```
 
-The refusal sent to the page stays English (the page is English; `why` is translated for the terminal). `webhost.go`: add to the `WebHost` interface
+Imports grow by `internal/config` and `internal/exttool` (both already imported elsewhere in `internal/tui`). The refusal sent to the page stays English (the page is English; `sessionPlace`'s own text is translated for the terminal). `webhost.go`: add to the `WebHost` interface
 
 ```go
 	// SetSessionStarter installs the page's way to start a session: the
@@ -1193,7 +1279,7 @@ function killPrompt(s, remove) {
 }
 ```
 
-Import `showLocalConfirm` from `./ops.js` (ops.js does not import console.js or openfiles.js — no cycle). Impure section:
+Import `showLocalConfirm` from `./ops.js`. This closes an import cycle (console.js → ops.js → sidebar.js → console.js); the page already lives with such cycles (ops ↔ sidebar ↔ layers) and it is safe here because `showLocalConfirm` is only CALLED from event handlers, never at module-evaluation time — keep it that way (no top-level use of an ops.js binding in console.js). Impure section:
 
 ```js
 // killSession asks once, then kills (remove = the TUI's X: the session leaves
@@ -1201,8 +1287,9 @@ Import `showLocalConfirm` from `./ops.js` (ops.js does not import console.js or 
 // the live sessions event; nothing is repainted here.
 function killSession(s, remove) {
   if (!s || s.state === "exited") return remove ? removeSession(s) : toast(s ? s.label + " has already exited" : "that session is gone");
-  showLocalConfirm(killPrompt(s, remove), [remove ? "kill and remove" : "kill", "cancel"], async (o) => {
-    if (o === "cancel") return;
+  const yes = remove ? "kill and remove" : "kill";
+  showLocalConfirm(killPrompt(s, remove), [yes, "cancel"], async (o) => {
+    if (o !== yes) return; // cancel, esc, a backdrop click — whatever the modal hands back
     try {
       await postJSON("/api/session-kill", { id: s.id, remove: !!remove });
       toast("killing " + s.label + " in " + wtName(s.worktree) + "…");
@@ -1223,7 +1310,7 @@ async function removeSession(s) {
 }
 ```
 
-Check `showLocalConfirm`'s callback contract in `ops.js` (what esc/abort passes — treat anything but the first option as cancel: `if (o !== "kill" && o !== "kill and remove") return;`) and that `"kill"`/`"kill and remove"` render as danger (add them to `DANGER_OPTIONS` in `core.js` if that set is how the modal colours options).
+`answerModal(option)` hands the callback the clicked option's text; a dismissed modal goes through `hideModal`, which drops the callback — so only an explicit click on the first option kills. Check that `"kill"`/`"kill and remove"` render as danger (add them to `DANGER_OPTIONS` in `core.js` if that set is how the modal colours options).
 
 Foot + keys:
 
