@@ -3,7 +3,7 @@ local  branch main                                                              
 │ Merge preview: feature → main                     ││ Commits (all) 3                                                                                         │
 │ .                                                 ││   ●  ↓ ✎ feature add c  ◆ 1                                                                             │
 │ > M  a.txt  ◆ 1                                   ││   ●      feature grow a                                                                                 │
-│   A  c.txt  ◆ 1                                   ││   ●  ↓   *main   add a b                                                                                │
+│   A  c.txt                                        ││   ●  ↓   *main   add a b                                                                                │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

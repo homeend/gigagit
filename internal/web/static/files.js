@@ -20,7 +20,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { leaveRangeReview, leaveReview, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
+import { leaveRangeReview, leaveReview, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -2342,7 +2342,7 @@ function noteQuery(ctx = state.diffCtx) {
     return q;
   }
   if (ctx.preview) {
-    // The preview gathers notes along the branch, so the READ is keyed on the
+    // The preview gathers ITS notes along the branch, so the READ is keyed on the
     // PAIR: a note written against an older commit still belongs here. rev and
     // state ride along unchanged because they are what the WRITE needs — a
     // preview note is an ordinary commit note on the source tip, and
@@ -4377,6 +4377,11 @@ $("files-list").addEventListener("click", (e) => {
   // A commit's Range review row opens the range its notes were written in.
   if (li && li.dataset.scope) {
     openRangeReview(li.dataset.scope);
+    return;
+  }
+  // …and a Notes row reads its notes (a file the commit does not change).
+  if (li && li.dataset.noted) {
+    openNotedPath(li.dataset.noted);
     return;
   }
   if (li && li.dataset.ov && reviewActive()) {

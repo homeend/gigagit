@@ -18,7 +18,21 @@ import (
 // a.txt's only line, and a note on EACH. The pair is c0..c2, so c1's and c2's
 // notes belong to it and c0's does not — three look-alike commits that must
 // disagree on one fixture.
+//
+// The notes are written IN the pair c0..c2 (stamped with its name): a pair
+// shows the notes written in it and no others. plainPairNotesRepo leaves them
+// unstamped — ordinary notes on their commits.
 func pairNotesRepo(t *testing.T) (ts *httptest.Server, svc *domain.Service, c [3]string) {
+	t.Helper()
+	return pairNotesRepoWith(t, true)
+}
+
+func plainPairNotesRepo(t *testing.T) (ts *httptest.Server, svc *domain.Service, c [3]string) {
+	t.Helper()
+	return pairNotesRepoWith(t, false)
+}
+
+func pairNotesRepoWith(t *testing.T, scoped bool) (ts *httptest.Server, svc *domain.Service, c [3]string) {
 	t.Helper()
 	dir := newRepoDir(t, 1)
 	svc = domain.Open(dir)
@@ -33,8 +47,14 @@ func pairNotesRepo(t *testing.T) (ts *httptest.Server, svc *domain.Service, c [3
 		gitRun(t, dir, "add", "-A")
 		gitRun(t, dir, "commit", "-m", "c"+string(rune('0'+i)))
 		c[i] = gitRun(t, dir, "rev-parse", "HEAD")
+	}
+	scope := ""
+	if scoped {
+		scope = c[0][:7] + ".." + c[2][:7]
+	}
+	for i := range c {
 		if _, err := svc.NoteAdd(ctx, model.Note{
-			Source: model.NoteSourceAgent, Author: "ada",
+			Source: model.NoteSourceAgent, Author: "ada", Preview: scope,
 			Address: model.FileAddress{State: model.StateCommitted, Commit: c[i], Path: "a.txt"},
 			Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "on c" + string(rune('0'+i)),
 		}); err != nil {

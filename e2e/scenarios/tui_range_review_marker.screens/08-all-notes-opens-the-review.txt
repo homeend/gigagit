@@ -1,0 +1,40 @@
+diff: a.txt  @ Range review: feature → main                                                                                       line 2  change 1/1  rows 1–7/7
+  1 a                                                                          │  1 a
+···············································································│  2 more a
+                                                                               │╭─ agent note · agent · a.txt R2 ─────────────────────────────────────────────╮
+                                                                               ││                                                                             │
+                                                                               ││ why more a?                                                                 │
+                                                                               ││                                                                             │
+                                                                               │╰─────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] scroll  [←→] pan  [h/b] hist  [esc] back
