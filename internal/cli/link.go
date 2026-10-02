@@ -20,9 +20,10 @@ import (
 // is load-bearing: '#' starts a comment in every POSIX shell, so an unquoted
 // hunk link silently loses its hunk. gg deliberately applies no heuristic —
 // it says so here instead.
-const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --ref <branch|tag> | --pair <a>..<b> | --content] [--bookmark <id> | --shelf <id>] [--no-fingerprint]\n" +
+const linkUsage = "usage: gg link [<path>[:<line>[-<end>]]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --ref <branch|tag> | --pair <a>..<b> | --content] [--bookmark <id> | --shelf <id>] [--no-fingerprint]\n" +
 	"       gg link --version <branch> <id|latest>  (a branch version's preview link)\n" +
 	"       gg link resolve <gg://…> [--json]\n" +
+	"       gg link text <gg://…> [--json]  (the lines a line or range link names)\n" +
 	"       gg links [--json]  (this repo's copied-link history)\n" +
 	"quote links that carry #<hunk> — an unquoted # starts a shell comment"
 
@@ -39,6 +40,9 @@ func cmdLink(svc *domain.Service, workdir string, args []string, stdout, stderr 
 func runLink(statePath string, svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "resolve" {
 		return linkResolve(statePath, svc, args[1:], stdout, stderr)
+	}
+	if len(args) > 0 && args[0] == "text" {
+		return linkText(statePath, svc, args[1:], stdout, stderr)
 	}
 	fs := flag.NewFlagSet("link", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -181,7 +185,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 				fmt.Fprintln(stderr, "error:", rerr)
 				return 1
 			}
-			if n := contentLineCount(data); l.Line > n {
+			if n := contentLineCount(data); max(l.Line, l.End) > n {
 				fmt.Fprintf(stderr, "error: %s has %d lines\n", l.Path, n)
 				return 1
 			}
@@ -189,8 +193,14 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	}
 	// An uncommitted line carries its fingerprint, so whoever opens the link
 	// later is told when the line moved or changed (domain.ResolveLink).
+	// A range carries its whole block's, which the resolver only checks: a
+	// block that changed makes the link stale.
 	if !*noFP {
-		l.Fingerprint = svc.LinkLineFingerprint(ctx, l)
+		if l.End > l.Line {
+			l.Fingerprint = svc.LinkBlockFingerprint(ctx, l)
+		} else {
+			l.Fingerprint = svc.LinkLineFingerprint(ctx, l)
+		}
 	}
 	// Best-effort, after the link is known good: a history that cannot be
 	// written must never fail the copy the user asked for, and must never
@@ -269,7 +279,7 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 		if rel == "" && (probe.Line > 0 || probe.Hunk > 0) {
 			return model.Link{}, fmt.Errorf("%w: a line or a hunk needs a file path", model.ErrLink)
 		}
-		l.Path, l.Side, l.Line, l.Hunk = rel, probe.Side, probe.Line, probe.Hunk
+		l.Path, l.Side, l.Line, l.End, l.Hunk = rel, probe.Side, probe.Line, probe.End, probe.Hunk
 	}
 
 	switch {
@@ -482,6 +492,8 @@ type wireResolvedLink struct {
 	Worktree string `json:"worktree,omitempty"`
 	Side     string `json:"side,omitempty"`
 	Line     int    `json:"line,omitempty"`
+	// EndLine is the last line of a range link (…:A-B); absent for one line.
+	EndLine int `json:"end_line,omitempty"`
 	// AskedLine / Anchor / AnchorMatches describe a fingerprinted link
 	// (…:N~<fp>): Line is where the text is NOW, AskedLine the line the link
 	// named, Anchor "same" | "moved" | "changed".
@@ -539,7 +551,7 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 		w := wireResolvedLink{
 			Checkout: res.Checkout, State: res.Addr.State.String(), Path: res.Addr.Path,
 			Commit: res.Addr.Commit, Worktree: res.Addr.Worktree,
-			Side: string(res.Side), Line: res.Line, Hunk: res.Hunk,
+			Side: string(res.Side), Line: res.Line, EndLine: res.End, Hunk: res.Hunk,
 		}
 		if res.Preview != nil {
 			w.Source, w.Target = res.Preview.Source, res.Preview.Target
@@ -586,11 +598,83 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 		line += fmt.Sprintf(" hunk %d", res.Hunk)
 	case res.Line > 0:
 		line += fmt.Sprintf(" %s:%d", res.Side, res.Line)
+		if res.End > res.Line {
+			line += fmt.Sprintf("-%d", res.End)
+		}
 		if n := res.AnchorNote(); n != "" {
 			line += " (" + n + ")"
 		}
 	}
 	fmt.Fprintln(stdout, line)
+	return 0
+}
+
+// wireLinkText is `gg link text --json`'s payload (and gg_link_text's).
+type wireLinkText struct {
+	Path   string   `json:"path"`
+	Target string   `json:"target"`
+	Side   string   `json:"side"`
+	Start  int      `json:"start"`
+	End    int      `json:"end"`
+	Lines  []string `json:"lines"`
+}
+
+// linkText is `gg link text <link> [--json]`: exactly the lines a line or
+// range link names, read from the version and side it names. It is how an
+// agent turns a pasted link into the code the human marked. A stale range
+// (domain.ErrLinkStale) prints the refusal and no text.
+func linkText(statePath string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("link text", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	asJSON := fs.Bool("json", false, "print the lines as JSON")
+	pos, err := parseSteerFlags(fs, args)
+	if err != nil {
+		return 2
+	}
+	if len(pos) != 1 {
+		fmt.Fprintln(stderr, linkUsage)
+		return 2
+	}
+	if !isLinkArg(pos[0]) {
+		fmt.Fprintf(stderr, "link text: %q is not a gg link (it must start with %s)\n", pos[0], model.LinkScheme)
+		return 2
+	}
+	l, err := model.ParseLink(pos[0])
+	if err != nil {
+		fmt.Fprintln(stderr, "link text:", err)
+		return 2
+	}
+	ctx := context.Background()
+	res, err := domain.ResolveLink(ctx, l, linkResolveOpts(statePath, svc))
+	if err != nil {
+		return linkExit("link text", err, stderr)
+	}
+	lt, err := openLinkTarget(res).LinkText(ctx, res)
+	if errors.Is(err, domain.ErrLinkNoLines) {
+		fmt.Fprintln(stderr, "link text: the link needs a file and a line or a range (gg://<repo>/<path>[@<target>]:<line>[-<end>])")
+		return 2
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, "link text:", err)
+		return 1
+	}
+	warnAnchor(stderr, res)
+	if *asJSON {
+		w := wireLinkText{Path: lt.Path, Target: lt.Target, Side: string(lt.Side), Start: lt.Start, End: lt.End, Lines: lt.Lines}
+		if err := json.NewEncoder(stdout).Encode(w); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		return 0
+	}
+	span := fmt.Sprintf("line %d", lt.Start)
+	if lt.End > lt.Start {
+		span = fmt.Sprintf("lines %d-%d", lt.Start, lt.End)
+	}
+	fmt.Fprintf(stdout, "%s @ %s (%s), %s\n", lt.Path, lt.Target, lt.Side, span)
+	for i, line := range lt.Lines {
+		fmt.Fprintf(stdout, "%d\t%s\n", lt.Start+i, line)
+	}
 	return 0
 }
 

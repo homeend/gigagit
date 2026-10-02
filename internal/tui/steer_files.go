@@ -63,6 +63,10 @@ func (m Model) steerNavigateBackground(c steer.Command) (Model, tea.Cmd) {
 	}
 	if line > 0 || !d.loading {
 		d.pendingLine = line // a line-less open never cancels one still loading
+		d.pendingEnd = 0
+		if c.Line != nil && c.Line.End > line {
+			d.pendingEnd = c.Line.End
+		}
 	}
 	m.statusMsg = ""
 	m, ev := m.registerDocEv(d)
@@ -93,7 +97,10 @@ func (m Model) steerFileFocus(c steer.Command) (Model, tea.Cmd) {
 	if c.Line != nil {
 		line = c.Line.No
 	}
-	d.pendingLine = line
+	d.pendingLine, d.pendingEnd = line, 0
+	if c.Line != nil && c.Line.End > line {
+		d.pendingEnd = c.Line.End
+	}
 	m, load := m.bringToFront(d)
 	lead := "focused " + d.path
 	if d.ov != nil {

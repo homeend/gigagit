@@ -135,6 +135,76 @@ func (v *diffView) noteRowIndex() (map[int][]noteLine, map[int]bool) {
 	return byLine, foldMark
 }
 
+// noteSpan is the range of a note about SEVERAL lines: lines lo..hi on one
+// side of one file (file 0 unstacked), with the colour its box's frame wears.
+type noteSpan struct {
+	file   int
+	old    bool
+	lo, hi int
+	bar    lipgloss.Style
+}
+
+type noteSpans []noteSpan
+
+// at reports whether line no on that side of that file sits inside a ranged
+// note, and the bar colour (the first note's, when several overlap).
+func (ns noteSpans) at(file int, old bool, no int) (lipgloss.Style, bool) {
+	if no <= 0 {
+		return lipgloss.Style{}, false
+	}
+	for _, s := range ns {
+		if s.file == file && s.old == old && no >= s.lo && no <= s.hi {
+			return s.bar, true
+		}
+	}
+	return lipgloss.Style{}, false
+}
+
+// noteSpans lists the ranges the view's notes cover — only notes about more
+// than one line: a single-line note already sits right under its line. A
+// hidden agent layer hides its ranges too, and so does a note with no box.
+func (v *diffView) noteSpans() noteSpans {
+	var out noteSpans
+	s := st()
+	add := func(file int, ns []domain.ResolvedNote) {
+		lo, hi := 0, len(v.lines)-1
+		if v.stk != nil {
+			lo, hi = v.fileLineRange(file)
+		}
+		for _, r := range ns {
+			if r.Range[1] <= r.Range[0] || r.Note.IsReply() {
+				continue
+			}
+			agent := r.Note.Source == model.NoteSourceAgent
+			if agent && v.hideAgent {
+				continue
+			}
+			// The bar belongs to the BOX: a note whose anchor line is not in
+			// this view, or sits under a fold, draws no box (noteRowIndex) —
+			// and so no bar beside lines that would then explain nothing.
+			if _, visible := v.noteAnchorLineIn(lo, hi, r); !visible {
+				continue
+			}
+			bar := s.noteFrameUser
+			switch {
+			case r.Status != model.NoteActive:
+				bar = s.noteFrameStale
+			case agent:
+				bar = s.noteFrameAgent
+			}
+			out = append(out, noteSpan{file: file, old: r.Note.Side == model.NoteSideOld, lo: r.Range[0], hi: r.Range[1], bar: bar})
+		}
+	}
+	if v.stk == nil {
+		add(0, v.notes)
+	} else {
+		for i := range v.stk.files {
+			add(i, v.notesOf(i))
+		}
+	}
+	return out
+}
+
 // notesOf are file i's resolved notes. Stacked they live on the file's OWN
 // view — stackFile.d is the single-file view its ordinary loader built, so its
 // noteAddr and previewSet are that loader's stamps, exactly as in single-file

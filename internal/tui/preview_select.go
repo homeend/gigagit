@@ -244,6 +244,18 @@ func (m Model) previewSelectKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		}
 		nm, cmd := row.run(m)
 		return nm.(Model), cmd, true
+	case "L":
+		// With lines marked, L copies the link to them (the . menu's row);
+		// without a selection the key keeps whatever the host gives it.
+		if !p.lsel.on {
+			return m, nil, false
+		}
+		if row, ok := m.contextFileLinkRow(); ok {
+			nm, cmd := row.run(m)
+			return nm.(Model), cmd, true
+		}
+		m.statusMsg = i18n.T("▸ no gg link for this place")
+		return m, nil, true
 	case "esc":
 		if !p.lsel.on {
 			return m, nil, false

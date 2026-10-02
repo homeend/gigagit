@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v124 -->
+<!-- gg:using-gg:v125 -->
 
 # Using gg (gigagit)
 
@@ -136,6 +136,8 @@ gg://<repo>/<path>[@<target>][:<line>]     <target> = a full/short sha, "staged"
 gg://<repo>/<path>[@<target>]#<hunk>       hunk numbers are `gg diff --hunks`'s
 gg://<repo>/<path>@<sha>:old:<n>           the old side of that diff
 gg://<repo>/<path>[@staged]:[old:]<n>~<fp>  an UNCOMMITTED line + its 8-hex fingerprint: gg re-finds the text
+gg://<repo>/<path>[@<target>]:[old:]<a>-<b>  a RANGE of lines a..b on one side (every target a line link takes)
+gg://<repo>/<path>[@staged]:[old:]<a>-<b>~<fp>  an UNCOMMITTED range + the fingerprint of its whole block: only CHECKED
 gg://<repo>@<sha>                          a commit, no file
 gg://<repo>@ref:<branch|tag>               a branch or tag TIP: the whole tree there
 gg://<repo>@<a>..<b>                       a CHANGE-SET: only what differs between a and b
@@ -187,6 +189,20 @@ say so rather than answer about whatever sits on line 33 now). `gg link
 resolve --json` and `gg_link_resolve` report `line` (now), `asked_line` and
 `anchor` (`same` | `moved` | `changed`). A commit, pair, preview or ref link
 never carries a fingerprint (it is refused): those already name fixed content.
+A RANGE link (`:<a>-<b>`, `:old:<a>-<b>`) names the lines a human MARKED —
+in a diff, the file viewer or a preview — and usually comes with a question
+("why are these here", "explain this"). Get exactly those lines with
+`gg link text <link>` (header `<path> @ <target> (<side>), lines a-b`, then
+`<no>\t<text>` per line; `--json` gives `path`/`target`/`side`/`start`/
+`end`/`lines`; MCP: `gg_link_text`). It works for a single-line link too.
+An uncommitted range carries ONE fingerprint over its whole block and gg does
+NOT re-find it: if any marked line changed, or the block moved, every verb
+refuses the link (exit 1, `the link is no longer valid: lines a-b of <path>
+have changed since it was copied`) — ask the human for a fresh link instead of
+guessing. `gg link <path>:<a>-<b>` prints one; `gg link resolve --json`
+reports `end_line`; `gg session highlight add <link>` bands the range (do not
+also pass `--end`); `gg note add <link>` writes a note covering the range,
+shown under its last line with the range marked beside it.
 `gg link resolve` takes both: a `@ref:` link answers with `ref <name>` plus
 the tip it resolves to HERE, a `@a..b` link with `pair <a>..<b>`, and
 `--json` carries `ref` / `pair_a` + `pair_b` beside the address fields. The

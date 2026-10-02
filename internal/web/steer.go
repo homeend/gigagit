@@ -89,13 +89,17 @@ type steerWire struct {
 	Line   int    `json:"line,omitempty"`
 	// AnchorNote says a fingerprinted link's line moved or changed
 	// (domain.AnchorNote); the page shows it on its op line.
-	AnchorNote string   `json:"anchor_note,omitempty"`
-	Step       string   `json:"step,omitempty"`
-	Sources    []string `json:"sources,omitempty"`
-	Panel      string   `json:"panel,omitempty"`
-	Start      int      `json:"start,omitempty"`
-	End        int      `json:"end,omitempty"`
-	Tone       string   `json:"tone,omitempty"`
+	AnchorNote string `json:"anchor_note,omitempty"`
+	// EndLine is the last line of a RANGE link (> Line). The page lands on
+	// Line and names the range on its op line (AnchorNote); marking the
+	// lines in the browser is a follow-up.
+	EndLine int      `json:"end_line,omitempty"`
+	Step    string   `json:"step,omitempty"`
+	Sources []string `json:"sources,omitempty"`
+	Panel   string   `json:"panel,omitempty"`
+	Start   int      `json:"start,omitempty"`
+	End     int      `json:"end,omitempty"`
+	Tone    string   `json:"tone,omitempty"`
 	// HintKind/HintID name the UI surface a navigate's link was copied from
 	// (spec §3.3) — "bookmark", "shelf" or "stash", the closed set
 	// model.LinkHint's grammar already validated, so the page can reveal it
@@ -225,6 +229,13 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		}
 		w.Side, w.Line = c.Line.Side, c.Line.No
 		w.AnchorNote = domain.AnchorNote(c.Line.Asked, c.Line.No, c.Line.Anchor, c.Line.Matches)
+		if c.Line.End != 0 && c.Line.End < c.Line.No {
+			return w, errors.New("the range ends before it starts")
+		}
+		if c.Line.End > c.Line.No {
+			w.EndLine = c.Line.End
+			w.AnchorNote = fmt.Sprintf("the link names lines %d-%d", c.Line.No, c.Line.End)
+		}
 		if w.Side == "" {
 			w.Side = "new"
 		}

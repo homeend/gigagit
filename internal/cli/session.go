@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -866,7 +865,7 @@ func sessionHighlightAdd(dir sessDir, svc *domain.Service, args []string, stdout
 			fmt.Fprintln(stderr, "session highlight add: a gg:// link already names the target, the first line and the side (drop --file, --rev, --cached, --start and --side)")
 			return 2
 		}
-		text, linkEnd := splitLinkRange(pos[0])
+		text := pos[0]
 		ctx := context.Background()
 		// A change-set link lands its band on commit b, new side — the address
 		// a pair's diff is stamped with once its note scope is armed.
@@ -891,7 +890,7 @@ func sessionHighlightAdd(dir sessDir, svc *domain.Service, args []string, stdout
 			return 1
 		}
 		dir := sessDir{inbox: inbox, to: dir.to}
-		sideVal, first, last := string(res.Side), res.Line, *end
+		sideVal, first, last, linkEnd := string(res.Side), res.Line, *end, res.End
 		switch {
 		case res.Hunk > 0:
 			// A hunk link already names a range (controller ruling P22): a
@@ -1004,31 +1003,6 @@ func sessionHighlightClear(dir sessDir, svc *domain.Service, args []string, stdo
 		c.File, c.Target = addr.Path, targetOf(addr)
 	}
 	return sendSteer(dir, c, *noWait, stdout, stderr)
-}
-
-// splitLinkRange peels a "-<end>" suffix off a link for
-// `gg session highlight add <link>-<end>`. The suffix is recognised ONLY when
-// the text after the link's LAST ":" is "<digits>-<digits>" — a dash anywhere
-// else belongs to a path ("my-file.go") or a sha, and must not be eaten.
-func splitLinkRange(s string) (string, int) {
-	i := strings.LastIndexByte(s, ':')
-	if i < 0 {
-		return s, 0
-	}
-	seg := s[i+1:]
-	j := strings.IndexByte(seg, '-')
-	if j <= 0 {
-		return s, 0
-	}
-	start, end := seg[:j], seg[j+1:]
-	if _, err := strconv.Atoi(start); err != nil {
-		return s, 0
-	}
-	n, err := strconv.Atoi(end)
-	if err != nil || n < 1 {
-		return s, 0
-	}
-	return s[:i+1] + start, n
 }
 
 // linkSteerDir picks the inbox a link's command goes to. When the link
