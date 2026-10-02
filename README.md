@@ -1532,12 +1532,36 @@ opens it as a live console over the panes, painted from the server's screen
 a focused console sends every key to the agent except `ctrl+]` (step out)
 and `ctrl+\`; the browser keeps `ctrl+w`, `ctrl+t`, `ctrl+n` and friends
 (the bottom bar says so). Unfocused: `enter` focus, `m` maximize over the
-sidebar, `esc` or `ctrl+]` again close — the session keeps running. Whichever viewer has the
+sidebar, `k` kill, `X` kill and remove, `esc` or `ctrl+]` again close — the
+session keeps running; on an exited one `x` removes it. Whichever viewer has the
 console focused — this tab, another tab, or the TUI — sets the session's
 size; the others scroll. Every worktree row in the sidebar lists its
 sessions beneath it (`└ ● claude running 12m`, `○` when exited); a click
-opens one, and an exit raises a toast. Starting, killing and removing
-sessions from the web is not built yet.
+opens one, and an exit raises a toast.
+
+**Starting one from the page:** a worktree's right-click menu — and a
+branch's, when that branch is checked out in a worktree — offers **Start
+agent in `<wt>`** and **Open terminal in `<wt>`**. Start agent lists the
+configured session commands (`approved` / `approve on start` / `not found`;
+`1`–`9` or `enter` starts, `esc` cancels); a command that was never run in
+this repository shows its full text and asks once, exactly as in the TUI
+(the two share the approval). On a machine with no session command yet the
+dialog first detects the installed agents and adds their safe commands to
+the global config. The new session opens as a focused console, sized to the
+page. Open terminal starts your shell without a dialog.
+
+**Killing and removing:** `k` kills a running session (asks once), `X`
+kills it and removes it from the list, `x` removes an exited one — in the
+console (unfocused), in the `ctrl+\` popup's Agents tab (there `k` is kill,
+as in the TUI's popup; move with `↑`/`↓`/`j`), and in a session row's
+right-click menu.
+
+When the TUI serves the page, a start from the browser is the terminal's
+own start: the agent gets the same inbox and agent channel as one started
+in the terminal (it can spawn workers, `gg session …` inside it reaches
+gg), and the terminal's status line says `… started in <wt> from the web
+page` without opening its own console. A standalone `gg web` starts the
+session itself, without the agent channel.
 
 The hosted page and the terminal switch together: switch repo or worktree
 in the TUI and the page re-roots with it; switch from the page (palette

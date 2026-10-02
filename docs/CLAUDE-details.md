@@ -3999,6 +3999,51 @@ dedicated SSE stream per console, session states (erbrus port) = plan 3.
   steer-hint wiring pin expects the exact string `revealHintEntry } from
   "./sidebar.js"` in live.js — keep that import's last name.
 
+### Web attach — session lifecycle on the page (plan 2, 2026-10-02)
+
+Plan `docs/superpowers/plans/2026-10-02-web-attach-plan-2-lifecycle.md`.
+Rulings (user, do not re-ask): a hosted page's start is the TERMINAL's
+start; finished-task results in the web viewer are a separate follow-up;
+the page has the TUI's `X` (kill and remove).
+
+- **Endpoints** (`session_lifecycle.go`), POSTs behind `writeGuard`:
+  `GET /api/session-commands?worktree=` → `{commands:[{name, command
+  (resolved), approved, found}], added, config_path}` — `SessionCommands(cfg,
+  "web")`; with NO session command configured it runs
+  `EnsureSessionCommands` inside the request (the page shows "Detecting
+  installed agents…"). `POST /api/session-start {worktree, tool | terminal,
+  approve, cols, rows}` → `{session}`; 400 a path that is not one of
+  `svc.Worktrees` (exact match — the allowlist) or an unknown tool, 409
+  unreachable (probed BEFORE the approval question), 403 + `needs_approval`
+  (template hash, resolved text — the AI lanes' pattern, shared store with
+  the TUI), size clamped (none = 100×30). `POST /api/session-kill {id,
+  remove}` (409 already exited) and `POST /api/session-remove {id}` (409
+  running); 404 unknown id. Handlers never broadcast: the manager's signal
+  reaches the tabs through `watchSessions`.
+- **The starter seam:** `Host.SetSessionStarter(fn(ctx,
+  domain.SessionStartRequest) (SessionID, error))`. Unset (standalone
+  `gg web`): `startSessionHere` — `GG_INBOX` = the page's steer inbox, no
+  agent channel. Set by the TUI (`tui/websession.go`, the `SetSwitcher`
+  shape: `sessionStarterFor` → `webSessionRequestMsg` → Update →
+  `webSessionStartedMsg`): the terminal's own env (`childEnv`, `agentURL`),
+  `childInbox` recorded, a status line, NO console. The server bounds the
+  round trip at 30 s (`Server.startTimeout`) — a wedged terminal cannot
+  hang the page. The TUI reloads its config in that handler when it has no
+  session command yet: the page's first-run detect just wrote them, and
+  `AppendToolCommands` does not dedupe.
+- **Page:** `sessions.js` (dialog phases detecting → choose → approve →
+  starting; `dialogStep` is pure; a start in flight takes no key), menu
+  rows through `registerRows` on `worktree`, `branch` (gate =
+  `worktreePathForBranch`) and the new `session` key (the sub-row's
+  right-click menu in `sidebar.js`). `killSession` / `removeSession` live in
+  `console.js` and confirm through `showLocalConfirm` — console.js → ops.js
+  → sidebar.js → console.js is an import cycle that is safe only because
+  the confirm is called from handlers, never at module load. In the
+  switcher `k` is kill on the Agents tab and "up" on the other two.
+- **Browser check:** the `attach_browser_test.go` host seeds a `Shell`
+  session command in its isolated global config; the lifecycle script
+  starts it from the worktree menu.
+
 ### The TUI serves its own web page (2026-09-28)
 
 Spec `docs/superpowers/specs/2026-09-28-web-hosted-in-tui-design.md`, plan

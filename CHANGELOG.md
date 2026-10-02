@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Start, kill and remove agent sessions from the browser
+
+### Added
+
+- **Start an agent or a terminal from gg web.** A worktree's right-click
+  menu — and a branch's, when the branch is checked out in a worktree —
+  offers **Start agent in `<wt>`** and **Open terminal in `<wt>`**. Start
+  agent lists the configured session commands with their state (`approved`
+  / `approve on start` / `not found`); a command never run in this
+  repository shows its text and asks once (the approval is shared with the
+  terminal). With no session command configured the dialog detects the
+  installed agents first and adds their safe commands to the global config.
+  The session opens as a focused console at the page's size.
+- **Kill and remove from the page.** `k` kills a running session (asks
+  once), `X` kills and removes it, `x` removes an exited one: in an
+  unfocused console, in the `ctrl+\` popup's Agents tab, and in a session
+  sub-row's right-click menu (Open / Kill / Kill and remove / Remove).
+- **A start from a TUI-hosted page is the terminal's own start.** The agent
+  gets the terminal's inbox and agent channel (it can spawn workers); the
+  terminal's status line reads `<name> started in <wt> from the web page`
+  and its console stays as it was. A standalone `gg web` starts the session
+  itself, without the agent channel.
+
+### Changed
+
+- **`k` on the popup's Agents tab kills** (the terminal popup's key) instead
+  of moving up; `↑`, `↓` and `j` move. `k` still moves up on the AI tasks
+  and Open files tabs.
+
 ## Old-side links in the narrow browser layout; marking lines from the keyboard
 
 ### Added
