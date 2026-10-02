@@ -633,6 +633,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onWebReroot(msg)
 	case webSwitchRequestMsg:
 		return m.onWebSwitchRequest(msg)
+	case webSessionRequestMsg:
+		return m.onWebSessionRequest(msg)
+	case webSessionStartedMsg:
+		return m.onWebSessionStarted(msg)
 	case agentSpawnRequestMsg:
 		return m.onAgentSpawnRequest(msg)
 	case agentSpawnedMsg:
