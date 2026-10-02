@@ -23,7 +23,12 @@ type notesLoadedMsg struct {
 }
 
 // noteMutatedMsg reports the outcome of an add/edit/reply/remove.
-type noteMutatedMsg struct{ err error }
+// clearMarks: the note was written over the diff's marked lines, which a
+// successful write unmarks (a failed one keeps them).
+type noteMutatedMsg struct {
+	err        error
+	clearMarks bool
+}
 
 // diffNoteAddress is the address notes hang off for the open diff. It is the
 // field the LOADER stamped (diffView.noteAddr), never something derived from

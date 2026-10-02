@@ -43,7 +43,7 @@ type notePopup struct {
 	first    int // a range note's first line; line is its last (first == line: one line)
 	line     int
 	hash     string
-	ranged   bool // written over the diff's marked lines: saving clears the marks
+	ranged   bool // written over the diff's marked lines: a successful save clears the marks
 	author   string
 	preview  string // add in a preview or pair diff: the scope (PreviewNoteSet.Pair) the note records
 }
@@ -63,17 +63,19 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 	// line for the length of this call (contextLinkText does the same).
 	var marked *noteAnchor
 	if mode == noteAdd {
-		a, refusal, on := m.noteAnchorOfMarks()
+		a, row, refusal, on := m.noteAnchorOfMarks()
 		if refusal != "" {
 			m.statusMsg = refusal
 			m.diffNotice = refusal // the full-screen diff has no status bar
 			return m, nil
 		}
+		if row < 0 {
+			return m, nil
+		}
 		if on {
-			sel, _ := m.diffLinkSelection()
 			v := m.diffLayer()
 			defer func(cur int) { v.curLine = cur }(v.curLine)
-			v.curLine = sel.row
+			v.curLine = row
 			marked = &a
 		}
 	}
@@ -113,32 +115,41 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 
 // noteAnchorOfMarks is the anchor of a note over the diff's marked lines: the
 // cursor's side, first to last line (diffLinkSelection's trim rule), with the
-// fingerprint of the whole block. on == false: no marks, or one marked row —
-// that is the one-line note at the cursor, side choice included. A non-empty
-// refusal is the translated reason these marks take no note.
-func (m Model) noteAnchorOfMarks() (a noteAnchor, refusal string, on bool) {
+// fingerprint of the whole block; row is the view line carrying the first one.
+// on == false: no marks, or one marked row with the cursor ON it — that is the
+// one-line note at the cursor, side choice included. A non-empty refusal is
+// the translated reason these marks take no note; row == -1 says their file
+// takes no notes at all (c is inert, never a note at the cursor). Every gate reads the file
+// the MARKS are in (the cursor is lent to their first row meanwhile): frozen
+// marks stay in their file while the cursor walks a stack.
+func (m Model) noteAnchorOfMarks() (a noteAnchor, row int, refusal string, on bool) {
 	v := m.diffLayer()
 	if v == nil || !v.lsel.on {
-		return a, "", false
+		return a, 0, "", false
 	}
-	if lo, hi, _ := v.lsel.bounds(v.curLine); lo == hi {
-		return a, "", false
+	lo, hi, _ := v.lsel.bounds(v.curLine)
+	lo, hi = max(lo, 0), min(hi, len(v.lines)-1)
+	if lo > hi || (lo == hi && lo == v.curLine) {
+		return a, 0, "", false
 	}
+	// Read BEFORE the cursor is lent: loose marks end at the cursor.
+	sel, _ := m.diffLinkSelection()
+	defer func(cur int) { v.curLine = cur }(v.curLine)
+	v.curLine = lo
 	if _, ok := m.diffNoteAddress(); !ok {
-		return a, "", false // no notes on this surface: c stays inert
+		return a, -1, "", false // the marks' file takes no notes: c stays inert
 	}
 	// A preview's old side is the MERGE BASE (noteAnchorsAtCursor's rule).
 	if v.onOld && m.previewNoteSet() != nil {
-		return a, i18n.T("notes in a preview anchor on the new side"), false
+		return a, 0, i18n.T("notes in a preview anchor on the new side"), false
 	}
-	sel, _ := m.diffLinkSelection()
 	switch {
 	case sel.crossFile:
-		return a, i18n.T("▸ a note marks lines of one file"), false
+		return a, 0, i18n.T("▸ a note marks lines of one file"), false
 	case sel.refusal != "":
-		return a, i18n.T("▸ nothing to note on this side"), false
+		return a, 0, i18n.T("▸ nothing to note on this side"), false
 	}
-	return noteAnchor{side: sel.side, first: sel.first, line: sel.last, hash: model.NoteContextHash(sel.block)}, "", true
+	return noteAnchor{side: sel.side, first: sel.first, line: sel.last, hash: model.NoteContextHash(sel.block)}, sel.row, "", true
 }
 
 // openNotePopupFor opens the edit/reply form on one targeted note.
@@ -200,11 +211,6 @@ func (p *notePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.popLayer()
 		if strings.TrimSpace(p.summary.Value()) == "" {
 			return m, nil // an empty summary is a cancel
-		}
-		if p.ranged {
-			if v := m.diffLayer(); v != nil {
-				v.lsel.clear()
-			}
 		}
 		return m, m.noteSubmitCmd(p)
 	case tea.KeyTab:
@@ -322,7 +328,7 @@ func (m Model) noteSubmitCmd(p *notePopup) tea.Cmd {
 	}
 	summary := strings.TrimSpace(p.summary.Value())
 	rationale := strings.TrimSpace(p.rationale.Value())
-	mode, id := p.mode, p.targetID
+	mode, id, ranged := p.mode, p.targetID, p.ranged
 	n := p.note(summary, rationale)
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -335,7 +341,7 @@ func (m Model) noteSubmitCmd(p *notePopup) tea.Cmd {
 		default:
 			_, err = svc.NoteAdd(ctx, n)
 		}
-		return noteMutatedMsg{err: err}
+		return noteMutatedMsg{err: err, clearMarks: ranged}
 	}
 }
 

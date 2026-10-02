@@ -847,8 +847,10 @@ fills ONE anchor `{side, first, line, NoteContextHash(block)}` — no side
 field. The address is read where the marks are (cursor lent to `sel.row`, as
 `contextLinkText` does), so frozen marks in another file of a stack note that
 file. `notePopup.note()` builds the stored note (`Range{first, line}`);
-ctrl+s with `p.ranged` clears `lsel`. One marked row falls through to the
-cursor's one-line note.
+`noteMutatedMsg.clearMarks` clears `lsel` on a successful write only. One
+marked row with the cursor on it falls through to the cursor's one-line
+note. The selection is read BEFORE the cursor is lent (loose marks end at
+the cursor); the gates (address, preview old side) read the marks' file.
 
 **Line fingerprints (2026-10-01).** An UNCOMMITTED line link (working tree,
 `@staged`, `?view=content`) may end `:<n>~<fp>`: `model.LineFingerprint` =

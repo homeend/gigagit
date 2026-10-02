@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -45,6 +46,15 @@ func TestCWithMarkedLinesOpensARangeNote(t *testing.T) {
 	}
 	if n := p.note("s", "r"); n.Range != [2]int{5, 7} || n.Side != model.NoteSideNew || n.ContextHash != p.hash {
 		t.Errorf("note = %+v, want range 5-7 on the new side", n)
+	}
+
+	// Loose marks (one space) follow the cursor.
+	m = rangeLinkModel(t, model.StateUnstaged)
+	v = m.diffLayer()
+	v.lsel = lineSel{on: true, anchor: 4}
+	v.curLine = 6
+	if _, p = rangeNotePopup(t, m); p == nil || p.first != 5 || p.line != 7 {
+		t.Fatalf("loose marks: popup = %+v, want 5-7", p)
 	}
 
 	// The old side.
@@ -175,10 +185,68 @@ func TestRangeNoteSaveClearsTheMarks(t *testing.T) {
 	m, p = rangeNotePopup(t, m)
 	p.summary = newTextField("why")
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	if !v.lsel.on {
+		t.Fatal("the marks went before the write was known to succeed")
+	}
+	// A failed write keeps the marks (the text is lost, the range is not).
+	u, _ := m.Update(noteMutatedMsg{err: errTestNote, clearMarks: true})
+	if m = u.(Model); !v.lsel.on {
+		t.Fatal("a failed write dropped the marks")
+	}
+	u, _ = m.Update(noteMutatedMsg{clearMarks: true})
 	if v.lsel.on {
 		t.Error("saving the note kept the marks")
 	}
-	_ = m
+	_ = u
+}
+
+var errTestNote = errors.New("boom")
+
+// One frozen mark with the cursor walked away: the note goes to the MARK (as
+// L's link does), not to the cursor.
+func TestOneFrozenMarkAwayFromTheCursorTakesTheNote(t *testing.T) {
+	t.Parallel()
+	m := rangeLinkModel(t, model.StateUnstaged)
+	v := m.diffLayer()
+	selectRows(v, 4, 4)
+	v.curLine = 9
+	_, p := rangeNotePopup(t, m)
+	if p == nil || p.first != 5 || p.line != 5 || !p.ranged || p.hasSideField() {
+		t.Fatalf("popup = %+v, want the marked line 5", p)
+	}
+}
+
+// In a stack the gates read the file of the MARKS: a cursor parked in a file
+// that takes no notes does not silence c, and marks in such a file are inert.
+func TestRangeNoteGatesOnTheMarksFile(t *testing.T) {
+	t.Parallel()
+	r := sameRowsTUI(6)
+	build := func(stamped int) (Model, *diffView, func(file, no int) int) {
+		v := stackViewOf(t, r, r)
+		v.stk.files[stamped].d.noteAddr = model.FileAddress{State: model.StateUnstaged, Path: v.stk.files[stamped].path, Worktree: "/repo"}
+		line := func(file, no int) int {
+			for i, l := range v.lines {
+				if l.file == file && l.isBody() && l.Row.RightNo == no {
+					return i
+				}
+			}
+			t.Fatalf("no row for file %d line %d", file, no)
+			return -1
+		}
+		return diffModel().pushLayer(v), v, line
+	}
+	m, v, line := build(1)
+	selectRows(v, line(1, 2), line(1, 4))
+	v.curLine = line(0, 3) // the cursor's file has no address
+	if _, p := rangeNotePopup(t, m); p == nil || p.first != 2 || p.line != 4 {
+		t.Fatalf("popup = %+v, want lines 2-4 of the marks' file", p)
+	}
+	m, v, line = build(0)
+	selectRows(v, line(1, 2), line(1, 4))
+	v.curLine = line(0, 3) // the marks' file has no address
+	if _, p := rangeNotePopup(t, m); p != nil {
+		t.Fatalf("marks in a file with no address opened a form: %+v", p)
+	}
 }
 
 func TestSelectionHintOffersTheNote(t *testing.T) {
