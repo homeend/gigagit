@@ -10,15 +10,17 @@ steps = [
   { write = "body.md", content = "Hello <user:name>\n<br> <date> #<seq:tt:2>\n" },
 ]
 
+# --repo: scenarios share one global store, and a global row would show up in
+# the TUI scenario's window. (add's global default is a CLI unit test.)
 [[run]]
-cmd             = ["template", "add", "--title", "Greeting", "-F", "body.md"]
+cmd             = ["template", "add", "--repo", "--title", "Greeting", "-F", "body.md"]
 exit            = 0
 stdout_contains = ["greeting"]
 
 [[run]]
 cmd             = ["template", "list"]
 exit            = 0
-stdout_contains = ["greeting\tglobal\tGreeting"]
+stdout_contains = ["greeting\trepo\tGreeting"]
 
 # A missing variable names the flag to pass.
 [[run]]

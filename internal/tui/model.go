@@ -3616,6 +3616,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case textTemplateDraftMsg:
 		if msg.err != nil {
+			if v := layerOf[*textTemplatesView](m); v != nil {
+				v.handingOff = false
+			}
 			m.statusMsg = i18n.T("text template not saved: %s", msg.err.Error())
 			return m, nil
 		}
@@ -3625,6 +3628,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		data, rerr := os.ReadFile(msg.path)
 		removeTempFile(msg.path)
 		if v := layerOf[*textTemplatesView](m); v != nil {
+			v.handingOff = false
 			return v.onEdited(m, msg, data, rerr)
 		}
 		return m, nil
