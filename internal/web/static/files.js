@@ -2872,14 +2872,26 @@ function setDiffRange(tr, range, later = false) {
     const prev = new Map(touched.map((o) => [o, o.range]));
     for (const o of state.stack.slots) o.range = o === own ? r : null;
     const at = (o) => document.querySelector(`#diff-body .stk-file[data-k="${state.stack.slots.indexOf(o)}"]`);
-    const stale = bandPending ? touched : touched.filter((o) => !paintBandInPlace(at(o), (o.diff || {}).rows, prev.get(o), o.range));
-    if (stale.length) later ? repaintBandLater(stale) : repaintStackSlots(stale);
+    // While a repaint is pending the rows are behind the state: no in-place.
+    const pend = bandPendingHere();
+    const stale = pend ? touched : touched.filter((o) => !paintBandInPlace(at(o), (o.diff || {}).rows, prev.get(o), o.range));
+    if (!stale.length) return held;
+    if (later) repaintBandLater(stale);
+    else {
+      // A repaint now draws all a pending one would: that one is dropped.
+      repaintStackSlots(pend ? [...new Set([...stale, ...pend.slots])] : stale);
+      bandPending = null;
+    }
     return held;
   }
   const prev = state.diffRange;
   state.diffRange = r;
-  if (bandPending || !paintBandInPlace($("diff-body"), (state.lastDiff || {}).rows, prev, r)) {
-    later ? repaintBandLater(null) : rerenderDiffKeepingPlace(true);
+  if (bandPendingHere() || !paintBandInPlace($("diff-body"), (state.lastDiff || {}).rows, prev, r)) {
+    if (later) repaintBandLater(null);
+    else {
+      rerenderDiffKeepingPlace(true);
+      bandPending = null;
+    }
   }
   return held;
 }
@@ -2889,7 +2901,8 @@ function setDiffRange(tr, range, later = false) {
 // the rows already rendered under root, giving them the classes markCls would:
 // a repaint of a large file costs a second, a keyboard step must not. False
 // (nothing touched) when the table was drawn without bands (data-band: notes
-// off) or a line of next is not rendered — folded away, which only a repaint
+// off), from other rows (a stack slot's new diff lands before its repaint),
+// or a line of next is not rendered — folded away, which only a repaint
 // opens.
 function paintBandInPlace(root, rows, prev, next) {
   const table = root && root.querySelector("table.diff[data-band]");
@@ -2899,17 +2912,40 @@ function paintBandInPlace(root, rows, prev, next) {
   if (want.some((i) => !now.has(i))) return false;
   const had = prev ? rangeRows(rows, prev.side, prev.first, prev.last).idx : [];
   const was = had.length ? renderedRows(table, had[0], had[had.length - 1]) : new Map();
+  for (const [got, idx] of [[now, want], [was, had]]) {
+    for (const i of [idx[0], idx[idx.length - 1]]) {
+      if (got.has(i) && !got.get(i).every((t) => rowShows(t, rows[i]))) return false;
+    }
+  }
   const unified = table.dataset.cols === "3";
   for (const [i, trs] of [...was, ...now]) {
     for (const t of trs) {
-      // A unified layout's changed row is two: del (old side) then add (new).
-      const only = unified && !t.classList.contains("same") ? (t.classList.contains("del") ? "old" : "new") : "";
-      t.classList.remove("rng-l", "rng-r");
-      const c = next && now.has(i) ? bandCls(true, next.side, only) : "";
+      const kind = t.classList.contains("same") ? "same" : t.classList.contains("del") ? "del" : "add";
+      const c = next && now.has(i) ? bandCls(true, next.side, bandOnly(unified, kind)) : "";
+      const has = t.classList.contains("rng-l") ? "rng-l" : t.classList.contains("rng-r") ? "rng-r" : "";
+      if (has === c) continue; // only the rows entering or leaving: a band can be thousands
+      if (has) t.classList.remove(has);
       if (c) t.classList.add(c);
     }
   }
   return true;
+}
+
+
+// bandOnly is the one side a rendered row shows, for bandCls: in the unified
+// layout (3 columns) a changed row is two — del (old side) then add (new); a
+// context row, and every row of the other layouts, shows both. Pure.
+function bandOnly(unified, kind) {
+  return unified && kind !== "same" ? (kind === "del" ? "old" : "new") : "";
+}
+
+
+// rowShows reports whether a rendered row carries the line numbers of the
+// data row r (a blank number cell says nothing): the table was drawn from
+// these rows.
+function rowShows(t, r) {
+  const l = t.querySelector("td.no.l"), n = t.querySelector("td.no.r");
+  return !!r && (!l || !l.textContent || l.textContent === String(r.left_no)) && (!n || !n.textContent || n.textContent === String(r.right_no));
 }
 
 
@@ -2936,6 +2972,16 @@ function renderedRows(table, lo, hi) {
 let bandPending = null;
 const bandPaint = { cost: 0, end: 0 };
 
+// bandPendingHere is the pending band repaint when it was made for the diff
+// on screen. One made for another (the reader switched files, or opened or
+// closed the stack) is dropped: its rows are gone, its end is not here.
+function bandPendingHere() {
+  const p = bandPending;
+  if (p && (state.stack ? p.stack === state.stack : !p.stack && p.diff === state.lastDiff)) return p;
+  bandPending = null;
+  return null;
+}
+
 // repaintBandLater repaints the band's files soon, not now: a held key steps
 // faster than a large file repaints, so the steps made meanwhile share one
 // repaint. A repaint waits half as long as the last one took: the keys keep
@@ -2943,24 +2989,27 @@ const bandPaint = { cost: 0, end: 0 };
 // by at most one and a half repaints. slots: the stack's files; null = the
 // single diff.
 function repaintBandLater(slots) {
-  if (!bandPending) {
-    bandPending = { single: false, slots: new Set(), diff: state.lastDiff, stack: state.stack, end: null };
+  if (!bandPendingHere()) {
+    const p = { single: false, slots: new Set(), diff: state.lastDiff, stack: state.stack, end: null };
+    bandPending = p;
     const wait = Math.max(0, bandPaint.end + bandPaint.cost / 2 - performance.now());
-    setTimeout(() => requestAnimationFrame(flushBandRepaint), wait);
+    setTimeout(() => requestAnimationFrame(() => flushBandRepaint(p)), wait);
   }
   if (slots) for (const s of slots) bandPending.slots.add(s);
   else bandPending.single = true;
 }
 
-function flushBandRepaint() {
-  const p = bandPending;
+// flushBandRepaint runs pending repaint p — unless a repaint since drew it
+// (bandPending is no longer p) or the reader left its diff.
+function flushBandRepaint(p) {
+  if (bandPending !== p) return;
   bandPending = null;
-  if (!p) return;
   const t0 = performance.now();
-  // The reader went to another diff meanwhile: its own render drew the band.
-  if (p.single && !state.stack && state.lastDiff === p.diff) rerenderDiffKeepingPlace(true);
-  if (p.slots.size && state.stack && state.stack === p.stack) repaintStackSlots([...p.slots]);
-  if (p.end) showBandEnd(p.end);
+  const single = p.single && !state.stack && !p.stack && state.lastDiff === p.diff;
+  const stack = p.slots.size > 0 && !!state.stack && state.stack === p.stack;
+  if (single) rerenderDiffKeepingPlace(true);
+  if (stack) repaintStackSlots([...p.slots]);
+  if (p.end && (single || stack)) showBandEnd(p.end);
   bandPaint.end = performance.now();
   bandPaint.cost = bandPaint.end - t0;
 }
@@ -3001,9 +3050,14 @@ function keepRowInSight(tr) {
 function clearDiffRange() {
   const rows = $("diff-body").querySelectorAll("tr.rng-l, tr.rng-r");
   for (const t of $("diff-body").querySelectorAll("tr.rng-l, tr.rng-r")) t.classList.remove("rng-l", "rng-r");
+  // A keyboard step whose repaint is still pending had a band the rows do
+  // not show yet: esc takes that band (and nothing else), and the repaint
+  // is dropped.
+  const pending = !!bandPendingHere() && !!(state.diffRange || (state.stack && state.stack.slots.some((o) => o.range)));
+  bandPending = null;
   state.diffRange = null;
   if (state.stack) for (const o of state.stack.slots) o.range = null;
-  return rows.length > 0;
+  return rows.length > 0 || pending;
 }
 
 
