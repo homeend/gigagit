@@ -112,10 +112,26 @@ function lineFingerprint(text) {
   return h.toString(16).padStart(8, "0");
 }
 
+// blockFingerprint is internal/model.BlockFingerprint: one fingerprint over a
+// RANGE's lines — each trimmed as lineFingerprint trims, joined with "\n";
+// "" when every line is blank. TestBlockFingerprintJSMatchesGo pins the pair.
+function blockFingerprint(lines) {
+  const t = (lines || []).map((l) => (l || "").replace(GO_TRIM, ""));
+  if (!t.some((l) => l)) return "";
+  let h = 0x811c9dc5;
+  for (const b of new TextEncoder().encode(t.join("\n"))) {
+    h ^= b;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
 // text is the RAW text of the line the link names (optional): an uncommitted
 // line link carries its fingerprint (`:N~<fp>`), a commit / pair / preview
-// link never does.
-function linkFor(repo, worktree, ctx, side, no, text) {
+// link never does. end > no makes it a RANGE (`:no-end`), whose fingerprint
+// is over block — the raw text of every line no..end; a block of any other
+// length carries none.
+function linkFor(repo, worktree, ctx, side, no, text, end, block) {
   // A compare addressed by two side SPECS (the entry-diff lane): two commits
   // are the pair; any other compare names the clicked side as the VERSION it
   // shows — the working file, the index, or that commit's own text (hence the
@@ -125,13 +141,13 @@ function linkFor(repo, worktree, ctx, side, no, text) {
     const commitOf = (spec) => (/^commit:[0-9a-f]+$/.test(spec || "") ? spec.slice(7) : "");
     const { left, right } = ctx.cmpSides;
     if (commitOf(left) && commitOf(right))
-      return linkFor(repo, worktree, { path: ctx.path, compare: true, cmpPair: { a: commitOf(left), b: commitOf(right) } }, side, no);
+      return linkFor(repo, worktree, { path: ctx.path, compare: true, cmpPair: { a: commitOf(left), b: commitOf(right) } }, side, no, "", end);
     const old = side === "old" && no > 0;
     const spec = old ? left : right;
     const path = (old && ctx.oldPath) || ctx.path;
-    if (spec === "worktree") return linkFor(repo, worktree, { path, state: "unstaged" }, "new", no, text);
-    if (spec === "staged") return linkFor(repo, worktree, { path, state: "staged" }, "new", no, text);
-    if (commitOf(spec)) return linkFor(repo, worktree, { path, state: "commit", rev: commitOf(spec) }, "new", no);
+    if (spec === "worktree") return linkFor(repo, worktree, { path, state: "unstaged" }, "new", no, text, end, block);
+    if (spec === "staged") return linkFor(repo, worktree, { path, state: "staged" }, "new", no, text, end, block);
+    if (commitOf(spec)) return linkFor(repo, worktree, { path, state: "commit", rev: commitOf(spec) }, "new", no, "", end);
     return "";
   }
   let preview = (ctx && ctx.preview) || null;
@@ -185,7 +201,10 @@ function linkFor(repo, worktree, ctx, side, no, text) {
     // A line that was not valid UTF-8 arrives with U+FFFD in place of its
     // bytes (JSON cannot carry them): its fingerprint would be of different
     // bytes than the file's and read "changed" forever, so the link is plain.
-    if (st !== "commit" && !(text || "").includes("\ufffd")) fp = lineFingerprint(text);
+    const ranged = end > no && no > 0;
+    if (st !== "commit" && ranged) {
+      if (block && block.length === end - no + 1 && !block.some((l) => (l || "").includes("\ufffd"))) fp = blockFingerprint(block);
+    } else if (st !== "commit" && !(text || "").includes("\ufffd")) fp = lineFingerprint(text);
     if (st === "staged") {
       s += "@staged";
     } else if (st === "commit") {
@@ -202,7 +221,7 @@ function linkFor(repo, worktree, ctx, side, no, text) {
   // pair the resolver reads for it anyway (index → file).
   if (no > 0) {
     if (!path) return "";
-    s += ":" + (side === "old" ? "old:" : "") + no + (fp ? "~" + fp : "");
+    s += ":" + (side === "old" ? "old:" : "") + no + (end > no ? "-" + end : "") + (fp ? "~" + fp : "");
   }
   // Last, always: '?' opens the grammar's final segment, so anything after it
   // would be read as part of the hint id.
