@@ -36,6 +36,10 @@ func (s *Server) handlePairNotes(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// scope narrows the read to ONE review's notes (a range opened from a
+	// commit's Range review row). It is only ever compared with stored text —
+	// it never reaches git — so it needs no allowlist.
+	set.Only = q.Get("scope")
 	// Ruling 6: a pair that is not here has nothing to show — not an error.
 	out := map[string]any{"notes": []wireNote{}, "tip": set.Tip, "counts": map[string]int{}, "total": 0}
 	if !set.OK() {

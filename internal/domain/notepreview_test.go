@@ -97,3 +97,60 @@ func TestScopeAtCommit(t *testing.T) {
 		t.Fatal("no scope must be an error")
 	}
 }
+
+// A set narrowed to one review gathers that review's notes alone — not a
+// plain note, not another review's — and a note written in it joins it.
+func TestPreviewNoteSetOnly(t *testing.T) {
+	t.Parallel()
+	svc, dir := newPreviewRepo(t)
+	ctx := context.Background()
+	base, tip := revParse(t, dir, "main"), revParse(t, dir, "feat")
+	ids := map[string]string{}
+	for _, pv := range []string{"main...feat", "aaaaaaa..bbbbbbb", ""} {
+		n, err := svc.NoteAdd(ctx, model.Note{
+			Source: model.NoteSourceAgent, Author: "ada", Preview: pv,
+			Address: model.FileAddress{State: model.StateCommitted, Commit: tip, Path: "a.txt"},
+			Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "in " + pv,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[pv] = n.ID
+	}
+	// A reply carries no scope of its own: it follows its root.
+	for _, pv := range []string{"main...feat", ""} {
+		if _, err := svc.NoteReply(ctx, ids[pv], model.Note{Source: model.NoteSourceUser, Author: "bob", Summary: "re " + pv}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	set, err := svc.PairNotes(ctx, base, tip)
+	if err != nil || !set.OK() {
+		t.Fatalf("pair set: %+v, %v", set, err)
+	}
+	if _, total, _ := svc.PreviewNoteCounts(ctx, set); total != 3 {
+		t.Fatalf("the whole pair gathers every note: %d, want 3", total)
+	}
+	set.Only = "main...feat"
+	byPath, total, err := svc.PreviewNoteCounts(ctx, set)
+	if err != nil || total != 1 || byPath["a.txt"] != 1 {
+		t.Fatalf("one review's notes: %v total %d, %v", byPath, total, err)
+	}
+	got, err := svc.PreviewNotesAt(ctx, set, "a.txt")
+	if err != nil || len(got) != 1 || got[0].Note.Summary != "in main...feat" {
+		t.Fatalf("notes = %+v, %v", got, err)
+	}
+	if rs := got[0].Replies; len(rs) != 1 || rs[0].Note.Summary != "re main...feat" {
+		t.Fatalf("the review's thread must keep its reply: %+v", rs)
+	}
+	// …and the commit's own view keeps the plain thread whole, reply included.
+	own, err := svc.NotesAt(ctx, model.FileAddress{State: model.StateCommitted, Commit: tip, Path: "a.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain := PlainNotes(own); len(plain) != 1 || plain[0].Note.Summary != "in " || len(plain[0].Replies) != 1 {
+		t.Fatalf("the commit's own notes = %+v", plain)
+	}
+	if set.Pair() != "main...feat" {
+		t.Fatalf("a note written in the narrowed set must carry its scope: %q", set.Pair())
+	}
+}

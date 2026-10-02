@@ -32,7 +32,11 @@ type pairNotesMsg struct {
 // pairNotesCmd resolves the scope for commits a..b. Build it AFTER
 // openCompareFiles returns: that call runs closeFilesView, which bumps
 // previewGen, and a command stamped before it would be dropped as stale.
-func (m Model) pairNotesCmd(a, b string) tea.Cmd {
+//
+// only narrows the scope to one review's notes (PreviewNoteSet.Only): a range
+// opened from a commit's Range review row passes the row's scope; "" gathers
+// every note along the pair.
+func (m Model) pairNotesCmd(a, b, only string) tea.Cmd {
 	svc, gen := m.svc, m.previewGen
 	if svc == nil {
 		return nil
@@ -44,6 +48,7 @@ func (m Model) pairNotesCmd(a, b string) tea.Cmd {
 		if err != nil || !set.OK() {
 			return msg
 		}
+		set.Only = only
 		msg.set = set
 		msg.counts, _, _ = svc.PreviewNoteCounts(ctx, set)
 		return msg
@@ -105,7 +110,7 @@ func (m Model) pairNotesRefreshCmd() tea.Cmd {
 	if s == nil || !s.IsPair() || m.filesView == nil {
 		return nil
 	}
-	return m.pairNotesCmd(s.Base, s.Tip)
+	return m.pairNotesCmd(s.Base, s.Tip, s.Only)
 }
 
 // scopeLinkFor is the link to a place inside a note scope: a merge preview's
@@ -132,5 +137,5 @@ func (m Model) steeredPairNotesCmd(c steer.Command) tea.Cmd {
 	if l.Kind() != model.EndpointCommit || r.Kind() != model.EndpointCommit {
 		return nil
 	}
-	return m.pairNotesCmd(l.Hash(), r.Hash())
+	return m.pairNotesCmd(l.Hash(), r.Hash(), "")
 }

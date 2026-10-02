@@ -205,3 +205,73 @@ func TestCommitRowMarksARangeReview(t *testing.T) {
 		}
 	}
 }
+
+// A range review's notes belong to the review alone: on a file the commit
+// itself changes they are neither counted on the file's row nor drawn in the
+// commit's own diff of it. Only the note written outside any range is; the
+// review's notes show when the range is opened from its row.
+func TestRangeNotesStayOutOfTheCommitsOwnView(t *testing.T) {
+	t.Parallel()
+	m, _, tip := scopeReviewModel(t) // tip = "add b": it changes b.txt
+	ctx := context.Background()
+	add := func(preview, summary string) {
+		t.Helper()
+		if _, err := m.svc.NoteAdd(ctx, model.Note{
+			Source: model.NoteSourceAgent, Author: "ada", Preview: preview,
+			Address: model.FileAddress{State: model.StateCommitted, Commit: tip, Path: "b.txt"},
+			Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: summary,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("main...feat/x", "review: why b?")
+	add("", "plain: b is terse")
+	m.svc.InvalidateNoteCounts()
+	m, cmd := m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{manual: true})
+	m = drainMsgs(t, m, cmd, 4)
+
+	v := m.View()
+	if !strings.Contains(v, "b.txt  ◆ 1") || strings.Contains(v, "b.txt  ◆ 2") {
+		t.Fatalf("the file row must count the plain note only:\n%s", v)
+	}
+	if !strings.Contains(v, "feat/x → main  ◆ 2") {
+		t.Fatalf("the review row counts both of its notes:\n%s", v)
+	}
+	// The commit's own diff of b.txt.
+	for i, l := range m.filesView.visible() {
+		if l.path == "b.txt" {
+			m.filesView.sel = i
+		}
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = drainMsgs(t, updated.(Model), cmd, 8)
+	dv := m.diffLayer()
+	if dv == nil {
+		t.Fatalf("enter must open b.txt's diff (status %q)", m.statusMsg)
+	}
+	if len(dv.notes) != 1 || dv.notes[0].Note.Summary != "plain: b is terse" {
+		t.Fatalf("the commit's diff must show the plain note only: %+v", dv.notes)
+	}
+	// The same diff opened from View all notes (rangeNotes) draws both: there
+	// a note opens where it is stored.
+	dv.rangeNotes = true
+	updated, _ = m.Update(m.loadNotesCmd()())
+	m = updated.(Model)
+	if dv = m.diffLayer(); len(dv.notes) != 2 {
+		t.Fatalf("a View-all-notes diff must draw the range note too: %+v", dv.notes)
+	}
+	dv.rangeNotes = false
+	// Back to the commit, into the review: there the file carries the review's note.
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	m.filesView.sel = rangeRowIndex(t, m)
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = drainMsgs(t, updated.(Model), cmd, 8)
+	// …and only ITS notes: the plain one stays the commit's.
+	if m.filesPreviewSet == nil || m.filesPreviewCounts["b.txt"] != 1 || m.filesPreviewCounts["a.txt"] != 1 {
+		t.Fatalf("the review must carry its own notes, per file: %v", m.filesPreviewCounts)
+	}
+	if got := m.filesPreviewSet.Pair(); got != "main...feat/x" {
+		t.Fatalf("a note written in the opened review must join it: scope %q", got)
+	}
+}

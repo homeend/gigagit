@@ -75,6 +75,21 @@ type NoteScopeCount struct {
 	N     int
 }
 
+// PlainNotes drops the threads written in a range (a merge preview or a
+// commit pair: Note.Preview). Those are a range review's notes: they sit on
+// the range's newest commit but belong to the review, which shows them when
+// it is opened — a commit's OWN view (its file badges, its diffs) shows only
+// what is left here. A reply follows its root.
+func PlainNotes(rs []ResolvedNote) []ResolvedNote {
+	out := make([]ResolvedNote, 0, len(rs))
+	for _, r := range rs {
+		if r.Note.Preview == "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // PlainCommitNotes counts a commit's notes written in NO scope: its ◆ N in a
 // commit list. The ones written in a merge preview or a commit pair are a
 // range review — the commit's ✎ — and, like an AI review, are not counted

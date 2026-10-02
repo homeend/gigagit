@@ -707,7 +707,9 @@ function pairCtx() {
 // pairNoteCtx is the `preview` slice a pair's diff context carries: no names
 // (there are none), so every reader of source/target must ask .pair first.
 function pairNoteCtx(p) {
-  return { pair: { a: p.a, b: p.b }, source: "", target: "", pr: 0, linkSource: "", linkTarget: "" };
+  // scope: the ONE review this pair shows (a range opened from a commit's
+  // Range review row) — its notes only; "" for a pair showing every note.
+  return { pair: { a: p.a, b: p.b }, scope: p.scope || "", source: "", target: "", pr: 0, linkSource: "", linkTarget: "" };
 }
 
 
@@ -716,14 +718,15 @@ function pairNoteCtx(p) {
 async function loadPairCounts() {
   const p = pairCtx();
   if (!p) return;
+  const scope = p.scope || ""; // a read begun before the scope was set is stale
   let d;
   try {
-    d = await getJSON("/api/pair/notes?a=" + p.a + "&b=" + p.b);
+    d = await getJSON("/api/pair/notes?" + new URLSearchParams({ a: p.a, b: p.b, ...(p.scope ? { scope: p.scope } : {}) }));
   } catch {
     return; // decoration: no badge beats a wrong badge
   }
   const now = pairCtx();
-  if (!now || now.a !== p.a || now.b !== p.b) return; // superseded
+  if (!now || now.a !== p.a || now.b !== p.b || (now.scope || "") !== scope) return; // superseded
   state.previewCounts = d.counts || {};
   renderFiles();
 }
@@ -1033,7 +1036,8 @@ function renderFiles() {
     if (reviewActive()) return renderReviewFiles(); // ≡ Overview + the reviewed files (reviews.js)
     if (symActive()) return renderSymLists(); // two aligned lists (symcompare.js)
     // A commit file's notes are keyed "<sha>:<path>" — the sha this row's diff
-    // would open. A COMPARISON gets no badge at all: its diff is not
+    // would open — and count only the notes written outside any range: a range
+    // review's notes are its own row's (reviews.js), shown when it is opened. A COMPARISON gets no badge at all: its diff is not
     // note-addressable (see openFile), so a ◆ would advertise notes that its
     // rows cannot show and its keys cannot add.
     const cmp = state.filesMode === "compare";
@@ -1047,7 +1051,7 @@ function renderFiles() {
         ? noteBadgeHTML(state.previewCounts[f.path])
         : cmp
         ? ""
-        : noteBadgeHTML(state.noteCounts.by_commit_path[(f.sha || state.fileSha) + ":" + f.path]);
+        : noteBadgeHTML(state.noteCounts.plain_by_commit_path[(f.sha || state.fileSha) + ":" + f.path]);
     const anyBadge = state.files.some((f) => badge(f) !== "");
     const cols = fileCols(anyBadge ? NOTE_BADGE_COLS : 0);
     // A commit's AI reviews head its files (reviews.js); "" when it has none.
@@ -2332,6 +2336,7 @@ function noteQuery(ctx = state.diffCtx) {
     // ride along for the WRITE — a pair note is an ordinary note on b.
     q.set("a", ctx.preview.pair.a);
     q.set("b", ctx.preview.pair.b);
+    if (ctx.preview.scope) q.set("scope", ctx.preview.scope);
     q.set("rev", ctx.rev);
     q.set("state", "commit");
     return q;
@@ -2382,7 +2387,35 @@ async function notesFor(ctx) {
   const pv = ctx.preview;
   if (ctx.review) return await getJSON("/api/review/notes?" + q);
   const url = !pv ? "/api/notes?" : pv.pr ? "/api/pr/notes?" : pv.pair ? "/api/pair/notes?" : "/api/preview/notes?";
+  // A commit's own diff leaves a range review's notes to the review; a diff
+  // opened from View all notes (showRangeNotes) shows them where they are stored.
+  if (rangeNotesArmed) {
+    // Armed for the NEXT diff (armRangeNotes): its very first read is the
+    // scoped one, so no plain answer can land after it and wipe the note.
+    rangeNotesArmed = false;
+    ctx.scoped = true;
+  }
+  if (!pv && ctx.scoped) q.set("scoped", "1");
   return await getJSON(url + q);
+}
+
+
+// View all notes lands on a note where it is stored, so the diff it opens
+// draws the notes written in a range review too. armRangeNotes says so BEFORE
+// that diff opens; showRangeNotes covers a diff already open. Either way the
+// flag lives on the diff's context: the next file opened is a plain commit
+// diff again.
+let rangeNotesArmed = false;
+
+function armRangeNotes(on = true) {
+  rangeNotesArmed = on;
+}
+
+async function showRangeNotes() {
+  rangeNotesArmed = false; // unclaimed: the open never reached a notes read
+  if (!state.diffCtx || state.diffCtx.scoped) return;
+  state.diffCtx.scoped = true;
+  await fetchNotes();
 }
 
 
@@ -2448,6 +2481,7 @@ async function refreshNoteCounts() {
       by_path: c.by_path || {},
       by_commit: c.by_commit || {},
       by_commit_path: c.by_commit_path || {},
+      plain_by_commit_path: c.plain_by_commit_path || {}, // a commit's file badges: no range review's notes
       scopes_by_commit: c.scopes_by_commit || {}, // a commit's Range review rows
       reviews: c.reviews || [], // the Branches' review sub-rows
     };
@@ -2459,7 +2493,7 @@ async function refreshNoteCounts() {
     // Counts are decoration, but a STALE badge is worse than none: a failed
     // fetch means we no longer know, so draw no ◆ at all until the next one
     // succeeds.
-    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, scopes_by_commit: {}, reviews: [] };
+    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, plain_by_commit_path: {}, scopes_by_commit: {}, reviews: [] };
   }
   renderFiles();
   renderBranches(); // a review deleted anywhere leaves its branch sub-row
@@ -2586,6 +2620,7 @@ function fileNoteRowsHTML(cols, nctx = null) {
 // The server resolves it and stamps the note only when its tip matches.
 function noteScopeSpec(pv) {
   if (!pv || pv.pr) return "";
+  if (pv.pair && pv.scope) return pv.scope; // a note written in an opened review joins it
   if (pv.pair) return `${pv.pair.a}..${pv.pair.b}`;
   return pv.source && pv.target ? `${pv.target}...${pv.source}` : "";
 }
@@ -4585,4 +4620,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

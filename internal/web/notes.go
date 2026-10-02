@@ -98,6 +98,12 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// A range review's notes belong to the review: a commit's own diff leaves
+	// them out. View all notes opens a note where it is stored and asks for
+	// every note at the address (scoped=1).
+	if q.Get("scoped") != "1" {
+		res = domain.PlainNotes(res)
+	}
 	out := make([]wireNote, 0, len(res))
 	for _, n := range res {
 		out = append(out, toWireNote(n))
@@ -122,6 +128,8 @@ func (s *Server) handleNoteCounts(w http.ResponseWriter, r *http.Request) {
 		"by_path":        orEmptyCounts(c.ByPath),
 		"by_commit":      orEmptyCounts(c.ByCommit),
 		"by_commit_path": orEmptyCounts(c.ByCommitPath),
+		// …and the ones written outside any range: a commit's file badges.
+		"plain_by_commit_path": orEmptyCounts(c.PlainByCommitPath),
 		// The ranges each commit's notes were written in: its Range review rows.
 		"scopes_by_commit": wireScopes(c.ScopesByCommit),
 		"reviews":          reviewHeads(c.Reviews), // the Branches' review sub-rows
@@ -211,6 +219,16 @@ func (s *Server) noteAuthor(ctx context.Context, given string) string {
 func (s *Server) notePreview(ctx context.Context, spec string, addr model.FileAddress) string {
 	if spec = strings.TrimSpace(spec); spec == "" || addr.State != model.StateCommitted {
 		return ""
+	}
+	// A review this commit already holds (the page is inside it, opened from
+	// the commit's Range review row): the note joins it under the same name,
+	// however far its branch moved since. An allowlist — no resolving needed.
+	if c, cerr := s.service().NoteCounts(ctx); cerr == nil {
+		for _, sc := range c.ScopesByCommit[addr.Commit] {
+			if sc.Scope == spec {
+				return spec
+			}
+		}
 	}
 	set, err := s.service().NoteScopeResolve(ctx, spec)
 	if err != nil || set.Tip != addr.Commit {

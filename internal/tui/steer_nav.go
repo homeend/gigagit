@@ -671,7 +671,7 @@ func (m Model) steerNavigatePair(c steer.Command) (Model, tea.Cmd) {
 	// cannot): the endpoint-shaped compare, which is right for every pair
 	// except a `-u` stash's.
 	nm, cmd := m.openCompareFiles(left, right)
-	if nc := nm.pairNotesCmd(ahash, bhash); nc != nil { // the pair's review notes (saved_pair_notes.go)
+	if nc := nm.pairNotesCmd(ahash, bhash, ""); nc != nil { // the pair's review notes (saved_pair_notes.go)
 		cmd = tea.Batch(cmd, nc)
 	}
 	pair := shortHash(ahash) + ".." + shortHash(bhash)

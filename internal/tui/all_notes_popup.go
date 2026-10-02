@@ -414,7 +414,7 @@ func (m Model) openAllNotesTarget(p *allNotesPopup, t anTarget, id string) (Mode
 		lm.filesContext = t.subject
 		cmd = lm.loadCommitDiffCmd(t.commit, line)
 		m = m.pushLayer(&diffView{title: t.path, context: "@ " + t.subject, rev: t.commit, loading: true,
-			partial: m.diffPartial, long: m.diffLong,
+			partial: m.diffPartial, long: m.diffLong, rangeNotes: true, // the note opens where it is stored
 			noteAddr: model.FileAddress{State: model.StateCommitted, Commit: t.commit, Path: t.path}})
 		m.diffTag = "commit:" + t.commit + ":" + t.path
 	case model.StateUnstaged, model.StateUntracked, model.StateStaged:
