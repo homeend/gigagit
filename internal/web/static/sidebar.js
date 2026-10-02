@@ -1,6 +1,6 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, SECTIONS, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
+import { $, SECTIONS, activityAttn, activityLabel, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
@@ -33,7 +33,9 @@ function sessAge(iso, now) {
 }
 
 // worktreeSessionRows: the sessions running in one worktree, in start order —
-// the TUI's Worktrees sub-rows (└ ● claude  running 12m).
+// the TUI's Worktrees sub-rows (└ ● claude  running 12m). A classified
+// session's activity ("idle 3m", "needs input") replaces the running age:
+// the row is narrow; attn asks for the attention colour.
 function worktreeSessionRows(sessions, path, now) {
   return sessions
     .filter((s) => s.worktree === path)
@@ -41,8 +43,9 @@ function worktreeSessionRows(sessions, path, now) {
       id: s.id,
       glyph: s.state === "exited" ? "○" : "●",
       label: s.label,
-      meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : "running " + sessAge(s.started, now),
+      meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : activityLabel(s, now) || "running " + sessAge(s.started, now),
       task: !!s.task,
+      attn: activityAttn(s),
     }));
 }
 // recycleCandidates: the worktrees the recycle row can pick — every
@@ -69,7 +72,7 @@ function sessionSubRows(path, cols) {
     .map((r) => {
       const room = cols - 6 - Array.from(r.meta).length;
       return (
-        `<li class="wsess${r.task ? " task" : ""}" data-sid="${esc(r.id)}" title="${esc(r.label + " — " + r.meta)}">` +
+        `<li class="wsess${r.task ? " task" : ""}${r.attn ? " attn" : ""}" data-sid="${esc(r.id)}" title="${esc(r.label + " — " + r.meta)}">` +
         `└ <span class="glyph ${r.glyph === "●" ? "run" : "ex"}">${r.glyph}</span> ${esc(room > 4 ? elideNameMiddle(r.label, room) : r.label)}` +
         `<span class="wpath">${esc(r.meta)}</span></li>`
       );

@@ -134,6 +134,7 @@ function measure() {
 
 async function post(body) {
   const resp = await postJSON("/api/session-start", Object.assign(body, measure()));
+  if (resp.warning) toast(resp.warning, { err: true }); // bad screen_* rules: the built-ins apply
   openConsole(resp.session.id);
 }
 

@@ -10,7 +10,7 @@ const consolePureEnd = "// --- end console model ---"
 
 func TestConsoleModelJS(t *testing.T) {
 	t.Parallel()
-	out := runPureJS(t, "console.js", consolePureStart, consolePureEnd, `
+	out := runPureJS(t, "console.js", consolePureStart, consolePureEnd, activitySection(t)+`
 const ev = (o) => Object.assign({ key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false }, o);
 const r = [];
 r.push(JSON.stringify(keyToWire(ev({ key: "a", code: "KeyA" }))));

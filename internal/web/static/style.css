@@ -1811,6 +1811,11 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #worktrees-list li.wsess .glyph.ex { color: var(--dim); }
 #worktrees-list li.wsess.task .glyph.run { color: #f2a65a; }
 #worktrees-list li.wsess:hover { background: var(--sel); }
+/* A session that needs the user (a question, a stall) wears one colour everywhere. */
+:root { --act-attn: #f2a65a; }
+#worktrees-list li.wsess.attn .wpath, #branches-list li.wsess.attn .wpath { color: var(--act-attn); }
+#openfiles-list .ofrow.attn .ofmeta { color: var(--act-attn); }
+#console-label .act.attn { color: var(--act-attn); }
 #branches-list li.wsess { padding-left: 22px; cursor: pointer; color: var(--fg); font-weight: normal; }
 #branches-list li.wsess .glyph.run { color: #7bd88f; }
 #branches-list li.wsess .glyph.ex { color: var(--dim); }
