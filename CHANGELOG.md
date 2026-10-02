@@ -30,22 +30,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   error (both are shown), names no key ("leaving again discards it" — it also
   follows the cancel button and a click outside), and goes away once the text
   is edited again.
-
 - **TUI:** when `y` copied the text but its `<seq>` counters could not be
   written, the status line says so (the web view already did); it was silent.
 - `gg template show <unknown> --global` (and `render` / `edit` / `rm`) says
   the id is unknown (exit 2) when only the **repo** store is damaged — a
   search reports a damaged scope only when it covers that scope.
-- **Web:** a save that is answered after you left its form (and maybe opened
-  another) no longer closes the form now open or puts its error there: a late
-  success only refreshes the list, a late failure is reported on the status
-  line.
+- **Web:** a save or delete that is answered after you left its step (and
+  maybe opened another form) no longer closes the form now open or puts its
+  error there: a late success only refreshes the list, a late failure is
+  reported on the status line. Save ignores a second click while it is being
+  sent.
 
 ### Internal
 
 - The web overlay's decisions (form guard, notice line, delete-confirm keys,
-  the row a reload selects, where a save's answer lands) are pure functions in `texttemplates.js`, tested
-  under node by `internal/web/texttemplatesjs_test.go`.
+  the row a reload selects, where a late answer lands) are pure functions in
+  `texttemplates.js`, tested under node by
+  `internal/web/texttemplatesjs_test.go`.
 
 ## Text templates: follow-up fixes
 

@@ -43,6 +43,8 @@ async function openTextTemplates() {
 }
 
 function close() {
+  // No step survives the overlay: a late answer must not land in one.
+  mode = null;
   closeLayer("texttemplates");
 }
 
@@ -85,16 +87,15 @@ function ttSelectIndex(list, id, scope, prev) {
   return at >= 0 ? at : Math.min(prev, Math.max(list.length - 1, 0));
 }
 
-// ttSaveLanding is where a save's answer goes. The form that sent it may be
-// gone by then (the user left, and may be writing another template): its
-// answer must not close or mark whatever is open now.
-//   "select"     — the form is still open, saved: reload and select the row
-//   "form-error" — the form is still open, refused: say so in the form
-//   "refresh"    — the form is gone, saved: refetch the list, keep the step
-//   "report"     — the form is gone, refused: say so on the op line
-function ttSaveLanding(formOpen, failed) {
-  if (formOpen) return failed ? "form-error" : "select";
-  return failed ? "report" : "refresh";
+// ttAnswerLanding is where a late answer goes — a save, a delete, the list
+// reload after either. The step that asked may be gone by then (the user
+// left, and may be writing another template):
+//   "step"      — the asking step is still the one open: act in it
+//   "browse"    — the user is back at the list: it may be redrawn
+//   "elsewhere" — another step is open: nothing on screen is touched
+function ttAnswerLanding(sameStep, browsing) {
+  if (sameStep) return "step";
+  return browsing ? "browse" : "elsewhere";
 }
 
 // formContent is what the open form holds (ttFormContent).
@@ -210,13 +211,28 @@ function showErr(msg) {
   if (err) err.textContent = msg;
 }
 
-// reload refetches the list and selects the row (id, scope) names — the same
-// id may exist in both scopes.
-async function reload(selectId, selectScope) {
+// landing is ttAnswerLanding for the step object that asked.
+function landing(from) {
+  return ttAnswerLanding(mode === from, !mode);
+}
+
+// reload refetches the list for the step `from` (a saved form, an answered
+// delete question) and selects the row (id, scope) names — the same id may
+// exist in both scopes. With another step open by then, only the list is
+// replaced: that step, and what is typed in it, stays.
+async function reload(selectId, selectScope, from) {
+  const was = current();
+  let next;
   try {
-    data = await getJSON("/api/text-templates");
+    next = await getJSON("/api/text-templates");
   } catch (e) {
-    showErr(e.message);
+    if (landing(from) === "step") showErr(e.message);
+    else opLine("text templates: " + e.message, true);
+    return;
+  }
+  data = next;
+  if (landing(from) === "elsewhere") {
+    sel = ttSelectIndex(rows(), was ? was.id : "", was ? was.scope : "", sel);
     return;
   }
   sel = ttSelectIndex(rows(), selectId, selectScope, sel);
@@ -298,43 +314,36 @@ function saveForm() {
     return;
   }
   const form = mode;
+  if (form.saving) return; // one save at a time: a second would be refused as a duplicate
+  form.saving = true;
   const t = form.t;
   const req = t
     ? postJSON("/api/text-templates/update", { id: t.id, scope: t.scope, title, body })
     : postJSON("/api/text-templates", { title, body, scope: $("tt-scope").dataset.scope });
   req.then(
-    (row) => {
-      if (ttSaveLanding(mode === form, false) === "select") reload(row.id, row.scope);
-      else refreshList();
-    },
+    (row) => reload(row.id, row.scope, form),
     (err) => {
-      if (ttSaveLanding(mode === form, true) === "form-error") showErr("not saved: " + err.message);
+      form.saving = false;
+      if (landing(form) === "step") showErr("not saved: " + err.message);
       else opLine("text template " + title + " not saved: " + err.message, true);
     },
   );
 }
 
-// refreshList refetches the list after a save whose form is gone. The step
-// on screen stays; only the list itself is redrawn.
-async function refreshList() {
-  try {
-    data = await getJSON("/api/text-templates");
-  } catch (e) {
-    return; // the next open reads it again
-  }
-  if (mode) return;
-  sel = ttSelectIndex(rows(), "", "", sel);
-  render();
-}
-
 function removeTemplate(t) {
-  postJSON("/api/text-templates/remove", { id: t.id, scope: t.scope })
-    .then(() => reload("", ""))
-    .catch((err) => {
+  const asked = mode;
+  postJSON("/api/text-templates/remove", { id: t.id, scope: t.scope }).then(
+    () => reload("", "", asked),
+    (err) => {
+      if (landing(asked) !== "step") {
+        opLine("text template " + t.title + " not deleted: " + err.message, true);
+        return;
+      }
       mode = null;
       render();
       showErr("not deleted: " + err.message);
-    });
+    },
+  );
 }
 
 function browseHTML() {
