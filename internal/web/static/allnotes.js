@@ -11,7 +11,7 @@ import { $, charWidth, elideNoteSummary, esc, getJSON, postJSON, state } from ".
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { opLine, showLocalConfirm } from "./ops.js";
-import { openReview, openScopeRange } from "./reviews.js";
+import { openReview, openScopeRange, viewBranches } from "./reviews.js";
 import { openCommitByHash } from "./commits.js";
 import { armRangeNotes, landNote, showRangeNotes, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
 import { openShelfNotes } from "./shelfnotes.js";
@@ -312,7 +312,9 @@ async function load() {
   const gen = ++anGen;
   let ov;
   try {
-    ov = await getJSON("/api/notes/overview");
+    // What was created on a branch is listed on that branch only: say which
+    // branch this page is on.
+    ov = await getJSON("/api/notes/overview?" + new URLSearchParams(viewBranches().map((b) => ["on", b])));
   } catch (e) {
     if (!an || gen !== anGen) return;
     an.loading = false;

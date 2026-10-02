@@ -1,10 +1,10 @@
-local  branch main                                                                                            {{root}}____________________________________/local
+local  branch feature                                                                                         {{root}}____________________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Files acfc46c add c                               ││ Commits (all) 3                                                                                         │
-│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓ ✎ feature add c                                                                                  │
-│ > Range reviews                                   ││   ●    ✎ feature grow a                                                                                 │
-│     feature → main  ◆ 2                           ││   ●  ↓   *main   add a b  ◆ 1                                                                           │
-│   A  c.txt                                        ││                                                                                                         │
+│ Range review: 049ab7a..cb762ac                    ││ Commits (all) 3                                                                                         │
+│ .                                                 ││   ●  ↓   *feature add c                                                                                 │
+│ > M  a.txt  ◆ 1                                   ││   ●    ✎ feature  grow a                                                                                │
+│                                                   ││   ●  ↓   main     add a b  ◆ 1                                                                          │
+│                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
@@ -36,5 +36,5 @@ local  branch main                                                              
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 ╰───────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-tree: [↑/↓] move  [enter] diff  [a] all files  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view  [ctrl+t] full  [i] msg  [esc/l] close
-⎇ feature · # acfc46c · @ gg-e2e
+tree: [↑/↓] move  [enter] diff  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view  [ctrl+t] full  [esc/l] close
+⎇ feature · # cb762ac · @ gg-e2e

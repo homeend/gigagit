@@ -102,20 +102,43 @@ func (m Model) showBranchReviewRow() (actionRow, bool) {
 }
 
 // commitReviewed reports whether commit hash holds a review — the Commits
-// list's ✎: a stored AI review, or a range review (notes written in a merge
-// preview or a commit pair, which sit on the range's newest commit). It reads
+// list's ✎: a stored AI review or a range review (notes written in a commit
+// pair, which sit on the pair's newer commit), created on the branch being
+// viewed. A preview's review never marks a commit: it is the preview's. It reads
 // the note counts the list already holds, so a scroll costs no read.
 func (m Model) commitReviewed(hash string) bool {
 	if hash == "" {
 		return false
 	}
-	if len(m.noteCounts.ScopesByCommit[hash]) > 0 {
+	if len(m.shownScopes(hash)) > 0 {
 		return true
 	}
+	view := m.viewBranches()
 	for _, r := range m.noteCounts.Reviews {
-		if r.Commit == hash {
+		if r.Commit == hash && domain.ReviewShownOn(r.Branch, view) {
 			return true
 		}
 	}
 	return false
+}
+
+// viewBranches are the branches the reader is ON: the ones the commit list is
+// narrowed to (solo / a scope), else the checked-out branch. nil when neither
+// is known (a detached HEAD): nothing can be told apart then.
+func (m Model) viewBranches() []string {
+	if len(m.commitScopeBranches) > 0 {
+		return m.commitScopeBranches
+	}
+	if m.status.Branch != "" {
+		return []string{m.status.Branch}
+	}
+	return nil
+}
+
+// shownScopes are the range reviews commit hash shows on the viewed branch:
+// what was created on a branch is shown on that branch and no other — not on
+// the target it was merged into (domain.ReviewShownOn) — and a preview's
+// review never on a commit. Hidden, never deleted: on its own branch it is back.
+func (m Model) shownScopes(hash string) []domain.NoteScopeCount {
+	return m.noteCounts.ScopesShownOn(hash, m.viewBranches())
 }

@@ -6,7 +6,7 @@ import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { rev, startReview } from "./review.js";
-import { reviewMarkTitle } from "./reviews.js";
+import { reviewMarkTitle, reviewShownOn, viewBranches } from "./reviews.js";
 import { addCommitEntry } from "./sidebar.js";
 import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
@@ -75,12 +75,18 @@ function renderCommits() {
 // reviewedHashes is the set of commits with a stored AI review, rebuilt only
 // when the note counts bring a new list — rowHTML runs per visible row.
 let revSrc = null;
+let revView = "";
 let revSet = new Set();
+// A branch's review marks its commit on that branch only (reviewShownOn), so
+// the set is rebuilt when the viewed branch changes too.
 function reviewedHashes() {
   const rs = (state.noteCounts && state.noteCounts.reviews) || [];
-  if (rs !== revSrc) {
+  const view = viewBranches();
+  const key = view.join("\n");
+  if (rs !== revSrc || key !== revView) {
     revSrc = rs;
-    revSet = new Set(rs.map((r) => r.commit));
+    revView = key;
+    revSet = new Set(rs.filter((r) => reviewShownOn(r.branch, view)).map((r) => r.commit));
   }
   return revSet;
 }
@@ -91,7 +97,7 @@ function rowHTML(row, i, flat) {
   const fl = row.hash === state.flashHash ? " flash" : "";
   // ◉ marked for a batch action; ✎ holds a review — an AI review or a range
   // review (the TUI's marker).
-  const rvTitle = reviewMarkTitle(row.hash, reviewedHashes().has(row.hash), state.noteCounts && state.noteCounts.scopes_by_commit);
+  const rvTitle = reviewMarkTitle(row.hash, reviewedHashes().has(row.hash), state.noteCounts && state.noteCounts.scopes_by_commit, viewBranches());
   const mark =
     (state.cmarks.has(row.hash) ? "◉ " : "") +
     (rvTitle ? `<span class="rvmark" title="${esc(rvTitle)}">✎</span>` : "");

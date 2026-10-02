@@ -100,6 +100,11 @@ func (s *Server) handleNotesOverview(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, status, err)
 		return
 	}
+	// What was created on a branch is listed on that branch only: the page
+	// says which branch it is on (checked out, or the one its commit list is
+	// narrowed to). The names are only compared — they never reach git. None
+	// given (a detached HEAD) lists everything.
+	ov = ov.ShownOn(r.URL.Query()["on"])
 	out := notesOverviewWire{
 		Count:     ov.Count(),
 		Unstaged:  overviewFiles(ov.Unstaged, "unstaged"),

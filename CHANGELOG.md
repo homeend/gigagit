@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A review shows where it was made
+
+### Changed
+
+- **What was created on a branch shows on that branch only.** A range review
+  (notes written over a commit pair) and a branch's AI review were shown on
+  their commit from any branch — so after a merge they turned up in the
+  target's history, where they are noise. They now show only while the
+  reader is ON the branch they were created on: that branch checked out, or
+  the commit list narrowed to it (solo). On another branch — the one it was
+  merged into included — the commit has no ✎ and no Reviews / Range reviews
+  row, and View all notes leaves them out. Nothing is deleted. A range
+  review note records the branch it was written on (`preview_branch`, the
+  one checked out at the time); a range review older than that record, and a
+  commit's own AI review, have no branch and show anywhere, as does
+  everything on a detached HEAD. TUI and web (`domain.ReviewShownOn`,
+  `NoteCounts.ScopesShownOn`, `NotesOverview.ShownOn`, `ReviewsShownOn`;
+  the page sends its branch as `/api/notes/overview?on=`).
+- **A merge preview's review is the preview's.** Its notes are stored on the
+  source tip, but that commit no longer shows them in any form — no ✎, no
+  row: they are read in the preview (the Previews tab, a preview link) and
+  listed in View all notes, where one opens in its preview review. The
+  commit's Range reviews rows are for commit pairs only. A preview note now
+  records where its range began (`preview_base`), so its review still opens
+  from View all notes after the branch was merged into the target.
+- Skill v129; new e2e scenario `tui_review_other_branch` (the view from main
+  after the merge), `tui_range_review_marker` rewritten for the three kinds.
+
 ## Recycle a worktree: what is uncommitted
 
 ### Changed

@@ -1,19 +1,16 @@
-name = "tui: a commit holding a range review reads as reviewed (✎), in both forms"
+name = "tui: on its own branch — a range review marks its commit (✎) and lists a row; a preview's review never shows on a commit"
 
-# feature = "grow a" + "add c" on top of main's "add a b". Three kinds of
-# notes, each on a different commit:
+# feature = "grow a" + "add c" on top of main's "add a b", and feature is
+# checked out: what was created on a branch shows on that branch. Three kinds
+# of notes:
 #
-#   add c    a BRANCH review: two notes written in the merge preview
-#            feature → main. Both are stored on the source tip: one on a.txt
-#            — a file "add c" does not change — and one on c.txt, the file
-#            it adds.
-#   grow a   a RANGE review: a note written in the commit pair
-#            main..feature~1, stored on the pair's newer commit.
-#   add a b  a plain note on the commit's own change: no range.
-#
-# A range review is a review: its commit carries ✎ in Commits, the marker an
-# AI review has, and its notes are NOT counted again as ◆ N. The plain note is
-# the only ◆ on the list, and earns no ✎.
+#   grow a   a RANGE review: a note written over the commit pair
+#            main..feature~1, stored on the pair's newer commit. Written on
+#            feature, so it is feature's.
+#   add c    a PREVIEW's review: two notes written in the merge preview
+#            feature → main, stored on the source tip (a.txt and c.txt). They
+#            are the preview's — read in the preview, never on a commit.
+#   add a b  a plain note on the commit's own change.
 [input]
 steps = [
   { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
@@ -23,19 +20,18 @@ steps = [
   { commit = "grow a" },
   { write = "c.txt", content = "c\n" },
   { commit = "add c" },
-  { switch = "main" },
 ]
 
 [[run]]
-cmd = ["note", "add", "--preview", "main...feature", "--file", "a.txt", "--new-line", "2", "--summary", "why more a?"]
+cmd = ["note", "add", "--preview", "main...feature", "--file", "a.txt", "--new-line", "2", "--summary", "preview: why more a?"]
 exit = 0
 
 [[run]]
-cmd = ["note", "add", "--preview", "main...feature", "--file", "c.txt", "--new-line", "1", "--summary", "review: why c?"]
+cmd = ["note", "add", "--preview", "main...feature", "--file", "c.txt", "--new-line", "1", "--summary", "preview: why c?"]
 exit = 0
 
 [[run]]
-cmd = ["note", "add", "--preview", "main..feature~1", "--file", "a.txt", "--new-line", "2", "--summary", "pair: is this needed?"]
+cmd = ["note", "add", "--preview", "main..feature~1", "--file", "a.txt", "--new-line", "2", "--summary", "range: is this needed?"]
 exit = 0
 
 [[run]]
@@ -45,69 +41,71 @@ exit = 0
 [tui]
 size = "160x40"
 
-# Commits: ✎ on both range-review commits and no ◆ beside it; the plain note
-# is ◆ 1 with no ✎.
+# Commits: ✎ on the range review's commit and no ◆ beside it; NOTHING on the
+# tip, whose notes are the preview's; the plain note is ◆ 1 with no ✎.
 [[tui.step]]
 name = "commits"
 keys = ["right"]
-screen_contains = ["✎ feature add c", "✎ feature grow a", "add a b  ◆ 1"]
-screen_excludes = ["add c  ◆", "grow a  ◆", "✎ *main"]
+screen_contains = ["✎ feature  grow a", "*feature add c", "add a b  ◆ 1"]
+screen_excludes = ["✎ *feature add c", "add c  ◆", "grow a  ◆", "✎ main"]
 
-# The branch review, from its commit: one Range reviews row counting both
-# notes, not a loose a.txt row — and NO ◆ on c.txt: the note on it belongs to
-# the review, not to the commit's own view of the file.
+# The tip's own view: its file, and nothing of the preview's review — no row,
+# no a.txt, no ◆ on c.txt.
 [[tui.step]]
-name = "branch-review-row"
+name = "tip-shows-nothing-of-the-preview"
 keys = ["enter"]
-screen_contains = ["Range reviews", "feature → main  ◆ 2", "A  c.txt"]
-screen_excludes = ["a.txt", "c.txt  ◆"]
+screen_contains = ["A  c.txt"]
+screen_excludes = ["Range reviews", "feature → main", "a.txt", "c.txt  ◆"]
 
-# …nor is it drawn in the commit's own diff of c.txt.
+# The range review, from ITS commit: one Range reviews row naming the pair.
+# a.txt is a file of "grow a" too, but its row carries no ◆: the note is the
+# review's.
+[[tui.step]]
+keys = ["esc", "down"]
+
+[[tui.step]]
+name = "range-review-row"
+keys = ["enter"]
+screen_contains = ["Range reviews", "M  a.txt"]
+screen_excludes = ["feature → main", "a.txt  ◆"]
+
+# …and the commit's own diff of a.txt does not draw it.
 [[tui.step]]
 name = "commit-diff-without-review-notes"
 keys = ["down", "down", "enter"]
-screen_contains = ["c.txt"]
-screen_excludes = ["review: why c?"]
+screen_contains = ["more a"]
+screen_excludes = ["range: is this needed?"]
 
-# Opened from its row, the review shows every file with its notes, and the
-# note on its line.
+# Opened from its row, the review shows its file with the note on its line.
 [[tui.step]]
 keys = ["esc", "up"]
 
 [[tui.step]]
 name = "review-files"
 keys = ["enter"]
-screen_contains = ["Range review: feature → main", "a.txt  ◆ 1", "c.txt  ◆ 1"]
+screen_contains = ["Range review: ", "a.txt  ◆ 1"]
 
 [[tui.step]]
 name = "review-diff-with-its-note"
-keys = ["down", "enter"]
-screen_contains = ["review: why c?"]
-
-# The range review (a commit pair), from ITS commit: the row names the pair.
-# a.txt is a file of "grow a" too, but its row carries no ◆: the pair's note
-# is the review's.
-[[tui.step]]
-keys = ["esc", "esc", "esc", "down"]
-
-[[tui.step]]
-name = "pair-review-row"
 keys = ["enter"]
-screen_contains = ["Range reviews", "M  a.txt"]
-screen_excludes = ["feature → main", "a.txt  ◆"]
+screen_contains = ["range: is this needed?"]
+screen_excludes = ["preview: why more a?"]
 
-# View all notes lists every note where it is stored. A review's note opens in
-# its REVIEW: the range's diff of a.txt — a file its commit ("add c") does not
-# even change — with the review's note drawn under its line.
+# View all notes lists every note that is this branch's to see. The preview's
+# note opens in its PREVIEW review: the range's diff of a.txt — a file its
+# commit ("add c") does not even change — with the note under its line.
 [[tui.step]]
-keys = ["esc", "esc"]
+keys = ["esc", "esc", "esc"]
 
 [[tui.step]]
 name = "all-notes"
-keys = ["C-p", "all", "space", "notes", "enter", "more", "down", "down", "down"]
-screen_contains = ["why more a?"]
+keys = ["C-p", "all", "space", "notes", "enter"]
+screen_contains = ["preview: why more a?", "preview: why c?", "range: is this needed?", "b is terse"]
 
 [[tui.step]]
-name = "all-notes-opens-the-review"
+keys = ["esc", "C-p", "all", "space", "notes", "enter", "more", "down", "down", "down"]
+
+[[tui.step]]
+name = "all-notes-opens-the-preview-review"
 keys = ["enter"]
-screen_contains = ["Range review: feature → main", "more a", "why more a?"]
+screen_contains = ["Preview review: feature → main", "more a", "preview: why more a?"]

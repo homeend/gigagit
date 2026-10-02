@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v128 -->
+<!-- gg:using-gg:v129 -->
 
 # Using gg (gigagit)
 
@@ -670,9 +670,12 @@ finds the right one here.
   and `gg note add --preview P --file F (--new-line N | --hunk H) --summary …`
   anchors a note on it. A preview note is stored on the SOURCE TIP and
   remembers the preview (`--json` carries `"preview": "<target>...<source>"`,
-  or `"<a7>..<b7>"` for a pair); the TUI and the web page show it in the
-  review — a Range reviews row on the tip, ✎ in Commits — not on the commit's
-  own files. The old side (the merge base) is not addressable, so `--old-line`
+  or `"<a7>..<b7>"` for a pair). The TUI and the web page show a PREVIEW's
+  notes in that preview only, never on the commit; a PAIR's notes (a range
+  review) as a Range reviews row and ✎ on the pair's newer commit — and only
+  while the reader is on the branch the note was written on (the branch
+  checked out when `gg note add --preview <a>..<b>` ran), so write a range
+  review from the branch it reviews. The old side (the merge base) is not addressable, so `--old-line`
   is refused. `gg note list --preview P [--file F] [--json]` lists the notes
   written IN that preview or pair, on any commit of the branch — one written
   when an earlier commit was the tip, whose lines a later commit changed, is

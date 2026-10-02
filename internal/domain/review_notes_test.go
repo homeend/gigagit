@@ -275,6 +275,46 @@ func TestRenameBranchRenamesItsReviews(t *testing.T) {
 	}
 }
 
+// A range review's notes are shown on the branch they were written on: a
+// rename carries them to the new name (they would be hidden on both names
+// otherwise), and deleting the branch leaves them in the store.
+func TestRangeReviewNotesFollowABranchRename(t *testing.T) {
+	t.Parallel()
+	dir, svc, tip := reviewRepo(t)
+	ctx := context.Background()
+	st := svc.notesStore(ctx)
+	if err := st.Put(model.Note{ID: "rng1", Preview: "aaaaaaa..bbbbbbb", PreviewBranch: "feature",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: tip, Path: "f.txt"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "range", Created: time.Now(), ContextHash: "h"}); err != nil {
+		t.Fatal(err)
+	}
+	runGitIn(t, dir, "checkout", "main")
+	if _, err := svc.Execute(ctx, engine.RenameBranch{Old: "feature", New: "feat2"}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	c, err := svc.NoteCounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.ScopesShownOn(tip, []string{"feat2"}); len(got) != 1 {
+		t.Fatalf("on the renamed branch the review must show: %+v (all %+v)", got, c.ScopesByCommit[tip])
+	}
+	if got := c.ScopesShownOn(tip, []string{"main"}); len(got) != 0 {
+		t.Fatalf("on main it must not: %+v", got)
+	}
+	if _, err := svc.Execute(ctx, engine.DeleteBranch{Name: "feat2"}, nil, deleteAnyway); err != nil {
+		t.Fatal(err)
+	}
+	if all, _ := st.Load(); len(all) != 1 {
+		t.Fatalf("deleting the branch must leave its range notes in the store: %v", all)
+	}
+	// The branch is gone: its review is no other branch's to show.
+	svc.InvalidateNoteCounts()
+	if c, _ := svc.NoteCounts(ctx); len(c.ScopesShownOn(tip, []string{"main"})) != 0 {
+		t.Fatal("a deleted branch's range review must not surface on main")
+	}
+}
+
 func TestNotesOverviewListsReviewsUnderTheirCommit(t *testing.T) {
 	t.Parallel()
 	_, svc, tip := reviewRepo(t)

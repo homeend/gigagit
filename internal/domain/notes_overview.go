@@ -279,3 +279,48 @@ func sortNoteFiles(fs []NoteFileNotes) {
 		return ni < nj
 	})
 }
+
+// ShownOn keeps what the reader on the viewing branches is shown: every plain
+// note and every preview's note (it opens in its preview), a range review's
+// notes and an AI review only when they were created on one of those branches
+// (ReviewShownOn). A commit left with neither notes nor reviews is dropped;
+// the working tree and the shelves hold no reviews and pass through. The
+// receiver is not modified.
+func (o NotesOverview) ShownOn(viewing []string) NotesOverview {
+	out := o
+	out.Commits = nil
+	for _, c := range o.Commits {
+		kept := c
+		kept.Files, kept.Reviews = nil, nil
+		for _, f := range c.Files {
+			var ns []ResolvedNote
+			for _, r := range f.Notes {
+				if ReviewShownOn(NoteReviewBranch(r.Note), viewing) {
+					ns = append(ns, r)
+				}
+			}
+			if len(ns) > 0 {
+				f.Notes = ns
+				kept.Files = append(kept.Files, f)
+			}
+		}
+		kept.Reviews = ReviewsShownOn(c.Reviews, viewing)
+		if len(kept.Files) > 0 || len(kept.Reviews) > 0 {
+			out.Commits = append(out.Commits, kept)
+		}
+	}
+	return out
+}
+
+// ReviewsShownOn are the AI reviews the reader on the viewing branches is
+// shown: a review of a BRANCH on that branch only; a review with no branch (a
+// commit's own) anywhere.
+func ReviewsShownOn(rs []Review, viewing []string) []Review {
+	var out []Review
+	for _, r := range rs {
+		if ReviewShownOn(r.Branch, viewing) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
