@@ -37,6 +37,7 @@ console.log(JSON.stringify([
   rangeRows(rows, "old", 2, 4),
   rangeRows(rows, "new", 5, 7),
   rangeRows(rows, "new", 8, 9),
+  rangeRows(rows, "old", 3, 3),
   { old: [...bars.old], new: [...bars.new] },
 ]));
 `
@@ -78,6 +79,8 @@ func TestRangeMarkDecisions(t *testing.T) {
 		// lines 6 and 7 are not in the diff: a short block
 		`{"idx":[5],"block":["e"]},` +
 		`{"idx":[],"block":[]},` +
+		// a line only the old side has
+		`{"idx":[2],"block":["gone"]},` +
 		// one-line and file-level notes have no bar
 		`{"old":[1,2],"new":[3,4,5]}` +
 		`]`
@@ -120,6 +123,10 @@ func TestRangeGestureGuards(t *testing.T) {
 		{files, "if (rangeGesture(e)) return; // marking a range of lines leaves the staging selection alone", "the outside-click clear must skip the range gesture"},
 		{files, "  if (rangeGesture(e)) return;\n  const handle = e.target.closest(\".notetitle[data-collapse]\");", "the note-anchor click must skip the range gesture"},
 		{files, "if (!keepRange) clearDiffRange();", "a plain mark drops the range"},
+		{files, "$(\"diff-body\").addEventListener(\"dblclick\", (e) => {\n  if (rangeGesture(e)) return;", "a shift+double-click on a number must not stage"},
+		{files, "const rng = notesOn ? nc.range || null : null;", "the band is the open diff's: the history overlay renders through diffHTML too"},
+		{files, "for (const t of $(\"diff-body\").querySelectorAll(\"tr.rng-l, tr.rng-r\")) t.classList.remove(\"rng-l\", \"rng-r\");", "dropping the band must not repaint: callers hold rows"},
+		{files, "const unified = tr.dataset.lno === undefined;", "one text column: the range stays on the mark's side"},
 		{files, "`copy gg link to lines ${rg.first}-${rg.last}`", "the menu names the range"},
 		{keys, "if (e.key === \"Escape\" && clearDiffRange()) return;\n  if (e.key === \"Escape\" && clearRowSelection()) return;", "esc drops the range before the staging selection"},
 		{viewer, `case "Escape": if (!clearViewerRange()) closeViewer(`, "esc drops the viewer's range before closing"},

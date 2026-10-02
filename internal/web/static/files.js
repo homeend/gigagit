@@ -1768,7 +1768,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   // note that covers several. In the render for the reason above: the table
   // is rebuilt on every notes refresh. `only` names the one side a unified
   // layout's del/add row shows.
-  const rng = nc.range || null;
+  const rng = notesOn ? nc.range || null : null;
   const rngRows = rng ? new Set(rangeRows(rows, rng.side, rng.first, rng.last).idx.map((i) => rows[i])) : null;
   const bars = notesOn && notesArmed(nc.ctx) ? noteBars(nc.notes.filter(noteShown)) : null;
   const markCls = (r, only) => {
@@ -1929,6 +1929,7 @@ function renderDiff(d) {
   // resize, a notes refresh, the f toggle) keeps the folds the reader opened.
   // A new diff is also a new search: the query does not follow a file step.
   if (d !== state.lastDiff) {
+    state.diffRange = null; // the marked range was of the previous diff's lines
     state.diffFolds = new Set();
     state.diffImgOld = false; // a new image pair opens on its new side
     diffSearchBar.reset(); // no re-render: this render is the new file's
@@ -2750,8 +2751,7 @@ function markDiffRow(tr, side, no, keepRange = false) {
   // previous }/{ landing for nearestNote. stepNote re-claims the id right
   // after its own call.
   noteStepId = null;
-  // A plain mark is a new "here": the marked range goes (last — the repaint
-  // replaces the rows, and the mark above is repainted from the state).
+  // A plain mark is a new "here": the marked range goes.
   if (!keepRange) clearDiffRange();
 }
 
@@ -2790,14 +2790,17 @@ function setDiffRange(tr, range) {
 }
 
 
-// clearDiffRange drops the marked range; false when there was none (esc then
-// falls through to what it did before).
+// clearDiffRange drops the marked range; false when no band was on screen
+// (esc then falls through to what it did before). The classes are taken off
+// IN PLACE — no repaint: markDiffRow's callers hold the row they marked (a
+// staging click, a landing's scroll, a note step's flash), and a repaint
+// would hand them a detached one. Lines the band had unfolded stay unfolded.
 function clearDiffRange() {
-  let had = !!state.diffRange;
+  const rows = $("diff-body").querySelectorAll("tr.rng-l, tr.rng-r");
+  for (const t of $("diff-body").querySelectorAll("tr.rng-l, tr.rng-r")) t.classList.remove("rng-l", "rng-r");
   state.diffRange = null;
-  if (state.stack) for (const o of state.stack.slots) { had = had || !!o.range; o.range = null; }
-  if (had) rerenderDiffKeepingPlace(true);
-  return had;
+  if (state.stack) for (const o of state.stack.slots) o.range = null;
+  return rows.length > 0;
 }
 
 
@@ -3114,12 +3117,21 @@ $("diff-body").addEventListener("click", (e) => {
   const d = tr && rowDiff(tr);
   const r = d && d.rows ? d.rows[Number(tr.dataset.i)] : null;
   if (!r || !diffLinkCtx(tr)) return;
-  const side = td.classList.contains("l") ? "old" : "new";
-  const no = side === "old" ? r.left_no : r.right_no;
-  if (!no) return;
-  getSelection().removeAllRanges();
   const sec = state.stack ? tr.closest(".stk-file") : null;
   const mark = sec ? (state.stack.slots[Number(sec.dataset.k)] || {}).row : state.diffRow;
+  // The side is the clicked number's — except where that says nothing: in the
+  // one-text-column layouts a context row shows BOTH numbers for one line (a
+  // plain click there marks the new side), and a changed row has an empty
+  // cell for the side it lacks. There the range stays on the mark's side when
+  // the row has a line on it, else on the row's own.
+  const unified = tr.dataset.lno === undefined;
+  const numOn = (sd) => (sd === "old" ? r.left_no : r.right_no);
+  let side = td.classList.contains("l") ? "old" : "new";
+  if (unified && mark && mark.side !== side && numOn(mark.side) && (tr.classList.contains("same") || !numOn(side))) side = mark.side;
+  if (!numOn(side)) side = side === "old" ? "new" : "old";
+  const no = numOn(side);
+  if (!no) return;
+  getSelection().removeAllRanges();
   const range = extendRange(mark, { side, no });
   // Nothing to extend: the clicked line becomes the mark (and no range).
   if (range.first === range.last && tr.dataset.no) return markDiffRow(tr, side, no);
@@ -3206,8 +3218,15 @@ $("diff-body").addEventListener("contextmenu", (e) => {
       // Inside the marked range the row offers the RANGE's link — when the
       // diff holds every one of its lines (the block is what an uncommitted
       // range is fingerprinted over).
+      // (In a one-text-column layout a context row answers "new" for either
+      // side's band: the band's own side decides. A merge preview's old side
+      // names nothing, so it has no range link either.)
       const rg = rowRange(row);
-      if (rg && rg.side === side && no >= rg.first && no <= rg.last) {
+      const rrow = rg ? ((rowDiff(row) || {}).rows || [])[Number(row.dataset.i)] : null;
+      const rno = rrow ? (rg.side === "old" ? rrow.left_no : rrow.right_no) : 0;
+      const baseOnly = !!rg && rg.side === "old" && !!rowCtx.preview && !rowCtx.preview.pair;
+      if (rg && !baseOnly && rno >= rg.first && rno <= rg.last && (rg.side === side || row.dataset.lno === undefined)) {
+        side = rg.side;
         const blk = rangeRows((rowDiff(row) || {}).rows, side, rg.first, rg.last).block;
         const rlink = blk.length === rg.last - rg.first + 1 ? linkFor(state.repo, state.worktree, rowCtx, side, rg.first, blk[0], rg.last, blk) : "";
         if (rlink) [link, linkLabel] = [rlink, `copy gg link to lines ${rg.first}-${rg.last}`];
@@ -4095,6 +4114,7 @@ function actOnRow(tr) {
 
 
 $("diff-body").addEventListener("dblclick", (e) => {
+  if (rangeGesture(e)) return;
   const tr = e.target.closest("tr[data-hunk][data-hr]");
   if (!tr) return;
   getSelection().removeAllRanges(); // a double-click also selects a word: not wanted here

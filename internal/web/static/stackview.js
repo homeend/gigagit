@@ -627,7 +627,8 @@ async function landStackLine(path, side, line, end = 0) {
   markDiffRow(tr, side, line);
   if (end > line) {
     const held = setDiffRange(tr, { side, first: line, last: end });
-    const again = sectionEl(k) && sectionEl(k).querySelector(`tr[data-side="${side}"][data-no="${line}"], tr[data-lno="${line}"]`);
+    const sec2 = sectionEl(k);
+    const again = sec2 && (sec2.querySelector(`tr[data-side="${side}"][data-no="${line}"]`) || (side === "old" ? sec2.querySelector(`tr[data-lno="${line}"]`) : null));
     (again || tr).scrollIntoView({ block: "center" });
     return { held };
   }
