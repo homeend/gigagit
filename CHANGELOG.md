@@ -13,7 +13,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **CLI:** `gg template show` / `render` / `edit` / `rm` exit **1** when a
   store file cannot be read (it was 2); 2 stays for an unknown or ambiguous id.
 - **TUI:** the delete question is answered by `y` (delete) or `n` / `esc`
-  (keep) only; any other key used to cancel it.
+  (keep) only; any other key used to cancel it. Its hint names esc.
+- **Web:** rendering or copying a template whose store file cannot be read
+  answers with the reason (HTTP 500); it said "unknown text template".
 - **Web:** switching only the scope in the add form is not unsaved text —
   leaving it asks nothing.
 
@@ -29,10 +31,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   follows the cancel button and a click outside), and goes away once the text
   is edited again.
 
+- **TUI:** when `y` copied the text but its `<seq>` counters could not be
+  written, the status line says so (the web view already did); it was silent.
+- `gg template show <unknown> --global` (and `render` / `edit` / `rm`) says
+  the id is unknown (exit 2) when only the **repo** store is damaged — a
+  search reports a damaged scope only when it covers that scope.
+- **Web:** a save that is answered after you left its form (and maybe opened
+  another) no longer closes the form now open or puts its error there: a late
+  success only refreshes the list, a late failure is reported on the status
+  line.
+
 ### Internal
 
 - The web overlay's decisions (form guard, notice line, delete-confirm keys,
-  the row a reload selects) are pure functions in `texttemplates.js`, tested
+  the row a reload selects, where a save's answer lands) are pure functions in `texttemplates.js`, tested
   under node by `internal/web/texttemplatesjs_test.go`.
 
 ## Text templates: follow-up fixes

@@ -258,3 +258,29 @@ func TestTemplateDamagedStoreExitsOne(t *testing.T) {
 		}
 	}
 }
+
+// --global looks in the global store only: a damaged repo store is not its
+// business, so an unknown id is still the caller's mistake.
+func TestTemplateGlobalIgnoresDamagedRepoStore(t *testing.T) {
+	dir := prefixRepo(t)
+	if code, _, errb := runCLIStdin(t, dir, "text\n", "template", "add", "--repo", "--title", "Mine", "-F", "-"); code != 0 {
+		t.Fatalf("add exit %d: %s", code, errb)
+	}
+	var damaged int
+	_ = filepath.WalkDir(os.Getenv("XDG_STATE_HOME"), func(p string, d os.DirEntry, _ error) error {
+		if d != nil && d.Name() == "texttemplates.toml" {
+			damaged++
+			_ = os.WriteFile(p, []byte("[[templates]\n"), 0o644)
+		}
+		return nil
+	})
+	if damaged != 1 {
+		t.Fatalf("store files damaged = %d", damaged)
+	}
+	if code, _, errb := runCLI(t, dir, "template", "show", "nope", "--global"); code != 2 || strings.Contains(errb, "damaged") {
+		t.Fatalf("--global: exit %d err %q; want 2, unknown id", code, errb)
+	}
+	if code, _, errb := runCLI(t, dir, "template", "show", "nope"); code != 1 || !strings.Contains(errb, "damaged") {
+		t.Fatalf("any scope: exit %d err %q; want 1 and the damage", code, errb)
+	}
+}

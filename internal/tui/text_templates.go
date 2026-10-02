@@ -316,7 +316,7 @@ func (v *textTemplatesView) box(m Model) string {
 		g := v.geometry(m)
 		return popupBox(g.inner, strings.Join([]string{
 			i18n.T("Delete text template %s?", v.selTitle()), "",
-			i18n.T("[y] delete  [n] keep"),
+			i18n.T("[y] delete  [n/esc] keep"),
 		}, "\n"))
 	}
 	return v.browseBox(m)
@@ -406,17 +406,23 @@ func (v *textTemplatesView) updateRendered(m Model, msg tea.KeyMsg) (Model, tea.
 		copyCmd := m.copyToClipboardCmd(i18n.T("copied the rendered text"), v.rendered)
 		return m, func() tea.Msg {
 			res, _ := copyCmd().(clipboardCopiedMsg)
+			out := textTemplateCopiedMsg{clipboardCopiedMsg: res}
 			if res.err == nil && svc != nil && len(names) > 0 {
-				_ = svc.TakeTextTemplateSeqs(context.Background(), names)
+				out.seqErr = svc.TakeTextTemplateSeqs(context.Background(), names)
 			}
-			return textTemplateCopiedMsg{res}
+			return out
 		}
 	}
 	return m, nil
 }
 
 // textTemplateCopiedMsg is the outcome of y's copy of the rendered text.
-type textTemplateCopiedMsg struct{ clipboardCopiedMsg }
+// seqErr: the text was copied but its <seq:…> counters could not be consumed
+// (the next render hands out the same numbers).
+type textTemplateCopiedMsg struct {
+	clipboardCopiedMsg
+	seqErr error
+}
 
 // selTitle is the selected template's title ("" with nothing selected).
 func (v *textTemplatesView) selTitle() string {

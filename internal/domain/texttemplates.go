@@ -295,13 +295,28 @@ func (s *Service) TakeTextTemplateSeqs(ctx context.Context, names []string) erro
 // the argument names. Several distinct ids are an ambiguity.
 func (s *Service) FindTextTemplate(ctx context.Context, idPrefix string, scope *model.ProfileScope) (model.TextTemplate, error) {
 	// A scope that cannot be read does not hide the other one; it is the
-	// answer only when the id was not found in what could be read.
-	all, listErr := s.TextTemplates(ctx)
-	var exact, pre []model.TextTemplate
-	for _, t := range all {
-		if scope != nil && t.Scope != *scope {
+	// answer only when the id was not found in what could be read — and only
+	// a scope the search covers counts.
+	global, repo := s.textTemplateStores(ctx)
+	var all []model.TextTemplate
+	var errs []error
+	for _, in := range []struct {
+		st    texttmpl.Store
+		scope model.ProfileScope
+	}{{global, model.ProfileScopeGlobal}, {repo, model.ProfileScopeRepo}} {
+		if in.st == nil || (scope != nil && in.scope != *scope) {
 			continue
 		}
+		ts, err := in.st.List()
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		all = append(all, ts...)
+	}
+	listErr := errors.Join(errs...)
+	var exact, pre []model.TextTemplate
+	for _, t := range all {
 		if t.ID == idPrefix {
 			exact = append(exact, t)
 		} else if idPrefix != "" && strings.HasPrefix(t.ID, idPrefix) {

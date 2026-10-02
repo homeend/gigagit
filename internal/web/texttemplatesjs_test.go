@@ -13,7 +13,7 @@ import (
 // add/edit form may be left, what its notice line says, which keys answer the
 // delete question, and which row a reload lands on.
 const textTemplatesHarness = `
-import { ttFormContent, ttLeaveForm, ttFormNotice, ttConfirmKey, ttSelectIndex } from "./tt.mjs";
+import { ttFormContent, ttLeaveForm, ttFormNotice, ttConfirmKey, ttSelectIndex, ttSaveLanding } from "./tt.mjs";
 const seed = ttFormContent("Title", "text");
 const edited = ttFormContent("Title", "text more");
 const rows = [{ id: "z", scope: "global" }, { id: "a", scope: "global" }, { id: "b", scope: "global" }, { id: "a", scope: "repo" }];
@@ -33,6 +33,7 @@ console.log(JSON.stringify({
   selGone: ttSelectIndex(rows, "zz", "repo", 2),
   selClamped: ttSelectIndex(rows.slice(0, 2), "", "", 5),
   selEmpty: ttSelectIndex([], "", "", 3),
+  landings: [[true, false], [true, true], [false, false], [false, true]].map(([open, failed]) => ttSaveLanding(open, failed)),
 }));
 `
 
@@ -42,7 +43,7 @@ func TestTextTemplatesOverlayDecisions(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed; the JS guard needs it")
 	}
-	names := []string{"ttFormContent", "ttLeaveForm", "ttFormNotice", "ttConfirmKey", "ttSelectIndex"}
+	names := []string{"ttFormContent", "ttLeaveForm", "ttFormNotice", "ttConfirmKey", "ttSelectIndex", "ttSaveLanding"}
 	var mod strings.Builder
 	for _, n := range names {
 		mod.WriteString(jsFunc(t, "texttemplates.js", n) + "\n")
@@ -62,7 +63,7 @@ func TestTextTemplatesOverlayDecisions(t *testing.T) {
 	var got struct {
 		Untouched, First, Again, EditedAfterNotice, TitleCounts string
 		NoticeBoth, NoticeErr, NoticeOnly, NoticeNone           string
-		Keys                                                    []string
+		Keys, Landings                                          []string
 		SelRepo, SelGlobal, SelGone, SelClamped, SelEmpty       *int
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &got); err != nil {
@@ -84,6 +85,12 @@ func TestTextTemplatesOverlayDecisions(t *testing.T) {
 	// handling backs out of every step before them.
 	if want := "delete,cancel,,,,,,"; strings.Join(got.Keys, ",") != want {
 		t.Errorf("confirm keys = %q, want %q", strings.Join(got.Keys, ","), want)
+	}
+	// A save answers the form that sent it. Once that form is gone — the
+	// user left and may be writing another — a success only refreshes the
+	// list and a failure is reported outside the form.
+	if want := "select,form-error,refresh,report"; strings.Join(got.Landings, ",") != want {
+		t.Errorf("save landings = %q, want %q", strings.Join(got.Landings, ","), want)
 	}
 	// The same id may live in both scopes: the scope picks the row.
 	for name, c := range map[string]struct {

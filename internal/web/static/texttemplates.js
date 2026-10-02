@@ -85,6 +85,18 @@ function ttSelectIndex(list, id, scope, prev) {
   return at >= 0 ? at : Math.min(prev, Math.max(list.length - 1, 0));
 }
 
+// ttSaveLanding is where a save's answer goes. The form that sent it may be
+// gone by then (the user left, and may be writing another template): its
+// answer must not close or mark whatever is open now.
+//   "select"     — the form is still open, saved: reload and select the row
+//   "form-error" — the form is still open, refused: say so in the form
+//   "refresh"    — the form is gone, saved: refetch the list, keep the step
+//   "report"     — the form is gone, refused: say so on the op line
+function ttSaveLanding(formOpen, failed) {
+  if (formOpen) return failed ? "form-error" : "select";
+  return failed ? "report" : "refresh";
+}
+
 // formContent is what the open form holds (ttFormContent).
 function formContent() {
   return ttFormContent($("tt-title").value, $("tt-body").value);
@@ -285,11 +297,34 @@ function saveForm() {
     showErr("the text is empty");
     return;
   }
-  const t = mode.t;
+  const form = mode;
+  const t = form.t;
   const req = t
     ? postJSON("/api/text-templates/update", { id: t.id, scope: t.scope, title, body })
     : postJSON("/api/text-templates", { title, body, scope: $("tt-scope").dataset.scope });
-  req.then((row) => reload(row.id, row.scope)).catch((err) => showErr("not saved: " + err.message));
+  req.then(
+    (row) => {
+      if (ttSaveLanding(mode === form, false) === "select") reload(row.id, row.scope);
+      else refreshList();
+    },
+    (err) => {
+      if (ttSaveLanding(mode === form, true) === "form-error") showErr("not saved: " + err.message);
+      else opLine("text template " + title + " not saved: " + err.message, true);
+    },
+  );
+}
+
+// refreshList refetches the list after a save whose form is gone. The step
+// on screen stays; only the list itself is redrawn.
+async function refreshList() {
+  try {
+    data = await getJSON("/api/text-templates");
+  } catch (e) {
+    return; // the next open reads it again
+  }
+  if (mode) return;
+  sel = ttSelectIndex(rows(), "", "", sel);
+  render();
 }
 
 function removeTemplate(t) {

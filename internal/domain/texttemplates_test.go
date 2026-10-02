@@ -236,3 +236,27 @@ func TestTakeTextTemplateSeqsAdvancesEachOnce(t *testing.T) {
 		t.Fatalf("no counters: %v", err)
 	}
 }
+
+// A damaged scope is the answer only for a search that covers it: asked for
+// the other scope alone, an unknown id is simply unknown.
+func TestFindTextTemplateDamagedScopeOnlyWhenSearched(t *testing.T) {
+	t.Parallel()
+	_, svc := newRealRepo(t)
+	repoDir := t.TempDir()
+	svc.SetTextTemplateStores(
+		texttmpl.NewFileStore(t.TempDir(), model.ProfileScopeGlobal),
+		texttmpl.NewFileStore(repoDir, model.ProfileScopeRepo))
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(repoDir, "texttemplates.toml"), []byte("[[templates]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global, repo := model.ProfileScopeGlobal, model.ProfileScopeRepo
+	if _, err := svc.FindTextTemplate(ctx, "nope", &global); !IsTextTemplateNotFound(err) {
+		t.Fatalf("global only: %v; want not found", err)
+	}
+	for name, scope := range map[string]*model.ProfileScope{"repo": &repo, "any": nil} {
+		if _, err := svc.FindTextTemplate(ctx, "nope", scope); err == nil || IsTextTemplateNotFound(err) || !strings.Contains(err.Error(), "damaged") {
+			t.Fatalf("%s: %v; want the damage", name, err)
+		}
+	}
+}

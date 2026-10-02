@@ -142,6 +142,23 @@ func (s *Server) handleTextTemplateRemove(w http.ResponseWriter, r *http.Request
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
+// storedTextTemplate reads the template (id, scope) names in a fresh read.
+// The id must be exact — a prefix is a CLI convenience, not a wire value —
+// so an unknown or ambiguous one is 404; a scope whose store cannot be read
+// is 500 with the reason, never "unknown".
+func (s *Server) storedTextTemplate(w http.ResponseWriter, r *http.Request, id string, scope model.ProfileScope) (model.TextTemplate, bool) {
+	t, err := s.service().FindTextTemplate(r.Context(), id, &scope)
+	switch {
+	case err == nil && t.ID == id:
+		return t, true
+	case err == nil || domain.IsTextTemplateNotFound(err) || domain.IsTextTemplateAmbiguous(err):
+		writeErr(w, http.StatusNotFound, errors.New("unknown text template"))
+	default:
+		writeErr(w, http.StatusInternalServerError, err)
+	}
+	return model.TextTemplate{}, false
+}
+
 // handleTextTemplateRender previews a stored template: tokens resolve against
 // the live repo, seq counters are PEEKED (the page consumes them through
 // /take once the text is copied), and the wire never carries a raw template
@@ -152,9 +169,8 @@ func (s *Server) handleTextTemplateRender(w http.ResponseWriter, r *http.Request
 		return
 	}
 	svc := s.service()
-	t, err := svc.FindTextTemplate(r.Context(), req.ID, &scope)
-	if err != nil || t.ID != req.ID { // an id prefix is a CLI convenience, not a wire value
-		writeErr(w, http.StatusNotFound, errors.New("unknown text template"))
+	t, ok := s.storedTextTemplate(w, r, req.ID, scope)
+	if !ok {
 		return
 	}
 	labels, _ := domain.TextTemplateTokens(t.Body)
@@ -185,9 +201,8 @@ func (s *Server) handleTextTemplateTake(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	svc := s.service()
-	t, err := svc.FindTextTemplate(r.Context(), req.ID, &scope)
-	if err != nil || t.ID != req.ID {
-		writeErr(w, http.StatusNotFound, errors.New("unknown text template"))
+	t, ok := s.storedTextTemplate(w, r, req.ID, scope)
+	if !ok {
 		return
 	}
 	// One write: the text's counters advance together or not at all.

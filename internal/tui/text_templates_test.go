@@ -961,3 +961,42 @@ func TestTextTemplatesFillKeepsPositionWithLongTitle(t *testing.T) {
 		t.Fatalf("short title: tipFull %q\n%s", v.tipFull, box)
 	}
 }
+
+// The text is copied but its counters could not be written: the window still
+// closes (the text is taken) and the status says the numbers did not advance.
+func TestTextTemplatesYReportsCountersNotAdvanced(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.clipWrite = func(io.Writer, string) (string, error) { return "", nil }
+	cd, err := m.svc.GitCommonDir(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := filepath.Join(strings.TrimSpace(cd), "gg", "state.toml")
+	if err := os.MkdirAll(filepath.Dir(state), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(state, []byte("[[seq\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	v := &textTemplatesView{mode: ttRendered, rendered: "final text", seqNames: []string{"ybad"}, items: []model.TextTemplate{{ID: "a", Title: "A"}}}
+	m = m.pushLayer(v)
+	out, cmd := v.update(m, keyMsg("y"))
+	res, _ := out.Update(cmd())
+	mm := res.(Model)
+	if layerOf[*textTemplatesView](mm) != nil || !strings.Contains(mm.statusMsg, "counters did not advance") {
+		t.Fatalf("window open %v, status %q", layerOf[*textTemplatesView](mm) != nil, mm.statusMsg)
+	}
+}
+
+// The delete question names every key that answers it.
+func TestTextTemplatesDeleteConfirmHintNamesEsc(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}
+	v := &textTemplatesView{items: ttItems(2), mode: ttConfirmDelete}
+	box := plain(v.box(m))
+	if !strings.Contains(box, "[y] delete  [n/esc] keep") {
+		t.Fatalf("confirm hint:\n%s", box)
+	}
+	ttBoxFits(t, "confirm", box, 100, 40, "[y] delete")
+}
