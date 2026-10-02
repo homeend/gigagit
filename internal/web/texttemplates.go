@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -34,9 +35,10 @@ func textTemplateRowOf(t model.TextTemplate) textTemplateRow {
 }
 
 // handleTextTemplates lists the text templates, global rows then repo rows.
+// A scope that cannot be read rides along as "error" beside the other's rows.
 func (s *Server) handleTextTemplates(w http.ResponseWriter, r *http.Request) {
 	ts, err := s.service().TextTemplates(readCtx(r))
-	if err != nil {
+	if err != nil && len(ts) == 0 {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -44,7 +46,12 @@ func (s *Server) handleTextTemplates(w http.ResponseWriter, r *http.Request) {
 	for _, t := range ts {
 		rows = append(rows, textTemplateRowOf(t))
 	}
-	writeJSON(w, map[string]any{"templates": rows})
+	out := map[string]any{"templates": rows}
+	if err != nil {
+		// One scope's file is damaged: the other's rows, and the reason.
+		out["error"] = err.Error()
+	}
+	writeJSON(w, out)
 }
 
 // textTemplateReq is the body every text-template write shares.
@@ -72,13 +79,14 @@ func decodeTextTemplateReq(w http.ResponseWriter, r *http.Request) (textTemplate
 }
 
 // writeTextTemplateErr maps a store error: an unknown id is 404, a title
-// already taken in the scope 409.
+// whose id is already taken in the scope 409.
 func writeTextTemplateErr(w http.ResponseWriter, err error) {
 	switch {
 	case domain.IsTextTemplateNotFound(err):
 		writeErr(w, http.StatusNotFound, errors.New("unknown text template"))
 	case domain.IsTextTemplateDuplicate(err):
-		writeErr(w, http.StatusConflict, errors.New("a text template with this title already exists in that scope"))
+		// The store's text names the id and the title that holds it.
+		writeErr(w, http.StatusConflict, errors.New(strings.TrimPrefix(err.Error(), "text template: ")))
 	default:
 		writeErr(w, http.StatusInternalServerError, err)
 	}

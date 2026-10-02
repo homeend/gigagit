@@ -87,3 +87,18 @@ func TestTextTokens(t *testing.T) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
+
+// <branch> takes no argument and <user:> needs a label: both are refused
+// whatever the context holds, so validation (a dry resolve) catches them.
+func TestResolveTextRefusesBranchArgAndEmptyUserLabel(t *testing.T) {
+	ctx := textCtx()
+	for _, tmpl := range []string{"on <branch:short>", "on <branch:>", "hi <user:>"} {
+		if out, err := ResolveText(tmpl, map[string]string{"": "x"}, ctx); err == nil {
+			t.Errorf("%q resolved to %q, want an error", tmpl, out)
+		}
+	}
+	ctx.Branch = ""
+	if _, err := ResolveText("on <branch:short>", nil, ctx); err == nil {
+		t.Error("<branch:short> on a detached HEAD: no error")
+	}
+}

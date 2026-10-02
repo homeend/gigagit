@@ -1,6 +1,7 @@
 package texttmpl
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,19 +32,30 @@ type index struct {
 
 func (fs *FileStore) path() string { return filepath.Join(fs.root, "texttemplates.toml") }
 
-func (fs *FileStore) read() index {
+// read loads the registry. A missing file is an empty registry; a file that
+// cannot be read or parsed is an ERROR — it holds texts the user wrote, so no
+// caller may take it for empty and write over it.
+func (fs *FileStore) read() (index, error) {
 	var idx index
 	data, err := os.ReadFile(fs.path())
+	if os.IsNotExist(err) {
+		return idx, nil
+	}
 	if err != nil {
-		return idx
+		return index{}, err
 	}
 	if err := toml.Unmarshal(data, &idx); err != nil {
-		return index{}
+		return index{}, fmt.Errorf("text template: %s is damaged and was left untouched: %w", fs.path(), err)
 	}
 	for i := range idx.Templates {
 		idx.Templates[i].Scope = fs.scope // Scope is toml:"-"; set from the store
 	}
-	return idx
+	return idx, nil
+}
+
+// duplicate is ErrDuplicate naming the id and the template that holds it.
+func duplicate(have model.TextTemplate) error {
+	return fmt.Errorf("%w: %q (the id of %q)", ErrDuplicate, have.ID, have.Title)
 }
 
 // write persists idx via temp-file + rename (the prefix-store pattern).
@@ -93,10 +105,13 @@ func (fs *FileStore) Add(t model.TextTemplate) (model.TextTemplate, error) {
 	if t.Created.IsZero() {
 		t.Created = time.Now()
 	}
-	idx := fs.read()
+	idx, err := fs.read()
+	if err != nil {
+		return model.TextTemplate{}, err
+	}
 	for _, have := range idx.Templates {
 		if have.ID == t.ID {
-			return model.TextTemplate{}, ErrDuplicate
+			return model.TextTemplate{}, duplicate(have)
 		}
 	}
 	idx.Templates = append(idx.Templates, t)
@@ -104,7 +119,11 @@ func (fs *FileStore) Add(t model.TextTemplate) (model.TextTemplate, error) {
 }
 
 func (fs *FileStore) Get(id string) (model.TextTemplate, error) {
-	for _, t := range fs.read().Templates {
+	idx, err := fs.read()
+	if err != nil {
+		return model.TextTemplate{}, err
+	}
+	for _, t := range idx.Templates {
 		if t.ID == id {
 			return t, nil
 		}
@@ -114,7 +133,11 @@ func (fs *FileStore) Get(id string) (model.TextTemplate, error) {
 
 // List returns the rows alphabetically by title (case-insensitive).
 func (fs *FileStore) List() ([]model.TextTemplate, error) {
-	ts := fs.read().Templates
+	idx, err := fs.read()
+	if err != nil {
+		return nil, err
+	}
+	ts := idx.Templates
 	sort.SliceStable(ts, func(a, b int) bool {
 		return strings.ToLower(ts[a].Title) < strings.ToLower(ts[b].Title)
 	})
@@ -126,13 +149,16 @@ func (fs *FileStore) Update(id string, t model.TextTemplate) (model.TextTemplate
 	if newID == "" {
 		return model.TextTemplate{}, ErrNoID
 	}
-	idx := fs.read()
+	idx, err := fs.read()
+	if err != nil {
+		return model.TextTemplate{}, err
+	}
 	at := -1
 	for i, have := range idx.Templates {
 		if have.ID == id {
 			at = i
 		} else if have.ID == newID {
-			return model.TextTemplate{}, ErrDuplicate
+			return model.TextTemplate{}, duplicate(have)
 		}
 	}
 	if at < 0 {
@@ -144,7 +170,10 @@ func (fs *FileStore) Update(id string, t model.TextTemplate) (model.TextTemplate
 }
 
 func (fs *FileStore) Remove(id string) error {
-	idx := fs.read()
+	idx, err := fs.read()
+	if err != nil {
+		return err
+	}
 	kept := idx.Templates[:0]
 	found := false
 	for _, t := range idx.Templates {

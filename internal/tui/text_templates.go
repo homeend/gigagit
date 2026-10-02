@@ -48,9 +48,20 @@ type textTemplatesView struct {
 	field   int    // 0 = title, 1 = scope
 	formErr string // inline validation error; "" = none
 	editID  string // the template being edited; "" = adding
+	// handingOff: enter was pressed and the text is on its way to the editor
+	// (the temp file is being written). Keys are swallowed until the editor
+	// returns or the handoff fails, so a second enter queues no second editor.
+	handingOff bool
 	// draft is text the editor returned that could not be saved (a malformed
 	// token): the next editor run starts from it, not from the stored text.
 	draft string
+
+	// tipFull is the selected title when the list had to cut it: render shows
+	// it whole on the bottom bar. Set by browseBox. The bottom bar is also the
+	// status row, so tipHold keeps the title off it from an outcome this
+	// window reported until the next key.
+	tipFull string
+	tipHold bool
 }
 
 type ttMode int
@@ -63,13 +74,14 @@ const (
 	ttConfirmDelete
 )
 
-// textTemplatesDataMsg is a (re)loaded template list. selectID names the row
-// to land on after a save; status is the status line to show.
+// textTemplatesDataMsg is a (re)loaded template list. selectID and
+// selectScope name the row to land on after a save; status is the status line to show.
 type textTemplatesDataMsg struct {
-	items    []model.TextTemplate
-	err      error
-	selectID string
-	status   string
+	items       []model.TextTemplate
+	err         error
+	selectID    string
+	selectScope model.ProfileScope // the scope selectID lives in
+	status      string
 }
 
 func (m Model) openTextTemplates() (Model, tea.Cmd) {
@@ -88,12 +100,14 @@ func (m Model) loadTextTemplatesCmd(selectID, status string) tea.Cmd {
 // onData lands a loaded list in the view.
 func (v *textTemplatesView) onData(msg textTemplatesDataMsg) {
 	v.loading = false
-	if msg.err != nil {
-		return
+	v.tipHold = msg.err != nil || msg.status != ""
+	if msg.err != nil && len(msg.items) == 0 {
+		return // nothing could be read: keep what is shown
 	}
+	// With an error AND rows, one scope's file is damaged: show the other.
 	v.items = msg.items
 	for i, t := range v.items {
-		if msg.selectID != "" && t.ID == msg.selectID {
+		if msg.selectID != "" && t.ID == msg.selectID && t.Scope == msg.selectScope {
 			v.sel = i
 		}
 	}
@@ -111,6 +125,9 @@ func (v *textTemplatesView) selected() (model.TextTemplate, bool) {
 func (v *textTemplatesView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
+	}
+	if v.handingOff {
+		return m, nil
 	}
 	if v.rendering {
 		if msg.Type == tea.KeyEsc {
@@ -135,6 +152,7 @@ func (v *textTemplatesView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (v *textTemplatesView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	v.tipHold = false
 	switch msg.Type {
 	case tea.KeyEsc:
 		return m.popLayer(), nil
@@ -276,10 +294,17 @@ func ttTextPane(text string, textW, h int, scroll *int) (rows []string, rule str
 
 func (v *textTemplatesView) render(m Model, below string) string {
 	w, h := m.overlayDims()
-	return overlayCenter(clipToHeight(below, h), v.box(m), w, h)
+	out := overlayCenter(clipToHeight(below, h), v.box(m), w, h)
+	if v.tipFull != "" && !v.tipHold {
+		// The selected title was cut: it takes the bottom bar, which the
+		// window never covers, in the terminal's own colours.
+		out = overlayAt(out, padRight(truncate(" "+v.tipFull, w), w), 0, h-1, w, h)
+	}
+	return out
 }
 
 func (v *textTemplatesView) box(m Model) string {
+	v.tipFull = ""
 	switch v.mode {
 	case ttFill:
 		return v.fillBox(m)
@@ -399,21 +424,46 @@ func (v *textTemplatesView) selTitle() string {
 	return t.Title
 }
 
+// ttHints lays a step's key hints out for the window's text width.
+func ttHints(hints string, textW int) []string {
+	return wrapParts(strings.Split(hints, "  "), textW, "  ")
+}
+
+// ttRoom is how many content rows a step has on this terminal, given the
+// rows its own chrome takes (title, rules, blank lines, hints).
+func ttRoom(m Model, chrome int) int {
+	_, termH := m.overlayDims()
+	return termH - chrome - st().modalStyle.GetVerticalFrameSize() - 2
+}
+
 func (v *textTemplatesView) fillBox(m Model) string {
 	g := v.geometry(m)
+	hints := ttHints(i18n.T("[enter/tab] next  [esc] back"), g.textW)
+	fields := v.fill.view(g.textW)
+	// title + blank, blank + hints. More fields than rows: the shown ones
+	// follow the focused field (the title carries its number).
+	if room := max(1, ttRoom(m, 2+1+len(hints))); len(fields) > room {
+		top := max(0, min(v.fill.idx-room/2, len(fields)-room))
+		fields = fields[top : top+room]
+	}
 	parts := []string{i18n.T("%s — fill variables (%d/%d)", v.selTitle(), v.fill.idx+1, len(v.fill.labels)), ""}
-	parts = append(parts, v.fill.view(g.textW)...)
-	parts = append(parts, "", i18n.T("[enter/tab] next  [esc] back"))
+	parts = append(parts, fields...)
+	parts = append(parts, "")
+	parts = append(parts, hints...)
 	return popupBox(g.inner, strings.Join(parts, "\n"))
+}
+
+// renderedHints are the rendered step's key hints.
+func renderedHints(textW int) []string {
+	return ttHints(i18n.T("[y] copy and close  [↑/↓] scroll  [esc] back to templates"), textW)
 }
 
 // renderedRows is the rendered step's text height: the whole text when it
 // fits, else what the terminal leaves (16 rows unless maximized).
 func (v *textTemplatesView) renderedRows(m Model) int {
 	g := v.geometry(m)
-	_, termH := m.overlayDims()
-	// title + blank, the rule, blank + one hint line, the frame.
-	room := max(3, termH-2-1-2-st().modalStyle.GetVerticalFrameSize()-2)
+	// title + blank, the rule, blank + hints.
+	room := max(3, ttRoom(m, 2+1+1+len(renderedHints(g.textW))))
 	if !v.maximized {
 		room = min(room, 16)
 	}
@@ -433,7 +483,8 @@ func (v *textTemplatesView) renderedBox(m Model) string {
 	}
 	rows, rule := ttTextPane(v.rendered, g.textW, v.renderedRows(m), &v.rScroll)
 	parts = append(parts, rows...)
-	parts = append(parts, rule, "", i18n.T("[y] copy and close  [↑/↓] scroll  [esc] back to templates"))
+	parts = append(parts, rule, "")
+	parts = append(parts, renderedHints(g.textW)...)
 	return popupBox(g.inner, strings.Join(parts, "\n"))
 }
 
@@ -464,6 +515,9 @@ func (v *textTemplatesView) browseBox(m Model) string {
 		// The tag is a right-hand column; the title takes the rest.
 		titleW := max(1, g.textW-lipgloss.Width(cursor)-lipgloss.Width(tag)-2)
 		rows[i] = winRow{text: cursor + padRight(truncate(t.Title, titleW), titleW) + "  " + tag, style: style}
+		if i == v.sel && rowTruncated(t.Title, titleW) {
+			v.tipFull = t.Title
+		}
 	}
 	parts = append(parts, renderWindow(rows, winOpts{w: g.textW, h: g.listH, anchor: v.sel})...)
 	parts = append(parts, s.dim.Render(strings.Repeat("─", g.textW)))
@@ -513,7 +567,7 @@ func (v *textTemplatesView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 			} else if t.ID == domain.TextTemplateID(title) {
 				// Refused here, before the editor: a text written for a
 				// title that cannot be saved would be wasted work.
-				v.formErr = i18n.T("a text template with this title already exists in that scope")
+				v.formErr = i18n.T("the id %s is already taken in that scope (by %s)", t.ID, t.Title)
 				return m, nil
 			}
 		}
@@ -521,6 +575,7 @@ func (v *textTemplatesView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 		if v.draft != "" {
 			seed = v.draft
 		}
+		v.handingOff = true
 		return m, textTemplateDraftCmd(textTemplateDraftMsg{title: title, scope: v.scope, editID: v.editID, before: before}, seed)
 	}
 	if v.field == 1 {
@@ -646,7 +701,7 @@ func (v *textTemplatesView) onEdited(m Model, msg textTemplateEditedMsg, data []
 	}
 	done := func(status string) (Model, tea.Cmd) {
 		v.mode, v.draft, v.formErr = ttBrowse, "", ""
-		m.statusMsg = status
+		m.statusMsg, v.tipHold = status, true
 		return m, nil
 	}
 	switch {
@@ -683,7 +738,7 @@ func (m Model) saveTextTemplateCmd(d textTemplateDraftMsg, body string) tea.Cmd 
 			return textTemplateSaveFailedMsg{err: err, body: body}
 		}
 		items, lerr := svc.TextTemplates(ctx)
-		return textTemplatesDataMsg{items: items, err: lerr, selectID: saved.ID, status: i18n.T("saved text template %s", saved.Title)}
+		return textTemplatesDataMsg{items: items, err: lerr, selectID: saved.ID, selectScope: saved.Scope, status: i18n.T("saved text template %s", saved.Title)}
 	}
 }
 

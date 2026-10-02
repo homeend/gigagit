@@ -356,7 +356,8 @@ func TestTextTemplatesFormAddFlow(t *testing.T) {
 	if data, err := os.ReadFile(draft.path); err != nil || len(data) != 0 || !strings.HasSuffix(draft.path, ".md") {
 		t.Fatalf("a new template starts from an empty .md file: %q %v %s", data, err, draft.path)
 	}
-	// esc leaves the form.
+	// esc leaves the form (once the handoff is over).
+	v.handingOff = false
 	v.update(m, keyMsg("esc"))
 	if v.mode != ttBrowse {
 		t.Fatalf("esc: mode %v", v.mode)
@@ -468,7 +469,8 @@ func TestTextTemplateEditedInvalidBodyKeepsFormAndDraft(t *testing.T) {
 	if data, _ := os.ReadFile(draft.path); string(data) != "bad <seq> token" {
 		t.Fatalf("editor reseeded with %q", data)
 	}
-	// esc drops the draft.
+	// esc drops the draft (once the handoff is over).
+	v.handingOff = false
 	v.update(out.(Model), keyMsg("esc"))
 	if v.draft != "" {
 		t.Fatal("esc must drop the draft")
@@ -491,7 +493,7 @@ func TestTextTemplatesSaveRoundTrip(t *testing.T) {
 		t.Fatal("no save command")
 	}
 	data, ok := cmd().(textTemplatesDataMsg)
-	if !ok || data.err != nil || data.selectID == "" || data.status == "" {
+	if !ok || data.err != nil || data.selectID == "" || data.selectScope != model.ProfileScopeRepo || data.status == "" {
 		t.Fatalf("save = %+v", data)
 	}
 	out, _ = out.(Model).Update(data)
@@ -664,7 +666,7 @@ func TestTextTemplateSaveFailureKeepsText(t *testing.T) {
 		t.Fatalf("a refused save must report as a save failure, got %T", msg)
 	}
 	res, _ := out.(Model).Update(msg)
-	if v.mode != ttForm || v.loading || v.draft != "a long text written in the editor" || !strings.Contains(v.formErr, "already exists") || strings.Contains(v.formErr, "text template:") {
+	if v.mode != ttForm || v.loading || v.draft != "a long text written in the editor" || !strings.Contains(v.formErr, "already taken") || strings.Contains(v.formErr, "text template:") {
 		t.Fatalf("mode %v loading %v draft %q err %q", v.mode, v.loading, v.draft, v.formErr)
 	}
 	// The window is usable again: esc leaves the form.
@@ -684,7 +686,7 @@ func TestTextTemplatesFormRefusesDuplicateTitle(t *testing.T) {
 	}}
 	v.update(m, keyMsg("n"))
 	ttType(v, m, "pr description")
-	if _, cmd := v.update(m, keyMsg("enter")); cmd != nil || !strings.Contains(v.formErr, "already exists") {
+	if _, cmd := v.update(m, keyMsg("enter")); cmd != nil || !strings.Contains(v.formErr, "pr-description") || !strings.Contains(v.formErr, "PR description") {
 		t.Fatalf("duplicate title: cmd nil %v err %q", cmd == nil, v.formErr)
 	}
 	// The other scope is free.
@@ -695,6 +697,7 @@ func TestTextTemplatesFormRefusesDuplicateTitle(t *testing.T) {
 		t.Fatalf("the same title in the other scope must be allowed (err %q)", v.formErr)
 	}
 	os.Remove(cmd().(textTemplateDraftMsg).path)
+	v.handingOff = false // the editor came back
 	// Editing a template under its own title is not a duplicate; onto another's is.
 	v.sel = 1
 	v.update(m, keyMsg("esc"))
@@ -704,8 +707,203 @@ func TestTextTemplatesFormRefusesDuplicateTitle(t *testing.T) {
 	} else {
 		os.Remove(cmd().(textTemplateDraftMsg).path)
 	}
+	v.handingOff = false
 	v.fTitle = newTextField("PR Description")
 	if _, cmd := v.update(m, keyMsg("enter")); cmd != nil || v.formErr == "" {
 		t.Fatal("a rename onto another template's title must be refused in the form")
+	}
+}
+
+// ttBoxFits fails when a box overflows the terminal or its key hints do not
+// sit under a blank line.
+func ttBoxFits(t *testing.T, name, box string, w, h int, hintStart string) {
+	t.Helper()
+	lines := strings.Split(strings.TrimRight(box, "\n"), "\n")
+	if len(lines) > h {
+		t.Errorf("%s: box is %d lines tall on a %d-row terminal", name, len(lines), h)
+	}
+	hint := -1
+	for i, l := range lines {
+		if lipgloss.Width(l) > w {
+			t.Errorf("%s: line %d is %d wide on a %d-column terminal", name, i, lipgloss.Width(l), w)
+		}
+		if hint < 0 && strings.Contains(l, hintStart) {
+			hint = i
+		}
+	}
+	if hint < 1 {
+		t.Fatalf("%s: no %q hint\n%s", name, hintStart, box)
+	}
+	if strings.Trim(lines[hint-1], " ║│|") != "" {
+		t.Errorf("%s: no blank line above the hints: %q", name, lines[hint-1])
+	}
+}
+
+// More variables than rows: the fill step scrolls with the focused field and
+// the box still fits the terminal.
+func TestTextTemplatesFillScrollsWithManyVariables(t *testing.T) {
+	t.Parallel()
+	var body strings.Builder
+	for i := 0; i < 30; i++ {
+		fmt.Fprintf(&body, "<user:var%02d> ", i)
+	}
+	for _, size := range [][2]int{{80, 24}, {100, 40}, {44, 16}} {
+		m := Model{width: size[0], height: size[1]}
+		v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "Many", Body: body.String()}}}
+		v.update(m, keyMsg("enter"))
+		name := fmt.Sprintf("%dx%d", size[0], size[1])
+		box := plain(v.box(m))
+		ttBoxFits(t, name+" first", box, size[0], size[1], "[enter/tab]")
+		if !strings.Contains(box, "> var00:") {
+			t.Errorf("%s: the first field is not shown\n%s", name, box)
+		}
+		for i := 0; i < 25; i++ {
+			v.update(m, keyMsg("enter"))
+		}
+		box = plain(v.box(m))
+		ttBoxFits(t, name+" field 26", box, size[0], size[1], "[enter/tab]")
+		if !strings.Contains(box, "> var25:") {
+			t.Errorf("%s: the focused field scrolled out of view\n%s", name, box)
+		}
+		for i := 0; i < 4; i++ {
+			v.update(m, keyMsg("enter"))
+		}
+		if box = plain(v.box(m)); !strings.Contains(box, "> var29:") {
+			t.Errorf("%s: the last field is not shown\n%s", name, box)
+		}
+	}
+}
+
+// The rendered step's hints wrap on a narrow terminal and the box still fits.
+func TestTextTemplatesRenderedHintsWrap(t *testing.T) {
+	t.Parallel()
+	text := strings.Repeat("a rendered line\n", 60)
+	for _, size := range [][2]int{{44, 16}, {80, 24}} {
+		m := Model{width: size[0], height: size[1]}
+		v := &textTemplatesView{mode: ttRendered, rendered: text, items: ttItems(1)}
+		ttBoxFits(t, fmt.Sprintf("%dx%d", size[0], size[1]), plain(v.box(m)), size[0], size[1], "[y] copy")
+		if box := plain(v.box(m)); !strings.Contains(box, "back to templates") {
+			t.Errorf("%v: a hint was cut off\n%s", size, box)
+		}
+	}
+}
+
+// One enter hands the text to the editor; a second one, while the temp file
+// is still being written, must not queue another editor.
+func TestTextTemplatesFormEnterHandsOffOnce(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}.pushLayer(&textTemplatesView{})
+	v := layerOf[*textTemplatesView](m)
+	v.update(m, keyMsg("n"))
+	ttType(v, m, "Once")
+	_, cmd := v.update(m, keyMsg("enter"))
+	if cmd == nil {
+		t.Fatal("no editor handoff")
+	}
+	draft := cmd().(textTemplateDraftMsg)
+	defer os.Remove(draft.path)
+	for _, k := range []string{"enter", "x", "esc"} {
+		if _, again := v.update(m, keyMsg(k)); again != nil || v.mode != ttForm {
+			t.Fatalf("%s during the handoff: cmd %v mode %v", k, again != nil, v.mode)
+		}
+	}
+	if v.fTitle.Value() != "Once" {
+		t.Fatalf("a key typed during the handoff reached the title: %q", v.fTitle.Value())
+	}
+	// A draft that could not be written gives the form back.
+	m.Update(textTemplateDraftMsg{err: errors.New("disk full")})
+	if _, cmd = v.update(m, keyMsg("enter")); cmd == nil {
+		t.Fatal("the form stayed locked after a failed handoff")
+	}
+	os.Remove(cmd().(textTemplateDraftMsg).path)
+	// So does the editor coming back (here: with a text that cannot be saved).
+	edited := ttEdited(t, "bad <seq>\n")
+	edited.title = "Once"
+	m.Update(edited)
+	if _, cmd = v.update(m, keyMsg("enter")); cmd == nil {
+		t.Fatal("the form stayed locked after the editor returned")
+	}
+	os.Remove(cmd().(textTemplateDraftMsg).path)
+}
+
+// A title cut with … is shown whole on the bottom bar (plain colours); a
+// title that fits leaves the bar alone.
+func TestTextTemplatesCutTitleShowsOnBottomBar(t *testing.T) {
+	t.Parallel()
+	long := "A very long template title " + strings.Repeat("that goes on ", 5) + "END"
+	m := Model{width: 60, height: 24}
+	below := strings.Repeat(strings.Repeat("b", 60)+"\n", 23) + "[hints]"
+	v := &textTemplatesView{items: []model.TextTemplate{{ID: "l", Title: long, Body: "x"}, {ID: "s", Title: "Short", Body: "y"}}}
+	last := func() string {
+		lines := strings.Split(plain(v.render(m, below)), "\n")
+		return lines[len(lines)-1]
+	}
+	if got := last(); !strings.Contains(got, "A very long template title") || strings.Contains(got, "[hints]") {
+		t.Fatalf("cut title: bottom bar = %q", got)
+	}
+	if strings.Contains(plain(v.box(m)), "END") {
+		t.Fatal("the title was not cut in the list — the test proves nothing")
+	}
+	v.update(m, keyMsg("down"))
+	if got := last(); !strings.Contains(got, "[hints]") {
+		t.Fatalf("short title: bottom bar = %q", got)
+	}
+	// Only the list has a cut row: the other steps leave the bar alone.
+	v.update(m, keyMsg("up"))
+	v.update(m, keyMsg("d"))
+	if got := last(); !strings.Contains(got, "[hints]") {
+		t.Fatalf("confirm step: bottom bar = %q", got)
+	}
+}
+
+// The same id may exist in both scopes: a save lands on the row of ITS scope.
+func TestTextTemplatesDataMsgSelectsRowByScope(t *testing.T) {
+	t.Parallel()
+	items := []model.TextTemplate{
+		{ID: "note", Title: "Note", Scope: model.ProfileScopeGlobal},
+		{ID: "other", Title: "Other", Scope: model.ProfileScopeGlobal},
+		{ID: "note", Title: "Note", Scope: model.ProfileScopeRepo},
+	}
+	v := &textTemplatesView{sel: 1}
+	v.onData(textTemplatesDataMsg{items: items, selectID: "note", selectScope: model.ProfileScopeGlobal})
+	if v.sel != 0 {
+		t.Fatalf("global note: sel %d, want 0", v.sel)
+	}
+	v.onData(textTemplatesDataMsg{items: items, selectID: "note", selectScope: model.ProfileScopeRepo})
+	if v.sel != 2 {
+		t.Fatalf("repo note: sel %d, want 2", v.sel)
+	}
+}
+
+// The bottom row is also where the window reports what happened: an outcome
+// stays readable there until the next key, and only then the cut title takes it.
+func TestTextTemplatesCutTitleDoesNotHideAnOutcome(t *testing.T) {
+	t.Parallel()
+	long := "A very long template title " + strings.Repeat("that goes on ", 5) + "END"
+	items := []model.TextTemplate{{ID: "l", Title: long, Body: "x"}, {ID: "s", Title: "Short", Body: "y"}}
+	m := Model{width: 60, height: 24}.pushLayer(&textTemplatesView{loading: true})
+	below := strings.Repeat(strings.Repeat("b", 60)+"\n", 23) + "[status]"
+	last := func(m Model) string {
+		lines := strings.Split(plain(layerOf[*textTemplatesView](m).render(m, below)), "\n")
+		return lines[len(lines)-1]
+	}
+	out, _ := m.Update(textTemplatesDataMsg{items: items, status: "deleted text template X"})
+	mm := out.(Model)
+	if got := last(mm); !strings.Contains(got, "[status]") {
+		t.Fatalf("after an outcome the bottom row = %q", got)
+	}
+	v := layerOf[*textTemplatesView](mm)
+	v.update(mm, keyMsg("down"))
+	v.update(mm, keyMsg("up"))
+	if got := last(mm); !strings.Contains(got, "A very long template title") {
+		t.Fatalf("after a key the bottom row = %q", got)
+	}
+	// The editor coming back with nothing to save is an outcome too.
+	v.update(mm, keyMsg("e"))
+	edited := ttEdited(t, "x\n")
+	edited.title, edited.editID, edited.before = long, "l", "x"
+	out, _ = mm.Update(edited)
+	if got := last(out.(Model)); !strings.Contains(got, "[status]") {
+		t.Fatalf("after an unchanged edit the bottom row = %q", got)
 	}
 }

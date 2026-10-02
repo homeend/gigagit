@@ -17,7 +17,7 @@ cmd  = ["template", "add", "--global", "--title", "PR description", "-F", "pr.md
 exit = 0
 
 [[run]]
-cmd  = ["template", "add", "--title", "Standup note", "-F", "standup.md"]
+cmd  = ["template", "add", "--repo", "--title", "Standup note", "-F", "standup.md"]
 exit = 0
 
 [tui]
