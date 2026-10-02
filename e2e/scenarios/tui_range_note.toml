@@ -1,0 +1,29 @@
+name = "tui: c with lines marked writes one note over that range"
+
+[input]
+steps = [
+  { write = "a.txt", content = "one\ntwo\nthree\nfour\nfive\nsix\n" },
+  { commit = "first" },
+  { write = "a.txt", content = "one\ntwo\nTHREE\nfour\nFIVE\nsix\nseven\n" },
+  { commit = "second" },
+]
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "commit-diff"
+keys = ["right", "enter", "enter"]
+screen_contains = ["a.txt", "THREE"]
+
+[[tui.step]]
+name = "range-note-form"
+keys = ["space", "j", "j", "c"]
+screen_contains = ["Add note  new side lines 3-5"]
+screen_excludes = ["side:"]
+
+[[tui.step]]
+name = "range-note-saved"
+keys = ["why", "C-s"]
+screen_contains = ["why", "▎"]
+screen_excludes = ["mark end"]

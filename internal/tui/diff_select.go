@@ -110,5 +110,5 @@ func (m Model) diffSelectKey(v *diffView, msg tea.KeyMsg) (Model, tea.Cmd, bool)
 // serves the three long-line variants; measured at 86 columns, well inside the
 // 140 budget.
 func diffSelectHint() string {
-	return i18n.T("[space] mark end  [enter] copy  [esc] unmark  [alt+↑↓/jk] extend  [alt↔] side (locked)")
+	return i18n.T("[space] mark end  [enter] copy  [L] link  [c] note  [esc] unmark  [alt+↑↓/jk] extend  [alt↔] side (locked)")
 }

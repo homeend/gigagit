@@ -40,8 +40,10 @@ type notePopup struct {
 	targetID string // noteEdit: the note; noteReply: the parent
 	addr     model.FileAddress
 	side     model.NoteSide
+	first    int // a range note's first line; line is its last (first == line: one line)
 	line     int
 	hash     string
+	ranged   bool // written over the diff's marked lines: saving clears the marks
 	author   string
 	preview  string // add in a preview or pair diff: the scope (PreviewNoteSet.Pair) the note records
 }
@@ -55,6 +57,26 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 		m.diffNotice = m.statusMsg // the full-screen diff has no status bar
 		return m, nil
 	}
+	// Lines marked in the diff: the note covers them. The address and the
+	// scope are read where the MARKS are — frozen ones stay in their file
+	// while the cursor walks a stack — so the cursor is lent to their first
+	// line for the length of this call (contextLinkText does the same).
+	var marked *noteAnchor
+	if mode == noteAdd {
+		a, refusal, on := m.noteAnchorOfMarks()
+		if refusal != "" {
+			m.statusMsg = refusal
+			m.diffNotice = refusal // the full-screen diff has no status bar
+			return m, nil
+		}
+		if on {
+			sel, _ := m.diffLinkSelection()
+			v := m.diffLayer()
+			defer func(cur int) { v.curLine = cur }(v.curLine)
+			v.curLine = sel.row
+			marked = &a
+		}
+	}
 	addr, ok := m.diffNoteAddress()
 	if !ok {
 		return m, nil
@@ -63,6 +85,9 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 	switch mode {
 	case noteAdd:
 		p.anchors = m.noteAnchorsAtCursor()
+		if marked != nil {
+			p.anchors, p.ranged = []noteAnchor{*marked}, true
+		}
 		if len(p.anchors) == 0 {
 			// On a preview the cause is knowable and worth saying: the cursor
 			// is on a line that exists only on the merge-base side.
@@ -86,6 +111,36 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 	return m.pushLayer(p), nil
 }
 
+// noteAnchorOfMarks is the anchor of a note over the diff's marked lines: the
+// cursor's side, first to last line (diffLinkSelection's trim rule), with the
+// fingerprint of the whole block. on == false: no marks, or one marked row —
+// that is the one-line note at the cursor, side choice included. A non-empty
+// refusal is the translated reason these marks take no note.
+func (m Model) noteAnchorOfMarks() (a noteAnchor, refusal string, on bool) {
+	v := m.diffLayer()
+	if v == nil || !v.lsel.on {
+		return a, "", false
+	}
+	if lo, hi, _ := v.lsel.bounds(v.curLine); lo == hi {
+		return a, "", false
+	}
+	if _, ok := m.diffNoteAddress(); !ok {
+		return a, "", false // no notes on this surface: c stays inert
+	}
+	// A preview's old side is the MERGE BASE (noteAnchorsAtCursor's rule).
+	if v.onOld && m.previewNoteSet() != nil {
+		return a, i18n.T("notes in a preview anchor on the new side"), false
+	}
+	sel, _ := m.diffLinkSelection()
+	switch {
+	case sel.crossFile:
+		return a, i18n.T("▸ a note marks lines of one file"), false
+	case sel.refusal != "":
+		return a, i18n.T("▸ nothing to note on this side"), false
+	}
+	return noteAnchor{side: sel.side, first: sel.first, line: sel.last, hash: model.NoteContextHash(sel.block)}, "", true
+}
+
 // openNotePopupFor opens the edit/reply form on one targeted note.
 func (m Model) openNotePopupFor(mode noteFormMode, t noteTarget) (tea.Model, tea.Cmd) {
 	addr, ok := m.diffNoteAddress()
@@ -93,7 +148,7 @@ func (m Model) openNotePopupFor(mode noteFormMode, t noteTarget) (tea.Model, tea
 		return m, nil
 	}
 	p := &notePopup{mode: mode, addr: addr, author: m.identity.EffectiveName}
-	p.side, p.line, p.hash = t.side, t.line, t.hash
+	p.side, p.first, p.line, p.hash = t.side, t.line, t.line, t.hash
 	if mode == noteEdit {
 		// Edit acts on the targeted ROW's own note (which may be a reply).
 		p.targetID = t.note.ID
@@ -114,7 +169,10 @@ func (p *notePopup) setPick(i int) {
 	}
 	p.pick = ((i % len(p.anchors)) + len(p.anchors)) % len(p.anchors)
 	a := p.anchors[p.pick]
-	p.side, p.line, p.hash = a.side, a.line, a.hash
+	p.side, p.first, p.line, p.hash = a.side, a.first, a.line, a.hash
+	if p.first == 0 {
+		p.first = p.line
+	}
 }
 
 // hasSideField reports whether the form offers a side choice: only on add,
@@ -142,6 +200,11 @@ func (p *notePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.popLayer()
 		if strings.TrimSpace(p.summary.Value()) == "" {
 			return m, nil // an empty summary is a cancel
+		}
+		if p.ranged {
+			if v := m.diffLayer(); v != nil {
+				v.lsel.clear()
+			}
 		}
 		return m, m.noteSubmitCmd(p)
 	case tea.KeyTab:
@@ -223,7 +286,11 @@ func (p *notePopup) box(m Model) string {
 		return "  "
 	}
 	var b strings.Builder
-	b.WriteString(heading + "  " + i18n.T("%s line %d", noteSideLabel(p.side), p.line) + "\n\n")
+	where := i18n.T("%s line %d", noteSideLabel(p.side), p.line)
+	if p.first < p.line {
+		where = i18n.T("%s lines %d-%d", noteSideLabel(p.side), p.first, p.line)
+	}
+	b.WriteString(heading + "  " + where + "\n\n")
 	// Field labels follow the commit popup: plain, not translated.
 	b.WriteString(viewField(cur(0)+"summary:   ", p.summary, p.field == 0, contentW) + "\n")
 	b.WriteString(viewFieldWindow(cur(1)+"rationale: ", p.rationale, p.field == 1, contentW, 8, &p.ratScroll) + "\n")
@@ -256,11 +323,7 @@ func (m Model) noteSubmitCmd(p *notePopup) tea.Cmd {
 	summary := strings.TrimSpace(p.summary.Value())
 	rationale := strings.TrimSpace(p.rationale.Value())
 	mode, id := p.mode, p.targetID
-	n := model.Note{
-		Source: model.NoteSourceUser, Author: p.author, Address: p.addr, Preview: p.preview,
-		Side: p.side, Range: [2]int{p.line, p.line}, ContextHash: p.hash,
-		Summary: summary, Rationale: rationale,
-	}
+	n := p.note(summary, rationale)
 	return func() tea.Msg {
 		ctx := context.Background()
 		var err error
@@ -273,6 +336,15 @@ func (m Model) noteSubmitCmd(p *notePopup) tea.Cmd {
 			_, err = svc.NoteAdd(ctx, n)
 		}
 		return noteMutatedMsg{err: err}
+	}
+}
+
+// note is the note the form writes: under line, covering first..line.
+func (p *notePopup) note(summary, rationale string) model.Note {
+	return model.Note{
+		Source: model.NoteSourceUser, Author: p.author, Address: p.addr, Preview: p.preview,
+		Side: p.side, Range: [2]int{p.first, p.line}, ContextHash: p.hash,
+		Summary: summary, Rationale: rationale,
 	}
 }
 

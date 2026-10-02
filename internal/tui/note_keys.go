@@ -157,9 +157,10 @@ func (m Model) loadNotesCmd() tea.Cmd {
 // new note can hang off: the side, its line number and the fingerprint of that
 // line's text.
 type noteAnchor struct {
-	side model.NoteSide
-	line int
-	hash string
+	side  model.NoteSide
+	first int // a range note's first line; 0 = the one line `line`
+	line  int
+	hash  string
 }
 
 // noteAnchorsAtCursor lists the anchors the cursor row offers — both when the
@@ -181,7 +182,7 @@ func (m Model) noteAnchorsAtCursor() []noteAnchor {
 		if r.RightNo <= 0 {
 			return noteAnchor{}, false
 		}
-		return noteAnchor{model.NoteSideNew, r.RightNo, model.NoteContextHash([]string{r.Right})}, true
+		return noteAnchor{side: model.NoteSideNew, line: r.RightNo, hash: model.NoteContextHash([]string{r.Right})}, true
 	}
 	// A preview's old side is the MERGE BASE, which no stored address names,
 	// so it offers no anchor at all — the same rule `gg review A..B` follows
@@ -191,7 +192,7 @@ func (m Model) noteAnchorsAtCursor() []noteAnchor {
 		if r.LeftNo <= 0 || m.previewNoteSet() != nil {
 			return noteAnchor{}, false
 		}
-		return noteAnchor{model.NoteSideOld, r.LeftNo, model.NoteContextHash([]string{r.Left})}, true
+		return noteAnchor{side: model.NoteSideOld, line: r.LeftNo, hash: model.NoteContextHash([]string{r.Left})}, true
 	}
 	first, second := newSide, oldSide
 	if v.onOld {

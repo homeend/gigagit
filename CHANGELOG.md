@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A note over marked lines
+
+### Added
+
+- **`c` with lines marked writes one note over them.** In the diff view
+  (single file or stacked), mark lines (`space`, move, `space`) and press
+  `c`: the form reads `Add note  new side lines 3-5`, and the saved note sits
+  under the last marked line on the cursor's side with the gutter bar beside
+  the lines it covers — what only `gg note add <range link>` did before. The
+  range follows `L`'s rule (edge rows with no line on that side are trimmed,
+  lines a fold hides inside count). Saving clears the marks; `esc` in the
+  form keeps them. One marked line is the ordinary one-line note, side choice
+  included. Refused with a notice: marks reaching into a second file of a
+  stack, the old side of a merge preview, and marks with no line on the
+  cursor's side.
+- The footer shown while lines are marked now names `[L] link` and
+  `[c] note`.
+
 ## Text templates: follow-up fixes
 
 ### Changed
