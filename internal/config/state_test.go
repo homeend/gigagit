@@ -136,3 +136,42 @@ func TestBumpSeqConcurrentHandsOutDistinctNumbers(t *testing.T) {
 		t.Fatalf("next = %d, want %d", PeekSeq(gitDir, "issue"), n+1)
 	}
 }
+
+// BumpSeqs consumes several counters in ONE write: either all advance or none.
+func TestBumpSeqsAdvancesAllInOneWrite(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := BumpSeq(dir, "a"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := BumpSeqs(dir, []string{"a", "b", "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["a"] != 2 || got["b"] != 1 || len(got) != 2 {
+		t.Fatalf("BumpSeqs = %v, want a:2 b:1", got)
+	}
+	if PeekSeq(dir, "a") != 3 || PeekSeq(dir, "b") != 2 {
+		t.Fatalf("after: a=%d b=%d", PeekSeq(dir, "a"), PeekSeq(dir, "b"))
+	}
+}
+
+// A state file that cannot be read fails the whole take: no counter moves.
+func TestBumpSeqsDamagedStateConsumesNothing(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "gg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	damaged := []byte("[seq\na = 1\n")
+	if err := os.WriteFile(statePath(dir), damaged, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BumpSeqs(dir, []string{"a", "b"}); err == nil {
+		t.Fatal("BumpSeqs on a damaged state file: no error")
+	}
+	if got, _ := os.ReadFile(statePath(dir)); string(got) != string(damaged) {
+		t.Fatalf("state rewritten: %s", got)
+	}
+	if _, err := BumpSeqs("", []string{"a"}); err == nil {
+		t.Fatal("BumpSeqs with no git dir: no error")
+	}
+}

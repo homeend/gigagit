@@ -2,6 +2,9 @@ package texttmpl
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -103,5 +106,60 @@ func TestIDUnicode(t *testing.T) {
 	fs := NewFileStore(t.TempDir(), model.ProfileScopeGlobal)
 	if _, err := fs.Add(model.TextTemplate{Title: "!!!", Body: "x"}); !errors.Is(err, ErrNoID) {
 		t.Fatalf("symbol-only title: %v", err)
+	}
+}
+
+// A damaged file holds the user's texts: no call may answer as if the store
+// were empty, and no write may replace it.
+func TestFileStoreDamagedFileIsNeverReplaced(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	fs := NewFileStore(dir, model.ProfileScopeRepo)
+	if _, err := fs.Add(model.TextTemplate{Title: "Keep", Body: "precious"}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "texttemplates.toml")
+	damaged := []byte("[[templates]\ntitle = 'Keep'\nbody = 'precious'\n")
+	if err := os.WriteFile(path, damaged, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fs.Add(model.TextTemplate{Title: "New", Body: "b"}); err == nil {
+		t.Error("Add on a damaged file: no error")
+	}
+	if _, err := fs.Update("keep", model.TextTemplate{Title: "Keep", Body: "b"}); err == nil || errors.Is(err, ErrNotFound) {
+		t.Errorf("Update on a damaged file: %v", err)
+	}
+	if err := fs.Remove("keep"); err == nil || errors.Is(err, ErrNotFound) {
+		t.Errorf("Remove on a damaged file: %v", err)
+	}
+	if _, err := fs.List(); err == nil {
+		t.Error("List on a damaged file: no error")
+	}
+	if _, err := fs.Get("keep"); err == nil || errors.Is(err, ErrNotFound) {
+		t.Errorf("Get on a damaged file: %v", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != string(damaged) {
+		t.Fatalf("the damaged file was rewritten:\n%s", got)
+	}
+}
+
+// Two titles collide when their IDS match: the error names the id and the
+// title that holds it, not "this title".
+func TestFileStoreDuplicateNamesTheID(t *testing.T) {
+	t.Parallel()
+	fs := NewFileStore(t.TempDir(), model.ProfileScopeRepo)
+	if _, err := fs.Add(model.TextTemplate{Title: "Bug report", Body: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := fs.Add(model.TextTemplate{Title: "bug-report", Body: "b"})
+	if !errors.Is(err, ErrDuplicate) || !strings.Contains(err.Error(), `"bug-report"`) || !strings.Contains(err.Error(), `"Bug report"`) {
+		t.Fatalf("add: %v", err)
+	}
+	if _, err := fs.Add(model.TextTemplate{Title: "Other", Body: "b"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = fs.Update("other", model.TextTemplate{Title: "BUG REPORT", Body: "b"})
+	if !errors.Is(err, ErrDuplicate) || !strings.Contains(err.Error(), `"Bug report"`) {
+		t.Fatalf("update: %v", err)
 	}
 }

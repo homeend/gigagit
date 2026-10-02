@@ -77,6 +77,36 @@ func BumpSeq(gitDir, name string) (int, error) {
 	return next, nil
 }
 
+// BumpSeqs is BumpSeq for several counters at once: one lock, one read, one
+// write — either every named counter advances or none does. A name listed
+// twice is consumed once. It returns the number each counter was handed.
+func BumpSeqs(gitDir string, names []string) (map[string]int, error) {
+	if gitDir == "" {
+		return nil, fmt.Errorf("config: no git dir; refusing to write seq state")
+	}
+	release, err := filelock.Acquire(statePath(gitDir) + ".lock")
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	st, err := readSeqState(gitDir)
+	if err != nil {
+		return nil, err
+	}
+	taken := make(map[string]int, len(names))
+	for _, n := range names {
+		if _, done := taken[n]; done {
+			continue
+		}
+		st.Seq[n]++
+		taken[n] = st.Seq[n]
+	}
+	if err := writeSeqState(gitDir, st); err != nil {
+		return nil, err
+	}
+	return taken, nil
+}
+
 // writeSeqState marshals st to <gitDir>/gg/state.toml via a temp file + rename so
 // a concurrent reader never sees a half-written file. os.Rename replaces an
 // existing target on all platforms gigagit supports.

@@ -140,3 +140,52 @@ func TestFindTextTemplate(t *testing.T) {
 		t.Fatalf("unknown id: %v", err)
 	}
 }
+
+func TestValidateTextTemplateRefusesInertTokensAndTabTitle(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct{ title, body string }{
+		"branch with an argument": {"t", "on <branch:short>"},
+		"user without a label":    {"t", "hi <user:>"},
+		"tab in the title":        {"a\tb", "b"},
+		"control char in title":   {"a\x1bb", "b"},
+	} {
+		if err := ValidateTextTemplate(tc.title, tc.body); err == nil {
+			t.Errorf("%s: want an error", name)
+		}
+	}
+}
+
+// A prefix that names ONE id held by both scopes is not ambiguous: the repo
+// row wins, as it does for the exact id.
+func TestFindTextTemplatePrefixInBothScopesRepoWins(t *testing.T) {
+	t.Parallel()
+	svc, ctx := textSvc(t), context.Background()
+	_, _ = svc.AddTextTemplate(ctx, model.TextTemplate{Title: "Zebra", Body: "global", Scope: model.ProfileScopeGlobal})
+	_, _ = svc.AddTextTemplate(ctx, model.TextTemplate{Title: "Zebra", Body: "repo", Scope: model.ProfileScopeRepo})
+	_, _ = svc.AddTextTemplate(ctx, model.TextTemplate{Title: "Yak one", Body: "a", Scope: model.ProfileScopeGlobal})
+	_, _ = svc.AddTextTemplate(ctx, model.TextTemplate{Title: "Yak two", Body: "b", Scope: model.ProfileScopeRepo})
+
+	if got, err := svc.FindTextTemplate(ctx, "ze", nil); err != nil || got.Body != "repo" {
+		t.Fatalf("prefix of one id in both scopes: %+v, %v", got, err)
+	}
+	_, err := svc.FindTextTemplate(ctx, "yak", nil)
+	if err == nil || IsTextTemplateNotFound(err) || !strings.Contains(err.Error(), "matches 2") {
+		t.Fatalf("two distinct ids must stay ambiguous: %v", err)
+	}
+	// The domain names no frontend's command.
+	if _, err := svc.FindTextTemplate(ctx, "nope", nil); !IsTextTemplateNotFound(err) || strings.Contains(err.Error(), "gg template") {
+		t.Fatalf("unknown id: %v", err)
+	}
+}
+
+// Several counters are taken together and the text carries the numbers taken.
+func TestTakeTextTemplateSeveralCounters(t *testing.T) {
+	t.Parallel()
+	svc, ctx := textSvc(t), context.Background()
+	body := "<seq:one>/<seq:two>/<seq:one>"
+	for _, want := range []string{"1/1/1", "2/2/2"} {
+		if got, err := svc.TakeTextTemplate(ctx, body, nil); err != nil || got != want {
+			t.Fatalf("take = %q, %v; want %q", got, err, want)
+		}
+	}
+}

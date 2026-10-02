@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/homeend/gigagit/internal/clock"
@@ -156,6 +157,9 @@ func ValidateTextTemplate(title, body string) error {
 		return fmt.Errorf("invalid text template: the title is empty")
 	case strings.ContainsAny(title, "\r\n"):
 		return fmt.Errorf("invalid text template: the title must be one line")
+	case strings.ContainsFunc(title, unicode.IsControl):
+		// A TAB would break the CLI's id<TAB>scope<TAB>title rows.
+		return fmt.Errorf("invalid text template: the title holds a tab or another control character")
 	case utf8.RuneCountInString(title) > MaxTextTemplateTitle:
 		return fmt.Errorf("invalid text template: the title is longer than %d characters", MaxTextTemplateTitle)
 	case texttmpl.ID(title) == "":
@@ -243,7 +247,7 @@ func (s *Service) RenderTextTemplate(ctx context.Context, body string, inputs ma
 // TakeTextTemplate consumes the body's <seq:…> counters and resolves with the
 // numbers THIS call was handed (another process may bump between a peek and
 // here — the gg prefix resolve --bump rule). A body that cannot resolve
-// consumes nothing.
+// consumes nothing, and several counters advance together or not at all.
 func (s *Service) TakeTextTemplate(ctx context.Context, body string, inputs map[string]string) (string, error) {
 	tctx, gitDir := s.textCtx(ctx)
 	names := template.TextTokens(body).SeqNames
@@ -252,20 +256,17 @@ func (s *Service) TakeTextTemplate(ctx context.Context, body string, inputs map[
 	if err != nil || len(names) == 0 {
 		return out, err
 	}
-	taken := map[string]int{}
-	for _, n := range names {
-		v, berr := config.BumpSeq(gitDir, n)
-		if berr != nil {
-			return "", fmt.Errorf("could not advance <seq:%s>: %w", n, berr)
-		}
-		taken[n] = v
+	taken, berr := config.BumpSeqs(gitDir, names)
+	if berr != nil {
+		return "", fmt.Errorf("could not advance the <seq> counters: %w", berr)
 	}
 	tctx.Seqs = taken
 	return template.ResolveText(body, inputs, tctx)
 }
 
 // FindTextTemplate resolves an id or a unique id prefix. An exact id beats a
-// prefix; with scope nil the repo row wins when both scopes hold the id.
+// prefix; with scope nil the repo row wins when both scopes hold the one id
+// the argument names. Several distinct ids are an ambiguity.
 func (s *Service) FindTextTemplate(ctx context.Context, idPrefix string, scope *model.ProfileScope) (model.TextTemplate, error) {
 	all, err := s.TextTemplates(ctx)
 	if err != nil {
@@ -286,17 +287,19 @@ func (s *Service) FindTextTemplate(ctx context.Context, idPrefix string, scope *
 	if len(pick) == 0 {
 		pick = pre
 	}
-	switch {
-	case len(pick) == 0:
-		return model.TextTemplate{}, fmt.Errorf("%w: %q (gg template list shows the ids)", texttmpl.ErrNotFound, idPrefix)
-	case len(pick) == 1:
-		return pick[0], nil
-	case len(exact) > 1: // the same id in both scopes: the repo row wins
-		for _, t := range exact {
-			if t.Scope == model.ProfileScopeRepo {
-				return t, nil
-			}
+	if len(pick) == 0 {
+		return model.TextTemplate{}, fmt.Errorf("%w: %q", texttmpl.ErrNotFound, idPrefix)
+	}
+	ids := map[string]bool{}
+	found := pick[0]
+	for _, t := range pick {
+		ids[t.ID] = true
+		if t.Scope == model.ProfileScopeRepo {
+			found = t
 		}
 	}
-	return model.TextTemplate{}, fmt.Errorf("%q matches %d text templates — give more of the id", idPrefix, len(pick))
+	if len(ids) > 1 {
+		return model.TextTemplate{}, fmt.Errorf("%q matches %d text templates — give more of the id", idPrefix, len(ids))
+	}
+	return found, nil
 }

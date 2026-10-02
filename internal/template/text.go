@@ -1,6 +1,9 @@
 package template
 
-import "regexp"
+import (
+	"fmt"
+	"regexp"
+)
 
 // textTokenRe is tokenRe for prose: a token never spans a line and never
 // contains a '<', so a bare '<' ("a < b") cannot swallow the token after it.
@@ -17,24 +20,34 @@ var textTokenKinds = map[string]bool{
 // in three ways: a <…> whose kind is not a token stays in the output as
 // written; <branch> is Ctx.Branch verbatim (an unset branch is ""); a token
 // never spans lines. A KNOWN token with malformed arguments is still an
-// error. Substituted values are never scanned again.
+// error — as are <branch:…> (it takes no argument) and <user:> (no label).
+// Substituted values are never scanned again.
 func ResolveText(tmpl string, inputs map[string]string, ctx Ctx) (string, error) {
 	var firstErr error
 	out := textTokenRe.ReplaceAllStringFunc(tmpl, func(tok string) string {
 		body := tok[1 : len(tok)-1]
-		kind, _, _ := cutColon(body)
+		kind, rest, hasColon := cutColon(body)
 		if !textTokenKinds[kind] {
 			return tok
 		}
-		if body == "branch" {
-			return ctx.Branch
-		}
-		val, err := resolveToken(body, inputs, ctx)
-		if err != nil {
+		fail := func(err error) string {
 			if firstErr == nil {
 				firstErr = err
 			}
 			return ""
+		}
+		switch {
+		case body == "branch":
+			return ctx.Branch
+		case kind == "branch":
+			// Not left to resolveToken: its <branch> is the path-template one.
+			return fail(fmt.Errorf("template: <branch> takes no argument"))
+		case kind == "user" && hasColon && rest == "":
+			return fail(fmt.Errorf("template: <user:> requires a label, e.g. <user:issue-id>"))
+		}
+		val, err := resolveToken(body, inputs, ctx)
+		if err != nil {
+			return fail(err)
 		}
 		return val
 	})

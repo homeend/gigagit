@@ -12,8 +12,9 @@ import (
 var (
 	// ErrNotFound is returned by Get/Update/Remove for an unknown id.
 	ErrNotFound = errors.New("text template: not found")
-	// ErrDuplicate is returned when a title's id is already taken in the scope.
-	ErrDuplicate = errors.New("text template: a template with this title already exists")
+	// ErrDuplicate is returned when a title's id is already taken in the scope
+	// (titles collide by id: "Bug report" and "bug-report" are one template).
+	ErrDuplicate = errors.New("text template: the title's id is already taken in this scope")
 	// ErrNoID is returned for a title with no letter or digit to build an id from.
 	ErrNoID = errors.New("text template: the title needs a letter or a digit")
 )
