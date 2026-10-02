@@ -47,12 +47,35 @@ function escRun(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
+// BOXED: a stretch of glyphs the monospace font may not have — blocks, box
+// drawing, powerline and Nerd Font icons, symbols. A browser takes them from
+// a fallback font at THAT font's width, and every later column drifts; so
+// the stretch sits in a box of whole cells (one per code point). Latin
+// (through U+024F) and zero-width marks stay plain text.
+const BOXED = /[^\u0000-\u024f\u0300-\u036f\u200b-\u200d\ufe00-\ufe0f]+/gu;
+
+function cellBox(text, cells) {
+  return `<span class="cg" style="width:calc(var(--cw) * ${cells})">${escRun(text)}</span>`;
+}
+
+// textHTML: a run's text with its boxed stretches; run.w marks a run that is
+// one wide glyph (the server's cell width for it).
+function textHTML(run) {
+  if (run.w) return cellBox(run.t, run.w);
+  let out = "", at = 0;
+  for (const m of run.t.matchAll(BOXED)) {
+    out += escRun(run.t.slice(at, m.index)) + cellBox(m[0], [...m[0]].length);
+    at = m.index + m[0].length;
+  }
+  return out + escRun(run.t.slice(at));
+}
+
 function runHTML(run) {
   const st = [];
   if (run.fg) st.push("color:" + run.fg);
   if (run.bg) st.push("background:" + run.bg);
   const cls = ["b", "i", "u", "r", "d", "s"].filter((f) => run[f]).join(" ");
-  return `<span${st.length ? ` style="${st.join(";")}"` : ""}${cls ? ` class="${cls}"` : ""}>${escRun(run.t)}</span>`;
+  return `<span${st.length ? ` style="${st.join(";")}"` : ""}${cls ? ` class="${cls}"` : ""}>${textHTML(run)}</span>`;
 }
 
 function rowHTML(runs) {
@@ -122,14 +145,20 @@ $("foot").addEventListener("click", (e) => {
   })[b.dataset.cact]();
 });
 
+// measureCell: the cell is a ROW's height (not the font's content box, which
+// is shorter — the grid then asked for more rows than fit and scrolled) and
+// a twentieth of twenty M's. The width also sizes the glyph boxes (--cw).
 function measureCell() {
-  const probe = document.createElement("span");
-  probe.textContent = "M".repeat(20);
+  const probe = document.createElement("div");
+  probe.className = "conrow";
   probe.style.visibility = "hidden";
+  const m = document.createElement("span");
+  m.textContent = "M".repeat(20);
+  probe.append(m);
   grid.append(probe);
-  const r = probe.getBoundingClientRect();
+  con.cell = { w: m.getBoundingClientRect().width / 20, h: probe.getBoundingClientRect().height };
   probe.remove();
-  con.cell = { w: r.width / 20, h: r.height };
+  grid.style.setProperty("--cw", con.cell.w + "px");
 }
 
 // layout puts the layer over the panes right of the sidebar (over the whole
@@ -144,7 +173,7 @@ function layout() {
 }
 
 function paint() {
-  grid.innerHTML = con.rows.map((r) => `<div class="crow">${r || " "}</div>`).join("");
+  grid.innerHTML = con.rows.map((r) => `<div class="conrow">${r || " "}</div>`).join("");
   paintCursor();
 }
 

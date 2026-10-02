@@ -20,6 +20,10 @@ type Run struct {
 	Reverse   bool   `json:"r,omitempty"`
 	Dim       bool   `json:"d,omitempty"`
 	Strike    bool   `json:"s,omitempty"`
+	// W is set on a run that is ONE wide glyph: the cells it fills (2). The
+	// page boxes it at that width — a browser draws a fallback font's CJK or
+	// emoji glyph at whatever width that font has.
+	W int `json:"w,omitempty"`
 }
 
 // RunRow is one screen row. An empty Runs is a blank row.
@@ -59,18 +63,21 @@ func (s *Session) ScreenRuns() ScreenRuns {
 				continue
 			}
 			c := s.emu.CellAt(x, y)
-			text, style := " ", uv.Style{}
+			text, style, wide := " ", uv.Style{}, 0
 			if c != nil && !c.IsZero() {
 				text, style = c.Content, c.Style
 				if c.Width > 1 {
-					skip = c.Width - 1
+					skip, wide = c.Width-1, c.Width
 				}
 			}
-			if n := len(runs); n > 0 && curStyle.Equal(&style) {
+			// A wide glyph never merges, and nothing merges into it.
+			if n := len(runs); n > 0 && wide == 0 && runs[n-1].W == 0 && curStyle.Equal(&style) {
 				runs[n-1].Text += text
 				continue
 			}
-			runs = append(runs, runFor(text, style))
+			r := runFor(text, style)
+			r.W = wide
+			runs = append(runs, r)
 			curStyle = style
 		}
 		out.Lines[y] = RunRow{Runs: trimRow(runs)}

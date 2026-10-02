@@ -127,7 +127,9 @@ function measure() {
   const left = side && side.offsetWidth ? side.getBoundingClientRect().right + 5 : panes.left;
   const h = $("foot").getBoundingClientRect().top - panes.top;
   const cw = r.width / 20 || 7.2;
-  return { cols: Math.max(20, Math.floor((window.innerWidth - left - 32) / cw)), rows: Math.max(5, Math.floor((h - 50) / (r.height || 16))) };
+  // 16 = a console row's height (style.css .conrow) — NOT the probe's own
+  // height, which is the font's content box and asks for too many rows.
+  return { cols: Math.max(20, Math.floor((window.innerWidth - left - 32) / cw)), rows: Math.max(5, Math.floor((h - 50) / 16)) };
 }
 
 async function post(body) {

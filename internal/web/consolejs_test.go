@@ -33,6 +33,7 @@ r.push(rows[0], rows[1], rows[2]);
 r.push(consoleTitle({ label: "claude", worktree: "/a/b/wt", state: "running", started: new Date(Date.now() - 125000).toISOString() }, Date.now(), (p) => p));
 r.push(consoleTitle({ label: "codex", worktree: "/a/b/wt", state: "exited", exit_code: 3 }, Date.now(), (p) => p));
 r.push(String(exitToast("running", false)), String(exitToast("running", true)), String(exitToast("exited", false)));
+r.push(runHTML({ t: "ab\u2590\u259bX\ue0b0" }), runHTML({ t: "\u4f60", w: 2 }), runHTML({ t: "e\u0301x" }));
 r.push(killPrompt({ label: "claude", worktree: "/a/b/wt" }, false), killPrompt({ label: "claude", worktree: "C:\\x\\wt2" }, true));
 console.log(r.join("|"));
 `)
@@ -41,7 +42,9 @@ console.log(r.join("|"));
 		`{"cols":111,"rows":25}|{"cols":1,"rows":1}|` +
 		`<span style="color:#ff0000" class="b">a&lt;b</span>|<span>x</span>||` +
 		`3|<span>one</span>|true|<span>three</span>|<span>one</span>|<span>TWO</span>|<span>three</span>|` +
-		`claude · /a/b/wt · running 2m|codex · /a/b/wt · exited (3)|true|false|false|Kill claude in wt?|Kill claude in wt2 and remove it from the list?`
+		`claude · /a/b/wt · running 2m|codex · /a/b/wt · exited (3)|true|false|false|<span>ab<span class="cg" style="width:calc(var(--cw) * 2)">▐▛</span>X<span class="cg" style="width:calc(var(--cw) * 1)"></span></span>|` +
+		`<span><span class="cg" style="width:calc(var(--cw) * 2)">你</span></span>|<span>éx</span>` +
+		`|Kill claude in wt?|Kill claude in wt2 and remove it from the list?`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
@@ -66,6 +69,16 @@ var consoleWiring = []struct{ file, want, why string }{
 	{"core.js", `"kill", "kill and remove"`, "the kill options render as danger"},
 	{"style.css", "#console.hidden", "hidden by id, never a global .hidden"},
 	{"style.css", "#console-grid", "the grid has its own rules (monospace, pre)"},
+	{"console.js", `class="conrow"`, "a console row has its OWN class: .crow is the commit row (flex, nowrap, padded) and deformed the screen"},
+	{"style.css", "#console-grid .conrow { height: 16px; line-height: 16px; white-space: pre; }", "the row keeps its spaces and its height"},
+	{"style.css", "#console-grid .cg { display: inline-block;", "a non-ASCII stretch sits in a box of whole cells"},
+	{"console.js", `probe.className = "conrow"`, "the cell height is a ROW's height, not the font's content box (the grid overflowed the console)"},
+	{"console.js", `setProperty("--cw"`, "the cell width reaches the glyph boxes"},
+	{"style.css", `"Symbols Nerd Font Mono"`, "prompt icons (Nerd Font private-use glyphs) find a font"},
+	{"style.css", "#sessstart-body button { background: var(--bg);", "the dialog's run button looks like the page's buttons"},
+	{"sidebar.js", "sessionSubRows(path", "a branch row checked out in a worktree lists that worktree's sessions"},
+	{"sidebar.js", "sessionSubRows(w.path", "…with the worktree row's own markup"},
+	{"style.css", "#branches-list li.wsess", "the branch sub-rows are styled"},
 }
 
 func TestConsoleJSIsWired(t *testing.T) {
@@ -74,5 +87,12 @@ func TestConsoleJSIsWired(t *testing.T) {
 		if !strings.Contains(readStatic(t, c.file), c.want) {
 			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
 		}
+	}
+}
+
+func TestConsoleRowClassIsNotTheCommitRows(t *testing.T) {
+	t.Parallel()
+	if strings.Contains(readStatic(t, "console.js"), `class="crow"`) {
+		t.Fatal(`console.js paints rows as .crow — the commit list's class`)
 	}
 }

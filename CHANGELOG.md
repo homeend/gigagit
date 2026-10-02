@@ -39,6 +39,33 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   takes the empty side — it reads `— removed` — and `i` again lets go; `I`
   takes those too. The conflict resolver is unchanged.
 
+## The browser console draws the agent's screen as the terminal does
+
+### Fixed
+
+- **A deformed screen in the gg web console.** Console rows shared a CSS
+  class with the commit list's rows, which collapsed runs of spaces and
+  padded every row: logos and boxes fell apart and the cursor sat left of
+  its place. Rows have their own class now.
+- **The console asked for more rows than it could show**, so the bottom of
+  the agent's screen — its input box, what you type — was below the fold.
+  The cell height was measured from the font instead of from a row.
+- **Columns drift after block, box-drawing, icon and CJK glyphs.** A browser
+  takes a glyph the monospace font lacks from another font, at that font's
+  width. Such stretches now sit in boxes of whole cells (a wide glyph in a
+  two-cell box, by the emulator's own width).
+- **Prompt icons showed as missing-glyph boxes.** The console's font list now
+  ends in the common Nerd Fonts (MesloLGS NF, JetBrainsMono, CaskaydiaCove,
+  FiraCode, Hack, Symbols Nerd Font): with one installed, the icons draw.
+- **The Start agent dialog's run button** had the browser's default look.
+
+### Added
+
+- **Sessions under a branch in gg web.** A branch checked out in a worktree
+  lists that worktree's sessions beneath it, as the terminal's Branches tab
+  does: click opens the console, right-click offers Open / Kill / Kill and
+  remove / Remove.
+
 ## Start, kill and remove agent sessions from the browser
 
 ### Added

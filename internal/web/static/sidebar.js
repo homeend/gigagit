@@ -60,11 +60,41 @@ function recycleCandidates(worktrees, current, sessions) {
 }
 // --- end sidebar model ---
 
+// sessionSubRows: the sub-rows of the sessions in one worktree — under its
+// Worktrees row and under the branch checked out there (the TUI lists them
+// on both tabs). No data-n / data-p: the parent's menu and the drop targets
+// skip them; data-sid opens the console and carries the session menu.
+function sessionSubRows(path, cols) {
+  return worktreeSessionRows(state.sessions || [], path, Date.now())
+    .map((r) => {
+      const room = cols - 6 - Array.from(r.meta).length;
+      return (
+        `<li class="wsess${r.task ? " task" : ""}" data-sid="${esc(r.id)}" title="${esc(r.label + " — " + r.meta)}">` +
+        `└ <span class="glyph ${r.glyph === "●" ? "run" : "ex"}">${r.glyph}</span> ${esc(room > 4 ? elideNameMiddle(r.label, room) : r.label)}` +
+        `<span class="wpath">${esc(r.meta)}</span></li>`
+      );
+    })
+    .join("");
+}
+
+// sessionRowMenu: the right-click menu of a session sub-row (sessions.js
+// adds Kill / Remove through the "session" menu key). false = not a sub-row.
+function sessionRowMenu(li, e) {
+  if (!li || !li.classList.contains("wsess")) return false;
+  const s = (state.sessions || []).find((x) => x.id === li.dataset.sid);
+  if (s) {
+    e.preventDefault();
+    showCtxMenu([{ label: "Open session", act: () => openConsole(s.id) }, ...extraRows("session", s)], e.clientX, e.clientY);
+  }
+  return true;
+}
+
 // takeSessions: the agent-session list (boot and every "sessions" live
 // event) — the sub-rows under the worktrees repaint from it.
 function takeSessions(list) {
   state.sessions = list || [];
   renderWorktrees();
+  renderBranches(); // a branch checked out in a worktree lists its sessions too
 }
 
 async function fetchBranches() {
@@ -182,7 +212,8 @@ function renderBranches() {
         // data-n and not draggable, so the branch menu and drops skip them.
         branchReviews(state.noteCounts.reviews, b)
           .map((r) => `<li class="brev" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(branchReviewText(r))}</li>`)
-          .join("")
+          .join("") +
+        (path ? sessionSubRows(path, cols) : "")
       );
     })
     .join("");
@@ -234,16 +265,7 @@ function renderWorktrees() {
       // Session sub-rows (web attach): one per agent session in this
       // worktree, a click opens its console. No data-p: the worktree menu
       // and the drop targets skip them.
-      const subs = worktreeSessionRows(state.sessions || [], w.path, Date.now())
-        .map((r) => {
-          const room = cols - 6 - Array.from(r.meta).length;
-          return (
-            `<li class="wsess${r.task ? " task" : ""}" data-sid="${esc(r.id)}" title="${esc(r.label + " — " + r.meta)}">` +
-            `└ <span class="glyph ${r.glyph === "●" ? "run" : "ex"}">${r.glyph}</span> ${esc(room > 4 ? elideNameMiddle(r.label, room) : r.label)}` +
-            `<span class="wpath">${esc(r.meta)}</span></li>`
-          );
-        })
-        .join("");
+      const subs = sessionSubRows(w.path, cols);
       return (
         `<li class="${cur.trim()}" data-p="${esc(w.path)}" title="${esc(w.path)}">` +
         `${mark(!!cur)}${esc(label)}` +
@@ -538,6 +560,7 @@ function showBranchMenu(b, x, y) {
 $("branches-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (li && li.dataset.review) return openReview(li.dataset.review, { kind: "list" });
+  if (li && li.dataset.sid) return openConsole(li.dataset.sid);
   if (!li || !li.dataset.n) return;
   const b = state.branches.find((x) => x.name === li.dataset.n);
   if (b) gotoBranchTip(b);
@@ -549,6 +572,7 @@ $("branches-list").addEventListener("contextmenu", (e) => {
     e.preventDefault();
     return reviewMenu(li.dataset.review, e.clientX, e.clientY);
   }
+  if (sessionRowMenu(li, e)) return;
   if (!li || !li.dataset.n) return;
   e.preventDefault();
   const b = state.branches.find((x) => x.name === li.dataset.n);
@@ -835,14 +859,7 @@ function showWorktreeMenu(w, x, y) {
 $("worktrees-list").addEventListener("contextmenu", (e) => {
   const li = e.target.closest("li");
   if (!li) return;
-  if (li.classList.contains("wsess")) {
-    // A session sub-row: its own menu (sessions.js adds Kill / Remove).
-    const s = (state.sessions || []).find((x) => x.id === li.dataset.sid);
-    if (!s) return;
-    e.preventDefault();
-    showCtxMenu([{ label: "Open session", act: () => openConsole(s.id) }, ...extraRows("session", s)], e.clientX, e.clientY);
-    return;
-  }
+  if (sessionRowMenu(li, e)) return;
   if (!li.dataset.p) return;
   e.preventDefault();
   const w = state.worktrees.find((x) => x.path === li.dataset.p);
