@@ -530,12 +530,15 @@ func splitLinkLine(t string) (rest string, side NoteSide, line, end int, fp stri
 	}
 	first, last, isRange := num, "", false
 	if j := strings.IndexByte(num, '-'); j > 0 {
-		if _, nerr := strconv.Atoi(num[:j]); nerr == nil {
+		if _, nerr := linkNum(num[:j]); nerr == nil {
 			first, last, isRange = num[:j], num[j+1:], true
 		}
 	}
-	n, cerr := strconv.Atoi(first)
+	n, cerr := linkNum(first)
 	if cerr != nil {
+		if neg, ok := strings.CutPrefix(first, "-"); ok && neg != "" && isAllDigits(neg) {
+			return "", "", 0, 0, "", fmt.Errorf("%w: a line must be a 1-based number, got %q", ErrLink, num)
+		}
 		if num == "" {
 			return "", "", 0, 0, "", fmt.Errorf("%w: a line number is missing after \":\"", ErrLink)
 		}
@@ -545,7 +548,7 @@ func splitLinkLine(t string) (rest string, side NoteSide, line, end int, fp stri
 		if last == "" {
 			return "", "", 0, 0, "", fmt.Errorf("%w: a line number is missing after \"-\"", ErrLink)
 		}
-		m, merr := strconv.Atoi(last)
+		m, merr := linkNum(last)
 		if merr != nil {
 			return t, NoteSideNew, 0, 0, "", nil // "3-7x.go": a path, not a range
 		}
@@ -570,21 +573,32 @@ func splitLinkLine(t string) (rest string, side NoteSide, line, end int, fp stri
 }
 
 func isAllDigits(s string) bool {
-	_, err := strconv.Atoi(s)
+	_, err := linkNum(s)
 	return err == nil
+}
+
+// linkNum reads a line number: digits only. strconv.Atoi alone takes a sign,
+// which read ":3-+7" as the range 3-7.
+func linkNum(s string) (int, error) {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return 0, strconv.ErrSyntax
+		}
+	}
+	return strconv.Atoi(s)
 }
 
 // linkLineSpec reports whether s is "<n>" or "<a>-<b>" (or the unfinished
 // "<a>-", which splitLinkLine then refuses by name).
 func linkLineSpec(s string) bool {
 	a, b, isRange := strings.Cut(s, "-")
-	if _, err := strconv.Atoi(a); err != nil {
+	if _, err := linkNum(a); err != nil {
 		return false
 	}
 	if !isRange || b == "" {
 		return true
 	}
-	_, err := strconv.Atoi(b)
+	_, err := linkNum(b)
 	return err == nil
 }
 

@@ -232,6 +232,7 @@ type noteTarget struct {
 	note    model.Note     // the targeted note itself (root or reply)
 	rootID  string         // the thread root's id (== note.ID on a root)
 	line    int            // the thread's resolved anchor line (popup heading)
+	first   int            // the first line the thread covers (== line for a one-line note)
 	side    model.NoteSide // the thread's side
 	hash    string         // the thread's context fingerprint
 	replies int            // replies a delete would take along (0 unless note is the root)
@@ -246,7 +247,7 @@ func (v *diffView) noteTargetIn(r domain.ResolvedNote) (noteTarget, bool) {
 	shown := func(n model.Note) bool {
 		return !v.hideAgent || n.Source != model.NoteSourceAgent
 	}
-	t := noteTarget{rootID: r.Note.ID, line: r.Range[1], side: r.Note.Side, hash: r.Note.ContextHash}
+	t := noteTarget{rootID: r.Note.ID, first: r.Range[0], line: r.Range[1], side: r.Note.Side, hash: r.Note.ContextHash}
 	if shown(r.Note) {
 		// Deleting a root takes its replies, hidden ones included — the count
 		// the confirmation quotes is the STORED thread, not the shown rows.
