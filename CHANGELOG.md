@@ -76,6 +76,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the console's screen first — the session keeps running, `ctrl+\` or its
   row brings it back. Background refreshes never close it.
 
+- **A repo switch from the page with Settings still open in the terminal**
+  was refused ("a window is open that owns the keyboard"). The terminal now
+  closes its Settings window and switches, unless you are typing into a
+  field there; any other refusal now ends with the way out ("press esc in
+  the terminal, then switch again").
+
 ### Added
 
 - **Sessions under a branch in gg web.** A branch checked out in a worktree
