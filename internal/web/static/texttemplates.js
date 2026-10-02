@@ -18,7 +18,8 @@ let data = null; // last GET /api/text-templates payload
 let sel = 0; // index into data.templates
 // null = browse · {kind:"fill", t} · {kind:"rendering", t} (a render is in
 // flight: keys are swallowed, Escape gives up on it) · {kind:"rendered", t, text}
-// · {kind:"form", t|null} · {kind:"confirm", t}
+// · {kind:"form", t|null, warned} (warned = the form's content when the
+// unsaved-text notice was last shown) · {kind:"confirm", t}
 let mode = null;
 
 const scopeTag = (s) => (s === "repo" ? "[this repo]" : "[global]");
@@ -43,16 +44,36 @@ function close() {
   closeLayer("texttemplates");
 }
 
+// formContent is what the open form holds, as one comparable value.
+function formContent() {
+  return JSON.stringify([$("tt-title").value, $("tt-body").value, $("tt-scope").dataset.scope]);
+}
+
+// canLeaveForm guards every way out of the add/edit form except save. An
+// untouched form may go at once. A changed one is kept the first time, with a
+// notice; leaving again without touching the text discards it.
+function canLeaveForm() {
+  if (!mode || mode.kind !== "form") return true;
+  const now = formContent();
+  if (now === mode.seed || now === mode.warned) return true;
+  mode.warned = now;
+  showErr("unsaved text — esc again discards it");
+  return false;
+}
+
+// back leaves the current step for the list.
+function back() {
+  if (!canLeaveForm()) return;
+  mode = null;
+  render();
+}
+
 // onKey owns the keyboard while the overlay is open. Typed text stays in its
 // field: only Escape (and Enter in a one-line field) act from inside one.
 function onKey(e) {
   if (e.key === "Escape") {
-    if (mode) {
-      mode = null;
-      render();
-    } else {
-      close();
-    }
+    if (mode) back();
+    else close();
     e.preventDefault();
     return true;
   }
@@ -69,11 +90,10 @@ function onKey(e) {
     return true;
   }
   if (mode && mode.kind === "confirm") {
+    // Only y deletes and only n (or Escape, above) cancels: a stray key —
+    // a bare Shift, Tab — must not answer the question.
     if (e.key === "y") removeTemplate(mode.t);
-    else {
-      mode = null;
-      render();
-    }
+    else if (e.key === "n") back();
     return true;
   }
   if (mode) return true;
@@ -124,14 +144,16 @@ function showErr(msg) {
   if (err) err.textContent = msg;
 }
 
-async function reload(selectId) {
+// reload refetches the list and selects the row (id, scope) names — the same
+// id may exist in both scopes.
+async function reload(selectId, selectScope) {
   try {
     data = await getJSON("/api/text-templates");
   } catch (e) {
     showErr(e.message);
     return;
   }
-  const at = rows().findIndex((t) => t.id === selectId);
+  const at = rows().findIndex((t) => t.id === selectId && t.scope === selectScope);
   sel = at >= 0 ? at : Math.min(sel, Math.max(rows().length - 1, 0));
   mode = null;
   render();
@@ -207,12 +229,12 @@ function saveForm() {
   const req = t
     ? postJSON("/api/text-templates/update", { id: t.id, scope: t.scope, title, body })
     : postJSON("/api/text-templates", { title, body, scope: $("tt-scope").dataset.scope });
-  req.then((row) => reload(row.id)).catch((err) => showErr("not saved: " + err.message));
+  req.then((row) => reload(row.id, row.scope)).catch((err) => showErr("not saved: " + err.message));
 }
 
 function removeTemplate(t) {
   postJSON("/api/text-templates/remove", { id: t.id, scope: t.scope })
-    .then(() => reload(""))
+    .then(() => reload("", ""))
     .catch((err) => {
       mode = null;
       render();
@@ -322,6 +344,7 @@ function render() {
   if (mode && mode.kind === "form") {
     $("tt-title").value = mode.t ? mode.t.title : "";
     $("tt-body").value = mode.t ? mode.t.body : "";
+    mode.seed = formContent();
   }
   const first = box.querySelector("input");
   if (first) {
@@ -343,8 +366,7 @@ $("texttemplates-box").addEventListener("click", (e) => {
   if (!t || t.disabled) return;
   switch (t.dataset.act) {
     case "back":
-      mode = null;
-      render();
+      back();
       break;
     case "fill":
       startFill();
@@ -392,7 +414,7 @@ $("texttemplates-box").addEventListener("dblclick", (e) => {
 });
 
 $("texttemplates").addEventListener("click", (e) => {
-  if (e.target === $("texttemplates")) close();
+  if (e.target === $("texttemplates") && canLeaveForm()) close();
 });
 
 // textTemplatesKey opens the overlay on alt+x and reports whether it took

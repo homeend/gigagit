@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -114,5 +115,18 @@ func TestTextTemplateRenderPeeksTakeBumps(t *testing.T) {
 	}
 	if code := ttPost(t, ts, "/render", `{"id":"seq","scope":"repo","inputs":{}}`, nil); code != http.StatusBadRequest {
 		t.Fatalf("missing input: code = %d", code)
+	}
+}
+
+// Titles collide by id: the 409 names the id and the title that holds it.
+func TestTextTemplateDuplicateNamesTheID(t *testing.T) {
+	isolatePrefixes(t)
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	if code := ttPost(t, ts, "", `{"title":"Bug report","body":"x","scope":"repo"}`, nil); code != http.StatusOK {
+		t.Fatalf("seed add code = %d", code)
+	}
+	code, out := postJSONRaw(t, ts, "/api/text-templates", `{"title":"bug-report","body":"x","scope":"repo"}`)
+	if code != http.StatusConflict || !strings.Contains(out["error"], `"bug-report"`) || !strings.Contains(out["error"], `"Bug report"`) || strings.Contains(out["error"], "text template:") {
+		t.Fatalf("code %d error %q", code, out["error"])
 	}
 }

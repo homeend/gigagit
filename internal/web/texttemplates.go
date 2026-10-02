@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -72,13 +73,14 @@ func decodeTextTemplateReq(w http.ResponseWriter, r *http.Request) (textTemplate
 }
 
 // writeTextTemplateErr maps a store error: an unknown id is 404, a title
-// already taken in the scope 409.
+// whose id is already taken in the scope 409.
 func writeTextTemplateErr(w http.ResponseWriter, err error) {
 	switch {
 	case domain.IsTextTemplateNotFound(err):
 		writeErr(w, http.StatusNotFound, errors.New("unknown text template"))
 	case domain.IsTextTemplateDuplicate(err):
-		writeErr(w, http.StatusConflict, errors.New("a text template with this title already exists in that scope"))
+		// The store's text names the id and the title that holds it.
+		writeErr(w, http.StatusConflict, errors.New(strings.TrimPrefix(err.Error(), "text template: ")))
 	default:
 		writeErr(w, http.StatusInternalServerError, err)
 	}
