@@ -875,14 +875,16 @@ finds the right one here.
   of the name yourself (`me/MTHR-1234` + `-fix-login`). `--template <value>`
   resolves a raw template instead of a stored id.
 - `gg template list` / `gg template show <id>` / `gg template render <id> [--set label=value]… [--peek]` /
-  `gg template add --title <title> -F <file|-> [--global]` /
+  `gg template add --title <title> -F <file|-> [--repo]` /
   `gg template edit <id> [--title <title>] [-F <file|->]` / `gg template rm <id>`
   — **text templates**: titled, multi-line texts (a PR description, a bug
   report) with the branch-prefix tokens plus `<branch>` (the current branch),
-  in the same two-scope store (repo by default; `--global`). `list` prints
-  `id<TAB>scope<TAB>title`; an id may be a unique prefix. `render` prints the
-  resolved text: `--set name=Ann` fills `<user:name>` (a missing label exits 2
-  naming the flag); it CONSUMES the template's `<seq:…>` counters — pass
+  in a two-scope store: `add` stores GLOBALLY (every repo) unless `--repo`;
+  the other verbs find either scope (the repo row wins a tie; `--global`
+  narrows). `list` prints `id<TAB>scope<TAB>title`; an id may be a unique
+  prefix. `render` prints the resolved text: `--set name=Ann` fills
+  `<user:name>` (a missing label, or a label the template does not ask for,
+  exits 2 naming it); it CONSUMES the template's `<seq:…>` counters — pass
   `--peek` to preview without advancing them. An unknown `<…>` (`<br>`,
   `<me@x.com>`) is literal text. `-F -` reads the text from stdin. In the TUI,
   `alt+x` opens the same templates (fill, then `y` copies).

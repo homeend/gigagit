@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -25,7 +26,7 @@ func cmdTemplate(svc *domain.Service, workdir string, args []string, stdin io.Re
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "list", "ls":
-		return templateList(svc, stdout, stderr)
+		return templateList(svc, rest, stdout, stderr)
 	case "show":
 		return templateShow(svc, rest, stdout, stderr)
 	case "render":
@@ -72,27 +73,42 @@ func templateScope(global bool) *model.ProfileScope {
 func findTemplate(svc *domain.Service, verb, id string, global bool, stderr io.Writer) (model.TextTemplate, bool) {
 	t, err := svc.FindTextTemplate(context.Background(), id, templateScope(global))
 	if err != nil {
-		fmt.Fprintf(stderr, "template %s: %s\n", verb, strings.TrimPrefix(err.Error(), "text template: "))
+		msg := strings.TrimPrefix(err.Error(), "text template: ")
+		if domain.IsTextTemplateNotFound(err) {
+			msg += " (gg template list shows the ids)"
+		}
+		fmt.Fprintf(stderr, "template %s: %s\n", verb, msg)
 		return model.TextTemplate{}, false
 	}
 	return t, true
 }
 
 // readBody reads -F's target: a file path (a relative one is taken from
-// workdir, the directory the command runs against), or stdin for "-".
+// workdir, the directory the command runs against), or stdin for "-". It
+// reads one byte past the largest text a template may hold and no further:
+// more than that is refused by validation whatever follows.
 func readBody(workdir, from string, stdin io.Reader) (string, error) {
-	if from == "-" {
-		b, err := io.ReadAll(stdin)
-		return string(b), err
+	src := stdin
+	if from != "-" {
+		if !filepath.IsAbs(from) {
+			from = filepath.Join(workdir, from)
+		}
+		f, err := os.Open(from)
+		if err != nil {
+			return "", err
+		}
+		defer f.Close()
+		src = f
 	}
-	if !filepath.IsAbs(from) {
-		from = filepath.Join(workdir, from)
-	}
-	b, err := os.ReadFile(from)
+	b, err := io.ReadAll(io.LimitReader(src, domain.MaxTextTemplateBody+1))
 	return string(b), err
 }
 
-func templateList(svc *domain.Service, stdout, stderr io.Writer) int {
+func templateList(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
+		fmt.Fprintln(stderr, "usage: gg template list")
+		return 2
+	}
 	ts, err := svc.TextTemplates(context.Background())
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
@@ -160,6 +176,21 @@ func templateRender(svc *domain.Service, args []string, stdout, stderr io.Writer
 		fmt.Fprintf(stderr, "template render: %s needs %s\n", t.ID, strings.Join(missing, " "))
 		return 2
 	}
+	var unknown []string
+	for l := range inputs {
+		if !slices.Contains(labels, l) {
+			unknown = append(unknown, l)
+		}
+	}
+	if len(unknown) > 0 {
+		slices.Sort(unknown)
+		asks := "no variables"
+		if len(labels) > 0 {
+			asks = strings.Join(labels, ", ")
+		}
+		fmt.Fprintf(stderr, "template render: %s has no variable %s (it asks for: %s)\n", t.ID, strings.Join(unknown, ", "), asks)
+		return 2
+	}
 	ctx := context.Background()
 	var text string
 	var err error
@@ -184,10 +215,11 @@ func templateAdd(svc *domain.Service, workdir string, args []string, stdin io.Re
 	fs.SetOutput(stderr)
 	title := fs.String("title", "", "the template's title")
 	from := fs.String("F", "", "read the text from this file (- = stdin)")
-	global := fs.Bool("global", false, "store in the global (every-repo) scope")
+	repo := fs.Bool("repo", false, "store for this repo only")
+	global := fs.Bool("global", false, "store in the global (every-repo) scope — the default")
 	pos, ok := parseInterleaved(fs, args)
-	if !ok || len(pos) != 0 || *title == "" || *from == "" {
-		fmt.Fprintln(stderr, "usage: gg template add --title <title> -F <file|-> [--global]")
+	if !ok || len(pos) != 0 || *title == "" || *from == "" || (*repo && *global) {
+		fmt.Fprintln(stderr, "usage: gg template add --title <title> -F <file|-> [--repo]")
 		return 2
 	}
 	body, err := readBody(workdir, *from, stdin)
@@ -195,9 +227,10 @@ func templateAdd(svc *domain.Service, workdir string, args []string, stdin io.Re
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	scope := model.ProfileScopeRepo
-	if *global {
-		scope = model.ProfileScopeGlobal
+	// Global unless --repo: the default the TUI window and the web view use.
+	scope := model.ProfileScopeGlobal
+	if *repo {
+		scope = model.ProfileScopeRepo
 	}
 	stored, err := svc.AddTextTemplate(context.Background(), model.TextTemplate{Title: *title, Body: body, Scope: scope})
 	if err != nil {

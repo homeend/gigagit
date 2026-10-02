@@ -18,7 +18,7 @@ stdout_contains = ["greeting"]
 [[run]]
 cmd             = ["template", "list"]
 exit            = 0
-stdout_contains = ["greeting\trepo\tGreeting"]
+stdout_contains = ["greeting\tglobal\tGreeting"]
 
 # A missing variable names the flag to pass.
 [[run]]

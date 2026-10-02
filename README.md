@@ -215,7 +215,7 @@ gg prefix resolve <id> [--set label=value]... [--parent <branch>] [--bump]
 gg template list                          # list text templates: id, scope, title
 gg template show <id>                     # a template's text and its variables
 gg template render <id> --set name=value  # print the resolved text (consumes <seq>; --peek does not)
-gg template add --title <t> -F <file|->   # store a text template (default scope: this repo; --global)
+gg template add --title <t> -F <file|->   # store a text template (for every repo; --repo = this repo only)
 gg template edit <id> [--title <t>] [-F <file|->]
 gg template rm <id>                       # remove a text template
 gg undo
