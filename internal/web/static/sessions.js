@@ -20,9 +20,11 @@ function wtLeaf(path) {
 // dialogStep: what a key does to the dialog — a patch ({sel}, {phase}), a
 // {start: i, approve} order, {close: true}, or {} for nothing. Pure: the
 // dialog applies it. Detecting only closes; a start in flight takes no key
-// at all (a held enter must not start twice, esc must not orphan it).
-function dialogStep(d, key) {
-  if (d.phase === "starting") return {};
+// at all (a held enter must not start twice, esc must not orphan it). A
+// REPEATED enter (the key held down) does nothing anywhere: it would pick a
+// row and then approve its command before anyone could read it.
+function dialogStep(d, key, repeat) {
+  if (d.phase === "starting" || (repeat && key === "Enter")) return {};
   if (d.phase === "detecting") return key === "Escape" ? { close: true } : {};
   if (d.phase === "approve") {
     if (key === "Enter") return { start: d.sel, approve: true };
@@ -159,7 +161,7 @@ async function startAgent(path) {
   const d = (dlg = { phase: "detecting", path, cmds: [], sel: 0 });
   pushLayer("sessstart", root, {
     onKey: (e) => {
-      if (dlg) apply(dialogStep(dlg, e.key));
+      if (dlg) apply(dialogStep(dlg, e.key, e.repeat));
       e.preventDefault();
       return true; // the dialog owns the keyboard
     },

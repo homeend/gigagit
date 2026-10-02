@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/agentsession"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/exttool"
 )
 
 // privateSessions installs a private session manager. Serial tests only:
@@ -136,5 +138,29 @@ func TestWebStartInstallsTheSessionStarter(t *testing.T) {
 	_ = runOne(t, m, cmd)
 	if f.starter == nil {
 		t.Fatal("the host never got a session starter")
+	}
+}
+
+// The hosted page's dialog ran the first-run detect (the global file holds
+// the commands) while the terminal's config is stale: the terminal's own
+// Start agent must list them — not report "no agent found", not append again.
+func TestStartAgentAfterThePageDetected(t *testing.T) {
+	m := loadedModel(t)
+	global := filepath.Join(t.TempDir(), "config.toml")
+	old, oldDetect := agentGlobalConfigPath, agentDetect
+	agentGlobalConfigPath = func() string { return global }
+	agentDetect = func() []exttool.Detection { t.Error("detected again"); return nil }
+	t.Cleanup(func() { agentGlobalConfigPath, agentDetect = old, oldDetect })
+	tc := config.ToolCommand{Name: "Shell", Category: "session", Mode: "session", Command: "sh -c 'sleep 30'"}
+	if err := config.AppendToolCommands(global, []config.ToolCommand{tc}); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(global)
+	msg := m.ensureAgentsCmd(modelTop(t, m))().(agentEnsureMsg)
+	if msg.err != nil || msg.added != nil || !msg.loaded || len(domain.SessionCommands(msg.cfg, "tui")) != 1 {
+		t.Fatalf("ensure = %+v", msg)
+	}
+	if after, _ := os.ReadFile(global); string(after) != string(before) {
+		t.Fatal("the global config was appended to again")
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 )
@@ -332,5 +333,29 @@ func TestSessionStartTimesOutOnAWedgedStarter(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the start hung on a wedged starter")
+	}
+}
+
+// Open terminal never detects agents or writes the config: that is Start
+// agent's dialog, where the page says what was added.
+func TestSessionStartTerminalNeverDetects(t *testing.T) {
+	srv, root := lifecycleServer(t, "")
+	t.Setenv("SHELL", "/bin/sh")
+	detected := false
+	srv.detectTools = func() []exttool.Detection {
+		detected = true
+		return []exttool.Detection{{Bin: "/usr/bin/claude", Tool: exttool.Tool{ID: "claude", Label: "Claude Code", Commands: []exttool.CommandTemplate{
+			{Category: exttool.CatSession, Name: "Claude", Mode: "session", Command: "claude"},
+		}}}}
+	}
+	ts := serve(t, srv)
+	if code, body := postJSONAny(t, ts, "/api/session-start", startBody(root, `,"terminal":true`)); code != http.StatusOK {
+		t.Fatalf("%d %v", code, body)
+	}
+	if code, _ := postJSONAny(t, ts, "/api/session-start", startBody(root, `,"tool":"Claude","approve":true`)); code != http.StatusBadRequest {
+		t.Fatalf("a start naming an unconfigured tool = %d, want 400", code)
+	}
+	if _, err := os.Stat(config.DefaultGlobalPath()); detected || !os.IsNotExist(err) {
+		t.Fatalf("detected=%v, global config stat err=%v: a start must not detect or write", detected, err)
 	}
 }

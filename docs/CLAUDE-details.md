@@ -4011,7 +4011,11 @@ the page has the TUI's `X` (kill and remove).
   (resolved), approved, found}], added, config_path}` — `SessionCommands(cfg,
   "web")`; with NO session command configured it runs
   `EnsureSessionCommands` inside the request (the page shows "Detecting
-  installed agents…"). `POST /api/session-start {worktree, tool | terminal,
+  installed agents…"); a start never detects. `EnsureSessionCommands`
+  re-reads the global file under a process mutex before appending (the
+  caller's config may be stale — terminal and page each hold their own),
+  and the TUI's ensure reloads its config even when nothing was added.
+  `POST /api/session-start {worktree, tool | terminal,
   approve, cols, rows}` → `{session}`; 400 a path that is not one of
   `svc.Worktrees` (exact match — the allowlist) or an unknown tool, 409
   unreachable (probed BEFORE the approval question), 403 + `needs_approval`
@@ -4032,7 +4036,8 @@ the page has the TUI's `X` (kill and remove).
   session command yet: the page's first-run detect just wrote them, and
   `AppendToolCommands` does not dedupe.
 - **Page:** `sessions.js` (dialog phases detecting → choose → approve →
-  starting; `dialogStep` is pure; a start in flight takes no key), menu
+  starting; `dialogStep` is pure; a start in flight takes no key, and a REPEATED
+  enter does nothing — a held key must not pick a row and approve it), menu
   rows through `registerRows` on `worktree`, `branch` (gate =
   `worktreePathForBranch`) and the new `session` key (the sub-row's
   right-click menu in `sidebar.js`). `killSession` / `removeSession` live in

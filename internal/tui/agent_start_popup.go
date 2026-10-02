@@ -42,6 +42,7 @@ type agentStartPopup struct {
 type agentEnsureMsg struct {
 	added    []string
 	cfg      config.Config
+	loaded   bool // cfg is the re-read effective config
 	path     string
 	err      error
 	worktree string
@@ -93,9 +94,11 @@ func (m Model) ensureAgentsCmd(worktree string) tea.Cmd {
 		path := agentGlobalConfigPath()
 		added, err := domain.EnsureSessionCommands(cfg, path, agentDetect)
 		msg := agentEnsureMsg{added: added, path: path, err: err, worktree: worktree}
-		if err == nil && added != nil {
+		if err == nil {
+			// Always: with nothing added the file may still hold commands this
+			// model never loaded (the hosted page's first run wrote them).
 			if nc, lerr := config.Load(path, repoPath); lerr == nil {
-				msg.cfg = nc
+				msg.cfg, msg.loaded = nc, true
 			}
 		}
 		return msg
@@ -113,8 +116,10 @@ func (m Model) applyAgentEnsure(msg agentEnsureMsg) (tea.Model, tea.Cmd) {
 		m.statusMsg = i18n.T("could not write the agent commands: %s", msg.err.Error())
 		return m, nil
 	}
-	if msg.added != nil {
+	if msg.loaded {
 		m.cfg = msg.cfg
+	}
+	if msg.added != nil {
 		m.statusMsg = i18n.T("Added %s to %s — edit there or in Settings → External tools", strings.Join(msg.added, ", "), msg.path)
 	}
 	cmds := domain.SessionCommands(m.cfg, "tui")

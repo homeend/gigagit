@@ -203,11 +203,14 @@ func (s *Server) handleSessionStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
-	cfg, cmds, _, err := s.sessionCommandsFor(r.Context(), svc)
+	// Never the first-run detect here: that is the dialog's GET, where the
+	// page says what was added. A start only runs what is configured.
+	cfg, err := s.effectiveConfig(r.Context(), svc)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	cmds := domain.SessionCommands(cfg, "web")
 	req := domain.SessionStartRequest{Worktree: dir, Terminal: q.Terminal}
 	req.Cols, req.Rows = startSize(q.Cols, q.Rows)
 	if !q.Terminal {

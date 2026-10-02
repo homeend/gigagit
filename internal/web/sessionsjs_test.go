@@ -24,6 +24,8 @@ r.push(JSON.stringify(dialogStep(d, "Escape")));
 r.push(JSON.stringify(dialogStep({ phase: "starting", cmds, sel: 0 }, "Enter")));  // a held enter starts nothing twice
 r.push(JSON.stringify(dialogStep({ phase: "starting", cmds, sel: 0 }, "Escape"))); // …and esc cannot orphan a start in flight
 r.push(JSON.stringify(dialogStep({ phase: "detecting", cmds: [], sel: 0 }, "Escape")));
+r.push(JSON.stringify(dialogStep(d, "Enter", true)), JSON.stringify(dialogStep({ phase: "approve", cmds, sel: 1 }, "Enter", true))); // a HELD enter neither picks nor approves
+r.push(JSON.stringify(dialogStep(d, "ArrowDown", true)));          // …while a held arrow still moves
 r.push(JSON.stringify(startRows("/a/b/wt").map((x) => x.label)));
 r.push(JSON.stringify(sessionMenuRows({ id: "s1", state: "running" }).map((x) => x.label)), JSON.stringify(sessionMenuRows({ id: "s2", state: "exited" }).map((x) => x.label)));
 console.log(r.join("|"));
@@ -31,7 +33,7 @@ console.log(r.join("|"));
 	want := `approved|approve on start|not found|` +
 		`{"sel":1}|{"sel":2}|{"sel":0}|` +
 		`{"start":0,"approve":false}|{"sel":1,"phase":"approve"}|{}|{"start":2,"approve":false}|` +
-		`{"start":1,"approve":true}|{"phase":"choose"}|{"close":true}|{"close":true}|{}|{}|{"close":true}|` +
+		`{"start":1,"approve":true}|{"phase":"choose"}|{"close":true}|{"close":true}|{}|{}|{"close":true}|{}|{}|{"sel":1}|` +
 		`["Start agent in wt","Open terminal in wt"]|["Kill session","Kill and remove session"]|["Remove session"]`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
@@ -48,6 +50,7 @@ var sessionsWiring = []struct{ file, want, why string }{
 	{"sessions.js", `registerRows("branch"`, "branch rows with a worktree get them too"},
 	{"sessions.js", `registerRows("session"`, "sub-rows get Kill / Remove"},
 	{"sessions.js", "worktreePathForBranch(", "the branch gate is the sidebar's own lookup"},
+	{"sessions.js", "dialogStep(dlg, e.key, e.repeat)", "key auto-repeat reaches the step: a held enter must not approve"},
 	{"menus.js", `"session"`, "session is a registered menu key"},
 	{"sidebar.js", `extraRows("session"`, "the sub-row menu collects the session rows"},
 	{"style.css", "#sessstart.hidden", "hidden by id, never a global .hidden"},

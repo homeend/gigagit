@@ -74,6 +74,19 @@ func UseSessionManager(m *agentsession.Manager) func() {
 	}
 }
 
+// ensureMu serialises the first-run detect's check-then-append
+// (EnsureSessionCommands) across the frontends of this process.
+var ensureMu sync.Mutex
+
+func hasSessionCommand(cfg config.Config) bool {
+	for _, tc := range cfg.Tools.Command {
+		if tc.Category == string(exttool.CatSession) {
+			return true
+		}
+	}
+	return false
+}
+
 // SessionCommands returns the effective config's valid `session` commands
 // offered in frontend ("tui"|"web"|"cli"), in config order. An invalid block
 // is inert here, as in every other tool lane.
@@ -95,11 +108,20 @@ func SessionCommands(cfg config.Config, frontend string) []config.ToolCommand {
 // session command, detect installed agents and append their SAFE session
 // templates (never an OptIn/yolo one) to the global config at globalPath.
 // Returns the names added; nil when already configured or nothing found.
+//
+// cfg may be STALE: the terminal and the page it hosts each hold their own
+// loaded config, and the other one's first run may have written the file
+// since. So the global file is read again here, under ensureMu, before
+// anything is appended — a caller that gets nil re-loads its config to see
+// what is there.
 func EnsureSessionCommands(cfg config.Config, globalPath string, detect func() []exttool.Detection) ([]string, error) {
-	for _, tc := range cfg.Tools.Command {
-		if tc.Category == string(exttool.CatSession) {
-			return nil, nil // configured (even if hidden from this frontend or invalid): never second-guess the user's file
-		}
+	if hasSessionCommand(cfg) {
+		return nil, nil // configured (even if hidden from this frontend or invalid): never second-guess the user's file
+	}
+	ensureMu.Lock()
+	defer ensureMu.Unlock()
+	if onDisk, err := config.Load(globalPath, ""); err == nil && hasSessionCommand(onDisk) {
+		return nil, nil
 	}
 	var blocks []config.ToolCommand
 	var names []string

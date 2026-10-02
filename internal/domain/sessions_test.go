@@ -316,3 +316,21 @@ func TestSessionProgram(t *testing.T) {
 		}
 	}
 }
+
+// A caller holding a STALE config (the file gained session commands since it
+// loaded — another frontend's first run) must not append them a second time.
+func TestEnsureSessionCommandsRechecksTheFile(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if _, err := EnsureSessionCommands(config.Config{}, path, fakeDetect); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(path)
+	added, err := EnsureSessionCommands(config.Config{}, path, fakeDetect) // stale: still empty
+	if err != nil || added != nil {
+		t.Fatalf("stale caller: added=%v err=%v, want nothing", added, err)
+	}
+	if after, _ := os.ReadFile(path); string(after) != string(before) {
+		t.Fatalf("the file was appended to again:\n%s", after)
+	}
+}
