@@ -67,10 +67,12 @@ func UseSessionManager(m *agentsession.Manager) func() {
 	prev := sessionsMgr
 	sessionsMgr = m
 	sessionsMu.Unlock()
+	resetSessionStates() // the state watcher follows the manager
 	return func() {
 		sessionsMu.Lock()
 		sessionsMgr = prev
 		sessionsMu.Unlock()
+		resetSessionStates()
 	}
 }
 
@@ -161,7 +163,16 @@ func (s *Service) startSessionPrompt(ctx context.Context, tc config.ToolCommand,
 	if err != nil {
 		return nil, err
 	}
-	return s.startLine(ctx, Sessions(), tc.Name, agentIDFor(tc), resolved, worktreeDir, cwd, cols, rows, env)
+	sess, err := s.startLine(ctx, Sessions(), tc.Name, agentIDFor(tc), resolved, worktreeDir, cwd, cols, rows, env)
+	if err != nil {
+		return nil, err
+	}
+	// A command with its own screen_* lists is classified by them (an
+	// invalid list leaves the agent's built-ins; SessionRulesWarning says so).
+	if r, custom, _ := SessionRules(tc); custom {
+		bindSessionRules(sess.Info().ID, r)
+	}
+	return sess, nil
 }
 
 // StartAgentSession is StartSession for an AGENT the agent channel can
