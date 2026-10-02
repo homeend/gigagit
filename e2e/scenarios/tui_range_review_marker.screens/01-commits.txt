@@ -1,10 +1,19 @@
-local  branch main                                                                                                  {{root}}______________________________/local
+local  branch main                                                                                            {{root}}____________________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Files acfc46c add c                               ││ Commits (all) 3                                                                                         │
-│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓ ✎ feature add c  ◆ 1                                                                             │
-│ > Range reviews                                   ││   ●      feature grow a                                                                                 │
-│     feature → main  ◆ 1                           ││   ●  ↓   *main   add a b                                                                                │
-│   A  c.txt  ◆ 1                                   ││                                                                                                         │
+│ [Branches] R W P ·date↓                           ││ Commits (all) 3                                                                                         │
+│     feature                                       ││ > ●  ↓ ✎ feature add c                                                                                  │
+│   * main (/tmp/gg-tui-########/tui_range_review_… ││   ●    ✎ feature grow a                                                                                 │
+│                                                   ││   ●  ↓   *main   add a b  ◆ 1                                                                           │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+╰───────────────────────────────────────────────────╯│                                                                                                         │
+╭───────────────────────────────────────────────────╮│                                                                                                         │
+│ [Files 0] Tags 0                                  ││                                                                                                         │
+│   (none)                                          ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
@@ -13,19 +22,10 @@ local  branch main                                                              
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
-│                                                   ││                                                                                                         │
+╰───────────────────────────────────────────────────╯│                                                                                                         │
+╭───────────────────────────────────────────────────╮│                                                                                                         │
+│ [Staged 0] Reflog 5                               ││                                                                                                         │
+│   (none)                                          ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
@@ -36,5 +36,5 @@ local  branch main                                                              
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 ╰───────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-tree: [↑/↓] move  [enter] diff  [a] all files  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view  [ctrl+t] full  [i] msg  [esc/l] close
+[enter/l] files [space] mark [i] message [I] in editor [ctrl+g] solo [\] filter [<>] graph [⇧←→] pan [=] center [ctrl+t] full  •  [C] amend [p]ull … [?] help
 ⎇ feature · # acfc46c · @ gg-e2e

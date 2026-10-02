@@ -146,3 +146,62 @@ func TestRangeReviewRowUnresolvableSaysSo(t *testing.T) {
 		t.Fatalf("a failed open must keep the commit's files and say why: status %q", m.statusMsg)
 	}
 }
+
+// A commit holding a range review reads as REVIEWED in the Commits list — ✎,
+// the marker an AI review has — whichever form the range took (a merge
+// preview: "branch review"; a commit pair). Its range notes are the review,
+// so they are not counted again as ◆ N; a note written outside any range
+// still is, and earns no ✎.
+func TestCommitRowMarksARangeReview(t *testing.T) {
+	t.Parallel()
+	m, base, tip := scopeReviewModel(t) // a merge-preview note on the tip
+	ctx := context.Background()
+	mid, _, err := m.svc.ResolveRev(ctx, tip+"~1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mid = strings.TrimSpace(mid)
+	add := func(commit, preview string) {
+		t.Helper()
+		if _, err := m.svc.NoteAdd(ctx, model.Note{
+			Source: model.NoteSourceAgent, Author: "ada", Preview: preview,
+			Address: model.FileAddress{State: model.StateCommitted, Commit: commit, Path: "a.txt"},
+			Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "s",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(mid, base[:7]+".."+mid[:7]) // a commit-pair note on "add a"
+	add(mid, "")                    // …and a plain note beside it
+	m.svc.InvalidateNoteCounts()
+	m, cmd := m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{manual: true})
+	m = drainMsgs(t, m, cmd, 4)
+
+	rows := map[string]string{}
+	for i, c := range m.commits {
+		rows[c.Hash] = m.commitIdentRowAt(i+m.wipCount(), m.commitIdentWidth(), false, -1)
+	}
+	for name, tc := range map[string]struct {
+		hash       string
+		mark       bool
+		badge, not string
+	}{
+		"merge preview on the tip": {tip, true, "", "◆"},
+		"commit pair + plain note": {mid, true, "◆ 1", "◆ 2"},
+		"no notes":                 {base, false, "", "◆"},
+	} {
+		row := rows[tc.hash]
+		if got := m.commitReviewed(tc.hash); got != tc.mark {
+			t.Errorf("%s: commitReviewed = %v, want %v", name, got, tc.mark)
+		}
+		if got := strings.Contains(row, markerReview); got != tc.mark {
+			t.Errorf("%s: ✎ in the row = %v, want %v: %q", name, got, tc.mark, row)
+		}
+		if tc.badge != "" && !strings.Contains(row, tc.badge) {
+			t.Errorf("%s: row must carry %q: %q", name, tc.badge, row)
+		}
+		if strings.Contains(row, tc.not) {
+			t.Errorf("%s: row must not carry %q: %q", name, tc.not, row)
+		}
+	}
+}
