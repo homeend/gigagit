@@ -987,11 +987,31 @@ function stepViewerRange(dir) {
   const own = view.range && view.rangeOwn ? view.range : null;
   const got = viewerStep(own, view.cur, view.lines.length, dir);
   if (!got) return;
+  const prev = view.range;
   view.range = got.range;
   view.rangeOwn = true;
-  rerenderKeepingScroll();
+  if (!paintViewerBand(prev, view.range)) rerenderKeepingScroll();
   const row = $("viewer-body").querySelector(`.vline[data-i="${got.end - 1}"]`);
   if (row) row.scrollIntoView({ block: "nearest" });
+}
+
+// paintViewerBand moves the band from prev to next (either may be null) on
+// the lines already rendered — a repaint of a large file costs a third of a
+// second, a step must not. False when the body is not the file's lines.
+function paintViewerBand(prev, next) {
+  const body = $("viewer-body");
+  if (view.ov || view.image || view.placeholder || !body.querySelector(".vline")) return false;
+  const has = (r, n) => !!r && r.start <= n && n <= r.end;
+  // Only the lines that enter or leave the band: a step is one line.
+  for (const r of [prev, next]) {
+    if (!r) continue;
+    for (let n = r.start; n <= r.end; n++) {
+      if (has(prev, n) === has(next, n)) continue;
+      const el = body.querySelector(`.vline[data-i="${n - 1}"]`);
+      if (el) el.classList.toggle("vrange", has(next, n));
+    }
+  }
+  return true;
 }
 
 // viewerLinkHere is the content link the viewer offers now: the band's lines,

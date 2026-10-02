@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Marking lines from the keyboard stays quick on large files
+
+### Fixed
+
+- **gg web: shift+↓ / shift+↑ no longer hide the line they marked.** The
+  band's moving end used to scroll up to just under the sticky diff header
+  (and, in a stacked diff, under the file's own header); it now stops below
+  them, and above the bottom scroll bars.
+- **gg web: holding shift+↓ on a large file no longer lags.** Each step
+  repainted the whole diff — about a second per line on a 20,000-line file.
+  The band now moves on the rows already on screen (a step costs a few
+  milliseconds); only a step into a folded run repaints, and while the key
+  is held those repaints are shared, so the band catches up within a
+  fraction of a second of letting go. The file viewer's band moves the same
+  way. Shift+click and opening a range link get the same speed-up; shrinking
+  a band no longer folds back the lines it had opened.
+
 ## Start, kill and remove agent sessions from the browser
 
 ### Added

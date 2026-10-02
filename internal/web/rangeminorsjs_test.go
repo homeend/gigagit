@@ -13,9 +13,10 @@ func TestRangeMinorsWiring(t *testing.T) {
 	live := readStatic(t, "live.js")
 	viewer := readStatic(t, "viewer.js")
 	for _, c := range []struct{ src, pin, why string }{
-		{files, "rngRows.has(r) && (!only || only === rng.side)", "unified: a one-side row wears the band only on the band's side"},
+		{files, "const b = rng ? bandCls(rngRows.has(r), rng.side, only) : \"\";", "unified: a one-side row wears the band only on the band's side (bandCls)"},
 		{files, "`<tr class=\"same${curClsBoth(r)}${attnClsBoth(r)}${markCls(r)}\"${anchor(\"new\", r.right_no)}", "unified: a context row keeps an old-side mark across a repaint"},
-		{files, "repaintStackSlots(touched);", "a stack repaints only the files whose band changed"},
+		{files, "const touched = state.stack.slots.filter((o) => o.range || o === own);", "a stack touches only the files whose band changed"},
+		{files, "repaintStackSlots(pend ? [...new Set([...stale, ...pend.slots])] : stale);", "…and repaints only those it could not band in place"},
 		{files, "are not all in this diff", "c refuses a range the diff holds only in part"},
 		{files, "\"notes in a compare anchor on the new side\"", "a commit pair's old side is refused in compare words"},
 		{view, "s.range = null; // other rows now", "a slot whose file changed on disk drops its band"},

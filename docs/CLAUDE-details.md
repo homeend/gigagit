@@ -890,6 +890,23 @@ the cursor walked off restarts from the cursor. Tests:
 `rangekeysjs_test.go`. `rangeKey` runs before `diffScrollKey`. Narrow layout: a context row
 carries `data-ono` (its old line — NOT data-lno, which means "split layout"
 to the click code); `diffRowAt` is the one (side, line) → row lookup. Tests: `rangenotejs_test.go`, `TestNotesAddRange`.
+Cheap steps (2026-10-02): `setDiffRange` bands IN PLACE (`paintBandInPlace`:
+the classes `bandCls` gives in the render — `markCls` calls it — toggled on
+the rows entering/leaving, found by a sibling walk from the band's first
+`data-i`, `renderedRows`) when the table says it wears bands (`data-band`,
+= notesOn; `data-cols="3"` = unified, where a del/add row bands only its
+side) and every band row is rendered. Else a repaint: now for shift+click /
+landings, deferred for a keyboard step (`repaintBandLater`: one repaint for
+the steps a held key makes meanwhile, throttled to half its last cost;
+`bandPending.end` is shown after it; a repaint for a diff the reader left is
+dropped). Shrinking leaves the rows the band had unfolded (as
+`clearDiffRange`). The moving end is kept in sight by `keepRowInSight` —
+pure `sightScroll` against `#diff-top` + the slot's `.stk-head` heights and
+the bottom bars — never `scrollIntoView`, which parks it under the sticky
+headers. The viewer's twin is `paintViewerBand`. Tests:
+`TestBandClassAndSight`, `TestRangeKeysCheapStepWiring`; browser probe with a
+20k-line file: step 700–1000 ms → ~1–6 ms, viewer ~250 ms → <1 ms, a held
+key in the changes-only view settles ~0.2 s after the last key (was ~3.5 s).
 
 **A note over marked lines (2026-10-02).** `c` with more than one row marked
 in the diff asks `noteAnchorOfMarks` (`note_popup.go`), which reuses
