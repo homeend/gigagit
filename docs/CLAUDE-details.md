@@ -4080,7 +4080,13 @@ the page has the TUI's `X` (kill and remove).
   boxes of N × `--cw` (`textHTML`), and a wide glyph is its own run with
   `w` (cells) from the emulator, because a browser's fallback font has its
   own widths. Session sub-rows render under branch rows too
-  (`sessionSubRows`, `sessionRowMenu` in sidebar.js).
+  (`sessionSubRows`, `sessionRowMenu` in sidebar.js). The console GIVES
+  WAY: `files.js setLayout` fires a `gg:panes` document event, which closes
+  the console only within 10 s of a click outside it (background refreshes
+  call setLayout too); `layers.js pushLayer` (a surface with a lower
+  z-index than the console) and `live.js steerNavigateLand` fire it with
+  `force`; a click on a sidebar row that is not a session sub-row closes it
+  directly.
 - **Browser check:** the `attach_browser_test.go` host seeds a `Shell`
   session command in its isolated global config; the lifecycle script
   starts it from the worktree menu.

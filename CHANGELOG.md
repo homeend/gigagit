@@ -68,6 +68,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **The sessions popup in gg web shows a repository name as written** — it
   was uppercased, so a repository called `b` read as a stray `B`.
 
+- **The console gives way when you ask the page for something else.** A
+  review, a branch tip, a compare or Settings opened while an agent console
+  was shown landed underneath it, out of sight. A click on a sidebar row, a
+  pane navigation that follows your own click outside the console, a surface
+  that would open under it, and an agent's `gg session navigate` now close
+  the console's screen first — the session keeps running, `ctrl+\\` or its
+  row brings it back. Background refreshes never close it.
+
 ### Added
 
 - **Sessions under a branch in gg web.** A branch checked out in a worktree

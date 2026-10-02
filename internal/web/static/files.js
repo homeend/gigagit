@@ -175,6 +175,9 @@ function setLayout(mode) {
   // into either stage that shows the pane re-renders and rescrolls it.
   if (mode === "list" || (mode === "files" && was === "diff")) stepCommitCursor(0);
   symLayoutChanged(); // the symmetric grid exists only in the diff stage
+  // The panes show something else now: an agent console lying over them
+  // gives way when the user asked for it (console.js decides).
+  document.dispatchEvent(new CustomEvent("gg:panes"));
 }
 
 

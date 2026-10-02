@@ -289,6 +289,7 @@ document.addEventListener("paste", (e) => {
 });
 
 function consoleKey(e) {
+  outsideClick = 0; // typing here: a later background refresh is not the user's navigation
   if (isReserved(e)) {
     e.preventDefault();
     if (e.code === "Backslash" || e.key === "\\") askSwitcher();
@@ -344,6 +345,7 @@ function maximize() {
 }
 
 async function openConsole(id) {
+  outsideClick = 0;
   let body;
   try {
     body = await getJSON("/api/sessions");
@@ -419,6 +421,34 @@ function consoleSessions(list) {
   con.info = Object.assign({}, con.info, info);
   retitle();
 }
+
+// The console lies over the panes. When the user asks the page for something
+// else it gives way (the session runs on; ctrl+\ brings it back):
+//  - a click on a sidebar row navigates the panes (a session sub-row opens a
+//    console instead, and openConsole replaces this one);
+//  - "gg:panes" — a pane navigation (files.js setLayout), a surface opening
+//    under the console, an agent's navigate. A plain navigation counts only
+//    shortly after a click OUTSIDE the console: background refreshes move
+//    the panes too, and must never close a console the user is typing in.
+const GIVE_WAY_MS = 10000;
+let outsideClick = 0;
+
+document.addEventListener("click", (e) => {
+  if (!con.id) return;
+  if (root.contains(e.target)) {
+    outsideClick = 0;
+    return;
+  }
+  if ($("foot").contains(e.target)) return; // the console's own foot buttons
+  outsideClick = Date.now();
+  const li = e.target.closest("#branches-pane li");
+  if (li && !li.classList.contains("wsess")) closeConsole();
+}, true);
+
+document.addEventListener("gg:panes", (e) => {
+  if (!con.id) return;
+  if ((e.detail && e.detail.force) || Date.now() - outsideClick < GIVE_WAY_MS) closeConsole();
+});
 
 grid.addEventListener("mousedown", () => {
   if (con.id && !con.focused) focusConsole();

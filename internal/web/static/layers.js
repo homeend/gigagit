@@ -16,6 +16,12 @@ const layers = [];
 function pushLayer(id, el, opts) {
   if (layers.some((l) => l.id === id)) return; // one instance per surface
   el.classList.remove("hidden");
+  // A surface that opens UNDER the agent console (settings, help, …: a lower
+  // z-index) would be invisible: tell the console to give way.
+  const con = layers.find((l) => l.id === "console");
+  if (con && (Number(getComputedStyle(el).zIndex) || 0) < (Number(getComputedStyle(con.el).zIndex) || 0)) {
+    document.dispatchEvent(new CustomEvent("gg:panes", { detail: { force: true } }));
+  }
   layers.push({ id, el, onKey: (opts && opts.onKey) || null });
 }
 
