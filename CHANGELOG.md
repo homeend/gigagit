@@ -73,7 +73,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   was shown landed underneath it, out of sight. A click on a sidebar row, a
   pane navigation that follows your own click outside the console, a surface
   that would open under it, and an agent's `gg session navigate` now close
-  the console's screen first — the session keeps running, `ctrl+\\` or its
+  the console's screen first — the session keeps running, `ctrl+\` or its
   row brings it back. Background refreshes never close it.
 
 ### Added
