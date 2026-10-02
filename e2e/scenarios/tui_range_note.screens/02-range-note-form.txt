@@ -1,0 +1,40 @@
+diff: a.txt  @ 5033c87 second                                                                                                     line 5  change 1/3  rows 1–7/7
+  1 one                                                                        │  1 one
+  2 two                                                                        │  2 two
+  3 three                                                                      │  3 THREE
+  4 four                                                                       │  4 four
+  5 five                                                                       │  5 FIVE
+  6 six                                                                        │  6 six
+···············································································│  7 seven
+
+
+
+
+
+
+                               ╔════════════════════════════════════════════════════════════════════════════════════════════════╗
+                               ║                                                                                                ║
+                               ║  Add note  new side lines 3-5                                                                  ║
+                               ║                                                                                                ║
+                               ║  > summary:                                                                                    ║
+                               ║    rationale:                                                                                  ║
+                               ║                                                                                                ║
+                               ║  [tab] switch field  [enter] newline/next  [ctrl+t] fullscreen  [ctrl+s] save  [esc] cancel    ║
+                               ║                                                                                                ║
+                               ╚════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[space] mark end  [enter] copy  [L] link  [c] note  [esc] unmark  [alt+↑↓/jk] extend  [alt↔] side (locked)

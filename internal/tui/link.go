@@ -420,6 +420,7 @@ type linkSel struct {
 	row         int // the view line carrying `first`: where the link's address is read
 	block       []string
 	refusal     string
+	crossFile   bool // the refusal: the marks reach into another file of a stack
 }
 
 // diffLinkSelection reads the live selection of the diff on top (on == false:
@@ -449,7 +450,7 @@ func (m Model) diffLinkSelection() (sel linkSel, on bool) {
 	for i := lo; i <= hi; i++ {
 		ln := v.lines[i]
 		if v.stk != nil && ln.file != file {
-			sel.refusal = i18n.T("▸ a link marks lines of one file")
+			sel.refusal, sel.crossFile = i18n.T("▸ a link marks lines of one file"), true
 			return sel, true
 		}
 		if !ln.isBody() || !sidePresent(ln.Row, old) {

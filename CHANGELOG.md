@@ -48,6 +48,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `texttemplates.js`, tested under node by
   `internal/web/texttemplatesjs_test.go`.
 
+## A note over marked lines
+
+### Added
+
+- **`c` with lines marked writes one note over them.** In the diff view
+  (single file or stacked), mark lines (`space`, move, `space`) and press
+  `c`: the form reads `Add note  new side lines 3-5`, and the saved note sits
+  under the last marked line on the cursor's side with the gutter bar beside
+  the lines it covers — what only `gg note add <range link>` did before. The
+  range follows `L`'s rule (edge rows with no line on that side are trimmed,
+  lines a fold hides inside count). A saved note clears the marks; `esc` in
+  the form, or a write that fails, keeps them. One marked line with the
+  cursor on it is the ordinary one-line note, side choice included; a frozen
+  mark the cursor has left takes the note itself, as its link does. Refused with a notice: marks reaching into a second file of a
+  stack, the old side of a merge preview, and marks with no line on the
+  cursor's side.
+- The footer shown while lines are marked now names `[L] link` and
+  `[c] note`.
+
 ## Text templates: follow-up fixes
 
 ### Changed

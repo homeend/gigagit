@@ -107,8 +107,8 @@ func (m Model) diffSelectKey(v *diffView, msg tea.KeyMsg) (Model, tea.Cmd, bool)
 // diffSelectHint is the footer while a selection is live: it replaces the whole
 // base hint, because every key that matters in that state is here and the user
 // must always be able to see the way out (esc). Mode-independent, so one key
-// serves the three long-line variants; measured at 86 columns, well inside the
+// serves the three long-line variants; measured at 105 columns, well inside the
 // 140 budget.
 func diffSelectHint() string {
-	return i18n.T("[space] mark end  [enter] copy  [esc] unmark  [alt+↑↓/jk] extend  [alt↔] side (locked)")
+	return i18n.T("[space] mark end  [enter] copy  [L] link  [c] note  [esc] unmark  [alt+↑↓/jk] extend  [alt↔] side (locked)")
 }

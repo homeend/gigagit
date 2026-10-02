@@ -37,4 +37,4 @@ diff: a.txt  @ 5033c87 second                                                   
   ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
   │▸ Copied link: gg://{{root}}___________________________/local/a.txt@5033c875e1745d8e9229c807d75c6ecaeeedd46f:3-5│
   ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-[space] mark end  [enter] copy  [esc] unmark  [alt+↑↓/jk] extend  [alt↔] side (locked)
+[space] mark end  [enter] copy  [L] link  [c] note  [esc] unmark  [alt+↑↓/jk] extend  [alt↔] side (locked)

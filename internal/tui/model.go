@@ -778,7 +778,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case noteMutatedMsg:
 		if msg.err != nil {
 			m.statusMsg = i18n.T("note: %s", msg.err.Error())
+			if msg.clearMarks { // written from the full-screen diff, which draws no status line
+				m.diffNotice = "▸ " + m.statusMsg
+			}
 			return m, nil
+		}
+		if v := m.diffLayer(); v != nil && msg.clearMarks {
+			v.lsel.clear()
 		}
 		// One reload, not two: the srcNotes arrival handler re-resolves the open
 		// diff's notes itself, and reloadSourcesCmd always dispatches (no

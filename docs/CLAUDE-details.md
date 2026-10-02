@@ -840,6 +840,18 @@ beside its lines. The CLI's old `splitLinkRange` shim (highlight add only,
 broke on `~fp`) is gone. Web this round: `steerWire.EndLine` + the op line
 "the link names lines a-b"; no selection restore, no range copy.
 
+**A note over marked lines (2026-10-02).** `c` with more than one row marked
+in the diff asks `noteAnchorOfMarks` (`note_popup.go`), which reuses
+`diffLinkSelection` (side, trim rule, block from the file's full rows) and
+fills ONE anchor `{side, first, line, NoteContextHash(block)}` — no side
+field. The address is read where the marks are (cursor lent to `sel.row`, as
+`contextLinkText` does), so frozen marks in another file of a stack note that
+file. `notePopup.note()` builds the stored note (`Range{first, line}`);
+`noteMutatedMsg.clearMarks` clears `lsel` on a successful write only. One
+marked row with the cursor on it falls through to the cursor's one-line
+note. The selection is read BEFORE the cursor is lent (loose marks end at
+the cursor); the gates (address, preview old side) read the marks' file.
+
 **Line fingerprints (2026-10-01).** An UNCOMMITTED line link (working tree,
 `@staged`, `?view=content`) may end `:<n>~<fp>`: `model.LineFingerprint` =
 8 hex of FNV-1a 32 over the `TrimSpace`d line ("" for a blank line; NOT
