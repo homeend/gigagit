@@ -142,3 +142,87 @@ func TestRangeKeysWiring(t *testing.T) {
 		t.Error("viewer.js: shift+↓/↑ must be taken before the cursor keys")
 	}
 }
+
+// The band's class (shared by the render and the in-place step) and the
+// scroll that keeps the moving end out from under the sticky headers, run
+// under node.
+const bandSightHarness = `
+import { bandCls, sightScroll } from "./bs.mjs";
+console.log(JSON.stringify([
+  bandCls(true, "new", ""),
+  bandCls(true, "old", ""),
+  bandCls(false, "new", ""),
+  bandCls(true, "new", "old"),
+  bandCls(true, "old", "old"),
+  bandCls(true, "new", "new"),
+  sightScroll(100, 120, 65, 500),
+  sightScroll(50, 70, 65, 500),
+  sightScroll(36, 56, 94, 500),
+  sightScroll(490, 510, 65, 500),
+  sightScroll(100, 700, 65, 500),
+]));
+`
+
+func TestBandClassAndSight(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	mod := jsFunc(t, "files.js", "bandCls") + "\n" + jsFunc(t, "files.js", "sightScroll") + "\n" +
+		"export { bandCls, sightScroll };\n"
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "bs.mjs"), []byte(mod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(bandSightHarness), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, filepath.Join(dir, "run.mjs")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	want := `[` +
+		// a band row wears its side's class; a row outside wears none
+		`"rng-r","rng-l","",` +
+		// a unified one-side row: only when it shows the band's side
+		`"","rng-l","rng-r",` +
+		// already in sight: no scroll
+		`0,` +
+		// under #diff-top (bottom 65): up by what it hides
+		`-15,` +
+		// under a stack file's header too (bottom 94)
+		`-58,` +
+		// under the bottom bars: down
+		`10,` +
+		// taller than the gap: its top shows, it is not pushed above it
+		`35` +
+		`]`
+	if got := strings.TrimSpace(string(out)); got != want {
+		t.Errorf("band class / sight:\n got %s\nwant %s", got, want)
+	}
+}
+
+// The cheap step's wiring: a keyboard step bands in place, leaves a repaint
+// to the next frame, and keeps the end clear of the sticky headers.
+func TestRangeKeysCheapStepWiring(t *testing.T) {
+	t.Parallel()
+	files := readStatic(t, "files.js")
+	viewer := readStatic(t, "viewer.js")
+	for _, c := range []struct{ src, pin, why string }{
+		{files, "setDiffRange(any, { side: next.side, first: next.first, last: next.last }, true);", "a keyboard step may leave its repaint to the next frame"},
+		{files, "if (bandPending || !paintBandInPlace($(\"diff-body\"), (state.lastDiff || {}).rows, prev, r)) {", "the single diff bands in place first"},
+		{files, "if (bandPending) bandPending.end = end;", "the end is shown after a pending repaint"},
+		{files, "pane.scrollTop += sightScroll(r.top, r.bottom, from, to);", "the end is kept clear of the sticky headers"},
+		{files, "data-cols=\"${cols}\"${notesOn ? \" data-band\" : \"\"}", "the table says how it was drawn"},
+		{files, "if (p.single && !state.stack && state.lastDiff === p.diff) rerenderDiffKeepingPlace(true);", "a late repaint is dropped once the reader moved on"},
+		{viewer, "if (!paintViewerBand(prev, view.range)) rerenderKeepingScroll();", "the viewer bands in place first"},
+	} {
+		if !strings.Contains(c.src, c.pin) {
+			t.Errorf("%s: lost %q", c.why, c.pin)
+		}
+	}
+	if strings.Contains(files, `if (end) end.scrollIntoView({ block: "nearest" });`) {
+		t.Error("files.js: the keyboard step must not scrollIntoView (it parks the end under the sticky headers)")
+	}
+}
