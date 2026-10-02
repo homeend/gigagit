@@ -76,6 +76,8 @@ type Server struct {
 	// detectTools overrides the external-tools catalog probe (test seam);
 	// nil = exttool.Detect against the real machine.
 	detectTools func() []exttool.Detection
+	// lookPath finds a session command's program (tests); nil = exec.LookPath.
+	lookPath func(string) (string, error)
 
 	// toolStatuses overrides the tool-template status read (test seam);
 	// nil = the service's read against the real machine.
