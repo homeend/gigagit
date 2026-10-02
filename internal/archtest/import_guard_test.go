@@ -24,6 +24,7 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/linkhist":     "frontends must reach the copied-link history store through internal/domain",
 		"github.com/homeend/gigagit/internal/savedcompare": "frontends must reach the saved-comparison store through internal/domain",
 		"github.com/homeend/gigagit/internal/agentsession": "frontends must reach agent sessions through internal/domain",
+		"github.com/homeend/gigagit/internal/agentstate":   "frontends must reach session activity through internal/domain",
 		"github.com/homeend/gigagit/internal/taskhist":     "frontends must reach the AI-task history through internal/domain",
 		"github.com/homeend/gigagit/internal/sessionreg":   "frontends must reach the session registry through internal/domain",
 		"github.com/homeend/gigagit/internal/wtclaim":      "frontends must reach worktree claims through internal/domain",
@@ -194,6 +195,17 @@ func TestBranchfilterIsStdlibOnly(t *testing.T) {
 	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/branchfilter") {
 		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
 			t.Errorf("internal/branchfilter imports %s — it must stay stdlib only", imp)
+		}
+	}
+}
+
+// TestAgentstateIsStdlibOnly pins internal/agentstate's dependency budget:
+// the screen classifier is pure text in, state out.
+func TestAgentstateIsStdlibOnly(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/agentstate") {
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/agentstate imports %s — it must stay stdlib only", imp)
 		}
 	}
 }
