@@ -172,19 +172,15 @@ func TestTemplateTitleWithTabRefused(t *testing.T) {
 // -F stops reading once the input cannot be a valid text: an endless stdin
 // ends in the size error instead of filling memory.
 func TestTemplateReadBodyIsBounded(t *testing.T) {
-	body, err := readBody("", "-", endless{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(body) != domain.MaxTextTemplateBody+1 {
-		t.Fatalf("read %d bytes, want the cap + 1", len(body))
+	if _, err := readBody("", "-", endless{}); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("endless stdin: %v", err)
 	}
 	f := filepath.Join(t.TempDir(), "big.md")
 	if err := os.WriteFile(f, []byte(strings.Repeat("x", domain.MaxTextTemplateBody*3)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if body, err = readBody("", f, nil); err != nil || len(body) != domain.MaxTextTemplateBody+1 {
-		t.Fatalf("file: read %d bytes, %v", len(body), err)
+	if _, err := readBody("", f, nil); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("oversized file: %v", err)
 	}
 	dir := prefixRepo(t)
 	code, _, errb := runCLI(t, dir, "template", "add", "--title", "Big", "-F", f)
@@ -209,5 +205,27 @@ func TestTemplateUnknownIDHintsAtList(t *testing.T) {
 	code, _, errb := runCLI(t, dir, "template", "show", "nope")
 	if code != 2 || !strings.Contains(errb, "gg template list") {
 		t.Fatalf("exit %d err %q", code, errb)
+	}
+}
+
+// An oversized text is refused even when the byte at the limit is whitespace
+// (the stored text is trimmed): it must never be stored cut off.
+func TestTemplateOversizedFileNeverStoredTruncated(t *testing.T) {
+	dir := prefixRepo(t)
+	f := filepath.Join(t.TempDir(), "big.md")
+	big := strings.Repeat("x", domain.MaxTextTemplateBody) + "\n" + strings.Repeat("tail ", 5000)
+	if err := os.WriteFile(f, []byte(big), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, errb := runCLI(t, dir, "template", "add", "--title", "Big", "-F", f)
+	if code == 0 || !strings.Contains(errb, "larger than") {
+		t.Fatalf("add: exit %d err %q", code, errb)
+	}
+	if _, out, _ := runCLI(t, dir, "template", "list"); out != "" {
+		t.Fatalf("a cut-off text was stored: %q", out)
+	}
+	runCLIStdin(t, dir, "small", "template", "add", "--title", "Small", "-F", "-")
+	if code, _, errb = runCLI(t, dir, "template", "edit", "small", "-F", f); code == 0 || !strings.Contains(errb, "larger than") {
+		t.Fatalf("edit: exit %d err %q", code, errb)
 	}
 }

@@ -85,8 +85,9 @@ func findTemplate(svc *domain.Service, verb, id string, global bool, stderr io.W
 
 // readBody reads -F's target: a file path (a relative one is taken from
 // workdir, the directory the command runs against), or stdin for "-". It
-// reads one byte past the largest text a template may hold and no further:
-// more than that is refused by validation whatever follows.
+// reads one byte past the largest text a template may hold and no further;
+// an input that long is refused HERE — handed on, the cut-off text could
+// pass the size check once its trailing whitespace is trimmed.
 func readBody(workdir, from string, stdin io.Reader) (string, error) {
 	src := stdin
 	if from != "-" {
@@ -101,6 +102,9 @@ func readBody(workdir, from string, stdin io.Reader) (string, error) {
 		src = f
 	}
 	b, err := io.ReadAll(io.LimitReader(src, domain.MaxTextTemplateBody+1))
+	if err == nil && len(b) > domain.MaxTextTemplateBody {
+		return "", fmt.Errorf("the text is larger than %d KiB", domain.MaxTextTemplateBody>>10)
+	}
 	return string(b), err
 }
 
@@ -109,13 +113,15 @@ func templateList(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, "usage: gg template list")
 		return 2
 	}
+	// A scope that cannot be read fails the command, after the rows of the
+	// one that can.
 	ts, err := svc.TextTemplates(context.Background())
+	for _, t := range ts {
+		fmt.Fprintf(stdout, "%s\t%s\t%s\n", t.ID, t.Scope.String(), t.Title)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
-	}
-	for _, t := range ts {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\n", t.ID, t.Scope.String(), t.Title)
 	}
 	return 0
 }

@@ -38,6 +38,7 @@ async function openTextTemplates() {
   mode = null;
   render();
   pushLayer("texttemplates", $("texttemplates"), { onKey });
+  scopeError();
 }
 
 function close() {
@@ -157,6 +158,13 @@ async function reload(selectId, selectScope) {
   sel = at >= 0 ? at : Math.min(sel, Math.max(rows().length - 1, 0));
   mode = null;
   render();
+  scopeError();
+}
+
+// scopeError reports a scope whose file could not be read (the list still
+// holds the other scope's rows).
+function scopeError() {
+  if (data && data.error) showErr(data.error);
 }
 
 // startFill asks for the variables, or renders at once when there are none.

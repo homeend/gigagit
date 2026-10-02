@@ -57,8 +57,11 @@ type textTemplatesView struct {
 	draft string
 
 	// tipFull is the selected title when the list had to cut it: render shows
-	// it whole on the bottom bar. Set by browseBox.
+	// it whole on the bottom bar. Set by browseBox. The bottom bar is also the
+	// status row, so tipHold keeps the title off it from an outcome this
+	// window reported until the next key.
 	tipFull string
+	tipHold bool
 }
 
 type ttMode int
@@ -97,9 +100,11 @@ func (m Model) loadTextTemplatesCmd(selectID, status string) tea.Cmd {
 // onData lands a loaded list in the view.
 func (v *textTemplatesView) onData(msg textTemplatesDataMsg) {
 	v.loading = false
-	if msg.err != nil {
-		return
+	v.tipHold = msg.err != nil || msg.status != ""
+	if msg.err != nil && len(msg.items) == 0 {
+		return // nothing could be read: keep what is shown
 	}
+	// With an error AND rows, one scope's file is damaged: show the other.
 	v.items = msg.items
 	for i, t := range v.items {
 		if msg.selectID != "" && t.ID == msg.selectID && t.Scope == msg.selectScope {
@@ -147,6 +152,7 @@ func (v *textTemplatesView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (v *textTemplatesView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	v.tipHold = false
 	switch msg.Type {
 	case tea.KeyEsc:
 		return m.popLayer(), nil
@@ -289,7 +295,7 @@ func ttTextPane(text string, textW, h int, scroll *int) (rows []string, rule str
 func (v *textTemplatesView) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	out := overlayCenter(clipToHeight(below, h), v.box(m), w, h)
-	if v.tipFull != "" {
+	if v.tipFull != "" && !v.tipHold {
 		// The selected title was cut: it takes the bottom bar, which the
 		// window never covers, in the terminal's own colours.
 		out = overlayAt(out, padRight(truncate(" "+v.tipFull, w), w), 0, h-1, w, h)
@@ -695,7 +701,7 @@ func (v *textTemplatesView) onEdited(m Model, msg textTemplateEditedMsg, data []
 	}
 	done := func(status string) (Model, tea.Cmd) {
 		v.mode, v.draft, v.formErr = ttBrowse, "", ""
-		m.statusMsg = status
+		m.statusMsg, v.tipHold = status, true
 		return m, nil
 	}
 	switch {

@@ -3,6 +3,8 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -128,5 +130,41 @@ func TestTextTemplateDuplicateNamesTheID(t *testing.T) {
 	code, out := postJSONRaw(t, ts, "/api/text-templates", `{"title":"bug-report","body":"x","scope":"repo"}`)
 	if code != http.StatusConflict || !strings.Contains(out["error"], `"bug-report"`) || !strings.Contains(out["error"], `"Bug report"`) || strings.Contains(out["error"], "text template:") {
 		t.Fatalf("code %d error %q", code, out["error"])
+	}
+}
+
+// A damaged scope file does not empty the list: the other scope's rows come
+// with the reason.
+func TestTextTemplatesDamagedScopeStillListsTheOther(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	for _, body := range []string{`{"title":"G","body":"x","scope":"global"}`, `{"title":"R","body":"x","scope":"repo"}`} {
+		if code := ttPost(t, ts, "", body, nil); code != http.StatusOK {
+			t.Fatalf("seed add code = %d", code)
+		}
+	}
+	var files []string
+	_ = filepath.WalkDir(state, func(p string, d os.DirEntry, _ error) error {
+		if d != nil && d.Name() == "texttemplates.toml" && filepath.Base(filepath.Dir(p)) == "global" {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if len(files) != 1 {
+		t.Fatalf("global store file not found: %v", files)
+	}
+	if err := os.WriteFile(files[0], []byte("[[templates]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Templates []textTemplateRow `json:"templates"`
+		Error     string            `json:"error"`
+	}
+	if code := getJSON(t, ts, "/api/text-templates", &out); code != http.StatusOK {
+		t.Fatalf("list code = %d", code)
+	}
+	if len(out.Templates) != 1 || out.Templates[0].Title != "R" || !strings.Contains(out.Error, "damaged") {
+		t.Fatalf("list = %+v", out)
 	}
 }

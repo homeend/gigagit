@@ -874,3 +874,36 @@ func TestTextTemplatesDataMsgSelectsRowByScope(t *testing.T) {
 		t.Fatalf("repo note: sel %d, want 2", v.sel)
 	}
 }
+
+// The bottom row is also where the window reports what happened: an outcome
+// stays readable there until the next key, and only then the cut title takes it.
+func TestTextTemplatesCutTitleDoesNotHideAnOutcome(t *testing.T) {
+	t.Parallel()
+	long := "A very long template title " + strings.Repeat("that goes on ", 5) + "END"
+	items := []model.TextTemplate{{ID: "l", Title: long, Body: "x"}, {ID: "s", Title: "Short", Body: "y"}}
+	m := Model{width: 60, height: 24}.pushLayer(&textTemplatesView{loading: true})
+	below := strings.Repeat(strings.Repeat("b", 60)+"\n", 23) + "[status]"
+	last := func(m Model) string {
+		lines := strings.Split(plain(layerOf[*textTemplatesView](m).render(m, below)), "\n")
+		return lines[len(lines)-1]
+	}
+	out, _ := m.Update(textTemplatesDataMsg{items: items, status: "deleted text template X"})
+	mm := out.(Model)
+	if got := last(mm); !strings.Contains(got, "[status]") {
+		t.Fatalf("after an outcome the bottom row = %q", got)
+	}
+	v := layerOf[*textTemplatesView](mm)
+	v.update(mm, keyMsg("down"))
+	v.update(mm, keyMsg("up"))
+	if got := last(mm); !strings.Contains(got, "A very long template title") {
+		t.Fatalf("after a key the bottom row = %q", got)
+	}
+	// The editor coming back with nothing to save is an outcome too.
+	v.update(mm, keyMsg("e"))
+	edited := ttEdited(t, "x\n")
+	edited.title, edited.editID, edited.before = long, "l", "x"
+	out, _ = mm.Update(edited)
+	if got := last(out.(Model)); !strings.Contains(got, "[status]") {
+		t.Fatalf("after an unchanged edit the bottom row = %q", got)
+	}
+}

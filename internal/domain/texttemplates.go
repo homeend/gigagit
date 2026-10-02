@@ -69,21 +69,25 @@ func (s *Service) textTemplateStores(ctx context.Context) (global, repo texttmpl
 }
 
 // TextTemplates lists global rows then repo rows, each tagged with its scope
-// and alphabetical by title within it.
+// and alphabetical by title within it. A scope whose store cannot be read
+// (a damaged file) is reported in the error WITHOUT hiding the other scope:
+// the rows that could be read are returned beside it.
 func (s *Service) TextTemplates(ctx context.Context) ([]model.TextTemplate, error) {
 	global, repo := s.textTemplateStores(ctx)
 	var out []model.TextTemplate
+	var errs []error
 	for _, st := range []texttmpl.Store{global, repo} {
 		if st == nil {
 			continue
 		}
 		ts, err := st.List()
 		if err != nil {
-			return nil, err
+			errs = append(errs, err)
+			continue
 		}
 		out = append(out, ts...)
 	}
-	return out, nil
+	return out, errors.Join(errs...)
 }
 
 func (s *Service) textStore(ctx context.Context, scope model.ProfileScope) (texttmpl.Store, error) {
@@ -268,10 +272,9 @@ func (s *Service) TakeTextTemplate(ctx context.Context, body string, inputs map[
 // prefix; with scope nil the repo row wins when both scopes hold the one id
 // the argument names. Several distinct ids are an ambiguity.
 func (s *Service) FindTextTemplate(ctx context.Context, idPrefix string, scope *model.ProfileScope) (model.TextTemplate, error) {
-	all, err := s.TextTemplates(ctx)
-	if err != nil {
-		return model.TextTemplate{}, err
-	}
+	// A scope that cannot be read does not hide the other one; it is the
+	// answer only when the id was not found in what could be read.
+	all, listErr := s.TextTemplates(ctx)
 	var exact, pre []model.TextTemplate
 	for _, t := range all {
 		if scope != nil && t.Scope != *scope {
@@ -288,6 +291,9 @@ func (s *Service) FindTextTemplate(ctx context.Context, idPrefix string, scope *
 		pick = pre
 	}
 	if len(pick) == 0 {
+		if listErr != nil {
+			return model.TextTemplate{}, listErr
+		}
 		return model.TextTemplate{}, fmt.Errorf("%w: %q", texttmpl.ErrNotFound, idPrefix)
 	}
 	ids := map[string]bool{}

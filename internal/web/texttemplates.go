@@ -35,9 +35,10 @@ func textTemplateRowOf(t model.TextTemplate) textTemplateRow {
 }
 
 // handleTextTemplates lists the text templates, global rows then repo rows.
+// A scope that cannot be read rides along as "error" beside the other's rows.
 func (s *Server) handleTextTemplates(w http.ResponseWriter, r *http.Request) {
 	ts, err := s.service().TextTemplates(readCtx(r))
-	if err != nil {
+	if err != nil && len(ts) == 0 {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -45,7 +46,12 @@ func (s *Server) handleTextTemplates(w http.ResponseWriter, r *http.Request) {
 	for _, t := range ts {
 		rows = append(rows, textTemplateRowOf(t))
 	}
-	writeJSON(w, map[string]any{"templates": rows})
+	out := map[string]any{"templates": rows}
+	if err != nil {
+		// One scope's file is damaged: the other's rows, and the reason.
+		out["error"] = err.Error()
+	}
+	writeJSON(w, out)
 }
 
 // textTemplateReq is the body every text-template write shares.

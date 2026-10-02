@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -187,5 +189,34 @@ func TestTakeTextTemplateSeveralCounters(t *testing.T) {
 		if got, err := svc.TakeTextTemplate(ctx, body, nil); err != nil || got != want {
 			t.Fatalf("take = %q, %v; want %q", got, err, want)
 		}
+	}
+}
+
+// One damaged scope file does not take the other scope down: its rows are
+// still listed and found, and the damage is still reported.
+func TestTextTemplatesDamagedScopeKeepsTheOther(t *testing.T) {
+	t.Parallel()
+	_, svc := newRealRepo(t)
+	repoDir := t.TempDir()
+	svc.SetTextTemplateStores(
+		texttmpl.NewFileStore(t.TempDir(), model.ProfileScopeGlobal),
+		texttmpl.NewFileStore(repoDir, model.ProfileScopeRepo))
+	ctx := context.Background()
+	if _, err := svc.AddTextTemplate(ctx, model.TextTemplate{Title: "Healthy", Body: "g", Scope: model.ProfileScopeGlobal}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "texttemplates.toml"), []byte("[[templates]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	list, err := svc.TextTemplates(ctx)
+	if err == nil || len(list) != 1 || list[0].Title != "Healthy" {
+		t.Fatalf("list = %+v, err %v; want the healthy row AND the error", list, err)
+	}
+	if got, err := svc.FindTextTemplate(ctx, "healthy", nil); err != nil || got.Body != "g" {
+		t.Fatalf("find in the healthy scope: %+v, %v", got, err)
+	}
+	// What is not found may be in the damaged file: that is the error to give.
+	if _, err := svc.FindTextTemplate(ctx, "other", nil); err == nil || IsTextTemplateNotFound(err) {
+		t.Fatalf("find a missing id with a damaged scope: %v", err)
 	}
 }

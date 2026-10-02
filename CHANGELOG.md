@@ -27,10 +27,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - A template's `<seq>` counters are consumed together, in one write.
 - `gg template show no` and the other verbs: an id prefix that names one
   template held by both scopes resolves to this repo's row.
-- `gg template add -F` stops reading at the 64 KiB limit.
+- `gg template add -F` stops reading at the 64 KiB limit and refuses a
+  larger input.
+- When one scope's file is damaged, the other scope's templates are still
+  listed, found and rendered (TUI, CLI and web); the damage is reported.
 - **TUI:** the fill step scrolls when a template asks for more variables than
   fit; the fill and rendered key hints wrap on a narrow terminal; a title cut
-  in the list is shown whole on the bottom bar; a second `enter` in the form
+  in the list is shown whole on the bottom bar (a message the window just
+  reported stays there until the next key); a second `enter` in the form
   no longer queues a second editor; after a save the cursor lands on the saved
   row even when both scopes hold the title.
 - **Web:** leaving the add/edit form with unsaved text asks once (`esc` again
