@@ -90,6 +90,10 @@ type steerWire struct {
 	// AnchorNote says a fingerprinted link's line moved or changed
 	// (domain.AnchorNote); the page shows it on its op line.
 	AnchorNote string   `json:"anchor_note,omitempty"`
+	// EndLine is the last line of a RANGE link (> Line). The page lands on
+	// Line and names the range on its op line (AnchorNote); marking the
+	// lines in the browser is a follow-up.
+	EndLine int `json:"end_line,omitempty"`
 	Step       string   `json:"step,omitempty"`
 	Sources    []string `json:"sources,omitempty"`
 	Panel      string   `json:"panel,omitempty"`
@@ -225,6 +229,13 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		}
 		w.Side, w.Line = c.Line.Side, c.Line.No
 		w.AnchorNote = domain.AnchorNote(c.Line.Asked, c.Line.No, c.Line.Anchor, c.Line.Matches)
+		if c.Line.End != 0 && c.Line.End < c.Line.No {
+			return w, errors.New("the range ends before it starts")
+		}
+		if c.Line.End > c.Line.No {
+			w.EndLine = c.Line.End
+			w.AnchorNote = fmt.Sprintf("the link names lines %d-%d", c.Line.No, c.Line.End)
+		}
 		if w.Side == "" {
 			w.Side = "new"
 		}
