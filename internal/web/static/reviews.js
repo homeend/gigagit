@@ -80,6 +80,19 @@ function nextNotedFile(files, counts, from, dir) {
 }
 
 
+// reviewMarkTitle is the tooltip of a commit row's ✎ — "" for a commit that
+// earns no mark. A commit is REVIEWED when it has a stored AI review, or when
+// it holds a range review: notes written in a merge preview ("branch
+// review") or a commit pair, which /api/notes/counts lists per commit
+// (scopes_by_commit). The TUI's commitReviewed.
+function reviewMarkTitle(hash, hasReview, scopes) {
+  const ranges = ((scopes || {})[hash] || []).length;
+  if (hasReview && ranges) return "has an AI review and a range review — open the commit to read them";
+  if (hasReview) return "has an AI review — open the commit to read it";
+  if (ranges) return "has a range review — open the commit to read it";
+  return "";
+}
+
 // --- end reviews pure ---
 
 
@@ -478,12 +491,12 @@ registerHelp({
     "notes, with the review's notes in the diffs, read-only. On the review's file list <b>,</b> / <b>.</b> move to " +
     "the previous / next file the review notes. esc goes back; right-click a review row or the " +
     "Overview for <b>Delete review</b>. Notes written in a merge preview or a commit pair are stored on the " +
-    "range's newest commit: that commit lists them as one row under <b>Range reviews</b> (◆N) — click it to " +
+    "range's newest commit: it carries <b>✎</b> in the commit list like an AI-reviewed one, and lists them as one row under <b>Range reviews</b> (◆N) — click it to " +
     "open the range the notes were written in, every file with its notes; esc returns to the commit",
 });
 
 
-export { leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

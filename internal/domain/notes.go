@@ -75,6 +75,18 @@ type NoteScopeCount struct {
 	N     int
 }
 
+// PlainCommitNotes counts a commit's notes written in NO scope: its ◆ N in a
+// commit list. The ones written in a merge preview or a commit pair are a
+// range review — the commit's ✎ — and, like an AI review, are not counted
+// again as notes.
+func (c NoteCounts) PlainCommitNotes(hash string) int {
+	n := c.ByCommit[hash]
+	for _, sc := range c.ScopesByCommit[hash] {
+		n -= sc.N
+	}
+	return max(n, 0)
+}
+
 // NoteAdd stores a new note, filling ID, Created/Updated and (when the caller
 // left it empty) ContextHash — read from the note's own side text. Frontends
 // that already display the anchored line pass the hash so it matches exactly

@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Text templates
+
+### Added
+
+- **TUI:** `alt+x` (also `ctrl+p` → **Text templates…**) opens the text
+  templates window: reusable multi-line texts — a PR description, a bug
+  report — kept globally or for this repo. The window lists the titles (8
+  rows, scrolling), the selected template's text and, under it, the variables
+  it asks for. `enter` asks for each `<user:LABEL>` value and shows the
+  rendered text; `y` copies it and closes the window. `n` adds and `e` edits
+  (the title in the window, the text in `$EDITOR`), `d` deletes.
+- **Tokens:** the branch-prefix ones (`<user:LABEL>`, `<date>`, `<date:FMT>`,
+  `<seq:NAME:N>`, `<parent-branch>`, `<repo>`, `<random-*>`) plus `<branch>`,
+  the current branch. Any other `<…>` (`<br>`, `<me@example.com>`) stays as
+  written. A `<seq:…>` counter advances only when the rendered text is taken.
+- **CLI:** `gg template list | show | render | add | edit | rm`. `render <id>
+  --set label=value` prints the resolved text (`--peek` leaves the counters
+  alone); `add --title … -F <file|->` reads the text from a file or stdin.
+- **Web:** the same view in `gg web` — `alt+x`, ☰ → **text templates…** or
+  the palette: list, text, variables, a fill dialog, the rendered text with
+  **copy and close**, and add/edit in a text box.
 ## A range review is one row of the commit that holds it
 
 ### Changed
@@ -37,6 +58,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   commit's own notes name) to the two commits the page opens as a pair
   landing. Before, the page could not reach those notes from the commit at
   all.
+
+- **A commit holding a range review reads as reviewed: ✎.** In the TUI's
+  Commits list and in the web page's commit list, a commit whose notes were
+  written in a merge preview (a branch review) or a commit pair carries the
+  ✎ an AI-reviewed commit has. In the TUI those notes are no longer counted
+  again in the row's ◆ N — it counts the notes written outside any range
+  (`NoteCounts.PlainCommitNotes`), so a tip that read `◆ 8` for one branch
+  review now reads `✎`. The web row's tooltip says which kind of review it
+  is (`reviewMarkTitle`). New e2e scenario `tui_range_review_marker` pins
+  both forms with golden screens.
 
 ### Fixed
 

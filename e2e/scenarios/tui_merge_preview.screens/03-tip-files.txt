@@ -1,7 +1,7 @@
 local  branch main                                                                                                  {{root}}______________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Files acfc46c add c                               ││ Commits (all) 3                                                                                         │
-│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓   feature add c  ◆ 2                                                                             │
+│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓ ✎ feature add c  ◆ 1                                                                             │
 │ > Range reviews                                   ││   ●      feature grow a                                                                                 │
 │     feature → main  ◆ 1                           ││   ●  ↓   *main   add a b                                                                                │
 │   A  c.txt  ◆ 1                                   ││                                                                                                         │

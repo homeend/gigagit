@@ -16,7 +16,9 @@ func TestHelpOpensWithQuestionMark(t *testing.T) {
 		t.Fatal("? must open the help popup")
 	}
 	out := ansi.Strip(m.render())
-	if !strings.Contains(out, "Help") || !strings.Contains(out, "pull") {
+	// "settings" is a row of the first screenful (the overflow section lists
+	// every footer key that did not fit, so its length follows the footer).
+	if !strings.Contains(out, "Help") || !strings.Contains(out, "settings") {
 		t.Fatalf("help window must show bindings:\n%s", out)
 	}
 }

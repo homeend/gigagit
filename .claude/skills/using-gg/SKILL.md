@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v123 -->
+<!-- gg:using-gg:v124 -->
 
 # Using gg (gigagit)
 
@@ -881,6 +881,18 @@ finds the right one here.
   `--bump` ONCE, for the name you will create, to advance it. Append the rest
   of the name yourself (`me/MTHR-1234` + `-fix-login`). `--template <value>`
   resolves a raw template instead of a stored id.
+- `gg template list` / `gg template show <id>` / `gg template render <id> [--set label=value]… [--peek]` /
+  `gg template add --title <title> -F <file|-> [--global]` /
+  `gg template edit <id> [--title <title>] [-F <file|->]` / `gg template rm <id>`
+  — **text templates**: titled, multi-line texts (a PR description, a bug
+  report) with the branch-prefix tokens plus `<branch>` (the current branch),
+  in the same two-scope store (repo by default; `--global`). `list` prints
+  `id<TAB>scope<TAB>title`; an id may be a unique prefix. `render` prints the
+  resolved text: `--set name=Ann` fills `<user:name>` (a missing label exits 2
+  naming the flag); it CONSUMES the template's `<seq:…>` counters — pass
+  `--peek` to preview without advancing them. An unknown `<…>` (`<br>`,
+  `<me@x.com>`) is literal text. `-F -` reads the text from stdin. In the TUI,
+  `alt+x` opens the same templates (fill, then `y` copies).
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` (plain: `branch<TAB>path`) / `gg worktree add [<start-point>]` /
   `gg worktree add --branch <name> [<path>]` /

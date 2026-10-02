@@ -58,6 +58,11 @@ func TestNoteCountsScopesByCommit(t *testing.T) {
 	if got := c.PlainByCommitPath[tip+":b.txt"]; got != 1 {
 		t.Fatalf("b.txt plain notes = %d, want 1", got)
 	}
+	// The commit's ◆ N counts only the note written in no scope: the other
+	// three are its range reviews.
+	if all, plain := c.ByCommit[tip], c.PlainCommitNotes(tip); all != 4 || plain != 1 {
+		t.Fatalf("commit notes = %d (plain %d), want 4 (plain 1)", all, plain)
+	}
 	if got := c.PlainByCommitPath[tip+":a.txt"]; got != 0 {
 		t.Fatalf("a.txt plain notes = %d, want 0", got)
 	}

@@ -31,6 +31,7 @@ import (
 	"github.com/homeend/gigagit/internal/savedcompare"
 	"github.com/homeend/gigagit/internal/searchhist"
 	"github.com/homeend/gigagit/internal/shelf"
+	"github.com/homeend/gigagit/internal/texttmpl"
 )
 
 // Service couples one repository with its process-wide gate and a singleflight
@@ -89,6 +90,9 @@ type Service struct {
 
 	prefixGlobal prefix.Store // lazily resolved; nil disables prefixes
 	prefixRepo   prefix.Store // lazily resolved; nil disables prefixes
+
+	textGlobal texttmpl.Store // lazily resolved; nil disables text templates
+	textRepo   texttmpl.Store // lazily resolved; nil disables text templates
 
 	// forgeMu guards forge detection and the known-PR set (forge.go). It is
 	// never held across a provider call (the probe is a network round trip and

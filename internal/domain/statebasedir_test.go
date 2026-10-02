@@ -17,6 +17,7 @@ func TestStateBaseDirKinds(t *testing.T) {
 		"bookmark",
 		"notes",
 		"prefix",
+		"texttemplates",
 		"previews",
 		"profile",
 		"search",
