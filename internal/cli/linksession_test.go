@@ -244,30 +244,3 @@ func TestSessionHighlightAddLinkWithBogusToneExitsTwoAndPostsNothing(t *testing.
 		t.Errorf("inbox = %+v, want nothing posted", got)
 	}
 }
-
-func TestSplitLinkRange(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		in   string
-		link string
-		end  int
-	}{
-		{"gg://r/a.go:40-46", "gg://r/a.go:40", 46},
-		{"gg://r/a.go:40", "gg://r/a.go:40", 0},
-		{"gg://r/a.go", "gg://r/a.go", 0},
-		// A dash that is not in the last ":" segment belongs to the path.
-		{"gg://r/my-file.go:7", "gg://r/my-file.go:7", 0},
-		{"gg://r/my-file.go", "gg://r/my-file.go", 0},
-		{"gg:///mnt/a-b/c.go:3-9", "gg:///mnt/a-b/c.go:3", 9},
-	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.in, func(t *testing.T) {
-			t.Parallel()
-			link, end := splitLinkRange(tc.in)
-			if link != tc.link || end != tc.end {
-				t.Errorf("splitLinkRange(%q) = %q, %d; want %q, %d", tc.in, link, end, tc.link, tc.end)
-			}
-		})
-	}
-}

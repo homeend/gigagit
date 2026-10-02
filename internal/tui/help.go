@@ -315,6 +315,7 @@ func helpContent() []contentLine {
 		r("o/O", i18n.T("collapse / expand the note next to the cursor line to a single row (▸ author: summary); O does it for every note in the view. View state only — nothing is stored")),
 		r("a", i18n.T("show or hide agent-written notes; your own notes always stay visible")),
 		r("L", i18n.T("copy a gg:// link to the cursor line — paste it in a chat and gg diff / gg note add / gg session navigate take it straight back; in a comparison it names the line on the side the cursor is on, alt+←/→ picks the side (also the . menu's Copy link row does the same in the Files, Staged and Commits panels and a commit's files view)")),
+		r("", i18n.T("with lines marked (space, move, space) L copies a link to that range of lines on the cursor's side; opening the link marks the same lines again, and gg link text prints them — a range of uncommitted lines is refused once any of them changed (the file viewer and the View-file preview do the same)")),
 		r("}/{", i18n.T("jump to the next / previous annotated line (a folded note expands the view); at the last / first one, press again to step to the next / previous file that carries notes")),
 		r("", i18n.T("the . menu grows Edit note / Reply to note / Delete note rows while a note sits next to the cursor line")),
 		r("", i18n.T("the . menu also carries List notes… (every thread on this file, type to filter, enter goes to one) and Remove all notes… (type `remove all` to delete this file's notes and replies) wherever the cursor sits")),

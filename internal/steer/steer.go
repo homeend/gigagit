@@ -72,6 +72,9 @@ type Target struct {
 type Line struct {
 	Side string `json:"side"` // "new" | "old"
 	No   int    `json:"no"`
+	// End is the last line of a RANGE on that side (> No): the consumer marks
+	// No..End as a selection. 0 = a single line.
+	End int `json:"end,omitempty"`
 	// Asked / Anchor / Matches describe a FINGERPRINTED link's line: No is
 	// where its text is now, Asked the line the link named, Anchor "same" |
 	// "moved" | "changed". Empty for every other command.

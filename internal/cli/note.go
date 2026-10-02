@@ -370,7 +370,8 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 			}
 			side, rng = s, r
 		case link.Line > 0:
-			side, rng = link.Side, [2]int{link.Line, link.Line}
+			// A range link's note covers the range; it sits under its last line.
+			side, rng = link.Side, [2]int{link.Line, max(link.End, link.Line)}
 		default:
 			fmt.Fprintln(stderr, "note add: the link names a file but no anchor; add :<line> or #<hunk>")
 			return 2

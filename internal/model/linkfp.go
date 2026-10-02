@@ -24,6 +24,25 @@ func LineFingerprint(line string) string {
 	return fmt.Sprintf("%08x", h.Sum32())
 }
 
+// BlockFingerprint is the fingerprint an uncommitted RANGE link carries
+// (`:<a>-<b>~<fp>`): FNV-1a 32-bit over the block's lines, each trimmed like
+// LineFingerprint's, joined with "\n" — so re-indenting is not a change but an
+// added, dropped or edited line is. A block that is blank throughout has none.
+func BlockFingerprint(lines []string) string {
+	trimmed := make([]string, len(lines))
+	blank := true
+	for i, l := range lines {
+		trimmed[i] = strings.TrimSpace(l)
+		blank = blank && trimmed[i] == ""
+	}
+	if blank {
+		return ""
+	}
+	h := fnv.New32a()
+	h.Write([]byte(strings.Join(trimmed, "\n")))
+	return fmt.Sprintf("%08x", h.Sum32())
+}
+
 // LinkFingerprintOK reports whether fp is a well-formed fingerprint: exactly
 // 8 lowercase hex characters.
 func LinkFingerprintOK(fp string) bool {

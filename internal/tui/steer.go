@@ -356,6 +356,9 @@ func steerEnumRefusal(c steer.Command) string {
 	if c.Line != nil && c.Line.No < 0 {
 		return "a line number is 1-based"
 	}
+	if c.Line != nil && c.Line.End != 0 && c.Line.End < c.Line.No {
+		return "the range ends before it starts"
+	}
 	if c.Line != nil {
 		switch c.Line.Side {
 		case "", "new", "old":

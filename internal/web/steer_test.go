@@ -665,3 +665,21 @@ func TestSteerWireCarriesTheAnchorNote(t *testing.T) {
 		t.Errorf("a plain line carries a note: %q", w.AnchorNote)
 	}
 }
+
+// A range link lands on its first line; the page is told the range.
+func TestSteerWireNamesARange(t *testing.T) {
+	t.Parallel()
+	c := steer.Command{Cmd: "navigate", File: "a.txt", Target: &steer.Target{State: "unstaged"},
+		Line: &steer.Line{Side: "new", No: 3, End: 5, Anchor: "same", Matches: 1}}
+	w, err := toSteerWire(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Line != 3 || w.EndLine != 5 || w.AnchorNote != "the link names lines 3-5" {
+		t.Errorf("wire = line %d end %d note %q", w.Line, w.EndLine, w.AnchorNote)
+	}
+	c.Line.End = 2
+	if _, err := toSteerWire(c); err == nil {
+		t.Error("a backwards range must be refused")
+	}
+}

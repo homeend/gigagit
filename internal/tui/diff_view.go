@@ -1159,6 +1159,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		r, ok := m.contextLinkRow()
 		if !ok {
 			m.diffNotice = i18n.T("▸ no gg link for this place")
+			if sel, on := m.diffLinkSelection(); on && sel.refusal != "" {
+				m.diffNotice = sel.refusal
+			}
 			return m, nil
 		}
 		nm, cmd := r.run(m)

@@ -243,7 +243,7 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 // fingerprinted link's line is where its text is NOW, and the consumer says
 // so from Asked/Anchor.
 func lineOf(res domain.Resolved) steer.Line {
-	return steer.Line{Side: string(res.Side), No: res.Line,
+	return steer.Line{Side: string(res.Side), No: res.Line, End: res.End,
 		Asked: res.Anchor.Asked, Anchor: res.Anchor.State, Matches: res.Anchor.Matches}
 }
 
@@ -279,7 +279,7 @@ func AtLink(res domain.Resolved, c steer.Command) model.Link {
 		l.Side = model.NoteSideOld
 	}
 	if c.Line != nil {
-		l.Line = c.Line.No
+		l.Line, l.End = c.Line.No, c.Line.End
 	}
 	return l
 }

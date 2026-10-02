@@ -808,6 +808,38 @@ panics there.
 
 ### gg links (`gg://`, `internal/model/link.go` + `internal/domain/linkresolve.go`)
 
+**Range links (2026-10-02).** `:<a>-<b>` / `:old:<a>-<b>` names lines a..b
+on one side: `model.Link.End` (0 = one line; `a == b` collapses to the
+single-line link and keeps its lenient rule below), read by `splitLinkLine`
+(a range and `#hunk` conflict like a line and a hunk). An UNCOMMITTED range
+carries `model.BlockFingerprint` in the same `~<8hex>` slot: FNV-1a 32 over
+the trimmed lines joined by `\n` ("" for an all-blank block). The resolver
+only CHECKS it (`anchorLink`): a block that is not where the link says —
+edited, moved, past the end, unreadable — is `domain.ErrLinkStale` (typed
+`*LinkStaleError{Path, First, Last}` so the TUI's `#` prompt can translate
+it); there is NO moved state for a range (user ruling: do not guess). CLI
+verbs exit 1 through `linkExit`. `Resolved.End` → `steer.Line.End` (via
+`linknav.lineOf`; `AtLink` and the TUI's pure `steerCommandForLink` keep it) →
+the landing: `landSteer` calls `markLandedRange` (a FROZEN `lineSel`, cursor
+on the first line, the fold hiding the end opened, the end clamped to the
+side's last line), a parked stack landing carries `stackLanding.end`, and a
+content link sets `openFile.pendingEnd` (`landPendingLine` already selected
+ranges for overviews). Producers: `diffLinkSelection` (cursor side; first and
+last selected row that HAS a number there; the block text from the file's
+`full` rows so folded lines count; a stack selection crossing files is
+refused) + `rangeLink` (post-processes the first line's link, so every target
+kind is covered by the existing builders); `contextFileLinkRow` for the
+viewer/preview (`L` there is bound only while a selection is live); CLI
+`gg link <path>:<a>-<b>` (`Service.LinkBlockFingerprint`). `L` keeps the
+selection. `gg link text` / `gg_link_text` print the lines over
+`Service.LinkText` (uncommitted → `linkSideLines`; a commit's `:old:` = its
+parent; a pair's = commit a). `gg note add <range link>` stores `Range
+[a,b]`; every note whose range spans several lines draws a bar (`▎`,
+`cellMark.note` / `diffView.noteSpans`) in the gutter's separator column
+beside its lines. The CLI's old `splitLinkRange` shim (highlight add only,
+broke on `~fp`) is gone. Web this round: `steerWire.EndLine` + the op line
+"the link names lines a-b"; no selection restore, no range copy.
+
 **Line fingerprints (2026-10-01).** An UNCOMMITTED line link (working tree,
 `@staged`, `?view=content`) may end `:<n>~<fp>`: `model.LineFingerprint` =
 8 hex of FNV-1a 32 over the `TrimSpace`d line ("" for a blank line; NOT
