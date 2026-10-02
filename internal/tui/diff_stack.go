@@ -186,6 +186,7 @@ type stackLanding struct {
 	dir  int
 	side model.NoteSide
 	no   int
+	end  int // a range link's last line (> no): its lines are marked on landing
 }
 
 // spliceStack rebuilds v.lines / v.blocks from the stack's files: per file a

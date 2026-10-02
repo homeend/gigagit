@@ -94,6 +94,9 @@ func (m Model) drainStackLanding(idx, body int) (Model, bool) {
 	v.setCursorLine(li, body)
 	if land.dir == 0 {
 		v.landOnSide(land.side == model.NoteSideOld)
+		if land.end > land.no {
+			m, _ = m.markLandedRange(v, lo, hi, land.no, land.end, land.side == model.NoteSideOld, body)
+		}
 	}
 	v.revealCursorNotes(body)
 	v.noteVisited = true

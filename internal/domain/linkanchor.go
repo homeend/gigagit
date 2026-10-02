@@ -156,6 +156,19 @@ func (s *Service) LinkLineFingerprint(ctx context.Context, l model.Link) string 
 // copied from. A range is never re-found: the link is refused.
 var ErrLinkStale = errors.New("the link is no longer valid")
 
+// LinkStaleError is ErrLinkStale with the range it refuses, so a frontend can
+// say the sentence in the reader's language.
+type LinkStaleError struct {
+	Path        string
+	First, Last int
+}
+
+func (e *LinkStaleError) Error() string {
+	return fmt.Sprintf("%s: lines %d-%d of %s have changed since it was copied", ErrLinkStale, e.First, e.Last, e.Path)
+}
+
+func (e *LinkStaleError) Unwrap() error { return ErrLinkStale }
+
 // LinkBlockFingerprint is the fingerprint a PRODUCER puts on an uncommitted
 // range link: that of lines l.Line..l.End, read from the side l names. "" for
 // a link with no range, a committed target, an unreadable file, a range past
@@ -182,7 +195,7 @@ func anchorLink(ctx context.Context, svc *Service, l model.Link, res *Resolved) 
 	lines, ok := linkSideLines(ctx, svc, l, res.Addr.Path)
 	if l.End > l.Line {
 		if !ok || l.End > len(lines) || model.BlockFingerprint(lines[l.Line-1:l.End]) != l.Fingerprint {
-			return fmt.Errorf("%w: lines %d-%d of %s have changed since it was copied", ErrLinkStale, l.Line, l.End, res.Addr.Path)
+			return &LinkStaleError{Path: res.Addr.Path, First: l.Line, Last: l.End}
 		}
 		res.Anchor = LineAnchor{Asked: l.Line, State: AnchorSame, Matches: 1}
 		return nil
