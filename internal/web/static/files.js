@@ -2992,6 +2992,9 @@ function addNotePrompt() {
   const q = noteQuery(ad.ctx);
   if (!q) return;
   const scope = noteScope();
+  // A stack's band may sit in another file than the one under the cursor: the
+  // title then says whose lines these are.
+  const where = ranged && rd.slot && rd.slot !== activeDiff().slot ? ` of ${q.get("path")}` : "";
   let at = ranged || ad.row || firstChangedRow(scope);
   if (!at) return;
   // A preview's old side is the MERGE BASE, which no stored address names, so
@@ -3014,7 +3017,7 @@ function addNotePrompt() {
     }
   }
   openPrompt({
-    title: `Add note on ${noteAnchorLabel(at)}`,
+    title: `Add note on ${noteAnchorLabel(at)}${where}`,
     placeholder: "summary",
     body: { label: "rationale (optional)" },
     onSubmit: (summary, rationale) =>
@@ -3033,7 +3036,8 @@ function addNotePrompt() {
           preview: noteScopeSpec(ad.ctx.preview),
         },
         // The note now says what the band said: the saved note's bar takes over.
-        ranged ? clearDiffRange : null,
+        // Only THIS band — one marked while the write ran is not this note's.
+        ranged ? () => (rd.slot ? rd.slot.range : state.diffRange) === rd.range && clearDiffRange() : null,
       ),
   });
 }
@@ -3086,7 +3090,7 @@ registerHelp({
   html:
     "<b>shift+click a line number</b> (in a diff, a stacked diff or the file viewer) marks the lines from the " +
     "marked line to it, on that number's side; right-click inside the band for <b>copy gg link to lines a-b</b>. " +
-    "A range link that opens marks the same lines again. <b>c</b> with a band up writes ONE note over those lines " +
+    "A range link that opens marks the same lines again. In a diff or a stacked diff <b>c</b> with a band up writes ONE note over those lines " +
     "(on the band's side, shown under the last line; the band goes once the note is saved). <b>esc</b> or a plain " +
     "click drops the band. A note that covers several lines shows a bar beside their line numbers",
 });

@@ -434,8 +434,8 @@ the diff view copies the cursor line's link and the `.` menu's **Copy link**
 works in the Files, Staged and Commits panels and a commit's files view; in
 `gg web`, **shift+click a line number** marks a range of lines (diff, stacked
 diff, file viewer — the right-click menu then copies the range's link, a
-range link that opens marks its lines again, and `c` writes one note over
-the marked lines), and right-click
+range link that opens marks its lines again, and in a diff `c` writes one
+note over the marked lines), and right-click
 a diff line, a review note, a file row or a commit row — a note has no address
 of its own (its id is machine-local), so **copy gg link to this note** hands
 back the note's ANCHOR line, the same link the line under it copies, and a

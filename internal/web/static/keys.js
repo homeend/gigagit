@@ -8,7 +8,7 @@ import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, rend
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewOverview, stepCommitReviews, stepReviewFile } from "./reviews.js";
 import { addNotePrompt, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
-import { activeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
+import { activeDiff, rangeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
@@ -107,8 +107,10 @@ function stepCommitCursor(delta) {
 // A stack has one address per FILE, so the gate reads the ACTIVE slot's
 // context (activeDiff), not the single-file view's global one — which is null
 // while a stack is up and would leave every note key dead there.
-function noteKey(e, key) {
-  return e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey && notesArmed(activeDiff().ctx);
+// `c` passes the context of the file that HOLDS a marked range instead: that
+// file takes the note, so its address is the one that must be armed.
+function noteKey(e, key, ctx = activeDiff().ctx) {
+  return e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey && notesArmed(ctx);
 }
 
 
@@ -224,7 +226,7 @@ document.addEventListener("keydown", (e) => {
     // file list is the one the keyboard can reach — the sidebar's lists cycle
     // from the chips in their own headers.
     if (state.pane === "files" && state.filesMode === "status") cycleFilesSort();
-  } else if (noteKey(e, "c")) {
+  } else if (noteKey(e, "c", (rangeDiff() || activeDiff()).ctx)) {
     e.preventDefault(); // the key must not land in the prompt input that opens
     // Review notes (the TUI's c/E/R/a/}/{). The web has no line cursor: `c`
     // anchors on the clicked diff row (tr.cur), else the first changed row,

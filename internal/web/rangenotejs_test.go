@@ -67,14 +67,29 @@ func TestRangeNoteWiring(t *testing.T) {
 		"let at = ranged || ad.row || firstChangedRow(scope);",
 		"const fwd = !ranged && !ad.row && firstNewSideRow(scope);",
 		"first: ranged ? at.first : 0,",
-		"ranged ? clearDiffRange : null,",
-		"if (saved) saved();",
+		"ranged ? () => (rd.slot ? rd.slot.range : state.diffRange) === rd.range && clearDiffRange() : null,",
+		"const where = ranged && rd.slot && rd.slot !== activeDiff().slot ? ` of ${q.get(\"path\")}` : \"\";",
 	} {
 		if !strings.Contains(files, pin) {
 			t.Errorf("files.js lost %q", pin)
 		}
 	}
-	if !strings.Contains(readStatic(t, "stackview.js"), "const s = st.slots.find((o) => o.range);") {
+	// The hook runs AFTER the post: a failed write must leave the band.
+	nw := jsFunc(t, "files.js", "noteWrite")
+	post, hook := strings.Index(nw, "await postJSON(path, body);"), strings.Index(nw, "if (saved) saved();")
+	if post < 0 || hook < post {
+		t.Error("files.js: noteWrite must run the saved hook after the post, never before")
+	}
+	view := readStatic(t, "stackview.js")
+	if !strings.Contains(view, "const s = st.slots.find((o) => o.range);") {
 		t.Error("stackview.js: rangeDiff no longer looks for the slot that holds the range")
+	}
+	// A folded section's band is not on screen, so it must not take a note.
+	if strings.Count(view, "if (s.collapsed) s.range = null;") != 2 {
+		t.Error("stackview.js: folding a section (one or all) must drop its marked range")
+	}
+	// The key is live for the file that will take the note.
+	if !strings.Contains(readStatic(t, "keys.js"), `noteKey(e, "c", (rangeDiff() || activeDiff()).ctx)`) {
+		t.Error("keys.js: c must be gated on the band's file, not the cursor slot")
 	}
 }

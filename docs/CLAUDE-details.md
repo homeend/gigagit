@@ -866,8 +866,9 @@ it: `addNotePrompt` reads `rangeDiff()` (stackview.js — the slot HOLDING the
 range, not the cursor slot) and `rangeAnchor(range)` → `{side, first, no}`,
 posts `first` beside `line` (`/api/notes/add`: range `first..line`, 0 = one
 line; the server leaves the hash to domain), refuses a preview's old side
-with no fall-forward, and hands `clearDiffRange` to `noteWrite`'s `saved`
-hook (success only). Tests: `rangenotejs_test.go`, `TestNotesAddRange`.
+with no fall-forward, and hands a clear of THAT band to `noteWrite`'s `saved`
+hook (success only). The `c` gate reads the same slot (`noteKey`'s ctx
+argument); collapsing a stack section drops its range. Tests: `rangenotejs_test.go`, `TestNotesAddRange`.
 
 **A note over marked lines (2026-10-02).** `c` with more than one row marked
 in the diff asks `noteAnchorOfMarks` (`note_popup.go`), which reuses

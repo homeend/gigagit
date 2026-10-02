@@ -15,14 +15,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   titled "Add note on new lines 3-5" and the note covers those lines, on the
   band's side, shown under the last one with the bar beside the lines — the
   twin of the terminal's `c` over marked lines. In a stacked diff the file
-  that holds the band takes the note, whichever section is current. The band
+  that holds the band takes the note, whichever section is current (the
+  prompt then names the file); folding a section drops its band. The band
   is dropped once the note is saved; a failed write or a cancelled prompt
   leaves it. One marked line is the ordinary note. A merge preview's old
   side is refused ("notes in a preview anchor on the new side") and the band
   stays.
 - `POST /api/notes/add` takes an optional `first` line: the note's range is
-  `first..line` (`first` past `line` or below 1 is a 400). Without it the
-  note is one line, as before.
+  `first..line` (`first` past `line` or negative is a 400). Without it, or
+  with 0, the note is one line, as before.
 
 ## Text templates: follow-up fixes 2
 

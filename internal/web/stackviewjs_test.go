@@ -278,7 +278,7 @@ func TestStackNoteContextIsShared(t *testing.T) {
 func TestStackNoteGatesReadTheActiveSlot(t *testing.T) {
 	t.Parallel()
 	keys := readStatic(t, "keys.js")
-	if !strings.Contains(keys, "notesArmed(activeDiff().ctx)") {
+	if !strings.Contains(keys, "function noteKey(e, key, ctx = activeDiff().ctx) {") || !strings.Contains(keys, "notesArmed(ctx)") {
 		t.Fatal("keys.js: noteKey must gate on the active slot's context")
 	}
 	files := readStatic(t, "files.js")
