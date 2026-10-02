@@ -166,7 +166,7 @@ func TestConflictFileLoadedBinaryNoOp(t *testing.T) {
 func TestStagePickerNoGateAppliesImmediately(t *testing.T) {
 	t.Parallel()
 	d := hunkpick.FromDiff([]byte("a\nb\n"), []byte("a\nB\n"))
-	d.SetAll(hunkpick.TakeCurrent) // default: nothing staged
+	d.StartUntouched() // as the loader does
 	e := newStagePicker("f.txt", d)
 	if e.requireAll {
 		t.Fatal("staging picker must not gate on Pending")
@@ -383,12 +383,11 @@ func TestUnstageHunksBinaryAndEmptyRefusals(t *testing.T) {
 func TestUnstagePickerApplyDispatchesStageHunks(t *testing.T) {
 	t.Parallel()
 	doc := hunkpick.FromDiff([]byte("a\nX\nc\n"), []byte("a\nb\nc\n"))
-	doc.SetAll(hunkpick.TakeCurrent)
+	doc.StartUntouched()
 	e := newUnstagePicker("f.txt", doc)
-	// Revert the changed region to HEAD: incoming on, current off.
+	// Revert the changed region to HEAD: tick the HEAD side.
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("i"))
-	m, _ = e.update(m, keyMsg("c"))
 	out, ok := e.doc.Resolved()
 	if !ok || string(out) != "a\nb\nc\n" {
 		t.Fatalf("resolved = %q ok=%v, want HEAD content", out, ok)
@@ -527,17 +526,17 @@ func TestConflictPickerMasterToggleTriState(t *testing.T) {
 	}
 }
 
-func TestStagePickerSpaceMaterializesDefault(t *testing.T) {
+func TestStagePickerSpaceStartsFromNothing(t *testing.T) {
 	t.Parallel()
 	d := hunkpick.FromDiff([]byte("a\nb\n"), []byte("a\nB\n"))
-	d.SetAll(hunkpick.TakeCurrent) // the H picker's nothing-staged default
+	d.StartUntouched() // as the loader does
 	e := newStagePicker("f.txt", d)
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("right")) // working side
 	m, _ = e.update(m, keyMsg("space"))
 	out, ok := d.Resolved()
-	if !ok || string(out) != "a\nb\nB\n" {
-		t.Fatalf("space on the default must keep the index side and add the line: %q ok=%v", out, ok)
+	if !ok || string(out) != "a\nB\n" {
+		t.Fatalf("space on an untouched hunk must yield only the ticked line: %q ok=%v", out, ok)
 	}
 }
 

@@ -270,6 +270,11 @@ func (e *hunkPicker) stateSuffix(b *hunkpick.Block) string {
 		return " — " + i18n.T("undecided")
 	}
 	if b.Skipped() {
+		if !e.requireAll {
+			// Staging: the one empty result a hunk can hold is a taken empty
+			// side — its lines leave the file.
+			return " — " + i18n.T("removed")
+		}
 		return " — " + i18n.T("skipped")
 	}
 	ca, _ := b.SideState(hunkpick.Current)
@@ -282,6 +287,35 @@ func (e *hunkPicker) stateSuffix(b *hunkpick.Block) string {
 		return " — " + i18n.T("%s first", lbl)
 	}
 	return ""
+}
+
+// toggleSide is c / i on one region. The staging pickers add two rules to the
+// model's tri-state toggle: a hunk whose last tick is removed goes back to
+// untouched (it is left as it is, never staged empty), and i on a hunk with
+// no line on the right side takes that empty side — the only way to say
+// "these lines go" when there is nothing to tick — and lets go on a second i.
+func (e *hunkPicker) toggleSide(b *hunkpick.Block, s hunkpick.Side) {
+	if b == nil {
+		return
+	}
+	e.pickRev++
+	if !e.requireAll && s == hunkpick.Incoming && len(b.Incoming) == 0 {
+		if b.Skipped() {
+			b.Mode = hunkpick.Untouched
+		} else {
+			b.Skip()
+		}
+		return
+	}
+	b.ToggleSide(s)
+	e.settle(b)
+}
+
+// settle returns a staging hunk left with no tick to untouched.
+func (e *hunkPicker) settle(b *hunkpick.Block) {
+	if !e.requireAll && b.Skipped() {
+		b.Mode = hunkpick.Untouched
+	}
 }
 
 // focusNextUndecided moves the cursor to the next Undecided region after the
@@ -680,14 +714,14 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "s":
 		// Skip: decide the region with nothing from either side and move on
 		// (conflict picker: next undecided; staging pickers: reset the hunk
-		// to its default — nothing staged / everything stays staged — and
+		// to untouched — it stays unstaged / stays staged — and
 		// step to the next hunk). s on a skipped conflict region un-skips it.
 		if b == nil {
 			break
 		}
 		e.pickRev++
 		if !e.requireAll {
-			b.Mode, b.Picks = hunkpick.TakeCurrent, nil
+			b.Mode, b.Picks = hunkpick.Untouched, nil
 			e.stepBlock(+1)
 			break
 		}
@@ -700,15 +734,9 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.statusMsg = i18n.T("all regions resolved — [ctrl+s] apply")
 		}
 	case "c":
-		if b != nil {
-			b.ToggleSide(hunkpick.Current)
-			e.pickRev++
-		}
+		e.toggleSide(b, hunkpick.Current)
 	case "i":
-		if b != nil {
-			b.ToggleSide(hunkpick.Incoming)
-			e.pickRev++
-		}
+		e.toggleSide(b, hunkpick.Incoming)
 	case "C", "I":
 		// Master toggle: regions with nothing on that side are marked skipped
 		// (or reset when clearing), so a completing pass can decide the whole
@@ -719,6 +747,15 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		e.doc.ToggleSideAll(side)
 		e.pickRev++
+		if !e.requireAll {
+			// Staging: an emptied hunk is untouched again; only a hunk with
+			// no right-side line keeps the empty result I gave it.
+			for _, blk := range e.blocks {
+				if side != hunkpick.Incoming || len(blk.Incoming) > 0 {
+					e.settle(blk)
+				}
+			}
+		}
 		if e.requireAll && e.doc.Pending() == 0 {
 			m.statusMsg = i18n.T("all regions resolved — [ctrl+s] apply")
 		}
@@ -726,6 +763,7 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if b != nil && e.sideLen() > 0 {
 			b.EnsurePicks()
 			b.ToggleLine(e.side, e.line)
+			e.settle(b)
 			e.pickRev++
 		}
 	case "enter":
@@ -883,6 +921,9 @@ func (e *hunkPicker) render(m Model, _ string) string {
 		}
 		lAll, lAny := blk.SideState(hunkpick.Current)
 		rAll, rAny := blk.SideState(hunkpick.Incoming)
+		if !e.requireAll && blk.Skipped() {
+			rAll, rAny = true, true // staging: the empty right side is taken
+		}
 		rows = append(rows, colRow{
 			left: &winCell{gutter: marker, style: hstyle,
 				body: tickFor(lAll, lAny) + " " + e.leftLabel + " · " + i18n.T("region %d/%d", blockNo+1, len(e.blocks))},

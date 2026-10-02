@@ -25,7 +25,7 @@ func captureApply(e *hunkPicker) *[]byte {
 
 func stageDoc() *hunkpick.Doc {
 	d := hunkpick.FromDiff([]byte("a\nb\nc\n"), []byte("A\nb\nC\n"))
-	d.SetAll(hunkpick.TakeCurrent) // as the loader does: default = nothing staged
+	d.StartUntouched() // as the loader does: nothing picked, nothing staged
 	return d
 }
 
@@ -221,7 +221,7 @@ func TestStagePickerSkipResetsHunkAndSteps(t *testing.T) {
 	e := newStagePicker("f.txt", stageDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, key("i")) // stage hunk 0 (working side)
-	if e.blocks[0].Mode == hunkpick.TakeCurrent {
+	if e.blocks[0].Mode == hunkpick.Untouched {
 		t.Fatal("fixture: i must change hunk 0")
 	}
 	m, _ = e.update(m, key("p")) // wrap back onto hunk 0 via p
@@ -230,7 +230,7 @@ func TestStagePickerSkipResetsHunkAndSteps(t *testing.T) {
 		t.Fatalf("p then n must land back on hunk 0, bi=%d", e.bi)
 	}
 	m, _ = e.update(m, key("s"))
-	if e.blocks[0].Mode != hunkpick.TakeCurrent || len(e.blocks[0].Picks) != 0 || e.bi != 1 {
+	if e.blocks[0].Mode != hunkpick.Untouched || len(e.blocks[0].Picks) != 0 || e.bi != 1 {
 		t.Fatalf("s must reset the hunk to its default and step on: mode=%v picks=%d bi=%d", e.blocks[0].Mode, len(e.blocks[0].Picks), e.bi)
 	}
 }
@@ -249,5 +249,88 @@ func TestPickerNextPrevWrap(t *testing.T) {
 	}
 	if !strings.Contains(e.render(m, ""), "[s] skip") {
 		t.Fatal("hint must advertise [s] skip")
+	}
+}
+
+// The staging pickers open with nothing ticked on either side: the user picks
+// every line themselves, and a hunk never touched is left as it is.
+func TestStagePickerOpensWithNothingTicked(t *testing.T) {
+	t.Parallel()
+	for name, e := range map[string]*hunkPicker{
+		"stage":   newStagePicker("f.txt", stageDoc()),
+		"unstage": newUnstagePicker("f.txt", stageDoc()),
+	} {
+		m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+		if out := e.render(m, ""); strings.Contains(out, "[x]") || strings.Contains(out, "[~]") {
+			t.Fatalf("%s: nothing may be ticked on open:\n%s", name, out)
+		}
+		got := captureApply(e)
+		e.update(m, keyMsg("ctrl+s"))
+		if string(*got) != "a\nb\nc\n" {
+			t.Fatalf("%s: untouched hunks must be left as they are, got %q", name, *got)
+		}
+	}
+}
+
+// A line picked on an untouched hunk is the hunk's whole result — the index
+// side's lines do not ride along.
+func TestStagePickerFirstPickStartsEmpty(t *testing.T) {
+	t.Parallel()
+	e := newStagePicker("f.txt", stageDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("right"))
+	m, _ = e.update(m, key(" "))
+	got := captureApply(e)
+	e.update(m, keyMsg("ctrl+s"))
+	if string(*got) != "A\nb\nc\n" {
+		t.Fatalf("one working line picked must stage exactly it, got %q", *got)
+	}
+}
+
+// Unticking the last line returns the hunk to untouched instead of staging an
+// empty hunk.
+func TestStagePickerUntickAllReturnsToUntouched(t *testing.T) {
+	t.Parallel()
+	e := newStagePicker("f.txt", stageDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	for _, k := range []string{" ", " ", "i", "i", "c", "c"} {
+		m, _ = e.update(m, key(k))
+		_ = m
+	}
+	if e.blocks[0].Mode != hunkpick.Untouched {
+		t.Fatalf("a hunk with every tick removed must be untouched, mode=%v", e.blocks[0].Mode)
+	}
+	m, _ = e.update(m, key("I"))
+	m, _ = e.update(m, key("I"))
+	for i, b := range e.blocks {
+		if b.Mode != hunkpick.Untouched {
+			t.Fatalf("I twice must leave hunk %d untouched, mode=%v", i, b.Mode)
+		}
+	}
+}
+
+// A pure deletion has no working line to tick: i on it takes the (empty)
+// working side — the lines are removed — and i again lets go.
+func TestStagePickerTakesAnEmptyWorkingSide(t *testing.T) {
+	t.Parallel()
+	d := hunkpick.FromDiff([]byte("a\nb\nc\n"), []byte("a\nc\n"))
+	d.StartUntouched()
+	e := newStagePicker("f.txt", d)
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, key("i"))
+	if !e.blocks[0].Skipped() {
+		t.Fatalf("i on a deletion must take the empty side, mode=%v", e.blocks[0].Mode)
+	}
+	if out := e.render(m, ""); !strings.Contains(out, "removed") {
+		t.Fatalf("the hunk must read removed:\n%s", out)
+	}
+	got := captureApply(e)
+	e.update(m, keyMsg("ctrl+s"))
+	if string(*got) != "a\nc\n" {
+		t.Fatalf("the deletion must be staged, got %q", *got)
+	}
+	m, _ = e.update(m, key("i"))
+	if e.blocks[0].Mode != hunkpick.Untouched {
+		t.Fatalf("i again must let the hunk go, mode=%v", e.blocks[0].Mode)
 	}
 }
