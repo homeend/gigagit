@@ -1751,6 +1751,10 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   // anchor/cur/after are no-ops when notesOn is false, so the two layouts
   // below read the same either way.
   const anchor = (side, no) => (notesOn && no ? ` data-side="${side}" data-no="${no}"` : "");
+  // The narrow layout's context row anchors on its new side, so its OLD line
+  // rides beside it (data-ono) for a link to the old side to find. Not
+  // data-lno: that attribute is what says "split layout" to the click code.
+  const oldNo = (r) => (notesOn && r.left_no ? ` data-ono="${r.left_no}"` : "");
   const curCls = (side, no) =>
     notesOn && no && nc.row && nc.row.side === side && nc.row.no === no ? " cur" : "";
   // A split row is "cur" when the mark sits on EITHER of its sides.
@@ -1886,7 +1890,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
       }
       if (r.kind === "same") {
         html +=
-          `<tr class="same${curClsBoth(r)}${attnClsBoth(r)}${markCls(r)}"${anchor("new", r.right_no)} data-i="${ri(r)}">` +
+          `<tr class="same${curClsBoth(r)}${attnClsBoth(r)}${markCls(r)}"${anchor("new", r.right_no)}${oldNo(r)} data-i="${ri(r)}">` +
           `<td class="no l">${r.left_no || ""}</td>` +
           `<td class="no r">${r.right_no || ""}</td>` +
           `<td class="side"><span class="pan">${renderCell(r.right, null, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
@@ -2075,14 +2079,24 @@ function rerenderDiffKeepingPlace(keepScroll = false) {
 }
 
 
+// diffRowAt is the rendered row of (side, line) under root: the row anchored
+// there; for the old side also a split row carrying that left number
+// (data-lno — a changed pair anchors on its new side) or a narrow-layout
+// context row carrying it (data-ono — it anchors on its new side too).
+function diffRowAt(root, side, line) {
+  return (
+    root.querySelector(`tr[data-side="${side}"][data-no="${line}"]`) ||
+    (side === "old" ? root.querySelector(`tr[data-lno="${line}"], tr[data-ono="${line}"]`) : null)
+  );
+}
+
+
 // revealDiffRow returns the rendered row for (side, line), unfolding the run
 // that hides it first when the changes-only view folded it away — an agent
 // steering the page to a line (gg session navigate) must land on it, never
 // on a silent miss. null when the diff has no such line at all.
 function revealDiffRow(side, line) {
-  const find = () =>
-    document.querySelector(`#diff-body tr[data-side="${side}"][data-no="${line}"]`) ||
-    (side === "old" ? document.querySelector(`#diff-body tr[data-lno="${line}"]`) : null);
+  const find = () => diffRowAt($("diff-body"), side, line);
   let tr = find();
   if (tr || !state.diffPartial || !state.lastDiff) return tr;
   const rows = state.lastDiff.rows || [];
@@ -4876,4 +4890,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { diffRowAt, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

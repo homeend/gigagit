@@ -21,6 +21,9 @@ func TestRangeMinorsWiring(t *testing.T) {
 		{view, "s.range = null; // other rows now", "a slot whose file changed on disk drops its band"},
 		{view, "at = firstHeldLine((s.diff || {}).rows, side, line, end);", "a stack lands a range on the first line it holds"},
 		{live, "at = firstHeldLine((state.lastDiff || {}).rows, side, line, s.end_line);", "a range link lands on the first line the diff holds"},
+		{files, "${anchor(\"new\", r.right_no)}${oldNo(r)} data-i=", "narrow layout: a context row carries its old line"},
+		{files, "root.querySelector(`tr[data-lno=\"${line}\"], tr[data-ono=\"${line}\"]`)", "an old-side link finds a narrow-layout context row"},
+		{view, "const rowAt = (root, no) => diffRowAt(root, side, no);", "a stack lands through the same row lookup"},
 		{viewer, "if (!picked.isCollapsed && $(\"viewer-body\").contains(picked.anchorNode)) return;", "viewer: a text drag is not a click"},
 		{viewer, "if (view.range) view.range = viewerRange(view.range.start, view.range.end, view.lines.length);", "viewer: the band is clamped when the file shrinks"},
 	} {

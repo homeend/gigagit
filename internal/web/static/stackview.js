@@ -31,6 +31,7 @@ import {
   markDiffRow,
   setDiffRange,
   firstHeldLine,
+  diffRowAt,
   globalNoteCtx,
   hunkEligible,
   notesArmed,
@@ -637,9 +638,7 @@ async function landStackLine(path, side, line, end = 0) {
   if (!(await awaitSlot(st, s))) return false;
   const sec = sectionEl(k);
   if (!sec) return false;
-  const rowAt = (root, no) =>
-    root.querySelector(`tr[data-side="${side}"][data-no="${no}"]`) ||
-    (side === "old" ? root.querySelector(`tr[data-lno="${no}"]`) : null);
+  const rowAt = (root, no) => diffRowAt(root, side, no);
   // A range whose first line the diff lacks lands on the first one it holds.
   let at = line;
   let tr = rowAt(sec, line);

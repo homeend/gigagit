@@ -48,6 +48,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   In the TUI a path too wide for the question is cut in the middle, keeping
   the file name; it is never wrapped.
 
+## Old-side links in the narrow browser layout
+
+### Fixed
+
+- **A link to the old side of an unchanged line lands in the narrow
+  layout.** Below ~950px gg web draws one text column, and an unchanged
+  row there answered only to its new line number: `gg://…:old:8` (or a
+  range `:old:7-9`) said "line 8 is not in a.txt's diff" — in the single
+  diff and in the stacked diff. Such a row now carries its old line too.
+
 ## Range links and range notes: follow-up fixes
 
 ### Fixed
