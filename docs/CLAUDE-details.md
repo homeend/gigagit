@@ -4100,6 +4100,102 @@ the page has the TUI's `X` (kill and remove).
   session command in its isolated global config; the lifecycle script
   starts it from the worktree menu.
 
+### Web attach — session states (plan 3, 2026-10-03)
+
+Plan `docs/superpowers/plans/2026-10-02-web-attach-plan-3-states.md`.
+Rulings (user): states surface to agents + TUI + web; `gg agent wait` and
+the report channel are the NEXT plan.
+
+- **`internal/agentstate`** (port of erbrus `internal/screen`, stdlib
+  only): `Tail(text, 15)` → `Classify(rules, lines)` in structural order
+  **working → waiting → question → unknown**, so a phrase quoted in
+  scrollback never outranks the prompt box. Patterns run in `(?m)` mode
+  over the joined tail (`^`/`$` bound a line, `\n` spans two). Built-in
+  rules per gg agent id: `claude`, `codex`, `junie`, `kimi` (erbrus's
+  verified sets), `antigravity` (captured live 2026-10-03: braille spinner,
+  a `>` box BETWEEN two rules — the echoed user line has a rule above only —
+  trust/permission dialogs), `""` generic; `HasDefaults(id)` is false for
+  the generic set. No ANSI stripping: `Session.Text()` is already plain
+  cells (a wide glyph's right half is a SPACE tmux captures never had —
+  fixtures from gg's own emulator in `live_test.go`). `DialogOptions(raw,
+  lines)`: numbered (`❯ 1. Yes`, key = the digit) else cursor-style
+  (`> Yes, I trust`, key `pick:<i>`, `Current`) read from the UNTRIMMED
+  screen (the cursor line fixes the text column; radio lists skip deeper
+  descriptions); carried on the wire, never pressed.
+- **`domain.SessionStates()`** (`session_states.go`): one process-global
+  `StateWatcher` over `Sessions()`, started on first use (frontends call it
+  at startup; `SessionActivityOf(id)` never starts it — agent verbs and
+  tests read through that). It subscribes to the manager (start/exit/remove
+  → re-sync) AND to every running session (output → 300 ms coalesce →
+  `observe`); a 2 s tick serves the stall clock. `observe(now)`: unknown
+  changes nothing (mid-redraw debounce); a transition sets
+  `State`+`Since`; notices ride a numbered ring of 64
+  (`Notices(after)`, `NoticeSeq()`) — each frontend keeps its own cursor,
+  so the terminal and the page it hosts each get every notice once;
+  `Subscribe()` is a Broadcaster. **Grace**: the first 30 s after start post
+  no notice (sign-in spinners read as working), the badge shows at once; a
+  question still up when the grace ends is posted then (a trust dialog), an
+  idle-after-working inside it never. **Stalled** = `LastOutput` older than
+  120 s while working — or unknown, but only with DEDICATED rules (a generic
+  agent would be called stalled at every idle prompt). Exited sessions are
+  dropped. **Rules**: a command with any `screen_*` list is compiled at
+  start (`SessionRules(tc)`: a set list replaces the agent's built-in list
+  of that kind, a missing one keeps it — a partial Claude block must not
+  lose the idle box; review fix) and bound to the session id in a `ruleStore`
+  outside the watcher (`bindSessionRules`), so a custom command with lists
+  is classified and a start never depends on the watcher (`ruleStore.keep`
+  prunes only ids an observe has SEEN live — a bind that lands between an
+  observe's `List()` and its `keep` is not dropped; review fix); terminals and
+  custom commands without lists are skipped; an invalid pattern →
+  `SessionRulesWarning(tc)` (TUI status / web `warning` on the start reply)
+  and the built-ins apply. `UseSessionManager` resets the watcher (it
+  follows the manager); `UseStateTiming` and `UseSessionStates` +
+  `NewStaticStates`/`PostNotice` are the test seams. Protocol words
+  (`SessionActivity.Name()`): `working` · `idle` · `question` · `""`.
+- **Config**: `ToolCommand.ScreenWorking/ScreenWaiting/ScreenQuestion`
+  (`screen_*` lists, `HasScreenRules`), written by `renderToolCommand` as
+  TOML basic strings (`tomlString`: `%q` would emit `\x`), NOT in
+  `ToolFingerprint`, and carried over by `ReplaceToolCommandIf` when the
+  new block brings none (a template upgrade keeps tuned lists).
+- **Agents**: `AgentEntry.Activity/ActivitySince/Stalled`;
+  `AgentScreen` → `AgentScreenResult{State, Text, Activity, Options}`;
+  `gg agent list` prints the activity word after the state, `gg agent
+  screen` leads with `activity: question (1. Yes · 2. No)`. Skill v130.
+- **Web**: `sessionWire.agent_state/since/step_for/stalled/options`
+  (`sessionsWireWith(list, tasks, lookup)`); `liveMsg.Notices`
+  (`activityNoticeWire{id, kind, label, worktree, quiet_s}`) on the
+  `sessions` event from `watchSessionStates` (own subscription + cursor from
+  `NoticeSeq()` at start — nothing replayed). Page: `core.js` pure
+  `activityLabel(s, now)` / `activityAttn(s)` / `noticeText(n)` (prepended
+  to the sidebar/switcher/console pure-section tests via
+  `activitySection`); narrow sub-rows REPLACE `running 12m`, the switcher
+  rows and the console title APPEND (` · idle 3m`); `.attn` rows and the
+  title's `.act.attn` use `--act-attn`; `live.js` toasts each notice unless
+  `consoleFocusedId()` is that session.
+- **TUI** (`session_activity.go`): `activityWatch`/`actSeq` on pointer
+  fields (shared across the value copy), `waitActivityCmd` nil in quiet
+  mode (golden screens never start the watcher), `onSessionActivity` →
+  status line (newest wins; the focused console's session is skipped);
+  `activityText`/`activityAttn`; sub-rows replace, popup rows and the
+  console title append; `sessionDecorators` paints attention rows with
+  `st().activityAttn` (the AttentionWarn colour as a foreground). i18n keys:
+  `working %s`, `idle %s`, `needs input`, `stalled · %s`, `no output`, the
+  three notice sentences, the rule warning, one help row.
+- **Browser check**: `TestAttachBrowserHost` also hosts a Claude-shaped
+  `sh` session (`AgentID: "claude"`: a rule + `❯` box, Enter → a numbered
+  dialog, Enter → the box) under `UseStateTiming(0, 2 s)`; the Playwright
+  script asserts the sub-row reads idle → needs input (attention colour),
+  the toast, the console title and the switcher row — all seen failing on
+  the unfixed build first.
+- **Live verification 2026-10-03** (throwaway recorder, not committed):
+  claude (trust dialog → question with cursor options), junie (trust →
+  question; spinner → working; box → idle), kimi (trust → question;
+  moon spinner → working; box → idle), codex 0.160.0 (update/trust dialogs
+  → question; "Working (" → working; box → idle; the STARTUP box over "? for
+  shortcuts" needed a rule), antigravity 1.2.15 (all new). Gotcha: the
+  recorder's Enter accepted codex's "Update now" dialog — never send keys to
+  a live agent whose screen you have not read.
+
 ### The TUI serves its own web page (2026-09-28)
 
 Spec `docs/superpowers/specs/2026-09-28-web-hosted-in-tui-design.md`, plan

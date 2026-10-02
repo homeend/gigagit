@@ -143,6 +143,8 @@ type Model struct {
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
 	consoleSwitch consoleSwitch                            // a repo switch's console settle, run when its snapshot lands (console_scope.go)
 	sessWatch     *sessionWatch                            // the TUI's subscription to the session list (console.go)
+	actWatch      *activityWatch                           // its subscription to session activity (session_activity.go)
+	actSeq        *uint64                                  // the last activity notice shown (shared across the value copy)
 	web           *webHostState                            // the gg web page served from this process (webhost.go)
 	webOpts       webLaunchOptions                         // gg --web / --web-addr for this run
 	agentHost     *agentHostState                          // the agent MCP channel (agenthost.go); pointer: survives the value copy
@@ -480,6 +482,8 @@ func New(svc *domain.Service) Model {
 	m := Model{
 		svc:                    svc,
 		sessWatch:              &sessionWatch{},
+		actWatch:               &activityWatch{},
+		actSeq:                 new(uint64),
 		web:                    newWebHostState(),
 		clipWrite:              clipboard.Copy,
 		feed:                   svc.CommitFeed(),
@@ -526,7 +530,7 @@ func (m Model) loadPrefs() Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd(), waitAgentSpawnCmd(m.agentHost))
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitActivityCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd(), waitAgentSpawnCmd(m.agentHost))
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -627,6 +631,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitSessionCmd(m.console, msg.id, msg.gen)
 	case sessionsChangedMsg:
 		return m.onSessionsChanged()
+	case sessionActivityMsg:
+		return m.onSessionActivity()
 	case webStartedMsg:
 		return m.onWebStarted(msg)
 	case webRerootMsg:

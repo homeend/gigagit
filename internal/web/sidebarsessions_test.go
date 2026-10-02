@@ -7,7 +7,7 @@ import (
 
 func TestWorktreeSessionRowsJS(t *testing.T) {
 	t.Parallel()
-	out := runPureJS(t, "sidebar.js", "// --- sidebar model (pure; guarded against Go) ---", "// --- end sidebar model ---", `
+	out := runPureJS(t, "sidebar.js", "// --- sidebar model (pure; guarded against Go) ---", "// --- end sidebar model ---", activitySection(t)+`
 const now = Date.now();
 const sess = [
   { id: "s1", label: "claude", worktree: "/x/gg", state: "running", started: new Date(now - 125000).toISOString() },
@@ -16,7 +16,7 @@ const sess = [
 ];
 console.log(JSON.stringify(worktreeSessionRows(sess, "/x/gg", now)));
 `)
-	want := `[{"id":"s1","glyph":"●","label":"claude","meta":"running 2m","task":false},{"id":"s3","glyph":"○","label":"Claude · commit message — main @ abc","meta":"exited (2)","task":true}]`
+	want := `[{"id":"s1","glyph":"●","label":"claude","meta":"running 2m","task":false,"attn":false},{"id":"s3","glyph":"○","label":"Claude · commit message — main @ abc","meta":"exited (2)","task":true,"attn":false}]`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}

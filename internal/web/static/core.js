@@ -378,6 +378,41 @@ function defaultWorktreePath(branch) {
   return parent + sep + name + "-" + branch.replace(/[^\w.-]+/g, "-");
 }
 
+// --- session activity (pure; guarded against Go) ---
+// What an agent session is doing, as the server classified it from its
+// screen (domain.SessionStates): s.agent_state is working | idle | question,
+// s.since when that began, s.stalled when it printed nothing for two
+// minutes while apparently busy. Labels mirror the TUI's: never "waiting".
+function activityAge(iso, now) {
+  const s = Math.max(0, Math.floor((now - Date.parse(iso)) / 1000));
+  return s < 60 ? s + "s" : s < 3600 ? Math.floor(s / 60) + "m" : Math.floor(s / 3600) + "h";
+}
+// activityLabel: "working 7m" | "idle 3m" | "needs input" | "stalled · working 7m"
+// | "stalled · no output" | "" (unknown and not stalled, or exited).
+function activityLabel(s, now) {
+  if (!s || s.state === "exited") return "";
+  let label = "";
+  if (s.agent_state === "working" || s.agent_state === "idle") label = s.agent_state + (s.since ? " " + activityAge(s.since, now) : "");
+  else if (s.agent_state === "question") label = "needs input";
+  if (s.stalled) return "stalled · " + (label || "no output");
+  return label;
+}
+// activityAttn: the attention colour — the agent waits for a decision, or
+// looks stuck.
+function activityAttn(s) {
+  return !!s && (s.agent_state === "question" || !!s.stalled);
+}
+// noticeText: the toast for one activity notice {kind, label, worktree, quiet_s}.
+function noticeText(n) {
+  const wt = String(n.worktree || "").split(/[\\/]/).filter(Boolean).pop() || n.worktree;
+  const who = n.label + " in " + wt;
+  if (n.kind === "question") return who + " needs your input";
+  if (n.kind === "idle") return who + " finished its turn — idle";
+  const q = n.quiet_s || 0;
+  return who + " has printed nothing for " + (q < 60 ? q + "s" : Math.floor(q / 60) + "m") + " — stalled?";
+}
+// --- end session activity ---
+
 // --- single-flight task gate (pure; guarded against node) ---
 //
 // The same background task can be started many times over: a reload answers
@@ -435,7 +470,7 @@ function runOnce(type, fn, opts = {}) {
 // --- end single-flight task gate ---
 
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, activityAttn, activityLabel, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lsGet, lsSet, noticeText, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
 
 // fmtBytes is the TUI's byte count for a placeholder: "597.0 KB", "1.2 MB", "312 B".
 export function fmtBytes(n) {

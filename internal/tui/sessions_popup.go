@@ -82,12 +82,17 @@ func sessionsPopupRows(list []domain.SessionInfo, query string) (rows []string, 
 	return rows, ids
 }
 
-// sessionStateText is "● Claude  running 12m" / "○ Codex  exited (0)".
+// sessionStateText is "● Claude  running 12m" / "○ Codex  exited (0)"; the
+// row is wide, so a known activity is appended: "running 12m · idle 3m".
 func sessionStateText(info domain.SessionInfo) string {
 	if info.State == domain.SessionExited {
 		return "○ " + info.Label + "  " + i18n.T("exited (%d)", info.ExitCode)
 	}
-	return "● " + info.Label + "  " + i18n.T("running %s", formatElapsed(time.Since(info.Started)))
+	row := "● " + info.Label + "  " + i18n.T("running %s", formatElapsed(time.Since(info.Started)))
+	if act := sessionActivityText(info.ID); act != "" {
+		row += " · " + act
+	}
+	return row
 }
 
 // openSessionsPopup opens the ctrl+\ popup; with no sessions (and not in

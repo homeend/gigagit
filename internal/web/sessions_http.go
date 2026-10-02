@@ -19,20 +19,35 @@ func init() {
 	})
 }
 
-// sessionWire is one session as the page sees it. agent_state/since are
-// plan 3's activity detection and stay empty until then.
+// sessionWire is one session as the page sees it. agent_state and the
+// fields after it are what the agent is doing (domain.SessionStates): the
+// protocol words working | idle | question, when that began, the spinner's
+// own timer in seconds, the stall flag and a question's choices — absent for
+// a session gg does not classify.
 type sessionWire struct {
-	ID         string    `json:"id"`
-	Label      string    `json:"label"`
-	Agent      string    `json:"agent"`
-	Repo       string    `json:"repo"`
-	Worktree   string    `json:"worktree"`
-	State      string    `json:"state"`
-	ExitCode   int       `json:"exit_code"`
-	Started    time.Time `json:"started"`
-	Task       string    `json:"task,omitempty"`
-	AgentState string    `json:"agent_state,omitempty"`
-	Since      time.Time `json:"since,omitempty"`
+	ID         string                  `json:"id"`
+	Label      string                  `json:"label"`
+	Agent      string                  `json:"agent"`
+	Repo       string                  `json:"repo"`
+	Worktree   string                  `json:"worktree"`
+	State      string                  `json:"state"`
+	ExitCode   int                     `json:"exit_code"`
+	Started    time.Time               `json:"started"`
+	Task       string                  `json:"task,omitempty"`
+	AgentState string                  `json:"agent_state,omitempty"`
+	Since      time.Time               `json:"since,omitzero"`
+	StepFor    int                     `json:"step_for,omitempty"`
+	Stalled    bool                    `json:"stalled,omitempty"`
+	Options    []domain.ActivityOption `json:"options,omitempty"`
+}
+
+// activityNoticeWire is one activity notice (a toast on every tab).
+type activityNoticeWire struct {
+	ID       string `json:"id"`
+	Kind     string `json:"kind"` // question | idle | stalled
+	Label    string `json:"label"`
+	Worktree string `json:"worktree"`
+	QuietS   int    `json:"quiet_s,omitempty"` // stalled: seconds without output
 }
 
 type taskWire struct {
@@ -52,6 +67,11 @@ type taskWire struct {
 // task-backed session is labelled "<agent> · <task key>" like the TUI's
 // sub-row. Order: start time.
 func sessionsWire(list []domain.SessionInfo, tasks []domain.TaskInfo) []sessionWire {
+	return sessionsWireWith(list, tasks, domain.SessionActivityOf)
+}
+
+// sessionsWireWith is sessionsWire with the activity lookup injected.
+func sessionsWireWith(list []domain.SessionInfo, tasks []domain.TaskInfo, activity func(domain.SessionID) (domain.SessionActivity, bool)) []sessionWire {
 	owner := map[domain.SessionID]domain.TaskInfo{}
 	for _, tk := range tasks {
 		if tk.Session != "" {
@@ -67,6 +87,9 @@ func sessionsWire(list []domain.SessionInfo, tasks []domain.TaskInfo) []sessionW
 		}
 		if tk, ok := owner[info.ID]; ok {
 			w.Task, w.Label = string(tk.ID), info.Label+" · "+tk.Key
+		}
+		if a, ok := activity(info.ID); ok {
+			w.AgentState, w.Since, w.StepFor, w.Stalled, w.Options = a.Name(), a.Since, int(a.StepFor.Seconds()), a.Stalled, a.Options
 		}
 		out = append(out, w)
 	}
@@ -95,11 +118,36 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"tasks": tasksWire(domain.Tasks().List())})
 }
 
-// broadcastSessions tells every tab the list changed. fanOut, not emit: the
-// op gate must not swallow a session's exit.
-func (s *Server) broadcastSessions() {
+// broadcastSessions tells every tab the list changed, with the activity
+// notices since the last broadcast. fanOut, not emit: the op gate must not
+// swallow a session's exit or a question.
+func (s *Server) broadcastSessions(notices []activityNoticeWire) {
 	if h := s.liveHubRef(); h != nil {
-		h.fanOut(liveMsg{Changed: []string{}, Reason: "sessions", Sessions: s.sessionsNow()})
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "sessions", Sessions: s.sessionsNow(), Notices: notices})
+	}
+}
+
+// watchSessionStates forwards activity changes and notices until stop
+// closes. Its own subscription and its own notice cursor (from the
+// watcher's current sequence: nothing older is replayed), so the terminal
+// hosting this page reads every notice too.
+func (s *Server) watchSessionStates(stop <-chan struct{}) {
+	w := domain.SessionStates()
+	ch, cancel := w.Subscribe()
+	defer cancel()
+	seq := w.NoticeSeq()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ch:
+			var out []activityNoticeWire
+			for _, n := range w.Notices(seq) {
+				seq = n.Seq
+				out = append(out, activityNoticeWire{ID: string(n.ID), Kind: n.Kind, Label: n.Label, Worktree: n.Dir, QuietS: int(n.Quiet.Seconds())})
+			}
+			s.broadcastSessions(out)
+		}
 	}
 }
 
@@ -114,7 +162,7 @@ func (s *Server) watchSessions(stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-ch:
-			s.broadcastSessions()
+			s.broadcastSessions(nil)
 		}
 	}
 }

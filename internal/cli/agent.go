@@ -148,7 +148,14 @@ func agentList(ctx context.Context, c *agentlink.Client, args []string, stdout, 
 		return 0
 	}
 	for _, a := range out.Agents {
-		line := fmt.Sprintf("%s  %s  %s  %s", a.ID, a.State, a.Tool, a.Worktree)
+		line := a.ID + "  " + a.State
+		if a.Activity != "" {
+			line += "  " + a.Activity
+		}
+		if a.Stalled {
+			line += "  stalled"
+		}
+		line += "  " + a.Tool + "  " + a.Worktree
 		if a.Parent != "" {
 			line += "  parent " + a.Parent
 		}
@@ -198,10 +205,15 @@ func agentOneID(ctx context.Context, c *agentlink.Client, verb string, args []st
 		return 2
 	}
 	var out struct {
-		Text string `json:"text"`
+		Text     string                  `json:"text"`
+		Activity string                  `json:"activity"`
+		Options  []domain.ActivityOption `json:"options"`
 	}
 	if code := call(ctx, c, verb, "agent_"+verb, map[string]any{"id": args[0]}, &out, stderr); code != 0 {
 		return code
+	}
+	if out.Activity != "" {
+		fmt.Fprintln(stdout, activityLine(out.Activity, out.Options))
 	}
 	fmt.Fprintln(stdout, out.Text)
 	return 0
@@ -278,4 +290,18 @@ func agentTask(ctx context.Context, c *agentlink.Client, args []string, stdout, 
 		fmt.Fprintln(stdout)
 	}
 	return 0
+}
+
+// activityLine: "activity: question (1. Yes · 2. No)" — the first line of
+// `gg agent screen` when gg can tell what the agent is doing.
+func activityLine(activity string, opts []domain.ActivityOption) string {
+	line := "activity: " + activity
+	if len(opts) == 0 {
+		return line
+	}
+	parts := make([]string, len(opts))
+	for i, o := range opts {
+		parts[i] = o.Key + ". " + o.Label
+	}
+	return line + " (" + strings.Join(parts, " · ") + ")"
 }

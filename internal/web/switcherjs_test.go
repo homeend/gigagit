@@ -7,7 +7,7 @@ import (
 
 func TestSwitcherTabsModelJS(t *testing.T) {
 	t.Parallel()
-	out := runPureJS(t, "openfiles.js", "// --- switcher model (pure; guarded against Go) ---", "// --- end switcher model ---", `
+	out := runPureJS(t, "openfiles.js", "// --- switcher model (pure; guarded against Go) ---", "// --- end switcher model ---", activitySection(t)+`
 const r = [];
 const sess = [
   { id: "s1", label: "claude", repo: "gg", worktree: "/x/gg", state: "running", started: new Date(Date.now() - 65000).toISOString() },
@@ -70,7 +70,7 @@ func TestSwitcherLifecycleWired(t *testing.T) {
 
 func TestSwitcherAgentKeyJS(t *testing.T) {
 	t.Parallel()
-	out := runPureJS(t, "openfiles.js", "// --- switcher model (pure; guarded against Go) ---", "// --- end switcher model ---", `
+	out := runPureJS(t, "openfiles.js", "// --- switcher model (pure; guarded against Go) ---", "// --- end switcher model ---", activitySection(t)+`
 console.log([agentKey("k", "running"), agentKey("X", "running"), agentKey("x", "exited"), agentKey("x", "running"), agentKey("k", "exited"), agentKey("X", "exited"), agentKey("j", "running")].join("|"));
 `)
 	if want := "kill|killrm|remove|refuse-remove|none|remove|none"; out != want {

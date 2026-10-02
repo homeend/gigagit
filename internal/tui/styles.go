@@ -72,6 +72,8 @@ type styles struct {
 	attnInfo  lipgloss.Style
 	attnWarn  lipgloss.Style
 	attnError lipgloss.Style
+	// activityAttn: a session row whose agent wants the user (needs input, stalled).
+	activityAttn lipgloss.Style
 
 	// field_style.go
 	field       lipgloss.Style // was fieldStyle
@@ -174,6 +176,7 @@ func buildStyles(th theme.Theme) *styles {
 	s.attnInfo = ns().Background(pick(th.AttentionInfo, legacy.AttentionInfo))
 	s.attnWarn = ns().Background(pick(th.AttentionWarn, legacy.AttentionWarn))
 	s.attnError = ns().Background(pick(th.AttentionError, legacy.AttentionError))
+	s.activityAttn = ns().Foreground(pick(th.AttentionWarn, legacy.AttentionWarn))
 
 	s.field = ns().Background(pick(th.FieldBg, legacy.FieldBg))
 	s.fieldCursor = ns().Background(pick(th.FieldCursorBg, legacy.FieldCursorBg)).Foreground(pick(th.FieldCursorFg, legacy.FieldCursorFg))

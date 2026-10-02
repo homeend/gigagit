@@ -7,7 +7,7 @@
 // everything); never two refreshes at once (the runOnce("refresh") gate
 // manualRefresh uses too — an `r` press and a push coalesce); a reconnect
 // after a dropped stream reloads everything, since events were missed.
-import { attnKey, getJSON, runOnce, state, tabId } from "./core.js";
+import { attnKey, getJSON, noticeText, runOnce, state, tabId } from "./core.js";
 import { isServerDown, onServerUp, serverSeen, serverShutdown, suspectServerDown } from "./serverdown.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
@@ -21,7 +21,8 @@ import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
 import { switcherOpenFiles, switcherSessions } from "./openfiles.js";
-import { consoleSessions } from "./console.js";
+import { consoleFocusedId, consoleSessions } from "./console.js";
+import { toast } from "./toast.js";
 import { evictedText, markViewerRange, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
 import { closeFinder } from "./wtfinder.js";
 
@@ -140,6 +141,9 @@ function connectLive() {
       switcherSessions(msg.sessions || []);
       consoleSessions(msg.sessions || []);
       takeSessions(msg.sessions || []);
+      // What an agent wants from the user, once per transition; not for
+      // the session this tab is typing into — the user is looking at it.
+      for (const n of msg.notices || []) if (n.id !== consoleFocusedId()) toast(noticeText(n));
       return;
     }
     for (const src of msg.changed || []) pending.add(src);

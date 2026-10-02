@@ -1,7 +1,7 @@
 // console.js — an agent session's console in the page (web attach, plan 1):
 // the server's screen painted as styled runs over a per-console SSE stream,
 // keys and paste posted back, the focused viewer owning the session's size.
-import { $, elidePath, getJSON, postJSON } from "./core.js";
+import { $, activityAttn, activityLabel, elidePath, esc, getJSON, postJSON } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, topLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
@@ -104,9 +104,15 @@ function exitToast(prevState, wasFocused) {
   return prevState !== "exited" && !wasFocused;
 }
 
-function consoleTitle(s, now, elide) {
+// consoleTitleParts: the title's base ("claude · wt · running 2m") and the
+// activity it appends when the server knows one ("needs input").
+function consoleTitleParts(s, now, elide) {
   const st = s.state === "exited" ? "exited (" + s.exit_code + ")" : "running " + ageText(s.started, now);
-  return s.label + " · " + elide(s.worktree) + " · " + st;
+  return { base: s.label + " · " + elide(s.worktree) + " · " + st, act: activityLabel(s, now) };
+}
+function consoleTitle(s, now, elide) {
+  const p = consoleTitleParts(s, now, elide);
+  return p.act ? p.base + " · " + p.act : p.base;
 }
 
 function wtName(path) {
@@ -191,7 +197,8 @@ function paintCursor() {
 function retitle() {
   if (!con.info) return;
   const budget = Math.max(12, Math.floor(($("console-title").clientWidth - 160) / (con.cell ? con.cell.w : 7)));
-  $("console-label").textContent = consoleTitle(con.info, Date.now(), (p) => elidePath(p, budget));
+  const p = consoleTitleParts(con.info, Date.now(), (q) => elidePath(q, budget));
+  $("console-label").innerHTML = esc(p.base) + (p.act ? ` · <span class="act${activityAttn(con.info) ? " attn" : ""}">${esc(p.act)}</span>` : "");
   $("console-size").textContent = con.frame ? con.frame.cols + "×" + con.frame.rows : "";
   $("console-label").classList.toggle("exited", con.info.state === "exited");
 }
@@ -412,6 +419,12 @@ function consoleSessionId() {
   return con.id;
 }
 
+// consoleFocusedId: the session the user is typing into ("" when none) —
+// its notices are not toasted, the user is looking at it.
+function consoleFocusedId() {
+  return con.focused ? con.id : "";
+}
+
 // consoleSessions: the live list changed — retitle the shown session, close on
 // its removal (the stream's gone event also does; the list may land first).
 function consoleSessions(list) {
@@ -462,4 +475,4 @@ registerHelp({
     "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>k</b> kill, <b>X</b> kill and remove, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running); an exited one: <b>x</b> removes it. The viewer that has the console focused sets its size.",
 });
 
-export { closeConsole, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };
+export { closeConsole, consoleFocusedId, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };

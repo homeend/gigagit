@@ -8,7 +8,7 @@
 //              most recently shown first (plan 5b). ● marks the file THIS
 //              tab's viewer shows; enter brings one back where this tab left
 //              it, x closes it in every tab.
-import { $, charWidth, elidePath, esc, getJSON, postJSON, tabId } from "./core.js";
+import { $, activityAttn, activityLabel, charWidth, elidePath, esc, getJSON, postJSON, tabId } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { dropViewer, openViewer, versionLabel, viewerClosedFile, viewerFileId } from "./viewer.js";
@@ -60,8 +60,10 @@ function sessionRows(list, mine, now) {
           id: s.id, label: s.label, wt, task: !!s.task,
           glyph: s.state === "exited" ? "○" : "●",
           mark: s.id === mine ? "●" : "○",
-          meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : ageOf(s.started, now),
+          // The row is wide: the age, then the activity ("2m · idle 3m").
+          meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : [ageOf(s.started, now), activityLabel(s, now)].filter(Boolean).join(" · "),
           state: s.state,
+          attn: activityAttn(s),
         });
       }
     }
@@ -246,7 +248,7 @@ function renderSwitcher() {
         i++;
         const j = vis.findIndex((s) => s.id === r.id);
         return (
-          `<div class="ofrow${j === sw.sel ? " sel" : ""}${r.task ? " task" : ""}" data-i="${j}" title="${esc(r.label)}">` +
+          `<div class="ofrow${j === sw.sel ? " sel" : ""}${r.task ? " task" : ""}${r.attn ? " attn" : ""}" data-i="${j}" title="${esc(r.label)}">` +
           `<span class="glyph ${r.state === "exited" ? "ex" : "run"}">${r.glyph}</span> ${esc(elidePath(r.label, Math.max(8, cols - 30)))}` +
           `<span class="ofmeta">${esc(r.meta)}</span></div>`
         );

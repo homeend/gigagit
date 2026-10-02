@@ -202,6 +202,8 @@ func consoleTitle(info domain.SessionInfo, focused bool) string {
 	state := i18n.T("running %s", formatElapsed(time.Since(info.Started)))
 	if info.State == domain.SessionExited {
 		state = i18n.T("exited (%d)", info.ExitCode)
+	} else if act := sessionActivityText(info.ID); act != "" {
+		state += " · " + act
 	}
 	t := info.Label + " · " + shortWorktreeName(info.Dir) + " · " + state
 	if !focused {

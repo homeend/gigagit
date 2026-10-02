@@ -36,6 +36,21 @@ type AgentEntry struct {
 	Started  time.Time `json:"started"`
 	Spawned  bool      `json:"spawned"`
 	Mine     bool      `json:"mine"`
+	// What the agent is doing, read off its screen: "working" | "idle" |
+	// "question" (it waits for a decision — agent_screen has the options);
+	// "" for a session gg does not classify. Stalled: nothing printed for
+	// two minutes while apparently busy.
+	Activity      string    `json:"activity,omitempty"`
+	ActivitySince time.Time `json:"activity_since,omitzero"`
+	Stalled       bool      `json:"stalled,omitempty"`
+}
+
+// AgentScreenResult is agent_screen's answer.
+type AgentScreenResult struct {
+	State    string // running | exited
+	Text     string // the visible screen, trailing blanks trimmed
+	Activity string // as AgentEntry.Activity
+	Options  []ActivityOption
 }
 
 // AgentList is every session of this process; Mine marks caller's descendants.
@@ -44,9 +59,13 @@ func AgentList(caller string) []AgentEntry {
 	for _, in := range Sessions().List() {
 		full := FullSessionID(in.ID)
 		rec, _ := AgentRecord(full)
-		out = append(out, AgentEntry{ID: full, Parent: rec.Parent, Tool: in.Label, Label: in.Label,
+		e := AgentEntry{ID: full, Parent: rec.Parent, Tool: in.Label, Label: in.Label,
 			Worktree: in.Dir, State: sessionStateName(in.State), ExitCode: in.ExitCode,
-			Started: in.Started, Spawned: rec.Spawned, Mine: AgentDescends(full, caller)})
+			Started: in.Started, Spawned: rec.Spawned, Mine: AgentDescends(full, caller)}
+		if a, ok := SessionActivityOf(in.ID); ok {
+			e.Activity, e.ActivitySince, e.Stalled = a.Name(), a.Since, a.Stalled
+		}
+		out = append(out, e)
 	}
 	return out
 }
@@ -63,17 +82,22 @@ func sessionOf(full string) (*AgentSession, error) {
 	return s, nil
 }
 
-// AgentScreen is target's visible screen as plain text (trailing blanks trimmed).
-func AgentScreen(target string) (string, string, error) {
+// AgentScreen is target's visible screen as plain text (trailing blanks
+// trimmed) with what the agent is doing and, at a question, its choices.
+func AgentScreen(target string) (AgentScreenResult, error) {
 	s, err := sessionOf(target)
 	if err != nil {
-		return "", "", err
+		return AgentScreenResult{}, err
 	}
 	lines := strings.Split(s.Text(), "\n")
 	for i := range lines {
 		lines[i] = strings.TrimRight(lines[i], " ")
 	}
-	return sessionStateName(s.Info().State), strings.TrimRight(strings.Join(lines, "\n"), "\n"), nil
+	res := AgentScreenResult{State: sessionStateName(s.Info().State), Text: strings.TrimRight(strings.Join(lines, "\n"), "\n")}
+	if a, ok := SessionActivityOf(s.Info().ID); ok {
+		res.Activity, res.Options = a.Name(), a.Options
+	}
+	return res, nil
 }
 
 // reach refuses a target that is not caller's descendant (spec §5).

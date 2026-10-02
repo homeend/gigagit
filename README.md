@@ -1509,8 +1509,33 @@ mode = "session"
 command = '''claude --model opus'''
 ```
 
-and runs through the usual first-run approval. The two reserved keys are
-configurable:
+and runs through the usual first-run approval.
+
+**What the agent is doing.** gg reads each agent session's screen and says so
+on its sub-row — `└ ● Claude  working 7m` while it runs a step, `idle 3m`
+when its turn is over and it waits for you, **needs input** when a dialog
+(trust, a command permission, a question) waits for a decision, and
+`stalled · …` when it has printed nothing for two minutes while apparently
+busy. The `ctrl+\` popup rows and the console title show the same words
+after the running age; needs input and stalled wear the attention colour.
+When a session starts needing you, finishes its turn, or stalls, the status
+line says so once (`Claude in feat-x needs your input`) — unless you are
+typing into that very console. Terminals and plain custom commands are not
+read. gg knows the screens of Claude Code, Codex, Junie, Antigravity and Kimi
+Code; a `[[tools.command]]` block may bring its own rules (RE2, matched
+against the last 15 non-empty screen lines, in this order):
+
+```toml
+screen_working  = ['^[⠋-⠿] ']           # a spinner line
+screen_waiting  = ['^> \S*$']            # the empty prompt
+screen_question = ['\(y/n\)', 'Allow\?']
+```
+
+A list you set replaces the built-in list of that kind for the agent; one you
+leave out keeps the built-in (an invalid pattern is reported once at start and
+the built-in rules apply). Agents see the same
+through `agent_list` (`activity`, `stalled`) and `agent_screen` (`activity`,
+a dialog's `options`). The two reserved keys are configurable:
 
 ```toml
 [console]
