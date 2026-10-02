@@ -581,7 +581,11 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 	if r.Note.Side == model.NoteSideOld {
 		sideMark = "L"
 	}
-	t += " · " + v.noteAddr.Path + " " + sideMark + strconv.Itoa(r.Range[1])
+	t += " · " + v.noteAddr.Path + " " + sideMark
+	if r.Range[0] > 0 && r.Range[0] < r.Range[1] {
+		t += strconv.Itoa(r.Range[0]) + "-" // a note over several lines names them
+	}
+	t += strconv.Itoa(r.Range[1])
 	if r.Status == model.NoteStale {
 		if v.previewSet != nil {
 			// In a preview a note whose lines a later commit changed is the

@@ -37,6 +37,8 @@ const titles = [
   noteTitle({ id: "n1", source: "agent", author: "bot", side: "new", line: 9, status: "stale" }, "a.go", false, now),
   noteTitle({ id: "n2", source: "user", side: "old", line: 4, status: "outdated" }, "a.go", true, now),
   noteTitle({ id: "n3", source: "user", side: "new", line: 4, status: "active" }, "a.go", false, now),
+  noteTitle({ id: "n4", source: "user", side: "new", line: 10, range: [8, 10], status: "active" }, "a.go", false, now),
+  noteTitle({ id: "n5", source: "user", side: "old", line: 4, range: [4, 4], status: "active" }, "a.go", false, now),
 ];
 const ages = ["", "garbage", "2026-09-20T11:59:50Z", "2026-09-20T11:15:00Z", "2026-09-20T02:00:00Z", "2026-09-01T12:00:00Z", "2025-01-01T00:00:00Z"]
   .map((c) => noteAge(c, now));
@@ -68,7 +70,7 @@ console.log(JSON.stringify({ titles, ages, seed: [...seed].sort(), t1, after1, t
 		"review · 3d · b.txt (file)",
 		"agent note · bot · a.go R9 (stale)",
 		"note · a.go L4 (outdated)",
-		"note · a.go R4",
+		"note · a.go R4", "note · a.go R8-10", "note · a.go L4",
 	}
 	eq := func(what string, got, want []string) {
 		t.Helper()

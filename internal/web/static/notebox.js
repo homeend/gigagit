@@ -26,9 +26,11 @@ export function noteTitle(n, path, preview, nowMs) {
     const at = n.file_level ? path + " (file)" : path + " " + side + n.line;
     return ["review", n.author, noteAge(n.created, nowMs), at, n.resolved ? "resolved" : ""].filter(Boolean).join(" · ");
   }
+  // A note over several lines names them (R8-10); one line is the number.
+  const lines = n.range && n.range[1] > n.range[0] ? n.range[0] + "-" + n.range[1] : n.line;
   const stale = n.status === "stale" || n.status === "outdated";
   const word = stale ? (preview ? " (outdated)" : " (stale)") : "";
-  return (n.source === "agent" ? "agent note" : "note") + (n.author ? " · " + n.author : "") + " · " + path + " " + side + n.line + word;
+  return (n.source === "agent" ? "agent note" : "note") + (n.author ? " · " + n.author : "") + " · " + path + " " + side + lines + word;
 }
 
 // seedCollapsed is the collapse set a freshly opened diff starts with: the

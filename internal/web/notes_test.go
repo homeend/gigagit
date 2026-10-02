@@ -122,6 +122,9 @@ func TestNotesAddRange(t *testing.T) {
 	for _, body := range []string{
 		`{"path":"f.txt","state":"unstaged","side":"new","first":3,"line":2,"summary":"x"}`,
 		`{"path":"f.txt","state":"unstaged","side":"new","first":-1,"line":2,"summary":"x"}`,
+		// past the end of the side (3 lines): the request's mistake, not a 500
+		`{"path":"f.txt","state":"unstaged","side":"new","first":2,"line":9,"summary":"x"}`,
+		`{"path":"f.txt","state":"unstaged","side":"new","line":9,"summary":"x"}`,
 	} {
 		if code, _ := postJSONRaw(t, ts, "/api/notes/add", body); code != http.StatusBadRequest {
 			t.Fatalf("POST %s = %d, want 400", body, code)

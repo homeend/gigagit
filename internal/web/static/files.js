@@ -23,7 +23,7 @@ import { openShelfNotes } from "./shelfnotes.js";
 import { leaveRangeReview, leaveReview, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
-import { activeDiff, rangeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
+import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -1388,6 +1388,18 @@ function rangeRows(rows, side, first, last) {
 }
 
 
+// firstHeldLine is the first line of first..last (on side) the diff's rows
+// hold, 0 when none: where a range link lands when its own first line is not
+// in the diff. Pure.
+function firstHeldLine(rows, side, first, last) {
+  for (const r of rows || []) {
+    const no = side === "old" ? r.left_no : r.right_no;
+    if (no >= first && no <= last) return no;
+  }
+  return 0;
+}
+
+
 // noteBars is the lines that carry a note's bar, per side: every line of a
 // note that covers MORE than one. Pure.
 function noteBars(notes) {
@@ -1772,7 +1784,9 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   const rngRows = rng ? new Set(rangeRows(rows, rng.side, rng.first, rng.last).idx.map((i) => rows[i])) : null;
   const bars = notesOn && notesArmed(nc.ctx) ? noteBars(nc.notes.filter(noteShown)) : null;
   const markCls = (r, only) => {
-    let c = rngRows && rngRows.has(r) ? (rng.side === "old" ? " rng-l" : " rng-r") : "";
+    // A one-side row of the unified layout wears the band only when it shows
+    // the band's side: a deleted row inside a new-side range is not its line.
+    let c = rngRows && rngRows.has(r) && (!only || only === rng.side) ? (rng.side === "old" ? " rng-l" : " rng-r") : "";
     if (bars && only !== "new" && r.left_no && bars.old.has(r.left_no)) c += " nbar-l";
     if (bars && only !== "old" && r.right_no && bars.new.has(r.right_no)) c += " nbar-r";
     return c;
@@ -1872,7 +1886,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
       }
       if (r.kind === "same") {
         html +=
-          `<tr class="same${curCls("new", r.right_no)}${attnClsBoth(r)}${markCls(r)}"${anchor("new", r.right_no)} data-i="${ri(r)}">` +
+          `<tr class="same${curClsBoth(r)}${attnClsBoth(r)}${markCls(r)}"${anchor("new", r.right_no)} data-i="${ri(r)}">` +
           `<td class="no l">${r.left_no || ""}</td>` +
           `<td class="no r">${r.right_no || ""}</td>` +
           `<td class="side"><span class="pan">${renderCell(r.right, null, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
@@ -2783,8 +2797,14 @@ function setDiffRange(tr, range) {
   if (state.stack) {
     const sec = tr.closest(".stk-file");
     const own = sec ? state.stack.slots[Number(sec.dataset.k)] : null;
+    // Only the files whose band changes are repainted: the one that had it
+    // and the one that gets it — not every loaded file of the stack.
+    const touched = state.stack.slots.filter((o) => o.range || o === own);
     for (const o of state.stack.slots) o.range = o === own ? r : null;
-  } else state.diffRange = r;
+    repaintStackSlots(touched);
+    return held;
+  }
+  state.diffRange = r;
   rerenderDiffKeepingPlace(true);
   return held;
 }
@@ -3012,7 +3032,18 @@ function addNotePrompt() {
     const fwd = !ranged && !ad.row && firstNewSideRow(scope);
     if (fwd) at = fwd;
     if (at.side === "old") {
-      opLine("notes in a preview anchor on the new side", true);
+      // A commit pair is a compare on screen, not a preview: say so.
+      opLine(ad.ctx.preview.pair ? "notes in a compare anchor on the new side" : "notes in a preview anchor on the new side", true);
+      return;
+    }
+  }
+  // A range the diff holds only in part (a range link landed on a diff that
+  // lacks some of its lines): the band shows fewer lines than the note would
+  // cover, so it is refused — as the range's link is.
+  if (ranged) {
+    const rows = ((rd.slot ? rd.slot.diff : state.lastDiff) || {}).rows;
+    if (rangeRows(rows, at.side, at.first, at.no).block.length < at.no - at.first + 1) {
+      opLine(`lines ${at.first}-${at.no} are not all in this diff`, true);
       return;
     }
   }
@@ -4845,4 +4876,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

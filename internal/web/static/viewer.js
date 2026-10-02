@@ -331,6 +331,9 @@ $("viewer-body").addEventListener("click", (e) => {
     rerenderKeepingScroll();
     return;
   }
+  // A drag that selected text (it may end on the line it began on, which is a
+  // click) is copying, not pointing: the cursor and the band stay.
+  if (!getSelection().isCollapsed) return;
   view.cur = Number(row.dataset.i) + 1;
   if (clearViewerRange()) return;
   paintCursor();
@@ -1081,6 +1084,8 @@ async function viewerFileChanged(id) {
   view.placeholder = placeholderFor(body, view.lines);
   view.image = imageOf(body, view.src, view.rev, view.path);
   view.cur = keepLine(view.cur, view.lines.length, !!body.missing);
+  // The file shrank on disk: the band ends with it (gone when it began past the end).
+  if (view.range) view.range = viewerRange(view.range.start, view.range.end, view.lines.length);
   renderViewer();
   el.scrollTop = top;
   el.scrollLeft = left;

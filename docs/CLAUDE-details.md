@@ -868,7 +868,15 @@ posts `first` beside `line` (`/api/notes/add`: range `first..line`, 0 = one
 line; the server leaves the hash to domain), refuses a preview's old side
 with no fall-forward, and hands a clear of THAT band to `noteWrite`'s `saved`
 hook (success only). The `c` gate reads the same slot (`noteKey`'s ctx
-argument); collapsing a stack section drops its range. Tests: `rangenotejs_test.go`, `TestNotesAddRange`.
+argument); collapsing a stack section drops its range. Follow-ups (2026-10-02):
+a link's line is digits only (`linkNum`); `firstHeldLine` lands a range link
+on the first line the diff holds; `setDiffRange` repaints only the touched
+stack slots (`repaintStackSlots`) and `showSlotDiff` drops a re-read slot's
+band; `markCls(r, only)` bands a unified one-side row only on the band's
+side; `c` refuses a partly held range; the note title names a range
+(`R8-10`, both frontends); `domain.ErrNoteRange` → 400. Left on purpose: a
+one-line shift+click in a compare still marks the row (it is the only way
+to start a range there), bare-CR numbering, a checkout path ending `:<n>-`. Tests: `rangenotejs_test.go`, `TestNotesAddRange`.
 
 **A note over marked lines (2026-10-02).** `c` with more than one row marked
 in the diff asks `noteAnchorOfMarks` (`note_popup.go`), which reuses
