@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A note over marked lines in gg web
+
+### Added
+
+- **`c` with a range marked writes one note over it.** In the browser, mark
+  lines with shift+click on a line number and press `c`: the prompt is
+  titled "Add note on new lines 3-5" and the note covers those lines, on the
+  band's side, shown under the last one with the bar beside the lines — the
+  twin of the terminal's `c` over marked lines. In a stacked diff the file
+  that holds the band takes the note, whichever section is current. The band
+  is dropped once the note is saved; a failed write or a cancelled prompt
+  leaves it. One marked line is the ordinary note. A merge preview's old
+  side is refused ("notes in a preview anchor on the new side") and the band
+  stays.
+- `POST /api/notes/add` takes an optional `first` line: the note's range is
+  `first..line` (`first` past `line` or below 1 is a 400). Without it the
+  note is one line, as before.
+
 ## Text templates: follow-up fixes 2
 
 ### Changed

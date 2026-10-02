@@ -658,6 +658,15 @@ function activeDiff() {
   if (!s) return globalNoteCtx();
   return { ctx: s.ctx || null, notes: s.notes || [], row: s.row || null, slot: s };
 }
+// rangeDiff is the note context of the file that holds the marked range — in a
+// stack that need not be the slot under the cursor (the band's file takes the
+// note, as the terminal's marks do) — or null when no range is marked.
+function rangeDiff() {
+  const st = state.stack;
+  if (!st) return state.diffRange ? globalNoteCtx() : null;
+  const s = st.slots.find((o) => o.range);
+  return s ? { ctx: s.ctx || null, notes: s.notes || [], row: s.row || null, range: s.range, slot: s } : null;
+}
 // stackAllNotes is every loaded slot's notes, in stream order — what a
 // whole-view gesture (Z, the notes list, a }/{ walk) reads.
 function stackAllNotes() {
@@ -1017,4 +1026,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, stackChangeStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, rangeDiff, stackChangeStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

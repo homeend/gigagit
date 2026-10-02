@@ -175,12 +175,15 @@ func checkNoteText(summary, rationale, author string) error {
 }
 
 type noteReq struct {
-	ID        string `json:"id"`
-	Path      string `json:"path"`
-	Rev       string `json:"rev"`
-	State     string `json:"state"`
-	Side      string `json:"side"`
-	Line      int    `json:"line"`
+	ID    string `json:"id"`
+	Path  string `json:"path"`
+	Rev   string `json:"rev"`
+	State string `json:"state"`
+	Side  string `json:"side"`
+	Line  int    `json:"line"`
+	// First opens a note over a RANGE of lines (first..line, the note sits
+	// under line); 0 = a one-line note.
+	First     int    `json:"first"`
 	Summary   string `json:"summary"`
 	Rationale string `json:"rationale"`
 	Author    string `json:"author"`
@@ -253,13 +256,21 @@ func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("side, a 1-based line and a summary are required"))
 		return
 	}
+	first := req.First
+	if first == 0 {
+		first = req.Line
+	}
+	if first < 1 || first > req.Line {
+		writeErr(w, http.StatusBadRequest, errors.New("a range's first line is 1-based and not past its last"))
+		return
+	}
 	if err := checkNoteText(summary, req.Rationale, req.Author); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
 	n := model.Note{
 		Source: model.NoteSourceUser, Author: s.noteAuthor(r.Context(), req.Author), Address: addr,
-		Side: side, Range: [2]int{req.Line, req.Line},
+		Side: side, Range: [2]int{first, req.Line},
 		Summary: summary, Rationale: strings.TrimSpace(req.Rationale),
 		Preview: s.notePreview(r.Context(), req.Preview, addr),
 	}

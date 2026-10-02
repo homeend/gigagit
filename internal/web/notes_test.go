@@ -3,6 +3,8 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -19,6 +21,7 @@ type testWireNote struct {
 	Author    string         `json:"author"`
 	Side      string         `json:"side"`
 	Line      int            `json:"line"`
+	Range     [2]int         `json:"range"`
 	Summary   string         `json:"summary"`
 	Rationale string         `json:"rationale"`
 	Status    string         `json:"status"`
@@ -82,6 +85,47 @@ func TestNotesAddListReplyRemove(t *testing.T) {
 	getJSON(t, ts, "/api/notes?path=f.txt&state=unstaged", &got)
 	if len(got.Notes) != 0 {
 		t.Fatalf("remove left %+v", got.Notes)
+	}
+}
+
+// A note over a range of lines: "first" opens the range, "line" closes it (the
+// line the note sits under). Without "first" the note is one line, as before.
+func TestNotesAddRange(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 2)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\ntwo\nthree\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := domain.Open(dir)
+	svc.UseNotesDir(t.TempDir())
+	ts := serve(t, New(svc))
+	if code, b := postJSONRaw(t, ts, "/api/notes/add",
+		`{"path":"f.txt","state":"unstaged","side":"new","first":1,"line":2,"summary":"both"}`); code != http.StatusOK {
+		t.Fatalf("add range = %d (%v)", code, b)
+	}
+	if code, b := postJSONRaw(t, ts, "/api/notes/add",
+		`{"path":"f.txt","state":"unstaged","side":"new","line":2,"summary":"one"}`); code != http.StatusOK {
+		t.Fatalf("add line = %d (%v)", code, b)
+	}
+	var got notesResp
+	getJSON(t, ts, "/api/notes?path=f.txt&state=unstaged", &got)
+	ranges := map[string][2]int{}
+	for _, n := range got.Notes {
+		if n.Line != 2 {
+			t.Fatalf("note %q sits under line %d, want 2", n.Summary, n.Line)
+		}
+		ranges[n.Summary] = n.Range
+	}
+	if ranges["both"] != [2]int{1, 2} || ranges["one"] != [2]int{2, 2} {
+		t.Fatalf("ranges = %v", ranges)
+	}
+	for _, body := range []string{
+		`{"path":"f.txt","state":"unstaged","side":"new","first":3,"line":2,"summary":"x"}`,
+		`{"path":"f.txt","state":"unstaged","side":"new","first":-1,"line":2,"summary":"x"}`,
+	} {
+		if code, _ := postJSONRaw(t, ts, "/api/notes/add", body); code != http.StatusBadRequest {
+			t.Fatalf("POST %s = %d, want 400", body, code)
+		}
 	}
 }
 

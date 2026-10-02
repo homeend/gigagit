@@ -861,7 +861,13 @@ In the one-text-column layouts the range stays on the mark's side when the
 clicked number cell says nothing (a context row, an empty cell). Viewer: `view.range` + `view.rangeOwn` (a hand/link range clears on
 click or esc; an overview anchor's band does not), `viewerRange` clamps.
 Landing: `live.js` passes `end_line` to `setDiffRange` / `landStackLine(…,
-end)` / `markViewerRange`. The web's `c` still writes a one-line note.
+end)` / `markViewerRange`. The web's `c` with a band up writes ONE note over
+it: `addNotePrompt` reads `rangeDiff()` (stackview.js — the slot HOLDING the
+range, not the cursor slot) and `rangeAnchor(range)` → `{side, first, no}`,
+posts `first` beside `line` (`/api/notes/add`: range `first..line`, 0 = one
+line; the server leaves the hash to domain), refuses a preview's old side
+with no fall-forward, and hands `clearDiffRange` to `noteWrite`'s `saved`
+hook (success only). Tests: `rangenotejs_test.go`, `TestNotesAddRange`.
 
 **A note over marked lines (2026-10-02).** `c` with more than one row marked
 in the diff asks `noteAnchorOfMarks` (`note_popup.go`), which reuses
