@@ -40,6 +40,8 @@ type styles struct {
 
 	// conflict_picker.go
 	pickerLabel lipgloss.Style
+	pickerLeft  lipgloss.Style // the left side's labels, ticks and output bar
+	pickerRight lipgloss.Style
 
 	// content_popup.go
 	messageBlock lipgloss.Style
@@ -100,6 +102,7 @@ var legacy = theme.Theme{
 	MessageBlockBg: "236", SaveBannerFg: "15", SaveBannerBg: "22",
 	NoticeHot: "196", NoticeDim: "124", ReviewHot: "39", ReviewDim: "31",
 	NoteUser: "75", NoteAgent: "141", NoteStale: "240", PickerLabel: "245",
+	PickerLeft: "74", PickerRight: "179",
 	AttentionInfo: "24", AttentionWarn: "94", AttentionError: "89",
 	Lanes:  [7]string{"33", "208", "40", "201", "51", "220", "129"},
 	Syntax: [11]string{"", "141", "79", "222", "", "150", "215", "245", "252", "250", "180"},
@@ -136,6 +139,8 @@ func buildStyles(th theme.Theme) *styles {
 
 	s.tagDeco = ns().Foreground(pick(th.TagDeco, legacy.TagDeco))
 	s.pickerLabel = ns().Bold(true).Foreground(pick(th.PickerLabel, legacy.PickerLabel))
+	s.pickerLeft = ns().Foreground(pick(th.PickerLeft, legacy.PickerLeft))
+	s.pickerRight = ns().Foreground(pick(th.PickerRight, legacy.PickerRight))
 	s.messageBlock = ns().Background(pick(th.MessageBlockBg, legacy.MessageBlockBg))
 	s.errModal = s.modalStyle.BorderForeground(pick(th.ErrFg, legacy.ErrFg))
 

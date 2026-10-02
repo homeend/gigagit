@@ -124,6 +124,15 @@ with no tick goes back to `Untouched`, and `i` on a hunk with no right-side
 line toggles the taken-empty state (`Skipped()`, drawn `— removed`). The
 conflict picker (`requireAll`) never holds `Untouched`.
 
+The picker's **side colours** (theme roles `picker_left` / `picker_right`):
+`ensureOutput` builds `outSide` beside `outLines` — one `outMark` per output
+line from the `ResolvedPicks` provenance, `outNone` for literals, placeholders
+and `Untouched` hunks — and `renderOutput` lays the text at `w-1` behind the
+`outBar` column (repeated on every display line of a wrapped line). A ticked
+line's gutter takes the side colour through `winCell.gutterStyle` →
+`cellPiece.preStyle`, which `renderPiece` ignores on a reverse-video cell (the
+cursor row stays one plain block).
+
 The **hunk picker** (conflict resolver + hunk staging/unstaging) reaches the
 same colouring through **`winCell.mask`** — a `runMask{cls, emph}` per display
 rune that `cellPieces` slices alongside the body in all three modes and

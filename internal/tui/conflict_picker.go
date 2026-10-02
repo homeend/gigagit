@@ -67,6 +67,7 @@ type hunkPicker struct {
 	outBuilt bool
 	outRev   int       // pickRev the output cache was built at
 	outLines []sanLine // assembled output, reusing the grid's sanitized lines
+	outSide  []outMark // per output line: the side it was picked from (the pane's bar)
 	outStart []int     // per block index: first output line of the block's contribution
 
 	lastGridH int // grid height at the last render — the pgup/pgdn page size
@@ -390,6 +391,40 @@ func (e *hunkPicker) ensureSan() {
 	}
 }
 
+// outMark is where an output line came from: nowhere the user chose (literal
+// context, an untouched hunk, a placeholder), or a pick from one side.
+type outMark uint8
+
+const (
+	outNone outMark = iota
+	outLeft
+	outRight
+)
+
+// pickerBar is the output pane's first column beside a picked line, painted
+// in that line's side colour.
+const pickerBar = "▌"
+
+// sideStyle is the colour of a side: its labels, its ticks, its output bar.
+func sideStyle(s hunkpick.Side) lipgloss.Style {
+	if s == hunkpick.Incoming {
+		return st().pickerRight
+	}
+	return st().pickerLeft
+}
+
+// outBar is the output pane's first column for one line: the side's bar, or a
+// blank for a line no pick produced.
+func outBar(k outMark) string {
+	switch k {
+	case outLeft:
+		return st().pickerLeft.Render(pickerBar)
+	case outRight:
+		return st().pickerRight.Render(pickerBar)
+	}
+	return " "
+}
+
 // ensureOutput (re)assembles the output lines and each block's start offset —
 // only when the picks changed since the last build. Every line is the very
 // sanLine the grid already holds (looked up through the block's ResolvedPicks
@@ -400,7 +435,7 @@ func (e *hunkPicker) ensureOutput() {
 	}
 	e.ensureSan()
 	e.outBuilt, e.outRev = true, e.pickRev
-	e.outLines = e.outLines[:0]
+	e.outLines, e.outSide = e.outLines[:0], e.outSide[:0]
 	if e.outStart == nil {
 		e.outStart = make([]int, len(e.blocks))
 	}
@@ -408,14 +443,21 @@ func (e *hunkPicker) ensureOutput() {
 	for i, it := range e.doc.Items {
 		if it.Block == nil {
 			e.outLines = append(e.outLines, e.sanLit[i]...)
+			e.outSide = append(e.outSide, make([]outMark, len(e.sanLit[i]))...)
 			continue
 		}
 		e.outStart[bi] = len(e.outLines)
+		// An untouched hunk resolves to its left side without anyone having
+		// picked it: its lines carry no bar.
+		chosen := it.Block.Mode != hunkpick.Untouched
 		if ps, ok := it.Block.ResolvedPicks(); ok {
 			for _, p := range ps {
-				side := e.sanCur[bi]
+				side, mark := e.sanCur[bi], outLeft
 				if p.Side == hunkpick.Incoming {
-					side = e.sanInc[bi]
+					side, mark = e.sanInc[bi], outRight
+				}
+				if !chosen {
+					mark = outNone
 				}
 				// Belt and braces, never a rescue: ResolvedPicks already drops
 				// out-of-range picks, and sanCur/sanInc are sized from the very
@@ -424,10 +466,12 @@ func (e *hunkPicker) ensureOutput() {
 				// stale by some future edit.
 				if p.Line >= 0 && p.Line < len(side) {
 					e.outLines = append(e.outLines, side[p.Line])
+					e.outSide = append(e.outSide, mark)
 				}
 			}
 		} else {
 			e.outLines = append(e.outLines, sanLine{text: i18n.T("‹region %d undecided›", bi+1)})
+			e.outSide = append(e.outSide, outNone)
 		}
 		bi++
 	}
@@ -816,10 +860,14 @@ func pickerCell(blk *hunkpick.Block, san []sanLine, side hunkpick.Side, r int, c
 		cur = "> "
 	}
 	tick := "[ ] "
+	c := &winCell{body: san[r].text, mask: san[r].mask}
 	if blk.LinePicked(side, r) {
+		// A ticked line wears its side's colour — the one its output bar has.
 		tick = "[x] "
+		gs := sideStyle(side)
+		c.gutterStyle = &gs
 	}
-	c := &winCell{gutter: cur + tick, body: san[r].text, mask: san[r].mask}
+	c.gutter = cur + tick
 	if len(hits) > 0 {
 		// NEVER write into the cached mask: ensureOutput hands the very same
 		// sanLine to the output pane. overlayHits paints a copy.
@@ -925,9 +973,9 @@ func (e *hunkPicker) render(m Model, _ string) string {
 			rAll, rAny = true, true // staging: the empty right side is taken
 		}
 		rows = append(rows, colRow{
-			left: &winCell{gutter: marker, style: hstyle,
+			left: &winCell{gutter: marker, style: hstyle.Foreground(st().pickerLeft.GetForeground()),
 				body: tickFor(lAll, lAny) + " " + e.leftLabel + " · " + i18n.T("region %d/%d", blockNo+1, len(e.blocks))},
-			right: &winCell{gutter: "  ", style: hstyle,
+			right: &winCell{gutter: "  ", style: hstyle.Foreground(st().pickerRight.GetForeground()),
 				body: tickFor(rAll, rAny) + " " + e.rightLabel + e.stateSuffix(blk)},
 		})
 		n := len(blk.Current)
@@ -980,9 +1028,12 @@ func (e *hunkPicker) columnLabels(w int) string {
 	}
 	sty := st()
 	cell := func(label string, s hunkpick.Side) string {
-		marker, style := "  ", sty.pickerLabel
+		// Each label wears its side's colour (the focused one in reverse), so
+		// the output pane's bars explain themselves.
+		fg := sideStyle(s).GetForeground()
+		marker, style := "  ", sty.pickerLabel.Foreground(fg)
 		if e.side == s {
-			marker, style = "▶ ", sty.selectedRow
+			marker, style = "▶ ", sty.selectedRow.Foreground(fg)
 		}
 		return styleCell(style, marker+tickFor(e.doc.SideStateAll(s))+" "+label, colW)
 	}
@@ -1002,7 +1053,8 @@ func (e *hunkPicker) outputLines() ([]sanLine, int) {
 	return e.outLines, anchor
 }
 
-// renderOutput windows the assembled result to h display lines of width w,
+// renderOutput windows the assembled result to h display lines of width w —
+// one column of which is the bar naming the side a picked line came from —
 // keeping the focused region's first line in view; the picker's display mode
 // applies per line (wrap expands, scroll pans with the shared hscroll). The
 // lines arrive pre-sanitized (with their paint masks) from the output cache;
@@ -1011,6 +1063,10 @@ func (e *hunkPicker) outputLines() ([]sanLine, int) {
 func (e *hunkPicker) renderOutput(w, h int) []string {
 	e.lastOutH = h
 	src, srcAnchor := e.outputLines()
+	tw := w - 1 // the text's width beside the bar column
+	if tw < 1 {
+		tw = 1
+	}
 	if e.mode != modeWrap {
 		// 1 line : 1 display line — window in line space, transform the window.
 		anchor := srcAnchor
@@ -1040,20 +1096,25 @@ func (e *hunkPicker) renderOutput(w, h int) []string {
 				out = append(out, padRight("", w))
 				continue
 			}
-			p := cellPieces(&winCell{body: src[idx].text, mask: src[idx].mask}, w, e.mode, e.hscroll)[0]
-			out = append(out, renderPiece(lipgloss.Style{}, p, w))
+			p := cellPieces(&winCell{body: src[idx].text, mask: src[idx].mask}, tw, e.mode, e.hscroll)[0]
+			out = append(out, outBar(e.outSide[idx])+renderPiece(lipgloss.Style{}, p, tw))
 		}
 		return out
 	}
 	// Wrap expands lines unevenly, so the whole document is laid out before
 	// windowing (the sanitize cost is already cached away).
 	var dl []cellPiece
+	var dlSide []outMark // the bar repeats on every display line of a wrapped line
 	anchor := 0
 	for i, l := range src {
 		if i == srcAnchor {
 			anchor = len(dl)
 		}
-		dl = append(dl, cellPieces(&winCell{body: l.text, mask: l.mask}, w, modeWrap, e.hscroll)...)
+		ps := cellPieces(&winCell{body: l.text, mask: l.mask}, tw, modeWrap, e.hscroll)
+		dl = append(dl, ps...)
+		for range ps {
+			dlSide = append(dlSide, e.outSide[i])
+		}
 	}
 	if srcAnchor >= len(src) {
 		anchor = len(dl)
@@ -1077,7 +1138,7 @@ func (e *hunkPicker) renderOutput(w, h int) []string {
 	out := make([]string, 0, h)
 	for i := 0; i < h; i++ {
 		if idx := start + i; idx < len(dl) {
-			out = append(out, renderPiece(lipgloss.Style{}, dl[idx], w))
+			out = append(out, outBar(dlSide[idx])+renderPiece(lipgloss.Style{}, dl[idx], tw))
 		} else {
 			out = append(out, padRight("", w))
 		}

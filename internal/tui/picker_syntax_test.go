@@ -356,7 +356,8 @@ func TestRenderOutputColoursTheAssembledLines(t *testing.T) {
 	if row == "" {
 		t.Fatalf("scrolled `var a int` row not found:\n%s", ansi.Strip(joined))
 	}
-	if !strings.HasPrefix(ansi.Strip(row), "a int") {
+	// The row opens with the output pane's bar column (a picked line).
+	if !strings.HasPrefix(strings.TrimPrefix(ansi.Strip(row), pickerBar), "a int") {
 		t.Errorf("hscroll=4 should start the row at the 5th rune: %q", ansi.Strip(row))
 	}
 	if strings.Contains(row, kw+"mvar") {
