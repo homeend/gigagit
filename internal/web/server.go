@@ -161,6 +161,7 @@ func New(svc *domain.Service) *Server {
 	s.ofs = newOpenFiles(func() int64 { return s.docs.NextFileSeq() })
 	s.svc.Store(svc)
 	go s.watchSessions(s.sessStop)
+	go s.watchSessionStates(s.sessStop)
 	return s
 }
 

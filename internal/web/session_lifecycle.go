@@ -269,7 +269,11 @@ func (s *Server) handleSessionStart(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, sw := range s.sessionsNow() {
 		if sw.ID == string(id) {
-			writeJSON(w, map[string]any{"session": sw})
+			out := map[string]any{"session": sw}
+			if warn := domain.SessionRulesWarning(req.Command); warn != "" {
+				out["warning"] = warn // the built-in rules apply; the page says so once
+			}
+			writeJSON(w, out)
 			return
 		}
 	}
