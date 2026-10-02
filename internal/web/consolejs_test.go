@@ -33,6 +33,7 @@ r.push(rows[0], rows[1], rows[2]);
 r.push(consoleTitle({ label: "claude", worktree: "/a/b/wt", state: "running", started: new Date(Date.now() - 125000).toISOString() }, Date.now(), (p) => p));
 r.push(consoleTitle({ label: "codex", worktree: "/a/b/wt", state: "exited", exit_code: 3 }, Date.now(), (p) => p));
 r.push(String(exitToast("running", false)), String(exitToast("running", true)), String(exitToast("exited", false)));
+r.push(killPrompt({ label: "claude", worktree: "/a/b/wt" }, false), killPrompt({ label: "claude", worktree: "C:\\x\\wt2" }, true));
 console.log(r.join("|"));
 `)
 	want := `{"k":"char","mod":0,"text":"a"}|{"k":"enter","mod":0,"text":""}|{"k":"tab","mod":1,"text":""}|{"k":"char","mod":2,"text":"c"}|` +
@@ -40,7 +41,7 @@ console.log(r.join("|"));
 		`{"cols":111,"rows":25}|{"cols":1,"rows":1}|` +
 		`<span style="color:#ff0000" class="b">a&lt;b</span>|<span>x</span>||` +
 		`3|<span>one</span>|true|<span>three</span>|<span>one</span>|<span>TWO</span>|<span>three</span>|` +
-		`claude · /a/b/wt · running 2m|codex · /a/b/wt · exited (3)|true|false|false`
+		`claude · /a/b/wt · running 2m|codex · /a/b/wt · exited (3)|true|false|false|Kill claude in wt?|Kill claude in wt2 and remove it from the list?`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
@@ -56,6 +57,13 @@ var consoleWiring = []struct{ file, want, why string }{
 	{"console.js", "stay with the browser", "the focused foot says which keys the browser keeps"},
 	{"console.js", "else closeConsole();", "ctrl+] on an unfocused console closes it"},
 	{"console.js", "ResizeObserver", "a focused console re-measures on resize"},
+	{"console.js", "/api/session-kill", "kill goes to its endpoint"},
+	{"console.js", "/api/session-remove", "remove goes to its endpoint"},
+	{"console.js", `k kill`, "the unfocused foot offers kill"},
+	{"console.js", `X kill + remove`, "…and kill and remove"},
+	{"console.js", `x remove`, "the exited foot offers remove"},
+	{"console.js", `if (o !== yes) return;`, "only the explicit kill option kills: esc and cancel never do"},
+	{"core.js", `"kill", "kill and remove"`, "the kill options render as danger"},
 	{"style.css", "#console.hidden", "hidden by id, never a global .hidden"},
 	{"style.css", "#console-grid", "the grid has its own rules (monospace, pre)"},
 }

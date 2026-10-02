@@ -5,6 +5,7 @@ import { $, elidePath, getJSON, postJSON } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer, topLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { toast } from "./toast.js";
+import { showLocalConfirm } from "./ops.js";
 
 // --- console model (pure; guarded against Go) ---
 const KEY_NAMES = {
@@ -84,6 +85,14 @@ function consoleTitle(s, now, elide) {
   const st = s.state === "exited" ? "exited (" + s.exit_code + ")" : "running " + ageText(s.started, now);
   return s.label + " · " + elide(s.worktree) + " · " + st;
 }
+
+function wtName(path) {
+  return String(path).split(/[\\/]/).filter(Boolean).pop() || String(path);
+}
+
+function killPrompt(s, remove) {
+  return "Kill " + s.label + " in " + wtName(s.worktree) + (remove ? " and remove it from the list?" : "?");
+}
 // --- end console model ---
 
 const con = { id: "", info: null, rows: [], frame: null, focused: false, max: false, es: null, queue: [], inflight: false, cell: null, size: null, tick: 0 };
@@ -95,8 +104,8 @@ const grid = $("console-grid");
 const cursor = $("console-cursor");
 
 const FOOT_FOCUSED = `<button data-cact="out">ctrl+] step out</button><button data-cact="sessions">ctrl+\\ sessions</button><span class="cwarn">ctrl+w · ctrl+t · ctrl+n stay with the browser</span>`;
-const FOOT_UNFOCUSED = `<button data-cact="focus">enter focus</button><button data-cact="max">m maximize</button><button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
-const FOOT_EXITED = `<button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
+const FOOT_UNFOCUSED = `<button data-cact="focus">enter focus</button><button data-cact="max">m maximize</button><button data-cact="kill">k kill</button><button data-cact="killrm">X kill + remove</button><button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
+const FOOT_EXITED = `<button data-cact="remove">x remove</button><button data-cact="sessions">ctrl+\\ sessions</button><button data-cact="close">esc / ctrl+] close</button>`;
 
 // openSwitcher is the ctrl+\ popup (openfiles.js); a document event keeps
 // the two modules from importing each other.
@@ -107,7 +116,10 @@ function askSwitcher() {
 $("foot").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-cact]");
   if (!b || !con.id) return;
-  ({ out: stepOut, focus: focusConsole, max: maximize, close: closeConsole, sessions: askSwitcher })[b.dataset.cact]();
+  ({
+    out: stepOut, focus: focusConsole, max: maximize, close: closeConsole, sessions: askSwitcher,
+    kill: () => killSession(con.info, false), killrm: () => killSession(con.info, true), remove: () => removeSession(con.info),
+  })[b.dataset.cact]();
 });
 
 function measureCell() {
@@ -266,6 +278,9 @@ function consoleKey(e) {
   switch (e.key) {
     case "Enter": focusConsole(); break;
     case "m": maximize(); break;
+    case "k": if (con.info.state !== "exited") killSession(con.info, false); break;
+    case "X": if (con.info.state !== "exited") killSession(con.info, true); break;
+    case "x": if (con.info.state === "exited") removeSession(con.info); break;
     case "Escape": closeConsole(); break;
     default: return true; // an unfocused console still owns the keyboard: nothing leaks to the page
   }
@@ -332,6 +347,36 @@ function closeConsole() {
   popFoot("console");
 }
 
+// killSession asks once, then kills (remove = the TUI's X: the session leaves
+// the list when its exit is recorded). The row and any console on it follow
+// the live sessions event; nothing is repainted here. showLocalConfirm comes
+// from ops.js, which reaches back here through sidebar.js — an import cycle
+// that is safe only because it is CALLED from handlers, never at load.
+function killSession(s, remove) {
+  if (!s) return toast("that agent session is gone", { err: true });
+  if (s.state === "exited") return remove ? removeSession(s) : toast(s.label + " has already exited");
+  const yes = remove ? "kill and remove" : "kill";
+  showLocalConfirm(killPrompt(s, remove), [yes, "cancel"], async (o) => {
+    if (o !== yes) return; // cancel, esc — whatever the modal hands back
+    try {
+      await postJSON("/api/session-kill", { id: s.id, remove: !!remove });
+      toast("killing " + s.label + " in " + wtName(s.worktree) + "…");
+    } catch (e) {
+      toast("kill: " + (e.message || e), { err: true });
+    }
+  });
+}
+
+async function removeSession(s) {
+  if (!s) return;
+  if (s.state !== "exited") return toast("only an exited session can be removed — X kills and removes a running one");
+  try {
+    await postJSON("/api/session-remove", { id: s.id });
+  } catch (e) {
+    toast("remove: " + (e.message || e), { err: true });
+  }
+}
+
 function consoleSessionId() {
   return con.id;
 }
@@ -355,7 +400,7 @@ registerHelp({
   html:
     "<b>ctrl+\\</b> lists the agent sessions of this gg (Agents tab); <b>enter</b> opens one as a live console over the panes. " +
     "A focused console sends every key to the agent except <b>ctrl+]</b> (step out) and <b>ctrl+\\</b>; ctrl+w, ctrl+t and ctrl+n stay with the browser. " +
-    "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running). The viewer that has the console focused sets its size.",
+    "Unfocused: <b>enter</b> focus, <b>m</b> maximize, <b>k</b> kill, <b>X</b> kill and remove, <b>esc</b> or <b>ctrl+]</b> again close (the session keeps running); an exited one: <b>x</b> removes it. The viewer that has the console focused sets its size.",
 });
 
-export { closeConsole, consoleSessionId, consoleSessions, openConsole };
+export { closeConsole, consoleSessionId, consoleSessions, killSession, openConsole, removeSession };

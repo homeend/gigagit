@@ -129,6 +129,7 @@ const DANGER_OPTIONS = new Set([
   "force", "force-with-lease", "force-delete", "reset", "delete", "drop",
   "unlock-and-remove", "discard", "overwrite", "hard",
   "abort merge", "abort rebase", "abort cherry-pick", "abort revert",
+  "kill", "kill and remove",
 ]);
 
 
