@@ -25,8 +25,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   read.
 - **`screen_working` / `screen_waiting` / `screen_question`** on a
   `[[tools.command]]` session block: RE2 pattern lists that replace the
-  built-in rules for that command (set any and all three come from config;
-  an invalid pattern is reported once at start and the built-ins apply).
+  built-in rules of that kind for the command's agent (a list left out keeps
+  the built-in; an invalid pattern is reported once at start and the
+  built-ins apply).
   They survive a template upgrade and do not count as editing the template.
 - **Agents see it too:** `agent_list` rows carry `activity`,
   `activity_since` and `stalled`; `agent_screen` carries `activity` and a

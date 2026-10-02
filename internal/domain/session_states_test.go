@@ -288,8 +288,9 @@ func TestSessionRules(t *testing.T) {
 	one := plain
 	one.ScreenWaiting = []string{`^READY$`}
 	r, custom, err := SessionRules(one)
-	if !custom || err != nil || len(r.Waiting) != 1 || len(r.Working) != 0 || len(r.Question) != 0 {
-		t.Fatalf("one list: %+v custom=%v err=%v", r, custom, err)
+	def := agentstate.DefaultRules("claude")
+	if !custom || err != nil || len(r.Waiting) != 1 || len(r.Working) != len(def.Working) || len(r.Question) != len(def.Question) {
+		t.Fatalf("one list (claude keeps its other built-ins): %+v custom=%v err=%v", r, custom, err)
 	}
 	bad := plain
 	bad.ScreenWorking = []string{`(`}
@@ -383,4 +384,54 @@ func TestStartSessionBindsScreenRules(t *testing.T) {
 	}
 	a, ok := SessionActivityOf(s.Info().ID)
 	t.Fatalf("activity = %+v %v", a, ok)
+}
+
+// A rule set bound before its session shows up in List (the start path
+// binds after the manager registered it; an observe may run in between)
+// must survive until the session has been seen live and gone.
+func TestStatesKeepRulesBoundBeforeTheSessionIsListed(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("")
+	f.infos = nil // not listed yet
+	r, _ := agentstate.Compile(nil, []string{`^READY$`}, nil)
+	w.Bind("s1", r)
+	w.observe(actT0.Add(time.Minute))
+	f.infos = []agentsession.Info{{ID: "s1", Label: "Custom", Dir: "/wt/a", Started: actT0}}
+	f.text["s1"] = "READY\n"
+	w.observe(actT0.Add(2 * time.Minute))
+	if a, _ := w.Get("s1"); a.State != ActivityIdle {
+		t.Fatalf("bound rules were dropped before the session was listed: %+v", a)
+	}
+	f.infos[0].State = agentsession.Exited
+	w.observe(actT0.Add(3 * time.Minute))
+	if _, ok := w.rules.get("s1"); ok {
+		t.Fatal("rules of an exited session were kept")
+	}
+}
+
+// A block for a known agent that sets only some lists keeps the agent's
+// built-ins for the others — otherwise its idle box reads unknown and every
+// turn end becomes a stall.
+func TestSessionRulesMergeWithTheAgentBuiltins(t *testing.T) {
+	t.Parallel()
+	tc := config.ToolCommand{Category: "session", Name: "Claude", Command: "claude", ScreenQuestion: []string{`CONFIRM`}}
+	r, custom, err := SessionRules(tc)
+	if !custom || err != nil {
+		t.Fatalf("custom=%v err=%v", custom, err)
+	}
+	if got := agentstate.Classify(r, agentstate.Tail(actIdle, 15)); got != agentstate.Waiting {
+		t.Fatalf("claude's idle box with a partial block: %q", got)
+	}
+	if got := agentstate.Classify(r, agentstate.Tail("please CONFIRM", 15)); got != agentstate.Question {
+		t.Fatalf("own question list: %q", got)
+	}
+	if got := agentstate.Classify(r, agentstate.Tail(actQuestion, 15)); got != agentstate.Unknown {
+		t.Fatalf("the built-in question list must be replaced, not merged: %q", got)
+	}
+	// A custom command (no agent) with one list has only that list.
+	cu := config.ToolCommand{Category: "session", Name: "X", Command: "mytool", ScreenWaiting: []string{`^READY$`}}
+	r, _, _ = SessionRules(cu)
+	if len(r.Working) != 0 || len(r.Question) != 0 || len(r.Waiting) != 1 {
+		t.Fatalf("custom: %+v", r)
+	}
 }

@@ -119,11 +119,14 @@ func (s managerSource) LastOutput(id agentsession.ID) time.Time {
 // own screen_* lists). It lives outside the watcher so a start never
 // depends on the watcher running.
 type ruleStore struct {
-	mu sync.Mutex
-	m  map[SessionID]agentstate.Rules
+	mu   sync.Mutex
+	m    map[SessionID]agentstate.Rules
+	seen map[SessionID]bool // ids an observe has seen live: only those are pruned
 }
 
-func newRuleStore() *ruleStore { return &ruleStore{m: map[SessionID]agentstate.Rules{}} }
+func newRuleStore() *ruleStore {
+	return &ruleStore{m: map[SessionID]agentstate.Rules{}, seen: map[SessionID]bool{}}
+}
 
 func (s *ruleStore) bind(id SessionID, r agentstate.Rules) {
 	s.mu.Lock()
@@ -138,11 +141,24 @@ func (s *ruleStore) get(id SessionID) (agentstate.Rules, bool) {
 	return r, ok
 }
 
+// keep prunes the rules of sessions that were live and are gone. A set bound
+// before its session shows up in List (the start binds after the manager
+// registered the session; an observe may have listed in between) is kept
+// until the session has been seen.
 func (s *ruleStore) keep(live map[SessionID]bool) {
 	s.mu.Lock()
+	for id := range live {
+		s.seen[id] = true
+	}
 	for id := range s.m {
-		if !live[id] {
+		if s.seen[id] && !live[id] {
 			delete(s.m, id)
+			delete(s.seen, id)
+		}
+	}
+	for id := range s.seen {
+		if !live[id] {
+			delete(s.seen, id)
 		}
 	}
 	s.mu.Unlock()
@@ -503,8 +519,11 @@ func bindSessionRules(id SessionID, r agentstate.Rules) {
 
 // SessionRules compiles a command's own screen rules. custom is false when
 // it has none (the agent's built-ins apply) and when a pattern is invalid
-// (err says which; the built-ins apply then too). Any list set means all
-// three come from config.
+// (err says which; the built-ins apply then too). A list the block sets
+// replaces the agent's built-in list of that kind; a list it leaves out
+// keeps the built-in one (a Claude block with only screen_question must
+// not lose the idle box, or every turn end would read as a stall). A
+// custom command (no known agent) has only the lists it sets.
 func SessionRules(tc config.ToolCommand) (r agentstate.Rules, custom bool, err error) {
 	if !tc.HasScreenRules() {
 		return agentstate.Rules{}, false, nil
@@ -512,6 +531,18 @@ func SessionRules(tc config.ToolCommand) (r agentstate.Rules, custom bool, err e
 	r, err = agentstate.Compile(tc.ScreenWorking, tc.ScreenWaiting, tc.ScreenQuestion)
 	if err != nil {
 		return agentstate.Rules{}, false, err
+	}
+	if id := agentIDFor(tc); agentstate.HasDefaults(id) {
+		def := agentstate.DefaultRules(id)
+		if len(tc.ScreenWorking) == 0 {
+			r.Working = def.Working
+		}
+		if len(tc.ScreenWaiting) == 0 {
+			r.Waiting = def.Waiting
+		}
+		if len(tc.ScreenQuestion) == 0 {
+			r.Question = def.Question
+		}
 	}
 	return r, true, nil
 }

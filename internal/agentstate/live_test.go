@@ -208,3 +208,34 @@ func TestClassifyCodexLive(t *testing.T) {
 		t.Errorf("trust options = %+v", opts)
 	}
 }
+
+// A numbered list in the transcript right above the dialog must not supply
+// the dialog's labels: the options are the numbered run around the cursor
+// line (review finding, 2026-10-03).
+func TestOptionsAnchorOnTheCursorLine(t *testing.T) {
+	screen := "⏺ Two things to do:\n  1. Delete the old file\n  2. Rewrite the test\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No, and tell Claude what to do differently\n Esc to cancel\n"
+	lines := Tail(screen, 15)
+	if got := Classify(DefaultRules("claude"), lines); got != Question {
+		t.Fatalf("state = %q", got)
+	}
+	opts := Options(lines)
+	if len(opts) != 2 || opts[0].Label != "Yes" || opts[1].Key != "2" || opts[1].Label != "No, and tell Claude what to do differently" {
+		t.Fatalf("options = %+v", opts)
+	}
+	// Without a cursor line the LAST numbered run is the dialog.
+	plain := "  1. old\n  2. older\nPick one:\n  1. Yes\n  2. No\n"
+	if opts := Options(Tail(plain, 15)); len(opts) != 2 || opts[0].Label != "Yes" {
+		t.Fatalf("last run = %+v", opts)
+	}
+}
+
+// codex on Windows: the status line names a drive, not a slash root.
+func TestCodexIdleOnWindowsPaths(t *testing.T) {
+	r := DefaultRules("codex")
+	if got := Classify(r, Tail("› Ask Codex to do anything\n  gpt-5 low · C:\\work\\repo\n", 15)); got != Waiting {
+		t.Fatalf("windows idle: %q", got)
+	}
+	if got := Classify(r, Tail("› Ask Codex to do anything\n  gpt-5 low · /work/repo\n", 15)); got != Waiting {
+		t.Fatalf("posix idle: %q", got)
+	}
+}

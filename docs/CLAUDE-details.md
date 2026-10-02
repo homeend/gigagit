@@ -4139,9 +4139,13 @@ the report channel are the NEXT plan.
   120 s while working — or unknown, but only with DEDICATED rules (a generic
   agent would be called stalled at every idle prompt). Exited sessions are
   dropped. **Rules**: a command with any `screen_*` list is compiled at
-  start (`SessionRules(tc)`) and bound to the session id in a `ruleStore`
+  start (`SessionRules(tc)`: a set list replaces the agent's built-in list
+  of that kind, a missing one keeps it — a partial Claude block must not
+  lose the idle box; review fix) and bound to the session id in a `ruleStore`
   outside the watcher (`bindSessionRules`), so a custom command with lists
-  is classified and a start never depends on the watcher; terminals and
+  is classified and a start never depends on the watcher (`ruleStore.keep`
+  prunes only ids an observe has SEEN live — a bind that lands between an
+  observe's `List()` and its `keep` is not dropped; review fix); terminals and
   custom commands without lists are skipped; an invalid pattern →
   `SessionRulesWarning(tc)` (TUI status / web `warning` on the start reply)
   and the built-ins apply. `UseSessionManager` resets the watcher (it

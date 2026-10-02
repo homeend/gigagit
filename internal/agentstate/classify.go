@@ -47,12 +47,12 @@ var defaults = map[string][3][]string{
 		{`Working \(\d+`, `(?i)esc to interrupt`},
 		// The input box is a › line (placeholder "Ask Codex to do anything"
 		// or typed text) directly above the status line "<model> <effort>
-		// · <cwd>". A user message echoed in the transcript also starts
-		// with › but is followed by other text. Captured live 2026-09-08
-		// (codex 0.153.4).
+		// · <cwd>" (a / root, or a drive on Windows). A user message echoed
+		// in the transcript also starts with › but is followed by other
+		// text. Captured live 2026-09-08 (codex 0.153.4).
 		// At startup (codex 0.160.0, captured 2026-10-03) the status line is
 		// not there yet: the box sits over "? for shortcuts".
-		{`^›[^\n]*\n[^\n]*· /`, `^›[^\n]*\n\s*\? for shortcuts`},
+		{`^›[^\n]*\n[^\n]*· (?:/|[A-Za-z]:)`, `^›[^\n]*\n\s*\? for shortcuts`},
 		{`\(y/n\)`, `\[Y/n\]`, `Press Enter`, `^\s*[›>] \d+\.`},
 	},
 	// Antigravity CLI 1.2.15, captured live from gg's emulator 2026-10-03: a
@@ -219,12 +219,45 @@ func DialogOptions(raw string, lines []string) []Option {
 
 var optionRe = regexp.MustCompile(`^[❯›>]?\s*(\d)[.)]\s+(.+)$`)
 
+// cursorNumberedRe: the numbered line the dialog's cursor sits on.
+var cursorNumberedRe = regexp.MustCompile(`^[❯›>]\s*\d[.)]\s`)
+
 // Options extracts the numbered choices a dialog offers, in screen order,
-// so the UI can show real buttons instead of a fixed 1/2/3.
+// so the UI can show real buttons instead of a fixed 1/2/3. The dialog is
+// the contiguous run of numbered lines around the line carrying the cursor
+// marker — a numbered list in the transcript right above it must not supply
+// the labels; with no marker, the LAST numbered run is the dialog.
 func Options(lines []string) []Option {
+	numbered := make([]bool, len(lines))
+	anchor := -1
+	for i, l := range lines {
+		l = strings.TrimSpace(l)
+		numbered[i] = optionRe.MatchString(l)
+		if numbered[i] && cursorNumberedRe.MatchString(l) {
+			anchor = i
+		}
+	}
+	if anchor < 0 {
+		for i := len(lines) - 1; i >= 0; i-- {
+			if numbered[i] {
+				anchor = i
+				break
+			}
+		}
+	}
+	if anchor < 0 {
+		return nil
+	}
+	lo, hi := anchor, anchor
+	for lo > 0 && numbered[lo-1] {
+		lo--
+	}
+	for hi+1 < len(lines) && numbered[hi+1] {
+		hi++
+	}
 	var out []Option
 	seen := map[string]bool{}
-	for _, l := range lines {
+	for _, l := range lines[lo : hi+1] {
 		m := optionRe.FindStringSubmatch(strings.TrimSpace(l))
 		if m == nil || seen[m[1]] {
 			continue

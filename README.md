@@ -1531,8 +1531,9 @@ screen_waiting  = ['^> \S*$']            # the empty prompt
 screen_question = ['\(y/n\)', 'Allow\?']
 ```
 
-Set any of the three and all three come from the block (an invalid pattern
-is reported once at start and the built-in rules apply). Agents see the same
+A list you set replaces the built-in list of that kind for the agent; one you
+leave out keeps the built-in (an invalid pattern is reported once at start and
+the built-in rules apply). Agents see the same
 through `agent_list` (`activity`, `stalled`) and `agent_screen` (`activity`,
 a dialog's `options`). The two reserved keys are configurable:
 
