@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"time"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -245,7 +246,17 @@ func (s *Server) handleSessionStart(w http.ResponseWriter, r *http.Request) {
 	}
 	var id domain.SessionID
 	if start := s.sessionStarter(); start != nil {
-		id, err = start(r.Context(), req)
+		// Bounded: a wedged terminal must not hang the page's request.
+		d := s.startTimeout
+		if d == 0 {
+			d = 30 * time.Second
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), d)
+		id, err = start(ctx, req)
+		cancel()
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = errors.New("the terminal did not answer in time — the session list shows whether it started")
+		}
 	} else {
 		id, err = s.startSessionHere(svc, cfg, req, cwd)
 	}

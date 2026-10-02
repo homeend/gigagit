@@ -310,3 +310,27 @@ func TestSessionKillAndRemoveInOne(t *testing.T) {
 	}
 	t.Fatal("kill+remove left the session listed")
 }
+
+// Review focus 5: a wedged terminal must not hang the page's start forever.
+func TestSessionStartTimesOutOnAWedgedStarter(t *testing.T) {
+	srv, root := lifecycleServer(t, "")
+	srv.startTimeout = 100 * time.Millisecond
+	srv.SetSessionStarter(func(ctx context.Context, _ domain.SessionStartRequest) (domain.SessionID, error) {
+		<-ctx.Done() // the terminal never answers
+		return "", ctx.Err()
+	})
+	ts := serve(t, srv)
+	done := make(chan int, 1)
+	go func() {
+		code, _ := postJSONAny(t, ts, "/api/session-start", startBody(root, `,"terminal":true`))
+		done <- code
+	}()
+	select {
+	case code := <-done:
+		if code != http.StatusInternalServerError {
+			t.Fatalf("code = %d, want 500", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the start hung on a wedged starter")
+	}
+}
