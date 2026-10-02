@@ -278,7 +278,11 @@ func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 	// (the browser has the rendered row, but the server is the authority here).
 	got, err := s.service().NoteAdd(r.Context(), n)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
+		code := http.StatusInternalServerError
+		if errors.Is(err, domain.ErrNoteRange) {
+			code = http.StatusBadRequest // lines the side does not hold: the request's mistake
+		}
+		writeErr(w, code, err)
 		return
 	}
 	s.emitNotes()

@@ -111,7 +111,7 @@ name = "中文"
 "▸ nothing to link on this side" = "▸ 这一侧没有可链接的行"
 "▸ a link marks lines of one file" = "▸ 链接只能标记一个文件中的行"
 "▸ a note marks lines of one file" = "▸ 笔记只能标记一个文件中的行"
-"▸ nothing to note on this side" = "▸ 这一侧没有可添加笔记的行"
+"▸ nothing to note on this side — [esc] unmark" = "▸ 这一侧没有可添加笔记的行 — [esc] 取消选择"
 "with lines marked c writes one note over them: it sits under the last marked line on the cursor's side, a bar in the gutter marks the lines it covers, and saving it clears the marks (one marked line is the ordinary one-line note)" = "标记了多行时按 c 会为这些行写一条笔记: 笔记位于光标一侧最后一个标记行的下方, 行号槽中的竖条标出它覆盖的行, 保存后标记被清除 (只标记一行时就是普通的单行笔记)"
 "stash is gone: %s" = "贮藏已不存在：%s"
 "in the # prompt, ↓ picks from the gg:// links you copied — newest first, from the TUI, the CLI and the web alike" = "在 # 提示中按 ↓ 可从已复制的 gg:// 链接中选择 — 最新的在前，包括在 TUI、CLI 和网页中复制的"
@@ -2119,6 +2119,7 @@ name = "中文"
 
 # Notes in merge previews
 "notes in a preview anchor on the new side" = "预览中的笔记锚定在新的一侧"
+"notes in a compare anchor on the new side" = "比较中的笔记锚定在新的一侧"
 "(outdated)" = "(已过时)"
 "Remove all notes on %s (%d of %d)." = "删除 %s 上的所有笔记（%d / %d）。"
 

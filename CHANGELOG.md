@@ -20,6 +20,35 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   In the TUI a path too wide for the question is cut in the middle, keeping
   the file name; it is never wrapped.
 
+## Range links and range notes: follow-up fixes
+
+### Fixed
+
+- **A link's line number is digits only.** `gg://…:3-+7` and `:+3` are
+  refused; they used to read as lines 3-7 and 3.
+- **A range note names its lines everywhere.** The note box title reads
+  `R8-10` (terminal and browser), and the terminal's edit / reply form is
+  headed "lines 8-10" like the add form.
+- **Terminal refusals say more.** "nothing to note on this side" now ends
+  with "[esc] unmark"; the old side of a commit pair is refused as "notes in
+  a compare anchor on the new side" (it said "preview"), in the browser too.
+- **gg web, landing a range link:** a range whose first line the diff lacks
+  lands on the first line it holds; one the diff holds none of says "lines
+  a-b are not in …'s diff".
+- **gg web, stacked diff:** marking a range repaints only the files whose
+  band changed, not every loaded file; a file that changed on disk drops
+  its band, as the single-file view does.
+- **gg web, narrow (one-column) layout:** a deleted row inside a new-side
+  band is no longer half tinted; a mark on the old side of a context row
+  survives a repaint.
+- **gg web, `c` over a band the diff holds only in part** is refused ("lines
+  a-b are not all in this diff") instead of noting lines never shown marked.
+- **gg web file viewer:** a text drag that ends on the line it began on no
+  longer drops the band; the band is cut to the file when the file shrinks
+  on disk.
+- `POST /api/notes/add` answers 400 (not 500) for lines the side does not
+  hold (`domain.ErrNoteRange`).
+
 ## A note over marked lines in gg web
 
 ### Added

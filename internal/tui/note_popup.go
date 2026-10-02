@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -93,8 +94,8 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 		if len(p.anchors) == 0 {
 			// On a preview the cause is knowable and worth saying: the cursor
 			// is on a line that exists only on the merge-base side.
-			if m.previewNoteSet() != nil {
-				m.statusMsg = i18n.T("notes in a preview anchor on the new side")
+			if set := m.previewNoteSet(); set != nil {
+				m.statusMsg = oldSideRefusal(set)
 			}
 			return m, nil
 		}
@@ -140,16 +141,26 @@ func (m Model) noteAnchorOfMarks() (a noteAnchor, row int, refusal string, on bo
 		return a, -1, "", false // the marks' file takes no notes: c stays inert
 	}
 	// A preview's old side is the MERGE BASE (noteAnchorsAtCursor's rule).
-	if v.onOld && m.previewNoteSet() != nil {
-		return a, 0, i18n.T("notes in a preview anchor on the new side"), false
+	if set := m.previewNoteSet(); v.onOld && set != nil {
+		return a, 0, oldSideRefusal(set), false
 	}
 	switch {
 	case sel.crossFile:
 		return a, 0, i18n.T("▸ a note marks lines of one file"), false
 	case sel.refusal != "":
-		return a, 0, i18n.T("▸ nothing to note on this side"), false
+		return a, 0, i18n.T("▸ nothing to note on this side — [esc] unmark"), false
 	}
 	return noteAnchor{side: sel.side, first: sel.first, line: sel.last, hash: model.NoteContextHash(sel.block)}, sel.row, "", true
+}
+
+// oldSideRefusal says why the old side of a preview-scoped diff takes no note,
+// in the words of the view on screen: a commit pair (a set with no branch
+// names) is a compare, not a preview.
+func oldSideRefusal(set *domain.PreviewNoteSet) string {
+	if set.IsPair() {
+		return i18n.T("notes in a compare anchor on the new side")
+	}
+	return i18n.T("notes in a preview anchor on the new side")
 }
 
 // openNotePopupFor opens the edit/reply form on one targeted note.
@@ -159,7 +170,10 @@ func (m Model) openNotePopupFor(mode noteFormMode, t noteTarget) (tea.Model, tea
 		return m, nil
 	}
 	p := &notePopup{mode: mode, addr: addr, author: m.identity.EffectiveName}
-	p.side, p.first, p.line, p.hash = t.side, t.line, t.line, t.hash
+	p.side, p.first, p.line, p.hash = t.side, t.first, t.line, t.hash
+	if p.first < 1 || p.first > p.line {
+		p.first = p.line
+	}
 	if mode == noteEdit {
 		// Edit acts on the targeted ROW's own note (which may be a reply).
 		p.targetID = t.note.ID

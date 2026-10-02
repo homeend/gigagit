@@ -111,7 +111,7 @@ name = "Русский"
 "▸ nothing to link on this side" = "▸ на этой стороне нет строк для ссылки"
 "▸ a link marks lines of one file" = "▸ ссылка отмечает строки только одного файла"
 "▸ a note marks lines of one file" = "▸ заметка отмечает строки только одного файла"
-"▸ nothing to note on this side" = "▸ на этой стороне нет строк для заметки"
+"▸ nothing to note on this side — [esc] unmark" = "▸ на этой стороне нет строк для заметки — [esc] снять отметку"
 "with lines marked c writes one note over them: it sits under the last marked line on the cursor's side, a bar in the gutter marks the lines it covers, and saving it clears the marks (one marked line is the ordinary one-line note)" = "когда строки отмечены, c пишет одну заметку на все отмеченные строки: она стоит под последней отмеченной строкой на стороне курсора, полоса в поле номеров показывает охваченные строки, а сохранение снимает отметки (одна отмеченная строка — обычная заметка к одной строке)"
 "stash is gone: %s" = "stash больше не существует: %s"
 "in the # prompt, ↓ picks from the gg:// links you copied — newest first, from the TUI, the CLI and the web alike" = "в подсказке # клавиша ↓ выбирает из скопированных gg:// ссылок — сначала новые, из TUI, CLI и веб-интерфейса"
@@ -2119,6 +2119,7 @@ name = "Русский"
 
 # Notes in merge previews
 "notes in a preview anchor on the new side" = "заметки в предпросмотре привязываются к новой стороне"
+"notes in a compare anchor on the new side" = "заметки в сравнении привязываются к новой стороне"
 "(outdated)" = "(устарело)"
 "Remove all notes on %s (%d of %d)." = "Удалить все заметки на %s (%d из %d)."
 
