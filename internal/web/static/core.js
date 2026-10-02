@@ -87,6 +87,7 @@ const state = {
   noteCollapsedFor: "",      // the diff that set was seeded for (path + rev)
   notesAgentOff: false,      // the TUI's `a`: hide agent-written notes
   diffRow: null,             // {side, no} — the clicked diff row `c` anchors on
+  diffRange: null,           // {side, first, last} — the marked range of lines (shift+click a line number)
   // Attention bands an agent painted (gg session highlight), keyed by
   // attnKey below. Each value is a list of {side, start, end, tone}. Cleared
   // by highlight_clear and by a `status`/`all` steer reload — never by the
