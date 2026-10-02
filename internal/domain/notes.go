@@ -267,19 +267,29 @@ func (s *Service) NoteRangeCheck(ctx context.Context, addr model.FileAddress, si
 //     be dropped by the next sweep with no explanation.
 func checkNoteRange(rng [2]int, side model.NoteSide, path string, lines []string) error {
 	if rng[0] < 1 || rng[0] > rng[1] {
-		return fmt.Errorf("notes: invalid range %d-%d for the %s side of %s", rng[0], rng[1], side, path)
+		return noteRangeError(fmt.Sprintf("notes: invalid range %d-%d for the %s side of %s", rng[0], rng[1], side, path))
 	}
 	if len(lines) == 0 {
 		if rng == [2]int{1, 1} {
 			return nil
 		}
-		return fmt.Errorf("notes: line %d is past the end of the %s side of %s (0 lines)", rng[1], side, path)
+		return noteRangeError(fmt.Sprintf("notes: line %d is past the end of the %s side of %s (0 lines)", rng[1], side, path))
 	}
 	if rng[1] > len(lines) {
-		return fmt.Errorf("notes: line %d is past the end of the %s side of %s (%d lines)", rng[1], side, path, len(lines))
+		return noteRangeError(fmt.Sprintf("notes: line %d is past the end of the %s side of %s (%d lines)", rng[1], side, path, len(lines)))
 	}
 	return nil
 }
+
+// ErrNoteRange is a note whose lines the side does not hold — the caller's
+// mistake, not a store failure (a frontend answers it as a bad request).
+var ErrNoteRange = errors.New("notes: range not on this side")
+
+// noteRangeError carries checkNoteRange's own sentence and matches ErrNoteRange.
+type noteRangeError string
+
+func (e noteRangeError) Error() string        { return string(e) }
+func (e noteRangeError) Is(target error) bool { return target == ErrNoteRange }
 
 // NoteEdit replaces one note's summary and rationale.
 func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) error {

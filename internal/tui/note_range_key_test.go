@@ -112,14 +112,14 @@ func TestRangeNoteRefusals(t *testing.T) {
 	if p != nil {
 		t.Fatal("marks with no line on this side opened a form")
 	}
-	if !strings.Contains(m.diffNotice, "nothing to note on this side") {
+	if !strings.Contains(m.diffNotice, "nothing to note on this side — [esc] unmark") {
 		t.Errorf("notice = %q", m.diffNotice)
 	}
 
 	// A preview's old side is the merge base: no note anchors there.
 	m = rangeLinkModel(t, model.StateUnstaged)
 	v = m.diffLayer()
-	v.previewSet = &domain.PreviewNoteSet{}
+	v.previewSet = &domain.PreviewNoteSet{Source: "feat", Target: "main"}
 	selectRows(v, 4, 6)
 	v.onOld = true
 	m, p = rangeNotePopup(t, m)
@@ -128,6 +128,40 @@ func TestRangeNoteRefusals(t *testing.T) {
 	}
 	if !strings.Contains(m.diffNotice, "notes in a preview anchor on the new side") {
 		t.Errorf("notice = %q", m.diffNotice)
+	}
+
+	// A commit pair (a set with no branch names) is a compare: the refusal
+	// names the view on screen.
+	m = rangeLinkModel(t, model.StateUnstaged)
+	v = m.diffLayer()
+	v.previewSet = &domain.PreviewNoteSet{Tip: "b", Base: "a"}
+	selectRows(v, 4, 6)
+	v.onOld = true
+	if m, p = rangeNotePopup(t, m); p != nil || !strings.Contains(m.diffNotice, "notes in a compare anchor on the new side") {
+		t.Errorf("pair old side: popup=%v notice=%q", p != nil, m.diffNotice)
+	}
+}
+
+// Editing or replying to a note over several lines names the range, as the
+// add form did.
+func TestEditAndReplyHeadingNameTheRange(t *testing.T) {
+	t.Parallel()
+	m := rangeLinkModel(t, model.StateUnstaged)
+	tgt := noteTarget{rootID: "n1", first: 5, line: 7, side: model.NoteSideNew, note: model.Note{ID: "n1", Summary: "s"}}
+	for _, mode := range []noteFormMode{noteEdit, noteReply} {
+		u, _ := m.openNotePopupFor(mode, tgt)
+		p, _ := u.(Model).topLayer().(*notePopup)
+		if p == nil {
+			t.Fatalf("mode %d opened no form", mode)
+		}
+		if box := p.box(u.(Model)); !strings.Contains(box, "new side lines 5-7") {
+			t.Errorf("mode %d: heading does not name the range:\n%s", mode, box)
+		}
+	}
+	tgt.first = 0 // an older caller: one line
+	u, _ := m.openNotePopupFor(noteEdit, tgt)
+	if box := u.(Model).topLayer().(*notePopup).box(u.(Model)); !strings.Contains(box, "new side line 7") {
+		t.Errorf("one-line heading:\n%s", box)
 	}
 }
 

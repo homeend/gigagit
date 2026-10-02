@@ -12,7 +12,7 @@ import { isServerDown, onServerUp, serverSeen, serverShutdown, suspectServerDown
 import { fetchStatus, wtCount } from "./status.js";
 import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
 import { landStackLine } from "./stackview.js";
-import { fetchNotes, markDiffRow, setDiffRange, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
+import { fetchNotes, firstHeldLine, markDiffRow, setDiffRange, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches, takeSessions, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
 import { revealVersion } from "./versions.js";
@@ -562,21 +562,27 @@ async function steerNavigateLand(s) {
   const file = s.file;
   if (state.stack) {
     const landed = await landStackLine(s.file, side, s.line, s.end_line || 0);
-    if (!landed) navMiss("line " + line + " is not in " + file + "'s diff");
+    if (!landed) navMiss(s.end_line > line ? "lines " + line + "-" + s.end_line + " are not in " + file + "'s diff" : "line " + line + " is not in " + file + "'s diff");
     else if (s.end_line > line) rangeLanded(landed.held, line, s.end_line, file);
     return;
   }
-  const tr = revealDiffRow(side, line);
+  // A range whose first line the diff lacks lands on the first one it holds.
+  let at = line;
+  let tr = revealDiffRow(side, line);
+  if (!tr && s.end_line > line) {
+    at = firstHeldLine((state.lastDiff || {}).rows, side, line, s.end_line);
+    tr = at ? revealDiffRow(side, at) : null;
+  }
   if (!tr) {
-    navMiss("line " + line + " is not in " + file + "'s diff");
+    navMiss(s.end_line > line ? "lines " + line + "-" + s.end_line + " are not in " + file + "'s diff" : "line " + line + " is not in " + file + "'s diff");
     return;
   }
-  markDiffRow(tr, side, s.line);
+  markDiffRow(tr, side, at);
   // A range link: band its lines (the band's rows are never folded away, so
   // the repaint also unfolds what hid them) and find the first row again.
   if (s.end_line > line) {
     rangeLanded(setDiffRange(tr, { side, first: line, last: s.end_line }), line, s.end_line, file);
-    (revealDiffRow(side, line) || tr).scrollIntoView({ block: "center" });
+    (revealDiffRow(side, at) || tr).scrollIntoView({ block: "center" });
     return;
   }
   tr.scrollIntoView({ block: "center" });

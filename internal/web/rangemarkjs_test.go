@@ -12,7 +12,7 @@ import (
 // shift+click extends the mark, which rows a range bands (and what its block
 // reads), and which lines get a ranged note's bar.
 const rangeMarkHarness = `
-import { extendRange, rangeRows, noteBars } from "./rm.mjs";
+import { extendRange, rangeRows, noteBars, firstHeldLine } from "./rm.mjs";
 const rows = [
   { left_no: 1, right_no: 1, left: "a", right: "a" },
   { left_no: 2, right_no: 2, left: "b", right: "b" },
@@ -39,6 +39,8 @@ console.log(JSON.stringify([
   rangeRows(rows, "new", 8, 9),
   rangeRows(rows, "old", 3, 3),
   { old: [...bars.old], new: [...bars.new] },
+  [firstHeldLine(rows, "new", 0, 9), firstHeldLine(rows, "new", 3, 4), firstHeldLine(rows, "old", 3, 9),
+   firstHeldLine(rows, "new", 6, 9), firstHeldLine(null, "new", 1, 2)],
 ]));
 `
 
@@ -48,7 +50,7 @@ func TestRangeMarkDecisions(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed; the JS guard needs it")
 	}
-	names := []string{"extendRange", "rangeRows", "noteBars"}
+	names := []string{"extendRange", "rangeRows", "noteBars", "firstHeldLine"}
 	var mod strings.Builder
 	for _, n := range names {
 		mod.WriteString(jsFunc(t, "files.js", n) + "\n")
@@ -82,7 +84,9 @@ func TestRangeMarkDecisions(t *testing.T) {
 		// a line only the old side has
 		`{"idx":[2],"block":["gone"]},` +
 		// one-line and file-level notes have no bar
-		`{"old":[1,2],"new":[3,4,5]}` +
+		`{"old":[1,2],"new":[3,4,5]},` +
+		// a range link lands on the first of its lines the diff holds
+		`[1,3,3,0,0]` +
 		`]`
 	if got := strings.TrimSpace(string(out)); got != want {
 		t.Errorf("range decisions:\n got %s\nwant %s", got, want)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/pusherr"
@@ -1709,6 +1710,23 @@ func (m Model) commitHaystackAt(i int) string {
 	return c.Hash + " " + names + " " + c.Subject
 }
 
+// recycleOverviewRow fits one file row of the recycle.dirty prompt ("XY path"
+// or "XY old → new") into w cells: the marker stays, the path is elided in
+// the middle (a rename's two paths share the room). Other lines (the
+// "… and N more" tail) and rows that fit pass through.
+func recycleOverviewRow(line string, w int) string {
+	if lipgloss.Width(line) <= w || len(line) < 4 || line[2] != ' ' || strings.HasPrefix(line, "…") {
+		return line
+	}
+	mark, path := line[:3], line[3:]
+	room := w - 3
+	if from, to, ok := strings.Cut(path, " → "); ok {
+		half := (room - 3) / 2
+		return mark + elidePath(from, half) + " → " + elidePath(to, room-3-half)
+	}
+	return mark + elidePath(path, room)
+}
+
 func (m Model) renderModal() string {
 	// Bound content to the terminal so long dynamic text (a long branch name, an
 	// export path) wraps instead of overflowing the box and being clipped by
@@ -1725,7 +1743,20 @@ func (m Model) renderModal() string {
 	// Prompt: keep any explicit line breaks (e.g. the hook-approval script),
 	// word-wrapping each physical line. wrapWords hard-chunks a single token
 	// wider than maxW, so an unbreakable long branch name still fits.
+	// A recycle.dirty file row ("XY path", after the blank line) is the one
+	// exception: wrapping would strand its marker and chop the file name, so
+	// a row too wide has its path cut in the middle instead.
+	fileRows := false
 	for _, line := range strings.Split(renderPrompt(m.modal.req), "\n") {
+		if m.modal.req.ID == engine.RecycleDirtyDecisionID {
+			if line == "" {
+				fileRows = true
+			} else if fileRows {
+				b.WriteString(recycleOverviewRow(line, maxW))
+				b.WriteString("\n")
+				continue
+			}
+		}
 		if wrapped := wrapWords(line, maxW); len(wrapped) > 0 {
 			b.WriteString(strings.Join(wrapped, "\n"))
 		}

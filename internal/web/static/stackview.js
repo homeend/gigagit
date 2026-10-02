@@ -30,6 +30,7 @@ import {
   goToDiffHit,
   markDiffRow,
   setDiffRange,
+  firstHeldLine,
   globalNoteCtx,
   hunkEligible,
   notesArmed,
@@ -295,6 +296,22 @@ function rerenderStack(resetFolds = false) {
   });
   // f, w and a resize change WHICH rows exist: the query must be re-found over
   // them, and the bar repainted, or the count goes stale.
+  if (diffSearch.query) {
+    refindStack();
+    diffSearchBar.paint();
+  }
+}
+
+// repaintStackSlots repaints just these slots (a marked range moved from one
+// file to another): the rest of the stack is untouched.
+function repaintStackSlots(slots) {
+  const st = state.stack;
+  if (!st) return;
+  for (const s of slots) {
+    const k = st.slots.indexOf(s);
+    if (k >= 0 && s.diff && !s.collapsed) repaintSlot(st, k);
+  }
+  // A band unfolds the rows it covers: the query is re-found over them.
   if (diffSearch.query) {
     refindStack();
     diffSearchBar.paint();
@@ -620,15 +637,37 @@ async function landStackLine(path, side, line, end = 0) {
   if (!(await awaitSlot(st, s))) return false;
   const sec = sectionEl(k);
   if (!sec) return false;
-  const tr =
-    sec.querySelector(`tr[data-side="${side}"][data-no="${line}"]`) ||
-    (side === "old" ? sec.querySelector(`tr[data-lno="${line}"]`) : null);
+  const rowAt = (root, no) =>
+    root.querySelector(`tr[data-side="${side}"][data-no="${no}"]`) ||
+    (side === "old" ? root.querySelector(`tr[data-lno="${no}"]`) : null);
+  // A range whose first line the diff lacks lands on the first one it holds.
+  let at = line;
+  let tr = rowAt(sec, line);
+  if (!tr && end > line) {
+    at = firstHeldLine((s.diff || {}).rows, side, line, end);
+    tr = at ? rowAt(sec, at) : null;
+  }
+  if (!tr && end > line && firstHeldLine((s.diff || {}).rows, side, line, end)) {
+    // Held but folded away (changes only): the band unfolds its rows, so band
+    // first — from any row of the section — and find the line afterwards.
+    const any = sec.querySelector("tr[data-i]");
+    if (!any) return false;
+    at = firstHeldLine(s.diff.rows, side, line, end);
+    const held = setDiffRange(any, { side, first: line, last: end });
+    const sec3 = sectionEl(k);
+    const row = sec3 && rowAt(sec3, at);
+    if (row) {
+      markDiffRow(row, side, at, true);
+      row.scrollIntoView({ block: "center" });
+    }
+    return { held };
+  }
   if (!tr) return false;
-  markDiffRow(tr, side, line);
+  markDiffRow(tr, side, at);
   if (end > line) {
     const held = setDiffRange(tr, { side, first: line, last: end });
     const sec2 = sectionEl(k);
-    const again = sec2 && (sec2.querySelector(`tr[data-side="${side}"][data-no="${line}"]`) || (side === "old" ? sec2.querySelector(`tr[data-lno="${line}"]`) : null));
+    const again = sec2 && rowAt(sec2, at);
     (again || tr).scrollIntoView({ block: "center" });
     return { held };
   }
@@ -971,6 +1010,7 @@ async function quietReloadSlot(st, s) {
     s.hunks = hunks;
     return;
   }
+  s.range = null; // other rows now: the band was over the previous ones (the single-file view's rule for a new diff)
   showSlotDiff(s, d, hunks);
 }
 
@@ -1028,4 +1068,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, rangeDiff, stackChangeStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, rangeDiff, repaintStackSlots, stackChangeStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
