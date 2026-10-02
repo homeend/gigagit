@@ -69,10 +69,11 @@ function ttFormNotice(err, unsaved) {
 }
 
 // ttConfirmKey maps a key to the delete question's answer: only y deletes,
-// only n or Escape cancels; "" = not an answer (a bare Shift, Tab, Enter).
+// only n cancels (Escape backs out of every step before this is asked);
+// "" = not an answer (a bare Shift, Tab, Enter).
 function ttConfirmKey(key) {
   if (key === "y") return "delete";
-  if (key === "n" || key === "Escape") return "cancel";
+  if (key === "n") return "cancel";
   return "";
 }
 
@@ -473,6 +474,7 @@ $("texttemplates-box").addEventListener("click", (e) => {
 $("texttemplates-box").addEventListener("input", () => {
   if (mode && mode.kind === "form" && mode.note) {
     mode.note = false;
+    mode.warned = undefined;
     paintFormNotice();
   }
 });

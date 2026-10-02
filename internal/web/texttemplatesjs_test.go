@@ -16,7 +16,7 @@ const textTemplatesHarness = `
 import { ttFormContent, ttLeaveForm, ttFormNotice, ttConfirmKey, ttSelectIndex } from "./tt.mjs";
 const seed = ttFormContent("Title", "text");
 const edited = ttFormContent("Title", "text more");
-const rows = [{ id: "a", scope: "global" }, { id: "b", scope: "global" }, { id: "a", scope: "repo" }];
+const rows = [{ id: "z", scope: "global" }, { id: "a", scope: "global" }, { id: "b", scope: "global" }, { id: "a", scope: "repo" }];
 console.log(JSON.stringify({
   untouched: ttLeaveForm(seed, undefined, ttFormContent("Title", "text")),
   first: ttLeaveForm(seed, undefined, edited),
@@ -28,10 +28,10 @@ console.log(JSON.stringify({
   noticeOnly: ttFormNotice("", true),
   noticeNone: ttFormNotice("", false),
   keys: ["y", "n", "Escape", "Y", "Enter", "Shift", "Tab", " "].map(ttConfirmKey),
-  selRepo: ttSelectIndex(rows, "a", "repo", 1),
-  selGlobal: ttSelectIndex(rows, "a", "global", 1),
-  selGone: ttSelectIndex(rows, "zz", "repo", 1),
-  selClamped: ttSelectIndex(rows.slice(0, 1), "", "", 5),
+  selRepo: ttSelectIndex(rows, "a", "repo", 2),
+  selGlobal: ttSelectIndex(rows, "a", "global", 2),
+  selGone: ttSelectIndex(rows, "zz", "repo", 2),
+  selClamped: ttSelectIndex(rows.slice(0, 2), "", "", 5),
   selEmpty: ttSelectIndex([], "", "", 3),
 }));
 `
@@ -63,7 +63,7 @@ func TestTextTemplatesOverlayDecisions(t *testing.T) {
 		Untouched, First, Again, EditedAfterNotice, TitleCounts string
 		NoticeBoth, NoticeErr, NoticeOnly, NoticeNone           string
 		Keys                                                    []string
-		SelRepo, SelGlobal, SelGone, SelClamped, SelEmpty       int
+		SelRepo, SelGlobal, SelGone, SelClamped, SelEmpty       *int
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &got); err != nil {
 		t.Fatalf("not the harness JSON: %v\n%s", err, out)
@@ -80,12 +80,19 @@ func TestTextTemplatesOverlayDecisions(t *testing.T) {
 	if got.NoticeBoth != "not saved: boom · "+note || got.NoticeErr != "not saved: boom" || got.NoticeOnly != note || got.NoticeNone != "" {
 		t.Errorf("notice: both %q err %q only %q none %q", got.NoticeBoth, got.NoticeErr, got.NoticeOnly, got.NoticeNone)
 	}
-	if want := "delete,cancel,cancel,,,,,"; strings.Join(got.Keys, ",") != want {
+	// Escape never reaches the question's own keys: the overlay's Escape
+	// handling backs out of every step before them.
+	if want := "delete,cancel,,,,,,"; strings.Join(got.Keys, ",") != want {
 		t.Errorf("confirm keys = %q, want %q", strings.Join(got.Keys, ","), want)
 	}
 	// The same id may live in both scopes: the scope picks the row.
-	if got.SelRepo != 2 || got.SelGlobal != 0 || got.SelGone != 1 || got.SelClamped != 0 || got.SelEmpty != 0 {
-		t.Errorf("select: repo %d global %d gone %d clamped %d empty %d", got.SelRepo, got.SelGlobal, got.SelGone, got.SelClamped, got.SelEmpty)
+	for name, c := range map[string]struct {
+		got  *int
+		want int
+	}{"repo": {got.SelRepo, 3}, "global": {got.SelGlobal, 1}, "gone": {got.SelGone, 2}, "clamped": {got.SelClamped, 1}, "empty": {got.SelEmpty, 0}} {
+		if c.got == nil || *c.got != c.want {
+			t.Errorf("select %s = %v, want %d", name, c.got, c.want)
+		}
 	}
 }
 
