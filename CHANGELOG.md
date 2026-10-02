@@ -48,7 +48,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   In the TUI a path too wide for the question is cut in the middle, keeping
   the file name; it is never wrapped.
 
-## Old-side links in the narrow browser layout
+## Old-side links in the narrow browser layout; marking lines from the keyboard
+
+### Added
+
+- **Mark lines from the keyboard in gg web.** In a diff, a stacked diff or
+  the file viewer, **shift+↓ / shift+↑** grow or shrink the band one line at
+  a time at the end away from the marked line (which stays, as with
+  shift+click). With nothing marked the diff starts at the first change —
+  where `c` lands; the viewer starts at its cursor. In a stacked diff the
+  band stays inside its file and stops at its last line.
+- **`L` copies the link** of the band, else of the marked line (the
+  terminal's `L`): in the diff the same link the right-click menu offers on
+  that row, in the viewer the menu's "copy file link". With nothing marked
+  the status line says how to mark a line.
 
 ### Fixed
 

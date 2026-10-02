@@ -135,7 +135,7 @@ func TestRangeGestureGuards(t *testing.T) {
 		{keys, "if (e.key === \"Escape\" && clearDiffRange()) return;\n  if (e.key === \"Escape\" && clearRowSelection()) return;", "esc drops the range before the staging selection"},
 		{viewer, `case "Escape": if (!clearViewerRange()) closeViewer(`, "esc drops the viewer's range before closing"},
 		{viewer, `"copy file link (lines " + rg.start + "-" + rg.end + ")"`, "the viewer's menu names the range"},
-		{viewer, `view.src === "worktree" ? block : null)`, "the viewer fingerprints only the disk's text"},
+		{viewer, `const block = view.src === "worktree" ? view.lines.slice(rg.start - 1, rg.end).map((l) => l.text) : null;`, "the viewer fingerprints only the disk's text"},
 		{live, "if (r && r.ok && s.end_line > s.line) markViewerRange(s.line, s.end_line);", "a content range link bands the viewer"},
 		{live, "setDiffRange(tr, { side, first: line, last: s.end_line })", "a range link bands the diff"},
 		{live, "landStackLine(s.file, side, s.line, s.end_line || 0)", "a range link bands the stack"},

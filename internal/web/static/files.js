@@ -1400,6 +1400,35 @@ function firstHeldLine(rows, side, first, last) {
 }
 
 
+// stepRange is one shift+↓ (dir 1) or shift+↑ (dir -1) over a diff's rows:
+// the band grows or shrinks at its MOVING end — the end away from the mark,
+// which stays put as it does for a shift+click — to the next line the side
+// holds. No band yet: it starts at the mark. Returns {side, first, last, end}
+// (first === last: back to the one marked line, no band) or null when there
+// is no line further that way. Pure.
+function stepRange(rows, mark, range, dir) {
+  const side = range ? range.side : mark ? mark.side : "";
+  if (!side) return null;
+  const held = [];
+  for (const r of rows || []) {
+    const no = side === "old" ? r.left_no : r.right_no;
+    if (no) held.push(no);
+  }
+  let anchor;
+  let end;
+  if (range) {
+    anchor = mark && mark.side === side && mark.no === range.last ? range.last : range.first;
+    end = anchor === range.first ? range.last : range.first;
+  } else {
+    anchor = end = mark.no;
+  }
+  const i = held.indexOf(end);
+  if (i < 0 || i + dir < 0 || i + dir >= held.length) return null;
+  const next = held[i + dir];
+  return { side, first: Math.min(anchor, next), last: Math.max(anchor, next), end: next };
+}
+
+
 // noteBars is the lines that carry a note's bar, per side: every line of a
 // note that covers MORE than one. Pure.
 function noteBars(notes) {
@@ -3134,7 +3163,9 @@ registerHelp({
   key: "a range of lines",
   html:
     "<b>shift+click a line number</b> (in a diff, a stacked diff or the file viewer) marks the lines from the " +
-    "marked line to it, on that number's side; right-click inside the band for <b>copy gg link to lines a-b</b>. " +
+    "marked line to it, on that number's side; <b>shift+↓ / shift+↑</b> grow or shrink the band a line at a time " +
+    "(from the clicked line, else the first change); <b>L</b> copies the link of the band or of the marked line, as " +
+    "right-click inside the band does (<b>copy gg link to lines a-b</b>). " +
     "A range link that opens marks the same lines again. In a diff or a stacked diff <b>c</b> with a band up writes ONE note over those lines " +
     "(on the band's side, shown under the last line; the band goes once the note is saved). <b>esc</b> or a plain " +
     "click drops the band. A note that covers several lines shows a bar beside their line numbers",
@@ -3173,6 +3204,131 @@ function rowSideAndLine(tr, td) {
     if (wantOld && ln) { side = "old"; no = ln; } else if (!wantOld && rn) { side = "new"; no = rn; }
   }
   return { side, no };
+}
+
+
+// diffRowLink is the gg:// link a diff row offers (the right-click menu's
+// row, and L): the line under the pointer's cell (td), or the marked range's
+// lines when the row is inside the band. {link, label, path}, or null when
+// the row's file has no address.
+function diffRowLink(row, td) {
+  // In a stack the link must name the ROW's own file, not whichever slot was
+  // active: a right-click is itself a "this line" gesture.
+  const rowCtx = diffLinkCtx(row);
+  // Not gated on notesArmed: a plain compare has no notes, yet its lines are
+  // addressable. linkFor refuses what has no address.
+  if (!rowCtx) return null;
+  let { side, no } = rowSideAndLine(row, td);
+  // A preview has no old side. A context row's LEFT cell still names a
+  // line that exists on the new side (data-rno), so that number travels;
+  // a deletion row has none, and linkFor degrades the link to the file
+  // form (the user's ruling, 2026-09-16 — the TUI's cursor on a deletion
+  // row copies the same file link).
+  if (side === "old" && rowCtx.preview && !rowCtx.preview.pair) {
+    const rn = Number(row.dataset.rno || 0);
+    if (rn) { side = "new"; no = rn; }
+  }
+  let link = linkFor(state.repo, state.worktree, rowCtx, side, no, rowRawText(row, side));
+  let label = "copy gg link to this line";
+  // Inside the marked range the row offers the RANGE's link — when the
+  // diff holds every one of its lines (the block is what an uncommitted
+  // range is fingerprinted over).
+  // (In a one-text-column layout a context row answers "new" for either
+  // side's band: the band's own side decides. A merge preview's old side
+  // names nothing, so it has no range link either.)
+  const rg = rowRange(row);
+  const rrow = rg ? ((rowDiff(row) || {}).rows || [])[Number(row.dataset.i)] : null;
+  const rno = rrow ? (rg.side === "old" ? rrow.left_no : rrow.right_no) : 0;
+  const baseOnly = !!rg && rg.side === "old" && !!rowCtx.preview && !rowCtx.preview.pair;
+  if (rg && !baseOnly && rno >= rg.first && rno <= rg.last && (rg.side === side || row.dataset.lno === undefined)) {
+    side = rg.side;
+    const blk = rangeRows((rowDiff(row) || {}).rows, side, rg.first, rg.last).block;
+    const rlink = blk.length === rg.last - rg.first + 1 ? linkFor(state.repo, state.worktree, rowCtx, side, rg.first, blk[0], rg.last, blk) : "";
+    if (rlink) [link, label] = [rlink, `copy gg link to lines ${rg.first}-${rg.last}`];
+  }
+  return link ? { link, label, path: rowCtx.path || "" } : null;
+}
+
+
+// markHere is the file the keyboard marks in and where its mark stands: the
+// band's file, else the marked row's, else the file under the cursor (a
+// stack's active slot). {root, rows, mark, range}; null when no diff is up.
+function markHere() {
+  const st = state.stack;
+  if (!st) {
+    if (!state.lastDiff) return null;
+    return { root: $("diff-body"), rows: state.lastDiff.rows, mark: state.diffRow, range: state.diffRange };
+  }
+  const s = st.slots.find((o) => o.range) || st.slots.find((o) => o.row) || st.slots[st.anchor];
+  const k = st.slots.indexOf(s);
+  const root = k >= 0 ? document.querySelector(`#diff-body .stk-file[data-k="${k}"]`) : null;
+  if (!s || !s.diff || s.collapsed || !root) return null;
+  return { root, rows: s.diff.rows, mark: s.row, range: s.range, k };
+}
+
+
+// stepDiffRange is shift+↓ / shift+↑ in the diff: the band grows or shrinks
+// one line at its moving end (stepRange), as a shift+click on that line's
+// number would. With nothing marked it starts at the first changed row —
+// where c lands. The band stays in its file: the stack's next file is never
+// reached this way.
+function stepDiffRange(dir) {
+  const h = markHere();
+  if (!h) return;
+  let mark = h.mark;
+  if (!mark && !h.range) {
+    mark = firstChangedRow(h.root);
+    const tr = mark ? diffRowAt(h.root, mark.side, mark.no) : null;
+    if (!tr || !diffLinkCtx(tr)) return;
+    markDiffRow(tr, mark.side, mark.no);
+  }
+  const next = stepRange(h.rows, mark, h.range, dir);
+  const any = h.root.querySelector("tr[data-i]");
+  if (!next || !any || !diffLinkCtx(any)) return;
+  setDiffRange(any, { side: next.side, first: next.first, last: next.last });
+  // The repaint replaced the rows: find the moving end again and keep it in sight.
+  const root = h.k === undefined ? $("diff-body") : document.querySelector(`#diff-body .stk-file[data-k="${h.k}"]`);
+  const end = root && diffRowAt(root, next.side, next.end);
+  if (end) end.scrollIntoView({ block: "nearest" });
+}
+
+
+// copyMarkLink is L in the diff (the TUI's L): the link of the marked range,
+// else of the marked line — what the right-click menu offers on that row.
+function copyMarkLink() {
+  const h = markHere();
+  const want = h && (h.range || h.mark);
+  if (!want) {
+    opLine("L copies the link of the marked line: click a line (shift+click or shift+↓ marks several)", false);
+    return;
+  }
+  const side = h.range ? h.range.side : h.mark.side;
+  const no = h.range ? h.range.first : h.mark.no;
+  const row = diffRowAt(h.root, side, no);
+  const got = row ? diffRowLink(row, row.querySelector(side === "old" ? "td.no.l" : "td.no.r")) : null;
+  if (!got) {
+    opLine("this line has no gg:// link", true);
+    return;
+  }
+  copyLink(got.link, linkDesc("file", got.path, ""));
+}
+
+
+// rangeKey takes the keyboard's range keys in the diff: shift+↓ / shift+↑
+// mark, L copies the link. True when it acted.
+function rangeKey(e) {
+  if (state.layout !== "diff" || conflictPick || e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault(); // no page scroll, no text selection growing
+    stepDiffRange(e.key === "ArrowDown" ? 1 : -1);
+    return true;
+  }
+  if (e.key === "L") {
+    e.preventDefault();
+    copyMarkLink();
+    return true;
+  }
+  return false;
 }
 
 
@@ -3275,50 +3431,15 @@ $("diff-body").addEventListener("contextmenu", (e) => {
       if (line) rows.push({ label: "copy line", act: () => copyText(line, "line") });
     }
     const row = e.target.closest("tr[data-no]");
-    // In a stack the link must name the ROW's own file, not whichever slot was
-    // active: a right-click is itself a "this line" gesture.
-    const rowCtx = diffLinkCtx(row);
-    // Not gated on notesArmed: a plain compare has no notes, yet its lines are
-    // addressable. linkFor refuses what has no address.
-    if (row && rowCtx) {
-      const td = e.target.closest("td");
-      let { side, no } = rowSideAndLine(row, td);
-      // A preview has no old side. A context row's LEFT cell still names a
-      // line that exists on the new side (data-rno), so that number travels;
-      // a deletion row has none, and linkFor degrades the link to the file
-      // form (the user's ruling, 2026-09-16 — the TUI's cursor on a deletion
-      // row copies the same file link).
-      if (side === "old" && rowCtx.preview && !rowCtx.preview.pair) {
-        const rn = Number(row.dataset.rno || 0);
-        if (rn) { side = "new"; no = rn; }
-      }
-      let link = linkFor(state.repo, state.worktree, rowCtx, side, no, rowRawText(row, side));
-      let linkLabel = "copy gg link to this line";
-      // Inside the marked range the row offers the RANGE's link — when the
-      // diff holds every one of its lines (the block is what an uncommitted
-      // range is fingerprinted over).
-      // (In a one-text-column layout a context row answers "new" for either
-      // side's band: the band's own side decides. A merge preview's old side
-      // names nothing, so it has no range link either.)
-      const rg = rowRange(row);
-      const rrow = rg ? ((rowDiff(row) || {}).rows || [])[Number(row.dataset.i)] : null;
-      const rno = rrow ? (rg.side === "old" ? rrow.left_no : rrow.right_no) : 0;
-      const baseOnly = !!rg && rg.side === "old" && !!rowCtx.preview && !rowCtx.preview.pair;
-      if (rg && !baseOnly && rno >= rg.first && rno <= rg.last && (rg.side === side || row.dataset.lno === undefined)) {
-        side = rg.side;
-        const blk = rangeRows((rowDiff(row) || {}).rows, side, rg.first, rg.last).block;
-        const rlink = blk.length === rg.last - rg.first + 1 ? linkFor(state.repo, state.worktree, rowCtx, side, rg.first, blk[0], rg.last, blk) : "";
-        if (rlink) [link, linkLabel] = [rlink, `copy gg link to lines ${rg.first}-${rg.last}`];
-      }
-      // Recorded like every other copy (Task 9): copyLink, never copyText.
-      // The Desc names the FILE — a line link's row in `gg links` has to be
-      // recognisable, and the line number is already in the link text.
-      if (link)
-        rows.push({
-          label: linkLabel,
-          act: () => copyLink(link, linkDesc("file", (rowCtx && rowCtx.path) || "", "")),
-        });
-    }
+    const got = row ? diffRowLink(row, e.target.closest("td")) : null;
+    // Recorded like every other copy (Task 9): copyLink, never copyText.
+    // The Desc names the FILE — a line link's row in `gg links` has to be
+    // recognisable, and the line number is already in the link text.
+    if (got)
+      rows.push({
+        label: got.label,
+        act: () => copyLink(got.link, linkDesc("file", got.path, "")),
+      });
     // Staging, on a selectable row: act on the selection, or on the hunk under
     // the pointer (GitKraken's two rows). They lead the menu — they are what a
     // right-click in a working-tree diff is for.
@@ -4890,4 +5011,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { diffRowAt, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { diffRowAt, rangeKey, armRangeNotes, showRangeNotes, loadPairCounts, getDiff, cycleImageLayout, flipImage, footImageChip, landNote, setDiffBack, NOTE_BADGE_COLS, fileCols, filePathHTML, setFilesKind, SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, rowLinkCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, unfoldFilesForOpen, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, copyPathRows, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, setDiffRange, clearDiffRange, firstHeldLine, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

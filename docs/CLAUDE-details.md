@@ -876,7 +876,16 @@ rows changed; `markCls(r, only)` bands a unified one-side row only on the band's
 side; `c` refuses a partly held range; the note title names a range
 (`R8-10`, both frontends); `domain.ErrNoteRange` → 400. Left on purpose: a
 one-line shift+click in a compare still marks the row (it is the only way
-to start a range there), bare-CR numbering, a checkout path ending `:<n>-`. Tests: `rangenotejs_test.go`, `TestNotesAddRange`.
+to start a range there), bare-CR numbering, a checkout path ending `:<n>-`.
+Keyboard marking (2026-10-02, user-picked keys): shift+↓/↑ = `rangeKey` →
+`stepDiffRange` (files.js; `markHere` = the band's file, else the marked
+row's, else the cursor slot; pure `stepRange` moves the end AWAY from the
+mark to the next line the side holds) and the viewer's `stepViewerRange`
+(pure `viewerStep`, the cursor is the anchor); `L` = `copyMarkLink` /
+`copyViewerLinkHere`, sharing `diffRowLink` / `viewerLinkHere` with the
+menus. `rangeKey` runs before `diffScrollKey`. Narrow layout: a context row
+carries `data-ono` (its old line — NOT data-lno, which means "split layout"
+to the click code); `diffRowAt` is the one (side, line) → row lookup. Tests: `rangenotejs_test.go`, `TestNotesAddRange`.
 
 **A note over marked lines (2026-10-02).** `c` with more than one row marked
 in the diff asks `noteAnchorOfMarks` (`note_popup.go`), which reuses

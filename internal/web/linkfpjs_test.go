@@ -115,7 +115,7 @@ func TestViewerFileLinkFingerprintsTheDiskLine(t *testing.T) {
 	}
 	for _, want := range []string{
 		`const text = line && view.src === "worktree" && view.lines[line - 1] ? view.lines[line - 1].text : "";`,
-		`hint: { kind: "view", id: "content" } }, "new", line, text);`,
+		`const link = linkFor(state.repo, state.worktree, ctx, "new", line, text);`,
 	} {
 		if !strings.Contains(string(src), want) {
 			t.Errorf("viewer.js: missing %q", want)
