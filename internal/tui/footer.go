@@ -232,6 +232,7 @@ func globalBindings() []footerBinding {
 		{"clear-filters", "ctrl+r", i18n.T("[ctrl+r] clear filter"), Model.canClearFilters, scopeGlobal},
 		{"repo", "R", i18n.T("[R]epo"), Model.opsIdle, scopeGlobal},
 		{"settings", ",", i18n.T("[,] settings"), Model.opsIdle, scopeGlobal},
+		{"text-templates", "alt+x", i18n.T("[alt+x] templates"), Model.opsIdle, scopeGlobal},
 		{"actions", ".", i18n.T("[.] actions"), Model.opsIdle, scopeGlobal},
 		{"commands", "ctrl+p", i18n.T("[ctrl+p] commands"), Model.opsIdle, scopeGlobal},
 		{"", "tab", i18n.T("[tab] focus"), func(Model) bool { return true }, scopeGlobal},

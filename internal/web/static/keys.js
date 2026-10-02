@@ -13,6 +13,7 @@ import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 import { branchFilterKey } from "./branchfilter.js";
+import { textTemplatesKey } from "./texttemplates.js";
 
 // --- focus + keyboard ---
 
@@ -135,6 +136,8 @@ document.addEventListener("keydown", (e) => {
   // alt+1…5 / alt+shift+1…5: branch-filter slots. Not inside inputs — a
   // digit typed into the commit box must stay a digit.
   if (!(e.target.closest && e.target.closest("input,textarea")) && branchFilterKey(e)) return;
+  // alt+x: the text templates overlay (the TUI's key). Not inside inputs.
+  if (!(e.target.closest && e.target.closest("input,textarea")) && textTemplatesKey(e)) return;
   // Form fields own the keyboard: without this, typing a commit message
   // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.
   if (e.target.closest && e.target.closest("input,textarea")) {

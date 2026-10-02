@@ -16,7 +16,12 @@ type templateFill struct {
 }
 
 func newTemplateFill(value string) templateFill {
-	labels := template.UserLabels(value)
+	return newTemplateFillLabels(template.UserLabels(value))
+}
+
+// newTemplateFillLabels is newTemplateFill for a caller that already knows
+// the labels (a text template scans with its own token rules).
+func newTemplateFillLabels(labels []string) templateFill {
 	f := templateFill{labels: labels, fields: make([]textfield, len(labels))}
 	for i := range f.fields {
 		f.fields[i] = newTextField("")

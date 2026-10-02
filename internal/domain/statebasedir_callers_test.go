@@ -24,6 +24,7 @@ var stateBaseDirKinds = []string{
 	"linkhist",
 	"notes",
 	"prefix",
+	"texttemplates",
 	"previews",
 	"profile",
 	"search",

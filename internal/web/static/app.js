@@ -29,6 +29,7 @@ import { fetchHealth } from "./bigrepo.js";
 import "./settings.js";
 import "./identity.js";
 import "./prefixes.js";
+import "./texttemplates.js";
 import "./exttools.js";
 import "./sessionerrors.js";
 import "./helpsearch.js";
