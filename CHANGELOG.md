@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Old-side links in the narrow browser layout; marking lines from the keyboard
+
+### Added
+
+- **Mark lines from the keyboard in gg web.** In a diff, a stacked diff or
+  the file viewer, **shift+↓ / shift+↑** grow or shrink the band one line at
+  a time at the end away from the marked line (which stays, as with
+  shift+click). With nothing marked the diff starts at the first change —
+  where `c` lands; the viewer starts at its cursor. In a stacked diff the
+  band stays inside its file and stops at its last line.
+- **`L` copies the link** of the band, else of the marked line (the
+  terminal's `L`): in the diff the same link the right-click menu offers on
+  that row, in the viewer the menu's "copy file link". With nothing marked
+  the status line says how to mark a line.
+
+### Fixed
+
+- **A link to the old side of an unchanged line lands in the narrow
+  layout.** Below ~950px gg web draws one text column, and an unchanged
+  row there answered only to its new line number: `gg://…:old:8` (or a
+  range `:old:7-9`) said "line 8 is not in a.txt's diff" — in the single
+  diff and in the stacked diff. Such a row now carries its old line too.
+
 ## A review shows where it was made
 
 ### Changed

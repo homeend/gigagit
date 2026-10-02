@@ -433,7 +433,8 @@ another checkout asks first, then switches the repo and lands there; `L` in
 the diff view copies the cursor line's link and the `.` menu's **Copy link**
 works in the Files, Staged and Commits panels and a commit's files view; in
 `gg web`, **shift+click a line number** marks a range of lines (diff, stacked
-diff, file viewer — the right-click menu then copies the range's link, a
+diff, file viewer — or **shift+↓ / shift+↑** from the keyboard, with `L`
+to copy the link; the right-click menu also copies the range's link, a
 range link that opens marks its lines again, and in a diff `c` writes one
 note over the marked lines), and right-click
 a diff line, a review note, a file row or a commit row — a note has no address

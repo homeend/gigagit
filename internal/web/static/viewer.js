@@ -801,6 +801,18 @@ function viewerKey(e) {
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
   if (view.ov) return overviewKey(e);
+  // shift+↓ / shift+↑ mark lines from the cursor (it stays, as a shift+click
+  // leaves it); L copies the link — the band's, else the cursor line's.
+  if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    stepViewerRange(e.key === "ArrowDown" ? 1 : -1);
+    return true;
+  }
+  if (e.key === "L") {
+    e.preventDefault();
+    copyViewerLinkHere();
+    return true;
+  }
   if (viewerSearchKey(e)) return true;
   switch (e.key) {
     case "Backspace": if (!view.from) return false; anchorBack(); break;
@@ -951,6 +963,61 @@ function viewerRange(line, end, len) {
   return { start: line, end: Math.min(end, len) };
 }
 
+// viewerStep is one shift+↓ (dir 1) / shift+↑ (dir -1) in the viewer: the
+// band (own: the reader's, or null) grows or shrinks at the end away from the
+// cursor, which stays put (a band the cursor left starts over from it).
+// {range, end}: range null = back to the one line;
+// null when the moving end is already at the file's edge. Pure.
+function viewerStep(own, cur, len, dir) {
+  if (!len || cur < 1) return null;
+  // A band the cursor has walked away from is not "from the cursor": start over.
+  if (own && cur !== own.start && cur !== own.end) own = null;
+  const anchor = own && cur === own.end ? own.end : own ? own.start : cur;
+  const end = own ? (anchor === own.start ? own.end : own.start) : cur;
+  const next = Math.min(Math.max(end + dir, 1), len);
+  if (next === end) return null;
+  return { range: viewerRange(Math.min(anchor, next), Math.max(anchor, next), len), end: next };
+}
+
+// stepViewerRange applies viewerStep to the open file and keeps the moving
+// end in sight. An overview anchor's band is not the reader's: marking starts
+// over from the cursor.
+function stepViewerRange(dir) {
+  if (view.placeholder) return;
+  const own = view.range && view.rangeOwn ? view.range : null;
+  const got = viewerStep(own, view.cur, view.lines.length, dir);
+  if (!got) return;
+  view.range = got.range;
+  view.rangeOwn = true;
+  rerenderKeepingScroll();
+  const row = $("viewer-body").querySelector(`.vline[data-i="${got.end - 1}"]`);
+  if (row) row.scrollIntoView({ block: "nearest" });
+}
+
+// viewerLinkHere is the content link the viewer offers now: the band's lines,
+// else the cursor line. The link names the file ON DISK, so a fingerprint is
+// taken only when the viewer shows the disk's text — a commit's or a shelf's
+// version of the line may say something else. {link, label}; null = none.
+function viewerLinkHere() {
+  const line = view.placeholder ? 0 : view.cur;
+  const ctx = { path: view.path, state: "unstaged", hint: { kind: "view", id: "content" } };
+  const rg = view.placeholder ? null : view.range;
+  if (rg) {
+    const block = view.src === "worktree" ? view.lines.slice(rg.start - 1, rg.end).map((l) => l.text) : null;
+    const link = linkFor(state.repo, state.worktree, ctx, "new", rg.start, "", rg.end, block);
+    if (link) return { link, label: "copy file link (lines " + rg.start + "-" + rg.end + ")" };
+  }
+  const text = line && view.src === "worktree" && view.lines[line - 1] ? view.lines[line - 1].text : "";
+  const link = linkFor(state.repo, state.worktree, ctx, "new", line, text);
+  return link ? { link, label: "copy file link" + (line ? " (line " + line + ")" : "") } : null;
+}
+
+// copyViewerLinkHere is L: the menu's first row without the menu.
+function copyViewerLinkHere() {
+  const got = viewerLinkHere();
+  if (got) copyViewerLink(got.link);
+}
+
 // markViewerRange bands a range link's lines in the open file.
 function markViewerRange(line, end) {
   view.range = viewerRange(line, end, view.lines.length);
@@ -975,20 +1042,9 @@ function clearViewerRange() {
 function openViewerMenu(x, y) {
   const line = view.placeholder ? 0 : view.cur;
   const items = [];
-  // The link names the file ON DISK, so the line's fingerprint is taken only
-  // when the viewer is showing the disk's text — a commit's or a shelf's
-  // version of the line may say something else.
-  const text = line && view.src === "worktree" && view.lines[line - 1] ? view.lines[line - 1].text : "";
-  const flink = linkFor(state.repo, state.worktree, { path: view.path, state: "unstaged", hint: { kind: "view", id: "content" } }, "new", line, text);
-  // A marked range: the link names its lines, fingerprinted as one block
-  // (again only for the disk's text).
-  const rg = view.placeholder ? null : view.range;
-  const block = rg ? view.lines.slice(rg.start - 1, rg.end).map((l) => l.text) : null;
-  const rlink = rg
-    ? linkFor(state.repo, state.worktree, { path: view.path, state: "unstaged", hint: { kind: "view", id: "content" } }, "new", rg.start, "", rg.end, view.src === "worktree" ? block : null)
-    : "";
-  if (rlink) items.push({ label: "copy file link (lines " + rg.start + "-" + rg.end + ")", act: () => copyViewerLink(rlink) });
-  else if (flink) items.push({ label: "copy file link" + (line ? " (line " + line + ")" : ""), act: () => copyViewerLink(flink) });
+  // The band's lines, else the cursor line (viewerLinkHere — L copies the same).
+  const here = viewerLinkHere();
+  if (here) items.push({ label: here.label, act: () => copyViewerLink(here.link) });
   if (line && view.lines[line - 1]) items.push({ label: "copy line", act: () => copyText(view.lines[line - 1].text, "line " + line) });
   items.push({ sep: true });
   if (view.src === "worktree") items.push({ label: "diff (working tree changes)", act: () => viewerDiffWorktree(view.path) });
@@ -1134,7 +1190,7 @@ registerHelp({
   key: "view file",
   html:
     "a file row's or a shelved file's <b>view file</b> (right-click / <b>.</b>), or a pasted content link, opens the file full-page: " +
-    "<b>↑↓ j k</b> line, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close; " +
+    "<b>↑↓ j k</b> line, <b>shift+↓↑</b> mark lines from the cursor (or shift+click a number), <b>L</b> copy their link, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close; " +
     "an agent's notes (<code>gg session note</code>) sit under their lines: <b>} {</b> next / previous note, <b>d</b> dismiss, <b>r</b> copy its reference; " +
     "an agent's overview (<code>gg session overview</code>) opens as a document: <b>tab / shift+tab</b> select an anchor, <b>enter</b> or a click opens it, " +
     "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> (or the browser's Back) in the file an anchor opened comes back",

@@ -7,7 +7,7 @@ import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stag
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { openSelectedReview, reviewActive, showReviewOverview, stepCommitReviews, stepReviewFile } from "./reviews.js";
-import { addNotePrompt, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, rangeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
@@ -158,6 +158,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && clearDiffRange()) return;
   if (e.key === "Escape" && clearRowSelection()) return;
   if (diffSearchKey(e)) return;
+  // shift+↓/↑ mark lines and L copies their link, before the arrows scroll.
+  if (rangeKey(e)) return;
   // The symmetric comparison view's own keys (v, x, 1–4), only while one is up.
   if (symKey(e)) return;
   // In the diff layout the arrows and page keys scroll the DIFF (the TUI's
