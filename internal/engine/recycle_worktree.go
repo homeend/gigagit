@@ -151,7 +151,7 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	committed, shelved, discarded := "", "", false
 	if c.Staged+c.Unstaged+c.Conflicted+c.Untracked > 0 {
 		resp, err := deps.decide(ctx, PromptReq(RecycleDirtyDecisionID,
-			"%s has uncommitted changes on %s", []string{"commit", "shelve", "discard", "abort"}, target, old))
+			"%s has uncommitted changes on %s:\n\n%s", []string{"commit", "shelve", "discard", "abort"}, target, old, recycleDirtyOverview(st.Files)))
 		if err != nil {
 			return Result{}, err
 		}
@@ -223,6 +223,45 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
+}
+
+// recycleOverviewMax caps the file rows in the recycle.dirty prompt.
+const recycleOverviewMax = 10
+
+// recycleDirtyOverview lists what the recycle.dirty answer acts on, in the
+// shape of `git status --short`: a staged and a not-staged status letter,
+// then the path ("??" untracked, "UU" conflicted, a rename as old → new).
+// An unchanged side is "." (porcelain v2's letter), not a space: the TUI and
+// web modals both collapse runs of spaces, which would make "staged" and
+// "not staged" read the same.
+// Git's own order; past recycleOverviewMax rows a tail line counts the rest.
+func recycleDirtyOverview(files []model.FileStatus) string {
+	xy := func(b byte) byte {
+		if b == 0 || b == '.' {
+			return '.'
+		}
+		return b
+	}
+	var lines []string
+	for i, f := range files {
+		if i == recycleOverviewMax {
+			lines = append(lines, fmt.Sprintf("… and %d more", len(files)-recycleOverviewMax))
+			break
+		}
+		mark := string([]byte{xy(f.Staged), xy(f.Unstaged)})
+		switch {
+		case f.Kind == model.KindUntracked:
+			mark = "??"
+		case f.Kind == model.KindUnmerged && mark == "..":
+			mark = "UU"
+		}
+		path := f.Path
+		if f.OrigPath != "" {
+			path = f.OrigPath + " → " + f.Path
+		}
+		lines = append(lines, mark+" "+path)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // discardAll throws away the worktree's staged, unstaged and untracked work.
