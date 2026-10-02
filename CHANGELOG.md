@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Text templates: follow-up fixes 2
+
+### Changed
+
+- **CLI:** `gg template show` / `render` / `edit` / `rm` exit **1** when a
+  store file cannot be read (it was 2); 2 stays for an unknown or ambiguous id.
+- **TUI:** the delete question is answered by `y` (delete) or `n` / `esc`
+  (keep) only; any other key used to cancel it.
+- **Web:** switching only the scope in the add form is not unsaved text —
+  leaving it asks nothing.
+
+### Fixed
+
+- Copying a rendered text (`y` in the TUI, copy in the web view) advances all
+  of its `<seq>` counters in one write, as `gg template render` does; they
+  were written one at a time.
+- **TUI:** in the fill step a very long title no longer pushes the "(n/m)"
+  position off the line; the title is cut and shown whole on the bottom bar.
+- **Web:** the unsaved-text notice no longer replaces a pending "not saved: …"
+  error (both are shown), names no key ("leaving again discards it" — it also
+  follows the cancel button and a click outside), and goes away once the text
+  is edited again.
+
+### Internal
+
+- The web overlay's decisions (form guard, notice line, delete-confirm keys,
+  the row a reload selects) are pure functions in `texttemplates.js`, tested
+  under node by `internal/web/texttemplatesjs_test.go`.
+
 ## Text templates: follow-up fixes
 
 ### Changed

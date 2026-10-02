@@ -18,8 +18,9 @@ let data = null; // last GET /api/text-templates payload
 let sel = 0; // index into data.templates
 // null = browse · {kind:"fill", t} · {kind:"rendering", t} (a render is in
 // flight: keys are swallowed, Escape gives up on it) · {kind:"rendered", t, text}
-// · {kind:"form", t|null, warned} (warned = the form's content when the
-// unsaved-text notice was last shown) · {kind:"confirm", t}
+// · {kind:"form", t|null, seed, warned, err, note} (seed = the form's content
+// when it opened, warned = its content when the unsaved-text notice was last
+// shown, err = a pending error, note = the notice is showing) · {kind:"confirm", t}
 let mode = null;
 
 const scopeTag = (s) => (s === "repo" ? "[this repo]" : "[global]");
@@ -45,9 +46,47 @@ function close() {
   closeLayer("texttemplates");
 }
 
-// formContent is what the open form holds, as one comparable value.
+// ttFormContent is what counts as a form's unsaved text, as one comparable
+// value: the title and the text. The scope switch alone is nothing to lose.
+function ttFormContent(title, body) {
+  return JSON.stringify([title, body]);
+}
+
+// ttLeaveForm decides a way out of the add/edit form: "leave" for an
+// untouched form (now is still the seed) and for one left a second time
+// without a change since the notice (now is what was warned about), else
+// "warn" — keep the form and show the notice.
+function ttLeaveForm(seed, warned, now) {
+  return now === seed || now === warned ? "leave" : "warn";
+}
+
+// ttFormNotice is the form's notice line: a pending error stays readable
+// beside the unsaved-text notice, which names no key — Escape, the cancel
+// button and a click outside all leave.
+function ttFormNotice(err, unsaved) {
+  const note = unsaved ? "unsaved text — leaving again discards it" : "";
+  return err && note ? err + " · " + note : err || note;
+}
+
+// ttConfirmKey maps a key to the delete question's answer: only y deletes,
+// only n or Escape cancels; "" = not an answer (a bare Shift, Tab, Enter).
+function ttConfirmKey(key) {
+  if (key === "y") return "delete";
+  if (key === "n" || key === "Escape") return "cancel";
+  return "";
+}
+
+// ttSelectIndex is the row a reloaded list lands on: the one (id, scope)
+// names — the same id may exist in both scopes — else the previous index,
+// clamped to the list.
+function ttSelectIndex(list, id, scope, prev) {
+  const at = list.findIndex((t) => t.id === id && t.scope === scope);
+  return at >= 0 ? at : Math.min(prev, Math.max(list.length - 1, 0));
+}
+
+// formContent is what the open form holds (ttFormContent).
 function formContent() {
-  return JSON.stringify([$("tt-title").value, $("tt-body").value, $("tt-scope").dataset.scope]);
+  return ttFormContent($("tt-title").value, $("tt-body").value);
 }
 
 // canLeaveForm guards every way out of the add/edit form except save. An
@@ -56,10 +95,17 @@ function formContent() {
 function canLeaveForm() {
   if (!mode || mode.kind !== "form") return true;
   const now = formContent();
-  if (now === mode.seed || now === mode.warned) return true;
+  if (ttLeaveForm(mode.seed, mode.warned, now) === "leave") return true;
   mode.warned = now;
-  showErr("unsaved text — esc again discards it");
+  mode.note = true;
+  paintFormNotice();
   return false;
+}
+
+// paintFormNotice writes the form's pending error and unsaved-text notice.
+function paintFormNotice() {
+  const err = $("texttemplates-box").querySelector(".serr");
+  if (err) err.textContent = ttFormNotice(mode.err || "", !!mode.note);
 }
 
 // back leaves the current step for the list.
@@ -91,10 +137,10 @@ function onKey(e) {
     return true;
   }
   if (mode && mode.kind === "confirm") {
-    // Only y deletes and only n (or Escape, above) cancels: a stray key —
-    // a bare Shift, Tab — must not answer the question.
-    if (e.key === "y") removeTemplate(mode.t);
-    else if (e.key === "n") back();
+    // A stray key — a bare Shift, Tab — must not answer the question.
+    const answer = ttConfirmKey(e.key);
+    if (answer === "delete") removeTemplate(mode.t);
+    else if (answer === "cancel") back();
     return true;
   }
   if (mode) return true;
@@ -141,6 +187,12 @@ function move(d) {
 }
 
 function showErr(msg) {
+  if (mode && mode.kind === "form") {
+    // The form's line also carries the unsaved-text notice.
+    mode.err = msg;
+    paintFormNotice();
+    return;
+  }
   const err = $("texttemplates-box").querySelector(".serr");
   if (err) err.textContent = msg;
 }
@@ -154,8 +206,7 @@ async function reload(selectId, selectScope) {
     showErr(e.message);
     return;
   }
-  const at = rows().findIndex((t) => t.id === selectId && t.scope === selectScope);
-  sel = at >= 0 ? at : Math.min(sel, Math.max(rows().length - 1, 0));
+  sel = ttSelectIndex(rows(), selectId, selectScope, sel);
   mode = null;
   render();
   scopeError();
@@ -414,6 +465,15 @@ $("texttemplates-box").addEventListener("click", (e) => {
         t.classList.toggle("on", next === "global");
         t.textContent = next === "repo" ? "this repo only" : "global (every repo)";
       }
+  }
+});
+
+// Typing after the notice makes it stale: the changed text is asked about
+// again. A pending error stays.
+$("texttemplates-box").addEventListener("input", () => {
+  if (mode && mode.kind === "form" && mode.note) {
+    mode.note = false;
+    paintFormNotice();
   }
 });
 
