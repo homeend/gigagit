@@ -3050,6 +3050,14 @@ function removeNote(id) {
 
 
 registerHelp({
+  key: "a range of lines",
+  html:
+    "<b>shift+click a line number</b> (in a diff, a stacked diff or the file viewer) marks the lines from the " +
+    "marked line to it, on that number's side; right-click inside the band for <b>copy gg link to lines a-b</b>. " +
+    "A range link that opens marks the same lines again. <b>esc</b> or a plain click drops the band. A note that " +
+    "covers several lines shows a bar beside their line numbers",
+});
+registerHelp({
   key: "review notes",
   html:
     "in an open diff: click a line to anchor, then <b>c</b> to write a note on it (summary + optional rationale). " +
@@ -3091,8 +3099,10 @@ function rowSideAndLine(tr, td) {
 // the number cell: shift+click on a changed row's code stays the staging
 // selection, and the staging handlers skip this gesture (rangeGesture), so
 // the two never fire together.
+// (Matched by the table, not by #diff-body: the gesture's own repaint detaches
+// the clicked row, and the handlers that run after it must still see it.)
 function rangeGesture(e) {
-  return e.shiftKey && !e.ctrlKey && !e.metaKey && !!e.target.closest && !!e.target.closest("#diff-body td.no");
+  return e.shiftKey && !e.ctrlKey && !e.metaKey && !!e.target.closest && !!e.target.closest("table.diff td.no");
 }
 $("diff-body").addEventListener("mousedown", (e) => {
   if (rangeGesture(e)) e.preventDefault(); // no text selection from the old caret

@@ -840,6 +840,25 @@ beside its lines. The CLI's old `splitLinkRange` shim (highlight add only,
 broke on `~fp`) is gone. Web this round: `steerWire.EndLine` + the op line
 "the link names lines a-b"; no selection restore, no range copy.
 
+**Range links in gg web (2026-10-02).** State: `state.diffRange` / a stack
+slot's `range` = `{side, first, last}` (one at a time, stack-wide), carried
+into `diffHTML` on the note context (`nc.range`) and painted IN the render
+(`markCls`: `rng-l`/`rng-r` band, `nbar-l`/`nbar-r` note bar) — a class
+added after the fact would vanish on the next notes refresh. Band rows are
+pinned against folding, so setting a range unfolds it. Pure helpers in
+`files.js` (`extendRange`, `rangeRows`, `noteBars`) and `links.js`
+(`blockFingerprint`, `linkFor(…, end, block)`), pinned against Go by
+`blockfpjs_test.go` / `rangemarkjs_test.go`. The gesture is `rangeGesture`
+(shift+click on `table.diff td.no` — matched by the table because the
+gesture's own repaint detaches the row before later handlers run); the
+note-anchor click, the staging click and the outside-click clear all stand
+aside for it. `setDiffRange` repaints and returns how many of the range's
+lines the diff holds; `markDiffRow(…, keepRange)` drops the range on a plain
+mark. Viewer: `view.range` + `view.rangeOwn` (a hand/link range clears on
+click or esc; an overview anchor's band does not), `viewerRange` clamps.
+Landing: `live.js` passes `end_line` to `setDiffRange` / `landStackLine(…,
+end)` / `markViewerRange`. The web's `c` still writes a one-line note.
+
 **A note over marked lines (2026-10-02).** `c` with more than one row marked
 in the diff asks `noteAnchorOfMarks` (`note_popup.go`), which reuses
 `diffLinkSelection` (side, trim rule, block from the file's full rows) and

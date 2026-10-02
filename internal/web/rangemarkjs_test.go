@@ -115,7 +115,7 @@ func TestRangeGestureGuards(t *testing.T) {
 	t.Parallel()
 	files, keys, viewer, live := readStatic(t, "files.js"), readStatic(t, "keys.js"), readStatic(t, "viewer.js"), readStatic(t, "live.js")
 	for _, c := range []struct{ src, want, why string }{
-		{files, `return e.shiftKey && !e.ctrlKey && !e.metaKey && !!e.target.closest && !!e.target.closest("#diff-body td.no");`, "the range gesture is shift+click on a line number"},
+		{files, `return e.shiftKey && !e.ctrlKey && !e.metaKey && !!e.target.closest && !!e.target.closest("table.diff td.no");`, "the range gesture is shift+click on a line number"},
 		{files, "if (rangeGesture(e)) return; // a line-number shift+click marks a range, never a staging row", "the staging click must skip the range gesture"},
 		{files, "if (rangeGesture(e)) return; // marking a range of lines leaves the staging selection alone", "the outside-click clear must skip the range gesture"},
 		{files, "  if (rangeGesture(e)) return;\n  const handle = e.target.closest(\".notetitle[data-collapse]\");", "the note-anchor click must skip the range gesture"},

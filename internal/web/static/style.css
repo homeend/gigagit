@@ -1460,10 +1460,11 @@ body.lm-scroll #blame-body .bline.brecent .bgut, body.lm-scroll #blame-body .bli
 table.diff tr.cur > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 table.diff tr.cur > td.no { color: var(--accent); }
 /* The marked range of lines (shift+click a line number; a range link's
-   landing): a band on its own side. The unified layout's context row has one
-   text cell with no side class. */
+   landing): a band on its own side, laid OVER the cell's colour (an added or
+   deleted line keeps its tint). The unified layout's context row has one text
+   cell with no side class. */
 table.diff tr.rng-l > td.l, table.diff tr.rng-r > td.r,
-table.diff tr.same.rng-l > td.side:not(.l):not(.r), table.diff tr.same.rng-r > td.side:not(.l):not(.r) { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+table.diff tr.same.rng-l > td.side:not(.l):not(.r), table.diff tr.same.rng-r > td.side:not(.l):not(.r) { background-image: linear-gradient(color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--accent) 14%, transparent)); }
 /* The lines a note covers when it covers several: a bar on the inner edge of
    that side's line number. */
 table.diff tr.nbar-l > td.no.l, table.diff tr.nbar-r > td.no.r { box-shadow: inset -3px 0 0 var(--accent); }

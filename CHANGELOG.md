@@ -48,6 +48,30 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `texttemplates.js`, tested under node by
   `internal/web/texttemplatesjs_test.go`.
 
+## Range links in gg web
+
+### Added
+
+- **Opening a range link marks its lines in the browser.** A `gg://…:a-b`
+  link (pasted into the page's `#` prompt, `gg open --web`, `gg session
+  navigate`) lands on the first line and draws a band over lines a-b on the
+  link's side — in a diff, in the stacked diff (inside the file's own
+  section) and in the file viewer. Folded lines inside the range are
+  unfolded. A diff that holds only part of the range bands what is there and
+  says so; a range of uncommitted lines that changed is refused in the
+  resolver's words ("the link is no longer valid: lines a-b of … have
+  changed since it was copied").
+- **Marking lines and copying a range link.** Shift+click on a line NUMBER
+  marks the lines from the marked line to it, on that number's side. Inside
+  the band the right-click menu offers **copy gg link to lines a-b** (the
+  viewer: **copy file link (lines a-b)**); uncommitted lines carry the block
+  fingerprint, exactly as the terminal's `L` writes it. `esc` drops the band
+  first (then the staging selection, then what it did before); a plain click
+  drops it too. The staging selection ignores the gesture: shift+click on a
+  changed row's code still selects rows to stage.
+- **A bar beside the lines of a note that covers several** (the terminal's
+  `▎`), in the diff and the stacked diff, on the note's side.
+
 ## A note over marked lines
 
 ### Added
