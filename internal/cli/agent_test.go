@@ -153,3 +153,32 @@ func TestAgentFlagsAfterPositionals(t *testing.T) {
 		t.Fatalf("kill <id> --remove must parse and reach the tool: %d %q", code, errOut)
 	}
 }
+
+// Serial: installs a static state watcher. The list shows the activity word
+// after the state; the screen leads with the activity and the dialog's
+// choices when there is one.
+func TestAgentListAndScreenShowActivity(t *testing.T) {
+	dir, full := agentEnvFor(t, nil)
+	code, out, _ := runAgentCLI(t, dir, "", "list")
+	if code != 0 || strings.Contains(out, "idle") {
+		t.Fatalf("unclassified list = %d %q", code, out)
+	}
+	id := domain.SessionID(full[strings.LastIndex(full, "/")+1:])
+	restore := domain.UseSessionStates(domain.NewStaticStates(map[domain.SessionID]domain.SessionActivity{
+		id: {State: domain.ActivityQuestion, Since: time.Now(), Stalled: true,
+			Options: []domain.ActivityOption{{Key: "1", Label: "Yes"}, {Key: "2", Label: "No"}}},
+	}))
+	defer restore()
+	code, out, _ = runAgentCLI(t, dir, "", "list")
+	if code != 0 || !strings.Contains(out, "  running  question  stalled  ") {
+		t.Fatalf("list = %d %q", code, out)
+	}
+	code, out, _ = runAgentCLI(t, dir, "", "list", "--json")
+	if code != 0 || !strings.Contains(out, `"activity":"question"`) || !strings.Contains(out, `"stalled":true`) {
+		t.Fatalf("list --json = %d %q", code, out)
+	}
+	code, out, _ = runAgentCLI(t, dir, "", "screen", full)
+	if code != 0 || !strings.HasPrefix(out, "activity: question (1. Yes · 2. No)\n") {
+		t.Fatalf("screen = %d %q", code, out)
+	}
+}

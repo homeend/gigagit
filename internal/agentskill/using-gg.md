@@ -1059,8 +1059,18 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   returns to you when it ends. `tool` is a session command named in the
   user's `[agents] spawn`.
 - `agent_list` / `gg agent list [--json]` — every session of this gg;
-  `mine` marks the agents you started.
-- `agent_screen {id}` / `gg agent screen <id>` — its visible console text.
+  `mine` marks the agents you started. `activity` is what the agent is
+  doing, read off its screen: `working`, `idle` (its turn is over, it waits
+  for input), `question` (it waits for a decision — read the choices from
+  `agent_screen`); absent when gg cannot tell. `stalled` means it printed
+  nothing for two minutes while apparently busy. `activity_since` is when
+  that began. Poll `agent_list` to wait for a worker: `idle` after `working`
+  means its turn ended.
+- `agent_screen {id}` / `gg agent screen <id>` — its visible console text,
+  with `activity` and, at a question, `options` (`key` is the digit to
+  `agent_send` as a key for a numbered choice; `pick:<i>` names a
+  cursor-style choice gg cannot press for you yet — answer it with
+  `up`/`down`/`enter` keys instead).
 - `agent_send {id, text?, enter?, keys?}` / `gg agent send <id> [text…]
   [--no-enter] [--key esc]…` — paste text (up to 64 KiB), then Enter (default
   when there is text), then keys (`enter esc tab up down … ctrl+c 1 space`). Only agents

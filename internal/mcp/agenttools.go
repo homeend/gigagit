@@ -32,9 +32,11 @@ type agentListOut struct {
 	Agents []domain.AgentEntry `json:"agents"`
 }
 type agentScreenOut struct {
-	ID    string `json:"id"`
-	State string `json:"state"`
-	Text  string `json:"text"`
+	ID       string                  `json:"id"`
+	State    string                  `json:"state"`
+	Text     string                  `json:"text"`
+	Activity string                  `json:"activity,omitempty" jsonschema:"what the agent is doing: working | idle | question (it waits for a decision — see options); absent when gg cannot tell"`
+	Options  []domain.ActivityOption `json:"options,omitempty" jsonschema:"the dialog's choices at a question: key is the digit to press (numbered) or pick:<i> (cursor-style, not pressable yet), label its text"`
 }
 type agentTaskOut struct {
 	Brief    string `json:"brief"`
@@ -71,8 +73,8 @@ func RegisterAgentTools(srv *sdk.Server, caller func(*sdk.CallToolRequest) (stri
 			if _, err := caller(req); err != nil {
 				return nil, agentScreenOut{}, err
 			}
-			st, text, err := domain.AgentScreen(in.ID)
-			return nil, agentScreenOut{ID: in.ID, State: st, Text: text}, err
+			sc, err := domain.AgentScreen(in.ID)
+			return nil, agentScreenOut{ID: in.ID, State: sc.State, Text: sc.Text, Activity: sc.Activity, Options: sc.Options}, err
 		})
 	sdk.AddTool(srv, toolAgentSend(),
 		func(_ context.Context, req *sdk.CallToolRequest, in agentSendIn) (*sdk.CallToolResult, empty, error) {
@@ -109,10 +111,10 @@ func toolAgentStart() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_start", Description: "Start a worker agent in a worktree with a task; the worktree claim passes to the worker."}
 }
 func toolAgentList() *sdk.Tool {
-	return &sdk.Tool{Name: "agent_list", Description: "Every agent session of this gg; mine = started by you.", Annotations: readOnlyAnnotations()}
+	return &sdk.Tool{Name: "agent_list", Description: "Every agent session of this gg; mine = started by you; activity = working | idle | question (needs a decision), stalled = silent for two minutes.", Annotations: readOnlyAnnotations()}
 }
 func toolAgentScreen() *sdk.Tool {
-	return &sdk.Tool{Name: "agent_screen", Description: "A session's visible console text.", Annotations: readOnlyAnnotations()}
+	return &sdk.Tool{Name: "agent_screen", Description: "A session's visible console text, what the agent is doing (activity) and a dialog's choices (options).", Annotations: readOnlyAnnotations()}
 }
 func toolAgentSend() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_send", Description: "Type into an agent you started: paste text, then Enter (default when there is text), then keys."}

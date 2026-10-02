@@ -152,7 +152,8 @@ func TestSpawnedWorkerGetsChannelEnv(t *testing.T) {
 	want := "u=http://127.0.0.1:9/mcp p=" + ov + " t=64"
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		_, text, _ := AgentScreen(res.ID)
+		sc, _ := AgentScreen(res.ID)
+		text := sc.Text
 		if strings.Contains(text, want) {
 			break
 		}
@@ -177,7 +178,8 @@ func TestAgentSendTypesAndEnters(t *testing.T) {
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		_, text, err := AgentScreen(target)
+		sc, err := AgentScreen(target)
+		text := sc.Text
 		if err == nil && strings.Contains(text, "gg-42") {
 			break
 		}
@@ -298,5 +300,40 @@ func TestServiceForDirIsTheTUIOpener(t *testing.T) {
 	}
 	if got := strings.TrimSpace(res.Stdout); !strings.Contains(got, "BatchMode=yes") {
 		t.Fatalf("GIT_SSH_COMMAND = %q, want ssh BatchMode", got)
+	}
+}
+
+// Serial: installs a static state watcher. Agents read what a session is
+// doing from agent_list and its dialog choices from agent_screen.
+func TestAgentListAndScreenCarryActivity(t *testing.T) {
+	_, wt, _, ov := spawnFixture(t, 5)
+	res, _, err := SpawnAgent(context.Background(), SpawnSpec{Req: AgentStartRequest{Caller: ov, Worktree: wt, Tool: "Sleeper", Prompt: "x"}, Cols: 80, Rows: 24, Approved: approveAll})
+	if err != nil {
+		t.Fatal(err)
+	}
+	since := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	restore := UseSessionStates(NewStaticStates(map[SessionID]SessionActivity{
+		localID(res.ID): {State: ActivityQuestion, Since: since, Stalled: true,
+			Options: []ActivityOption{{Key: "1", Label: "Yes"}, {Key: "2", Label: "No"}}},
+	}))
+	defer restore()
+	for _, e := range AgentList(ov) {
+		switch e.ID {
+		case res.ID:
+			if e.Activity != "question" || !e.ActivitySince.Equal(since) || !e.Stalled {
+				t.Fatalf("worker row %+v", e)
+			}
+		case ov:
+			if e.Activity != "" || e.Stalled {
+				t.Fatalf("an unclassified session carries activity: %+v", e)
+			}
+		}
+	}
+	sc, err := AgentScreen(res.ID)
+	if err != nil || sc.Activity != "question" || len(sc.Options) != 2 || sc.Options[1].Label != "No" || sc.State != "running" {
+		t.Fatalf("screen = %+v %v", sc, err)
+	}
+	if sc, _ = AgentScreen(ov); sc.Activity != "" || sc.Options != nil {
+		t.Fatalf("unclassified screen = %+v", sc)
 	}
 }
