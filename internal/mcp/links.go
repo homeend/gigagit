@@ -51,6 +51,8 @@ type linkResolveOut struct {
 	PreviewSource string `json:"preview_source,omitempty"`
 	PreviewTarget string `json:"preview_target,omitempty"`
 	Line          int    `json:"line,omitempty"`
+	// EndLine is the last line of a range link (…:A-B); absent for one line.
+	EndLine int `json:"end_line,omitempty"`
 	// AskedLine / Anchor / AnchorMatches: a fingerprinted link's line as the
 	// link named it, and what became of it ("same" | "moved" | "changed").
 	// Line is where the text is NOW.
@@ -65,6 +67,16 @@ type linkResolveOut struct {
 	// points — only which row a consumer reveals there (spec §3.3).
 	HintKind string `json:"hint_kind,omitempty"`
 	HintID   string `json:"hint_id,omitempty"`
+}
+
+type linkTextOut struct {
+	Repo   RepoInfo `json:"repo"`
+	Path   string   `json:"path"`
+	Target string   `json:"target"`
+	Side   string   `json:"side"`
+	Start  int      `json:"start"`
+	End    int      `json:"end"`
+	Lines  []string `json:"lines"`
 }
 
 type linkListOut struct {
@@ -113,7 +125,8 @@ func (s *Server) registerLinkTools(srv *sdk.Server) {
 		Name: "gg_link_resolve",
 		Description: "Take apart a gg:// link: which checkout, path, state, commit, branch tip, change-set, line, side, hunk and landing hint it names. " +
 			"Use this when a human hands you a gg:// link and you need the place it points at. " +
-			"A link ending :N~<fingerprint> is re-anchored: line is where that text is now, asked_line what the link named, anchor same|moved|changed.",
+			"A link ending :N~<fingerprint> is re-anchored: line is where that text is now, asked_line what the link named, anchor same|moved|changed. " +
+			"A range link (:A-B) reports end_line; a range whose lines changed since it was copied is refused, never re-found.",
 		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in linkResolveIn) (*sdk.CallToolResult, linkResolveOut, error) {
 		out := linkResolveOut{Repo: s.repoInfo()}
@@ -135,7 +148,7 @@ func (s *Server) registerLinkTools(srv *sdk.Server) {
 		if pv := res.Preview; pv != nil {
 			out.PreviewSource, out.PreviewTarget = pv.Source, pv.Target
 		}
-		out.Line = res.Line
+		out.Line, out.EndLine = res.Line, res.End
 		if res.Anchor.State != "" {
 			out.AskedLine, out.Anchor, out.AnchorMatches = res.Anchor.Asked, res.Anchor.State, res.Anchor.Matches
 		}
@@ -144,6 +157,30 @@ func (s *Server) registerLinkTools(srv *sdk.Server) {
 		}
 		out.Hunk = res.Hunk
 		out.HintKind, out.HintID = res.Hint.Kind, res.Hint.ID
+		return nil, out, nil
+	})
+
+	sdk.AddTool(srv, &sdk.Tool{
+		Name: "gg_link_text",
+		Description: "The lines a gg:// line or range link names (…:N or …:A-B), read from the version and side it names. " +
+			"Use this when a human pastes a link to code they marked and asks about it. " +
+			"A range whose lines changed since the link was copied is refused: ask for a fresh link.",
+		Annotations: readOnlyAnnotations(),
+	}, func(ctx context.Context, _ *sdk.CallToolRequest, in linkResolveIn) (*sdk.CallToolResult, linkTextOut, error) {
+		out := linkTextOut{Repo: s.repoInfo(), Lines: []string{}}
+		if err := s.repoCheck(); err != nil {
+			return nil, out, err
+		}
+		res, err := s.resolveLinkArg(ctx, in.Link)
+		if err != nil {
+			return nil, out, err
+		}
+		lt, err := s.svc.LinkText(ctx, res)
+		if err != nil {
+			return nil, out, err
+		}
+		out.Path, out.Target, out.Side = lt.Path, lt.Target, string(lt.Side)
+		out.Start, out.End, out.Lines = lt.Start, lt.End, lt.Lines
 		return nil, out, nil
 	})
 
