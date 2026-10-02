@@ -282,6 +282,16 @@ func (s *Session) SubscriberCount() int { return s.bc.count() }
 // Info returns a snapshot of the session's metadata.
 func (s *Session) Info() Info { s.mu.Lock(); defer s.mu.Unlock(); return s.info }
 
+// LastOutput is when the child last printed anything; the zero time before
+// its first chunk. The stall clock of the session-state watcher.
+func (s *Session) LastOutput() time.Time {
+	n := s.lastOut.Load()
+	if n == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, n)
+}
+
 // Done is closed once the exit has been recorded.
 func (s *Session) Done() <-chan struct{} { return s.done }
 

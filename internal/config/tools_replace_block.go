@@ -85,6 +85,10 @@ func ReplaceToolCommandIf(path, key, want string, tc ToolCommand) (bool, error) 
 		if want != "" && ToolFingerprint(one.Tools.Command[0]) != want {
 			return false, ErrToolBlockChanged
 		}
+		if old := one.Tools.Command[0]; !tc.HasScreenRules() {
+			// A template upgrade brings no screen rules: the user's stay.
+			tc.ScreenWorking, tc.ScreenWaiting, tc.ScreenQuestion = old.ScreenWorking, old.ScreenWaiting, old.ScreenQuestion
+		}
 		index := 0 // this block's position among the file's tool blocks
 		for j := 0; j < si; j++ {
 			if tools[j] {

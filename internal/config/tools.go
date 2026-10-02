@@ -23,6 +23,14 @@ type ToolCommand struct {
 	Frontends []string `toml:"frontends"` // limits which frontends offer this command: any of "tui", "web", "cli". Empty = everywhere.
 	Command   string   `toml:"command"`   // shell command with <token> placeholders
 
+	// Session commands only: RE2 pattern lists that say what the agent's
+	// screen shows (working / waiting at its prompt / asking a question),
+	// replacing gg's built-in rules for that agent when any is set. Not
+	// part of the fingerprint: tuning them is not editing the template.
+	ScreenWorking  []string `toml:"screen_working"`
+	ScreenWaiting  []string `toml:"screen_waiting"`
+	ScreenQuestion []string `toml:"screen_question"`
+
 	// The template stamp (written only on blocks gg generated from the
 	// catalog): the family's template version, the variant's agent range,
 	// and ToolFingerprint of the block as written — a later mismatch means
@@ -39,6 +47,11 @@ type ToolsConfig struct {
 
 // Key identifies a command for the overlay collision rule.
 func (tc ToolCommand) Key() string { return tc.Category + "\x00" + tc.Name }
+
+// HasScreenRules reports a block that brings its own screen rules.
+func (tc ToolCommand) HasScreenRules() bool {
+	return len(tc.ScreenWorking)+len(tc.ScreenWaiting)+len(tc.ScreenQuestion) > 0
+}
 
 // Stamped reports a block gg generated from the catalog.
 func (tc ToolCommand) Stamped() bool { return tc.TemplateVersion > 0 }
@@ -206,9 +219,42 @@ func renderToolCommand(b *strings.Builder, tc ToolCommand) {
 		fmt.Fprintf(b, "agent_range = %q\n", tc.AgentRange)
 		fmt.Fprintf(b, "fingerprint = %q\n", ToolFingerprint(tc))
 	}
+	for _, l := range []struct {
+		key  string
+		list []string
+	}{{"screen_working", tc.ScreenWorking}, {"screen_waiting", tc.ScreenWaiting}, {"screen_question", tc.ScreenQuestion}} {
+		if len(l.list) == 0 {
+			continue
+		}
+		quoted := make([]string, len(l.list))
+		for i, s := range l.list {
+			quoted[i] = tomlString(s)
+		}
+		fmt.Fprintf(b, "%s = [%s]\n", l.key, strings.Join(quoted, ", "))
+	}
 	b.WriteString("command = '''\n")
 	b.WriteString(strings.TrimRight(tc.Command, "\n"))
 	b.WriteString("\n'''\n")
+}
+
+// tomlString writes s as a TOML basic string: Go's %q would emit \x and
+// \a escapes TOML does not know.
+func tomlString(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch {
+		case r == '\\' || r == '"':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case r < 0x20 || r == 0x7f:
+			fmt.Fprintf(&b, `\u%04X`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 // RenderToolCommand is the block text the config writer lays out for tc,

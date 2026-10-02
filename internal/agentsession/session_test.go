@@ -189,3 +189,19 @@ func TestStartCwdOverridesTheProcessDirOnly(t *testing.T) {
 		t.Fatalf("Info.Dir = %q, want the worktree identity", got)
 	}
 }
+
+func TestLastOutputStampsTheLatestChunk(t *testing.T) {
+	before := time.Now()
+	quiet := startSh(t, "sleep 30")
+	if got := quiet.LastOutput(); !got.IsZero() {
+		t.Fatalf("a silent session has LastOutput %v", got)
+	}
+	s := startSh(t, "echo hi; sleep 30")
+	deadline := time.Now().Add(5 * time.Second)
+	for s.LastOutput().IsZero() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := s.LastOutput(); got.Before(before) {
+		t.Fatalf("LastOutput = %v, want after %v", got, before)
+	}
+}
