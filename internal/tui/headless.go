@@ -309,6 +309,9 @@ func (h *Headless) Close() {
 	if m.sessWatch != nil && m.sessWatch.cancel != nil {
 		m.sessWatch.cancel()
 	}
+	if m.actWatch != nil && m.actWatch.cancel != nil {
+		m.actWatch.cancel()
+	}
 	if m.taskTrack != nil && m.taskTrack.cancel != nil {
 		m.taskTrack.cancel()
 	}

@@ -52,6 +52,10 @@ func sessionRowBody(info domain.SessionInfo) string {
 	if info.State == domain.SessionExited {
 		return "└ ○ " + info.Label + "  " + i18n.T("exited (%d)", info.ExitCode)
 	}
+	// The row is narrow: a known activity replaces the running age.
+	if act := sessionActivityText(info.ID); act != "" {
+		return "└ ● " + info.Label + "  " + act
+	}
 	return "└ ● " + info.Label + "  " + i18n.T("running %s", formatElapsed(time.Since(info.Started)))
 }
 

@@ -541,8 +541,11 @@ func (m Model) renderInterface() string {
 			}
 			rows, idx := m.panelViewWindowed(p, g.boxH[p])
 			var decos []rowDecorator
-			if p == panelPRs {
+			switch p {
+			case panelPRs:
 				decos = m.prDecorators(idx)
+			case panelWorktrees, panelBranches:
+				decos = m.sessionDecorators(p, idx)
 			}
 			boxes = append(boxes, m.renderPanel(p, m.leftPanelLabel(p), rows, decos, g.leftW, g.boxH[p]))
 		}
