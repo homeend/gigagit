@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Recycle a worktree: what is uncommitted
+
+### Changed
+
+- The question a recycle asks about a worktree with uncommitted changes
+  (commit / shelve / discard / abort) now lists what those changes are: up to
+  ten files, each with its status — the first letter is the staged change,
+  the second the not-staged one, `.` means none (`M.` staged, `.M` not staged,
+  `MM` both), `??` an untracked file, `UU` a conflict, a rename reads
+  `old → new`. Past ten files the list ends with `… and N more`. The same
+  text shows in the TUI, in gg web and in `gg worktree recycle`.
+  In the TUI a path too wide for the question is cut in the middle, keeping
+  the file name; it is never wrapped.
+
 ## A note over marked lines in gg web
 
 ### Added

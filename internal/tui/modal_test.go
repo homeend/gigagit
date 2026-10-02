@@ -154,3 +154,34 @@ func TestModalWrapsLongOptionWithinTerminal(t *testing.T) {
 		t.Fatalf("short option 'cancel' missing:\n%s", ansi.Strip(out))
 	}
 }
+
+// A recycle.dirty file row wider than the modal keeps its status marker and
+// the file name on ONE row (the path is cut in the middle), never wrapped.
+func TestModalRecycleOverviewElidesLongPath(t *testing.T) {
+	t.Parallel()
+	long := "a-very-long-directory-name/with-another-long-directory/and-one-more-level-of-nesting/file.txt"
+	m := New(nil)
+	m.width, m.height = 60, 30
+	m.modal = &decisionState{req: engine.PromptReq(engine.RecycleDirtyDecisionID,
+		"%s has uncommitted changes on %s:\n\n%s", []string{"commit", "abort"},
+		"/w", "side", "M. t1.txt\n?? "+long+"\nR. "+long+" → "+long)}
+	out := ansi.Strip(m.renderModal())
+	var row, ren string
+	for _, l := range strings.Split(out, "\n") {
+		switch {
+		case strings.Contains(l, "?? "):
+			row = l
+		case strings.Contains(l, "R. "):
+			ren = l
+		}
+	}
+	if !strings.Contains(out, "M. t1.txt") {
+		t.Fatalf("a short row must be untouched:\n%s", out)
+	}
+	if !strings.Contains(row, "?? …/") || !strings.Contains(row, "…") || !strings.Contains(row, "file.txt") {
+		t.Fatalf("long row must keep marker + elided path + file name on one row:\n%s", out)
+	}
+	if !strings.Contains(ren, " → ") || strings.Count(ren, "file.txt") != 2 {
+		t.Fatalf("a rename row must keep both file names on one row:\n%s", out)
+	}
+}
