@@ -29,7 +29,8 @@ const commitIdentW = 16
 // and one separator space.
 const commitMarkerW = 4
 
-// markerReview marks a commit that has a stored AI review.
+// markerReview marks a commit that holds a review: a stored AI review, or a
+// range review (commitReviewed).
 const markerReview = "✎"
 
 const (
@@ -130,7 +131,7 @@ type commitIdent struct {
 	extra     []string // additional local-branch tips at this commit (multi-tip)
 	tags      []string // tag names at this commit (RefTag), rendered in the deco group
 	count     int      // number of local-branch tips at this commit (for the count badge)
-	reviewed  bool     // the commit has a stored AI review (✎)
+	reviewed  bool     // the commit holds a review: an AI review or a range review (✎)
 }
 
 // commitIdentOf derives the identity from a commit's local refs (a tip) or, when

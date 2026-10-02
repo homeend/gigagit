@@ -1853,6 +1853,11 @@ them on a file row.
   `/api/compare-links?a=&b=` — a pair landing, so the pair note lane arms
   itself — and hangs the way back on the comparison (`state.compare.back`);
   `drillOut` asks `leaveRangeReview` before leaving the files stage.
+- The Commits marker (2026-10-02): a commit with any `ScopesByCommit` entry is
+  REVIEWED — `Model.commitReviewed` (TUI ✎) and `reviewMarkTitle` in
+  reviews.js's pure section (web ✎ + tooltip; commits.js's one `rvmark` site
+  goes through it). The TUI row's ◆ N is `NoteCounts.PlainCommitNotes` — the
+  notes written in no scope — so a range review is never counted twice.
 - `unfoldFilesForOpen` (files.js): opening a commit (`openCommit`,
   `openCommitByHash`) unfolds a folded file list and stores it — a commit
   opens onto its files, never onto the strip. The exception is a caller going

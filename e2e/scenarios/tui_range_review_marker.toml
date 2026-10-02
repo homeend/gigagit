@@ -1,0 +1,68 @@
+name = "tui: a commit holding a range review reads as reviewed (✎), in both forms"
+
+# feature = "grow a" + "add c" on top of main's "add a b". Three kinds of
+# notes, each on a different commit:
+#
+#   add c    a BRANCH review: a note written in the merge preview
+#            feature → main. It is stored on the source tip, on a.txt — a
+#            file "add c" does not change.
+#   grow a   a RANGE review: a note written in the commit pair
+#            main..feature~1, stored on the pair's newer commit.
+#   add a b  a plain note on the commit's own change: no range.
+#
+# A range review is a review: its commit carries ✎ in Commits, the marker an
+# AI review has, and its notes are NOT counted again as ◆ N. The plain note is
+# the only ◆ on the list, and earns no ✎.
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" }, { write = "b.txt", content = "b\n" },
+  { commit = "add a b" },
+  { branch = "feature" }, { switch = "feature" },
+  { write = "a.txt", content = "a\nmore a\n" },
+  { commit = "grow a" },
+  { write = "c.txt", content = "c\n" },
+  { commit = "add c" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd = ["note", "add", "--preview", "main...feature", "--file", "a.txt", "--new-line", "2", "--summary", "why more a?"]
+exit = 0
+
+[[run]]
+cmd = ["note", "add", "--preview", "main..feature~1", "--file", "a.txt", "--new-line", "2", "--summary", "pair: is this needed?"]
+exit = 0
+
+[[run]]
+cmd = ["note", "add", "--rev", "main", "--file", "b.txt", "--new-line", "1", "--summary", "b is terse"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+# Commits: ✎ on both range-review commits and no ◆ beside it; the plain note
+# is ◆ 1 with no ✎.
+[[tui.step]]
+name = "commits"
+keys = ["right"]
+screen_contains = ["✎ feature add c", "✎ feature grow a", "add a b  ◆ 1"]
+screen_excludes = ["add c  ◆", "grow a  ◆", "✎ *main"]
+
+# The branch review, from its commit: one Range reviews row, not a loose
+# a.txt row.
+[[tui.step]]
+name = "branch-review-row"
+keys = ["enter"]
+screen_contains = ["Range reviews", "feature → main  ◆ 1", "A  c.txt"]
+screen_excludes = ["a.txt"]
+
+# The range review (a commit pair), from ITS commit: the row names the pair.
+# a.txt is a file of "grow a" too, so its own row carries the note as well.
+[[tui.step]]
+keys = ["esc", "down"]
+
+[[tui.step]]
+name = "pair-review-row"
+keys = ["enter"]
+screen_contains = ["Range reviews", "M  a.txt  ◆ 1"]
+screen_excludes = ["feature → main"]

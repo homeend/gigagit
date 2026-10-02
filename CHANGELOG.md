@@ -59,6 +59,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   landing. Before, the page could not reach those notes from the commit at
   all.
 
+- **A commit holding a range review reads as reviewed: ✎.** In the TUI's
+  Commits list and in the web page's commit list, a commit whose notes were
+  written in a merge preview (a branch review) or a commit pair carries the
+  ✎ an AI-reviewed commit has. In the TUI those notes are no longer counted
+  again in the row's ◆ N — it counts the notes written outside any range
+  (`NoteCounts.PlainCommitNotes`), so a tip that read `◆ 8` for one branch
+  review now reads `✎`. The web row's tooltip says which kind of review it
+  is (`reviewMarkTitle`). New e2e scenario `tui_range_review_marker` pins
+  both forms with golden screens.
+
 ### Fixed
 
 - **Opening a commit in the web page brings a folded file list back.** With

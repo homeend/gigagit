@@ -6,6 +6,7 @@ import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { rev, startReview } from "./review.js";
+import { reviewMarkTitle } from "./reviews.js";
 import { addCommitEntry } from "./sidebar.js";
 import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta, unfoldFilesForOpen } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
@@ -88,10 +89,12 @@ function reviewedHashes() {
 function rowHTML(row, i, flat) {
   const sel = i === state.cursor ? " sel" : "";
   const fl = row.hash === state.flashHash ? " flash" : "";
-  // ◉ marked for a batch action; ✎ has an AI review (the TUI's marker).
+  // ◉ marked for a batch action; ✎ holds a review — an AI review or a range
+  // review (the TUI's marker).
+  const rvTitle = reviewMarkTitle(row.hash, reviewedHashes().has(row.hash), state.noteCounts && state.noteCounts.scopes_by_commit);
   const mark =
     (state.cmarks.has(row.hash) ? "◉ " : "") +
-    (reviewedHashes().has(row.hash) ? `<span class="rvmark" title="has an AI review — open the commit to read it">✎</span>` : "");
+    (rvTitle ? `<span class="rvmark" title="${esc(rvTitle)}">✎</span>` : "");
   const refs = (row.refs || [])
     .map((r) => `<span class="ref ${r.kind}${r.head ? " head" : ""}">${esc(r.name)}</span>`)
     .join("");
