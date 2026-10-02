@@ -528,6 +528,11 @@ func splitLinkLine(t string) (rest string, side NoteSide, line, end int, fp stri
 			num, fp, hasFP = num[:j], num[j+1:], true
 		}
 	}
+	// A sign is not part of a line number: "+3" / "3-+7" would otherwise fall
+	// through as a path tail in the local form (which allows a colon).
+	if strings.Contains(num, "+") && linkLineSpec(strings.ReplaceAll(num, "+", "")) {
+		return "", "", 0, 0, "", fmt.Errorf("%w: a line number is digits only, got %q", ErrLink, num)
+	}
 	first, last, isRange := num, "", false
 	if j := strings.IndexByte(num, '-'); j > 0 {
 		if _, nerr := linkNum(num[:j]); nerr == nil {

@@ -157,7 +157,7 @@ func (m Model) noteAnchorOfMarks() (a noteAnchor, row int, refusal string, on bo
 // in the words of the view on screen: a commit pair (a set with no branch
 // names) is a compare, not a preview.
 func oldSideRefusal(set *domain.PreviewNoteSet) string {
-	if set.Source == "" {
+	if set.IsPair() {
 		return i18n.T("notes in a compare anchor on the new side")
 	}
 	return i18n.T("notes in a preview anchor on the new side")

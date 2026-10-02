@@ -871,8 +871,8 @@ hook (success only). The `c` gate reads the same slot (`noteKey`'s ctx
 argument); collapsing a stack section drops its range. Follow-ups (2026-10-02):
 a link's line is digits only (`linkNum`); `firstHeldLine` lands a range link
 on the first line the diff holds; `setDiffRange` repaints only the touched
-stack slots (`repaintStackSlots`) and `showSlotDiff` drops a re-read slot's
-band; `markCls(r, only)` bands a unified one-side row only on the band's
+stack slots (`repaintStackSlots`) and `quietReloadSlot` drops the band of a slot whose
+rows changed; `markCls(r, only)` bands a unified one-side row only on the band's
 side; `c` refuses a partly held range; the note title names a range
 (`R8-10`, both frontends); `domain.ErrNoteRange` → 400. Left on purpose: a
 one-line shift+click in a compare still marks the row (it is the only way

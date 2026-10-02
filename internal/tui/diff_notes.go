@@ -581,11 +581,7 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 	if r.Note.Side == model.NoteSideOld {
 		sideMark = "L"
 	}
-	t += " · " + v.noteAddr.Path + " " + sideMark
-	if r.Range[0] > 0 && r.Range[0] < r.Range[1] {
-		t += strconv.Itoa(r.Range[0]) + "-" // a note over several lines names them
-	}
-	t += strconv.Itoa(r.Range[1])
+	t += " · " + v.noteAddr.Path + " " + sideMark + noteLines(r.Range)
 	if r.Status == model.NoteStale {
 		if v.previewSet != nil {
 			// In a preview a note whose lines a later commit changed is the
@@ -599,6 +595,14 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 		t += " · " + sanitizeLine(strings.Join(r.Note.Tags, " · ")) // the review's meta
 	}
 	return t
+}
+
+// noteLines names a note's lines in a title: "8-10" over several, else "10".
+func noteLines(rng [2]int) string {
+	if rng[0] > 0 && rng[0] < rng[1] {
+		return strconv.Itoa(rng[0]) + "-" + strconv.Itoa(rng[1])
+	}
+	return strconv.Itoa(rng[1])
 }
 
 // forgeNoteTitle is a forge review thread's top rule: "review · author · 2d ago
@@ -618,9 +622,9 @@ func (v *diffView) forgeNoteTitle(r domain.ResolvedNote) string {
 	case isFileLevelNote(r):
 		where += " " + i18n.T("(file)")
 	case r.Note.Side == model.NoteSideOld:
-		where += " L" + strconv.Itoa(r.Range[1])
+		where += " L" + noteLines(r.Range)
 	default:
-		where += " R" + strconv.Itoa(r.Range[1])
+		where += " R" + noteLines(r.Range)
 	}
 	parts = append(parts, where)
 	if model.NoteHasTag(r.Note, model.NoteTagResolved) {

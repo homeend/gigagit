@@ -647,6 +647,21 @@ async function landStackLine(path, side, line, end = 0) {
     at = firstHeldLine((s.diff || {}).rows, side, line, end);
     tr = at ? rowAt(sec, at) : null;
   }
+  if (!tr && end > line && firstHeldLine((s.diff || {}).rows, side, line, end)) {
+    // Held but folded away (changes only): the band unfolds its rows, so band
+    // first — from any row of the section — and find the line afterwards.
+    const any = sec.querySelector("tr[data-i]");
+    if (!any) return false;
+    at = firstHeldLine(s.diff.rows, side, line, end);
+    const held = setDiffRange(any, { side, first: line, last: end });
+    const sec3 = sectionEl(k);
+    const row = sec3 && rowAt(sec3, at);
+    if (row) {
+      markDiffRow(row, side, at, true);
+      row.scrollIntoView({ block: "center" });
+    }
+    return { held };
+  }
   if (!tr) return false;
   markDiffRow(tr, side, at);
   if (end > line) {
@@ -916,7 +931,6 @@ function showSlotDiff(slot, d, hunks) {
   if (!st) return;
   const k = st.slots.indexOf(slot);
   if (k < 0) return;
-  if (slot.diff) slot.range = null; // a re-read diff: the band was over the previous rows (renderDiff's rule)
   slot.diff = d;
   slot.load = "ok";
   slot.hunks = hunks;
@@ -996,6 +1010,7 @@ async function quietReloadSlot(st, s) {
     s.hunks = hunks;
     return;
   }
+  s.range = null; // other rows now: the band was over the previous ones (the single-file view's rule for a new diff)
   showSlotDiff(s, d, hunks);
 }
 

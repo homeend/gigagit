@@ -54,10 +54,7 @@ func (mk cellMark) gutterCell(num string, gut int) string {
 	if !mk.note || !strings.HasSuffix(cell, " ") {
 		return mk.gut.Render(cell)
 	}
-	// The bar wears the number's background (a cursor row's), not the
-	// terminal's: its own colour is a foreground only.
-	bar := mk.noteBar.Background(mk.gut.GetBackground())
-	return mk.gut.Render(strings.TrimSuffix(cell, " ")) + bar.Render(noteBarGlyph)
+	return mk.gut.Render(strings.TrimSuffix(cell, " ")) + mk.noteBar.Render(noteBarGlyph)
 }
 
 // noMark is a function, not a package var: it reads st(), and package-level

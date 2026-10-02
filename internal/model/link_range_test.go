@@ -109,11 +109,11 @@ func TestParseLinkRefNamedLikeALine(t *testing.T) {
 }
 
 // A line is digits only: a sign is not part of a number, so ":3-+7" and ":+3"
-// are not the lines 3-7 or 3 — the link is refused (its tail is no line, and a
-// path cannot hold a colon).
+// are not the lines 3-7 or 3 — the link is refused, in the local form too
+// (whose path may hold a colon, so the tail would pass as a path).
 func TestParseLinkLineIsDigitsOnly(t *testing.T) {
 	t.Parallel()
-	for _, in := range []string{"gg://r/f.go:3-+7", "gg://r/f.go:+3", "gg://r/f.go:3-+7~0a1b2c3d", "gg://r/f.go:+3-7"} {
+	for _, in := range []string{"gg://r/f.go:3-+7", "gg://r/f.go:+3", "gg://r/f.go:3-+7~0a1b2c3d", "gg://r/f.go:+3-7", "gg:///work/r/f.go:+3", "gg:///work/r/f.go:3-+7"} {
 		if l, err := ParseLink(in); !errors.Is(err, ErrLink) {
 			t.Errorf("%s parsed as lines %d-%d (%v)", in, l.Line, l.End, err)
 		}

@@ -16,6 +16,10 @@ func TestNoteBoxTitleNamesARange(t *testing.T) {
 	if got := v.noteBoxTitle(r); got != "note · a.go R8-10" {
 		t.Errorf("range title = %q", got)
 	}
+	// …and the edit / reply form reads the same resolved range.
+	if tgt, ok := v.noteTargetIn(r); !ok || tgt.first != 8 || tgt.line != 10 {
+		t.Errorf("target = %+v, want lines 8-10", tgt)
+	}
 	r.Note.Side, r.Range = model.NoteSideOld, [2]int{4, 4}
 	if got := v.noteBoxTitle(r); got != "note · a.go L4" {
 		t.Errorf("one-line title = %q", got)

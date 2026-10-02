@@ -18,10 +18,10 @@ func TestRangeMinorsWiring(t *testing.T) {
 		{files, "repaintStackSlots(touched);", "a stack repaints only the files whose band changed"},
 		{files, "are not all in this diff", "c refuses a range the diff holds only in part"},
 		{files, "\"notes in a compare anchor on the new side\"", "a commit pair's old side is refused in compare words"},
-		{view, "if (slot.diff) slot.range = null;", "a re-read slot diff drops its band"},
+		{view, "s.range = null; // other rows now", "a slot whose file changed on disk drops its band"},
 		{view, "at = firstHeldLine((s.diff || {}).rows, side, line, end);", "a stack lands a range on the first line it holds"},
 		{live, "at = firstHeldLine((state.lastDiff || {}).rows, side, line, s.end_line);", "a range link lands on the first line the diff holds"},
-		{viewer, "if (!getSelection().isCollapsed) return;", "viewer: a text drag is not a click"},
+		{viewer, "if (!picked.isCollapsed && $(\"viewer-body\").contains(picked.anchorNode)) return;", "viewer: a text drag is not a click"},
 		{viewer, "if (view.range) view.range = viewerRange(view.range.start, view.range.end, view.lines.length);", "viewer: the band is clamped when the file shrinks"},
 	} {
 		if !strings.Contains(c.src, c.pin) {
@@ -29,7 +29,7 @@ func TestRangeMinorsWiring(t *testing.T) {
 		}
 	}
 	// The drag guard sits BEFORE the cursor moves and the band is cleared.
-	guard, clear := strings.Index(viewer, "if (!getSelection().isCollapsed) return;"), strings.Index(viewer, "if (clearViewerRange()) return;")
+	guard, clear := strings.Index(viewer, "if (!picked.isCollapsed"), strings.Index(viewer, "if (clearViewerRange()) return;")
 	if guard < 0 || clear < guard {
 		t.Error("viewer.js: the drag guard must come before the band is cleared")
 	}

@@ -12,8 +12,6 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 - **A link's line number is digits only.** `gg://…:3-+7` and `:+3` are
   refused; they used to read as lines 3-7 and 3.
-- **The note bar keeps the cursor row's background** in the terminal diff
-  (it punched a one-column hole in the cursor colour).
 - **A range note names its lines everywhere.** The note box title reads
   `R8-10` (terminal and browser), and the terminal's edit / reply form is
   headed "lines 8-10" like the add form.
@@ -24,9 +22,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   lands on the first line it holds; one the diff holds none of says "lines
   a-b are not in …'s diff".
 - **gg web, stacked diff:** marking a range repaints only the files whose
-  band changed, not every loaded file; a file whose diff is re-read (it
-  changed on disk, lines were staged) drops its band, as the single-file
-  view does.
+  band changed, not every loaded file; a file that changed on disk drops
+  its band, as the single-file view does.
 - **gg web, narrow (one-column) layout:** a deleted row inside a new-side
   band is no longer half tinted; a mark on the old side of a context row
   survives a repaint.

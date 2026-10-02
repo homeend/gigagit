@@ -333,7 +333,8 @@ $("viewer-body").addEventListener("click", (e) => {
   }
   // A drag that selected text (it may end on the line it began on, which is a
   // click) is copying, not pointing: the cursor and the band stay.
-  if (!getSelection().isCollapsed) return;
+  const picked = getSelection();
+  if (!picked.isCollapsed && $("viewer-body").contains(picked.anchorNode)) return;
   view.cur = Number(row.dataset.i) + 1;
   if (clearViewerRange()) return;
   paintCursor();
