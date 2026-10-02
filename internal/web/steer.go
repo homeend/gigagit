@@ -89,17 +89,17 @@ type steerWire struct {
 	Line   int    `json:"line,omitempty"`
 	// AnchorNote says a fingerprinted link's line moved or changed
 	// (domain.AnchorNote); the page shows it on its op line.
-	AnchorNote string   `json:"anchor_note,omitempty"`
+	AnchorNote string `json:"anchor_note,omitempty"`
 	// EndLine is the last line of a RANGE link (> Line). The page lands on
 	// Line and names the range on its op line (AnchorNote); marking the
 	// lines in the browser is a follow-up.
-	EndLine int `json:"end_line,omitempty"`
-	Step       string   `json:"step,omitempty"`
-	Sources    []string `json:"sources,omitempty"`
-	Panel      string   `json:"panel,omitempty"`
-	Start      int      `json:"start,omitempty"`
-	End        int      `json:"end,omitempty"`
-	Tone       string   `json:"tone,omitempty"`
+	EndLine int      `json:"end_line,omitempty"`
+	Step    string   `json:"step,omitempty"`
+	Sources []string `json:"sources,omitempty"`
+	Panel   string   `json:"panel,omitempty"`
+	Start   int      `json:"start,omitempty"`
+	End     int      `json:"end,omitempty"`
+	Tone    string   `json:"tone,omitempty"`
 	// HintKind/HintID name the UI surface a navigate's link was copied from
 	// (spec §3.3) — "bookmark", "shelf" or "stash", the closed set
 	// model.LinkHint's grammar already validated, so the page can reveal it
