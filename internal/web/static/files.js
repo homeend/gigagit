@@ -23,7 +23,7 @@ import { openShelfNotes } from "./shelfnotes.js";
 import { leaveRangeReview, leaveReview, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
-import { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
+import { activeDiff, rangeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -2948,9 +2948,10 @@ async function landNote(id) {
 
 // noteWrite runs one mutation through the single-flight gate and reloads both
 // the open diff's notes and the badge counts.
-function noteWrite(label, path, body) {
+function noteWrite(label, path, body, saved = null) {
   const run = runOnce("note-write", async () => {
     await postJSON(path, body);
+    if (saved) saved(); // only a write that landed: a failed one changes nothing on screen
     await Promise.all([fetchNotes(), refreshNoteCounts()]);
   });
   if (!run) {
@@ -2961,10 +2962,29 @@ function noteWrite(label, path, body) {
 }
 
 
+// rangeAnchor is where a note over a marked range goes: the range's side, its
+// lines first..no, the note under the last one. null = no range (one line is
+// not a range). Pure.
+function rangeAnchor(range) {
+  if (!range || !(range.last > range.first)) return null;
+  return { side: range.side, first: range.first, no: range.last };
+}
+
+
+// noteAnchorLabel names an anchor in the add prompt's title. Pure.
+function noteAnchorLabel(at) {
+  return at.first && at.first < at.no ? `${at.side} lines ${at.first}-${at.no}` : `${at.side} line ${at.no}`;
+}
+
+
 // addNotePrompt asks for a summary + optional rationale (the prompt's two-field
-// shape) and anchors the note on the clicked row, else the first changed row.
+// shape) and anchors the note on the marked range (one note over its lines,
+// in the file that holds the band), else the clicked row, else the first
+// changed row.
 function addNotePrompt() {
-  const ad = activeDiff();
+  const rd = rangeDiff();
+  const ranged = rangeAnchor(rd && rd.range);
+  const ad = ranged ? rd : activeDiff();
   if (ad.ctx && ad.ctx.review) {
     opLine("a review's notes are read-only", true);
     return;
@@ -2972,7 +2992,10 @@ function addNotePrompt() {
   const q = noteQuery(ad.ctx);
   if (!q) return;
   const scope = noteScope();
-  let at = ad.row || firstChangedRow(scope);
+  // A stack's band may sit in another file than the one under the cursor: the
+  // title then says whose lines these are.
+  const where = ranged && rd.slot && rd.slot !== activeDiff().slot ? ` of ${q.get("path")}` : "";
+  let at = ranged || ad.row || firstChangedRow(scope);
   if (!at) return;
   // A preview's old side is the MERGE BASE, which no stored address names, so
   // there is nothing there to anchor to (domain.ErrPreviewOldSide). The refusal
@@ -2984,7 +3007,9 @@ function addNotePrompt() {
     // named. Fall forward to the file's first new-side row instead of
     // refusing a file that has a perfectly addressable side. An explicit
     // old-side click still gets the refusal — there the user meant that line.
-    const fwd = !ad.row && firstNewSideRow(scope);
+    // The same goes for a marked range: its lines were named, so it is refused
+    // too and its band stays.
+    const fwd = !ranged && !ad.row && firstNewSideRow(scope);
     if (fwd) at = fwd;
     if (at.side === "old") {
       opLine("notes in a preview anchor on the new side", true);
@@ -2992,20 +3017,28 @@ function addNotePrompt() {
     }
   }
   openPrompt({
-    title: `Add note on ${at.side} line ${at.no}`,
+    title: `Add note on ${noteAnchorLabel(at)}${where}`,
     placeholder: "summary",
     body: { label: "rationale (optional)" },
     onSubmit: (summary, rationale) =>
-      noteWrite("note", "/api/notes/add", {
-        path: q.get("path"),
-        rev: q.get("rev") || "",
-        state: q.get("state"),
-        side: at.side,
-        line: at.no,
-        summary,
-        rationale,
-        preview: noteScopeSpec(ad.ctx.preview),
-      }),
+      noteWrite(
+        "note",
+        "/api/notes/add",
+        {
+          path: q.get("path"),
+          rev: q.get("rev") || "",
+          state: q.get("state"),
+          side: at.side,
+          line: at.no,
+          first: ranged ? at.first : 0,
+          summary,
+          rationale,
+          preview: noteScopeSpec(ad.ctx.preview),
+        },
+        // The note now says what the band said: the saved note's bar takes over.
+        // Only THIS band — one marked while the write ran is not this note's.
+        ranged ? () => (rd.slot ? rd.slot.range : state.diffRange) === rd.range && clearDiffRange() : null,
+      ),
   });
 }
 
@@ -3057,8 +3090,9 @@ registerHelp({
   html:
     "<b>shift+click a line number</b> (in a diff, a stacked diff or the file viewer) marks the lines from the " +
     "marked line to it, on that number's side; right-click inside the band for <b>copy gg link to lines a-b</b>. " +
-    "A range link that opens marks the same lines again. <b>esc</b> or a plain click drops the band. A note that " +
-    "covers several lines shows a bar beside their line numbers",
+    "A range link that opens marks the same lines again. In a diff or a stacked diff <b>c</b> with a band up writes ONE note over those lines " +
+    "(on the band's side, shown under the last line; the band goes once the note is saved). <b>esc</b> or a plain " +
+    "click drops the band. A note that covers several lines shows a bar beside their line numbers",
 });
 registerHelp({
   key: "review notes",

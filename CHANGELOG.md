@@ -20,6 +20,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   In the TUI a path too wide for the question is cut in the middle, keeping
   the file name; it is never wrapped.
 
+## A note over marked lines in gg web
+
+### Added
+
+- **`c` with a range marked writes one note over it.** In the browser, mark
+  lines with shift+click on a line number and press `c`: the prompt is
+  titled "Add note on new lines 3-5" and the note covers those lines, on the
+  band's side, shown under the last one with the bar beside the lines — the
+  twin of the terminal's `c` over marked lines. In a stacked diff the file
+  that holds the band takes the note, whichever section is current (the
+  prompt then names the file); folding a section drops its band. The band
+  is dropped once the note is saved; a failed write or a cancelled prompt
+  leaves it. One marked line is the ordinary note. A merge preview's old
+  side is refused ("notes in a preview anchor on the new side") and the band
+  stays.
+- `POST /api/notes/add` takes an optional `first` line: the note's range is
+  `first..line` (`first` past `line` or negative is a 400). Without it, or
+  with 0, the note is one line, as before.
+
 ## Text templates: follow-up fixes 2
 
 ### Changed

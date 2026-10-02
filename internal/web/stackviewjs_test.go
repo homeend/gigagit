@@ -263,9 +263,10 @@ func TestStackNoteContextIsShared(t *testing.T) {
 	if !strings.Contains(files, "const sec = tr.closest(\".stk-file\");") {
 		t.Fatal("files.js: markDiffRow must record the row on its own slot")
 	}
-	// …and the note prompt reads that slot, not the globals.
+	// …and the note prompt reads that slot (or the one holding a marked
+	// range), not the globals.
 	add := jsFunc(t, "files.js", "addNotePrompt")
-	if !strings.Contains(add, "const ad = activeDiff();") || !strings.Contains(add, "noteQuery(ad.ctx)") {
+	if !strings.Contains(add, "const ad = ranged ? rd : activeDiff();") || !strings.Contains(add, "noteQuery(ad.ctx)") {
 		t.Fatal("files.js: addNotePrompt must act on the active slot's address")
 	}
 }
@@ -277,7 +278,7 @@ func TestStackNoteContextIsShared(t *testing.T) {
 func TestStackNoteGatesReadTheActiveSlot(t *testing.T) {
 	t.Parallel()
 	keys := readStatic(t, "keys.js")
-	if !strings.Contains(keys, "notesArmed(activeDiff().ctx)") {
+	if !strings.Contains(keys, "function noteKey(e, key, ctx = activeDiff().ctx) {") || !strings.Contains(keys, "notesArmed(ctx)") {
 		t.Fatal("keys.js: noteKey must gate on the active slot's context")
 	}
 	files := readStatic(t, "files.js")
