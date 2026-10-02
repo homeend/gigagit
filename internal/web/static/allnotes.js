@@ -11,9 +11,9 @@ import { $, charWidth, elideNoteSummary, esc, getJSON, postJSON, state } from ".
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { opLine, showLocalConfirm } from "./ops.js";
+import { openReview, openScopeRange } from "./reviews.js";
 import { openCommitByHash } from "./commits.js";
 import { armRangeNotes, landNote, showRangeNotes, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
-import { openReview } from "./reviews.js";
 import { openShelfNotes } from "./shelfnotes.js";
 
 // This module builds its own DOM: index.html's `hidden` class has NO global
@@ -378,7 +378,7 @@ function activate(i) {
         openShelfNotes({ id: r.target.shelf }, r.target.label, r.note.id);
         return;
       }
-      openTarget(r.target, r.note.id);
+      openTarget(r.target, r.note.id, r.note.preview || "");
       return;
     case "review":
       // The review lives in the note: it opens even when the commit is gone.
@@ -399,8 +399,25 @@ function notice(text) {
 // openTarget opens t's diff with the popup hidden and, when id is set, lands
 // on that note once the diff's notes have painted; esc on the diff reopens
 // the popup.
-async function openTarget(t, id) {
+//
+// A range review's note (scope: the review it was written in) opens IN its
+// review: the range's diff of the file, where the note is drawn — the commit
+// it is stored on does not show it and may not even change the file. A range
+// that can no longer be opened falls back to that commit.
+async function openTarget(t, id, scope) {
   an.notice = "";
+  if (t.state === "commit" && scope && !t.missing) {
+    hide();
+    if (await openScopeRange(t.commit, scope)) {
+      const i = state.files.findIndex((f) => f.path === t.path);
+      if (i >= 0) {
+        await openFile(i);
+        setDiffBack(reshow);
+        if (id && !(await landNote(id))) opLine("the note is not in this diff now", true);
+        return;
+      }
+    }
+  }
   if (t.state === "commit") {
     if (t.missing) return notice("That commit no longer exists.");
     hide();

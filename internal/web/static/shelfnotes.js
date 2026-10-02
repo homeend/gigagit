@@ -74,6 +74,14 @@ async function openShelfNotes(e, label, noteId) {
   const got = await getJSON("/api/shelf/notes?id=" + encodeURIComponent(e.id)).catch(() => null);
   let notes = (got && got.notes) || [];
   if (noteId) notes = notes.filter((n) => n.id === noteId);
+  openNotesWindow(label, notes);
+}
+
+
+// openNotesWindow is the read-only notes dialog itself: the given notes under
+// "Notes on <label>". A commit's Notes rows (reviews.js) read their notes in
+// it too — notes on a file the commit does not change have no diff to sit in.
+function openNotesWindow(label, notes) {
   const el = buildDialog();
   $("gg-shelf-notes-title").textContent = "Notes on " + label;
   $("gg-shelf-notes-body").innerHTML = notes.length ? notes.map(noteHTML).join("") : `<div class="meta">no notes</div>`;
@@ -88,4 +96,4 @@ async function openShelfNotes(e, label, noteId) {
   });
 }
 
-export { noteHTML, openShelfNotes };
+export { openNotesWindow, noteHTML, openShelfNotes };

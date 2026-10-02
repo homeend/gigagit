@@ -284,3 +284,21 @@ func TestCommitRowMarkGoesThroughReviewMarkTitle(t *testing.T) {
 		t.Fatalf("commits.js: %d rvmark sites, want the one in rowHTML", n)
 	}
 }
+
+// A commit's Notes rows: the paths with plain notes at the commit that it
+// does not change — a changed file badges its own row, another commit's notes
+// never count, and the list is sorted.
+func TestNotedElsewherePaths(t *testing.T) {
+	t.Parallel()
+	got := runReviewsPure(t, `
+const plain = { "abc:z/y.txt": 2, "abc:a.txt": 1, "abc:c.txt": 1, "abc:gone.txt": 0, "def:b.txt": 1 };
+console.log(JSON.stringify(notedElsewherePaths(plain, "abc", [{ path: "c.txt" }])));
+console.log(JSON.stringify(notedElsewherePaths(plain, "def", [{ path: "b.txt" }])));
+console.log(JSON.stringify(notedElsewherePaths(undefined, "abc", [])));
+console.log(JSON.stringify(notedElsewherePaths(plain, "", [])));
+`)
+	want := "[\"a.txt\",\"z/y.txt\"]\n[]\n[]\n[]"
+	if got != want {
+		t.Errorf("noted paths:\n%s\nwant:\n%s", got, want)
+	}
+}

@@ -148,8 +148,16 @@ func TestCommitFileBadgeCountsPlainNotes(t *testing.T) {
 	}
 	// Armed BEFORE the diff opens, so its first notes read is the scoped one.
 	an := staticSrc(t, "allnotes.js")
-	if arm, open := strings.Index(an, "armRangeNotes();"), strings.Index(an, "await openFile(i);"); arm < 0 || open < arm {
-		t.Fatal("allnotes.js: a commit note must arm the range notes before its diff opens")
+	arm := strings.Index(an, "armRangeNotes();")
+	if arm < 0 {
+		t.Fatal("allnotes.js: a commit note opened on its commit must arm the range notes")
+	}
+	if next := strings.Index(an[arm:], "await openFile(i);"); next < 0 || next > 160 {
+		t.Fatal("allnotes.js: the range notes must be armed right before that diff opens")
+	}
+	// A review's note opens in its review first; its commit is the fallback.
+	if rng := strings.Index(an, "await openScopeRange(t.commit, scope)"); rng < 0 || rng > arm {
+		t.Fatal("allnotes.js: a range review's note must try its review before its commit")
 	}
 	if !strings.Contains(an, "showRangeNotes()") {
 		t.Fatal("allnotes.js: a note opened from View all notes must ask for the range notes")

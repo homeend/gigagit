@@ -95,3 +95,19 @@ name = "pair-review-row"
 keys = ["enter"]
 screen_contains = ["Range reviews", "M  a.txt"]
 screen_excludes = ["feature → main", "a.txt  ◆"]
+
+# View all notes lists every note where it is stored. A review's note opens in
+# its REVIEW: the range's diff of a.txt — a file its commit ("add c") does not
+# even change — with the review's note drawn under its line.
+[[tui.step]]
+keys = ["esc", "esc"]
+
+[[tui.step]]
+name = "all-notes"
+keys = ["C-p", "all", "space", "notes", "enter", "more", "down", "down", "down"]
+screen_contains = ["why more a?"]
+
+[[tui.step]]
+name = "all-notes-opens-the-review"
+keys = ["enter"]
+screen_contains = ["Range review: feature → main", "more a", "why more a?"]

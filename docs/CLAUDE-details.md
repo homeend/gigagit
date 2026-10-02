@@ -1911,6 +1911,20 @@ them on a file row.
   (source `refs/gg/pr/<n>`) is exempt: its local notes carry no portable
   name. A note that must show in a preview has to be WRITTEN in it (test
   fixtures stamp `Preview`); address reads (`--rev`, `NotesAt`) stay whole.
+- View all notes → a review's note (2026-10-02): the TUI's enter on a note
+  with `Note.Preview` goes to `openAllNotesReviewNote` (all_notes_scope.go):
+  a loading diff layer over the popup, then `ScopeAtCommit` + `PairNotes`
+  (`Only` = the scope) + the file's row from `CompareFiles` (its status decides
+  which sides the diff reads), and `onAllNotesScope` stamps the layer
+  (`previewSet`, `noteAddr`, the `cmp:` diffTag, the landing's tag) before
+  `loadCompareDiffCmd`. On a range that cannot be resolved it pops the layer
+  and opens the stored commit (`rangeNotes` diff). The web's `openTarget`
+  takes the note's `preview` and tries `openScopeRange` (reviews.js — the
+  shared core of `openRangeReview`) first, the commit second.
+- The web's Notes rows (2026-10-02): `notedElsewherePaths` (reviews.js pure
+  section) over `plain_by_commit_path`; rows carry `data-noted`, share the
+  head-row cursor (`state.reviewSel = "noted:<path>"`), and open
+  `openNotesWindow` (shelfnotes.js) with `/api/notes` for that path.
 - `unfoldFilesForOpen` (files.js): opening a commit (`openCommit`,
   `openCommitByHash`) unfolds a folded file list and stores it — a commit
   opens onto its files, never onto the strip. The exception is a caller going
