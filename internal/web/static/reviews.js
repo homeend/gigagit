@@ -15,6 +15,7 @@ import { NOTE_BADGE_COLS, loadPairCounts, enterFilesStage, fileCols, filePathHTM
 import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
 import { focusPane } from "./keys.js";
+import { openNotesWindow } from "./shelfnotes.js";
 import { runLinkCompare } from "./linkcompare.js";
 
 // --- reviews pure (guarded against Go) ---
@@ -93,6 +94,21 @@ function reviewMarkTitle(hash, hasReview, scopes) {
   return "";
 }
 
+// notedElsewherePaths lists, sorted, the paths with PLAIN notes at commit sha
+// that the commit does not change (the TUI's notedElsewhere): they have no
+// file row to carry their ◆N, so the commit lists them under "Notes". plain
+// is /api/notes/counts' plain_by_commit_path ("<sha>:<path>" → threads) —
+// a range review's notes are its own row, never loose paths here.
+function notedElsewherePaths(plain, sha, files) {
+  if (!sha) return [];
+  const changed = new Set((files || []).map((f) => f.path));
+  const pre = sha + ":";
+  return Object.keys(plain || {})
+    .filter((k) => k.startsWith(pre) && plain[k] > 0 && !changed.has(k.slice(pre.length)))
+    .map((k) => k.slice(pre.length))
+    .sort();
+}
+
 // --- end reviews pure ---
 
 
@@ -124,11 +140,22 @@ function commitScopes() {
 const scopeSel = (scope) => "scope:" + scope;
 
 
+// commitNoted is the open commit's Notes rows: the paths with plain notes at
+// this commit that it does not change.
+function commitNoted() {
+  if (state.filesMode !== "commit") return [];
+  return notedElsewherePaths(state.noteCounts.plain_by_commit_path, state.fileSha, state.files);
+}
+
+const notedSel = (path) => "noted:" + path;
+
+
 // headRowIds are the rows above a commit's first file, top to bottom.
 function headRowIds() {
   return commitReviewList()
     .map((r) => r.id)
-    .concat(commitScopes().map((sc) => scopeSel(sc.scope)));
+    .concat(commitScopes().map((sc) => scopeSel(sc.scope)))
+    .concat(commitNoted().map(notedSel));
 }
 
 
@@ -156,8 +183,49 @@ function reviewRowsHTML() {
               `title="open the range these notes were written in">${esc(sc.label)}${noteBadgeHTML(sc.n)}</li>`
           )
           .join("")
-      : "")
+      : "") +
+    notedRowsHTML()
   );
+}
+
+
+// notedRowsHTML is the commit's "Notes" section: one row per path with plain
+// notes here that the commit does not change. Not files (no data-i): the
+// notes are read in the notes window, there being no diff of the file here.
+function notedRowsHTML() {
+  const paths = commitNoted();
+  if (!paths.length) return "";
+  const plain = state.noteCounts.plain_by_commit_path;
+  const cols = fileCols(NOTE_BADGE_COLS);
+  return (
+    `<li class="sect">Notes</li>` +
+    paths
+      .map(
+        (p) =>
+          `<li class="rev${state.reviewSel === notedSel(p) ? " sel" : ""}" data-noted="${esc(p)}">` +
+          filePathHTML(p, cols) +
+          noteBadgeHTML(plain[state.fileSha + ":" + p]) +
+          `</li>`
+      )
+      .join("")
+  );
+}
+
+
+// openNotedPath reads a Notes row's notes: the plain notes on path at the
+// commit on screen (/api/notes leaves range reviews' notes to their reviews).
+async function openNotedPath(path) {
+  const sha = state.fileSha;
+  if (state.filesMode !== "commit" || !sha) return;
+  let d;
+  try {
+    d = await getJSON("/api/notes?" + new URLSearchParams({ path, rev: sha, state: "commit" }));
+  } catch (e) {
+    opLine("note: " + (e.message || e), true);
+    return;
+  }
+  if (state.fileSha !== sha) return; // the reader moved on
+  openNotesWindow(path + " @ " + sha.slice(0, 7), d.notes || []);
 }
 
 
@@ -186,35 +254,47 @@ function stepCommitReviews(delta) {
 function openSelectedReview() {
   if (!state.reviewSel || !headRowIds().includes(state.reviewSel)) return false;
   const sc = commitScopes().find((x) => scopeSel(x.scope) === state.reviewSel);
+  const noted = commitNoted().find((p) => notedSel(p) === state.reviewSel);
   if (sc) openRangeReview(sc.scope);
+  else if (noted) openNotedPath(noted);
   else openReview(state.reviewSel, reviewBackFromCommit(state.reviewSel));
   return true;
 }
 
 
-// openRangeReview opens a Range review row of the commit on screen: the range
-// its notes were written in, frozen at this commit (/api/scope-range), as a
-// pair landing — every file of the range with its ◆N, the notes on their
-// lines. esc from that file list comes back to the commit (leaveRangeReview).
+// openScopeRange puts a range review on screen: the range its notes were
+// written in, frozen at commit (/api/scope-range), as a pair landing narrowed
+// to the review's own notes — every file of the range with its ◆N, the notes
+// on their lines. still() says whether the reader is where they asked from
+// once the range is resolved. It answers the range ({a, b, label}), or null
+// when it could not be opened (the op line says why).
+async function openScopeRange(commit, scope, still) {
+  let d;
+  try {
+    d = await getJSON("/api/scope-range?" + new URLSearchParams({ commit, scope }));
+  } catch (e) {
+    opLine("range review: " + (e.message || e), true);
+    return null;
+  }
+  if (still && !still()) return null; // the reader moved on
+  if (!(await runLinkCompare("a=" + d.a + "&b=" + d.b))) return null;
+  const c = state.compare;
+  if (!c || !c.pair || c.pair.a !== d.a || c.pair.b !== d.b) return null; // superseded
+  c.pair.scope = scope; // the review under its own name (pairNoteCtx)
+  state.previewCounts = null; // the landing's counts were read under the pair's name
+  loadPairCounts();
+  $("files-title").textContent = "Range review: " + d.label;
+  return d;
+}
+
+
+// openRangeReview opens a Range review row of the commit on screen; esc from
+// the range's file list comes back to the commit (leaveRangeReview).
 async function openRangeReview(scope) {
   const back = reviewBackFromCommit(scopeSel(scope));
   if (state.filesMode !== "commit" || !back.sha) return;
-  let d;
-  try {
-    d = await getJSON("/api/scope-range?" + new URLSearchParams({ commit: back.sha, scope }));
-  } catch (e) {
-    opLine("range review: " + (e.message || e), true);
-    return;
-  }
-  if (state.filesMode !== "commit" || state.fileSha !== back.sha) return; // the reader moved on
-  if (!(await runLinkCompare("a=" + d.a + "&b=" + d.b))) return;
-  const c = state.compare;
-  if (!c || !c.pair || c.pair.a !== d.a || c.pair.b !== d.b) return; // superseded
-  c.back = back;
-  c.pair.scope = scope; // the review's own notes only (pairNoteCtx)
-  state.previewCounts = null; // the landing's counts were every note along the pair
-  loadPairCounts();
-  $("files-title").textContent = "Range review: " + d.label;
+  const d = await openScopeRange(back.sha, scope, () => state.filesMode === "commit" && state.fileSha === back.sha);
+  if (d) state.compare.back = back;
 }
 
 
@@ -495,11 +575,12 @@ registerHelp({
     "the previous / next file the review notes. esc goes back; right-click a review row or the " +
     "Overview for <b>Delete review</b>. Notes written in a merge preview or a commit pair are stored on the " +
     "range's newest commit: it carries <b>✎</b> in the commit list like an AI-reviewed one, and lists them as one row under <b>Range reviews</b> (◆N) — click it to " +
-    "open the range the notes were written in, every file with its notes; esc returns to the commit",
+    "open the range the notes were written in, every file with its notes; esc returns to the commit. Notes written " +
+    "outside any review on a file the commit does not change are listed under <b>Notes</b>; click one to read them",
 });
 
 
-export { reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

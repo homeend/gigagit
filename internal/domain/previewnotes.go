@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -42,13 +43,23 @@ type PreviewNoteSet struct {
 	Tip            string   // full sha of the source tip: the write target
 	Base           string   // merge-base(target, source)
 	Commits        []string // merge-base..source, newest first (includes Tip)
-	// Only narrows the set to ONE review: when set, just the notes written in
-	// that scope (Note.Preview) are gathered, and a note written here joins
-	// it. A range review opened from its commit (ScopeAtCommit) sets it, so
-	// the review shows its own notes and no other review's — the count its
-	// row carries. "" gathers every note along the range, as a saved preview
-	// or pair does.
+	// Only names the review this set shows when that is not the set's own
+	// name: a range review opened from its commit (ScopeAtCommit) is a frozen
+	// commit pair on screen but still the review "<target>...<source>" its
+	// notes were written in. "" = the set's own name (Pair).
 	Only string
+}
+
+// scope is the review whose notes the set shows: a scope shows the notes
+// written IN it (Note.Preview) and no others — not a plain note on one of its
+// commits, which is the commit's, and not another review's. "" = no such
+// filter: a pull request's set, whose local notes are written against gg's
+// private ref and carry no portable name.
+func (set PreviewNoteSet) scope() string {
+	if _, pr := git.ParsePRRef(set.Source); pr {
+		return ""
+	}
+	return set.Pair()
 }
 
 // OK reports whether the pair resolved to a previewable range.
@@ -208,14 +219,13 @@ func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path
 		return nil, err
 	}
 	in := set.commitSet()
-	// A set narrowed to one review keeps that review's threads: its roots by
-	// their scope, and their replies by their root — a reply carries no scope
-	// of its own.
+	// The set keeps its own review's threads: the roots by their scope, and
+	// their replies by their root — a reply carries no scope of its own.
 	var ofReview map[string]bool
-	if set.Only != "" {
+	if sc := set.scope(); sc != "" {
 		ofReview = map[string]bool{}
 		for _, n := range all {
-			if !n.IsReply() && n.Preview == set.Only {
+			if !n.IsReply() && n.Preview == sc {
 				ofReview[n.ID] = true
 			}
 		}
@@ -414,7 +424,7 @@ func (s *Service) previewStoreCounts(ctx context.Context, set PreviewNoteSet) (m
 	if !set.OK() {
 		return map[string]int{}, 0, nil
 	}
-	key := set.Tip + ":" + set.Base + ":" + set.Only
+	key := set.Tip + ":" + set.Base + ":" + set.scope()
 	s.mu.Lock()
 	if e, ok := s.previewCounts[key]; ok {
 		s.mu.Unlock()
