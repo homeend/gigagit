@@ -1,0 +1,53 @@
+name = "range links: a link names lines a-b, gg link text prints them, a changed block is refused"
+
+[input]
+steps = [
+  { write = "f.txt", content = "one\ntwo\nthree\nfour\nfive\nsix\n" },
+  { commit = "c1" },
+  { write = "f.txt", content = "one\ntwo\nthree\nfour\nfive\nsix\nseven\n" },
+]
+
+[[run]]
+cmd             = ["link", "f.txt:3-5"]
+exit            = 0
+stdout_contains = ["/f.txt:3-5~8d2b577f"]
+
+[[run]]
+cmd             = ["link", "resolve", "gg://{{cwd}}/f.txt:3-5~8d2b577f"]
+exit            = 0
+stdout_contains = ["new:3-5"]
+
+[[run]]
+cmd             = ["link", "text", "gg://{{cwd}}/f.txt:3-5~8d2b577f"]
+exit            = 0
+stdout_contains = ["f.txt @ working tree (new), lines 3-5", "3\tthree", "4\tfour", "5\tfive"]
+stdout_excludes = ["two", "six"]
+
+# a commit's range needs no fingerprint
+[[run]]
+cmd             = ["link", "--rev", "HEAD", "f.txt:1-2"]
+exit            = 0
+stdout_contains = [":1-2"]
+stdout_excludes = ["~"]
+
+# the block is not at 2-4: a range is never re-found, the link is refused
+[[run]]
+cmd             = ["link", "text", "gg://{{cwd}}/f.txt:2-4~8d2b577f"]
+exit            = 1
+stderr_contains = ["the link is no longer valid: lines 2-4 of f.txt have changed since it was copied"]
+stdout_excludes = ["two"]
+
+[[run]]
+cmd             = ["diff", "gg://{{cwd}}/f.txt:2-4~8d2b577f"]
+exit            = 1
+stderr_contains = ["the link is no longer valid"]
+
+# a note on a range covers the range
+[[run]]
+cmd  = ["note", "add", "gg://{{cwd}}/f.txt:3-5~8d2b577f", "--summary", "these three"]
+exit = 0
+
+[[run]]
+cmd             = ["note", "list", "--file", "f.txt"]
+exit            = 0
+stdout_contains = ["3-5"]

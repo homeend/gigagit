@@ -59,6 +59,42 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Web:** the same view in `gg web` — `alt+x`, ☰ → **text templates…** or
   the palette: list, text, variables, a fill dialog, the rendered text with
   **copy and close**, and add/edit in a text box.
+## Links to a range of lines
+
+### Added
+
+- **A `gg://` link can name a range of lines.** Mark lines in the diff view
+  (either side, single file or stacked), the file viewer or the View-file
+  preview (`space`, move, `space`) and `L` / "Copy link to selected lines (N)"
+  copies `gg://…/<path>[@<target>]:<a>-<b>` (`:old:<a>-<b>` on the old side).
+  Opening the link — the `#` prompt, `gg open`, `gg session navigate` — marks
+  the same lines on the same side again, cursor on the first, and the notice
+  reads `opened <path>:<a>-<b>`. `L` keeps the selection, so enter can still
+  copy the text. A stacked selection that reaches into a second file has no
+  link.
+- **`gg link text <link> [--json]`** (MCP `gg_link_text`) prints exactly the
+  lines a line or range link names, from the version and side it names — how
+  an agent turns a pasted link into the code the human marked. The old side
+  of a renamed file is read at its old path; a file with no old side says so
+  (`<path> has no text on the old side of <commit>`).
+- `gg link <path>:<a>-<b>`; `gg link resolve --json` / `gg_link_resolve`
+  report `end_line`; `gg session highlight add <link>` bands a range link's
+  lines; `gg note add <range link>` writes a note covering the range.
+- **A note about several lines marks them**: a bar in the gutter beside every
+  line of its range, in the note's colour, above the note's box (hunk notes
+  from agents included). No box, no bar: a note whose anchor line is gone
+  from the view or folded away marks nothing.
+
+### Changed
+
+- **An uncommitted range link is strict.** It carries one fingerprint of the
+  whole marked block (`:<a>-<b>~<fp>`), and gg never re-finds a range: if any
+  marked line changed, or the block moved, every consumer refuses the link —
+  `the link is no longer valid: lines <a>-<b> of <path> have changed since it
+  was copied` (CLI exit 1). Single-line links keep following their text.
+- The web page lands a range link on its first line and names the range on
+  its op line; marking and copying ranges in the browser is a follow-up.
+
 ## A range review is one row of the commit that holds it
 
 ### Changed
@@ -91,6 +127,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   landing. Before, the page could not reach those notes from the commit at
   all.
 
+- **A range review's notes show in the review, and only there.** Notes
+  written in a merge preview (a branch review) or a commit pair no longer
+  appear in the commit's own view: a file the commit changes is not badged
+  ◆ N for them, and the commit's own diff of that file (single file and
+  stacked) does not draw them — in the TUI and in the web page. They are the
+  review's: counted on its **Range reviews** row and drawn when the review is
+  opened from it. The opened review in turn shows **its own notes only** —
+  not a plain note on a commit of the range, not another review's — so the
+  per-file counts add up to the row's ◆ N, and a note written there joins the
+  review. View all notes still opens a note where it is stored, with the
+  range notes drawn. Notes written outside any range are unchanged. (A saved
+  merge preview or commit pair opened from the Previews tab still gathers
+  every note along its range.) `domain.PlainNotes`, `PreviewNoteSet.Only`;
+  the web's `/api/notes` leaves range notes out unless `scoped=1`,
+  `/api/notes/counts` carries `plain_by_commit_path`, `/api/pair/notes`
+  takes `scope`. CLI and MCP reads are unchanged — an agent still sees
+  every note at an address.
 - **A commit holding a range review reads as reviewed: ✎.** In the TUI's
   Commits list and in the web page's commit list, a commit whose notes were
   written in a merge preview (a branch review) or a commit pair carries the

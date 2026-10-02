@@ -221,7 +221,7 @@ func (d *openFile) landPendingLine(rows int) (notice string) {
 	n := len(p.lines)
 	if line > n {
 		notice = i18n.T("line %d is past the end of %s (%d lines)", line, d.path, n)
-		line = n
+		line, end = n, 0 // a range that starts past the end has no lines to mark
 	}
 	p.cur = line - 1
 	p.sel = p.clampTop(p.cur-rows/2, rows)

@@ -186,6 +186,7 @@ type stackLanding struct {
 	dir  int
 	side model.NoteSide
 	no   int
+	end  int // a range link's last line (> no): its lines are marked on landing
 }
 
 // spliceStack rebuilds v.lines / v.blocks from the stack's files: per file a
@@ -401,7 +402,8 @@ func (m Model) stackNotesCmd(gen, idx int, d *diffView) tea.Cmd {
 			return stackNotesMsg{gen: gen, idx: idx, notes: ns, err: err}
 		}
 		ns, err := svc.NotesFor(context.Background(), addr, dd)
-		return stackNotesMsg{gen: gen, idx: idx, notes: ns, err: err}
+		// A range review's notes show in the review, not in the commit's stack.
+		return stackNotesMsg{gen: gen, idx: idx, notes: domain.PlainNotes(ns), err: err}
 	}
 }
 

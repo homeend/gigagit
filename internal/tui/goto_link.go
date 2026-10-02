@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -96,6 +97,10 @@ func (m Model) resolvedGotoLink(p *gotoCommitPopup, msg gotoLinkResolvedMsg) (Mo
 	p.resolving = false
 	if msg.err != nil {
 		p.err = i18n.T("cannot open link: %s", msg.err.Error())
+		var stale *domain.LinkStaleError
+		if errors.As(msg.err, &stale) {
+			p.err = i18n.T("the link is no longer valid: lines %d-%d of %s have changed since it was copied", stale.First, stale.Last, stale.Path)
+		}
 		return m, nil
 	}
 	if !msg.same {

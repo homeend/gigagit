@@ -233,9 +233,31 @@ func (m Model) contextLinkText() (string, bool) {
 		return "", false
 	}
 	if _, ok := m.topLayer().(*diffView); ok {
+		// A live selection: the link names its lines, on the cursor's side.
+		// The address is read where the SELECTION is — a frozen one stays in
+		// its file while the cursor walks a stack — so the cursor is lent to
+		// its first line for the length of this call.
+		sel, selOn := m.diffLinkSelection()
+		if selOn {
+			if sel.refusal != "" {
+				return "", false
+			}
+			v := m.diffLayer()
+			defer func(cur int) { v.curLine = cur }(v.curLine)
+			v.curLine = sel.row
+		}
 		side, line, text, has := m.linkAnchorAtCursor()
 		if !has {
 			side, line, text = model.NoteSideNew, 0, ""
+		}
+		if selOn {
+			side, line, text = sel.side, sel.first, sel.block[0]
+		}
+		ranged := func(link string, ok bool) (string, bool) {
+			if !ok || !selOn {
+				return link, ok
+			}
+			return rangeLink(link, sel.last, sel.block)
 		}
 		if addr, ok := m.diffNoteAddress(); ok {
 			// A scope's diff rows are note-addressable at the tip, but the
@@ -244,11 +266,11 @@ func (m Model) contextLinkText() (string, bool) {
 			// on a deletion row there is exactly the "line 0, new side" the
 			// spec asks for; a commit pair's old side is commit a and travels.
 			if set := m.previewNoteSet(); set != nil {
-				return m.scopeLinkFor(set, addr.Path, side, line)
+				return ranged(m.scopeLinkFor(set, addr.Path, side, line))
 			}
-			return m.lineLinkFor(addr, side, line, text)
+			return ranged(m.lineLinkFor(addr, side, line, text))
 		}
-		return m.compareLinkText(side, line, text)
+		return ranged(m.compareLinkText(side, line, text))
 	}
 	// A preview's file list: the row is a file IN THE PREVIEW, not a file of
 	// the tip commit — checked before focusedBookmark, which answers with the
@@ -382,5 +404,120 @@ func (m Model) contextLinkRow() (actionRow, bool) {
 	if !ok {
 		return actionRow{}, false
 	}
-	return m.copyRow("copy-link", i18n.T("Copy link"), i18n.T("Copied link: %s", text), text), true
+	label := i18n.T("Copy link")
+	if n := m.linkSelectionLines(); n > 1 {
+		label = i18n.T("Copy link to selected lines (%d)", n)
+	}
+	return m.copyRow("copy-link", label, i18n.T("Copied link: %s", text), text), true
+}
+
+// linkSel is a diff selection as a link names it: lines first..last on one
+// side of ONE file, with their raw text (the block an uncommitted range link
+// fingerprints). refusal is the translated reason there is no such link.
+type linkSel struct {
+	side        model.NoteSide
+	first, last int
+	row         int // the view line carrying `first`: where the link's address is read
+	block       []string
+	refusal     string
+}
+
+// diffLinkSelection reads the live selection of the diff on top (on == false:
+// none). The side is the cursor's; the range runs from the first to the last
+// selected row that HAS a number on that side — gap rows at the edges are
+// trimmed, and the text comes from the file's full aligned rows, so lines a
+// fold hides inside the range are part of the block. A stack's selection that
+// reaches into another file names no one file and is refused.
+func (m Model) diffLinkSelection() (sel linkSel, on bool) {
+	v := m.diffLayer()
+	if v == nil || !v.lsel.on {
+		return linkSel{}, false
+	}
+	lo, hi, _ := v.lsel.bounds(v.curLine)
+	lo, hi = max(lo, 0), min(hi, len(v.lines)-1)
+	old := v.onOld
+	sel.side = model.NoteSideNew
+	if old {
+		sel.side = model.NoteSideOld
+		if set := m.previewNoteSet(); set != nil && !set.IsPair() {
+			// A merge preview's old side is the merge base, which nothing names.
+			sel.refusal = i18n.T("▸ nothing to link on this side")
+			return sel, true
+		}
+	}
+	file := v.lines[lo].file
+	for i := lo; i <= hi; i++ {
+		ln := v.lines[i]
+		if v.stk != nil && ln.file != file {
+			sel.refusal = i18n.T("▸ a link marks lines of one file")
+			return sel, true
+		}
+		if !ln.isBody() || !sidePresent(ln.Row, old) {
+			continue
+		}
+		no := ln.Row.RightNo
+		if old {
+			no = ln.Row.LeftNo
+		}
+		if no <= 0 {
+			continue
+		}
+		if sel.first == 0 {
+			sel.first, sel.row = no, i
+		}
+		sel.last = no
+	}
+	fv := v
+	if v.stk != nil {
+		fv = v.stk.files[file].d
+	}
+	if sel.first == 0 || fv == nil {
+		sel.refusal = i18n.T("▸ nothing to link on this side")
+		return sel, true
+	}
+	for _, r := range fv.full {
+		if !sidePresent(r, old) {
+			continue
+		}
+		no, text := r.RightNo, r.Right
+		if old {
+			no, text = r.LeftNo, r.Left
+		}
+		if no >= sel.first && no <= sel.last {
+			sel.block = append(sel.block, text)
+		}
+	}
+	if len(sel.block) != sel.last-sel.first+1 {
+		sel.refusal = i18n.T("▸ nothing to link on this side")
+	}
+	return sel, true
+}
+
+// linkSelectionLines is how many lines the link under L / Copy link names
+// when a selection is live (0 = no selection, or one with no link).
+func (m Model) linkSelectionLines() int {
+	if sel, on := m.diffLinkSelection(); on && sel.refusal == "" {
+		return sel.last - sel.first + 1
+	}
+	return 0
+}
+
+// rangeLink turns the link to a range's FIRST line into the link to the whole
+// range first..last. block is the raw text of those lines: an uncommitted
+// range carries its fingerprint (model.BlockFingerprint), which the resolver
+// checks — a block that changed makes the link stale. A one-line range stays
+// the single-line link it already is.
+func rangeLink(link string, last int, block []string) (string, bool) {
+	l, err := model.ParseLink(link)
+	if err != nil || l.Line <= 0 {
+		return "", false
+	}
+	if last <= l.Line {
+		return link, true
+	}
+	l.End, l.Fingerprint = last, ""
+	if l.Target.State != model.StateCommitted {
+		l.Fingerprint = model.BlockFingerprint(block)
+	}
+	return l.String(), true
 }

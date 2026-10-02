@@ -333,6 +333,16 @@ still shows the previewed text), Copy file link carries the cursor line
 that line. `gg link --content <path>:<line>` prints one (exit 1 when the file
 has fewer lines).
 
+With lines marked (`space`, move, `space`) in a diff, the file viewer or a
+preview, `L` / Copy link copies a link to that **range** — `…:42-57`, or
+`…:old:42-57` on the old side. Opening it marks the same lines on the same
+side again. Paste it to an agent with a question; the agent reads the lines
+with `gg link text <link>`. A range link to uncommitted lines is strict: once
+any of those lines changed (or the block moved) the link is refused as no
+longer valid rather than pointed at whatever sits there now. A note written on
+a range link (`gg note add <link>`) sits under the last line and marks the
+lines it is about with a bar in the gutter.
+
 ```bash
 gg link internal/tui/steer.go:42        # print the link for a place here
 gg link --rev HEAD README.md            # …at a commit (always the full sha)
@@ -341,7 +351,9 @@ gg link --pair HEAD~3..HEAD             # …the last 3 commits' change-set (bot
 gg link --ref main --bookmark b1        # …with a landing hint appended
 gg link --content README.md             # …the file's CONTENT on disk (?view=content), no commit
 gg link --version main latest           # …a branch version's frozen preview (?version=<id>)
+gg link internal/tui/steer.go:42-57     # …a RANGE of lines (uncommitted: + a fingerprint of the block)
 gg link resolve gg://gigagit/a.go:3     # which checkout on this machine?
+gg link text gg://gigagit/a.go:42-57    # print exactly the lines a line or range link names
 gg links                                # the links copied here, newest first
 
 gg compare gg://gigagit@ref:main gg://gigagit@ref:v1.2         # links on either side of a compare

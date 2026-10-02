@@ -42,6 +42,13 @@ type PreviewNoteSet struct {
 	Tip            string   // full sha of the source tip: the write target
 	Base           string   // merge-base(target, source)
 	Commits        []string // merge-base..source, newest first (includes Tip)
+	// Only narrows the set to ONE review: when set, just the notes written in
+	// that scope (Note.Preview) are gathered, and a note written here joins
+	// it. A range review opened from its commit (ScopeAtCommit) sets it, so
+	// the review shows its own notes and no other review's — the count its
+	// row carries. "" gathers every note along the range, as a saved preview
+	// or pair does.
+	Only string
 }
 
 // OK reports whether the pair resolved to a previewable range.
@@ -54,6 +61,8 @@ func (set PreviewNoteSet) Pair() string {
 	switch {
 	case !set.OK():
 		return ""
+	case set.Only != "":
+		return set.Only
 	case set.Source != "":
 		return set.Target + "..." + set.Source
 	}
@@ -199,6 +208,18 @@ func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path
 		return nil, err
 	}
 	in := set.commitSet()
+	// A set narrowed to one review keeps that review's threads: its roots by
+	// their scope, and their replies by their root — a reply carries no scope
+	// of its own.
+	var ofReview map[string]bool
+	if set.Only != "" {
+		ofReview = map[string]bool{}
+		for _, n := range all {
+			if !n.IsReply() && n.Preview == set.Only {
+				ofReview[n.ID] = true
+			}
+		}
+	}
 	mine := make([]model.Note, 0, 8)
 	for _, n := range all {
 		if n.Address.State != model.StateCommitted || n.Side != model.NoteSideNew {
@@ -206,6 +227,9 @@ func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path
 		}
 		if path != "" && n.Address.Path != path {
 			continue
+		}
+		if ofReview != nil && !ofReview[n.ID] && !(n.IsReply() && ofReview[n.ParentID]) {
+			continue // another review's thread, or a plain one: not this review's
 		}
 		if in[n.Address.Commit] {
 			mine = append(mine, n)
@@ -390,7 +414,7 @@ func (s *Service) previewStoreCounts(ctx context.Context, set PreviewNoteSet) (m
 	if !set.OK() {
 		return map[string]int{}, 0, nil
 	}
-	key := set.Tip + ":" + set.Base
+	key := set.Tip + ":" + set.Base + ":" + set.Only
 	s.mu.Lock()
 	if e, ok := s.previewCounts[key]; ok {
 		s.mu.Unlock()

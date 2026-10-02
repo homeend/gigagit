@@ -73,7 +73,7 @@ func (m Model) handlePairOpenMsg(msg pairOpenMsg) (Model, tea.Cmd) {
 	m.filesTitle = pairTitle(msg.pair.Label)
 	m.filesContext = m.filesTitle
 	// After openCompareFiles: it bumped previewGen, which the command stamps.
-	if nc := m.pairNotesCmd(msg.pair.A, msg.pair.B); nc != nil {
+	if nc := m.pairNotesCmd(msg.pair.A, msg.pair.B, ""); nc != nil {
 		cmd = tea.Batch(cmd, nc)
 	}
 	return m, cmd

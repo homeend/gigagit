@@ -12,7 +12,7 @@ import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { openCommitByHash } from "./commits.js";
-import { landNote, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
+import { armRangeNotes, landNote, showRangeNotes, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
 import { openReview } from "./reviews.js";
 import { openShelfNotes } from "./shelfnotes.js";
 
@@ -410,6 +410,7 @@ async function openTarget(t, id) {
       show();
       return notice("The commit does not change " + t.path + ".");
     }
+    armRangeNotes(); // the note may be a range review's: this diff draws those too
     await openFile(i);
   } else if (t.state === "unstaged" || t.state === "staged" || t.state === "untracked") {
     const section = t.state === "unstaged" ? "changes" : t.state;
@@ -429,6 +430,7 @@ async function openTarget(t, id) {
     return notice("Shelf notes open from gg note list.");
   }
   setDiffBack(reshow);
+  if (t.state === "commit") await showRangeNotes(); // the note may be a range review's
   if (id && !(await landNote(id))) opLine("the note is not in this diff now", true);
 }
 

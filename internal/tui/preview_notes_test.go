@@ -197,8 +197,8 @@ func TestPreviewNotedFileStepUsesThePreviewCounts(t *testing.T) {
 	m.filesPreviewCounts = map[string]int{"b.txt": 2}
 	m.noteCounts = domain.NoteCounts{
 		ByPath:       map[string]int{"tiponly.txt": 1},
-		ByCommitPath: map[string]int{tip + ":tiponly.txt": 1},
-		ByCommit:     map[string]int{},
+		ByCommitPath: map[string]int{tip + ":tiponly.txt": 1}, PlainByCommitPath: map[string]int{tip + ":tiponly.txt": 1},
+		ByCommit: map[string]int{},
 	}
 	if !m.notedFilePath("b.txt") {
 		t.Fatal("a path the preview counts carries notes")

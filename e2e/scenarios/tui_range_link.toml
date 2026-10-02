@@ -1,0 +1,22 @@
+name = "tui: L with lines marked copies a link to that range"
+
+[input]
+steps = [
+  { write = "a.txt", content = "one\ntwo\nthree\nfour\nfive\nsix\n" },
+  { commit = "first" },
+  { write = "a.txt", content = "one\ntwo\nTHREE\nfour\nFIVE\nsix\nseven\n" },
+  { commit = "second" },
+]
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "commit-diff"
+keys = ["right", "enter", "enter"]
+screen_contains = ["a.txt", "THREE"]
+
+[[tui.step]]
+name = "range-link"
+keys = ["space", "j", "j", "L"]
+screen_contains = ["Copied link: gg://", ":3-5"]

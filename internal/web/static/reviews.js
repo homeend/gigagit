@@ -11,7 +11,7 @@ import { copyText, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { mdHTML } from "./markdown.js";
 import { registerHelp } from "./menus.js";
-import { NOTE_BADGE_COLS, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
+import { NOTE_BADGE_COLS, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
 import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
 import { focusPane } from "./keys.js";
@@ -211,6 +211,9 @@ async function openRangeReview(scope) {
   const c = state.compare;
   if (!c || !c.pair || c.pair.a !== d.a || c.pair.b !== d.b) return; // superseded
   c.back = back;
+  c.pair.scope = scope; // the review's own notes only (pairNoteCtx)
+  state.previewCounts = null; // the landing's counts were every note along the pair
+  loadPairCounts();
   $("files-title").textContent = "Range review: " + d.label;
 }
 

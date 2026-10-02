@@ -350,7 +350,7 @@ func TestFileSideSourcesAgreeEverywhere(t *testing.T) {
 func TestLinkToolsAreReadOnly(t *testing.T) {
 	e := newTestEnv(t)
 	ann := e.listTools(t)
-	for _, name := range []string{"gg_link_resolve", "gg_link_list", "gg_compare_links"} {
+	for _, name := range []string{"gg_link_resolve", "gg_link_text", "gg_link_list", "gg_compare_links"} {
 		a, ok := ann[name]
 		if !ok {
 			t.Errorf("%s is not registered", name)
@@ -416,5 +416,33 @@ func TestLinkResolveReportsAFingerprintedLinesAnchor(t *testing.T) {
 	}
 	if _, ok := out["asked_line"]; ok {
 		t.Errorf("a plain link reports asked_line: %v", out)
+	}
+}
+
+// A range link reports its last line and hands out its text; once the block
+// changed it is refused, never re-found.
+func TestLinkTextAndRangeResolve(t *testing.T) {
+	e := newTestEnv(t)
+	write := func(body string) {
+		if err := os.WriteFile(filepath.Join(e.dir, "a.txt"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("first\nsecond\nthird\nfourth\n")
+	link := linkTo(e, "/a.txt:2-3~"+model.BlockFingerprint([]string{"second", "third"}))
+	out := e.call(t, "gg_link_resolve", map[string]any{"link": link})
+	if out["line"].(float64) != 2 || out["end_line"].(float64) != 3 || out["anchor"] != "same" {
+		t.Errorf("resolve: %v", out)
+	}
+	out = e.call(t, "gg_link_text", map[string]any{"link": link})
+	lines, _ := out["lines"].([]any)
+	if out["start"].(float64) != 2 || out["end"].(float64) != 3 || len(lines) != 2 || lines[1] != "third" || out["target"] != "working tree" {
+		t.Errorf("text: %v", out)
+	}
+	write("new\nfirst\nsecond\nthird\nfourth\n")
+	for _, tool := range []string{"gg_link_resolve", "gg_link_text"} {
+		if msg := e.callErr(t, tool, map[string]any{"link": link}); !strings.Contains(msg, "no longer valid") {
+			t.Errorf("%s on a moved block: %q", tool, msg)
+		}
 	}
 }

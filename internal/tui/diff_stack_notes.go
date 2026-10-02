@@ -57,7 +57,7 @@ func (m Model) notedStackFile(v *diffView, i int) bool {
 		return m.filesPreviewCounts[f.path] > 0 && !m.previewPathGoneAtTip(f.path)
 	}
 	if v.rev != "" {
-		return m.noteCounts.ByCommitPath[v.rev+":"+f.path] > 0
+		return m.noteCounts.PlainByCommitPath[v.rev+":"+f.path] > 0
 	}
 	return m.noteCounts.ByPath[f.path] > 0
 }
@@ -94,6 +94,9 @@ func (m Model) drainStackLanding(idx, body int) (Model, bool) {
 	v.setCursorLine(li, body)
 	if land.dir == 0 {
 		v.landOnSide(land.side == model.NoteSideOld)
+		if land.end > land.no {
+			m, _ = m.markLandedRange(v, land.no, land.end, land.side == model.NoteSideOld, body)
+		}
 	}
 	v.revealCursorNotes(body)
 	v.noteVisited = true

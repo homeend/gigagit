@@ -1,0 +1,40 @@
+diff: c.txt  @ acfc46c add c                                                                                                      line 1  change 1/1  rows 1–1/1
+···············································································│  1 c
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] scroll  [←→] pan  [h/b] hist  [esc] back

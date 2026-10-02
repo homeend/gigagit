@@ -27,7 +27,7 @@ func (m Model) commitNotesCmd(hash, path string) tea.Cmd {
 	svc, label := m.svc, path+" @ "+shortHash(hash)
 	return func() tea.Msg {
 		ns, err := svc.NotesAt(context.Background(), model.FileAddress{State: model.StateCommitted, Commit: hash, Path: path})
-		return commitNotesMsg{label: label, notes: ns, err: err}
+		return commitNotesMsg{label: label, notes: domain.PlainNotes(ns), err: err}
 	}
 }
 

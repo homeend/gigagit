@@ -377,6 +377,9 @@ func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
 		line = c.Line.No // a content link has no old side (ParseLink refuses one)
 	}
 	m, load, ev := m.openFileViewerEv(c.File, line)
+	if fv, ok := m.topLayer().(*fileViewer); ok && c.Line != nil && c.Line.End > line {
+		fv.pendingEnd = c.Line.End // a range link: landPendingLine marks it
+	}
 	// The reply waits for the load: only the loaded lines say where the
 	// cursor landed (a link's line may be past the end of a file that shrank).
 	lead, evicted := "opened "+c.File, evictedPath(ev)
@@ -671,7 +674,7 @@ func (m Model) steerNavigatePair(c steer.Command) (Model, tea.Cmd) {
 	// cannot): the endpoint-shaped compare, which is right for every pair
 	// except a `-u` stash's.
 	nm, cmd := m.openCompareFiles(left, right)
-	if nc := nm.pairNotesCmd(ahash, bhash); nc != nil { // the pair's review notes (saved_pair_notes.go)
+	if nc := nm.pairNotesCmd(ahash, bhash, ""); nc != nil { // the pair's review notes (saved_pair_notes.go)
 		cmd = tea.Batch(cmd, nc)
 	}
 	pair := shortHash(ahash) + ".." + shortHash(bhash)
@@ -842,10 +845,10 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 			if old {
 				side = model.NoteSideOld
 			}
-			v.stk.land = &stackLanding{file: i, side: side, no: no}
+			v.stk.land = &stackLanding{file: i, side: side, no: no, end: c.Line.End}
 			nm, cmd := m.pumpStack()
 			nm.diffNotice = steerOpenedNotice(c, no)
-			nm, rcmd := nm.navigateLanded(c, "opened "+c.File+":"+strconv.Itoa(no))
+			nm, rcmd := nm.navigateLanded(c, "opened "+c.File+":"+lineSpanText(no, c.Line.End))
 			return nm, tea.Batch(cmd, rcmd)
 		}
 		fi = i
@@ -902,10 +905,21 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 	v.setCursorLine(li, body)
 	v.alignCursor(alignCenter, body)
 	v.landOnSide(old)
+	// A range link: its lines are marked again, as the two spaces that copied
+	// it left them. A clamped landing has no range left to mark.
+	end := 0
+	if c.Line.End > no && !clamped {
+		if m, end = m.markLandedRange(v, no, c.Line.End, old, body); end > 0 {
+			v.alignCursor(alignCenter, body)
+		}
+	}
+	ln := *c.Line
+	ln.End = end
+	c.Line = &ln
 
 	m.diffNotice = steerOpenedNotice(c, no)
 
-	detail := "opened " + c.File + ":" + strconv.Itoa(no)
+	detail := "opened " + c.File + ":" + lineSpanText(no, end)
 	if clamped {
 		detail += "; clamped to line " + strconv.Itoa(no)
 	}
@@ -1059,7 +1073,7 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 		}
 		c.File = l.Path
 		if l.Line > 0 {
-			c.Line = &steer.Line{Side: "new", No: l.Line} // a preview has no old side
+			c.Line = &steer.Line{Side: "new", No: l.Line, End: l.End} // a preview has no old side
 		}
 		return c, true
 	}
@@ -1076,7 +1090,7 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 			if l.Side == model.NoteSideOld {
 				side = "old"
 			}
-			c.Line = &steer.Line{Side: side, No: l.Line}
+			c.Line = &steer.Line{Side: side, No: l.Line, End: l.End}
 		}
 		return c, true
 	}
@@ -1093,7 +1107,7 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 			if l.Side == model.NoteSideOld {
 				side = "old"
 			}
-			c.Line = &steer.Line{Side: side, No: l.Line}
+			c.Line = &steer.Line{Side: side, No: l.Line, End: l.End}
 		}
 		return c, true
 	}
@@ -1126,7 +1140,7 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 		if l.Side == model.NoteSideOld {
 			side = "old"
 		}
-		c.Line = &steer.Line{Side: side, No: l.Line}
+		c.Line = &steer.Line{Side: side, No: l.Line, End: l.End}
 	}
 	return c, true
 }
@@ -1208,8 +1222,76 @@ func (m Model) consumeStartAt() (Model, tea.Cmd) {
 // steerOpenedNotice is the diff view's own notice for a landing: the user's
 // own link reads "opened", an agent's reads "agent opened".
 func steerOpenedNotice(c steer.Command, no int) string {
-	if startAtOrigin(c) {
-		return i18n.T("▸ opened %s", c.File+":"+strconv.Itoa(no))
+	end := 0
+	if c.Line != nil {
+		end = c.Line.End
 	}
-	return i18n.T("▸ agent opened %s", c.File+":"+strconv.Itoa(no))
+	if startAtOrigin(c) {
+		return i18n.T("▸ opened %s", c.File+":"+lineSpanText(no, end))
+	}
+	return i18n.T("▸ agent opened %s", c.File+":"+lineSpanText(no, end))
+}
+
+// lineSpanText is "<a>" or "<a>-<b>": how a landing names its line or range.
+func lineSpanText(no, end int) string {
+	if end > no {
+		return strconv.Itoa(no) + "-" + strconv.Itoa(end)
+	}
+	return strconv.Itoa(no)
+}
+
+// markLandedRange marks lines no..end on one side as a FROZEN selection — the
+// state two spaces leave — inside the stream range lo..hi (a stack file's
+// rows, or the whole view), with the cursor on the first line. An end past
+// the side's last line is clamped to it; a fold hiding the end is opened. It
+// returns the last line marked (0 = nothing: the range has no second line
+// here).
+func (m Model) markLandedRange(v *diffView, no, end int, old bool, body int) (Model, int) {
+	fi := -1
+	if v.stk != nil {
+		fi = v.curFile()
+	}
+	// Re-read on every probe: expanding a fold lengthens the stream.
+	bounds := func() (int, int) {
+		if fi >= 0 {
+			return v.fileLineRange(fi)
+		}
+		return 0, len(v.lines) - 1
+	}
+	findEnd := func() (int, bool) {
+		l, h := bounds()
+		return v.lineAnchorIn(l, h, end, old)
+	}
+	// landSteer's order: find, expand the fold that hides it, and only then
+	// clamp — against the EXPANDED view's real last line, never the last line
+	// that happened to be visible.
+	le, _ := findEnd()
+	if le >= 0 {
+		var ok bool
+		if m, le, ok = m.expandFoldFor(v, le, findEnd); !ok {
+			le = -1
+		}
+	}
+	if le < 0 {
+		l, h := bounds()
+		if end = v.lastLineNoIn(l, h, old); end <= no {
+			return m, 0
+		}
+		if le, _ = findEnd(); le < 0 {
+			return m, 0
+		}
+		var ok bool
+		if m, le, ok = m.expandFoldFor(v, le, findEnd); !ok {
+			return m, 0
+		}
+	}
+	l, h := bounds()
+	ls, vis := v.lineAnchorIn(l, h, no, old)
+	if ls < 0 || !vis {
+		return m, 0
+	}
+	v.setCursorLine(ls, body)
+	v.onOld = old
+	v.lsel = lineSel{on: true, anchor: ls, end: le, fixed: true}
+	return m, end
 }
