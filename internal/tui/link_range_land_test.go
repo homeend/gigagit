@@ -168,3 +168,18 @@ func TestPastedStaleRangeLinkIsRefused(t *testing.T) {
 		t.Error("the prompt must stay open on a refused link")
 	}
 }
+
+// The range's END under a trailing fold: the fold is opened, the range is not
+// cut at the last line that happened to be visible.
+func TestRangeLinkLandingReachesUnderATrailingFold(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	m.diffPartial = true
+	m = landRange(t, m, "r-8", steer.Line{Side: "new", No: 20, End: 30})
+	if a, b := selNos(t, m.diffLayer(), false); a != 20 || b != 30 {
+		t.Errorf("marked %d-%d, want 20-30", a, b)
+	}
+	if !strings.Contains(m.diffNotice, "a.txt:20-30") {
+		t.Errorf("notice = %q", m.diffNotice)
+	}
+}

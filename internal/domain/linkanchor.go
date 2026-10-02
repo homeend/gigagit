@@ -114,8 +114,10 @@ func splitTextLines(data []byte) ([]string, bool) {
 	if len(data) > MaxDiffBytes || textdiff.IsBinary(data) {
 		return nil, false
 	}
+	// ONE trailing newline ends the last line; any before it are blank lines
+	// the diff numbers (textdiff.splitLines), so a link may name them.
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
-	text = strings.TrimRight(strings.ReplaceAll(text, "\r", "\n"), "\n")
+	text = strings.TrimSuffix(strings.ReplaceAll(text, "\r", "\n"), "\n")
 	if text == "" {
 		return nil, true
 	}

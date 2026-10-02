@@ -77,6 +77,9 @@ type linkTextOut struct {
 	Start  int      `json:"start"`
 	End    int      `json:"end"`
 	Lines  []string `json:"lines"`
+	// Note says a fingerprinted single line moved or changed since the link
+	// was copied (domain.AnchorNote): start is where its text is NOW.
+	Note string `json:"note,omitempty"`
 }
 
 type linkListOut struct {
@@ -181,6 +184,7 @@ func (s *Server) registerLinkTools(srv *sdk.Server) {
 		}
 		out.Path, out.Target, out.Side = lt.Path, lt.Target, string(lt.Side)
 		out.Start, out.End, out.Lines = lt.Start, lt.End, lt.Lines
+		out.Note = res.AnchorNote()
 		return nil, out, nil
 	})
 

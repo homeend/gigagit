@@ -350,7 +350,12 @@ func ParseLink(s string) (Link, error) {
 	var line, end int
 	var fp string
 	var err error
-	if hasTarget {
+	if name, isRef := strings.CutPrefix(tail, "ref:"); hasTarget && isRef && !strings.Contains(name, ":") && !isAllDigits(name) {
+		// "@ref:<name>" with no line: a name that merely LOOKS like a range
+		// ("ref:2026-10") is a name. An all-digit one stays refused below, as
+		// it always was (ruling R5): the line suffix wins.
+		side = NoteSideNew
+	} else if hasTarget {
 		tail, side, line, end, fp, err = splitLinkLine(tail)
 	} else {
 		head, side, line, end, fp, err = splitLinkLine(head)
@@ -562,6 +567,11 @@ func splitLinkLine(t string) (rest string, side NoteSide, line, end int, fp stri
 		rest, side = rest[:j], NoteSideOld
 	}
 	return rest, side, n, end, fp, nil
+}
+
+func isAllDigits(s string) bool {
+	_, err := strconv.Atoi(s)
+	return err == nil
 }
 
 // linkLineSpec reports whether s is "<n>" or "<a>-<b>" (or the unfinished

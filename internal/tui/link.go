@@ -233,16 +233,24 @@ func (m Model) contextLinkText() (string, bool) {
 		return "", false
 	}
 	if _, ok := m.topLayer().(*diffView); ok {
-		side, line, text, has := m.linkAnchorAtCursor()
-		if !has {
-			side, line, text = model.NoteSideNew, 0, ""
-		}
 		// A live selection: the link names its lines, on the cursor's side.
+		// The address is read where the SELECTION is — a frozen one stays in
+		// its file while the cursor walks a stack — so the cursor is lent to
+		// its first line for the length of this call.
 		sel, selOn := m.diffLinkSelection()
 		if selOn {
 			if sel.refusal != "" {
 				return "", false
 			}
+			v := m.diffLayer()
+			defer func(cur int) { v.curLine = cur }(v.curLine)
+			v.curLine = sel.row
+		}
+		side, line, text, has := m.linkAnchorAtCursor()
+		if !has {
+			side, line, text = model.NoteSideNew, 0, ""
+		}
+		if selOn {
 			side, line, text = sel.side, sel.first, sel.block[0]
 		}
 		ranged := func(link string, ok bool) (string, bool) {
@@ -409,6 +417,7 @@ func (m Model) contextLinkRow() (actionRow, bool) {
 type linkSel struct {
 	side        model.NoteSide
 	first, last int
+	row         int // the view line carrying `first`: where the link's address is read
 	block       []string
 	refusal     string
 }
@@ -436,7 +445,7 @@ func (m Model) diffLinkSelection() (sel linkSel, on bool) {
 			return sel, true
 		}
 	}
-	file := v.curFile()
+	file := v.lines[lo].file
 	for i := lo; i <= hi; i++ {
 		ln := v.lines[i]
 		if v.stk != nil && ln.file != file {
@@ -454,11 +463,14 @@ func (m Model) diffLinkSelection() (sel linkSel, on bool) {
 			continue
 		}
 		if sel.first == 0 {
-			sel.first = no
+			sel.first, sel.row = no, i
 		}
 		sel.last = no
 	}
-	fv := v.curNoteView()
+	fv := v
+	if v.stk != nil {
+		fv = v.stk.files[file].d
+	}
 	if sel.first == 0 || fv == nil {
 		sel.refusal = i18n.T("▸ nothing to link on this side")
 		return sel, true

@@ -90,3 +90,20 @@ func TestBlockFingerprint(t *testing.T) {
 		t.Errorf("shape: %q", a)
 	}
 }
+
+// A branch or tag named like a range is a NAME, not a line (an all-digit name
+// stays refused: TestAllDigitBranchNameIsRefused).
+func TestParseLinkRefNamedLikeALine(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"2026-10", "1-2", "7-3"} {
+		s := "gg://r@ref:" + name
+		l, err := ParseLink(s)
+		if err != nil || l.Target.Ref != name || l.Line != 0 || l.String() != s {
+			t.Errorf("%s: %+v, %v", s, l, err)
+		}
+	}
+	l, err := ParseLink("gg://r/a.go@ref:2026-10:3-7")
+	if err != nil || l.Target.Ref != "2026-10" || l.Line != 3 || l.End != 7 {
+		t.Errorf("a ref with a range: %+v, %v", l, err)
+	}
+}

@@ -164,3 +164,32 @@ func TestRangeLinkFromTheFileViewer(t *testing.T) {
 		t.Error("L must keep the selection")
 	}
 }
+
+// A frozen selection keeps its link when the cursor walks into another file
+// of the stack: the link names the selection's file.
+func TestStackedRangeLinkFollowsTheSelectionNotTheCursor(t *testing.T) {
+	t.Parallel()
+	r := sameRowsTUI(6)
+	v := stackViewOf(t, r, r)
+	for i := range v.stk.files {
+		v.stk.files[i].d.cmp = &compareStamp{left: mustCommitEndpoint(cmpShaA), right: mustCommitEndpoint(cmpShaB), path: v.stk.files[i].path}
+	}
+	line := func(file, no int) int {
+		for i, l := range v.lines {
+			if l.file == file && l.isBody() && l.Row.RightNo == no {
+				return i
+			}
+		}
+		t.Fatalf("no row for file %d line %d", file, no)
+		return -1
+	}
+	m := diffModel()
+	m.linkRepoName, m.currentWorktree = "gigagit", "/repo"
+	m = m.pushLayer(v)
+	selectRows(v, line(0, 2), line(0, 4))
+	v.curLine = line(1, 5) // the cursor moved on; the marks stay in f0.go
+	wantLink(t, m, "gg://gigagit/f0.go@"+cmpShaA+".."+cmpShaB+":2-4")
+	if v.curLine != line(1, 5) {
+		t.Error("building the link must leave the cursor where it was")
+	}
+}

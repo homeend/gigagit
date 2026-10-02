@@ -181,3 +181,18 @@ func rangeHead(t *testing.T, dir string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// Trailing blank lines are lines of the diff, so a range may end on one.
+func TestResolveRangeLinkEndingOnATrailingBlankLine(t *testing.T) {
+	t.Parallel()
+	_, svc, write := rangeRepo(t)
+	write("a\nb\n\n")
+	ctx := context.Background()
+	fp := model.BlockFingerprint([]string{"b", ""})
+	if got := svc.LinkBlockFingerprint(ctx, rangeLink(model.StateUnstaged, model.NoteSideNew, 2, 3, "")); got != fp {
+		t.Fatalf("LinkBlockFingerprint = %q, want %q", got, fp)
+	}
+	if _, err := ResolveLink(ctx, rangeLink(model.StateUnstaged, model.NoteSideNew, 2, 3, fp), ResolveOpts{Cwd: svc}); err != nil {
+		t.Errorf("lines 2-3 of a file ending in a blank line: %v", err)
+	}
+}

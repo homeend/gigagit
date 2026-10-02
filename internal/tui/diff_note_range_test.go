@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -32,7 +33,12 @@ func TestRangedNoteMarksItsLines(t *testing.T) {
 			t.Errorf("row %d: the OLD pane carries a bar for a new-side note: %q", i, left)
 		}
 		if strings.Contains(right, noteBarGlyph) {
-			barred[v.disp[i].row.RightNo] = true
+			no := v.disp[i].row.RightNo
+			barred[no] = true
+			// The bar sits in the separator column: the number stays whole.
+			if want := fmt.Sprintf("%d%s", no, noteBarGlyph); !strings.Contains(right, want) || strings.Contains(right, "…") {
+				t.Errorf("new line %d: gutter %q, want the number then the bar", no, right[:min(len(right), 12)])
+			}
 		}
 	}
 	for no := 1; no <= 7; no++ {

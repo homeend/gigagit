@@ -848,7 +848,7 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 			v.stk.land = &stackLanding{file: i, side: side, no: no, end: c.Line.End}
 			nm, cmd := m.pumpStack()
 			nm.diffNotice = steerOpenedNotice(c, no)
-			nm, rcmd := nm.navigateLanded(c, "opened "+c.File+":"+strconv.Itoa(no))
+			nm, rcmd := nm.navigateLanded(c, "opened "+c.File+":"+lineSpanText(no, c.Line.End))
 			return nm, tea.Batch(cmd, rcmd)
 		}
 		fi = i
@@ -909,8 +909,7 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 	// it left them. A clamped landing has no range left to mark.
 	end := 0
 	if c.Line.End > no && !clamped {
-		lo, hi := bounds()
-		if m, end = m.markLandedRange(v, lo, hi, no, c.Line.End, old, body); end > 0 {
+		if m, end = m.markLandedRange(v, no, c.Line.End, old, body); end > 0 {
 			v.alignCursor(alignCenter, body)
 		}
 	}
@@ -1247,34 +1246,44 @@ func lineSpanText(no, end int) string {
 // the side's last line is clamped to it; a fold hiding the end is opened. It
 // returns the last line marked (0 = nothing: the range has no second line
 // here).
-func (m Model) markLandedRange(v *diffView, lo, hi, no, end int, old bool, body int) (Model, int) {
+func (m Model) markLandedRange(v *diffView, no, end int, old bool, body int) (Model, int) {
 	fi := -1
 	if v.stk != nil {
 		fi = v.curFile()
 	}
+	// Re-read on every probe: expanding a fold lengthens the stream.
 	bounds := func() (int, int) {
 		if fi >= 0 {
 			return v.fileLineRange(fi)
 		}
 		return 0, len(v.lines) - 1
 	}
-	if last := v.lastLineNoIn(lo, hi, old); end > last {
-		end = last
-	}
-	if end <= no {
-		return m, 0
-	}
 	findEnd := func() (int, bool) {
 		l, h := bounds()
 		return v.lineAnchorIn(l, h, end, old)
 	}
+	// landSteer's order: find, expand the fold that hides it, and only then
+	// clamp — against the EXPANDED view's real last line, never the last line
+	// that happened to be visible.
 	le, _ := findEnd()
-	if le < 0 {
-		return m, 0
+	if le >= 0 {
+		var ok bool
+		if m, le, ok = m.expandFoldFor(v, le, findEnd); !ok {
+			le = -1
+		}
 	}
-	var ok bool
-	if m, le, ok = m.expandFoldFor(v, le, findEnd); !ok {
-		return m, 0
+	if le < 0 {
+		l, h := bounds()
+		if end = v.lastLineNoIn(l, h, old); end <= no {
+			return m, 0
+		}
+		if le, _ = findEnd(); le < 0 {
+			return m, 0
+		}
+		var ok bool
+		if m, le, ok = m.expandFoldFor(v, le, findEnd); !ok {
+			return m, 0
+		}
 	}
 	l, h := bounds()
 	ls, vis := v.lineAnchorIn(l, h, no, old)

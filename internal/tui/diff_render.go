@@ -48,10 +48,13 @@ const noteBarGlyph = "▎"
 // gutterCell renders the gutter column: the number (or blanks) and the one
 // separator column, which a note's range fills with its bar.
 func (mk cellMark) gutterCell(num string, gut int) string {
-	if !mk.note || gut < 1 {
-		return mk.gut.Render(truncate(num, gut+1))
+	cell := truncate(num, gut+1)
+	// The bar takes the separator column only: a cell with no trailing blank
+	// (a degenerate pane cut the number) keeps every column it has.
+	if !mk.note || !strings.HasSuffix(cell, " ") {
+		return mk.gut.Render(cell)
 	}
-	return mk.gut.Render(truncate(num, gut)) + mk.noteBar.Render(noteBarGlyph)
+	return mk.gut.Render(strings.TrimSuffix(cell, " ")) + mk.noteBar.Render(noteBarGlyph)
 }
 
 // noMark is a function, not a package var: it reads st(), and package-level
