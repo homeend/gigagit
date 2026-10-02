@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Session rows say what the agent is doing
+
+### Added
+
+- **Session states on both frontends.** gg reads each agent session's screen
+  and says what the agent is doing: `working 7m`, `idle 3m` (its turn is
+  over), **needs input** (a dialog waits for a decision) or `stalled · …`
+  (nothing printed for two minutes while apparently busy). The Worktrees and
+  Branches sub-rows show the state in place of the running age, the `ctrl+\`
+  popup rows and the console title show it after the age — in the TUI and on
+  the gg web page alike; needs input and stalled wear the attention colour.
+  When a session starts needing you, finishes its turn or stalls, the status
+  line (TUI) or a toast (web) says so once — not for the session you are
+  typing into, and not during the first 30 seconds after a start. Built-in
+  screen rules for Claude Code, Codex, Junie, Kimi Code and Antigravity, all
+  verified on live screens; terminals and plain custom commands are not
+  read.
+- **`screen_working` / `screen_waiting` / `screen_question`** on a
+  `[[tools.command]]` session block: RE2 pattern lists that replace the
+  built-in rules for that command (set any and all three come from config;
+  an invalid pattern is reported once at start and the built-ins apply).
+  They survive a template upgrade and do not count as editing the template.
+- **Agents see it too:** `agent_list` rows carry `activity`,
+  `activity_since` and `stalled`; `agent_screen` carries `activity` and a
+  dialog's `options` (numbered keys, or `pick:<i>` for cursor-style
+  choices). `gg agent list` / `gg agent screen` print them. Skill v130.
+- New leaf `internal/agentstate` (a port of erbrus's screen classifier) and
+  `domain.SessionStates()`, the process-global watcher behind all of it.
+
 ## Marking lines from the keyboard stays quick on large files
 
 ### Fixed
