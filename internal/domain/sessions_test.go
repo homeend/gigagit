@@ -302,3 +302,17 @@ func TestStartTerminalRunsTheShell(t *testing.T) {
 	s.SendText("echo \"T-$GG_INBOX\"\r")
 	waitSessionText(t, s, "T-/tmp/inbox-t")
 }
+
+func TestSessionProgram(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ cmd, want string }{
+		{"claude --resume", "claude"},
+		{`"C:\Program Files\Claude\claude.exe" --x`, `C:\Program Files\Claude\claude.exe`},
+		{"  codex  ", "codex"},
+		{"", ""},
+	} {
+		if got := SessionProgram(config.ToolCommand{Command: c.cmd}); got != c.want {
+			t.Errorf("SessionProgram(%q) = %q, want %q", c.cmd, got, c.want)
+		}
+	}
+}

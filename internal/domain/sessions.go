@@ -253,18 +253,39 @@ func sessionShell(line, goos string, getenv func(string) string) (argv []string,
 	return []string{sh, "-c", line}, ""
 }
 
+// SessionStartRequest is a frontend asking for a session in a worktree: the
+// page's start (web) handed to whoever owns the start — the web server
+// itself, or the terminal hosting the page. Command is ignored for a
+// terminal.
+type SessionStartRequest struct {
+	Worktree   string
+	Command    config.ToolCommand
+	Terminal   bool
+	Cols, Rows int
+}
+
+// SessionProgram is the program a session command runs: its first word, or
+// the double-quoted first word of a Windows install path. "" for an empty
+// command.
+func SessionProgram(tc config.ToolCommand) string {
+	prog := strings.TrimSpace(tc.Command)
+	if strings.HasPrefix(prog, `"`) {
+		if end := strings.Index(prog[1:], `"`); end >= 0 {
+			return prog[1 : 1+end]
+		}
+		return prog
+	}
+	if f := strings.Fields(prog); len(f) > 0 {
+		return f[0]
+	}
+	return ""
+}
+
 // agentIDFor maps a command to its catalog tool id by its program (the
 // first word, or the double-quoted first word of a Windows install path),
 // "" for a custom command.
 func agentIDFor(tc config.ToolCommand) string {
-	prog := strings.TrimSpace(tc.Command)
-	if strings.HasPrefix(prog, `"`) {
-		if end := strings.Index(prog[1:], `"`); end >= 0 {
-			prog = prog[1 : 1+end]
-		}
-	} else if f := strings.Fields(prog); len(f) > 0 {
-		prog = f[0]
-	}
+	prog := SessionProgram(tc)
 	if prog == "" {
 		return ""
 	}
