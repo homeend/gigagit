@@ -18,8 +18,9 @@ let data = null; // last GET /api/text-templates payload
 let sel = 0; // index into data.templates
 // null = browse · {kind:"fill", t} · {kind:"rendering", t} (a render is in
 // flight: keys are swallowed, Escape gives up on it) · {kind:"rendered", t, text}
-// · {kind:"form", t|null, warned} (warned = the form's content when the
-// unsaved-text notice was last shown) · {kind:"confirm", t}
+// · {kind:"form", t|null, seed, warned, err, note} (seed = the form's content
+// when it opened, warned = its content when the unsaved-text notice was last
+// shown, err = a pending error, note = the notice is showing) · {kind:"confirm", t}
 let mode = null;
 
 const scopeTag = (s) => (s === "repo" ? "[this repo]" : "[global]");
@@ -42,12 +43,64 @@ async function openTextTemplates() {
 }
 
 function close() {
+  // No step survives the overlay: a late answer must not land in one.
+  mode = null;
   closeLayer("texttemplates");
 }
 
-// formContent is what the open form holds, as one comparable value.
+// ttFormContent is what counts as a form's unsaved text, as one comparable
+// value: the title and the text. The scope switch alone is nothing to lose.
+function ttFormContent(title, body) {
+  return JSON.stringify([title, body]);
+}
+
+// ttLeaveForm decides a way out of the add/edit form: "leave" for an
+// untouched form (now is still the seed) and for one left a second time
+// without a change since the notice (now is what was warned about), else
+// "warn" — keep the form and show the notice.
+function ttLeaveForm(seed, warned, now) {
+  return now === seed || now === warned ? "leave" : "warn";
+}
+
+// ttFormNotice is the form's notice line: a pending error stays readable
+// beside the unsaved-text notice, which names no key — Escape, the cancel
+// button and a click outside all leave.
+function ttFormNotice(err, unsaved) {
+  const note = unsaved ? "unsaved text — leaving again discards it" : "";
+  return err && note ? err + " · " + note : err || note;
+}
+
+// ttConfirmKey maps a key to the delete question's answer: only y deletes,
+// only n cancels (Escape backs out of every step before this is asked);
+// "" = not an answer (a bare Shift, Tab, Enter).
+function ttConfirmKey(key) {
+  if (key === "y") return "delete";
+  if (key === "n") return "cancel";
+  return "";
+}
+
+// ttSelectIndex is the row a reloaded list lands on: the one (id, scope)
+// names — the same id may exist in both scopes — else the previous index,
+// clamped to the list.
+function ttSelectIndex(list, id, scope, prev) {
+  const at = list.findIndex((t) => t.id === id && t.scope === scope);
+  return at >= 0 ? at : Math.min(prev, Math.max(list.length - 1, 0));
+}
+
+// ttAnswerLanding is where a late answer goes — a save, a delete, the list
+// reload after either. The step that asked may be gone by then (the user
+// left, and may be writing another template):
+//   "step"      — the asking step is still the one open: act in it
+//   "browse"    — the user is back at the list: it may be redrawn
+//   "elsewhere" — another step is open: nothing on screen is touched
+function ttAnswerLanding(sameStep, browsing) {
+  if (sameStep) return "step";
+  return browsing ? "browse" : "elsewhere";
+}
+
+// formContent is what the open form holds (ttFormContent).
 function formContent() {
-  return JSON.stringify([$("tt-title").value, $("tt-body").value, $("tt-scope").dataset.scope]);
+  return ttFormContent($("tt-title").value, $("tt-body").value);
 }
 
 // canLeaveForm guards every way out of the add/edit form except save. An
@@ -56,10 +109,17 @@ function formContent() {
 function canLeaveForm() {
   if (!mode || mode.kind !== "form") return true;
   const now = formContent();
-  if (now === mode.seed || now === mode.warned) return true;
+  if (ttLeaveForm(mode.seed, mode.warned, now) === "leave") return true;
   mode.warned = now;
-  showErr("unsaved text — esc again discards it");
+  mode.note = true;
+  paintFormNotice();
   return false;
+}
+
+// paintFormNotice writes the form's pending error and unsaved-text notice.
+function paintFormNotice() {
+  const err = $("texttemplates-box").querySelector(".serr");
+  if (err) err.textContent = ttFormNotice(mode.err || "", !!mode.note);
 }
 
 // back leaves the current step for the list.
@@ -91,10 +151,10 @@ function onKey(e) {
     return true;
   }
   if (mode && mode.kind === "confirm") {
-    // Only y deletes and only n (or Escape, above) cancels: a stray key —
-    // a bare Shift, Tab — must not answer the question.
-    if (e.key === "y") removeTemplate(mode.t);
-    else if (e.key === "n") back();
+    // A stray key — a bare Shift, Tab — must not answer the question.
+    const answer = ttConfirmKey(e.key);
+    if (answer === "delete") removeTemplate(mode.t);
+    else if (answer === "cancel") back();
     return true;
   }
   if (mode) return true;
@@ -141,21 +201,41 @@ function move(d) {
 }
 
 function showErr(msg) {
+  if (mode && mode.kind === "form") {
+    // The form's line also carries the unsaved-text notice.
+    mode.err = msg;
+    paintFormNotice();
+    return;
+  }
   const err = $("texttemplates-box").querySelector(".serr");
   if (err) err.textContent = msg;
 }
 
-// reload refetches the list and selects the row (id, scope) names — the same
-// id may exist in both scopes.
-async function reload(selectId, selectScope) {
+// landing is ttAnswerLanding for the step object that asked.
+function landing(from) {
+  return ttAnswerLanding(mode === from, !mode);
+}
+
+// reload refetches the list for the step `from` (a saved form, an answered
+// delete question) and selects the row (id, scope) names — the same id may
+// exist in both scopes. With another step open by then, only the list is
+// replaced: that step, and what is typed in it, stays.
+async function reload(selectId, selectScope, from) {
+  const was = current();
+  let next;
   try {
-    data = await getJSON("/api/text-templates");
+    next = await getJSON("/api/text-templates");
   } catch (e) {
-    showErr(e.message);
+    if (landing(from) === "step") showErr(e.message);
+    else opLine("text templates: " + e.message, true);
     return;
   }
-  const at = rows().findIndex((t) => t.id === selectId && t.scope === selectScope);
-  sel = at >= 0 ? at : Math.min(sel, Math.max(rows().length - 1, 0));
+  data = next;
+  if (landing(from) === "elsewhere") {
+    sel = ttSelectIndex(rows(), was ? was.id : "", was ? was.scope : "", sel);
+    return;
+  }
+  sel = ttSelectIndex(rows(), selectId, selectScope, sel);
   mode = null;
   render();
   scopeError();
@@ -233,21 +313,37 @@ function saveForm() {
     showErr("the text is empty");
     return;
   }
-  const t = mode.t;
+  const form = mode;
+  if (form.saving) return; // one save at a time: a second would be refused as a duplicate
+  form.saving = true;
+  const t = form.t;
   const req = t
     ? postJSON("/api/text-templates/update", { id: t.id, scope: t.scope, title, body })
     : postJSON("/api/text-templates", { title, body, scope: $("tt-scope").dataset.scope });
-  req.then((row) => reload(row.id, row.scope)).catch((err) => showErr("not saved: " + err.message));
+  req.then(
+    (row) => reload(row.id, row.scope, form),
+    (err) => {
+      form.saving = false;
+      if (landing(form) === "step") showErr("not saved: " + err.message);
+      else opLine("text template " + title + " not saved: " + err.message, true);
+    },
+  );
 }
 
 function removeTemplate(t) {
-  postJSON("/api/text-templates/remove", { id: t.id, scope: t.scope })
-    .then(() => reload("", ""))
-    .catch((err) => {
+  const asked = mode;
+  postJSON("/api/text-templates/remove", { id: t.id, scope: t.scope }).then(
+    () => reload("", "", asked),
+    (err) => {
+      if (landing(asked) !== "step") {
+        opLine("text template " + t.title + " not deleted: " + err.message, true);
+        return;
+      }
       mode = null;
       render();
       showErr("not deleted: " + err.message);
-    });
+    },
+  );
 }
 
 function browseHTML() {
@@ -414,6 +510,16 @@ $("texttemplates-box").addEventListener("click", (e) => {
         t.classList.toggle("on", next === "global");
         t.textContent = next === "repo" ? "this repo only" : "global (every repo)";
       }
+  }
+});
+
+// Typing after the notice makes it stale: the changed text is asked about
+// again. A pending error stays.
+$("texttemplates-box").addEventListener("input", () => {
+  if (mode && mode.kind === "form" && mode.note) {
+    mode.note = false;
+    mode.warned = undefined;
+    paintFormNotice();
   }
 });
 

@@ -901,7 +901,8 @@ finds the right one here.
   in a two-scope store: `add` stores GLOBALLY (every repo) unless `--repo`;
   the other verbs find either scope (the repo row wins a tie; `--global`
   narrows). `list` prints `id<TAB>scope<TAB>title`; an id may be a unique
-  prefix. `render` prints the resolved text: `--set name=Ann` fills
+  prefix — an unknown or ambiguous id exits 2, a store file that cannot be
+  read exits 1 with the reason. `render` prints the resolved text: `--set name=Ann` fills
   `<user:name>` (a missing label, or a label the template does not ask for,
   exits 2 naming it); it CONSUMES the template's `<seq:…>` counters — pass
   `--peek` to preview without advancing them. An unknown `<…>` (`<br>`,

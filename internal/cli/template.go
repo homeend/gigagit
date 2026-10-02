@@ -68,19 +68,23 @@ func templateScope(global bool) *model.ProfileScope {
 	return &g
 }
 
-// findTemplate resolves the one positional id (or unique id prefix). An
-// unknown or ambiguous id is the caller's mistake: exit 2.
-func findTemplate(svc *domain.Service, verb, id string, global bool, stderr io.Writer) (model.TextTemplate, bool) {
+// findTemplate resolves the one positional id (or unique id prefix) and
+// returns the exit code: 0 when found, 2 for an unknown or ambiguous id (the
+// caller's mistake), 1 for anything else — a store file that cannot be read.
+func findTemplate(svc *domain.Service, verb, id string, global bool, stderr io.Writer) (model.TextTemplate, int) {
 	t, err := svc.FindTextTemplate(context.Background(), id, templateScope(global))
 	if err != nil {
-		msg := strings.TrimPrefix(err.Error(), "text template: ")
-		if domain.IsTextTemplateNotFound(err) {
-			msg += " (gg template list shows the ids)"
+		msg, code := strings.TrimPrefix(err.Error(), "text template: "), 1
+		switch {
+		case domain.IsTextTemplateNotFound(err):
+			msg, code = msg+" (gg template list shows the ids)", 2
+		case domain.IsTextTemplateAmbiguous(err):
+			code = 2
 		}
 		fmt.Fprintf(stderr, "template %s: %s\n", verb, msg)
-		return model.TextTemplate{}, false
+		return model.TextTemplate{}, code
 	}
-	return t, true
+	return t, 0
 }
 
 // readBody reads -F's target: a file path (a relative one is taken from
@@ -135,9 +139,9 @@ func templateShow(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, "usage: gg template show <id> [--global]")
 		return 2
 	}
-	t, ok := findTemplate(svc, "show", pos[0], *global, stderr)
-	if !ok {
-		return 2
+	t, code := findTemplate(svc, "show", pos[0], *global, stderr)
+	if code != 0 {
+		return code
 	}
 	fmt.Fprintln(stdout, t.Body)
 	labels, auto := domain.TextTemplateTokens(t.Body)
@@ -167,9 +171,9 @@ func templateRender(svc *domain.Service, args []string, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "usage: gg template render <id> [--set label=value]... [--peek] [--global]")
 		return 2
 	}
-	t, ok := findTemplate(svc, "render", pos[0], *global, stderr)
-	if !ok {
-		return 2
+	t, code := findTemplate(svc, "render", pos[0], *global, stderr)
+	if code != 0 {
+		return code
 	}
 	labels, _ := domain.TextTemplateTokens(t.Body)
 	var missing []string
@@ -258,9 +262,9 @@ func templateEdit(svc *domain.Service, workdir string, args []string, stdin io.R
 		fmt.Fprintln(stderr, "usage: gg template edit <id> [--title <title>] [-F <file|->] [--global]")
 		return 2
 	}
-	t, ok := findTemplate(svc, "edit", pos[0], *global, stderr)
-	if !ok {
-		return 2
+	t, code := findTemplate(svc, "edit", pos[0], *global, stderr)
+	if code != 0 {
+		return code
 	}
 	next := model.TextTemplate{Title: t.Title, Body: t.Body}
 	if *title != "" {
@@ -292,9 +296,9 @@ func templateRemove(svc *domain.Service, args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "usage: gg template rm <id> [--global]")
 		return 2
 	}
-	t, ok := findTemplate(svc, "rm", pos[0], *global, stderr)
-	if !ok {
-		return 2
+	t, code := findTemplate(svc, "rm", pos[0], *global, stderr)
+	if code != 0 {
+		return code
 	}
 	if err := svc.RemoveTextTemplate(context.Background(), t.Scope, t.ID); err != nil {
 		fmt.Fprintln(stderr, "error:", err)

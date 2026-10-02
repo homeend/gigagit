@@ -151,6 +151,13 @@ func (s *Service) RemoveTextTemplate(ctx context.Context, scope model.ProfileSco
 func IsTextTemplateNotFound(err error) bool  { return errors.Is(err, texttmpl.ErrNotFound) }
 func IsTextTemplateDuplicate(err error) bool { return errors.Is(err, texttmpl.ErrDuplicate) }
 
+// errTextTemplateAmbiguous: an id prefix that names several templates.
+var errTextTemplateAmbiguous = errors.New("gives too little of the id")
+
+// IsTextTemplateAmbiguous reports FindTextTemplate's "several ids match" —
+// like an unknown id the caller's mistake, unlike a store that cannot be read.
+func IsTextTemplateAmbiguous(err error) bool { return errors.Is(err, errTextTemplateAmbiguous) }
+
 // ValidateTextTemplate checks the limits and proves the body's known tokens
 // well-formed by a dry resolve (placeholder inputs, zero counters). An
 // unknown <…> is literal text and passes.
@@ -236,7 +243,7 @@ func (s *Service) textCtx(ctx context.Context) (template.Ctx, string) {
 
 // RenderTextTemplate previews body against this repo. <seq:…> counters are
 // PEEKED, never consumed; the returned names are the counters to bump
-// (BumpPrefixSeqs) once the rendered text is actually taken.
+// (TakeTextTemplateSeqs) once the rendered text is actually taken.
 func (s *Service) RenderTextTemplate(ctx context.Context, body string, inputs map[string]string) (string, []string, error) {
 	tctx, gitDir := s.textCtx(ctx)
 	names := template.TextTokens(body).SeqNames
@@ -268,18 +275,48 @@ func (s *Service) TakeTextTemplate(ctx context.Context, body string, inputs map[
 	return template.ResolveText(body, inputs, tctx)
 }
 
+// TakeTextTemplateSeqs consumes the named counters of a rendered text that
+// was just taken (copied): one write, so they advance together or not at
+// all, and a name listed twice is consumed once.
+func (s *Service) TakeTextTemplateSeqs(ctx context.Context, names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	gitDir, err := s.GitCommonDir(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = config.BumpSeqs(strings.TrimSpace(gitDir), names)
+	return err
+}
+
 // FindTextTemplate resolves an id or a unique id prefix. An exact id beats a
 // prefix; with scope nil the repo row wins when both scopes hold the one id
 // the argument names. Several distinct ids are an ambiguity.
 func (s *Service) FindTextTemplate(ctx context.Context, idPrefix string, scope *model.ProfileScope) (model.TextTemplate, error) {
 	// A scope that cannot be read does not hide the other one; it is the
-	// answer only when the id was not found in what could be read.
-	all, listErr := s.TextTemplates(ctx)
-	var exact, pre []model.TextTemplate
-	for _, t := range all {
-		if scope != nil && t.Scope != *scope {
+	// answer only when the id was not found in what could be read — and only
+	// a scope the search covers counts.
+	global, repo := s.textTemplateStores(ctx)
+	var all []model.TextTemplate
+	var errs []error
+	for _, in := range []struct {
+		st    texttmpl.Store
+		scope model.ProfileScope
+	}{{global, model.ProfileScopeGlobal}, {repo, model.ProfileScopeRepo}} {
+		if in.st == nil || (scope != nil && in.scope != *scope) {
 			continue
 		}
+		ts, err := in.st.List()
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		all = append(all, ts...)
+	}
+	listErr := errors.Join(errs...)
+	var exact, pre []model.TextTemplate
+	for _, t := range all {
 		if t.ID == idPrefix {
 			exact = append(exact, t)
 		} else if idPrefix != "" && strings.HasPrefix(t.ID, idPrefix) {
@@ -305,7 +342,19 @@ func (s *Service) FindTextTemplate(ctx context.Context, idPrefix string, scope *
 		}
 	}
 	if len(ids) > 1 {
-		return model.TextTemplate{}, fmt.Errorf("%q matches %d text templates — give more of the id", idPrefix, len(ids))
+		return model.TextTemplate{}, ambiguousTextTemplate{prefix: idPrefix, n: len(ids)}
 	}
 	return found, nil
 }
+
+// ambiguousTextTemplate is the error for an id prefix several templates share.
+type ambiguousTextTemplate struct {
+	prefix string
+	n      int
+}
+
+func (e ambiguousTextTemplate) Error() string {
+	return fmt.Sprintf("%q matches %d text templates — give more of the id", e.prefix, e.n)
+}
+
+func (ambiguousTextTemplate) Is(target error) bool { return target == errTextTemplateAmbiguous }

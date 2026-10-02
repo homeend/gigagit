@@ -168,3 +168,38 @@ func TestTextTemplatesDamagedScopeStillListsTheOther(t *testing.T) {
 		t.Fatalf("list = %+v", out)
 	}
 }
+
+// A store that cannot be read is not an unknown template: render and take
+// answer 500 with the reason; an id missing from a readable scope stays 404.
+func TestTextTemplateRenderTakeReportDamagedStore(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	for _, body := range []string{`{"title":"G","body":"x","scope":"global"}`, `{"title":"R","body":"x <seq:n>","scope":"repo"}`} {
+		if code := ttPost(t, ts, "", body, nil); code != http.StatusOK {
+			t.Fatalf("seed add code = %d", code)
+		}
+	}
+	var damaged int
+	_ = filepath.WalkDir(state, func(p string, d os.DirEntry, _ error) error {
+		if d != nil && d.Name() == "texttemplates.toml" && filepath.Base(filepath.Dir(p)) != "global" {
+			damaged++
+			_ = os.WriteFile(p, []byte("[[templates]\n"), 0o644)
+		}
+		return nil
+	})
+	if damaged != 1 {
+		t.Fatalf("repo store files damaged = %d", damaged)
+	}
+	for _, path := range []string{"/render", "/take"} {
+		if code, out := postJSONRaw(t, ts, "/api/text-templates"+path, `{"id":"r","scope":"repo","inputs":{}}`); code != http.StatusInternalServerError || !strings.Contains(out["error"], "damaged") {
+			t.Errorf("%s on the damaged scope: %d %q; want 500 and the damage", path, code, out["error"])
+		}
+		if code := ttPost(t, ts, path, `{"id":"nope","scope":"global","inputs":{}}`, nil); code != http.StatusNotFound {
+			t.Errorf("%s unknown id in the healthy scope: %d; want 404", path, code)
+		}
+		if code := ttPost(t, ts, path, `{"id":"g","scope":"global","inputs":{}}`, nil); code != http.StatusOK {
+			t.Errorf("%s in the healthy scope: %d; want 200", path, code)
+		}
+	}
+}

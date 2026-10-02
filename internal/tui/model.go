@@ -3656,6 +3656,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.popLayer()
 		}
 		m.statusMsg = msg.ok
+		if msg.seqErr != nil {
+			m.statusMsg = i18n.T("copied, but its <seq> counters did not advance: %s", msg.seqErr.Error())
+		}
 		return m, nil
 
 	case textTemplateRenderedMsg:
