@@ -23,6 +23,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   way. Shift+click and opening a range link get the same speed-up; shrinking
   a band no longer folds back the lines it had opened.
 
+## The hunk picker shows which side each output line came from
+
+### Added
+
+- **TUI: side colours in the hunk picker (`H` staging and the conflict
+  resolver).** The output pane gains a first column: a bar `▌` beside every
+  line a pick produced, in the colour of the side it came from — blue for
+  the left pane, amber for the right. Unchanged lines and the lines of a hunk
+  you have not touched carry no bar, so the bars show exactly what your ticks
+  changed. Above, each side's labels (the column header and every hunk
+  header) and its ticked `[x]` wear the same colour. The colours are two new
+  theme roles, `picker_left` and `picker_right`, set for the dark and light
+  themes and overridable in `[themes.<name>]`; they avoid green and red,
+  which mean added/removed in the diff views.
+
 ## Hunk staging opens with nothing ticked
 
 ### Changed

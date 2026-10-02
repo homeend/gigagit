@@ -30,6 +30,8 @@ func TestBuildStylesTerminalPinsLegacyLiterals(t *testing.T) {
 		{"dim fg", fg(s.dim), "240"},
 		{"tagDeco fg", fg(s.tagDeco), "220"},
 		{"pickerLabel fg", fg(s.pickerLabel), "245"},
+		{"pickerLeft fg", fg(s.pickerLeft), "74"},
+		{"pickerRight fg", fg(s.pickerRight), "179"},
 		{"messageBlock bg", bg(s.messageBlock), "236"},
 		{"diffDel bg", bg(s.diffDelCell), "52"},
 		{"diffAdd bg", bg(s.diffAddCell), "22"},

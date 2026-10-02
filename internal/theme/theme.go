@@ -57,6 +57,11 @@ type Theme struct {
 	NoticeHot, NoticeDim, ReviewHot, ReviewDim  string
 	NoteUser, NoteAgent, NoteStale, PickerLabel string
 
+	// The hunk/conflict picker's two sides: each side's labels and ticks, and
+	// the bar the output pane draws beside a line picked from that side.
+	// Deliberately not green/red, which mean added/removed in the diff views.
+	PickerLeft, PickerRight string
+
 	// Attention bands: the background an agent's `gg session highlight` paints
 	// over the marked rows on one side of the diff (a band, like the note band
 	// — never a box).
@@ -82,6 +87,7 @@ func (t Theme) roles() []string {
 		t.SearchCurrent, t.Selection, t.BlameRecentBg,
 		t.NoticeHot, t.NoticeDim, t.ReviewHot, t.ReviewDim,
 		t.NoteUser, t.NoteAgent, t.NoteStale, t.PickerLabel,
+		t.PickerLeft, t.PickerRight,
 		t.AttentionInfo, t.AttentionWarn, t.AttentionError,
 	}
 }
@@ -104,6 +110,7 @@ var Dark = Theme{
 	Selection: "#264F78", BlameRecentBg: "#1F3A26",
 	NoticeHot: "196", NoticeDim: "124", ReviewHot: "39", ReviewDim: "31",
 	NoteUser: "75", NoteAgent: "141", NoteStale: "240", PickerLabel: "245",
+	PickerLeft: "74", PickerRight: "179",
 	AttentionInfo: "24", AttentionWarn: "94", AttentionError: "89",
 	Lanes:  [7]string{"33", "208", "40", "201", "51", "220", "129"},
 	Syntax: [11]string{"", "141", "79", "222", "", "150", "215", "245", "252", "250", "180"},
@@ -127,6 +134,7 @@ var Light = Theme{
 	Selection: "#ADD6FF", BlameRecentBg: "#DFF5E3",
 	NoticeHot: "#C0392B", NoticeDim: "#A0564C", ReviewHot: "#2F6FB8", ReviewDim: "#2A8C8C",
 	NoteUser: "#2F6FB8", NoteAgent: "#6B4FBB", NoteStale: "#8A8F8A", PickerLabel: "#5F6570",
+	PickerLeft: "#2F6FB8", PickerRight: "#A0682A",
 	AttentionInfo: "#D3E2F2", AttentionWarn: "#F2E8CC", AttentionError: "#EFD3DC",
 	Lanes:  [7]string{"#2F6FB8", "#C7641B", "#3E8E41", "#6B4FBB", "#2A8C8C", "#B08000", "#C0392B"},
 	Syntax: [11]string{"", "#6B4FBB", "#2A8C8C", "#B08000", "", "#3E8E41", "#C7641B", "#8A8F8A", "#33393F", "#5F6570", "#A0682A"},

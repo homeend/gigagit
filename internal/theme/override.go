@@ -52,6 +52,8 @@ type Override struct {
 	NoteAgent   string `toml:"note_agent"`
 	NoteStale   string `toml:"note_stale"`
 	PickerLabel string `toml:"picker_label"`
+	PickerLeft  string `toml:"picker_left"`
+	PickerRight string `toml:"picker_right"`
 
 	AttentionInfo  string `toml:"attention_info_bg"`
 	AttentionWarn  string `toml:"attention_warn_bg"`
@@ -118,6 +120,8 @@ var roleFields = []roleField{
 	{"note_agent", "review-note frame, agent-written notes", func(t *Theme) *string { return &t.NoteAgent }, func(o *Override) *string { return &o.NoteAgent }},
 	{"note_stale", "review-note frame, notes whose anchor moved", func(t *Theme) *string { return &t.NoteStale }, func(o *Override) *string { return &o.NoteStale }},
 	{"picker_label", "hunk/conflict picker side labels", func(t *Theme) *string { return &t.PickerLabel }, func(o *Override) *string { return &o.PickerLabel }},
+	{"picker_left", "hunk/conflict picker: the left side's labels, ticks and output bar", func(t *Theme) *string { return &t.PickerLeft }, func(o *Override) *string { return &o.PickerLeft }},
+	{"picker_right", "hunk/conflict picker: the right side's labels, ticks and output bar", func(t *Theme) *string { return &t.PickerRight }, func(o *Override) *string { return &o.PickerRight }},
 
 	{"attention_info_bg", "agent attention band background, info tone (gg session highlight)", func(t *Theme) *string { return &t.AttentionInfo }, func(o *Override) *string { return &o.AttentionInfo }},
 	{"attention_warn_bg", "agent attention band background, warn tone", func(t *Theme) *string { return &t.AttentionWarn }, func(o *Override) *string { return &o.AttentionWarn }},

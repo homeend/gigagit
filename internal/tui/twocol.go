@@ -94,6 +94,9 @@ type winCell struct {
 	body   string
 	style  lipgloss.Style
 	mask   runMask
+	// gutterStyle, when set, paints the gutter instead of style — unless the
+	// cell is reverse video (the cursor row stays one plain block).
+	gutterStyle *lipgloss.Style
 }
 
 // colRow is one logical row: a full-width row (full != nil, spanning the whole
@@ -125,6 +128,9 @@ type cellPiece struct {
 	pre  string
 	body string
 	mask runMask
+	// preStyle is the cell's gutterStyle, carried on the segment that holds
+	// the gutter (never on a wrap continuation's blank indent).
+	preStyle *lipgloss.Style
 }
 
 // cellPieces lays a cell's body out at width under mode and returns one piece
@@ -143,7 +149,7 @@ func cellPieces(c *winCell, width int, mode dispMode, hscroll int) []cellPiece {
 	case modeWrap:
 		ws := wrapWidth(c.body, bodyW, 1<<20)
 		if len(ws) == 0 {
-			return []cellPiece{{pre: c.gutter}}
+			return []cellPiece{{pre: c.gutter, preStyle: c.gutterStyle}}
 		}
 		masks := wrapSegMasks(c.body, c.mask, ws)
 		indent := strings.Repeat(" ", gw)
@@ -155,13 +161,15 @@ func cellPieces(c *winCell, width int, mode dispMode, hscroll int) []cellPiece {
 			}
 			out[i] = cellPiece{pre: pre, body: s, mask: masks[i]}
 		}
+		out[0].preStyle = c.gutterStyle
 		return out
 	case modeScroll:
 		body := hslice(c.body, hscroll, bodyW)
 		return []cellPiece{{
-			pre:  c.gutter,
-			body: body,
-			mask: c.mask.slice(hscrollRuneOff(c.body, hscroll), len([]rune(body))),
+			pre:      c.gutter,
+			preStyle: c.gutterStyle,
+			body:     body,
+			mask:     c.mask.slice(hscrollRuneOff(c.body, hscroll), len([]rune(body))),
 		}}
 	default: // modeCutoff
 		body := truncate(c.body, bodyW)
@@ -174,7 +182,7 @@ func cellPieces(c *winCell, width int, mode dispMode, hscroll int) []cellPiece {
 			m.cls[len(m.cls)-1] = syntax.Plain
 			m.emph[len(m.emph)-1] = emphNone
 		}
-		return []cellPiece{{pre: c.gutter, body: body, mask: m}}
+		return []cellPiece{{pre: c.gutter, preStyle: c.gutterStyle, body: body, mask: m}}
 	}
 }
 
@@ -238,6 +246,12 @@ func pieceOrBlank(ps []cellPiece, k int) cellPiece {
 // the body painted run by run (styledRuns) with the prefix and the trailing
 // padding under style. Mirrors renderWindow's colouredLine.
 func renderPiece(style lipgloss.Style, p cellPiece, w int) string {
+	if p.preStyle != nil && p.pre != "" && !style.GetReverse() {
+		// A gutter with a colour of its own: paint it apart, the rest as ever.
+		pre, ps := p.pre, *p.preStyle
+		p.pre, p.preStyle = "", nil
+		return ps.Render(pre) + renderPiece(style, p, w-lipgloss.Width(pre))
+	}
 	if style.GetReverse() {
 		// Reverse swaps foreground and background, so per-token colours would
 		// paint per-token BACKGROUNDS: the class mask drops. Emphasis is bold,
