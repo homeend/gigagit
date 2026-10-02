@@ -68,3 +68,22 @@ func TestRangedNoteMarksItsLines(t *testing.T) {
 		t.Error("hidden agent notes must not mark their lines")
 	}
 }
+
+// A note whose anchor line is not in the view draws no box, so no bar either.
+func TestRangedNoteWithoutABoxDrawsNoBar(t *testing.T) {
+	t.Parallel()
+	n := rootNote("n1", 5, "gone", "", model.NoteSourceUser, model.NoteStale)
+	n.Range, n.Note.Range = [2]int{3, 900}, [2]int{3, 900} // ends on a line this file does not have
+	v := notedView([]domain.ResolvedNote{n})
+	if byLine, _ := v.noteRowIndex(); len(byLine) != 0 {
+		t.Fatalf("fixture: the note still has a box (%d lines)", len(byLine))
+	}
+	if spans := v.noteSpans(); len(spans) != 0 {
+		t.Errorf("spans = %+v, want none for a note with no box", spans)
+	}
+	for _, line := range diffModel().diffPaneLines(v, 80, 12, 0, 0, "off") {
+		if strings.Contains(line, noteBarGlyph) {
+			t.Fatalf("a bar with no box: %q", ansiStrip(line))
+		}
+	}
+}

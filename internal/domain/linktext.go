@@ -63,8 +63,19 @@ func (s *Service) LinkText(ctx context.Context, res Resolved) (LinkText, error) 
 			}
 		}
 		data, err := s.ResolveBytes(ctx, model.FileRef{Source: model.SourceCommit, Locator: rev, Path: res.Addr.Path})
+		if err != nil && res.Side == model.NoteSideOld {
+			// A RENAME: the diff's old side is the text at the OLD path, while
+			// the link names the new one (linkSideLines' staged-rename rule).
+			if orig := s.linkRenameSource(ctx, res); orig != "" {
+				data, err = s.ResolveBytes(ctx, model.FileRef{Source: model.SourceCommit, Locator: rev, Path: orig})
+			}
+		}
 		if err != nil {
-			return LinkText{}, err
+			side := "the new side"
+			if res.Side == model.NoteSideOld {
+				side = "the old side"
+			}
+			return LinkText{}, fmt.Errorf("%s has no text on %s of %s", res.Addr.Path, side, out.Target)
 		}
 		lines, ok = splitTextLines(data)
 	}
@@ -76,6 +87,33 @@ func (s *Service) LinkText(ctx context.Context, res Resolved) (LinkText, error) 
 	}
 	out.Lines = lines[out.Start-1 : out.End]
 	return out, nil
+}
+
+// linkRenameSource is the path res.Addr.Path was renamed FROM in the change a
+// committed link names — the commit's own, or a pair's a→b ("" when it was
+// not renamed there).
+func (s *Service) linkRenameSource(ctx context.Context, res Resolved) string {
+	var files []model.CommitFile
+	var err error
+	if p := res.Pair; p != nil {
+		a, aerr := model.CommitEndpoint(p.A)
+		b, berr := model.CommitEndpoint(p.B)
+		if aerr != nil || berr != nil {
+			return ""
+		}
+		files, err = s.CompareFiles(ctx, a, b)
+	} else {
+		files, err = s.CommitFiles(ctx, res.Commit)
+	}
+	if err != nil {
+		return ""
+	}
+	for _, f := range files {
+		if f.Path == res.Addr.Path && f.OldPath != "" {
+			return f.OldPath
+		}
+	}
+	return ""
 }
 
 func lineSpan(a, b int) string {

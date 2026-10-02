@@ -42,13 +42,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   link.
 - **`gg link text <link> [--json]`** (MCP `gg_link_text`) prints exactly the
   lines a line or range link names, from the version and side it names — how
-  an agent turns a pasted link into the code the human marked.
+  an agent turns a pasted link into the code the human marked. The old side
+  of a renamed file is read at its old path; a file with no old side says so
+  (`<path> has no text on the old side of <commit>`).
 - `gg link <path>:<a>-<b>`; `gg link resolve --json` / `gg_link_resolve`
   report `end_line`; `gg session highlight add <link>` bands a range link's
   lines; `gg note add <range link>` writes a note covering the range.
 - **A note about several lines marks them**: a bar in the gutter beside every
   line of its range, in the note's colour, above the note's box (hunk notes
-  from agents included).
+  from agents included). No box, no bar: a note whose anchor line is gone
+  from the view or folded away marks nothing.
 
 ### Changed
 

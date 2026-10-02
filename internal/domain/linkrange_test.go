@@ -196,3 +196,43 @@ func TestResolveRangeLinkEndingOnATrailingBlankLine(t *testing.T) {
 		t.Errorf("lines 2-3 of a file ending in a blank line: %v", err)
 	}
 }
+
+// The old side of a RENAMED file is its text at the old path — for a commit's
+// own change and for a pair; a file with no old side says so plainly.
+func TestLinkTextOldSideFollowsARename(t *testing.T) {
+	t.Parallel()
+	dir, svc, write := rangeRepo(t)
+	ctx := context.Background()
+	c1 := rangeHead(t, dir)
+	runGitIn(t, dir, "mv", "f.txt", "g.txt")
+	runGitIn(t, dir, "commit", "-m", "rename")
+	c2 := rangeHead(t, dir)
+	_ = write
+	if err := os.WriteFile(filepath.Join(dir, "n.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitIn(t, dir, "add", "n.txt")
+	runGitIn(t, dir, "commit", "-m", "add n")
+	c3 := rangeHead(t, dir)
+	old := func(target model.LinkTarget, path string) (LinkText, error) {
+		res, err := ResolveLink(ctx, model.Link{Repo: model.LinkRepo{Name: "gigagit"}, Path: path, Side: model.NoteSideOld,
+			Line: 3, End: 5, Target: target}, ResolveOpts{Cwd: svc})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return svc.LinkText(ctx, res)
+	}
+	for name, target := range map[string]model.LinkTarget{
+		"commit": {State: model.StateCommitted, Commit: c2},
+		"pair":   {State: model.StateCommitted, Pair: &model.LinkPair{A: c1, B: c3}},
+	} {
+		lt, err := old(target, "g.txt")
+		if err != nil || len(lt.Lines) != 3 || lt.Lines[0] != "l3" {
+			t.Errorf("%s: %+v, %v", name, lt, err)
+		}
+	}
+	_, err := old(model.LinkTarget{State: model.StateCommitted, Commit: c3}, "n.txt")
+	if err == nil || !strings.Contains(err.Error(), "n.txt has no text on the old side of "+c3[:7]) {
+		t.Errorf("an added file's old side: %v", err)
+	}
+}

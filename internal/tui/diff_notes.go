@@ -162,17 +162,27 @@ func (ns noteSpans) at(file int, old bool, no int) (lipgloss.Style, bool) {
 
 // noteSpans lists the ranges the view's notes cover — only notes about more
 // than one line: a single-line note already sits right under its line. A
-// hidden agent layer hides its ranges too.
+// hidden agent layer hides its ranges too, and so does a note with no box.
 func (v *diffView) noteSpans() noteSpans {
 	var out noteSpans
 	s := st()
 	add := func(file int, ns []domain.ResolvedNote) {
+		lo, hi := 0, len(v.lines)-1
+		if v.stk != nil {
+			lo, hi = v.fileLineRange(file)
+		}
 		for _, r := range ns {
 			if r.Range[1] <= r.Range[0] || r.Note.IsReply() {
 				continue
 			}
 			agent := r.Note.Source == model.NoteSourceAgent
 			if agent && v.hideAgent {
+				continue
+			}
+			// The bar belongs to the BOX: a note whose anchor line is not in
+			// this view, or sits under a fold, draws no box (noteRowIndex) —
+			// and so no bar beside lines that would then explain nothing.
+			if _, visible := v.noteAnchorLineIn(lo, hi, r); !visible {
 				continue
 			}
 			bar := s.noteFrameUser

@@ -183,3 +183,26 @@ func TestRangeLinkLandingReachesUnderATrailingFold(t *testing.T) {
 		t.Errorf("notice = %q", m.diffNotice)
 	}
 }
+
+// A range that STARTS past the end of the file lands on the last line and
+// marks nothing — as the diff does.
+func TestContentRangePastTheEndMarksNothing(t *testing.T) {
+	t.Parallel()
+	m, _ := viewerModel(t)
+	m = fvKeys(t, m, keyType(27))
+	c := steer.Command{ID: "fv-p", Cmd: "navigate", File: "main.go",
+		Target: &steer.Target{State: "unstaged"}, HintKind: "view", HintID: "content",
+		Line: &steer.Line{Side: "new", No: 900, End: 905}, Wait: true}
+	nm, cmd := m.applySteer(c)
+	m = pumpAll(t, nm, cmd)
+	d, ok := m.focusedDoc()
+	if !ok {
+		t.Fatal("no viewer after the navigate")
+	}
+	if d.p.lsel.on {
+		t.Errorf("selection = %+v, want none", d.p.lsel)
+	}
+	if d.p.cur != len(d.p.lines)-1 {
+		t.Errorf("cursor on line %d, want the last (%d)", d.p.cur+1, len(d.p.lines))
+	}
+}
