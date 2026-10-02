@@ -1359,6 +1359,48 @@ function rowRawText(tr, side) {
 }
 
 
+// extendRange is one shift+click on a line number: the lines from the mark to
+// the hit, in either order — or the hit alone when there is no mark on that
+// side to extend. Pure — TestRangeMarkDecisions runs it.
+function extendRange(mark, hit) {
+  if (!mark || mark.side !== hit.side || !mark.no) return { side: hit.side, first: hit.no, last: hit.no };
+  return { side: hit.side, first: Math.min(mark.no, hit.no), last: Math.max(mark.no, hit.no) };
+}
+
+
+// rangeRows is what a marked range covers in a diff's FULL row set: idx, the
+// rows from the first to the last one carrying a line of first..last on that
+// side (contiguous — a row of the other side in between sits inside the
+// band), and block, those lines' raw text in order. A block shorter than
+// last-first+1 means the diff does not hold every line. Pure.
+function rangeRows(rows, side, first, last) {
+  const idx = [], block = [];
+  let lo = -1, hi = -1;
+  (rows || []).forEach((r, i) => {
+    const no = side === "old" ? r.left_no : r.right_no;
+    if (!no || no < first || no > last) return;
+    if (lo < 0) lo = i;
+    hi = i;
+    block.push((side === "old" ? r.left : r.right) || "");
+  });
+  for (let i = lo; lo >= 0 && i <= hi; i++) idx.push(i);
+  return { idx, block };
+}
+
+
+// noteBars is the lines that carry a note's bar, per side: every line of a
+// note that covers MORE than one. Pure.
+function noteBars(notes) {
+  const out = { old: new Set(), new: new Set() };
+  for (const n of notes || []) {
+    const r = n.range;
+    if (n.file_level || !r || !(r[1] > r[0]) || !out[n.side]) continue;
+    for (let no = r[0]; no <= r[1]; no++) out[n.side].add(no);
+  }
+  return out;
+}
+
+
 // diffLinkCtx is the context "copy gg link to this line" builds from for a
 // diff row: the row's own slot in a stack, else the single-file view's — its
 // note context when it has one, the link-only one otherwise.
