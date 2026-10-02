@@ -275,3 +275,89 @@ func TestRangeNotesStayOutOfTheCommitsOwnView(t *testing.T) {
 		t.Fatalf("a note written in the opened review must join it: scope %q", got)
 	}
 }
+
+// View all notes opens a range review's note IN its review: the range's diff
+// of the file, the review's notes drawn, the cursor on the note — not the
+// commit the note is stored on, which may not even change that file.
+func TestAllNotesOpensAReviewNoteInItsReview(t *testing.T) {
+	t.Parallel()
+	m, base, tip := scopeReviewModel(t) // the review note is on a.txt; the tip ("add b") does not change it
+	m = m.closeFilesView()
+	m, cmd := m.openAllNotes()
+	m = drainMsgs(t, m, cmd, 4)
+	p := layerOf[*allNotesPopup](m)
+	if p == nil {
+		t.Fatal("the popup must be open")
+	}
+	found := false
+	for i, r := range p.visible() {
+		if r.note != nil && r.note.Note.Summary == "why a?" {
+			p.sel, found = i, true
+		}
+	}
+	if !found {
+		t.Fatalf("the review note is not listed: %+v", p.visible())
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = drainMsgs(t, updated.(Model), cmd, 10)
+	dv := m.diffLayer()
+	if dv == nil {
+		t.Fatalf("enter must open a diff (notice %q)", p.notice)
+	}
+	left, _ := model.CommitEndpoint(base)
+	right, _ := model.CommitEndpoint(tip)
+	if want := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":a.txt"; m.diffTag != want {
+		t.Fatalf("diffTag = %q, want the range's diff %q", m.diffTag, want)
+	}
+	if dv.previewSet == nil || dv.previewSet.Only != "main...feat/x" {
+		t.Fatalf("the diff must be the review's: set %+v", dv.previewSet)
+	}
+	if len(dv.notes) != 1 || dv.notes[0].Note.Summary != "why a?" {
+		t.Fatalf("the review's note must be drawn: %+v", dv.notes)
+	}
+	if !strings.Contains(dv.context, "feat/x → main") {
+		t.Fatalf("the diff must say which review it shows: %q", dv.context)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if _, ok := updated.(Model).topLayer().(*allNotesPopup); !ok {
+		t.Fatalf("esc must return to the popup, top = %T", updated.(Model).topLayer())
+	}
+}
+
+// A Notes row too long for its column loses the MIDDLE of its path, like any
+// file row: what stays is the end of the name and, whole, its ◆ N — down to
+// the narrowest terminal that still draws the list.
+func TestNotedRowKeepsNameAndBadgeWhenNarrow(t *testing.T) {
+	t.Parallel()
+	m, _, tip := scopeReviewModel(t)
+	const long = "ej-app/cli-standalone/src/main/kotlin/com/intellij/ml/llm/matterhorn/acp/session/v2/JunieV2AgentSession.kt"
+	if _, err := m.svc.NoteAdd(context.Background(), model.Note{
+		Source: model.NoteSourceAgent, Author: "ada",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: tip, Path: long},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "plain, on a file the commit does not change",
+		ContextHash: "x", // the file is not in the fixture: skip the read
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m.svc.InvalidateNoteCounts()
+	m, cmd := m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{manual: true})
+	m = drainMsgs(t, m, cmd, 4)
+	m, cmd = m.openChangedFiles(model.Commit{Hash: tip})
+	m = drainMsgs(t, m, cmd, 6)
+	for _, w := range []int{160, 120, 100, 90, 80, 70} {
+		m.width = w
+		v := m.View()
+		var row string
+		for _, l := range strings.Split(v, "\n") {
+			if strings.Contains(l, "JunieV2") {
+				row = l
+			}
+		}
+		if !strings.Contains(row, ".kt  ◆ 1") {
+			t.Errorf("width %d: the name's end and its badge must stay: %q", w, row)
+		}
+		if w >= 100 && !strings.Contains(row, "JunieV2AgentSession.kt  ◆ 1") {
+			t.Errorf("width %d: the whole name fits and must stay: %q", w, row)
+		}
+	}
+}

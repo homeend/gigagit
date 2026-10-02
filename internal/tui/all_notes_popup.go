@@ -373,6 +373,10 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.openShelfNotes(shelfNotesMsg{id: r.note.Note.Address.ShelfID, label: r.target.shelf,
 					notes: []domain.ResolvedNote{*r.note}}), nil
 			}
+			if n := r.note.Note; n.Preview != "" && r.target.state == model.StateCommitted && !r.target.missing {
+				// A range review's note opens in its review (all_notes_scope.go).
+				return m.openAllNotesReviewNote(p, r.target, n)
+			}
 			return m.openAllNotesTarget(p, r.target, r.note.Note.ID)
 		case anReview:
 			// The review lives in the note: it opens (as text) even when the

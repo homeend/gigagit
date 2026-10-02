@@ -98,8 +98,10 @@ func TestScopeAtCommit(t *testing.T) {
 	}
 }
 
-// A set narrowed to one review gathers that review's notes alone — not a
-// plain note, not another review's — and a note written in it joins it.
+// A scope shows the notes written IN it alone — not a plain note on one of
+// its commits, not another review's — whether it is named by itself (a
+// merge preview, a pair) or by Only (a range review opened from its commit);
+// a note written in it joins it.
 func TestPreviewNoteSetOnly(t *testing.T) {
 	t.Parallel()
 	svc, dir := newPreviewRepo(t)
@@ -127,8 +129,16 @@ func TestPreviewNoteSetOnly(t *testing.T) {
 	if err != nil || !set.OK() {
 		t.Fatalf("pair set: %+v, %v", set, err)
 	}
-	if _, total, _ := svc.PreviewNoteCounts(ctx, set); total != 3 {
-		t.Fatalf("the whole pair gathers every note: %d, want 3", total)
+	// The pair itself is a scope of its own (base7..tip7): none of the three
+	// notes was written in it.
+	if _, total, _ := svc.PreviewNoteCounts(ctx, set); total != 0 {
+		t.Fatalf("a pair shows the notes written in it alone: %d, want 0", total)
+	}
+	// …and so is the merge preview, by its own name.
+	if pv, err := svc.PreviewNotes(ctx, "feat", "main"); err != nil {
+		t.Fatal(err)
+	} else if _, total, _ := svc.PreviewNoteCounts(ctx, pv); total != 1 {
+		t.Fatalf("the merge preview shows its own note: %d, want 1", total)
 	}
 	set.Only = "main...feat"
 	byPath, total, err := svc.PreviewNoteCounts(ctx, set)

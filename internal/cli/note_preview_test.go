@@ -117,14 +117,19 @@ func TestNoteAddPreviewNeedsAFile(t *testing.T) {
 	}
 }
 
-// A note on an older commit's rewritten line lists as `outdated`.
+// A note written in the preview on an older tip, on a line a later commit
+// rewrote, lists as `outdated`.
 func TestNoteListPreviewReportsOutdated(t *testing.T) {
 	dir := newCLIPreviewRepo(t)
-	c1 := runGit(t, dir, "rev-parse", "feat~2")
-	if code, _, errb := runCLI(t, dir, "note", "add", "--rev", c1, "--file", "a.txt",
+	// Written IN the preview while feat~2 was its tip: a preview lists the
+	// notes written in it, however far the branch moved since.
+	tip := runGit(t, dir, "rev-parse", "feat")
+	runGit(t, dir, "branch", "-f", "feat", "feat~2")
+	if code, _, errb := runCLI(t, dir, "note", "add", "--preview", "main...feat", "--file", "a.txt",
 		"--new-line", "4", "--summary", "why DELTA"); code != 0 {
 		t.Fatalf("seed exit %d: %s", code, errb)
 	}
+	runGit(t, dir, "branch", "-f", "feat", tip)
 	code, out, errb := runCLI(t, dir, "note", "list", "--preview", "main...feat", "--file", "a.txt")
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errb)

@@ -1,4 +1,4 @@
-name = "preview notes: stored on the tip, gathered along the branch, outdated when a later commit moved the lines"
+name = "preview notes: stored on the tip; a preview lists the notes written in it, and a commit's own note stays the commit's"
 
 [input]
 steps = [
@@ -27,8 +27,9 @@ stdout_contains = ["a.txt", "1 @@ -"]
 cmd             = ["note", "add", "--preview", "login", "--file", "a.txt", "--new-line", "4", "--summary", "why ECHO"]
 exit            = 0
 
-# A note on the EARLIER commit, on the line that commit added and the next one
-# rewrote. It is not on the tip at all, yet the preview gathers it.
+# A note on the EARLIER commit's own change, written outside the preview. It
+# is that commit's note: a preview lists the notes written IN it, so it does
+# not appear there — it is read from its commit.
 [[run]]
 cmd             = ["note", "add", "--rev", "HEAD~1", "--file", "a.txt", "--new-line", "4", "--summary", "why DELTA"]
 exit            = 0
@@ -36,7 +37,14 @@ exit            = 0
 [[run]]
 cmd             = ["note", "list", "--preview", "login", "--file", "a.txt"]
 exit            = 0
-stdout_contains = ["why ECHO", "active", "why DELTA", "outdated"]
+stdout_contains = ["why ECHO", "active"]
+stdout_excludes = ["why DELTA"]
+
+[[run]]
+cmd             = ["note", "list", "--rev", "HEAD~1", "--file", "a.txt"]
+exit            = 0
+stdout_contains = ["why DELTA"]
+stdout_excludes = ["why ECHO"]
 
 # The old side is the merge base: not addressable.
 [[run]]
@@ -52,7 +60,8 @@ exit = 2
 [[run]]
 cmd             = ["note", "list", "--preview", "main...feat/x", "--file", "a.txt"]
 exit            = 0
-stdout_contains = ["why ECHO", "why DELTA"]
+stdout_contains = ["why ECHO"]
+stdout_excludes = ["why DELTA"]
 
 [expect]
 branch = "feat/x"

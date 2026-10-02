@@ -20,15 +20,17 @@ func pairWithNote(t *testing.T) (Model, domain.CommitPair) {
 	t.Helper()
 	m, p := savedPairModel(t)
 	m.svc.UseNotesDir(t.TempDir())
-	pairTestNote(t, m.svc, p.B, "why a.txt exists")
+	pairTestNote(t, m.svc, p, "why a.txt exists")
 	return m, p
 }
 
-func pairTestNote(t *testing.T, svc *domain.Service, commit, summary string) {
+// pairTestNote stores a note written IN pair p (on its tip, stamped with the
+// pair's name): a pair shows the notes written in it and no others.
+func pairTestNote(t *testing.T, svc *domain.Service, p domain.CommitPair, summary string) {
 	t.Helper()
 	if _, err := svc.NoteAdd(context.Background(), model.Note{
-		Source: model.NoteSourceAgent, Author: "ada",
-		Address: model.FileAddress{State: model.StateCommitted, Commit: commit, Path: "a.txt"},
+		Source: model.NoteSourceAgent, Author: "ada", Preview: p.A[:7] + ".." + p.B[:7],
+		Address: model.FileAddress{State: model.StateCommitted, Commit: p.B, Path: "a.txt"},
 		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: summary,
 	}); err != nil {
 		t.Fatal(err)
@@ -138,7 +140,7 @@ func TestPairCountsRefreshAfterANoteWrite(t *testing.T) {
 	t.Parallel()
 	m, p := pairWithNote(t)
 	m = openSavedPair(t, m)
-	pairTestNote(t, m.svc, p.B, "a second thread")
+	pairTestNote(t, m.svc, p, "a second thread")
 	m, cmd := m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
 	m = pumpAll(t, m, cmd)
 	if m.filesPreviewCounts["a.txt"] != 2 {
@@ -178,7 +180,7 @@ func TestPairRowCarriesItsNoteBadge(t *testing.T) {
 	t.Parallel()
 	m, _ := savedPairModel(t)
 	m.svc.UseNotesDir(t.TempDir())
-	pairTestNote(t, m.svc, m.previews[1].pair.B, "counted")
+	pairTestNote(t, m.svc, m.previews[1].pair, "counted")
 	m, cmd := m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{manual: true})
 	m = pumpAll(t, m, cmd)
 	r := m.previews[1]

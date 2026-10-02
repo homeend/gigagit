@@ -208,7 +208,7 @@ func TestPreviewNotesForGathersOlderCommitsAndMarksThemStale(t *testing.T) {
 
 	// On c1, line 4 is "DELTA"; c2 rewrote it to "ECHO" → stale on the tip.
 	stale, err := svc.NoteAdd(ctx, model.Note{
-		Source: model.NoteSourceAgent, Author: "ada",
+		Source: model.NoteSourceAgent, Author: "ada", Preview: "main...feat",
 		Address: model.FileAddress{State: model.StateCommitted, Commit: c1, Path: "a.txt"},
 		Side:    model.NoteSideNew, Range: [2]int{4, 4}, Summary: "why DELTA",
 	})
@@ -217,7 +217,7 @@ func TestPreviewNotesForGathersOlderCommitsAndMarksThemStale(t *testing.T) {
 	}
 	// On c1, line 1 is "alpha" and still is on the tip → active.
 	live, err := svc.NoteAdd(ctx, model.Note{
-		Source: model.NoteSourceAgent, Author: "ada",
+		Source: model.NoteSourceAgent, Author: "ada", Preview: "main...feat",
 		Address: model.FileAddress{State: model.StateCommitted, Commit: c1, Path: "a.txt"},
 		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "alpha stands",
 	})
@@ -262,7 +262,7 @@ func TestPreviewNoteCountsIncludeHiddenNotes(t *testing.T) {
 	ctx := context.Background()
 	c3 := revParse(t, dir, "feat") // "c3 adds b.txt", tip before the removal
 	if _, err := svc.NoteAdd(ctx, model.Note{
-		Source: model.NoteSourceAgent, Author: "ada",
+		Source: model.NoteSourceAgent, Author: "ada", Preview: "main...feat",
 		Address: model.FileAddress{State: model.StateCommitted, Commit: c3, Path: "b.txt"},
 		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "on a file the tip drops",
 	}); err != nil {
@@ -279,7 +279,7 @@ func TestPreviewNoteCountsIncludeHiddenNotes(t *testing.T) {
 	// rebased away / never on the branch — must not be attributed.
 	seed := revParse(t, dir, "main")
 	offBranch, err := svc.NoteAdd(ctx, model.Note{
-		Source: model.NoteSourceAgent, Author: "ada",
+		Source: model.NoteSourceAgent, Author: "ada", Preview: "main...feat",
 		Address: model.FileAddress{State: model.StateCommitted, Commit: seed, Path: "a.txt"},
 		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "off the branch",
 	})
@@ -336,7 +336,7 @@ func TestSetNotesStoreClearsPreviewCounts(t *testing.T) {
 	}
 	svc.UseNotesDir(t.TempDir())
 	if _, err := svc.NoteAdd(ctx, model.Note{
-		Source: model.NoteSourceAgent, Author: "ada",
+		Source: model.NoteSourceAgent, Author: "ada", Preview: "main...feat",
 		Address: model.FileAddress{State: model.StateCommitted, Commit: revParse(t, dir, "feat"), Path: "b.txt"},
 		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "in the new store",
 	}); err != nil {
@@ -364,7 +364,7 @@ func TestPreviewNoteCountsInvalidateOnAMutation(t *testing.T) {
 		t.Fatalf("cold counts: total=%d err=%v", total, err)
 	}
 	if _, err := svc.NoteAdd(ctx, model.Note{
-		Source: model.NoteSourceAgent, Author: "ada",
+		Source: model.NoteSourceAgent, Author: "ada", Preview: "main...feat",
 		Address: model.FileAddress{State: model.StateCommitted, Commit: revParse(t, dir, "feat"), Path: "b.txt"},
 		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "fresh",
 	}); err != nil {
@@ -470,7 +470,7 @@ func TestPreviewNotesAllGathersEveryPathAndHidesOrphans(t *testing.T) {
 	add := func(commit, path string, line int, summary string) {
 		t.Helper()
 		if _, err := svc.NoteAdd(ctx, model.Note{
-			Source: model.NoteSourceAgent, Author: "ada",
+			Source: model.NoteSourceAgent, Author: "ada", Preview: "main...feat",
 			Address: model.FileAddress{State: model.StateCommitted, Commit: commit, Path: path},
 			Side:    model.NoteSideNew, Range: [2]int{line, line}, Summary: summary,
 		}); err != nil {
