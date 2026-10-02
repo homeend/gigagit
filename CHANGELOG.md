@@ -17,6 +17,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `MM` both), `??` an untracked file, `UU` a conflict, a rename reads
   `old → new`. Past ten files the list ends with `… and N more`. The same
   text shows in the TUI, in gg web and in `gg worktree recycle`.
+  In the TUI a path too wide for the question is cut in the middle, keeping
+  the file name; it is never wrapped.
 
 ## Text templates: follow-up fixes 2
 
