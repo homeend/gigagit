@@ -834,7 +834,16 @@ function showWorktreeMenu(w, x, y) {
 
 $("worktrees-list").addEventListener("contextmenu", (e) => {
   const li = e.target.closest("li");
-  if (!li || !li.dataset.p) return;
+  if (!li) return;
+  if (li.classList.contains("wsess")) {
+    // A session sub-row: its own menu (sessions.js adds Kill / Remove).
+    const s = (state.sessions || []).find((x) => x.id === li.dataset.sid);
+    if (!s) return;
+    e.preventDefault();
+    showCtxMenu([{ label: "Open session", act: () => openConsole(s.id) }, ...extraRows("session", s)], e.clientX, e.clientY);
+    return;
+  }
+  if (!li.dataset.p) return;
   e.preventDefault();
   const w = state.worktrees.find((x) => x.path === li.dataset.p);
   if (w) showWorktreeMenu(w, e.clientX, e.clientY);
