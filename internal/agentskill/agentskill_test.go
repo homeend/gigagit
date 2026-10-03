@@ -141,10 +141,36 @@ func TestReviewSkillBodyCoversTheNoteSurface(t *testing.T) {
 	}
 }
 
-func TestAllReturnsBothSkills(t *testing.T) {
+func TestAllReturnsEverySkill(t *testing.T) {
 	got := All()
-	if len(got) != 2 || got[0].Name != "using-gg" || got[1].Name != "reviewing-with-gg" {
-		t.Fatalf("All() = %+v, want using-gg then reviewing-with-gg", got)
+	if len(got) != 3 || got[0].Name != "using-gg" || got[1].Name != "reviewing-with-gg" || got[2].Name != "delegate" {
+		t.Fatalf("All() = %+v, want using-gg, reviewing-with-gg, delegate", got)
+	}
+}
+
+func TestDogfoodDelegateSkillCopyInSync(t *testing.T) {
+	path := filepath.Join("..", "..", ".claude", "skills", "delegate", "SKILL.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("dogfood copy missing — run `gg init --update` and commit it: %v", err)
+	}
+	if string(data) != Delegate.SkillFile() {
+		t.Error(".claude/skills/delegate/SKILL.md is out of sync — run `gg init --update` and commit the result")
+	}
+}
+
+// The delegate skill is the playbook both roles follow: the overseer's loop
+// over the agent tools, and the worker protocol the kickoff line points at.
+func TestDelegateSkillCoversBothRoles(t *testing.T) {
+	b := Delegate.Body()
+	for _, want := range []string{
+		"## Overseer", "## Worker protocol",
+		"agent_start", "agent_wait", "agent_screen", "agent_send", "agent_kill", "agent_task", "agent_report",
+		"gg worktree list --free", "timed_out", "final",
+	} {
+		if !strings.Contains(b, want) {
+			t.Errorf("delegate skill lacks %q", want)
+		}
 	}
 }
 

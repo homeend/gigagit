@@ -366,6 +366,12 @@ anchor they left.
   (nothing on stdin), `give the text with --file or on stdin` (a terminal on
   stdin), `the text is over 64 KiB`.
 
+A worker agent started by gg runs in its OWN worktree, which the user's gg is
+usually not showing — `gg session overview` and `gg session note` answer `gg
+is showing worktree …` there. A worker's overview is its final
+`agent_report`: gg files it as a tour of the worker's worktree (see the
+delegate skill).
+
 Combine with notes: `gg session note add` the remarks first, then link them
 from the overview (`[why this lock](note:t7)`). Order the anchors in the order
 you would explain them — tab walks them top to bottom. Like notes, overviews
@@ -1047,6 +1053,10 @@ a WSL/Windows pair (one repo, two hosts) is never judged dead from this side
 — only its own side or the user releases it.
 
 ### Starting another agent
+
+To hand a task to worker agents, follow the **delegate** skill (the
+overseer's playbook: plan, brief, start, the wait loop, check, finish — and
+the worker protocol). This section is the tool reference.
 
 Inside a gg console you have gg's agent tools (MCP, via `gg mcp`) and their
 CLI twins. Outside a gg console they do not exist: `gg agent` exits 2,

@@ -104,7 +104,7 @@ func CustomDetections(ts []CustomTarget) []Detection {
 		review := ag.TargetFor(agentskill.ReviewingWithGG, "", "")
 		out = append(out, Detection{
 			Agent: ag, Target: ct.Path, ReviewTarget: review,
-			Status: combinedStatus(ct.Path, review),
+			Status: combinedStatus(ct.Path, mode),
 		})
 	}
 	return out
