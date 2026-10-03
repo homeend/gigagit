@@ -74,7 +74,7 @@ gg note list  --shelf <entry-id>                                   # notes gg le
 gg note rm    [<repo-link>] <note-id>
 gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
 gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]     # also keep the review's notes as permanent notes
-gg skill path [review|using-gg]                                  # print the bundled skill's path
+gg skill path [review|using-gg|delegate]                         # print the bundled skill's path
 ```
 
 Notes are machine-local review remarks anchored to a line range on one side of
