@@ -166,3 +166,20 @@ func TestSkillUsageErrors(t *testing.T) {
 		t.Errorf("usage errors wrote %d skill dirs into the cache", len(entries))
 	}
 }
+
+// The worker kickoff names the delegate skill; a worker without it installed
+// fetches it the way the other two are fetched.
+func TestSkillPathDelegate(t *testing.T) {
+	cache := t.TempDir()
+	old := SkillCacheDir
+	SkillCacheDir = cache
+	t.Cleanup(func() { SkillCacheDir = old })
+	code, out, errb := runCLI(t, newRepoDir(t), "skill", "path", "delegate")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	data, err := os.ReadFile(strings.TrimSpace(out))
+	if err != nil || string(data) != agentskill.Delegate.SkillFile() {
+		t.Fatalf("delegate skill at %q: %v", out, err)
+	}
+}

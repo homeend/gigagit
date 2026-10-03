@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## /delegate — a skill for handing work to worker agents
+
+### Added
+
+- **The `delegate` skill** (installed by `gg init` next to `using-gg` and
+  `reviewing-with-gg`): the overseer's playbook — read the task from any
+  source (prompt text, a file, a GitHub / Jira / … issue through the agent's
+  own tools; the brief carries the task itself, the source rides on the
+  worktree claim), name its kind (investigate · check · fix, plus a report
+  as a tour), write a self-contained brief with anchors, `agent_start`, the
+  `agent_wait` loop (report / question / idle / exit / timeout), verify the
+  worker's changes, finish — and the worker protocol (the kind's limits, ask
+  through a non-final report, the final report IS the worker's overview,
+  review notes with `gg note`). Your prompt holds only the task:
+  `/delegate investigate and fix <issue URL>, then report as a tour`.
+- Every spawned worker's kickoff line points it at the delegate skill's
+  worker protocol, so briefs need not repeat it.
+
 ## Briefs and reports open as tours
 
 ### Added

@@ -23,7 +23,7 @@ var SkillCacheDir string
 // skillUsage is what every caller mistake — and -h/--help — prints. It names
 // the default and the cache's refresh rule, because both decide whether an
 // agent gets the skill this binary carries or a stale one.
-const skillUsage = `usage: gg skill path [review|using-gg]
+const skillUsage = `usage: gg skill path [review|using-gg|delegate]
 
 Writes the embedded skill under the user cache dir and prints its absolute
 path. The default is review (reviewing-with-gg); using-gg is the git CLI
@@ -61,8 +61,10 @@ func cmdSkill(args []string, stdout, stderr io.Writer) int {
 		sk = agentskill.ReviewingWithGG
 	case "using-gg", "using":
 		sk = agentskill.UsingGG
+	case "delegate":
+		sk = agentskill.Delegate
 	default:
-		fmt.Fprintf(stderr, "skill: unknown skill %q (use review or using-gg)\n", name)
+		fmt.Fprintf(stderr, "skill: unknown skill %q (use review, using-gg or delegate)\n", name)
 		fmt.Fprintln(stderr, skillUsage)
 		return 2
 	}

@@ -382,6 +382,11 @@ func TestInstallWritesBothSkillsInEveryMode(t *testing.T) {
 		if !agentskill.ReviewingWithGG.HasMarker(review) {
 			t.Errorf("%s: reviewing-with-gg not installed at %s", id, d.ReviewTarget)
 		}
+		dt := d.TargetOf(agentskill.Delegate)
+		del, err := os.ReadFile(dt)
+		if err != nil || !agentskill.Delegate.HasMarker(del) {
+			t.Errorf("%s: delegate not installed at %s (%v)", id, dt, err)
+		}
 		if id == "agents-md" {
 			// Both blocks live in one file and neither may eat the other.
 			if !agentskill.UsingGG.HasMarker(review) {
@@ -414,6 +419,16 @@ func TestStatusIsTheWorstOfTheTwoSkills(t *testing.T) {
 	}
 	if got, _ := byID(Detect(proj, home), "claude-project"); got.Status != StatusOutdated {
 		t.Fatalf("review skill missing = %v, want StatusOutdated", got.Status)
+	}
+	// …and so is a missing delegate skill (a refresh adds it).
+	if err := Install(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(d.TargetOf(agentskill.Delegate)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := byID(Detect(proj, home), "claude-project"); got.Status != StatusOutdated {
+		t.Fatalf("delegate skill missing = %v, want StatusOutdated", got.Status)
 	}
 	// using-gg itself missing = new.
 	if err := os.Remove(d.Target); err != nil {

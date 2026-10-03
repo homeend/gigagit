@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/agentinit"
+	"github.com/homeend/gigagit/internal/agentskill"
 	"github.com/homeend/gigagit/internal/repos"
 )
 
@@ -181,14 +182,22 @@ func initTargetsPath() string {
 	return ""
 }
 
-// reviewTargetSuffix names the reviewing-with-gg install alongside the
-// using-gg one printed on the success line — install writes BOTH skills, so
-// the user must not read the line as installing only one.
+// reviewTargetSuffix names the other skills' installs alongside the using-gg
+// one printed on the success line — install writes EVERY skill, so the user
+// must not read the line as installing only one.
 func reviewTargetSuffix(d agentinit.Detection) string {
-	if d.ReviewTarget == "" || d.ReviewTarget == d.Target {
-		return " (+ reviewing-with-gg)"
+	var parts []string
+	for _, sk := range agentskill.All() {
+		if sk.Name == agentskill.UsingGG.Name {
+			continue
+		}
+		if t := d.TargetOf(sk); t == "" || t == d.Target {
+			parts = append(parts, "+ "+sk.Name)
+		} else {
+			parts = append(parts, fmt.Sprintf("+ %s → %s", sk.Name, t))
+		}
 	}
-	return fmt.Sprintf(" (+ reviewing-with-gg → %s)", d.ReviewTarget)
+	return " (" + strings.Join(parts, ", ") + ")"
 }
 
 // printList renders the numbered checkbox listing.

@@ -46,14 +46,24 @@ func (a Agent) TargetFor(sk agentskill.Skill, projDir, homeDir string) string {
 	if t == "" {
 		return ""
 	}
-	switch a.Mode {
+	return SkillTarget(t, a.Mode, sk)
+}
+
+// SkillTarget is where skill sk goes, given the resolved using-gg target of
+// an agent in mode: using-gg itself stays at that target; every other skill
+// sits next to it — <root>/<skill-name>/SKILL.md, <dir>/<skill-name><ext>,
+// or another block in the same shared file.
+func SkillTarget(usingTarget string, mode Mode, sk agentskill.Skill) string {
+	if sk.Name == agentskill.UsingGG.Name || usingTarget == "" {
+		return usingTarget
+	}
+	switch mode {
 	case ModeSkillFile:
-		// <root>/<skill-name>/SKILL.md
-		return filepath.Join(filepath.Dir(filepath.Dir(t)), sk.Name, filepath.Base(t))
+		return filepath.Join(filepath.Dir(filepath.Dir(usingTarget)), sk.Name, filepath.Base(usingTarget))
 	case ModePlainFile:
-		return filepath.Join(filepath.Dir(t), sk.Name+filepath.Ext(t))
-	default: // ModeBlock: one file, two blocks
-		return t
+		return filepath.Join(filepath.Dir(usingTarget), sk.Name+filepath.Ext(usingTarget))
+	default: // ModeBlock: one file, one block per skill
+		return usingTarget
 	}
 }
 
@@ -122,6 +132,11 @@ type Detection struct {
 	Status       Status
 }
 
+// TargetOf is where d installs skill sk.
+func (d Detection) TargetOf(sk agentskill.Skill) string {
+	return SkillTarget(d.Target, d.Agent.Mode, sk)
+}
+
 // resolve maps a registry path to an absolute path; "" means "not resolvable
 // in this run" (home-scoped path with no homeDir — the hermeticity rule).
 func resolve(p, projDir, homeDir string) string {
@@ -149,7 +164,7 @@ func Detect(projDir, homeDir string) []Detection {
 		}
 		target := resolve(a.Target, projDir, homeDir)
 		review := a.TargetFor(agentskill.ReviewingWithGG, projDir, homeDir)
-		out = append(out, Detection{Agent: a, Target: target, ReviewTarget: review, Status: combinedStatus(target, review)})
+		out = append(out, Detection{Agent: a, Target: target, ReviewTarget: review, Status: combinedStatus(target, a.Mode)})
 	}
 	return out
 }
@@ -169,31 +184,32 @@ func skillStatus(sk agentskill.Skill, target string) Status {
 	return StatusUpToDate
 }
 
-// combinedStatus folds the two skills into the single row the frontends show:
+// combinedStatus folds every skill into the single row the frontends show:
 // using-gg missing = new (this agent has never been set up); using-gg present
-// but the review skill missing or behind = outdated (a refresh adds it).
-func combinedStatus(usingTarget, reviewTarget string) Status {
+// but another skill missing or behind = outdated (a refresh adds it).
+func combinedStatus(usingTarget string, mode Mode) Status {
 	u := skillStatus(agentskill.UsingGG, usingTarget)
 	if u == StatusNew {
 		return StatusNew
 	}
-	r := skillStatus(agentskill.ReviewingWithGG, reviewTarget)
-	if u == StatusOutdated || r != StatusUpToDate {
-		return StatusOutdated
+	out := u
+	for _, sk := range agentskill.All() {
+		if sk.Name == agentskill.UsingGG.Name {
+			continue
+		}
+		if skillStatus(sk, SkillTarget(usingTarget, mode, sk)) != StatusUpToDate {
+			out = StatusOutdated
+		}
 	}
-	return StatusUpToDate
+	return out
 }
 
-// Install writes BOTH embedded skills into d's targets according to the agent's
-// mode, creating parent directories as needed. Shared files keep all
+// Install writes EVERY embedded skill into d's targets according to the
+// agent's mode, creating parent directories as needed. Shared files keep all
 // surrounding content — and each skill's own block — byte-for-byte. Idempotent.
 func Install(d Detection) error {
 	for _, sk := range agentskill.All() {
-		target := d.Target
-		if sk.Name == agentskill.ReviewingWithGG.Name && d.ReviewTarget != "" {
-			target = d.ReviewTarget
-		}
-		if err := installSkill(sk, target, d.Agent.Mode); err != nil {
+		if err := installSkill(sk, d.TargetOf(sk), d.Agent.Mode); err != nil {
 			return err
 		}
 	}

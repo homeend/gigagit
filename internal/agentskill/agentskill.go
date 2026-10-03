@@ -1,6 +1,6 @@
 // Package agentskill carries the skills that teach AI coding agents to drive gg:
-// "using-gg" (the git CLI surface) and "reviewing-with-gg" (the review-notes
-// lane). The content is compiled into the binary (go:embed); installed copies
+// "using-gg" (the git CLI surface), "reviewing-with-gg" (the review-notes
+// lane) and "delegate" (overseeing worker agents; the worker protocol). The content is compiled into the binary (go:embed); installed copies
 // are derived artifacts that change only when a newer binary's init runs.
 package agentskill
 
@@ -17,13 +17,19 @@ var usingBody string
 //go:embed reviewing-with-gg.md
 var reviewBody string
 
+//go:embed delegate.md
+var delegateBody string
+
 // Version is bumped whenever using-gg.md (or the rendered wrappers) change.
 // Installed copies carry it so init can tell new/outdated/up-to-date apart.
-const Version = 132
+const Version = 133
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
 const ReviewVersion = 10
+
+// DelegateVersion is the counter for the delegate skill.
+const DelegateVersion = 1
 
 // Skill is one embedded skill: its identity, its own version counter, and the
 // rendered forms init installs. Markers are per-skill ("gg:<name>:v<N>"), so
@@ -63,8 +69,16 @@ var ReviewingWithGG = newSkill("reviewing-with-gg",
 	"Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.",
 	ReviewVersion, reviewBody)
 
+// Delegate is the playbook for handing work to worker agents through gg's
+// agent tools (the overseer's loop) and the protocol a worker follows; gg's
+// kickoff line points every spawned worker at it. Short name on purpose:
+// users type it (/delegate <task>).
+var Delegate = newSkill("delegate",
+	"Use when the user asks you to delegate a task to worker agents through gg — start workers in their own worktrees, brief them, wait for their reports and check the result; also the protocol a worker started by gg follows.",
+	DelegateVersion, delegateBody)
+
 // All is the install set, in a stable order.
-func All() []Skill { return []Skill{UsingGG, ReviewingWithGG} }
+func All() []Skill { return []Skill{UsingGG, ReviewingWithGG, Delegate} }
 
 // Body is the canonical markdown body — no frontmatter, no markers.
 func (s Skill) Body() string { return s.body }

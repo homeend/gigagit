@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v132 -->
+<!-- gg:using-gg:v133 -->
 
 # Using gg (gigagit)
 
@@ -81,7 +81,7 @@ gg note list  --shelf <entry-id>                                   # notes gg le
 gg note rm    [<repo-link>] <note-id>
 gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
 gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]     # also keep the review's notes as permanent notes
-gg skill path [review|using-gg]                                  # print the bundled skill's path
+gg skill path [review|using-gg|delegate]                         # print the bundled skill's path
 ```
 
 Notes are machine-local review remarks anchored to a line range on one side of
@@ -372,6 +372,12 @@ anchor they left.
   says `gg web is showing worktree …`). Exit 2 is misuse: `--title is required`, `the text is empty`
   (nothing on stdin), `give the text with --file or on stdin` (a terminal on
   stdin), `the text is over 64 KiB`.
+
+A worker agent started by gg runs in its OWN worktree, which the user's gg is
+usually not showing — `gg session overview` and `gg session note` answer `gg
+is showing worktree …` there. A worker's overview is its final
+`agent_report`: gg files it as a tour of the worker's worktree (see the
+delegate skill).
 
 Combine with notes: `gg session note add` the remarks first, then link them
 from the overview (`[why this lock](note:t7)`). Order the anchors in the order
@@ -1054,6 +1060,10 @@ a WSL/Windows pair (one repo, two hosts) is never judged dead from this side
 — only its own side or the user releases it.
 
 ### Starting another agent
+
+To hand a task to worker agents, follow the **delegate** skill (the
+overseer's playbook: plan, brief, start, the wait loop, check, finish — and
+the worker protocol). This section is the tool reference.
 
 Inside a gg console you have gg's agent tools (MCP, via `gg mcp`) and their
 CLI twins. Outside a gg console they do not exist: `gg agent` exits 2,

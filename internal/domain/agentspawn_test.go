@@ -96,6 +96,14 @@ func TestSpawnSlotsAreRaceFree(t *testing.T) {
 	}
 }
 
+// The kickoff points the worker at its protocol, so briefs need not repeat it.
+func TestKickoffNamesTheDelegateSkill(t *testing.T) {
+	if !strings.Contains(AgentKickoff, "worker protocol of the delegate skill") || !strings.Contains(AgentKickoff, "gg agent task") ||
+		!strings.Contains(AgentKickoff, "gg skill path delegate") {
+		t.Fatalf("kickoff = %q", AgentKickoff)
+	}
+}
+
 func TestKickoffIsShellSafe(t *testing.T) {
 	if strings.ContainsAny(AgentKickoff, "\"'%!^&|<>$`\\") {
 		t.Fatalf("the kick-off must be safe in sh and cmd.exe quoting: %q", AgentKickoff)
