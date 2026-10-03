@@ -52,10 +52,11 @@ func (a SessionActivity) Name() string {
 type ActivityNotice struct {
 	Seq   uint64
 	ID    SessionID
-	Kind  string        // "question" | "idle" | "stalled"
+	Kind  string        // "question" | "idle" | "stalled" | "report"
 	Label string        // the session's label
 	Dir   string        // its worktree
 	Quiet time.Duration // stalled: how long nothing was printed
+	Text  string        // report: its first line
 }
 
 // Timing rules. Variables so tests (UseStateTiming) can shrink them.

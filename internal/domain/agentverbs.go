@@ -43,6 +43,10 @@ type AgentEntry struct {
 	Activity      string    `json:"activity,omitempty"`
 	ActivitySince time.Time `json:"activity_since,omitzero"`
 	Stalled       bool      `json:"stalled,omitempty"`
+	// The latest agent_report, when any: when it came and whether the
+	// worker called it final.
+	ReportAt    time.Time `json:"report_at,omitzero"`
+	ReportFinal bool      `json:"report_final,omitempty"`
 }
 
 // AgentScreenResult is agent_screen's answer.
@@ -51,6 +55,7 @@ type AgentScreenResult struct {
 	Text     string // the visible screen, trailing blanks trimmed
 	Activity string // as AgentEntry.Activity
 	Options  []ActivityOption
+	Report   *AgentReport // the latest agent_report, nil when none
 }
 
 // AgentList is every session of this process; Mine marks caller's descendants.
@@ -64,6 +69,9 @@ func AgentList(caller string) []AgentEntry {
 			Started: in.Started, Spawned: rec.Spawned, Mine: AgentDescends(full, caller)}
 		if a, ok := SessionActivityOf(in.ID); ok {
 			e.Activity, e.ActivitySince, e.Stalled = a.Name(), a.Since, a.Stalled
+		}
+		if rep, ok := latestReport(full); ok {
+			e.ReportAt, e.ReportFinal = rep.At, rep.Final
 		}
 		out = append(out, e)
 	}
@@ -96,6 +104,9 @@ func AgentScreen(target string) (AgentScreenResult, error) {
 	res := AgentScreenResult{State: sessionStateName(s.Info().State), Text: strings.TrimRight(strings.Join(lines, "\n"), "\n")}
 	if a, ok := SessionActivityOf(s.Info().ID); ok {
 		res.Activity, res.Options = a.Name(), a.Options
+	}
+	if rep, ok := latestReport(target); ok {
+		res.Report = &rep
 	}
 	return res, nil
 }
