@@ -4533,6 +4533,39 @@ Spec `docs/superpowers/specs/2026-10-03-agent-wait-report-design.md`.
   export list AND that file's import (`reportLine` was caught only by the
   browser check; two `activityWiring` rows guard it now).
 
+### Agent orchestration — tours (stage 4, 2026-10-03)
+
+Spec `docs/superpowers/specs/2026-10-03-agent-tours-design.md`.
+
+- `domain.AgentTour(full, kind)` composes a tour (`AgentTourDoc{Key, Root,
+  Dir, Title, Text, Seq}`): kind `brief` from the spawn record (a brief over
+  `TourMaxBytes` = 64 KiB is cut at a line end + a closing line), kind
+  `report` from the latest report (`Final report — …` when final). Titles
+  are English data (`Brief — <label> · <worktree> (HH:MM of the start)`).
+  `AgentTourKinds(full)` says which exist. domain does NOT import agentdocs;
+  a tui test pins `TourMaxBytes == agentdocs.MaxOverviewBytes`.
+- `agentdocs.Store.FileTour(key, root, dir, title, text)` keys an overview
+  (`brief:<full id>` / `report:<full id>`): replaced in place while open,
+  filed anew once the user closed it. `TourID(key)` = the open one.
+- TUI: `onAgentSpawned` files the brief (`fileBriefTour`); every activity
+  wake runs `fileReportTours` — per session, the latest report's seq vs
+  `*m.tourSeq` (so a closed report tour comes back only with a NEW report;
+  quiet mode files none). The cap refusal goes to the status line, the spawn
+  answer is not affected. Open brief / Open report (`tourMenuRows`,
+  `openTour`) re-file, then show at once on the current worktree, else
+  `guardedReRoot(dir, false)` + `consoleSwitch.tour`, shown by
+  `settleConsoleAfterSwitch` after the snapshot synced the overviews.
+- Web: the session wire carries `has_brief` / `has_report`; `POST
+  /api/agent-tour {id, kind}` files the tour INSIDE `listDocs` (+
+  `ensureOpenID` for the served worktree) — the page focuses it right after
+  the answer and the follow pass is asynchronous (a plain FileTour answered
+  404 to that focus; found by the browser check). Another worktree's tour:
+  `sessionStorage gg-open-tour` + `doReroot`, opened by `openPendingTour()` at
+  boot. The ctrl+\ switcher rows have no menu (planning ruling: ask first).
+- `UseSessionManager` (test seam) now also installs a fresh spawn registry:
+  ids restart at s1, and the old manager's records/reports leaked onto the
+  new s1.
+
 ## Review view (structured reviews, 2026-09-28)
 
 Spec: `docs/superpowers/specs/2026-09-28-review-view-design.md`; plan

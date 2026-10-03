@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Briefs and reports open as tours
+
+### Added
+
+- **A worker's brief and its reports are tours.** When an agent starts a
+  worker, gg files the brief as an overview document in the worker's
+  worktree (`Brief — Claude · job (14:03)`); every `agent_report` files or
+  replaces that session's report tour (`Report — …`, `Final report — …`).
+  Links like `[parser](internal/x/parse.go:40-60)` are anchors: tab / enter
+  walk them in the worker's own files. Nothing opens by itself; a brief over
+  64 KiB is cut at a line end (the worker still gets all of it).
+- **Open brief / Open report** on a worker's session row — the `.` menu in
+  the TUI, the right-click menu on the web page. gg switches to the worker's
+  worktree first (a hosted page: the terminal too) and shows the tour; one
+  you closed is filed again. Tours stay until gg quits.
+
+### Changed
+
+- The `using-gg` skill (v132) asks overseers to put anchors into briefs and
+  workers to put a one-line summary and anchors into reports.
+
 ## Agents wait for and report to each other
 
 ### Added
