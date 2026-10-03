@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,7 +26,7 @@ const noChannel = "this gg console has no agent channel — an Open terminal nev
 
 func cmdAgent(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg agent <start|list|screen|send|kill|task> [args]")
+		fmt.Fprintln(stderr, "usage: gg agent <start|list|screen|send|kill|task|wait|report> [args]")
 		return 2
 	}
 	verb, rest := args[0], args[1:]
@@ -57,6 +58,10 @@ func cmdAgent(svc *domain.Service, args []string, stdin io.Reader, stdout, stder
 		return agentKill(ctx, c, rest, stdout, stderr)
 	case "task":
 		return agentTask(ctx, c, rest, stdout, stderr)
+	case "wait":
+		return agentWait(c, rest, stdout, stderr) // its own ctx: the timeout plus slack
+	case "report":
+		return agentReport(ctx, c, rest, stdin, stdout, stderr)
 	}
 	fmt.Fprintf(stderr, "agent: unknown verb %q\n", verb)
 	return 2
@@ -155,6 +160,13 @@ func agentList(ctx context.Context, c *agentlink.Client, args []string, stdout, 
 		if a.Stalled {
 			line += "  stalled"
 		}
+		if !a.ReportAt.IsZero() {
+			if a.ReportFinal {
+				line += "  done"
+			} else {
+				line += "  reported"
+			}
+		}
 		line += "  " + a.Tool + "  " + a.Worktree
 		if a.Parent != "" {
 			line += "  parent " + a.Parent
@@ -200,22 +212,192 @@ func agentListOutside(svc *domain.Service, args []string, stdout, stderr io.Writ
 }
 
 func agentOneID(ctx context.Context, c *agentlink.Client, verb string, args []string, stdout, stderr io.Writer) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: gg agent "+verb+" <id>")
+	reports := false
+	var ids []string
+	for _, a := range args { // flags anywhere: `screen <id> --reports`
+		if a == "--reports" || a == "-reports" {
+			reports = true
+		} else {
+			ids = append(ids, a)
+		}
+	}
+	if len(ids) != 1 {
+		fmt.Fprintln(stderr, "usage: gg agent "+verb+" <id> [--reports]")
 		return 2
 	}
 	var out struct {
 		Text     string                  `json:"text"`
 		Activity string                  `json:"activity"`
 		Options  []domain.ActivityOption `json:"options"`
+		Report   *domain.AgentReport     `json:"report"`
+		Reports  []domain.AgentReport    `json:"reports"`
 	}
-	if code := call(ctx, c, verb, "agent_"+verb, map[string]any{"id": args[0]}, &out, stderr); code != 0 {
+	if code := call(ctx, c, verb, "agent_"+verb, map[string]any{"id": ids[0]}, &out, stderr); code != 0 {
 		return code
+	}
+	if reports { // the kept reports, oldest first, instead of the screen
+		for _, r := range out.Reports {
+			fmt.Fprintln(stdout, reportLines(r))
+		}
+		return 0
 	}
 	if out.Activity != "" {
 		fmt.Fprintln(stdout, activityLine(out.Activity, out.Options))
 	}
+	if out.Report != nil {
+		fmt.Fprintln(stdout, "report: "+domain.ReportFirstLine(out.Report.Text))
+	}
 	fmt.Fprintln(stdout, out.Text)
+	return 0
+}
+
+// agentWait: gg agent wait [<id>] [--until <what>] [--timeout <s>] — exit
+// 0 on an event, 3 on a timeout (loop on it), 1 on a channel failure, 2 on
+// a refusal or usage.
+func agentWait(c *agentlink.Client, args []string, stdout, stderr io.Writer) int {
+	const usage = "usage: gg agent wait [<id>] [--until idle|question|exit|report|any] [--timeout <seconds>]"
+	id, until, timeout := "", "", 0
+	value := func(i *int) (string, bool) {
+		if *i+1 >= len(args) {
+			return "", false
+		}
+		*i++
+		return args[*i], true
+	}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--until" || a == "-until":
+			v, ok := value(&i)
+			if !ok {
+				fmt.Fprintln(stderr, usage)
+				return 2
+			}
+			until = v
+		case strings.HasPrefix(a, "--until="):
+			until = strings.TrimPrefix(a, "--until=")
+		case a == "--timeout" || a == "-timeout" || strings.HasPrefix(a, "--timeout="):
+			v, ok := strings.TrimPrefix(a, "--timeout="), true
+			if !strings.HasPrefix(a, "--timeout=") {
+				v, ok = value(&i)
+			}
+			n, err := strconv.Atoi(v)
+			if !ok || err != nil {
+				fmt.Fprintln(stderr, usage)
+				return 2
+			}
+			timeout = n
+		case strings.HasPrefix(a, "-"):
+			fmt.Fprintln(stderr, usage)
+			return 2
+		default:
+			if id != "" {
+				fmt.Fprintln(stderr, usage)
+				return 2
+			}
+			id = a
+		}
+	}
+	slack := domain.WaitDefaultTimeout + 15*time.Second
+	if timeout > 0 {
+		slack = time.Duration(timeout)*time.Second + 15*time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), slack)
+	defer cancel()
+	in := map[string]any{"id": id, "until": until, "timeout_s": timeout}
+	var out domain.AgentWaitResult
+	if code := call(ctx, c, "wait", "agent_wait", in, &out, stderr); code != 0 {
+		return code
+	}
+	printWaitResult(stdout, out)
+	return waitExitCode(out)
+}
+
+func waitExitCode(out domain.AgentWaitResult) int {
+	if out.TimedOut {
+		return 3
+	}
+	return 0
+}
+
+func printWaitResult(w io.Writer, out domain.AgentWaitResult) {
+	if out.TimedOut {
+		fmt.Fprintln(w, "timed out")
+	} else {
+		fmt.Fprintln(w, "event: "+out.Event)
+	}
+	if out.ID != "" {
+		fmt.Fprintln(w, "id: "+out.ID)
+	}
+	if out.Activity != "" {
+		fmt.Fprintln(w, activityLine(out.Activity, out.Options))
+	}
+	if out.ExitCode != nil {
+		fmt.Fprintf(w, "exit code: %d\n", *out.ExitCode)
+	}
+	if out.Report != nil {
+		fmt.Fprintln(w, reportLines(*out.Report))
+	}
+}
+
+// reportLines: "report #3 (final) 12:04:05:" then the text, indented.
+func reportLines(r domain.AgentReport) string {
+	head := fmt.Sprintf("report #%d", r.Seq)
+	if r.Final {
+		head += " (final)"
+	}
+	head += " " + r.At.Local().Format("15:04:05") + ":"
+	return head + "\n  " + strings.ReplaceAll(strings.TrimRight(r.Text, "\n"), "\n", "\n  ")
+}
+
+// agentReport: gg agent report [--final] (<text>… | -F <file> | -F -)
+func agentReport(ctx context.Context, c *agentlink.Client, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	const usage = "usage: gg agent report [--final] (<text>… | -F <file> | -F -)"
+	final, file := false, ""
+	var words []string
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--final" || a == "-final":
+			final = true
+		case a == "-F" || a == "--file":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return 2
+			}
+			i++
+			file = args[i]
+		default:
+			words = append(words, a)
+		}
+	}
+	text := strings.Join(words, " ")
+	if file != "" {
+		if text != "" {
+			fmt.Fprintln(stderr, usage)
+			return 2
+		}
+		var b []byte
+		var err error
+		if file == "-" {
+			b, err = io.ReadAll(stdin)
+		} else {
+			b, err = os.ReadFile(file)
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, "agent report:", err)
+			return 1
+		}
+		text = string(b)
+	}
+	if strings.TrimSpace(text) == "" {
+		fmt.Fprintln(stderr, usage)
+		return 2
+	}
+	var out domain.AgentReport
+	if code := call(ctx, c, "report", "agent_report", map[string]any{"text": text, "final": final}, &out, stderr); code != 0 {
+		return code
+	}
+	fmt.Fprintf(stdout, "reported #%d\n", out.Seq)
 	return 0
 }
 
