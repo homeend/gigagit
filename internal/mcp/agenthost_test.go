@@ -197,3 +197,40 @@ func TestAgentWaitAndReportOverHTTP(t *testing.T) {
 		t.Fatalf("bad until = %s", resultText(res))
 	}
 }
+
+// Review fix 1: a client that cancels its agent_wait (the CLI on SIGINT /
+// SIGTERM, an MCP client cancelling a tool call) ends the host's waiter —
+// a report that arrives afterwards goes to the NEXT wait, not to nobody.
+func TestCancelledAgentWaitConsumesNothing(t *testing.T) {
+	url, tok, full := hostEnv(t, nil)
+	tc := config.ToolCommand{Category: "session", Name: "Sh", Mode: "session", Command: "sh -c 'sleep 600'"}
+	dir := domain.Sessions().List()[0].Dir
+	child, _, err := domain.Open(dir).StartAgentSession(context.Background(), tc, dir, "", 80, 24, nil, url, domain.SpawnRecord{Parent: full, Spawned: true}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	childID := domain.FullSessionID(child.Info().ID)
+	cs, err := agentClient(t, url, tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = cs.CallTool(ctx, &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"id": childID, "timeout_s": 20}})
+	}()
+	time.Sleep(300 * time.Millisecond)
+	cancel()
+	<-done
+	time.Sleep(300 * time.Millisecond) // the cancel notification reaches the host
+	if _, err := domain.AgentReportVerb(childID, "after the cancel", true); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(800 * time.Millisecond) // a surviving waiter would take it within its tick
+	res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"id": childID, "timeout_s": 2}})
+	if err != nil || res.IsError || !strings.Contains(resultText(res), `"event":"report"`) || !strings.Contains(resultText(res), "after the cancel") {
+		t.Fatalf("the report was eaten by the cancelled wait: %v %s", err, resultText(res))
+	}
+}

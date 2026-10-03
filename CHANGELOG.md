@@ -16,23 +16,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   event of a worker the caller started: its turn ended (`idle`), it asks a
   decision (`question`, with the dialog's options), it exited (`exit`, with
   the code) or it reported (`report`). Without an id it watches every worker
-  the caller started directly. An event counts only when it happened after
-  the last input to that worker (so "send, then wait" never returns the idle
-  the worker was already in) and an idle only after it held two seconds;
-  each event is delivered once per caller; a timeout (45 s by default, up to
-  600) is a normal answer — call again. The CLI exits 0 on an event, 3 on a
-  timeout.
+  the caller started directly. An idle or a question counts only when it
+  began after the last input to that worker (so "send, then wait" never
+  returns the idle the worker was already in) and an idle only after it held
+  two seconds; an exit ends every wait, whatever was asked; each event is
+  delivered once per caller; a timeout (45 s by default, up to 600) is a
+  normal answer that says whether the worker still runs — call again. The
+  CLI exits 0 on an event, 3 on a timeout, and an interrupted `gg agent
+  wait` cancels its call so the next wait gets the event.
 - **`agent_report` — a worker hands its result back.** `agent_report {text,
   final?}` (CLI `gg agent report [--final] (<text> | -F <file> | -F -)`)
   stores the worker's result on its session: the parent's `agent_wait`
   returns it, `agent_list` shows `report_at` / `report_final`,
   `agent_screen` the latest report and all kept ones (`gg agent screen <id>
-  --reports`; 20 per session, 64 KiB each). A report never ends the worker
-  — the parent kills it when done.
+  --reports`; 20 per session, 64 KiB each). The text is stored without
+  terminal control sequences. A report never ends the worker — the parent
+  kills it when done.
 - **Rows say `reported` / `done`.** In the TUI and on the gg web page a
   session's row shows `reported 2m` — `done 2m` for a final report — in the
   attention colour instead of the activity, until someone types into that
-  session (a dialog waiting for a decision still wins). The `ctrl+\` popup
+  session or it exits (a dialog waiting for a decision still wins). The `ctrl+\` popup
   and the web switcher add the report's first line; the status line / a
   toast says `<agent> in <worktree> reports: …` once.
 

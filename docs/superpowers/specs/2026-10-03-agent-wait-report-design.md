@@ -57,7 +57,9 @@ store's own broadcaster. Nothing can be missed; nothing depends on grace.
 
 An event is *deliverable* for (caller, worker) when all of these hold:
 
-- **kind asked**: it is one of `until`.
+- **kind asked**: it is one of `until` — except an **exit**, which ends
+  every wait whatever was asked (review ruling: a dead worker can do
+  nothing else, and a parent looping on `until: report` would never end).
 - **freshness** (idle, question): the activity's `Since` postdates the
   worker's **last input** — `agentsession.Session.LastInput()`, the
   `LastOutput` twin, stamped by every input path (`SendKey`, `SendText`,
@@ -82,8 +84,8 @@ Several deliverable events on one wake (or across workers for an `any`
 wait): **report before exit before question before idle**; among workers,
 list order (start order). One event per return; the parent calls again.
 
-**Timeout** is not an error: `{timed_out: true, id?, activity, since,
-stalled}` (the fields of the named worker; absent for an `any` wait). The
+**Timeout** is not an error: `{timed_out: true, id?, state, activity,
+since, stalled}` (the fields of the named worker; absent for an `any` wait). The
 parent simply calls again — the skill says so.
 
 **Immediate refusals** (errors): no such session / not yours; `until`
@@ -186,7 +188,7 @@ report replaces it:
 |---|---|
 | latest report final, unanswered | `done 2m` (age of the report) |
 | latest report non-final, unanswered | `reported 2m` |
-| answered (input after the report), or no report | the stage-3a badge (`working …` / `idle …` / `needs input` / `stalled`) |
+| answered (input after the report), exited, or no report | the stage-3a badge (`working …` / `idle …` / `needs input` / `stalled`) |
 
 Precedence: `needs input` (question) **beats** a report badge (the human
 must act); a report badge beats `stalled` and `idle`/`working`. Both report

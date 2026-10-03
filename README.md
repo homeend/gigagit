@@ -1013,12 +1013,12 @@ read every session of the TUI.
 The overseer waits with `agent_wait` (`gg agent wait [<id>] [--until
 idle|question|exit|report|any] [--timeout <s>]`): one call blocks until a
 worker's turn ended, it asks a decision, it exited or it reported, and
-returns that one event — each once, and only if it happened after the last
-input to the worker; on a timeout (45 s by default; the CLI exits 3) it
-simply calls again. A worker ends its task with `agent_report` (`gg agent
+returns that one event — each once; a turn's end or a question only if it
+began after the last input to the worker, and an exit whatever was asked. On
+a timeout (45 s by default; the CLI exits 3) it simply calls again. A worker ends its task with `agent_report` (`gg agent
 report [--final] <text>`): the result reaches the overseer's `agent_wait`,
 and the worker's row says **reported** — **done** for a final report — in
-the attention colour until someone types into that session; the status line
+the attention colour until someone types into that session or it exits; the status line
 (or a toast on the web page) carries the report's first line. A report never
 ends the worker; the overseer kills it when the work is done.
 

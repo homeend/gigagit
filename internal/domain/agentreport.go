@@ -53,10 +53,11 @@ func (r *spawnRegistry) setMark(caller, worker string, m deliveryMark) {
 }
 
 // AgentReportVerb records caller's report about itself and tells the
-// waiters and the human. Only a running session reports (its token stops
+// waiters and the human. The text is stored free of terminal control
+// (cleanReportText): it reaches status lines and terminals. Only a running session reports (its token stops
 // working at exit anyway).
 func AgentReportVerb(caller, text string, final bool) (AgentReport, error) {
-	text = strings.TrimRight(text, "\r\n")
+	text = strings.TrimRight(cleanReportText(text), "\n")
 	if strings.TrimSpace(text) == "" {
 		return AgentReport{}, errors.New("the report is empty")
 	}
@@ -111,12 +112,13 @@ func latestReport(full string) (AgentReport, bool) {
 }
 
 // SessionReportOf is the report the session's row shows: the latest one,
-// while nobody has typed into the session since (spec §5.1 — a report is
-// news until somebody talks to the worker). Frontends add the question
+// while the session runs and nobody has typed into it since (spec §5.1 — a
+// report is news until somebody talks to the worker; an exited session's
+// row says exited and nobody can answer it). Frontends add the question
 // precedence themselves.
 func SessionReportOf(id SessionID) (AgentReport, bool) {
 	s, ok := Sessions().Get(id)
-	if !ok {
+	if !ok || s.Info().State != SessionRunning {
 		return AgentReport{}, false
 	}
 	rep, ok := latestReport(FullSessionID(id))
@@ -126,15 +128,39 @@ func SessionReportOf(id SessionID) (AgentReport, bool) {
 	return rep, true
 }
 
-var ansiRe = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+// Terminal control sequences a report must never carry to a status line, a
+// popup row or a terminal the CLI prints to: string sequences (OSC, DCS,
+// APC, PM, SOS — up to BEL or ST), CSI, and two-byte / charset escapes.
+var (
+	escStringRe = regexp.MustCompile(`\x1b[\]P_^X][^\x07\x1b]*(?:\x07|\x1b\\)?`)
+	escCSIRe    = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+	escOtherRe  = regexp.MustCompile(`\x1b[ -/]*[0-~]`)
+)
+
+// cleanReportText is text without terminal control: escape sequences are
+// removed, CRLF becomes LF, and every other control character (C0 but tab
+// and newline, DEL, C1) is dropped.
+func cleanReportText(text string) string {
+	text = escStringRe.ReplaceAllString(text, "")
+	text = escCSIRe.ReplaceAllString(text, "")
+	text = escOtherRe.ReplaceAllString(text, "")
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || r == '\t':
+			return r
+		case r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f):
+			return -1
+		}
+		return r
+	}, strings.ReplaceAll(text, "\r\n", "\n"))
+}
 
 // ReportFirstLine is the notice/row line of a report: its first non-blank
-// line, control sequences stripped, cut to reportLineMax runes with an
+// line, free of terminal control, cut to reportLineMax runes with an
 // ellipsis.
 func ReportFirstLine(text string) string {
-	text = ansiRe.ReplaceAllString(text, "")
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		line = strings.TrimSpace(strings.ReplaceAll(line, "\r", ""))
+	for _, line := range strings.Split(cleanReportText(text), "\n") {
+		line = strings.TrimSpace(strings.ReplaceAll(line, "\t", " "))
 		if line == "" {
 			continue
 		}

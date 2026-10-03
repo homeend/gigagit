@@ -18,6 +18,7 @@ type AgentWaitResult struct {
 	ID       string           `json:"id,omitempty"`
 	Event    string           `json:"event,omitempty"` // idle | question | exit | report
 	TimedOut bool             `json:"timed_out,omitempty"`
+	State    string           `json:"state,omitempty"` // running | exited (the worker, when one is named)
 	Activity string           `json:"activity,omitempty"`
 	Since    time.Time        `json:"since,omitzero"`
 	Stalled  bool             `json:"stalled,omitempty"`
@@ -61,8 +62,9 @@ func clampWaitTimeout(d time.Duration) time.Duration {
 }
 
 // AgentWait blocks until target (or, with target "", any direct child of
-// caller) has a new event among until, or timeout passes. A ctx end is an
-// error (the client hung up), a timeout a normal answer.
+// caller) has a new event among until — or exits, which ends every wait —
+// or timeout passes. A ctx end is an error (the client hung up), a timeout
+// a normal answer.
 func AgentWait(ctx context.Context, caller, target, until string, timeout time.Duration) (AgentWaitResult, error) {
 	want, err := parseWaitUntil(until)
 	if err != nil {
@@ -93,6 +95,9 @@ func AgentWait(ctx context.Context, caller, target, until string, timeout time.D
 	tick := time.NewTicker(waitTick)
 	defer tick.Stop()
 	for {
+		if err := ctx.Err(); err != nil {
+			return AgentWaitResult{}, err // a client that is gone consumes nothing
+		}
 		for _, id := range candidates() {
 			res, ok, err := nextWaitEvent(w, caller, id, want, time.Now())
 			if err != nil {
@@ -113,6 +118,7 @@ func AgentWait(ctx context.Context, caller, target, until string, timeout time.D
 			if target != "" {
 				res.ID = target
 				if s, err := sessionOf(target); err == nil {
+					res.State = sessionStateName(s.Info().State)
 					if a, ok := w.Get(s.Info().ID); ok {
 						res.Activity, res.Since, res.Stalled = a.Name(), a.Since, a.Stalled
 					}
@@ -152,7 +158,7 @@ func nextWaitEvent(w *StateWatcher, caller, id string, want map[string]bool, now
 		return AgentWaitResult{}, false, err
 	}
 	info := s.Info()
-	res := AgentWaitResult{ID: id}
+	res := AgentWaitResult{ID: id, State: sessionStateName(info.State)}
 	a, classified := w.Get(info.ID)
 	if classified {
 		res.Activity, res.Since, res.Stalled = a.Name(), a.Since, a.Stalled
@@ -179,7 +185,9 @@ func nextWaitEvent(w *StateWatcher, caller, id string, want map[string]bool, now
 			}
 		}
 	}
-	if want["exit"] && info.State == SessionExited && !m.exit {
+	// An exit ends every wait, whatever was asked: a dead worker can do
+	// nothing else, and a parent waiting for its report would loop forever.
+	if info.State == SessionExited && !m.exit {
 		m.exit = true
 		r.setMark(caller, id, m)
 		code := info.ExitCode

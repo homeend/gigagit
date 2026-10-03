@@ -1086,10 +1086,15 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   `agent_report`, text included), `exit` (with `exit_code`), `question`
   (with `options` — answer with `agent_send`), `idle` (its turn ended
   without a report — read `agent_screen`). Without `id`: any worker you
-  started directly. Each event comes once, and only if it happened after
-  the last input to that worker; `timed_out: true` (default after 45 s —
-  keep `timeout_s` under your client's tool timeout, at most 600) just
-  means call again. The CLI exits 0 on an event, 3 on a timeout.
+  started directly. Each event comes once; an `idle` or `question` only if
+  it began after the last input to that worker. An `exit` ends every wait,
+  whatever `until` asked — a dead worker reports nothing more.
+  `timed_out: true` (default after 45 s — keep `timeout_s` under your
+  client's tool timeout, at most 600) just means call again; with an `id`
+  it carries the worker's `state` (`running` / `exited`) and `activity`.
+  The CLI exits 0 on an event, 3 on a timeout. A wait that was killed
+  outright can swallow one event — if a worker seems silent for long,
+  look at `agent_list` (`report_at`, `state`) or `agent_screen`.
 - `agent_report {text, final?}` / `gg agent report [--final] (<text> | -F
   <file> | -F -)` — **a worker's last act**: your result for whoever
   started you (what changed, what you skipped, what they must do; up to

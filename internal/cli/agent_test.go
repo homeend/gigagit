@@ -227,10 +227,10 @@ func TestAgentReportAndWaitCLI(t *testing.T) {
 func TestWaitExitCodeAndPrint(t *testing.T) {
 	at := time.Date(2026, 10, 3, 1, 2, 3, 0, time.Local)
 	code := 7
-	res := domain.AgentWaitResult{ID: "p/s1", Event: "report", Activity: "idle", Report: &domain.AgentReport{Seq: 3, Text: "a\nb", Final: true, At: at}, ExitCode: &code}
+	res := domain.AgentWaitResult{ID: "p/s1", Event: "report", State: "running", Activity: "idle", Report: &domain.AgentReport{Seq: 3, Text: "a\nb", Final: true, At: at}, ExitCode: &code}
 	var b strings.Builder
 	printWaitResult(&b, res)
-	want := "event: report\nid: p/s1\nactivity: idle\nexit code: 7\nreport #3 (final) 01:02:03:\n  a\n  b\n"
+	want := "event: report\nid: p/s1\nstate: running\nactivity: idle\nexit code: 7\nreport #3 (final) 01:02:03:\n  a\n  b\n"
 	if b.String() != want || waitExitCode(res) != 0 {
 		t.Fatalf("%q (code %d)", b.String(), waitExitCode(res))
 	}
@@ -238,5 +238,39 @@ func TestWaitExitCodeAndPrint(t *testing.T) {
 	printWaitResult(&b, domain.AgentWaitResult{TimedOut: true, ID: "p/s1", Activity: "working"})
 	if b.String() != "timed out\nid: p/s1\nactivity: working\n" || waitExitCode(domain.AgentWaitResult{TimedOut: true}) != 3 {
 		t.Fatalf("%q", b.String())
+	}
+}
+
+// Review fix 1: an interrupted `gg agent wait` (SIGINT / SIGTERM — a
+// harness timeout) cancels its call, so the host's waiter ends and the
+// worker's next event goes to the next wait.
+func TestAgentWaitCLIStopsOnSignal(t *testing.T) {
+	dir, full := agentEnvFor(t, nil)
+	tc := config.ToolCommand{Category: "session", Name: "Sh", Mode: "session", Command: "sh -c 'sleep 600'"}
+	child, _, err := domain.Open(dir).StartAgentSession(context.Background(), tc, dir, "", 80, 24, nil, "", domain.SpawnRecord{Parent: full, Spawned: true}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	childID := domain.FullSessionID(child.Info().ID)
+	prev := waitSignalContext
+	waitSignalContext = func(parent context.Context) (context.Context, context.CancelFunc) {
+		ctx, cancel := context.WithCancel(parent)
+		time.AfterFunc(300*time.Millisecond, cancel) // "the signal"
+		return ctx, cancel
+	}
+	start := time.Now()
+	code, _, _ := runAgentCLI(t, dir, "", "wait", childID, "--timeout", "20")
+	waitSignalContext = prev
+	if code != 1 || time.Since(start) > 5*time.Second {
+		t.Fatalf("an interrupted wait must fail fast: code %d after %v", code, time.Since(start))
+	}
+	time.Sleep(300 * time.Millisecond)
+	if _, err := domain.AgentReportVerb(childID, "after the signal", true); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(800 * time.Millisecond)
+	code, out, _ := runAgentCLI(t, dir, "", "wait", childID, "--timeout", "2")
+	if code != 0 || !strings.Contains(out, "event: report") || !strings.Contains(out, "state: running") {
+		t.Fatalf("wait after the signal = %d %q", code, out)
 	}
 }

@@ -4491,21 +4491,31 @@ Spec `docs/superpowers/specs/2026-10-03-agent-wait-report-design.md`.
   activity's `Since` is after the worker's `Session.LastInput()` (the start
   time while nothing was typed) ∧ (idle only) held ≥ `idleSettle` 2 s
   (`UseIdleSettle` in tests). Order: report > exit > question > idle; one
-  event per return. Timeout (default 45 s, cap 600 s) is a normal result
+  event per return. An EXIT is delivered whatever `until` asked (a parent
+  looping on `until: report` over a crashed worker would never end), and
+  every result that names a worker carries `state` (running | exited). Timeout (default 45 s, cap 600 s) is a normal result
   `{timed_out, id?, activity, since}`; a ctx end is an error.
 - **Delivery marks** live in the spawn registry beside the records:
   `marks[caller][worker] = {idleSince, questionSince, reportSeq, exit}`,
   advanced under the registry lock (two waiters never get the same event),
-  pruned with the records. A parent that restarts is a new caller and sees
+  pruned with the records. The loop checks `ctx` BEFORE evaluating, so a
+  cancelled call consumes nothing; the go-sdk cancels the handler ctx on
+  `notifications/cancelled` (a client ctx cancel sends it) but NOT on a
+  dropped connection — hence `gg agent wait` cancels on SIGINT/SIGTERM
+  (`waitSignalContext`), and a SIGKILLed waiter can still swallow one event
+  (the level reads are the recovery). A parent that restarts is a new caller and sees
   pending events again.
 - **Reports** (`agentreport.go`): `reports[full id]`, ≤ 20, `Seq` is
   process-global and monotonic; kept until the session is REMOVED (not
   until it exits), so "final report, then exit" is read as report then
   exit. `AgentReportVerb` refuses an empty/oversized (64 KiB) text and an
-  exited session, signals the waiters and posts an `ActivityNotice{Kind:
+  exited session, stores the text through `cleanReportText` (no OSC/DCS/
+  CSI/ESC sequences, no C0 but tab+newline, no DEL/C1 — it reaches the
+  status line and terminals), signals the waiters and posts an `ActivityNotice{Kind:
   "report", Text: first line}` at once (no grace).
 - **Row rule**: `domain.SessionReportOf(id)` returns the latest report
-  while `LastInput` is not after its `At` — "a report is news until
+  while the session RUNS and `LastInput` is not after its `At` (an exited
+  row says exited; nobody can answer it) — "a report is news until
   somebody talks to the worker" (level state cannot tell "idle after
   reporting" from "idle after the next turn"). Frontends add: a question
   wins. TUI `sessionBadge` / web `activityLabel`; final only changes the

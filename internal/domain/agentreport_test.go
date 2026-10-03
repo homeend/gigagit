@@ -126,15 +126,59 @@ func TestAgentReportRefusesExitedAndPrunesOnRemove(t *testing.T) {
 
 func TestReportFirstLine(t *testing.T) {
 	cases := map[string]string{
-		"merged\r\nnext":            "merged",
-		"\n\n  lead blank\nx":       "lead blank",
-		"\x1b[31mred\x1b[0m tail\n": "red tail",
-		strings.Repeat("é", 130):    strings.Repeat("é", 119) + "…",
-		"":                          "",
+		"merged\r\nnext":                     "merged",
+		"\n\n  lead blank\nx":                "lead blank",
+		"\x1b[31mred\x1b[0m tail\n":          "red tail",
+		strings.Repeat("é", 130):             strings.Repeat("é", 119) + "…",
+		"":                                   "",
+		"\x1b]52;c;aGk=\x07done":             "done",
+		"\x1b]0;title\x1b\\ok\x1b(B":         "ok",
+		"a\tb\x07\x00c\x7f\u009b31md":        "a bc31md",
+		"\x1bPdcs payload\x1b\\after \x1bM!": "after !",
 	}
 	for in, want := range cases {
 		if got := ReportFirstLine(in); got != want {
 			t.Errorf("ReportFirstLine(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// Review fix 3: the STORED text is clean too — the CLI prints it to a
+// terminal.
+func TestAgentReportStoresCleanText(t *testing.T) {
+	_, wt, _, ov := spawnFixture(t, 4)
+	res, _, err := SpawnAgent(context.Background(), SpawnSpec{Req: AgentStartRequest{Caller: ov, Worktree: wt, Tool: "Sleeper", Prompt: "x"}, Cols: 80, Rows: 24, MCPURL: "http://x", Approved: approveAll})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer UseSessionStates(NewStaticStates(nil))()
+	rep, err := AgentReportVerb(res.ID, "line \x1b[1mone\x1b[0m\r\n\tindented\x1b]52;c;eA==\x07 two\x00\n", false)
+	if err != nil || rep.Text != "line one\n\tindented two" {
+		t.Fatalf("stored %q %v", rep.Text, err)
+	}
+	if _, err := AgentReportVerb(res.ID, "\x1b[0m\x07", false); err == nil {
+		t.Fatal("a report of only control noise is empty")
+	}
+}
+
+// Review fix 4: an exited session shows no report badge (nobody can answer
+// it; its row says exited) — the report stays readable for agents.
+func TestSessionReportOfDropsAnExitedSession(t *testing.T) {
+	_, wt, _, ov := spawnFixture(t, 4)
+	res, sess, err := SpawnAgent(context.Background(), SpawnSpec{Req: AgentStartRequest{Caller: ov, Worktree: wt, Tool: "Sleeper", Prompt: "x"}, Cols: 80, Rows: 24, MCPURL: "http://x", Approved: approveAll})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer UseSessionStates(NewStaticStates(nil))()
+	if _, err := AgentReportVerb(res.ID, "done", true); err != nil {
+		t.Fatal(err)
+	}
+	_ = Sessions().Kill(sess.Info().ID)
+	<-sess.Done()
+	if rep, ok := SessionReportOf(sess.Info().ID); ok {
+		t.Fatalf("an exited session must not wear a report badge: %+v", rep)
+	}
+	if list, _ := AgentReports(res.ID); len(list) != 1 {
+		t.Fatal("the report itself stays")
 	}
 }

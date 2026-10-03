@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/homeend/gigagit/internal/agentlink"
@@ -302,7 +304,11 @@ func agentWait(c *agentlink.Client, args []string, stdout, stderr io.Writer) int
 	if timeout > 0 {
 		slack = time.Duration(timeout)*time.Second + 15*time.Second
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), slack)
+	// An interrupt cancels the call: the host's waiter ends with it, so an
+	// event that arrives later is not delivered to a process that is gone.
+	sigCtx, stop := waitSignalContext(context.Background())
+	defer stop()
+	ctx, cancel := context.WithTimeout(sigCtx, slack)
 	defer cancel()
 	in := map[string]any{"id": id, "until": until, "timeout_s": timeout}
 	var out domain.AgentWaitResult
@@ -311,6 +317,11 @@ func agentWait(c *agentlink.Client, args []string, stdout, stderr io.Writer) int
 	}
 	printWaitResult(stdout, out)
 	return waitExitCode(out)
+}
+
+// waitSignalContext ends with SIGINT / SIGTERM (a test seam).
+var waitSignalContext = func(parent context.Context) (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 }
 
 func waitExitCode(out domain.AgentWaitResult) int {
@@ -328,6 +339,9 @@ func printWaitResult(w io.Writer, out domain.AgentWaitResult) {
 	}
 	if out.ID != "" {
 		fmt.Fprintln(w, "id: "+out.ID)
+	}
+	if out.State != "" {
+		fmt.Fprintln(w, "state: "+out.State)
 	}
 	if out.Activity != "" {
 		fmt.Fprintln(w, activityLine(out.Activity, out.Options))

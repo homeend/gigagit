@@ -209,3 +209,38 @@ func TestAgentWaitDefaults(t *testing.T) {
 		t.Fatalf("default = %v", d)
 	}
 }
+
+// Review fix 1: a wait whose client is already gone must not consume the
+// pending event — the next wait gets it.
+func TestAgentWaitCancelledCallConsumesNothing(t *testing.T) {
+	ov, w1, _, _, _, _ := waitFixture(t)
+	if _, err := AgentReportVerb(w1, "pending", false); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if res, err := AgentWait(ctx, ov, w1, "any", time.Second); err == nil {
+		t.Fatalf("a cancelled wait returned %+v", res)
+	}
+	if res := doWait(t, ov, w1, "any", time.Second); res.Event != "report" || res.Report.Text != "pending" {
+		t.Fatalf("the event was eaten by the cancelled call: %+v", res)
+	}
+}
+
+// Review fix 2: a dead worker ends every wait on it — nothing else can
+// happen — and a timeout says whether the worker still runs.
+func TestAgentWaitExitEndsAnyUntil(t *testing.T) {
+	ov, w1, w2, s1, _, _ := waitFixture(t)
+	if res := doWait(t, ov, w2, "report", 200*time.Millisecond); !res.TimedOut || res.State != "running" {
+		t.Fatalf("timeout must carry the state: %+v", res)
+	}
+	_ = Sessions().Kill(s1.Info().ID)
+	<-s1.Done()
+	res := doWait(t, ov, w1, "report", time.Second)
+	if res.Event != "exit" || res.ExitCode == nil || res.State != "exited" {
+		t.Fatalf("until: report on a dead worker must return its exit: %+v", res)
+	}
+	if res = doWait(t, ov, w1, "idle", 200*time.Millisecond); !res.TimedOut || res.State != "exited" {
+		t.Fatalf("after the exit went out, the timeout still says exited: %+v", res)
+	}
+}
