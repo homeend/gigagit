@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agents wait for and report to each other
+
+### Added
+
+- **`agent_wait` — a parent blocks until a worker has news.** One call
+  (`agent_wait {id?, until?, timeout_s?}`, CLI `gg agent wait [<id>]
+  [--until idle|question|exit|report|any] [--timeout <s>]`) returns one
+  event of a worker the caller started: its turn ended (`idle`), it asks a
+  decision (`question`, with the dialog's options), it exited (`exit`, with
+  the code) or it reported (`report`). Without an id it watches every worker
+  the caller started directly. An event counts only when it happened after
+  the last input to that worker (so "send, then wait" never returns the idle
+  the worker was already in) and an idle only after it held two seconds;
+  each event is delivered once per caller; a timeout (45 s by default, up to
+  600) is a normal answer — call again. The CLI exits 0 on an event, 3 on a
+  timeout.
+- **`agent_report` — a worker hands its result back.** `agent_report {text,
+  final?}` (CLI `gg agent report [--final] (<text> | -F <file> | -F -)`)
+  stores the worker's result on its session: the parent's `agent_wait`
+  returns it, `agent_list` shows `report_at` / `report_final`,
+  `agent_screen` the latest report and all kept ones (`gg agent screen <id>
+  --reports`; 20 per session, 64 KiB each). A report never ends the worker
+  — the parent kills it when done.
+- **Rows say `reported` / `done`.** In the TUI and on the gg web page a
+  session's row shows `reported 2m` — `done 2m` for a final report — in the
+  attention colour instead of the activity, until someone types into that
+  session (a dialog waiting for a decision still wins). The `ctrl+\` popup
+  and the web switcher add the report's first line; the status line / a
+  toast says `<agent> in <worktree> reports: …` once.
+
+### Changed
+
+- The `using-gg` skill (v131) teaches the worker to finish with
+  `agent_report --final` and stay running, and the parent to loop on
+  `agent_wait` instead of polling `agent_list`.
+
 ## Session rows say what the agent is doing
 
 ### Added

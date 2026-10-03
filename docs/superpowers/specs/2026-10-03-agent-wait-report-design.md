@@ -221,8 +221,9 @@ bundles.
 
 ### 5.3 Reading the text
 
-The ctrl+\ popup and the web switcher show the latest report's first line
-under the row (dim, elided). The full text is an agent surface
+The ctrl+\ popup and the web switcher show the unanswered report's first
+line on the row, after the badge (`done 2m — merged feat/x`; the rows are
+wide, and neither list has sub-lines). The full text is an agent surface
 (`agent_screen`, `gg agent screen --reports`, `gg agent list --json`); no
 new viewer — a report is a sentence for the parent, not a document.
 
