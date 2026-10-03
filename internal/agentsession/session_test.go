@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 func needSh(t *testing.T) {
@@ -203,5 +205,34 @@ func TestLastOutputStampsTheLatestChunk(t *testing.T) {
 	}
 	if got := s.LastOutput(); got.Before(before) {
 		t.Fatalf("LastOutput = %v, want after %v", got, before)
+	}
+}
+
+func TestLastInputStampedByEveryInputPath(t *testing.T) {
+	needSh(t)
+	s := startSh(t, "sleep 60")
+	if !s.LastInput().IsZero() {
+		t.Fatal("LastInput must be zero before any input")
+	}
+	s.Touch()
+	if !s.LastInput().IsZero() {
+		t.Fatal("Touch (a frontend showing the session) is not input")
+	}
+	before := time.Now()
+	s.SendText("a")
+	t1 := s.LastInput()
+	if t1.Before(before) {
+		t.Fatalf("SendText did not stamp: %v", t1)
+	}
+	time.Sleep(2 * time.Millisecond)
+	s.Paste("b")
+	t2 := s.LastInput()
+	if !t2.After(t1) {
+		t.Fatal("Paste did not restamp")
+	}
+	time.Sleep(2 * time.Millisecond)
+	s.SendKey(uv.KeyPressEvent{Code: uv.KeyEnter})
+	if !s.LastInput().After(t2) {
+		t.Fatal("SendKey did not restamp")
 	}
 }
