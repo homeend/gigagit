@@ -39,8 +39,11 @@ var defaults = map[string][3][]string{
 		// The input box is a ❯ line directly under a horizontal rule —
 		// whether or not text is typed in it (an unsubmitted message
 		// still means the agent is idle). A user message echoed in the
-		// transcript also starts with ❯ but has no rule above it.
-		{`^─{8,}\n❯`},
+		// transcript also starts with ❯ but has no rule above it. Once the
+		// session has a name the rule carries it ("──── merge conflict
+		// resolution ─", Claude Code seen 2026-10-03), so the rule only has
+		// to LEAD its line.
+		{`^─{8,}[^\n]*\n❯`},
 		{`^❯ \d+\.`, `Esc to cancel`, `Esc to go back`, `\(y/n\)`, `\[Y/n\]`, `Do you want to proceed`},
 	},
 	"codex": {

@@ -105,6 +105,42 @@ func TestClassifyTypedButUnsubmitted(t *testing.T) {
 	}
 }
 
+// Reported 2026-10-03 (screenshot, Claude Code with Opus 5.5): once a
+// session has a name, Claude Code writes it into the input box's top rule.
+// The turn is over; the row kept saying "working" because the idle rule
+// wanted a rule of dashes only.
+const titledBoxScreen = `  - git worktree prune would remove the two stale T:/ worktree entries.
+  - The leftover gg autostashes might be worth clearing if they're no longer needed.
+
+  Neither is urgent for a fixture repo, and I haven't changed anything. If you'd like this as a shareable
+  page, I can publish it as one.
+
+✻ Cooked for 37s · done 12:28 PM
+
+──────────────────────────────────────────────────────────────────── merge conflict resolution orderservice ─
+❯
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  homeend@homeend-p14s  /mnt/…/test-1.worktrees/b (conflict-10-a-20261002-222629*)  Opus 5.5  6% of 1M  5h …
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents
+`
+
+func TestClassifyTitledInputBox(t *testing.T) {
+	if got := Classify(DefaultRules("claude"), Tail(titledBoxScreen, 15)); got != Waiting {
+		t.Errorf("titled box: got %q want waiting", got)
+	}
+	// Typed but unsubmitted text in a titled box is still idle.
+	typed := strings.Replace(titledBoxScreen, "\n❯\n", "\n❯ next question\n", 1)
+	if got := Classify(DefaultRules("claude"), Tail(typed, 15)); got != Waiting {
+		t.Errorf("titled box with text: got %q want waiting", got)
+	}
+	// A user message echoed under a line that merely STARTS with text is
+	// not the box: the rule must lead the line.
+	echo := "see ──────── here\n❯ do the thing\n● Working on it\n"
+	if got := Classify(DefaultRules("claude"), Tail(echo, 15)); got != Unknown {
+		t.Errorf("echo: got %q want unknown", got)
+	}
+}
+
 func TestClassifyGenericAndCodex(t *testing.T) {
 	if got := Classify(DefaultRules("mystery"), Tail("run tests? (y/n)", 5)); got != Question {
 		t.Errorf("generic question: %q", got)
