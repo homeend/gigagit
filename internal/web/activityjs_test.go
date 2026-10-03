@@ -42,10 +42,16 @@ r.push([{ agent_state: "question" }, { agent_state: "idle", stalled: true }, { a
 r.push(noticeText({ kind: "question", label: "claude", worktree: "/a/b/wt" }));
 r.push(noticeText({ kind: "idle", label: "claude", worktree: "C:\\x\\wt2" }));
 r.push(noticeText({ kind: "stalled", label: "codex", worktree: "/a/wt", quiet_s: 125 }));
+r.push(activityLabel({ state: "running", agent_state: "idle", since, report_at: new Date(now - 120000).toISOString(), report_final: true }, now));
+r.push(activityLabel({ state: "running", agent_state: "working", since, report_at: new Date(now - 30000).toISOString() }, now));
+r.push(activityLabel({ state: "running", agent_state: "question", since, report_at: new Date(now - 30000).toISOString() }, now));
+r.push([{ report_at: "x" }, { report_at: "x", agent_state: "question" }].map((s) => activityAttn(s)).join(","));
+r.push(noticeText({ kind: "report", label: "claude", worktree: "/a/wt", text: "merged feat/x" }));
 console.log(r.join("|"));
 `)
 	want := `working 7m|idle 7m|needs input|stalled · working 7m|stalled · no output|true|true|true,true,false,false|` +
-		`claude in wt needs your input|claude in wt2 finished its turn — idle|codex in wt has printed nothing for 2m — stalled?`
+		`claude in wt needs your input|claude in wt2 finished its turn — idle|codex in wt has printed nothing for 2m — stalled?` +
+		`|done 2m|reported 30s|needs input|true,true|claude in wt reports: merged feat/x`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
@@ -75,10 +81,11 @@ const since = new Date(now - 3 * 60000).toISOString();
 const rows = sessionRows([
   { id: "s1", label: "claude", repo: "r", worktree: "/x/gg", state: "running", started: new Date(now - 125000).toISOString(), agent_state: "working", since, stalled: true },
   { id: "s3", label: "sh", repo: "r", worktree: "/x/gg", state: "running", started: new Date(now - 125000).toISOString() },
+  { id: "s4", label: "worker", repo: "r", worktree: "/x/gg", state: "running", started: new Date(now - 125000).toISOString(), agent_state: "idle", since, report_at: since, report_final: true, report_line: "merged feat/x" },
 ], "", now).filter((r) => r.id);
 console.log(rows.map((r) => r.meta + "/" + r.attn).join("|"));
 `)
-	if want := "2m · stalled · working 3m/true|2m/false"; switcher != want {
+	if want := "2m · stalled · working 3m/true|2m/false|2m · done 3m — merged feat/x/true"; switcher != want {
 		t.Fatalf("switcher got %s want %s", switcher, want)
 	}
 	console := runPureJS(t, "console.js", consolePureStart, consolePureEnd, pre+`
@@ -104,6 +111,8 @@ var activityWiring = []struct{ file, want, why string }{
 	{"style.css", ".wsess.attn", "attention sub-rows are coloured"},
 	{"style.css", ".ofrow.attn", "attention switcher rows are coloured"},
 	{"style.css", "--act-attn", "one attention colour token"},
+	{"core.js", "postJSON, reportLine, runOnce", "core exports the report line helper"},
+	{"openfiles.js", "postJSON, reportLine, tabId } from", "the switcher imports it (a module: an unimported name is a ReferenceError)"},
 }
 
 func TestActivityWired(t *testing.T) {

@@ -388,25 +388,35 @@ function activityAge(iso, now) {
   return s < 60 ? s + "s" : s < 3600 ? Math.floor(s / 60) + "m" : Math.floor(s / 3600) + "h";
 }
 // activityLabel: "working 7m" | "idle 3m" | "needs input" | "stalled · working 7m"
-// | "stalled · no output" | "" (unknown and not stalled, or exited).
+// | "stalled · no output" | "" (unknown and not stalled, or exited); and
+// "reported 2m" / "done 2m" while an agent_report is unanswered (s.report_at
+// is on the wire only until someone types into the session) — a question
+// still wins, the user must act.
 function activityLabel(s, now) {
   if (!s || s.state === "exited") return "";
+  if (s.report_at && s.agent_state !== "question") return (s.report_final ? "done " : "reported ") + activityAge(s.report_at, now);
   let label = "";
   if (s.agent_state === "working" || s.agent_state === "idle") label = s.agent_state + (s.since ? " " + activityAge(s.since, now) : "");
   else if (s.agent_state === "question") label = "needs input";
   if (s.stalled) return "stalled · " + (label || "no output");
   return label;
 }
-// activityAttn: the attention colour — the agent waits for a decision, or
-// looks stuck.
+// activityAttn: the attention colour — the agent waits for a decision,
+// looks stuck, or reported a result nobody answered yet.
 function activityAttn(s) {
-  return !!s && (s.agent_state === "question" || !!s.stalled);
+  return !!s && (s.agent_state === "question" || !!s.stalled || !!s.report_at);
 }
-// noticeText: the toast for one activity notice {kind, label, worktree, quiet_s}.
+// reportLine: the unanswered report's first line for a wide row, "" under
+// a question.
+function reportLine(s) {
+  return s && s.report_line && s.agent_state !== "question" ? s.report_line : "";
+}
+// noticeText: the toast for one activity notice {kind, label, worktree, quiet_s, text}.
 function noticeText(n) {
   const wt = String(n.worktree || "").split(/[\\/]/).filter(Boolean).pop() || n.worktree;
   const who = n.label + " in " + wt;
   if (n.kind === "question") return who + " needs your input";
+  if (n.kind === "report") return who + " reports: " + (n.text || "");
   if (n.kind === "idle") return who + " finished its turn — idle";
   const q = n.quiet_s || 0;
   return who + " has printed nothing for " + (q < 60 ? q + "s" : Math.floor(q / 60) + "m") + " — stalled?";
@@ -470,7 +480,7 @@ function runOnce(type, fn, opts = {}) {
 // --- end single-flight task gate ---
 
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, activityAttn, activityLabel, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lsGet, lsSet, noticeText, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, activityAttn, activityLabel, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elideNoteSummary, elidePath, esc, getJSON, lsGet, lsSet, noticeText, postJSON, reportLine, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
 
 // fmtBytes is the TUI's byte count for a placeholder: "597.0 KB", "1.2 MB", "312 B".
 export function fmtBytes(n) {
