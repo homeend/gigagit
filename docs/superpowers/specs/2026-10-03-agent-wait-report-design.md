@@ -59,10 +59,13 @@ An event is *deliverable* for (caller, worker) when all of these hold:
 
 - **kind asked**: it is one of `until`.
 - **freshness** (idle, question): the activity's `Since` postdates the
-  worker's `last_input` — the time the parent last spoke to it. `agent_start`
-  stamps `last_input` at start; `agent_send` restamps it on every send (text
-  or keys). So `agent_send` → `agent_wait until: idle` cannot return the idle
-  the worker was already in before the send.
+  worker's **last input** — `agentsession.Session.LastInput()`, the
+  `LastOutput` twin, stamped by every input path (`SendKey`, `SendText`,
+  `Paste`: the parent's `agent_send`, the human typing in a console, the web
+  console alike); the session's start time while nothing was typed. So
+  `agent_send` → `agent_wait until: idle` cannot return the idle the worker
+  was already in before the send, and a human who answers a worker's
+  question in its console makes that question stale for the parent too.
 - **settle** (idle only): the idle has held for ≥ 2 s (`idleSettle`,
   behind the `UseStateTiming` seam for tests). Guards the known
   working→idle→working flicker a level-triggered wait would otherwise fire
@@ -123,11 +126,12 @@ Known edges, documented not solved:
 - a worker that never changes its screen after a send (it ignored the
   input) is reported by the timeout, with the old `since`.
 
-### 3.5 `agent_send` restamp and `AgentEntry`
+### 3.5 Last input
 
-`agent_send` records `last_input` on the target's spawn record. It is
-exposed nowhere; it only feeds freshness. `agent_list` entries gain nothing
-for the wait itself.
+`Session.LastInput()` is new in `agentsession` (leaf): an atomic UnixNano
+set by `SendKey`/`SendText`/`Paste`, zero before the first input. It is
+exposed nowhere on the wire; it feeds the wait's freshness (§3.2) and the
+report badge (§5.1). `agent_list` entries gain nothing for the wait itself.
 
 ## 4. `agent_report`
 
@@ -173,26 +177,33 @@ human channel (§5).
 
 A report **replaces the activity word** on every session row (TUI
 worktree/branch sub-rows, the ctrl+\ popup, the console title; web sidebar
-sub-rows, the switcher, the console title):
+sub-rows, the switcher, the console title) **until someone answers it** —
+the next input to that session (`LastInput` after the report's `At`), from
+the parent's `agent_send` or the human's keystrokes — or until a newer
+report replaces it:
 
 | condition | badge |
 |---|---|
-| latest report non-final, activity has not entered *working* since it | `reported 2m` (age of the report) |
-| latest report final | `done 2m` — stays until the session is killed/removed; a later non-final report does not demote it |
-| otherwise | the stage-3a badge (`working …` / `idle …` / `needs input` / `stalled`) |
+| latest report final, unanswered | `done 2m` (age of the report) |
+| latest report non-final, unanswered | `reported 2m` |
+| answered (input after the report), or no report | the stage-3a badge (`working …` / `idle …` / `needs input` / `stalled`) |
 
 Precedence: `needs input` (question) **beats** a report badge (the human
 must act); a report badge beats `stalled` and `idle`/`working`. Both report
-badges wear the attention colour (`--act-attn` / `activityAttn`).
+badges wear the attention colour (`--act-attn` / `activityAttn`). Final
+versus non-final changes only the word: a `done` worker the human asks a
+follow-up of is working again, and its row says so.
 
-Rule in one sentence: a non-final report is "news until the worker is busy
-again"; a final report is "this worker is finished".
+Rule in one sentence: a report is news until somebody talks to the worker.
+(Level state cannot tell "idle after reporting" from "idle after the next
+turn", but it can tell "someone answered" — hence this rule rather than
+"until working again".)
 
-Implementation: `SessionActivity` gains nothing; the decision lives in one
-pure helper per frontend fed with the activity **and** the latest report
-(`domain.SessionReportOf(id) (AgentReport, bool)` — the TUI and web wire
-carry `report_at`, `report_final`, `report_line` = first line, ≤ 120
-runes).
+Implementation: one rule in `domain` — `SessionReportOf(id) (AgentReport,
+bool)` returns the latest report only while it is unanswered; the frontends
+add the question precedence. The TUI reads it next to
+`SessionActivityOf`; the web wire carries `report_at`, `report_final`,
+`report_line` (first line, ≤ 120 runes) only while the badge shows.
 
 ### 5.2 Notice
 
@@ -235,9 +246,10 @@ new viewer — a report is a sentence for the parent, not a document.
 
 | part | where | change |
 |---|---|---|
-| Report store + delivery marks + `last_input` | `internal/domain/agentspawn.go` (registry) + new `agentreport.go` | `AgentReport`, `addReport`, `reportsOf`, `markDelivered`/`delivered`, `stampInput`; a `Broadcaster` for waiters |
+| Last input | `internal/agentsession/io.go`, `session.go` | `lastIn` atomic + `LastInput()` |
+| Report store + delivery marks | `internal/domain/agentspawn.go` (registry) + new `agentreport.go` | `AgentReport`, `addReport`, `reportsOf`, `markDelivered`/`delivered`; a `Broadcaster` for waiters |
 | Wait | new `internal/domain/agentwait.go` | `AgentWait`, `AgentWaitResult`, `waitUntil` parse, `idleSettle` under `UseStateTiming` |
-| Verbs | `internal/domain/agentverbs.go` | `AgentReportVerb(caller, text, final)`, `AgentReports`, `AgentSend` restamp, `AgentEntry`/`AgentScreenResult` fields, `SessionReportOf` |
+| Verbs | `internal/domain/agentverbs.go` | `AgentReportVerb(caller, text, final)`, `AgentReports`, `AgentEntry`/`AgentScreenResult` fields, `SessionReportOf` |
 | Notice | `internal/domain/session_states.go` | `ActivityNotice.Text`, kind `report` posted by the store |
 | MCP | `internal/mcp/agenttools.go` (+ forwarder in `server.go`) | `agent_wait`, `agent_report`; new out fields |
 | CLI | `internal/cli/agent.go` | `wait`, `report`, `screen --reports`, list columns |
@@ -246,7 +258,7 @@ new viewer — a report is a sentence for the parent, not a document.
 | Skill + docs | `agentskill/using-gg.md` v131, CHANGELOG, README, CLAUDE-details | |
 
 `archtest`: nothing new crosses a boundary (`agentstate` untouched; the
-report store is `domain`-only).
+report store is `domain`-only; `agentsession` stays a leaf).
 
 ## 8. Deferred (explicit)
 
@@ -263,8 +275,9 @@ report store is `domain`-only).
 
 ## 9. Testing
 
+- `agentsession`: `LastInput` zero before input, set by key/text/paste.
 - `domain`: fake-fed watcher (`NewStaticStates` + a mutable source) —
-  freshness (idle before send not delivered; idle after send delivered),
+  freshness (idle before input not delivered; idle after input delivered),
   settle (idle < 2 s not delivered), once-only per caller, two callers each
   get the event, order report > exit > question > idle, `any` across two
   children (grandchild excluded), exited worker answers exit then reports,
@@ -273,8 +286,8 @@ report store is `domain`-only).
 - `mcp`: tool registration + forwarder round trip for both tools (the
   stage-2 harness).
 - `cli`: exit codes 0/3/1, `-F -` stdin, `--reports`.
-- `tui`: badge precedence table as a pure test, popup line, notice text,
-  i18n gates.
+- `tui`: badge precedence (unanswered report, answered report, question
+  wins) as a pure test, popup line, notice text, i18n gates.
 - `web`: wire fields, pure-section JS tests for the badge/notice, and the
   browser check (`TestAttachBrowserHost` + `checkstates.mjs`) gains a
   reported row — asserted visible, seen failing on the unfixed build.
