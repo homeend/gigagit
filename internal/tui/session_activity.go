@@ -1,6 +1,7 @@
 package tui
 
-// What an agent session is doing — working, idle, needs input, stalled —
+// What an agent session is doing — working, idle, needs input, stalled, or
+// what it reported (reported / done) —
 // on the Worktrees/Branches sub-rows, the ctrl+\ popup rows and the console
 // title, and the status-line notices when a session wants the user
 // (domain.SessionStates). The TUI keeps its own subscription and notice
@@ -50,10 +51,46 @@ func activityAttn(a domain.SessionActivity) bool {
 	return a.State == domain.ActivityQuestion || a.Stalled
 }
 
+// reportText is the badge of an unanswered agent_report: "reported 2m", or
+// "done 2m" when the agent called it final (ages from the report).
+func reportText(r domain.AgentReport, now time.Time) string {
+	if r.Final {
+		return i18n.T("done %s", formatElapsed(now.Sub(r.At)))
+	}
+	return i18n.T("reported %s", formatElapsed(now.Sub(r.At)))
+}
+
+// sessionBadge is a session row's word and whether it wears the attention
+// colour: a question first (the user must act), then an unanswered report,
+// then the activity.
+func sessionBadge(id domain.SessionID, now time.Time) (string, bool) {
+	a, aok := domain.SessionActivityOf(id)
+	if aok && a.State == domain.ActivityQuestion {
+		return activityText(a, now), true
+	}
+	if rep, ok := domain.SessionReportOf(id); ok {
+		return reportText(rep, now), true
+	}
+	if aok {
+		return activityText(a, now), activityAttn(a)
+	}
+	return "", false
+}
+
 // sessionActivityText is the label for a session row, "" when unknown.
 func sessionActivityText(id domain.SessionID) string {
-	if a, ok := domain.SessionActivityOf(id); ok {
-		return activityText(a, time.Now())
+	text, _ := sessionBadge(id, time.Now())
+	return text
+}
+
+// sessionReportLine is the report's first line for the wide popup row; ""
+// once someone answered it, and while a question has the row.
+func sessionReportLine(id domain.SessionID) string {
+	if a, ok := domain.SessionActivityOf(id); ok && a.State == domain.ActivityQuestion {
+		return ""
+	}
+	if rep, ok := domain.SessionReportOf(id); ok {
+		return domain.ReportFirstLine(rep.Text)
 	}
 	return ""
 }
@@ -66,6 +103,8 @@ func activityNoticeText(n domain.ActivityNotice) string {
 		return i18n.T("%s in %s needs your input", n.Label, wt)
 	case "idle":
 		return i18n.T("%s in %s finished its turn — idle", n.Label, wt)
+	case "report":
+		return i18n.T("%s in %s reports: %s", n.Label, wt, n.Text)
 	default:
 		return i18n.T("%s in %s has printed nothing for %s — stalled?", n.Label, wt, formatElapsed(n.Quiet))
 	}
@@ -135,12 +174,13 @@ func (m Model) sessionDecorators(p panel, idx []int) []rowDecorator {
 		return nil
 	}
 	var decos []rowDecorator
+	now := time.Now()
 	for j, i := range idx {
 		id, ok := sessAt(i)
 		if !ok {
 			continue
 		}
-		if a, ok := domain.SessionActivityOf(id); ok && activityAttn(a) {
+		if _, attn := sessionBadge(id, now); attn {
 			if decos == nil {
 				decos = make([]rowDecorator, len(idx))
 			}

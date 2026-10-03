@@ -103,6 +103,7 @@ func helpContent() []contentLine {
 		r("", i18n.T("tasks with the same key run one after another; at most [tasks] max_parallel (default 3, 1..10) run at once. An interactive agent's every write of $GG_MESSAGE_FILE is applied (commit box, review viewer, resolution overview) with a notice; a result that would get in the way waits behind a notice (… ready — ctrl+\\)")),
 		r("", i18n.T("Open terminal (.-menu on a Worktrees row, or on a Branches row checked out in a worktree): an interactive shell in that worktree, in the same console ([console] shell picks it)")),
 		r("", i18n.T("A session sub-row says what the agent is doing: working, idle (its turn is over), needs input (a dialog waits — open the console and answer), stalled (nothing printed for two minutes); the status line tells you once when one needs you")),
+		r("", i18n.T("A session row says reported or done once its agent reported a result (agent_report); the badge stays until someone types into that session")),
 		h(i18n.T("Worktrees panel")),
 		r("enter", i18n.T("switch into the selected worktree")),
 		r("f", i18n.T("find current: jump the cursor to the worktree gg is running in")),

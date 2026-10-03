@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/agentsession"
 	"github.com/homeend/gigagit/internal/domain"
 )
 
@@ -119,5 +121,84 @@ func TestActivityWaitIsQuietInHeadlessMode(t *testing.T) {
 func TestScreenRulesWarningIsTranslated(t *testing.T) {
 	if got := screenRulesWarning("Claude"); !strings.Contains(got, "Claude") || !strings.Contains(got, "built-in") {
 		t.Fatalf("warning = %q", got)
+	}
+}
+
+// reportingSession: a fresh manager with one running session (no parallel:
+// the manager and the watcher are process-global).
+func reportingSession(t *testing.T) *domain.AgentSession {
+	t.Helper()
+	restore := domain.UseSessionManager(agentsession.NewManager())
+	s, err := domain.Sessions().Start(domain.SessionStartSpec{Label: "w", AgentID: "claude", Repo: "r", Dir: t.TempDir(), Cols: 80, Rows: 24, Argv: []string{"sh", "-c", "sleep 60"}})
+	if err != nil {
+		restore()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { domain.Sessions().KillAll(context.Background()); restore() })
+	return s
+}
+
+func TestSessionBadgePrecedence(t *testing.T) {
+	s := reportingSession(t)
+	id := s.Info().ID
+	now := time.Now()
+	w := domain.NewStaticStates(map[domain.SessionID]domain.SessionActivity{id: {State: domain.ActivityIdle, Since: now.Add(-3 * time.Minute)}})
+	defer domain.UseSessionStates(w)()
+	if text, attn := sessionBadge(id, now); text != "idle 3m00s" || attn {
+		t.Fatalf("no report: %q %v", text, attn)
+	}
+	if _, err := domain.AgentReportVerb(domain.FullSessionID(id), "merged feat/x\nmore", false); err != nil {
+		t.Fatal(err)
+	}
+	if text, attn := sessionBadge(id, now.Add(2*time.Minute)); !strings.HasPrefix(text, "reported 1m") && !strings.HasPrefix(text, "reported 2m") || !attn {
+		t.Fatalf("non-final report: %q %v", text, attn)
+	}
+	if line := sessionReportLine(id); line != "merged feat/x" {
+		t.Fatalf("report line = %q", line)
+	}
+	if _, err := domain.AgentReportVerb(domain.FullSessionID(id), "all done", true); err != nil {
+		t.Fatal(err)
+	}
+	if text, _ := sessionBadge(id, now.Add(2*time.Minute)); !strings.HasPrefix(text, "done ") {
+		t.Fatalf("final report: %q", text)
+	}
+	// A question beats the report.
+	restore2 := domain.UseSessionStates(domain.NewStaticStates(map[domain.SessionID]domain.SessionActivity{id: {State: domain.ActivityQuestion, Since: now}}))
+	defer restore2()
+	if text, attn := sessionBadge(id, now); text != "needs input" || !attn {
+		t.Fatalf("question must win: %q %v", text, attn)
+	}
+	if line := sessionReportLine(id); line != "" {
+		t.Fatalf("a question hides the report line: %q", line)
+	}
+}
+
+func TestSessionBadgeClearsOnInput(t *testing.T) {
+	s := reportingSession(t)
+	id := s.Info().ID
+	defer domain.UseSessionStates(domain.NewStaticStates(nil))()
+	if _, err := domain.AgentReportVerb(domain.FullSessionID(id), "done", true); err != nil {
+		t.Fatal(err)
+	}
+	if text, _ := sessionBadge(id, time.Now()); !strings.HasPrefix(text, "done ") {
+		t.Fatalf("%q", text)
+	}
+	if row := sessionStateText(s.Info()); !strings.Contains(row, " — done") && !strings.HasSuffix(row, " — done") {
+		t.Fatalf("the popup row carries the report line: %q", row)
+	}
+	time.Sleep(2 * time.Millisecond)
+	s.SendText("thanks")
+	if text, _ := sessionBadge(id, time.Now()); text != "" {
+		t.Fatalf("answered report must clear (no activity → empty): %q", text)
+	}
+	if line := sessionReportLine(id); line != "" {
+		t.Fatalf("line must clear too: %q", line)
+	}
+}
+
+func TestActivityNoticeTextReport(t *testing.T) {
+	n := domain.ActivityNotice{Kind: "report", Label: "claude", Dir: "/a/b/wt", Text: "merged feat/x"}
+	if got := activityNoticeText(n); got != "claude in wt reports: merged feat/x" {
+		t.Fatalf("%q", got)
 	}
 }
