@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v131 -->
+<!-- gg:using-gg:v132 -->
 
 # Using gg (gigagit)
 
@@ -1064,7 +1064,10 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   [--note <url>]` — starts a worker in that worktree with your task as its
   brief (up to 256 KiB; the note up to 1 KiB); prints its id. Your claim on the worktree (or a fresh one) passes to the worker and
   returns to you when it ends. `tool` is a session command named in the
-  user's `[agents] spawn`.
+  user's `[agents] spawn`. Write the brief as markdown and link the files
+  and lines the worker should start from with repo-relative anchors
+  (`[the parser](internal/x/parse.go:40-60)`, the overview anchor grammar):
+  the user reads it as a tour of the worker's worktree.
 - `agent_list` / `gg agent list [--json]` — every session of this gg;
   `mine` marks the agents you started. `activity` is what the agent is
   doing, read off its screen: `working`, `idle` (its turn is over, it waits
@@ -1108,7 +1111,10 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   64 KiB). `final` says you are done. You stay running until killed — do
   not exit on your own: the parent may read your screen or ask more. The
   user's session row shows `done` / `reported` until someone types into
-  your session.
+  your session. Write it as markdown: the first line a one-line summary
+  (rows and notices show it), then anchors to what you changed, most
+  important first (`[new check](src/a.go:10-30)`) — the user opens it as a
+  tour of your worktree.
 
 A parent's loop: `agent_wait` → on `report` read it; on `question` answer
 with `agent_send`; on `idle` without a report read `agent_screen`; on

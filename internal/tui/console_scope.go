@@ -18,6 +18,7 @@ import (
 type consoleSwitch struct {
 	armed bool             // reRoot ran; the console has not been checked against the new repo yet
 	open  domain.SessionID // the session the switch was asked for, opened once the repo has loaded
+	tour  string           // an agent tour (overview id) to show once the worktree has loaded
 }
 
 // inRepo reports whether a session runs in one of this repository's worktrees.
@@ -78,6 +79,15 @@ func (m Model) openSessionAnywhere(id domain.SessionID) (Model, tea.Cmd) {
 // for opens; otherwise a console showing a session the new repository does
 // not own closes. The session itself keeps running.
 func (m Model) settleConsoleAfterSwitch() (Model, tea.Cmd) {
+	tour := m.consoleSwitch.tour
+	m, cmd := m.settleConsole()
+	if tour != "" {
+		m = m.showTour(tour) // the snapshot synced the worktree's overviews first
+	}
+	return m, cmd
+}
+
+func (m Model) settleConsole() (Model, tea.Cmd) {
 	if !m.consoleSwitch.armed {
 		return m, nil
 	}

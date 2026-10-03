@@ -139,6 +139,7 @@ func (m Model) onSessionActivity() (Model, tea.Cmd) {
 	if m.actSeq == nil || m.quiet {
 		return m, m.waitActivityCmd()
 	}
+	m = m.fileReportTours() // a new report becomes (or replaces) its tour
 	for _, n := range domain.SessionStates().Notices(*m.actSeq) {
 		*m.actSeq = n.Seq
 		if m.console != nil && m.console.focused && m.console.id == n.ID {

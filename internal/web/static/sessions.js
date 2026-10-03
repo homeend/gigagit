@@ -1,12 +1,14 @@
 // sessions.js — starting sessions from the page (web attach, plan 2): the
 // Start agent dialog (first-run detect, list, approval), Open terminal, and
 // the menu rows that reach them. Kill and remove live in console.js.
-import { $, esc, getJSON, postJSON } from "./core.js";
+import { $, esc, getJSON, postJSON, ssGet, ssSet } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer } from "./layers.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { toast } from "./toast.js";
 import { killSession, openConsole, removeSession } from "./console.js";
 import { worktreePathForBranch } from "./sidebar.js";
+import { doReroot } from "./ops.js";
+import { openViewer } from "./viewer.js";
 
 // --- sessions model (pure; guarded against Go) ---
 function commandRowState(c) {
@@ -47,10 +49,14 @@ function startRows(path) {
   return [{ id: "agent", label: "Start agent in " + n }, { id: "terminal", label: "Open terminal in " + n }];
 }
 
+// A worker's brief and its latest report open as tours (stage 4), first.
 function sessionMenuRows(s) {
-  return s.state === "exited"
+  const tours = [];
+  if (s.has_brief) tours.push({ id: "brief", label: "Open brief" });
+  if (s.has_report) tours.push({ id: "report", label: "Open report" });
+  return tours.concat(s.state === "exited"
     ? [{ id: "remove", label: "Remove session" }]
-    : [{ id: "kill", label: "Kill session" }, { id: "killrm", label: "Kill and remove session" }];
+    : [{ id: "kill", label: "Kill session" }, { id: "killrm", label: "Kill and remove session" }]);
 }
 // --- end sessions model ---
 
@@ -207,9 +213,37 @@ registerRows("branch", (b) => {
 registerRows("session", (s) =>
   sessionMenuRows(s).map((r) => ({
     label: r.label,
-    danger: r.id !== "remove",
-    act: () => (r.id === "remove" ? removeSession(s) : killSession(s, r.id === "killrm")),
+    danger: r.id === "kill" || r.id === "killrm",
+    act: () => (r.id === "brief" || r.id === "report" ? openTour(s, r.id)
+      : r.id === "remove" ? removeSession(s) : killSession(s, r.id === "killrm")),
   })));
+
+// openTour asks the server to file the tour (again, if it was closed), then
+// opens it — after switching the page (a hosted page: the terminal too)
+// when the server says it lives in another worktree; the switch's reload
+// leaves a one-shot key that boot reads back (openPendingTour).
+async function openTour(s, kind) {
+  let r;
+  try {
+    r = await postJSON("/api/agent-tour", { id: s.id, kind });
+  } catch (e) {
+    toast(String(e.message || e));
+    return;
+  }
+  if (!r.here) {
+    doReroot(r.worktree, r.overview); // the switch's reload carries the tour (ops.js)
+    return;
+  }
+  openViewer({ id: r.overview });
+}
+
+// openPendingTour: the tour a switch was made for, once the page is up.
+function openPendingTour() {
+  const id = ssGet("gg-open-tour");
+  if (!id) return;
+  ssSet("gg-open-tour", "");
+  openViewer({ id }).catch(() => {});
+}
 
 registerHelp({
   key: "starting agents",
@@ -218,4 +252,4 @@ registerHelp({
     "A command runs only after you approve it once per repository. A session's own row (right-click) offers <b>Kill</b>, <b>Kill and remove</b> and, once exited, <b>Remove</b>.",
 });
 
-export { openTerminal, startAgent };
+export { openPendingTour, openTerminal, startAgent };

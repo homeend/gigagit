@@ -286,3 +286,41 @@ func TestParseOverviewPlainLabelPastTheCapKeepsTheBreakSpace(t *testing.T) {
 		t.Fatalf("last inline = %+v", last)
 	}
 }
+
+func TestFileTourIsKeyed(t *testing.T) {
+	s := New()
+	o, added, err := s.FileTour("brief:p/s1", "/r", "/r", "Brief — a", "one")
+	if err != nil || !added || o.Title != "Brief — a" {
+		t.Fatalf("first file: %+v %v %v", o, added, err)
+	}
+	o2, added, err := s.FileTour("brief:p/s1", "/r", "/r", "Brief — b", "two")
+	if err != nil || added || o2.ID != o.ID || o2.Text != "two" || o2.Title != "Brief — b" {
+		t.Fatalf("refile must replace in place: %+v %v %v", o2, added, err)
+	}
+	if id, ok := s.TourID("brief:p/s1"); !ok || id != o.ID {
+		t.Fatalf("TourID = %q %v", id, ok)
+	}
+	s.RemoveOverview(o.ID) // the user closed it (X)
+	if _, ok := s.TourID("brief:p/s1"); ok {
+		t.Fatal("a closed tour has no id")
+	}
+	o3, added, err := s.FileTour("brief:p/s1", "/r", "/r", "Brief — c", "three")
+	if err != nil || !added || o3.ID == o.ID {
+		t.Fatalf("a closed tour is filed anew: %+v %v %v", o3, added, err)
+	}
+	if got := len(s.Overviews("/r")); got != 1 {
+		t.Fatalf("overviews = %d, want 1", got)
+	}
+}
+
+func TestFileTourAtTheCap(t *testing.T) {
+	s := New()
+	for i := 0; i < MaxOverviewsPerRoot; i++ {
+		if _, err := s.AddOverview("/r", "/r", "o", "x"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := s.FileTour("report:p/s1", "/r", "/r", "Report", "x"); err == nil || !strings.Contains(err.Error(), "overviews are open") {
+		t.Fatalf("cap: %v", err)
+	}
+}

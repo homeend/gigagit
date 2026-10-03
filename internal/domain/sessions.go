@@ -61,17 +61,21 @@ func Sessions() *agentsession.Manager {
 }
 
 // UseSessionManager installs m as the process-global manager (tests) and
-// returns a func restoring the previous one.
+// returns a func restoring the previous one. The spawn registry (records,
+// tokens, reports, wait marks) is keyed by session ids the new manager
+// hands out again from s1, so it is swapped for a fresh one too.
 func UseSessionManager(m *agentsession.Manager) func() {
 	sessionsMu.Lock()
 	prev := sessionsMgr
 	sessionsMgr = m
 	sessionsMu.Unlock()
+	restoreReg := useSpawnRegistry()
 	resetSessionStates() // the state watcher follows the manager
 	return func() {
 		sessionsMu.Lock()
 		sessionsMgr = prev
 		sessionsMu.Unlock()
+		restoreReg()
 		resetSessionStates()
 	}
 }

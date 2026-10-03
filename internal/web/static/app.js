@@ -18,7 +18,7 @@ import "./filehist.js";
 import "./viewer.js";
 import "./openfiles.js";
 import "./console.js";
-import "./sessions.js";
+import { openPendingTour } from "./sessions.js";
 import "./wtfinder.js";
 import "./review.js";
 import { syncStackChrome } from "./stackview.js";
@@ -112,6 +112,7 @@ async function boot() {
   // startAtReady gate has. Nothing above waits on this.
   await Promise.allSettled(firstLoad);
   applyStartAt().catch(() => {});
+  openPendingTour(); // a worker's tour a switch was made for (stage 4)
 }
 
 boot().catch((e) => {

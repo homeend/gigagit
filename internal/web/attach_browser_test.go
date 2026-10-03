@@ -80,7 +80,7 @@ func TestAttachBrowserHost(t *testing.T) {
 	}
 	go func() {
 		time.Sleep(3 * time.Second)
-		_, _ = domain.AgentReportVerb(domain.FullSessionID(wk.Info().ID), "merged feat/x — two tests skipped\nsee the log", true)
+		_, _ = domain.AgentReportVerb(domain.FullSessionID(wk.Info().ID), "merged feat/x — two tests skipped\nsee [the file](f.txt:1)", true)
 	}()
 	fmt.Printf("ATTACH_URL=%s\n", ts.URL)
 	done := os.Getenv("GG_BROWSER_DONE")

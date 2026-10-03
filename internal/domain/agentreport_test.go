@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/homeend/gigagit/internal/agentsession"
 )
 
 func TestAgentReportStoredAndRead(t *testing.T) {
@@ -180,5 +182,33 @@ func TestSessionReportOfDropsAnExitedSession(t *testing.T) {
 	}
 	if list, _ := AgentReports(res.ID); len(list) != 1 {
 		t.Fatal("the report itself stays")
+	}
+}
+
+// A fresh manager numbers its sessions from s1 again: what the spawn
+// registry knew (records, tokens, reports) about the OLD manager's s1 must
+// not leak onto the new one.
+func TestUseSessionManagerForgetsTheOldRegistry(t *testing.T) {
+	_, wt, _, ov := spawnFixture(t, 4)
+	res, _, err := SpawnAgent(context.Background(), SpawnSpec{Req: AgentStartRequest{Caller: ov, Worktree: wt, Tool: "Sleeper", Prompt: "x"}, Cols: 80, Rows: 24, MCPURL: "http://x", Approved: approveAll})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer UseSessionStates(NewStaticStates(nil))()
+	if _, err := AgentReportVerb(res.ID, "old", true); err != nil {
+		t.Fatal(err)
+	}
+	restore := UseSessionManager(agentsession.NewManager())
+	defer func() { Sessions().KillAll(context.Background()); restore() }()
+	for i := 0; i < 3; i++ { // reach the old worker's number again
+		if _, err := Sessions().Start(SessionStartSpec{Label: "n", Dir: t.TempDir(), Cols: 80, Rows: 24, Argv: []string{"sh", "-c", "sleep 60"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, ok := latestReport(res.ID); ok {
+		t.Fatal("a report of the old manager's session shows on the new one")
+	}
+	if _, ok := AgentRecord(res.ID); ok {
+		t.Fatal("a spawn record of the old manager's session shows on the new one")
 	}
 }

@@ -1022,6 +1022,12 @@ the attention colour until someone types into that session or it exits; the stat
 (or a toast on the web page) carries the report's first line. A report never
 ends the worker; the overseer kills it when the work is done.
 
+The brief and the latest report are also **tours**: overview documents in the
+worker's worktree whose markdown links (`[parser](src/parse.go:40-60)`) jump
+into its files. **Open brief** / **Open report** on the worker's row (the `.`
+menu, or right-click on the web page) switches to that worktree and shows the
+tour; they stay until gg quits.
+
 ### Post-worktree hook
 
 After `gg` creates a worktree it can run a per-repo shell script — handy for
