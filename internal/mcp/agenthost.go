@@ -34,7 +34,8 @@ var agentSessionTimeout = time.Hour
 
 const agentInstructions = "gg agent channel. These tools exist only for an agent running inside a gg console. " +
 	"A worker agent's first act is agent_task (its brief). agent_start starts a worker in a worktree " +
-	"(the gg [agents] spawn allow-list governs which session commands); agent_send/agent_kill reach only agents you started."
+	"(the gg [agents] spawn allow-list governs which session commands); agent_send/agent_kill reach only agents you started. " +
+	"A worker's last act is agent_report (its result; it stays running until killed); a parent waits for its workers with agent_wait."
 
 // Handler is the authenticated MCP endpoint (tests mount it on httptest).
 func (h *AgentHost) Handler(starter Starter) http.Handler {

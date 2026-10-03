@@ -20,7 +20,8 @@ func TestSessionsWireCarriesActivity(t *testing.T) {
 		"s1": {State: domain.ActivityQuestion, Since: since, StepFor: 7 * time.Second, Stalled: true,
 			Options: []domain.ActivityOption{{Key: "1", Label: "Yes"}}},
 	}
-	w := sessionsWireWith(list, nil, func(id domain.SessionID) (domain.SessionActivity, bool) { a, ok := act[id]; return a, ok })
+	w := sessionsWireWith(list, nil, func(id domain.SessionID) (domain.SessionActivity, bool) { a, ok := act[id]; return a, ok },
+		func(domain.SessionID) (domain.AgentReport, bool) { return domain.AgentReport{}, false })
 	if w[0].AgentState != "question" || !w[0].Since.Equal(since) || w[0].StepFor != 7 || !w[0].Stalled || len(w[0].Options) != 1 {
 		t.Fatalf("classified: %+v", w[0])
 	}
@@ -82,5 +83,26 @@ func TestSessionStartWarnsAboutBadScreenRules(t *testing.T) {
 	}
 	if n := len(domain.Sessions().List()); n != 1 {
 		t.Fatalf("%d sessions", n)
+	}
+}
+
+func TestSessionsWireCarriesAnUnansweredReport(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 10, 3, 1, 0, 0, 0, time.UTC)
+	list := []domain.SessionInfo{{ID: "s1", Label: "Claude", Started: at.Add(-time.Hour)}, {ID: "s2", Label: "Codex", Started: at.Add(-time.Minute)}}
+	rep := func(id domain.SessionID) (domain.AgentReport, bool) {
+		if id == "s1" {
+			return domain.AgentReport{Seq: 3, Text: "merged feat/x\nmore", Final: true, At: at}, true
+		}
+		return domain.AgentReport{}, false
+	}
+	none := func(domain.SessionID) (domain.SessionActivity, bool) { return domain.SessionActivity{}, false }
+	ws := sessionsWireWith(list, nil, none, rep)
+	b, _ := json.Marshal(ws[0])
+	if !strings.Contains(string(b), `"report_at":"2026-10-03T01:00:00Z"`) || !strings.Contains(string(b), `"report_final":true`) || !strings.Contains(string(b), `"report_line":"merged feat/x"`) {
+		t.Fatalf("%s", b)
+	}
+	if b, _ = json.Marshal(ws[1]); strings.Contains(string(b), "report") {
+		t.Fatalf("no report must mean no fields: %s", b)
 	}
 }

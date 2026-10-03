@@ -1010,6 +1010,18 @@ worker cannot start workers, and `agent_send` / `agent_kill` (`gg agent send`
 / `kill`) reach only the agents you started; `agent_list` / `agent_screen`
 read every session of the TUI.
 
+The overseer waits with `agent_wait` (`gg agent wait [<id>] [--until
+idle|question|exit|report|any] [--timeout <s>]`): one call blocks until a
+worker's turn ended, it asks a decision, it exited or it reported, and
+returns that one event — each once; a turn's end or a question only if it
+began after the last input to the worker, and an exit whatever was asked. On
+a timeout (45 s by default; the CLI exits 3) it simply calls again. A worker ends its task with `agent_report` (`gg agent
+report [--final] <text>`): the result reaches the overseer's `agent_wait`,
+and the worker's row says **reported** — **done** for a final report — in
+the attention colour until someone types into that session or it exits; the status line
+(or a toast on the web page) carries the report's first line. A report never
+ends the worker; the overseer kills it when the work is done.
+
 ### Post-worktree hook
 
 After `gg` creates a worktree it can run a per-repo shell script — handy for
@@ -1535,7 +1547,7 @@ A list you set replaces the built-in list of that kind for the agent; one you
 leave out keeps the built-in (an invalid pattern is reported once at start and
 the built-in rules apply). Agents see the same
 through `agent_list` (`activity`, `stalled`) and `agent_screen` (`activity`,
-a dialog's `options`). The two reserved keys are configurable:
+a dialog's `options`), and block on a change with `agent_wait`. The two reserved keys are configurable:
 
 ```toml
 [console]

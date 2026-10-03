@@ -8,7 +8,7 @@
 //              most recently shown first (plan 5b). ● marks the file THIS
 //              tab's viewer shows; enter brings one back where this tab left
 //              it, x closes it in every tab.
-import { $, activityAttn, activityLabel, charWidth, elidePath, esc, getJSON, postJSON, tabId } from "./core.js";
+import { $, activityAttn, activityLabel, charWidth, elidePath, esc, getJSON, postJSON, reportLine, tabId } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { dropViewer, openViewer, versionLabel, viewerClosedFile, viewerFileId } from "./viewer.js";
@@ -60,8 +60,9 @@ function sessionRows(list, mine, now) {
           id: s.id, label: s.label, wt, task: !!s.task,
           glyph: s.state === "exited" ? "○" : "●",
           mark: s.id === mine ? "●" : "○",
-          // The row is wide: the age, then the activity ("2m · idle 3m").
-          meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : [ageOf(s.started, now), activityLabel(s, now)].filter(Boolean).join(" · "),
+          // The row is wide: the age, then the activity ("2m · idle 3m"),
+          // then an unanswered report's first line ("done 3m — merged …").
+          meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : [ageOf(s.started, now), activityLabel(s, now) + (reportLine(s) ? " — " + reportLine(s) : "")].filter(Boolean).join(" · "),
           state: s.state,
           attn: activityAttn(s),
         });

@@ -69,6 +69,19 @@ func TestAttachBrowserHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A "Worker" that reports a final result three seconds in (stage 3b):
+	// the row says done, a toast carries the first line, input clears it.
+	wk, err := domain.Sessions().Start(domain.SessionStartSpec{
+		Label: "Worker", AgentID: "claude", Repo: "r", Dir: root, Cols: 80, Rows: 24,
+		Argv: []string{"sh", "-c", "sleep 600"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(3 * time.Second)
+		_, _ = domain.AgentReportVerb(domain.FullSessionID(wk.Info().ID), "merged feat/x — two tests skipped\nsee the log", true)
+	}()
 	fmt.Printf("ATTACH_URL=%s\n", ts.URL)
 	done := os.Getenv("GG_BROWSER_DONE")
 	deadline := time.Now().Add(10 * time.Minute)

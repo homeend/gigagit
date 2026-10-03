@@ -165,3 +165,72 @@ func TestCloseDoesNotWaitOnAnOpenStream(t *testing.T) {
 		t.Fatalf("Close took %v: an idle SSE stream must not hold the TUI's quit", d)
 	}
 }
+
+func TestAgentWaitAndReportOverHTTP(t *testing.T) {
+	url, tok, full := hostEnv(t, nil)
+	cs, err := agentClient(t, url, tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	// A manual session reports about itself; the report is on its screen result.
+	res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_report", Arguments: map[string]any{"text": "merged feat/x", "final": true}})
+	if err != nil || res.IsError || !strings.Contains(resultText(res), `"final":true`) {
+		t.Fatalf("agent_report = %v %s", err, resultText(res))
+	}
+	res, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_screen", Arguments: map[string]any{"id": full}})
+	if res.IsError || !strings.Contains(resultText(res), `"report":{`) || !strings.Contains(resultText(res), `"reports":[{`) {
+		t.Fatalf("agent_screen = %s", resultText(res))
+	}
+	// A childless any-wait is refused; a wait on a stranger (oneself) is
+	// refused; a bad until is refused.
+	res, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"timeout_s": 1}})
+	if !res.IsError || !strings.Contains(resultText(res), "no workers") {
+		t.Fatalf("any-wait = %s", resultText(res))
+	}
+	res, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"id": full, "until": "idle", "timeout_s": 1}})
+	if !res.IsError || !strings.Contains(resultText(res), "not an agent you started") {
+		t.Fatalf("wait on oneself = %s", resultText(res))
+	}
+	res, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"id": full, "until": "later"}})
+	if !res.IsError || !strings.Contains(resultText(res), "until must be") {
+		t.Fatalf("bad until = %s", resultText(res))
+	}
+}
+
+// Review fix 1: a client that cancels its agent_wait (the CLI on SIGINT /
+// SIGTERM, an MCP client cancelling a tool call) ends the host's waiter —
+// a report that arrives afterwards goes to the NEXT wait, not to nobody.
+func TestCancelledAgentWaitConsumesNothing(t *testing.T) {
+	url, tok, full := hostEnv(t, nil)
+	tc := config.ToolCommand{Category: "session", Name: "Sh", Mode: "session", Command: "sh -c 'sleep 600'"}
+	dir := domain.Sessions().List()[0].Dir
+	child, _, err := domain.Open(dir).StartAgentSession(context.Background(), tc, dir, "", 80, 24, nil, url, domain.SpawnRecord{Parent: full, Spawned: true}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	childID := domain.FullSessionID(child.Info().ID)
+	cs, err := agentClient(t, url, tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = cs.CallTool(ctx, &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"id": childID, "timeout_s": 20}})
+	}()
+	time.Sleep(300 * time.Millisecond)
+	cancel()
+	<-done
+	time.Sleep(300 * time.Millisecond) // the cancel notification reaches the host
+	if _, err := domain.AgentReportVerb(childID, "after the cancel", true); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(800 * time.Millisecond) // a surviving waiter would take it within its tick
+	res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"id": childID, "timeout_s": 2}})
+	if err != nil || res.IsError || !strings.Contains(resultText(res), `"event":"report"`) || !strings.Contains(resultText(res), "after the cancel") {
+		t.Fatalf("the report was eaten by the cancelled wait: %v %s", err, resultText(res))
+	}
+}

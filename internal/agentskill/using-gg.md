@@ -1064,13 +1064,15 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   for input), `question` (it waits for a decision — read the choices from
   `agent_screen`); absent when gg cannot tell. `stalled` means it printed
   nothing for two minutes while apparently busy. `activity_since` is when
-  that began. Poll `agent_list` to wait for a worker: `idle` after `working`
-  means its turn ended.
+  that began. `report_at` / `report_final` say the agent reported
+  (`agent_report`). To wait for a worker use `agent_wait`, not a poll.
 - `agent_screen {id}` / `gg agent screen <id>` — its visible console text,
   with `activity` and, at a question, `options` (`key` is the digit to
   `agent_send` as a key for a numbered choice; `pick:<i>` names a
   cursor-style choice gg cannot press for you yet — answer it with
-  `up`/`down`/`enter` keys instead).
+  `up`/`down`/`enter` keys instead). `report` is its latest `agent_report`,
+  `reports` all kept ones; `gg agent screen <id> --reports` prints those
+  instead of the screen.
 - `agent_send {id, text?, enter?, keys?}` / `gg agent send <id> [text…]
   [--no-enter] [--key esc]…` — paste text (up to 64 KiB), then Enter (default
   when there is text), then keys (`enter esc tab up down … ctrl+c 1 space`). Only agents
@@ -1078,13 +1080,40 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
 - `agent_kill {id, remove?}` / `gg agent kill <id> [--remove]` — only agents
   you started.
 - `agent_task` / `gg agent task` — **a worker's first act**: your task.
+- `agent_wait {id?, until?, timeout_s?}` / `gg agent wait [<id>] [--until
+  idle|question|exit|report|any] [--timeout <s>]` — block until a worker
+  you started has news, then return ONE event: `report` (its
+  `agent_report`, text included), `exit` (with `exit_code`), `question`
+  (with `options` — answer with `agent_send`), `idle` (its turn ended
+  without a report — read `agent_screen`). Without `id`: any worker you
+  started directly. Each event comes once; an `idle` or `question` only if
+  it began after the last input to that worker. An `exit` ends every wait,
+  whatever `until` asked — a dead worker reports nothing more.
+  `timed_out: true` (default after 45 s — keep `timeout_s` under your
+  client's tool timeout, at most 600) just means call again; with an `id`
+  it carries the worker's `state` (`running` / `exited`) and `activity`.
+  The CLI exits 0 on an event, 3 on a timeout. A wait that was killed
+  outright can swallow one event — if a worker seems silent for long,
+  look at `agent_list` (`report_at`, `state`) or `agent_screen`.
+- `agent_report {text, final?}` / `gg agent report [--final] (<text> | -F
+  <file> | -F -)` — **a worker's last act**: your result for whoever
+  started you (what changed, what you skipped, what they must do; up to
+  64 KiB). `final` says you are done. You stay running until killed — do
+  not exit on your own: the parent may read your screen or ask more. The
+  user's session row shows `done` / `reported` until someone types into
+  your session.
+
+A parent's loop: `agent_wait` → on `report` read it; on `question` answer
+with `agent_send`; on `idle` without a report read `agent_screen`; on
+`timed_out` call again; `agent_kill {remove: true}` when the work is done.
 
 Refusals and what to do: "spawning is off" / "not in [agents] spawn" — ask
 the user to allow the command in the global config; "has no <prompt> slot" —
 the user accepts the command's update in Settings → External tools;
 "approve … once" — the user starts that command from Start agent once;
 "max_spawned cap" — wait for or kill a worker; "a spawned agent may not
-start agents" — you are a worker: report back instead; "is not free:
+start agents" — you are a worker: `agent_report` back instead; "you have no
+workers" — `agent_wait` without an id needs a worker you started; "is not free:
 claimed/…" — pick another worktree (`gg worktree list --free`); "this gg
 console has no agent channel" — tell the user (an Open terminal never has
 one).

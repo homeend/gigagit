@@ -27,6 +27,12 @@ type spawnRegistry struct {
 	tokens  map[string]string // token -> full session id
 	records map[string]SpawnRecord
 	pending int // reserved slots whose start has not finished
+	// Stage 3b: what workers reported and what each caller's wait already
+	// delivered. Pruned with the records (a removed session forgets both).
+	reports   map[string][]AgentReport           // full id -> oldest first, ≤ maxReportsKept
+	reportSeq uint64                             // process-global, monotonic
+	marks     map[string]map[string]deliveryMark // caller -> worker -> delivered
+	bc        agentsession.Broadcaster           // wakes waiters on a report
 }
 
 var (
@@ -35,7 +41,8 @@ var (
 )
 
 func newSpawnRegistry() *spawnRegistry {
-	return &spawnRegistry{tokens: map[string]string{}, records: map[string]SpawnRecord{}}
+	return &spawnRegistry{tokens: map[string]string{}, records: map[string]SpawnRecord{},
+		reports: map[string][]AgentReport{}, marks: map[string]map[string]deliveryMark{}}
 }
 
 func registry() *spawnRegistry { spawnMu.Lock(); defer spawnMu.Unlock(); return spawnReg }
@@ -89,6 +96,22 @@ func (r *spawnRegistry) prune() {
 	for tok, id := range r.tokens {
 		if !listed[id] {
 			delete(r.tokens, tok)
+		}
+	}
+	for id := range r.reports {
+		if !listed[id] {
+			delete(r.reports, id)
+		}
+	}
+	for caller, byWorker := range r.marks {
+		if !listed[caller] {
+			delete(r.marks, caller)
+			continue
+		}
+		for id := range byWorker {
+			if !listed[id] {
+				delete(byWorker, id)
+			}
 		}
 	}
 }

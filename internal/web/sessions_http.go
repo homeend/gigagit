@@ -39,15 +39,21 @@ type sessionWire struct {
 	StepFor    int                     `json:"step_for,omitempty"`
 	Stalled    bool                    `json:"stalled,omitempty"`
 	Options    []domain.ActivityOption `json:"options,omitempty"`
+	// An unanswered agent_report (domain.SessionReportOf): when it came,
+	// whether the agent called it final, its first line.
+	ReportAt    time.Time `json:"report_at,omitzero"`
+	ReportFinal bool      `json:"report_final,omitempty"`
+	ReportLine  string    `json:"report_line,omitempty"`
 }
 
 // activityNoticeWire is one activity notice (a toast on every tab).
 type activityNoticeWire struct {
 	ID       string `json:"id"`
-	Kind     string `json:"kind"` // question | idle | stalled
+	Kind     string `json:"kind"` // question | idle | stalled | report
 	Label    string `json:"label"`
 	Worktree string `json:"worktree"`
 	QuietS   int    `json:"quiet_s,omitempty"` // stalled: seconds without output
+	Text     string `json:"text,omitempty"`    // report: its first line
 }
 
 type taskWire struct {
@@ -67,11 +73,11 @@ type taskWire struct {
 // task-backed session is labelled "<agent> · <task key>" like the TUI's
 // sub-row. Order: start time.
 func sessionsWire(list []domain.SessionInfo, tasks []domain.TaskInfo) []sessionWire {
-	return sessionsWireWith(list, tasks, domain.SessionActivityOf)
+	return sessionsWireWith(list, tasks, domain.SessionActivityOf, domain.SessionReportOf)
 }
 
 // sessionsWireWith is sessionsWire with the activity lookup injected.
-func sessionsWireWith(list []domain.SessionInfo, tasks []domain.TaskInfo, activity func(domain.SessionID) (domain.SessionActivity, bool)) []sessionWire {
+func sessionsWireWith(list []domain.SessionInfo, tasks []domain.TaskInfo, activity func(domain.SessionID) (domain.SessionActivity, bool), report func(domain.SessionID) (domain.AgentReport, bool)) []sessionWire {
 	owner := map[domain.SessionID]domain.TaskInfo{}
 	for _, tk := range tasks {
 		if tk.Session != "" {
@@ -90,6 +96,9 @@ func sessionsWireWith(list []domain.SessionInfo, tasks []domain.TaskInfo, activi
 		}
 		if a, ok := activity(info.ID); ok {
 			w.AgentState, w.Since, w.StepFor, w.Stalled, w.Options = a.Name(), a.Since, int(a.StepFor.Seconds()), a.Stalled, a.Options
+		}
+		if rep, ok := report(info.ID); ok {
+			w.ReportAt, w.ReportFinal, w.ReportLine = rep.At, rep.Final, domain.ReportFirstLine(rep.Text)
 		}
 		out = append(out, w)
 	}
@@ -144,7 +153,7 @@ func (s *Server) watchSessionStates(stop <-chan struct{}) {
 			var out []activityNoticeWire
 			for _, n := range w.Notices(seq) {
 				seq = n.Seq
-				out = append(out, activityNoticeWire{ID: string(n.ID), Kind: n.Kind, Label: n.Label, Worktree: n.Dir, QuietS: int(n.Quiet.Seconds())})
+				out = append(out, activityNoticeWire{ID: string(n.ID), Kind: n.Kind, Label: n.Label, Worktree: n.Dir, QuietS: int(n.Quiet.Seconds()), Text: n.Text})
 			}
 			s.broadcastSessions(out)
 		}

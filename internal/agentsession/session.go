@@ -42,6 +42,7 @@ type Session struct {
 	traceEv *os.File                 // <trace>.events: "offset cols rows" at start and every resize (under ioMu)
 	traced  atomic.Int64             // bytes written to trace so far
 	lastOut atomic.Int64             // UnixNano of pumpOut's latest read
+	lastIn  atomic.Int64             // UnixNano of the latest input (SendKey/SendText/Paste)
 	osc     oscFilter                // pumpOut-only: keeps UTF-8 in OSC payloads away from x/ansi's C1 parsing
 	job     uintptr                  // Windows job object handle; 0 elsewhere
 }
@@ -286,6 +287,17 @@ func (s *Session) Info() Info { s.mu.Lock(); defer s.mu.Unlock(); return s.info 
 // its first chunk. The stall clock of the session-state watcher.
 func (s *Session) LastOutput() time.Time {
 	n := s.lastOut.Load()
+	if n == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, n)
+}
+
+// LastInput is when anyone last typed into the child (SendKey, SendText,
+// Paste — a parent's agent_send and a human's console alike); the zero
+// time before the first input. Touch is not input.
+func (s *Session) LastInput() time.Time {
+	n := s.lastIn.Load()
 	if n == 0 {
 		return time.Time{}
 	}

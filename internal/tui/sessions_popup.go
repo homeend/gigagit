@@ -92,6 +92,9 @@ func sessionStateText(info domain.SessionInfo) string {
 	if act := sessionActivityText(info.ID); act != "" {
 		row += " · " + act
 	}
+	if line := sessionReportLine(info.ID); line != "" {
+		row += " — " + line
+	}
 	return row
 }
 
