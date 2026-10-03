@@ -4801,6 +4801,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingSteer = nil                         // the repo it referred to is gone; its inbox went with it
 	m.consoleSwitch.armed = true                 // the console keeps only a session the new repo owns
 	m.consoleSwitch.open = ""                    // a console asked for across an earlier switch is moot
+	m.consoleSwitch.tour = ""                    // …and so is a tour
 	m.pendingHint = nil                          // ditto: its navigate referred to the old repo
 	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
 	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one

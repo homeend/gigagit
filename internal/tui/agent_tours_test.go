@@ -121,3 +121,78 @@ func TestClosedReportTourComesBackOnlyWithANewReport(t *testing.T) {
 		t.Fatalf("a new report files it again: %+v", ovs)
 	}
 }
+
+func topTour(m Model) string {
+	if fv := layerOf[*fileViewer](m); fv != nil && fv.openFile != nil {
+		return fv.id()
+	}
+	return ""
+}
+
+func TestOpenTourOnTheCurrentWorktree(t *testing.T) {
+	m, id, wt := tourFixture(t)
+	m.currentWorktree = wt
+	m, _ = m.openTour(id, "brief")
+	ovID, ok := m.docs.TourID("brief:" + domain.FullSessionID(id))
+	if !ok || topTour(m) != ovID {
+		t.Fatalf("the brief must show at once: top %q, tour %q %v", topTour(m), ovID, ok)
+	}
+	if m.consoleSwitch.armed || m.consoleSwitch.tour != "" {
+		t.Fatalf("no switch on the current worktree: %+v", m.consoleSwitch)
+	}
+}
+
+func TestOpenTourSwitchesWorktree(t *testing.T) {
+	m, id, wt := tourFixture(t)
+	m, _ = m.openTour(id, "brief")
+	ovID, _ := m.docs.TourID("brief:" + domain.FullSessionID(id))
+	if !m.consoleSwitch.armed || m.consoleSwitch.tour != ovID || topTour(m) != "" {
+		t.Fatalf("a tour in another worktree waits for the switch: %+v, top %q", m.consoleSwitch, topTour(m))
+	}
+	// The switch lands (model.go: the snapshot syncs the docs, then settles).
+	m.currentWorktree = wt
+	m = m.syncOverviews()
+	m, _ = m.settleConsoleAfterSwitch()
+	if topTour(m) != ovID || m.consoleSwitch.tour != "" {
+		t.Fatalf("after the switch: top %q want %q, %+v", topTour(m), ovID, m.consoleSwitch)
+	}
+}
+
+func TestOpenTourRefilesAClosedTour(t *testing.T) {
+	m, id, wt := tourFixture(t)
+	m.currentWorktree = wt
+	m, _ = m.onAgentSpawned(spawned(id, wt))
+	first, _ := m.docs.TourID("brief:" + domain.FullSessionID(id))
+	m.docs.RemoveOverview(first)
+	m, _ = m.openTour(id, "brief")
+	again, ok := m.docs.TourID("brief:" + domain.FullSessionID(id))
+	if !ok || again == first || topTour(m) != again {
+		t.Fatalf("closed → re-filed and shown: first %q again %q top %q", first, again, topTour(m))
+	}
+}
+
+func TestOpenTourWithoutOneSaysSo(t *testing.T) {
+	m, id, _ := tourFixture(t)
+	m, _ = m.openTour(id, "report")
+	if !strings.Contains(m.statusMsg, "no tour to open:") || !strings.Contains(m.statusMsg, "has not reported") {
+		t.Fatalf("status = %q", m.statusMsg)
+	}
+}
+
+func TestTourMenuRows(t *testing.T) {
+	m, id, _ := tourFixture(t)
+	ids := func() string {
+		var out []string
+		for _, r := range m.tourMenuRows(id) {
+			out = append(out, r.id)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := ids(); got != "session-brief" {
+		t.Fatalf("before a report: %q", got)
+	}
+	domain.AgentReportVerb(domain.FullSessionID(id), "r", false)
+	if got := ids(); got != "session-brief,session-report" {
+		t.Fatalf("after a report: %q", got)
+	}
+}
