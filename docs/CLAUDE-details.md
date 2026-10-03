@@ -4102,6 +4102,8 @@ the page has the TUI's `X` (kill and remove).
 
 ### Web attach — session states (plan 3, 2026-10-03)
 
+- **Claude's idle box (fix 2026-10-03):** the rule above `❯` may carry the session's NAME (`──── title ─`), so the waiting rule is `^─{8,}[^\n]*\n❯`. An unmatched screen keeps the previous state (`Unknown` never changes `State`), so a missed idle rule shows as a turn that stays `working` until the 120 s stall marks it `stalled · working`.
+
 Plan `docs/superpowers/plans/2026-10-02-web-attach-plan-3-states.md`.
 Rulings (user): states surface to agents + TUI + web; `gg agent wait` and
 the report channel are the NEXT plan.

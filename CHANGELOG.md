@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Claude sessions with a name read as idle again
+
+### Fixed
+
+- **A finished Claude Code turn kept saying `working`.** Once a session has
+  a name, Claude Code writes it into the input box's top rule (`──── merge
+  conflict resolution ─`); gg's idle rule wanted a rule of dashes only, so
+  the end of the turn was never seen and the row, the console title and
+  `agent_list` kept the last state (`working`). The rule now only has to
+  lead the line.
+
 ## Agents wait for and report to each other
 
 ### Added
