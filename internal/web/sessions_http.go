@@ -44,6 +44,10 @@ type sessionWire struct {
 	ReportAt    time.Time `json:"report_at,omitzero"`
 	ReportFinal bool      `json:"report_final,omitempty"`
 	ReportLine  string    `json:"report_line,omitempty"`
+	// Which agent tours the session has (stage 4): a spawned worker's
+	// brief, its latest report — the row menu offers to open them.
+	HasBrief  bool `json:"has_brief,omitempty"`
+	HasReport bool `json:"has_report,omitempty"`
 }
 
 // activityNoticeWire is one activity notice (a toast on every tab).
@@ -73,7 +77,11 @@ type taskWire struct {
 // task-backed session is labelled "<agent> · <task key>" like the TUI's
 // sub-row. Order: start time.
 func sessionsWire(list []domain.SessionInfo, tasks []domain.TaskInfo) []sessionWire {
-	return sessionsWireWith(list, tasks, domain.SessionActivityOf, domain.SessionReportOf)
+	out := sessionsWireWith(list, tasks, domain.SessionActivityOf, domain.SessionReportOf)
+	for i := range out {
+		out[i].HasBrief, out[i].HasReport = domain.AgentTourKinds(domain.FullSessionID(domain.SessionID(out[i].ID)))
+	}
+	return out
 }
 
 // sessionsWireWith is sessionsWire with the activity lookup injected.

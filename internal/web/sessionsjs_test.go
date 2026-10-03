@@ -28,13 +28,16 @@ r.push(JSON.stringify(dialogStep(d, "Enter", true)), JSON.stringify(dialogStep({
 r.push(JSON.stringify(dialogStep(d, "ArrowDown", true)));          // …while a held arrow still moves
 r.push(JSON.stringify(startRows("/a/b/wt").map((x) => x.label)));
 r.push(JSON.stringify(sessionMenuRows({ id: "s1", state: "running" }).map((x) => x.label)), JSON.stringify(sessionMenuRows({ id: "s2", state: "exited" }).map((x) => x.label)));
+r.push(sessionMenuRows({ id: "s3", state: "running", has_brief: true, has_report: true }).map((x) => x.id).join(","));
+r.push(sessionMenuRows({ id: "s4", state: "exited", has_report: true }).map((x) => x.id).join(","));
 console.log(r.join("|"));
 `)
 	want := `approved|approve on start|not found|` +
 		`{"sel":1}|{"sel":2}|{"sel":0}|` +
 		`{"start":0,"approve":false}|{"sel":1,"phase":"approve"}|{}|{"start":2,"approve":false}|` +
 		`{"start":1,"approve":true}|{"phase":"choose"}|{"close":true}|{"close":true}|{}|{}|{"close":true}|{}|{}|{"sel":1}|` +
-		`["Start agent in wt","Open terminal in wt"]|["Kill session","Kill and remove session"]|["Remove session"]`
+		`["Start agent in wt","Open terminal in wt"]|["Kill session","Kill and remove session"]|["Remove session"]|` +
+		`brief,report,kill,killrm|report,remove`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
@@ -54,6 +57,10 @@ var sessionsWiring = []struct{ file, want, why string }{
 	{"menus.js", `"session"`, "session is a registered menu key"},
 	{"sidebar.js", `extraRows("session"`, "the sub-row menu collects the session rows"},
 	{"style.css", "#sessstart.hidden", "hidden by id, never a global .hidden"},
+	{"sessions.js", "/api/agent-tour", "the tour rows ask the server to file the tour"},
+	{"sessions.js", "gg-open-tour", "a tour on another worktree opens after the switch's reload"},
+	{"sessions.js", "doReroot(r.worktree)", "a tour in another worktree switches the page there"},
+	{"app.js", "openPendingTour", "boot opens a tour a switch left pending"},
 }
 
 func TestSessionsJSIsWired(t *testing.T) {
