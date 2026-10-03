@@ -165,3 +165,35 @@ func TestCloseDoesNotWaitOnAnOpenStream(t *testing.T) {
 		t.Fatalf("Close took %v: an idle SSE stream must not hold the TUI's quit", d)
 	}
 }
+
+func TestAgentWaitAndReportOverHTTP(t *testing.T) {
+	url, tok, full := hostEnv(t, nil)
+	cs, err := agentClient(t, url, tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	// A manual session reports about itself; the report is on its screen result.
+	res, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_report", Arguments: map[string]any{"text": "merged feat/x", "final": true}})
+	if err != nil || res.IsError || !strings.Contains(resultText(res), `"final":true`) {
+		t.Fatalf("agent_report = %v %s", err, resultText(res))
+	}
+	res, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_screen", Arguments: map[string]any{"id": full}})
+	if res.IsError || !strings.Contains(resultText(res), `"report":{`) || !strings.Contains(resultText(res), `"reports":[{`) {
+		t.Fatalf("agent_screen = %s", resultText(res))
+	}
+	// A childless any-wait is refused; a wait on a stranger (oneself) is
+	// refused; a bad until is refused.
+	res, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"timeout_s": 1}})
+	if !res.IsError || !strings.Contains(resultText(res), "no workers") {
+		t.Fatalf("any-wait = %s", resultText(res))
+	}
+	res, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"id": full, "until": "idle", "timeout_s": 1}})
+	if !res.IsError || !strings.Contains(resultText(res), "not an agent you started") {
+		t.Fatalf("wait on oneself = %s", resultText(res))
+	}
+	res, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"id": full, "until": "later"}})
+	if !res.IsError || !strings.Contains(resultText(res), "until must be") {
+		t.Fatalf("bad until = %s", resultText(res))
+	}
+}

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -28,6 +29,15 @@ type agentKillIn struct {
 	ID     string `json:"id"`
 	Remove bool   `json:"remove,omitempty" jsonschema:"also forget the session once it exited"`
 }
+type agentWaitIn struct {
+	ID       string `json:"id,omitempty" jsonschema:"a session id; omitted: any worker you started"`
+	Until    string `json:"until,omitempty" jsonschema:"idle | question | exit | report | any (default)"`
+	TimeoutS int    `json:"timeout_s,omitempty" jsonschema:"seconds to wait, 1-600 (default 45); on timed_out simply call again"`
+}
+type agentReportIn struct {
+	Text  string `json:"text" jsonschema:"your result for whoever started you: what changed, what was skipped, what they must do (up to 64 KiB)"`
+	Final bool   `json:"final,omitempty" jsonschema:"this is your last word on the task (the row says done)"`
+}
 type agentListOut struct {
 	Agents []domain.AgentEntry `json:"agents"`
 }
@@ -37,6 +47,8 @@ type agentScreenOut struct {
 	Text     string                  `json:"text"`
 	Activity string                  `json:"activity,omitempty" jsonschema:"what the agent is doing: working | idle | question (it waits for a decision — see options); absent when gg cannot tell"`
 	Options  []domain.ActivityOption `json:"options,omitempty" jsonschema:"the dialog's choices at a question: key is the digit to press (numbered) or pick:<i> (cursor-style, not pressable yet), label its text"`
+	Report   *domain.AgentReport     `json:"report,omitempty" jsonschema:"the agent's latest agent_report"`
+	Reports  []domain.AgentReport    `json:"reports,omitempty" jsonschema:"every kept agent_report, oldest first (up to 20)"`
 }
 type agentTaskOut struct {
 	Brief    string `json:"brief"`
@@ -45,7 +57,7 @@ type agentTaskOut struct {
 }
 type empty struct{}
 
-// RegisterAgentTools adds the six agent tools; caller names the
+// RegisterAgentTools adds the eight agent tools; caller names the
 // authenticated session of a request, starter runs agent_start.
 func RegisterAgentTools(srv *sdk.Server, caller func(*sdk.CallToolRequest) (string, error), starter Starter) {
 	sdk.AddTool(srv, toolAgentStart(),
@@ -74,7 +86,11 @@ func RegisterAgentTools(srv *sdk.Server, caller func(*sdk.CallToolRequest) (stri
 				return nil, agentScreenOut{}, err
 			}
 			sc, err := domain.AgentScreen(in.ID)
-			return nil, agentScreenOut{ID: in.ID, State: sc.State, Text: sc.Text, Activity: sc.Activity, Options: sc.Options}, err
+			out := agentScreenOut{ID: in.ID, State: sc.State, Text: sc.Text, Activity: sc.Activity, Options: sc.Options, Report: sc.Report}
+			if err == nil {
+				out.Reports, _ = domain.AgentReports(in.ID)
+			}
+			return nil, out, err
 		})
 	sdk.AddTool(srv, toolAgentSend(),
 		func(_ context.Context, req *sdk.CallToolRequest, in agentSendIn) (*sdk.CallToolResult, empty, error) {
@@ -95,6 +111,24 @@ func RegisterAgentTools(srv *sdk.Server, caller func(*sdk.CallToolRequest) (stri
 				return nil, empty{}, err
 			}
 			return nil, empty{}, domain.AgentKill(who, in.ID, in.Remove)
+		})
+	sdk.AddTool(srv, toolAgentWait(),
+		func(ctx context.Context, req *sdk.CallToolRequest, in agentWaitIn) (*sdk.CallToolResult, domain.AgentWaitResult, error) {
+			who, err := caller(req)
+			if err != nil {
+				return nil, domain.AgentWaitResult{}, err
+			}
+			res, err := domain.AgentWait(ctx, who, in.ID, in.Until, time.Duration(in.TimeoutS)*time.Second)
+			return nil, res, err
+		})
+	sdk.AddTool(srv, toolAgentReport(),
+		func(_ context.Context, req *sdk.CallToolRequest, in agentReportIn) (*sdk.CallToolResult, domain.AgentReport, error) {
+			who, err := caller(req)
+			if err != nil {
+				return nil, domain.AgentReport{}, err
+			}
+			rep, err := domain.AgentReportVerb(who, in.Text, in.Final)
+			return nil, rep, err
 		})
 	sdk.AddTool(srv, toolAgentTask(),
 		func(_ context.Context, req *sdk.CallToolRequest, _ empty) (*sdk.CallToolResult, agentTaskOut, error) {
@@ -121,6 +155,12 @@ func toolAgentSend() *sdk.Tool {
 }
 func toolAgentKill() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_kill", Description: "End an agent you started."}
+}
+func toolAgentWait() *sdk.Tool {
+	return &sdk.Tool{Name: "agent_wait", Description: "Block until a worker you started has news: idle (its turn ended), question (it waits for a decision — options included), exit, or report (its agent_report). Returns one event, each once; timed_out means call again.", Annotations: readOnlyAnnotations()}
+}
+func toolAgentReport() *sdk.Tool {
+	return &sdk.Tool{Name: "agent_report", Description: "Report your result to whoever started you (and to the user's session row). final marks your last word; you stay running until killed."}
 }
 func toolAgentTask() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_task", Description: "Your own task, when an agent started you.", Annotations: readOnlyAnnotations()}

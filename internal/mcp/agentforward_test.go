@@ -60,7 +60,7 @@ func TestForwarderCallsTheTUI(t *testing.T) {
 	url, tok, full := hostEnv(t, nil)
 	cs := stdioWith(t, t.TempDir(), map[string]string{"GG_MCP_URL": url, "GG_SESSION_TOKEN": tok})
 	names := toolNames(t, cs)
-	for _, n := range []string{"agent_start", "agent_list", "agent_screen", "agent_send", "agent_kill", "agent_task"} {
+	for _, n := range []string{"agent_start", "agent_list", "agent_screen", "agent_send", "agent_kill", "agent_task", "agent_wait", "agent_report"} {
 		if !names[n] {
 			t.Fatalf("%s missing from the forwarder", n)
 		}
