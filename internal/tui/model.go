@@ -145,6 +145,7 @@ type Model struct {
 	sessWatch     *sessionWatch                            // the TUI's subscription to the session list (console.go)
 	actWatch      *activityWatch                           // its subscription to session activity (session_activity.go)
 	actSeq        *uint64                                  // the last activity notice shown (shared across the value copy)
+	tourSeq       *map[domain.SessionID]uint64             // per session, the report seq its tour was last filed for (agent_tours.go)
 	web           *webHostState                            // the gg web page served from this process (webhost.go)
 	webOpts       webLaunchOptions                         // gg --web / --web-addr for this run
 	agentHost     *agentHostState                          // the agent MCP channel (agenthost.go); pointer: survives the value copy
@@ -484,6 +485,7 @@ func New(svc *domain.Service) Model {
 		sessWatch:              &sessionWatch{},
 		actWatch:               &activityWatch{},
 		actSeq:                 new(uint64),
+		tourSeq:                &map[domain.SessionID]uint64{},
 		web:                    newWebHostState(),
 		clipWrite:              clipboard.Copy,
 		feed:                   svc.CommitFeed(),
