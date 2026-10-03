@@ -70,6 +70,9 @@ var (
 	stateTick = 2 * time.Second
 	// stateCoalesce: a burst of output is classified once it settles.
 	stateCoalesce = 300 * time.Millisecond
+	// idleSettle: agent_wait trusts an idle only after it has held this long
+	// (the working→idle→working flicker guard).
+	idleSettle = 2 * time.Second
 )
 
 const (
@@ -89,6 +92,16 @@ func UseStateTiming(grace, stall time.Duration) func() {
 		stateGrace, stallAfter = pg, ps
 		statesMu.Unlock()
 	}
+}
+
+// UseIdleSettle replaces agent_wait's idle settle (tests) and returns the
+// restore.
+func UseIdleSettle(d time.Duration) func() {
+	statesMu.Lock()
+	prev := idleSettle
+	idleSettle = d
+	statesMu.Unlock()
+	return func() { statesMu.Lock(); idleSettle = prev; statesMu.Unlock() }
 }
 
 // stateSource is what the watcher reads: the manager in production, a fake
