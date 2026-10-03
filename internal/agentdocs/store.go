@@ -19,6 +19,7 @@ type Store struct {
 	noteSeq   int64
 	files     map[fileKey]*fileNotes
 	overviews map[string]*ovEntry // by id
+	tours     map[string]string   // FileTour key -> overview id (may name a closed one)
 	b         broadcaster
 }
 
@@ -26,7 +27,7 @@ type fileKey struct{ root, path string }
 
 // New is an empty store (a standalone gg web, every test).
 func New() *Store {
-	return &Store{files: map[fileKey]*fileNotes{}, overviews: map[string]*ovEntry{}}
+	return &Store{files: map[fileKey]*fileNotes{}, overviews: map[string]*ovEntry{}, tours: map[string]string{}}
 }
 
 var (

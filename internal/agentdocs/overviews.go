@@ -234,6 +234,42 @@ func (s *Store) AddOverview(root, dir, title, text string) (Overview, error) {
 	return out, nil
 }
 
+// FileTour files or replaces the overview a caller keeps under key (an
+// agent tour: "brief:<session>", "report:<session>"): replaced in place while
+// it is open, filed anew when it never was or the user closed it. added
+// says which.
+func (s *Store) FileTour(key, root, dir, title, text string) (Overview, bool, error) {
+	if id, ok := s.TourID(key); ok {
+		if o, err := s.SetOverview(id, title, text); err == nil {
+			return o, false, nil
+		}
+		// closed between the two calls: file it anew
+	}
+	o, err := s.AddOverview(root, dir, title, text)
+	if err != nil {
+		return Overview{}, false, err
+	}
+	s.mu.Lock()
+	s.tours[key] = o.ID
+	s.mu.Unlock()
+	return o, true, nil
+}
+
+// TourID is the open overview filed under key.
+func (s *Store) TourID(key string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id, ok := s.tours[key]
+	if !ok {
+		return "", false
+	}
+	if _, open := s.overviews[id]; !open {
+		delete(s.tours, key)
+		return "", false
+	}
+	return id, true
+}
+
 // SetOverview replaces an overview's text, and its title unless title is
 // blank. An anchor whose destination stays keeps what the last check found.
 func (s *Store) SetOverview(id, title, text string) (Overview, error) {
