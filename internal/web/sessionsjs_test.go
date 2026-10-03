@@ -59,7 +59,7 @@ var sessionsWiring = []struct{ file, want, why string }{
 	{"style.css", "#sessstart.hidden", "hidden by id, never a global .hidden"},
 	{"sessions.js", "/api/agent-tour", "the tour rows ask the server to file the tour"},
 	{"sessions.js", "gg-open-tour", "a tour on another worktree opens after the switch's reload"},
-	{"sessions.js", "doReroot(r.worktree)", "a tour in another worktree switches the page there"},
+	{"sessions.js", "doReroot(r.worktree, r.overview)", "a tour in another worktree switches the page there, carrying the tour"},
 	{"app.js", "openPendingTour", "boot opens a tour a switch left pending"},
 }
 

@@ -1,7 +1,7 @@
 // sessions.js — starting sessions from the page (web attach, plan 2): the
 // Start agent dialog (first-run detect, list, approval), Open terminal, and
 // the menu rows that reach them. Kill and remove live in console.js.
-import { $, esc, getJSON, postJSON, ssGet, ssSet, state } from "./core.js";
+import { $, esc, getJSON, postJSON, ssGet, ssSet } from "./core.js";
 import { closeLayer, mountOverlay, popFoot, pushFoot, pushLayer } from "./layers.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { toast } from "./toast.js";
@@ -220,8 +220,8 @@ registerRows("session", (s) =>
 
 // openTour asks the server to file the tour (again, if it was closed), then
 // opens it — after switching the page (a hosted page: the terminal too)
-// when it lives in another worktree; the reload reads the one-shot key back
-// at boot (openPendingTour).
+// when the server says it lives in another worktree; the switch's reload
+// leaves a one-shot key that boot reads back (openPendingTour).
 async function openTour(s, kind) {
   let r;
   try {
@@ -230,9 +230,8 @@ async function openTour(s, kind) {
     toast(String(e.message || e));
     return;
   }
-  if (state.worktree && r.worktree !== state.worktree) {
-    ssSet("gg-open-tour", r.overview);
-    doReroot(r.worktree);
+  if (!r.here) {
+    doReroot(r.worktree, r.overview); // the switch's reload carries the tour (ops.js)
     return;
   }
   openViewer({ id: r.overview });

@@ -64,5 +64,8 @@ func (s *Server) handleAgentTour(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, map[string]string{"overview": o.ID, "worktree": d.Dir})
+	// here: the tour lives in the served worktree — the page opens it at
+	// once; else it switches to worktree. Decided here, by the store keys,
+	// never by the page comparing path spellings (Windows notation differs).
+	writeJSON(w, map[string]any{"overview": o.ID, "worktree": d.Dir, "here": d.Root == root})
 }

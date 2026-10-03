@@ -1,6 +1,6 @@
 // ops.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, runOnce, state } from "./core.js";
+import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, runOnce, ssSet, state } from "./core.js";
 import { closeLayer, closePrompt, copyText, openPrompt, pushLayer, showCtxMenu } from "./layers.js";
 import { openPrefixPicker } from "./prefixes.js";
 import { fetchStatus, wtCount } from "./status.js";
@@ -375,8 +375,14 @@ function hideSwitching() {
 // reload aborts (doReroot's own POST, when the live "switched" message beat
 // its reply) must not take the veil down on its way out.
 let switchReloading = false;
+// switchCarry: an agent tour (overview id) the switch in flight was asked
+// for. Only the reload writes it down for boot (sessions.js openPendingTour);
+// a switch that is refused, busy or cancelled drops it, so no unrelated
+// reload ever opens a stale tour.
+let switchCarry = null;
 function reloadForSwitch() {
   switchReloading = true;
+  if (switchCarry) ssSet("gg-open-tour", switchCarry);
   location.reload();
 }
 function isSwitching() {
@@ -386,10 +392,14 @@ function isSwitching() {
 // server-down veil's rule, serverdown.js).
 window.addEventListener("keydown", (e) => { if (isSwitching()) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
 
-async function doReroot(path) {
+async function doReroot(path, carry = null) {
   closeCommitFilter();
   state.gotoGen++;
-  if (opBusy()) return;
+  if (opBusy()) {
+    switchCarry = null;
+    return;
+  }
+  switchCarry = carry;
   showSwitching(path);
   try {
     await postJSON("/api/reroot", { path });
@@ -406,11 +416,15 @@ async function doReroot(path) {
         "This worktree is linked for another environment. Repair it for this one? It will stop working there until repaired back.",
         ["repair", "cancel"],
         (opt) => {
-          if (opt !== "repair") return;
+          if (opt !== "repair") {
+            switchCarry = null;
+            return;
+          }
           showSwitching(path);
           postJSON("/api/reroot", { path, repair: true })
             .then(() => reloadForSwitch())
             .catch((err) => {
+              switchCarry = null; // a reload already wrote it down (reloadForSwitch)
               if (switchReloading) return;
               hideSwitching();
               opLine("error: " + (err.message || err), true);
@@ -419,6 +433,7 @@ async function doReroot(path) {
       );
       return;
     }
+    switchCarry = null;
     opLine("error: " + (e.message || e), true);
   }
 }

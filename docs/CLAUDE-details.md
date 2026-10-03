@@ -4559,9 +4559,14 @@ Spec `docs/superpowers/specs/2026-10-03-agent-tours-design.md`.
   /api/agent-tour {id, kind}` files the tour INSIDE `listDocs` (+
   `ensureOpenID` for the served worktree) — the page focuses it right after
   the answer and the follow pass is asynchronous (a plain FileTour answered
-  404 to that focus; found by the browser check). Another worktree's tour:
-  `sessionStorage gg-open-tour` + `doReroot`, opened by `openPendingTour()` at
-  boot. The ctrl+\ switcher rows have no menu (planning ruling: ask first).
+  404 to that focus; found by the browser check). The answer carries
+  `here` (store keys compared server-side — the page never compares path
+  spellings, which differ on Windows). Another worktree's tour:
+  `doReroot(path, carry)`; ONLY `reloadForSwitch` writes `sessionStorage
+  gg-open-tour` (`switchCarry`), every failure arm (busy, refusal, cancelled
+  or failed repair) drops it — a key written before the switch survived a
+  refused switch and opened a stale tour on a later reload (review finding).
+  `openPendingTour()` reads it at boot. The ctrl+\ switcher rows have no menu (planning ruling: ask first).
 - `UseSessionManager` (test seam) now also installs a fresh spawn registry:
   ids restart at s1, and the old manager's records/reports leaked onto the
   new s1.
