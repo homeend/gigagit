@@ -283,9 +283,6 @@ func commitFileLines(files []model.CommitFile) []contentLine {
 	return out
 }
 
-// reviewsDir is the virtual directory a commit's AI reviews are listed under.
-const reviewsDir = "@notes"
-
 // withReviewLines puts a commit's reviews in front of its file list as a
 // "Reviews" heading. The stack is built from this list, so the
 // reviews read above the first real file there too.
@@ -296,10 +293,9 @@ func withReviewLines(reviews []domain.Review, lines []contentLine) []contentLine
 	out := make([]contentLine, 0, len(reviews)+1+len(lines))
 	out = append(out, contentLine{text: i18n.T("Reviews"), heading: true})
 	for _, r := range reviews {
-		// The path only keys the row (the stack, the sticky line); the row
-		// reads as a review, not as a file.
-		name := "review-" + r.Created.Local().Format("2006-01-02") + "-" + r.ID + ".md"
-		out = append(out, contentLine{text: "  " + reviewRowText(r), path: reviewsDir + "/" + name, status: "R", noteID: r.ID})
+		// No path: a review is not a file, so every file action (copy, shelf,
+		// bookmark, compare, the stack) passes it by; its menu is noteRowMenu.
+		out = append(out, contentLine{text: "  " + reviewRowText(r), noteID: r.ID})
 	}
 	if len(lines) == 1 && lines[0].path == "" && !lines[0].heading {
 		return out // "(no files)": the reviews are the whole list
@@ -1114,7 +1110,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.focusTree(), nil
 		}
 		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview && vis[p.sel].shelfNote == "" && vis[p.sel].notedPath == "" && vis[p.sel].noteScope == "") {
+		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview && vis[p.sel].noteID == "" && vis[p.sel].shelfNote == "" && vis[p.sel].notedPath == "" && vis[p.sel].noteScope == "") {
 			return m, nil // heading row, placeholder, or empty view
 		}
 		return m.openDiffForFileLine(vis[p.sel])

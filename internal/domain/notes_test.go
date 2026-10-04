@@ -661,3 +661,71 @@ func TestNotesClearOfAnUnusedAddressIsANoOp(t *testing.T) {
 		t.Fatalf("NotesFor(a/b.go) = %+v, %v, want the note untouched", left, err)
 	}
 }
+
+// NotesClearAtCommit removes what one row of a commit's Files view stands
+// for: a Notes row (scope "") = the plain threads on its path, a Range review
+// row = every thread written in the scope there, whichever file. Replies go
+// with their roots; the other kind, another path, another commit and the
+// commit's AI review stay.
+func TestNotesClearAtCommit(t *testing.T) {
+	t.Parallel()
+	svc, _ := notesSvc(t)
+	ctx := context.Background()
+	at := func(commit, path string) model.FileAddress {
+		return model.FileAddress{State: model.StateCommitted, Commit: commit, Path: path}
+	}
+	add := func(addr model.FileAddress, scope, summary string) model.Note {
+		t.Helper()
+		n, err := svc.NoteAdd(ctx, model.Note{Address: addr, Preview: scope, Side: model.NoteSideNew,
+			Range: [2]int{1, 1}, Summary: summary, ContextHash: model.NoteContextHash([]string{"a"})})
+		if err != nil {
+			t.Fatalf("NoteAdd(%s): %v", summary, err)
+		}
+		return n
+	}
+	const c, other, scope = "c0ffee", "deadbee", "aaaaaaa..bbbbbbb"
+	plain := add(at(c, "a.go"), "", "plain a")
+	if _, err := svc.NoteReply(ctx, plain.ID, model.Note{Summary: "reply"}); err != nil {
+		t.Fatal(err)
+	}
+	keepPath := add(at(c, "b.go"), "", "plain b")
+	scoped := add(at(c, "a.go"), scope, "scoped a")
+	scoped2 := add(at(c, "b.go"), scope, "scoped b")
+	keepScope := add(at(c, "a.go"), "main...feat", "another scope")
+	keepCommit := add(at(other, "a.go"), "", "other commit")
+
+	ids := func() map[string]bool {
+		t.Helper()
+		all, err := svc.notesStore(ctx).Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]bool{}
+		for _, n := range all {
+			out[n.ID] = true
+		}
+		return out
+	}
+
+	got, err := svc.NotesClearAtCommit(ctx, c, "a.go", "")
+	if err != nil || got != 1 {
+		t.Fatalf("clear the Notes row = %d, %v, want 1 thread (its reply goes too), nil", got, err)
+	}
+	have := ids()
+	if have[plain.ID] || len(have) != 5 || !have[keepPath.ID] || !have[scoped.ID] || !have[keepScope.ID] || !have[keepCommit.ID] {
+		t.Fatalf("after the Notes row clear: %v", have)
+	}
+
+	got, err = svc.NotesClearAtCommit(ctx, c, "", scope)
+	if err != nil || got != 2 {
+		t.Fatalf("clear the Range review row = %d, %v, want 2, nil", got, err)
+	}
+	have = ids()
+	if have[scoped.ID] || have[scoped2.ID] || !have[keepPath.ID] || !have[keepScope.ID] || !have[keepCommit.ID] {
+		t.Fatalf("after the Range review clear: %v", have)
+	}
+
+	if got, err := svc.NotesClearAtCommit(ctx, c, "", ""); err == nil || got != 0 {
+		t.Fatalf("neither a path nor a scope must be refused, got %d, %v", got, err)
+	}
+}

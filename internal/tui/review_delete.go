@@ -32,7 +32,8 @@ func reviewQuote(agent, summary string) string {
 }
 
 // deleteReviewRow is the "." menu's "Delete review": the review under the
-// Branches cursor, or the one the review view shows.
+// Branches cursor, or the one the review view shows. A commit's Reviews row
+// has its own (noteRowMenu).
 func (m Model) deleteReviewRow() (actionRow, bool) {
 	var id, quote string
 	switch {
@@ -103,6 +104,10 @@ func (m Model) onStoredDeleted(msg storedDeletedMsg) (Model, tea.Cmd) {
 		var c tea.Cmd
 		m, c = m.leaveReviewView()
 		cmds = append(cmds, c)
+	} else if msg.review {
+		// Deleted off a commit's Reviews row (or elsewhere while that list is
+		// open): the row goes with it.
+		m = m.dropFilesRows(func(l contentLine) bool { return l.noteID == msg.id })
 	}
 	if p := layerOf[*allNotesPopup](m); p != nil {
 		svc, gen := m.svc, m.loadGen

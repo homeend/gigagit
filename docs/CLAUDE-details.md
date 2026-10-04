@@ -1946,6 +1946,24 @@ scrolled to the file.
   its `.` menu and help rows) and "notes" lost its plural; the stacked view
   has its OWN footer line. `diffHintFor(long, stacked)`.
 
+### Note rows' "." menu: Open + Delete only (2026-10-05)
+
+User ruling: a review is opened or removed, nothing else. A commit's three
+note rows — Reviews (`noteID`), Range reviews (`noteScope`), Notes
+(`notedPath`) — carry no path, and `availableActions` returns
+`noteRowMenu()` alone for them (before any copy row): Open = enter
+(`openDiffForFileLine`), Delete = a confirm defaulting to Cancel. A review
+goes through `confirmStoredDelete` (`onStoredDeleted` drops the row via
+`dropFilesRows`); a Range review / Notes row through
+`domain.NotesClearAtCommit(commit, path, scope)` — exactly the threads
+`ScopesByCommit` / `PlainByCommitPath` count (roots + replies; a reply has
+no `Preview` of its own, so it follows its root; reviews never touched) —
+then `dropFilesRows` (an emptied group loses its heading) and a srcNotes
+reload. Web: right-click on the same rows = the same pair (`reviewMenu`
+with an open callback, `scopeRowMenu`, `notedRowMenu`) over `POST
+/api/notes/clear-row {commit, path|scope}`; the Branches review sub-row
+menu gained Open too.
+
 ### Range review rows in a commit's Files view (2026-10-02)
 
 A note written in a merge preview or a commit pair is an ordinary committed
@@ -4767,9 +4785,10 @@ Spec: `docs/superpowers/specs/2026-09-27-review-notes-design.md`.
 - **BranchReviewTarget** fills `Commit` and `Branch`; `HEAD` resolves to the
   checked-out branch, a sha or tag leaves `Branch` empty.
 - **TUI:** `srcNote` viewer source (`openReviewNote`); `withReviewLines`
-  prepends `@notes/` entries (`contentLine.noteID`) to a commit's changed-file
-  list, which the stack inherits; `loadCommitDiffCmd` shows one as an
-  all-added, uncached, non-note-addressable file. Branches tab is entry-based
+  prepends a "Reviews" heading + one row per review (`contentLine.noteID`, NO
+  path since 2026-10-05 — it used to carry a virtual `@notes/review-….md` path
+  + status R, which made every path-keyed file action (copy, shelf, bookmark,
+  compare, the session snapshot) treat the review as a file). Branches tab is entry-based
   (`brEntry`, the Worktrees sub-row pattern): the branch filter maps entry →
   branch, `backingIndex` refuses a review row.
 - **Shelf-entry notes in a shelved set's list:** `withShelfNoteLines` prepends

@@ -408,6 +408,50 @@ func (s *Service) NotesClear(ctx context.Context, addr model.FileAddress) (int, 
 	return dropped, err
 }
 
+// NotesClearAtCommit removes the threads one row of a commit's Files view
+// stands for and reports how many THREADS went (the row's ◆ N, which the
+// confirm quotes; replies are not counted): with scope "" the plain notes
+// on path (a Notes row — written in no scope), else every note written in
+// scope at the commit, whichever file (a Range review row). These are exactly
+// the threads NoteCounts' PlainByCommitPath / ScopesByCommit count. A reply
+// carries no scope of its own, so it goes with its root. The commit's AI
+// reviews are never touched (they have a row of their own).
+func (s *Service) NotesClearAtCommit(ctx context.Context, commit, path, scope string) (int, error) {
+	if commit == "" || (path == "" && scope == "") {
+		return 0, errors.New("notes clear: a commit and a path or a scope are required")
+	}
+	st := s.notesStore(ctx)
+	if st == nil {
+		return 0, ErrNotesDisabled
+	}
+	all, err := st.Load()
+	if err != nil {
+		return 0, err
+	}
+	roots := map[string]bool{}
+	for _, n := range all {
+		a := n.Address
+		if n.IsReply() || n.IsReviewNote() || a.State != model.StateCommitted || a.Commit != commit || a.Path == "" || n.Preview != scope {
+			continue
+		}
+		if scope == "" && a.Path != path {
+			continue
+		}
+		roots[n.ID] = true
+	}
+	if len(roots) == 0 {
+		return 0, nil
+	}
+	dropped, err := st.Sweep(func(n model.Note) bool { return !roots[n.ID] && !roots[n.ParentID] })
+	if dropped > 0 {
+		s.invalidateNoteCounts()
+	}
+	if err != nil {
+		return 0, err
+	}
+	return len(roots), nil
+}
+
 // NotesFor returns the notes that apply to addr, resolved against the OPEN
 // diff d and threaded (roots carry their replies), sorted new-side-first then
 // by line. Orphaned notes are omitted — they are hidden until the startup

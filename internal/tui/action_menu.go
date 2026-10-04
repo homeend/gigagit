@@ -62,6 +62,11 @@ func availableActions(m Model) []actionRow {
 			}
 			return append(rows, m.stashActionRows()...)
 		}
+		// A commit's note row (a review, a range review, notes) is not a
+		// file: its menu is its own Open + Delete and nothing else.
+		if rows, ok := m.noteRowMenu(); ok {
+			return rows
+		}
 		rows := m.contextCopyRows()
 		if r, ok := m.contextLinkRow(); ok {
 			rows = insertCopyLinkRow(rows, r)

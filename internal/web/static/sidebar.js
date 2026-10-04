@@ -573,7 +573,8 @@ $("branches-list").addEventListener("contextmenu", (e) => {
   const li = e.target.closest("li");
   if (li && li.dataset.review) {
     e.preventDefault();
-    return reviewMenu(li.dataset.review, e.clientX, e.clientY);
+    const rid = li.dataset.review;
+    return reviewMenu(rid, e.clientX, e.clientY, () => openReview(rid, { kind: "list" }));
   }
   if (sessionRowMenu(li, e)) return;
   if (!li || !li.dataset.n) return;

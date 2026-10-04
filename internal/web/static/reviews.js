@@ -546,8 +546,64 @@ function reviewHead(id) {
 
 // reviewMenu is the right-click menu of a review row (a commit's, a branch's
 // sub-row, the review view's Overview).
-function reviewMenu(id, x, y) {
-  showCtxMenu([{ label: "Delete review", danger: true, act: () => confirmDeleteReview(id) }], x, y);
+// reviewMenu is a review row's right-click menu: a review is opened or
+// removed, nothing else (the TUI's noteRowMenu). open is what a click on the
+// row does; the open review's own Overview row passes none.
+function reviewMenu(id, x, y, open) {
+  const rows = open ? [{ label: "Open review", act: open }] : [];
+  rows.push({ label: "Delete review", danger: true, act: () => confirmDeleteReview(id) });
+  showCtxMenu(rows, x, y);
+}
+
+
+// scopeRowMenu and notedRowMenu are a commit's Range review and Notes rows'
+// right-click menus: Open (what a click does) and Delete (every note the row
+// stands for at this commit).
+function scopeRowMenu(scope, x, y) {
+  const sc = commitScopes().find((c) => c.scope === scope);
+  const n = sc ? sc.n : 0;
+  const what = n === 1 ? "Delete this range review's note?" : `Delete this range review's ${n} notes?`;
+  showCtxMenu(
+    [
+      { label: "Open range review", act: () => openRangeReview(scope) },
+      { label: "Delete range review", danger: true, act: () => confirmClearRow({ scope }, what + " " + (sc ? sc.label : scope), scopeSel(scope)) },
+    ],
+    x,
+    y
+  );
+}
+
+
+function notedRowMenu(path, x, y) {
+  const n = state.noteCounts.plain_by_commit_path[state.fileSha + ":" + path] || 0;
+  const what = n === 1 ? "Delete the note on this file?" : `Delete the ${n} notes on this file?`;
+  showCtxMenu(
+    [
+      { label: "Open notes", act: () => openNotedPath(path) },
+      { label: "Delete notes", danger: true, act: () => confirmClearRow({ path }, what + " " + path, notedSel(path)) },
+    ],
+    x,
+    y
+  );
+}
+
+
+// confirmClearRow asks first — cancel is listed first and is what esc
+// answers — then removes the row's notes at the commit on screen; the counts
+// refresh redraws the list without the row.
+function confirmClearRow(key, prompt, sel) {
+  const sha = state.fileSha;
+  showLocalConfirm(prompt, ["cancel", "delete"], (o) => {
+    if (o !== "delete" || !sha) return;
+    const run = runOnce("note-row-clear", async () => {
+      const r = await postJSON("/api/notes/clear-row", { commit: sha, ...key });
+      if (state.reviewSel === sel) state.reviewSel = "";
+      await refreshNoteCounts();
+      opLine(r.removed === 1 ? "deleted the note" : `deleted ${r.removed} notes`, false);
+    });
+    if (!run) return;
+    run.catch((e) => opLine("delete notes: " + (e.message || e), true));
+  });
 }
 
 
@@ -613,7 +669,7 @@ registerHelp({
 });
 
 
-export { reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

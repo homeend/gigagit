@@ -1299,8 +1299,10 @@ opens the report file in `$EDITOR`, `esc` closes); a failed or empty run
 reports the error in the status line instead. Every commit, range or branch
 review is stored as a **note on the reviewed commit** (a range's last commit; a
 branch review's tip, carrying the branch name) — never as a file. You find it
-from the thing it is about: an `@notes/` entry at the top of the commit's file
-list (and at the top of the stacked diff), a `◆n` marker and review rows under
+from the thing it is about: a row under **Reviews** at the top of the commit's
+file list (`.` / right-click there offers only **Open review** and **Delete
+review**; the commit's Range reviews and Notes rows likewise only Open and
+Delete), a `◆n` marker and review rows under
 the branch in the Branches tab (only reviews of the branch's current tip; `.` →
 **Show review** opens the newest), under the commit in **View all notes…**, and
 from the run in the `ctrl+\` AI-tasks tab. Deleting or renaming a branch in gg
