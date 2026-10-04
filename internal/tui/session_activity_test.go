@@ -207,3 +207,17 @@ func TestActivityNoticeTextReport(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// A model built while the watcher already holds notices starts reading after
+// them: a second tui.New in one process never replays old notices.
+func TestNewStartsAfterTheNoticesAlreadyPosted(t *testing.T) {
+	w := domain.NewStaticStates(nil)
+	defer domain.UseSessionStates(w)()
+	w.PostNotice(domain.ActivityNotice{ID: "s1", Kind: "question", Label: "Claude", Dir: "/wt/feat-a"})
+	repo, _ := newRepoDir(t)
+	m := New(domain.Open(repo))
+	m, _ = m.onSessionActivity()
+	if m.statusMsg != "" {
+		t.Fatalf("an old notice was replayed: %q", m.statusMsg)
+	}
+}

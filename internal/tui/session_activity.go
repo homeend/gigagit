@@ -25,6 +25,8 @@ type activityWatch struct {
 
 type sessionActivityMsg struct{}
 
+func seqPtr(n uint64) *uint64 { return &n }
+
 // activityText is the human label: "working 7m" · "idle 3m" · "needs
 // input" · "stalled · …"; "" when gg cannot tell. Ages tick from Since.
 func activityText(a domain.SessionActivity, now time.Time) string {

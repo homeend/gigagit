@@ -484,7 +484,7 @@ func New(svc *domain.Service) Model {
 		svc:                    svc,
 		sessWatch:              &sessionWatch{},
 		actWatch:               &activityWatch{},
-		actSeq:                 new(uint64),
+		actSeq:                 seqPtr(domain.SessionNoticeSeq()), // never replay notices posted before this model
 		tourSeq:                &map[domain.SessionID]uint64{},
 		web:                    newWebHostState(),
 		clipWrite:              clipboard.Copy,

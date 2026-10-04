@@ -578,6 +578,18 @@ func SessionActivityOf(id SessionID) (SessionActivity, bool) {
 	return w.Get(id)
 }
 
+// SessionNoticeSeq is the running watcher's newest notice number, 0 when
+// none runs; it never starts one. A frontend that starts now reads after it.
+func SessionNoticeSeq() uint64 {
+	statesMu.Lock()
+	w := statesW
+	statesMu.Unlock()
+	if w == nil {
+		return 0
+	}
+	return w.NoticeSeq()
+}
+
 // UseSessionStates installs w as the process-global watcher (tests) and
 // returns the restore.
 func UseSessionStates(w *StateWatcher) func() {
