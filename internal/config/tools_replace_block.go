@@ -33,6 +33,16 @@ func ReplaceToolCommand(path, key string, tc ToolCommand) (bool, error) {
 	return ReplaceToolCommandIf(path, key, "", tc)
 }
 
+// CarryScreenRules is tc with old's screen_* lists when tc has none: a
+// template upgrade brings no screen rules, so the user's stay — in the
+// written block and in the block a review shows.
+func CarryScreenRules(tc, old ToolCommand) ToolCommand {
+	if !tc.HasScreenRules() {
+		tc.ScreenWorking, tc.ScreenWaiting, tc.ScreenQuestion = old.ScreenWorking, old.ScreenWaiting, old.ScreenQuestion
+	}
+	return tc
+}
+
 // ReplaceToolCommandIf is ReplaceToolCommand that first checks, under the
 // write's lock, that the block still has ToolFingerprint want ("" = any):
 // ErrToolBlockChanged otherwise, and nothing is written.
@@ -85,10 +95,7 @@ func ReplaceToolCommandIf(path, key, want string, tc ToolCommand) (bool, error) 
 		if want != "" && ToolFingerprint(one.Tools.Command[0]) != want {
 			return false, ErrToolBlockChanged
 		}
-		if old := one.Tools.Command[0]; !tc.HasScreenRules() {
-			// A template upgrade brings no screen rules: the user's stay.
-			tc.ScreenWorking, tc.ScreenWaiting, tc.ScreenQuestion = old.ScreenWorking, old.ScreenWaiting, old.ScreenQuestion
-		}
+		tc = CarryScreenRules(tc, one.Tools.Command[0])
 		index := 0 // this block's position among the file's tool blocks
 		for j := 0; j < si; j++ {
 			if tools[j] {

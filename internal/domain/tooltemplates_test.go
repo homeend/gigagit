@@ -260,3 +260,23 @@ func TestToolTemplateStatusesWarmTheVersionCache(t *testing.T) {
 		t.Fatalf("cache not warmed: %+v", got)
 	}
 }
+
+// An upgrade keeps the block's own screen_* lists, so the offered block —
+// what the review popup and the web preview show — carries them too.
+func TestToolUpdateOffersTheCarriedScreenRules(t *testing.T) {
+	v1 := fakeDet(1, exttool.CommandTemplate{Command: "<bin> one"})
+	v2 := fakeDet(2, exttool.CommandTemplate{Command: "<bin> two"})
+	block := NewToolBlock(v1, v1.Tool.Commands[0])
+	block.ScreenQuestion = []string{`CONFIRM\?`}
+	stubVersion(t, "")
+	sts := ToolTemplateStatuses(context.Background(), []string{writeBlocks(t, block)}, []exttool.Detection{v2})
+	if len(sts) != 1 || sts[0].Kind != ToolUpdateAvailable {
+		t.Fatalf("%+v", sts)
+	}
+	if got := sts[0].New.ScreenQuestion; len(got) != 1 || got[0] != `CONFIRM\?` {
+		t.Fatalf("offered block lost the screen rules: %+v", sts[0].New)
+	}
+	if !strings.Contains(config.RenderToolCommand(sts[0].New), "screen_question") {
+		t.Fatal("the preview text has no screen_question")
+	}
+}

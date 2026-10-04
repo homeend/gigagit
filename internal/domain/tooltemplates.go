@@ -142,7 +142,7 @@ func blockStatus(ctx context.Context, path string, tc config.ToolCommand, det ex
 		return st, false // unknown version, no variant to name: no status
 	}
 	st.ToRange = ct.Range
-	st.New = NewToolBlock(det, ct)
+	st.New = config.CarryScreenRules(NewToolBlock(det, ct), tc) // outside the fingerprint
 	switch {
 	case !tc.Stamped():
 		if config.ToolFingerprint(tc) == config.ToolFingerprint(st.New) {
