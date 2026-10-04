@@ -239,6 +239,37 @@ func TestStatesStalledOncePerStretch(t *testing.T) {
 	}
 }
 
+// A hung API call keeps Claude's spinner timer ticking — output, but no
+// progress. Only the spinner moving for spinStallAfter is a stall too; a long
+// think stays working until then.
+func TestStatesStalledWhenOnlyTheSpinnerMoves(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("claude")
+	t0 := actT0.Add(time.Minute)
+	frame := func(at time.Time, glyph string, secs int) {
+		f.text["s1"] = fmt.Sprintf("● Read 2 files\n%s Slithering… (%ds · thinking with high effort)\n────────────────────\n❯ \n", glyph, secs)
+		f.last["s1"] = at // the timer redraw is output
+		w.observe(at)
+	}
+	frame(t0, "✶", 1)
+	frame(t0.Add(9*time.Minute), "*", 541)
+	if a, _ := w.Get("s1"); a.Stalled || kinds(w.Notices(0)) != "" {
+		t.Fatalf("a 9-minute think stalled: %+v %q", a, kinds(w.Notices(0)))
+	}
+	frame(t0.Add(10*time.Minute+time.Second), "✻", 601)
+	a, _ := w.Get("s1")
+	ns := w.Notices(0)
+	if !a.Stalled || kinds(ns) != "stalled" || !ns[0].Spinning || ns[0].Quiet < 10*time.Minute {
+		t.Fatalf("spinner only for 10m: %+v %+v", a, ns)
+	}
+	// Progress (new transcript text) ends it.
+	f.text["s1"] = "● Read 3 files\n✶ Slithering… (602s · thinking with high effort)\n────────────────────\n❯ \n"
+	w.observe(t0.Add(10*time.Minute + 2*time.Second))
+	if a, _ := w.Get("s1"); a.Stalled {
+		t.Fatalf("still stalled after progress: %+v", a)
+	}
+}
+
 func TestStatesStallFromUnknownNeedsDedicatedRules(t *testing.T) {
 	t.Parallel()
 	now := actT0.Add(10 * time.Minute)

@@ -95,6 +95,11 @@ func TestSessionActivityNotices(t *testing.T) {
 	if m.statusMsg != "Codex in b has printed nothing for 2m05s — stalled?" {
 		t.Fatalf("newest = %q", m.statusMsg)
 	}
+	w.PostNotice(domain.ActivityNotice{ID: "s2", Kind: "stalled", Label: "Claude", Dir: "/wt/b", Quiet: 10 * time.Minute, Spinning: true})
+	m, _ = m.onSessionActivity()
+	if m.statusMsg != "Claude in b has shown only its spinner for 10m00s — stalled?" {
+		t.Fatalf("spinning = %q", m.statusMsg)
+	}
 	// The user is typing into s1: its notices say nothing.
 	m.statusMsg = ""
 	m.console = &consoleState{id: "s1", focused: true}

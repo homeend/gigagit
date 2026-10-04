@@ -106,6 +106,9 @@ func activityNoticeText(n domain.ActivityNotice) string {
 	case "report":
 		return i18n.T("%s in %s reports: %s", n.Label, wt, n.Text)
 	default:
+		if n.Spinning {
+			return i18n.T("%s in %s has shown only its spinner for %s — stalled?", n.Label, wt, formatElapsed(n.Quiet))
+		}
 		return i18n.T("%s in %s has printed nothing for %s — stalled?", n.Label, wt, formatElapsed(n.Quiet))
 	}
 }

@@ -55,8 +55,11 @@ type ActivityNotice struct {
 	Kind  string        // "question" | "idle" | "stalled" | "report"
 	Label string        // the session's label
 	Dir   string        // its worktree
-	Quiet time.Duration // stalled: how long nothing was printed
-	Text  string        // report: its first line
+	Quiet time.Duration // stalled: how long nothing was printed (or, Spinning, nothing but the spinner moved)
+	// Spinning: the stall is a spinner that kept ticking with no progress
+	// (a hung API call), not silence.
+	Spinning bool
+	Text     string // report: its first line
 }
 
 // Timing rules. Variables so tests (UseStateTiming) can shrink them.
@@ -66,6 +69,10 @@ var (
 	stateGrace = 30 * time.Second
 	// stallAfter: no output for this long while working is a stall.
 	stallAfter = 120 * time.Second
+	// spinStallAfter: only the spinner moving (glyph, timer) this long while
+	// working is a stall too — a hung API call keeps the timer ticking. Long:
+	// a think shows nothing else either (live capture 2026-10-04).
+	spinStallAfter = 10 * time.Minute
 	// stateTick serves the stall clock; output wakes the watcher itself.
 	stateTick = 2 * time.Second
 	// stateCoalesce: a burst of output is classified once it settles.
@@ -178,6 +185,11 @@ func (s *ruleStore) keep(live map[SessionID]bool) {
 	s.mu.Unlock()
 }
 
+type progressMark struct {
+	key   string
+	since time.Time
+}
+
 // StateWatcher classifies the running agent sessions of one manager.
 type StateWatcher struct {
 	src   stateSource
@@ -190,8 +202,11 @@ type StateWatcher struct {
 	// pendingIdle: when a working session's screen first read idle; it
 	// shows as idle only once that has held idleSettle (the flicker guard).
 	pendingIdle map[SessionID]time.Time
-	notices     []ActivityNotice
-	seq         uint64
+	// progress: each session's tail without its spinner (agentstate.Progress)
+	// and since when it has read so.
+	progress map[SessionID]progressMark
+	notices  []ActivityNotice
+	seq      uint64
 
 	stop chan struct{}
 	wg   sync.WaitGroup
@@ -199,7 +214,8 @@ type StateWatcher struct {
 
 func newStateWatcher(src stateSource, rules *ruleStore) *StateWatcher {
 	return &StateWatcher{src: src, rules: rules, states: map[SessionID]SessionActivity{},
-		pendingQ: map[SessionID]bool{}, pendingIdle: map[SessionID]time.Time{}, stop: make(chan struct{})}
+		pendingQ: map[SessionID]bool{}, pendingIdle: map[SessionID]time.Time{},
+		progress: map[SessionID]progressMark{}, stop: make(chan struct{})}
 }
 
 // NewStaticStates is a watcher that watches nothing and serves the given
@@ -294,7 +310,7 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 		return 0
 	}
 	statesMu.Lock()
-	grace, stall, settle := stateGrace, stallAfter, idleSettle
+	grace, stall, spinStall, settle := stateGrace, stallAfter, spinStallAfter, idleSettle
 	statesMu.Unlock()
 	infos := w.src.List()
 	live := map[SessionID]bool{}
@@ -324,8 +340,8 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 		default:
 			next.Options = nil
 		}
-		note := func(kind string, quiet time.Duration) {
-			w.post(ActivityNotice{ID: info.ID, Kind: kind, Label: info.Label, Dir: info.Dir, Quiet: quiet})
+		note := func(kind string, quiet time.Duration, spinning bool) {
+			w.post(ActivityNotice{ID: info.ID, Kind: kind, Label: info.Label, Dir: info.Dir, Quiet: quiet, Spinning: spinning})
 			changed = true
 		}
 		trusted := now.Sub(info.Started) >= grace
@@ -353,18 +369,18 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 			changed = true
 			switch {
 			case st == agentstate.Question && trusted:
-				note("question", 0)
+				note("question", 0, false)
 			case st == agentstate.Question:
 				w.pendingQ[info.ID] = true
 			case st == agentstate.Waiting && prev.State == agentstate.Working && since.Sub(info.Started) >= grace:
-				note("idle", 0)
+				note("idle", 0, false)
 			}
 		} else if w.pendingQ[info.ID] && trusted {
 			// The question that opened inside the grace is still up: the
 			// user must hear about it (a trust dialog at start).
 			delete(w.pendingQ, info.ID)
 			if next.State == agentstate.Question {
-				note("question", 0)
+				note("question", 0, false)
 			}
 		}
 		if next.State != agentstate.Question {
@@ -374,10 +390,19 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 		last := w.src.LastOutput(info.ID)
 		stalled := !last.IsZero() && now.Sub(last) > stall &&
 			(next.State == agentstate.Working || (next.State == agentstate.Unknown && dedicated))
+		quiet, spinning := now.Sub(last), false
+		pm := w.progress[info.ID]
+		if key := agentstate.Progress(lines); key != pm.key || pm.since.IsZero() {
+			pm = progressMark{key: key, since: now}
+			w.progress[info.ID] = pm
+		}
+		if !stalled && next.State == agentstate.Working && now.Sub(pm.since) >= spinStall {
+			stalled, quiet, spinning = true, now.Sub(pm.since), true
+		}
 		if stalled != prev.Stalled {
 			changed = true
 			if stalled {
-				note("stalled", now.Sub(last))
+				note("stalled", quiet, spinning)
 			}
 		}
 		next.Stalled = stalled
@@ -391,6 +416,7 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 			delete(w.states, id)
 			delete(w.pendingQ, id)
 			delete(w.pendingIdle, id)
+			delete(w.progress, id)
 			changed = true
 		}
 	}

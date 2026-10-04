@@ -4139,7 +4139,15 @@ the report channel are the NEXT plan.
   question still up when the grace ends is posted then (a trust dialog), an
   idle-after-working inside it never. **Stalled** = `LastOutput` older than
   120 s while working — or unknown, but only with DEDICATED rules (a generic
-  agent would be called stalled at every idle prompt). Exited sessions are
+  agent would be called stalled at every idle prompt) — or, while working,
+  `agentstate.Progress(tail)` (the tail without a leading spinner glyph and
+  elapsed-time counters) unchanged for `spinStallAfter` 10 min: a hung API
+  call keeps Claude's timer ticking. Ten, not two: Claude's thinking spinner
+  shows no token counter (live 2026-10-04), so a long think looks the same;
+  the notice says `Spinning`. **Idle hold**: working → idle shows only once
+  idle has held `idleSettle` (2 s), from when it began (`pendingIdle`; the
+  loop arms a timer for it). **Own menus**: `Rules.Own` (built-in, Claude's
+  "Esc to back/go back/close/clear" footers) read unknown, keeping the state. Exited sessions are
   dropped. **Rules**: a command with any `screen_*` list is compiled at
   start (`SessionRules(tc)`: a set list replaces the agent's built-in list
   of that kind, a missing one keeps it — a partial Claude block must not

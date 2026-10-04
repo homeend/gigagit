@@ -145,7 +145,7 @@ func toolAgentStart() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_start", Description: "Start a worker agent in a worktree with a task; the worktree claim passes to the worker."}
 }
 func toolAgentList() *sdk.Tool {
-	return &sdk.Tool{Name: "agent_list", Description: "Every agent session of this gg; mine = started by you; activity = working | idle | question (needs a decision), stalled = silent for two minutes.", Annotations: readOnlyAnnotations()}
+	return &sdk.Tool{Name: "agent_list", Description: "Every agent session of this gg; mine = started by you; activity = working | idle | question (needs a decision), stalled = silent for two minutes, or only its spinner moving for ten (a hung call).", Annotations: readOnlyAnnotations()}
 }
 func toolAgentScreen() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_screen", Description: "A session's visible console text, what the agent is doing (activity) and a dialog's choices (options).", Annotations: readOnlyAnnotations()}

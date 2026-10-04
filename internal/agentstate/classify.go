@@ -214,6 +214,25 @@ func StepDuration(lines []string) time.Duration {
 	return 0
 }
 
+// spinnerGlyphRe: a spinner frame leading a line — Claude Code's glyphs,
+// braille (junie, antigravity) and kimi's moon phases.
+var spinnerGlyphRe = regexp.MustCompile(`^(?:[·✢✳✶✻✽*]|[⠀-⣿]|[🌑🌒🌓🌔🌕🌖🌗🌘]) `)
+
+// timerRe: an elapsed-time counter ("5s", "7m 12s", "1h 2m 3s").
+var timerRe = regexp.MustCompile(`\b(?:\d+h )?(?:\d+m )?\d+s\b`)
+
+// Progress is the tail without what moves while nothing happens — a leading
+// spinner glyph and the elapsed-time counters — so two screens with the same
+// Progress show no progress between them. Everything else counts, a token
+// counter included.
+func Progress(lines []string) string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = timerRe.ReplaceAllString(spinnerGlyphRe.ReplaceAllString(l, ""), "")
+	}
+	return strings.Join(out, "\n")
+}
+
 // HasDefaults reports whether gg ships dedicated rules for this agent id
 // (the generic set does not count).
 func HasDefaults(agentID string) bool { _, ok := defaults[agentID]; return ok && agentID != "" }

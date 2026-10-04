@@ -1537,7 +1537,7 @@ on its sub-row — `└ ● Claude  working 7m` while it runs a step, `idle 3m`
 when its turn is over and it waits for you, **needs input** when a dialog
 (trust, a command permission, a question) waits for a decision, and
 `stalled · …` when it has printed nothing for two minutes while apparently
-busy. The `ctrl+\` popup rows and the console title show the same words
+busy, or nothing but its spinner has moved for ten (a hung model call). The `ctrl+\` popup rows and the console title show the same words
 after the running age; needs input and stalled wear the attention colour.
 When a session starts needing you, finishes its turn, or stalls, the status
 line says so once (`Claude in feat-x needs your input`) — unless you are
