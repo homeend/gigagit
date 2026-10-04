@@ -185,21 +185,23 @@ func (fs *FileStore) Remove(id string) error {
 }
 
 // Sweep applies keep to every part, each under its own lock, and reports
-// the total shrinkage. It stops at the first failing part.
+// the total shrinkage. A failing part (corrupt, lock held) does not stop
+// the others; its error is returned, joined.
 func (fs *FileStore) Sweep(keep func(model.Note) bool) (int, error) {
 	parts, err := fs.Parts()
 	if err != nil {
 		return 0, err
 	}
 	total := 0
+	var errs []error
 	for _, p := range parts {
 		n, serr := fs.file(p).Sweep(keep)
 		total += n
 		if serr != nil {
-			return total, serr
+			errs = append(errs, serr)
 		}
 	}
-	return total, nil
+	return total, errors.Join(errs...)
 }
 
 // Quarantine moves every CORRUPT part aside (<file>.corrupt-<unix>) and

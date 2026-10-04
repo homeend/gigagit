@@ -231,3 +231,28 @@ func TestEmptyStoreHasNoPartsAndCreatesNothing(t *testing.T) {
 		t.Fatal("reads and an empty sweep must not create the state directory")
 	}
 }
+
+// A corrupt part must not stop a sweep (a clear, a shelf remove) from
+// reaching the healthy parts after it; its error is still reported.
+func TestSweepContinuesPastACorruptPart(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	fs := NewFileStore(root)
+	shelf := noteAt("s0000000", 1)
+	shelf.Address = model.FileAddress{State: model.StateShelf, ShelfID: "e1", Path: "a.go"}
+	for _, n := range []model.Note{shelf, liveNote("w0000000", "/repo", 2)} {
+		if err := fs.Put(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(PartShelf.file(root), []byte("notes = [[["), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dropped, err := fs.Sweep(func(n model.Note) bool { return n.ID != "w0000000" })
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("Sweep err = %v, want the corrupt part reported", err)
+	}
+	if dropped != 1 {
+		t.Fatalf("dropped = %d, want the healthy part swept", dropped)
+	}
+}
