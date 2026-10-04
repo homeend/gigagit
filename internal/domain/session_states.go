@@ -8,8 +8,6 @@ package domain
 
 import (
 	"fmt"
-	"maps"
-	"slices"
 	"sync"
 	"time"
 
@@ -132,63 +130,53 @@ func UseTitleSettle(d time.Duration) func() {
 
 // stateSource is what the watcher reads: the manager in production, a fake
 // feed in tests.
+// stateSource is where the watcher observes sessions.
 type stateSource interface {
 	List() []agentsession.Info
-	Text(id agentsession.ID) (string, bool)
-	LastOutput(id agentsession.ID) time.Time
-	Signals(id agentsession.ID) (agentsession.Signals, bool)
+	// Observe is the session's screen, title and progress as one
+	// observation, and when it last printed.
+	Observe(id agentsession.ID) (agentstate.Observation, time.Time, bool)
 }
 
 type managerSource struct{ m *agentsession.Manager }
 
 func (s managerSource) List() []agentsession.Info { return s.m.List() }
-func (s managerSource) Text(id agentsession.ID) (string, bool) {
+func (s managerSource) Observe(id agentsession.ID) (agentstate.Observation, time.Time, bool) {
 	sess, ok := s.m.Get(id)
 	if !ok {
-		return "", false
+		return agentstate.Observation{}, time.Time{}, false
 	}
-	return sess.Text(), true
-}
-func (s managerSource) LastOutput(id agentsession.ID) time.Time {
-	if sess, ok := s.m.Get(id); ok {
-		return sess.LastOutput()
-	}
-	return time.Time{}
-}
-func (s managerSource) Signals(id agentsession.ID) (agentsession.Signals, bool) {
-	if sess, ok := s.m.Get(id); ok {
-		return sess.Signals(), true
-	}
-	return agentsession.Signals{}, false
+	text, sig := sess.Text(), sess.Signals()
+	return agentstate.Observation{Text: text, Lines: agentstate.Tail(text, stateTailLines), Title: sig.Title, Progress: sig.Progress}, sess.LastOutput(), true
 }
 
-// ruleStore holds the rules bound to sessions at start (a command with its
-// own screen_* lists). It lives outside the watcher so a start never
+// ruleStore holds the profiles bound to sessions at start (a command with
+// its own screen_* lists). It lives outside the watcher so a start never
 // depends on the watcher running.
 type ruleStore struct {
 	mu   sync.Mutex
-	m    map[SessionID]agentstate.Rules
+	m    map[SessionID]agentstate.Profile
 	seen map[SessionID]bool // ids an observe has seen live: only those are pruned
 }
 
 func newRuleStore() *ruleStore {
-	return &ruleStore{m: map[SessionID]agentstate.Rules{}, seen: map[SessionID]bool{}}
+	return &ruleStore{m: map[SessionID]agentstate.Profile{}, seen: map[SessionID]bool{}}
 }
 
-func (s *ruleStore) bind(id SessionID, r agentstate.Rules) {
+func (s *ruleStore) bind(id SessionID, p agentstate.Profile) {
 	s.mu.Lock()
-	s.m[id] = r
+	s.m[id] = p
 	s.mu.Unlock()
 }
 
-func (s *ruleStore) get(id SessionID) (agentstate.Rules, bool) {
+func (s *ruleStore) get(id SessionID) (agentstate.Profile, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r, ok := s.m[id]
-	return r, ok
+	p, ok := s.m[id]
+	return p, ok
 }
 
-// keep prunes the rules of sessions that were live and are gone. A set bound
+// keep prunes the profiles of sessions that were live and are gone. A set bound
 // before its session shows up in List (the start binds after the manager
 // registered the session; an observe may have listed in between) is kept
 // until the session has been seen.
@@ -211,29 +199,18 @@ func (s *ruleStore) keep(live map[SessionID]bool) {
 	s.mu.Unlock()
 }
 
-type progressMark struct {
-	key   string
-	since time.Time
-}
-
 // StateWatcher classifies the running agent sessions of one manager.
 type StateWatcher struct {
 	src   stateSource
 	rules *ruleStore
 	bc    agentsession.Broadcaster
 
-	mu       sync.Mutex
-	states   map[SessionID]SessionActivity
-	pendingQ map[SessionID]bool // a question seen inside the grace, not yet announced
-	// pendingIdle: when a working session's screen first read idle; it
-	// shows as idle only once that has held idleSettle (the flicker guard).
-	pendingIdle map[SessionID]time.Time
-	// progress: each session's tail without its spinner (agentstate.Progress)
-	// and since when it has read so.
-	progress map[SessionID]progressMark
-	// animated: sessions whose title or progress has said working — only
-	// their idle title counts (agentstate.Signal.Trusted).
-	animated map[SessionID]bool
+	mu sync.Mutex
+	// states: each session's published activity (what Get serves).
+	states map[SessionID]SessionActivity
+	// trackers: each running session's state over time (holds, grace,
+	// stalls) — session_tracker.go.
+	trackers map[SessionID]*sessionTracker
 	notices  []ActivityNotice
 	seq      uint64
 
@@ -243,8 +220,7 @@ type StateWatcher struct {
 
 func newStateWatcher(src stateSource, rules *ruleStore) *StateWatcher {
 	return &StateWatcher{src: src, rules: rules, states: map[SessionID]SessionActivity{},
-		pendingQ: map[SessionID]bool{}, pendingIdle: map[SessionID]time.Time{},
-		progress: map[SessionID]progressMark{}, animated: map[SessionID]bool{}, stop: make(chan struct{})}
+		trackers: map[SessionID]*sessionTracker{}, stop: make(chan struct{})}
 }
 
 // NewStaticStates is a watcher that watches nothing and serves the given
@@ -292,8 +268,8 @@ func (w *StateWatcher) Notices(after uint64) []ActivityNotice {
 	return out
 }
 
-// Bind gives a session its own rules (a command with screen_* lists).
-func (w *StateWatcher) Bind(id SessionID, r agentstate.Rules) { w.rules.bind(id, r) }
+// Bind gives a session its own profile (a command with screen_* lists).
+func (w *StateWatcher) Bind(id SessionID, p agentstate.Profile) { w.rules.bind(id, p) }
 
 // PostNotice appends a notice and wakes the subscribers (tests; the
 // watcher posts its own through the same path).
@@ -318,176 +294,82 @@ func (w *StateWatcher) post(n ActivityNotice) {
 	}
 }
 
-// rulesFor: the bound rules, else the built-ins of a known agent. Terminals
-// and custom commands without bound rules are never classified. dedicated
-// reports rules that know this agent's screens (not the generic set).
-func (w *StateWatcher) rulesFor(info agentsession.Info) (r agentstate.Rules, dedicated, ok bool) {
-	if r, bound := w.rules.get(info.ID); bound {
-		return r, true, true
+// profileFor: the bound profile, else the built-in one of a known agent.
+// Terminals and custom commands without a bound profile are never
+// classified.
+func (w *StateWatcher) profileFor(info agentsession.Info) (agentstate.Profile, bool) {
+	if p, bound := w.rules.get(info.ID); bound {
+		return p, true
 	}
 	if info.Terminal || info.AgentID == "" {
-		return agentstate.Rules{}, false, false
+		return agentstate.Profile{}, false
 	}
-	return agentstate.DefaultRules(info.AgentID), agentstate.HasDefaults(info.AgentID), true
+	return agentstate.ForAgent(info.AgentID), true
 }
 
-// observe classifies every running session once — its screen together with
-// its title and progress report (agentstate.ClassifyWith) — and folds the
-// result into the states, posting the notices the transitions call for. An
-// unknown read changes nothing: output lands mid-redraw often enough that
-// acting on it would flap. A spinning title keeps a session working whatever
-// its screen shows between two steps. A working session that reads idle
-// shows idle only once that has held — titleSettle when its title says idle
-// too, else idleSettle (Claude Code drops its screen spinner between two
-// steps of one turn) — and then from when it began; observe returns how soon
-// a pending idle wants looking at again (0: none pending).
+// observe is THE entry of state detection. For each running session it
+// observes (stateSource.Observe: screen, title, progress), reads the
+// observation with the session's profile (agentstate: the screen, title and
+// progress detectors composed per agent), and folds the reading into the
+// session's tracker (sessionTracker.Step: holds, grace, stalls), publishing
+// the activity and its notices. Screens are read before taking w.mu: each
+// read takes its session's emulator lock, and Get must not wait on that.
+// It returns how soon a pending idle wants another look (0: none).
 func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 	if w.src == nil {
 		return 0
 	}
-	statesMu.Lock()
-	grace, stall, spinStall, settle, tsettle := stateGrace, stallAfter, spinStallAfter, idleSettle, titleSettle
-	statesMu.Unlock()
-	w.mu.Lock()
-	animated := maps.Clone(w.animated)
-	w.mu.Unlock()
-	// The screens are read and classified before taking w.mu: each read
-	// takes its session's emulator lock, and Get must not wait on that.
-	type reading struct {
+	tm := currentTiming()
+	type read struct {
 		info      agentsession.Info
 		dedicated bool
-		text      string
-		lines     []string
-		st        agentstate.State
-		says      agentstate.State // what the title/progress alone say
-		titleIdle bool             // a trusted idle title
+		rd        agentstate.Reading
 		last      time.Time
 	}
-	var reads []reading
+	var reads []read
 	live := map[SessionID]bool{}
 	for _, info := range w.src.List() {
 		if info.State != agentsession.Running {
 			continue
 		}
 		live[info.ID] = true
-		rules, dedicated, ok := w.rulesFor(info)
+		prof, ok := w.profileFor(info)
 		if !ok {
 			continue
 		}
-		text, ok := w.src.Text(info.ID)
+		obs, last, ok := w.src.Observe(info.ID)
 		if !ok {
 			continue
 		}
-		lines := agentstate.Tail(text, stateTailLines)
-		sigs, _ := w.src.Signals(info.ID)
-		sg := agentstate.Signal{Title: sigs.Title, Progress: sigs.Progress}
-		says := agentstate.SignalState(rules, sg)
-		sg.Trusted = animated[info.ID] || says == agentstate.Working
-		st, titleIdle := agentstate.ClassifyWith(rules, lines, sg)
-		reads = append(reads, reading{info: info, dedicated: dedicated, text: text, lines: lines,
-			st: st, says: says, titleIdle: titleIdle, last: w.src.LastOutput(info.ID)})
+		reads = append(reads, read{info: info, dedicated: prof.Dedicated, rd: prof.Read(obs), last: last})
 	}
 	changed := false
 	w.mu.Lock()
-	for _, rd := range reads {
-		info, dedicated, text, lines, st := rd.info, rd.dedicated, rd.text, rd.lines, rd.st
-		if rd.says == agentstate.Working {
-			w.animated[info.ID] = true
+	for _, r := range reads {
+		t := w.trackers[r.info.ID]
+		if t == nil {
+			t = &sessionTracker{}
+			w.trackers[r.info.ID] = t
 		}
-		prev := w.states[info.ID]
-		next := prev
-		switch st {
-		case agentstate.Question:
-			next.Options = agentstate.DialogOptions(text, lines)
-		case agentstate.Unknown:
-		default:
-			next.Options = nil
+		t.dedicated = r.dedicated
+		act, notes, ch, again := t.Step(r.rd, r.info, r.last, now, tm)
+		w.states[r.info.ID] = act
+		for _, n := range notes {
+			w.post(n)
 		}
-		note := func(kind string, quiet time.Duration, spinning bool) {
-			w.post(ActivityNotice{ID: info.ID, Kind: kind, Label: info.Label, Dir: info.Dir, Quiet: quiet, Spinning: spinning})
-			changed = true
+		changed = changed || ch
+		if again > 0 && (recheck == 0 || again < recheck) {
+			recheck = again
 		}
-		trusted := now.Sub(info.Started) >= grace
-		since := now
-		hold := settle
-		if rd.titleIdle {
-			hold = tsettle
+	}
+	for id := range w.trackers {
+		if !live[id] {
+			delete(w.trackers, id)
 		}
-		switch {
-		case st == agentstate.Waiting && prev.State == agentstate.Working:
-			first, ok := w.pendingIdle[info.ID]
-			if !ok {
-				first, w.pendingIdle[info.ID] = now, now
-			}
-			if held := now.Sub(first); held < hold {
-				st = agentstate.Unknown // not yet: the session stays working
-				if left := hold - held; recheck == 0 || left < recheck {
-					recheck = left
-				}
-			} else {
-				delete(w.pendingIdle, info.ID)
-				since = first
-			}
-		case st != agentstate.Unknown:
-			delete(w.pendingIdle, info.ID) // working again, or a question
-		}
-		if st != agentstate.Unknown && st != prev.State {
-			next.State, next.Since, next.Settle = st, since, 0
-			if st == agentstate.Waiting {
-				next.Settle = hold
-			}
-			changed = true
-			switch {
-			case st == agentstate.Question && trusted:
-				note("question", 0, false)
-			case st == agentstate.Question:
-				w.pendingQ[info.ID] = true
-			case st == agentstate.Waiting && prev.State == agentstate.Working && since.Sub(info.Started) >= grace:
-				note("idle", 0, false)
-			}
-		} else if w.pendingQ[info.ID] && trusted {
-			// The question that opened inside the grace is still up: the
-			// user must hear about it (a trust dialog at start).
-			delete(w.pendingQ, info.ID)
-			if next.State == agentstate.Question {
-				note("question", 0, false)
-			}
-		}
-		if next.State != agentstate.Question {
-			delete(w.pendingQ, info.ID)
-		}
-		next.StepFor = agentstate.StepDuration(lines)
-		last := rd.last
-		stalled := !last.IsZero() && now.Sub(last) > stall &&
-			(next.State == agentstate.Working || (next.State == agentstate.Unknown && dedicated))
-		quiet, spinning := now.Sub(last), false
-		pm := w.progress[info.ID]
-		if key := agentstate.Progress(lines); key != pm.key || pm.since.IsZero() {
-			pm = progressMark{key: key, since: now}
-			w.progress[info.ID] = pm
-		}
-		if !stalled && next.State == agentstate.Working && now.Sub(pm.since) >= spinStall {
-			stalled, quiet, spinning = true, now.Sub(pm.since), true
-		}
-		if stalled != prev.Stalled {
-			changed = true
-			if stalled {
-				note("stalled", quiet, spinning)
-			}
-		}
-		next.Stalled = stalled
-		if !slices.Equal(prev.Options, next.Options) {
-			changed = true
-		}
-		w.states[info.ID] = next
 	}
 	for id := range w.states {
 		if !live[id] {
 			delete(w.states, id)
-			delete(w.pendingQ, id)
-			delete(w.pendingIdle, id)
-			delete(w.progress, id)
-			delete(w.animated, id)
 			changed = true
 		}
 	}
@@ -670,51 +552,39 @@ func resetSessionStates() {
 	}
 }
 
-// bindSessionRules binds rules to a session of the process-global manager.
-func bindSessionRules(id SessionID, r agentstate.Rules) {
+// bindSessionProfile binds a profile to a session of the process-global
+// manager.
+func bindSessionProfile(id SessionID, p agentstate.Profile) {
 	statesMu.Lock()
 	s := statesRules
 	statesMu.Unlock()
-	s.bind(id, r)
+	s.bind(id, p)
 }
 
-// SessionRules compiles a command's own screen rules. custom is false when
-// it has none (the agent's built-ins apply) and when a pattern is invalid
-// (err says which; the built-ins apply then too). A list the block sets
-// replaces the agent's built-in list of that kind; a list it leaves out
-// keeps the built-in one (a Claude block with only screen_question must
-// not lose the idle box, or every turn end would read as a stall). A
-// custom command (no known agent) has only the lists it sets.
-func SessionRules(tc config.ToolCommand) (r agentstate.Rules, custom bool, err error) {
+// SessionProfile is the profile of a command with its own screen_* lists.
+// custom is false when it has none (the agent's built-ins apply) and when a
+// pattern is invalid (err says which; the built-ins apply then too). A list
+// the block sets replaces the agent's built-in list of that kind; a list it
+// leaves out keeps the built-in one (a Claude block with only
+// screen_question must not lose the idle box, or every turn end would read
+// as a stall), and the agent's own menus, title and progress parts stay
+// (agentstate.WithScreen). A custom command (no known agent) has only the
+// lists it sets.
+func SessionProfile(tc config.ToolCommand) (p agentstate.Profile, custom bool, err error) {
 	if !tc.HasScreenRules() {
-		return agentstate.Rules{}, false, nil
+		return agentstate.Profile{}, false, nil
 	}
-	r, err = agentstate.Compile(tc.ScreenWorking, tc.ScreenWaiting, tc.ScreenQuestion)
+	p, err = agentstate.WithScreen(agentIDFor(tc), tc.ScreenWorking, tc.ScreenWaiting, tc.ScreenQuestion)
 	if err != nil {
-		return agentstate.Rules{}, false, err
+		return agentstate.Profile{}, false, err
 	}
-	if id := agentIDFor(tc); agentstate.HasDefaults(id) {
-		def := agentstate.DefaultRules(id)
-		if len(tc.ScreenWorking) == 0 {
-			r.Working = def.Working
-		}
-		if len(tc.ScreenWaiting) == 0 {
-			r.Waiting = def.Waiting
-		}
-		if len(tc.ScreenQuestion) == 0 {
-			r.Question = def.Question
-		}
-		r.Own = def.Own // the agent's own menus have no config list
-		// Nor have the title and progress rules.
-		r.TitleWorking, r.TitleQuestion, r.TitleIdle, r.ProgressBusy = def.TitleWorking, def.TitleQuestion, def.TitleIdle, def.ProgressBusy
-	}
-	return r, true, nil
+	return p, true, nil
 }
 
 // SessionRulesWarning is what a start tells the user when the command's
 // screen rules do not compile, "" otherwise. English; the TUI words its own.
 func SessionRulesWarning(tc config.ToolCommand) string {
-	if _, _, err := SessionRules(tc); err != nil {
+	if _, _, err := SessionProfile(tc); err != nil {
 		return fmt.Sprintf("screen rules of %s are invalid (%v) — the built-in rules apply", tc.Name, err)
 	}
 	return ""

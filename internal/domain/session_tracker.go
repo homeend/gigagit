@@ -17,6 +17,13 @@ func currentTiming() stateTiming {
 	return stateTiming{grace: stateGrace, stall: stallAfter, spinStall: spinStallAfter, idleSettle: idleSettle, titleSettle: titleSettle}
 }
 
+// progressMark: the session's tail without its spinner (agentstate.Progress)
+// and since when it has read so.
+type progressMark struct {
+	key   string
+	since time.Time
+}
+
 // sessionTracker folds one session's readings into its activity over time:
 // the trust its idle hint needs, the idle hold, the grace after a start, the
 // question that opened inside it, both stall rules. One per running session,
