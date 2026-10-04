@@ -728,37 +728,46 @@ func (fs *FileStore) LoadAll() ([]model.Note, error) {
 }
 
 // where maps each stored id to its part, skipping unreadable parts (their
-// own operations fail on their own).
-func (fs *FileStore) where() (map[string]Part, error) {
+// own operations fail on their own); unread is the first such read error.
+func (fs *FileStore) where() (at map[string]Part, unread error, err error) {
 	parts, err := fs.Parts()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	at := map[string]Part{}
+	at = map[string]Part{}
 	for _, p := range parts {
 		ns, lerr := fs.Load(p)
 		if lerr != nil {
+			if unread == nil {
+				unread = lerr
+			}
 			continue
 		}
 		for _, n := range ns {
 			at[n.ID] = p
 		}
 	}
-	return at, nil
+	return at, unread, nil
 }
 
 // Put adds n, or replaces the record with the same ID, in n's part. A reply
 // goes to its root's part (a reply carries no Preview of its own); a reply
 // whose root is gone falls back to PartOf and the orphan prune drops it.
 func (fs *FileStore) Put(n model.Note) error {
-	at, err := fs.where()
+	at, unread, err := fs.where()
 	if err != nil {
 		return err
 	}
 	want := PartOf(n)
 	if n.IsReply() {
-		if p, ok := at[n.ParentID]; ok {
+		p, ok := at[n.ParentID]
+		switch {
+		case ok:
 			want = p
+		case unread != nil:
+			// The root may sit in the part that could not be read: guessing
+			// would file the reply where the orphan prune silently drops it.
+			return unread
 		}
 	}
 	if p, ok := at[n.ID]; ok && p != want {
@@ -1583,7 +1592,7 @@ func normWorktree(p string) string {
 - [ ] **Step 4: Run the sweep tests**
 
 Run: `cd /work/gigagit/.claude/worktrees/notes-partitions && go test ./internal/domain/ -run 'Sweep'`
-Expected: PASS (new and existing sweep tests).
+Expected: PASS (new and existing sweep tests). Existing tests that store live notes under an invented worktree (`Worktree: "/wt"`) with a FakeRunner keep passing because the unconfigured `git worktree list` errors. If any REAL-repo test loses a note to the new rule, fix its fixture (a real worktree path, or a configured listing) — never weaken the rule to make it pass. Then run the whole package: `go test ./internal/domain/`.
 
 - [ ] **Step 5: Commit**
 
