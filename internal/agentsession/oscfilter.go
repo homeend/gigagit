@@ -1,5 +1,10 @@
 package agentsession
 
+import (
+	"strings"
+	"unicode/utf8"
+)
+
 // oscFilter strips non-ASCII bytes from the payload of string escape
 // sequences (OSC, DCS, APC, PM, SOS) before they reach the emulator.
 //
@@ -11,9 +16,22 @@ package agentsession
 // console shows, so dropping their non-ASCII bytes costs nothing visible;
 // UTF-8 in ordinary screen text is untouched. State carries across calls, so
 // a sequence split between two reads is filtered the same.
+//
+// It also records, from the unfiltered bytes, the last window title (OSC 0
+// or 2) and the last OSC 9;4 progress state: agents announce working and
+// idle there (agentstate's title rules). Only those payloads are buffered,
+// the title capped at titleCap.
 type oscFilter struct {
 	state filterState
 	out   []byte
+
+	osc         oscKind // the OSC being read: unknown until its number ends
+	num         []byte  // the OSC number read so far
+	pay         []byte  // a title/progress payload read so far
+	title       string  // the last complete title
+	progress    int     // the last OSC 9;4 state (0–4)
+	hasProgress bool    // an OSC 9;4 has been seen
+	changed     bool    // title or progress committed since the reader last cleared it
 }
 
 type filterState uint8
@@ -24,6 +42,18 @@ const (
 	fString                // inside an OSC/DCS/APC/PM/SOS payload
 	fStringEsc             // saw ESC inside a payload (ESC \ ends it)
 )
+
+type oscKind uint8
+
+const (
+	oscNone     oscKind = iota // not an OSC, or one gg does not record
+	oscNumber                  // an OSC whose number is still being read
+	oscTitle                   // OSC 0 / OSC 2
+	oscProgress                // OSC 9 (a progress report only if it reads "4;<state>")
+)
+
+// titleCap bounds a recorded title; longer payloads are cut on a rune.
+const titleCap = 256
 
 // filter returns p with string-payload bytes >= 0x80 removed. The returned
 // slice is reused by the next call.
@@ -37,8 +67,10 @@ func (f *oscFilter) filter(p []byte) []byte {
 			}
 		case fEsc:
 			switch b {
-			case ']', 'P', '_', '^', 'X': // OSC, DCS, APC, PM, SOS
-				f.state = fString
+			case ']': // OSC
+				f.state, f.osc, f.num, f.pay = fString, oscNumber, f.num[:0], f.pay[:0]
+			case 'P', '_', '^', 'X': // DCS, APC, PM, SOS
+				f.state, f.osc = fString, oscNone
 			case 0x1B:
 				// ESC ESC: still at an escape
 			default:
@@ -46,26 +78,92 @@ func (f *oscFilter) filter(p []byte) []byte {
 			}
 		case fString:
 			switch {
-			case b == 0x07, b == 0x18, b == 0x1A: // BEL ends; CAN/SUB cancel
+			case b == 0x07: // BEL ends
+				f.commit()
 				f.state = fGround
+			case b == 0x18, b == 0x1A: // CAN/SUB cancel
+				f.state, f.osc = fGround, oscNone
 			case b == 0x1B:
 				f.state = fStringEsc
-			case b >= 0x80:
-				continue // the byte x/ansi could mistake for a C1 terminator
+			default:
+				f.record(b)
+				if b >= 0x80 {
+					continue // the byte x/ansi could mistake for a C1 terminator
+				}
 			}
 		case fStringEsc:
 			switch b {
 			case '\\': // ST
+				f.commit()
 				f.state = fGround
-			case ']', 'P', '_', '^', 'X': // ESC ends the string and opens a new one
-				f.state = fString
+			case ']': // ESC ends the string and opens a new one
+				f.state, f.osc, f.num, f.pay = fString, oscNumber, f.num[:0], f.pay[:0]
+			case 'P', '_', '^', 'X':
+				f.state, f.osc = fString, oscNone
 			case 0x1B:
-				f.state = fEsc
+				f.state, f.osc = fEsc, oscNone
 			default:
-				f.state = fGround
+				f.state, f.osc = fGround, oscNone
 			}
 		}
 		f.out = append(f.out, b)
 	}
 	return f.out
+}
+
+// record takes one payload byte of the current string.
+func (f *oscFilter) record(b byte) {
+	switch f.osc {
+	case oscNumber:
+		if b == ';' {
+			switch string(f.num) {
+			case "0", "2":
+				f.osc = oscTitle
+			case "9":
+				f.osc = oscProgress
+			default:
+				f.osc = oscNone
+			}
+			return
+		}
+		if b < '0' || b > '9' || len(f.num) >= 4 {
+			f.osc = oscNone
+			return
+		}
+		f.num = append(f.num, b)
+	case oscTitle:
+		if len(f.pay) < titleCap+utf8.UTFMax {
+			f.pay = append(f.pay, b)
+		}
+	case oscProgress:
+		if len(f.pay) < 16 {
+			f.pay = append(f.pay, b)
+		}
+	}
+}
+
+// commit stores a complete title or progress report.
+func (f *oscFilter) commit() {
+	switch f.osc {
+	case oscTitle:
+		t := f.pay
+		if len(t) > titleCap {
+			t = t[:titleCap]
+		}
+		f.title, f.changed = strings.ToValidUTF8(string(t), ""), true
+	case oscNumber: // "ESC ] 0 BEL": a number with no payload
+		if n := string(f.num); n == "0" || n == "2" {
+			f.title, f.changed = "", true
+		}
+	case oscProgress:
+		rest, ok := strings.CutPrefix(string(f.pay), "4;")
+		if !ok {
+			break
+		}
+		st, _, _ := strings.Cut(rest, ";")
+		if len(st) == 1 && st[0] >= '0' && st[0] <= '4' {
+			f.progress, f.hasProgress, f.changed = int(st[0]-'0'), true, true
+		}
+	}
+	f.osc = oscNone
 }
