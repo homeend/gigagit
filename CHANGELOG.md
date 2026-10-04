@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent sessions — the title says working
+
+### Changed
+
+- **A turn reads as working from start to end.** Claude Code and Codex
+  announce their turn in the terminal title (a spinning glyph); Kimi Code
+  in its progress report. gg now reads those beside the screen: the row
+  stays working while the agent pauses between two steps, and turns idle
+  about 0.7 s after the turn ends instead of 2 s — `agent_wait` wakes as
+  soon. Questions still come from the screen; Codex's "Action Required"
+  title is one too. Junie and Antigravity are unchanged.
+- Agents no longer see `STY` / `ZELLIJ*` from the terminal gg runs in
+  (like `TMUX` already): under a multiplexer Claude stops spinning its
+  title.
+
 ## Agent sessions — states, wait/report and tours polished
 
 ### Changed
