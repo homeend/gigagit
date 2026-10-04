@@ -8,6 +8,7 @@ package domain
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -38,6 +39,7 @@ type SessionActivity struct {
 	StepFor time.Duration    // the spinner's own timer, 0 when it shows none
 	Stalled bool             // nothing printed for stallAfter while (apparently) busy
 	Options []ActivityOption // the dialog's choices (question only); carried, never pressed
+	Settle  time.Duration    // the hold an idle passed (agent_wait trusts it after this); 0 otherwise
 }
 
 // Name is the protocol value: "working", "idle", "question" or "".
@@ -80,6 +82,10 @@ var (
 	// idleSettle: agent_wait trusts an idle only after it has held this long
 	// (the working→idle→working flicker guard).
 	idleSettle = 2 * time.Second
+	// titleSettle: the idle hold when the agent's title (or progress report)
+	// says idle too — the title kept the turn working, so a short guard
+	// against a redraw is enough (herdr holds 700 ms).
+	titleSettle = 700 * time.Millisecond
 )
 
 const (
@@ -111,12 +117,23 @@ func UseIdleSettle(d time.Duration) func() {
 	return func() { statesMu.Lock(); idleSettle = prev; statesMu.Unlock() }
 }
 
+// UseTitleSettle replaces the titled idle hold (tests) and returns the
+// restore.
+func UseTitleSettle(d time.Duration) func() {
+	statesMu.Lock()
+	prev := titleSettle
+	titleSettle = d
+	statesMu.Unlock()
+	return func() { statesMu.Lock(); titleSettle = prev; statesMu.Unlock() }
+}
+
 // stateSource is what the watcher reads: the manager in production, a fake
 // feed in tests.
 type stateSource interface {
 	List() []agentsession.Info
 	Text(id agentsession.ID) (string, bool)
 	LastOutput(id agentsession.ID) time.Time
+	Signals(id agentsession.ID) (agentsession.Signals, bool)
 }
 
 type managerSource struct{ m *agentsession.Manager }
@@ -134,6 +151,12 @@ func (s managerSource) LastOutput(id agentsession.ID) time.Time {
 		return sess.LastOutput()
 	}
 	return time.Time{}
+}
+func (s managerSource) Signals(id agentsession.ID) (agentsession.Signals, bool) {
+	if sess, ok := s.m.Get(id); ok {
+		return sess.Signals(), true
+	}
+	return agentsession.Signals{}, false
 }
 
 // ruleStore holds the rules bound to sessions at start (a command with its
@@ -205,6 +228,9 @@ type StateWatcher struct {
 	// progress: each session's tail without its spinner (agentstate.Progress)
 	// and since when it has read so.
 	progress map[SessionID]progressMark
+	// animated: sessions whose title or progress has said working — only
+	// their idle title counts (agentstate.Signal.Trusted).
+	animated map[SessionID]bool
 	notices  []ActivityNotice
 	seq      uint64
 
@@ -215,7 +241,7 @@ type StateWatcher struct {
 func newStateWatcher(src stateSource, rules *ruleStore) *StateWatcher {
 	return &StateWatcher{src: src, rules: rules, states: map[SessionID]SessionActivity{},
 		pendingQ: map[SessionID]bool{}, pendingIdle: map[SessionID]time.Time{},
-		progress: map[SessionID]progressMark{}, stop: make(chan struct{})}
+		progress: map[SessionID]progressMark{}, animated: map[SessionID]bool{}, stop: make(chan struct{})}
 }
 
 // NewStaticStates is a watcher that watches nothing and serves the given
@@ -302,20 +328,26 @@ func (w *StateWatcher) rulesFor(info agentsession.Info) (r agentstate.Rules, ded
 	return agentstate.DefaultRules(info.AgentID), agentstate.HasDefaults(info.AgentID), true
 }
 
-// observe classifies every running session once and folds the result into
-// the states, posting the notices the transitions call for. An unknown
-// screen changes nothing: output lands mid-redraw often enough that acting
-// on it would flap. A working session that reads idle shows idle only once
-// that has held idleSettle — Claude Code drops its spinner between two steps
-// of one turn — and then from when it began; observe returns how soon a
-// pending idle wants looking at again (0: none pending).
+// observe classifies every running session once — its screen together with
+// its title and progress report (agentstate.ClassifyWith) — and folds the
+// result into the states, posting the notices the transitions call for. An
+// unknown read changes nothing: output lands mid-redraw often enough that
+// acting on it would flap. A spinning title keeps a session working whatever
+// its screen shows between two steps. A working session that reads idle
+// shows idle only once that has held — titleSettle when its title says idle
+// too, else idleSettle (Claude Code drops its screen spinner between two
+// steps of one turn) — and then from when it began; observe returns how soon
+// a pending idle wants looking at again (0: none pending).
 func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 	if w.src == nil {
 		return 0
 	}
 	statesMu.Lock()
-	grace, stall, spinStall, settle := stateGrace, stallAfter, spinStallAfter, idleSettle
+	grace, stall, spinStall, settle, tsettle := stateGrace, stallAfter, spinStallAfter, idleSettle, titleSettle
 	statesMu.Unlock()
+	w.mu.Lock()
+	animated := maps.Clone(w.animated)
+	w.mu.Unlock()
 	// The screens are read and classified before taking w.mu: each read
 	// takes its session's emulator lock, and Get must not wait on that.
 	type reading struct {
@@ -324,6 +356,8 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 		text      string
 		lines     []string
 		st        agentstate.State
+		says      agentstate.State // what the title/progress alone say
+		titleIdle bool             // a trusted idle title
 		last      time.Time
 	}
 	var reads []reading
@@ -342,13 +376,21 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 			continue
 		}
 		lines := agentstate.Tail(text, stateTailLines)
+		sigs, _ := w.src.Signals(info.ID)
+		sg := agentstate.Signal{Title: sigs.Title, Progress: sigs.Progress}
+		says := agentstate.SignalState(rules, sg)
+		sg.Trusted = animated[info.ID] || says == agentstate.Working
+		st, titleIdle := agentstate.ClassifyWith(rules, lines, sg)
 		reads = append(reads, reading{info: info, dedicated: dedicated, text: text, lines: lines,
-			st: agentstate.Classify(rules, lines), last: w.src.LastOutput(info.ID)})
+			st: st, says: says, titleIdle: titleIdle, last: w.src.LastOutput(info.ID)})
 	}
 	changed := false
 	w.mu.Lock()
 	for _, rd := range reads {
 		info, dedicated, text, lines, st := rd.info, rd.dedicated, rd.text, rd.lines, rd.st
+		if rd.says == agentstate.Working {
+			w.animated[info.ID] = true
+		}
 		prev := w.states[info.ID]
 		next := prev
 		switch st {
@@ -364,15 +406,19 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 		}
 		trusted := now.Sub(info.Started) >= grace
 		since := now
+		hold := settle
+		if rd.titleIdle {
+			hold = tsettle
+		}
 		switch {
 		case st == agentstate.Waiting && prev.State == agentstate.Working:
 			first, ok := w.pendingIdle[info.ID]
 			if !ok {
 				first, w.pendingIdle[info.ID] = now, now
 			}
-			if held := now.Sub(first); held < settle {
+			if held := now.Sub(first); held < hold {
 				st = agentstate.Unknown // not yet: the session stays working
-				if left := settle - held; recheck == 0 || left < recheck {
+				if left := hold - held; recheck == 0 || left < recheck {
 					recheck = left
 				}
 			} else {
@@ -383,7 +429,10 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 			delete(w.pendingIdle, info.ID) // working again, or a question
 		}
 		if st != agentstate.Unknown && st != prev.State {
-			next.State, next.Since = st, since
+			next.State, next.Since, next.Settle = st, since, 0
+			if st == agentstate.Waiting {
+				next.Settle = hold
+			}
 			changed = true
 			switch {
 			case st == agentstate.Question && trusted:
@@ -435,6 +484,7 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 			delete(w.pendingQ, id)
 			delete(w.pendingIdle, id)
 			delete(w.progress, id)
+			delete(w.animated, id)
 			changed = true
 		}
 	}

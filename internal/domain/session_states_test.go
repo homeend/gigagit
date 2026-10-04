@@ -26,7 +26,8 @@ type fakeStates struct {
 	infos []agentsession.Info
 	text  map[agentsession.ID]string
 	last  map[agentsession.ID]time.Time
-	slow  chan struct{} // Text blocks on it when set (a session busy rendering)
+	sig   map[agentsession.ID]agentsession.Signals // absent: no title, no progress
+	slow  chan struct{}                            // Text blocks on it when set (a session busy rendering)
 }
 
 func (f *fakeStates) List() []agentsession.Info { return f.infos }
@@ -38,6 +39,12 @@ func (f *fakeStates) Text(id agentsession.ID) (string, bool) {
 	return t, ok
 }
 func (f *fakeStates) LastOutput(id agentsession.ID) time.Time { return f.last[id] }
+func (f *fakeStates) Signals(id agentsession.ID) (agentsession.Signals, bool) {
+	if s, ok := f.sig[id]; ok {
+		return s, true
+	}
+	return agentsession.Signals{Progress: -1}, true
+}
 
 var actT0 = time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 
@@ -46,6 +53,7 @@ func oneSession(agentID string) (*StateWatcher, *fakeStates) {
 	f := &fakeStates{
 		infos: []agentsession.Info{{ID: "s1", Label: "Claude", AgentID: agentID, Dir: "/wt/a", Started: actT0}},
 		text:  map[agentsession.ID]string{}, last: map[agentsession.ID]time.Time{},
+		sig: map[agentsession.ID]agentsession.Signals{},
 	}
 	return newStateWatcher(f, newRuleStore()), f
 }
@@ -583,5 +591,113 @@ func TestSessionRulesMergeWithTheAgentBuiltins(t *testing.T) {
 	r, _, _ = SessionRules(cu)
 	if len(r.Working) != 0 || len(r.Question) != 0 || len(r.Waiting) != 1 {
 		t.Fatalf("custom: %+v", r)
+	}
+}
+
+func title(t string) agentsession.Signals { return agentsession.Signals{Title: t, Progress: -1} }
+
+// Between two steps Claude's screen shows the empty prompt while its title
+// still spins: the row stays working and nothing is pending.
+func TestStatesTitleWorkingBridgesTheGap(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("claude")
+	late := actT0.Add(time.Minute)
+	f.text["s1"], f.sig["s1"] = actWorking, title("◐ topic")
+	w.observe(late)
+	f.text["s1"] = actIdle
+	if wait := w.observe(late.Add(time.Second)); wait != 0 {
+		t.Fatalf("an idle is pending under a spinning title: %v", wait)
+	}
+	w.observe(late.Add(5 * time.Second))
+	if a, _ := w.Get("s1"); a.State != ActivityWorking || kinds(w.Notices(0)) != "" {
+		t.Fatalf("activity %+v notices %q", a, kinds(w.Notices(0)))
+	}
+}
+
+// The title says idle: the hold is titleSettle, the idle shows from its
+// first read and carries the hold it passed.
+func TestStatesTitledIdleHoldsShort(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("claude")
+	late := actT0.Add(time.Minute)
+	f.text["s1"], f.sig["s1"] = actWorking, title("◑ topic")
+	w.observe(late)
+	f.text["s1"], f.sig["s1"] = actIdle, title("✳ topic")
+	if wait := w.observe(late.Add(time.Second)); wait != 700*time.Millisecond {
+		t.Fatalf("titled idle recheck = %v, want 700ms", wait)
+	}
+	w.observe(late.Add(1700 * time.Millisecond))
+	a, _ := w.Get("s1")
+	if a.State != ActivityIdle || !a.Since.Equal(late.Add(time.Second)) || a.Settle != 700*time.Millisecond {
+		t.Fatalf("activity = %+v", a)
+	}
+	if kinds(w.Notices(0)) != "idle" {
+		t.Fatalf("notices = %q", kinds(w.Notices(0)))
+	}
+}
+
+// A title that never animated ("✳" from the start: a multiplexer gg did not
+// strip) says nothing: today's 2 s hold applies.
+func TestStatesNeverAnimatedKeeps2s(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("claude")
+	late := actT0.Add(time.Minute)
+	f.text["s1"], f.sig["s1"] = actWorking, title("✳ topic")
+	w.observe(late)
+	f.text["s1"] = actIdle
+	if wait := w.observe(late.Add(time.Second)); wait != 2*time.Second {
+		t.Fatalf("recheck = %v, want 2s", wait)
+	}
+	w.observe(late.Add(3 * time.Second))
+	if a, _ := w.Get("s1"); a.State != ActivityIdle || a.Settle != 2*time.Second {
+		t.Fatalf("activity = %+v", a)
+	}
+}
+
+// A dialog mid-turn: the title turns "✳", the screen says question — at once.
+func TestStatesDialogUnderAnIdleTitleIsAQuestion(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("claude")
+	late := actT0.Add(time.Minute)
+	f.text["s1"], f.sig["s1"] = actWorking, title("◐ topic")
+	w.observe(late)
+	f.text["s1"], f.sig["s1"] = actQuestion, title("✳ topic")
+	w.observe(late.Add(time.Second))
+	if a, _ := w.Get("s1"); a.State != ActivityQuestion || len(a.Options) == 0 {
+		t.Fatalf("activity = %+v", a)
+	}
+}
+
+// A redraw the screen rules cannot read, under a trusted idle title, still
+// becomes idle (after the short hold).
+func TestStatesTitledIdleOverAnUnreadableScreen(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("claude")
+	late := actT0.Add(time.Minute)
+	f.text["s1"], f.sig["s1"] = actWorking, title("◐ topic")
+	w.observe(late)
+	f.text["s1"], f.sig["s1"] = actNoise, title("✳ topic")
+	w.observe(late.Add(time.Second))
+	w.observe(late.Add(2 * time.Second))
+	if a, _ := w.Get("s1"); a.State != ActivityIdle {
+		t.Fatalf("activity = %+v", a)
+	}
+}
+
+// Kimi's progress report: busy keeps working over an idle box, clear goes
+// idle on the short hold.
+func TestStatesKimiProgress(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("kimi")
+	late := actT0.Add(time.Minute)
+	kimiIdle := " │ >                    │\n ╰────────────────────╯\n"
+	f.text["s1"], f.sig["s1"] = kimiIdle, agentsession.Signals{Progress: 3}
+	w.observe(late)
+	if a, _ := w.Get("s1"); a.State != ActivityWorking {
+		t.Fatalf("busy: %+v", a)
+	}
+	f.sig["s1"] = agentsession.Signals{Progress: 0}
+	if wait := w.observe(late.Add(time.Second)); wait != 700*time.Millisecond {
+		t.Fatalf("recheck = %v", wait)
 	}
 }

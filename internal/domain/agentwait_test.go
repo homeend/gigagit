@@ -258,3 +258,16 @@ func TestAgentWaitRefusesANegativeTimeout(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// The watcher's activity says which hold its idle passed; agent_wait trusts
+// the idle after that, not after idleSettle.
+func TestAgentWaitHonoursTheIdlesSettle(t *testing.T) {
+	ov, w1, _, s1, _, w := waitFixture(t)
+	t.Cleanup(UseIdleSettle(2 * time.Second))
+	start := time.Now()
+	setStatic(w, s1.Info().ID, SessionActivity{State: ActivityIdle, Since: start, Settle: 100 * time.Millisecond})
+	res := doWait(t, ov, w1, "idle", 3*time.Second)
+	if res.TimedOut || time.Since(start) > time.Second {
+		t.Fatalf("titled idle waited for idleSettle: %+v after %v", res, time.Since(start))
+	}
+}
