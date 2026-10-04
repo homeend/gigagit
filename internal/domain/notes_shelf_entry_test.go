@@ -78,7 +78,7 @@ func TestShelfRemoveDropsItsNotes(t *testing.T) {
 	if err := svc.ShelfRemove(ctx, e.ID); err != nil {
 		t.Fatal(err)
 	}
-	all, _ := svc.notesStore(ctx).Load()
+	all, _ := svc.notesStore(ctx).LoadAll()
 	for _, n := range all {
 		if n.Address.ShelfID == e.ID {
 			t.Fatalf("removing the entry must drop its notes, still have %+v", n)
@@ -107,7 +107,7 @@ func TestSweepKeepsShelfNoteUntilItsEntryIsGone(t *testing.T) {
 	if _, err := svc.sweepNotes(ctx); err != nil {
 		t.Fatal(err)
 	}
-	all, _ := svc.notesStore(ctx).Load()
+	all, _ := svc.notesStore(ctx).LoadAll()
 	if len(all) != 0 {
 		t.Fatalf("the sweep must drop a shelf note whose entry is gone, got %+v", all)
 	}

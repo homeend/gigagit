@@ -104,7 +104,7 @@ func (s *Service) notesStoreKeyed(commonDir func() (string, error)) notes.Store 
 		}
 		root = filepath.Join(base, key)
 	}
-	fs := notes.NewFileStore(root)
+	fs := openNotesStore(root)
 	s.mu.Lock()
 	fresh := s.notes == nil
 	if fresh {
@@ -117,4 +117,19 @@ func (s *Service) notesStoreKeyed(commonDir func() (string, error)) notes.Store 
 		st.SetPolicy(notes.Policy{MaxEntries: max})
 	}
 	return st
+}
+
+// openNotesStore opens the store rooted at root and converts a legacy
+// notes.toml first. RunAutoMigrations covers the composition roots, but a
+// TUI repo switch, a hosted-web switch and `gg mcp` open a repo without it;
+// converting at resolution keeps their notes visible. Idempotent: the
+// conversion is presence-based and merges by id. A failure (a corrupt file,
+// now quarantined; a lock held past its budget) is left for the preflight
+// path to report — the store still opens on whatever parts exist.
+func openNotesStore(root string) *notes.FileStore {
+	fs := notes.NewFileStore(root)
+	if fs.LegacyPresent() {
+		_, _ = fs.ConvertLegacy()
+	}
+	return fs
 }

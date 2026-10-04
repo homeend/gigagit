@@ -1,339 +1,229 @@
 package notes
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
-	"slices"
 	"sort"
-	"strconv"
+	"strings"
 	"sync"
 
-	"github.com/pelletier/go-toml/v2"
-
-	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// FileStore keeps notes.toml under root, rewritten atomically (temp+rename,
-// the bookmark pattern) under two locks: a process-local mutex (the sweep
-// goroutine vs a `c` keypress in the same process) and a notes.toml.lock file
-// (this gg vs another gg, or a phase-2 `gg note add`).
+// ErrPartChange refuses a Put that would move a stored note to another part:
+// an address is fixed at creation, so this is a caller bug, never a move.
+var ErrPartChange = errors.New("notes: a note cannot move to another part")
+
+// FileStore is the note store: one partFile per Part under root
+// (commits.toml, previews.toml, shelf.toml, worktrees/<key>.toml). Every
+// mutation locks only the file it changes; reads name the parts they need.
 type FileStore struct {
 	root string
 
-	mu  sync.Mutex // process-local: guards every mutation AND pol
-	pol Policy
+	mu    sync.Mutex // guards parts and pol
+	parts map[Part]*partFile
+	pol   Policy
 }
 
 // NewFileStore roots a store at the per-repo directory (caller-supplied).
-func NewFileStore(root string) *FileStore { return &FileStore{root: root} }
+func NewFileStore(root string) *FileStore {
+	return &FileStore{root: root, parts: map[Part]*partFile{}}
+}
 
-// SetPolicy sets the write-time entry cap. Safe to call at any time.
+// SetPolicy sets the write-time entry cap of EVERY part (spec §4).
 func (fs *FileStore) SetPolicy(p Policy) {
 	fs.mu.Lock()
 	fs.pol = p
+	files := make([]*partFile, 0, len(fs.parts))
+	for _, f := range fs.parts {
+		files = append(files, f)
+	}
 	fs.mu.Unlock()
+	for _, f := range files {
+		f.SetPolicy(p)
+	}
 }
 
-// ErrCorrupt is wrapped by a read of a notes.toml that is not valid TOML.
-var ErrCorrupt = errors.New("notes: store is corrupt")
-
-type index struct {
-	Notes []model.Note `toml:"notes"`
+// file returns (creating once) the partFile behind p.
+func (fs *FileStore) file(p Part) *partFile {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	f, ok := fs.parts[p]
+	if !ok {
+		f = &partFile{path: p.file(fs.root), pol: fs.pol}
+		fs.parts[p] = f
+	}
+	return f
 }
 
-func (fs *FileStore) path() string     { return filepath.Join(fs.root, "notes.toml") }
-func (fs *FileStore) lockPath() string { return fs.path() + ".lock" }
-
-// read parses the file. A MISSING file reads as empty (nothing has been
-// stored yet); every other failure — an unreadable file, corrupt TOML — is
-// propagated. Swallowing those would make the next mutation rewrite the file
-// from an empty base and silently destroy the whole store, which is far worse
-// than surfacing the error and leaving the file alone.
-func (fs *FileStore) read() ([]model.Note, error) {
-	data, err := os.ReadFile(fs.path())
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
+// Parts lists the parts that have a file, fixed parts first, then the
+// worktrees sorted. A missing root or worktrees/ dir is simply empty.
+func (fs *FileStore) Parts() ([]Part, error) {
+	var out []Part
+	for _, p := range []Part{PartCommits, PartPreviews, PartShelf} {
+		if _, err := os.Stat(p.file(fs.root)); err == nil {
+			out = append(out, p)
 		}
+	}
+	ents, err := os.ReadDir(filepath.Join(fs.root, "worktrees"))
+	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
-	var idx index
-	if err := toml.Unmarshal(data, &idx); err != nil {
-		return nil, fmt.Errorf("%w: %s: %v", ErrCorrupt, fs.path(), err)
-	}
-	return idx.Notes, nil
-}
-
-// Load returns every stored note. NEVER writes (not even to prune): the
-// startup sweep is the only pruner, so a read-heavy session cannot rewrite
-// the file under a concurrent writer.
-func (fs *FileStore) Load() ([]model.Note, error) { return fs.read() }
-
-// lock takes the cross-process lock (internal/filelock: an O_EXCL lock file,
-// breaking one that has gone stale). Returns a release func.
-func (fs *FileStore) lock() (func(), error) { return filelock.Acquire(fs.lockPath()) }
-
-// write persists ns via temp-file + rename (the bookmark/seq-state pattern).
-func (fs *FileStore) write(ns []model.Note) error {
-	data, err := toml.Marshal(index{Notes: ns})
-	if err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(fs.root, "notes-*.toml")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(name)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(name)
-		return err
-	}
-	if err := os.Rename(name, fs.path()); err != nil {
-		os.Remove(name)
-		return err
-	}
-	return nil
-}
-
-// mutate is the ONE write path: process mutex → file lock → fresh read →
-// apply → drop orphaned replies → cap → atomic rewrite. Re-reading under the
-// lock is what makes the startup sweep and a concurrent `gg note add` safe.
-//
-// A mutation that changes nothing writes nothing: the startup sweep of a
-// clean store must not touch the file (nor create it).
-//
-// It reports how many records the store holds AFTERWARDS — after the orphan
-// prune and the entry cap, neither of which the callback can see. Sweep needs
-// that to report a truthful drop count.
-func (fs *FileStore) mutate(apply func([]model.Note) ([]model.Note, error)) (int, error) {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-	unlock, err := fs.lock()
-	if err != nil {
-		return 0, err
-	}
-	defer unlock()
-	before, err := fs.read()
-	if err != nil {
-		return 0, err
-	}
-	// apply gets a CLONE: it may edit records in place (Put replaces by ID),
-	// and the unchanged-check below has to compare against the state actually
-	// read from disk, not against a slice the callback has already rewritten.
-	ns, err := apply(slices.Clone(before))
-	if err != nil {
-		return 0, err
-	}
-	ns = dropOrphanReplies(ns)
-	ns = capOldestFirst(ns, fs.pol.MaxEntries)
-	if sameNotes(before, ns) {
-		return len(ns), nil
-	}
-	if werr := fs.write(ns); werr != nil {
-		return 0, werr
-	}
-	return len(ns), nil
-}
-
-// sameNotes reports whether two record lists are identical. A nil list and an
-// empty one are the same: "no notes" must not become a written empty file.
-func sameNotes(a, b []model.Note) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if !reflect.DeepEqual(a[i], b[i]) {
-			return false
+	var wts []Part
+	for _, e := range ents {
+		if e.IsDir() {
+			continue
+		}
+		if p, ok := partOfFile(e.Name()); ok {
+			wts = append(wts, p)
 		}
 	}
-	return true
+	sort.Slice(wts, func(a, b int) bool { return wts[a] < wts[b] })
+	return append(out, wts...), nil
 }
 
-// Put adds n, or replaces the record with the same ID.
+// Load returns one part's notes. NEVER writes.
+func (fs *FileStore) Load(p Part) ([]model.Note, error) { return fs.file(p).Load() }
+
+// LoadAll returns every part's notes. A corrupt part does not hide the
+// others' notes, but its error is returned (joined), so a caller that fails
+// on a corrupt store keeps failing exactly as before the split.
+func (fs *FileStore) LoadAll() ([]model.Note, error) {
+	parts, err := fs.Parts()
+	if err != nil {
+		return nil, err
+	}
+	var all []model.Note
+	var errs []error
+	for _, p := range parts {
+		ns, lerr := fs.Load(p)
+		if lerr != nil {
+			errs = append(errs, lerr)
+			continue
+		}
+		all = append(all, ns...)
+	}
+	return all, errors.Join(errs...)
+}
+
+// where maps each stored id to its part, skipping unreadable parts (their
+// own operations fail on their own); unread is the first such read error.
+func (fs *FileStore) where() (at map[string]Part, unread error, err error) {
+	parts, err := fs.Parts()
+	if err != nil {
+		return nil, nil, err
+	}
+	at = map[string]Part{}
+	for _, p := range parts {
+		ns, lerr := fs.Load(p)
+		if lerr != nil {
+			if unread == nil {
+				unread = lerr
+			}
+			continue
+		}
+		for _, n := range ns {
+			at[n.ID] = p
+		}
+	}
+	return at, unread, nil
+}
+
+// Put adds n, or replaces the record with the same ID, in n's part. A reply
+// goes to its root's part (a reply carries no Preview of its own); a reply
+// whose root is gone falls back to PartOf and the orphan prune drops it.
 func (fs *FileStore) Put(n model.Note) error {
-	_, err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
-		for i := range ns {
-			if ns[i].ID == n.ID {
-				ns[i] = n
-				return ns, nil
-			}
-		}
-		return append(ns, n), nil
-	})
-	return err
-}
-
-// Remove deletes one note; removing a root removes its replies too.
-func (fs *FileStore) Remove(id string) error {
-	_, err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
-		kept := make([]model.Note, 0, len(ns))
-		found := false
-		for _, n := range ns {
-			if n.ID == id || n.ParentID == id {
-				found = found || n.ID == id
-				continue
-			}
-			kept = append(kept, n)
-		}
-		if !found {
-			return nil, ErrNotFound
-		}
-		return kept, nil
-	})
-	return err
-}
-
-// Sweep keeps every note the predicate accepts and reports how many records
-// went (including replies orphaned by a dropped root).
-//
-// A store with no file yet is already swept: Sweep returns without taking the
-// lock, so the common startup sweep of a repo that has never had a note
-// creates neither the state directory nor the file.
-func (fs *FileStore) Sweep(keep func(model.Note) bool) (int, error) {
-	if _, err := os.Stat(fs.path()); os.IsNotExist(err) {
-		return 0, nil
+	at, unread, err := fs.where()
+	if err != nil {
+		return err
 	}
-	before := 0
-	// The count is taken from what mutate LEAVES, not from the predicate: the
-	// orphan prune and the entry cap drop records the predicate accepted, and
-	// a Sweep that reported only its own rejections would under-report the
-	// moment the cap bites.
-	after, err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
-		before = len(ns)
-		kept := make([]model.Note, 0, len(ns))
-		for _, n := range ns {
-			if keep(n) {
-				kept = append(kept, n)
+	want := PartOf(n)
+	if n.IsReply() {
+		p, ok := at[n.ParentID]
+		switch {
+		case ok:
+			want = p
+		case unread != nil:
+			// The root may sit in the part that could not be read: guessing
+			// would file the reply where the orphan prune silently drops it.
+			return unread
+		}
+	}
+	if p, ok := at[n.ID]; ok && p != want {
+		return fmt.Errorf("%w: %s is in %s, not %s", ErrPartChange, n.ID, p, want)
+	}
+	return fs.file(want).Put(n)
+}
+
+// Remove deletes one note wherever it is stored; a root takes its replies
+// (they share its part). A corrupt part is skipped unless nothing else held
+// the id, in which case its error is reported instead of ErrNotFound.
+func (fs *FileStore) Remove(id string) error {
+	parts, err := fs.Parts()
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, p := range parts {
+		rerr := fs.file(p).Remove(id)
+		switch {
+		case rerr == nil:
+			return nil
+		case errors.Is(rerr, ErrNotFound):
+		default:
+			if firstErr == nil {
+				firstErr = rerr
 			}
 		}
-		return kept, nil
-	})
+	}
+	if firstErr != nil {
+		return firstErr
+	}
+	return ErrNotFound
+}
+
+// Sweep applies keep to every part, each under its own lock, and reports
+// the total shrinkage. A failing part (corrupt, lock held) does not stop
+// the others; its error is returned, joined.
+func (fs *FileStore) Sweep(keep func(model.Note) bool) (int, error) {
+	parts, err := fs.Parts()
 	if err != nil {
 		return 0, err
 	}
-	return before - after, nil
+	total := 0
+	var errs []error
+	for _, p := range parts {
+		n, serr := fs.file(p).Sweep(keep)
+		total += n
+		if serr != nil {
+			errs = append(errs, serr)
+		}
+	}
+	return total, errors.Join(errs...)
 }
 
-// dropOrphanReplies removes replies whose root is gone (dropped by a Remove,
-// a Sweep predicate, or the cap).
-func dropOrphanReplies(ns []model.Note) []model.Note {
-	roots := make(map[string]bool, len(ns))
-	for _, n := range ns {
-		if !n.IsReply() {
-			roots[n.ID] = true
-		}
-	}
-	kept := make([]model.Note, 0, len(ns))
-	for _, n := range ns {
-		if n.IsReply() && !roots[n.ParentID] {
-			continue
-		}
-		kept = append(kept, n)
-	}
-	return kept
-}
-
-// capOldestFirst enforces max records by dropping whole threads, oldest root
-// (by Created) first. max <= 0 is uncapped.
-//
-// Entry-level notes (AI reviews, shelf-entry annotations) are exempt: they neither count toward max
-// nor are ever dropped, and neither are their replies.
-func capOldestFirst(ns []model.Note, max int) []model.Note {
-	if max <= 0 {
-		return ns
-	}
-	exempt := map[string]bool{}
-	for _, n := range ns {
-		if !n.IsReply() && n.IsEntryLevel() {
-			exempt[n.ID] = true
-		}
-	}
-	size := 0
-	for _, n := range ns {
-		if !exempt[n.ID] && !exempt[n.ParentID] {
-			size++
-		}
-	}
-	if size <= max {
-		return ns
-	}
-	roots := make([]model.Note, 0, len(ns))
-	for _, n := range ns {
-		if !n.IsReply() && !exempt[n.ID] {
-			roots = append(roots, n)
-		}
-	}
-	sort.SliceStable(roots, func(a, b int) bool { return roots[a].Created.Before(roots[b].Created) })
-	doomed := map[string]bool{}
-	for _, r := range roots {
-		if size <= max {
-			break
-		}
-		doomed[r.ID] = true
-		size-- // the root
-		for _, n := range ns {
-			if n.ParentID == r.ID {
-				size--
-			}
-		}
-	}
-	kept := make([]model.Note, 0, len(ns))
-	for _, n := range ns {
-		if doomed[n.ID] || doomed[n.ParentID] {
-			continue
-		}
-		kept = append(kept, n)
-	}
-	return kept
-}
-
-// Quarantine moves notes.toml aside to notes.toml.corrupt-<unix> under the
-// store's locks and reports where it went ("" when there was no file). The
-// next write starts a fresh store; nothing is deleted.
+// Quarantine moves every CORRUPT part aside (<file>.corrupt-<unix>) and
+// reports where they went, ", "-joined ("" when none was corrupt). Healthy
+// parts are never touched.
 func (fs *FileStore) Quarantine() (string, error) {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-	unlock, err := fs.lock()
+	parts, err := fs.Parts()
 	if err != nil {
 		return "", err
 	}
-	defer unlock()
-	if _, err := os.Stat(fs.path()); os.IsNotExist(err) {
-		return "", nil
-	}
-	dst := fs.path() + ".corrupt-" + strconv.FormatInt(Now().Unix(), 10)
-	if err := os.Rename(fs.path(), dst); err != nil {
-		return "", err
-	}
-	return dst, nil
-}
-
-// NewID mints an 8-hex-char id not present in existing.
-func NewID(existing []model.Note) string {
-	taken := make(map[string]bool, len(existing))
-	for _, n := range existing {
-		taken[n.ID] = true
-	}
-	var b [4]byte
-	for {
-		// crypto/rand.Read never returns an error (Go 1.24+ panics on an
-		// unusable source instead), so there is no fallback branch here — one
-		// would only be a second, collision-blind id generator.
-		rand.Read(b[:])
-		id := hex.EncodeToString(b[:])
-		if !taken[id] {
-			return id
+	var moved []string
+	for _, p := range parts {
+		if _, lerr := fs.Load(p); !errors.Is(lerr, ErrCorrupt) {
+			continue
+		}
+		dst, qerr := fs.file(p).Quarantine()
+		if qerr != nil {
+			return strings.Join(moved, ", "), qerr
+		}
+		if dst != "" {
+			moved = append(moved, dst)
 		}
 	}
+	return strings.Join(moved, ", "), nil
 }

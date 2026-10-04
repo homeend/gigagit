@@ -113,7 +113,7 @@ feature; keep THIS file's map to one line per package.
 | `clipboard`  | System-clipboard writer: native OS command first (WSL-interop-gated `clip.exe`, Wayland-socket-resolved `wl-copy`, …), OSC 52 fallback; `Probe()` backs the clipboard notices. |
 | `shelf`      | Non-git per-file/per-commit content store (blobs + TOML index under XDG state); shelved commits keep a tar + best-effort format-patch snapshot; shelved file SETS (several marked working files) keep a tar only. Owned by `domain`; frontends never import it. |
 | `bookmark`   | Persistent registry of richly-addressed file/commit references (records only, no blobs). Owned by `domain`. |
-| `notes`      | Machine-local review-note store (TOML + O_EXCL lock, write-time cap, `Sweep`); records only. Owned by `domain`; frontends never import it. |
+| `notes`      | Machine-local review-note store split in PARTS (`commits.toml`, `previews.toml`, `shelf.toml`, `worktrees/<key>.toml`; `PartOf` routes, a reply follows its root): `Load(part)`/`LoadAll`, per-part O_EXCL lock + cap + quarantine, lossless `ConvertLegacy` of the old `notes.toml`; records only. Owned by `domain`; frontends never import it. |
 | `notebatch`  | Pure parser for the two agent JSON note-batch shapes (hunk agent-context v1, comment apply); shared by CLI, MCP and the review importer. DAG leaf. |
 | `savedcompare`| Machine-local registry of saved comparisons: an entry is a PAIR of `gg://` links or a SET (one link — a saved merge preview). Records only, TOML + the shared file lock under XDG state; absorbed the former `preview` store, converting it losslessly on first run. Owned by `domain`; frontends never import it. |
 | `profile`    | Named git-identity presets, global + per-repo scoped. Owned by `domain`. |

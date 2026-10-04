@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/preflight"
 	"github.com/homeend/gigagit/internal/savedcompare"
 )
@@ -79,6 +80,7 @@ func (s *Service) probesFrom(ctx context.Context, formats map[string]int) (prefl
 		Legacy: map[string]preflight.LegacyProbe{
 			StorePreviews:       {Present: s.legacyPreviewsPresent(ctx)},
 			StoreReviewCommands: {Present: s.legacyReviewCommandsPresent(ctx)},
+			StoreNotes:          {Present: s.legacyNotesPresent(ctx)},
 		},
 		GitVersion: ver,
 		// A snapshot, never a probe: forge detection is a network round trip
@@ -346,6 +348,13 @@ func (s *Service) legacyPreviewsPresent(ctx context.Context) bool {
 	return err == nil
 }
 
+// legacyNotesPresent reports a pre-split notes.toml in this repo's note
+// store. An injected non-file store (tests) has no legacy layout.
+func (s *Service) legacyNotesPresent(ctx context.Context) bool {
+	fs, ok := s.notesStore(ctx).(*notes.FileStore)
+	return ok && fs.LegacyPresent()
+}
+
 // migrationAction builds the BODY for one declared migration. This is the ONE
 // place an Action name becomes code, which is what lets preflight stay a
 // stdlib leaf whose whole decision table is testable with plain values — and
@@ -361,6 +370,12 @@ func (s *Service) migrationAction(ctx context.Context, store, action string) (en
 		return convertPreviews{Dir: s.savedCompareDir(ctx), Repo: repo}, nil
 	case "upgrade-review-commands":
 		return upgradeReviewCommands{Paths: s.toolConfigPaths(ctx)}, nil
+	case "split-notes":
+		fs, ok := s.notesStore(ctx).(*notes.FileStore)
+		if !ok {
+			return nil, fmt.Errorf("preflight: no note file store to split")
+		}
+		return splitNotes{Store: fs, After: s.invalidateNoteCounts}, nil
 	case "discard-refs", "":
 		refs, err := s.storeRefs(ctx, store)
 		if err != nil {
@@ -422,6 +437,7 @@ func (s *Service) RunAutoMigrations(ctx context.Context) error {
 	}
 	probes := preflight.Probes{Legacy: map[string]preflight.LegacyProbe{
 		StorePreviews: {Present: s.legacyPreviewsPresent(ctx)},
+		StoreNotes:    {Present: s.legacyNotesPresent(ctx)},
 	}}
 	ran := false
 	for _, v := range preflight.Resolve(cheap, probes) {

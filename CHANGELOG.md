@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Note store split into parts
+
+### Changed
+
+- **One file per kind of note.** The per-repo note store is no longer one
+  `notes.toml`: notes live in `commits.toml`, `previews.toml`,
+  `shelf.toml` and one `worktrees/<key>.toml` per worktree. A working-tree
+  read no longer parses every note in the repository, and a corrupt file
+  of another worktree no longer hides this checkout's notes (adding or
+  editing a note still reports it). A removed worktree's file is deleted
+  by the startup cleanup.
+- **Existing notes are converted automatically** the first time gg opens
+  the repository — also after a repo switch and in `gg mcp` — without
+  asking and without loss; the old file is kept as
+  `notes.toml.migrated-<unix>` (a corrupt one is moved to
+  `notes.toml.corrupt-<unix>`). An older gg still running that writes
+  `notes.toml` again is merged the next time.
+
 ## Reviews and notes in a commit's file list — Open or Delete
 
 ### Changed
