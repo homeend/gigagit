@@ -570,6 +570,14 @@ func TestSessionRulesMergeWithTheAgentBuiltins(t *testing.T) {
 	if got := agentstate.Classify(r, agentstate.Tail("please CONFIRM\n ❯ 1. View tools\n Esc to back", 15)); got != agentstate.Unknown {
 		t.Fatalf("an own menu with a partial block: %q", got)
 	}
+	// The title rules have no config list either: a block keeps them.
+	if st, _ := agentstate.ClassifyWith(r, agentstate.Tail(actIdle, 15), agentstate.Signal{Title: "◐ x", Progress: -1}); st != agentstate.Working {
+		t.Fatalf("claude's title spinner with a partial block: %q", st)
+	}
+	kimi := config.ToolCommand{Category: "session", Name: "Kimi", Command: "kimi", ScreenQuestion: []string{`CONFIRM`}}
+	if kr, _, _ := SessionRules(kimi); !kr.ProgressBusy {
+		t.Fatal("kimi's progress rule lost with a partial block")
+	}
 	// A custom command (no agent) with one list has only that list.
 	cu := config.ToolCommand{Category: "session", Name: "X", Command: "mytool", ScreenWaiting: []string{`^READY$`}}
 	r, _, _ = SessionRules(cu)

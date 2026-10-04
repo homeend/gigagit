@@ -652,6 +652,8 @@ func SessionRules(tc config.ToolCommand) (r agentstate.Rules, custom bool, err e
 			r.Question = def.Question
 		}
 		r.Own = def.Own // the agent's own menus have no config list
+		// Nor have the title and progress rules.
+		r.TitleWorking, r.TitleQuestion, r.TitleIdle, r.ProgressBusy = def.TitleWorking, def.TitleQuestion, def.TitleIdle, def.ProgressBusy
 	}
 	return r, true, nil
 }
