@@ -27,19 +27,26 @@ surface down until quarantined.
 
 ## 3. Routing — `notes.PartOf`
 
-A pure, total function on `model.Note` decides the file. A reply copies its
-root's address (`model.Note` contract), so it always lands with its root.
+A pure, total function on `model.Note` decides a ROOT note's file. A reply
+always goes to its root's file: it copies the root's address but carries no
+`Preview` of its own (`loadPreviewNotes`: "a reply carries no scope"), so
+`PartOf` alone would send a preview note's reply to `commits`. The store
+routes a reply by looking its parent up; a reply whose parent is gone falls
+back to `PartOf` (and the orphan prune drops it, as today).
 
 | Note | Part | File |
 |---|---|---|
-| `Address.State` ∈ {staged, unstaged, untracked} — line notes on live files, and spec 2's working reviews | `wt-<key>` | `worktrees/<key>.toml` |
-| `Address.State == shelf` | `shelf` | `shelf.toml` |
+| no commit and no shelf id (`worktreeScopedNote`: staged / unstaged / untracked) — line notes on live files, and spec 2's working reviews | `wt-<key>` | `worktrees/<key>.toml` |
+| a shelf id (`Address.State == shelf`) | `shelf` | `shelf.toml` |
 | committed AND `Preview` is a merge-preview scope (contains `...`) | `previews` | `previews.toml` |
 | every other committed note: plain commit line notes, commit/branch reviews, commit-pair notes (`Preview` = `a7..b7`), pull-request notes (their `Preview` is empty — `PreviewNoteSet.scope()`) | `commits` | `commits.toml` |
 
-`<key>` = `repoKey(<worktree top-level path>)` — the same hash that names the
-repo directory today. A live-state note with an empty `Address.Worktree`
-(written before worktrees were recorded) routes to the MAIN worktree's file.
+`<key>` = the first 8 bytes of sha256 over the cleaned worktree top-level
+path, hex — the formula `repoKey` uses for the repo directory today. A
+live-state note with an empty `Address.Worktree` (written before worktrees
+were recorded) routes to `worktrees/unscoped.toml`: such notes already match
+no checkout today (`sameWorktreePath` rejects ""), so they stay stored and
+invisible exactly as now, and age out through the sweep.
 
 The routing table is pinned by a table test over every `FileState` and
 `Preview` shape; a new `FileState` without a row fails it.
@@ -49,7 +56,8 @@ The routing table is pinned by a table test over every `FileState` and
 ```go
 type Part string // "commits", "previews", "shelf", "wt-<key>"
 
-func PartOf(n model.Note, mainWorktree string) Part
+func PartOf(n model.Note) Part
+func WorktreePart(top string) Part // "wt-<key>", "wt-unscoped" for ""
 
 type Store interface {
 	Load(p Part) ([]model.Note, error) // one file; never writes
@@ -76,9 +84,8 @@ type Store interface {
   moved aside alone; the others keep working. `LoadAll` returns the parts it
   could read plus a joined error naming the bad ones; callers that today fail
   on a corrupt store keep failing the same way.
-- **Worktree file header.** A `worktrees/<key>.toml` records
-  `worktree = "<abs path>"` so `LoadAll` callers can label it and the sweep
-  can test it without reversing the hash.
+- **An emptied file is deleted.** A mutation that leaves a part with no
+  notes removes its file, so a removed worktree leaves nothing behind.
 
 ## 5. Readers
 
@@ -86,21 +93,24 @@ Each domain read names the parts it needs:
 
 | Reader | Parts |
 |---|---|
-| Files panel badges, working-tree diffs, `NotesFor`/`NotesAt` on a live address | own `wt-<key>` |
-| commit list badges, commit view, range review rows, review read model (`reviewNotes`, `Review*`) | `commits` |
-| preview view (`PreviewNotes*`, `PreviewNoteCounts`) | `previews` (+ `commits` for a commit-pair set) |
-| shelf view | `shelf` |
-| `NoteCounts` | `commits` + own `wt-<key>` + `shelf` |
-| View all notes, CLI `gg note list`, MCP, id lookups, `NoteAddresses`, sweep | `LoadAll()` |
+| `NotesFor` / `NotesAt` / `NotesClear` on a live address | own `wt-<key>` |
+| `NotesFor` / `NotesAt` on a commit address (a commit's notes include the ones written in a scope; `PlainNotes` filters later) | `commits` + `previews` |
+| `NotesFor` / `NotesAt` on a shelf address | `shelf` |
+| review read model (`reviewNotes`, `Review*`), branch delete/rename follow-up | `commits` |
+| preview view (`loadPreviewNotes`): merge-preview scope (`...`) | `previews` |
+| preview view: commit-pair scope (`a7..b7`) | `commits` |
+| preview view: pull-request set (empty scope — gathers every note on its commits) | `commits` + `previews` |
+| `NoteCounts`, `NoteAddresses`, `NotesOverview` — they already hide other worktrees' notes | the VISIBLE parts: `commits` + `previews` + `shelf` + own `wt-<key>` |
+| id lookups (`NoteGet`/`Edit`/`Reply`/`Remove`), `NewID`, sweep | `LoadAll()` |
 
-`NoteCounts` no longer reads `previews.toml`; merge-preview notes never show on
-a commit (user ruling 2026-10-02), so nothing it reports changes.
+Other worktrees' files are read only by id lookups and the sweep.
 
 ## 6. Worktree lifecycle
 
 - The main checkout is a worktree like any other and has its own file.
-- **Deleted worktree:** the sweep removes `worktrees/<key>.toml` once its
-  recorded path is no longer listed by `git worktree list`. Timid like today's
+- **Deleted worktree:** the sweep drops every live-state note whose
+  `Address.Worktree` is no longer listed by `git worktree list`; the emptied
+  file is deleted with it (§4). Timid like today's
   sweep: a failed or cancelled list read removes nothing.
 - **Recycled worktree** (same path, new branch): the file stays. Its line
   notes go stale and the existing sweep rules drop them; spec 2's working
@@ -135,5 +145,8 @@ Follows the saved-previews precedent (`FeaturePreviews`,
   sweep against real `git worktree remove`.
 - Existing TUI/web/CLI/MCP note tests pass unchanged — the API change
   is internal to domain.
-- e2e: one scenario that starts with a legacy `notes.toml` and asserts every
-  note still shows where it did.
+- No e2e scenario: the harness cannot seed a state file before a run. A
+  domain integration test over a real repo covers it instead — a legacy
+  `notes.toml` holding every note kind, `RunAutoMigrations`, then each note
+  is found by the reader that showed it before (`NotesAt`, `NoteCounts`,
+  `PreviewNotes`, `reviewNotes`, `NoteGet`).
