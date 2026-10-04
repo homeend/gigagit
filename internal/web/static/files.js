@@ -20,7 +20,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { leaveRangeReview, leaveReview, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
+import { leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewOverview } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -5023,11 +5023,27 @@ function fileExt(path) {
 // opening its diff.
 $("files-list").addEventListener("contextmenu", (e) => {
   const li = e.target.closest("li");
-  // A review row (a commit's, or the review view's Overview): Delete review.
-  const rid = li && (li.dataset.review || (li.dataset.ov && reviewActive() ? state.review.id : ""));
-  if (rid) {
+  // A commit's note rows are not files: Open + Delete only (the TUI's
+  // noteRowMenu). The review view's Overview row: Delete review.
+  if (li && li.dataset.review) {
     e.preventDefault();
-    reviewMenu(rid, e.clientX, e.clientY);
+    const rid = li.dataset.review;
+    reviewMenu(rid, e.clientX, e.clientY, () => openReview(rid, reviewBackFromCommit(rid)));
+    return;
+  }
+  if (li && li.dataset.scope) {
+    e.preventDefault();
+    scopeRowMenu(li.dataset.scope, e.clientX, e.clientY);
+    return;
+  }
+  if (li && li.dataset.noted) {
+    e.preventDefault();
+    notedRowMenu(li.dataset.noted, e.clientX, e.clientY);
+    return;
+  }
+  if (li && li.dataset.ov && reviewActive()) {
+    e.preventDefault();
+    reviewMenu(state.review.id, e.clientX, e.clientY);
     return;
   }
   if (!li || li.dataset.i === undefined) return;

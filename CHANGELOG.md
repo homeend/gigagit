@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Reviews and notes in a commit's file list — Open or Delete
+
+### Changed
+
+- **A review row is not a file.** The "." menu (right-click in gg web) on a
+  commit's Reviews, Range reviews and Notes rows now offers exactly two
+  actions: **Open** (what enter / a click does) and **Delete** (asks first,
+  Cancel is the default). The review row used to offer file actions — copy
+  path, View review as raw text, Open in external editor, Add to shelf,
+  Bookmark, Compare…, Copy to working dir, Copy commit id — on a made-up
+  `@notes/…` path; their hotkeys and `gg session`'s snapshot no longer see
+  it either. Delete on a Range review row removes every note of that range
+  review at the commit; on a Notes row, the plain notes on that file; the
+  row disappears. The Branches review sub-row's web menu gained Open review.
+
 ## Agent sessions — the title says working
 
 ### Changed

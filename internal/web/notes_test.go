@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // wireNote mirrors the JSON one note renders as; the handler's own type is
@@ -251,6 +253,52 @@ func TestNotesUnknownIDIs404(t *testing.T) {
 	for _, path := range []string{"/api/notes/edit", "/api/notes/reply", "/api/notes/remove"} {
 		if code, b := postJSONRaw(t, ts, path, `{"id":"deadbeef","summary":"x"}`); code != http.StatusNotFound {
 			t.Fatalf("POST %s for an unknown id = %d (%v), want 404", path, code, b)
+		}
+	}
+}
+
+// POST /api/notes/clear-row removes what one note row of a commit's file list
+// stands for: a Notes row ({commit, path}) or a Range review row ({commit,
+// scope}); a bad commit or neither key is the request's mistake.
+func TestNotesClearRow(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 2)
+	svc := domain.Open(dir)
+	svc.UseNotesDir(t.TempDir())
+	ts := serve(t, New(svc))
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	ctx := context.Background()
+	add := func(path, scope string) {
+		t.Helper()
+		if _, err := svc.NoteAdd(ctx, model.Note{Source: model.NoteSourceUser, Author: "me", Preview: scope,
+			Address: model.FileAddress{State: model.StateCommitted, Commit: head, Path: path},
+			Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: path + scope}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("f.txt", "")
+	add("f.txt", "aaaaaaa..bbbbbbb")
+	add("f.txt", "aaaaaaa..bbbbbbb")
+
+	var res struct{ Removed int }
+	code, b := postJSONRaw(t, ts, "/api/notes/clear-row", `{"commit":"`+head+`","path":"f.txt"}`)
+	if code != http.StatusOK {
+		t.Fatalf("clear a Notes row = %d (%v)", code, b)
+	}
+	if code := postJSON(t, ts, "/api/notes/clear-row", `{"commit":"`+head+`","scope":"aaaaaaa..bbbbbbb"}`, "application/json", "", &res); code != http.StatusOK || res.Removed != 2 {
+		t.Fatalf("clear a Range review row = %d, removed %d, want 200, 2", code, res.Removed)
+	}
+	c, err := svc.NoteCounts(ctx)
+	if err != nil || c.ByCommit[head] != 0 {
+		t.Fatalf("notes left at the commit: %+v, %v", c.ByCommit, err)
+	}
+	for _, body := range []string{
+		`{"commit":"` + head + `"}`,
+		`{"commit":"HEAD~1","path":"f.txt"}`,
+		`{"path":"f.txt"}`,
+	} {
+		if code, _ := postJSONRaw(t, ts, "/api/notes/clear-row", body); code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", body, code)
 		}
 	}
 }

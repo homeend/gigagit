@@ -28,6 +28,7 @@ func init() {
 		mux.HandleFunc("POST /api/notes/edit", writeGuard(s.handleNoteEdit))
 		mux.HandleFunc("POST /api/notes/reply", writeGuard(s.handleNoteReply))
 		mux.HandleFunc("POST /api/notes/remove", writeGuard(s.handleNoteRemove))
+		mux.HandleFunc("POST /api/notes/clear-row", writeGuard(s.handleNoteClearRow))
 	})
 }
 
@@ -354,6 +355,34 @@ func (s *Server) handleNoteRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	s.emitNotes()
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// handleNoteClearRow deletes what one note row of a commit's file list stands
+// for (the TUI's noteRowMenu Delete): {commit, path} = a Notes row's plain
+// notes on path, {commit, scope} = a Range review row's notes. The commit is
+// the full hex the commits feed hands the page; path and scope are only
+// compared against stored notes, never read from disk.
+func (s *Server) handleNoteClearRow(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Commit string `json:"commit"`
+		Path   string `json:"path"`
+		Scope  string `json:"scope"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if !isHexSha(req.Commit) || (req.Path == "") == (req.Scope == "") {
+		writeErr(w, http.StatusBadRequest, errors.New("a commit sha and one of path or scope are required"))
+		return
+	}
+	n, err := s.service().NotesClearAtCommit(r.Context(), req.Commit, req.Path, req.Scope)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.emitNotes()
+	writeJSON(w, map[string]any{"removed": n})
 }
 
 // noteErrStatus separates "you named a note that is not there" (a stale page
