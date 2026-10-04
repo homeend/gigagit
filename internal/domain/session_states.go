@@ -275,6 +275,10 @@ func (w *StateWatcher) PostNotice(n ActivityNotice) {
 	w.bc.Signal()
 }
 
+// Wake wakes the subscribers without a notice (a report whose notice the
+// gap held back: rows and tours read the level).
+func (w *StateWatcher) Wake() { w.bc.Signal() }
+
 // post numbers and stores n. Caller holds w.mu.
 func (w *StateWatcher) post(n ActivityNotice) {
 	w.seq++

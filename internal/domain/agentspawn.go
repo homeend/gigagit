@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/homeend/gigagit/internal/agentsession"
 )
@@ -32,6 +33,7 @@ type spawnRegistry struct {
 	reports   map[string][]AgentReport           // full id -> oldest first, ≤ maxReportsKept
 	reportSeq uint64                             // process-global, monotonic
 	marks     map[string]map[string]deliveryMark // caller -> worker -> delivered
+	noticed   map[string]time.Time               // full id -> when its last report notice went out
 	bc        agentsession.Broadcaster           // wakes waiters on a report
 }
 
@@ -42,7 +44,8 @@ var (
 
 func newSpawnRegistry() *spawnRegistry {
 	return &spawnRegistry{tokens: map[string]string{}, records: map[string]SpawnRecord{},
-		reports: map[string][]AgentReport{}, marks: map[string]map[string]deliveryMark{}}
+		reports: map[string][]AgentReport{}, marks: map[string]map[string]deliveryMark{},
+		noticed: map[string]time.Time{}}
 }
 
 func registry() *spawnRegistry { spawnMu.Lock(); defer spawnMu.Unlock(); return spawnReg }
@@ -101,6 +104,7 @@ func (r *spawnRegistry) prune() {
 	for id := range r.reports {
 		if !listed[id] {
 			delete(r.reports, id)
+			delete(r.noticed, id)
 		}
 	}
 	for caller, byWorker := range r.marks {
