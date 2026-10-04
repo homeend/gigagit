@@ -85,7 +85,7 @@ func TestNotesOverviewGroupsEveryNote(t *testing.T) {
 	addNote(t, svc, model.FileAddress{State: model.StateUnstaged, Worktree: "/elsewhere", Path: "a.go"}, 1, "one", "sibling")
 
 	// Make the c1/b.go note stale: its anchored text is not what the file says.
-	all, _ := svc.notesStore(ctx).Load()
+	all, _ := svc.notesStore(ctx).LoadAll()
 	for _, n := range all {
 		if n.ID == stale.ID {
 			n.ContextHash = model.NoteContextHash([]string{"nothing like it"})

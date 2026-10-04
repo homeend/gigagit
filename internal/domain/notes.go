@@ -140,7 +140,7 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 	if st == nil {
 		return model.Note{}, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return model.Note{}, err
 	}
@@ -300,7 +300,7 @@ func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) e
 	if st == nil {
 		return ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return err
 	}
@@ -333,7 +333,7 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 	if st == nil {
 		return model.Note{}, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return model.Note{}, err
 	}
@@ -431,7 +431,7 @@ func (s *Service) loadNotesAt(ctx context.Context, addr model.FileAddress) ([]mo
 	if st == nil {
 		return nil, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +507,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 	if st == nil {
 		return NoteCounts{}, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return NoteCounts{}, err
 	}
@@ -988,7 +988,7 @@ func (s *Service) NoteGet(ctx context.Context, id string) (model.Note, error) {
 	if st == nil {
 		return model.Note{}, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return model.Note{}, err
 	}
@@ -1015,7 +1015,7 @@ func (s *Service) NoteAddresses(ctx context.Context) ([]model.FileAddress, error
 	if st == nil {
 		return nil, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return nil, err
 	}

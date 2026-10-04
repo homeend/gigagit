@@ -133,7 +133,7 @@ func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 	if st == nil {
 		return 0, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return 0, err
 	}

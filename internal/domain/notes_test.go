@@ -33,12 +33,15 @@ type hookStore struct {
 	onLoad func()
 }
 
-func (h *hookStore) Load() ([]model.Note, error) {
+func (h *hookStore) fire() {
 	if h.onLoad != nil {
 		h.onLoad()
 	}
-	return h.Store.Load()
 }
+
+func (h *hookStore) LoadAll() ([]model.Note, error) { h.fire(); return h.Store.LoadAll() }
+
+func (h *hookStore) Load(p notes.Part) ([]model.Note, error) { h.fire(); return h.Store.Load(p) }
 
 // countingStore records how often the write-time policy was pushed onto it.
 type countingStore struct {

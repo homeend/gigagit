@@ -3,9 +3,10 @@
 // one address. It is owned by internal/domain — frontends never import it,
 // exactly like shelf/bookmark/prefix.
 //
-// The store is deliberately narrow: Load never writes, every mutation
-// re-reads under a cross-process lock, applies, enforces the entry cap and
-// rewrites atomically. Housekeeping (expiry, orphan pruning) is the caller's
+// The store keeps one file per anchor kind (part.go) and is deliberately
+// narrow: Load never writes, every mutation re-reads ITS part under a
+// cross-process lock, applies, enforces the entry cap and rewrites
+// atomically. Housekeeping (expiry, orphan pruning) is the caller's
 // policy, expressed through Sweep's predicate.
 package notes
 
@@ -26,10 +27,13 @@ var Now = clock.Now
 // Policy is the write-time budget. MaxEntries <= 0 means uncapped.
 type Policy struct{ MaxEntries int }
 
-// Store persists note records. Load is read-only; every other method
-// serialises against other processes and other goroutines.
+// Store persists note records in parts (spec 2026-10-04): Load reads one
+// part, LoadAll every part; neither writes. Put routes by PartOf (a reply by
+// its root); every other method serialises against other processes and
+// other goroutines, per part.
 type Store interface {
-	Load() ([]model.Note, error)
+	Load(p Part) ([]model.Note, error)
+	LoadAll() ([]model.Note, error)
 	Put(n model.Note) error // add, or replace by ID
 	Remove(id string) error // a root takes its replies
 	Sweep(keep func(model.Note) bool) (dropped int, err error)

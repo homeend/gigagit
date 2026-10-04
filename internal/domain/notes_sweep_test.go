@@ -81,7 +81,7 @@ func TestSweepDropsExpiredStaleAndOrphaned(t *testing.T) {
 	if dropped != 2 {
 		t.Fatalf("dropped = %d, want 2 (stale + expired)", dropped)
 	}
-	left, _ := svc.notesStore(ctx).Load()
+	left, _ := svc.notesStore(ctx).LoadAll()
 	if len(left) != 1 || left[0].ID != keep.ID {
 		t.Fatalf("sweep left %+v (stale %s, expired %s)", left, stale.ID, old.ID)
 	}
@@ -168,7 +168,7 @@ func TestSweepOnARealRepoDropsExpiredStaleAndOrphaned(t *testing.T) {
 		t.Fatalf("dropped = %d, want 3 (stale %s + orphan %s + expired %s)",
 			dropped, stale.ID, orphan.ID, expired.ID)
 	}
-	left, err := svc.notesStore(ctx).Load()
+	left, err := svc.notesStore(ctx).LoadAll()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestSweepAbortsWhenTheReadFailsAndTheContextIsDone(t *testing.T) {
 	if dropped != 0 {
 		t.Fatalf("dropped = %d, want 0 — a cancelled pass must change nothing", dropped)
 	}
-	left, lerr := svc.notesStore(ctx).Load()
+	left, lerr := svc.notesStore(ctx).LoadAll()
 	if lerr != nil || len(left) != 2 {
 		t.Fatalf("the store must be untouched: %d notes, err %v", len(left), lerr)
 	}
@@ -328,7 +328,7 @@ func TestSweepKeepsANoteWhoseReadMerelyFailed(t *testing.T) {
 	if dropped != 0 {
 		t.Fatalf("dropped = %d, want 0 — an I/O failure is not proof of an orphan", dropped)
 	}
-	if left, _ := svc.notesStore(ctx).Load(); len(left) != 1 {
+	if left, _ := svc.notesStore(ctx).LoadAll(); len(left) != 1 {
 		t.Fatalf("the note must survive an unreadable read, got %+v", left)
 	}
 }
@@ -427,7 +427,7 @@ func TestSweepKeepsANoteAddedDuringThePass(t *testing.T) {
 	if dropped != 1 {
 		t.Fatalf("dropped = %d, want 1 (only the stale note)", dropped)
 	}
-	left, _ := fs.Load()
+	left, _ := fs.LoadAll()
 	ids := map[string]bool{}
 	for _, n := range left {
 		ids[n.ID] = true
@@ -577,7 +577,7 @@ func TestSweepDropsOrphansOnlyRealGitCanReport(t *testing.T) {
 		// the note is KEPT (the safe direction), but the orphan never leaves.
 		t.Fatalf("dropped = %d, want 4 — noteTargetGone missed a real git 'absent' message", dropped)
 	}
-	if left, _ := svc.notesStore(ctx).Load(); len(left) != 1 || left[0].ID != active.ID {
+	if left, _ := svc.notesStore(ctx).LoadAll(); len(left) != 1 || left[0].ID != active.ID {
 		t.Fatalf("only the active note may survive; left %+v", left)
 	}
 }
@@ -624,7 +624,7 @@ func TestStagedNoteResolvesAgainstTheIndexNotTheWorkingFile(t *testing.T) {
 	if dropped != 1 {
 		t.Fatalf("dropped = %d, want 1 (only the misfiled unstaged note)", dropped)
 	}
-	left, _ := svc.notesStore(ctx).Load()
+	left, _ := svc.notesStore(ctx).LoadAll()
 	if len(left) != 1 || left[0].ID != staged.ID {
 		t.Fatalf("the staged note must survive further working-tree edits; left %+v (misfiled %s)", left, misfiled.ID)
 	}
@@ -699,7 +699,7 @@ func TestSweepKeepsPathlessNoteOnMissingCommit(t *testing.T) {
 	if _, err := svc.sweepNotes(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	all, _ := store.Load()
+	all, _ := store.LoadAll()
 	if len(all) != 1 || all[0].ID != "rev1" {
 		t.Fatalf("sweep dropped the review note: %v", all)
 	}

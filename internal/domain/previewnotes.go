@@ -214,7 +214,7 @@ func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path
 	if st == nil {
 		return nil, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return nil, err
 	}

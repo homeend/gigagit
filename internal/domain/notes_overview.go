@@ -86,7 +86,7 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 	if st == nil {
 		return ov, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return ov, err
 	}

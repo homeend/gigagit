@@ -178,7 +178,7 @@ func TestSaveReviewQuarantinesACorruptStore(t *testing.T) {
 	svc.UseNotesDir(notesDir)
 	runGitIn(t, dir, "checkout", "-b", "feature")
 	commitFile(t, dir, "f.txt", "x\n", "c")
-	if err := os.WriteFile(filepath.Join(notesDir, "notes.toml"), []byte("[[[ broken"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(notesDir, "commits.toml"), []byte("[[[ broken"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tg, _ := svc.BranchReviewTarget(context.Background(), "feature")
@@ -186,10 +186,10 @@ func TestSaveReviewQuarantinesACorruptStore(t *testing.T) {
 	if err != nil || id == "" {
 		t.Fatalf("SaveReview: %q %v", id, err)
 	}
-	if !strings.Contains(warn, "notes.toml.corrupt-") {
+	if !strings.Contains(warn, "commits.toml.corrupt-") {
 		t.Fatalf("warn = %q, want the quarantine path", warn)
 	}
-	m, _ := filepath.Glob(filepath.Join(notesDir, "notes.toml.corrupt-*"))
+	m, _ := filepath.Glob(filepath.Join(notesDir, "commits.toml.corrupt-*"))
 	if len(m) != 1 {
 		t.Fatalf("quarantined files = %v", m)
 	}
@@ -253,7 +253,7 @@ func TestDeleteBranchKeepsLineNotes(t *testing.T) {
 	if _, err := svc.Execute(ctx, engine.DeleteBranch{Name: "feature"}, nil, deleteAnyway); err != nil {
 		t.Fatal(err)
 	}
-	all, _ := st.Load()
+	all, _ := st.LoadAll()
 	if len(all) != 1 || all[0].ID != "line1" {
 		t.Fatalf("the line note went with the branch: %v", all)
 	}
@@ -305,7 +305,7 @@ func TestRangeReviewNotesFollowABranchRename(t *testing.T) {
 	if _, err := svc.Execute(ctx, engine.DeleteBranch{Name: "feat2"}, nil, deleteAnyway); err != nil {
 		t.Fatal(err)
 	}
-	if all, _ := st.Load(); len(all) != 1 {
+	if all, _ := st.LoadAll(); len(all) != 1 {
 		t.Fatalf("deleting the branch must leave its range notes in the store: %v", all)
 	}
 	// The branch is gone: its review is no other branch's to show.
