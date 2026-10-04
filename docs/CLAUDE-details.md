@@ -4147,7 +4147,9 @@ the report channel are the NEXT plan.
   the notice says `Spinning`. **Idle hold**: working → idle shows only once
   idle has held `idleSettle` (2 s), from when it began (`pendingIdle`; the
   loop arms a timer for it). **Own menus**: `Rules.Own` (built-in, Claude's
-  "Esc to back/go back/close/clear" footers) read unknown, keeping the state. Exited sessions are
+  "Esc to back/go back/close/clear" footers) read unknown, keeping the state
+  — matched on the LAST tail line only: the same words quoted in a diff above
+  a permission dialog must not hide it (review fix). Exited sessions are
   dropped. **Rules**: a command with any `screen_*` list is compiled at
   start (`SessionRules(tc)`: a set list replaces the agent's built-in list
   of that kind, a missing one keeps it — a partial Claude block must not

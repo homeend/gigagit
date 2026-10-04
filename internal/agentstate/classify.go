@@ -23,8 +23,8 @@ const (
 // multi-line mode over the joined tail lines, so ^ and $ bound a line and
 // "\n" lets a rule span two adjacent lines (e.g. rule-line + prompt).
 //
-// Own are the agent's OWN menus (a settings or server menu the user opened):
-// they read as Unknown, so the session keeps the state it had — idle stays
+// Own are the agent's OWN menus (a settings or server menu the user opened),
+// matched against the LAST tail line (their footer): they read as Unknown, so the session keeps the state it had — idle stays
 // idle, and a dialog's sub-step keeps its question. Built-in only.
 type Rules struct {
 	Working, Waiting, Question []*regexp.Regexp
@@ -49,7 +49,7 @@ var defaults = map[string][3][]string{
 		// resolution ─", Claude Code seen 2026-10-03), so the rule only has
 		// to LEAD its line.
 		{`^─{8,}[^\n]*\n❯`},
-		{`^❯ \d+\.`, `Esc to cancel`, `Esc to go back`, `\(y/n\)`, `\[Y/n\]`, `Do you want to proceed`},
+		{`^❯ \d+\.`, `Esc to cancel`, `\(y/n\)`, `\[Y/n\]`, `Do you want to proceed`},
 	},
 	"codex": {
 		{`Working \(\d+`, `(?i)esc to interrupt`},
@@ -172,7 +172,10 @@ func Classify(r Rules, lines []string) State {
 		return Working
 	case anyMatch(r.Waiting, text):
 		return Waiting
-	case anyMatch(r.Own, text):
+	case len(lines) > 0 && anyMatch(r.Own, lines[len(lines)-1]):
+		// Only the last line: a menu's footer sits there, and the same
+		// words quoted higher up (a diff the agent asks to apply) must
+		// not hide the dialog below them.
 		return Unknown
 	case anyMatch(r.Question, text):
 		return Question

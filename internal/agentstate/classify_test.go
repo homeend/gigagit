@@ -360,3 +360,23 @@ func TestProgressIgnoresTheSpinnerAndItsTimer(t *testing.T) {
 		t.Fatal("new transcript text is progress")
 	}
 }
+
+// An own-menu footer is the LAST line: the same words quoted higher up — in
+// the diff of an edit the agent asks to make — must not hide the dialog.
+func TestOwnMenuFooterOnlyOnTheLastLine(t *testing.T) {
+	editDialog := ` Edit file README.md
+   12 -Press Esc to close the panel.
+   12 +Press Esc to close or Esc to clear the filter; Esc to back out.
+ Do you want to make this edit to README.md?
+ ❯ 1. Yes
+   2. Yes, allow all edits during this session
+   3. No, and tell Claude what to do differently
+ Esc to cancel
+`
+	if got := Classify(DefaultRules("claude"), Tail(editDialog, 15)); got != Question {
+		t.Fatalf("a quoted footer hid the edit dialog: %q", got)
+	}
+	if got := Classify(DefaultRules("claude"), Tail(ownMenuScreen, 15)); got != Unknown {
+		t.Fatalf("the menu itself: %q", got)
+	}
+}
