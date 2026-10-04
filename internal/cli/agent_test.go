@@ -224,6 +224,39 @@ func TestAgentReportAndWaitCLI(t *testing.T) {
 	}
 }
 
+// The wait's flag spellings and its timeout; the report's flags stop at the
+// text, and a file or stdin is capped like the report itself.
+func TestAgentWaitAndReportCLIFlags(t *testing.T) {
+	dir, full := agentEnvFor(t, nil)
+	for _, args := range [][]string{{"wait"}, {"wait", "-until=idle"}, {"wait", "--until=idle"}, {"wait", "-timeout=1"}, {"wait", "-timeout", "1"}} {
+		// Parsed (no usage line), sent without a timeout_s 0: the host's
+		// refusal is the childless wait's.
+		if code, _, errOut := runAgentCLI(t, dir, "", args...); code != 2 || !strings.Contains(errOut, "no workers") {
+			t.Fatalf("%v = %d %q", args, code, errOut)
+		}
+	}
+	for _, v := range []string{"0", "-3", "601"} {
+		if code, _, errOut := runAgentCLI(t, dir, "", "wait", "--timeout", v); code != 2 || !strings.Contains(errOut, "1 … 600") {
+			t.Fatalf("--timeout %s = %d %q", v, code, errOut)
+		}
+	}
+	// Flags only before the text: a later --final or -F is prose.
+	if code, out, _ := runAgentCLI(t, dir, "", "report", "fixed", "the", "--final", "flag", "-F", "x"); code != 0 || !strings.HasPrefix(out, "reported #") {
+		t.Fatalf("prose flags = %d %q", code, out)
+	}
+	_, out, _ := runAgentCLI(t, dir, "", "screen", full, "--reports")
+	if !strings.Contains(out, "fixed the --final flag -F x") || strings.Contains(out, "(final)") {
+		t.Fatalf("the prose lost its words or turned final: %q", out)
+	}
+	if code, _, _ := runAgentCLI(t, dir, "", "report", "--", "--final", "is", "a", "word"); code != 0 {
+		t.Fatal("-- ends the flags")
+	}
+	big := strings.Repeat("x", domain.MaxReportBytes+1)
+	if code, _, errOut := runAgentCLI(t, dir, big, "report", "-F", "-"); code != 2 || !strings.Contains(errOut, "larger than") {
+		t.Fatalf("an oversized stdin = %d %q", code, errOut)
+	}
+}
+
 func TestWaitExitCodeAndPrint(t *testing.T) {
 	at := time.Date(2026, 10, 3, 1, 2, 3, 0, time.Local)
 	code := 7

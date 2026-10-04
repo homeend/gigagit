@@ -192,6 +192,13 @@ func TestAgentWaitAndReportOverHTTP(t *testing.T) {
 	if !res.IsError || !strings.Contains(resultText(res), "not an agent you started") {
 		t.Fatalf("wait on oneself = %s", resultText(res))
 	}
+	// A timeout_s given must be 1…600: 0 or less is refused, never the default.
+	for _, bad := range []int{0, -5} {
+		res, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"id": full, "timeout_s": bad}})
+		if !res.IsError || !strings.Contains(resultText(res), "timeout_s is 1") {
+			t.Fatalf("timeout_s %d = %s", bad, resultText(res))
+		}
+	}
 	res, _ = cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "agent_wait", Arguments: map[string]any{"id": full, "until": "later"}})
 	if !res.IsError || !strings.Contains(resultText(res), "until must be") {
 		t.Fatalf("bad until = %s", resultText(res))
