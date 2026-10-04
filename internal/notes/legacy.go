@@ -1,6 +1,8 @@
 package notes
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,7 +25,8 @@ func (fs *FileStore) LegacyPresent() bool {
 // notes.toml.lock — the lock every older gg takes — so an old writer cannot
 // interleave. Merging is by id, the newer Updated winning, and ignores the
 // entry cap: re-running after an older gg recreated the file loses nothing.
-// A corrupt file is left in place and reported (ErrCorrupt).
+// A corrupt file is moved to notes.toml.corrupt-<unix> and reported
+// (ErrCorrupt).
 func (fs *FileStore) ConvertLegacy() (int, error) {
 	if !fs.LegacyPresent() {
 		return 0, nil
@@ -34,8 +37,21 @@ func (fs *FileStore) ConvertLegacy() (int, error) {
 		return 0, err
 	}
 	defer unlock()
+	if !fs.LegacyPresent() {
+		return 0, nil // another gg converted it while this one waited
+	}
 	old, err := legacy.read()
 	if err != nil {
+		if errors.Is(err, ErrCorrupt) {
+			// Quarantined, not converted (spec §7): left in place, every
+			// later run would fail on it again. The lock is ours already,
+			// so this renames directly rather than through Quarantine.
+			dst := legacy.path + ".corrupt-" + strconv.FormatInt(Now().Unix(), 10)
+			if rerr := os.Rename(legacy.path, dst); rerr != nil {
+				return 0, errors.Join(err, rerr)
+			}
+			return 0, fmt.Errorf("%w (moved to %s)", err, dst)
+		}
 		return 0, err
 	}
 	byID := make(map[string]model.Note, len(old))

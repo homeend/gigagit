@@ -99,7 +99,9 @@ func TestConvertLegacyMergesARecreatedFile(t *testing.T) {
 	}
 }
 
-func TestConvertLegacyRefusesACorruptFile(t *testing.T) {
+// A corrupt legacy file is quarantined (spec §7), not converted and not left
+// in place — left in place, every later run would fail on it again.
+func TestConvertLegacyQuarantinesACorruptFile(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, LegacyFile), []byte("notes = [[["), 0o644); err != nil {
@@ -107,10 +109,17 @@ func TestConvertLegacyRefusesACorruptFile(t *testing.T) {
 	}
 	fs := NewFileStore(root)
 	if _, err := fs.ConvertLegacy(); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("ConvertLegacy = %v, want ErrCorrupt", err)
+		t.Fatalf("ConvertLegacy = %v, want ErrCorrupt reported", err)
 	}
-	if !fs.LegacyPresent() {
-		t.Fatal("a corrupt legacy file must be left where it is")
+	if fs.LegacyPresent() {
+		t.Fatal("a corrupt legacy file must be moved aside")
+	}
+	moved, _ := filepath.Glob(filepath.Join(root, LegacyFile+".corrupt-*"))
+	if len(moved) != 1 {
+		t.Fatalf("want one quarantined file, got %v", moved)
+	}
+	if n, err := fs.ConvertLegacy(); err != nil || n != 0 {
+		t.Fatalf("the next run = %d, %v; want a clean no-op", n, err)
 	}
 }
 
@@ -123,5 +132,36 @@ func TestConvertLegacyWithNothingToDo(t *testing.T) {
 	}
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatal("nothing to convert must create nothing")
+	}
+}
+
+// Two gg processes may start converting at once: the one that waited on the
+// legacy lock finds the file already gone and does nothing, cleanly.
+func TestConvertLegacyAfterAnotherConversionIsANoOp(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeLegacy(t, root, []model.Note{commitNote("c0000000", "", 1)})
+	lock := filepath.Join(root, LegacyFile+".lock")
+	held, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	held.Close()
+	fs := NewFileStore(root)
+	done := make(chan error, 1)
+	go func() {
+		_, cerr := fs.ConvertLegacy()
+		done <- cerr
+	}()
+	time.Sleep(200 * time.Millisecond) // ConvertLegacy is now waiting on the lock
+	// "The other process" converted and renamed the file meanwhile.
+	if err := os.Rename(filepath.Join(root, LegacyFile), filepath.Join(root, LegacyFile+".migrated-1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(lock); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("the waiting conversion = %v, want a clean no-op", err)
 	}
 }
