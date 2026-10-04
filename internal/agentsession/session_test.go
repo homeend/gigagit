@@ -224,6 +224,14 @@ func TestLastInputStampedByEveryInputPath(t *testing.T) {
 	if t1.Before(before) {
 		t.Fatalf("SendText did not stamp: %v", t1)
 	}
+	// The stamps keep the monotonic clock: agent_wait compares them with the
+	// watcher's times, and a wall-clock step must not reorder them.
+	if !strings.Contains(t1.String(), " m=") {
+		t.Fatalf("LastInput lost the monotonic reading: %v", t1)
+	}
+	if lo := s.LastOutput(); !lo.IsZero() && !strings.Contains(lo.String(), " m=") {
+		t.Fatalf("LastOutput lost the monotonic reading: %v", lo)
+	}
 	time.Sleep(2 * time.Millisecond)
 	s.Paste("b")
 	t2 := s.LastInput()

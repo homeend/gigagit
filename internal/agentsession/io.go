@@ -36,7 +36,7 @@ func (s *Session) SendKey(k Key) {
 		return
 	}
 	s.Touch()
-	s.lastIn.Store(time.Now().UnixNano())
+	s.lastIn.mark()
 	if seq, ok := encodeModifiedKey(k); ok {
 		s.withEmu(func() { s.emu.SendText(seq) })
 		return
@@ -48,7 +48,7 @@ func (s *Session) SendKey(k Key) {
 func (s *Session) SendText(text string) {
 	if s.running() {
 		s.Touch()
-		s.lastIn.Store(time.Now().UnixNano())
+		s.lastIn.mark()
 		s.withEmu(func() { s.emu.SendText(text) })
 	}
 }
@@ -57,7 +57,7 @@ func (s *Session) SendText(text string) {
 func (s *Session) Paste(text string) {
 	if s.running() {
 		s.Touch()
-		s.lastIn.Store(time.Now().UnixNano())
+		s.lastIn.mark()
 		s.withEmu(func() { s.emu.Paste(text) })
 	}
 }
