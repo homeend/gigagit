@@ -36,9 +36,10 @@ func (m Model) fileBriefTour(id domain.SessionID) Model {
 // fileReportTours files the report tour of every session whose latest
 // report is newer than the one last filed — the level, not the notices, so a
 // burst past the notice ring is not missed. A tour the user closed comes
-// back only with a NEW report.
+// back only with a NEW report; one refused (the cap) is tried again on the
+// next wake, its refusal said once.
 func (m Model) fileReportTours() Model {
-	if m.docs == nil || m.tourSeq == nil {
+	if m.docs == nil || m.tourSeq == nil || m.tourRefused == nil {
 		return m
 	}
 	for _, info := range domain.Sessions().List() {
@@ -46,10 +47,15 @@ func (m Model) fileReportTours() Model {
 		if err != nil || d.Seq <= (*m.tourSeq)[info.ID] {
 			continue
 		}
-		(*m.tourSeq)[info.ID] = d.Seq
 		if _, _, err := m.docs.FileTour(d.Key, d.Root, d.Dir, d.Title, d.Text); err != nil {
-			m.statusMsg = i18n.T("report not filed: %s", err.Error())
+			if (*m.tourRefused)[info.ID] != d.Seq {
+				(*m.tourRefused)[info.ID] = d.Seq
+				m.statusMsg = i18n.T("report not filed: %s", err.Error())
+			}
+			continue
 		}
+		(*m.tourSeq)[info.ID] = d.Seq
+		delete(*m.tourRefused, info.ID)
 	}
 	return m
 }

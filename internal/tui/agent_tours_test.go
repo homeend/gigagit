@@ -196,3 +196,35 @@ func TestTourMenuRows(t *testing.T) {
 		t.Fatalf("after a report: %q", got)
 	}
 }
+
+// A report refused at the cap is filed once there is room — without waiting
+// for a new report — and its refusal is said once, not on every wake.
+func TestReportRefusedAtTheCapIsFiledOnceThereIsRoom(t *testing.T) {
+	m, id, wt := tourFixture(t)
+	root := domain.CheckoutKey(wt)
+	var first agentdocs.Overview
+	for i := 0; i < agentdocs.MaxOverviewsPerRoot; i++ {
+		o, err := m.docs.AddOverview(root, wt, "o", "x")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = o
+		}
+	}
+	domain.AgentReportVerb(domain.FullSessionID(id), "done", false)
+	m = m.fileReportTours()
+	if !strings.Contains(m.statusMsg, "report not filed") {
+		t.Fatalf("status = %q", m.statusMsg)
+	}
+	m.statusMsg = ""
+	m = m.fileReportTours()
+	if m.statusMsg != "" {
+		t.Fatalf("the refusal was said again: %q", m.statusMsg)
+	}
+	m.docs.RemoveOverview(first.ID) // the user closed one: room for the report
+	m = m.fileReportTours()
+	if _, ok := m.docs.TourID("report:" + domain.FullSessionID(id)); !ok {
+		t.Fatal("the refused report never came back")
+	}
+}
