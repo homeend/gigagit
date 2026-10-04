@@ -43,6 +43,9 @@ func TestTourCapIsTheOverviewCap(t *testing.T) {
 	if domain.TourMaxBytes != agentdocs.MaxOverviewBytes {
 		t.Fatalf("domain.TourMaxBytes %d != agentdocs.MaxOverviewBytes %d", domain.TourMaxBytes, agentdocs.MaxOverviewBytes)
 	}
+	if domain.TourMaxTitle != agentdocs.MaxOverviewTitle {
+		t.Fatalf("domain.TourMaxTitle %d != agentdocs.MaxOverviewTitle %d", domain.TourMaxTitle, agentdocs.MaxOverviewTitle)
+	}
 }
 
 func TestBriefTourFiledOnSpawn(t *testing.T) {
