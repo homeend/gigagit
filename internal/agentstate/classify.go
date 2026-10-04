@@ -26,9 +26,16 @@ const (
 // Own are the agent's OWN menus (a settings or server menu the user opened),
 // matched against the LAST tail line (their footer): they read as Unknown, so the session keeps the state it had — idle stays
 // idle, and a dialog's sub-step keeps its question. Built-in only.
+//
+// Title* match the agent's window title (OSC 0/2) and ProgressBusy reads its
+// OSC 9;4 report: herdr's order puts a title question and a title spinner
+// above every screen rule and an idle title below them (ClassifyWith).
+// Built-in only.
 type Rules struct {
-	Working, Waiting, Question []*regexp.Regexp
-	Own                        []*regexp.Regexp
+	Working, Waiting, Question             []*regexp.Regexp
+	Own                                    []*regexp.Regexp
+	TitleWorking, TitleQuestion, TitleIdle []*regexp.Regexp
+	ProgressBusy                           bool // OSC 9;4: 1/3 working, 0 idle
 }
 
 // defaults: [working, waiting, question] pattern lists per gg agent id
@@ -104,6 +111,22 @@ var ownMenus = map[string][]string{
 	"claude": {`Esc to (?:go )?back\b`, `Esc to close\b`, `Esc to clear\b`},
 }
 
+// titleRules: [working, question, idle] title patterns per gg agent id,
+// from live captures (2026-10-04). Claude Code 2.1.289 titles a turn
+// "◐ <topic>" / "◑ <topic>" (◒◓ reserved; braille up to 2.1.227) and an idle
+// or a dialog "✳ <topic>" — under a multiplexer always "✳", which is why
+// title-idle is only a fallback. Codex 0.160.0 prefixes a braille spinner
+// while working, says "Action Required" when blocked (herdr) and drops the
+// glyph when idle.
+var titleRules = map[string][3][]string{
+	"claude": {{`^[◐◑◒◓⠀-⣿] `}, nil, {`^✳ `}},
+	"codex":  {{`(?:^| )[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏](?: |$)`}, {`Action Required`}, {`\S`}},
+}
+
+// progressAgents report their turn through OSC 9;4 (Kimi Code 2.1.1: 3 while
+// working, 0 when done).
+var progressAgents = map[string]bool{"kimi": true}
+
 // DefaultRules returns the built-in rules for an agent id, or the generic
 // set for ids gg has no verified rules for.
 func DefaultRules(agentID string) Rules {
@@ -118,6 +141,17 @@ func DefaultRules(agentID string) Rules {
 	if r.Own, err = compileAll(ownMenus[agentID]); err != nil {
 		panic(err)
 	}
+	tr := titleRules[agentID]
+	if r.TitleWorking, err = compileAll(tr[0]); err != nil {
+		panic(err)
+	}
+	if r.TitleQuestion, err = compileAll(tr[1]); err != nil {
+		panic(err)
+	}
+	if r.TitleIdle, err = compileAll(tr[2]); err != nil {
+		panic(err)
+	}
+	r.ProgressBusy = progressAgents[agentID]
 	return r
 }
 
@@ -181,6 +215,56 @@ func Classify(r Rules, lines []string) State {
 		return Question
 	}
 	return Unknown
+}
+
+// Signal is what the agent announces outside its screen. Trusted: this
+// session has shown a working title or progress before — only then does an
+// idle one count (a title frozen at "✳" says nothing).
+type Signal struct {
+	Title    string
+	Progress int // OSC 9;4 state, −1 none
+	Trusted  bool
+}
+
+// SignalState is what the title and progress say on their own: Question,
+// Working, Waiting (idle) or Unknown. Trusted is not consulted.
+func SignalState(r Rules, s Signal) State {
+	if s.Title != "" {
+		switch {
+		case anyMatch(r.TitleQuestion, s.Title):
+			return Question
+		case anyMatch(r.TitleWorking, s.Title):
+			return Working
+		}
+	}
+	if r.ProgressBusy && (s.Progress == 1 || s.Progress == 3) {
+		return Working
+	}
+	if s.Title != "" && anyMatch(r.TitleIdle, s.Title) {
+		return Waiting
+	}
+	if r.ProgressBusy && s.Progress == 0 {
+		return Waiting
+	}
+	return Unknown
+}
+
+// ClassifyWith classifies the screen together with the signal, first match
+// wins: a title question, a title spinner (or busy progress), the screen
+// (Classify), and last a trusted idle title when the screen decides
+// nothing. titleIdle reports a trusted idle title whichever step decided —
+// the watcher holds such an idle for less. An own menu stays Unknown.
+func ClassifyWith(r Rules, lines []string, s Signal) (st State, titleIdle bool) {
+	says := SignalState(r, s)
+	if says == Question || says == Working {
+		return says, false
+	}
+	titleIdle = says == Waiting && s.Trusted
+	st = Classify(r, lines)
+	if st == Unknown && titleIdle && !(len(lines) > 0 && anyMatch(r.Own, lines[len(lines)-1])) {
+		st = Waiting
+	}
+	return st, titleIdle
 }
 
 func anyMatch(res []*regexp.Regexp, text string) bool {

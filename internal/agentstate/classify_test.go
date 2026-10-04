@@ -380,3 +380,93 @@ func TestOwnMenuFooterOnlyOnTheLastLine(t *testing.T) {
 		t.Fatalf("the menu itself: %q", got)
 	}
 }
+
+func sig(title string) Signal { return Signal{Title: title, Progress: -1, Trusted: true} }
+
+// Captured live 2026-10-04 (Claude Code 2.1.289, Codex 0.160.0, Kimi 2.1.1).
+func TestSignalState(t *testing.T) {
+	t.Parallel()
+	claude, codex, kimi, junie := DefaultRules("claude"), DefaultRules("codex"), DefaultRules("kimi"), DefaultRules("junie")
+	cases := []struct {
+		name string
+		r    Rules
+		s    Signal
+		want State
+	}{
+		{"claude ◐", claude, sig("◐ Math and shell command sequence"), Working},
+		{"claude ◑", claude, sig("◑ Claude Code"), Working},
+		{"claude ◓ (2.1.228+ set)", claude, sig("◓ x"), Working},
+		{"claude braille (≤2.1.227)", claude, sig("⠂ Claude Code"), Working},
+		{"claude ✳", claude, sig("✳ Claude Code"), Waiting},
+		{"claude empty (exit)", claude, sig(""), Unknown},
+		{"claude plain", claude, sig("Claude Code"), Unknown},
+		{"codex spinner", codex, sig("⠋ Run sleep 5 command | repo"), Working},
+		{"codex spinner alone", codex, sig("⠹ repo"), Working},
+		{"codex idle", codex, sig("Run sleep 5 command | repo"), Waiting},
+		{"codex action required", codex, sig("Action Required | repo"), Question},
+		{"codex empty", codex, sig(""), Unknown},
+		{"kimi busy", kimi, Signal{Title: "Run the shell", Progress: 3}, Working},
+		{"kimi normal", kimi, Signal{Progress: 1}, Working},
+		{"kimi clear", kimi, Signal{Progress: 0}, Waiting},
+		{"kimi error", kimi, Signal{Progress: 2}, Unknown},
+		{"kimi none", kimi, Signal{Progress: -1}, Unknown},
+		{"junie title", junie, sig("◐ Junie"), Unknown},
+		{"claude ignores progress", claude, Signal{Progress: 3}, Unknown},
+	}
+	for _, c := range cases {
+		if got := SignalState(c.r, c.s); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestClassifyWith(t *testing.T) {
+	t.Parallel()
+	claude := DefaultRules("claude")
+	idleBox := Tail("done\n────────────────────\n❯ \n────────────────────\n", 15)
+	spinner := Tail("✻ Cogitating… (27s · ↓ 1.5k tokens)\n────────────────────\n❯ \n", 15)
+	dialog := Tail(" Do you want to create b.txt?\n ❯ 1. Yes\n   2. Yes, and switch\n   3. No\n Esc to cancel · Tab to amend\n", 15)
+	noise := Tail("just some text\nmid redraw\n", 15)
+	ownMenu := Tail(" ❯ 1. View tools\n Esc to back\n", 15)
+	cases := []struct {
+		name     string
+		lines    []string
+		s        Signal
+		want     State
+		wantIdle bool
+	}{
+		{"◐ over the idle box (between two steps)", idleBox, sig("◐ x"), Working, false},
+		{"◐ over noise", noise, sig("◐ x"), Working, false},
+		{"dialog under ✳", dialog, sig("✳ x"), Question, true},
+		{"✳ over the idle box", idleBox, sig("✳ x"), Waiting, true},
+		{"✳ over noise", noise, sig("✳ x"), Waiting, true},
+		{"static ✳ over a spinner", spinner, sig("✳ x"), Working, true},
+		{"✳ untrusted over noise", noise, Signal{Title: "✳ x", Progress: -1}, Unknown, false},
+		{"✳ untrusted over the idle box", idleBox, Signal{Title: "✳ x", Progress: -1}, Waiting, false},
+		{"own menu under ✳", ownMenu, sig("✳ x"), Unknown, true},
+		{"no signal", idleBox, Signal{Progress: -1}, Waiting, false},
+	}
+	for _, c := range cases {
+		st, idle := ClassifyWith(claude, c.lines, c.s)
+		if st != c.want || idle != c.wantIdle {
+			t.Errorf("%s: %q idle=%v, want %q idle=%v", c.name, st, idle, c.want, c.wantIdle)
+		}
+	}
+	codex := DefaultRules("codex")
+	if st, _ := ClassifyWith(codex, idleBox, sig("Action Required | repo")); st != Question {
+		t.Errorf("codex action required: %q", st)
+	}
+}
+
+// The screen-only form is ClassifyWith with no signal.
+func TestClassifyIsClassifyWithoutASignal(t *testing.T) {
+	t.Parallel()
+	r := DefaultRules("claude")
+	for _, text := range []string{"✻ Cogitating… (27s · ↓ 1.5k tokens)", "x\n────────────────────\n❯ ", " ❯ 1. Yes\n Esc to cancel", "noise"} {
+		lines := Tail(text, 15)
+		got, _ := ClassifyWith(r, lines, Signal{Progress: -1})
+		if want := Classify(r, lines); got != want {
+			t.Errorf("%q: %q vs %q", text, got, want)
+		}
+	}
+}
