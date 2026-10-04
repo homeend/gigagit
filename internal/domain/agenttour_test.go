@@ -2,10 +2,13 @@ package domain
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/homeend/gigagit/internal/agentsession"
 )
 
 func tourWorker(t *testing.T, brief string) (ov, worker string, sess *AgentSession) {
@@ -68,5 +71,34 @@ func TestAgentTourCutsALongBrief(t *testing.T) {
 	}
 	if body := strings.TrimSuffix(d.Text, tourCutLine); !strings.HasSuffix(body, "\n") {
 		t.Fatal("the cut must fall on a line end")
+	}
+}
+
+// A long label and a long worktree name still make a title the overview
+// store takes (one line, ≤ TourMaxTitle runes): both are cut in the middle,
+// the kind and the start time stay.
+func TestAgentTourTitleFitsTheCap(t *testing.T) {
+	tourWorker(t, "x") // installs the manager and the static states
+	dir := filepath.Join(t.TempDir(), strings.Repeat("wörktree-", 20))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Sessions().Start(agentsession.StartSpec{Label: strings.Repeat("Claude (yolo) ", 12) + "\nsecond line", Dir: dir, Cols: 40, Rows: 10, Argv: []string{"sh", "-c", "sleep 60"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := FullSessionID(s.Info().ID)
+	if _, err := AgentReportVerb(full, "done", true); err != nil {
+		t.Fatal(err)
+	}
+	d, err := AgentTour(full, "report")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := utf8.RuneCountInString(d.Title); n > TourMaxTitle || strings.Contains(d.Title, "\n") {
+		t.Fatalf("title %d runes: %q", n, d.Title)
+	}
+	if !strings.HasPrefix(d.Title, "Final report — Claude") || !strings.HasSuffix(d.Title, ")") || !strings.Contains(d.Title, " · wörktree-") || !strings.Contains(d.Title, "…") {
+		t.Fatalf("title = %q", d.Title)
 	}
 }

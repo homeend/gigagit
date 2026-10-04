@@ -41,8 +41,8 @@ type Session struct {
 	trace   *os.File                 // raw-output recording (StartSpec.TracePath); written by pumpOut only
 	traceEv *os.File                 // <trace>.events: "offset cols rows" at start and every resize (under ioMu)
 	traced  atomic.Int64             // bytes written to trace so far
-	lastOut atomic.Int64             // UnixNano of pumpOut's latest read
-	lastIn  atomic.Int64             // UnixNano of the latest input (SendKey/SendText/Paste)
+	lastOut stamp                    // pumpOut's latest read
+	lastIn  stamp                    // the latest input (SendKey/SendText/Paste)
 	osc     oscFilter                // pumpOut-only: keeps UTF-8 in OSC payloads away from x/ansi's C1 parsing
 	job     uintptr                  // Windows job object handle; 0 elsewhere
 }
@@ -145,7 +145,7 @@ func (s *Session) pumpOut() {
 				_, _ = s.trace.Write(buf[:n])
 				s.traced.Add(int64(n))
 			}
-			s.lastOut.Store(time.Now().UnixNano())
+			s.lastOut.mark()
 			s.withEmu(func() { _, _ = s.emu.Write(s.osc.filter(buf[:n])) })
 			s.feedTaps(buf[:n])
 			s.signal()
@@ -204,7 +204,7 @@ func (s *Session) wait() {
 	// never ends the stream on its own (xpty holds the pipe's write end until
 	// Close), and a grandchild holding a PTY open would keep it readable, so
 	// the drain ends once output goes quiet, and is bounded.
-	drainOutput(s.outDone, &s.lastOut, drainQuiet, 2*time.Second)
+	drainOutput(s.outDone, s.lastOut.get, drainQuiet, 2*time.Second)
 	s.mu.Lock()
 	s.info.State, s.info.ExitCode = Exited, code
 	s.mu.Unlock()
@@ -219,7 +219,7 @@ const drainQuiet = 150 * time.Millisecond
 
 // drainOutput returns at end-of-stream, once no output has arrived for quiet
 // (counted from the call at the earliest), or after bound.
-func drainOutput(eof <-chan struct{}, last *atomic.Int64, quiet, bound time.Duration) {
+func drainOutput(eof <-chan struct{}, last func() time.Time, quiet, bound time.Duration) {
 	began := time.Now()
 	deadline := time.NewTimer(bound)
 	defer deadline.Stop()
@@ -233,7 +233,7 @@ func drainOutput(eof <-chan struct{}, last *atomic.Int64, quiet, bound time.Dura
 			return
 		case now := <-tick.C:
 			since := began
-			if t := time.Unix(0, last.Load()); t.After(since) {
+			if t := last(); t.After(since) {
 				since = t
 			}
 			if now.Sub(since) >= quiet {
@@ -285,23 +285,30 @@ func (s *Session) Info() Info { s.mu.Lock(); defer s.mu.Unlock(); return s.info 
 
 // LastOutput is when the child last printed anything; the zero time before
 // its first chunk. The stall clock of the session-state watcher.
-func (s *Session) LastOutput() time.Time {
-	n := s.lastOut.Load()
-	if n == 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, n)
-}
+func (s *Session) LastOutput() time.Time { return s.lastOut.get() }
 
 // LastInput is when anyone last typed into the child (SendKey, SendText,
 // Paste — a parent's agent_send and a human's console alike); the zero
 // time before the first input. Touch is not input.
-func (s *Session) LastInput() time.Time {
-	n := s.lastIn.Load()
+func (s *Session) LastInput() time.Time { return s.lastIn.get() }
+
+// stamp is an atomic point in time that keeps the monotonic clock reading
+// (time.Unix(0, n) would drop it): readers compare it with times taken by
+// time.Now, and a wall-clock step must not reorder them. It holds the
+// nanoseconds since the package's base, plus one — zero means never.
+type stamp struct{ n atomic.Int64 }
+
+// stampBase: one monotonic origin for every stamp of the process.
+var stampBase = time.Now()
+
+func (t *stamp) mark() { t.n.Store(int64(time.Since(stampBase)) + 1) }
+
+func (t *stamp) get() time.Time {
+	n := t.n.Load()
 	if n == 0 {
 		return time.Time{}
 	}
-	return time.Unix(0, n)
+	return stampBase.Add(time.Duration(n - 1))
 }
 
 // Done is closed once the exit has been recorded.

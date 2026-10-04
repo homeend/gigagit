@@ -14,7 +14,7 @@ func TestDrainEndsWhenOutputGoesQuiet(t *testing.T) {
 	var last atomic.Int64
 	last.Store(time.Now().UnixNano())
 	began := time.Now()
-	drainOutput(make(chan struct{}), &last, 100*time.Millisecond, 2*time.Second)
+	drainOutput(make(chan struct{}), func() time.Time { return time.Unix(0, last.Load()) }, 100*time.Millisecond, 2*time.Second)
 	if d := time.Since(began); d < 100*time.Millisecond || d > time.Second {
 		t.Fatalf("drain took %v, want about the 100ms quiet window", d)
 	}
@@ -37,7 +37,7 @@ func TestDrainWaitsWhileOutputFlows(t *testing.T) {
 	}()
 	time.AfterFunc(400*time.Millisecond, func() { close(stop) })
 	began := time.Now()
-	drainOutput(make(chan struct{}), &last, 100*time.Millisecond, 2*time.Second)
+	drainOutput(make(chan struct{}), func() time.Time { return time.Unix(0, last.Load()) }, 100*time.Millisecond, 2*time.Second)
 	if d := time.Since(began); d < 400*time.Millisecond || d > 1500*time.Millisecond {
 		t.Fatalf("drain took %v, want the output burst plus the quiet window", d)
 	}
@@ -50,7 +50,7 @@ func TestDrainEndsAtEOF(t *testing.T) {
 	done := make(chan struct{})
 	close(done)
 	began := time.Now()
-	drainOutput(done, &last, time.Second, 2*time.Second)
+	drainOutput(done, func() time.Time { return time.Unix(0, last.Load()) }, time.Second, 2*time.Second)
 	if d := time.Since(began); d > 50*time.Millisecond {
 		t.Fatalf("drain took %v after end-of-stream", d)
 	}
@@ -73,7 +73,7 @@ func TestDrainIsBounded(t *testing.T) {
 		}
 	}()
 	began := time.Now()
-	drainOutput(make(chan struct{}), &last, 100*time.Millisecond, 300*time.Millisecond)
+	drainOutput(make(chan struct{}), func() time.Time { return time.Unix(0, last.Load()) }, 100*time.Millisecond, 300*time.Millisecond)
 	if d := time.Since(began); d > 800*time.Millisecond {
 		t.Fatalf("drain took %v, past its 300ms bound", d)
 	}

@@ -55,8 +55,11 @@ type ActivityNotice struct {
 	Kind  string        // "question" | "idle" | "stalled" | "report"
 	Label string        // the session's label
 	Dir   string        // its worktree
-	Quiet time.Duration // stalled: how long nothing was printed
-	Text  string        // report: its first line
+	Quiet time.Duration // stalled: how long nothing was printed (or, Spinning, nothing but the spinner moved)
+	// Spinning: the stall is a spinner that kept ticking with no progress
+	// (a hung API call), not silence.
+	Spinning bool
+	Text     string // report: its first line
 }
 
 // Timing rules. Variables so tests (UseStateTiming) can shrink them.
@@ -66,6 +69,10 @@ var (
 	stateGrace = 30 * time.Second
 	// stallAfter: no output for this long while working is a stall.
 	stallAfter = 120 * time.Second
+	// spinStallAfter: only the spinner moving (glyph, timer) this long while
+	// working is a stall too — a hung API call keeps the timer ticking. Long:
+	// a think shows nothing else either (live capture 2026-10-04).
+	spinStallAfter = 10 * time.Minute
 	// stateTick serves the stall clock; output wakes the watcher itself.
 	stateTick = 2 * time.Second
 	// stateCoalesce: a burst of output is classified once it settles.
@@ -178,6 +185,11 @@ func (s *ruleStore) keep(live map[SessionID]bool) {
 	s.mu.Unlock()
 }
 
+type progressMark struct {
+	key   string
+	since time.Time
+}
+
 // StateWatcher classifies the running agent sessions of one manager.
 type StateWatcher struct {
 	src   stateSource
@@ -187,6 +199,12 @@ type StateWatcher struct {
 	mu       sync.Mutex
 	states   map[SessionID]SessionActivity
 	pendingQ map[SessionID]bool // a question seen inside the grace, not yet announced
+	// pendingIdle: when a working session's screen first read idle; it
+	// shows as idle only once that has held idleSettle (the flicker guard).
+	pendingIdle map[SessionID]time.Time
+	// progress: each session's tail without its spinner (agentstate.Progress)
+	// and since when it has read so.
+	progress map[SessionID]progressMark
 	notices  []ActivityNotice
 	seq      uint64
 
@@ -196,7 +214,8 @@ type StateWatcher struct {
 
 func newStateWatcher(src stateSource, rules *ruleStore) *StateWatcher {
 	return &StateWatcher{src: src, rules: rules, states: map[SessionID]SessionActivity{},
-		pendingQ: map[SessionID]bool{}, stop: make(chan struct{})}
+		pendingQ: map[SessionID]bool{}, pendingIdle: map[SessionID]time.Time{},
+		progress: map[SessionID]progressMark{}, stop: make(chan struct{})}
 }
 
 // NewStaticStates is a watcher that watches nothing and serves the given
@@ -256,6 +275,10 @@ func (w *StateWatcher) PostNotice(n ActivityNotice) {
 	w.bc.Signal()
 }
 
+// Wake wakes the subscribers without a notice (a report whose notice the
+// gap held back: rows and tours read the level).
+func (w *StateWatcher) Wake() { w.bc.Signal() }
+
 // post numbers and stores n. Caller holds w.mu.
 func (w *StateWatcher) post(n ActivityNotice) {
 	w.seq++
@@ -282,19 +305,30 @@ func (w *StateWatcher) rulesFor(info agentsession.Info) (r agentstate.Rules, ded
 // observe classifies every running session once and folds the result into
 // the states, posting the notices the transitions call for. An unknown
 // screen changes nothing: output lands mid-redraw often enough that acting
-// on it would flap.
-func (w *StateWatcher) observe(now time.Time) {
+// on it would flap. A working session that reads idle shows idle only once
+// that has held idleSettle — Claude Code drops its spinner between two steps
+// of one turn — and then from when it began; observe returns how soon a
+// pending idle wants looking at again (0: none pending).
+func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 	if w.src == nil {
-		return
+		return 0
 	}
 	statesMu.Lock()
-	grace, stall := stateGrace, stallAfter
+	grace, stall, spinStall, settle := stateGrace, stallAfter, spinStallAfter, idleSettle
 	statesMu.Unlock()
-	infos := w.src.List()
+	// The screens are read and classified before taking w.mu: each read
+	// takes its session's emulator lock, and Get must not wait on that.
+	type reading struct {
+		info      agentsession.Info
+		dedicated bool
+		text      string
+		lines     []string
+		st        agentstate.State
+		last      time.Time
+	}
+	var reads []reading
 	live := map[SessionID]bool{}
-	changed := false
-	w.mu.Lock()
-	for _, info := range infos {
+	for _, info := range w.src.List() {
 		if info.State != agentsession.Running {
 			continue
 		}
@@ -308,7 +342,13 @@ func (w *StateWatcher) observe(now time.Time) {
 			continue
 		}
 		lines := agentstate.Tail(text, stateTailLines)
-		st := agentstate.Classify(rules, lines)
+		reads = append(reads, reading{info: info, dedicated: dedicated, text: text, lines: lines,
+			st: agentstate.Classify(rules, lines), last: w.src.LastOutput(info.ID)})
+	}
+	changed := false
+	w.mu.Lock()
+	for _, rd := range reads {
+		info, dedicated, text, lines, st := rd.info, rd.dedicated, rd.text, rd.lines, rd.st
 		prev := w.states[info.ID]
 		next := prev
 		switch st {
@@ -318,41 +358,69 @@ func (w *StateWatcher) observe(now time.Time) {
 		default:
 			next.Options = nil
 		}
-		note := func(kind string, quiet time.Duration) {
-			w.post(ActivityNotice{ID: info.ID, Kind: kind, Label: info.Label, Dir: info.Dir, Quiet: quiet})
+		note := func(kind string, quiet time.Duration, spinning bool) {
+			w.post(ActivityNotice{ID: info.ID, Kind: kind, Label: info.Label, Dir: info.Dir, Quiet: quiet, Spinning: spinning})
 			changed = true
 		}
 		trusted := now.Sub(info.Started) >= grace
+		since := now
+		switch {
+		case st == agentstate.Waiting && prev.State == agentstate.Working:
+			first, ok := w.pendingIdle[info.ID]
+			if !ok {
+				first, w.pendingIdle[info.ID] = now, now
+			}
+			if held := now.Sub(first); held < settle {
+				st = agentstate.Unknown // not yet: the session stays working
+				if left := settle - held; recheck == 0 || left < recheck {
+					recheck = left
+				}
+			} else {
+				delete(w.pendingIdle, info.ID)
+				since = first
+			}
+		case st != agentstate.Unknown:
+			delete(w.pendingIdle, info.ID) // working again, or a question
+		}
 		if st != agentstate.Unknown && st != prev.State {
-			next.State, next.Since = st, now
+			next.State, next.Since = st, since
 			changed = true
 			switch {
 			case st == agentstate.Question && trusted:
-				note("question", 0)
+				note("question", 0, false)
 			case st == agentstate.Question:
 				w.pendingQ[info.ID] = true
-			case st == agentstate.Waiting && prev.State == agentstate.Working && trusted:
-				note("idle", 0)
+			case st == agentstate.Waiting && prev.State == agentstate.Working && since.Sub(info.Started) >= grace:
+				note("idle", 0, false)
 			}
 		} else if w.pendingQ[info.ID] && trusted {
 			// The question that opened inside the grace is still up: the
 			// user must hear about it (a trust dialog at start).
 			delete(w.pendingQ, info.ID)
 			if next.State == agentstate.Question {
-				note("question", 0)
+				note("question", 0, false)
 			}
 		}
 		if next.State != agentstate.Question {
 			delete(w.pendingQ, info.ID)
 		}
 		next.StepFor = agentstate.StepDuration(lines)
-		last := w.src.LastOutput(info.ID)
+		last := rd.last
 		stalled := !last.IsZero() && now.Sub(last) > stall &&
 			(next.State == agentstate.Working || (next.State == agentstate.Unknown && dedicated))
+		quiet, spinning := now.Sub(last), false
+		pm := w.progress[info.ID]
+		if key := agentstate.Progress(lines); key != pm.key || pm.since.IsZero() {
+			pm = progressMark{key: key, since: now}
+			w.progress[info.ID] = pm
+		}
+		if !stalled && next.State == agentstate.Working && now.Sub(pm.since) >= spinStall {
+			stalled, quiet, spinning = true, now.Sub(pm.since), true
+		}
 		if stalled != prev.Stalled {
 			changed = true
 			if stalled {
-				note("stalled", now.Sub(last))
+				note("stalled", quiet, spinning)
 			}
 		}
 		next.Stalled = stalled
@@ -365,6 +433,8 @@ func (w *StateWatcher) observe(now time.Time) {
 		if !live[id] {
 			delete(w.states, id)
 			delete(w.pendingQ, id)
+			delete(w.pendingIdle, id)
+			delete(w.progress, id)
 			changed = true
 		}
 	}
@@ -373,6 +443,7 @@ func (w *StateWatcher) observe(now time.Time) {
 	if changed {
 		w.bc.Signal()
 	}
+	return recheck
 }
 
 // run watches m until close: the manager's signal re-syncs the per-session
@@ -430,27 +501,38 @@ func (w *StateWatcher) run(m *agentsession.Manager) {
 			}
 		}
 	}
+	// promote: a pending idle comes due (an idle agent prints nothing that
+	// would wake the loop sooner than the tick).
+	var settle, promote <-chan time.Time
+	observe := func() {
+		if d := w.observe(time.Now()); d > 0 {
+			promote = time.After(d)
+		} else {
+			promote = nil
+		}
+	}
 	resync()
-	w.observe(time.Now())
+	observe()
 	tick := time.NewTicker(stateTick)
 	defer tick.Stop()
-	var settle <-chan time.Time
 	for {
 		select {
 		case <-w.stop:
 			return
 		case <-mch:
 			resync()
-			w.observe(time.Now())
+			observe()
 		case <-dirty:
 			if settle == nil {
 				settle = time.After(stateCoalesce)
 			}
 		case <-settle:
 			settle = nil
-			w.observe(time.Now())
+			observe()
+		case <-promote:
+			observe()
 		case <-tick.C:
-			w.observe(time.Now())
+			observe()
 		}
 	}
 }
@@ -494,6 +576,18 @@ func SessionActivityOf(id SessionID) (SessionActivity, bool) {
 		return SessionActivity{}, false
 	}
 	return w.Get(id)
+}
+
+// SessionNoticeSeq is the running watcher's newest notice number, 0 when
+// none runs; it never starts one. A frontend that starts now reads after it.
+func SessionNoticeSeq() uint64 {
+	statesMu.Lock()
+	w := statesW
+	statesMu.Unlock()
+	if w == nil {
+		return 0
+	}
+	return w.NoticeSeq()
 }
 
 // UseSessionStates installs w as the process-global watcher (tests) and
@@ -557,6 +651,7 @@ func SessionRules(tc config.ToolCommand) (r agentstate.Rules, custom bool, err e
 		if len(tc.ScreenQuestion) == 0 {
 			r.Question = def.Question
 		}
+		r.Own = def.Own // the agent's own menus have no config list
 	}
 	return r, true, nil
 }

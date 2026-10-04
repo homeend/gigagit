@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/charmbracelet/lipgloss"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -199,17 +200,44 @@ func (m Model) waitSessionsCmd() tea.Cmd {
 
 // consoleTitle is the box title: label · worktree · state.
 func consoleTitle(info domain.SessionInfo, focused bool) string {
-	state := i18n.T("running %s", formatElapsed(time.Since(info.Started)))
+	label, wt, state := consoleTitleParts(info)
+	t := label + " · " + wt + " · " + state
+	if !focused {
+		t += consoleTitleHints()
+	}
+	return t
+}
+
+func consoleTitleHints() string {
+	return "  " + i18n.T("[enter] type  [ctrl+t] maximise  [esc] close")
+}
+
+// consoleTitleParts: the label, the worktree's short name and the state (the
+// running age or exit, then the activity).
+func consoleTitleParts(info domain.SessionInfo) (label, wt, state string) {
+	state = i18n.T("running %s", formatElapsed(time.Since(info.Started)))
 	if info.State == domain.SessionExited {
 		state = i18n.T("exited (%d)", info.ExitCode)
 	} else if act := sessionActivityText(info.ID); act != "" {
 		state += " · " + act
 	}
-	t := info.Label + " · " + shortWorktreeName(info.Dir) + " · " + state
-	if !focused {
-		t += "  " + i18n.T("[enter] type  [ctrl+t] maximise  [esc] close")
+	return info.Label, shortWorktreeName(info.Dir), state
+}
+
+// consoleTitleFit is the title in w columns, keeping what it is for — the
+// label and the state with its activity: the key hints go first, then the
+// worktree name is cut in the middle, then dropped; only then is the end cut.
+func consoleTitleFit(info domain.SessionInfo, focused bool, w int) string {
+	if t := consoleTitle(info, focused); lipgloss.Width(t) <= w {
+		return t
 	}
-	return t
+	label, wt, state := consoleTitleParts(info)
+	if room := w - lipgloss.Width(label+" ·  · "+state); room >= lipgloss.Width(wt) {
+		return label + " · " + wt + " · " + state
+	} else if room >= 4 {
+		return label + " · " + elideNameMiddle(wt, room) + " · " + state
+	}
+	return truncate(label+" · "+state, w)
 }
 
 // renderConsole draws the console box. The emulator lines are ANSI strings
@@ -224,7 +252,7 @@ func (m Model) renderConsole(boxW, boxH int) string {
 		lines = []string{padRight(i18n.T("(agent session gone)"), innerW)}
 	} else {
 		info := sess.Info()
-		lines = append(lines, padRight(truncate(consoleTitle(info, m.console.focused), innerW), innerW))
+		lines = append(lines, padRight(consoleTitleFit(info, m.console.focused, innerW), innerW))
 		var sc domain.SessionScreen
 		if m.console.focused && info.State == domain.SessionRunning {
 			sc = sess.ScreenWithCursor()

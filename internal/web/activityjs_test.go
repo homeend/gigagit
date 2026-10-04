@@ -47,11 +47,12 @@ r.push(activityLabel({ state: "running", agent_state: "working", since, report_a
 r.push(activityLabel({ state: "running", agent_state: "question", since, report_at: new Date(now - 30000).toISOString() }, now));
 r.push([{ report_at: "x" }, { report_at: "x", agent_state: "question" }].map((s) => activityAttn(s)).join(","));
 r.push(noticeText({ kind: "report", label: "claude", worktree: "/a/wt", text: "merged feat/x" }));
+r.push(noticeText({ kind: "stalled", label: "claude", worktree: "/a/wt", quiet_s: 600, spinning: true }));
 console.log(r.join("|"));
 `)
 	want := `working 7m|idle 7m|needs input|stalled · working 7m|stalled · no output|true|true|true,true,false,false|` +
 		`claude in wt needs your input|claude in wt2 finished its turn — idle|codex in wt has printed nothing for 2m — stalled?` +
-		`|done 2m|reported 30s|needs input|true,true|claude in wt reports: merged feat/x`
+		`|done 2m|reported 30s|needs input|true,true|claude in wt reports: merged feat/x|claude in wt has shown only its spinner for 10m — stalled?`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}

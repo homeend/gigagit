@@ -18,12 +18,17 @@ const (
 )
 
 // Rules are the per-agent patterns. Checks are ordered Working →
-// Waiting → Question so that a phrase quoted in scrollback can never
+// Waiting → Own → Question so that a phrase quoted in scrollback can never
 // outrank the prompt box that is still on screen. Patterns run in
 // multi-line mode over the joined tail lines, so ^ and $ bound a line and
 // "\n" lets a rule span two adjacent lines (e.g. rule-line + prompt).
+//
+// Own are the agent's OWN menus (a settings or server menu the user opened),
+// matched against the LAST tail line (their footer): they read as Unknown, so the session keeps the state it had — idle stays
+// idle, and a dialog's sub-step keeps its question. Built-in only.
 type Rules struct {
 	Working, Waiting, Question []*regexp.Regexp
+	Own                        []*regexp.Regexp
 }
 
 // defaults: [working, waiting, question] pattern lists per gg agent id
@@ -44,7 +49,7 @@ var defaults = map[string][3][]string{
 		// resolution ─", Claude Code seen 2026-10-03), so the rule only has
 		// to LEAD its line.
 		{`^─{8,}[^\n]*\n❯`},
-		{`^❯ \d+\.`, `Esc to cancel`, `Esc to go back`, `\(y/n\)`, `\[Y/n\]`, `Do you want to proceed`},
+		{`^❯ \d+\.`, `Esc to cancel`, `\(y/n\)`, `\[Y/n\]`, `Do you want to proceed`},
 	},
 	"codex": {
 		{`Working \(\d+`, `(?i)esc to interrupt`},
@@ -91,6 +96,14 @@ var defaults = map[string][3][]string{
 	},
 }
 
+// ownMenus: the footers of an agent's own menus, per gg agent id. Claude
+// Code's (2.1.289, captured live 2026-10-04): a server menu "Esc to back",
+// the login screens "Press Esc to go back", /config "Esc to close" / "Esc to
+// clear". Its permission dialogs say "Esc to cancel" — a question.
+var ownMenus = map[string][]string{
+	"claude": {`Esc to (?:go )?back\b`, `Esc to close\b`, `Esc to clear\b`},
+}
+
 // DefaultRules returns the built-in rules for an agent id, or the generic
 // set for ids gg has no verified rules for.
 func DefaultRules(agentID string) Rules {
@@ -101,6 +114,9 @@ func DefaultRules(agentID string) Rules {
 	r, err := Compile(d[0], d[1], d[2])
 	if err != nil {
 		panic(err) // built-ins are constants; a bad one is a programming error
+	}
+	if r.Own, err = compileAll(ownMenus[agentID]); err != nil {
+		panic(err)
 	}
 	return r
 }
@@ -156,6 +172,11 @@ func Classify(r Rules, lines []string) State {
 		return Working
 	case anyMatch(r.Waiting, text):
 		return Waiting
+	case len(lines) > 0 && anyMatch(r.Own, lines[len(lines)-1]):
+		// Only the last line: a menu's footer sits there, and the same
+		// words quoted higher up (a diff the agent asks to apply) must
+		// not hide the dialog below them.
+		return Unknown
 	case anyMatch(r.Question, text):
 		return Question
 	}
@@ -194,6 +215,25 @@ func StepDuration(lines []string) time.Duration {
 		return d
 	}
 	return 0
+}
+
+// spinnerGlyphRe: a spinner frame leading a line — Claude Code's glyphs,
+// braille (junie, antigravity) and kimi's moon phases.
+var spinnerGlyphRe = regexp.MustCompile(`^(?:[·✢✳✶✻✽*]|[⠀-⣿]|[🌑🌒🌓🌔🌕🌖🌗🌘]) `)
+
+// timerRe: an elapsed-time counter ("5s", "7m 12s", "1h 2m 3s").
+var timerRe = regexp.MustCompile(`\b(?:\d+h )?(?:\d+m )?\d+s\b`)
+
+// Progress is the tail without what moves while nothing happens — a leading
+// spinner glyph and the elapsed-time counters — so two screens with the same
+// Progress show no progress between them. Everything else counts, a token
+// counter included.
+func Progress(lines []string) string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = timerRe.ReplaceAllString(spinnerGlyphRe.ReplaceAllString(l, ""), "")
+	}
+	return strings.Join(out, "\n")
 }
 
 // HasDefaults reports whether gg ships dedicated rules for this agent id

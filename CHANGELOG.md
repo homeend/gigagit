@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent sessions — states, wait/report and tours polished
+
+### Changed
+
+- **Idle shows once it holds.** A working agent reads idle — on its row,
+  console title and in the "finished its turn" notice — only after idle
+  has held 2 s, dated from when it began: Claude Code's pause between two
+  steps of one turn no longer flips the row and posts a notice.
+- **Stalled also when only the spinner moves.** A session whose screen
+  showed nothing but its spinner (glyph and timer) for 10 minutes while
+  working is stalled — a hung model call keeps the timer ticking. The
+  notice says "has shown only its spinner for 10m — stalled?". Ten, not
+  two: a long think looks the same on Claude's screen.
+- **Claude's own menus keep the state.** An MCP server's menu, /config or
+  a login screen opened inside Claude Code no longer reads as needs input;
+  the row keeps what it had. Permission dialogs still do.
+- `gg agent list` prints aligned columns (`-` for an empty cell).
+- `gg agent report`: flags count only before the text (`--` ends them), so
+  "fixed the --final flag" stays prose; `-F` reads at most 64 KiB.
+  `gg agent wait` takes `-until=x` / `-timeout=x` and refuses a timeout
+  outside 1 … 600; `agent_wait` refuses `timeout_s` 0 or below (left out it
+  is still 45 s).
+- A worker's report notices go out at most once every 5 s (a final report
+  always); every report is still stored and delivered.
+- **delegate skill** (from a first real run): `agent_wait` stays at 90 s at
+  most (Claude Code moves a 2-minute tool call to the background, where the
+  orphaned wait takes the next event); a recipe for tasks ABOUT an existing
+  worktree ("describe / review the changes in X") — the worker works in
+  it, the overseer only finds the range; a short hand-over when the report
+  is the deliverable. The worker's kickoff names the skill's "Worker
+  protocol" section.
+
+### Fixed
+
+- A narrow console title keeps the label and the state: the key hints go
+  first, then the worktree name.
+- A start in a worktree that needs repair keeps the warning about invalid
+  `screen_*` rules; a template upgrade's review shows the `screen_*` lists
+  the upgrade keeps.
+- A second TUI model in one process no longer replays old notices; the
+  state watcher no longer holds its lock while reading screens; the
+  activity clocks survive a wall-clock step.
+- Tours: tours the TUI files strike through anchors whose file is missing;
+  one refused at the 20-overview cap comes back once there is room; two
+  filings at once no longer leave a stray overview; a long label or
+  worktree name no longer stops a brief or report from being filed; a
+  refused switch never hands its tour to an earlier one; the web opens a
+  switch's tour after a `gg open --web` landing.
+
 ## /delegate — a skill for handing work to worker agents
 
 ### Added

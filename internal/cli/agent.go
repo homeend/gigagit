@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/homeend/gigagit/internal/agentlink"
@@ -154,31 +155,46 @@ func agentList(ctx context.Context, c *agentlink.Client, args []string, stdout, 
 		fmt.Fprintln(stdout, string(data))
 		return 0
 	}
-	for _, a := range out.Agents {
-		line := a.ID + "  " + a.State
-		if a.Activity != "" {
-			line += "  " + a.Activity
+	printAgentList(stdout, out.Agents)
+	return 0
+}
+
+// printAgentList prints one line per session, in columns: id, state,
+// activity, stalled, report, tool, worktree, then "parent <id>" and "mine"
+// when they apply. An absent cell is "-", so the columns always line up.
+func printAgentList(stdout io.Writer, agents []domain.AgentEntry) {
+	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	dash := func(s string) string {
+		if s == "" {
+			return "-"
 		}
+		return s
+	}
+	for _, a := range agents {
+		stalled, report := "", ""
 		if a.Stalled {
-			line += "  stalled"
+			stalled = "stalled"
 		}
 		if !a.ReportAt.IsZero() {
+			report = "reported"
 			if a.ReportFinal {
-				line += "  done"
-			} else {
-				line += "  reported"
+				report = "done"
 			}
 		}
-		line += "  " + a.Tool + "  " + a.Worktree
+		var tail []string
 		if a.Parent != "" {
-			line += "  parent " + a.Parent
+			tail = append(tail, "parent "+a.Parent)
 		}
 		if a.Mine {
-			line += "  mine"
+			tail = append(tail, "mine")
 		}
-		fmt.Fprintln(stdout, line)
+		line := strings.Join([]string{a.ID, a.State, dash(a.Activity), dash(stalled), dash(report), a.Tool, a.Worktree}, "\t")
+		if len(tail) > 0 {
+			line += "\t" + strings.Join(tail, "  ")
+		}
+		fmt.Fprintln(tw, line)
 	}
-	return 0
+	tw.Flush()
 }
 
 // agentListOutside prints the live TUIs from their registry files: no
@@ -258,34 +274,26 @@ func agentOneID(ctx context.Context, c *agentlink.Client, verb string, args []st
 // a refusal or usage.
 func agentWait(c *agentlink.Client, args []string, stdout, stderr io.Writer) int {
 	const usage = "usage: gg agent wait [<id>] [--until idle|question|exit|report|any] [--timeout <seconds>]"
-	id, until, timeout := "", "", 0
-	value := func(i *int) (string, bool) {
-		if *i+1 >= len(args) {
-			return "", false
-		}
-		*i++
-		return args[*i], true
-	}
+	id, until, timeout := "", "", 0 // timeout 0: none given (the host's default)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
-		case a == "--until" || a == "-until":
-			v, ok := value(&i)
+		case flagIs(a, "until"):
+			v, ok := flagValue(a, args, &i)
 			if !ok {
 				fmt.Fprintln(stderr, usage)
 				return 2
 			}
 			until = v
-		case strings.HasPrefix(a, "--until="):
-			until = strings.TrimPrefix(a, "--until=")
-		case a == "--timeout" || a == "-timeout" || strings.HasPrefix(a, "--timeout="):
-			v, ok := strings.TrimPrefix(a, "--timeout="), true
-			if !strings.HasPrefix(a, "--timeout=") {
-				v, ok = value(&i)
-			}
+		case flagIs(a, "timeout"):
+			v, ok := flagValue(a, args, &i)
 			n, err := strconv.Atoi(v)
 			if !ok || err != nil {
 				fmt.Fprintln(stderr, usage)
+				return 2
+			}
+			if n < 1 || n > int(domain.WaitMaxTimeout.Seconds()) {
+				fmt.Fprintln(stderr, "gg agent wait: --timeout is 1 … "+strconv.Itoa(int(domain.WaitMaxTimeout.Seconds()))+" seconds")
 				return 2
 			}
 			timeout = n
@@ -310,7 +318,10 @@ func agentWait(c *agentlink.Client, args []string, stdout, stderr io.Writer) int
 	defer stop()
 	ctx, cancel := context.WithTimeout(sigCtx, slack)
 	defer cancel()
-	in := map[string]any{"id": id, "until": until, "timeout_s": timeout}
+	in := map[string]any{"id": id, "until": until}
+	if timeout > 0 {
+		in["timeout_s"] = timeout // left out, the host waits its default
+	}
 	var out domain.AgentWaitResult
 	if code := call(ctx, c, "wait", "agent_wait", in, &out, stderr); code != 0 {
 		return code
@@ -365,12 +376,38 @@ func reportLines(r domain.AgentReport) string {
 }
 
 // agentReport: gg agent report [--final] (<text>… | -F <file> | -F -)
+// flagIs: a is the named flag, with one dash or two, alone or "=value".
+func flagIs(a, name string) bool {
+	a = strings.TrimPrefix(strings.TrimPrefix(a, "-"), "-")
+	return a == name || strings.HasPrefix(a, name+"=")
+}
+
+// flagValue: the value of the flag at args[*i] — after its "=", or the next
+// argument (consumed).
+func flagValue(a string, args []string, i *int) (string, bool) {
+	if _, v, ok := strings.Cut(a, "="); ok {
+		return v, true
+	}
+	if *i+1 >= len(args) {
+		return "", false
+	}
+	*i++
+	return args[*i], true
+}
+
 func agentReport(ctx context.Context, c *agentlink.Client, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	const usage = "usage: gg agent report [--final] (<text>… | -F <file> | -F -)"
+	const usage = "usage: gg agent report [--final] [--] (<text>… | -F <file> | -F -)"
 	final, file := false, ""
 	var words []string
-	for i := 0; i < len(args); i++ {
+	// Flags come before the text: a "--final" or "-F" inside the prose is
+	// a word of it, and "--" ends the flags outright.
+	i := 0
+flags:
+	for ; i < len(args); i++ {
 		switch a := args[i]; {
+		case a == "--":
+			i++
+			break flags
 		case a == "--final" || a == "-final":
 			final = true
 		case a == "-F" || a == "--file":
@@ -381,25 +418,35 @@ func agentReport(ctx context.Context, c *agentlink.Client, args []string, stdin 
 			i++
 			file = args[i]
 		default:
-			words = append(words, a)
+			break flags
 		}
 	}
+	words = args[i:]
 	text := strings.Join(words, " ")
 	if file != "" {
 		if text != "" {
 			fmt.Fprintln(stderr, usage)
 			return 2
 		}
-		var b []byte
-		var err error
-		if file == "-" {
-			b, err = io.ReadAll(stdin)
-		} else {
-			b, err = os.ReadFile(file)
+		var r io.Reader = stdin
+		if file != "-" {
+			f, err := os.Open(file)
+			if err != nil {
+				fmt.Fprintln(stderr, "agent report:", err)
+				return 1
+			}
+			defer f.Close()
+			r = f
 		}
+		// Read one byte past the cap: no more is needed to refuse.
+		b, err := io.ReadAll(io.LimitReader(r, domain.MaxReportBytes+1))
 		if err != nil {
 			fmt.Fprintln(stderr, "agent report:", err)
 			return 1
+		}
+		if len(b) > domain.MaxReportBytes {
+			fmt.Fprintf(stderr, "agent report: the report is larger than %d bytes\n", domain.MaxReportBytes)
+			return 2
 		}
 		text = string(b)
 	}

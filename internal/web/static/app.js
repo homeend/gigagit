@@ -111,7 +111,7 @@ async function boot() {
   // show-once preview otherwise), the same previews-seen clause the TUI's
   // startAtReady gate has. Nothing above waits on this.
   await Promise.allSettled(firstLoad);
-  applyStartAt().catch(() => {});
+  await applyStartAt().catch(() => {}); // settled first: the pending tour below must end on top
   openPendingTour(); // a worker's tour a switch was made for (stage 4)
 }
 

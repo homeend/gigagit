@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/homeend/gigagit/internal/config"
 	"strings"
 	"testing"
 	"time"
@@ -94,6 +96,11 @@ func TestSessionActivityNotices(t *testing.T) {
 	m, _ = m.onSessionActivity()
 	if m.statusMsg != "Codex in b has printed nothing for 2m05s — stalled?" {
 		t.Fatalf("newest = %q", m.statusMsg)
+	}
+	w.PostNotice(domain.ActivityNotice{ID: "s2", Kind: "stalled", Label: "Claude", Dir: "/wt/b", Quiet: 10 * time.Minute, Spinning: true})
+	m, _ = m.onSessionActivity()
+	if m.statusMsg != "Claude in b has shown only its spinner for 10m00s — stalled?" {
+		t.Fatalf("spinning = %q", m.statusMsg)
 	}
 	// The user is typing into s1: its notices say nothing.
 	m.statusMsg = ""
@@ -200,5 +207,56 @@ func TestActivityNoticeTextReport(t *testing.T) {
 	n := domain.ActivityNotice{Kind: "report", Label: "claude", Dir: "/a/b/wt", Text: "merged feat/x"}
 	if got := activityNoticeText(n); got != "claude in wt reports: merged feat/x" {
 		t.Fatalf("%q", got)
+	}
+}
+
+// A model built while the watcher already holds notices starts reading after
+// them: a second tui.New in one process never replays old notices.
+func TestNewStartsAfterTheNoticesAlreadyPosted(t *testing.T) {
+	w := domain.NewStaticStates(nil)
+	defer domain.UseSessionStates(w)()
+	w.PostNotice(domain.ActivityNotice{ID: "s1", Kind: "question", Label: "Claude", Dir: "/wt/feat-a"})
+	repo, _ := newRepoDir(t)
+	m := New(domain.Open(repo))
+	m, _ = m.onSessionActivity()
+	if m.statusMsg != "" {
+		t.Fatalf("an old notice was replayed: %q", m.statusMsg)
+	}
+}
+
+// A start's status line keeps both notes: the worktree's (git fails there
+// until repaired) and the command's invalid screen rules.
+func TestStartNoteKeepsBothNotes(t *testing.T) {
+	bad := config.ToolCommand{Category: "session", Name: "Claude", Command: "claude", ScreenQuestion: []string{`(`}}
+	got := startNote("started in /x — git there fails", bad)
+	if !strings.Contains(got, "git there fails") || !strings.Contains(got, "screen rules of Claude") {
+		t.Fatalf("note = %q", got)
+	}
+	if got := startNote("", bad); !strings.HasPrefix(got, "screen rules of Claude") {
+		t.Fatalf("rules only = %q", got)
+	}
+	if got := startNote("place", config.ToolCommand{Name: "Claude", Command: "claude"}); got != "place" {
+		t.Fatalf("place only = %q", got)
+	}
+}
+
+// A narrow console keeps what the title is for — the label and the state
+// with its activity: the key hints go first, then the worktree name is cut
+// in the middle.
+func TestConsoleTitleFitKeepsTheState(t *testing.T) {
+	defer domain.UseSessionStates(domain.NewStaticStates(map[domain.SessionID]domain.SessionActivity{
+		"s1": {State: domain.ActivityQuestion, Since: time.Now()},
+	}))()
+	info := domain.SessionInfo{ID: "s1", Label: "Claude", Dir: "/wt/feature-with-a-rather-long-worktree-name", Started: time.Now().Add(-2 * time.Minute)}
+	plain := consoleTitle(info, true) // label · worktree · state, no hints
+	if got := consoleTitleFit(info, false, lipgloss.Width(plain)); got != plain {
+		t.Fatalf("hints must go first:\n got %q\nwant %q", got, plain)
+	}
+	got := consoleTitleFit(info, false, 50)
+	if lipgloss.Width(got) > 50 || !strings.HasPrefix(got, "Claude · feat") || !strings.HasSuffix(got, "running 2m00s · needs input") || !strings.Contains(got, "…") {
+		t.Fatalf("narrow = %q", got)
+	}
+	if got := consoleTitleFit(info, true, 36); got != "Claude · running 2m00s · needs input" {
+		t.Fatalf("very narrow = %q", got)
 	}
 }

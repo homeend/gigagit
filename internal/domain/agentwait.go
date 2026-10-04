@@ -54,11 +54,20 @@ func parseWaitUntil(s string) (map[string]bool, error) {
 	return want, nil
 }
 
-func clampWaitTimeout(d time.Duration) time.Duration {
-	if d <= 0 {
-		return WaitDefaultTimeout
+// ErrWaitTimeoutRange: a timeout outside 1 … 600 s. The frontends refuse an
+// explicit 0 with it too; only a timeout left out is the default.
+var ErrWaitTimeoutRange = fmt.Errorf("timeout_s is 1 … %d", int(WaitMaxTimeout.Seconds()))
+
+// waitTimeout: 0 (none given) is the default; below 0 or past the cap is
+// refused.
+func waitTimeout(d time.Duration) (time.Duration, error) {
+	switch {
+	case d == 0:
+		return WaitDefaultTimeout, nil
+	case d < 0 || d > WaitMaxTimeout:
+		return 0, ErrWaitTimeoutRange
 	}
-	return d
+	return d, nil
 }
 
 // AgentWait blocks until target (or, with target "", any direct child of
@@ -70,9 +79,8 @@ func AgentWait(ctx context.Context, caller, target, until string, timeout time.D
 	if err != nil {
 		return AgentWaitResult{}, err
 	}
-	timeout = clampWaitTimeout(timeout)
-	if timeout > WaitMaxTimeout {
-		return AgentWaitResult{}, fmt.Errorf("timeout_s is 1 … %d", int(WaitMaxTimeout.Seconds()))
+	if timeout, err = waitTimeout(timeout); err != nil {
+		return AgentWaitResult{}, err
 	}
 	candidates := func() []string { return childrenOf(caller) }
 	if target != "" {

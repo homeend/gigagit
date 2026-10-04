@@ -5,13 +5,14 @@ import (
 	"encoding/hex"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/homeend/gigagit/internal/agentsession"
 )
 
 // AgentKickoff is the one line a spawned worker's <prompt> slot carries: the
 // brief itself never rides a command line (spec §2 ruling 5).
-const AgentKickoff = "You were started by gg as a worker agent. Read your task with the gg tool agent_task - or gg agent task in a shell - then do it following the worker protocol of the delegate skill - gg skill path delegate prints where it is."
+const AgentKickoff = "You were started by gg as a worker agent. Read your task with the gg tool agent_task - or gg agent task in a shell - then do it following the Worker protocol section of the delegate skill - gg skill path delegate prints where it is."
 
 // SpawnRecord is what this process knows about an agent session it started.
 type SpawnRecord struct {
@@ -32,6 +33,7 @@ type spawnRegistry struct {
 	reports   map[string][]AgentReport           // full id -> oldest first, ≤ maxReportsKept
 	reportSeq uint64                             // process-global, monotonic
 	marks     map[string]map[string]deliveryMark // caller -> worker -> delivered
+	noticed   map[string]time.Time               // full id -> when its last report notice went out
 	bc        agentsession.Broadcaster           // wakes waiters on a report
 }
 
@@ -42,7 +44,8 @@ var (
 
 func newSpawnRegistry() *spawnRegistry {
 	return &spawnRegistry{tokens: map[string]string{}, records: map[string]SpawnRecord{},
-		reports: map[string][]AgentReport{}, marks: map[string]map[string]deliveryMark{}}
+		reports: map[string][]AgentReport{}, marks: map[string]map[string]deliveryMark{},
+		noticed: map[string]time.Time{}}
 }
 
 func registry() *spawnRegistry { spawnMu.Lock(); defer spawnMu.Unlock(); return spawnReg }
@@ -101,6 +104,7 @@ func (r *spawnRegistry) prune() {
 	for id := range r.reports {
 		if !listed[id] {
 			delete(r.reports, id)
+			delete(r.noticed, id)
 		}
 	}
 	for caller, byWorker := range r.marks {

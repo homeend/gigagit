@@ -26,10 +26,14 @@ type fakeStates struct {
 	infos []agentsession.Info
 	text  map[agentsession.ID]string
 	last  map[agentsession.ID]time.Time
+	slow  chan struct{} // Text blocks on it when set (a session busy rendering)
 }
 
 func (f *fakeStates) List() []agentsession.Info { return f.infos }
 func (f *fakeStates) Text(id agentsession.ID) (string, bool) {
+	if f.slow != nil {
+		<-f.slow
+	}
 	t, ok := f.text[id]
 	return t, ok
 }
@@ -93,13 +97,60 @@ func TestStatesIdleAfterWorkingPostsOnce(t *testing.T) {
 	w.observe(late)
 	f.text["s1"] = actIdle
 	w.observe(late.Add(time.Second))
-	w.observe(late.Add(2 * time.Second))
+	w.observe(late.Add(3 * time.Second)) // held past the idle settle
+	w.observe(late.Add(4 * time.Second))
 	ns := w.Notices(0)
 	if kinds(ns) != "idle" || ns[0].ID != "s1" || ns[0].Label != "Claude" || ns[0].Dir != "/wt/a" {
 		t.Fatalf("notices = %+v", ns)
 	}
 	if w.NoticeSeq() != ns[0].Seq {
 		t.Fatalf("NoticeSeq = %d, notice %d", w.NoticeSeq(), ns[0].Seq)
+	}
+}
+
+// An idle blip between two steps of one turn (shorter than the idle settle)
+// changes nothing: no idle row, no notice. An idle that holds shows from
+// when it began, so agent_wait does not add its own settle on top.
+func TestStatesIdleShowsOnlyOnceItHolds(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("claude")
+	late := actT0.Add(time.Minute)
+	f.text["s1"] = actWorking
+	w.observe(late)
+	f.text["s1"] = actIdle
+	if wait := w.observe(late.Add(time.Second)); wait != 2*time.Second {
+		t.Fatalf("a pending idle asks to be looked at again in %v, want 2s", wait)
+	}
+	if a, _ := w.Get("s1"); a.State != ActivityWorking || !a.Since.Equal(late) {
+		t.Fatalf("a fresh idle showed at once: %+v", a)
+	}
+	f.text["s1"] = actWorking
+	if wait := w.observe(late.Add(2 * time.Second)); wait != 0 {
+		t.Fatalf("nothing pending, yet wait = %v", wait)
+	}
+	f.text["s1"] = actIdle
+	w.observe(late.Add(3 * time.Second))
+	f.text["s1"] = actNoise // mid-redraw: neither cancels nor promotes
+	w.observe(late.Add(4 * time.Second))
+	if got := kinds(w.Notices(0)); got != "" {
+		t.Fatalf("the flicker posted: %q", got)
+	}
+	f.text["s1"] = actIdle
+	w.observe(late.Add(5 * time.Second))
+	a, _ := w.Get("s1")
+	if a.State != ActivityIdle || !a.Since.Equal(late.Add(3*time.Second)) {
+		t.Fatalf("held idle: %+v", a)
+	}
+	if got := kinds(w.Notices(0)); got != "idle" {
+		t.Fatalf("notices = %q", got)
+	}
+	// A question is never held back.
+	f.text["s1"] = actWorking
+	w.observe(late.Add(6 * time.Second))
+	f.text["s1"] = actQuestion
+	w.observe(late.Add(7 * time.Second))
+	if a, _ := w.Get("s1"); a.State != ActivityQuestion {
+		t.Fatalf("question held back: %+v", a)
 	}
 }
 
@@ -192,6 +243,37 @@ func TestStatesStalledOncePerStretch(t *testing.T) {
 	}
 }
 
+// A hung API call keeps Claude's spinner timer ticking — output, but no
+// progress. Only the spinner moving for spinStallAfter is a stall too; a long
+// think stays working until then.
+func TestStatesStalledWhenOnlyTheSpinnerMoves(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("claude")
+	t0 := actT0.Add(time.Minute)
+	frame := func(at time.Time, glyph string, secs int) {
+		f.text["s1"] = fmt.Sprintf("● Read 2 files\n%s Slithering… (%ds · thinking with high effort)\n────────────────────\n❯ \n", glyph, secs)
+		f.last["s1"] = at // the timer redraw is output
+		w.observe(at)
+	}
+	frame(t0, "✶", 1)
+	frame(t0.Add(9*time.Minute), "*", 541)
+	if a, _ := w.Get("s1"); a.Stalled || kinds(w.Notices(0)) != "" {
+		t.Fatalf("a 9-minute think stalled: %+v %q", a, kinds(w.Notices(0)))
+	}
+	frame(t0.Add(10*time.Minute+time.Second), "✻", 601)
+	a, _ := w.Get("s1")
+	ns := w.Notices(0)
+	if !a.Stalled || kinds(ns) != "stalled" || !ns[0].Spinning || ns[0].Quiet < 10*time.Minute {
+		t.Fatalf("spinner only for 10m: %+v %+v", a, ns)
+	}
+	// Progress (new transcript text) ends it.
+	f.text["s1"] = "● Read 3 files\n✶ Slithering… (602s · thinking with high effort)\n────────────────────\n❯ \n"
+	w.observe(t0.Add(10*time.Minute + 2*time.Second))
+	if a, _ := w.Get("s1"); a.Stalled {
+		t.Fatalf("still stalled after progress: %+v", a)
+	}
+}
+
 func TestStatesStallFromUnknownNeedsDedicatedRules(t *testing.T) {
 	t.Parallel()
 	now := actT0.Add(10 * time.Minute)
@@ -259,6 +341,29 @@ func TestStatesBoundRulesWin(t *testing.T) {
 	if a, _ := w.Get("s1"); a.State != ActivityIdle {
 		t.Fatalf("bound rule ignored: %+v", a)
 	}
+}
+
+// Reading the screens (each session's emulator lock) happens outside the
+// watcher's lock: a session slow to render never stalls Get, the rows'
+// reader on the UI thread.
+func TestStatesGetIsNotBlockedByAScreenRead(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("claude")
+	f.text["s1"] = actIdle
+	f.slow = make(chan struct{})
+	done := make(chan struct{})
+	go func() { w.observe(actT0.Add(time.Minute)); close(done) }()
+	time.Sleep(20 * time.Millisecond) // observe is inside Text now
+	got := make(chan struct{})
+	go func() { w.Get("s1"); w.NoticeSeq(); close(got) }()
+	select {
+	case <-got:
+	case <-time.After(time.Second):
+		close(f.slow)
+		t.Fatal("Get waited for a screen read")
+	}
+	close(f.slow)
+	<-done
 }
 
 func TestStatesNoticeRing(t *testing.T) {
@@ -357,6 +462,38 @@ func TestSessionStatesWakeOnOutput(t *testing.T) {
 	}
 }
 
+// Serial: the process-global manager. A turn's end shows once the idle has
+// held the settle, with no further output and the tick off: the watcher
+// looks again by itself.
+func TestSessionStatesPromoteAHeldIdleWithoutOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	prevTick := stateTick
+	stateTick = time.Hour
+	defer func() { stateTick = prevTick }()
+	defer UseIdleSettle(300 * time.Millisecond)()
+	m := agentsession.NewManager()
+	defer UseSessionManager(m)()
+	sess, err := m.Start(agentsession.StartSpec{Label: "Custom", Dir: t.TempDir(), Cols: 40, Rows: 10,
+		Argv: []string{"sh", "-c", `sleep 1; printf 'BUSY\n'; sleep 1; printf '\033[2J\033[HREADY\n'; sleep 30`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.KillAll(t.Context())
+	r, _ := agentstate.Compile([]string{`^BUSY$`}, []string{`^READY$`}, nil)
+	SessionStates().Bind(sess.Info().ID, r)
+	deadline := time.Now().Add(6 * time.Second)
+	for time.Now().Before(deadline) {
+		if a, ok := SessionActivityOf(sess.Info().ID); ok && a.State == ActivityIdle {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	a, _ := SessionActivityOf(sess.Info().ID)
+	t.Fatalf("activity = %+v: a held idle was never promoted", a)
+}
+
 // Serial: the process-global manager. A command's own screen_* lists are
 // bound at start, so a custom command (no agent id) is classified by them.
 func TestStartSessionBindsScreenRules(t *testing.T) {
@@ -427,6 +564,11 @@ func TestSessionRulesMergeWithTheAgentBuiltins(t *testing.T) {
 	}
 	if got := agentstate.Classify(r, agentstate.Tail(actQuestion, 15)); got != agentstate.Unknown {
 		t.Fatalf("the built-in question list must be replaced, not merged: %q", got)
+	}
+	// Claude's own menus stay unknown whatever the block sets: there is no
+	// config list for them.
+	if got := agentstate.Classify(r, agentstate.Tail("please CONFIRM\n ❯ 1. View tools\n Esc to back", 15)); got != agentstate.Unknown {
+		t.Fatalf("an own menu with a partial block: %q", got)
 	}
 	// A custom command (no agent) with one list has only that list.
 	cu := config.ToolCommand{Category: "session", Name: "X", Command: "mytool", ScreenWaiting: []string{`^READY$`}}

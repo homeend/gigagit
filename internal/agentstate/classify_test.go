@@ -291,3 +291,92 @@ func TestHasDefaultsAndGenericFallback(t *testing.T) {
 		t.Errorf("generic fallback: %q", got)
 	}
 }
+
+// Captured live 2026-10-04 (Claude Code 2.1.289): an MCP server's menu the
+// USER opened from /mcp. Numbered like a permission dialog, but its footer
+// steps back inside Claude's own menus — not the agent asking anything.
+const ownMenuScreen = `     Docs: https://code.claude.com/docs/en/sub-agents
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+   Claude.ai Claude Docs MCP Server
+   Status:           ✔ connected
+   Protocol:         2026-07-28
+   URL:              https://api.anthropic.com
+   Config location:  claude.ai
+   Capabilities: tools
+   Tools: 8 tools
+   ❯ 1. View tools
+     2. Clear authentication
+     3. Reconnect
+     4. Disable
+   ↑/↓ to navigate · Enter to select · Esc to back
+`
+
+// Captured live 2026-10-04: the trust dialog at start (cursor-style).
+const trustScreen = ` Claude Code'll be able to read, edit, and execute files here.
+ Security guide
+ ❯ No, exit
+   Yes, I trust this folder
+ Enter to confirm · Esc to cancel
+`
+
+// Claude's own menus (their footers step back, close or clear) read as
+// unknown, so a session keeps the state it had; the agent's dialogs (Esc to
+// cancel) stay questions.
+func TestClaudeOwnMenusAreNotQuestions(t *testing.T) {
+	r := DefaultRules("claude")
+	cases := map[string]State{
+		ownMenuScreen: Unknown,
+		"   Settings\n   ❯ Auto-compact   true\n   Enter/Space to change · / to search · Esc to close\n": Unknown,
+		"   Press Esc to go back\n": Unknown,
+		"   Type to filter · Enter/↓ to select · ↑ to tabs · Esc to clear\n": Unknown,
+		questionScreen: Question,
+		trustScreen:    Question,
+	}
+	for in, want := range cases {
+		if got := Classify(r, Tail(in, 15)); got != want {
+			t.Errorf("%q: got %q want %q", in[max(0, len(in)-50):], got, want)
+		}
+	}
+}
+
+// Progress ignores what moves while nothing happens — the spinner's glyph
+// and its timer (live 2026-10-04: a think shows only "(5s · thinking with
+// high effort)") — and keeps everything else, the token counter included.
+func TestProgressIgnoresTheSpinnerAndItsTimer(t *testing.T) {
+	a := Progress(Tail("● Read 2 files\n✶ Slithering… (5s · thinking with high effort)\n❯ \n", 15))
+	b := Progress(Tail("● Read 2 files\n* Slithering… (7m 12s · thinking with high effort)\n❯ \n", 15))
+	if a != b {
+		t.Fatalf("glyph/timer changed the progress:\n%q\n%q", a, b)
+	}
+	c := Progress(Tail("● Read 2 files\n✶ Slithering… (8s · ↓ 1.2k tokens)\n❯ \n", 15))
+	d := Progress(Tail("● Read 2 files\n✶ Slithering… (9s · ↓ 1.3k tokens)\n❯ \n", 15))
+	if c == d {
+		t.Fatal("a moving token counter is progress")
+	}
+	if Progress(Tail("⠋ Running cargo build\n", 15)) != Progress(Tail("⠙ Running cargo build\n", 15)) {
+		t.Fatal("a braille spinner frame is not progress")
+	}
+	if Progress(Tail("● Read 2 files\n", 15)) == Progress(Tail("● Read 3 files\n", 15)) {
+		t.Fatal("new transcript text is progress")
+	}
+}
+
+// An own-menu footer is the LAST line: the same words quoted higher up — in
+// the diff of an edit the agent asks to make — must not hide the dialog.
+func TestOwnMenuFooterOnlyOnTheLastLine(t *testing.T) {
+	editDialog := ` Edit file README.md
+   12 -Press Esc to close the panel.
+   12 +Press Esc to close or Esc to clear the filter; Esc to back out.
+ Do you want to make this edit to README.md?
+ ❯ 1. Yes
+   2. Yes, allow all edits during this session
+   3. No, and tell Claude what to do differently
+ Esc to cancel
+`
+	if got := Classify(DefaultRules("claude"), Tail(editDialog, 15)); got != Question {
+		t.Fatalf("a quoted footer hid the edit dialog: %q", got)
+	}
+	if got := Classify(DefaultRules("claude"), Tail(ownMenuScreen, 15)); got != Unknown {
+		t.Fatalf("the menu itself: %q", got)
+	}
+}

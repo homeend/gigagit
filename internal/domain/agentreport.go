@@ -30,6 +30,21 @@ const (
 	reportLineMax  = 120
 )
 
+// reportNoticeGap: at most one report notice per session this often — a
+// looping worker must not flood the status line and push other notices out
+// of the ring. A final report always goes out. Every report is stored.
+var reportNoticeGap = 5 * time.Second
+
+// UseReportNoticeGap replaces the gap (tests) and returns the restore.
+func UseReportNoticeGap(d time.Duration) func() {
+	r := registry()
+	r.mu.Lock()
+	prev := reportNoticeGap
+	reportNoticeGap = d
+	r.mu.Unlock()
+	return func() { r.mu.Lock(); reportNoticeGap = prev; r.mu.Unlock() }
+}
+
 // deliveryMark is what one caller's agent_wait already returned about one
 // worker: the Since of the idle/question it delivered, the highest report
 // seq, and whether the exit went out.
@@ -82,9 +97,17 @@ func AgentReportVerb(caller, text string, final bool) (AgentReport, error) {
 		list = list[len(list)-maxReportsKept:]
 	}
 	r.reports[caller] = list
+	tell := final || rep.At.Sub(r.noticed[caller]) >= reportNoticeGap
+	if tell {
+		r.noticed[caller] = rep.At
+	}
 	r.mu.Unlock()
 	r.bc.Signal()
-	SessionStates().PostNotice(ActivityNotice{ID: info.ID, Kind: "report", Label: info.Label, Dir: info.Dir, Text: ReportFirstLine(text)})
+	if tell {
+		SessionStates().PostNotice(ActivityNotice{ID: info.ID, Kind: "report", Label: info.Label, Dir: info.Dir, Text: ReportFirstLine(text)})
+	} else {
+		SessionStates().Wake() // no notice; the frontends still file its tour and repaint
+	}
 	return rep, nil
 }
 

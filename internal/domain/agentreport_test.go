@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -210,5 +211,44 @@ func TestUseSessionManagerForgetsTheOldRegistry(t *testing.T) {
 	}
 	if _, ok := AgentRecord(res.ID); ok {
 		t.Fatal("a spawn record of the old manager's session shows on the new one")
+	}
+}
+
+// A looping worker cannot flood the notices: one report notice per session
+// per reportNoticeGap; every report is still stored, and a final one always
+// tells the human.
+func TestAgentReportNoticesAreRateLimited(t *testing.T) {
+	_, wt, _, ov := spawnFixture(t, 4)
+	res, _, err := SpawnAgent(context.Background(), SpawnSpec{Req: AgentStartRequest{Caller: ov, Worktree: wt, Tool: "Sleeper", Prompt: "x"}, Cols: 80, Rows: 24, MCPURL: "http://x", Approved: approveAll})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer UseSessionStates(NewStaticStates(nil))()
+	defer UseReportNoticeGap(time.Hour)()
+	seq0 := SessionStates().NoticeSeq()
+	ch, cancel := SessionStates().Subscribe()
+	defer cancel()
+	for i := 0; i < 5; i++ {
+		if _, err := AgentReportVerb(res.ID, fmt.Sprintf("step %d", i), false); err != nil {
+			t.Fatal(err)
+		}
+		// Told or not, the frontends wake: they file the report's tour
+		// and repaint the row from the level.
+		if !woken(ch) {
+			t.Fatalf("report %d woke nobody", i)
+		}
+	}
+	if _, err := AgentReportVerb(res.ID, "all done", true); err != nil {
+		t.Fatal(err)
+	}
+	var texts []string
+	for _, n := range SessionStates().Notices(seq0) {
+		texts = append(texts, n.Text)
+	}
+	if strings.Join(texts, "|") != "step 0|all done" {
+		t.Fatalf("notices = %q", texts)
+	}
+	if list, _ := AgentReports(res.ID); len(list) != 6 {
+		t.Fatalf("every report is stored: %d", len(list))
 	}
 }

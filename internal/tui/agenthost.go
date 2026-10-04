@@ -182,8 +182,8 @@ func (m Model) onAgentSpawned(msg agentSpawnedMsg) (Model, tea.Cmd) {
 	if msg.res.Warning != "" {
 		m.statusMsg += " — " + i18n.T("its worktree claim stayed with the agent that started it")
 	}
-	m = m.fileBriefTour(msg.id) // its brief as a tour in the worker's worktree, in the background
+	m, check := m.fileBriefTour(msg.id) // its brief as a tour in the worker's worktree, in the background
 	var cmd tea.Cmd
 	m, cmd = m.reloadSourcesCmd([]sourceKey{srcWorktrees, srcBranches}, reloadOpts{})
-	return m, cmd
+	return m, tea.Batch(cmd, check)
 }

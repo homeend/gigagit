@@ -118,3 +118,15 @@ func TestPendingTourKeyOnlyAtTheReload(t *testing.T) {
 		t.Fatalf("every failure arm (busy, refusal, cancelled repair, failed repair) clears the carry; found %d", n)
 	}
 }
+
+// Boot opens the pending tour only after the start-at landing settled: both
+// open something, and the tour the switch was made for must end on top.
+func TestPendingTourOpensAfterTheStartAt(t *testing.T) {
+	t.Parallel()
+	app := readStatic(t, "app.js")
+	at := strings.Index(app, "await applyStartAt().catch(() => {});")
+	tour := strings.Index(app, "openPendingTour();")
+	if at < 0 || tour < 0 || tour < at {
+		t.Fatal("boot must await applyStartAt before openPendingTour")
+	}
+}

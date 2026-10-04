@@ -56,8 +56,9 @@ type activityNoticeWire struct {
 	Kind     string `json:"kind"` // question | idle | stalled | report
 	Label    string `json:"label"`
 	Worktree string `json:"worktree"`
-	QuietS   int    `json:"quiet_s,omitempty"` // stalled: seconds without output
-	Text     string `json:"text,omitempty"`    // report: its first line
+	QuietS   int    `json:"quiet_s,omitempty"`  // stalled: seconds without output (spinning: without progress)
+	Spinning bool   `json:"spinning,omitempty"` // stalled: only the spinner moved (a hung call), not silence
+	Text     string `json:"text,omitempty"`     // report: its first line
 }
 
 type taskWire struct {
@@ -161,7 +162,7 @@ func (s *Server) watchSessionStates(stop <-chan struct{}) {
 			var out []activityNoticeWire
 			for _, n := range w.Notices(seq) {
 				seq = n.Seq
-				out = append(out, activityNoticeWire{ID: string(n.ID), Kind: n.Kind, Label: n.Label, Worktree: n.Dir, QuietS: int(n.Quiet.Seconds()), Text: n.Text})
+				out = append(out, activityNoticeWire{ID: string(n.ID), Kind: n.Kind, Label: n.Label, Worktree: n.Dir, QuietS: int(n.Quiet.Seconds()), Spinning: n.Spinning, Text: n.Text})
 			}
 			s.broadcastSessions(out)
 		}

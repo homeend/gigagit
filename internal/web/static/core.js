@@ -382,7 +382,7 @@ function defaultWorktreePath(branch) {
 // What an agent session is doing, as the server classified it from its
 // screen (domain.SessionStates): s.agent_state is working | idle | question,
 // s.since when that began, s.stalled when it printed nothing for two
-// minutes while apparently busy. Labels mirror the TUI's: never "waiting".
+// minutes while apparently busy, or showed only its spinner for ten. Labels mirror the TUI's: never "waiting".
 function activityAge(iso, now) {
   const s = Math.max(0, Math.floor((now - Date.parse(iso)) / 1000));
   return s < 60 ? s + "s" : s < 3600 ? Math.floor(s / 60) + "m" : Math.floor(s / 3600) + "h";
@@ -411,7 +411,7 @@ function activityAttn(s) {
 function reportLine(s) {
   return s && s.report_line && s.agent_state !== "question" ? s.report_line : "";
 }
-// noticeText: the toast for one activity notice {kind, label, worktree, quiet_s, text}.
+// noticeText: the toast for one activity notice {kind, label, worktree, quiet_s, spinning, text}.
 function noticeText(n) {
   const wt = String(n.worktree || "").split(/[\\/]/).filter(Boolean).pop() || n.worktree;
   const who = n.label + " in " + wt;
@@ -419,7 +419,9 @@ function noticeText(n) {
   if (n.kind === "report") return who + " reports: " + (n.text || "");
   if (n.kind === "idle") return who + " finished its turn — idle";
   const q = n.quiet_s || 0;
-  return who + " has printed nothing for " + (q < 60 ? q + "s" : Math.floor(q / 60) + "m") + " — stalled?";
+  const age = q < 60 ? q + "s" : Math.floor(q / 60) + "m";
+  if (n.spinning) return who + " has shown only its spinner for " + age + " — stalled?";
+  return who + " has printed nothing for " + age + " — stalled?";
 }
 // --- end session activity ---
 

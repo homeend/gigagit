@@ -224,6 +224,39 @@ func TestAgentReportAndWaitCLI(t *testing.T) {
 	}
 }
 
+// The wait's flag spellings and its timeout; the report's flags stop at the
+// text, and a file or stdin is capped like the report itself.
+func TestAgentWaitAndReportCLIFlags(t *testing.T) {
+	dir, full := agentEnvFor(t, nil)
+	for _, args := range [][]string{{"wait"}, {"wait", "-until=idle"}, {"wait", "--until=idle"}, {"wait", "-timeout=1"}, {"wait", "-timeout", "1"}} {
+		// Parsed (no usage line), sent without a timeout_s 0: the host's
+		// refusal is the childless wait's.
+		if code, _, errOut := runAgentCLI(t, dir, "", args...); code != 2 || !strings.Contains(errOut, "no workers") {
+			t.Fatalf("%v = %d %q", args, code, errOut)
+		}
+	}
+	for _, v := range []string{"0", "-3", "601"} {
+		if code, _, errOut := runAgentCLI(t, dir, "", "wait", "--timeout", v); code != 2 || !strings.Contains(errOut, "1 … 600") {
+			t.Fatalf("--timeout %s = %d %q", v, code, errOut)
+		}
+	}
+	// Flags only before the text: a later --final or -F is prose.
+	if code, out, _ := runAgentCLI(t, dir, "", "report", "fixed", "the", "--final", "flag", "-F", "x"); code != 0 || !strings.HasPrefix(out, "reported #") {
+		t.Fatalf("prose flags = %d %q", code, out)
+	}
+	_, out, _ := runAgentCLI(t, dir, "", "screen", full, "--reports")
+	if !strings.Contains(out, "fixed the --final flag -F x") || strings.Contains(out, "(final)") {
+		t.Fatalf("the prose lost its words or turned final: %q", out)
+	}
+	if code, _, _ := runAgentCLI(t, dir, "", "report", "--", "--final", "is", "a", "word"); code != 0 {
+		t.Fatal("-- ends the flags")
+	}
+	big := strings.Repeat("x", domain.MaxReportBytes+1)
+	if code, _, errOut := runAgentCLI(t, dir, big, "report", "-F", "-"); code != 2 || !strings.Contains(errOut, "larger than") {
+		t.Fatalf("an oversized stdin = %d %q", code, errOut)
+	}
+}
+
 func TestWaitExitCodeAndPrint(t *testing.T) {
 	at := time.Date(2026, 10, 3, 1, 2, 3, 0, time.Local)
 	code := 7
@@ -272,5 +305,36 @@ func TestAgentWaitCLIStopsOnSignal(t *testing.T) {
 	code, out, _ := runAgentCLI(t, dir, "", "wait", childID, "--timeout", "2")
 	if code != 0 || !strings.Contains(out, "event: report") || !strings.Contains(out, "state: running") {
 		t.Fatalf("wait after the signal = %d %q", code, out)
+	}
+}
+
+// The list's columns line up whatever a row has (activity, stall, report)
+// and leaves blank: absent cells print "-".
+func TestAgentListColumnsAlign(t *testing.T) {
+	var b strings.Builder
+	printAgentList(&b, []domain.AgentEntry{
+		{ID: "123-4/s1", State: "running", Activity: "working", Stalled: true, ReportAt: time.Now(), Tool: "Claude", Worktree: "/wt/a", Mine: true},
+		{ID: "123-4/s10", State: "exited", Tool: "Codex", Worktree: "/wt/bb", Parent: "123-4/s1"},
+	})
+	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("%q", b.String())
+	}
+	col := func(line, word string) int { return strings.Index(line, word) }
+	if col(lines[0], "Claude") != col(lines[1], "Codex") || col(lines[0], "/wt/a") != col(lines[1], "/wt/bb") {
+		t.Fatalf("columns do not line up:\n%s", b.String())
+	}
+	if !strings.Contains(lines[0], "working") || !strings.Contains(lines[0], "stalled") || !strings.Contains(lines[0], "reported") || !strings.Contains(lines[1], " - ") {
+		t.Fatalf("cells:\n%s", b.String())
+	}
+}
+
+func TestAgentListNoTrailingSpaces(t *testing.T) {
+	var b strings.Builder
+	printAgentList(&b, []domain.AgentEntry{{ID: "1/s1", State: "running", Tool: "Claude", Worktree: "/wt/a", Mine: true}, {ID: "1/s2", State: "running", Tool: "X", Worktree: "/wt/b"}})
+	for _, l := range strings.Split(strings.TrimRight(b.String(), "\n"), "\n") {
+		if strings.HasSuffix(l, " ") {
+			t.Fatalf("trailing space: %q", l)
+		}
 	}
 }

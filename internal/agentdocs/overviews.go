@@ -239,6 +239,11 @@ func (s *Store) AddOverview(root, dir, title, text string) (Overview, error) {
 // it is open, filed anew when it never was or the user closed it. added
 // says which.
 func (s *Store) FileTour(key, root, dir, title, text string) (Overview, bool, error) {
+	// Two filings of one key at once (the TUI's wake and a web click) must
+	// not both add: the second would orphan an overview that counts against
+	// the cap. s.mu cannot cover the steps (each takes it), tourMu does.
+	s.tourMu.Lock()
+	defer s.tourMu.Unlock()
 	if id, ok := s.TourID(key); ok {
 		if o, err := s.SetOverview(id, title, text); err == nil {
 			return o, false, nil

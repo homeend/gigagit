@@ -146,6 +146,7 @@ type Model struct {
 	actWatch      *activityWatch                           // its subscription to session activity (session_activity.go)
 	actSeq        *uint64                                  // the last activity notice shown (shared across the value copy)
 	tourSeq       *map[domain.SessionID]uint64             // per session, the report seq its tour was last filed for (agent_tours.go)
+	tourRefused   *map[domain.SessionID]uint64             // per session, the report seq whose filing the cap refused (said once)
 	web           *webHostState                            // the gg web page served from this process (webhost.go)
 	webOpts       webLaunchOptions                         // gg --web / --web-addr for this run
 	agentHost     *agentHostState                          // the agent MCP channel (agenthost.go); pointer: survives the value copy
@@ -484,8 +485,9 @@ func New(svc *domain.Service) Model {
 		svc:                    svc,
 		sessWatch:              &sessionWatch{},
 		actWatch:               &activityWatch{},
-		actSeq:                 new(uint64),
+		actSeq:                 seqPtr(domain.SessionNoticeSeq()), // never replay notices posted before this model
 		tourSeq:                &map[domain.SessionID]uint64{},
+		tourRefused:            &map[domain.SessionID]uint64{},
 		web:                    newWebHostState(),
 		clipWrite:              clipboard.Copy,
 		feed:                   svc.CommitFeed(),
@@ -4800,6 +4802,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingGotoTip = ""                        // a repo switch must not fire a stale tip jump
 	m.pendingSteer = nil                         // the repo it referred to is gone; its inbox went with it
 	m.consoleSwitch.armed = true                 // the console keeps only a session the new repo owns
+	m.consoleSwitch.gen++                        // a new switch (openTour tells it from one in flight)
 	m.consoleSwitch.open = ""                    // a console asked for across an earlier switch is moot
 	m.consoleSwitch.tour = ""                    // …and so is a tour
 	m.pendingHint = nil                          // ditto: its navigate referred to the old repo

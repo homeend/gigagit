@@ -32,7 +32,7 @@ type agentKillIn struct {
 type agentWaitIn struct {
 	ID       string `json:"id,omitempty" jsonschema:"a session id; omitted: any worker you started"`
 	Until    string `json:"until,omitempty" jsonschema:"idle | question | exit | report | any (default)"`
-	TimeoutS int    `json:"timeout_s,omitempty" jsonschema:"seconds to wait, 1-600 (default 45); on timed_out simply call again"`
+	TimeoutS *int   `json:"timeout_s,omitempty" jsonschema:"seconds to wait, 1-600 (default 45); on timed_out simply call again"`
 }
 type agentReportIn struct {
 	Text  string `json:"text" jsonschema:"your result for whoever started you: what changed, what was skipped, what they must do (up to 64 KiB)"`
@@ -118,7 +118,14 @@ func RegisterAgentTools(srv *sdk.Server, caller func(*sdk.CallToolRequest) (stri
 			if err != nil {
 				return nil, domain.AgentWaitResult{}, err
 			}
-			res, err := domain.AgentWait(ctx, who, in.ID, in.Until, time.Duration(in.TimeoutS)*time.Second)
+			var timeout time.Duration // left out: the default
+			if in.TimeoutS != nil {
+				if *in.TimeoutS <= 0 {
+					return nil, domain.AgentWaitResult{}, domain.ErrWaitTimeoutRange
+				}
+				timeout = time.Duration(*in.TimeoutS) * time.Second
+			}
+			res, err := domain.AgentWait(ctx, who, in.ID, in.Until, timeout)
 			return nil, res, err
 		})
 	sdk.AddTool(srv, toolAgentReport(),
@@ -145,7 +152,7 @@ func toolAgentStart() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_start", Description: "Start a worker agent in a worktree with a task; the worktree claim passes to the worker."}
 }
 func toolAgentList() *sdk.Tool {
-	return &sdk.Tool{Name: "agent_list", Description: "Every agent session of this gg; mine = started by you; activity = working | idle | question (needs a decision), stalled = silent for two minutes.", Annotations: readOnlyAnnotations()}
+	return &sdk.Tool{Name: "agent_list", Description: "Every agent session of this gg; mine = started by you; activity = working | idle | question (needs a decision), stalled = silent for two minutes, or only its spinner moving for ten (a hung call).", Annotations: readOnlyAnnotations()}
 }
 func toolAgentScreen() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_screen", Description: "A session's visible console text, what the agent is doing (activity) and a dialog's choices (options).", Annotations: readOnlyAnnotations()}
@@ -156,6 +163,11 @@ func toolAgentSend() *sdk.Tool {
 func toolAgentKill() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_kill", Description: "End an agent you started."}
 }
+
+// toolAgentWait is annotated read-only although a delivered event advances
+// the caller's delivery mark (each event goes out once): the mark is the
+// caller's own bookkeeping, nothing in the repo or any session changes, and
+// a write annotation would make clients ask the user on every wait.
 func toolAgentWait() *sdk.Tool {
 	return &sdk.Tool{Name: "agent_wait", Description: "Block until a worker you started has news: idle (its turn ended), question (it waits for a decision — options included), exit, or report (its agent_report). Returns one event, each once; timed_out means call again.", Annotations: readOnlyAnnotations()}
 }

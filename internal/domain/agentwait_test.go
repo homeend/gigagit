@@ -205,8 +205,13 @@ func TestAgentWaitDefaults(t *testing.T) {
 	if _, err := parseWaitUntil("any"); err != nil {
 		t.Fatal(err)
 	}
-	if d := clampWaitTimeout(0); d != WaitDefaultTimeout {
-		t.Fatalf("default = %v", d)
+	if d, err := waitTimeout(0); err != nil || d != WaitDefaultTimeout {
+		t.Fatalf("default = %v %v", d, err)
+	}
+	for _, d := range []time.Duration{-time.Second, WaitMaxTimeout + time.Second} {
+		if _, err := waitTimeout(d); err == nil {
+			t.Fatalf("%v accepted", d)
+		}
 	}
 }
 
@@ -242,5 +247,14 @@ func TestAgentWaitExitEndsAnyUntil(t *testing.T) {
 	}
 	if res = doWait(t, ov, w1, "idle", 200*time.Millisecond); !res.TimedOut || res.State != "exited" {
 		t.Fatalf("after the exit went out, the timeout still says exited: %+v", res)
+	}
+}
+
+// A negative timeout is refused (0 is the default for callers that give
+// none); the MCP and CLI edges refuse an explicit 0 themselves.
+func TestAgentWaitRefusesANegativeTimeout(t *testing.T) {
+	ov, w1, _, _, _, _ := waitFixture(t)
+	if _, err := AgentWait(context.Background(), ov, w1, "", -time.Second); err == nil || !strings.Contains(err.Error(), "timeout_s is 1") {
+		t.Fatalf("err = %v", err)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -24,6 +25,8 @@ type activityWatch struct {
 }
 
 type sessionActivityMsg struct{}
+
+func seqPtr(n uint64) *uint64 { return &n }
 
 // activityText is the human label: "working 7m" · "idle 3m" · "needs
 // input" · "stalled · …"; "" when gg cannot tell. Ages tick from Since.
@@ -106,6 +109,9 @@ func activityNoticeText(n domain.ActivityNotice) string {
 	case "report":
 		return i18n.T("%s in %s reports: %s", n.Label, wt, n.Text)
 	default:
+		if n.Spinning {
+			return i18n.T("%s in %s has shown only its spinner for %s — stalled?", n.Label, wt, formatElapsed(n.Quiet))
+		}
 		return i18n.T("%s in %s has printed nothing for %s — stalled?", n.Label, wt, formatElapsed(n.Quiet))
 	}
 }
@@ -114,6 +120,18 @@ func activityNoticeText(n domain.ActivityNotice) string {
 // built-in rules apply.
 func screenRulesWarning(name string) string {
 	return i18n.T("screen rules of %s are invalid — the built-in rules apply", name)
+}
+
+// startNote is a start's status line: the worktree's note (place) and the
+// command's invalid screen rules.
+func startNote(place string, tc config.ToolCommand) string {
+	if domain.SessionRulesWarning(tc) == "" {
+		return place
+	}
+	if place == "" {
+		return screenRulesWarning(tc.Name)
+	}
+	return place + " · " + screenRulesWarning(tc.Name)
 }
 
 // waitActivityCmd blocks until the watcher signals a change or a notice.
@@ -139,7 +157,7 @@ func (m Model) onSessionActivity() (Model, tea.Cmd) {
 	if m.actSeq == nil || m.quiet {
 		return m, m.waitActivityCmd()
 	}
-	m = m.fileReportTours() // a new report becomes (or replaces) its tour
+	m, check := m.fileReportTours() // a new report becomes (or replaces) its tour
 	for _, n := range domain.SessionStates().Notices(*m.actSeq) {
 		*m.actSeq = n.Seq
 		if m.console != nil && m.console.focused && m.console.id == n.ID {
@@ -147,7 +165,7 @@ func (m Model) onSessionActivity() (Model, tea.Cmd) {
 		}
 		m.statusMsg = activityNoticeText(n)
 	}
-	return m, m.waitActivityCmd()
+	return m, tea.Batch(m.waitActivityCmd(), check)
 }
 
 // sessionDecorators colours the Worktrees/Branches sub-rows whose session

@@ -82,7 +82,23 @@ func TestAttachBrowserHost(t *testing.T) {
 		time.Sleep(3 * time.Second)
 		_, _ = domain.AgentReportVerb(domain.FullSessionID(wk.Info().ID), "merged feat/x — two tests skipped\nsee [the file](f.txt:1)", true)
 	}()
-	fmt.Printf("ATTACH_URL=%s\n", ts.URL)
+	// An "Other" worker in a SECOND worktree of the repo (stage 4 minors):
+	// opening its report switches the page there and shows the tour after
+	// the reload (here: false → reloadForSwitch → openPendingTour).
+	second := filepath.Join(t.TempDir(), "w2")
+	gitRun(t, root, "worktree", "add", "-b", "w2", second)
+	ow, err := domain.Sessions().Start(domain.SessionStartSpec{
+		Label: "Other", AgentID: "claude", Repo: "r", Dir: second, Cols: 80, Rows: 24,
+		Argv: []string{"sh", "-c", "sleep 600"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(3 * time.Second)
+		_, _ = domain.AgentReportVerb(domain.FullSessionID(ow.Info().ID), "the other worktree is done", true)
+	}()
+	fmt.Printf("ATTACH_URL=%s\nSECOND=%s\n", ts.URL, second)
 	done := os.Getenv("GG_BROWSER_DONE")
 	deadline := time.Now().Add(10 * time.Minute)
 	for time.Now().Before(deadline) {

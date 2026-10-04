@@ -3,7 +3,7 @@ name: delegate
 description: Use when the user asks you to delegate a task to worker agents through gg — start workers in their own worktrees, brief them, wait for their reports and check the result; also the protocol a worker started by gg follows.
 ---
 
-<!-- gg:delegate:v1 -->
+<!-- gg:delegate:v3 -->
 
 # delegate — hand work to worker agents through gg
 
@@ -82,6 +82,15 @@ expected: stop at the report and let the overseer (you) or the user decide.
   4. Name the branch in the brief's Context.
   None free → ask the user, or `gg branch create <b> <start>` then `gg
   worktree add --branch <b> <path>` (`--branch` takes an EXISTING branch).
+- **A task ABOUT an existing worktree** ("describe / explain / review the
+  changes in <worktree>"): the worker works IN that worktree — claim it
+  (`gg worktree claim --note <source> <path>`; refused → ask the user), no
+  new branch, no recycle; Kind *investigate* (or *check*) + report. Find
+  only what the brief needs — the branch and the range its work spans
+  (`<base>..HEAD`, e.g. from `git merge-base` with the branch it came from)
+  — and leave the reading to the worker: analysing it yourself first only
+  doubles the work and fills your context. Ask for a report with one anchor
+  per change.
   `agent_start` passes your claim to the worker; it returns to you when the
   worker ends.
 - The user's `[agents] max_spawned` caps how many run at once; a worker can
@@ -125,8 +134,12 @@ appears under the worktree in the user's gg; nothing opens on their screen.
 
 ### 6. Wait — the loop
 
-Call `agent_wait` (no id = any of your workers; `timeout_s` 45 is safe) and
-act on the ONE event it returns:
+Call `agent_wait` (no id = any of your workers) and act on the ONE event it
+returns. Leave `timeout_s` out (45 s) or keep it at 90 at most: a client
+that moves a long tool call to the background (Claude Code does at 2 min)
+leaves that wait running there, and it takes the next event — each event
+comes once, so your loop never sees it. If a wait was moved to the
+background anyway, stop that task before you wait again.
 
 | event | do |
 |---|---|
@@ -134,7 +147,7 @@ act on the ONE event it returns:
 | `question` | the worker's tool shows a dialog; `options` lists the choices. Pick the one that fits the brief's limits (never destructive or out of scope) and send its `key`: `agent_send {id, keys: ["<key>"]}`. A `pick:<i>` key cannot be pressed — move with `up` / `down` keys and send `enter`. Unsure → ask the user. |
 | `idle` | its turn ended without a report: read `agent_screen`. Finished → `agent_send` "finish with agent_report (final)". Stuck or asking in prose → answer it. |
 | `exit` | the worker is gone: read `agent_screen` for why (reports it made come first). Restart it (new `agent_start`) or report the failure. |
-| `timed_out: true` | nothing new — call `agent_wait` again. Long `stalled` → read `agent_screen`. |
+| `timed_out: true` | nothing new — call `agent_wait` again. `activity: idle` after you sent something, or a long `stalled` → read `agent_screen`. |
 
 Each event comes once. `agent_list` shows the current state of everything
 (`activity`, `report_at`) when you lose track.
@@ -147,7 +160,9 @@ Each event comes once. `agent_list` shows the current state of everything
 - Not done → `agent_send` the gap (one message, concrete), back to the loop.
 - Done → tell the user: per worker, the outcome, the worktree and branch,
   what is left — and that **Open report** on the worker's row shows its
-  report as a tour (and **Open brief** the brief). Merging or pushing a
+  report as a tour (and **Open brief** the brief). Keep it short when the
+  report IS the deliverable (a description, an investigation): its summary
+  lines and where to open it, not a retelling. Merging or pushing a
   worker's branch is the user's call unless the task said otherwise.
 - Then `agent_kill {id}` — WITHOUT `remove`: removing the session also
   drops its brief and report, so the user's **Open report** would show
