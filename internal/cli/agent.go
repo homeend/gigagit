@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/homeend/gigagit/internal/agentlink"
@@ -154,31 +155,46 @@ func agentList(ctx context.Context, c *agentlink.Client, args []string, stdout, 
 		fmt.Fprintln(stdout, string(data))
 		return 0
 	}
-	for _, a := range out.Agents {
-		line := a.ID + "  " + a.State
-		if a.Activity != "" {
-			line += "  " + a.Activity
+	printAgentList(stdout, out.Agents)
+	return 0
+}
+
+// printAgentList prints one line per session, in columns: id, state,
+// activity, stalled, report, tool, worktree, then "parent <id>" and "mine"
+// when they apply. An absent cell is "-", so the columns always line up.
+func printAgentList(stdout io.Writer, agents []domain.AgentEntry) {
+	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	dash := func(s string) string {
+		if s == "" {
+			return "-"
 		}
+		return s
+	}
+	for _, a := range agents {
+		stalled, report := "", ""
 		if a.Stalled {
-			line += "  stalled"
+			stalled = "stalled"
 		}
 		if !a.ReportAt.IsZero() {
+			report = "reported"
 			if a.ReportFinal {
-				line += "  done"
-			} else {
-				line += "  reported"
+				report = "done"
 			}
 		}
-		line += "  " + a.Tool + "  " + a.Worktree
+		var tail []string
 		if a.Parent != "" {
-			line += "  parent " + a.Parent
+			tail = append(tail, "parent "+a.Parent)
 		}
 		if a.Mine {
-			line += "  mine"
+			tail = append(tail, "mine")
 		}
-		fmt.Fprintln(stdout, line)
+		line := strings.Join([]string{a.ID, a.State, dash(a.Activity), dash(stalled), dash(report), a.Tool, a.Worktree}, "\t")
+		if len(tail) > 0 {
+			line += "\t" + strings.Join(tail, "  ")
+		}
+		fmt.Fprintln(tw, line)
 	}
-	return 0
+	tw.Flush()
 }
 
 // agentListOutside prints the live TUIs from their registry files: no

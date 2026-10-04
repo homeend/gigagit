@@ -307,3 +307,34 @@ func TestAgentWaitCLIStopsOnSignal(t *testing.T) {
 		t.Fatalf("wait after the signal = %d %q", code, out)
 	}
 }
+
+// The list's columns line up whatever a row has (activity, stall, report)
+// and leaves blank: absent cells print "-".
+func TestAgentListColumnsAlign(t *testing.T) {
+	var b strings.Builder
+	printAgentList(&b, []domain.AgentEntry{
+		{ID: "123-4/s1", State: "running", Activity: "working", Stalled: true, ReportAt: time.Now(), Tool: "Claude", Worktree: "/wt/a", Mine: true},
+		{ID: "123-4/s10", State: "exited", Tool: "Codex", Worktree: "/wt/bb", Parent: "123-4/s1"},
+	})
+	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("%q", b.String())
+	}
+	col := func(line, word string) int { return strings.Index(line, word) }
+	if col(lines[0], "Claude") != col(lines[1], "Codex") || col(lines[0], "/wt/a") != col(lines[1], "/wt/bb") {
+		t.Fatalf("columns do not line up:\n%s", b.String())
+	}
+	if !strings.Contains(lines[0], "working") || !strings.Contains(lines[0], "stalled") || !strings.Contains(lines[0], "reported") || !strings.Contains(lines[1], " - ") {
+		t.Fatalf("cells:\n%s", b.String())
+	}
+}
+
+func TestAgentListNoTrailingSpaces(t *testing.T) {
+	var b strings.Builder
+	printAgentList(&b, []domain.AgentEntry{{ID: "1/s1", State: "running", Tool: "Claude", Worktree: "/wt/a", Mine: true}, {ID: "1/s2", State: "running", Tool: "X", Worktree: "/wt/b"}})
+	for _, l := range strings.Split(strings.TrimRight(b.String(), "\n"), "\n") {
+		if strings.HasSuffix(l, " ") {
+			t.Fatalf("trailing space: %q", l)
+		}
+	}
+}
