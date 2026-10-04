@@ -83,3 +83,63 @@ func TestNotesFeatureDeclaresALosslessSilentMigration(t *testing.T) {
 	}
 	t.Fatal("no notes feature registered")
 }
+
+// Every store resolution converts a legacy notes.toml, so a repo opened by a
+// TUI repo switch, a hosted-web switch or `gg mcp` — none of which run
+// RunAutoMigrations — still shows its notes.
+func TestOpeningANoteStoreConvertsALegacyFile(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	n := model.Note{ID: "c0000000", Source: model.NoteSourceUser, Side: model.NoteSideNew, Range: [2]int{1, 1},
+		Address: model.FileAddress{State: model.StateCommitted, Commit: "0123456789012345678901234567890123456789", Path: "a.go"},
+		Summary: "old"}
+	data, err := toml.Marshal(struct {
+		Notes []model.Note `toml:"notes"`
+	}{[]model.Note{n}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, notes.LegacyFile), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := openNotesStore(root)
+	got, err := st.Load(notes.PartCommits)
+	if err != nil || len(got) != 1 || got[0].Summary != "old" {
+		t.Fatalf("Load(commits) after open = %+v, %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, notes.LegacyFile)); !os.IsNotExist(err) {
+		t.Fatal("opening the store must convert the legacy file")
+	}
+}
+
+// The lazy store resolution itself converts (not only openNotesStore in
+// isolation). Serial: t.Setenv.
+func TestLazyNoteStoreResolutionConvertsALegacyFile(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	common := filepath.Join(t.TempDir(), ".git")
+	root := filepath.Join(stateBaseDir("notes"), repoKey(common))
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	n := model.Note{ID: "c0000000", Source: model.NoteSourceUser, Side: model.NoteSideNew, Range: [2]int{1, 1},
+		Address: model.FileAddress{State: model.StateCommitted, Commit: "0123456789012345678901234567890123456789", Path: "a.go"},
+		Summary: "old"}
+	data, err := toml.Marshal(struct {
+		Notes []model.Note `toml:"notes"`
+	}{[]model.Note{n}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, notes.LegacyFile), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := New(nil)
+	st := svc.notesStoreKeyed(func() (string, error) { return common, nil })
+	if st == nil {
+		t.Fatal("no store resolved")
+	}
+	if got, err := st.Load(notes.PartCommits); err != nil || len(got) != 1 {
+		t.Fatalf("Load(commits) = %+v, %v", got, err)
+	}
+}
