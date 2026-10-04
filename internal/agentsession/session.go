@@ -44,7 +44,9 @@ type Session struct {
 	lastOut stamp                    // pumpOut's latest read
 	lastIn  stamp                    // the latest input (SendKey/SendText/Paste)
 	osc     oscFilter                // pumpOut-only: keeps UTF-8 in OSC payloads away from x/ansi's C1 parsing
-	job     uintptr                  // Windows job object handle; 0 elsewhere
+	sigMu   sync.Mutex
+	sig     Signals // the title/progress osc recorded; under sigMu
+	job     uintptr // Windows job object handle; 0 elsewhere
 }
 
 func start(id ID, spec StartSpec) (*Session, error) {
@@ -100,6 +102,7 @@ func start(id ID, spec StartSpec) (*Session, error) {
 		pty: p, emu: emu, cmd: cmd, trace: trace, traceEv: traceEv,
 		done:    make(chan struct{}),
 		outDone: make(chan struct{}),
+		sig:     Signals{Progress: -1},
 	}
 	// Callbacks run inside emu.Write under the emulator's lock: store only.
 	emu.SetCallbacks(vt.Callbacks{CursorVisibility: func(v bool) { s.cursorHidden.Store(!v) }})
@@ -112,15 +115,19 @@ func start(id ID, spec StartSpec) (*Session, error) {
 
 // childEnv drops the variables that describe gg's own host terminal rather
 // than the console the child runs in: an agent seeing TMUX assumes it is a
-// tmux pane (Claude prints tmux scroll hints). TERM is set explicitly. A gg
-// started inside a gg console must not hand ITS agent-channel identity
-// (GG_SESSION_ID, GG_MCP_URL, GG_SESSION_TOKEN, GG_PARENT_SESSION) on.
+// tmux pane (Claude prints tmux scroll hints), and under any multiplexer
+// (TMUX, STY, ZELLIJ*) Claude freezes its title at "✳", the working signal
+// the state watcher reads. TERM is set explicitly. A gg started inside a gg
+// console must not hand ITS agent-channel identity (GG_SESSION_ID,
+// GG_MCP_URL, GG_SESSION_TOKEN, GG_PARENT_SESSION) on.
 func childEnv(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
 		k, _, _ := strings.Cut(kv, "=")
-		switch k {
-		case "TMUX", "TMUX_PANE", "TERM", "GG_SESSION_ID", "GG_MCP_URL", "GG_SESSION_TOKEN", "GG_PARENT_SESSION":
+		switch {
+		case k == "TMUX", k == "TMUX_PANE", k == "STY", k == "TERM",
+			k == "GG_SESSION_ID", k == "GG_MCP_URL", k == "GG_SESSION_TOKEN", k == "GG_PARENT_SESSION",
+			strings.HasPrefix(k, "ZELLIJ"):
 			continue
 		}
 		out = append(out, kv)
@@ -147,6 +154,15 @@ func (s *Session) pumpOut() {
 			}
 			s.lastOut.mark()
 			s.withEmu(func() { _, _ = s.emu.Write(s.osc.filter(buf[:n])) })
+			if s.osc.changed {
+				s.osc.changed = false
+				s.sigMu.Lock()
+				s.sig.Title = s.osc.title
+				if s.osc.hasProgress {
+					s.sig.Progress = s.osc.progress
+				}
+				s.sigMu.Unlock()
+			}
 			s.feedTaps(buf[:n])
 			s.signal()
 		}
@@ -286,6 +302,13 @@ func (s *Session) Info() Info { s.mu.Lock(); defer s.mu.Unlock(); return s.info 
 // LastOutput is when the child last printed anything; the zero time before
 // its first chunk. The stall clock of the session-state watcher.
 func (s *Session) LastOutput() time.Time { return s.lastOut.get() }
+
+// Signals is the agent's last title and progress report.
+func (s *Session) Signals() Signals {
+	s.sigMu.Lock()
+	defer s.sigMu.Unlock()
+	return s.sig
+}
 
 // LastInput is when anyone last typed into the child (SendKey, SendText,
 // Paste — a parent's agent_send and a human's console alike); the zero

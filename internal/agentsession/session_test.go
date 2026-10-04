@@ -244,3 +244,24 @@ func TestLastInputStampedByEveryInputPath(t *testing.T) {
 		t.Fatal("SendKey did not restamp")
 	}
 }
+
+// The agent's title and progress reach Signals with their UTF-8 intact.
+func TestSessionSignals(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	s := startSh(t, `printf 'a\033]0;\342\227\220 Claude Code\007b'; sleep 5`)
+	if got := s.Signals(); got.Progress != -1 {
+		t.Fatalf("before any report: %+v", got)
+	}
+	eventually(t, "title", func() bool { return s.Signals().Title == "◐ Claude Code" })
+	if got := s.Signals(); got.Progress != -1 {
+		t.Fatalf("progress = %d", got.Progress)
+	}
+}
+
+func TestSessionSignalsProgress(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	s := startSh(t, `printf '\033]9;4;3\007'; sleep 5`)
+	eventually(t, "progress", func() bool { return s.Signals().Progress == 3 })
+}
