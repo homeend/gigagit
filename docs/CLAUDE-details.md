@@ -4698,6 +4698,44 @@ Spec: `docs/superpowers/specs/2026-09-28-review-view-design.md`; plan
   Delete = `POST /api/notes/remove` behind `showLocalConfirm(…,
   ["cancel","delete"])`.
 
+## Note store partitions (2026-10-04)
+
+Spec: `docs/superpowers/specs/2026-10-04-notes-partitions-design.md`.
+
+- **Files** under `$XDG_STATE_HOME/gg/notes/<repoKey>/`: `commits.toml`,
+  `previews.toml`, `shelf.toml`, `worktrees/<key>.toml` (key = first 8 bytes
+  of sha256 over the cleaned top-level, hex), `worktrees/unscoped.toml`.
+- **Routing** (`notes.PartOf`, a ROOT note): shelf id → shelf; no commit
+  (domain's `worktreeScopedNote`) → the worktree's part, "" → unscoped;
+  `Preview` containing `...` → previews; every other committed note
+  (plain, commit/branch reviews, pair `a..b` notes, PR notes) → commits.
+- **A reply goes to its parent's part**: replies carry no `Preview`, so
+  `PartOf` alone would send a preview note's reply to commits. `Put` looks
+  the parent up; when the parent is found nowhere AND a part was unreadable,
+  `Put` returns that read error instead of guessing. `Put` of a stored id
+  whose part would change → `ErrPartChange`.
+- **Per part**: lock (`<file>.lock`), process mutex, `max_entries` cap,
+  quarantine (`FileStore.Quarantine` moves only corrupt parts). An emptied
+  part's file is deleted. Temp files are `.notes-*.tmp` (never `.toml`, so a
+  concurrent `Parts()` listing cannot mistake one for a part).
+- **Readers** (`internal/domain/notes_parts.go`): live address → own worktree
+  part; commit address → commits + previews (a commit's notes include the
+  scoped ones, `PlainNotes` filters later); `loadPreviewNotes` by scope
+  (`...` → previews, `a..b` → commits, PR "" → both); `NoteCounts` /
+  `NoteAddresses` / `NotesOverview` → the visible parts (shared + own
+  worktree); reviews + the branch delete/rename follow-up → commits. Ids,
+  `NewID` and the sweep use `LoadAll`.
+- **Sweep**: drops live notes whose `Address.Worktree` is not in `git
+  worktree list` (`normWorktree`: Clean + Windows case-fold); a failed or
+  empty list drops nothing. A removed worktree's notes were already orphaned
+  (no file to read); the rule covers a dir that exists but is unregistered.
+- **Migration** `split-notes` (`FeatureNotes`, `Silent`, `Lossless`,
+  `LegacyStore{StoreNotes}`): `FileStore.ConvertLegacy` holds
+  `notes.toml.lock`, routes replies with their roots, merges by id (newer
+  `Updated` wins, uncapped), renames to `notes.toml.migrated-<unix>`.
+  Idempotent: an older gg that recreates `notes.toml` is merged on the next
+  start. A corrupt legacy file is left in place (`ErrCorrupt`).
+
 ## Review notes (AI reviews stored as notes, 2026-09-27)
 
 Spec: `docs/superpowers/specs/2026-09-27-review-notes-design.md`.
