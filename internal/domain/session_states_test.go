@@ -428,6 +428,11 @@ func TestSessionRulesMergeWithTheAgentBuiltins(t *testing.T) {
 	if got := agentstate.Classify(r, agentstate.Tail(actQuestion, 15)); got != agentstate.Unknown {
 		t.Fatalf("the built-in question list must be replaced, not merged: %q", got)
 	}
+	// Claude's own menus stay unknown whatever the block sets: there is no
+	// config list for them.
+	if got := agentstate.Classify(r, agentstate.Tail("please CONFIRM\n ❯ 1. View tools\n Esc to back", 15)); got != agentstate.Unknown {
+		t.Fatalf("an own menu with a partial block: %q", got)
+	}
 	// A custom command (no agent) with one list has only that list.
 	cu := config.ToolCommand{Category: "session", Name: "X", Command: "mytool", ScreenWaiting: []string{`^READY$`}}
 	r, _, _ = SessionRules(cu)

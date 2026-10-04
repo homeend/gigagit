@@ -557,6 +557,7 @@ func SessionRules(tc config.ToolCommand) (r agentstate.Rules, custom bool, err e
 		if len(tc.ScreenQuestion) == 0 {
 			r.Question = def.Question
 		}
+		r.Own = def.Own // the agent's own menus have no config list
 	}
 	return r, true, nil
 }

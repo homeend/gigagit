@@ -18,12 +18,17 @@ const (
 )
 
 // Rules are the per-agent patterns. Checks are ordered Working →
-// Waiting → Question so that a phrase quoted in scrollback can never
+// Waiting → Own → Question so that a phrase quoted in scrollback can never
 // outrank the prompt box that is still on screen. Patterns run in
 // multi-line mode over the joined tail lines, so ^ and $ bound a line and
 // "\n" lets a rule span two adjacent lines (e.g. rule-line + prompt).
+//
+// Own are the agent's OWN menus (a settings or server menu the user opened):
+// they read as Unknown, so the session keeps the state it had — idle stays
+// idle, and a dialog's sub-step keeps its question. Built-in only.
 type Rules struct {
 	Working, Waiting, Question []*regexp.Regexp
+	Own                        []*regexp.Regexp
 }
 
 // defaults: [working, waiting, question] pattern lists per gg agent id
@@ -91,6 +96,14 @@ var defaults = map[string][3][]string{
 	},
 }
 
+// ownMenus: the footers of an agent's own menus, per gg agent id. Claude
+// Code's (2.1.289, captured live 2026-10-04): a server menu "Esc to back",
+// the login screens "Press Esc to go back", /config "Esc to close" / "Esc to
+// clear". Its permission dialogs say "Esc to cancel" — a question.
+var ownMenus = map[string][]string{
+	"claude": {`Esc to (?:go )?back\b`, `Esc to close\b`, `Esc to clear\b`},
+}
+
 // DefaultRules returns the built-in rules for an agent id, or the generic
 // set for ids gg has no verified rules for.
 func DefaultRules(agentID string) Rules {
@@ -101,6 +114,9 @@ func DefaultRules(agentID string) Rules {
 	r, err := Compile(d[0], d[1], d[2])
 	if err != nil {
 		panic(err) // built-ins are constants; a bad one is a programming error
+	}
+	if r.Own, err = compileAll(ownMenus[agentID]); err != nil {
+		panic(err)
 	}
 	return r
 }
@@ -156,6 +172,8 @@ func Classify(r Rules, lines []string) State {
 		return Working
 	case anyMatch(r.Waiting, text):
 		return Waiting
+	case anyMatch(r.Own, text):
+		return Unknown
 	case anyMatch(r.Question, text):
 		return Question
 	}

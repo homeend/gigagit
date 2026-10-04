@@ -291,3 +291,50 @@ func TestHasDefaultsAndGenericFallback(t *testing.T) {
 		t.Errorf("generic fallback: %q", got)
 	}
 }
+
+// Captured live 2026-10-04 (Claude Code 2.1.289): an MCP server's menu the
+// USER opened from /mcp. Numbered like a permission dialog, but its footer
+// steps back inside Claude's own menus — not the agent asking anything.
+const ownMenuScreen = `     Docs: https://code.claude.com/docs/en/sub-agents
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+   Claude.ai Claude Docs MCP Server
+   Status:           ✔ connected
+   Protocol:         2026-07-28
+   URL:              https://api.anthropic.com
+   Config location:  claude.ai
+   Capabilities: tools
+   Tools: 8 tools
+   ❯ 1. View tools
+     2. Clear authentication
+     3. Reconnect
+     4. Disable
+   ↑/↓ to navigate · Enter to select · Esc to back
+`
+
+// Captured live 2026-10-04: the trust dialog at start (cursor-style).
+const trustScreen = ` Claude Code'll be able to read, edit, and execute files here.
+ Security guide
+ ❯ No, exit
+   Yes, I trust this folder
+ Enter to confirm · Esc to cancel
+`
+
+// Claude's own menus (their footers step back, close or clear) read as
+// unknown, so a session keeps the state it had; the agent's dialogs (Esc to
+// cancel) stay questions.
+func TestClaudeOwnMenusAreNotQuestions(t *testing.T) {
+	r := DefaultRules("claude")
+	cases := map[string]State{
+		ownMenuScreen: Unknown,
+		"   Settings\n   ❯ Auto-compact   true\n   Enter/Space to change · / to search · Esc to close\n": Unknown,
+		"   Press Esc to go back\n": Unknown,
+		"   Type to filter · Enter/↓ to select · ↑ to tabs · Esc to clear\n": Unknown,
+		questionScreen: Question,
+		trustScreen:    Question,
+	}
+	for in, want := range cases {
+		if got := Classify(r, Tail(in, 15)); got != want {
+			t.Errorf("%q: got %q want %q", in[max(0, len(in)-50):], got, want)
+		}
+	}
+}
