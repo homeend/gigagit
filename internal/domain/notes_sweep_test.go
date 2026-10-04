@@ -16,6 +16,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/observ"
@@ -702,5 +703,81 @@ func TestSweepKeepsPathlessNoteOnMissingCommit(t *testing.T) {
 	all, _ := store.LoadAll()
 	if len(all) != 1 || all[0].ID != "rev1" {
 		t.Fatalf("sweep dropped the review note: %v", all)
+	}
+}
+
+// A live note of a worktree git no longer lists is dropped by the sweep, and
+// the worktree's emptied part file goes with it.
+func TestSweepDropsNotesOfARemovedWorktree(t *testing.T) {
+	dir := noteSideRepo(t)
+	other := filepath.Join(t.TempDir(), "wt2")
+	gittest.Run(t, dir, "worktree", "add", "-b", "side", other)
+	root := t.TempDir()
+	store := notes.NewFileStore(root)
+	main, side := svcIn(t, dir), svcIn(t, other)
+	main.SetNotesStore(store)
+	side.SetNotesStore(store)
+	ctx := context.Background()
+	sideTop, err := side.TopLevel(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := side.NoteAdd(ctx, model.Note{
+		Address: model.FileAddress{State: model.StateUnstaged, Worktree: sideTop, Path: "a.go"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "on the side worktree",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "worktree", "remove", "--force", other)
+
+	dropped, err := main.sweepNotes(ctx)
+	if err != nil || dropped != 1 {
+		t.Fatalf("sweepNotes = %d, %v; want 1", dropped, err)
+	}
+	if ents, _ := os.ReadDir(filepath.Join(root, "worktrees")); len(ents) != 0 {
+		t.Fatalf("the removed worktree's file survived: %v", ents)
+	}
+}
+
+// Timid like every sweep rule: no worktree list, no deletion. The third arm
+// proves the note was otherwise droppable — the same note goes once git
+// lists worktrees that do not include its checkout. The note's file exists
+// and matches, so resolution alone would keep it in every arm.
+func TestSweepKeepsLiveNotesWhenWorktreeListFails(t *testing.T) {
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(wt, "a.go"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := func(listing *gitexec.Result) int {
+		t.Helper()
+		f := gitexec.NewFakeRunner()
+		f.SetResponse("git rev-parse (toplevel)", gitexec.Result{Stdout: "/main\n"})
+		if listing != nil {
+			f.SetResponse("git worktree list", *listing)
+		} // else: the fake errors on the unconfigured command
+		svc := New(&git.Repo{Runner: f})
+		store := notes.NewFileStore(t.TempDir())
+		svc.SetNotesStore(store)
+		n := model.Note{ID: "w0000000", Source: model.NoteSourceUser, Side: model.NoteSideNew,
+			Address: model.FileAddress{State: model.StateUnstaged, Worktree: wt, Path: "a.go"},
+			Range:   [2]int{1, 1}, ContextHash: model.NoteContextHash([]string{"x"}), Created: notes.Now().UTC()}
+		if err := store.Put(n); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.sweepNotes(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		all, _ := store.LoadAll()
+		return len(all)
+	}
+	if left := run(nil); left != 1 {
+		t.Fatalf("a failed worktree list must delete nothing, %d left", left)
+	}
+	if left := run(&gitexec.Result{Stdout: ""}); left != 1 {
+		t.Fatalf("an empty worktree list must delete nothing, %d left", left)
+	}
+	only := gitexec.Result{Stdout: "worktree /main\nHEAD " + strings.Repeat("a", 40) + "\nbranch refs/heads/main\n\n"}
+	if left := run(&only); left != 0 {
+		t.Fatalf("a note of an unlisted worktree must go, %d left", left)
 	}
 }
