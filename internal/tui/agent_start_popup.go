@@ -154,9 +154,7 @@ func (p *agentStartPopup) start(m Model) (tea.Model, tea.Cmd) {
 	cols, rows := consoleInner(g.rightW, g.boxH[panelCommits])
 	svc, tc, dir, env, inbox, url := m.svc, p.pick, p.worktree, m.childEnv(), m.childInboxDir(), m.agentURL()
 	cwd, note, _ := sessionPlace(dir)
-	if note == "" && domain.SessionRulesWarning(tc) != "" {
-		note = screenRulesWarning(tc.Name)
-	}
+	note = startNote(note, tc)
 	m.statusMsg = i18n.T("starting %s…", tc.Name)
 	return m, func() tea.Msg {
 		s, _, err := svc.StartAgentSession(context.Background(), tc, dir, cwd, cols, rows, env, url, domain.SpawnRecord{}, "")

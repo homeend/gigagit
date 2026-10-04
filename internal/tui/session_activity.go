@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -119,6 +120,18 @@ func activityNoticeText(n domain.ActivityNotice) string {
 // built-in rules apply.
 func screenRulesWarning(name string) string {
 	return i18n.T("screen rules of %s are invalid — the built-in rules apply", name)
+}
+
+// startNote is a start's status line: the worktree's note (place) and the
+// command's invalid screen rules.
+func startNote(place string, tc config.ToolCommand) string {
+	if domain.SessionRulesWarning(tc) == "" {
+		return place
+	}
+	if place == "" {
+		return screenRulesWarning(tc.Name)
+	}
+	return place + " · " + screenRulesWarning(tc.Name)
 }
 
 // waitActivityCmd blocks until the watcher signals a change or a notice.

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/homeend/gigagit/internal/config"
 	"strings"
 	"testing"
 	"time"
@@ -219,5 +220,21 @@ func TestNewStartsAfterTheNoticesAlreadyPosted(t *testing.T) {
 	m, _ = m.onSessionActivity()
 	if m.statusMsg != "" {
 		t.Fatalf("an old notice was replayed: %q", m.statusMsg)
+	}
+}
+
+// A start's status line keeps both notes: the worktree's (git fails there
+// until repaired) and the command's invalid screen rules.
+func TestStartNoteKeepsBothNotes(t *testing.T) {
+	bad := config.ToolCommand{Category: "session", Name: "Claude", Command: "claude", ScreenQuestion: []string{`(`}}
+	got := startNote("started in /x — git there fails", bad)
+	if !strings.Contains(got, "git there fails") || !strings.Contains(got, "screen rules of Claude") {
+		t.Fatalf("note = %q", got)
+	}
+	if got := startNote("", bad); !strings.HasPrefix(got, "screen rules of Claude") {
+		t.Fatalf("rules only = %q", got)
+	}
+	if got := startNote("place", config.ToolCommand{Name: "Claude", Command: "claude"}); got != "place" {
+		t.Fatalf("place only = %q", got)
 	}
 }
