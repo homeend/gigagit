@@ -4545,6 +4545,47 @@ Spec `docs/superpowers/specs/2026-10-03-agent-wait-report-design.md`.
   export list AND that file's import (`reportLine` was caught only by the
   browser check; two `activityWiring` rows guard it now).
 
+### Agent state pipeline (2026-10-05, refactor — no behaviour change)
+
+The STRUCTURE of state detection since then; the stage sections below keep
+their rulings, but their function names (`Classify`, `Rules`,
+`ClassifyWith`, `SessionRules`, the watcher's per-session maps) are gone.
+
+```
+StateWatcher.observe(now)          THE entry (domain/session_states.go)
+  for each running session:
+    profileFor(info)               bound Profile (screen_* block) or agentstate.ForAgent(id)
+    src.Observe(id)                agentstate.Observation{Text, Lines, Title, Progress} + last output
+    profile.Read(obs)              agentstate.Reading: Verdict{State, IdleHint, Spinning}
+                                   + Options (Question), StepFor, Progress (stall key)
+    tracker.Step(rd, …)            domain/session_tracker.go: trust, idle hold, grace,
+                                   delayed question, both stalls → SessionActivity, notices
+  → states (Get), notice ring, Subscribe  → TUI · web · agent verbs · agent_wait (ReadyAt)
+```
+
+| Where | What lives there |
+|---|---|
+| `agentstate/detector.go` | `Observation`, `Verdict`, `Detector` (the one interface), `Reading`, `Profile.Read`, `First` |
+| `agentstate/screen.go` | `Screen` — Working → Waiting → Own (last line) → Question |
+| `agentstate/signals.go` | `Title` (question/spinner decide, idle only hints), `ProgressReport` (OSC 9;4) |
+| `agentstate/agents.go` | THE table: per agent id its signal parts + screen patterns; `ForAgent`, `Known`, `WithScreen` |
+| `domain/session_tracker.go` | per-session state over time (`sessionTracker.Step`, `stateTiming`) |
+| `domain/session_states.go` | the watcher: `observe`, source, profile binding, notices, run loop |
+| `domain/agentwait.go` | delivery only: `now ≥ ReadyAt` and newer than the caller's input |
+
+`First(parts…)`: the first part with a verdict decides and carries the
+hints of the parts before it; later parts are not asked (a Codex "Action
+Required" title carries no idle hint). `WithScreen(id, …)`: a known agent's
+empty lists keep its built-ins, `Own`/title/progress stay; an unknown
+command gets only its own lists; always `Dedicated`. `SessionActivity.ReadyAt`
+= idle `Since + hold` (700 ms trusted hint / 2 s), others `Since`; a zero
+`ReadyAt` (static watcher) → `Since + idleSettle`.
+
+**Adding a signal:** write a `Detector` part (pure, reads the
+`Observation`), add it to the agent's `signals` in `agents.go`; if it needs
+new raw data, add a field to `Observation` and fill it in
+`managerSource.Observe`. Timing belongs in the tracker, never in a part.
+
 ### Agent states from the title (2026-10-04)
 
 Live capture under `script`, env as gg gives it: Claude Code 2.1.289 titles

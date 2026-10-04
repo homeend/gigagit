@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## Agent sessions — the title says working
 
+### Internal
+
+- Agent-state detection restructured, no behaviour change: one entry (the
+  state watcher) reads each session as one observation through a
+  per-agent profile of detectors (screen rules, window title, progress
+  report — one table says which agent uses which), and a per-session
+  tracker applies the holds, grace and stall rules; `agent_wait` reads the
+  tracker's settle time instead of keeping its own rule.
+
 ### Changed
 
 - **A turn reads as working from start to end.** Claude Code and Codex
