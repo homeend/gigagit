@@ -12,7 +12,7 @@ import (
 
 // AgentKickoff is the one line a spawned worker's <prompt> slot carries: the
 // brief itself never rides a command line (spec §2 ruling 5).
-const AgentKickoff = "You were started by gg as a worker agent. Read your task with the gg tool agent_task - or gg agent task in a shell - then do it following the worker protocol of the delegate skill - gg skill path delegate prints where it is."
+const AgentKickoff = "You were started by gg as a worker agent. Read your task with the gg tool agent_task - or gg agent task in a shell - then do it following the Worker protocol section of the delegate skill - gg skill path delegate prints where it is."
 
 // SpawnRecord is what this process knows about an agent session it started.
 type SpawnRecord struct {

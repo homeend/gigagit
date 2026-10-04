@@ -30,6 +30,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   is still 45 s).
 - A worker's report notices go out at most once every 5 s (a final report
   always); every report is still stored and delivered.
+- **delegate skill** (from a first real run): `agent_wait` stays at 90 s at
+  most (Claude Code moves a 2-minute tool call to the background, where the
+  orphaned wait takes the next event); a recipe for tasks ABOUT an existing
+  worktree ("describe / review the changes in X") — the worker works in
+  it, the overseer only finds the range; a short hand-over when the report
+  is the deliverable. The worker's kickoff names the skill's "Worker
+  protocol" section.
 
 ### Fixed
 

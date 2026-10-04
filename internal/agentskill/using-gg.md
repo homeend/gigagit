@@ -1104,7 +1104,9 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   it began after the last input to that worker. An `exit` ends every wait,
   whatever `until` asked — a dead worker reports nothing more.
   `timed_out: true` (default after 45 s — keep `timeout_s` under your
-  client's tool timeout, 1 … 600; leave it out for the default) just means
+  client's tool timeout and at most 90 when it moves long calls to the
+  background, as Claude Code does at 2 min: a backgrounded wait still takes
+  the next event; 1 … 600; leave it out for the default) just means
   call again; with an `id` it carries the worker's `state` (`running` /
   `exited`) and `activity`. A turn too short for gg to see it working
   (a fraction of a second) ends without an `idle`: a `timed_out` whose
