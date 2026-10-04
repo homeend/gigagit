@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/homeend/gigagit/internal/config"
 	"strings"
 	"testing"
@@ -236,5 +237,26 @@ func TestStartNoteKeepsBothNotes(t *testing.T) {
 	}
 	if got := startNote("place", config.ToolCommand{Name: "Claude", Command: "claude"}); got != "place" {
 		t.Fatalf("place only = %q", got)
+	}
+}
+
+// A narrow console keeps what the title is for — the label and the state
+// with its activity: the key hints go first, then the worktree name is cut
+// in the middle.
+func TestConsoleTitleFitKeepsTheState(t *testing.T) {
+	defer domain.UseSessionStates(domain.NewStaticStates(map[domain.SessionID]domain.SessionActivity{
+		"s1": {State: domain.ActivityQuestion, Since: time.Now()},
+	}))()
+	info := domain.SessionInfo{ID: "s1", Label: "Claude", Dir: "/wt/feature-with-a-rather-long-worktree-name", Started: time.Now().Add(-2 * time.Minute)}
+	plain := consoleTitle(info, true) // label · worktree · state, no hints
+	if got := consoleTitleFit(info, false, lipgloss.Width(plain)); got != plain {
+		t.Fatalf("hints must go first:\n got %q\nwant %q", got, plain)
+	}
+	got := consoleTitleFit(info, false, 50)
+	if lipgloss.Width(got) > 50 || !strings.HasPrefix(got, "Claude · feat") || !strings.HasSuffix(got, "running 2m00s · needs input") || !strings.Contains(got, "…") {
+		t.Fatalf("narrow = %q", got)
+	}
+	if got := consoleTitleFit(info, true, 36); got != "Claude · running 2m00s · needs input" {
+		t.Fatalf("very narrow = %q", got)
 	}
 }
