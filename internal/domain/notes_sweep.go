@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -150,18 +148,6 @@ func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 		cutoff = notes.Now().UTC().AddDate(0, 0, -maxAge)
 	}
 
-	// Live notes of a worktree git no longer lists go: their checkout is
-	// gone. A failed — or impossible, empty — list removes nothing.
-	var liveWT map[string]bool
-	if wts, werr := s.Worktrees(ctx); werr == nil && len(wts) > 0 {
-		liveWT = make(map[string]bool, len(wts))
-		for _, w := range wts {
-			liveWT[normWorktree(w.Path)] = true
-		}
-	} else if cerr := ctx.Err(); cerr != nil {
-		return 0, cerr
-	}
-
 	// Phase 1 — resolve against the snapshot, no lock held.
 	cache := map[string]noteSide{}
 	drop := map[string]bool{}
@@ -188,11 +174,6 @@ func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 			if gone {
 				drop[n.ID] = true
 			}
-			continue
-		}
-		if liveWT != nil && worktreeScopedNote(n.Address) && n.Address.Worktree != "" &&
-			!liveWT[normWorktree(n.Address.Worktree)] {
-			drop[n.ID] = true
 			continue
 		}
 		if !cutoff.IsZero() && n.Created.Before(cutoff) {
@@ -289,15 +270,4 @@ func noteTargetGone(err error) bool {
 		}
 	}
 	return false
-}
-
-// normWorktree compares checkout roots the way git and filepath may each
-// spell them: cleaned (which also converts / to \ on Windows) and, on
-// Windows, case-folded.
-func normWorktree(p string) string {
-	p = filepath.Clean(p)
-	if runtime.GOOS == "windows" {
-		p = strings.ToLower(p)
-	}
-	return p
 }
