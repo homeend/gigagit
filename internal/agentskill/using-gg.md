@@ -1076,7 +1076,8 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   doing, read off its screen: `working`, `idle` (its turn is over, it waits
   for input), `question` (it waits for a decision — read the choices from
   `agent_screen`); absent when gg cannot tell. `stalled` means it printed
-  nothing for two minutes while apparently busy. `activity_since` is when
+  nothing for two minutes while apparently busy, or showed nothing but its
+  spinner for ten (a hung model call). `activity_since` is when
   that began. `report_at` / `report_final` say the agent reported
   (`agent_report`). To wait for a worker use `agent_wait`, not a poll.
 - `agent_screen {id}` / `gg agent screen <id>` — its visible console text,
@@ -1103,13 +1104,17 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   it began after the last input to that worker. An `exit` ends every wait,
   whatever `until` asked — a dead worker reports nothing more.
   `timed_out: true` (default after 45 s — keep `timeout_s` under your
-  client's tool timeout, at most 600) just means call again; with an `id`
-  it carries the worker's `state` (`running` / `exited`) and `activity`.
+  client's tool timeout, 1 … 600; leave it out for the default) just means
+  call again; with an `id` it carries the worker's `state` (`running` /
+  `exited`) and `activity`. A turn too short for gg to see it working
+  (a fraction of a second) ends without an `idle`: a `timed_out` whose
+  `activity` is `idle` after you sent something — read `agent_screen`.
   The CLI exits 0 on an event, 3 on a timeout. A wait that was killed
   outright can swallow one event — if a worker seems silent for long,
   look at `agent_list` (`report_at`, `state`) or `agent_screen`.
-- `agent_report {text, final?}` / `gg agent report [--final] (<text> | -F
-  <file> | -F -)` — **a worker's last act**: your result for whoever
+- `agent_report {text, final?}` / `gg agent report [--final] [--] (<text> |
+  -F <file> | -F -)` — flags before the text (a `--final` inside it is
+  prose) — **a worker's last act**: your result for whoever
   started you (what changed, what you skipped, what they must do; up to
   64 KiB). `final` says you are done. You stay running until killed — do
   not exit on your own: the parent may read your screen or ask more. The
@@ -1121,7 +1126,7 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
 
 A parent's loop: `agent_wait` → on `report` read it; on `question` answer
 with `agent_send`; on `idle` without a report read `agent_screen`; on
-`timed_out` call again; `agent_kill {remove: true}` when the work is done.
+`timed_out` call again (with `activity: idle` read `agent_screen` first); `agent_kill {remove: true}` when the work is done.
 
 Refusals and what to do: "spawning is off" / "not in [agents] spawn" — ask
 the user to allow the command in the global config; "has no <prompt> slot" —

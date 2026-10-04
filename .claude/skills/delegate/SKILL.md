@@ -3,7 +3,7 @@ name: delegate
 description: Use when the user asks you to delegate a task to worker agents through gg — start workers in their own worktrees, brief them, wait for their reports and check the result; also the protocol a worker started by gg follows.
 ---
 
-<!-- gg:delegate:v1 -->
+<!-- gg:delegate:v2 -->
 
 # delegate — hand work to worker agents through gg
 
@@ -134,7 +134,7 @@ act on the ONE event it returns:
 | `question` | the worker's tool shows a dialog; `options` lists the choices. Pick the one that fits the brief's limits (never destructive or out of scope) and send its `key`: `agent_send {id, keys: ["<key>"]}`. A `pick:<i>` key cannot be pressed — move with `up` / `down` keys and send `enter`. Unsure → ask the user. |
 | `idle` | its turn ended without a report: read `agent_screen`. Finished → `agent_send` "finish with agent_report (final)". Stuck or asking in prose → answer it. |
 | `exit` | the worker is gone: read `agent_screen` for why (reports it made come first). Restart it (new `agent_start`) or report the failure. |
-| `timed_out: true` | nothing new — call `agent_wait` again. Long `stalled` → read `agent_screen`. |
+| `timed_out: true` | nothing new — call `agent_wait` again. `activity: idle` after you sent something, or a long `stalled` → read `agent_screen`. |
 
 Each event comes once. `agent_list` shows the current state of everything
 (`activity`, `report_at`) when you lose track.

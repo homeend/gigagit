@@ -1019,7 +1019,7 @@ worker's turn ended, it asks a decision, it exited or it reported, and
 returns that one event — each once; a turn's end or a question only if it
 began after the last input to the worker, and an exit whatever was asked. On
 a timeout (45 s by default; the CLI exits 3) it simply calls again. A worker ends its task with `agent_report` (`gg agent
-report [--final] <text>`): the result reaches the overseer's `agent_wait`,
+report [--final] [--] <text>` — flags before the text): the result reaches the overseer's `agent_wait`,
 and the worker's row says **reported** — **done** for a final report — in
 the attention colour until someone types into that session or it exits; the status line
 (or a toast on the web page) carries the report's first line. A report never

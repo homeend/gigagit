@@ -4543,6 +4543,46 @@ Spec `docs/superpowers/specs/2026-10-03-agent-wait-report-design.md`.
   export list AND that file's import (`reportLine` was caught only by the
   browser check; two `activityWiring` rows guard it now).
 
+### Agent orchestration — minors batch (2026-10-04)
+
+The 3a/3b/4 deferred minors; the states rules (idle hold, spinner stall,
+own menus) are in the session-states section above.
+- **Wait timeout:** `waitTimeout(0)` = default; < 0 or > 600 s →
+  `ErrWaitTimeoutRange`. MCP `timeout_s` is `*int` (left out = default, an
+  explicit ≤ 0 refused); the CLI sends `timeout_s` only when `--timeout` was
+  given. `gg agent wait` flags go through `flagIs`/`flagValue` (one or two
+  dashes, `=value` or the next arg).
+- **Report flags:** `--final` / `-F` only BEFORE the text, `--` ends them;
+  `-F` reads through `io.LimitReader(MaxReportBytes+1)` and refuses past it.
+- **Report notices:** `reportNoticeGap` 5 s per worker (`registry.noticed`,
+  pruned with the reports; `UseReportNoticeGap` for tests); a final always
+  posts; a held-back one still `Wake()`s the watcher's subscribers — the TUI
+  files report tours and the rows repaint on those wakes.
+- **Clocks:** `agentsession.stamp` keeps the monotonic reading (nanos since
+  one process origin) for `LastInput` / `LastOutput`; `time.Unix(0, n)`
+  would drop it.
+- **TUI:** `actSeq` starts at `domain.SessionNoticeSeq()` (never starts the
+  watcher); `startNote` joins the worktree note and the screen-rule warning;
+  `consoleTitleFit` drops hints, then middle-cuts the worktree, then drops it.
+  Tours: `fileBriefTour` / `fileReportTours` / `openTour` return
+  `checkTourCmd` (CheckAnchors off the UI thread); `tourSeq` moves only on a
+  successful file, `tourRefused` says a cap refusal once per report;
+  `consoleSwitch.gen` (bumped by reRoot) tells openTour a switch it made from
+  one already in flight.
+- **Store:** `agentdocs.Store.tourMu` makes FileTour's look-up + add one step.
+  `domain.tourTitle` keeps titles one line and ≤ `TourMaxTitle` (200, pinned
+  to `agentdocs.MaxOverviewTitle`), middle-cutting label / worktree.
+- **Templates:** `config.CarryScreenRules` — the offered upgrade block
+  carries the block's screen_* lists, so the TUI popup and web preview show
+  what will be written.
+- **Browser host:** `TestAttachBrowserHost` also runs an "Other" worker in a
+  second real worktree; the scratch playwright check opens its report and
+  asserts the switch and the tour after the reload.
+- **Left as documented:** a turn shorter than the 300 ms coalesce never shows
+  working, so its idle is never fresh for agent_wait (the skill: a timed_out
+  with `activity: idle` → read agent_screen); a SIGKILLed waiter can swallow
+  one event.
+
 ### Agent orchestration — tours (stage 4, 2026-10-03)
 
 Spec `docs/superpowers/specs/2026-10-03-agent-tours-design.md`.
