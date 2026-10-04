@@ -90,7 +90,8 @@ func (m Model) noteRowMenu() ([]actionRow, bool) {
 }
 
 // rowNotesClearedMsg reports a Range review or Notes row's notes removed:
-// path set = a Notes row, else scope = a Range review row.
+// path set = a Notes row, else scope = a Range review row; n counts threads,
+// as the confirm did.
 type rowNotesClearedMsg struct {
 	hash, path, scope string
 	n                 int
@@ -143,29 +144,35 @@ func (m Model) onRowNotesCleared(msg rowNotesClearedMsg) (Model, tea.Cmd) {
 	return m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
 }
 
-// dropFilesRows removes the files-view rows gone matches, and a group heading
-// left with no rows under it; a list left empty reads "(no files)" again. The
-// cursor stays on the row that took the removed one's place.
+// dropFilesRows removes the files-view rows gone matches, and a note group's
+// heading left with no rows under it; a list left empty reads "(no files)"
+// again. A group heading is told by the rows under it, never by what follows
+// the group: root files carry no heading of their own, so a stale "Notes"
+// would read as theirs.
 func (m Model) dropFilesRows(gone func(contentLine) bool) Model {
 	p := m.filesView
 	if p == nil {
 		return m
 	}
-	kept := make([]contentLine, 0, len(p.lines))
-	for _, l := range p.lines {
-		if !gone(l) {
-			kept = append(kept, l)
+	isNote := func(l contentLine) bool { return l.noteID != "" || l.noteScope != "" || l.notedPath != "" }
+	out := make([]contentLine, 0, len(p.lines))
+	for i, l := range p.lines {
+		if gone(l) {
+			continue
 		}
-	}
-	if len(kept) == len(p.lines) {
-		return m
-	}
-	out := make([]contentLine, 0, len(kept))
-	for i, l := range kept {
-		if l.heading && (i+1 == len(kept) || kept[i+1].heading) {
-			continue // an emptied group: its heading goes with its last row
+		if l.heading && i+1 < len(p.lines) && isNote(p.lines[i+1]) {
+			kept := false
+			for j := i + 1; j < len(p.lines) && isNote(p.lines[j]); j++ {
+				kept = kept || !gone(p.lines[j])
+			}
+			if !kept {
+				continue // an emptied group: its heading goes with its last row
+			}
 		}
 		out = append(out, l)
+	}
+	if len(out) == len(p.lines) {
+		return m
 	}
 	if len(out) == 0 {
 		out = commitFileLines(nil)

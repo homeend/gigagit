@@ -378,7 +378,7 @@ func (s *Server) handleNoteClearRow(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := s.service().NotesClearAtCommit(r.Context(), req.Commit, req.Path, req.Scope)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
+		writeErr(w, noteErrStatus(err), err)
 		return
 	}
 	s.emitNotes()

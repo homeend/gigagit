@@ -708,11 +708,11 @@ func TestNotesClearAtCommit(t *testing.T) {
 	}
 
 	got, err := svc.NotesClearAtCommit(ctx, c, "a.go", "")
-	if err != nil || got != 2 {
-		t.Fatalf("clear the Notes row = %d, %v, want 2 (root + reply), nil", got, err)
+	if err != nil || got != 1 {
+		t.Fatalf("clear the Notes row = %d, %v, want 1 thread (its reply goes too), nil", got, err)
 	}
 	have := ids()
-	if have[plain.ID] || !have[keepPath.ID] || !have[scoped.ID] || !have[keepScope.ID] || !have[keepCommit.ID] {
+	if have[plain.ID] || len(have) != 5 || !have[keepPath.ID] || !have[scoped.ID] || !have[keepScope.ID] || !have[keepCommit.ID] {
 		t.Fatalf("after the Notes row clear: %v", have)
 	}
 

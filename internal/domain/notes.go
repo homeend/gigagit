@@ -409,7 +409,8 @@ func (s *Service) NotesClear(ctx context.Context, addr model.FileAddress) (int, 
 }
 
 // NotesClearAtCommit removes the threads one row of a commit's Files view
-// stands for and reports how many records went: with scope "" the plain notes
+// stands for and reports how many THREADS went (the row's ◆ N, which the
+// confirm quotes; replies are not counted): with scope "" the plain notes
 // on path (a Notes row — written in no scope), else every note written in
 // scope at the commit, whichever file (a Range review row). These are exactly
 // the threads NoteCounts' PlainByCommitPath / ScopesByCommit count. A reply
@@ -445,7 +446,10 @@ func (s *Service) NotesClearAtCommit(ctx context.Context, commit, path, scope st
 	if dropped > 0 {
 		s.invalidateNoteCounts()
 	}
-	return dropped, err
+	if err != nil {
+		return 0, err
+	}
+	return len(roots), nil
 }
 
 // NotesFor returns the notes that apply to addr, resolved against the OPEN

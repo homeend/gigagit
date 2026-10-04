@@ -175,6 +175,14 @@ func TestNotesRowDeleteDropsTheRow(t *testing.T) {
 	if listsRow(m, isNotedRow) || !listsRow(m, isScopeRow) {
 		t.Fatalf("after the delete: %+v", m.filesView.lines)
 	}
+	// The emptied group's heading goes too — b.txt is a ROOT file (no
+	// directory heading of its own), so a stale "Notes" would claim it.
+	if listsRow(m, func(l contentLine) bool { return l.heading && l.text == "Notes" }) {
+		t.Fatalf("the emptied Notes heading stayed over the files: %+v", m.filesView.lines)
+	}
+	if m.statusMsg != "deleted the note" {
+		t.Fatalf("status = %q, want one thread deleted (the reply goes with it)", m.statusMsg)
+	}
 	if n := m.noteCounts.PlainByCommitPath[m.filesHash+":a.txt"]; n != 0 {
 		t.Fatalf("a.txt still counts %d plain notes", n)
 	}
