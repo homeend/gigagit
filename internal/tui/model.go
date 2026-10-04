@@ -4802,6 +4802,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingGotoTip = ""                        // a repo switch must not fire a stale tip jump
 	m.pendingSteer = nil                         // the repo it referred to is gone; its inbox went with it
 	m.consoleSwitch.armed = true                 // the console keeps only a session the new repo owns
+	m.consoleSwitch.gen++                        // a new switch (openTour tells it from one in flight)
 	m.consoleSwitch.open = ""                    // a console asked for across an earlier switch is moot
 	m.consoleSwitch.tour = ""                    // …and so is a tour
 	m.pendingHint = nil                          // ditto: its navigate referred to the old repo

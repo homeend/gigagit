@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	tea "github.com/charmbracelet/bubbletea"
+	"os"
 	"strings"
 	"testing"
 
@@ -279,5 +280,23 @@ func TestTUIFiledToursCheckTheirAnchors(t *testing.T) {
 	runTourCmds(cmd)
 	if !anchorMissing(t, m, "brief:"+full) {
 		t.Fatal("open: a refiled brief's missing anchor is not struck through")
+	}
+}
+
+// A switch this open could not make (the worktree is unreachable) leaves
+// the tour off an earlier switch still in flight: that switch lands
+// elsewhere, where the tour is not.
+func TestOpenTourRefusedSwitchDoesNotRideAnEarlierOne(t *testing.T) {
+	m, id, wt := tourFixture(t)
+	m.consoleSwitch.armed = true // an earlier switch has not settled yet
+	if err := os.RemoveAll(wt); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.openTour(id, "brief")
+	if m.consoleSwitch.tour != "" {
+		t.Fatalf("the tour rode the earlier switch: %q", m.consoleSwitch.tour)
+	}
+	if !strings.Contains(m.statusMsg, "cannot switch") {
+		t.Fatalf("status = %q", m.statusMsg)
 	}
 }

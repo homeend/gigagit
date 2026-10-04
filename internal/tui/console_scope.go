@@ -19,6 +19,7 @@ type consoleSwitch struct {
 	armed bool             // reRoot ran; the console has not been checked against the new repo yet
 	open  domain.SessionID // the session the switch was asked for, opened once the repo has loaded
 	tour  string           // an agent tour (overview id) to show once the worktree has loaded
+	gen   int              // counts reRoots: tells a switch a call made from one already in flight
 }
 
 // inRepo reports whether a session runs in one of this repository's worktrees.

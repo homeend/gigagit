@@ -54,9 +54,12 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 		m = m.syncOverviews()
 		return m.showTour(o.ID), check
 	}
+	gen := m.consoleSwitch.gen
 	nm, cmd := m.guardedReRoot(dir, false)
 	m = nm.(Model)
-	if m.consoleSwitch.armed { // the switch runs (a refusal said why on the status line)
+	// Only a switch THIS call made carries the tour; a refusal (said on the
+	// status line) leaves an earlier switch in flight, which lands elsewhere.
+	if m.consoleSwitch.gen != gen {
 		m.consoleSwitch.tour = o.ID
 	}
 	return m, tea.Batch(cmd, check)
