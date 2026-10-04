@@ -4547,9 +4547,22 @@ Spec `docs/superpowers/specs/2026-10-03-agent-wait-report-design.md`.
 
 ### Agent state pipeline (2026-10-05, refactor — no behaviour change)
 
-The STRUCTURE of state detection since then; the stage sections below keep
-their rulings, but their function names (`Classify`, `Rules`,
-`ClassifyWith`, `SessionRules`, the watcher's per-session maps) are gone.
+The STRUCTURE of state detection since then. The stage sections below keep
+their rulings, but name things that are gone — read them through this map:
+
+| Gone | Now |
+|---|---|
+| `Rules`, `DefaultRules(id)`, `Compile(…)` | `Profile`, `ForAgent(id)`, `WithScreen(id, …)` |
+| `Classify(rules, lines)` | `Screen.Read` (inside `Profile.Read`) |
+| `SignalState`, `ClassifyWith`, `Signal{Title, Progress}` | `Title.Read` / `ProgressReport.Read` composed by `First`; `Observation{Title, Progress}` |
+| `titleIdle`, `Signal.Trusted` | `Verdict.IdleHint` + `sessionTracker.animated` |
+| `HasDefaults(id)` | `Known(id)` |
+| `defaults`, `ownMenus`, `titleRules`, `progressAgents` | the `agents` table (`agents.go`) |
+| `SessionRules(tc)`, `bindSessionRules` | `SessionProfile(tc)`, `bindSessionProfile` |
+| `rulesFor` | `profileFor` |
+| watcher maps `pendingIdle`, `pendingQ`, `progress`, `animated` | `sessionTracker` fields |
+| `SessionActivity.Settle`, `idleHold` | `SessionActivity.ReadyAt`, `readyAt` |
+| `stateSource.Text` / `Signals` / `LastOutput` | `stateSource.Observe` |
 
 ```
 StateWatcher.observe(now)          THE entry (domain/session_states.go)

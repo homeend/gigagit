@@ -127,9 +127,8 @@ func UseTitleSettle(d time.Duration) func() {
 	return func() { statesMu.Lock(); titleSettle = prev; statesMu.Unlock() }
 }
 
-// stateSource is what the watcher reads: the manager in production, a fake
-// feed in tests.
-// stateSource is where the watcher observes sessions.
+// stateSource is where the watcher observes sessions: the manager in
+// production, a fake feed in tests.
 type stateSource interface {
 	List() []agentsession.Info
 	// Observe is the session's screen, title and progress as one

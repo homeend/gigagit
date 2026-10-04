@@ -87,3 +87,17 @@ func TestKnown(t *testing.T) {
 		t.Error("generic ids must not claim dedicated rules")
 	}
 }
+
+// Every known agent's screen can say idle and can say question: an agent
+// whose waiting list is empty would read every turn end as a stall.
+func TestEveryKnownAgentScreenSaysIdleAndQuestion(t *testing.T) {
+	t.Parallel()
+	for id, r := range agents {
+		if id == "" {
+			continue
+		}
+		if len(r.screen.Waiting) == 0 || len(r.screen.Question) == 0 {
+			t.Errorf("%s: no waiting or question rules", id)
+		}
+	}
+}
