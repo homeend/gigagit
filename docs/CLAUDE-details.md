@@ -4545,6 +4545,39 @@ Spec `docs/superpowers/specs/2026-10-03-agent-wait-report-design.md`.
   export list AND that file's import (`reportLine` was caught only by the
   browser check; two `activityWiring` rows guard it now).
 
+### Agent states from the title (2026-10-04)
+
+Live capture under `script`, env as gg gives it: Claude Code 2.1.289 titles
+a turn `◐ <topic>` / `◑ <topic>` (OSC 0, frames every 960 ms while it has
+focus; the glyph stays ◐ without it) and an idle or a permission dialog
+`✳ <topic>`; ≤ 2.1.227 used braille frames (herdr). Under a multiplexer —
+`TMUX`, `STY` or `ZELLIJ` in its env, flag `tengu_static_title_under_mux` —
+it is always `✳`, so `childEnv` strips all three. Codex 0.160.0: braille
+spinner + ` | repo` while working, no glyph idle, `Action Required` when
+blocked (herdr). Kimi Code 2.1.1: OSC 9;4 `4;3` working, `4;0` done.
+Junie/agy send nothing usable.
+
+- `agentsession.oscFilter` records the last OSC 0/2 title (full UTF-8,
+  256-byte cap cut to valid UTF-8) and OSC 9;4 state from the raw bytes; it
+  reads the OSC number first and buffers only 0/2/9 payloads (an OSC 52
+  clipboard payload is never held). The emulator input is unchanged.
+  `Session.Signals()` = `{Title, Progress}` (−1 = no report yet).
+- `agentstate`: built-in `Rules.TitleWorking/TitleQuestion/TitleIdle` +
+  `ProgressBusy` (no config lists; `SessionRules` carries them past a
+  `screen_*` block like `Own`). `ClassifyWith` order (herdr): title
+  question → title working / busy progress → the screen (`Classify`). An
+  idle title never decides — Claude titles any waiting screen `✳` (a
+  picker opened mid-turn, a dialog the rules miss), so it only confirms an
+  idle the screen shows (`titleIdle`, trusted only).
+- Guard: an idle title counts only once the same session has shown a
+  working title/progress (`StateWatcher.animated` → `Signal.Trusted`): a
+  title frozen at `✳` keeps the screen-only 2 s behaviour.
+- Watcher: a titled idle holds `titleSettle` 700 ms, else `idleSettle` 2 s;
+  `SessionActivity.Settle` is the hold the idle passed and `agent_wait`
+  trusts the idle after it (0 → `idleSettle`). Stall rules unchanged — the
+  title frames are output like the spinner timer; the 10-min
+  spinner-only rule still catches a hung call.
+
 ### Agent orchestration — minors batch (2026-10-04)
 
 The 3a/3b/4 deferred minors; the states rules (idle hold, spinner stall,

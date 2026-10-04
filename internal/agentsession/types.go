@@ -55,3 +55,11 @@ type StartSpec struct {
 
 // ScrollbackLines caps the emulator's scrollback per session.
 const ScrollbackLines = 10000
+
+// Signals is what the agent announces outside the screen: the last window
+// title (OSC 0/2) and the last OSC 9;4 progress state (0 clear, 1 normal,
+// 2 error, 3 busy, 4 paused; −1 before any).
+type Signals struct {
+	Title    string
+	Progress int
+}
