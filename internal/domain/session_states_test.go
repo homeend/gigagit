@@ -26,10 +26,14 @@ type fakeStates struct {
 	infos []agentsession.Info
 	text  map[agentsession.ID]string
 	last  map[agentsession.ID]time.Time
+	slow  chan struct{} // Text blocks on it when set (a session busy rendering)
 }
 
 func (f *fakeStates) List() []agentsession.Info { return f.infos }
 func (f *fakeStates) Text(id agentsession.ID) (string, bool) {
+	if f.slow != nil {
+		<-f.slow
+	}
 	t, ok := f.text[id]
 	return t, ok
 }
@@ -337,6 +341,29 @@ func TestStatesBoundRulesWin(t *testing.T) {
 	if a, _ := w.Get("s1"); a.State != ActivityIdle {
 		t.Fatalf("bound rule ignored: %+v", a)
 	}
+}
+
+// Reading the screens (each session's emulator lock) happens outside the
+// watcher's lock: a session slow to render never stalls Get, the rows'
+// reader on the UI thread.
+func TestStatesGetIsNotBlockedByAScreenRead(t *testing.T) {
+	t.Parallel()
+	w, f := oneSession("claude")
+	f.text["s1"] = actIdle
+	f.slow = make(chan struct{})
+	done := make(chan struct{})
+	go func() { w.observe(actT0.Add(time.Minute)); close(done) }()
+	time.Sleep(20 * time.Millisecond) // observe is inside Text now
+	got := make(chan struct{})
+	go func() { w.Get("s1"); w.NoticeSeq(); close(got) }()
+	select {
+	case <-got:
+	case <-time.After(time.Second):
+		close(f.slow)
+		t.Fatal("Get waited for a screen read")
+	}
+	close(f.slow)
+	<-done
 }
 
 func TestStatesNoticeRing(t *testing.T) {

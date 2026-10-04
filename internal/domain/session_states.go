@@ -312,11 +312,19 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 	statesMu.Lock()
 	grace, stall, spinStall, settle := stateGrace, stallAfter, spinStallAfter, idleSettle
 	statesMu.Unlock()
-	infos := w.src.List()
+	// The screens are read and classified before taking w.mu: each read
+	// takes its session's emulator lock, and Get must not wait on that.
+	type reading struct {
+		info      agentsession.Info
+		dedicated bool
+		text      string
+		lines     []string
+		st        agentstate.State
+		last      time.Time
+	}
+	var reads []reading
 	live := map[SessionID]bool{}
-	changed := false
-	w.mu.Lock()
-	for _, info := range infos {
+	for _, info := range w.src.List() {
 		if info.State != agentsession.Running {
 			continue
 		}
@@ -330,7 +338,13 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 			continue
 		}
 		lines := agentstate.Tail(text, stateTailLines)
-		st := agentstate.Classify(rules, lines)
+		reads = append(reads, reading{info: info, dedicated: dedicated, text: text, lines: lines,
+			st: agentstate.Classify(rules, lines), last: w.src.LastOutput(info.ID)})
+	}
+	changed := false
+	w.mu.Lock()
+	for _, rd := range reads {
+		info, dedicated, text, lines, st := rd.info, rd.dedicated, rd.text, rd.lines, rd.st
 		prev := w.states[info.ID]
 		next := prev
 		switch st {
@@ -387,7 +401,7 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 			delete(w.pendingQ, info.ID)
 		}
 		next.StepFor = agentstate.StepDuration(lines)
-		last := w.src.LastOutput(info.ID)
+		last := rd.last
 		stalled := !last.IsZero() && now.Sub(last) > stall &&
 			(next.State == agentstate.Working || (next.State == agentstate.Unknown && dedicated))
 		quiet, spinning := now.Sub(last), false
