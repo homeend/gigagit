@@ -5,6 +5,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/savedcompare"
 )
 
@@ -27,4 +28,23 @@ func (a convertPreviews) Describe() string { return "converting saved merge prev
 
 func (a convertPreviews) Apply(ctx context.Context, deps engine.OpDeps) (int, error) {
 	return savedcompare.ConvertLegacy(a.Dir, a.Repo)
+}
+
+// splitNotes moves a legacy notes.toml into the per-part files
+// (notes.FileStore.ConvertLegacy) and drops the cached badge counts.
+type splitNotes struct {
+	Store *notes.FileStore
+	After func()
+}
+
+var _ engine.MigrationAction = splitNotes{}
+
+func (a splitNotes) Describe() string { return "splitting the note store" }
+
+func (a splitNotes) Apply(ctx context.Context, deps engine.OpDeps) (int, error) {
+	n, err := a.Store.ConvertLegacy()
+	if err == nil && a.After != nil {
+		a.After()
+	}
+	return n, err
 }
