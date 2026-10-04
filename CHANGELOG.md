@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent console — [x] close once the agent exits
+
+### Added
+
+- **An exited agent's console closes with x.** Once the agent has exited,
+  its docked console title and the footer offer `[x] close` in place of
+  `[enter] type`: x removes the session (as the ctrl+\ popup's x does) and
+  gives the Commits column back. esc now reads `hide` there — it keeps the
+  exited session listed. On a running agent x is unchanged.
+
 ## Agent sessions — the title says working
 
 ### Changed

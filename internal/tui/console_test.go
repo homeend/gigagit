@@ -414,3 +414,48 @@ func TestStepOutKeyTwiceClosesConsole(t *testing.T) {
 		t.Fatal("closing the console must not end the session")
 	}
 }
+
+// An exited agent leaves nothing to type into: its docked console offers
+// [x] close, which removes the session and gives the Commits column back. On
+// a running agent x is an ordinary key (the console swallows it) and the
+// title and footer keep [enter] type.
+func TestExitedConsoleClosesOnX(t *testing.T) {
+	m := newTestModel(t)
+	s := startTestSession(t, m, "sleep 0.3")
+	m, _ = m.openConsole(s.Info().ID)
+	m.console.focused = false
+	m.focus = panelCommits
+	m, _ = m.onSessionsChanged() // seen running
+	if strings.Contains(m.footerLine(), "[x] close") || strings.Contains(consoleTitle(s.Info(), false), "[x] close") {
+		t.Fatalf("a running console must not offer [x] close: %q", m.footerLine())
+	}
+	mm, _ := m.Update(keyMsg("x"))
+	m = mm.(Model)
+	if m.console == nil {
+		t.Fatal("x closed a RUNNING agent's console")
+	}
+	if _, ok := domain.Sessions().Get(s.Info().ID); !ok {
+		t.Fatal("x removed a RUNNING session")
+	}
+
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not exit")
+	}
+	m, _ = m.onSessionsChanged()
+	if !strings.Contains(m.footerLine(), "[x] close") {
+		t.Fatalf("footer must advertise [x] close on an exited console: %q", m.footerLine())
+	}
+	if title := consoleTitle(s.Info(), false); !strings.Contains(title, "[x] close") || strings.Contains(title, "[enter] type") {
+		t.Fatalf("exited title hints: %q", title)
+	}
+	mm, _ = m.Update(keyMsg("x"))
+	m = mm.(Model)
+	if m.console != nil {
+		t.Fatalf("x must close an exited console, got %+v", m.console)
+	}
+	if _, ok := domain.Sessions().Get(s.Info().ID); ok {
+		t.Fatal("x must remove the exited session")
+	}
+}
