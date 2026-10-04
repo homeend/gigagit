@@ -439,7 +439,7 @@ func TestClassifyWith(t *testing.T) {
 		{"◐ over noise", noise, sig("◐ x"), Working, false},
 		{"dialog under ✳", dialog, sig("✳ x"), Question, true},
 		{"✳ over the idle box", idleBox, sig("✳ x"), Waiting, true},
-		{"✳ over noise", noise, sig("✳ x"), Waiting, true},
+		{"✳ over noise (a title confirms an idle, never creates one)", noise, sig("✳ x"), Unknown, true},
 		{"static ✳ over a spinner", spinner, sig("✳ x"), Working, true},
 		{"✳ untrusted over noise", noise, Signal{Title: "✳ x", Progress: -1}, Unknown, false},
 		{"✳ untrusted over the idle box", idleBox, Signal{Title: "✳ x", Progress: -1}, Waiting, false},

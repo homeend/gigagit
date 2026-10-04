@@ -668,8 +668,11 @@ func TestStatesDialogUnderAnIdleTitleIsAQuestion(t *testing.T) {
 	}
 }
 
-// A redraw the screen rules cannot read, under a trusted idle title, still
-// becomes idle (after the short hold).
+// A screen the rules cannot read keeps a working session working even under
+// a trusted idle title: Claude's title turns "✳" for any screen that waits —
+// a picker opened mid-turn, a dialog the question rules miss — and an idle
+// there would let a parent type into it. The title confirms an idle the
+// screen shows; it never creates one.
 func TestStatesTitledIdleOverAnUnreadableScreen(t *testing.T) {
 	t.Parallel()
 	w, f := oneSession("claude")
@@ -678,9 +681,9 @@ func TestStatesTitledIdleOverAnUnreadableScreen(t *testing.T) {
 	w.observe(late)
 	f.text["s1"], f.sig["s1"] = actNoise, title("✳ topic")
 	w.observe(late.Add(time.Second))
-	w.observe(late.Add(2 * time.Second))
-	if a, _ := w.Get("s1"); a.State != ActivityIdle {
-		t.Fatalf("activity = %+v", a)
+	w.observe(late.Add(5 * time.Second))
+	if a, _ := w.Get("s1"); a.State != ActivityWorking || kinds(w.Notices(0)) != "" {
+		t.Fatalf("activity = %+v notices %q", a, kinds(w.Notices(0)))
 	}
 }
 

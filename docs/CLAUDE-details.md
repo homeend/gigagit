@@ -4565,9 +4565,10 @@ Junie/agy send nothing usable.
 - `agentstate`: built-in `Rules.TitleWorking/TitleQuestion/TitleIdle` +
   `ProgressBusy` (no config lists; `SessionRules` carries them past a
   `screen_*` block like `Own`). `ClassifyWith` order (herdr): title
-  question → title working / busy progress → the screen (`Classify`) → a
-  trusted idle title when the screen is Unknown (not under an own menu).
-  `titleIdle` is reported whichever step decided.
+  question → title working / busy progress → the screen (`Classify`). An
+  idle title never decides — Claude titles any waiting screen `✳` (a
+  picker opened mid-turn, a dialog the rules miss), so it only confirms an
+  idle the screen shows (`titleIdle`, trusted only).
 - Guard: an idle title counts only once the same session has shown a
   working title/progress (`StateWatcher.animated` → `Signal.Trusted`): a
   title frozen at `✳` keeps the screen-only 2 s behaviour.

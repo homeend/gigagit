@@ -77,10 +77,14 @@ apply, first match wins (herdr's order):
 1. title question → Question
 2. title working, or progress busy → Working
 3. the screen, unchanged: Working → Waiting → Own (last line) → Question
-4. screen Unknown and title idle (or progress 0) → Waiting
+An idle title (or progress 0) never decides the state — it only confirms
+an idle the screen shows (review ruling, 2026-10-04: Claude titles ANY
+waiting screen "✳" — a picker opened mid-turn, a dialog the question rules
+miss — so an unreadable screen under "✳" stays Unknown and the session
+keeps its state; a false idle would let a parent type into it).
 
-`titleIdle` is true when the title/progress says idle, whatever step
-decided (the watcher uses it for the hold). `Classify(r, lines)` stays as
+`titleIdle` is true when a trusted title/progress says idle (the watcher
+uses it for the hold). `Classify(r, lines)` stays as
 the screen-only form (`ClassifyWith` with an empty signal).
 
 **Guard:** a session's title-idle counts only once the same session has
@@ -141,7 +145,7 @@ rules; Junie/agy/generic signals; OSC 9;4 for Claude/Codex (they send none).
 - `childEnv`: `STY`, `ZELLIJ`, `ZELLIJ_SESSION_NAME` dropped.
 - `agentstate`: table over captured titles × screens: dialog under "✳" →
   question; static "✳" + screen spinner → working; "◐" + empty prompt box
-  → working; "✳" + unknown screen → waiting; guard off → screen-only;
+  → working; "✳" + unknown screen → unknown; guard off → screen-only;
   Codex `Action Required` → question; Kimi progress 3/0.
 - `domain`: `SessionRules` with custom screen lists keeps title rules;
   watcher with a fake source — a turn whose screen drops the spinner stays

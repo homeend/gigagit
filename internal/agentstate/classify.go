@@ -29,7 +29,8 @@ const (
 //
 // Title* match the agent's window title (OSC 0/2) and ProgressBusy reads its
 // OSC 9;4 report: herdr's order puts a title question and a title spinner
-// above every screen rule and an idle title below them (ClassifyWith).
+// above every screen rule; an idle title only confirms the screen's idle
+// (ClassifyWith).
 // Built-in only.
 type Rules struct {
 	Working, Waiting, Question             []*regexp.Regexp
@@ -250,21 +251,17 @@ func SignalState(r Rules, s Signal) State {
 }
 
 // ClassifyWith classifies the screen together with the signal, first match
-// wins: a title question, a title spinner (or busy progress), the screen
-// (Classify), and last a trusted idle title when the screen decides
-// nothing. titleIdle reports a trusted idle title whichever step decided —
-// the watcher holds such an idle for less. An own menu stays Unknown.
+// wins: a title question, a title spinner (or busy progress), then the
+// screen (Classify). An idle title never decides: Claude titles any screen
+// that waits "✳" — a picker opened mid-turn, a dialog the question rules
+// miss — so it only confirms an idle the screen shows. titleIdle reports a
+// trusted idle title; the watcher holds such an idle for less.
 func ClassifyWith(r Rules, lines []string, s Signal) (st State, titleIdle bool) {
 	says := SignalState(r, s)
 	if says == Question || says == Working {
 		return says, false
 	}
-	titleIdle = says == Waiting && s.Trusted
-	st = Classify(r, lines)
-	if st == Unknown && titleIdle && !(len(lines) > 0 && anyMatch(r.Own, lines[len(lines)-1])) {
-		st = Waiting
-	}
-	return st, titleIdle
+	return Classify(r, lines), says == Waiting && s.Trusted
 }
 
 func anyMatch(res []*regexp.Regexp, text string) bool {
