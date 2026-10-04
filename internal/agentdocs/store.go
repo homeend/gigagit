@@ -20,6 +20,7 @@ type Store struct {
 	files     map[fileKey]*fileNotes
 	overviews map[string]*ovEntry // by id
 	tours     map[string]string   // FileTour key -> overview id (may name a closed one)
+	tourMu    sync.Mutex          // one FileTour at a time: look up, then add or replace
 	b         broadcaster
 }
 

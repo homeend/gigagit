@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/markdown"
@@ -322,5 +323,28 @@ func TestFileTourAtTheCap(t *testing.T) {
 	}
 	if _, _, err := s.FileTour("report:p/s1", "/r", "/r", "Report", "x"); err == nil || !strings.Contains(err.Error(), "overviews are open") {
 		t.Fatalf("cap: %v", err)
+	}
+}
+
+// Two callers filing one key at once (the TUI's wake and a web click) file
+// one overview: the second replaces the first, never orphans a twin that
+// counts against the cap.
+func TestFileTourConcurrentFilesOne(t *testing.T) {
+	for round := 0; round < 50; round++ {
+		s := New()
+		var wg sync.WaitGroup
+		for i := 0; i < 8; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if _, _, err := s.FileTour("report:p/s1", "/r", "/r", "Report", "x"); err != nil {
+					t.Error(err)
+				}
+			}()
+		}
+		wg.Wait()
+		if n := len(s.Overviews("/r")); n != 1 {
+			t.Fatalf("round %d: %d overviews for one key", round, n)
+		}
 	}
 }
