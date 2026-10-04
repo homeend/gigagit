@@ -13,15 +13,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **One file per kind of note.** The per-repo note store is no longer one
   `notes.toml`: notes live in `commits.toml`, `previews.toml`,
   `shelf.toml` and one `worktrees/<key>.toml` per worktree. A working-tree
-  read no longer parses every note in the repository, and one corrupt file
-  no longer disables every note — only that file is moved aside.
-- **Notes of an unregistered worktree are swept.** The startup cleanup
-  drops working-tree notes whose worktree git no longer lists (a failed
-  worktree listing deletes nothing).
-- **Existing notes are converted automatically**, without asking and
-  without loss; the old file is kept as `notes.toml.migrated-<unix>`. An
-  older gg still running that writes `notes.toml` again is merged on the
-  next start.
+  read no longer parses every note in the repository, and a corrupt file
+  of another worktree no longer hides this checkout's notes (adding or
+  editing a note still reports it). A removed worktree's file is deleted
+  by the startup cleanup.
+- **Existing notes are converted automatically** the first time gg opens
+  the repository — also after a repo switch and in `gg mcp` — without
+  asking and without loss; the old file is kept as
+  `notes.toml.migrated-<unix>` (a corrupt one is moved to
+  `notes.toml.corrupt-<unix>`). An older gg still running that writes
+  `notes.toml` again is merged the next time.
 
 ## Agent sessions — states, wait/report and tours polished
 

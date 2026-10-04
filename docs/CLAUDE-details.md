@@ -4725,16 +4725,23 @@ Spec: `docs/superpowers/specs/2026-10-04-notes-partitions-design.md`.
   `NoteAddresses` / `NotesOverview` → the visible parts (shared + own
   worktree); reviews + the branch delete/rename follow-up → commits. Ids,
   `NewID` and the sweep use `LoadAll`.
-- **Sweep**: drops live notes whose `Address.Worktree` is not in `git
-  worktree list` (`normWorktree`: Clean + Windows case-fold); a failed or
-  empty list drops nothing. A removed worktree's notes were already orphaned
-  (no file to read); the rule covers a dir that exists but is unregistered.
+- **Sweep**: a removed worktree's live notes resolve orphaned (no file to
+  read) and are dropped; the emptied part file is deleted. There is NO
+  `git worktree list` rule: git names the MAIN checkout of a submodule or a
+  `--separate-git-dir` repo by its git dir, not its top level, so such a
+  rule dropped every note of that checkout (review finding, removed;
+  `TestSweepKeepsNotesOfASeparateGitDirCheckout`). `FileStore.Sweep`
+  continues past a corrupt part and joins the errors.
 - **Migration** `split-notes` (`FeatureNotes`, `Silent`, `Lossless`,
   `LegacyStore{StoreNotes}`): `FileStore.ConvertLegacy` holds
   `notes.toml.lock`, routes replies with their roots, merges by id (newer
   `Updated` wins, uncapped), renames to `notes.toml.migrated-<unix>`.
   Idempotent: an older gg that recreates `notes.toml` is merged on the next
-  start. A corrupt legacy file is left in place (`ErrCorrupt`).
+  open; a conversion that waited on the lock and finds the file gone is a
+  no-op. A corrupt legacy file is moved to `notes.toml.corrupt-<unix>` and
+  reported (`ErrCorrupt`). Besides `RunAutoMigrations`, every lazy store
+  resolution converts (`openNotesStore`): a TUI/hosted-web repo switch and
+  `gg mcp` never call `RunAutoMigrations`.
 
 ## Review notes (AI reviews stored as notes, 2026-09-27)
 

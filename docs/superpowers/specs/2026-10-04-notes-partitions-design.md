@@ -108,9 +108,11 @@ Other worktrees' files are read only by id lookups and the sweep.
 ## 6. Worktree lifecycle
 
 - The main checkout is a worktree like any other and has its own file.
-- **Deleted worktree:** the sweep drops every live-state note whose
-  `Address.Worktree` is no longer listed by `git worktree list`; the emptied
-  file is deleted with it (§4). Timid like today's
+- **Deleted worktree:** its live notes resolve orphaned (their file is gone)
+  and the sweep drops them; the emptied file is deleted with them (§4).
+  (Amended after the final review: a `git worktree list` rule was dropped —
+  git lists a submodule's or `--separate-git-dir` repo's main checkout by its
+  git dir, so the rule deleted that checkout's notes.) Timid like today's
   sweep: a failed or cancelled list read removes nothing.
 - **Recycled worktree** (same path, new branch): the file stays. Its line
   notes go stale and the existing sweep rules drop them; spec 2's working
@@ -133,6 +135,9 @@ Follows the saved-previews precedent (`FeaturePreviews`,
   again. Nothing is lost, so no format range has to lock old binaries out.
 - A corrupt `notes.toml` is not migrated: it is quarantined (today's
   behaviour) and the migration reports it.
+- Besides the startup migration, every store resolution converts a legacy
+  file: a TUI or hosted-web repo switch and `gg mcp` open a repo without
+  running `RunAutoMigrations`.
 
 ## 8. Testing
 
