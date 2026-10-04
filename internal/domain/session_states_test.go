@@ -643,7 +643,7 @@ func TestStatesTitledIdleHoldsShort(t *testing.T) {
 	}
 	w.observe(late.Add(1700 * time.Millisecond))
 	a, _ := w.Get("s1")
-	if a.State != ActivityIdle || !a.Since.Equal(late.Add(time.Second)) || a.Settle != 700*time.Millisecond {
+	if a.State != ActivityIdle || !a.Since.Equal(late.Add(time.Second)) || !a.ReadyAt.Equal(a.Since.Add(700*time.Millisecond)) {
 		t.Fatalf("activity = %+v", a)
 	}
 	if kinds(w.Notices(0)) != "idle" {
@@ -664,7 +664,7 @@ func TestStatesNeverAnimatedKeeps2s(t *testing.T) {
 		t.Fatalf("recheck = %v, want 2s", wait)
 	}
 	w.observe(late.Add(3 * time.Second))
-	if a, _ := w.Get("s1"); a.State != ActivityIdle || a.Settle != 2*time.Second {
+	if a, _ := w.Get("s1"); a.State != ActivityIdle || !a.ReadyAt.Equal(a.Since.Add(2*time.Second)) {
 		t.Fatalf("activity = %+v", a)
 	}
 }

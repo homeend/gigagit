@@ -86,9 +86,9 @@ func (t *sessionTracker) Step(rd agentstate.Reading, info agentsession.Info, las
 		t.pendingIdle = time.Time{} // working again, or a question
 	}
 	if st != agentstate.Unknown && st != prev.State {
-		next.State, next.Since, next.ReadyAt, next.Settle = st, since, since, 0
+		next.State, next.Since, next.ReadyAt = st, since, since
 		if st == agentstate.Waiting {
-			next.ReadyAt, next.Settle = since.Add(hold), hold
+			next.ReadyAt = since.Add(hold)
 		}
 		changed = true
 		switch {

@@ -37,7 +37,6 @@ type SessionActivity struct {
 	StepFor time.Duration    // the spinner's own timer, 0 when it shows none
 	Stalled bool             // nothing printed for stallAfter while (apparently) busy
 	Options []ActivityOption // the dialog's choices (question only); carried, never pressed
-	Settle  time.Duration    // the hold an idle passed (agent_wait trusts it after this); 0 otherwise
 	// ReadyAt: when the state counts as settled — an idle after the hold it
 	// passed, any other state at Since.
 	ReadyAt time.Time
