@@ -65,7 +65,7 @@ func TestTail(t *testing.T) {
 }
 
 func TestClassifyClaudeCode(t *testing.T) {
-	r := DefaultRules("claude")
+	r := ForAgent("claude")
 	cases := map[string]State{
 		workingScreen:               Working,
 		hooksScreen:                 Working, // hooks running: busy although the input box is visible
@@ -76,7 +76,7 @@ func TestClassifyClaudeCode(t *testing.T) {
 		"just some text\nno prompt": Unknown,
 	}
 	for in, want := range cases {
-		if got := Classify(r, Tail(in, 15)); got != want {
+		if got := read(r, Tail(in, 15)); got != want {
 			t.Errorf("%q: got %q want %q", in[:min(len(in), 30)], got, want)
 		}
 	}
@@ -94,13 +94,13 @@ const typedScreen = `● Sent (message 23) — the README.md diff adding the [ui
 `
 
 func TestClassifyTypedButUnsubmitted(t *testing.T) {
-	if got := Classify(DefaultRules("claude"), Tail(typedScreen, 15)); got != Waiting {
+	if got := read(ForAgent("claude"), Tail(typedScreen, 15)); got != Waiting {
 		t.Errorf("got %q want waiting", got)
 	}
 	// A user message echoed in the transcript (no rule above it) is not
 	// the input box.
 	echo := "❯ do the thing\n  (sent from the erbrus chat)\n● Working on it\n"
-	if got := Classify(DefaultRules("claude"), Tail(echo, 15)); got != Unknown {
+	if got := read(ForAgent("claude"), Tail(echo, 15)); got != Unknown {
 		t.Errorf("echo: got %q want unknown", got)
 	}
 }
@@ -125,43 +125,43 @@ const titledBoxScreen = `  - git worktree prune would remove the two stale T:/ w
 `
 
 func TestClassifyTitledInputBox(t *testing.T) {
-	if got := Classify(DefaultRules("claude"), Tail(titledBoxScreen, 15)); got != Waiting {
+	if got := read(ForAgent("claude"), Tail(titledBoxScreen, 15)); got != Waiting {
 		t.Errorf("titled box: got %q want waiting", got)
 	}
 	// Typed but unsubmitted text in a titled box is still idle.
 	typed := strings.Replace(titledBoxScreen, "\n❯\n", "\n❯ next question\n", 1)
-	if got := Classify(DefaultRules("claude"), Tail(typed, 15)); got != Waiting {
+	if got := read(ForAgent("claude"), Tail(typed, 15)); got != Waiting {
 		t.Errorf("titled box with text: got %q want waiting", got)
 	}
 	// A user message echoed under a line that merely STARTS with text is
 	// not the box: the rule must lead the line.
 	echo := "see ──────── here\n❯ do the thing\n● Working on it\n"
-	if got := Classify(DefaultRules("claude"), Tail(echo, 15)); got != Unknown {
+	if got := read(ForAgent("claude"), Tail(echo, 15)); got != Unknown {
 		t.Errorf("echo: got %q want unknown", got)
 	}
 }
 
 func TestClassifyGenericAndCodex(t *testing.T) {
-	if got := Classify(DefaultRules("mystery"), Tail("run tests? (y/n)", 5)); got != Question {
+	if got := read(ForAgent("mystery"), Tail("run tests? (y/n)", 5)); got != Question {
 		t.Errorf("generic question: %q", got)
 	}
-	if got := Classify(DefaultRules("mystery"), Tail("$ ", 5)); got != Waiting {
+	if got := read(ForAgent("mystery"), Tail("$ ", 5)); got != Waiting {
 		t.Errorf("generic waiting: %q", got)
 	}
-	if got := Classify(DefaultRules("codex"), Tail("• Working (12s • esc to interrupt)\n›", 5)); got != Working {
+	if got := read(ForAgent("codex"), Tail("• Working (12s • esc to interrupt)\n›", 5)); got != Working {
 		t.Errorf("codex working: %q", got)
 	}
 }
 
 func TestCompileOverridesAndErrors(t *testing.T) {
-	r, err := Compile([]string{`Thinking \(`}, []string{`^>\s*$`}, []string{`CONFIRM`})
+	r, err := WithScreen("", []string{`Thinking \(`}, []string{`^>\s*$`}, []string{`CONFIRM`})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := Classify(r, Tail("please CONFIRM", 5)); got != Question {
+	if got := read(r, Tail("please CONFIRM", 5)); got != Question {
 		t.Errorf("override: %q", got)
 	}
-	if _, err := Compile([]string{`(`}, nil, nil); err == nil {
+	if _, err := WithScreen("", []string{`(`}, nil, nil); err == nil {
 		t.Error("bad pattern accepted")
 	}
 }
@@ -191,7 +191,7 @@ const codexDialog = `  GPT-5.4 Mini will be deprecated soon
 
 func TestCodexDialogIsQuestionWithOptions(t *testing.T) {
 	lines := Tail(codexDialog, 15)
-	if got := Classify(DefaultRules("codex"), lines); got != Question {
+	if got := read(ForAgent("codex"), lines); got != Question {
 		t.Fatalf("state = %q", got)
 	}
 	opts := Options(lines)
@@ -217,19 +217,19 @@ const codexIdle = `› ask me using ask user tool: what deser I prefer: icecream
 `
 
 func TestCodexIdleAndTyped(t *testing.T) {
-	r := DefaultRules("codex")
-	if got := Classify(r, Tail(codexIdle, 15)); got != Waiting {
+	r := ForAgent("codex")
+	if got := read(r, Tail(codexIdle, 15)); got != Waiting {
 		t.Fatalf("idle: %q", got)
 	}
 	typed := strings.Replace(codexIdle, "› Ask Codex to do anything", "› rolls, thanks", 1)
-	if got := Classify(r, Tail(typed, 15)); got != Waiting {
+	if got := read(r, Tail(typed, 15)); got != Waiting {
 		t.Fatalf("typed-but-unsubmitted: %q", got)
 	}
 	// The echoed user message alone (no status line under it) is not the box.
-	if got := Classify(r, Tail("› do the thing\n• Working on it\n", 15)); got != Unknown {
+	if got := read(r, Tail("› do the thing\n• Working on it\n", 15)); got != Unknown {
 		t.Fatalf("echo: %q", got)
 	}
-	if got := Classify(r, Tail("• Working (12s • Esc to interrupt)\n› Ask Codex to do anything\n  gpt-5 low · /x\n", 15)); got != Working {
+	if got := read(r, Tail("• Working (12s • Esc to interrupt)\n› Ask Codex to do anything\n  gpt-5 low · /x\n", 15)); got != Working {
 		t.Fatalf("working: %q", got)
 	}
 }
@@ -247,7 +247,7 @@ const codexApproval = `  Would you like to run the following command?
 
 func TestCodexApprovalDialog(t *testing.T) {
 	lines := Tail(codexApproval, 15)
-	if got := Classify(DefaultRules("codex"), lines); got != Question {
+	if got := read(ForAgent("codex"), lines); got != Question {
 		t.Fatalf("state = %q", got)
 	}
 	opts := Options(lines)
@@ -258,36 +258,36 @@ func TestCodexApprovalDialog(t *testing.T) {
 
 // Junie and kimi rules come from erbrus's agent presets (live captures).
 func TestClassifyJunieAndKimi(t *testing.T) {
-	j := DefaultRules("junie")
-	if got := Classify(j, Tail("⠹ Running tests esc to stop\n> Type your prompt...\n~ /work/x\n", 15)); got != Working {
+	j := ForAgent("junie")
+	if got := read(j, Tail("⠹ Running tests esc to stop\n> Type your prompt...\n~ /work/x\n", 15)); got != Working {
 		t.Errorf("junie working: %q", got)
 	}
-	if got := Classify(j, Tail("Done.\n> Type your prompt...\n~ /work/x\n", 15)); got != Waiting {
+	if got := read(j, Tail("Done.\n> Type your prompt...\n~ /work/x\n", 15)); got != Waiting {
 		t.Errorf("junie idle: %q", got)
 	}
-	if got := Classify(j, Tail("    Junie needs your trust decision\n  → Trust this project\n    Keep untrusted\n", 15)); got != Question {
+	if got := read(j, Tail("    Junie needs your trust decision\n  → Trust this project\n    Keep untrusted\n", 15)); got != Question {
 		t.Errorf("junie question: %q", got)
 	}
-	k := DefaultRules("kimi")
+	k := ForAgent("kimi")
 	// gg's Text() puts a space after a wide glyph (its right-half cell).
-	if got := Classify(k, Tail("🌒  Thinking\n", 15)); got != Working {
+	if got := read(k, Tail("🌒  Thinking\n", 15)); got != Working {
 		t.Errorf("kimi working (wide glyph): %q", got)
 	}
-	if got := Classify(k, Tail("│ > \n╰──────╯\n", 15)); got != Waiting {
+	if got := read(k, Tail("│ > \n╰──────╯\n", 15)); got != Waiting {
 		t.Errorf("kimi idle: %q", got)
 	}
 }
 
-func TestHasDefaultsAndGenericFallback(t *testing.T) {
+func TestKnownAndGenericFallback(t *testing.T) {
 	for _, id := range []string{"claude", "codex", "junie", "kimi", "antigravity"} {
-		if !HasDefaults(id) {
+		if !Known(id) {
 			t.Errorf("%s has no rules", id)
 		}
 	}
-	if HasDefaults("") || HasDefaults("mystery") {
+	if Known("") || Known("mystery") {
 		t.Error("generic ids must not claim dedicated rules")
 	}
-	if got := Classify(DefaultRules("mystery"), Tail("continue? (y/n)", 5)); got != Question {
+	if got := read(ForAgent("mystery"), Tail("continue? (y/n)", 5)); got != Question {
 		t.Errorf("generic fallback: %q", got)
 	}
 }
@@ -323,7 +323,7 @@ const trustScreen = ` Claude Code'll be able to read, edit, and execute files he
 // unknown, so a session keeps the state it had; the agent's dialogs (Esc to
 // cancel) stay questions.
 func TestClaudeOwnMenusAreNotQuestions(t *testing.T) {
-	r := DefaultRules("claude")
+	r := ForAgent("claude")
 	cases := map[string]State{
 		ownMenuScreen: Unknown,
 		"   Settings\n   ❯ Auto-compact   true\n   Enter/Space to change · / to search · Esc to close\n": Unknown,
@@ -333,7 +333,7 @@ func TestClaudeOwnMenusAreNotQuestions(t *testing.T) {
 		trustScreen:    Question,
 	}
 	for in, want := range cases {
-		if got := Classify(r, Tail(in, 15)); got != want {
+		if got := read(r, Tail(in, 15)); got != want {
 			t.Errorf("%q: got %q want %q", in[max(0, len(in)-50):], got, want)
 		}
 	}
@@ -373,56 +373,67 @@ func TestOwnMenuFooterOnlyOnTheLastLine(t *testing.T) {
    3. No, and tell Claude what to do differently
  Esc to cancel
 `
-	if got := Classify(DefaultRules("claude"), Tail(editDialog, 15)); got != Question {
+	if got := read(ForAgent("claude"), Tail(editDialog, 15)); got != Question {
 		t.Fatalf("a quoted footer hid the edit dialog: %q", got)
 	}
-	if got := Classify(DefaultRules("claude"), Tail(ownMenuScreen, 15)); got != Unknown {
+	if got := read(ForAgent("claude"), Tail(ownMenuScreen, 15)); got != Unknown {
 		t.Fatalf("the menu itself: %q", got)
 	}
 }
 
-func sig(title string) Signal { return Signal{Title: title, Progress: -1, Trusted: true} }
+// read is the state a profile reads from a screen with no title or progress.
+func read(p Profile, lines []string) State {
+	return p.Read(Observation{Text: strings.Join(lines, "\n"), Lines: lines, Progress: -1}).State
+}
 
 // Captured live 2026-10-04 (Claude Code 2.1.289, Codex 0.160.0, Kimi 2.1.1).
-func TestSignalState(t *testing.T) {
+// The signal parts read over an empty screen: a question or a spinner
+// decides; an idle title only hints.
+func TestSignalParts(t *testing.T) {
 	t.Parallel()
-	claude, codex, kimi, junie := DefaultRules("claude"), DefaultRules("codex"), DefaultRules("kimi"), DefaultRules("junie")
+	const hint State = "idle hint"
 	cases := []struct {
-		name string
-		r    Rules
-		s    Signal
-		want State
+		name     string
+		id       string
+		title    string
+		progress int
+		want     State
 	}{
-		{"claude ◐", claude, sig("◐ Math and shell command sequence"), Working},
-		{"claude ◑", claude, sig("◑ Claude Code"), Working},
-		{"claude ◓ (2.1.228+ set)", claude, sig("◓ x"), Working},
-		{"claude braille (≤2.1.227)", claude, sig("⠂ Claude Code"), Working},
-		{"claude ✳", claude, sig("✳ Claude Code"), Waiting},
-		{"claude empty (exit)", claude, sig(""), Unknown},
-		{"claude plain", claude, sig("Claude Code"), Unknown},
-		{"codex spinner", codex, sig("⠋ Run sleep 5 command | repo"), Working},
-		{"codex spinner alone", codex, sig("⠹ repo"), Working},
-		{"codex idle", codex, sig("Run sleep 5 command | repo"), Waiting},
-		{"codex action required", codex, sig("Action Required | repo"), Question},
-		{"codex empty", codex, sig(""), Unknown},
-		{"kimi busy", kimi, Signal{Title: "Run the shell", Progress: 3}, Working},
-		{"kimi normal", kimi, Signal{Progress: 1}, Working},
-		{"kimi clear", kimi, Signal{Progress: 0}, Waiting},
-		{"kimi error", kimi, Signal{Progress: 2}, Unknown},
-		{"kimi none", kimi, Signal{Progress: -1}, Unknown},
-		{"junie title", junie, sig("◐ Junie"), Unknown},
-		{"claude ignores progress", claude, Signal{Progress: 3}, Unknown},
+		{"claude ◐", "claude", "◐ Math and shell command sequence", -1, Working},
+		{"claude ◑", "claude", "◑ Claude Code", -1, Working},
+		{"claude ◓ (2.1.228+ set)", "claude", "◓ x", -1, Working},
+		{"claude braille (≤2.1.227)", "claude", "⠂ Claude Code", -1, Working},
+		{"claude ✳", "claude", "✳ Claude Code", -1, hint},
+		{"claude empty (exit)", "claude", "", -1, Unknown},
+		{"claude plain", "claude", "Claude Code", -1, Unknown},
+		{"codex spinner", "codex", "⠋ Run sleep 5 command | repo", -1, Working},
+		{"codex spinner alone", "codex", "⠹ repo", -1, Working},
+		{"codex idle", "codex", "Run sleep 5 command | repo", -1, hint},
+		{"codex action required", "codex", "Action Required | repo", -1, Question},
+		{"codex empty", "codex", "", -1, Unknown},
+		{"kimi busy", "kimi", "Run the shell", 3, Working},
+		{"kimi normal", "kimi", "", 1, Working},
+		{"kimi clear", "kimi", "", 0, hint},
+		{"kimi error", "kimi", "", 2, Unknown},
+		{"kimi none", "kimi", "", -1, Unknown},
+		{"junie title", "junie", "◐ Junie", -1, Unknown},
+		{"claude ignores progress", "claude", "", 3, Unknown},
 	}
 	for _, c := range cases {
-		if got := SignalState(c.r, c.s); got != c.want {
-			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		v := ForAgent(c.id).Read(Observation{Title: c.title, Progress: c.progress})
+		got := v.State
+		if got == Unknown && v.IdleHint {
+			got = hint
+		}
+		if got != c.want || v.Spinning != (c.want == Working) {
+			t.Errorf("%s: %q spinning=%v, want %q", c.name, got, v.Spinning, c.want)
 		}
 	}
 }
 
-func TestClassifyWith(t *testing.T) {
+func TestProfileReadsSignalsBeforeTheScreen(t *testing.T) {
 	t.Parallel()
-	claude := DefaultRules("claude")
+	claude := ForAgent("claude")
 	idleBox := Tail("done\n────────────────────\n❯ \n────────────────────\n", 15)
 	spinner := Tail("✻ Cogitating… (27s · ↓ 1.5k tokens)\n────────────────────\n❯ \n", 15)
 	dialog := Tail(" Do you want to create b.txt?\n ❯ 1. Yes\n   2. Yes, and switch\n   3. No\n Esc to cancel · Tab to amend\n", 15)
@@ -431,42 +442,26 @@ func TestClassifyWith(t *testing.T) {
 	cases := []struct {
 		name     string
 		lines    []string
-		s        Signal
+		title    string
 		want     State
-		wantIdle bool
+		wantHint bool
 	}{
-		{"◐ over the idle box (between two steps)", idleBox, sig("◐ x"), Working, false},
-		{"◐ over noise", noise, sig("◐ x"), Working, false},
-		{"dialog under ✳", dialog, sig("✳ x"), Question, true},
-		{"✳ over the idle box", idleBox, sig("✳ x"), Waiting, true},
-		{"✳ over noise (a title confirms an idle, never creates one)", noise, sig("✳ x"), Unknown, true},
-		{"static ✳ over a spinner", spinner, sig("✳ x"), Working, true},
-		{"✳ untrusted over noise", noise, Signal{Title: "✳ x", Progress: -1}, Unknown, false},
-		{"✳ untrusted over the idle box", idleBox, Signal{Title: "✳ x", Progress: -1}, Waiting, false},
-		{"own menu under ✳", ownMenu, sig("✳ x"), Unknown, true},
-		{"no signal", idleBox, Signal{Progress: -1}, Waiting, false},
+		{"◐ over the idle box (between two steps)", idleBox, "◐ x", Working, false},
+		{"◐ over noise", noise, "◐ x", Working, false},
+		{"dialog under ✳", dialog, "✳ x", Question, true},
+		{"✳ over the idle box", idleBox, "✳ x", Waiting, true},
+		{"✳ over noise (a title confirms an idle, never creates one)", noise, "✳ x", Unknown, true},
+		{"static ✳ over a spinner", spinner, "✳ x", Working, true},
+		{"own menu under ✳", ownMenu, "✳ x", Unknown, true},
+		{"no signal", idleBox, "", Waiting, false},
 	}
 	for _, c := range cases {
-		st, idle := ClassifyWith(claude, c.lines, c.s)
-		if st != c.want || idle != c.wantIdle {
-			t.Errorf("%s: %q idle=%v, want %q idle=%v", c.name, st, idle, c.want, c.wantIdle)
+		rd := claude.Read(Observation{Lines: c.lines, Title: c.title, Progress: -1})
+		if rd.State != c.want || rd.IdleHint != c.wantHint {
+			t.Errorf("%s: %q hint=%v, want %q hint=%v", c.name, rd.State, rd.IdleHint, c.want, c.wantHint)
 		}
 	}
-	codex := DefaultRules("codex")
-	if st, _ := ClassifyWith(codex, idleBox, sig("Action Required | repo")); st != Question {
+	if st := ForAgent("codex").Read(Observation{Lines: idleBox, Title: "Action Required | repo", Progress: -1}).State; st != Question {
 		t.Errorf("codex action required: %q", st)
-	}
-}
-
-// The screen-only form is ClassifyWith with no signal.
-func TestClassifyIsClassifyWithoutASignal(t *testing.T) {
-	t.Parallel()
-	r := DefaultRules("claude")
-	for _, text := range []string{"✻ Cogitating… (27s · ↓ 1.5k tokens)", "x\n────────────────────\n❯ ", " ❯ 1. Yes\n Esc to cancel", "noise"} {
-		lines := Tail(text, 15)
-		got, _ := ClassifyWith(r, lines, Signal{Progress: -1})
-		if want := Classify(r, lines); got != want {
-			t.Errorf("%q: %q vs %q", text, got, want)
-		}
 	}
 }
