@@ -187,8 +187,11 @@ type StateWatcher struct {
 	mu       sync.Mutex
 	states   map[SessionID]SessionActivity
 	pendingQ map[SessionID]bool // a question seen inside the grace, not yet announced
-	notices  []ActivityNotice
-	seq      uint64
+	// pendingIdle: when a working session's screen first read idle; it
+	// shows as idle only once that has held idleSettle (the flicker guard).
+	pendingIdle map[SessionID]time.Time
+	notices     []ActivityNotice
+	seq         uint64
 
 	stop chan struct{}
 	wg   sync.WaitGroup
@@ -196,7 +199,7 @@ type StateWatcher struct {
 
 func newStateWatcher(src stateSource, rules *ruleStore) *StateWatcher {
 	return &StateWatcher{src: src, rules: rules, states: map[SessionID]SessionActivity{},
-		pendingQ: map[SessionID]bool{}, stop: make(chan struct{})}
+		pendingQ: map[SessionID]bool{}, pendingIdle: map[SessionID]time.Time{}, stop: make(chan struct{})}
 }
 
 // NewStaticStates is a watcher that watches nothing and serves the given
@@ -282,13 +285,16 @@ func (w *StateWatcher) rulesFor(info agentsession.Info) (r agentstate.Rules, ded
 // observe classifies every running session once and folds the result into
 // the states, posting the notices the transitions call for. An unknown
 // screen changes nothing: output lands mid-redraw often enough that acting
-// on it would flap.
-func (w *StateWatcher) observe(now time.Time) {
+// on it would flap. A working session that reads idle shows idle only once
+// that has held idleSettle — Claude Code drops its spinner between two steps
+// of one turn — and then from when it began; observe returns how soon a
+// pending idle wants looking at again (0: none pending).
+func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 	if w.src == nil {
-		return
+		return 0
 	}
 	statesMu.Lock()
-	grace, stall := stateGrace, stallAfter
+	grace, stall, settle := stateGrace, stallAfter, idleSettle
 	statesMu.Unlock()
 	infos := w.src.List()
 	live := map[SessionID]bool{}
@@ -323,15 +329,34 @@ func (w *StateWatcher) observe(now time.Time) {
 			changed = true
 		}
 		trusted := now.Sub(info.Started) >= grace
+		since := now
+		switch {
+		case st == agentstate.Waiting && prev.State == agentstate.Working:
+			first, ok := w.pendingIdle[info.ID]
+			if !ok {
+				first, w.pendingIdle[info.ID] = now, now
+			}
+			if held := now.Sub(first); held < settle {
+				st = agentstate.Unknown // not yet: the session stays working
+				if left := settle - held; recheck == 0 || left < recheck {
+					recheck = left
+				}
+			} else {
+				delete(w.pendingIdle, info.ID)
+				since = first
+			}
+		case st != agentstate.Unknown:
+			delete(w.pendingIdle, info.ID) // working again, or a question
+		}
 		if st != agentstate.Unknown && st != prev.State {
-			next.State, next.Since = st, now
+			next.State, next.Since = st, since
 			changed = true
 			switch {
 			case st == agentstate.Question && trusted:
 				note("question", 0)
 			case st == agentstate.Question:
 				w.pendingQ[info.ID] = true
-			case st == agentstate.Waiting && prev.State == agentstate.Working && trusted:
+			case st == agentstate.Waiting && prev.State == agentstate.Working && since.Sub(info.Started) >= grace:
 				note("idle", 0)
 			}
 		} else if w.pendingQ[info.ID] && trusted {
@@ -365,6 +390,7 @@ func (w *StateWatcher) observe(now time.Time) {
 		if !live[id] {
 			delete(w.states, id)
 			delete(w.pendingQ, id)
+			delete(w.pendingIdle, id)
 			changed = true
 		}
 	}
@@ -373,6 +399,7 @@ func (w *StateWatcher) observe(now time.Time) {
 	if changed {
 		w.bc.Signal()
 	}
+	return recheck
 }
 
 // run watches m until close: the manager's signal re-syncs the per-session
@@ -430,27 +457,38 @@ func (w *StateWatcher) run(m *agentsession.Manager) {
 			}
 		}
 	}
+	// promote: a pending idle comes due (an idle agent prints nothing that
+	// would wake the loop sooner than the tick).
+	var settle, promote <-chan time.Time
+	observe := func() {
+		if d := w.observe(time.Now()); d > 0 {
+			promote = time.After(d)
+		} else {
+			promote = nil
+		}
+	}
 	resync()
-	w.observe(time.Now())
+	observe()
 	tick := time.NewTicker(stateTick)
 	defer tick.Stop()
-	var settle <-chan time.Time
 	for {
 		select {
 		case <-w.stop:
 			return
 		case <-mch:
 			resync()
-			w.observe(time.Now())
+			observe()
 		case <-dirty:
 			if settle == nil {
 				settle = time.After(stateCoalesce)
 			}
 		case <-settle:
 			settle = nil
-			w.observe(time.Now())
+			observe()
+		case <-promote:
+			observe()
 		case <-tick.C:
-			w.observe(time.Now())
+			observe()
 		}
 	}
 }
