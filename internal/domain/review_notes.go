@@ -263,7 +263,7 @@ func (s *Service) reviewNotes(ctx context.Context) ([]model.Note, error) {
 	if st == nil {
 		return nil, ErrNotesDisabled
 	}
-	all, err := st.LoadAll()
+	all, err := st.Load(notes.PartCommits)
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +351,7 @@ func (s *Service) reviewsFollowBranchOp(ctx context.Context, op engine.Operation
 	if st == nil {
 		return
 	}
-	all, err := st.LoadAll()
+	all, err := st.Load(notes.PartCommits)
 	if err != nil {
 		return
 	}

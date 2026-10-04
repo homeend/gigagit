@@ -431,18 +431,18 @@ func (s *Service) loadNotesAt(ctx context.Context, addr model.FileAddress) ([]mo
 	if st == nil {
 		return nil, ErrNotesDisabled
 	}
-	all, err := st.LoadAll()
-	if err != nil {
-		return nil, err
-	}
 	// Scope the query to this checkout so a sibling worktree's notes on the
-	// same path never surface here.
+	// same path never surface here — and so the right part is read.
 	if worktreeScopedNote(addr) {
 		wt, werr := s.noteWorktree(ctx, addr)
 		if werr != nil {
 			return nil, werr
 		}
 		addr.Worktree = wt
+	}
+	all, err := loadParts(st, addrParts(addr)...)
+	if err != nil {
+		return nil, err
 	}
 	mine := make([]model.Note, 0, len(all))
 	for _, n := range all {
@@ -507,7 +507,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 	if st == nil {
 		return NoteCounts{}, ErrNotesDisabled
 	}
-	all, err := st.LoadAll()
+	all, err := loadParts(st, s.visibleParts(ctx)...)
 	if err != nil {
 		return NoteCounts{}, err
 	}
@@ -1015,7 +1015,7 @@ func (s *Service) NoteAddresses(ctx context.Context) ([]model.FileAddress, error
 	if st == nil {
 		return nil, ErrNotesDisabled
 	}
-	all, err := st.LoadAll()
+	all, err := loadParts(st, s.visibleParts(ctx)...)
 	if err != nil {
 		return nil, err
 	}
