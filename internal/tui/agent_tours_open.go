@@ -49,16 +49,17 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 		return m, nil
 	}
 	dir := s.Info().Dir
+	check := m.checkTourCmd([]string{o.ID})
 	if filepath.Clean(dir) == filepath.Clean(m.currentWorktree) {
 		m = m.syncOverviews()
-		return m.showTour(o.ID), nil
+		return m.showTour(o.ID), check
 	}
 	nm, cmd := m.guardedReRoot(dir, false)
 	m = nm.(Model)
 	if m.consoleSwitch.armed { // the switch runs (a refusal said why on the status line)
 		m.consoleSwitch.tour = o.ID
 	}
-	return m, cmd
+	return m, tea.Batch(cmd, check)
 }
 
 // showTour pushes the viewer on the current worktree's overview ovID.

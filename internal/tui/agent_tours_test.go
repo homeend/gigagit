@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	tea "github.com/charmbracelet/bubbletea"
 	"strings"
 	"testing"
 
@@ -81,7 +82,7 @@ func TestReportTourFiledUnderTheWorkersWorktree(t *testing.T) {
 	if _, err := domain.AgentReportVerb(domain.FullSessionID(id), "done: [a](a.go:1)", false); err != nil {
 		t.Fatal(err)
 	}
-	m = m.fileReportTours()
+	m, _ = m.fileReportTours()
 	ovs := m.docs.Overviews(domain.CheckoutKey(wt))
 	if len(ovs) != 1 || !strings.HasPrefix(ovs[0].Title, "Report — Sh · ") {
 		t.Fatalf("report tours = %+v", ovs)
@@ -95,9 +96,9 @@ func TestSecondReportReplacesTheTour(t *testing.T) {
 	m, id, wt := tourFixture(t)
 	full := domain.FullSessionID(id)
 	domain.AgentReportVerb(full, "half way", false)
-	m = m.fileReportTours()
+	m, _ = m.fileReportTours()
 	domain.AgentReportVerb(full, "all done", true)
-	m = m.fileReportTours()
+	m, _ = m.fileReportTours()
 	ovs := m.docs.Overviews(domain.CheckoutKey(wt))
 	if len(ovs) != 1 || ovs[0].Text != "all done" || !strings.HasPrefix(ovs[0].Title, "Final report — ") {
 		t.Fatalf("report tours = %+v", ovs)
@@ -108,15 +109,15 @@ func TestClosedReportTourComesBackOnlyWithANewReport(t *testing.T) {
 	m, id, wt := tourFixture(t)
 	full := domain.FullSessionID(id)
 	domain.AgentReportVerb(full, "one", false)
-	m = m.fileReportTours()
+	m, _ = m.fileReportTours()
 	root := domain.CheckoutKey(wt)
 	m.docs.RemoveOverview(m.docs.Overviews(root)[0].ID) // the user closed it
-	m = m.fileReportTours()
+	m, _ = m.fileReportTours()
 	if n := len(m.docs.Overviews(root)); n != 0 {
 		t.Fatalf("a closed tour came back without a new report (%d)", n)
 	}
 	domain.AgentReportVerb(full, "two", false)
-	m = m.fileReportTours()
+	m, _ = m.fileReportTours()
 	if ovs := m.docs.Overviews(root); len(ovs) != 1 || ovs[0].Text != "two" {
 		t.Fatalf("a new report files it again: %+v", ovs)
 	}
@@ -213,18 +214,67 @@ func TestReportRefusedAtTheCapIsFiledOnceThereIsRoom(t *testing.T) {
 		}
 	}
 	domain.AgentReportVerb(domain.FullSessionID(id), "done", false)
-	m = m.fileReportTours()
+	m, _ = m.fileReportTours()
 	if !strings.Contains(m.statusMsg, "report not filed") {
 		t.Fatalf("status = %q", m.statusMsg)
 	}
 	m.statusMsg = ""
-	m = m.fileReportTours()
+	m, _ = m.fileReportTours()
 	if m.statusMsg != "" {
 		t.Fatalf("the refusal was said again: %q", m.statusMsg)
 	}
 	m.docs.RemoveOverview(first.ID) // the user closed one: room for the report
-	m = m.fileReportTours()
+	m, _ = m.fileReportTours()
 	if _, ok := m.docs.TourID("report:" + domain.FullSessionID(id)); !ok {
 		t.Fatal("the refused report never came back")
+	}
+}
+
+// runTourCmds runs a command and every command a batch holds, dropping their
+// messages (a check's answer is the store's own signal).
+func runTourCmds(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	if b, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range b {
+			runTourCmds(c)
+		}
+	}
+}
+
+func anchorMissing(t *testing.T, m Model, key string) bool {
+	t.Helper()
+	id, ok := m.docs.TourID(key)
+	if !ok {
+		t.Fatalf("no tour %s", key)
+	}
+	o, _ := m.docs.Overview(id)
+	return len(o.Anchors) > 0 && o.Anchors[0].Missing
+}
+
+// A tour the TUI files has its anchors checked (spec §3.4): one whose file
+// is not in the worktree is struck through — on spawn, on a report wake and
+// when the user opens it.
+func TestTUIFiledToursCheckTheirAnchors(t *testing.T) {
+	m, id, wt := tourFixture(t) // the brief points at a.go, which wt lacks
+	full := domain.FullSessionID(id)
+	m, cmd := m.onAgentSpawned(spawned(id, wt))
+	runTourCmds(cmd)
+	if !anchorMissing(t, m, "brief:"+full) {
+		t.Fatal("spawn: a missing anchor of the brief is not struck through")
+	}
+	domain.AgentReportVerb(full, "see [b](b.go:2)", false)
+	m.actWatch = nil // no subscription: its wait would block runTourCmds
+	m, cmd = m.onSessionActivity()
+	runTourCmds(cmd)
+	if !anchorMissing(t, m, "report:"+full) {
+		t.Fatal("wake: a missing anchor of the report is not struck through")
+	}
+	m.docs.RemoveOverview(func() string { i, _ := m.docs.TourID("brief:" + full); return i }())
+	m, cmd = m.openTour(id, "brief")
+	runTourCmds(cmd)
+	if !anchorMissing(t, m, "brief:"+full) {
+		t.Fatal("open: a refiled brief's missing anchor is not struck through")
 	}
 }
