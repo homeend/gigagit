@@ -76,7 +76,20 @@ func reviewWorkingInput(ctx context.Context, deps OpDeps, stats []model.DiffStat
 		}
 		seen[p] = true
 		full := abs(p)
-		if fi, serr := os.Lstat(full); serr == nil && fi.Mode().IsRegular() && size <= MaxDiffBytes &&
+		fi, serr := os.Lstat(full)
+		if serr == nil && fi.Mode()&os.ModeSymlink != 0 {
+			// git's patch for a symlink is its target string, mode 120000.
+			if target, rerr := os.Readlink(full); rerr == nil {
+				b := git.BlobOf(format, []byte(target))
+				add(p, b, nil)
+				text := newFilePatch(p, os.ModeSymlink, []byte(target), false)
+				patch.WriteString(text)
+				size += len(text)
+				numstat.WriteString(numstatRecord(p, b))
+				continue
+			}
+		}
+		if serr == nil && fi.Mode().IsRegular() && size <= MaxDiffBytes &&
 			fi.Size() <= int64(MaxDiffBytes-size) {
 			if data, rerr := os.ReadFile(full); rerr == nil {
 				b := git.BlobOf(format, data)
@@ -88,10 +101,19 @@ func reviewWorkingInput(ctx context.Context, deps OpDeps, stats []model.DiffStat
 				continue
 			}
 		}
+		// Too big for what is left of the cap: stream-hashed, never read
+		// whole. A binary file is still one line of git's patch; only a
+		// text file that does not fit truncates the reviewed diff.
 		b, herr := git.HashWorktreeFile(format, full)
 		if add(p, b, herr) && !errors.Is(herr, fs.ErrNotExist) {
 			numstat.WriteString(numstatRecord(p, b))
-			w.overCap = true
+			if b.Binary && serr == nil {
+				text := newFilePatch(p, fi.Mode(), nil, true)
+				patch.WriteString(text)
+				size += len(text)
+			} else {
+				w.overCap = true
+			}
 		}
 	}
 	w.patch, w.numstat = patch.String(), numstat.String()
@@ -111,15 +133,18 @@ func numstatRecord(path string, b git.WorktreeBlob) string {
 func newFilePatch(path string, mode fs.FileMode, data []byte, binary bool) string {
 	var b strings.Builder
 	fileMode := "100644"
-	if mode&0o111 != 0 {
+	switch {
+	case mode&os.ModeSymlink != 0:
+		fileMode = "120000"
+	case mode&0o111 != 0:
 		fileMode = "100755"
 	}
 	fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode %s\n", path, path, fileMode)
 	switch {
-	case len(data) == 0:
-		return b.String()
 	case binary:
 		fmt.Fprintf(&b, "Binary files /dev/null and b/%s differ\n", path)
+		return b.String()
+	case len(data) == 0:
 		return b.String()
 	}
 	text := string(data)

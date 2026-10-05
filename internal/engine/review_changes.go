@@ -59,6 +59,10 @@ func (op ReviewChanges) Prepare(ctx context.Context, deps OpDeps) (TaskInputs, e
 	if truncated {
 		diffBody = fmt.Sprintf("(diff truncated: %d bytes exceeds the %d KiB cap — inspect specific files with git)\n",
 			len(diff), MaxDiffBytes>>10)
+		if len(diff) <= MaxDiffBytes { // the diff fits; an untracked text file did not
+			diffBody = fmt.Sprintf("(diff truncated: an untracked file does not fit the %d KiB cap — inspect specific files with git)\n",
+				MaxDiffBytes>>10)
+		}
 	}
 	tmp := &tempSet{}
 	fail := func(err error) (TaskInputs, error) { tmp.cleanup(); return TaskInputs{}, err }

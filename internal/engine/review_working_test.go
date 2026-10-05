@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -166,7 +167,7 @@ func TestReviewChangesWorkingUntrackedPastTheCap(t *testing.T) {
 	dir, repo := newRepo(t)
 	write(t, dir, "huge.txt", strings.Repeat("x\n", MaxDiffBytes))
 	in, diff, ctxDoc := prepareWorking(t, dir, repo)
-	if !strings.Contains(diff, "(diff truncated") || !strings.Contains(ctxDoc, "truncated") {
+	if !strings.Contains(diff, "(diff truncated") || !strings.Contains(diff, "untracked file") || !strings.Contains(ctxDoc, "truncated") {
 		t.Errorf("the diff must say it was truncated:\n%.200s", diff)
 	}
 	if f, ok := fileOf(in.ReviewFiles, "huge.txt"); !ok || f.Blob != gitHash(t, dir, "huge.txt") {
@@ -215,5 +216,45 @@ func TestReviewChangesCollectCarriesTheFingerprints(t *testing.T) {
 	res, _ := ReviewChanges{Working: true}.Collect(TaskInputs{ReviewFiles: files}, []byte("r"))
 	if len(res.ReviewFiles) != 1 || res.ReviewFiles[0] != files[0] {
 		t.Fatalf("ReviewFiles = %+v", res.ReviewFiles)
+	}
+}
+
+// A big untracked BINARY file is one "Binary files … differ" line in git's
+// own patch: it never truncates the reviewed diff.
+func TestReviewChangesWorkingBigBinaryDoesNotTruncate(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepo(t)
+	stageAndCommit(t, dir, repo, "a.txt", "one\n", "c1")
+	write(t, dir, "a.txt", "one\nTWO\n")
+	write(t, dir, "big.bin", "\x00"+strings.Repeat("b", MaxDiffBytes+10))
+	in, diff, _ := prepareWorking(t, dir, repo)
+	if strings.Contains(diff, "(diff truncated") || !strings.Contains(diff, "+TWO") ||
+		!strings.Contains(diff, "Binary files /dev/null and b/big.bin differ") {
+		t.Fatalf("diff:\n%.300s", diff)
+	}
+	if f, ok := fileOf(in.ReviewFiles, "big.bin"); !ok || f.Blob != gitHash(t, dir, "big.bin") {
+		t.Fatalf("big.bin = %+v", f)
+	}
+}
+
+// An untracked symlink is git's 120000 new-file patch of its target.
+func TestReviewChangesWorkingUntrackedSymlink(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	dir, repo := newRepo(t)
+	stageAndCommit(t, dir, repo, "a.txt", "one\n", "c1")
+	write(t, dir, "a.txt", "one\nTWO\n")
+	if err := os.Symlink("a.txt", filepath.Join(dir, "link")); err != nil {
+		t.Fatal(err)
+	}
+	in, diff, _ := prepareWorking(t, dir, repo)
+	if strings.Contains(diff, "(diff truncated") || !strings.Contains(diff, "new file mode 120000") ||
+		!strings.Contains(diff, "+a.txt\n\\ No newline at end of file") || !strings.Contains(diff, "+TWO") {
+		t.Fatalf("diff:\n%s", diff)
+	}
+	if f, ok := fileOf(in.ReviewFiles, "link"); !ok || f.Blob != git.BlobOf("sha1", []byte("a.txt")).ID {
+		t.Fatalf("link = %+v", f)
 	}
 }
