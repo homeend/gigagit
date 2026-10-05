@@ -54,9 +54,12 @@ type Model struct {
 	// workingReviews is this worktree's working reviews, matched (the Files
 	// panel's Review row and ✎ markers).
 	workingReviews []domain.WorkingReview
-	stagedIdx      []int
-	branches       []model.Branch
-	commits        []model.Commit
+	// workingReviewsGen tags a working-reviews read: a repo switch bumps it
+	// so a read still in flight from the old repo lands nowhere.
+	workingReviewsGen int
+	stagedIdx         []int
+	branches          []model.Branch
+	commits           []model.Commit
 
 	worktrees              []model.Worktree
 	worktreeMarks          map[string]domain.WorktreeMark // path -> live claim / reserve (Worktrees ⚑ / ⊘)
@@ -961,7 +964,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.blinkOn = !m.blinkOn
 		return m, m.noticeBlinkCmd(msg.gen)
 	case workingReviewsMsg:
-		if msg.err == nil {
+		if msg.err == nil && msg.gen == m.workingReviewsGen {
 			m = m.withWorkingReviews(msg.reviews)
 		}
 		return m, nil
@@ -4788,6 +4791,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	closeDocWatch(m.docWatch.w)                         // the old tree's files are not the new one's
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
+	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go
+	m = m.withWorkingReviews(nil)
 	// Disable the snapshot synchronously (no git subprocess here — reRoot runs
 	// on the Update goroutine); snapshotTargetCmd below re-resolves and
 	// re-enables it once its two reads land off-thread.

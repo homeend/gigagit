@@ -24,6 +24,7 @@ const reviewRowIdx = -1
 type workingReviewsMsg struct {
 	reviews []domain.WorkingReview
 	err     error
+	gen     int // Model.workingReviewsGen when the read started
 }
 
 // loadWorkingReviewsCmd reads and matches the working reviews off-thread;
@@ -33,9 +34,10 @@ func (m Model) loadWorkingReviewsCmd() tea.Cmd {
 	if svc == nil || len(m.noteCounts.WorkingReviews) == 0 {
 		return nil
 	}
+	gen := m.workingReviewsGen
 	return func() tea.Msg {
 		rs, err := svc.WorkingReviews(context.Background())
-		return workingReviewsMsg{reviews: rs, err: err}
+		return workingReviewsMsg{reviews: rs, err: err, gen: gen}
 	}
 }
 

@@ -144,3 +144,20 @@ func TestFilesPanelReviewRowMenuIsOpenAndDelete(t *testing.T) {
 		t.Fatalf("menu = %+v", rows)
 	}
 }
+
+// A repo switch drops the old repo's working reviews, and a read still in
+// flight from it lands nowhere.
+func TestReRootDropsTheWorkingReviews(t *testing.T) {
+	t.Parallel()
+	m := Model{workingReviews: rowReview()}
+	updated, _ := m.reRoot(t.TempDir())
+	got := updated.(Model)
+	if got.workingReviews != nil {
+		t.Fatalf("workingReviews = %+v after reRoot, want nil", got.workingReviews)
+	}
+	stale := workingReviewsMsg{reviews: rowReview(), gen: m.workingReviewsGen}
+	after, _ := got.Update(stale)
+	if after.(Model).workingReviews != nil {
+		t.Fatal("a read from the old repo installed its reviews")
+	}
+}
