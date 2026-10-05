@@ -2918,6 +2918,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelBranches {
 				if b, ok := m.selectedBranch(); ok {
 					if r, rowOK := m.commitSoloRow(); rowOK { // gates opsIdle
+						// The gesture asks to SEE the soloed feed: a docked
+						// console covering it steps aside (its session runs
+						// on), so the landing below focuses Commits.
+						if m.console != nil {
+							m = m.dropConsole().reconcileFullscreenFocus()
+						}
 						m.pendingGotoTip = b.Hash
 						return r.run(m)
 					}

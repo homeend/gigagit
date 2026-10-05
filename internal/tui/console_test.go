@@ -11,6 +11,7 @@ import (
 	"github.com/homeend/gigagit/internal/agentsession"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // startTestSession starts `sh -c script` through the process-global manager
@@ -387,6 +388,43 @@ func TestBranchEnterLeavesDockedConsoleUnfocused(t *testing.T) {
 	}
 	if m.sel[panelCommits] < 0 {
 		t.Fatal("the Commits cursor must still move to the branch tip")
+	}
+}
+
+// ctrl+g on a branch row is asked to SHOW the soloed feed, which a docked
+// console covers: the console steps aside (the session runs on) and the
+// reload's landing focuses Commits on the tip, as it does with no console.
+func TestBranchCtrlGHidesDockedConsole(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	mm, _ := m.Update(ctrlBracket()) // step out: docked, unfocused
+	m = mm.(Model)
+	m = m.activateTab(panelBranches)
+	m.sel[panelBranches] = 0
+	b, ok := m.selectedBranch()
+	if !ok {
+		t.Fatal("fixture: the cursor must sit on a branch row")
+	}
+	mm, _ = m.Update(keyMsg("ctrl+g"))
+	m = mm.(Model)
+	if m.console != nil {
+		t.Fatalf("console = %+v, want hidden", m.console)
+	}
+	if s.Info().State != domain.SessionRunning {
+		t.Fatal("the session must keep running")
+	}
+	if m.pendingGotoTip != b.Hash {
+		t.Fatalf("pendingGotoTip = %q, want %q", m.pendingGotoTip, b.Hash)
+	}
+	mm, _ = m.Update(commitsReloadedMsg{gen: m.feed.Gen(), state: domain.FeedState{Commits: []model.Commit{
+		{Hash: "b0aaaaaaaaaa", Subject: "base"},
+		{Hash: b.Hash, Subject: "tip"},
+	}}})
+	m = mm.(Model)
+	if m.focus != panelCommits || m.sel[panelCommits] != 1 {
+		t.Fatalf("focus=%v sel=%d, want panelCommits/1 (the tip row)", m.focus, m.sel[panelCommits])
 	}
 }
 

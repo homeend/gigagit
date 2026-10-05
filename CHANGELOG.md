@@ -16,6 +16,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   gives the Commits column back. esc now reads `hide` there — it keeps the
   exited session listed. On a running agent x is unchanged.
 
+### Changed
+
+- **ctrl+g on a branch hides a docked agent console.** Solo + go to tip
+  asks to see the soloed feed, which the console covered: the solo ran
+  out of sight. The console now steps aside (its session keeps running;
+  alt+a or the session row brings it back) and the cursor lands on the
+  tip in Commits. Enter on a branch row still leaves the console docked.
+
 ## Working-changes reviews are notes
 
 ### Changed
