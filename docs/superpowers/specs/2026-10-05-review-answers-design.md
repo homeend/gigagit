@@ -49,19 +49,35 @@ is a read-only, read-time id. Stage 2 builds it for `review:` roots and leaves
   as today (`ErrReadOnlyNote`). For a `review:` parent it:
   - loads the review ("no such review <id>" when it is gone, "review <id>
     has no remark <n>" when `n` is out of range);
-  - copies the remark's address, side and range onto the reply (what a
-    stored root's reply inherits today), with the review's address — a
-    committed review's commit, or a working review's worktree address;
+  - stores the reply at the **review's own address** (a commit review's
+    commit-level address, a working review's worktree-level address) — not
+    the remark's line. The remark's path, side and range come from the join
+    at read time (§1.2), so a re-saved review cannot leave a stale anchor
+    behind;
   - stamps `RemarkFP` and `RemarkSummary` (below) on the reply.
 - **`Note.RemarkFP`** (new, TOML `remark_fp`, empty for every other note):
   the first 16 hex of sha256 over `path \x00 side \x00 start \x00 end \x00
   summary` of the remark it answers. **`Note.RemarkSummary`** (TOML
   `remark_summary`) keeps that remark's summary so an outdated thread can
   still say what it answered.
-- **Part routing:** a reply to a remark lives in the **review's** part
-  (`commits.toml` for a commit review, the worktree part for a working
-  review). Its copied address equals the review's, so `notes.PartOf` already
-  routes it there; a test pins that.
+- **A remark reply is a stored child of its review.** One model helper,
+  `Note.StoredParent()`, returns `<reviewID>` for a
+  `review:<reviewID>:<n>` parent and `ParentID` otherwise. Every place that
+  treats `ParentID` as "my stored root" uses it:
+  - the store's `dropOrphanReplies` (run on EVERY part write — without this
+    the next note write anywhere in the part would delete B's replies) and
+    `capOldestFirst` (the review is cap-exempt, so its remark replies are
+    too);
+  - `Store.Remove` ("a root takes its replies"): removing the review takes
+    its remark replies — the cascade falls out of the rule;
+  - domain sweeps (`NotesClearAtCommit`'s predicate, the background sweep):
+    the reply carries the review's address, so the existing "commit-level /
+    worktree-level notes never expire" rules already keep it, and the
+    worktree-review sweep that drops an outdated working review takes its
+    replies through `dropOrphanReplies`.
+- **Part routing:** the reply's address is the review's, so `notes.PartOf`
+  puts it in the review's part (`commits.toml` / the worktree part); a test
+  pins both.
 - **`Note.Link`** (new, TOML `link`, optional): a `gg://` link or a commit
   (resolved to a full sha at write time). Any note may carry one; the reply
   verbs set it.
@@ -107,18 +123,26 @@ Replies sort by creation time (today's rule).
   preview/pair notes, review remarks, working-review remarks) sets them; a
   forge thread sets `Resolved` from GitHub's `resolved` tag
   (`model.NoteTagResolved`).
-- **Cascade:** `NoteRemove` of a stored root removes its `[[resolved]]`
-  entry. `NoteRemove` of a **review** (the review view, Files-row and
-  Branches Delete all call it) also removes every note whose `ParentID`
-  starts with `review:<id>:` and every `review:<id>:*` entry;
-  `NotesClearAtCommit` does the same for the reviews it clears. `Sweep`
-  drops an entry whose stored root is gone.
+- **Cascade:** every part write drops `[[resolved]]` entries whose root is
+  gone from that part — a stored root by id, a `review:<id>:<n>` root by
+  its review `<id>` (the `StoredParent` rule). So `NoteRemove` of a note or
+  a review, `NotesClearAtCommit`, the cap and every sweep clear the entries
+  with no extra code path.
 
-### 1.4 Counts
+### 1.4 Readers: a remark reply is never shown on its own
 
-`NoteCounts` (✎ markers, Notes rows, file badges) **skips replies whose
-parent is a `review:` id** — they belong to their review, never make a
-plain-note row or marker. A review's tally (§2.3) counts them instead.
+A remark reply is visible ONLY through its review's join (§1.2) and the
+review's tally (§2.3). Every other reader that walks stored notes skips it:
+
+- `NoteCounts` (✎ markers, Notes rows, file badges) — replies are already
+  skipped ("a badge counts THREADS"); a test pins that a remark reply adds
+  no Notes row and no marker.
+- `resolveNotes` threading (stored line notes) — it never sees one, since
+  the reply carries no path; a test pins it.
+- `NotesOverview` / View all notes, `gg note list`, MCP `gg_notes_list`,
+  the preview / pair readers, `NotesClearAtCommit`: skip notes whose
+  `ParentID` is a `review:` id, except where they report the review's
+  tally.
 
 ## 2. TUI
 
@@ -237,3 +261,5 @@ The rest of stage 1's deferred minors stay deferred.
 - Verdict labels (agree / disagree / fixed) — ruled out.
 - Stage 3 (a second review that answers the first).
 - Storing the collapsed state.
+- Open-file notes (`agentdocs`, memory-only agent remarks): no stored
+  thread, no Resolve.
