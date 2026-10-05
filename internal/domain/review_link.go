@@ -81,6 +81,12 @@ func (s *Service) linkText(ctx context.Context, l model.Link) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return linkTextIn(repo, l)
+}
+
+// linkTextIn is linkText with the repository already resolved — a caller
+// spelling many links (a review's remarks) pays for LinkRepo once.
+func linkTextIn(repo model.LinkRepo, l model.Link) (string, error) {
 	l.Repo = repo
 	if l.Side == "" {
 		l.Side = model.NoteSideNew
@@ -135,13 +141,26 @@ type ReviewRemark struct {
 // read-time note ids use (<ReviewNoteIDPrefix><id>:<n>), stable for answers.
 // A prose review has none (an empty, non-nil list).
 func (s *Service) ReviewRemarks(ctx context.Context, r Review) ([]ReviewRemark, error) {
-	out := []ReviewRemark{}
 	if r.Doc == nil {
-		return out, nil
+		return []ReviewRemark{}, nil
 	}
 	t, err := s.reviewTarget(ctx, r)
 	if err != nil {
 		return nil, err
+	}
+	repo, err := s.LinkRepo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return reviewRemarksIn(r, t, repo), nil
+}
+
+// reviewRemarksIn lists r's remarks against its resolved target and
+// repository: no git at all, whatever the review's size.
+func reviewRemarksIn(r Review, t model.LinkTarget, repo model.LinkRepo) []ReviewRemark {
+	out := []ReviewRemark{}
+	if r.Doc == nil {
+		return out
 	}
 	n := 0
 	for _, f := range r.Doc.Files {
@@ -150,20 +169,21 @@ func (s *Service) ReviewRemarks(ctx context.Context, r Review) ([]ReviewRemark, 
 			if dn.Side == "old" {
 				side = model.NoteSideOld
 			}
-			rm := ReviewRemark{N: n, Path: f.Path, Side: side, Start: dn.Range[0], End: dn.Range[1],
+			path := reviewPath(f.Path) // as every reader of a review document does
+			rm := ReviewRemark{N: n, Path: path, Side: side, Start: dn.Range[0], End: dn.Range[1],
 				Summary: dn.Summary, Rationale: dn.Rationale, Meta: dn.Meta}
 			n++
-			l := model.Link{Path: f.Path, Target: t, Side: side, Line: rm.Start}
+			l := model.Link{Path: path, Target: t, Side: side, Line: rm.Start}
 			if rm.End > rm.Start {
 				l.End = rm.End
 			}
-			if text, err := s.linkText(ctx, l); err == nil {
+			if text, err := linkTextIn(repo, l); err == nil {
 				rm.Link = text // a path a link cannot spell keeps no link; it never fails the list
 			}
 			out = append(out, rm)
 		}
 	}
-	return out, nil
+	return out
 }
 
 // checkReviewHint refuses a resolved review link whose address is not the
@@ -237,11 +257,17 @@ func (s *Service) ReviewShow(ctx context.Context, id string) (ReviewShow, error)
 	if err != nil {
 		return ReviewShow{}, err
 	}
+	// The reviewed change and the repository are resolved ONCE here; the
+	// link and every remark's link are spelled from them with no more git.
 	t, err := s.reviewTarget(ctx, r)
 	if err != nil {
 		return ReviewShow{}, err
 	}
-	link, err := s.ReviewLink(ctx, id)
+	repo, err := s.LinkRepo(ctx)
+	if err != nil {
+		return ReviewShow{}, err
+	}
+	link, err := linkTextIn(repo, model.Link{Target: t, Hint: model.LinkHint{Kind: model.ReviewHintKind, ID: r.ID}})
 	if err != nil {
 		return ReviewShow{}, err
 	}
@@ -253,11 +279,7 @@ func (s *Service) ReviewShow(ctx context.Context, id string) (ReviewShow, error)
 	if r.Doc != nil {
 		out.Overview, out.Meta = r.Doc.Overview, metaMap(r.Doc.Meta)
 	}
-	rs, err := s.ReviewRemarks(ctx, r)
-	if err != nil {
-		return ReviewShow{}, err
-	}
-	for _, x := range rs {
+	for _, x := range reviewRemarksIn(r, t, repo) {
 		out.Remarks = append(out.Remarks, ReviewShowRemark{N: x.N, Path: x.Path, Side: string(x.Side), Start: x.Start, End: x.End,
 			Summary: x.Summary, Rationale: x.Rationale, Meta: metaMap(x.Meta), Link: x.Link})
 	}

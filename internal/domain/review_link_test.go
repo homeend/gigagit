@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 const linkReviewDoc = `{"version":1,"summary":"ok","files":[{"path":"a.txt","annotations":[
@@ -192,5 +195,59 @@ func TestReviewHintCheckUsesTheCallersService(t *testing.T) {
 	bad := good[:strings.LastIndex(good, "@")+1] + other + "?review=" + single
 	if _, err := ResolveLink(ctx, mustParse(t, bad), ResolveOpts{Cwd: svc}); !errors.Is(err, ErrReviewLinkMismatch) {
 		t.Fatalf("Cwd-only resolve must still refuse the moved link: %v", err)
+	}
+}
+
+// A remark's path is the document's, normalised like every other reader of
+// a review document (reviewPath: "./a.txt" → "a.txt").
+func TestReviewRemarksNormaliseThePath(t *testing.T) {
+	t.Parallel()
+	svc, dir, _, _ := reviewLinkFixture(t)
+	ctx := context.Background()
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	doc := `{"version":1,"summary":"s","files":[{"path":"./a.txt","annotations":[{"newRange":[1,1],"summary":"x"}]}]}`
+	id, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Commit: head}, Agent: "C", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := svc.Review(ctx, id)
+	rs, err := svc.ReviewRemarks(ctx, r)
+	if err != nil || len(rs) != 1 || rs[0].Path != "a.txt" || !strings.Contains(rs[0].Link, "/a.txt@") || strings.Contains(rs[0].Link, "./") {
+		t.Fatalf("remark = %+v, %v", rs, err)
+	}
+}
+
+// ReviewShow's git cost does not grow with the review: the repository and
+// the reviewed change are resolved once, not once per remark.
+func TestReviewShowGitCostIsFlat(t *testing.T) {
+	t.Parallel()
+	_, dir, _, _ := reviewLinkFixture(t)
+	cr := newCountingRunner(gitexec.NewExecRunner("git", dir, observ.NewRing(50)))
+	svc := New(&git.Repo{Runner: cr})
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	var notes []string
+	for i := 0; i < 12; i++ {
+		notes = append(notes, `{"newRange":[1,1],"summary":"n"}`)
+	}
+	doc := `{"version":1,"summary":"s","files":[{"path":"a.txt","annotations":[` + strings.Join(notes, ",") + `]}]}`
+	id, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Commit: head}, Agent: "C", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cr.reset()
+	rs, err := svc.ReviewShow(ctx, id)
+	if err != nil || len(rs.Remarks) != 12 {
+		t.Fatalf("show = %d remarks, %v", len(rs.Remarks), err)
+	}
+	total := 0
+	cr.mu.Lock()
+	for _, n := range cr.calls {
+		total += n
+	}
+	cr.mu.Unlock()
+	if total > 10 {
+		t.Fatalf("ReviewShow ran %d git processes for 12 remarks (%v); want a flat cost", total, cr.calls)
 	}
 }

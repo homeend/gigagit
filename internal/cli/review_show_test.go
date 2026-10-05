@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 const showReviewDoc = `{"version":1,"summary":"looks fine","files":[{"path":"a.txt","annotations":[
@@ -103,5 +105,23 @@ func TestLinkResolvePrintsTheReview(t *testing.T) {
 	code, out, errb := runCLI(t, dir, "link", "resolve", strings.TrimSpace(link))
 	if code != 0 || !strings.Contains(out, "review "+id) {
 		t.Fatalf("resolve = %d %q %q", code, out, errb)
+	}
+}
+
+// A review link into ANOTHER checkout reads the review there: the check and
+// the read must use the same repository's store.
+//
+// SERIAL — no t.Parallel(): withState writes the package's RepoStatePath.
+func TestReviewShowFollowsTheLinksCheckout(t *testing.T) {
+	dirA, id := reviewedRepo(t)
+	dirB, _ := reviewedRepo(t)
+	state := withState(t)
+	if err := repos.Touch(state, dirA, "", time.Unix(9000, 0)); err != nil { // A was opened in gg once
+		t.Fatal(err)
+	}
+	_, link, _ := runCLI(t, dirA, "link", "--review", id)
+	code, out, errb := runCLI(t, dirB, "review", "show", strings.TrimSpace(link))
+	if code != 0 || !strings.Contains(out, "review "+id) {
+		t.Fatalf("from another checkout = %d\n%s\n%s", code, out, errb)
 	}
 }

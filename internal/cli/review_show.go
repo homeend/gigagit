@@ -32,7 +32,7 @@ func reviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 		return 2
 	}
 	ctx := context.Background()
-	id, code := reviewArgID(ctx, svc, fs.Arg(0), stderr)
+	svc, id, code := reviewArgID(ctx, svc, fs.Arg(0), stderr)
 	if code != 0 {
 		return code
 	}
@@ -53,25 +53,32 @@ func reviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 }
 
 // reviewArgID turns a review link, an id or "latest" into a stored review's
-// id. Exit 2 for a link that is malformed or names no review, 1 for a review
-// that is not here (or a link moved onto another change).
-func reviewArgID(ctx context.Context, svc *domain.Service, arg string, stderr io.Writer) (string, int) {
+// id, and the service whose store holds it: a link into another checkout is
+// read THERE (the store the link was checked against), not in the cwd's. Exit
+// 2 for a link that is malformed or names no review, 1 for a review that is
+// not here (or a link moved onto another change).
+func reviewArgID(ctx context.Context, svc *domain.Service, arg string, stderr io.Writer) (*domain.Service, string, int) {
 	if strings.HasPrefix(arg, "gg://") {
 		l, err := model.ParseLink(arg)
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
-			return "", 2
+			return svc, "", 2
 		}
 		if l.Hint.Kind != model.ReviewHintKind {
 			fmt.Fprintln(stderr, "error: that link names no review (no ?review=<id>)")
-			return "", 2
+			return svc, "", 2
 		}
-		if _, err := resolveLinkArg(ctx, svc, arg, linkShapes{Pair: true, Ref: true}, "review show"); err != nil {
+		res, err := resolveLinkArg(ctx, svc, arg, linkShapes{Pair: true, Ref: true}, "review show")
+		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			if errors.Is(err, model.ErrLink) && !errors.Is(err, domain.ErrReviewLinkMismatch) {
-				return "", 2
+				return svc, "", 2
 			}
-			return "", 1
+			return svc, "", 1
+		}
+		if top, terr := svc.TopLevel(ctx); terr != nil || !domain.SamePath(top, res.Checkout) {
+			svc = domain.Open(res.Checkout)
+			setupCLIService(svc)
 		}
 		arg = l.Hint.ID
 	}
@@ -82,9 +89,9 @@ func reviewArgID(ctx context.Context, svc *domain.Service, arg string, stderr io
 		} else {
 			fmt.Fprintln(stderr, "error:", err)
 		}
-		return "", 1
+		return svc, "", 1
 	}
-	return id, 0
+	return svc, id, 0
 }
 
 func printReviewShow(w io.Writer, rs domain.ReviewShow) {
