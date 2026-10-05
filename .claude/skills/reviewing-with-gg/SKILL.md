@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v10 -->
+<!-- gg:reviewing-with-gg:v11 -->
 
 # Reviewing with gg
 
@@ -49,6 +49,16 @@ attempt — use a COMMIT PAIR the same way: `gg note add --preview <a>..<b>
 --file <path> --new-line <n> …` (or `gg preview add <a>..<b>` first and use its
 id). Notes land on `<b>`, new side only. Hand back `gg link --preview <a>..<b>`
 — a `gg://<repo>@<a>..<b>` link the user opens with `gg open`.
+
+## Checking another agent's review
+
+When the human pastes a review link (`gg://…?review=<id>`) and asks you to
+check it: `gg review show <link>` prints the other agent's overview and every
+remark, numbered, each with its own line link. For each remark, read the code
+it points at (`gg link text <remark-link>`, or `gg diff <review-link>` for the
+whole reviewed change), decide whether the remark holds, and report remark by
+remark — `[n] agree / disagree / fixed — why`. Do not re-review from scratch
+unless asked; the job is to check the remarks you were handed.
 
 ## Choosing the target
 

@@ -1,0 +1,41 @@
+name = "a review link: gg link --review latest, gg review show latest, the link names the reviewed commit"
+
+# The review tool prints a review DOCUMENT (committed beside the code, so the
+# tree stays clean) — gg stores it as a review with one remark.
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[tools.command]]
+category = "review"
+name = "Doc"
+mode = "capture"
+command = 'cat review.json'
+''' },
+  { write = "review.json", content = '{"version":1,"summary":"looks fine","files":[{"path":"a.txt","annotations":[{"newRange":[1,1],"summary":"check v2","rationale":"is v2 right?"}]}]}' },
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "v2\n" },
+  { commit = "second" },
+]
+
+[[run]]
+cmd = ["review", "--tool", "Doc", "HEAD"]
+exit = 0
+
+[[run]]
+cmd = ["link", "--review", "latest"]
+exit = 0
+stdout_contains = ["?review="]
+
+[[run]]
+cmd = ["review", "show", "latest"]
+exit = 0
+stdout_contains = ["looks fine", "[0] a.txt:1 — check v2", "    is v2 right?", "/a.txt@"]
+
+[[run]]
+cmd = ["review", "show", "deadbeef"]
+exit = 1
+
+[expect]
+branch = "main"
+clean = true

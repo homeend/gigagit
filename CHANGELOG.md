@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review links — hand one agent's review to another
+
+### Added
+
+- **A stored AI review has a gg:// link**, `gg://<repo>@<commit>?review=<id>`
+  (`@<base>..<tip>` for a range or branch review). Copy it with **Copy gg
+  link** on the review's row in a commit's file list, in a Branches review
+  row's menu, with **Copy review link** in the open review's `.` menu or
+  `ctrl+l` in View all notes; gg web's right-click menus have it too. Build
+  one with `gg link --review <id|latest>`.
+- **The link opens the review itself**, wherever a link opens: `#` in the
+  TUI or gg web, `gg open <link>` (`--web` too), `gg session navigate`. A
+  review deleted since opens its change with a notice; a link edited to point
+  at another change is refused.
+- **`gg review show <link|id|latest> [--json]`** prints a stored review for
+  an agent: the overview and every remark, numbered, with the remark's own
+  gg:// line link (read the code with `gg link text`). MCP: `gg_review_show`.
+  The reviewing-with-gg skill teaches checking another agent's review.
+- The commit's Range reviews and Notes rows gained **Copy gg link** as well
+  (the commit pair, and the file at the commit — `gg note list <link>` reads
+  their notes).
+
 ## Note store split into parts
 
 ### Changed

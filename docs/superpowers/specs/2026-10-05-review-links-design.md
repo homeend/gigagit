@@ -191,6 +191,19 @@ CHANGELOG, README (the review paragraph), `docs/CLAUDE-details.md`.
 - e2e scenario: save a review → `gg link --review` → `gg review show` →
   `gg diff <link>` shows the reviewed change.
 
+## Changed while planning / building
+
+- The address-less `?review=` link is refused at RESOLVE time (`finishLink`,
+  the preview/version pattern), not at parse time.
+- gg web asks the server for the Range review / Notes row links too
+  (`GET /api/notes/row-link`): one builder for all three row kinds.
+- `latest` is accepted wherever a review id is (`gg link --review latest`,
+  `gg review show latest`, MCP).
+- gg web's View all notes has no row menu, so it gets no copy action; the
+  TUI's All notes copies with `ctrl+l`.
+- The review-hint check refuses only a PROVEN mismatch and reads the
+  caller's own service for its own checkout (see CLAUDE-details).
+
 ## Out of scope
 
 Answers per remark (stage 2), a second review answering the first (stage 3),
