@@ -15,6 +15,7 @@ type Title struct {
 	Working, Question, Idle []*regexp.Regexp
 }
 
+// CompileTitle compiles p; a bad pattern is an error naming it.
 func CompileTitle(p TitlePatterns) (*Title, error) {
 	var t Title
 	var err error
@@ -30,6 +31,8 @@ func CompileTitle(p TitlePatterns) (*Title, error) {
 	return &t, nil
 }
 
+// Read says nothing for an empty title; a question wins over a spinner; an
+// idle title is only a hint.
 func (t *Title) Read(o Observation) Verdict {
 	if o.Title == "" {
 		return Verdict{}
@@ -49,6 +52,7 @@ func (t *Title) Read(o Observation) Verdict {
 // working, 0 (clear) hints idle; 2 (error) and 4 (paused) say nothing.
 type ProgressReport struct{}
 
+// Read reads o.Progress (−1: no report yet, says nothing).
 func (ProgressReport) Read(o Observation) Verdict {
 	switch o.Progress {
 	case 1, 3:

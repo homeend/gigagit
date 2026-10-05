@@ -42,6 +42,8 @@ func CompileScreen(p ScreenPatterns) (*Screen, error) {
 	return &s, nil
 }
 
+// Read matches o.Lines in the order above; nothing matching, or an Own
+// menu, says nothing (Unknown).
 func (s *Screen) Read(o Observation) Verdict {
 	text := strings.Join(o.Lines, "\n")
 	switch {
