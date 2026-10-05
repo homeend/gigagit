@@ -17,9 +17,9 @@ func currentTiming() stateTiming {
 	return stateTiming{grace: stateGrace, stall: stallAfter, spinStall: spinStallAfter, idleSettle: idleSettle, titleSettle: titleSettle}
 }
 
-// progressMark: the session's tail without its spinner (agentstate.Progress)
+// stallMark: the session's tail without its spinner (agentstate.StallKey)
 // and since when it has read so.
-type progressMark struct {
+type stallMark struct {
 	key   string
 	since time.Time
 }
@@ -32,7 +32,7 @@ type sessionTracker struct {
 	act         SessionActivity // the last published activity
 	pendingIdle time.Time       // the first idle read while working (zero: none)
 	pendingQ    bool            // a question seen inside the grace, not yet announced
-	progress    progressMark    // the spinner-only stall clock
+	stall       stallMark       // the spinner-only stall clock
 	animated    bool            // a non-screen source has said working: its idle hint is trusted
 }
 
@@ -113,11 +113,11 @@ func (t *sessionTracker) Step(rd agentstate.Reading, info agentsession.Info, las
 	stalled := !lastOut.IsZero() && now.Sub(lastOut) > tm.stall &&
 		(next.State == agentstate.Working || (next.State == agentstate.Unknown && rd.Dedicated))
 	quiet, spinning := now.Sub(lastOut), false
-	if rd.Progress != t.progress.key || t.progress.since.IsZero() {
-		t.progress = progressMark{key: rd.Progress, since: now}
+	if rd.StallKey != t.stall.key || t.stall.since.IsZero() {
+		t.stall = stallMark{key: rd.StallKey, since: now}
 	}
-	if !stalled && next.State == agentstate.Working && now.Sub(t.progress.since) >= tm.spinStall {
-		stalled, quiet, spinning = true, now.Sub(t.progress.since), true
+	if !stalled && next.State == agentstate.Working && now.Sub(t.stall.since) >= tm.spinStall {
+		stalled, quiet, spinning = true, now.Sub(t.stall.since), true
 	}
 	if stalled != prev.Stalled {
 		changed = true

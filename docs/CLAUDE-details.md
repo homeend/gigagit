@@ -4158,7 +4158,7 @@ the report channel are the NEXT plan.
   idle-after-working inside it never. **Stalled** = `LastOutput` older than
   120 s while working — or unknown, but only with DEDICATED rules (a generic
   agent would be called stalled at every idle prompt) — or, while working,
-  `agentstate.Progress(tail)` (the tail without a leading spinner glyph and
+  `agentstate.StallKey(tail)` (the tail without a leading spinner glyph and
   elapsed-time counters) unchanged for `spinStallAfter` 10 min: a hung API
   call keeps Claude's timer ticking. Ten, not two: Claude's thinking spinner
   shows no token counter (live 2026-10-04), so a long think looks the same;
@@ -4578,7 +4578,9 @@ their rulings, but name things that are gone — read them through this map:
 | `defaults`, `ownMenus`, `titleRules`, `progressAgents` | the `agents` table (`agents.go`) |
 | `SessionRules(tc)`, `bindSessionRules` | `SessionProfile(tc)`, `bindSessionProfile` |
 | `rulesFor` | `profileFor` |
-| watcher maps `pendingIdle`, `pendingQ`, `progress`, `animated` | `sessionTracker` fields |
+| watcher maps `pendingIdle`, `pendingQ`, `progress`, `animated` | `sessionTracker` fields (`progress` → `stall`) |
+| `agentstate.Progress(lines)`, `Reading.Progress` (stall key) | `agentstate.StallKey(lines)`, `Reading.StallKey` |
+| `sessionTracker.dedicated` | `Reading.Dedicated` (copied from the `Profile`) |
 | `SessionActivity.Settle`, `idleHold` | `SessionActivity.ReadyAt`, `readyAt` |
 | `stateSource.Text` / `Signals` / `LastOutput` | `stateSource.Observe` |
 
@@ -4588,7 +4590,7 @@ StateWatcher.observe(now)          THE entry (domain/session_states.go)
     profileFor(info)               bound Profile (screen_* block) or agentstate.ForAgent(id)
     src.Observe(id)                agentstate.Observation{Text, Lines, Title, Progress} + last output
     profile.Read(obs)              agentstate.Reading: Verdict{State, IdleHint, Spinning}
-                                   + Options (Question), StepFor, Progress (stall key)
+                                   + Options (Question), StepFor, StallKey, Dedicated
     tracker.Step(rd, …)            domain/session_tracker.go: trust, idle hold, grace,
                                    delayed question, both stalls → SessionActivity, notices
   → states (Get), notice ring, Subscribe  → TUI · web · agent verbs · agent_wait (ReadyAt)

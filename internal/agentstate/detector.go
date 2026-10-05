@@ -38,7 +38,7 @@ type Reading struct {
 	Verdict
 	Options  []Option      // when State is Question
 	StepFor  time.Duration // StepDuration(Lines)
-	Progress string        // Progress(Lines)
+	StallKey string        // StallKey(Lines)
 	// Dedicated is the profile's: an unreadable screen of a dedicated agent
 	// counts towards a stall.
 	Dedicated bool
@@ -58,7 +58,7 @@ func (p Profile) Read(o Observation) Reading {
 	if p.Detector != nil {
 		v = p.Detector.Read(o)
 	}
-	rd := Reading{Verdict: v, StepFor: StepDuration(o.Lines), Progress: Progress(o.Lines), Dedicated: p.Dedicated}
+	rd := Reading{Verdict: v, StepFor: StepDuration(o.Lines), StallKey: StallKey(o.Lines), Dedicated: p.Dedicated}
 	if v.State == Question {
 		rd.Options = DialogOptions(o.Text, o.Lines)
 	}

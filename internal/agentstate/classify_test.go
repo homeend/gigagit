@@ -339,24 +339,24 @@ func TestClaudeOwnMenusAreNotQuestions(t *testing.T) {
 	}
 }
 
-// Progress ignores what moves while nothing happens — the spinner's glyph
+// StallKey ignores what moves while nothing happens — the spinner's glyph
 // and its timer (live 2026-10-04: a think shows only "(5s · thinking with
 // high effort)") — and keeps everything else, the token counter included.
-func TestProgressIgnoresTheSpinnerAndItsTimer(t *testing.T) {
-	a := Progress(Tail("● Read 2 files\n✶ Slithering… (5s · thinking with high effort)\n❯ \n", 15))
-	b := Progress(Tail("● Read 2 files\n* Slithering… (7m 12s · thinking with high effort)\n❯ \n", 15))
+func TestStallKeyIgnoresTheSpinnerAndItsTimer(t *testing.T) {
+	a := StallKey(Tail("● Read 2 files\n✶ Slithering… (5s · thinking with high effort)\n❯ \n", 15))
+	b := StallKey(Tail("● Read 2 files\n* Slithering… (7m 12s · thinking with high effort)\n❯ \n", 15))
 	if a != b {
 		t.Fatalf("glyph/timer changed the progress:\n%q\n%q", a, b)
 	}
-	c := Progress(Tail("● Read 2 files\n✶ Slithering… (8s · ↓ 1.2k tokens)\n❯ \n", 15))
-	d := Progress(Tail("● Read 2 files\n✶ Slithering… (9s · ↓ 1.3k tokens)\n❯ \n", 15))
+	c := StallKey(Tail("● Read 2 files\n✶ Slithering… (8s · ↓ 1.2k tokens)\n❯ \n", 15))
+	d := StallKey(Tail("● Read 2 files\n✶ Slithering… (9s · ↓ 1.3k tokens)\n❯ \n", 15))
 	if c == d {
 		t.Fatal("a moving token counter is progress")
 	}
-	if Progress(Tail("⠋ Running cargo build\n", 15)) != Progress(Tail("⠙ Running cargo build\n", 15)) {
+	if StallKey(Tail("⠋ Running cargo build\n", 15)) != StallKey(Tail("⠙ Running cargo build\n", 15)) {
 		t.Fatal("a braille spinner frame is not progress")
 	}
-	if Progress(Tail("● Read 2 files\n", 15)) == Progress(Tail("● Read 3 files\n", 15)) {
+	if StallKey(Tail("● Read 2 files\n", 15)) == StallKey(Tail("● Read 3 files\n", 15)) {
 		t.Fatal("new transcript text is progress")
 	}
 }

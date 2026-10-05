@@ -13,7 +13,7 @@ var trkTiming = stateTiming{grace: 30 * time.Second, stall: 2 * time.Minute, spi
 var trkInfo = agentsession.Info{ID: "s1", Label: "Claude", Dir: "/wt/a", Started: actT0}
 
 func rdg(st agentstate.State) agentstate.Reading {
-	return agentstate.Reading{Verdict: agentstate.Verdict{State: st}, Progress: string(st)}
+	return agentstate.Reading{Verdict: agentstate.Verdict{State: st}, StallKey: string(st)}
 }
 
 func noteKinds(ns []ActivityNotice) string {
