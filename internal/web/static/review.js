@@ -211,7 +211,12 @@ function reviewDone(ev, kind) {
     return;
   }
   if (ev.cancelled) opLine(isConflict ? "AI resolve cancelled" : "review cancelled");
-  else opLine((isConflict ? "AI resolve failed: " : "review failed: ") + (ev.error || "unknown error"), true);
+  else {
+    // A review the store could not keep still shows: the error line says it
+    // was not saved.
+    if (!isConflict && ev.report) openReport(title, "", ev.report, reviewDoc(ev));
+    opLine((isConflict ? "AI resolve failed: " : "review failed: ") + (ev.error || "unknown error"), true);
+  }
 }
 
 
@@ -289,7 +294,11 @@ function collectTask() {
   state.task = null;
   renderTaskChip(false);
   if (t.status === "done") openReport(t.title || "Review", t.noteId, t.report, t.doc);
-  else opLine(noun + " failed: " + (t.error || "unknown error"), true);
+  else {
+    // A review the store could not keep is still collected (see reviewDone).
+    if (t.kind === "review" && t.report) openReport(t.title || "Review", "", t.report, t.doc);
+    opLine(noun + " failed: " + (t.error || "unknown error"), true);
+  }
 }
 
 

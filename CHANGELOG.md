@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Working-changes reviews — follow-ups
+
+### Fixed
+
+- **gg web's ✎ marks the files of every current working review**, as the
+  TUI does, not only the newest review's files.
+- **A review that cannot be saved is still shown.** When the note store
+  cannot keep a review (notes off, no state directory), `gg review`
+  prints the report and then `error: review not saved: …`, exit 1; gg web
+  opens the report beside the error line. Before, the agent's report was
+  lost. Commit, branch and working reviews alike.
+- **Remove all notes… skips a working review's notes.** They are drawn on
+  the unstaged diff read-only and cannot be removed: they no longer offer
+  the row or count in its confirmation.
+
 ## Agent console — [x] close once the agent exits
 
 ### Added

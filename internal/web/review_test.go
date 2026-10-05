@@ -394,3 +394,28 @@ func TestReviewDonePayloadCarriesTheStructuredReview(t *testing.T) {
 		t.Fatalf("prose done = %v", prose)
 	}
 }
+
+// A review the store cannot keep (notes off here) still reaches the page:
+// the done event fails with the save error and carries the report.
+func TestReviewDoneCarriesTheReportWhenTheSaveFails(t *testing.T) {
+	dir := reviewRepo(t, echoReviewTool)
+	ts := serve(t, New(domain.Open(dir))) // TestMain turned notes off
+	code, body := startReview(t, ts, `{"target":"branch","branch":"feature","tool":"Echo","approve":true}`)
+	if code != http.StatusAccepted {
+		t.Fatalf("start = %d (%v)", code, body)
+	}
+	events := readSSE(t, ts, body["op_id"].(string), 30*time.Second)
+	last := events[len(events)-1]
+	if last["ok"] != false {
+		t.Fatalf("done = %v, want a failure", last)
+	}
+	if msg, _ := last["error"].(string); !strings.Contains(msg, "review not saved") {
+		t.Errorf("error = %q, want the save error", msg)
+	}
+	if rep, _ := last["report"].(string); !strings.Contains(rep, "looks fine") {
+		t.Errorf("report = %q, want the review the agent wrote", rep)
+	}
+	if id, _ := last["noteId"].(string); id != "" {
+		t.Errorf("noteId = %q, want none", id)
+	}
+}
