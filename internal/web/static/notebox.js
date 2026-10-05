@@ -30,7 +30,7 @@ export function noteTitle(n, path, preview, nowMs) {
   }
   const stale = n.status === "stale" || n.status === "outdated";
   const word = stale ? (preview ? " (outdated)" : " (stale)") : "";
-  return (n.source === "agent" ? "agent note" : "note") + (n.author ? " · " + n.author : "") + " · " + path + " " + side + lines + word;
+  return (n.source === "agent" ? "agent note" : "note") + (n.author ? " · " + n.author : "") + " · " + path + " " + side + lines + word + (n.resolved ? " · resolved" : "");
 }
 
 // seedCollapsed is the collapse set a freshly opened diff starts with: the

@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v139 -->
+<!-- gg:using-gg:v140 -->
 
 # Using gg (gigagit)
 
@@ -95,7 +95,9 @@ guards against removing the worktree you are standing in.
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]   # numbered git @@ hunks per file
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>] \
               --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] [--json]
-gg note reply [<repo-link>] <note-id> --summary "…" [--json]
+gg note reply [<repo-link>] <note-id|review:<id>:<n>> --summary "…" [--rationale "…"] [--link <commit|gg://…>] [--json]
+gg note resolve   [<repo-link>] <note-id|review:<id>:<n>> [--json]   # resolve a thread (any of its ids); a resolved thread folds
+gg note unresolve [<repo-link>] <note-id|review:<id>:<n>>            # reopen it (exit 1 when it is not resolved)
 gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--json]   # agent-context v1 or a comments batch
 gg note list  [<link> | --file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
 gg note list  --shelf <entry-id>                                   # notes gg left on a whole shelf entry
@@ -110,6 +112,12 @@ one file; the user reads them inline in `gg` and `gg web`. A note targets ONE
 diff: no flag = the unstaged working tree, `--cached` = the staged diff,
 `--rev <commit>` = that commit's own change (a range is refused). Line numbers
 are 1-based. Full guidance: `gg skill path` (the reviewing-with-gg skill).
+
+A stored review's remarks are threads: `gg review show` lists each remark's id
+(`review:<id>:<n>`; `review:latest:<n>` = the newest review's), and `gg note
+reply` / `resolve` / `unresolve` take it — answer another agent's review there.
+Pull-request (forge) threads stay read-only: GitHub owns their resolved state.
+MCP: `gg_note_reply`, `gg_note_resolve`.
 
 Three gotchas worth knowing up front (the reviewing-with-gg skill covers
 them in full): a path with BOTH a staged and an unstaged note needs

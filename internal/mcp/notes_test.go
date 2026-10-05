@@ -225,6 +225,7 @@ func TestNoteToolAnnotations(t *testing.T) {
 	tools := e.listTools(t)
 	for name, wantReadOnly := range map[string]bool{
 		"gg_notes_list": true, "gg_note_add": false, "gg_notes_apply": false, "gg_note_rm": false,
+		"gg_note_reply": false, "gg_note_resolve": false,
 	} {
 		ann, ok := tools[name]
 		if !ok {

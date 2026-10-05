@@ -20,6 +20,9 @@ import (
 // change never gets this far: domain.ResolveLink refuses it.
 
 type reviewHintMsg struct {
+	// svc is the repository the lookup ran against: a repo switch since
+	// (reRoot replaces m.svc) makes the answer stale.
+	svc    *domain.Service
 	cmd    steer.Command
 	commit string
 	found  bool
@@ -34,14 +37,17 @@ func (m Model) steerNavigateReview(c steer.Command) (Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		r, err := svc.Review(context.Background(), c.HintID)
 		if errors.Is(err, domain.ErrReviewNotFound) {
-			return reviewHintMsg{cmd: c}
+			return reviewHintMsg{svc: svc, cmd: c}
 		}
-		return reviewHintMsg{cmd: c, commit: r.Commit, found: err == nil, err: err}
+		return reviewHintMsg{svc: svc, cmd: c, commit: r.Commit, found: err == nil, err: err}
 	}
 }
 
 func (m Model) onReviewHint(msg reviewHintMsg) (Model, tea.Cmd) {
 	c := msg.cmd
+	if msg.svc != m.svc {
+		return m, m.answerSteer(c, steerFail(c, "the repository changed before the review opened"))
+	}
 	if !msg.found {
 		plain := c
 		plain.HintKind, plain.HintID = "", ""

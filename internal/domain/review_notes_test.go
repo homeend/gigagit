@@ -444,7 +444,9 @@ func TestReviewNoteIsReadOnly(t *testing.T) {
 	if err := svc.NoteEdit(ctx, "review:abc:0", "x", ""); !errors.Is(err, ErrReadOnlyNote) {
 		t.Fatalf("edit: %v", err)
 	}
-	if _, err := svc.NoteReply(ctx, "review:abc:0", model.Note{Summary: "r"}); !errors.Is(err, ErrReadOnlyNote) {
+	// A remark takes replies (spec 2026-10-05 review answers): replying to
+	// one of a review this store lacks says so, it is not "read-only".
+	if _, err := svc.NoteReply(ctx, "review:abc:0", model.Note{Summary: "r"}); !errors.Is(err, ErrReviewNotFound) {
 		t.Fatalf("reply: %v", err)
 	}
 	if err := svc.NoteRemove(ctx, "review:abc:0"); !errors.Is(err, ErrReadOnlyNote) {

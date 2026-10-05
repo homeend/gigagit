@@ -318,6 +318,7 @@ func helpContent() []contentLine {
 		r("c", i18n.T("add a review note at the cursor line (a summary, plus an optional rationale; an empty summary cancels)")),
 		r("E/R", i18n.T("edit / reply to the note next to the cursor line (several on one line: a chooser)")),
 		r("o/O", i18n.T("collapse / expand the note next to the cursor line to a single row (▸ author: summary); O does it for every note in the view. View state only — nothing is stored")),
+		r("x", i18n.T("resolve / reopen the thread next to the cursor (stored; a resolved thread folds, o unfolds it). A review's remarks take replies (R) and resolve too")),
 		r("a", i18n.T("show or hide agent-written notes; your own notes always stay visible")),
 		r("L", i18n.T("copy a gg:// link to the cursor line — paste it in a chat and gg diff / gg note add / gg session navigate take it straight back; in a comparison it names the line on the side the cursor is on, alt+←/→ picks the side (also the . menu's Copy link row does the same in the Files, Staged and Commits panels and a commit's files view)")),
 		r("", i18n.T("with lines marked (space, move, space) L copies a link to that range of lines on the cursor's side; opening the link marks the same lines again, and gg link text prints them — a range of uncommitted lines is refused once any of them changed (the file viewer and the View-file preview do the same)")),

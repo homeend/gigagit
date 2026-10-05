@@ -92,7 +92,7 @@ func TestNoteReadersLoadOnlyTheirParts(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("NoteAddresses", visible)
-	if _, err := svc.reviewNotes(ctx); err != nil {
+	if _, _, err := svc.reviewNotes(ctx); err != nil {
 		t.Fatal(err)
 	}
 	check("reviewNotes", []notes.Part{notes.PartCommits, wt}) // commit reviews + this worktree's working reviews

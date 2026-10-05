@@ -232,6 +232,9 @@ func shortRev(h string) string {
 // ReviewShowRemark is one remark as `gg review show --json` and the MCP
 // gg_review_show tool print it.
 type ReviewShowRemark struct {
+	// ID is the remark's thread id ("review:<review id>:<n>"): what
+	// gg note reply / resolve take.
+	ID        string            `json:"id"`
 	N         int               `json:"n"`
 	Path      string            `json:"path"`
 	Side      string            `json:"side"`
@@ -241,6 +244,29 @@ type ReviewShowRemark struct {
 	Rationale string            `json:"rationale,omitempty"`
 	Meta      map[string]string `json:"meta,omitempty"`
 	Link      string            `json:"link,omitempty"`
+	// The remark's thread: resolved (by whom) and its replies.
+	Resolved   bool              `json:"resolved"`
+	ResolvedBy string            `json:"resolved_by,omitempty"`
+	Replies    []ReviewShowReply `json:"replies,omitempty"`
+}
+
+// ReviewShowReply is one reply in a remark's thread.
+type ReviewShowReply struct {
+	ID        string    `json:"id"`
+	Author    string    `json:"author"`
+	Summary   string    `json:"summary"`
+	Rationale string    `json:"rationale,omitempty"`
+	Link      string    `json:"link,omitempty"`
+	Created   time.Time `json:"created"`
+}
+
+// ReviewShowOutdated is a thread whose remark the re-saved review no longer
+// has. It carries no remark id: the one it was made under now names another
+// remark (or none), so nothing may be addressed through it.
+type ReviewShowOutdated struct {
+	Summary  string            `json:"summary"`
+	Resolved bool              `json:"resolved"`
+	Replies  []ReviewShowReply `json:"replies,omitempty"`
 }
 
 // ReviewShow is a stored review as an agent reads it: who, what it compared
@@ -260,6 +286,10 @@ type ReviewShow struct {
 	Overview string             `json:"overview"`
 	Meta     map[string]string  `json:"meta,omitempty"`
 	Remarks  []ReviewShowRemark `json:"remarks"`
+	// Resolved counts the resolved remarks; Outdated lists the threads
+	// whose remark is gone from the re-saved review.
+	Resolved int                  `json:"resolved"`
+	Outdated []ReviewShowOutdated `json:"outdated,omitempty"`
 }
 
 // ReviewShow reads review id for an agent (gg review show, gg_review_show).
@@ -290,11 +320,34 @@ func (s *Service) ReviewShow(ctx context.Context, id string) (ReviewShow, error)
 	if r.Doc != nil {
 		out.Overview, out.Meta = r.Doc.Overview, metaMap(r.Doc.Meta)
 	}
+	th, outdated := r.RemarkThreads()
 	for _, x := range reviewRemarksIn(r, t, repo) {
-		out.Remarks = append(out.Remarks, ReviewShowRemark{N: x.N, Path: x.Path, Side: string(x.Side), Start: x.Start, End: x.End,
-			Summary: x.Summary, Rationale: x.Rationale, Meta: metaMap(x.Meta), Link: x.Link})
+		rm := ReviewShowRemark{ID: fmt.Sprintf("%s%s:%d", model.ReviewNoteIDPrefix, r.ID, x.N),
+			N: x.N, Path: x.Path, Side: string(x.Side), Start: x.Start, End: x.End,
+			Summary: x.Summary, Rationale: x.Rationale, Meta: metaMap(x.Meta), Link: x.Link}
+		if x.N < len(th) {
+			if res := th[x.N].Resolution; res != nil {
+				rm.Resolved, rm.ResolvedBy = true, res.By
+				out.Resolved++
+			}
+			rm.Replies = showReplies(th[x.N].Replies)
+		}
+		out.Remarks = append(out.Remarks, rm)
+	}
+	for _, o := range outdated {
+		out.Outdated = append(out.Outdated, ReviewShowOutdated{Summary: o.Summary,
+			Resolved: o.Resolution != nil, Replies: showReplies(o.Replies)})
 	}
 	return out, nil
+}
+
+func showReplies(ns []model.Note) []ReviewShowReply {
+	var out []ReviewShowReply
+	for _, n := range ns {
+		out = append(out, ReviewShowReply{ID: n.ID, Author: n.Author, Summary: n.Summary,
+			Rationale: n.Rationale, Link: n.Link, Created: n.Created})
+	}
+	return out
 }
 
 func metaMap(kv []notebatch.MetaKV) map[string]string {

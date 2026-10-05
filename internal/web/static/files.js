@@ -11,7 +11,8 @@ import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { rev } from "./review.js";
 import { symPair } from "./stack.js";
-import { renderCommits, rewordPrompt } from "./commits.js";
+import { gotoCommit, renderCommits, rewordPrompt } from "./commits.js";
+import { gotoLink } from "./live.js";
 import { focusPane, moveCursor, stepCommitCursor } from "./keys.js";
 import { saveUI } from "./uistate.js";
 import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutChanged, symOffered, symReapply, symRows } from "./symcompare.js";
@@ -2748,9 +2749,11 @@ function noteBoxHTML(n, cols, nctx = null) {
     `<div class="notebox ${kind}${stale ? " " + cls : ""}">` +
     `<div class="notetitle" data-collapse="${esc(n.id)}" title="click (or z) to collapse / expand">` +
     `<span class="notefold"></span>${esc(title)}</div>`;
-  if (rootOn) box += part(n, "") + text(n);
+  // A note's link (a reply's fix) is its own line; a click opens it.
+  const linkLine = (r) => (r.link ? `<div class="notelink" data-link="${esc(r.link)}" title="open">→ ${esc(r.link)}</div>` : "");
+  if (rootOn) box += part(n, "") + text(n) + linkLine(n);
   for (const r of reps) {
-    box += `<div class="notereply" data-note="${esc(r.id)}">` + part(r, "↳ " + (r.author ? r.author + ": " : "")) + text(r) + `</div>`;
+    box += `<div class="notereply" data-note="${esc(r.id)}">` + part(r, "↳ " + (r.author ? r.author + ": " : "")) + text(r) + linkLine(r) + `</div>`;
   }
   box += `</div>`;
   const cell = (span) => `<td class="note" colspan="${span}">${box}</td>`;
@@ -3350,16 +3353,48 @@ function editNotePrompt(note) {
 }
 
 
-function replyNotePrompt(note) {
+// replyNotePrompt answers a thread; withLink asks first for a commit or
+// gg:// link the reply points at (the prompt has two fields, not three).
+function replyNotePrompt(note, withLink = false) {
   const n = note || nearestNote();
-  if (!n || readOnlyNote(n)) return;
+  if (!n || (!n.replyable && readOnlyNote(n))) return;
+  const reply = (link) =>
+    openPrompt({
+      title: "Reply to “" + n.summary + "”" + (link ? " → " + link : ""),
+      placeholder: "summary",
+      body: { label: "rationale (optional)" },
+      onSubmit: (summary, rationale) =>
+        noteWrite("reply", "/api/notes/reply", { id: n.id, summary, rationale, link }),
+    });
+  if (!withLink) return reply("");
   openPrompt({
-    title: "Reply to “" + n.summary + "”",
-    placeholder: "summary",
-    body: { label: "rationale (optional)" },
-    onSubmit: (summary, rationale) =>
-      noteWrite("reply", "/api/notes/reply", { id: n.id, summary, rationale }),
+    title: "Link the reply points at",
+    placeholder: "a commit (sha, branch) or a gg:// link",
+    onSubmit: (link) => setTimeout(() => reply(link.trim()), 0),
   });
+}
+
+// resolveNote resolves a thread (or reopens it): stored, so every viewer
+// and agent sees it. Resolved folds the thread here (root: the menu's thread
+// root, the fold key), reopened unfolds it.
+function resolveNote(n, resolved, root) {
+  noteWrite(resolved ? "resolve" : "reopen", "/api/notes/resolve", { id: n.id, resolved }, () => {
+    if (resolved) state.noteCollapsed.add(root);
+    else state.noteCollapsed.delete(root);
+  });
+}
+
+// noteLinks are the distinct links a thread carries (its root, its replies).
+function noteLinks(n) {
+  const out = [];
+  for (const x of [n, ...(n.replies || [])]) if (x.link && !out.includes(x.link)) out.push(x.link);
+  return out;
+}
+
+// gotoNoteLink opens a note's link the way # does: a gg:// link lands, a
+// commit opens.
+function gotoNoteLink(l) {
+  return l.startsWith("gg://") ? gotoLink(l) : gotoCommit(l);
 }
 
 
@@ -3607,6 +3642,12 @@ $("diff-body").addEventListener("click", (e) => {
   // global one here would leave every row unmarkable inside a stack.
   if (rangeGesture(e)) return;
   const handle = e.target.closest(".notetitle[data-collapse]");
+  // A note's link line opens what it points at (a reply's fix).
+  const nl = e.target.closest(".notelink[data-link]");
+  if (nl && getSelection().isCollapsed) {
+    gotoNoteLink(nl.dataset.link);
+    return;
+  }
   if (!notesArmed(rowSlotCtx(handle || e.target.closest("tr")) || state.diffCtx)) return;
   // A note's title line is its fold handle.
   if (handle && getSelection().isCollapsed) {
@@ -3691,12 +3732,17 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     hint: "z",
     act: () => toggleNoteCollapsed(rootId),
   };
-  const noteRows = n.read_only
-    ? []
-    : [
-        { label: "Edit note", act: () => editNotePrompt(n) },
-        { label: "Reply…", act: () => replyNotePrompt(n) },
-      ];
+  // A review's remark is read-only yet takes replies (n.replyable); a forge
+  // thread takes neither, and GitHub owns its resolved state.
+  const noteRows = [];
+  if (!n.read_only) noteRows.push({ label: "Edit note", act: () => editNotePrompt(n) });
+  if (!n.read_only || n.replyable) {
+    noteRows.push({ label: "Reply…", act: () => replyNotePrompt(n) });
+    noteRows.push({ label: "Reply with a link…", act: () => replyNotePrompt(n, true) });
+  }
+  if (n.source !== "forge" && !String(n.id).startsWith("forge:"))
+    noteRows.push({ label: n.resolved ? "Reopen thread" : "Resolve thread", act: () => resolveNote(n, !n.resolved, rootId) });
+  for (const l of noteLinks(n)) noteRows.push({ label: "Open link: " + l, act: () => gotoNoteLink(l) });
   const nlink = linkFor(state.repo, state.worktree, noteSlotCtx(n) || state.diffCtx, n.side, n.line);
   if (nlink)
     noteRows.push({

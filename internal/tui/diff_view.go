@@ -1118,6 +1118,10 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.toggleNoteCollapse(), nil
 	case "O":
 		return m.toggleAllNotesCollapse(), nil
+	case "x":
+		// Layers get keys before the model's own x (session row / conflict):
+		// in a diff, x is the thread's Resolve / Reopen.
+		return m.toggleThreadResolved()
 	case "c":
 		return m.openNotePopup(noteAdd)
 	case "E":

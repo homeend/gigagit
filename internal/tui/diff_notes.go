@@ -442,6 +442,9 @@ func (v *diffView) collapsedNoteLine(r domain.ResolvedNote) noteLine {
 	case n > 1:
 		text += " " + i18n.T("(%d replies)", n)
 	}
+	if r.Resolution != nil {
+		text += " · " + i18n.T("resolved")
+	}
 	side := r.Note.Side
 	if side == "" {
 		side = model.NoteSideNew
@@ -451,7 +454,7 @@ func (v *diffView) collapsedNoteLine(r domain.ResolvedNote) noteLine {
 }
 
 // setNotes replaces the view's threads and seeds the collapse state of the
-// ones seen for the first time: a forge thread marked resolved starts folded.
+// ones seen for the first time: a resolved thread starts folded.
 func (v *diffView) setNotes(ns []domain.ResolvedNote) {
 	v.notes = ns
 	v.seedCollapsed(ns)
@@ -470,8 +473,8 @@ func (v *diffView) setNotesFor(i int, ns []domain.ResolvedNote) {
 	v.seedCollapsed(ns)
 }
 
-// seedCollapsed folds a forge thread its reviewers resolved, ONCE — a later
-// reload never re-folds what the reader opened by hand.
+// seedCollapsed folds a RESOLVED thread (stored, review remark or forge),
+// ONCE — a later reload never re-folds what the reader opened by hand.
 func (v *diffView) seedCollapsed(ns []domain.ResolvedNote) {
 	if v.collapsed == nil {
 		v.collapsed = map[string]bool{}
@@ -484,7 +487,7 @@ func (v *diffView) seedCollapsed(ns []domain.ResolvedNote) {
 			continue
 		}
 		v.collapseSeeded[r.Note.ID] = true
-		if r.Note.Source == model.NoteSourceForge && model.NoteHasTag(r.Note, model.NoteTagResolved) {
+		if r.Resolution != nil || (r.Note.Source == model.NoteSourceForge && model.NoteHasTag(r.Note, model.NoteTagResolved)) {
 			v.collapsed[r.Note.ID] = true
 		}
 	}
@@ -594,6 +597,9 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 	if model.IsReviewNoteID(r.Note.ID) && len(r.Note.Tags) > 0 {
 		t += " · " + sanitizeLine(strings.Join(r.Note.Tags, " · ")) // the review's meta
 	}
+	if r.Resolution != nil {
+		t += " · " + i18n.T("resolved")
+	}
 	return t
 }
 
@@ -664,6 +670,11 @@ func noteBodyLines(r domain.ResolvedNote, rootID string, depth, innerW int, stal
 			for _, ln := range noteWrap(sanitizeLine(src), innerW-len([]rune(indent))) {
 				rows = append(rows, mk(noteRowText, indent+ln))
 			}
+		}
+	}
+	if r.Note.Link != "" { // what the note points at (a reply's fix): opened from the . menu
+		for _, ln := range noteWrap(sanitizeLine("→ "+r.Note.Link), innerW-len([]rune(indent))) {
+			rows = append(rows, mk(noteRowText, indent+ln))
 		}
 	}
 	return rows

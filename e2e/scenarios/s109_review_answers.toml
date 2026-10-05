@@ -1,0 +1,53 @@
+name = "review answers: reply in a remark's thread (with the fix's link), resolve, reopen — gg review show reads it back"
+
+# The review tool prints a review DOCUMENT with two remarks (committed beside
+# the code, so the tree stays clean). Agent B answers it remark by remark.
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[tools.command]]
+category = "review"
+name = "Doc"
+mode = "capture"
+command = 'cat review.json'
+''' },
+  { write = "review.json", content = '{"version":1,"summary":"looks fine","files":[{"path":"a.txt","annotations":[{"newRange":[1,1],"summary":"check v2"},{"newRange":[2,2],"summary":"line two"}]}]}' },
+  { write = "a.txt", content = "v1\nx\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "v2\ny\n" },
+  { commit = "second" },
+]
+
+[[run]]
+cmd = ["review", "--tool", "Doc", "HEAD"]
+exit = 0
+
+[[run]]
+cmd = ["note", "reply", "review:latest:0", "--summary", "v2 is right", "--link", "HEAD"]
+exit = 0
+
+[[run]]
+cmd = ["note", "resolve", "review:latest:0"]
+exit = 0
+stdout_contains = ["resolved review:"]
+
+[[run]]
+cmd = ["review", "show", "latest"]
+exit = 0
+stdout_contains = ["1 of 2 resolved", "[0] a.txt:1 — check v2", "    resolved by ", "↳ ", "v2 is right", "      → ", "[1] a.txt:2 — line two"]
+
+[[run]]
+cmd = ["note", "unresolve", "review:latest:0"]
+exit = 0
+
+[[run]]
+cmd = ["note", "unresolve", "review:latest:0"]
+exit = 1
+
+[[run]]
+cmd = ["note", "reply", "review:latest:9", "--summary", "x"]
+exit = 1
+
+[expect]
+branch = "main"
+clean = true

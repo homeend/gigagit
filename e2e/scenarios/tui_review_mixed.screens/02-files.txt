@@ -3,8 +3,8 @@ local  branch feature                                                           
 │ Files 1290a1e deleted a b                         ││ Commits (all) 2                                                                                         │
 │ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓ ✎ *feature deleted a b                                                                           │
 │ > Reviews                                         ││   ●  ↓   main     add a b  ◆ 1                                                                          │
-│     └ 2026-01-02 00:00 fake                       ││                                                                                                         │
-│     └ 2026-01-02 00:00 fake                       ││                                                                                                         │
+│     └ 2026-01-02 00:00 fake · 0/1 resolved        ││                                                                                                         │
+│     └ 2026-01-02 00:00 fake · 0/1 resolved        ││                                                                                                         │
 │   D  a.txt                                        ││                                                                                                         │
 │   D  b.txt                                        ││                                                                                                         │
 │                                                   ││                                                                                                         │

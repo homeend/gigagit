@@ -115,7 +115,7 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 		}
 	}
 	for _, n := range all {
-		if review[n.ID] || review[n.ParentID] {
+		if review[n.ID] || review[n.StoredParent()] {
 			continue
 		}
 		a := n.Address
@@ -157,6 +157,7 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 		}
 		return sh
 	}
+	var resIdx map[string]model.ThreadResolution // loaded once, on the first file
 	for _, b := range buckets {
 		if err := ctx.Err(); err != nil {
 			return NotesOverview{}, err
@@ -169,7 +170,10 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 		}
 		oldLines, _ := s.noteSideLines(ctx, b.addr, model.NoteSideOld)
 		newLines, _ := s.noteSideLines(ctx, b.addr, model.NoteSideNew)
-		f := NoteFileNotes{Addr: b.addr, Notes: resolveNotes(b.notes, oldLines, newLines)}
+		if resIdx == nil {
+			resIdx = s.resolutionIndex(ctx)
+		}
+		f := NoteFileNotes{Addr: b.addr, Notes: stampResolutions(resolveNotes(b.notes, oldLines, newLines), resIdx)}
 		if len(f.Notes) == 0 {
 			continue
 		}

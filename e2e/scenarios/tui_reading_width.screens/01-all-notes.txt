@@ -19,7 +19,7 @@ local  branch main                                                              
 │  ║                                    > ▾ Commits                                                                                                                                                 ║  │
 │  ║                                        ▾ b4b8643  deleted a b  · 2026-01-01 00:00                                                                                                              ║  │
 │  ║                                            Reviews                                                                                                                                             ║  │
-│  ║                                                review   fake      commit    0s      Review: HEAD (HEAD^..HEAD)                                                                                 ║  │
+│  ║                                                review   fake      commit    0s      Review: HEAD (HEAD^..HEAD) · 0/1 resolved                                                                  ║  │
 │  ║                                        ▾ dc4bb26  add a b  · 2026-01-01 00:00                                                                                                                  ║  │
 │  ║                                              a.txt                                                                                                                                             ║  │
 │  ║                                                active   agent     new:1     0s      This note is deliberately long so that the NOTE column cannot hold it                                      ║  │

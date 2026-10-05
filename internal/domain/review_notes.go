@@ -65,12 +65,19 @@ type Review struct {
 	// Doc is Text parsed as a review document; nil when the review is prose
 	// (a reply that was not the document is kept as text).
 	Doc *notebatch.ReviewDoc
+	// Replies are the review's remark replies (creation order) and
+	// Resolutions its remark resolutions; RemarkThreads joins them.
+	Replies     []model.Note
+	Resolutions []model.ThreadResolution
 }
 
 // ReviewHead is a review without its text: what a list row needs.
 type ReviewHead struct {
 	ID, Commit, Branch, Agent, Summary string
 	Created                            time.Time
+	// Remarks is the document's remark count, Resolved how many of them
+	// are resolved: a review row's tally.
+	Remarks, Resolved int
 }
 
 // A held lock is retried within reviewRetryBudget, sleeping a random
@@ -288,11 +295,12 @@ func (s *Service) reviewOf(ctx context.Context, n model.Note, tips map[string]st
 }
 
 // reviewNotes is every review note (roots only), newest first: the commit
-// reviews and THIS worktree's working reviews — never a sibling's.
-func (s *Service) reviewNotes(ctx context.Context) ([]model.Note, error) {
+// reviews and THIS worktree's working reviews — never a sibling's — and
+// their remark threads (attach them to each Review built).
+func (s *Service) reviewNotes(ctx context.Context) ([]model.Note, remarkThreadSet, error) {
 	st := s.notesStore(ctx)
 	if st == nil {
-		return nil, ErrNotesDisabled
+		return nil, remarkThreadSet{}, ErrNotesDisabled
 	}
 	parts := []notes.Part{notes.PartCommits}
 	top, _ := s.TopLevel(ctx)
@@ -302,7 +310,7 @@ func (s *Service) reviewNotes(ctx context.Context) ([]model.Note, error) {
 	}
 	all, err := loadParts(st, parts...)
 	if err != nil {
-		return nil, err
+		return nil, remarkThreadSet{}, err
 	}
 	var out []model.Note
 	for _, n := range all {
@@ -314,29 +322,29 @@ func (s *Service) reviewNotes(ctx context.Context) ([]model.Note, error) {
 		}
 	}
 	sort.SliceStable(out, func(a, b int) bool { return out[a].Created.After(out[b].Created) })
-	return out, nil
+	return out, loadReviewThreads(st, all, parts), nil
 }
 
 // Reviews is every stored review, newest first.
 func (s *Service) Reviews(ctx context.Context) ([]Review, error) {
-	ns, err := s.reviewNotes(ctx)
+	ns, th, err := s.reviewNotes(ctx)
 	tips := map[string]string{}
 	out := make([]Review, 0, len(ns))
 	for _, n := range ns {
-		out = append(out, s.reviewOf(ctx, n, tips))
+		out = append(out, th.attach(s.reviewOf(ctx, n, tips)))
 	}
 	return out, err
 }
 
 // Review is one stored review by note id; ErrReviewNotFound when gone.
 func (s *Service) Review(ctx context.Context, id string) (Review, error) {
-	ns, err := s.reviewNotes(ctx)
+	ns, th, err := s.reviewNotes(ctx)
 	if err != nil {
 		return Review{}, err
 	}
 	for _, n := range ns {
 		if n.ID == id {
-			return s.reviewOf(ctx, n, map[string]string{}), nil
+			return th.attach(s.reviewOf(ctx, n, map[string]string{})), nil
 		}
 	}
 	return Review{}, ErrReviewNotFound
@@ -346,12 +354,12 @@ func (s *Service) Review(ctx context.Context, id string) (Review, error) {
 func (s *Service) ReviewsForCommit(ctx context.Context, sha string) ([]Review, error) {
 	// Filter the notes first: building a Review parses its document and may
 	// resolve its branch tip (a git call), which only this commit's need.
-	ns, err := s.reviewNotes(ctx)
+	ns, th, err := s.reviewNotes(ctx)
 	tips := map[string]string{}
 	var out []Review
 	for _, n := range ns {
 		if n.Address.Commit == sha {
-			out = append(out, s.reviewOf(ctx, n, tips))
+			out = append(out, th.attach(s.reviewOf(ctx, n, tips)))
 		}
 	}
 	return out, err

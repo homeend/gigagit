@@ -149,14 +149,16 @@ func TestReviewDiffShowsOnlyReviewNotes(t *testing.T) {
 	}
 }
 
-func TestReviewNoteCannotBeReplied(t *testing.T) {
+// A review's remark is never edited and no note is added in the review view;
+// R answers a remark (spec 2026-10-05 review answers — note_resolve_test.go).
+func TestReviewNoteCannotBeEditedOrAdded(t *testing.T) {
 	t.Parallel()
 	m, _ := openedReviewView(t)
 	m = openReviewDiff(t, m, "a.go")
 	v := m.diffLayer()
 	li, _ := v.noteAnchorLine(v.notes[0])
 	v.setCursorLine(li, m.diffBodyRows())
-	for _, key := range []string{"R", "E", "c"} {
+	for _, key := range []string{"E", "c"} {
 		nm, _ := v.update(m, synthKey(key))
 		if _, open := nm.topLayer().(*notePopup); open {
 			t.Fatalf("%s opened a note form in the review view", key)

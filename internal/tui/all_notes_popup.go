@@ -551,10 +551,17 @@ func anReviewParts(r anRow, now time.Time) (head, summary string) {
 	return head, sanitizeLine(r.review.Summary)
 }
 
+// anReviewSummary is a review row's summary with its tally: the long form
+// when room columns hold it, else the short one ("0/2 resolved").
+func anReviewSummary(r anRow, summary string, room int) string {
+	remarks, resolved := r.review.Tally()
+	return withTally(summary, remarks, resolved, room)
+}
+
 // anReviewFull is a review row's cells uncut: the bottom bar's text.
 func anReviewFull(r anRow, now time.Time) string {
 	status, who, where, when := anReviewCells(r, now)
-	return strings.Join([]string{status, who, where, when, sanitizeLine(r.review.Summary)}, " · ")
+	return strings.Join([]string{status, who, where, when, anReviewSummary(r, sanitizeLine(r.review.Summary), tallyWide)}, " · ")
 }
 
 // anReviewCells is a review row's column values.
@@ -609,7 +616,7 @@ func (p *allNotesPopup) anRowText(r anRow, w int, now time.Time) string {
 		if budget < 1 {
 			return strings.Repeat(" ", anNoteIndent) + truncate(head, w-anNoteIndent)
 		}
-		return strings.Repeat(" ", anNoteIndent) + head + truncate(summary, budget)
+		return strings.Repeat(" ", anNoteIndent) + head + truncate(anReviewSummary(r, summary, budget), budget)
 	case anGroup, anSub:
 		mark := "▾ "
 		if p.folded[r.key] && p.query == "" {
@@ -788,8 +795,9 @@ func anWrappedRow(r anRow, now time.Time) (text string, hang int, ok bool) {
 		head, summary, tail := anNoteParts(r, now)
 		return indent + head + summary + tail, anNoteIndent + lipgloss.Width(head), true
 	case r.kind == anReview:
+		// Wrapped, the short tally: a long one would split across lines.
 		head, summary := anReviewParts(r, now)
-		return indent + head + summary, anNoteIndent + lipgloss.Width(head), true
+		return indent + head + anReviewSummary(r, summary, tallyNarrow), anNoteIndent + lipgloss.Width(head), true
 	}
 	return "", 0, false
 }

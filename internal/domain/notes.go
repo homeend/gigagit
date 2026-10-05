@@ -42,6 +42,9 @@ type ResolvedNote struct {
 	Status  model.NoteStatus
 	Range   [2]int
 	Replies []ResolvedNote
+	// Resolution is the thread's resolved state (nil = open): stored for a
+	// stored root or a review remark, GitHub's for a forge thread.
+	Resolution *model.ThreadResolution
 	// SummarySrc is a FORGE note's summary line with its markdown markers
 	// intact (Note.Summary is that line as plain text). Empty for a stored
 	// note, and for a forge note whose summary is a label ("suggestion").
@@ -140,6 +143,10 @@ func (c NoteCounts) PlainCommitNotes(hash string) int {
 // that already display the anchored line pass the hash so it matches exactly
 // what the user saw.
 func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error) {
+	var lerr error
+	if n.Link, lerr = s.NoteLink(ctx, n.Link); lerr != nil {
+		return model.Note{}, lerr
+	}
 	st := s.notesStore(ctx)
 	if st == nil {
 		return model.Note{}, ErrNotesDisabled
@@ -330,6 +337,13 @@ func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) e
 // from non-replies, so a note whose parent is itself a reply would be dropped
 // inside Put while this call reported success.
 func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) (model.Note, error) {
+	var err error
+	if n.Link, err = s.NoteLink(ctx, n.Link); err != nil {
+		return model.Note{}, err
+	}
+	if model.IsReviewNoteID(parentID) { // a review's remark: its thread lives with the review
+		return s.replyToRemark(ctx, parentID, n)
+	}
 	if model.IsReadOnlyNoteID(parentID) {
 		return model.Note{}, ErrReadOnlyNote
 	}
@@ -348,6 +362,9 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 	root, ok := byID[parentID]
 	if !ok {
 		return model.Note{}, ErrNoteNotFound
+	}
+	if root.IsRemarkReply() { // answering an answer: stay in its remark's thread
+		return s.replyInThread(ctx, root, n)
 	}
 	// Walk up to the root, bounded by the record count so corrupt data (a
 	// parent cycle) cannot spin here.
@@ -446,7 +463,7 @@ func (s *Service) NotesClearAtCommit(ctx context.Context, commit, path, scope st
 	if len(roots) == 0 {
 		return 0, nil
 	}
-	dropped, err := st.Sweep(func(n model.Note) bool { return !roots[n.ID] && !roots[n.ParentID] })
+	dropped, err := st.Sweep(func(n model.Note) bool { return !roots[n.ID] && !roots[n.StoredParent()] })
 	if dropped > 0 {
 		s.invalidateNoteCounts()
 	}
@@ -475,7 +492,7 @@ func (s *Service) NotesFor(ctx context.Context, addr model.FileAddress, d Diff) 
 			sortReviewNotes(out)
 		}
 	}
-	return out, nil
+	return s.withResolutions(ctx, out), nil
 }
 
 // loadNotesAt is the STORE half of a note read, shared by NotesFor and
@@ -549,7 +566,7 @@ func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]Resolv
 		})
 	}
 	if len(mine) == 0 {
-		return extra, nil
+		return s.withResolutions(ctx, extra), nil
 	}
 	// Only now are the two sides worth reading: the reads shell out to git,
 	// and an address with no notes at all must cost nothing.
@@ -560,7 +577,7 @@ func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]Resolv
 		out = append(out, extra...)
 		sortReviewNotes(out)
 	}
-	return out, nil
+	return s.withResolutions(ctx, out), nil
 }
 
 // NoteCounts returns the badge counts, cached until the next mutation. The
@@ -589,6 +606,16 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 	// fail the query: commit badges need no worktree at all, so an empty cur
 	// simply leaves ByPath empty.
 	cur, _ := s.TopLevel(ctx)
+	// A review row carries its tally: the remark resolutions by review.
+	remarkRes := map[string][]model.ThreadResolution{}
+	if rs, rerr := st.LoadAllResolved(); rerr == nil || len(rs) > 0 {
+		for _, r := range rs {
+			if model.IsReviewNoteID(r.Root) {
+				id := model.StoredRootID(r.Root)
+				remarkRes[id] = append(remarkRes[id], r)
+			}
+		}
+	}
 	c := NoteCounts{ByPath: map[string]int{}, ByCommit: map[string]int{}, ByCommitPath: map[string]int{}, ByShelf: map[string]int{}}
 	for _, n := range all {
 		if n.IsReply() { // a badge counts THREADS
@@ -596,15 +623,19 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		}
 		if n.IsWorkingReview() {
 			if sameWorktreePath(n.Address.Worktree, cur) {
-				c.WorkingReviews = append(c.WorkingReviews, ReviewHead{ID: n.ID, Agent: n.Author, Summary: n.Summary, Created: n.Created})
+				h := ReviewHead{ID: n.ID, Agent: n.Author, Summary: n.Summary, Created: n.Created}
+				h.Remarks, h.Resolved = docTally(n.Rationale, remarkRes[n.ID])
+				c.WorkingReviews = append(c.WorkingReviews, h)
 			}
 			continue
 		}
 		if n.IsReviewNote() {
 			// A review has its own marker (✎ in Commits, ◆ in Branches):
 			// it is never counted in the ◆N note badges.
-			c.Reviews = append(c.Reviews, ReviewHead{ID: n.ID, Commit: n.Address.Commit, Branch: n.Address.Branch,
-				Agent: n.Author, Summary: n.Summary, Created: n.Created})
+			h := ReviewHead{ID: n.ID, Commit: n.Address.Commit, Branch: n.Address.Branch,
+				Agent: n.Author, Summary: n.Summary, Created: n.Created}
+			h.Remarks, h.Resolved = docTally(n.Rationale, remarkRes[n.ID])
+			c.Reviews = append(c.Reviews, h)
 			continue
 		}
 		if n.IsShelfLevel() {

@@ -144,3 +144,18 @@ func TestParseConfidenceWords(t *testing.T) {
 		}
 	}
 }
+
+func TestCommentReplyCarriesLinkAndResolve(t *testing.T) {
+	b, err := Parse([]byte(`{"comments":[{"replyTo":"review:ab12cd34:1","summary":"fixed","link":"gg://r@abc:a.go:3","resolve":true}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	it := b.Items[0]
+	if it.Link != "gg://r@abc:a.go:3" || it.Resolve == nil || !*it.Resolve {
+		t.Fatalf("item = %+v", it)
+	}
+	if _, err := Parse([]byte(`{"comments":[{"filePath":"a.go","newLine":1,"summary":"x","resolve":true}]}`)); err == nil ||
+		!strings.Contains(err.Error(), "resolve") {
+		t.Fatalf("resolve on a root comment: %v", err)
+	}
+}

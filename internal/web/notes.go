@@ -28,6 +28,7 @@ func init() {
 		mux.HandleFunc("POST /api/notes/add", writeGuard(s.handleNoteAdd))
 		mux.HandleFunc("POST /api/notes/edit", writeGuard(s.handleNoteEdit))
 		mux.HandleFunc("POST /api/notes/reply", writeGuard(s.handleNoteReply))
+		mux.HandleFunc("POST /api/notes/resolve", writeGuard(s.handleNoteResolve))
 		mux.HandleFunc("POST /api/notes/remove", writeGuard(s.handleNoteRemove))
 		mux.HandleFunc("POST /api/notes/clear-row", writeGuard(s.handleNoteClearRow))
 		mux.HandleFunc("GET /api/notes/row-link", s.handleNoteRowLink)
@@ -196,6 +197,10 @@ type noteReq struct {
 	// Preview is the scope the page wrote the note in ("<target>...<source>"
 	// or "<a>..<b>"); stamped only when it resolves to the note's own commit.
 	Preview string `json:"preview"`
+	// Link: a reply's gg:// link or commit (domain validates it). Resolved:
+	// the thread state /api/notes/resolve sets (required there).
+	Link     string `json:"link"`
+	Resolved *bool  `json:"resolved"`
 }
 
 func decodeNoteReq(w http.ResponseWriter, r *http.Request) (noteReq, bool) {
@@ -335,7 +340,7 @@ func (s *Server) handleNoteReply(w http.ResponseWriter, r *http.Request) {
 	// flattens to the thread root); nothing about it comes off the wire.
 	got, err := s.service().NoteReply(r.Context(), req.ID, model.Note{
 		Source: model.NoteSourceUser, Author: s.noteAuthor(r.Context(), req.Author),
-		Summary: summary, Rationale: strings.TrimSpace(req.Rationale),
+		Summary: summary, Rationale: strings.TrimSpace(req.Rationale), Link: req.Link,
 	})
 	if err != nil {
 		writeErr(w, noteErrStatus(err), err)
@@ -343,6 +348,25 @@ func (s *Server) handleNoteReply(w http.ResponseWriter, r *http.Request) {
 	}
 	s.emitNotes()
 	writeJSON(w, map[string]any{"id": got.ID})
+}
+
+// handleNoteResolve resolves a thread (resolved:true) or reopens it, by any
+// of its ids — a root, a reply or a review remark.
+func (s *Server) handleNoteResolve(w http.ResponseWriter, r *http.Request) {
+	req, ok := decodeNoteReq(w, r)
+	if !ok {
+		return
+	}
+	if req.ID == "" || req.Resolved == nil {
+		writeErr(w, http.StatusBadRequest, errors.New("id and resolved are required"))
+		return
+	}
+	if _, err := s.service().NoteResolve(r.Context(), req.ID, *req.Resolved, s.noteAuthor(r.Context(), req.Author)); err != nil {
+		writeErr(w, noteErrStatus(err), err)
+		return
+	}
+	s.emitNotes()
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (s *Server) handleNoteRemove(w http.ResponseWriter, r *http.Request) {
@@ -421,8 +445,13 @@ func (s *Server) handleNoteRowLink(w http.ResponseWriter, r *http.Request) {
 // matches domain's own sentinel, which wraps the store's notes.ErrNotFound so
 // a frontend never has to import internal/notes (archtest forbids it).
 func noteErrStatus(err error) int {
-	if errors.Is(err, domain.ErrNoteNotFound) {
+	switch {
+	case errors.Is(err, domain.ErrNoteNotFound), errors.Is(err, domain.ErrReviewNotFound), errors.Is(err, domain.ErrNoSuchRemark):
 		return http.StatusNotFound
+	case errors.Is(err, domain.ErrReadOnlyNote), errors.Is(err, domain.ErrForgeResolved), errors.Is(err, domain.ErrNotResolved):
+		return http.StatusConflict
+	case errors.Is(err, domain.ErrNoteLink):
+		return http.StatusBadRequest
 	}
 	return http.StatusInternalServerError
 }
@@ -455,8 +484,10 @@ func (s *Server) workingReviewsWire(r *http.Request, some bool) []map[string]any
 			}
 		}
 		sort.Strings(matches)
+		remarks, resolved := wr.Tally()
 		out = append(out, map[string]any{"id": wr.ID, "summary": wr.Summary, "agent": wr.Agent,
-			"created": wireTime(wr.Created), "current": wr.Current, "matches": matches})
+			"created": wireTime(wr.Created), "current": wr.Current, "matches": matches,
+			"remarks": remarks, "resolved": resolved})
 	}
 	return out
 }

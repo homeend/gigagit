@@ -1976,6 +1976,61 @@ answers per remark, stage 3 = a second review answering the first).
 - CLI: `gg review show` is dispatched before `gg review`'s flag parse;
   links go through `resolveLinkArg` (the cli one-door guard).
 
+### Review answers — remark threads + resolved (2026-10-05, review links stage 2)
+
+Spec/plan: `docs/superpowers/specs/2026-10-05-review-answers-design.md`,
+`docs/superpowers/plans/2026-10-05-review-answers.md`. User rulings: an
+answer is a REPLY in the remark's thread (no verdict words); the GitHub model
+— resolved (stored, anyone toggles) + collapsed (view state, `o`/`O`); a
+resolved thread starts folded once per view; Resolve on EVERY note thread;
+forge threads keep GitHub's state (no local reply / resolve); row tallies in
+plain words (`12 remarks · 4 resolved`, short `4/12 resolved`), never ✓/✗/✔.
+
+- **A remark reply is a stored child of its review.** `ParentID` = the
+  review's note id (an older gg's orphan prune keeps it), `Remark =
+  "review:<id>:<n>"` (the remark answered), stored at the REVIEW's address (commit-level /
+  worktree-level, so the sweeps never expire it); `model.StoredRootID` /
+  `Note.StoredParent()` map the remark id to the review id for the store's
+  `dropOrphanReplies` (runs on EVERY part write — without the mapping the
+  next write anywhere deletes B's replies), `capOldestFirst`, `Remove` (a
+  review takes its remark replies) and `FileStore.Put` routing. Readers that
+  walk stored notes skip `IsRemarkReply()` notes (overview, preview `mine`).
+- **Join by fingerprint.** A reply stamps `RemarkFP` (sha256 of path, side,
+  range, summary) and `RemarkSummary`; `Review.RemarkThreads()` joins replies
+  and `review:` resolutions to the remark with that fp (same index first, else
+  the moved remark, else an OUTDATED thread listed with the review's other
+  notes). `reviewDocNotes` attaches them, so the TUI/web/working-tree diffs
+  get remark threads for free.
+- **`[[resolved]]` table per note part** (`model.ThreadResolution{Root, By,
+  At, RemarkFP}`), written under the part lock; every part write drops
+  entries whose root is gone (`keepRootedResolutions`). `Store.Resolve`
+  routes to the root's part (a remark: its review's). Domain
+  `NoteResolve(id, resolved, by)` takes a root, a reply or a remark id;
+  `withResolutions` stamps `ResolvedNote.Resolution` on every public thread
+  reader (forge: from the `resolved` tag; never a remark — its state comes
+  from the fingerprint join). Every remark WRITE first re-keys the review's
+  entries to their remarks' current ids (`rekeyRemarkResolutions`, all out
+  then all in) — a re-save that moved remarks must not let one remark's
+  resolve/reopen land on another's entry; a reply to an answer joins the
+  answer's thread (`replyInThread`); an outdated thread is not addressable
+  (no id printed, resolve refused).
+- **Links:** `Note.Link` (a gg:// link or a full sha), normalised by
+  `Service.NoteLink` inside `NoteAdd`/`NoteReply` (`ErrNoteLink`).
+- **Frontends:** CLI `gg note reply --link`, `gg note resolve|unresolve`,
+  `review:latest:<n>`, `gg review show` prints `id`, `resolved by`, replies,
+  outdated threads, `N of M resolved` (the remark line format is pinned by
+  s108 — unchanged); `gg note apply` comments take `link` + `resolve` (reply
+  items only; resolutions applied after the replies, restored + rolled back on
+  a failure). MCP `gg_note_reply`, `gg_note_resolve`. TUI: `R` on a remark
+  (the review view still refuses `c`/`E`), `x` = Resolve/Reopen (help + `.`
+  menu only — the diff footer is full), links open from the `.` menu ("Open
+  link: …" through the `#` prompt — the diff cursor never sits on note rows),
+  reply popup has a link field. Web: `POST /api/notes/resolve`, `replyable`
+  on the wire, "Reply with a link…" row (the prompt has two fields), link
+  line click, tallies on rows.
+- `reviewHintMsg` carries its `svc`: a lookup that lands after a repo switch
+  answers the steer with "the repository changed…" and does nothing.
+
 ### Note rows' "." menu: Open + Delete only (2026-10-05)
 
 User ruling: a review is opened or removed, nothing else. A commit's three

@@ -1494,10 +1494,14 @@ table.diff tr.note td.note-gap { cursor: default; }
 table.diff tr.note.collapsed .notefold::before { content: "▸ "; }
 table.diff tr.note.collapsed .notesum,
 table.diff tr.note.collapsed .notetext,
+table.diff tr.note.collapsed .notelink,
 table.diff tr.note.collapsed .notereply { display: none; }
 table.diff tr.note.collapsed .notebox { padding: 8px 12px 2px; }
 .notesum { font-weight: bold; }
 .notetext { opacity: .8; margin-top: 2px; }
+/* A note's link (a reply's fix): a click opens it the way # does. */
+.notelink { margin-top: 2px; color: var(--accent); cursor: pointer; overflow-wrap: anywhere; }
+.notelink:hover { text-decoration: underline; }
 .notereply { margin-top: 8px; padding-left: 12px; }
 .notebadge { margin-left: 6px; color: var(--accent); opacity: .85; }
 

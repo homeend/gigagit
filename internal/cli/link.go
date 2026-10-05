@@ -65,6 +65,10 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	if *review != "" {
 		// A review's link is its own place: the reviewed change plus the
 		// ?review= hint. No path, no other target or landing composes with it.
+		if *noFP {
+			fmt.Fprintf(stderr, "link: --no-fingerprint has no meaning with --review (a review link names no line)\n%s\n", linkUsage)
+			return 2
+		}
 		if *version != "" || *cached || *rev != "" || pf.set() || *ref != "" || *pair != "" || *bookmark != "" || *shelf != "" || *content || len(pos) > 0 {
 			fmt.Fprintf(stderr, "link: --review names its own target and landing; it takes no other flag or argument\n%s\n", linkUsage)
 			return 2

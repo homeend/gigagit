@@ -177,6 +177,9 @@ func reviewMetaLine(st *reviewViewState) string {
 		parts = append(parts, ageString(clock.Now(), st.review.Created))
 	}
 	parts = append(parts, i18n.T("%d notes on %d files", notes, files))
+	if _, resolved := st.review.Tally(); resolved > 0 {
+		parts = append(parts, i18n.T("%d resolved", resolved))
+	}
 	return strings.Join(parts, " · ")
 }
 
@@ -309,7 +312,18 @@ func reviewOverviewLines(st *reviewViewState) []contentLine {
 // cannot place, carrying its path.
 func reviewOtherNoteLines(st *reviewViewState) []contentLine {
 	out := make([]contentLine, 0, len(st.other))
+	heading := false
 	for _, o := range st.other {
+		if o.Outdated {
+			// A thread whose remark the re-saved review no longer has: never
+			// a path:line, under one heading.
+			if !heading {
+				out = append(out, contentLine{text: i18n.T("Outdated (the remark is gone from the re-saved review)"), heading: true})
+				heading = true
+			}
+			out = append(out, contentLine{text: sanitizeLine(o.Summary) + threadSuffix(len(o.Replies), o.Resolution != nil)})
+			continue
+		}
 		line := fmt.Sprint(o.Range[0])
 		if o.Side == model.NoteSideOld {
 			line = "-" + line
@@ -318,9 +332,28 @@ func reviewOtherNoteLines(st *reviewViewState) []contentLine {
 		if o.Changed {
 			text += " (" + i18n.T("changed since the review") + ")"
 		}
+		text += threadSuffix(len(o.Replies), o.Resolution != nil)
 		out = append(out, contentLine{text: text, path: o.Path})
 	}
 	return out
+}
+
+// threadSuffix is a remark row's thread state: " — 2 replies · resolved".
+func threadSuffix(replies int, resolved bool) string {
+	var parts []string
+	switch {
+	case replies == 1:
+		parts = append(parts, i18n.T("1 reply"))
+	case replies > 1:
+		parts = append(parts, i18n.T("%d replies", replies))
+	}
+	if resolved {
+		parts = append(parts, i18n.T("resolved"))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " — " + strings.Join(parts, " · ")
 }
 
 // reviewMetaText is meta as "key: value · key: value".

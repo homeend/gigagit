@@ -50,7 +50,7 @@ func TestRunAutoMigrationsSplitsTheNoteStore(t *testing.T) {
 	if got, err := svc.NoteGet(ctx, live.ID); err != nil || got.Summary != "live" {
 		t.Fatalf("NoteGet(live) = %+v, %v", got, err)
 	}
-	if rs, err := svc.reviewNotes(ctx); err != nil || len(rs) != 1 || rs[0].ID != review.ID {
+	if rs, _, err := svc.reviewNotes(ctx); err != nil || len(rs) != 1 || rs[0].ID != review.ID {
 		t.Fatalf("reviewNotes = %+v, %v", rs, err)
 	}
 	svc.InvalidateNoteCounts()

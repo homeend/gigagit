@@ -42,7 +42,8 @@ func (fs *partFile) SetPolicy(p Policy) {
 var ErrCorrupt = errors.New("notes: store is corrupt")
 
 type index struct {
-	Notes []model.Note `toml:"notes"`
+	Notes    []model.Note             `toml:"notes"`
+	Resolved []model.ThreadResolution `toml:"resolved,omitempty"`
 }
 
 func (fs *partFile) lockPath() string { return fs.path + ".lock" }
@@ -53,18 +54,31 @@ func (fs *partFile) lockPath() string { return fs.path + ".lock" }
 // from an empty base and silently destroy the whole store, which is far worse
 // than surfacing the error and leaving the file alone.
 func (fs *partFile) read() ([]model.Note, error) {
+	idx, err := fs.readIndex()
+	return idx.Notes, err
+}
+
+// readIndex parses the whole file: the notes and the thread resolutions
+// (read's missing-file and corrupt-file rules).
+func (fs *partFile) readIndex() (index, error) {
 	data, err := os.ReadFile(fs.path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return index{}, nil
 		}
-		return nil, err
+		return index{}, err
 	}
 	var idx index
 	if err := toml.Unmarshal(data, &idx); err != nil {
-		return nil, fmt.Errorf("%w: %s: %v", ErrCorrupt, fs.path, err)
+		return index{}, fmt.Errorf("%w: %s: %v", ErrCorrupt, fs.path, err)
 	}
-	return idx.Notes, nil
+	return idx, nil
+}
+
+// LoadResolved returns this part's thread resolutions. Never writes.
+func (fs *partFile) LoadResolved() ([]model.ThreadResolution, error) {
+	idx, err := fs.readIndex()
+	return idx.Resolved, err
 }
 
 // Load returns every note of this part. NEVER writes (not even to prune): the
@@ -80,14 +94,14 @@ func (fs *partFile) lock() (func(), error) { return filelock.Acquire(fs.lockPath
 // A part left with no notes is removed instead of written empty, so a
 // removed worktree leaves no file behind. The temp name never ends in .toml:
 // a concurrent part listing must not mistake it for a part.
-func (fs *partFile) write(ns []model.Note) error {
-	if len(ns) == 0 {
+func (fs *partFile) write(idx index) error {
+	if len(idx.Notes) == 0 { // a resolution cannot outlive its root
 		if err := os.Remove(fs.path); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		return nil
 	}
-	data, err := toml.Marshal(index{Notes: ns})
+	data, err := toml.Marshal(idx)
 	if err != nil {
 		return err
 	}
@@ -136,14 +150,14 @@ func (fs *partFile) mutateCap(apply func([]model.Note) ([]model.Note, error), ca
 		return 0, err
 	}
 	defer unlock()
-	before, err := fs.read()
+	before, err := fs.readIndex()
 	if err != nil {
 		return 0, err
 	}
 	// apply gets a CLONE: it may edit records in place (Put replaces by ID),
 	// and the unchanged-check below has to compare against the state actually
 	// read from disk, not against a slice the callback has already rewritten.
-	ns, err := apply(slices.Clone(before))
+	ns, err := apply(slices.Clone(before.Notes))
 	if err != nil {
 		return 0, err
 	}
@@ -151,10 +165,12 @@ func (fs *partFile) mutateCap(apply func([]model.Note) ([]model.Note, error), ca
 	if capped {
 		ns = capOldestFirst(ns, fs.pol.MaxEntries)
 	}
-	if sameNotes(before, ns) {
+	// A resolution goes with its thread root, whatever removed the root.
+	rs := keepRootedResolutions(before.Resolved, ns)
+	if sameNotes(before.Notes, ns) && sameResolutions(before.Resolved, rs) {
 		return len(ns), nil
 	}
-	if werr := fs.write(ns); werr != nil {
+	if werr := fs.write(index{Notes: ns, Resolved: rs}); werr != nil {
 		return 0, werr
 	}
 	return len(ns), nil
@@ -174,6 +190,98 @@ func sameNotes(a, b []model.Note) bool {
 	return true
 }
 
+// keepRootedResolutions drops a resolution whose thread root is gone from
+// the part: a stored root by id, a review remark by its review.
+func keepRootedResolutions(rs []model.ThreadResolution, ns []model.Note) []model.ThreadResolution {
+	if len(rs) == 0 {
+		return rs
+	}
+	roots := make(map[string]bool, len(ns))
+	for _, n := range ns {
+		if !n.IsReply() {
+			roots[n.ID] = true
+		}
+	}
+	kept := make([]model.ThreadResolution, 0, len(rs))
+	for _, r := range rs {
+		if roots[model.StoredRootID(r.Root)] {
+			kept = append(kept, r)
+		}
+	}
+	return kept
+}
+
+// sameResolutions: nil and empty are the same (nothing to write).
+func sameResolutions(a, b []model.ThreadResolution) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// mutateResolved is mutate for the resolutions: same locks, fresh read,
+// atomic rewrite; the notes are untouched (apply sees them to check a
+// root). A resolution whose root is not in this part is dropped.
+func (fs *partFile) mutateResolved(apply func(ns []model.Note, rs []model.ThreadResolution) ([]model.ThreadResolution, error)) error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	unlock, err := fs.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	before, err := fs.readIndex()
+	if err != nil {
+		return err
+	}
+	rs, err := apply(before.Notes, slices.Clone(before.Resolved))
+	if err != nil {
+		return err
+	}
+	rs = keepRootedResolutions(rs, before.Notes)
+	if sameResolutions(before.Resolved, rs) {
+		return nil
+	}
+	return fs.write(index{Notes: before.Notes, Resolved: rs})
+}
+
+// Resolve adds r, or replaces the entry with the same Root. ErrNotFound when
+// the root is not in this part.
+func (fs *partFile) Resolve(r model.ThreadResolution) error {
+	return fs.mutateResolved(func(ns []model.Note, rs []model.ThreadResolution) ([]model.ThreadResolution, error) {
+		if !hasRoot(ns, model.StoredRootID(r.Root)) {
+			return nil, ErrNotFound
+		}
+		for i := range rs {
+			if rs[i].Root == r.Root {
+				rs[i] = r
+				return rs, nil
+			}
+		}
+		return append(rs, r), nil
+	})
+}
+
+// Unresolve removes root's entry; ErrNotFound when there is none.
+func (fs *partFile) Unresolve(root string) error {
+	return fs.mutateResolved(func(_ []model.Note, rs []model.ThreadResolution) ([]model.ThreadResolution, error) {
+		i := slices.IndexFunc(rs, func(r model.ThreadResolution) bool { return r.Root == root })
+		if i < 0 {
+			return nil, ErrNotFound
+		}
+		return slices.Delete(rs, i, i+1), nil
+	})
+}
+
+func hasRoot(ns []model.Note, id string) bool {
+	return slices.ContainsFunc(ns, func(n model.Note) bool { return n.ID == id && !n.IsReply() })
+}
+
 // Put adds n, or replaces the record with the same ID.
 func (fs *partFile) Put(n model.Note) error {
 	_, err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
@@ -188,13 +296,14 @@ func (fs *partFile) Put(n model.Note) error {
 	return err
 }
 
-// Remove deletes one note; removing a root removes its replies too.
+// Remove deletes one note; removing a root removes its replies too — a
+// review takes its remark replies (their stored parent is the review).
 func (fs *partFile) Remove(id string) error {
 	_, err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
 		kept := make([]model.Note, 0, len(ns))
 		found := false
 		for _, n := range ns {
-			if n.ID == id || n.ParentID == id {
+			if n.ID == id || n.StoredParent() == id {
 				found = found || n.ID == id
 				continue
 			}
@@ -250,7 +359,7 @@ func dropOrphanReplies(ns []model.Note) []model.Note {
 	}
 	kept := make([]model.Note, 0, len(ns))
 	for _, n := range ns {
-		if n.IsReply() && !roots[n.ParentID] {
+		if n.IsReply() && !roots[n.StoredParent()] {
 			continue
 		}
 		kept = append(kept, n)
@@ -275,7 +384,7 @@ func capOldestFirst(ns []model.Note, max int) []model.Note {
 	}
 	size := 0
 	for _, n := range ns {
-		if !exempt[n.ID] && !exempt[n.ParentID] {
+		if !exempt[n.ID] && !exempt[n.StoredParent()] {
 			size++
 		}
 	}
@@ -297,14 +406,14 @@ func capOldestFirst(ns []model.Note, max int) []model.Note {
 		doomed[r.ID] = true
 		size-- // the root
 		for _, n := range ns {
-			if n.ParentID == r.ID {
+			if n.StoredParent() == r.ID {
 				size--
 			}
 		}
 	}
 	kept := make([]model.Note, 0, len(ns))
 	for _, n := range ns {
-		if doomed[n.ID] || doomed[n.ParentID] {
+		if doomed[n.ID] || doomed[n.StoredParent()] {
 			continue
 		}
 		kept = append(kept, n)

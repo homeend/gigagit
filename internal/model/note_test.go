@@ -105,3 +105,36 @@ func TestWorkingReviewPredicates(t *testing.T) {
 		}
 	}
 }
+
+func TestStoredRootIDMapsARemarkToItsReview(t *testing.T) {
+	cases := map[string]string{
+		"review:ab12cd34:3": "ab12cd34",
+		"review:ab12cd34:0": "ab12cd34",
+		"ab12cd34":          "ab12cd34",
+		"forge:991":         "forge:991",
+		"review:bad":        "review:bad", // no index: not a remark id
+		"":                  "",
+	}
+	for in, want := range cases {
+		if got := StoredRootID(in); got != want {
+			t.Errorf("StoredRootID(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// A remark reply hangs off the review note; Remark names the remark.
+	r := Note{ID: "r1", ParentID: "ab12cd34", Remark: "review:ab12cd34:2"}
+	if r.StoredParent() != "ab12cd34" || !r.IsRemarkReply() {
+		t.Fatalf("remark reply: StoredParent=%q IsRemarkReply=%v", r.StoredParent(), r.IsRemarkReply())
+	}
+	p := Note{ID: "r2", ParentID: "11223344"}
+	if p.StoredParent() != "11223344" || p.IsRemarkReply() {
+		t.Fatalf("plain reply: StoredParent=%q IsRemarkReply=%v", p.StoredParent(), p.IsRemarkReply())
+	}
+	if id, n, ok := ParseReviewNoteID("review:ab12cd34:7"); !ok || id != "ab12cd34" || n != 7 {
+		t.Fatalf("ParseReviewNoteID = %q %d %v", id, n, ok)
+	}
+	for _, bad := range []string{"review:ab12cd34", "review::3", "review:ab:-1", "review:ab:x", "ab:3"} {
+		if _, _, ok := ParseReviewNoteID(bad); ok {
+			t.Errorf("ParseReviewNoteID(%q) accepted", bad)
+		}
+	}
+}

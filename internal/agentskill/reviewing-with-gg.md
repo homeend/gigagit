@@ -47,11 +47,27 @@ id). Notes land on `<b>`, new side only. Hand back `gg link --preview <a>..<b>`
 
 When the human pastes a review link (`gg://…?review=<id>`) and asks you to
 check it: `gg review show <link>` prints the other agent's overview and every
-remark, numbered, each with its own line link. For each remark, read the code
-it points at (`gg link text <remark-link>`, or `gg diff <review-link>` for the
-whole reviewed change), decide whether the remark holds, and report remark by
-remark — `[n] agree / disagree / fixed — why`. Do not re-review from scratch
-unless asked; the job is to check the remarks you were handed.
+remark, numbered, each with its own line link, its thread id
+(`review:<id>:<n>`), its replies and whether it is resolved. For each remark,
+read the code it points at (`gg link text <remark-link>`, or `gg diff
+<review-link>` for the whole reviewed change) and decide whether it holds. Do
+not re-review from scratch unless asked; the job is to check the remarks you
+were handed.
+
+Answer IN the remark's thread — the human and the review's author read it
+there (TUI, gg web, `gg review show`):
+
+1. Reply: `gg note reply review:<id>:<n> --summary "…" [--rationale "…"]
+   [--link <commit|gg://…>]` — `--link` points at your fix.
+2. Settle what is settled: `gg note resolve review:<id>:<n>` (reopen with
+   `gg note unresolve`). Leave a remark open when you disagree, and say why
+   in the reply.
+3. Or all at once: `gg note apply --stdin` with
+   `{"comments":[{"replyTo":"review:<id>:<n>","summary":"…","link":"…","resolve":true}, …]}`
+   — one batch, rolled back whole on a failure.
+
+`review:latest:<n>` names a remark of the newest review. The review's author
+reads your answers back with `gg review show`.
 
 ## Choosing the target
 
