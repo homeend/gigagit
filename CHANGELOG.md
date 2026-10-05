@@ -31,6 +31,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - A review link that resolves after a repo switch no longer acts in the new
   repository.
 
+### Note
+
+- An answer hangs off its review note, so a gg built before this change
+  keeps it; that older gg still drops the resolved marks and the reply links
+  when it rewrites a note file — restart running gg sessions after updating.
+
 ## Working-changes reviews — follow-ups
 
 ### Fixed

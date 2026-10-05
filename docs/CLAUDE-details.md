@@ -1986,8 +1986,9 @@ resolved thread starts folded once per view; Resolve on EVERY note thread;
 forge threads keep GitHub's state (no local reply / resolve); row tallies in
 plain words (`12 remarks · 4 resolved`, short `4/12 resolved`), never ✓/✗/✔.
 
-- **A remark reply is a stored child of its review.** `ParentID =
-  "review:<id>:<n>"`, stored at the REVIEW's address (commit-level /
+- **A remark reply is a stored child of its review.** `ParentID` = the
+  review's note id (an older gg's orphan prune keeps it), `Remark =
+  "review:<id>:<n>"` (the remark answered), stored at the REVIEW's address (commit-level /
   worktree-level, so the sweeps never expire it); `model.StoredRootID` /
   `Note.StoredParent()` map the remark id to the review id for the store's
   `dropOrphanReplies` (runs on EVERY part write — without the mapping the
@@ -2006,7 +2007,13 @@ plain words (`12 remarks · 4 resolved`, short `4/12 resolved`), never ✓/✗/�
   routes to the root's part (a remark: its review's). Domain
   `NoteResolve(id, resolved, by)` takes a root, a reply or a remark id;
   `withResolutions` stamps `ResolvedNote.Resolution` on every public thread
-  reader (forge: from the `resolved` tag).
+  reader (forge: from the `resolved` tag; never a remark — its state comes
+  from the fingerprint join). Every remark WRITE first re-keys the review's
+  entries to their remarks' current ids (`rekeyRemarkResolutions`, all out
+  then all in) — a re-save that moved remarks must not let one remark's
+  resolve/reopen land on another's entry; a reply to an answer joins the
+  answer's thread (`replyInThread`); an outdated thread is not addressable
+  (no id printed, resolve refused).
 - **Links:** `Note.Link` (a gg:// link or a full sha), normalised by
   `Service.NoteLink` inside `NoteAdd`/`NoteReply` (`ErrNoteLink`).
 - **Frontends:** CLI `gg note reply --link`, `gg note resolve|unresolve`,

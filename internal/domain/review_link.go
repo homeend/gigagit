@@ -261,9 +261,9 @@ type ReviewShowReply struct {
 }
 
 // ReviewShowOutdated is a thread whose remark the re-saved review no longer
-// has: Root is the remark id it was made under.
+// has. It carries no remark id: the one it was made under now names another
+// remark (or none), so nothing may be addressed through it.
 type ReviewShowOutdated struct {
-	Root     string            `json:"root"`
 	Summary  string            `json:"summary"`
 	Resolved bool              `json:"resolved"`
 	Replies  []ReviewShowReply `json:"replies,omitempty"`
@@ -335,7 +335,7 @@ func (s *Service) ReviewShow(ctx context.Context, id string) (ReviewShow, error)
 		out.Remarks = append(out.Remarks, rm)
 	}
 	for _, o := range outdated {
-		out.Outdated = append(out.Outdated, ReviewShowOutdated{Root: o.Root, Summary: o.Summary,
+		out.Outdated = append(out.Outdated, ReviewShowOutdated{Summary: o.Summary,
 			Resolved: o.Resolution != nil, Replies: showReplies(o.Replies)})
 	}
 	return out, nil

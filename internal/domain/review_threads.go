@@ -15,8 +15,9 @@ import (
 
 // Review remarks are threads (spec 2026-10-05 review answers): a reply to
 // remark "review:<id>:<n>" is a stored note at the REVIEW's address whose
-// stored parent is the review (model.StoredRootID); a resolution is a
-// [[resolved]] entry keyed by the remark id. Both find their remark again by
+// ParentID is the review's note id (an older gg keeps it as an ordinary
+// reply) and whose Remark names the remark; a resolution is a [[resolved]]
+// entry keyed by the remark id, re-keyed when a re-save moves the remark. Both find their remark again by
 // fingerprint, so a re-saved review never moves an answer onto another
 // remark.
 
@@ -102,13 +103,13 @@ func (r Review) RemarkThreads() (byRemark []RemarkThread, outdated []OutdatedThr
 	gone := map[string]*OutdatedThread{} // by fingerprint
 	var order []string
 	for _, n := range r.Replies {
-		if i := remarkFor(rs, n.ParentID, n.RemarkFP); i >= 0 {
+		if i := remarkFor(rs, n.Remark, n.RemarkFP); i >= 0 {
 			byRemark[i].Replies = append(byRemark[i].Replies, n)
 			continue
 		}
 		o, ok := gone[n.RemarkFP]
 		if !ok {
-			o = &OutdatedThread{Root: n.ParentID, Summary: n.RemarkSummary}
+			o = &OutdatedThread{Root: n.Remark, Summary: n.RemarkSummary}
 			gone[n.RemarkFP] = o
 			order = append(order, n.RemarkFP)
 		}
@@ -163,7 +164,7 @@ func loadReviewThreads(st notes.Store, all []model.Note, parts []notes.Part) rem
 	th := remarkThreadSet{replies: map[string][]model.Note{}, resolutions: map[string][]model.ThreadResolution{}}
 	for _, n := range all {
 		if n.IsRemarkReply() {
-			id := n.StoredParent()
+			id := n.ParentID
 			th.replies[id] = append(th.replies[id], n)
 		}
 	}
@@ -195,6 +196,18 @@ func (th remarkThreadSet) attach(r Review) Review {
 // replyToRemark stores a reply to remark id ("review:<rid>:<n>") at the
 // review's own address, stamped with the remark's fingerprint and summary.
 func (s *Service) replyToRemark(ctx context.Context, id string, n model.Note) (model.Note, error) {
+	return s.storeRemarkReply(ctx, id, nil, n)
+}
+
+// replyInThread answers an answer: the new reply joins the thread the
+// answered one is in, wherever a re-save moved its remark (or outdated it).
+func (s *Service) replyInThread(ctx context.Context, answered model.Note, n model.Note) (model.Note, error) {
+	return s.storeRemarkReply(ctx, answered.Remark, &answered, n)
+}
+
+// storeRemarkReply is the one writer of remark replies. same, when set, is a
+// reply of the thread: its remark stamps are copied as they are.
+func (s *Service) storeRemarkReply(ctx context.Context, id string, same *model.Note, n model.Note) (model.Note, error) {
 	rid, idx, ok := model.ParseReviewNoteID(id)
 	if !ok {
 		return model.Note{}, ErrNoteNotFound
@@ -217,18 +230,22 @@ func (s *Service) replyToRemark(ctx context.Context, id string, n model.Note) (m
 	if root == nil {
 		return model.Note{}, fmt.Errorf("%w: %s", ErrReviewNotFound, rid)
 	}
-	rs := s.reviewOf(ctx, *root, map[string]string{}).docRemarks()
-	if idx >= len(rs) {
-		return model.Note{}, fmt.Errorf("%w: review %s has no remark %d", ErrNoSuchRemark, rid, idx)
+	if same != nil {
+		n.Remark, n.RemarkFP, n.RemarkSummary = same.Remark, same.RemarkFP, same.RemarkSummary
+	} else {
+		rs := s.reviewOf(ctx, *root, map[string]string{}).docRemarks()
+		if idx >= len(rs) {
+			return model.Note{}, fmt.Errorf("%w: review %s has no remark %d", ErrNoSuchRemark, rid, idx)
+		}
+		n.Remark, n.RemarkFP, n.RemarkSummary = id, rs[idx].fp, rs[idx].summary
 	}
 	now := notes.Now().UTC()
 	n.ID = notes.NewID(all)
-	n.ParentID = id
+	n.ParentID = rid // the review note: an ordinary stored parent
 	if n.Source == "" {
 		n.Source = model.NoteSourceUser
 	}
 	n.Address, n.Side, n.Range, n.ContextHash = root.Address, model.NoteSideNew, [2]int{}, ""
-	n.RemarkFP, n.RemarkSummary = rs[idx].fp, rs[idx].summary
 	n.Created, n.Updated = now, now
 	if err := st.Put(n); err != nil {
 		return model.Note{}, err

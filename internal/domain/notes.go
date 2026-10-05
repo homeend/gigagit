@@ -363,6 +363,9 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 	if !ok {
 		return model.Note{}, ErrNoteNotFound
 	}
+	if root.IsRemarkReply() { // answering an answer: stay in its remark's thread
+		return s.replyInThread(ctx, root, n)
+	}
 	// Walk up to the root, bounded by the record count so corrupt data (a
 	// parent cycle) cannot spin here.
 	for i := 0; root.IsReply() && i < len(all); i++ {
@@ -371,9 +374,6 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 			break
 		}
 		root = p
-	}
-	if root.IsRemarkReply() { // a reply to an answer stays flat under the remark
-		return s.replyToRemark(ctx, root.ParentID, n)
 	}
 	n.ParentID = root.ID
 	n.Address, n.Side, n.Range, n.ContextHash = root.Address, root.Side, root.Range, root.ContextHash

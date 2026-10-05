@@ -155,10 +155,13 @@ type Note struct {
 	// Link is an address the note points at — a gg:// link or a full commit
 	// sha (a reply's "here is the fix"). Empty on most notes.
 	Link string `toml:"link,omitempty"`
-	// RemarkFP and RemarkSummary are set only on a reply to a review remark
-	// (ParentID "review:<id>:<n>"): the remark's fingerprint, which finds it
-	// again when the review is re-saved, and its summary, which an outdated
-	// thread still shows.
+	// Remark, RemarkFP and RemarkSummary are set only on a reply to a review
+	// remark, whose ParentID is the REVIEW's note id (so an older gg's
+	// orphan prune keeps it): Remark is the remark id it answered
+	// ("review:<id>:<n>" when written), RemarkFP the remark's fingerprint,
+	// which finds it again when the review is re-saved, RemarkSummary its
+	// summary, which an outdated thread still shows.
+	Remark        string    `toml:"remark,omitempty"`
 	RemarkFP      string    `toml:"remark_fp,omitempty"`
 	RemarkSummary string    `toml:"remark_summary,omitempty"`
 	Created       time.Time `toml:"created"`
@@ -174,7 +177,7 @@ func (n Note) StoredParent() string { return StoredRootID(n.ParentID) }
 
 // IsRemarkReply reports a reply to a review remark: it is shown only inside
 // its review, never as a note of its own.
-func (n Note) IsRemarkReply() bool { return IsReviewNoteID(n.ParentID) }
+func (n Note) IsRemarkReply() bool { return n.IsReply() && n.Remark != "" }
 
 // ReviewTag marks a commit-level note that holds an AI review.
 const ReviewTag = "review"

@@ -120,7 +120,8 @@ func TestStoredRootIDMapsARemarkToItsReview(t *testing.T) {
 			t.Errorf("StoredRootID(%q) = %q, want %q", in, got, want)
 		}
 	}
-	r := Note{ID: "r1", ParentID: "review:ab12cd34:2"}
+	// A remark reply hangs off the review note; Remark names the remark.
+	r := Note{ID: "r1", ParentID: "ab12cd34", Remark: "review:ab12cd34:2"}
 	if r.StoredParent() != "ab12cd34" || !r.IsRemarkReply() {
 		t.Fatalf("remark reply: StoredParent=%q IsRemarkReply=%v", r.StoredParent(), r.IsRemarkReply())
 	}

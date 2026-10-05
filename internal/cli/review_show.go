@@ -145,7 +145,7 @@ func printReviewShow(w io.Writer, rs domain.ReviewShow) {
 	if len(rs.Outdated) > 0 {
 		fmt.Fprintln(w, "\nOutdated threads (their remark is gone from the re-saved review):")
 		for _, o := range rs.Outdated {
-			fmt.Fprintf(w, "[%s] — %s\n", o.Root, o.Summary)
+			fmt.Fprintf(w, "[outdated] — %s\n", o.Summary)
 			if o.Resolved {
 				fmt.Fprintln(w, "    resolved")
 			}

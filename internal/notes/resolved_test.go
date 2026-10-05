@@ -21,7 +21,7 @@ func reviewRoot(id, commit string) model.Note {
 }
 
 func remarkReply(id, reviewID string, n int, commit string) model.Note {
-	return model.Note{ID: id, ParentID: fmt.Sprintf("review:%s:%d", reviewID, n), Source: model.NoteSourceAgent,
+	return model.Note{ID: id, ParentID: reviewID, Remark: fmt.Sprintf("review:%s:%d", reviewID, n), Source: model.NoteSourceAgent,
 		Address: model.FileAddress{State: model.StateCommitted, Commit: commit},
 		Side:    model.NoteSideNew, Summary: "agreed", RemarkFP: "fp", RemarkSummary: "s",
 		Created: time.Unix(200, 0).UTC()}

@@ -3375,9 +3375,9 @@ function replyNotePrompt(note, withLink = false) {
 }
 
 // resolveNote resolves a thread (or reopens it): stored, so every viewer
-// and agent sees it. Resolved folds the thread here, reopened unfolds it.
-function resolveNote(n, resolved) {
-  const root = n.parent_id && !String(n.parent_id).startsWith("review:") ? n.parent_id : n.id;
+// and agent sees it. Resolved folds the thread here (root: the menu's thread
+// root, the fold key), reopened unfolds it.
+function resolveNote(n, resolved, root) {
   noteWrite(resolved ? "resolve" : "reopen", "/api/notes/resolve", { id: n.id, resolved }, () => {
     if (resolved) state.noteCollapsed.add(root);
     else state.noteCollapsed.delete(root);
@@ -3741,7 +3741,7 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     noteRows.push({ label: "Reply with a link…", act: () => replyNotePrompt(n, true) });
   }
   if (n.source !== "forge" && !String(n.id).startsWith("forge:"))
-    noteRows.push({ label: n.resolved ? "Reopen thread" : "Resolve thread", act: () => resolveNote(n, !n.resolved) });
+    noteRows.push({ label: n.resolved ? "Reopen thread" : "Resolve thread", act: () => resolveNote(n, !n.resolved, rootId) });
   for (const l of noteLinks(n)) noteRows.push({ label: "Open link: " + l, act: () => gotoNoteLink(l) });
   const nlink = linkFor(state.repo, state.worktree, noteSlotCtx(n) || state.diffCtx, n.side, n.line);
   if (nlink)

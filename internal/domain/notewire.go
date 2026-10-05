@@ -38,8 +38,11 @@ type WireNote struct {
 	ResolvedBy string `json:"resolved_by,omitempty"`
 	ResolvedAt string `json:"resolved_at,omitempty"`
 	Link       string `json:"link,omitempty"`
-	FileLevel  bool   `json:"file_level,omitempty"`
-	Created    string `json:"created,omitempty"` // RFC 3339; empty when unknown
+	// Remark: the review remark a reply answers ("review:<id>:<n>" when it
+	// was written); its ParentID is the review note.
+	Remark    string `json:"remark,omitempty"`
+	FileLevel bool   `json:"file_level,omitempty"`
+	Created   string `json:"created,omitempty"` // RFC 3339; empty when unknown
 	// Preview is the scope the note was written in (model.Note.Preview):
 	// "<target>...<source>" or "<a7>..<b7>"; empty for any other note.
 	Preview string `json:"preview,omitempty"`
@@ -79,7 +82,7 @@ func ToWireNote(r ResolvedNote) WireNote {
 		// edited or removed, but its thread takes replies.
 		w.ReadOnly, w.Replyable = true, true
 	}
-	w.Link = r.Note.Link
+	w.Link, w.Remark = r.Note.Link, r.Note.Remark
 	if !r.Note.Created.IsZero() {
 		w.Created = r.Note.Created.UTC().Format(time.RFC3339)
 	}

@@ -30,7 +30,7 @@ func TestNoteReplyAndResolveToolsAnswerAReview(t *testing.T) {
 	remark := "review:" + id + ":0"
 	out := e.call(t, "gg_note_reply", map[string]any{"id": remark, "summary": "agreed", "link": "HEAD"})
 	note, _ := out["note"].(map[string]any)
-	if note["parent_id"] != remark || len(note["link"].(string)) != 40 {
+	if note["parent_id"] != id || note["remark"] != remark || len(note["link"].(string)) != 40 {
 		t.Fatalf("gg_note_reply = %v", out)
 	}
 	if out := e.call(t, "gg_note_resolve", map[string]any{"id": remark, "resolved": true}); out["ok"] != true {

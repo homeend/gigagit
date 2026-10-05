@@ -368,8 +368,11 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 	for _, r := range forge { // active by construction: appended, never re-resolved
 		out[r.Note.Address.Path] = append(out[r.Note.Address.Path], r)
 	}
-	for p := range out {
-		out[p] = s.withResolutions(ctx, out[p])
+	if len(out) > 0 {
+		idx := s.resolutionIndex(ctx)
+		for p := range out {
+			out[p] = stampResolutions(out[p], idx)
+		}
 	}
 	return out, nil
 }
