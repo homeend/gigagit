@@ -204,8 +204,8 @@ func TestReviewRangePositionalPrintsAndPersists(t *testing.T) {
 	}
 }
 
-// A review of working changes has no commit to attach to: printed, not stored.
-func TestReviewWorkingPrintsWithoutANote(t *testing.T) {
+// A working-changes review is stored as a note and listed like any review.
+func TestReviewWorkingStoresANote(t *testing.T) {
 	isolateReviewEnv(t)
 	dir := newRepoDir(t)
 	writeReviewTool(t, dir, "Echo", `printf "FAKE WORKING REVIEW\n"`)
@@ -213,8 +213,55 @@ func TestReviewWorkingPrintsWithoutANote(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit=%d stderr=%s", code, errb)
 	}
-	if !strings.Contains(out, "FAKE WORKING REVIEW") || strings.Contains(errb, "note:") {
-		t.Fatalf("stdout=%q stderr=%q, want the review printed and no note", out, errb)
+	if !strings.Contains(out, "FAKE WORKING REVIEW") || !strings.Contains(errb, "note: ") {
+		t.Fatalf("stdout=%q stderr=%q, want the review printed and its note id", out, errb)
+	}
+	_, list, _ := runCLI(t, dir, "note", "list")
+	if !strings.Contains(list, "] review working changes") {
+		t.Fatalf("note list = %q, want the working review row", list)
+	}
+}
+
+func TestReviewWorkingWithNotesIsAUsageError(t *testing.T) {
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	writeReviewTool(t, dir, "Echo", `printf "x\n"`)
+	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
+	if code != 2 || !strings.Contains(errb, "a working review is stored; its notes show on the files") {
+		t.Fatalf("exit=%d stderr=%q, want 2 and the documented message", code, errb)
+	}
+}
+
+// The stored review's notes show on a matching file's `note list --file`, and
+// leave once the file is edited.
+func TestNoteListFileShowsAWorkingReviewsNotesWhileTheFileMatches(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-m", "seed")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeReviewTool(t, dir, "Echo",
+		`printf '{"version":1,"summary":"R","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"shouty"}]}]}' > "$GG_MESSAGE_FILE"`)
+	if code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working"); code != 0 {
+		t.Fatalf("review exit=%d stderr=%s", code, errb)
+	}
+	_, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt")
+	if !strings.Contains(list, "shouty") || !strings.Contains(list, "review:") {
+		t.Fatalf("note list --file = %q, want the review's note", list)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, list, _ = runCLI(t, dir, "note", "list", "--file", "a.txt"); strings.Contains(list, "shouty") {
+		t.Fatalf("an edited file still lists the review's note: %q", list)
 	}
 }
 
@@ -276,10 +323,11 @@ func TestReviewNotesImportsTheDocument(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	runGit(t, dir, "commit", "-am", "change")
 	writeReviewTool(t, dir, "Echo",
 		`printf '{"version":1,"summary":"THE REPORT","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"shouty"}]}]}' > "$GG_MESSAGE_FILE"`)
 
-	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
+	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "--notes", "HEAD")
 	if code != 0 {
 		t.Fatalf("exit=%d stderr=%s", code, errb)
 	}
@@ -289,7 +337,7 @@ func TestReviewNotesImportsTheDocument(t *testing.T) {
 	if !strings.Contains(errb, "notes:") {
 		t.Fatalf("stderr must list the imported ids: %q", errb)
 	}
-	_, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt")
+	_, list, _ := runCLI(t, dir, "note", "list", "--rev", "HEAD", "--file", "a.txt")
 	if !strings.Contains(list, "shouty") || !strings.Contains(list, "new:2-2") {
 		t.Fatalf("the note must be stored against the working tree:\n%s", list)
 	}
@@ -310,14 +358,15 @@ func TestReviewNotesReadsTheDocumentFromStdout(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	runGit(t, dir, "commit", "-am", "change")
 	writeReviewTool(t, dir, "Echo",
 		`printf '{"version":1,"summary":"ok","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"from the report"}]}]}\n'`)
 
-	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
+	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--notes", "HEAD")
 	if code != 0 {
 		t.Fatalf("exit=%d stderr=%s", code, errb)
 	}
-	_, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt")
+	_, list, _ := runCLI(t, dir, "note", "list", "--rev", "HEAD", "--file", "a.txt")
 	if !strings.Contains(list, "from the report") {
 		t.Fatalf("a document on stdout must be imported:\n%s", list)
 	}
@@ -332,7 +381,7 @@ func TestReviewNotesNoNotesIsExit1(t *testing.T) {
 	dir := newRepoDir(t)
 	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
 	writeReviewTool(t, dir, "Echo", `printf 'just prose, no JSON\n'`)
-	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
+	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--notes", "HEAD")
 	if code != 1 {
 		t.Fatalf("exit=%d stderr=%s, want 1", code, errb)
 	}
@@ -393,7 +442,7 @@ func TestReviewNotesStoringNothingPostsNoReload(t *testing.T) {
 	writeReviewTool(t, dir, "Echo",
 		`printf '{"version":1,"summary":"nothing anchored","files":[]}' > "$GG_MESSAGE_FILE"`)
 
-	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
+	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--notes", "HEAD")
 	if code != 0 {
 		t.Fatalf("exit=%d stderr=%s", code, errb)
 	}
