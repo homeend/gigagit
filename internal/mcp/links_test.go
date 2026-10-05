@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 	"strings"
 	"testing"
@@ -444,5 +445,41 @@ func TestLinkTextAndRangeResolve(t *testing.T) {
 		if msg := e.callErr(t, tool, map[string]any{"link": link}); !strings.Contains(msg, "no longer valid") {
 			t.Errorf("%s on a moved block: %q", tool, msg)
 		}
+	}
+}
+
+// gg_review_show reads a stored review back — by its link, its id or
+// "latest" — with each remark's own line link.
+func TestReviewShowReadsAStoredReview(t *testing.T) {
+	e := newTestEnv(t)
+	gitRun(t, e.dir, "config", "user.name", "t")
+	gitRun(t, e.dir, "config", "user.email", "t@t")
+	if err := os.WriteFile(filepath.Join(e.dir, "a.txt"), []byte("HELLO\nWORLD\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, e.dir, "commit", "-qam", "upper")
+	head := gitRun(t, e.dir, "rev-parse", "HEAD")
+	ctx := context.Background()
+	doc := `{"version":1,"summary":"ok","files":[{"path":"a.txt","annotations":[{"newRange":[1,2],"summary":"shouty"},{"oldRange":[1,1],"summary":"gone"}]}]}`
+	id, _, err := e.svc.SaveReview(ctx, domain.SaveReview{Target: domain.ReviewTarget{Kind: domain.ReviewRange, Range: head + "^.." + head, Commit: head}, Agent: "Claude", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := e.svc.ReviewLink(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, arg := range []string{link, id, "latest"} {
+		out := e.call(t, "gg_review_show", map[string]any{"link": arg})
+		rs, _ := out["remarks"].([]any)
+		if out["id"] != id || len(rs) != 2 {
+			t.Fatalf("%s: %v", arg, out)
+		}
+		if r0, _ := rs[0].(map[string]any); r0["link"] == "" || r0["summary"] != "shouty" {
+			t.Fatalf("%s: remark 0 = %v", arg, rs[0])
+		}
+	}
+	if msg := e.callErr(t, "gg_review_show", map[string]any{"link": "deadbeef"}); !strings.Contains(msg, "not found") {
+		t.Fatalf("unknown id: %q", msg)
 	}
 }
