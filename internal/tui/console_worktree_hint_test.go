@@ -78,3 +78,23 @@ func TestConsoleWorktreeHintElidesToTheRoomLeft(t *testing.T) {
 		t.Fatalf("status row %q: want the path middle-elided, ending in its directory name", row)
 	}
 }
+
+// The Commits row hint ("working tree · 3 files", "⎇ main · # …") describes
+// a row the docked console covers: it gives the status row to the console's
+// worktree instead of reading as a second "worktree".
+func TestDockedConsoleHidesCommitRowHint(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m.focus = panelCommits
+	if m.commitBranchHint() == "" {
+		t.Fatal("precondition: the Commits row hint shows without a console")
+	}
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.showConsole(s.Info().ID, false)
+	if m.focus != panelCommits {
+		t.Fatalf("precondition: focus = %v, want the Commits column", m.focus)
+	}
+	if got := m.commitBranchHint(); got != "" {
+		t.Fatalf("docked console: Commits row hint = %q, want none", got)
+	}
+}

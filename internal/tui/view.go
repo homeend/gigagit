@@ -1319,7 +1319,9 @@ func (m Model) taskSegment() string {
 // instead of the id. Shown in the status line ahead of any status message,
 // occluding no commit row.
 func (m Model) commitBranchHint() string {
-	if m.focus != panelCommits {
+	// A docked console covers the Commits column: its row is out of sight
+	// (the status row names the console's worktree instead).
+	if m.focus != panelCommits || m.console != nil {
 		return ""
 	}
 	if r, ok := m.wipRowAt(m.commitSelUnified()); ok { // pseudo-row: no commit id

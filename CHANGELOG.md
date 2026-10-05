@@ -17,6 +17,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   short (its start and its directory name survive). The path keeps up to
   half the row: the text before it is cut first. A focused console on gg's
   own worktree shows nothing extra.
+- **A docked console hides the Commits row hint** (`working tree · 3 files`,
+  `⎇ main · # …`): the console covers that row, and beside the worktree
+  path it read as a second "worktree".
 
 ## Working-changes reviews — follow-ups
 
