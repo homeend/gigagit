@@ -53,6 +53,9 @@ type NotesOverview struct {
 	Untracked []NoteFileNotes
 	Commits   []NoteCommitNotes
 	Shelves   []NoteShelfNotes
+	// WorkingReviews is this worktree's reviews of uncommitted changes,
+	// newest first; Current false = outdated (no reviewed file matches).
+	WorkingReviews []WorkingReview
 }
 
 // Count is the number of threads (root notes) in the overview.
@@ -66,6 +69,7 @@ func (o NotesOverview) Count() int {
 	count(o.Unstaged)
 	count(o.Staged)
 	count(o.Untracked)
+	n += len(o.WorkingReviews)
 	for _, c := range o.Commits {
 		count(c.Files)
 		n += len(c.Reviews)
@@ -86,7 +90,7 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 	if st == nil {
 		return ov, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := loadParts(st, s.visibleParts(ctx)...)
 	if err != nil {
 		return ov, err
 	}
@@ -105,7 +109,7 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 	for _, n := range all {
 		if !n.IsReply() {
 			rootAddr[n.ID] = n.Address
-			if n.IsReviewNote() {
+			if n.IsReviewNote() || n.IsWorkingReview() {
 				review[n.ID] = true
 			}
 		}
@@ -191,6 +195,9 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 
 	revs, _ := s.Reviews(ctx) // newest first
 	for _, r := range revs {
+		if r.Kind == ReviewOnWorktree {
+			continue // listed apart: ov.WorkingReviews
+		}
 		c := commits[r.Commit]
 		if c == nil {
 			c = s.overviewCommit(ctx, r.Commit)
@@ -198,6 +205,7 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 		}
 		c.Reviews = append(c.Reviews, r)
 	}
+	ov.WorkingReviews, _ = s.WorkingReviews(ctx)
 	for _, c := range commits {
 		s.fillCommitFileStatus(ctx, c)
 		sortNoteFiles(c.Files)

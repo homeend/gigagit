@@ -16,13 +16,125 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   gives the Commits column back. esc now reads `hide` there — it keeps the
   exited session listed. On a running agent x is unchanged.
 
+## Working-changes reviews are notes
+
+### Changed
+
+- **A review of uncommitted changes is stored.** "Review working changes"
+  (TUI, web) and `gg review --working` save the review as a note in this
+  worktree's notes and print `note: <id>`, like a commit or branch review.
+  It records every file it read by path and git blob id, so each file's
+  part of the review shows while THAT file still matches: edit a file and
+  its annotations leave, the other files keep theirs. Staging an unchanged
+  file keeps the review. A review shows only in the worktree it was made in.
+- **Untracked files are reviewed.** The review input gains every untracked,
+  non-ignored file as a new-file patch (it used to be `git diff HEAD` only,
+  which silently skipped them); they count toward the diff size cap.
+- **Where it shows.** A "✎ Review" row heads the TUI Files panel and the web
+  working list while a review is current, and ✎ marks each file it still
+  matches. The row opens the review as HEAD ↔ the working tree: matching
+  files carry their notes, the others say "changed since the review" or
+  "not reviewed". A matching file's working-tree diff draws the review's
+  notes (read-only, new side), and `gg note list --file` lists them.
+- **Outdated, then swept.** Once no reviewed file matches, the review leaves
+  the Files panel and stays in View all notes labelled *outdated*; the
+  startup cleanup deletes it after `[notes] max_age_days`.
+- `gg review --working --notes` is now a usage error (exit 2): a working
+  review is stored and draws its own notes.
+- **Its link** is the checkout's working tree plus the review:
+  `gg://<repo>?review=<id>` (Copy gg link on its row, `gg link --review`);
+  `gg review show` reads it like any review, each remark linking its
+  working-tree line.
+## Review links — hand one agent's review to another
+
+### Added
+
+- **A stored AI review has a gg:// link**, `gg://<repo>@<commit>?review=<id>`
+  (`@<base>..<tip>` for a range or branch review). Copy it with **Copy gg
+  link** on the review's row in a commit's file list, in a Branches review
+  row's menu, with **Copy review link** in the open review's `.` menu or
+  `ctrl+l` in View all notes; gg web's right-click menus have it too. Build
+  one with `gg link --review <id|latest>`.
+- **The link opens the review itself**, wherever a link opens: `#` in the
+  TUI or gg web, `gg open <link>` (`--web` too), `gg session navigate`. A
+  review deleted since opens its change with a notice; a link edited to point
+  at another change is refused.
+- **`gg review show <link|id|latest> [--json]`** prints a stored review for
+  an agent: the overview and every remark, numbered, with the remark's own
+  gg:// line link (read the code with `gg link text`). MCP: `gg_review_show`.
+  The reviewing-with-gg skill teaches checking another agent's review.
+- The commit's Range reviews and Notes rows gained **Copy gg link** as well
+  (the commit pair, and the file at the commit — `gg note list <link>` reads
+  their notes).
+
+## Review and note markers after a repo switch
+
+### Fixed
+
+- **Switching repositories now shows the new repo's review ✎ / ◆ markers,
+  a commit's Reviews rows and the file note badges right away.** The note
+  counts were read only at startup, on `r` and after a note change, so a
+  switch kept the old repo's (matching nothing, or the wrong commits when
+  two repos share history) until a refresh.
+
+## Agent-state detection — one pipeline
+
+### Internal
+
+- Agent-state detection restructured, no behaviour change: one entry (the
+  state watcher) reads each session as one observation through a
+  per-agent profile of detectors (screen rules, window title, progress
+  report — one table says which agent uses which), and a per-session
+  tracker applies the holds, grace and stall rules; `agent_wait` reads the
+  tracker's settle time instead of keeping its own rule. Follow-ups: the
+  stall key is named `StallKey` (no longer a second `Progress`), the
+  reading carries whether the agent's rules are dedicated, `First` keeps
+  its own list, doc comments on the readers, and a test for a title and
+  a progress report whose `ESC \` terminator arrives split across two
+  reads.
+
+## Note store split into parts
+
+### Changed
+
+- **One file per kind of note.** The per-repo note store is no longer one
+  `notes.toml`: notes live in `commits.toml`, `previews.toml`,
+  `shelf.toml` and one `worktrees/<key>.toml` per worktree. A working-tree
+  read no longer parses every note in the repository, and a corrupt file
+  of another worktree no longer hides this checkout's notes (adding or
+  editing a note still reports it). A removed worktree's file is deleted
+  by the startup cleanup.
+- **Existing notes are converted automatically** the first time gg opens
+  the repository — also after a repo switch and in `gg mcp` — without
+  asking and without loss; the old file is kept as
+  `notes.toml.migrated-<unix>` (a corrupt one is moved to
+  `notes.toml.corrupt-<unix>`). An older gg still running that writes
+  `notes.toml` again is merged the next time.
+
+## Reviews and notes in a commit's file list — Open or Delete
+
+### Changed
+
+- **A review row is not a file.** The "." menu (right-click in gg web) on a
+  commit's Reviews, Range reviews and Notes rows now offers exactly two
+  actions: **Open** (what enter / a click does) and **Delete** (asks first,
+  Cancel is the default). The review row used to offer file actions — copy
+  path, View review as raw text, Open in external editor, Add to shelf,
+  Bookmark, Compare…, Copy to working dir, Copy commit id — on a made-up
+  `@notes/…` path; their hotkeys and `gg session`'s snapshot no longer see
+  it either. Delete on a Range review row removes every note of that range
+  review at the commit; on a Notes row, the plain notes on that file; the
+  row disappears. The Branches review sub-row's web menu gained Open review.
+
 ## Agent sessions — the title says working
 
 ### Changed
 
 - **A turn reads as working from start to end.** Claude Code and Codex
   announce their turn in the terminal title (a spinning glyph); Kimi Code
-  in its progress report. gg now reads those beside the screen: the row
+  in its progress report (only under Windows Terminal, ConEmu, ghostty
+  or WezTerm — elsewhere Kimi sends none and is read from the screen
+  alone). gg now reads those beside the screen: the row
   stays working while the agent pauses between two steps, and turns idle
   about 0.7 s after the turn ends instead of 2 s — `agent_wait` wakes as
   soon. Questions still come from the screen; Codex's "Action Required"

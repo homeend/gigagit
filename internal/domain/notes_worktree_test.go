@@ -166,7 +166,7 @@ func TestNoteAddRejectsAnchorPastTheEndOfItsSide(t *testing.T) {
 	if !strings.Contains(err.Error(), "line 2 is past the end of the new side of a.go (1 lines)") {
 		t.Fatalf("err = %q, want it to name the line, side, path and length", err)
 	}
-	if left, _ := svc.notesStore(ctx).Load(); len(left) != 0 {
+	if left, _ := svc.notesStore(ctx).LoadAll(); len(left) != 0 {
 		t.Fatalf("a refused add must store nothing, got %+v", left)
 	}
 
@@ -203,7 +203,7 @@ func TestNoteAddOnAnEmptySideAcceptsOnlyTheSentinelRange(t *testing.T) {
 	}); err == nil || !strings.Contains(err.Error(), "line 500 is past the end of the new side of empty.go (0 lines)") {
 		t.Fatalf("err = %v, want a past-the-end error naming 0 lines", err)
 	}
-	if left, _ := svc.notesStore(ctx).Load(); len(left) != 0 {
+	if left, _ := svc.notesStore(ctx).LoadAll(); len(left) != 0 {
 		t.Fatalf("a refused add must store nothing, got %+v", left)
 	}
 
@@ -346,7 +346,7 @@ func TestNoteAddRefusesWhenTheSideCannotBeFingerprinted(t *testing.T) {
 		t.Fatal("an absent side must be an error, not a doomed note")
 	}
 	// Nothing was written either way.
-	if left, _ := svc.notesStore(ctx).Load(); len(left) != 0 {
+	if left, _ := svc.notesStore(ctx).LoadAll(); len(left) != 0 {
 		t.Fatalf("a refused add must store nothing, got %+v", left)
 	}
 	// The readable case still fills a fingerprint and stores.

@@ -106,9 +106,13 @@ type Note struct {
 	// PreviewBase is where a merge preview's range began when the note was
 	// written (the merge base, full sha): the range still opens from it once
 	// the branch was merged and git can no longer tell.
-	PreviewBase string    `toml:"preview_base,omitempty"`
-	Created     time.Time `toml:"created"`
-	Updated     time.Time `toml:"updated"`
+	PreviewBase string `toml:"preview_base,omitempty"`
+	// Files is a working-changes review's fingerprint: every file the review
+	// read, with git's blob id of the bytes it read (spec 2026-10-04 working
+	// reviews §4). Empty on every other note.
+	Files   []NoteFile `toml:"files,omitempty"`
+	Created time.Time  `toml:"created"`
+	Updated time.Time  `toml:"updated"`
 }
 
 // IsReply reports whether n hangs off another note.
@@ -129,9 +133,33 @@ func (n Note) IsShelfLevel() bool {
 	return n.Address.State == StateShelf && n.Address.ShelfID != "" && n.Address.Path == ""
 }
 
-// IsEntryLevel reports a note about a whole object — a commit or a shelf
-// entry. It has no line to re-anchor.
-func (n Note) IsEntryLevel() bool { return n.IsCommitLevel() || n.IsShelfLevel() }
+// NoteFile is one file a working-changes review read: its repo-relative
+// path and git's blob id of the working-tree bytes it reviewed (hex, in the
+// repo's object format). Deleted: the review saw the file absent.
+type NoteFile struct {
+	Path    string `toml:"path"`
+	Blob    string `toml:"blob,omitempty"`
+	Deleted bool   `toml:"deleted,omitempty"`
+}
+
+// IsWorktreeLevel reports a note about a whole worktree's uncommitted
+// changes: a live address with a worktree and no path, commit or shelf entry.
+func (n Note) IsWorktreeLevel() bool {
+	a := n.Address
+	return a.Path == "" && a.Commit == "" && a.ShelfID == "" && a.Worktree != "" &&
+		(a.State == StateUnstaged || a.State == StateStaged || a.State == StateUntracked)
+}
+
+// IsWorkingReview reports a worktree-level note tagged ReviewTag: an AI
+// review of uncommitted changes. IsReviewNote stays commit-only; the review
+// read model checks both.
+func (n Note) IsWorkingReview() bool { return n.IsWorktreeLevel() && NoteHasTag(n, ReviewTag) }
+
+// IsEntryLevel reports a note about a whole object — a commit, a shelf entry
+// or a worktree's uncommitted changes. It has no line to re-anchor.
+func (n Note) IsEntryLevel() bool {
+	return n.IsCommitLevel() || n.IsShelfLevel() || n.IsWorktreeLevel()
+}
 
 // IsReviewNote reports a commit-level note tagged ReviewTag. It is the ONLY
 // test for "this is an AI review": Address.Branch alone proves nothing (the

@@ -608,6 +608,11 @@ func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool, status stri
 		fmt.Fprintf(w, "  %s [%s] reply  %s\n", r.Note.ID, r.Note.Source, r.Note.Summary)
 		return
 	}
+	if r.Note.IsWorkingReview() {
+		// A review of uncommitted changes: no commit, file or range to show.
+		fmt.Fprintf(w, "%s [%s] review working changes  %s\n", r.Note.ID, r.Note.Source, r.Note.Summary)
+		return
+	}
 	if r.Note.IsReviewNote() {
 		// A review is commit-level: it has no file, side or range to show,
 		// and "stale" on it would only mean "no lines to track".
@@ -876,7 +881,9 @@ func noteClear(svc *domain.Service, link *domain.Resolved, args []string, stdout
 			return 1
 		}
 		for _, r := range res {
-			if !noteTypeMatches(*typ, r.Note.Source) {
+			// A working review's notes on the file are its document's, not
+			// the store's (read-only): they leave when the review does.
+			if !noteTypeMatches(*typ, r.Note.Source) || model.IsReadOnlyNoteID(r.Note.ID) {
 				continue
 			}
 			if err := svc.NoteRemove(ctx, r.Note.ID); err != nil {

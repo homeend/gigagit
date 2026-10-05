@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -28,6 +29,8 @@ func init() {
 		mux.HandleFunc("POST /api/notes/edit", writeGuard(s.handleNoteEdit))
 		mux.HandleFunc("POST /api/notes/reply", writeGuard(s.handleNoteReply))
 		mux.HandleFunc("POST /api/notes/remove", writeGuard(s.handleNoteRemove))
+		mux.HandleFunc("POST /api/notes/clear-row", writeGuard(s.handleNoteClearRow))
+		mux.HandleFunc("GET /api/notes/row-link", s.handleNoteRowLink)
 	})
 }
 
@@ -133,6 +136,9 @@ func (s *Server) handleNoteCounts(w http.ResponseWriter, r *http.Request) {
 		// The ranges each commit's notes were written in: its Range review rows.
 		"scopes_by_commit": wireScopes(c.ScopesByCommit),
 		"reviews":          reviewHeads(c.Reviews), // the Branches' review sub-rows
+		// This worktree's working reviews, matched: the working list's Review
+		// row and its ✎ markers.
+		"working_reviews": s.workingReviewsWire(r, len(c.WorkingReviews) > 0),
 	})
 }
 
@@ -356,6 +362,60 @@ func (s *Server) handleNoteRemove(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true})
 }
 
+// handleNoteClearRow deletes what one note row of a commit's file list stands
+// for (the TUI's noteRowMenu Delete): {commit, path} = a Notes row's plain
+// notes on path, {commit, scope} = a Range review row's notes. The commit is
+// the full hex the commits feed hands the page; path and scope are only
+// compared against stored notes, never read from disk.
+func (s *Server) handleNoteClearRow(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Commit string `json:"commit"`
+		Path   string `json:"path"`
+		Scope  string `json:"scope"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if !isHexSha(req.Commit) || (req.Path == "") == (req.Scope == "") {
+		writeErr(w, http.StatusBadRequest, errors.New("a commit sha and one of path or scope are required"))
+		return
+	}
+	n, err := s.service().NotesClearAtCommit(r.Context(), req.Commit, req.Path, req.Scope)
+	if err != nil {
+		writeErr(w, noteErrStatus(err), err)
+		return
+	}
+	s.emitNotes()
+	writeJSON(w, map[string]any{"removed": n})
+}
+
+// handleNoteRowLink is a commit's Range review / Notes row link (Copy gg
+// link): ?commit=<sha>&path=<p> = the file at the commit, ?commit=<sha>&scope=
+// <s> = the commit pair the scope names there. Built by domain, the one
+// builder the TUI shares.
+func (s *Server) handleNoteRowLink(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	commit, path, scope := q.Get("commit"), q.Get("path"), q.Get("scope")
+	if !isHexSha(commit) || (path == "") == (scope == "") {
+		writeErr(w, http.StatusBadRequest, errors.New("a commit sha and one of path or scope are required"))
+		return
+	}
+	ctx, svc := readCtx(r), s.service()
+	var link string
+	var err error
+	if scope != "" {
+		link, err = svc.ScopeLinkText(ctx, scope, commit)
+	} else {
+		link, err = svc.CommitFileLinkText(ctx, commit, path)
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, map[string]any{"link": link})
+}
+
 // noteErrStatus separates "you named a note that is not there" (a stale page
 // after a sweep or another client's delete) from a real store failure. It
 // matches domain's own sentinel, which wraps the store's notes.ErrNotFound so
@@ -373,4 +433,30 @@ func (s *Server) emitNotes() {
 	if h := s.liveHubRef(); h != nil {
 		h.emit(liveMsg{Changed: []string{"notes"}, Reason: "notes"})
 	}
+}
+
+// workingReviewsWire is this worktree's working reviews, newest first, each
+// with whether it is current and the files it still matches (sorted). Empty
+// — never null — when there are none (some: the counts say so, no file read).
+func (s *Server) workingReviewsWire(r *http.Request, some bool) []map[string]any {
+	out := []map[string]any{}
+	if !some {
+		return out
+	}
+	rs, err := s.service().WorkingReviews(r.Context())
+	if err != nil {
+		return out
+	}
+	for _, wr := range rs {
+		matches := []string{}
+		for p, st := range wr.States {
+			if st == domain.WorkingFileMatches {
+				matches = append(matches, p)
+			}
+		}
+		sort.Strings(matches)
+		out = append(out, map[string]any{"id": wr.ID, "summary": wr.Summary, "agent": wr.Agent,
+			"created": wireTime(wr.Created), "current": wr.Current, "matches": matches})
+	}
+	return out
 }

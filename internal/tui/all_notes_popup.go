@@ -61,16 +61,17 @@ type anTarget struct {
 }
 
 type anRow struct {
-	kind   anRowKind
-	depth  int
-	text   string // headings and files: the label; notes: unused
-	key    string // fold key (groups and subs)
-	span   int    // index one past the row's last descendant
-	note   *domain.ResolvedNote
-	review *domain.Review // anReview rows
-	status string         // a note's display status
-	target anTarget
-	filter string // lowercased text a query matches (notes only)
+	kind     anRowKind
+	depth    int
+	text     string // headings and files: the label; notes: unused
+	key      string // fold key (groups and subs)
+	span     int    // index one past the row's last descendant
+	note     *domain.ResolvedNote
+	review   *domain.Review // anReview rows
+	outdated bool           // a working review no file matches anymore
+	status   string         // a note's display status
+	target   anTarget
+	filter   string // lowercased text a query matches (notes only)
 }
 
 type allNotesPopup struct {
@@ -166,7 +167,7 @@ func buildAllNotesRows(ov domain.NotesOverview, worktree string) []anRow {
 		rows = append(rows, anRow{kind: anSub, depth: 1, text: text, key: key})
 	}
 
-	if len(ov.Unstaged)+len(ov.Staged)+len(ov.Untracked) > 0 {
+	if len(ov.Unstaged)+len(ov.Staged)+len(ov.Untracked)+len(ov.WorkingReviews) > 0 {
 		label := i18n.T("Working tree")
 		if worktree != "" && worktree != "." {
 			label += "  (" + worktree + ")"
@@ -185,6 +186,16 @@ func buildAllNotesRows(ov domain.NotesOverview, worktree string) []anRow {
 			}
 			sub(s.key, s.label)
 			files(2, s.fs, anTarget{})
+		}
+		if len(ov.WorkingReviews) > 0 {
+			// Reviews of these uncommitted changes; an outdated one (no
+			// reviewed file matches anymore) says so until the sweep drops it.
+			sub("wt:reviews", i18n.T("Reviews"))
+			for i := range ov.WorkingReviews {
+				wr := &ov.WorkingReviews[i]
+				rows = append(rows, anRow{kind: anReview, depth: 2, review: &wr.Review, outdated: !wr.Current,
+					filter: strings.ToLower(wr.Summary + "\x00" + wr.Agent)})
+			}
 		}
 	}
 	if len(ov.Commits) > 0 {
@@ -345,6 +356,15 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlD: // delete the review or thread under the cursor (asks first)
 		u, cmd := m.allNotesDelete(p)
 		return u.(Model), cmd
+	case tea.KeyCtrlL: // copy the review's gg link
+		if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) && vis[p.sel].kind == anReview && m.svc != nil {
+			svc, id := m.svc, vis[p.sel].review.ID
+			u, cmd := m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
+				return svc.ReviewLink(ctx, id)
+			}).run(m)
+			return u.(Model), cmd
+		}
+		return m, nil
 	case tea.KeyHome:
 		p.sel = 0
 	case tea.KeyEnd:
@@ -546,6 +566,11 @@ func anReviewCells(r anRow, now time.Time) (status, who, where, when string) {
 		where = i18n.T("branch %s", v.Branch)
 	case domain.ReviewWasTip:
 		where = i18n.T("was tip %s", v.Branch)
+	case domain.ReviewOnWorktree:
+		where = i18n.T("working changes")
+		if r.outdated {
+			where = i18n.T("outdated")
+		}
 	}
 	who = v.Agent
 	if who == "" {
@@ -645,6 +670,9 @@ func (p *allNotesPopup) box(m Model) string {
 	}
 	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) && (vis[p.sel].kind == anNote || vis[p.sel].kind == anReview) {
 		keys = append(keys, i18n.T("[ctrl+d] delete"))
+		if vis[p.sel].kind == anReview {
+			keys = append(keys, i18n.T("[ctrl+l] copy link"))
+		}
 	}
 	keys = append(keys, i18n.T("type to filter"), i18n.T("[ctrl+t] fullscreen"), i18n.T("[esc] close"))
 	hints := wrapParts(keys, textW, "  ")

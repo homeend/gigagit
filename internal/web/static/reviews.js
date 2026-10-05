@@ -17,6 +17,7 @@ import { openCommitByHash } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { openNotesWindow } from "./shelfnotes.js";
 import { runLinkCompare } from "./linkcompare.js";
+import { copyLink } from "./links.js";
 
 // --- reviews pure (guarded against Go) ---
 // reviewStamp is a review's time as the TUI prints it: local
@@ -385,7 +386,14 @@ async function openReview(id, back) {
   if (gen !== state.detailGen) return;
   const files = d.files || [];
   let cmp = null;
-  if (d.range) {
+  if (d.working) {
+    // A review of uncommitted changes is HEAD ↔ the working tree: the diffs
+    // read /api/diff's head lane, the notes the review's own lane.
+    const a = d.base.slice(0, 7);
+    cmp = { a, b: "working tree", aHash: d.base, bHash: "", worktree: true, all: files, filter: "all", previewBar: "reviewed working changes" };
+    state.compare = cmp;
+    state.filesMode = "compare";
+  } else if (d.range) {
     // A range review is the compare of its range: the diffs, the stack and
     // the counts read base..tip through the compare lane unchanged.
     const a = d.base.slice(0, 7), b = d.tip.slice(0, 7);
@@ -421,6 +429,7 @@ function renderReviewFiles() {
       `<span class="st ${esc(f.status)}">${esc(f.status)}</span>` +
       filePathHTML(f.path, cols) +
       noteBadgeHTML(counts[f.path]) +
+      workingStateHTML(d, f.path) +
       `</li>`;
     const sum = (d.summaries || {})[f.path];
     if (sum) html += `<li class="rsum" title="${esc(sum)}">${esc(sum)}</li>`;
@@ -442,7 +451,7 @@ function reviewOverviewHTML() {
     (d.meta ? `<div class="review-ov-meta">${esc(d.meta)}</div>` : "") +
     (other.length
       ? `<h4>Other notes</h4><ul class="review-other">` +
-        other.map((n) => `<li>${esc(n.path + ":" + n.line + " — " + n.summary)}</li>`).join("") +
+        other.map((n) => `<li>${esc(n.path + ":" + n.line + " — " + n.summary + (n.changed ? " (changed since the review)" : ""))}</li>`).join("") +
         `</ul>`
       : "") +
     `</div>`
@@ -546,8 +555,77 @@ function reviewHead(id) {
 
 // reviewMenu is the right-click menu of a review row (a commit's, a branch's
 // sub-row, the review view's Overview).
-function reviewMenu(id, x, y) {
-  showCtxMenu([{ label: "Delete review", danger: true, act: () => confirmDeleteReview(id) }], x, y);
+// reviewMenu is a review row's right-click menu: a review is opened or
+// removed, nothing else (the TUI's noteRowMenu). open is what a click on the
+// row does; the open review's own Overview row passes none.
+function reviewMenu(id, x, y, open) {
+  const rows = open ? [{ label: "Open review", act: open }] : [];
+  rows.push({ label: "Copy gg link", act: () => copyServerLink("/api/review/" + encodeURIComponent(id) + "/link", "review: " + id) });
+  rows.push({ label: "Delete review", danger: true, act: () => confirmDeleteReview(id) });
+  showCtxMenu(rows, x, y);
+}
+
+
+// copyServerLink copies a link the server builds (a review's needs its
+// revs; a note row's the domain builder the TUI shares) and records it like
+// every copy (copyLink → /api/linkhist).
+function copyServerLink(url, desc) {
+  getJSON(url)
+    .then((d) => copyLink(d.link, desc))
+    .catch((e) => opLine("copy link: " + (e.message || e), true));
+}
+
+
+// scopeRowMenu and notedRowMenu are a commit's Range review and Notes rows'
+// right-click menus: Open (what a click does) and Delete (every note the row
+// stands for at this commit).
+function scopeRowMenu(scope, x, y) {
+  const sc = commitScopes().find((c) => c.scope === scope);
+  const n = sc ? sc.n : 0;
+  const what = n === 1 ? "Delete this range review's note?" : `Delete this range review's ${n} notes?`;
+  showCtxMenu(
+    [
+      { label: "Open range review", act: () => openRangeReview(scope) },
+      { label: "Copy gg link", act: () => copyServerLink("/api/notes/row-link?" + new URLSearchParams({ commit: state.fileSha, scope }), "range review: " + scope) },
+      { label: "Delete range review", danger: true, act: () => confirmClearRow({ scope }, what + " " + (sc ? sc.label : scope), scopeSel(scope)) },
+    ],
+    x,
+    y
+  );
+}
+
+
+function notedRowMenu(path, x, y) {
+  const n = state.noteCounts.plain_by_commit_path[state.fileSha + ":" + path] || 0;
+  const what = n === 1 ? "Delete the note on this file?" : `Delete the ${n} notes on this file?`;
+  showCtxMenu(
+    [
+      { label: "Open notes", act: () => openNotedPath(path) },
+      { label: "Copy gg link", act: () => copyServerLink("/api/notes/row-link?" + new URLSearchParams({ commit: state.fileSha, path }), "file: " + path) },
+      { label: "Delete notes", danger: true, act: () => confirmClearRow({ path }, what + " " + path, notedSel(path)) },
+    ],
+    x,
+    y
+  );
+}
+
+
+// confirmClearRow asks first — cancel is listed first and is what esc
+// answers — then removes the row's notes at the commit on screen; the counts
+// refresh redraws the list without the row.
+function confirmClearRow(key, prompt, sel) {
+  const sha = state.fileSha;
+  showLocalConfirm(prompt, ["cancel", "delete"], (o) => {
+    if (o !== "delete" || !sha) return;
+    const run = runOnce("note-row-clear", async () => {
+      const r = await postJSON("/api/notes/clear-row", { commit: sha, ...key });
+      if (state.reviewSel === sel) state.reviewSel = "";
+      await refreshNoteCounts();
+      opLine(r.removed === 1 ? "deleted the note" : `deleted ${r.removed} notes`, false);
+    });
+    if (!run) return;
+    run.catch((e) => opLine("delete notes: " + (e.message || e), true));
+  });
 }
 
 
@@ -613,9 +691,36 @@ registerHelp({
 });
 
 
-export { reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { currentWorkingReview, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;
   copyText(state.review.data.text || "", "the review");
 });
+
+
+// currentWorkingReview is the newest review of this worktree's uncommitted
+// changes that still matches a file (the counts' working_reviews, newest
+// first); null when there is none.
+function currentWorkingReview() {
+  const rs = (state.noteCounts && state.noteCounts.working_reviews) || [];
+  return rs.find((r) => r.current) || null;
+}
+
+// workingReviewRowHTML is the working list's Review row: "✎ Review: <date>
+// <agent>". It carries data-review and no data-i: not a file, so the cursor,
+// staging, the stack and every file action pass it by. "" without a review.
+function workingReviewRowHTML(r) {
+  if (!r) return "";
+  return `<li class="rev wrev${state.reviewSel === r.id ? " sel" : ""}" data-review="${esc(r.id)}" title="the review of these changes">✎ Review: ${esc(reviewWords(r))}</li>`;
+}
+
+// workingStateHTML marks a working review's file row: one it never read, or
+// one that changed since — whose notes are not drawn. "" otherwise.
+function workingStateHTML(d, path) {
+  if (!d.working) return "";
+  const st = (d.states || {})[path];
+  if (!st) return `<span class="dim"> · not reviewed</span>`;
+  if (st !== "matches") return `<span class="dim"> · changed since the review</span>`;
+  return "";
+}

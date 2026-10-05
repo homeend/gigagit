@@ -1946,6 +1946,54 @@ scrolled to the file.
   its `.` menu and help rows) and "notes" lost its plural; the stacked view
   has its OWN footer line. `diffHintFor(long, stacked)`.
 
+### Review links (2026-10-05)
+
+Spec/plan: `docs/superpowers/specs/2026-10-05-review-links-design.md`,
+`docs/superpowers/plans/2026-10-05-review-links.md` (stage 1 of 3; stage 2 =
+answers per remark, stage 3 = a second review answering the first).
+
+- Hint kind `review` (`model.ReviewHintKind`); the address is the reviewed
+  change (`domain.reviewTarget`: one commit, or `<base>..<tip>` full shas).
+  An address-less `?review=` is refused in `finishLink` (like preview/version).
+- `ResolveLink` runs `checkReviewHint` after `finishLink`: refuses ONLY a
+  proven mismatch (`ErrReviewLinkMismatch`, wrapped in `ErrLink`); a deleted
+  review or an unreadable store passes. It checks with `opts.Cwd` when the
+  link is in the caller's checkout — a fresh `Open` would not see an injected
+  note store (tests) and, generally, is a second service for nothing.
+- `domain/review_link.go`: `ReviewID` (`latest`), `ReviewLink`,
+  `ScopeLinkText` (Range review row), `CommitFileLinkText` (Notes row),
+  `ReviewRemarks` (N = the read-time note-id index), `ReviewShow` (the JSON
+  `gg review show --json` and MCP `gg_review_show` share).
+- Landing: one path. `steerNavigate` sends a review hint to
+  `steerNavigateReview` (TUI, `review_hint.go`: off-thread lookup →
+  `openReviewFrom`, back = the review's commit; deleted → plain landing +
+  notice). gg web: `live.js` `steerNavigateReview` (pinned by
+  `steerhintjs_test.go`).
+- Copy: `asyncCopyLinkRow` builds the link when the row RUNS (git off the
+  Update thread) and copies through `copyToClipboardCmd` (records in gg
+  links). Web asks the server: `GET /api/review/{id}/link`,
+  `GET /api/notes/row-link`.
+- CLI: `gg review show` is dispatched before `gg review`'s flag parse;
+  links go through `resolveLinkArg` (the cli one-door guard).
+
+### Note rows' "." menu: Open + Delete only (2026-10-05)
+
+User ruling: a review is opened or removed, nothing else. A commit's three
+note rows — Reviews (`noteID`), Range reviews (`noteScope`), Notes
+(`notedPath`) — carry no path, and `availableActions` returns
+`noteRowMenu()` alone for them (before any copy row): Open = enter
+(`openDiffForFileLine`), Delete = a confirm defaulting to Cancel. A review
+goes through `confirmStoredDelete` (`onStoredDeleted` drops the row via
+`dropFilesRows`); a Range review / Notes row through
+`domain.NotesClearAtCommit(commit, path, scope)` — exactly the threads
+`ScopesByCommit` / `PlainByCommitPath` count (roots + replies; a reply has
+no `Preview` of its own, so it follows its root; reviews never touched) —
+then `dropFilesRows` (an emptied group loses its heading) and a srcNotes
+reload. Web: right-click on the same rows = the same pair (`reviewMenu`
+with an open callback, `scopeRowMenu`, `notedRowMenu`) over `POST
+/api/notes/clear-row {commit, path|scope}`; the Branches review sub-row
+menu gained Open too.
+
 ### Range review rows in a commit's Files view (2026-10-02)
 
 A note written in a merge preview or a commit pair is an ordinary committed
@@ -4140,7 +4188,7 @@ the report channel are the NEXT plan.
   idle-after-working inside it never. **Stalled** = `LastOutput` older than
   120 s while working — or unknown, but only with DEDICATED rules (a generic
   agent would be called stalled at every idle prompt) — or, while working,
-  `agentstate.Progress(tail)` (the tail without a leading spinner glyph and
+  `agentstate.StallKey(tail)` (the tail without a leading spinner glyph and
   elapsed-time counters) unchanged for `spinStallAfter` 10 min: a hung API
   call keeps Claude's timer ticking. Ten, not two: Claude's thinking spinner
   shows no token counter (live 2026-10-04), so a long think looks the same;
@@ -4545,6 +4593,62 @@ Spec `docs/superpowers/specs/2026-10-03-agent-wait-report-design.md`.
   export list AND that file's import (`reportLine` was caught only by the
   browser check; two `activityWiring` rows guard it now).
 
+### Agent state pipeline (2026-10-05, refactor — no behaviour change)
+
+The STRUCTURE of state detection since then. The stage sections below keep
+their rulings, but name things that are gone — read them through this map:
+
+| Gone | Now |
+|---|---|
+| `Rules`, `DefaultRules(id)`, `Compile(…)` | `Profile`, `ForAgent(id)`, `WithScreen(id, …)` |
+| `Classify(rules, lines)` | `Screen.Read` (inside `Profile.Read`) |
+| `SignalState`, `ClassifyWith`, `Signal{Title, Progress}` | `Title.Read` / `ProgressReport.Read` composed by `First`; `Observation{Title, Progress}` |
+| `titleIdle`, `Signal.Trusted` | `Verdict.IdleHint` + `sessionTracker.animated` |
+| `HasDefaults(id)` | `Known(id)` |
+| `defaults`, `ownMenus`, `titleRules`, `progressAgents` | the `agents` table (`agents.go`) |
+| `SessionRules(tc)`, `bindSessionRules` | `SessionProfile(tc)`, `bindSessionProfile` |
+| `rulesFor` | `profileFor` |
+| watcher maps `pendingIdle`, `pendingQ`, `progress`, `animated` | `sessionTracker` fields (`progress` → `stall`) |
+| `agentstate.Progress(lines)`, `Reading.Progress` (stall key) | `agentstate.StallKey(lines)`, `Reading.StallKey` |
+| `sessionTracker.dedicated` | `Reading.Dedicated` (copied from the `Profile`) |
+| `SessionActivity.Settle`, `idleHold` | `SessionActivity.ReadyAt`, `readyAt` |
+| `stateSource.Text` / `Signals` / `LastOutput` | `stateSource.Observe` |
+
+```
+StateWatcher.observe(now)          THE entry (domain/session_states.go)
+  for each running session:
+    profileFor(info)               bound Profile (screen_* block) or agentstate.ForAgent(id)
+    src.Observe(id)                agentstate.Observation{Text, Lines, Title, Progress} + last output
+    profile.Read(obs)              agentstate.Reading: Verdict{State, IdleHint, Spinning}
+                                   + Options (Question), StepFor, StallKey, Dedicated
+    tracker.Step(rd, …)            domain/session_tracker.go: trust, idle hold, grace,
+                                   delayed question, both stalls → SessionActivity, notices
+  → states (Get), notice ring, Subscribe  → TUI · web · agent verbs · agent_wait (ReadyAt)
+```
+
+| Where | What lives there |
+|---|---|
+| `agentstate/detector.go` | `Observation`, `Verdict`, `Detector` (the one interface), `Reading`, `Profile.Read`, `First` |
+| `agentstate/screen.go` | `Screen` — Working → Waiting → Own (last line) → Question |
+| `agentstate/signals.go` | `Title` (question/spinner decide, idle only hints), `ProgressReport` (OSC 9;4) |
+| `agentstate/agents.go` | THE table: per agent id its signal parts + screen patterns; `ForAgent`, `Known`, `WithScreen` |
+| `domain/session_tracker.go` | per-session state over time (`sessionTracker.Step`, `stateTiming`) |
+| `domain/session_states.go` | the watcher: `observe`, source, profile binding, notices, run loop |
+| `domain/agentwait.go` | delivery only: `now ≥ ReadyAt` and newer than the caller's input |
+
+`First(parts…)`: the first part with a verdict decides and carries the
+hints of the parts before it; later parts are not asked (a Codex "Action
+Required" title carries no idle hint). `WithScreen(id, …)`: a known agent's
+empty lists keep its built-ins, `Own`/title/progress stay; an unknown
+command gets only its own lists; always `Dedicated`. `SessionActivity.ReadyAt`
+= idle `Since + hold` (700 ms trusted hint / 2 s), others `Since`; a zero
+`ReadyAt` (static watcher) → `Since + idleSettle`.
+
+**Adding a signal:** write a `Detector` part (pure, reads the
+`Observation`), add it to the agent's `signals` in `agents.go`; if it needs
+new raw data, add a field to `Observation` and fill it in
+`managerSource.Observe`. Timing belongs in the tracker, never in a part.
+
 ### Agent states from the title (2026-10-04)
 
 Live capture under `script`, env as gg gives it: Claude Code 2.1.289 titles
@@ -4554,7 +4658,10 @@ focus; the glyph stays ◐ without it) and an idle or a permission dialog
 `TMUX`, `STY` or `ZELLIJ` in its env, flag `tengu_static_title_under_mux` —
 it is always `✳`, so `childEnv` strips all three. Codex 0.160.0: braille
 spinner + ` | repo` while working, no glyph idle, `Action Required` when
-blocked (herdr). Kimi Code 2.1.1: OSC 9;4 `4;3` working, `4;0` done.
+blocked (herdr). Kimi Code 2.1.1: OSC 9;4 `4;3` working, `4;0` done —
+but only when it believes its host terminal shows progress (Windows
+Terminal `WT_SESSION`, ConEmu, ghostty, WezTerm in its env); elsewhere it
+sends none and Kimi is read from the screen alone, as before.
 Junie/agy send nothing usable.
 
 - `agentsession.oscFilter` records the last OSC 0/2 title (full UTF-8,
@@ -4731,6 +4838,51 @@ Spec: `docs/superpowers/specs/2026-09-28-review-view-design.md`; plan
   Delete = `POST /api/notes/remove` behind `showLocalConfirm(…,
   ["cancel","delete"])`.
 
+## Note store partitions (2026-10-04)
+
+Spec: `docs/superpowers/specs/2026-10-04-notes-partitions-design.md`.
+
+- **Files** under `$XDG_STATE_HOME/gg/notes/<repoKey>/`: `commits.toml`,
+  `previews.toml`, `shelf.toml`, `worktrees/<key>.toml` (key = first 8 bytes
+  of sha256 over the cleaned top-level, hex), `worktrees/unscoped.toml`.
+- **Routing** (`notes.PartOf`, a ROOT note): shelf id → shelf; no commit
+  (domain's `worktreeScopedNote`) → the worktree's part, "" → unscoped;
+  `Preview` containing `...` → previews; every other committed note
+  (plain, commit/branch reviews, pair `a..b` notes, PR notes) → commits.
+- **A reply goes to its parent's part**: replies carry no `Preview`, so
+  `PartOf` alone would send a preview note's reply to commits. `Put` looks
+  the parent up; when the parent is found nowhere AND a part was unreadable,
+  `Put` returns that read error instead of guessing. `Put` of a stored id
+  whose part would change → `ErrPartChange`.
+- **Per part**: lock (`<file>.lock`), process mutex, `max_entries` cap,
+  quarantine (`FileStore.Quarantine` moves only corrupt parts). An emptied
+  part's file is deleted. Temp files are `.notes-*.tmp` (never `.toml`, so a
+  concurrent `Parts()` listing cannot mistake one for a part).
+- **Readers** (`internal/domain/notes_parts.go`): live address → own worktree
+  part; commit address → commits + previews (a commit's notes include the
+  scoped ones, `PlainNotes` filters later); `loadPreviewNotes` by scope
+  (`...` → previews, `a..b` → commits, PR "" → both); `NoteCounts` /
+  `NoteAddresses` / `NotesOverview` → the visible parts (shared + own
+  worktree); reviews + the branch delete/rename follow-up → commits. Ids,
+  `NewID` and the sweep use `LoadAll`.
+- **Sweep**: a removed worktree's live notes resolve orphaned (no file to
+  read) and are dropped; the emptied part file is deleted. There is NO
+  `git worktree list` rule: git names the MAIN checkout of a submodule or a
+  `--separate-git-dir` repo by its git dir, not its top level, so such a
+  rule dropped every note of that checkout (review finding, removed;
+  `TestSweepKeepsNotesOfASeparateGitDirCheckout`). `FileStore.Sweep`
+  continues past a corrupt part and joins the errors.
+- **Migration** `split-notes` (`FeatureNotes`, `Silent`, `Lossless`,
+  `LegacyStore{StoreNotes}`): `FileStore.ConvertLegacy` holds
+  `notes.toml.lock`, routes replies with their roots, merges by id (newer
+  `Updated` wins, uncapped), renames to `notes.toml.migrated-<unix>`.
+  Idempotent: an older gg that recreates `notes.toml` is merged on the next
+  open; a conversion that waited on the lock and finds the file gone is a
+  no-op. A corrupt legacy file is moved to `notes.toml.corrupt-<unix>` and
+  reported (`ErrCorrupt`). Besides `RunAutoMigrations`, every lazy store
+  resolution converts (`openNotesStore`): a TUI/hosted-web repo switch and
+  `gg mcp` never call `RunAutoMigrations`.
+
 ## Review notes (AI reviews stored as notes, 2026-09-27)
 
 Spec: `docs/superpowers/specs/2026-09-27-review-notes-design.md`.
@@ -4767,9 +4919,10 @@ Spec: `docs/superpowers/specs/2026-09-27-review-notes-design.md`.
 - **BranchReviewTarget** fills `Commit` and `Branch`; `HEAD` resolves to the
   checked-out branch, a sha or tag leaves `Branch` empty.
 - **TUI:** `srcNote` viewer source (`openReviewNote`); `withReviewLines`
-  prepends `@notes/` entries (`contentLine.noteID`) to a commit's changed-file
-  list, which the stack inherits; `loadCommitDiffCmd` shows one as an
-  all-added, uncached, non-note-addressable file. Branches tab is entry-based
+  prepends a "Reviews" heading + one row per review (`contentLine.noteID`, NO
+  path since 2026-10-05 — it used to carry a virtual `@notes/review-….md` path
+  + status R, which made every path-keyed file action (copy, shelf, bookmark,
+  compare, the session snapshot) treat the review as a file). Branches tab is entry-based
   (`brEntry`, the Worktrees sub-row pattern): the branch filter maps entry →
   branch, `backingIndex` refuses a review row.
 - **Shelf-entry notes in a shelved set's list:** `withShelfNoteLines` prepends
@@ -5097,3 +5250,64 @@ Spec `docs/superpowers/specs/2026-10-01-agent-spawn-design.md`, plans A
 - **Enter.** `agent_send` presses Enter by default only after text.
 - **Tests** that swap `UseSessionManager` / `agentEnv` / `agentGetenv` or
   `t.Setenv` are serial; cli/mcp/e2e TestMains unset the channel env.
+
+## Working-changes reviews (2026-10-05)
+
+Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
+
+- **The note**: one root per review, `Address{State: StateUnstaged,
+  Worktree: filepath.Clean(top)}`, no Path, tag `review`, `Files
+  []model.NoteFile{Path, Blob, Deleted}`. `model.Note.IsWorktreeLevel()`
+  (live, worktree, no path/commit/shelf) ⊂ `IsEntryLevel()` (cap-exempt,
+  never re-anchored); `IsWorkingReview()` = that + tag. `IsReviewNote()`
+  stays commit-only. It routes to `worktrees/<key>.toml`.
+- **Fingerprint channel**: `engine.ReviewChanges{Working: true}.Prepare`
+  hashes every numstat path (rename old side → `Deleted`) and every
+  `ls-files --others` file in-process (`git.HashWorktreeFile` /
+  `git.BlobOf`, the repo's object format via `GitOps.ObjectFormat`),
+  synthesizes untracked new-file patches under `MaxDiffBytes` (a file past
+  the cap is stream-hashed, never read whole, and the diff is reported
+  truncated) → `TaskInputs.ReviewFiles` → `Result.ReviewFiles` (Collect) →
+  `TaskSpec.Store(ctx, noteID, text, files)` (the task keeps them for
+  RetrySave) / `ReviewReport` → `SaveReview{Files}`.
+- **Matching**: `domain.WorkingReviewState(worktree, files)` → per path
+  matches/changed/gone, `Current` while ≥1 matches; a missing worktree dir =
+  all gone. The algorithm comes from the blob's length (40 = sha1, 64 =
+  sha256). `workingBlobs` caches ids by (abs path, mtime, size) but never a
+  file modified < 2 s ago (racily clean). `WorkingReviews` reads ONLY the
+  worktree part (`workingReviewNotes`) so a live read never parses
+  commits.toml; `reviewNotes` reads commits + this worktree's part.
+- **Readers**: sweep drops a working review when outdated AND past
+  max_age_days (matched against its own worktree; replies skipped);
+  `NoteCounts.WorkingReviews` (never in ◆N or `Reviews`);
+  `NotesOverview.WorkingReviews` (+ `Count`), kept by `ShownOn`;
+  `resolveOne` returns active for every entry-level note (commit reviews
+  used to be "stale" by accident of `git show <sha>:` listing a tree);
+  `NotesFor`/`NotesAt` on a live file address append the matching reviews'
+  NEW-side notes (`workingReviewNotesOn`, ids `review:<id>:<n>`); review
+  view: `ReviewRevs` = (HEAD sha, "", false), `ReviewFiles` =
+  `CompareFiles(HEAD, WorkTree)`, `reviewSplit` places only matching files'
+  notes (others → `ReviewOtherNote.Changed`), `ReviewNotesFor` addresses
+  the worktree.
+- **TUI Files panel Review row**: a pseudo row with backing index
+  `reviewRowIdx = -1` prepended by `displayIndices(panelFiles)` while a
+  review is current and no `/` filter is active (`filesIdxReview` caches the
+  prefixed fast path; `withStatus`/`withWorkingReviews` refresh it).
+  `backingIndex`, `rowKeyAt`, `selectedKey` refuse it; walkers that index
+  `m.status.Files[u]` skip it (`diff_filenav`, `buildStatusStack`, the stack
+  landing). `panelLen` counts it (cursor bound); the tab count uses
+  `filesPanelFileCount`. `withWorkingReviews` shifts the cursor so it stays
+  on its file. Loaded off-thread after srcNotes (when the counts list any)
+  and after every srcStatus refresh.
+- **Review links** (merged from main's review links): `reviewTarget` of a
+  working review is the working tree (`LinkTarget{State: StateUnstaged}`),
+  so its link is `gg://<repo>?review=<id>` — an address-less review hint the
+  resolver accepts ONLY when the checkout's store holds that id as a
+  working review (`reviewHintService`); `checkReviewHint` matches it to a
+  commit-less, pair-less resolution. `ReviewShow.Working` names it.
+- **Web**: counts JSON `working_reviews` (current + sorted `matches`);
+  `/api/review/{id}` adds `working`/`states`; `/api/diff?wt=head` = HEAD →
+  working tree (no staging tags); the review opens as a compare with
+  `cmp.worktree` so `fileDiffURL` uses that lane. The page's
+  `state.noteCounts` is a field whitelist — a new counts field must be added
+  there (files.js) and in core.js's initial value.

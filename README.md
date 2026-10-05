@@ -144,10 +144,11 @@ gg note add --preview <a>..<b> --file F --new-line N --summary "…"   # review 
 gg review [--tool <name>] [--working] [<rev>|<A..B>]
                                       # AI code review; flags MUST precede the positional (like gg log -n). No positional
                                       # reviews the current branch's work; a single <rev> reviews just that commit's own
-                                      # change; --working reviews uncommitted changes. Prints the report to stdout and
-                                      # persists it under the gg state dir; --tool picks among configured review commands
-gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]
-                                      # also ask the tool for anchored notes (agent-context v1) and import them
+                                      # change; --working reviews uncommitted changes, untracked files included. Prints the
+                                      # report and stores it as a note (`note: <id>`); a --working review's notes show on
+                                      # each file while it still matches what was reviewed; --tool picks the review command
+gg review --notes [--tool <name>] [<rev>|<A..B>]
+                                      # also import the review's notes as permanent notes (not with --working)
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
                                       # numbered git @@ hunks per file, over the same patch a note anchors to
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>]
@@ -1299,11 +1300,16 @@ opens the report file in `$EDITOR`, `esc` closes); a failed or empty run
 reports the error in the status line instead. Every commit, range or branch
 review is stored as a **note on the reviewed commit** (a range's last commit; a
 branch review's tip, carrying the branch name) — never as a file. You find it
-from the thing it is about: an `@notes/` entry at the top of the commit's file
-list (and at the top of the stacked diff), a `◆n` marker and review rows under
+from the thing it is about: a row under **Reviews** at the top of the commit's
+file list (`.` / right-click there offers **Open review**, **Copy gg link**
+and **Delete review**; the commit's Range reviews and Notes rows likewise
+Open, Copy gg link and Delete), a `◆n` marker and review rows under
 the branch in the Branches tab (only reviews of the branch's current tip; `.` →
 **Show review** opens the newest), under the commit in **View all notes…**, and
-from the run in the `ctrl+\` AI-tasks tab. Deleting or renaming a branch in gg
+from the run in the `ctrl+\` AI-tasks tab. A review's gg link (`gg://…?review=<id>`, or `gg link --review
+<id|latest>`) opens the review itself from `#`, `gg open` or gg web, so you
+can hand one agent's review to another, which reads it with `gg review show
+<link>` — every remark numbered, with its own line link. Deleting or renaming a branch in gg
 takes its reviews along; review notes never expire. A review of uncommitted
 changes has no commit, so it stays in the AI-tasks history only. The same pipeline is
 scriptable as `gg review`

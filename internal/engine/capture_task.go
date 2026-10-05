@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // TaskInputs is what an AI task's Prepare made for one run: the resolved
@@ -20,6 +22,9 @@ type TaskInputs struct {
 	Env         []string
 	MessageFile string
 	Cleanup     func()
+	// ReviewFiles is a working-changes review's fingerprint of every file it
+	// read (ReviewChanges.Working), taken when the input was built.
+	ReviewFiles []model.NoteFile
 }
 
 // CaptureTask is an AI-task operation split in three so the same inputs can

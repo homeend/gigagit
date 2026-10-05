@@ -82,7 +82,7 @@ func TestStackLeavesTheReviewOut(t *testing.T) {
 		t.Fatalf("stack %+v, want the commit's 3 files", v)
 	}
 	for i, f := range v.stk.files {
-		if f.line.noteID != "" || strings.HasPrefix(f.path, reviewsDir) {
+		if f.line.noteID != "" || strings.HasPrefix(f.path, "@notes") {
 			t.Fatalf("stack file %d is the review %+v", i, f)
 		}
 	}
@@ -96,29 +96,21 @@ func diffRowTexts(v *diffView) []string {
 	return out
 }
 
-func TestReviewEntryActions(t *testing.T) {
+// A review is not a file: no file action takes its row — it is opened or
+// deleted (noteRowMenu, TestNoteRowMenusAreOpenAndDelete).
+func TestReviewEntryHasNoFileActions(t *testing.T) {
 	t.Parallel()
 	m := reviewedStackModel(t, "# Verdict\nship it")
 	m.filesTreeFocused = true
 	m.filesView.sel = 1 // the review entry
-	if r, ok := m.viewFileRow(); !ok || r.label != "View review" {
-		t.Fatalf("view row %+v %v", r, ok)
+	if _, ok := m.viewFileRow(); ok {
+		t.Fatal("a review offers View file")
+	}
+	if _, ok := m.openExternalRow(); ok {
+		t.Fatal("a review offers the external editor")
 	}
 	if _, ok := m.commitsTouchingFileRow(); ok {
 		t.Fatal("a review has no history to browse")
-	}
-	r, _ := m.viewFileRow()
-	u, cmd := r.run(m)
-	m = drainCmds(t, u.(Model), cmd)
-	if m.filesPreview == nil || m.filesPreview.src.kind != srcNote {
-		t.Fatalf("preview %+v", m.filesPreview)
-	}
-	var b strings.Builder
-	for _, l := range m.filesPreview.p.lines {
-		b.WriteString(l.text + "\n")
-	}
-	if !strings.Contains(b.String(), "ship it") {
-		t.Fatalf("preview text:\n%s", b.String())
 	}
 }
 

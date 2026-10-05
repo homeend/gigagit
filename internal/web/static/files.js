@@ -20,7 +20,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { leaveRangeReview, leaveReview, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview } from "./reviews.js";
+import { currentWorkingReview, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewOverview } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -1097,6 +1097,11 @@ function renderFiles() {
   let lastSection = "";
   const anyBadge = state.statusEntries.some((f) => state.noteCounts.by_path[f.path] > 0);
   const cols = fileCols(FILE_BTN_COLS + (anyBadge ? NOTE_BADGE_COLS : 0));
+  // A current review of these changes heads the list; ✎ marks each file it
+  // still matches (reviews.js).
+  const wr = currentWorkingReview();
+  const reviewed = new Set(wr ? wr.matches || [] : []);
+  html += workingReviewRowHTML(wr);
   state.statusEntries.forEach((f, i) => {
     if (f.section !== lastSection) {
       html += `<li class="sect">${SECTION_LABELS[f.section]}</li>`;
@@ -1113,6 +1118,7 @@ function renderFiles() {
       `<li class="${i === state.fileCursor ? "sel" : ""} ${f.section}${state.marked.has(f.path) ? " marked" : ""}" data-i="${i}">` +
       `<span class="st">${esc(badge)}</span>` +
       filePathHTML(f.path, cols) +
+      (reviewed.has(f.path) ? `<span class="wrmark" title="the review of these changes still matches this file">✎</span>` : "") +
       noteBadgeHTML(state.noteCounts.by_path[f.path]) +
       `${btn}</li>`;
   });
@@ -1182,6 +1188,12 @@ function fileDiffURL(f) {
     if (f.status) q.set("status", f.status);
     if (c.links && f.old_path) q.set("old_path", f.old_path);
     return "/api/entry-diff?" + q;
+  }
+  // A working review compares HEAD with the working tree (/api/diff's head lane).
+  if (state.filesMode === "compare" && c && c.worktree) {
+    const wq = new URLSearchParams({ wt: "head", path: f.path });
+    if (f.old_path) wq.set("old", f.old_path);
+    return "/api/diff?" + wq;
   }
   const q = new URLSearchParams({ path: f.path, status: f.status });
   if (state.filesMode === "compare") {
@@ -2623,6 +2635,7 @@ async function refreshNoteCounts() {
       plain_by_commit_path: c.plain_by_commit_path || {}, // a commit's file badges: no range review's notes
       scopes_by_commit: c.scopes_by_commit || {}, // a commit's Range review rows
       reviews: c.reviews || [], // the Branches' review sub-rows
+      working_reviews: c.working_reviews || [], // the working list's Review row and ✎
     };
     // The open commit's Reviews rows follow the same list, so a review saved
     // or deleted anywhere (the TUI, another tab) shows up without a reopen.
@@ -2632,7 +2645,7 @@ async function refreshNoteCounts() {
     // Counts are decoration, but a STALE badge is worse than none: a failed
     // fetch means we no longer know, so draw no ◆ at all until the next one
     // succeeds.
-    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, plain_by_commit_path: {}, scopes_by_commit: {}, reviews: [] };
+    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, plain_by_commit_path: {}, scopes_by_commit: {}, reviews: [], working_reviews: [] };
   }
   renderFiles();
   renderBranches(); // a review deleted anywhere leaves its branch sub-row
@@ -4968,7 +4981,8 @@ $("files-list").addEventListener("click", (e) => {
   // A commit's review row opens the review; the review view's Overview row
   // shows the Overview. Neither is a file (no data-i).
   if (li && li.dataset.review) {
-    openReview(li.dataset.review, reviewBackFromCommit(li.dataset.review));
+    // The working list's Review row returns to the list; a commit's to it.
+    openReview(li.dataset.review, state.filesMode === "status" ? { kind: "list" } : reviewBackFromCommit(li.dataset.review));
     return;
   }
   // A commit's Range review row opens the range its notes were written in.
@@ -5023,11 +5037,27 @@ function fileExt(path) {
 // opening its diff.
 $("files-list").addEventListener("contextmenu", (e) => {
   const li = e.target.closest("li");
-  // A review row (a commit's, or the review view's Overview): Delete review.
-  const rid = li && (li.dataset.review || (li.dataset.ov && reviewActive() ? state.review.id : ""));
-  if (rid) {
+  // A commit's note rows are not files: Open + Delete only (the TUI's
+  // noteRowMenu). The review view's Overview row: Delete review.
+  if (li && li.dataset.review) {
     e.preventDefault();
-    reviewMenu(rid, e.clientX, e.clientY);
+    const rid = li.dataset.review;
+    reviewMenu(rid, e.clientX, e.clientY, () => openReview(rid, reviewBackFromCommit(rid)));
+    return;
+  }
+  if (li && li.dataset.scope) {
+    e.preventDefault();
+    scopeRowMenu(li.dataset.scope, e.clientX, e.clientY);
+    return;
+  }
+  if (li && li.dataset.noted) {
+    e.preventDefault();
+    notedRowMenu(li.dataset.noted, e.clientX, e.clientY);
+    return;
+  }
+  if (li && li.dataset.ov && reviewActive()) {
+    e.preventDefault();
+    reviewMenu(state.review.id, e.clientX, e.clientY);
     return;
   }
   if (!li || li.dataset.i === undefined) return;

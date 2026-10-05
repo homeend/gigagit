@@ -39,6 +39,14 @@ func (f *fakeStates) Text(id agentsession.ID) (string, bool) {
 	return t, ok
 }
 func (f *fakeStates) LastOutput(id agentsession.ID) time.Time { return f.last[id] }
+func (f *fakeStates) Observe(id agentsession.ID) (agentstate.Observation, time.Time, bool) {
+	text, ok := f.Text(id)
+	if !ok {
+		return agentstate.Observation{}, time.Time{}, false
+	}
+	sig, _ := f.Signals(id)
+	return agentstate.Observation{Text: text, Lines: agentstate.Tail(text, stateTailLines), Title: sig.Title, Progress: sig.Progress}, f.last[id], true
+}
 func (f *fakeStates) Signals(id agentsession.ID) (agentsession.Signals, bool) {
 	if s, ok := f.sig[id]; ok {
 		return s, true
@@ -296,7 +304,7 @@ func TestStatesStallFromUnknownNeedsDedicatedRules(t *testing.T) {
 	}
 	// A custom command with its own rules counts as dedicated.
 	w, f := oneSession("")
-	r, _ := agentstate.Compile(nil, []string{`^READY$`}, nil)
+	r, _ := agentstate.WithScreen("", nil, []string{`^READY$`}, nil)
 	w.Bind("s1", r)
 	f.text["s1"] = actNoise
 	f.last["s1"] = now.Add(-5 * time.Minute)
@@ -337,7 +345,7 @@ func TestStatesDropExitedAndSkipUnclassified(t *testing.T) {
 func TestStatesBoundRulesWin(t *testing.T) {
 	t.Parallel()
 	w, f := oneSession("claude")
-	r, _ := agentstate.Compile(nil, []string{`^READY$`}, nil)
+	r, _ := agentstate.WithScreen("", nil, []string{`^READY$`}, nil)
 	w.Bind("s1", r)
 	f.text["s1"] = actIdle // claude's own idle box: not the bound rule
 	w.observe(actT0.Add(time.Minute))
@@ -392,7 +400,7 @@ func TestStatesNoticeRing(t *testing.T) {
 func TestSessionRules(t *testing.T) {
 	t.Parallel()
 	plain := config.ToolCommand{Category: "session", Name: "Claude", Command: "claude"}
-	if _, custom, err := SessionRules(plain); custom || err != nil {
+	if _, custom, err := SessionProfile(plain); custom || err != nil {
 		t.Fatalf("no lists: custom=%v err=%v", custom, err)
 	}
 	if SessionRulesWarning(plain) != "" {
@@ -400,14 +408,19 @@ func TestSessionRules(t *testing.T) {
 	}
 	one := plain
 	one.ScreenWaiting = []string{`^READY$`}
-	r, custom, err := SessionRules(one)
-	def := agentstate.DefaultRules("claude")
-	if !custom || err != nil || len(r.Waiting) != 1 || len(r.Working) != len(def.Working) || len(r.Question) != len(def.Question) {
-		t.Fatalf("one list (claude keeps its other built-ins): %+v custom=%v err=%v", r, custom, err)
+	r, custom, err := SessionProfile(one)
+	if !custom || err != nil {
+		t.Fatalf("one list: custom=%v err=%v", custom, err)
+	}
+	read := func(text string) agentstate.State {
+		return r.Read(agentstate.Observation{Text: text, Lines: agentstate.Tail(text, 15), Progress: -1}).State
+	}
+	if read("READY") != agentstate.Waiting || read(actWorking) != agentstate.Working || read(actQuestion) != agentstate.Question {
+		t.Fatal("one list (claude keeps its other built-ins)")
 	}
 	bad := plain
 	bad.ScreenWorking = []string{`(`}
-	if _, custom, err := SessionRules(bad); custom || err == nil {
+	if _, custom, err := SessionProfile(bad); custom || err == nil {
 		t.Fatalf("bad pattern: custom=%v err=%v", custom, err)
 	}
 	if w := SessionRulesWarning(bad); !strings.Contains(w, "Claude") || !strings.Contains(w, "(") {
@@ -426,9 +439,8 @@ func TestEverySessionAgentHasRules(t *testing.T) {
 		if !session {
 			continue
 		}
-		r := agentstate.DefaultRules(tl.ID)
-		if len(r.Waiting) == 0 || len(r.Question) == 0 {
-			t.Errorf("%s: no waiting or question rules", tl.ID)
+		if !agentstate.Known(tl.ID) {
+			t.Errorf("%s: no dedicated rules", tl.ID)
 		}
 	}
 }
@@ -448,7 +460,7 @@ func TestSessionStatesWakeOnOutput(t *testing.T) {
 	}
 	defer m.KillAll(t.Context())
 	before := sess.SubscriberCount()
-	r, _ := agentstate.Compile(nil, []string{`^READY$`}, nil)
+	r, _ := agentstate.WithScreen("", nil, []string{`^READY$`}, nil)
 	w := SessionStates()
 	w.Bind(sess.Info().ID, r)
 	deadline := time.Now().Add(5 * time.Second)
@@ -489,7 +501,7 @@ func TestSessionStatesPromoteAHeldIdleWithoutOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer m.KillAll(t.Context())
-	r, _ := agentstate.Compile([]string{`^BUSY$`}, []string{`^READY$`}, nil)
+	r, _ := agentstate.WithScreen("", []string{`^BUSY$`}, []string{`^READY$`}, nil)
 	SessionStates().Bind(sess.Info().ID, r)
 	deadline := time.Now().Add(6 * time.Second)
 	for time.Now().Before(deadline) {
@@ -538,7 +550,7 @@ func TestStatesKeepRulesBoundBeforeTheSessionIsListed(t *testing.T) {
 	t.Parallel()
 	w, f := oneSession("")
 	f.infos = nil // not listed yet
-	r, _ := agentstate.Compile(nil, []string{`^READY$`}, nil)
+	r, _ := agentstate.WithScreen("", nil, []string{`^READY$`}, nil)
 	w.Bind("s1", r)
 	w.observe(actT0.Add(time.Minute))
 	f.infos = []agentsession.Info{{ID: "s1", Label: "Custom", Dir: "/wt/a", Started: actT0}}
@@ -560,37 +572,40 @@ func TestStatesKeepRulesBoundBeforeTheSessionIsListed(t *testing.T) {
 func TestSessionRulesMergeWithTheAgentBuiltins(t *testing.T) {
 	t.Parallel()
 	tc := config.ToolCommand{Category: "session", Name: "Claude", Command: "claude", ScreenQuestion: []string{`CONFIRM`}}
-	r, custom, err := SessionRules(tc)
+	r, custom, err := SessionProfile(tc)
 	if !custom || err != nil {
 		t.Fatalf("custom=%v err=%v", custom, err)
 	}
-	if got := agentstate.Classify(r, agentstate.Tail(actIdle, 15)); got != agentstate.Waiting {
+	read := func(p agentstate.Profile, text string) agentstate.State {
+		return p.Read(agentstate.Observation{Text: text, Lines: agentstate.Tail(text, 15), Progress: -1}).State
+	}
+	if got := read(r, actIdle); got != agentstate.Waiting {
 		t.Fatalf("claude's idle box with a partial block: %q", got)
 	}
-	if got := agentstate.Classify(r, agentstate.Tail("please CONFIRM", 15)); got != agentstate.Question {
+	if got := read(r, "please CONFIRM"); got != agentstate.Question {
 		t.Fatalf("own question list: %q", got)
 	}
-	if got := agentstate.Classify(r, agentstate.Tail(actQuestion, 15)); got != agentstate.Unknown {
+	if got := read(r, actQuestion); got != agentstate.Unknown {
 		t.Fatalf("the built-in question list must be replaced, not merged: %q", got)
 	}
 	// Claude's own menus stay unknown whatever the block sets: there is no
 	// config list for them.
-	if got := agentstate.Classify(r, agentstate.Tail("please CONFIRM\n ❯ 1. View tools\n Esc to back", 15)); got != agentstate.Unknown {
+	if got := read(r, "please CONFIRM\n ❯ 1. View tools\n Esc to back"); got != agentstate.Unknown {
 		t.Fatalf("an own menu with a partial block: %q", got)
 	}
 	// The title rules have no config list either: a block keeps them.
-	if st, _ := agentstate.ClassifyWith(r, agentstate.Tail(actIdle, 15), agentstate.Signal{Title: "◐ x", Progress: -1}); st != agentstate.Working {
+	if st := r.Read(agentstate.Observation{Lines: agentstate.Tail(actIdle, 15), Title: "◐ x", Progress: -1}).State; st != agentstate.Working {
 		t.Fatalf("claude's title spinner with a partial block: %q", st)
 	}
 	kimi := config.ToolCommand{Category: "session", Name: "Kimi", Command: "kimi", ScreenQuestion: []string{`CONFIRM`}}
-	if kr, _, _ := SessionRules(kimi); !kr.ProgressBusy {
+	if kr, _, _ := SessionProfile(kimi); kr.Read(agentstate.Observation{Progress: 3}).State != agentstate.Working {
 		t.Fatal("kimi's progress rule lost with a partial block")
 	}
 	// A custom command (no agent) with one list has only that list.
 	cu := config.ToolCommand{Category: "session", Name: "X", Command: "mytool", ScreenWaiting: []string{`^READY$`}}
-	r, _, _ = SessionRules(cu)
-	if len(r.Working) != 0 || len(r.Question) != 0 || len(r.Waiting) != 1 {
-		t.Fatalf("custom: %+v", r)
+	r, _, _ = SessionProfile(cu)
+	if read(r, "continue? (y/n)") != agentstate.Unknown || read(r, "READY") != agentstate.Waiting {
+		t.Fatal("custom: only its own list")
 	}
 }
 
@@ -628,7 +643,7 @@ func TestStatesTitledIdleHoldsShort(t *testing.T) {
 	}
 	w.observe(late.Add(1700 * time.Millisecond))
 	a, _ := w.Get("s1")
-	if a.State != ActivityIdle || !a.Since.Equal(late.Add(time.Second)) || a.Settle != 700*time.Millisecond {
+	if a.State != ActivityIdle || !a.Since.Equal(late.Add(time.Second)) || !a.ReadyAt.Equal(a.Since.Add(700*time.Millisecond)) {
 		t.Fatalf("activity = %+v", a)
 	}
 	if kinds(w.Notices(0)) != "idle" {
@@ -649,7 +664,7 @@ func TestStatesNeverAnimatedKeeps2s(t *testing.T) {
 		t.Fatalf("recheck = %v, want 2s", wait)
 	}
 	w.observe(late.Add(3 * time.Second))
-	if a, _ := w.Get("s1"); a.State != ActivityIdle || a.Settle != 2*time.Second {
+	if a, _ := w.Get("s1"); a.State != ActivityIdle || !a.ReadyAt.Equal(a.Since.Add(2*time.Second)) {
 		t.Fatalf("activity = %+v", a)
 	}
 }

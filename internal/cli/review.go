@@ -18,7 +18,8 @@ import (
 
 // cmdReview implements `gg review [--tool <name>] [--working] [<rev>|<A..B>]`:
 // runs the configured review agent headless over the resolved target, prints
-// the captured report to stdout, and persists it via domain.ReviewReport.
+// the captured report to stdout, and persists it via domain.ReviewReport — a
+// --working review is stored as a note in this worktree's notes.
 // Exit 0 on a produced report, 1 on tool failure/empty report/no review tool
 // configured, 2 on a flag/usage error.
 //
@@ -28,21 +29,30 @@ import (
 // partitioned out from after a positional the way show's bool-only --patch
 // is (see partitionFlags's doc comment in diff.go).
 func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stderr io.Writer) int {
+	// `show` is a subcommand: it reads a stored review back. A branch named
+	// show is reviewed by its full ref (gg review refs/heads/show).
+	if len(rest) > 0 && rest[0] == "show" {
+		return reviewShow(svc, rest[1:], stdout, stderr)
+	}
 	fs := flag.NewFlagSet("review", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	toolName := fs.String("tool", "", "review tool name (from config); default: the only one")
 	working := fs.Bool("working", false, "review uncommitted working changes")
-	wantNotes := fs.Bool("notes", false, "also ask the tool for anchored notes (agent-context v1) and import them")
+	wantNotes := fs.Bool("notes", false, "also ask the tool for anchored notes (agent-context v1) and import them (not with --working)")
 	pf := addPreviewFlag(fs)
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
 	if *working && fs.NArg() >= 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]")
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: "))
 		return 2
 	}
 	if fs.NArg() > 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]")
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: "))
+		return 2
+	}
+	if *working && *wantNotes {
+		fmt.Fprintln(stderr, "gg review: --notes does not apply to --working: a working review is stored; its notes show on the files")
 		return 2
 	}
 	ctx := context.Background()
@@ -136,14 +146,11 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 //
 //	gg review <sha>        → that commit; BOTH sides are addressable
 //	gg review A..B / branch→ the TIP commit; NEW side only
-//	gg review --working    → the unstaged working tree; NEW side only
 //
-// The two new-side-only cases exist because a review's base (the merge base, or
-// HEAD for --working) is not one of §4.4's note-addressable old sides.
+// (A --working review is stored and draws its own notes: --notes refuses it.)
+// The new-side-only case exists because a review's base (the merge base) is
+// not one of §4.4's note-addressable old sides.
 func reviewImportTarget(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg string) (cached bool, rev string, rule domain.NoteSideRule, err error) {
-	if target.Kind == domain.ReviewWorking {
-		return false, "", domain.NoteSideNewOnly, nil
-	}
 	if arg != "" && !strings.Contains(arg, "..") {
 		return false, arg, domain.NoteSideBoth, nil // a single commit: parent → commit
 	}

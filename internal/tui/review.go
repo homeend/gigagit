@@ -191,7 +191,7 @@ func (m Model) applyReviewResult(info domain.TaskInfo) (Model, tea.Cmd) {
 	if info.SaveErr != "" {
 		return m.stickyNotice(i18n.T("%s: %s — ctrl+\\ to retry", info.Key, info.SaveErr))
 	}
-	if info.NoteID == "" { // a working-changes review: not a note (spec ruling 1)
+	if info.NoteID == "" { // a review that produced no note (every review is stored now, a working one too)
 		if !m.canShowResult(info) {
 			return m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
 		}

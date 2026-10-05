@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notes"
 )
 
 // reviewRepo is a real repo on branch "feature" (one commit past main) with
@@ -98,12 +100,31 @@ func TestSaveReviewCommitRangeAnchorsOnTheLastCommit(t *testing.T) {
 	}
 }
 
-func TestSaveReviewRefusesWorkingChanges(t *testing.T) {
+// A working-changes review is a note in this worktree's part file: path-less,
+// live, tagged review, carrying the fingerprints it was given.
+func TestSaveReviewStoresAWorkingReview(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := reviewRepo(t)
-	_, _, err := svc.SaveReview(context.Background(), SaveReview{Target: WorkingReviewTarget(), Text: "x"})
-	if !errors.Is(err, ErrNoReviewCommit) {
-		t.Fatalf("err = %v, want ErrNoReviewCommit", err)
+	ctx := context.Background()
+	files := []model.NoteFile{{Path: "f.txt", Blob: strings.Repeat("a", 40)}, {Path: "gone.txt", Deleted: true}}
+	id, warn, err := svc.SaveReview(ctx, SaveReview{Target: WorkingReviewTarget(), Agent: "Claude Code", Text: "x", Files: files})
+	if err != nil || warn != "" {
+		t.Fatalf("SaveReview: %v %q", err, warn)
+	}
+	top, _ := svc.TopLevel(ctx) // the spelling the store keys the part by
+	st := svc.notesStore(ctx)
+	got, err := st.Load(notes.WorktreePart(strings.TrimSpace(top)))
+	if err != nil || len(got) != 1 {
+		all, _ := st.LoadAll()
+		t.Fatalf("worktree part = %+v (%v); store = %+v", got, err, all)
+	}
+	n := got[0]
+	if n.ID != id || !n.IsWorkingReview() || n.Author != "Claude Code" || n.Summary != "Review: working changes" ||
+		!reflect.DeepEqual(n.Files, files) || n.Scope != "" {
+		t.Fatalf("note = %+v", n)
+	}
+	if cs, _ := st.Load(notes.PartCommits); len(cs) != 0 {
+		t.Fatalf("a working review reached commits.toml: %+v", cs)
 	}
 }
 
@@ -178,7 +199,7 @@ func TestSaveReviewQuarantinesACorruptStore(t *testing.T) {
 	svc.UseNotesDir(notesDir)
 	runGitIn(t, dir, "checkout", "-b", "feature")
 	commitFile(t, dir, "f.txt", "x\n", "c")
-	if err := os.WriteFile(filepath.Join(notesDir, "notes.toml"), []byte("[[[ broken"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(notesDir, "commits.toml"), []byte("[[[ broken"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tg, _ := svc.BranchReviewTarget(context.Background(), "feature")
@@ -186,10 +207,10 @@ func TestSaveReviewQuarantinesACorruptStore(t *testing.T) {
 	if err != nil || id == "" {
 		t.Fatalf("SaveReview: %q %v", id, err)
 	}
-	if !strings.Contains(warn, "notes.toml.corrupt-") {
+	if !strings.Contains(warn, "commits.toml.corrupt-") {
 		t.Fatalf("warn = %q, want the quarantine path", warn)
 	}
-	m, _ := filepath.Glob(filepath.Join(notesDir, "notes.toml.corrupt-*"))
+	m, _ := filepath.Glob(filepath.Join(notesDir, "commits.toml.corrupt-*"))
 	if len(m) != 1 {
 		t.Fatalf("quarantined files = %v", m)
 	}
@@ -253,7 +274,7 @@ func TestDeleteBranchKeepsLineNotes(t *testing.T) {
 	if _, err := svc.Execute(ctx, engine.DeleteBranch{Name: "feature"}, nil, deleteAnyway); err != nil {
 		t.Fatal(err)
 	}
-	all, _ := st.Load()
+	all, _ := st.LoadAll()
 	if len(all) != 1 || all[0].ID != "line1" {
 		t.Fatalf("the line note went with the branch: %v", all)
 	}
@@ -305,7 +326,7 @@ func TestRangeReviewNotesFollowABranchRename(t *testing.T) {
 	if _, err := svc.Execute(ctx, engine.DeleteBranch{Name: "feat2"}, nil, deleteAnyway); err != nil {
 		t.Fatal(err)
 	}
-	if all, _ := st.Load(); len(all) != 1 {
+	if all, _ := st.LoadAll(); len(all) != 1 {
 		t.Fatalf("deleting the branch must leave its range notes in the store: %v", all)
 	}
 	// The branch is gone: its review is no other branch's to show.

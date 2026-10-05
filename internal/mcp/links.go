@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -186,6 +187,35 @@ func (s *Server) registerLinkTools(srv *sdk.Server) {
 		out.Start, out.End, out.Lines = lt.Start, lt.End, lt.Lines
 		out.Note = res.AnchorNote()
 		return nil, out, nil
+	})
+
+	sdk.AddTool(srv, &sdk.Tool{
+		Name: "gg_review_show",
+		Description: "A stored AI review: its overview and every remark (path, side, lines, summary, rationale) with the remark's own gg:// line link. " +
+			"Pass a review link (gg://…?review=<id>), a review id, or \"latest\". Use it to check another agent's review.",
+		Annotations: readOnlyAnnotations(),
+	}, func(ctx context.Context, _ *sdk.CallToolRequest, in linkResolveIn) (*sdk.CallToolResult, domain.ReviewShow, error) {
+		var out domain.ReviewShow
+		if err := s.repoCheck(); err != nil {
+			return nil, out, err
+		}
+		id := strings.TrimSpace(in.Link)
+		if strings.HasPrefix(id, "gg://") {
+			res, err := s.resolveLinkArg(ctx, id)
+			if err != nil {
+				return nil, out, err
+			}
+			if res.Hint.Kind != model.ReviewHintKind {
+				return nil, out, errors.New("that link names no review (no ?review=<id>)")
+			}
+			id = res.Hint.ID
+		}
+		id, err := s.svc.ReviewID(ctx, id)
+		if err != nil {
+			return nil, out, fmt.Errorf("review %s: %w", strings.TrimSpace(in.Link), err)
+		}
+		out, err = s.svc.ReviewShow(ctx, id)
+		return nil, out, err
 	})
 
 	sdk.AddTool(srv, &sdk.Tool{

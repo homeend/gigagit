@@ -47,10 +47,19 @@ type Model struct {
 	// all of status.Files — which, on a 40k-file working tree, was rebuilt many
 	// times per keystroke and made scrolling lag for seconds. Read-only: callers
 	// must not sort/append/reorder the returned slice.
-	filesIdx  []int
-	stagedIdx []int
-	branches  []model.Branch
-	commits   []model.Commit
+	filesIdx []int
+	// filesIdxReview is filesIdx with the Review row's sentinel in front
+	// (working_review_row.go); nil while the row is not shown.
+	filesIdxReview []int
+	// workingReviews is this worktree's working reviews, matched (the Files
+	// panel's Review row and ✎ markers).
+	workingReviews []domain.WorkingReview
+	// workingReviewsGen tags a working-reviews read: a repo switch bumps it
+	// so a read still in flight from the old repo lands nowhere.
+	workingReviewsGen int
+	stagedIdx         []int
+	branches          []model.Branch
+	commits           []model.Commit
 
 	worktrees              []model.Worktree
 	worktreeMarks          map[string]domain.WorktreeMark // path -> live claim / reserve (Worktrees ⚑ / ⊘)
@@ -233,6 +242,9 @@ type Model struct {
 	reviewOpenGen int
 
 	previews []previewRow // saved merge previews + live summaries (srcPreviews)
+	// rerootNotes asks the next full snapshot to chain a note-counts read: a
+	// repo switch cleared the old repo's counts (reRoot).
+	rerootNotes bool
 
 	// Pull requests (pr_panel.go). forgeShown flips true on the first read that
 	// finds a usable forge CLI and stays true for this repo session (reRoot
@@ -954,6 +966,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.blinkOn = !m.blinkOn
 		return m, m.noticeBlinkCmd(msg.gen)
+	case workingReviewsMsg:
+		if msg.err == nil && msg.gen == m.workingReviewsGen {
+			m = m.withWorkingReviews(msg.reviews)
+		}
+		return m, nil
+
 	case reviewViewMsg:
 		return m.handleReviewViewMsg(msg)
 	case reviewsFollowMsg:
@@ -1590,6 +1608,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onAllNotesScope(msg)
 	case storedDeletedMsg:
 		return m.onStoredDeleted(msg)
+	case rowNotesClearedMsg:
+		return m.onRowNotesCleared(msg)
+	case reviewHintMsg:
+		return m.onReviewHint(msg)
 	case remoteHeadNamesMsg:
 		p := layerOf[*remoteHeadsPopup](m)
 		if p == nil || msg.gen != m.loadGen {
@@ -1810,6 +1832,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			legacyLoading := m.loading // this arm owns the legacy flag; a silent chain must not flip it
 			var previewsCmd tea.Cmd
 			m, previewsCmd = m.chainPreviewsRead()
+			if m.rerootNotes {
+				// The first snapshot after a repo switch: read the new repo's
+				// note counts here, for the same ordering reason as previews.
+				// Only after a switch — startup's fan-out already reads them,
+				// and an op that changes notes reloads srcNotes itself.
+				m.rerootNotes = false
+				var notesCmd tea.Cmd
+				m, notesCmd = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{manual: m.srcLoading[srcNotes]})
+				previewsCmd = tea.Batch(previewsCmd, notesCmd)
+			}
 			m.loading = legacyLoading // an inherited manual flag is cleared by that read's own arrival
 			// An active process advances from the freshly-reloaded state (e.g.
 			// the conflict process re-derives its file list after a resolve).
@@ -1915,6 +1947,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.conflict = p.conflict
 			m = m.restorePanelSel(panelFiles, keyFiles)
 			m = m.restorePanelSel(panelStaged, keyStaged)
+			// An edit changes which files a working review still matches.
+			previewsChain = tea.Batch(previewsChain, m.loadWorkingReviewsCmd())
 			// Rebuild the commit graph so WIP pseudo-rows (◇ Working tree/Staged)
 			// stay in sync with the new status, even on the proc path (e.g. after
 			// a stash pop that triggers a status-only refresh mid-conflict process).
@@ -2037,6 +2071,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.identity = msg.value.(model.Identity)
 		case srcNotes:
 			m.noteCounts = msg.value.(domain.NoteCounts)
+			// The Files panel's Review row: re-match this worktree's working
+			// reviews (none → the row and the ✎ go).
+			if len(m.noteCounts.WorkingReviews) == 0 {
+				m = m.withWorkingReviews(nil)
+			} else {
+				previewsChain = tea.Batch(previewsChain, m.loadWorkingReviewsCmd())
+			}
 			// Preview badges count the SAME store, so a note write moves them
 			// too. Armed only while a preview is actually on screen — otherwise
 			// every note write in every repo would spend a git resolve per
@@ -2847,6 +2888,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Files panel, conflicted row: hand the file straight to the region
 			// picker (the same pipeline the x process's enter runs, minus the
 			// process — apply/esc land back here).
+			if m.onReviewRow() {
+				r, _ := m.currentWorkingReview()
+				return m.openReview(r.ID, r.Summary)
+			}
 			if m.focus == panelFiles && m.opsIdle() {
 				if bi, ok := m.backingIndex(panelFiles); ok && m.status.Files[bi].Kind == model.KindUnmerged {
 					f := m.status.Files[bi]
@@ -4761,6 +4806,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	closeDocWatch(m.docWatch.w)                         // the old tree's files are not the new one's
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
+	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go
+	m = m.withWorkingReviews(nil)
 	// Disable the snapshot synchronously (no git subprocess here — reRoot runs
 	// on the Update goroutine); snapshotTargetCmd below re-resolves and
 	// re-enables it once its two reads land off-thread.
@@ -4836,6 +4883,11 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingNoticeConfig = nil
 	m.refreshHealthAfterOp = false
 	m.previews = nil // the old repo's saved previews must not linger in the new one
+	// Nor its note counts: the ✎ / ◆ markers, a commit's Reviews rows and the
+	// file badges are keyed by sha and path, and two repos can share both.
+	// The new repo's are read once its snapshot lands (rerootNotes).
+	m.noteCounts = domain.NoteCounts{}
+	m.rerootNotes = true
 	// The forge belongs to the repository: the new Service probes afresh, and
 	// until it answers there is no Pull requests tab to stand on.
 	m.forgeShown, m.forgeProvider, m.forgeProbeKicked = false, "", false

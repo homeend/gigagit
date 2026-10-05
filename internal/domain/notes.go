@@ -63,9 +63,13 @@ type NoteCounts struct {
 	// PlainByCommitPath counts the commit notes written in NO scope, by
 	// "<sha>:<path>": the ones a commit's Notes rows are for.
 	PlainByCommitPath map[string]int
-	Reviews           []ReviewHead   // every AI review note, newest first (Branches tab, @notes)
-	ByCommitPath      map[string]int // commit notes, by "<sha>:<path>"
-	ByShelf           map[string]int // notes on a whole shelf entry, by entry id
+	Reviews           []ReviewHead // every AI review note, newest first (Branches tab, @notes)
+	// WorkingReviews is this worktree's reviews of uncommitted changes,
+	// newest first: never in a ◆N badge, never in Reviews (the Branches
+	// sub-rows). Unmatched — matching reads files (Service.WorkingReviews).
+	WorkingReviews []ReviewHead
+	ByCommitPath   map[string]int // commit notes, by "<sha>:<path>"
+	ByShelf        map[string]int // notes on a whole shelf entry, by entry id
 }
 
 // NoteScopeCount is one scope's share of a commit's notes: the scope as the
@@ -140,7 +144,7 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 	if st == nil {
 		return model.Note{}, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return model.Note{}, err
 	}
@@ -300,7 +304,7 @@ func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) e
 	if st == nil {
 		return ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return err
 	}
@@ -333,7 +337,7 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 	if st == nil {
 		return model.Note{}, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return model.Note{}, err
 	}
@@ -408,6 +412,50 @@ func (s *Service) NotesClear(ctx context.Context, addr model.FileAddress) (int, 
 	return dropped, err
 }
 
+// NotesClearAtCommit removes the threads one row of a commit's Files view
+// stands for and reports how many THREADS went (the row's ◆ N, which the
+// confirm quotes; replies are not counted): with scope "" the plain notes
+// on path (a Notes row — written in no scope), else every note written in
+// scope at the commit, whichever file (a Range review row). These are exactly
+// the threads NoteCounts' PlainByCommitPath / ScopesByCommit count. A reply
+// carries no scope of its own, so it goes with its root. The commit's AI
+// reviews are never touched (they have a row of their own).
+func (s *Service) NotesClearAtCommit(ctx context.Context, commit, path, scope string) (int, error) {
+	if commit == "" || (path == "" && scope == "") {
+		return 0, errors.New("notes clear: a commit and a path or a scope are required")
+	}
+	st := s.notesStore(ctx)
+	if st == nil {
+		return 0, ErrNotesDisabled
+	}
+	all, err := loadParts(st, notes.PartCommits, notes.PartPreviews)
+	if err != nil {
+		return 0, err
+	}
+	roots := map[string]bool{}
+	for _, n := range all {
+		a := n.Address
+		if n.IsReply() || n.IsReviewNote() || a.State != model.StateCommitted || a.Commit != commit || a.Path == "" || n.Preview != scope {
+			continue
+		}
+		if scope == "" && a.Path != path {
+			continue
+		}
+		roots[n.ID] = true
+	}
+	if len(roots) == 0 {
+		return 0, nil
+	}
+	dropped, err := st.Sweep(func(n model.Note) bool { return !roots[n.ID] && !roots[n.ParentID] })
+	if dropped > 0 {
+		s.invalidateNoteCounts()
+	}
+	if err != nil {
+		return 0, err
+	}
+	return len(roots), nil
+}
+
 // NotesFor returns the notes that apply to addr, resolved against the OPEN
 // diff d and threaded (roots carry their replies), sorted new-side-first then
 // by line. Orphaned notes are omitted — they are hidden until the startup
@@ -418,7 +466,16 @@ func (s *Service) NotesFor(ctx context.Context, addr model.FileAddress, d Diff) 
 		return nil, err
 	}
 	oldLines, newLines := diffSideLines(d)
-	return keepResolved(resolveNotes(mine, oldLines, newLines)), nil
+	out := keepResolved(resolveNotes(mine, oldLines, newLines))
+	if workingDiffAddr(addr) {
+		// A current working review's notes on this file (spec §7).
+		wt, _ := s.noteWorktree(ctx, addr)
+		if extra := s.workingReviewNotesOn(ctx, wt, addr.Path, func() []string { return newLines }); len(extra) > 0 {
+			out = append(out, extra...)
+			sortReviewNotes(out)
+		}
+	}
+	return out, nil
 }
 
 // loadNotesAt is the STORE half of a note read, shared by NotesFor and
@@ -431,18 +488,18 @@ func (s *Service) loadNotesAt(ctx context.Context, addr model.FileAddress) ([]mo
 	if st == nil {
 		return nil, ErrNotesDisabled
 	}
-	all, err := st.Load()
-	if err != nil {
-		return nil, err
-	}
 	// Scope the query to this checkout so a sibling worktree's notes on the
-	// same path never surface here.
+	// same path never surface here — and so the right part is read.
 	if worktreeScopedNote(addr) {
 		wt, werr := s.noteWorktree(ctx, addr)
 		if werr != nil {
 			return nil, werr
 		}
 		addr.Worktree = wt
+	}
+	all, err := loadParts(st, addrParts(addr)...)
+	if err != nil {
+		return nil, err
 	}
 	mine := make([]model.Note, 0, len(all))
 	for _, n := range all {
@@ -481,14 +538,29 @@ func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]Resolv
 	if err != nil {
 		return nil, err
 	}
+	// A current working review's notes on this file (spec §7); its new side
+	// is read only when a review matches the file.
+	var extra []ResolvedNote
+	if workingDiffAddr(addr) {
+		wt, _ := s.noteWorktree(ctx, addr)
+		extra = s.workingReviewNotesOn(ctx, wt, addr.Path, func() []string {
+			l, _ := s.noteSideLines(ctx, addr, model.NoteSideNew)
+			return l
+		})
+	}
 	if len(mine) == 0 {
-		return nil, nil
+		return extra, nil
 	}
 	// Only now are the two sides worth reading: the reads shell out to git,
 	// and an address with no notes at all must cost nothing.
 	oldLines, _ := s.noteSideLines(ctx, addr, model.NoteSideOld)
 	newLines, _ := s.noteSideLines(ctx, addr, model.NoteSideNew)
-	return keepResolved(resolveNotes(mine, oldLines, newLines)), nil
+	out := keepResolved(resolveNotes(mine, oldLines, newLines))
+	if len(extra) > 0 {
+		out = append(out, extra...)
+		sortReviewNotes(out)
+	}
+	return out, nil
 }
 
 // NoteCounts returns the badge counts, cached until the next mutation. The
@@ -507,7 +579,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 	if st == nil {
 		return NoteCounts{}, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := loadParts(st, s.visibleParts(ctx)...)
 	if err != nil {
 		return NoteCounts{}, err
 	}
@@ -520,6 +592,12 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 	c := NoteCounts{ByPath: map[string]int{}, ByCommit: map[string]int{}, ByCommitPath: map[string]int{}, ByShelf: map[string]int{}}
 	for _, n := range all {
 		if n.IsReply() { // a badge counts THREADS
+			continue
+		}
+		if n.IsWorkingReview() {
+			if sameWorktreePath(n.Address.Worktree, cur) {
+				c.WorkingReviews = append(c.WorkingReviews, ReviewHead{ID: n.ID, Agent: n.Author, Summary: n.Summary, Created: n.Created})
+			}
 			continue
 		}
 		if n.IsReviewNote() {
@@ -579,6 +657,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		sort.Slice(sc, func(a, b int) bool { return sc[a].Scope < sc[b].Scope })
 	}
 	sort.SliceStable(c.Reviews, func(a, b int) bool { return c.Reviews[a].Created.After(c.Reviews[b].Created) })
+	sort.SliceStable(c.WorkingReviews, func(a, b int) bool { return c.WorkingReviews[a].Created.After(c.WorkingReviews[b].Created) })
 	s.mu.Lock()
 	if s.notesGen == gen { // a mutation raced this computation: drop it
 		s.noteCounts = &c
@@ -709,6 +788,11 @@ func anchorLines(lines []string, rng [2]int) []string {
 // found again elsewhere (scanning outward from the stored start); not found
 // but the file is there (stale, clamped); side absent (orphaned).
 func resolveOne(n model.Note, lines []string) (model.NoteStatus, [2]int) {
+	// A note about a whole object (an AI review, a shelf entry, a worktree's
+	// changes) has no lines to find: it is where it is.
+	if n.IsEntryLevel() {
+		return model.NoteActive, n.Range
+	}
 	if lines == nil {
 		return model.NoteOrphaned, n.Range
 	}
@@ -988,7 +1072,7 @@ func (s *Service) NoteGet(ctx context.Context, id string) (model.Note, error) {
 	if st == nil {
 		return model.Note{}, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := st.LoadAll()
 	if err != nil {
 		return model.Note{}, err
 	}
@@ -1015,7 +1099,7 @@ func (s *Service) NoteAddresses(ctx context.Context) ([]model.FileAddress, error
 	if st == nil {
 		return nil, ErrNotesDisabled
 	}
-	all, err := st.Load()
+	all, err := loadParts(st, s.visibleParts(ctx)...)
 	if err != nil {
 		return nil, err
 	}

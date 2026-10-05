@@ -54,6 +54,9 @@ func (m Model) buildStatusStack(staged bool) []stackFile {
 	}
 	var out []stackFile
 	for _, bi := range m.displayIndices(p) {
+		if bi == reviewRowIdx {
+			continue // the Files panel's Review row is not a file
+		}
 		f := m.status.Files[bi]
 		letter := f.Unstaged
 		if staged {
@@ -222,7 +225,7 @@ func (m Model) unstack() (tea.Model, tea.Cmd) {
 		p = panelStaged
 	}
 	for s, bi := range m.displayIndices(p) {
-		if m.status.Files[bi].Path == f.path {
+		if bi != reviewRowIdx && m.status.Files[bi].Path == f.path {
 			m.sel[p] = s
 			break
 		}

@@ -64,6 +64,15 @@ type notesOverviewWire struct {
 	Untracked []overviewFileWire   `json:"untracked"`
 	Commits   []overviewCommitWire `json:"commits"`
 	Shelves   []overviewShelfWire  `json:"shelves"`
+	// WorkingReviews is this worktree's reviews of uncommitted changes.
+	WorkingReviews []overviewWorkingReviewWire `json:"working_reviews"`
+}
+
+// overviewWorkingReviewWire is a working review row: Outdated = no reviewed
+// file matches anymore (the sweep drops it after [notes] max_age_days).
+type overviewWorkingReviewWire struct {
+	overviewReviewWire
+	Outdated bool `json:"outdated"`
 }
 
 func overviewFiles(fs []domain.NoteFileNotes, state string) []overviewFileWire {
@@ -85,6 +94,8 @@ func overviewReviewKind(k domain.ReviewNoteKind) string {
 		return "branch"
 	case domain.ReviewWasTip:
 		return "was_tip"
+	case domain.ReviewOnWorktree:
+		return "working"
 	}
 	return "commit"
 }
@@ -106,12 +117,20 @@ func (s *Server) handleNotesOverview(w http.ResponseWriter, r *http.Request) {
 	// given (a detached HEAD) lists everything.
 	ov = ov.ShownOn(r.URL.Query()["on"])
 	out := notesOverviewWire{
-		Count:     ov.Count(),
-		Unstaged:  overviewFiles(ov.Unstaged, "unstaged"),
-		Staged:    overviewFiles(ov.Staged, "staged"),
-		Untracked: overviewFiles(ov.Untracked, "untracked"),
-		Commits:   make([]overviewCommitWire, 0, len(ov.Commits)),
-		Shelves:   make([]overviewShelfWire, 0, len(ov.Shelves)),
+		Count:          ov.Count(),
+		Unstaged:       overviewFiles(ov.Unstaged, "unstaged"),
+		Staged:         overviewFiles(ov.Staged, "staged"),
+		Untracked:      overviewFiles(ov.Untracked, "untracked"),
+		Commits:        make([]overviewCommitWire, 0, len(ov.Commits)),
+		Shelves:        make([]overviewShelfWire, 0, len(ov.Shelves)),
+		WorkingReviews: make([]overviewWorkingReviewWire, 0, len(ov.WorkingReviews)),
+	}
+	for _, wr := range ov.WorkingReviews {
+		rw := overviewReviewWire{ID: wr.ID, Kind: overviewReviewKind(wr.Kind), Agent: wr.Agent, Summary: wr.Summary}
+		if !wr.Created.IsZero() {
+			rw.Created = wr.Created.UTC().Format(time.RFC3339)
+		}
+		out.WorkingReviews = append(out.WorkingReviews, overviewWorkingReviewWire{overviewReviewWire: rw, Outdated: !wr.Current})
 	}
 	if top, err := svc.TopLevel(readCtx(r)); err == nil && top != "" {
 		out.Worktree = filepath.Base(top)

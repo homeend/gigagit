@@ -12,6 +12,9 @@ const (
 
 	FeatureStructuredReviews = "structured-reviews"
 
+	FeatureNotes = "notes"
+	StoreNotes   = "notes"
+
 	StoreVersions       = "versions"
 	StorePreviews       = "previews"
 	StoreReviewCommands = "review-commands"
@@ -32,6 +35,12 @@ const VersionsFormat = 2
 // different FILES, so the requirement asks presence (preflight.LegacyStore)
 // and the number only labels the marker once the conversion has run.
 const PreviewsFormat = 2
+
+// NotesFormat is the note-store layout this build writes. Format 1 was the
+// single notes.toml; format 2 splits it into one file per part (spec
+// 2026-10-04). Like PreviewsFormat it only labels the marker: the
+// requirement asks presence of the legacy file (preflight.LegacyStore).
+const NotesFormat = 2
 
 // MinGitVersion is the oldest git gg supports. 2.30 ships the for-each-ref and
 // worktree behaviour every frontend assumes.
@@ -82,6 +91,28 @@ func Features() []preflight.Feature {
 				Describe: func() preflight.Text {
 					return preflight.Text{
 						Format: "Folds your saved merge previews into the saved-comparison store. Nothing is lost: ids, labels and creation times are kept, and preview notes are unaffected.",
+					}
+				},
+			},
+		},
+		{
+			ID:          FeatureNotes,
+			Criticality: preflight.Optional,
+			// An older gg (an installed gg mcp) may recreate notes.toml
+			// mid-session; the next start merges it. Never worth a notice.
+			Silent: true,
+			Requires: []preflight.Requirement{
+				preflight.LegacyStore{Store: StoreNotes},
+			},
+			// LOSSLESS: every note's address names its file, the merge is by
+			// id with the newer copy winning, and the old file is kept as a
+			// backup — there is nothing to confess, so nothing to ask.
+			Migrate: &preflight.Migration{
+				Store: StoreNotes, From: 1, To: NotesFormat,
+				Action: "split-notes", Lossless: true,
+				Describe: func() preflight.Text {
+					return preflight.Text{
+						Format: "Splits the note store into one file per worktree plus files for commits, previews and shelf entries. Nothing is lost: every note keeps its id, and the old file is kept as a backup.",
 					}
 				},
 			},

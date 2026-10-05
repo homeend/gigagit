@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repogate"
 	"github.com/homeend/gigagit/internal/taskhist"
 )
@@ -28,6 +31,7 @@ type blockOp struct {
 	key     string
 	out     string
 	err     error
+	files   []model.NoteFile // returned as Result.ReviewFiles
 }
 
 func (blockOp) LockMode() repogate.Mode { return repogate.Read }
@@ -44,7 +48,7 @@ func (o blockOp) Run(ctx context.Context, _ engine.OpDeps) (engine.Result, error
 	case <-ctx.Done():
 		return engine.Result{}, ctx.Err()
 	}
-	return engine.Result{Captured: o.out}, o.err
+	return engine.Result{Captured: o.out, ReviewFiles: o.files}, o.err
 }
 
 func newTestTasks(t *testing.T) (*TaskManager, *Service) {
@@ -412,7 +416,7 @@ func TestSaveTaskResultWritesAndPrunes(t *testing.T) {
 }
 
 // storedReviewSpec is a headless review whose result goes through store.
-func storedReviewSpec(svc *Service, key, out string, store func(context.Context, string, string) (string, string, error)) TaskSpec {
+func storedReviewSpec(svc *Service, key, out string, store func(context.Context, string, string, []model.NoteFile) (string, string, error)) TaskSpec {
 	rel := make(chan struct{})
 	close(rel)
 	spec := headlessSpec(svc, key, blockOp{started: make(chan string, 1), release: rel, key: key, out: out})
@@ -424,7 +428,7 @@ func TestHeadlessReviewIsStoredNotRecorded(t *testing.T) {
 	t.Parallel()
 	m, svc := newTestTasks(t)
 	var saved []string
-	spec := storedReviewSpec(svc, "review — stored", "the review", func(_ context.Context, id, text string) (string, string, error) {
+	spec := storedReviewSpec(svc, "review — stored", "the review", func(_ context.Context, id, text string, _ []model.NoteFile) (string, string, error) {
 		saved = append(saved, id+"|"+text)
 		return "n1", "", nil
 	})
@@ -446,12 +450,12 @@ func TestInteractiveReviewUpdatesOneNote(t *testing.T) {
 	m, _ := newTestTasks(t)
 	var ids []string
 	tk := &task{spec: TaskSpec{Kind: exttool.CatReview, Mode: TaskInteractive,
-		Store: func(_ context.Context, id, _ string) (string, string, error) {
+		Store: func(_ context.Context, id, _ string, _ []model.NoteFile) (string, string, error) {
 			ids = append(ids, id)
 			return "n1", "", nil
 		}}}
-	m.setResult(tk, "first")
-	m.setResult(tk, "second")
+	m.setResult(tk, "first", nil)
+	m.setResult(tk, "second", nil)
 	if len(ids) != 2 || ids[0] != "" || ids[1] != "n1" {
 		t.Fatalf("Store ids = %q, want [\"\" n1] (create, then update in place)", ids)
 	}
@@ -462,7 +466,7 @@ func TestStoreFailureFailsTheTaskAndRetrySaveRecovers(t *testing.T) {
 	m, svc := newTestTasks(t)
 	var fail atomic.Bool
 	fail.Store(true)
-	spec := storedReviewSpec(svc, "review — failing", "the review", func(context.Context, string, string) (string, string, error) {
+	spec := storedReviewSpec(svc, "review — failing", "the review", func(context.Context, string, string, []model.NoteFile) (string, string, error) {
 		if fail.Load() {
 			return "", "", errors.New("disk full")
 		}
@@ -485,5 +489,37 @@ func TestStoreFailureFailsTheTaskAndRetrySaveRecovers(t *testing.T) {
 	}
 	if rec := m.History()[0]; rec.NoteID != "n9" || rec.State != string(TaskDone) {
 		t.Fatalf("history after retry: %+v", rec)
+	}
+}
+
+func TestStoreReceivesTheReviewedFilesAndRetrySaveResendsThem(t *testing.T) {
+	t.Parallel()
+	m, svc := newTestTasks(t)
+	files := []model.NoteFile{{Path: "a.txt", Blob: "abc"}}
+	var fail atomic.Bool
+	fail.Store(true)
+	var mu sync.Mutex
+	var got [][]model.NoteFile
+	rel := make(chan struct{})
+	close(rel)
+	spec := headlessSpec(svc, "review — files", blockOp{started: make(chan string, 1), release: rel, key: "review — files", out: "r", files: files})
+	spec.Store = func(_ context.Context, _, _ string, fs []model.NoteFile) (string, string, error) {
+		mu.Lock()
+		got = append(got, fs)
+		mu.Unlock()
+		if fail.Load() {
+			return "", "", errors.New("disk full")
+		}
+		return "n1", "", nil
+	}
+	info := waitInfo(t, m, m.Submit(spec), "ended", func(i TaskInfo) bool { return !i.State.Live() })
+	fail.Store(false)
+	if err := m.RetrySave(info.ID); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 2 || !reflect.DeepEqual(got[0], files) || !reflect.DeepEqual(got[1], files) {
+		t.Fatalf("Store saw %+v, want the op's files twice", got)
 	}
 }

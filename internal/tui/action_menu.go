@@ -62,6 +62,15 @@ func availableActions(m Model) []actionRow {
 			}
 			return append(rows, m.stashActionRows()...)
 		}
+		// A commit's note row (a review, a range review, notes) is not a
+		// file: its menu is its own Open + Delete and nothing else.
+		if rows, ok := m.noteRowMenu(); ok {
+			return rows
+		}
+		// The Files panel's Review row is not a file either: Open + Delete.
+		if rows, ok := m.workingReviewRowMenu(); ok {
+			return rows
+		}
 		rows := m.contextCopyRows()
 		if r, ok := m.contextLinkRow(); ok {
 			rows = insertCopyLinkRow(rows, r)
@@ -109,6 +118,9 @@ func availableActions(m Model) []actionRow {
 				rows = append(rows, r)
 			}
 			if r, ok := m.openExternalRow(); ok {
+				rows = append(rows, r)
+			}
+			if r, ok := m.reviewViewCopyLinkRow(); ok {
 				rows = append(rows, r)
 			}
 			if r, ok := m.deleteReviewRow(); ok {
@@ -303,6 +315,9 @@ func availableActions(m Model) []actionRow {
 		out = append(out, r)
 	}
 	if r, ok := m.showBranchReviewRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.branchReviewCopyLinkRow(); ok {
 		out = append(out, r)
 	}
 	if r, ok := m.deleteReviewRow(); ok {

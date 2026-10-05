@@ -14,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/taskhist"
 )
 
@@ -68,6 +69,7 @@ type task struct {
 	info   TaskInfo
 	spec   TaskSpec
 	cancel context.CancelFunc
+	files  []model.NoteFile // the fingerprints the latest result was stored with (RetrySave re-sends them)
 }
 
 type taskEnd struct {
@@ -195,8 +197,9 @@ func (t *task) parse(captured string) (string, error) {
 }
 
 // setResult records a new result and signals.
-func (m *TaskManager) setResult(t *task, result string) {
+func (m *TaskManager) setResult(t *task, result string, files []model.NoteFile) {
 	m.mu.Lock()
+	t.files = files
 	t.info.Result = result
 	t.info.Results++
 	if t.spec.Mode == TaskInteractive && t.info.State == TaskRunning {
@@ -205,15 +208,15 @@ func (m *TaskManager) setResult(t *task, result string) {
 	store, noteID := t.spec.Store, t.info.NoteID
 	m.mu.Unlock()
 	if store != nil {
-		m.storeResult(t, store, noteID, result)
+		m.storeResult(t, store, noteID, result, files)
 	}
 	m.signal()
 }
 
 // storeResult runs a Store hook OUTSIDE the lock (it may retry for 15 s) and
 // records the note id, or why the save failed.
-func (m *TaskManager) storeResult(t *task, store func(context.Context, string, string) (string, string, error), noteID, text string) {
-	id, _, err := store(context.Background(), noteID, text)
+func (m *TaskManager) storeResult(t *task, store func(context.Context, string, string, []model.NoteFile) (string, string, error), noteID, text string, files []model.NoteFile) {
+	id, _, err := store(context.Background(), noteID, text, files)
 	m.mu.Lock()
 	if err != nil {
 		t.info.SaveErr = "review not saved: " + err.Error()
@@ -237,9 +240,9 @@ func (m *TaskManager) RetrySave(id TaskID) error {
 		m.mu.Unlock()
 		return errors.New("nothing to save")
 	}
-	store, noteID, text := t.spec.Store, t.info.NoteID, t.info.Result
+	store, noteID, text, files := t.spec.Store, t.info.NoteID, t.info.Result, t.files
 	m.mu.Unlock()
-	m.storeResult(t, store, noteID, text)
+	m.storeResult(t, store, noteID, text, files)
 	m.mu.Lock()
 	if t.info.SaveErr == "" && t.info.State == TaskFailed && t.info.Err != "" && strings.HasPrefix(t.info.Err, "review not saved: ") {
 		t.info.State, t.info.Err = TaskDone, ""
@@ -286,7 +289,7 @@ func (m *TaskManager) runHeadless(ctx context.Context, t *task) taskEnd {
 	}
 	result, perr := t.parse(res.Captured)
 	if perr == nil && strings.TrimSpace(result) != "" {
-		m.setResult(t, result)
+		m.setResult(t, result, res.ReviewFiles)
 		return taskEnd{state: TaskDone}
 	}
 	if t.spec.ResultOptional && perr == nil {
@@ -587,7 +590,7 @@ func (m *TaskManager) runInteractive(ctx context.Context, t *task) taskEnd {
 			return
 		}
 		results++
-		m.setResult(t, out)
+		m.setResult(t, out, res.ReviewFiles)
 	}
 	stop := ctx.Done()
 	for {

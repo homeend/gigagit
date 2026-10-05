@@ -54,7 +54,7 @@ type notePopup struct {
 // address, or when edit/reply have no note to act on.
 func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 	if v := m.diffLayer().curNoteView(); v != nil && v.reviewID != "" {
-		m.statusMsg = reviewReadOnlyNotice()
+		m.statusMsg = m.reviewReadOnlyNotice()
 		m.diffNotice = m.statusMsg // the full-screen diff has no status bar
 		return m, nil
 	}

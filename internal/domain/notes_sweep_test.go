@@ -16,6 +16,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/observ"
@@ -81,7 +82,7 @@ func TestSweepDropsExpiredStaleAndOrphaned(t *testing.T) {
 	if dropped != 2 {
 		t.Fatalf("dropped = %d, want 2 (stale + expired)", dropped)
 	}
-	left, _ := svc.notesStore(ctx).Load()
+	left, _ := svc.notesStore(ctx).LoadAll()
 	if len(left) != 1 || left[0].ID != keep.ID {
 		t.Fatalf("sweep left %+v (stale %s, expired %s)", left, stale.ID, old.ID)
 	}
@@ -168,7 +169,7 @@ func TestSweepOnARealRepoDropsExpiredStaleAndOrphaned(t *testing.T) {
 		t.Fatalf("dropped = %d, want 3 (stale %s + orphan %s + expired %s)",
 			dropped, stale.ID, orphan.ID, expired.ID)
 	}
-	left, err := svc.notesStore(ctx).Load()
+	left, err := svc.notesStore(ctx).LoadAll()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -293,7 +294,7 @@ func TestSweepAbortsWhenTheReadFailsAndTheContextIsDone(t *testing.T) {
 	if dropped != 0 {
 		t.Fatalf("dropped = %d, want 0 — a cancelled pass must change nothing", dropped)
 	}
-	left, lerr := svc.notesStore(ctx).Load()
+	left, lerr := svc.notesStore(ctx).LoadAll()
 	if lerr != nil || len(left) != 2 {
 		t.Fatalf("the store must be untouched: %d notes, err %v", len(left), lerr)
 	}
@@ -328,7 +329,7 @@ func TestSweepKeepsANoteWhoseReadMerelyFailed(t *testing.T) {
 	if dropped != 0 {
 		t.Fatalf("dropped = %d, want 0 — an I/O failure is not proof of an orphan", dropped)
 	}
-	if left, _ := svc.notesStore(ctx).Load(); len(left) != 1 {
+	if left, _ := svc.notesStore(ctx).LoadAll(); len(left) != 1 {
 		t.Fatalf("the note must survive an unreadable read, got %+v", left)
 	}
 }
@@ -427,7 +428,7 @@ func TestSweepKeepsANoteAddedDuringThePass(t *testing.T) {
 	if dropped != 1 {
 		t.Fatalf("dropped = %d, want 1 (only the stale note)", dropped)
 	}
-	left, _ := fs.Load()
+	left, _ := fs.LoadAll()
 	ids := map[string]bool{}
 	for _, n := range left {
 		ids[n.ID] = true
@@ -577,7 +578,7 @@ func TestSweepDropsOrphansOnlyRealGitCanReport(t *testing.T) {
 		// the note is KEPT (the safe direction), but the orphan never leaves.
 		t.Fatalf("dropped = %d, want 4 — noteTargetGone missed a real git 'absent' message", dropped)
 	}
-	if left, _ := svc.notesStore(ctx).Load(); len(left) != 1 || left[0].ID != active.ID {
+	if left, _ := svc.notesStore(ctx).LoadAll(); len(left) != 1 || left[0].ID != active.ID {
 		t.Fatalf("only the active note may survive; left %+v", left)
 	}
 }
@@ -624,7 +625,7 @@ func TestStagedNoteResolvesAgainstTheIndexNotTheWorkingFile(t *testing.T) {
 	if dropped != 1 {
 		t.Fatalf("dropped = %d, want 1 (only the misfiled unstaged note)", dropped)
 	}
-	left, _ := svc.notesStore(ctx).Load()
+	left, _ := svc.notesStore(ctx).LoadAll()
 	if len(left) != 1 || left[0].ID != staged.ID {
 		t.Fatalf("the staged note must survive further working-tree edits; left %+v (misfiled %s)", left, misfiled.ID)
 	}
@@ -699,8 +700,68 @@ func TestSweepKeepsPathlessNoteOnMissingCommit(t *testing.T) {
 	if _, err := svc.sweepNotes(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	all, _ := store.Load()
+	all, _ := store.LoadAll()
 	if len(all) != 1 || all[0].ID != "rev1" {
 		t.Fatalf("sweep dropped the review note: %v", all)
+	}
+}
+
+// A removed worktree's live notes are dropped by the sweep (their file is
+// gone, so they resolve orphaned), and the emptied part file goes with them.
+func TestSweepDropsNotesOfARemovedWorktree(t *testing.T) {
+	dir := noteSideRepo(t)
+	other := filepath.Join(t.TempDir(), "wt2")
+	gittest.Run(t, dir, "worktree", "add", "-b", "side", other)
+	root := t.TempDir()
+	store := notes.NewFileStore(root)
+	main, side := svcIn(t, dir), svcIn(t, other)
+	main.SetNotesStore(store)
+	side.SetNotesStore(store)
+	ctx := context.Background()
+	sideTop, err := side.TopLevel(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := side.NoteAdd(ctx, model.Note{
+		Address: model.FileAddress{State: model.StateUnstaged, Worktree: sideTop, Path: "a.go"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "on the side worktree",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "worktree", "remove", "--force", other)
+
+	dropped, err := main.sweepNotes(ctx)
+	if err != nil || dropped != 1 {
+		t.Fatalf("sweepNotes = %d, %v; want 1", dropped, err)
+	}
+	if ents, _ := os.ReadDir(filepath.Join(root, "worktrees")); len(ents) != 0 {
+		t.Fatalf("the removed worktree's file survived: %v", ents)
+	}
+}
+
+// git worktree list names the MAIN checkout of a --separate-git-dir repo
+// (and of a submodule) by its git dir, not by its top level: the sweep must
+// never read that as "this checkout is gone" and drop its notes.
+func TestSweepKeepsNotesOfASeparateGitDirCheckout(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "sep")
+	gittest.Run(t, base, "init", "-b", "main", "--separate-git-dir", filepath.Join(base, "sep.git"), dir)
+	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "add", "a.go")
+	gittest.Run(t, dir, "commit", "-m", "root")
+	svc := svcIn(t, dir)
+	store := notes.NewFileStore(t.TempDir())
+	svc.SetNotesStore(store)
+	ctx := context.Background()
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Address: model.FileAddress{State: model.StateUnstaged, Path: "a.go"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "keep me",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if dropped, err := svc.sweepNotes(ctx); err != nil || dropped != 0 {
+		t.Fatalf("sweepNotes = %d, %v; the checkout's note must survive", dropped, err)
 	}
 }

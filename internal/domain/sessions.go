@@ -173,8 +173,8 @@ func (s *Service) startSessionPrompt(ctx context.Context, tc config.ToolCommand,
 	}
 	// A command with its own screen_* lists is classified by them (an
 	// invalid list leaves the agent's built-ins; SessionRulesWarning says so).
-	if r, custom, _ := SessionRules(tc); custom {
-		bindSessionRules(sess.Info().ID, r)
+	if p, custom, _ := SessionProfile(tc); custom {
+		bindSessionProfile(sess.Info().ID, p)
 	}
 	return sess, nil
 }

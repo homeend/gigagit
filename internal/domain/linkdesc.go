@@ -47,6 +47,8 @@ func LinkDesc(kind, id, subject string) string {
 		return "commit: " + id + " " + truncateDesc(subject)
 	case "stash":
 		return "stash: " + truncateDesc(subject)
+	case "review":
+		return "review: " + id + " " + truncateDesc(subject)
 	default:
 		return kind + ": " + truncateDesc(id)
 	}
@@ -125,6 +127,19 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 		// same set without a label, rather than printing an id nobody can read.
 		if kind, label, ok := s.savedSetLabel(ctx, l.Hint.ID); ok {
 			return kind, label, ""
+		}
+	case model.ReviewHintKind:
+		// The stored review, when this store holds it: "review: <id> <agent>
+		// · <what it reviewed>"; a miss falls THROUGH to the address arms.
+		if r, err := s.Review(ctx, l.Hint.ID); err == nil {
+			what := shortRev(r.Commit)
+			if r.Kind == ReviewOnWorktree {
+				what = "working changes"
+			}
+			if r.Branch != "" {
+				what = r.Branch + " " + what
+			}
+			return "review", r.ID, strings.TrimSpace(r.Agent + " · " + what)
 		}
 	case "version":
 		// The recorded version, when this store holds it; a miss (deleted,
