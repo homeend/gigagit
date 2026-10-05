@@ -5161,3 +5161,58 @@ Spec `docs/superpowers/specs/2026-10-01-agent-spawn-design.md`, plans A
 - **Enter.** `agent_send` presses Enter by default only after text.
 - **Tests** that swap `UseSessionManager` / `agentEnv` / `agentGetenv` or
   `t.Setenv` are serial; cli/mcp/e2e TestMains unset the channel env.
+
+## Working-changes reviews (2026-10-05)
+
+Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
+
+- **The note**: one root per review, `Address{State: StateUnstaged,
+  Worktree: filepath.Clean(top)}`, no Path, tag `review`, `Files
+  []model.NoteFile{Path, Blob, Deleted}`. `model.Note.IsWorktreeLevel()`
+  (live, worktree, no path/commit/shelf) ⊂ `IsEntryLevel()` (cap-exempt,
+  never re-anchored); `IsWorkingReview()` = that + tag. `IsReviewNote()`
+  stays commit-only. It routes to `worktrees/<key>.toml`.
+- **Fingerprint channel**: `engine.ReviewChanges{Working: true}.Prepare`
+  hashes every numstat path (rename old side → `Deleted`) and every
+  `ls-files --others` file in-process (`git.HashWorktreeFile` /
+  `git.BlobOf`, the repo's object format via `GitOps.ObjectFormat`),
+  synthesizes untracked new-file patches under `MaxDiffBytes` (a file past
+  the cap is stream-hashed, never read whole, and the diff is reported
+  truncated) → `TaskInputs.ReviewFiles` → `Result.ReviewFiles` (Collect) →
+  `TaskSpec.Store(ctx, noteID, text, files)` (the task keeps them for
+  RetrySave) / `ReviewReport` → `SaveReview{Files}`.
+- **Matching**: `domain.WorkingReviewState(worktree, files)` → per path
+  matches/changed/gone, `Current` while ≥1 matches; a missing worktree dir =
+  all gone. The algorithm comes from the blob's length (40 = sha1, 64 =
+  sha256). `workingBlobs` caches ids by (abs path, mtime, size) but never a
+  file modified < 2 s ago (racily clean). `WorkingReviews` reads ONLY the
+  worktree part (`workingReviewNotes`) so a live read never parses
+  commits.toml; `reviewNotes` reads commits + this worktree's part.
+- **Readers**: sweep drops a working review when outdated AND past
+  max_age_days (matched against its own worktree; replies skipped);
+  `NoteCounts.WorkingReviews` (never in ◆N or `Reviews`);
+  `NotesOverview.WorkingReviews` (+ `Count`), kept by `ShownOn`;
+  `resolveOne` returns active for every entry-level note (commit reviews
+  used to be "stale" by accident of `git show <sha>:` listing a tree);
+  `NotesFor`/`NotesAt` on a live file address append the matching reviews'
+  NEW-side notes (`workingReviewNotesOn`, ids `review:<id>:<n>`); review
+  view: `ReviewRevs` = (HEAD sha, "", false), `ReviewFiles` =
+  `CompareFiles(HEAD, WorkTree)`, `reviewSplit` places only matching files'
+  notes (others → `ReviewOtherNote.Changed`), `ReviewNotesFor` addresses
+  the worktree.
+- **TUI Files panel Review row**: a pseudo row with backing index
+  `reviewRowIdx = -1` prepended by `displayIndices(panelFiles)` while a
+  review is current and no `/` filter is active (`filesIdxReview` caches the
+  prefixed fast path; `withStatus`/`withWorkingReviews` refresh it).
+  `backingIndex`, `rowKeyAt`, `selectedKey` refuse it; walkers that index
+  `m.status.Files[u]` skip it (`diff_filenav`, `buildStatusStack`, the stack
+  landing). `panelLen` counts it (cursor bound); the tab count uses
+  `filesPanelFileCount`. `withWorkingReviews` shifts the cursor so it stays
+  on its file. Loaded off-thread after srcNotes (when the counts list any)
+  and after every srcStatus refresh.
+- **Web**: counts JSON `working_reviews` (current + sorted `matches`);
+  `/api/review/{id}` adds `working`/`states`; `/api/diff?wt=head` = HEAD →
+  working tree (no staging tags); the review opens as a compare with
+  `cmp.worktree` so `fileDiffURL` uses that lane. The page's
+  `state.noteCounts` is a field whitelist — a new counts field must be added
+  there (files.js) and in core.js's initial value.

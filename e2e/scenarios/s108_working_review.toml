@@ -1,0 +1,91 @@
+name = "a working-changes review is a note: untracked files reviewed, each file's notes live while it matches"
+
+# Spec 2026-10-04 working reviews §9: review working changes with an
+# untracked file → the review is stored (note id on stderr) and its notes show
+# on both files → a.txt changes (discarded back to HEAD) → a.txt's note goes,
+# n.txt's stays. The TUI then shows the Review row on top of the Files panel
+# (still current through n.txt) with ✎ on n.txt only, and enter opens the
+# review as HEAD ↔ the working tree.
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[tools.command]]
+category = "review"
+name = "fake"
+mode = "capture"
+command = "{{ggfake}} review working-review.json"
+''' },
+  { write = "a.txt", content = "one\ntwo\n" },
+  { commit = "seed" },
+  { write = "a.txt", content = "one\nTWO\n" },
+  { write = "n.txt", content = "n1\n" },
+]
+
+[[run]]
+cmd = ["review", "--tool", "fake", "--working"]
+exit = 0
+stderr_contains = ["note: "]
+
+# --notes would import loose copies; a working review draws its own.
+[[run]]
+cmd = ["review", "--tool", "fake", "--working", "--notes"]
+exit = 2
+stderr_contains = ["a working review is stored; its notes show on the files"]
+
+[[run]]
+cmd = ["note", "list"]
+exit = 0
+stdout_contains = ["review working changes"]
+
+[[run]]
+cmd = ["note", "list", "--file", "a.txt"]
+exit = 0
+stdout_contains = ["why shout TWO?"]
+
+[[run]]
+cmd = ["note", "list", "--file", "n.txt"]
+exit = 0
+stdout_contains = ["a new file, untracked"]
+
+[[run]]
+cmd = ["discard", "--yes", "a.txt"]
+exit = 0
+
+[[run]]
+cmd = ["note", "list", "--file", "a.txt"]
+exit = 0
+stdout_excludes = ["why shout TWO?"]
+
+[[run]]
+cmd = ["note", "list", "--file", "n.txt"]
+exit = 0
+stdout_contains = ["a new file, untracked"]
+
+[expect]
+branch = "main"
+
+[expect.files]
+"a.txt" = "one\ntwo\n"
+"n.txt" = "n1\n"
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "files-panel"
+wait = true
+screen_contains = ["✎ Review:", "n.txt ✎"]
+screen_excludes = ["a.txt ✎"]
+
+# tab: Branches → Files. The cursor kept its file (n.txt) when the Review
+# row arrived above it; n.txt's working-tree diff draws the review's note.
+[[tui.step]]
+name = "file-diff-note"
+keys = ["tab", "enter"]
+screen_contains = ["a new file, untracked", "review · fake"]
+
+# up: onto the Review row; enter opens the review (HEAD ↔ working tree).
+[[tui.step]]
+name = "review-view"
+keys = ["esc", "up", "enter"]
+screen_contains = ["≡ Overview", "Review: working changes"]
