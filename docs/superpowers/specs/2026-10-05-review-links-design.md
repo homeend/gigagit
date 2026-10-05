@@ -115,17 +115,40 @@ records in `gg links` via `RecordLink`, as every copy action does):
 `gg note list <link>` already reads the pair and file-at-commit links, so
 agent B reads a Range review or Notes row's notes with no new verb.
 
-Landing: a pasted (`#`), `--at` or `gg session navigate` review link opens
-the review view exactly as enter on its row does (`openReviewFrom`, back to
-the commit). A deleted review: a notice ("That review no longer exists"),
-then the address's commit or range opens as usual.
+Landing: see §4a — every way a link opens ends in the review view.
+
+## 4a. Opening a review link — every entry point opens the REVIEW
+
+A review link is a link: wherever a `gg://` link can be opened today, a
+review link opens the review itself (not just its commit), for the agent and
+for the user alike (user, 2026-10-05: "links should also open review … I
+should be able to open it in tui/gui, as they are links").
+
+| Who | Entry point | Result |
+|---|---|---|
+| agent / shell | `gg open <link>` | a live gg session in the link's checkout shows the review; none live → the TUI starts there on the review |
+| agent / shell | `gg open --web <link>` | the gg web page (live, or served by the live TUI) shows the review |
+| agent | `gg session navigate <link>` | the live TUI / page shows the review |
+| user, TUI | `#` paste field, start-at (`gg open` launching the TUI) | the review view |
+| user, gg web | `#` prompt (pasted `gg://` link), the page's start-at | the review |
+
+One mechanism: `linknav.Command` carries the hint (`HintKind = "review"`,
+`HintID`) on the steer navigate command, as it does for `version`; the TUI
+(`steer_nav.go`) and the page each map that hint to their review opener
+(`openReviewFrom` / `openReview`), so no entry point can drift. The view's
+way back is the review's commit (a range: its tip), as from a commit's
+Reviews row.
+
+A deleted review: a notice ("That review no longer exists"), then the
+link's commit or range opens as usual — the address still means something.
+A mismatched address (§1): a notice, nothing opens.
 
 ## 5. gg web
 
 The same rows' right-click menus gain **Copy gg link** (the review row's
 menu: Open review · Copy gg link · Delete review; the Range review and Notes
 rows likewise; the Branches review sub-row too). A navigate to a review link
-opens the review (`openReview`). The review link comes from the server — a
+opens the review (§4a). The review link comes from the server — a
 new `GET /api/review/{id}/link` (only the server knows the review's revs);
 the pair and file-at-commit links are built the way the page already builds
 links (`linkFor` over `/api/link-base`). Every copy records through
@@ -157,10 +180,14 @@ CHANGELOG, README (the review paragraph), `docs/CLAUDE-details.md`.
 - CLI: `gg link --review`, `gg review show` text and `--json` golden, exit
   codes.
 - TUI: the three row menus (now three items each), Copy gg link text, the
-  review view / Branches / All notes rows, paste landing + deleted-review
+  review view / Branches / All notes rows; landing through EACH §4a entry
+  (paste, start-at, steer navigate) opens the review view; deleted-review
   notice; i18n gates.
 - web: the link endpoint, right-click menus checked in a real browser
-  (visibility asserted), navigate landing.
+  (visibility asserted), the `#` prompt and a steered navigate both open the
+  review.
+- CLI: `gg open <link>` and `gg open --web <link>` against a live session
+  post a navigate carrying the review hint.
 - e2e scenario: save a review → `gg link --review` → `gg review show` →
   `gg diff <link>` shows the reviewed change.
 
