@@ -153,7 +153,8 @@ gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
                                       # numbered git @@ hunks per file, over the same patch a note anchors to
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>]
               --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] [--json]
-gg note reply [<repo-link>] <note-id> --summary "…" [--json]
+gg note reply [<repo-link>] <note-id|review:<id>:<n>> --summary "…" [--link <commit|gg://…>] [--json]
+gg note resolve|unresolve [<repo-link>] <note-id|review:<id>:<n>>
 gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--json]
                                       # agent-context v1 or a comments batch; validated whole before the first write
 gg note list  [<link> | --file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]

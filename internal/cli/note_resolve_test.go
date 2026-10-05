@@ -48,3 +48,21 @@ func TestLinkReviewRefusesNoFingerprint(t *testing.T) {
 		t.Fatalf("got %d %s", code, errb)
 	}
 }
+
+// "review:latest:<n>" names a remark of the newest review, as `latest` names
+// the review in gg review show / gg link --review.
+func TestRemarkIDAcceptsLatest(t *testing.T) {
+	t.Parallel()
+	dir, id := reviewedRepo(t)
+	if code, _, errb := runCLI(t, dir, "note", "reply", "review:latest:1", "--summary", "ok"); code != 0 {
+		t.Fatalf("reply: %s", errb)
+	}
+	if code, out, errb := runCLI(t, dir, "note", "resolve", "review:latest:1"); code != 0 || !strings.Contains(out, "review:"+id+":1") {
+		t.Fatalf("resolve: %d %q %q", code, out, errb)
+	}
+	code, out, _ := runCLI(t, dir, "review", "show", "--json", id)
+	var rs domain.ReviewShow
+	if code != 0 || json.Unmarshal([]byte(out), &rs) != nil || !rs.Remarks[1].Resolved || len(rs.Remarks[1].Replies) != 1 {
+		t.Fatalf("show: %s", out)
+	}
+}

@@ -124,7 +124,7 @@ func workingReviewRowText(r domain.WorkingReview) string {
 		parts = append(parts, sanitizeLine(a))
 	}
 	remarks, resolved := r.Review.Tally()
-	return withTally(strings.Join(parts, " "), remarks, resolved, tallyWide)
+	return withTally(strings.Join(parts, " "), remarks, resolved, tallyNarrow)
 }
 
 // onReviewRow: the Files cursor is on the Review row.

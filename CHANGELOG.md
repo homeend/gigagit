@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review answers — a review's remarks are threads (review links stage 2)
+
+### Added
+
+- **Answer a review remark by remark.** Every remark of a stored review is a
+  thread: anyone — another agent, or you — replies in it (`gg note reply
+  review:<id>:<n>`, `R` on the remark in the TUI review, Reply… in gg web),
+  and a reply may point at the fix (`--link <commit|gg://…>`; opened from
+  the `.` menu or by a click on the page). `gg note apply` takes a whole
+  batch of answers. `gg review show` prints each remark's id, its replies
+  and whether it is resolved, so the review's author reads the answers back.
+- **Resolve any note thread, the GitHub way.** `x` in a diff (or Resolve
+  thread in the `.` menu / the page's note menu, `gg note resolve|unresolve`,
+  MCP `gg_note_resolve`) marks a thread resolved for everyone; a resolved
+  thread starts folded and `o` unfolds it. Pull-request threads keep
+  GitHub's own resolved state.
+- **Review rows carry a tally** — `2 remarks · 1 resolved`, or `1/2
+  resolved` where the row is narrow — in the Files view, the Branches
+  sub-row, the working-tree row and View all notes (TUI and gg web).
+
+### Fixed
+
+- A review link that resolves after a repo switch no longer acts in the new
+  repository.
+
 ## Working-changes reviews — follow-ups
 
 ### Fixed

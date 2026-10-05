@@ -470,7 +470,7 @@ func noteReply(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, "usage: gg note reply <note-id> --summary \"…\"")
 		return 2
 	}
-	id, rest := args[0], args[1:]
+	id, rest := latestRemarkID(svc, args[0]), args[1:]
 	fs := flag.NewFlagSet("note reply", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	summary := fs.String("summary", "", "the reply (required)")
@@ -520,6 +520,21 @@ func noteReply(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 	return 0
 }
 
+// latestRemarkID expands "review:latest:<n>" to the newest review's remark
+// id, as `latest` names the review in gg review show / gg link --review.
+// Anything else — or no review at all — is returned as given.
+func latestRemarkID(svc *domain.Service, id string) string {
+	rid, n, ok := model.ParseReviewNoteID(id)
+	if !ok || rid != "latest" {
+		return id
+	}
+	full, err := svc.ReviewID(context.Background(), "latest")
+	if err != nil {
+		return id
+	}
+	return fmt.Sprintf("%s%s:%d", model.ReviewNoteIDPrefix, full, n)
+}
+
 // noteResolve marks a thread resolved (resolve) or open again (unresolve):
 // any id of the thread — its root, a reply, or a review remark.
 func noteResolve(svc *domain.Service, resolve bool, args []string, stdout, stderr io.Writer) int {
@@ -531,7 +546,7 @@ func noteResolve(svc *domain.Service, resolve bool, args []string, stdout, stder
 		fmt.Fprintf(stderr, "usage: gg %s [<repo-link>] <note-id|review:<id>:<n>> [--json]\n", sub)
 		return 2
 	}
-	id, rest := args[0], args[1:]
+	id, rest := latestRemarkID(svc, args[0]), args[1:]
 	fs := flag.NewFlagSet(sub, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	author := fs.String("author", "", "who resolves (default: $GG_AGENT, else agent)")

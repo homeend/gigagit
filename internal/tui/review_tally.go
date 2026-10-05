@@ -33,9 +33,10 @@ func withTally(head string, remarks, resolved, width int) string {
 	return head + " · " + t
 }
 
-// Rows laid out without a known width: the Files-view and working-tree
-// review rows and View all notes take the long form, the Branches sub-row
-// (a narrow column) the short one.
+// Rows laid out without a known width: View all notes (a wide popup) takes
+// the long form; the Files-panel review rows (commit and working tree) and
+// the Branches sub-row sit in narrow columns and take the short one — a long
+// tally there is cut mid-word.
 const (
 	tallyWide   = 1 << 16
 	tallyNarrow = 0

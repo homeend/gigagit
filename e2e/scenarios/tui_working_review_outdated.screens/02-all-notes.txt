@@ -18,7 +18,7 @@ local  branch main                                                              
 │                              ║              STATUS   WHO       WHERE     WHEN    NOTE                                         ║                              │
 │                              ║  > ▾ Working tree  (local)                                                                     ║                              │
 │                              ║      ▾ Reviews                                                                                 ║                              │
-│                              ║              review   fake      outdated  0s      Review: working changes                      ║                              │
+│                              ║              review   fake      outdated  0s      Review: working changes · 0/2 resolved       ║                              │
 │                              ║                                                                                                ║                              │
 │                              ║  [↑/↓] move  [enter] open / fold  [←/→] fold  type to filter  [ctrl+t] fullscreen              ║                              │
 │                              ║  [esc] close                                                                                   ║                              │
