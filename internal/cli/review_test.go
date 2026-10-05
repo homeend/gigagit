@@ -575,3 +575,33 @@ func TestRenderNoteLineBranchReview(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
+
+// A working review's notes on a file are read-only and not the store's:
+// `note clear --type` passes them by instead of failing on them.
+func TestNoteClearByTypeSkipsAWorkingReviewsNotes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-m", "seed")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeReviewTool(t, dir, "Echo",
+		`printf '{"version":1,"summary":"R","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"shouty"}]}]}' > "$GG_MESSAGE_FILE"`)
+	if code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working"); code != 0 {
+		t.Fatalf("review exit=%d stderr=%s", code, errb)
+	}
+	code, out, errb := runCLI(t, dir, "note", "clear", "--file", "a.txt", "--type", "agent", "--yes")
+	if code != 0 || !strings.Contains(out, "removed 0 notes") {
+		t.Fatalf("exit=%d out=%q stderr=%q, want 0 and nothing removed", code, out, errb)
+	}
+	if _, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt"); !strings.Contains(list, "shouty") {
+		t.Fatalf("the review's note must still show: %q", list)
+	}
+}

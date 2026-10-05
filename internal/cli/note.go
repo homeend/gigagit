@@ -881,7 +881,9 @@ func noteClear(svc *domain.Service, link *domain.Resolved, args []string, stdout
 			return 1
 		}
 		for _, r := range res {
-			if !noteTypeMatches(*typ, r.Note.Source) {
+			// A working review's notes on the file are its document's, not
+			// the store's (read-only): they leave when the review does.
+			if !noteTypeMatches(*typ, r.Note.Source) || model.IsReadOnlyNoteID(r.Note.ID) {
 				continue
 			}
 			if err := svc.NoteRemove(ctx, r.Note.ID); err != nil {
