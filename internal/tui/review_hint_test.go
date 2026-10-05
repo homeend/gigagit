@@ -66,3 +66,25 @@ func TestPastedReviewLinkOpensTheReview(t *testing.T) {
 		t.Fatalf("the pasted review link did not open the review: %+v (status %q) %s", m.filesReview, m.statusMsg, perr)
 	}
 }
+
+// A review lookup that resolves after a repo switch must not open the OLD
+// repo's review in the new one (the gotoLinkResolvedMsg rule: the service it
+// was issued against travels with it).
+func TestReviewHintFromAnotherRepoIsDropped(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, reviewViewDoc)
+	sha := m.commits[0].Hash
+	c := steer.Command{Cmd: "navigate", Commit: sha, HintKind: model.ReviewHintKind, HintID: id}
+	m, cmd := m.steerNavigate(c)
+	msg := cmd()
+	other, _ := reviewViewModel(t, reviewViewDoc) // the session switched repos meanwhile
+	m.svc = other.svc
+	m.statusMsg = ""
+	before := m.filesView
+	nm, next := m.Update(msg)
+	got := drainCmds(t, nm.(Model), next)
+	if got.filesReview != nil || got.filesView != before || (got.statusMsg != "" && !strings.Contains(got.statusMsg, "repository changed")) {
+		t.Fatalf("a stale review hint acted in the new repo: review=%+v filesView changed=%v status=%q",
+			got.filesReview, got.filesView != before, got.statusMsg)
+	}
+}

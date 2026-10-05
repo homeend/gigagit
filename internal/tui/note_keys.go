@@ -229,13 +229,14 @@ func (m Model) noteAnchorAtCursor() (model.NoteSide, int, string, bool) {
 // root and anchor, so E edits exactly the row the user can see while R still
 // replies into that row's thread.
 type noteTarget struct {
-	note    model.Note     // the targeted note itself (root or reply)
-	rootID  string         // the thread root's id (== note.ID on a root)
-	line    int            // the thread's resolved anchor line (popup heading)
-	first   int            // the first line the thread covers (== line for a one-line note)
-	side    model.NoteSide // the thread's side
-	hash    string         // the thread's context fingerprint
-	replies int            // replies a delete would take along (0 unless note is the root)
+	note     model.Note     // the targeted note itself (root or reply)
+	rootID   string         // the thread root's id (== note.ID on a root)
+	line     int            // the thread's resolved anchor line (popup heading)
+	first    int            // the first line the thread covers (== line for a one-line note)
+	side     model.NoteSide // the thread's side
+	hash     string         // the thread's context fingerprint
+	replies  int            // replies a delete would take along (0 unless note is the root)
+	resolved bool           // the thread is resolved (its Resolution is set)
 }
 
 // noteTargetIn picks the targetable note inside one thread: the first note
@@ -247,7 +248,8 @@ func (v *diffView) noteTargetIn(r domain.ResolvedNote) (noteTarget, bool) {
 	shown := func(n model.Note) bool {
 		return !v.hideAgent || n.Source != model.NoteSourceAgent
 	}
-	t := noteTarget{rootID: r.Note.ID, first: r.Range[0], line: r.Range[1], side: r.Note.Side, hash: r.Note.ContextHash}
+	t := noteTarget{rootID: r.Note.ID, first: r.Range[0], line: r.Range[1], side: r.Note.Side, hash: r.Note.ContextHash,
+		resolved: r.Resolution != nil || model.NoteHasTag(r.Note, model.NoteTagResolved)}
 	if shown(r.Note) {
 		// Deleting a root takes its replies, hidden ones included — the count
 		// the confirmation quotes is the STORED thread, not the shown rows.
@@ -372,6 +374,109 @@ func editableNoteTargets(ts []noteTarget) []noteTarget {
 		}
 	}
 	return out
+}
+
+// replyableNoteTargets are the threads R may answer and x may resolve:
+// every stored thread and a review's remarks; forge threads stay read-only.
+func replyableNoteTargets(ts []noteTarget) []noteTarget {
+	out := ts[:0:0]
+	for _, t := range ts {
+		if t.note.Source != model.NoteSourceForge && !model.IsForgeNoteID(t.rootID) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// toggleThreadResolved resolves the thread in reach, or reopens it (x).
+func (m Model) toggleThreadResolved() (Model, tea.Cmd) {
+	all := m.notesAtCursor()
+	ts := replyableNoteTargets(all)
+	if len(ts) == 0 {
+		if len(all) > 0 {
+			m.statusMsg = i18n.T("resolved on GitHub")
+			m.diffNotice = m.statusMsg // the full-screen diff has no status bar
+		}
+		return m, nil
+	}
+	nm, cmd := m.withNoteTargetIn(ts, func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
+		svc, root, want, who := m.svc, t.rootID, !t.resolved, m.identity.EffectiveName
+		if svc == nil {
+			return m, nil
+		}
+		return m, func() tea.Msg {
+			_, err := svc.NoteResolve(context.Background(), root, want, who)
+			return threadResolvedMsg{root: root, resolved: want, err: err}
+		}
+	})
+	return nm.(Model), cmd
+}
+
+// threadResolvedMsg is a resolve / reopen's result: on success the thread
+// folds (resolved) or unfolds (reopened) and the notes reload.
+type threadResolvedMsg struct {
+	root     string
+	resolved bool
+	err      error
+}
+
+// onThreadResolved folds or unfolds the thread and reloads the notes.
+func (m Model) onThreadResolved(msg threadResolvedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.statusMsg = i18n.T("note: %s", msg.err.Error())
+		m.diffNotice = "▸ " + m.statusMsg
+		return m, nil
+	}
+	if v := m.diffLayer(); v != nil {
+		if v.collapsed == nil {
+			v.collapsed = map[string]bool{}
+		}
+		v.collapsed[msg.root] = msg.resolved
+		m.relayoutKeepingCursor(v)
+	}
+	return m.Update(noteMutatedMsg{}) // the one notes reload path
+}
+
+// noteLinkRows are one "Open link: …" row per link a thread in reach carries
+// (its root or a reply): the diff cursor never sits on a note row, so the
+// . menu is where a link opens. It opens through the # prompt.
+func (m Model) noteLinkRows() []actionRow {
+	v, ok := m.topLayer().(*diffView)
+	if !ok {
+		return nil
+	}
+	var rows []actionRow
+	seen := map[string]bool{}
+	for _, t := range m.notesAtCursor() {
+		for _, r := range v.curNotes() {
+			if r.Note.ID != t.rootID {
+				continue
+			}
+			for _, n := range append([]domain.ResolvedNote{r}, r.Replies...) {
+				link := n.Note.Link
+				if link == "" || seen[link] {
+					continue
+				}
+				seen[link] = true
+				rows = append(rows, actionRow{id: "note-link", label: i18n.T("Open link: %s", truncate(link, 48)),
+					run: func(m Model) (tea.Model, tea.Cmd) { return m.openNoteLink(link) }})
+			}
+		}
+	}
+	return rows
+}
+
+// openNoteLink opens a note's link through the # prompt: the same resolve,
+// errors and cross-checkout confirm as a pasted link.
+func (m Model) openNoteLink(link string) (tea.Model, tea.Cmd) {
+	m, histCmd := m.openGotoCommitPopup()
+	p := layerOf[*gotoCommitPopup](m)
+	if p == nil {
+		return m, histCmd
+	}
+	p.input = newTextField(link)
+	m, cmd := p.submit(m, link)
+	return m, tea.Batch(histCmd, cmd)
 }
 
 func (m Model) withNoteTargetIn(ts []noteTarget, act func(Model, noteTarget) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd) {
@@ -611,7 +716,9 @@ func (m Model) noteMenuRows() []actionRow {
 	if _, ok := m.topLayer().(*diffView); !ok {
 		return nil
 	}
-	if len(editableNoteTargets(m.notesAtCursor())) == 0 {
+	all := m.notesAtCursor()
+	replyable := replyableNoteTargets(all)
+	if len(replyable) == 0 {
 		return nil // nothing in reach, or only read-only forge threads
 	}
 	open := func(id, label string, mode noteFormMode) actionRow {
@@ -619,10 +726,19 @@ func (m Model) noteMenuRows() []actionRow {
 			return m.openNotePopup(mode)
 		}}
 	}
-	rows := []actionRow{
-		open("note-edit", i18n.T("Edit note"), noteEdit),
-		open("note-reply", i18n.T("Reply to note"), noteReply),
+	var rows []actionRow
+	editable := len(editableNoteTargets(all)) > 0
+	if editable {
+		rows = append(rows, open("note-edit", i18n.T("Edit note"), noteEdit))
 	}
+	rows = append(rows, open("note-reply", i18n.T("Reply to note"), noteReply))
+	resolve := i18n.T("Resolve thread")
+	if replyable[0].resolved {
+		resolve = i18n.T("Reopen thread")
+	}
+	rows = append(rows, actionRow{id: "note-resolve", key: "x", label: resolve, run: func(m Model) (tea.Model, tea.Cmd) {
+		return m.toggleThreadResolved()
+	}})
 	if r, ok := m.noteDeleteRow(); ok {
 		rows = append(rows, r)
 	}

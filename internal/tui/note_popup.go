@@ -29,7 +29,8 @@ type notePopup struct {
 	popupMax
 	summary   textfield
 	rationale textfield
-	field     int // 0 = summary, 1 = rationale, 2 = side (add only, when the row has both)
+	link      textfield // reply only: a commit or gg:// link the reply points at
+	field     int       // 0 = summary, 1 = rationale, 2 = side (add, when the row has both) or link (reply)
 	ratScroll int
 
 	// anchors are the sides a new note may hang off (new first); pick indexes
@@ -53,7 +54,7 @@ type notePopup struct {
 // the note nearest the cursor (edit/reply). Inert when the surface carries no
 // address, or when edit/reply have no note to act on.
 func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
-	if v := m.diffLayer().curNoteView(); v != nil && v.reviewID != "" {
+	if v := m.diffLayer().curNoteView(); v != nil && v.reviewID != "" && mode != noteReply {
 		m.statusMsg = m.reviewReadOnlyNotice()
 		m.diffNotice = m.statusMsg // the full-screen diff has no status bar
 		return m, nil
@@ -79,6 +80,20 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 			v.curLine = row
 			marked = &a
 		}
+	}
+	if mode == noteReply {
+		// Every stored thread and a review's remarks take replies; forge
+		// threads are read-only.
+		all := m.notesAtCursor()
+		ts := replyableNoteTargets(all)
+		if len(ts) == 0 && len(all) > 0 {
+			m.statusMsg = i18n.T("forge comments are read-only")
+			m.diffNotice = m.statusMsg
+			return m, nil
+		}
+		return m.withNoteTargetIn(ts, func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
+			return m.openNotePopupFor(mode, t)
+		})
 	}
 	addr, ok := m.diffNoteAddress()
 	if !ok {
@@ -106,7 +121,7 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 		if set := m.previewNoteSet(); set != nil && (m.previewOpen == nil || m.previewOpen.prNumber == 0) {
 			p.preview = set.Pair()
 		}
-	case noteEdit, noteReply:
+	case noteEdit:
 		return m.withEditableNoteTarget(func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
 			return m.openNotePopupFor(mode, t)
 		})
@@ -166,7 +181,9 @@ func oldSideRefusal(set *domain.PreviewNoteSet) string {
 // openNotePopupFor opens the edit/reply form on one targeted note.
 func (m Model) openNotePopupFor(mode noteFormMode, t noteTarget) (tea.Model, tea.Cmd) {
 	addr, ok := m.diffNoteAddress()
-	if !ok {
+	// A review's remark has no note address here (the review view refuses
+	// one); its reply is stored with the review, so none is needed.
+	if !ok && !model.IsReviewNoteID(t.rootID) {
 		return m, nil
 	}
 	p := &notePopup{mode: mode, addr: addr, author: m.identity.EffectiveName}
@@ -182,7 +199,7 @@ func (m Model) openNotePopupFor(mode noteFormMode, t noteTarget) (tea.Model, tea
 		// Reply threads onto the ROOT — NoteReply flattens to it anyway,
 		// and inherits the root's address/side/range/fingerprint.
 		p.targetID = t.rootID
-		p.summary, p.rationale = newTextField(""), newTextField("")
+		p.summary, p.rationale, p.link = newTextField(""), newTextField(""), newTextField("")
 	}
 	return m.pushLayer(p), nil
 }
@@ -206,7 +223,7 @@ func (p *notePopup) hasSideField() bool { return p.mode == noteAdd && len(p.anch
 
 // fields is how many tab stops the form has.
 func (p *notePopup) fields() int {
-	if p.hasSideField() {
+	if p.hasSideField() || p.mode == noteReply {
 		return 3
 	}
 	return 2
@@ -254,11 +271,13 @@ func (p *notePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	switch p.field {
-	case 0:
+	switch {
+	case p.field == 0:
 		p.summary.HandleEditKey(msg)
-	case 1:
+	case p.field == 1:
 		p.rationale.HandleEditKey(msg)
+	case p.mode == noteReply:
+		p.link.HandleEditKey(msg)
 	default:
 		// The side field: ←/→, space, h/l or the side's own letter flip it.
 		switch msg.String() {
@@ -314,6 +333,10 @@ func (p *notePopup) box(m Model) string {
 	// Field labels follow the commit popup: plain, not translated.
 	b.WriteString(viewField(cur(0)+"summary:   ", p.summary, p.field == 0, contentW) + "\n")
 	b.WriteString(viewFieldWindow(cur(1)+"rationale: ", p.rationale, p.field == 1, contentW, 8, &p.ratScroll) + "\n")
+	if p.mode == noteReply {
+		b.WriteString(viewField(cur(2)+"link:      ", p.link, p.field == 2, contentW) + "\n")
+		b.WriteString("  " + i18n.T("a commit or gg:// link the reply points at (optional)") + "\n")
+	}
 	if p.hasSideField() {
 		// "side:  ● new R12   ○ old L12" — the picked anchor is filled in.
 		var opts []string
@@ -364,7 +387,7 @@ func (p *notePopup) note(summary, rationale string) model.Note {
 	return model.Note{
 		Source: model.NoteSourceUser, Author: p.author, Address: p.addr, Preview: p.preview,
 		Side: p.side, Range: [2]int{p.first, p.line}, ContextHash: p.hash,
-		Summary: summary, Rationale: rationale,
+		Summary: summary, Rationale: rationale, Link: strings.TrimSpace(p.link.Value()),
 	}
 }
 
