@@ -141,7 +141,7 @@ func (fs *FileStore) Put(n model.Note) error {
 	}
 	want := PartOf(n)
 	if n.IsReply() {
-		p, ok := at[n.ParentID]
+		p, ok := at[n.StoredParent()]
 		switch {
 		case ok:
 			want = p
@@ -226,4 +226,63 @@ func (fs *FileStore) Quarantine() (string, error) {
 		}
 	}
 	return strings.Join(moved, ", "), nil
+}
+
+// LoadResolved returns part p's thread resolutions. Never writes.
+func (fs *FileStore) LoadResolved(p Part) ([]model.ThreadResolution, error) {
+	return fs.file(p).LoadResolved()
+}
+
+// LoadAllResolved returns every part's thread resolutions; an unreadable
+// part is skipped and reported, like LoadAll.
+func (fs *FileStore) LoadAllResolved() ([]model.ThreadResolution, error) {
+	parts, err := fs.Parts()
+	if err != nil {
+		return nil, err
+	}
+	var all []model.ThreadResolution
+	var errs []error
+	for _, p := range parts {
+		rs, lerr := fs.LoadResolved(p)
+		if lerr != nil {
+			errs = append(errs, lerr)
+			continue
+		}
+		all = append(all, rs...)
+	}
+	return all, errors.Join(errs...)
+}
+
+// rootPart is the part holding the stored note a thread root id lives under
+// (a review remark's review).
+func (fs *FileStore) rootPart(root string) (Part, error) {
+	at, unread, err := fs.where()
+	if err != nil {
+		return "", err
+	}
+	if p, ok := at[model.StoredRootID(root)]; ok {
+		return p, nil
+	}
+	if unread != nil {
+		return "", unread
+	}
+	return "", ErrNotFound
+}
+
+// Resolve records a thread resolved in its root's part.
+func (fs *FileStore) Resolve(r model.ThreadResolution) error {
+	p, err := fs.rootPart(r.Root)
+	if err != nil {
+		return err
+	}
+	return fs.file(p).Resolve(r)
+}
+
+// Unresolve removes a thread's resolution.
+func (fs *FileStore) Unresolve(root string) error {
+	p, err := fs.rootPart(root)
+	if err != nil {
+		return err
+	}
+	return fs.file(p).Unresolve(root)
 }

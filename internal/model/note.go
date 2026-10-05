@@ -3,6 +3,7 @@ package model
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -38,6 +39,46 @@ func IsReviewNoteID(id string) bool { return strings.HasPrefix(id, ReviewNoteIDP
 // IsReadOnlyNoteID reports whether id names a note built at read time — a
 // forge comment or a review's note — that no note mutation may touch.
 func IsReadOnlyNoteID(id string) bool { return IsForgeNoteID(id) || IsReviewNoteID(id) }
+
+// ParseReviewNoteID splits a review remark id "review:<id>:<n>".
+func ParseReviewNoteID(id string) (reviewID string, n int, ok bool) {
+	rest, found := strings.CutPrefix(id, ReviewNoteIDPrefix)
+	if !found {
+		return "", 0, false
+	}
+	i := strings.LastIndexByte(rest, ':')
+	if i <= 0 {
+		return "", 0, false
+	}
+	n, err := strconv.Atoi(rest[i+1:])
+	if err != nil || n < 0 {
+		return "", 0, false
+	}
+	return rest[:i], n, true
+}
+
+// StoredRootID is the STORED note a thread root id lives under: the review
+// for a review remark ("review:<id>:<n>" → "<id>"), the id itself otherwise.
+// A reply to a remark is a stored child of its review: the store's orphan
+// prune, cap and cascade all key on this.
+func StoredRootID(id string) string {
+	if rid, _, ok := ParseReviewNoteID(id); ok {
+		return rid
+	}
+	return id
+}
+
+// ThreadResolution marks one note thread resolved (GitHub's "Resolve
+// conversation"). Root is the thread's root id — a stored note id or a
+// review remark id; RemarkFP is set for a remark root (it follows the remark
+// when the review is re-saved). It is stored beside the notes, in the
+// root's part, and goes when the root goes.
+type ThreadResolution struct {
+	Root     string    `toml:"root"`
+	By       string    `toml:"by,omitempty"`
+	At       time.Time `toml:"at"`
+	RemarkFP string    `toml:"remark_fp,omitempty"`
+}
 
 // NoteTagResolved tags a forge thread its reviewers marked resolved.
 const NoteTagResolved = "resolved"
@@ -110,13 +151,30 @@ type Note struct {
 	// Files is a working-changes review's fingerprint: every file the review
 	// read, with git's blob id of the bytes it read (spec 2026-10-04 working
 	// reviews §4). Empty on every other note.
-	Files   []NoteFile `toml:"files,omitempty"`
-	Created time.Time  `toml:"created"`
-	Updated time.Time  `toml:"updated"`
+	Files []NoteFile `toml:"files,omitempty"`
+	// Link is an address the note points at — a gg:// link or a full commit
+	// sha (a reply's "here is the fix"). Empty on most notes.
+	Link string `toml:"link,omitempty"`
+	// RemarkFP and RemarkSummary are set only on a reply to a review remark
+	// (ParentID "review:<id>:<n>"): the remark's fingerprint, which finds it
+	// again when the review is re-saved, and its summary, which an outdated
+	// thread still shows.
+	RemarkFP      string    `toml:"remark_fp,omitempty"`
+	RemarkSummary string    `toml:"remark_summary,omitempty"`
+	Created       time.Time `toml:"created"`
+	Updated       time.Time `toml:"updated"`
 }
 
 // IsReply reports whether n hangs off another note.
 func (n Note) IsReply() bool { return n.ParentID != "" }
+
+// StoredParent is the stored note n hangs off: the review for a reply to a
+// review remark, ParentID otherwise ("" for a root).
+func (n Note) StoredParent() string { return StoredRootID(n.ParentID) }
+
+// IsRemarkReply reports a reply to a review remark: it is shown only inside
+// its review, never as a note of its own.
+func (n Note) IsRemarkReply() bool { return IsReviewNoteID(n.ParentID) }
 
 // ReviewTag marks a commit-level note that holds an AI review.
 const ReviewTag = "review"

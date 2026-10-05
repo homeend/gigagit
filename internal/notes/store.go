@@ -38,6 +38,14 @@ type Store interface {
 	Remove(id string) error // a root takes its replies
 	Sweep(keep func(model.Note) bool) (dropped int, err error)
 	SetPolicy(p Policy) // the write-time budget lives ON the store (§4.4)
+	// LoadResolved / LoadAllResolved read the thread resolutions (never
+	// write). Resolve records a thread resolved in its root's part (a review
+	// remark's: its review's); ErrNotFound when no part holds the root.
+	// Unresolve removes the entry; ErrNotFound when there is none.
+	LoadResolved(p Part) ([]model.ThreadResolution, error)
+	LoadAllResolved() ([]model.ThreadResolution, error)
+	Resolve(r model.ThreadResolution) error
+	Unresolve(root string) error
 }
 
 var _ Store = (*FileStore)(nil)
