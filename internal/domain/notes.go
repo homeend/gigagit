@@ -467,7 +467,7 @@ func (s *Service) NotesFor(ctx context.Context, addr model.FileAddress, d Diff) 
 	}
 	oldLines, newLines := diffSideLines(d)
 	out := keepResolved(resolveNotes(mine, oldLines, newLines))
-	if worktreeScopedNote(addr) && addr.Path != "" {
+	if workingDiffAddr(addr) {
 		// A current working review's notes on this file (spec §7).
 		wt, _ := s.noteWorktree(ctx, addr)
 		if extra := s.workingReviewNotesOn(ctx, wt, addr.Path, func() []string { return newLines }); len(extra) > 0 {
@@ -541,7 +541,7 @@ func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]Resolv
 	// A current working review's notes on this file (spec §7); its new side
 	// is read only when a review matches the file.
 	var extra []ResolvedNote
-	if worktreeScopedNote(addr) && addr.Path != "" {
+	if workingDiffAddr(addr) {
 		wt, _ := s.noteWorktree(ctx, addr)
 		extra = s.workingReviewNotesOn(ctx, wt, addr.Path, func() []string {
 			l, _ := s.noteSideLines(ctx, addr, model.NoteSideNew)

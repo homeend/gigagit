@@ -198,3 +198,11 @@ func (s *Service) workingReviewNotesOn(ctx context.Context, worktree, path strin
 	}
 	return out
 }
+
+// workingDiffAddr: addr is a working-tree diff of one file (unstaged or
+// untracked) — the new side a working review read. A staged diff's new side
+// is the index, where the review's line numbers do not hold.
+func workingDiffAddr(addr model.FileAddress) bool {
+	return worktreeScopedNote(addr) && addr.Path != "" &&
+		(addr.State == model.StateUnstaged || addr.State == model.StateUntracked)
+}

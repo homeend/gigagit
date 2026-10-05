@@ -365,3 +365,17 @@ func TestNotesAtAddsAMatchingWorkingReviewsNotes(t *testing.T) {
 		t.Fatalf("an edited file still shows %+v", ns)
 	}
 }
+
+// A staged diff's new side is the index, not the working bytes a review
+// read: a working review's notes are drawn on the working-tree diff only.
+func TestNotesAtLeavesAWorkingReviewsNotesOffTheStagedDiff(t *testing.T) {
+	t.Parallel()
+	_, svc, _ := workingReviewOf(t)
+	ns, err := svc.NotesAt(context.Background(), model.FileAddress{State: model.StateStaged, Path: "a.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ns) != 0 {
+		t.Fatalf("staged diff notes = %+v, want none", ns)
+	}
+}
