@@ -212,11 +212,24 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// HIDDEN commit list — the wheel scrolled it and dragged the reveal tooltip
 	// across the terminal. Ahead of the files view, whose commits side is the
 	// same hidden list. Mirrors the keyboard rule in updateConsoleKey.
+	// A left click on the console is the one exception: it focuses the
+	// console, as enter does (a click on a left panel takes focus away).
 	if m.console != nil {
 		if m.console.maximized {
 			return m, nil
 		}
 		if p, ok := m.panelAt(msg.X, msg.Y); ok && p == panelCommits {
+			if msg.Button == tea.MouseButtonLeft && (!m.console.focused || m.focus != panelCommits) {
+				m.filterTyping = false
+				m = m.rememberLeftFocus()
+				m.focus = panelCommits
+				if m.filesView != nil {
+					m = m.focusRight()
+				}
+				m.console.focused = true
+				m.touchConsole()
+				return m.syncConsoleSize(), nil // gaining focus takes the size back
+			}
 			return m, nil
 		}
 	}

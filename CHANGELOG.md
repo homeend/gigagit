@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent console — click to focus
+
+### Fixed
+
+- **A click on a docked agent console focuses it again**, as enter does —
+  the mirror of a click on a left panel taking focus away. Since the fix
+  that kept the wheel off the hidden commit list, every mouse event over
+  the console was swallowed, the focusing click included.
+
 ## Agent sessions — state minors
 
 ### Fixed
