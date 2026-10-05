@@ -33,6 +33,9 @@ type ReviewOtherNote struct {
 	Side    model.NoteSide
 	Range   [2]int
 	Summary string
+	// Changed: the note is on a file a working review read that changed
+	// since — it is not drawn (spec §7), only listed.
+	Changed bool
 }
 
 // reviewRevs are the two revisions a review compares: base (the old side) and
@@ -40,6 +43,14 @@ type ReviewOtherNote struct {
 // is "<commit>^..<commit>" or unreadable — compares against the commit's
 // parent.
 func (s *Service) reviewRevs(ctx context.Context, r Review) (base, tip string, isRange bool) {
+	if r.Kind == ReviewOnWorktree {
+		// A working review compares HEAD with the working tree: no tip.
+		head, found, err := s.ResolveRev(ctx, "HEAD")
+		if err != nil || !found {
+			return "", "", false
+		}
+		return strings.TrimSpace(head), "", false
+	}
 	tip, base = r.Commit, r.Commit+"^"
 	a, b, ok := strings.Cut(r.Scope, "..")
 	b = strings.TrimPrefix(b, ".")
@@ -68,6 +79,15 @@ func (s *Service) ReviewRevs(ctx context.Context, r Review) (base, tip string, i
 // ReviewFiles are the files the review view lists: the commit's changed files,
 // or for a range review the files that differ across its range.
 func (s *Service) ReviewFiles(ctx context.Context, r Review) ([]model.CommitFile, error) {
+	if r.Kind == ReviewOnWorktree {
+		// HEAD ↔ the working tree; CompareFiles adds the untracked files.
+		base, _, _ := s.reviewRevs(ctx, r)
+		left, err := model.CommitEndpoint(base)
+		if err != nil {
+			return nil, err
+		}
+		return s.CompareFiles(ctx, left, model.WorkTreeEndpoint())
+	}
 	base, tip, isRange := s.reviewRevs(ctx, r)
 	if !isRange {
 		return s.CommitFiles(ctx, tip)
@@ -106,7 +126,25 @@ func (s *Service) ReviewNotesFor(ctx context.Context, reviewID, path string, d D
 	if err != nil || r.Doc == nil {
 		return nil, err
 	}
+	addr := model.FileAddress{State: model.StateCommitted, Commit: r.Commit, Path: path}
+	if r.Kind == ReviewOnWorktree {
+		// Annotations show only on a file that still matches (spec §7).
+		if WorkingReviewState(r.Worktree, r.Files).States[reviewPath(path)] != WorkingFileMatches {
+			return nil, nil
+		}
+		addr = model.FileAddress{State: model.StateUnstaged, Worktree: r.Worktree, Path: path}
+	}
 	oldLines, newLines := diffSideLines(d)
+	return reviewDocNotes(r, path, addr, oldLines, newLines, false), nil
+}
+
+// reviewDocNotes are review r's document notes on path, numbered in document
+// order ("review:<id>:<n>") and anchored at addr. A note whose side is absent
+// or too short is left out; newOnly drops old-side notes.
+func reviewDocNotes(r Review, path string, addr model.FileAddress, oldLines, newLines []string, newOnly bool) []ResolvedNote {
+	if r.Doc == nil {
+		return nil
+	}
 	want := reviewPath(path)
 	var out []ResolvedNote
 	i := 0
@@ -118,6 +156,9 @@ func (s *Service) ReviewNotesFor(ctx context.Context, reviewID, path string, d D
 				continue
 			}
 			side := reviewSide(dn.Side)
+			if newOnly && side == model.NoteSideOld {
+				continue
+			}
 			lines := newLines
 			if side == model.NoteSideOld {
 				lines = oldLines
@@ -125,9 +166,8 @@ func (s *Service) ReviewNotesFor(ctx context.Context, reviewID, path string, d D
 			if !fitsSide(lines, dn.Range) {
 				continue
 			}
-			n := model.Note{ID: id, Source: model.NoteSourceAgent, Author: r.Agent,
-				Address: model.FileAddress{State: model.StateCommitted, Commit: r.Commit, Path: path},
-				Side:    side, Range: dn.Range, Summary: dn.Summary, Rationale: dn.Rationale,
+			n := model.Note{ID: id, Source: model.NoteSourceAgent, Author: r.Agent, Address: addr,
+				Side: side, Range: dn.Range, Summary: dn.Summary, Rationale: dn.Rationale,
 				Created: r.Created, Updated: r.Updated}
 			for _, kv := range dn.Meta {
 				n.Tags = append(n.Tags, kv.Key+": "+kv.Value)
@@ -135,13 +175,18 @@ func (s *Service) ReviewNotesFor(ctx context.Context, reviewID, path string, d D
 			out = append(out, ResolvedNote{Note: n, Status: model.NoteActive, Range: dn.Range})
 		}
 	}
+	sortReviewNotes(out)
+	return out
+}
+
+// sortReviewNotes orders resolved roots new side first, then by line.
+func sortReviewNotes(out []ResolvedNote) {
 	sort.SliceStable(out, func(a, b int) bool {
 		if out[a].Note.Side != out[b].Note.Side {
 			return out[a].Note.Side == model.NoteSideNew
 		}
 		return out[a].Range[0] < out[b].Range[0]
 	})
-	return out, nil
 }
 
 // reviewSplit sorts the document's notes into per-file counts (notes the view
@@ -161,6 +206,11 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 		inView[reviewPath(f.Path)] = true
 	}
 	base, tip, _ := s.reviewRevs(ctx, r)
+	var match WorkingReviewMatch
+	working := r.Kind == ReviewOnWorktree
+	if working {
+		match = WorkingReviewState(r.Worktree, r.Files)
+	}
 	type sides struct{ old, new []string }
 	read := map[string]sides{}
 	sideOf := func(path string) sides {
@@ -168,6 +218,9 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 			return sd
 		}
 		sd := sides{old: s.revLines(ctx, base, path), new: s.revLines(ctx, tip, path)}
+		if working {
+			sd.new = s.worktreeLines(ctx, r.Worktree, path)
+		}
 		read[path] = sd
 		return sd
 	}
@@ -177,6 +230,11 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 		p := reviewPath(f.Path)
 		for _, dn := range f.Notes {
 			side := reviewSide(dn.Side)
+			if working && match.States[p] != WorkingFileMatches {
+				_, reviewed := match.States[p]
+				other = append(other, ReviewOtherNote{Path: p, Side: side, Range: dn.Range, Summary: dn.Summary, Changed: reviewed})
+				continue
+			}
 			if inView[p] {
 				sd := sideOf(p)
 				lines := sd.new
@@ -192,6 +250,15 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 		}
 	}
 	return counts, other, nil
+}
+
+// worktreeLines is path's text in worktree split into lines; nil when absent.
+func (s *Service) worktreeLines(ctx context.Context, worktree, path string) []string {
+	b, err := s.worktreeFileIn(ctx, worktree, path)
+	if err != nil {
+		return nil
+	}
+	return splitLines(b)
 }
 
 // revLines is path's text at rev split into lines; nil when rev lacks it.

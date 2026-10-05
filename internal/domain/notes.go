@@ -466,7 +466,16 @@ func (s *Service) NotesFor(ctx context.Context, addr model.FileAddress, d Diff) 
 		return nil, err
 	}
 	oldLines, newLines := diffSideLines(d)
-	return keepResolved(resolveNotes(mine, oldLines, newLines)), nil
+	out := keepResolved(resolveNotes(mine, oldLines, newLines))
+	if worktreeScopedNote(addr) && addr.Path != "" {
+		// A current working review's notes on this file (spec §7).
+		wt, _ := s.noteWorktree(ctx, addr)
+		if extra := s.workingReviewNotesOn(ctx, wt, addr.Path, func() []string { return newLines }); len(extra) > 0 {
+			out = append(out, extra...)
+			sortReviewNotes(out)
+		}
+	}
+	return out, nil
 }
 
 // loadNotesAt is the STORE half of a note read, shared by NotesFor and
@@ -529,14 +538,29 @@ func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]Resolv
 	if err != nil {
 		return nil, err
 	}
+	// A current working review's notes on this file (spec §7); its new side
+	// is read only when a review matches the file.
+	var extra []ResolvedNote
+	if worktreeScopedNote(addr) && addr.Path != "" {
+		wt, _ := s.noteWorktree(ctx, addr)
+		extra = s.workingReviewNotesOn(ctx, wt, addr.Path, func() []string {
+			l, _ := s.noteSideLines(ctx, addr, model.NoteSideNew)
+			return l
+		})
+	}
 	if len(mine) == 0 {
-		return nil, nil
+		return extra, nil
 	}
 	// Only now are the two sides worth reading: the reads shell out to git,
 	// and an address with no notes at all must cost nothing.
 	oldLines, _ := s.noteSideLines(ctx, addr, model.NoteSideOld)
 	newLines, _ := s.noteSideLines(ctx, addr, model.NoteSideNew)
-	return keepResolved(resolveNotes(mine, oldLines, newLines)), nil
+	out := keepResolved(resolveNotes(mine, oldLines, newLines))
+	if len(extra) > 0 {
+		out = append(out, extra...)
+		sortReviewNotes(out)
+	}
+	return out, nil
 }
 
 // NoteCounts returns the badge counts, cached until the next mutation. The

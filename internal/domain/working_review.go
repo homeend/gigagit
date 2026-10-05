@@ -173,3 +173,28 @@ func (s *Service) workingReviewNotes(ctx context.Context) ([]model.Note, error) 
 	sort.SliceStable(out, func(a, b int) bool { return out[a].Created.After(out[b].Created) })
 	return out, nil
 }
+
+// workingReviewNotesOn are the notes the current working reviews of worktree
+// place on path, new side only — the old side a review read is HEAD, not the
+// index a Files-panel diff shows (spec §7). lines reads the file's new side,
+// lazily: an address no review matches costs no file read.
+func (s *Service) workingReviewNotesOn(ctx context.Context, worktree, path string, lines func() []string) []ResolvedNote {
+	revs, err := s.WorkingReviews(ctx)
+	if err != nil {
+		return nil
+	}
+	var out []ResolvedNote
+	var newLines []string
+	read := false
+	for _, wr := range revs {
+		if wr.Doc == nil || !sameWorktreePath(wr.Worktree, worktree) || wr.States[reviewPath(path)] != WorkingFileMatches {
+			continue
+		}
+		if !read {
+			newLines, read = lines(), true
+		}
+		addr := model.FileAddress{State: model.StateUnstaged, Worktree: wr.Worktree, Path: path}
+		out = append(out, reviewDocNotes(wr.Review, path, addr, nil, newLines, true)...)
+	}
+	return out
+}

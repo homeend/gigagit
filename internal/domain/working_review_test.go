@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 func blob(s string) string { return git.BlobOf("sha1", []byte(s)).ID }
@@ -261,5 +262,106 @@ func TestNotesAtShowsAWorkingReviewItself(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("the working review is not listed")
+	}
+}
+
+// workingReviewOf commits a.txt/c.txt, edits both, stores a structured
+// working review with one note on each (new side) and one old-side note on a.txt.
+func workingReviewOf(t *testing.T) (string, *Service, string) {
+	t.Helper()
+	dir, svc := newRealRepo(t)
+	svc.UseNotesDir(t.TempDir())
+	commitFile(t, dir, "a.txt", "a1\na2\n", "a")
+	commitFile(t, dir, "c.txt", "c1\n", "c")
+	writeAt(t, dir, "a.txt", "a1\nA2\n")
+	writeAt(t, dir, "c.txt", "c1\nC2\n")
+	writeAt(t, dir, "u.txt", "u1\n")
+	doc := `{"version":1,"summary":"ok","files":[` +
+		`{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"on a"},{"oldRange":[2,2],"summary":"old a"}]},` +
+		`{"path":"c.txt","annotations":[{"newRange":[2,2],"summary":"on c"}]}]}`
+	files := []model.NoteFile{{Path: "a.txt", Blob: blob("a1\nA2\n")}, {Path: "c.txt", Blob: blob("c1\nC2\n")}, {Path: "u.txt", Blob: blob("u1\n")}}
+	id, _, err := svc.SaveReview(context.Background(), SaveReview{Target: WorkingReviewTarget(), Text: doc, Files: files})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir, svc, id
+}
+
+func TestReviewFilesOfAWorkingReviewIsHeadToWorktree(t *testing.T) {
+	t.Parallel()
+	_, svc, id := workingReviewOf(t)
+	ctx := context.Background()
+	r, _ := svc.Review(ctx, id)
+	files, err := svc.ReviewFiles(ctx, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, f := range files {
+		got[f.Path] = true
+	}
+	if !got["a.txt"] || !got["c.txt"] || !got["u.txt"] {
+		t.Fatalf("files = %+v, want the modified and the untracked ones", files)
+	}
+	base, tip, isRange := svc.ReviewRevs(ctx, r)
+	if len(base) < 40 || tip != "" || isRange {
+		t.Fatalf("revs = %q %q %v, want HEAD's sha, no tip, no range", base, tip, isRange)
+	}
+}
+
+func TestWorkingReviewCountsOnlyMatchingFiles(t *testing.T) {
+	t.Parallel()
+	dir, svc, id := workingReviewOf(t)
+	ctx := context.Background()
+	writeAt(t, dir, "c.txt", "c1\nC2 edited\n")
+	counts, err := svc.ReviewFileCounts(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts["a.txt"] != 2 || counts["c.txt"] != 0 {
+		t.Fatalf("counts = %v, want a.txt:2 (both sides fit) and nothing on the changed c.txt", counts)
+	}
+	other, _ := svc.ReviewOtherNotes(ctx, id)
+	if len(other) != 1 || other[0].Path != "c.txt" || !other[0].Changed {
+		t.Fatalf("other = %+v, want c.txt's note marked changed", other)
+	}
+}
+
+func TestReviewNotesForAWorkingReviewUseTheWorktreeAddress(t *testing.T) {
+	t.Parallel()
+	dir, svc, id := workingReviewOf(t)
+	ctx := context.Background()
+	d := Diff{Result: textdiff.Result{Rows: []textdiff.Row{
+		{LeftNo: 1, RightNo: 1, Left: "a1", Right: "a1"}, {LeftNo: 2, RightNo: 2, Left: "a2", Right: "A2"}}}}
+	ns, err := svc.ReviewNotesFor(ctx, id, "a.txt", d)
+	if err != nil || len(ns) != 2 {
+		t.Fatalf("notes = %+v %v", ns, err)
+	}
+	if a := ns[0].Note.Address; a.State != model.StateUnstaged || a.Path != "a.txt" || a.Worktree == "" {
+		t.Fatalf("address = %+v", a)
+	}
+	writeAt(t, dir, "a.txt", "changed\n")
+	if ns, _ = svc.ReviewNotesFor(ctx, id, "a.txt", d); len(ns) != 0 {
+		t.Fatalf("a changed file still shows %d notes", len(ns))
+	}
+}
+
+// Spec §7: a matching file's working-tree diff draws the review's notes —
+// new side only (the old side the review read is HEAD, not the index).
+func TestNotesAtAddsAMatchingWorkingReviewsNotes(t *testing.T) {
+	t.Parallel()
+	dir, svc, id := workingReviewOf(t)
+	ctx := context.Background()
+	addr := model.FileAddress{State: model.StateUnstaged, Path: "a.txt"}
+	ns, err := svc.NotesAt(ctx, addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ns) != 1 || ns[0].Note.ID != model.ReviewNoteIDPrefix+id+":0" || ns[0].Note.Side != model.NoteSideNew {
+		t.Fatalf("notes = %+v, want only the new-side review note", ns)
+	}
+	writeAt(t, dir, "a.txt", "edited\n")
+	if ns, _ = svc.NotesAt(ctx, addr); len(ns) != 0 {
+		t.Fatalf("an edited file still shows %+v", ns)
 	}
 }
