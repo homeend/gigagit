@@ -252,6 +252,74 @@ func TestStackLateLoadAboveViewportKeepsScreen(t *testing.T) {
 	}
 }
 
+// Opening a stack on its LAST file leaves the files above it on screen as
+// one-line placeholders (the header's lead). When one of them arrives it grows
+// ON screen — the viewport must still keep the cursor's file where it was,
+// not the top line's: anchored on the top, the arrival pushed the file the
+// user opened off the bottom while the title kept naming it.
+func TestStackLateLoadOnScreenAboveCursorKeepsCursorFile(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, nil, nil, nil, nil, sameRowsTUI(40, 5))
+	m := diffModel()
+	m.height, m.width = 30, 120
+	m = m.pushLayer(v)
+	dv := m.diffLayer()
+	body := m.diffBodyRows()
+	dv.goToStackFile(4, body)
+	top := dv.disp[dv.offset].line
+	if dv.lines[top].file >= 4 {
+		t.Fatalf("setup: the placeholders above the last file must be on screen (top is file %d)", dv.lines[top].file)
+	}
+	screen := dv.lineStart[dv.curLine] - dv.offset
+
+	for _, idx := range []int{3, 2, 1} {
+		u, _ := m.Update(stackFileMsg{gen: dv.stk.gen, idx: idx, view: diffViewWith(sameRowsTUI(40, 5), []int{5})})
+		m = u.(Model)
+		dv = m.diffLayer()
+		if dv.curFile() != 4 {
+			t.Fatalf("after file %d arrived the cursor left file 4 (now %d)", idx, dv.curFile())
+		}
+		if s2 := dv.lineStart[dv.curLine] - dv.offset; s2 != screen {
+			t.Fatalf("after file %d arrived the cursor's screen row moved %d → %d (the opened file left the screen)", idx, screen, s2)
+		}
+	}
+}
+
+// Opening a stack (stacked mode on) on its last file before ANY file has
+// loaded: the stream is all placeholders, too short to give the header its
+// lead, so the header sits clamped at the bottom of the screen. When that
+// file's own rows arrive the header must take the lead it was promised —
+// kept where it was, the file the user opened grew off the bottom unseen.
+func TestStackOpenedFileArrivingTakesItsLead(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, nil, nil, nil, nil, nil)
+	m := diffModel()
+	m.height, m.width = 30, 120
+	m = m.pushLayer(v)
+	dv := m.diffLayer()
+	body := m.diffBodyRows()
+	dv.goToStackFile(4, body)
+	if r := dv.lineStart[dv.curLine] - dv.offset; r <= diffLead {
+		t.Fatalf("setup: the header must start clamped below its lead (row %d)", r)
+	}
+
+	u, _ := m.Update(stackFileMsg{gen: dv.stk.gen, idx: 4, view: diffViewWith(sameRowsTUI(40, 5), []int{5})})
+	dv = u.(Model).diffLayer()
+	hdr := dv.stk.files[4].hdr
+	if dv.curLine != hdr {
+		t.Fatalf("the cursor left the opened file's header: line %d, header %d", dv.curLine, hdr)
+	}
+	if r := dv.lineStart[hdr] - dv.offset; r != diffLead {
+		t.Fatalf("the opened file's header sits at row %d, want its lead %d", r, diffLead)
+	}
+	if first := dv.lineStart[hdr+2] - dv.offset; first < 0 || first >= body {
+		t.Fatalf("the opened file's first row is off screen (row %d of %d)", first, body)
+	}
+	if want := len(dv.blocks) - 1; dv.cur != want {
+		t.Fatalf("the change ordinal is %d, want the opened file's first change %d", dv.cur, want)
+	}
+}
+
 // An answer owed to a stack that has since been rebuilt is dropped.
 func TestStackStaleGenIsDropped(t *testing.T) {
 	t.Parallel()

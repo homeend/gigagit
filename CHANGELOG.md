@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Stacked diff — opening on a late file shows that file
+
+### Fixed
+
+- **A stack opened on one of its last files now shows that file.** Before,
+  the files above it arrived on screen as they loaded and pushed the opened
+  file off the bottom: the title named it (`f10.txt … file 10/10`) while the
+  screen showed another (`f07.txt`). A loading file now keeps the cursor's
+  line where it is on screen, and the opened file, once its rows arrive,
+  takes its usual place under the top lead with its own change count
+  (`change 19/20`, not `1/20`).
+
 ## Working-changes reviews — follow-ups
 
 ### Fixed
