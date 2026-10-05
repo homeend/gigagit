@@ -51,6 +51,9 @@ func contextBindings() []footerBinding {
 			_, ok := m.selectedBranch()
 			return m.focus == panelBranches && ok
 		}, scopeRow},
+		{"go-to-worktree", "ctrl+s", i18n.T("[ctrl+s] go to worktree"), func(m Model) bool {
+			return m.focus == panelBranches && m.canGoToBranchWorktree()
+		}, scopeRow},
 		{"", "ctrl+g", i18n.T("[ctrl+g] solo+tip"), func(m Model) bool {
 			_, ok := m.selectedBranch()
 			return m.focus == panelBranches && m.opsIdle() && ok

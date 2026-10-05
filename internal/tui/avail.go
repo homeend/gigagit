@@ -146,6 +146,18 @@ func (m Model) canSwitchBranch() bool {
 	return m.opsIdle() && ok && !b.IsHead
 }
 
+// canGoToBranchWorktree gates ctrl+s on Branches: the selected branch is
+// checked out in ANOTHER worktree of this repo, so the key can switch there
+// at once — s asks first, ctrl+s does not.
+func (m Model) canGoToBranchWorktree() bool {
+	b, ok := m.selectedBranch()
+	if !m.opsIdle() || !ok {
+		return false
+	}
+	_, ok = m.worktreeForBranch(b.Name)
+	return ok
+}
+
 // canOpenBranchPopup gates b/B: a new branch from the selected one.
 func (m Model) canOpenBranchPopup() bool {
 	_, ok := m.selectedBranch()

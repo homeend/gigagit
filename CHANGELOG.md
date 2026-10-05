@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Branches: `ctrl+s` goes to the branch's worktree
+
+- On the Branches panel, `ctrl+s` on a branch checked out in another worktree
+  switches gg to that worktree at once — no question (`s` still asks "go to
+  worktree?" first). On any other branch it only says the branch is not
+  checked out in another worktree. The footer shows `[ctrl+s] go to worktree`
+  on such rows, and the `.` menu offers the same as **Go to its worktree**.
+
 ## Agent console — click to focus
 
 ### Fixed

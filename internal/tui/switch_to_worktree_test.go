@@ -158,3 +158,91 @@ func TestSKeyOnLocalBranchStillSmartSwitches(t *testing.T) {
 		t.Fatal("s on a normal branch should start SmartSwitch")
 	}
 }
+
+func TestCtrlSOnOtherWorktreeBranchSwitchesWithoutAsking(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepoDir(t)
+	wt := filepath.Join(filepath.Dir(dir), "wt-feat-e")
+	runGit(t, dir, "worktree", "add", "-b", "feature/e", wt, "main")
+
+	m := loadModel(t, repo)
+	m.focus = panelBranches
+	selectBranchRow(t, &m, "feature/e")
+	if !strings.Contains(m.footerLine(), "[ctrl+s] go to worktree") {
+		t.Fatalf("footer should advertise ctrl+s on a branch checked out elsewhere:\n%s", m.footerLine())
+	}
+
+	u, cmd := m.Update(keyMsg("ctrl+s"))
+	m = u.(Model)
+
+	if m.modal != nil {
+		t.Fatalf("ctrl+s must switch without a modal, got %+v", m.modal.req)
+	}
+	want, _ := filepath.EvalSymlinks(wt)
+	got, _ := filepath.EvalSymlinks(m.switchTarget)
+	if got != want {
+		t.Fatalf("switchTarget = %q, want %q", got, want)
+	}
+	if cmd == nil {
+		t.Fatal("switching to a worktree should return a reload command")
+	}
+}
+
+func TestCtrlSOnBranchNotInAnotherWorktreeDoesNotSwitch(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepoDir(t)
+	runGit(t, dir, "branch", "feature/f", "main")
+
+	for _, name := range []string{"feature/f", "main"} {
+		m := loadModel(t, repo)
+		m.focus = panelBranches
+		selectBranchRow(t, &m, name)
+		if strings.Contains(m.footerLine(), "[ctrl+s]") {
+			t.Fatalf("%s: footer must not offer ctrl+s:\n%s", name, m.footerLine())
+		}
+
+		u, _ := m.Update(keyMsg("ctrl+s"))
+		m = u.(Model)
+
+		if m.modal != nil || m.running || m.switchTarget != "" {
+			t.Fatalf("%s: ctrl+s must not switch, ask or run: modal=%v running=%v target=%q", name, m.modal, m.running, m.switchTarget)
+		}
+		if !strings.Contains(m.statusMsg, "not checked out in another worktree") {
+			t.Fatalf("%s: statusMsg = %q", name, m.statusMsg)
+		}
+	}
+}
+
+// The . menu's "Go to its worktree" row replays ctrl+s through synthKey and
+// lands on the same switch as the key.
+func TestGoToWorktreeMenuRowSwitches(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepoDir(t)
+	wt := filepath.Join(filepath.Dir(dir), "wt-feat-e")
+	runGit(t, dir, "worktree", "add", "-b", "feature/e", wt, "main")
+
+	m := loadModel(t, repo)
+	m.focus = panelBranches
+	selectBranchRow(t, &m, "feature/e")
+	u, _ := m.Update(keyMsg("."))
+	m = u.(Model)
+	if m.actionMenu == nil {
+		t.Fatal(". should open the action menu")
+	}
+	sel := -1
+	for i, r := range m.actionMenu.visible() {
+		if r.id == "go-to-worktree" {
+			sel = i
+		}
+	}
+	if sel < 0 {
+		t.Fatalf("no go-to-worktree row in %+v", m.actionMenu.visible())
+	}
+	u, _ = m.runVisibleRow(sel)
+	m = u.(Model)
+	want, _ := filepath.EvalSymlinks(wt)
+	got, _ := filepath.EvalSymlinks(m.switchTarget)
+	if got != want {
+		t.Fatalf("switchTarget = %q, want %q", got, want)
+	}
+}
