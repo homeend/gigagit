@@ -29,6 +29,7 @@ func init() {
 		mux.HandleFunc("POST /api/notes/reply", writeGuard(s.handleNoteReply))
 		mux.HandleFunc("POST /api/notes/remove", writeGuard(s.handleNoteRemove))
 		mux.HandleFunc("POST /api/notes/clear-row", writeGuard(s.handleNoteClearRow))
+		mux.HandleFunc("GET /api/notes/row-link", s.handleNoteRowLink)
 	})
 }
 
@@ -383,6 +384,32 @@ func (s *Server) handleNoteClearRow(w http.ResponseWriter, r *http.Request) {
 	}
 	s.emitNotes()
 	writeJSON(w, map[string]any{"removed": n})
+}
+
+// handleNoteRowLink is a commit's Range review / Notes row link (Copy gg
+// link): ?commit=<sha>&path=<p> = the file at the commit, ?commit=<sha>&scope=
+// <s> = the commit pair the scope names there. Built by domain, the one
+// builder the TUI shares.
+func (s *Server) handleNoteRowLink(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	commit, path, scope := q.Get("commit"), q.Get("path"), q.Get("scope")
+	if !isHexSha(commit) || (path == "") == (scope == "") {
+		writeErr(w, http.StatusBadRequest, errors.New("a commit sha and one of path or scope are required"))
+		return
+	}
+	ctx, svc := readCtx(r), s.service()
+	var link string
+	var err error
+	if scope != "" {
+		link, err = svc.ScopeLinkText(ctx, scope, commit)
+	} else {
+		link, err = svc.CommitFileLinkText(ctx, commit, path)
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, map[string]any{"link": link})
 }
 
 // noteErrStatus separates "you named a note that is not there" (a stale page
