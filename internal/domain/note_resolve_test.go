@@ -121,7 +121,6 @@ func TestRemarkRepliesFollowAMovedRemark(t *testing.T) {
 	}
 }
 
-
 // A forge thread GitHub marked resolved carries a Resolution like a stored
 // one, so every frontend folds it by one rule.
 func TestForgeResolvedThreadCarriesAResolution(t *testing.T) {
