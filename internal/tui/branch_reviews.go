@@ -56,7 +56,7 @@ func branchReviewRowBody(r domain.ReviewHead) string {
 	if a := strings.TrimSpace(r.Agent); a != "" {
 		parts = append(parts, sanitizeLine(a))
 	}
-	return "└ " + strings.Join(parts, " ")
+	return withTally("└ "+strings.Join(parts, " "), r.Remarks, r.Resolved, tallyNarrow)
 }
 
 func (m Model) reviewHead(id string) (domain.ReviewHead, bool) {

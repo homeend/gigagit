@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notebatch"
 	"github.com/homeend/gigagit/internal/notes"
 )
 
@@ -138,6 +139,17 @@ func (r Review) Tally() (remarks, resolved int) {
 		}
 	}
 	return len(th), resolved
+}
+
+// docTally counts a review document's remarks and how many of rs resolve
+// one of them (by fingerprint, as RemarkThreads joins). No git: NoteCounts
+// calls it for every review.
+func docTally(text string, rs []model.ThreadResolution) (remarks, resolved int) {
+	r := Review{Text: text, Resolutions: rs}
+	if doc, err := notebatch.ParseReview([]byte(text)); err == nil {
+		r.Doc = &doc
+	}
+	return r.Tally()
 }
 
 // remarkThreadSet is every remark reply and remark resolution of some parts,

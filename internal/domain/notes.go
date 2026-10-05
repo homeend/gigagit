@@ -606,6 +606,16 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 	// fail the query: commit badges need no worktree at all, so an empty cur
 	// simply leaves ByPath empty.
 	cur, _ := s.TopLevel(ctx)
+	// A review row carries its tally: the remark resolutions by review.
+	remarkRes := map[string][]model.ThreadResolution{}
+	if rs, rerr := st.LoadAllResolved(); rerr == nil || len(rs) > 0 {
+		for _, r := range rs {
+			if model.IsReviewNoteID(r.Root) {
+				id := model.StoredRootID(r.Root)
+				remarkRes[id] = append(remarkRes[id], r)
+			}
+		}
+	}
 	c := NoteCounts{ByPath: map[string]int{}, ByCommit: map[string]int{}, ByCommitPath: map[string]int{}, ByShelf: map[string]int{}}
 	for _, n := range all {
 		if n.IsReply() { // a badge counts THREADS
@@ -613,15 +623,19 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		}
 		if n.IsWorkingReview() {
 			if sameWorktreePath(n.Address.Worktree, cur) {
-				c.WorkingReviews = append(c.WorkingReviews, ReviewHead{ID: n.ID, Agent: n.Author, Summary: n.Summary, Created: n.Created})
+				h := ReviewHead{ID: n.ID, Agent: n.Author, Summary: n.Summary, Created: n.Created}
+				h.Remarks, h.Resolved = docTally(n.Rationale, remarkRes[n.ID])
+				c.WorkingReviews = append(c.WorkingReviews, h)
 			}
 			continue
 		}
 		if n.IsReviewNote() {
 			// A review has its own marker (✎ in Commits, ◆ in Branches):
 			// it is never counted in the ◆N note badges.
-			c.Reviews = append(c.Reviews, ReviewHead{ID: n.ID, Commit: n.Address.Commit, Branch: n.Address.Branch,
-				Agent: n.Author, Summary: n.Summary, Created: n.Created})
+			h := ReviewHead{ID: n.ID, Commit: n.Address.Commit, Branch: n.Address.Branch,
+				Agent: n.Author, Summary: n.Summary, Created: n.Created}
+			h.Remarks, h.Resolved = docTally(n.Rationale, remarkRes[n.ID])
+			c.Reviews = append(c.Reviews, h)
 			continue
 		}
 		if n.IsShelfLevel() {

@@ -135,3 +135,20 @@ func TestReviewNotesForCarriesRepliesAndResolution(t *testing.T) {
 		t.Fatalf("Tally = %d %d", rem, res)
 	}
 }
+
+func TestNoteCountsCarryTheReviewTally(t *testing.T) {
+	t.Parallel()
+	svc, rid, _ := threadReview(t)
+	ctx := context.Background()
+	if _, err := svc.NoteResolve(ctx, remarkID(rid, 2), true, "B"); err != nil {
+		t.Fatal(err)
+	}
+	c, err := svc.NoteCounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(c.Reviews, func(h ReviewHead) bool { return h.ID == rid })
+	if i < 0 || c.Reviews[i].Remarks != 3 || c.Reviews[i].Resolved != 1 {
+		t.Fatalf("heads = %+v", c.Reviews)
+	}
+}

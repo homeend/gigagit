@@ -548,7 +548,8 @@ func anReviewParts(r anRow, now time.Time) (head, summary string) {
 		padRight(truncate(who, anWhoW-1), anWhoW) +
 		padRight(truncate(where, anWhereW-1), anWhereW) +
 		padRight(truncate(when, anWhenW-1), anWhenW)
-	return head, sanitizeLine(r.review.Summary)
+	remarks, resolved := r.review.Tally()
+	return head, withTally(sanitizeLine(r.review.Summary), remarks, resolved, tallyWide)
 }
 
 // anReviewFull is a review row's cells uncut: the bottom bar's text.

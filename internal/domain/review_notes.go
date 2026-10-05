@@ -75,6 +75,9 @@ type Review struct {
 type ReviewHead struct {
 	ID, Commit, Branch, Agent, Summary string
 	Created                            time.Time
+	// Remarks is the document's remark count, Resolved how many of them
+	// are resolved: a review row's tally.
+	Remarks, Resolved int
 }
 
 // A held lock is retried within reviewRetryBudget, sleeping a random

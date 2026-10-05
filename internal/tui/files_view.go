@@ -418,7 +418,8 @@ func reviewRowText(r domain.Review) string {
 	if len(parts) == 0 {
 		parts = append(parts, sanitizeLine(r.Summary))
 	}
-	return "└ " + strings.Join(parts, " ")
+	remarks, resolved := r.Tally()
+	return withTally("└ "+strings.Join(parts, " "), remarks, resolved, tallyWide)
 }
 
 // fileLine renders one file row: "<letter>  <basename>"; renames show the
