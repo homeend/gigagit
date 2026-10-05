@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -92,6 +93,20 @@ type notesApplyIn struct {
 
 type noteRmIn struct {
 	ID string `json:"id"`
+}
+
+type noteReplyIn struct {
+	ID        string `json:"id" jsonschema:"the note id or review remark id (review:<id>:<n>) to reply to"`
+	Summary   string `json:"summary" jsonschema:"the reply"`
+	Rationale string `json:"rationale,omitempty" jsonschema:"the why, optional"`
+	Link      string `json:"link,omitempty" jsonschema:"a gg:// link or a commit the reply points at, e.g. the fix"`
+	Author    string `json:"author,omitempty" jsonschema:"author label (default: $GG_AGENT, else agent)"`
+}
+
+type noteResolveIn struct {
+	ID       string `json:"id" jsonschema:"any id of the thread: its root, a reply, or a review remark (review:<id>:<n>)"`
+	Resolved bool   `json:"resolved" jsonschema:"true resolves the thread, false reopens it"`
+	Author   string `json:"author,omitempty" jsonschema:"who resolves (default: $GG_AGENT, else agent)"`
 }
 
 type okOut struct {
@@ -310,6 +325,53 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		if len(stored) > 0 {
 			s.notifyNotesChanged()
 		}
+		return nil, out, nil
+	})
+
+	sdk.AddTool(srv, &sdk.Tool{
+		Name: "gg_note_reply",
+		Description: "Reply in a gg review-note thread: a stored note id, or a review remark id " +
+			`"review:<review id>:<n>" as gg_review_show lists them. link (optional) is a gg:// link or a ` +
+			"commit the reply points at, e.g. the fix. MUTATES gg's note store.",
+		Annotations:  mutatingAnnotations(),
+		OutputSchema: wireNoteOutputSchema,
+	}, func(ctx context.Context, _ *sdk.CallToolRequest, in noteReplyIn) (*sdk.CallToolResult, noteOut, error) {
+		out := noteOut{Repo: s.repoInfo()}
+		if err := s.repoCheck(); err != nil {
+			return nil, out, err
+		}
+		if in.ID == "" || strings.TrimSpace(in.Summary) == "" {
+			return nil, out, fmt.Errorf("id and summary are required")
+		}
+		n, err := s.svc.NoteReply(ctx, in.ID, model.Note{Source: model.NoteSourceAgent, Author: domain.NoteAuthorDefault(in.Author),
+			Summary: strings.TrimSpace(in.Summary), Rationale: strings.TrimSpace(in.Rationale), Link: in.Link})
+		if err != nil {
+			return nil, out, err
+		}
+		out.Note = domain.ToWireNote(domain.ResolvedNote{Note: n, Status: model.NoteActive, Range: n.Range})
+		s.notifyNotesChanged()
+		return nil, out, nil
+	})
+
+	sdk.AddTool(srv, &sdk.Tool{
+		Name: "gg_note_resolve",
+		Description: "Resolve (resolved:true) or reopen (resolved:false) a gg note thread by any of its ids, " +
+			`including a review remark id "review:<review id>:<n>". Pull-request threads are resolved on ` +
+			"GitHub and refuse. MUTATES gg's note store.",
+		Annotations: mutatingAnnotations(),
+	}, func(ctx context.Context, _ *sdk.CallToolRequest, in noteResolveIn) (*sdk.CallToolResult, okOut, error) {
+		out := okOut{Repo: s.repoInfo()}
+		if err := s.repoCheck(); err != nil {
+			return nil, out, err
+		}
+		if in.ID == "" {
+			return nil, out, fmt.Errorf("id is required")
+		}
+		if _, err := s.svc.NoteResolve(ctx, in.ID, in.Resolved, domain.NoteAuthorDefault(in.Author)); err != nil {
+			return nil, out, err
+		}
+		out.OK = true
+		s.notifyNotesChanged()
 		return nil, out, nil
 	})
 

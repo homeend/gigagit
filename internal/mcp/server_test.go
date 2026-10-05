@@ -148,6 +148,7 @@ func TestServerToolRosterAndAnnotations(t *testing.T) {
 		// non-read-only:
 		"gg_export": false, "gg_cherry_pick": false, "gg_write_to_worktree": false,
 		"gg_note_add": false, "gg_notes_apply": false, "gg_note_rm": false,
+		"gg_note_reply": false, "gg_note_resolve": false,
 	}
 	got := map[string]*sdk.Tool{}
 	for _, tool := range res.Tools {
