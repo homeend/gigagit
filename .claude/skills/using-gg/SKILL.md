@@ -62,7 +62,7 @@ guards against removing the worktree you are standing in.
   printed on stderr. A `--working` review is stored too, in this worktree's
   notes: it includes untracked files and records each reviewed file by its
   blob id, so `gg note list --file <path>` shows its notes on a file only
-  while that file still matches what was reviewed Its link is the working
+  while that file still matches what was reviewed. Its link is the working
   tree plus `?review=<id>`.
   There is no report file. Flags must precede the positional (like `gg log
   -n`). No positional reviews the current branch's work; a single `<rev>`
