@@ -59,3 +59,13 @@ func (r *Repo) UntrackedFiles(ctx context.Context) ([]string, error) {
 	}
 	return out, nil
 }
+
+// ObjectFormat is the repository's object hash: "sha1" or "sha256".
+func (r *Repo) ObjectFormat(ctx context.Context) (string, error) {
+	res, err := r.Runner.Run(ctx, "git rev-parse (object format)",
+		gitcmd.New("rev-parse").Arg("--show-object-format").ToArgv())
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(res.Stdout), nil
+}

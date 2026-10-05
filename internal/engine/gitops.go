@@ -80,6 +80,11 @@ type GitOps interface {
 
 	DiffPatch(ctx context.Context, spec model.DiffSpec) (string, error)
 	DiffNumstat(ctx context.Context, spec model.DiffSpec) (string, error)
+	// UntrackedFiles / ObjectFormat feed a working-changes review: the
+	// untracked files it reviews as new files, and the hash its fingerprints
+	// use.
+	UntrackedFiles(ctx context.Context) ([]string, error)
+	ObjectFormat(ctx context.Context) (string, error)
 
 	StashList(ctx context.Context) ([]string, error)
 	StashPush(ctx context.Context, message string, paths []string, includeUntracked bool) error
