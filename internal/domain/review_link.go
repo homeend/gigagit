@@ -167,19 +167,17 @@ func (s *Service) ReviewRemarks(ctx context.Context, r Review) ([]ReviewRemark, 
 }
 
 // checkReviewHint refuses a resolved review link whose address is not the
-// change its review compared. A review this store no longer holds passes: the
-// address still means something, and the consumer says the review is gone.
+// change its review compared — and ONLY that, a proven mismatch. A review this
+// store no longer holds, or a store that cannot be read here, passes: the
+// address still means something, and the consumer says what it finds.
 func checkReviewHint(ctx context.Context, svc *Service, res Resolved) error {
 	r, err := svc.Review(ctx, res.Hint.ID)
-	if errors.Is(err, ErrReviewNotFound) {
-		return nil
-	}
 	if err != nil {
-		return err
+		return nil
 	}
 	t, err := svc.reviewTarget(ctx, r)
 	if err != nil {
-		return err
+		return nil
 	}
 	match := t.Pair == nil && res.Pair == nil && res.Commit == t.Commit ||
 		t.Pair != nil && res.Pair != nil && *res.Pair == *t.Pair

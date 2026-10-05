@@ -130,7 +130,15 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	if res.Hint.Kind == model.ReviewHintKind {
 		// One check for every entry point (gg open, #, start-at, steer, web):
 		// a review link moved onto another change never opens.
-		if err := checkReviewHint(ctx, opts.OpenFn(res.Checkout), res); err != nil {
+		svc := opts.OpenFn(res.Checkout)
+		if opts.Cwd != nil {
+			// The caller's own service when the link is in its checkout: it
+			// carries the caller's note store (a fresh Open would not).
+			if top, err := opts.Cwd.TopLevel(ctx); err == nil && SamePath(top, res.Checkout) {
+				svc = opts.Cwd
+			}
+		}
+		if err := checkReviewHint(ctx, svc, res); err != nil {
 			return Resolved{}, err
 		}
 	}

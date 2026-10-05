@@ -176,3 +176,21 @@ func TestDescribeReviewLink(t *testing.T) {
 		t.Fatalf("desc = %q, want review: %s … Claude", got, single)
 	}
 }
+
+// With only the caller's service (Cwd) — the CLI's, the TUI paste's — the
+// check reads THAT service's store: a fresh Open of the same checkout would
+// not see it and could not refuse the moved link.
+func TestReviewHintCheckUsesTheCallersService(t *testing.T) {
+	t.Parallel()
+	svc, dir, single, _ := reviewLinkFixture(t)
+	ctx := context.Background()
+	good, err := svc.ReviewLink(ctx, single)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD~1"))
+	bad := good[:strings.LastIndex(good, "@")+1] + other + "?review=" + single
+	if _, err := ResolveLink(ctx, mustParse(t, bad), ResolveOpts{Cwd: svc}); !errors.Is(err, ErrReviewLinkMismatch) {
+		t.Fatalf("Cwd-only resolve must still refuse the moved link: %v", err)
+	}
+}
