@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
@@ -12,6 +13,29 @@ import (
 // ErrForgeResolved refuses a local resolve of a forge thread: GitHub owns
 // that state until gg can publish (notes ↔ forge strategy).
 var ErrForgeResolved = errors.New("forge threads are resolved on GitHub")
+
+// ErrNoteLink is a note link that is neither a gg:// link nor a commit.
+var ErrNoteLink = errors.New("link is neither a gg:// link nor a commit")
+
+// NoteLink normalises a note's link: a gg:// link that parses stays as
+// written, a revision becomes its full commit sha. "" stays "".
+func (s *Service) NoteLink(ctx context.Context, v string) (string, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(v, "gg://") {
+		if _, err := model.ParseLink(v); err != nil {
+			return "", fmt.Errorf("%w: %v", ErrNoteLink, err)
+		}
+		return v, nil
+	}
+	full, ok, err := s.ResolveRev(ctx, v)
+	if err != nil || !ok {
+		return "", fmt.Errorf("%w: %q", ErrNoteLink, v)
+	}
+	return strings.TrimSpace(full), nil
+}
 
 // ErrNotResolved is an unresolve of an open thread.
 var ErrNotResolved = errors.New("thread is not resolved")
@@ -114,4 +138,42 @@ func (s *Service) withResolutions(ctx context.Context, rns []ResolvedNote) []Res
 		}
 	}
 	return rns
+}
+
+// resolutionOf is the thread of id's current resolution (nil = open or
+// unknown).
+func (s *Service) resolutionOf(ctx context.Context, id string) *model.ThreadResolution {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return nil
+	}
+	root, _, err := s.threadRoot(ctx, st, id)
+	if err != nil {
+		return nil
+	}
+	rs, _ := st.LoadAllResolved()
+	for _, r := range rs {
+		if r.Root == root {
+			return &r
+		}
+	}
+	return nil
+}
+
+// restoreResolution puts the thread of id back to prev (nil = open). Best
+// effort: it undoes a failed batch.
+func (s *Service) restoreResolution(ctx context.Context, id string, prev *model.ThreadResolution) {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return
+	}
+	root, _, err := s.threadRoot(ctx, st, id)
+	if err != nil {
+		return
+	}
+	if prev == nil {
+		_ = st.Unresolve(root)
+		return
+	}
+	_ = st.Resolve(*prev)
 }

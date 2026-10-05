@@ -46,6 +46,10 @@ type Item struct {
 	Author     string
 	Tags       []string
 	Confidence float64
+	// Link is an address the note points at (a gg:// link or a revision).
+	// Resolve, set only on a reply, is its thread's state after the reply.
+	Link    string
+	Resolve *bool
 }
 
 // Batch is a parsed input: the notes to create plus the unanchored prose
@@ -93,6 +97,8 @@ type rawComment struct {
 	Summary    *string `json:"summary"`
 	Rationale  *string `json:"rationale"`
 	Author     *string `json:"author"`
+	Link       *string `json:"link"`
+	Resolve    *bool   `json:"resolve"`
 }
 
 // Parse reads either supported shape, chosen by the top-level key, and returns
@@ -204,6 +210,7 @@ func parseComments(top rawTop) (Batch, error) {
 			Rationale: trimPtr(c.Rationale),
 			Author:    trimPtr(c.Author),
 			ReplyTo:   strings.TrimSpace(c.ReplyTo),
+			Link:      trimPtr(c.Link),
 		}
 		if it.ReplyTo != "" {
 			// A reply inherits its parent's anchor: naming a target too is a
@@ -211,8 +218,12 @@ func parseComments(top rawTop) (Batch, error) {
 			if c.FilePath != "" || c.NewLine != nil || c.OldLine != nil || c.Hunk != nil || c.HunkNumber != nil {
 				return Batch{}, fmt.Errorf("%s: replyTo takes no filePath or target", where)
 			}
+			it.Resolve = c.Resolve
 			b.Items = append(b.Items, it)
 			continue
+		}
+		if c.Resolve != nil {
+			return Batch{}, fmt.Errorf("%s: resolve applies to a replyTo comment only", where)
 		}
 		if strings.TrimSpace(c.FilePath) == "" {
 			return Batch{}, fmt.Errorf("%s: a root comment requires filePath", where)

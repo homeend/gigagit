@@ -16,6 +16,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -37,6 +38,9 @@ const (
 type PlannedNote struct {
 	Note    model.Note // ready to store; zero ParentID for a root
 	ReplyTo string     // non-empty makes it a reply
+	// Resolve, on a reply, sets its thread's state once every reply of the
+	// batch is stored.
+	Resolve *bool
 }
 
 // NoteBatchTarget separates the two things a batch needs from its target: the
@@ -80,15 +84,15 @@ func (s *Service) PlanNoteBatchIn(ctx context.Context, b notebatch.Batch, bt Not
 		n := model.Note{
 			Source: model.NoteSourceAgent, Author: who,
 			Summary: it.Summary, Rationale: it.Rationale,
-			Tags: it.Tags, Confidence: it.Confidence,
+			Tags: it.Tags, Confidence: it.Confidence, Link: it.Link,
 		}
 		if it.ReplyTo != "" {
 			// Validate the parent NOW: an unknown id must reject the batch
 			// before anything is stored.
-			if _, gerr := s.NoteGet(ctx, it.ReplyTo); gerr != nil {
+			if gerr := s.checkReplyParent(ctx, it.ReplyTo); gerr != nil {
 				return nil, 0, fmt.Errorf("item %d: replyTo %s: %w", i, it.ReplyTo, gerr)
 			}
-			planned = append(planned, PlannedNote{Note: n, ReplyTo: it.ReplyTo})
+			planned = append(planned, PlannedNote{Note: n, ReplyTo: it.ReplyTo, Resolve: it.Resolve})
 			continue
 		}
 		n.Preview = bt.Preview
@@ -173,7 +177,51 @@ func (s *Service) ApplyNoteBatch(ctx context.Context, planned []PlannedNote) ([]
 		}
 		out = append(out, stored)
 	}
+	// The thread states, once every reply is stored; a failure restores the
+	// states already changed and rolls the replies back.
+	type undo struct {
+		id   string
+		prev *model.ThreadResolution // nil = it was open
+	}
+	var undos []undo
+	for i, p := range planned {
+		if p.Resolve == nil {
+			continue
+		}
+		prev := s.resolutionOf(ctx, out[i].ID)
+		if _, err := s.NoteResolve(ctx, out[i].ID, *p.Resolve, out[i].Author); err != nil && !errors.Is(err, ErrNotResolved) {
+			for j := len(undos) - 1; j >= 0; j-- {
+				s.restoreResolution(ctx, undos[j].id, undos[j].prev)
+			}
+			removed, failed := s.rollbackNoteBatch(ctx, out)
+			if failed > 0 {
+				return nil, fmt.Errorf("item %d: %w (rollback incomplete: %d could not be removed)", i, err, failed)
+			}
+			return nil, fmt.Errorf("item %d: %w (rolled back %d notes)", i, err, removed)
+		}
+		undos = append(undos, undo{out[i].ID, prev})
+	}
 	return out, nil
+}
+
+// checkReplyParent validates a reply's parent without writing: a stored
+// note, or a remark of a review this store holds; forge ids are refused.
+func (s *Service) checkReplyParent(ctx context.Context, id string) error {
+	if rid, n, ok := model.ParseReviewNoteID(id); ok {
+		r, err := s.Review(ctx, rid)
+		if err != nil {
+			return err
+		}
+		if n >= len(r.remarkFPs()) {
+			return fmt.Errorf("%w: review %s has no remark %d", ErrNoSuchRemark, rid, n)
+		}
+		return nil
+	}
+	if model.IsReadOnlyNoteID(id) {
+		return ErrReadOnlyNote
+	}
+	_, err := s.NoteGet(ctx, id)
+	return err
 }
 
 // rollbackNoteBatch is ApplyNoteBatch's best-effort undo: it removes what THIS
