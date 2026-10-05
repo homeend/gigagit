@@ -1,6 +1,9 @@
 package agentstate
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Observation is what gg observed of one session at one moment: its screen
 // and what it announced outside it (the window title, the OSC 9;4 report).
@@ -30,12 +33,16 @@ type Detector interface{ Read(Observation) Verdict }
 
 // Reading is a profile's conclusion: the verdict plus what any screen
 // shows whatever the agent — the dialog's choices, the spinner's timer,
-// the tail without what moves while nothing happens (the stall key).
+// the tail without what moves while nothing happens (the stall key) —
+// and whether the profile is dedicated.
 type Reading struct {
 	Verdict
 	Options  []Option      // when State is Question
 	StepFor  time.Duration // StepDuration(Lines)
-	Progress string        // Progress(Lines)
+	StallKey string        // StallKey(Lines)
+	// Dedicated is the profile's: an unreadable screen of a dedicated agent
+	// counts towards a stall.
+	Dedicated bool
 }
 
 // Profile is how one agent is read.
@@ -52,7 +59,7 @@ func (p Profile) Read(o Observation) Reading {
 	if p.Detector != nil {
 		v = p.Detector.Read(o)
 	}
-	rd := Reading{Verdict: v, StepFor: StepDuration(o.Lines), Progress: Progress(o.Lines)}
+	rd := Reading{Verdict: v, StepFor: StepDuration(o.Lines), StallKey: StallKey(o.Lines), Dedicated: p.Dedicated}
 	if v.State == Question {
 		rd.Options = DialogOptions(o.Text, o.Lines)
 	}
@@ -62,8 +69,8 @@ func (p Profile) Read(o Observation) Reading {
 // First consults its parts in order: the first one with a verdict decides,
 // carrying the hints of the parts before it; later parts are not asked.
 // (herdr's order: a title question or spinner outranks every screen rule;
-// an idle title only hints.)
-func First(parts ...Detector) Detector { return first(parts) }
+// an idle title only hints.) It keeps its own copy of the list.
+func First(parts ...Detector) Detector { return first(slices.Clone(parts)) }
 
 type first []Detector
 
