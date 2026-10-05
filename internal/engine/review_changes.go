@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repogate"
 )
@@ -26,6 +27,10 @@ type ReviewChanges struct {
 	Env        []string       // caller env additions (e.g. GG_TASK=review)
 	Diff       model.DiffSpec // the range/working diff to review
 	RangeLabel string         // human range label for the summary (e.g. "main..HEAD")
+	// Working: a review of uncommitted changes. The input gains the
+	// untracked files as new-file patches, and Prepare fingerprints every
+	// reviewed file (TaskInputs.ReviewFiles).
+	Working bool
 }
 
 var _ Operation = ReviewChanges{}
@@ -38,7 +43,18 @@ func (op ReviewChanges) Prepare(ctx context.Context, deps OpDeps) (TaskInputs, e
 		return TaskInputs{}, err
 	}
 	stat, _ := deps.Repo.DiffNumstat(ctx, op.Diff)
-	truncated := len(diff) > MaxDiffBytes
+	var files []model.NoteFile
+	overCap := false
+	if op.Working {
+		w, werr := reviewWorkingInput(ctx, deps, git.ParseNumstat(stat), len(diff))
+		if werr != nil {
+			return TaskInputs{}, werr
+		}
+		files, overCap = w.files, w.overCap
+		diff += w.patch
+		stat += w.numstat
+	}
+	truncated := overCap || len(diff) > MaxDiffBytes
 	diffBody := diff
 	if truncated {
 		diffBody = fmt.Sprintf("(diff truncated: %d bytes exceeds the %d KiB cap — inspect specific files with git)\n",
@@ -64,11 +80,12 @@ func (op ReviewChanges) Prepare(ctx context.Context, deps OpDeps) (TaskInputs, e
 		"GG_MESSAGE_FILE="+msgPath,
 		"GG_REPO="+op.Dir,
 	)
-	return TaskInputs{Command: op.Command, Dir: op.Dir, Env: env, MessageFile: msgPath, Cleanup: tmp.cleanup}, nil
+	return TaskInputs{Command: op.Command, Dir: op.Dir, Env: env, MessageFile: msgPath, Cleanup: tmp.cleanup, ReviewFiles: files}, nil
 }
 
 func (op ReviewChanges) Collect(in TaskInputs, stdout []byte) (Result, error) {
-	return Result{Captured: collectCaptured(in.MessageFile, stdout)}.WithSummary("reviewed %s", op.RangeLabel), nil
+	return Result{Captured: collectCaptured(in.MessageFile, stdout), ReviewFiles: in.ReviewFiles}.
+		WithSummary("reviewed %s", op.RangeLabel), nil
 }
 
 func (op ReviewChanges) Run(ctx context.Context, deps OpDeps) (Result, error) {
@@ -87,7 +104,11 @@ func (op ReviewChanges) reviewSummary(diffPath, stat string, truncated bool) str
 	if truncated {
 		b.WriteString("  (truncated — inspect files with git)")
 	}
-	b.WriteString("\n\n## Files changed (git diff --numstat)\n")
+	heading := "\n\n## Files changed (git diff --numstat)\n"
+	if op.Working {
+		heading = "\n\n## Files changed (git diff --numstat; untracked files as added)\n"
+	}
+	b.WriteString(heading)
 	stat = strings.ReplaceAll(stat, "\x00", "\n") // -z is NUL-delimited
 	if strings.TrimSpace(stat) == "" {
 		b.WriteString("(no changes)\n")
