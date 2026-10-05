@@ -123,7 +123,18 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	if err != nil {
 		return Resolved{}, err
 	}
-	return finishLink(ctx, l, c, opts)
+	res, err := finishLink(ctx, l, c, opts)
+	if err != nil {
+		return Resolved{}, err
+	}
+	if res.Hint.Kind == model.ReviewHintKind {
+		// One check for every entry point (gg open, #, start-at, steer, web):
+		// a review link moved onto another change never opens.
+		if err := checkReviewHint(ctx, opts.OpenFn(res.Checkout), res); err != nil {
+			return Resolved{}, err
+		}
+	}
+	return res, nil
 }
 
 // LocateLink answers the FIRST half of ResolveLink's question and only that
@@ -547,6 +558,10 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 			// which record the pair came from — so without one the link
 			// names nothing, whether or not this store holds the id.
 			return Resolved{}, fmt.Errorf("%w: a version hint needs the preview it names (@<base>..<ours>); %q alone names nothing", model.ErrLink, l.Hint.ID)
+		case model.ReviewHintKind:
+			// A review IS the change it compared — the hint only says which
+			// review — so without an address the link names nothing.
+			return Resolved{}, fmt.Errorf("%w: a review hint needs the change it reviewed (@<commit> or @<base>..<tip>); %q alone names nothing", model.ErrLink, l.Hint.ID)
 		case model.ContentHintKind:
 			// A content link names a FILE's content; with no path it names
 			// nothing. (The remote form is refused by ParseLink already; the

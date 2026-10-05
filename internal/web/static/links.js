@@ -256,6 +256,8 @@ function linkDesc(kind, id, subject) {
       return "commit: " + id + " " + truncateDesc(subject);
     case "stash":
       return "stash: " + truncateDesc(subject);
+    case "review":
+      return "review: " + id + " " + truncateDesc(subject);
     default:
       return kind + ": " + truncateDesc(id);
   }
