@@ -63,9 +63,13 @@ type NoteCounts struct {
 	// PlainByCommitPath counts the commit notes written in NO scope, by
 	// "<sha>:<path>": the ones a commit's Notes rows are for.
 	PlainByCommitPath map[string]int
-	Reviews           []ReviewHead   // every AI review note, newest first (Branches tab, @notes)
-	ByCommitPath      map[string]int // commit notes, by "<sha>:<path>"
-	ByShelf           map[string]int // notes on a whole shelf entry, by entry id
+	Reviews           []ReviewHead // every AI review note, newest first (Branches tab, @notes)
+	// WorkingReviews is this worktree's reviews of uncommitted changes,
+	// newest first: never in a ◆N badge, never in Reviews (the Branches
+	// sub-rows). Unmatched — matching reads files (Service.WorkingReviews).
+	WorkingReviews []ReviewHead
+	ByCommitPath   map[string]int // commit notes, by "<sha>:<path>"
+	ByShelf        map[string]int // notes on a whole shelf entry, by entry id
 }
 
 // NoteScopeCount is one scope's share of a commit's notes: the scope as the
@@ -566,6 +570,12 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		if n.IsReply() { // a badge counts THREADS
 			continue
 		}
+		if n.IsWorkingReview() {
+			if sameWorktreePath(n.Address.Worktree, cur) {
+				c.WorkingReviews = append(c.WorkingReviews, ReviewHead{ID: n.ID, Agent: n.Author, Summary: n.Summary, Created: n.Created})
+			}
+			continue
+		}
 		if n.IsReviewNote() {
 			// A review has its own marker (✎ in Commits, ◆ in Branches):
 			// it is never counted in the ◆N note badges.
@@ -623,6 +633,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		sort.Slice(sc, func(a, b int) bool { return sc[a].Scope < sc[b].Scope })
 	}
 	sort.SliceStable(c.Reviews, func(a, b int) bool { return c.Reviews[a].Created.After(c.Reviews[b].Created) })
+	sort.SliceStable(c.WorkingReviews, func(a, b int) bool { return c.WorkingReviews[a].Created.After(c.WorkingReviews[b].Created) })
 	s.mu.Lock()
 	if s.notesGen == gen { // a mutation raced this computation: drop it
 		s.noteCounts = &c
@@ -753,6 +764,11 @@ func anchorLines(lines []string, rng [2]int) []string {
 // found again elsewhere (scanning outward from the stored start); not found
 // but the file is there (stale, clamped); side absent (orphaned).
 func resolveOne(n model.Note, lines []string) (model.NoteStatus, [2]int) {
+	// A note about a whole object (an AI review, a shelf entry, a worktree's
+	// changes) has no lines to find: it is where it is.
+	if n.IsEntryLevel() {
+		return model.NoteActive, n.Range
+	}
 	if lines == nil {
 		return model.NoteOrphaned, n.Range
 	}

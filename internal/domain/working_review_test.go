@@ -149,3 +149,117 @@ func TestWorkingReviewsOnlyInTheirWorktree(t *testing.T) {
 		t.Fatalf("own worktree: %+v %v", got, err)
 	}
 }
+
+// putWorkingReview stores a working review of dir's a.txt (blob of reviewed)
+// created at created, directly through the store.
+func putWorkingReview(t *testing.T, svc *Service, top, reviewed string, created time.Time) string {
+	t.Helper()
+	st := svc.notesStore(context.Background())
+	n := model.Note{ID: "rv" + reviewed[:1], Source: model.NoteSourceAgent, Tags: []string{model.ReviewTag},
+		Address: model.FileAddress{State: model.StateUnstaged, Worktree: top},
+		Summary: "Review: working changes", Files: []model.NoteFile{{Path: "a.txt", Blob: blob(reviewed)}},
+		Created: created, Updated: created}
+	if err := st.Put(n); err != nil {
+		t.Fatal(err)
+	}
+	return n.ID
+}
+
+func TestSweepWorkingReviews(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		onDisk   string // a.txt now
+		age      time.Duration
+		wantKept bool
+	}{
+		{"current and old: kept", "A\n", 400 * 24 * time.Hour, true},
+		{"outdated and young: kept", "edited\n", time.Hour, true},
+		{"outdated and old: dropped", "edited\n", 400 * 24 * time.Hour, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir, svc := newRealRepo(t)
+			svc.UseNotesDir(t.TempDir())
+			svc.SetNotesPolicy(30, 0)
+			top, _ := svc.TopLevel(context.Background())
+			writeAt(t, dir, "a.txt", c.onDisk)
+			id := putWorkingReview(t, svc, top, "A\n", time.Now().UTC().Add(-c.age))
+			if _, err := svc.sweepNotes(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			all, _ := svc.notesStore(context.Background()).LoadAll()
+			kept := false
+			for _, n := range all {
+				kept = kept || n.ID == id
+			}
+			if kept != c.wantKept {
+				t.Fatalf("kept = %v, want %v", kept, c.wantKept)
+			}
+		})
+	}
+}
+
+func TestNoteCountsListWorkingReviewsApart(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	svc.UseNotesDir(t.TempDir())
+	top, _ := svc.TopLevel(context.Background())
+	writeAt(t, dir, "a.txt", "A\n")
+	putWorkingReview(t, svc, top, "A\n", time.Now().UTC())
+	c, err := svc.NoteCounts(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.WorkingReviews) != 1 || len(c.Reviews) != 0 || len(c.ByPath) != 0 {
+		t.Fatalf("counts: working %d reviews %d byPath %v", len(c.WorkingReviews), len(c.Reviews), c.ByPath)
+	}
+}
+
+func TestNotesOverviewListsWorkingReviewsWithTheirState(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	svc.UseNotesDir(t.TempDir())
+	top, _ := svc.TopLevel(context.Background())
+	writeAt(t, dir, "a.txt", "A\n")
+	putWorkingReview(t, svc, top, "A\n", time.Now().UTC())                   // current
+	putWorkingReview(t, svc, top, "B\n", time.Now().UTC().Add(-time.Minute)) // outdated
+	ov, err := svc.NotesOverview(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ov.WorkingReviews) != 2 || !ov.WorkingReviews[0].Current || ov.WorkingReviews[1].Current {
+		t.Fatalf("working reviews = %+v", ov.WorkingReviews)
+	}
+	if len(ov.Unstaged) != 0 || len(ov.Commits) != 0 || ov.Count() != 2 {
+		t.Fatalf("leaked: unstaged %d commits %d count %d", len(ov.Unstaged), len(ov.Commits), ov.Count())
+	}
+	if got := ov.ShownOn([]string{"main"}); len(got.WorkingReviews) != 2 {
+		t.Fatalf("ShownOn dropped the working reviews")
+	}
+}
+
+// `gg note list` reaches a working review through NoteAddresses → NotesAt.
+func TestNotesAtShowsAWorkingReviewItself(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	top, _ := svc.TopLevel(ctx)
+	writeAt(t, dir, "a.txt", "A\n")
+	id := putWorkingReview(t, svc, top, "A\n", time.Now().UTC())
+	addrs, _ := svc.NoteAddresses(ctx)
+	found := false
+	for _, a := range addrs {
+		rs, err := svc.NotesAt(ctx, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range rs {
+			found = found || (r.Note.ID == id && r.Status == model.NoteActive)
+		}
+	}
+	if !found {
+		t.Fatal("the working review is not listed")
+	}
+}

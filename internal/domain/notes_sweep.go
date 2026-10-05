@@ -153,6 +153,18 @@ func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 	drop := map[string]bool{}
 	shelfGone := map[string]bool{}
 	for _, n := range all {
+		// A working review (and its replies, which copy its address) has no
+		// line to re-anchor. It is dropped once no reviewed file matches
+		// (outdated) AND it is past max_age_days; a current one is never
+		// swept. Matched against the note's own worktree — the sweep reads
+		// every worktree's part.
+		if n.IsWorktreeLevel() {
+			if !n.IsReply() && n.IsWorkingReview() && !cutoff.IsZero() && n.Created.Before(cutoff) &&
+				!WorkingReviewState(n.Address.Worktree, n.Files).Current {
+				drop[n.ID] = true
+			}
+			continue
+		}
 		// A commit-level note (an AI review) has no line to re-anchor and never
 		// expires: a missing commit shows it as missing, it is not deleted
 		// behind the user's back. Its replies copy its address, so they are
