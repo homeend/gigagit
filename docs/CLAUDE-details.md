@@ -4628,7 +4628,10 @@ focus; the glyph stays ◐ without it) and an idle or a permission dialog
 `TMUX`, `STY` or `ZELLIJ` in its env, flag `tengu_static_title_under_mux` —
 it is always `✳`, so `childEnv` strips all three. Codex 0.160.0: braille
 spinner + ` | repo` while working, no glyph idle, `Action Required` when
-blocked (herdr). Kimi Code 2.1.1: OSC 9;4 `4;3` working, `4;0` done.
+blocked (herdr). Kimi Code 2.1.1: OSC 9;4 `4;3` working, `4;0` done —
+but only when it believes its host terminal shows progress (Windows
+Terminal `WT_SESSION`, ConEmu, ghostty, WezTerm in its env); elsewhere it
+sends none and Kimi is read from the screen alone, as before.
 Junie/agy send nothing usable.
 
 - `agentsession.oscFilter` records the last OSC 0/2 title (full UTF-8,

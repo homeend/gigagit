@@ -39,7 +39,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   review at the commit; on a Notes row, the plain notes on that file; the
   row disappears. The Branches review sub-row's web menu gained Open review.
 
-## Agent sessions — the title says working
+## Agent-state detection — one pipeline
 
 ### Internal
 
@@ -48,13 +48,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   per-agent profile of detectors (screen rules, window title, progress
   report — one table says which agent uses which), and a per-session
   tracker applies the holds, grace and stall rules; `agent_wait` reads the
-  tracker's settle time instead of keeping its own rule.
+  tracker's settle time instead of keeping its own rule. Follow-ups: the
+  stall key is named `StallKey` (no longer a second `Progress`), the
+  reading carries whether the agent's rules are dedicated, `First` keeps
+  its own list, doc comments on the readers, and a test for a title whose
+  `ESC \` terminator arrives split across two reads.
+
+## Agent sessions — the title says working
 
 ### Changed
 
 - **A turn reads as working from start to end.** Claude Code and Codex
   announce their turn in the terminal title (a spinning glyph); Kimi Code
-  in its progress report. gg now reads those beside the screen: the row
+  in its progress report (only under Windows Terminal, ConEmu, ghostty
+  or WezTerm — elsewhere Kimi sends none and is read from the screen
+  alone). gg now reads those beside the screen: the row
   stays working while the agent pauses between two steps, and turns idle
   about 0.7 s after the turn ends instead of 2 s — `agent_wait` wakes as
   soon. Questions still come from the screen; Codex's "Action Required"
