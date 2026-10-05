@@ -53,15 +53,17 @@ func submitReview(t *testing.T, m Model, line string) domain.TaskID {
 	return domain.Tasks().Submit(spec)
 }
 
-func TestTaskTabEnterShowsResultAndCopy(t *testing.T) {
+// A finished review run is a stored note (a working review included): enter
+// opens it in the review view.
+func TestTaskTabEnterOpensTheStoredReview(t *testing.T) {
 	m := launchTestModel(t)
+	m.svc.UseNotesDir(t.TempDir())
 	id := submitReview(t, m, "echo fine")
 	waitTaskState(t, id, taskEndedFn)
 	m, _ = m.openSessionsPopupOn(tabTasks, id)
 	m, _ = updateKey(m, "enter")
-	v := layerOf[*fileViewer](m)
-	if v == nil || v.src.kind != srcExternal || !v.result || v.apply != nil {
-		t.Fatalf("viewer %+v", v)
+	if !m.hasReviewLoading(m.reviewOpenGen) {
+		t.Fatalf("enter did not open the stored review (status %q)", m.statusMsg)
 	}
 }
 
@@ -191,6 +193,7 @@ func TestResultViewerCopiesWholeResult(t *testing.T) {
 
 func TestTaskTabHintFollowsTheRow(t *testing.T) {
 	m := launchTestModel(t)
+	m.svc.UseNotesDir(t.TempDir())
 	done := submitReview(t, m, "echo fine")
 	waitTaskState(t, done, taskEndedFn)
 	running := submitReview(t, m, "sleep 5") // same key: queued, then running — headless either way

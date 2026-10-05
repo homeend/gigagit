@@ -76,8 +76,8 @@ func WorkingReviewTarget() ReviewTarget {
 	return ReviewTarget{Kind: ReviewWorking, Range: "", Label: "working changes", Diff: model.DiffSpec{Rev: "HEAD"}}
 }
 
-// ReviewResult is a produced review: its text, the note it was stored as
-// ("" for working changes, which have no commit to attach to), the
+// ReviewResult is a produced review: its text, the note it was stored as (a
+// working-changes review is stored in this worktree's notes), the
 // injection-safe range, and the human Label used for titles.
 type ReviewResult struct {
 	NoteID  string
@@ -93,7 +93,8 @@ type ReviewResult struct {
 // ReviewReport runs resolvedCommand over target via engine.ReviewChanges and
 // stores the captured review as a note on the reviewed commit (SaveReview).
 // The three-frontend entry point; agent names the tool (the note's author). A
-// working-changes review is returned but not stored: it has no commit.
+// working-changes review is stored in this worktree's notes, with the
+// fingerprints of the files it read (spec 2026-10-04 working reviews).
 func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, resolvedCommand string, env []string) (ReviewResult, error) {
 	label := target.DisplayLabel()
 	op := engine.ReviewChanges{
@@ -102,6 +103,7 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, 
 		Env:        env,
 		Diff:       target.Diff,
 		RangeLabel: label, // the agent's "# Range:" context header — display text, not executed
+		Working:    target.Kind == ReviewWorking,
 	}
 	res, err := s.Execute(ctx, op, nil, nil)
 	if err != nil {
@@ -123,10 +125,7 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, 
 	report = canonicalReview(report)
 	_, perr = notebatch.ParseReview([]byte(report))
 	out := ReviewResult{Content: report, Range: target.Range, Label: label, Structured: perr == nil}
-	if target.Kind == ReviewWorking {
-		return out, nil
-	}
-	id, warn, serr := s.SaveReview(ctx, SaveReview{Target: target, Agent: agent, Text: report})
+	id, warn, serr := s.SaveReview(ctx, SaveReview{Target: target, Agent: agent, Text: report, Files: res.ReviewFiles})
 	if serr != nil {
 		return ReviewResult{}, fmt.Errorf("review not saved: %w", serr)
 	}

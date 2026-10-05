@@ -11,6 +11,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repogate"
 	"github.com/homeend/gigagit/internal/template"
 )
@@ -44,8 +45,9 @@ type TaskSpec struct {
 	ResultOptional bool
 	// Store, when set, persists each result (a review → a note) INSTEAD of
 	// the history's .result file. noteID is "" on the first call and the id
-	// it returned afterwards, so later results rewrite the same note.
-	Store func(ctx context.Context, noteID, text string) (id, warn string, err error)
+	// it returned afterwards, so later results rewrite the same note. files
+	// is a working review's fingerprints from Prepare (nil otherwise).
+	Store func(ctx context.Context, noteID, text string, files []model.NoteFile) (id, warn string, err error)
 }
 
 var longHex = regexp.MustCompile(`\b[0-9a-f]{8,40}\b`)
@@ -151,14 +153,12 @@ func (s *Service) ReviewTask(ctx context.Context, tc config.ToolCommand, target 
 	spec.Key = ReviewKey(top, target)
 	spec.Op = engine.ReviewChanges{
 		Command: resolved, Dir: top, Env: []string{"GG_TASK=review"},
-		Diff: target.Diff, RangeLabel: target.DisplayLabel(),
+		Diff: target.Diff, RangeLabel: target.DisplayLabel(), Working: target.Kind == ReviewWorking,
 	}
 	spec.Parse = parseReport
-	if target.Kind != ReviewWorking { // working changes have no commit: no note (spec ruling 1)
-		agent := spec.Agent
-		spec.Store = func(ctx context.Context, noteID, text string) (string, string, error) {
-			return s.SaveReview(ctx, SaveReview{Target: target, Agent: agent, Text: text, NoteID: noteID})
-		}
+	agent := spec.Agent
+	spec.Store = func(ctx context.Context, noteID, text string, files []model.NoteFile) (string, string, error) {
+		return s.SaveReview(ctx, SaveReview{Target: target, Agent: agent, Text: text, NoteID: noteID, Files: files})
 	}
 	return spec, nil
 }

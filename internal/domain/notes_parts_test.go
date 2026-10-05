@@ -95,7 +95,7 @@ func TestNoteReadersLoadOnlyTheirParts(t *testing.T) {
 	if _, err := svc.reviewNotes(ctx); err != nil {
 		t.Fatal(err)
 	}
-	check("reviewNotes", []notes.Part{notes.PartCommits})
+	check("reviewNotes", []notes.Part{notes.PartCommits, wt}) // commit reviews + this worktree's working reviews
 }
 
 func TestPreviewPartsByScope(t *testing.T) {

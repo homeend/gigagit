@@ -71,18 +71,35 @@ func TestReviewReportSavesANote(t *testing.T) {
 	}
 }
 
-func TestReviewReportWorkingChangesSavesNoNote(t *testing.T) {
-	_, svc := newRealRepo(t)
-	svc.UseNotesDir(t.TempDir())
-	res, err := svc.ReviewReport(context.Background(), WorkingReviewTarget(), "Fake", `printf 'ok\n'`, nil)
+// A working-changes review is stored, with the untracked file fingerprinted.
+func TestReviewReportStoresAWorkingReview(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	dir, svc, _ := reviewRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("n\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	res, err := svc.ReviewReport(ctx, WorkingReviewTarget(), "Echo",
+		`printf '{"version":1,"summary":"ok","files":[]}' > "$GG_MESSAGE_FILE"`, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.NoteID != "" || res.Content != "ok" {
-		t.Fatalf("res = %+v, want the text and no note", res)
+	if res.NoteID == "" {
+		t.Fatal("a working review must be stored")
 	}
-	if all, _ := svc.Reviews(context.Background()); len(all) != 0 {
-		t.Fatalf("a working-changes review was stored: %+v", all)
+	r, err := svc.Review(ctx, res.NoteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, f := range r.Files {
+		found = found || (f.Path == "new.txt" && f.Blob != "")
+	}
+	if !found || r.Kind != ReviewOnWorktree {
+		t.Fatalf("review = %+v, want a worktree review with the untracked new.txt fingerprinted", r)
 	}
 }
 
