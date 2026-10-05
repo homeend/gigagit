@@ -11,11 +11,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Fixed
 
 - **gg web's ✎ marks the files of every current working review**, as the
-  TUI does, not only the newest review's files.
+  TUI does, not only the newest review's files — and never a Staged row:
+  the review's notes are not drawn on the staged diff.
 - **A review that cannot be saved is still shown.** When the note store
   cannot keep a review (notes off, no state directory), `gg review`
   prints the report and then `error: review not saved: …`, exit 1; gg web
-  opens the report beside the error line. Before, the agent's report was
+  opens the report, its path line saying it was not saved. Before, the agent's report was
   lost. Commit, branch and working reviews alike.
 - **Remove all notes… skips a working review's notes.** They are drawn on
   the unstaged diff read-only and cannot be removed: they no longer offer

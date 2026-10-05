@@ -214,7 +214,7 @@ function reviewDone(ev, kind) {
   else {
     // A review the store could not keep still shows: the error line says it
     // was not saved.
-    if (!isConflict && ev.report) openReport(title, "", ev.report, reviewDoc(ev));
+    if (!isConflict && ev.report) openReport(title, "", ev.report, reviewDoc(ev), ev.error || "not saved");
     opLine((isConflict ? "AI resolve failed: " : "review failed: ") + (ev.error || "unknown error"), true);
   }
 }
@@ -296,7 +296,7 @@ function collectTask() {
   if (t.status === "done") openReport(t.title || "Review", t.noteId, t.report, t.doc);
   else {
     // A review the store could not keep is still collected (see reviewDone).
-    if (t.kind === "review" && t.report) openReport(t.title || "Review", "", t.report, t.doc);
+    if (t.kind === "review" && t.report) openReport(t.title || "Review", "", t.report, t.doc, t.error || "not saved");
     opLine(noun + " failed: " + (t.error || "unknown error"), true);
   }
 }
@@ -453,11 +453,21 @@ function reviewDoc(ev) {
   return { structured: !!ev.structured, overviewMd: ev.overviewMd, docMeta: ev.docMeta || "", notes: ev.notes || [] };
 }
 
+// reportWhere is the report viewer's path line: the note a review is stored
+// as, or — for one the store could not keep — that it was not saved (the
+// error line under the viewer is covered while it is open). "" for a
+// conflict run's overview.
+function reportWhere(noteId, unsaved) {
+  if (noteId) return "note " + noteId;
+  return unsaved ? "not saved — " + unsaved : "";
+}
+
 // The report viewer. A structured review (the gg review document) shows its
 // overview as rendered markdown — parsed server-side, as for PR bodies — then
 // its meta and one "path:line — summary" row per note; anything else is shown
-// as plain text, with a warning when a review was not the document.
-function openReport(title, noteId, content, doc) {
+// as plain text, with a warning when a review was not the document. unsaved
+// is the save error of a review the store could not keep.
+function openReport(title, noteId, content, doc, unsaved) {
   $("report-title").textContent = title;
   const structured = !!(doc && doc.structured);
   $("report-doc").style.display = structured ? "" : "none";
@@ -472,8 +482,7 @@ function openReport(title, noteId, content, doc) {
       .join("");
   }
   $("report-body").textContent = content || "";
-  // A commit/branch review is stored as a note; working changes are not.
-  const where = noteId ? "note " + noteId : "";
+  const where = reportWhere(noteId, unsaved);
   $("report-path").textContent = where;
   $("report-path").title = where;
   $("report-body").scrollTop = 0;
