@@ -214,7 +214,7 @@ func consoleTitleHints(exited bool) string {
 	if exited {
 		return "  " + i18n.T("[x] close  [ctrl+t] maximise  [esc] hide")
 	}
-	return "  " + i18n.T("[enter] type  [ctrl+t] maximise  [esc] close")
+	return "  " + i18n.T("[enter] type  [X] kill+remove  [ctrl+t] maximise  [esc] close")
 }
 
 // consoleTitleParts: the label, the worktree's short name and the state (the
@@ -490,6 +490,15 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m.syncConsoleSize(), nil, true
 	case "esc", m.stepOutKey(): // the step-out key twice = out, then away
 		return m.closeConsole(), nil, true
+	case "X":
+		// The session row's X (kill after a confirm, then remove; the list
+		// change closes this console). On an exited agent it is x.
+		if m.consoleExited() {
+			return m.removeConsoleSession(), nil, true
+		}
+		if s, ok := m.consoleSession(); ok {
+			return m.killRemoveSessionRow(s.Info()), nil, true
+		}
 	case "x":
 		if m.consoleExited() {
 			return m.removeConsoleSession(), nil, true

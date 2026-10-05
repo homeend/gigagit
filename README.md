@@ -1492,6 +1492,7 @@ included — except two:
 | `enter` | → agent | focus the console (type again) |
 | `ctrl+t` | → agent | maximise over the whole body, focused |
 | `esc` | → agent | close the console — **the agent keeps running** |
+| `X` | → agent | kill the agent (asks first) and remove the session, as `X` on its sub-row; on an exited agent `x` / `X` close the console and remove the session |
 
 A running or exited session shows as a sub-row under its worktree
 (`└ ● Claude  running 12m` / `└ ○ Codex  exited (0)`); `enter` on it (or its

@@ -15,6 +15,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `[enter] type`: x removes the session (as the ctrl+\ popup's x does) and
   gives the Commits column back. esc now reads `hide` there — it keeps the
   exited session listed. On a running agent x is unchanged.
+- **X on a running agent's unfocused console kills and removes it**, as X
+  on its session sub-row does: it asks first (Cancel is the default), then
+  kills the agent and drops the session; the console closes with it. The
+  title and the footer say `[X] kill+remove`. On an exited agent X is x.
 
 ### Changed
 

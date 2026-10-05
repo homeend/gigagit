@@ -497,3 +497,53 @@ func TestExitedConsoleClosesOnX(t *testing.T) {
 		t.Fatal("x must remove the exited session")
 	}
 }
+
+// X on a running agent's unfocused console is the session row's X: confirm
+// (Cancel by default), then kill the agent and remove it; the list change
+// closes the console. The title and footer advertise it.
+func TestUnfocusedRunningConsoleKillRemovesOnX(t *testing.T) {
+	m := newTestModel(t)
+	s := startTestSession(t, m, "sleep 30")
+	m, _ = m.openConsole(s.Info().ID)
+	m.console.focused = false
+	m.focus = panelCommits
+	m, _ = m.onSessionsChanged()
+	if !strings.Contains(m.footerLine(), "[X] kill+remove") || !strings.Contains(consoleTitle(s.Info(), false), "[X] kill+remove") {
+		t.Fatalf("a running unfocused console must offer [X] kill+remove: footer %q title %q", m.footerLine(), consoleTitle(s.Info(), false))
+	}
+	mm, _ := m.Update(keyMsg("X"))
+	m = mm.(Model)
+	if m.modal == nil || m.modal.req.ID != "session-kill-remove" || m.modal.req.Options[m.modal.sel] != "Cancel" {
+		t.Fatalf("X must confirm (Cancel by default), modal = %+v", m.modal)
+	}
+	mm, _ = m.Update(keyMsg("esc"))
+	m = mm.(Model)
+	if m.modal != nil || m.console == nil || s.Info().State != domain.SessionRunning {
+		t.Fatal("esc on the confirm must leave the agent running and its console docked")
+	}
+	mm, _ = m.Update(keyMsg("X"))
+	m = mm.(Model)
+	mm, _ = m.Update(keyMsg("up")) // Kill
+	m = mm.(Model)
+	mm, _ = m.Update(keyMsg("enter"))
+	m = mm.(Model)
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("X did not kill the agent")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, ok := domain.Sessions().Get(s.Info().ID); !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("X did not remove the killed session")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	m, _ = m.onSessionsChanged()
+	if m.console != nil {
+		t.Fatalf("the removed session's console is still docked: %+v", m.console)
+	}
+}

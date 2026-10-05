@@ -261,7 +261,7 @@ func (m Model) footerOverride() (string, bool) {
 			if m.consoleExited() {
 				return i18n.T("agent console: [x] close  [ctrl+t] maximise  [esc/%s] hide  [%s] sessions  [tab] panels", m.stepOutKey(), m.sessionsKey()), true
 			}
-			return i18n.T("agent console: [enter] type  [ctrl+t] maximise  [esc/%s] close  [%s] sessions  [tab] panels", m.stepOutKey(), m.sessionsKey()), true
+			return i18n.T("agent console: [enter] type  [X] kill+remove  [ctrl+t] maximise  [esc/%s] close  [%s] sessions  [tab] panels", m.stepOutKey(), m.sessionsKey()), true
 		}
 	}
 	if m.filterTyping || m.stashFilterTyping() {
