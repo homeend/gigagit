@@ -504,6 +504,11 @@ func (m Model) renderInterface() string {
 	if errMode || (haveFull && lipgloss.Width(full) > g.w) {
 		full = i18n.T("[E] full details") + " · " + full
 	}
+	if !errMode {
+		// Trails the row with room of its own: the plain back-cut below
+		// would chop a path's name first.
+		full = m.withConsoleWorktree(full, g.w)
+	}
 	statusRow := truncate(full, g.w)
 	if errMode {
 		statusRow = st().statusErr.Render(statusRow)
