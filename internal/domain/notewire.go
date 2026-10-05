@@ -29,10 +29,17 @@ type WireNote struct {
 	// ReadOnly marks a forge review comment: gg shows it and never edits,
 	// answers or removes it. Resolved is the forge's own thread flag; FileLevel
 	// a comment on the whole file (no line — it renders above the file).
-	ReadOnly  bool   `json:"read_only,omitempty"`
-	Resolved  bool   `json:"resolved,omitempty"`
-	FileLevel bool   `json:"file_level,omitempty"`
-	Created   string `json:"created,omitempty"` // RFC 3339; empty when unknown
+	ReadOnly bool `json:"read_only,omitempty"`
+	Resolved bool `json:"resolved,omitempty"`
+	// Replyable: a read-only root that still takes replies (a review
+	// remark). ResolvedBy/ResolvedAt: who resolved the thread, when (RFC
+	// 3339). Link: an address the note points at (a reply's fix).
+	Replyable  bool   `json:"replyable,omitempty"`
+	ResolvedBy string `json:"resolved_by,omitempty"`
+	ResolvedAt string `json:"resolved_at,omitempty"`
+	Link       string `json:"link,omitempty"`
+	FileLevel  bool   `json:"file_level,omitempty"`
+	Created    string `json:"created,omitempty"` // RFC 3339; empty when unknown
 	// Preview is the scope the note was written in (model.Note.Preview):
 	// "<target>...<source>" or "<a7>..<b7>"; empty for any other note.
 	Preview string `json:"preview,omitempty"`
@@ -61,9 +68,18 @@ func ToWireNote(r ResolvedNote) WireNote {
 		w.Resolved = model.NoteHasTag(r.Note, model.NoteTagResolved)
 		w.FileLevel = r.Range == [2]int{}
 	}
-	if model.IsReviewNoteID(r.Note.ID) {
-		w.ReadOnly = true // built from a review document at read time, never stored
+	if r.Resolution != nil {
+		w.Resolved, w.ResolvedBy = true, r.Resolution.By
+		if !r.Resolution.At.IsZero() {
+			w.ResolvedAt = r.Resolution.At.UTC().Format(time.RFC3339)
+		}
 	}
+	if model.IsReviewNoteID(r.Note.ID) {
+		// Built from a review document at read time, never stored: never
+		// edited or removed, but its thread takes replies.
+		w.ReadOnly, w.Replyable = true, true
+	}
+	w.Link = r.Note.Link
 	if !r.Note.Created.IsZero() {
 		w.Created = r.Note.Created.UTC().Format(time.RFC3339)
 	}

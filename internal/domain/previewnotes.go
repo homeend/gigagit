@@ -238,6 +238,9 @@ func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path
 		if path != "" && n.Address.Path != path {
 			continue
 		}
+		if n.IsRemarkReply() {
+			continue // shown only inside its review
+		}
 		if ofReview != nil && !ofReview[n.ID] && !(n.IsReply() && ofReview[n.ParentID]) {
 			continue // another review's thread, or a plain one: not this review's
 		}
@@ -364,6 +367,9 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 	}
 	for _, r := range forge { // active by construction: appended, never re-resolved
 		out[r.Note.Address.Path] = append(out[r.Note.Address.Path], r)
+	}
+	for p := range out {
+		out[p] = s.withResolutions(ctx, out[p])
 	}
 	return out, nil
 }

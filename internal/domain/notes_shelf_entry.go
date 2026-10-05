@@ -24,7 +24,7 @@ func (s *Service) ShelfNotes(ctx context.Context, id string) ([]ResolvedNote, er
 	if err != nil {
 		return nil, err
 	}
-	return entryNotes(mine), nil
+	return s.withResolutions(ctx, entryNotes(mine)), nil
 }
 
 // entryNotes is resolveNotes for notes that anchor on no line: every root is

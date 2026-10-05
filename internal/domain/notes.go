@@ -455,7 +455,7 @@ func (s *Service) NotesClearAtCommit(ctx context.Context, commit, path, scope st
 	if len(roots) == 0 {
 		return 0, nil
 	}
-	dropped, err := st.Sweep(func(n model.Note) bool { return !roots[n.ID] && !roots[n.ParentID] })
+	dropped, err := st.Sweep(func(n model.Note) bool { return !roots[n.ID] && !roots[n.StoredParent()] })
 	if dropped > 0 {
 		s.invalidateNoteCounts()
 	}
@@ -484,7 +484,7 @@ func (s *Service) NotesFor(ctx context.Context, addr model.FileAddress, d Diff) 
 			sortReviewNotes(out)
 		}
 	}
-	return out, nil
+	return s.withResolutions(ctx, out), nil
 }
 
 // loadNotesAt is the STORE half of a note read, shared by NotesFor and
@@ -558,7 +558,7 @@ func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]Resolv
 		})
 	}
 	if len(mine) == 0 {
-		return extra, nil
+		return s.withResolutions(ctx, extra), nil
 	}
 	// Only now are the two sides worth reading: the reads shell out to git,
 	// and an address with no notes at all must cost nothing.
@@ -569,7 +569,7 @@ func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]Resolv
 		out = append(out, extra...)
 		sortReviewNotes(out)
 	}
-	return out, nil
+	return s.withResolutions(ctx, out), nil
 }
 
 // NoteCounts returns the badge counts, cached until the next mutation. The

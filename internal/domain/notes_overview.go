@@ -115,7 +115,7 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 		}
 	}
 	for _, n := range all {
-		if review[n.ID] || review[n.ParentID] {
+		if review[n.ID] || review[n.StoredParent()] {
 			continue
 		}
 		a := n.Address
@@ -169,7 +169,7 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 		}
 		oldLines, _ := s.noteSideLines(ctx, b.addr, model.NoteSideOld)
 		newLines, _ := s.noteSideLines(ctx, b.addr, model.NoteSideNew)
-		f := NoteFileNotes{Addr: b.addr, Notes: resolveNotes(b.notes, oldLines, newLines)}
+		f := NoteFileNotes{Addr: b.addr, Notes: s.withResolutions(ctx, resolveNotes(b.notes, oldLines, newLines))}
 		if len(f.Notes) == 0 {
 			continue
 		}
