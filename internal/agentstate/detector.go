@@ -1,6 +1,9 @@
 package agentstate
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Observation is what gg observed of one session at one moment: its screen
 // and what it announced outside it (the window title, the OSC 9;4 report).
@@ -62,8 +65,8 @@ func (p Profile) Read(o Observation) Reading {
 // First consults its parts in order: the first one with a verdict decides,
 // carrying the hints of the parts before it; later parts are not asked.
 // (herdr's order: a title question or spinner outranks every screen rule;
-// an idle title only hints.)
-func First(parts ...Detector) Detector { return first(parts) }
+// an idle title only hints.) It keeps its own copy of the list.
+func First(parts ...Detector) Detector { return first(slices.Clone(parts)) }
 
 type first []Detector
 

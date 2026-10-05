@@ -36,6 +36,18 @@ func TestFirstStopsAtTheFirstVerdict(t *testing.T) {
 	}
 }
 
+// First keeps its own list: changing the caller's slice afterwards does not
+// change what the composed detector reads.
+func TestFirstKeepsItsOwnParts(t *testing.T) {
+	t.Parallel()
+	parts := []Detector{fixed{State: Question}}
+	d := First(parts...)
+	parts[0] = fixed{State: Working}
+	if got := d.Read(Observation{Progress: -1}); got.State != Question {
+		t.Fatalf("state = %v after the caller's slice changed, want Question", got.State)
+	}
+}
+
 func TestWithScreen(t *testing.T) {
 	t.Parallel()
 	// A known agent: the given list replaces its built-in one, the other
