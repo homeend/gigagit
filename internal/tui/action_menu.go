@@ -67,6 +67,10 @@ func availableActions(m Model) []actionRow {
 		if rows, ok := m.noteRowMenu(); ok {
 			return rows
 		}
+		// The Files panel's Review row is not a file either: Open + Delete.
+		if rows, ok := m.workingReviewRowMenu(); ok {
+			return rows
+		}
 		rows := m.contextCopyRows()
 		if r, ok := m.contextLinkRow(); ok {
 			rows = insertCopyLinkRow(rows, r)

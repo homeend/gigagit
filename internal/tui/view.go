@@ -639,7 +639,7 @@ func (m Model) leftPanelLabel(p panel) string {
 	case panelStaged, panelReflog:
 		return m.panelLabel(p, bottomTabLabel(p, m.panelLen(panelStaged), m.panelLen(panelReflog)))
 	case panelFiles, panelTags:
-		return m.panelLabel(p, filesTabLabel(p, m.panelLen(panelFiles), m.panelLen(panelTags)))
+		return m.panelLabel(p, filesTabLabel(p, m.filesPanelFileCount(), m.panelLen(panelTags)))
 	default: // the Branches/Remotes/Worktrees tab slot
 		label := joinTabSegs(topTabSegsWith(p, m.forgeShown))
 		if p == panelPRs && m.prsErr != "" && len(m.prs) > 0 {

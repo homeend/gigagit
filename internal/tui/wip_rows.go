@@ -157,6 +157,9 @@ func (m Model) selectedKey(p panel) (string, bool) {
 	if s < 0 || s >= len(idx) {
 		return "", false
 	}
+	if p == panelFiles && idx[s] == reviewRowIdx {
+		return "", false // the Review row cannot be marked
+	}
 	return m.listFor(p).Key(idx[s]), true
 }
 

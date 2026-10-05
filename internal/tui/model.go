@@ -47,10 +47,16 @@ type Model struct {
 	// all of status.Files — which, on a 40k-file working tree, was rebuilt many
 	// times per keystroke and made scrolling lag for seconds. Read-only: callers
 	// must not sort/append/reorder the returned slice.
-	filesIdx  []int
-	stagedIdx []int
-	branches  []model.Branch
-	commits   []model.Commit
+	filesIdx []int
+	// filesIdxReview is filesIdx with the Review row's sentinel in front
+	// (working_review_row.go); nil while the row is not shown.
+	filesIdxReview []int
+	// workingReviews is this worktree's working reviews, matched (the Files
+	// panel's Review row and ✎ markers).
+	workingReviews []domain.WorkingReview
+	stagedIdx      []int
+	branches       []model.Branch
+	commits        []model.Commit
 
 	worktrees              []model.Worktree
 	worktreeMarks          map[string]domain.WorktreeMark // path -> live claim / reserve (Worktrees ⚑ / ⊘)
@@ -954,6 +960,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.blinkOn = !m.blinkOn
 		return m, m.noticeBlinkCmd(msg.gen)
+	case workingReviewsMsg:
+		if msg.err == nil {
+			m = m.withWorkingReviews(msg.reviews)
+		}
+		return m, nil
+
 	case reviewViewMsg:
 		return m.handleReviewViewMsg(msg)
 	case reviewsFollowMsg:
@@ -1917,6 +1929,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.conflict = p.conflict
 			m = m.restorePanelSel(panelFiles, keyFiles)
 			m = m.restorePanelSel(panelStaged, keyStaged)
+			// An edit changes which files a working review still matches.
+			previewsChain = tea.Batch(previewsChain, m.loadWorkingReviewsCmd())
 			// Rebuild the commit graph so WIP pseudo-rows (◇ Working tree/Staged)
 			// stay in sync with the new status, even on the proc path (e.g. after
 			// a stash pop that triggers a status-only refresh mid-conflict process).
@@ -2039,6 +2053,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.identity = msg.value.(model.Identity)
 		case srcNotes:
 			m.noteCounts = msg.value.(domain.NoteCounts)
+			// The Files panel's Review row: re-match this worktree's working
+			// reviews (none → the row and the ✎ go).
+			if len(m.noteCounts.WorkingReviews) == 0 {
+				m = m.withWorkingReviews(nil)
+			} else {
+				previewsChain = tea.Batch(previewsChain, m.loadWorkingReviewsCmd())
+			}
 			// Preview badges count the SAME store, so a note write moves them
 			// too. Armed only while a preview is actually on screen — otherwise
 			// every note write in every repo would spend a git resolve per
@@ -2849,6 +2870,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Files panel, conflicted row: hand the file straight to the region
 			// picker (the same pipeline the x process's enter runs, minus the
 			// process — apply/esc land back here).
+			if m.onReviewRow() {
+				r, _ := m.currentWorkingReview()
+				return m.openReview(r.ID, r.Summary)
+			}
 			if m.focus == panelFiles && m.opsIdle() {
 				if bi, ok := m.backingIndex(panelFiles); ok && m.status.Files[bi].Kind == model.KindUnmerged {
 					f := m.status.Files[bi]

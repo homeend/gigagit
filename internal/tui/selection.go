@@ -41,6 +41,9 @@ func (m Model) rowKeyAt(p panel, i int) string {
 		return ""
 	}
 	u := idx[i] // backing (or unified-commits) index
+	if p == panelFiles && u == reviewRowIdx {
+		return "" // the Review row has no file
+	}
 	switch p {
 	case panelBranches:
 		return m.listFor(p).Key(u) // entry-aware: a session sub-row keys as name\x00id
