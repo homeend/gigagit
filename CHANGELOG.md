@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review and note markers after a repo switch
+
+### Fixed
+
+- **Switching repositories now shows the new repo's review ✎ / ◆ markers,
+  a commit's Reviews rows and the file note badges right away.** The note
+  counts were read only at startup, on `r` and after a note change, so a
+  switch kept the old repo's (matching nothing, or the wrong commits when
+  two repos share history) until a refresh.
+
 ## Note store split into parts
 
 ### Changed

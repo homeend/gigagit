@@ -233,6 +233,9 @@ type Model struct {
 	reviewOpenGen int
 
 	previews []previewRow // saved merge previews + live summaries (srcPreviews)
+	// rerootNotes asks the next full snapshot to chain a note-counts read: a
+	// repo switch cleared the old repo's counts (reRoot).
+	rerootNotes bool
 
 	// Pull requests (pr_panel.go). forgeShown flips true on the first read that
 	// finds a usable forge CLI and stays true for this repo session (reRoot
@@ -1812,6 +1815,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			legacyLoading := m.loading // this arm owns the legacy flag; a silent chain must not flip it
 			var previewsCmd tea.Cmd
 			m, previewsCmd = m.chainPreviewsRead()
+			if m.rerootNotes {
+				// The first snapshot after a repo switch: read the new repo's
+				// note counts here, for the same ordering reason as previews.
+				// Only after a switch — startup's fan-out already reads them,
+				// and an op that changes notes reloads srcNotes itself.
+				m.rerootNotes = false
+				var notesCmd tea.Cmd
+				m, notesCmd = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{manual: m.srcLoading[srcNotes]})
+				previewsCmd = tea.Batch(previewsCmd, notesCmd)
+			}
 			m.loading = legacyLoading // an inherited manual flag is cleared by that read's own arrival
 			// An active process advances from the freshly-reloaded state (e.g.
 			// the conflict process re-derives its file list after a resolve).
@@ -4838,6 +4851,11 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingNoticeConfig = nil
 	m.refreshHealthAfterOp = false
 	m.previews = nil // the old repo's saved previews must not linger in the new one
+	// Nor its note counts: the ✎ / ◆ markers, a commit's Reviews rows and the
+	// file badges are keyed by sha and path, and two repos can share both.
+	// The new repo's are read once its snapshot lands (rerootNotes).
+	m.noteCounts = domain.NoteCounts{}
+	m.rerootNotes = true
 	// The forge belongs to the repository: the new Service probes afresh, and
 	// until it answers there is no Pull requests tab to stand on.
 	m.forgeShown, m.forgeProvider, m.forgeProbeKicked = false, "", false
