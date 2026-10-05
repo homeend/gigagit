@@ -129,17 +129,18 @@ func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
 		// reason), so this lane's only wire traffic is the terminal done.
 		res, rerr := svc.ReviewReport(ctx, target, cmd.Name, resolved, []string{"GG_TASK=review"})
 		if rerr != nil {
+			// A report the store could not keep still reaches the page,
+			// beside the error.
+			if res.Content != "" {
+				return engine.Result{}, reviewDoneWire(res), rerr
+			}
 			return engine.Result{}, nil, rerr
 		}
 		summary := "review finished"
 		if res.NoteID != "" {
 			summary = "review saved as note " + res.NoteID
 		}
-		out := map[string]any{"report": res.Content, "noteId": res.NoteID, "label": res.Label, "warn": res.Warn, "structured": false}
-		if doc, perr := notebatch.ParseReview([]byte(res.Content)); perr == nil {
-			addReviewDoc(out, doc)
-		}
-		return engine.Result{Summary: summary}, out, nil
+		return engine.Result{Summary: summary}, reviewDoneWire(res), nil
 	})
 	if err != nil {
 		writeErr(w, http.StatusConflict, err)
@@ -148,6 +149,17 @@ func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id, "tool": cmd.Name, "label": label})
+}
+
+// reviewDoneWire is the review lane's done payload: the report, its note
+// (none when the store could not keep it) and, for a review document, its
+// parsed parts.
+func reviewDoneWire(res domain.ReviewResult) map[string]any {
+	out := map[string]any{"report": res.Content, "noteId": res.NoteID, "label": res.Label, "warn": res.Warn, "structured": false}
+	if doc, perr := notebatch.ParseReview([]byte(res.Content)); perr == nil {
+		addReviewDoc(out, doc)
+	}
+	return out
 }
 
 // handleOpCancel cancels a live agent run (review or conflict_complete).

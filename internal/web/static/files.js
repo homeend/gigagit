@@ -20,7 +20,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { currentWorkingReview, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewOverview } from "./reviews.js";
+import { currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewOverview } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -1097,11 +1097,10 @@ function renderFiles() {
   let lastSection = "";
   const anyBadge = state.statusEntries.some((f) => state.noteCounts.by_path[f.path] > 0);
   const cols = fileCols(FILE_BTN_COLS + (anyBadge ? NOTE_BADGE_COLS : 0));
-  // A current review of these changes heads the list; ✎ marks each file it
-  // still matches (reviews.js).
-  const wr = currentWorkingReview();
-  const reviewed = new Set(wr ? wr.matches || [] : []);
-  html += workingReviewRowHTML(wr);
+  // The newest current review of these changes heads the list; ✎ marks each
+  // unstaged file any current review still matches (reviews.js).
+  const reviewed = workingReviewedPaths(state.noteCounts.working_reviews);
+  html += workingReviewRowHTML(currentWorkingReview());
   state.statusEntries.forEach((f, i) => {
     if (f.section !== lastSection) {
       html += `<li class="sect">${SECTION_LABELS[f.section]}</li>`;
@@ -1118,7 +1117,7 @@ function renderFiles() {
       `<li class="${i === state.fileCursor ? "sel" : ""} ${f.section}${state.marked.has(f.path) ? " marked" : ""}" data-i="${i}">` +
       `<span class="st">${esc(badge)}</span>` +
       filePathHTML(f.path, cols) +
-      (reviewed.has(f.path) ? `<span class="wrmark" title="the review of these changes still matches this file">✎</span>` : "") +
+      workingReviewMarkHTML(f, reviewed) +
       noteBadgeHTML(state.noteCounts.by_path[f.path]) +
       `${btn}</li>`;
   });

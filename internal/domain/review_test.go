@@ -103,6 +103,28 @@ func TestReviewReportStoresAWorkingReview(t *testing.T) {
 	}
 }
 
+// A review the store cannot keep still hands back its report: the caller
+// prints it beside the save error instead of losing the agent's work.
+func TestReviewReportKeepsTheReportWhenTheSaveFails(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	dir, svc, _ := reviewRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("n\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc.disableNotesForTest()
+	res, err := svc.ReviewReport(context.Background(), WorkingReviewTarget(), "Echo",
+		`printf 'REPORT: kept\n'`, nil)
+	if err == nil || !strings.Contains(err.Error(), "review not saved") {
+		t.Fatalf("err = %v, want the save error", err)
+	}
+	if !strings.Contains(res.Content, "REPORT: kept") || res.NoteID != "" {
+		t.Fatalf("result = %+v, want the report and no note id", res)
+	}
+}
+
 // TestWorkingReviewTargetDiffsAgainstHEAD proves the working-changes target
 // diffs against HEAD (git diff HEAD, which includes staged changes), NOT the
 // zero DiffSpec (bare git diff = working tree vs index only, which silently

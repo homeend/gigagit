@@ -691,7 +691,7 @@ registerHelp({
 });
 
 
-export { currentWorkingReview, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;
@@ -705,6 +705,25 @@ $("diff-body").addEventListener("click", (e) => {
 function currentWorkingReview() {
   const rs = (state.noteCounts && state.noteCounts.working_reviews) || [];
   return rs.find((r) => r.current) || null;
+}
+
+// workingReviewedPaths are the files any current review of these changes
+// still matches: their ✎ (the TUI's reviewedPaths). An outdated review marks
+// nothing.
+function workingReviewedPaths(rs) {
+  const out = new Set();
+  for (const r of rs || []) {
+    if (r.current) (r.matches || []).forEach((p) => out.add(p));
+  }
+  return out;
+}
+
+// workingReviewMarkHTML is a working-list row's ✎: its file is one a current
+// review still matches. Never on a Staged row — the review's notes are not
+// drawn on the staged diff, so ✎ there would point at nothing.
+function workingReviewMarkHTML(f, reviewed) {
+  if (f.section === "staged" || !reviewed.has(f.path)) return "";
+  return `<span class="wrmark" title="the review of these changes still matches this file">✎</span>`;
 }
 
 // workingReviewRowHTML is the working list's Review row: "✎ Review: <date>

@@ -119,6 +119,11 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 
 	res, err := svc.ReviewReport(ctx, target, cmd.Name, resolved, []string{"GG_TASK=review"})
 	if err != nil {
+		// A report the store could not keep is still printed: the agent's
+		// work is not lost because the note was not written.
+		if res.Content != "" {
+			printReview(stdout, res.Content)
+		}
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}

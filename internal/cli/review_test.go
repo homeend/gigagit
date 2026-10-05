@@ -222,6 +222,27 @@ func TestReviewWorkingStoresANote(t *testing.T) {
 	}
 }
 
+// With nowhere to store it, the review is still printed: the save error goes
+// to stderr and the exit is 1.
+func TestReviewWorkingPrintsTheReportWhenTheSaveFails(t *testing.T) {
+	isolateReviewEnv(t)
+	prev := domain.NotesDisabled
+	domain.NotesDisabled = true
+	t.Cleanup(func() { domain.NotesDisabled = prev })
+	dir := newRepoDir(t)
+	writeReviewTool(t, dir, "Echo", `printf "FAKE WORKING REVIEW\n"`)
+	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working")
+	if code != 1 {
+		t.Fatalf("exit=%d, want 1 (the review was not saved)", code)
+	}
+	if !strings.Contains(out, "FAKE WORKING REVIEW") {
+		t.Fatalf("stdout = %q, want the review printed", out)
+	}
+	if !strings.Contains(errb, "error: review not saved") || strings.Contains(errb, "note: ") {
+		t.Fatalf("stderr = %q, want the save error and no note id", errb)
+	}
+}
+
 func TestReviewWorkingWithNotesIsAUsageError(t *testing.T) {
 	isolateReviewEnv(t)
 	dir := newRepoDir(t)

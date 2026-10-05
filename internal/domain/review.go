@@ -95,6 +95,8 @@ type ReviewResult struct {
 // The three-frontend entry point; agent names the tool (the note's author). A
 // working-changes review is stored in this worktree's notes, with the
 // fingerprints of the files it read (spec 2026-10-04 working reviews).
+// When the store cannot keep it, the result still carries the report
+// (Content, Label, Structured; no NoteID) beside a "review not saved" error.
 func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, resolvedCommand string, env []string) (ReviewResult, error) {
 	label := target.DisplayLabel()
 	op := engine.ReviewChanges{
@@ -127,7 +129,9 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, 
 	out := ReviewResult{Content: report, Range: target.Range, Label: label, Structured: perr == nil}
 	id, warn, serr := s.SaveReview(ctx, SaveReview{Target: target, Agent: agent, Text: report, Files: res.ReviewFiles})
 	if serr != nil {
-		return ReviewResult{}, fmt.Errorf("review not saved: %w", serr)
+		// The report is the agent's work: hand it back beside the error so
+		// the caller can still show it.
+		return out, fmt.Errorf("review not saved: %w", serr)
 	}
 	out.NoteID, out.Warn = id, warn
 	return out, nil
