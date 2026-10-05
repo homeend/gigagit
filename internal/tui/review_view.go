@@ -29,6 +29,9 @@ type reviewViewState struct {
 	counts map[string]int
 	other  []domain.ReviewOtherNote
 	tip    string
+	// states is a working review's files against the worktree (nil for a
+	// commit review): the tree marks the ones that changed since.
+	states map[string]domain.WorkingFileState
 	// back is the commit whose files view opened this review (its @notes/
 	// entry): esc returns to that list. Zero = esc closes the view.
 	back model.Commit
@@ -42,6 +45,7 @@ type reviewViewMsg struct {
 	other     []domain.ReviewOtherNote
 	base, tip string
 	isRange   bool
+	states    map[string]domain.WorkingFileState
 	back      model.Commit
 	gen       int // the loading box it answers (reviewLoadingPopup.gen)
 	err       error
@@ -74,6 +78,9 @@ func (m Model) openReviewFrom(id, title string, back model.Commit) (Model, tea.C
 			return out
 		}
 		out.base, out.tip, out.isRange = svc.ReviewRevs(ctx, out.review)
+		if out.review.Kind == domain.ReviewOnWorktree {
+			out.states = domain.WorkingReviewState(out.review.Worktree, out.review.Files).States
+		}
 		if out.counts, out.err = svc.ReviewFileCounts(ctx, id); out.err != nil {
 			return out
 		}
@@ -103,10 +110,21 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("not in gg review format — shown as text")
 		return m, cmd
 	}
-	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, back: msg.back}
+	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back}
 	open := func(m Model) (Model, tea.Cmd) {
 		var cmd tea.Cmd
-		if msg.isRange {
+		switch {
+		case msg.review.Kind == domain.ReviewOnWorktree:
+			// A review of uncommitted changes opens as HEAD ↔ the working
+			// tree, untracked files included (CompareFiles adds them).
+			left, lerr := model.CommitEndpoint(msg.base)
+			if lerr != nil {
+				m.statusMsg = i18n.T("review: %s", lerr.Error())
+				return m, nil
+			}
+			m.compareTag = ""
+			m, cmd = m.openCompareFiles(left, model.WorkTreeEndpoint())
+		case msg.isRange:
 			left, lerr := model.CommitEndpoint(msg.base)
 			right, rerr := model.CommitEndpoint(msg.tip)
 			if lerr != nil || rerr != nil {
@@ -115,7 +133,7 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 			}
 			m.compareTag = "" // a compare of the same pair re-reads for the review mode
 			m, cmd = m.openCompareFiles(left, right)
-		} else {
+		default:
 			m, cmd = m.openChangedFiles(model.Commit{Hash: msg.tip})
 		}
 		m.filesReview = st
@@ -135,6 +153,9 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 
 // reviewLabel is the branch a review was of, else its commit's short sha.
 func reviewLabel(r domain.Review) string {
+	if r.Kind == domain.ReviewOnWorktree {
+		return i18n.T("working changes")
+	}
 	if r.Branch != "" {
 		return r.Branch + " " + shortHash(r.Commit)
 	}
@@ -178,6 +199,14 @@ func reviewTreeLines(st *reviewViewState, files []contentLine) []contentLine {
 			continue
 		}
 		l.text += noteBadge(st.counts[l.path])
+		if st.states != nil {
+			switch state, reviewed := st.states[l.path]; {
+			case !reviewed:
+				l.text += " · " + i18n.T("not reviewed")
+			case state != domain.WorkingFileMatches:
+				l.text += " · " + i18n.T("changed since the review")
+			}
+		}
 		out = append(out, l)
 		if s := summaries[l.path]; s != "" {
 			indent := strings.Repeat(" ", len(l.text)-len(strings.TrimLeft(l.text, " "))+3)
@@ -214,6 +243,10 @@ func (m Model) stampReviewNotes(dv *diffView, path string) {
 		return
 	}
 	dv.reviewID = st.id
+	if st.review.Kind == domain.ReviewOnWorktree {
+		dv.noteAddr = model.FileAddress{State: model.StateUnstaged, Worktree: st.review.Worktree, Path: path}
+		return
+	}
 	if dv.noteAddr.Path == "" {
 		dv.noteAddr = model.FileAddress{State: model.StateCommitted, Commit: st.tip, Path: path}
 	}
@@ -221,7 +254,10 @@ func (m Model) stampReviewNotes(dv *diffView, path string) {
 
 // reviewReadOnlyNotice is what a note gesture in the review view says: the
 // review's notes are part of the review, not the store.
-func reviewReadOnlyNotice() string {
+func (m Model) reviewReadOnlyNotice() string {
+	if st := m.filesReview; st != nil && st.review.Kind == domain.ReviewOnWorktree {
+		return i18n.T("▸ review notes are read-only") // --notes does not apply to a working review
+	}
 	return i18n.T("▸ review notes are read-only — gg review --notes keeps them")
 }
 
@@ -278,7 +314,11 @@ func reviewOtherNoteLines(st *reviewViewState) []contentLine {
 		if o.Side == model.NoteSideOld {
 			line = "-" + line
 		}
-		out = append(out, contentLine{text: o.Path + ":" + line + " — " + sanitizeLine(o.Summary), path: o.Path})
+		text := o.Path + ":" + line + " — " + sanitizeLine(o.Summary)
+		if o.Changed {
+			text += " (" + i18n.T("changed since the review") + ")"
+		}
+		out = append(out, contentLine{text: text, path: o.Path})
 	}
 	return out
 }
@@ -323,6 +363,10 @@ func (p *reviewOtherNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 	if !p.typing && msg.String() == "enter" {
 		vis := p.visible()
 		if p.sel >= 0 && p.sel < len(vis) && vis[p.sel].path != "" {
+			if p.tip == "" { // a working review: no commit to open the file at
+				m.statusMsg = i18n.T("the file changed since the review")
+				return m, nil
+			}
 			return m.openFileAtCommit(p.tip, vis[p.sel].path)
 		}
 		return m, nil
