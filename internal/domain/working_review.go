@@ -33,6 +33,9 @@ const (
 type WorkingReviewMatch struct {
 	States  map[string]WorkingFileState
 	Current bool
+	// Unreadable: a read FAILED (permissions, an unmounted drive) — that
+	// proves nothing about the files, so the sweep keeps the review.
+	Unreadable bool
 }
 
 // WorkingReview is a stored working review, matched now.
@@ -48,34 +51,45 @@ func WorkingReviewState(worktree string, files []model.NoteFile) WorkingReviewMa
 	m := WorkingReviewMatch{States: make(map[string]WorkingFileState, len(files))}
 	fi, err := os.Stat(worktree)
 	if worktree == "" || err != nil || !fi.IsDir() {
+		m.Unreadable = err != nil && !errors.Is(err, fs.ErrNotExist)
 		for _, f := range files {
 			m.States[f.Path] = WorkingFileGone
 		}
 		return m
 	}
 	for _, f := range files {
-		st := matchWorkingFile(filepath.Join(worktree, filepath.FromSlash(f.Path)), f)
+		st, unreadable := matchWorkingFile(filepath.Join(worktree, filepath.FromSlash(f.Path)), f)
 		m.States[f.Path] = st
 		m.Current = m.Current || st == WorkingFileMatches
+		m.Unreadable = m.Unreadable || unreadable
 	}
 	return m
 }
 
-func matchWorkingFile(abs string, f model.NoteFile) WorkingFileState {
+// matchWorkingFile is one file's state; unreadable when the read failed for
+// a reason other than the file being absent (the state is then Changed:
+// nothing is drawn on it, but nothing may be deleted because of it).
+func matchWorkingFile(abs string, f model.NoteFile) (WorkingFileState, bool) {
 	if f.Deleted {
-		if _, err := os.Lstat(abs); errors.Is(err, fs.ErrNotExist) {
-			return WorkingFileMatches
+		_, err := os.Lstat(abs)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			return WorkingFileMatches, false
+		case err != nil:
+			return WorkingFileChanged, true
 		}
-		return WorkingFileChanged
+		return WorkingFileChanged, false
 	}
 	id, err := workingBlobs.id(git.BlobFormatOf(f.Blob), abs)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return WorkingFileGone
-	case err != nil || id != f.Blob:
-		return WorkingFileChanged
+		return WorkingFileGone, false
+	case err != nil:
+		return WorkingFileChanged, true
+	case id != f.Blob:
+		return WorkingFileChanged, false
 	}
-	return WorkingFileMatches
+	return WorkingFileMatches, false
 }
 
 // blobCacheMax bounds the cache; past it the cache starts over.

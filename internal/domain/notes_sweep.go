@@ -159,9 +159,11 @@ func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 		// swept. Matched against the note's own worktree — the sweep reads
 		// every worktree's part.
 		if n.IsWorktreeLevel() {
-			if !n.IsReply() && n.IsWorkingReview() && !cutoff.IsZero() && n.Created.Before(cutoff) &&
-				!WorkingReviewState(n.Address.Worktree, n.Files).Current {
-				drop[n.ID] = true
+			if !n.IsReply() && n.IsWorkingReview() && !cutoff.IsZero() && n.Created.Before(cutoff) {
+				// A failed read (Unreadable) says nothing: keep the review.
+				if m := WorkingReviewState(n.Address.Worktree, n.Files); !m.Current && !m.Unreadable {
+					drop[n.ID] = true
+				}
 			}
 			continue
 		}

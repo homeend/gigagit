@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -378,4 +379,40 @@ func TestNotesAtLeavesAWorkingReviewsNotesOffTheStagedDiff(t *testing.T) {
 	if len(ns) != 0 {
 		t.Fatalf("staged diff notes = %+v, want none", ns)
 	}
+}
+
+// A read that merely FAILS (permissions, an unmounted drive) proves nothing:
+// the review is unreadable, not outdated, and the sweep keeps it.
+func TestSweepKeepsAWorkingReviewItCannotRead(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" || os.Getuid() == 0 {
+		t.Skip("needs POSIX permissions and a non-root user")
+	}
+	dir, svc := newRealRepo(t)
+	svc.UseNotesDir(t.TempDir())
+	svc.SetNotesPolicy(30, 0)
+	top, _ := svc.TopLevel(context.Background())
+	writeAt(t, dir, "a.txt", "A\n")
+	id := putWorkingReview(t, svc, top, "A\n", time.Now().UTC().Add(-400*24*time.Hour))
+	locked := filepath.Join(top)
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	m := WorkingReviewState(top, []model.NoteFile{{Path: "a.txt", Blob: blob("A\n")}})
+	if !m.Unreadable || m.Current {
+		os.Chmod(locked, 0o755)
+		t.Fatalf("match = %+v, want unreadable", m)
+	}
+	_, err := svc.sweepNotes(context.Background())
+	os.Chmod(locked, 0o755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, _ := svc.notesStore(context.Background()).LoadAll()
+	for _, n := range all {
+		if n.ID == id {
+			return
+		}
+	}
+	t.Fatal("the sweep dropped a review it could not read")
 }
