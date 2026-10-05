@@ -63,7 +63,8 @@ guards against removing the worktree you are standing in.
   is used as a range; `--working` reviews uncommitted changes. `--tool`
   picks among configured `review` commands when more than one is set up.
   Exit 0 on a produced report, 1 on tool failure/empty report/no review tool
-  configured, 2 on a usage error.
+  configured, 2 on a usage error. A report the note store cannot keep is
+  still printed, then `error: review not saved: …` on stderr, exit 1.
 - `gg review show [--json] <review-link|id|latest>` — read a STORED review
   back (another agent's, or your own earlier one): a header line `review <id>
   · <agent> · <date> · <what it reviewed>`, the overview, then one numbered
