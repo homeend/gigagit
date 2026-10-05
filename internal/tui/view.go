@@ -504,6 +504,11 @@ func (m Model) renderInterface() string {
 	if errMode || (haveFull && lipgloss.Width(full) > g.w) {
 		full = i18n.T("[E] full details") + " · " + full
 	}
+	if !errMode {
+		// Trails the row with room of its own: the plain back-cut below
+		// would chop a path's name first.
+		full = m.withConsoleWorktree(full, g.w)
+	}
 	statusRow := truncate(full, g.w)
 	if errMode {
 		statusRow = st().statusErr.Render(statusRow)
@@ -1314,7 +1319,9 @@ func (m Model) taskSegment() string {
 // instead of the id. Shown in the status line ahead of any status message,
 // occluding no commit row.
 func (m Model) commitBranchHint() string {
-	if m.focus != panelCommits {
+	// A docked console covers the Commits column: its row is out of sight
+	// (the status row names the console's worktree instead).
+	if m.focus != panelCommits || m.console != nil {
 		return ""
 	}
 	if r, ok := m.wipRowAt(m.commitSelUnified()); ok { // pseudo-row: no commit id

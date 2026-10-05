@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent console — its worktree path in the status line
+
+### Added
+
+- **The status line names the docked console's worktree.** While an agent
+  or terminal console is shown unfocused (as alt+a / alt+t leave it), or
+  works in another worktree than this gg, the status line ends with
+  `worktree: <path>` — the full path, cut in the middle when the row is
+  short (its start and its directory name survive). The path keeps up to
+  half the row: the text before it is cut first. A focused console on gg's
+  own worktree shows nothing extra.
+- **A docked console hides the Commits row hint** (`working tree · 3 files`,
+  `⎇ main · # …`): the console covers that row, and beside the worktree
+  path it read as a second "worktree".
+
 ## Branches: `ctrl+s` goes to the branch's worktree
 
 - On the Branches panel, `ctrl+s` on a branch checked out in another worktree
