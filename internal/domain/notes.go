@@ -42,6 +42,9 @@ type ResolvedNote struct {
 	Status  model.NoteStatus
 	Range   [2]int
 	Replies []ResolvedNote
+	// Resolution is the thread's resolved state (nil = open): stored for a
+	// stored root or a review remark, GitHub's for a forge thread.
+	Resolution *model.ThreadResolution
 	// SummarySrc is a FORGE note's summary line with its markdown markers
 	// intact (Note.Summary is that line as plain text). Empty for a stored
 	// note, and for a forge note whose summary is a label ("suggestion").
@@ -330,6 +333,9 @@ func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) e
 // from non-replies, so a note whose parent is itself a reply would be dropped
 // inside Put while this call reported success.
 func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) (model.Note, error) {
+	if model.IsReviewNoteID(parentID) { // a review's remark: its thread lives with the review
+		return s.replyToRemark(ctx, parentID, n)
+	}
 	if model.IsReadOnlyNoteID(parentID) {
 		return model.Note{}, ErrReadOnlyNote
 	}
@@ -357,6 +363,9 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 			break
 		}
 		root = p
+	}
+	if root.IsRemarkReply() { // a reply to an answer stays flat under the remark
+		return s.replyToRemark(ctx, root.ParentID, n)
 	}
 	n.ParentID = root.ID
 	n.Address, n.Side, n.Range, n.ContextHash = root.Address, root.Side, root.Range, root.ContextHash

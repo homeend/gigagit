@@ -36,6 +36,14 @@ type ReviewOtherNote struct {
 	// Changed: the note is on a file a working review read that changed
 	// since — it is not drawn (spec §7), only listed.
 	Changed bool
+	// Root is the remark's id; Replies and Resolution its thread.
+	Root       string
+	Replies    []model.Note
+	Resolution *model.ThreadResolution
+	// Outdated: a thread whose remark the re-saved review no longer has
+	// (Path empty); Summary is the remark's summary as its first reply
+	// recorded it.
+	Outdated bool
 }
 
 // reviewRevs are the two revisions a review compares: base (the old side) and
@@ -146,11 +154,13 @@ func reviewDocNotes(r Review, path string, addr model.FileAddress, oldLines, new
 		return nil
 	}
 	want := reviewPath(path)
+	threads, _ := r.RemarkThreads()
 	var out []ResolvedNote
 	i := 0
 	for _, f := range r.Doc.Files {
 		for _, dn := range f.Notes {
 			id := fmt.Sprintf("%s%s:%d", model.ReviewNoteIDPrefix, r.ID, i)
+			th := threads[i]
 			i++
 			if reviewPath(f.Path) != want {
 				continue
@@ -172,7 +182,13 @@ func reviewDocNotes(r Review, path string, addr model.FileAddress, oldLines, new
 			for _, kv := range dn.Meta {
 				n.Tags = append(n.Tags, kv.Key+": "+kv.Value)
 			}
-			out = append(out, ResolvedNote{Note: n, Status: model.NoteActive, Range: dn.Range})
+			rn := ResolvedNote{Note: n, Status: model.NoteActive, Range: dn.Range, Resolution: th.Resolution}
+			for _, rep := range th.Replies {
+				// A reply is stored at the review's address; it draws at its remark.
+				rep.Address, rep.Side, rep.Range = addr, side, dn.Range
+				rn.Replies = append(rn.Replies, ResolvedNote{Note: rep, Status: model.NoteActive, Range: dn.Range})
+			}
+			out = append(out, rn)
 		}
 	}
 	sortReviewNotes(out)
@@ -224,15 +240,21 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 		read[path] = sd
 		return sd
 	}
+	threads, outdated := r.RemarkThreads()
 	counts := map[string]int{}
 	var other []ReviewOtherNote
+	i := 0
 	for _, f := range r.Doc.Files {
 		p := reviewPath(f.Path)
 		for _, dn := range f.Notes {
 			side := reviewSide(dn.Side)
+			th := threads[i]
+			root := fmt.Sprintf("%s%s:%d", model.ReviewNoteIDPrefix, r.ID, i)
+			i++
 			if working && match.States[p] != WorkingFileMatches {
 				_, reviewed := match.States[p]
-				other = append(other, ReviewOtherNote{Path: p, Side: side, Range: dn.Range, Summary: dn.Summary, Changed: reviewed})
+				other = append(other, ReviewOtherNote{Path: p, Side: side, Range: dn.Range, Summary: dn.Summary, Changed: reviewed,
+					Root: root, Replies: th.Replies, Resolution: th.Resolution})
 				continue
 			}
 			if inView[p] {
@@ -246,8 +268,13 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 					continue
 				}
 			}
-			other = append(other, ReviewOtherNote{Path: p, Side: side, Range: dn.Range, Summary: dn.Summary})
+			other = append(other, ReviewOtherNote{Path: p, Side: side, Range: dn.Range, Summary: dn.Summary,
+				Root: root, Replies: th.Replies, Resolution: th.Resolution})
 		}
+	}
+	for _, o := range outdated {
+		other = append(other, ReviewOtherNote{Outdated: true, Root: o.Root, Summary: o.Summary,
+			Replies: o.Replies, Resolution: o.Resolution})
 	}
 	return counts, other, nil
 }

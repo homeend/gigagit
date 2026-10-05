@@ -151,32 +151,34 @@ func (c *blobCache) id(format, abs string) (string, error) {
 // matched now — current and outdated alike (View all notes lists both). It
 // reads ONLY this worktree's part: a live file read never parses commits.
 func (s *Service) WorkingReviews(ctx context.Context) ([]WorkingReview, error) {
-	ns, err := s.workingReviewNotes(ctx)
+	ns, th, err := s.workingReviewNotes(ctx)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]WorkingReview, 0, len(ns))
 	for _, n := range ns {
-		r := s.reviewOf(ctx, n, nil)
+		r := th.attach(s.reviewOf(ctx, n, nil))
 		out = append(out, WorkingReview{Review: r, WorkingReviewMatch: WorkingReviewState(r.Worktree, r.Files)})
 	}
 	return out, nil
 }
 
-// workingReviewNotes is this worktree's working-review roots, newest first.
-func (s *Service) workingReviewNotes(ctx context.Context) ([]model.Note, error) {
+// workingReviewNotes is this worktree's working-review roots, newest first,
+// and their remark threads.
+func (s *Service) workingReviewNotes(ctx context.Context) ([]model.Note, remarkThreadSet, error) {
 	st := s.notesStore(ctx)
 	if st == nil {
-		return nil, ErrNotesDisabled
+		return nil, remarkThreadSet{}, ErrNotesDisabled
 	}
 	top, _ := s.TopLevel(ctx)
 	top = strings.TrimSpace(top)
 	if top == "" {
-		return nil, nil
+		return nil, remarkThreadSet{}, nil
 	}
-	all, err := st.Load(notes.WorktreePart(top))
+	part := notes.WorktreePart(top)
+	all, err := st.Load(part)
 	if err != nil {
-		return nil, err
+		return nil, remarkThreadSet{}, err
 	}
 	var out []model.Note
 	for _, n := range all {
@@ -185,7 +187,7 @@ func (s *Service) workingReviewNotes(ctx context.Context) ([]model.Note, error) 
 		}
 	}
 	sort.SliceStable(out, func(a, b int) bool { return out[a].Created.After(out[b].Created) })
-	return out, nil
+	return out, loadReviewThreads(st, all, []notes.Part{part}), nil
 }
 
 // workingReviewNotesOn are the notes the current working reviews of worktree
