@@ -27,6 +27,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   out of sight. The console now steps aside (its session keeps running;
   alt+a or the session row brings it back) and the cursor lands on the
   tip in Commits. Enter on a branch row still leaves the console docked.
+- **The . menu's Solo this branch hides it too.** It is the same solo
+  ctrl+g runs (ctrl+g only adds the jump to the tip), so it now clears the
+  docked console the same way; focus stays on the branch row.
 
 ## Working-changes reviews are notes
 

@@ -547,3 +547,34 @@ func TestUnfocusedRunningConsoleKillRemovesOnX(t *testing.T) {
 		t.Fatalf("the removed session's console is still docked: %+v", m.console)
 	}
 }
+
+// The . menu's Solo this branch is ctrl+g without the jump: it too asks to
+// see the soloed feed, so a docked console steps aside (the session runs on)
+// and focus stays on the branch row.
+func TestBranchMenuSoloHidesDockedConsole(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	mm, _ := m.Update(ctrlBracket()) // step out: docked, unfocused
+	m = mm.(Model)
+	m = m.activateTab(panelBranches)
+	m.sel[panelBranches] = 0
+	b, ok := m.selectedBranch()
+	if !ok {
+		t.Fatal("fixture: the cursor must sit on a branch row")
+	}
+	m = runActionRow(t, m, "commits-solo")
+	if m.console != nil {
+		t.Fatalf("console = %+v, want hidden", m.console)
+	}
+	if s.Info().State != domain.SessionRunning {
+		t.Fatal("the session must keep running")
+	}
+	if len(m.commitScopeBranches) != 1 || m.commitScopeBranches[0] != b.Name {
+		t.Fatalf("scope = %v, want [%s]", m.commitScopeBranches, b.Name)
+	}
+	if m.focus != panelBranches {
+		t.Fatalf("focus = %v, want panelBranches", m.focus)
+	}
+}
