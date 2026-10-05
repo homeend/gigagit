@@ -89,7 +89,7 @@ type LinkTarget struct {
 // git: there the hint is the only content source, and the link has no address
 // at all. That link cannot travel between machines, by construction.
 type LinkHint struct {
-	Kind string // "bookmark", "shelf", "stash" or "preview"; "" = no hint
+	Kind string // one of linkHintKinds ("bookmark", "shelf", "stash", "preview", "view", "version", "review"); "" = no hint
 	ID   string // the machine-local id; never empty when Kind is set
 }
 
@@ -120,7 +120,16 @@ func (h LinkHint) String() string {
 // reject '/'. A lookup key like "preview": the consumer finds the record by
 // id, tie-broken by the pair, else by the pair alone. Machine-local by
 // nature — version refs are never pushed.
-var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true, "view": true, "version": true}
+//
+// "review" names a stored AI REVIEW (its review note's id). The link's address
+// is the change the review compared — @<commit> for one commit, @<base>..<tip>
+// for a range or a branch — so every hint-blind verb sees the reviewed change;
+// the consumer opens the review itself. A lookup key, machine-local like
+// "version": reviews live in the local note store.
+var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true, "view": true, "version": true, "review": true}
+
+// ReviewHintKind is the hint a review link carries (?review=<id>).
+const ReviewHintKind = "review"
 
 // The content hint: gg://<repo>/<path>[:<line>]?view=content names a file's
 // CONTENT on disk in the worktree — never a diff, never a commit.
@@ -682,7 +691,7 @@ func parseLinkHint(s string) (LinkHint, error) {
 	}
 	kind, id := s[:i], s[i+1:]
 	if !LinkHintKindOK(kind) {
-		return LinkHint{}, fmt.Errorf("%w: unknown hint kind %q (want bookmark, shelf, stash, preview, version or view)", ErrLink, kind)
+		return LinkHint{}, fmt.Errorf("%w: unknown hint kind %q (want bookmark, shelf, stash, preview, version, review or view)", ErrLink, kind)
 	}
 	if id == "" {
 		return LinkHint{}, fmt.Errorf("%w: hint %q has no id", ErrLink, kind)

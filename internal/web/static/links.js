@@ -60,7 +60,7 @@ function linkRefOK(s) {
 // grammar separator, a '/' or whitespace, or the link would not reparse: the
 // producer refuses instead of emitting something ParseLink rejects.
 function linkHintKindOK(kind) {
-  return kind === "bookmark" || kind === "shelf" || kind === "stash" || kind === "preview" || kind === "view" || kind === "version";
+  return kind === "bookmark" || kind === "shelf" || kind === "stash" || kind === "preview" || kind === "view" || kind === "version" || kind === "review";
 }
 
 function linkHintIDOK(id) {
@@ -256,6 +256,8 @@ function linkDesc(kind, id, subject) {
       return "commit: " + id + " " + truncateDesc(subject);
     case "stash":
       return "stash: " + truncateDesc(subject);
+    case "review":
+      return "review: " + id + " " + truncateDesc(subject);
     default:
       return kind + ": " + truncateDesc(id);
   }

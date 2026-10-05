@@ -60,6 +60,22 @@ guards against removing the worktree you are standing in.
   picks among configured `review` commands when more than one is set up.
   Exit 0 on a produced report, 1 on tool failure/empty report/no review tool
   configured, 2 on a usage error.
+- `gg review show [--json] <review-link|id|latest>` — read a STORED review
+  back (another agent's, or your own earlier one): a header line `review <id>
+  · <agent> · <date> · <what it reviewed>`, the overview, then one numbered
+  remark per line, `[n] <path>:<line> — <summary>` (`-<line>` = a removed
+  line, `<a>-<b>` = a range), its rationale and the remark's own gg:// line
+  link indented beneath — hand that link to `gg link text` for the exact
+  code. `--json`: `{id, agent, created, branch, base, tip, link, overview,
+  meta, remarks: [{n, path, side, start, end, summary, rationale, meta,
+  link}]}` (`base` is empty for a one-commit review; `remarks` is `[]` for a
+  review that is not in the document format). `n` is the remark's stable
+  index. `show` is always the subcommand — review a branch named `show` as
+  `gg review refs/heads/show`. Exit 1 unknown/deleted review or a moved
+  link, 2 a malformed link or one with no `?review=`. MCP: `gg_review_show`
+  (`link` = a review link, an id or `latest`).
+- `gg link --review <id|latest>` — print a stored review's link (and record
+  it in `gg links`); `latest` = the newest review in this repository.
 
 ### Review notes
 
@@ -140,9 +156,10 @@ gg://<repo>@<target>...<source>            a merge preview: the Previews tab ent
 gg://<repo>/<path>@<target>...<source>[:<line>]   a file (or new-side line) in that preview
 gg://<repo>/<path>@<target>...<source>#<hunk>     a hunk of that preview's patch
 gg:///abs/checkout/path/file.go:12         a repo with no remote: its absolute path
-gg://<repo>@<sha>?bookmark=<id>            a trailing ?<kind>=<id> hint: bookmark | shelf | stash | preview | version
+gg://<repo>@<sha>?bookmark=<id>            a trailing ?<kind>=<id> hint: bookmark | shelf | stash | preview | version | review
 gg://<repo>@<a>..<b>?preview=<id>          a SAVED pair (or, on a <target>...<source> link, a saved merge preview)
 gg://<repo>@<base>..<ours>?version=<unix>-<op>   a RECORDED BRANCH VERSION's frozen preview (the id `gg versions` prints)
+gg://<repo>@<sha>?review=<id>              a STORED AI REVIEW of one commit (<base>..<tip> for a range or branch review)
 ```
 
 `@ref:<name>` keeps the NAME on purpose: it addresses the branch, not
@@ -170,6 +187,15 @@ versions row it came from. The id is `<unix>-<op>` with no branch (ids reject
 `/`); the consumer finds the record by id, tie-broken by the pair. These
 links are MACHINE-LOCAL: version refs are never pushed and `<ours>` is a
 rewritten tip, so on another checkout the pair itself will not resolve.
+`?review=<id>` names a STORED AI REVIEW (the id `gg review` prints as
+`note: <id>`); its address is the change the review compared, so `gg diff`
+on it shows exactly what was reviewed. When a human hands you a review link
+— usually "check this review" — read it with `gg review show <link>` (below)
+and check each remark against the code; `gg open <link>` shows the review in
+their gg. A review link moved onto another change is refused (exit 1, `the
+link does not match the review`); a review deleted since the link was copied
+still resolves its address, and `gg review show` says `review <id> not found`.
+Review links are machine-local like version links.
 A link to an UNCOMMITTED line (the working tree, `@staged`, `?view=content`)
 ends `:<n>~<fp>`: a fingerprint of that line's text, added by every copy path
 (`gg link` too; `--no-fingerprint` prints the plain form). The file may have

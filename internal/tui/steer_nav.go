@@ -185,6 +185,9 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 		return m.steerStep(c)
 	case c.HintKind == model.ContentHintKind:
 		return m.steerNavigateContent(c)
+	case c.HintKind == model.ReviewHintKind:
+		// A review link opens the review itself (review_hint.go).
+		return m.steerNavigateReview(c)
 	case c.Target != nil && c.Target.State == "preview":
 		return m.steerNavigatePreview(c)
 	case c.Target != nil && c.Target.State == "ref":

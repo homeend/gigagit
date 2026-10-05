@@ -17,6 +17,7 @@ import { openCommitByHash } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { openNotesWindow } from "./shelfnotes.js";
 import { runLinkCompare } from "./linkcompare.js";
+import { copyLink } from "./links.js";
 
 // --- reviews pure (guarded against Go) ---
 // reviewStamp is a review's time as the TUI prints it: local
@@ -551,8 +552,19 @@ function reviewHead(id) {
 // row does; the open review's own Overview row passes none.
 function reviewMenu(id, x, y, open) {
   const rows = open ? [{ label: "Open review", act: open }] : [];
+  rows.push({ label: "Copy gg link", act: () => copyServerLink("/api/review/" + encodeURIComponent(id) + "/link", "review: " + id) });
   rows.push({ label: "Delete review", danger: true, act: () => confirmDeleteReview(id) });
   showCtxMenu(rows, x, y);
+}
+
+
+// copyServerLink copies a link the server builds (a review's needs its
+// revs; a note row's the domain builder the TUI shares) and records it like
+// every copy (copyLink → /api/linkhist).
+function copyServerLink(url, desc) {
+  getJSON(url)
+    .then((d) => copyLink(d.link, desc))
+    .catch((e) => opLine("copy link: " + (e.message || e), true));
 }
 
 
@@ -566,6 +578,7 @@ function scopeRowMenu(scope, x, y) {
   showCtxMenu(
     [
       { label: "Open range review", act: () => openRangeReview(scope) },
+      { label: "Copy gg link", act: () => copyServerLink("/api/notes/row-link?" + new URLSearchParams({ commit: state.fileSha, scope }), "range review: " + scope) },
       { label: "Delete range review", danger: true, act: () => confirmClearRow({ scope }, what + " " + (sc ? sc.label : scope), scopeSel(scope)) },
     ],
     x,
@@ -580,6 +593,7 @@ function notedRowMenu(path, x, y) {
   showCtxMenu(
     [
       { label: "Open notes", act: () => openNotedPath(path) },
+      { label: "Copy gg link", act: () => copyServerLink("/api/notes/row-link?" + new URLSearchParams({ commit: state.fileSha, path }), "file: " + path) },
       { label: "Delete notes", danger: true, act: () => confirmClearRow({ path }, what + " " + path, notedSel(path)) },
     ],
     x,

@@ -116,6 +116,9 @@ func availableActions(m Model) []actionRow {
 			if r, ok := m.openExternalRow(); ok {
 				rows = append(rows, r)
 			}
+			if r, ok := m.reviewViewCopyLinkRow(); ok {
+				rows = append(rows, r)
+			}
 			if r, ok := m.deleteReviewRow(); ok {
 				rows = append(rows, r)
 			}
@@ -308,6 +311,9 @@ func availableActions(m Model) []actionRow {
 		out = append(out, r)
 	}
 	if r, ok := m.showBranchReviewRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.branchReviewCopyLinkRow(); ok {
 		out = append(out, r)
 	}
 	if r, ok := m.deleteReviewRow(); ok {

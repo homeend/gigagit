@@ -1946,6 +1946,36 @@ scrolled to the file.
   its `.` menu and help rows) and "notes" lost its plural; the stacked view
   has its OWN footer line. `diffHintFor(long, stacked)`.
 
+### Review links (2026-10-05)
+
+Spec/plan: `docs/superpowers/specs/2026-10-05-review-links-design.md`,
+`docs/superpowers/plans/2026-10-05-review-links.md` (stage 1 of 3; stage 2 =
+answers per remark, stage 3 = a second review answering the first).
+
+- Hint kind `review` (`model.ReviewHintKind`); the address is the reviewed
+  change (`domain.reviewTarget`: one commit, or `<base>..<tip>` full shas).
+  An address-less `?review=` is refused in `finishLink` (like preview/version).
+- `ResolveLink` runs `checkReviewHint` after `finishLink`: refuses ONLY a
+  proven mismatch (`ErrReviewLinkMismatch`, wrapped in `ErrLink`); a deleted
+  review or an unreadable store passes. It checks with `opts.Cwd` when the
+  link is in the caller's checkout — a fresh `Open` would not see an injected
+  note store (tests) and, generally, is a second service for nothing.
+- `domain/review_link.go`: `ReviewID` (`latest`), `ReviewLink`,
+  `ScopeLinkText` (Range review row), `CommitFileLinkText` (Notes row),
+  `ReviewRemarks` (N = the read-time note-id index), `ReviewShow` (the JSON
+  `gg review show --json` and MCP `gg_review_show` share).
+- Landing: one path. `steerNavigate` sends a review hint to
+  `steerNavigateReview` (TUI, `review_hint.go`: off-thread lookup →
+  `openReviewFrom`, back = the review's commit; deleted → plain landing +
+  notice). gg web: `live.js` `steerNavigateReview` (pinned by
+  `steerhintjs_test.go`).
+- Copy: `asyncCopyLinkRow` builds the link when the row RUNS (git off the
+  Update thread) and copies through `copyToClipboardCmd` (records in gg
+  links). Web asks the server: `GET /api/review/{id}/link`,
+  `GET /api/notes/row-link`.
+- CLI: `gg review show` is dispatched before `gg review`'s flag parse;
+  links go through `resolveLinkArg` (the cli one-door guard).
+
 ### Note rows' "." menu: Open + Delete only (2026-10-05)
 
 User ruling: a review is opened or removed, nothing else. A commit's three
