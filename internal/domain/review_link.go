@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
@@ -200,4 +201,78 @@ func shortRev(h string) string {
 		return h[:7]
 	}
 	return h
+}
+
+// ReviewShowRemark is one remark as `gg review show --json` and the MCP
+// gg_review_show tool print it.
+type ReviewShowRemark struct {
+	N         int               `json:"n"`
+	Path      string            `json:"path"`
+	Side      string            `json:"side"`
+	Start     int               `json:"start"`
+	End       int               `json:"end"`
+	Summary   string            `json:"summary"`
+	Rationale string            `json:"rationale,omitempty"`
+	Meta      map[string]string `json:"meta,omitempty"`
+	Link      string            `json:"link,omitempty"`
+}
+
+// ReviewShow is a stored review as an agent reads it: who, what it compared
+// (Base is empty for one commit), its link, its overview (a prose review's
+// whole text) and its remarks (never nil).
+type ReviewShow struct {
+	ID       string             `json:"id"`
+	Agent    string             `json:"agent"`
+	Created  time.Time          `json:"created"`
+	Branch   string             `json:"branch,omitempty"`
+	Base     string             `json:"base"`
+	Tip      string             `json:"tip"`
+	Link     string             `json:"link"`
+	Overview string             `json:"overview"`
+	Meta     map[string]string  `json:"meta,omitempty"`
+	Remarks  []ReviewShowRemark `json:"remarks"`
+}
+
+// ReviewShow reads review id for an agent (gg review show, gg_review_show).
+func (s *Service) ReviewShow(ctx context.Context, id string) (ReviewShow, error) {
+	r, err := s.Review(ctx, id)
+	if err != nil {
+		return ReviewShow{}, err
+	}
+	t, err := s.reviewTarget(ctx, r)
+	if err != nil {
+		return ReviewShow{}, err
+	}
+	link, err := s.ReviewLink(ctx, id)
+	if err != nil {
+		return ReviewShow{}, err
+	}
+	out := ReviewShow{ID: r.ID, Agent: r.Agent, Created: r.Created, Branch: r.Branch, Tip: t.Commit,
+		Link: link, Overview: r.Text, Remarks: []ReviewShowRemark{}}
+	if t.Pair != nil {
+		out.Base, out.Tip = t.Pair.A, t.Pair.B
+	}
+	if r.Doc != nil {
+		out.Overview, out.Meta = r.Doc.Overview, metaMap(r.Doc.Meta)
+	}
+	rs, err := s.ReviewRemarks(ctx, r)
+	if err != nil {
+		return ReviewShow{}, err
+	}
+	for _, x := range rs {
+		out.Remarks = append(out.Remarks, ReviewShowRemark{N: x.N, Path: x.Path, Side: string(x.Side), Start: x.Start, End: x.End,
+			Summary: x.Summary, Rationale: x.Rationale, Meta: metaMap(x.Meta), Link: x.Link})
+	}
+	return out, nil
+}
+
+func metaMap(kv []notebatch.MetaKV) map[string]string {
+	if len(kv) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(kv))
+	for _, e := range kv {
+		m[e.Key] = e.Value
+	}
+	return m
 }
