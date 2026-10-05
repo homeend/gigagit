@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -134,6 +135,9 @@ func (s *Server) handleNoteCounts(w http.ResponseWriter, r *http.Request) {
 		// The ranges each commit's notes were written in: its Range review rows.
 		"scopes_by_commit": wireScopes(c.ScopesByCommit),
 		"reviews":          reviewHeads(c.Reviews), // the Branches' review sub-rows
+		// This worktree's working reviews, matched: the working list's Review
+		// row and its ✎ markers.
+		"working_reviews": s.workingReviewsWire(r, len(c.WorkingReviews) > 0),
 	})
 }
 
@@ -402,4 +406,30 @@ func (s *Server) emitNotes() {
 	if h := s.liveHubRef(); h != nil {
 		h.emit(liveMsg{Changed: []string{"notes"}, Reason: "notes"})
 	}
+}
+
+// workingReviewsWire is this worktree's working reviews, newest first, each
+// with whether it is current and the files it still matches (sorted). Empty
+// — never null — when there are none (some: the counts say so, no file read).
+func (s *Server) workingReviewsWire(r *http.Request, some bool) []map[string]any {
+	out := []map[string]any{}
+	if !some {
+		return out
+	}
+	rs, err := s.service().WorkingReviews(r.Context())
+	if err != nil {
+		return out
+	}
+	for _, wr := range rs {
+		matches := []string{}
+		for p, st := range wr.States {
+			if st == domain.WorkingFileMatches {
+				matches = append(matches, p)
+			}
+		}
+		sort.Strings(matches)
+		out = append(out, map[string]any{"id": wr.ID, "summary": wr.Summary, "agent": wr.Agent,
+			"created": wireTime(wr.Created), "current": wr.Current, "matches": matches})
+	}
+	return out
 }

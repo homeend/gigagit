@@ -336,7 +336,7 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 
 type errBadLane struct{}
 
-func (errBadLane) Error() string { return "wt must be unstaged or staged" }
+func (errBadLane) Error() string { return "wt must be unstaged, staged or head" }
 
 // heldSides are the two versions a working-tree diff compares when the
 // caller already holds them (a staging action knows what it just wrote).
@@ -373,6 +373,17 @@ func worktreeDiff(ctx context.Context, svc *domain.Service, wt, path, oldPath st
 		}
 		newRead = func(ctx context.Context) ([]byte, error) {
 			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: path})
+		}
+	case "head":
+		// HEAD → the working tree: a working review's view of one file
+		// (staged and unstaged changes together; an untracked file is an add).
+		// Nothing to stage from here.
+		wantHunks = false
+		oldRead = func(ctx context.Context) ([]byte, error) {
+			return svc.ShowFile(ctx, "HEAD", oldPath)
+		}
+		newRead = func(ctx context.Context) ([]byte, error) {
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
 		}
 	default:
 		return domain.Diff{}, nil, errBadLane{}
