@@ -218,7 +218,9 @@ function reviewCells(r, now) {
   else if (v.kind === "was_tip") where = "was tip " + v.branch;
   else if (v.kind === "working") where = v.outdated ? "outdated" : "working changes";
   const when = v.created ? anAgo(now - Date.parse(v.created)) : "";
-  return { status: "review", who: v.agent || "agent", where, when, summary: v.summary, tail: "" };
+  // The review's tally (the TUI's reviewTally), plain words.
+  const tally = v.remarks ? "  " + (v.remarks === 1 ? "1 remark" : v.remarks + " remarks") + " · " + (v.resolved || 0) + " resolved" : "";
+  return { status: "review", who: v.agent || "agent", where, when, summary: v.summary, tail: tally };
 }
 
 function columnsHTML(c, whoCls, dimStatus) {

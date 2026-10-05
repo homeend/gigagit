@@ -27,6 +27,9 @@ type reviewHeadWire struct {
 	Agent   string `json:"agent"`
 	Summary string `json:"summary"`
 	Created string `json:"created"` // RFC3339 UTC, "" when unknown
+	// Remarks / Resolved: the review row's tally.
+	Remarks  int `json:"remarks"`
+	Resolved int `json:"resolved"`
 }
 
 func wireTime(t time.Time) string {
@@ -40,7 +43,8 @@ func wireTime(t time.Time) string {
 func reviewHeads(hs []domain.ReviewHead) []reviewHeadWire {
 	out := make([]reviewHeadWire, 0, len(hs))
 	for _, h := range hs {
-		out = append(out, reviewHeadWire{ID: h.ID, Commit: h.Commit, Branch: h.Branch, Agent: h.Agent, Summary: h.Summary, Created: wireTime(h.Created)})
+		out = append(out, reviewHeadWire{ID: h.ID, Commit: h.Commit, Branch: h.Branch, Agent: h.Agent, Summary: h.Summary, Created: wireTime(h.Created),
+			Remarks: h.Remarks, Resolved: h.Resolved})
 	}
 	return out
 }
@@ -49,7 +53,9 @@ func reviewHeads(hs []domain.ReviewHead) []reviewHeadWire {
 func reviewHeadsOf(rs []domain.Review) []reviewHeadWire {
 	out := make([]reviewHeadWire, 0, len(rs))
 	for _, r := range rs {
-		out = append(out, reviewHeadWire{ID: r.ID, Commit: r.Commit, Branch: r.Branch, Agent: r.Agent, Summary: r.Summary, Created: wireTime(r.Created)})
+		remarks, resolved := r.Tally()
+		out = append(out, reviewHeadWire{ID: r.ID, Commit: r.Commit, Branch: r.Branch, Agent: r.Agent, Summary: r.Summary, Created: wireTime(r.Created),
+			Remarks: remarks, Resolved: resolved})
 	}
 	return out
 }
@@ -160,12 +166,22 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	out["overviewMd"] = markdown.Parse(rv.Doc.Overview)
 	out["meta"] = reviewMetaText(rv.Doc.Meta)
 	out["notes"], out["note_files"] = rv.Doc.NoteCount()
+	_, out["resolved"] = rv.Tally()
 	other := []map[string]string{}
 	if os, err := svc.ReviewOtherNotes(ctx, rv.ID); err == nil {
 		for _, o := range os {
 			row := map[string]string{"path": o.Path, "line": reviewLine(o.Side, o.Range), "summary": o.Summary}
 			if o.Changed {
 				row["changed"] = "1"
+			}
+			if o.Outdated { // its remark is gone from the re-saved review: no path:line
+				row = map[string]string{"summary": o.Summary, "outdated": "1"}
+			}
+			if len(o.Replies) > 0 {
+				row["replies"] = strconv.Itoa(len(o.Replies))
+			}
+			if o.Resolution != nil {
+				row["resolved"] = "1"
 			}
 			other = append(other, row)
 		}

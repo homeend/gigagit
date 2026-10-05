@@ -36,9 +36,22 @@ function reviewWords(r) {
   return parts.length ? parts.join(" ") : (r.summary || "").trim();
 }
 
+// tallyText is a review row's "12 remarks · 4 resolved" — plain words (the
+// TUI's reviewTally) — or "" for a review without remarks.
+function tallyText(r) {
+  if (!r || !r.remarks) return "";
+  return (r.remarks === 1 ? "1 remark" : r.remarks + " remarks") + " · " + (r.resolved || 0) + " resolved";
+}
+
+// withTally appends a review's tally to its row text.
+function withTally(text, r) {
+  const t = tallyText(r);
+  return t ? text + " · " + t : text;
+}
+
 // reviewRowText is a commit's review row: "└ 2026-09-29 14:05 claude".
 function reviewRowText(r) {
-  return "└ " + reviewWords(r);
+  return withTally("└ " + reviewWords(r), r);
 }
 
 // branchReviewText is a branch's review sub-row: "└ Review: 09-28 23:37
@@ -49,7 +62,9 @@ function branchReviewText(r, now = new Date()) {
   let stamp = reviewStamp(r.created);
   if (stamp && d.getFullYear() === now.getFullYear()) stamp = stamp.slice(5);
   const parts = [stamp, (r.agent || "").trim()].filter(Boolean);
-  return "└ Review: " + (parts.length ? parts.join(" ") : (r.summary || "").trim());
+  // The sidebar is narrow: the short form, as the TUI's Branches sub-row.
+  const short = r && r.remarks ? " · " + (r.resolved || 0) + "/" + r.remarks + " resolved" : "";
+  return "└ Review: " + (parts.length ? parts.join(" ") : (r.summary || "").trim()) + short;
 }
 
 // branchReviews is b's reviews of its CURRENT tip, newest first as given. The
@@ -343,7 +358,7 @@ function leaveRangeReview() {
 // reviewMetaLine is the line under the review's title: agent · date · how
 // many notes on how many files (the TUI's reviewMetaLine, with a date).
 function reviewMetaLine(d) {
-  return [d.agent, reviewStamp(d.created), d.structured ? `${d.notes} notes on ${d.note_files} files` : ""]
+  return [d.agent, reviewStamp(d.created), d.structured ? `${d.notes} notes on ${d.note_files} files` : "", d.resolved ? `${d.resolved} resolved` : ""]
     .filter(Boolean)
     .join(" · ");
 }
@@ -451,7 +466,13 @@ function reviewOverviewHTML() {
     (d.meta ? `<div class="review-ov-meta">${esc(d.meta)}</div>` : "") +
     (other.length
       ? `<h4>Other notes</h4><ul class="review-other">` +
-        other.map((n) => `<li>${esc(n.path + ":" + n.line + " — " + n.summary + (n.changed ? " (changed since the review)" : ""))}</li>`).join("") +
+        other
+          .map((n) => {
+            const thread = [n.replies ? n.replies + (n.replies === "1" ? " reply" : " replies") : "", n.resolved ? "resolved" : ""].filter(Boolean).join(" · ");
+            const head = n.outdated ? "outdated: " + n.summary : n.path + ":" + n.line + " — " + n.summary + (n.changed ? " (changed since the review)" : "");
+            return `<li>${esc(head + (thread ? " — " + thread : ""))}</li>`;
+          })
+          .join("") +
         `</ul>`
       : "") +
     `</div>`
@@ -731,7 +752,7 @@ function workingReviewMarkHTML(f, reviewed) {
 // staging, the stack and every file action pass it by. "" without a review.
 function workingReviewRowHTML(r) {
   if (!r) return "";
-  return `<li class="rev wrev${state.reviewSel === r.id ? " sel" : ""}" data-review="${esc(r.id)}" title="the review of these changes">✎ Review: ${esc(reviewWords(r))}</li>`;
+  return `<li class="rev wrev${state.reviewSel === r.id ? " sel" : ""}" data-review="${esc(r.id)}" title="the review of these changes">✎ Review: ${esc(withTally(reviewWords(r), r))}</li>`;
 }
 
 // workingStateHTML marks a working review's file row: one it never read, or
