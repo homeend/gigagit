@@ -167,6 +167,12 @@ func (m Model) commitSoloRow() (actionRow, bool) {
 		id:    "commits-solo",
 		label: i18n.T("Solo this branch"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
+			// Soloing asks to SEE the soloed feed (ctrl+g and the . menu
+			// both run this): a docked console covering it steps aside (its
+			// session runs on), so ctrl+g's landing focuses Commits.
+			if m.console != nil {
+				m = m.dropConsole().reconcileFullscreenFocus()
+			}
 			if len(m.commitScopeBranches) == 1 && m.commitScopeBranches[0] == b.Name {
 				m.commitScopeBranches = nil // re-solo → un-solo
 			} else {
