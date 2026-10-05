@@ -61,9 +61,9 @@ func menuLabels(m Model) []string {
 	return out
 }
 
-// A note row is not a file: its "." menu opens it or deletes it — no file
-// copies, no bookmark/shelf/compare, no editor, no commit id (user ruling
-// 2026-10-05).
+// A note row is not a file: its "." menu opens it, copies its gg link or
+// deletes it — no file copies, no bookmark/shelf/compare, no editor, no commit
+// id (user rulings 2026-10-05).
 func TestNoteRowMenusAreOpenAndDelete(t *testing.T) {
 	t.Parallel()
 	m, _ := noteRowsModel(t)
@@ -72,9 +72,9 @@ func TestNoteRowMenusAreOpenAndDelete(t *testing.T) {
 		row  func(contentLine) bool
 		want []string
 	}{
-		{"review", isReviewRow, []string{"Open review", "Delete review"}},
-		{"range review", isScopeRow, []string{"Open range review", "Delete range review"}},
-		{"notes", isNotedRow, []string{"Open notes", "Delete notes"}},
+		{"review", isReviewRow, []string{"Open review", "Copy gg link", "Delete review"}},
+		{"range review", isScopeRow, []string{"Open range review", "Copy gg link", "Delete range review"}},
+		{"notes", isNotedRow, []string{"Open notes", "Copy gg link", "Delete notes"}},
 	} {
 		got := menuLabels(selectRow(t, m, c.row))
 		if !slices.Equal(got, c.want) {
