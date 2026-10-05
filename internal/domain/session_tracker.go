@@ -29,7 +29,6 @@ type progressMark struct {
 // question that opened inside it, both stall rules. One per running session,
 // owned by the watcher (under its mu).
 type sessionTracker struct {
-	dedicated   bool            // the profile knows this agent's screens
 	act         SessionActivity // the last published activity
 	pendingIdle time.Time       // the first idle read while working (zero: none)
 	pendingQ    bool            // a question seen inside the grace, not yet announced
@@ -112,7 +111,7 @@ func (t *sessionTracker) Step(rd agentstate.Reading, info agentsession.Info, las
 	}
 	next.StepFor = rd.StepFor
 	stalled := !lastOut.IsZero() && now.Sub(lastOut) > tm.stall &&
-		(next.State == agentstate.Working || (next.State == agentstate.Unknown && t.dedicated))
+		(next.State == agentstate.Working || (next.State == agentstate.Unknown && rd.Dedicated))
 	quiet, spinning := now.Sub(lastOut), false
 	if rd.Progress != t.progress.key || t.progress.since.IsZero() {
 		t.progress = progressMark{key: rd.Progress, since: now}

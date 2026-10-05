@@ -319,10 +319,9 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 	}
 	tm := currentTiming()
 	type read struct {
-		info      agentsession.Info
-		dedicated bool
-		rd        agentstate.Reading
-		last      time.Time
+		info agentsession.Info
+		rd   agentstate.Reading
+		last time.Time
 	}
 	var reads []read
 	live := map[SessionID]bool{}
@@ -339,7 +338,7 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 		if !ok {
 			continue
 		}
-		reads = append(reads, read{info: info, dedicated: prof.Dedicated, rd: prof.Read(obs), last: last})
+		reads = append(reads, read{info: info, rd: prof.Read(obs), last: last})
 	}
 	changed := false
 	w.mu.Lock()
@@ -349,7 +348,6 @@ func (w *StateWatcher) observe(now time.Time) (recheck time.Duration) {
 			t = &sessionTracker{}
 			w.trackers[r.info.ID] = t
 		}
-		t.dedicated = r.dedicated
 		act, notes, ch, again := t.Step(r.rd, r.info, r.last, now, tm)
 		w.states[r.info.ID] = act
 		for _, n := range notes {

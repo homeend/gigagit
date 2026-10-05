@@ -108,13 +108,15 @@ func TestTrackerStalls(t *testing.T) {
 	if !act.Stalled || len(notes) != 1 || !notes[0].Spinning {
 		t.Fatalf("spinner stall: %+v %+v", act, notes)
 	}
-	// unknown counts only for dedicated rules
-	gen := sessionTracker{dedicated: false}
+	// unknown counts only for dedicated rules — the reading says which
+	var gen sessionTracker
 	if act, _, _, _ := gen.Step(rdg(agentstate.Unknown), trkInfo, late, late.Add(3*time.Minute), trkTiming); act.Stalled {
 		t.Fatal("generic unknown stalled")
 	}
-	ded := sessionTracker{dedicated: true}
-	if act, _, _, _ := ded.Step(rdg(agentstate.Unknown), trkInfo, late, late.Add(3*time.Minute), trkTiming); !act.Stalled {
+	var ded sessionTracker
+	dr := rdg(agentstate.Unknown)
+	dr.Dedicated = true
+	if act, _, _, _ := ded.Step(dr, trkInfo, late, late.Add(3*time.Minute), trkTiming); !act.Stalled {
 		t.Fatal("dedicated unknown did not stall")
 	}
 }

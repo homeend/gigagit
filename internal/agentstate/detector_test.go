@@ -98,6 +98,11 @@ func TestKnown(t *testing.T) {
 	if Known("") || Known("mystery") || ForAgent("mystery").Dedicated {
 		t.Error("generic ids must not claim dedicated rules")
 	}
+	// The reading carries it: the tracker counts an unreadable screen of a
+	// dedicated agent towards a stall from the reading alone.
+	if !ForAgent("claude").Read(obs("", "", -1)).Dedicated || ForAgent("mystery").Read(obs("", "", -1)).Dedicated {
+		t.Error("Reading.Dedicated does not follow the profile")
+	}
 }
 
 // Every known agent's screen can say idle and can say question: an agent
