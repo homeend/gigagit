@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notes"
 )
 
 // reviewRepo is a real repo on branch "feature" (one commit past main) with
@@ -98,12 +100,31 @@ func TestSaveReviewCommitRangeAnchorsOnTheLastCommit(t *testing.T) {
 	}
 }
 
-func TestSaveReviewRefusesWorkingChanges(t *testing.T) {
+// A working-changes review is a note in this worktree's part file: path-less,
+// live, tagged review, carrying the fingerprints it was given.
+func TestSaveReviewStoresAWorkingReview(t *testing.T) {
 	t.Parallel()
 	_, svc, _ := reviewRepo(t)
-	_, _, err := svc.SaveReview(context.Background(), SaveReview{Target: WorkingReviewTarget(), Text: "x"})
-	if !errors.Is(err, ErrNoReviewCommit) {
-		t.Fatalf("err = %v, want ErrNoReviewCommit", err)
+	ctx := context.Background()
+	files := []model.NoteFile{{Path: "f.txt", Blob: strings.Repeat("a", 40)}, {Path: "gone.txt", Deleted: true}}
+	id, warn, err := svc.SaveReview(ctx, SaveReview{Target: WorkingReviewTarget(), Agent: "Claude Code", Text: "x", Files: files})
+	if err != nil || warn != "" {
+		t.Fatalf("SaveReview: %v %q", err, warn)
+	}
+	top, _ := svc.TopLevel(ctx) // the spelling the store keys the part by
+	st := svc.notesStore(ctx)
+	got, err := st.Load(notes.WorktreePart(strings.TrimSpace(top)))
+	if err != nil || len(got) != 1 {
+		all, _ := st.LoadAll()
+		t.Fatalf("worktree part = %+v (%v); store = %+v", got, err, all)
+	}
+	n := got[0]
+	if n.ID != id || !n.IsWorkingReview() || n.Author != "Claude Code" || n.Summary != "Review: working changes" ||
+		!reflect.DeepEqual(n.Files, files) || n.Scope != "" {
+		t.Fatalf("note = %+v", n)
+	}
+	if cs, _ := st.Load(notes.PartCommits); len(cs) != 0 {
+		t.Fatalf("a working review reached commits.toml: %+v", cs)
 	}
 }
 

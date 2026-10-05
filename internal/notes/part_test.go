@@ -29,6 +29,7 @@ func TestPartOfRoutesEveryKind(t *testing.T) {
 		{"commit line", model.FileAddress{State: model.StateCommitted, Commit: sha, Path: "a.go"}, "", PartCommits},
 		{"commit review", model.FileAddress{State: model.StateCommitted, Commit: sha}, "", PartCommits},
 		{"pair note", model.FileAddress{State: model.StateCommitted, Commit: sha, Path: "a.go"}, "aaaaaaa..bbbbbbb", PartCommits},
+		{"working review", model.FileAddress{State: model.StateUnstaged, Worktree: "/repo"}, "", wt},
 		{"merge preview", model.FileAddress{State: model.StateCommitted, Commit: sha, Path: "a.go"}, "main...feat/x", PartPreviews},
 	}
 	for _, c := range cases {

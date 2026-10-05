@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Working-changes reviews are notes
+
+### Changed
+
+- **A review of uncommitted changes is stored.** "Review working changes"
+  (TUI, web) and `gg review --working` save the review as a note in this
+  worktree's notes and print `note: <id>`, like a commit or branch review.
+  It records every file it read by path and git blob id, so each file's
+  part of the review shows while THAT file still matches: edit a file and
+  its annotations leave, the other files keep theirs. Staging an unchanged
+  file keeps the review. A review shows only in the worktree it was made in.
+- **Untracked files are reviewed.** The review input gains every untracked,
+  non-ignored file as a new-file patch (it used to be `git diff HEAD` only,
+  which silently skipped them); they count toward the diff size cap.
+- **Where it shows.** A "✎ Review" row heads the TUI Files panel and the web
+  working list while a review is current, and ✎ marks each file it still
+  matches. The row opens the review as HEAD ↔ the working tree: matching
+  files carry their notes, the others say "changed since the review" or
+  "not reviewed". A matching file's working-tree diff draws the review's
+  notes (read-only, new side), and `gg note list --file` lists them.
+- **Outdated, then swept.** Once no reviewed file matches, the review leaves
+  the Files panel and stays in View all notes labelled *outdated*; the
+  startup cleanup deletes it after `[notes] max_age_days`.
+- `gg review --working --notes` is now a usage error (exit 2): a working
+  review is stored and draws its own notes.
+- **Its link** is the checkout's working tree plus the review:
+  `gg://<repo>?review=<id>` (Copy gg link on its row, `gg link --review`);
+  `gg review show` reads it like any review, each remark linking its
+  working-tree line.
 ## Review links — hand one agent's review to another
 
 ### Added

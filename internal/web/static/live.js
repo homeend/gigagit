@@ -216,6 +216,10 @@ async function refreshSources(want) {
   // "notes" is not a ticker source: only a note mutation emits it, and both
   // halves (the open diff's rows, the ◆N badges) reload from it.
   if (want.has("notes")) jobs.push(fetchNotes(), refreshNoteCounts());
+  // A working review's matches follow the files: an edit can take a file's
+  // ✎ (or the whole Review row) away, so a status change re-reads the counts
+  // while one is listed.
+  else if (want.has("status") && (state.noteCounts.working_reviews || []).length) jobs.push(refreshNoteCounts());
   let sidebar = false;
   for (const s of want) if (SIDEBAR.has(s)) sidebar = true;
   if (sidebar) jobs.push(fetchBranches(), loadRepo());

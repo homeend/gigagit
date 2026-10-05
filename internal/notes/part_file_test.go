@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -558,5 +559,46 @@ func TestCapExemptsShelfLevelNotes(t *testing.T) {
 	ids := got[0].ID + "," + got[1].ID
 	if !strings.Contains(ids, "shelf000") || !strings.Contains(ids, "new00000") {
 		t.Fatalf("want shelf000 and new00000 kept, got %s", ids)
+	}
+}
+
+// A working review is entry-level: the cap never counts or drops it.
+func TestCapExemptsWorkingReviews(t *testing.T) {
+	t.Parallel()
+	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	review := model.Note{ID: "rv", Tags: []string{model.ReviewTag}, Created: old,
+		Address: model.FileAddress{State: model.StateUnstaged, Worktree: "/r"}}
+	line := func(id string, h int) model.Note {
+		return model.Note{ID: id, Address: model.FileAddress{State: model.StateUnstaged, Worktree: "/r", Path: "f.go"},
+			Created: old.Add(time.Duration(h) * time.Hour)}
+	}
+	got := capOldestFirst([]model.Note{review, line("l1", 1), line("l2", 2), line("l3", 3)}, 2)
+	var ids []string
+	for _, n := range got {
+		ids = append(ids, n.ID)
+	}
+	if !slices.Contains(ids, "rv") || len(ids) != 3 || slices.Contains(ids, "l1") {
+		t.Fatalf("kept %v, want the review plus the two newest line notes", ids)
+	}
+}
+
+// Files round-trips through the TOML part file.
+func TestNoteFilesRoundTrip(t *testing.T) {
+	t.Parallel()
+	st := NewFileStore(t.TempDir())
+	now := time.Now().UTC().Truncate(time.Second)
+	n := model.Note{ID: "rv1", Source: model.NoteSourceAgent, Tags: []string{model.ReviewTag},
+		Address: model.FileAddress{State: model.StateUnstaged, Worktree: "/repo"},
+		Files:   []model.NoteFile{{Path: "a b.go", Blob: strings.Repeat("c", 40)}, {Path: "gone.go", Deleted: true}},
+		Created: now, Updated: now}
+	if err := st.Put(n); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.Load(WorktreePart("/repo"))
+	if err != nil || len(got) != 1 {
+		t.Fatalf("Load = %v, %v", got, err)
+	}
+	if !reflect.DeepEqual(got[0].Files, n.Files) {
+		t.Fatalf("Files = %+v, want %+v", got[0].Files, n.Files)
 	}
 }

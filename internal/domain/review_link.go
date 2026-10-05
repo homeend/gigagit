@@ -49,6 +49,11 @@ func (s *Service) ReviewID(ctx context.Context, idOrLatest string) (string, erro
 // reviewTarget is the link target of review r: its commit, or its range as
 // two full shas.
 func (s *Service) reviewTarget(ctx context.Context, r Review) (model.LinkTarget, error) {
+	if r.Kind == ReviewOnWorktree {
+		// A review of uncommitted changes compared HEAD with the working
+		// tree: its address is this checkout's working tree.
+		return model.LinkTarget{State: model.StateUnstaged}, nil
+	}
 	base, tip, isRange := s.ReviewRevs(ctx, r)
 	full := func(rev string) (string, error) {
 		h, ok, err := s.ResolveRev(ctx, rev)
@@ -201,6 +206,9 @@ func checkReviewHint(ctx context.Context, svc *Service, res Resolved) error {
 	}
 	match := t.Pair == nil && res.Pair == nil && res.Commit == t.Commit ||
 		t.Pair != nil && res.Pair != nil && *res.Pair == *t.Pair
+	if r.Kind == ReviewOnWorktree { // its working tree, never a commit
+		match = res.Pair == nil && res.Commit == ""
+	}
 	if !match {
 		return fmt.Errorf("%w: %w (review %s compared %s)", model.ErrLink, ErrReviewLinkMismatch, r.ID, targetText(t))
 	}
@@ -239,13 +247,16 @@ type ReviewShowRemark struct {
 // (Base is empty for one commit), its link, its overview (a prose review's
 // whole text) and its remarks (never nil).
 type ReviewShow struct {
-	ID       string             `json:"id"`
-	Agent    string             `json:"agent"`
-	Created  time.Time          `json:"created"`
-	Branch   string             `json:"branch,omitempty"`
-	Base     string             `json:"base"`
-	Tip      string             `json:"tip"`
-	Link     string             `json:"link"`
+	ID      string    `json:"id"`
+	Agent   string    `json:"agent"`
+	Created time.Time `json:"created"`
+	Branch  string    `json:"branch,omitempty"`
+	Base    string    `json:"base"`
+	Tip     string    `json:"tip"`
+	Link    string    `json:"link"`
+	// Working: a review of uncommitted changes (HEAD ↔ the working tree);
+	// Base and Tip are then empty.
+	Working  bool               `json:"working,omitempty"`
 	Overview string             `json:"overview"`
 	Meta     map[string]string  `json:"meta,omitempty"`
 	Remarks  []ReviewShowRemark `json:"remarks"`
@@ -272,7 +283,7 @@ func (s *Service) ReviewShow(ctx context.Context, id string) (ReviewShow, error)
 		return ReviewShow{}, err
 	}
 	out := ReviewShow{ID: r.ID, Agent: r.Agent, Created: r.Created, Branch: r.Branch, Tip: t.Commit,
-		Link: link, Overview: r.Text, Remarks: []ReviewShowRemark{}}
+		Link: link, Overview: r.Text, Remarks: []ReviewShowRemark{}, Working: r.Kind == ReviewOnWorktree}
 	if t.Pair != nil {
 		out.Base, out.Tip = t.Pair.A, t.Pair.B
 	}

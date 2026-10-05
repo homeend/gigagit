@@ -238,20 +238,25 @@ func TestReviewRowOpensLaunchDialog(t *testing.T) {
 	}
 }
 
-func TestReviewResultOpensViewerAndSavesReport(t *testing.T) {
+// A finished working-changes review is a stored note now: it opens through
+// the review view (openReview), like a commit review.
+func TestReviewResultOpensAStoredWorkingReview(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	m := launchTestModel(t)
+	m.svc.UseNotesDir(t.TempDir())
 	m.cfg.Tools.Command = []config.ToolCommand{captureCmd(exttool.CatReview, "echo LGTM")}
 	spec, err := m.svc.ReviewTask(context.Background(), m.cfg.Tools.Command[0], domain.WorkingReviewTarget())
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := domain.Tasks().Submit(spec)
-	waitTaskState(t, id, taskEndedFn)
+	info := waitTaskState(t, id, taskEndedFn)
+	if info.NoteID == "" {
+		t.Fatalf("the working review was not stored: %+v", info)
+	}
 	m, _ = m.onTasksChanged()
-	v := layerOf[*fileViewer](m)
-	if v == nil || v.src.kind != srcExternal || !strings.HasSuffix(v.path, ".md") || !strings.HasPrefix(v.title(), "Review: ") {
-		t.Fatalf("viewer %+v (status %q)", v, m.statusMsg)
+	if !m.hasReviewLoading(m.reviewOpenGen) {
+		t.Fatalf("the stored review did not open (status %q)", m.statusMsg)
 	}
 }
 

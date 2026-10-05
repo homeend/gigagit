@@ -386,7 +386,14 @@ async function openReview(id, back) {
   if (gen !== state.detailGen) return;
   const files = d.files || [];
   let cmp = null;
-  if (d.range) {
+  if (d.working) {
+    // A review of uncommitted changes is HEAD ↔ the working tree: the diffs
+    // read /api/diff's head lane, the notes the review's own lane.
+    const a = d.base.slice(0, 7);
+    cmp = { a, b: "working tree", aHash: d.base, bHash: "", worktree: true, all: files, filter: "all", previewBar: "reviewed working changes" };
+    state.compare = cmp;
+    state.filesMode = "compare";
+  } else if (d.range) {
     // A range review is the compare of its range: the diffs, the stack and
     // the counts read base..tip through the compare lane unchanged.
     const a = d.base.slice(0, 7), b = d.tip.slice(0, 7);
@@ -422,6 +429,7 @@ function renderReviewFiles() {
       `<span class="st ${esc(f.status)}">${esc(f.status)}</span>` +
       filePathHTML(f.path, cols) +
       noteBadgeHTML(counts[f.path]) +
+      workingStateHTML(d, f.path) +
       `</li>`;
     const sum = (d.summaries || {})[f.path];
     if (sum) html += `<li class="rsum" title="${esc(sum)}">${esc(sum)}</li>`;
@@ -443,7 +451,7 @@ function reviewOverviewHTML() {
     (d.meta ? `<div class="review-ov-meta">${esc(d.meta)}</div>` : "") +
     (other.length
       ? `<h4>Other notes</h4><ul class="review-other">` +
-        other.map((n) => `<li>${esc(n.path + ":" + n.line + " — " + n.summary)}</li>`).join("") +
+        other.map((n) => `<li>${esc(n.path + ":" + n.line + " — " + n.summary + (n.changed ? " (changed since the review)" : ""))}</li>`).join("") +
         `</ul>`
       : "") +
     `</div>`
@@ -683,9 +691,36 @@ registerHelp({
 });
 
 
-export { notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { currentWorkingReview, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;
   copyText(state.review.data.text || "", "the review");
 });
+
+
+// currentWorkingReview is the newest review of this worktree's uncommitted
+// changes that still matches a file (the counts' working_reviews, newest
+// first); null when there is none.
+function currentWorkingReview() {
+  const rs = (state.noteCounts && state.noteCounts.working_reviews) || [];
+  return rs.find((r) => r.current) || null;
+}
+
+// workingReviewRowHTML is the working list's Review row: "✎ Review: <date>
+// <agent>". It carries data-review and no data-i: not a file, so the cursor,
+// staging, the stack and every file action pass it by. "" without a review.
+function workingReviewRowHTML(r) {
+  if (!r) return "";
+  return `<li class="rev wrev${state.reviewSel === r.id ? " sel" : ""}" data-review="${esc(r.id)}" title="the review of these changes">✎ Review: ${esc(reviewWords(r))}</li>`;
+}
+
+// workingStateHTML marks a working review's file row: one it never read, or
+// one that changed since — whose notes are not drawn. "" otherwise.
+function workingStateHTML(d, path) {
+  if (!d.working) return "";
+  const st = (d.states || {})[path];
+  if (!st) return `<span class="dim"> · not reviewed</span>`;
+  if (st !== "matches") return `<span class="dim"> · changed since the review</span>`;
+  return "";
+}

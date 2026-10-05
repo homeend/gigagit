@@ -105,6 +105,9 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	if rv.Branch != "" {
 		label = rv.Branch + " " + label
 	}
+	if rv.Kind == domain.ReviewOnWorktree {
+		label = "working changes"
+	}
 	out := map[string]any{
 		"id": rv.ID, "agent": rv.Agent, "created": wireTime(rv.Created), "branch": rv.Branch,
 		"commit": rv.Commit, "label": label, "structured": rv.Doc != nil, "text": rv.Text,
@@ -119,6 +122,17 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	}
 	base, tip, isRange := svc.ReviewRevs(ctx, rv)
 	out["base"], out["tip"], out["range"] = base, tip, isRange
+	var states map[string]domain.WorkingFileState
+	if rv.Kind == domain.ReviewOnWorktree {
+		// A review of uncommitted changes: HEAD ↔ the working tree, each
+		// reviewed file marked against the bytes the review read.
+		states = domain.WorkingReviewState(rv.Worktree, rv.Files).States
+		ws := make(map[string]string, len(states))
+		for p, st := range states {
+			ws[p] = workingStateWord(st)
+		}
+		out["working"], out["states"] = true, ws
+	}
 	files, err := svc.ReviewFiles(ctx, rv)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -149,7 +163,11 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	other := []map[string]string{}
 	if os, err := svc.ReviewOtherNotes(ctx, rv.ID); err == nil {
 		for _, o := range os {
-			other = append(other, map[string]string{"path": o.Path, "line": reviewLine(o.Side, o.Range), "summary": o.Summary})
+			row := map[string]string{"path": o.Path, "line": reviewLine(o.Side, o.Range), "summary": o.Summary}
+			if o.Changed {
+				row["changed"] = "1"
+			}
+			other = append(other, row)
 		}
 	}
 	out["other"] = other
@@ -180,6 +198,24 @@ func (s *Server) handleReviewNotes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"notes": notes})
 		return
 	}
+	if rv.Kind == domain.ReviewOnWorktree {
+		// The page shows HEAD → the working tree (/api/diff?wt=head).
+		d, _, err := worktreeDiff(ctx, svc, "head", path, oldPath, nil, false)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		res, err := svc.ReviewNotesFor(ctx, rv.ID, path, d)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		for _, n := range res {
+			notes = append(notes, toWireNote(n))
+		}
+		writeJSON(w, map[string]any{"notes": notes})
+		return
+	}
 	base, tip, isRange := svc.ReviewRevs(ctx, rv)
 	key := tip + "^.." + tip + ":" + path // /api/diff's commit form
 	if isRange {
@@ -206,6 +242,17 @@ func (s *Server) handleReviewNotes(w http.ResponseWriter, r *http.Request) {
 		notes = append(notes, toWireNote(n))
 	}
 	writeJSON(w, map[string]any{"notes": notes})
+}
+
+// workingStateWord is a working review file's state on the wire.
+func workingStateWord(st domain.WorkingFileState) string {
+	switch st {
+	case domain.WorkingFileMatches:
+		return "matches"
+	case domain.WorkingFileGone:
+		return "gone"
+	}
+	return "changed"
 }
 
 // handleReviewLink is a review's gg link (Copy gg link on its rows): only the

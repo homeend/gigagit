@@ -20,6 +20,9 @@ type Result struct {
 	Path         string // when an operation creates/targets a path (e.g. CreateWorktree), its absolute path
 	// Captured is the captured stdout, set only by capture ops like GenerateMessage.
 	Captured string
+	// ReviewFiles carries a working review's fingerprints from Prepare to
+	// whoever stores the review (domain.SaveReview).
+	ReviewFiles []model.NoteFile
 }
 
 // OpDeps is everything an operation needs: the repo to act on, an optional

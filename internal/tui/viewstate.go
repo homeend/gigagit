@@ -349,6 +349,10 @@ type statusList struct {
 	root  string
 	mtime map[int]int64  // dedupes os.Stat within one sort pass; 0 = unknown (sorts last)
 	notes map[string]int // NoteCounts.ByPath: the trailing ◆N badge (display only); nil = no badges
+	// review is the Files panel's Review row (backing index reviewRowIdx);
+	// reviewed marks the files a current working review matches (✎).
+	review   string
+	reviewed map[string]bool
 }
 
 func (l statusList) Len() int { return len(l.files) }
@@ -361,16 +365,34 @@ func (l statusList) Len() int { return len(l.files) }
 // unbadged text, so typing a digit never matches a file because of its note
 // count. With no notes the badge is "" and the row is byte-identical to before.
 func (l statusList) Row(i int) string {
-	return l.Haystack(i) + noteBadge(l.notes[l.files[i].Path])
+	if i < 0 {
+		return l.review
+	}
+	mark := ""
+	if l.reviewed[l.files[i].Path] {
+		mark = " ✎"
+	}
+	return l.Haystack(i) + mark + noteBadge(l.notes[l.files[i].Path])
 }
 
 // Haystack is the filter-match text: the row WITHOUT its note badge.
 func (l statusList) Haystack(i int) string {
+	if i < 0 {
+		return ""
+	}
 	return fmt.Sprintf("%c %s", fileGlyph(l.p, l.files[i]), l.files[i].Path)
 }
-func (l statusList) Name(i int) string { return l.files[i].Path }
-func (l statusList) Key(i int) string  { return l.files[i].Path }
+func (l statusList) Name(i int) string {
+	if i < 0 {
+		return ""
+	}
+	return l.files[i].Path
+}
+func (l statusList) Key(i int) string { return l.Name(i) }
 func (l statusList) Date(i int) int64 {
+	if i < 0 {
+		return 0
+	}
 	if t, ok := l.mtime[i]; ok {
 		return t
 	}
@@ -498,6 +520,7 @@ func (m Model) withStatus(st model.WorkingTreeStatus) Model {
 	m.status = st
 	m.filesIdx = m.fileMembership(panelFiles)
 	m.stagedIdx = m.fileMembership(panelStaged)
+	m = m.withReviewRowIdx()
 	// An open working-tree stack shows one of these two sections, so it is
 	// reconciled here — the one place the section membership is derived.
 	return m.reconcileStatusStack()
@@ -538,8 +561,15 @@ func (m Model) listFor(p panel) panelList {
 		// Both file panels back onto the FULL status slice; panelView's
 		// membership filter selects each panel's subset, so backingIndex keeps
 		// returning indices into m.status.Files for the action handlers.
-		return statusList{files: m.status.Files, p: p, root: m.currentWorktree,
+		l := statusList{files: m.status.Files, p: p, root: m.currentWorktree,
 			mtime: map[int]int64{}, notes: m.noteCounts.ByPath}
+		if p == panelFiles {
+			l.reviewed = m.reviewedPaths()
+			if r, ok := m.currentWorkingReview(); ok {
+				l.review = workingReviewRowText(r)
+			}
+		}
+		return l
 	case panelCommits:
 		return commitList{items: m.commits, m: &m, identW: m.commitIdentWidth()}
 	}
@@ -599,7 +629,19 @@ func (m Model) filterActive(p panel) bool {
 // strings. panelView builds rows on top of this; idx-only callers use it
 // directly so they never pay for styling — important for the Commits panel,
 // whose Row styling (graph window + identity token) is the per-frame hot cost.
-func (m Model) displayIndices(p panel) (idx []int) {
+func (m Model) displayIndices(p panel) []int {
+	if p == panelFiles && m.reviewRowShown() {
+		// The Review row heads the Files panel (working_review_row.go).
+		if m.sortModes[p] == sortDefault && m.filesIdxReview != nil {
+			return m.filesIdxReview
+		}
+		return append([]int{reviewRowIdx}, m.displayIndicesBase(p)...)
+	}
+	return m.displayIndicesBase(p)
+}
+
+// displayIndicesBase is displayIndices without the Files panel's Review row.
+func (m Model) displayIndicesBase(p panel) (idx []int) {
 	// Fast path: an unsorted, unfiltered file panel is exactly its precomputed
 	// membership split (derived on every status write). This returns a shared,
 	// read-only slice in O(1) — the file panels' displayIndices is called many
@@ -745,6 +787,9 @@ func (m Model) backingIndex(p panel) (int, bool) {
 		return 0, false
 	}
 	u := idx[s]
+	if p == panelFiles && u == reviewRowIdx {
+		return 0, false // the Review row is not a file
+	}
 	if p == panelCommits {
 		// The Commits list is unified (WIP pseudo-rows ++ feed). A pseudo-row is
 		// not a real commit, so refuse it (ok=false) — every caller already guards

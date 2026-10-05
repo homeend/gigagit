@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -26,30 +27,38 @@ import (
 type ReviewNoteKind int
 
 const (
-	ReviewOnCommit ReviewNoteKind = iota // a commit or range review
-	ReviewOnBranch                       // a branch review whose commit is still the branch's tip
-	ReviewWasTip                         // a branch review whose branch moved on or is gone
+	ReviewOnCommit   ReviewNoteKind = iota // a commit or range review
+	ReviewOnBranch                         // a branch review whose commit is still the branch's tip
+	ReviewWasTip                           // a branch review whose branch moved on or is gone
+	ReviewOnWorktree                       // a review of a worktree's uncommitted changes (spec 2026-10-04 working reviews)
 )
 
 var (
 	ErrNoReviewCommit = errors.New("review: working changes have no commit to attach a review to")
 	ErrReviewNotFound = errors.New("review not found")
+	// ErrNoReviewWorktree: a working-changes review needs this checkout's
+	// top level to know which worktree's notes it belongs to.
+	ErrNoReviewWorktree = errors.New("review: no worktree to attach a working review to")
 )
 
 // SaveReview is the one command every review path issues.
 type SaveReview struct {
 	Target ReviewTarget
-	Agent  string // the tool's name → Note.Author
-	Text   string // the review, markdown
-	NoteID string // non-empty: rewrite this review in place
+	Agent  string           // the tool's name → Note.Author
+	Text   string           // the review, markdown
+	NoteID string           // non-empty: rewrite this review in place
+	Files  []model.NoteFile // a working review's fingerprints (engine Prepare)
 }
 
 // Review is one stored AI review, as every frontend sees it.
 type Review struct {
-	ID               string
-	Kind             ReviewNoteKind
-	Commit, Branch   string
-	Scope            string // the reviewed hex range
+	ID             string
+	Kind           ReviewNoteKind
+	Commit, Branch string
+	Scope          string // the reviewed hex range
+	Worktree       string // a working review's checkout ("" otherwise)
+	// Files is a working review's fingerprints: what it read, by blob id.
+	Files            []model.NoteFile
 	Agent, Summary   string
 	Text             string
 	Created, Updated time.Time
@@ -128,7 +137,14 @@ func (s *Service) reviewBranchName(ctx context.Context, tip, tipSHA string) stri
 // file outside the note store.
 func (s *Service) SaveReview(ctx context.Context, cmd SaveReview) (string, string, error) {
 	t := s.FillReviewCommit(ctx, cmd.Target)
-	if t.Kind == ReviewWorking || t.Commit == "" {
+	wt := ""
+	if t.Kind == ReviewWorking {
+		top, err := s.TopLevel(ctx)
+		if err != nil || strings.TrimSpace(top) == "" {
+			return "", "", ErrNoReviewWorktree
+		}
+		wt = filepath.Clean(strings.TrimSpace(top))
+	} else if t.Commit == "" {
 		return "", "", ErrNoReviewCommit
 	}
 	// A review document is stored canonical — unwrapped from any fence or
@@ -147,7 +163,7 @@ func (s *Service) SaveReview(ctx context.Context, cmd SaveReview) (string, strin
 	}
 	warn := ""
 	for {
-		id, err := s.putReview(st, t, cmd)
+		id, err := s.putReview(st, t, wt, cmd)
 		if err == nil {
 			s.invalidateNoteCounts()
 			return id, warn, nil
@@ -180,7 +196,7 @@ func (s *Service) SaveReview(ctx context.Context, cmd SaveReview) (string, strin
 }
 
 // putReview is one save attempt: read, build the note, Put.
-func (s *Service) putReview(st notes.Store, t ReviewTarget, cmd SaveReview) (string, error) {
+func (s *Service) putReview(st notes.Store, t ReviewTarget, wt string, cmd SaveReview) (string, error) {
 	if reviewPutHook != nil {
 		if err := reviewPutHook(); err != nil {
 			return "", err
@@ -191,10 +207,16 @@ func (s *Service) putReview(st notes.Store, t ReviewTarget, cmd SaveReview) (str
 		return "", err
 	}
 	now := notes.Now().UTC()
+	addr := model.FileAddress{State: model.StateCommitted, Commit: t.Commit, Branch: t.Branch}
+	scope := t.Range
+	if t.Kind == ReviewWorking {
+		// One note per review in this worktree's part file (spec §4): the
+		// cleaned top level is what PartOf and the readers key it by.
+		addr, scope = model.FileAddress{State: model.StateUnstaged, Worktree: wt}, ""
+	}
 	n := model.Note{ID: cmd.NoteID, Source: model.NoteSourceAgent, Author: cmd.Agent,
-		Address: model.FileAddress{State: model.StateCommitted, Commit: t.Commit, Branch: t.Branch},
-		Side:    model.NoteSideNew, Tags: []string{model.ReviewTag}, Scope: t.Range,
-		Summary: reviewSummary(t), Rationale: cmd.Text, Created: now, Updated: now}
+		Address: addr, Side: model.NoteSideNew, Tags: []string{model.ReviewTag}, Scope: scope,
+		Summary: reviewSummary(t), Rationale: cmd.Text, Files: cmd.Files, Created: now, Updated: now}
 	if n.ID == "" {
 		n.ID = notes.NewID(all)
 	} else {
@@ -242,6 +264,14 @@ func (s *Service) branchTip(ctx context.Context, name string) string {
 }
 
 func (s *Service) reviewOf(ctx context.Context, n model.Note, tips map[string]string) Review {
+	if n.IsWorkingReview() {
+		r := Review{ID: n.ID, Kind: ReviewOnWorktree, Worktree: n.Address.Worktree, Files: n.Files,
+			Agent: n.Author, Summary: n.Summary, Text: n.Rationale, Created: n.Created, Updated: n.Updated}
+		if doc, err := notebatch.ParseReview([]byte(n.Rationale)); err == nil {
+			r.Doc = &doc
+		}
+		return r
+	}
 	b := n.Address.Branch
 	tip, ok := tips[b]
 	if !ok && b != "" {
@@ -257,19 +287,29 @@ func (s *Service) reviewOf(ctx context.Context, n model.Note, tips map[string]st
 	return r
 }
 
-// reviewNotes is every review note (roots only), newest first.
+// reviewNotes is every review note (roots only), newest first: the commit
+// reviews and THIS worktree's working reviews — never a sibling's.
 func (s *Service) reviewNotes(ctx context.Context) ([]model.Note, error) {
 	st := s.notesStore(ctx)
 	if st == nil {
 		return nil, ErrNotesDisabled
 	}
-	all, err := st.Load(notes.PartCommits)
+	parts := []notes.Part{notes.PartCommits}
+	top, _ := s.TopLevel(ctx)
+	top = strings.TrimSpace(top)
+	if top != "" {
+		parts = append(parts, notes.WorktreePart(top))
+	}
+	all, err := loadParts(st, parts...)
 	if err != nil {
 		return nil, err
 	}
 	var out []model.Note
 	for _, n := range all {
-		if !n.IsReply() && n.IsReviewNote() {
+		if n.IsReply() {
+			continue
+		}
+		if n.IsReviewNote() || (n.IsWorkingReview() && sameWorktreePath(n.Address.Worktree, top)) {
 			out = append(out, n)
 		}
 	}

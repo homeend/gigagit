@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v136 -->
+<!-- gg:using-gg:v137 -->
 
 # Using gg (gigagit)
 
@@ -59,7 +59,11 @@ guards against removing the worktree you are standing in.
   with `warning: the review is not in gg review format` on stderr. The
   review is stored as a note on the reviewed commit (a range's last commit;
   a branch review's tip, carrying the branch name) and `note: <id>` is
-  printed on stderr; a `--working` review has no commit and is printed only.
+  printed on stderr. A `--working` review is stored too, in this worktree's
+  notes: it includes untracked files and records each reviewed file by its
+  blob id, so `gg note list --file <path>` shows its notes on a file only
+  while that file still matches what was reviewed. Its link is the working
+  tree plus `?review=<id>`.
   There is no report file. Flags must precede the positional (like `gg log
   -n`). No positional reviews the current branch's work; a single `<rev>`
   reviews just that commit's own change (`rev^..rev`); an `A..B` positional
@@ -96,7 +100,7 @@ gg note list  [<link> | --file <path>] [--type user|agent|all] [--cached | --rev
 gg note list  --shelf <entry-id>                                   # notes gg left on a whole shelf entry
 gg note rm    [<repo-link>] <note-id>
 gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
-gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]     # also keep the review's notes as permanent notes
+gg review --notes [--tool <name>] [<rev>|<A..B>]                 # also keep the review's notes as permanent notes (not with --working)
 gg skill path [review|using-gg|delegate]                         # print the bundled skill's path
 ```
 

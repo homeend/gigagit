@@ -160,6 +160,9 @@ func (m Model) diffFileSequence(dir int) []string {
 		}
 		idx := m.displayIndices(p)
 		for s := m.sel[p] + dir; s >= 0 && s < len(idx); s += dir {
+			if idx[s] == reviewRowIdx {
+				continue // the Files panel's Review row
+			}
 			f := m.status.Files[idx[s]]
 			if f.Kind != model.KindUnmerged {
 				out = append(out, f.Path)
@@ -228,6 +231,9 @@ func (m Model) nextStatusFile(dir int, staged bool) (int, model.FileStatus, bool
 	}
 	idx := m.displayIndices(p)
 	for s := m.sel[p] + dir; s >= 0 && s < len(idx); s += dir {
+		if idx[s] == reviewRowIdx {
+			continue // the Files panel's Review row
+		}
 		f := m.status.Files[idx[s]]
 		if f.Kind != model.KindUnmerged {
 			return s, f, true

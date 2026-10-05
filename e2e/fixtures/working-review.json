@@ -1,0 +1,3 @@
+{"version":1,"summary":"## Summary\nTWO is shouted and n.txt is new.\n\n## Verdict\nComment.","meta":{"verdict":"comment"},"files":[
+ {"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"why shout TWO?"}]},
+ {"path":"n.txt","annotations":[{"newRange":[1,1],"summary":"a new file, untracked"}]}]}

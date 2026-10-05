@@ -1,0 +1,40 @@
+name = "tui: a working review whose files all changed is outdated — no Review row, View all notes says so"
+
+# Spec 2026-10-04 working reviews §7: once no reviewed file matches, the
+# review leaves the working surfaces (no Review row, no ✎) and View all notes
+# lists it labelled outdated until the sweep drops it after max_age_days.
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[tools.command]]
+category = "review"
+name = "fake"
+mode = "capture"
+command = "{{ggfake}} review working-review.json"
+''' },
+  { write = "a.txt", content = "one\ntwo\n" },
+  { commit = "seed" },
+  { write = "a.txt", content = "one\nTWO\n" },
+  { write = "n.txt", content = "n1\n" },
+]
+
+[[run]]
+cmd = ["review", "--tool", "fake", "--working"]
+exit = 0
+
+[[run]]
+cmd = ["discard", "--yes", "a.txt", "n.txt"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "files-panel"
+wait = true
+screen_excludes = ["✎ Review:"]
+
+[[tui.step]]
+name = "all-notes"
+keys = ["C-p", "all", "space", "notes", "enter"]
+screen_contains = ["Working tree", "Reviews", "outdated", "Review: working changes"]

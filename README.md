@@ -144,10 +144,11 @@ gg note add --preview <a>..<b> --file F --new-line N --summary "…"   # review 
 gg review [--tool <name>] [--working] [<rev>|<A..B>]
                                       # AI code review; flags MUST precede the positional (like gg log -n). No positional
                                       # reviews the current branch's work; a single <rev> reviews just that commit's own
-                                      # change; --working reviews uncommitted changes. Prints the report to stdout and
-                                      # persists it under the gg state dir; --tool picks among configured review commands
-gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]
-                                      # also ask the tool for anchored notes (agent-context v1) and import them
+                                      # change; --working reviews uncommitted changes, untracked files included. Prints the
+                                      # report and stores it as a note (`note: <id>`); a --working review's notes show on
+                                      # each file while it still matches what was reviewed; --tool picks the review command
+gg review --notes [--tool <name>] [<rev>|<A..B>]
+                                      # also import the review's notes as permanent notes (not with --working)
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
                                       # numbered git @@ hunks per file, over the same patch a note anchors to
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>]
