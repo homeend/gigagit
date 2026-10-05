@@ -31,6 +31,53 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   startup cleanup deletes it after `[notes] max_age_days`.
 - `gg review --working --notes` is now a usage error (exit 2): a working
   review is stored and draws its own notes.
+## Review links — hand one agent's review to another
+
+### Added
+
+- **A stored AI review has a gg:// link**, `gg://<repo>@<commit>?review=<id>`
+  (`@<base>..<tip>` for a range or branch review). Copy it with **Copy gg
+  link** on the review's row in a commit's file list, in a Branches review
+  row's menu, with **Copy review link** in the open review's `.` menu or
+  `ctrl+l` in View all notes; gg web's right-click menus have it too. Build
+  one with `gg link --review <id|latest>`.
+- **The link opens the review itself**, wherever a link opens: `#` in the
+  TUI or gg web, `gg open <link>` (`--web` too), `gg session navigate`. A
+  review deleted since opens its change with a notice; a link edited to point
+  at another change is refused.
+- **`gg review show <link|id|latest> [--json]`** prints a stored review for
+  an agent: the overview and every remark, numbered, with the remark's own
+  gg:// line link (read the code with `gg link text`). MCP: `gg_review_show`.
+  The reviewing-with-gg skill teaches checking another agent's review.
+- The commit's Range reviews and Notes rows gained **Copy gg link** as well
+  (the commit pair, and the file at the commit — `gg note list <link>` reads
+  their notes).
+
+## Review and note markers after a repo switch
+
+### Fixed
+
+- **Switching repositories now shows the new repo's review ✎ / ◆ markers,
+  a commit's Reviews rows and the file note badges right away.** The note
+  counts were read only at startup, on `r` and after a note change, so a
+  switch kept the old repo's (matching nothing, or the wrong commits when
+  two repos share history) until a refresh.
+
+## Agent-state detection — one pipeline
+
+### Internal
+
+- Agent-state detection restructured, no behaviour change: one entry (the
+  state watcher) reads each session as one observation through a
+  per-agent profile of detectors (screen rules, window title, progress
+  report — one table says which agent uses which), and a per-session
+  tracker applies the holds, grace and stall rules; `agent_wait` reads the
+  tracker's settle time instead of keeping its own rule. Follow-ups: the
+  stall key is named `StallKey` (no longer a second `Progress`), the
+  reading carries whether the agent's rules are dedicated, `First` keeps
+  its own list, doc comments on the readers, and a test for a title and
+  a progress report whose `ESC \` terminator arrives split across two
+  reads.
 
 ## Note store split into parts
 
@@ -71,7 +118,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 - **A turn reads as working from start to end.** Claude Code and Codex
   announce their turn in the terminal title (a spinning glyph); Kimi Code
-  in its progress report. gg now reads those beside the screen: the row
+  in its progress report (only under Windows Terminal, ConEmu, ghostty
+  or WezTerm — elsewhere Kimi sends none and is read from the screen
+  alone). gg now reads those beside the screen: the row
   stays working while the agent pauses between two steps, and turns idle
   about 0.7 s after the turn ends instead of 2 s — `agent_wait` wakes as
   soon. Questions still come from the screen; Codex's "Action Required"

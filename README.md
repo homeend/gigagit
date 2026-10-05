@@ -1301,12 +1301,15 @@ reports the error in the status line instead. Every commit, range or branch
 review is stored as a **note on the reviewed commit** (a range's last commit; a
 branch review's tip, carrying the branch name) — never as a file. You find it
 from the thing it is about: a row under **Reviews** at the top of the commit's
-file list (`.` / right-click there offers only **Open review** and **Delete
-review**; the commit's Range reviews and Notes rows likewise only Open and
-Delete), a `◆n` marker and review rows under
+file list (`.` / right-click there offers **Open review**, **Copy gg link**
+and **Delete review**; the commit's Range reviews and Notes rows likewise
+Open, Copy gg link and Delete), a `◆n` marker and review rows under
 the branch in the Branches tab (only reviews of the branch's current tip; `.` →
 **Show review** opens the newest), under the commit in **View all notes…**, and
-from the run in the `ctrl+\` AI-tasks tab. Deleting or renaming a branch in gg
+from the run in the `ctrl+\` AI-tasks tab. A review's gg link (`gg://…?review=<id>`, or `gg link --review
+<id|latest>`) opens the review itself from `#`, `gg open` or gg web, so you
+can hand one agent's review to another, which reads it with `gg review show
+<link>` — every remark numbered, with its own line link. Deleting or renaming a branch in gg
 takes its reviews along; review notes never expire. A review of uncommitted
 changes has no commit, so it stays in the AI-tasks history only. The same pipeline is
 scriptable as `gg review`

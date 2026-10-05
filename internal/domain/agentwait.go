@@ -211,7 +211,7 @@ func nextWaitEvent(w *StateWatcher, caller, id string, want map[string]bool, now
 		res.Event, res.Options = "question", a.Options
 		return res, true, nil
 	}
-	if want["idle"] && a.State == ActivityIdle && now.Sub(a.Since) >= idleHold(a, settle) && !m.idleSince.Equal(a.Since) {
+	if want["idle"] && a.State == ActivityIdle && !now.Before(readyAt(a, settle)) && !m.idleSince.Equal(a.Since) {
 		m.idleSince = a.Since
 		r.setMark(caller, id, m)
 		res.Event = "idle"
@@ -220,11 +220,11 @@ func nextWaitEvent(w *StateWatcher, caller, id string, want map[string]bool, now
 	return AgentWaitResult{}, false, nil
 }
 
-// idleHold is how long agent_wait sees an idle held before trusting it: the
-// hold the watcher applied (shorter under an idle title), else idleSettle.
-func idleHold(a SessionActivity, settle time.Duration) time.Duration {
-	if a.Settle > 0 {
-		return a.Settle
+// readyAt is when the watcher's idle counts as settled; an activity without
+// one (a static watcher in tests) settles idleSettle after it began.
+func readyAt(a SessionActivity, settle time.Duration) time.Time {
+	if !a.ReadyAt.IsZero() {
+		return a.ReadyAt
 	}
-	return settle
+	return a.Since.Add(settle)
 }

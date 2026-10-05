@@ -45,7 +45,7 @@ func (m Model) noteRowMenu() ([]actionRow, bool) {
 		return nil, false
 	}
 	open := func(m Model) (tea.Model, tea.Cmd) { return m.openDiffForFileLine(l) }
-	hash := m.filesHash
+	hash, svc := m.filesHash, m.svc
 	switch {
 	case l.noteID != "":
 		id, quote := l.noteID, reviewQuote("", "")
@@ -56,6 +56,9 @@ func (m Model) noteRowMenu() ([]actionRow, bool) {
 		}
 		return []actionRow{
 			{id: "open-review", label: i18n.T("Open review"), run: open},
+			m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
+				return svc.ReviewLink(ctx, id)
+			}),
 			{id: "delete-review", label: i18n.T("Delete review"), run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.confirmStoredDelete(id, i18n.T("Delete this review?")+"\n"+quote, true)
 			}},
@@ -65,6 +68,9 @@ func (m Model) noteRowMenu() ([]actionRow, bool) {
 		n := scopeNoteCount(m.noteCounts, hash, scope)
 		return []actionRow{
 			{id: "open-range-review", label: i18n.T("Open range review"), run: open},
+			m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
+				return svc.ScopeLinkText(ctx, scope, hash)
+			}),
 			{id: "delete-range-review", label: i18n.T("Delete range review"), run: func(m Model) (tea.Model, tea.Cmd) {
 				prompt := i18n.T("Delete this range review's %d notes?", n)
 				if n == 1 {
@@ -78,6 +84,9 @@ func (m Model) noteRowMenu() ([]actionRow, bool) {
 		n := m.noteCounts.PlainByCommitPath[hash+":"+path]
 		return []actionRow{
 			{id: "open-notes", label: i18n.T("Open notes"), run: open},
+			m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
+				return svc.CommitFileLinkText(ctx, hash, path)
+			}),
 			{id: "delete-notes", label: i18n.T("Delete notes"), run: func(m Model) (tea.Model, tea.Cmd) {
 				prompt := i18n.T("Delete the %d notes on this file?", n)
 				if n == 1 {
@@ -182,4 +191,47 @@ func (m Model) dropFilesRows(gone func(contentLine) bool) Model {
 		p.sel = max(n-1, 0)
 	}
 	return m
+}
+
+// asyncCopyLinkRow is a copy row whose link needs git (a review's revs, a
+// pair's full shas): the link is built when the row RUNS, off the Update
+// thread, then copied — and recorded in gg links — like every copy.
+func (m Model) asyncCopyLinkRow(id, label string, build func(context.Context) (string, error)) actionRow {
+	return actionRow{id: id, label: label, run: func(m Model) (tea.Model, tea.Cmd) {
+		cp := m.copyToClipboardCmd
+		return m, func() tea.Msg {
+			text, err := build(context.Background())
+			if err != nil {
+				return clipboardCopiedMsg{err: err}
+			}
+			return cp(i18n.T("Copied link: %s", text), text)()
+		}
+	}}
+}
+
+// reviewViewCopyLinkRow is the open review view's "Copy review link".
+func (m Model) reviewViewCopyLinkRow() (actionRow, bool) {
+	st, svc := m.filesReview, m.svc
+	if st == nil || svc == nil || !m.inContentWindow() || m.diffLayer() != nil {
+		return actionRow{}, false
+	}
+	id := st.id
+	return m.asyncCopyLinkRow("copy-review-link", i18n.T("Copy review link"), func(ctx context.Context) (string, error) {
+		return svc.ReviewLink(ctx, id)
+	}), true
+}
+
+// branchReviewCopyLinkRow is a Branches review sub-row's "Copy gg link".
+func (m Model) branchReviewCopyLinkRow() (actionRow, bool) {
+	if m.focus != panelBranches || m.inContentWindow() || m.svc == nil {
+		return actionRow{}, false
+	}
+	h, ok := m.selectedBranchReview()
+	if !ok {
+		return actionRow{}, false
+	}
+	svc, id := m.svc, h.ID
+	return m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
+		return svc.ReviewLink(ctx, id)
+	}), true
 }

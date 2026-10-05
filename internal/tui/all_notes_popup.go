@@ -356,6 +356,15 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlD: // delete the review or thread under the cursor (asks first)
 		u, cmd := m.allNotesDelete(p)
 		return u.(Model), cmd
+	case tea.KeyCtrlL: // copy the review's gg link
+		if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) && vis[p.sel].kind == anReview && m.svc != nil {
+			svc, id := m.svc, vis[p.sel].review.ID
+			u, cmd := m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
+				return svc.ReviewLink(ctx, id)
+			}).run(m)
+			return u.(Model), cmd
+		}
+		return m, nil
 	case tea.KeyHome:
 		p.sel = 0
 	case tea.KeyEnd:
@@ -661,6 +670,9 @@ func (p *allNotesPopup) box(m Model) string {
 	}
 	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) && (vis[p.sel].kind == anNote || vis[p.sel].kind == anReview) {
 		keys = append(keys, i18n.T("[ctrl+d] delete"))
+		if vis[p.sel].kind == anReview {
+			keys = append(keys, i18n.T("[ctrl+l] copy link"))
+		}
 	}
 	keys = append(keys, i18n.T("type to filter"), i18n.T("[ctrl+t] fullscreen"), i18n.T("[esc] close"))
 	hints := wrapParts(keys, textW, "  ")

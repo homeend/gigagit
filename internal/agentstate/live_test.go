@@ -178,10 +178,10 @@ Antigravity CLI requires permission to read, edit, and execute files here.
 )
 
 func TestClassifyAntigravityLive(t *testing.T) {
-	r := DefaultRules("antigravity")
+	r := ForAgent("antigravity")
 	cases := map[string]State{agyIdle: Waiting, agyDone: Waiting, agyWork: Working, agyRun: Working, agyPerm: Question, agyTrustLive: Question}
 	for in, want := range cases {
-		if got := Classify(r, Tail(in, 15)); got != want {
+		if got := read(r, Tail(in, 15)); got != want {
 			t.Errorf("%q…: got %q want %q", in[:min(len(in), 40)], got, want)
 		}
 	}
@@ -196,12 +196,12 @@ func TestClassifyAntigravityLive(t *testing.T) {
 }
 
 func TestClassifyCodexLive(t *testing.T) {
-	r := DefaultRules("codex")
-	if got := Classify(r, Tail(codexStart, 15)); got != Waiting {
+	r := ForAgent("codex")
+	if got := read(r, Tail(codexStart, 15)); got != Waiting {
 		t.Errorf("startup idle: %q", got)
 	}
 	lines := Tail(codexTrust, 15)
-	if got := Classify(r, lines); got != Question {
+	if got := read(r, lines); got != Question {
 		t.Errorf("trust: %q", got)
 	}
 	if opts := Options(lines); len(opts) < 2 || opts[0].Label != "Trust and continue" {
@@ -215,7 +215,7 @@ func TestClassifyCodexLive(t *testing.T) {
 func TestOptionsAnchorOnTheCursorLine(t *testing.T) {
 	screen := "⏺ Two things to do:\n  1. Delete the old file\n  2. Rewrite the test\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No, and tell Claude what to do differently\n Esc to cancel\n"
 	lines := Tail(screen, 15)
-	if got := Classify(DefaultRules("claude"), lines); got != Question {
+	if got := read(ForAgent("claude"), lines); got != Question {
 		t.Fatalf("state = %q", got)
 	}
 	opts := Options(lines)
@@ -231,11 +231,11 @@ func TestOptionsAnchorOnTheCursorLine(t *testing.T) {
 
 // codex on Windows: the status line names a drive, not a slash root.
 func TestCodexIdleOnWindowsPaths(t *testing.T) {
-	r := DefaultRules("codex")
-	if got := Classify(r, Tail("› Ask Codex to do anything\n  gpt-5 low · C:\\work\\repo\n", 15)); got != Waiting {
+	r := ForAgent("codex")
+	if got := read(r, Tail("› Ask Codex to do anything\n  gpt-5 low · C:\\work\\repo\n", 15)); got != Waiting {
 		t.Fatalf("windows idle: %q", got)
 	}
-	if got := Classify(r, Tail("› Ask Codex to do anything\n  gpt-5 low · /work/repo\n", 15)); got != Waiting {
+	if got := read(r, Tail("› Ask Codex to do anything\n  gpt-5 low · /work/repo\n", 15)); got != Waiting {
 		t.Fatalf("posix idle: %q", got)
 	}
 }

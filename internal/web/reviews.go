@@ -58,6 +58,7 @@ func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("GET /api/review/notes", s.handleReviewNotes)
 		mux.HandleFunc("GET /api/review/{id}", s.handleReview)
+		mux.HandleFunc("GET /api/review/{id}/link", s.handleReviewLink)
 	})
 }
 
@@ -252,4 +253,19 @@ func workingStateWord(st domain.WorkingFileState) string {
 		return "gone"
 	}
 	return "changed"
+}
+
+// handleReviewLink is a review's gg link (Copy gg link on its rows): only the
+// server knows the change the review compared, so the page never builds it.
+func (s *Server) handleReviewLink(w http.ResponseWriter, r *http.Request) {
+	svc, rv, ok := s.knownReview(w, r, r.PathValue("id"))
+	if !ok {
+		return
+	}
+	link, err := svc.ReviewLink(readCtx(r), rv.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, map[string]any{"link": link})
 }

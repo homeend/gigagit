@@ -25,6 +25,7 @@ import { consoleFocusedId, consoleSessions } from "./console.js";
 import { toast } from "./toast.js";
 import { evictedText, markViewerRange, openViewer, viewerAgentDocs, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
 import { closeFinder } from "./wtfinder.js";
+import { openReview } from "./reviews.js";
 
 const COALESCE_MS = 150; // one burst of watcher events → one refresh
 const RETRY_MS = 500; // a refresh is already running → try again after it
@@ -424,9 +425,25 @@ async function openCompareForPair(a, b) {
 // over, in finishLink's arms).
 async function steerNavigate(s) {
   if (s.hint_kind === "view" && s.hint_id === "content") return steerNavigateContent(s);
+  if (s.hint_kind === "review") return steerNavigateReview(s);
   closeFinder(); // the landing is on the panes F covers (the TUI's steerToPanels closes its files view)
   await steerNavigateLand(s);
   if (s.hint_kind) await revealHint(s);
+}
+
+// steerNavigateReview: a review link opens the REVIEW (the TUI's
+// steerNavigateReview) — the # prompt and an agent's navigate both land here.
+// A deleted review says so and lands its change, which still means something.
+async function steerNavigateReview(s) {
+  try {
+    await getJSON("/api/review/" + encodeURIComponent(s.hint_id));
+  } catch (e) {
+    opLine(e.status === 404 ? "that review no longer exists; opened its change" : "review: " + (e.message || e), true);
+    closeFinder();
+    return steerNavigateLand({ ...s, hint_kind: "", hint_id: "" });
+  }
+  closeFinder();
+  await openReview(s.hint_id, { kind: "list" });
 }
 
 // steerNavigateContent lands a content link: the file ON DISK in the viewer,

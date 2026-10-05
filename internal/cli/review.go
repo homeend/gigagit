@@ -29,6 +29,11 @@ import (
 // partitioned out from after a positional the way show's bool-only --patch
 // is (see partitionFlags's doc comment in diff.go).
 func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stderr io.Writer) int {
+	// `show` is a subcommand: it reads a stored review back. A branch named
+	// show is reviewed by its full ref (gg review refs/heads/show).
+	if len(rest) > 0 && rest[0] == "show" {
+		return reviewShow(svc, rest[1:], stdout, stderr)
+	}
 	fs := flag.NewFlagSet("review", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	toolName := fs.String("tool", "", "review tool name (from config); default: the only one")
@@ -39,11 +44,11 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		return 2
 	}
 	if *working && fs.NArg() >= 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]")
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: "))
 		return 2
 	}
 	if fs.NArg() > 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]")
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: "))
 		return 2
 	}
 	if *working && *wantNotes {

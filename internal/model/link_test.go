@@ -748,3 +748,24 @@ func TestContentLinkRefusals(t *testing.T) {
 		})
 	}
 }
+
+// A review hint rides a commit or a pair link and round-trips; its kind is
+// in the closed set the parse error names.
+func TestReviewHintRoundTrips(t *testing.T) {
+	for _, s := range []string{
+		"gg://github.com/o/r@0123456789abcdef0123456789abcdef01234567?review=1a2b3c4d",
+		"gg://github.com/o/r@0123456789abcdef0123456789abcdef01234567..89abcdef0123456789abcdef0123456789abcdef?review=1a2b3c4d",
+	} {
+		l, err := ParseLink(s)
+		if err != nil {
+			t.Fatalf("ParseLink(%q): %v", s, err)
+		}
+		if l.Hint != (LinkHint{Kind: ReviewHintKind, ID: "1a2b3c4d"}) || l.String() != s {
+			t.Fatalf("%q → %+v → %q", s, l.Hint, l.String())
+		}
+	}
+	_, err := ParseLink("gg://github.com/o/r@abc1234?nope=1")
+	if err == nil || !strings.Contains(err.Error(), "review") {
+		t.Fatalf("the unknown-kind error must list review: %v", err)
+	}
+}
