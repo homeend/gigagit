@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent-state detection — one pipeline
+
+### Internal
+
+- Agent-state detection restructured, no behaviour change: one entry (the
+  state watcher) reads each session as one observation through a
+  per-agent profile of detectors (screen rules, window title, progress
+  report — one table says which agent uses which), and a per-session
+  tracker applies the holds, grace and stall rules; `agent_wait` reads the
+  tracker's settle time instead of keeping its own rule. Follow-ups: the
+  stall key is named `StallKey` (no longer a second `Progress`), the
+  reading carries whether the agent's rules are dedicated, `First` keeps
+  its own list, doc comments on the readers, and a test for a title and a progress
+  report whose `ESC \` terminator arrives split across two reads.
+
 ## Note store split into parts
 
 ### Changed
@@ -38,21 +53,6 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   it either. Delete on a Range review row removes every note of that range
   review at the commit; on a Notes row, the plain notes on that file; the
   row disappears. The Branches review sub-row's web menu gained Open review.
-
-## Agent-state detection — one pipeline
-
-### Internal
-
-- Agent-state detection restructured, no behaviour change: one entry (the
-  state watcher) reads each session as one observation through a
-  per-agent profile of detectors (screen rules, window title, progress
-  report — one table says which agent uses which), and a per-session
-  tracker applies the holds, grace and stall rules; `agent_wait` reads the
-  tracker's settle time instead of keeping its own rule. Follow-ups: the
-  stall key is named `StallKey` (no longer a second `Progress`), the
-  reading carries whether the agent's rules are dedicated, `First` keeps
-  its own list, doc comments on the readers, and a test for a title whose
-  `ESC \` terminator arrives split across two reads.
 
 ## Agent sessions — the title says working
 

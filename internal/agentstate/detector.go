@@ -33,7 +33,8 @@ type Detector interface{ Read(Observation) Verdict }
 
 // Reading is a profile's conclusion: the verdict plus what any screen
 // shows whatever the agent — the dialog's choices, the spinner's timer,
-// the tail without what moves while nothing happens (the stall key).
+// the tail without what moves while nothing happens (the stall key) —
+// and whether the profile is dedicated.
 type Reading struct {
 	Verdict
 	Options  []Option      // when State is Question
