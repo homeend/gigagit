@@ -30,7 +30,7 @@ const notesSweepBudget = 2 * time.Second
 // cmdNote dispatches `gg note <add|reply|rm|list|clear|apply> ...`.
 func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg note <add|reply|rm|list|clear|apply> ...")
+		fmt.Fprintln(stderr, "usage: gg note <add|reply|resolve|unresolve|rm|list|clear|apply> ...")
 		return 2
 	}
 	sub, rest := args[0], args[1:]
@@ -61,6 +61,8 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 			return noteAdd(svc, link, rest, stdout, stderr)
 		case "reply":
 			return noteReply(svc, rest, stdout, stderr)
+		case "resolve", "unresolve":
+			return noteResolve(svc, sub == "resolve", rest, stdout, stderr)
 		case "rm":
 			return noteRemove(svc, rest, stdout, stderr)
 		case "list":
@@ -110,7 +112,7 @@ func noteLinkShape(sub string, res domain.Resolved) string {
 		if !hasPath && res.Preview == nil && res.Pair == nil {
 			return "that link names a repository, not a file"
 		}
-	case "reply", "rm":
+	case "reply", "rm", "resolve", "unresolve":
 		if hasPath || hasTarget {
 			return "pass the repository's link (gg://<repo> or gg:///abs/path), not a file or commit: the note id names the note"
 		}
@@ -148,7 +150,7 @@ func noteIDExit(sub, id string, svc *domain.Service, err error, stderr io.Writer
 
 // noteMutations are the sub-commands that CHANGE the store; only they are worth
 // waking a live session for. `list` reads.
-var noteMutations = map[string]bool{"add": true, "reply": true, "rm": true, "clear": true, "apply": true}
+var noteMutations = map[string]bool{"add": true, "reply": true, "resolve": true, "unresolve": true, "rm": true, "clear": true, "apply": true}
 
 // withNotesHousekeeping applies [notes] from the effective config, runs fn, and
 // only THEN starts and briefly waits for the sweep — the caller's work must
@@ -475,6 +477,7 @@ func noteReply(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 	rationale := fs.String("rationale", "", "the why, optional")
 	author := fs.String("author", "", "author label (default: $GG_AGENT, else agent)")
 	source := fs.String("source", "", "user or agent (default agent)")
+	link := fs.String("link", "", "a gg:// link or a commit the reply points at (e.g. the fix)")
 	asJSON := fs.Bool("json", false, "print the created reply as JSON")
 	if err := fs.Parse(rest); err != nil {
 		return 2
@@ -501,13 +504,71 @@ func noteReply(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 	stored, err := svc.NoteReply(context.Background(), id, model.Note{
 		Source: src, Author: noteAuthorDefault(*author),
 		Summary: strings.TrimSpace(*summary), Rationale: strings.TrimSpace(*rationale),
+		Link: strings.TrimSpace(*link),
 	})
+	if errors.Is(err, domain.ErrNoteLink) {
+		fmt.Fprintln(stderr, "note reply: --link:", err)
+		return 2
+	}
 	if err != nil {
 		return noteIDExit("note reply", id, svc, err, stderr)
 	}
 	if err := printNote(stdout, stored, *asJSON); err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
+	}
+	return 0
+}
+
+// noteResolve marks a thread resolved (resolve) or open again (unresolve):
+// any id of the thread — its root, a reply, or a review remark.
+func noteResolve(svc *domain.Service, resolve bool, args []string, stdout, stderr io.Writer) int {
+	sub := "note unresolve"
+	if resolve {
+		sub = "note resolve"
+	}
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		fmt.Fprintf(stderr, "usage: gg %s [<repo-link>] <note-id|review:<id>:<n>> [--json]\n", sub)
+		return 2
+	}
+	id, rest := args[0], args[1:]
+	fs := flag.NewFlagSet(sub, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	author := fs.String("author", "", "who resolves (default: $GG_AGENT, else agent)")
+	asJSON := fs.Bool("json", false, "print the thread's state as JSON")
+	if err := fs.Parse(rest); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "usage: gg %s [<repo-link>] <note-id|review:<id>:<n>> [--json]\n", sub)
+		return 2
+	}
+	e, err := svc.NoteResolve(context.Background(), id, resolve, noteAuthorDefault(*author))
+	switch {
+	case errors.Is(err, domain.ErrNotResolved):
+		fmt.Fprintf(stderr, "%s: thread %s is not resolved\n", sub, id)
+		return 1
+	case errors.Is(err, domain.ErrForgeResolved):
+		fmt.Fprintf(stderr, "%s: %s is a pull-request thread: it is resolved on GitHub\n", sub, id)
+		return 1
+	case err != nil:
+		return noteIDExit(sub, id, svc, err, stderr)
+	}
+	if *asJSON {
+		out := map[string]any{"id": id, "resolved": resolve}
+		if resolve {
+			out["root"], out["by"] = e.Root, e.By
+		}
+		if err := json.NewEncoder(stdout).Encode(out); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		return 0
+	}
+	if resolve {
+		fmt.Fprintf(stdout, "resolved %s\n", id)
+	} else {
+		fmt.Fprintf(stdout, "reopened %s\n", id)
 	}
 	return 0
 }

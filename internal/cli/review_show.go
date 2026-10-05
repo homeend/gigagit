@@ -106,6 +106,9 @@ func printReviewShow(w io.Writer, rs domain.ReviewShow) {
 		what = "working changes"
 	}
 	fmt.Fprintf(w, "review %s · %s · %s · %s\n", rs.ID, rs.Agent, rs.Created.Local().Format("2006-01-02 15:04"), what)
+	if len(rs.Remarks) > 0 {
+		fmt.Fprintf(w, "%d of %d resolved\n", rs.Resolved, len(rs.Remarks))
+	}
 	fmt.Fprintln(w, strings.TrimRight(rs.Overview, "\n"))
 	if len(rs.Meta) > 0 {
 		fmt.Fprintf(w, "\n%s\n", metaMapText(rs.Meta))
@@ -132,7 +135,42 @@ func printReviewShow(w io.Writer, rs domain.ReviewShow) {
 		if r.Link != "" {
 			fmt.Fprintln(w, "    "+r.Link)
 		}
+		// The thread: the id answers go to, its state, its replies.
+		fmt.Fprintln(w, "    id "+r.ID)
+		if r.Resolved {
+			fmt.Fprintf(w, "    resolved by %s\n", orDash(r.ResolvedBy))
+		}
+		printShowReplies(w, r.Replies)
 	}
+	if len(rs.Outdated) > 0 {
+		fmt.Fprintln(w, "\nOutdated threads (their remark is gone from the re-saved review):")
+		for _, o := range rs.Outdated {
+			fmt.Fprintf(w, "[%s] — %s\n", o.Root, o.Summary)
+			if o.Resolved {
+				fmt.Fprintln(w, "    resolved")
+			}
+			printShowReplies(w, o.Replies)
+		}
+	}
+}
+
+func printShowReplies(w io.Writer, reps []domain.ReviewShowReply) {
+	for _, rep := range reps {
+		fmt.Fprintf(w, "    ↳ %s: %s\n", orDash(rep.Author), rep.Summary)
+		if t := strings.TrimSpace(rep.Rationale); t != "" {
+			fmt.Fprintln(w, "      "+strings.ReplaceAll(t, "\n", "\n      "))
+		}
+		if rep.Link != "" {
+			fmt.Fprintln(w, "      → "+rep.Link)
+		}
+	}
+}
+
+func orDash(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "-"
+	}
+	return s
 }
 
 // metaMapText is metaText for a map: "key: value" pairs, sorted by key.
