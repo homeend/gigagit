@@ -416,3 +416,30 @@ func TestSweepKeepsAWorkingReviewItCannotRead(t *testing.T) {
 	}
 	t.Fatal("the sweep dropped a review it could not read")
 }
+
+// A working review's link is its checkout's working tree plus ?review=<id>:
+// it resolves there (no commit to compare), its remarks link working-tree
+// lines, and `gg review show` reads it like any review.
+func TestWorkingReviewLinkAndShow(t *testing.T) {
+	t.Parallel()
+	_, svc, id := workingReviewOf(t)
+	ctx := context.Background()
+	link, err := svc.ReviewLink(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(link, "?review="+id) || strings.Contains(link, "@") {
+		t.Fatalf("link = %q, want the working tree with the review hint", link)
+	}
+	res, err := ResolveLink(ctx, mustParse(t, link), resolveWith(svc))
+	if err != nil || res.Hint.ID != id || res.Commit != "" {
+		t.Fatalf("resolve: %+v, %v", res, err)
+	}
+	show, err := svc.ReviewShow(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(show.Remarks) != 3 || !strings.HasSuffix(show.Remarks[0].Link, "/a.txt:2") || strings.Contains(show.Remarks[0].Link, "@") {
+		t.Fatalf("remarks = %+v", show.Remarks)
+	}
+}

@@ -135,12 +135,12 @@ func TestFilesPanelOutdatedReviewHasNoRowAndNoMarks(t *testing.T) {
 	}
 }
 
-func TestFilesPanelReviewRowMenuIsOpenAndDelete(t *testing.T) {
+func TestFilesPanelReviewRowMenuIsOpenCopyLinkDelete(t *testing.T) {
 	t.Parallel()
 	m := reviewRowModel(t)
 	m.sel[panelFiles] = 0
 	rows, ok := m.workingReviewRowMenu()
-	if !ok || len(rows) != 2 || rows[0].id != "open-review" || rows[1].id != "delete-review" {
+	if !ok || len(rows) != 3 || rows[0].id != "open-review" || rows[1].id != "copy-gg-link" || rows[2].id != "delete-review" {
 		t.Fatalf("menu = %+v", rows)
 	}
 }

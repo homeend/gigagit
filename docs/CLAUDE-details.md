@@ -5299,6 +5299,12 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   `filesPanelFileCount`. `withWorkingReviews` shifts the cursor so it stays
   on its file. Loaded off-thread after srcNotes (when the counts list any)
   and after every srcStatus refresh.
+- **Review links** (merged from main's review links): `reviewTarget` of a
+  working review is the working tree (`LinkTarget{State: StateUnstaged}`),
+  so its link is `gg://<repo>?review=<id>` — an address-less review hint the
+  resolver accepts ONLY when the checkout's store holds that id as a
+  working review (`reviewHintService`); `checkReviewHint` matches it to a
+  commit-less, pair-less resolution. `ReviewShow.Working` names it.
 - **Web**: counts JSON `working_reviews` (current + sorted `matches`);
   `/api/review/{id}` adds `working`/`states`; `/api/diff?wt=head` = HEAD →
   working tree (no staging tags); the review opens as a compare with

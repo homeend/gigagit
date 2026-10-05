@@ -102,6 +102,9 @@ func printReviewShow(w io.Writer, rs domain.ReviewShow) {
 	if rs.Branch != "" {
 		what += " (" + rs.Branch + ")"
 	}
+	if rs.Working {
+		what = "working changes"
+	}
 	fmt.Fprintf(w, "review %s · %s · %s · %s\n", rs.ID, rs.Agent, rs.Created.Local().Format("2006-01-02 15:04"), what)
 	fmt.Fprintln(w, strings.TrimRight(rs.Overview, "\n"))
 	if len(rs.Meta) > 0 {

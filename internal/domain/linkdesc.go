@@ -133,6 +133,9 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 		// · <what it reviewed>"; a miss falls THROUGH to the address arms.
 		if r, err := s.Review(ctx, l.Hint.ID); err == nil {
 			what := shortRev(r.Commit)
+			if r.Kind == ReviewOnWorktree {
+				what = "working changes"
+			}
 			if r.Branch != "" {
 				what = r.Branch + " " + what
 			}

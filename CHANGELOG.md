@@ -31,6 +31,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   startup cleanup deletes it after `[notes] max_age_days`.
 - `gg review --working --notes` is now a usage error (exit 2): a working
   review is stored and draws its own notes.
+- **Its link** is the checkout's working tree plus the review:
+  `gg://<repo>?review=<id>` (Copy gg link on its row, `gg link --review`);
+  `gg review show` reads it like any review, each remark linking its
+  working-tree line.
 ## Review links — hand one agent's review to another
 
 ### Added

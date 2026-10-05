@@ -136,18 +136,22 @@ func (m Model) onReviewRow() bool {
 	return s >= 0 && s < len(idx) && idx[s] == reviewRowIdx
 }
 
-// workingReviewRowMenu is the whole "." menu on the Review row: Open and
-// Delete (user ruling 2026-10-05 for note rows).
+// workingReviewRowMenu is the whole "." menu on the Review row: what a
+// commit's review row offers — Open, Copy gg link, Delete.
 func (m Model) workingReviewRowMenu() ([]actionRow, bool) {
 	if !m.onReviewRow() {
 		return nil, false
 	}
 	r, _ := m.currentWorkingReview()
 	id, summary, quote := r.ID, r.Summary, reviewQuote(r.Agent, r.Summary)
+	svc := m.svc
 	return []actionRow{
 		{id: "open-review", label: i18n.T("Open review"), run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openReview(id, summary)
 		}},
+		m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
+			return svc.ReviewLink(ctx, id)
+		}),
 		{id: "delete-review", label: i18n.T("Delete review"), run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.confirmStoredDelete(id, i18n.T("Delete this review?")+"\n"+quote, true)
 		}},

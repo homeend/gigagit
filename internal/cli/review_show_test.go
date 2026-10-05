@@ -125,3 +125,13 @@ func TestReviewShowFollowsTheLinksCheckout(t *testing.T) {
 		t.Fatalf("from another checkout = %d\n%s\n%s", code, out, errb)
 	}
 }
+
+// A working review compared HEAD with the working tree: the header says so.
+func TestPrintReviewShowNamesWorkingChanges(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	printReviewShow(&b, domain.ReviewShow{ID: "rv1", Agent: "Echo", Working: true})
+	if first := strings.SplitN(b.String(), "\n", 2)[0]; !strings.HasSuffix(first, " · working changes") {
+		t.Fatalf("header = %q", first)
+	}
+}
