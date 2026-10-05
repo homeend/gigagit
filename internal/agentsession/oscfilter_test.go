@@ -137,6 +137,24 @@ func TestOSCFilterRecordsTheTitleAcrossReads(t *testing.T) {
 	}
 }
 
+// An ST terminator (ESC \) split between two reads still ends the string:
+// the title and the progress are recorded, and nothing leaks to the screen.
+func TestOSCFilterRecordsSTTerminatedStringsAcrossReads(t *testing.T) {
+	t.Parallel()
+	in := []byte("X\x1b]2;◑ x\x1b\\\x1b]9;4;3\x1b\\AB")
+	for cut := 1; cut < len(in); cut++ {
+		var f oscFilter
+		f.filter(in[:cut])
+		f.filter(in[cut:])
+		if f.title != "◑ x" || !f.hasProgress || f.progress != 3 {
+			t.Fatalf("cut at %d: title = %q progress = %d (has %v)", cut, f.title, f.progress, f.hasProgress)
+		}
+		if got := screenOf(40, 1, in[:cut], in[cut:])[0]; got != "XAB" {
+			t.Fatalf("cut at %d: screen = %q, want %q", cut, got, "XAB")
+		}
+	}
+}
+
 func TestOSCFilterRecordsProgress(t *testing.T) {
 	t.Parallel()
 	var f oscFilter
