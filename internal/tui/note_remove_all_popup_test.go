@@ -191,3 +191,30 @@ func TestNoteRemoveAllPopupClearsTheAddressOnConfirm(t *testing.T) {
 		t.Fatal("a clear must refresh the note sources so the ◆N badges follow")
 	}
 }
+
+// A working review's notes are drawn on the unstaged diff read-only
+// ("review:<id>:<n>"): NotesClear cannot remove them, so they neither offer
+// the row nor count in the popup.
+func TestNoteRemoveAllSkipsAWorkingReviewsReadOnlyNotes(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	v := m.diffLayer()
+	v.notes = []domain.ResolvedNote{rootNote(model.ReviewNoteIDPrefix+"rv:1", 5, "from the review", "", model.NoteSourceAgent, model.NoteActive)}
+	v.relayout(0)
+	if hasActionRow(m, "note-remove-all") {
+		t.Fatal("Remove all notes must not be offered when the only notes are a review's read-only ones")
+	}
+	v.notes = append(v.notes, rootNote("n1", 25, "mine", "", model.NoteSourceUser, model.NoteActive))
+	v.relayout(0)
+	if !hasActionRow(m, "note-remove-all") {
+		t.Fatal("Remove all notes must be offered while a stored note is shown")
+	}
+	m = runActionRow(t, m, "note-remove-all")
+	p := layerOf[*noteRemoveAllPopup](m)
+	if p == nil {
+		t.Fatal("Remove all notes must push a noteRemoveAllPopup")
+	}
+	if p.total != 1 || p.roots != 1 || p.replies != 0 {
+		t.Fatalf("counts = total %d roots %d replies %d, want 1/1/0 (the review's note is not removed)", p.total, p.roots, p.replies)
+	}
+}

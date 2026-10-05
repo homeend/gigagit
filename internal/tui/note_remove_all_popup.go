@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -50,7 +51,7 @@ func (m Model) noteRemoveAllRow() (actionRow, bool) {
 	// Removal is per ADDRESS, so in a stack it is the CURSOR's file that is
 	// cleared — offering the row while the cursor sits in a file with no notes
 	// would name a different file than the one it would clear.
-	if len(m.diffLayer().curNotes()) == 0 {
+	if !anyRemovableNote(m.diffLayer().curNotes()) {
 		return actionRow{}, false
 	}
 	addr, ok := m.diffNoteAddress()
@@ -72,11 +73,30 @@ func (m Model) noteRemoveAllRow() (actionRow, bool) {
 	}, true
 }
 
-// diffHasTipNotes reports whether any visible thread is anchored on commit.
+// removableNote reports whether NotesClear can remove n. A forge thread is
+// not stored, and a note built at read time (a working review's notes, drawn
+// on the unstaged diff) is read-only: neither is removed, so neither offers
+// the row nor counts in the popup.
+func removableNote(n model.Note) bool {
+	return n.Source != model.NoteSourceForge && !model.IsReadOnlyNoteID(n.ID)
+}
+
+// anyRemovableNote reports whether a visible thread is one NotesClear removes.
+func anyRemovableNote(rs []domain.ResolvedNote) bool {
+	for _, r := range rs {
+		if removableNote(r.Note) {
+			return true
+		}
+	}
+	return false
+}
+
+// diffHasTipNotes reports whether any removable visible thread is anchored on
+// commit.
 func diffHasTipNotes(v *diffView, commit string) bool {
 	for _, r := range v.curNotes() {
-		if r.Note.Source == model.NoteSourceForge {
-			continue // a forge thread is not stored: there is nothing to remove
+		if !removableNote(r.Note) {
+			continue
 		}
 		if r.Note.Address.Commit == commit {
 			return true
@@ -92,11 +112,14 @@ func (m Model) openNoteRemoveAll() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	v := m.diffLayer()
-	if v == nil || len(v.curNotes()) == 0 {
+	if v == nil || !anyRemovableNote(v.curNotes()) {
 		return m, nil
 	}
 	p := &noteRemoveAllPopup{field: newTextField(""), addr: addr, path: addr.Path}
 	for _, r := range v.curNotes() {
+		if !removableNote(r.Note) {
+			continue // NotesClear leaves it: counting it would overstate the removal
+		}
 		// total counts NOTES, the same unit roots+replies does: "(2 of 3)"
 		// has to compare like with like or it reads as two different things.
 		p.total += 1 + len(r.Replies)
