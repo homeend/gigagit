@@ -691,7 +691,7 @@ registerHelp({
 });
 
 
-export { currentWorkingReview, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { currentWorkingReview, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;
@@ -705,6 +705,17 @@ $("diff-body").addEventListener("click", (e) => {
 function currentWorkingReview() {
   const rs = (state.noteCounts && state.noteCounts.working_reviews) || [];
   return rs.find((r) => r.current) || null;
+}
+
+// workingReviewedPaths are the files any current review of these changes
+// still matches: their ✎ (the TUI's reviewedPaths). An outdated review marks
+// nothing.
+function workingReviewedPaths(rs) {
+  const out = new Set();
+  for (const r of rs || []) {
+    if (r.current) (r.matches || []).forEach((p) => out.add(p));
+  }
+  return out;
 }
 
 // workingReviewRowHTML is the working list's Review row: "✎ Review: <date>

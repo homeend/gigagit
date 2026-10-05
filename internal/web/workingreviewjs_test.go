@@ -67,3 +67,46 @@ func TestWorkingReviewsInTheWebAllNotesAndReviewView(t *testing.T) {
 		t.Errorf("marks = %q commit = %q", got.Marks, got.Commit)
 	}
 }
+
+// The ✎ on a working-list file row comes from EVERY current review, as in
+// the TUI (reviewedPaths): two current reviews that each match a different
+// file mark both; an outdated review marks nothing.
+const workingReviewedHarness = `
+import { workingReviewedPaths } from "./wrp.mjs";
+const rs = [
+  { id: "new", current: true, matches: ["a.txt"] },
+  { id: "old", current: true, matches: ["b.txt"] },
+  { id: "gone", current: false, matches: ["c.txt"] } ];
+console.log(JSON.stringify([...workingReviewedPaths(rs)].sort()));
+`
+
+func TestWebWorkingReviewMarksUnionCurrentReviews(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	mod := jsFunc(t, "reviews.js", "workingReviewedPaths") + "\nexport { workingReviewedPaths };\n"
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "wrp.mjs"), []byte(mod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(workingReviewedHarness), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, filepath.Join(dir, "run.mjs")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	if got := strings.TrimSpace(string(out)); got != `["a.txt","b.txt"]` {
+		t.Errorf("reviewed = %s, want a.txt and b.txt", got)
+	}
+	// renderFiles draws its ✎ from that set, not from the newest review alone.
+	src, err := os.ReadFile(filepath.Join("static", "files.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), "workingReviewedPaths(state.noteCounts.working_reviews)") {
+		t.Error("files.js renderFiles does not take its ✎ set from workingReviewedPaths")
+	}
+}
