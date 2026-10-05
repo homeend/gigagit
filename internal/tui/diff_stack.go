@@ -647,19 +647,36 @@ func (m Model) applyStackFile(msg stackFileMsg) (Model, tea.Cmd) {
 	}
 	body := m.diffBodyRows()
 	cur := v.anchorAt(v.curLine)
-	topLine := 0
+	// The viewport is pinned to the CURSOR's screen row while the cursor is on
+	// screen: the arriving file may itself be on screen above it (opening a
+	// stack on its last file leaves the files above as one-line placeholders
+	// in the header's lead), and pinned to the TOP line that file would grow
+	// downward and push the file being read off the screen. Off screen (a free
+	// scroll), the top line is all there is to keep.
+	pinLine, pinRow := 0, 0
 	if len(v.disp) > 0 {
-		topLine = v.disp[clampInt(v.offset, 0, len(v.disp)-1)].line
+		pinLine = v.disp[clampInt(v.offset, 0, len(v.disp)-1)].line
 	}
-	top := v.anchorAt(topLine)
-	if len(v.lineStart) > topLine {
-		top.sub = v.offset - v.lineStart[topLine]
+	if v.curLine >= 0 && v.curLine < len(v.lineStart) {
+		if r := v.lineStart[v.curLine] - v.offset; r >= 0 && r < body {
+			pinLine, pinRow = v.curLine, r
+		}
+	}
+	pin := v.anchorAt(pinLine)
+	if pinLine < len(v.lineStart) {
+		pin.sub = v.offset + pinRow - v.lineStart[pinLine]
 	}
 	v.rebuildLines()
 	v.curLine = v.lineAt(cur)
-	tl := v.lineAt(top)
-	if tl < len(v.lineStart) {
-		v.offset = v.lineStart[tl] + top.sub
+	if pl := v.lineAt(pin); pl < len(v.lineStart) {
+		v.offset = v.lineStart[pl] + pin.sub - pinRow
+	}
+	// The cursor waiting on THIS file's header is a goToStackFile owed its
+	// lead and its change ordinal: a stream of placeholders is too short to
+	// give the header its lead (it clamps to the bottom), and the file had no
+	// changes to seat the ordinal on — both are given now that the rows exist.
+	if msg.idx == cur.file && v.curLine == f.hdr {
+		v.goToStackFile(msg.idx, body)
 	}
 	// AFTER the remap: refindAfterRebuild measures from v.curLine, and until
 	// the line above is run that index still names the OLD stream.
