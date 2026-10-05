@@ -8,7 +8,7 @@ import (
 	"github.com/homeend/gigagit/internal/agentstate"
 )
 
-var trkTiming = stateTiming{grace: 30 * time.Second, stall: 2 * time.Minute, spinStall: 10 * time.Minute, idleSettle: 2 * time.Second, titleSettle: 700 * time.Millisecond}
+var trkTiming = stateTiming{grace: 30 * time.Second, stall: 2 * time.Minute, spinStall: 11 * time.Minute, idleSettle: 2 * time.Second, titleSettle: 700 * time.Millisecond}
 
 var trkInfo = agentsession.Info{ID: "s1", Label: "Claude", Dir: "/wt/a", Started: actT0}
 
@@ -50,6 +50,34 @@ func TestTrackerTitledIdleHoldsShortOnlyWhenTrusted(t *testing.T) {
 		if act.State != ActivityIdle || !act.Since.Equal(late.Add(time.Second)) || !act.ReadyAt.Equal(late.Add(time.Second+c.want)) || noteKinds(notes) != "idle," {
 			t.Errorf("%s: %+v notes %q", c.name, act, noteKinds(notes))
 		}
+	}
+}
+
+// An Unknown read while an idle is held keeps the re-check: the rest of the
+// hold, at least stateCoalesce once it has passed. Without one the idle waits
+// for the 2 s tick (an idle agent prints nothing that would wake the loop).
+func TestTrackerUnknownReadKeepsThePendingIdleRecheck(t *testing.T) {
+	t.Parallel()
+	late := actT0.Add(time.Minute)
+	var tr sessionTracker
+	tr.Step(rdg(agentstate.Working), trkInfo, late, late, trkTiming)
+	idleAt := late.Add(time.Second)
+	tr.Step(rdg(agentstate.Waiting), trkInfo, late, idleAt, trkTiming)
+	if _, _, _, again := tr.Step(rdg(agentstate.Unknown), trkInfo, late, idleAt.Add(500*time.Millisecond), trkTiming); again != 1500*time.Millisecond {
+		t.Errorf("inside the hold: recheck %v, want 1.5s", again)
+	}
+	if _, _, _, again := tr.Step(rdg(agentstate.Unknown), trkInfo, late, idleAt.Add(3*time.Second), trkTiming); again != stateCoalesce {
+		t.Errorf("past the hold: recheck %v, want %v", again, stateCoalesce)
+	}
+	act, notes, _, _ := tr.Step(rdg(agentstate.Waiting), trkInfo, late, idleAt.Add(3300*time.Millisecond), trkTiming)
+	if act.State != ActivityIdle || !act.Since.Equal(idleAt) || noteKinds(notes) != "idle," {
+		t.Errorf("after the Unknown reads: %+v notes %q", act, noteKinds(notes))
+	}
+	// No pending idle: an Unknown read asks for nothing.
+	var calm sessionTracker
+	calm.Step(rdg(agentstate.Working), trkInfo, late, late, trkTiming)
+	if _, _, _, again := calm.Step(rdg(agentstate.Unknown), trkInfo, late, idleAt, trkTiming); again != 0 {
+		t.Errorf("no pending idle: recheck %v, want 0", again)
 	}
 }
 

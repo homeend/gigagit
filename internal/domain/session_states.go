@@ -73,8 +73,10 @@ var (
 	stallAfter = 120 * time.Second
 	// spinStallAfter: only the spinner moving (glyph, timer) this long while
 	// working is a stall too — a hung API call keeps the timer ticking. Long:
-	// a think shows nothing else either (live capture 2026-10-04).
-	spinStallAfter = 10 * time.Minute
+	// a think shows nothing else either (live capture 2026-10-04). Past 10
+	// min: Claude's Bash tool and agent_wait (WaitMaxTimeout) both end by
+	// then, and a run at its cap must not read as a stall.
+	spinStallAfter = 11 * time.Minute
 	// stateTick serves the stall clock; output wakes the watcher itself.
 	stateTick = 2 * time.Second
 	// stateCoalesce: a burst of output is classified once it settles.

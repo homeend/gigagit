@@ -261,7 +261,9 @@ func TestStatesStalledOncePerStretch(t *testing.T) {
 
 // A hung API call keeps Claude's spinner timer ticking — output, but no
 // progress. Only the spinner moving for spinStallAfter is a stall too; a long
-// think stays working until then.
+// think stays working until then, and so does a run at its cap: Claude's
+// Bash tool and agent_wait both end by 10 min, so a result that renders a
+// moment late must not read as a stall.
 func TestStatesStalledWhenOnlyTheSpinnerMoves(t *testing.T) {
 	t.Parallel()
 	w, f := oneSession("claude")
@@ -276,15 +278,19 @@ func TestStatesStalledWhenOnlyTheSpinnerMoves(t *testing.T) {
 	if a, _ := w.Get("s1"); a.Stalled || kinds(w.Notices(0)) != "" {
 		t.Fatalf("a 9-minute think stalled: %+v %q", a, kinds(w.Notices(0)))
 	}
-	frame(t0.Add(10*time.Minute+time.Second), "✻", 601)
+	frame(t0.Add(10*time.Minute+30*time.Second), "✻", 630)
+	if a, _ := w.Get("s1"); a.Stalled || kinds(w.Notices(0)) != "" {
+		t.Fatalf("a run at the 10-minute cap stalled: %+v %q", a, kinds(w.Notices(0)))
+	}
+	frame(t0.Add(11*time.Minute+time.Second), "✻", 661)
 	a, _ := w.Get("s1")
 	ns := w.Notices(0)
-	if !a.Stalled || kinds(ns) != "stalled" || !ns[0].Spinning || ns[0].Quiet < 10*time.Minute {
-		t.Fatalf("spinner only for 10m: %+v %+v", a, ns)
+	if !a.Stalled || kinds(ns) != "stalled" || !ns[0].Spinning || ns[0].Quiet < 11*time.Minute {
+		t.Fatalf("spinner only for 11m: %+v %+v", a, ns)
 	}
 	// Progress (new transcript text) ends it.
-	f.text["s1"] = "● Read 3 files\n✶ Slithering… (602s · thinking with high effort)\n────────────────────\n❯ \n"
-	w.observe(t0.Add(10*time.Minute + 2*time.Second))
+	f.text["s1"] = "● Read 3 files\n✶ Slithering… (662s · thinking with high effort)\n────────────────────\n❯ \n"
+	w.observe(t0.Add(11*time.Minute + 2*time.Second))
 	if a, _ := w.Get("s1"); a.Stalled {
 		t.Fatalf("still stalled after progress: %+v", a)
 	}
