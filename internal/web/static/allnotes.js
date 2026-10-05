@@ -92,7 +92,8 @@ function anBuildRows(ov) {
   const sub = (key, text) => rows.push({ kind: "sub", depth: 1, text, key });
 
   const unstaged = ov.unstaged || [], staged = ov.staged || [], untracked = ov.untracked || [];
-  if (unstaged.length + staged.length + untracked.length > 0) {
+  const working = ov.working_reviews || [];
+  if (unstaged.length + staged.length + untracked.length + working.length > 0) {
     let label = "Working tree";
     if (ov.worktree && ov.worktree !== ".") label += "  (" + ov.worktree + ")";
     group("wt", label);
@@ -100,6 +101,14 @@ function anBuildRows(ov) {
       if (!s[2].length) continue;
       sub(s[0], s[1]);
       files(2, s[2], {});
+    }
+    // Reviews of these uncommitted changes; an outdated one (no reviewed file
+    // matches anymore) says so until the sweep drops it.
+    if (working.length) {
+      sub("wt:reviews", "Reviews");
+      for (const r of working) {
+        rows.push({ kind: "review", depth: 2, review: r, filter: (r.summary + "\0" + (r.agent || "")).toLowerCase() });
+      }
     }
   }
   const commits = ov.commits || [];
@@ -207,6 +216,7 @@ function reviewCells(r, now) {
   let where = "commit";
   if (v.kind === "branch") where = "branch " + v.branch;
   else if (v.kind === "was_tip") where = "was tip " + v.branch;
+  else if (v.kind === "working") where = v.outdated ? "outdated" : "working changes";
   const when = v.created ? anAgo(now - Date.parse(v.created)) : "";
   return { status: "review", who: v.agent || "agent", where, when, summary: v.summary, tail: "" };
 }
