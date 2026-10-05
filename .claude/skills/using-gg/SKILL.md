@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v138 -->
+<!-- gg:using-gg:v139 -->
 
 # Using gg (gigagit)
 
@@ -1115,7 +1115,7 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   for input), `question` (it waits for a decision — read the choices from
   `agent_screen`); absent when gg cannot tell. `stalled` means it printed
   nothing for two minutes while apparently busy, or showed nothing but its
-  spinner for ten (a hung model call). `activity_since` is when
+  spinner for eleven minutes (a hung model call). `activity_since` is when
   that began. `report_at` / `report_final` say the agent reported
   (`agent_report`). To wait for a worker use `agent_wait`, not a poll.
 - `agent_screen {id}` / `gg agent screen <id>` — its visible console text,

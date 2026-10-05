@@ -40,9 +40,11 @@ type sessionTracker struct {
 // post (unnumbered), whether anything a subscriber shows changed, and how
 // soon a pending idle wants another look (0: none). An Unknown reading
 // changes nothing (output lands mid-redraw often enough that acting on it
-// would flap), but keeps a pending idle's re-check. A working session that reads idle shows idle only once that
-// has held — titleSettle when a trusted idle hint agrees, else idleSettle —
-// and then from when it began.
+// would flap) and keeps a pending idle: every screen change wakes the
+// watcher, so the redraw's end is read and a Waiting read re-arms the
+// re-check (an Unknown one needs none). A working session that reads idle
+// shows idle only once that has held — titleSettle when a trusted idle hint
+// agrees, else idleSettle — and then from when it began.
 func (t *sessionTracker) Step(rd agentstate.Reading, info agentsession.Info, lastOut, now time.Time, tm stateTiming) (SessionActivity, []ActivityNotice, bool, time.Duration) {
 	var notes []ActivityNotice
 	changed := false
@@ -83,15 +85,6 @@ func (t *sessionTracker) Step(rd agentstate.Reading, info agentsession.Info, las
 		}
 	case st != agentstate.Unknown:
 		t.pendingIdle = time.Time{} // working again, or a question
-	case !t.pendingIdle.IsZero():
-		// A redraw mid-hold: look again when the hold could be over (the
-		// shorter, titled one when the hint may return), else the idle
-		// waits for the tick.
-		h := hold
-		if t.animated {
-			h = tm.titleSettle
-		}
-		recheck = max(h-now.Sub(t.pendingIdle), stateCoalesce)
 	}
 	if st != agentstate.Unknown && st != prev.State {
 		next.State, next.Since, next.ReadyAt = st, since, since

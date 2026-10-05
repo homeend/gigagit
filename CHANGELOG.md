@@ -10,10 +10,6 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Fixed
 
-- **An idle is no longer up to 2 s late after a redraw.** When an agent
-  that just went idle read as unknown mid-hold (a redraw), the watcher
-  dropped its early look and the idle — badge, notice, `agent_wait` —
-  waited for the 2 s tick. The look is now kept.
 - **A run at its 10-minute cap is not called stalled.** The spinner-only
   stall now needs 11 minutes: Claude's Bash tool and `agent_wait` both end
   by 10, and a result that rendered a moment late could read as a stall.

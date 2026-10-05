@@ -4197,8 +4197,9 @@ the report channel are the NEXT plan.
   and a run at its cap must not read as a stall. The notice says
   `Spinning`. **Idle hold**: working → idle shows only once idle has held
   `idleSettle` (2 s), from when it began (`pendingIdle`; the loop arms a
-  timer for it, and an Unknown read mid-hold keeps it — the rest of the
-  hold, at least `stateCoalesce` — else the idle waits for the 2 s tick). **Own menus**: `Rules.Own` (built-in, Claude's
+  timer for it). An Unknown read mid-hold keeps `pendingIdle` and arms
+  nothing: every screen change wakes the watcher, so the redraw's end is
+  read and a Waiting read re-arms the timer (re-checked 2026-10-05). **Own menus**: `Rules.Own` (built-in, Claude's
   "Esc to back/go back/close/clear" footers) read unknown, keeping the state
   — matched on the LAST tail line only: the same words quoted in a diff above
   a permission dialog must not hide it (review fix). Exited sessions are
