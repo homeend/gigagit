@@ -2910,6 +2910,18 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.canShowReflogFiles() {
 				return m.openReflogFiles()
 			}
+		case "ctrl+s":
+			// Branches: go straight to the worktree the branch is checked out
+			// in — s's "go to worktree" answer without the question.
+			if m.focus == panelBranches && m.opsIdle() {
+				if b, ok := m.selectedBranch(); ok {
+					if wt, inWT := m.worktreeForBranch(b.Name); inWT {
+						return m.guardedReRoot(wt.Path, true)
+					}
+					m.statusMsg = i18n.T("%s is not checked out in another worktree", b.Name)
+					return m, nil
+				}
+			}
 		case "ctrl+g":
 			// Solo the selected branch AND land on its tip: run the .-menu
 			// "Solo this branch" row (its toggle semantics included), remembering

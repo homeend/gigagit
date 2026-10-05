@@ -516,6 +516,8 @@ func actionMenuLabel(id string) (string, bool) {
 		return i18n.T("Unmark preview"), true
 	case "pair":
 		return i18n.T("Compare with marked branch"), true
+	case "go-to-worktree":
+		return i18n.T("Go to its worktree"), true
 	case "switch-worktree":
 		return i18n.T("Switch to worktree"), true
 	case "delete-worktree":
