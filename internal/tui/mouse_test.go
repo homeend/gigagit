@@ -355,6 +355,38 @@ func TestMouseOverConsoleLeavesHiddenCommitsAlone(t *testing.T) {
 	}
 }
 
+// A left click on an unfocused docked console focuses it, as enter does — the
+// mirror of a click on a left panel taking focus away from it. It moves focus
+// to the Commits column but never selects a hidden commit row.
+func TestLeftClickFocusesDockedConsole(t *testing.T) {
+	t.Parallel()
+	m := mouseModel() // focus Branches; 2 commits; commits column x>=26
+	m.console = &consoleState{}
+	u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonLeft))
+	mm := u.(Model)
+	if !mm.console.focused || mm.focus != panelCommits {
+		t.Fatalf("click on the console: focused=%v focus=%v, want a focused console on the Commits column", mm.console.focused, mm.focus)
+	}
+	if mm.sel[panelCommits] != 0 {
+		t.Fatalf("click on the console selected hidden commit row %d", mm.sel[panelCommits])
+	}
+	// A click on a left panel takes focus back (the keyboard rule then drops
+	// the console's focus), and a second click on the console regains it.
+	u, _ = mm.Update(mouseMsg(5, 4, tea.MouseButtonLeft))
+	u, _ = u.(Model).Update(mouseMsg(30, 5, tea.MouseButtonLeft))
+	if mm = u.(Model); !mm.console.focused || mm.focus != panelCommits {
+		t.Fatalf("second click on the console: focused=%v focus=%v", mm.console.focused, mm.focus)
+	}
+
+	// Beside the files view the click takes focus off the tree too.
+	f := openFilesView(t, filesModel())
+	f.console = &consoleState{}
+	u, _ = f.Update(mouseMsg(30, 5, tea.MouseButtonLeft))
+	if ff := u.(Model); !ff.console.focused || ff.filesTreeFocused {
+		t.Fatalf("click on the console in the files view: focused=%v treeFocused=%v", ff.console.focused, ff.filesTreeFocused)
+	}
+}
+
 // The console can dock while the commit files view is open (the tree stays on
 // the left); the wheel over the console must not reach the files view's
 // commit-side follow-live path either. A maximised console owns the whole
