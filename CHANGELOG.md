@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent sessions — state minors
+
+### Fixed
+
+- **A run at its 10-minute cap is not called stalled.** The spinner-only
+  stall now needs 11 minutes: Claude's Bash tool and `agent_wait` both end
+  by 10, and a result that rendered a moment late could read as a stall.
+- **`gg agent report --file=<f>` / `-F=<f>` read the file** (they were
+  posted as the report's text); a bare word with `=` is still prose.
+- **`gg agent wait --until=` (empty) is a usage error**, not "any".
+
 ## Working-changes reviews — follow-ups
 
 ### Fixed

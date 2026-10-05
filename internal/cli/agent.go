@@ -280,7 +280,7 @@ func agentWait(c *agentlink.Client, args []string, stdout, stderr io.Writer) int
 		switch {
 		case flagIs(a, "until"):
 			v, ok := flagValue(a, args, &i)
-			if !ok {
+			if !ok || v == "" { // an explicit empty value is a slip, not "any"
 				fmt.Fprintln(stderr, usage)
 				return 2
 			}
@@ -375,7 +375,6 @@ func reportLines(r domain.AgentReport) string {
 	return head + "\n  " + strings.ReplaceAll(strings.TrimRight(r.Text, "\n"), "\n", "\n  ")
 }
 
-// agentReport: gg agent report [--final] (<text>… | -F <file> | -F -)
 // flagIs: a is the named flag, with one dash or two, alone or "=value".
 func flagIs(a, name string) bool {
 	a = strings.TrimPrefix(strings.TrimPrefix(a, "-"), "-")
@@ -395,6 +394,7 @@ func flagValue(a string, args []string, i *int) (string, bool) {
 	return args[*i], true
 }
 
+// agentReport: gg agent report [--final] (<text>… | -F <file> | -F -)
 func agentReport(ctx context.Context, c *agentlink.Client, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	const usage = "usage: gg agent report [--final] [--] (<text>… | -F <file> | -F -)"
 	final, file := false, ""
@@ -410,13 +410,13 @@ flags:
 			break flags
 		case a == "--final" || a == "-final":
 			final = true
-		case a == "-F" || a == "--file":
-			if i+1 >= len(args) {
+		case strings.HasPrefix(a, "-") && (flagIs(a, "F") || flagIs(a, "file")):
+			v, ok := flagValue(a, args, &i)
+			if !ok || v == "" {
 				fmt.Fprintln(stderr, usage)
 				return 2
 			}
-			i++
-			file = args[i]
+			file = v
 		default:
 			break flags
 		}

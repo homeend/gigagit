@@ -8,7 +8,7 @@ import (
 	"github.com/homeend/gigagit/internal/agentstate"
 )
 
-var trkTiming = stateTiming{grace: 30 * time.Second, stall: 2 * time.Minute, spinStall: 10 * time.Minute, idleSettle: 2 * time.Second, titleSettle: 700 * time.Millisecond}
+var trkTiming = stateTiming{grace: 30 * time.Second, stall: 2 * time.Minute, spinStall: 11 * time.Minute, idleSettle: 2 * time.Second, titleSettle: 700 * time.Millisecond}
 
 var trkInfo = agentsession.Info{ID: "s1", Label: "Claude", Dir: "/wt/a", Started: actT0}
 
@@ -50,6 +50,26 @@ func TestTrackerTitledIdleHoldsShortOnlyWhenTrusted(t *testing.T) {
 		if act.State != ActivityIdle || !act.Since.Equal(late.Add(time.Second)) || !act.ReadyAt.Equal(late.Add(time.Second+c.want)) || noteKinds(notes) != "idle," {
 			t.Errorf("%s: %+v notes %q", c.name, act, noteKinds(notes))
 		}
+	}
+}
+
+// An Unknown read mid-hold (a redraw) asks for no look of its own — the
+// redraw's end wakes the watcher — and keeps the pending idle: the next
+// Waiting read promotes it from when it began, at once when the hold has
+// passed meanwhile.
+func TestTrackerUnknownReadKeepsThePendingIdle(t *testing.T) {
+	t.Parallel()
+	late := actT0.Add(time.Minute)
+	var tr sessionTracker
+	tr.Step(rdg(agentstate.Working), trkInfo, late, late, trkTiming)
+	idleAt := late.Add(time.Second)
+	tr.Step(rdg(agentstate.Waiting), trkInfo, late, idleAt, trkTiming)
+	if act, _, _, again := tr.Step(rdg(agentstate.Unknown), trkInfo, late, idleAt.Add(500*time.Millisecond), trkTiming); again != 0 || act.State != ActivityWorking {
+		t.Errorf("mid-hold Unknown: %+v recheck %v, want working and 0", act, again)
+	}
+	act, notes, _, _ := tr.Step(rdg(agentstate.Waiting), trkInfo, late, idleAt.Add(3*time.Second), trkTiming)
+	if act.State != ActivityIdle || !act.Since.Equal(idleAt) || noteKinds(notes) != "idle," {
+		t.Errorf("after the Unknown read: %+v notes %q", act, noteKinds(notes))
 	}
 }
 

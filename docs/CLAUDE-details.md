@@ -4190,12 +4190,16 @@ the report channel are the NEXT plan.
   120 s while working — or unknown, but only with DEDICATED rules (a generic
   agent would be called stalled at every idle prompt) — or, while working,
   `agentstate.StallKey(tail)` (the tail without a leading spinner glyph and
-  elapsed-time counters) unchanged for `spinStallAfter` 10 min: a hung API
-  call keeps Claude's timer ticking. Ten, not two: Claude's thinking spinner
+  elapsed-time counters) unchanged for `spinStallAfter` 11 min: a hung API
+  call keeps Claude's timer ticking. Not two: Claude's thinking spinner
   shows no token counter (live 2026-10-04), so a long think looks the same;
-  the notice says `Spinning`. **Idle hold**: working → idle shows only once
-  idle has held `idleSettle` (2 s), from when it began (`pendingIdle`; the
-  loop arms a timer for it). **Own menus**: `Rules.Own` (built-in, Claude's
+  past ten, because Claude's Bash tool and `agent_wait` both end by 10 min
+  and a run at its cap must not read as a stall. The notice says
+  `Spinning`. **Idle hold**: working → idle shows only once idle has held
+  `idleSettle` (2 s), from when it began (`pendingIdle`; the loop arms a
+  timer for it). An Unknown read mid-hold keeps `pendingIdle` and arms
+  nothing: every screen change wakes the watcher, so the redraw's end is
+  read and a Waiting read re-arms the timer (re-checked 2026-10-05). **Own menus**: `Rules.Own` (built-in, Claude's
   "Esc to back/go back/close/clear" footers) read unknown, keeping the state
   — matched on the LAST tail line only: the same words quoted in a diff above
   a permission dialog must not hide it (review fix). Exited sessions are

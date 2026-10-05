@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -250,6 +252,28 @@ func TestAgentWaitAndReportCLIFlags(t *testing.T) {
 	}
 	if code, _, _ := runAgentCLI(t, dir, "", "report", "--", "--final", "is", "a", "word"); code != 0 {
 		t.Fatal("-- ends the flags")
+	}
+	// The file flag takes "=" like every other flag; a bare word with "="
+	// is still prose.
+	note := filepath.Join(t.TempDir(), "note.txt")
+	if err := os.WriteFile(note, []byte("from the file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []string{"--file=" + note, "-F=" + note} {
+		if code, out, errOut := runAgentCLI(t, dir, "", "report", a); code != 0 || !strings.HasPrefix(out, "reported #") {
+			t.Fatalf("%s = %d %q %q", a, code, out, errOut)
+		}
+	}
+	runAgentCLI(t, dir, "", "report", "file=x", "is", "prose")
+	_, out, _ = runAgentCLI(t, dir, "", "screen", full, "--reports")
+	if strings.Count(out, "from the file") != 2 || strings.Contains(out, "--file=") || strings.Contains(out, "-F=") || !strings.Contains(out, "file=x is prose") {
+		t.Fatalf("the file flag's = form: %q", out)
+	}
+	// An explicit empty --until is a slip, not "any".
+	for _, args := range [][]string{{"wait", "--until="}, {"wait", "--until", ""}} {
+		if code, _, errOut := runAgentCLI(t, dir, "", args...); code != 2 || strings.Contains(errOut, "no workers") {
+			t.Fatalf("%q = %d %q", args, code, errOut)
+		}
 	}
 	big := strings.Repeat("x", domain.MaxReportBytes+1)
 	if code, _, errOut := runAgentCLI(t, dir, big, "report", "-F", "-"); code != 2 || !strings.Contains(errOut, "larger than") {

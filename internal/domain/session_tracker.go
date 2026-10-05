@@ -40,9 +40,11 @@ type sessionTracker struct {
 // post (unnumbered), whether anything a subscriber shows changed, and how
 // soon a pending idle wants another look (0: none). An Unknown reading
 // changes nothing (output lands mid-redraw often enough that acting on it
-// would flap). A working session that reads idle shows idle only once that
-// has held — titleSettle when a trusted idle hint agrees, else idleSettle —
-// and then from when it began.
+// would flap) and keeps a pending idle: every screen change wakes the
+// watcher, so the redraw's end is read and a Waiting read re-arms the
+// re-check (an Unknown one needs none). A working session that reads idle
+// shows idle only once that has held — titleSettle when a trusted idle hint
+// agrees, else idleSettle — and then from when it began.
 func (t *sessionTracker) Step(rd agentstate.Reading, info agentsession.Info, lastOut, now time.Time, tm stateTiming) (SessionActivity, []ActivityNotice, bool, time.Duration) {
 	var notes []ActivityNotice
 	changed := false
