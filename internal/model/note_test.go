@@ -71,3 +71,37 @@ func TestShelfLevelNote(t *testing.T) {
 		t.Fatal("a commit-level note is entry-level, not shelf-level")
 	}
 }
+
+// The working-review predicates: a live, path-less note with a worktree.
+func TestWorkingReviewPredicates(t *testing.T) {
+	t.Parallel()
+	sha := strings.Repeat("a", 40)
+	review := []string{ReviewTag}
+	cases := []struct {
+		name               string
+		n                  Note
+		wtLevel, wr, entry bool
+	}{
+		{"working review", Note{Tags: review, Address: FileAddress{State: StateUnstaged, Worktree: "/r"}}, true, true, true},
+		{"worktree-level untagged", Note{Address: FileAddress{State: StateUnstaged, Worktree: "/r"}}, true, false, true},
+		{"staged state", Note{Tags: review, Address: FileAddress{State: StateStaged, Worktree: "/r"}}, true, true, true},
+		{"no worktree", Note{Tags: review, Address: FileAddress{State: StateUnstaged}}, false, false, false},
+		{"a file", Note{Tags: review, Address: FileAddress{State: StateUnstaged, Worktree: "/r", Path: "a.go"}}, false, false, false},
+		{"commit review", Note{Tags: review, Address: FileAddress{State: StateCommitted, Commit: sha}}, false, false, true},
+		{"shelf entry", Note{Address: FileAddress{State: StateShelf, ShelfID: "e1"}}, false, false, true},
+	}
+	for _, c := range cases {
+		if got := c.n.IsWorktreeLevel(); got != c.wtLevel {
+			t.Errorf("%s: IsWorktreeLevel = %v, want %v", c.name, got, c.wtLevel)
+		}
+		if got := c.n.IsWorkingReview(); got != c.wr {
+			t.Errorf("%s: IsWorkingReview = %v, want %v", c.name, got, c.wr)
+		}
+		if got := c.n.IsEntryLevel(); got != c.entry {
+			t.Errorf("%s: IsEntryLevel = %v, want %v", c.name, got, c.entry)
+		}
+		if c.n.IsWorkingReview() && c.n.IsReviewNote() {
+			t.Errorf("%s: IsReviewNote must stay commit-only", c.name)
+		}
+	}
+}
