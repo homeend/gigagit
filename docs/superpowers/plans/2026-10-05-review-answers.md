@@ -1316,8 +1316,19 @@ func TestRemarkRepliesAreNeverListedOnTheirOwn(t *testing.T) {
 		t.Fatalf("counts changed: %+v → %+v", before, after)
 	}
 	ov, _ := svc.NotesOverview(ctx)
-	if strings.Contains(fmt.Sprintf("%+v", ov), "RemarkFP:"+mustReview(t, svc, rid).remarkFPs()[0]) {
-		t.Fatalf("overview lists a remark reply: %+v", ov)
+	var files []NoteFileNotes
+	files = append(append(append(files, ov.Unstaged...), ov.Staged...), ov.Untracked...)
+	for _, c := range ov.Commits {
+		files = append(files, c.Files...)
+	}
+	for _, f := range files {
+		for _, n := range f.Notes {
+			for _, x := range append([]ResolvedNote{n}, n.Replies...) {
+				if x.Note.IsRemarkReply() {
+					t.Fatalf("overview lists a remark reply: %+v", x)
+				}
+			}
+		}
 	}
 	addrs, _ := svc.NoteAddresses(ctx)
 	for _, a := range addrs {
@@ -1331,7 +1342,7 @@ func TestRemarkRepliesAreNeverListedOnTheirOwn(t *testing.T) {
 }
 ```
 
-Imports: `fmt`, `reflect`, `strings` besides Task 2's. If a forge test
+Imports: `reflect`, `strings` besides Task 2's. If a forge test
 helper exists (`forge_notes_test.go`), add one case: a forge comment
 tagged `resolved` comes out of `PreviewNotesAt` with a non-nil
 `Resolution`.
@@ -1567,13 +1578,14 @@ applies to a replyTo comment only", where) }`. A root comment may carry
 - [ ] **Step 5: Failing domain test** (`notebatch_plan_test.go`)
 
 ```go
-func TestBatchAnswersAReviewAndRollsBackOnAFailedResolve(t *testing.T) {
-	svc, rid := reviewedRepo(t)
+func TestBatchAnswersAReview(t *testing.T) {
+	t.Parallel()
+	svc, rid, _ := threadReview(t)
 	ctx := context.Background()
 	yes := true
 	b := notebatch.Batch{Items: []notebatch.Item{
-		{ReplyTo: model.ReviewNoteIDPrefix + rid + ":0", Summary: "agreed", Resolve: &yes},
-		{ReplyTo: model.ReviewNoteIDPrefix + rid + ":1", Summary: "fixed", Link: "abc1234"},
+		{ReplyTo: remarkID(rid, 0), Summary: "agreed", Resolve: &yes},
+		{ReplyTo: remarkID(rid, 1), Summary: "fixed", Link: "HEAD"},
 	}}
 	planned, _, err := svc.PlanNoteBatch(ctx, b, false, "", "B", NoteSideBoth)
 	if err != nil {
@@ -1584,31 +1596,67 @@ func TestBatchAnswersAReviewAndRollsBackOnAFailedResolve(t *testing.T) {
 	}
 	r, _ := svc.Review(ctx, rid)
 	th, _ := r.RemarkThreads()
-	if th[0].Resolution == nil || len(th[1].Replies) != 1 || th[1].Replies[0].Link != "abc1234" {
+	if th[0].Resolution == nil || len(th[1].Replies) != 1 || len(th[1].Replies[0].Link) != 40 {
 		t.Fatalf("threads = %+v", th)
 	}
 	// A bad replyTo fails the PLAN, before any write.
-	bad := notebatch.Batch{Items: []notebatch.Item{{ReplyTo: model.ReviewNoteIDPrefix + rid + ":9", Summary: "x"}}}
+	bad := notebatch.Batch{Items: []notebatch.Item{{ReplyTo: remarkID(rid, 9), Summary: "x"}}}
 	if _, _, err := svc.PlanNoteBatch(ctx, bad, false, "", "B", NoteSideBoth); !errors.Is(err, ErrNoSuchRemark) {
 		t.Fatalf("plan: %v", err)
 	}
-	// A resolve that fails at apply time (the remark's review deleted
-	// between plan and apply) rolls back the batch's replies.
-	planned, _, _ = svc.PlanNoteBatch(ctx, notebatch.Batch{Items: []notebatch.Item{
-		{ReplyTo: model.ReviewNoteIDPrefix + rid + ":2", Summary: "late", Resolve: &yes}}}, false, "", "B", NoteSideBoth)
-	planned[0].Resolve = &yes
-	planned[0].ReplyTo = "nope0000" // forces the reply itself to fail: rollback path
-	if _, err := svc.ApplyNoteBatch(ctx, planned); err == nil {
-		t.Fatal("expected a failure")
+}
+
+// failResolveStore fails Resolve for one root: the seam that reaches the
+// resolve-failure rollback (a reply failure never gets that far).
+type failResolveStore struct {
+	notes.Store
+	failRoot string
+}
+
+func (f *failResolveStore) Resolve(r model.ThreadResolution) error {
+	if r.Root == f.failRoot {
+		return errors.New("disk full")
 	}
-	r, _ = svc.Review(ctx, rid)
-	if th, _ := r.RemarkThreads(); len(th[2].Replies) != 0 {
-		t.Fatalf("rollback left a reply: %+v", th[2])
+	return f.Store.Resolve(r)
+}
+
+func TestBatchResolveFailureRestoresAndRollsBack(t *testing.T) {
+	t.Parallel()
+	svc, rid, _ := threadReview(t)
+	ctx := context.Background()
+	// Remark 0 is already resolved by A before the batch.
+	if _, err := svc.NoteResolve(ctx, remarkID(rid, 0), true, "A"); err != nil {
+		t.Fatal(err)
+	}
+	yes, no := true, false
+	planned, _, err := svc.PlanNoteBatch(ctx, notebatch.Batch{Items: []notebatch.Item{
+		{ReplyTo: remarkID(rid, 0), Summary: "reopen", Resolve: &no},
+		{ReplyTo: remarkID(rid, 1), Summary: "done", Resolve: &yes},
+	}}, false, "", "B", NoteSideBoth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.SetNotesStore(&failResolveStore{Store: svc.notesStore(ctx), failRoot: remarkID(rid, 1)})
+	if _, err := svc.ApplyNoteBatch(ctx, planned); err == nil || !strings.Contains(err.Error(), "rolled back") {
+		t.Fatalf("expected a rolled-back failure, got %v", err)
+	}
+	th, _ := mustReview(t, svc, rid).RemarkThreads()
+	if len(th[0].Replies) != 0 || len(th[1].Replies) != 0 {
+		t.Fatalf("the batch's replies survived: %+v", th)
+	}
+	if th[0].Resolution == nil || th[0].Resolution.By != "A" {
+		t.Fatalf("remark 0 must be resolved by A again: %+v", th[0].Resolution)
+	}
+	if th[1].Resolution != nil {
+		t.Fatalf("remark 1 must stay open: %+v", th[1].Resolution)
 	}
 }
 ```
 
-- [ ] **Step 6: Run** — Expected FAIL (`Resolve` field undefined on PlannedNote).
+The test file uses `threadReview`, `remarkID`, `mustReview` from Task 2's
+`review_threads_test.go` (same package).
+
+- [ ] **Step 6: Run** `go test ./internal/domain/ -run 'BatchAnswers|BatchResolveFailure'` — Expected FAIL (`Resolve` field undefined on PlannedNote).
 
 - [ ] **Step 7: Implement** in `notebatch_plan.go`:
 
@@ -1934,9 +1982,11 @@ func showReplies(ns []model.Note) []ReviewShowReply {
 JSON tags: `ID json:"id"`, `Resolved json:"resolved"`, `ResolvedBy json:"resolved_by,omitempty"`, `Replies json:"replies,omitempty"`; `ReviewShowReply` fields `id, author, summary, rationale,omitempty, link,omitempty, created`.
 
 `printReviewShow` — after the header line add a tally line when there are
-remarks (`fmt.Fprintf(w, "%d of %d resolved\n", rs.Resolved, len(rs.Remarks))`);
-print each remark as `[%d] %s %s:%s — %s` with its `ID` after the index
-(so agents can copy it), then, after rationale and link:
+remarks (`fmt.Fprintf(w, "%d of %d resolved\n", rs.Resolved, len(rs.Remarks))`).
+The remark line `[%d] %s:%s — %s` stays EXACTLY as it is (the existing
+pins in `review_show_test.go` and `e2e/scenarios/s108_review_links.toml`
+check it); the id goes on its own line after the link:
+`fmt.Fprintln(w, "    id "+r.ID)`. Then:
 
 ```go
 		if r.Resolved {
@@ -1962,6 +2012,10 @@ glyph ruling is about row tallies; keep them.
 `--review --no-fingerprint`: in the `gg link` flag handling (grep
 `no-fingerprint` in `internal/cli/link*.go`), refuse the combination with
 exit 2: `link: --no-fingerprint has no meaning with --review (a review link names no line)`.
+
+`--json` stays the parse surface for agents; the text additions are for
+humans. If any existing `TestReviewShow*` pin or s108's `stdout_contains`
+breaks, the remark line changed — put it back, do not edit the pin.
 
 - [ ] **Step 4: Run** `go test ./internal/cli/ 2>&1 | tail -5` — Expected `ok`.
 
@@ -2312,6 +2366,9 @@ func (m Model) openNoteLink(link string) (tea.Model, tea.Cmd) {
 Wire `noteLinkRows()` into `action_menu.go:144` after `noteMenuRows()`.
 
 `diff_view.go` key switch: `case "x": return m.toggleThreadResolved()`.
+(Verified while planning: the model routes keys to the top layer —
+`model.go` `l.update(m, msg)` — before its own `case "x"` (session row /
+conflict start), so the diff's `x` never reaches it.)
 
 **Reply popup Link field** (`note_popup.go`): `notePopup` gains
 `link textfield`; in `noteReply` mode the field order is summary →
