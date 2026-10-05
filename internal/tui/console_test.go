@@ -11,6 +11,7 @@ import (
 	"github.com/homeend/gigagit/internal/agentsession"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // startTestSession starts `sh -c script` through the process-global manager
@@ -390,6 +391,43 @@ func TestBranchEnterLeavesDockedConsoleUnfocused(t *testing.T) {
 	}
 }
 
+// ctrl+g on a branch row is asked to SHOW the soloed feed, which a docked
+// console covers: the console steps aside (the session runs on) and the
+// reload's landing focuses Commits on the tip, as it does with no console.
+func TestBranchCtrlGHidesDockedConsole(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	mm, _ := m.Update(ctrlBracket()) // step out: docked, unfocused
+	m = mm.(Model)
+	m = m.activateTab(panelBranches)
+	m.sel[panelBranches] = 0
+	b, ok := m.selectedBranch()
+	if !ok {
+		t.Fatal("fixture: the cursor must sit on a branch row")
+	}
+	mm, _ = m.Update(keyMsg("ctrl+g"))
+	m = mm.(Model)
+	if m.console != nil {
+		t.Fatalf("console = %+v, want hidden", m.console)
+	}
+	if s.Info().State != domain.SessionRunning {
+		t.Fatal("the session must keep running")
+	}
+	if m.pendingGotoTip != b.Hash {
+		t.Fatalf("pendingGotoTip = %q, want %q", m.pendingGotoTip, b.Hash)
+	}
+	mm, _ = m.Update(commitsReloadedMsg{gen: m.feed.Gen(), state: domain.FeedState{Commits: []model.Commit{
+		{Hash: "b0aaaaaaaaaa", Subject: "base"},
+		{Hash: b.Hash, Subject: "tip"},
+	}}})
+	m = mm.(Model)
+	if m.focus != panelCommits || m.sel[panelCommits] != 1 {
+		t.Fatalf("focus=%v sel=%d, want panelCommits/1 (the tip row)", m.focus, m.sel[panelCommits])
+	}
+}
+
 // The step-out key pressed twice puts the console in the background: the
 // first press unfocuses it, the second closes it as esc does.
 func TestStepOutKeyTwiceClosesConsole(t *testing.T) {
@@ -412,5 +450,100 @@ func TestStepOutKeyTwiceClosesConsole(t *testing.T) {
 	}
 	if s.Info().State != domain.SessionRunning {
 		t.Fatal("closing the console must not end the session")
+	}
+}
+
+// An exited agent leaves nothing to type into: its docked console offers
+// [x] close, which removes the session and gives the Commits column back. On
+// a running agent x is an ordinary key (the console swallows it) and the
+// title and footer keep [enter] type.
+func TestExitedConsoleClosesOnX(t *testing.T) {
+	m := newTestModel(t)
+	s := startTestSession(t, m, "sleep 0.3")
+	m, _ = m.openConsole(s.Info().ID)
+	m.console.focused = false
+	m.focus = panelCommits
+	m, _ = m.onSessionsChanged() // seen running
+	if strings.Contains(m.footerLine(), "[x] close") || strings.Contains(consoleTitle(s.Info(), false), "[x] close") {
+		t.Fatalf("a running console must not offer [x] close: %q", m.footerLine())
+	}
+	mm, _ := m.Update(keyMsg("x"))
+	m = mm.(Model)
+	if m.console == nil {
+		t.Fatal("x closed a RUNNING agent's console")
+	}
+	if _, ok := domain.Sessions().Get(s.Info().ID); !ok {
+		t.Fatal("x removed a RUNNING session")
+	}
+
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not exit")
+	}
+	m, _ = m.onSessionsChanged()
+	if !strings.Contains(m.footerLine(), "[x] close") {
+		t.Fatalf("footer must advertise [x] close on an exited console: %q", m.footerLine())
+	}
+	if title := consoleTitle(s.Info(), false); !strings.Contains(title, "[x] close") || strings.Contains(title, "[enter] type") {
+		t.Fatalf("exited title hints: %q", title)
+	}
+	mm, _ = m.Update(keyMsg("x"))
+	m = mm.(Model)
+	if m.console != nil {
+		t.Fatalf("x must close an exited console, got %+v", m.console)
+	}
+	if _, ok := domain.Sessions().Get(s.Info().ID); ok {
+		t.Fatal("x must remove the exited session")
+	}
+}
+
+// X on a running agent's unfocused console is the session row's X: confirm
+// (Cancel by default), then kill the agent and remove it; the list change
+// closes the console. The title and footer advertise it.
+func TestUnfocusedRunningConsoleKillRemovesOnX(t *testing.T) {
+	m := newTestModel(t)
+	s := startTestSession(t, m, "sleep 30")
+	m, _ = m.openConsole(s.Info().ID)
+	m.console.focused = false
+	m.focus = panelCommits
+	m, _ = m.onSessionsChanged()
+	if !strings.Contains(m.footerLine(), "[X] kill+remove") || !strings.Contains(consoleTitle(s.Info(), false), "[X] kill+remove") {
+		t.Fatalf("a running unfocused console must offer [X] kill+remove: footer %q title %q", m.footerLine(), consoleTitle(s.Info(), false))
+	}
+	mm, _ := m.Update(keyMsg("X"))
+	m = mm.(Model)
+	if m.modal == nil || m.modal.req.ID != "session-kill-remove" || m.modal.req.Options[m.modal.sel] != "Cancel" {
+		t.Fatalf("X must confirm (Cancel by default), modal = %+v", m.modal)
+	}
+	mm, _ = m.Update(keyMsg("esc"))
+	m = mm.(Model)
+	if m.modal != nil || m.console == nil || s.Info().State != domain.SessionRunning {
+		t.Fatal("esc on the confirm must leave the agent running and its console docked")
+	}
+	mm, _ = m.Update(keyMsg("X"))
+	m = mm.(Model)
+	mm, _ = m.Update(keyMsg("up")) // Kill
+	m = mm.(Model)
+	mm, _ = m.Update(keyMsg("enter"))
+	m = mm.(Model)
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("X did not kill the agent")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, ok := domain.Sessions().Get(s.Info().ID); !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("X did not remove the killed session")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	m, _ = m.onSessionsChanged()
+	if m.console != nil {
+		t.Fatalf("the removed session's console is still docked: %+v", m.console)
 	}
 }

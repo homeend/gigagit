@@ -203,13 +203,18 @@ func consoleTitle(info domain.SessionInfo, focused bool) string {
 	label, wt, state := consoleTitleParts(info)
 	t := label + " · " + wt + " · " + state
 	if !focused {
-		t += consoleTitleHints()
+		t += consoleTitleHints(info.State == domain.SessionExited)
 	}
 	return t
 }
 
-func consoleTitleHints() string {
-	return "  " + i18n.T("[enter] type  [ctrl+t] maximise  [esc] close")
+// consoleTitleHints: an exited agent has nothing to type into, so its console
+// offers [x] close (remove the session) and esc only hides it.
+func consoleTitleHints(exited bool) string {
+	if exited {
+		return "  " + i18n.T("[x] close  [ctrl+t] maximise  [esc] hide")
+	}
+	return "  " + i18n.T("[enter] type  [X] kill+remove  [ctrl+t] maximise  [esc] close")
 }
 
 // consoleTitleParts: the label, the worktree's short name and the state (the
@@ -435,6 +440,9 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 	}
 	if m.console.focused {
+		if key == "x" && m.consoleExited() {
+			return m.removeConsoleSession(), nil, true
+		}
 		if key == m.stepOutKey() {
 			m.console.focused = false
 			if m.console.maximized {
@@ -482,11 +490,40 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m.syncConsoleSize(), nil, true
 	case "esc", m.stepOutKey(): // the step-out key twice = out, then away
 		return m.closeConsole(), nil, true
+	case "X":
+		// The session row's X (kill after a confirm, then remove; the list
+		// change closes this console). On an exited agent it is x.
+		if m.consoleExited() {
+			return m.removeConsoleSession(), nil, true
+		}
+		if s, ok := m.consoleSession(); ok {
+			return m.killRemoveSessionRow(s.Info()), nil, true
+		}
+	case "x":
+		if m.consoleExited() {
+			return m.removeConsoleSession(), nil, true
+		}
 	}
 	if consolePassthrough[key] {
 		return m, nil, false
 	}
 	return m, nil, true
+}
+
+// consoleExited reports a docked console whose agent has exited.
+func (m Model) consoleExited() bool {
+	s, ok := m.consoleSession()
+	return ok && s.Info().State == domain.SessionExited
+}
+
+// removeConsoleSession is an exited console's x: the session goes from the
+// list (as the ctrl+\ popup's x) and the Commits column comes back.
+func (m Model) removeConsoleSession() Model {
+	if err := domain.Sessions().Remove(m.console.id); err != nil {
+		m.statusMsg = i18n.T("only an exited session can be removed — kill it first (k)")
+		return m
+	}
+	return m.closeConsole()
 }
 
 // touchConsole marks the docked console's session used — it just gained focus.

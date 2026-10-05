@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent console — [x] close once the agent exits
+
+### Added
+
+- **An exited agent's console closes with x.** Once the agent has exited,
+  its docked console title and the footer offer `[x] close` in place of
+  `[enter] type`: x removes the session (as the ctrl+\ popup's x does) and
+  gives the Commits column back. esc now reads `hide` there — it keeps the
+  exited session listed. On a running agent x is unchanged.
+- **X on a running agent's unfocused console kills and removes it**, as X
+  on its session sub-row does: it asks first (Cancel is the default), then
+  kills the agent and drops the session; the console closes with it. The
+  title and the footer say `[X] kill+remove`. On an exited agent X is x.
+
+### Changed
+
+- **ctrl+g on a branch hides a docked agent console.** Solo + go to tip
+  asks to see the soloed feed, which the console covered: the solo ran
+  out of sight. The console now steps aside (its session keeps running;
+  alt+a or the session row brings it back) and the cursor lands on the
+  tip in Commits. Enter on a branch row still leaves the console docked.
+
 ## Working-changes reviews are notes
 
 ### Changed
