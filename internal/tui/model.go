@@ -561,7 +561,7 @@ func (m Model) Init() tea.Cmd {
 // below).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	before := m.statusMsg
-	nm, cmd := m.dispatch(msg)
+	nm, cmd := m.dispatchParkedAware(msg)
 	// Invariant this relies on: every dispatch path returns a Model (true of
 	// every case today). If that ever stopped holding, the ok-guard below
 	// would silently skip the capture instead of failing loud — lastError
@@ -2216,10 +2216,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openCommandPalette()
 		}
 		// alt+a / alt+t cycle the running agents / terminals by last use,
-		// shown unfocused (a focused console kept the key for its program
-		// above). Base panels only: a window or popup on top would hide the
-		// console it docks.
-		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.topLayer() == nil && !m.filterTyping {
+		// shown unfocused, then back to the screen the cycle started from.
+		// From the base panels or a full-screen view (parked while the
+		// sessions show maximised); a focused console handled the key above.
+		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.cycleReachable() {
 			return m.cycleSessions(k == "alt+t")
 		}
 		// alt+x opens the text templates window (base panels only, like
@@ -4851,6 +4851,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	if dv := m.diffLayer(); dv != nil {   // the new repo invalidates any open diff
 		m = m.removeLayer(dv)
 	}
+	m = m.forgetConsoleReturn() // what a console covers is the old repo's too
 	m.diffTag = ""
 	m.remoteTagNames = nil // tag names from a different repo must not bleed into the new one
 	m.pushCheckGen++       // drop any in-flight pre-push tag check from the old repo

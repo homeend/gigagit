@@ -36,6 +36,28 @@ func (m Model) paletteReachable() bool {
 	}
 }
 
+// cycleReachable reports where alt+a / alt+t may start a cycle: a screen
+// the cycle can come back to. The base panels, or a poppable full-screen
+// view on top (diff, history, blame, file viewer — the views steerRefusal
+// pops), parked while the sessions show; never a popup, an editor holding
+// an operation's input, or text being typed.
+func (m Model) cycleReachable() bool {
+	if m.filterTyping {
+		return false
+	}
+	switch l := m.topLayer().(type) {
+	case nil, *historyView:
+		return true
+	case *diffView:
+		return !l.search.typing
+	case *blameView:
+		return !l.search.typing
+	case *fileViewer:
+		return l.openFile == nil || l.p == nil || !l.p.search.typing
+	}
+	return false
+}
+
 // canStageHunks reports whether the Files panel's selected row is a tracked,
 // non-conflicted file the hunk-staging picker can open.
 func (m Model) canStageHunks() bool {

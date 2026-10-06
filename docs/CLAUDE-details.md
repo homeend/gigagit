@@ -4049,16 +4049,47 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   carries `LastUsed` (starts at `Started`; moves on `SendKey`/`SendText`/
   `Paste` and `Session.Touch()`) and `Terminal` (set by `StartTerminal` via
   `StartSpec.Terminal`). `sessionsByLastUsed(list, terminal)` = running
-  sessions of one kind, newest use first. `cycleSessions` shows the head
-  UNFOCUSED via `showConsole(id, false)`, or — when an unfocused console of
-  that list is docked — the entry after it (wrapping). Only a FOCUSED show is a
-  use: `openConsole` and the unfocused console's `enter`/`ctrl+t`
-  (`touchConsole`) Touch; the unfocused show must not, or the walk would
-  reorder itself. The web counts through typing only (a page's screen stream
-  may reattach on its own, so attaching is not a use). The keys sit next to ctrl+p in `Update`, gated to no layer and no `/` typing; a
-  focused console keeps them for its program, an unfocused one lets them
-  through (`consolePassthrough`). Not ctrl+a (a common tmux prefix — gg never
-  sees it) nor ctrl+l (Commits' load-more). Not configurable; not in the web.
+  sessions of one kind, newest use first. `cycleSessions` walks a RING: the
+  sessions, then the console's return point (2026-10-06). `consoleState.ret`
+  (`consoleReturn`) is captured by the first console shown over a
+  non-console screen (`captureReturn`: the live layer stack is PARKED only
+  when its top is a full-screen VIEW — diff/history/blame/file viewer; a
+  popup or editor on top stays live and keeps the keyboard, so a console
+  opening on its own never takes it — and the ctrl+t pin / stash list / file
+  preview (restored only inside the same files view) / focus saved) and carried over
+  when a console replaces a console, so "the screen before the agent"
+  survives a cycle; `closeConsole` restores it (parked layers go BENEATH
+  whatever is live — a popup opened over the agent stays on top; focus only
+  when it sat in the console's column). `ret.full` (a full-screen layer
+  parked or an active pin) shows every console of the cycle maximised;
+  `maximized && !focused` exists only there: enter/ctrl+t focus, esc /
+  step-out return, only `consoleFullPassthrough` (q, ctrl+c, ?, ctrl+o,
+  alt+a/alt+t) reaches gg — openers like F/S would open behind it — and it
+  owns its keys even over a focused files tree; focus snaps back to the
+  column; step-out (and an exit) from a focused full console stays full
+  (`consoleFull`), from a ctrl+t-maximised docked one docks. `dropConsole`
+  (another right-column owner) restores parked layers too — a parked view
+  is never lost; `detachConsole` is the bare clear. A view pushed OVER a
+  shown console, then alt+a: the console returns first, the cycle restarts
+  with the whole stack. Parked views still get their async results: `Update` →
+  `dispatchParkedAware` hands a non-input message to `dispatch` with the
+  parked stack put back beneath the live one, then re-parks what is left
+  (a diff load, a stack file, history/blame lists, a resize relayout). A
+  repo switch (`reRoot`, and `settleConsole` again) runs
+  `forgetConsoleReturn` (parked views / stash list / preview go; pin and
+  focus stay; full only if the pin was);
+  `steerRefusal` reads a parked stack's top when the live stack is empty.
+  Only a FOCUSED show is a use: `openConsole` and the unfocused console's
+  `enter`/`ctrl+t` (`touchConsole`) Touch; the unfocused show must not, or
+  the walk would reorder itself. The web counts through typing only
+  (a page's screen stream may reattach on its own, so attaching is not a
+  use). The gate is `cycleReachable` (`avail.go`: base panels or a
+  diff/history/blame/file viewer on top — steerRefusal's poppable views —
+  not while a search is typed); a focused console intercepts alt+a/alt+t
+  before its program (`updateConsoleKey`). An unfocused full console keeps
+  the "unfocused never resizes" rule: it renders at the PTY's current size
+  until enter. Not ctrl+a (a common tmux prefix — gg never sees it) nor
+  ctrl+l (Commits' load-more). Not configurable; not in the web.
 - **A console is repo-scoped** (2026-10-01, `console_scope.go`): it shows
   only a session whose `Dir` is one of `m.worktrees` (`inRepo`, the Worktrees
   sub-rows' `filepath.Clean` rule). `reRoot` arms `consoleSwitch`; the

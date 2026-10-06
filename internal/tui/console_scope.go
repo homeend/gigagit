@@ -94,6 +94,7 @@ func (m Model) settleConsole() (Model, tea.Cmd) {
 	}
 	open := m.consoleSwitch.open
 	m.consoleSwitch = consoleSwitch{}
+	m = m.forgetConsoleReturn() // reRoot did; a settle without one too
 	if open != "" {
 		return m.openConsole(open)
 	}

@@ -59,10 +59,10 @@ func TestSessionRowsShowActivity(t *testing.T) {
 	if got := sessionStateText(plain); got != "● sh  running 2m00s" {
 		t.Errorf("plain popup row = %q", got)
 	}
-	if got := consoleTitle(classified, true); got != "Claude · a · running 2m00s · needs input" {
+	if got := consoleTitle(classified, true, false); got != "Claude · a · running 2m00s · needs input" {
 		t.Errorf("title = %q", got)
 	}
-	if got := consoleTitle(plain, true); got != "sh · a · running 2m00s" {
+	if got := consoleTitle(plain, true, false); got != "sh · a · running 2m00s" {
 		t.Errorf("plain title = %q", got)
 	}
 	exited := classified
@@ -248,15 +248,15 @@ func TestConsoleTitleFitKeepsTheState(t *testing.T) {
 		"s1": {State: domain.ActivityQuestion, Since: time.Now()},
 	}))()
 	info := domain.SessionInfo{ID: "s1", Label: "Claude", Dir: "/wt/feature-with-a-rather-long-worktree-name", Started: time.Now().Add(-2 * time.Minute)}
-	plain := consoleTitle(info, true) // label · worktree · state, no hints
-	if got := consoleTitleFit(info, false, lipgloss.Width(plain)); got != plain {
+	plain := consoleTitle(info, true, false) // label · worktree · state, no hints
+	if got := consoleTitleFit(info, false, false, lipgloss.Width(plain)); got != plain {
 		t.Fatalf("hints must go first:\n got %q\nwant %q", got, plain)
 	}
-	got := consoleTitleFit(info, false, 50)
+	got := consoleTitleFit(info, false, false, 50)
 	if lipgloss.Width(got) > 50 || !strings.HasPrefix(got, "Claude · feat") || !strings.HasSuffix(got, "running 2m00s · needs input") || !strings.Contains(got, "…") {
 		t.Fatalf("narrow = %q", got)
 	}
-	if got := consoleTitleFit(info, true, 36); got != "Claude · running 2m00s · needs input" {
+	if got := consoleTitleFit(info, true, false, 36); got != "Claude · running 2m00s · needs input" {
 		t.Fatalf("very narrow = %q", got)
 	}
 }

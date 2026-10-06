@@ -27,7 +27,23 @@ type consoleState struct {
 	gen       int
 	highHalf  rune            // a UTF-16 high surrogate waiting for its low half (Windows input)
 	screen    <-chan struct{} // this console's own subscription to its session's screen
-	cancel    func()          // drops it; every path that clears m.console goes through dropConsole
+	cancel    func()          // drops it; every path that clears m.console goes through detachConsole
+	ret       *consoleReturn  // the screen to go back to (never nil on a shown console)
+}
+
+// consoleReturn is the screen a console was shown over: where esc, the
+// step-out key twice and the last stop of an alt+a / alt+t cycle go back
+// to. Captured by the first console shown, carried over when a console
+// replaces a console, so "the screen before the agent" survives a cycle.
+type consoleReturn struct {
+	layers       []layer // the live stack, parked while the console shows
+	full         bool    // a full-screen view or a ctrl+t pin: consoles show maximised
+	fullMaxed    bool
+	fullMax      panel
+	stashView    *stashView
+	filesView    *contentPopup // the files view a preview belongs to
+	filesPreview *openFile
+	focus        panel
 }
 
 // sessionWatch is the TUI's subscription to the session LIST, on a pointer
@@ -72,9 +88,13 @@ func (m Model) openConsole(id domain.SessionID) (Model, tea.Cmd) {
 	return m.showConsole(id, true)
 }
 
-// showConsole docks session id in the Commits column, focused or not (alt+a /
-// alt+t show one unfocused). Only a focused show is a use of the session
-// (Touch): cycling through them must not reorder the list it walks.
+// showConsole shows session id, focused or not (alt+a / alt+t show one
+// unfocused): docked in the Commits column, or maximised when the screen it
+// covers is full-screen. What it covers — the pin, the stash list or file
+// preview, a parked layer stack, focus — goes into its return point, which
+// a console replacing a console carries over. Only a focused show is a use
+// of the session (Touch): cycling through them must not reorder the list it
+// walks.
 func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 	s, ok := domain.Sessions().Get(id)
 	if !ok {
@@ -85,32 +105,133 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 	if m.console != nil {
 		gen = m.console.gen + 1
 	}
+	var ret *consoleReturn
+	if m.console != nil {
+		ret = m.console.ret // a console replacing a console keeps the way back
+	}
+	if ret == nil {
+		m, ret = m.captureReturn()
+	}
 	if m.focus != panelCommits {
 		m = m.rememberLeftFocus()
 	}
+	// What the console covers is in ret. A pinned panel would hide the
+	// column the console docks in (and shrink its PTY to nothing), so the
+	// pin drops while the console shows — maximised, as the pin was full —
+	// and comes back with the return point.
 	m.stashView = nil
 	m.filesPreview = nil
-	// A fullscreen left panel would hide the column the console docks in
-	// (and shrink its PTY to nothing); showing the agent is what was asked
-	// for, so the pin drops. Unlike the stash list, this is a clear, not a
-	// suspend — the console is a peer of the commit list, not a surface the
-	// pin yields to (fullscreenYielded).
 	m.fullMaxed = false
-	m = m.dropConsole()
+	m = m.detachConsole()
 	if focused {
 		s.Touch()
 	}
 	screen, cancel := s.Subscribe()
-	m.console = &consoleState{id: id, focused: focused, gen: gen, screen: screen, cancel: cancel}
+	m.console = &consoleState{id: id, focused: focused, maximized: ret.full, gen: gen, screen: screen, cancel: cancel, ret: ret}
 	m.focus = panelCommits
 	m = m.syncConsoleSizeIfFocused()
 	return m, waitSessionCmd(m.console, id, gen)
 }
 
-// dropConsole clears the console and its screen subscription. Every place
+// captureReturn records the screen a console is about to cover. A
+// full-screen VIEW on top (diff, history, blame, file viewer) is parked off
+// the live stack — it would draw over the console and keep the keys — and
+// makes the return point full, as an active pin does. Anything else on top
+// (a popup being typed into, an editor holding an operation's input) stays
+// live and keeps the keyboard: a console opening on its own (an agent
+// started, an AI task) must never take it.
+func (m Model) captureReturn() (Model, *consoleReturn) {
+	r := &consoleReturn{
+		fullMaxed: m.fullMaxed, fullMax: m.fullMax,
+		stashView: m.stashView, filesView: m.filesView, filesPreview: m.filesPreview,
+		focus: m.focus,
+		full:  m.fullMaxActive(),
+	}
+	switch m.topLayer().(type) {
+	case *diffView, *historyView, *blameView, *fileViewer:
+		r.layers = m.layers.entries
+		m.layers.entries = nil
+		r.full = true
+	}
+	return m, r
+}
+
+// forgetConsoleReturn drops what the console covers that belongs to the
+// checkout gg is leaving (a repo switch): the parked views, the stash list,
+// the preview. The pin and focus are panel states and stay; a console that
+// was full only for its parked views docks again.
+func (m Model) forgetConsoleReturn() Model {
+	if m.console == nil || m.console.ret == nil {
+		return m
+	}
+	r := m.console.ret
+	r.layers, r.stashView, r.filesView, r.filesPreview = nil, nil, nil, nil
+	r.full = r.fullMaxed
+	m.console.maximized = r.full
+	return m.syncConsoleSizeIfFocused()
+}
+
+// dispatchParkedAware delivers a message. A non-input one (a load result, a
+// resize) is handled with the console's parked views put back beneath the
+// live stack, so a view parked under a console still receives what it
+// asked for; afterwards whatever of them is still there is parked again.
+// Keys and mouse never see parked views — the console covers them.
+func (m Model) dispatchParkedAware(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case tea.KeyMsg, tea.MouseMsg:
+		return m.dispatch(msg)
+	}
+	if m.console == nil || m.console.ret == nil || len(m.console.ret.layers) == 0 {
+		return m.dispatch(msg)
+	}
+	r := m.console.ret
+	parked := r.layers
+	r.layers = nil // a close while handling finds them live already
+	m = m.restoreLayersBeneath(parked)
+	nm, cmd := m.dispatch(msg)
+	out, ok := nm.(Model)
+	if !ok || out.console == nil || out.console.ret != r || out.layers == nil {
+		return nm, cmd // the console went: its views are live now
+	}
+	was := make(map[layer]bool, len(parked))
+	for _, l := range parked {
+		was[l] = true
+	}
+	var keep, live []layer
+	for _, l := range out.layers.entries {
+		if was[l] {
+			keep = append(keep, l)
+		} else {
+			live = append(live, l)
+		}
+	}
+	r.layers = keep
+	out.layers.entries = live
+	return out, cmd
+}
+
+// consoleFull reports a console shown over a full-screen return point.
+func (m Model) consoleFull() bool {
+	return m.console != nil && m.console.ret != nil && m.console.ret.full
+}
+
+// restoreLayersBeneath puts a parked stack back UNDER whatever is live now
+// (a popup opened over the console stays on top).
+func (m Model) restoreLayersBeneath(parked []layer) Model {
+	if len(parked) == 0 {
+		return m
+	}
+	if m.layers == nil {
+		m.layers = &layerStack{}
+	}
+	m.layers.entries = append(append([]layer{}, parked...), m.layers.entries...)
+	return m
+}
+
+// detachConsole clears the console and its screen subscription. Every place
 // that sets m.console = nil goes through it, so a closed console never
 // leaves a subscriber behind on its session.
-func (m Model) dropConsole() Model {
+func (m Model) detachConsole() Model {
 	if m.console != nil && m.console.cancel != nil {
 		m.console.cancel()
 	}
@@ -118,10 +239,38 @@ func (m Model) dropConsole() Model {
 	return m
 }
 
-// closeConsole hides the console; the session keeps running.
+// dropConsole is a console stepping aside for another right-column owner
+// (stash list, file preview, a solo): the session keeps running and the
+// return point is dropped — except a parked view, which is never lost.
+func (m Model) dropConsole() Model {
+	if m.console != nil && m.console.ret != nil {
+		m = m.restoreLayersBeneath(m.console.ret.layers)
+	}
+	return m.detachConsole()
+}
+
+// closeConsole hides the console (the session keeps running) and puts back
+// the screen it was shown over. Focus returns only when it sat in the
+// console's column: a click elsewhere already moved it.
 func (m Model) closeConsole() Model {
-	m = m.dropConsole()
-	m.focus = m.lastLeftPanel
+	if m.console == nil {
+		return m
+	}
+	r := m.console.ret
+	m = m.detachConsole()
+	if r == nil {
+		m.focus = m.lastLeftPanel
+		return m.reconcileFullscreenFocus()
+	}
+	m = m.restoreLayersBeneath(r.layers)
+	m.fullMaxed, m.fullMax = r.fullMaxed, r.fullMax
+	m.stashView = r.stashView
+	if r.filesPreview != nil && r.filesView != nil && m.filesView == r.filesView {
+		m.filesPreview = r.filesPreview // only inside the files view it belongs to
+	}
+	if m.focus == panelCommits {
+		m.focus = r.focus
+	}
 	return m.reconcileFullscreenFocus()
 }
 
@@ -198,20 +347,27 @@ func (m Model) waitSessionsCmd() tea.Cmd {
 	}
 }
 
-// consoleTitle is the box title: label · worktree · state.
-func consoleTitle(info domain.SessionInfo, focused bool) string {
+// consoleTitle is the box title: label · worktree · state. full = shown
+// over a full-screen return point (its unfocused keys differ).
+func consoleTitle(info domain.SessionInfo, focused, full bool) string {
 	label, wt, state := consoleTitleParts(info)
 	t := label + " · " + wt + " · " + state
 	if !focused {
-		t += consoleTitleHints(info.State == domain.SessionExited)
+		t += consoleTitleHints(info.State == domain.SessionExited, full)
 	}
 	return t
 }
 
 // consoleTitleHints: an exited agent has nothing to type into, so its console
-// offers [x] close (remove the session) and esc only hides it.
-func consoleTitleHints(exited bool) string {
-	if exited {
+// offers [x] close (remove the session) and esc only hides it. A full-screen
+// one is already maximised and esc goes back to the view it covers.
+func consoleTitleHints(exited, full bool) string {
+	switch {
+	case exited && full:
+		return "  " + i18n.T("[x] close  [esc] back")
+	case full:
+		return "  " + i18n.T("[enter] type  [X] kill+remove  [esc] back")
+	case exited:
 		return "  " + i18n.T("[x] close  [ctrl+t] maximise  [esc] hide")
 	}
 	return "  " + i18n.T("[enter] type  [X] kill+remove  [ctrl+t] maximise  [esc] close")
@@ -232,8 +388,8 @@ func consoleTitleParts(info domain.SessionInfo) (label, wt, state string) {
 // consoleTitleFit is the title in w columns, keeping what it is for — the
 // label and the state with its activity: the key hints go first, then the
 // worktree name is cut in the middle, then dropped; only then is the end cut.
-func consoleTitleFit(info domain.SessionInfo, focused bool, w int) string {
-	if t := consoleTitle(info, focused); lipgloss.Width(t) <= w {
+func consoleTitleFit(info domain.SessionInfo, focused, full bool, w int) string {
+	if t := consoleTitle(info, focused, full); lipgloss.Width(t) <= w {
 		return t
 	}
 	label, wt, state := consoleTitleParts(info)
@@ -257,7 +413,7 @@ func (m Model) renderConsole(boxW, boxH int) string {
 		lines = []string{padRight(i18n.T("(agent session gone)"), innerW)}
 	} else {
 		info := sess.Info()
-		lines = append(lines, padRight(consoleTitleFit(info, m.console.focused, innerW), innerW))
+		lines = append(lines, padRight(consoleTitleFit(info, m.console.focused, m.consoleFull(), innerW), innerW))
 		var sc domain.SessionScreen
 		if m.console.focused && info.State == domain.SessionRunning {
 			sc = sess.ScreenWithCursor()
@@ -296,7 +452,7 @@ func (m Model) onSessionsChanged() (Model, tea.Cmd) {
 			// Nothing is left to type into: step out as ctrl+] would, so
 			// gg's keys work again without the user asking.
 			m.console.focused = false
-			if m.console.maximized {
+			if m.console.maximized && !m.consoleFull() {
 				m.console.maximized = false
 				m = m.syncConsoleSize()
 			}
@@ -306,15 +462,9 @@ func (m Model) onSessionsChanged() (Model, tea.Cmd) {
 	m.sessionStates = next
 	if m.console != nil {
 		if _, ok := next[m.console.id]; !ok {
-			// Its session was removed: give the Commits column back rather
-			// than dock a box with nothing in it. Focus moves only when the
-			// console held it.
-			if m.console.focused {
-				m = m.closeConsole()
-			} else {
-				m = m.dropConsole()
-				m = m.reconcileFullscreenFocus()
-			}
+			// Its session was removed: give the screen it covered back
+			// rather than show a box with nothing in it.
+			m = m.closeConsole()
 		}
 	}
 	// A session started, exited or went: the Worktrees claim marks (a claim
@@ -348,8 +498,9 @@ func sessionsByLastUsed(list []domain.SessionInfo, terminal bool) []domain.Sessi
 
 // cycleSessions is alt+a (agents) / alt+t (terminals): show this
 // repository's most recently used session of that kind, unfocused; pressed
-// again while one of them is shown unfocused, the next one back in last-used
-// order (wrapping). enter then focuses it, which makes it the most recent.
+// again, the next one back in last-used order, then the screen the cycle
+// started from (the console's return point), then around again. enter
+// focuses the shown one, which makes it the most recent.
 func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 	list := sessionsByLastUsed(m.repoSessions(domain.Sessions().List()), terminal)
 	if len(list) == 0 {
@@ -360,14 +511,28 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// A view pushed over a shown console (the palette opened a diff from a
+	// full-screen agent) is a new starting screen: the console goes back
+	// first — its parked views slot in beneath — and the cycle starts over
+	// with the whole stack as its return point.
+	if m.console != nil && m.topLayer() != nil {
+		m = m.closeConsole()
+	}
+	// The ring is the sessions then the return point: from the shown session
+	// at i go to i+1, past the last one back to the screen the cycle came
+	// from. Anything else (no console, the other kind, an exited one)
+	// starts at the most recent.
 	next := 0
-	if m.console != nil && !m.console.focused {
+	if m.console != nil {
 		for i, info := range list {
 			if info.ID == m.console.id {
-				next = (i + 1) % len(list)
+				next = i + 1
 				break
 			}
 		}
+	}
+	if next == len(list) {
+		return m.closeConsole(), nil
 	}
 	info := list[next]
 	m, cmd := m.showConsole(info.ID, false)
@@ -452,6 +617,14 @@ var consolePassthrough = map[string]bool{
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
 
+// consoleFullPassthrough is what an unfocused FULL-SCREEN console lets
+// through: quitting, help, the shell escape and the cycle. It covers every
+// panel and the parked view, so focus moves would land on hidden panels and
+// an opener (F, S, c, p…) would open something behind it.
+var consoleFullPassthrough = map[string]bool{
+	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true,
+}
+
 // updateConsoleKey routes a key to/around the console per the state table
 // (spec). handled=false lets the key continue down gg's normal dispatch.
 func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
@@ -472,7 +645,11 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	// Focus left the console's column (a mouse click on another panel): the
-	// keyboard is gg's again.
+	// keyboard is gg's again. A full-screen console hides every panel, so
+	// the click cannot have meant one: focus snaps back.
+	if m.focus != panelCommits && m.consoleFull() {
+		m.focus = panelCommits
+	}
 	if m.console.focused && m.focus != panelCommits {
 		m.console.focused = false
 		if m.console.maximized {
@@ -484,9 +661,18 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if key == "x" && m.consoleExited() {
 			return m.removeConsoleSession(), nil, true
 		}
+		// alt+a / alt+t are gg's even here: the cycle starts from this
+		// agent and comes back to the screen it was shown over.
+		if key == "alt+a" || key == "alt+t" {
+			nm, cmd := m.cycleSessions(key == "alt+t")
+			return nm, cmd, true
+		}
 		if key == m.stepOutKey() {
 			m.console.focused = false
-			if m.console.maximized {
+			// Over a full-screen return point the console stays full-screen
+			// (a second press or esc goes back); a ctrl+t-maximised docked
+			// one docks again.
+			if m.console.maximized && !m.consoleFull() {
 				m.console.maximized = false
 				m = m.syncConsoleSize()
 			}
@@ -517,8 +703,8 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	// Unfocused: the console answers only while its column has focus — and a
 	// files view's focused tree (a commit's or a review's files, which keep
 	// focus on the Commits column) owns the keyboard, not the console.
-	if m.focus != panelCommits || (m.filesView != nil && m.filesTreeFocused) {
-		return m, nil, false
+	if !m.consoleFull() && (m.focus != panelCommits || (m.filesView != nil && m.filesTreeFocused)) {
+		return m, nil, false // a full-screen console covers the tree: its keys are the console's
 	}
 	switch key {
 	case "enter":
@@ -544,6 +730,9 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if m.consoleExited() {
 			return m.removeConsoleSession(), nil, true
 		}
+	}
+	if m.consoleFull() {
+		return m, nil, !consoleFullPassthrough[key]
 	}
 	if consolePassthrough[key] {
 		return m, nil, false

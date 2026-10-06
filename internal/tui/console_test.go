@@ -330,10 +330,9 @@ func TestFullscreenLeftPanelHidesDockedConsole(t *testing.T) {
 	}
 }
 
-// Opening a console while a left panel is fullscreen clears the pin: the user
-// asked to see the agent, and a pinned column would put the keyboard on a
-// hidden console and shrink its PTY to nothing.
-func TestOpenConsoleClearsFullscreenPin(t *testing.T) {
+// Opening a console while a panel is pinned fullscreen shows it maximised
+// (the pin is a full-screen return point) and closing it brings the pin back.
+func TestOpenConsoleOverPinShowsFullAndRestoresPin(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	s := startTestSession(t, m, `sleep 5`)
@@ -343,16 +342,17 @@ func TestOpenConsoleClearsFullscreenPin(t *testing.T) {
 		t.Fatal("baseline: Branches should be fullscreen")
 	}
 	m, _ = m.openConsole(s.Info().ID)
-	if m.fullMaxed || !m.console.focused || m.focus != panelCommits {
-		t.Fatalf("after open: fullMaxed=%v focused=%v focus=%v", m.fullMaxed, m.console.focused, m.focus)
+	if m.fullMaxed || !m.console.focused || !m.console.maximized || m.focus != panelCommits {
+		t.Fatalf("after open: fullMaxed=%v console=%+v focus=%v", m.fullMaxed, m.console, m.focus)
 	}
 	w, h := m.consoleBox()
-	if w != m.layout().rightW || h != m.layout().bodyH {
-		t.Fatalf("console box %dx%d, want the Commits column %dx%d", w, h, m.layout().rightW, m.layout().bodyH)
-	}
 	cols, rows := consoleInner(w, h)
 	if sc := s.Screen(); sc.Cols != cols || sc.Rows != rows {
-		t.Fatalf("emulator %dx%d, want %dx%d", sc.Cols, sc.Rows, cols, rows)
+		t.Fatalf("emulator %dx%d, want the body %dx%d", sc.Cols, sc.Rows, cols, rows)
+	}
+	m = m.closeConsole()
+	if !m.fullMaxActive() || m.fullMax != panelBranches || m.focus != panelBranches {
+		t.Fatalf("after close: pin=%v/%v focus=%v", m.fullMaxed, m.fullMax, m.focus)
 	}
 }
 
@@ -464,7 +464,7 @@ func TestExitedConsoleClosesOnX(t *testing.T) {
 	m.console.focused = false
 	m.focus = panelCommits
 	m, _ = m.onSessionsChanged() // seen running
-	if strings.Contains(m.footerLine(), "[x] close") || strings.Contains(consoleTitle(s.Info(), false), "[x] close") {
+	if strings.Contains(m.footerLine(), "[x] close") || strings.Contains(consoleTitle(s.Info(), false, false), "[x] close") {
 		t.Fatalf("a running console must not offer [x] close: %q", m.footerLine())
 	}
 	mm, _ := m.Update(keyMsg("x"))
@@ -485,7 +485,7 @@ func TestExitedConsoleClosesOnX(t *testing.T) {
 	if !strings.Contains(m.footerLine(), "[x] close") {
 		t.Fatalf("footer must advertise [x] close on an exited console: %q", m.footerLine())
 	}
-	if title := consoleTitle(s.Info(), false); !strings.Contains(title, "[x] close") || strings.Contains(title, "[enter] type") {
+	if title := consoleTitle(s.Info(), false, false); !strings.Contains(title, "[x] close") || strings.Contains(title, "[enter] type") {
 		t.Fatalf("exited title hints: %q", title)
 	}
 	mm, _ = m.Update(keyMsg("x"))
@@ -508,8 +508,8 @@ func TestUnfocusedRunningConsoleKillRemovesOnX(t *testing.T) {
 	m.console.focused = false
 	m.focus = panelCommits
 	m, _ = m.onSessionsChanged()
-	if !strings.Contains(m.footerLine(), "[X] kill+remove") || !strings.Contains(consoleTitle(s.Info(), false), "[X] kill+remove") {
-		t.Fatalf("a running unfocused console must offer [X] kill+remove: footer %q title %q", m.footerLine(), consoleTitle(s.Info(), false))
+	if !strings.Contains(m.footerLine(), "[X] kill+remove") || !strings.Contains(consoleTitle(s.Info(), false, false), "[X] kill+remove") {
+		t.Fatalf("a running unfocused console must offer [X] kill+remove: footer %q title %q", m.footerLine(), consoleTitle(s.Info(), false, false))
 	}
 	mm, _ := m.Update(keyMsg("X"))
 	m = mm.(Model)

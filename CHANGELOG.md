@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## alt+a / alt+t come back where they started
+
+### Changed
+
+- **The alt+a / alt+t cycle ends on the screen it started from.** It walks
+  this repository's agents (terminals) by last use, unfocused, and then
+  returns to the screen the cycle began on — then around again (it used to
+  wrap from the last session to the first).
+- **It works inside a focused agent.** gg keeps alt+a / alt+t there (the
+  agent no longer receives them); the way back is the screen the agent was
+  opened over.
+- **It works over a diff, history, blame or file view.** The sessions show
+  full-screen, unfocused, and the view comes back untouched (cursor, scroll,
+  folds). A ctrl+t-maximised panel is such a screen too — opening a session
+  over one no longer drops the maximise; the panel comes back on close.
+- **An unfocused full-screen agent:** enter (or ctrl+t) focuses it, esc
+  goes back; besides alt+a / alt+t only quit, `?` and ctrl+o reach gg —
+  the panels and the view are hidden, so nothing opens behind it. A view
+  under it keeps loading (a diff or history still arriving is complete
+  when you come back).
+  ctrl+] in a focused full-screen agent leaves it full-screen and
+  unfocused; a second ctrl+] or esc goes back.
+- **esc on an unfocused console** puts back what it covered — the stash
+  list, a file preview, a maximised panel, a parked view — instead of only
+  moving focus.
+
 ## Review answers — a review's remarks are threads (review links stage 2)
 
 ### Added
