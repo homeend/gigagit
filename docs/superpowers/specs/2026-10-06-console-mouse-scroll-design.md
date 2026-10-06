@@ -211,6 +211,16 @@ come from a user's mouse/keys in that console).
   Junie, mc in Open terminal — wheel, drag-copy, keyboard copy, paste the
   clipboard elsewhere.
 
+### Deviations recorded during the plan and execution
+
+- No e2e golden screen: the e2e harness cannot start sessions or send mouse
+  events; scroll mode is checked by `View()`-level unit tests instead.
+- "new output" compares `LastOutput()` with the snapshot time — a line count
+  stops growing once the 10k scrollback is full.
+- Selection = reverse video, cursor row = underline, set on the cells (the
+  rows are the child's own ANSI, so lipgloss/theme styles cannot be layered).
+- A copy of one line says "Copied 1 line" (its own key, per the plural rule).
+
 ### 7. Stages
 
 1. **Pass-through + OSC 52** (§1 rows 1 and 3, §3) — fullscreen Claude and mc

@@ -4448,6 +4448,46 @@ drops bytes >= 0x80 inside OSC/DCS/APC/PM/SOS payloads. Found with
 belong in charmbracelet/x/ansi — drop the filter once a released x/vt parses
 UTF-8 payloads correctly (the fixture test tells).
 
+### Agent console: mouse pass-through, scroll mode, copy (2026-10-07)
+
+Spec `docs/superpowers/specs/2026-10-06-console-mouse-scroll-design.md`.
+Probe: Claude Code with `"tui": "fullscreen"` runs in the alt screen with
+mouse tracking `?1000/1002/1003/1006h` (so x/vt has NO scrollback for it) and
+copies its own drag-selection with OSC 52 — which x/vt ignores.
+
+- **`agentsession`:** `Input()` = mouse tracking (bitmask fed by x/vt's
+  `EnableMode`/`DisableMode` callbacks over modes 9/1000/1001/1002/1003) +
+  `IsAltScreen` + emulator size; `SendMouse` (x/vt encodes per the child's
+  mode, no-op without tracking; touches LastUsed, not LastInput).
+  `oscFilter` buffers OSC 52 (`clipCap` 1 MiB base64; over-cap → `Clip.Over`;
+  `?` read requests ignored) → `Session.Clipboard()` with a `Seq`.
+  `History()`: scrollback lines are cloned by x/vt on push and never mutated,
+  so the snapshot clones only the header slice (`slices.Clone(sb.Lines())` —
+  NOT the live slice: eviction `slices.Delete`s it in place) + clones the
+  screen rows; rows render lazily with `RowMarks` (reverse = selection,
+  underline = cursor — cell-level because rows are the child's ANSI).
+  `Text` skips wide right halves (zero cells), trims trailing blanks, joins
+  rows with `\n` (no soft-wrap flag in x/vt).
+- **TUI router** (`console_mouse.go`, first thing in `handleMouse`, ahead of
+  its press-only gate): owner check = no modal/proc/menu/layer; box geometry
+  `consoleRect` (maximised = (0,1) full body; else `pos[panelCommits]`),
+  content = box + (2, 2). Tracking child → forwarded, clamped to the
+  EMULATOR size (the PTY can differ from the box), `console.held` keeps a
+  drag's release flowing when the pointer leaves the box. Alt screen without
+  tracking → 3 × ↑/↓ per notch. Otherwise → scroll mode. A left press
+  focuses (`focusConsoleByClick`); the wheel never does.
+- **Scroll mode** (`console_scroll.go`): `consoleState.scroll` holds the
+  History, `top`, `cursor`, `lineSel`, `charSel`. Keys only while
+  `consoleOwnsKeys()`; esc clears a selection first, then leaves; esc/q never
+  reach the agent; any other key leaves and continues through
+  `updateConsoleKey`. `syncConsoleSize` drops the snapshot when the PTY size
+  really changes. "new output" = `LastOutput()` after `History.Taken()`
+  (a line count stops growing at the 10k cap). Clicks: `consoleClicks`
+  (400 ms, same cell) — a double/triple click copies on the PRESS.
+- **OSC 52 → clipboard:** `consumeConsoleClip` on every `consoleChangedMsg`;
+  `clipSeq` is seeded at show time so a copy made before the console showed
+  is never replayed.
+
 ### Worktree terminal + GG_INBOX (AI tasks plan 1, 2026-09-25)
 
 - **Open terminal** (Worktrees `.`): `domain.StartTerminal` runs the shell as

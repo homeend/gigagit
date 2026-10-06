@@ -10,6 +10,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+- **Scroll back through what an agent printed.** Over a console whose
+  program does not take the mouse — Claude Code's normal mode, Junie, a
+  shell — the wheel (or `alt+PgUp`, or `PgUp` on an unfocused console) opens
+  scroll mode: a frozen view of the whole history (up to 10,000 lines) while
+  the program keeps running; the title shows the position and "new output"
+  once more has arrived. `↑`/`↓`, `PgUp`/`PgDn`, `g`/`G` move a cursor row;
+  `space`…`space` then `enter` copies whole lines; a drag copies text (a
+  double-click a word, a triple-click a line), scrolling when it passes the
+  edge. `esc` or `q` leaves and never reaches the agent; any other key leaves
+  and goes to the agent; scrolling past the bottom leaves too.
 - **Wheel, clicks and drags go to a console program that asks for the
   mouse.** Claude Code in its fullscreen mode scrolls its transcript with the
   wheel and selects text with a drag; `mc` and other mouse-aware programs in
