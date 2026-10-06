@@ -69,6 +69,12 @@ there (TUI, gg web, `gg review show`):
 `review:latest:<n>` names a remark of the newest review. The review's author
 reads your answers back with `gg review show`.
 
+Findings the review MISSED are not answers: leave each as an ordinary note on
+the change it reviewed — `gg note add --rev <tip> --file <path> --new-line N
+--summary "…"` for a one-commit review, `--preview <base>..<tip>` for a range
+review (`gg review show` prints both ends in its header). They show beside the
+review, on the commit's Notes rows. Say in your report how many you added.
+
 ## Choosing the target
 
 A note anchors to ONE base and ONE result. The flags pick which:

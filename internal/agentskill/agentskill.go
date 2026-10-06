@@ -26,7 +26,7 @@ const Version = 140
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
-const ReviewVersion = 12
+const ReviewVersion = 13
 
 // DelegateVersion is the counter for the delegate skill.
 const DelegateVersion = 3
