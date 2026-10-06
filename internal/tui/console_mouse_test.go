@@ -194,3 +194,23 @@ func TestConsoleAltScreenWheelIsNotInput(t *testing.T) {
 		t.Fatalf("LastInput moved %v → %v", in, s.LastInput())
 	}
 }
+
+// A press elsewhere while a forwarded button is still held means its
+// release was lost (let go outside the terminal): the child gets the
+// release, and the press is the panel's, not the console's.
+func TestConsoleLostReleaseEndsForwardedDrag(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, sgrEcho)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "READY")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonLeft, tea.MouseActionPress)
+	waitScreen(t, s, hexOf("\x1b[<0;2;2M"))
+	p := m.layout().pos[panelBranches]
+	m = mouseAt(m, p.x+2, p.y+2, tea.MouseButtonLeft, tea.MouseActionPress)
+	waitScreen(t, s, hexOf("\x1b[<0;1;1m")) // where it was pressed, clamped to the content
+	if m.console.held != tea.MouseButtonNone || m.focus != panelBranches {
+		t.Fatalf("held=%v focus=%v", m.console.held, m.focus)
+	}
+}

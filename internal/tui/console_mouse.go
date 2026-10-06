@@ -70,6 +70,14 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 	cx, cy, inBox, inContent := m.consoleCell(msg.X, msg.Y)
 	held := m.console.held != tea.MouseButtonNone || m.console.press != nil ||
 		(m.console.scroll != nil && m.console.scroll.drag.active)
+	if held && msg.Action == tea.MouseActionPress && !isWheel(msg.Button) {
+		// A press while a button is still held: its release was lost (let
+		// go outside the terminal). End what it held, then route the press
+		// as a new one — outside the box it is the panels'.
+		m, lost := m.endHeldMouse(cx, cy)
+		nm, cmd, ok := m.consoleMouse(msg)
+		return nm, tea.Batch(lost, cmd), ok
+	}
 	if !inBox && !held {
 		return m, nil, false
 	}
@@ -112,6 +120,22 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 	}
 	m.console.held = tea.MouseButtonNone
 	return m.consoleScrollMouse(msg, cx, cy, inContent)
+}
+
+// endHeldMouse ends a press whose release never came: the child gets the
+// release of the button it was given (at content cell (cx, cy), clamped),
+// a pending live-view press is dropped, and a scroll-mode drag ends where it
+// got to — copied, as its release would have.
+func (m Model) endHeldMouse(cx, cy int) (Model, tea.Cmd) {
+	if b := m.console.held; b != tea.MouseButtonNone {
+		if sess, ok := m.consoleSession(); ok {
+			in := sess.Input()
+			sess.SendMouse(uv.MouseReleaseEvent{X: clampInt(cx, 0, in.Cols-1), Y: clampInt(cy, 0, in.Rows-1), Button: teaToUVButton[b]})
+		}
+		m.console.held = tea.MouseButtonNone
+	}
+	m.console.press = nil
+	return m, m.finishDrag()
 }
 
 func isWheel(b tea.MouseButton) bool {

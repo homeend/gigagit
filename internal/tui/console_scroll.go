@@ -279,14 +279,24 @@ func (m Model) consoleScrollMouse(msg tea.MouseMsg, cx, cy int, inContent bool) 
 			return m, nil, true
 		}
 		m = m.extendDrag(cx, cy, rows)
-		sc.drag.active = false
-		if sc.drag.r0 == sc.drag.r1 && sc.drag.c0 == sc.drag.c1 {
-			sc.drag = charSel{} // a plain click: nothing selected, nothing copied
-			return m, nil, true
-		}
-		return m, m.copyDrag(), true
+		return m, m.finishDrag(), true
 	}
 	return m, nil, true
+}
+
+// finishDrag ends a held drag where it got to: a selection is copied, a
+// drag that never left its cell is a plain click and selects nothing.
+func (m Model) finishDrag() tea.Cmd {
+	sc := m.console.scroll
+	if sc == nil || !sc.drag.active {
+		return nil
+	}
+	sc.drag.active = false
+	if sc.drag.r0 == sc.drag.r1 && sc.drag.c0 == sc.drag.c1 {
+		sc.drag = charSel{}
+		return nil
+	}
+	return m.copyDrag()
 }
 
 // startPendingDrag turns a live-view press into a drag once the pointer has

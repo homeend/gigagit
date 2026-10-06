@@ -410,3 +410,45 @@ func TestScrollKeepsMouseAfterProgramTakesIt(t *testing.T) {
 		}
 	}
 }
+
+// A press elsewhere during a drag whose release was lost ends the drag where
+// it got to — copied — and goes to the panel it landed on.
+func TestScrollLostReleaseEndsDrag(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, `printf 'alpha beta\r\ngamma delta'; while :; do sleep 5; done`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "delta")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+6, y0, tea.MouseButtonLeft, tea.MouseActionPress)
+	m = mouseAt(m, x0+4, y0+1, tea.MouseButtonLeft, tea.MouseActionMotion)
+	p := m.layout().pos[panelBranches]
+	nm, cmd := m.Update(tea.MouseMsg{X: p.x + 2, Y: p.y + 2, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	m = nm.(Model)
+	runCmdMsgs(cmd)
+	if copied != "beta\ngamma" {
+		t.Fatalf("copied %q", copied)
+	}
+	if m.console.scroll == nil || m.console.scroll.drag.active || m.focus != panelBranches {
+		t.Fatalf("scroll=%+v focus=%v", m.console.scroll, m.focus)
+	}
+}
+
+// A plain press at the live view whose release was lost leaves nothing
+// behind: the next press elsewhere is the panel's.
+func TestConsoleLostReleaseOfPlainPress(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	s := startTestSession(t, m, fortyLines)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "TAIL")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonLeft, tea.MouseActionPress)
+	p := m.layout().pos[panelBranches]
+	m = mouseAt(m, p.x+2, p.y+2, tea.MouseButtonLeft, tea.MouseActionPress)
+	if m.console.press != nil || m.console.scroll != nil || m.focus != panelBranches {
+		t.Fatalf("press=%v scroll=%v focus=%v", m.console.press, m.console.scroll != nil, m.focus)
+	}
+}

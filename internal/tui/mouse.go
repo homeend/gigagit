@@ -92,8 +92,13 @@ func rightClickMenuLayer(l layer) bool {
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// The agent console takes press, motion and release over its box (and a
 	// drag it forwarded, wherever it goes) ahead of the press-only gate.
-	if nm, cmd, ok := m.consoleMouse(msg); ok {
-		return nm, cmd
+	nm, lost, ok := m.consoleMouse(msg)
+	if ok {
+		return nm, lost
+	}
+	if lost != nil { // the console ended a drag whose release was lost; the press is the panels'
+		next, cmd := nm.handleMouse(msg)
+		return next, tea.Batch(lost, cmd)
 	}
 	if msg.Action != tea.MouseActionPress {
 		return m, nil
