@@ -65,10 +65,6 @@ func openWeeklyLog(path string, keep int, now func() time.Time) (*WeeklyLog, err
 	return l, nil
 }
 
-func openAppend(path string) (*os.File, error) {
-	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-}
-
 // Write appends p, rolling the file over first when the week has turned.
 func (l *WeeklyLog) Write(p []byte) (int, error) {
 	l.mu.Lock()

@@ -17,9 +17,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   starts a fresh file. A TUI left running over the weekend rolls over too.
   The newest 4 archived weeks are kept, older ones are deleted. Several gg
   processes (TUIs, `gg web`) may write one log: only one of them rotates it,
-  and an archive is never overwritten. On Windows, where a file another gg
-  still holds open cannot be renamed, the log keeps appending and retries
-  hourly. The Session-errors viewer (TUI and web) says so beside the path.
+  and an archive is never overwritten. On Windows the logs are opened with
+  delete sharing, so a rollover works while another gg holds the file; should
+  a rename still fail, the log keeps appending and retries an hour later. The
+  Session-errors viewer (TUI and web) says so beside the path.
 
 ## alt+A unlocks a stuck "⏳ reloading…" and writes a state dump
 
