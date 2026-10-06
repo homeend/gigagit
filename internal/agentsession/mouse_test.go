@@ -70,3 +70,20 @@ func TestSendMouseIsInertWithoutTracking(t *testing.T) {
 	s.SendText("z")
 	waitText(t, s, "7aEND") // only the z arrived: the click produced no bytes
 }
+
+func TestSessionClipboardFromChild(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	s, err := start("c1", StartSpec{Dir: t.TempDir(), Cols: 40, Rows: 5, Argv: []string{"sh", "-c",
+		`printf '\033]52;c;Y29waWVk\007DONE'; sleep 5`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.cmd.Process.Kill() })
+	waitText(t, s, "DONE")
+	if c := s.Clipboard(); c.Text != "copied" || c.Seq != 1 || c.Over {
+		t.Fatalf("clip = %+v", c)
+	}
+}

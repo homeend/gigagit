@@ -48,6 +48,7 @@ type Session struct {
 	osc     oscFilter                // pumpOut-only: keeps UTF-8 in OSC payloads away from x/ansi's C1 parsing
 	sigMu   sync.Mutex
 	sig     Signals // the title/progress osc recorded; under sigMu
+	clip    Clip    // the last OSC 52 write; under sigMu
 	job     uintptr // Windows job object handle; 0 elsewhere
 }
 
@@ -204,6 +205,12 @@ func (s *Session) pumpOut() {
 				}
 				s.sigMu.Unlock()
 			}
+			if s.osc.clipChanged {
+				s.osc.clipChanged = false
+				s.sigMu.Lock()
+				s.clip = Clip{Text: s.osc.clip, Seq: s.osc.clipSeq, Over: s.osc.clipOver}
+				s.sigMu.Unlock()
+			}
 			s.feedTaps(buf[:n])
 			s.signal()
 		}
@@ -349,6 +356,13 @@ func (s *Session) Signals() Signals {
 	s.sigMu.Lock()
 	defer s.sigMu.Unlock()
 	return s.sig
+}
+
+// Clipboard is the child's last OSC 52 clipboard write.
+func (s *Session) Clipboard() Clip {
+	s.sigMu.Lock()
+	defer s.sigMu.Unlock()
+	return s.clip
 }
 
 // LastInput is when anyone last typed into the child (SendKey, SendText,
