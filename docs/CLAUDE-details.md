@@ -4458,9 +4458,13 @@ copies its own drag-selection with OSC 52 — which x/vt ignores.
 - **`agentsession`:** `Input()` = mouse tracking (bitmask fed by x/vt's
   `EnableMode`/`DisableMode` callbacks over modes 9/1000/1001/1002/1003) +
   `IsAltScreen` + emulator size; `SendMouse` (x/vt encodes per the child's
-  mode, no-op without tracking; touches LastUsed, not LastInput).
+  mode, no-op without tracking) and `ScrollKey` (the alt-screen wheel's
+  ↑/↓) touch neither LastUsed nor LastInput — a hover wheel must not reorder
+  alt+a or look like typing to `agent_wait`/the report store. RIS (`reset`)
+  needs nothing: x/vt's fullReset re-applies every mode through setMode, so
+  `DisableMode` fires (pinned by `TestResetClearsInputModes`).
   `oscFilter` buffers OSC 52 (`clipCap` 1 MiB base64; over-cap → `Clip.Over`;
-  `?` read requests ignored) → `Session.Clipboard()` with a `Seq`.
+  `?` read requests and empty writes ignored) → `Session.Clipboard()` with a `Seq`.
   `History()`: scrollback lines are cloned by x/vt on push and never mutated,
   so the snapshot clones only the header slice (`slices.Clone(sb.Lines())` —
   NOT the live slice: eviction `slices.Delete`s it in place) + clones the
@@ -4474,19 +4478,31 @@ copies its own drag-selection with OSC 52 — which x/vt ignores.
   content = box + (2, 2). Tracking child → forwarded, clamped to the
   EMULATOR size (the PTY can differ from the box), `console.held` keeps a
   drag's release flowing when the pointer leaves the box. Alt screen without
-  tracking → 3 × ↑/↓ per notch. Otherwise → scroll mode. A left press
-  focuses (`focusConsoleByClick`); the wheel never does.
+  tracking → 3 × ↑/↓ per notch. Otherwise → scroll mode. Scroll mode is
+  checked FIRST: once on, it keeps the mouse even after the program takes
+  the mouse or the alt screen (user ruling 2026-10-07). A left press
+  focuses (`focusConsoleByClick`); the wheel never does. A non-wheel press
+  while something is held = a lost release: `endHeldMouse` sends the child
+  the held button's release, drops a pending press, `finishDrag`s (copies)
+  a scroll drag, then routes the press anew (outside the box `handleMouse`
+  re-runs with the copy batched).
 - **Scroll mode** (`console_scroll.go`): `consoleState.scroll` holds the
   History, `top`, `cursor`, `lineSel`, `charSel`. Keys only while
   `consoleOwnsKeys()`; esc clears a selection first, then leaves; esc/q never
   reach the agent; any other key leaves and continues through
   `updateConsoleKey`. `syncConsoleSize` drops the snapshot when the PTY size
   really changes. "new output" = `LastOutput()` after `History.Taken()`
-  (a line count stops growing at the 10k cap). Clicks: `consoleClicks`
+  (cheap gate) AND `History.Outgrown(s.Extent())`: Extent = scrollback +
+  rows to the screen's last non-blank one, plus which screen — a spinner's
+  redraw in place leaves it; at the 10k cap only the screen part grows.
+  Rows are cut to the box with `ansi.Truncate` (`fitConsoleRow`, live and
+  scroll): an unfocused console keeps a PTY size that can be wider. Clicks: `consoleClicks`
   (400 ms, same cell) — a double/triple click copies on the PRESS.
 - **OSC 52 → clipboard:** `consumeConsoleClip` on every `consoleChangedMsg`;
   `clipSeq` is seeded at show time so a copy made before the console showed
-  is never replayed.
+  is never replayed; only a FOCUSED console copies (user ruling 2026-10-07)
+  — unfocused, the write is spent (`clipSeq` advances), never copied on
+  focus. Line count trims one trailing `\n`.
 
 ### Worktree terminal + GG_INBOX (AI tasks plan 1, 2026-09-25)
 
