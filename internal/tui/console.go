@@ -455,8 +455,9 @@ func (m Model) renderConsole(boxW, boxH int) string {
 
 // consumeConsoleClip copies the child's newest OSC 52 write (a fullscreen
 // agent's own selection) through the TUI's one clipboard writer. Only the
-// shown console's session is read: a copy needs the user's mouse or keys in
-// that console.
+// shown console's session is read, and only while it has focus: a copy needs
+// the user's mouse or keys in that console (a click focuses it). A write
+// made while unfocused is spent, never copied later.
 func (m Model) consumeConsoleClip() (Model, tea.Cmd) {
 	s, ok := m.consoleSession()
 	if !ok {
@@ -467,6 +468,9 @@ func (m Model) consumeConsoleClip() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.console.clipSeq = c.Seq
+	if !m.console.focused {
+		return m, nil
+	}
 	if c.Over {
 		m.statusMsg = i18n.T("copy too large — dropped")
 		return m, nil

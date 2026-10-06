@@ -148,3 +148,32 @@ func TestConsoleOSC52CountsLinesWithoutTheTrailingNewline(t *testing.T) {
 		t.Fatalf("status %q, want 2 lines", msg.ok)
 	}
 }
+
+// A console shown unfocused (alt+a) does not copy: the user did nothing in
+// it. The write is spent, not copied later when the console gains focus.
+func TestConsoleOSC52OnlyWhileFocused(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, `read _; printf '\033]52;c;b2xk\007OLD'; read _; printf '\033]52;c;bmV3\007NEW'; sleep 5`)
+	m, _ = m.showConsole(s.Info().ID, false)
+	s.SendText("\r")
+	waitScreen(t, s, "OLD")
+	m, cmd := m.consumeConsoleClip()
+	if cmd != nil {
+		t.Fatal("an unfocused console copied")
+	}
+	m.console.focused = true
+	if m, cmd = m.consumeConsoleClip(); cmd != nil {
+		t.Fatal("the write made while unfocused was copied on focus")
+	}
+	s.SendText("\r")
+	waitScreen(t, s, "NEW")
+	if _, cmd = m.consumeConsoleClip(); cmd == nil {
+		t.Fatal("a focused console's write was not copied")
+	}
+	if cmd(); copied != "new" {
+		t.Fatalf("copied %q", copied)
+	}
+}
