@@ -56,6 +56,16 @@ func (s *Session) SendKey(k Key) {
 	s.withEmu(func() { s.emu.SendKey(k) })
 }
 
+// ScrollKey is a wheel notch sent as a cursor key to an alt-screen program
+// without mouse tracking (xterm's alternate scroll): encoded like SendKey,
+// but like SendMouse it is neither typed input (LastInput — agent_wait and
+// the report store read that as "the user typed") nor a use (LastUsed).
+func (s *Session) ScrollKey(k Key) {
+	if s.running() {
+		s.withEmu(func() { s.emu.SendKey(k) })
+	}
+}
+
 // SendText sends literal text (no paste bracketing).
 func (s *Session) SendText(text string) {
 	if s.running() {

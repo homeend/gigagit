@@ -55,8 +55,9 @@ func (m Model) focusConsoleByClick() Model {
 	return m.syncConsoleSize() // gaining focus takes the size back
 }
 
-// consoleMouse routes a mouse event over the console by the child's live
-// modes (spec §1): a program that tracks the mouse gets it — a drag it
+// consoleMouse routes a mouse event over the console: scroll mode's frozen
+// view first, else by the child's live modes (spec §1): a program that
+// tracks the mouse gets it — a drag it
 // started keeps going wherever the pointer goes, so its release always
 // arrives — and an alt-screen program without tracking gets ↑/↓ for the
 // wheel (xterm's alternate scroll). The wheel never moves focus; a left
@@ -69,6 +70,14 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 	cx, cy, inBox, inContent := m.consoleCell(msg.X, msg.Y)
 	held := m.console.held != tea.MouseButtonNone || m.console.press != nil ||
 		(m.console.scroll != nil && m.console.scroll.drag.active)
+	if msg.Action == tea.MouseActionPress && m.pressedAgain(msg.Button) {
+		// The held button pressed again: its release was lost (let go
+		// outside the terminal). End what it held, then route the press as
+		// a new one — outside the box it is the panels'.
+		m, lost := m.endHeldMouse()
+		nm, cmd, ok := m.consoleMouse(msg)
+		return nm, tea.Batch(lost, cmd), ok
+	}
 	if !inBox && !held {
 		return m, nil, false
 	}
@@ -82,15 +91,16 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 		m = m.focusConsoleByClick()
 	}
 	switch {
-	case m.console.scroll != nil && running && (modes.Mouse || modes.AltScreen) && msg.Action == tea.MouseActionPress:
-		// The program took the mouse (or the alt screen) since scroll mode
-		// began: leave it and route by the new mode.
-		return m.leaveConsoleScroll().consoleMouse(msg)
+	case m.console.scroll != nil:
+		// Scroll mode keeps the mouse until it is left, even when the program
+		// took the mouse or the alt screen since: the frozen view is what the
+		// user is looking at (user ruling 2026-10-07).
 	case running && modes.Mouse:
 		if !inContent && !held && msg.Action == tea.MouseActionPress {
 			return m, nil, true // a press on the border or title only focuses
 		}
-		if ev, ok := consoleMouseEvent(msg, clampInt(cx, 0, modes.Cols-1), clampInt(cy, 0, modes.Rows-1)); ok {
+		x, y := clampInt(cx, 0, modes.Cols-1), clampInt(cy, 0, modes.Rows-1)
+		if ev, ok := consoleMouseEvent(msg, x, y); ok {
 			sess.SendMouse(ev)
 		}
 		switch {
@@ -99,18 +109,48 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 		case msg.Action == tea.MouseActionPress && !isWheel(msg.Button):
 			m.console.held = msg.Button
 		}
+		if msg.Action != tea.MouseActionRelease && !isWheel(msg.Button) {
+			m.console.heldAt = [2]int{x, y} // where a lost release is sent
+		}
 		return m, nil, true
 	case running && modes.AltScreen:
 		m.console.held = tea.MouseButtonNone
 		if k, ok := wheelArrow(msg.Button); ok && msg.Action == tea.MouseActionPress {
 			for range 3 {
-				sess.SendKey(k)
+				sess.ScrollKey(k)
 			}
 		}
 		return m, nil, true
 	}
 	m.console.held = tea.MouseButtonNone
 	return m.consoleScrollMouse(msg, cx, cy, inContent)
+}
+
+// pressedAgain: b is the button the console holds, pressed again — so its
+// release never arrived. Another button is a chord and changes nothing; a
+// live-view press and a scroll drag are the left button's.
+func (m Model) pressedAgain(b tea.MouseButton) bool {
+	if m.console.held != tea.MouseButtonNone {
+		return b == m.console.held
+	}
+	return b == tea.MouseButtonLeft &&
+		(m.console.press != nil || (m.console.scroll != nil && m.console.scroll.drag.active))
+}
+
+// endHeldMouse ends a press whose release never came: the child gets the
+// release of the button it was given where the drag last was (a selecting
+// program ends its selection there), a pending live-view press is dropped,
+// and a scroll-mode drag ends where it got to — copied, as its release
+// would have.
+func (m Model) endHeldMouse() (Model, tea.Cmd) {
+	if b := m.console.held; b != tea.MouseButtonNone {
+		if sess, ok := m.consoleSession(); ok {
+			sess.SendMouse(uv.MouseReleaseEvent{X: m.console.heldAt[0], Y: m.console.heldAt[1], Button: teaToUVButton[b]})
+		}
+		m.console.held = tea.MouseButtonNone
+	}
+	m.console.press = nil
+	return m, m.finishDrag()
 }
 
 func isWheel(b tea.MouseButton) bool {

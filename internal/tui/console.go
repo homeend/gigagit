@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -34,6 +35,7 @@ type consoleState struct {
 	press     *consolePress   // a left press at the live view not yet a drag (a plain click stays live)
 	scroll    *consoleScroll  // scroll mode's frozen view; nil = live
 	held      tea.MouseButton // a button forwarded to the child and not yet released (MouseButtonNone = none)
+	heldAt    [2]int          // the emulator cell of the last press or motion forwarded
 }
 
 // consoleReturn is the screen a console was shown over: where esc, the
@@ -410,6 +412,16 @@ func consoleTitleFit(info domain.SessionInfo, focused, full bool, w int) string 
 	return truncate(label+" · "+state, w)
 }
 
+// fitConsoleRow cuts an emulator row of cols cells to the box's w columns:
+// an unfocused console keeps its PTY size, which can be wider than the box
+// (a wide glyph across the edge is dropped; styles stay balanced).
+func fitConsoleRow(row string, cols, w int) string {
+	if cols <= w {
+		return row
+	}
+	return ansi.Truncate(row, w, "")
+}
+
 // renderConsole draws the console box. The emulator lines are ANSI strings
 // sized to the inner width; Render drops trailing blanks, so each is padded.
 func (m Model) renderConsole(boxW, boxH int) string {
@@ -425,7 +437,7 @@ func (m Model) renderConsole(boxW, boxH int) string {
 		if sc := m.console.scroll; sc != nil {
 			lines = append(lines, padRight(truncate(m.consoleScrollTitle(sess), innerW), innerW))
 			for i := sc.top; i < sc.hist.Len() && len(lines) < contentH; i++ {
-				lines = append(lines, padRight(sc.hist.Row(i, m.consoleRowMarks(i)), innerW))
+				lines = append(lines, padRight(fitConsoleRow(sc.hist.Row(i, m.consoleRowMarks(i)), sc.hist.Width(), innerW), innerW))
 			}
 		} else {
 			lines = append(lines, padRight(consoleTitleFit(info, m.console.focused, m.consoleFull(), innerW), innerW))
@@ -439,7 +451,7 @@ func (m Model) renderConsole(boxW, boxH int) string {
 				if len(lines) >= contentH {
 					break
 				}
-				lines = append(lines, padRight(l, innerW))
+				lines = append(lines, padRight(fitConsoleRow(l, sc.Cols, innerW), innerW))
 			}
 		}
 	}
@@ -455,8 +467,9 @@ func (m Model) renderConsole(boxW, boxH int) string {
 
 // consumeConsoleClip copies the child's newest OSC 52 write (a fullscreen
 // agent's own selection) through the TUI's one clipboard writer. Only the
-// shown console's session is read: a copy needs the user's mouse or keys in
-// that console.
+// shown console's session is read, and only while it has focus: a copy needs
+// the user's mouse or keys in that console (a click focuses it). A write
+// made while unfocused is spent, never copied later.
 func (m Model) consumeConsoleClip() (Model, tea.Cmd) {
 	s, ok := m.consoleSession()
 	if !ok {
@@ -467,11 +480,14 @@ func (m Model) consumeConsoleClip() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.console.clipSeq = c.Seq
+	if !m.console.focused {
+		return m, nil
+	}
 	if c.Over {
 		m.statusMsg = i18n.T("copy too large — dropped")
 		return m, nil
 	}
-	return m, m.copyToClipboardCmd(copiedLines(strings.Count(c.Text, "\n")+1), c.Text)
+	return m, m.copyToClipboardCmd(copiedLines(strings.Count(strings.TrimSuffix(c.Text, "\n"), "\n")+1), c.Text)
 }
 
 // copiedLines is the status line of a console copy of n lines.
@@ -581,6 +597,10 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 	}
 	info := list[next]
 	m, cmd := m.showConsole(info.ID, false)
+	// The user asked to see it: it takes its box's size although unfocused,
+	// or a PTY left wider (from a maximised spell, another viewer) cuts its
+	// lines — x/vt does not reflow.
+	m = m.syncConsoleSize()
 	m.statusMsg = i18n.T("%s in %s — %d of %d by last use  [enter] focus", info.Label, shortWorktreeName(info.Dir), next+1, len(list))
 	return m, cmd
 }

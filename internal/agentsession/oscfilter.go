@@ -191,8 +191,9 @@ func (f *oscFilter) commit() {
 }
 
 // commitClip stores an OSC 52 write: "<selection>;<base64>". A read request
-// ("?") and undecodable data are ignored; an over-cap payload is recorded as
-// dropped so the frontend can say so.
+// ("?"), an empty write (xterm's "clear the selection": it must not empty the
+// user's clipboard) and undecodable data are ignored; an over-cap payload is
+// recorded as dropped so the frontend can say so.
 func (f *oscFilter) commitClip() {
 	if f.clipLong {
 		f.clip, f.clipOver = "", true
@@ -201,7 +202,7 @@ func (f *oscFilter) commitClip() {
 		return
 	}
 	_, data, ok := strings.Cut(string(f.clipBuf), ";")
-	if !ok || data == "?" {
+	if !ok || data == "?" || data == "" {
 		return
 	}
 	dec, err := base64.StdEncoding.DecodeString(data)

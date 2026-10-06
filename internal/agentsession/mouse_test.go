@@ -108,3 +108,54 @@ func TestSendMouseDoesNotTouch(t *testing.T) {
 		t.Fatalf("LastUsed moved %v → %v", before, after)
 	}
 }
+
+// A reset (RIS, ESC c — what `reset` prints) turns tracking off, leaves the
+// alt screen and shows the cursor. x/vt's fullReset re-applies every mode
+// through setMode, so the mode callbacks fire; this pins that (its reset
+// carries an "investigate" note). One printf each: the order inside one
+// read matters.
+func TestResetClearsInputModes(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	s, err := start("m4", StartSpec{Dir: t.TempDir(), Cols: 40, Rows: 5, Argv: []string{"sh", "-c",
+		`printf '\033[?1049h\033[?1000h\033[?25lA\033cB\n'; sleep 0.3; printf '\033c\033[?1002hC\n'; sleep 5`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.kill(); <-s.Done() })
+	waitText(t, s, "B")
+	if m := s.Input(); m.Mouse || m.AltScreen {
+		t.Fatalf("after a reset: %+v", m)
+	}
+	if !s.Screen().CursorVisible {
+		t.Fatal("the cursor stays hidden after a reset")
+	}
+	waitText(t, s, "C")
+	if m := s.Input(); !m.Mouse {
+		t.Fatalf("tracking turned on after a reset is lost: %+v", m)
+	}
+}
+
+// ScrollKey is the wheel as a cursor key (xterm's alternate scroll): it
+// reaches the child, but it is neither typed input nor a use.
+func TestScrollKeyIsNotInput(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	s, err := start("m5", StartSpec{Dir: t.TempDir(), Cols: 40, Rows: 5, Argv: []string{"sh", "-c",
+		`stty raw -echo; printf '\033[?1049hREADY'; head -c 3 | od -An -tx1 | tr -d ' \n'; printf 'END'; sleep 5`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.kill(); <-s.Done() })
+	waitText(t, s, "READY")
+	used, in := s.Info().LastUsed, s.LastInput()
+	s.ScrollKey(uv.KeyPressEvent{Code: uv.KeyUp})
+	waitText(t, s, "1b5b41END")
+	if !s.Info().LastUsed.Equal(used) || !s.LastInput().Equal(in) {
+		t.Fatalf("LastUsed %v → %v, LastInput %v → %v", used, s.Info().LastUsed, in, s.LastInput())
+	}
+}

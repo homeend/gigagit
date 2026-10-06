@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent console mouse: follow-up fixes
+
+### Changed
+
+- **Scroll mode keeps the mouse until you leave it.** When the program in a
+  scrolled console switches to fullscreen or turns on mouse tracking, the
+  wheel still scrolls the frozen view and a drag still copies from it;
+  the program gets the mouse once you leave scroll mode. Before, the next
+  click or wheel left scroll mode and the view jumped to the live screen.
+- **A program's clipboard write is copied only while its console has
+  focus.** A console shown unfocused with `alt+a` no longer copies whatever
+  its agent writes. A click into a fullscreen agent focuses the console
+  first, so its own selections still copy.
+
+### Fixed
+
+- "new output" in the scroll-mode title lit up on every redraw, so a spinner
+  kept it on while an agent worked; it now means lines the frozen view does
+  not have.
+- The wheel's `↑`/`↓` for a full-screen program without mouse support
+  counted as typing to the agent, which affected `agent_wait` and when
+  reports showed.
+- When a mouse release got lost (button let go outside the terminal), the
+  console kept the button held and took the next click anywhere. That click
+  now ends the drag (a scroll-mode selection is copied) and goes where it
+  landed.
+- A console showing a program wider than its box (an unfocused console
+  keeps the size it had, e.g. from being maximised) pushed the right border
+  and the whole screen out of line. Rows are now cut to the box.
+- A console shown with `alt+a` kept whatever size its program last had
+  (for example from being maximised), so its lines were cut at the box edge.
+  It now takes its box's size when shown. Lines printed before the resize
+  are not rewrapped (the emulator does not reflow), but everything the
+  program prints after it fits.
+- An empty clipboard write from a program put an empty string on the
+  clipboard with "Copied 1 line"; it is now ignored. A copy ending in a
+  newline no longer counts one line too many.
+
 ## The mouse reaches programs in an agent console
 
 ### Added

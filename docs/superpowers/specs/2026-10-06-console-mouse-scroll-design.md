@@ -187,8 +187,10 @@ come from a user's mouse/keys in that console).
 - Clipboard failure → existing copy-failure notice; OSC 52 over cap →
   `copy too large — dropped`.
 - A mode switch while scrolling (the program enters the alt screen or turns
-  tracking on) leaves scroll mode on the next wheel/press, which then routes
-  by the new mode.
+  tracking on) does not end scroll mode: the frozen view keeps the mouse
+  (wheel, drag, double/triple click) until the user leaves it; only then does
+  the program get the mouse (user ruling 2026-10-07; the first build left
+  scroll mode on the next press).
 - A console replaced (alt+a cycle, repo switch, close) drops its scroll
   state with it.
 - Events while a popup/menu is above the console are not routed.

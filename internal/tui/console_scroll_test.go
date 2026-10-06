@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 const fortyLines = `i=0; while [ $i -lt 40 ]; do echo "row-$i"; i=$((i+1)); done; printf 'TAIL'; while :; do sleep 5; done`
@@ -365,5 +366,139 @@ func TestScrollClickKeepsFrozenView(t *testing.T) {
 	m = keys(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if w, h := m.consoleBox(); func() bool { c, r := consoleInner(w, h); i := s.Input(); return i.Cols != c || i.Rows != r }() {
 		t.Fatal("leaving scroll mode did not take the size back")
+	}
+}
+
+// Scroll mode keeps the mouse after the program took it (user ruling
+// 2026-10-07): the frozen view is what the user is looking at, so the wheel
+// scrolls it and a drag copies from it until scroll mode is left; the
+// program gets nothing meanwhile.
+func TestScrollKeepsMouseAfterProgramTakesIt(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, `i=0; while [ $i -lt 40 ]; do echo "row-$i"; i=$((i+1)); done; printf 'TAIL'; read _; stty raw -echo; printf '\033[?1049h\033[?1000h\033[?1006hALT'; while :; do head -c 1 | od -An -tx1 | tr -d ' \n'; done`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "TAIL")
+	x0, y0 := contentOrigin(m)
+	for range 3 {
+		m = mouseAt(m, x0+1, y0+1, tea.MouseButtonWheelUp, tea.MouseActionPress)
+	}
+	if m.console.scroll == nil {
+		t.Fatal("the wheel did not enter scroll mode")
+	}
+	s.SendText("\r")
+	waitScreen(t, s, "ALT")
+	top := m.console.scroll.top
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonWheelUp, tea.MouseActionPress)
+	if m.console.scroll == nil || m.console.scroll.top >= top {
+		t.Fatalf("the wheel left or did not scroll the frozen view: %+v", m.console.scroll)
+	}
+	m = mouseAt(m, x0, y0+1, tea.MouseButtonLeft, tea.MouseActionPress)
+	m = mouseAt(m, x0+3, y0+2, tea.MouseButtonLeft, tea.MouseActionMotion)
+	nm, cmd := m.Update(tea.MouseMsg{X: x0 + 3, Y: y0 + 2, Button: tea.MouseButtonLeft, Action: tea.MouseActionRelease})
+	m = nm.(Model)
+	runCmdMsgs(cmd)
+	if m.console.scroll == nil || !strings.HasPrefix(copied, "row-") {
+		t.Fatalf("scroll=%v copied=%q", m.console.scroll != nil, copied)
+	}
+	s.SendText("z")
+	waitScreen(t, s, "7a")
+	for _, l := range s.Screen().Lines {
+		if strings.Contains(l, hexOf("\x1b[<")) {
+			t.Fatalf("the program got the mouse: %q", l)
+		}
+	}
+}
+
+// A press elsewhere during a drag whose release was lost ends the drag where
+// it got to — copied — and goes to the panel it landed on.
+func TestScrollLostReleaseEndsDrag(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, `printf 'alpha beta\r\ngamma delta'; while :; do sleep 5; done`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "delta")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+6, y0, tea.MouseButtonLeft, tea.MouseActionPress)
+	m = mouseAt(m, x0+4, y0+1, tea.MouseButtonLeft, tea.MouseActionMotion)
+	p := m.layout().pos[panelBranches]
+	nm, cmd := m.Update(tea.MouseMsg{X: p.x + 2, Y: p.y + 2, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	m = nm.(Model)
+	runCmdMsgs(cmd)
+	if copied != "beta\ngamma" {
+		t.Fatalf("copied %q", copied)
+	}
+	if m.console.scroll == nil || m.console.scroll.drag.active || m.focus != panelBranches {
+		t.Fatalf("scroll=%+v focus=%v", m.console.scroll, m.focus)
+	}
+}
+
+// A plain press at the live view whose release was lost leaves nothing
+// behind: the next press elsewhere is the panel's.
+func TestConsoleLostReleaseOfPlainPress(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	s := startTestSession(t, m, fortyLines)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "TAIL")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonLeft, tea.MouseActionPress)
+	p := m.layout().pos[panelBranches]
+	m = mouseAt(m, p.x+2, p.y+2, tea.MouseButtonLeft, tea.MouseActionPress)
+	if m.console.press != nil || m.console.scroll != nil || m.focus != panelBranches {
+		t.Fatalf("press=%v scroll=%v focus=%v", m.console.press, m.console.scroll != nil, m.focus)
+	}
+}
+
+// An unfocused console keeps the PTY size it had (here wider than the box):
+// its rows must still fit the box — a long live line, and in scroll mode the
+// underlined cursor row and a full-row selection, which draw every cell.
+func TestConsoleRowsFitABoxNarrowerThanThePTY(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	s := startTestSession(t, m, `i=0; while [ $i -lt 40 ]; do echo "row-$i"; i=$((i+1)); done; printf '%s' "$(printf 'x%.0s' $(seq 1 79))Z"; while :; do sleep 5; done`)
+	m, _ = m.showConsole(s.Info().ID, false)
+	waitScreen(t, s, "Z")
+	bw, _ := m.consoleBox()
+	if in, cols := s.Input(), max(bw-4, 1); in.Cols <= cols {
+		t.Fatalf("PTY %d cols, box %d: the test needs a wider PTY", in.Cols, cols)
+	}
+	fits := func(what string) {
+		t.Helper()
+		for i, l := range strings.Split(m.View(), "\n") {
+			if w := lipgloss.Width(l); w > m.width {
+				t.Fatalf("%s: view line %d is %d wide (screen %d)", what, i, w, m.width)
+			}
+		}
+	}
+	fits("live")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonWheelUp, tea.MouseActionPress)
+	m = keys(m, tea.KeyMsg{Type: tea.KeySpace}, tea.KeyMsg{Type: tea.KeyUp})
+	fits("scroll mode")
+}
+
+// "new output" means lines the frozen view lacks, not any redraw: a spinner
+// rewriting its row in place leaves it off.
+func TestScrollTitleIgnoresRedrawInPlace(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	s := startTestSession(t, m, `stty -echo; i=0; while [ $i -lt 40 ]; do echo "row-$i"; i=$((i+1)); done; printf 'spin-0'; read _; printf '\rspin-1'; read _; printf '\nLATER'; sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "spin-0")
+	m = keys(m, altPgUp)
+	s.SendText("\r")
+	waitScreen(t, s, "spin-1")
+	if out := m.View(); strings.Contains(out, "new output") {
+		t.Fatal("a redraw in place is flagged as new output")
+	}
+	s.SendText("\r")
+	waitScreen(t, s, "LATER")
+	if out := m.View(); !strings.Contains(out, "new output") {
+		t.Fatal("a new line is not flagged")
 	}
 }

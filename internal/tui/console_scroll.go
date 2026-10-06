@@ -156,11 +156,12 @@ func (m Model) consoleScrollKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 }
 
 // consoleScrollTitle is the title row while scrolling: the position, a
-// flag once the program has printed since the snapshot, and the keys.
+// flag once the program has printed rows the snapshot lacks (not a redraw in
+// place: a spinner would light it all the time), and the keys.
 func (m Model) consoleScrollTitle(s *domain.AgentSession) string {
 	sc := m.console.scroll
 	t := i18n.T("scroll ↑ %s / %s", fmt.Sprint(sc.top+1), fmt.Sprint(sc.hist.Len()))
-	if s.LastOutput().After(sc.hist.Taken()) {
+	if s.LastOutput().After(sc.hist.Taken()) && sc.hist.Outgrown(s.Extent()) { // the cheap check first: Extent scans the screen
 		t += " · " + i18n.T("new output")
 	}
 	return t + "  " + i18n.T("[esc] leave  [spc] select  [enter] copy")
@@ -279,14 +280,24 @@ func (m Model) consoleScrollMouse(msg tea.MouseMsg, cx, cy int, inContent bool) 
 			return m, nil, true
 		}
 		m = m.extendDrag(cx, cy, rows)
-		sc.drag.active = false
-		if sc.drag.r0 == sc.drag.r1 && sc.drag.c0 == sc.drag.c1 {
-			sc.drag = charSel{} // a plain click: nothing selected, nothing copied
-			return m, nil, true
-		}
-		return m, m.copyDrag(), true
+		return m, m.finishDrag(), true
 	}
 	return m, nil, true
+}
+
+// finishDrag ends a held drag where it got to: a selection is copied, a
+// drag that never left its cell is a plain click and selects nothing.
+func (m Model) finishDrag() tea.Cmd {
+	sc := m.console.scroll
+	if sc == nil || !sc.drag.active {
+		return nil
+	}
+	sc.drag.active = false
+	if sc.drag.r0 == sc.drag.r1 && sc.drag.c0 == sc.drag.c1 {
+		sc.drag = charSel{}
+		return nil
+	}
+	return m.copyDrag()
 }
 
 // startPendingDrag turns a live-view press into a drag once the pointer has

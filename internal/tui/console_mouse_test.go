@@ -130,3 +130,105 @@ func TestConsoleOSC52GoesToClipboard(t *testing.T) {
 		t.Fatal("the same write was copied twice")
 	}
 }
+
+// A copy ending in a newline (a whole line selected) is still two lines.
+func TestConsoleOSC52CountsLinesWithoutTheTrailingNewline(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m.clipWrite = func(io.Writer, string) (string, error) { return "fake", nil }
+	s := startTestSession(t, m, `read _; printf '\033]52;c;b25lCnR3bwo=\007NEW'; sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	s.SendText("\r")
+	waitScreen(t, s, "NEW")
+	_, cmd := m.consumeConsoleClip()
+	if cmd == nil {
+		t.Fatal("no copy command")
+	}
+	if msg := cmd().(clipboardCopiedMsg); !strings.Contains(msg.ok, "2 lines") {
+		t.Fatalf("status %q, want 2 lines", msg.ok)
+	}
+}
+
+// A console shown unfocused (alt+a) does not copy: the user did nothing in
+// it. The write is spent, not copied later when the console gains focus.
+func TestConsoleOSC52OnlyWhileFocused(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, `read _; printf '\033]52;c;b2xk\007OLD'; read _; printf '\033]52;c;bmV3\007NEW'; sleep 5`)
+	m, _ = m.showConsole(s.Info().ID, false)
+	s.SendText("\r")
+	waitScreen(t, s, "OLD")
+	m, cmd := m.consumeConsoleClip()
+	if cmd != nil {
+		t.Fatal("an unfocused console copied")
+	}
+	m.console.focused = true
+	if m, cmd = m.consumeConsoleClip(); cmd != nil {
+		t.Fatal("the write made while unfocused was copied on focus")
+	}
+	s.SendText("\r")
+	waitScreen(t, s, "NEW")
+	if _, cmd = m.consumeConsoleClip(); cmd == nil {
+		t.Fatal("a focused console's write was not copied")
+	}
+	if cmd(); copied != "new" {
+		t.Fatalf("copied %q", copied)
+	}
+}
+
+// The alt-screen wheel's arrows are not typed input: agent_wait and the
+// report store read LastInput as "the user typed to the agent".
+func TestConsoleAltScreenWheelIsNotInput(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `stty raw -echo; printf '\033[?1049hREADY'; while :; do head -c 1 | od -An -tx1 | tr -d ' \n'; done`)
+	m, _ = m.showConsole(s.Info().ID, false)
+	waitScreen(t, s, "READY")
+	in := s.LastInput()
+	x0, y0 := contentOrigin(m)
+	_ = mouseAt(m, x0, y0, tea.MouseButtonWheelDown, tea.MouseActionPress)
+	waitScreen(t, s, strings.Repeat(hexOf("\x1b[B"), 3))
+	if !s.LastInput().Equal(in) {
+		t.Fatalf("LastInput moved %v → %v", in, s.LastInput())
+	}
+}
+
+// A press elsewhere while a forwarded button is still held means its
+// release was lost (let go outside the terminal): the child gets the
+// release, and the press is the panel's, not the console's.
+func TestConsoleLostReleaseEndsForwardedDrag(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, sgrEcho)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "READY")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonLeft, tea.MouseActionPress)
+	m = mouseAt(m, x0+3, y0+2, tea.MouseButtonLeft, tea.MouseActionMotion)
+	waitScreen(t, s, hexOf("\x1b[<32;4;3M"))
+	p := m.layout().pos[panelBranches]
+	m = mouseAt(m, p.x+2, p.y+2, tea.MouseButtonLeft, tea.MouseActionPress)
+	waitScreen(t, s, hexOf("\x1b[<0;4;3m")) // where the drag got to: a selecting program ends its selection there
+	if m.console.held != tea.MouseButtonNone || m.focus != panelBranches {
+		t.Fatalf("held=%v focus=%v", m.console.held, m.focus)
+	}
+}
+
+// Another button pressed while one is held is a chord, not a lost release:
+// the held button stays down for the child.
+func TestConsoleChordIsNotALostRelease(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, sgrEcho)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "READY")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonLeft, tea.MouseActionPress)
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonRight, tea.MouseActionPress)
+	waitScreen(t, s, hexOf("\x1b[<0;2;2M\x1b[<2;2;2M"))
+	if m.console.held == tea.MouseButtonNone {
+		t.Fatal("the chord dropped the held button")
+	}
+}

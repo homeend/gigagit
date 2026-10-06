@@ -496,3 +496,21 @@ func TestOrphanPreviewIsNotRestored(t *testing.T) {
 		t.Fatal("a preview without its files view came back")
 	}
 }
+
+// A console alt+a shows takes its box's size, focused or not: what is shown
+// is what the program lays out for (a PTY left at another size cuts its
+// lines or leaves the box half empty).
+func TestAltAShownConsoleTakesItsBoxSize(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m = pressAlt(t, m, 'a')
+	if m.console == nil || m.console.focused {
+		t.Fatalf("console = %+v", m.console)
+	}
+	w, h := m.consoleBox()
+	cols, rows := consoleInner(w, h)
+	if in := s.Input(); in.Cols != max(cols, 20) || in.Rows != max(rows, 5) {
+		t.Fatalf("PTY %dx%d, box content %dx%d", in.Cols, in.Rows, cols, rows)
+	}
+}

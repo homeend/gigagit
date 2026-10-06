@@ -1,6 +1,7 @@
 package agentsession
 
 import (
+	"fmt"
 	"regexp"
 	"runtime"
 	"testing"
@@ -150,5 +151,61 @@ func TestHistoryRowSelectionOverReversedCells(t *testing.T) {
 	row := s.History().Row(0, RowMarks{SelFrom: 0, SelTo: 4})
 	if !regexp.MustCompile(`\x1b\[(?:[0-9]*;)*7(?:;[0-9]*)*mABCD`).MatchString(row) {
 		t.Fatalf("selection not reversed throughout: %q", row)
+	}
+}
+
+// Outgrown: the program printed rows the snapshot lacks (a new line, or a
+// switch of screen) — a redraw in place is not.
+func TestHistoryOutgrown(t *testing.T) {
+	t.Parallel()
+	s := startSh(t, `stty -echo; echo a; printf 'spin-0'; read _; printf '\rspin-1'; read _; printf '\nB'; read _; printf '\033[?1049hALT'; sleep 5`)
+	waitText(t, s, "spin-0")
+	h := s.History()
+	if h.Outgrown(s.Extent()) {
+		t.Fatal("outgrown at once")
+	}
+	s.SendText("\r")
+	waitText(t, s, "spin-1")
+	if h.Outgrown(s.Extent()) {
+		t.Fatal("a redraw in place outgrew the snapshot")
+	}
+	s.SendText("\r")
+	waitText(t, s, "B")
+	if !h.Outgrown(s.Extent()) {
+		t.Fatal("a new line did not")
+	}
+	h = s.History()
+	s.SendText("\r")
+	waitText(t, s, "ALT")
+	if !h.Outgrown(s.Extent()) {
+		t.Fatal("a switch to the alt screen did not")
+	}
+}
+
+// A clear that wipes the scrollback (ED3, `clear`) and prints anew is new
+// output though the output now reaches less far than the snapshot.
+func TestHistoryOutgrownAfterClear(t *testing.T) {
+	t.Parallel()
+	s := startSh(t, `stty -echo; i=0; while [ $i -lt 30 ]; do echo "row-$i"; i=$((i+1)); done; printf 'MARK'; read _; printf '\033[2J\033[3J\033[Hfresh'; sleep 5`)
+	waitText(t, s, "MARK")
+	h := s.History()
+	s.SendText("\r")
+	waitText(t, s, "fresh")
+	if !h.Outgrown(s.Extent()) {
+		t.Fatal("output after a clear is not new")
+	}
+}
+
+// With the scrollback full a new line pushes the oldest out: lengths stay
+// put, so any output counts as new.
+func TestHistoryOutgrownAtTheScrollbackCap(t *testing.T) {
+	t.Parallel()
+	s := startSh(t, fmt.Sprintf(`stty -echo; seq 1 %d; printf 'MARK'; read _; printf '\nmore'; sleep 5`, ScrollbackLines+50))
+	waitText(t, s, "MARK")
+	h := s.History()
+	s.SendText("\r")
+	waitText(t, s, "more")
+	if !h.Outgrown(s.Extent()) {
+		t.Fatal("a new line at the cap is not new")
 	}
 }

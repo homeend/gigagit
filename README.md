@@ -1517,7 +1517,10 @@ shell): the wheel, `alt+PgUp`, or `PgUp` on an unfocused console freezes a
 view of the program's whole history while it keeps running. `↑`/`↓`
 `PgUp`/`PgDn` `g`/`G` move, `space`…`space` `enter` copies lines, a drag
 copies text (double-click a word, triple-click a line), `esc`/`q` leave (never
-sent to the agent), and any other key leaves and goes to the agent.
+sent to the agent), and any other key leaves and goes to the agent. Scroll
+mode keeps the mouse until you leave it, even if the program meanwhile turns
+on mouse tracking. A program's clipboard writes are copied only while its
+console has focus.
 
 A running or exited session shows as a sub-row under its worktree
 (`└ ● Claude  running 12m` / `└ ○ Codex  exited (0)`); `enter` on it (or its

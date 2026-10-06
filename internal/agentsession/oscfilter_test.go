@@ -241,6 +241,7 @@ func TestOSCFilterIgnoresClipboardReadsAndJunk(t *testing.T) {
 	f.filter([]byte("\x1b]52;c;?\x07"))   // a read request: never answered, never stored
 	f.filter([]byte("\x1b]52;c;!!!\x07")) // not base64
 	f.filter([]byte("\x1b]52;c\x07"))     // no data field
+	f.filter([]byte("\x1b]52;c;\x07"))    // empty: xterm's "clear the selection" — never empties the user's clipboard
 	if f.clipChanged || f.clipSeq != 0 {
 		t.Fatalf("stored something: seq=%d clip=%q", f.clipSeq, f.clip)
 	}
