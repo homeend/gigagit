@@ -30,6 +30,7 @@ type consoleState struct {
 	cancel    func()          // drops it; every path that clears m.console goes through detachConsole
 	ret       *consoleReturn  // the screen to go back to (never nil on a shown console)
 	clipSeq   int             // the child's last OSC 52 write this console has taken (consumeConsoleClip)
+	scroll    *consoleScroll  // scroll mode's frozen view; nil = live
 	held      tea.MouseButton // a button forwarded to the child and not yet released (MouseButtonNone = none)
 }
 
@@ -305,6 +306,9 @@ func (m Model) syncConsoleSize() Model {
 	}
 	w, h := m.consoleBox()
 	cols, rows := consoleInner(w, h)
+	if in := s.Input(); m.console.scroll != nil && (in.Cols != max(cols, 20) || in.Rows != max(rows, 5)) {
+		m.console.scroll = nil // the snapshot is the old size
+	}
 	_ = s.Resize(cols, rows)
 	return m
 }
@@ -416,18 +420,25 @@ func (m Model) renderConsole(boxW, boxH int) string {
 		lines = []string{padRight(i18n.T("(agent session gone)"), innerW)}
 	} else {
 		info := sess.Info()
-		lines = append(lines, padRight(consoleTitleFit(info, m.console.focused, m.consoleFull(), innerW), innerW))
-		var sc domain.SessionScreen
-		if m.console.focused && info.State == domain.SessionRunning {
-			sc = sess.ScreenWithCursor()
-		} else {
-			sc = sess.Screen()
-		}
-		for _, l := range sc.Lines {
-			if len(lines) >= contentH {
-				break
+		if sc := m.console.scroll; sc != nil {
+			lines = append(lines, padRight(truncate(m.consoleScrollTitle(sess), innerW), innerW))
+			for i := sc.top; i < sc.hist.Len() && len(lines) < contentH; i++ {
+				lines = append(lines, padRight(sc.hist.Row(i, m.consoleRowMarks(i)), innerW))
 			}
-			lines = append(lines, padRight(l, innerW))
+		} else {
+			lines = append(lines, padRight(consoleTitleFit(info, m.console.focused, m.consoleFull(), innerW), innerW))
+			var sc domain.SessionScreen
+			if m.console.focused && info.State == domain.SessionRunning {
+				sc = sess.ScreenWithCursor()
+			} else {
+				sc = sess.Screen()
+			}
+			for _, l := range sc.Lines {
+				if len(lines) >= contentH {
+					break
+				}
+				lines = append(lines, padRight(l, innerW))
+			}
 		}
 	}
 	for len(lines) < contentH {
@@ -688,6 +699,19 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.console.maximized = false
 			m = m.syncConsoleSize()
 		}
+	}
+	if m.console.scroll != nil && m.consoleOwnsKeys() {
+		var cmd tea.Cmd
+		var done bool
+		if m, cmd, done = m.consoleScrollKey(msg); done {
+			return m, cmd, true
+		}
+	}
+	if m.console.scroll == nil && m.console.focused && key == "alt+pgup" {
+		return m.enterConsoleScroll(), nil, true
+	}
+	if m.console.scroll == nil && !m.console.focused && m.consoleOwnsKeys() && key == "pgup" {
+		return m.enterConsoleScroll(), nil, true
 	}
 	if m.console.focused {
 		if key == "x" && m.consoleExited() {

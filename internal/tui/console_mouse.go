@@ -78,6 +78,10 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 		m = m.focusConsoleByClick()
 	}
 	switch {
+	case m.console.scroll != nil && running && (modes.Mouse || modes.AltScreen) && msg.Action == tea.MouseActionPress:
+		// The program took the mouse (or the alt screen) since scroll mode
+		// began: leave it and route by the new mode.
+		return m.leaveConsoleScroll().consoleMouse(msg)
 	case running && modes.Mouse:
 		if !inContent && !held && msg.Action == tea.MouseActionPress {
 			return m, nil, true // a press on the border or title only focuses
@@ -102,7 +106,7 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 	m.console.held = tea.MouseButtonNone
-	return m, nil, true
+	return m.consoleScrollMouse(msg, cx, cy, inContent)
 }
 
 func isWheel(b tea.MouseButton) bool {

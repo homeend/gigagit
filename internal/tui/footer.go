@@ -262,6 +262,9 @@ func (m Model) footerOverride() (string, bool) {
 	// A focused agent console gets every key but the two reserved ones; an
 	// unfocused one answers only its own three while its column has focus.
 	if m.console != nil && m.topLayer() == nil && m.actionMenu == nil {
+		if m.console.scroll != nil && m.consoleOwnsKeys() {
+			return i18n.T("agent console scroll: [↑/↓] move  [pgup/pgdn] page  [g/G] top/bottom  [spc] select  [enter] copy  [drag] copy  [esc/q] leave"), true
+		}
 		if m.console.focused {
 			return i18n.T("agent console: every key goes to the agent, the mouse too when it asks  [%s] step out  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
 		}
