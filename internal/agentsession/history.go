@@ -20,14 +20,13 @@ type History struct {
 	extent Extent
 }
 
-// Extent is how far the program's output reaches: the rows up to the screen's
-// last non-blank one, scrollback included, and which screen it is on. A
-// redraw in place (a spinner) leaves it as it was; a new line or a switch of
-// screen does not. At the scrollback cap a new line pushes one out, so only
-// the screen part can still grow.
+// Extent is where the program's output stands: the scrollback length, the
+// screen rows up to the last non-blank one, which screen it is on, and
+// whether the scrollback is at its cap. A redraw in place (a spinner) leaves
+// it as it was; a new line, a clear or a switch of screen does not.
 type Extent struct {
-	Rows int
-	Alt  bool
+	Scrollback, Screen int
+	Alt, Full          bool
 }
 
 // Extent measures the output now.
@@ -41,13 +40,15 @@ func (s *Session) Extent() Extent {
 func (s *Session) extent() Extent {
 	e := Extent{Alt: s.emu.IsAltScreen()}
 	if !e.Alt {
-		e.Rows = s.emu.ScrollbackLen()
+		e.Scrollback = s.emu.ScrollbackLen()
+		e.Full = e.Scrollback >= ScrollbackLines
 	}
 	w := s.emu.Width()
 	for y := s.emu.Height() - 1; y >= 0; y-- {
 		for x := range w {
 			if c := s.emu.CellAt(x, y); c != nil && c.Content != "" && c.Content != " " {
-				return Extent{Rows: e.Rows + y + 1, Alt: e.Alt}
+				e.Screen = y + 1
+				return e
 			}
 		}
 	}
@@ -80,9 +81,12 @@ func (s *Session) History() History {
 }
 
 // Outgrown reports whether the output now (now = Session.Extent) has rows
-// this snapshot lacks: it reaches further, or it is on the other screen.
+// this snapshot lacks: the scrollback changed (grew, or a clear wiped it),
+// the screen's output reaches further, or it is on the other screen. With
+// the scrollback full a new line pushes one out and no length moves, so
+// there it is always true: the caller's LastOutput check decides alone.
 func (h History) Outgrown(now Extent) bool {
-	return now.Alt != h.extent.Alt || now.Rows > h.extent.Rows
+	return now.Full || now.Alt != h.extent.Alt || now.Scrollback != h.extent.Scrollback || now.Screen > h.extent.Screen
 }
 
 // Len is the number of rows: scrollback then screen.

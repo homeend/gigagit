@@ -4485,16 +4485,21 @@ copies its own drag-selection with OSC 52 — which x/vt ignores.
   while something is held = a lost release: `endHeldMouse` sends the child
   the held button's release, drops a pending press, `finishDrag`s (copies)
   a scroll drag, then routes the press anew (outside the box `handleMouse`
-  re-runs with the copy batched).
+  re-runs with the copy batched). Only the HELD button pressed again counts
+  (another button is a chord); the release goes to `heldAt`, the last
+  forwarded cell, so a selecting program does not stretch its selection.
 - **Scroll mode** (`console_scroll.go`): `consoleState.scroll` holds the
   History, `top`, `cursor`, `lineSel`, `charSel`. Keys only while
   `consoleOwnsKeys()`; esc clears a selection first, then leaves; esc/q never
   reach the agent; any other key leaves and continues through
   `updateConsoleKey`. `syncConsoleSize` drops the snapshot when the PTY size
   really changes. "new output" = `LastOutput()` after `History.Taken()`
-  (cheap gate) AND `History.Outgrown(s.Extent())`: Extent = scrollback +
-  rows to the screen's last non-blank one, plus which screen — a spinner's
-  redraw in place leaves it; at the 10k cap only the screen part grows.
+  (cheap gate) AND `History.Outgrown(s.Extent())`: Extent = scrollback
+  length, rows to the screen's last non-blank one, which screen, and
+  scrollback-full. A changed scrollback length (growth, or ED3 wiping it),
+  a further-reaching screen, or a screen switch is new output; a spinner's
+  redraw in place is not. At the 10k cap no length moves, so there any
+  output lights it (the LastOutput gate alone).
   Rows are cut to the box with `ansi.Truncate` (`fitConsoleRow`, live and
   scroll): an unfocused console keeps a PTY size that can be wider —
   except one alt+a shows: `cycleSessions` syncs it to its box (the user asked
