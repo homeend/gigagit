@@ -1305,17 +1305,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return nm, tea.Batch(cmd, bcmd)
 		}
 		return m, bcmd
-	case historyListMsg:
-		if h := layerOf[*historyView](m); h != nil && h.listTag == msg.tag {
-			h.loading = false
-			h.err = msg.err
-			h.commits = msg.commits
-			h.sel = 0
-			if len(h.commits) > 0 {
-				return m, h.selectCmd(m)
-			}
-		}
-		return m, nil
+	case historyChunkMsg:
+		return m.onHistoryChunk(msg)
 	case historyDiffMsg:
 		if h := layerOf[*historyView](m); h != nil && h.diffTag == msg.tag {
 			h.diff = msg.view
@@ -2951,7 +2942,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ctx := navContext{path: f.Path, rev: ""}
 				h := newHistoryView(ctx)
 				m = m.pushLayer(h)
-				return m, m.loadHistoryListCmd(ctx, h.listTag)
+				return m, m.loadHistoryListCmd(h)
 			}
 		case "tab":
 			m = m.rememberLeftFocus()

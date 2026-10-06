@@ -1087,7 +1087,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		ctx := navContext{path: v.title, rev: v.rev}
 		hv := newHistoryView(ctx)
 		m = m.pushLayer(hv)
-		return m, m.loadHistoryListCmd(ctx, hv.listTag)
+		return m, m.loadHistoryListCmd(hv)
 	case "H":
 		// Hunk staging for the file being read — the cursor's file in a stack
 		// (diff_stack_hunks.go). The picker opens as a layer over this view.

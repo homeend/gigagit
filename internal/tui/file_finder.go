@@ -54,7 +54,7 @@ func (m Model) worktreeFileRows(path string, untracked bool) []actionRow {
 				ctx := navContext{path: path}
 				hv := newHistoryView(ctx)
 				m = m.pushLayer(hv)
-				return m, m.loadHistoryListCmd(ctx, hv.listTag)
+				return m, m.loadHistoryListCmd(hv)
 			},
 		}, actionRow{
 			id:    "ff-blame",

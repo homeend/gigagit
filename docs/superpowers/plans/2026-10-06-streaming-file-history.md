@@ -454,7 +454,7 @@ func (r *histRunner) walk(i int) []string {
 	return r.walks[i]
 }
 
-func histModel(r *histRunner) (Model, *historyView) {
+func fileHistModel(r *histRunner) (Model, *historyView) {
 	m := Model{width: 100, height: 30, svc: domain.New(&git.Repo{Runner: r})}
 	h := newHistoryView(navContext{path: "a.go"})
 	return m.pushLayer(h), h
@@ -478,7 +478,7 @@ func drainHistory(t *testing.T, m Model, cmd tea.Cmd) Model {
 func TestHistoryStreamFirstBatchBeforeDone(t *testing.T) {
 	t.Parallel()
 	r := newHistRunner(2, true)
-	m, h := histModel(r)
+	m, h := fileHistModel(r)
 	msg := m.loadHistoryListCmd(h)().(historyChunkMsg)
 	if msg.done {
 		t.Fatal("first batch must arrive while the walk still runs")
@@ -502,8 +502,9 @@ func TestHistoryStreamFirstBatchBeforeDone(t *testing.T) {
 	if h.streaming || h.more {
 		t.Fatalf("after done: streaming=%v more=%v", h.streaming, h.more)
 	}
-	if out := h.render(m, ""); strings.Contains(out, "loading…") {
-		t.Fatalf("header still says loading after the walk ended:\n%s", out)
+	// Only the header: the right pane still shows its diff placeholder.
+	if hdr := strings.SplitN(h.render(m, ""), "\n", 2)[0]; strings.Contains(hdr, "loading…") {
+		t.Fatalf("header still says loading after the walk ended: %q", hdr)
 	}
 }
 
@@ -511,7 +512,7 @@ func TestHistoryStreamFirstBatchBeforeDone(t *testing.T) {
 func TestHistoryEscCancelsWalk(t *testing.T) {
 	t.Parallel()
 	r := newHistRunner(1, true)
-	m, h := histModel(r)
+	m, h := fileHistModel(r)
 	msg := m.loadHistoryListCmd(h)().(historyChunkMsg)
 	m, _ = m.onHistoryChunk(msg)
 	m, _ = h.update(m, tea.KeyMsg{Type: tea.KeyEsc})
@@ -530,7 +531,7 @@ func TestHistoryEscCancelsWalk(t *testing.T) {
 func TestHistoryChunkForGoneViewCancels(t *testing.T) {
 	t.Parallel()
 	r := newHistRunner(1, true)
-	m, h := histModel(r)
+	m, h := fileHistModel(r)
 	msg := m.loadHistoryListCmd(h)().(historyChunkMsg)
 	m = m.clearLayers()
 	_, cmd := m.onHistoryChunk(msg)
@@ -547,7 +548,7 @@ func TestHistoryChunkForGoneViewCancels(t *testing.T) {
 // A superseded walk's chunks are dropped.
 func TestHistoryStaleGenDropped(t *testing.T) {
 	t.Parallel()
-	m, h := histModel(newHistRunner(0, false))
+	m, h := fileHistModel(newHistRunner(0, false))
 	h.gen = 2
 	m, cmd := m.onHistoryChunk(historyChunkMsg{view: h, gen: 1, commits: histFixture().commits, done: true})
 	if len(h.commits) != 0 || cmd != nil {
@@ -559,7 +560,7 @@ func TestHistoryStaleGenDropped(t *testing.T) {
 func TestHistoryStreamDrainsAll(t *testing.T) {
 	t.Parallel()
 	r := newHistRunner(45, false) // > historyBatchMax: several batches
-	m, h := histModel(r)
+	m, h := fileHistModel(r)
 	_ = drainHistory(t, m, m.loadHistoryListCmd(h))
 	if len(h.commits) != 45 || h.commits[0].Hash != "c000" || h.commits[44].Hash != "c044" {
 		t.Fatalf("drained %d commits, first=%v", len(h.commits), h.commits)
@@ -692,9 +693,13 @@ func (m Model) loadHistoryListCmd(h *historyView) tea.Cmd {
 	if !w.pin {
 		w.rev = h.start
 	}
-	out := make(chan historyChunkMsg)
-	go w.run(ctx, out)
-	return waitHistoryChunk(out)
+	// The walk starts when the cmd runs, not when it is built: a caller that
+	// builds the cmd and drops it starts no git.
+	return func() tea.Msg {
+		out := make(chan historyChunkMsg)
+		go w.run(ctx, out)
+		return <-out
+	}
 }
 
 // waitHistoryChunk delivers a walk's next message.
@@ -714,7 +719,7 @@ type historyWalk struct {
 
 // run streams the walk into out in batches. Every send selects on ctx, so a
 // walk whose view went away never blocks forever.
-func (w historyWalk) run(ctx context.Context, out chan<- historyChunkMsg) {
+func (w historyWalk) run(ctx context.Context, out chan historyChunkMsg) {
 	start := w.rev
 	if w.pin {
 		r := w.rev
@@ -960,7 +965,7 @@ git commit -m "feat(tui): stream file history — newest commits show while git 
 func TestHistoryLoadMorePinsStartAndSkipsShown(t *testing.T) {
 	t.Parallel()
 	r := newHistRunner(historyPage+5, false)
-	m, h := histModel(r)
+	m, h := fileHistModel(r)
 	m = drainHistory(t, m, m.loadHistoryListCmd(h))
 	if len(h.commits) != historyPage || !h.more {
 		t.Fatalf("first page: %d commits, more=%v", len(h.commits), h.more)
@@ -994,7 +999,7 @@ func TestHistoryLoadMorePinsStartAndSkipsShown(t *testing.T) {
 func TestHistoryShortPageOffersNoLoadMore(t *testing.T) {
 	t.Parallel()
 	r := newHistRunner(5, false)
-	m, h := histModel(r)
+	m, h := fileHistModel(r)
 	m = drainHistory(t, m, m.loadHistoryListCmd(h))
 	if h.more {
 		t.Fatal("5 < page: more must be false")

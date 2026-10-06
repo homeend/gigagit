@@ -184,7 +184,7 @@ func (p *filePathPopup) open(m Model, rel string) (Model, tea.Cmd) {
 	}
 	hv := newHistoryView(ctx)
 	m = m.pushLayer(hv)
-	return m, m.loadHistoryListCmd(ctx, hv.listTag)
+	return m, m.loadHistoryListCmd(hv)
 }
 
 // rerank rebuilds the suggestion list for query (the NORMALIZED input) and
