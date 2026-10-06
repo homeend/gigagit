@@ -471,7 +471,7 @@ func (m Model) consumeConsoleClip() (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("copy too large — dropped")
 		return m, nil
 	}
-	return m, m.copyToClipboardCmd(copiedLines(strings.Count(c.Text, "\n")+1), c.Text)
+	return m, m.copyToClipboardCmd(copiedLines(strings.Count(strings.TrimSuffix(c.Text, "\n"), "\n")+1), c.Text)
 }
 
 // copiedLines is the status line of a console copy of n lines.

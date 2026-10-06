@@ -130,3 +130,21 @@ func TestConsoleOSC52GoesToClipboard(t *testing.T) {
 		t.Fatal("the same write was copied twice")
 	}
 }
+
+// A copy ending in a newline (a whole line selected) is still two lines.
+func TestConsoleOSC52CountsLinesWithoutTheTrailingNewline(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m.clipWrite = func(io.Writer, string) (string, error) { return "fake", nil }
+	s := startTestSession(t, m, `read _; printf '\033]52;c;b25lCnR3bwo=\007NEW'; sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	s.SendText("\r")
+	waitScreen(t, s, "NEW")
+	_, cmd := m.consumeConsoleClip()
+	if cmd == nil {
+		t.Fatal("no copy command")
+	}
+	if msg := cmd().(clipboardCopiedMsg); !strings.Contains(msg.ok, "2 lines") {
+		t.Fatalf("status %q, want 2 lines", msg.ok)
+	}
+}
