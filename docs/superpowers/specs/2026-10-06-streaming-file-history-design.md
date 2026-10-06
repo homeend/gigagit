@@ -25,9 +25,12 @@ selected and its diff loads as soon as it arrives; the user can browse, open
 the full diff (`enter`), use its `.` menu (Copy to working dir, …), blame,
 open in the editor — all while older commits are still being found.
 
+Plus (user request, 2026-10-06): **load more** — when a walk stops at its
+200-commit page, the user can fetch the next 200 older commits.
+
 Out of scope: the web `/api/filelog` and the CLI (unchanged, still use the
-buffered `FileLog`); a "load more past 200" action; any new restore action
-(Copy to working dir from the diff's `.` menu already exists).
+buffered `FileLog`); any new restore action (Copy to working dir from the
+diff's `.` menu already exists).
 
 ## Behaviour
 
@@ -47,7 +50,25 @@ buffered `FileLog`); a "load more past 200" action; any new restore action
   - every other way the view can disappear (a repo switch, `clearLayers`, …)
     is caught lazily: the next batch for a view that is no longer on the
     stack (nor parked) cancels the walk and is dropped.
-- The 200-commit cap stays (`historyMaxCommits`).
+- A walk fetches one page of 200 commits (`historyPage`).
+
+### Load more
+
+- When a walk ends having found a FULL page (it hit its limit, so older
+  commits may exist), the list ends with a dim row
+  `↓ load 200 older commits`.
+- `↓`/`j` on the LAST commit while that row shows starts the next walk; the
+  selection moves onto the first older commit as soon as it arrives, and the
+  header shows `· loading… N found` again. No new key.
+- `git log --follow` ignores `--skip` (verified on linux: `--skip=200 -n 200`
+  returns the newest 200), so load more re-runs the walk with
+  `-n <shown+200>` and DROPS the first `<shown>` commits it emits. Streaming
+  hides the re-walk: new commits appear as git reaches them.
+- The walk is pinned: the first walk resolves its start rev (`HEAD` when the
+  context rev is `""`) to a sha once (`svc.RevParse`), and every load-more walk
+  starts from that sha, so a commit made meanwhile cannot shift the
+  positional skip. If the resolve fails (unborn HEAD) the rev is used as is.
+- A walk that ends short of its limit clears the row: that is all history.
 
 ## Repo gate
 
@@ -81,11 +102,15 @@ that waiting writer. The buffered `FileLog` keeps its reservation.
 
 ### TUI — `internal/tui/history_view.go`
 
-- `historyView` gains `cancel context.CancelFunc`, `streaming bool`
-  (walk still running) and `streamErr error` (error after partial results).
-  `loading` keeps meaning "no commit yet".
+- `historyView` gains `cancel context.CancelFunc`, `gen int` (walk
+  generation; a superseded walk's chunks are dropped), `streaming bool`
+  (walk still running), `streamErr error` (error after partial results),
+  `start string` (pinned start sha), `more bool` (last walk filled its
+  page) and `advance bool` (a load-more asked to step onto the first new
+  commit). `loading` keeps meaning "no commit yet". `listTag` goes.
 - `loadHistoryListCmd(h *historyView) tea.Cmd` (callers pass the view, not a
-  ctx+tag): creates a cancellable context stored on `h.cancel`, starts a
+  ctx+tag; the same call serves the first walk and every load-more — it
+  skips `len(h.commits)` and asks for `len(h.commits)+historyPage`): creates a cancellable context stored on `h.cancel`, starts a
   goroutine running `svc.FileLogStream`, which pushes commits into a
   batcher; the batcher sends a `historyChunkMsg{view, commits, done, err}`
   on a channel when ≥20 commits are pending or 50 ms passed since the first
@@ -116,7 +141,10 @@ that waiting writer. The buffered `FileLog` keeps its reservation.
 - tui: a batch arriving selects row 0 and returns a diff load before `done`;
   a later batch appends without moving `sel`; the header shows the
   `loading… N found` suffix until `done`; `esc` cancels the context; a batch
-  for a popped view cancels and is not re-armed.
+  for a popped view cancels and is not re-armed; a full page shows the
+  load-more row, `↓` on the last commit starts a walk that skips the shown
+  commits and the selection steps onto the first new one; a short page shows
+  no row.
 - Manual: `./tui-capture.sh` (or the real binary) on
   `/home/homeend/others/linux` with `drivers/net/ethernet/3com/3c509.c` —
   first commit + diff visible within ~1 s; `enter` → `.` → Copy to working
