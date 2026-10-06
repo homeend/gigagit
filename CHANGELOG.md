@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The mouse reaches programs in an agent console
+
+### Added
+
+- **Wheel, clicks and drags go to a console program that asks for the
+  mouse.** Claude Code in its fullscreen mode scrolls its transcript with the
+  wheel and selects text with a drag; `mc` and other mouse-aware programs in
+  Open terminal get clicks and the wheel. A drag that ends outside the
+  console still delivers its release. The wheel works by hover — the focused
+  left panel keeps the focus — and a click focuses the console as before.
+- **What a console program copies reaches the clipboard.** Its OSC 52
+  clipboard writes (Claude Code's own selection) go through gg's clipboard
+  path (`clip.exe` on WSL, a native tool, or OSC 52 to the host terminal),
+  with a "Copied N lines" status; a write over 1 MiB is dropped and says so.
+  Clipboard read requests are never answered.
+- A full-screen program without mouse support gets `↑`/`↓` for the wheel.
+
 ## The error and operation logs rotate weekly
 
 ### Changed

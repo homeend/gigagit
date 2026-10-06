@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"io"
 	"strconv"
 	"strings"
 	"testing"
@@ -101,4 +102,31 @@ func TestConsoleAltScreenWheelSendsArrows(t *testing.T) {
 	x0, y0 := contentOrigin(m)
 	_ = mouseAt(m, x0, y0, tea.MouseButtonWheelUp, tea.MouseActionPress)
 	waitScreen(t, s, strings.Repeat(hexOf("\x1b[A"), 3))
+}
+
+func TestConsoleOSC52GoesToClipboard(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, `printf '\033]52;c;b25lCnR3bw==\007OLD'; read _; printf '\033]52;c;bmV3\007NEW'; sleep 5`)
+	waitScreen(t, s, "OLD")
+	m, _ = m.openConsole(s.Info().ID) // a copy made before the console showed is not replayed
+	m, cmd := m.consumeConsoleClip()
+	if cmd != nil {
+		t.Fatal("a stale clipboard write was replayed")
+	}
+	s.SendText("\r")
+	waitScreen(t, s, "NEW")
+	m, cmd = m.consumeConsoleClip()
+	if cmd == nil {
+		t.Fatal("no copy command for the new OSC 52 write")
+	}
+	msg := cmd().(clipboardCopiedMsg)
+	if copied != "new" || msg.err != nil || msg.ok == "" {
+		t.Fatalf("copied=%q msg=%+v", copied, msg)
+	}
+	if _, cmd = m.consumeConsoleClip(); cmd != nil {
+		t.Fatal("the same write was copied twice")
+	}
 }

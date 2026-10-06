@@ -652,7 +652,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if _, ok := m.consoleSession(); !ok {
 			return m, nil
 		}
-		return m, waitSessionCmd(m.console, msg.id, msg.gen)
+		var clipCmd tea.Cmd
+		m, clipCmd = m.consumeConsoleClip()
+		return m, tea.Batch(clipCmd, waitSessionCmd(m.console, msg.id, msg.gen))
 	case sessionsChangedMsg:
 		return m.onSessionsChanged()
 	case sessionActivityMsg:

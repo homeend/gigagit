@@ -29,6 +29,7 @@ type consoleState struct {
 	screen    <-chan struct{} // this console's own subscription to its session's screen
 	cancel    func()          // drops it; every path that clears m.console goes through detachConsole
 	ret       *consoleReturn  // the screen to go back to (never nil on a shown console)
+	clipSeq   int             // the child's last OSC 52 write this console has taken (consumeConsoleClip)
 	held      tea.MouseButton // a button forwarded to the child and not yet released (MouseButtonNone = none)
 }
 
@@ -128,7 +129,8 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 		s.Touch()
 	}
 	screen, cancel := s.Subscribe()
-	m.console = &consoleState{id: id, focused: focused, maximized: ret.full, gen: gen, screen: screen, cancel: cancel, ret: ret}
+	m.console = &consoleState{id: id, focused: focused, maximized: ret.full, gen: gen, screen: screen, cancel: cancel, ret: ret,
+		clipSeq: s.Clipboard().Seq} // a copy made before it showed is not replayed
 	m.focus = panelCommits
 	m = m.syncConsoleSizeIfFocused()
 	return m, waitSessionCmd(m.console, id, gen)
@@ -436,6 +438,35 @@ func (m Model) renderConsole(boxW, boxH int) string {
 		style = s.focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))
+}
+
+// consumeConsoleClip copies the child's newest OSC 52 write (a fullscreen
+// agent's own selection) through the TUI's one clipboard writer. Only the
+// shown console's session is read: a copy needs the user's mouse or keys in
+// that console.
+func (m Model) consumeConsoleClip() (Model, tea.Cmd) {
+	s, ok := m.consoleSession()
+	if !ok {
+		return m, nil
+	}
+	c := s.Clipboard()
+	if c.Seq == m.console.clipSeq {
+		return m, nil
+	}
+	m.console.clipSeq = c.Seq
+	if c.Over {
+		m.statusMsg = i18n.T("copy too large — dropped")
+		return m, nil
+	}
+	return m, m.copyToClipboardCmd(copiedLines(strings.Count(c.Text, "\n")+1), c.Text)
+}
+
+// copiedLines is the status line of a console copy of n lines.
+func copiedLines(n int) string {
+	if n == 1 {
+		return i18n.T("Copied 1 line")
+	}
+	return i18n.T("Copied %d lines", n)
 }
 
 // onSessionsChanged reacts to a session-list change (start, exit, remove):
