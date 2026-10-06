@@ -78,7 +78,11 @@ func TestAltACyclesAgentsByLastUseAndEnterPromotes(t *testing.T) {
 	press(altKey('a'))
 	shows(c, "third alt+a")
 	press(altKey('a'))
-	shows(a, "fourth alt+a wraps")
+	if m.console != nil {
+		t.Fatalf("fourth alt+a returns to the starting screen, console = %+v", m.console)
+	}
+	press(altKey('a'))
+	shows(a, "fifth alt+a starts over")
 	press(altKey('a'))
 	press(altKey('a'))
 	shows(c, "back on the third")
@@ -126,21 +130,6 @@ func TestAltAWithNoRunningSessionSaysSo(t *testing.T) {
 		if m.console != nil || m.statusMsg == "" {
 			t.Fatalf("alt+%c: console=%+v status=%q", r, m.console, m.statusMsg)
 		}
-	}
-}
-
-func TestFocusedConsoleKeepsAltA(t *testing.T) {
-	m := loadedModel(t)
-	m.width, m.height = 120, 40
-	s := startTestSession(t, m, `sleep 5`)
-	other := startSecondSession(t, s, "other", false)
-	m, _ = m.openConsole(s.Info().ID)
-	time.Sleep(2 * time.Millisecond)
-	other.Touch()
-	mm, _ := m.Update(altKey('a'))
-	m = mm.(Model)
-	if m.console == nil || m.console.id != s.Info().ID || !m.console.focused {
-		t.Fatalf("console = %+v: alt+a in a focused console belongs to the program", m.console)
 	}
 }
 
