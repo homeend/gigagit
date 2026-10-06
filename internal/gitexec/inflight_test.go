@@ -14,8 +14,20 @@ func TestInFlightListsARunningGit(t *testing.T) {
 	r := NewExecRunner("git", t.TempDir(), nil)
 	var seen []Proc
 	_, err := r.Stream(context.Background(), "probe version", []string{"version"}, func(string) {
-		if seen == nil {
+		if seen != nil {
+			return
+		}
+		// os/exec's stdout copier can deliver a fast git's first line before
+		// Stream records the pid right after Start. Wait for it here: Wait
+		// cannot return (and untrack the git) while this callback blocks.
+		deadline := time.Now().Add(5 * time.Second)
+		for {
 			seen = InFlight()
+			i := slices.IndexFunc(seen, func(p Proc) bool { return p.Name == "probe version" })
+			if i < 0 || seen[i].PID != 0 || time.Now().After(deadline) {
+				return
+			}
+			time.Sleep(time.Millisecond)
 		}
 	})
 	if err != nil {
