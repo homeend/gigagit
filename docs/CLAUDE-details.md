@@ -5402,3 +5402,45 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   `cmp.worktree` so `fileDiffURL` uses that lane. The page's
   `state.noteCounts` is a field whitelist — a new counts field must be added
   there (files.js) and in core.js's initial value.
+
+### Streaming file history + load more (2026-10-06)
+
+- **Why:** `git log --follow -n 200` on a rarely touched linux file walks the
+  whole history (3c509.c: first hit after 0.06 s, full walk 19 s); the old
+  buffered `FileLog` showed nothing until git exited.
+- `git.Repo.FileLogStream` runs the SAME argv (`fileLogArgv`) through
+  `Runner.Stream`; `fileLogParser` completes a commit at its name-status line
+  (a merge with no status line completes at the next format line / flush),
+  and `ParseFileLog` is built on it so the two cannot drift.
+- `domain.Service.FileLogStream` is **ungated and uncoalesced** (user ruling):
+  a held Read for a 20 s walk would park Copy to working dir (TreeWrite) and,
+  writer-preferring, every later read. The buffered `FileLog` (web/CLI) keeps
+  its reservation.
+- TUI: `loadHistoryListCmd(h)` builds a `historyWalk`; the goroutine starts
+  when the cmd RUNS (callers build-and-drop it in tests with a nil svc). The
+  walk batches into `historyChunkMsg` (20 commits or 50 ms — the timer is
+  allow-listed in `tick_test.go`, it lives in the goroutine), each carrying
+  `next`; `onHistoryChunk` re-arms until `done`. `h.gen` drops a superseded
+  walk's chunks; a chunk for a view no longer live (`historyLive`: on the
+  stack — console-parked views are restored by `dispatchParkedAware` — or in
+  `filesReturnLayers`) cancels the walk. `esc`/`h` call `h.stop()` directly;
+  every OTHER teardown is caught by `sweepHistoryWalks`, run at the end of
+  `Model.Update`: running walks are tracked in `m.histWalks` (pointer field,
+  set by `New`) and a view no longer live (stack, console-parked, files-view
+  parked) is stopped in that same message. Do NOT hook `closeFilesView` —
+  it also runs right before a parked stack is restored. `run` closes its
+  channel on return, so a wait pending on a stopped walk returns nil instead
+  of leaking its goroutine.
+- **Load more:** `git log --follow` ignores `--skip` (linux: `--skip=200 -n
+  200` returned the newest 200), so a load-more walk asks for
+  `-n shown+200` and drops the first `shown` emissions. The first walk pins
+  its start rev to a sha (`svc.RevParse`, `HEAD` for rev ""), stored in
+  `h.start`, so a commit made meanwhile cannot shift the positional skip.
+  `h.more` = the walk hit its limit; `↓` on the last commit starts the next
+  page and `h.advance` steps onto its first commit when it lands — only if
+  the cursor is still on `h.advanceAt` (the old last row).
+- **Evidence** (`tui-capture.sh` on linux): 3c509.c — first screen already
+  shows the newest commit selected with its diff and `· loading… 4 found`;
+  esc → the `git log --follow` process is gone 80 ms later. core.c — the
+  200th row is 7b3d61f (matches plain git), `↓` → `loading… 200 found` →
+  279 and counting.

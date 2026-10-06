@@ -211,7 +211,7 @@ func blameAge(now, t time.Time) string {
 	}
 }
 
-// blameMsg carries the async blame result, tag-gated like historyListMsg.
+// blameMsg carries the async blame result, tag-gated like historyDiffMsg.
 type blameMsg struct {
 	tag   string
 	lines []model.BlameLine
@@ -482,7 +482,7 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		ctx := navContext{path: b.ctx.path, rev: blk.hash}
 		hv := newHistoryView(ctx)
 		m = m.pushLayer(hv)
-		return m, m.loadHistoryListCmd(ctx, hv.listTag)
+		return m, m.loadHistoryListCmd(hv)
 	}
 	return m, nil
 }

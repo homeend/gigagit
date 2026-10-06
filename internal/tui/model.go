@@ -150,6 +150,7 @@ type Model struct {
 	wtPreviewGen  int                                      // bumped per cursor move in F's window: drops a superseded preview settle
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
+	histWalks     *historyWalks                            // file-history walks still running; Update stops the ones whose view went away (sweepHistoryWalks)
 	consoleSwitch consoleSwitch                            // a repo switch's console settle, run when its snapshot lands (console_scope.go)
 	sessWatch     *sessionWatch                            // the TUI's subscription to the session list (console.go)
 	actWatch      *activityWatch                           // its subscription to session activity (session_activity.go)
@@ -495,6 +496,7 @@ var bottomTabs = []panel{panelStaged, panelReflog}
 func New(svc *domain.Service) Model {
 	m := Model{
 		svc:                    svc,
+		histWalks:              &historyWalks{},
 		sessWatch:              &sessionWatch{},
 		actWatch:               &activityWatch{},
 		actSeq:                 seqPtr(domain.SessionNoticeSeq()), // never replay notices posted before this model
@@ -589,6 +591,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if next.statusMsg != before && statusNeedsFull(next.statusMsg, next.width) {
 		next.lastError = next.statusMsg
 	}
+	next.sweepHistoryWalks()
 	return next, cmd
 }
 
@@ -1305,17 +1308,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return nm, tea.Batch(cmd, bcmd)
 		}
 		return m, bcmd
-	case historyListMsg:
-		if h := layerOf[*historyView](m); h != nil && h.listTag == msg.tag {
-			h.loading = false
-			h.err = msg.err
-			h.commits = msg.commits
-			h.sel = 0
-			if len(h.commits) > 0 {
-				return m, h.selectCmd(m)
-			}
-		}
-		return m, nil
+	case historyChunkMsg:
+		return m.onHistoryChunk(msg)
 	case historyDiffMsg:
 		if h := layerOf[*historyView](m); h != nil && h.diffTag == msg.tag {
 			h.diff = msg.view
@@ -2951,7 +2945,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ctx := navContext{path: f.Path, rev: ""}
 				h := newHistoryView(ctx)
 				m = m.pushLayer(h)
-				return m, m.loadHistoryListCmd(ctx, h.listTag)
+				return m, m.loadHistoryListCmd(h)
 			}
 		case "tab":
 			m = m.rememberLeftFocus()

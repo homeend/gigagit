@@ -401,12 +401,12 @@ func TestUnfocusedFullScreenConsoleHints(t *testing.T) {
 }
 
 // A view parked under a console still receives its async results: a history
-// still loading when the cycle parked it is filled when its list lands.
+// still loading when the cycle parked it is filled when its walk lands.
 func TestParkedViewReceivesItsAsyncResults(t *testing.T) {
 	m, _ := fullScreenAgent(t)
-	h := &historyView{listTag: "h1", loading: true}
+	h := &historyView{loading: true, gen: 1}
 	m.console.ret.layers = append(m.console.ret.layers, h)
-	mm, _ := m.Update(historyListMsg{tag: "h1"})
+	mm, _ := m.Update(historyChunkMsg{view: h, gen: 1, done: true})
 	m = mm.(Model)
 	if h.loading {
 		t.Fatal("the parked history never got its list")

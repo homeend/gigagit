@@ -1081,7 +1081,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		ctx := navContext{path: vis[p.sel].path, rev: m.lineHash(vis[p.sel])}
 		hv := newHistoryView(ctx)
 		m = m.pushLayer(hv)
-		return m, m.loadHistoryListCmd(ctx, hv.listTag)
+		return m, m.loadHistoryListCmd(hv)
 	case "b":
 		if !m.filesTreeFocused {
 			return m, nil

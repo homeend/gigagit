@@ -2,7 +2,9 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -12,8 +14,17 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// historyMaxCommits bounds file-history depth on huge repos.
-const historyMaxCommits = 200
+// historyPage is one walk's worth of file history; load more asks for the
+// next page.
+const historyPage = 200
+
+// A walk hands commits to the UI in batches: at historyBatchMax pending
+// commits, or historyBatchDelay after the first pending one — so the newest
+// commit shows within 50 ms even when git takes seconds to find the next.
+const (
+	historyBatchMax   = 20
+	historyBatchDelay = 50 * time.Millisecond
+)
 
 // historyListMaxW caps the commit-list column so a wide terminal gives the
 // extra width to the diff pane, not the list.
@@ -27,42 +38,317 @@ type navContext struct {
 }
 
 // historyView is the file-history surface: commits left, the file's diff at the
-// selected commit on the right (reusing the diff pane).
+// selected commit on the right (reusing the diff pane). The list streams in
+// (loadHistoryListCmd): commits appear as git finds them.
 type historyView struct {
 	ctx     navContext
 	commits []model.FileCommit
 	sel     int
-	mode    dispMode // left list text display mode; z cycles
-	hscroll int      // modeScroll horizontal offset
-	loading bool
-	err     error
+	mode    dispMode  // left list text display mode; z cycles
+	hscroll int       // modeScroll horizontal offset
+	loading bool      // no commit has arrived yet
+	err     error     // the walk failed before finding any commit
 	diff    *diffView // right pane (reuses diffView rendering + guards)
-	listTag string    // gates stale list loads
 	diffTag string    // gates stale right-pane loads
+
+	// The streamed walk (loadHistoryListCmd). gen gates a superseded walk's
+	// chunks; cancel stops the running git; start pins the first walk's start
+	// sha so a load-more walk skips exactly the commits already shown.
+	cancel    context.CancelFunc
+	gen       int
+	streaming bool  // a walk is running
+	streamErr error // the walk failed after some commits arrived
+	start     string
+	more      bool // the last walk filled its page: older commits may exist
+	advance   bool // load more: step onto the first new commit when it lands…
+	advanceAt int  // …if the cursor is still on this row (the old last commit)
 }
 
 func newHistoryView(ctx navContext) *historyView {
-	return &historyView{ctx: ctx, loading: true, listTag: "histlist:" + ctx.rev + ":" + ctx.path}
+	return &historyView{ctx: ctx, loading: true}
 }
 
-// historyListMsg / historyDiffMsg carry async results, tag-gated like diffMsg.
-type historyListMsg struct {
-	tag     string
-	commits []model.FileCommit
-	err     error
+// stop cancels a running walk (its git process is terminated).
+func (h *historyView) stop() {
+	if h.cancel != nil {
+		h.cancel()
+		h.cancel = nil
+	}
 }
+
+// historyChunkMsg is one batch of a streamed walk. next yields the walk's
+// following message; the handler re-arms it until done.
+type historyChunkMsg struct {
+	view    *historyView
+	gen     int
+	start   string // the walk's resolved start rev (pinned for load more)
+	commits []model.FileCommit
+	done    bool
+	more    bool // done and the walk hit its limit
+	err     error
+	next    <-chan historyChunkMsg
+}
+
 type historyDiffMsg struct {
 	tag  string
 	view *diffView
 }
 
-// loadHistoryListCmd fetches the commit list off the UI thread.
-func (m Model) loadHistoryListCmd(ctx navContext, tag string) tea.Cmd {
-	svc := m.svc
-	return func() tea.Msg {
-		cs, err := svc.FileLog(context.Background(), ctx.rev, ctx.path, historyMaxCommits)
-		return historyListMsg{tag: tag, commits: cs, err: err}
+// loadHistoryListCmd starts a streamed walk for h: the first walk, or — with
+// commits already listed — load more, which re-walks from the pinned start
+// with a page more and drops the commits already shown (git log --follow
+// ignores --skip).
+func (m Model) loadHistoryListCmd(h *historyView) tea.Cmd {
+	h.stop()
+	ctx, cancel := context.WithCancel(context.Background())
+	h.cancel = cancel
+	h.gen++
+	h.streaming = true
+	h.streamErr = nil
+	w := historyWalk{
+		svc:   m.svc,
+		gen:   h.gen,
+		view:  h,
+		rev:   h.ctx.rev,
+		pin:   h.start == "",
+		path:  h.ctx.path,
+		skip:  len(h.commits),
+		limit: len(h.commits) + historyPage,
 	}
+	if !w.pin {
+		w.rev = h.start
+	}
+	if m.histWalks != nil {
+		m.histWalks.add(h)
+	}
+	// The walk starts when the cmd runs, not when it is built: a caller that
+	// builds the cmd and drops it starts no git.
+	return func() tea.Msg {
+		out := make(chan historyChunkMsg)
+		go w.run(ctx, out)
+		return recvHistoryChunk(out)
+	}
+}
+
+// waitHistoryChunk delivers a walk's next message.
+func waitHistoryChunk(ch <-chan historyChunkMsg) tea.Cmd {
+	return func() tea.Msg { return recvHistoryChunk(ch) }
+}
+
+// recvHistoryChunk is the walk's next message, or nil once a stopped walk
+// closed its channel — so a wait pending when the walk stopped returns
+// instead of blocking its goroutine forever.
+func recvHistoryChunk(ch <-chan historyChunkMsg) tea.Msg {
+	msg, ok := <-ch
+	if !ok {
+		return nil
+	}
+	return msg
+}
+
+// historyWalk is one streamed git log --follow, run off the UI thread.
+type historyWalk struct {
+	svc         *domain.Service
+	view        *historyView
+	gen         int
+	rev, path   string
+	pin         bool
+	skip, limit int
+}
+
+// run streams the walk into out in batches. Every send selects on ctx, so a
+// walk whose view went away never blocks forever; out is closed on return so
+// a wait still pending on it returns too.
+func (w historyWalk) run(ctx context.Context, out chan historyChunkMsg) {
+	defer close(out)
+	start := w.rev
+	if w.pin {
+		r := w.rev
+		if r == "" {
+			r = "HEAD"
+		}
+		if sha, err := w.svc.RevParse(ctx, r); err == nil {
+			start = sha
+		}
+	}
+	found := make(chan model.FileCommit, historyBatchMax)
+	type result struct {
+		n   int
+		err error
+	}
+	finished := make(chan result, 1)
+	go func() {
+		n := 0
+		err := w.svc.FileLogStream(ctx, start, w.path, w.limit, func(fc model.FileCommit) {
+			n++
+			if n <= w.skip {
+				return
+			}
+			select {
+			case found <- fc:
+			case <-ctx.Done():
+			}
+		})
+		finished <- result{n: n, err: err}
+	}()
+
+	msg := historyChunkMsg{view: w.view, gen: w.gen, start: start, next: out}
+	var batch []model.FileCommit
+	var tick <-chan time.Time
+	send := func(done, more bool, err error) bool {
+		m := msg
+		m.commits, m.done, m.more, m.err = batch, done, more, err
+		select {
+		case out <- m:
+			msg.start = "" // only the first message carries it
+			batch, tick = nil, nil
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+	for {
+		select {
+		case fc := <-found:
+			batch = append(batch, fc)
+			if len(batch) == 1 {
+				tick = time.After(historyBatchDelay)
+			}
+			if len(batch) >= historyBatchMax && !send(false, false, nil) {
+				return
+			}
+		case <-tick:
+			if !send(false, false, nil) {
+				return
+			}
+		case r := <-finished:
+			// Every emit's send completed before finished was written: drain.
+			for drained := false; !drained; {
+				select {
+				case fc := <-found:
+					batch = append(batch, fc)
+				default:
+					drained = true
+				}
+			}
+			send(true, r.err == nil && r.n >= w.limit, r.err)
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// historyWalks tracks the views whose walk is running, on a pointer field so
+// the value-receiver Model shares it.
+type historyWalks struct{ views []*historyView }
+
+func (w *historyWalks) add(h *historyView) {
+	for _, v := range w.views {
+		if v == h {
+			return
+		}
+	}
+	w.views = append(w.views, h)
+}
+
+// sweepHistoryWalks stops the walk of every tracked view that is no longer
+// live. Update runs it after each message, so a view dropped by ANY teardown
+// (clearLayers, a repo switch forgetting a console's parked stack, a files
+// view dropping its parked stack, removeLayer) stops its git at once instead
+// of when the walk next finds a commit. Finished walks leave the set.
+func (m Model) sweepHistoryWalks() {
+	if m.histWalks == nil {
+		return
+	}
+	keep := m.histWalks.views[:0]
+	for _, h := range m.histWalks.views {
+		switch {
+		case h.cancel == nil: // finished or already stopped
+		case !m.historyLive(h):
+			h.stop()
+		default:
+			keep = append(keep, h)
+		}
+	}
+	m.histWalks.views = keep
+}
+
+// historyLive reports whether h is still a view the user can come back to:
+// on the stack, parked under a console (dispatchParkedAware also puts those
+// back for non-key messages) or parked by a hand-off to the files view.
+func (m Model) historyLive(h *historyView) bool {
+	if m.hasLayer(h) {
+		return true
+	}
+	parked := m.filesReturnLayers
+	if m.console != nil && m.console.ret != nil {
+		parked = append(append([]layer{}, parked...), m.console.ret.layers...)
+	}
+	for _, l := range parked {
+		if l == h {
+			return true
+		}
+	}
+	return false
+}
+
+// onHistoryChunk applies one batch of a streamed walk.
+func (m Model) onHistoryChunk(msg historyChunkMsg) (Model, tea.Cmd) {
+	h := msg.view
+	if h == nil || h.gen != msg.gen {
+		return m, nil // superseded: loadHistoryListCmd cancelled that walk
+	}
+	if !m.historyLive(h) {
+		h.stop()
+		return m, nil
+	}
+	if msg.start != "" {
+		h.start = msg.start
+	}
+	var cmds []tea.Cmd
+	if len(msg.commits) > 0 {
+		first := len(h.commits) == 0
+		h.commits = append(h.commits, msg.commits...)
+		h.loading = false
+		switch {
+		case first:
+			h.sel = 0
+			cmds = append(cmds, h.selectCmd(m))
+		case h.advance:
+			h.advance = false
+			if h.sel == h.advanceAt && h.sel < len(h.commits)-1 {
+				h.sel++
+				cmds = append(cmds, h.selectCmd(m))
+			}
+		}
+	}
+	if !msg.done {
+		return m, tea.Batch(append(cmds, waitHistoryChunk(msg.next))...)
+	}
+	h.stop()
+	h.streaming, h.loading, h.advance = false, false, false
+	h.more = msg.more
+	if msg.err != nil && !errors.Is(msg.err, context.Canceled) {
+		if len(h.commits) == 0 {
+			h.err = msg.err
+		} else {
+			h.streamErr = msg.err
+		}
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// headerSuffix is the walk's state after the path: the running count, or a
+// failure that came after some commits were already listed.
+func (h *historyView) headerSuffix() string {
+	switch {
+	case h.streaming && len(h.commits) > 0:
+		return i18n.T(" · loading… %d found", len(h.commits))
+	case h.streamErr != nil:
+		return i18n.T(" · error: %s", h.streamErr.Error())
+	}
+	return ""
 }
 
 // historyDiffSources builds the cache key + byte sources for fc's change (the
@@ -189,6 +475,9 @@ func (h *historyView) listRows(listW int) ([]winRow, int) {
 			rows = append(rows, winRow{text: indent + seg, style: st})
 		}
 	}
+	if h.more && !h.streaming {
+		rows = append(rows, winRow{text: truncate(i18n.T("    ↓ load %d older commits", historyPage), listW), style: s.dim})
+	}
 	return rows, anchor
 }
 
@@ -196,7 +485,12 @@ func (h *historyView) render(m Model, _ string) string {
 	w, scrH := m.overlayDims()
 	body := m.historyBodyRows()
 
-	header := elidePath(i18n.T("history: %s", h.ctx.path), w) // keep the file name
+	sfx := h.headerSuffix()
+	pathW := w - lipgloss.Width(sfx)
+	if pathW < 1 {
+		pathW = 1
+	}
+	header := truncate(elidePath(i18n.T("history: %s", h.ctx.path), pathW)+sfx, w) // keep the file name
 	hint := truncate(i18n.T("[↑↓] commit  [enter] diff  [e] editor  [esc] back"), w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.
@@ -332,6 +626,7 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc", "h":
+		h.stop()
 		return m.popLayer(), nil
 	case "b":
 		if h.sel >= 0 && h.sel < len(h.commits) {
@@ -367,6 +662,12 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if h.sel < len(h.commits)-1 {
 			h.sel++
 			return m, h.selectCmd(m)
+		}
+		// On the last commit of a full page: fetch the next page and step onto
+		// its first commit when it lands.
+		if h.more && !h.streaming && len(h.commits) > 0 {
+			h.more, h.advance, h.advanceAt = false, true, h.sel
+			return m, m.loadHistoryListCmd(h)
 		}
 	case "up", "k":
 		if h.sel > 0 {

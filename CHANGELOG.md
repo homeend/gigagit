@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## File history streams in, and loads more
+
+### Changed
+
+- **File history (`h`) shows commits as git finds them.** The newest commit
+  is selected and its diff opens at once; the header counts
+  `loading… N found` until the walk ends. On a huge repo a rarely touched
+  file used to show nothing for the whole walk (19 s for
+  `drivers/net/ethernet/3com/3c509.c` on linux) — now its newest change is
+  on screen in well under a second, and you can browse, `enter` the diff and
+  use its `.` menu (Copy to working dir) while older commits still arrive.
+- **Leaving the window stops the walk** (the git process ends).
+- The walk holds no repo lock, so a write started mid-load (Copy to working
+  dir, a commit) runs at once instead of waiting for it.
+
+### Added
+
+- **Load more:** a full 200-commit page ends with `↓ load 200 older
+  commits`; `↓` past the last commit fetches the next page and steps onto
+  its first commit.
+
 ## A branch review covers the whole branch in any repository
 
 ### Fixed

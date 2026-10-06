@@ -165,7 +165,7 @@ func helpContent() []contentLine {
 		r("m", i18n.T("mark / unmark a file (multi-select for staging, stashing, discarding, adding to the shelf)")),
 		r("enter", i18n.T("side-by-side diff of the unstaged change (index → working tree)")),
 		r("enter", i18n.T("on a conflicted file: open the region picker (current / incoming) directly — ctrl+s applies (writes and stages the file); esc returns here")),
-		r("h", i18n.T("file history: commits that touched it (left) + per-commit diff (right)")),
+		r("h", i18n.T("file history: commits that touched it (left, streamed in newest first — the newest shows at once) + per-commit diff (right); ↓ past the last commit loads 200 older")),
 		r("b", i18n.T("blame: who last changed each line, grouped by commit")),
 		r("d", i18n.T("discard the marked files (or the cursor row): revert edits, delete new files (confirm)")),
 		r("D", i18n.T("discard ALL unstaged changes: revert every edit + delete every new file (confirm)")),
