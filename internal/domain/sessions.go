@@ -29,6 +29,10 @@ type (
 	SessionManager = agentsession.Manager
 	SessionScreen  = agentsession.Screen
 	SessionKey     = agentsession.Key
+	// The console's mouse pass-through and the child's clipboard writes.
+	SessionMouse      = agentsession.Mouse
+	SessionInputModes = agentsession.InputModes
+	SessionClip       = agentsession.Clip
 	// The web console's frame (styled runs) and a start spec for callers
 	// that assemble one themselves (tests).
 	ScreenRuns       = agentsession.ScreenRuns

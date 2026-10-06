@@ -29,6 +29,7 @@ type consoleState struct {
 	screen    <-chan struct{} // this console's own subscription to its session's screen
 	cancel    func()          // drops it; every path that clears m.console goes through detachConsole
 	ret       *consoleReturn  // the screen to go back to (never nil on a shown console)
+	held      tea.MouseButton // a button forwarded to the child and not yet released (MouseButtonNone = none)
 }
 
 // consoleReturn is the screen a console was shown over: where esc, the
