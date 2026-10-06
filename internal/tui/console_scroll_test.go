@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 const fortyLines = `i=0; while [ $i -lt 40 ]; do echo "row-$i"; i=$((i+1)); done; printf 'TAIL'; while :; do sleep 5; done`
@@ -451,4 +452,32 @@ func TestConsoleLostReleaseOfPlainPress(t *testing.T) {
 	if m.console.press != nil || m.console.scroll != nil || m.focus != panelBranches {
 		t.Fatalf("press=%v scroll=%v focus=%v", m.console.press, m.console.scroll != nil, m.focus)
 	}
+}
+
+// An unfocused console keeps the PTY size it had (here wider than the box):
+// its rows must still fit the box — a long live line, and in scroll mode the
+// underlined cursor row and a full-row selection, which draw every cell.
+func TestConsoleRowsFitABoxNarrowerThanThePTY(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	s := startTestSession(t, m, `i=0; while [ $i -lt 40 ]; do echo "row-$i"; i=$((i+1)); done; printf '%s' "$(printf 'x%.0s' $(seq 1 79))Z"; while :; do sleep 5; done`)
+	m, _ = m.showConsole(s.Info().ID, false)
+	waitScreen(t, s, "Z")
+	bw, _ := m.consoleBox()
+	if in, cols := s.Input(), max(bw-4, 1); in.Cols <= cols {
+		t.Fatalf("PTY %d cols, box %d: the test needs a wider PTY", in.Cols, cols)
+	}
+	fits := func(what string) {
+		t.Helper()
+		for i, l := range strings.Split(m.View(), "\n") {
+			if w := lipgloss.Width(l); w > m.width {
+				t.Fatalf("%s: view line %d is %d wide (screen %d)", what, i, w, m.width)
+			}
+		}
+	}
+	fits("live")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonWheelUp, tea.MouseActionPress)
+	m = keys(m, tea.KeyMsg{Type: tea.KeySpace}, tea.KeyMsg{Type: tea.KeyUp})
+	fits("scroll mode")
 }

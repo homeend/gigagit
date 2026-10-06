@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -410,6 +411,16 @@ func consoleTitleFit(info domain.SessionInfo, focused, full bool, w int) string 
 	return truncate(label+" · "+state, w)
 }
 
+// fitConsoleRow cuts an emulator row of cols cells to the box's w columns:
+// an unfocused console keeps its PTY size, which can be wider than the box
+// (a wide glyph across the edge is dropped; styles stay balanced).
+func fitConsoleRow(row string, cols, w int) string {
+	if cols <= w {
+		return row
+	}
+	return ansi.Truncate(row, w, "")
+}
+
 // renderConsole draws the console box. The emulator lines are ANSI strings
 // sized to the inner width; Render drops trailing blanks, so each is padded.
 func (m Model) renderConsole(boxW, boxH int) string {
@@ -425,7 +436,7 @@ func (m Model) renderConsole(boxW, boxH int) string {
 		if sc := m.console.scroll; sc != nil {
 			lines = append(lines, padRight(truncate(m.consoleScrollTitle(sess), innerW), innerW))
 			for i := sc.top; i < sc.hist.Len() && len(lines) < contentH; i++ {
-				lines = append(lines, padRight(sc.hist.Row(i, m.consoleRowMarks(i)), innerW))
+				lines = append(lines, padRight(fitConsoleRow(sc.hist.Row(i, m.consoleRowMarks(i)), sc.hist.Width(), innerW), innerW))
 			}
 		} else {
 			lines = append(lines, padRight(consoleTitleFit(info, m.console.focused, m.consoleFull(), innerW), innerW))
@@ -439,7 +450,7 @@ func (m Model) renderConsole(boxW, boxH int) string {
 				if len(lines) >= contentH {
 					break
 				}
-				lines = append(lines, padRight(l, innerW))
+				lines = append(lines, padRight(fitConsoleRow(l, sc.Cols, innerW), innerW))
 			}
 		}
 	}
