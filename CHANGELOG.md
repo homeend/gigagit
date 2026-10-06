@@ -35,6 +35,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - A console showing a program wider than its box (an unfocused console
   keeps the size it had, e.g. from being maximised) pushed the right border
   and the whole screen out of line. Rows are now cut to the box.
+- A console shown with `alt+a` kept whatever size its program last had
+  (for example from being maximised), so its lines were cut at the box edge.
+  It now takes its box's size when shown. Lines printed before the resize
+  are not rewrapped (the emulator does not reflow), but everything the
+  program prints after it fits.
 - An empty clipboard write from a program put an empty string on the
   clipboard with "Copied 1 line"; it is now ignored. A copy ending in a
   newline no longer counts one line too many.

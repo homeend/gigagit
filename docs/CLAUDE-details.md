@@ -4496,7 +4496,9 @@ copies its own drag-selection with OSC 52 — which x/vt ignores.
   rows to the screen's last non-blank one, plus which screen — a spinner's
   redraw in place leaves it; at the 10k cap only the screen part grows.
   Rows are cut to the box with `ansi.Truncate` (`fitConsoleRow`, live and
-  scroll): an unfocused console keeps a PTY size that can be wider. Clicks: `consoleClicks`
+  scroll): an unfocused console keeps a PTY size that can be wider —
+  except one alt+a shows: `cycleSessions` syncs it to its box (the user asked
+  to see it; x/vt does not reflow, so old lines stay cut). Clicks: `consoleClicks`
   (400 ms, same cell) — a double/triple click copies on the PRESS.
 - **OSC 52 → clipboard:** `consumeConsoleClip` on every `consoleChangedMsg`;
   `clipSeq` is seeded at show time so a copy made before the console showed

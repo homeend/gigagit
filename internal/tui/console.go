@@ -596,6 +596,10 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 	}
 	info := list[next]
 	m, cmd := m.showConsole(info.ID, false)
+	// The user asked to see it: it takes its box's size although unfocused,
+	// or a PTY left wider (from a maximised spell, another viewer) cuts its
+	// lines — x/vt does not reflow.
+	m = m.syncConsoleSize()
 	m.statusMsg = i18n.T("%s in %s — %d of %d by last use  [enter] focus", info.Label, shortWorktreeName(info.Dir), next+1, len(list))
 	return m, cmd
 }
