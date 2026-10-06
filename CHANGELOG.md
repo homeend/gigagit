@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-## alt+u unlocks a stuck "⏳ reloading…" and writes a state dump
+## alt+A unlocks a stuck "⏳ reloading…" and writes a state dump
 
 ### Fixed
 
@@ -20,17 +20,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
-- **`alt+u` — emergency unlock, from any window.** When "⏳ reloading…" or
-  an operation never ends (a git that hangs), `alt+u` drops the stuck reads
+- **`alt+A` (alt+shift+a) — emergency unlock, from any window.** A capital
+  A, so a stray `alt+a` (the agent cycle) never fires it. When "⏳ reloading…" or
+  an operation never ends (a git that hangs), `alt+A` drops the stuck reads
   (their late results are ignored; `r` reloads), ends the git processes
   still running and asks a running operation to stop. git gets SIGTERM and
   releases its lockfiles. A hung read would otherwise keep its repo lock, so
   the next `r` would only join it. If an operation is waiting on a question,
-  `alt+u` answers it with abort. After 5 s of
+  `alt+A` answers it with abort. After 5 s of
   reloading, or 10 s of an operation, the status line and footer show
-  `[alt+u] unlock` / `[alt+u] stop it`. The blank loading screen shows it
+  `[alt+A] unlock` / `[alt+A] stop it`. The blank loading screen shows it
   too.
-- **Every `alt+u` writes a state dump**, even when nothing is stuck, to
+- **Every `alt+A` writes a state dump**, even when nothing is stuck, to
   `<state>/gg/dumps/state-<time>.txt` (`~/.local/state/gg` on Linux,
   `%LocalAppData%\gg` on Windows). The status line names the file, and `E`
   shows the full line. The dump

@@ -2604,13 +2604,13 @@ name = "한국어"
 "agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [%s] sessions" = "에이전트 콘솔: [x] 닫기  [esc/%s] 돌아가기  [alt+a/alt+t] 다음  [%s] 세션"
 "agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [%s] sessions" = "에이전트 콘솔: [enter] 입력  [X] 종료+제거  [esc/%s] 돌아가기  [alt+a/alt+t] 다음  [%s] 세션"
 
-# emergency unlock (alt+u)
-"[alt+u] unlock" = "[alt+u] 잠금 해제"
-"[alt+u] stop it" = "[alt+u] 중지"
+# emergency unlock (alt+A)
+"[alt+A] unlock" = "[alt+A] 잠금 해제"
+"[alt+A] stop it" = "[alt+A] 중지"
 "asked the running operation to stop" = "실행 중인 작업에 중지를 요청했습니다"
 "unlocked — abandoned %d stuck reads (r reloads)" = "잠금 해제 — 멈춘 읽기 %d개를 버림 (r로 다시 불러오기)"
 "state dump: %s" = "상태 덤프: %s"
 "state dump failed: %s" = "상태 덤프 실패: %s"
-"emergency unlock — works over ANY window: when \"⏳ reloading…\" or an operation never ends, abandons the stuck reads (their late results are dropped; r reloads), ends the git processes still running and asks a running operation to stop; always writes a state dump (running git processes, repo locks, goroutines) under the gg state dir and names the file in the status line" = "긴급 잠금 해제 — 어떤 창에서도 동작: \"⏳ reloading…\" 이나 작업이 끝나지 않을 때 멈춘 읽기를 버리고 (늦게 도착한 결과는 무시됨; r로 다시 불러오기) 실행 중인 git 프로세스를 끝내고 실행 중인 작업에 중지를 요청함. 항상 상태 덤프 (실행 중인 git 프로세스, 저장소 잠금, goroutine)를 gg 상태 디렉터리에 쓰고 상태 줄에 파일 이름을 표시함"
+"emergency unlock (alt+shift+a — a capital A, so a stray alt+a never fires it) — works over ANY window: when \"⏳ reloading…\" or an operation never ends, abandons the stuck reads (their late results are dropped; r reloads), ends the git processes still running and asks a running operation to stop; always writes a state dump (running git processes, repo locks, goroutines) under the gg state dir and names the file in the status line" = "긴급 잠금 해제 (alt+shift+a — 대문자 A라서 alt+a를 잘못 눌러도 동작하지 않음) — 어떤 창에서도 동작: \"⏳ reloading…\" 이나 작업이 끝나지 않을 때 멈춘 읽기를 버리고 (늦게 도착한 결과는 무시됨; r로 다시 불러오기) 실행 중인 git 프로세스를 끝내고 실행 중인 작업에 중지를 요청함. 항상 상태 덤프 (실행 중인 git 프로세스, 저장소 잠금, goroutine)를 gg 상태 디렉터리에 쓰고 상태 줄에 파일 이름을 표시함"
 "the running operation cannot be stopped from here — it ends when its work does" = "실행 중인 작업은 여기서 중지할 수 없습니다 — 작업이 끝나면 종료됩니다"
 "ended %d git processes" = "git 프로세스 %d개를 종료했습니다"

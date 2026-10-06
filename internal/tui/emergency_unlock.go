@@ -22,7 +22,7 @@ import (
 // "⏳ reloading…" — and every action gate on m.loading — up for good, and an
 // operation whose git hangs keeps m.running. Sits beside ctrl+o, above the
 // process and layer routing, with no opsIdle gate (that is the point).
-const emergencyUnlockKey = "alt+u"
+const emergencyUnlockKey = "alt+A"
 
 // endGitProcesses is domain.EndGitProcesses behind a seam: the tui tests run
 // in parallel in one process, so TestMain swaps in a counter that kills no
@@ -30,19 +30,19 @@ const emergencyUnlockKey = "alt+u"
 var endGitProcesses = domain.EndGitProcesses
 
 // locked reports whether the interface is held: a reload, an initial or
-// repo-switch load, or an operation. The footer advertises alt+u only then.
+// repo-switch load, or an operation. The footer advertises alt+A only then.
 func (m Model) locked() bool {
 	return m.running || m.loading || m.anySourceLoading()
 }
 
 // unlockHintAfter is how long a lock lasts before the status line offers
-// alt+u: long enough that an ordinary reload or op never flashes it.
+// alt+A: long enough that an ordinary reload or op never flashes it.
 const (
 	unlockHintAfterReload = 5 * time.Second
 	unlockHintAfterOp     = 10 * time.Second
 )
 
-// unlockHint is the status line's pointer at alt+u once a lock has outlived
+// unlockHint is the status line's pointer at alt+A once a lock has outlived
 // its normal span ("" before that, and when nothing holds the interface).
 // The perpetual heartbeat repaints the line, so it appears on its own.
 func (m Model) unlockHint(now time.Time) string {
@@ -51,7 +51,7 @@ func (m Model) unlockHint(now time.Time) string {
 	}
 	if m.running {
 		if !m.opStart.IsZero() && clock.Since(m.opStart) >= unlockHintAfterOp {
-			return i18n.T("[alt+u] stop it")
+			return i18n.T("[alt+A] stop it")
 		}
 		return ""
 	}
@@ -60,7 +60,7 @@ func (m Model) unlockHint(now time.Time) string {
 	}
 	for s, on := range m.srcLoading {
 		if t := m.srcSince[s]; on && !t.IsZero() && now.Sub(t) >= unlockHintAfterReload {
-			return i18n.T("[alt+u] unlock")
+			return i18n.T("[alt+A] unlock")
 		}
 	}
 	return ""
