@@ -419,6 +419,9 @@ func (h *historyView) listRows(listW int) ([]winRow, int) {
 			rows = append(rows, winRow{text: indent + seg, style: st})
 		}
 	}
+	if h.more && !h.streaming {
+		rows = append(rows, winRow{text: truncate(i18n.T("    ↓ load %d older commits", historyPage), listW), style: s.dim})
+	}
 	return rows, anchor
 }
 
@@ -603,6 +606,12 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if h.sel < len(h.commits)-1 {
 			h.sel++
 			return m, h.selectCmd(m)
+		}
+		// On the last commit of a full page: fetch the next page and step onto
+		// its first commit when it lands.
+		if h.more && !h.streaming && len(h.commits) > 0 {
+			h.more, h.advance = false, true
+			return m, m.loadHistoryListCmd(h)
 		}
 	case "up", "k":
 		if h.sel > 0 {

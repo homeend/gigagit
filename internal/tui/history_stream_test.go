@@ -189,3 +189,57 @@ func TestHistoryStreamDrainsAll(t *testing.T) {
 		t.Fatalf("drained %d commits, first=%v", len(h.commits), h.commits)
 	}
 }
+
+// A full page offers load more; ↓ on the last commit re-walks from the
+// PINNED start with a page more, drops what is shown, and steps onto the
+// first older commit.
+func TestHistoryLoadMorePinsStartAndSkipsShown(t *testing.T) {
+	t.Parallel()
+	r := newHistRunner(historyPage+5, false)
+	m, h := fileHistModel(r)
+	m = drainHistory(t, m, m.loadHistoryListCmd(h))
+	if len(h.commits) != historyPage || !h.more {
+		t.Fatalf("first page: %d commits, more=%v", len(h.commits), h.more)
+	}
+	h.sel = len(h.commits) - 1 // the row ends the list: render with it in view
+	if out := h.render(m, ""); !strings.Contains(out, "load 200 older commits") {
+		t.Fatalf("a full page must offer load more:\n%s", out)
+	}
+	m, cmd := h.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if cmd == nil {
+		t.Fatal("j on the last commit of a full page must start load more")
+	}
+	m = drainHistory(t, m, cmd)
+	argv := strings.Join(r.walk(1), " ")
+	if !strings.Contains(argv, " feedface ") || !strings.Contains(argv, "-n 400") {
+		t.Fatalf("load more must walk from the pinned sha with a page more: %s", argv)
+	}
+	if len(h.commits) != historyPage+5 || h.commits[historyPage].Hash != fmt.Sprintf("c%03d", historyPage) {
+		t.Fatalf("load more appended wrong commits: %d, [200]=%v", len(h.commits), h.commits[historyPage].Hash)
+	}
+	if h.sel != historyPage {
+		t.Fatalf("selection must step onto the first older commit, sel=%d", h.sel)
+	}
+	if h.more {
+		t.Fatal("a short second page must clear load more")
+	}
+}
+
+// A short page is all history: no load-more row, and j on the last commit
+// does nothing.
+func TestHistoryShortPageOffersNoLoadMore(t *testing.T) {
+	t.Parallel()
+	r := newHistRunner(5, false)
+	m, h := fileHistModel(r)
+	m = drainHistory(t, m, m.loadHistoryListCmd(h))
+	if h.more {
+		t.Fatal("5 < page: more must be false")
+	}
+	h.sel = len(h.commits) - 1
+	if out := h.render(m, ""); strings.Contains(out, "older commits") {
+		t.Fatalf("a short page must not offer load more:\n%s", out)
+	}
+	if _, cmd := h.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}); cmd != nil {
+		t.Fatal("j on the last commit of a short page must do nothing")
+	}
+}

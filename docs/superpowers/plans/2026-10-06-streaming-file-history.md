@@ -970,10 +970,10 @@ func TestHistoryLoadMorePinsStartAndSkipsShown(t *testing.T) {
 	if len(h.commits) != historyPage || !h.more {
 		t.Fatalf("first page: %d commits, more=%v", len(h.commits), h.more)
 	}
+	h.sel = len(h.commits) - 1 // the row ends the list: render with it in view
 	if out := h.render(m, ""); !strings.Contains(out, "load 200 older commits") {
 		t.Fatalf("a full page must offer load more:\n%s", out)
 	}
-	h.sel = len(h.commits) - 1
 	m, cmd := h.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	if cmd == nil {
 		t.Fatal("j on the last commit of a full page must start load more")
@@ -1004,10 +1004,10 @@ func TestHistoryShortPageOffersNoLoadMore(t *testing.T) {
 	if h.more {
 		t.Fatal("5 < page: more must be false")
 	}
+	h.sel = len(h.commits) - 1
 	if out := h.render(m, ""); strings.Contains(out, "older commits") {
 		t.Fatalf("a short page must not offer load more:\n%s", out)
 	}
-	h.sel = len(h.commits) - 1
 	if _, cmd := h.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}); cmd != nil {
 		t.Fatal("j on the last commit of a short page must do nothing")
 	}
