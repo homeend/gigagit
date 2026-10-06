@@ -287,6 +287,7 @@ func TestScrollDragPastEdgeScrolls(t *testing.T) {
 	waitScreen(t, s, "TAIL")
 	x0, y0 := contentOrigin(m)
 	m = mouseAt(m, x0, y0+2, tea.MouseButtonLeft, tea.MouseActionPress)
+	m = mouseAt(m, x0+1, y0+2, tea.MouseButtonLeft, tea.MouseActionMotion) // the drag begins: scroll mode
 	top := m.console.scroll.top
 	m = mouseAt(m, x0, y0-1, tea.MouseButtonLeft, tea.MouseActionMotion) // above the content: the title row
 	if m.console.scroll.top != top-1 {
@@ -314,5 +315,55 @@ func TestScrollDragHeldOutsideBoxStillExtends(t *testing.T) {
 	runCmdMsgs(cmd)
 	if copied != "alpha b" || m.console.scroll.drag.active {
 		t.Fatalf("copied %q active=%v", copied, m.console.scroll.drag.active)
+	}
+}
+
+// A plain click on a normal-screen console focuses it and stays live: what
+// is typed next reaches the agent (review Critical: it used to freeze the
+// view and eat the keys).
+func TestConsolePlainClickStaysLive(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	s := startTestSession(t, m, hexEcho)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "READY")
+	m.console.focused, m.focus = false, panelBranches
+	x0, y0 := contentOrigin(m)
+	m = pressRelease(m, x0+3, y0+1)
+	if !m.console.focused || m.console.scroll != nil {
+		t.Fatalf("focused=%v scroll=%v", m.console.focused, m.console.scroll != nil)
+	}
+	m = keys(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	waitScreen(t, s, "67")
+}
+
+// A click inside scroll mode keeps the frozen view even when focusing the
+// console would resize its PTY (review Important 1).
+func TestScrollClickKeepsFrozenView(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	s := startTestSession(t, m, fortyLines)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "TAIL")
+	m.console.focused, m.focus = false, panelBranches
+	in := s.Input()
+	_ = s.Resize(in.Cols-10, in.Rows) // another viewer holds a different size
+	x0, y0 := contentOrigin(m)
+	for range 20 {
+		m = mouseAt(m, x0+1, y0+1, tea.MouseButtonWheelUp, tea.MouseActionPress)
+	}
+	if m.console.scroll == nil || m.console.scroll.top != 0 {
+		t.Fatal("setup: not scrolled to the top")
+	}
+	m = pressRelease(m, x0+1, y0+3)
+	if sc := m.console.scroll; sc == nil || sc.top != 0 || sc.cursor != 3 {
+		if sc == nil {
+			t.Fatal("scroll mode left")
+		}
+		t.Fatalf("view jumped: top=%d cursor=%d", sc.top, sc.cursor)
+	}
+	m = keys(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if w, h := m.consoleBox(); func() bool { c, r := consoleInner(w, h); i := s.Input(); return i.Cols != c || i.Rows != r }() {
+		t.Fatal("leaving scroll mode did not take the size back")
 	}
 }

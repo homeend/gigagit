@@ -86,13 +86,13 @@ func (s *Session) Input() InputModes {
 
 // SendMouse encodes ev for the child in the mouse mode it enabled (a no-op
 // when it enabled none, or once the session has exited). Coordinates are
-// 0-based cells of the emulator. A mouse event is not typed input: it
-// touches LastUsed but leaves LastInput alone.
+// 0-based cells of the emulator. A mouse event is neither typed input
+// (LastInput) nor a use of the session (LastUsed): a hover wheel must not
+// reorder the alt+a cycle; the click that focuses a console touches it.
 func (s *Session) SendMouse(ev Mouse) {
 	if !s.running() {
 		return
 	}
-	s.Touch()
 	s.withEmu(func() { s.emu.SendMouse(ev) })
 }
 

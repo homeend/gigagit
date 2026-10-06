@@ -55,10 +55,16 @@ func (m Model) enterConsoleScroll() Model {
 	return m
 }
 
+// leaveConsoleScroll returns to the live view, taking back the size a click
+// that focused the console during scroll mode postponed.
 func (m Model) leaveConsoleScroll() Model {
 	m.console.scroll = nil
-	return m
+	return m.syncConsoleSizeIfFocused()
 }
+
+// consolePress is a left press at the live view that has not become a drag:
+// a plain click must leave the console live (it only focuses).
+type consolePress struct{ cx, cy int }
 
 // maxTop is the last view position: the bottom page.
 func (sc *consoleScroll) maxTop(rows int) int { return max(sc.hist.Len()-rows, 0) }
@@ -230,6 +236,12 @@ func (m Model) consoleScrollMouse(msg tea.MouseMsg, cx, cy int, inContent bool) 
 		m = m.scrollConsoleBy(m.wheelStep())
 		return m.extendDrag(cx, cy, rows), nil, true
 	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft && inContent:
+		n := m.console.clicks.press(cx, cy, time.Now())
+		m.console.press = nil
+		if m.console.scroll == nil && n == 1 {
+			m.console.press = &consolePress{cx, cy} // a drag or a second click enters scroll mode
+			return m, nil, true
+		}
 		m = m.enterConsoleScroll()
 		sc := m.console.scroll
 		if sc == nil {
@@ -238,7 +250,7 @@ func (m Model) consoleScrollMouse(msg tea.MouseMsg, cx, cy int, inContent bool) 
 		r, c := sc.historyAt(cx, cy, rows)
 		sc.sel.clear()
 		sc.cursor = r
-		switch m.console.clicks.press(cx, cy, time.Now()) {
+		switch n {
 		case 2:
 			c0, c1 := sc.hist.WordAt(r, c)
 			if c0 > c1 {
@@ -254,8 +266,14 @@ func (m Model) consoleScrollMouse(msg tea.MouseMsg, cx, cy int, inContent bool) 
 		sc.drag = charSel{on: true, active: true, r0: r, c0: c, r1: r, c1: c}
 		return m, nil, true
 	case msg.Action == tea.MouseActionMotion:
+		m = m.startPendingDrag(cx, cy, rows)
 		return m.extendDrag(cx, cy, rows), nil, true
 	case msg.Action == tea.MouseActionRelease:
+		if p := m.console.press; p != nil && p.cx == cx && p.cy == cy {
+			m.console.press = nil // a plain click: the console stays live
+			return m, nil, true
+		}
+		m = m.startPendingDrag(cx, cy, rows) // a release elsewhere is a drag whose motion went unreported
 		sc := m.console.scroll
 		if sc == nil || !sc.drag.active {
 			return m, nil, true
@@ -269,6 +287,26 @@ func (m Model) consoleScrollMouse(msg tea.MouseMsg, cx, cy int, inContent bool) 
 		return m, m.copyDrag(), true
 	}
 	return m, nil, true
+}
+
+// startPendingDrag turns a live-view press into a drag once the pointer has
+// left its cell: scroll mode freezes the view and the selection starts at
+// the pressed cell.
+func (m Model) startPendingDrag(cx, cy, rows int) Model {
+	p := m.console.press
+	if p == nil || (p.cx == cx && p.cy == cy) {
+		return m
+	}
+	m.console.press = nil
+	m = m.enterConsoleScroll()
+	sc := m.console.scroll
+	if sc == nil {
+		return m
+	}
+	r, c := sc.historyAt(p.cx, p.cy, rows)
+	sc.sel.clear()
+	sc.drag = charSel{on: true, active: true, r0: r, c0: c, r1: r, c1: c}
+	return m
 }
 
 // extendDrag moves a held selection's far end to the content cell (cx, cy);

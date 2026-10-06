@@ -99,7 +99,7 @@ func (h History) Row(i int, mk RowMarks) string {
 			row[c] = uv.EmptyCell // a stray zero cell
 		}
 		if c >= mk.SelFrom && c < mk.SelTo {
-			row[c].Style.Attrs ^= uv.AttrReverse
+			row[c].Style.Attrs |= uv.AttrReverse // set, not flip: a cell the program drew reversed stays marked
 		}
 		if mk.Cursor {
 			row[c].Style.Underline = uv.UnderlineSingle
@@ -108,9 +108,19 @@ func (h History) Row(i int, mk RowMarks) string {
 	return row.Render()
 }
 
+// rowCells is row r's length in cells: the snapshot width, or more for a
+// scrollback line printed while the emulator was wider (x/vt keeps old
+// lines as they were, no reflow).
+func (h History) rowCells(r int) int {
+	if r >= 0 && r < len(h.lines) {
+		return max(h.width, len(h.lines[r]))
+	}
+	return h.width
+}
+
 // RowWidth is the columns up to row r's last non-blank cell.
 func (h History) RowWidth(r int) int {
-	for c := h.width - 1; c >= 0; c-- {
+	for c := h.rowCells(r) - 1; c >= 0; c-- {
 		if !h.wordBreak(r, c) {
 			return c + 1
 		}
@@ -129,12 +139,12 @@ func (h History) Text(r0, c0, r1, c1 int) string {
 	}
 	rows := make([]string, 0, r1-r0+1)
 	for r := r0; r <= r1; r++ {
-		from, to := 0, h.width-1
+		from, to := 0, h.rowCells(r)-1
 		if r == r0 {
 			from = c0
 		}
 		if r == r1 {
-			to = min(c1, h.width-1)
+			to = min(c1, to)
 		}
 		if h.wideHalf(r, from) {
 			from-- // started on a right half: take the glyph
@@ -168,7 +178,7 @@ func (h History) WordAt(r, c int) (c0, c1 int) {
 	for c0 > 0 && !h.wordBreak(r, c0-1) {
 		c0--
 	}
-	for c1 < h.width-1 && !h.wordBreak(r, c1+1) {
+	for c1 < h.rowCells(r)-1 && !h.wordBreak(r, c1+1) {
 		c1++
 	}
 	return c0, c1

@@ -49,6 +49,9 @@ func (m Model) focusConsoleByClick() Model {
 	}
 	m.console.focused = true
 	m.touchConsole()
+	if m.console.scroll != nil {
+		return m // the size comes back when scroll mode ends: a resize would drop the frozen view
+	}
 	return m.syncConsoleSize() // gaining focus takes the size back
 }
 
@@ -64,7 +67,8 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	cx, cy, inBox, inContent := m.consoleCell(msg.X, msg.Y)
-	held := m.console.held != tea.MouseButtonNone || (m.console.scroll != nil && m.console.scroll.drag.active)
+	held := m.console.held != tea.MouseButtonNone || m.console.press != nil ||
+		(m.console.scroll != nil && m.console.scroll.drag.active)
 	if !inBox && !held {
 		return m, nil, false
 	}

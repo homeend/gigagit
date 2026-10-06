@@ -31,6 +31,7 @@ type consoleState struct {
 	ret       *consoleReturn  // the screen to go back to (never nil on a shown console)
 	clipSeq   int             // the child's last OSC 52 write this console has taken (consumeConsoleClip)
 	clicks    consoleClicks   // the last left press, for double / triple clicks
+	press     *consolePress   // a left press at the live view not yet a drag (a plain click stays live)
 	scroll    *consoleScroll  // scroll mode's frozen view; nil = live
 	held      tea.MouseButton // a button forwarded to the child and not yet released (MouseButtonNone = none)
 }

@@ -87,3 +87,24 @@ func TestSessionClipboardFromChild(t *testing.T) {
 		t.Fatalf("clip = %+v", c)
 	}
 }
+
+// The wheel over a console is not a use of the session: an alt+a cycle
+// orders sessions by LastUsed and must not reshuffle under a hover.
+func TestSendMouseDoesNotTouch(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	s, err := start("m4", StartSpec{Dir: t.TempDir(), Cols: 40, Rows: 5, Argv: []string{"sh", "-c",
+		`printf '\033[?1000h\033[?1006hREADY'; sleep 5`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.kill(); <-s.Done() })
+	waitText(t, s, "READY")
+	before := s.Info().LastUsed
+	s.SendMouse(uv.MouseWheelEvent{X: 1, Y: 1, Button: uv.MouseWheelUp})
+	if after := s.Info().LastUsed; !after.Equal(before) {
+		t.Fatalf("LastUsed moved %v → %v", before, after)
+	}
+}

@@ -125,3 +125,30 @@ func TestHistoryRowMarks(t *testing.T) {
 		t.Fatalf("cursor underline missing: %q", cur)
 	}
 }
+
+// A line printed wider than today's emulator keeps its cells in scrollback
+// (x/vt does not reflow): a copy must not cut it at the new width.
+func TestHistoryTextKeepsLinesWiderThanNow(t *testing.T) {
+	t.Parallel()
+	s := historySession(t, `printf '%s\r\n' 0123456789012345678901234567AB; i=0; while [ $i -lt 8 ]; do echo x; i=$((i+1)); done; printf 'READY'; read _; sleep 5`, 40, 5)
+	waitText(t, s, "READY")
+	_ = s.Resize(20, 5)
+	h := s.History()
+	if got := h.Text(0, 0, 1, 0); got != "0123456789012345678901234567AB\nx" {
+		t.Fatalf("whole row = %q", got)
+	}
+	if w := h.RowWidth(0); w != 30 {
+		t.Fatalf("row width %d, want 30", w)
+	}
+}
+
+// A selection over cells the program drew reversed must still show.
+func TestHistoryRowSelectionOverReversedCells(t *testing.T) {
+	t.Parallel()
+	s := historySession(t, `printf '\033[7mAB\033[0mCD'; sleep 5`, 20, 5)
+	waitText(t, s, "CD")
+	row := s.History().Row(0, RowMarks{SelFrom: 0, SelTo: 4})
+	if !regexp.MustCompile(`\x1b\[(?:[0-9]*;)*7(?:;[0-9]*)*mABCD`).MatchString(row) {
+		t.Fatalf("selection not reversed throughout: %q", row)
+	}
+}
