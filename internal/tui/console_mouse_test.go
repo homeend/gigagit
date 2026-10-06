@@ -206,11 +206,29 @@ func TestConsoleLostReleaseEndsForwardedDrag(t *testing.T) {
 	waitScreen(t, s, "READY")
 	x0, y0 := contentOrigin(m)
 	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonLeft, tea.MouseActionPress)
-	waitScreen(t, s, hexOf("\x1b[<0;2;2M"))
+	m = mouseAt(m, x0+3, y0+2, tea.MouseButtonLeft, tea.MouseActionMotion)
+	waitScreen(t, s, hexOf("\x1b[<32;4;3M"))
 	p := m.layout().pos[panelBranches]
 	m = mouseAt(m, p.x+2, p.y+2, tea.MouseButtonLeft, tea.MouseActionPress)
-	waitScreen(t, s, hexOf("\x1b[<0;1;1m")) // where it was pressed, clamped to the content
+	waitScreen(t, s, hexOf("\x1b[<0;4;3m")) // where the drag got to: a selecting program ends its selection there
 	if m.console.held != tea.MouseButtonNone || m.focus != panelBranches {
 		t.Fatalf("held=%v focus=%v", m.console.held, m.focus)
+	}
+}
+
+// Another button pressed while one is held is a chord, not a lost release:
+// the held button stays down for the child.
+func TestConsoleChordIsNotALostRelease(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, sgrEcho)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "READY")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonLeft, tea.MouseActionPress)
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonRight, tea.MouseActionPress)
+	waitScreen(t, s, hexOf("\x1b[<0;2;2M\x1b[<2;2;2M"))
+	if m.console.held == tea.MouseButtonNone {
+		t.Fatal("the chord dropped the held button")
 	}
 }

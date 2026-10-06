@@ -70,11 +70,11 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 	cx, cy, inBox, inContent := m.consoleCell(msg.X, msg.Y)
 	held := m.console.held != tea.MouseButtonNone || m.console.press != nil ||
 		(m.console.scroll != nil && m.console.scroll.drag.active)
-	if held && msg.Action == tea.MouseActionPress && !isWheel(msg.Button) {
-		// A press while a button is still held: its release was lost (let
-		// go outside the terminal). End what it held, then route the press
-		// as a new one — outside the box it is the panels'.
-		m, lost := m.endHeldMouse(cx, cy)
+	if msg.Action == tea.MouseActionPress && m.pressedAgain(msg.Button) {
+		// The held button pressed again: its release was lost (let go
+		// outside the terminal). End what it held, then route the press as
+		// a new one — outside the box it is the panels'.
+		m, lost := m.endHeldMouse()
 		nm, cmd, ok := m.consoleMouse(msg)
 		return nm, tea.Batch(lost, cmd), ok
 	}
@@ -99,7 +99,8 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 		if !inContent && !held && msg.Action == tea.MouseActionPress {
 			return m, nil, true // a press on the border or title only focuses
 		}
-		if ev, ok := consoleMouseEvent(msg, clampInt(cx, 0, modes.Cols-1), clampInt(cy, 0, modes.Rows-1)); ok {
+		x, y := clampInt(cx, 0, modes.Cols-1), clampInt(cy, 0, modes.Rows-1)
+		if ev, ok := consoleMouseEvent(msg, x, y); ok {
 			sess.SendMouse(ev)
 		}
 		switch {
@@ -107,6 +108,9 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 			m.console.held = tea.MouseButtonNone
 		case msg.Action == tea.MouseActionPress && !isWheel(msg.Button):
 			m.console.held = msg.Button
+		}
+		if msg.Action != tea.MouseActionRelease && !isWheel(msg.Button) {
+			m.console.heldAt = [2]int{x, y} // where a lost release is sent
 		}
 		return m, nil, true
 	case running && modes.AltScreen:
@@ -122,15 +126,26 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 	return m.consoleScrollMouse(msg, cx, cy, inContent)
 }
 
+// pressedAgain: b is the button the console holds, pressed again — so its
+// release never arrived. Another button is a chord and changes nothing; a
+// live-view press and a scroll drag are the left button's.
+func (m Model) pressedAgain(b tea.MouseButton) bool {
+	if m.console.held != tea.MouseButtonNone {
+		return b == m.console.held
+	}
+	return b == tea.MouseButtonLeft &&
+		(m.console.press != nil || (m.console.scroll != nil && m.console.scroll.drag.active))
+}
+
 // endHeldMouse ends a press whose release never came: the child gets the
-// release of the button it was given (at content cell (cx, cy), clamped),
-// a pending live-view press is dropped, and a scroll-mode drag ends where it
-// got to — copied, as its release would have.
-func (m Model) endHeldMouse(cx, cy int) (Model, tea.Cmd) {
+// release of the button it was given where the drag last was (a selecting
+// program ends its selection there), a pending live-view press is dropped,
+// and a scroll-mode drag ends where it got to — copied, as its release
+// would have.
+func (m Model) endHeldMouse() (Model, tea.Cmd) {
 	if b := m.console.held; b != tea.MouseButtonNone {
 		if sess, ok := m.consoleSession(); ok {
-			in := sess.Input()
-			sess.SendMouse(uv.MouseReleaseEvent{X: clampInt(cx, 0, in.Cols-1), Y: clampInt(cy, 0, in.Rows-1), Button: teaToUVButton[b]})
+			sess.SendMouse(uv.MouseReleaseEvent{X: m.console.heldAt[0], Y: m.console.heldAt[1], Button: teaToUVButton[b]})
 		}
 		m.console.held = tea.MouseButtonNone
 	}

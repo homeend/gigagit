@@ -35,6 +35,7 @@ type consoleState struct {
 	press     *consolePress   // a left press at the live view not yet a drag (a plain click stays live)
 	scroll    *consoleScroll  // scroll mode's frozen view; nil = live
 	held      tea.MouseButton // a button forwarded to the child and not yet released (MouseButtonNone = none)
+	heldAt    [2]int          // the emulator cell of the last press or motion forwarded
 }
 
 // consoleReturn is the screen a console was shown over: where esc, the
