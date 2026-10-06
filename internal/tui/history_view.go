@@ -60,7 +60,8 @@ type historyView struct {
 	streamErr error // the walk failed after some commits arrived
 	start     string
 	more      bool // the last walk filled its page: older commits may exist
-	advance   bool // load more: step onto the first new commit when it lands
+	advance   bool // load more: step onto the first new commit when it lands…
+	advanceAt int  // …if the cursor is still on this row (the old last commit)
 }
 
 func newHistoryView(ctx navContext) *historyView {
@@ -117,18 +118,32 @@ func (m Model) loadHistoryListCmd(h *historyView) tea.Cmd {
 	if !w.pin {
 		w.rev = h.start
 	}
+	if m.histWalks != nil {
+		m.histWalks.add(h)
+	}
 	// The walk starts when the cmd runs, not when it is built: a caller that
 	// builds the cmd and drops it starts no git.
 	return func() tea.Msg {
 		out := make(chan historyChunkMsg)
 		go w.run(ctx, out)
-		return <-out
+		return recvHistoryChunk(out)
 	}
 }
 
 // waitHistoryChunk delivers a walk's next message.
 func waitHistoryChunk(ch <-chan historyChunkMsg) tea.Cmd {
-	return func() tea.Msg { return <-ch }
+	return func() tea.Msg { return recvHistoryChunk(ch) }
+}
+
+// recvHistoryChunk is the walk's next message, or nil once a stopped walk
+// closed its channel — so a wait pending when the walk stopped returns
+// instead of blocking its goroutine forever.
+func recvHistoryChunk(ch <-chan historyChunkMsg) tea.Msg {
+	msg, ok := <-ch
+	if !ok {
+		return nil
+	}
+	return msg
 }
 
 // historyWalk is one streamed git log --follow, run off the UI thread.
@@ -142,8 +157,10 @@ type historyWalk struct {
 }
 
 // run streams the walk into out in batches. Every send selects on ctx, so a
-// walk whose view went away never blocks forever.
+// walk whose view went away never blocks forever; out is closed on return so
+// a wait still pending on it returns too.
 func (w historyWalk) run(ctx context.Context, out chan historyChunkMsg) {
+	defer close(out)
 	start := w.rev
 	if w.pin {
 		r := w.rev
@@ -222,14 +239,53 @@ func (w historyWalk) run(ctx context.Context, out chan historyChunkMsg) {
 	}
 }
 
+// historyWalks tracks the views whose walk is running, on a pointer field so
+// the value-receiver Model shares it.
+type historyWalks struct{ views []*historyView }
+
+func (w *historyWalks) add(h *historyView) {
+	for _, v := range w.views {
+		if v == h {
+			return
+		}
+	}
+	w.views = append(w.views, h)
+}
+
+// sweepHistoryWalks stops the walk of every tracked view that is no longer
+// live. Update runs it after each message, so a view dropped by ANY teardown
+// (clearLayers, a repo switch forgetting a console's parked stack, a files
+// view dropping its parked stack, removeLayer) stops its git at once instead
+// of when the walk next finds a commit. Finished walks leave the set.
+func (m Model) sweepHistoryWalks() {
+	if m.histWalks == nil {
+		return
+	}
+	keep := m.histWalks.views[:0]
+	for _, h := range m.histWalks.views {
+		switch {
+		case h.cancel == nil: // finished or already stopped
+		case !m.historyLive(h):
+			h.stop()
+		default:
+			keep = append(keep, h)
+		}
+	}
+	m.histWalks.views = keep
+}
+
 // historyLive reports whether h is still a view the user can come back to:
-// on the stack (a console's parked views are put back for non-key messages,
-// see dispatchParkedAware) or parked by a hand-off to the files view.
+// on the stack, parked under a console (dispatchParkedAware also puts those
+// back for non-key messages) or parked by a hand-off to the files view.
 func (m Model) historyLive(h *historyView) bool {
 	if m.hasLayer(h) {
 		return true
 	}
-	for _, l := range m.filesReturnLayers {
+	parked := m.filesReturnLayers
+	if m.console != nil && m.console.ret != nil {
+		parked = append(append([]layer{}, parked...), m.console.ret.layers...)
+	}
+	for _, l := range parked {
 		if l == h {
 			return true
 		}
@@ -261,7 +317,7 @@ func (m Model) onHistoryChunk(msg historyChunkMsg) (Model, tea.Cmd) {
 			cmds = append(cmds, h.selectCmd(m))
 		case h.advance:
 			h.advance = false
-			if h.sel < len(h.commits)-1 {
+			if h.sel == h.advanceAt && h.sel < len(h.commits)-1 {
 				h.sel++
 				cmds = append(cmds, h.selectCmd(m))
 			}
@@ -610,7 +666,7 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		// On the last commit of a full page: fetch the next page and step onto
 		// its first commit when it lands.
 		if h.more && !h.streaming && len(h.commits) > 0 {
-			h.more, h.advance = false, true
+			h.more, h.advance, h.advanceAt = false, true, h.sel
 			return m, m.loadHistoryListCmd(h)
 		}
 	case "up", "k":

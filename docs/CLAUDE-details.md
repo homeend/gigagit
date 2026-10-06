@@ -5423,14 +5423,22 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   `next`; `onHistoryChunk` re-arms until `done`. `h.gen` drops a superseded
   walk's chunks; a chunk for a view no longer live (`historyLive`: on the
   stack — console-parked views are restored by `dispatchParkedAware` — or in
-  `filesReturnLayers`) cancels the walk. `esc`/`h` call `h.stop()` directly.
+  `filesReturnLayers`) cancels the walk. `esc`/`h` call `h.stop()` directly;
+  every OTHER teardown is caught by `sweepHistoryWalks`, run at the end of
+  `Model.Update`: running walks are tracked in `m.histWalks` (pointer field,
+  set by `New`) and a view no longer live (stack, console-parked, files-view
+  parked) is stopped in that same message. Do NOT hook `closeFilesView` —
+  it also runs right before a parked stack is restored. `run` closes its
+  channel on return, so a wait pending on a stopped walk returns nil instead
+  of leaking its goroutine.
 - **Load more:** `git log --follow` ignores `--skip` (linux: `--skip=200 -n
   200` returned the newest 200), so a load-more walk asks for
   `-n shown+200` and drops the first `shown` emissions. The first walk pins
   its start rev to a sha (`svc.RevParse`, `HEAD` for rev ""), stored in
   `h.start`, so a commit made meanwhile cannot shift the positional skip.
   `h.more` = the walk hit its limit; `↓` on the last commit starts the next
-  page and `h.advance` steps onto its first commit when it lands.
+  page and `h.advance` steps onto its first commit when it lands — only if
+  the cursor is still on `h.advanceAt` (the old last row).
 - **Evidence** (`tui-capture.sh` on linux): 3c509.c — first screen already
   shows the newest commit selected with its diff and `· loading… 4 found`;
   esc → the `git log --follow` process is gone 80 ms later. core.c — the

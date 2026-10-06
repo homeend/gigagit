@@ -243,3 +243,86 @@ func TestHistoryShortPageOffersNoLoadMore(t *testing.T) {
 		t.Fatal("j on the last commit of a short page must do nothing")
 	}
 }
+
+// Final review #1: a stopped walk must release the cmd still waiting for its
+// next message — Bubble Tea runs that wait in its own goroutine, which would
+// otherwise block forever on every esc mid-walk.
+func TestHistoryWaitReturnsAfterStop(t *testing.T) {
+	t.Parallel()
+	r := newHistRunner(1, true)
+	m, h := fileHistModel(r)
+	msg := m.loadHistoryListCmd(h)().(historyChunkMsg)
+	m, _ = m.onHistoryChunk(msg)
+	got := make(chan tea.Msg, 1)
+	go func() { got <- waitHistoryChunk(msg.next)() }()
+	_, _ = h.update(m, tea.KeyMsg{Type: tea.KeyEsc})
+	select {
+	case v := <-got:
+		if v != nil {
+			t.Fatalf("a stopped walk's wait must yield nil, got %#v", v)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the pending wait never returned after the walk stopped (goroutine leak)")
+	}
+}
+
+// Final review #2: a view dropped by any teardown (clearLayers here — a
+// cherry-pick hand-off, gg session navigate) stops its walk at the end of
+// that same Update, not when git happens to find the next commit.
+func TestHistoryTeardownStopsWalk(t *testing.T) {
+	t.Parallel()
+	r := newHistRunner(1, true)
+	m, h := fileHistModel(r)
+	m.histWalks = &historyWalks{}
+	cmd := m.loadHistoryListCmd(h)
+	msg := cmd().(historyChunkMsg)
+	m, _ = m.onHistoryChunk(msg)
+	m = m.clearLayers()
+	mm, _ := m.Update(struct{}{})
+	_ = mm
+	select {
+	case <-r.ctxDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a torn-down view's walk kept running")
+	}
+}
+
+// …while a view merely parked (under a console, or by a files-view hand-off)
+// keeps walking: it comes back.
+func TestHistorySweepKeepsParkedWalks(t *testing.T) {
+	t.Parallel()
+	for _, park := range []string{"console", "files"} {
+		h := &historyView{}
+		stopped := false
+		h.cancel = func() { stopped = true }
+		m := Model{histWalks: &historyWalks{views: []*historyView{h}}}
+		switch park {
+		case "console":
+			m.console = &consoleState{ret: &consoleReturn{layers: []layer{h}}}
+		case "files":
+			m.filesReturnLayers = []layer{h}
+		}
+		m.sweepHistoryWalks()
+		if stopped {
+			t.Fatalf("%s-parked view's walk was stopped", park)
+		}
+	}
+}
+
+// Final review #3: load more steps onto the first new commit only if the
+// cursor is still on the old last commit — never from wherever the user moved
+// it while git re-walked the first page.
+func TestHistoryLoadMoreAdvanceOnlyFromBoundary(t *testing.T) {
+	t.Parallel()
+	r := newHistRunner(historyPage+5, false)
+	m, h := fileHistModel(r)
+	m = drainHistory(t, m, m.loadHistoryListCmd(h))
+	h.sel = len(h.commits) - 1
+	m, cmd := h.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m, _ = h.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	m, _ = h.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	_ = drainHistory(t, m, cmd)
+	if h.sel != historyPage-3 {
+		t.Fatalf("the user moved to %d; load more moved the cursor to %d", historyPage-3, h.sel)
+	}
+}

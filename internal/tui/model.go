@@ -150,6 +150,7 @@ type Model struct {
 	wtPreviewGen  int                                      // bumped per cursor move in F's window: drops a superseded preview settle
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
+	histWalks     *historyWalks                            // file-history walks still running; Update stops the ones whose view went away (sweepHistoryWalks)
 	consoleSwitch consoleSwitch                            // a repo switch's console settle, run when its snapshot lands (console_scope.go)
 	sessWatch     *sessionWatch                            // the TUI's subscription to the session list (console.go)
 	actWatch      *activityWatch                           // its subscription to session activity (session_activity.go)
@@ -495,6 +496,7 @@ var bottomTabs = []panel{panelStaged, panelReflog}
 func New(svc *domain.Service) Model {
 	m := Model{
 		svc:                    svc,
+		histWalks:              &historyWalks{},
 		sessWatch:              &sessionWatch{},
 		actWatch:               &activityWatch{},
 		actSeq:                 seqPtr(domain.SessionNoticeSeq()), // never replay notices posted before this model
@@ -589,6 +591,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if next.statusMsg != before && statusNeedsFull(next.statusMsg, next.width) {
 		next.lastError = next.statusMsg
 	}
+	next.sweepHistoryWalks()
 	return next, cmd
 }
 
