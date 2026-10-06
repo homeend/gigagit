@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A branch review covers the whole branch in any repository
+
+### Fixed
+
+- **"Review branch" reviewed only the last commit outside a `main`
+  repository.** The review's base was the merge-base with a local `main`;
+  a repository whose trunk is `master` (or anything else) fell through to
+  the branch's upstream and then to its tip commit alone. The base is now
+  the merge-base with the trunk — origin's default branch, else `main`,
+  else `master` (the same order the compare base picker uses) — in the TUI,
+  the web page and `gg review`.
+- **A branch tracking its own pushed copy is reviewed in full**, from the
+  trunk, not just its unpushed commits. The upstream is only the base when
+  the repository has no trunk.
+
 ## alt+a / alt+t come back where they started
 
 ### Changed
