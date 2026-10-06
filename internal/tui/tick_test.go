@@ -29,10 +29,11 @@ func TestTickInQuietModeIsADescriptor(t *testing.T) {
 // that may sleep on the wall clock. Keyed by line, not file, so a second
 // timer added to an allow-listed file is still caught.
 var rawTimerAllowed = map[string]map[string]string{
-	"tick.go":       {"return tea.Tick(d, fn)": "the one tea.Tick call"},
-	"console.go":    {"time.Sleep(consoleRepaint)": "waitSessionCmd's sleep: agent consoles never open in quiet mode"},
-	"headless.go":   {"case <-time.After(d):": "the driver's own settle guard: it bounds a blocking command, it is never a UI timer"},
-	"repo_popup.go": {"deadline := time.After(time.Second)": "probeReposCmd's 1 s deadline only bounds wedged fs probes; it returns as soon as every probe answers"},
+	"tick.go":         {"return tea.Tick(d, fn)": "the one tea.Tick call"},
+	"console.go":      {"time.Sleep(consoleRepaint)": "waitSessionCmd's sleep: agent consoles never open in quiet mode"},
+	"headless.go":     {"case <-time.After(d):": "the driver's own settle guard: it bounds a blocking command, it is never a UI timer"},
+	"repo_popup.go":   {"deadline := time.After(time.Second)": "probeReposCmd's 1 s deadline only bounds wedged fs probes; it returns as soon as every probe answers"},
+	"history_view.go": {"tick = time.After(historyBatchDelay)": "historyWalk's batch flush inside the walk goroutine: it only splits batches, the walk's end is sent at once"},
 }
 
 var rawTimer = regexp.MustCompile(`tea\.(Tick|Every)\(|time\.(After|Sleep)\(`)
