@@ -547,6 +547,20 @@ func (s *Service) FileLog(ctx context.Context, rev, path string, limit int) ([]m
 	})
 }
 
+// FileLogStream walks path's history like FileLog but hands each commit to
+// emit as git prints it, newest first. It deliberately takes NO reservation
+// and is not coalesced: git log reads immutable objects from a start rev it
+// resolves once and never takes index.lock, so a concurrent tree write cannot
+// tear it — while holding Read for a walk that can run 20 s on a huge repo
+// would park every write (and, writer-preferring, every later read) behind it.
+func (s *Service) FileLogStream(ctx context.Context, rev, path string, limit int, emit func(model.FileCommit)) error {
+	err := s.repo.FileLogStream(ctx, rev, path, limit, emit)
+	if err != nil && ctx.Err() == nil {
+		observ.NoteFailure("filelog stream "+path, err)
+	}
+	return err
+}
+
 // CommitMessage returns rev's full commit message, under a Read reservation.
 // Backs the reword popup's pre-fill.
 func (s *Service) CommitMessage(ctx context.Context, rev string) (string, error) {

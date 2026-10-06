@@ -441,3 +441,28 @@ func TestServiceLsFiles(t *testing.T) {
 		t.Fatalf("expected README.md in files, got %v", files)
 	}
 }
+
+// The streamed file history takes NO reservation: a 20 s walk on a huge repo
+// must not make a tree write (Copy to working dir) wait for it.
+func TestFileLogStreamTakesNoReservation(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	svc := New(&git.Repo{Runner: f})
+	var held []repogate.Entry
+	f.SetHandler("git log (file history)", func(ctx context.Context, argv []string) (gitexec.Result, error) {
+		held = svc.gateFor(ctx).Queue()
+		return gitexec.Result{Stdout: "aaa\x1f\x1fAda\x1f1700000000\x1fadd\nA\ta.go\n"}, nil
+	})
+	var got []model.FileCommit
+	err := svc.FileLogStream(context.Background(), "", "a.go", 200, func(fc model.FileCommit) {
+		got = append(got, fc)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(held) != 0 {
+		t.Fatalf("FileLogStream held the gate mid-walk: %+v", held)
+	}
+	if len(got) != 1 || got[0].Hash != "aaa" || got[0].Status != "A" || got[0].Path != "a.go" {
+		t.Fatalf("emitted %+v", got)
+	}
+}
