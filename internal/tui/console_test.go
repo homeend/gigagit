@@ -464,7 +464,7 @@ func TestExitedConsoleClosesOnX(t *testing.T) {
 	m.console.focused = false
 	m.focus = panelCommits
 	m, _ = m.onSessionsChanged() // seen running
-	if strings.Contains(m.footerLine(), "[x] close") || strings.Contains(consoleTitle(s.Info(), false), "[x] close") {
+	if strings.Contains(m.footerLine(), "[x] close") || strings.Contains(consoleTitle(s.Info(), false, false), "[x] close") {
 		t.Fatalf("a running console must not offer [x] close: %q", m.footerLine())
 	}
 	mm, _ := m.Update(keyMsg("x"))
@@ -485,7 +485,7 @@ func TestExitedConsoleClosesOnX(t *testing.T) {
 	if !strings.Contains(m.footerLine(), "[x] close") {
 		t.Fatalf("footer must advertise [x] close on an exited console: %q", m.footerLine())
 	}
-	if title := consoleTitle(s.Info(), false); !strings.Contains(title, "[x] close") || strings.Contains(title, "[enter] type") {
+	if title := consoleTitle(s.Info(), false, false); !strings.Contains(title, "[x] close") || strings.Contains(title, "[enter] type") {
 		t.Fatalf("exited title hints: %q", title)
 	}
 	mm, _ = m.Update(keyMsg("x"))
@@ -508,8 +508,8 @@ func TestUnfocusedRunningConsoleKillRemovesOnX(t *testing.T) {
 	m.console.focused = false
 	m.focus = panelCommits
 	m, _ = m.onSessionsChanged()
-	if !strings.Contains(m.footerLine(), "[X] kill+remove") || !strings.Contains(consoleTitle(s.Info(), false), "[X] kill+remove") {
-		t.Fatalf("a running unfocused console must offer [X] kill+remove: footer %q title %q", m.footerLine(), consoleTitle(s.Info(), false))
+	if !strings.Contains(m.footerLine(), "[X] kill+remove") || !strings.Contains(consoleTitle(s.Info(), false, false), "[X] kill+remove") {
+		t.Fatalf("a running unfocused console must offer [X] kill+remove: footer %q title %q", m.footerLine(), consoleTitle(s.Info(), false, false))
 	}
 	mm, _ := m.Update(keyMsg("X"))
 	m = mm.(Model)

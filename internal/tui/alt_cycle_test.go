@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/domain"
 )
@@ -375,5 +378,22 @@ func TestFullScreenConsoleSnapsFocusBack(t *testing.T) {
 	m = press(t, m, "x")
 	if m.console == nil || !m.console.focused || !m.console.maximized || m.focus != panelCommits {
 		t.Fatalf("console=%+v focus=%v", m.console, m.focus)
+	}
+}
+
+// An unfocused full-screen console advertises what its keys do there: esc
+// goes back, alt+a/alt+t go on; no maximise (it is) and no panels (hidden).
+func TestUnfocusedFullScreenConsoleHints(t *testing.T) {
+	m, _ := fullScreenAgent(t)
+	frame := ansi.Strip(m.View())
+	for _, want := range []string{"[esc] back", "[esc/ctrl+]] back", "[alt+a/alt+t] next"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("frame lacks %q", want)
+		}
+	}
+	for _, bad := range []string{"[ctrl+t] maximise", "[tab] panels"} {
+		if strings.Contains(frame, bad) {
+			t.Errorf("frame advertises %q", bad)
+		}
 	}
 }

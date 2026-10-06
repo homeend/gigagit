@@ -289,20 +289,27 @@ func (m Model) waitSessionsCmd() tea.Cmd {
 	}
 }
 
-// consoleTitle is the box title: label · worktree · state.
-func consoleTitle(info domain.SessionInfo, focused bool) string {
+// consoleTitle is the box title: label · worktree · state. full = shown
+// over a full-screen return point (its unfocused keys differ).
+func consoleTitle(info domain.SessionInfo, focused, full bool) string {
 	label, wt, state := consoleTitleParts(info)
 	t := label + " · " + wt + " · " + state
 	if !focused {
-		t += consoleTitleHints(info.State == domain.SessionExited)
+		t += consoleTitleHints(info.State == domain.SessionExited, full)
 	}
 	return t
 }
 
 // consoleTitleHints: an exited agent has nothing to type into, so its console
-// offers [x] close (remove the session) and esc only hides it.
-func consoleTitleHints(exited bool) string {
-	if exited {
+// offers [x] close (remove the session) and esc only hides it. A full-screen
+// one is already maximised and esc goes back to the view it covers.
+func consoleTitleHints(exited, full bool) string {
+	switch {
+	case exited && full:
+		return "  " + i18n.T("[x] close  [esc] back")
+	case full:
+		return "  " + i18n.T("[enter] type  [X] kill+remove  [esc] back")
+	case exited:
 		return "  " + i18n.T("[x] close  [ctrl+t] maximise  [esc] hide")
 	}
 	return "  " + i18n.T("[enter] type  [X] kill+remove  [ctrl+t] maximise  [esc] close")
@@ -323,8 +330,8 @@ func consoleTitleParts(info domain.SessionInfo) (label, wt, state string) {
 // consoleTitleFit is the title in w columns, keeping what it is for — the
 // label and the state with its activity: the key hints go first, then the
 // worktree name is cut in the middle, then dropped; only then is the end cut.
-func consoleTitleFit(info domain.SessionInfo, focused bool, w int) string {
-	if t := consoleTitle(info, focused); lipgloss.Width(t) <= w {
+func consoleTitleFit(info domain.SessionInfo, focused, full bool, w int) string {
+	if t := consoleTitle(info, focused, full); lipgloss.Width(t) <= w {
 		return t
 	}
 	label, wt, state := consoleTitleParts(info)
@@ -348,7 +355,7 @@ func (m Model) renderConsole(boxW, boxH int) string {
 		lines = []string{padRight(i18n.T("(agent session gone)"), innerW)}
 	} else {
 		info := sess.Info()
-		lines = append(lines, padRight(consoleTitleFit(info, m.console.focused, innerW), innerW))
+		lines = append(lines, padRight(consoleTitleFit(info, m.console.focused, m.consoleFull(), innerW), innerW))
 		var sc domain.SessionScreen
 		if m.console.focused && info.State == domain.SessionRunning {
 			sc = sess.ScreenWithCursor()
