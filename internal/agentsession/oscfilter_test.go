@@ -218,3 +218,53 @@ func TestOSCFilterOutputUnchangedByRecording(t *testing.T) {
 		t.Fatalf("filter output\n got %q\nwant %q", got, want)
 	}
 }
+
+func TestOSCFilterCapturesClipboardWrites(t *testing.T) {
+	t.Parallel()
+	var f oscFilter
+	// "hello\nworld" base64, split across two reads, BEL-terminated.
+	f.filter([]byte("x\x1b]52;c;aGVsbG8K"))
+	f.filter([]byte("d29ybGQ=\x07y"))
+	if !f.clipChanged || f.clip != "hello\nworld" || f.clipSeq != 1 || f.clipOver {
+		t.Fatalf("got changed=%v clip=%q seq=%d over=%v", f.clipChanged, f.clip, f.clipSeq, f.clipOver)
+	}
+	f.clipChanged = false
+	f.filter([]byte("\x1b]52;;Zm9v\x1b\\")) // empty selection param, ST-terminated
+	if !f.clipChanged || f.clip != "foo" || f.clipSeq != 2 {
+		t.Fatalf("ST form: clip=%q seq=%d", f.clip, f.clipSeq)
+	}
+}
+
+func TestOSCFilterIgnoresClipboardReadsAndJunk(t *testing.T) {
+	t.Parallel()
+	var f oscFilter
+	f.filter([]byte("\x1b]52;c;?\x07"))   // a read request: never answered, never stored
+	f.filter([]byte("\x1b]52;c;!!!\x07")) // not base64
+	f.filter([]byte("\x1b]52;c\x07"))     // no data field
+	if f.clipChanged || f.clipSeq != 0 {
+		t.Fatalf("stored something: seq=%d clip=%q", f.clipSeq, f.clip)
+	}
+}
+
+func TestOSCFilterDropsOversizedClipboard(t *testing.T) {
+	t.Parallel()
+	var f oscFilter
+	big := strings.Repeat("QUFB", clipCap/4+10) // > clipCap base64 bytes
+	f.filter([]byte("\x1b]52;c;" + big + "\x07"))
+	if !f.clipChanged || !f.clipOver || f.clip != "" || f.clipSeq != 1 {
+		t.Fatalf("over=%v clip len=%d seq=%d", f.clipOver, len(f.clip), f.clipSeq)
+	}
+	f.clipChanged = false
+	f.filter([]byte("\x1b]52;c;Zm9v\x07")) // the next small one is fine again
+	if f.clipOver || f.clip != "foo" {
+		t.Fatalf("after oversize: over=%v clip=%q", f.clipOver, f.clip)
+	}
+}
+
+func TestOSCFilterClipboardStaysOffScreen(t *testing.T) {
+	t.Parallel()
+	got := screenOf(40, 2, []byte("\x1b]52;c;aGVsbG8=\x07AB"))
+	if got[0] != "AB" {
+		t.Fatalf("row0 = %q", got[0])
+	}
+}

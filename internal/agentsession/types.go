@@ -63,3 +63,11 @@ type Signals struct {
 	Title    string
 	Progress int
 }
+
+// Clip is the last clipboard write the child asked for (OSC 52). Seq counts
+// writes (0 = none yet); Over = the last was over the cap and dropped.
+type Clip struct {
+	Text string
+	Seq  int
+	Over bool
+}

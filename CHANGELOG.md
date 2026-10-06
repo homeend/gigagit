@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The mouse reaches programs in an agent console
+
+### Added
+
+- **Scroll back through what an agent printed.** Over a console whose
+  program does not take the mouse — Claude Code's normal mode, Junie, a
+  shell — the wheel (or `alt+PgUp`, or `PgUp` on an unfocused console) opens
+  scroll mode: a frozen view of the whole history (up to 10,000 lines) while
+  the program keeps running; the title shows the position and "new output"
+  once more has arrived. `↑`/`↓`, `PgUp`/`PgDn`, `g`/`G` move a cursor row;
+  `space`…`space` then `enter` copies whole lines; a drag copies text (a
+  double-click a word, a triple-click a line), scrolling when it passes the
+  edge. `esc` or `q` leaves and never reaches the agent; any other key leaves
+  and goes to the agent; scrolling past the bottom leaves too.
+- **Wheel, clicks and drags go to a console program that asks for the
+  mouse.** Claude Code in its fullscreen mode scrolls its transcript with the
+  wheel and selects text with a drag; `mc` and other mouse-aware programs in
+  Open terminal get clicks and the wheel. A drag that ends outside the
+  console still delivers its release. The wheel works by hover — the focused
+  left panel keeps the focus — and a click focuses the console as before.
+- **What a console program copies reaches the clipboard.** Its OSC 52
+  clipboard writes (Claude Code's own selection) go through gg's clipboard
+  path (`clip.exe` on WSL, a native tool, or OSC 52 to the host terminal),
+  with a "Copied N lines" status; a write over 1 MiB is dropped and says so.
+  Clipboard read requests are never answered.
+- A full-screen program without mouse support gets `↑`/`↓` for the wheel.
+
 ## The error and operation logs rotate weekly
 
 ### Changed

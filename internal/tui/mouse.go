@@ -90,6 +90,11 @@ func rightClickMenuLayer(l layer) bool {
 // (synthKey), so they can never drift from what the keys do — and they act on
 // the control's own selected state, never on hidden background state.
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// The agent console takes press, motion and release over its box (and a
+	// drag it forwarded, wherever it goes) ahead of the press-only gate.
+	if nm, cmd, ok := m.consoleMouse(msg); ok {
+		return nm, cmd
+	}
 	if msg.Action != tea.MouseActionPress {
 		return m, nil
 	}
@@ -219,16 +224,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if p, ok := m.panelAt(msg.X, msg.Y); ok && p == panelCommits {
-			if msg.Button == tea.MouseButtonLeft && (!m.console.focused || m.focus != panelCommits) {
-				m.filterTyping = false
-				m = m.rememberLeftFocus()
-				m.focus = panelCommits
-				if m.filesView != nil {
-					m = m.focusRight()
-				}
-				m.console.focused = true
-				m.touchConsole()
-				return m.syncConsoleSize(), nil // gaining focus takes the size back
+			if msg.Button == tea.MouseButtonLeft {
+				return m.focusConsoleByClick(), nil
 			}
 			return m, nil
 		}

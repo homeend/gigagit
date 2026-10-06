@@ -1,6 +1,7 @@
 package agentsession
 
 import (
+	"encoding/base64"
 	"strings"
 	"unicode/utf8"
 )
@@ -32,6 +33,13 @@ type oscFilter struct {
 	progress    int     // the last OSC 9;4 state (0–4)
 	hasProgress bool    // an OSC 9;4 has been seen
 	changed     bool    // title or progress committed since the reader last cleared it
+
+	clipBuf     []byte // the OSC 52 payload read so far (capped at clipCap)
+	clipLong    bool   // the payload being read passed clipCap
+	clip        string // the last decoded clipboard write
+	clipSeq     int    // clipboard writes committed (an over-cap one included)
+	clipOver    bool   // the last write was over clipCap and dropped
+	clipChanged bool   // a clipboard write committed since the reader last cleared it
 }
 
 type filterState uint8
@@ -50,7 +58,11 @@ const (
 	oscNumber                  // an OSC whose number is still being read
 	oscTitle                   // OSC 0 / OSC 2
 	oscProgress                // OSC 9 (a progress report only if it reads "4;<state>")
+	oscClip                    // OSC 52: a clipboard write
 )
+
+// clipCap bounds an OSC 52 payload (base64 bytes); a longer one is dropped.
+const clipCap = 1 << 20
 
 // titleCap bounds a recorded title; longer payloads are cut on a rune.
 const titleCap = 256
@@ -121,6 +133,8 @@ func (f *oscFilter) record(b byte) {
 				f.osc = oscTitle
 			case "9":
 				f.osc = oscProgress
+			case "52":
+				f.osc, f.clipBuf, f.clipLong = oscClip, f.clipBuf[:0], false
 			default:
 				f.osc = oscNone
 			}
@@ -138,6 +152,12 @@ func (f *oscFilter) record(b byte) {
 	case oscProgress:
 		if len(f.pay) < 16 {
 			f.pay = append(f.pay, b)
+		}
+	case oscClip:
+		if len(f.clipBuf) < clipCap {
+			f.clipBuf = append(f.clipBuf, b)
+		} else {
+			f.clipLong = true
 		}
 	}
 }
@@ -164,6 +184,31 @@ func (f *oscFilter) commit() {
 		if len(st) == 1 && st[0] >= '0' && st[0] <= '4' {
 			f.progress, f.hasProgress, f.changed = int(st[0]-'0'), true, true
 		}
+	case oscClip:
+		f.commitClip()
 	}
 	f.osc = oscNone
+}
+
+// commitClip stores an OSC 52 write: "<selection>;<base64>". A read request
+// ("?") and undecodable data are ignored; an over-cap payload is recorded as
+// dropped so the frontend can say so.
+func (f *oscFilter) commitClip() {
+	if f.clipLong {
+		f.clip, f.clipOver = "", true
+		f.clipSeq++
+		f.clipChanged = true
+		return
+	}
+	_, data, ok := strings.Cut(string(f.clipBuf), ";")
+	if !ok || data == "?" {
+		return
+	}
+	dec, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return
+	}
+	f.clip, f.clipOver = string(dec), false
+	f.clipSeq++
+	f.clipChanged = true
 }

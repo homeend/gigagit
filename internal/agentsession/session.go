@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/charmbracelet/x/xpty"
 )
@@ -35,7 +36,8 @@ type Session struct {
 	done         chan struct{}
 	outDone      chan struct{} // closed when pumpOut has drained the PTY
 	closeOnce    sync.Once
-	cursorHidden atomic.Bool // DECTCEM state, fed by the emulator callback
+	cursorHidden atomic.Bool   // DECTCEM state, fed by the emulator callback
+	mouseModes   atomic.Uint32 // a bit per mouse-tracking DEC mode the child set (mouseModeBit)
 
 	taps    map[chan []byte]struct{} // raw-output subscribers (tap.go), under mu
 	trace   *os.File                 // raw-output recording (StartSpec.TracePath); written by pumpOut only
@@ -46,6 +48,7 @@ type Session struct {
 	osc     oscFilter                // pumpOut-only: keeps UTF-8 in OSC payloads away from x/ansi's C1 parsing
 	sigMu   sync.Mutex
 	sig     Signals // the title/progress osc recorded; under sigMu
+	clip    Clip    // the last OSC 52 write; under sigMu
 	job     uintptr // Windows job object handle; 0 elsewhere
 }
 
@@ -105,12 +108,51 @@ func start(id ID, spec StartSpec) (*Session, error) {
 		sig:     Signals{Progress: -1},
 	}
 	// Callbacks run inside emu.Write under the emulator's lock: store only.
-	emu.SetCallbacks(vt.Callbacks{CursorVisibility: func(v bool) { s.cursorHidden.Store(!v) }})
+	emu.SetCallbacks(vt.Callbacks{
+		CursorVisibility: func(v bool) { s.cursorHidden.Store(!v) },
+		EnableMode:       func(m ansi.Mode) { s.setMouseMode(m, true) },
+		DisableMode:      func(m ansi.Mode) { s.setMouseMode(m, false) },
+	})
 	attachJob(s)
 	go s.pumpOut()
 	go s.pumpIn()
 	go s.wait()
 	return s, nil
+}
+
+// mouseModeBit maps the mouse-tracking DEC modes to a bit each; any set bit
+// means the child reads mouse reports.
+func mouseModeBit(m ansi.Mode) uint32 {
+	switch m {
+	case ansi.ModeMouseX10:
+		return 1
+	case ansi.ModeMouseNormal:
+		return 2
+	case ansi.ModeMouseHighlight:
+		return 4
+	case ansi.ModeMouseButtonEvent:
+		return 8
+	case ansi.ModeMouseAnyEvent:
+		return 16
+	}
+	return 0
+}
+
+func (s *Session) setMouseMode(m ansi.Mode, on bool) {
+	bit := mouseModeBit(m)
+	if bit == 0 {
+		return
+	}
+	for {
+		old := s.mouseModes.Load()
+		next := old &^ bit
+		if on {
+			next = old | bit
+		}
+		if s.mouseModes.CompareAndSwap(old, next) {
+			return
+		}
+	}
 }
 
 // childEnv drops the variables that describe gg's own host terminal rather
@@ -161,6 +203,12 @@ func (s *Session) pumpOut() {
 				if s.osc.hasProgress {
 					s.sig.Progress = s.osc.progress
 				}
+				s.sigMu.Unlock()
+			}
+			if s.osc.clipChanged {
+				s.osc.clipChanged = false
+				s.sigMu.Lock()
+				s.clip = Clip{Text: s.osc.clip, Seq: s.osc.clipSeq, Over: s.osc.clipOver}
 				s.sigMu.Unlock()
 			}
 			s.feedTaps(buf[:n])
@@ -308,6 +356,13 @@ func (s *Session) Signals() Signals {
 	s.sigMu.Lock()
 	defer s.sigMu.Unlock()
 	return s.sig
+}
+
+// Clipboard is the child's last OSC 52 clipboard write.
+func (s *Session) Clipboard() Clip {
+	s.sigMu.Lock()
+	defer s.sigMu.Unlock()
+	return s.clip
 }
 
 // LastInput is when anyone last typed into the child (SendKey, SendText,

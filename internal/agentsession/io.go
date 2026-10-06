@@ -12,6 +12,18 @@ import (
 // terminal modes (application cursor keys, kitty flags) are honoured.
 type Key = uv.KeyEvent
 
+// Mouse is one mouse event for SendMouse (click, release, wheel, motion),
+// encoded by the emulator in the mouse mode the child enabled.
+type Mouse = uv.MouseEvent
+
+// InputModes is what the child asked of its terminal's input: mouse
+// tracking (any of modes 9/1000/1001/1002/1003) and the alternate screen,
+// plus the emulator's size for clamping coordinates.
+type InputModes struct {
+	Mouse, AltScreen bool
+	Cols, Rows       int
+}
+
 // Screen is a copied snapshot of the visible grid.
 type Screen struct {
 	Lines            []string // one ANSI-styled line per row, exactly Rows long
@@ -60,6 +72,28 @@ func (s *Session) Paste(text string) {
 		s.lastIn.mark()
 		s.withEmu(func() { s.emu.Paste(text) })
 	}
+}
+
+// Input reports the child's input modes and the emulator size.
+func (s *Session) Input() InputModes {
+	return InputModes{
+		Mouse:     s.mouseModes.Load() != 0,
+		AltScreen: s.emu.IsAltScreen(),
+		Cols:      s.emu.Width(),
+		Rows:      s.emu.Height(),
+	}
+}
+
+// SendMouse encodes ev for the child in the mouse mode it enabled (a no-op
+// when it enabled none, or once the session has exited). Coordinates are
+// 0-based cells of the emulator. A mouse event is neither typed input
+// (LastInput) nor a use of the session (LastUsed): a hover wheel must not
+// reorder the alt+a cycle; the click that focuses a console touches it.
+func (s *Session) SendMouse(ev Mouse) {
+	if !s.running() {
+		return
+	}
+	s.withEmu(func() { s.emu.SendMouse(ev) })
 }
 
 // Resize resizes the emulator and the PTY (SIGWINCH / ConPTY resize).
