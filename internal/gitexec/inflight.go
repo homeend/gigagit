@@ -1,6 +1,7 @@
 package gitexec
 
 import (
+	"context"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -18,21 +19,28 @@ type Proc struct {
 }
 
 var (
-	inflightMu  sync.Mutex
-	inflight    = map[int64]*Proc{}
-	inflightSeq int64
+	inflightMu     sync.Mutex
+	inflight       = map[int64]*Proc{}
+	inflightCancel = map[int64]context.CancelFunc{}
+	inflightSeq    int64
 
 	// slotWaiters counts callers queued for a gitSem slot: eight hung gits
 	// stall every later read here, before any process starts.
 	slotWaiters atomic.Int64
 )
 
-func trackProc(name string, argv []string, start time.Time) int64 {
+// trackProc registers a git about to start and derives the context it runs
+// under, so CancelInFlight can end it (the runner's own SIGTERM-then-WaitDelay
+// cancel). The caller untrackProc(id)s it once it exits and calls cancel only
+// on return — after its own ctx.Err() check, which must not see this cancel.
+func trackProc(ctx context.Context, name string, argv []string, start time.Time) (context.Context, int64, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
 	inflightMu.Lock()
 	defer inflightMu.Unlock()
 	inflightSeq++
 	inflight[inflightSeq] = &Proc{Name: name, Argv: slices.Clone(argv), Start: start}
-	return inflightSeq
+	inflightCancel[inflightSeq] = cancel
+	return ctx, inflightSeq, cancel
 }
 
 func setProcPID(id int64, pid int) {
@@ -43,10 +51,30 @@ func setProcPID(id int64, pid int) {
 	}
 }
 
+// untrackProc takes a git off the list; safe to call twice.
 func untrackProc(id int64) {
 	inflightMu.Lock()
 	defer inflightMu.Unlock()
 	delete(inflight, id)
+	delete(inflightCancel, id)
+}
+
+// CancelInFlight ends every git subprocess running right now — the emergency
+// unlock's last resort: an abandoned read that hangs still holds its
+// singleflight slot, its git slot and its repo reservation, so the next
+// reload would only join it. git gets SIGTERM (it releases its lockfiles)
+// and the caller sees a cancelled error. Returns how many it signalled.
+func CancelInFlight() int {
+	inflightMu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(inflightCancel))
+	for _, c := range inflightCancel {
+		cancels = append(cancels, c)
+	}
+	inflightMu.Unlock()
+	for _, c := range cancels {
+		c()
+	}
+	return len(cancels)
 }
 
 // InFlight snapshots the git subprocesses running right now, oldest first.

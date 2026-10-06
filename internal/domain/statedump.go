@@ -80,3 +80,9 @@ func oneLineDetail(s string) string {
 	}
 	return s
 }
+
+// EndGitProcesses SIGTERMs every git subprocess this process is running — the
+// emergency unlock's step after its dump: an abandoned read that hangs keeps
+// its coalesced flight, git slot and repo reservation, so a reload would only
+// join it. Returns how many were signalled.
+func EndGitProcesses() int { return gitexec.CancelInFlight() }

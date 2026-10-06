@@ -5,11 +5,17 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/engine"
 )
+
+// endGitCalls counts the (stubbed, see TestMain) alt+u git kills.
+var endGitCalls atomic.Int64
 
 // sourceMsgs runs a reload command and returns the messages it produced,
 // without feeding them back (the caller lands them in the order it needs).
@@ -80,6 +86,9 @@ func TestEmergencyUnlockClearsAStuckReload(t *testing.T) {
 	m = m.pushLayer(&compareLoadingPopup{tag: "x", subject: "y"}) // any screen
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u"), Alt: true})
 	m = updated.(Model)
+	if endGitCalls.Load() == 0 {
+		t.Fatal("a locked alt+u must end the git processes a hung read holds")
+	}
 	if !m.opsIdle() || m.anySourceLoading() || m.anySourceInflight() {
 		t.Fatalf("alt+u must unlock: loading=%v srcLoading=%v inflight=%v",
 			m.loading, m.srcLoading, m.srcInflight)
@@ -174,5 +183,44 @@ func TestUnlockHintAppearsOnlyOnAStuckReload(t *testing.T) {
 	m.srcSince[srcStatus] = now.Add(-time.Minute)
 	if !strings.Contains(m.footerLine(), "alt+u") {
 		t.Fatalf("the footer must offer alt+u on a stuck reload: %q", m.footerLine())
+	}
+}
+
+// alt+u on an op parked on its own decision answers it abort, so the dead op
+// never leaves a modal behind (the reply is buffered: this cannot block).
+func TestEmergencyUnlockAbortsTheOpsDecision(t *testing.T) {
+	t.Parallel()
+	m := newTestModel(t)
+	m.loading = false
+	m.running = true
+	m.opCancel = func() {}
+	reply := make(chan engine.DecisionResponse, 1)
+	m.modal = &decisionState{req: engine.DecisionRequest{Options: []string{"continue", "abort"}}, reply: reply}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u"), Alt: true})
+	m = updated.(Model)
+	if m.modal != nil {
+		t.Fatal("the op's decision must close")
+	}
+	select {
+	case r := <-reply:
+		if r.Option != "abort" {
+			t.Fatalf("answered %q, want abort", r.Option)
+		}
+	default:
+		t.Fatal("the op's decision must be answered")
+	}
+}
+
+// An op without a cancel cannot be stopped; alt+u says so rather than imply
+// the interface is free.
+func TestEmergencyUnlockSaysAnUnstoppableOpRuns(t *testing.T) {
+	t.Parallel()
+	m := newTestModel(t)
+	m.loading = false
+	m.running = true
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("u"), Alt: true})
+	m = updated.(Model)
+	if !strings.Contains(m.statusMsg, "cannot be stopped") || m.lastError != m.statusMsg {
+		t.Fatalf("status = %q, lastError = %q", m.statusMsg, m.lastError)
 	}
 }

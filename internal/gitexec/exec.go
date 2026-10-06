@@ -180,19 +180,21 @@ func (r *ExecRunner) Run(ctx context.Context, name string, argv []string) (Resul
 
 func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string) (Result, error) {
 	start := r.now()
+	ctx, id, cancel := trackProc(ctx, name, argv, start)
+	defer cancel()
+	defer untrackProc(id)
 	cmd := exec.CommandContext(ctx, resolveBinary(r.gitPath), argv...)
 	r.prepare(cmd, env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	id := trackProc(name, argv, start)
 	runErr := cmd.Start()
 	if runErr == nil {
 		setProcPID(id, cmd.Process.Pid)
 		runErr = cmd.Wait()
 	}
-	untrackProc(id)
+	untrackProc(id) // off the list as soon as it exits
 	dur := r.now().Sub(start)
 	exit := exitCodeOf(runErr)
 	if cmd.ProcessState != nil {
@@ -216,6 +218,9 @@ func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string
 
 func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (Result, error) {
 	start := r.now()
+	ctx, id, cancel := trackProc(ctx, name, argv, start)
+	defer cancel()
+	defer untrackProc(id)
 	cmd := exec.CommandContext(ctx, resolveBinary(r.gitPath), argv...)
 	r.prepare(cmd, nil)
 	var stderr bytes.Buffer
@@ -230,15 +235,13 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 	// returns ErrWaitDelay, handled below. This mirrors RunEnv's writer model.
 	lw := &lineWriter{onLine: onLine}
 	cmd.Stdout = lw
-	id := trackProc(name, argv, start)
 	if err := cmd.Start(); err != nil {
-		untrackProc(id)
 		return Result{}, err
 	}
 	setProcPID(id, cmd.Process.Pid)
 	runErr := cmd.Wait()
-	untrackProc(id)
-	lw.flush() // emit a final line not terminated by '\n' (matches bufio.ScanLines)
+	untrackProc(id) // off the list as soon as it exits
+	lw.flush()      // emit a final line not terminated by '\n' (matches bufio.ScanLines)
 	dur := r.now().Sub(start)
 	exit := exitCodeOf(runErr)
 	if cmd.ProcessState != nil {

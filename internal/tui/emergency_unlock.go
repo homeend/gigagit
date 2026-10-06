@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -22,6 +23,11 @@ import (
 // operation whose git hangs keeps m.running. Sits beside ctrl+o, above the
 // process and layer routing, with no opsIdle gate (that is the point).
 const emergencyUnlockKey = "alt+u"
+
+// endGitProcesses is domain.EndGitProcesses behind a seam: the tui tests run
+// in parallel in one process, so TestMain swaps in a counter that kills no
+// other test's git.
+var endGitProcesses = domain.EndGitProcesses
 
 // locked reports whether the interface is held: a reload, an initial or
 // repo-switch load, or an operation. The footer advertises alt+u only then.
@@ -40,6 +46,9 @@ const (
 // its normal span ("" before that, and when nothing holds the interface).
 // The perpetual heartbeat repaints the line, so it appears on its own.
 func (m Model) unlockHint(now time.Time) string {
+	if m.quiet {
+		return "" // headless golden screens pin rendering, not wall-clock waits
+	}
 	if m.running {
 		if !m.opStart.IsZero() && clock.Since(m.opStart) >= unlockHintAfterOp {
 			return i18n.T("[alt+u] stop it")
@@ -58,20 +67,24 @@ func (m Model) unlockHint(now time.Time) string {
 }
 
 // emergencyUnlock writes a state dump first (what was stuck, while it is
-// still stuck), then releases what holds the interface:
+// still stuck), then — only when something holds the interface — releases it:
 //   - every source read in flight is abandoned — its generation bumped, so the
 //     late result is dropped rather than re-locking — and the background lane
 //     is preempted the way a user op preempts it;
 //   - a pending full load (startup, repo switch) is abandoned the same way;
-//   - a running operation is asked to stop (its git gets SIGTERM and frees its
-//     lockfiles). It is NOT marked finished here: it still holds its repo
-//     reservation, so its Done is what ends it.
+//   - a running operation is asked to stop and its open decision answered
+//     abort. It is NOT marked finished here: it still holds its repo
+//     reservation, so its Done is what ends it;
+//   - every git subprocess still running is ended (SIGTERM, so git frees its
+//     lockfiles): a hung read keeps its coalesced flight, its git slot and its
+//     repo reservation, so without this the next r would only join it.
 //
 // With nothing held it only writes the dump.
 func (m Model) emergencyUnlock() (Model, tea.Cmd) {
 	now := time.Now()
 	path, derr := m.writeStateDump(now)
 
+	held := m.locked() || m.anySourceInflight()
 	reads := 0
 	if m.loading || m.anySourceLoading() || m.anySourceInflight() {
 		if m.srcGen == nil {
@@ -92,33 +105,53 @@ func (m Model) emergencyUnlock() (Model, tea.Cmd) {
 		m.loading = false
 		m.commitsLoading = false
 	}
-	if m.bgCancel != nil {
-		m.bgCancel()
-		m.bgCancel = nil
-	}
-	m.bgBusy = false
-	m.bgQueue = nil
 	stopping := false
-	if m.running && m.opCancel != nil {
-		m.opCancel()
-		stopping = true
+	if m.running {
+		if m.modal != nil && m.modal.onResolve == nil {
+			// The op's own decision: answer it abort (reply is buffered, so
+			// this never blocks even if the op is already gone).
+			m.modal.reply <- engine.DecisionResponse{Option: abortOption(m.modal.req.Options)}
+			m.modal = nil
+		}
+		if m.opCancel != nil {
+			m.opCancel()
+			stopping = true
+		}
+	}
+	gits := 0
+	if held {
+		if m.bgCancel != nil {
+			m.bgCancel()
+			m.bgCancel = nil
+		}
+		m.bgBusy = false
+		m.bgQueue = nil
+		gits = endGitProcesses()
 	}
 
 	var parts []string
+	if reads > 0 {
+		parts = append(parts, i18n.T("unlocked — abandoned %d stuck reads (r reloads)", reads))
+	}
 	switch {
 	case stopping:
 		parts = append(parts, i18n.T("asked the running operation to stop"))
-	case reads > 0:
-		parts = append(parts, i18n.T("unlocked — abandoned %d stuck reads (r reloads)", reads))
+	case m.running:
+		parts = append(parts, i18n.T("the running operation cannot be stopped from here — it ends when its work does"))
+	}
+	if gits > 0 {
+		parts = append(parts, i18n.T("ended %d git processes", gits))
 	}
 	if derr != nil {
 		parts = append(parts, i18n.T("state dump failed: %s", derr.Error()))
-		m.lastError = strings.Join(parts, " · ")
 	} else {
 		m.lastStateDump = path
 		parts = append(parts, i18n.T("state dump: %s", path))
 	}
 	m.statusMsg = strings.Join(parts, " · ")
+	// [E] opens the untruncated line: the dump path comes last, and the bar
+	// cuts from the back.
+	m.lastError = m.statusMsg
 	return m, nil
 }
 
