@@ -1,0 +1,40 @@
+name = "pull: uncommitted files in the way → unanswered fails, --on-dirty abort keeps everything"
+
+# No flag and no TTY: pull.dirty is unanswered → exit 1, nothing touched (and
+# no fall-through to the diverged question). abort is a chosen cancel → exit 0.
+[input]
+steps = [
+  { write = "f.txt", content = "local\n" },
+]
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "initial" },
+]
+after = [
+  { write = "f.txt", content = "v2\n" },
+  { commit = "upstream change" },
+]
+
+[[run]]
+cmd  = ["pull"]
+exit = 1
+
+[[run]]
+cmd  = ["pull", "--on-dirty", "abort"]
+exit = 0
+
+[expect]
+branch = "main"
+ahead  = 0
+behind = 1
+
+[expect.files]
+"f.txt" = "local\n"
+
+[expect.status]
+unstaged = ["f.txt"]
+
+[[expect.log]]
+subjects = ["initial"]

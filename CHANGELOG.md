@@ -22,6 +22,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   a rename still fail, the log keeps appending and retries an hour later. The
   Session-errors viewer (TUI and web) says so beside the path.
 
+## A pull blocked by uncommitted files asks what to do with them
+
+### Changed
+
+- **Pull no longer just fails when uncommitted files are in the way.** When
+  git refuses a pull because local changes or untracked files would be
+  overwritten — in the current worktree or in the worktree where the pulled
+  branch is checked out — gg asks, like recycling a worktree: **shelve**
+  (every change, untracked too, becomes one shelf entry `WIP on <branch>`),
+  **discard**, or **abort**. The question lists the first ten changed files
+  (`?? new.txt`, `.M f.txt`, `… and N more`). Shelve and discard retry the
+  pull; abort leaves everything as it was. Dirt the pull does not touch
+  still never asks. On the current branch such a refusal used to show the
+  wrong "diverged — rebase/merge/reset" question; a rebase answer that meets
+  a dirty tree now gets the same question. TUI, web and CLI
+  (`gg pull --on-dirty shelve|discard|abort`).
+
 ## alt+A unlocks a stuck "⏳ reloading…" and writes a state dump
 
 ### Fixed
