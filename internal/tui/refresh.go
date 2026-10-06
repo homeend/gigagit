@@ -390,6 +390,9 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	}
 	m.srcGen[it.source]++
 	m.srcInflight[it.source] = true
+	if m.srcSince != nil {
+		m.srcSince[it.source] = time.Now()
+	}
 	// manual=false → silent; startup=false → measured; no hardFeed → a background
 	// commits refresh reconciles into the loaded pages instead of clearing them.
 	return m, m.readSourceCmd(m.bgCtx, it.source, reloadOpts{})

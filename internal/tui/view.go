@@ -490,6 +490,9 @@ func (m Model) renderInterface() string {
 			statusLine = i18n.T("⏳ reloading…") + " · " + statusLine
 		}
 	}
+	if hint := m.unlockHint(time.Now()); hint != "" {
+		statusLine += " · " + hint
+	}
 	// Style after truncation: truncate slices runes and would corrupt ANSI codes.
 	// The bar is ONE line, so a long failure still gets cut here — git writes a
 	// paragraph of stderr and there is no width at which that reads. The [E]

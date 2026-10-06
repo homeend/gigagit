@@ -314,3 +314,20 @@ func (b *syncBuffer) String() string {
 	defer b.mu.Unlock()
 	return b.buf.String()
 }
+
+// All lists the holders and waiters of every busy gate with their times.
+func TestAllSnapshotsBusyGates(t *testing.T) {
+	key := t.Name()
+	r, err := For(key).Acquire(context.Background(), TreeWrite, "op Stuck")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := All()[key]
+	if len(got) != 1 || got[0].Label != "op Stuck" || got[0].Waiting || got[0].Since.IsZero() {
+		t.Fatalf("All() = %+v", got)
+	}
+	r.Release()
+	if _, ok := All()[key]; ok {
+		t.Fatal("an idle gate must not be listed")
+	}
+}

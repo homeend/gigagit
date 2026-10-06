@@ -277,14 +277,25 @@ func (m Model) reloadSourcesCmd(srcs []sourceKey, opts reloadOpts) (Model, tea.C
 	if m.srcLoading == nil {
 		m.srcLoading = map[sourceKey]bool{}
 	}
+	if m.srcSince == nil {
+		m.srcSince = map[sourceKey]time.Time{}
+	}
 	cmds := make([]tea.Cmd, 0, len(srcs))
 	for _, s := range srcs {
 		m.srcGen[s]++
 		m.srcInflight[s] = true
-		if opts.manual {
+		m.srcSince[s] = time.Now()
+		// A read superseding a manual one inherits its manual flag: the
+		// superseded message early-returns on the gen check BEFORE it clears
+		// srcLoading, so only this read can — a silent one never would, and
+		// "⏳ reloading…" (with every action gate on m.loading) would stick
+		// for the rest of the session.
+		so := opts
+		so.manual = opts.manual || m.srcLoading[s]
+		if so.manual {
 			m.srcLoading[s] = true
 		}
-		cmds = append(cmds, m.readSourceCmd(context.Background(), s, opts))
+		cmds = append(cmds, m.readSourceCmd(context.Background(), s, so))
 	}
 	// Keep the legacy action-blocking flag in sync (see the handler note in Task 4).
 	m.loading = m.anySourceLoading()
