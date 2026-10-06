@@ -900,7 +900,7 @@ func (p *settingsPopup) box(m Model) string {
 		// errors.log lives.
 		if path := defaultErrLogPath(); path != "" {
 			b.WriteString("\n")
-			for _, seg := range wrapWidth(i18n.T("full history: %s", path), textW, 1<<20) {
+			for _, seg := range wrapWidth(i18n.T("log (rotated weekly): %s", path), textW, 1<<20) {
 				b.WriteString(seg + "\n")
 			}
 		}

@@ -1,9 +1,9 @@
 package tui
 
 import (
-	"os"
 	"path/filepath"
 
+	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/repos"
 )
 
@@ -21,19 +21,17 @@ func defaultErrLogPath() string {
 // OpenErrorLog opens (creating as needed) the always-on error log for
 // appending and returns the handle plus its path. Unlike the operation log it
 // has no on/off toggle: every genuine failure is recorded for the whole
-// session. Returns (nil, "", nil) when there is no state dir — nothing to open,
-// and not an error worth blocking TUI launch.
-func OpenErrorLog() (*os.File, string, error) {
+// session. The log rolls over weekly (observ.WeeklyLog). Returns (nil, "", nil)
+// when there is no state dir — nothing to open, and not an error worth
+// blocking TUI launch.
+func OpenErrorLog() (*observ.WeeklyLog, string, error) {
 	path := defaultErrLogPath()
 	if path == "" {
 		return nil, "", nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, path, err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	l, err := observ.OpenWeeklyLog(path)
 	if err != nil {
 		return nil, path, err
 	}
-	return f, path, nil
+	return l, path, nil
 }

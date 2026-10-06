@@ -789,6 +789,13 @@ op hangs or runs slowly. You can also toggle it live from the `,` Settings menu,
 which shows the on/off state and the log's full path; toggling there persists the
 choice to this key in the global config so it survives restarts.
 
+Both logs in the state dir — `operations.log` and the always-on `errors.log` —
+**rotate weekly**: the first write in a new week (Monday 00:00 local) moves the
+old file to `errors-2026-W40.log` / `operations-2026-W40.log` (the ISO week of
+its last line) and starts a fresh one. The newest 4 archived weeks are kept;
+older ones are deleted. Several gg processes can share a log safely — only one
+of them rotates it.
+
 The `[refresh]` section configures **background auto-refresh** — entirely off by
 default. `[refresh] enabled` (default `false`) is the master switch; setting it
 `true` (or toggling it live from the `,` Settings menu, which persists the choice)

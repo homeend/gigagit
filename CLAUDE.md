@@ -121,7 +121,7 @@ feature; keep THIS file's map to one line per package.
 | `prefix`     | Templated branch-name prefix registry, global + per-repo scoped. Owned by `domain`. |
 | `texttmpl`   | Writable two-scope registry of text templates (titled multi-line texts with the prefix token grammar; records only, TOML under XDG state). Owned by `domain`; frontends never import it. |
 | `shellinit`  | `gg shell-init [bash|zsh|fish]` wrappers (cd-on-switch via `--cwd-file`). |
-| `observ`     | Observability: span ring buffer + sink (operation log), redaction, panic dump, session failure ring + `errors.log`. |
+| `observ`     | Observability: span ring buffer + sink (operation log), redaction, panic dump, session failure ring + `errors.log`; `WeeklyLog` (weekly rollover, 4 archived weeks, cross-process safe) behind both state-dir logs. |
 | `clock`      | One freezable "now" for STORED and DRAWN times (ages, dates, creation stamps); timing code keeps `time.Now`. Frozen by the e2e harness. Stdlib-only DAG leaf. |
 | `buildinfo`  | Version/commit via `-ldflags`, falling back to `runtime/debug.ReadBuildInfo`. |
 | `app`        | Wires layers into runnable surfaces (`inspect`, panic `DumpRepo`). |
