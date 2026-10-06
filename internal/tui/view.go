@@ -1723,7 +1723,7 @@ func (m Model) commitHaystackAt(i int) string {
 	return c.Hash + " " + names + " " + c.Subject
 }
 
-// recycleOverviewRow fits one file row of the recycle.dirty prompt ("XY path"
+// recycleOverviewRow fits one file row of the recycle.dirty (or pull.dirty) prompt ("XY path"
 // or "XY old → new") into w cells: the marker stays, the path is elided in
 // the middle (a rename's two paths share the room). Other lines (the
 // "… and N more" tail) and rows that fit pass through.
@@ -1756,12 +1756,12 @@ func (m Model) renderModal() string {
 	// Prompt: keep any explicit line breaks (e.g. the hook-approval script),
 	// word-wrapping each physical line. wrapWords hard-chunks a single token
 	// wider than maxW, so an unbreakable long branch name still fits.
-	// A recycle.dirty file row ("XY path", after the blank line) is the one
-	// exception: wrapping would strand its marker and chop the file name, so
+	// A recycle.dirty / pull.dirty file row ("XY path", after the blank
+	// line) is the one exception: wrapping would strand its marker and chop the file name, so
 	// a row too wide has its path cut in the middle instead.
 	fileRows := false
 	for _, line := range strings.Split(renderPrompt(m.modal.req), "\n") {
-		if m.modal.req.ID == engine.RecycleDirtyDecisionID {
+		if id := m.modal.req.ID; id == engine.RecycleDirtyDecisionID || id == engine.PullDirtyDecisionID {
 			if line == "" {
 				fileRows = true
 			} else if fileRows {

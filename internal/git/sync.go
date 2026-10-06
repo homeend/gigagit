@@ -113,6 +113,19 @@ func (r *Repo) PullInWorktree(ctx context.Context, worktreePath, remote, branch 
 	return err
 }
 
+// IsLocalChangesRefusal reports whether a pull failed because uncommitted
+// work in the worktree was in the way: tracked or untracked files the merge
+// would overwrite, or a rebase pull refusing a dirty tree. Matched on git's
+// English stderr (the pusherr precedent); such a pull changed nothing.
+func IsLocalChangesRefusal(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "would be overwritten by") ||
+		strings.Contains(msg, "cannot pull with rebase")
+}
+
 // FastForwardRef updates a NON-checked-out local branch to its remote tip
 // without a checkout, via a fetch refspec (origin branch:branch). Fails if the
 // update would not be a fast-forward.

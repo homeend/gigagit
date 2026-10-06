@@ -18,6 +18,7 @@ func cmdPull(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	fs.SetOutput(stderr)
 	background := fs.Bool("background", false, "update the branch's ref without checking it out")
 	onConflict := fs.String("on-conflict", "", "how to resolve divergence: rebase|merge|reset|abort (reset = hard-reset to the remote tip, discarding local commits and changes)")
+	onDirty := fs.String("on-dirty", "", "when uncommitted changes in the pulled worktree block the pull: shelve|discard|abort (asked only when git refuses)")
 	onStaleMapping := fs.String("on-stale-mapping", "", "when a fetch mapping references a branch deleted on the remote (it blocks every fetch): remove|abort")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -37,6 +38,14 @@ func cmdPull(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	policy := map[string]string{}
 	if *onConflict != "" {
 		policy["non-fast-forward"] = *onConflict
+	}
+	switch *onDirty {
+	case "":
+	case "shelve", "discard", "abort":
+		policy[engine.PullDirtyDecisionID] = *onDirty
+	default:
+		fmt.Fprintf(stderr, "pull: --on-dirty must be shelve, discard, or abort (got %q)\n", *onDirty)
+		return 2
 	}
 	switch *onStaleMapping {
 	case "":

@@ -1,0 +1,37 @@
+name = "tui: a pull git refuses over uncommitted files asks shelve/discard/abort with the files listed"
+
+# main is behind origin; f.txt is edited and n.txt untracked, and upstream
+# changes/adds both, so git refuses the ff-only pull. `p` (confirmed) raises
+# pull.dirty listing the worktree's changes in git's status order; shelve is
+# the first (safe) option. Answering discard pulls and the tree is clean.
+[input]
+steps = [
+  { write = "f.txt", content = "local\n" },
+  { write = "n.txt", content = "mine\n" },
+]
+
+[input.origin]
+transport = "path"
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "initial" },
+]
+after = [
+  { write = "f.txt", content = "v2\n" },
+  { write = "n.txt", content = "remote\n" },
+  { commit = "upstream change" },
+]
+
+[tui]
+size = "120x34"
+
+[[tui.step]]
+name = "dirty-question"
+keys = ["p", "up", "enter"]
+screen_contains = ["would overwrite local changes in", ".M f.txt", "?? n.txt", "> shelve", "discard", "abort"]
+
+[[tui.step]]
+name = "pulled"
+keys = ["down", "enter"]
+screen_contains = ["upstream change"]
+screen_excludes = ["would overwrite local changes", "n.txt"]

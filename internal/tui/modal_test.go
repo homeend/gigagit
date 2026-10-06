@@ -185,3 +185,25 @@ func TestModalRecycleOverviewElidesLongPath(t *testing.T) {
 		t.Fatalf("a rename row must keep both file names on one row:\n%s", out)
 	}
 }
+
+// The pull.dirty question carries the same file overview, so its rows are
+// cut in the middle the same way.
+func TestModalPullDirtyOverviewElidesLongPath(t *testing.T) {
+	t.Parallel()
+	long := "a-very-long-directory-name/with-another-long-directory/and-one-more-level-of-nesting/file.txt"
+	m := New(nil)
+	m.width, m.height = 60, 30
+	m.modal = &decisionState{req: engine.PromptReq(engine.PullDirtyDecisionID,
+		"Pulling %s would overwrite local changes in %s:\n\n%s", []string{"shelve", "discard", "abort"},
+		"main", "/w", "?? "+long)}
+	out := ansi.Strip(m.renderModal())
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "?? ") {
+			if !strings.Contains(l, "…") || !strings.Contains(l, "file.txt") {
+				t.Fatalf("long row must keep marker + elided path + file name on one row:\n%s", out)
+			}
+			return
+		}
+	}
+	t.Fatalf("file row missing:\n%s", out)
+}
