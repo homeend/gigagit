@@ -55,8 +55,9 @@ func (m Model) focusConsoleByClick() Model {
 	return m.syncConsoleSize() // gaining focus takes the size back
 }
 
-// consoleMouse routes a mouse event over the console by the child's live
-// modes (spec §1): a program that tracks the mouse gets it — a drag it
+// consoleMouse routes a mouse event over the console: scroll mode's frozen
+// view first, else by the child's live modes (spec §1): a program that
+// tracks the mouse gets it — a drag it
 // started keeps going wherever the pointer goes, so its release always
 // arrives — and an alt-screen program without tracking gets ↑/↓ for the
 // wheel (xterm's alternate scroll). The wheel never moves focus; a left
@@ -82,10 +83,10 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 		m = m.focusConsoleByClick()
 	}
 	switch {
-	case m.console.scroll != nil && running && (modes.Mouse || modes.AltScreen) && msg.Action == tea.MouseActionPress:
-		// The program took the mouse (or the alt screen) since scroll mode
-		// began: leave it and route by the new mode.
-		return m.leaveConsoleScroll().consoleMouse(msg)
+	case m.console.scroll != nil:
+		// Scroll mode keeps the mouse until it is left, even when the program
+		// took the mouse or the alt screen since: the frozen view is what the
+		// user is looking at (user ruling 2026-10-07).
 	case running && modes.Mouse:
 		if !inContent && !held && msg.Action == tea.MouseActionPress {
 			return m, nil, true // a press on the border or title only focuses

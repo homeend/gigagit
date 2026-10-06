@@ -367,3 +367,46 @@ func TestScrollClickKeepsFrozenView(t *testing.T) {
 		t.Fatal("leaving scroll mode did not take the size back")
 	}
 }
+
+// Scroll mode keeps the mouse after the program took it (user ruling
+// 2026-10-07): the frozen view is what the user is looking at, so the wheel
+// scrolls it and a drag copies from it until scroll mode is left; the
+// program gets nothing meanwhile.
+func TestScrollKeepsMouseAfterProgramTakesIt(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, `i=0; while [ $i -lt 40 ]; do echo "row-$i"; i=$((i+1)); done; printf 'TAIL'; read _; stty raw -echo; printf '\033[?1049h\033[?1000h\033[?1006hALT'; while :; do head -c 1 | od -An -tx1 | tr -d ' \n'; done`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "TAIL")
+	x0, y0 := contentOrigin(m)
+	for range 3 {
+		m = mouseAt(m, x0+1, y0+1, tea.MouseButtonWheelUp, tea.MouseActionPress)
+	}
+	if m.console.scroll == nil {
+		t.Fatal("the wheel did not enter scroll mode")
+	}
+	s.SendText("\r")
+	waitScreen(t, s, "ALT")
+	top := m.console.scroll.top
+	m = mouseAt(m, x0+1, y0+1, tea.MouseButtonWheelUp, tea.MouseActionPress)
+	if m.console.scroll == nil || m.console.scroll.top >= top {
+		t.Fatalf("the wheel left or did not scroll the frozen view: %+v", m.console.scroll)
+	}
+	m = mouseAt(m, x0, y0+1, tea.MouseButtonLeft, tea.MouseActionPress)
+	m = mouseAt(m, x0+3, y0+2, tea.MouseButtonLeft, tea.MouseActionMotion)
+	nm, cmd := m.Update(tea.MouseMsg{X: x0 + 3, Y: y0 + 2, Button: tea.MouseButtonLeft, Action: tea.MouseActionRelease})
+	m = nm.(Model)
+	runCmdMsgs(cmd)
+	if m.console.scroll == nil || !strings.HasPrefix(copied, "row-") {
+		t.Fatalf("scroll=%v copied=%q", m.console.scroll != nil, copied)
+	}
+	s.SendText("z")
+	waitScreen(t, s, "7a")
+	for _, l := range s.Screen().Lines {
+		if strings.Contains(l, hexOf("\x1b[<")) {
+			t.Fatalf("the program got the mouse: %q", l)
+		}
+	}
+}
