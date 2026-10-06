@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v140 -->
+<!-- gg:using-gg:v141 -->
 
 # Using gg (gigagit)
 
@@ -536,9 +536,17 @@ finds the right one here.
   recreates commits from a `git format-patch` mailbox (author/date/message
   preserved) and is atomic: a conflicting mailbox is rolled back completely
   (exit 1, nothing changed). `--am` on a plain diff is refused.
-- `gg pull [<branch>] [--background] [--on-conflict rebase|merge|reset|abort] [--on-stale-mapping remove|abort]` —
+- `gg pull [<branch>] [--background] [--on-conflict rebase|merge|reset|abort] [--on-dirty shelve|discard|abort] [--on-stale-mapping remove|abort]` —
   smart pull; with `<branch>` + `--background` it fast-forwards that branch's
-  ref without checking it out. On a diverged current branch, `--on-conflict=reset`
+  ref without checking it out (or pulls in the worktree that has it checked
+  out). When git refuses the pull because uncommitted work in that worktree
+  is in the way (files the pull would overwrite, or a rebase pull on a dirty
+  tree), `--on-dirty` answers the `pull.dirty` fork: `shelve` stores every
+  change (untracked too) as one shelf entry `WIP on <branch>` and cleans the
+  tree, `discard` throws it away (ignored files kept), both then retry the
+  pull; `abort` prints `pull cancelled` (exit 0, nothing touched). Without
+  the flag a piped run exits 1 naming `pull.dirty`. Dirt the pull does not
+  touch never asks. On a diverged current branch, `--on-conflict=reset`
   hard-resets it to the remote tip, discarding local commits and uncommitted
   changes. If a per-branch fetch refspec references a branch deleted on the
   remote, every fetch exits 128 and blocks the pull; `--on-stale-mapping=remove`

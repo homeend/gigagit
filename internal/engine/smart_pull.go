@@ -174,9 +174,34 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 	// empty-before-set skip makes that silent.
 	ep := capturePullEndpoints(ctx, deps, remote, branch)
 	deps.emit(ctx, Progress{Step: "pulling (ff-only)", Detail: branch})
-	if err := deps.Repo.Pull(ctx, remote, branch, git.PullFF); err == nil {
+	// Uncommitted work in the way is asked about first (pull.dirty); only a
+	// pull that still fails for another reason reaches the diverged question.
+	d, err := pullClearingDirt(ctx, deps, deps.Repo, branch, func() error {
+		return deps.Repo.Pull(ctx, remote, branch, git.PullFF)
+	})
+	if d.cancelled {
+		return Result{}.WithSummary("pull cancelled"), nil
+	}
+	if err == nil {
 		ep.record(ctx, deps, branch)
-		return Result{Changed: true}.WithSummary("pulled %s", branch), nil
+		return d.annotate(Result{Changed: true}.WithSummary("pulled %s", branch)), nil
+	}
+	if d.settled(err) {
+		return Result{}, err
+	}
+	// The rebase and merge answers can meet the same dirt (a rebase pull
+	// refuses any dirty tree), so they ride the same question.
+	pullAs := func(strategy git.PullStrategy, done Result) (Result, error) {
+		d2, err := pullClearingDirt(ctx, deps, deps.Repo, branch, func() error {
+			return deps.Repo.Pull(ctx, remote, branch, strategy)
+		})
+		if d2.cancelled {
+			return Result{}.WithSummary("pull cancelled"), nil
+		}
+		if err != nil {
+			return Result{}, err
+		}
+		return d2.annotate(d.annotate(done)), nil
 	}
 	resp, derr := deps.decide(ctx, PromptReq("non-fast-forward", "%s has diverged from %s (reset discards local commits and changes)", []string{"rebase", "merge", "reset", "abort"}, branch, remote))
 	if derr != nil {
@@ -185,16 +210,10 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 	switch resp.Option {
 	case "rebase":
 		ep.record(ctx, deps, branch)
-		if err := deps.Repo.Pull(ctx, remote, branch, git.PullRebase); err != nil {
-			return Result{}, err
-		}
-		return Result{Changed: true}.WithSummary("pulled (rebased) %s", branch), nil
+		return pullAs(git.PullRebase, Result{Changed: true}.WithSummary("pulled (rebased) %s", branch))
 	case "merge":
 		ep.record(ctx, deps, branch)
-		if err := deps.Repo.Pull(ctx, remote, branch, git.PullMerge); err != nil {
-			return Result{}, err
-		}
-		return Result{Changed: true}.WithSummary("pulled (merged) %s", branch), nil
+		return pullAs(git.PullMerge, Result{Changed: true}.WithSummary("pulled (merged) %s", branch))
 	case "reset":
 		// The ff-only pull above failed WITHOUT starting a merge or rebase (that
 		// is the --ff-only guarantee), so there is no in-progress state to abort:
@@ -244,12 +263,21 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 	}
 	if wt != nil {
 		deps.emit(ctx, Progress{Step: "pulling in worktree", Detail: wt.Path})
-		if err := repo.PullInWorktree(ctx, wt.Path, remote, target); err != nil {
+		// pull.dirty acts on THAT worktree, so it needs its own view; without
+		// the RepoAt seam a refusal stays the plain failure below.
+		view, _ := deps.repoAt(wt.Path)
+		d, err := pullClearingDirt(ctx, deps, view, target, func() error {
+			return repo.PullInWorktree(ctx, wt.Path, remote, target)
+		})
+		if d.cancelled {
+			return Result{}.WithSummary("pull cancelled"), nil
+		}
+		if err != nil {
 			deps.emit(ctx, DecisionNeeded{Request: PromptReq("worktree-pull-failed", "Pull in worktree %s failed", []string{"abort"}, wt.Path)})
 			return Result{}, fmt.Errorf("smart pull: worktree %s: %w", wt.Path, err)
 		}
 		ep.record(ctx, deps, target)
-		return Result{Changed: true}.WithSummary("pulled %s in worktree %s", target, wt.Path), nil
+		return d.annotate(Result{Changed: true}.WithSummary("pulled %s in worktree %s", target, wt.Path)), nil
 	}
 
 	dirty, err := repo.IsDirty(ctx)
