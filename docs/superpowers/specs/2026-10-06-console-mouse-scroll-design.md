@@ -40,6 +40,25 @@ joining on copy.
 - Bubble Tea v1 cannot report shift+PgUp (and Windows Terminal takes it for
   its own scrollback); alt+PgUp arrives as `KeyPgUp` with `Alt`.
 
+## Reference: herdr (`~/others/herdr` @ `5da0a01e`)
+
+Same routing order: any mouse tracking mode → report to the app; alt screen
+→ arrow keys; else its own scrollback, 3 rows per notch
+(`src/pane/terminal.rs:1968`, `src/server/pane_input.rs:128`). Its scrollback
+is a live offset (libghostty keeps it stable), left by any key; copy-on-release
+by default; double-click word (350 ms), no triple-click; wheel during a drag
+extends the selection; child OSC 52 forwarded to the foreground client only
+(cap 192 KiB); copied text trims trailing blanks and skips wide-glyph halves
+(it also joins soft wraps — x/vt cannot). Deliberate differences here:
+
+- **Alternate scroll** for every alt-screen program without tracking (as
+  Windows Terminal does by default), not only after `?1007h` as herdr/xterm.
+- **Hover wheel does not focus** the console (user ruling); herdr focuses
+  the hovered pane first.
+- **Frozen snapshot + cursor row + space/space/enter** instead of herdr's
+  separate vi copy mode — gg's existing line-selection grammar.
+- Triple-click selects a row.
+
 ## Design
 
 ### 1. Routing — who gets a mouse event over the console
@@ -93,7 +112,8 @@ the second freezes its end, enter copies the lines and clears.
 style: from the press cell to the drag cell, whole rows in between); release
 copies. Double-click selects a word (a run of non-space cells), triple-click
 the row. Dragging above the first / below the last visible row scrolls one
-row per motion event. The selection stays highlighted until the next press,
+row per motion event; the wheel while the button is held scrolls and extends
+the selection (herdr). The selection stays highlighted until the next press,
 a key, or leaving.
 
 **Copy text:** cell contents only (no styles); the right half of a wide
