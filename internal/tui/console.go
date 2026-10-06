@@ -30,6 +30,7 @@ type consoleState struct {
 	cancel    func()          // drops it; every path that clears m.console goes through detachConsole
 	ret       *consoleReturn  // the screen to go back to (never nil on a shown console)
 	clipSeq   int             // the child's last OSC 52 write this console has taken (consumeConsoleClip)
+	clicks    consoleClicks   // the last left press, for double / triple clicks
 	scroll    *consoleScroll  // scroll mode's frozen view; nil = live
 	held      tea.MouseButton // a button forwarded to the child and not yet released (MouseButtonNone = none)
 }

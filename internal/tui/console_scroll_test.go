@@ -220,3 +220,99 @@ func TestScrollSpaceSpaceEnterCopiesLines(t *testing.T) {
 		t.Fatal("a copy must stay in scroll mode and clear the selection")
 	}
 }
+
+// pressRelease clicks the left button at (x, y) and runs every command the
+// press and the release returned.
+func pressRelease(m Model, x, y int) Model {
+	nm, c1 := m.Update(tea.MouseMsg{X: x, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	nm, c2 := nm.(Model).Update(tea.MouseMsg{X: x, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionRelease})
+	runCmdMsgs(c1)
+	runCmdMsgs(c2)
+	return nm.(Model)
+}
+
+func TestScrollDragAtLiveViewCopiesText(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, `printf 'alpha beta\r\ngamma delta'; while :; do sleep 5; done`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "delta")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+6, y0, tea.MouseButtonLeft, tea.MouseActionPress)
+	m = mouseAt(m, x0+4, y0+1, tea.MouseButtonLeft, tea.MouseActionMotion)
+	if out := m.View(); !strings.Contains(out, "\x1b[7mbeta") {
+		t.Fatal("the dragged span is not drawn")
+	}
+	nm, cmd := m.Update(tea.MouseMsg{X: x0 + 4, Y: y0 + 1, Button: tea.MouseButtonLeft, Action: tea.MouseActionRelease})
+	m = nm.(Model)
+	runCmdMsgs(cmd)
+	if copied != "beta\ngamma" {
+		t.Fatalf("copied %q", copied)
+	}
+	if m.console.scroll == nil {
+		t.Fatal("a drag must enter scroll mode")
+	}
+}
+
+func TestScrollDoubleClickWordTripleClickLine(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, `printf 'one two.three four'; while :; do sleep 5; done`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "four")
+	x0, y0 := contentOrigin(m)
+	m = pressRelease(m, x0+6, y0)
+	if copied != "" {
+		t.Fatalf("a single click copied %q", copied)
+	}
+	m = pressRelease(m, x0+6, y0)
+	if copied != "two.three" {
+		t.Fatalf("double click copied %q", copied)
+	}
+	_ = pressRelease(m, x0+6, y0)
+	if copied != "one two.three four" {
+		t.Fatalf("triple click copied %q", copied)
+	}
+}
+
+func TestScrollDragPastEdgeScrolls(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	s := startTestSession(t, m, fortyLines)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "TAIL")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0, y0+2, tea.MouseButtonLeft, tea.MouseActionPress)
+	top := m.console.scroll.top
+	m = mouseAt(m, x0, y0-1, tea.MouseButtonLeft, tea.MouseActionMotion) // above the content: the title row
+	if m.console.scroll.top != top-1 {
+		t.Fatalf("top %d, want %d", m.console.scroll.top, top-1)
+	}
+	m = mouseAt(m, x0, y0+2, tea.MouseButtonWheelUp, tea.MouseActionPress) // wheel while held extends
+	if !m.console.scroll.drag.active || m.console.scroll.top >= top-1 {
+		t.Fatal("wheel during a drag did not scroll the held selection")
+	}
+}
+
+func TestScrollDragHeldOutsideBoxStillExtends(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, `printf 'alpha beta'; while :; do sleep 5; done`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "beta")
+	x0, y0 := contentOrigin(m)
+	m = mouseAt(m, x0+6, y0, tea.MouseButtonLeft, tea.MouseActionPress)
+	// Released over the left panels: the selection ends at column 0.
+	nm, cmd := m.Update(tea.MouseMsg{X: 1, Y: y0, Button: tea.MouseButtonLeft, Action: tea.MouseActionRelease})
+	m = nm.(Model)
+	runCmdMsgs(cmd)
+	if copied != "alpha b" || m.console.scroll.drag.active {
+		t.Fatalf("copied %q active=%v", copied, m.console.scroll.drag.active)
+	}
+}

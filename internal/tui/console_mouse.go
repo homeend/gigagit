@@ -64,7 +64,7 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	cx, cy, inBox, inContent := m.consoleCell(msg.X, msg.Y)
-	held := m.console.held != tea.MouseButtonNone
+	held := m.console.held != tea.MouseButtonNone || (m.console.scroll != nil && m.console.scroll.drag.active)
 	if !inBox && !held {
 		return m, nil, false
 	}
