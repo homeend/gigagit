@@ -3,6 +3,8 @@ package tui
 import (
 	"testing"
 	"time"
+
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 func pressAlt(t *testing.T, m Model, r rune) Model {
@@ -122,5 +124,169 @@ func TestFocusedConsoleGivesAltAToTheCycle(t *testing.T) {
 	m = pressAlt(t, m, 'a')
 	if m.console == nil || m.console.id != other.Info().ID || m.console.focused {
 		t.Fatalf("console = %+v: alt+a in a focused console cycles", m.console)
+	}
+}
+
+// From a diff view: sessions show full-screen and unfocused, the diff is
+// parked (the same window, cursor and all) and comes back on top.
+func TestAltAFromDiffViewCyclesFullScreenAndReturns(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	a := startTestSession(t, m, `sleep 5`)
+	b := startSecondSession(t, a, "b", false)
+	time.Sleep(2 * time.Millisecond)
+	b.Touch() // last used: b, a
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m = pressAlt(t, m, 'a')
+	if m.console == nil || m.console.id != b.Info().ID || m.console.focused || !m.console.maximized {
+		t.Fatalf("first alt+a over a diff: console=%+v", m.console)
+	}
+	if m.topLayer() != nil {
+		t.Fatal("the diff must be parked off the live stack")
+	}
+	m = pressAlt(t, m, 'a')
+	if m.console == nil || m.console.id != a.Info().ID || !m.console.maximized {
+		t.Fatalf("second alt+a: console=%+v", m.console)
+	}
+	m = pressAlt(t, m, 'a')
+	if m.console != nil || m.topLayer() != layer(dv) {
+		t.Fatalf("third alt+a must bring the same diff back: console=%+v top=%T", m.console, m.topLayer())
+	}
+}
+
+// A removed session never strands the parked view.
+func TestRemovedSessionOverParkedDiffBringsTheDiffBack(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, "sleep 0.3")
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m = pressAlt(t, m, 'a')
+	if !m.consoleFull() || m.topLayer() != nil {
+		t.Fatalf("precondition: a full-screen agent over the parked diff, console=%+v", m.console)
+	}
+	m, _ = m.onSessionsChanged()
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not exit")
+	}
+	m, _ = m.onSessionsChanged()
+	if err := domain.Sessions().Remove(s.Info().ID); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.onSessionsChanged()
+	if m.console != nil || m.topLayer() != layer(dv) {
+		t.Fatalf("console=%+v top=%T, want the diff back", m.console, m.topLayer())
+	}
+}
+
+// A popup opened over the full-screen agent stays on top when the console
+// returns beneath it.
+func TestPopupOverFullScreenAgentStaysOnTopOfTheReturnedDiff(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	startTestSession(t, m, `sleep 5`)
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m = pressAlt(t, m, 'a')
+	pop := &contentPopup{}
+	m = m.pushLayer(pop)
+	m = m.closeConsole()
+	if len(m.layers.entries) != 2 || m.layers.entries[0] != layer(dv) || m.layers.entries[1] != layer(pop) {
+		t.Fatalf("stack = %T, want [diff popup]", m.layers.entries)
+	}
+}
+
+// A view pushed over a shown console is a new starting screen: alt+a there
+// brings the console's parked views back beneath it and parks the lot.
+func TestAltAOverAViewOpenedFromTheAgentParksTheWholeStack(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	startTestSession(t, m, `sleep 5`)
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m = pressAlt(t, m, 'a')
+	hv := &historyView{}
+	m = m.pushLayer(hv)
+	m = pressAlt(t, m, 'a')
+	if m.console == nil || !m.console.maximized || m.topLayer() != nil {
+		t.Fatalf("console=%+v top=%T", m.console, m.topLayer())
+	}
+	m = pressAlt(t, m, 'a')
+	if m.console != nil || len(m.layers.entries) != 2 || m.layers.entries[0] != layer(dv) || m.layers.entries[1] != layer(hv) {
+		t.Fatalf("console=%+v stack=%T, want [diff history]", m.console, m.layers.entries)
+	}
+}
+
+// The cycle starts only where it can come back: base panels and the
+// poppable views; not over a popup, the rebase editor, or a typed search.
+func TestAltAGate(t *testing.T) {
+	t.Parallel()
+	m := newTestModel(t)
+	typingViewer := &fileViewer{openFile: &openFile{p: &contentPopup{}}}
+	typingViewer.p.search.typing = true
+	typingDiff := &diffView{title: "a.go"}
+	typingDiff.search.typing = true
+	typingBlame := &blameView{}
+	typingBlame.search.typing = true
+	for name, l := range map[string]layer{
+		"popup":         &contentPopup{},
+		"rebase editor": &irebaseEditor{},
+		"viewer search": typingViewer,
+		"diff search":   typingDiff,
+		"blame search":  typingBlame,
+	} {
+		if m.pushLayer(l).cycleReachable() {
+			t.Errorf("%s: alt+a must not start a cycle", name)
+		}
+		m = m.clearLayers()
+	}
+	for name, l := range map[string]layer{
+		"diff":    &diffView{title: "a.go"},
+		"history": &historyView{},
+		"blame":   &blameView{},
+		"viewer":  &fileViewer{openFile: &openFile{p: &contentPopup{}}},
+	} {
+		if !m.pushLayer(l).cycleReachable() {
+			t.Errorf("%s: alt+a must start a cycle", name)
+		}
+		m = m.clearLayers()
+	}
+	if !m.cycleReachable() {
+		t.Error("panels: alt+a must start a cycle")
+	}
+}
+
+// A repo switch closing a foreign console drops what it had parked: those
+// views show the old repository.
+func TestSettleConsoleDropsTheReturnPoint(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	startTestSession(t, m, `sleep 5`)
+	m = m.pushLayer(&diffView{title: "a.go"})
+	m = pressAlt(t, m, 'a')
+	m.worktrees = nil // the new repository owns none of the session's dirs
+	m.consoleSwitch.armed = true
+	m, _ = m.settleConsole()
+	if m.console != nil || m.topLayer() != nil {
+		t.Fatalf("console=%+v top=%T, want both gone", m.console, m.topLayer())
+	}
+}
+
+// A switch (steer, hosted web) is refused over a parked editor exactly as
+// over a live one: it would throw the operation's pending input away.
+func TestSteerRefusalReadsTheParkedStack(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m = m.pushLayer(&irebaseEditor{})
+	m, _ = m.openConsole(s.Info().ID)
+	if m.topLayer() != nil {
+		t.Fatal("precondition: the editor is parked")
+	}
+	if m.steerRefusal() == "" {
+		t.Fatal("a parked rebase editor must refuse a switch")
 	}
 }

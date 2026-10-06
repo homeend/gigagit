@@ -446,6 +446,13 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// A view pushed over a shown console (the palette opened a diff from a
+	// full-screen agent) is a new starting screen: the console goes back
+	// first — its parked views slot in beneath — and the cycle starts over
+	// with the whole stack as its return point.
+	if m.console != nil && m.topLayer() != nil {
+		m = m.closeConsole()
+	}
 	// The ring is the sessions then the return point: from the shown session
 	// at i go to i+1, past the last one back to the screen the cycle came
 	// from. Anything else (no console, the other kind, an exited one)

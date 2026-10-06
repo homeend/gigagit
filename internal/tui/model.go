@@ -2216,10 +2216,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openCommandPalette()
 		}
 		// alt+a / alt+t cycle the running agents / terminals by last use,
-		// shown unfocused (a focused console kept the key for its program
-		// above). Base panels only: a window or popup on top would hide the
-		// console it docks.
-		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.topLayer() == nil && !m.filterTyping {
+		// shown unfocused, then back to the screen the cycle started from.
+		// From the base panels or a full-screen view (parked while the
+		// sessions show maximised); a focused console handled the key above.
+		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.cycleReachable() {
 			return m.cycleSessions(k == "alt+t")
 		}
 		// alt+x opens the text templates window (base panels only, like

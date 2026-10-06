@@ -218,7 +218,13 @@ func (m Model) steerRefusal() string {
 	case m.stashView != nil && m.stashView.typing:
 		return "the user is typing"
 	}
-	switch l := m.topLayer().(type) {
+	// A console shown over a parked stack: the switch would drop what is
+	// parked, so its top answers as a live one would.
+	top := m.topLayer()
+	if top == nil && m.console != nil && m.console.ret != nil && len(m.console.ret.layers) > 0 {
+		top = m.console.ret.layers[len(m.console.ret.layers)-1]
+	}
+	switch l := top.(type) {
 	case nil, *diffView, *historyView, *blameView:
 		return ""
 	case *fileViewer:
