@@ -104,7 +104,7 @@ func (m Model) consoleMouse(msg tea.MouseMsg) (Model, tea.Cmd, bool) {
 		m.console.held = tea.MouseButtonNone
 		if k, ok := wheelArrow(msg.Button); ok && msg.Action == tea.MouseActionPress {
 			for range 3 {
-				sess.SendKey(k)
+				sess.ScrollKey(k)
 			}
 		}
 		return m, nil, true

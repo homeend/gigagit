@@ -177,3 +177,20 @@ func TestConsoleOSC52OnlyWhileFocused(t *testing.T) {
 		t.Fatalf("copied %q", copied)
 	}
 }
+
+// The alt-screen wheel's arrows are not typed input: agent_wait and the
+// report store read LastInput as "the user typed to the agent".
+func TestConsoleAltScreenWheelIsNotInput(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `stty raw -echo; printf '\033[?1049hREADY'; while :; do head -c 1 | od -An -tx1 | tr -d ' \n'; done`)
+	m, _ = m.showConsole(s.Info().ID, false)
+	waitScreen(t, s, "READY")
+	in := s.LastInput()
+	x0, y0 := contentOrigin(m)
+	_ = mouseAt(m, x0, y0, tea.MouseButtonWheelDown, tea.MouseActionPress)
+	waitScreen(t, s, strings.Repeat(hexOf("\x1b[B"), 3))
+	if !s.LastInput().Equal(in) {
+		t.Fatalf("LastInput moved %v → %v", in, s.LastInput())
+	}
+}

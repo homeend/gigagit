@@ -137,3 +137,25 @@ func TestResetClearsInputModes(t *testing.T) {
 		t.Fatalf("tracking turned on after a reset is lost: %+v", m)
 	}
 }
+
+// ScrollKey is the wheel as a cursor key (xterm's alternate scroll): it
+// reaches the child, but it is neither typed input nor a use.
+func TestScrollKeyIsNotInput(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	s, err := start("m5", StartSpec{Dir: t.TempDir(), Cols: 40, Rows: 5, Argv: []string{"sh", "-c",
+		`stty raw -echo; printf '\033[?1049hREADY'; head -c 3 | od -An -tx1 | tr -d ' \n'; printf 'END'; sleep 5`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.kill(); <-s.Done() })
+	waitText(t, s, "READY")
+	used, in := s.Info().LastUsed, s.LastInput()
+	s.ScrollKey(uv.KeyPressEvent{Code: uv.KeyUp})
+	waitText(t, s, "1b5b41END")
+	if !s.Info().LastUsed.Equal(used) || !s.LastInput().Equal(in) {
+		t.Fatalf("LastUsed %v → %v, LastInput %v → %v", used, s.Info().LastUsed, in, s.LastInput())
+	}
+}
