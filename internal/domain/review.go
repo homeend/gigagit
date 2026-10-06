@@ -137,8 +137,11 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, 
 	return out, nil
 }
 
-// BranchReviewTarget resolves <base>..<tip>: base = merge-base with main, then
-// @{upstream}, else the tip alone (a branch with no base -> review just its tip).
+// BranchReviewTarget resolves <base>..<tip>: base = merge-base with the trunk
+// (trunkFor: origin's default branch, else main, else master), then
+// @{upstream}, else the tip alone (a branch with no base -> review just its
+// tip). The trunk wins over the upstream: a branch tracking its own pushed
+// copy is still reviewed in full, not just its unpushed commits.
 //
 // Both endpoints are resolved to their full commit SHA before being
 // substituted into Range (which an external-tool command later splices as
@@ -148,7 +151,7 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, 
 // quotes. tip is the obvious case (the TUI passes a user-created branch
 // name); base needs the same treatment because the @{upstream} fallback
 // yields a ref name too (e.g. "origin/feature", from a hostile remote branch
-// auto-tracked by a local branch whose merge-base with main doesn't exist)
+// auto-tracked by a local branch whose merge-base with the trunk doesn't exist)
 // — not a SHA, so it's just as injectable if left unresolved. Resolving both
 // closes it off: Range/Diff.Rev are pure hex, never carry a ref name. The
 // one visible tradeoff: a branch review's report title and filename now show
@@ -159,7 +162,14 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 		return ReviewTarget{}, err
 	}
 	branch := s.reviewBranchName(ctx, tip, tipSHA)
-	base, err := s.repo.MergeBase(ctx, "main", tip)
+	// The trunk is not skipped for itself here: reviewing the trunk measures
+	// it against itself (an empty range), as it always has.
+	var base string
+	if trunk, terr := s.trunkFor(ctx, ""); terr != nil {
+		return ReviewTarget{}, terr
+	} else if trunk != "" {
+		base, err = s.repo.MergeBase(ctx, trunk, tipSHA)
+	}
 	if err != nil || strings.TrimSpace(base) == "" {
 		if up, uerr := s.repo.UpstreamRef(ctx, tip); uerr == nil && strings.TrimSpace(up) != "" {
 			base = strings.TrimSpace(up)

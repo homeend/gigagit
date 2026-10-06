@@ -344,3 +344,72 @@ func TestReviewDisplayLabelFallback(t *testing.T) {
 		t.Fatalf("DisplayLabel = %q, want \"working changes\"", got)
 	}
 }
+
+// TestBranchReviewTargetMasterTrunk: a repository whose trunk is `master`
+// (no `main` at all) reviews EVERY commit the branch adds since master, not
+// just its tip commit — the user's bug: a five-commit branch reviewed as one.
+func TestBranchReviewTargetMasterTrunk(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+	runGitIn(t, dir, "branch", "-m", "main", "master")
+	base := revParse(t, dir, "master")
+	runGitIn(t, dir, "checkout", "-b", "feature")
+	for i, f := range []string{"a.txt", "b.txt", "c.txt"} {
+		commitFile(t, dir, f, "x\n", "feature commit "+string(rune('1'+i)))
+	}
+	target, err := svc.BranchReviewTarget(ctx, "feature")
+	if err != nil {
+		t.Fatalf("BranchReviewTarget: %v", err)
+	}
+	if want := base + ".." + revParse(t, dir, "feature"); target.Range != want {
+		t.Fatalf("Range = %q, want %q (everything since master)", target.Range, want)
+	}
+}
+
+// TestBranchReviewTargetTrunkBeatsOwnUpstream: a branch tracking its own
+// pushed copy is still reviewed from the trunk, not from what was last
+// pushed (user ruling 2026-10-06: a branch review covers everything since
+// trunk).
+func TestBranchReviewTargetTrunkBeatsOwnUpstream(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+	runGitIn(t, dir, "branch", "-m", "main", "master")
+	base := revParse(t, dir, "master")
+	remote := t.TempDir()
+	runGitIn(t, remote, "init", "--bare", "-q")
+	runGitIn(t, dir, "remote", "add", "origin", remote)
+	runGitIn(t, dir, "checkout", "-b", "feature")
+	commitFile(t, dir, "a.txt", "x\n", "pushed commit")
+	runGitIn(t, dir, "push", "-q", "-u", "origin", "feature")
+	commitFile(t, dir, "b.txt", "x\n", "unpushed commit")
+
+	target, err := svc.BranchReviewTarget(ctx, "feature")
+	if err != nil {
+		t.Fatalf("BranchReviewTarget: %v", err)
+	}
+	if want := base + ".." + revParse(t, dir, "feature"); target.Range != want {
+		t.Fatalf("Range = %q, want %q (since master, not since origin/feature)", target.Range, want)
+	}
+}
+
+// TestBranchReviewTargetOriginDefaultBranch: with no local main or master,
+// origin's default branch (refs/remotes/origin/HEAD) is the trunk.
+func TestBranchReviewTargetOriginDefaultBranch(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+	base := revParse(t, dir, "main")
+	runGitIn(t, dir, "update-ref", "refs/remotes/origin/develop", base)
+	runGitIn(t, dir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop")
+	runGitIn(t, dir, "checkout", "-b", "feature")
+	runGitIn(t, dir, "branch", "-D", "main")
+	commitFile(t, dir, "a.txt", "x\n", "one")
+	commitFile(t, dir, "b.txt", "x\n", "two")
+
+	target, err := svc.BranchReviewTarget(ctx, "feature")
+	if err != nil {
+		t.Fatalf("BranchReviewTarget: %v", err)
+	}
+	if want := base + ".." + revParse(t, dir, "feature"); target.Range != want {
+		t.Fatalf("Range = %q, want %q (since origin/develop)", target.Range, want)
+	}
+}

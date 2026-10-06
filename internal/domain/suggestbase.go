@@ -100,14 +100,28 @@ func (s *Service) suggestRefBase(ctx context.Context, ref string) (base, why str
 	if up = strings.TrimSpace(up); up != "" && up != ref {
 		return up, "upstream", nil
 	}
+	trunk, err := s.trunkFor(ctx, ref)
+	if err != nil || trunk == "" {
+		return "", "", err
+	}
+	return trunk, "trunk", nil
+}
+
+// trunkFor is the repository's trunk as a base for ref: origin's default
+// branch (refs/remotes/origin/HEAD), else a local `main`, else a local
+// `master` — the first that is not ref itself (a branch is not bounded by
+// itself). "" when there is none. gg has no trunk setting; this order is the
+// whole notion, shared by the base picker and the branch review (which
+// passes "": it skips nothing).
+func (s *Service) trunkFor(ctx context.Context, ref string) (string, error) {
 	head, _ := queryQuiet(ctx, s, "remote-head:origin", func(ctx context.Context) (string, error) {
 		return s.repo.RemoteDefaultBranch(ctx, "origin")
 	})
 	if err := ctx.Err(); err != nil {
-		return "", "", err
+		return "", err
 	}
 	if head = strings.TrimSpace(head); head != "" && head != ref {
-		return head, "trunk", nil
+		return head, nil
 	}
 	for _, name := range []string{"main", "master"} {
 		if name == ref {
@@ -115,11 +129,11 @@ func (s *Service) suggestRefBase(ctx context.Context, ref string) (base, why str
 		}
 		_, ok, err := s.ResolveRev(ctx, "refs/heads/"+name)
 		if err != nil {
-			return "", "", err
+			return "", err
 		}
 		if ok {
-			return name, "trunk", nil
+			return name, nil
 		}
 	}
-	return "", "", nil
+	return "", nil
 }
