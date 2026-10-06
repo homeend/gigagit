@@ -1,6 +1,10 @@
 package cli
 
 import (
+	"archive/tar"
+	"bytes"
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,9 +35,13 @@ func TestPullOnDirtyDiscard(t *testing.T) {
 	}
 }
 
+// Shelve really stores the work before the clean: the entry holds the edit
+// AND an untracked file (its content is the clone's path, so the entry found
+// is this test's own in the shared state dir).
 func TestPullOnDirtyShelve(t *testing.T) {
 	t.Parallel()
 	clone := cloneBehindDirty(t)
+	os.WriteFile(filepath.Join(clone, "other.txt"), []byte(clone), 0o644)
 	code, out, errb := runCLI(t, clone, "pull", "--on-dirty", "shelve")
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errb)
@@ -44,6 +52,38 @@ func TestPullOnDirtyShelve(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(clone, "f.txt")); string(b) != "v2\n" {
 		t.Fatalf("f.txt = %q, want v2", b)
 	}
+	if _, err := os.Stat(filepath.Join(clone, "other.txt")); !os.IsNotExist(err) {
+		t.Fatalf("other.txt must be cleaned after the shelve: %v", err)
+	}
+	svc := openCLIService(t, clone)
+	es, err := svc.ShelfList(context.Background(), "", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range es {
+		blob, err := svc.ShelfBlob(context.Background(), e.ID)
+		if err != nil {
+			continue
+		}
+		members := map[string]string{}
+		tr := tar.NewReader(bytes.NewReader(blob))
+		for {
+			h, err := tr.Next()
+			if err != nil {
+				break
+			}
+			b, _ := io.ReadAll(tr)
+			members[h.Name] = string(b)
+		}
+		if members["other.txt"] != clone {
+			continue
+		}
+		if members["f.txt"] != "local\n" {
+			t.Fatalf("shelved f.txt = %q, want the local edit", members["f.txt"])
+		}
+		return
+	}
+	t.Fatal("no shelf entry holds this clone's changes")
 }
 
 func TestPullOnDirtyAbortKeepsWork(t *testing.T) {

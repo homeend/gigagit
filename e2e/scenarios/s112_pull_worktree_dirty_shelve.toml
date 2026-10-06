@@ -1,0 +1,34 @@
+name = "pull other branch in its worktree: an untracked file in the way → --on-dirty shelve"
+
+# feature/x lives in a linked worktree holding an untracked b.txt that the
+# upstream commit adds. The pull runs THERE; pull.dirty answered shelve stores
+# the file as a shelf entry, cleans that worktree and retries. The main
+# worktree never switches.
+[input]
+steps = [
+  { worktree = "wt-feature", branch = "feature/x" },
+  { write = "b.txt", content = "mine\n", cwd = "wt-feature" },
+]
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { branch = "feature/x" },
+]
+after = [
+  { switch = "feature/x" },
+  { write = "b.txt", content = "remote\n" },
+  { commit = "feature adds b" },
+]
+
+[[run]]
+cmd  = ["pull", "--on-dirty", "shelve", "feature/x"]
+exit = 0
+
+[expect]
+branch    = "main"
+worktrees = ["wt-feature"]
+
+[expect.worktree."wt-feature".files]
+"b.txt" = "remote\n"

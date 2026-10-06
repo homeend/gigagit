@@ -1,0 +1,38 @@
+name = "pull: uncommitted files in the way → --on-dirty discard clears them and pulls"
+
+# git refuses the ff-only pull: f.txt is edited and n.txt is untracked, and
+# upstream changes/adds both. pull.dirty answered discard: the tree is reset
+# (untracked removed), the pull retried and lands.
+[input]
+steps = [
+  { write = "f.txt", content = "local\n" },
+  { write = "n.txt", content = "mine\n" },
+]
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "initial" },
+]
+after = [
+  { write = "f.txt", content = "v2\n" },
+  { write = "n.txt", content = "remote\n" },
+  { commit = "upstream change" },
+]
+
+[[run]]
+cmd  = ["pull", "--on-dirty", "discard"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
+ahead  = 0
+behind = 0
+
+[expect.files]
+"f.txt" = "v2\n"
+"n.txt" = "remote\n"
+
+[[expect.log]]
+subjects = ["upstream change", "initial"]
