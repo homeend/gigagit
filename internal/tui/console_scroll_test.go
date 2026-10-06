@@ -481,3 +481,24 @@ func TestConsoleRowsFitABoxNarrowerThanThePTY(t *testing.T) {
 	m = keys(m, tea.KeyMsg{Type: tea.KeySpace}, tea.KeyMsg{Type: tea.KeyUp})
 	fits("scroll mode")
 }
+
+// "new output" means lines the frozen view lacks, not any redraw: a spinner
+// rewriting its row in place leaves it off.
+func TestScrollTitleIgnoresRedrawInPlace(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	s := startTestSession(t, m, `stty -echo; i=0; while [ $i -lt 40 ]; do echo "row-$i"; i=$((i+1)); done; printf 'spin-0'; read _; printf '\rspin-1'; read _; printf '\nLATER'; sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "spin-0")
+	m = keys(m, altPgUp)
+	s.SendText("\r")
+	waitScreen(t, s, "spin-1")
+	if out := m.View(); strings.Contains(out, "new output") {
+		t.Fatal("a redraw in place is flagged as new output")
+	}
+	s.SendText("\r")
+	waitScreen(t, s, "LATER")
+	if out := m.View(); !strings.Contains(out, "new output") {
+		t.Fatal("a new line is not flagged")
+	}
+}

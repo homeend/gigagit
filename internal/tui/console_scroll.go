@@ -156,11 +156,12 @@ func (m Model) consoleScrollKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 }
 
 // consoleScrollTitle is the title row while scrolling: the position, a
-// flag once the program has printed since the snapshot, and the keys.
+// flag once the program has printed rows the snapshot lacks (not a redraw in
+// place: a spinner would light it all the time), and the keys.
 func (m Model) consoleScrollTitle(s *domain.AgentSession) string {
 	sc := m.console.scroll
 	t := i18n.T("scroll ↑ %s / %s", fmt.Sprint(sc.top+1), fmt.Sprint(sc.hist.Len()))
-	if s.LastOutput().After(sc.hist.Taken()) {
+	if s.LastOutput().After(sc.hist.Taken()) && sc.hist.Outgrown(s.Extent()) { // the cheap check first: Extent scans the screen
 		t += " · " + i18n.T("new output")
 	}
 	return t + "  " + i18n.T("[esc] leave  [spc] select  [enter] copy")

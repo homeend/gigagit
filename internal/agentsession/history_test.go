@@ -152,3 +152,31 @@ func TestHistoryRowSelectionOverReversedCells(t *testing.T) {
 		t.Fatalf("selection not reversed throughout: %q", row)
 	}
 }
+
+// Outgrown: the program printed rows the snapshot lacks (a new line, or a
+// switch of screen) — a redraw in place is not.
+func TestHistoryOutgrown(t *testing.T) {
+	t.Parallel()
+	s := startSh(t, `stty -echo; echo a; printf 'spin-0'; read _; printf '\rspin-1'; read _; printf '\nB'; read _; printf '\033[?1049hALT'; sleep 5`)
+	waitText(t, s, "spin-0")
+	h := s.History()
+	if h.Outgrown(s.Extent()) {
+		t.Fatal("outgrown at once")
+	}
+	s.SendText("\r")
+	waitText(t, s, "spin-1")
+	if h.Outgrown(s.Extent()) {
+		t.Fatal("a redraw in place outgrew the snapshot")
+	}
+	s.SendText("\r")
+	waitText(t, s, "B")
+	if !h.Outgrown(s.Extent()) {
+		t.Fatal("a new line did not")
+	}
+	h = s.History()
+	s.SendText("\r")
+	waitText(t, s, "ALT")
+	if !h.Outgrown(s.Extent()) {
+		t.Fatal("a switch to the alt screen did not")
+	}
+}
