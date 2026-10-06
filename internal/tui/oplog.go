@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -16,11 +15,11 @@ import (
 // It is a pointer field on Model so the open handle and on/off state survive the
 // value-receiver copies. When on, every recorded span — each engine operation
 // and each git invocation, redacted — is appended as one JSON line, leaving a
-// trace of a hung or slow op.
+// trace of a hung or slow op. The file rolls over weekly (observ.WeeklyLog).
 type opLog struct {
-	path string   // operations.log location (shown in the Settings menu)
-	on   bool     // currently mirroring spans to the file
-	file *os.File // open append handle while on; nil when off
+	path string            // operations.log location (shown in the Settings menu)
+	on   bool              // currently mirroring spans to the file
+	file *observ.WeeklyLog // open append handle while on; nil when off
 }
 
 // newOpLog resolves the log location (beside the repo registry in the gg state
@@ -50,10 +49,7 @@ func (l *opLog) enable() error {
 		// rendered status line.
 		return fmt.Errorf("%s", i18n.T("no state directory"))
 	}
-	if err := os.MkdirAll(filepath.Dir(l.path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := observ.OpenWeeklyLog(l.path)
 	if err != nil {
 		return err
 	}

@@ -43,7 +43,7 @@ func TestOpenErrorLogCreatesAppendable(t *testing.T) {
 		t.Fatal("expected a file handle with a state dir set")
 	}
 	defer f.Close()
-	if _, err := f.WriteString("x\n"); err != nil {
+	if _, err := f.Write([]byte("x\n")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	if _, err := os.Stat(path); err != nil {

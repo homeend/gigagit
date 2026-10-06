@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The error and operation logs rotate weekly
+
+### Changed
+
+- **`errors.log` and `operations.log` rotate every week.** Both used to grow
+  forever. Now the first write in a new week (Monday 00:00 local) moves the
+  old file to a dated archive beside it — `errors-2026-W40.log`,
+  `operations-2026-W40.log`, named for the ISO week of its last line — and
+  starts a fresh file. A TUI left running over the weekend rolls over too.
+  The newest 4 archived weeks are kept, older ones are deleted. Several gg
+  processes (TUIs, `gg web`) may write one log: only one of them rotates it,
+  and an archive is never overwritten. On Windows, where a file another gg
+  still holds open cannot be renamed, the log keeps appending and retries
+  hourly. The Session-errors viewer (TUI and web) says so beside the path.
+
 ## alt+A unlocks a stuck "⏳ reloading…" and writes a state dump
 
 ### Fixed

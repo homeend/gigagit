@@ -48,7 +48,7 @@ function renderSessionErrors() {
     <h2>session errors</h2>
     ${rows || '<div class="srow"><span class="snote">(no failures this session)</span></div>'}
     ${trunc}
-    <div class="sfoot">genuine failures only — user aborts are excluded · newest first · this server session's ring; the full history persists in ${esc(data.log_path || "the state dir's errors.log")} · esc closes</div>`;
+    <div class="sfoot">genuine failures only — user aborts are excluded · newest first · this server session's ring; the log persists in ${esc(data.log_path || "the state dir's errors.log")} (rotated weekly, 4 older weeks kept) · esc closes</div>`;
 }
 
 $("sesserrors").addEventListener("click", (e) => {
