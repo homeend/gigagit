@@ -186,7 +186,13 @@ func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	runErr := cmd.Run()
+	id := trackProc(name, argv, start)
+	runErr := cmd.Start()
+	if runErr == nil {
+		setProcPID(id, cmd.Process.Pid)
+		runErr = cmd.Wait()
+	}
+	untrackProc(id)
 	dur := r.now().Sub(start)
 	exit := exitCodeOf(runErr)
 	if cmd.ProcessState != nil {
@@ -224,10 +230,14 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 	// returns ErrWaitDelay, handled below. This mirrors RunEnv's writer model.
 	lw := &lineWriter{onLine: onLine}
 	cmd.Stdout = lw
+	id := trackProc(name, argv, start)
 	if err := cmd.Start(); err != nil {
+		untrackProc(id)
 		return Result{}, err
 	}
+	setProcPID(id, cmd.Process.Pid)
 	runErr := cmd.Wait()
+	untrackProc(id)
 	lw.flush() // emit a final line not terminated by '\n' (matches bufio.ScanLines)
 	dur := r.now().Sub(start)
 	exit := exitCodeOf(runErr)

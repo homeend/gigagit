@@ -55,12 +55,14 @@ func compatible(a, b Mode) bool {
 type holder struct {
 	mode  Mode
 	label string
+	since time.Time // when granted (the emergency state dump shows hold times)
 }
 
 // waiter is one queued Acquire.
 type waiter struct {
 	mode  Mode
 	label string
+	since time.Time     // when queued
 	ready chan struct{} // closed on grant; h is set before the close
 	h     *holder
 }
@@ -88,12 +90,12 @@ func (g *Gate) Acquire(ctx context.Context, mode Mode, label string) (*Reservati
 	// preference — new reads queue behind a waiting writer) wins over
 	// opportunistic overlap.
 	if len(g.waiters) == 0 && g.holdersCompatibleWith(mode) {
-		h := &holder{mode: mode, label: label}
+		h := &holder{mode: mode, label: label, since: start}
 		g.holders = append(g.holders, h)
 		g.mu.Unlock()
 		return &Reservation{g: g, h: h}, nil
 	}
-	w := &waiter{mode: mode, label: label, ready: make(chan struct{})}
+	w := &waiter{mode: mode, label: label, since: start, ready: make(chan struct{})}
 	g.waiters = append(g.waiters, w)
 	g.mu.Unlock()
 
@@ -146,7 +148,7 @@ func (g *Gate) grant() {
 			return
 		}
 		g.waiters = g.waiters[1:]
-		w.h = &holder{mode: w.mode, label: w.label}
+		w.h = &holder{mode: w.mode, label: w.label, since: time.Now()}
 		g.holders = append(g.holders, w.h)
 		close(w.ready)
 	}
@@ -175,6 +177,7 @@ type Entry struct {
 	Label   string
 	Mode    Mode
 	Waiting bool
+	Since   time.Time // granted (holder) or queued (waiter)
 }
 
 // Queue snapshots current holders then waiters, in FIFO order, for
@@ -184,10 +187,10 @@ func (g *Gate) Queue() []Entry {
 	defer g.mu.Unlock()
 	out := make([]Entry, 0, len(g.holders)+len(g.waiters))
 	for _, h := range g.holders {
-		out = append(out, Entry{Label: h.label, Mode: h.mode})
+		out = append(out, Entry{Label: h.label, Mode: h.mode, Since: h.since})
 	}
 	for _, w := range g.waiters {
-		out = append(out, Entry{Label: w.label, Mode: w.mode, Waiting: true})
+		out = append(out, Entry{Label: w.label, Mode: w.mode, Waiting: true, Since: w.since})
 	}
 	return out
 }
@@ -245,4 +248,22 @@ func For(key string) *Gate {
 		gates[key] = g
 	}
 	return g
+}
+
+// All snapshots every gate in the process that has a holder or a waiter,
+// keyed by git common dir — the emergency state dump's "who holds the repo".
+func All() map[string][]Entry {
+	regMu.Lock()
+	gs := make(map[string]*Gate, len(gates))
+	for k, g := range gates {
+		gs[k] = g
+	}
+	regMu.Unlock()
+	out := map[string][]Entry{}
+	for k, g := range gs {
+		if q := g.Queue(); len(q) > 0 {
+			out[k] = q
+		}
+	}
+	return out
 }

@@ -48,6 +48,7 @@ func helpContent() []contentLine {
 		r("t", i18n.T("maximize the focused left-column panel to fill the whole left column (t again restores); while maximized, ctrl+←/→ still cycles that slot's tabs")),
 		r("ctrl+t", i18n.T("fullscreen whatever is focused — any panel OR any open popup — to a near-fullscreen box (ctrl+t or esc restores; on a panel, t drops back to the left column)")),
 		r("ctrl+o", i18n.T("open a shell in the repo worktree (emergency hatch — works over ANY window, incl. a failed conflict resolve; 'exit' returns to gg and reloads)")),
+		r("alt+u", i18n.T("emergency unlock — works over ANY window: when \"⏳ reloading…\" or an operation never ends, abandons the stuck reads (their late results are dropped; r reloads) and asks a running operation to stop; always writes a state dump (running git processes, repo locks, goroutines) under the gg state dir and names the file in the status line")),
 		r("shift+←/→", i18n.T("scroll display mode: pan the focused window horizontally")),
 		r("/", i18n.T("filter the focused panel")),
 		r("ctrl+r", i18n.T("clear the focused window's filtering — its / filter, or on the Commits panel the @ highlight and the \\ commit filter (other windows' filters are left untouched)")),

@@ -2603,3 +2603,12 @@ name = "日本語"
 "[enter] type  [X] kill+remove  [esc] back" = "[enter] 入力  [X] 強制終了+削除  [esc] 戻る"
 "agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [%s] sessions" = "エージェントコンソール: [x] 閉じる  [esc/%s] 戻る  [alt+a/alt+t] 次へ  [%s] セッション"
 "agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [%s] sessions" = "エージェントコンソール: [enter] 入力  [X] 強制終了+削除  [esc/%s] 戻る  [alt+a/alt+t] 次へ  [%s] セッション"
+
+# emergency unlock (alt+u)
+"[alt+u] unlock" = "[alt+u] ロック解除"
+"[alt+u] stop it" = "[alt+u] 停止"
+"asked the running operation to stop" = "実行中の操作に停止を要求しました"
+"unlocked — abandoned %d stuck reads (r reloads)" = "ロック解除 — 停止した読み込み %d 件を破棄 (r で再読み込み)"
+"state dump: %s" = "状態ダンプ: %s"
+"state dump failed: %s" = "状態ダンプ失敗: %s"
+"emergency unlock — works over ANY window: when \"⏳ reloading…\" or an operation never ends, abandons the stuck reads (their late results are dropped; r reloads) and asks a running operation to stop; always writes a state dump (running git processes, repo locks, goroutines) under the gg state dir and names the file in the status line" = "緊急ロック解除 — どのウィンドウ上でも有効: \"⏳ reloading…\" や操作が終わらないとき、停止した読み込みを破棄し (遅れて届いた結果は捨てられる; r で再読み込み)、実行中の操作に停止を要求する。常に状態ダンプ (実行中の git プロセス、リポジトリのロック、goroutine) を gg の状態ディレクトリに書き出し、ステータス行にファイル名を表示する"

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -197,6 +198,10 @@ func contextBindings() []footerBinding {
 // contextBindings: labels must re-evaluate on a live language switch.
 func globalBindings() []footerBinding {
 	return []footerBinding{
+		// First of the global keys so the overflow trim drops it last: the
+		// way out once a lock outlives its normal span (the status line's
+		// own hint uses the same threshold, so a short reload never flashes it).
+		{"unlock", "alt+u", i18n.T("[alt+u] unlock"), func(m Model) bool { return m.unlockHint(time.Now()) != "" }, scopeGlobal},
 		{"resolve", "x", i18n.T("[x] resolve"), func(m Model) bool {
 			// A session sub-row (Worktrees or Branches) owns x (remove /
 			// refuse), so the conflict hint steps back there.

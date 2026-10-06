@@ -23,21 +23,33 @@ func (l *LimitRunner) Run(ctx context.Context, name string, argv []string) (Resu
 }
 
 func (l *LimitRunner) RunEnv(ctx context.Context, name string, argv, env []string) (Result, error) {
-	select {
-	case gitSem <- struct{}{}:
-	case <-ctx.Done():
-		return Result{}, ctx.Err()
+	if err := acquireSlot(ctx); err != nil {
+		return Result{}, err
 	}
 	defer func() { <-gitSem }()
 	return l.inner.RunEnv(ctx, name, argv, env)
 }
 
 func (l *LimitRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (Result, error) {
-	select {
-	case gitSem <- struct{}{}:
-	case <-ctx.Done():
-		return Result{}, ctx.Err()
+	if err := acquireSlot(ctx); err != nil {
+		return Result{}, err
 	}
 	defer func() { <-gitSem }()
 	return l.inner.Stream(ctx, name, argv, onLine)
+}
+
+func acquireSlot(ctx context.Context) error {
+	select {
+	case gitSem <- struct{}{}:
+		return nil
+	default:
+	}
+	slotWaiters.Add(1)
+	defer slotWaiters.Add(-1)
+	select {
+	case gitSem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
