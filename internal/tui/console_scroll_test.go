@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"io"
 	"strings"
 	"testing"
 
@@ -173,5 +174,49 @@ func TestScrollTitleShowsPositionAndNewOutput(t *testing.T) {
 	waitScreen(t, s, "LATER")
 	if out := m.View(); !strings.Contains(out, "new output") {
 		t.Fatal("new output not flagged")
+	}
+}
+
+// runCmdMsgs runs cmd and, for a tea.BatchMsg, each of its commands.
+func runCmdMsgs(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if b, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range b {
+			out = append(out, runCmdMsgs(c)...)
+		}
+		return out
+	}
+	return []tea.Msg{msg}
+}
+
+func TestScrollSpaceSpaceEnterCopiesLines(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 30
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	s := startTestSession(t, m, fortyLines)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "TAIL")
+	m = keys(m, altPgUp, tea.KeyMsg{Type: tea.KeyHome},
+		tea.KeyMsg{Type: tea.KeyDown}, tea.KeyMsg{Type: tea.KeySpace},
+		tea.KeyMsg{Type: tea.KeyDown}, tea.KeyMsg{Type: tea.KeyDown}, tea.KeyMsg{Type: tea.KeySpace})
+	if out := m.View(); !strings.Contains(out, "\x1b[7mrow-2") {
+		t.Fatal("the line selection is not drawn")
+	}
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if cmd == nil {
+		t.Fatal("enter produced no copy")
+	}
+	runCmdMsgs(cmd)
+	if copied != "row-1\nrow-2\nrow-3" {
+		t.Fatalf("copied %q", copied)
+	}
+	if m.console.scroll == nil || m.console.scroll.sel.on {
+		t.Fatal("a copy must stay in scroll mode and clear the selection")
 	}
 }

@@ -119,6 +119,18 @@ func (m Model) consoleScrollKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		sc.cursor, sc.top = 0, 0
 	case "end", "G":
 		sc.cursor, sc.top = last, sc.maxTop(rows)
+	case " ":
+		sc.sel.press(sc.cursor)
+		sc.drag = charSel{}
+		return m, nil, true
+	case "enter":
+		lo, hi, ok := sc.sel.bounds(sc.cursor)
+		if !ok {
+			lo, hi = sc.cursor, sc.cursor // enter with no selection copies the cursor row
+		}
+		text := sc.hist.Text(lo, 0, hi, sc.hist.Width()-1)
+		sc.sel.clear()
+		return m, m.copyToClipboardCmd(copiedLines(hi-lo+1), text), true
 	case "esc":
 		if sc.sel.on || sc.drag.on {
 			sc.sel.clear()
