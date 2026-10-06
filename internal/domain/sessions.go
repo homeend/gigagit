@@ -33,6 +33,9 @@ type (
 	SessionMouse      = agentsession.Mouse
 	SessionInputModes = agentsession.InputModes
 	SessionClip       = agentsession.Clip
+	// Scroll mode's frozen view of a console's history.
+	SessionHistory  = agentsession.History
+	SessionRowMarks = agentsession.RowMarks
 	// The web console's frame (styled runs) and a start spec for callers
 	// that assemble one themselves (tests).
 	ScreenRuns       = agentsession.ScreenRuns

@@ -17,7 +17,7 @@ func TestInputModesFollowMouseTracking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = s.cmd.Process.Kill() })
+	t.Cleanup(func() { s.kill(); <-s.Done() })
 	waitText(t, s, "A")
 	if m := s.Input(); m.Mouse || m.AltScreen {
 		t.Fatalf("at start: %+v", m)
@@ -47,7 +47,7 @@ func TestSendMouseReachesChildAsSGR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = s.cmd.Process.Kill() })
+	t.Cleanup(func() { s.kill(); <-s.Done() })
 	waitText(t, s, "READY")
 	s.SendMouse(uv.MouseClickEvent{X: 2, Y: 3, Button: uv.MouseLeft})
 	// ESC [ < 0 ; 3 ; 4 M — x/ansi adds 1 to both coordinates.
@@ -64,7 +64,7 @@ func TestSendMouseIsInertWithoutTracking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = s.cmd.Process.Kill() })
+	t.Cleanup(func() { s.kill(); <-s.Done() })
 	waitText(t, s, "READY")
 	s.SendMouse(uv.MouseClickEvent{X: 2, Y: 3, Button: uv.MouseLeft})
 	s.SendText("z")
@@ -81,7 +81,7 @@ func TestSessionClipboardFromChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = s.cmd.Process.Kill() })
+	t.Cleanup(func() { s.kill(); <-s.Done() })
 	waitText(t, s, "DONE")
 	if c := s.Clipboard(); c.Text != "copied" || c.Seq != 1 || c.Over {
 		t.Fatalf("clip = %+v", c)
