@@ -387,7 +387,7 @@ func (m Model) onSessionsChanged() (Model, tea.Cmd) {
 			// Nothing is left to type into: step out as ctrl+] would, so
 			// gg's keys work again without the user asking.
 			m.console.focused = false
-			if m.console.maximized {
+			if m.console.maximized && !m.consoleFull() {
 				m.console.maximized = false
 				m = m.syncConsoleSize()
 			}
@@ -552,6 +552,12 @@ var consolePassthrough = map[string]bool{
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
 
+// consoleFocusMoves are the passthrough keys that move panel focus: a
+// full-screen console hides every panel, so they are swallowed there.
+var consoleFocusMoves = map[string]bool{
+	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
+}
+
 // updateConsoleKey routes a key to/around the console per the state table
 // (spec). handled=false lets the key continue down gg's normal dispatch.
 func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
@@ -572,7 +578,11 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	// Focus left the console's column (a mouse click on another panel): the
-	// keyboard is gg's again.
+	// keyboard is gg's again. A full-screen console hides every panel, so
+	// the click cannot have meant one: focus snaps back.
+	if m.focus != panelCommits && m.consoleFull() {
+		m.focus = panelCommits
+	}
 	if m.console.focused && m.focus != panelCommits {
 		m.console.focused = false
 		if m.console.maximized {
@@ -592,7 +602,10 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		if key == m.stepOutKey() {
 			m.console.focused = false
-			if m.console.maximized {
+			// Over a full-screen return point the console stays full-screen
+			// (a second press or esc goes back); a ctrl+t-maximised docked
+			// one docks again.
+			if m.console.maximized && !m.consoleFull() {
 				m.console.maximized = false
 				m = m.syncConsoleSize()
 			}
@@ -650,6 +663,9 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if m.consoleExited() {
 			return m.removeConsoleSession(), nil, true
 		}
+	}
+	if m.console.maximized && consoleFocusMoves[key] {
+		return m, nil, true
 	}
 	if consolePassthrough[key] {
 		return m, nil, false

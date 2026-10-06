@@ -290,3 +290,90 @@ func TestSteerRefusalReadsTheParkedStack(t *testing.T) {
 		t.Fatal("a parked rebase editor must refuse a switch")
 	}
 }
+
+func fullScreenAgent(t *testing.T) (Model, *diffView) {
+	t.Helper()
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	startTestSession(t, m, `sleep 5`)
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	m = pressAlt(t, m, 'a')
+	if !m.consoleFull() || m.console.focused {
+		t.Fatalf("precondition: console=%+v", m.console)
+	}
+	return m, dv
+}
+
+func TestUnfocusedFullScreenConsoleKeys(t *testing.T) {
+	m, dv := fullScreenAgent(t)
+	for _, k := range []string{"tab", "shift+tab", "left", "h", "ctrl+left", "ctrl+right", "j"} {
+		m = press(t, m, k)
+		if m.console == nil || m.focus != panelCommits || !m.console.maximized {
+			t.Fatalf("%s: console=%+v focus=%v — the hidden panels must not take keys", k, m.console, m.focus)
+		}
+	}
+	m = press(t, m, "enter")
+	if !m.console.focused || !m.console.maximized {
+		t.Fatalf("enter: %+v, want focused full-screen", m.console)
+	}
+	mm, _ := m.Update(ctrlBracket())
+	m = mm.(Model)
+	if m.console == nil || m.console.focused || !m.console.maximized {
+		t.Fatalf("step-out from a full return point stays full-screen: %+v", m.console)
+	}
+	m = press(t, m, "esc")
+	if m.console != nil || m.topLayer() != layer(dv) {
+		t.Fatalf("esc: console=%+v top=%T, want the diff", m.console, m.topLayer())
+	}
+}
+
+// ctrl+t on a DOCKED console maximises it; stepping out docks it again.
+func TestStepOutOfCtrlTMaximisedDockedConsoleDocks(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.showConsole(s.Info().ID, false)
+	m = press(t, m, "ctrl+t")
+	if !m.console.maximized || !m.console.focused {
+		t.Fatalf("ctrl+t: %+v", m.console)
+	}
+	mm, _ := m.Update(ctrlBracket())
+	m = mm.(Model)
+	if m.console.maximized || m.console.focused {
+		t.Fatalf("step-out: %+v, want docked unfocused", m.console)
+	}
+}
+
+// The agent exiting under a focused full-screen console steps out but stays
+// full-screen until the user leaves.
+func TestExitInFullScreenConsoleStaysFullScreen(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, "sleep 0.3")
+	m = m.pushLayer(&diffView{title: "a.go"})
+	m = pressAlt(t, m, 'a')
+	m = press(t, m, "enter")
+	m, _ = m.onSessionsChanged()
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not exit")
+	}
+	m, _ = m.onSessionsChanged()
+	if m.console == nil || m.console.focused || !m.console.maximized {
+		t.Fatalf("console=%+v", m.console)
+	}
+}
+
+// A click (focus moved by the mouse) never leaves a full-screen console's
+// keys to the hidden panels.
+func TestFullScreenConsoleSnapsFocusBack(t *testing.T) {
+	m, _ := fullScreenAgent(t)
+	m = press(t, m, "enter")
+	m.focus = panelBranches // as a mouse click would
+	m = press(t, m, "x")
+	if m.console == nil || !m.console.focused || !m.console.maximized || m.focus != panelCommits {
+		t.Fatalf("console=%+v focus=%v", m.console, m.focus)
+	}
+}
