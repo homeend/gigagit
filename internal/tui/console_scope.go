@@ -94,11 +94,7 @@ func (m Model) settleConsole() (Model, tea.Cmd) {
 	}
 	open := m.consoleSwitch.open
 	m.consoleSwitch = consoleSwitch{}
-	// What the console was shown over belongs to the old checkout: a switch
-	// pops such views anyway, and a stash list / preview there is stale.
-	if m.console != nil {
-		m.console.ret = nil
-	}
+	m = m.forgetConsoleReturn() // reRoot did; a settle without one too
 	if open != "" {
 		return m.openConsole(open)
 	}

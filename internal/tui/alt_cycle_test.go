@@ -278,19 +278,21 @@ func TestSettleConsoleDropsTheReturnPoint(t *testing.T) {
 	}
 }
 
-// A switch (steer, hosted web) is refused over a parked editor exactly as
-// over a live one: it would throw the operation's pending input away.
+// A switch (steer, hosted web) is refused over a parked view exactly as over
+// a live one: a file viewer whose search is being typed would lose it.
 func TestSteerRefusalReadsTheParkedStack(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	s := startTestSession(t, m, `sleep 5`)
-	m = m.pushLayer(&irebaseEditor{})
+	fv := &fileViewer{openFile: &openFile{p: &contentPopup{}}}
+	fv.p.search.typing = true
+	m = m.pushLayer(fv)
 	m, _ = m.openConsole(s.Info().ID)
 	if m.topLayer() != nil {
-		t.Fatal("precondition: the editor is parked")
+		t.Fatal("precondition: the viewer is parked")
 	}
 	if m.steerRefusal() == "" {
-		t.Fatal("a parked rebase editor must refuse a switch")
+		t.Fatal("a parked viewer with a typed search must refuse a switch")
 	}
 }
 
@@ -395,5 +397,102 @@ func TestUnfocusedFullScreenConsoleHints(t *testing.T) {
 		if strings.Contains(frame, bad) {
 			t.Errorf("frame advertises %q", bad)
 		}
+	}
+}
+
+// A view parked under a console still receives its async results: a history
+// still loading when the cycle parked it is filled when its list lands.
+func TestParkedViewReceivesItsAsyncResults(t *testing.T) {
+	m, _ := fullScreenAgent(t)
+	h := &historyView{listTag: "h1", loading: true}
+	m.console.ret.layers = append(m.console.ret.layers, h)
+	mm, _ := m.Update(historyListMsg{tag: "h1"})
+	m = mm.(Model)
+	if h.loading {
+		t.Fatal("the parked history never got its list")
+	}
+	if m.console == nil || m.topLayer() != nil || len(m.console.ret.layers) != 2 {
+		t.Fatalf("the stack must stay parked: console=%+v top=%T", m.console, m.topLayer())
+	}
+}
+
+// A diff opened from a commit's file list leaves the files tree focused; the
+// full-screen console covering both still owns its keys.
+func TestFullScreenConsoleOwnsKeysOverAFocusedFilesTree(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	startTestSession(t, m, `sleep 5`)
+	m.filesView, m.filesTreeFocused = &contentPopup{}, true
+	m = m.pushLayer(&diffView{title: "a.go"})
+	m = pressAlt(t, m, 'a')
+	m = press(t, m, "enter")
+	if m.console == nil || !m.console.focused {
+		t.Fatalf("enter must focus the full-screen console, console=%+v", m.console)
+	}
+	if !strings.Contains(m.footerLine(), "every key goes to the agent") {
+		t.Fatalf("footer = %q", m.footerLine())
+	}
+}
+
+// Keys that would open something hidden behind an unfocused full-screen
+// console (the files finder, the stash list, a pull) are swallowed.
+func TestUnfocusedFullScreenConsoleSwallowsOpeners(t *testing.T) {
+	m, _ := fullScreenAgent(t)
+	for _, k := range []string{"F", "S", "c", "g"} {
+		m = press(t, m, k)
+		if m.console == nil || !m.consoleFull() || m.stashView != nil || m.filesView != nil || m.topLayer() != nil {
+			t.Fatalf("%s: console=%+v stash=%v files=%v top=%T", k, m.console, m.stashView, m.filesView, m.topLayer())
+		}
+	}
+}
+
+// A console that opens on its own (an agent started from a popup flow, an
+// AI task) never takes a live popup's keyboard: only a full-screen view is
+// parked.
+func TestConsoleOpenedUnderAPopupLeavesItLive(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	pop := &contentPopup{}
+	m = m.pushLayer(pop)
+	m, _ = m.openConsole(s.Info().ID)
+	if m.topLayer() != layer(pop) {
+		t.Fatalf("top = %T, want the popup still live", m.topLayer())
+	}
+	if m.console.maximized {
+		t.Fatal("a popup is not a full-screen return point")
+	}
+}
+
+// A repo switch drops what the console parked at once, not only once the new
+// repository has loaded: an esc in between must not bring the old diff back.
+func TestReRootDropsParkedViews(t *testing.T) {
+	m, _ := fullScreenAgent(t)
+	sv := &stashView{tag: "stash"}
+	m.console.ret.stashView = sv
+	mm, _ := m.reRoot(m.currentWorktree)
+	m = mm.(Model)
+	if m.console == nil {
+		t.Fatal("precondition: the console survives reRoot")
+	}
+	m = m.closeConsole()
+	if m.topLayer() != nil || m.stashView != nil {
+		t.Fatalf("after the switch: top=%T stash=%v, want the old repo's views gone", m.topLayer(), m.stashView)
+	}
+}
+
+// A file preview comes back only with the files view it lived in.
+func TestOrphanPreviewIsNotRestored(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	startTestSession(t, m, `sleep 5`)
+	m.filesView = &contentPopup{}
+	m.filesPreview = &openFile{}
+	m.focus = panelCommits
+	m = pressAlt(t, m, 'a')
+	m.filesView = nil // an agent's navigate closed the files view meanwhile
+	m = m.closeConsole()
+	if m.filesPreview != nil {
+		t.Fatal("a preview without its files view came back")
 	}
 }

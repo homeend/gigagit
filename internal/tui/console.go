@@ -41,6 +41,7 @@ type consoleReturn struct {
 	fullMaxed    bool
 	fullMax      panel
 	stashView    *stashView
+	filesView    *contentPopup // the files view a preview belongs to
 	filesPreview *openFile
 	focus        panel
 }
@@ -132,27 +133,81 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 	return m, waitSessionCmd(m.console, id, gen)
 }
 
-// captureReturn records the screen a console is about to cover and parks
-// the live layer stack (it would draw over the console and keep the keys).
-// A stack holding a full-screen view, or an active pin, makes the return
-// point full.
+// captureReturn records the screen a console is about to cover. A
+// full-screen VIEW on top (diff, history, blame, file viewer) is parked off
+// the live stack — it would draw over the console and keep the keys — and
+// makes the return point full, as an active pin does. Anything else on top
+// (a popup being typed into, an editor holding an operation's input) stays
+// live and keeps the keyboard: a console opening on its own (an agent
+// started, an AI task) must never take it.
 func (m Model) captureReturn() (Model, *consoleReturn) {
 	r := &consoleReturn{
 		fullMaxed: m.fullMaxed, fullMax: m.fullMax,
-		stashView: m.stashView, filesPreview: m.filesPreview,
+		stashView: m.stashView, filesView: m.filesView, filesPreview: m.filesPreview,
 		focus: m.focus,
 		full:  m.fullMaxActive(),
 	}
-	if m.layers != nil && len(m.layers.entries) > 0 {
+	switch m.topLayer().(type) {
+	case *diffView, *historyView, *blameView, *fileViewer:
 		r.layers = m.layers.entries
 		m.layers.entries = nil
-		for _, l := range r.layers {
-			if isFullScreenLayer(l) {
-				r.full = true
-			}
-		}
+		r.full = true
 	}
 	return m, r
+}
+
+// forgetConsoleReturn drops what the console covers that belongs to the
+// checkout gg is leaving (a repo switch): the parked views, the stash list,
+// the preview. The pin and focus are panel states and stay; a console that
+// was full only for its parked views docks again.
+func (m Model) forgetConsoleReturn() Model {
+	if m.console == nil || m.console.ret == nil {
+		return m
+	}
+	r := m.console.ret
+	r.layers, r.stashView, r.filesView, r.filesPreview = nil, nil, nil, nil
+	r.full = r.fullMaxed
+	m.console.maximized = r.full
+	return m.syncConsoleSizeIfFocused()
+}
+
+// dispatchParkedAware delivers a message. A non-input one (a load result, a
+// resize) is handled with the console's parked views put back beneath the
+// live stack, so a view parked under a console still receives what it
+// asked for; afterwards whatever of them is still there is parked again.
+// Keys and mouse never see parked views — the console covers them.
+func (m Model) dispatchParkedAware(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case tea.KeyMsg, tea.MouseMsg:
+		return m.dispatch(msg)
+	}
+	if m.console == nil || m.console.ret == nil || len(m.console.ret.layers) == 0 {
+		return m.dispatch(msg)
+	}
+	r := m.console.ret
+	parked := r.layers
+	r.layers = nil // a close while handling finds them live already
+	m = m.restoreLayersBeneath(parked)
+	nm, cmd := m.dispatch(msg)
+	out, ok := nm.(Model)
+	if !ok || out.console == nil || out.console.ret != r || out.layers == nil {
+		return nm, cmd // the console went: its views are live now
+	}
+	was := make(map[layer]bool, len(parked))
+	for _, l := range parked {
+		was[l] = true
+	}
+	var keep, live []layer
+	for _, l := range out.layers.entries {
+		if was[l] {
+			keep = append(keep, l)
+		} else {
+			live = append(live, l)
+		}
+	}
+	r.layers = keep
+	out.layers.entries = live
+	return out, cmd
 }
 
 // consoleFull reports a console shown over a full-screen return point.
@@ -209,7 +264,10 @@ func (m Model) closeConsole() Model {
 	}
 	m = m.restoreLayersBeneath(r.layers)
 	m.fullMaxed, m.fullMax = r.fullMaxed, r.fullMax
-	m.stashView, m.filesPreview = r.stashView, r.filesPreview
+	m.stashView = r.stashView
+	if r.filesPreview != nil && r.filesView != nil && m.filesView == r.filesView {
+		m.filesPreview = r.filesPreview // only inside the files view it belongs to
+	}
 	if m.focus == panelCommits {
 		m.focus = r.focus
 	}
@@ -559,10 +617,12 @@ var consolePassthrough = map[string]bool{
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
 
-// consoleFocusMoves are the passthrough keys that move panel focus: a
-// full-screen console hides every panel, so they are swallowed there.
-var consoleFocusMoves = map[string]bool{
-	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
+// consoleFullPassthrough is what an unfocused FULL-SCREEN console lets
+// through: quitting, help, the shell escape and the cycle. It covers every
+// panel and the parked view, so focus moves would land on hidden panels and
+// an opener (F, S, c, p…) would open something behind it.
+var consoleFullPassthrough = map[string]bool{
+	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true,
 }
 
 // updateConsoleKey routes a key to/around the console per the state table
@@ -643,8 +703,8 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	// Unfocused: the console answers only while its column has focus — and a
 	// files view's focused tree (a commit's or a review's files, which keep
 	// focus on the Commits column) owns the keyboard, not the console.
-	if m.focus != panelCommits || (m.filesView != nil && m.filesTreeFocused) {
-		return m, nil, false
+	if !m.consoleFull() && (m.focus != panelCommits || (m.filesView != nil && m.filesTreeFocused)) {
+		return m, nil, false // a full-screen console covers the tree: its keys are the console's
 	}
 	switch key {
 	case "enter":
@@ -671,8 +731,8 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			return m.removeConsoleSession(), nil, true
 		}
 	}
-	if m.console.maximized && consoleFocusMoves[key] {
-		return m, nil, true
+	if m.consoleFull() {
+		return m, nil, !consoleFullPassthrough[key]
 	}
 	if consolePassthrough[key] {
 		return m, nil, false

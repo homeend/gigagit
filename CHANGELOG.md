@@ -22,7 +22,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   folds). A ctrl+t-maximised panel is such a screen too — opening a session
   over one no longer drops the maximise; the panel comes back on close.
 - **An unfocused full-screen agent:** enter (or ctrl+t) focuses it, esc
-  goes back, the panel focus keys do nothing (the panels are hidden).
+  goes back; besides alt+a / alt+t only quit, `?` and ctrl+o reach gg —
+  the panels and the view are hidden, so nothing opens behind it. A view
+  under it keeps loading (a diff or history still arriving is complete
+  when you come back).
   ctrl+] in a focused full-screen agent leaves it full-screen and
   unfocused; a second ctrl+] or esc goes back.
 - **esc on an unfocused console** puts back what it covered — the stash
