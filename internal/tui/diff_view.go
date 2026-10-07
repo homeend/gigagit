@@ -157,6 +157,10 @@ type diffView struct {
 	// reviewID is set when this diff was opened from the review view: its
 	// notes are that review's (domain.ReviewNotesFor, read-only), never the
 	// store's (stampReviewNotes).
+	// forgePR is the pull request whose diff this is (0 = none): note boxes
+	// wear their sync mark and group bar only there (plan 3, T3). Stamped
+	// when the notes arrive (notesLoadedMsg / stackNotesMsg).
+	forgePR  int
 	reviewID string
 	// search is the in-view text search (spec §4.3). It is per VIEW, not per
 	// file: stepping to another file (N/P, home/end) replaces the whole

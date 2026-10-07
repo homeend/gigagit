@@ -730,6 +730,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		body := m.diffBodyRows()
 		hold := dv.anchorAt(dv.curLine)
 		wasVisible := dv.cursorVisible(body)
+		dv.forgePR = m.openPRNumber() // marks and group bars draw in a PR's diff only
 		dv.setNotesFor(msg.idx, msg.notes)
 		dv.rebuild()
 		dv.curLine = dv.lineAt(hold)
@@ -805,6 +806,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		body := m.diffBodyRows()
 		cr, hadRow := dv.cursorRow()
 		wasVisible := dv.cursorVisible(body) // a free-scrolled view keeps its place
+		dv.forgePR = m.openPRNumber()        // marks and group bars draw in a PR's diff only
 		dv.setNotes(msg.notes)
 		dv.relayout(dv.width)
 		dv.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
