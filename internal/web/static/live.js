@@ -584,6 +584,7 @@ async function steerNavigateLand(s) {
     await openWorkingTree(0);
     if (!(await openNamedFile(state.statusEntries, s, "the working-tree diff"))) return;
   }
+  if (!s.line) return;
   await landLine(s);
 }
 
