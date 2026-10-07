@@ -101,10 +101,10 @@ at that line for a remark link — instead of the review's overview.
 - Review file rows (`files.js` files-list menu when a review is active):
   `copy file link (review)` via `copyServerLink`.
 - Remark menu (`files.js` note menu, ids starting `review:`): `copy remark
-  link` (server-built) and `copy remark id`; the existing `copy gg link to
-  this note` is fixed for range/working reviews (passes the review's pair /
-  working target via `cmpPair`) — or replaced by `copy remark link` for
-  review remarks (one row, not two near-duplicates).
+  link` (server-built) and `copy remark id`. For a review remark these
+  REPLACE the existing `copy gg link to this note` (its plain `@tip` link
+  names the wrong change for range/working reviews) — one row, not two
+  near-duplicates; store notes keep their row unchanged.
 - Opening a `?review=` link with a path on the page (`links.js` /
   `gg open --web`): open the review, then that file, scrolled to the line.
 
