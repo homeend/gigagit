@@ -574,6 +574,17 @@ async function removePreview(e) {
 }
 
 
+// reviewRows are a row's AI-review menu rows: "review (AI)…" while the
+// preview is previewable (the server refuses the rest anyway), "show review"
+// when it has a review of its current tip.
+function reviewRows(e) {
+  const rows = [];
+  if (e.state === "ok") rows.push({ label: "review (AI)…", act: () => window.__ggStartReview("preview", "", "", e.id) });
+  const cur = (e.reviews || []).find((r) => !r.older);
+  if (cur) rows.push({ label: "show review", act: () => openReview(cur.id, { kind: "list" }) });
+  return rows;
+}
+
 function showPreviewMenu(e, x, y) {
   const items = [
     { label: "open merge preview", act: () => openPreviewEntry(e) },
@@ -595,6 +606,7 @@ function showPreviewMenu(e, x, y) {
         }),
     },
     { label: "save reversed (" + e.target + " → " + e.source + ")", act: () => savePreview(e.target, e.source, "", false) },
+    ...reviewRows(e),
   ];
   items.push(...extraRows("preview", e));
   items.push(...compareWithRows(e));
@@ -677,6 +689,7 @@ function showPairMenu(e, x, y) {
       { label: "rename…", act: () => renameSaved(e) },
       { label: "save reversed (" + e.b.slice(0, 8) + ".." + e.a.slice(0, 8) + ")", act: () => saveSaved({ a: e.b, b: e.a, label: "" }) },
       { label: "copy gg link", act: () => copyLink(e.link, e.desc) },
+      ...reviewRows(e),
       ...compareWithRows(e),
       { sep: true },
       { label: "remove pair", danger: true, act: () => confirmRemoveSaved(e, "pair") },

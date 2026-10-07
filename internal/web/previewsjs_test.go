@@ -136,3 +136,24 @@ func TestPreviewsJSReviewSubRowsWired(t *testing.T) {
 		t.Error("a review sub-row carries a data-id")
 	}
 }
+
+func TestPreviewsJSReviewMenuRows(t *testing.T) {
+	t.Parallel()
+	src := staticSrc(t, "previews.js")
+	for _, want := range []string{
+		`label: "review (AI)…"`,
+		`window.__ggStartReview("preview", "", "", e.id)`,
+		`label: "show review"`,
+		`e.state === "ok"`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("previews.js lacks %q", want)
+		}
+	}
+	rv := staticSrc(t, "review.js")
+	for _, want := range []string{`async function startReview(target, branch, sha, preview)`, `"&preview="`, `preview, tool: tool.name`, `window.__ggStartReview = startReview`} {
+		if !strings.Contains(rv, want) {
+			t.Errorf("review.js lacks %q", want)
+		}
+	}
+}
