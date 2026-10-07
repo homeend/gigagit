@@ -89,14 +89,51 @@ func TestEnterOpensAPathAnchorOnTopWithItsLine(t *testing.T) {
 	}
 }
 
-func TestEnterOnARangeSelectsTheLines(t *testing.T) {
+func TestEnterOnARangeLandsWithoutSelecting(t *testing.T) {
 	t.Parallel()
 	m, d, _ := tourModel(t)
 	m = openNth(t, m, d, 2)
 	f := topDoc(m)
-	lo, hi, ok := f.p.lsel.bounds(f.p.cur)
-	if f.p.cur != 4 || !ok || lo != 4 || hi != 7 || !f.p.lsel.fixed {
-		t.Fatalf("cur=%d sel=%v %d..%d fixed=%v, want 5-8 selected", f.p.cur, ok, lo, hi, f.p.lsel.fixed)
+	if f.p.cur != 4 || f.p.lsel.on {
+		t.Fatalf("cur=%d lsel=%v, want line 5 and no selection", f.p.cur, f.p.lsel.on)
+	}
+	bs := f.bands()
+	if len(bs) != 2 || f.curBand(bs) != 0 || bs[0].start != 5 || bs[0].end != 8 || bs[1].start != 12 {
+		t.Fatalf("bands=%v cur=%d", bs, f.curBand(bs))
+	}
+}
+
+func TestBandsGoWhenTheOverviewCloses(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 1)
+	f := topDoc(m)
+	m.openFiles.remove(m.currentWorktree, d)
+	if f.bands() != nil {
+		t.Fatal("a closed overview still bands its file")
+	}
+}
+
+func TestBandsFollowAnOverviewSet(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 1) // a.txt:12 current
+	f := topDoc(m)
+	if _, err := m.docs.SetOverview(d.id(), "Tour", "# Tour\n\n- [three](a.txt:3)\n- [nine to ten](a.txt:9-10)\n"); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.onAgentDocsChanged()
+	bs := f.bands()
+	if len(bs) != 2 || bs[0].start != 3 || bs[1].start != 9 || bs[1].end != 10 || f.curBand(bs) != -1 {
+		t.Fatalf("after set: bands=%v cur=%d", bs, f.curBand(bs))
+	}
+}
+
+func TestFileOpenedWithoutAnOverviewHasNoBands(t *testing.T) {
+	t.Parallel()
+	_, d := notedViewer(t)
+	if d.bands() != nil {
+		t.Fatal("bands without an overview")
 	}
 }
 

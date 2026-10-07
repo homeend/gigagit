@@ -102,6 +102,7 @@ func (m Model) openAnchor(ov *openFile, i int) (Model, tea.Cmd) {
 		}
 		mark(false)
 		d.pendingLine, d.pendingEnd = n.Start, 0
+		d.anchorCur = "" // a note is no band: none is current
 		d.from, d.backgrounded = ov, true
 		return m.bringToFront(d)
 	}
@@ -141,10 +142,9 @@ func (m Model) anchorStatted(msg anchorStatMsg) (Model, tea.Cmd) {
 	}
 	m, cmd, _ := m.openFileViewerEv(t.Path, t.Start)
 	if d := topDoc(m); d != nil {
-		if t.End > t.Start {
-			d.pendingEnd = t.End
-		}
-		d.from, d.backgrounded = ov, true
+		// The range is drawn as the current band (anchor_bands.go), not
+		// selected: the reader's own marking stays theirs.
+		d.from, d.backgrounded, d.anchorCur = ov, true, msg.dest
 	}
 	return m, cmd
 }

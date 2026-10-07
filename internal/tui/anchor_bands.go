@@ -88,3 +88,43 @@ func stepBand(bands []anchorBand, cur, line, dir int) (int, bool) {
 	}
 	return n - 1, n > 1
 }
+
+// bands is the bands of the overview that opened d, while it is open; nil
+// for any other document.
+func (d *openFile) bands() []anchorBand {
+	if d.from == nil || d.from.ov == nil || d.from.ov.closed || !docLoaded(d) || d.p.img != nil {
+		return nil
+	}
+	return anchorBands(d.from.ov.anchors, d.path, len(d.p.lines))
+}
+
+// curBand is the index in bands of d's current anchor, or -1.
+func (d *openFile) curBand(bands []anchorBand) int {
+	if d.from == nil || d.from.ov == nil {
+		return -1
+	}
+	return bandOf(bands, d.from.ov.anchors, d.anchorCur, len(d.p.lines))
+}
+
+// bandKind is how a line sits under the bands.
+type bandKind int
+
+const (
+	bandNone bandKind = iota
+	bandOther
+	bandCurrent
+)
+
+// bandKindAt is line's kind (1-based): the current band wins an overlap.
+func bandKindAt(bands []anchorBand, cur, line int) bandKind {
+	k := bandNone
+	for i, b := range bands {
+		if b.start <= line && line <= b.end {
+			if i == cur {
+				return bandCurrent
+			}
+			k = bandOther
+		}
+	}
+	return k
+}

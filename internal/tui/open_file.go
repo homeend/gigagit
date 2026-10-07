@@ -99,6 +99,10 @@ type openFile struct {
 	// from is the overview whose anchor opened this file last (nil = none):
 	// backspace returns to it.
 	from *openFile
+	// anchorCur is the destination of the overview anchor this file is on —
+	// the one opened, or the one n / p stepped to ("" = none): the band drawn
+	// apart from the rest (anchor_bands.go).
+	anchorCur string
 	// pendingEnd is the last line (1-based) of the range a link asked for
 	// (0 = none): landPendingLine selects pendingLine..pendingEnd.
 	pendingEnd int
