@@ -37,7 +37,7 @@
 
 ## Rulings this plan makes on the spec (for the user's review)
 
-- **T1 — a PR's AI reviews draw in its diff.** Today a review's remarks render only in the review view; a PR's diff never shows them, so "Send review (its group)" and the group colours (§1.3, §4.1) would have nothing to sit on. A review belongs to PR n when its reviewed tip is one of the PR's commits or it was saved on the PR's preview link; its unsent remarks draw in the PR diff, re-anchored on the PR head by the same hash rule the send uses (a remark whose lines changed is not drawn there; it stays in the review view). Cost if wrong: the PR view shows remarks the user expected only in the review view.
+- **T1 — a PR's AI reviews draw in its diff.** Today a review's remarks render only in the review view; a PR's diff never shows them, so "Send review (its group)" and the group colours (§1.3, §4.1) would have nothing to sit on. A review belongs to PR n when its reviewed tip is one of the PR's commits or it was saved on the PR's preview link; its unsent remarks draw in the PR diff, re-anchored on the PR head by the same hash rule the send uses (a remark whose lines changed is not drawn there; it stays in the review view). Cost if wrong: the PR view shows remarks the user expected only in the review view. Side effect: gg web's PR page reads the same domain calls, so its note list shows the remarks before plan 4 styles them (rows like any agent note).
 - **T2 — carried notes count in the Files badges** (closes the plan-2 open item). The `}`/`{` file steps and the stacked-diff filter read those counts; a carried note left out would make the step skip a file that visibly shows a box.
 - **T3 — sync marks and group bars show in a PR's diff only.** Elsewhere a stored note is always local and every one would be in "my draft review", so a mark and a bar on every box everywhere would say nothing and change every golden screen. Outside a PR only the two states that need attention show: `◌` sending and `○!` failed (with the error). Spec ruling 4 says "every note shows its sync state"; cost if wrong: one condition to drop.
 - **T4 — the TUI renders the confirm itself.** The engine's confirm text carries English item labels and skip reasons as arguments; the TUI holds the op's `Plan` before running it and renders the `forge.send` prompt from it (translated, capped to the screen). The CLI keeps the engine's English text.
@@ -284,6 +284,8 @@ git commit -F <msgfile>   # "feat(theme): six note-group colour roles and a stab
 - Consumes: `sendRepo(t)` (domain test helper: PR #7, big.go lines 5 and 25 changed, head sha), `addPRNote`, `SaveReview`, `PRPreview`.
 - Produces: `func (s *Service) PreviewNoteGroups(ctx context.Context, set PreviewNoteSet) (map[string][]string, error)` — path → distinct group ids in line order; remark roots `ResolvedNote{Note.ID: "review:<rid>:<i>", Group: "review:<rid>"}` in `PreviewNotesFor/At/All` of a PR set; `PreviewNoteCounts` of a PR set includes carried notes and drawn remarks.
 
+- [ ] **Step 0: Confirm the association facts.** `ReviewHead.Commit` is the review note's `Address.Commit` (`notes.go` ~line 652) — check what `SaveReview` stores there for a `ReviewRange` `head^..head` review (the tip, full sha?) and that `PreviewNoteSet.Commits` (behind `commitSet()`) holds full shas. If either differs (the range's base, short shas), adjust `prReviewHeads`' match and ledger the ruling before writing the tests.
+
 - [ ] **Step 1: Write the failing tests**
 
 `internal/domain/pr_reviews_test.go`:
@@ -478,6 +480,7 @@ package domain
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -492,19 +495,40 @@ func (s *Service) prReviews(ctx context.Context, set PreviewNoteSet) []Review {
 	if _, ok := git.ParsePRRef(set.Source); !ok || !set.OK() {
 		return nil
 	}
+	var out []Review
+	for _, h := range s.prReviewHeads(ctx, set) {
+		if r, err := s.Review(ctx, h.ID); err == nil && r.Doc != nil {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// prReviewHeads are the PR's review heads, newest first: commit and branch
+// reviews (NoteCounts.Reviews) whose reviewed tip is one of the PR's commits,
+// then the reviews saved on a preview whose source is the PR's ref
+// (NoteCounts.PreviewReviews — a preview review is never in Reviews).
+func (s *Service) prReviewHeads(ctx context.Context, set PreviewNoteSet) []ReviewHead {
 	c, err := s.NoteCounts(ctx)
 	if err != nil {
 		return nil
 	}
 	in := set.commitSet()
-	var out []Review
+	var out []ReviewHead
 	for _, h := range c.Reviews {
-		if !in[h.Commit] && !strings.HasSuffix(h.Preview, "..."+set.Source) {
-			continue
+		if in[h.Commit] {
+			out = append(out, h)
 		}
-		if r, err := s.Review(ctx, h.ID); err == nil && r.Doc != nil {
-			out = append(out, r)
+	}
+	scopes := make([]string, 0, len(c.PreviewReviews))
+	for sc := range c.PreviewReviews {
+		if strings.HasSuffix(sc, "..."+set.Source) {
+			scopes = append(scopes, sc)
 		}
+	}
+	sort.Strings(scopes) // no map order
+	for _, sc := range scopes {
+		out = append(out, c.PreviewReviews[sc]...)
 	}
 	return out
 }
@@ -659,7 +683,7 @@ func (s *Service) PreviewNoteGroups(ctx context.Context, set PreviewNoteSet) (ma
 - [ ] **Step 4: Run the tests**
 
 Run: `go test ./internal/domain/ -run 'PRDiff|PRCounts|PreviewNote|PlanSend|PRSendOp|Carried|Remark|Review' 2>&1 | tail -20`
-Expected: PASS (the planner tests prove `remarkPlace` kept `remarkItem`'s behaviour). Then `go test ./internal/domain/ ./internal/cli/ 2>&1 | tail -5` — PASS (`gg pr notes` now also lists remark roots: if a CLI test pins its exact rows, update the expectation and ledger it).
+Expected: PASS (the planner tests prove `remarkPlace` kept `remarkItem`'s behaviour). Then `go test ./internal/domain/ ./internal/cli/ ./internal/web/ 2>&1 | tail -5` — PASS (the web PR page now lists remark roots too: note it in memory for plan 4) (`gg pr notes` now also lists remark roots: if a CLI test pins its exact rows, update the expectation and ledger it).
 
 - [ ] **Step 5: Commit**
 
@@ -922,8 +946,15 @@ func (s *Service) PRSendGroups(ctx context.Context, n int) ([]SendGroup, error) 
 	if c := counts[GroupMine]; c > 0 {
 		out = append(out, SendGroup{ID: GroupMine, Count: c})
 	}
-	nc, _ := s.NoteCounts(ctx)
-	for _, h := range nc.Reviews { // newest first already
+	pr, err := s.PullRequest(ctx, n)
+	if err != nil {
+		return nil, err
+	}
+	prev, err := s.PRPreview(ctx, pr)
+	if err != nil {
+		return nil, err
+	}
+	for _, h := range s.prReviewHeads(ctx, prev.Set) {
 		if c := counts["review:"+h.ID]; c > 0 {
 			out = append(out, SendGroup{ID: "review:" + h.ID, Agent: h.Agent, Summary: h.Summary, Count: c})
 		}
@@ -1540,7 +1571,12 @@ func prSendModel(t *testing.T) (Model, string, string) {
 	domain.ForgeDisabled = false
 	t.Cleanup(func() { domain.ForgeDisabled = true })
 	forgetest.Seed(t, fixtures, prSendFixtures(head))
-	return New(domain.OpenTUI(dir)), dir, head
+	m := New(domain.OpenTUI(dir))
+	// No bootstrap runs here (its batch holds the never-ending heartbeat):
+	// a fresh model may still say "loading", which opsIdle reads, and every
+	// send would be refused as "another operation is running".
+	m.loading = false
+	return m, dir, head
 }
 
 // prSendFixtures are the CLI's sendPRRepo answers (internal/cli/prsend_test.go):
@@ -1577,14 +1613,33 @@ func addTUINote(t *testing.T, m Model, head string, line int, sum string) string
 }
 
 // runToModal runs a forgeSendCmd chain until the op asks its question; it
-// returns the model and the op's pending wait (the next message).
+// returns the model and the op's pending wait (the command that yields the
+// op's next message). startOp returns a BATCH (the heartbeat beside the op
+// wait), so each step's batch is flattened: the op's wait is the command
+// whose message is an op message; the heartbeat's tick is dropped.
 func runToModal(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
 	t.Helper()
 	for i := 0; i < 50 && m.modal == nil; i++ {
 		if cmd == nil {
 			t.Fatalf("no modal (status %q)", m.statusMsg)
 		}
-		nm, next := m.Update(cmd())
+		msg := cmd()
+		if b, ok := msg.(tea.BatchMsg); ok {
+			// Run the batch's commands one by one; keep the one the op answers.
+			for _, c := range b {
+				if c == nil {
+					continue
+				}
+				if inner := c(); inner != nil {
+					if _, tick := inner.(heartbeatMsg); !tick {
+						nm, next := m.Update(inner)
+						m, cmd = nm.(Model), next
+					}
+				}
+			}
+			continue
+		}
+		nm, next := m.Update(msg)
 		m, cmd = nm.(Model), next
 	}
 	if m.modal == nil {
@@ -2480,8 +2535,6 @@ func TestReplyAndSendFromThePRView(t *testing.T) {
 	}
 }
 ```
-
-(`runToModal` must keep feeding every message the batch returns: if `m.Update(noteMutatedMsg…)` returns a `tea.Batch`, flatten it with `flattenCmd` and feed each message — adjust `runToModal` once, for every caller.)
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -3443,12 +3496,12 @@ Expected: FAIL — unknown field `Ref`; help lacks the rows.
 			b.git(t, dir, "update-ref", st.Ref, st.Value)
 ```
 
-and the `write` case writes `expandRevs(t, b, dir, ExpandText(st.Content))`:
+and the `write` case writes `expandRevs(t, dir, ExpandText(st.Content))`:
 
 ```go
 // expandRevs replaces {{rev:<name>}} with the commit <name> names in the repo
 // being built — a fixture (a fake gh answer) can then carry a real head sha.
-func expandRevs(t *testing.T, b *Sandbox, dir, s string) string {
+func expandRevs(t *testing.T, dir, s string) string {
 	t.Helper()
 	for {
 		i := strings.Index(s, "{{rev:")
@@ -3460,8 +3513,15 @@ func expandRevs(t *testing.T, b *Sandbox, dir, s string) string {
 			return s
 		}
 		name := s[i+len("{{rev:") : i+j]
-		sha := strings.TrimSpace(b.git(t, dir, "rev-parse", name))
-		s = s[:i] + sha + s[i+j+2:]
+		// Not b.git: that advances the frozen clock, so an expansion would
+		// shift every later commit's date (and sha) by a second.
+		cmd := exec.Command("git", "rev-parse", name)
+		cmd.Dir = dir
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("build: {{rev:%s}}: %v", name, err)
+		}
+		s = s[:i] + strings.TrimSpace(string(out)) + s[i+j+2:]
 	}
 }
 ```
