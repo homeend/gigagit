@@ -295,11 +295,12 @@ func (s *Service) PreviewNotesFor(ctx context.Context, set PreviewNoteSet, path 
 		}
 		return nil, err
 	}
+	carried := s.carriedNotes(ctx, set)[path] // a PR's view carries identical lines (§1.4)
 	if len(mine) == 0 {
-		return forge, nil
+		return append(carried, forge...), nil
 	}
 	_, newLines := diffSideLines(d)
-	return append(keepResolved(resolveNotes(mine, nil, newLines)), forge...), nil
+	return append(append(keepResolved(resolveNotes(mine, nil, newLines)), carried...), forge...), nil
 }
 
 // PreviewNotesAt is PreviewNotesFor for a caller with no diff in hand (the web
@@ -328,8 +329,9 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 		}
 		return nil, err
 	}
+	carried := s.carriedNotes(ctx, set)[path] // a PR's view carries identical lines (§1.4)
 	if len(mine) == 0 {
-		return forge, nil
+		return append(carried, forge...), nil
 	}
 	var newLines []string
 	if b, ferr := s.ShowFile(ctx, set.Tip, path); ferr == nil {
@@ -338,7 +340,7 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 	// newLines stays nil when the path is gone from the tip: resolveOne then
 	// reports orphaned, and keepResolved hides those — exactly the rule the
 	// ordinary note path follows for a deleted file.
-	return append(keepResolved(resolveNotes(mine, nil, newLines)), forge...), nil
+	return append(append(keepResolved(resolveNotes(mine, nil, newLines)), carried...), forge...), nil
 }
 
 // PreviewNotesAll is PreviewNotesAt for EVERY path the preview carries notes
@@ -383,6 +385,9 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 		if got := keepResolved(resolveNotes(byPath[p], nil, newLines)); len(got) > 0 {
 			out[p] = got
 		}
+	}
+	for p, rs := range s.carriedNotes(ctx, set) { // a PR's view carries identical lines (§1.4)
+		out[p] = append(out[p], rs...)
 	}
 	for _, r := range forge { // active by construction: appended, never re-resolved
 		out[r.Note.Address.Path] = append(out[r.Note.Address.Path], r)
