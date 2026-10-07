@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v151 -->
+<!-- gg:using-gg:v152 -->
 
 # Using gg (gigagit)
 
@@ -107,7 +107,9 @@ guards against removing the worktree you are standing in.
   file of the review, with a line one remark: `gg review show <that link>`
   prints only that file's remarks, or the remark(s) at that line — so a
   link the user copied from a review ("Copy remark link") tells you which
-  remark they mean. `n` is the remark's stable
+  remark they mean. Narrowed, it leaves out the review's outdated threads
+  (they record no file) and says how many: `N outdated threads not shown`
+  (`outdated_hidden` in JSON). `n` is the remark's stable
   index. `show` is always the subcommand — review a branch named `show` as
   `gg review refs/heads/show`. Exit 1 unknown/deleted review or a moved
   link, 2 a malformed link or one with no `?review=`. MCP: `gg_review_show`

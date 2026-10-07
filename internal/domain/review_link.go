@@ -398,6 +398,9 @@ type ReviewShow struct {
 	// whose remark is gone from the re-saved review.
 	Resolved int                  `json:"resolved"`
 	Outdated []ReviewShowOutdated `json:"outdated,omitempty"`
+	// OutdatedHidden counts the outdated threads a view narrowed to one
+	// file or remark left out (they record no file).
+	OutdatedHidden int `json:"outdated_hidden,omitempty"`
 }
 
 // ReviewShow reads review id for an agent (gg review show, gg_review_show).
