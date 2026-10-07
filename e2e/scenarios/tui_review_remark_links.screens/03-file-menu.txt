@@ -1,0 +1,40 @@
+local  branch main                                                                                            {{root}}____________________________________/local
+╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Review: 16e84e5                                   ││ Commits (all) 2                                                                                         │
+│ fake · just now · 1 notes on 1 files              ││   ●  ↓ ✎ *main delete a                                                                                 │
+│   ≡ Overview                                      ││   ●      main  add a                                                                                    │
+│ > D  a.txt  ◆ 1                                   ││                                                                                                         │
+│      deleted                                      ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                  ╔════════════════════════════════════════════════════════╗                                                  │
+│                                                  ║                                                        ║                                                  │
+│                                                  ║  Actions                                               ║                                                  │
+│                                                  ║                                                        ║                                                  │
+│                                                  ║  > Copy file path                                      ║                                                  │
+│                                                  ║    Copy absolute file path                             ║                                                  │
+│                                                  ║    Copy file name                                      ║                                                  │
+│                                                  ║    Copy commit id                                      ║                                                  │
+│                                                  ║    Copy file link                                      ║                                                  │
+│                                                  ║    Commits touching this                               ║                                                  │
+│                                                  ║    Copy review link                                    ║                                                  │
+│                                                  ║    Copy review link to this file                       ║                                                  │
+│                                                  ║    Delete review                                       ║                                                  │
+│                                                  ║                                                        ║                                                  │
+│                                                  ║  type to filter  [enter] run  [ctrl+w] view            ║                                                  │
+│                                                  ║  [esc] close                                           ║                                                  │
+│                                                  ║                                                        ║                                                  │
+│                                                  ╚════════════════════════════════════════════════════════╝                                                  │
+│                                                                                                                                                              │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+│                                                   ││                                                                                                         │
+╰───────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+tree: [↑/↓] move  [enter] diff  [a] all files  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view  [ctrl+t] full  [i] msg  [esc/l] close
+⎇ main · # 16e84e5 · @ gg-e2e

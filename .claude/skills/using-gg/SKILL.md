@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v146 -->
+<!-- gg:using-gg:v147 -->
 
 # Using gg (gigagit)
 
@@ -93,8 +93,15 @@ guards against removing the worktree you are standing in.
   link indented beneath — hand that link to `gg link text` for the exact
   code. `--json`: `{id, agent, created, branch, base, tip, link, overview,
   meta, remarks: [{n, path, side, start, end, summary, rationale, meta,
-  link}]}` (`base` is empty for a one-commit review; `remarks` is `[]` for a
-  review that is not in the document format). `n` is the remark's stable
+  link, review_link}]}` (`base` is empty for a one-commit review; `remarks`
+  is `[]` for a review that is not in the document format). Each remark also
+  prints its id `review:<id>:<n>` — what `gg note reply` / `gg note resolve`
+  take — and its REVIEW link (the line link plus `?review=<id>`, which
+  reopens the review at the remark). A review link WITH a path names one
+  file of the review, with a line one remark: `gg review show <that link>`
+  prints only that file's remarks, or the remark(s) at that line — so a
+  link the user copied from a review ("Copy remark link") tells you which
+  remark they mean. `n` is the remark's stable
   index. `show` is always the subcommand — review a branch named `show` as
   `gg review refs/heads/show`. Exit 1 unknown/deleted review or a moved
   link, 2 a malformed link or one with no `?review=`. MCP: `gg_review_show`

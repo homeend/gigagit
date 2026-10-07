@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review links to files and remarks
+
+### Added
+
+- **Copy a link to one file or one remark of an AI review.** In an opened
+  review, a file row's menu has **Copy review link to this file**, and a
+  remark's menu **Copy remark link** (also `L`) and **Copy remark id**
+  (`review:<id>:<n>`, the handle `gg note reply` / `gg note resolve` take)
+  — in the TUI and in gg web (where they replace a remark's misleading
+  "copy gg link to this note"). The links are the review link with the
+  file and line: opening one opens the REVIEW on that file, at that line.
+- **`gg review show <file or remark link>`** prints only that file's
+  remarks, or the remark at that line; every remark now also prints its
+  review link (`review_link` in `--json`). using-gg skill v147.
+
+### Fixed
+
+- `L` on a review remark in a one-commit review answered "no gg link for
+  this place"; it copies the remark link.
+
 ## Cross-review: several models, one review
 
 ### Added
