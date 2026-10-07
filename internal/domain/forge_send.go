@@ -189,21 +189,21 @@ func (s *Service) planActions(ctx context.Context, plan engine.SendPlan, req PRS
 		for _, id := range req.Notes {
 			d, ok := byID[id]
 			if !ok { // deleted since the request was made (a queued send)
-				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "reply " + id, Reason: "it no longer exists"})
+				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "reply " + id, Reason: SkipGone, Summary: id})
 				continue
 			}
 			label := "reply: " + cutLabel(d.Summary)
 			_, root, ok := s.forgeCommentByID(strings.TrimPrefix(d.ParentID, model.ForgeNoteIDPrefix))
 			switch {
 			case !ok || root.ThreadID == "":
-				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: "its thread is not in this PR"})
+				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: SkipThreadNotInPR, Summary: cutLabel(d.Summary)})
 				continue
 			case d.Send.State() == model.SyncSending:
-				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: "already being sent"})
+				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: SkipBeingSent, Summary: cutLabel(d.Summary)})
 				continue
 			}
 			plan.Items = append(plan.Items, engine.SendItem{Key: d.ID, Label: label, Kind: engine.SendReply,
-				ThreadID: root.ThreadID, Body: sendBody(d, d.ID, "")})
+				ThreadID: root.ThreadID, Body: sendBody(d, d.ID, ""), Summary: cutLabel(d.Summary)})
 		}
 	}
 	for _, x := range []struct {
@@ -320,9 +320,12 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 			return engine.SendPlan{}, err
 		}
 		plan.Key, plan.Body, plan.Verdict = r.ID, reviewSendBody(r), true
+		if b := strings.TrimSpace(req.Body); b != "" { // the user edited the summary (plan 3, T7)
+			plan.Body = sendBody(model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: b}, r.ID, "")
+		}
 		if r.summarySent(pr.Number) {
 			plan.Body = ""
-			plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: "already on GitHub"})
+			plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: SkipOnGitHub})
 		}
 		for i := range r.docRemarks() {
 			s.remarkItem(ctx, &plan, r, i, pl)
@@ -367,7 +370,8 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 					if n.IsReply() && !n.IsForgeReply() {
 						return engine.SendPlan{}, fmt.Errorf("%w: %s is a reply: send its thread's root", ErrSendRequest, id)
 					}
-					plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(n.Address.Path, n.Range[0], n.Summary), Reason: "not in this PR"})
+					plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(n.Address.Path, n.Range[0], n.Summary), Reason: SkipNotInPR,
+						Path: n.Address.Path, Line: n.Range[0], Summary: cutLabel(n.Summary)})
 					continue
 				}
 				noteItem(&plan, r, pl)
@@ -382,24 +386,25 @@ func noteItem(plan *engine.SendPlan, r ResolvedNote, pl *sendPlace) {
 	n := r.Note
 	path := n.Address.Path
 	skip := func(reason string) {
-		plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(path, r.Range[0], n.Summary), Reason: reason})
+		plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(path, r.Range[0], n.Summary), Reason: reason,
+			Path: path, Line: r.Range[0], Summary: cutLabel(n.Summary)})
 	}
 	switch {
 	case r.Sync == model.SyncSending:
-		skip("already being sent")
+		skip(SkipBeingSent)
 		return
 	case !pl.changed[path]:
-		skip("not in this PR")
+		skip(SkipNotInPR)
 		return
 	case r.Status != model.NoteActive:
-		skip("its lines changed")
+		skip(SkipLinesChanged)
 		return
 	}
 	text := anchorLines(pl.lines(false, path), r.Range)
 	th := threadFor(path, model.NoteSideNew, r.Range, text, pl.hunks[path],
 		func(q string) string { return sendBody(n, n.ID, q) })
 	it := engine.SendItem{Key: n.ID, Label: threadLabel(th, r.Range[0], n.Summary), Kind: engine.SendThread,
-		Thread: th, Resolve: r.Resolution != nil}
+		Thread: th, Resolve: r.Resolution != nil, Summary: cutLabel(n.Summary)}
 	for _, rep := range r.Replies {
 		if rep.Note.Source == model.NoteSourceForge {
 			continue
@@ -437,19 +442,20 @@ func (s *Service) remarkItem(ctx context.Context, plan *engine.SendPlan, r Revie
 		return
 	}
 	skip := func(reason string) {
-		plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(path, dn.Range[0], dn.Summary), Reason: reason})
+		plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(path, dn.Range[0], dn.Summary), Reason: reason,
+			Path: path, Line: dn.Range[0], Summary: cutLabel(dn.Summary)})
 	}
 	if r.remarkSend(fp).State() == model.SyncSending {
-		skip("already being sent")
+		skip(SkipBeingSent)
 		return
 	}
 	if !pl.changed[path] {
-		skip("not in this PR")
+		skip(SkipNotInPR)
 		return
 	}
 	rng, want, ok := s.remarkPlace(ctx, r, path, side, dn.Range, pl.lines(side == model.NoteSideOld, path))
 	if !ok {
-		skip("its lines changed")
+		skip(SkipLinesChanged)
 		return
 	}
 	note := model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: dn.Summary, Rationale: dn.Rationale}
@@ -458,7 +464,8 @@ func (s *Service) remarkItem(ctx context.Context, plan *engine.SendPlan, r Revie
 	}
 	key := RemarkKey(r.ID, fp)
 	th := threadFor(path, side, rng, want, pl.hunks[path], func(q string) string { return sendBody(note, key, q) })
-	it := engine.SendItem{Key: key, Label: threadLabel(th, rng[0], dn.Summary), Kind: engine.SendThread, Thread: th}
+	it := engine.SendItem{Key: key, Label: threadLabel(th, rng[0], dn.Summary), Kind: engine.SendThread, Thread: th,
+		Summary: cutLabel(dn.Summary)}
 	if threads, _ := r.RemarkThreads(); i < len(threads) {
 		it.Resolve = threads[i].Resolution != nil
 		for _, rep := range threads[i].Replies {

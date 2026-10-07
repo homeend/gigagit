@@ -36,11 +36,21 @@ type SendItem struct {
 	Resolve  bool            // SendThread: resolve once submitted
 	ThreadID string          // SendReply / SendResolve / SendUnresolve
 	Body     string          // SendReply
+	Summary  string          // the note's summary, cut to 60 runes ("" for a resolve)
 }
 
-// SendSkip is an item the plan could not send, with the reason the confirm
-// shows.
-type SendSkip struct{ Label, Reason string }
+// SendSkip is an item the plan could not send, and why. Path/Line/Summary
+// name it for a frontend that renders its own text (the TUI); Label is the
+// CLI's English line; Reason is a code (the domain's Skip* constants).
+type SendSkip struct {
+	Label, Reason string
+	Path          string
+	Line          int
+	Summary       string
+}
+
+// BodyText is the review body as the user reads it: the send marker dropped.
+func (p SendPlan) BodyText() string { return strings.TrimSpace(forge.StripSendMarker(p.Body)) }
 
 // SendMode is what a SendToForge does with its plan.
 type SendMode int

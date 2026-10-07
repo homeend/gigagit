@@ -324,3 +324,11 @@ func TestFinishRetriesABlankBody(t *testing.T) {
 		t.Fatalf("calls = %q", w.calls)
 	}
 }
+
+func TestSendPlanBodyTextDropsTheMarker(t *testing.T) {
+	t.Parallel()
+	p := SendPlan{Body: "fine\n\n" + forge.SendMarker("n1")}
+	if got := p.BodyText(); got != "fine" {
+		t.Fatalf("BodyText = %q", got)
+	}
+}
