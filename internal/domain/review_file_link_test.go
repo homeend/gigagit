@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -85,5 +87,44 @@ func TestReviewFileLinkOnAWorkingReview(t *testing.T) {
 	}
 	if l := mustParse(t, fl); !strings.HasSuffix(fl, "/f.txt?review="+id) || l.Hint.ID != id {
 		t.Fatalf("working file link %q = %+v", fl, l)
+	}
+}
+
+// A file link names a file the review holds: one its change touched or one
+// its document (or a working review's fingerprint) names. Any other path
+// is refused — the link would open the review on nothing.
+func TestReviewFileLinkRefusesAPathNotInTheReview(t *testing.T) {
+	t.Parallel()
+	svc, dir, single, rng := reviewLinkFixture(t)
+	ctx := context.Background()
+	for _, id := range []string{single, rng} {
+		_, err := svc.ReviewFileLink(ctx, id, "nope.txt")
+		if !errors.Is(err, ErrNotInReview) || !strings.Contains(err.Error(), "nope.txt is not in review "+id) {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+	// b.txt changed with a.txt but has no remark; ghost.txt has a remark
+	// but its change is elsewhere. Both are the review's.
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("z\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-q", "-m", "two files")
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	doc := `{"version":1,"summary":"ok","files":[{"path":"ghost.txt","annotations":[{"newRange":[1,1],"summary":"s"}]}]}`
+	id, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Commit: head}, Agent: "Claude", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"a.txt", "b.txt", "ghost.txt"} {
+		if _, err := svc.ReviewFileLink(ctx, id, p); err != nil {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+	if _, err := svc.ReviewFileLink(ctx, id, "c.txt"); !errors.Is(err, ErrNotInReview) {
+		t.Errorf("c.txt: %v", err)
 	}
 }

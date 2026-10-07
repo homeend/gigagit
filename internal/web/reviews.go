@@ -313,6 +313,10 @@ func (s *Server) handleReviewLink(w http.ResponseWriter, r *http.Request) {
 	default:
 		link, err = svc.ReviewLink(readCtx(r), rv.ID)
 	}
+	if errors.Is(err, domain.ErrNotInReview) {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

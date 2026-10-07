@@ -21,6 +21,9 @@ import (
 // would mislead whoever follows the link.
 var ErrReviewLinkMismatch = errors.New("the link does not match the review")
 
+// ErrNotInReview refuses a link to a file the review does not hold.
+var ErrNotInReview = errors.New("not in the review")
+
 // ReviewID turns an id, or "latest" (the newest stored review), into a stored
 // review's id. ErrReviewNotFound when there is none.
 func (s *Service) ReviewID(ctx context.Context, idOrLatest string) (string, error) {
@@ -128,8 +131,41 @@ func (s *Service) ReviewFileLink(ctx context.Context, id, path string) (string, 
 	if err != nil {
 		return "", err
 	}
+	if ok, err := s.reviewHolds(ctx, r, path); err != nil {
+		return "", err
+	} else if !ok {
+		return "", fmt.Errorf("%w: %s is not in review %s", ErrNotInReview, path, r.ID)
+	}
 	return s.linkText(ctx, model.Link{Path: path, Target: t, Side: model.NoteSideNew,
 		Hint: model.LinkHint{Kind: model.ReviewHintKind, ID: r.ID}})
+}
+
+// reviewHolds reports whether path is one of review r's files: named by its
+// document or a working review's fingerprint (no git), else listed in the
+// change the review view opens (ReviewFiles).
+func (s *Service) reviewHolds(ctx context.Context, r Review, path string) (bool, error) {
+	if r.Doc != nil {
+		for _, f := range r.Doc.Files {
+			if reviewPath(f.Path) == path {
+				return true, nil
+			}
+		}
+	}
+	for _, f := range r.Files {
+		if f.Path == path {
+			return true, nil
+		}
+	}
+	files, err := s.ReviewFiles(ctx, r)
+	if err != nil {
+		return false, err
+	}
+	for _, f := range files {
+		if f.Path == path || f.OldPath == path { // a rename's old name too
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ReviewRemarkLink is the review-aware link of one remark, named by its id

@@ -65,6 +65,9 @@ func TestReviewLinkEndpointFileAndRemark(t *testing.T) {
 	if code := getJSON(t, ts, "/api/review/"+id+"/link?n=99", &got); code != 404 {
 		t.Fatalf("unknown remark = %d, want 404", code)
 	}
+	if code := getJSON(t, ts, "/api/review/"+id+"/link?path=nope.txt", &got); code != 404 {
+		t.Fatalf("a file the review does not hold = %d, want 404", code)
+	}
 	if code := getJSON(t, ts, "/api/review/"+id+"/link?n=x", &got); code != 400 {
 		t.Fatalf("bad n = %d, want 400", code)
 	}
