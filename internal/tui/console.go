@@ -393,7 +393,7 @@ func consoleTitleParts(info domain.SessionInfo) (label, wt, state string) {
 	} else if act := sessionActivityText(info.ID); act != "" {
 		state += " · " + act
 	}
-	return info.Label, shortWorktreeName(info.Dir), state
+	return info.Title(), shortWorktreeName(info.Dir), state
 }
 
 // consoleTitleFit is the title in w columns, keeping what it is for — the
@@ -518,7 +518,7 @@ func (m Model) onSessionsChanged() (Model, tea.Cmd) {
 				m = m.syncConsoleSize()
 			}
 		}
-		m.statusMsg = i18n.T("%s in %s exited (%d)", info.Label, shortWorktreeName(info.Dir), info.ExitCode)
+		m.statusMsg = i18n.T("%s in %s exited (%d)", info.Title(), shortWorktreeName(info.Dir), info.ExitCode)
 	}
 	m.sessionStates = next
 	if m.console != nil {
@@ -601,7 +601,7 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 	// or a PTY left wider (from a maximised spell, another viewer) cuts its
 	// lines — x/vt does not reflow.
 	m = m.syncConsoleSize()
-	m.statusMsg = i18n.T("%s in %s — %d of %d by last use  [enter] focus", info.Label, shortWorktreeName(info.Dir), next+1, len(list))
+	m.statusMsg = i18n.T("%s in %s — %d of %d by last use  [enter] focus", info.Title(), shortWorktreeName(info.Dir), next+1, len(list))
 	return m, cmd
 }
 
@@ -849,6 +849,6 @@ func (m Model) killSession(id domain.SessionID) Model {
 		return m
 	}
 	info := s.Info()
-	m.statusMsg = i18n.T("killing %s in %s…", info.Label, shortWorktreeName(info.Dir))
+	m.statusMsg = i18n.T("killing %s in %s…", info.Title(), shortWorktreeName(info.Dir))
 	return m
 }

@@ -2754,7 +2754,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.canDeleteWorktree() {
 					wt, _ := m.selectedWorktree()
 					if info, busy := runningSessionIn(wt.Path); busy {
-						m.statusMsg = i18n.T("%s is running in this worktree — kill it first (ctrl+\\)", info.Label)
+						m.statusMsg = i18n.T("%s is running in this worktree — kill it first (ctrl+\\)", info.Title())
 						return m, nil
 					}
 					return m.startOp(engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch})

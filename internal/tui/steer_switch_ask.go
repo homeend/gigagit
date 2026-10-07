@@ -55,7 +55,7 @@ func (m Model) askSteerSwitch(c steer.Command) (Model, tea.Cmd) {
 func (m Model) steerSender(c steer.Command) string {
 	for _, info := range domain.Sessions().List() {
 		if m.childInbox[info.ID] == c.From && domain.SameCheckout(info.Dir, c.Worktree) {
-			return info.Label
+			return info.Title()
 		}
 	}
 	return i18n.T("an agent")

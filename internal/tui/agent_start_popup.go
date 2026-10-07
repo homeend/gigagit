@@ -390,7 +390,7 @@ func (m Model) removeSessionRow(info domain.SessionInfo) Model {
 		m.statusMsg = i18n.T("only an exited session can be removed — X kills and removes a running one")
 		return m
 	}
-	m.statusMsg = i18n.T("removed %s", info.Label)
+	m.statusMsg = i18n.T("removed %s", info.Title())
 	return m
 }
 
@@ -404,7 +404,7 @@ func (m Model) killRemoveSessionRow(info domain.SessionInfo) Model {
 	if info.State != domain.SessionRunning {
 		return m.removeSessionRow(info)
 	}
-	id, label, dir := info.ID, info.Label, shortWorktreeName(info.Dir)
+	id, label, dir := info.ID, info.Title(), shortWorktreeName(info.Dir)
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "session-kill-remove",
