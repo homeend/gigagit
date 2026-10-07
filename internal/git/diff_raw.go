@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -13,9 +14,13 @@ import (
 // with ParseNumstat). -z keeps paths verbatim (no core.quotepath mangling)
 // and makes rename records unambiguous.
 func (r *Repo) DiffNumstat(ctx context.Context, spec model.DiffSpec) (string, error) {
+	revs, err := r.diffRevs(ctx, spec)
+	if err != nil {
+		return "", err
+	}
 	b := gitcmd.New("diff").Arg("--numstat", "-z").
 		ArgIf(spec.Cached, "--cached").
-		ArgIf(spec.Rev != "", spec.Rev)
+		Arg(revs...)
 	if len(spec.Paths) > 0 {
 		b.Arg("--").Arg(spec.Paths...)
 	}
@@ -34,6 +39,10 @@ func (r *Repo) DiffNumstat(ctx context.Context, spec model.DiffSpec) (string, er
 // header prefixes and uncoloured output, so those user settings would
 // otherwise make hunk parsing silently find nothing.
 func (r *Repo) DiffPatch(ctx context.Context, spec model.DiffSpec) (string, error) {
+	revs, err := r.diffRevs(ctx, spec)
+	if err != nil {
+		return "", err
+	}
 	b := gitcmd.New("diff").
 		Config("diff.noprefix=false").
 		Config("diff.mnemonicPrefix=false").
@@ -45,7 +54,7 @@ func (r *Repo) DiffPatch(ctx context.Context, spec model.DiffSpec) (string, erro
 		ArgIf(spec.Unified > 0, "-U"+strconv.Itoa(spec.Unified), "--inter-hunk-context=0",
 			"--diff-algorithm=myers", "--indent-heuristic", "--no-ext-diff", "--no-textconv").
 		ArgIf(spec.Cached, "--cached").
-		ArgIf(spec.Rev != "", spec.Rev)
+		Arg(revs...)
 	if len(spec.Paths) > 0 {
 		b.Arg("--").Arg(spec.Paths...)
 	}
@@ -54,6 +63,33 @@ func (r *Repo) DiffPatch(ctx context.Context, spec model.DiffSpec) (string, erro
 		return "", err
 	}
 	return res.Stdout, nil
+}
+
+// emptyTree is the empty tree's id in each object format: what a root
+// commit's own change is diffed against (git knows it without storing it).
+var emptyTree = map[string]string{
+	"sha1":   "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+	"sha256": "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321",
+}
+
+// diffRevs are spec's revision arguments: Rev as given, or for a root
+// commit the empty tree and Rev (one more git call: the object format).
+func (r *Repo) diffRevs(ctx context.Context, spec model.DiffSpec) ([]string, error) {
+	switch {
+	case spec.Rev == "":
+		return nil, nil
+	case !spec.Root:
+		return []string{spec.Rev}, nil
+	}
+	format, err := r.ObjectFormat(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tree, ok := emptyTree[format]
+	if !ok {
+		return nil, fmt.Errorf("unknown object format %q", format)
+	}
+	return []string{tree, spec.Rev}, nil
 }
 
 // ParseNumstat parses `--numstat -z` records: "A\tD\tpath\x00" ordinarily;

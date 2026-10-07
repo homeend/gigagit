@@ -148,7 +148,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 		target = domain.WorkingReviewTarget()
 	case fs.NArg() >= 1:
 		arg = fs.Arg(0)
-		target = reviewTargetForArg(arg)
+		target = reviewTargetForArg(arg, func(rev string) (string, model.DiffSpec) { return svc.OwnChange(ctx, rev) })
 	default:
 		t, err := svc.BranchReviewTarget(ctx, "HEAD")
 		if err != nil {
@@ -374,18 +374,18 @@ func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.R
 }
 
 // reviewTargetForArg classifies a single positional argument as either an
-// explicit range (contains "..", used as-is) or a single commit (reviewed
-// against its own parent via "<arg>^..<arg>" — model.DiffSpec{Rev: arg} alone
-// would diff the WORKING TREE against arg, which is empty on a clean
-// checkout, not the commit's own change).
-func reviewTargetForArg(arg string) domain.ReviewTarget {
+// explicit range (contains "..", used as-is) or a single commit, reviewed as
+// its OWN change — own(arg) is domain.Service.OwnChange: "<arg>^..<arg>", or
+// a root commit against the empty tree (model.DiffSpec{Rev: arg} alone would
+// diff the WORKING TREE against arg, not the commit's own change).
+func reviewTargetForArg(arg string, own func(rev string) (string, model.DiffSpec)) domain.ReviewTarget {
 	// Label = the arg as typed (already human-readable, e.g. "main..HEAD" or a
 	// short sha) for the report title/filename; Range stays the executed rev.
 	if strings.Contains(arg, "..") {
 		return domain.ReviewTarget{Kind: domain.ReviewRange, Range: arg, Label: arg, Diff: model.DiffSpec{Rev: arg}}
 	}
-	rng := arg + "^.." + arg
-	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Label: arg, Diff: model.DiffSpec{Rev: rng}}
+	rng, diff := own(arg)
+	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Label: arg, Diff: diff}
 }
 
 // selectReviewCommand loads the effective config and returns the chosen

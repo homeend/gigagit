@@ -22,10 +22,7 @@ func (s *Service) CommitReviewTarget(ctx context.Context, sha string) (ReviewTar
 	if !hexSHA.MatchString(sha) {
 		return ReviewTarget{}, errors.New("invalid commit")
 	}
-	rng := sha + "^.." + sha
-	if _, ok, err := s.ResolveRev(ctx, sha+"^"); err == nil && !ok {
-		rng = sha // root commit
-	}
+	rng, diff := s.OwnChange(ctx, sha)
 	label := sha
 	if len(label) > 8 {
 		label = label[:8]
@@ -35,7 +32,20 @@ func (s *Service) CommitReviewTarget(ctx context.Context, sha string) (ReviewTar
 			label += " " + subj
 		}
 	}
-	return ReviewTarget{Kind: ReviewRange, Range: rng, Label: label, Diff: model.DiffSpec{Rev: rng}, Commit: sha}, nil
+	return ReviewTarget{Kind: ReviewRange, Range: rng, Label: label, Diff: diff, Commit: sha}, nil
+}
+
+// OwnChange is the range and diff of rev's OWN change: rev^..rev, or for a
+// root commit (no parent) rev alone, diffed against the empty tree. A rev
+// that does not resolve keeps rev^..rev, so git names the bad revision.
+func (s *Service) OwnChange(ctx context.Context, rev string) (string, model.DiffSpec) {
+	if _, ok, err := s.ResolveRev(ctx, rev+"^"); err == nil && !ok {
+		if _, okRev, errRev := s.ResolveRev(ctx, rev); errRev == nil && okRev {
+			return rev, model.DiffSpec{Rev: rev, Root: true}
+		}
+	}
+	rng := rev + "^.." + rev
+	return rng, model.DiffSpec{Rev: rng}
 }
 
 // LinkReviewTarget is the review a resolved gg:// link names: a merge preview

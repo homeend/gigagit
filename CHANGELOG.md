@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Reviewing a repository's first commit
+
+### Fixed
+
+- **`gg review <rev>` works on a repository's first commit.** It reviewed
+  `<rev>^..<rev>`, which does not exist for a commit with no parent, and
+  failed with `unknown revision`. A root commit is now reviewed as
+  everything it adds (diffed against the empty tree, SHA-1 or SHA-256). The
+  TUI's and a link's root-commit review had quietly given the reviewer the
+  wrong diff (the working tree against that commit); they get the same fix.
+  Skill: using-gg v153.
+
 ## Review links: the remaining rough edges
 
 ### Fixed

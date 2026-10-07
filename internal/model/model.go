@@ -192,6 +192,10 @@ type DiffSpec struct {
 	// Unified > 0 asks for -U<n> context lines (a forge's hunks are git's
 	// default 3, whatever the user's diff.context says); 0 = git's default.
 	Unified int
+	// Root: Rev is a root commit, and the diff is its OWN change — against
+	// the empty tree. A bare Rev diffs the working tree against it instead,
+	// and Rev^..Rev does not exist.
+	Root bool
 }
 
 // DiffStat is one file's terse change stat (from git --numstat).
