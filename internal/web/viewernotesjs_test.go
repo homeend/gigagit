@@ -164,6 +164,13 @@ func TestViewerAnchorBandsWiring(t *testing.T) {
 			t.Errorf("viewer.js lacks %q", want)
 		}
 	}
+	// from reads t: t must be declared first (a use before it throws, and
+	// enter on an anchor silently opened nothing).
+	fn := src[strings.Index(src, "async function openAnchorAt("):]
+	fn = fn[:strings.Index(fn, "\n}\n")]
+	if ti, fi := strings.Index(fn, "const t = anchorTarget(a)"), strings.Index(fn, "const from = {"); ti < 0 || fi < 0 || fi < ti {
+		t.Errorf("openAnchorAt builds from (at %d) before t (at %d)", fi, ti)
+	}
 	if strings.Contains(src, "view.range = t.end > t.line") {
 		t.Error("an anchor open still sets the reader's range")
 	}

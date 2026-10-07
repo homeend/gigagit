@@ -680,12 +680,12 @@ async function openAnchorAt(i) {
   if (!view.ov || view.id !== id) return;
   const a = view.ov.anchors[view.ov.sel];
   if (!a) return opLine("that anchor is no longer in the overview", false);
-  // The overview's anchors travel with the way back: the file draws its
-  // own as bands (viewBands), the opened one current.
-  const from = { id, sel: view.ov.sel, dest: a.dest, anchors: view.ov.anchors, stamp: view.ov.stamp, cur: t.note ? "" : a.dest };
   if (a.missing) return opLine(anchorStatus(a), false);
   const t = anchorTarget(a);
   if (!t.path) return opLine("note " + t.note + " is gone", false);
+  // The overview's anchors travel with the way back: the file draws its
+  // own as bands (viewBands), the opened one current — a note is no band.
+  const from = { id, sel: view.ov.sel, dest: a.dest, anchors: view.ov.anchors, stamp: view.ov.stamp, cur: t.note ? "" : a.dest };
   const r = await openViewer({ src: "worktree", path: t.path, line: t.line });
   if (!r.ok) return;
   view.from = from;
