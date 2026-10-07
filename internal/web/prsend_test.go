@@ -1,12 +1,16 @@
 package web
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/model"
@@ -118,5 +122,164 @@ func TestPRNotesCountsCarryGroupSlots(t *testing.T) {
 		if n.Summary == "mine" && n.GroupSlot != 5 {
 			t.Fatalf("the note's group_slot = %d", n.GroupSlot)
 		}
+	}
+}
+
+// followDecide reads op id's events, answers its forge.send decision with
+// option, and returns every event through done.
+func followDecide(t *testing.T, ts *httptest.Server, id, option string) []wireEvent {
+	t.Helper()
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Get(ts.URL + "/api/op/" + id + "/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var evs []wireEvent
+	sc := bufio.NewScanner(resp.Body)
+	for sc.Scan() {
+		line, ok := strings.CutPrefix(sc.Text(), "data: ")
+		if !ok {
+			continue
+		}
+		var we wireEvent
+		if err := json.Unmarshal([]byte(line), &we); err != nil {
+			t.Fatal(err)
+		}
+		evs = append(evs, we)
+		switch we["type"] {
+		case "decision":
+			if code, out := postJSONAny(t, ts, "/api/op/"+id+"/decide", `{"option":"`+option+`"}`); code != 200 {
+				t.Fatalf("decide = %d %v", code, out)
+			}
+		case "done":
+			return evs
+		}
+	}
+	t.Fatalf("no done: %v", evs)
+	return nil
+}
+
+// Serial: sendServer.
+func TestWebSendsOneNoteBehindTheConfirm(t *testing.T) {
+	ts, wf, head := sendServer(t)
+	id := addWebNote(t, ts, head, "pr7.txt", 1, "rename this")
+	code, out := postJSONAny(t, ts, "/api/pr/send?n=7", `{"kind":"notes","ids":["`+id+`"]}`)
+	if code != 202 {
+		t.Fatalf("start = %d %v", code, out)
+	}
+	plan, _ := json.Marshal(out["plan"])
+	if strings.Contains(string(plan), head) || strings.Contains(string(plan), "PR_7") || strings.Contains(string(plan), id) {
+		t.Fatalf("the plan leaks a sha, a node id or a key: %s", plan)
+	}
+	if !strings.Contains(string(plan), "rename this") || !strings.Contains(string(plan), `"target"`) {
+		t.Fatalf("plan = %s", plan)
+	}
+	if wf.writeLog() != "" {
+		t.Fatal("nothing may be written before the confirm is answered")
+	}
+	evs := followDecide(t, ts, out["op_id"].(string), "send")
+	done, _ := findEvent(evs, "done")
+	if done["ok"] != true || !strings.Contains(wf.writeLog(), "SubmitReview COMMENT") {
+		t.Fatalf("done %v, writes %s", done, wf.writeLog())
+	}
+}
+
+// Serial: sendServer.
+func TestWebSendAbortPostsNothing(t *testing.T) {
+	ts, wf, head := sendServer(t)
+	id := addWebNote(t, ts, head, "pr7.txt", 1, "x")
+	code, out := postJSONAny(t, ts, "/api/pr/send?n=7", `{"kind":"notes","ids":["`+id+`"]}`)
+	if code != 202 {
+		t.Fatalf("start = %d %v", code, out)
+	}
+	followDecide(t, ts, out["op_id"].(string), "abort")
+	if w := wf.writeLog(); w != "" {
+		t.Fatalf("an aborted send wrote: %s", w)
+	}
+}
+
+// Review Focus 3: a forged wire value is refused before anything is planned.
+// Serial: sendServer.
+func TestWebSendRefusesForgedValues(t *testing.T) {
+	ts, wf, head := sendServer(t)
+	addWebNote(t, ts, head, "pr7.txt", 1, "x")
+	big := strings.Repeat("a", 70<<10)
+	for _, tc := range []struct {
+		q, body string
+		code    int
+	}{
+		{"n=0", `{"kind":"verdict"}`, 400},
+		{"n=99", `{"kind":"verdict"}`, 404},
+		{"n=7", `{"kind":"post-anything"}`, 400},
+		{"n=7", `{"kind":"notes","ids":[]}`, 400},
+		{"n=7", `{"kind":"notes","ids":["` + head + `"]}`, 400},
+		{"n=7", `{"kind":"notes","ids":["../x"]}`, 400},
+		{"n=7", `{"kind":"notes","ids":["forge:C1"]}`, 400}, // a GitHub thread is not a note to send
+		{"n=7", `{"kind":"resolve","ids":["forge:NOPE"]}`, 400},
+		{"n=7", `{"kind":"group","group":"review:not-listed"}`, 400},
+		{"n=7", `{"kind":"verdict","body":"` + big + `"}`, 400},
+	} {
+		if code, out := postJSONAny(t, ts, "/api/pr/send?"+tc.q, tc.body); code != tc.code {
+			t.Errorf("%s %.40s = %d %v, want %d", tc.q, tc.body, code, out, tc.code)
+		}
+	}
+	if w := wf.writeLog(); w != "" {
+		t.Fatalf("a refused request wrote: %s", w)
+	}
+}
+
+// Review Focus 2: the head moved on GitHub — refused, nothing planned.
+// Serial: sendServer.
+func TestWebSendRefusesAMovedHead(t *testing.T) {
+	ts, wf, head := sendServer(t)
+	id := addWebNote(t, ts, head, "pr7.txt", 1, "x")
+	wf.mu.Lock()
+	wf.open[0].HeadSHA = strings.Repeat("e", 40)
+	wf.mu.Unlock()
+	code, out := postJSONAny(t, ts, "/api/pr/send?n=7", `{"kind":"notes","ids":["`+id+`"]}`)
+	if code != 409 || !strings.Contains(fmt.Sprint(out["error"]), "new commits") {
+		t.Fatalf("= %d %v", code, out)
+	}
+}
+
+// Serial: sendServer.
+func TestWebSendGroupsListsMine(t *testing.T) {
+	ts, _, head := sendServer(t)
+	addWebNote(t, ts, head, "pr7.txt", 1, "x")
+	var out struct {
+		Groups []struct {
+			ID    string `json:"id"`
+			Count int    `json:"count"`
+			Slot  int    `json:"slot"`
+		} `json:"groups"`
+	}
+	if code := getJSON(t, ts, "/api/pr/send/groups?n=7", &out); code != 200 || len(out.Groups) != 1 ||
+		out.Groups[0].ID != "mine" || out.Groups[0].Count != 1 || out.Groups[0].Slot != 5 {
+		t.Fatalf("= %d %+v", code, out)
+	}
+}
+
+// Review Focus 1: one op at a time — a second send while one is parked on
+// its confirm is refused. Serial: sendServer.
+func TestWebSendWhileAnOpRunsIs409(t *testing.T) {
+	ts, _, head := sendServer(t)
+	id := addWebNote(t, ts, head, "pr7.txt", 1, "x")
+	_, first := postJSONAny(t, ts, "/api/pr/send?n=7", `{"kind":"notes","ids":["`+id+`"]}`)
+	if code, out := postJSONAny(t, ts, "/api/pr/send?n=7", `{"kind":"verdict"}`); code != 409 {
+		t.Fatalf("a second send while one is parked = %d %v", code, out)
+	}
+	followDecide(t, ts, first["op_id"].(string), "abort")
+}
+
+// Serial: sendServer. The send endpoint is a guarded POST.
+func TestWebSendIsWriteGuarded(t *testing.T) {
+	ts, _, _ := sendServer(t)
+	resp, err := http.Post(ts.URL+"/api/pr/send?n=7", "text/plain", strings.NewReader(`{"kind":"verdict"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 415 {
+		t.Fatalf("a non-JSON post = %d", resp.StatusCode)
 	}
 }
