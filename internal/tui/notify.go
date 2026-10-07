@@ -192,6 +192,7 @@ func (m Model) rebuildNotices() Model {
 	}
 	// Queued sends answer to their queue, never to a dismissal (plan 3, T6).
 	next = append(next, pendingSendNotices(m)...)
+	next = append(next, interruptedSendNotices(m)...)
 	// Tool-template notices come from their own background read (not repo
 	// health), so they are derived here, outside the health half.
 	var dismissed map[string]bool

@@ -93,22 +93,23 @@ type Model struct {
 	recycleBranch          string // branch captured when the Recycle-a-worktree picker opened
 	recycleRemote          string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
 
-	notices                []notice               // session notice list (see notify.go)
-	driftNotices           []driftNoticeSource    // post-op drift/paused-resume findings; rebuildNotices re-renders these too
-	pendingSends           []domain.PendingSend   // an agent's queued sends still waiting (pending_sends.go); rebuildNotices re-renders them
-	pendingWatch           *pendingWatchState     // the queue file's watcher and poll state (nil until armed)
-	noticesUnread          bool                   // blink while true; opening the ! dialog clears it
-	blinkOn                bool                   // current blink phase (style alternation)
-	noticeGen              int                    // stale-drop guard for repoHealthMsg across repo switches
-	gitConfigGen           int                    // stale-drop guard for explorer row loads
-	versionsGen            int                    // stale-drop guard for the branch-versions popup's loads
-	blinkGen               int                    // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
-	noticeSessionDismissed map[string]bool        // "Not now" ids; cleared on reRoot (re-evaluated next load)
-	repoHealth             model.RepoHealth       // last health snapshot (Settings Commit-graph row)
-	repoHealthKnown        bool                   // false until the first repoHealthMsg lands
-	clipAvail              clipboard.Availability // cached probe result; rebuildNotices reuses it on a language switch
-	pendingNoticeConfig    *engine.SetGitConfig   // chained after WriteCommitGraph succeeds
-	refreshHealthAfterOp   bool                   // re-read repo health once the op (incl. its chain) finishes
+	notices                []notice                // session notice list (see notify.go)
+	driftNotices           []driftNoticeSource     // post-op drift/paused-resume findings; rebuildNotices re-renders these too
+	pendingSends           []domain.PendingSend    // an agent's queued sends still waiting (pending_sends.go); rebuildNotices re-renders them
+	pendingWatch           *pendingWatchState      // the queue file's watcher and poll state (nil until armed)
+	interrupted            map[int]interruptedSend // sends gg left in a pending review, by PR (interrupted_sends.go)
+	noticesUnread          bool                    // blink while true; opening the ! dialog clears it
+	blinkOn                bool                    // current blink phase (style alternation)
+	noticeGen              int                     // stale-drop guard for repoHealthMsg across repo switches
+	gitConfigGen           int                     // stale-drop guard for explorer row loads
+	versionsGen            int                     // stale-drop guard for the branch-versions popup's loads
+	blinkGen               int                     // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
+	noticeSessionDismissed map[string]bool         // "Not now" ids; cleared on reRoot (re-evaluated next load)
+	repoHealth             model.RepoHealth        // last health snapshot (Settings Commit-graph row)
+	repoHealthKnown        bool                    // false until the first repoHealthMsg lands
+	clipAvail              clipboard.Availability  // cached probe result; rebuildNotices reuses it on a language switch
+	pendingNoticeConfig    *engine.SetGitConfig    // chained after WriteCommitGraph succeeds
+	refreshHealthAfterOp   bool                    // re-read repo health once the op (incl. its chain) finishes
 
 	cfg         config.Config
 	opLog       *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
@@ -3391,6 +3392,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pendingSendsMsg:
 		return m.handlePendingSends(msg)
 
+	case interruptedMsg:
+		return m.handleInterrupted(msg)
+
 	case pendingStatMsg:
 		return m.handlePendingStat(msg)
 
@@ -4922,6 +4926,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	removeSnapshotFile(m.snapshotPath) // the old repo's session ends here
 	m = m.closeSteerInbox()            // …and so does its steering inbox
 	m = m.closePendingWatch()          // …and its queue of agent sends
+	m.interrupted = nil                // …and the sends it left half done
 	m.steerGen++                       // drop the old watcher's in-flight msgs
 	if m.watcher != nil {
 		_ = m.watcher.Close()

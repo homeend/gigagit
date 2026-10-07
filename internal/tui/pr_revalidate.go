@@ -87,6 +87,8 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, cmd // offline, rate-limited: the diff on screen stands
 	}
+	// The read cached the PR: did a send stop half way (spec §3.4, T8)?
+	cmd = tea.Batch(cmd, m.interruptedCmd(msg.n))
 	for i := range m.prs { // the row follows the forge (merged, closed, retitled)
 		if m.prs[i].Number == msg.n {
 			m.prs[i] = msg.pr
