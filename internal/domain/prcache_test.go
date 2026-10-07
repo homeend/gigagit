@@ -2,12 +2,15 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/homeend/gigagit/internal/forge"
+	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/prcache"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 func newCachedForgeSvc(t *testing.T, ff *fakeForge, dir string) *Service {
@@ -228,5 +231,110 @@ func TestPRRevalidateWithoutSnapshot(t *testing.T) {
 	}
 	if n, _ := ff.calls(7); n != 1 || ff.commentCalls != 1 {
 		t.Fatalf("PR() %d / Comments() %d, want 1/1", n, ff.commentCalls)
+	}
+}
+
+// After a good session, the next one lists without a Detect call — in the
+// frontends' real order: ForgeStatus first, then PullRequests.
+func TestPullRequestsSkipsDetectAfterAGoodSession(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ff := &fakeForge{url: "u", open: []model.PullRequest{pr(3, "open", 1)}}
+	a := newCachedForgeSvc(t, ff, dir)
+	a.ForgeStatus(context.Background())
+	if _, err := a.PullRequests(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	before := ff.detects.Load()
+	b := newCachedForgeSvc(t, ff, dir)
+	if st := b.ForgeStatus(context.Background()); !st.Available() || st.Provider != "fake" {
+		t.Fatalf("the cached verdict must make the forge available: %+v", st)
+	}
+	if _, err := b.PullRequests(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := ff.detects.Load() - before; n != 0 {
+		t.Fatalf("Detect ran %d more times", n)
+	}
+}
+
+// A failing optimistic list undoes the verdict and falls back to detection.
+func TestPullRequestsFallsBackToDetect(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ok := &fakeForge{url: "u", open: []model.PullRequest{pr(3, "open", 1)}}
+	if _, err := newCachedForgeSvc(t, ok, dir).PullRequests(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	broken := &fakeForge{url: "u", listErr: errors.New("401"), detectErr: errors.New("logged out")}
+	b := newCachedForgeSvc(t, broken, dir)
+	if st := b.ForgeStatus(context.Background()); !st.Available() {
+		t.Fatal("optimistic verdict expected before the list")
+	}
+	if _, err := b.PullRequests(context.Background()); err == nil {
+		t.Fatal("want an error")
+	}
+	if n := broken.detects.Load(); n != 1 {
+		t.Fatalf("Detect calls = %d, want 1", n)
+	}
+	if st := b.ForgeStatus(context.Background()); st.Available() {
+		t.Fatal("after the real detection failed the forge must be unavailable")
+	}
+}
+
+// refspecFake fetches PR heads from a local branch (offline prefetch tests).
+type refspecFake struct {
+	*fakeForge
+	spec string
+}
+
+func (f refspecFake) HeadRefspec(int) string { return f.spec }
+
+// Review focus 4: prefetch = 0 does nothing; an unmoved head is skipped; a
+// user op holding the gate makes prefetch step aside; a moved head is warmed.
+func TestPRPrefetch(t *testing.T) {
+	t.Parallel()
+	dir, head := prPreviewRepo(t)
+	svc, _ := countingService(t, dir)
+	svc.SetPRCacheStore(prcache.New(t.TempDir(), 0))
+	ff := &fakeForge{url: dir, open: []model.PullRequest{{Number: 7, State: "open", Target: "main", HeadSHA: head}}}
+	svc.SetForgeProviders([]forge.Provider{refspecFake{ff, "refs/heads/feat"}})
+	ctx := context.Background()
+	if _, err := svc.PullRequests(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PRPreview(ctx, ff.open[0]); err != nil { // opened once → an entry
+		t.Fatal(err)
+	}
+	svc.SetPRCachePolicy(8*time.Hour, 0)
+	if n := svc.PRPrefetch(ctx); n != 0 {
+		t.Fatalf("prefetch=0 warmed %d", n)
+	}
+	svc.SetPRCachePolicy(8*time.Hour, 5)
+	if n := svc.PRPrefetch(ctx); n != 0 {
+		t.Fatalf("an unmoved head was prefetched (%d)", n)
+	}
+	// The forge's head moves past refs/gg/pr/7.
+	runGitIn(t, dir, "checkout", "-q", "feat")
+	commitFile(t, dir, "c.go", "package c\n", "c3")
+	moved := revParse(t, dir, "HEAD")
+	runGitIn(t, dir, "checkout", "-q", "-")
+	ff.setOpen(model.PullRequest{Number: 7, State: "open", Target: "main", HeadSHA: moved})
+	if _, err := svc.PullRequests(ctx); err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.gateFor(ctx).Acquire(ctx, repogate.TreeWrite, "user op")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := svc.PRPrefetch(ctx); n != 0 {
+		t.Fatalf("prefetch ran under a user op (%d)", n)
+	}
+	res.Release()
+	if n := svc.PRPrefetch(ctx); n != 1 {
+		t.Fatalf("prefetch after the op = %d, want 1", n)
+	}
+	if got := revParse(t, dir, git.PRRef(7)); got != moved {
+		t.Fatalf("refs/gg/pr/7 = %s, want the moved head %s", got, moved)
 	}
 }

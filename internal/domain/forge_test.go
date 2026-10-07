@@ -22,6 +22,7 @@ type fakeForge struct {
 	detectGate   chan struct{} // non-nil: Detect blocks until it is closed
 	detects      atomic.Int32
 	open         []model.PullRequest
+	listErr      error                     // ListOpen's error
 	byNum        map[int]model.PullRequest // PR(n); missing → forge.ErrNotFound
 	prCalls      map[int]int
 	comments     []model.ForgeComment
@@ -47,6 +48,9 @@ func (f *fakeForge) Detect(context.Context) error {
 func (f *fakeForge) ListOpen(context.Context) ([]model.PullRequest, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
 	return append([]model.PullRequest(nil), f.open...), nil
 }
 func (f *fakeForge) Search(_ context.Context, q forge.PRQuery) ([]model.PullRequest, bool, error) {

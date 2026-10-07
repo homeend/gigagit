@@ -10,6 +10,7 @@ import (
 	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/prcache"
 	"github.com/homeend/gigagit/internal/preflight"
 )
 
@@ -49,8 +50,28 @@ var ForgeDisabled bool
 // that lock. Concurrent first callers wait on forgeProbing, so Detect still
 // runs once; forgeProbe reports "unprobed" while it is in flight.
 func (s *Service) ForgeStatus(ctx context.Context) ForgeStatus {
+	// A fresh cached listing names the provider that answered last time:
+	// trust it without a Detect round trip (PullRequests undoes the verdict
+	// if that provider's list then fails). Read before forgeMu — it may run
+	// git to resolve the cache directory.
+	var listing *prcache.List
+	s.forgeMu.Lock()
+	skip := s.forgeProbed || s.forgeDistrust
+	s.forgeMu.Unlock()
+	if !skip {
+		if l, ok := s.cachedListing(ctx); ok {
+			listing = &l
+		}
+	}
 	s.forgeMu.Lock()
 	for !s.forgeProbed {
+		if p := s.optimisticProviderLocked(listing); p != nil && s.forgeProbing == nil {
+			s.forgeActive, s.forgeErr, s.forgeProbed, s.forgeOptimistic = p, nil, true, true
+			s.forgeMu.Unlock()
+			s.invalidatePreflight()
+			s.forgeMu.Lock()
+			break
+		}
 		if wait := s.forgeProbing; wait != nil {
 			s.forgeMu.Unlock()
 			select {
@@ -105,6 +126,24 @@ func (s *Service) ForgeStatus(ctx context.Context) ForgeStatus {
 	return st
 }
 
+// optimisticProviderLocked is the configured provider the cached listing
+// names, or nil. Callers hold forgeMu; the listing was read beforehand.
+func (s *Service) optimisticProviderLocked(l *prcache.List) forge.Provider {
+	if l == nil || l.Provider == "" {
+		return nil
+	}
+	ps := s.forgeProviders
+	if ps == nil && !ForgeDisabled {
+		ps = forge.Default(s.workdir, s.forgeRec)
+	}
+	for _, p := range ps {
+		if p.Name() == l.Provider {
+			return p
+		}
+	}
+	return nil
+}
+
 // forgeProbe snapshots detection for the preflight resolver WITHOUT probing.
 func (s *Service) forgeProbe() *preflight.ForgeProbe {
 	s.forgeMu.Lock()
@@ -140,6 +179,25 @@ func (s *Service) PullRequests(ctx context.Context) ([]model.PullRequest, error)
 		return nil, err
 	}
 	v, err := s.flight.Do("forge-prs", func() (any, error) { return s.pullRequests(ctx, p) })
+	s.forgeMu.Lock()
+	optimistic := s.forgeOptimistic && s.forgeActive == p
+	if optimistic {
+		s.forgeOptimistic = false // a list either proved the provider or undoes it
+	}
+	if err != nil && optimistic {
+		// The cached verdict was wrong (logged out, token revoked): forget it
+		// and let real detection decide, then list once more.
+		s.forgeProbed, s.forgeActive, s.forgeErr, s.forgeDistrust = false, nil, nil, true
+	}
+	s.forgeMu.Unlock()
+	if err != nil && optimistic {
+		s.invalidatePreflight()
+		p, perr := s.provider(ctx)
+		if perr != nil {
+			return nil, perr
+		}
+		v, err = s.flight.Do("forge-prs", func() (any, error) { return s.pullRequests(ctx, p) })
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -103,6 +103,8 @@ type Service struct {
 	forgeProviders  []forge.Provider // nil = forge.Default; tests inject
 	forgeRec        observ.Recorder  // the session's span ring, so gh calls reach the operation log; nil for a Service built by New
 	forgeProbed     bool
+	forgeOptimistic bool           // forgeActive came from the cached listing, not Detect (until a list proves it)
+	forgeDistrust   bool           // an optimistic verdict failed this session: always Detect
 	forgeProbing    chan struct{}  // non-nil while the one probe is in flight; closed when it lands
 	forgeActive     forge.Provider // nil when none is usable
 	forgeErr        error
