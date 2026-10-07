@@ -58,6 +58,9 @@ func (m Model) forgeSendCmd(req domain.PRSendRequest, pendingID string) (Model, 
 // queued request whose plan fails stays queued (it may work once the PR is
 // fetched): only the op's outcome finishes it.
 func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
+	if m.modal != nil { // its op's question would replace the open dialog
+		return m.sendDialogBusy(), nil
+	}
 	if msg.err != nil {
 		return m.sayInDiff(i18n.T("send: %s", firstLine(msg.err.Error()))), nil
 	}
@@ -66,6 +69,12 @@ func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
 	}
 	m.forgeSend = &forgeSendState{pr: msg.req.PR, plan: msg.op.Plan, pendingID: msg.pendingID, event: msg.req.Event}
 	return m.startOp(msg.op)
+}
+
+// sendDialogBusy drops a send step that answered while another dialog was
+// open: replacing that dialog could leave its op waiting forever.
+func (m Model) sendDialogBusy() Model {
+	return m.sayInDiff(i18n.T("send cancelled (another dialog opened) — send again"))
 }
 
 // sayInDiff puts msg on the status line and, while a diff is on top (it has
@@ -86,28 +95,64 @@ const (
 
 // sendConfirmText is the forge.send prompt in the user's language: target,
 // body, every item, every skipped item with its reason — what will be posted.
-func sendConfirmText(p engine.SendPlan) string {
-	var b []string
+func sendConfirmText(p engine.SendPlan) string { return sendConfirmTextFit(p, 0, 0) }
+
+// sendConfirmTextFit is sendConfirmText laid out for a modal w columns wide
+// with room for maxRows prompt rows (0 = no limit): the body and the rows are
+// counted AFTER wrapping, so a long AI overview never pushes the target or
+// the options off the screen (Review Focus 4). Item rows are cut, not wrapped.
+func sendConfirmTextFit(p engine.SendPlan, w, maxRows int) string {
+	wrap := func(s string) []string {
+		if w <= 0 {
+			return []string{s}
+		}
+		if ws := wrapWords(s, w); len(ws) > 0 {
+			return ws
+		}
+		return []string{""}
+	}
+	var out []string
 	switch p.Mode {
 	case engine.SendFinish:
-		b = append(b, i18n.T("Finish sending to %s:", p.Target))
+		out = append(out, wrap(i18n.T("Finish sending to %s:", p.Target))...)
 	case engine.SendDiscard:
-		b = append(b, i18n.T("Discard gg's pending review on %s:", p.Target))
+		out = append(out, wrap(i18n.T("Discard gg's pending review on %s:", p.Target))...)
 	default:
-		b = append(b, i18n.T("Send to %s:", p.Target))
+		out = append(out, wrap(i18n.T("Send to %s:", p.Target))...)
 	}
 	if p.Pending != "" && p.Mode == engine.SendReview {
-		b = append(b, i18n.T("You have a review pending on GitHub: these comments join it and it is submitted."))
+		out = append(out, wrap(i18n.T("You have a review pending on GitHub: these comments join it and it is submitted."))...)
 	}
-	if body := p.BodyText(); body != "" {
-		b = append(b, i18n.T("review body:"))
-		for i, l := range strings.Split(body, "\n") {
-			if i == sendConfirmBodyRows {
-				b = append(b, "    …")
-				break
+	budget := maxRows - len(out)
+	if maxRows <= 0 {
+		budget = 1 << 30
+	}
+	if body := p.BodyText(); body != "" && budget > 3 {
+		out = append(out, i18n.T("review body:"))
+		limit := min(sendConfirmBodyRows, max(1, budget/3))
+		var rows []string
+		for _, l := range strings.Split(body, "\n") {
+			bw := w - 4
+			if w <= 0 {
+				bw = 0
 			}
-			b = append(b, "    "+l)
+			if bw > 0 {
+				ws := wrapWords(l, bw)
+				if len(ws) == 0 {
+					ws = []string{""}
+				}
+				for _, x := range ws {
+					rows = append(rows, "    "+x)
+				}
+			} else {
+				rows = append(rows, "    "+l)
+			}
 		}
+		if len(rows) > limit {
+			rows = append(rows[:limit], "    …")
+		}
+		out = append(out, rows...)
+		budget -= len(rows) + 1
 	}
 	var rows []string
 	for _, it := range p.Items {
@@ -116,11 +161,18 @@ func sendConfirmText(p engine.SendPlan) string {
 	for _, sk := range p.Skipped {
 		rows = append(rows, "  - "+sendSkipText(sk))
 	}
-	if len(rows) > sendConfirmRows {
-		more := len(rows) - sendConfirmRows
-		rows = append(rows[:sendConfirmRows], "  "+i18n.T("+ %d more", more))
+	limit := min(sendConfirmRows, max(1, budget-1))
+	if len(rows) > limit {
+		more := len(rows) - limit
+		rows = append(rows[:limit], "  "+i18n.T("+ %d more", more))
 	}
-	return strings.Join(append(b, rows...), "\n")
+	for _, r := range rows {
+		if w > 0 {
+			r = truncate(r, w)
+		}
+		out = append(out, r)
+	}
+	return strings.Join(out, "\n")
 }
 
 // sendWhere is "path:line" or "path (file)": data plus one translated word.
@@ -205,5 +257,8 @@ func (m Model) forgeSendFinished(fs *forgeSendState, res engine.Result, err erro
 		m, c = m.prRefreshCmd(fs.pr, false)
 		cmds = append(cmds, c, m.prCountsCmd())
 	}
+	// Whatever PR is open: a finished or discarded interrupted send must
+	// take its notice along (it is only re-asked on that PR's refresh).
+	cmds = append(cmds, m.interruptedCmd(fs.pr))
 	return m, tea.Batch(cmds...)
 }

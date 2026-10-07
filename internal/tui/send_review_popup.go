@@ -49,6 +49,9 @@ func (m Model) openSendReview(pr int) (Model, tea.Cmd) {
 }
 
 func (m Model) handleSendGroups(msg sendGroupsMsg) (Model, tea.Cmd) {
+	if m.modal != nil {
+		return m.sendDialogBusy(), nil
+	}
 	switch {
 	case msg.err != nil:
 		return m.sayInDiff(i18n.T("send: %s", firstLine(msg.err.Error()))), nil
@@ -112,6 +115,9 @@ func (m Model) openSendReviewBody(pr int, group string) (Model, tea.Cmd) {
 }
 
 func (m Model) handleSendBody(msg sendBodyMsg) (Model, tea.Cmd) {
+	if m.modal != nil {
+		return m.sendDialogBusy(), nil
+	}
 	if msg.err != nil {
 		return m.sayInDiff(i18n.T("send: %s", firstLine(msg.err.Error()))), nil
 	}
@@ -146,6 +152,9 @@ func (p *sendReviewPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEsc:
 		return m.popLayer(), nil
 	case tea.KeyCtrlS:
+		if !m.opsIdle() { // refused at once: keep the popup and what was typed
+			return m.sayInDiff(i18n.T("another operation is running — send again when it ends")), nil
+		}
 		m = m.popLayer()
 		return m.forgeSendCmd(p.request(), "")
 	case tea.KeyEnter:

@@ -259,6 +259,16 @@ func TestPartlySentReviewKeepsItsSummaryOnGitHub(t *testing.T) {
 	if marks != 1 {
 		t.Fatalf("%d summary marks, want 1: %+v", marks, r2.RemarkSends)
 	}
+	// A body the user typed is posted even though the stored summary went;
+	// the stored summary typed back unchanged is still skipped.
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid, Body: "Edited: one more thing."})
+	if err != nil || !strings.Contains(p.Body, "Edited: one more thing.") || len(p.Skipped) != 0 {
+		t.Fatalf("an edited body: %q skipped %+v err %v", p.Body, p.Skipped, err)
+	}
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid, Body: "looks fine"})
+	if err != nil || strings.TrimSpace(p.Body) != "" || len(p.Skipped) != 1 {
+		t.Fatalf("the unchanged summary: %q skipped %+v err %v", p.Body, p.Skipped, err)
+	}
 	// Re-saved with a NEW summary: that text is not on GitHub yet, so it is
 	// the body again; the remark already there stays moved.
 	newDoc := strings.Replace(doc, "looks fine", "two things to fix", 1)

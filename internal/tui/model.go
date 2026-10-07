@@ -743,7 +743,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		body := m.diffBodyRows()
 		hold := dv.anchorAt(dv.curLine)
 		wasVisible := dv.cursorVisible(body)
-		dv.forgePR = m.openPRNumber() // marks and group bars draw in a PR's diff only
+		dv.forgePR = m.prOfView(dv) // marks and group bars draw in a PR's diff only
 		dv.setNotesFor(msg.idx, msg.notes)
 		dv.rebuild()
 		dv.curLine = dv.lineAt(hold)
@@ -819,7 +819,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		body := m.diffBodyRows()
 		cr, hadRow := dv.cursorRow()
 		wasVisible := dv.cursorVisible(body) // a free-scrolled view keeps its place
-		dv.forgePR = m.openPRNumber()        // marks and group bars draw in a PR's diff only
+		dv.forgePR = m.prOfView(dv)          // marks and group bars draw in a PR's diff only
 		dv.setNotes(msg.notes)
 		dv.relayout(dv.width)
 		dv.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
@@ -3369,7 +3369,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if fs := m.forgeSend; fs != nil && req.ID == engine.DecisionSendForge {
 			// The TUI's own words for the plan it holds (plan 3, T4); the
 			// verdict an agent asked for preselected.
-			req.Prompt, req.PromptMsg = sendConfirmText(fs.plan), engine.Msg{}
+			w, h := m.overlayDims() // renderModal's width cap; options, footer and frame take ~12 rows
+			req.Prompt, req.PromptMsg = sendConfirmTextFit(fs.plan, w-8, h-12), engine.Msg{}
 			if i := slices.Index(req.Options, fs.event); i >= 0 {
 				sel = i
 			}
@@ -3655,6 +3656,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingPRsReload = false
 		fs := m.forgeSend // a send's follow-up (forge_send.go); cleared whatever happened
 		m.forgeSend = nil
+		var sendCmd tea.Cmd // built now: the stash / process paths below return early
+		if fs != nil {
+			m, sendCmd = m.forgeSendFinished(fs, msg.res, msg.err)
+		}
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			// A lock failure is recoverable in-app; arm the notice before the
@@ -3762,7 +3767,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.stashView.loading = true
 			var cmd tea.Cmd
 			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
-			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag), driftCmd)
+			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag), driftCmd, sendCmd)
 		}
 		// A job an active process started just returned: let the process advance
 		// its state machine (it typically triggers a reload itself). This is the
@@ -3772,7 +3777,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// check.
 		if m.proc != nil {
 			pm, pcmd := m.proc.finished(m, msg.res, msg.err)
-			return pm, tea.Batch(healthCmd, pcmd, driftCmd)
+			return pm, tea.Batch(healthCmd, pcmd, driftCmd, sendCmd)
 		}
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
@@ -3794,11 +3799,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, listCmd = m.readPRsCmd(context.Background(), false, false)
 			prCmd = tea.Batch(prCmd, listCmd)
 		}
-		if fs != nil {
-			var sendCmd tea.Cmd
-			m, sendCmd = m.forgeSendFinished(fs, msg.res, msg.err)
-			prCmd = tea.Batch(prCmd, sendCmd)
-		}
+		prCmd = tea.Batch(prCmd, sendCmd)
 		return m, tea.Batch(healthCmd, cmd, driftCmd, prCmd)
 
 	case textTemplatesDataMsg:

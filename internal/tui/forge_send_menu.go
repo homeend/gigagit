@@ -8,6 +8,17 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
+// prOfView is the pull request v is the diff OF (0 = none): a PR's files
+// view is open AND v shows that PR's own pair — not merely any diff opened
+// over it (a commit note's diff, a working-tree diff).
+func (m Model) prOfView(v *diffView) int {
+	ps := m.filesPreviewSet
+	if v == nil || v.previewSet == nil || ps == nil || v.previewSet.Source != ps.Source {
+		return 0
+	}
+	return m.openPRNumber()
+}
+
 // prOfDiff is the pull request whose diff is on top (0 = none): the view's
 // own stamp, and only while that PR is still the open one.
 func (m Model) prOfDiff() int {

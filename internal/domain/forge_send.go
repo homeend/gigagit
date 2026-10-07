@@ -325,10 +325,13 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 			return engine.SendPlan{}, err
 		}
 		plan.Key, plan.Body, plan.Verdict = r.ID, reviewSendBody(r), true
-		if b := strings.TrimSpace(req.Body); b != "" { // the user edited the summary (plan 3, T7)
-			plan.Body = sendBody(model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: b}, r.ID, "")
+		edited := strings.TrimSpace(req.Body)
+		if edited != "" { // the user edited the summary (plan 3, T7)
+			plan.Body = sendBody(model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: edited}, r.ID, "")
 		}
-		if r.summarySent(pr.Number) {
+		// The stored summary is on GitHub already: skip it — unless the user
+		// typed a body of their own, which is new text and goes.
+		if r.summarySent(pr.Number) && (edited == "" || edited == r.summaryText()) {
 			plan.Body = ""
 			plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: SkipOnGitHub})
 		}

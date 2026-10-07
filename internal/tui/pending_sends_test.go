@@ -15,19 +15,7 @@ import (
 // commands Update returns (a new notice arms the self-re-arming blink tick).
 func feedOnce(t *testing.T, m Model, cmd tea.Cmd) Model {
 	t.Helper()
-	if cmd == nil {
-		return m
-	}
-	msgs := []tea.Msg{cmd()}
-	if b, ok := msgs[0].(tea.BatchMsg); ok {
-		msgs = msgs[:0]
-		for _, c := range b {
-			if c != nil {
-				msgs = append(msgs, c())
-			}
-		}
-	}
-	for _, msg := range msgs {
+	for _, msg := range msgsOf(cmd) { // nested batches flattened
 		if msg == nil {
 			continue
 		}

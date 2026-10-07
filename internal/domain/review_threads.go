@@ -168,13 +168,17 @@ func (r Review) remarkMoved(fp string) bool {
 // before the hash) still counts as sent: never post a summary twice.
 const summaryFP = "summary"
 
+// summaryText is r's summary as stored: a document's overview, else its text.
+func (r Review) summaryText() string {
+	if r.Doc != nil {
+		return strings.TrimSpace(r.Doc.Overview)
+	}
+	return strings.TrimSpace(r.Text)
+}
+
 // summaryKey is the summary mark of r's CURRENT summary text.
 func (r Review) summaryKey() string {
-	text := r.Text
-	if r.Doc != nil {
-		text = r.Doc.Overview
-	}
-	h := sha256.Sum256([]byte(strings.TrimSpace(text)))
+	h := sha256.Sum256([]byte(r.summaryText()))
 	return summaryFP + ":" + hex.EncodeToString(h[:8])
 }
 
