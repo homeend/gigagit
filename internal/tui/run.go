@@ -146,6 +146,7 @@ func Run(svc *domain.Service, opts RunOptions) (string, error) {
 		fm.stopPRPrefetch()
 		removeSnapshotFile(fm.snapshotPath)
 		fm = fm.closeSteerInbox()
+		fm = fm.closePendingWatch()
 		fm = fm.releaseKeptInboxes()
 		fm.recorder.close()
 		fm.closeWeb() // the pages get their shutdown message; the port closes

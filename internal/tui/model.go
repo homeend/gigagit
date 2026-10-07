@@ -95,6 +95,8 @@ type Model struct {
 
 	notices                []notice               // session notice list (see notify.go)
 	driftNotices           []driftNoticeSource    // post-op drift/paused-resume findings; rebuildNotices re-renders these too
+	pendingSends           []domain.PendingSend   // an agent's queued sends still waiting (pending_sends.go); rebuildNotices re-renders them
+	pendingWatch           *pendingWatchState     // the queue file's watcher and poll state (nil until armed)
 	noticesUnread          bool                   // blink while true; opening the ! dialog clears it
 	blinkOn                bool                   // current blink phase (style alternation)
 	noticeGen              int                    // stale-drop guard for repoHealthMsg across repo switches
@@ -577,7 +579,7 @@ func (m Model) loadPrefs() Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitActivityCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd(), waitAgentSpawnCmd(m.agentHost))
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.pendingWatchCmd(m.noticeGen), m.pendingSendsReadCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitActivityCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd(), waitAgentSpawnCmd(m.agentHost))
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -3386,6 +3388,21 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sendGroupsMsg:
 		return m.handleSendGroups(msg)
 
+	case pendingSendsMsg:
+		return m.handlePendingSends(msg)
+
+	case pendingStatMsg:
+		return m.handlePendingStat(msg)
+
+	case pendingWatchMsg:
+		return m.handlePendingWatch(msg)
+
+	case pendingWakeMsg:
+		if msg.gen != m.noticeGen || m.pendingWatch == nil || m.pendingWatch.w == nil {
+			return m, nil
+		}
+		return m, tea.Batch(m.pendingSendsReadCmd(msg.gen), pendingListenCmd(m.pendingWatch.w, msg.gen))
+
 	case sendBodyMsg:
 		return m.handleSendBody(msg)
 
@@ -3473,7 +3490,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var prcCmd, docCmd tea.Cmd
 		m, prcCmd = m.prCommentsTick(time.Now())
 		m, docCmd = m.openFilesTick(time.Now())
-		cmd = tea.Batch(cmd, prcCmd, docCmd)
+		var pendCmd tea.Cmd
+		m, pendCmd = m.pendingSendsTick(time.Now())
+		cmd = tea.Batch(cmd, prcCmd, docCmd, pendCmd)
 		m = m.maybeWriteSnapshot()
 		m.touchSteerPresence()
 		m = m.tendKeptInboxes()
@@ -4902,6 +4921,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m = m.stopPRPrefetch()             // the old repo's background fetches end here
 	removeSnapshotFile(m.snapshotPath) // the old repo's session ends here
 	m = m.closeSteerInbox()            // …and so does its steering inbox
+	m = m.closePendingWatch()          // …and its queue of agent sends
 	m.steerGen++                       // drop the old watcher's in-flight msgs
 	if m.watcher != nil {
 		_ = m.watcher.Close()
@@ -5029,7 +5049,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// the blank-screen gate set above. The dataLoadedMsg success arm chains it
 	// instead, so it can only run once this repo's snapshot is in the model.
 	// The hosted web page follows the switch (nil when no page is served).
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), snapshotTargetCmd(m.svc), m.webRerootCmd())
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), m.pendingWatchCmd(m.noticeGen), m.pendingSendsReadCmd(m.noticeGen), m.refreshToolStatusesCmd(), snapshotTargetCmd(m.svc), m.webRerootCmd())
 }
 
 // View implements tea.Model.

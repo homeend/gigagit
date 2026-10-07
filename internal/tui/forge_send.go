@@ -207,14 +207,3 @@ func (m Model) forgeSendFinished(fs *forgeSendState, res engine.Result, err erro
 	}
 	return m, tea.Batch(cmds...)
 }
-
-// pendingFinishCmd writes a queued request's outcome back (Task 10).
-func (m Model) pendingFinishCmd(id string, res engine.Result, err error) tea.Cmd {
-	svc := m.svc
-	return func() tea.Msg {
-		if st, out, waiting := domain.PendingOutcome(res, err); !waiting {
-			_, _ = svc.PendingSendFinish(context.Background(), id, st, out)
-		}
-		return nil
-	}
-}

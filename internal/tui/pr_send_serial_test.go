@@ -220,3 +220,29 @@ func TestReplyAndSendFromThePRView(t *testing.T) {
 		t.Fatalf("writes %+v", ws)
 	}
 }
+
+// Serial: env. An agent's queued send, approved in the TUI: the confirm
+// preselects the agent's wish, the send goes, the agent's entry says sent.
+func TestApprovedPendingSendIsSentAndAnswered(t *testing.T) {
+	m, dir, head := prSendModel(t)
+	id := addTUINote(t, m, head, 5, "look here")
+	ctx := context.Background()
+	e, err := m.svc.PendingSendAdd(ctx, domain.PRSendRequest{PR: 7, Notes: []string{id}}, "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m = feedOnce(t, m, m.pendingSendsReadCmd(m.noticeGen))
+	n := noticeByID(m, pendingSendNoticeID(e.ID))
+	m, cmd := m.applyNoticeAction(*n, n.actions[0])
+	m, wait := runToModal(t, m, cmd)
+	nm, _ := m.resolveModal("send")
+	m, tail := driveOpKeepCmd(t, nm.(Model), wait)
+	m = feedOnce(t, m, tail) // pendingFinishCmd + the re-read (and the source reloads)
+	got, _ := m.svc.PendingSendGet(ctx, e.ID)
+	if got.State != domain.PendingSent || len(forgetest.Writes(t, filepath.Join(dir, ".git", "fakegh"))) != 3 {
+		t.Fatalf("entry %+v", got)
+	}
+	if noticeByID(m, n.id) != nil {
+		t.Fatal("a sent entry keeps its notice")
+	}
+}

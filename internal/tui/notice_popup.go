@@ -131,7 +131,7 @@ func (p *noticePopup) currentNotice(m Model) *notice {
 // unless the action says keep: a copy is not a dismissal), records the
 // dismissal kind, and runs the action's op if it has one.
 func (m Model) applyNoticeAction(n notice, act noticeAction) (Model, tea.Cmd) {
-	if !act.keep {
+	if !act.keep && !act.sourced {
 		m = m.removeNotice(n.id)
 		m.noticeSessionDismissed[n.id] = true // a mid-session health re-read must not resurrect it
 	}
