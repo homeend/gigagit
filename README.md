@@ -157,6 +157,8 @@ gg review [--tool <name>] [--model <m>] [--link <gg-link>] --no-save [--json]
                                       # its own flag — Claude --model, Codex -m, Junie --model=, Kimi -m, Antigravity --model —
                                       # or fills <model> in a custom command); --link reviews what a gg:// link names;
                                       # --json prints the review document (prose → exit 1)
+gg review --focus <text> …           # any review: tell the reviewer what to look at hardest; written into its
+                                      # brief ($GG_CONTEXT_FILE, a `## Focus` section), never into the command
 gg review --tools [--json]           # the review tools: name, agent, mode, whether --model works
 gg review save <gg-link> --agent <name> (--stdin | --file <path>) [--json]
                                       # store a review document an agent wrote (overview + per-file remarks) as the review

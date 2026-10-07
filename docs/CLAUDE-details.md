@@ -5737,6 +5737,19 @@ Spec `docs/superpowers/specs/2026-10-07-cross-review-design.md`, plan
   `Checkout` (`<repo>` too), the review is stored there.
 - `ToolAgentID` (was `agentIDFor`) maps a command to a built-in agent by its
   program's base name.
+- **`--focus` travels in the brief** (follow-up, 2026-10-07):
+  `engine.ReviewChanges.Focus` → a `## Focus` section of `$GG_CONTEXT_FILE`
+  before the file list; `domain.ReviewTarget.Focus` carries it through
+  `runReview`. Never a template token, so any text works (quotes, line
+  breaks) and no template version moves. CLI-only today: `ReviewTask` (the
+  TUI/web task path) does not set it. Blank-but-set or > 2000 runes → exit 2.
+  `/gg-cross-review` passes the user's `[focus]` to every reviewer.
+- **Skills name only real `gg session` verbs**: `TestSkillsNameOnlyRealSessionVerbs`
+  (cli) runs every `gg session <verb> [<sub>]` in a skill body with `--help`;
+  a sub-verb is real when it answers with its own flag usage
+  (`Usage of session note …`). The show-it step of gg-review/gg-cross-review
+  is `gg session navigate <link>` alone (it steers the LINK's checkout;
+  `status` would ask about the shell's worktree).
 
 ### Sending to GitHub (plan 2 of GitHub write-back, spec `docs/superpowers/specs/2026-10-07-github-write-design.md` §1, §3)
 

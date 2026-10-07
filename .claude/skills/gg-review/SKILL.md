@@ -38,9 +38,9 @@ launch gg's TUI or `gg web`; they belong to the user.
 4. **Store it:** `gg review save <link> --agent "<your name, e.g. Claude Code>" --stdin --json`
    with the document on stdin. A "not a gg review document" error names what
    is wrong — fix the JSON and run it again.
-5. **Show it.** `gg session status` exits 0 when a gg window is open on
-   this worktree (1 = none: skip this step); then open the review there:
-   `gg session navigate <link from step 4>`.
+5. **Show it.** `gg session navigate <link from step 4>` opens the review in
+   the gg window open on the link's worktree. Exit 1 with `no gg session for
+   this worktree` means none is open: skip this step.
 6. **Reply** with the review link and a three-line summary (verdict first).
    Do not paste the whole review into the chat — it is in gg.
 

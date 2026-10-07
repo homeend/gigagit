@@ -21,10 +21,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Fixed
 
 - **`/gg-review` and `/gg-cross-review` named a command gg does not have.**
-  Their last step said `gg session list`; it is now `gg session status`
-  (exit 0 = a gg window is open on this worktree), then
-  `gg session navigate <review link>`. A test fails when any skill names a
-  `gg session` verb gg lacks. Skills: gg-review v2.
+  Their last step said `gg session list`; it is now
+  `gg session navigate <review link>`, which opens the review in the gg window
+  on the link's worktree and answers `no gg session for this worktree` (exit
+  1) when none is open. A test fails when any skill names a `gg session` verb
+  or sub-verb gg lacks. Skills: gg-review v2 (gg-cross-review: v3 above).
 
 ## Review links to files and remarks
 
