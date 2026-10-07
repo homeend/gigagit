@@ -216,7 +216,7 @@ func parseThreads(b []byte) ([]model.ForgeComment, bool, error) {
 	}
 	for _, r := range pr.Reviews.Nodes {
 		verdict := strings.ToLower(r.State)
-		if verdict == "pending" || (verdict == "commented" && strings.TrimSpace(r.Body) == "") {
+		if verdict == "pending" || (verdict == "commented" && strings.TrimSpace(StripSendMarker(r.Body)) == "") {
 			continue // the bare envelope of inline comments carries no news
 		}
 		out = append(out, model.ForgeComment{

@@ -1,6 +1,7 @@
-// Package forge is gg's read-only window onto a code forge's pull requests.
-// Everything above Provider is forge-neutral; gh.go is the only file that
-// knows GitHub. Owned by domain — frontends never import it.
+// Package forge is gg's window onto a code forge's pull requests: Provider
+// reads (and never mutates); the optional Writer posts, reached only through
+// engine.SendToForge. Everything above them is forge-neutral; gh*.go are the
+// only files that know GitHub. Owned by domain — frontends never import it.
 package forge
 
 import (

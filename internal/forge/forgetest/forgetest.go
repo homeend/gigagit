@@ -3,11 +3,13 @@
 package forgetest
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -69,4 +71,32 @@ func Seed(t testing.TB, dir string, files map[string]string) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// Write is one mutation the fake gh recorded.
+type Write struct {
+	Op     string         `json:"op"`
+	Vars   map[string]any `json:"variables"`
+	Failed bool           `json:"failed"` // a fail-<Op> file made it fail
+}
+
+// Writes reads the fake gh's writes.jsonl in dir (none = empty).
+func Writes(t testing.TB, dir string) []Write {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, "writes.jsonl"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []Write
+	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		var w Write
+		if err := json.Unmarshal([]byte(line), &w); err != nil {
+			t.Fatalf("writes.jsonl: %v", err)
+		}
+		out = append(out, w)
+	}
+	return out
 }
