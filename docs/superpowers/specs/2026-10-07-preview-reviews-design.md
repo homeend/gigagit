@@ -99,9 +99,10 @@ review view already opens exactly that range (`reviewRevs`).
 
 ### 3.3 Branch rename / delete
 
-`reviewsFollowBranchOp` also loads `PartPreviews`: a rename rewrites the
-branch name inside `Note.Preview` (either side of `...`). A delete leaves
-preview reviews alone — they are kept while their commits exist (R2).
+(Amended while planning.) A rename does NOT rewrite `Note.Preview`: saved
+merge previews and a preview's line notes keep the branch names they were
+made with, so a review follows the same names as the rest of its preview.
+A delete leaves preview reviews alone — kept while their commits exist (R2).
 
 ### 3.4 Existing data
 
@@ -131,8 +132,12 @@ CHANGE decides the target; a path/line part is ignored:
 - **Refusals:** a link with no change (a bare repo link, a hint-only link
   whose entry does not name one, a two-link comparison) — "names no change
   to review; give a commit, a pair, a merge preview, a branch or the working
-  tree"; a link that resolves to another repository than the current one —
-  refused.
+  tree". A link into another checkout or repository acts on THAT checkout
+  (the link verbs' rule, `openLinkTarget`).
+- **`--dry-run [--json]`** (added while planning) prints the target's kind,
+  label and the `gg diff` argument that shows exactly the reviewed change —
+  a `@ref:` link is the tip's own change to `gg diff` but the branch vs the
+  trunk to a review, so the skill reads through this rather than guessing.
 - **Store:** `SaveReview` (same retry on a held lock, same quarantine warning).
 - **Output:** `review: <id>` and the `gg://…?review=<id>` link
   (`Service.ReviewLink`); `--json` → `{"id","link","warn"}`.
@@ -160,8 +165,8 @@ CHANGE decides the target; a path/line part is ignored:
   to `gg review save`; single-file questions keep using `gg note add`.
 - **using-gg:** `gg review save` in the CLI reference; bump
   `agentskill.Version`.
-- Codex (`ModeBlock`, AGENTS.md only, no slash commands) gets the
-  reviewing-with-gg paragraph, no `/gg-review`.
+- (Amended while planning.) `gg-review` installs wherever `delegate` does,
+  Codex's AGENTS.md block included; its body reads as plain instructions.
 
 ## 6. TUI
 
