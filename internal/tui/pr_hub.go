@@ -48,7 +48,7 @@ func (m Model) openPRHub(p model.PullRequest) (Model, tea.Cmd) {
 	cp.mode = modeWrap // descriptions and comments are prose
 	cp.prose = true
 	cp.noCursor = true
-	cp.keys = i18n.T("[y] copy URL  [r] reload")
+	cp.keys = i18n.T("[y] copy URL  [r] reload  [s] send review  [v] verdict")
 	m = m.pushLayer(&prHubPopup{contentPopup: cp, pr: p})
 	return m, m.loadPRHubCmd(p.Number)
 }
@@ -108,6 +108,10 @@ func (p *prHubPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "r":
 			p.lines, p.sel, p.query = prHubLoading(p.pr), 0, ""
 			return m, m.loadPRHubCmd(p.pr.Number)
+		case "s":
+			return m.openSendReview(p.pr.Number)
+		case "v":
+			return m.openVerdict(p.pr.Number)
 		}
 	}
 	return p.contentPopup.update(m, msg)

@@ -3375,6 +3375,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case forgeSendReadyMsg:
 		return m.handleForgeSendReady(msg)
 
+	case sendGroupsMsg:
+		return m.handleSendGroups(msg)
+
+	case sendBodyMsg:
+		return m.handleSendBody(msg)
+
 	case prHubMsg:
 		return m.handlePRHubMsg(msg)
 

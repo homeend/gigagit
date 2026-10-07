@@ -171,3 +171,25 @@ func TestSendPlanErrorIsSaidAndNothingRuns(t *testing.T) {
 		t.Fatalf("running=%v modal=%v status=%q", mm.running, mm.modal != nil, mm.statusMsg)
 	}
 }
+
+// Serial: env. "my draft review" with a verdict: one review, every local note,
+// the event the user picked.
+func TestSendMyDraftReviewWithAVerdict(t *testing.T) {
+	m, dir, head := prSendModel(t)
+	addTUINote(t, m, head, 5, "look here")
+	m, _ = m.openSendReviewBody(7, domain.GroupMine)
+	p := layerOf[*sendReviewPopup](m)
+	p.body = newTextField("LGTM")
+	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	m, wait := runToModal(t, m, cmd)
+	if got := strings.Join(m.modal.req.Options, ","); got != "comment,approve,request-changes,abort" {
+		t.Fatalf("options %s", got)
+	}
+	nm, _ := m.resolveModal("approve")
+	m = driveOp(t, nm.(Model), wait)
+	ws := forgetest.Writes(t, filepath.Join(dir, ".git", "fakegh"))
+	last := ws[len(ws)-1]
+	if last.Op != "SubmitReview" || last.Vars["event"] != "APPROVE" || !strings.Contains(last.Vars["body"].(string), "LGTM") {
+		t.Fatalf("submit = %+v", last)
+	}
+}
