@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review skill follow-ups
+
+### Fixed
+
+- **`/gg-review` and `/gg-cross-review` named a command gg does not have.**
+  Their last step said `gg session list`; it is now `gg session status`
+  (exit 0 = a gg window is open on this worktree), then
+  `gg session navigate <review link>`. A test fails when any skill names a
+  `gg session` verb gg lacks. Skills: gg-review v2, gg-cross-review v2.
+
 ## Review links to files and remarks
 
 ### Added

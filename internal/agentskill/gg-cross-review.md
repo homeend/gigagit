@@ -45,8 +45,9 @@ review in gg. Do NOT launch gg's TUI or `gg web`; they belong to the user.
 7. **Store it:** `gg review save <link> --agent "<you> — cross-review (<model1>, <model2>[, <model3>])" --stdin --json`
    with the merged document on stdin. A "not a gg review document" error
    names what is wrong — fix the JSON and run it again.
-8. **Show it.** If `gg session list` shows a live gg window for this
-   worktree, open the review there: `gg session navigate <link from step 7>`.
+8. **Show it.** `gg session status` exits 0 when a gg window is open on
+   this worktree (1 = none: skip this step); then open the review there:
+   `gg session navigate <link from step 7>`.
 9. **Reply** with the review link, the verdict first, each reviewer and its
    verdict, and how many findings were agreed, how many disputed and how you
    ruled on them. Do not paste the whole review — it is in gg.

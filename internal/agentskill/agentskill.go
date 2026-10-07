@@ -40,10 +40,10 @@ const ReviewVersion = 15
 const DelegateVersion = 3
 
 // GGReviewVersion is the counter for the gg-review skill.
-const GGReviewVersion = 1
+const GGReviewVersion = 2
 
 // GGCrossReviewVersion is the counter for the gg-cross-review skill.
-const GGCrossReviewVersion = 1
+const GGCrossReviewVersion = 2
 
 // Skill is one embedded skill: its identity, its own version counter, and the
 // rendered forms init installs. Markers are per-skill ("gg:<name>:v<N>"), so
