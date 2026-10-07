@@ -414,6 +414,14 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #modal.hidden { display: none; }
 #modal-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 22px; max-width: 560px; }
 #modal-prompt { margin-bottom: 14px; white-space: pre-line; }
+/* The GitHub send confirm (sendplan.js): the body and the lists scroll on
+   their own, so a long review never pushes the buttons off screen. */
+#modal-prompt .sc-target { margin-bottom: 6px; }
+#modal-prompt .sc-note { color: var(--dim); margin: 4px 0; }
+#modal-prompt .sc-label { color: var(--dim); margin: 8px 0 2px; }
+#modal-prompt .sc-body { max-height: 25vh; overflow: auto; white-space: pre-wrap; margin: 0; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; font: inherit; }
+#modal-prompt .sc-items, #modal-prompt .sc-skipped { max-height: 30vh; overflow: auto; margin: 0; padding-left: 4px; list-style: none; white-space: normal; }
+#modal-prompt .sc-why, #modal-prompt .sc-more { color: var(--dim); }
 #modal-options { display: flex; gap: 10px; justify-content: flex-end; }
 #modal-options button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
 #modal-options button:hover { border-color: var(--accent); }

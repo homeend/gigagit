@@ -14,6 +14,7 @@ import { fetchHealth } from "./bigrepo.js";
 import { checkDrift, hideDrift } from "./versions.js";
 import { baseOf } from "./locks.js";
 import { clearHelpSearch, helpSearchKey, openHelpSearch } from "./helpsearch.js";
+import { sendDecision } from "./sendplan.js";
 
 // --- op transport client ---
 
@@ -490,7 +491,10 @@ function handleOpEvent(ev) {
   if (ev.type === "progress") {
     opLine("⟳ " + ev.step + (ev.detail ? " " + ev.detail : "") + "…");
   } else if (ev.type === "decision") {
-    showModal(ev);
+    // A GitHub send started on this page kept its plan (prsend.js): the
+    // confirm draws what will be posted, not the engine's English summary.
+    const plan = state.op && state.op.sendPlan;
+    showModal(plan && ev.id === "forge.send" ? sendDecision(ev, plan, esc) : ev);
   } else if (ev.type === "resolved") {
     hideModal(); // this decision was answered (another tab, or a replay)
   } else if (ev.type === "done") {
@@ -646,10 +650,14 @@ function escapeOption(opts) {
 // --- end modal escape rule ---
 
 
+// showModal shows a decision: its prompt as text — or ev.html, markup the
+// caller built and escaped (the GitHub send confirm) — and one button per
+// option, worded by ev.labels when given (the answer is still the option).
 function showModal(ev) {
-  $("modal-prompt").textContent = ev.prompt;
+  if (ev.html) $("modal-prompt").innerHTML = ev.html;
+  else $("modal-prompt").textContent = ev.prompt;
   $("modal-options").innerHTML = (ev.options || [])
-    .map((o) => `<button data-o="${esc(o)}"${DANGER_OPTIONS.has(o) ? ' class="danger"' : ""}>${esc(o)}</button>`)
+    .map((o) => `<button data-o="${esc(o)}"${DANGER_OPTIONS.has(o) ? ' class="danger"' : ""}>${esc((ev.labels && ev.labels[o]) || o)}</button>`)
     .join("");
   $("modal").dataset.opts = JSON.stringify(ev.options || []);
   pushLayer("modal", $("modal"), {
