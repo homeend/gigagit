@@ -80,8 +80,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		// reviewImportTarget then anchors notes on the tip, new side only —
 		// exactly what a preview needs.
 		arg = tgt.Spec.Rev
-		target = domain.ReviewTarget{Kind: domain.ReviewRange, Range: tgt.Spec.Rev,
-			Label: scopeName(tgt.Set), Diff: tgt.Spec}
+		target = domain.ScopeReviewTarget(tgt.Set) // the preview's own review (spec R5)
 		spec := tgt.Spec
 		hunkSpec, preview = &spec, tgt.Set.Pair()
 	case *working:

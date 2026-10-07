@@ -45,6 +45,11 @@ type ReviewTarget struct {
 	// named by a branch ref. Both are data, never spliced into a command.
 	Commit string
 	Branch string
+	// Preview is the scope a review belongs to when it reviewed a merge
+	// preview ("<target>...<source>", branch NAMES) or a commit pair
+	// ("<a7>..<b7>"): Note.Preview. Such a review is its preview's, never
+	// its commit's. Data only — never spliced into a command.
+	Preview string
 }
 
 // DisplayLabel is the human string shown for this target (status bar, viewer
@@ -74,6 +79,21 @@ func (t ReviewTarget) DisplayLabel() string {
 // instead of the generic "Review: %s" format — see DisplayLabel's fallback.
 func WorkingReviewTarget() ReviewTarget {
 	return ReviewTarget{Kind: ReviewWorking, Range: "", Label: "working changes", Diff: model.DiffSpec{Rev: "HEAD"}}
+}
+
+// ScopeReviewTarget is the review of a merge preview or a commit pair: Range
+// = the scope's hex pair (merge base..source tip, or a..b), Label = the human
+// pair, Commit = the tip, Preview = the scope's name. A pull request's set
+// has no portable scope name, so its review is stored untagged (as before).
+// The ONE constructor: `gg review --preview`, `gg review save`, the TUI and
+// the web all build a scope review here.
+func ScopeReviewTarget(set PreviewNoteSet) ReviewTarget {
+	spec := set.DiffSpec()
+	label := set.Target + " ... " + set.Source
+	if set.IsPair() {
+		label = shortSHA(set.Base) + ".." + shortSHA(set.Tip)
+	}
+	return ReviewTarget{Kind: ReviewRange, Range: spec.Rev, Label: label, Diff: spec, Commit: set.Tip, Preview: set.scope()}
 }
 
 // ReviewResult is a produced review: its text, the note it was stored as (a
