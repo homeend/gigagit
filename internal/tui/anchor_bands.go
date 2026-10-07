@@ -128,3 +128,17 @@ func bandKindAt(bands []anchorBand, cur, line int) bandKind {
 	}
 	return k
 }
+
+// gutterMark is a line's mark in the 2-column gutter: the current band,
+// another band, a note's lines — in that order — or nothing.
+func gutterMark(k bandKind, noted bool) string {
+	switch {
+	case k == bandCurrent:
+		return "┃ "
+	case k == bandOther:
+		return "╎ "
+	case noted:
+		return "│ "
+	}
+	return ""
+}

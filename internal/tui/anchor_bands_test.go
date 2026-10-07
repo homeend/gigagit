@@ -2,6 +2,7 @@ package tui
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -130,5 +131,58 @@ func TestStepBandOverlap(t *testing.T) {
 	}
 	if !reflect.DeepEqual(seen, []int{1, 2, 0}) {
 		t.Fatalf("walk = %v, want every band once", seen)
+	}
+}
+
+func TestGutterMarkPrecedence(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		k     bandKind
+		noted bool
+		want  string
+	}{
+		{bandCurrent, true, "┃ "}, {bandOther, true, "╎ "}, {bandNone, true, "│ "}, {bandNone, false, ""},
+	}
+	for _, c := range cases {
+		if got := gutterMark(c.k, c.noted); got != c.want {
+			t.Errorf("gutterMark(%d,%v) = %q want %q", c.k, c.noted, got, c.want)
+		}
+	}
+}
+
+func TestBandKindAtCurrentWinsAnOverlap(t *testing.T) {
+	t.Parallel()
+	bs := []anchorBand{band(2, 6, 0), band(4, 4, 1)}
+	if bandKindAt(bs, 1, 4) != bandCurrent || bandKindAt(bs, 1, 3) != bandOther || bandKindAt(bs, -1, 4) != bandOther || bandKindAt(bs, 1, 7) != bandNone {
+		t.Fatal("bandKindAt")
+	}
+}
+
+func TestBandedFileDrawsItsGutter(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 1) // a.txt:12 current, 5-8 other
+	f := topDoc(m)
+	// Count, not Contains: a frame border may itself be drawn with ┃.
+	withCur := strings.Count(m.View(), "┃ ")
+	f.anchorCur = "" // line 12 becomes an "other" band
+	v := m.View()
+	if withCur-strings.Count(v, "┃ ") != 1 || strings.Count(v, "╎ ") < 5 {
+		t.Fatalf("band gutter wrong (┃ diff %d):\n%s", withCur-strings.Count(v, "┃ "), v)
+	}
+}
+
+func TestPreviewRowMarkLaysTheBandUnderTheCursor(t *testing.T) {
+	t.Parallel()
+	p := &contentPopup{lines: []contentLine{{text: "a"}, {text: "b"}}, cur: 0}
+	if _, marked := previewRowMark(p, 1, false, p.lines[1], bandNone); marked {
+		t.Fatal("a plain row is marked")
+	}
+	if _, marked := previewRowMark(p, 1, false, p.lines[1], bandOther); !marked {
+		t.Fatal("a banded row is not marked")
+	}
+	cur, _ := previewRowMark(p, 0, false, p.lines[0], bandCurrent)
+	if cur.GetBackground() != st().diffCursorRow.GetBackground() {
+		t.Fatal("the cursor row lost to the band")
 	}
 }

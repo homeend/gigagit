@@ -122,14 +122,14 @@ func TestCursorBandSkipsImageRows(t *testing.T) {
 	t.Parallel()
 	p := &contentPopup{cur: 3}
 	cells := []termimg.Cell{{}}
-	if _, marked := previewRowMark(p, 3, false, contentLine{text: "▀", cells: cells}); marked {
+	if _, marked := previewRowMark(p, 3, false, contentLine{text: "▀", cells: cells}, bandNone); marked {
 		t.Fatal("an image row must not wear the cursor band: the decorator's per-cell colours would cancel it after the first cell")
 	}
-	if _, marked := previewRowMark(p, 3, false, contentLine{text: "info"}); !marked {
+	if _, marked := previewRowMark(p, 3, false, contentLine{text: "info"}, bandNone); !marked {
 		t.Fatal("a text row under the cursor keeps the band")
 	}
 	p.lsel.on, p.lsel.anchor = true, 3
-	if _, marked := previewRowMark(p, 3, false, contentLine{text: "▀", cells: cells}); marked {
+	if _, marked := previewRowMark(p, 3, false, contentLine{text: "▀", cells: cells}, bandNone); marked {
 		t.Fatal("nor the selection stripe")
 	}
 }

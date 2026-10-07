@@ -443,17 +443,23 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	return m.renderPreviewBox(m.filesPreview.p, i18n.T("View %s", m.filesPreview.path), boxW, boxH, !m.filesTreeFocused, false)
 }
 
-// previewRowMark is the cursor band / selection stripe a preview row wears
-// (marked false = neither). The stripe REPLACES the band on the cursor row —
+// previewRowMark is the anchor band / cursor band / selection stripe a
+// preview row wears, in that order bottom to top (marked false = none). The stripe REPLACES the band on the cursor row —
 // the stripe is the row (spec §4.7). An image row wears neither: its
 // decorator paints every cell with its own colours, which would cancel the
 // band after the first cell, and there is nothing to select on it.
-func previewRowMark(p *contentPopup, row int, cursorOff bool, l contentLine) (lipgloss.Style, bool) {
+func previewRowMark(p *contentPopup, row int, cursorOff bool, l contentLine, band bandKind) (lipgloss.Style, bool) {
 	var rowStyle lipgloss.Style
 	if l.cells != nil {
 		return rowStyle, false
 	}
 	marked := false
+	switch band { // under the cursor and the selection: both stay readable on it
+	case bandCurrent:
+		rowStyle, marked = st().anchorBandCur, true
+	case bandOther:
+		rowStyle, marked = st().anchorBand, true
+	}
 	if row == p.cur && !cursorOff {
 		rowStyle, marked = st().diffCursorRow, true
 	}
@@ -509,10 +515,13 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	// every line index (cursor, selection, search hit) stays a file line —
 	// and its lines give up noteGutterW columns for the range mark.
 	var notes []agentdocs.Note
-	gut, boxH := 0, 0
+	var bands []anchorBand // an overview's anchors in the file it opened
+	gut, boxH, curB := 0, 0, -1
 	if d := m.previewDoc(p); d != nil && d.gutterW() > 0 {
 		boxH = noteBoxMaxRows(rowsCap)
 		notes, gut = d.notes, d.gutterW()
+		bands = d.bands()
+		curB = d.curBand(bands)
 		d.noteW, d.noteH = max(innerW-gut, 4), noteBoxMaxRows(rowsCap)
 	}
 	start := p.clampTop(p.sel, rowsCap)
@@ -531,7 +540,8 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		//
 		// [ui] diff_cursor governs the preview cursor too; "number" falls back
 		// to the band, because there is no gutter to carry a number.
-		if rowStyle, marked := previewRowMark(p, row, cursorOff, l); marked {
+		kind := bandKindAt(bands, curB, row+1)
+		if rowStyle, marked := previewRowMark(p, row, cursorOff, l, kind); marked {
 			r.style = rowStyle
 		}
 		if p.search.active() {
@@ -539,12 +549,14 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 				r.emph = overlayHits(nil, 0, len([]rune(l.text)), hs)
 			}
 		}
+		noted := false // the range mark: this line is under a note
 		for _, n := range notes {
 			if n.Start <= row+1 && row+1 <= n.End {
-				r.prefix = "│ " // the range mark: this line is under a note
+				noted = true
 				break
 			}
 		}
+		r.prefix = gutterMark(kind, noted)
 		wr = append(wr, r)
 		for _, n := range notes {
 			if n.End == row+1 {
