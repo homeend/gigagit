@@ -182,7 +182,9 @@ func (s *Service) pullRequests(ctx context.Context, p forge.Provider) ([]model.P
 	}
 	slices.SortFunc(open, prByUpdated)
 	slices.SortFunc(rest, prByUpdated)
-	return append(open, rest...), nil
+	all := append(open, rest...)
+	s.saveListing(ctx, p.Name(), all)
+	return all, nil
 }
 
 // prByUpdated orders pull requests newest-updated first, the number breaking
@@ -234,9 +236,7 @@ func (s *Service) PullRequest(ctx context.Context, n int) (model.PullRequest, er
 	}
 	// A full read (it carries the body) feeds the cache: the details view is
 	// served from it the next time, before the forge answers.
-	s.forgeMu.Lock()
-	s.putPRLocked(pr, true)
-	s.forgeMu.Unlock()
+	s.rememberPR(ctx, pr, true)
 	return pr, nil
 }
 
@@ -259,6 +259,12 @@ func (s *Service) PRComments(ctx context.Context, n int) (PRComments, error) {
 	if err != nil {
 		return PRComments{}, err
 	}
+	return bucketComments(cs, truncated), nil
+}
+
+// bucketComments sorts a PR's raw comments into the buckets a frontend
+// shows them in.
+func bucketComments(cs []model.ForgeComment, truncated bool) PRComments {
 	// Empty buckets are [] on the wire, never null: agents index into them.
 	out := PRComments{Inline: []model.ForgeComment{}, Hub: []model.ForgeComment{},
 		Outdated: []model.ForgeComment{}, Truncated: truncated}
@@ -277,7 +283,7 @@ func (s *Service) PRComments(ctx context.Context, n int) (PRComments, error) {
 		}
 	}
 	slices.SortStableFunc(out.Hub, func(a, b model.ForgeComment) int { return a.Created.Compare(b.Created) })
-	return out, nil
+	return out
 }
 
 // PRFetchOp builds the op that brings PR n's head into refs/gg/pr/<n>. It
@@ -324,6 +330,9 @@ func (s *Service) PRForgetOp(n int) engine.ForgetPR {
 	delete(s.forgeComments, n)
 	delete(s.forgePRCache, n)
 	s.forgeMu.Unlock()
+	if st := s.prCacheStore(context.Background()); st != nil {
+		_ = st.Remove(n)
+	}
 	return engine.ForgetPR{Number: n}
 }
 

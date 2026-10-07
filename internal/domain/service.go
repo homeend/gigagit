@@ -24,6 +24,7 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/observ"
+	"github.com/homeend/gigagit/internal/prcache"
 	"github.com/homeend/gigagit/internal/prefix"
 	"github.com/homeend/gigagit/internal/preflight"
 	"github.com/homeend/gigagit/internal/profile"
@@ -112,10 +113,18 @@ type Service struct {
 	// forgePRCache holds single pull requests (forge_cache.go): an open is served
 	// from it and revalidated in the background; an entry nobody used for
 	// prCacheIdle is evicted. forgeBase is the base repository, fixed for the
-	// session. forgeNow is the cache clock (nil = time.Now; tests move it).
+	// session. forgeNow is the cache clock (nil = clock.Now; tests move it).
 	forgePRCache map[int]forgePREntry
 	forgeBase    *forgeBaseRepo
 	forgeNow     func() time.Time
+	// prStore is the on-disk PR cache (prcachestore.go); resolved on first
+	// use, nil when no state dir resolves. prMaxAge / prPrefetch are
+	// [forge] cache_hours / prefetch (SetPRCachePolicy; unset = 8h / 5).
+	prStore      *prcache.Store
+	prStoreReady bool
+	prMaxAge     time.Duration
+	prPrefetch   int
+	prPolicySet  bool
 
 	// preflightMu guards the resolved verdicts. reRoot builds a FRESH Service,
 	// so a cached resolution can never outlive the repo it describes.

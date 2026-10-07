@@ -9,6 +9,7 @@ import (
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/prcache"
 )
 
 // ErrReadOnlyNote is returned by every note mutation handed the id of a note
@@ -23,19 +24,38 @@ var ErrReadOnlyNote = errors.New("forge comments and review notes are read-only"
 // the comments differ from what was cached. A failed read keeps the previous
 // cache.
 func (s *Service) PRCommentsRefresh(ctx context.Context, n int) (changed bool, err error) {
-	c, err := s.PRComments(ctx, n) // provider call: never under forgeMu
+	p, err := s.provider(ctx)
 	if err != nil {
 		return false, err
 	}
+	raw, truncated, err := p.Comments(ctx, n) // provider call: never under forgeMu
+	if err != nil {
+		return false, err
+	}
+	return s.storeComments(ctx, n, raw, truncated), nil
+}
+
+// storeComments caches PR n's comments in memory and on disk and reports
+// whether they differ from what was cached (this session or, while fresh,
+// an earlier one).
+func (s *Service) storeComments(ctx context.Context, n int, raw []model.ForgeComment, truncated bool) bool {
+	c := bucketComments(raw, truncated)
 	sig := prCommentsSig(c)
+	prev, had := s.PRCommentsCached(n) // memory, else the fresh disk copy
 	s.forgeMu.Lock()
-	defer s.forgeMu.Unlock()
 	if s.forgeComments == nil {
 		s.forgeComments = map[int]forgeCommentsEntry{}
 	}
-	prev, had := s.forgeComments[n]
 	s.forgeComments[n] = forgeCommentsEntry{c: c, sig: sig}
-	return !had || prev.sig != sig, nil
+	s.forgeMu.Unlock()
+	now := s.forgeClock()
+	s.persistPR(ctx, n, func(e *prcache.Entry) {
+		e.Comments, e.Truncated, e.HasComments = raw, truncated, true
+		if e.ReadAt.IsZero() {
+			e.ReadAt = now // comments alone still date the entry
+		}
+	})
+	return !had || prCommentsSig(prev) != sig
 }
 
 type forgeCommentsEntry struct {
@@ -64,9 +84,25 @@ func prCommentsSig(c PRComments) string {
 // them; ok is false when nothing was fetched yet. It never calls the forge.
 func (s *Service) PRCommentsCached(n int) (PRComments, bool) {
 	s.forgeMu.Lock()
-	defer s.forgeMu.Unlock()
 	e, ok := s.forgeComments[n]
-	return e.c, ok
+	s.forgeMu.Unlock()
+	if ok {
+		return e.c, true
+	}
+	d, ok := s.diskEntry(context.Background(), n)
+	if !ok || !d.HasComments {
+		return PRComments{}, false
+	}
+	c := bucketComments(d.Comments, d.Truncated)
+	s.forgeMu.Lock()
+	if s.forgeComments == nil {
+		s.forgeComments = map[int]forgeCommentsEntry{}
+	}
+	if _, raced := s.forgeComments[n]; !raced {
+		s.forgeComments[n] = forgeCommentsEntry{c: c, sig: prCommentsSig(c)}
+	}
+	s.forgeMu.Unlock()
+	return c, true
 }
 
 // dropForgeComments forgets PR n's cached comments (ForgetPR).

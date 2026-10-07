@@ -78,8 +78,16 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("XDG_CONFIG_HOME", xdg)
+	// Per-repo state (the PR cache, link history, …) lands under XDG state:
+	// never the developer's own.
+	state, err := os.MkdirTemp("", "gg-web-state")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_STATE_HOME", state)
 	code := m.Run()
 	_ = os.RemoveAll(xdg)
+	_ = os.RemoveAll(state)
 	if ggBinDir != "" {
 		_ = os.RemoveAll(ggBinDir)
 	}

@@ -19,6 +19,7 @@ func TestStateBaseDirKinds(t *testing.T) {
 		"prefix",
 		"texttemplates",
 		"previews",
+		"prcache",
 		"profile",
 		"search",
 		"sessions",
