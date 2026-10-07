@@ -6,7 +6,7 @@
 
 **Goal:** Local notes, single review remarks, whole AI reviews and verdicts go to a GitHub pull request from gg — all-or-nothing per review — replies and resolve/unresolve work on GitHub threads, and a sent item is deleted locally so GitHub is its only home; agents can only queue a send that the user approves.
 
-**Architecture:** `forge` gains a `Writer` (GraphQL mutations through `gh api graphql --input <temp file>`). `engine.SendToForge` is a thin op in the `ApplyMigration` style: it holds the confirm decision and the write ORDER, and is handed a domain-built `Plan` func (refresh + re-anchor + rendered bodies), the `forge.Writer`, and a domain `SendLedger` (stamp / fail / settle). Domain stamps local items before the forge sees them, and ONE settle pass — run on every PR snapshot read — turns stamps into deletions (sent), keeps them (still pending on GitHub) or clears them (gone): that pass is write-through, crash recovery and the echo-marker match at once. A file-backed pending-send queue (domain + filelock) is how an agent's send waits for the user. The CLI gets `gg pr send|reply|resolve|unresolve|notes|pending`.
+**Architecture:** `forge` gains a `Writer` (GraphQL mutations through `gh api graphql --input <temp file>`). `engine.SendToForge` is a thin op in the `ApplyMigration` style: it holds the confirm decision and the write ORDER, and is handed a domain-built `Plan` value (refresh + re-anchor + rendered bodies, computed outside the repo gate right before the op runs — R12), the `forge.Writer`, and a domain `SendLedger` (stamp / fail / settle; gate-free). Domain stamps local items before the forge sees them, and ONE settle pass — run on every PR snapshot read — turns stamps into deletions (sent), keeps them (still pending on GitHub) or clears them (gone): that pass is write-through, crash recovery and the echo-marker match at once. A file-backed pending-send queue (domain + filelock) is how an agent's send waits for the user. The CLI gets `gg pr send|reply|resolve|unresolve|notes|pending`.
 
 **Tech Stack:** Go 1.26, `gh` CLI (`gh api graphql --input`), `pelletier/go-toml/v2`, `internal/filelock`, the fake gh (`internal/forge/testdata/fakegh`).
 
@@ -36,7 +36,8 @@
 3. **A review re-saved after one of its remarks moved to GitHub** (`gg review save` with the same id, a re-imported reply) → the moved remark stays hidden; it does not come back as local. (Task 3 test.)
 4. **A local draft reply to a GitHub thread** survives every store mutation — another note's removal, the orphan prune, the cap. (Task 2 test.)
 5. **A mixed group** — one note inside a diff hunk, one in a changed file outside every hunk, one in a file the PR does not touch, one stale → line thread, file-level thread with a quote, skipped "not in this PR", skipped "its lines changed"; the skipped notes stay local and untouched. (Task 6 test.)
-6. **`diff.context` set in the user's git config** → hunk membership still matches GitHub's 3-line context. (Task 6 test.)
+6. **A writer queued behind the send** (a commit started while the confirm is open) → the op's settle step never blocks on the repo gate. (Task 5 test.)
+7. **`diff.context` set in the user's git config** → hunk membership still matches GitHub's 3-line context. (Task 6 test.)
 
 ## Rulings this plan makes on the spec (for the user's review)
 
@@ -50,6 +51,7 @@
 - **R8 — `gg pr notes <n> [--json]`** is added: the CLI's way to see what a PR's view holds (every local note, carried ones with their origin, GitHub threads, each with its sync state) — the items `gg pr send --note` takes.
 - **R9 — `gg note list` prints a sync token only when it is not `local`** (`[sending]`, `[failed: <error>]`), and `(from <origin>)` on a carried note, so the existing line shape agents parse is unchanged for every plain note; `--json` carries `sync`, `send_error`, `group`, `origin`.
 - **R10 — empty-body `COMMENT`** is sent as is; when GitHub refuses a blank body, the submit is retried once with "1 comment" / "N comments" (§3.4's fallback), so the unverified API answer cannot fail a send.
+- **R12 — the plan is computed before the op runs, outside the repo gate.** Spec §3.3 has the op refresh and re-anchor; but every domain read takes its own Read reservation and the gate is not re-entrant (a writer queued behind the op's Read would deadlock a nested read). `PRSendOp` builds the plan — refresh, settle, re-anchor, bodies — immediately before handing the op over; the op holds it as a value. The confirm may sit open for a while; threads then anchor on the head the plan read (`commitOID`), which GitHub accepts (an older line just shows as outdated if it changed). The op's only domain call afterwards, the ledger's `Settle`, must be gate-free (Task 5 tests it under a queued writer).
 - **R11 — skills.** CLAUDE.md asks for a `using-gg.md` update on any CLI change; spec §7 defers skills to plan 5. This plan adds one short "sending to GitHub" paragraph (version bump, `gg init --update`); plan 5 writes the full agent guidance.
 
 ---
@@ -94,7 +96,7 @@
   func StripSendMarker(body string) string           // body without any trailing marker line
   func IsBlankBodyError(err error) bool
   // forgetest:
-  type Write struct{ Op string; Vars map[string]any }
+  type Write struct{ Op string; Vars map[string]any; Failed bool }
   func Writes(t testing.TB, dir string) []Write
   ```
 
@@ -604,13 +606,14 @@ func mutation(dir, input string) int {
 		op = op[:i]
 	}
 	_ = os.MkdirAll(dir, 0o755)
-	line, _ := json.Marshal(map[string]any{"op": op, "variables": doc.Variables})
+	failMsg, failErr := os.ReadFile(filepath.Join(dir, "fail-"+op))
+	line, _ := json.Marshal(map[string]any{"op": op, "variables": doc.Variables, "failed": failErr == nil})
 	if f, err := os.OpenFile(filepath.Join(dir, "writes.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
 		f.Write(append(line, '\n'))
 		f.Close()
 	}
-	if msg, err := os.ReadFile(filepath.Join(dir, "fail-"+op)); err == nil {
-		fmt.Fprintln(os.Stderr, strings.TrimSpace(string(msg)))
+	if failErr == nil {
+		fmt.Fprintln(os.Stderr, strings.TrimSpace(string(failMsg)))
 		return 1
 	}
 	if out, err := os.ReadFile(filepath.Join(dir, "mutation-"+op+".json")); err == nil {
@@ -636,6 +639,25 @@ func mutation(dir, input string) int {
 	return 0
 }
 
+// shownWrite reports a recorded, successful SubmitReview / Reply / Resolve /
+// Unresolve.
+func shownWrite(dir string) bool {
+	b, _ := os.ReadFile(filepath.Join(dir, "writes.jsonl"))
+	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		var w struct {
+			Op     string `json:"op"`
+			Failed bool   `json:"failed"`
+		}
+		if json.Unmarshal([]byte(line), &w) == nil && !w.Failed {
+			switch w.Op {
+			case "SubmitReview", "Reply", "Resolve", "Unresolve":
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // countWrites is how many times op has been recorded (this call included):
 // the k in a created id, so two threads get two ids.
 func countWrites(dir, op string) int {
@@ -648,7 +670,10 @@ And in the snapshot branch: when `writes.jsonl` records a `SubmitReview` (or a `
 
 ```go
 	if strings.HasPrefix(name, "snapshot-") {
-		if w, _ := os.ReadFile(filepath.Join(dir, "writes.jsonl")); len(w) > 0 {
+		// Only a SUCCESSFUL write GitHub would show — a submitted review, a
+		// reply, a resolve — switches to the sent snapshot; a failed send
+		// (StartReview … DeleteReview) shows nothing.
+		if shownWrite(dir) {
 			sent := strings.TrimSuffix(name, ".json") + "-sent.json"
 			if b2, err2 := os.ReadFile(filepath.Join(dir, sent)); err2 == nil {
 				os.Stdout.Write(b2)
@@ -663,8 +688,9 @@ And in the snapshot branch: when `writes.jsonl` records a `SubmitReview` (or a `
 ```go
 // Write is one mutation the fake gh recorded.
 type Write struct {
-	Op   string         `json:"op"`
-	Vars map[string]any `json:"variables"`
+	Op     string         `json:"op"`
+	Vars   map[string]any `json:"variables"`
+	Failed bool           `json:"failed"` // a fail-<Op> file made it fail
 }
 
 // Writes reads the fake gh's writes.jsonl in dir (none = empty).
@@ -792,8 +818,7 @@ func forgeReply(id string, sec int) model.Note {
 
 func TestForgeRootedReplySurvivesMutations(t *testing.T) {
 	t.Parallel()
-	fs := NewFileStore(t.TempDir())
-	fs.SetPolicy(Policy{MaxEntries: 2})
+	fs := NewFileStore(t.TempDir()) // uncapped: only the orphan prune is under test
 	for _, n := range []model.Note{forgeReply("r0000001", 1), commitNote("c0000001", "", 2), commitNote("c0000002", "", 3)} {
 		if err := fs.Put(n); err != nil {
 			t.Fatal(err)
@@ -1464,11 +1489,12 @@ git commit -m "feat(notes): draft replies under GitHub threads, sync state and g
       Settle(ctx context.Context) error                              // re-read the PR, settle every stamp
   }
   type SendToForge struct {
-      Plan   func(ctx context.Context) (SendPlan, error)
+      Plan   SendPlan
       Writer forge.Writer
       Ledger SendLedger
       Now    func() time.Time // stamp clock; nil = time.Now (domain passes clock.Now)
   }
+  // Plan is a VALUE (R12): domain computed it outside the gate just before.
   const DecisionSendForge = "forge.send"
   // Options: OptComment "comment", OptApprove "approve", OptRequestChanges "request-changes",
   //          OptSend "send", OptSubmitWithPending "submit-with-pending", OptDiscard "discard", "abort".
@@ -1573,7 +1599,7 @@ func runSend(t *testing.T, p SendPlan, w *fakeWriter, l *fakeLedger, answer stri
 		asked = append(asked, r)
 		return DecisionResponse{Option: answer}, nil
 	})
-	op := SendToForge{Plan: func(context.Context) (SendPlan, error) { return p, nil }, Writer: w, Ledger: l,
+	op := SendToForge{Plan: p, Writer: w, Ledger: l,
 		Now: func() time.Time { return time.Unix(100, 0) }}
 	res, err := op.Run(context.Background(), OpDeps{Decider: dec})
 	return res, err, asked
@@ -1804,14 +1830,10 @@ func (op SendToForge) now() time.Time {
 }
 
 func (op SendToForge) Run(ctx context.Context, deps OpDeps) (Result, error) {
-	if op.Plan == nil || op.Writer == nil || op.Ledger == nil {
-		return Result{}, fmt.Errorf("send to forge: Plan, Writer and Ledger are required")
+	if op.Writer == nil || op.Ledger == nil {
+		return Result{}, fmt.Errorf("send to forge: Writer and Ledger are required")
 	}
-	deps.emit(ctx, Progress{Step: "reading the pull request"})
-	p, err := op.Plan(ctx)
-	if err != nil {
-		return Result{}, err
-	}
+	p := op.Plan
 	switch p.Mode {
 	case SendFinish:
 		return op.finish(ctx, deps, p)
@@ -1920,7 +1942,7 @@ func (op SendToForge) review(ctx context.Context, deps OpDeps, p SendPlan) (Resu
 	}
 	threads := map[string]string{} // item key → thread id
 	for _, it := range p.Items {
-		deps.emit(ctx, Progressf("sending", "%s", it.Label))
+		deps.emit(ctx, Progress{Step: "sending", Detail: it.Label})
 		ref, err := op.Writer.AddThread(ctx, review, it.Thread)
 		if err != nil {
 			return fail(err)
@@ -2043,8 +2065,11 @@ func (op SendToForge) actions(ctx context.Context, deps OpDeps, p SendPlan) (Res
 
 func (op SendToForge) finish(ctx context.Context, deps OpDeps, p SendPlan) (Result, error) {
 	choice, err := confirm(ctx, deps, p, []string{OptSend, "abort"})
-	if err != nil || choice == "abort" {
-		return Result{}.WithSummary("aborted: sending to %s", p.Target), err
+	if err != nil {
+		return Result{}, err
+	}
+	if choice == "abort" {
+		return Result{}.WithSummary("aborted: sending to %s", p.Target), nil
 	}
 	if err := op.Writer.SubmitReview(ctx, p.Pending, forge.EventComment, p.Body); err != nil {
 		return Result{}, err
@@ -2059,8 +2084,11 @@ func (op SendToForge) finish(ctx context.Context, deps OpDeps, p SendPlan) (Resu
 
 func (op SendToForge) discard(ctx context.Context, deps OpDeps, p SendPlan) (Result, error) {
 	choice, err := confirm(ctx, deps, p, []string{OptDiscard, "abort"})
-	if err != nil || choice == "abort" {
-		return Result{}.WithSummary("aborted: sending to %s", p.Target), err
+	if err != nil {
+		return Result{}, err
+	}
+	if choice == "abort" {
+		return Result{}.WithSummary("aborted: sending to %s", p.Target), nil
 	}
 	if err := op.Writer.DeletePendingReview(ctx, p.Pending); err != nil {
 		return Result{}, err
@@ -2078,7 +2106,7 @@ Note the blank-body test: the plan's `Verdict` false + body "" means the single-
 
 - `internal/tui/source.go`: add `engine.SendToForge` to the `FetchPRHead, ForgetPR` case (touches no panel; empty, not nil).
 - `optionDisplayName`: add the missing cases among `comment`, `approve`, `request-changes`, `send`, `submit-with-pending`, `discard`, each `return i18n.T("<value>")` (check first which exist).
-- Bundles: add every new key to all four files — the prompt `"Send to %s:\n%s"`, the step `"reading the pull request"`, `"sending"`, the summaries `"aborted: sending to %s"`, `"sent %d comments to %s"`, `"sent %d actions to %s"`, `"; local copies are removed at the next refresh (%v)"`, `"; %d threads could not be resolved"`, `"submitted the pending review on %s"`, `"discarded the pending review on %s"`, and the option labels. Translate each (ja/ko/zh/ru), keeping verbs.
+- Bundles: add every new key to all four files — the prompt `"Send to %s:\n%s"`, the step `"sending"`, the summaries `"aborted: sending to %s"`, `"sent %d comments to %s"`, `"sent %d actions to %s"`, `"; local copies are removed at the next refresh (%v)"`, `"; %d threads could not be resolved"`, `"submitted the pending review on %s"`, `"discarded the pending review on %s"`, and the option labels. Translate each (ja/ko/zh/ru), keeping verbs.
 
 - [ ] **Step 5: Run the tests and the i18n gates**
 
@@ -2100,6 +2128,7 @@ git commit -m "feat(engine): SendToForge — one confirm, all-or-nothing reviews
 - Create: `internal/domain/forge_send_ledger.go`
 - Create: `internal/domain/forge_send_ledger_test.go`
 - Modify: `internal/domain/forge_cache.go` (`PRRevalidate` notes its read start and runs `settleSends`)
+- Modify: `internal/domain/service.go` (`sendIdx *sendIndexT`, `sendIdxGen` beside `previewCounts`)
 
 **Interfaces:**
 - Consumes: `notes.Store.Edit`, `model.NoteSend`, `model.RemarkSend` (Task 2); `forge.SendMarkerKey` (Task 1); `Review.RemarkSends` (Task 3); `engine.SendLedger` (Task 4).
@@ -2239,6 +2268,59 @@ func TestSettleNeverJudgesAStampNewerThanTheRead(t *testing.T) {
 	}
 	if n, _ := noteByID(t, svc, a); n.Send == nil || n.Send.Review != "PRR_racing" {
 		t.Fatalf("a newer stamp was judged: %+v", n.Send)
+	}
+}
+
+func TestSettleClearsAWholeReviewWhoseReviewIsGone(t *testing.T) {
+	t.Parallel()
+	svc, r := structuredReview(t)
+	svc.forgeNow = func() time.Time { return settleT0 }
+	ctx := context.Background()
+	if err := svc.notesStore(ctx).Edit(r.ID, func(n *model.Note) error {
+		n.Send = &model.NoteSend{PR: 7, Review: "PRR_deleted", At: settleT0.Add(-time.Minute)}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	svc.invalidateNoteCounts()
+	svc.settleSends(ctx, model.PullRequest{Number: 7}, nil, settleT0)
+	r2, _ := svc.Review(ctx, r.ID)
+	n, _ := noteByID(t, svc, r2.ID)
+	if n.Send != nil {
+		t.Fatalf("a whole review whose GitHub review is gone stays sending forever: %+v", n.Send)
+	}
+}
+
+// The op calls Settle while holding a Read reservation: a writer queued
+// behind it must not deadlock a gate-taking read inside Settle (R12).
+func TestSettleNeverTakesTheGate(t *testing.T) {
+	t.Parallel()
+	svc, _, a, _ := settleSvc(t)
+	stampNote(t, svc, a, model.NoteSend{PR: 7, Review: "PRR_gone", At: settleT0.Add(-time.Minute)})
+	ctx := context.Background()
+	gate := svc.gateFor(ctx)
+	held, err := gate.Acquire(ctx, repogate.Read, "op SendToForge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Release()
+	go func() { // a writer queues behind the op
+		if w, err := gate.Acquire(ctx, repogate.TreeWrite, "op Commit"); err == nil {
+			w.Release()
+		}
+	}()
+	for len(gate.Queue()) < 2 { // wait until the writer is queued
+		time.Sleep(time.Millisecond)
+	}
+	done := make(chan error, 1)
+	go func() { done <- svc.sendLedger(7).Settle(ctx) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Settle blocked on the repo gate under a queued writer")
 	}
 }
 
@@ -2423,8 +2505,15 @@ func (l prLedger) Settle(ctx context.Context) error {
 }
 
 // settleSends applies the settle table (plan Task 5) to PR pr's stamped
-// items, judging only stamps older than readStart.
+// items, judging only stamps older than readStart. It runs on EVERY
+// PRRevalidate (the TUI heartbeat, the web poll), so the common case —
+// nothing of this PR is stamped and no echoed marker names a local note —
+// costs no store read: sendIndex answers it from a per-notes-generation memo.
 func (s *Service) settleSends(ctx context.Context, pr model.PullRequest, cs []model.ForgeComment, readStart time.Time) {
+	idx := s.sendIndex(ctx)
+	if !idx.prs[pr.Number] && !idx.echoed(cs) {
+		return
+	}
 	st := s.notesStore(ctx)
 	if st == nil {
 		return
@@ -2474,7 +2563,7 @@ func (s *Service) settleSends(ctx context.Context, pr model.PullRequest, cs []mo
 	changed := false
 	for _, n := range all {
 		if n.IsReviewNote() || n.IsWorkingReview() {
-			if s.settleReview(ctx, st, n, pr.Number, judge, reviewDone, readStart) {
+			if s.settleReview(ctx, st, n, pr.Number, pending, judge, reviewDone, readStart) {
 				changed = true
 			}
 			continue
@@ -2503,7 +2592,7 @@ func (s *Service) settleSends(ctx context.Context, pr model.PullRequest, cs []mo
 
 // settleReview settles one review note: each remark entry, then the note's
 // own whole-review stamp (R4: deleted only when every remark has moved).
-func (s *Service) settleReview(ctx context.Context, st notes.Store, n model.Note, pr int,
+func (s *Service) settleReview(ctx context.Context, st notes.Store, n model.Note, pr int, pending string,
 	judge func(string, *model.NoteSend) (bool, bool), reviewDone map[string]bool, readStart time.Time) bool {
 	if len(n.RemarkSends) == 0 && n.Send == nil {
 		return false
@@ -2528,12 +2617,19 @@ func (s *Service) settleReview(ctx context.Context, st notes.Store, n model.Note
 		}
 	}
 	whole := n.Send != nil && n.Send.PR == pr && n.Send.Err == "" && n.Send.At.Before(readStart)
-	if whole && reviewDone[n.Send.Review] {
-		r := s.reviewOf(ctx, n, map[string]string{})
+	switch {
+	case whole && reviewDone[n.Send.Review]:
+		// reviewDocOf parses the stored document only: no branch-tip
+		// lookup, so the settle pass never takes the repo gate (R12).
+		r := reviewDocOf(n)
 		r.RemarkSends = out
 		if allRemarksMoved(r) {
 			return st.Remove(n.ID) == nil
 		}
+		_ = st.Edit(n.ID, func(x *model.Note) error { x.Send, x.RemarkSends = nil, out; return nil })
+		return true
+	case whole && n.Send.Review != pending:
+		// Its review is neither submitted nor pending: gone. Local again.
 		_ = st.Edit(n.ID, func(x *model.Note) error { x.Send, x.RemarkSends = nil, out; return nil })
 		return true
 	}
@@ -2543,6 +2639,16 @@ func (s *Service) settleReview(ctx context.Context, st notes.Store, n model.Note
 	return changed
 }
 
+// reviewDocOf is a review note's document and send entries, nothing more:
+// enough for remark fingerprints, with no git call.
+func reviewDocOf(n model.Note) Review {
+	r := Review{ID: n.ID, RemarkSends: n.RemarkSends}
+	if doc, err := notebatch.ParseReview([]byte(n.Rationale)); err == nil {
+		r.Doc = &doc
+	}
+	return r
+}
+
 func allRemarksMoved(r Review) bool {
 	for _, fp := range r.remarkFPs() {
 		if !r.remarkMoved(fp) {
@@ -2550,6 +2656,67 @@ func allRemarksMoved(r Review) bool {
 		}
 	}
 	return true
+}
+
+// sendIndexT is what settleSends needs to know cheaply: which PRs have a
+// stamped item, and which local ids (notes, reviews) exist to be echoed.
+type sendIndexT struct {
+	prs map[int]bool
+	ids map[string]bool
+}
+
+// echoed reports a comment whose marker names a local note or a remark of
+// a local review.
+func (x sendIndexT) echoed(cs []model.ForgeComment) bool {
+	for _, c := range cs {
+		k, ok := forge.SendMarkerKey(c.Body)
+		if !ok {
+			continue
+		}
+		if rid, _, isRemark := parseRemarkKey(k); isRemark {
+			k = rid
+		}
+		if x.ids[k] {
+			return true
+		}
+	}
+	return false
+}
+
+// sendIndex is built once per notes generation (one LoadAll per notes
+// change, never per poll); Stamp/Fail invalidate it through
+// invalidateNoteCounts.
+func (s *Service) sendIndex(ctx context.Context) sendIndexT {
+	s.mu.Lock()
+	if s.sendIdx != nil && s.sendIdxGen == s.notesGen {
+		x := *s.sendIdx
+		s.mu.Unlock()
+		return x
+	}
+	gen := s.notesGen
+	s.mu.Unlock()
+	x := sendIndexT{prs: map[int]bool{}, ids: map[string]bool{}}
+	if st := s.notesStore(ctx); st != nil {
+		if all, err := st.LoadAll(); err == nil {
+			for _, n := range all {
+				x.ids[n.ID] = true
+				if n.Send != nil && n.Send.Err == "" {
+					x.prs[n.Send.PR] = true
+				}
+				for _, r := range n.RemarkSends {
+					if !r.Moved && r.Send.Err == "" {
+						x.prs[r.Send.PR] = true
+					}
+				}
+			}
+		}
+	}
+	s.mu.Lock()
+	if s.notesGen == gen {
+		s.sendIdx, s.sendIdxGen = &x, gen
+	}
+	s.mu.Unlock()
+	return x
 }
 
 // PRInterrupted (doc in the Interfaces block).
@@ -3004,7 +3171,9 @@ var (
 // (PRSendRequest as in the Interfaces block)
 
 // PRSendOp builds the one op that writes to a forge. The frontend collected
-// every input already; the op re-reads the PR, re-anchors, confirms, writes.
+// every input already; building the op re-reads the PR, settles, re-anchors
+// and renders the bodies (R12: outside the gate, right before Execute); the
+// op confirms and writes.
 func (s *Service) PRSendOp(ctx context.Context, req PRSendRequest) (engine.SendToForge, error) {
 	p, err := s.provider(ctx)
 	if err != nil {
@@ -3014,8 +3183,12 @@ func (s *Service) PRSendOp(ctx context.Context, req PRSendRequest) (engine.SendT
 	if !ok {
 		return engine.SendToForge{}, ErrForgeReadOnly
 	}
+	plan, err := s.planSend(ctx, req) // outside the gate (R12): every read here reserves it
+	if err != nil {
+		return engine.SendToForge{}, err
+	}
 	return engine.SendToForge{
-		Plan:   func(ctx context.Context) (engine.SendPlan, error) { return s.planSend(ctx, req) },
+		Plan:   plan,
 		Writer: w,
 		Ledger: s.sendLedger(req.PR),
 		Now:    s.forgeClock,
@@ -3063,7 +3236,7 @@ with these helpers in the same file (each small; the executor writes them out in
 - `onlyDrafts(ctx, ids) bool` — every id names a stored `IsForgeReply` note (and there is at least one).
 - `planActions` — one `SendReply` per draft (`ThreadID` = `forgeCommentByID(parent).ThreadID`, `Body` = `sendBody(note, note.ID, "")`, `Label` = `"reply: " + summary`), one `SendResolve` / `SendUnresolve` per id (`threadIDFor(n, id)`: a `PRRT_…` thread id as is, a comment id → its `ThreadID`; unknown → `fmt.Errorf("%w: %s is not a thread of #%d", ErrSendRequest, id, n)`).
 - `planReview`:
-  1. `prev, err := s.PRPreview(ctx, pr)`; not `PreviewOK` → `fmt.Errorf("%w: #%d's diff is not available here (gg pr fetch %d)", ErrSendRequest, …)`.
+  1. A verdict-only request (no `Notes`, no `Review`, not `Mine`) needs no diff: return the plan with `Verdict` and the body at once. Otherwise `prev, err := s.PRPreview(ctx, pr)`; not `PreviewOK` → `fmt.Errorf("%w: #%d's diff is not available here (gg pr fetch %d)", ErrSendRequest, …)`.
   2. `hunks := s.sendHunks(ctx, prev.Set)` — `DiffHunks(DiffSpec{Rev: set.Base+".."+set.Tip, Unified: 3})` as `map[path][]model.Hunk` plus `changed map[path]bool` from `prev.Files` (status ≠ `D`).
   3. `shown, _ := s.PreviewNotesAll(ctx, prev.Set)` → index roots by id.
   4. For each requested id (and for `--mine` every shown root with `Group == GroupMine` and `!Note.IsForgeReply()`, and for `--review` every unmoved remark): build the item with `s.noteItem(rn, hunks, changed, tip lines)` or `s.remarkItem(ctx, r, i, prev.Set, hunks, changed)`, or a `SendSkip`.
@@ -3355,6 +3528,11 @@ Expected: FAIL — `gg pr send` is a usage error today (exit 2) and the comments
 // comments when they are not cached yet.
 func (s *Service) PRThreadRoot(ctx context.Context, n int, id string) (string, string, error) {
 	id = strings.TrimPrefix(strings.TrimSpace(id), model.ForgeNoteIDPrefix)
+	// The PR itself too: a draft reply is addressed at its head
+	// (forgeReplyDraft reads PRDetailsCached).
+	if _, err := s.PullRequest(ctx, n); err != nil {
+		return "", "", err
+	}
 	cs, err := s.PRComments(ctx, n)
 	if err != nil {
 		return "", "", err
