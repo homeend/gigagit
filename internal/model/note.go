@@ -16,8 +16,9 @@ const (
 	NoteSourceUser  NoteSource = "user"
 	NoteSourceAgent NoteSource = "agent"
 	// NoteSourceForge is a review comment read from a forge (a pull request's
-	// inline or file-level thread). It is never stored and never editable: gg
-	// reads the forge, it does not write to it.
+	// inline or file-level thread). It is never stored, and edited or deleted
+	// only on the forge: gg sends notes TO the forge (engine.SendToForge) and
+	// stores local draft replies to its threads.
 	NoteSourceForge NoteSource = "forge"
 )
 
