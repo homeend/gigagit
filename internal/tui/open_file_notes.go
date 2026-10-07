@@ -142,13 +142,14 @@ func rawOf(lines []contentLine) []string {
 }
 
 // noteGutterW is the column an annotated file's lines give up on the left
-// for the range mark ("│ " on a line a note covers).
+// for the range mark ("│ " on a line a note covers; "┃ " / "╎ " on an
+// overview's anchors in the file it opened — gutterMark).
 const noteGutterW = 2
 
-// gutterW is the width of d's range-mark gutter: none without notes, so an
-// ordinary file is laid out exactly as before.
+// gutterW is the width of d's range-mark gutter: none without notes or
+// anchor bands, so an ordinary file is laid out exactly as before.
 func (d *openFile) gutterW() int {
-	if len(d.notes) == 0 || !docLoaded(d) || d.p.img != nil {
+	if (len(d.notes) == 0 && d.bands() == nil) || !docLoaded(d) || d.p.img != nil {
 		return 0
 	}
 	return noteGutterW

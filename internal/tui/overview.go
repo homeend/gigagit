@@ -39,6 +39,7 @@ type overview struct {
 	sel     int      // the selected anchor; -1 = none
 	w       int      // the width the rows were laid out at; 0 = never
 	mode    dispMode // the view they were laid out for (ctrl+w)
+	closed  bool     // taken out of the open files: its files lose their bands
 }
 
 // overviewLines lays text out at width for view mode: the rows, and the

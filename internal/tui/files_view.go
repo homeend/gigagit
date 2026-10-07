@@ -901,6 +901,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if nm, cmd, handled := m.previewNoteKey(msg); handled {
 		return nm, cmd
 	}
+	// …and an overview's anchors in the file it opened: n / p (declined
+	// without bands, so the review view's n / p keep working).
+	if nm, cmd, handled := m.bandKey(msg); handled {
+		return nm, cmd
+	}
 	if m.inWorktreeFiles() {
 		return m.updateWorktreeFilesKey(msg)
 	}

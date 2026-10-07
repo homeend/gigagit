@@ -61,8 +61,15 @@ func TestFollowPassTellsTheTabsWhichOverviewClosed(t *testing.T) {
 	}
 	s.docs.RemoveOverview(o.ID)
 	s.followDocs()
-	if m := next(); m.Reason != "agentdocs" || len(m.Files) != 0 || len(m.Closed) != 1 || m.Closed[0] != o.ID {
+	m := next()
+	if m.Reason != "agentdocs" || len(m.Files) != 0 || len(m.Closed) != 1 || m.Closed[0] != o.ID {
 		t.Fatalf("remove event = %+v", m)
+	}
+	// The stamps list every overview the store holds — none is a list too:
+	// a file whose overview left must hear it even when nothing names it
+	// closed (the switcher's x unlists it before the store drops it).
+	if m.Stamps == nil {
+		t.Fatal("an agentdocs event with no overviews left carries no stamps")
 	}
 }
 
@@ -88,6 +95,7 @@ func TestOverviewEndpointServesTheTreeAndTheAnchors(t *testing.T) {
 			Note    string `json:"note"`
 			Missing bool   `json:"missing"`
 			Ref     string `json:"ref"`
+			Label   string `json:"label"`
 		} `json:"anchors"`
 	}
 	if code := getJSON(t, serve(t, s), "/api/overview?id="+o.ID, &body); code != http.StatusOK {
@@ -104,6 +112,9 @@ func TestOverviewEndpointServesTheTreeAndTheAnchors(t *testing.T) {
 	}
 	if body.Anchors[0].Ref != `gg overview `+o.ID+` "Tour" → f.txt:1` {
 		t.Fatalf("ref = %q", body.Anchors[0].Ref)
+	}
+	if body.Anchors[0].Label == "" {
+		t.Fatalf("anchor label missing: %+v", body.Anchors[0])
 	}
 	if !strings.Contains(string(body.Blocks), `"k":"anchor"`) {
 		t.Fatalf("blocks carry no anchor inline: %s", body.Blocks)

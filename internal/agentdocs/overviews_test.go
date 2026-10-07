@@ -348,3 +348,11 @@ func TestFileTourConcurrentFilesOne(t *testing.T) {
 		}
 	}
 }
+
+func TestParseOverviewKeepsTheLabel(t *testing.T) {
+	t.Parallel()
+	_, as := ParseOverview("see [the **lock** order](a.go:5-8) and [x](note:t3)")
+	if len(as) != 2 || as[0].Label != "the lock order" || as[1].Label != "x" {
+		t.Fatalf("anchors = %+v", as)
+	}
+}

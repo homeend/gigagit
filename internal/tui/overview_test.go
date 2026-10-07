@@ -31,7 +31,7 @@ func TestOverviewLinesSpansInAParagraph(t *testing.T) {
 	if got := anchorText(lines, as[0]); got != "open files" {
 		t.Fatalf("anchor 0 text = %q", got)
 	}
-	if as[0].target != (agentdocs.Anchor{Dest: "internal/tui/open_files.go:20", Path: "internal/tui/open_files.go", Start: 20, End: 20}) || as[0].dest != "internal/tui/open_files.go:20" {
+	if as[0].target != (agentdocs.Anchor{Dest: "internal/tui/open_files.go:20", Path: "internal/tui/open_files.go", Start: 20, End: 20, Label: "open files"}) || as[0].dest != "internal/tui/open_files.go:20" {
 		t.Fatalf("anchor 0 = %+v", as[0])
 	}
 	if got := anchorText(lines, as[1]); got != "x" {

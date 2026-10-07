@@ -197,6 +197,70 @@ function releaseAfterFailedOpen(regId, shownId) {
   if (!regId || regId === shownId) return null;
   return shownId ? { op: "focus", id: shownId } : { op: "background", id: regId };
 }
+// anchorBands is the bands an overview's anchors make in path (nLines
+// lines): its line and range anchors — never a file's or a note's — sorted
+// by start then end, one per range, past the end dropped, cut at it.
+function anchorBands(anchors, path, nLines) {
+  const out = [], seen = new Set();
+  anchors.forEach((a, i) => {
+    if (a.note || a.path !== path || !(a.start > 0) || a.start > nLines) return;
+    const end = Math.min(Math.max(a.end || 0, a.start), nLines), k = a.start + ":" + end;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push({ start: a.start, end, i });
+  });
+  return out.sort((x, y) => x.start - y.start || x.end - y.end);
+}
+
+// bandOf is the index of the band anchor dest makes in nLines lines (its
+// range clamped as anchorBands clamps it), or -1.
+function bandOf(bands, anchors, dest, nLines) {
+  if (!dest) return -1;
+  for (const a of anchors) {
+    if (a.dest !== dest || a.note || !(a.start > 0)) continue;
+    const end = Math.min(Math.max(a.end || 0, a.start), nLines);
+    const k = bands.findIndex((b) => b.start === a.start && b.end === end);
+    if (k >= 0) return k;
+  }
+  return -1;
+}
+
+// stepBand is n (dir 1) / p (-1): from band cur when line is in it, else
+// from line; wraps (one band never "wraps"). i is -1 with no bands.
+function stepBand(bands, cur, line, dir) {
+  const n = bands.length;
+  if (!n) return { i: -1, wrapped: false };
+  if (cur >= 0 && cur < n && bands[cur].start <= line && line <= bands[cur].end) {
+    const next = cur + dir;
+    return { i: ((next % n) + n) % n, wrapped: (next < 0 || next >= n) && n > 1 };
+  }
+  if (dir > 0) {
+    const k = bands.findIndex((b) => b.start > line);
+    return k >= 0 ? { i: k, wrapped: false } : { i: 0, wrapped: n > 1 };
+  }
+  for (let k = n - 1; k >= 0; k--) if (bands[k].start < line) return { i: k, wrapped: false };
+  return { i: n - 1, wrapped: n > 1 };
+}
+
+// fromGone reports whether overview id left the store: named on the closed
+// list, or missing from the stamps, which list every overview the store
+// holds (a close from the switcher's x takes it off the list first, so it
+// is never named closed). No stamps: no word either way.
+function fromGone(stamps, closed, id) {
+  return closed.includes(id) || (!!stamps && !(id in stamps));
+}
+
+// bandKindAt is line's band: "cur" (wins an overlap), "other" or "".
+function bandKindAt(bands, cur, line) {
+  let k = "";
+  for (let i = 0; i < bands.length; i++) {
+    if (bands[i].start <= line && line <= bands[i].end) {
+      if (i === cur) return "cur";
+      k = "other";
+    }
+  }
+  return k;
+}
 // --- end overview model ---
 
 // --- the overlay -------------------------------------------------------------
@@ -498,11 +562,14 @@ function renderViewer() {
     body.innerHTML = imageHTML(view.image);
   } else {
     let html = "";
+    const bands = viewBands(), curB = view.from ? bandOf(bands, view.from.anchors || [], view.from.cur, view.lines.length) : -1;
     view.lines.forEach((l, i) => {
       const noted = noteAtLine(view.notes, i + 1) ? " vnoted" : "";
       const ranged = view.range && view.range.start <= i + 1 && i + 1 <= view.range.end ? " vrange" : "";
+      const bk = bandKindAt(bands, curB, i + 1);
+      const banded = bk ? " vanchor" + (bk === "cur" ? " acur" : "") : "";
       html +=
-        `<div class="vline${i + 1 === view.cur ? " vcur" : ""}${noted}${ranged}" data-i="${i}"><span class="vno">${i + 1}</span>` +
+        `<div class="vline${i + 1 === view.cur ? " vcur" : ""}${noted}${ranged}${banded}" data-i="${i}"><span class="vno">${i + 1}</span>` +
         `<span class="vtext">${renderCell(l.text, null, l.tok, "", viewerSearch.query ? viewerSearch.hitsOn(i, 0) : null) || " "}</span></div>`;
       for (const n of boxesAfter(view.notes, i)) html += noteBoxHTML(n);
     });
@@ -564,9 +631,50 @@ async function refreshOverviewAs(mine) {
   return true;
 }
 
-// openAnchorAt opens anchor i in front — a file at its line, its range
-// tinted, or a note's file at the note — after the server re-checked it; a
-// missing one says why and opens nothing. Backspace there comes back.
+// viewBands is the shown file's bands: the anchors of the overview that
+// opened it, while that overview is open; [] otherwise.
+function viewBands() {
+  const f = view.from;
+  if (!f || f.closed || !f.anchors || view.ov || view.image || view.placeholder) return [];
+  return anchorBands(f.anchors, view.path, view.lines.length);
+}
+
+// stepViewerAnchor is n / p: the next / previous band, the cursor on its
+// first line centred, the band current, and the way back on its anchor.
+function stepViewerAnchor(dir) {
+  const bands = viewBands(), f = view.from;
+  if (!bands.length) return;
+  const r = stepBand(bands, bandOf(bands, f.anchors, f.cur, view.lines.length), view.cur, dir);
+  const b = bands[r.i], a = f.anchors[b.i];
+  f.cur = f.dest = a.dest; // backAnchor returns to it
+  f.sel = b.i;
+  view.cur = b.start;
+  rerenderKeepingScroll();
+  centerCursor();
+  opLine("anchor " + (r.i + 1) + "/" + bands.length + " in this file · " + (a.label || a.dest) + (r.wrapped ? " · wrapped" : ""), false);
+}
+
+// refreshFromAnchors re-reads the overview that opened the shown file, for
+// its anchors; a failed read keeps the last ones (a closed overview arrives
+// on the closed list instead).
+async function refreshFromAnchors(f) {
+  let ov;
+  try {
+    ov = await fetchOverview(f.id);
+  } catch {
+    return;
+  }
+  if (view.from !== f || !isOpen()) return;
+  f.anchors = ov.anchors || [];
+  f.stamp = ov.stamp;
+  rerenderKeepingScroll();
+  swapFoot(true);
+}
+
+// openAnchorAt opens anchor i in front — a file at its line, the
+// overview's anchors in it drawn as bands, or a note's file at the note —
+// after the server re-checked it; a missing one says why and opens nothing.
+// Backspace there comes back.
 async function openAnchorAt(i) {
   if (!view.ov || !view.ov.anchors[i]) return;
   const id = view.id, seq0 = loadSeq;
@@ -580,16 +688,16 @@ async function openAnchorAt(i) {
   if (!view.ov || view.id !== id) return;
   const a = view.ov.anchors[view.ov.sel];
   if (!a) return opLine("that anchor is no longer in the overview", false);
-  const from = { id, sel: view.ov.sel, dest: a.dest };
   if (a.missing) return opLine(anchorStatus(a), false);
   const t = anchorTarget(a);
   if (!t.path) return opLine("note " + t.note + " is gone", false);
+  // The overview's anchors travel with the way back: the file draws its
+  // own as bands (viewBands), the opened one current — a note is no band.
+  const from = { id, sel: view.ov.sel, dest: a.dest, anchors: view.ov.anchors, stamp: view.ov.stamp, cur: t.note ? "" : a.dest };
   const r = await openViewer({ src: "worktree", path: t.path, line: t.line });
   if (!r.ok) return;
   view.from = from;
   armBack();
-  view.range = t.end > t.line ? { start: t.line, end: t.end } : null;
-  view.rangeOwn = false;
   rerenderKeepingScroll();
   swapFoot(true);
   if (t.note) $("viewer-body").querySelector(`.vnote[data-note="${t.note}"]`)?.scrollIntoView({ block: "nearest" });
@@ -828,6 +936,8 @@ function viewerKey(e) {
     case "r": { const n = noteAtLine(view.notes, view.cur); if (!n) return false; copyNoteRef(n); break; }
     case "}": stepNote(1); break;
     case "{": stepNote(-1); break;
+    case "n": stepViewerAnchor(1); break; // always ours: a p in the viewer is never pull
+    case "p": stepViewerAnchor(-1); break;
     // A noted file steps aside on esc (the TUI's rule); the server decides
     // the same for a note that landed after this read.
     case "Escape": if (!clearViewerRange()) closeViewer(escHow(false, view.notes.length)); break;
@@ -911,11 +1021,12 @@ function viewerFoot() {
     );
   }
   const back = view.from ? `<button data-vact="back" title="or your browser's Back">bksp back</button>` : "";
+  const bandKeys = view.from && viewBands().length ? "<span>n p anchors</span>" : "";
   const notes = view.notes.length
     ? `<span>} { notes</span><button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>`
     : "";
   return (
-    back + `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
+    back + bandKeys + `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
     `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\\ open files</button><button data-vact="close">esc close</button>`
   );
 }
@@ -980,8 +1091,8 @@ function viewerStep(own, cur, len, dir) {
 }
 
 // stepViewerRange applies viewerStep to the open file and keeps the moving
-// end in sight. An overview anchor's band is not the reader's: marking starts
-// over from the cursor.
+// end in sight. A range the reader does not own starts over from the cursor
+// (an overview's anchors are bands, never this range — viewBands).
 function stepViewerRange(dir) {
   if (view.placeholder) return;
   const own = view.range && view.rangeOwn ? view.range : null;
@@ -1045,8 +1156,8 @@ function markViewerRange(line, end) {
   if (view.range) rerenderKeepingScroll();
 }
 
-// clearViewerRange drops a range marked by hand or by a link (an overview
-// anchor's band stays until its file is left); false when there was none.
+// clearViewerRange drops a range marked by hand or by a link (an overview's
+// anchor bands are not a range: they stay); false when there was none.
 function clearViewerRange() {
   if (!view.range || !view.rangeOwn) return false;
   view.range = null;
@@ -1185,6 +1296,16 @@ function viewerAgentDocs(files, closed = [], stamps = undefined) {
   }
   viewerOpenFiles(files);
   if (!viewerFileId()) return;
+  // The shown file's bands follow the overview that opened it: gone with it,
+  // re-read when it changed. A closed viewer has none to follow.
+  const f = view.from;
+  if (f && !f.closed && !view.ov) {
+    if (fromGone(stamps, closed, f.id)) {
+      f.closed = true;
+      rerenderKeepingScroll();
+      swapFoot(true);
+    } else if (overviewStale(stamps, f.id, f.stamp)) refreshFromAnchors(f);
+  }
   if (view.ov) {
     if (overviewStale(stamps, view.id, view.ov.stamp)) refreshOverview();
   } else viewerFileChanged(viewerFileId());
@@ -1213,7 +1334,8 @@ registerHelp({
     "<b>↑↓ j k</b> line, <b>shift+↓↑</b> mark lines from the cursor (or shift+click a number), <b>L</b> copy their link, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close; " +
     "an agent's notes (<code>gg session note</code>) sit under their lines: <b>} {</b> next / previous note, <b>d</b> dismiss, <b>r</b> copy its reference; " +
     "an agent's overview (<code>gg session overview</code>) opens as a document: <b>tab / shift+tab</b> select an anchor, <b>enter</b> or a click opens it, " +
-    "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> (or the browser's Back) in the file an anchor opened comes back",
+    "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> (or the browser's Back) in the file an anchor opened comes back; " +
+    "in that file the overview's line and range anchors are tinted bands, the one you are on brighter, and <b>n / p</b> step through them (in line order, wrapping)",
 });
 
 export { closeViewer, dropViewer, evictedText, markViewerRange, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerClosedFile, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };

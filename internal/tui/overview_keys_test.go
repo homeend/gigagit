@@ -89,14 +89,51 @@ func TestEnterOpensAPathAnchorOnTopWithItsLine(t *testing.T) {
 	}
 }
 
-func TestEnterOnARangeSelectsTheLines(t *testing.T) {
+func TestEnterOnARangeLandsWithoutSelecting(t *testing.T) {
 	t.Parallel()
 	m, d, _ := tourModel(t)
 	m = openNth(t, m, d, 2)
 	f := topDoc(m)
-	lo, hi, ok := f.p.lsel.bounds(f.p.cur)
-	if f.p.cur != 4 || !ok || lo != 4 || hi != 7 || !f.p.lsel.fixed {
-		t.Fatalf("cur=%d sel=%v %d..%d fixed=%v, want 5-8 selected", f.p.cur, ok, lo, hi, f.p.lsel.fixed)
+	if f.p.cur != 4 || f.p.lsel.on {
+		t.Fatalf("cur=%d lsel=%v, want line 5 and no selection", f.p.cur, f.p.lsel.on)
+	}
+	bs := f.bands()
+	if len(bs) != 2 || f.curBand(bs) != 0 || bs[0].start != 5 || bs[0].end != 8 || bs[1].start != 12 {
+		t.Fatalf("bands=%v cur=%d", bs, f.curBand(bs))
+	}
+}
+
+func TestBandsGoWhenTheOverviewCloses(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 1)
+	f := topDoc(m)
+	m.openFiles.remove(m.currentWorktree, d)
+	if f.bands() != nil {
+		t.Fatal("a closed overview still bands its file")
+	}
+}
+
+func TestBandsFollowAnOverviewSet(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 1) // a.txt:12 current
+	f := topDoc(m)
+	if _, err := m.docs.SetOverview(d.id(), "Tour", "# Tour\n\n- [three](a.txt:3)\n- [nine to ten](a.txt:9-10)\n"); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.onAgentDocsChanged()
+	bs := f.bands()
+	if len(bs) != 2 || bs[0].start != 3 || bs[1].start != 9 || bs[1].end != 10 || f.curBand(bs) != -1 {
+		t.Fatalf("after set: bands=%v cur=%d", bs, f.curBand(bs))
+	}
+}
+
+func TestFileOpenedWithoutAnOverviewHasNoBands(t *testing.T) {
+	t.Parallel()
+	_, d := notedViewer(t)
+	if d.bands() != nil {
+		t.Fatal("bands without an overview")
 	}
 }
 
@@ -317,5 +354,80 @@ func TestViewerTitleSkipsTheRunningAndStickyMessages(t *testing.T) {
 	m.stickyMsg = "working on it"
 	if strings.Contains(m.View(), "working on it") {
 		t.Fatal("a sticky message sits in the viewer title")
+	}
+}
+
+func TestNStepsToTheNextBandAndWraps(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 2) // a.txt:5-8 current; bands 5-8, 12
+	f := topDoc(m)
+	m = fvKeys(t, m, keyMsg("n"))
+	if f.p.cur != 11 || f.anchorCur != "a.txt:12" || d.ov.sel != 1 {
+		t.Fatalf("n: cur=%d anchorCur=%q sel=%d", f.p.cur, f.anchorCur, d.ov.sel)
+	}
+	if !strings.Contains(m.statusMsg, "anchor 2/2 in this file · line twelve") {
+		t.Fatalf("status = %q", m.statusMsg)
+	}
+	m = fvKeys(t, m, keyMsg("n"))
+	if f.p.cur != 4 || !strings.HasSuffix(m.statusMsg, "· wrapped") {
+		t.Fatalf("wrap: cur=%d status=%q", f.p.cur, m.statusMsg)
+	}
+}
+
+func TestPStepsBackAndBackspaceReturnsOnIt(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 1) // a.txt:12
+	m = fvKeys(t, m, keyMsg("p"))
+	if f := topDoc(m); f.p.cur != 4 || f.anchorCur != "a.txt:5-8" {
+		t.Fatalf("p: cur=%d current anchor %q", f.p.cur, f.anchorCur)
+	}
+	m = fvKeys(t, m, keyMsg("backspace"))
+	if topDoc(m) != d || d.ov.sel != 2 {
+		t.Fatalf("back on sel %d, want 2 (the anchor stepped to)", d.ov.sel)
+	}
+}
+
+func TestNAndPAreInertWithoutBands(t *testing.T) {
+	t.Parallel()
+	m, f := notedViewer(t)
+	cur := f.p.cur
+	m = fvKeys(t, m, keyMsg("n"))
+	fvKeys(t, m, keyMsg("p"))
+	if f.p.cur != cur {
+		t.Fatal("n / p moved a file with no bands")
+	}
+}
+
+func TestNoteAnchorOpenShowsBandsNoneCurrent(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 3) // the note on a.txt:20
+	f := topDoc(m)
+	bs := f.bands()
+	if len(bs) != 2 || f.curBand(bs) != -1 {
+		t.Fatalf("bands=%v cur=%d", bs, f.curBand(bs))
+	}
+	fvKeys(t, m, keyMsg("p")) // the cursor on 20: the last band above it is 12
+	if f.p.cur != 11 {
+		t.Fatalf("p from the note: cur=%d want 11", f.p.cur)
+	}
+}
+
+func TestBandMenuRowsAndHint(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 1)
+	ids := map[string]bool{}
+	for _, r := range m.overviewRows() {
+		ids[r.id] = true
+	}
+	if !ids["anchor-next"] || !ids["anchor-prev"] || !ids["overview-back"] {
+		t.Fatalf("rows = %v", ids)
+	}
+	m.statusMsg = ""
+	if !strings.Contains(m.View(), "[n/p] anchors") {
+		t.Fatal("hint lacks [n/p] anchors")
 	}
 }

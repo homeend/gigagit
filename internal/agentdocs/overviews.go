@@ -35,7 +35,8 @@ type Anchor struct {
 	Start   int
 	End     int
 	Note    string
-	Missing bool // its file or note was not found when last checked
+	Label   string // the link text, markup dropped (ParseOverview)
+	Missing bool   // its file or note was not found when last checked
 }
 
 // Overview is one overview, as a copy. ID is an open-file id ("f<n>") from
@@ -146,6 +147,7 @@ func ParseOverview(text string) (markdown.Doc, []Anchor) {
 				}
 				a, _ := ParseAnchorDest(n.URL)
 				a.Dest = n.URL
+				a.Label = flat(n.In)
 				n.Text = strconv.Itoa(len(anchors))
 				anchors = append(anchors, a)
 				continue

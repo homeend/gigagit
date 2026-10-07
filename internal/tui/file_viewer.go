@@ -83,6 +83,9 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if nm, cmd, ok := m.overviewKey(fv.openFile, msg); ok {
 		return nm, cmd
 	}
+	if nm, cmd, ok := m.bandKey(msg); ok {
+		return nm, cmd
+	}
 	p := fv.p
 	rows, _ := fv.geom(m)
 	scroll := func(delta int) { p.scrollBy(delta, rows) }

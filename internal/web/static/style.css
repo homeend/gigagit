@@ -1694,6 +1694,14 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 .md a.md-anchor.agone.asel { background: var(--dim); color: var(--bg); }
 .vline.vrange { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .vline.vrange.vcur { background: var(--sel); }
+/* An overview's anchors in the file it opened: the one you are on brighter. */
+.vline.vanchor { background: color-mix(in srgb, #d4a72c 10%, transparent); }
+.vline.vanchor .vno { box-shadow: inset 3px 0 0 color-mix(in srgb, #d4a72c 45%, transparent); }
+.vline.vanchor.acur { background: color-mix(in srgb, #d4a72c 24%, transparent); }
+.vline.vanchor.acur .vno { box-shadow: inset 3px 0 0 #d4a72c; }
+/* the reader's marked range shows over a band (the cursor still wins) */
+.vline.vanchor.vrange, .vline.vanchor.acur.vrange { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.vline.vanchor.vcur { background: var(--sel); }
 .vtext { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 #viewer-body .hit { background: var(--hit-bg); color: inherit; }
 #viewer-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }

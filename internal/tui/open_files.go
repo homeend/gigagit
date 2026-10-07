@@ -94,6 +94,9 @@ func (r *openFilesReg) remove(wt string, d *openFile) {
 	}
 	l := r.byWT[wt][:0:0]
 	for _, e := range r.byWT[wt] {
+		if e == d && d.ov != nil {
+			d.ov.closed = true // a file it opened stops drawing its anchors
+		}
 		if e != d {
 			l = append(l, e)
 		}

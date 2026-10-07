@@ -13,9 +13,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/vt"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/promptstate"
+	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/theme"
 )
 
@@ -72,6 +74,9 @@ func NewHeadless(svc *domain.Service, opts HeadlessOptions) (*Headless, error) {
 	// and goes nowhere, so its confirmation is the same on every machine.
 	m.clipWrite = func(io.Writer, string) (string, error) { return "", nil }
 	m.statePath = opts.StatePath
+	// An agent's notes and overviews live in a store of this run's own: the
+	// process-wide one numbers documents across parallel scenarios.
+	m.docs = agentdocs.New()
 	// Prompt memory (dismissed prompts, the stacked-diff preference) lives
 	// beside StatePath too: New opened the machine-global store, which
 	// parallel scenarios would share.
@@ -106,6 +111,18 @@ func (h *Headless) Press(tok string) error {
 		}
 	}
 	return nil
+}
+
+// AddOverview hands the TUI an agent's overview as `gg session overview
+// add` does — shown unless the screen cannot take it — then settles. The
+// harness has no steer inbox to post to; this is the command it would carry.
+func (h *Headless) AddOverview(title, text string) error {
+	nm, cmd := h.m.applySteer(steer.Command{Cmd: "overview_add", Title: title, Text: text})
+	h.m = nm
+	if err := h.settle([]tea.Cmd{cmd}); err != nil {
+		return err
+	}
+	return h.checkGlobals()
 }
 
 // FireTimers fires every timer parked right now, soonest first, settling
