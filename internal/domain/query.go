@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -488,7 +489,33 @@ func (s *Service) CompareFiles(ctx context.Context, left, right model.Endpoint) 
 	if left.Kind() == model.EndpointShelf || right.Kind() == model.EndpointShelf {
 		return s.shelfCompareFiles(ctx, left, right)
 	}
-	return query(ctx, s, "compare-files:"+left.CacheTag()+":"+right.CacheTag(), func(ctx context.Context) ([]model.CommitFile, error) {
+	if left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointCommit {
+		// Two commits never change: the answer is cached (and a PR open
+		// seeds it from the disk cache — PRPreview). Callers get a copy.
+		v, err := s.factory.Cache("compare-files").GetOrLoad(compareFilesKey(left, right), func() (any, error) {
+			return s.compareFilesUncached(ctx, left, right)
+		})
+		if err != nil {
+			return nil, err
+		}
+		return slices.Clone(v.([]model.CommitFile)), nil
+	}
+	return s.compareFilesUncached(ctx, left, right)
+}
+
+func compareFilesKey(left, right model.Endpoint) string {
+	return "compare-files:" + left.CacheTag() + ":" + right.CacheTag()
+}
+
+// seedCompareFiles stores a commit↔commit file list computed elsewhere.
+func (s *Service) seedCompareFiles(left, right model.Endpoint, files []model.CommitFile) {
+	_, _ = s.factory.Cache("compare-files").GetOrLoad(compareFilesKey(left, right), func() (any, error) {
+		return slices.Clone(files), nil
+	})
+}
+
+func (s *Service) compareFilesUncached(ctx context.Context, left, right model.Endpoint) ([]model.CommitFile, error) {
+	return query(ctx, s, compareFilesKey(left, right), func(ctx context.Context) ([]model.CommitFile, error) {
 		files, err := s.repo.DiffTreeFiles(ctx, left, right)
 		if err != nil {
 			return nil, err

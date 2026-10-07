@@ -116,6 +116,19 @@ func (s *Service) PreviewNotes(ctx context.Context, source, target string) (Prev
 	if sum.State != PreviewOK {
 		return PreviewNoteSet{}, nil // ruling 6: no set, no error
 	}
+	return s.previewNoteSetFor(ctx, source, target, sum)
+}
+
+// seedPreviewRevList stores a pair's commit list computed elsewhere (the PR
+// cache) under the key previewNoteSetFor reads.
+func (s *Service) seedPreviewRevList(src, tgt string, commits []string) {
+	_, _ = s.factory.Cache("preview").GetOrLoad("preview-revlist:"+src+":"+tgt, func() (any, error) {
+		return commits, nil
+	})
+}
+
+// previewNoteSetFor is PreviewNotes for an OK summary (the rev-list cached).
+func (s *Service) previewNoteSetFor(ctx context.Context, source, target string, sum PreviewSummary) (PreviewNoteSet, error) {
 	key := "preview-revlist:" + sum.SourceHash + ":" + sum.TargetHash
 	v, err := s.factory.Cache("preview").GetOrLoad(key, func() (any, error) {
 		return query(ctx, s, key, func(ctx context.Context) ([]string, error) {
