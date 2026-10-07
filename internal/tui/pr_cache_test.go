@@ -245,7 +245,9 @@ func TestMovedIsJudgedAgainstTheHeadOnScreen(t *testing.T) {
 		t.Fatalf("a forge head unlike the one on screen must re-open (cmd=%v skip=%d)", cmd != nil, mm.prRevalidateSkip)
 	}
 	pr.HeadSHA = shown
-	if _, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, moved: false, pr: pr}); cmd != nil {
+	// A good refresh still asks about interrupted sends (plan 3): "nothing to
+	// do" is no reopen, read off the reopen's own marker.
+	if nm, _ := m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, moved: false, pr: pr}); nm.(Model).prRevalidateSkip != 0 {
 		t.Fatal("the head on screen is the forge's: nothing to do")
 	}
 }
