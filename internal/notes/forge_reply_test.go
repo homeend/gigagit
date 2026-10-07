@@ -87,3 +87,24 @@ func TestEditIsAtomicPerRecord(t *testing.T) {
 		t.Fatal("a failed edit was written")
 	}
 }
+
+// ErrRemoveRecord removes the record and its replies in the same write.
+func TestEditCanRemoveTheRecordAndItsReplies(t *testing.T) {
+	t.Parallel()
+	fs := NewFileStore(t.TempDir())
+	root, other := commitNote("c0000001", "", 1), commitNote("c0000002", "", 2)
+	reply := commitNote("c0000003", "", 3)
+	reply.ParentID = root.ID
+	for _, n := range []model.Note{root, other, reply} {
+		if err := fs.Put(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := fs.Edit(root.ID, func(*model.Note) error { return ErrRemoveRecord }); err != nil {
+		t.Fatalf("Edit = %v", err)
+	}
+	all, _ := fs.LoadAll()
+	if len(all) != 1 || all[0].ID != other.ID {
+		t.Fatalf("after the remove: %+v", all)
+	}
+}

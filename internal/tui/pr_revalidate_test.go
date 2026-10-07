@@ -1,6 +1,7 @@
 package tui
 
 import (
+	tea "github.com/charmbracelet/bubbletea"
 	"strings"
 	"testing"
 
@@ -27,14 +28,17 @@ func TestPRRevalidatedIgnoredWhenNotMovedOrGone(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
 	pr := model.PullRequest{Number: 7, State: model.PRStateOpen}
-	if _, cmd := m.Update(prRevalidatedMsg{n: 7, pr: pr, moved: false}); cmd != nil {
+	// A good refresh still asks whether a send was interrupted (plan 3), so
+	// "no reopen" is the reopen's own marker, not "no command at all".
+	reopened := func(tm tea.Model) bool { return tm.(Model).prRevalidateSkip != 0 }
+	if nm, _ := m.Update(prRevalidatedMsg{n: 7, pr: pr, moved: false}); reopened(nm) {
 		t.Error("an unchanged head needs nothing")
 	}
-	if _, cmd := m.Update(prRevalidatedMsg{n: 9, pr: pr, moved: true}); cmd != nil {
+	if nm, _ := m.Update(prRevalidatedMsg{n: 9, pr: pr, moved: true}); reopened(nm) {
 		t.Error("another PR's verdict must not reopen this view")
 	}
 	closed := m.closePreviewView()
-	if _, cmd := closed.Update(prRevalidatedMsg{n: 7, pr: pr, moved: true}); cmd != nil {
+	if nm, _ := closed.Update(prRevalidatedMsg{n: 7, pr: pr, moved: true}); reopened(nm) {
 		t.Error("the user left: the next open fetches, nothing reopens behind their back")
 	}
 }

@@ -302,7 +302,17 @@ func (fs *partFile) edit(id string, fn func(*model.Note) error) error {
 	_, err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
 		for i := range ns {
 			if ns[i].ID == id {
-				if err := fn(&ns[i]); err != nil {
+				err := fn(&ns[i])
+				switch {
+				case errors.Is(err, ErrRemoveRecord):
+					kept := make([]model.Note, 0, len(ns))
+					for _, n := range ns {
+						if n.ID != id && n.StoredParent() != id {
+							kept = append(kept, n)
+						}
+					}
+					return kept, nil
+				case err != nil:
 					return nil, err
 				}
 				return ns, nil

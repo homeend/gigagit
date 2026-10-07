@@ -48,6 +48,7 @@ type notePopup struct {
 	ranged   bool // written over the diff's marked lines: a successful save clears the marks
 	author   string
 	preview  string // add in a preview or pair diff: the scope (PreviewNoteSet.Pair) the note records
+	sendPR   int    // Reply & send: the PR the reply goes to once saved (0 = save only)
 }
 
 // openNotePopup pushes the form for mode, anchored at the cursor (add) or at
@@ -85,7 +86,7 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 		// Every stored thread and a review's remarks take replies; forge
 		// threads are read-only.
 		all := m.notesAtCursor()
-		ts := replyableNoteTargets(all)
+		ts := replyableNoteTargets(all, m.prOfDiff() > 0)
 		if len(ts) == 0 && len(all) > 0 {
 			m.statusMsg = i18n.T("forge comments are read-only")
 			m.diffNotice = m.statusMsg
@@ -309,6 +310,9 @@ func (p *notePopup) box(m Model) string {
 		heading = i18n.T("Edit note")
 	case noteReply:
 		heading = i18n.T("Reply to note")
+		if p.sendPR != 0 {
+			heading = i18n.T("Reply & send")
+		}
 	}
 	footer := packHints([]string{
 		i18n.T("[tab] switch field"),
@@ -365,7 +369,7 @@ func (m Model) noteSubmitCmd(p *notePopup) tea.Cmd {
 	}
 	summary := strings.TrimSpace(p.summary.Value())
 	rationale := strings.TrimSpace(p.rationale.Value())
-	mode, id, ranged := p.mode, p.targetID, p.ranged
+	mode, id, ranged, sendPR := p.mode, p.targetID, p.ranged, p.sendPR
 	n := p.note(summary, rationale)
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -374,7 +378,11 @@ func (m Model) noteSubmitCmd(p *notePopup) tea.Cmd {
 		case noteEdit:
 			err = svc.NoteEdit(ctx, id, summary, rationale)
 		case noteReply:
-			_, err = svc.NoteReply(ctx, id, n)
+			d, rerr := svc.NoteReply(ctx, id, n)
+			if rerr == nil && sendPR != 0 {
+				return noteMutatedMsg{clearMarks: ranged, sendPR: sendPR, sendID: d.ID}
+			}
+			err = rerr
 		default:
 			_, err = svc.NoteAdd(ctx, n)
 		}

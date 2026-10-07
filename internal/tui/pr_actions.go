@@ -78,6 +78,7 @@ func (m Model) openPRPreviewCmd(p model.PullRequest) tea.Cmd {
 		if err == nil && r.Endpoints.Summary.State == domain.PreviewOK && r.Set.OK() {
 			msg.set = r.Set
 			msg.counts, _, _ = svc.PreviewNoteCounts(ctx, r.Set)
+			msg.groups, _ = svc.PreviewNoteGroups(ctx, r.Set)
 		}
 		return msg
 	}

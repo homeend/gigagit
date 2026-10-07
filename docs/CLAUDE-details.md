@@ -5802,8 +5802,12 @@ process may be mid-send), and each edit re-judges the LIVE record inside
 `Store.Edit` (another process may have stamped it after LoadAll). A
 standalone reply is never judged sent by its thread (the thread existed
 before it). A whole review is deleted only when every remark moved (R4);
-otherwise it gains a moved `RemarkSends` entry keyed `summaryFP` ("summary",
-per PR) so a re-send posts the remaining remarks with an empty body. The pass is skipped cheaply via `sendIndex` (one
+otherwise it gains a moved `RemarkSends` entry keyed `summaryKey()`
+("summary:<hash of the summary text>", per PR; a legacy bare "summary" still
+counts) so a re-send posts the remaining remarks with an empty body — and a
+re-saved review with a NEW summary posts it. A fully sent review is removed
+INSIDE the judging `Store.Edit` (fn returns `notes.ErrRemoveRecord`), never
+by a later `Remove`. The pass is skipped cheaply via `sendIndex` (one
 store read per notes generation). Sent forge reviews map back to their local
 group (`prcache.Entry.Groups`, `Service.forgeGroups`) so a group keeps its
 colour.
@@ -5869,3 +5873,51 @@ Spec `docs/superpowers/specs/2026-10-07-review-links-copy-design.md`, plan
 `send`) but never `submit-with-pending` — `sendNow` refuses `--yes` into a
 pending review, and approve / request-changes on the viewer's own PR, before
 the op runs.
+
+### Sending to GitHub from the TUI (plan 3, `docs/superpowers/plans/2026-10-07-github-write-3-tui.md`)
+
+**One entry.** Every TUI send — a note, a group, a verdict, a reply, a
+resolve, an agent's queued request, finish/discard — goes through
+`Model.forgeSendCmd(req, pendingID)`: `domain.PRSendOp` runs in a `tea.Cmd`
+(it reads under the repo gate, which is not re-entrant), its
+`forgeSendReadyMsg` arms `m.forgeSend` (plan, PR, pending id, the asked
+event) and `startOp` runs the op. A plan error is said and nothing starts (a
+queued request stays waiting). `opDecisionMsg` for `forge.send` while
+`m.forgeSend` is set swaps the engine's English prompt for
+`sendConfirmText(plan)` (translated; 6 body lines, 12 item rows, "+ N more")
+and preselects the asked event. `opFinishedMsg` consumes `m.forgeSend`
+(`forgeSendFinished`: the pending outcome via `domain.PendingOutcome`, a PR
+refresh, a badge recount); `SendToForge` maps to `srcNotes`. Skip reasons are
+`domain.Skip*` codes; `SendItem.Summary` / `SendSkip.Path/Line/Summary` let
+the TUI word every row (`TestEverySkipReasonHasItsOwnWords` runs in `ja`:
+in English the fallback reads the same).
+
+**Where marks show (T3).** `diffView.forgePR` is stamped from
+`openPRNumber()` when notes arrive (`notesLoadedMsg`, `stackNotesMsg`);
+`prOfDiff()` is it while still the open PR. Inside: every root's sync mark
+and its group bar (`groupSlot` = FNV-1a % 6 + 1, pinned by a test; the bar
+is the box's left frame column). Outside: only `◌` / `○!`. GitHub threads are
+replyable/resolvable only inside (`replyableNoteTargets(ts, inPR)`).
+
+**PR reviews in the diff (T1).** `domain.prReviewHeads(set)`: commit/branch
+reviews whose tip is one of the PR's commits, plus `NoteCounts.PreviewReviews`
+of scopes ending `...refs/gg/pr/<n>` (a preview review is never in
+`Reviews`). `prReviewNotes` places unsent remarks with `remarkPlace` (shared
+with the send planner) — cached per tip:base:notesGen like carried notes.
+`PreviewNotesFor/At` build the extras in a FRESH slice (`prExtras`): the
+carried and remark slices are cached instances. Counts include carried
+notes and drawn remarks (T2); `PreviewNoteGroups` feeds the badge bars.
+
+**Notice sources.** Pending sends (`pending_sends.go`) and interrupted sends
+(`interrupted_sends.go`) are re-derived in `rebuildNotices`, never appended
+raw; their actions are `sourced` (close the dialog, never dismiss — the queue
+or the next refresh decides). The queue file (`PendingSendsPath`) is watched
+with `filewatch` (not under Headless) and stat-polled every 2 s on the
+heartbeat; `noticeGen` drops a read from the previous repo; `closePendingWatch`
+runs on `reRoot` and quit. Tests feed one round of messages (`feedOnce`):
+`drainCmd` would chase the self-re-arming blink tick for 30 s. Interrupted
+sends are asked after each successful `PRRevalidate` (`PRInterrupted` needs
+the cached PR).
+
+**Freshness.** `prUpdated` holds the PR number whose last refresh found new
+comments or commits; `prSeen` makes the open's own first read never count.

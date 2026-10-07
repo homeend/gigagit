@@ -6,6 +6,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Sending to GitHub from the terminal UI
+
+### Added
+
+- **Every note in a pull request's diff says where it lives.** `○` only on
+  this machine, `◌` being sent, `○!` the last send failed (the error is shown
+  inside the box), `●` on GitHub. Outside a pull request only `◌` and `○!`
+  show.
+- **Review groups have colours.** Your own notes ("my draft review"), each AI
+  review of the pull request's commits and each GitHub review wear a coloured
+  bar on the left of their boxes and on the file list's badges; a group you
+  send keeps its colour on GitHub. Six new theme roles, `note_group_1` …
+  `note_group_6`, recolour them.
+- **AI reviews of a pull request's commits show in its diff**, remark by
+  remark, so they can be sent from there.
+- **Send from the `.` menu.** On a note: *Send to GitHub* (*Retry* after a
+  failure) and *Send my draft review…* / *Send this AI review…*. On a GitHub
+  thread: *Reply to note*, *Reply & send…*, *Resolve / Reopen thread* (at
+  once, on GitHub), and *Send draft reply*. `R` and `x` work on GitHub threads
+  inside a pull request's diff.
+- **Send review… and Verdict…** in the pull request details (`s` / `v`) and
+  the diff's `.` menu: pick your draft review or an AI review, edit the body
+  (an AI review's summary is filled in), then choose comment, approve or
+  request changes. Approve and request changes are not offered on your own
+  pull request.
+- **Every send shows what will be posted and asks first**, in your language:
+  each comment, each skipped note and why, the review body — cut to fit the
+  screen.
+- **An agent's queued send appears in the notice centre (`!`)**: *Review and
+  send…* (the same confirm, the agent's verdict preselected), *Reject*,
+  *Later*. Nothing is posted until you confirm; the agent gets the answer.
+- **An interrupted send appears in the notice centre** after the pull request
+  is refreshed: *Finish sending* or *Discard*.
+- The pull request's title says **updated** after a refresh that found new
+  comments or commits.
+- `gg pr send --review <id> --body <text>` now replaces the review's summary
+  as the GitHub review body.
+
+### Fixed
+
+- A review re-saved with a new summary sends that summary again when it is
+  re-sent; an unchanged summary is still never posted twice.
+- A fully sent review is removed in the same locked write that decided it,
+  so a reply written at that moment is never caught half-way.
+- A note store that cannot be read is reported as such when you send,
+  instead of "send new comments and replies separately".
+- `gg pr send --note <id> --event approve` is refused (a verdict needs
+  `--review`, `--mine` or `--verdict`); with your own review pending on
+  GitHub the "rerun with --yes" hint is no longer printed (`--yes` is refused
+  there).
+- The diff a send anchors on ignores external diff tools and textconv
+  filters.
+- Skills: using-gg v150.
+
 ## Review skill follow-ups
 
 ### Added

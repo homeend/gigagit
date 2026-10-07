@@ -28,6 +28,9 @@ type notesLoadedMsg struct {
 type noteMutatedMsg struct {
 	err        error
 	clearMarks bool
+	// Reply & send (plan 3): send this saved draft to PR sendPR.
+	sendPR int
+	sendID string
 }
 
 // diffNoteAddress is the address notes hang off for the open diff. It is the
@@ -237,6 +240,12 @@ type noteTarget struct {
 	hash     string         // the thread's context fingerprint
 	replies  int            // replies a delete would take along (0 unless note is the root)
 	resolved bool           // the thread is resolved (its Resolution is set)
+	// Plan 3 (sending to GitHub): where the root lives, its group, whether it
+	// is a GitHub thread, and the local draft replies under such a thread.
+	sync   model.SyncState
+	group  string
+	forge  bool
+	drafts []string
 }
 
 // noteTargetIn picks the targetable note inside one thread: the first note
@@ -249,7 +258,13 @@ func (v *diffView) noteTargetIn(r domain.ResolvedNote) (noteTarget, bool) {
 		return !v.hideAgent || n.Source != model.NoteSourceAgent
 	}
 	t := noteTarget{rootID: r.Note.ID, first: r.Range[0], line: r.Range[1], side: r.Note.Side, hash: r.Note.ContextHash,
-		resolved: r.Resolution != nil || model.NoteHasTag(r.Note, model.NoteTagResolved)}
+		resolved: r.Resolution != nil || model.NoteHasTag(r.Note, model.NoteTagResolved),
+		sync:     r.Sync, group: r.Group, forge: r.Note.Source == model.NoteSourceForge}
+	for _, rep := range r.Replies {
+		if rep.Note.IsForgeReply() && rep.Sync != model.SyncForge && rep.Sync != model.SyncSending {
+			t.drafts = append(t.drafts, rep.Note.ID)
+		}
+	}
 	if shown(r.Note) {
 		// Deleting a root takes its replies, hidden ones included — the count
 		// the confirmation quotes is the STORED thread, not the shown rows.
@@ -377,11 +392,12 @@ func editableNoteTargets(ts []noteTarget) []noteTarget {
 }
 
 // replyableNoteTargets are the threads R may answer and x may resolve:
-// every stored thread and a review's remarks; forge threads stay read-only.
-func replyableNoteTargets(ts []noteTarget) []noteTarget {
+// every stored thread and a review's remarks; GitHub threads only inside a
+// PR's diff (plan 3) — elsewhere they stay read-only.
+func replyableNoteTargets(ts []noteTarget, inPR bool) []noteTarget {
 	out := ts[:0:0]
 	for _, t := range ts {
-		if t.note.Source != model.NoteSourceForge && !model.IsForgeNoteID(t.rootID) {
+		if inPR || (t.note.Source != model.NoteSourceForge && !model.IsForgeNoteID(t.rootID)) {
 			out = append(out, t)
 		}
 	}
@@ -391,7 +407,7 @@ func replyableNoteTargets(ts []noteTarget) []noteTarget {
 // toggleThreadResolved resolves the thread in reach, or reopens it (x).
 func (m Model) toggleThreadResolved() (Model, tea.Cmd) {
 	all := m.notesAtCursor()
-	ts := replyableNoteTargets(all)
+	ts := replyableNoteTargets(all, m.prOfDiff() > 0)
 	if len(ts) == 0 {
 		if len(all) > 0 {
 			m.statusMsg = i18n.T("resolved on GitHub")
@@ -400,6 +416,9 @@ func (m Model) toggleThreadResolved() (Model, tea.Cmd) {
 		return m, nil
 	}
 	nm, cmd := m.withNoteTargetIn(ts, func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
+		if t.forge { // a GitHub thread inside a PR's diff: resolved on GitHub (spec §3.5)
+			return m.forgeSendCmd(threadActionRequest(m.prOfDiff(), t), "")
+		}
 		svc, root, want, who := m.svc, t.rootID, !t.resolved, m.identity.EffectiveName
 		if svc == nil {
 			return m, nil
@@ -717,7 +736,7 @@ func (m Model) noteMenuRows() []actionRow {
 		return nil
 	}
 	all := m.notesAtCursor()
-	replyable := replyableNoteTargets(all)
+	replyable := replyableNoteTargets(all, m.prOfDiff() > 0)
 	if len(replyable) == 0 {
 		return nil // nothing in reach, or only read-only forge threads
 	}
@@ -740,6 +759,7 @@ func (m Model) noteMenuRows() []actionRow {
 		return m.toggleThreadResolved()
 	}})
 	rows = append(rows, m.reviewRemarkRows()...)
+	rows = append(rows, m.forgeNoteRows()...)
 	if r, ok := m.noteDeleteRow(); ok {
 		rows = append(rows, r)
 	}

@@ -112,7 +112,7 @@ func (b *Sandbox) runSteps(t *testing.T, steps []Step, defaultDir string) {
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(p, []byte(ExpandText(st.Content)), 0o644); err != nil {
+			if err := os.WriteFile(p, []byte(expandRevs(t, dir, ExpandText(st.Content))), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		case "rm":
@@ -140,6 +140,8 @@ func (b *Sandbox) runSteps(t *testing.T, steps []Step, defaultDir string) {
 			}
 		case "git_config":
 			b.git(t, dir, "config", st.GitConfig, st.Value)
+		case "ref":
+			b.git(t, dir, "update-ref", st.Ref, st.Value)
 		}
 	}
 }
@@ -237,4 +239,30 @@ func sandboxRoot(t *testing.T, sc *Scenario) string {
 // one width for every pid, so a golden's layout does not depend on it.
 func tuiRoot(pid int, stem string) string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("gg-tui-%08d", pid%100000000), stem)
+}
+
+// expandRevs replaces {{rev:<name>}} with the commit <name> names in the repo
+// being built — a fixture (a fake gh answer) can then carry a real head sha.
+func expandRevs(t *testing.T, dir, s string) string {
+	t.Helper()
+	for {
+		i := strings.Index(s, "{{rev:")
+		if i < 0 {
+			return s
+		}
+		j := strings.Index(s[i:], "}}")
+		if j < 0 {
+			return s
+		}
+		name := s[i+len("{{rev:") : i+j]
+		// Not b.git: that advances the frozen clock, so an expansion would
+		// shift every later commit's date (and sha) by a second.
+		cmd := exec.Command("git", "rev-parse", name)
+		cmd.Dir = dir
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("build: {{rev:%s}}: %v", name, err)
+		}
+		s = s[:i] + strings.TrimSpace(string(out)) + s[i+j+2:]
+	}
 }

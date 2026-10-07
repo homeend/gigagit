@@ -121,7 +121,7 @@ func TestDiffPatchArgvUnifiedPinsTheHunkShape(t *testing.T) {
 	}
 	want := []string{
 		"-c", "diff.mnemonicPrefix=false", "-c", "diff.noprefix=false",
-		"diff", "--no-color", "-U3", "--inter-hunk-context=0", "--diff-algorithm=myers", "--indent-heuristic", "a..b",
+		"diff", "--no-color", "-U3", "--inter-hunk-context=0", "--diff-algorithm=myers", "--indent-heuristic", "--no-ext-diff", "--no-textconv", "a..b",
 	}
 	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
 		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)

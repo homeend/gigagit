@@ -129,6 +129,7 @@ func TestPRSendUsage(t *testing.T) {
 	for _, args := range [][]string{
 		{"send"}, {"send", "x"}, {"send", "7"}, {"send", "7", "--mine", "--review", "r1"},
 		{"send", "7", "--event", "maybe", "--mine"}, {"send", "7", "--finish", "--discard"},
+		{"send", "7", "--note", "n1", "--event", "approve"}, // a verdict needs --review, --mine or --verdict
 	} {
 		if _, _, code := runPR(t, dir, args...); code != 2 {
 			t.Errorf("%v: exit %d, want 2", args, code)
@@ -190,4 +191,16 @@ func writeCommit(t *testing.T, dir, name, body, msg string) {
 	}
 	runGit(t, dir, "add", name)
 	runGit(t, dir, "commit", "-q", "-m", msg)
+}
+
+// With your own review pending on GitHub, --yes is always refused: the pipe's
+// "rerun with --yes" hint would send the user in a circle.
+func TestPRSendHintSkipsYesWhenAReviewIsPending(t *testing.T) {
+	dir, head, fixtures := sendPRRepo(t)
+	id := addCLINote(t, dir, head, 5)
+	editSnapshot(t, fixtures, `"viewerLatestReview":null`, `"viewerLatestReview":{"id":"PRR_mine","state":"PENDING"}`)
+	_, errs, code := runPR(t, dir, "send", "7", "--note", id)
+	if code == 0 || strings.Contains(errs, "rerun with --yes") || !strings.Contains(errs, "review pending on GitHub") {
+		t.Fatalf("exit %d, stderr %q", code, errs)
+	}
 }

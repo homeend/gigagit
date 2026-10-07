@@ -42,6 +42,9 @@ type noticeAction struct {
 	// keep leaves the notice standing after run: a copy is not a dismissal,
 	// and removing the notice would delete the list the copy is about.
 	keep bool
+	// sourced: the notice's own source (a queued or interrupted send) decides
+	// when it goes; the action closes the dialog and never dismisses it.
+	sourced bool
 }
 
 // noticeCommitGraph is the commit-graph recommendation's stable id.
@@ -187,6 +190,9 @@ func (m Model) rebuildNotices() Model {
 	if n := steerAskNotice(m.steerAsk, m.repoHealth.GitCommonDir); n != nil {
 		next = append(next, *n)
 	}
+	// Queued sends answer to their queue, never to a dismissal (plan 3, T6).
+	next = append(next, pendingSendNotices(m)...)
+	next = append(next, interruptedSendNotices(m)...)
 	// Tool-template notices come from their own background read (not repo
 	// health), so they are derived here, outside the health half.
 	var dismissed map[string]bool

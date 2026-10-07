@@ -43,6 +43,10 @@ type noteLine struct {
 	// cls is the row's per-rune class mask — set only on a FORGE note's rows,
 	// whose text is rendered markdown (md_render.go); nil everywhere else.
 	cls []syntax.Class
+	// group is the thread's group colour slot (0 = no bar): a PR view only.
+	group int
+	// errRow is the "send failed: …" row, painted in the error colour.
+	errRow bool
 }
 
 // noteRowKind is one row's role inside a note box, hunk-style: a rounded
@@ -410,12 +414,61 @@ func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int, owner *diffVi
 	frame := func(kind noteRowKind, text string) noteLine {
 		return noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: kind, side: r.Note.Side, text: text, stale: stale, agent: allAgent}
 	}
-	rows := []noteLine{frame(noteRowTop, owner.noteBoxTitle(r)), frame(noteRowBlank, "")}
+	inPR := v.forgePR > 0
+	title := owner.noteBoxTitle(r) + noteOrigin(r.Origin)
+	if mk := syncMark(r.Sync, inPR); mk != "" {
+		title = mk + " " + title
+	}
+	rows := []noteLine{frame(noteRowTop, title), frame(noteRowBlank, "")}
 	rows = append(rows, noteBodyLines(r, r.Note.ID, 0, innerW, stale)...)
 	for _, rep := range r.Replies {
 		rows = append(rows, noteBodyLines(rep, r.Note.ID, 1, innerW, stale)...)
 	}
-	return append(rows, frame(noteRowBlank, ""), frame(noteRowBottom, ""))
+	if r.Sync == model.SyncFailed && r.SendErr != "" {
+		// The last send's error, inside the box it failed for (spec §1.1).
+		for _, ln := range noteWrap(sanitizeLine(i18n.T("send failed: %s", firstLine(r.SendErr))), innerW) {
+			nl := frame(noteRowText, ln)
+			nl.errRow = true
+			rows = append(rows, nl)
+		}
+	}
+	rows = append(rows, frame(noteRowBlank, ""), frame(noteRowBottom, ""))
+	if inPR {
+		slot := groupSlot(r.Group)
+		for i := range rows {
+			rows[i].group = slot
+		}
+	}
+	return rows
+}
+
+// syncMark is a root's sync mark (spec §1.1). Inside a PR every state shows;
+// elsewhere only the two that need attention (plan 3, T3).
+func syncMark(s model.SyncState, inPR bool) string {
+	switch s {
+	case model.SyncSending:
+		return "◌"
+	case model.SyncFailed:
+		return "○!"
+	}
+	if !inPR {
+		return ""
+	}
+	if s == model.SyncForge {
+		return "●"
+	}
+	return "○"
+}
+
+// noteOrigin is a carried note's title tail ("" for any other note).
+func noteOrigin(origin string) string {
+	switch origin {
+	case "":
+		return ""
+	case domain.OriginWorkingTree:
+		return " · " + i18n.T("from working tree")
+	}
+	return " · " + i18n.T("from %s", origin)
 }
 
 // collapsedNoteLine is a whole thread on one row: "author: summary (N
@@ -449,8 +502,15 @@ func (v *diffView) collapsedNoteLine(r domain.ResolvedNote) noteLine {
 	if side == "" {
 		side = model.NoteSideNew
 	}
-	return noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: noteRowCollapsed, side: side,
+	if mk := syncMark(r.Sync, v.forgePR > 0); mk != "" {
+		text = mk + " " + text
+	}
+	nl := noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: noteRowCollapsed, side: side,
 		text: sanitizeLine(text), stale: r.Status == model.NoteStale, agent: allAgent}
+	if v.forgePR > 0 {
+		nl.group = groupSlot(r.Group)
+	}
+	return nl
 }
 
 // setNotes replaces the view's threads and seeds the collapse state of the
@@ -703,6 +763,25 @@ func noteBadge(n int) string {
 		return ""
 	}
 	return "  ◆ " + strconv.Itoa(n)
+}
+
+// noteBadgeGroups is a PR file row's badge: one bar per note group (at most
+// three, each in its group's colour — spec §1.3) before the ◆ count.
+func noteBadgeGroups(n int, groups []string) string {
+	if n <= 0 || len(groups) == 0 {
+		return noteBadge(n)
+	}
+	var b strings.Builder
+	b.WriteString("  ")
+	for i, g := range groups {
+		if i == 3 {
+			break
+		}
+		if bar, ok := groupBarStyle(groupSlot(g)); ok {
+			b.WriteString(bar.Render("▌"))
+		}
+	}
+	return b.String() + "◆ " + strconv.Itoa(n)
 }
 
 // noteCollapseRows are the . menu's collapse rows (keys o / O; the diff footer

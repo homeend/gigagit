@@ -792,6 +792,14 @@ func noteBoxCell(nl noteLine, paneW int) string {
 	if nl.stale {
 		frame, text = s.noteFrameStale, s.noteDim
 	}
+	// The left frame column wears the group's colour (spec §1.3): the bar.
+	left := frame
+	if bar, ok := groupBarStyle(nl.group); ok && !nl.stale {
+		left = bar
+	}
+	if nl.errRow && !nl.stale {
+		text = s.errorText
+	}
 	inner := paneW - noteBoxFrame
 	var cell string
 	switch nl.kind {
@@ -801,15 +809,15 @@ func noteBoxCell(nl noteLine, paneW int) string {
 		if rule < 1 {
 			rule = 1
 		}
-		cell = frame.Render("╭─ " + title + " " + strings.Repeat("─", rule-1) + "╮")
+		cell = left.Render("╭") + frame.Render("─ "+title+" "+strings.Repeat("─", rule-1)+"╮")
 	case noteRowBottom:
-		cell = frame.Render("╰" + strings.Repeat("─", paneW-2) + "╯")
+		cell = left.Render("╰") + frame.Render(strings.Repeat("─", paneW-2)+"╯")
 	case noteRowBlank:
-		cell = frame.Render("│") + strings.Repeat(" ", paneW-2) + frame.Render("│")
+		cell = left.Render("│") + strings.Repeat(" ", paneW-2) + frame.Render("│")
 	case noteRowCollapsed:
 		// No frame: one row, led by the fold mark in the thread's frame colour.
 		body := padRight(truncate(sanitizeLine(nl.text), paneW-2), paneW-2)
-		cell = frame.Render("▸ ") + text.Render(body)
+		cell = left.Render("▸") + " " + text.Render(body)
 	default:
 		body := padRight(truncate(sanitizeLine(nl.text), inner), inner)
 		painted := text.Render(body)
@@ -820,7 +828,7 @@ func noteBoxCell(nl noteLine, paneW int) string {
 			cls := append(append([]syntax.Class{}, nl.cls...), make([]syntax.Class, len(runes)-len(nl.cls))...)
 			painted = styledRuns(runes, make([]emphLevel, len(runes)), cls, text)
 		}
-		cell = frame.Render("│ ") + painted + frame.Render(" │")
+		cell = left.Render("│") + " " + painted + frame.Render(" │")
 	}
 	return cell
 }

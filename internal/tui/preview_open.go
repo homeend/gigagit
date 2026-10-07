@@ -36,6 +36,7 @@ type previewOpenMsg struct {
 	eps                domain.PreviewEndpoints
 	set                domain.PreviewNoteSet // the note scope; zero when the pair is not ok
 	counts             map[string]int        // per-path root-note counts for the file list
+	groups             map[string][]string   // a PR's per-path note groups (the badges' colour bars)
 	heads              []domain.ReviewHead   // the scope's AI reviews: the file list's Reviews block
 	landNote           string                // a review whose row the cursor lands on (back from that review)
 	err                error
@@ -172,7 +173,7 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		// fresh scope without reopening anything.
 		if msg.set.OK() {
 			set := msg.set
-			m.filesPreviewSet, m.filesPreviewCounts = &set, msg.counts
+			m.filesPreviewSet, m.filesPreviewCounts, m.filesPreviewGroups = &set, msg.counts, msg.groups
 			m = m.setPreviewReviews(msg.heads)
 		}
 		return m, nil
@@ -206,6 +207,7 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		set := msg.set
 		m.filesPreviewSet = &set
 		m.filesPreviewCounts = msg.counts
+		m.filesPreviewGroups = msg.groups
 		m.filesPreviewReviews = msg.heads
 	}
 	m.filesLandNote = msg.landNote
