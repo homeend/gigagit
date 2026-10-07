@@ -23,7 +23,7 @@ function reviewTitle() {
 }
 
 
-async function startReview(target, branch, sha) {
+async function startReview(target, branch, sha, preview) {
   if (rev) {
     // Parked: the overlay is not on screen, so a silent refusal here looks
     // like the menu row does nothing. The parked run may be the OTHER mode
@@ -42,7 +42,8 @@ async function startReview(target, branch, sha) {
   try {
     const q = "?target=" + encodeURIComponent(target) +
       (branch ? "&branch=" + encodeURIComponent(branch) : "") +
-      (sha ? "&sha=" + encodeURIComponent(sha) : "");
+      (sha ? "&sha=" + encodeURIComponent(sha) : "") +
+      (preview ? "&preview=" + encodeURIComponent(preview) : "");
     info = await getJSON("/api/review/tools" + q);
   } catch (e) {
     opLine("review: " + (e.message || e), true);
@@ -55,7 +56,7 @@ async function startReview(target, branch, sha) {
     opLine('review: no review tool configured — add a [[tools.command]] block with category = "review"', true);
     return;
   }
-  rev = { mode: "review", target, branch, sha, label: info.label, tools, sel: 0, phase: "choose", tool: null };
+  rev = { mode: "review", target, branch, sha, preview, label: info.label, tools, sel: 0, phase: "choose", tool: null };
   pushLayer("review", $("review"), { onKey: reviewKey });
   if (tools.length === 1) reviewPick(tools[0]);
   else renderReview();
@@ -113,7 +114,7 @@ function reviewPick(tool) {
 
 async function reviewRun(approve) {
   if (!rev) return;
-  const { target, branch, sha, tool } = rev;
+  const { target, branch, sha, preview, tool } = rev;
   const isConflict = rev.mode === "conflict";
   rev.phase = "running";
   renderReview();
@@ -121,7 +122,7 @@ async function reviewRun(approve) {
   try {
     resp = await postJSON(
       isConflict ? "/api/conflict/complete" : "/api/review",
-      isConflict ? { tool: tool.name, approve: !!approve } : { target, branch, sha, tool: tool.name, approve: !!approve }
+      isConflict ? { tool: tool.name, approve: !!approve } : { target, branch, sha, preview, tool: tool.name, approve: !!approve }
     );
   } catch (e) {
     // Most often a 403: the server does not consider this command approved,
@@ -494,4 +495,9 @@ function openReport(title, noteId, content, doc, unsaved) {
 $("report-close").addEventListener("click", () => closeLayer("report"));
 
 $("report-copy").addEventListener("click", () => copyText($("report-body").textContent, "the report"));
+// previews.js starts a preview review through this hand-off (the
+// __ggAddPreview precedent): importing review.js there would close a cycle
+// through ops.js.
+window.__ggStartReview = startReview;
+
 export { closeReviewLane, collectTask, openReport, parkReview, renderReview, renderTaskChip, rev, reviewCancel, reviewConfirm, reviewDone, reviewKey, reviewPick, reviewRun, reviewTitle, startConflictAI, startReview, unparkReview };

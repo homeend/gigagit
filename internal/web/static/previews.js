@@ -15,6 +15,10 @@ import { extraRows, registerHelp, registerRows } from "./menus.js";
 import { copyLink, previewRowLink } from "./links.js";
 import { openLinkCompareDialog, runLinkCompare } from "./linkcompare.js";
 import { isCollapsed, toggleSection } from "./sidebar.js";
+// reviews.js reaches previews.js only through ops.js (the cycle this module
+// already has with ops.js); every name is a hoisted function called from a
+// handler, so evaluation order cannot bite.
+import { openReview, previewReviewText, reviewMenu } from "./reviews.js";
 
 // fetchPreviews loads the list and renders it. A failure leaves an EMPTY list
 // rather than the previous one: a stale row invites a click that opens a pair
@@ -145,8 +149,18 @@ function savedRowHTML(e) {
     (e.kind === "pair" ? `<span class="psub">${esc(pairStateText(e))}</span>` : "") +
     // The pair's review-note total — the merge rows' badge, one painter.
     (e.kind === "pair" ? noteBadgeHTML(e.notes) : "") +
-    `</li>`
+    `</li>` +
+    (e.kind === "pair" ? reviewSubRows(e) : "")
   );
+}
+
+// reviewSubRows paints a row's AI reviews under it (spec R3), the Branches
+// sub-row's shape: no data-id and not draggable, so every preview handler and
+// drag & drop pass them by; data-review routes click and right-click.
+function reviewSubRows(e) {
+  return (e.reviews || [])
+    .map((r) => `<li class="brev" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(previewReviewText(r))}</li>`)
+    .join("");
 }
 
 function renderPreviews() {
@@ -166,7 +180,8 @@ function renderPreviews() {
         // files.js's noteBadgeHTML — one badge painter for every list, so a
         // preview row can never drift from a file row.
         noteBadgeHTML(e.notes) +
-        `</li>`
+        `</li>` +
+        reviewSubRows(e)
     )
     // Merge previews first, then pairs, then comparisons (the server's order).
     .concat((state.savedCompares || []).map(savedRowHTML))
@@ -234,7 +249,10 @@ function armPreview(body) {
   // list; loadPreviewCounts fills them in again a moment later. Re-arming the
   // same pair (a tip that moved) keeps the numbers standing meanwhile, so the
   // badges do not blink off on every refresh.
-  if (!samePair) state.previewCounts = null;
+  if (!samePair) {
+    state.previewCounts = null;
+    state.previewReviews = [];
+  }
   // /api/preview/notes resolves branch NAMES; a PR's would 404 (a fork) or,
   // worse, read a same-named local pair's notes — a PR asks by its number.
   if (state.previewOpen.pr) loadPRCounts(state.previewOpen.pr);
@@ -273,6 +291,7 @@ async function loadPreviewCounts(source, target) {
   const po = state.previewOpen;
   if (!po || po.source !== source || po.target !== target) return; // superseded
   state.previewCounts = d.counts || {};
+  state.previewReviews = d.reviews || [];
   renderFiles();
 }
 
@@ -535,6 +554,9 @@ window.__ggSymmetricPreview = (a, b) => symmetricPreviewFlow(a, b);
 // The sidebar header's + control starts the flow. sidebar.js cannot import
 // this module (the cycle above), so the handle goes through the window.
 window.__ggAddPreview = addPreviewFlow;
+// reviews.js returns to a preview (esc from a review opened in its Reviews
+// block) through this: importing previews.js there would close a cycle.
+window.__ggOpenPreviewForPair = openPreviewForPair;
 
 
 async function removePreview(e) {
@@ -559,6 +581,17 @@ async function removePreview(e) {
 }
 
 
+// reviewRows are a row's AI-review menu rows: "review (AI)…" while the
+// preview is previewable (the server refuses the rest anyway), "show review"
+// when it has a review of its current tip.
+function reviewRows(e) {
+  const rows = [];
+  if (e.state === "ok") rows.push({ label: "review (AI)…", act: () => window.__ggStartReview("preview", "", "", e.id) });
+  const cur = (e.reviews || []).find((r) => !r.older);
+  if (cur) rows.push({ label: "show review", act: () => openReview(cur.id, { kind: "list" }) });
+  return rows;
+}
+
 function showPreviewMenu(e, x, y) {
   const items = [
     { label: "open merge preview", act: () => openPreviewEntry(e) },
@@ -580,6 +613,7 @@ function showPreviewMenu(e, x, y) {
         }),
     },
     { label: "save reversed (" + e.target + " → " + e.source + ")", act: () => savePreview(e.target, e.source, "", false) },
+    ...reviewRows(e),
   ];
   items.push(...extraRows("preview", e));
   items.push(...compareWithRows(e));
@@ -662,6 +696,7 @@ function showPairMenu(e, x, y) {
       { label: "rename…", act: () => renameSaved(e) },
       { label: "save reversed (" + e.b.slice(0, 8) + ".." + e.a.slice(0, 8) + ")", act: () => saveSaved({ a: e.b, b: e.a, label: "" }) },
       { label: "copy gg link", act: () => copyLink(e.link, e.desc) },
+      ...reviewRows(e),
       ...compareWithRows(e),
       { sep: true },
       { label: "remove pair", danger: true, act: () => confirmRemoveSaved(e, "pair") },
@@ -713,6 +748,8 @@ function findRow(id, kind) {
 
 $("previews-list").addEventListener("click", (ev) => {
   const li = ev.target.closest("li");
+  // A review sub-row opens its review (it has no data-id: no preview handler).
+  if (li && li.dataset.review) return openReview(li.dataset.review, { kind: "list" });
   if (!li || !li.dataset.id) return;
   const e = rowEntry(li);
   if (!e) return;
@@ -722,6 +759,12 @@ $("previews-list").addEventListener("click", (ev) => {
 
 $("previews-list").addEventListener("contextmenu", (ev) => {
   const li = ev.target.closest("li");
+  // A review sub-row's menu is the review row menu (R6): open, copy, delete.
+  if (li && li.dataset.review) {
+    ev.preventDefault();
+    const rid = li.dataset.review;
+    return reviewMenu(rid, ev.clientX, ev.clientY, () => openReview(rid, { kind: "list" }));
+  }
   if (!li || !li.dataset.id) return;
   ev.preventDefault();
   const e = rowEntry(li);
@@ -904,7 +947,14 @@ export async function reopenPreviewIfMoved() {
     }
     // Both sides are rev-parse output here (the row comes from the server),
     // so this is a plain comparison — sameHash only matters for tipOf.
-    if (sameHash(row.source_hash, po.sourceHash) && sameHash(row.target_hash, po.targetHash)) return;
+    if (sameHash(row.source_hash, po.sourceHash) && sameHash(row.target_hash, po.targetHash)) {
+      // The tips did not move, but the reviews may have (a review run that
+      // finished, one deleted): the row carries them, so the open preview's
+      // Reviews block takes them without another fetch.
+      state.previewReviews = row.reviews || [];
+      renderFiles();
+      return;
+    }
     await openPreviewEntry(row, sameHash(row.source_hash, po.sourceHash) ? po.target : po.source);
     return;
   }
@@ -914,7 +964,10 @@ export async function reopenPreviewIfMoved() {
   // answers with the real state.
   const s = tipOf(po.source);
   const t = tipOf(po.target);
-  if (s && t && sameHash(s, po.sourceHash) && sameHash(t, po.targetHash)) return;
+  if (s && t && sameHash(s, po.sourceHash) && sameHash(t, po.targetHash)) {
+    loadPreviewCounts(po.source, po.target); // no row to read: re-read the badges and the Reviews block
+    return;
+  }
   // Name the moved ref only when both tips are actually known here; otherwise
   // the re-open speaks for itself (and stays silent if nothing changed).
   const moved = s && t ? (sameHash(s, po.sourceHash) ? po.target : po.source) : "";
@@ -936,5 +989,12 @@ registerHelp({
     "save…</b>; <b>compare with…</b> in the row's menu is the same without a drag. A <b>symmetric " +
     "merge preview</b> (the menu's <b>new symmetric merge preview…</b>, or drag one branch onto " +
     "another) compares what two branches would each bring into a base you name — saved as one " +
-    "<b>sym</b> row; its menu also opens either side's merge preview",
+    "<b>sym</b> row; its menu also opens either side's merge preview. Right-click a merge preview " +
+    "or a commit pair → <b>review (AI)…</b>: an agent reviews the whole preview as ONE document " +
+    "(an overview, then remarks per file), stored with the preview; <b>show review</b> opens the " +
+    "newest one. A preview's reviews list under it (<b>└ Review:</b> date agent tally, <b>· older " +
+    "tip</b> once the preview has moved on — it still opens exactly what was reviewed; hidden once " +
+    "its commits are gone): click opens the review, right-click → open / copy gg link / delete. " +
+    "The opened preview lists them under <b>Reviews</b> above its files, and back from a review " +
+    "returns to the preview",
 });

@@ -88,6 +88,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+- **Web: preview reviews where the preview lives.** The sidebar's Previews
+  list shows a merge preview's or commit pair's AI reviews as sub-rows
+  (`· older tip` for a review of a tip the preview has moved past; hidden
+  once its commits are gone); click opens it, right-click is Open review /
+  Copy gg link / Delete review. A preview's or pair's right-click menu gains
+  **review (AI)…** (started by the saved row's id, which the server looks up
+  itself — no ref name comes from the page) and **show review**. The opened
+  preview lists its reviews under **Reviews**; back from one returns to the
+  preview with its row selected (or to the list, with a notice, when the
+  preview no longer opens). The review view's title names the preview and
+  says `older tip`. A stored review emits `notes` once its run ends, so every
+  open page shows it; a review link re-reads the counts and previews first.
 - **TUI: preview reviews where the preview lives.** The Previews list shows
   a merge preview's or commit pair's AI reviews as sub-rows under it
   (`└ Review: <date> <agent> <tally>`, `· older tip` for a review of a tip the

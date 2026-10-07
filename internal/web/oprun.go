@@ -151,6 +151,12 @@ func (s *Server) runOpStream(ctx context.Context, run *opRun, fn runFunc) {
 	}
 	run.finish(done)
 	run.cancel()
+	// A run that stored a note (the review lane) tells every open page, so
+	// their ✎, review sub-rows and Previews rows re-read. Only after finish:
+	// the hub drops emits while a run is in flight.
+	if id, _ := extra["noteId"].(string); id != "" {
+		s.emitNotes()
+	}
 }
 
 // toWire maps an engine event to its SSE shape. engine.Done and Timing are

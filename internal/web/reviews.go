@@ -30,6 +30,9 @@ type reviewHeadWire struct {
 	// Remarks / Resolved: the review row's tally.
 	Remarks  int `json:"remarks"`
 	Resolved int `json:"resolved"`
+	// Older marks a preview review of a tip its preview has since moved
+	// past (domain classifies it; spec R2). Absent on every other review.
+	Older bool `json:"older,omitempty"`
 }
 
 func wireTime(t time.Time) string {
@@ -44,7 +47,7 @@ func reviewHeads(hs []domain.ReviewHead) []reviewHeadWire {
 	out := make([]reviewHeadWire, 0, len(hs))
 	for _, h := range hs {
 		out = append(out, reviewHeadWire{ID: h.ID, Commit: h.Commit, Branch: h.Branch, Agent: h.Agent, Summary: h.Summary, Created: wireTime(h.Created),
-			Remarks: h.Remarks, Resolved: h.Resolved})
+			Remarks: h.Remarks, Resolved: h.Resolved, Older: h.Older})
 	}
 	return out
 }
@@ -114,10 +117,16 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	if rv.Kind == domain.ReviewOnWorktree {
 		label = "working changes"
 	}
+	if rv.Preview != "" {
+		// A preview's review is named by its preview (the TUI's header).
+		label = domain.NoteScopeLabel(rv.Preview)
+	}
 	out := map[string]any{
 		"id": rv.ID, "agent": rv.Agent, "created": wireTime(rv.Created), "branch": rv.Branch,
 		"commit": rv.Commit, "label": label, "structured": rv.Doc != nil, "text": rv.Text,
 		"base": "", "tip": rv.Commit, "range": false,
+		// older: a preview review of a tip its preview has since moved past.
+		"older": svc.ReviewOlder(ctx, rv),
 		"files": []map[string]string{}, "counts": map[string]int{}, "summaries": map[string]string{},
 		"meta": "", "notes": 0, "note_files": 0, "other": []map[string]string{},
 	}
