@@ -5525,6 +5525,26 @@ Spec `docs/superpowers/specs/2026-10-07-preview-reviews-design.md`, plan 1
   `· older tip`. `applyReviewResult` and `onReviewHint` also chain a previews
   read: the srcNotes arrival only chains one while the Previews tab or a
   preview is on screen.
+- **Web (plan 3,
+  `docs/superpowers/plans/2026-10-07-preview-reviews-3-web.md`).**
+  `reviewHeadWire.Older` (omitempty); `reviews` (never null) on `/api/preview`
+  entries (`PreviewReviews`, or `PreviewReviewsByScope` for a non-OK row), on
+  pair entries of `/api/saved-compares`, and on `/api/preview/notes` +
+  `/api/pair/notes` (none for a scoped pair read). `target=preview&preview=<id>`
+  → `previewReviewTarget`: the ID is looked up in `PreviewList`/`PairList`
+  only — NOT `NoteScopeResolve`, which also takes labels and `a...b` literals
+  (P3-R2) — and a non-OK set is a 400. `/api/review/{id}` labels a preview
+  review with `NoteScopeLabel` and adds `older` (`ReviewOlder`).
+  `runOpStream` emits `notes` AFTER `run.finish` when the done payload has a
+  `noteId`: the live hub drops emits while a run is in flight. Page:
+  `previewReviewText` (pure), `reviewSubRows` (`li.brev[data-review]`, no
+  data-id → preview handlers and drag skip it), `reviewRows` (menu; start via
+  `window.__ggStartReview` — review.js → ops.js → previews.js would close a
+  cycle), `state.previewReviews` from the two counts fetches,
+  `previewScopeReviews` (none for a PR or `p.scope`), `previewBack` → back
+  kinds `preview` (`window.__ggOpenPreviewForPair`; falls back to the list
+  when the preview no longer opens) and `pair` (`runLinkCompare("a=…&b=…")`).
+  live.js re-reads counts + previews before a review hint opens.
 
 ## Working-changes reviews (2026-10-05)
 

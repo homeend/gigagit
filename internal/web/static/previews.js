@@ -979,5 +979,12 @@ registerHelp({
     "save…</b>; <b>compare with…</b> in the row's menu is the same without a drag. A <b>symmetric " +
     "merge preview</b> (the menu's <b>new symmetric merge preview…</b>, or drag one branch onto " +
     "another) compares what two branches would each bring into a base you name — saved as one " +
-    "<b>sym</b> row; its menu also opens either side's merge preview",
+    "<b>sym</b> row; its menu also opens either side's merge preview. Right-click a merge preview " +
+    "or a commit pair → <b>review (AI)…</b>: an agent reviews the whole preview as ONE document " +
+    "(an overview, then remarks per file), stored with the preview; <b>show review</b> opens the " +
+    "newest one. A preview's reviews list under it (<b>└ Review:</b> date agent tally, <b>· older " +
+    "tip</b> once the preview has moved on — it still opens exactly what was reviewed; hidden once " +
+    "its commits are gone): click opens the review, right-click → open / copy gg link / delete. " +
+    "The opened preview lists them under <b>Reviews</b> above its files, and back from a review " +
+    "returns to the preview",
 });
