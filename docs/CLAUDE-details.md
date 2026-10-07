@@ -5702,13 +5702,17 @@ Spec `docs/superpowers/specs/2026-10-07-cross-review-design.md`, plan
   headless review template must set one (`TestReviewAgentsHaveAModelFlag`).
   No template TEXT carries a model, so the golden version guard is untouched.
 - **`<model>` wins over the flag**: `domain.ResolveReviewCommand` fills a
-  `<model>` slot when the command has one, else appends the agent's flag +
+  `<model>` / `<model:FLAG>` slot when the command has one (`<model:FLAG>`
+  drops the flag with the model, like `<prompt:FLAG>`), else appends the agent's flag +
   `template.QuoteArg(model)`, else `ErrNoModelSupport` (exit 2). An empty
   model adds nothing; `<model>` without one vanishes.
 - **`RunReview` stores nothing**; `ReviewReport` = `runReview` + `SaveReview`.
   `--no-save --json` prints the canonical document; prose → exit 1 with the
   text on stderr (a caller must tell "failed" from "reviewed").
-- **`--link`** shares `review save`'s resolver: `resolveLinkArg` →
+- **Model names** may not hold `"`, `%` or a line break (cmd.exe quoting,
+  a new shell line) — refused in the CLI before resolving.
+- **`--link`** refuses `--notes` (the notes import needs the preview's own
+  diff spec and scope, which only `--preview` sets). It shares `review save`'s resolver: `resolveLinkArg` →
   `openLinkTarget` → `LinkReviewTarget`; the tool runs in the link's
   `Checkout` (`<repo>` too), the review is stored there.
 - `ToolAgentID` (was `agentIDFor`) maps a command to a built-in agent by its

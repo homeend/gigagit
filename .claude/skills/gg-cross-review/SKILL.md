@@ -37,14 +37,17 @@ review in gg. Do NOT launch gg's TUI or `gg web`; they belong to the user.
    user to add your headless review tool (gg Settings → External tools,
    category review) and stop.
 5. **Run the reviewers in parallel.** Make a scratch directory
-   (`mktemp -d`) and start one command per model, each as a background task
-   (Claude Code: run it in the background; a shell: `&`, then `wait`):
+   (`mktemp -d`) and start one command per model — reviewer 1, 2, 3 — each
+   as a background task (Claude Code: run it in the background; a shell:
+   `&`, then `wait`). Quote the model (names like `sonnet[1m]` are shell
+   globs) and name the files by NUMBER, not by model:
 
-       gg review --tool <tool> --model <model> --link <link> --no-save --json > <dir>/<model>.json 2> <dir>/<model>.err
+       gg review --tool "<tool>" --model "<model>" --link "<link>" --no-save --json > <dir>/r1.json 2> <dir>/r1.err
 
    One review takes minutes: never make a blocking call your client will
    time out. Wait until all have finished. A non-zero exit is a failed
-   reviewer — keep its `.err` for the summary. None succeeded → report the
+   reviewer — keep its `.err` for the summary. Remember which number ran
+   which model. None succeeded → report the
    errors and stop. Each `.json` is a review document (the shape is in the
    reviewing-with-gg skill's "Review document" section).
 6. **Merge** them into ONE review document — see **Merging**.

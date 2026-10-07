@@ -272,7 +272,7 @@ func TestGGCrossReviewFrontmatter(t *testing.T) {
 	t.Parallel()
 	f := GGCrossReview.SkillFile()
 	for _, want := range []string{"name: gg-cross-review\n", "argument-hint: \"<gg-link> [2|3] [what to focus on]\"\n", "disable-model-invocation: true\n",
-		"gg review --tools --json", "--no-save --json", "--link", "--model", "## Disagreements resolved", "## Reviewers", "gg review save", "raised_by", "--dry-run"} {
+		"gg review --tools --json", "--no-save --json", "--link", "--model", "## Disagreements resolved", "## Reviewers", "gg review save", "raised_by", "--dry-run", `--model "<model>"`, "<dir>/r1.json"} {
 		if !strings.Contains(f, want) {
 			t.Fatalf("gg-cross-review SKILL.md lacks %q", want)
 		}

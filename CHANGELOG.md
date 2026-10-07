@@ -19,8 +19,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg review save`. Run `gg init --update` to install it.
 - **`gg review --model <m>`** runs the review tool on a model: gg adds the
   agent's own flag (Claude `--model`, Codex `-m`, Junie `--model=`, Kimi
-  `-m`, Antigravity `--model`) or fills `<model>` in a custom command; a
-  tool with neither refuses it.
+  `-m`, Antigravity `--model`) or fills `<model:FLAG>` / `<model>` in a
+  custom command; a tool with neither refuses it, and a model name holding
+  `"`, `%` or a line break is refused.
 - **`gg review --link <gg-link>`** reviews what a link names, as
   `gg review save` does; **`--no-save [--json]`** prints the review (the
   document JSON) and stores nothing; **`gg review --tools [--json]`** lists

@@ -100,9 +100,13 @@ func resolveCommandToken(body string, inputs map[string]string, ctx CmdCtx, goos
 		return q, nil
 	case "model":
 		if ctx.Model == "" {
-			return "", nil // the tool's default model: the slot vanishes
+			return "", nil // the tool's default model: the slot vanishes, flag and all
 		}
-		return quoteArgFor(ctx.Model, goos), nil
+		q := quoteArgFor(ctx.Model, goos)
+		if hasColon && rest != "" {
+			return rest + " " + q, nil // <model:--model>: the flag only with a model
+		}
+		return q, nil
 	case "bin":
 		return "", fmt.Errorf("template: <bin> is resolved when the command is generated — replace it with the tool binary")
 	case "env":

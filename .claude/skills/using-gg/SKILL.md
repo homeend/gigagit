@@ -71,10 +71,11 @@ guards against removing the worktree you are standing in.
   picks among configured `review` commands when more than one is set up.
   `--model <m>` runs the tool on that model: gg adds the agent's own flag
   (Claude `--model`, Codex `-m`, Junie `--model=`, Kimi `-m`, Antigravity
-  `--model`) or fills `<model>` in a custom command; a tool with neither
-  refuses it (exit 2); gg does not check the name — the agent's CLI does.
+  `--model`) or fills `<model:FLAG>` / `<model>` in a custom command; a
+  tool with neither refuses it (exit 2); gg does not check the name — the
+  agent's CLI does — but refuses a `"`, `%` or line break in it.
   `--link <gg-link>` reviews what the link names, as `gg review save` does
-  (not with `--working`, `--preview` or a positional). `--no-save` prints the
+  (not with `--working`, `--preview`, `--notes` or a positional). `--no-save` prints the
   review and stores nothing; with `--json` stdout is the review document
   itself, and a reply that is not one exits 1 with the text on stderr
   (`--json` needs `--no-save`; `--no-save` refuses `--notes`).

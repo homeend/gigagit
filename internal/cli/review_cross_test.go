@@ -114,6 +114,7 @@ func TestReviewFlagConflicts(t *testing.T) {
 		{"--link", "gg://x", "HEAD"},
 		{"--link", "gg://x", "--preview", "main...main"},
 		{"--no-save", "--notes", "HEAD"},
+		{"--link", "gg://x", "--notes"},
 	} {
 		if code, _, errb := runCLI(t, dir, append([]string{"review", "--tool", "Echo"}, args...)...); code != 2 {
 			t.Errorf("%v: exit=%d stderr=%s", args, code, errb)
@@ -244,5 +245,20 @@ func TestReviewNoSaveRunsConcurrently(t *testing.T) {
 	}
 	if d := time.Since(start); d > 1900*time.Millisecond {
 		t.Fatalf("the two reviews took %v — they waited on each other", d)
+	}
+}
+
+// A model name is one argument on every system: a double quote, a percent
+// sign or a line break would escape cmd.exe's quoting, so they are refused.
+func TestReviewModelNameIsChecked(t *testing.T) {
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	writeReviewTool(t, dir, "Slot", `printf '{"version":1,"summary":"M <model>","files":[]}' > "$GG_MESSAGE_FILE"`)
+	for _, m := range []string{`a"b`, "50%", "a\nb"} {
+		code, _, errb := runCLI(t, dir, "review", "--tool", "Slot", "--model", m, "--no-save", "--json", "HEAD")
+		if code != 2 || !strings.Contains(errb, "model name") {
+			t.Errorf("%q: exit=%d stderr=%s", m, code, errb)
+		}
 	}
 }

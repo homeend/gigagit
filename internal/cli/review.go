@@ -68,6 +68,14 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 	case *noSave && *wantNotes:
 		fmt.Fprintln(stderr, "gg review: --notes stores notes; it does not apply to --no-save")
 		return 2
+	case *linkArg != "" && *wantNotes:
+		fmt.Fprintln(stderr, "gg review: --notes does not apply to --link; use --preview, --working or a <rev> to import notes")
+		return 2
+	case strings.ContainsAny(*modelName, "\"%\r\n"):
+		// cmd.exe would end the quoting at a " or expand a %…%; a line
+		// break would start a new command anywhere.
+		fmt.Fprintf(stderr, "gg review: model name %q may not hold a double quote, %% or a line break\n", *modelName)
+		return 2
 	}
 	if *working && fs.NArg() >= 1 {
 		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
