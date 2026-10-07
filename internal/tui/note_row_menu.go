@@ -283,6 +283,38 @@ func (m Model) reviewRemarkLinkRow() (actionRow, bool) {
 	return actionRow{}, false
 }
 
+// reviewRemarkLinkAtCursorRow is what L copies on a review remark: the remark
+// link, but only for a remark whose lines hold the cursor line and with no
+// multi-line selection — a marked range, or the line under a remark, keeps
+// the ordinary link.
+func (m Model) reviewRemarkLinkAtCursorRow() (actionRow, bool) {
+	v, ok := m.topLayer().(*diffView)
+	if !ok || v.reviewID == "" || m.linkSelectionLines() > 1 {
+		return actionRow{}, false
+	}
+	row, ok := v.cursorRow()
+	if !ok {
+		return actionRow{}, false
+	}
+	for _, t := range replyableNoteTargets(m.notesAtCursor()) {
+		if !model.IsReviewNoteID(t.rootID) {
+			continue
+		}
+		no := row.RightNo
+		if t.side == model.NoteSideOld {
+			no = row.LeftNo
+		}
+		first := t.first
+		if first == 0 {
+			first = t.line
+		}
+		if no >= first && no <= t.line {
+			return m.reviewRemarkLinkRow()
+		}
+	}
+	return actionRow{}, false
+}
+
 // branchReviewCopyLinkRow is a Branches review sub-row's "Copy gg link".
 func (m Model) branchReviewCopyLinkRow() (actionRow, bool) {
 	if m.focus != panelBranches || m.inContentWindow() || m.svc == nil {

@@ -3742,7 +3742,9 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   // commit while the PLACE on screen is the pair, and the two menus must not
   // disagree about the same row. A reply carries its root's inherited
   // side/line on the wire (domain.ToWireNote), so it needs no special case.
-  const rootId = n.parent_id ? (state.notes.find((x) => (x.replies || []).some((r) => r.id === n.id)) || n).id : n.id;
+  // The stacked view keeps no state.notes: a reply then falls back to its
+  // parent id (threads are one level deep).
+  const rootId = n.parent_id ? (state.notes.find((x) => (x.replies || []).some((r) => r.id === n.id)) || {}).id || n.parent_id : n.id;
   const foldRow = {
     label: (state.noteCollapsed.has(rootId) ? "Expand" : "Collapse") + " thread",
     hint: "z",

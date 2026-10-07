@@ -1138,7 +1138,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// exact payload off the row's copyText (there is no seam under
 		// copyToClipboardCmd itself). On a review remark L copies the
 		// remark's review link — the menu's "Copy remark link".
-		if r, ok := m.reviewRemarkLinkRow(); ok {
+		if r, ok := m.reviewRemarkLinkAtCursorRow(); ok {
 			nm, cmd := r.run(m)
 			return nm.(Model), cmd
 		}

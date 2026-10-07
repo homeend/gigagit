@@ -182,3 +182,51 @@ func TestReviewRemarkLKeyCopiesTheRemarkLink(t *testing.T) {
 		t.Fatalf("L copied %q (notice %q)", got, nm.diffNotice)
 	}
 }
+
+// L copies the remark link only for the remark ON the cursor line, with no
+// multi-line selection: the line under a remark, or a marked range, keeps
+// the ordinary link.
+func TestReviewRemarkLKeyOnlyOnTheRemarkLine(t *testing.T) {
+	t.Parallel()
+	doc := `{"version":1,"summary":"s","files":[{"path":"a.go","annotations":[{"newRange":[1,1],"summary":"on 1"}]}]}`
+	m, _ := reviewViewModel(t, doc)
+	u, cmd := m.openReview(mustReviewID(t, m), "Review")
+	m = drainCmds(t, u, cmd)
+	m = openReviewDiff(t, m, "a.go")
+	v := m.diffLayer()
+	var got string
+	m = captureClip(m, &got)
+	// The cursor on new line 2, just below the remark's line.
+	for i := 0; i < 40; i++ {
+		if row, ok := v.cursorRow(); ok && row.RightNo == 2 {
+			break
+		}
+		v.setCursorLine(i, m.diffBodyRows())
+	}
+	if row, ok := v.cursorRow(); !ok || row.RightNo != 2 {
+		t.Fatalf("could not place the cursor on line 2 (%+v)", row)
+	}
+	nm, c2 := v.update(m, synthKey("L"))
+	drainCmds(t, nm, c2)
+	if strings.Contains(got, "?review=") {
+		t.Fatalf("L below the remark copied the remark link %q", got)
+	}
+	// A multi-line selection starting on the remark's line.
+	got = ""
+	li, _ := v.noteAnchorLine(v.notes[0])
+	selectRows(v, li, li+1)
+	nm, c2 = v.update(m, synthKey("L"))
+	drainCmds(t, nm, c2)
+	if strings.Contains(got, "?review=") {
+		t.Fatalf("L over a selection copied the remark link %q", got)
+	}
+}
+
+func mustReviewID(t *testing.T, m Model) string {
+	t.Helper()
+	rs, err := m.svc.ReviewsForCommit(context.Background(), m.commits[0].Hash)
+	if err != nil || len(rs) == 0 {
+		t.Fatalf("no review: %v", err)
+	}
+	return rs[0].ID
+}

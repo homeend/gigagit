@@ -141,7 +141,12 @@ func (m Model) openReviewLanding(id, title string, back model.Commit, bp *previe
 // parked (handOffToFilesView), so esc from the view returns to it.
 func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 	if !m.hasReviewLoading(msg.gen) {
-		return m, nil // cancelled (esc on the loading box), or superseded
+		// Cancelled (esc on the loading box), or superseded. A landing it
+		// carried is answered: its sender must not wait for nothing.
+		if msg.land != nil {
+			return m, m.answerSteer(*msg.land, steerFail(*msg.land, "the review did not open (cancelled)"))
+		}
+		return m, nil
 	}
 	m = m.dropReviewLoading()
 	var landFail tea.Cmd // the answer to a landing that cannot happen
@@ -168,6 +173,13 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 		return m, tea.Batch(cmd, landFail)
 	}
 	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back, backPreview: msg.backPrev, older: msg.older}
+	// landErr answers a landing whose review could not open its files.
+	landErr := func(err error) tea.Cmd {
+		if msg.land == nil {
+			return nil
+		}
+		return m.answerSteer(*msg.land, steerFail(*msg.land, "the review did not open: "+err.Error()))
+	}
 	open := func(m Model) (Model, tea.Cmd) {
 		var cmd tea.Cmd
 		switch {
@@ -177,7 +189,7 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 			left, lerr := model.CommitEndpoint(msg.base)
 			if lerr != nil {
 				m.statusMsg = i18n.T("review: %s", lerr.Error())
-				return m, nil
+				return m, landErr(lerr)
 			}
 			m.compareTag = ""
 			m, cmd = m.openCompareFiles(left, model.WorkTreeEndpoint())
@@ -186,7 +198,7 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 			right, rerr := model.CommitEndpoint(msg.tip)
 			if lerr != nil || rerr != nil {
 				m.statusMsg = i18n.T("review: %s", fmt.Sprint(lerr, rerr))
-				return m, nil
+				return m, landErr(fmt.Errorf("%v %v", lerr, rerr))
 			}
 			m.compareTag = "" // a compare of the same pair re-reads for the review mode
 			m, cmd = m.openCompareFiles(left, right)

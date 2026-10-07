@@ -80,6 +80,8 @@ var reviewLinkRowsWiring = []struct{ file, want, why string }{
 	{"files.js", `"/link?n="`, "the remark link is the server's"},
 	{"files.js", "copy remark id", "a remark copies the id gg note reply takes"},
 	{"live.js", "await openNamedFile(state.files, s, \"review \"", "a review link with a file lands on it"},
+	{"live.js", "await landLine(s)", "a review link with a line lands on the line, as every navigate does"},
+	{"files.js", "|| n.parent_id", "a reply's thread root falls back to its parent (the stacked view keeps no state.notes)"},
 }
 
 func TestReviewLinkRowsAreWired(t *testing.T) {
