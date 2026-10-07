@@ -184,10 +184,10 @@ ibar.className = "hidden";
 $("compare-bar").after(ibar);
 const ibarCSS = document.createElement("style");
 ibarCSS.textContent = `
-#pr-interrupted { display: flex; gap: 10px; align-items: baseline; padding: 4px 10px; background: var(--attn-warn); border-bottom: 1px solid var(--border); }
+#pr-interrupted { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; padding: 4px 10px; background: var(--attn-warn); border-bottom: 1px solid var(--border); }
 #pr-interrupted.hidden { display: none; }
-#pr-interrupted span { flex: 1 1 auto; }
-#pr-interrupted button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px; font: inherit; cursor: pointer; }
+#pr-interrupted span { flex: 1 1 100%; }
+#pr-interrupted button { white-space: nowrap; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px; font: inherit; cursor: pointer; }
 #pr-interrupted button:hover { border-color: var(--accent); }
 `;
 document.head.append(ibarCSS);

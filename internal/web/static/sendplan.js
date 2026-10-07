@@ -36,7 +36,8 @@ export function sendConfirmHTML(plan, esc) {
   let h = `<div class="sc-target">Send to <b>${esc(p.target || "")}</b></div>`;
   if (p.mode === "finish") h += `<div class="sc-note">finish the interrupted send: submit the review it left pending on GitHub</div>`;
   if (p.mode === "discard") h += `<div class="sc-note">discard the interrupted send: delete the review it left pending — none of it is posted</div>`;
-  if (p.has_pending) h += `<div class="sc-note">you have a review pending on GitHub: these comments join it</div>`;
+  // A review joining the user's own pending one says so (finish/discard ARE that review).
+  if (p.has_pending && p.mode === "review") h += `<div class="sc-note">you have a review pending on GitHub: these comments join it</div>`;
   if (p.body) h += `<div class="sc-label">review body</div><pre class="sc-body">${esc(p.body)}</pre>`;
   const items = p.items || [];
   if (items.length && p.mode !== "finish" && p.mode !== "discard") {

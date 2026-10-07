@@ -35,7 +35,7 @@ const plan = { target: "o/r #7", mode: "review", verdict: true, body: "line1\n<b
   skipped: [{ label: "b.go:3 old", reason: "its lines changed" }] };
 const html = sendConfirmHTML(plan, esc);
 const ev = sendDecision({ id: "forge.send", prompt: "Send to …", options: ["comment", "approve", "request-changes", "abort"] }, plan, esc);
-const finish = sendConfirmHTML({ target: "o/r #7", mode: "finish", items: [], skipped: [] }, esc);
+const finish = sendConfirmHTML({ target: "o/r #7", mode: "finish", has_pending: true, items: [{ label: "k1" }], skipped: [] }, esc);
 console.log(JSON.stringify({ html, finish, labels: ev.labels, evhtml: ev.html === html, cap: SEND_CONFIRM_CAP,
   pending: sendOptionLabel("submit-with-pending"), abort: sendOptionLabel("abort"), odd: sendOptionLabel("odd") }));
 `
@@ -64,8 +64,8 @@ console.log(JSON.stringify({ html, finish, labels: ev.labels, evhtml: ev.html ==
 	if strings.Contains(got.HTML, "remark 30") || strings.Contains(got.HTML, "<b>x") {
 		t.Errorf("not capped or not escaped:\n%s", got.HTML)
 	}
-	if !strings.Contains(got.Finish, "interrupted send") {
-		t.Errorf("a finish confirm says what it finishes:\n%s", got.Finish)
+	if !strings.Contains(got.Finish, "interrupted send") || strings.Contains(got.Finish, "join it") {
+		t.Errorf("a finish confirm says what it finishes, and nothing about joining:\n%s", got.Finish)
 	}
 	if got.Labels["request-changes"] != "Request changes" || got.Labels["abort"] != "Cancel" || got.Labels["comment"] != "Comment" || !got.EvHTML || got.Cap != 30 {
 		t.Errorf("labels = %v evhtml %v cap %d", got.Labels, got.EvHTML, got.Cap)
