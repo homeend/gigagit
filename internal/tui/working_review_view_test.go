@@ -122,3 +122,35 @@ func blobOfForTest(s string) string {
 	h.Write([]byte(s))
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+// A working review's file rows copy their review link too (the plain Copy
+// link has nothing to name there).
+func TestWorkingReviewFileRowCopiesItsReviewLink(t *testing.T) {
+	t.Parallel()
+	m := stackRepoModel(t)
+	m.svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	top, err := m.svc.TopLevel(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(top, "u.txt"), []byte("u1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	doc := `{"version":1,"summary":"ok","files":[{"path":"u.txt","annotations":[{"newRange":[1,1],"summary":"on u"}]}]}`
+	id, _, err := m.svc.SaveReview(ctx, domain.SaveReview{Target: domain.WorkingReviewTarget(), Agent: "Claude", Text: doc,
+		Files: []model.NoteFile{{Path: "u.txt", Blob: blobOfForTest("u1\n")}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, cmd := m.openReview(id, "Review")
+	m = drainCmds(t, m, cmd)
+	var got string
+	m = captureClip(m, &got)
+	_, i := filesLine(t, m, "u.txt")
+	m.filesView.sel = i
+	runMenuRow(t, m, "copy-review-file-link")
+	if !strings.HasSuffix(got, "/u.txt?review="+id) {
+		t.Fatalf("copied %q", got)
+	}
+}

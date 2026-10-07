@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"io"
 	"strings"
 	"testing"
@@ -114,5 +115,70 @@ func TestAllNotesCtrlLCopiesAReviewLink(t *testing.T) {
 	drainCmds(t, u.(Model), cmd)
 	if !strings.Contains(got, "?review="+id) {
 		t.Fatalf("copied %q", got)
+	}
+}
+
+// A reviewed file row copies the review link to that file.
+func TestReviewFileRowCopiesItsReviewLink(t *testing.T) {
+	t.Parallel()
+	m, id := openedReviewView(t)
+	var got string
+	m = captureClip(m, &got)
+	_, i := filesLine(t, m, "a.go")
+	m.filesView.sel = i
+	runMenuRow(t, m, "copy-review-file-link")
+	if !strings.Contains(got, "/a.go@") || !strings.HasSuffix(got, "?review="+id) {
+		t.Fatalf("copied %q", got)
+	}
+	m.filesView.sel = 0 // the Overview row names no file
+	if _, ok := menuRowByID(t, m, "copy-review-file-link"); ok {
+		t.Fatal("the Overview row offers a file link")
+	}
+}
+
+// reviewDiffOnRemark opens a.go's review diff with the cursor on its remark.
+func reviewDiffOnRemark(t *testing.T, m Model) Model {
+	t.Helper()
+	m = openReviewDiff(t, m, "a.go")
+	v := m.diffLayer()
+	li, _ := v.noteAnchorLine(v.notes[0])
+	v.setCursorLine(li, m.diffBodyRows())
+	return m
+}
+
+// A remark copies its review link and its id — the thread ROOT's, even with
+// a reply in the thread.
+func TestReviewRemarkRowsCopyLinkAndID(t *testing.T) {
+	t.Parallel()
+	m, id := openedReviewView(t)
+	if _, err := m.svc.NoteReply(context.Background(), "review:"+id+":0", model.Note{Author: "me", Summary: "agreed"}); err != nil {
+		t.Fatal(err)
+	}
+	m = reviewDiffOnRemark(t, m)
+	var got string
+	m = captureClip(m, &got)
+	runMenuRow(t, m, "copy-remark-link")
+	if !strings.Contains(got, "/a.go@") || !strings.Contains(got, ":3?review="+id) {
+		t.Fatalf("remark link %q", got)
+	}
+	got = ""
+	runMenuRow(t, m, "copy-remark-id")
+	if got != "review:"+id+":0" {
+		t.Fatalf("remark id %q", got)
+	}
+}
+
+// L on a remark of a single-commit review copies the remark link (it used
+// to answer "no gg link for this place").
+func TestReviewRemarkLKeyCopiesTheRemarkLink(t *testing.T) {
+	t.Parallel()
+	m, id := openedReviewView(t)
+	m = reviewDiffOnRemark(t, m)
+	var got string
+	m = captureClip(m, &got)
+	nm, cmd := m.diffLayer().update(m, synthKey("L"))
+	drainCmds(t, nm, cmd)
+	if !strings.Contains(got, ":3?review="+id) {
+		t.Fatalf("L copied %q (notice %q)", got, nm.diffNotice)
 	}
 }
