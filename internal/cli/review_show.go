@@ -32,7 +32,7 @@ func reviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 		return 2
 	}
 	ctx := context.Background()
-	svc, id, code := reviewArgID(ctx, svc, fs.Arg(0), stderr)
+	svc, id, at, code := reviewArgID(ctx, svc, fs.Arg(0), stderr)
 	if code != 0 {
 		return code
 	}
@@ -40,6 +40,9 @@ func reviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
+	}
+	if at != nil {
+		rs = narrowReviewShow(rs, *at)
 	}
 	if *asJSON {
 		if err := json.NewEncoder(stdout).Encode(rs); err != nil {
@@ -57,30 +60,35 @@ func reviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 // read THERE (the store the link was checked against), not in the cwd's. Exit
 // 2 for a link that is malformed or names no review, 1 for a review that is
 // not here (or a link moved onto another change).
-func reviewArgID(ctx context.Context, svc *domain.Service, arg string, stderr io.Writer) (*domain.Service, string, int) {
+//
+// at is the resolved link when arg was one (its file and line narrow what is
+// shown), nil for an id.
+func reviewArgID(ctx context.Context, svc *domain.Service, arg string, stderr io.Writer) (*domain.Service, string, *domain.Resolved, int) {
+	var at *domain.Resolved
 	if strings.HasPrefix(arg, "gg://") {
 		l, err := model.ParseLink(arg)
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
-			return svc, "", 2
+			return svc, "", nil, 2
 		}
 		if l.Hint.Kind != model.ReviewHintKind {
 			fmt.Fprintln(stderr, "error: that link names no review (no ?review=<id>)")
-			return svc, "", 2
+			return svc, "", nil, 2
 		}
 		res, err := resolveLinkArg(ctx, svc, arg, linkShapes{Pair: true, Ref: true}, "review show")
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			if errors.Is(err, model.ErrLink) && !errors.Is(err, domain.ErrReviewLinkMismatch) {
-				return svc, "", 2
+				return svc, "", nil, 2
 			}
-			return svc, "", 1
+			return svc, "", nil, 1
 		}
 		if top, terr := svc.TopLevel(ctx); terr != nil || !domain.SamePath(top, res.Checkout) {
 			svc = domain.Open(res.Checkout)
 			setupCLIService(svc)
 		}
 		arg = l.Hint.ID
+		at = &res
 	}
 	id, err := svc.ReviewID(ctx, arg)
 	if err != nil {
@@ -89,9 +97,9 @@ func reviewArgID(ctx context.Context, svc *domain.Service, arg string, stderr io
 		} else {
 			fmt.Fprintln(stderr, "error:", err)
 		}
-		return svc, "", 1
+		return svc, "", nil, 1
 	}
-	return svc, id, 0
+	return svc, id, at, 0
 }
 
 func printReviewShow(w io.Writer, rs domain.ReviewShow) {
@@ -134,6 +142,9 @@ func printReviewShow(w io.Writer, rs domain.ReviewShow) {
 		}
 		if r.Link != "" {
 			fmt.Fprintln(w, "    "+r.Link)
+		}
+		if r.ReviewLink != "" {
+			fmt.Fprintln(w, "    "+r.ReviewLink)
 		}
 		// The thread: the id answers go to, its state, its replies.
 		fmt.Fprintln(w, "    id "+r.ID)
@@ -215,4 +226,35 @@ func linkReview(svc *domain.Service, idOrLatest string, stdout, stderr io.Writer
 	svc.RecordCopiedLink(ctx, text)
 	fmt.Fprintln(stdout, text)
 	return 0
+}
+
+// narrowReviewShow keeps the remarks a review link names: with a path, that
+// file's; with a line too, those covering it on its side. A link with
+// neither is the whole review.
+func narrowReviewShow(rs domain.ReviewShow, at domain.Resolved) domain.ReviewShow {
+	path := at.Addr.Path
+	if path == "" {
+		return rs
+	}
+	side := string(at.Side)
+	if side == "" {
+		side = string(model.NoteSideNew)
+	}
+	end := max(at.Line, at.End)
+	kept := []domain.ReviewShowRemark{}
+	rs.Resolved = 0
+	for _, r := range rs.Remarks {
+		if r.Path != path {
+			continue
+		}
+		if at.Line > 0 && (r.Side != side || r.Start > end || max(r.Start, r.End) < at.Line) {
+			continue
+		}
+		kept = append(kept, r)
+		if r.Resolved {
+			rs.Resolved++
+		}
+	}
+	rs.Remarks = kept
+	return rs
 }
