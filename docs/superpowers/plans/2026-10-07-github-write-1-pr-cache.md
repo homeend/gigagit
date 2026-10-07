@@ -2,6 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 > **gigagit rule (CLAUDE.md): NO implementer subagents** — this plan is executed by the session that wrote it (executing-plans); only the final whole-branch review may be a read-only subagent.
+> Every commit message below ends with the session's attribution trailer lines (`Co-Authored-By: …` / `Claude-Session: …`); the steps show the subject only.
 
 **Goal:** A pull request seen in the last hours opens at once — from a disk cache that survives restarts — and is refreshed in the background with one forge call; the open view updates in place when the refresh finds changes.
 
@@ -17,7 +18,8 @@
 - Bound: **50** PR entries per repository; opening a 51st drops the least recently OPENED entry.
 - Prefetch: `[forge] prefetch`, default **5**, `0` = off; only PRs whose head moved; low priority, under `LimitRunner`.
 - One combined GraphQL query per refresh (head sha, state, body, threads with ids + review ids, reviews, `viewerDidAuthor`, `viewerLatestReview { id state }`, PR node id).
-- Cache location: `stateBaseDir("prcache")/<repoKey(git common dir)>/`; files `list.json`, `pr-<n>.json`, lock `cache.lock`; temp + rename writes; a corrupt file is renamed `<name>.corrupt-<unix>` and treated as absent.
+- Derived git data is keyed by **(merge base, head)**, not by the moving base-branch tip: the merge base and the ahead count are computed live (two cheap calls), the commit list and the file list come from the cache. Derived data expires by its own `ComputedAt` under the same `cache_hours`.
+- Cache location: `stateBaseDir("prcache")/<repoKey(git common dir)>/`; files `list.json`, `repo.json` (the base repository slug + URL), `pr-<n>.json`, lock `cache.lock`; temp + rename writes; a corrupt file is renamed `<name>.corrupt-<unix>` and treated as absent.
 - Stored/drawn times use `internal/clock` (`clock.Now()`); timing code keeps `time.Now`.
 - `internal/tui`, `internal/cli`, `internal/web`, `internal/mcp` never import `prcache` or `internal/git` (archtest); `prcache` imports only stdlib, `filelock`, `model`.
 - Every user-visible TUI string through `i18n.T` with a literal key present in all four bundles (ja/ko/zh/ru).
@@ -45,13 +47,18 @@
 - Produces:
   ```go
   type Derived struct {
-      Source, Target string            // full shas the data belongs to (PR head, base tip)
-      State          string            // "ok" | "merged" | "no-base"
-      MergeBase      string
-      Ahead, Files   int
-      Commits        []string          // rev-list mergeBase..Source
-      FileList       []model.CommitFile // diff --name-status mergeBase Source
+      MergeBase, Source string            // the key: merge base and PR head (full shas)
+      Files             int               // diff --name-only count mergeBase..Source
+      Commits           []string          // rev-list mergeBase..Source
+      FileList          []model.CommitFile // diff --name-status mergeBase Source
+      ComputedAt        time.Time         // expiry clock of THIS data
   }
+  type Repo struct {
+      Slug, URL string                    // the forge's base repository
+      ReadAt    time.Time
+  }
+  func (s *Store) LoadRepo() (Repo, bool)
+  func (s *Store) SaveRepo(r Repo) error
   type Entry struct {
       Number       int
       PR           model.PullRequest
@@ -74,8 +81,8 @@
   func (s *Store) Load(n int) (Entry, bool)
   func (s *Store) Save(e Entry) error        // then trims to max by OpenedAt
   func (s *Store) Remove(n int) error
-  func (e *Entry) PutDerived(d Derived)      // replaces same (Source,Target), keeps newest 2
-  func (e Entry) DerivedFor(source, target string) (Derived, bool)
+  func (e *Entry) PutDerived(d Derived)      // replaces same (MergeBase,Source), keeps newest 2
+  func (e Entry) DerivedFor(mergeBase, source string) (Derived, bool)
   func Fresh(readAt, now time.Time, maxAge time.Duration) bool
   const DefaultMax = 50
   ```
@@ -103,7 +110,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	s := New(t.TempDir(), DefaultMax)
 	e := Entry{Number: 7, PR: model.PullRequest{Number: 7, Title: "x", HeadSHA: "abc"}, Full: true,
 		Comments: []model.ForgeComment{{ID: "c1", Body: "hi"}}, HasComments: true, ReadAt: t0, OpenedAt: t0}
-	e.PutDerived(Derived{Source: "s1", Target: "t1", State: "ok", Ahead: 2, Files: 1,
+	e.PutDerived(Derived{MergeBase: "m1", Source: "s1", Files: 1, ComputedAt: t0,
 		FileList: []model.CommitFile{{Status: "M", Path: "a.go"}}})
 	if err := s.Save(e); err != nil {
 		t.Fatal(err)
@@ -112,11 +119,11 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if !ok || got.PR.Title != "x" || len(got.Comments) != 1 || !got.ReadAt.Equal(t0) {
 		t.Fatalf("Load = %+v, %v", got, ok)
 	}
-	d, ok := got.DerivedFor("s1", "t1")
+	d, ok := got.DerivedFor("m1", "s1")
 	if !ok || d.FileList[0].Path != "a.go" {
 		t.Fatalf("DerivedFor = %+v, %v", d, ok)
 	}
-	if _, ok := got.DerivedFor("s2", "t1"); ok {
+	if _, ok := got.DerivedFor("m2", "s1"); ok { // the base branch moved past a new merge base
 		t.Fatal("a different pair must miss")
 	}
 }
@@ -125,13 +132,13 @@ func TestPutDerivedKeepsNewestTwo(t *testing.T) {
 	t.Parallel()
 	var e Entry
 	for _, s := range []string{"a", "b", "c"} {
-		e.PutDerived(Derived{Source: s, Target: "t"})
+		e.PutDerived(Derived{MergeBase: "m", Source: s})
 	}
 	if len(e.Derived) != 2 || e.Derived[0].Source != "c" || e.Derived[1].Source != "b" {
 		t.Fatalf("Derived = %+v", e.Derived)
 	}
-	e.PutDerived(Derived{Source: "b", Target: "t", Ahead: 9}) // same pair: replaced, moved to front
-	if len(e.Derived) != 2 || e.Derived[0].Source != "b" || e.Derived[0].Ahead != 9 {
+	e.PutDerived(Derived{MergeBase: "m", Source: "b", Files: 9}) // same pair: replaced, moved to front
+	if len(e.Derived) != 2 || e.Derived[0].Source != "b" || e.Derived[0].Files != 9 {
 		t.Fatalf("Derived after replace = %+v", e.Derived)
 	}
 }
@@ -173,6 +180,20 @@ func TestCorruptFileIsQuarantined(t *testing.T) {
 	}
 	if _, ok := s.LoadList(); ok {
 		t.Fatal("a corrupt list must read as absent")
+	}
+}
+
+func TestRepoRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := New(t.TempDir(), DefaultMax)
+	if _, ok := s.LoadRepo(); ok {
+		t.Fatal("an empty cache has no repo")
+	}
+	if err := s.SaveRepo(Repo{Slug: "o/r", URL: "https://github.com/o/r", ReadAt: t0}); err != nil {
+		t.Fatal(err)
+	}
+	if r, ok := s.LoadRepo(); !ok || r.Slug != "o/r" {
+		t.Fatalf("LoadRepo = %+v, %v", r, ok)
 	}
 }
 
@@ -290,17 +311,25 @@ const DefaultMax = 50
 // seconds, never by hours.
 const futureSlack = time.Minute
 
-// Derived is the git data of one (head, base) pair. A new push is a new
-// pair, so an entry never serves another pair's data.
+// Derived is the git data of one (merge base, head) pair: the diff a PR
+// shows is merge-base..head, so the moving tip of its base branch is not
+// part of the key — a base branch that moved without a new merge base is
+// still a hit. A new push is a new head, a merge of the base into the PR a
+// new merge base: either way a new key.
 type Derived struct {
-	Source    string             `json:"source"`
-	Target    string             `json:"target"`
-	State     string             `json:"state"`
-	MergeBase string             `json:"merge_base,omitempty"`
-	Ahead     int                `json:"ahead,omitempty"`
-	Files     int                `json:"files,omitempty"`
-	Commits   []string           `json:"commits,omitempty"`
-	FileList  []model.CommitFile `json:"file_list,omitempty"`
+	MergeBase  string             `json:"merge_base"`
+	Source     string             `json:"source"`
+	Files      int                `json:"files,omitempty"`
+	Commits    []string           `json:"commits,omitempty"`
+	FileList   []model.CommitFile `json:"file_list,omitempty"`
+	ComputedAt time.Time          `json:"computed_at"`
+}
+
+// Repo is the forge's base repository (asked once, then cached).
+type Repo struct {
+	Slug   string    `json:"slug"`
+	URL    string    `json:"url"`
+	ReadAt time.Time `json:"read_at"`
 }
 
 // Entry is one cached pull request.
@@ -352,7 +381,7 @@ func Fresh(readAt, now time.Time, maxAge time.Duration) bool {
 func (e *Entry) PutDerived(d Derived) {
 	out := []Derived{d}
 	for _, x := range e.Derived {
-		if x.Source != d.Source || x.Target != d.Target {
+		if x.MergeBase != d.MergeBase || x.Source != d.Source {
 			out = append(out, x)
 		}
 	}
@@ -363,9 +392,9 @@ func (e *Entry) PutDerived(d Derived) {
 }
 
 // DerivedFor is the pair's data, if the entry has it.
-func (e Entry) DerivedFor(source, target string) (Derived, bool) {
+func (e Entry) DerivedFor(mergeBase, source string) (Derived, bool) {
 	for _, d := range e.Derived {
-		if d.Source == source && d.Target == target {
+		if d.MergeBase == mergeBase && d.Source == source {
 			return d, true
 		}
 	}
@@ -374,6 +403,18 @@ func (e Entry) DerivedFor(source, target string) (Derived, bool) {
 
 func (s *Store) entryPath(n int) string { return filepath.Join(s.root, "pr-"+strconv.Itoa(n)+".json") }
 func (s *Store) listPath() string       { return filepath.Join(s.root, "list.json") }
+func (s *Store) repoPath() string       { return filepath.Join(s.root, "repo.json") }
+
+// LoadRepo reads the cached base repository.
+func (s *Store) LoadRepo() (Repo, bool) {
+	var r Repo
+	return r, readJSON(s.repoPath(), &r)
+}
+
+// SaveRepo replaces the cached base repository.
+func (s *Store) SaveRepo(r Repo) error {
+	return s.locked(func() error { return writeJSON(s.repoPath(), r) })
+}
 
 // locked runs f under the directory's lock.
 func (s *Store) locked(f func() error) error {
@@ -542,7 +583,7 @@ func TestEntriesNewestOpenedFirst(t *testing.T) {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `go test -race ./internal/prcache/`
-Expected: PASS (all 8 tests).
+Expected: PASS (all 9 tests).
 
 - [ ] **Step 5: Add the package to the archtest DAG-leaf list**
 
@@ -759,6 +800,48 @@ In `internal/forge/testdata/fakegh/main.go`, inside the `api graphql` case, pick
 			}
 		}
 ```
+
+**Existing fixtures keep working.** TUI, web and e2e tests (and the PR-web browser fixtures) seed `pr-view-<n>.json` + `threads-<n>.json`, never `snapshot-<n>.json`. When the snapshot file is absent, the fake COMPOSES it from those two, so no seeding helper has to change:
+
+```go
+	b, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil && strings.HasPrefix(name, "snapshot-") {
+		b, err = composeSnapshot(dir, strings.TrimSuffix(strings.TrimPrefix(name, "snapshot-"), ".json"))
+	}
+```
+
+```go
+// composeSnapshot builds the combined read from the two older fixtures: the
+// threads document, with the pr-view fields merged into its pullRequest node.
+func composeSnapshot(dir, n string) ([]byte, error) {
+	tb, err := os.ReadFile(filepath.Join(dir, "threads-"+n+".json"))
+	if err != nil {
+		return nil, err
+	}
+	pb, err := os.ReadFile(filepath.Join(dir, "pr-view-"+n+".json"))
+	if err != nil {
+		return nil, err
+	}
+	var doc map[string]any
+	var pr map[string]any
+	if err := json.Unmarshal(tb, &doc); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(pb, &pr); err != nil {
+		return nil, err
+	}
+	node, ok := doc["data"].(map[string]any)["repository"].(map[string]any)["pullRequest"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("threads-%s.json has no pullRequest node", n)
+	}
+	for k, v := range pr {
+		node[k] = v
+	}
+	return json.Marshal(doc)
+}
+```
+
+Test it: a fixture dir holding only `pr-view-7.json` + `threads-7.json` (copy the shapes the existing `internal/web` or `e2e` PR fixtures use — `grep -rln 'threads-' internal/*/testdata e2e 2>/dev/null`) answers `gh api graphql … query=query PRSnapshot … number=7` with a document `parseSnapshot` accepts (run the built fake via `forgetest` and parse its stdout).
 
 Add an argv test in `gh_test.go` (FakeRunner) asserting `Snapshot(ctx, 7)` runs `api graphql -F owner={owner} -F name={repo} -F number=7 -f query=query PRSnapshot…`, with the runner returning the fixture bytes and the result's `PR.NodeID == "PR_kw7"`. Follow the existing `TestGHComments…` argv test in that file for the FakeRunner wiring.
 
@@ -1211,6 +1294,11 @@ Replace the other `putPRLocked(pr, true)` call sites outside `pullRequests` (`Pu
 
 `internal/domain/forge.go`:
 - extract `bucketComments(cs, truncated) PRComments` from `PRComments` (body unchanged) and call it there;
+- **Keep the read-only fields through a list poll.** `putPRLocked`'s "a listed row never overwrites a full read" keeps `Body` today; extend it to `NodeID`, `ViewerDidAuthor`, `ViewerPendingReview` (plan 2 needs `NodeID`). Test: a full read with `NodeID: "PR_x"`, then `pullRequests` with the listed row → `cachedPR` still returns `NodeID "PR_x"`.
+- **`forgeClock` defaults to `clock.Now`** (not `time.Now`): stored read times and the drawn "read 3 h ago" must agree under the e2e frozen clock.
+- **An open from the cached LIST costs no forge call.** In `cachedPR`, after a memory and disk-entry miss, look the row up in the fresh `list.json` (`st.LoadList()` + `fresh(l.ReadAt)`); a hit is served with `readAt = l.ReadAt` (as a listed, not full, entry) and persisted as the PR's entry. On a memory hit, persist `PR` and `ReadAt` too (not just `OpenedAt`) when the disk entry is missing or older — so the NEXT session's `diskEntry` serves it.
+- **The base repository is cached on disk.** `baseRepo` reads `st.LoadRepo()` (fresh by `ReadAt`) before asking the provider, and saves `prcache.Repo{Slug, URL, ReadAt: s.forgeClock()}` after a provider answer. Test (add to Step 1): two Services over one cache dir each call `PRFetchOp(ctx, 7)` → `BaseRepo` called once in total (`ff.calls(7)`'s second value).
+- Add to Step 1: `TestPROpenFromTheCachedListCostsNoForgeCall` — session A lists (`PullRequests`), session B over the same dir calls `PRFetchOp(ctx, 3)` for a listed PR → `PR()` calls stay 0 and `BaseRepo` calls stay at A's count.
 - `PRComments` gains nothing else; `PRCommentsRefresh` (forge_notes.go) after storing in memory also persists: `s.persistPR(ctx, n, func(x *prcache.Entry){ x.Comments, x.Truncated, x.HasComments = raw, truncated, true })` — so `PRComments` must hand back the raw slice too: add an unexported `prCommentsRaw(ctx, n) ([]model.ForgeComment, bool, error)` that `PRComments` and `PRCommentsRefresh` share;
 - `pullRequests`: after a successful `ListOpen`, `st.SaveList(prcache.List{ReadAt: s.forgeClock(), Provider: p.Name(), PRs: <the open+rest result>})` (best effort, store resolved via `prCacheStore`);
 - `PRForgetOp`: also `if st := s.prCacheStore(context.Background()); st != nil { _ = st.Remove(n) }` (outside forgeMu).
@@ -1365,7 +1453,7 @@ git commit -m "feat(domain): revalidate a PR with one forge call, reporting comm
       Endpoints PreviewEndpoints
       Set       PreviewNoteSet      // zero unless Endpoints.Summary.State == PreviewOK
       Files     []model.CommitFile  // the compare file list (nil unless PreviewOK)
-      Cached    bool                // served from the disk entry (no git recompute)
+      Cached    bool                // the commit list + file list came from the disk entry
   }
   func (s *Service) PRPreview(ctx context.Context, pr model.PullRequest) (PRPreviewResult, error)
   func (s *Service) previewSummaryHashes(ctx context.Context, srcHash, tgtHash string) (PreviewSummary, error)
@@ -1395,8 +1483,9 @@ func TestPRPreviewServesASecondSessionFromTheCache(t *testing.T) {
 	if err != nil || !second.Cached || len(second.Files) != 1 || len(second.Set.Commits) != 2 {
 		t.Fatalf("second open = %+v, %v", second, err)
 	}
-	for _, name := range []string{"git merge-base", "git rev-list --left-right --count",
-		"git diff --name-only (range)", "git rev-list (range)", "git diff (compare files)"} {
+	// The merge base and the ahead count are computed live (cheap, and they
+	// are the key); the slow three come from the cache.
+	for _, name := range []string{"git diff --name-only (range)", "git rev-list (range)", "git diff (compare files)"} {
 		if calls(name) != 0 {
 			t.Errorf("%s ran %d times on a cached open, want 0", name, calls(name))
 		}
@@ -1407,6 +1496,26 @@ func TestPRPreviewServesASecondSessionFromTheCache(t *testing.T) {
 	}
 	if calls("git diff (compare files)") != 0 {
 		t.Error("CompareFiles re-ran git after PRPreview seeded it")
+	}
+}
+
+// The base branch moving WITHOUT a new merge base is still a cache hit.
+func TestPRPreviewHitsAfterTheBaseBranchMoved(t *testing.T) {
+	t.Parallel()
+	dir, head := prPreviewRepo(t)
+	cache := t.TempDir()
+	p := model.PullRequest{Number: 7, State: "open", Target: "main", HeadSHA: head}
+	a, _ := countingService(t, dir)
+	a.SetPRCacheStore(prcache.New(cache, 0))
+	if _, err := a.PRPreview(context.Background(), p); err != nil {
+		t.Fatal(err)
+	}
+	commitOnMain(t, dir, "z.txt") // main moves; the merge base with the PR does not
+	b, _ := countingService(t, dir)
+	b.SetPRCacheStore(prcache.New(cache, 0))
+	got, err := b.PRPreview(context.Background(), p)
+	if err != nil || !got.Cached || len(got.Files) != 1 {
+		t.Fatalf("after main moved: %+v, %v", got, err)
 	}
 }
 
@@ -1469,22 +1578,23 @@ import (
 )
 
 // PRPreview is a pull request's whole open: its pair, the endpoints, the
-// note set and the changed files. The pair's derived git data (merge base,
-// counts, commit list, file list) is read from the disk cache when it holds
-// THIS (head, base) pair, and seeded into the memory caches the compare view
-// reads next; otherwise it is computed once and saved. Each ref resolves
-// once (spec §2.2).
+// note set and the changed files. The merge base and the ahead count are
+// computed live (two cheap calls — and the merge base is the cache key);
+// the slow parts (the commit list, the file list, the file count) come from
+// the disk cache when it holds THIS (merge base, head) pair and are seeded
+// into the memory caches the compare view reads next; otherwise they are
+// computed once and saved. Each ref resolves once (spec §2.2).
 func (s *Service) PRPreview(ctx context.Context, pr model.PullRequest) (PRPreviewResult, error) {
 	pair := s.PRPair(ctx, pr)
+	out := PRPreviewResult{Pair: pair}
 	src, okS, err := s.ResolveRev(ctx, pair.Head)
 	if err != nil {
-		return PRPreviewResult{}, err
+		return out, err
 	}
 	tgt, okT, err := s.ResolveRev(ctx, pair.Base)
 	if err != nil {
-		return PRPreviewResult{}, err
+		return out, err
 	}
-	out := PRPreviewResult{Pair: pair}
 	switch {
 	case !okS:
 		out.Endpoints.Summary = PreviewSummary{State: PreviewMissingSource}
@@ -1493,54 +1603,82 @@ func (s *Service) PRPreview(ctx context.Context, pr model.PullRequest) (PRPrevie
 		out.Endpoints.Summary = PreviewSummary{State: PreviewMissingTarget, SourceHash: src}
 		return out, nil
 	}
-	if e, ok := s.diskEntry(ctx, pr.Number); ok {
-		if d, ok := e.DerivedFor(src, tgt); ok {
-			return s.fromDerived(pair, d)
+	sum := PreviewSummary{SourceHash: src, TargetHash: tgt}
+	base, err := s.repo.MergeBase(ctx, tgt, src)
+	if err != nil {
+		if ctx.Err() != nil {
+			return out, err
+		}
+		sum.State = PreviewNoBase
+		out.Endpoints.Summary = sum
+		return out, nil
+	}
+	_, ahead, err := s.repo.CountLeftRight(ctx, tgt, src)
+	if err != nil {
+		return out, err
+	}
+	if ahead == 0 {
+		sum.State = PreviewMerged
+		out.Endpoints.Summary = sum
+		return out, nil
+	}
+	sum.base, sum.Ahead = base, ahead
+	if e, ok := s.prCacheEntry(ctx, pr.Number); ok {
+		if d, ok := e.DerivedFor(base, src); ok && s.fresh(d.ComputedAt) {
+			sum.Files = d.Files
+			return s.fromDerived(pair, sum, d)
 		}
 	}
-	sum, err := s.previewSummaryHashes(ctx, src, tgt)
-	if err != nil {
-		return PRPreviewResult{}, err
+	// Miss: the generic path computes (and memory-caches) the slow parts.
+	if sum, err = s.previewSummaryHashes(ctx, src, tgt); err != nil || sum.State != PreviewOK {
+		out.Endpoints.Summary = sum
+		return out, err
 	}
-	out.Endpoints, err = endpointsFor(sum)
-	if err != nil || sum.State != PreviewOK {
-		s.saveDerived(ctx, pr.Number, sum, nil, nil)
+	if out.Endpoints, err = endpointsFor(sum); err != nil {
 		return out, err
 	}
 	if out.Set, err = s.previewNoteSetFor(ctx, pair.Head, pair.Base, sum); err != nil {
-		return PRPreviewResult{}, err
+		return out, err
 	}
 	if out.Files, err = s.CompareFiles(ctx, out.Endpoints.Left, out.Endpoints.Right); err != nil {
-		return PRPreviewResult{}, err
+		return out, err
 	}
-	s.saveDerived(ctx, pr.Number, sum, out.Set.Commits, out.Files)
+	d := prcache.Derived{MergeBase: sum.base, Source: src, Files: sum.Files,
+		Commits: out.Set.Commits, FileList: out.Files, ComputedAt: s.forgeClock()}
+	s.persistPR(ctx, pr.Number, func(e *prcache.Entry) { e.PutDerived(d) })
 	return out, nil
 }
 
-func (s *Service) fromDerived(pair PRPair, d prcache.Derived) (PRPreviewResult, error) {
-	sum := PreviewSummary{State: previewStateOf(d.State), SourceHash: d.Source, TargetHash: d.Target,
-		Files: d.Files, Ahead: d.Ahead, base: d.MergeBase}
+// fromDerived serves a hit: seeds the memory caches under the keys the
+// generic preview readers use, then answers from d.
+func (s *Service) fromDerived(pair PRPair, sum PreviewSummary, d prcache.Derived) (PRPreviewResult, error) {
+	sum.State = PreviewOK
 	s.seedPreviewSummary(sum)
+	s.seedPreviewRevList(sum.SourceHash, sum.TargetHash, d.Commits)
 	out := PRPreviewResult{Pair: pair, Cached: true}
 	var err error
-	if out.Endpoints, err = endpointsFor(sum); err != nil || sum.State != PreviewOK {
+	if out.Endpoints, err = endpointsFor(sum); err != nil {
 		return out, err
 	}
-	s.seedPreviewRevList(d.Source, d.Target, d.Commits)
 	s.seedCompareFiles(out.Endpoints.Left, out.Endpoints.Right, d.FileList)
-	out.Set = PreviewNoteSet{Source: pair.Head, Target: pair.Base, Tip: d.Source, Base: d.MergeBase, Commits: d.Commits}
+	out.Set = PreviewNoteSet{Source: pair.Head, Target: pair.Base, Tip: sum.SourceHash, Base: sum.base, Commits: d.Commits}
 	out.Files = d.FileList
 	return out, nil
 }
 
-func (s *Service) saveDerived(ctx context.Context, n int, sum PreviewSummary, commits []string, files []model.CommitFile) {
-	d := prcache.Derived{Source: sum.SourceHash, Target: sum.TargetHash, State: sum.State.String(),
-		MergeBase: sum.base, Ahead: sum.Ahead, Files: sum.Files, Commits: commits, FileList: files}
-	s.persistPR(ctx, n, func(e *prcache.Entry) { e.PutDerived(d) })
+// prCacheEntry is PR n's disk entry REGARDLESS of the entry's own read time:
+// derived data carries its own ComputedAt (the forge data and the git data
+// age separately).
+func (s *Service) prCacheEntry(ctx context.Context, n int) (prcache.Entry, bool) {
+	st := s.prCacheStore(ctx)
+	if st == nil {
+		return prcache.Entry{}, false
+	}
+	return st.Load(n)
 }
 ```
 
-Factor `endpointsFor(sum PreviewSummary) (PreviewEndpoints, error)` out of `PreviewOpen` (the two `CommitEndpoint` calls) and have `PreviewOpen` use it. Add `previewStateOf(string) PreviewState` as the inverse of the existing `PreviewState.String()` (states: ok, merged, no-base, missing-source, missing-target). `persistPR` must not create an entry with a zero `ReadAt` that later reads as "fresh": it never does (`Fresh` rejects a zero time), and `diskEntry` refuses it — note that a PR opened from the list (row data only) gets its `ReadAt` from `rememberPR` in `cachedPR`.
+Factor `endpointsFor(sum PreviewSummary) (PreviewEndpoints, error)` out of `PreviewOpen` (the two `CommitEndpoint` calls) and have `PreviewOpen` use it. A PR entry created by `persistPR` from `PRPreview` alone has a zero `ReadAt`: `diskEntry` (forge data) refuses it, while `prCacheEntry` (git data) serves its `Derived` by `ComputedAt` — the two kinds of data age separately on purpose. Write `commitOnMain` beside the other helpers (a commit on `main` that does not touch the PR's files).
 
 - [ ] **Step 4: Run** `go test -race ./internal/domain/` → PASS (whole package: the preview tests must not regress).
 
@@ -1565,7 +1703,7 @@ git commit -m "feat(domain): PRPreview opens a PR from cached derived git data"
   ```go
   func (s *Service) PRPrefetch(ctx context.Context) int // PRs warmed; 0 when prefetch is off
   ```
-  `PullRequests`: when detection has not run yet and the fresh cached listing names a provider, that provider's `ListOpen` is tried FIRST; success marks it the active provider (no `Detect` call); failure falls back to `ForgeStatus` (today's path).
+  `ForgeStatus`: when detection has not run yet and the fresh cached listing names a provider, that provider becomes the active one WITHOUT `Detect` (an optimistic verdict, flagged `forgeOptimistic`). Both frontends call `ForgeStatus` before `PullRequests`, so the verdict must live here. `PullRequests`: if the optimistic provider's `ListOpen` fails, the verdict is undone (`forgeProbed=false`, `forgeActive=nil`, flag cleared, preflight invalidated), real detection runs, and the list is retried once through the detected provider.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1576,9 +1714,14 @@ func TestPullRequestsSkipsDetectAfterAGoodSession(t *testing.T) {
 	dir := t.TempDir()
 	ff := &fakeForge{url: "u", open: []model.PullRequest{pr(3, "open", 1)}}
 	a := newCachedForgeSvc(t, ff, dir)
+	a.ForgeStatus(context.Background())
 	a.PullRequests(context.Background())
 	before := ff.detects
 	b := newCachedForgeSvc(t, ff, dir)
+	// The frontends' real order: status first, then the list.
+	if st := b.ForgeStatus(context.Background()); !st.Available() {
+		t.Fatal("the cached verdict must make the forge available")
+	}
 	if _, err := b.PullRequests(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -1598,11 +1741,15 @@ func TestPullRequestsFallsBackToDetect(t *testing.T) {
 	newCachedForgeSvc(t, ok, dir).PullRequests(context.Background())
 	broken := &fakeForge{url: "u", listErr: errors.New("401"), detectErr: errors.New("logged out")}
 	b := newCachedForgeSvc(t, broken, dir)
+	b.ForgeStatus(context.Background()) // optimistic: available
 	if _, err := b.PullRequests(context.Background()); err == nil {
 		t.Fatal("want an error")
 	}
 	if broken.detects != 1 {
 		t.Fatalf("Detect calls = %d, want 1", broken.detects)
+	}
+	if st := b.ForgeStatus(context.Background()); st.Available() {
+		t.Fatal("after the real detection failed the forge must be unavailable")
 	}
 }
 
@@ -1623,53 +1770,50 @@ func TestPRPrefetch(t *testing.T) {
 	if n := svc.PRPrefetch(context.Background()); n != 0 {
 		t.Fatalf("an unmoved head was prefetched (%d)", n)
 	}
+	// A held reservation (a user op) makes prefetch step aside.
+	moveForgeHead(t, ff, dir, 7) // the listed head moves past refs/gg/pr/7
+	res, err := svc.gateFor(context.Background()).Acquire(context.Background(), repogate.TreeWrite, "user op")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := svc.PRPrefetch(context.Background()); n != 0 {
+		t.Fatalf("prefetch ran under a user op (%d)", n)
+	}
+	res.Release()
+	if n := svc.PRPrefetch(context.Background()); n != 1 {
+		t.Fatalf("prefetch after the op = %d, want 1", n)
+	}
 }
 ```
 
-(Add `detects`, `detectErr`, `listErr` to `fakeForge` if missing.)
+(Add `detects`, `detectErr`, `listErr` to `fakeForge` if missing. `moveForgeHead(t, ff, dir, n)` commits once more on the PR's branch in the test repo and sets `ff.open[i].HeadSHA` to that new sha WITHOUT moving `refs/gg/pr/n`; for the prefetch fetch to succeed, the fake's `BaseRepo` URL must be the test repo's own path and `HeadRefspec(n)` must name a ref that exists there — e.g. `refs/heads/feat` — so `git fetch <dir> +refs/heads/feat:refs/gg/pr/7` works offline.)
 
 - [ ] **Step 2: Run** → FAIL (`PRPrefetch` undefined; the skip test fails on detects).
 
 - [ ] **Step 3: Implement**
 
-In `PullRequests`, before `s.provider(ctx)`:
+In `ForgeStatus`, at the top of the `for !s.forgeProbed` loop body, BEFORE starting a probe (still under `forgeMu`; `optimisticProviderLocked` must not run git or take forgeMu — so resolve the list beforehand: call `l, ok := s.cachedListing()` (a `prCacheStore` + `LoadList` + `fresh` read) BEFORE taking the lock at the top of `ForgeStatus`):
 
 ```go
-	if p := s.optimisticProvider(); p != nil {
-		v, err := s.flight.Do("forge-prs", func() (any, error) { return s.pullRequests(ctx, p) })
-		if err == nil {
-			s.forgeMu.Lock()
-			if !s.forgeProbed {
-				s.forgeActive, s.forgeErr, s.forgeProbed = p, nil, true
-			}
+		if p := s.optimisticProviderLocked(listing); p != nil {
+			s.forgeActive, s.forgeErr, s.forgeProbed, s.forgeOptimistic = p, nil, true, true
 			s.forgeMu.Unlock()
 			s.invalidatePreflight()
-			return slices.Clone(v.([]model.PullRequest)), nil
+			s.forgeMu.Lock()
+			break
 		}
-		// fall through: detection decides, as before
-	}
 ```
 
 ```go
-// optimisticProvider is the provider the fresh cached listing names, when
-// detection has not run yet this session; nil otherwise.
-func (s *Service) optimisticProvider() forge.Provider {
-	s.forgeMu.Lock()
-	probed, ps, rec := s.forgeProbed || s.forgeProbing != nil, s.forgeProviders, s.forgeRec
-	s.forgeMu.Unlock()
-	if probed {
+// optimisticProviderLocked is the provider the fresh cached listing names,
+// from the configured list. Callers hold forgeMu; listing was read before.
+func (s *Service) optimisticProviderLocked(l *prcache.List) forge.Provider {
+	if l == nil || l.Provider == "" {
 		return nil
 	}
-	st := s.prCacheStore(context.Background())
-	if st == nil {
-		return nil
-	}
-	l, ok := st.LoadList()
-	if !ok || l.Provider == "" || !s.fresh(l.ReadAt) {
-		return nil
-	}
+	ps := s.forgeProviders
 	if ps == nil && !ForgeDisabled {
-		ps = forge.Default(s.workdir, rec)
+		ps = forge.Default(s.workdir, s.forgeRec)
 	}
 	for _, p := range ps {
 		if p.Name() == l.Provider {
@@ -1680,6 +1824,8 @@ func (s *Service) optimisticProvider() forge.Provider {
 }
 ```
 
+(Add the `forgeOptimistic bool` field beside `forgeProbed` in service.go.) In `PullRequests`, when `s.pullRequests` fails AND `forgeOptimistic` is set: undo the verdict under `forgeMu` (`forgeProbed, forgeActive, forgeOptimistic = false, nil, false`), `invalidatePreflight()`, then run `s.provider(ctx)` again (a REAL `Detect`) and, if it yields a provider, retry `pullRequests` once; return that result or the detection error. A successful optimistic list clears `forgeOptimistic` (the list proved the provider).
+
 `prprefetch.go`:
 
 ```go
@@ -1688,6 +1834,19 @@ func (s *Service) optimisticProvider() forge.Provider {
 // each fetch through Execute (the repo gate) and then PRPreview, so the next
 // open is a cache hit. Returns how many PRs it warmed.
 func (s *Service) PRPrefetch(ctx context.Context) int {
+	// One prefetch at a time per Service: the TUI and the page it hosts may
+	// both ask after the same list refresh.
+	v, _ := s.flight.Do("pr-prefetch", func() (any, error) { return s.prPrefetch(ctx), nil })
+	return v.(int)
+}
+
+// gateBusy: a user operation holds or waits for the repo gate — prefetch
+// steps aside rather than queue a ref write ahead of it.
+func (s *Service) gateBusy(ctx context.Context) bool {
+	return len(s.gateFor(ctx).Queue()) > 0
+}
+
+func (s *Service) prPrefetch(ctx context.Context) int {
 	s.forgeMu.Lock()
 	_, limit := s.prPolicyLocked()
 	s.forgeMu.Unlock()
@@ -1703,7 +1862,7 @@ func (s *Service) PRPrefetch(ctx context.Context) int {
 	}
 	warmed := 0
 	for _, e := range st.Entries() {
-		if warmed >= limit || ctx.Err() != nil {
+		if warmed >= limit || ctx.Err() != nil || s.gateBusy(ctx) {
 			break
 		}
 		p, ok := listed[e.Number]
