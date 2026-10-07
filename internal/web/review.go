@@ -50,7 +50,8 @@ type reviewToolRow struct {
 // trip before anything runs.
 func (s *Server) handleReviewTools(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
-	target, err := s.reviewTarget(r.Context(), svc, r.URL.Query().Get("target"), r.URL.Query().Get("branch"), r.URL.Query().Get("sha"))
+	q := r.URL.Query()
+	target, err := s.reviewTarget(r.Context(), svc, q.Get("target"), q.Get("branch"), q.Get("sha"), q.Get("preview"))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -64,9 +65,10 @@ func (s *Server) handleReviewTools(w http.ResponseWriter, r *http.Request) {
 }
 
 type reviewStartRequest struct {
-	Target  string `json:"target"` // "branch" (default) | "working" | "commit"
+	Target  string `json:"target"` // "branch" (default) | "working" | "commit" | "preview"
 	Branch  string `json:"branch"`
-	Sha     string `json:"sha"` // target "commit": the commit to review, hex only
+	Sha     string `json:"sha"`     // target "commit": the commit to review, hex only
+	Preview string `json:"preview"` // target "preview": a saved merge preview's or pair's ID
 	Tool    string `json:"tool"`
 	Approve bool   `json:"approve"` // the user just approved this command
 }
@@ -81,7 +83,7 @@ func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
 		return
 	}
-	target, err := s.reviewTarget(r.Context(), svc, req.Target, req.Branch, req.Sha)
+	target, err := s.reviewTarget(r.Context(), svc, req.Target, req.Branch, req.Sha, req.Preview)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -195,9 +197,12 @@ func (s *Server) handleOpCancel(w http.ResponseWriter, r *http.Request) {
 // breaking something downstream, and BranchReviewTarget resolves BOTH
 // endpoints to hex before they reach the tool's <range> token, so no ref name
 // is ever spliced into a command.
-func (s *Server) reviewTarget(ctx context.Context, svc *domain.Service, kind, branch, sha string) (domain.ReviewTarget, error) {
+func (s *Server) reviewTarget(ctx context.Context, svc *domain.Service, kind, branch, sha, preview string) (domain.ReviewTarget, error) {
 	if kind == "working" {
 		return domain.WorkingReviewTarget(), nil
+	}
+	if kind == "preview" {
+		return s.previewReviewTarget(ctx, svc, preview)
 	}
 	if kind == "commit" {
 		return s.commitReviewTarget(ctx, svc, sha)
@@ -222,6 +227,53 @@ func (s *Server) commitReviewTarget(ctx context.Context, svc *domain.Service, sh
 		return domain.ReviewTarget{}, errors.New("invalid commit")
 	}
 	return svc.CommitReviewTarget(ctx, sha)
+}
+
+// previewReviewTarget is the review of a SAVED merge preview or commit pair,
+// named by its row ID. The ID is looked up in the two lists — never resolved
+// as a label or an a...b literal (NoteScopeResolve would) — so no ref name
+// from the wire reaches the target; the range is the scope's hex pair
+// (ScopeReviewTarget). A preview that is not previewable (merged, a side
+// missing, no base) is refused like the CLI refuses it.
+func (s *Server) previewReviewTarget(ctx context.Context, svc *domain.Service, id string) (domain.ReviewTarget, error) {
+	if id == "" {
+		return domain.ReviewTarget{}, errors.New("no preview named")
+	}
+	ps, err := svc.PreviewList(ctx)
+	if err != nil {
+		return domain.ReviewTarget{}, err
+	}
+	for _, p := range ps {
+		if p.ID != id {
+			continue
+		}
+		set, err := svc.PreviewNotes(ctx, p.Source, p.Target)
+		if err != nil {
+			return domain.ReviewTarget{}, err
+		}
+		if !set.OK() {
+			return domain.ReviewTarget{}, fmt.Errorf("preview %s is not previewable (merged, a side missing, or no common base)", p.Label)
+		}
+		return domain.ScopeReviewTarget(set), nil
+	}
+	pairs, err := svc.PairList(ctx)
+	if err != nil {
+		return domain.ReviewTarget{}, err
+	}
+	for _, p := range pairs {
+		if p.ID != id {
+			continue
+		}
+		set, err := svc.PairNotes(ctx, p.A, p.B)
+		if err != nil {
+			return domain.ReviewTarget{}, err
+		}
+		if !set.OK() {
+			return domain.ReviewTarget{}, fmt.Errorf("pair %s: a commit is missing", p.Label)
+		}
+		return domain.ScopeReviewTarget(set), nil
+	}
+	return domain.ReviewTarget{}, fmt.Errorf("unknown preview %q", id)
 }
 
 // reviewToolRows resolves every usable review command for target.

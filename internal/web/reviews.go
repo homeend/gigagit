@@ -117,10 +117,16 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	if rv.Kind == domain.ReviewOnWorktree {
 		label = "working changes"
 	}
+	if rv.Preview != "" {
+		// A preview's review is named by its preview (the TUI's header).
+		label = domain.NoteScopeLabel(rv.Preview)
+	}
 	out := map[string]any{
 		"id": rv.ID, "agent": rv.Agent, "created": wireTime(rv.Created), "branch": rv.Branch,
 		"commit": rv.Commit, "label": label, "structured": rv.Doc != nil, "text": rv.Text,
 		"base": "", "tip": rv.Commit, "range": false,
+		// older: a preview review of a tip its preview has since moved past.
+		"older": svc.ReviewOlder(ctx, rv),
 		"files": []map[string]string{}, "counts": map[string]int{}, "summaries": map[string]string{},
 		"meta": "", "notes": 0, "note_files": 0, "other": []map[string]string{},
 	}

@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 )
 
@@ -139,5 +141,101 @@ func TestOpenedScopeNotesCarryReviews(t *testing.T) {
 	pr.Reviews = nil
 	if code := getJSON(t, ts, "/api/pair/notes?a="+set.Base+"&b="+set.Tip+"&scope=x", &pr); code != http.StatusOK || len(pr.Reviews) != 0 {
 		t.Fatalf("scoped /api/pair/notes = %d %+v, want no reviews", code, pr)
+	}
+}
+
+func TestReviewPreviewTargetByID(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir, svc := previewReviewWebRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte(echoReviewTool), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts := serve(t, New(svc))
+	ps, _ := svc.PreviewList(context.Background())
+	pairs, _ := svc.PairList(context.Background())
+	got := reviewTools(t, ts, "?target=preview&preview="+ps[0].ID)
+	set, _ := svc.PreviewNotes(context.Background(), "feat/x", "main")
+	if got.Range != set.Base+".."+set.Tip || got.Label != "main ... feat/x" {
+		t.Fatalf("preview target = %+v", got)
+	}
+	if got := reviewTools(t, ts, "?target=preview&preview="+pairs[0].ID); got.Range != set.Base+".."+set.Tip {
+		t.Fatalf("pair target = %+v", got)
+	}
+}
+
+func TestReviewPreviewTargetRefusesNonIDs(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir, svc := previewReviewWebRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte(echoReviewTool), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts := serve(t, New(svc))
+	for _, bad := range []string{"", "login", "main...feat/x", "x;rm%20-rf", "nope"} {
+		var body map[string]any
+		if code := getJSON(t, ts, "/api/review/tools?target=preview&preview="+bad, &body); code != http.StatusBadRequest {
+			t.Errorf("preview=%q → %d, want 400", bad, code)
+		}
+	}
+	gitRun(t, dir, "merge", "--ff-only", "feat/x") // the preview is no longer previewable
+	ps, _ := svc.PreviewList(context.Background())
+	if code, body := startReview(t, ts, `{"target":"preview","preview":"`+ps[0].ID+`","tool":"Echo","approve":true}`); code != http.StatusBadRequest {
+		t.Fatalf("merged preview start = %d (%v), want 400", code, body)
+	}
+}
+
+// A stored review (any kind) tells every open page: their sub-rows and ✎
+// re-read on the live hub's "notes".
+func TestReviewRunEmitsNotes(t *testing.T) {
+	dir := reviewRepo(t, echoReviewTool)
+	svc := reviewSvc(t, dir)
+	srv := New(svc)
+	ts := serve(t, srv)
+	srv.liveMu.Lock()
+	srv.live = newLiveHub(config.RefreshConfig{}, false, srv.opInFlight)
+	srv.liveMu.Unlock()
+	t.Cleanup(srv.stopLive)
+	ch, cancel := srv.liveHubRef().subscribe()
+	t.Cleanup(cancel)
+	code, body := startReview(t, ts, `{"target":"branch","branch":"feature","tool":"Echo","approve":true}`)
+	if code != http.StatusAccepted {
+		t.Fatalf("start = %d (%v)", code, body)
+	}
+	opID, _ := body["op_id"].(string)
+	readSSE(t, ts, opID, 30*time.Second)
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case msg := <-ch:
+			for _, c := range msg.Changed {
+				if c == "notes" {
+					return
+				}
+			}
+		case <-deadline:
+			t.Fatal("a stored review emitted no notes event")
+		}
+	}
+}
+
+func TestReviewEndpointNamesThePreviewAndOlder(t *testing.T) {
+	t.Parallel()
+	dir, svc := previewReviewWebRepo(t)
+	ts := serve(t, New(svc))
+	set, _ := svc.PreviewNotes(context.Background(), "feat/x", "main")
+	hs, _ := svc.PreviewReviews(context.Background(), set)
+	var r struct {
+		Label string `json:"label"`
+		Older bool   `json:"older"`
+	}
+	if code := getJSON(t, ts, "/api/review/"+hs[0].ID, &r); code != http.StatusOK || r.Label != "feat/x → main" || r.Older {
+		t.Fatalf("review = %d %+v", code, r)
+	}
+	gitRun(t, dir, "checkout", "feat/x")
+	gitRun(t, dir, "commit", "--allow-empty", "-m", "more")
+	gitRun(t, dir, "checkout", "main")
+	if getJSON(t, ts, "/api/review/"+hs[0].ID, &r); !r.Older {
+		t.Fatalf("review after the source moved = %+v, want older", r)
 	}
 }
