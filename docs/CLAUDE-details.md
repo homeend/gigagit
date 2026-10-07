@@ -4170,6 +4170,39 @@ dedicated SSE stream per console, session states (erbrus port) = plan 3.
   steer-hint wiring pin expects the exact string `revealHintEntry } from
   "./sidebar.js"` in live.js — keep that import's last name.
 
+### Agent names (2026-10-07)
+
+Spec `docs/superpowers/specs/2026-10-07-agent-names-design.md`, plan
+`docs/superpowers/plans/2026-10-07-agent-names.md`.
+
+- **`Name` is not `Label`.** `agentsession.Info.Label` stays the command
+  ("Claude (yolo)") — the tool identity `agent_list`'s `tool`, the task rows
+  (`Label · key`) and the registry's fallback agent name read. The user's
+  name is `Info.Name`; every DISPLAY site uses `Info.Title()` =
+  `Label [Name]` (`domain.SessionTitle` for frontends). A new display site
+  must call `Title()`, never concatenate.
+- **One way in.** The name rides `domain.SpawnRecord.Name` (TUI, hosted page)
+  or `SessionStartRequest.Name` (web → starter); `StartAgentSession` cleans it
+  with `domain.CleanAgentName` (trim, controls dropped, 40 runes) and hands it
+  to `startSessionPrompt` → `startLine` → `StartSpec.Name`. Terminals and
+  tasks pass `""`; `agent_start` has no name input (user ruling).
+- **Memory = the search-history ring `agentname`** (per repo,
+  `[ui] search_history_size`). TUI: the Start agent popup's `stageName`
+  (after choose/approve) uses `recallUpdate`/`recordSearch` like the shell
+  prompt — enter on a recalled name fills the field, a second enter starts.
+  Web: `/api/session-commands` returns `names`, the dialog's `name` phase
+  fills a `<datalist>`; `/api/session-start` records the name. A hosted
+  page's start also updates the TUI's in-memory ring (`webSessionStartLeaf`),
+  without a second disk write.
+- **Web name phase owns typing:** `onKey` returns false for every key but
+  enter/esc there, so letters/digits reach the input and no gg shortcut.
+- **Narrow web sub-rows** cut the label before `[name]` (`sessionTitleFit`
+  in the sidebar model); the TUI cuts rows at their end, where the state
+  text sits, so the name stays.
+- Tests landing a TUI start must NOT `pumpAll` it: the opened console's
+  session subscription never returns (`landStart` in
+  `agent_start_popup_test.go`).
+
 ### Web attach — session lifecycle on the page (plan 2, 2026-10-02)
 
 Plan `docs/superpowers/plans/2026-10-02-web-attach-plan-2-lifecycle.md`.
