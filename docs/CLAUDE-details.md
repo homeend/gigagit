@@ -5507,3 +5507,48 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   esc → the `git log --follow` process is gone 80 ms later. core.c — the
   200th row is 7b3d61f (matches plain git), `↓` → `loading… 200 found` →
   279 and counting.
+
+### Pull-request cache (`internal/prcache`, plan 1 of GitHub write-back, spec `docs/superpowers/specs/2026-10-07-github-write-design.md` §2)
+
+- **Layers.** `domain/forge_cache.go` keeps the in-memory maps (hot);
+  `domain/prcachestore.go` resolves `stateBaseDir("prcache")/<repoKey>/`
+  and moves entries between the two. Files: `list.json` (listing +
+  provider name), `repo.json` (base repo slug/URL), `pr-<n>.json`. Every
+  write is best effort; `prcachestore.go` helpers take `forgeMu`
+  themselves — never call them while holding it.
+- **Expiry is by READ time** (`[forge] cache_hours`, default 8 via
+  `SetPRCachePolicy`; frontends call it on config load): the old 5-minute
+  idle eviction is gone. A listed row is served with the listing's read
+  time; a full read (`rememberPR`) stamps its own. `putPRAtLocked` keeps
+  body, `NodeID` and viewer fields when a listing row lands on a full read.
+- **Derived git data** (`PRPreview`) is keyed by (merge base, head): the
+  merge base and ahead count are computed live (cheap; the key), the
+  commit list / file list / file count come from the entry while its own
+  `ComputedAt` is fresh, and are seeded into the memory caches the generic
+  readers use (`preview-summary:`, `preview-revlist:`, the new commit↔commit
+  `compare-files` cache, which hands out clones). `prCacheEntry` reads an
+  entry regardless of its forge read time — forge data and git data age
+  separately.
+- **One read per refresh.** `PRRevalidate` uses `forge.Snapshotter` (GH's
+  `query PRSnapshot`) when the provider has it: PR + comments in one call,
+  `CommentsChanged` from the stored signature. The TUI's `prRefreshCmd`
+  sets BOTH `prRevalidateInflight` and `prCommentsInflight` (the open no
+  longer issues a separate comment read); the web's comment poll calls
+  `PRRevalidate` too. The fake gh composes `snapshot-<n>.json` from
+  `pr-view-<n>.json` + `threads-<n>.json` when absent.
+- **Optimistic forge verdict.** `ForgeStatus` trusts the fresh cached
+  listing's provider without `Detect` (`forgeOptimistic`); a failing list
+  undoes it, sets `forgeDistrust` for the session and runs real detection.
+- **Prefetch** (`PRPrefetch`, singleflight `pr-prefetch`) walks entries by
+  last open, skips unmoved heads, stops while `gateFor(ctx).Queue()` is
+  non-empty (a user op holds or waits), runs `FetchPRHead` through
+  `Execute` then `PRPreview`. The web runs it via `Server.goBackground`
+  (ctx cancelled + waited on in `Close` — a fire-and-forget one wrote into
+  a test's temp dir during cleanup).
+- **Frontends.** TUI: `prsCachedMsg` draws the tab from the cache before
+  the live read (never over a live read, gen-checked); `prFreshnessSuffix`
+  on the files title; a moved head records `prReland` (path via
+  `keepPath`, open diff via `lineLanding`) consumed by the reopen's
+  `compareFilesMsg`. Web: `writePRs` answers `cached: true` rows before the
+  live listing; `cachedPR` falls back to them (else opening a cached row
+  404s); `#pr-fresh` beside `#files-title`.

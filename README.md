@@ -828,6 +828,16 @@ branches_watch  = false  # true = watch .git/refs/heads (recursive)
 remotes_watch   = false  # true = watch .git/refs/remotes (recursive)
 ```
 
+Pull requests open from a per-repository cache on disk and refresh in the
+background (one GitHub call); the view updates in place when the refresh
+finds new comments or new commits:
+
+```toml
+[forge]
+cache_hours = 8   # a PR read within this many hours opens at once; older = read from GitHub first; 0 = always read first
+prefetch    = 5   # after the list refreshes, prepare this many recently opened PRs whose head moved; 0 = off
+```
+
 Each per-source value is the poll interval in seconds; 0 (the default) means that
 source never auto-refreshes. Intervals are floored at `min_seconds` (default 10)
 so cheap sources don't hammer the repo. The `fetch` and `remote_tags` rows are
