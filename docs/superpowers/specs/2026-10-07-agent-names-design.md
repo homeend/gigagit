@@ -69,8 +69,8 @@ fallback agent name. A bracketed label would leak into all of them.
     closes the popup (mirrors the approve stage's esc).
   - alt+↓ / alt+↑ / enter / esc inside the open dropdown: `recallUpdate` with
     the new `scopeAgentName = "agentname"` ring — the shell-command prompt's
-    exact mechanics. Enter on a recalled entry accepts it **and starts**
-    (commit = start), as the shell prompt runs its recalled command.
+    exact mechanics: enter on a recalled entry fills the field, a second
+    enter starts (the shell prompt's own rule).
   - ctrl+c quits, as in the other stages.
 - The recall dropdown overlays via the existing `withRecall` path; the popup
   resets recall state on open/close (`recallReset`).
@@ -82,9 +82,8 @@ fallback agent name. A bracketed label would leak into all of them.
 Every site that shows a session's `Label` to the user switches to `Title()`:
 
 - Worktrees / Branches sub-rows (`sessionRowBody`): `└ ● Claude (yolo)
-  [viewer]  idle`. When the row is too narrow, the existing row truncation
-  applies; the plan checks it keeps the bracketed name visible (cut the
-  label's middle before the name) and fixes it if not.
+  [viewer]  idle`. A too-narrow row is cut at its end, as today; the name
+  sits right after the label, so the state text goes first.
 - Console title (`console.go` title triple), status lines (alt+a/alt+t
   cycle, kill, exited, removed, repo-scope "keeps running"), the sessions
   popup rows **and its filter** (typing `viewer` finds the session), the
@@ -109,6 +108,9 @@ Every site that shows a session's `Label` to the user switches to `Title()`:
   (today it `preventDefault`s every key). A start that comes back
   `needs_approval` goes to the approve phase and re-posts **with the typed
   name**. `dialogStep` stays pure and gets tests for the new phase.
+- The hosted page's start (`tui/websession.go`) passes `req.Name` on and
+  records it in the TUI's in-memory ring too (a duplicate disk write is a
+  harmless dedup-to-top).
 - Session JSON (`sessions_http.go`): `label` becomes the title (rows and the
   console header show it with no JS change); a new `name` field carries the
   raw name. Activity notices already ride `Label` → the title.
