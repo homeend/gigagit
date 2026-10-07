@@ -196,7 +196,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"style.css", ".md-anchor.agone", "a missing anchor is styled"},
 	{"style.css", ".vline.vrange", "the range is tinted"},
 	{"viewer.js", "selectAnchor(backAnchor(view.ov.anchors, f))", "back finds the anchor by its destination (a set may have moved it)"},
-	{"viewer.js", "dest: a.dest }", "the way back carries the anchor's destination"},
+	{"viewer.js", "dest: a.dest, anchors: view.ov.anchors", "the way back carries the anchor's destination"},
 	// Overview minors, round 2 (r1–r5).
 	{"viewer.js", "armBack(); // the overview did not come back: the way back stays", "r1: a Back whose overview fetch fails keeps the way back"},
 	{"viewer.js", "if (loadSeq !== seq0) return; // a re-open or a close meanwhile owns the screen", "r2: a re-open during the re-check never reads the reset selection"},

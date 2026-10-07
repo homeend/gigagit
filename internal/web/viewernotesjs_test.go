@@ -1,6 +1,10 @@
 package web
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
 
 const voPureStart = "// --- overview model (pure; guarded against Go) ---"
 const voPureEnd = "// --- end overview model ---"
@@ -110,5 +114,64 @@ func TestEvictedTextJS(t *testing.T) {
 	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `console.log([evictedText("a.go", 20), evictedText("b.go", 7)].join("|"));`)
 	if want := "closed a.go (20 files open)|closed b.go (7 files open)"; out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+func TestViewerAnchorBandsJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `
+const as = [
+  {dest: "a.go", path: "a.go"},
+  {dest: "a.go:12", path: "a.go", start: 12, end: 12},
+  {dest: "a.go:5-8", path: "a.go", start: 5, end: 8},
+  {dest: "b.go:3", path: "b.go", start: 3, end: 3},
+  {dest: "note:t1", note: "t1", path: "a.go", start: 20, end: 20},
+  {dest: "./a.go:5-8", path: "a.go", start: 5, end: 8},
+  {dest: "a.go:40", path: "a.go", start: 40, end: 40},
+  {dest: "a.go:28-35", path: "a.go", start: 28, end: 35},
+];
+const bs = anchorBands(as, "a.go", 30);
+const st = (c, l, d) => { const r = stepBand(bs, c, l, d); return r.i + (r.wrapped ? "w" : ""); };
+console.log([
+  JSON.stringify(bs),
+  bandOf(bs, as, "a.go:12", 30), bandOf(bs, as, "./a.go:5-8", 30), bandOf(bs, as, "gone", 30), bandOf(bs, as, "", 30), bandOf(bs, as, "a.go:28-35", 30),
+  st(1, 12, 1), st(2, 28, 1), st(0, 6, -1), st(-1, 1, 1), st(-1, 30, 1), st(-1, 20, -1), st(-1, 3, -1),
+  stepBand([], -1, 5, 1).i,
+  JSON.stringify(stepBand(bs.slice(0, 1), 0, 5, 1)),
+  bandKindAt(bs, 1, 12), bandKindAt(bs, 1, 6), bandKindAt(bs, 1, 9),
+  JSON.stringify(anchorBands([{dest: "x:2", path: "x", start: 2}], "x", 10)),
+].join("|"));
+`)
+	want := `[{"start":5,"end":8,"i":2},{"start":12,"end":12,"i":1},{"start":28,"end":30,"i":7}]|1|0|-1|-1|2|2|0w|2w|0|0w|1|2w|-1|{"i":0,"wrapped":false}|cur|other||[{"start":2,"end":2,"i":0}]`
+	if out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+// The viewer's wiring of the bands: n / p always the viewer's (a p there is
+// never the global pull), an anchor open no longer sets the reader's range,
+// and a change in the store re-reads the anchors of the overview that opened
+// the file.
+func TestViewerAnchorBandsWiring(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile("static/viewer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{`case "n": stepViewerAnchor(1)`, `case "p": stepViewerAnchor(-1)`, `cur: t.note ? "" : a.dest`, "refreshFromAnchors(f)", "bandKindAt(bands, curB, i + 1)"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	if strings.Contains(src, "view.range = t.end > t.line") {
+		t.Error("an anchor open still sets the reader's range")
+	}
+	css, err := os.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(css), ".vline.vanchor.acur") {
+		t.Error("style.css has no current-band rule")
 	}
 }
