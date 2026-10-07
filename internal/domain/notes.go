@@ -737,6 +737,7 @@ func (s *Service) invalidateNoteCounts() {
 	s.noteCounts = nil
 	s.previewCounts = nil // preview badges count the same store
 	s.carriedCache = nil  // carried notes read the same store
+	s.prReviewCache = nil // remarks read the same store
 	s.notesGen++
 	s.mu.Unlock()
 }

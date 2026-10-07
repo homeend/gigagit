@@ -447,28 +447,11 @@ func (s *Service) remarkItem(ctx context.Context, plan *engine.SendPlan, r Revie
 		skip("not in this PR")
 		return
 	}
-	base, tip, _ := s.reviewRevs(ctx, r)
-	var src []string
-	switch {
-	case side == model.NoteSideOld:
-		src = s.revLines(ctx, base, path)
-	case r.Kind == ReviewOnWorktree:
-		src = s.worktreeLines(ctx, r.Worktree, path)
-	default:
-		src = s.revLines(ctx, tip, path)
-	}
-	span := dn.Range[1] - dn.Range[0] + 1
-	want := anchorLines(src, dn.Range)
-	if span < 1 || len(want) != span {
+	rng, want, ok := s.remarkPlace(ctx, r, path, side, dn.Range, pl.lines(side == model.NoteSideOld, path))
+	if !ok {
 		skip("its lines changed")
 		return
 	}
-	start := findAnchor(pl.lines(side == model.NoteSideOld, path), model.NoteContextHash(want), span, dn.Range[0])
-	if start == 0 {
-		skip("its lines changed")
-		return
-	}
-	rng := [2]int{start, start + span - 1}
 	note := model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: dn.Summary, Rationale: dn.Rationale}
 	for _, kv := range dn.Meta {
 		note.Tags = append(note.Tags, kv.Key+": "+kv.Value)
@@ -483,6 +466,33 @@ func (s *Service) remarkItem(ctx context.Context, plan *engine.SendPlan, r Revie
 		}
 	}
 	plan.Items = append(plan.Items, it)
+}
+
+// remarkPlace re-finds a remark's lines in target (§3.2): the text is read
+// where the review read it (the merge base for the old side, the review's
+// worktree or tip for the new) and found by its hash. ok false = its lines
+// changed. Shared by the send planner and the PR view (plan 3, T1).
+func (s *Service) remarkPlace(ctx context.Context, r Review, path string, side model.NoteSide, rng [2]int, target []string) ([2]int, []string, bool) {
+	base, tip, _ := s.reviewRevs(ctx, r)
+	var src []string
+	switch {
+	case side == model.NoteSideOld:
+		src = s.revLines(ctx, base, path)
+	case r.Kind == ReviewOnWorktree:
+		src = s.worktreeLines(ctx, r.Worktree, path)
+	default:
+		src = s.revLines(ctx, tip, path)
+	}
+	span := rng[1] - rng[0] + 1
+	want := anchorLines(src, rng)
+	if span < 1 || len(want) != span {
+		return [2]int{}, nil, false
+	}
+	start := findAnchor(target, model.NoteContextHash(want), span, rng[0])
+	if start == 0 {
+		return [2]int{}, nil, false
+	}
+	return [2]int{start, start + span - 1}, want, true
 }
 
 // placeThread reports whether rng lies inside ONE hunk on side — the lines
