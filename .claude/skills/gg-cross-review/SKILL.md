@@ -5,7 +5,7 @@ argument-hint: "<gg-link> [2|3] [what to focus on]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-cross-review:v3 -->
+<!-- gg:gg-cross-review:v4 -->
 
 # /gg-cross-review — several models review, you settle it
 
@@ -33,9 +33,12 @@ review in gg. Do NOT launch gg's TUI or `gg web`; they belong to the user.
 4. **Your own review tool.** `gg review --tools --json` lists the review
    tools: `name`, `agent` (`claude`, `codex`, `junie`, `kimi`,
    `antigravity`, `""` for a custom command), `mode`, `model`. Take the one
-   with `mode: "capture"`, `agent` = you and `model: true`. None → tell the
-   user to add your headless review tool (gg Settings → External tools,
-   category review) and stop.
+   with `mode: "capture"`, `agent` = you and `model: true`. More than one →
+   ask the user which to use, naming them; every reviewer runs that one.
+   None → tell the user to add your headless review tool (gg Settings →
+   External tools, category review) and stop — or, when a tool of yours
+   says `model: false`, that its command must take `<model:FLAG>` (its
+   `gg review --model` error says where).
 5. **Run the reviewers in parallel.** Make a scratch directory
    (`mktemp -d`) and start one command per model — reviewer 1, 2, 3 — each
    as a background task (Claude Code: run it in the background; a shell:

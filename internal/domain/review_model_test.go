@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -42,6 +43,32 @@ func TestResolveReviewCommandModel(t *testing.T) {
 	}
 	if got, err := ResolveReviewCommand(custom, template.CmdCtx{}); err != nil || got != "printf x" {
 		t.Fatalf("no model, no change: %q %v", got, err)
+	}
+}
+
+// A command the agent's flag cannot be appended to — something after the
+// agent's own arguments would take it — is refused with a fix, not run on
+// the default model; without a model it runs as before.
+func TestResolveReviewCommandRefusesAnUnreachableFlag(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell splitting asserted")
+	}
+	for cmd, sep := range map[string]string{
+		`claude -p x | tee /tmp/log`:    "|",
+		`claude -p x # my review`:       "#",
+		`claude -p x; echo done`:        ";",
+		"claude -p x\necho done\n":      "a line break",
+		`claude -p x && notify-send ok`: "&&",
+	} {
+		tc := config.ToolCommand{Name: "Mine", Category: "review", Mode: "capture", Command: cmd}
+		_, err := ResolveReviewCommand(tc, template.CmdCtx{Model: "opus"})
+		if !errors.Is(err, ErrNoModelSupport) || !strings.Contains(err.Error(), sep) || !strings.Contains(err.Error(), "<model:--model>") {
+			t.Errorf("%q: %v", cmd, err)
+		}
+		if _, err := ResolveReviewCommand(tc, template.CmdCtx{}); err != nil {
+			t.Errorf("%q without a model: %v", cmd, err)
+		}
 	}
 }
 

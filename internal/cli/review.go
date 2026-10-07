@@ -271,7 +271,7 @@ func printReviewTools(svc *domain.Service, asJSON bool, stdout, stderr io.Writer
 			mode = string(exttool.ModeCapture)
 		}
 		rows = append(rows, reviewToolRow{Name: tc.Name, Agent: agent, Mode: mode,
-			Model: template.HasModelSlot(tc.Command) || exttool.ModelFlagFor(agent) != ""})
+			Model: domain.ReviewTakesModel(tc)})
 	}
 	if asJSON {
 		_ = json.NewEncoder(stdout).Encode(rows)

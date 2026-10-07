@@ -185,6 +185,7 @@ func TestReviewToolsJSON(t *testing.T) {
 	dir := newRepoDir(t)
 	writeReviewTool(t, dir, "Claude", "claude -p x")
 	writeReviewTool(t, dir, "Echo", `printf x`)
+	writeReviewTool(t, dir, "Piped", "claude -p x | cat") // --model would miss the agent
 	block := "\n[[tools.command]]\ncategory = \"review\"\nname = \"Claude (interactive)\"\nmode = \"interactive\"\ncommand = \"claude\"\n"
 	f, err := os.OpenFile(filepath.Join(dir, ".gg.toml"), os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
@@ -207,7 +208,8 @@ func TestReviewToolsJSON(t *testing.T) {
 	for _, tl := range tools {
 		got[tl.Name] = tl.Agent + "/" + tl.Mode + "/" + map[bool]string{true: "model", false: "-"}[tl.Model]
 	}
-	if got["Claude"] != "claude/capture/model" || got["Echo"] != "/capture/-" || got["Claude (interactive)"] != "claude/interactive/model" {
+	if got["Claude"] != "claude/capture/model" || got["Echo"] != "/capture/-" || got["Claude (interactive)"] != "claude/interactive/model" ||
+		got["Piped"] != "claude/capture/-" {
 		t.Fatalf("tools = %v", got)
 	}
 }
@@ -298,5 +300,20 @@ func TestReviewFocusIsChecked(t *testing.T) {
 		if code != 2 || !strings.Contains(errb, "--focus") {
 			t.Errorf("%d chars: exit=%d stderr=%s", len(f), code, errb)
 		}
+	}
+}
+
+// A command whose last part would take the appended model flag (a pipe, a
+// comment, …) is refused with exit 2 before anything runs.
+func TestReviewModelRefusedWhenTheFlagWouldMissTheAgent(t *testing.T) {
+	skipOnWindows(t)
+	isolateReviewEnv(t)
+	fakeAgent(t, "claude")
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	writeReviewTool(t, dir, "Claude", "claude -p x | cat")
+	code, out, errb := runCLI(t, dir, "review", "--tool", "Claude", "--model", "opus", "--no-save", "--json", "HEAD")
+	if code != 2 || out != "" || !strings.Contains(errb, "after `|`") || !strings.Contains(errb, "<model:--model>") {
+		t.Fatalf("exit=%d out=%q stderr=%s", code, out, errb)
 	}
 }
