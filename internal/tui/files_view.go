@@ -65,6 +65,8 @@ func (m Model) closeFilesView() Model {
 	// its rows note-addressable at a stale tip. This is the single exit point.
 	m.filesPreviewSet = nil
 	m.filesPreviewCounts = nil
+	m.filesPreviewReviews = nil
+	m.filesPairLabel = ""
 	m.filesReview = nil
 	m.filesLandNote = ""
 	m.filesLandScope = ""
@@ -1246,6 +1248,10 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		return m, m.commitNotesCmd(m.filesHash, l.notedPath)
 	}
 	if l.noteID != "" { // an @notes/ entry: the review opens as the review view, esc comes back here
+		if bp := m.previewReturnHere(); bp != nil && m.inCompareMode() {
+			// A preview's Reviews block: esc re-opens the preview.
+			return m.openReviewWith(l.noteID, reviewTitle(bp.title), model.Commit{}, bp)
+		}
 		back := m.filesCommit
 		if back.Hash == "" {
 			back.Hash = m.filesHash

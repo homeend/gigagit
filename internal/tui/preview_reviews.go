@@ -113,3 +113,76 @@ func (m Model) previewReviewRowMenu() []actionRow {
 		}),
 	}
 }
+
+// previewReviewLines puts a scope's reviews on top of an opened preview's
+// file list under a "Reviews" heading, replacing a block already there (a
+// refresh re-applies it). Each row is a noteID row: enter opens the review
+// view, esc comes back here.
+func previewReviewLines(heads []domain.ReviewHead, lines []contentLine) []contentLine {
+	rest := lines
+	if len(rest) > 1 && rest[0].heading && rest[1].noteID != "" {
+		i := 1
+		for i < len(rest) && rest[i].noteID != "" {
+			i++
+		}
+		rest = rest[i:]
+	}
+	if len(heads) == 0 {
+		return rest
+	}
+	out := make([]contentLine, 0, len(heads)+1+len(rest))
+	out = append(out, contentLine{text: i18n.T("Reviews"), heading: true})
+	for _, h := range heads {
+		// No path: a review is not a file, so every file action passes it by.
+		out = append(out, contentLine{text: "  " + previewReviewRowBody(h), noteID: h.ID})
+	}
+	return append(out, rest...)
+}
+
+// setPreviewReviews stores the open scope's heads and re-lays the list on
+// screen, keeping the cursor on the row it was on; a pending landing
+// (filesLandNote: back from a review) puts it on that review's row. A list
+// still loading takes the heads when it lands (the compareFilesMsg arm).
+func (m Model) setPreviewReviews(heads []domain.ReviewHead) Model {
+	m.filesPreviewReviews = heads
+	p := m.filesView
+	if p == nil || m.filesReview != nil || !m.inCompareMode() ||
+		(len(p.lines) == 1 && isLoadingPlaceholder(p.lines[0].text)) {
+		return m
+	}
+	var keep contentLine
+	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) {
+		keep = vis[p.sel]
+	}
+	p.lines = previewReviewLines(heads, p.lines)
+	return m.landPreviewCursor(keep)
+}
+
+// landPreviewCursor puts the tree cursor on filesLandNote's row when it is
+// listed (consuming it), else back on keep's row (the same file or review).
+func (m Model) landPreviewCursor(keep contentLine) Model {
+	p := m.filesView
+	if p == nil {
+		return m
+	}
+	vis := p.visible()
+	if id := m.filesLandNote; id != "" {
+		for i, l := range vis {
+			if l.noteID == id {
+				m.filesLandNote = ""
+				p.sel = i
+				return m
+			}
+		}
+	}
+	for i, l := range vis {
+		if (keep.path != "" && l.path == keep.path) || (keep.noteID != "" && l.noteID == keep.noteID) {
+			p.sel = i
+			return m
+		}
+	}
+	if p.sel >= len(vis) {
+		p.sel = max(len(vis)-1, 0)
+	}
+	return m
+}

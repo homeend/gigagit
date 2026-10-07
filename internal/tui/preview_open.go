@@ -36,6 +36,8 @@ type previewOpenMsg struct {
 	eps                domain.PreviewEndpoints
 	set                domain.PreviewNoteSet // the note scope; zero when the pair is not ok
 	counts             map[string]int        // per-path root-note counts for the file list
+	heads              []domain.ReviewHead   // the scope's AI reviews: the file list's Reviews block
+	landNote           string                // a review whose row the cursor lands on (back from that review)
 	err                error
 }
 
@@ -57,6 +59,17 @@ func (m Model) openPreviewCmd(id, source, target, keepPath string) tea.Cmd {
 // source tip — and so the whole target…source diff — untouched. Only the
 // re-open path (a changed compare tag) says anything.
 func (m Model) reopenPreviewCmd(id, source, target, keepPath, moved string) tea.Cmd {
+	return m.resolvePreviewCmd(id, source, target, keepPath, moved, "")
+}
+
+// openPreviewLandingCmd is openPreviewCmd landing the cursor on review
+// landNote's row once the list is up: esc from a review opened in the
+// preview's Reviews block comes back to it.
+func (m Model) openPreviewLandingCmd(id, source, target, landNote string) tea.Cmd {
+	return m.resolvePreviewCmd(id, source, target, "", "", landNote)
+}
+
+func (m Model) resolvePreviewCmd(id, source, target, keepPath, moved, landNote string) tea.Cmd {
 	svc, gen := m.svc, m.previewGen
 	// A re-resolve of the pair that is already open keeps the title it opened
 	// with (a PR diff must not fall back to "Merge preview: refs/gg/pr/7 → …").
@@ -68,7 +81,7 @@ func (m Model) reopenPreviewCmd(id, source, target, keepPath, moved string) tea.
 		eps, err := svc.PreviewOpen(context.Background(), source, target)
 		msg := previewOpenMsg{
 			id: id, source: source, target: target, title: title, prNumber: prNumber,
-			keepPath: keepPath, moved: moved, gen: gen, eps: eps, err: err,
+			keepPath: keepPath, moved: moved, gen: gen, eps: eps, err: err, landNote: landNote,
 		}
 		// The note scope rides the SAME resolve, so the file list paints its
 		// badges in the first frame rather than after a second round trip.
@@ -76,6 +89,7 @@ func (m Model) reopenPreviewCmd(id, source, target, keepPath, moved string) tea.
 			if set, serr := svc.PreviewNotes(context.Background(), source, target); serr == nil {
 				msg.set = set
 				msg.counts, _, _ = svc.PreviewNoteCounts(context.Background(), set)
+				msg.heads, _ = svc.PreviewReviews(context.Background(), set)
 			}
 		}
 		return msg
@@ -159,6 +173,7 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		if msg.set.OK() {
 			set := msg.set
 			m.filesPreviewSet, m.filesPreviewCounts = &set, msg.counts
+			m = m.setPreviewReviews(msg.heads)
 		}
 		return m, nil
 	}
@@ -191,7 +206,9 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		set := msg.set
 		m.filesPreviewSet = &set
 		m.filesPreviewCounts = msg.counts
+		m.filesPreviewReviews = msg.heads
 	}
+	m.filesLandNote = msg.landNote
 	m.previewOpen = &previewOpenState{
 		id: msg.id, source: msg.source, target: msg.target,
 		srcHash: msg.eps.Summary.SourceHash, tgtHash: msg.eps.Summary.TargetHash,
@@ -296,6 +313,8 @@ func (m Model) afterPreviewsRefresh() (Model, tea.Cmd) {
 				if r.byPath != nil {
 					m.filesPreviewCounts = r.byPath
 				}
+				// The same for its reviews: the Reviews block on top.
+				m = m.setPreviewReviews(r.reviews)
 				return m, nil
 			}
 			moved = po.source

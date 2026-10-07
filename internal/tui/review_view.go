@@ -35,6 +35,30 @@ type reviewViewState struct {
 	// back is the commit whose files view opened this review (its @notes/
 	// entry): esc returns to that list. Zero = esc closes the view.
 	back model.Commit
+	// backPreview is the preview (or pair) whose Reviews block opened this
+	// review: esc re-opens it. One-shot — leaveReviewView clears it.
+	backPreview *previewReturn
+}
+
+// previewReturn is the preview a review view was opened from (its Reviews
+// block): esc re-opens it, the cursor on the review's row.
+type previewReturn struct {
+	id, source, target string             // a merge preview (id "" = a one-off)
+	pair               *domain.CommitPair // a commit pair (A, B, Label); nil for a merge preview
+	title              string
+}
+
+// previewReturnHere is what the view on screen re-opens as when a review is
+// opened from its Reviews block: the merge preview (previewOpen) or the
+// commit pair (its note scope); nil for any other view.
+func (m Model) previewReturnHere() *previewReturn {
+	if po := m.previewOpen; po != nil {
+		return &previewReturn{id: po.id, source: po.source, target: po.target, title: m.filesTitle}
+	}
+	if s := m.filesPreviewSet; s != nil && s.IsPair() && s.Only == "" {
+		return &previewReturn{pair: &domain.CommitPair{A: s.Base, B: s.Tip, Label: m.filesPairLabel}, title: m.filesTitle}
+	}
+	return nil
 }
 
 // reviewViewMsg is openReview's off-thread read.
@@ -47,6 +71,7 @@ type reviewViewMsg struct {
 	isRange   bool
 	states    map[string]domain.WorkingFileState
 	back      model.Commit
+	backPrev  *previewReturn
 	gen       int // the loading box it answers (reviewLoadingPopup.gen)
 	err       error
 }
@@ -62,6 +87,12 @@ func (m Model) openReview(id, title string) (Model, tea.Cmd) {
 // openReviewFrom is openReview from a commit's files view: esc from the review
 // view returns to back's file list.
 func (m Model) openReviewFrom(id, title string, back model.Commit) (Model, tea.Cmd) {
+	return m.openReviewWith(id, title, back, nil)
+}
+
+// openReviewWith is openReviewFrom with a preview to return to (bp, from a
+// preview's Reviews block) instead of a commit.
+func (m Model) openReviewWith(id, title string, back model.Commit, bp *previewReturn) (Model, tea.Cmd) {
 	svc := m.svc
 	if svc == nil {
 		return m, nil
@@ -73,7 +104,7 @@ func (m Model) openReviewFrom(id, title string, back model.Commit) (Model, tea.C
 	m = m.pushLayer(&reviewLoadingPopup{gen: gen})
 	return m, func() tea.Msg {
 		ctx := context.Background()
-		out := reviewViewMsg{id: id, title: title, back: back, gen: gen}
+		out := reviewViewMsg{id: id, title: title, back: back, backPrev: bp, gen: gen}
 		if out.review, out.err = svc.Review(ctx, id); out.err != nil || out.review.Doc == nil {
 			return out
 		}
@@ -110,7 +141,7 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("not in gg review format — shown as text")
 		return m, cmd
 	}
-	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back}
+	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back, backPreview: msg.backPrev}
 	open := func(m Model) (Model, tea.Cmd) {
 		var cmd tea.Cmd
 		switch {

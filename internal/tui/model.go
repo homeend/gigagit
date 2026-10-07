@@ -224,6 +224,11 @@ type Model struct {
 	// showing a preview. Stamped onto each diff the view opens.
 	filesPreviewSet    *domain.PreviewNoteSet
 	filesPreviewCounts map[string]int
+	// filesPreviewReviews are the open preview's (or pair's) AI reviews: the
+	// Reviews block on top of its file list. filesPairLabel is an open saved
+	// pair's label, kept so a review opened from it can re-open it.
+	filesPreviewReviews []domain.ReviewHead
+	filesPairLabel      string
 	// filesReview is the files view's REVIEW mode (review_view.go): set
 	// after the view opens on a structured review; nil otherwise.
 	filesReview *reviewViewState
@@ -1185,6 +1190,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesView.lines = reviewTreeLines(st, m.filesView.lines)
 		}
 		m.filesView.sel = 0
+		if m.filesReview == nil && m.filesPreviewSet != nil && len(m.filesPreviewReviews) > 0 {
+			m.filesView.lines = previewReviewLines(m.filesPreviewReviews, m.filesView.lines)
+			m = m.landPreviewCursor(contentLine{})
+		}
 		// A re-armed merge preview keeps the file the cursor was on when its
 		// tips moved (the path survives in the fresh list unless the commit
 		// dropped it); one-shot, so a later manual reload starts at the top.

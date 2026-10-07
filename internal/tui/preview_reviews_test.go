@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
@@ -279,5 +281,207 @@ func TestReviewResultRereadsThePreviews(t *testing.T) {
 	nm, _ := m.applyReviewResult(domain.TaskInfo{Key: "review — x", NoteID: "r9"})
 	if !nm.srcInflight[srcNotes] || !nm.srcInflight[srcPreviews] {
 		t.Fatalf("in flight: notes %v previews %v", nm.srcInflight[srcNotes], nm.srcInflight[srcPreviews])
+	}
+}
+
+// drainUntil runs cmd and every command its messages return, breadth-first,
+// until done(m) holds or the queue is empty (tea.BatchMsg unwrapped). A
+// command that does not answer within 2 s (a tick, a never-ending wait) is
+// skipped.
+func drainUntil(t *testing.T, m Model, cmd tea.Cmd, done func(Model) bool) Model {
+	t.Helper()
+	queue := []tea.Cmd{cmd}
+	for steps := 0; len(queue) > 0 && !done(m) && steps < 500; steps++ {
+		c := queue[0]
+		queue = queue[1:]
+		if c == nil {
+			continue
+		}
+		ch := make(chan tea.Msg, 1)
+		go func() { ch <- c() }()
+		var msg tea.Msg
+		select {
+		case msg = <-ch:
+		case <-time.After(2 * time.Second):
+			continue
+		}
+		if b, ok := msg.(tea.BatchMsg); ok {
+			queue = append(queue, b...)
+			continue
+		}
+		if msg == nil {
+			continue
+		}
+		updated, next := m.Update(msg)
+		m = updated.(Model)
+		queue = append(queue, next)
+	}
+	if !done(m) {
+		t.Fatalf("drainUntil: condition never held (status %q)", m.statusMsg)
+	}
+	return m
+}
+
+// drainUntilFilesListed drains until a compare file list with a Reviews
+// block on top is on screen (no review view).
+func drainUntilFilesListed(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	return drainUntil(t, m, cmd, func(m Model) bool {
+		return m.filesView != nil && m.filesReview == nil && len(m.filesView.lines) > 0 &&
+			!isLoadingPlaceholder(m.filesView.lines[0].text) && m.filesView.lines[0].heading
+	})
+}
+
+// openStoredPreview opens Previews row 0 and lands its file list.
+func openStoredPreview(t *testing.T, m Model) Model {
+	t.Helper()
+	m.sel[panelPreviews] = 0
+	m, cmd := updateKey(m, "enter")
+	return drainUntilFilesListed(t, m, cmd)
+}
+
+func TestOpenPreviewShowsItsReviewsOnTop(t *testing.T) {
+	t.Parallel()
+	m, _ := storedPreviewReviewModel(t)
+	m = openStoredPreview(t, m)
+	lines := m.filesView.lines
+	if len(lines) < 3 || !lines[0].heading || lines[0].text != "Reviews" || lines[1].noteID == "" || !strings.Contains(lines[1].text, "└ Review:") {
+		t.Fatalf("file list %+v, want a Reviews block on top", lines)
+	}
+	if lines[len(lines)-1].path != "a.txt" {
+		t.Fatalf("the files follow the block: %+v", lines)
+	}
+}
+
+func TestReviewFromPreviewEscReturnsToThePreview(t *testing.T) {
+	t.Parallel()
+	m, _ := storedPreviewReviewModel(t)
+	m = openStoredPreview(t, m)
+	id := m.filesView.lines[1].noteID
+	m.filesView.sel = 1
+	m, cmd := updateKey(m, "enter")
+	m = drainUntil(t, m, cmd, func(m Model) bool { return m.filesReview != nil })
+	if st := m.filesReview; st.backPreview == nil || st.backPreview.source != "feat/x" {
+		t.Fatalf("review opened without a way back to its preview: %+v", st)
+	}
+	m, cmd = updateKey(m, "esc")
+	m = drainUntilFilesListed(t, m, cmd)
+	if m.filesReview != nil || m.previewOpen == nil || m.previewOpen.source != "feat/x" {
+		t.Fatalf("esc did not return to the preview (review %v, preview %+v)", m.filesReview != nil, m.previewOpen)
+	}
+	vis := m.filesView.visible()
+	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) || vis[m.filesView.sel].noteID != id {
+		t.Fatalf("cursor not back on the review's row (sel %d)", m.filesView.sel)
+	}
+}
+
+// The way back is one-shot: a preview that no longer opens leaves the
+// review on screen, and the next esc closes it — never an esc loop.
+func TestReviewFromPreviewEscTwiceWhenThePreviewIsGone(t *testing.T) {
+	t.Parallel()
+	m, dir := storedPreviewReviewModel(t)
+	m = openStoredPreview(t, m)
+	m.filesView.sel = 1
+	m, cmd := updateKey(m, "enter")
+	m = drainUntil(t, m, cmd, func(m Model) bool { return m.filesReview != nil })
+	runGit(t, dir, "branch", "-D", "feat/x")
+	m, cmd = updateKey(m, "esc")
+	m = drainUntil(t, m, cmd, func(m Model) bool { return m.statusMsg != "" })
+	if m.filesReview == nil {
+		t.Fatal("the review closed although its preview could not open")
+	}
+	m, cmd = updateKey(m, "esc")
+	m = pumpAll(t, m, cmd)
+	if m.filesView != nil {
+		t.Fatalf("the second esc did not close the view (review %v)", m.filesReview != nil)
+	}
+}
+
+func TestPreviewReviewLinesReplaceInPlace(t *testing.T) {
+	t.Parallel()
+	files := []contentLine{{text: "M  a.txt", path: "a.txt"}}
+	h := domain.ReviewHead{ID: "r1", Agent: "A"}
+	once := previewReviewLines([]domain.ReviewHead{h}, files)
+	twice := previewReviewLines([]domain.ReviewHead{h, {ID: "r2", Agent: "B"}}, once)
+	if len(once) != 3 || len(twice) != 4 || twice[3].path != "a.txt" {
+		t.Fatalf("once %d lines, twice %d: %+v", len(once), len(twice), twice)
+	}
+	if none := previewReviewLines(nil, twice); len(none) != 1 || none[0].path != "a.txt" {
+		t.Fatalf("no heads left a block: %+v", none)
+	}
+}
+
+func TestOpenPreviewReviewsBlockFollowsARefresh(t *testing.T) {
+	t.Parallel()
+	m, _ := storedPreviewReviewModel(t)
+	m = openStoredPreview(t, m)
+	m = m.setPreviewReviews(nil)
+	if m.filesView.lines[0].heading {
+		t.Fatalf("an emptied scope kept its block: %+v", m.filesView.lines)
+	}
+	// A previews read whose tips did not move re-applies the row's heads.
+	m = readPreviewsNow(t, m)
+	if l := m.filesView.lines; !l[0].heading || l[1].noteID == "" {
+		t.Fatalf("a refresh did not restore the block: %+v", l)
+	}
+}
+
+// storedPairReviewModel: a saved commit pair main..feat/x ("pair one") with
+// one review saved on it, the Previews tab read.
+func storedPairReviewModel(t *testing.T) Model {
+	t.Helper()
+	dir, repo := newRepoDir(t)
+	base := gitOut(t, dir, "rev-parse", "HEAD")
+	runGit(t, dir, "checkout", "-q", "-b", "feat/x")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-q", "-m", "add a")
+	tip := gitOut(t, dir, "rev-parse", "HEAD")
+	runGit(t, dir, "checkout", "-q", "main")
+	svc := domain.New(repo)
+	svc.UsePreviewsDir(t.TempDir())
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	if _, err := svc.PairAdd(ctx, base, tip, "pair one"); err != nil {
+		t.Fatal(err)
+	}
+	set, err := svc.PairNotes(ctx, base, tip)
+	if err != nil || !set.OK() {
+		t.Fatalf("PairNotes: %+v %v", set, err)
+	}
+	if _, _, err := svc.SaveReview(ctx, domain.SaveReview{Target: domain.ScopeReviewTarget(set), Agent: "Claude Code", Text: previewReviewTestDoc}); err != nil {
+		t.Fatal(err)
+	}
+	m := New(svc)
+	updated, _ := m.Update(m.loadCmd()())
+	m = readPreviewsNow(t, updated.(Model))
+	return m.activateTab(panelPreviews)
+}
+
+func TestReviewFromPairEscReturnsToThePair(t *testing.T) {
+	t.Parallel()
+	m := storedPairReviewModel(t)
+	rows, _ := m.panelView(panelPreviews)
+	if len(rows) != 2 || !strings.Contains(rows[1], "└ Review:") {
+		t.Fatalf("rows %q, want the pair and its review", rows)
+	}
+	m = openStoredPreview(t, m) // enter on row 0: the pair
+	id := m.filesView.lines[1].noteID
+	m.filesView.sel = 1
+	m, cmd := updateKey(m, "enter")
+	m = drainUntil(t, m, cmd, func(m Model) bool { return m.filesReview != nil })
+	if bp := m.filesReview.backPreview; bp == nil || bp.pair == nil || bp.pair.Label != "pair one" {
+		t.Fatalf("review opened without a way back to its pair: %+v", m.filesReview.backPreview)
+	}
+	m, cmd = updateKey(m, "esc")
+	m = drainUntilFilesListed(t, m, cmd)
+	if m.filesReview != nil || m.filesPreviewSet == nil || !m.filesPreviewSet.IsPair() || !strings.Contains(m.filesTitle, "pair one") {
+		t.Fatalf("esc did not return to the pair (title %q)", m.filesTitle)
+	}
+	vis := m.filesView.visible()
+	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) || vis[m.filesView.sel].noteID != id {
+		t.Fatalf("cursor not back on the review's row (sel %d)", m.filesView.sel)
 	}
 }
