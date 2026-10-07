@@ -1492,6 +1492,27 @@ table.diff tr.note td.note-gap { cursor: default; }
 /* A forge review thread (a pull request's comments): read-only, its own tint. */
 .notebox.forge { border-color: #4fb3a8; }
 .notebox.forge .notetitle { color: #4fb3a8; }
+/* A PR's note groups (spec 2026-10-07 §1.3): the group's colour as the box's
+   left edge, and as stripes on a file's ◆ badge. */
+.notebox.g1 { border-left: 4px solid var(--note-group-1); }
+.notebox.g2 { border-left: 4px solid var(--note-group-2); }
+.notebox.g3 { border-left: 4px solid var(--note-group-3); }
+.notebox.g4 { border-left: 4px solid var(--note-group-4); }
+.notebox.g5 { border-left: 4px solid var(--note-group-5); }
+.notebox.g6 { border-left: 4px solid var(--note-group-6); }
+.gbar { display: inline-block; width: 3px; height: 0.9em; margin-right: 1px; vertical-align: -0.1em; }
+.gbar.g1 { background: var(--note-group-1); }
+.gbar.g2 { background: var(--note-group-2); }
+.gbar.g3 { background: var(--note-group-3); }
+.gbar.g4 { background: var(--note-group-4); }
+.gbar.g5 { background: var(--note-group-5); }
+.gbar.g6 { background: var(--note-group-6); }
+/* Sync marks (§1.1): ○ local, ◌ sending, ○! failed, ● on GitHub. */
+.notemark { font-weight: bold; }
+.notemark.mark-sending { color: var(--dim); }
+.notemark.mark-failed, .notesenderr { color: #f27a6a; }
+.notemark.mark-github { color: #4fb3a8; }
+.notesenderr { font-size: .92em; margin-top: 4px; white-space: pre-wrap; }
 /* Every box folds from its title line (click, or z / Z): the title stays, the
    body goes. The fold is a class on the ROW so it toggles without a re-render. */
 .notetitle { cursor: pointer; }

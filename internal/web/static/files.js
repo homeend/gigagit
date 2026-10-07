@@ -18,7 +18,7 @@ import { saveUI } from "./uistate.js";
 import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutChanged, symOffered, symReapply, symRows } from "./symcompare.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
-import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
+import { noteMark, noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewOverview } from "./reviews.js";
@@ -635,6 +635,7 @@ function openLinkCompare(body) {
   // …and the previous screen's per-file totals must not paint on this one's
   // rows: only armPreview cleared them before a pair could read the same slot.
   state.previewCounts = null;
+  state.previewGroups = null;
   state.previewReviews = [];
   state.compare = {
     a: body.left.desc,
@@ -747,6 +748,7 @@ async function loadPairCounts() {
   const now = pairCtx();
   if (!now || now.a !== p.a || now.b !== p.b || (now.scope || "") !== scope) return; // superseded
   state.previewCounts = d.counts || {};
+  state.previewGroups = d.groups || {}; // a PR's per-file group slots (the badges' stripes)
   state.previewReviews = d.reviews || [];
   renderFiles();
 }
@@ -1068,7 +1070,7 @@ function renderFiles() {
     const prev = openPreviewCtx() || pairCtx();
     const badge = (f) =>
       prev && state.previewCounts
-        ? noteBadgeHTML(state.previewCounts[f.path])
+        ? noteBadgeHTML(state.previewCounts[f.path], (state.previewGroups || {})[f.path])
         : cmp
         ? ""
         : noteBadgeHTML(state.noteCounts.plain_by_commit_path[(f.sha || state.fileSha) + ":" + f.path]);
@@ -1145,8 +1147,12 @@ function renderFiles() {
 // noteBadgeHTML is the ◆N marker the TUI draws on a row with review notes
 // (threads, replies excluded). "" for none, so a repo without notes renders
 // byte-identically to before.
-function noteBadgeHTML(n) {
-  return n > 0 ? `<span class="notebadge">◆${n}</span>` : "";
+// slots, when given, are the file's note groups (a PR's — spec §1.3): one
+// colour stripe each, at most three, before the ◆.
+function noteBadgeHTML(n, slots) {
+  if (!(n > 0)) return "";
+  const bars = (slots || []).slice(0, 3).map((g) => `<span class="gbar g${Number(g) || 0}"></span>`).join("");
+  return `<span class="notebadge">${bars}◆${n}</span>`;
 }
 
 
@@ -2622,6 +2628,7 @@ async function fetchNotes(rerender = true) {
       // The preview's read hands back every file's total in the same call, so
       // the file list's ◆N badges follow a write without a second round-trip.
       state.previewCounts = d.counts || {};
+      state.previewGroups = d.groups || {}; // a PR's per-file group slots (the badges' stripes)
       renderFiles();
     }
   } catch {
@@ -2747,6 +2754,12 @@ function noteBoxHTML(n, cols, nctx = null) {
   const stale = n.status === "stale" || n.status === "outdated";
   const prev = !!(nc.ctx && nc.ctx.preview);
   const cls = prev ? "outdated" : "stale";
+  // A PR's own diff (its notes come from /api/pr/notes): a sync mark on every
+  // box and the group's colour as the left border (spec §1.3); elsewhere only
+  // the sending / failed marks.
+  const inPR = !!(nc.ctx && nc.ctx.preview && nc.ctx.preview.pr);
+  const mark = noteMark(n, inPR);
+  const slot = inPR && n.group_slot ? " g" + n.group_slot : "";
   const agent = n.source === "agent";
   const kind = n.read_only ? "forge" : agent ? "agent" : "user";
   const folded = state.noteCollapsed.has(n.id);
@@ -2762,12 +2775,16 @@ function noteBoxHTML(n, cols, nctx = null) {
   // line and drops its body. The fold is a CLASS on the row, toggled in place
   // — never a re-render, which would reset the ‹/› stepper and jolt the scroll.
   let box =
-    `<div class="notebox ${kind}${stale ? " " + cls : ""}">` +
+    `<div class="notebox ${kind}${stale ? " " + cls : ""}${slot}">` +
     `<div class="notetitle" data-collapse="${esc(n.id)}" title="click (or z) to collapse / expand">` +
-    `<span class="notefold"></span>${esc(title)}</div>`;
+    `<span class="notefold"></span>` +
+    (mark ? `<span class="notemark ${mark.cls}" title="${esc(mark.tip)}">${mark.glyph}</span> ` : "") +
+    `${esc(title)}</div>`;
   // A note's link (a reply's fix) is its own line; a click opens it.
   const linkLine = (r) => (r.link ? `<div class="notelink" data-link="${esc(r.link)}" title="open">→ ${esc(r.link)}</div>` : "");
   if (rootOn) box += part(n, "") + text(n) + linkLine(n);
+  // A failed send keeps the note local; its error is said inside the box.
+  if (rootOn && n.sync === "failed" && n.send_error) box += `<div class="notesenderr">${esc(n.send_error)}</div>`;
   for (const r of reps) {
     box += `<div class="notereply" data-note="${esc(r.id)}">` + part(r, "↳ " + (r.author ? r.author + ": " : "")) + text(r) + linkLine(r) + `</div>`;
   }
