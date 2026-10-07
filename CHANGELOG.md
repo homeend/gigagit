@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Sending to GitHub from gg web; agents never send
+
+### Added
+
+- **gg web shows where every note of a pull request lives** — `○` only on
+  this machine, `◌` being sent, `○!` the last send failed (the error inside
+  the box), `●` on GitHub — and colours each review group's notes (a left
+  border, and stripes on the file list's ◆ badges), with the same colours as
+  the terminal UI's dark theme. A note carried from another commit names
+  where it is stored.
+- **Send from gg web.** Right-click a note in a pull request's diff: *Send to
+  GitHub* (*Retry* after a failure), *Send my draft review…* / *Send this AI
+  review…*; on a GitHub thread *Reply & send…*, *Resolve / Reopen on
+  GitHub* and *Send draft replies*. The pull request's right-click menu has
+  *Send review…* (pick a group, edit the body) and *Verdict…*.
+- **Every send in gg web shows what will be posted and asks first**: the
+  target, the review body, each comment (30 shown, then "+ N more"), each
+  note that is skipped and why; the buttons are the verdicts (*Comment*,
+  *Approve*, *Request changes*) or *Send* / *Cancel*.
+- **gg web says "updated"** when a refresh of the open pull request found
+  new comments or commits — not on its first read and not for your own send.
+- **An interrupted send shows a bar** under the open pull request in gg web:
+  *Finish sending* or *Discard* (never discarding your own pending review).
+
+### Changed
+
+- **Agents never send to GitHub.** An AI agent writes local notes and
+  reviews; only you send them. Inside any session gg started (agent consoles
+  and gg terminal tabs) `gg pr send`, `gg pr reply --send`, `gg pr resolve`
+  and `gg pr unresolve` refuse, and outside one they post only after you
+  answer the confirm at your terminal.
+- **Clearing an AI review's body sends no body** (it no longer falls back to
+  the stored summary). `gg pr send --review <id>` without `--body` still
+  sends the summary; `--body ""` sends none.
+
+### Removed
+
+- The pending-send queue: `gg pr pending …`, the terminal UI's notices for
+  an agent's queued send, and the agent-verdict preselection.
+- `gg pr send --yes` and `--event`, and `gg pr reply --send --yes`: the
+  confirm is always answered at your terminal.
+
 ## Sending to GitHub from the terminal UI
 
 ### Added
