@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
@@ -161,13 +162,27 @@ func (r Review) remarkMoved(fp string) bool {
 // summaryFP keys the RemarkSends entry that records a review's SUMMARY
 // reached a pull request (its whole-review send was submitted while some of
 // its remarks stayed local, R4). Moved, so nothing counts it as sending; a
-// remark fingerprint is hex, so it never collides.
+// remark fingerprint is hex, so it never collides. The entry is
+// summaryKey(): this prefix plus the summary text's hash, so a review re-saved
+// with a NEW summary has that summary unsent. A bare "summary" entry (written
+// before the hash) still counts as sent: never post a summary twice.
 const summaryFP = "summary"
+
+// summaryKey is the summary mark of r's CURRENT summary text.
+func (r Review) summaryKey() string {
+	text := r.Text
+	if r.Doc != nil {
+		text = r.Doc.Overview
+	}
+	h := sha256.Sum256([]byte(strings.TrimSpace(text)))
+	return summaryFP + ":" + hex.EncodeToString(h[:8])
+}
 
 // summarySent reports the review's summary is already on pull request pr.
 func (r Review) summarySent(pr int) bool {
+	key := r.summaryKey()
 	for _, x := range r.RemarkSends {
-		if x.RemarkFP == summaryFP && x.Moved && x.Send.PR == pr {
+		if (x.RemarkFP == key || x.RemarkFP == summaryFP) && x.Moved && x.Send.PR == pr {
 			return true
 		}
 	}

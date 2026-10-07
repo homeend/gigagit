@@ -103,7 +103,11 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 		}
 		return plan, nil
 	}
-	if drafts, other := s.noteKinds(ctx, req.Notes); len(req.Resolve)+len(req.Unresolve) > 0 || drafts > 0 {
+	drafts, other, err := s.noteKinds(ctx, req.Notes)
+	if err != nil {
+		return engine.SendPlan{}, err
+	}
+	if len(req.Resolve)+len(req.Unresolve) > 0 || drafts > 0 {
 		if req.Review != "" || req.Mine || req.Verdict || other > 0 {
 			return engine.SendPlan{}, ErrMixedSend
 		}
@@ -157,14 +161,15 @@ func (s *Service) storedNotes(ctx context.Context) (map[string]model.Note, error
 
 // noteKinds counts a --note list's draft replies to GitHub threads and its
 // other items (local notes, remarks, GitHub ids); an id no longer stored is
-// neither — a reply/resolve send skips it, any other send names it.
-func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, other int) {
+// neither — a reply/resolve send skips it, any other send names it. A store
+// that cannot be read is an error, never a guess.
+func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, other int, err error) {
 	if len(ids) == 0 {
-		return 0, 0
+		return 0, 0, nil
 	}
 	byID, err := s.storedNotes(ctx)
 	if err != nil {
-		return 0, len(ids)
+		return 0, 0, err
 	}
 	for _, id := range ids {
 		n, ok := byID[id]
@@ -175,7 +180,7 @@ func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, other in
 			other++
 		}
 	}
-	return drafts, other
+	return drafts, other, nil
 }
 
 // planActions is replies and resolves: each its own call.
@@ -189,7 +194,7 @@ func (s *Service) planActions(ctx context.Context, plan engine.SendPlan, req PRS
 		for _, id := range req.Notes {
 			d, ok := byID[id]
 			if !ok { // deleted since the request was made (a queued send)
-				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "reply " + id, Reason: SkipGone, Summary: id})
+				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "reply: " + id, Reason: SkipGone, Summary: id})
 				continue
 			}
 			label := "reply: " + cutLabel(d.Summary)

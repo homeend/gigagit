@@ -3,10 +3,12 @@ package domain
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notes"
 )
 
 func draftReply(t *testing.T, svc *Service, sum string) string {
@@ -44,7 +46,24 @@ func TestPlanSendActionsSkipADeletedDraft(t *testing.T) {
 	if p.Mode != engine.SendActions || len(p.Items) != 2 {
 		t.Fatalf("plan = %+v", p)
 	}
-	if len(p.Skipped) != 1 || p.Skipped[0].Reason != "it no longer exists" || p.Skipped[0].Label != "reply "+gone {
+	if len(p.Skipped) != 1 || p.Skipped[0].Reason != "it no longer exists" || p.Skipped[0].Label != "reply: "+gone {
 		t.Fatalf("skipped = %+v", p.Skipped)
+	}
+}
+
+type failingLoadStore struct{ notes.Store }
+
+func (failingLoadStore) LoadAll() ([]model.Note, error) { return nil, errors.New("disk on fire") }
+
+// A store that cannot be read is said as such — never mistaken for a mixed
+// send.
+func TestPlanSendSurfacesAStoreError(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	ctx := context.Background()
+	svc.SetNotesStore(failingLoadStore{svc.notesStore(ctx)})
+	_, err := svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{"n1"}, Resolve: []string{"PRRT_1"}})
+	if err == nil || errors.Is(err, ErrMixedSend) || !strings.Contains(err.Error(), "disk on fire") {
+		t.Fatalf("err = %v", err)
 	}
 }

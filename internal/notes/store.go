@@ -20,6 +20,11 @@ import (
 // ErrNotFound is returned by Remove for an unknown id.
 var ErrNotFound = errors.New("notes: not found")
 
+// ErrRemoveRecord, returned by an Edit's fn, removes the record (a root takes
+// its replies) in the same locked write that judged it — a decision to
+// delete never races a reply written between two calls.
+var ErrRemoveRecord = errors.New("notes: remove this record")
+
 // Now is the clock seam (the snapshotNow pattern): tests override it to make
 // expiry deterministic. Package-level, so tests that set it run SERIALLY.
 var Now = clock.Now
@@ -37,7 +42,8 @@ type Store interface {
 	Put(n model.Note) error // add, or replace by ID
 	Remove(id string) error // a root takes its replies
 	// Edit is load+edit+save of ONE record under its part's lock;
-	// ErrNotFound when no part holds id (fn's error aborts the write).
+	// ErrNotFound when no part holds id (fn's error aborts the write;
+	// ErrRemoveRecord removes the record and its replies instead).
 	Edit(id string, fn func(*model.Note) error) error
 	Sweep(keep func(model.Note) bool) (dropped int, err error)
 	SetPolicy(p Policy) // the write-time budget lives ON the store (§4.4)

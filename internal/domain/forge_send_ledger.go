@@ -298,21 +298,16 @@ func (s *Service) settleReview(ctx context.Context, st notes.Store, n model.Note
 	if remove, changed := settle(&n); !remove && !changed {
 		return false
 	}
-	remove := false
 	err := st.Edit(n.ID, func(x *model.Note) error {
 		rm, changed := settle(x)
 		switch {
-		case rm:
-			remove = true
-			return errSettleNoChange
+		case rm: // judged on the live record, removed in the same write
+			return notes.ErrRemoveRecord
 		case !changed:
 			return errSettleNoChange
 		}
 		return nil
 	})
-	if remove {
-		return st.Remove(n.ID) == nil
-	}
 	return err == nil
 }
 
@@ -351,7 +346,7 @@ func settleReviewRecord(x *model.Note, pr int, pending string, judge func(string
 		// Some remarks stay local: remember the summary went, so a re-send
 		// posts only them.
 		if !r.summarySent(pr) {
-			out = append(out, model.RemarkSend{RemarkFP: summaryFP, Send: *x.Send, Moved: true})
+			out = append(out, model.RemarkSend{RemarkFP: r.summaryKey(), Send: *x.Send, Moved: true})
 		}
 		x.Send, x.RemarkSends = nil, out
 		return false, true
@@ -368,7 +363,7 @@ func settleReviewRecord(x *model.Note, pr int, pending string, judge func(string
 // reviewDocOf is a review note's document and send entries, nothing more:
 // enough for remark fingerprints, with no git call.
 func reviewDocOf(n model.Note) Review {
-	r := Review{ID: n.ID, RemarkSends: n.RemarkSends}
+	r := Review{ID: n.ID, RemarkSends: n.RemarkSends, Text: n.Rationale}
 	if doc, err := notebatch.ParseReview([]byte(n.Rationale)); err == nil {
 		r.Doc = &doc
 	}

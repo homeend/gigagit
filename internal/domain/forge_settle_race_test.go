@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -128,5 +129,62 @@ func TestSettleNeverClearsAStampThatProvesASend(t *testing.T) {
 	}
 	if n, ok := noteByID(t, svc, a); ok && n.Send == nil {
 		t.Fatal("a stamp naming a comment GitHub has was cleared: the note is local again")
+	}
+}
+
+type removeCountingStore struct {
+	notes.Store
+	removes int
+}
+
+func (c *removeCountingStore) Remove(id string) error {
+	c.removes++
+	return c.Store.Remove(id)
+}
+
+// A fully sent review goes in the same locked write that judged it: a reply
+// written between a judging Edit and a later Remove would be lost.
+func TestSettleRemovesASentReviewInOneLockedWrite(t *testing.T) {
+	t.Parallel()
+	svc, ff, head := sendRepo(t)
+	svc.forgeNow = func() time.Time { return settleT0 }
+	ctx := context.Background()
+	doc := `{"version":1,"summary":"looks fine","files":[{"path":"big.go","annotations":[
+ {"newRange":[5,5],"summary":"check this"},{"newRange":[25,25],"summary":"and this"}]}]}`
+	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Label: "feat"},
+		Agent: "claude", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := svc.Review(ctx, rid)
+	fps := r.remarkFPs()
+	at := settleT0.Add(-time.Minute)
+	if err := svc.notesStore(ctx).Edit(rid, func(n *model.Note) error {
+		n.Send = &model.NoteSend{PR: 7, Review: "PRR_done", At: at}
+		n.RemarkSends = []model.RemarkSend{
+			{RemarkFP: fps[0], Send: model.NoteSend{PR: 7, Review: "PRR_done", Thread: "PRRT_x", At: at}},
+			{RemarkFP: fps[1], Send: model.NoteSend{PR: 7, Review: "PRR_done", Thread: "PRRT_y", At: at}},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ff.mu.Lock()
+	for i, th := range []string{"PRRT_x", "PRRT_y"} {
+		ff.comments = append(ff.comments, model.ForgeComment{ID: "PRRC_" + th, Kind: model.ForgeCommentInline, Path: "big.go",
+			Line: 5 + 20*i, Body: "x\n\n" + forge.SendMarker(RemarkKey(rid, fps[i])), ThreadID: th, ReviewID: "PRR_done"})
+	}
+	ff.mu.Unlock()
+	c := &removeCountingStore{Store: svc.notesStore(ctx)}
+	svc.SetNotesStore(c)
+	svc.invalidateNoteCounts()
+	if _, err := svc.PRRevalidate(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Review(ctx, rid); !errors.Is(err, ErrReviewNotFound) {
+		t.Fatalf("the fully sent review is still local: %v", err)
+	}
+	if c.removes != 0 {
+		t.Fatalf("removed by %d separate Remove call(s) after the judging Edit", c.removes)
 	}
 }
