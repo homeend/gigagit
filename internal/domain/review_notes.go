@@ -57,6 +57,7 @@ type Review struct {
 	Commit, Branch string
 	Scope          string // the reviewed hex range
 	Worktree       string // a working review's checkout ("" otherwise)
+	Preview        string // the scope it belongs to (Note.Preview); "" = a commit's or branch's review
 	// Files is a working review's fingerprints: what it read, by blob id.
 	Files            []model.NoteFile
 	Agent, Summary   string
@@ -78,6 +79,11 @@ type ReviewHead struct {
 	// Remarks is the document's remark count, Resolved how many of them
 	// are resolved: a review row's tally.
 	Remarks, Resolved int
+	// Preview is the scope a preview review belongs to ("" otherwise),
+	// Scope the hex range it read; Older marks a preview review of a tip
+	// the preview has since moved past (PreviewReviews sets it).
+	Preview, Scope string
+	Older          bool
 }
 
 // A held lock is retried within reviewRetryBudget, sleeping a random
@@ -224,6 +230,7 @@ func (s *Service) putReview(st notes.Store, t ReviewTarget, wt string, cmd SaveR
 	n := model.Note{ID: cmd.NoteID, Source: model.NoteSourceAgent, Author: cmd.Agent,
 		Address: addr, Side: model.NoteSideNew, Tags: []string{model.ReviewTag}, Scope: scope,
 		Summary: reviewSummary(t), Rationale: cmd.Text, Files: cmd.Files, Created: now, Updated: now}
+	n.Preview = t.Preview
 	if n.ID == "" {
 		n.ID = notes.NewID(all)
 	} else {
@@ -286,7 +293,7 @@ func (s *Service) reviewOf(ctx context.Context, n model.Note, tips map[string]st
 		tips[b] = tip
 	}
 	r := Review{ID: n.ID, Kind: ReviewKindOf(b, n.Address.Commit, tip),
-		Commit: n.Address.Commit, Branch: b, Scope: n.Scope, Agent: n.Author,
+		Commit: n.Address.Commit, Branch: b, Scope: n.Scope, Preview: n.Preview, Agent: n.Author,
 		Summary: n.Summary, Text: n.Rationale, Created: n.Created, Updated: n.Updated}
 	if doc, err := notebatch.ParseReview([]byte(n.Rationale)); err == nil {
 		r.Doc = &doc
@@ -302,7 +309,7 @@ func (s *Service) reviewNotes(ctx context.Context) ([]model.Note, remarkThreadSe
 	if st == nil {
 		return nil, remarkThreadSet{}, ErrNotesDisabled
 	}
-	parts := []notes.Part{notes.PartCommits}
+	parts := []notes.Part{notes.PartCommits, notes.PartPreviews}
 	top, _ := s.TopLevel(ctx)
 	top = strings.TrimSpace(top)
 	if top != "" {
@@ -358,7 +365,8 @@ func (s *Service) ReviewsForCommit(ctx context.Context, sha string) ([]Review, e
 	tips := map[string]string{}
 	var out []Review
 	for _, n := range ns {
-		if n.Address.Commit == sha {
+		// a preview's review is its preview's, never its commit's (spec R5)
+		if n.Address.Commit == sha && n.Preview == "" {
 			out = append(out, th.attach(s.reviewOf(ctx, n, tips)))
 		}
 	}

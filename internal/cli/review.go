@@ -28,11 +28,14 @@ import (
 // at the first non-flag argument, so a value-taking flag can't safely be
 // partitioned out from after a positional the way show's bool-only --patch
 // is (see partitionFlags's doc comment in diff.go).
-func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stderr io.Writer) int {
+func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// `show` is a subcommand: it reads a stored review back. A branch named
 	// show is reviewed by its full ref (gg review refs/heads/show).
 	if len(rest) > 0 && rest[0] == "show" {
 		return reviewShow(svc, rest[1:], stdout, stderr)
+	}
+	if len(rest) > 0 && rest[0] == "save" {
+		return reviewSave(svc, rest[1:], stdin, stdout, stderr)
 	}
 	fs := flag.NewFlagSet("review", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -44,11 +47,11 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		return 2
 	}
 	if *working && fs.NArg() >= 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: "))
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
 		return 2
 	}
 	if fs.NArg() > 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: "))
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
 		return 2
 	}
 	if *working && *wantNotes {
@@ -80,8 +83,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		// reviewImportTarget then anchors notes on the tip, new side only —
 		// exactly what a preview needs.
 		arg = tgt.Spec.Rev
-		target = domain.ReviewTarget{Kind: domain.ReviewRange, Range: tgt.Spec.Rev,
-			Label: scopeName(tgt.Set), Diff: tgt.Spec}
+		target = domain.ScopeReviewTarget(tgt.Set) // the preview's own review (spec R5)
 		spec := tgt.Spec
 		hunkSpec, preview = &spec, tgt.Set.Pair()
 	case *working:

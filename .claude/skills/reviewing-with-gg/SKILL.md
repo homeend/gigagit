@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v13 -->
+<!-- gg:reviewing-with-gg:v14 -->
 
 # Reviewing with gg
 
@@ -81,6 +81,18 @@ the change it reviewed — `gg note add --rev <tip> --file <path> --new-line N
 --summary "…"` for a one-commit review, `--preview <base>..<tip>` for a range
 review (`gg review show` prints both ends in its header). They show beside the
 review, on the commit's Notes rows. Say in your report how many you added.
+
+## Writing a full review yourself
+
+When the user asks you to REVIEW a change (not one file — the whole change):
+store one review document — the "Review document" shape below — with
+`gg review save <gg-link> --agent "<your name>" --stdin`. Run
+`gg review save <gg-link> --dry-run` first: it prints what is reviewed and
+the `gg diff` argument that shows exactly that change. The review opens in
+the user's review view (overview, files, your remarks at their lines); on a
+merge preview or a commit pair it belongs to that preview. The user can also
+start this with `/gg-review <gg-link> [focus]`. A question about one file or
+line stays an ordinary note (`gg note add`).
 
 ## Choosing the target
 

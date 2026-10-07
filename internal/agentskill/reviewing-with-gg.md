@@ -75,6 +75,18 @@ the change it reviewed — `gg note add --rev <tip> --file <path> --new-line N
 review (`gg review show` prints both ends in its header). They show beside the
 review, on the commit's Notes rows. Say in your report how many you added.
 
+## Writing a full review yourself
+
+When the user asks you to REVIEW a change (not one file — the whole change):
+store one review document — the "Review document" shape below — with
+`gg review save <gg-link> --agent "<your name>" --stdin`. Run
+`gg review save <gg-link> --dry-run` first: it prints what is reviewed and
+the `gg diff` argument that shows exactly that change. The review opens in
+the user's review view (overview, files, your remarks at their lines); on a
+merge preview or a commit pair it belongs to that preview. The user can also
+start this with `/gg-review <gg-link> [focus]`. A question about one file or
+line stays an ordinary note (`gg note add`).
+
 ## Choosing the target
 
 A note anchors to ONE base and ONE result. The flags pick which:

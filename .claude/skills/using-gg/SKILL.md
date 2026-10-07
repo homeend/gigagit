@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v141 -->
+<!-- gg:using-gg:v142 -->
 
 # Using gg (gigagit)
 
@@ -86,6 +86,27 @@ guards against removing the worktree you are standing in.
   `gg review refs/heads/show`. Exit 1 unknown/deleted review or a moved
   link, 2 a malformed link or one with no `?review=`. MCP: `gg_review_show`
   (`link` = a review link, an id or `latest`).
+- `gg review save <gg-link> --agent <name> (--stdin | --file <path>) [--json]`
+  — store a review document YOU wrote (the shape in the reviewing-with-gg
+  skill's "Review document") as the review of the change the link names: a
+  merge preview or commit pair (the review then belongs to that preview,
+  never to its commit), a commit (its own change), a `@ref:` branch (against
+  the trunk) or a working/staged file link (the working changes). A path or
+  line in the link narrows nothing. Prints `review: <id>` and the review's
+  gg:// link; `--json` → `{id, link, warn}`. Exit 1 on input that is not a
+  review document (nothing stored) or a link naming no change, 2 on a usage
+  error or a malformed link.
+- `gg review save <gg-link> --dry-run [--json]` — store nothing; print what
+  the link would review and how to read it; `--json` → `{kind, label, range,
+  diff, hunks, checkout}`. `kind` = preview | pair | commit | branch |
+  working; `diff` = the `gg diff` argument for the patch/stat (the range;
+  `<empty-tree>..<sha>` for a root commit; `HEAD` for working changes);
+  `hunks` = the `gg diff --hunks` argument (`""` for working changes — no
+  hunk numbering covers HEAD → working tree, read the patch); `checkout` =
+  where to run both (a working link may name another worktree). Read the
+  change through these: a `@ref:` link is the tip's own change to `gg diff`
+  but the branch against the trunk to a review. A stored working review
+  carries fingerprints taken at save time, like the lane's.
 - `gg link --review <id|latest>` — print a stored review's link (and record
   it in `gg links`); `latest` = the newest review in this repository.
 
@@ -736,7 +757,7 @@ finds the right one here.
   commit's own note: `--preview` does not list it (`gg note list --rev`
   does, and `--rev` still lists every note at that address). `gg note apply --preview P --stdin` imports
   a batch onto the tip (old-side items skipped), and `gg review --preview P
-  [--notes]` reviews the pair.
+  [--notes]` reviews the pair — stored as the preview's own review.
 - `gg branch current` — just the branch name (HEAD's short sha when
   detached).
 - `gg branch ls` — local branches, `* ` marking HEAD, `↑a ↓b` when an

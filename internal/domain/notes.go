@@ -67,6 +67,10 @@ type NoteCounts struct {
 	// "<sha>:<path>": the ones a commit's Notes rows are for.
 	PlainByCommitPath map[string]int
 	Reviews           []ReviewHead // every AI review note, newest first (Branches tab, @notes)
+	// PreviewReviews are the reviews written for a merge preview or a commit
+	// pair, keyed by the scope name (Note.Preview), newest first. Never in
+	// Reviews: a preview's review marks no commit (spec R5).
+	PreviewReviews map[string][]ReviewHead
 	// WorkingReviews is this worktree's reviews of uncommitted changes,
 	// newest first: never in a ◆N badge, never in Reviews (the Branches
 	// sub-rows). Unmatched — matching reads files (Service.WorkingReviews).
@@ -633,8 +637,15 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 			// A review has its own marker (✎ in Commits, ◆ in Branches):
 			// it is never counted in the ◆N note badges.
 			h := ReviewHead{ID: n.ID, Commit: n.Address.Commit, Branch: n.Address.Branch,
-				Agent: n.Author, Summary: n.Summary, Created: n.Created}
+				Agent: n.Author, Summary: n.Summary, Created: n.Created, Preview: n.Preview, Scope: n.Scope}
 			h.Remarks, h.Resolved = docTally(n.Rationale, remarkRes[n.ID])
+			if n.Preview != "" {
+				if c.PreviewReviews == nil {
+					c.PreviewReviews = map[string][]ReviewHead{}
+				}
+				c.PreviewReviews[n.Preview] = append(c.PreviewReviews[n.Preview], h)
+				continue
+			}
 			c.Reviews = append(c.Reviews, h)
 			continue
 		}
@@ -689,6 +700,9 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 	}
 	sort.SliceStable(c.Reviews, func(a, b int) bool { return c.Reviews[a].Created.After(c.Reviews[b].Created) })
 	sort.SliceStable(c.WorkingReviews, func(a, b int) bool { return c.WorkingReviews[a].Created.After(c.WorkingReviews[b].Created) })
+	for _, hs := range c.PreviewReviews {
+		sort.SliceStable(hs, func(a, b int) bool { return hs[a].Created.After(hs[b].Created) })
+	}
 	s.mu.Lock()
 	if s.notesGen == gen { // a mutation raced this computation: drop it
 		s.noteCounts = &c
