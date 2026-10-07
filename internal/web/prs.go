@@ -252,6 +252,9 @@ func (s *Server) applyPRPolicy(ctx context.Context, svc *domain.Service) {
 
 func (s *Server) handlePRs(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
+	// The policy first: the listing lane's forge verdict reads the cache
+	// under it ([forge] cache_hours = 0 trusts no cached listing).
+	s.applyPRPolicy(readCtx(r), svc)
 	s.kickPRs(svc, false)
 	s.writePRs(w, r, svc)
 }
@@ -370,6 +373,6 @@ func (s *Server) handlePRRevalidate(w http.ResponseWriter, r *http.Request) {
 	if !rv.ReadAt.IsZero() {
 		readAt = rv.ReadAt.UTC().Format(time.RFC3339)
 	}
-	writeJSON(w, map[string]any{"moved": rv.Moved, "state": rv.PR.State,
+	writeJSON(w, map[string]any{"moved": rv.Moved, "state": rv.PR.State, "head_sha": rv.PR.HeadSHA,
 		"comments_changed": rv.CommentsChanged, "read_at": readAt})
 }

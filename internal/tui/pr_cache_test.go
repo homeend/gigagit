@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -193,5 +194,57 @@ func TestPRListRefreshSchedulesPrefetch(t *testing.T) {
 	}
 	if _, cmd = m.handlePRsLoaded(prsLoadedMsg{gen: m.prsGen, bg: true, status: ok, err: errors.New("502")}); has(cmd) {
 		t.Fatal("a failed list must not prefetch")
+	}
+}
+
+// Review finding 3: the TUI owns its prefetch — a repo switch (and quit)
+// cancels it.
+func TestPRPrefetchIsCancelledOnRepoSwitch(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m, cmd := m.prPrefetchCmd()
+	if cmd == nil || m.prPrefetch == nil {
+		t.Fatal("prefetch not started")
+	}
+	ctx := m.prPrefetch.ctx
+	if ctx.Err() != nil {
+		t.Fatal("cancelled at start")
+	}
+	m = m.stopPRPrefetch()
+	if ctx.Err() == nil || m.prPrefetch != nil {
+		t.Fatal("stopPRPrefetch must cancel the running prefetch")
+	}
+	m, _ = m.prPrefetchCmd()
+	ctx = m.prPrefetch.ctx
+	top, err := m.svc.TopLevel(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	nm, _ := m.reRoot(top)
+	if ctx.Err() == nil {
+		t.Fatal("a repo switch must cancel the old repo's prefetch")
+	}
+	_ = nm
+}
+
+// A prefetch may already have fetched the moved head into the local ref, so
+// the domain says "not moved": the view still shows the OLD head and must
+// follow the forge's head all the same.
+func TestMovedIsJudgedAgainstTheHeadOnScreen(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m.prRevalidateInflight, m.prCommentsInflight = false, false
+	shown := m.previewOpen.srcHash
+	if shown == "" {
+		t.Fatal("setup: the open view has no head hash")
+	}
+	pr := model.PullRequest{Number: 7, State: model.PRStateOpen, HeadSHA: strings.Repeat("e", 40)}
+	nm, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, moved: false, pr: pr})
+	if mm := nm.(Model); cmd == nil || mm.prRevalidateSkip != 7 {
+		t.Fatalf("a forge head unlike the one on screen must re-open (cmd=%v skip=%d)", cmd != nil, mm.prRevalidateSkip)
+	}
+	pr.HeadSHA = shown
+	if _, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, moved: false, pr: pr}); cmd != nil {
+		t.Fatal("the head on screen is the forge's: nothing to do")
 	}
 }

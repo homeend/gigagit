@@ -92,7 +92,15 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 			m.prs[i] = msg.pr
 		}
 	}
-	if !msg.moved || m.openPRNumber() != msg.n || !m.opsIdle() {
+	// "Moved" is judged against the head ON SCREEN too: a background prefetch
+	// may already have fetched the new head into the local ref, and then the
+	// domain (which compares with that ref) says nothing moved.
+	moved := msg.moved
+	if po := m.previewOpen; po != nil && po.prNumber == msg.n && msg.pr.HeadSHA != "" &&
+		po.srcHash != "" && po.srcHash != msg.pr.HeadSHA {
+		moved = true
+	}
+	if !moved || m.openPRNumber() != msg.n || !m.opsIdle() {
 		return m, cmd // unchanged, or the user moved on: the next enter fetches
 	}
 	m.prRevalidateSkip = msg.n

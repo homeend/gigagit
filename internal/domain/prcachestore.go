@@ -97,12 +97,7 @@ func (s *Service) persistPR(ctx context.Context, n int, edit func(e *prcache.Ent
 	if st == nil {
 		return
 	}
-	e, ok := st.Load(n)
-	if !ok {
-		e = prcache.Entry{Number: n}
-	}
-	edit(&e)
-	_ = st.Save(e)
+	_ = st.Update(n, edit) // load+edit+save under the lock: no lost update
 }
 
 // cachedListing is the fresh cached open-PR listing.

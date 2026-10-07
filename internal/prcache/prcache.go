@@ -216,6 +216,24 @@ func (s *Store) Save(e Entry) error {
 	})
 }
 
+// Update loads PR n's entry (a fresh one when absent), applies edit and
+// saves it — all under the lock, so concurrent edits of one entry (this
+// process or another) never lose each other.
+func (s *Store) Update(n int, edit func(e *Entry)) error {
+	return s.locked(func() error {
+		e, ok := s.Load(n)
+		if !ok {
+			e = Entry{Number: n}
+		}
+		edit(&e)
+		e.Number = n
+		if err := writeJSON(s.entryPath(n), e); err != nil {
+			return err
+		}
+		return s.trimLocked()
+	})
+}
+
 // Remove deletes PR n's entry; an absent one is not an error.
 func (s *Store) Remove(n int) error {
 	return s.locked(func() error {

@@ -99,20 +99,26 @@ func (s *Service) PRDetailsCached(n int) (model.PullRequest, PRComments, bool) {
 }
 
 // loadDiskPR seeds the memory cache from PR n's fresh disk entry when memory
-// has nothing fresh. It reports whether memory now holds PR n.
+// has nothing fresh — or holds only a LISTED row while the disk has a full
+// read (the listing lands first in every session): the row's newer fields
+// win, the full read's body, forge id and viewer fields are kept. It reports
+// whether memory now holds PR n.
 func (s *Service) loadDiskPR(ctx context.Context, n int) bool {
 	s.forgeMu.Lock()
-	_, ok := s.takePRLocked(n)
+	mem, ok := s.takePRLocked(n)
 	s.forgeMu.Unlock()
-	if ok {
+	if ok && mem.full {
 		return true
 	}
-	d, ok := s.diskEntry(ctx, n)
-	if !ok {
-		return false
+	d, dok := s.diskEntry(ctx, n)
+	if !dok || (ok && !d.Full) {
+		return ok
 	}
 	s.forgeMu.Lock()
 	s.putPRAtLocked(d.PR, d.Full, d.ReadAt)
+	if ok { // the listed row on top: putPRAtLocked keeps the full read's fields
+		s.putPRAtLocked(mem.pr, false, mem.readAt)
+	}
 	s.forgeMu.Unlock()
 	return true
 }
@@ -159,13 +165,24 @@ func (s *Service) rememberPR(ctx context.Context, pr model.PullRequest, full boo
 }
 
 // persistEntry writes a memory entry to disk as just opened: the PR and its
-// read time (never older than what the disk already holds), and the open
-// stamp the disk cache's bound keys on.
+// read time when it is newer than the disk's — or the disk's is not fresh
+// (expired, or stamped in the future by a clock that moved back) — and the
+// open stamp the disk cache's bound keys on. A listed row never downgrades a
+// fresh full read on disk: its body, forge id and viewer fields are kept.
 func (s *Service) persistEntry(ctx context.Context, e forgePREntry) {
 	now := s.forgeClock()
 	s.persistPR(ctx, e.pr.Number, func(x *prcache.Entry) {
-		if !e.readAt.Before(x.ReadAt) {
-			x.PR, x.Full, x.ReadAt = e.pr, e.full, e.readAt
+		diskFresh := s.fresh(x.ReadAt)
+		if !e.readAt.Before(x.ReadAt) || !diskFresh {
+			pr, full := e.pr, e.full
+			if !full && x.Full && diskFresh {
+				pr.Body, full = x.PR.Body, true
+				if pr.NodeID == "" {
+					pr.NodeID = x.PR.NodeID
+				}
+				pr.ViewerDidAuthor, pr.ViewerPendingReview = x.PR.ViewerDidAuthor, x.PR.ViewerPendingReview
+			}
+			x.PR, x.Full, x.ReadAt = pr, full, e.readAt
 		}
 		x.OpenedAt = now
 	})

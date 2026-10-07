@@ -3,6 +3,7 @@ package prcache
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -186,5 +187,29 @@ func TestEntriesNewestOpenedFirst(t *testing.T) {
 	es := s.Entries()
 	if len(es) != 2 || es[0].Number != 2 || es[1].Number != 1 {
 		t.Fatalf("Entries = %+v", es)
+	}
+}
+
+// Update is load+edit+save under the lock: concurrent edits of one entry
+// never lose each other (a Load→Save pair would).
+func TestUpdateNeverLosesAConcurrentEdit(t *testing.T) {
+	t.Parallel()
+	s := New(t.TempDir(), DefaultMax)
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.Update(4, func(e *Entry) {
+				e.Comments = append(e.Comments, model.ForgeComment{ID: strconv.Itoa(i)})
+			}); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	e, ok := s.Load(4)
+	if !ok || len(e.Comments) != 20 || e.Number != 4 {
+		t.Fatalf("after 20 concurrent updates: ok=%v number=%d comments=%d", ok, e.Number, len(e.Comments))
 	}
 }

@@ -143,6 +143,7 @@ func Run(svc *domain.Service, opts RunOptions) (string, error) {
 		if fm.opCancel != nil {
 			fm.opCancel()
 		}
+		fm.stopPRPrefetch()
 		removeSnapshotFile(fm.snapshotPath)
 		fm = fm.closeSteerInbox()
 		fm = fm.releaseKeptInboxes()

@@ -338,3 +338,96 @@ func TestPRPrefetch(t *testing.T) {
 		t.Fatalf("refs/gg/pr/7 = %s, want the moved head %s", got, moved)
 	}
 }
+
+// Review finding 1: in a new session the listing lands first (as it does in
+// every session); the full entry on disk must still serve the details, and
+// an open from the listed row must not strip the disk entry's body / id.
+func TestListFirstKeepsTheFullDiskEntry(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	full := pr(7, "open", 1)
+	full.Body, full.NodeID, full.ViewerDidAuthor = "b", "PR_x", true
+	ff := &fakeForge{url: "u", byNum: map[int]model.PullRequest{7: full}, open: []model.PullRequest{pr(7, "open", 2)},
+		comments: []model.ForgeComment{{ID: "c1", Kind: model.ForgeCommentInline, Path: "a", Line: 1}}}
+	a := newCachedForgeSvc(t, ff, dir)
+	if _, err := a.PullRequest(context.Background(), 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.PRCommentsRefresh(context.Background(), 7); err != nil {
+		t.Fatal(err)
+	}
+	b := newCachedForgeSvc(t, ff, dir)
+	if _, err := b.PullRequests(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, _, ok := b.PRDetailsCached(7)
+	if !ok || got.Body != "b" || got.NodeID != "PR_x" {
+		t.Fatalf("details after the list in a new session: ok=%v %+v", ok, got)
+	}
+	if _, err := b.PRFetchOp(context.Background(), 7); err != nil {
+		t.Fatal(err)
+	}
+	e, _ := prcache.New(dir, 0).Load(7)
+	if !e.Full || e.PR.Body != "b" || e.PR.NodeID != "PR_x" || !e.PR.ViewerDidAuthor {
+		t.Fatalf("disk entry after an open from the listed row: full=%v %+v", e.Full, e.PR)
+	}
+	if !e.PR.Updated.Equal(time.Unix(2, 0)) {
+		t.Fatalf("the row's newer fields must win: updated %v", e.PR.Updated)
+	}
+}
+
+// Review finding 2: a disk entry stamped in the future (clock moved back,
+// copied file) is repaired by the next forge read, not pinned dead.
+func TestFutureStampedEntryIsRepaired(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	st := prcache.New(dir, 0)
+	future := time.Now().Add(48 * time.Hour)
+	if err := st.Save(prcache.Entry{Number: 7, PR: pr(7, "open", 1), Full: true, ReadAt: future}); err != nil {
+		t.Fatal(err)
+	}
+	ff := &fakeForge{url: "u", byNum: map[int]model.PullRequest{7: pr(7, "open", 1)}}
+	a := newCachedForgeSvc(t, ff, dir)
+	if _, err := a.PRFetchOp(context.Background(), 7); err != nil {
+		t.Fatal(err)
+	}
+	b := newCachedForgeSvc(t, ff, dir)
+	if _, err := b.PRFetchOp(context.Background(), 7); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := ff.calls(7); n != 1 {
+		t.Fatalf("PR() calls = %d: the future-stamped entry was never repaired", n)
+	}
+}
+
+// Review finding 3: a prefetch fetch that holds the gate is cancelled as
+// soon as a user operation queues behind it.
+func TestPrefetchYieldsToAWaitingOp(t *testing.T) {
+	t.Parallel()
+	_, svc := newRealRepo(t)
+	bg := context.Background()
+	held, err := svc.gateFor(bg).Acquire(bg, repogate.RefWrite, "prefetch fetch") // what Execute holds
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(bg)
+	defer cancel()
+	stop := svc.yieldToWaiters(ctx, cancel)
+	defer stop()
+	select {
+	case <-ctx.Done():
+		t.Fatal("cancelled with nobody waiting")
+	case <-time.After(300 * time.Millisecond):
+	}
+	go func() {
+		if r, err := svc.gateFor(bg).Acquire(bg, repogate.TreeWrite, "user op"); err == nil {
+			r.Release()
+		}
+	}()
+	select {
+	case <-ctx.Done():
+	case <-time.After(3 * time.Second):
+		t.Fatal("a queued user op did not cancel the prefetch fetch")
+	}
+	held.Release()
+}

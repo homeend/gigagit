@@ -22,6 +22,7 @@ import (
 type fakeForge struct {
 	mu      sync.Mutex
 	detect  error
+	detects int
 	listErr error
 	open    []model.PullRequest
 	byN     map[int]model.PullRequest
@@ -44,6 +45,7 @@ func (f *fakeForge) Name() string { return "fake" }
 func (f *fakeForge) Detect(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.detects++
 	return f.detect
 }
 func (f *fakeForge) Search(_ context.Context, q forge.PRQuery) ([]model.PullRequest, bool, error) {

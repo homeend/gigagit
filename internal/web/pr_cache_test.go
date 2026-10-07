@@ -2,6 +2,8 @@ package web
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -118,5 +120,28 @@ func TestPROpenServesASecondSessionFromTheCache(t *testing.T) {
 	}
 	if second.Left != first.Left || second.Right != first.Right {
 		t.Fatalf("cached pair %s..%s != %s..%s", second.Left, second.Right, first.Left, first.Right)
+	}
+}
+
+// Review finding 6: [forge] cache_hours = 0 holds from the very first request
+// — the cached listing must not let the first listing skip detection.
+func TestWebCacheHoursZeroHoldsOnTheFirstListing(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 1)
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte("[forge]\ncache_hours = 0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeForge{open: []model.PullRequest{openPR(3, "live")}}
+	ts, srv := prServe(t, dir, f)
+	srv.service().SeedPRListing("fake", []model.PullRequest{openPR(3, "cached")}) // fresh only under the 8 h default
+	out := waitPRsLoaded(t, ts)
+	if len(out.PRs) != 1 || out.PRs[0].Title != "live" {
+		t.Fatalf("cache_hours = 0 served %+v", out.PRs)
+	}
+	f.mu.Lock()
+	d := f.detects
+	f.mu.Unlock()
+	if d != 1 {
+		t.Fatalf("Detect calls = %d, want 1 (cache_hours = 0 trusts no cached verdict)", d)
 	}
 }

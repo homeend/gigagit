@@ -168,6 +168,16 @@ function offlineFresh(n) {
   setPRFresh(n, age ? "offline \u00b7 read " + age : "offline");
 }
 
+// headMoved: the forge's answer says PR n's head is not the one on screen —
+// "moved" from the server (its local ref is behind), or a head that differs
+// from the open view's (a background prefetch may already have fetched the
+// new head into the local ref, so the server sees nothing behind).
+function headMoved(n, r) {
+  if (r.moved) return true;
+  const po = state.previewOpen;
+  return !!(r.head_sha && po && po.pr === n && po.sourceHash && po.sourceHash !== r.head_sha);
+}
+
 // reloadPRNotes redraws PR n's threads (or its file badges) when they changed.
 async function reloadPRNotes(n) {
   const po = state.previewOpen;
@@ -214,6 +224,9 @@ export function refreshPRComments(n) {
     }
     setPRFresh(n, "");
     if (r.changed) await reloadPRNotes(n);
+    // The same read says whether the head moved: follow it OUTSIDE this
+    // gate — the re-open asks for the comments again.
+    if (headMoved(n, r)) setTimeout(() => followMovedHead(n), 0);
   });
 }
 
@@ -260,7 +273,12 @@ async function revalidate(n) {
   fetchPRs(); // the row may have changed state (merged, closed)
   // One read answered both: the comments, and whether the head moved.
   if (rv.comments_changed) await reloadPRNotes(n);
-  if (!rv.moved) return;
+  if (headMoved(n, rv)) await followMovedHead(n);
+}
+
+// followMovedHead fetches PR n's new head and re-opens its diff — if the user
+// is still looking at it.
+async function followMovedHead(n) {
   const po = state.previewOpen;
   if (!po || po.pr !== n) return; // they moved on; the next open fetches
   opLine("⟳ " + prLabel(n) + " has new commits — updating…");

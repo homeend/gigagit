@@ -146,24 +146,44 @@ func (m Model) handlePRsLoaded(msg prsLoadedMsg) (Model, tea.Cmd) {
 	key := m.panelSelKey(panelPRs)
 	m.prs, m.prsErr, m.prsLoaded = msg.prs, "", true
 	m = m.restorePanelSel(panelPRs, key)
-	return m, m.prPrefetchCmd()
+	return m.prPrefetchCmd()
 }
 
 // prPrefetchedMsg lands when a background prefetch finished; nothing on
 // screen changes (the next open is simply a cache hit).
 type prPrefetchedMsg struct{ gen, n int }
 
+// prPrefetchRun is the Model's handle on its running background prefetch.
+type prPrefetchRun struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
 // prPrefetchCmd warms the recently opened PRs whose head moved ([forge]
-// prefetch; domain runs one at a time and steps aside for user ops). nil when
+// prefetch; domain runs one at a time, bounds each fetch and yields to a
+// user op). The Model owns it: a repo switch and quit cancel it. nil when
 // off, and in quiet (headless) mode.
-func (m Model) prPrefetchCmd() tea.Cmd {
+func (m Model) prPrefetchCmd() (Model, tea.Cmd) {
 	if m.svc == nil || m.quiet || m.cfg.Forge.PrefetchCount() == 0 {
-		return nil
+		return m, nil
 	}
+	m = m.stopPRPrefetch() // a newer list supersedes a prefetch still running
+	ctx, cancel := context.WithCancel(context.Background())
+	m.prPrefetch = &prPrefetchRun{ctx: ctx, cancel: cancel}
 	svc, gen := m.svc, m.prsGen
-	return func() tea.Msg {
-		return prPrefetchedMsg{gen: gen, n: svc.PRPrefetch(context.Background())}
+	return m, func() tea.Msg {
+		defer cancel()
+		return prPrefetchedMsg{gen: gen, n: svc.PRPrefetch(ctx)}
 	}
+}
+
+// stopPRPrefetch cancels the running prefetch, if any.
+func (m Model) stopPRPrefetch() Model {
+	if m.prPrefetch != nil {
+		m.prPrefetch.cancel()
+		m.prPrefetch = nil
+	}
+	return m
 }
 
 func errText(err error) string {

@@ -281,7 +281,10 @@ type Model struct {
 	// prReland is where the user was when the open PR's head moved: the
 	// reopen that follows lands the files cursor (and an open diff, at its
 	// line) back there. Consumed by that reopen's file list.
-	prReland       *prReland
+	prReland *prReland
+	// prPrefetch is the background PR prefetch this Model started (pr_panel.go):
+	// cancelled on a repo switch, a newer list, and quit.
+	prPrefetch     *prPrefetchRun
 	prCommentsLast time.Time
 	previewOpen    *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
 	previewGen     int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
@@ -4843,6 +4846,7 @@ func (m Model) commitPageEligible() bool {
 // --cwd-file by cmd/gg). A fresh span ring is used for the new root; the cmd/gg
 // panic dump still references the original repo (acceptable for a debug aid).
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
+	m = m.stopPRPrefetch()             // the old repo's background fetches end here
 	removeSnapshotFile(m.snapshotPath) // the old repo's session ends here
 	m = m.closeSteerInbox()            // …and so does its steering inbox
 	m.steerGen++                       // drop the old watcher's in-flight msgs
