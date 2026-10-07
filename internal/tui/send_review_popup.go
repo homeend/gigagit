@@ -57,15 +57,11 @@ func (m Model) handleSendGroups(msg sendGroupsMsg) (Model, tea.Cmd) {
 	case len(msg.groups) == 1:
 		return m.openSendReviewBody(msg.pr, msg.groups[0].ID)
 	}
-	opts := make([]string, 0, len(msg.groups)+1)
-	for _, g := range msg.groups {
-		opts = append(opts, sendGroupLabel(g))
-	}
-	opts = append(opts, "Cancel")
 	groups := msg.groups
+	opts := sendGroupOptions(groups)
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{ID: "pr-send-group", Prompt: i18n.T("Send which review to #%d?", msg.pr),
-			Options: opts}, // dynamic by nature: the groups' own words
+			Options: sendGroupOptions(groups)}, // dynamic by nature: the groups' own words
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 			for i, g := range groups {
 				if opt == opts[i] {
@@ -76,6 +72,15 @@ func (m Model) handleSendGroups(msg sendGroupsMsg) (Model, tea.Cmd) {
 		},
 	}
 	return m, nil
+}
+
+// sendGroupOptions are the chooser's rows plus the trailing Cancel esc maps to.
+func sendGroupOptions(groups []domain.SendGroup) []string {
+	opts := make([]string, 0, len(groups)+1)
+	for _, g := range groups {
+		opts = append(opts, sendGroupLabel(g))
+	}
+	return append(opts, "Cancel")
 }
 
 // sendGroupLabel is one chooser row: "my draft review · 2 notes" or
