@@ -37,6 +37,21 @@ type Provider interface {
 	HeadRefspec(n int) string
 }
 
+// Snapshot is one pull request and all its comments, as one read returns
+// them.
+type Snapshot struct {
+	PR        model.PullRequest
+	Comments  []model.ForgeComment
+	Truncated bool
+}
+
+// Snapshotter is optional: a Provider that implements it answers a
+// revalidation (the PR and its comments) with ONE call instead of two.
+// Read-only, like Provider.
+type Snapshotter interface {
+	Snapshot(ctx context.Context, n int) (Snapshot, error)
+}
+
 // Default is the provider list, in probe order.
 func Default(workDir string, rec observ.Recorder) []Provider {
 	return []Provider{NewGH(workDir, rec)}

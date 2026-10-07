@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/forge/forgetest"
@@ -98,9 +99,40 @@ func TestGHAgainstFakeBinary(t *testing.T) {
 	if _, err := g.PR(ctx, 99); !errors.Is(err, ErrNotFound) {
 		t.Errorf("PR(99) err = %v, want ErrNotFound", err)
 	}
+	// No snapshot fixture: the fake composes one from pr-view + threads, so
+	// every older fixture set answers the combined read.
+	if s, err := g.Snapshot(ctx, 7); err != nil || s.PR.Number != 7 || len(s.Comments) == 0 {
+		t.Fatalf("composed Snapshot = %+v, %d comments, %v", s.PR, len(s.Comments), err)
+	}
+	forgetest.Seed(t, dir, map[string]string{"snapshot-7.json": string(fixture(t, "snapshot-7.json"))})
+	if s, err := g.Snapshot(ctx, 7); err != nil || s.PR.NodeID != "PR_kw7" {
+		t.Fatalf("seeded Snapshot = %+v, %v", s.PR, err)
+	}
 	t.Setenv(forgetest.EnvFixtures, t.TempDir()) // empty dir = a gh that cannot read the repo
 	if err := g.Detect(ctx); err == nil {
 		t.Error("Detect against an empty fixture dir = nil, want an error")
+	}
+}
+
+// Snapshot is ONE read-only graphql call naming the PRSnapshot operation.
+func TestGHSnapshotArgv(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	var seen []string
+	f.SetHandler("gh api graphql (snapshot)", func(_ context.Context, argv []string) (gitexec.Result, error) {
+		seen = argv
+		return gitexec.Result{Stdout: string(fixture(t, "snapshot-7.json"))}, nil
+	})
+	s, err := NewGHWithRunner(f).Snapshot(context.Background(), 7)
+	if err != nil || s.PR.NodeID != "PR_kw7" {
+		t.Fatalf("Snapshot = %+v, %v", s.PR, err)
+	}
+	if !slices.Contains(seen, "number=7") || !slices.Contains(seen, "owner={owner}") || !slices.Contains(seen, "graphql") {
+		t.Errorf("argv = %v", seen)
+	}
+	q := seen[len(seen)-1]
+	if !strings.HasPrefix(q, "query=query PRSnapshot") || strings.Contains(q, "mutation") {
+		t.Errorf("query arg = %.60q", q)
 	}
 }
 
