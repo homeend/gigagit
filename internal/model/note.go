@@ -161,11 +161,74 @@ type Note struct {
 	// ("review:<id>:<n>" when written), RemarkFP the remark's fingerprint,
 	// which finds it again when the review is re-saved, RemarkSummary its
 	// summary, which an outdated thread still shows.
-	Remark        string    `toml:"remark,omitempty"`
-	RemarkFP      string    `toml:"remark_fp,omitempty"`
-	RemarkSummary string    `toml:"remark_summary,omitempty"`
-	Created       time.Time `toml:"created"`
-	Updated       time.Time `toml:"updated"`
+	Remark        string `toml:"remark,omitempty"`
+	RemarkFP      string `toml:"remark_fp,omitempty"`
+	RemarkSummary string `toml:"remark_summary,omitempty"`
+	// Send is this note's trip to a forge: stamped with the forge's ids while
+	// it is being sent (a crash leaves them for the next refresh to settle),
+	// or holding the last attempt's error. nil = never sent.
+	Send *NoteSend `toml:"send,omitempty"`
+	// RemarkSends is, on a review note, each remark that has gone (or is
+	// going) to a forge, keyed by remark fingerprint so a re-saved review
+	// keeps them.
+	RemarkSends []RemarkSend `toml:"remark_sends,omitempty"`
+	Created     time.Time    `toml:"created"`
+	Updated     time.Time    `toml:"updated"`
+}
+
+// NoteSend is one note's (or one review remark's) send to a forge.
+type NoteSend struct {
+	PR      int       `toml:"pr"`
+	Review  string    `toml:"review,omitempty"`
+	Thread  string    `toml:"thread,omitempty"`
+	Comment string    `toml:"comment,omitempty"`
+	URL     string    `toml:"url,omitempty"`
+	At      time.Time `toml:"at"`
+	Err     string    `toml:"err,omitempty"`
+}
+
+// RemarkSend is one remark of a stored review on its way to a forge;
+// Moved: the forge has it and the remark is hidden locally.
+type RemarkSend struct {
+	RemarkFP string   `toml:"remark_fp"`
+	Send     NoteSend `toml:"send"`
+	Moved    bool     `toml:"moved,omitempty"`
+}
+
+// SyncState is where a note lives (spec 2026-10-07 §1.1); English protocol
+// values (CLI --json, MCP).
+type SyncState string
+
+const (
+	SyncLocal   SyncState = "local"
+	SyncSending SyncState = "sending"
+	SyncFailed  SyncState = "failed"
+	SyncForge   SyncState = "github"
+)
+
+// State is the sync state a send stamp gives its note.
+func (s *NoteSend) State() SyncState {
+	switch {
+	case s == nil:
+		return SyncLocal
+	case s.Err != "":
+		return SyncFailed
+	}
+	return SyncSending
+}
+
+// IsForgeReply reports a stored reply whose thread root is a forge comment:
+// a local draft answer to a GitHub thread.
+func (n Note) IsForgeReply() bool { return n.IsReply() && IsForgeNoteID(n.ParentID) }
+
+// RemarkSend is the send entry of the remark with fingerprint fp.
+func (n Note) RemarkSend(fp string) (RemarkSend, bool) {
+	for _, r := range n.RemarkSends {
+		if r.RemarkFP == fp {
+			return r, true
+		}
+	}
+	return RemarkSend{}, false
 }
 
 // IsReply reports whether n hangs off another note.

@@ -36,6 +36,9 @@ type Store interface {
 	LoadAll() ([]model.Note, error)
 	Put(n model.Note) error // add, or replace by ID
 	Remove(id string) error // a root takes its replies
+	// Edit is load+edit+save of ONE record under its part's lock;
+	// ErrNotFound when no part holds id (fn's error aborts the write).
+	Edit(id string, fn func(*model.Note) error) error
 	Sweep(keep func(model.Note) bool) (dropped int, err error)
 	SetPolicy(p Policy) // the write-time budget lives ON the store (§4.4)
 	// LoadResolved / LoadAllResolved read the thread resolutions (never

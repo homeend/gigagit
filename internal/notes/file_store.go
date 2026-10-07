@@ -184,6 +184,22 @@ func (fs *FileStore) Remove(id string) error {
 	return ErrNotFound
 }
 
+// Edit loads, edits and saves ONE record wherever it is stored, under its
+// part's lock — the read-modify-write a send's stamps need (two gg
+// processes may stamp one note). ErrNotFound when no part holds id.
+func (fs *FileStore) Edit(id string, fn func(*model.Note) error) error {
+	parts, err := fs.Parts()
+	if err != nil {
+		return err
+	}
+	for _, p := range parts {
+		if err := fs.file(p).edit(id, fn); !errors.Is(err, ErrNotFound) {
+			return err
+		}
+	}
+	return ErrNotFound
+}
+
 // Sweep applies keep to every part, each under its own lock, and reports
 // the total shrinkage. A failing part (corrupt, lock held) does not stop
 // the others; its error is returned, joined.
