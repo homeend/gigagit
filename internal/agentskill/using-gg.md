@@ -62,6 +62,18 @@ guards against removing the worktree you are standing in.
   reviews just that commit's own change (`rev^..rev`); an `A..B` positional
   is used as a range; `--working` reviews uncommitted changes. `--tool`
   picks among configured `review` commands when more than one is set up.
+  `--model <m>` runs the tool on that model: gg adds the agent's own flag
+  (Claude `--model`, Codex `-m`, Junie `--model=`, Kimi `-m`, Antigravity
+  `--model`) or fills `<model>` in a custom command; a tool with neither
+  refuses it (exit 2); gg does not check the name — the agent's CLI does.
+  `--link <gg-link>` reviews what the link names, as `gg review save` does
+  (not with `--working`, `--preview` or a positional). `--no-save` prints the
+  review and stores nothing; with `--json` stdout is the review document
+  itself, and a reply that is not one exits 1 with the text on stderr
+  (`--json` needs `--no-save`; `--no-save` refuses `--notes`).
+  `gg review --tools [--json]` lists the review tools: `name`, `agent`
+  (the built-in agent id, `""` for a custom command), `mode`, `model`
+  (whether `--model` works).
   Exit 0 on a produced report, 1 on tool failure/empty report/no review tool
   configured, 2 on a usage error. A report the note store cannot keep is
   still printed, then `error: review not saved: …` on stderr, exit 1.

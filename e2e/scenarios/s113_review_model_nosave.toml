@@ -1,0 +1,43 @@
+name = "gg review --model fills <model>; --no-save --json prints the document and stores nothing"
+
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[tools.command]]
+category = "review"
+name = "Echo"
+mode = "capture"
+command = 'printf "{\"version\":1,\"summary\":\"M <model>\",\"files\":[]}" > "$GG_MESSAGE_FILE"'
+''' },
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "v2\n" },
+  { commit = "second" },
+]
+
+# A reviewer run: the model reaches the command quoted as one argument (the
+# printf format is double-quoted, so its single quotes stay literal), and the
+# document is printed.
+[[run]]
+cmd = ["review", "--tool", "Echo", "--model", "a", "--no-save", "--json", "HEAD"]
+exit = 0
+stdout_contains = ["M 'a'"]
+
+# ...and nothing was stored.
+[[run]]
+cmd = ["review", "show", "latest"]
+exit = 1
+
+# A plain review is stored as before (the exit 1 above is not vacuous).
+[[run]]
+cmd = ["review", "--tool", "Echo", "HEAD"]
+exit = 0
+
+[[run]]
+cmd = ["review", "show", "latest"]
+exit = 0
+stdout_contains = ["M "]
+
+[expect]
+branch = "main"
+clean = true

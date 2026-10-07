@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v14 -->
+<!-- gg:reviewing-with-gg:v15 -->
 
 # Reviewing with gg
 
@@ -91,8 +91,10 @@ store one review document — the "Review document" shape below — with
 the `gg diff` argument that shows exactly that change. The review opens in
 the user's review view (overview, files, your remarks at their lines); on a
 merge preview or a commit pair it belongs to that preview. The user can also
-start this with `/gg-review <gg-link> [focus]`. A question about one file or
-line stays an ordinary note (`gg note add`).
+start this with `/gg-review <gg-link> [focus]`, or with
+`/gg-cross-review <gg-link> [2|3] [focus]` for a review by 2–3 copies of you
+on different models, merged and with their disagreements settled. A question
+about one file or line stays an ordinary note (`gg note add`).
 
 ## Choosing the target
 
