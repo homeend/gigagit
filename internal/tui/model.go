@@ -268,6 +268,9 @@ type Model struct {
 	// pendingPROpen is the PR whose diff opens once its FetchPRHead succeeds
 	// (the pendingSwitch pattern; opFinishedMsg consumes and clears it).
 	pendingPROpen *model.PullRequest
+	// forgeSend is the send being run (forge_send.go): its plan renders the
+	// confirm, its follow-up runs when the op ends. nil = none.
+	forgeSend *forgeSendState
 	// pendingPRsReload re-reads the PR list once the running ForgetPR lands
 	// (the list is not a registry source, so pendingSources cannot carry it).
 	pendingPRsReload bool
@@ -3348,7 +3351,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.waitForOp(m.opMsgs)
 	case opDecisionMsg:
-		m.modal = &decisionState{req: msg.req, reply: msg.reply}
+		req, sel := msg.req, 0
+		if fs := m.forgeSend; fs != nil && req.ID == engine.DecisionSendForge {
+			// The TUI's own words for the plan it holds (plan 3, T4); the
+			// verdict an agent asked for preselected.
+			req.Prompt, req.PromptMsg = sendConfirmText(fs.plan), engine.Msg{}
+			if i := slices.Index(req.Options, fs.event); i >= 0 {
+				sel = i
+			}
+		}
+		m.modal = &decisionState{req: req, reply: msg.reply, sel: sel}
 		return m, m.waitForOp(m.opMsgs)
 	case prPrefetchedMsg:
 		return m, nil // nothing to draw: the next open is a cache hit
@@ -3359,6 +3371,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case prFetchReadyMsg:
 		return m.handlePRFetchReady(msg)
+
+	case forgeSendReadyMsg:
+		return m.handleForgeSendReady(msg)
 
 	case prHubMsg:
 		return m.handlePRHubMsg(msg)
@@ -3598,6 +3613,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingPROpen = nil
 		prsReload := m.pendingPRsReload
 		m.pendingPRsReload = false
+		fs := m.forgeSend // a send's follow-up (forge_send.go); cleared whatever happened
+		m.forgeSend = nil
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			// A lock failure is recoverable in-app; arm the notice before the
@@ -3736,6 +3753,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var listCmd tea.Cmd
 			m, listCmd = m.readPRsCmd(context.Background(), false, false)
 			prCmd = tea.Batch(prCmd, listCmd)
+		}
+		if fs != nil {
+			var sendCmd tea.Cmd
+			m, sendCmd = m.forgeSendFinished(fs, msg.res, msg.err)
+			prCmd = tea.Batch(prCmd, sendCmd)
 		}
 		return m, tea.Batch(healthCmd, cmd, driftCmd, prCmd)
 

@@ -343,7 +343,11 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcBranches, srcRemotes, srcFeed}
 	case engine.Fetch:
 		return []sourceKey{srcRemotes}
-	case engine.FetchPRHead, engine.ForgetPR, engine.SendToForge:
+	case engine.SendToForge:
+		// A send deletes the local notes GitHub now holds (and stamps the
+		// rest): the notes and their badges change; no git state does.
+		return []sourceKey{srcNotes}
+	case engine.FetchPRHead, engine.ForgetPR:
 		// Both touch only gg's private refs/gg/pr/<n> — invisible to every
 		// panel (the graph excludes refs/gg/*). Empty, NOT nil: nil means
 		// "all sources" and would auto-fire the remote-tags ls-remote probe.

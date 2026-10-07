@@ -1,0 +1,119 @@
+package tui
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/forge"
+	"github.com/homeend/gigagit/internal/i18n"
+)
+
+func TestSendConfirmTextNamesEveryItemAndSkip(t *testing.T) {
+	t.Parallel()
+	p := engine.SendPlan{Target: "o/r #7", Mode: engine.SendReview, Body: "Two things.\n\n" + forge.SendMarker("r1"),
+		Items: []engine.SendItem{
+			{Kind: engine.SendThread, Thread: forge.Thread{Path: "a.go", Line: 12, StartLine: 12}, Summary: "rename this",
+				Replies: []engine.SendReplyBody{{Key: "x"}}},
+			{Kind: engine.SendThread, Thread: forge.Thread{Path: "b.go"}, Summary: "split this file"},
+		},
+		Skipped: []engine.SendSkip{{Reason: domain.SkipNotInPR, Path: "c.go", Line: 3, Summary: "elsewhere"},
+			{Reason: domain.SkipOnGitHub}},
+	}
+	got := sendConfirmText(p)
+	for _, want := range []string{"Send to o/r #7:", "review body:", "Two things.", "+ a.go:12 rename this (1 reply)",
+		"+ b.go (file) split this file", "- c.go:3 elsewhere (skipped: not in this PR)", "- review summary (skipped: already on GitHub)"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("confirm lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "gg:") {
+		t.Errorf("the send marker leaked into the confirm:\n%s", got)
+	}
+}
+
+// Review Focus 4: a long review fits the screen.
+func TestSendConfirmTextIsCapped(t *testing.T) {
+	t.Parallel()
+	p := engine.SendPlan{Target: "o/r #7", Body: strings.Repeat("line\n", 40)}
+	for i := 0; i < 30; i++ {
+		p.Items = append(p.Items, engine.SendItem{Kind: engine.SendThread, Thread: forge.Thread{Path: "a.go", Line: i + 1}, Summary: fmt.Sprint("r", i)})
+	}
+	got := sendConfirmText(p)
+	if n := strings.Count(got, "\n") + 1; n > 24 {
+		t.Fatalf("%d rows:\n%s", n, got)
+	}
+	if !strings.Contains(got, "+ 18 more") {
+		t.Fatalf("the cut is not said:\n%s", got)
+	}
+}
+
+// Every reason code has words of its own — never the generic fallback. In
+// English the two read alike, so it is checked in Japanese. Serial: switches
+// the process-wide language.
+func TestEverySkipReasonHasItsOwnWords(t *testing.T) {
+	if err := i18n.SetLanguage("ja", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
+	for _, r := range domain.SendSkipReasons() {
+		if got := sendSkipReasonText(r); got == i18n.T("(skipped: %s)", r) {
+			t.Errorf("reason %q falls back to the generic text", r)
+		}
+	}
+}
+
+// The engine's English prompt is replaced by the TUI's own; the option the
+// agent asked for is preselected.
+func TestForgeSendDecisionUsesTheTUIsConfirm(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	m.forgeSend = &forgeSendState{pr: 7, plan: engine.SendPlan{Target: "o/r #7", Verdict: true}, event: engine.OptApprove}
+	req := engine.PromptReq(engine.DecisionSendForge, "Send to %s:\n%s",
+		[]string{engine.OptComment, engine.OptApprove, engine.OptRequestChanges, "abort"}, "o/r #7", "ENGLISH")
+	nm, _ := m.Update(opDecisionMsg{req: req, reply: make(chan engine.DecisionResponse, 1)})
+	mm := nm.(Model)
+	if mm.modal == nil || strings.Contains(renderPrompt(mm.modal.req), "ENGLISH") || !strings.HasPrefix(renderPrompt(mm.modal.req), "Send to o/r #7:") {
+		t.Fatalf("modal prompt = %q", renderPrompt(mm.modal.req))
+	}
+	if mm.modal.req.Options[mm.modal.sel] != engine.OptApprove {
+		t.Fatalf("preselected %q", mm.modal.req.Options[mm.modal.sel])
+	}
+}
+
+// Review Focus 1: while the confirm is open the comment poll stands down,
+// so no refresh re-renders the view under the modal.
+func TestThePRPollWaitsWhileTheConfirmIsOpen(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m.forgeSend = &forgeSendState{pr: 7}
+	m.modal = &decisionState{req: engine.DecisionRequest{ID: engine.DecisionSendForge, Options: []string{"send", "abort"}}}
+	if _, cmd := m.prCommentsTick(time.Now().Add(24 * time.Hour)); cmd != nil {
+		t.Fatal("the PR poll ran under the send confirm")
+	}
+}
+
+// Review Focus 3: a queued request whose plan fails stays queued: the error
+// is said and nothing is started or finished.
+func TestAFailedPlanLeavesAQueuedRequestWaiting(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	nm, cmd := m.Update(forgeSendReadyMsg{req: domain.PRSendRequest{PR: 7, Mine: true}, pendingID: "p1",
+		err: errors.New("#7's diff is not available here")})
+	mm := nm.(Model)
+	if cmd != nil || mm.forgeSend != nil || mm.running || !strings.Contains(mm.statusMsg, "not available") {
+		t.Fatalf("cmd=%v send=%v running=%v status=%q", cmd != nil, mm.forgeSend != nil, mm.running, mm.statusMsg)
+	}
+}
+
+func TestSendToForgeRefreshesTheNotes(t *testing.T) {
+	t.Parallel()
+	srcs := opAffectedSources(engine.SendToForge{})
+	if len(srcs) != 1 || srcs[0] != srcNotes {
+		t.Fatalf("SendToForge refreshes %v, want [srcNotes]", srcs)
+	}
+}
