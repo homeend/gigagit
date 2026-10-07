@@ -54,13 +54,14 @@ type prCache struct {
 	prs     []model.PullRequest
 	err     string // the last listing's failure; the rows then stand as they were
 	loading bool
+	policy  bool // [forge] cache_hours / prefetch handed to svc
 }
 
 // at returns the cache positioned on svc, reset when the service changed.
 // Callers hold c.mu.
 func (c *prCache) at(svc *domain.Service) *prCache {
 	if c.svc != svc {
-		c.svc, c.state, c.prs, c.err, c.loading = svc, prsUnprobed, nil, "", false
+		c.svc, c.state, c.prs, c.err, c.loading, c.policy = svc, prsUnprobed, nil, "", false, false
 	}
 	return c
 }
@@ -102,10 +103,15 @@ func (s *Server) prsSnapshot(svc *domain.Service) (state string, rows []model.Pu
 }
 
 // cachedPR finds PR n among the rows the page was shown: the polled list
-// first, then the last search's results (prsearch.go) — a closed PR found by
+// (or, until it lands, the cached listing) first, then the last search's results (prsearch.go) — a closed PR found by
 // searching is in no list until it has been fetched.
 func (s *Server) cachedPR(svc *domain.Service, n int) (model.PullRequest, bool) {
-	_, rows, _, _ := s.prsSnapshot(svc)
+	state, rows, _, _ := s.prsSnapshot(svc)
+	if state == prsUnprobed && len(rows) == 0 {
+		// Before the live listing lands the page shows the cached one
+		// (writePRs): its rows open like any other.
+		rows, _ = svc.PullRequestsCached()
+	}
 	for _, p := range rows {
 		if p.Number == n {
 			return p, true
@@ -177,6 +183,11 @@ func (s *Server) loadPRs(svc *domain.Service) {
 	if h := s.liveHubRef(); h != nil {
 		h.emit(liveMsg{Changed: []string{"prs"}, Reason: "prs"})
 	}
+	if state == prsReady && errText == "" {
+		// Warm the recently opened PRs whose head moved (domain: one at a
+		// time, steps aside for user ops, 0 when [forge] prefetch is off).
+		s.goBackground(func(ctx context.Context) { svc.PRPrefetch(ctx) })
+	}
 }
 
 // kickPRs starts a background listing. Without force it runs only for a
@@ -196,7 +207,16 @@ func (s *Server) kickPRs(svc *domain.Service, force bool) {
 // until the first listing lands; the page keeps its section hidden until
 // "available".
 func (s *Server) writePRs(w http.ResponseWriter, r *http.Request, svc *domain.Service) {
+	s.applyPRPolicy(readCtx(r), svc)
 	state, rows, errText, _ := s.prsSnapshot(svc)
+	// Before the first live listing lands, a fresh cached one draws the
+	// section at once (the live one replaces it and emits "prs").
+	cached := false
+	if state == prsUnprobed && len(rows) == 0 {
+		if prs, ok := svc.PullRequestsCached(); ok {
+			state, rows, cached = prsReady, prs, true
+		}
+	}
 	out := make([]prRow, 0, len(rows))
 	if len(rows) > 0 {
 		fetched := svc.PRFetched(readCtx(r))
@@ -207,9 +227,27 @@ func (s *Server) writePRs(w http.ResponseWriter, r *http.Request, svc *domain.Se
 	writeJSON(w, map[string]any{
 		"available": state == prsReady,
 		"loaded":    state != prsUnprobed,
+		"cached":    cached,
 		"error":     errText,
 		"prs":       out,
 	})
+}
+
+// applyPRPolicy hands [forge] cache_hours / prefetch to svc, once per
+// service (a hosted page shares the TUI's service, which set it already —
+// the value is the same config).
+func (s *Server) applyPRPolicy(ctx context.Context, svc *domain.Service) {
+	s.prs.mu.Lock()
+	c := s.prs.at(svc)
+	done := c.policy
+	c.policy = true
+	s.prs.mu.Unlock()
+	if done {
+		return
+	}
+	if cfg, err := s.effectiveConfig(ctx, svc); err == nil {
+		svc.SetPRCachePolicy(cfg.Forge.CacheMaxAge(), cfg.Forge.PrefetchCount())
+	}
 }
 
 func (s *Server) handlePRs(w http.ResponseWriter, r *http.Request) {
@@ -271,14 +309,20 @@ func (s *Server) handlePROpen(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"state": "unfetched", "label": label, "pr": n, "source": pr.Source, "target": pr.Target})
 		return
 	}
-	pair := svc.PRPair(ctx, pr)
-	eps, err := svc.PreviewOpen(ctx, pair.Head, pair.Base)
+	// One domain call: the pair and its endpoints, the slow git parts from
+	// the PR cache when this head was seen before.
+	res, err := svc.PRPreview(ctx, pr)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	body := previewOpenBody(eps, label, pr.Source, pr.Target)
+	pair := res.Pair
+	body := previewOpenBody(res.Endpoints, label, pr.Source, pr.Target)
 	body["pr"] = n
+	body["cached"] = res.Cached
+	if t, ok := svc.PRCacheReadAt(n); ok {
+		body["read_at"] = t.UTC().Format(time.RFC3339) // the page's "offline · read …" age
+	}
 	// The pair as a gg:// link names it. Sent OUT only (R1): the page pastes
 	// them into a copied link and never hands them back as a wire value.
 	body["link_source"], body["link_target"] = pair.Head, pair.Base
@@ -322,5 +366,10 @@ func (s *Server) handlePRRevalidate(w http.ResponseWriter, r *http.Request) {
 		s.prs.prs = rows
 	}
 	s.prs.mu.Unlock()
-	writeJSON(w, map[string]any{"moved": rv.Moved, "state": rv.PR.State})
+	readAt := ""
+	if !rv.ReadAt.IsZero() {
+		readAt = rv.ReadAt.UTC().Format(time.RFC3339)
+	}
+	writeJSON(w, map[string]any{"moved": rv.Moved, "state": rv.PR.State,
+		"comments_changed": rv.CommentsChanged, "read_at": readAt})
 }

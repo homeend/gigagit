@@ -7,7 +7,7 @@
 const MARKS = { approved: "✓", changes_requested: "✗", review_required: "●" };
 
 // ago is a compact relative age ("3h ago"); "" for an unknown time.
-function ago(iso, nowMs) {
+export function ago(iso, nowMs) {
   const t = Date.parse(iso || "");
   if (!t) return "";
   const s = Math.max(0, Math.floor((nowMs - t) / 1000));

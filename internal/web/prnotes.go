@@ -105,12 +105,13 @@ func (s *Server) handlePRCommentsRefresh(w http.ResponseWriter, r *http.Request)
 	}
 	ctx, cancel := context.WithTimeout(readCtx(r), prRevalidateBudget)
 	defer cancel()
-	changed, err := svc.PRCommentsRefresh(ctx, pr.Number)
+	// The PR's one refresh read: the comments and the head check together.
+	rv, err := svc.PRRevalidate(ctx, pr.Number)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]any{"changed": changed})
+	writeJSON(w, map[string]any{"changed": rv.CommentsChanged, "moved": rv.Moved})
 }
 
 // handlePRDetails is the details overlay's one load: the PR with its

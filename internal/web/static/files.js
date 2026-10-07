@@ -201,6 +201,8 @@ function enterFilesStage() {
   // screen sets filesMode before coming here, so it reads as "no badge".
   const lc = state.filesMode === "compare" && state.compare && state.compare.links ? state.compare : null;
   setFilesKind(lc ? lc.kindLabel || "" : "", lc ? lc.kindTip || "" : "");
+  // A pull request's freshness mark belongs to that PR's view only.
+  if (!(state.previewOpen && state.previewOpen.pr)) $("pr-fresh").textContent = "";
   $("files-title").dataset.sha = ""; // …and without a commit id; see setCommitTitle
   $("files-title").dataset.subject = "";
   $("files-title").dataset.short = "";

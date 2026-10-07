@@ -426,6 +426,35 @@ func (s *Server) Close() {
 	s.stopLive()
 	s.stopOpenFilesWatch()
 	s.sessStopOnce.Do(func() { close(s.sessStop) })
+	s.bgMu.Lock()
+	s.bgClosed = true
+	s.bgMu.Unlock()
+	s.bgWG.Wait()
+}
+
+// goBackground runs f in a goroutine the server owns: its ctx ends when the
+// server closes, and Close waits for it. A closed server starts nothing.
+func (s *Server) goBackground(f func(ctx context.Context)) {
+	s.bgMu.Lock()
+	if s.bgClosed {
+		s.bgMu.Unlock()
+		return
+	}
+	s.bgWG.Add(1)
+	s.bgMu.Unlock()
+	go func() {
+		defer s.bgWG.Done()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go func() {
+			select {
+			case <-s.sessStop:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		f(ctx)
+	}()
 }
 
 // announceShutdown tells every open /api/events stream the server is going

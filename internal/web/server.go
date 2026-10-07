@@ -101,6 +101,11 @@ type Server struct {
 	// sessStop ends the agent-session list watcher (sessions_http.go).
 	sessStop     chan struct{}
 	sessStopOnce sync.Once
+	// bgMu/bgWG/bgClosed own the background PR prefetch (prs.go): Close
+	// cancels it and waits, so none outlives the server.
+	bgMu     sync.Mutex
+	bgWG     sync.WaitGroup
+	bgClosed bool
 	// feeds fans each shown session's screen out to its console streams
 	// (console_stream.go).
 	feeds *screenFeeds

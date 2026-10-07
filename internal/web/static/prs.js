@@ -16,7 +16,7 @@ import { followOp, opBusy, opLine, showLocalConfirm } from "./ops.js";
 import { extraRows, registerHelp } from "./menus.js";
 import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
-import { prRowParts } from "./prsrow.js";
+import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
 
 // While the server's first listing is still in flight the answer says
@@ -155,9 +155,32 @@ function prLabel(n) {
   return "pull request #" + n + (pr && pr.title ? " \u00b7 " + pr.title : "");
 }
 
+// The open PR's freshness mark: "refreshing…" while the forge is asked, the
+// cached copy's age while it cannot be reached, nothing otherwise. Only ever
+// drawn for the PR on screen.
+const lastRead = new Map(); // PR number → the read_at the server last reported
+function setPRFresh(n, text) {
+  const po = state.previewOpen;
+  $("pr-fresh").textContent = po && po.pr === n ? text : "";
+}
+function offlineFresh(n) {
+  const age = ago(lastRead.get(n), Date.now());
+  setPRFresh(n, age ? "offline \u00b7 read " + age : "offline");
+}
+
+// reloadPRNotes redraws PR n's threads (or its file badges) when they changed.
+async function reloadPRNotes(n) {
+  const po = state.previewOpen;
+  if (!po || po.pr !== n || state.filesMode !== "compare") return;
+  const ctx = state.diffCtx;
+  if (ctx && ctx.preview && ctx.preview.pr === n) await fetchNotes(); // also refreshes the ◆N badges
+  else await loadPRCounts(n);
+}
+
 // showPR opens PR n's diff from the LOCAL head — no network. The server
-// resolves the pair; "unfetched" means there is no local head yet.
-async function showPR(n, moved) {
+// resolves the pair; "unfetched" means there is no local head yet. skipComments:
+// the caller asks the forge right after (revalidate reads the comments too).
+async function showPR(n, moved, skipComments) {
   let body;
   try {
     body = await getJSON("/api/pr/open?n=" + n);
@@ -167,10 +190,12 @@ async function showPR(n, moved) {
   }
   if (body.state === "unfetched") return "unfetched";
   await openPreviewBody(body, "");
+  if (body.read_at) lastRead.set(n, body.read_at);
+  setPRFresh(n, "");
   if (moved) opLine("pull request #" + n + " updated: new commits on the forge");
   // The diff is up with whatever threads the server had cached; only NOW is
   // the forge asked for the PR's comments (never on the click path).
-  refreshPRComments(n);
+  if (!skipComments) refreshPRComments(n);
   return "shown";
 }
 
@@ -184,13 +209,11 @@ export function refreshPRComments(n) {
     try {
       r = await postJSON("/api/pr/comments/refresh?n=" + n, {});
     } catch {
+      offlineFresh(n);
       return;
     }
-    const po = state.previewOpen;
-    if (!r.changed || !po || po.pr !== n || state.filesMode !== "compare") return;
-    const ctx = state.diffCtx;
-    if (ctx && ctx.preview && ctx.preview.pr === n) await fetchNotes(); // also refreshes the ◆N badges
-    else await loadPRCounts(n);
+    setPRFresh(n, "");
+    if (r.changed) await reloadPRNotes(n);
   });
 }
 
@@ -224,13 +247,19 @@ function fetchPR(n) {
 // head is still the PR's. A moved head is fetched and the diff re-opened — if
 // the user is still looking at it.
 async function revalidate(n) {
+  setPRFresh(n, "refreshing\u2026");
   let rv;
   try {
     rv = await postJSON("/api/pr/revalidate?n=" + n, {});
   } catch {
-    return; // offline, rate-limited: the diff on screen stands
+    offlineFresh(n); // offline, rate-limited: the diff on screen stands
+    return;
   }
+  if (rv.read_at) lastRead.set(n, rv.read_at);
+  setPRFresh(n, "");
   fetchPRs(); // the row may have changed state (merged, closed)
+  // One read answered both: the comments, and whether the head moved.
+  if (rv.comments_changed) await reloadPRNotes(n);
   if (!rv.moved) return;
   const po = state.previewOpen;
   if (!po || po.pr !== n) return; // they moved on; the next open fetches
@@ -255,7 +284,7 @@ async function openPR(pr) {
   maskOn(n, "opening " + prLabel(n) + "…");
   try {
     if (pr.fetched) {
-      const how = await showPR(n, false);
+      const how = await showPR(n, false, pr.state === "open"); // an open PR's comments ride revalidate
       if (how === "shown") {
         maskOff();
         if (pr.state === "open") revalidate(n); // a closed PR's head no longer moves

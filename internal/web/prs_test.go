@@ -110,7 +110,7 @@ func openPR(n int, title string) model.PullRequest {
 
 // prServe serves dir with f as the only forge provider and a ticker-less
 // live hub, so a test can watch emits without the global clock seams.
-func prServe(t *testing.T, dir string, f *fakeForge) (*httptest.Server, *Server) {
+func prServe(t *testing.T, dir string, f forge.Provider) (*httptest.Server, *Server) {
 	t.Helper()
 	svc := domain.Open(dir)
 	svc.SetForgeProviders([]forge.Provider{f})
