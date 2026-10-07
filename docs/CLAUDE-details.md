@@ -5432,7 +5432,12 @@ Spec `docs/superpowers/specs/2026-10-07-preview-reviews-design.md`, plan 1
   (preview/pair → scope; `@ref:` → `BranchReviewTarget`; commit →
   `CommitReviewTarget`; staged, or a working FILE link → working; anything
   else `ErrNoReviewChange`). Input must parse as the review document.
-  `--dry-run` prints `{kind,label,range,diff}`; `diff` is `HEAD` for working.
+  `--dry-run` prints `{kind,label,range,diff,hunks,checkout}`: `diff` is
+  `HEAD` for working and `<empty-tree>..<sha>` for a root commit (a bare sha
+  to `gg diff` is worktree-vs-sha); `hunks` is "" for working (HunkDiffSpec
+  turns a bare rev into rev^..rev, so `--hunks HEAD` is HEAD's own commit).
+  A working save fingerprints the files now (`engine.FingerprintWorking`
+  via `WorkingReviewFiles`), else `WorkingReviewState` never says current.
 - **`gg-review` skill**: `Skill.front` adds `argument-hint` +
   `disable-model-invocation: true` to the SKILL.md form only; installed
   wherever `delegate` is.

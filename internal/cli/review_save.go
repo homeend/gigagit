@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
 )
 
@@ -59,7 +60,7 @@ func reviewSave(svc *domain.Service, args []string, stdin io.Reader, stdout, std
 		return 1
 	}
 	if *dry {
-		return printReviewTarget(stdout, target, *asJSON)
+		return printReviewTarget(stdout, target, res.Checkout, *asJSON)
 	}
 	var data []byte
 	if *fromStdin {
@@ -75,7 +76,17 @@ func reviewSave(svc *domain.Service, args []string, stdin io.Reader, stdout, std
 		fmt.Fprintln(stderr, "review save: not a gg review document:", perr)
 		return 1
 	}
-	id, warn, err := tsvc.SaveReview(ctx, domain.SaveReview{Target: target, Agent: strings.TrimSpace(*agent), Text: string(data)})
+	// A working review carries the fingerprints of what it read, or it would
+	// never be "current" (domain.WorkingReviewState): taken now, as the
+	// lane takes them at its Prepare.
+	var files []model.NoteFile
+	if target.Kind == domain.ReviewWorking {
+		if files, err = tsvc.WorkingReviewFiles(ctx); err != nil {
+			fmt.Fprintln(stderr, "review save:", err)
+			return 1
+		}
+	}
+	id, warn, err := tsvc.SaveReview(ctx, domain.SaveReview{Target: target, Agent: strings.TrimSpace(*agent), Text: string(data), Files: files})
 	if err != nil {
 		fmt.Fprintln(stderr, "review save:", err)
 		return 1
@@ -113,15 +124,30 @@ func reviewKind(t domain.ReviewTarget) string {
 	return "commit"
 }
 
-func printReviewTarget(w io.Writer, t domain.ReviewTarget, asJSON bool) int {
-	diff := t.Range
-	if t.Kind == domain.ReviewWorking {
-		diff = "HEAD" // git diff HEAD: the working tree + the index vs HEAD
+// printReviewTarget is --dry-run's answer: what is reviewed, and how to read
+// exactly that. diff is the `gg diff` argument for the patch and the stat; a
+// root commit spells its own change against the empty tree, since a bare sha
+// would be the working tree vs that commit. hunks is the `gg diff --hunks`
+// argument ("" for working changes: no hunk numbering covers HEAD → working
+// tree, so read the patch, whose new-side lines are the working file's).
+// checkout is where to run both: a working link names another checkout's
+// changes.
+func printReviewTarget(w io.Writer, t domain.ReviewTarget, checkout string, asJSON bool) int {
+	diff, hunks := t.Range, t.Range
+	switch {
+	case t.Kind == domain.ReviewWorking:
+		diff, hunks = "HEAD", "" // git diff HEAD: the working tree + the index vs HEAD
+	case !strings.Contains(t.Range, ".."):
+		diff = domain.EmptyTreeSHA1 + ".." + t.Range // a root commit (gg diff --hunks <sha> knows)
 	}
 	if asJSON {
-		_ = json.NewEncoder(w).Encode(map[string]string{"kind": reviewKind(t), "label": t.DisplayLabel(), "range": t.Range, "diff": diff})
+		_ = json.NewEncoder(w).Encode(map[string]string{"kind": reviewKind(t), "label": t.DisplayLabel(),
+			"range": t.Range, "diff": diff, "hunks": hunks, "checkout": checkout})
 		return 0
 	}
-	fmt.Fprintf(w, "%s: %s\nread it with: gg diff %s\n", reviewKind(t), t.DisplayLabel(), diff)
+	fmt.Fprintf(w, "%s: %s\nin: %s\nread it with: gg diff %s\n", reviewKind(t), t.DisplayLabel(), checkout, diff)
+	if hunks != "" {
+		fmt.Fprintf(w, "numbered hunks: gg diff --hunks %s\n", hunks)
+	}
 	return 0
 }

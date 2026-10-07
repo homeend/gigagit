@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 const reviewSaveDoc = `{"version":1,"summary":"## Summary\nfine","files":[{"path":"f.txt","annotations":[{"newRange":[1,1],"summary":"one"}]}]}`
@@ -103,5 +106,56 @@ func TestReviewSaveRefusals(t *testing.T) {
 	bare := link[:strings.Index(link, "@")] // gg://<repo> with no target
 	if code, _, errb := runCLI(t, dir, "review", "save", bare, "--dry-run"); code != 1 || !strings.Contains(errb, "names no change") {
 		t.Fatalf("bare repo link = %d %q, want 1", code, errb)
+	}
+}
+
+func TestReviewSaveDryRunWorkingAndRoot(t *testing.T) {
+	t.Parallel()
+	dir, _ := reviewSaveRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\nb\nc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	type target struct{ Kind, Range, Diff, Hunks, Checkout string }
+	dry := func(link string) target {
+		t.Helper()
+		code, out, errb := runCLI(t, dir, "review", "save", strings.TrimSpace(link), "--dry-run", "--json")
+		var got target
+		if code != 0 || json.Unmarshal([]byte(out), &got) != nil {
+			t.Fatalf("dry-run %s = %d %q %q", link, code, out, errb)
+		}
+		return got
+	}
+	_, link, _ := runCLI(t, dir, "link", "f.txt:3")
+	got := dry(link)
+	// Working changes: patches via `gg diff HEAD`; no hunk numbering exists for
+	// HEAD → working tree, and the reads must run in the link's checkout.
+	if got.Kind != "working" || got.Diff != "HEAD" || got.Hunks != "" || !domain.SamePath(got.Checkout, dir) {
+		t.Fatalf("working dry-run = %+v (dir %s)", got, dir)
+	}
+	root := strings.TrimSpace(runGit(t, dir, "rev-list", "--max-parents=0", "HEAD"))
+	_, link, _ = runCLI(t, dir, "link", "f.txt", "--rev", root)
+	got = dry(link)
+	// A root commit: `gg diff <sha>` would be the working tree vs the root.
+	if got.Kind != "commit" || got.Diff != domain.EmptyTreeSHA1+".."+root || got.Hunks != root {
+		t.Fatalf("root dry-run = %+v", got)
+	}
+}
+
+func TestReviewSaveWorkingReviewIsCurrent(t *testing.T) {
+	t.Parallel()
+	dir, _ := reviewSaveRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\nb\nc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, link, _ := runCLI(t, dir, "link", "f.txt:3")
+	code, out, errb := runCLIStdin(t, dir, reviewSaveDoc, "review", "save", strings.TrimSpace(link), "--agent", "a", "--stdin", "--json")
+	var saved struct{ ID string }
+	if code != 0 || json.Unmarshal([]byte(out), &saved) != nil {
+		t.Fatalf("save = %d %q %q", code, out, errb)
+	}
+	svc := openCLIService(t, dir)
+	r, err := svc.Review(context.Background(), saved.ID)
+	if err != nil || len(r.Files) == 0 || !domain.WorkingReviewState(r.Worktree, r.Files).Current {
+		t.Fatalf("a working review stored by save must match the files it read: %+v %v", r.Files, err)
 	}
 }

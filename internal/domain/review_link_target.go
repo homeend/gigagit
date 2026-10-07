@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -68,4 +69,16 @@ func (s *Service) LinkReviewTarget(ctx context.Context, res Resolved) (ReviewTar
 		return WorkingReviewTarget(), nil
 	}
 	return ReviewTarget{}, ErrNoReviewChange
+}
+
+// WorkingReviewFiles fingerprints the working changes now (engine
+// FingerprintWorking): the Files a working review stored by `gg review save`
+// carries, so it is current until a reviewed file changes — the lane records
+// the same at its Prepare.
+func (s *Service) WorkingReviewFiles(ctx context.Context) ([]model.NoteFile, error) {
+	res, err := s.Execute(ctx, engine.FingerprintWorking{}, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return res.ReviewFiles, nil
 }

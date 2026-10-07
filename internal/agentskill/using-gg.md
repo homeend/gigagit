@@ -90,12 +90,16 @@ guards against removing the worktree you are standing in.
   review document (nothing stored) or a link naming no change, 2 on a usage
   error or a malformed link.
 - `gg review save <gg-link> --dry-run [--json]` — store nothing; print what
-  the link would review and how to read it: `<kind>: <label>` and `read it
-  with: gg diff <arg>`; `--json` → `{kind, label, range, diff}` (`kind` =
-  preview | pair | commit | branch | working; `diff` = the `gg diff`
-  argument — the range, or `HEAD` for working changes). Read the change
-  through `diff`: a `@ref:` link is the tip's own change to `gg diff` but
-  the branch against the trunk to a review.
+  the link would review and how to read it; `--json` → `{kind, label, range,
+  diff, hunks, checkout}`. `kind` = preview | pair | commit | branch |
+  working; `diff` = the `gg diff` argument for the patch/stat (the range;
+  `<empty-tree>..<sha>` for a root commit; `HEAD` for working changes);
+  `hunks` = the `gg diff --hunks` argument (`""` for working changes — no
+  hunk numbering covers HEAD → working tree, read the patch); `checkout` =
+  where to run both (a working link may name another worktree). Read the
+  change through these: a `@ref:` link is the tip's own change to `gg diff`
+  but the branch against the trunk to a review. A stored working review
+  carries fingerprints taken at save time, like the lane's.
 - `gg link --review <id|latest>` — print a stored review's link (and record
   it in `gg links`); `latest` = the newest review in this repository.
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // workingInput is what a working-changes review adds to `git diff HEAD`
@@ -161,4 +162,26 @@ func newFilePatch(path string, mode fs.FileMode, data []byte, binary bool) strin
 		b.WriteString("\\ No newline at end of file\n")
 	}
 	return b.String()
+}
+
+// FingerprintWorking fingerprints what a working-changes review reads — the
+// paths of `git diff HEAD` and every untracked file — without running a
+// review: the files a review document written outside the lane (`gg review
+// save`) is matched against, exactly as the lane's Prepare records them.
+type FingerprintWorking struct{}
+
+var _ Operation = FingerprintWorking{}
+
+func (FingerprintWorking) LockMode() repogate.Mode { return repogate.Read }
+
+func (FingerprintWorking) Run(ctx context.Context, deps OpDeps) (Result, error) {
+	stat, err := deps.Repo.DiffNumstat(ctx, model.DiffSpec{Rev: "HEAD"})
+	if err != nil {
+		return Result{}, err
+	}
+	w, err := reviewWorkingInput(ctx, deps, git.ParseNumstat(stat), 0)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{ReviewFiles: w.files}, nil
 }

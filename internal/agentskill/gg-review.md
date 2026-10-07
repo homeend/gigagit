@@ -9,14 +9,17 @@ launch gg's TUI or `gg web`; they belong to the user.
 ## Steps
 
 1. **What is reviewed.** `gg review save <link> --dry-run --json` prints
-   `kind`, `label` and `diff`. A file or line in the link does not narrow the
-   review: the whole change is reviewed. A refusal ("names no change") means
-   the link is not a change — ask the user for a commit, pair, merge preview,
-   branch or working-tree link.
-2. **Read it** with the `diff` value — never guess the range:
-   `gg diff --stat <diff>`, then `gg diff --hunks --json <diff>`, then
-   `gg diff <diff> -- <file>` for each file that matters. For `kind` =
-   `working`, also run `gg status`: untracked files are part of the review.
+   `kind`, `label`, `checkout`, `diff` and `hunks`. A file or line in the
+   link does not narrow the review: the whole change is reviewed. A refusal
+   ("names no change") means the link is not a change — ask the user for a
+   commit, pair, merge preview, branch or working-tree link.
+2. **Read it** in `checkout` (`cd` there first — a working link may name
+   another worktree) with those values — never guess the range:
+   `gg diff --stat <diff>`, then `gg diff --hunks --json <hunks>`, then
+   `gg diff <diff> -- <file>` for each file that matters. When `hunks` is
+   empty (`kind` = `working`) skip `--hunks`: read `gg diff HEAD -- <file>`,
+   whose new-side line numbers are the working file's, and run `gg status`
+   — untracked files are part of the review.
 3. **Write the review document** — exactly the shape in the
    reviewing-with-gg skill's "Review document" section: `summary` is markdown
    with `## Summary`, `## Findings` (most important first), `## Verdict`;
