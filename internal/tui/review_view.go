@@ -38,6 +38,9 @@ type reviewViewState struct {
 	// backPreview is the preview (or pair) whose Reviews block opened this
 	// review: esc re-opens it. One-shot — leaveReviewView clears it.
 	backPreview *previewReturn
+	// older: a preview review of a tip its preview has since moved past —
+	// the header says so (R2: it still shows exactly what was reviewed).
+	older bool
 }
 
 // previewReturn is the preview a review view was opened from (its Reviews
@@ -72,6 +75,7 @@ type reviewViewMsg struct {
 	states    map[string]domain.WorkingFileState
 	back      model.Commit
 	backPrev  *previewReturn
+	older     bool
 	gen       int // the loading box it answers (reviewLoadingPopup.gen)
 	err       error
 }
@@ -109,6 +113,7 @@ func (m Model) openReviewWith(id, title string, back model.Commit, bp *previewRe
 			return out
 		}
 		out.base, out.tip, out.isRange = svc.ReviewRevs(ctx, out.review)
+		out.older = svc.ReviewOlder(ctx, out.review)
 		if out.review.Kind == domain.ReviewOnWorktree {
 			out.states = domain.WorkingReviewState(out.review.Worktree, out.review.Files).States
 		}
@@ -141,7 +146,7 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("not in gg review format — shown as text")
 		return m, cmd
 	}
-	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back, backPreview: msg.backPrev}
+	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back, backPreview: msg.backPrev, older: msg.older}
 	open := func(m Model) (Model, tea.Cmd) {
 		var cmd tea.Cmd
 		switch {
@@ -173,7 +178,11 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 		// The tree side: moving the commit list would leave the review.
 		m.focus = panelCommits
 		m = m.focusTree()
-		m.filesTitle = i18n.T("Review: %s", reviewLabel(msg.review))
+		label := reviewLabel(msg.review)
+		if msg.older {
+			label = i18n.T("%s · older tip", label)
+		}
+		m.filesTitle = i18n.T("Review: %s", label)
 		return m, cmd
 	}
 	if m.layers != nil && len(m.layers.entries) > 0 {
@@ -182,10 +191,15 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 	return open(m)
 }
 
-// reviewLabel is the branch a review was of, else its commit's short sha.
+// reviewLabel is the preview a preview review belongs to (the Previews
+// panel's "source → target"), else the branch a review was of, else its
+// commit's short sha.
 func reviewLabel(r domain.Review) string {
 	if r.Kind == domain.ReviewOnWorktree {
 		return i18n.T("working changes")
+	}
+	if r.Preview != "" {
+		return domain.NoteScopeLabel(r.Preview)
 	}
 	if r.Branch != "" {
 		return r.Branch + " " + shortHash(r.Commit)

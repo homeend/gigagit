@@ -14,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // reviewPreviewsModel: two saved rows — a merge preview "login" with two
@@ -483,5 +484,55 @@ func TestReviewFromPairEscReturnsToThePair(t *testing.T) {
 	vis := m.filesView.visible()
 	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) || vis[m.filesView.sel].noteID != id {
 		t.Fatalf("cursor not back on the review's row (sel %d)", m.filesView.sel)
+	}
+}
+
+func TestReviewViewHeaderNamesThePreview(t *testing.T) {
+	t.Parallel()
+	if got := reviewLabel(domain.Review{Preview: "main...feat/x", Commit: strings.Repeat("a", 40)}); got != "feat/x → main" {
+		t.Fatalf("reviewLabel = %q", got)
+	}
+	m, dir := storedPreviewReviewModel(t)
+	id := m.previews[0].reviews[0].ID
+	m, cmd := m.openReview(id, "x")
+	m = drainUntil(t, m, cmd, func(m Model) bool { return m.filesReview != nil })
+	if m.filesTitle != "Review: feat/x → main" {
+		t.Fatalf("title %q", m.filesTitle)
+	}
+	runGit(t, dir, "checkout", "-q", "feat/x")
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-q", "-m", "more")
+	runGit(t, dir, "checkout", "-q", "main")
+	m, cmd = m.openReview(id, "x")
+	m = drainUntil(t, m, cmd, func(m Model) bool { return m.filesReview != nil && m.filesReview.older })
+	if m.filesTitle != "Review: feat/x → main · older tip" {
+		t.Fatalf("title %q, want it to say older tip", m.filesTitle)
+	}
+}
+
+// An agent saves a review out of band and navigates to it: the review opens,
+// and the note counts and the Previews rows are re-read on the way, so its
+// sub-row is there when the user looks.
+func TestSteerToAFreshPreviewReviewReloadsTheRows(t *testing.T) {
+	t.Parallel()
+	m, _ := storedPreviewReviewModel(t)
+	id := m.previews[0].reviews[0].ID
+	m.previews[0].reviews = nil // the TUI has not seen it yet
+	// On another tab: the srcNotes arrival chains a previews read only while
+	// the Previews tab (or a preview) is on screen.
+	m = m.activateTab(panelBranches)
+	nm, cmd := m.onReviewHint(reviewHintMsg{svc: m.svc, cmd: steer.Command{Cmd: "navigate", HintKind: "review", HintID: id},
+		commit: strings.Repeat("0", 40), preview: "main...feat/x", found: true})
+	if !nm.srcInflight[srcNotes] {
+		t.Fatal("a review hint did not re-read the note counts")
+	}
+	nm = drainUntil(t, nm, cmd, func(m Model) bool {
+		return len(m.previews) > 0 && len(m.previews[0].reviews) == 1 && m.filesReview != nil
+	})
+	if st := nm.filesReview; st.back.Hash != "" {
+		t.Fatalf("a preview review opened with a commit to return to: %+v", st.back)
 	}
 }

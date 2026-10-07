@@ -25,8 +25,10 @@ type reviewHintMsg struct {
 	svc    *domain.Service
 	cmd    steer.Command
 	commit string
-	found  bool
-	err    error
+	// preview is the scope a preview review belongs to ("" otherwise).
+	preview string
+	found   bool
+	err     error
 }
 
 func (m Model) steerNavigateReview(c steer.Command) (Model, tea.Cmd) {
@@ -39,7 +41,7 @@ func (m Model) steerNavigateReview(c steer.Command) (Model, tea.Cmd) {
 		if errors.Is(err, domain.ErrReviewNotFound) {
 			return reviewHintMsg{svc: svc, cmd: c}
 		}
-		return reviewHintMsg{svc: svc, cmd: c, commit: r.Commit, found: err == nil, err: err}
+		return reviewHintMsg{svc: svc, cmd: c, commit: r.Commit, preview: r.Preview, found: err == nil, err: err}
 	}
 }
 
@@ -60,6 +62,18 @@ func (m Model) onReviewHint(msg reviewHintMsg) (Model, tea.Cmd) {
 		return nm, cmd
 	}
 	nm := m.steerToPanels()
-	nm, open := nm.openReviewFrom(c.HintID, reviewTitle(shortHash(msg.commit)), model.Commit{Hash: msg.commit})
-	return nm, tea.Batch(open, nm.answerSteer(c, steerOK(c, "opened review "+c.HintID)))
+	back := model.Commit{Hash: msg.commit}
+	if msg.preview != "" {
+		back = model.Commit{} // a preview's review returns to the panels, never a commit (R5)
+	}
+	nm, open := nm.openReviewFrom(c.HintID, reviewTitle(shortHash(msg.commit)), back)
+	// An agent that just saved this review (gg review save, /gg-review) wrote
+	// the store behind this process: re-read the counts — and the Previews
+	// rows, where a preview review is a sub-row — so it shows on arrival.
+	var counts, rows tea.Cmd
+	nm, counts = nm.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+	if msg.preview != "" {
+		nm, rows = nm.chainPreviewsRead()
+	}
+	return nm, tea.Batch(open, counts, rows, nm.answerSteer(c, steerOK(c, "opened review "+c.HintID)))
 }
