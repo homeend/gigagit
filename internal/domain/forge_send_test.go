@@ -158,3 +158,29 @@ func TestPlanSendWholeReviewKeysEveryRemark(t *testing.T) {
 		t.Fatalf("plan = %+v", p)
 	}
 }
+
+func TestPlanSendSkipsAStaleNoteAndLeavesItLocal(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	ctx := context.Background()
+	stale := addPRNote(t, svc, head, "big.go", 5, "about the old text")
+	fresh := addPRNote(t, svc, head, "big.go", 25, "still here")
+	// Its anchored text is gone from the PR head (the file is not): stale.
+	if err := svc.notesStore(ctx).Edit(stale, func(n *model.Note) error { n.ContextHash = "gone"; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	svc.invalidateNoteCounts()
+	p, err := svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{stale, fresh}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Items) != 1 || p.Items[0].Key != fresh {
+		t.Fatalf("items = %+v", p.Items)
+	}
+	if len(p.Skipped) != 1 || p.Skipped[0].Reason != "its lines changed" || !strings.HasPrefix(p.Skipped[0].Label, "big.go:5 ") {
+		t.Fatalf("skipped = %+v", p.Skipped)
+	}
+	if n, ok := noteByID(t, svc, stale); !ok || n.Send != nil {
+		t.Fatalf("the stale note must stay local and unstamped: %+v %v", n.Send, ok)
+	}
+}
