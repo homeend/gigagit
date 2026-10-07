@@ -209,29 +209,51 @@ type PRRevalidation struct {
 	// Moved: the local refs/gg/pr/<n> is missing or is not the forge's head —
 	// a fetch would change what the diff shows.
 	Moved bool
+	// CommentsChanged: the PR's comments differ from what was cached.
+	CommentsChanged bool
+	// ReadAt is when this answer was read (the freshness a view shows).
+	ReadAt time.Time
 }
 
-// PRRevalidate asks the forge for PR n (never the cache), refreshes the cache
-// and reports whether the local head is behind. It is the one forge call a
-// cached open still makes — after the user already has the diff on screen.
+// PRRevalidate asks the forge for PR n and its comments (never the cache),
+// refreshes the cache and reports whether the local head is behind and
+// whether the comments changed. A provider that implements
+// forge.Snapshotter answers in ONE call; any other in two. It is the one
+// forge read a cached open still makes — after the user already has the
+// diff on screen — and the comment poll's read too.
 func (s *Service) PRRevalidate(ctx context.Context, n int) (PRRevalidation, error) {
 	p, err := s.provider(ctx)
 	if err != nil {
 		return PRRevalidation{}, err
 	}
-	pr, err := p.PR(ctx, n)
-	if err != nil {
-		return PRRevalidation{}, err
+	var pr model.PullRequest
+	changed := false
+	if sp, ok := p.(forge.Snapshotter); ok {
+		snap, err := sp.Snapshot(ctx, n)
+		if err != nil {
+			return PRRevalidation{}, err
+		}
+		pr = snap.PR
+		changed = s.storeComments(ctx, n, snap.Comments, snap.Truncated)
+	} else {
+		if pr, err = p.PR(ctx, n); err != nil {
+			return PRRevalidation{}, err
+		}
+		if changed, err = s.PRCommentsRefresh(ctx, n); err != nil {
+			return PRRevalidation{}, err
+		}
 	}
 	s.rememberPR(ctx, pr, true)
-	s.forgeMu.Lock()
 	if !pr.IsOpen() {
+		s.forgeMu.Lock()
 		if s.forgeTerminal == nil {
 			s.forgeTerminal = map[int]model.PullRequest{}
 		}
 		s.forgeTerminal[n] = pr
+		s.forgeMu.Unlock()
 	}
-	s.forgeMu.Unlock()
+	readAt, _ := s.PRCacheReadAt(n)
 	local, rerr := s.repo.ResolveCommit(ctx, git.PRRef(n))
-	return PRRevalidation{PR: pr, Moved: rerr != nil || (pr.HeadSHA != "" && local != pr.HeadSHA)}, nil
+	return PRRevalidation{PR: pr, Moved: rerr != nil || (pr.HeadSHA != "" && local != pr.HeadSHA),
+		CommentsChanged: changed, ReadAt: readAt}, nil
 }

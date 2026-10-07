@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/prcache"
 )
@@ -166,5 +167,66 @@ func TestPRForgetRemovesTheDiskEntry(t *testing.T) {
 	svc.PRForgetOp(7)
 	if _, ok := prcache.New(dir, 0).Load(7); ok {
 		t.Fatal("PRForgetOp left the disk entry")
+	}
+}
+
+// snapFake answers a revalidation in one Snapshot call.
+type snapFake struct {
+	*fakeForge
+	snaps int
+}
+
+func (f *snapFake) Snapshot(_ context.Context, n int) (forge.Snapshot, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.snaps++
+	return forge.Snapshot{PR: f.byNum[n], Comments: append([]model.ForgeComment(nil), f.comments...)}, nil
+}
+
+func TestPRRevalidateIsOneCallAndReportsComments(t *testing.T) {
+	t.Parallel()
+	ff := &snapFake{fakeForge: &fakeForge{url: "u", byNum: map[int]model.PullRequest{7: pr(7, "open", 1)},
+		comments: []model.ForgeComment{{ID: "c1", Kind: model.ForgeCommentInline, Path: "a", Line: 1}}}}
+	_, svc := newRealRepo(t)
+	svc.SetForgeProviders([]forge.Provider{ff})
+	svc.SetPRCacheStore(prcache.New(t.TempDir(), 0))
+	rv, err := svc.PRRevalidate(context.Background(), 7)
+	if err != nil || !rv.CommentsChanged || rv.ReadAt.IsZero() {
+		t.Fatalf("first revalidate = %+v, %v", rv, err)
+	}
+	rv, _ = svc.PRRevalidate(context.Background(), 7)
+	if rv.CommentsChanged {
+		t.Fatal("unchanged comments reported as changed")
+	}
+	ff.mu.Lock()
+	ff.comments = append(ff.comments, model.ForgeComment{ID: "c2", Kind: model.ForgeCommentInline, Path: "a", Line: 2})
+	ff.mu.Unlock()
+	if rv, _ = svc.PRRevalidate(context.Background(), 7); !rv.CommentsChanged {
+		t.Fatal("a new comment not reported")
+	}
+	if ff.snaps != 3 {
+		t.Fatalf("Snapshot calls = %d, want 3", ff.snaps)
+	}
+	if n, _ := ff.calls(7); n != 0 || ff.commentCalls != 0 {
+		t.Fatalf("PR() %d / Comments() %d beside Snapshot, want 0/0", n, ff.commentCalls)
+	}
+	if c, ok := svc.PRCommentsCached(7); !ok || len(c.Inline) != 2 {
+		t.Fatalf("revalidate did not fill the comment cache: %+v %v", c, ok)
+	}
+}
+
+// A provider without Snapshot still revalidates (two calls) and reports
+// comment changes.
+func TestPRRevalidateWithoutSnapshot(t *testing.T) {
+	t.Parallel()
+	ff := &fakeForge{url: "u", byNum: map[int]model.PullRequest{7: pr(7, "open", 1)},
+		comments: []model.ForgeComment{{ID: "c1", Kind: model.ForgeCommentInline, Path: "a", Line: 1}}}
+	svc := newCachedForgeSvc(t, ff, t.TempDir())
+	rv, err := svc.PRRevalidate(context.Background(), 7)
+	if err != nil || !rv.CommentsChanged {
+		t.Fatalf("revalidate = %+v, %v", rv, err)
+	}
+	if n, _ := ff.calls(7); n != 1 || ff.commentCalls != 1 {
+		t.Fatalf("PR() %d / Comments() %d, want 1/1", n, ff.commentCalls)
 	}
 }
