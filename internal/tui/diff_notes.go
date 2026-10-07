@@ -765,6 +765,25 @@ func noteBadge(n int) string {
 	return "  ◆ " + strconv.Itoa(n)
 }
 
+// noteBadgeGroups is a PR file row's badge: one bar per note group (at most
+// three, each in its group's colour — spec §1.3) before the ◆ count.
+func noteBadgeGroups(n int, groups []string) string {
+	if n <= 0 || len(groups) == 0 {
+		return noteBadge(n)
+	}
+	var b strings.Builder
+	b.WriteString("  ")
+	for i, g := range groups {
+		if i == 3 {
+			break
+		}
+		if bar, ok := groupBarStyle(groupSlot(g)); ok {
+			b.WriteString(bar.Render("▌"))
+		}
+	}
+	return b.String() + "◆ " + strconv.Itoa(n)
+}
+
 // noteCollapseRows are the . menu's collapse rows (keys o / O; the diff footer
 // has no room left for them, so the menu and ? are where they are advertised).
 func (m Model) noteCollapseRows() []actionRow {

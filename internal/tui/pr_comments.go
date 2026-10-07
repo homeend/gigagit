@@ -29,6 +29,7 @@ type prCommentsMsg struct {
 type prCountsMsg struct {
 	gen    int
 	counts map[string]int
+	groups map[string][]string // per-path note groups (nil: the plain badge)
 }
 
 // openPRNumber is the pull request whose diff the files view shows (0 = none).
@@ -112,11 +113,13 @@ func (m Model) prCountsCmd() tea.Cmd {
 	}
 	svc, set, gen := m.svc, *m.filesPreviewSet, m.previewGen
 	return func() tea.Msg {
-		counts, _, err := svc.PreviewNoteCounts(context.Background(), set)
+		ctx := context.Background()
+		counts, _, err := svc.PreviewNoteCounts(ctx, set)
 		if err != nil {
 			return nil
 		}
-		return prCountsMsg{gen: gen, counts: counts}
+		groups, _ := svc.PreviewNoteGroups(ctx, set) // an error leaves the plain badge
+		return prCountsMsg{gen: gen, counts: counts, groups: groups}
 	}
 }
 

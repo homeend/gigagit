@@ -224,6 +224,7 @@ type Model struct {
 	// showing a preview. Stamped onto each diff the view opens.
 	filesPreviewSet    *domain.PreviewNoteSet
 	filesPreviewCounts map[string]int
+	filesPreviewGroups map[string][]string // a PR's per-path note groups: the badges' colour bars
 	// filesPreviewReviews are the open preview's (or pair's) AI reviews: the
 	// Reviews block on top of its file list. filesPairLabel is an open saved
 	// pair's label, kept so a review opened from it can re-open it.
@@ -3371,6 +3372,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCountsMsg:
 		if msg.gen == m.previewGen && m.filesPreviewSet != nil && msg.counts != nil {
 			m.filesPreviewCounts = msg.counts
+			m.filesPreviewGroups = msg.groups
 		}
 		return m, nil
 
