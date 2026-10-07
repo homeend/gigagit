@@ -319,6 +319,10 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 			return engine.SendPlan{}, err
 		}
 		plan.Key, plan.Body, plan.Verdict = r.ID, reviewSendBody(r), true
+		if r.summarySent(pr.Number) {
+			plan.Body = ""
+			plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: "already on GitHub"})
+		}
 		for i := range r.docRemarks() {
 			s.remarkItem(ctx, &plan, r, i, pl)
 		}

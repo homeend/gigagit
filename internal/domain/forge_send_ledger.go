@@ -324,6 +324,11 @@ func (s *Service) settleReview(ctx context.Context, st notes.Store, n model.Note
 				remove = true
 				return errSettleNoChange
 			}
+			// Some remarks stay local: remember the summary went, so a
+			// re-send posts only them.
+			if !r.summarySent(pr) {
+				out = append(out, model.RemarkSend{RemarkFP: summaryFP, Send: *x.Send, Moved: true})
+			}
 			x.Send, x.RemarkSends = nil, out
 		case whole && x.Send.Review != pending:
 			// Its review is neither submitted nor pending: gone. Local again.

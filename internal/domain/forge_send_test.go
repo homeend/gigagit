@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/forge"
@@ -182,5 +183,55 @@ func TestPlanSendSkipsAStaleNoteAndLeavesItLocal(t *testing.T) {
 	}
 	if n, ok := noteByID(t, svc, stale); !ok || n.Send != nil {
 		t.Fatalf("the stale note must stay local and unstamped: %+v %v", n.Send, ok)
+	}
+}
+
+// R4: a whole-review send whose remarks did not ALL reach GitHub keeps the
+// review local — and must remember its summary did, or a re-send posts it
+// again.
+func TestPartlySentReviewKeepsItsSummaryOnGitHub(t *testing.T) {
+	t.Parallel()
+	svc, ff, head := sendRepo(t)
+	svc.forgeNow = func() time.Time { return settleT0 }
+	ctx := context.Background()
+	doc := `{"version":1,"summary":"looks fine","files":[{"path":"big.go","annotations":[
+ {"newRange":[5,5],"summary":"check this"},{"newRange":[25,25],"summary":"and this"}]}]}`
+	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Label: "feat"},
+		Agent: "claude", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := svc.Review(ctx, rid)
+	fps := r.remarkFPs()
+	at := settleT0.Add(-time.Minute)
+	if err := svc.notesStore(ctx).Edit(rid, func(n *model.Note) error {
+		n.Send = &model.NoteSend{PR: 7, Review: "PRR_done", At: at}
+		n.RemarkSends = []model.RemarkSend{
+			{RemarkFP: fps[0], Send: model.NoteSend{PR: 7, Review: "PRR_done", Thread: "PRRT_x", At: at}},
+			{RemarkFP: fps[1], Send: model.NoteSend{PR: 7, Review: "PRR_done", Thread: "PRRT_y", At: at}},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	svc.invalidateNoteCounts()
+	// The review was submitted; only the first remark's thread survived
+	// (the second was deleted on GitHub before this read).
+	ff.mu.Lock()
+	ff.comments = append(ff.comments, model.ForgeComment{ID: "PRRC_x", Kind: model.ForgeCommentInline, Path: "big.go",
+		Line: 5, Body: "check this\n\n" + forge.SendMarker(RemarkKey(rid, fps[0])), ThreadID: "PRRT_x", ReviewID: "PRR_done"})
+	ff.mu.Unlock()
+	p, err := svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Items) != 1 || p.Items[0].Key != RemarkKey(rid, fps[1]) {
+		t.Fatalf("items = %+v (only the remark GitHub lacks)", p.Items)
+	}
+	if strings.TrimSpace(p.Body) != "" || !p.Verdict {
+		t.Fatalf("body = %q verdict = %v: the summary is already on GitHub", p.Body, p.Verdict)
+	}
+	if len(p.Skipped) != 1 || p.Skipped[0].Reason != "already on GitHub" {
+		t.Fatalf("skipped = %+v", p.Skipped)
 	}
 }
