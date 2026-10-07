@@ -147,3 +147,18 @@ func (s *Service) PRCacheReadAt(n int) (time.Time, bool) {
 	}
 	return time.Time{}, false
 }
+
+// SeedPRListing records prs as the listing provider just answered — a TEST
+// seam for frontends, which cannot reach the cache store directly.
+func (s *Service) SeedPRListing(provider string, prs []model.PullRequest) {
+	s.saveListing(context.Background(), provider, prs)
+}
+
+// PRCacheProvider names the provider the cached listing came from ("" = none).
+func (s *Service) PRCacheProvider() string {
+	l, ok := s.cachedListing(context.Background())
+	if !ok {
+		return ""
+	}
+	return l.Provider
+}

@@ -62,6 +62,7 @@ func TestPRCommentsTickRunsUnderAnOpenDiff(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
 	m.prCommentsInflight = false
+	m.prRevalidateInflight = false // the open's one refresh read (it carries the comments)
 	m.loading = false
 	t0 := time.Unix(4_000_000, 0)
 	m.prCommentsLast = t0

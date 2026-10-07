@@ -1426,7 +1426,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	// it) so a long commit subject can't truncate the query out of view.
 	search := m.filesSearchLine()
 	meta := m.filesMetaLineFor()
-	title := m.filesTitle
+	title := m.filesTitle + m.prFreshnessSuffix()
 	if m.inWorktreeFiles() {
 		title = m.wtTitle()
 	}

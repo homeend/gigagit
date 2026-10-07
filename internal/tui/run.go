@@ -73,6 +73,7 @@ func prepareModelWith(svc *domain.Service, cfg config.Config) Model {
 	// dir); loadBranchFilterSlots is a no-op until it does, and notify.go's
 	// applyRepoHealth runs it then.
 	m = m.applyBranchFilterConfig()
+	m = m.applyForgeConfig()
 	m, _ = m.applyTasksConfig() // a warning comes back with configReadyMsg
 	m = m.initSnapshotTarget()
 	return m

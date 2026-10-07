@@ -42,17 +42,9 @@ func (m Model) openPRNumber() int {
 // prCommentsCmd re-reads the open PR's comments off the UI thread. One at a
 // time; nil when no PR diff is open.
 func (m Model) prCommentsCmd(manual bool) (Model, tea.Cmd) {
-	n := m.openPRNumber()
-	if n == 0 || m.svc == nil || m.prCommentsInflight {
-		return m, nil
-	}
-	m.prCommentsInflight = true
-	m.prCommentsLast = time.Now()
-	svc := m.svc
-	return m, func() tea.Msg {
-		changed, err := svc.PRCommentsRefresh(context.Background(), n)
-		return prCommentsMsg{number: n, changed: changed, manual: manual, err: err}
-	}
+	// The comments ride the PR's one refresh read (domain.PRRevalidate): it
+	// answers the head check and the comments together.
+	return m.prRefreshCmd(m.openPRNumber(), manual)
 }
 
 // prCommentsTick is the comment poll: every [refresh] prs seconds (the PR

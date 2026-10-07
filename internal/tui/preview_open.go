@@ -201,14 +201,10 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("preview updated: %s moved", msg.moved)
 	}
 	if msg.prNumber > 0 {
-		// The PR's review threads are fetched AFTER the view is up, never in
-		// the resolve: opening a diff must not wait on the forge CLI.
-		var prCmd tea.Cmd
-		m, prCmd = m.prCommentsCmd(false)
-		cmd = tea.Batch(cmd, prCmd)
 		// The diff came from what is local (the PR cache makes an unchanged PR
-		// a purely local open); only now is the forge asked whether that head
-		// is still the PR's.
+		// a purely local open); only now is the forge asked — ONE read — whether
+		// that head is still the PR's, and for its review threads. Never in the
+		// resolve: opening a diff must not wait on the forge CLI.
 		// "opening PR #n…" has done its job; a reopen the revalidation caused
 		// says what changed instead.
 		if msg.moved == "" {

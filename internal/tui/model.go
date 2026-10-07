@@ -273,9 +273,14 @@ type Model struct {
 	// open is the reopen a revalidation caused — that one must not ask again.
 	prRevalidateInflight bool
 	prRevalidateSkip     int
-	prCommentsLast       time.Time
-	previewOpen          *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
-	previewGen           int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
+	// prRefreshing: the open PR's forge read is in flight ("refreshing…" in
+	// its title); prOfflineSince: the last read failed — the title shows how
+	// old the cached copy on screen is (zero = online).
+	prRefreshing   bool
+	prOfflineSince time.Time
+	prCommentsLast time.Time
+	previewOpen    *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
+	previewGen     int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
@@ -1690,6 +1695,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// snapshotTargetMsg resolved before this config arrived.
 		var steerCmd tea.Cmd
 		m, steerCmd = m.reconcileSteer()
+		m = m.applyForgeConfig()
 		var tasksCmd tea.Cmd
 		m, tasksCmd = m.applyTasksConfig()
 		steerCmd = tea.Batch(steerCmd, tasksCmd)
@@ -1782,6 +1788,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// leftovers replay and the session runs watcher-less.
 			var steerCmd tea.Cmd
 			m, steerCmd = m.reconcileSteer()
+			m = m.applyForgeConfig()
 			var tasksCmd tea.Cmd
 			m, tasksCmd = m.applyTasksConfig()
 			var consoleCmd tea.Cmd
@@ -3313,6 +3320,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opDecisionMsg:
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, m.waitForOp(m.opMsgs)
+	case prsCachedMsg:
+		return m.handlePRsCached(msg)
 	case prsLoadedMsg:
 		return m.handlePRsLoaded(msg)
 
