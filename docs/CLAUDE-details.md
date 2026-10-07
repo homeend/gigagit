@@ -5438,6 +5438,43 @@ Spec `docs/superpowers/specs/2026-10-01-agent-spawn-design.md`, plans A
 - **Tests** that swap `UseSessionManager` / `agentEnv` / `agentGetenv` or
   `t.Setenv` are serial; cli/mcp/e2e TestMains unset the channel env.
 
+## Preview reviews (2026-10-07)
+
+Spec `docs/superpowers/specs/2026-10-07-preview-reviews-design.md`, plan 1
+`docs/superpowers/plans/2026-10-07-preview-reviews-1-domain-cli-skills.md`.
+
+- **The tag**: `ReviewTarget.Preview` → `Note.Preview` (`"<target>...<source>"`
+  by branch NAMES, or `"<a7>..<b7>"` for a pair). `domain.ScopeReviewTarget(set)`
+  is the ONE constructor (CLI `--preview`, `gg review save`, TUI, web); a PR
+  set's `scope()` is "" so its review stays untagged. A merge-preview review
+  routes to `previews.toml` (PartOf sees `...`), a pair review to
+  `commits.toml`; `reviewNotes` reads both.
+- **R5 — never a commit's**: `NoteCounts.Reviews` holds UNTAGGED reviews only
+  (✎, Branches sub-rows, the web's heads); tagged ones go to
+  `NoteCounts.PreviewReviews[scope]`. `ReviewsForCommit` skips them;
+  `loadPreviewNotes` skips every review note (no ◆N inflation). `Reviews()` /
+  View all notes still list them under the tip commit.
+- **R2 — current / older / gone**: `PreviewReviews(ctx, set)`. Current = its
+  commit is `set.Tip`; older (`ReviewHead.Older`) = both the scope's base and
+  tip still exist; gone = omitted. A tip in `set.commitSet()` costs no git
+  call; otherwise `ResolveRev(sha^{commit})` (pruned = not found).
+- **Rename does not follow**: saved previews and preview line notes keep the
+  names they were made with, so `Note.Preview` is not rewritten either.
+- **`gg review save`**: `resolveLinkArg` (Pair + Ref allowed) →
+  `openLinkTarget` (acts on the link's checkout) → `LinkReviewTarget`
+  (preview/pair → scope; `@ref:` → `BranchReviewTarget`; commit →
+  `CommitReviewTarget`; staged, or a working FILE link → working; anything
+  else `ErrNoReviewChange`). Input must parse as the review document.
+  `--dry-run` prints `{kind,label,range,diff,hunks,checkout}`: `diff` is
+  `HEAD` for working and `<empty-tree>..<sha>` for a root commit (a bare sha
+  to `gg diff` is worktree-vs-sha); `hunks` is "" for working (HunkDiffSpec
+  turns a bare rev into rev^..rev, so `--hunks HEAD` is HEAD's own commit).
+  A working save fingerprints the files now (`engine.FingerprintWorking`
+  via `WorkingReviewFiles`), else `WorkingReviewState` never says current.
+- **`gg-review` skill**: `Skill.front` adds `argument-hint` +
+  `disable-model-invocation: true` to the SKILL.md form only; installed
+  wherever `delegate` is.
+
 ## Working-changes reviews (2026-10-05)
 
 Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.

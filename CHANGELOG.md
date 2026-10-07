@@ -19,7 +19,34 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   repository (the web's input offers them as suggestions). A narrow web
   sub-row cuts the command label before the name. `agent_list` /
   `gg agent list` and the machine-wide session registry carry `name`
-  (using-gg skill v142).
+  (using-gg skill v143).
+
+## Preview reviews: stored as the preview's own, `gg review save`, `/gg-review`
+
+### Added
+
+- **`gg review save <gg-link> --agent <name> (--stdin | --file <path>) [--json]`**
+  stores a review document an agent wrote itself — the same overview +
+  per-file remarks the review lane produces — as the review of the change
+  the link names: a merge preview or commit pair, a commit, a `@ref:`
+  branch (against the trunk) or the working changes. A file or line in the
+  link narrows nothing. **`--dry-run [--json]`** stores nothing and prints
+  what would be reviewed plus the `gg diff` argument that shows it.
+- **`/gg-review <gg-link> [focus]`** — a new embedded skill (user-invoked)
+  that reviews the change, writes the review document and stores it with
+  `gg review save`, then opens it in the live gg window. Run
+  `gg init --update` to install it.
+
+### Changed
+
+- **A review of a merge preview or a commit pair belongs to that preview.**
+  `gg review --preview` (and every new preview review) tags the review with
+  the preview's name: it no longer puts ✎ on the source tip or shows in a
+  commit's or branch's Reviews list; View all notes still lists it. A
+  review of an older tip stays listed while both reviewed commits exist and
+  is hidden once one is gone. Reviews stored before this change are left
+  where they were. (The TUI and web surfaces for preview reviews follow.)
+- Skills: using-gg v142 and reviewing-with-gg v14 document `gg review save`.
 
 ## Tests: the maintenance-lock flake, second hole
 

@@ -1,6 +1,7 @@
 // Package agentskill carries the skills that teach AI coding agents to drive gg:
 // "using-gg" (the git CLI surface), "reviewing-with-gg" (the review-notes
-// lane) and "delegate" (overseeing worker agents; the worker protocol). The content is compiled into the binary (go:embed); installed copies
+// lane), "delegate" (overseeing worker agents; the worker protocol) and
+// "gg-review" (the user's /gg-review <gg-link> command). The content is compiled into the binary (go:embed); installed copies
 // are derived artifacts that change only when a newer binary's init runs.
 package agentskill
 
@@ -20,16 +21,22 @@ var reviewBody string
 //go:embed delegate.md
 var delegateBody string
 
+//go:embed gg-review.md
+var ggReviewBody string
+
 // Version is bumped whenever using-gg.md (or the rendered wrappers) change.
 // Installed copies carry it so init can tell new/outdated/up-to-date apart.
-const Version = 142
+const Version = 143
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
-const ReviewVersion = 13
+const ReviewVersion = 14
 
 // DelegateVersion is the counter for the delegate skill.
 const DelegateVersion = 3
+
+// GGReviewVersion is the counter for the gg-review skill.
+const GGReviewVersion = 1
 
 // Skill is one embedded skill: its identity, its own version counter, and the
 // rendered forms init installs. Markers are per-skill ("gg:<name>:v<N>"), so
@@ -40,6 +47,9 @@ type Skill struct {
 	Description string
 	Version     int
 
+	// front is extra frontmatter for the SKILL.md form, each line ending in
+	// "\n" (gg-review's argument hint and user-only invocation).
+	front   string
 	body    string
 	verRe   *regexp.Regexp
 	blockRe *regexp.Regexp
@@ -77,8 +87,21 @@ var Delegate = newSkill("delegate",
 	"Use when the user asks you to delegate a task to worker agents through gg — start workers in their own worktrees, brief them, wait for their reports and check the result; also the protocol a worker started by gg follows.",
 	DelegateVersion, delegateBody)
 
+// GGReview is the user-invoked /gg-review <gg-link> [focus]: review the change
+// a link names and store ONE review document with `gg review save`. Never
+// loaded on the model's own initiative (disable-model-invocation); installed
+// wherever delegate is, and its body reads as plain instructions where there
+// are no slash commands.
+var GGReview = func() Skill {
+	s := newSkill("gg-review",
+		"Review the change a gg:// link names and store the review in gg — an overview plus per-file remarks — with gg review save.",
+		GGReviewVersion, ggReviewBody)
+	s.front = "argument-hint: \"<gg-link> [what to focus on]\"\n" + "disable-model-invocation: true\n"
+	return s
+}()
+
 // All is the install set, in a stable order.
-func All() []Skill { return []Skill{UsingGG, ReviewingWithGG, Delegate} }
+func All() []Skill { return []Skill{UsingGG, ReviewingWithGG, Delegate, GGReview} }
 
 // Body is the canonical markdown body — no frontmatter, no markers.
 func (s Skill) Body() string { return s.body }
@@ -92,6 +115,7 @@ func (s Skill) SkillFile() string {
 	return "---\n" +
 		"name: " + s.Name + "\n" +
 		"description: " + s.Description + "\n" +
+		s.front +
 		"---\n\n" +
 		s.Marker() + "\n\n" + s.body
 }

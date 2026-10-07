@@ -15,7 +15,6 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/markdown"
-	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/template"
@@ -222,20 +221,7 @@ func (s *Server) commitReviewTarget(ctx context.Context, svc *domain.Service, sh
 	if !isHexSha(sha) {
 		return domain.ReviewTarget{}, errors.New("invalid commit")
 	}
-	rng := sha + "^.." + sha
-	if _, ok, err := svc.ResolveRev(ctx, sha+"^"); err == nil && !ok {
-		rng = sha // root commit
-	}
-	label := sha
-	if len(label) > 8 {
-		label = label[:8]
-	}
-	if msg, err := svc.CommitMessage(ctx, sha); err == nil {
-		if subj := strings.TrimSpace(strings.SplitN(msg, "\n", 2)[0]); subj != "" {
-			label += " " + subj
-		}
-	}
-	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Label: label, Diff: model.DiffSpec{Rev: rng}}, nil
+	return svc.CommitReviewTarget(ctx, sha)
 }
 
 // reviewToolRows resolves every usable review command for target.
