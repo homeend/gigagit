@@ -43,6 +43,10 @@ type PRSendRequest struct {
 	Unresolve []string `toml:"unresolve,omitempty" json:"unresolve,omitempty"` // thread ids or forge comment ids
 	Verdict   bool     `toml:"verdict,omitempty" json:"verdict,omitempty"`     // a verdict with no comments
 	Body      string   `toml:"body,omitempty" json:"body,omitempty"`
+	// BodySet: the user answered the body box, so Body is used as is — an
+	// emptied box posts no body (user ruling 2026-10-08), never the stored
+	// summary.
+	BodySet bool `toml:"body_set,omitempty" json:"body_set,omitempty"`
 	Finish    bool     `toml:"finish,omitempty" json:"finish,omitempty"`
 	Discard   bool     `toml:"discard,omitempty" json:"discard,omitempty"`
 }
@@ -324,12 +328,16 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 		}
 		plan.Key, plan.Body, plan.Verdict = r.ID, reviewSendBody(r), true
 		edited := strings.TrimSpace(req.Body)
-		if edited != "" { // the user edited the summary (plan 3, T7)
+		cleared := req.BodySet && edited == ""
+		switch {
+		case cleared:
+			plan.Body = "" // the user cleared it: no body, no trailer, no marker
+		case edited != "": // the user edited the summary (plan 3, T7)
 			plan.Body = sendBody(model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: edited}, r.ID, "")
 		}
 		// The stored summary is on GitHub already: skip it — unless the user
 		// typed a body of their own, which is new text and goes.
-		if r.summarySent(pr.Number) && (edited == "" || edited == r.summaryText()) {
+		if !cleared && r.summarySent(pr.Number) && (edited == "" || edited == r.summaryText()) {
 			plan.Body = ""
 			plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: SkipOnGitHub})
 		}

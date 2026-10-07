@@ -136,3 +136,12 @@ func TestNoNoticeOffersAnAgentsSend(t *testing.T) {
 		t.Fatal("notify.go still builds pending-send notices")
 	}
 }
+
+// W2: the body popup always answers the body — an emptied box posts none.
+func TestSendReviewPopupAnswersTheBody(t *testing.T) {
+	t.Parallel()
+	p := &sendReviewPopup{pr: 7, group: "review:r1", body: newTextField("")}
+	if req := p.request(); !req.BodySet || req.Body != "" || req.Review != "r1" {
+		t.Fatalf("request = %+v", req)
+	}
+}

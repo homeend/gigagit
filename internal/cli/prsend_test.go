@@ -241,3 +241,20 @@ func writeCommit(t *testing.T, dir, name, body, msg string) {
 	runGit(t, dir, "add", name)
 	runGit(t, dir, "commit", "-q", "-m", msg)
 }
+
+func TestPRSendBodyFlagSetsBodySet(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		args []string
+		set  bool
+	}{
+		{[]string{"7", "--review", "r1"}, false},
+		{[]string{"7", "--review", "r1", "--body", ""}, true},
+		{[]string{"7", "--review", "r1", "--body", "mine"}, true},
+	} {
+		req, err := parsePRSend(tc.args, io.Discard)
+		if err != nil || req.BodySet != tc.set {
+			t.Errorf("%v: BodySet %v, err %v", tc.args, req.BodySet, err)
+		}
+	}
+}

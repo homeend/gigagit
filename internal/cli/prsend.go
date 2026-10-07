@@ -75,8 +75,11 @@ func parsePRSend(args []string, stderr io.Writer) (domain.PRSendRequest, error) 
 	if kinds != 1 {
 		return domain.PRSendRequest{}, errors.New("name exactly one of --note, --review, --mine, --verdict, --finish, --discard")
 	}
-	return domain.PRSendRequest{PR: n, Review: *review, Mine: *mine, Notes: notes, Verdict: *verdict,
-		Body: *body, Finish: *finish, Discard: *discard}, nil
+	req := domain.PRSendRequest{PR: n, Review: *review, Mine: *mine, Notes: notes, Verdict: *verdict,
+		Body: *body, Finish: *finish, Discard: *discard}
+	// --body given at all (even empty) is the user's answer for the body.
+	fs.Visit(func(f *flag.Flag) { req.BodySet = req.BodySet || f.Name == "body" })
+	return req, nil
 }
 
 // inGGSession: this process runs inside a session gg started (an agent

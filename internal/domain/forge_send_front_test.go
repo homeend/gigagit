@@ -73,3 +73,32 @@ func TestPRSendGroupsListsMineThenReviews(t *testing.T) {
 		t.Fatalf("ReviewBodyText = %q, %v", body, err)
 	}
 }
+
+// W2 (user ruling 2026-10-08): the user cleared the body box — the review
+// posts no body at all; with no body answer (the CLI without --body) the
+// stored summary still goes.
+func TestAnEmptiedReviewBodyIsPostedEmpty(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	rid := saveHeadReview(t, svc, head, twoRemarks)
+	ctx := context.Background()
+	p, err := svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid, BodySet: true, Body: "   "})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Body != "" {
+		t.Fatalf("an emptied body must post empty, got %q", p.Body)
+	}
+	for _, sk := range p.Skipped {
+		if sk.Label == "review summary" {
+			t.Fatalf("an emptied body is not a skipped summary: %+v", p.Skipped)
+		}
+	}
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(p.Body, "looks fine") || !strings.Contains(p.Body, "via gg") {
+		t.Fatalf("no body given must post the signed summary, got %q", p.Body)
+	}
+}

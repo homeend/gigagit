@@ -133,7 +133,7 @@ func (m Model) openVerdict(pr int) (Model, tea.Cmd) {
 
 // request is what ctrl+s sends.
 func (p *sendReviewPopup) request() domain.PRSendRequest {
-	req := domain.PRSendRequest{PR: p.pr, Body: strings.TrimSpace(p.body.Value())}
+	req := domain.PRSendRequest{PR: p.pr, Body: strings.TrimSpace(p.body.Value()), BodySet: true}
 	switch {
 	case p.verdict:
 		req.Verdict = true
