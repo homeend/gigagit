@@ -15,8 +15,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   review` (it said `not in commit <sha>`, and `not in ..` for a review of
   uncommitted changes); a landing says `opened <file> in this review`.
 - **No link to a file the review does not hold.** `Copy review link to this
-  file` (TUI, web, `/api/review/{id}/link?path=`) refuses a path that is
-  neither in the reviewed change nor named by the review:
+  file` (TUI, web, `/api/review/{id}/link?path=`) refuses a path the
+  review's view does not list — the files its link can land on:
   `<path> is not in review <id>` (web: 404).
 - **`gg review show <file or remark link>` leaves out outdated threads.**
   They record no file, so none belongs to the narrowed view; it says
@@ -24,7 +24,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `outdated_hidden`). Skill: using-gg v152.
 - **Copy remark id checks the review is still there.** In the TUI and web,
   a review deleted meanwhile copies nothing and says `review <id> no
-  longer exists` (or `has no remark <n>`), as Copy remark link already did.
+  longer exists` (or `has no remark <n>`). It checks what `gg note reply`
+  checks, so an id still copies when the review's commit is gone.
 
 ## Cross-review: model flag guard
 

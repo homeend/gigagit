@@ -5710,11 +5710,15 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
 - A landing's answer reads "in this review" while `m.filesReview` is set
   (drainPendingFiles / drainPendingCompare); a plain navigate passes through
   closeFilesView, which clears it.
-- `Service.reviewHolds`: document paths, a working review's fingerprint,
-  then `ReviewFiles` (path or a rename's old path) — `ErrNotInReview`.
-- `ReviewRemarkID` / `ReviewRemarkLink` share `reviewRemark`; a gone review
-  is `reviewGone` (Is ErrReviewNotFound, worded "review <id> no longer
-  exists"). TUI: `asyncCopyRow`; web: `GET /api/review/{id}/remark-id?n=`.
+- `Service.reviewHolds` = the path is in `ReviewFiles` (exactly the list
+  the review view shows, new paths) — a doc-only file or a rename's old name
+  would be a link that lands on nothing. `ErrNotInReview` (`notInReview`).
+- `ReviewRemarkID` checks what `NoteReply` checks — the stored review and
+  `docRemarks()` count, NO git (a gc'd commit still copies);
+  `ReviewRemarkLink` needs the target (`reviewRemark`). Errors are typed with
+  `Is` (`reviewGone`, `noSuchRemark`, `notInReview`) so the text is not
+  doubled by a sentinel prefix. TUI: `asyncCopyRow`; web:
+  `GET /api/review/{id}/remark-id?n=`.
 - `narrowReviewShow` drops `Outdated` into `OutdatedHidden` (replies record
   no remark path).
 
