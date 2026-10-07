@@ -35,6 +35,9 @@ review in gg. Do NOT launch gg's TUI or `gg web`; they belong to the user.
 
        gg review --tool "<tool>" --model "<model>" --link "<link>" --no-save --json > <dir>/r1.json 2> <dir>/r1.err
 
+   When the user gave a focus, every reviewer gets it: add
+   `--focus '<the focus, word for word>'` before `--link` (in single quotes;
+   a `'` inside becomes `'\''`). gg puts it in each reviewer's brief.
    One review takes minutes: never make a blocking call your client will
    time out. Wait until all have finished. A non-zero exit is a failed
    reviewer — keep its `.err` for the summary. Remember which number ran
@@ -45,8 +48,9 @@ review in gg. Do NOT launch gg's TUI or `gg web`; they belong to the user.
 7. **Store it:** `gg review save <link> --agent "<you> — cross-review (<model1>, <model2>[, <model3>])" --stdin --json`
    with the merged document on stdin. A "not a gg review document" error
    names what is wrong — fix the JSON and run it again.
-8. **Show it.** If `gg session list` shows a live gg window for this
-   worktree, open the review there: `gg session navigate <link from step 7>`.
+8. **Show it.** `gg session navigate <link from step 7>` opens the review in
+   the gg window open on the link's worktree. Exit 1 with `no gg session for
+   this worktree` means none is open: skip this step.
 9. **Reply** with the review link, the verdict first, each reviewer and its
    verdict, and how many findings were agreed, how many disputed and how you
    ruled on them. Do not paste the whole review — it is in gg.

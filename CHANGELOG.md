@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review skill follow-ups
+
+### Added
+
+- **`gg review --focus <text>`: tell the reviewer what to look at hardest.**
+  gg writes the text into the review brief every review tool reads (a
+  `## Focus` section), never into the tool's command, so any text works;
+  an empty focus or one over 2000 characters exits 2.
+  `/gg-cross-review <link> [2|3] [focus]` now hands the focus to every
+  reviewer, not only to its own merge. Skills: using-gg v149,
+  gg-cross-review v3.
+
+### Fixed
+
+- **`/gg-review` and `/gg-cross-review` named a command gg does not have.**
+  Their last step said `gg session list`; it is now
+  `gg session navigate <review link>`, which opens the review in the gg window
+  on the link's worktree and answers `no gg session for this worktree` (exit
+  1) when none is open. A test fails when any skill names a `gg session` verb
+  or sub-verb gg lacks. Skills: gg-review v2 (gg-cross-review: v3 above).
+
 ## Review links to files and remarks
 
 ### Added
