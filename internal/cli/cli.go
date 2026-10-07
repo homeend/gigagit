@@ -185,7 +185,7 @@ func dispatchOne(svc *domain.Service, workdir, cmd string, rest []string, stdin 
 	case "show":
 		return cmdShow(svc, workdir, rest, stdout, stderr)
 	case "review":
-		return cmdReview(svc, workdir, rest, stdout, stderr)
+		return cmdReview(svc, workdir, rest, stdin, stdout, stderr)
 	case "versions":
 		return cmdVersions(svc, rest, stdin, stdout, stderr)
 	case "migrate":
