@@ -115,13 +115,18 @@ func (s *Server) handleSessionCommands(w http.ResponseWriter, r *http.Request) {
 		out = append(out, sessionCommandWire{Name: tc.Name, Command: resolved,
 			Approved: approved[promptstate.CommandHash(tc.Command)], Found: s.programFound(tc)})
 	}
-	writeJSON(w, map[string]any{"commands": out, "added": added, "config_path": config.DefaultGlobalPath()})
+	names := svc.SearchHistoryAll(r.Context())[domain.AgentNameHistoryScope]
+	if names == nil {
+		names = []string{}
+	}
+	writeJSON(w, map[string]any{"commands": out, "added": added, "config_path": config.DefaultGlobalPath(), "names": names})
 }
 
 type sessionStartReq struct {
 	Worktree string `json:"worktree"`
 	Tool     string `json:"tool"`
 	Terminal bool   `json:"terminal"`
+	Name     string `json:"name"`    // the user's optional name for an agent
 	Approve  bool   `json:"approve"` // the user just approved this command
 	Cols     int    `json:"cols"`
 	Rows     int    `json:"rows"`
@@ -173,7 +178,7 @@ func (s *Server) startSessionHere(svc *domain.Service, cfg config.Config, req do
 		}
 		return sess.Info().ID, nil
 	}
-	sess, _, err := svc.StartAgentSession(ctx, req.Command, req.Worktree, cwd, req.Cols, req.Rows, env, "", domain.SpawnRecord{}, "")
+	sess, _, err := svc.StartAgentSession(ctx, req.Command, req.Worktree, cwd, req.Cols, req.Rows, env, "", domain.SpawnRecord{Name: req.Name}, "")
 	if err != nil {
 		return "", err
 	}
@@ -212,6 +217,9 @@ func (s *Server) handleSessionStart(w http.ResponseWriter, r *http.Request) {
 	}
 	cmds := domain.SessionCommands(cfg, "web")
 	req := domain.SessionStartRequest{Worktree: dir, Terminal: q.Terminal}
+	if !q.Terminal {
+		req.Name = domain.CleanAgentName(q.Name)
+	}
 	req.Cols, req.Rows = startSize(q.Cols, q.Rows)
 	if !q.Terminal {
 		found := false
@@ -266,6 +274,9 @@ func (s *Server) handleSessionStart(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
+	}
+	if req.Name != "" { // Start agent's alt+↓ ring, shared with the terminal
+		svc.RecordSearch(r.Context(), domain.AgentNameHistoryScope, req.Name, cfg.UI.SearchHistorySize)
 	}
 	for _, sw := range s.sessionsNow() {
 		if sw.ID == string(id) {

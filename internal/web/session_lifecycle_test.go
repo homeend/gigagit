@@ -49,6 +49,7 @@ type sessionCommandsBody struct {
 		Approved, Found bool
 	}
 	Added      []string
+	Names      []string
 	ConfigPath string `json:"config_path"`
 }
 
@@ -139,6 +140,29 @@ func TestSessionStartApprovalGateThenStart(t *testing.T) {
 	}
 }
 
+func TestSessionStartWithANameRecordsIt(t *testing.T) {
+	srv, root := lifecycleServer(t, shSessionTool)
+	ts := serve(t, srv)
+	code, body := postJSONAny(t, ts, "/api/session-start", startBody(root, `,"tool":"Shell","approve":true,"name":"  viewer\n"`))
+	sess, _ := body["session"].(map[string]any)
+	if code != http.StatusOK || sess["label"] != "Shell [viewer]" || sess["name"] != "viewer" {
+		t.Fatalf("%d %v", code, body)
+	}
+	var cmds sessionCommandsBody
+	if code := getJSON(t, ts, "/api/session-commands?worktree="+url.QueryEscape(root), &cmds); code != http.StatusOK || len(cmds.Names) == 0 || cmds.Names[0] != "viewer" {
+		t.Fatalf("names = %d %v", code, cmds.Names)
+	}
+	// An unnamed start records nothing and keeps the bare label.
+	code, body = postJSONAny(t, ts, "/api/session-start", startBody(root, `,"tool":"Shell"`))
+	sess, _ = body["session"].(map[string]any)
+	if code != http.StatusOK || sess["label"] != "Shell" || sess["name"] != nil {
+		t.Fatalf("%d %v", code, body)
+	}
+	if code := getJSON(t, ts, "/api/session-commands?worktree="+url.QueryEscape(root), &cmds); code != http.StatusOK || len(cmds.Names) != 1 {
+		t.Fatalf("an unnamed start must not grow the ring: %v", cmds.Names)
+	}
+}
+
 func TestSessionStartTerminalNeedsNoApproval(t *testing.T) {
 	srv, root := lifecycleServer(t, "")
 	t.Setenv("SHELL", "/bin/sh")
@@ -223,12 +247,12 @@ func TestSessionStartDelegatesToTheStarter(t *testing.T) {
 		return s.Info().ID, nil
 	})
 	ts := serve(t, srv)
-	code, body := postJSONAny(t, ts, "/api/session-start", startBody(root, `,"tool":"Shell","approve":true,"cols":700,"rows":2`))
+	code, body := postJSONAny(t, ts, "/api/session-start", startBody(root, `,"tool":"Shell","approve":true,"name":" worker ","cols":700,"rows":2`))
 	sess, _ := body["session"].(map[string]any)
 	if code != http.StatusOK || sess["label"] != "from-tui" {
 		t.Fatalf("%d %v", code, body)
 	}
-	if got.Worktree != root || got.Command.Name != "Shell" || got.Terminal || got.Cols != 500 || got.Rows != 5 {
+	if got.Worktree != root || got.Command.Name != "Shell" || got.Terminal || got.Name != "worker" || got.Cols != 500 || got.Rows != 5 {
 		t.Fatalf("starter got %+v (the size must arrive clamped)", got)
 	}
 	srv.SetSessionStarter(func(context.Context, domain.SessionStartRequest) (domain.SessionID, error) {

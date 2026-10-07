@@ -26,7 +26,8 @@ func init() {
 // a session gg does not classify.
 type sessionWire struct {
 	ID         string                  `json:"id"`
-	Label      string                  `json:"label"`
+	Label      string                  `json:"label"` // the title: label + [name]
+	Name       string                  `json:"name,omitempty"`
 	Agent      string                  `json:"agent"`
 	Repo       string                  `json:"repo"`
 	Worktree   string                  `json:"worktree"`
@@ -95,13 +96,13 @@ func sessionsWireWith(list []domain.SessionInfo, tasks []domain.TaskInfo, activi
 	}
 	out := make([]sessionWire, 0, len(list))
 	for _, info := range list {
-		w := sessionWire{ID: string(info.ID), Label: info.Label, Agent: info.AgentID, Repo: info.Repo, Worktree: info.Dir,
+		w := sessionWire{ID: string(info.ID), Label: info.Title(), Name: info.Name, Agent: info.AgentID, Repo: info.Repo, Worktree: info.Dir,
 			State: "running", ExitCode: info.ExitCode, Started: info.Started}
 		if info.State == domain.SessionExited {
 			w.State = "exited"
 		}
 		if tk, ok := owner[info.ID]; ok {
-			w.Task, w.Label = string(tk.ID), info.Label+" · "+tk.Key
+			w.Task, w.Label = string(tk.ID), info.Title()+" · "+tk.Key
 		}
 		if a, ok := activity(info.ID); ok {
 			w.AgentState, w.Since, w.StepFor, w.Stalled, w.Options = a.Name(), a.Since, int(a.StepFor.Seconds()), a.Stalled, a.Options
