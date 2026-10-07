@@ -26,15 +26,22 @@ var ErrReadOnlyNote = errors.New("forge comments and review notes are read-only"
 // the comments differ from what was cached. A failed read keeps the previous
 // cache.
 func (s *Service) PRCommentsRefresh(ctx context.Context, n int) (changed bool, err error) {
+	_, changed, err = s.refreshComments(ctx, n)
+	return changed, err
+}
+
+// refreshComments is PRCommentsRefresh that also hands back the comments it
+// read (PRRevalidate's settle pass needs them).
+func (s *Service) refreshComments(ctx context.Context, n int) ([]model.ForgeComment, bool, error) {
 	p, err := s.provider(ctx)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	raw, truncated, err := p.Comments(ctx, n) // provider call: never under forgeMu
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
-	return s.storeComments(ctx, n, raw, truncated), nil
+	return raw, s.storeComments(ctx, n, raw, truncated), nil
 }
 
 // storeComments caches PR n's comments in memory and on disk and reports
@@ -157,6 +164,24 @@ func (s *Service) forgeNotesFor(ctx context.Context, set PreviewNoteSet, path st
 		}
 		rootOf[c.ID] = len(roots)
 		roots = append(roots, rn)
+	}
+	// A review gg sent keeps the local group it came from (its colour).
+	if n, ok := git.ParsePRRef(set.Source); ok {
+		if groups := s.prGroups(ctx, n); len(groups) > 0 {
+			regroup := func(r *ResolvedNote) {
+				if rid := strings.TrimPrefix(r.Group, "github:"); rid != r.Group {
+					if g, ok := groups[rid]; ok {
+						r.Group = g
+					}
+				}
+			}
+			for i := range roots {
+				regroup(&roots[i])
+				for j := range roots[i].Replies {
+					regroup(&roots[i].Replies[j])
+				}
+			}
+		}
 	}
 	// Local draft replies hang under their thread, after GitHub's replies.
 	if drafts := s.forgeDrafts(ctx); len(drafts) > 0 {
