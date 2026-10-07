@@ -143,8 +143,21 @@ func TestReviewSkillBodyCoversTheNoteSurface(t *testing.T) {
 
 func TestAllReturnsEverySkill(t *testing.T) {
 	got := All()
-	if len(got) != 3 || got[0].Name != "using-gg" || got[1].Name != "reviewing-with-gg" || got[2].Name != "delegate" {
-		t.Fatalf("All() = %+v, want using-gg, reviewing-with-gg, delegate", got)
+	if len(got) != 4 || got[0].Name != "using-gg" || got[1].Name != "reviewing-with-gg" || got[2].Name != "delegate" || got[3].Name != "gg-review" {
+		t.Fatalf("All() = %+v, want using-gg, reviewing-with-gg, delegate, gg-review", got)
+	}
+}
+
+func TestGGReviewFrontmatter(t *testing.T) {
+	t.Parallel()
+	f := GGReview.SkillFile()
+	for _, want := range []string{"name: gg-review\n", "argument-hint: \"<gg-link> [what to focus on]\"\n", "disable-model-invocation: true\n", "gg review save", "--dry-run"} {
+		if !strings.Contains(f, want) {
+			t.Fatalf("gg-review SKILL.md lacks %q", want)
+		}
+	}
+	if strings.Contains(UsingGG.SkillFile(), "disable-model-invocation") {
+		t.Fatal("only gg-review is user-invoked")
 	}
 }
 
@@ -218,12 +231,13 @@ func TestRenderedFrontmatterIsPlainScalarSafe(t *testing.T) {
 				t.Errorf("%s: %s spans more than one line: %q", sk.Name, f.label, v)
 			}
 		}
-		// Structural: exactly the opening ---, two key lines, and the closing ---.
+		// Structural: exactly the opening ---, the two key lines plus the
+		// skill's own extra lines (gg-review's), and the closing ---.
 		head := strings.SplitN(sk.SkillFile(), "---\n", 3)
 		if len(head) != 3 {
 			t.Fatalf("%s: SkillFile has no closed frontmatter block", sk.Name)
 		}
-		want := "name: " + sk.Name + "\ndescription: " + sk.Description + "\n"
+		want := "name: " + sk.Name + "\ndescription: " + sk.Description + "\n" + sk.front
 		if head[1] != want {
 			t.Errorf("%s: frontmatter body = %q, want %q", sk.Name, head[1], want)
 		}

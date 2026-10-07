@@ -387,6 +387,10 @@ func TestInstallWritesBothSkillsInEveryMode(t *testing.T) {
 		if err != nil || !agentskill.Delegate.HasMarker(del) {
 			t.Errorf("%s: delegate not installed at %s (%v)", id, dt, err)
 		}
+		gt := d.TargetOf(agentskill.GGReview)
+		if gr, err := os.ReadFile(gt); err != nil || !agentskill.GGReview.HasMarker(gr) {
+			t.Errorf("%s: gg-review not installed at %s (%v)", id, gt, err)
+		}
 		if id == "agents-md" {
 			// Both blocks live in one file and neither may eat the other.
 			if !agentskill.UsingGG.HasMarker(review) {
