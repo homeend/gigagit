@@ -851,6 +851,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// second NotesFor pass per mutation.
 		var counts tea.Cmd
 		m, counts = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+		if msg.sendPR != 0 && msg.sendID != "" { // Reply & send: the draft is saved, now send it
+			var send tea.Cmd
+			m, send = m.forgeSendCmd(domain.PRSendRequest{PR: msg.sendPR, Notes: []string{msg.sendID}}, "")
+			return m, tea.Batch(counts, send)
+		}
 		return m, counts
 	case notesClearedMsg:
 		// The clear is always run from the diff view, which owns the whole

@@ -193,3 +193,30 @@ func TestSendMyDraftReviewWithAVerdict(t *testing.T) {
 		t.Fatalf("submit = %+v", last)
 	}
 }
+
+// Serial: env. Reply & send: the draft is written, then sent as a reply.
+func TestReplyAndSendFromThePRView(t *testing.T) {
+	m, dir, _ := prSendModel(t)
+	fixtures := filepath.Join(dir, ".git", "fakegh")
+	b, _ := os.ReadFile(filepath.Join(fixtures, "snapshot-7-sent.json"))
+	forgetest.Seed(t, fixtures, map[string]string{"snapshot-7.json": string(b)}) // a thread to answer
+	ctx := context.Background()
+	if _, err := m.svc.PRRevalidate(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	d, err := m.svc.NoteReply(ctx, "forge:PRRC_new1", model.Note{Source: model.NoteSourceUser, Summary: "on it"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nm, cmd := m.Update(noteMutatedMsg{sendPR: 7, sendID: d.ID})
+	m, wait := runToModal(t, nm.(Model), cmd)
+	if !strings.Contains(renderPrompt(m.modal.req), "reply: on it") {
+		t.Fatalf("confirm:\n%s", renderPrompt(m.modal.req))
+	}
+	nm2, _ := m.resolveModal("send")
+	driveOp(t, nm2.(Model), wait)
+	ws := forgetest.Writes(t, fixtures)
+	if len(ws) != 1 || ws[0].Op != "Reply" || ws[0].Vars["thread"] != "PRRT_new1" {
+		t.Fatalf("writes %+v", ws)
+	}
+}
