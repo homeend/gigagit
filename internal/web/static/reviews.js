@@ -11,7 +11,7 @@ import { copyText, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { mdHTML } from "./markdown.js";
 import { registerHelp } from "./menus.js";
-import { NOTE_BADGE_COLS, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
+import { NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
 import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
 import { focusPane } from "./keys.js";
@@ -73,6 +73,13 @@ function branchReviews(reviews, b) {
   const h = (b && b.hash) || "";
   if (h.length < 7) return [];
   return (reviews || []).filter((r) => r.branch === b.name && (r.commit || "").startsWith(h));
+}
+
+// previewReviewText is a merge preview's (or pair's) review sub-row: the
+// branch sub-row's text, plus "· older tip" for a review of a tip the preview
+// has since moved past — it still opens exactly what was reviewed (R2).
+function previewReviewText(r, now = new Date()) {
+  return branchReviewText(r, now) + (r && r.older ? " · older tip" : "");
 }
 
 
@@ -196,9 +203,11 @@ function commitNoted() {
 const notedSel = (path) => "noted:" + path;
 
 
-// headRowIds are the rows above a commit's first file, top to bottom.
+// headRowIds are the rows above a commit's (or an opened preview's) first
+// file, top to bottom.
 function headRowIds() {
-  return commitReviewList()
+  return previewScopeReviews()
+    .concat(commitReviewList())
     .map((r) => r.id)
     .concat(commitScopes().map((sc) => scopeSel(sc.scope)))
     .concat(commitNoted().map(notedSel));
@@ -213,7 +222,16 @@ function headRowIds() {
 function reviewRowsHTML() {
   const revs = commitReviewList();
   const scopes = commitScopes();
+  // The opened merge preview's (or pair's) reviews head its files (spec §7).
+  const pv = previewScopeReviews();
+  const pvHTML = pv.length
+    ? `<li class="sect">Reviews</li>` +
+      pv
+        .map((r) => `<li class="rev${state.reviewSel === r.id ? " sel" : ""}" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(previewReviewText(r))}</li>`)
+        .join("")
+    : "";
   return (
+    pvHTML +
     (revs.length
       ? `<li class="sect">Reviews</li>` +
         revs
@@ -232,6 +250,19 @@ function reviewRowsHTML() {
       : "") +
     notedRowsHTML()
   );
+}
+
+
+// previewScopeReviews is the opened merge preview's (or unscoped pair's) AI
+// reviews — its Reviews block. None for a pull request (no scope) or a range
+// opened from a commit's Range review row (one review's notes: p.scope).
+function previewScopeReviews() {
+  if (state.filesMode !== "compare" || state.layout === "list") return [];
+  const po = state.previewOpen;
+  if (po && po.tip && state.compare && state.compare.bHash === po.tip) return po.pr ? [] : state.previewReviews || [];
+  const p = state.compare && state.compare.pair;
+  if (p && !p.scope) return state.previewReviews || [];
+  return [];
 }
 
 
@@ -303,7 +334,7 @@ function openSelectedReview() {
   const noted = commitNoted().find((p) => notedSel(p) === state.reviewSel);
   if (sc) openRangeReview(sc.scope);
   else if (noted) openNotedPath(noted);
-  else openReview(state.reviewSel, reviewBackFromCommit(state.reviewSel));
+  else openReview(state.reviewSel, previewBack(state.reviewSel) || reviewBackFromCommit(state.reviewSel));
   return true;
 }
 
@@ -369,15 +400,17 @@ function reviewMetaLine(d) {
 function setReviewHeader() {
   const d = state.review.data;
   setFilesKind("review", "a stored AI review — its notes are read-only");
-  $("files-title").textContent = "Review " + d.label;
+  $("files-title").textContent = "Review " + d.label + (d.older ? " · older tip" : "");
   setFilesMeta(reviewMetaLine(d));
 }
 
 
 // openReview opens review id as the review view. back says where esc from
 // its file list returns: {kind: "commit", sha, short, subject, reviewId} (a
-// commit's Reviews row), {kind: "popup", run} (View all notes: run reopens
-// it) or {kind: "list"}.
+// commit's Reviews row), {kind: "preview", source, target, reviewId} or
+// {kind: "pair", a, b, reviewId} (an opened preview's Reviews row: back to
+// it), {kind: "popup", run} (View all notes: run reopens it) or
+// {kind: "list"}.
 async function openReview(id, back) {
   const gen = ++state.detailGen; // a newer open or esc supersedes this one
   state.review = null;
@@ -535,6 +568,22 @@ function goBack(back) {
     state.reviewSel = back.reviewId || "";
     openCommitByHash(back.sha, back.subject || "").then((ok) => {
       if (ok) setCommitTitle(back.sha, back.short || "", back.subject || "");
+    });
+    return;
+  }
+  if (back && back.kind === "preview" && window.__ggOpenPreviewForPair) {
+    window.__ggOpenPreviewForPair(back.source, back.target).then(() => {
+      if (!state.previewOpen) return goBack({ kind: "list" }); // it no longer opens: the notice is up, back to the list
+      state.reviewSel = back.reviewId || "";
+      renderFiles();
+    });
+    return;
+  }
+  if (back && back.kind === "pair") {
+    runLinkCompare("a=" + encodeURIComponent(back.a) + "&b=" + encodeURIComponent(back.b)).then((ok) => {
+      if (!ok) return goBack({ kind: "list" });
+      state.reviewSel = back.reviewId || "";
+      renderFiles();
     });
     return;
   }
@@ -712,7 +761,7 @@ registerHelp({
 });
 
 
-export { currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { previewReviewText, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

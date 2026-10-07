@@ -40,7 +40,7 @@ func (s *Server) handlePreviewNotes(w http.ResponseWriter, r *http.Request) {
 	}
 	// Ruling 6: a pair that is not previewable is not an error — it simply
 	// has nothing to show.
-	out := map[string]any{"notes": []wireNote{}, "tip": set.Tip, "counts": map[string]int{}, "total": 0}
+	out := map[string]any{"notes": []wireNote{}, "tip": set.Tip, "counts": map[string]int{}, "total": 0, "reviews": []reviewHeadWire{}}
 	if !set.OK() {
 		writeJSON(w, out)
 		return
@@ -69,5 +69,9 @@ func (s *Server) handlePreviewNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out["notes"], out["counts"], out["total"] = notes, orEmptyCounts(counts), total
+	// The opened preview's Reviews block (spec §7).
+	if hs, herr := s.service().PreviewReviews(ctx, set); herr == nil {
+		out["reviews"] = reviewHeads(hs)
+	}
 	writeJSON(w, out)
 }

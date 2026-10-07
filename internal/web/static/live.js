@@ -443,6 +443,10 @@ async function steerNavigateReview(s) {
     return steerNavigateLand({ ...s, hint_kind: "", hint_id: "" });
   }
   closeFinder();
+  // An agent that just saved this review (gg review save) wrote the store
+  // behind this page: re-read the counts and the previews first, so its
+  // sub-row is there on arrival (the TUI's review-hint refresh).
+  await Promise.all([refreshNoteCounts(), fetchPreviews()]);
   await openReview(s.hint_id, { kind: "list" });
 }
 

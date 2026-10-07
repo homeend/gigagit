@@ -39,6 +39,9 @@ type previewRow struct {
 	// Notes is the preview's root-note total, hidden ones included (the TUI's
 	// ◆N badge). Zero for a pair that is not previewable.
 	Notes int `json:"notes"`
+	// Reviews are the preview's AI reviews (spec R2: current, then older
+	// tips whose commits still exist), newest first. Never null.
+	Reviews []reviewHeadWire `json:"reviews"`
 	// Error is set only on the degraded "error" state (a PreviewSummary
 	// failure — a transient git error, not a resolvable-name state). Never
 	// set alongside a real state, so omitempty keeps every other row clean.
@@ -48,7 +51,7 @@ type previewRow struct {
 func previewRowFrom(p model.MergePreview, sum domain.PreviewSummary) previewRow {
 	return previewRow{ID: p.ID, Label: p.Label, Source: p.Source, Target: p.Target,
 		State: sum.State.String(), Files: sum.Files, Ahead: sum.Ahead,
-		SourceHash: sum.SourceHash, TargetHash: sum.TargetHash}
+		SourceHash: sum.SourceHash, TargetHash: sum.TargetHash, Reviews: []reviewHeadWire{}}
 }
 
 // previewErrorRow is the degraded row for one pair whose PreviewSummary call
@@ -58,7 +61,7 @@ func previewRowFrom(p model.MergePreview, sum domain.PreviewSummary) previewRow 
 // the client can show it as failed rather than dropping it silently.
 func previewErrorRow(p model.MergePreview, err error) previewRow {
 	return previewRow{ID: p.ID, Label: p.Label, Source: p.Source, Target: p.Target,
-		State: "error", Error: err.Error()}
+		State: "error", Error: err.Error(), Reviews: []reviewHeadWire{}}
 }
 
 func (s *Server) handlePreviews(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +92,14 @@ func (s *Server) handlePreviews(w http.ResponseWriter, r *http.Request) {
 				if _, total, cerr := svc.PreviewNoteCounts(ctx, set); cerr == nil {
 					row.Notes = total
 				}
+				if hs, herr := svc.PreviewReviews(ctx, set); herr == nil {
+					row.Reviews = reviewHeads(hs)
+				}
 			}
+		} else if hs, herr := svc.PreviewReviewsByScope(ctx, p.Target+"..."+p.Source); herr == nil {
+			// Merged, a side missing, no base: no scope can be built, but a
+			// review whose commits still exist stays listed (spec §8).
+			row.Reviews = reviewHeads(hs)
 		}
 		rows = append(rows, row)
 	}

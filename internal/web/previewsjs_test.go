@@ -114,3 +114,109 @@ func TestPreviewsDragDropIsWired(t *testing.T) {
 		}
 	}
 }
+
+// Review sub-rows sit under their preview / pair row and route to the review,
+// never to a preview handler (Review Focus 1).
+func TestPreviewsJSReviewSubRowsWired(t *testing.T) {
+	t.Parallel()
+	src := staticSrc(t, "previews.js")
+	for _, want := range []string{
+		`previewReviewText`,
+		`class="brev" data-review=`,
+		`li.dataset.review`,
+		`openReview(li.dataset.review, { kind: "list" })`,
+		`reviewMenu(`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("previews.js lacks %q", want)
+		}
+	}
+	// The review rows carry no data-id: every preview handler's guard skips them.
+	if strings.Contains(src, `class="brev" data-id=`) {
+		t.Error("a review sub-row carries a data-id")
+	}
+}
+
+func TestPreviewsJSReviewMenuRows(t *testing.T) {
+	t.Parallel()
+	src := staticSrc(t, "previews.js")
+	for _, want := range []string{
+		`label: "review (AI)…"`,
+		`window.__ggStartReview("preview", "", "", e.id)`,
+		`label: "show review"`,
+		`e.state === "ok"`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("previews.js lacks %q", want)
+		}
+	}
+	rv := staticSrc(t, "review.js")
+	for _, want := range []string{`async function startReview(target, branch, sha, preview)`, `"&preview="`, `preview, tool: tool.name`, `window.__ggStartReview = startReview`} {
+		if !strings.Contains(rv, want) {
+			t.Errorf("review.js lacks %q", want)
+		}
+	}
+}
+
+func TestPreviewReviewsBlockWired(t *testing.T) {
+	t.Parallel()
+	rv := staticSrc(t, "reviews.js")
+	for _, want := range []string{
+		`state.previewReviews`,
+		`back.kind === "preview"`,
+		`window.__ggOpenPreviewForPair`,
+		`back.kind === "pair"`,
+		`runLinkCompare("a=" + encodeURIComponent(back.a) + "&b=" + encodeURIComponent(back.b))`,
+		`d.older ? " · older tip" : ""`,
+	} {
+		if !strings.Contains(rv, want) {
+			t.Errorf("reviews.js lacks %q", want)
+		}
+	}
+	pv := staticSrc(t, "previews.js")
+	for _, want := range []string{`window.__ggOpenPreviewForPair = openPreviewForPair`, `state.previewReviews = d.reviews || []`} {
+		if !strings.Contains(pv, want) {
+			t.Errorf("previews.js lacks %q", want)
+		}
+	}
+	fs := staticSrc(t, "files.js")
+	for _, want := range []string{`state.previewReviews = d.reviews || []`, `previewBack(`} {
+		if !strings.Contains(fs, want) {
+			t.Errorf("files.js lacks %q", want)
+		}
+	}
+	lv := staticSrc(t, "live.js")
+	if !strings.Contains(lv, `await Promise.all([refreshNoteCounts(), fetchPreviews()])`) {
+		t.Error("live.js: a review hint does not re-read the counts and previews first")
+	}
+}
+
+// Review Focus 4: a PR diff and a scoped pair (one review's range) get no block.
+func TestReviewRowsHTMLSkipsPRAndScopedPair(t *testing.T) {
+	t.Parallel()
+	rv := staticSrc(t, "reviews.js")
+	if !strings.Contains(rv, `function previewScopeReviews()`) || !strings.Contains(rv, `po.pr`) || !strings.Contains(rv, `p.scope`) {
+		t.Error("reviews.js: previewScopeReviews must refuse a PR and a scoped pair")
+	}
+}
+
+// Final-review fixes, each proven in a browser (the playwright probe); these
+// pin the wiring so a refactor cannot quietly drop one.
+func TestPreviewReviewsFinalReviewWiring(t *testing.T) {
+	t.Parallel()
+	css := staticSrc(t, "style.css")
+	if !strings.Contains(css, "#previews-list li.brev {") && !strings.Contains(css, "#previews-list li.brev,") && !strings.Contains(css, ", #previews-list li.brev {") {
+		t.Error("style.css: a preview's review sub-row is not styled as a sub-row")
+	}
+	rv := staticSrc(t, "reviews.js")
+	if !strings.Contains(rv, "return previewScopeReviews()\n    .concat(commitReviewList())") {
+		t.Error("reviews.js: the opened preview's review rows are not keyboard rows (headRowIds)")
+	}
+	if !strings.Contains(rv, "previewBack(state.reviewSel) || reviewBackFromCommit(state.reviewSel)") {
+		t.Error("reviews.js: enter on a preview's review row does not return to the preview")
+	}
+	pv := staticSrc(t, "previews.js")
+	if !strings.Contains(pv, "state.previewReviews = row.reviews || [];") {
+		t.Error("previews.js: an open preview's Reviews block does not follow a refresh")
+	}
+}
