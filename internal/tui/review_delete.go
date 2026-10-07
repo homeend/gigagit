@@ -50,6 +50,12 @@ func (m Model) deleteReviewRow() (actionRow, bool) {
 			return actionRow{}, false
 		}
 		id, quote = h.ID, reviewQuote(h.Agent, h.Summary)
+	case m.focus == panelPreviews && !m.inContentWindow():
+		h, ok := m.selectedPreviewReview()
+		if !ok {
+			return actionRow{}, false
+		}
+		id, quote = h.ID, reviewQuote(h.Agent, h.Summary)
 	default:
 		return actionRow{}, false
 	}
@@ -125,6 +131,23 @@ func (m Model) onStoredDeleted(msg storedDeletedMsg) (Model, tea.Cmd) {
 // leaveReviewView is the review view's esc: back to the commit's files it was
 // opened from, else closed onto the panel (and popup) that opened it.
 func (m Model) leaveReviewView() (Model, tea.Cmd) {
+	if st := m.filesReview; st != nil && st.backPreview != nil {
+		// Opened from a preview's Reviews block: re-open that preview, the
+		// cursor on the review's row. One-shot — a preview that no longer
+		// opens leaves the review on screen, and the next esc closes it.
+		bp, id := st.backPreview, st.id
+		cp := *st
+		cp.backPreview = nil
+		m.filesReview = &cp
+		if bp.pair != nil {
+			svc, gen, p := m.svc, m.previewGen, *bp.pair
+			return m, func() tea.Msg {
+				eps, err := svc.PairOpen(context.Background(), p.A, p.B)
+				return pairOpenMsg{pair: p, eps: eps, gen: gen, err: err, landNote: id}
+			}
+		}
+		return m, m.openPreviewLandingCmd(bp.id, bp.source, bp.target, id)
+	}
 	if st := m.filesReview; st != nil && st.back.Hash != "" {
 		// Opened from this commit's Reviews: back to its files, the keys on
 		// the tree and the cursor on the review's row once the list lands.

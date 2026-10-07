@@ -40,8 +40,11 @@ func (m Model) previewMarkedLinks() []string {
 		return nil
 	}
 	pos := make(map[int]int, len(m.previews))
-	for n, i := range m.displayIndices(panelPreviews) {
-		pos[i] = n
+	ents := m.previewEntries()
+	for n, u := range m.displayIndices(panelPreviews) {
+		if u < len(ents) && !ents[u].sub() { // a review sub-row is never marked
+			pos[ents[u].pv] = n
+		}
 	}
 	type marked struct {
 		at   int
@@ -179,9 +182,13 @@ func (m Model) previewMarksClearRow() (actionRow, bool) {
 // order the comparison takes them: "<label> ↔ <label>".
 func (m Model) previewMarkedSubjects() string {
 	var names []string
-	for _, i := range m.displayIndices(panelPreviews) {
-		if i < len(m.previews) && m.previewCompareSet[m.previews[i].id()] {
-			names = append(names, m.previews[i].label())
+	ents := m.previewEntries()
+	for _, u := range m.displayIndices(panelPreviews) {
+		if u >= len(ents) || ents[u].sub() {
+			continue
+		}
+		if r := m.previews[ents[u].pv]; m.previewCompareSet[r.id()] {
+			names = append(names, r.label())
 		}
 	}
 	return strings.Join(names, " ↔ ")

@@ -54,6 +54,13 @@ func (m Model) noteRowMenu() ([]actionRow, bool) {
 				quote = reviewQuote(r.Agent, r.Summary)
 			}
 		}
+		// A preview's Reviews block: its heads are the preview's, never in
+		// noteCounts.Reviews (R5).
+		for _, r := range m.filesPreviewReviews {
+			if r.ID == id {
+				quote = reviewQuote(r.Agent, r.Summary)
+			}
+		}
 		return []actionRow{
 			{id: "open-review", label: i18n.T("Open review"), run: open},
 			m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {

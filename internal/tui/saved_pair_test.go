@@ -46,7 +46,7 @@ func TestPreviewsTabListsBothKinds(t *testing.T) {
 	if !strings.Contains(out, "feat/x → main") {
 		t.Fatalf("the merge preview row must survive beside it:\n%s", out)
 	}
-	l := previewList{rows: m.previews}
+	l := m.listFor(panelPreviews).(previewList)
 	if l.Key(1) != p.ID || l.Name(1) != "attempt" || l.Date(1) != p.Created.Unix() {
 		t.Fatalf("list identity of the pair row = %q %q %d", l.Key(1), l.Name(1), l.Date(1))
 	}

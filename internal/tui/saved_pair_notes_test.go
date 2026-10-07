@@ -187,7 +187,7 @@ func TestPairRowCarriesItsNoteBadge(t *testing.T) {
 	if r.kind != rowPair || r.notes != 1 || r.byPath["a.txt"] != 1 {
 		t.Fatalf("pair row notes = %d %v", r.notes, r.byPath)
 	}
-	l := previewList{rows: m.previews, text: m.previewRows()}
+	l := m.listFor(panelPreviews).(previewList)
 	if !strings.HasSuffix(l.Row(1), noteBadge(1)) || strings.Contains(l.Haystack(1), noteBadge(1)) {
 		t.Fatalf("row %q / haystack %q", l.Row(1), l.Haystack(1))
 	}

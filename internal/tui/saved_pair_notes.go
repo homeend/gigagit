@@ -26,6 +26,7 @@ type pairNotesMsg struct {
 	a, b   string
 	set    domain.PreviewNoteSet
 	counts map[string]int
+	heads  []domain.ReviewHead // the pair's AI reviews (none for a single review's range)
 	gen    int
 }
 
@@ -51,6 +52,9 @@ func (m Model) pairNotesCmd(a, b, only string) tea.Cmd {
 		set.Only = only
 		msg.set = set
 		msg.counts, _, _ = svc.PreviewNoteCounts(ctx, set)
+		if only == "" {
+			msg.heads, _ = svc.PreviewReviews(ctx, set)
+		}
 		return msg
 	}
 }
@@ -82,6 +86,7 @@ func (m Model) handlePairNotesMsg(msg pairNotesMsg) (Model, tea.Cmd) {
 	if msg.counts != nil { // a failed counts read keeps the last known badges
 		m.filesPreviewCounts = msg.counts
 	}
+	m = m.setPreviewReviews(msg.heads)
 	// A file diff may already be open over this view — a steered landing opens
 	// it the moment the file list arrives, which can beat this message. It
 	// was opened unstamped, so its notes are inert: stamp it and load them.

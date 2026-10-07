@@ -13,10 +13,11 @@ import (
 // the previewGen it was dispatched under, like previewOpenMsg: a second enter
 // or a closed view in the meantime makes this one stale, and it is dropped.
 type pairOpenMsg struct {
-	pair domain.CommitPair
-	eps  domain.PairEndpoints
-	gen  int
-	err  error
+	pair     domain.CommitPair
+	eps      domain.PairEndpoints
+	gen      int
+	landNote string // a review whose row the cursor lands on (back from that review)
+	err      error
 }
 
 func pairTitle(label string) string { return i18n.T("Saved diff: %s", label) }
@@ -70,8 +71,15 @@ func (m Model) handlePairOpenMsg(msg pairOpenMsg) (Model, tea.Cmd) {
 	m.compareTag = ""
 	var cmd tea.Cmd
 	m, cmd = m.openCompareFiles(msg.eps.Left, msg.eps.Right)
-	m.filesTitle = pairTitle(msg.pair.Label)
+	label := msg.pair.Label
+	if label == "" {
+		label = msg.pair.DefaultLabel()
+	}
+	m.filesTitle = pairTitle(label)
 	m.filesContext = m.filesTitle
+	// After openCompareFiles (closeFilesView clears both): what a review
+	// opened from this pair's Reviews block re-opens on esc, and where.
+	m.filesPairLabel, m.filesLandNote = label, msg.landNote
 	// After openCompareFiles: it bumped previewGen, which the command stamps.
 	if nc := m.pairNotesCmd(msg.pair.A, msg.pair.B, ""); nc != nil {
 		cmd = tea.Batch(cmd, nc)

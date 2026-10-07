@@ -171,7 +171,7 @@ func TestThePanelListsAComparisonBesideTheSetRows(t *testing.T) {
 	if !strings.Contains(out, "trees") || !strings.Contains(out, "branch: main ↔ branch: feat/x") {
 		t.Errorf("the comparison row must show its label and both descriptions:\n%s", out)
 	}
-	l := previewList{rows: m.previews}
+	l := m.listFor(panelPreviews).(previewList)
 	if l.Key(2) != c.ID || l.Name(2) != "trees" || l.Date(2) != c.Created.Unix() {
 		t.Errorf("list identity = %q %q %d", l.Key(2), l.Name(2), l.Date(2))
 	}
