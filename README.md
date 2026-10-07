@@ -462,7 +462,15 @@ back the note's ANCHOR line, the same link the line under it copies, and a
 reply copies its thread's anchor — inside an open merge preview the
 diff line and the file row copy the preview forms
 (`…@<target>...<source>[:<line>]`, new side only; a deletion row copies the
-file), and a Previews row copies the pair's own link. Quote a link that carries `#<hunk>` — an unquoted `#` starts a shell
+file), and a Previews row copies the pair's own link. Inside an opened AI
+review, a file row also offers **Copy review link to this file**, and a
+review remark **Copy remark link** (`L` too) and **Copy remark id**
+(`review:<id>:<n>`, what `gg note reply` / `resolve` take) — in the TUI's
+`.` menu and the web's right-click menu, where they replace a remark's
+copy gg link to this note. Opening such a link (`#`, `gg open`,
+`gg session navigate`, the web's link dialog) opens the review on that
+file, at that line; `gg review show <link>` prints just that file's or that
+remark's notes. Quote a link that carries `#<hunk>` — an unquoted `#` starts a shell
 comment.
 
 The browser UI copies the same things the TUI's `.` menu does, from where they

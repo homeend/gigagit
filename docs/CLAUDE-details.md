@@ -5824,6 +5824,34 @@ longer stored is skipped there ("it no longer exists").
 
 **CLI confirm.** The send confirm is interactive only when the reader handed
 to `cli.Run` IS `os.Stdin` and a terminal; `--yes` answers it
+(`defaultAnswer`: the event for a verdict review, `discard`, else `send`) but
+never `submit-with-pending`.
+
+### Review links to files and remarks (2026-10-07)
+
+Spec `docs/superpowers/specs/2026-10-07-review-links-copy-design.md`, plan
+`docs/superpowers/plans/2026-10-07-review-links-copy.md`.
+
+- **Domain builds every link** (`review_link.go`): `ReviewFileLink(id,
+  path)`, `ReviewRemarkLink("review:<id>:<n>")`, and `ReviewRemark.ReviewLink`
+  / `ReviewShowRemark.ReviewLink` — the remark's line link plus the
+  `?review=` hint. No new grammar: `?review=` with a path (and line).
+- **Opening one** goes through `onReviewHint`: a link with `File` parks the
+  navigate (`reviewViewMsg.land` → `pendingSteer`, stage Files for a
+  one-commit review, Compare for a range/working one), and the review
+  view's file-list arrival drains it — the drain opens the file through the
+  review files view, so the diff carries the review's remarks
+  (`reviewID`). A landing that cannot happen answers the navigate with a
+  failure, never stays parked. The web: `steerNavigateReview` →
+  `openReview` then `openNamedFile`.
+- **TUI rows**: `reviewFileCopyLinkRow` (beside `reviewViewCopyLinkRow`;
+  "Copy file link" is the content link, hence the longer label),
+  `reviewRemarkRows` in `noteMenuRows` (thread ROOT, so a reply copies its
+  remark), `L` on a review remark copies the remark link.
+- **CLI narrowing** reads the RESOLVED link (`reviewArgID` returns
+  `*domain.Resolved`): a name-less local link cannot split repo from path
+  by syntax.
+
 (`defaultAnswer`: the request's event for a verdict review, `discard`, else
 `send`) but never `submit-with-pending` — `sendNow` refuses `--yes` into a
 pending review, and approve / request-changes on the viewer's own PR, before

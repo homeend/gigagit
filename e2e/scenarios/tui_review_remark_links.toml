@@ -1,0 +1,50 @@
+name = "tui: a review's remark offers Copy remark link / Copy remark id; its file row Copy review link to this file"
+
+# A commit deleting a.txt, reviewed by the fake agent (its one remark is on
+# a.txt's old line 1). The review view's file row and the remark in the
+# review diff each offer their review-aware copy rows.
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[tools.command]]
+category = "review"
+name = "fake"
+mode = "capture"
+command = "{{ggfake}} review"
+''' },
+  { write = "a.txt", content = "a\n" },
+  { commit = "add a" },
+  { rm = "a.txt" },
+  { commit = "delete a" },
+]
+
+[[run]]
+cmd = ["review", "--tool", "fake", "HEAD"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "files"
+keys = ["right", "enter"]
+screen_contains = ["Reviews", "D  a.txt"]
+
+# The review row (under "Reviews") opens the review view.
+[[tui.step]]
+name = "review"
+keys = ["down", "enter"]
+screen_contains = ["Overview", "a.txt"]
+
+# a.txt's row: the review-aware file link sits beside Copy review link.
+[[tui.step]]
+name = "file-menu"
+keys = ["down", "."]
+screen_contains = ["Copy review link", "Copy review link to this file"]
+
+# Its review diff, the cursor on the remark: the remark's own copy rows
+# (filtered: the menu is taller than the screen).
+[[tui.step]]
+name = "remark-menu"
+keys = ["esc", "enter", ".", "remark"]
+screen_contains = ["Copy remark link", "Copy remark id"]

@@ -448,6 +448,9 @@ async function steerNavigateReview(s) {
   // sub-row is there on arrival (the TUI's review-hint refresh).
   await Promise.all([refreshNoteCounts(), fetchPreviews()]);
   await openReview(s.hint_id, { kind: "list" });
+  // A review link with a path (and line): land on that file of the review,
+  // at its line.
+  if (s.file && (await openNamedFile(state.files, s, "review " + s.hint_id))) await landLine(s);
 }
 
 // steerNavigateContent lands a content link: the file ON DISK in the viewer,
@@ -581,6 +584,14 @@ async function steerNavigateLand(s) {
     await openWorkingTree(0);
     if (!(await openNamedFile(state.statusEntries, s, "the working-tree diff"))) return;
   }
+  if (!s.line) return;
+  await landLine(s);
+}
+
+// landLine lands a navigate's line in the diff its file just opened: the
+// cursor row, a range band, a miss said so. Every navigate that opened a
+// file comes here — steerNavigateLand and a review link with a line.
+async function landLine(s) {
   if (!s.line) return;
   // A fingerprinted link whose line moved or changed says so (the server's
   // domain.AnchorNote); s.line is already where the text is now.

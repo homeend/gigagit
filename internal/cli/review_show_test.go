@@ -135,3 +135,42 @@ func TestPrintReviewShowNamesWorkingChanges(t *testing.T) {
 		t.Fatalf("header = %q", first)
 	}
 }
+
+// A review link with a path shows that file's remarks; with a line, the
+// remark there. Every remark prints its review link and id.
+func TestReviewShowNarrowsToAFileOrRemarkLink(t *testing.T) {
+	t.Parallel()
+	dir, id := reviewedRepo(t)
+	svc := openCLIService(t, dir)
+	ctx := context.Background()
+	rl0, err := svc.ReviewRemarkLink(ctx, "review:"+id+":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, out, errb := runCLI(t, dir, "review", "show", id)
+	if code != 0 || !strings.Contains(out, "[0] a.txt:1-2") || !strings.Contains(out, "[1] a.txt:-1") || !strings.Contains(out, rl0) {
+		t.Fatalf("whole review = %d %q %q", code, out, errb)
+	}
+	code, out, errb = runCLI(t, dir, "review", "show", rl0)
+	if code != 0 || !strings.Contains(out, "[0] a.txt:1-2") || strings.Contains(out, "[1]") || !strings.Contains(out, "id review:"+id+":0") {
+		t.Fatalf("remark link = %d %q %q", code, out, errb)
+	}
+	code, out, errb = runCLI(t, dir, "review", "show", "--json", rl0)
+	var rs struct {
+		Remarks []struct {
+			N          int
+			ReviewLink string `json:"review_link"`
+		}
+	}
+	if code != 0 || json.Unmarshal([]byte(out), &rs) != nil || len(rs.Remarks) != 1 || rs.Remarks[0].ReviewLink != rl0 {
+		t.Fatalf("remark link --json = %d %q %q", code, out, errb)
+	}
+	fl, err := svc.ReviewFileLink(ctx, id, "a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, out, errb = runCLI(t, dir, "review", "show", fl)
+	if code != 0 || !strings.Contains(out, "[0]") || !strings.Contains(out, "[1]") {
+		t.Fatalf("file link = %d %q %q", code, out, errb)
+	}
+}

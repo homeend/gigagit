@@ -7,6 +7,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // A commit's Files view lists three kinds of note row above its files: a
@@ -226,6 +227,92 @@ func (m Model) reviewViewCopyLinkRow() (actionRow, bool) {
 	return m.asyncCopyLinkRow("copy-review-link", i18n.T("Copy review link"), func(ctx context.Context) (string, error) {
 		return svc.ReviewLink(ctx, id)
 	}), true
+}
+
+// reviewFileCopyLinkRow is a reviewed file row's "Copy review link to this
+// file": the review link with the file's path, which opens the review on it.
+func (m Model) reviewFileCopyLinkRow() (actionRow, bool) {
+	st, svc := m.filesReview, m.svc
+	if st == nil || svc == nil || !m.inContentWindow() || m.diffLayer() != nil {
+		return actionRow{}, false
+	}
+	path, ok := m.fileListRowPath()
+	if !ok || path == "" {
+		return actionRow{}, false
+	}
+	id := st.id
+	return m.asyncCopyLinkRow("copy-review-file-link", i18n.T("Copy review link to this file"), func(ctx context.Context) (string, error) {
+		return svc.ReviewFileLink(ctx, id, path)
+	}), true
+}
+
+// reviewRemarkRows are a review remark's copy rows in a review diff: its
+// review link (Copy remark link) and its id review:<id>:<n> (Copy remark id,
+// what gg note reply / resolve take). They act on the thread ROOT, so a reply
+// under the cursor copies its remark. nil when no remark is in reach.
+func (m Model) reviewRemarkRows() []actionRow {
+	v, ok := m.topLayer().(*diffView)
+	if !ok || v.reviewID == "" || m.svc == nil {
+		return nil
+	}
+	rootID := ""
+	for _, t := range replyableNoteTargets(m.notesAtCursor()) {
+		if model.IsReviewNoteID(t.rootID) {
+			rootID = t.rootID
+			break
+		}
+	}
+	if rootID == "" {
+		return nil
+	}
+	svc := m.svc
+	return []actionRow{
+		m.asyncCopyLinkRow("copy-remark-link", i18n.T("Copy remark link"), func(ctx context.Context) (string, error) {
+			return svc.ReviewRemarkLink(ctx, rootID)
+		}),
+		m.copyRow("copy-remark-id", i18n.T("Copy remark id"), i18n.T("Copied remark id: %s", rootID), rootID),
+	}
+}
+
+// reviewRemarkLinkRow is the remark's "Copy remark link" — what L copies on a
+// review remark.
+func (m Model) reviewRemarkLinkRow() (actionRow, bool) {
+	if rows := m.reviewRemarkRows(); len(rows) > 0 {
+		return rows[0], true
+	}
+	return actionRow{}, false
+}
+
+// reviewRemarkLinkAtCursorRow is what L copies on a review remark: the remark
+// link, but only for a remark whose lines hold the cursor line and with no
+// multi-line selection — a marked range, or the line under a remark, keeps
+// the ordinary link.
+func (m Model) reviewRemarkLinkAtCursorRow() (actionRow, bool) {
+	v, ok := m.topLayer().(*diffView)
+	if !ok || v.reviewID == "" || m.linkSelectionLines() > 1 {
+		return actionRow{}, false
+	}
+	row, ok := v.cursorRow()
+	if !ok {
+		return actionRow{}, false
+	}
+	for _, t := range replyableNoteTargets(m.notesAtCursor()) {
+		if !model.IsReviewNoteID(t.rootID) {
+			continue
+		}
+		no := row.RightNo
+		if t.side == model.NoteSideOld {
+			no = row.LeftNo
+		}
+		first := t.first
+		if first == 0 {
+			first = t.line
+		}
+		if no >= first && no <= t.line {
+			return m.reviewRemarkLinkRow()
+		}
+	}
+	return actionRow{}, false
 }
 
 // branchReviewCopyLinkRow is a Branches review sub-row's "Copy gg link".

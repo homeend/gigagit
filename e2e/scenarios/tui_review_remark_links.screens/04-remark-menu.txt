@@ -1,0 +1,40 @@
+diff: a.txt  @ 16e84e5 delete a                                                                                               old line 1  change 1/1  rows 1–6/6
+  1 a                                                                          │···············································································
+╭─ review · fake · a.txt L1 ──────────────────────────────────────────────────╮│
+│                                                                             ││
+│ the only line of a.txt goes with it                                         ││
+│                                                                             ││
+╰─────────────────────────────────────────────────────────────────────────────╯│
+
+
+
+
+
+
+
+                                                   ╔════════════════════════════════════════════════════════╗
+                                                   ║                                                        ║
+                                                   ║  Actions  remark█                                      ║
+                                                   ║                                                        ║
+                                                   ║  > Copy remark link                                    ║
+                                                   ║    Copy remark id                                      ║
+                                                   ║                                                        ║
+                                                   ║  type to filter  [enter] run  [ctrl+w] view            ║
+                                                   ║  [esc] close                                           ║
+                                                   ║                                                        ║
+                                                   ╚════════════════════════════════════════════════════════╝
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] scroll  [←→] pan  [h/b] hist  [esc] back

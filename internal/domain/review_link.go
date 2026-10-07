@@ -116,6 +116,49 @@ func (s *Service) ReviewLink(ctx context.Context, id string) (string, error) {
 	return s.linkText(ctx, model.Link{Target: t, Hint: model.LinkHint{Kind: model.ReviewHintKind, ID: r.ID}})
 }
 
+// ReviewFileLink is the link to one file of review id: the review's change
+// with path, carrying the ?review= hint, so opening it opens the review on
+// that file.
+func (s *Service) ReviewFileLink(ctx context.Context, id, path string) (string, error) {
+	r, err := s.Review(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	t, err := s.reviewTarget(ctx, r)
+	if err != nil {
+		return "", err
+	}
+	return s.linkText(ctx, model.Link{Path: path, Target: t, Side: model.NoteSideNew,
+		Hint: model.LinkHint{Kind: model.ReviewHintKind, ID: r.ID}})
+}
+
+// ReviewRemarkLink is the review-aware link of one remark, named by its id
+// review:<review id>:<n> (the id gg note reply / resolve take).
+func (s *Service) ReviewRemarkLink(ctx context.Context, remarkID string) (string, error) {
+	rid, n, ok := model.ParseReviewNoteID(remarkID)
+	if !ok {
+		return "", fmt.Errorf("not a review remark id: %q", remarkID)
+	}
+	r, err := s.Review(ctx, rid)
+	if err != nil {
+		return "", err
+	}
+	rms, err := s.ReviewRemarks(ctx, r)
+	if err != nil {
+		return "", err
+	}
+	for _, rm := range rms {
+		if rm.N != n {
+			continue
+		}
+		if rm.ReviewLink == "" {
+			return "", fmt.Errorf("remark %d of review %s has no link (its path cannot be spelled)", n, rid)
+		}
+		return rm.ReviewLink, nil
+	}
+	return "", fmt.Errorf("review %s has no remark %d", rid, n)
+}
+
 // ScopeLinkText is a commit's Range review row's link: the commit pair the
 // scope names at that commit, as gg://<repo>@<a>..<b> (full shas).
 func (s *Service) ScopeLinkText(ctx context.Context, scope, commit string) (string, error) {
@@ -140,6 +183,9 @@ type ReviewRemark struct {
 	Summary, Rationale string
 	Meta               []notebatch.MetaKV
 	Link               string
+	// ReviewLink is Link with the ?review= hint: it reopens THIS review at
+	// the remark (Link names only the change's line).
+	ReviewLink string
 }
 
 // ReviewRemarks are r's document notes in document order. N is the index the
@@ -184,6 +230,10 @@ func reviewRemarksIn(r Review, t model.LinkTarget, repo model.LinkRepo) []Review
 			}
 			if text, err := linkTextIn(repo, l); err == nil {
 				rm.Link = text // a path a link cannot spell keeps no link; it never fails the list
+			}
+			l.Hint = model.LinkHint{Kind: model.ReviewHintKind, ID: r.ID}
+			if text, err := linkTextIn(repo, l); err == nil {
+				rm.ReviewLink = text
 			}
 			out = append(out, rm)
 		}
@@ -244,6 +294,8 @@ type ReviewShowRemark struct {
 	Rationale string            `json:"rationale,omitempty"`
 	Meta      map[string]string `json:"meta,omitempty"`
 	Link      string            `json:"link,omitempty"`
+	// ReviewLink reopens this review at the remark (Link + ?review=<id>).
+	ReviewLink string `json:"review_link,omitempty"`
 	// The remark's thread: resolved (by whom) and its replies.
 	Resolved   bool              `json:"resolved"`
 	ResolvedBy string            `json:"resolved_by,omitempty"`
@@ -324,7 +376,7 @@ func (s *Service) ReviewShow(ctx context.Context, id string) (ReviewShow, error)
 	for _, x := range reviewRemarksIn(r, t, repo) {
 		rm := ReviewShowRemark{ID: fmt.Sprintf("%s%s:%d", model.ReviewNoteIDPrefix, r.ID, x.N),
 			N: x.N, Path: x.Path, Side: string(x.Side), Start: x.Start, End: x.End,
-			Summary: x.Summary, Rationale: x.Rationale, Meta: metaMap(x.Meta), Link: x.Link}
+			Summary: x.Summary, Rationale: x.Rationale, Meta: metaMap(x.Meta), Link: x.Link, ReviewLink: x.ReviewLink}
 		if x.N < len(th) {
 			if res := th[x.N].Resolution; res != nil {
 				rm.Resolved, rm.ResolvedBy = true, res.By

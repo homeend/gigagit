@@ -21,7 +21,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewOverview } from "./reviews.js";
+import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewOverview } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -3742,7 +3742,9 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   // commit while the PLACE on screen is the pair, and the two menus must not
   // disagree about the same row. A reply carries its root's inherited
   // side/line on the wire (domain.ToWireNote), so it needs no special case.
-  const rootId = n.parent_id ? (state.notes.find((x) => (x.replies || []).some((r) => r.id === n.id)) || n).id : n.id;
+  // The stacked view keeps no state.notes: a reply then falls back to its
+  // parent id (threads are one level deep).
+  const rootId = n.parent_id ? (state.notes.find((x) => (x.replies || []).some((r) => r.id === n.id)) || {}).id || n.parent_id : n.id;
   const foldRow = {
     label: (state.noteCollapsed.has(rootId) ? "Expand" : "Collapse") + " thread",
     hint: "z",
@@ -3759,7 +3761,17 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   if (n.source !== "forge" && !String(n.id).startsWith("forge:"))
     noteRows.push({ label: n.resolved ? "Reopen thread" : "Resolve thread", act: () => resolveNote(n, !n.resolved, rootId) });
   for (const l of noteLinks(n)) noteRows.push({ label: "Open link: " + l, act: () => gotoNoteLink(l) });
-  const nlink = linkFor(state.repo, state.worktree, noteSlotCtx(n) || state.diffCtx, n.side, n.line);
+  // A review REMARK (its thread root is review:<id>:<n>) copies its review
+  // link and its id — the link a plain line would give names the wrong
+  // change for a range or working review.
+  const remark = /^review:(.+):(\d+)$/.exec(String(rootId));
+  if (remark) {
+    noteRows.push(
+      { label: "copy remark link", act: () => copyServerLink("/api/review/" + encodeURIComponent(remark[1]) + "/link?n=" + remark[2], "remark " + remark[2]) },
+      { label: "copy remark id", act: () => copyText(rootId, "remark id " + rootId) }
+    );
+  }
+  const nlink = remark ? "" : linkFor(state.repo, state.worktree, noteSlotCtx(n) || state.diffCtx, n.side, n.line);
   if (nlink)
     noteRows.push({
       label: "copy gg link to this note",
@@ -5157,9 +5169,14 @@ $("files-list").addEventListener("contextmenu", (e) => {
           { label: "add to shelf", act: () => addFileEntry("shelf", f.path, "committed", hereRev) },
         ]
       : [];
+    // A reviewed file copies the link that reopens the REVIEW on it.
+    const reviewRows = reviewActive()
+      ? [{ label: "copy review link to this file", act: () => copyServerLink("/api/review/" + encodeURIComponent(state.review.id) + "/link?path=" + encodeURIComponent(f.path), "review file: " + f.path) }]
+      : [];
     showCtxMenu(
       [
         ...revRows,
+        ...reviewRows,
         ...copyPathRows(f.path),
         // A compare row's rev is bHash, but the diff on screen is aHash →
         // bHash, not bHash^ → bHash — a commit-state link would misdescribe

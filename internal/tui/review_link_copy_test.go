@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"io"
 	"strings"
 	"testing"
@@ -115,4 +116,117 @@ func TestAllNotesCtrlLCopiesAReviewLink(t *testing.T) {
 	if !strings.Contains(got, "?review="+id) {
 		t.Fatalf("copied %q", got)
 	}
+}
+
+// A reviewed file row copies the review link to that file.
+func TestReviewFileRowCopiesItsReviewLink(t *testing.T) {
+	t.Parallel()
+	m, id := openedReviewView(t)
+	var got string
+	m = captureClip(m, &got)
+	_, i := filesLine(t, m, "a.go")
+	m.filesView.sel = i
+	runMenuRow(t, m, "copy-review-file-link")
+	if !strings.Contains(got, "/a.go@") || !strings.HasSuffix(got, "?review="+id) {
+		t.Fatalf("copied %q", got)
+	}
+	m.filesView.sel = 0 // the Overview row names no file
+	if _, ok := menuRowByID(t, m, "copy-review-file-link"); ok {
+		t.Fatal("the Overview row offers a file link")
+	}
+}
+
+// reviewDiffOnRemark opens a.go's review diff with the cursor on its remark.
+func reviewDiffOnRemark(t *testing.T, m Model) Model {
+	t.Helper()
+	m = openReviewDiff(t, m, "a.go")
+	v := m.diffLayer()
+	li, _ := v.noteAnchorLine(v.notes[0])
+	v.setCursorLine(li, m.diffBodyRows())
+	return m
+}
+
+// A remark copies its review link and its id — the thread ROOT's, even with
+// a reply in the thread.
+func TestReviewRemarkRowsCopyLinkAndID(t *testing.T) {
+	t.Parallel()
+	m, id := openedReviewView(t)
+	if _, err := m.svc.NoteReply(context.Background(), "review:"+id+":0", model.Note{Author: "me", Summary: "agreed"}); err != nil {
+		t.Fatal(err)
+	}
+	m = reviewDiffOnRemark(t, m)
+	var got string
+	m = captureClip(m, &got)
+	runMenuRow(t, m, "copy-remark-link")
+	if !strings.Contains(got, "/a.go@") || !strings.Contains(got, ":3?review="+id) {
+		t.Fatalf("remark link %q", got)
+	}
+	got = ""
+	runMenuRow(t, m, "copy-remark-id")
+	if got != "review:"+id+":0" {
+		t.Fatalf("remark id %q", got)
+	}
+}
+
+// L on a remark of a single-commit review copies the remark link (it used
+// to answer "no gg link for this place").
+func TestReviewRemarkLKeyCopiesTheRemarkLink(t *testing.T) {
+	t.Parallel()
+	m, id := openedReviewView(t)
+	m = reviewDiffOnRemark(t, m)
+	var got string
+	m = captureClip(m, &got)
+	nm, cmd := m.diffLayer().update(m, synthKey("L"))
+	drainCmds(t, nm, cmd)
+	if !strings.Contains(got, ":3?review="+id) {
+		t.Fatalf("L copied %q (notice %q)", got, nm.diffNotice)
+	}
+}
+
+// L copies the remark link only for the remark ON the cursor line, with no
+// multi-line selection: the line under a remark, or a marked range, keeps
+// the ordinary link.
+func TestReviewRemarkLKeyOnlyOnTheRemarkLine(t *testing.T) {
+	t.Parallel()
+	doc := `{"version":1,"summary":"s","files":[{"path":"a.go","annotations":[{"newRange":[1,1],"summary":"on 1"}]}]}`
+	m, _ := reviewViewModel(t, doc)
+	u, cmd := m.openReview(mustReviewID(t, m), "Review")
+	m = drainCmds(t, u, cmd)
+	m = openReviewDiff(t, m, "a.go")
+	v := m.diffLayer()
+	var got string
+	m = captureClip(m, &got)
+	// The cursor on new line 2, just below the remark's line.
+	for i := 0; i < 40; i++ {
+		if row, ok := v.cursorRow(); ok && row.RightNo == 2 {
+			break
+		}
+		v.setCursorLine(i, m.diffBodyRows())
+	}
+	if row, ok := v.cursorRow(); !ok || row.RightNo != 2 {
+		t.Fatalf("could not place the cursor on line 2 (%+v)", row)
+	}
+	nm, c2 := v.update(m, synthKey("L"))
+	drainCmds(t, nm, c2)
+	if strings.Contains(got, "?review=") {
+		t.Fatalf("L below the remark copied the remark link %q", got)
+	}
+	// A multi-line selection starting on the remark's line.
+	got = ""
+	li, _ := v.noteAnchorLine(v.notes[0])
+	selectRows(v, li, li+1)
+	nm, c2 = v.update(m, synthKey("L"))
+	drainCmds(t, nm, c2)
+	if strings.Contains(got, "?review=") {
+		t.Fatalf("L over a selection copied the remark link %q", got)
+	}
+}
+
+func mustReviewID(t *testing.T, m Model) string {
+	t.Helper()
+	rs, err := m.svc.ReviewsForCommit(context.Background(), m.commits[0].Hash)
+	if err != nil || len(rs) == 0 {
+		t.Fatalf("no review: %v", err)
+	}
+	return rs[0].ID
 }

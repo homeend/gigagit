@@ -66,7 +66,15 @@ func (m Model) onReviewHint(msg reviewHintMsg) (Model, tea.Cmd) {
 	if msg.preview != "" {
 		back = model.Commit{} // a preview's review returns to the panels, never a commit (R5)
 	}
-	nm, open := nm.openReviewFrom(c.HintID, reviewTitle(shortHash(msg.commit)), back)
+	// A link with a file (and line) lands there once the review's files are
+	// in; the landing answers the navigate, so this does not.
+	var land *steer.Command
+	if c.File != "" {
+		l := c
+		l.HintKind, l.HintID = "", ""
+		land = &l
+	}
+	nm, open := nm.openReviewLanding(c.HintID, reviewTitle(shortHash(msg.commit)), back, nil, land)
 	// An agent that just saved this review (gg review save, /gg-review) wrote
 	// the store behind this process: re-read the counts — and the Previews
 	// rows, where a preview review is a sub-row — so it shows on arrival.
@@ -78,6 +86,9 @@ func (m Model) onReviewHint(msg reviewHintMsg) (Model, tea.Cmd) {
 	nm, counts = nm.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
 	if msg.preview != "" {
 		nm, rows = nm.chainPreviewsRead()
+	}
+	if land != nil {
+		return nm, tea.Batch(open, counts, rows)
 	}
 	return nm, tea.Batch(open, counts, rows, nm.answerSteer(c, steerOK(c, "opened review "+c.HintID)))
 }

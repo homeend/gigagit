@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // The review view: a structured AI review (domain.Review.Doc) opens as the
@@ -78,6 +80,10 @@ type reviewViewMsg struct {
 	older     bool
 	gen       int // the loading box it answers (reviewLoadingPopup.gen)
 	err       error
+	// land is the navigate a review link with a file (and line) carried: it
+	// is parked until the review's file list loads, then lands there. nil =
+	// open the review at its overview.
+	land *steer.Command
 }
 
 // openReview opens review id: the review view for a structured review, the
@@ -97,6 +103,12 @@ func (m Model) openReviewFrom(id, title string, back model.Commit) (Model, tea.C
 // openReviewWith is openReviewFrom with a preview to return to (bp, from a
 // preview's Reviews block) instead of a commit.
 func (m Model) openReviewWith(id, title string, back model.Commit, bp *previewReturn) (Model, tea.Cmd) {
+	return m.openReviewLanding(id, title, back, bp, nil)
+}
+
+// openReviewLanding is openReviewWith that lands on land's file (and line)
+// once the review's files are in (a review link with a path).
+func (m Model) openReviewLanding(id, title string, back model.Commit, bp *previewReturn, land *steer.Command) (Model, tea.Cmd) {
 	svc := m.svc
 	if svc == nil {
 		return m, nil
@@ -108,7 +120,7 @@ func (m Model) openReviewWith(id, title string, back model.Commit, bp *previewRe
 	m = m.pushLayer(&reviewLoadingPopup{gen: gen})
 	return m, func() tea.Msg {
 		ctx := context.Background()
-		out := reviewViewMsg{id: id, title: title, back: back, backPrev: bp, gen: gen}
+		out := reviewViewMsg{id: id, title: title, back: back, backPrev: bp, gen: gen, land: land}
 		if out.review, out.err = svc.Review(ctx, id); out.err != nil || out.review.Doc == nil {
 			return out
 		}
@@ -129,9 +141,23 @@ func (m Model) openReviewWith(id, title string, back model.Commit, bp *previewRe
 // parked (handOffToFilesView), so esc from the view returns to it.
 func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 	if !m.hasReviewLoading(msg.gen) {
-		return m, nil // cancelled (esc on the loading box), or superseded
+		// Cancelled (esc on the loading box), or superseded. A landing it
+		// carried is answered: its sender must not wait for nothing.
+		if msg.land != nil {
+			return m, m.answerSteer(*msg.land, steerFail(*msg.land, "the review did not open (cancelled)"))
+		}
+		return m, nil
 	}
 	m = m.dropReviewLoading()
+	var landFail tea.Cmd // the answer to a landing that cannot happen
+	if msg.land != nil && (msg.err != nil || msg.review.Doc == nil) {
+		reason := "the review has no files to open"
+		if msg.err != nil {
+			reason = "the review could not open its files: " + msg.err.Error()
+		}
+		landFail = m.answerSteer(*msg.land, steerFail(*msg.land, reason))
+		msg.land = nil
+	}
 	if msg.err != nil {
 		// Gone (the viewer says "review deleted"), or its commit is gone: the
 		// review itself lives in the note, so it still opens, as text.
@@ -139,14 +165,21 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 		if msg.review.ID != "" {
 			m.statusMsg = i18n.T("review: %s", msg.err.Error())
 		}
-		return m, cmd
+		return m, tea.Batch(cmd, landFail)
 	}
 	if msg.review.Doc == nil {
 		m, cmd := m.openReviewNote(msg.id, msg.title)
 		m.statusMsg = i18n.T("not in gg review format — shown as text")
-		return m, cmd
+		return m, tea.Batch(cmd, landFail)
 	}
 	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back, backPreview: msg.backPrev, older: msg.older}
+	// landErr answers a landing whose review could not open its files.
+	landErr := func(err error) tea.Cmd {
+		if msg.land == nil {
+			return nil
+		}
+		return m.answerSteer(*msg.land, steerFail(*msg.land, "the review did not open: "+err.Error()))
+	}
 	open := func(m Model) (Model, tea.Cmd) {
 		var cmd tea.Cmd
 		switch {
@@ -156,7 +189,7 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 			left, lerr := model.CommitEndpoint(msg.base)
 			if lerr != nil {
 				m.statusMsg = i18n.T("review: %s", lerr.Error())
-				return m, nil
+				return m, landErr(lerr)
 			}
 			m.compareTag = ""
 			m, cmd = m.openCompareFiles(left, model.WorkTreeEndpoint())
@@ -165,7 +198,7 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 			right, rerr := model.CommitEndpoint(msg.tip)
 			if lerr != nil || rerr != nil {
 				m.statusMsg = i18n.T("review: %s", fmt.Sprint(lerr, rerr))
-				return m, nil
+				return m, landErr(fmt.Errorf("%v %v", lerr, rerr))
 			}
 			m.compareTag = "" // a compare of the same pair re-reads for the review mode
 			m, cmd = m.openCompareFiles(left, right)
@@ -183,6 +216,15 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 			label = i18n.T("%s · older tip", label)
 		}
 		m.filesTitle = i18n.T("Review: %s", label)
+		if land := msg.land; land != nil {
+			// Parked like any navigate: the file list's arrival drains it
+			// (drainPendingFiles / drainPendingCompare run in review mode).
+			if msg.isRange || msg.review.Kind == domain.ReviewOnWorktree {
+				m.pendingSteer = &pendingSteer{cmd: *land, stage: steerStageCompare, tag: m.compareTag, at: time.Now()}
+			} else {
+				m.pendingSteer = &pendingSteer{cmd: *land, stage: steerStageFiles, hash: msg.tip, at: time.Now()}
+			}
+		}
 		return m, cmd
 	}
 	if m.layers != nil && len(m.layers.entries) > 0 {
