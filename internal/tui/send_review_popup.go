@@ -156,7 +156,7 @@ func (p *sendReviewPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.sayInDiff(i18n.T("another operation is running — send again when it ends")), nil
 		}
 		m = m.popLayer()
-		return m.forgeSendCmd(p.request(), "")
+		return m.forgeSendCmd(p.request())
 	case tea.KeyEnter:
 		p.body.InsertNewline()
 		return m, nil

@@ -2,10 +2,8 @@ package domain
 
 import (
 	"context"
-	"errors"
 	"strings"
 
-	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -81,23 +79,4 @@ func (s *Service) ReviewBodyText(ctx context.Context, id string) (string, error)
 		return strings.TrimSpace(r.Doc.Overview), nil
 	}
 	return strings.TrimSpace(r.Text), nil
-}
-
-// PendingSendsPath is this repository's pending-send queue file — what a
-// frontend watches (spec §3.7). The file may not exist yet.
-func (s *Service) PendingSendsPath(ctx context.Context) (string, error) { return s.pendingPath(ctx) }
-
-// PendingOutcome is what an approval writes back to the queue entry: sent,
-// rejected at the confirm, failed — or still waiting when the approver could
-// not answer the confirm (nothing reached the forge).
-func PendingOutcome(res engine.Result, err error) (state, outcome string, waiting bool) {
-	switch {
-	case errors.Is(err, engine.ErrDecisionRequired):
-		return PendingWaiting, "", true
-	case err != nil:
-		return PendingFailed, err.Error(), false
-	case strings.HasPrefix(res.Summary, "aborted"):
-		return PendingRejected, "rejected at the confirm", false
-	}
-	return PendingSent, res.Summary, false
 }

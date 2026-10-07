@@ -42,11 +42,9 @@ type PRSendRequest struct {
 	Resolve   []string `toml:"resolve,omitempty" json:"resolve,omitempty"`     // thread ids or forge comment ids
 	Unresolve []string `toml:"unresolve,omitempty" json:"unresolve,omitempty"` // thread ids or forge comment ids
 	Verdict   bool     `toml:"verdict,omitempty" json:"verdict,omitempty"`     // a verdict with no comments
-	Event     string   `toml:"event,omitempty" json:"event,omitempty"`         // the verdict asked for: comment, approve, request-changes ("" = ask)
 	Body      string   `toml:"body,omitempty" json:"body,omitempty"`
 	Finish    bool     `toml:"finish,omitempty" json:"finish,omitempty"`
 	Discard   bool     `toml:"discard,omitempty" json:"discard,omitempty"`
-	Agent     string   `toml:"agent,omitempty" json:"agent,omitempty"` // who asked (signs a --body text)
 }
 
 // PRSendOp builds the one op that writes to a forge. The frontend collected
@@ -294,7 +292,7 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 	plan.Mode = engine.SendReview
 	if len(req.Notes) == 0 && req.Review == "" && !req.Mine {
 		// A verdict alone needs no diff here.
-		plan.Verdict, plan.Body = true, signedBody(req)
+		plan.Verdict, plan.Body = true, typedBody(req)
 		return plan, nil
 	}
 	prev, err := s.PRPreview(ctx, pr)
@@ -339,7 +337,7 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 			s.remarkItem(ctx, &plan, r, i, pl)
 		}
 	case req.Mine:
-		plan.Verdict, plan.Body = true, signedBody(req)
+		plan.Verdict, plan.Body = true, typedBody(req)
 		for _, p := range PreviewNotePaths(shown) {
 			for _, r := range shown[p] {
 				if r.Group == GroupMine && r.Note.Source != model.NoteSourceForge && !r.Note.IsForgeReply() {
@@ -555,14 +553,9 @@ func cutLabel(s string) string {
 	return string(r)
 }
 
-// signedBody is a typed review body, signed when an agent asked for it.
-func signedBody(req PRSendRequest) string {
-	b := strings.TrimSpace(req.Body)
-	if req.Agent != "" && b != "" {
-		b += "\n\n— " + req.Agent + " via gg"
-	}
-	return b
-}
+// typedBody is the review body the user typed (agents never send, so it
+// is never signed).
+func typedBody(req PRSendRequest) string { return strings.TrimSpace(req.Body) }
 
 // PRThreadRoot names a thread of PR n by any of its handles — a thread id,
 // one of its comment ids, or "forge:<comment id>" — reading the PR's

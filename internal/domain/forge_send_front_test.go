@@ -2,12 +2,9 @@ package domain
 
 import (
 	"context"
-	"errors"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -74,41 +71,5 @@ func TestPRSendGroupsListsMineThenReviews(t *testing.T) {
 	body, err := svc.ReviewBodyText(context.Background(), rid)
 	if err != nil || !strings.Contains(body, "looks fine") || strings.Contains(body, "via gg") {
 		t.Fatalf("ReviewBodyText = %q, %v", body, err)
-	}
-}
-
-func TestPendingOutcomeMirrorsTheApprovalRules(t *testing.T) {
-	t.Parallel()
-	for _, c := range []struct {
-		res     engine.Result
-		err     error
-		state   string
-		waiting bool
-	}{
-		{engine.Result{Summary: "sent 1 comments to o/r #7"}, nil, PendingSent, false},
-		{engine.Result{Summary: "aborted: sending to o/r #7"}, nil, PendingRejected, false},
-		{engine.Result{}, errors.New("HTTP 502"), PendingFailed, false},
-		{engine.Result{}, engine.ErrDecisionRequired, PendingWaiting, true},
-	} {
-		st, _, waiting := PendingOutcome(c.res, c.err)
-		if st != c.state || waiting != c.waiting {
-			t.Errorf("%+v %v → %q waiting=%v", c.res, c.err, st, waiting)
-		}
-	}
-}
-
-func TestPendingSendsPathIsTheQueueFile(t *testing.T) {
-	t.Parallel()
-	_, svc := newRealRepo(t)
-	ctx := context.Background()
-	p, err := svc.PendingSendsPath(ctx)
-	if err != nil || p == "" {
-		t.Fatalf("path %q, %v", p, err)
-	}
-	if _, err := svc.PendingSendAdd(ctx, PRSendRequest{PR: 7, Mine: true}, "claude"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(p); err != nil {
-		t.Fatalf("the queue file is not at %s: %v", p, err)
 	}
 }

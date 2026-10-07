@@ -70,11 +70,11 @@ func interruptedSendNotices(m Model) []notice {
 			title = i18n.T("A send to #%d was interrupted: %d comments wait in a pending review on GitHub", n, len(s.keys))
 		}
 		acts := []noticeAction{{label: i18n.T("Finish sending"), sourced: true, run: func(m Model) (Model, tea.Cmd) {
-			return m.forgeSendCmd(domain.PRSendRequest{PR: n, Finish: true}, "")
+			return m.forgeSendCmd(domain.PRSendRequest{PR: n, Finish: true})
 		}}}
 		if !s.joined {
 			acts = append(acts, noticeAction{label: i18n.T("Discard"), sourced: true, run: func(m Model) (Model, tea.Cmd) {
-				return m.forgeSendCmd(domain.PRSendRequest{PR: n, Discard: true}, "")
+				return m.forgeSendCmd(domain.PRSendRequest{PR: n, Discard: true})
 			}})
 		}
 		acts = append(acts, noticeAction{label: i18n.T("Later"), sourced: true})
