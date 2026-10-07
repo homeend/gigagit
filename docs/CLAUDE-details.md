@@ -5441,6 +5441,34 @@ Spec `docs/superpowers/specs/2026-10-07-preview-reviews-design.md`, plan 1
 - **`gg-review` skill**: `Skill.front` adds `argument-hint` +
   `disable-model-invocation: true` to the SKILL.md form only; installed
   wherever `delegate` is.
+- **TUI (plan 2,
+  `docs/superpowers/plans/2026-10-07-preview-reviews-2-tui.md`).**
+  `readPreviews` attaches `previewRow.reviews`: `PreviewReviews(set)` for an
+  OK merge row / OK pair, `PreviewReviewsByScope("<target>...<source>")` for a
+  merge row that cannot be built (merged, side missing, no base — every
+  review whose commits exist, all `Older`). The Previews list is an entry
+  layer (`pvEntry{pv, review}`, the Branches `brEntry` pattern):
+  `backingIndex` refuses a sub-row, `Key` = record id / `id\x00review`,
+  `Haystack` = the row + its sub-rows minus ◆N; marks and steer landings map
+  through entries (`previewDisplayIndex`). Sub-row: enter = `openReview`, `.`
+  = Open / Copy gg link / Delete (`previewReviewRowMenu` + `deleteReviewRow`).
+  Preview row: `previewReviewRow` (async `PreviewNotes`/`PairNotes` →
+  `ScopeReviewTarget` → `reviewTargetReadyMsg`) and `previewShowReviewRow`
+  (first non-`Older` head). Footer-only hints `[enter] open review` and
+  `preview-review-hint` (`[.] review (AI)`). The opened preview:
+  `previewOpenMsg.heads` / `pairNotesMsg.heads` → `filesPreviewReviews`,
+  `previewReviewLines` re-applies the block in place (same-tag re-arm,
+  `afterPreviewsRefresh`, the pair refresh); `compareFilesMsg` adds it when
+  the list lands. Enter on its row → `openReviewWith(…, previewReturn)`;
+  `leaveReviewView` re-opens the preview (`openPreviewLandingCmd`) or the
+  pair (`PairOpen`, `pairOpenMsg.landNote`) — one-shot, so a preview that no
+  longer opens never traps esc. `filesPairLabel` keeps a saved pair's label
+  (an unlabelled pair now titles itself `a7..b7`). Header: `reviewLabel`
+  = `NoteScopeLabel(Preview)` ("src → tgt", the TUI's wording rather than
+  the spec's `main ... feat/x`), `ReviewOlder` (read with the review) adds
+  `· older tip`. `applyReviewResult` and `onReviewHint` also chain a previews
+  read: the srcNotes arrival only chains one while the Previews tab or a
+  preview is on screen.
 
 ## Working-changes reviews (2026-10-05)
 

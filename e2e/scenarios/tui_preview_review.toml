@@ -1,0 +1,52 @@
+name = "tui: a review saved on a merge preview shows as its sub-row and on top of the opened preview"
+
+# feature changes a.txt. An agent stores a review document on the preview
+# link (gg review save — what /gg-review does); the Previews tab lists it as a
+# sub-row under the preview, the opened preview lists it under Reviews above
+# its files, and enter on that row opens the review view titled with the
+# preview. esc returns to the preview, the cursor on the review's row.
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" },
+  { commit = "add a" },
+  { branch = "feature" }, { switch = "feature" },
+  { write = "a.txt", content = "a\nmore a\n" },
+  { commit = "grow a" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd = ["preview", "add", "--label", "feature into main", "feature", "main"]
+exit = 0
+
+[[run]]
+cmd   = ["review", "save", "gg://{{cwd}}@main...feature", "--agent", "Claude Code", "--stdin"]
+stdin = '{"version":1,"summary":"## Summary\nfine","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"why more a?"}]}]}'
+exit  = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "previews"
+keys = ["C-right", "C-right", "C-right"]
+screen_contains = ["feature into main", "└ Review:", "Claude Code"]
+screen_excludes = ["older tip"]
+
+[[tui.step]]
+name = "preview-reviews-block"
+keys = ["enter"]
+screen_contains = ["Reviews", "└ Review:", "a.txt"]
+
+[[tui.step]]
+name = "review-view"
+keys = ["down", "enter"]
+screen_contains = ["Review: feature → main", "Overview"]
+
+[[tui.step]]
+name = "back-to-preview"
+keys = ["esc"]
+screen_contains = ["Merge preview: feature → main", "Reviews", "a.txt"]
+
+[expect]
+branch = "main"

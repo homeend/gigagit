@@ -10,6 +10,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+- **TUI: preview reviews where the preview lives.** The Previews list shows
+  a merge preview's or commit pair's AI reviews as sub-rows under it
+  (`└ Review: <date> <agent> <tally>`, `· older tip` for a review of a tip the
+  preview has since moved past — it still opens exactly what was reviewed;
+  one whose commits are gone is hidden — a merged preview, or one whose
+  source was deleted, keeps its reviews while their commits exist). Enter
+  opens the review; its
+  `.` menu is Open review / Copy gg link / Delete review. A preview row's
+  `.` menu gains **Review (AI)** (a previewable merge preview or a pair with
+  both commits, a review tool configured) and **Show review** (the newest
+  review of the current tip). The opened preview lists its reviews under
+  **Reviews** above its files; esc from one returns to the preview, the
+  cursor on its row. The review view's title names the preview
+  (`feat/x → main`) and says `older tip` when it applies. A `?review=` link
+  (an agent's `gg session navigate` after `gg review save`) re-reads the note
+  counts and the Previews rows, so a review just saved shows on arrival.
 - **`gg review save <gg-link> --agent <name> (--stdin | --file <path>) [--json]`**
   stores a review document an agent wrote itself — the same overview +
   per-file remarks the review lane produces — as the review of the change
