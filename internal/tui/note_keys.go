@@ -259,7 +259,7 @@ func (v *diffView) noteTargetIn(r domain.ResolvedNote) (noteTarget, bool) {
 	}
 	t := noteTarget{rootID: r.Note.ID, first: r.Range[0], line: r.Range[1], side: r.Note.Side, hash: r.Note.ContextHash,
 		resolved: r.Resolution != nil || model.NoteHasTag(r.Note, model.NoteTagResolved),
-		sync: r.Sync, group: r.Group, forge: r.Note.Source == model.NoteSourceForge}
+		sync:     r.Sync, group: r.Group, forge: r.Note.Source == model.NoteSourceForge}
 	for _, rep := range r.Replies {
 		if rep.Note.IsForgeReply() && rep.Sync != model.SyncForge && rep.Sync != model.SyncSending {
 			t.drafts = append(t.drafts, rep.Note.ID)
