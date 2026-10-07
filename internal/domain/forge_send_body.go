@@ -47,13 +47,28 @@ func sendBody(n model.Note, key, quote string) string {
 }
 
 // quoteLines opens a file-level thread with the lines it is really about.
+// The fence outgrows any backtick run in them, so a quoted ``` cannot
+// close it.
 func quoteLines(line int, text []string) string {
+	run := 2
+	for _, l := range text {
+		n := 0
+		for _, r := range l {
+			if r == '`' {
+				n++
+				run = max(run, n)
+			} else {
+				n = 0
+			}
+		}
+	}
+	fence := strings.Repeat("`", run+1)
 	var b strings.Builder
-	fmt.Fprintf(&b, "> Line %d:\n> ```\n", line)
+	fmt.Fprintf(&b, "> Line %d:\n> %s\n", line, fence)
 	for _, l := range text {
 		b.WriteString("> " + l + "\n")
 	}
-	b.WriteString("> ```\n\n")
+	b.WriteString("> " + fence + "\n\n")
 	return b.String()
 }
 
