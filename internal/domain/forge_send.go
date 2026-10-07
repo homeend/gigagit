@@ -103,7 +103,11 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 		}
 		return plan, nil
 	}
-	if drafts, other := s.noteKinds(ctx, req.Notes); len(req.Resolve)+len(req.Unresolve) > 0 || drafts > 0 {
+	drafts, other, err := s.noteKinds(ctx, req.Notes)
+	if err != nil {
+		return engine.SendPlan{}, err
+	}
+	if len(req.Resolve)+len(req.Unresolve) > 0 || drafts > 0 {
 		if req.Review != "" || req.Mine || req.Verdict || other > 0 {
 			return engine.SendPlan{}, ErrMixedSend
 		}
@@ -157,14 +161,15 @@ func (s *Service) storedNotes(ctx context.Context) (map[string]model.Note, error
 
 // noteKinds counts a --note list's draft replies to GitHub threads and its
 // other items (local notes, remarks, GitHub ids); an id no longer stored is
-// neither — a reply/resolve send skips it, any other send names it.
-func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, other int) {
+// neither — a reply/resolve send skips it, any other send names it. A store
+// that cannot be read is an error, never a guess.
+func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, other int, err error) {
 	if len(ids) == 0 {
-		return 0, 0
+		return 0, 0, nil
 	}
 	byID, err := s.storedNotes(ctx)
 	if err != nil {
-		return 0, len(ids)
+		return 0, 0, err
 	}
 	for _, id := range ids {
 		n, ok := byID[id]
@@ -175,7 +180,7 @@ func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, other in
 			other++
 		}
 	}
-	return drafts, other
+	return drafts, other, nil
 }
 
 // planActions is replies and resolves: each its own call.
@@ -189,21 +194,21 @@ func (s *Service) planActions(ctx context.Context, plan engine.SendPlan, req PRS
 		for _, id := range req.Notes {
 			d, ok := byID[id]
 			if !ok { // deleted since the request was made (a queued send)
-				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "reply " + id, Reason: "it no longer exists"})
+				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "reply: " + id, Reason: SkipGone, Summary: id})
 				continue
 			}
 			label := "reply: " + cutLabel(d.Summary)
 			_, root, ok := s.forgeCommentByID(strings.TrimPrefix(d.ParentID, model.ForgeNoteIDPrefix))
 			switch {
 			case !ok || root.ThreadID == "":
-				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: "its thread is not in this PR"})
+				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: SkipThreadNotInPR, Summary: cutLabel(d.Summary)})
 				continue
 			case d.Send.State() == model.SyncSending:
-				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: "already being sent"})
+				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: SkipBeingSent, Summary: cutLabel(d.Summary)})
 				continue
 			}
 			plan.Items = append(plan.Items, engine.SendItem{Key: d.ID, Label: label, Kind: engine.SendReply,
-				ThreadID: root.ThreadID, Body: sendBody(d, d.ID, "")})
+				ThreadID: root.ThreadID, Body: sendBody(d, d.ID, ""), Summary: cutLabel(d.Summary)})
 		}
 	}
 	for _, x := range []struct {
@@ -320,9 +325,15 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 			return engine.SendPlan{}, err
 		}
 		plan.Key, plan.Body, plan.Verdict = r.ID, reviewSendBody(r), true
-		if r.summarySent(pr.Number) {
+		edited := strings.TrimSpace(req.Body)
+		if edited != "" { // the user edited the summary (plan 3, T7)
+			plan.Body = sendBody(model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: edited}, r.ID, "")
+		}
+		// The stored summary is on GitHub already: skip it — unless the user
+		// typed a body of their own, which is new text and goes.
+		if r.summarySent(pr.Number) && (edited == "" || edited == r.summaryText()) {
 			plan.Body = ""
-			plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: "already on GitHub"})
+			plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: SkipOnGitHub})
 		}
 		for i := range r.docRemarks() {
 			s.remarkItem(ctx, &plan, r, i, pl)
@@ -367,7 +378,8 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 					if n.IsReply() && !n.IsForgeReply() {
 						return engine.SendPlan{}, fmt.Errorf("%w: %s is a reply: send its thread's root", ErrSendRequest, id)
 					}
-					plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(n.Address.Path, n.Range[0], n.Summary), Reason: "not in this PR"})
+					plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(n.Address.Path, n.Range[0], n.Summary), Reason: SkipNotInPR,
+						Path: n.Address.Path, Line: n.Range[0], Summary: cutLabel(n.Summary)})
 					continue
 				}
 				noteItem(&plan, r, pl)
@@ -382,24 +394,25 @@ func noteItem(plan *engine.SendPlan, r ResolvedNote, pl *sendPlace) {
 	n := r.Note
 	path := n.Address.Path
 	skip := func(reason string) {
-		plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(path, r.Range[0], n.Summary), Reason: reason})
+		plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(path, r.Range[0], n.Summary), Reason: reason,
+			Path: path, Line: r.Range[0], Summary: cutLabel(n.Summary)})
 	}
 	switch {
 	case r.Sync == model.SyncSending:
-		skip("already being sent")
+		skip(SkipBeingSent)
 		return
 	case !pl.changed[path]:
-		skip("not in this PR")
+		skip(SkipNotInPR)
 		return
 	case r.Status != model.NoteActive:
-		skip("its lines changed")
+		skip(SkipLinesChanged)
 		return
 	}
 	text := anchorLines(pl.lines(false, path), r.Range)
 	th := threadFor(path, model.NoteSideNew, r.Range, text, pl.hunks[path],
 		func(q string) string { return sendBody(n, n.ID, q) })
 	it := engine.SendItem{Key: n.ID, Label: threadLabel(th, r.Range[0], n.Summary), Kind: engine.SendThread,
-		Thread: th, Resolve: r.Resolution != nil}
+		Thread: th, Resolve: r.Resolution != nil, Summary: cutLabel(n.Summary)}
 	for _, rep := range r.Replies {
 		if rep.Note.Source == model.NoteSourceForge {
 			continue
@@ -437,16 +450,44 @@ func (s *Service) remarkItem(ctx context.Context, plan *engine.SendPlan, r Revie
 		return
 	}
 	skip := func(reason string) {
-		plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(path, dn.Range[0], dn.Summary), Reason: reason})
+		plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: noteLabel(path, dn.Range[0], dn.Summary), Reason: reason,
+			Path: path, Line: dn.Range[0], Summary: cutLabel(dn.Summary)})
 	}
 	if r.remarkSend(fp).State() == model.SyncSending {
-		skip("already being sent")
+		skip(SkipBeingSent)
 		return
 	}
 	if !pl.changed[path] {
-		skip("not in this PR")
+		skip(SkipNotInPR)
 		return
 	}
+	rng, want, ok := s.remarkPlace(ctx, r, path, side, dn.Range, pl.lines(side == model.NoteSideOld, path))
+	if !ok {
+		skip(SkipLinesChanged)
+		return
+	}
+	note := model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: dn.Summary, Rationale: dn.Rationale}
+	for _, kv := range dn.Meta {
+		note.Tags = append(note.Tags, kv.Key+": "+kv.Value)
+	}
+	key := RemarkKey(r.ID, fp)
+	th := threadFor(path, side, rng, want, pl.hunks[path], func(q string) string { return sendBody(note, key, q) })
+	it := engine.SendItem{Key: key, Label: threadLabel(th, rng[0], dn.Summary), Kind: engine.SendThread, Thread: th,
+		Summary: cutLabel(dn.Summary)}
+	if threads, _ := r.RemarkThreads(); i < len(threads) {
+		it.Resolve = threads[i].Resolution != nil
+		for _, rep := range threads[i].Replies {
+			it.Replies = append(it.Replies, engine.SendReplyBody{Key: rep.ID, Body: sendBody(rep, rep.ID, "")})
+		}
+	}
+	plan.Items = append(plan.Items, it)
+}
+
+// remarkPlace re-finds a remark's lines in target (§3.2): the text is read
+// where the review read it (the merge base for the old side, the review's
+// worktree or tip for the new) and found by its hash. ok false = its lines
+// changed. Shared by the send planner and the PR view (plan 3, T1).
+func (s *Service) remarkPlace(ctx context.Context, r Review, path string, side model.NoteSide, rng [2]int, target []string) ([2]int, []string, bool) {
 	base, tip, _ := s.reviewRevs(ctx, r)
 	var src []string
 	switch {
@@ -457,32 +498,16 @@ func (s *Service) remarkItem(ctx context.Context, plan *engine.SendPlan, r Revie
 	default:
 		src = s.revLines(ctx, tip, path)
 	}
-	span := dn.Range[1] - dn.Range[0] + 1
-	want := anchorLines(src, dn.Range)
+	span := rng[1] - rng[0] + 1
+	want := anchorLines(src, rng)
 	if span < 1 || len(want) != span {
-		skip("its lines changed")
-		return
+		return [2]int{}, nil, false
 	}
-	start := findAnchor(pl.lines(side == model.NoteSideOld, path), model.NoteContextHash(want), span, dn.Range[0])
+	start := findAnchor(target, model.NoteContextHash(want), span, rng[0])
 	if start == 0 {
-		skip("its lines changed")
-		return
+		return [2]int{}, nil, false
 	}
-	rng := [2]int{start, start + span - 1}
-	note := model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: dn.Summary, Rationale: dn.Rationale}
-	for _, kv := range dn.Meta {
-		note.Tags = append(note.Tags, kv.Key+": "+kv.Value)
-	}
-	key := RemarkKey(r.ID, fp)
-	th := threadFor(path, side, rng, want, pl.hunks[path], func(q string) string { return sendBody(note, key, q) })
-	it := engine.SendItem{Key: key, Label: threadLabel(th, rng[0], dn.Summary), Kind: engine.SendThread, Thread: th}
-	if threads, _ := r.RemarkThreads(); i < len(threads) {
-		it.Resolve = threads[i].Resolution != nil
-		for _, rep := range threads[i].Replies {
-			it.Replies = append(it.Replies, engine.SendReplyBody{Key: rep.ID, Body: sendBody(rep, rep.ID, "")})
-		}
-	}
-	plan.Items = append(plan.Items, it)
+	return [2]int{start, start + span - 1}, want, true
 }
 
 // placeThread reports whether rng lies inside ONE hunk on side — the lines

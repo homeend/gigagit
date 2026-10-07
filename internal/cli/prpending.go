@@ -136,19 +136,13 @@ func approvePending(ctx context.Context, svc *domain.Service, e domain.PendingSe
 		fmt.Fprintf(stderr, "%s asks: %s\n", e.Requester, ev)
 	}
 	res, err := sendNow(ctx, svc, e.Request, yes, defaultAnswer(e.Request), stdin, stderr)
-	if errors.Is(err, engine.ErrDecisionRequired) || errors.Is(err, errJoinNeedsConfirm) {
+	state, outcome, waiting := domain.PendingOutcome(res, err)
+	if waiting || errors.Is(err, errJoinNeedsConfirm) {
 		// The approver could not answer here: nothing reached GitHub, and the
 		// agent's request is still good.
 		fmt.Fprintln(stderr, "error:", err)
 		fmt.Fprintf(stderr, "still pending: %s (approve it in a terminal, or in gg)\n", e.ID)
 		return 1
-	}
-	state, outcome := domain.PendingSent, res.Summary
-	switch {
-	case err != nil:
-		state, outcome = domain.PendingFailed, err.Error()
-	case strings.HasPrefix(res.Summary, "aborted"):
-		state, outcome = domain.PendingRejected, "rejected at the confirm"
 	}
 	if _, ferr := svc.PendingSendFinish(ctx, e.ID, state, outcome); ferr != nil {
 		fmt.Fprintln(stderr, "error:", ferr)

@@ -295,12 +295,12 @@ func (s *Service) PreviewNotesFor(ctx context.Context, set PreviewNoteSet, path 
 		}
 		return nil, err
 	}
-	carried := s.carriedNotes(ctx, set)[path] // a PR's view carries identical lines (§1.4)
+	extra := s.prExtras(ctx, set, path, forge)
 	if len(mine) == 0 {
-		return append(carried, forge...), nil
+		return extra, nil
 	}
 	_, newLines := diffSideLines(d)
-	return append(append(keepResolved(resolveNotes(mine, nil, newLines)), carried...), forge...), nil
+	return append(keepResolved(resolveNotes(mine, nil, newLines)), extra...), nil
 }
 
 // PreviewNotesAt is PreviewNotesFor for a caller with no diff in hand (the web
@@ -329,9 +329,9 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 		}
 		return nil, err
 	}
-	carried := s.carriedNotes(ctx, set)[path] // a PR's view carries identical lines (§1.4)
+	extra := s.prExtras(ctx, set, path, forge)
 	if len(mine) == 0 {
-		return append(carried, forge...), nil
+		return extra, nil
 	}
 	var newLines []string
 	if b, ferr := s.ShowFile(ctx, set.Tip, path); ferr == nil {
@@ -340,7 +340,17 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 	// newLines stays nil when the path is gone from the tip: resolveOne then
 	// reports orphaned, and keepResolved hides those — exactly the rule the
 	// ordinary note path follows for a deleted file.
-	return append(append(keepResolved(resolveNotes(mine, nil, newLines)), carried...), forge...), nil
+	return append(keepResolved(resolveNotes(mine, nil, newLines)), extra...), nil
+}
+
+// prExtras is what a path's notes gain beyond the store's own, in a FRESH
+// slice (the carried and remark slices are cached instances): a PR's carried
+// notes (§1.4), its AI reviews' remarks (plan 3, T1), then the forge's threads.
+func (s *Service) prExtras(ctx context.Context, set PreviewNoteSet, path string, forge []ResolvedNote) []ResolvedNote {
+	var out []ResolvedNote
+	out = append(out, s.carriedNotes(ctx, set)[path]...)
+	out = append(out, s.prReviewNotes(ctx, set)[path]...)
+	return append(out, forge...)
 }
 
 // PreviewNotesAll is PreviewNotesAt for EVERY path the preview carries notes
@@ -389,6 +399,9 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 	for p, rs := range s.carriedNotes(ctx, set) { // a PR's view carries identical lines (§1.4)
 		out[p] = append(out[p], rs...)
 	}
+	for p, rs := range s.prReviewNotes(ctx, set) { // its AI reviews' remarks (plan 3, T1)
+		out[p] = append(out[p], rs...)
+	}
 	for _, r := range forge { // active by construction: appended, never re-resolved
 		out[r.Note.Address.Path] = append(out[r.Note.Address.Path], r)
 	}
@@ -433,7 +446,22 @@ type previewCountEntry struct {
 func (s *Service) PreviewNoteCounts(ctx context.Context, set PreviewNoteSet) (map[string]int, int, error) {
 	byPath, total, err := s.previewStoreCounts(ctx, set)
 	fp, ft := s.forgeNoteCounts(ctx, set)
-	if ft == 0 {
+	// A PR's view also counts its carried notes and its AI reviews' drawn
+	// remarks (plan 3, T2): the }/{ steps read these counts, and a box the
+	// view shows must never sit in a file they skip.
+	extra := map[string]int{}
+	et := 0
+	if err == nil {
+		for p, rs := range s.carriedNotes(ctx, set) {
+			extra[p] += len(rs)
+			et += len(rs)
+		}
+		for p, rs := range s.prReviewNotes(ctx, set) {
+			extra[p] += len(rs)
+			et += len(rs)
+		}
+	}
+	if ft == 0 && et == 0 {
 		return byPath, total, err
 	}
 	if err != nil && !errors.Is(err, ErrNotesDisabled) {
@@ -442,14 +470,43 @@ func (s *Service) PreviewNoteCounts(ctx context.Context, set PreviewNoteSet) (ma
 	// The store's map is the shared cached instance (read-only): merge into a
 	// fresh one. The forge half is never cached here — it changes on a refresh
 	// the notes generation knows nothing about.
-	merged := make(map[string]int, len(byPath)+len(fp))
+	merged := make(map[string]int, len(byPath)+len(fp)+len(extra))
 	for p, n := range byPath {
 		merged[p] = n
 	}
 	for p, n := range fp {
 		merged[p] += n
 	}
-	return merged, total + ft, nil
+	for p, n := range extra {
+		merged[p] += n
+	}
+	return merged, total + ft + et, nil
+}
+
+// PreviewNoteGroups are a preview's note groups per path, each once, in line
+// order (ties: the order PreviewNotesAll gives) — the Files badge's colour
+// bars (spec §1.3). A PR set's only: every other preview is all "mine".
+func (s *Service) PreviewNoteGroups(ctx context.Context, set PreviewNoteSet) (map[string][]string, error) {
+	if _, ok := git.ParsePRRef(set.Source); !ok || !set.OK() {
+		return map[string][]string{}, nil
+	}
+	all, err := s.PreviewNotesAll(ctx, set)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(all))
+	for p, rs := range all {
+		rs = append([]ResolvedNote(nil), rs...)
+		sort.SliceStable(rs, func(a, b int) bool { return rs[a].Range[0] < rs[b].Range[0] })
+		seen := map[string]bool{}
+		for _, r := range rs {
+			if r.Group != "" && !seen[r.Group] {
+				seen[r.Group] = true
+				out[p] = append(out[p], r.Group)
+			}
+		}
+	}
+	return out, nil
 }
 
 // previewStoreCounts is the stored-notes half of PreviewNoteCounts.

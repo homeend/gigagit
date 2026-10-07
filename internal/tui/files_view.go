@@ -65,6 +65,7 @@ func (m Model) closeFilesView() Model {
 	// its rows note-addressable at a stale tip. This is the single exit point.
 	m.filesPreviewSet = nil
 	m.filesPreviewCounts = nil
+	m.filesPreviewGroups = nil
 	m.filesPreviewReviews = nil
 	m.filesPairLabel = ""
 	m.filesReview = nil
@@ -1496,7 +1497,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		// (which matches l.text) never matches a file by its note count.
 		elide := l.path != "" && !l.heading && l.noteID == ""
 		if m.filesPreviewSet != nil && l.path != "" {
-			text += noteBadge(m.filesPreviewCounts[l.path])
+			text += noteBadgeGroups(m.filesPreviewCounts[l.path], m.filesPreviewGroups[l.path])
 		} else if l.noteScope != "" && m.filesCommitBadges() {
 			// A commit's Range review row: every note of the scope here.
 			text += noteBadge(scopeNoteCount(m.noteCounts, m.filesHash, l.noteScope))

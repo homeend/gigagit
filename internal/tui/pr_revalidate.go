@@ -87,6 +87,8 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, cmd // offline, rate-limited: the diff on screen stands
 	}
+	// The read cached the PR: did a send stop half way (spec §3.4, T8)?
+	cmd = tea.Batch(cmd, m.interruptedCmd(msg.n))
 	for i := range m.prs { // the row follows the forge (merged, closed, retitled)
 		if m.prs[i].Number == msg.n {
 			m.prs[i] = msg.pr
@@ -99,6 +101,14 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 	if po := m.previewOpen; po != nil && po.prNumber == msg.n && msg.pr.HeadSHA != "" &&
 		po.srcHash != "" && po.srcHash != msg.pr.HeadSHA {
 		moved = true
+	}
+	switch {
+	case m.prSeen != msg.n:
+		m.prSeen = msg.n // the open's first read: it fills the view
+	case moved || msg.commentsChanged:
+		m.prUpdated = msg.n
+	case m.prUpdated == msg.n:
+		m.prUpdated = 0 // nothing new: the mark clears (spec §2.4)
 	}
 	if !moved || m.openPRNumber() != msg.n || !m.opsIdle() {
 		return m, cmd // unchanged, or the user moved on: the next enter fetches
@@ -126,6 +136,8 @@ func (m Model) prFreshnessSuffix() string {
 		return " · " + i18n.T("refreshing…")
 	case !m.prOfflineSince.IsZero():
 		return " · " + i18n.T("offline · read %s", ageString(clock.Now(), m.prOfflineSince))
+	case m.prUpdated == m.openPRNumber():
+		return " · " + i18n.T("updated")
 	}
 	return ""
 }

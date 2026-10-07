@@ -256,7 +256,7 @@ func (m Model) reviewRemarkRows() []actionRow {
 		return nil
 	}
 	rootID := ""
-	for _, t := range replyableNoteTargets(m.notesAtCursor()) {
+	for _, t := range replyableNoteTargets(m.notesAtCursor(), false) {
 		if model.IsReviewNoteID(t.rootID) {
 			rootID = t.rootID
 			break
@@ -296,7 +296,7 @@ func (m Model) reviewRemarkLinkAtCursorRow() (actionRow, bool) {
 	if !ok {
 		return actionRow{}, false
 	}
-	for _, t := range replyableNoteTargets(m.notesAtCursor()) {
+	for _, t := range replyableNoteTargets(m.notesAtCursor(), false) {
 		if !model.IsReviewNoteID(t.rootID) {
 			continue
 		}

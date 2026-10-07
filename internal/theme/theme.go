@@ -67,6 +67,11 @@ type Theme struct {
 	// Deliberately not green/red, which mean added/removed in the diff views.
 	PickerLeft, PickerRight string
 
+	// Note groups (spec 2026-10-07 §1.3): the colour bar a note box wears in a
+	// pull request's view — one per review group, picked stably from the
+	// group id (the TUI's groupSlot), so a review keeps its colour on GitHub.
+	NoteGroup1, NoteGroup2, NoteGroup3, NoteGroup4, NoteGroup5, NoteGroup6 string
+
 	// Attention bands: the background an agent's `gg session highlight` paints
 	// over the marked rows on one side of the diff (a band, like the note band
 	// — never a box).
@@ -94,6 +99,7 @@ func (t Theme) roles() []string {
 		t.NoticeHot, t.NoticeDim, t.ReviewHot, t.ReviewDim,
 		t.NoteUser, t.NoteAgent, t.NoteStale, t.PickerLabel,
 		t.PickerLeft, t.PickerRight,
+		t.NoteGroup1, t.NoteGroup2, t.NoteGroup3, t.NoteGroup4, t.NoteGroup5, t.NoteGroup6,
 		t.AttentionInfo, t.AttentionWarn, t.AttentionError,
 	}
 }
@@ -118,6 +124,7 @@ var Dark = Theme{
 	NoticeHot: "196", NoticeDim: "124", ReviewHot: "39", ReviewDim: "31",
 	NoteUser: "75", NoteAgent: "141", NoteStale: "240", PickerLabel: "245",
 	PickerLeft: "74", PickerRight: "179",
+	NoteGroup1: "#E06C75", NoteGroup2: "#E5C07B", NoteGroup3: "#98C379", NoteGroup4: "#56B6C2", NoteGroup5: "#C678DD", NoteGroup6: "#D19A66",
 	AttentionInfo: "24", AttentionWarn: "94", AttentionError: "89",
 	Lanes:  [7]string{"33", "208", "40", "201", "51", "220", "129"},
 	Syntax: [11]string{"", "141", "79", "222", "", "150", "215", "245", "252", "250", "180"},
@@ -143,6 +150,7 @@ var Light = Theme{
 	NoticeHot: "#C0392B", NoticeDim: "#A0564C", ReviewHot: "#2F6FB8", ReviewDim: "#2A8C8C",
 	NoteUser: "#2F6FB8", NoteAgent: "#6B4FBB", NoteStale: "#8A8F8A", PickerLabel: "#5F6570",
 	PickerLeft: "#2F6FB8", PickerRight: "#A0682A",
+	NoteGroup1: "#B23A48", NoteGroup2: "#A07400", NoteGroup3: "#3E7D2E", NoteGroup4: "#1F7A8C", NoteGroup5: "#7D3C98", NoteGroup6: "#B35C1E",
 	AttentionInfo: "#D3E2F2", AttentionWarn: "#F2E8CC", AttentionError: "#EFD3DC",
 	Lanes:  [7]string{"#2F6FB8", "#C7641B", "#3E8E41", "#6B4FBB", "#2A8C8C", "#B08000", "#C0392B"},
 	Syntax: [11]string{"", "#6B4FBB", "#2A8C8C", "#B08000", "", "#3E8E41", "#C7641B", "#8A8F8A", "#33393F", "#5F6570", "#A0682A"},

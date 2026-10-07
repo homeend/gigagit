@@ -66,6 +66,7 @@ type styles struct {
 	diffGapCursor  lipgloss.Style
 	noteFrameUser  lipgloss.Style
 	noteFrameAgent lipgloss.Style
+	noteGroups     [6]lipgloss.Style // note group bars, slot 1..6 at 0..5
 	noteFrameStale lipgloss.Style
 	noteSummary    lipgloss.Style
 	noteBody       lipgloss.Style
@@ -107,6 +108,7 @@ var legacy = theme.Theme{
 	NoticeHot: "196", NoticeDim: "124", ReviewHot: "39", ReviewDim: "31",
 	NoteUser: "75", NoteAgent: "141", NoteStale: "240", PickerLabel: "245",
 	PickerLeft: "74", PickerRight: "179",
+	NoteGroup1: "167", NoteGroup2: "179", NoteGroup3: "107", NoteGroup4: "73", NoteGroup5: "140", NoteGroup6: "173",
 	AttentionInfo: "24", AttentionWarn: "94", AttentionError: "89",
 	Lanes:  [7]string{"33", "208", "40", "201", "51", "220", "129"},
 	Syntax: [11]string{"", "141", "79", "222", "", "150", "215", "245", "252", "250", "180"},
@@ -178,6 +180,12 @@ func buildStyles(th theme.Theme) *styles {
 	s.noteFrameUser = ns().Foreground(pick(th.NoteUser, legacy.NoteUser))
 	s.noteFrameAgent = ns().Foreground(pick(th.NoteAgent, legacy.NoteAgent))
 	s.noteFrameStale = ns().Foreground(pick(th.NoteStale, legacy.NoteStale))
+	for i, c := range [6][2]string{
+		{th.NoteGroup1, legacy.NoteGroup1}, {th.NoteGroup2, legacy.NoteGroup2}, {th.NoteGroup3, legacy.NoteGroup3},
+		{th.NoteGroup4, legacy.NoteGroup4}, {th.NoteGroup5, legacy.NoteGroup5}, {th.NoteGroup6, legacy.NoteGroup6},
+	} {
+		s.noteGroups[i] = ns().Foreground(pick(c[0], c[1]))
+	}
 	s.noteSummary = ns().Bold(true).Foreground(bright)
 	s.noteBody = ns().Foreground(muted)
 	s.noteDim = ns().Foreground(dim)

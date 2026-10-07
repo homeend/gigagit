@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"testing"
@@ -90,6 +91,31 @@ func TestBuiltinsComplete(t *testing.T) {
 	for i, c := range zero.roles() {
 		if c != "" {
 			t.Fatalf("Terminal role %d must be empty (inherit), got %q", i, c)
+		}
+	}
+}
+
+func TestNoteGroupRolesAreConfigurable(t *testing.T) {
+	t.Parallel()
+	keys := map[string]bool{}
+	for _, d := range RoleDocs() {
+		keys[d.Key] = true
+	}
+	for i := 1; i <= 6; i++ {
+		k := fmt.Sprintf("note_group_%d", i)
+		if !keys[k] {
+			t.Errorf("RoleDocs lacks %s", k)
+		}
+	}
+	// Six DISTINCT colours per built-in theme that paints colours: two groups
+	// sharing a slot colour would read as one group.
+	for _, th := range []Theme{Dark, Light} {
+		seen := map[string]bool{}
+		for _, c := range []string{th.NoteGroup1, th.NoteGroup2, th.NoteGroup3, th.NoteGroup4, th.NoteGroup5, th.NoteGroup6} {
+			if c == "" || seen[c] {
+				t.Errorf("%s: group colour %q empty or repeated", th.Name, c)
+			}
+			seen[c] = true
 		}
 	}
 }

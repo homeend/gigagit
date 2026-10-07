@@ -181,8 +181,19 @@ func TestPlanSendSkipsAStaleNoteAndLeavesItLocal(t *testing.T) {
 	if len(p.Skipped) != 1 || p.Skipped[0].Reason != "its lines changed" || !strings.HasPrefix(p.Skipped[0].Label, "big.go:5 ") {
 		t.Fatalf("skipped = %+v", p.Skipped)
 	}
+	// SEND it (the plan never stamps): the stale note stays local, unstamped.
+	op, err := svc.PRSendOp(ctx, PRSendRequest{PR: 7, Notes: []string{stale, fresh}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Execute(ctx, op, nil, engine.MapDecider{engine.DecisionSendForge: engine.OptSend}); err != nil {
+		t.Fatal(err)
+	}
 	if n, ok := noteByID(t, svc, stale); !ok || n.Send != nil {
 		t.Fatalf("the stale note must stay local and unstamped: %+v %v", n.Send, ok)
+	}
+	if _, ok := noteByID(t, svc, fresh); ok {
+		t.Fatal("the fresh note was sent: it is no longer local")
 	}
 }
 
@@ -233,5 +244,44 @@ func TestPartlySentReviewKeepsItsSummaryOnGitHub(t *testing.T) {
 	}
 	if len(p.Skipped) != 1 || p.Skipped[0].Reason != "already on GitHub" {
 		t.Fatalf("skipped = %+v", p.Skipped)
+	}
+	// Planning again leaves ONE summary mark (no duplicate entry).
+	if _, err := svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid}); err != nil {
+		t.Fatal(err)
+	}
+	r2, _ := svc.Review(ctx, rid)
+	marks := 0
+	for _, x := range r2.RemarkSends {
+		if strings.HasPrefix(x.RemarkFP, summaryFP) {
+			marks++
+		}
+	}
+	if marks != 1 {
+		t.Fatalf("%d summary marks, want 1: %+v", marks, r2.RemarkSends)
+	}
+	// A body the user typed is posted even though the stored summary went;
+	// the stored summary typed back unchanged is still skipped.
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid, Body: "Edited: one more thing."})
+	if err != nil || !strings.Contains(p.Body, "Edited: one more thing.") || len(p.Skipped) != 0 {
+		t.Fatalf("an edited body: %q skipped %+v err %v", p.Body, p.Skipped, err)
+	}
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid, Body: "looks fine"})
+	if err != nil || strings.TrimSpace(p.Body) != "" || len(p.Skipped) != 1 {
+		t.Fatalf("the unchanged summary: %q skipped %+v err %v", p.Body, p.Skipped, err)
+	}
+	// Re-saved with a NEW summary: that text is not on GitHub yet, so it is
+	// the body again; the remark already there stays moved.
+	newDoc := strings.Replace(doc, "looks fine", "two things to fix", 1)
+	if _, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Label: "feat"},
+		Agent: "claude", Text: newDoc, NoteID: rid}); err != nil {
+		t.Fatal(err)
+	}
+	svc.invalidateNoteCounts()
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(p.Body, "two things to fix") || len(p.Skipped) != 0 || len(p.Items) != 1 {
+		t.Fatalf("after a new summary: body %q skipped %+v items %+v", p.Body, p.Skipped, p.Items)
 	}
 }

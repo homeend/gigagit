@@ -1,0 +1,66 @@
+name = "tui: a note in a pull request's diff shows its mark and is sent to GitHub from the . menu"
+
+# PR #7 = feat (line 5 changed); refs/gg/pr/7 is its head, so the open needs
+# no fetch. The fake gh answers from .git/fakegh and records every write; the
+# PR read after a submit answers snapshot-7-sent.json (the new thread).
+[input]
+steps = [
+  { write = "big.txt", content = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n" },
+  { commit = "big" },
+  { branch = "feat" }, { switch = "feat" },
+  { write = "big.txt", content = "line 1\nline 2\nline 3\nline 4\nline 5 changed\nline 6\nline 7\nline 8\nline 9\nline 10\n" },
+  { commit = "change" },
+  { switch = "main" },
+  { ref = "refs/gg/pr/7", value = "feat" },
+  { write = ".git/fakegh/pr-list.json", content = '[{"number":7,"title":"Change line 5","author":{"login":"ann"},"state":"OPEN","isDraft":false,"reviewDecision":"","headRefName":"feat","isCrossRepository":false,"baseRefName":"main","baseRefOid":"","headRefOid":"{{rev:feat}}","url":"https://github.com/o/r/pull/7","createdAt":"2026-01-01T10:00:00Z","updatedAt":"2026-01-01T11:00:00Z"}]' },
+  { write = ".git/fakegh/pr-view-7.json", content = '{"number":7,"title":"Change line 5","author":{"login":"ann"},"state":"OPEN","isDraft":false,"headRefName":"feat","isCrossRepository":false,"baseRefName":"main","baseRefOid":"","headRefOid":"{{rev:feat}}","url":"https://github.com/o/r/pull/7","createdAt":"2026-01-01T10:00:00Z","updatedAt":"2026-01-01T11:00:00Z","body":""}' },
+  { write = ".git/fakegh/repo-view.json", content = '{"nameWithOwner":"o/r","url":"https://github.com/o/r","sshUrl":"git@github.com:o/r.git"}' },
+  { write = ".git/fakegh/snapshot-7.json", content = '{"data":{"repository":{"pullRequest":{"id":"PR_7","number":7,"title":"Change line 5","body":"","author":{"login":"ann"},"state":"OPEN","isDraft":false,"reviewDecision":"","headRefName":"feat","isCrossRepository":false,"headRepositoryOwner":{"login":"ann"},"headRepository":{"name":"r"},"baseRefName":"main","baseRefOid":"","headRefOid":"{{rev:feat}}","url":"https://github.com/o/r/pull/7","createdAt":"2026-01-01T10:00:00Z","updatedAt":"2026-01-01T11:00:00Z","viewerDidAuthor":false,"viewerLatestReview":null,"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]},"comments":{"pageInfo":{"hasNextPage":false},"nodes":[]},"reviews":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' },
+  { write = ".git/fakegh/snapshot-7-sent.json", content = '{"data":{"repository":{"pullRequest":{"id":"PR_7","number":7,"title":"Change line 5","body":"","author":{"login":"ann"},"state":"OPEN","isDraft":false,"reviewDecision":"","headRefName":"feat","isCrossRepository":false,"headRepositoryOwner":{"login":"ann"},"headRepository":{"name":"r"},"baseRefName":"main","baseRefOid":"","headRefOid":"{{rev:feat}}","url":"https://github.com/o/r/pull/7","createdAt":"2026-01-01T10:00:00Z","updatedAt":"2026-01-01T11:00:00Z","viewerDidAuthor":false,"viewerLatestReview":null,"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"PRRT_new1","path":"big.txt","line":5,"startLine":null,"originalLine":5,"originalStartLine":null,"diffSide":"RIGHT","subjectType":"LINE","isResolved":false,"isOutdated":false,"comments":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"PRRC_new1","replyTo":null,"author":{"login":"me"},"body":"why changed?","diffHunk":"","createdAt":"2026-01-02T00:00:00Z","updatedAt":"2026-01-02T00:00:00Z","pullRequestReview":{"id":"PRR_new"}}]}}]},"comments":{"pageInfo":{"hasNextPage":false},"nodes":[]},"reviews":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' },
+]
+
+[[run]]
+cmd  = ["note", "add", "--rev", "feat", "--file", "big.txt", "--new-line", "5", "--summary", "why changed?", "--source", "user"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "pr-tab"
+keys = ["C-right", "C-right", "C-right", "C-right"]
+wait = true
+screen_contains = ["#7", "Change line 5"]
+
+[[tui.step]]
+name = "pr-files"
+keys = ["enter"]
+wait = true
+screen_contains = ["PR #7", "big.txt"]
+
+[[tui.step]]
+name = "pr-diff-note-marked"
+keys = ["enter"]
+wait = true
+screen_contains = ["why changed?"]
+
+[[tui.step]]
+name = "note-menu"
+keys = [".", "s", "e", "n", "d"]
+screen_contains = ["Send to GitHub", "Send my draft review…", "Send review…"]
+
+[[tui.step]]
+name = "send-confirm"
+keys = ["enter"]
+wait = true
+screen_contains = ["Send to o/r #7:", "+ big.txt:5 why changed?"]
+
+[[tui.step]]
+name = "sent"
+keys = ["enter"]
+wait = true
+screen_contains = ["● review · me", "why changed?"]
+screen_excludes = ["○ note"]
+
+[expect]
+branch = "main"

@@ -40,9 +40,10 @@ func (r *Repo) DiffPatch(ctx context.Context, spec model.DiffSpec) (string, erro
 		Arg("--no-color").
 		// A fixed context size is a forge's hunks (the send path): git's
 		// default hunk shape, whatever the user's diff.interHunkContext /
-		// diff.algorithm / diff.indentHeuristic say.
+		// diff.algorithm / diff.indentHeuristic say — and git's own text, never
+		// a configured external diff or textconv filter.
 		ArgIf(spec.Unified > 0, "-U"+strconv.Itoa(spec.Unified), "--inter-hunk-context=0",
-			"--diff-algorithm=myers", "--indent-heuristic").
+			"--diff-algorithm=myers", "--indent-heuristic", "--no-ext-diff", "--no-textconv").
 		ArgIf(spec.Cached, "--cached").
 		ArgIf(spec.Rev != "", spec.Rev)
 	if len(spec.Paths) > 0 {

@@ -93,20 +93,23 @@ type Model struct {
 	recycleBranch          string // branch captured when the Recycle-a-worktree picker opened
 	recycleRemote          string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
 
-	notices                []notice               // session notice list (see notify.go)
-	driftNotices           []driftNoticeSource    // post-op drift/paused-resume findings; rebuildNotices re-renders these too
-	noticesUnread          bool                   // blink while true; opening the ! dialog clears it
-	blinkOn                bool                   // current blink phase (style alternation)
-	noticeGen              int                    // stale-drop guard for repoHealthMsg across repo switches
-	gitConfigGen           int                    // stale-drop guard for explorer row loads
-	versionsGen            int                    // stale-drop guard for the branch-versions popup's loads
-	blinkGen               int                    // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
-	noticeSessionDismissed map[string]bool        // "Not now" ids; cleared on reRoot (re-evaluated next load)
-	repoHealth             model.RepoHealth       // last health snapshot (Settings Commit-graph row)
-	repoHealthKnown        bool                   // false until the first repoHealthMsg lands
-	clipAvail              clipboard.Availability // cached probe result; rebuildNotices reuses it on a language switch
-	pendingNoticeConfig    *engine.SetGitConfig   // chained after WriteCommitGraph succeeds
-	refreshHealthAfterOp   bool                   // re-read repo health once the op (incl. its chain) finishes
+	notices                []notice                // session notice list (see notify.go)
+	driftNotices           []driftNoticeSource     // post-op drift/paused-resume findings; rebuildNotices re-renders these too
+	pendingSends           []domain.PendingSend    // an agent's queued sends still waiting (pending_sends.go); rebuildNotices re-renders them
+	pendingWatch           *pendingWatchState      // the queue file's watcher and poll state (nil until armed)
+	interrupted            map[int]interruptedSend // sends gg left in a pending review, by PR (interrupted_sends.go)
+	noticesUnread          bool                    // blink while true; opening the ! dialog clears it
+	blinkOn                bool                    // current blink phase (style alternation)
+	noticeGen              int                     // stale-drop guard for repoHealthMsg across repo switches
+	gitConfigGen           int                     // stale-drop guard for explorer row loads
+	versionsGen            int                     // stale-drop guard for the branch-versions popup's loads
+	blinkGen               int                     // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
+	noticeSessionDismissed map[string]bool         // "Not now" ids; cleared on reRoot (re-evaluated next load)
+	repoHealth             model.RepoHealth        // last health snapshot (Settings Commit-graph row)
+	repoHealthKnown        bool                    // false until the first repoHealthMsg lands
+	clipAvail              clipboard.Availability  // cached probe result; rebuildNotices reuses it on a language switch
+	pendingNoticeConfig    *engine.SetGitConfig    // chained after WriteCommitGraph succeeds
+	refreshHealthAfterOp   bool                    // re-read repo health once the op (incl. its chain) finishes
 
 	cfg         config.Config
 	opLog       *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
@@ -224,6 +227,7 @@ type Model struct {
 	// showing a preview. Stamped onto each diff the view opens.
 	filesPreviewSet    *domain.PreviewNoteSet
 	filesPreviewCounts map[string]int
+	filesPreviewGroups map[string][]string // a PR's per-path note groups: the badges' colour bars
 	// filesPreviewReviews are the open preview's (or pair's) AI reviews: the
 	// Reviews block on top of its file list. filesPairLabel is an open saved
 	// pair's label, kept so a review opened from it can re-open it.
@@ -267,6 +271,9 @@ type Model struct {
 	// pendingPROpen is the PR whose diff opens once its FetchPRHead succeeds
 	// (the pendingSwitch pattern; opFinishedMsg consumes and clears it).
 	pendingPROpen *model.PullRequest
+	// forgeSend is the send being run (forge_send.go): its plan renders the
+	// confirm, its follow-up runs when the op ends. nil = none.
+	forgeSend *forgeSendState
 	// pendingPRsReload re-reads the PR list once the running ForgetPR lands
 	// (the list is not a registry source, so pendingSources cannot carry it).
 	pendingPRsReload bool
@@ -283,6 +290,12 @@ type Model struct {
 	// old the cached copy on screen is (zero = online).
 	prRefreshing   bool
 	prOfflineSince time.Time
+	// prUpdated: the PR whose last refresh found new comments or commits
+	// (0 = none) — its title says "updated" until a refresh finds nothing.
+	prUpdated int
+	// prSeen: the PR whose view has had its first refresh — that read only
+	// fills the view, so it never says "updated".
+	prSeen int
 	// prReland is where the user was when the open PR's head moved: the
 	// reopen that follows lands the files cursor (and an open diff, at its
 	// line) back there. Consumed by that reopen's file list.
@@ -570,7 +583,7 @@ func (m Model) loadPrefs() Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitActivityCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd(), waitAgentSpawnCmd(m.agentHost))
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), m.heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.pendingWatchCmd(m.noticeGen), m.pendingSendsReadCmd(m.noticeGen), m.refreshToolStatusesCmd(), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitActivityCmd(), m.waitTasksCmd(), m.waitDocsCmd(), m.startupWebCmd(), waitAgentSpawnCmd(m.agentHost))
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -730,6 +743,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		body := m.diffBodyRows()
 		hold := dv.anchorAt(dv.curLine)
 		wasVisible := dv.cursorVisible(body)
+		dv.forgePR = m.prOfView(dv) // marks and group bars draw in a PR's diff only
 		dv.setNotesFor(msg.idx, msg.notes)
 		dv.rebuild()
 		dv.curLine = dv.lineAt(hold)
@@ -805,6 +819,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		body := m.diffBodyRows()
 		cr, hadRow := dv.cursorRow()
 		wasVisible := dv.cursorVisible(body) // a free-scrolled view keeps its place
+		dv.forgePR = m.prOfView(dv)          // marks and group bars draw in a PR's diff only
 		dv.setNotes(msg.notes)
 		dv.relayout(dv.width)
 		dv.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
@@ -845,6 +860,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// second NotesFor pass per mutation.
 		var counts tea.Cmd
 		m, counts = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+		if msg.sendPR != 0 && msg.sendID != "" { // Reply & send: the draft is saved, now send it
+			var send tea.Cmd
+			m, send = m.forgeSendCmd(domain.PRSendRequest{PR: msg.sendPR, Notes: []string{msg.sendID}}, "")
+			return m, tea.Batch(counts, send)
+		}
 		return m, counts
 	case notesClearedMsg:
 		// The clear is always run from the diff view, which owns the whole
@@ -3345,7 +3365,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.waitForOp(m.opMsgs)
 	case opDecisionMsg:
-		m.modal = &decisionState{req: msg.req, reply: msg.reply}
+		req, sel := msg.req, 0
+		if fs := m.forgeSend; fs != nil && req.ID == engine.DecisionSendForge {
+			// The TUI's own words for the plan it holds (plan 3, T4); the
+			// verdict an agent asked for preselected.
+			w, h := m.overlayDims() // renderModal's width cap; options, footer and frame take ~12 rows
+			req.Prompt, req.PromptMsg = sendConfirmTextFit(fs.plan, w-8, h-12), engine.Msg{}
+			if i := slices.Index(req.Options, fs.event); i >= 0 {
+				sel = i
+			}
+		}
+		m.modal = &decisionState{req: req, reply: msg.reply, sel: sel}
 		return m, m.waitForOp(m.opMsgs)
 	case prPrefetchedMsg:
 		return m, nil // nothing to draw: the next open is a cache hit
@@ -3356,6 +3386,33 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case prFetchReadyMsg:
 		return m.handlePRFetchReady(msg)
+
+	case forgeSendReadyMsg:
+		return m.handleForgeSendReady(msg)
+
+	case sendGroupsMsg:
+		return m.handleSendGroups(msg)
+
+	case pendingSendsMsg:
+		return m.handlePendingSends(msg)
+
+	case interruptedMsg:
+		return m.handleInterrupted(msg)
+
+	case pendingStatMsg:
+		return m.handlePendingStat(msg)
+
+	case pendingWatchMsg:
+		return m.handlePendingWatch(msg)
+
+	case pendingWakeMsg:
+		if msg.gen != m.noticeGen || m.pendingWatch == nil || m.pendingWatch.w == nil {
+			return m, nil
+		}
+		return m, tea.Batch(m.pendingSendsReadCmd(msg.gen), pendingListenCmd(m.pendingWatch.w, msg.gen))
+
+	case sendBodyMsg:
+		return m.handleSendBody(msg)
 
 	case prHubMsg:
 		return m.handlePRHubMsg(msg)
@@ -3369,6 +3426,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCountsMsg:
 		if msg.gen == m.previewGen && m.filesPreviewSet != nil && msg.counts != nil {
 			m.filesPreviewCounts = msg.counts
+			m.filesPreviewGroups = msg.groups
 		}
 		return m, nil
 
@@ -3440,7 +3498,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var prcCmd, docCmd tea.Cmd
 		m, prcCmd = m.prCommentsTick(time.Now())
 		m, docCmd = m.openFilesTick(time.Now())
-		cmd = tea.Batch(cmd, prcCmd, docCmd)
+		var pendCmd tea.Cmd
+		m, pendCmd = m.pendingSendsTick(time.Now())
+		cmd = tea.Batch(cmd, prcCmd, docCmd, pendCmd)
 		m = m.maybeWriteSnapshot()
 		m.touchSteerPresence()
 		m = m.tendKeptInboxes()
@@ -3594,6 +3654,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingPROpen = nil
 		prsReload := m.pendingPRsReload
 		m.pendingPRsReload = false
+		fs := m.forgeSend // a send's follow-up (forge_send.go); cleared whatever happened
+		m.forgeSend = nil
+		var sendCmd tea.Cmd // built now: the stash / process paths below return early
+		if fs != nil {
+			m, sendCmd = m.forgeSendFinished(fs, msg.res, msg.err)
+		}
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			// A lock failure is recoverable in-app; arm the notice before the
@@ -3701,7 +3767,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.stashView.loading = true
 			var cmd tea.Cmd
 			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
-			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag), driftCmd)
+			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag), driftCmd, sendCmd)
 		}
 		// A job an active process started just returned: let the process advance
 		// its state machine (it typically triggers a reload itself). This is the
@@ -3711,7 +3777,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// check.
 		if m.proc != nil {
 			pm, pcmd := m.proc.finished(m, msg.res, msg.err)
-			return pm, tea.Batch(healthCmd, pcmd, driftCmd)
+			return pm, tea.Batch(healthCmd, pcmd, driftCmd, sendCmd)
 		}
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
@@ -3733,6 +3799,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, listCmd = m.readPRsCmd(context.Background(), false, false)
 			prCmd = tea.Batch(prCmd, listCmd)
 		}
+		prCmd = tea.Batch(prCmd, sendCmd)
 		return m, tea.Batch(healthCmd, cmd, driftCmd, prCmd)
 
 	case textTemplatesDataMsg:
@@ -4862,6 +4929,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m = m.stopPRPrefetch()             // the old repo's background fetches end here
 	removeSnapshotFile(m.snapshotPath) // the old repo's session ends here
 	m = m.closeSteerInbox()            // …and so does its steering inbox
+	m = m.closePendingWatch()          // …and its queue of agent sends
+	m.interrupted = nil                // …and the sends it left half done
 	m.steerGen++                       // drop the old watcher's in-flight msgs
 	if m.watcher != nil {
 		_ = m.watcher.Close()
@@ -4989,7 +5058,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// the blank-screen gate set above. The dataLoadedMsg success arm chains it
 	// instead, so it can only run once this repo's snapshot is in the model.
 	// The hosted web page follows the switch (nil when no page is served).
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), snapshotTargetCmd(m.svc), m.webRerootCmd())
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), m.pendingWatchCmd(m.noticeGen), m.pendingSendsReadCmd(m.noticeGen), m.refreshToolStatusesCmd(), snapshotTargetCmd(m.svc), m.webRerootCmd())
 }
 
 // View implements tea.Model.

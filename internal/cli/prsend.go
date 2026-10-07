@@ -67,6 +67,9 @@ func prSend(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr 
 	if kinds != 1 {
 		return usage("name exactly one of --note, --review, --mine, --verdict, --finish, --discard")
 	}
+	if *event != "" && *review == "" && !*mine && !*verdict {
+		return usage("--event needs --review, --mine or --verdict")
+	}
 	switch *event {
 	case "", engine.OptComment, engine.OptApprove, engine.OptRequestChanges:
 	default:
@@ -92,7 +95,7 @@ func runPRSend(ctx context.Context, svc *domain.Service, req domain.PRSendReques
 		fmt.Fprintln(stdout, res.Summary)
 	}
 	if err != nil {
-		if errors.Is(err, engine.ErrDecisionRequired) {
+		if errors.Is(err, engine.ErrDecisionRequired) && !errors.Is(err, errJoinNeedsConfirm) {
 			fmt.Fprintln(stderr, "(rerun with --yes to send without being asked)")
 		}
 		fmt.Fprintln(stderr, "error:", err)
@@ -142,7 +145,12 @@ func sendNow(ctx context.Context, svc *domain.Service, req domain.PRSendRequest,
 	if yes {
 		dec.policy = map[string]string{engine.DecisionSendForge: answer}
 	}
-	return runOperation(ctx, svc, op, dec, stderr)
+	res, err := runOperation(ctx, svc, op, dec, stderr)
+	if errors.Is(err, engine.ErrDecisionRequired) && op.Plan.Mode == engine.SendReview && op.Plan.Pending != "" {
+		// Your own review is pending: --yes is refused there, so say what to do.
+		err = fmt.Errorf("%w (%w)", err, errJoinNeedsConfirm)
+	}
+	return res, err
 }
 
 func prReply(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
