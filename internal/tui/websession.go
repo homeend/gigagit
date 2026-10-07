@@ -122,9 +122,15 @@ func (m Model) webSessionStartLeaf(msg webSessionRequestMsg) (Model, tea.Cmd, st
 		return m, nil, "cannot start here: " + req.Worktree + " is not reachable from here"
 	}
 	svc, shell, env, inbox, url := m.svc, m.cfg.Console.Shell, m.childEnv(), m.childInboxDir(), m.agentURL()
-	name := req.Command.Name
+	named := domain.CleanAgentName(req.Name)
+	name := domain.SessionTitle(req.Command.Name, named)
 	if req.Terminal {
-		name = i18n.T("Terminal")
+		name, named = i18n.T("Terminal"), ""
+	}
+	if named != "" {
+		// The page's server already wrote the name to disk: only the
+		// terminal's in-memory alt+↓ ring needs it.
+		m, _ = m.recordSearch(scopeAgentName, named)
 	}
 	start := func() tea.Msg {
 		out := webSessionStartedMsg{name: name, dir: req.Worktree, inbox: inbox, reply: msg.reply}
@@ -137,7 +143,7 @@ func (m Model) webSessionStartLeaf(msg webSessionRequestMsg) (Model, tea.Cmd, st
 			out.id = s.Info().ID
 			return out
 		}
-		s, _, err := svc.StartAgentSession(context.Background(), req.Command, req.Worktree, cwd, req.Cols, req.Rows, env, url, domain.SpawnRecord{}, "")
+		s, _, err := svc.StartAgentSession(context.Background(), req.Command, req.Worktree, cwd, req.Cols, req.Rows, env, url, domain.SpawnRecord{Name: named}, "")
 		if err != nil {
 			out.err = err
 			return out

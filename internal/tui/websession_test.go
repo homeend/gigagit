@@ -72,6 +72,34 @@ func TestWebSessionRequestStartsLikeTheTerminal(t *testing.T) {
 	}
 }
 
+// A page start with a name starts the session named, and the terminal's own
+// alt+↓ ring learns the name (the page's server already wrote it to disk).
+func TestWebSessionRequestCarriesTheName(t *testing.T) {
+	privateSessions(t)
+	installFakeHost(t)
+	m := loadedModel(t)
+	m = m.ensureWeb()
+	reply := make(chan webSessionReply, 1)
+	req := domain.SessionStartRequest{Worktree: modelTop(t, m), Cols: 90, Rows: 30, Name: " viewer ",
+		Command: config.ToolCommand{Name: "Shell", Category: "session", Mode: "session", Command: "sh -c 'sleep 30'"}}
+	m, leaf, why := m.webSessionStartLeaf(webSessionRequestMsg{req: req, reply: reply})
+	if why != "" {
+		t.Fatal(why)
+	}
+	m, _ = m.onWebSessionStarted(leaf().(webSessionStartedMsg))
+	r := <-reply
+	s, ok := domain.Sessions().Get(r.id)
+	if !ok || s.Info().Name != "viewer" {
+		t.Fatalf("session = %+v", s)
+	}
+	if ring := m.searchHist[scopeAgentName]; len(ring) == 0 || ring[0] != "viewer" {
+		t.Fatalf("ring = %v", ring)
+	}
+	if !strings.Contains(m.statusMsg, "Shell [viewer]") {
+		t.Fatalf("status = %q", m.statusMsg)
+	}
+}
+
 func TestWebSessionRequestRefusesAnUnreachableWorktree(t *testing.T) {
 	m := loadedModel(t).ensureWeb()
 	old := guardStat

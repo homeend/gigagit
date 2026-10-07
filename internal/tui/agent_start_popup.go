@@ -24,18 +24,20 @@ const (
 	stageDetecting agentStage = iota // first run: detecting + writing the session commands
 	stageChoose                      // numbered list of session commands
 	stageApprove                     // first-run approval of the picked command
+	stageName                        // the optional session name; alt+↓ recalls names used before
 )
 
 // agentStartPopup starts an agent session in a worktree: on a first run it
 // detects the installed agents (busy notice), then offers the configured
 // session commands, gates an unapproved one behind the shared approval box,
-// and opens the new session's console.
+// asks for an optional name, and opens the new session's console.
 type agentStartPopup struct {
 	stage    agentStage
 	worktree string
 	cmds     []config.ToolCommand
 	sel      int
 	pick     config.ToolCommand
+	name     textfield
 }
 
 // agentEnsureMsg carries the first-run detect+write result.
@@ -135,33 +137,40 @@ func (m Model) applyAgentEnsure(msg agentEnsureMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// choose moves past the chooser: straight to start when approved, else to
-// the approval box.
+// choose moves past the chooser: straight to the name step when approved,
+// else to the approval box.
 func (p *agentStartPopup) choose(m Model, tc config.ToolCommand) (tea.Model, tea.Cmd) {
 	p.pick = tc
 	if m.toolCommandApproved(tc.Command) {
-		return p.start(m)
+		return p.askName(m)
 	}
 	p.stage = stageApprove
 	return m, nil
 }
 
-// start closes the popup and starts the session off the UI thread, sized for
-// the docked console it opens in.
-func (p *agentStartPopup) start(m Model) (tea.Model, tea.Cmd) {
-	m = m.popLayer()
+// askName moves to the optional name step for the picked command.
+func (p *agentStartPopup) askName(m Model) (tea.Model, tea.Cmd) {
+	p.stage, p.name = stageName, newTextField("")
+	return m.recallReset(), nil
+}
+
+// start closes the popup and starts the session (named name, "" = unnamed)
+// off the UI thread, sized for the docked console it opens in.
+func (p *agentStartPopup) start(m Model, name string) (tea.Model, tea.Cmd) {
+	m = m.recallReset().popLayer()
 	g := m.layout()
 	cols, rows := consoleInner(g.rightW, g.boxH[panelCommits])
 	svc, tc, dir, env, inbox, url := m.svc, p.pick, p.worktree, m.childEnv(), m.childInboxDir(), m.agentURL()
 	cwd, note, _ := sessionPlace(dir)
 	note = startNote(note, tc)
-	m.statusMsg = i18n.T("starting %s…", tc.Name)
+	title := domain.SessionTitle(tc.Name, name)
+	m.statusMsg = i18n.T("starting %s…", title)
 	return m, func() tea.Msg {
-		s, _, err := svc.StartAgentSession(context.Background(), tc, dir, cwd, cols, rows, env, url, domain.SpawnRecord{}, "")
+		s, _, err := svc.StartAgentSession(context.Background(), tc, dir, cwd, cols, rows, env, url, domain.SpawnRecord{Name: name}, "")
 		if err != nil {
-			return agentStartedMsg{name: tc.Name, err: err}
+			return agentStartedMsg{name: title, err: err}
 		}
-		return agentStartedMsg{id: s.Info().ID, name: tc.Name, inbox: inbox, note: note}
+		return agentStartedMsg{id: s.Info().ID, name: title, inbox: inbox, note: note}
 	}
 }
 
@@ -189,11 +198,38 @@ func (p *agentStartPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			m = m.popLayer()
 		}
 		return m, nil
+	case stageName:
+		if nm, nq, handled, _ := m.recallUpdate(scopeAgentName, msg, p.name.Value()); handled {
+			p.name = newTextField(nq) // a recalled name fills the field; enter again starts
+			return nm, nil
+		} else {
+			m = nm
+		}
+		switch msg.Type {
+		case tea.KeyEsc:
+			m = m.recallReset()
+			if len(p.cmds) > 1 {
+				p.stage = stageChoose
+				return m, nil
+			}
+			return m.popLayer(), nil
+		case tea.KeyEnter:
+			name := domain.CleanAgentName(p.name.Value())
+			var record tea.Cmd
+			if name != "" {
+				m, record = m.recordSearch(scopeAgentName, name)
+			}
+			nm, cmd := p.start(m, name)
+			return nm.(Model), tea.Batch(record, cmd)
+		default:
+			p.name.HandleEditKey(msg) // spaces included — do NOT swallow KeySpace
+		}
+		return m, nil
 	case stageApprove:
 		switch key {
 		case "enter":
 			m.rememberToolApproval(p.pick.Command)
-			nm, cmd := p.start(m)
+			nm, cmd := p.askName(m)
 			return nm.(Model), cmd
 		case "esc":
 			if len(p.cmds) > 1 {
@@ -241,6 +277,17 @@ func (p *agentStartPopup) render(m Model, below string) string {
 		lines = []string{i18n.T("Start agent"), "", "⏳ " + i18n.T("Detecting installed agents…"), "", i18n.T("[esc] cancel")}
 	case stageApprove:
 		lines = []string{i18n.T("Start this agent?  (%s)", p.pick.Name), "", approvalBoxView(p.pick.Command, textW)}
+	case stageName:
+		hint := i18n.T("[enter] start  [alt+↓] recent names  [esc] back")
+		if len(p.cmds) <= 1 {
+			hint = i18n.T("[enter] start  [alt+↓] recent names  [esc] cancel")
+		}
+		lines = []string{
+			i18n.T("Name this agent (optional)"), "",
+			i18n.T("Start %s in %s", p.pick.Name, shortWorktreeName(p.worktree)), "",
+			viewField("> ", p.name, true, textW), "",
+			hint,
+		}
 	default:
 		lines = []string{i18n.T("Start agent in %s", shortWorktreeName(p.worktree)), ""}
 		s := st()
