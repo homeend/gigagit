@@ -166,15 +166,15 @@ func EnsureSessionCommands(cfg config.Config, globalPath string, detect func() [
 // session's identity. env is appended to the child's environment (the
 // frontend's GG_INBOX).
 func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, worktreeDir, cwd string, cols, rows int, env []string) (*AgentSession, error) {
-	return s.startSessionPrompt(ctx, tc, worktreeDir, cwd, cols, rows, env, "")
+	return s.startSessionPrompt(ctx, tc, worktreeDir, cwd, cols, rows, env, "", "")
 }
 
-func (s *Service) startSessionPrompt(ctx context.Context, tc config.ToolCommand, worktreeDir, cwd string, cols, rows int, env []string, prompt string) (*AgentSession, error) {
+func (s *Service) startSessionPrompt(ctx context.Context, tc config.ToolCommand, worktreeDir, cwd string, cols, rows int, env []string, prompt, name string) (*AgentSession, error) {
 	resolved, err := template.ResolveCommand(tc.Command, nil, template.CmdCtx{Repo: worktreeDir, Prompt: prompt})
 	if err != nil {
 		return nil, err
 	}
-	sess, err := s.startLine(ctx, Sessions(), tc.Name, agentIDFor(tc), resolved, worktreeDir, cwd, cols, rows, env)
+	sess, err := s.startLine(ctx, Sessions(), tc.Name, name, agentIDFor(tc), resolved, worktreeDir, cwd, cols, rows, env)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,8 @@ func (s *Service) startSessionPrompt(ctx context.Context, tc config.ToolCommand,
 // reach: with mcpURL set the child gets GG_MCP_URL and a fresh
 // GG_SESSION_TOKEN, bound to the new session with rec. prompt fills the
 // command's <prompt> slot (AgentKickoff for a spawned worker, "" for a
-// manual start). Returns the token ("" without a URL).
+// manual start). rec.Name is the user's name for the session (cleaned
+// here). Returns the token ("" without a URL).
 func (s *Service) StartAgentSession(ctx context.Context, tc config.ToolCommand, dir, cwd string, cols, rows int, env []string, mcpURL string, rec SpawnRecord, prompt string) (*AgentSession, string, error) {
 	tok := ""
 	if mcpURL != "" {
@@ -200,7 +201,8 @@ func (s *Service) StartAgentSession(ctx context.Context, tc config.ToolCommand, 
 	if rec.Parent != "" {
 		env = append(env, "GG_PARENT_SESSION="+rec.Parent)
 	}
-	sess, err := s.startSessionPrompt(ctx, tc, dir, cwd, cols, rows, env, prompt)
+	rec.Name = CleanAgentName(rec.Name)
+	sess, err := s.startSessionPrompt(ctx, tc, dir, cwd, cols, rows, env, prompt, rec.Name)
 	if err != nil {
 		return nil, "", err
 	}
@@ -244,11 +246,11 @@ func (s *Service) sessionRepo(ctx context.Context, worktreeDir string) string {
 // startLine runs an already-resolved command line as a session on mgr (the
 // AI-task path hands it a line Prepare resolved against its temp files —
 // resolving it again would misread any <…> in a path).
-func (s *Service) startLine(ctx context.Context, mgr *agentsession.Manager, label, agentID, line, worktreeDir, cwd string, cols, rows int, env []string) (*AgentSession, error) {
+func (s *Service) startLine(ctx context.Context, mgr *agentsession.Manager, label, name, agentID, line, worktreeDir, cwd string, cols, rows int, env []string) (*AgentSession, error) {
 	repo := s.sessionRepo(ctx, worktreeDir)
 	argv, cmdline := sessionShell(line, runtime.GOOS, os.Getenv)
 	return mgr.Start(agentsession.StartSpec{
-		Label: label, AgentID: agentID, Repo: repo, Dir: worktreeDir,
+		Label: label, Name: name, AgentID: agentID, Repo: repo, Dir: worktreeDir,
 		Cwd: cwd, Argv: argv, CmdLine: cmdline, Env: env, Cols: cols, Rows: rows,
 		TracePath: sessionTracePath(os.Getenv("GG_SESSION_TRACE"), label, time.Now()),
 	})
@@ -327,6 +329,7 @@ func sessionShell(line, goos string, getenv func(string) string) (argv []string,
 type SessionStartRequest struct {
 	Worktree   string
 	Command    config.ToolCommand
+	Name       string // the user's name for an agent ("" = unnamed); ignored for a terminal
 	Terminal   bool
 	Cols, Rows int
 }

@@ -19,7 +19,8 @@ type SpawnRecord struct {
 	Parent   string // full session id of the agent that spawned it ("" = the user)
 	Brief    string // the free-form task (agent_task)
 	Worktree string
-	Spawned  bool // started by an agent (counts against max_spawned; may not spawn)
+	Spawned  bool   // started by an agent (counts against max_spawned; may not spawn)
+	Name     string // the user's name for the session ("" = unnamed); cleaned by StartAgentSession
 }
 
 // spawnRegistry is process-global, like Sessions(): it survives reRoot.

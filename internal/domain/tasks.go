@@ -567,7 +567,7 @@ func (m *TaskManager) runInteractive(ctx context.Context, t *task) taskEnd {
 	defer in.Cleanup()
 	env := append(append([]string{}, t.spec.Env...), in.Env...)
 	label := t.spec.Agent + " · " + kindLabel(t.spec.Kind)
-	sess, err := t.spec.Svc.startLine(ctx, m.sessionMgr(), label, t.spec.AgentID, in.Command,
+	sess, err := t.spec.Svc.startLine(ctx, m.sessionMgr(), label, "", t.spec.AgentID, in.Command,
 		t.spec.Worktree, t.spec.Cwd, t.spec.Cols, t.spec.Rows, env)
 	if err != nil {
 		return startFailed(ctx, err)
