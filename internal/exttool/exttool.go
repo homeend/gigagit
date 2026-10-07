@@ -104,6 +104,20 @@ type Tool struct {
 	// VersionRe's first group is the version in that output (nil = the first X.Y[.Z]).
 	VersionRe *regexp.Regexp
 	Commands  []CommandTemplate
+	// ModelFlag picks the agent's model on its command line: the text put
+	// before the quoted model ("--model ", "-m ", "--model="); "" = none
+	// known. Verified against each CLI's --help (2026-10-07).
+	ModelFlag string
+}
+
+// ModelFlagFor is the model flag of the built-in agent id ("" = none).
+func ModelFlagFor(agentID string) string {
+	for _, tl := range Builtins() {
+		if tl.ID == agentID {
+			return tl.ModelFlag
+		}
+	}
+	return ""
 }
 
 // claudeConflictPrompt is the double-quoted conflict-resolution prompt shared
@@ -464,7 +478,7 @@ func Builtins() []Tool { return withDefaults(builtins()) }
 func builtins() []Tool {
 	return []Tool{
 		{
-			ID: "claude", Label: "Claude Code", Bins: []string{"claude"},
+			ID: "claude", ModelFlag: "--model ", Label: "Claude Code", Bins: []string{"claude"},
 			VersionArgs: []string{"--version"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Claude", Mode: ModeTerminal, Command: claudeConflictCommand},
@@ -498,7 +512,7 @@ func builtins() []Tool {
 			// mode with an initial prompt already submitted", which fits
 			// gg's terminal-handover model exactly (Junie runs interactively,
 			// with the conflict prompt pre-submitted, in the real terminal).
-			ID: "junie", Label: "JetBrains Junie", Bins: []string{"junie"},
+			ID: "junie", ModelFlag: "--model=", Label: "JetBrains Junie", Bins: []string{"junie"},
 			VersionArgs: []string{"--version"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Junie", Mode: ModeTerminal, Command: junieConflictCommand},
@@ -517,7 +531,7 @@ func builtins() []Tool {
 			},
 		},
 		{
-			ID: "codex", Label: "OpenAI Codex", Bins: []string{"codex"},
+			ID: "codex", ModelFlag: "-m ", Label: "OpenAI Codex", Bins: []string{"codex"},
 			VersionArgs: []string{"--version"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Codex", Mode: ModeTerminal, Command: codexConflictCommand},
@@ -535,7 +549,7 @@ func builtins() []Tool {
 			},
 		},
 		{
-			ID: "antigravity", Label: "Antigravity", Bins: []string{"agy"},
+			ID: "antigravity", ModelFlag: "--model ", Label: "Antigravity", Bins: []string{"agy"},
 			VersionArgs: []string{"--version"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Antigravity", Mode: ModeTerminal, Command: agyConflictCommand},
@@ -556,7 +570,7 @@ func builtins() []Tool {
 			// ExtraProbes covers the standard installer's location: kimi's
 			// PATH entry lives in a shell rc file, so a gg launched another
 			// way (desktop entry, another shell) would otherwise miss it.
-			ID: "kimi", Label: "Kimi Code", Bins: []string{"kimi"},
+			ID: "kimi", ModelFlag: "-m ", Label: "Kimi Code", Bins: []string{"kimi"},
 			VersionArgs: []string{"--version"},
 			ExtraProbes: []string{"~/.kimi-code/bin/kimi"},
 			Commands: []CommandTemplate{

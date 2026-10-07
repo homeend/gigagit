@@ -391,6 +391,10 @@ func TestInstallWritesBothSkillsInEveryMode(t *testing.T) {
 		if gr, err := os.ReadFile(gt); err != nil || !agentskill.GGReview.HasMarker(gr) {
 			t.Errorf("%s: gg-review not installed at %s (%v)", id, gt, err)
 		}
+		ct := d.TargetOf(agentskill.GGCrossReview)
+		if cr, err := os.ReadFile(ct); err != nil || !agentskill.GGCrossReview.HasMarker(cr) {
+			t.Errorf("%s: gg-cross-review not installed at %s (%v)", id, ct, err)
+		}
 		if id == "agents-md" {
 			// Both blocks live in one file and neither may eat the other.
 			if !agentskill.UsingGG.HasMarker(review) {

@@ -5704,3 +5704,36 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   false. Prefetch fetches run under `prefetchFetchBudget` and
   `yieldToWaiters` (cancelled when anyone queues behind the gate); the TUI
   cancels its prefetch on `reRoot`, a newer list and quit.
+
+### Cross-review (2026-10-07)
+
+Spec `docs/superpowers/specs/2026-10-07-cross-review-design.md`, plan
+`docs/superpowers/plans/2026-10-07-cross-review.md`.
+
+- **The skill is the only surface.** `/gg-cross-review` (embedded,
+  user-invoked, installed beside `gg-review`) runs the reviewers through
+  `gg review --tool <own> --model <m> --link <link> --no-save --json`, merges
+  them and stores ONE review with `gg review save`. No TUI/web launcher: the
+  stored review shows everywhere a review does.
+- **Model flags live in the exttool catalog** (`Tool.ModelFlag`,
+  `exttool.ModelFlagFor`): the text before the quoted model — Claude
+  `"--model "`, Codex `"-m "`, Junie `"--model="`, Kimi `"-m "`, Antigravity
+  `"--model "` (verified on the CLIs' --help, 2026-10-07). A new agent with a
+  headless review template must set one (`TestReviewAgentsHaveAModelFlag`).
+  No template TEXT carries a model, so the golden version guard is untouched.
+- **`<model>` wins over the flag**: `domain.ResolveReviewCommand` fills a
+  `<model>` / `<model:FLAG>` slot when the command has one (`<model:FLAG>`
+  drops the flag with the model, like `<prompt:FLAG>`), else appends the agent's flag +
+  `template.QuoteArg(model)`, else `ErrNoModelSupport` (exit 2). An empty
+  model adds nothing; `<model>` without one vanishes.
+- **`RunReview` stores nothing**; `ReviewReport` = `runReview` + `SaveReview`.
+  `--no-save --json` prints the canonical document; prose → exit 1 with the
+  text on stderr (a caller must tell "failed" from "reviewed").
+- **Model names** may not hold `"`, `%` or a line break (cmd.exe quoting,
+  a new shell line) — refused in the CLI before resolving.
+- **`--link`** refuses `--notes` (the notes import needs the preview's own
+  diff spec and scope, which only `--preview` sets). It shares `review save`'s resolver: `resolveLinkArg` →
+  `openLinkTarget` → `LinkReviewTarget`; the tool runs in the link's
+  `Checkout` (`<repo>` too), the review is stored there.
+- `ToolAgentID` (was `agentIDFor`) maps a command to a built-in agent by its
+  program's base name.

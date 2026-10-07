@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Cross-review: several models, one review
+
+### Added
+
+- **`/gg-cross-review <gg-link> [2|3] [focus]`** — a new embedded skill
+  (user-invoked): the agent asks how many reviewers (2 or 3) and which of
+  its own models, runs that many headless copies of itself on the link in
+  parallel, merges their reviews — one remark per agreed issue, crediting
+  the models that raised it — investigates every disagreement itself and
+  rules on it (`## Disagreements resolved`), and stores ONE review with
+  `gg review save`. Run `gg init --update` to install it.
+- **`gg review --model <m>`** runs the review tool on a model: gg adds the
+  agent's own flag (Claude `--model`, Codex `-m`, Junie `--model=`, Kimi
+  `-m`, Antigravity `--model`) or fills `<model:FLAG>` / `<model>` in a
+  custom command; a tool with neither refuses it, and a model name holding
+  `"`, `%` or a line break is refused.
+- **`gg review --link <gg-link>`** reviews what a link names, as
+  `gg review save` does; **`--no-save [--json]`** prints the review (the
+  document JSON) and stores nothing; **`gg review --tools [--json]`** lists
+  the review tools and whether each takes a model.
+- Skills: using-gg v145 and reviewing-with-gg v15.
+
 ## Pull requests open from a cache
 
 ### Changed

@@ -174,7 +174,7 @@ func (s *Service) startSessionPrompt(ctx context.Context, tc config.ToolCommand,
 	if err != nil {
 		return nil, err
 	}
-	sess, err := s.startLine(ctx, Sessions(), tc.Name, name, agentIDFor(tc), resolved, worktreeDir, cwd, cols, rows, env)
+	sess, err := s.startLine(ctx, Sessions(), tc.Name, name, ToolAgentID(tc), resolved, worktreeDir, cwd, cols, rows, env)
 	if err != nil {
 		return nil, err
 	}
@@ -351,10 +351,9 @@ func SessionProgram(tc config.ToolCommand) string {
 	return ""
 }
 
-// agentIDFor maps a command to its catalog tool id by its program (the
-// first word, or the double-quoted first word of a Windows install path),
-// "" for a custom command.
-func agentIDFor(tc config.ToolCommand) string {
+// ToolAgentID is the built-in agent a command runs, by its program's base
+// name (exttool Bins); "" for a custom command.
+func ToolAgentID(tc config.ToolCommand) string {
 	prog := SessionProgram(tc)
 	if prog == "" {
 		return ""

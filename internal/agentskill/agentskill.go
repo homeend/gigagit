@@ -1,7 +1,8 @@
 // Package agentskill carries the skills that teach AI coding agents to drive gg:
 // "using-gg" (the git CLI surface), "reviewing-with-gg" (the review-notes
 // lane), "delegate" (overseeing worker agents; the worker protocol) and
-// "gg-review" (the user's /gg-review <gg-link> command). The content is compiled into the binary (go:embed); installed copies
+// "gg-review" (the user's /gg-review <gg-link> command) and "gg-cross-review"
+// (/gg-cross-review: several models review, the agent merges and settles). The content is compiled into the binary (go:embed); installed copies
 // are derived artifacts that change only when a newer binary's init runs.
 package agentskill
 
@@ -24,19 +25,25 @@ var delegateBody string
 //go:embed gg-review.md
 var ggReviewBody string
 
+//go:embed gg-cross-review.md
+var ggCrossReviewBody string
+
 // Version is bumped whenever using-gg.md (or the rendered wrappers) change.
 // Installed copies carry it so init can tell new/outdated/up-to-date apart.
-const Version = 144
+const Version = 145
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
-const ReviewVersion = 14
+const ReviewVersion = 15
 
 // DelegateVersion is the counter for the delegate skill.
 const DelegateVersion = 3
 
 // GGReviewVersion is the counter for the gg-review skill.
 const GGReviewVersion = 1
+
+// GGCrossReviewVersion is the counter for the gg-cross-review skill.
+const GGCrossReviewVersion = 1
 
 // Skill is one embedded skill: its identity, its own version counter, and the
 // rendered forms init installs. Markers are per-skill ("gg:<name>:v<N>"), so
@@ -100,8 +107,20 @@ var GGReview = func() Skill {
 	return s
 }()
 
+// GGCrossReview is the user-invoked /gg-cross-review <gg-link> [2|3] [focus]:
+// run 2–3 headless copies of yourself on different models (gg review
+// --model … --no-save), merge their reviews, rule on every disagreement and
+// store ONE review. User-invoked like gg-review and installed beside it.
+var GGCrossReview = func() Skill {
+	s := newSkill("gg-cross-review",
+		"Review the change a gg:// link names with 2–3 copies of yourself on different models, settle their disagreements, and store one merged review in gg.",
+		GGCrossReviewVersion, ggCrossReviewBody)
+	s.front = "argument-hint: \"<gg-link> [2|3] [what to focus on]\"\n" + "disable-model-invocation: true\n"
+	return s
+}()
+
 // All is the install set, in a stable order.
-func All() []Skill { return []Skill{UsingGG, ReviewingWithGG, Delegate, GGReview} }
+func All() []Skill { return []Skill{UsingGG, ReviewingWithGG, Delegate, GGReview, GGCrossReview} }
 
 // Body is the canonical markdown body — no frontmatter, no markers.
 func (s Skill) Body() string { return s.body }

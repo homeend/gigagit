@@ -118,6 +118,31 @@ type ReviewResult struct {
 // When the store cannot keep it, the result still carries the report
 // (Content, Label, Structured; no NoteID) beside a "review not saved" error.
 func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, resolvedCommand string, env []string) (ReviewResult, error) {
+	out, files, err := s.runReview(ctx, target, resolvedCommand, env)
+	if err != nil {
+		return ReviewResult{}, err
+	}
+	id, warn, serr := s.SaveReview(ctx, SaveReview{Target: target, Agent: agent, Text: out.Content, Files: files})
+	if serr != nil {
+		// The report is the agent's work: hand it back beside the error so
+		// the caller can still show it.
+		return out, fmt.Errorf("review not saved: %w", serr)
+	}
+	out.NoteID, out.Warn = id, warn
+	return out, nil
+}
+
+// RunReview is ReviewReport without the store: it runs resolvedCommand over
+// target and returns the parsed review (NoteID stays ""). A cross-review's
+// reviewers run this way; only the merged review is stored.
+func (s *Service) RunReview(ctx context.Context, target ReviewTarget, resolvedCommand string, env []string) (ReviewResult, error) {
+	out, _, err := s.runReview(ctx, target, resolvedCommand, env)
+	return out, err
+}
+
+// runReview runs the review op and parses its capture: the result and, for a
+// working review, the reviewed files' fingerprints SaveReview records.
+func (s *Service) runReview(ctx context.Context, target ReviewTarget, resolvedCommand string, env []string) (ReviewResult, []model.NoteFile, error) {
 	label := target.DisplayLabel()
 	op := engine.ReviewChanges{
 		Command:    resolvedCommand,
@@ -129,7 +154,7 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, 
 	}
 	res, err := s.Execute(ctx, op, nil, nil)
 	if err != nil {
-		return ReviewResult{}, err
+		return ReviewResult{}, nil, err
 	}
 	// Claude's --output-format json wraps the markdown report in a JSON
 	// envelope ({"result":"<markdown>",...}); unwrap it here so the stored
@@ -138,23 +163,15 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, 
 	// tool) passes through unchanged.
 	report, perr := exttool.ParseCaptureReport(res.Captured)
 	if perr != nil {
-		return ReviewResult{}, perr
+		return ReviewResult{}, nil, perr
 	}
 	report = strings.TrimSpace(report)
 	if report == "" {
-		return ReviewResult{}, fmt.Errorf("review produced an empty report")
+		return ReviewResult{}, nil, fmt.Errorf("review produced an empty report")
 	}
 	report = canonicalReview(report)
 	_, perr = notebatch.ParseReview([]byte(report))
-	out := ReviewResult{Content: report, Range: target.Range, Label: label, Structured: perr == nil}
-	id, warn, serr := s.SaveReview(ctx, SaveReview{Target: target, Agent: agent, Text: report, Files: res.ReviewFiles})
-	if serr != nil {
-		// The report is the agent's work: hand it back beside the error so
-		// the caller can still show it.
-		return out, fmt.Errorf("review not saved: %w", serr)
-	}
-	out.NoteID, out.Warn = id, warn
-	return out, nil
+	return ReviewResult{Content: report, Range: target.Range, Label: label, Structured: perr == nil}, res.ReviewFiles, nil
 }
 
 // BranchReviewTarget resolves <base>..<tip>: base = merge-base with the trunk

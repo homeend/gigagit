@@ -152,12 +152,20 @@ gg review [--tool <name>] [--working] [<rev>|<A..B>]
                                       # each file while it still matches what was reviewed; --tool picks the review command
 gg review --notes [--tool <name>] [<rev>|<A..B>]
                                       # also import the review's notes as permanent notes (not with --working)
+gg review [--tool <name>] [--model <m>] [--link <gg-link>] --no-save [--json]
+                                      # run a review and print it, storing nothing: --model picks the agent's model (gg adds
+                                      # its own flag — Claude --model, Codex -m, Junie --model=, Kimi -m, Antigravity --model —
+                                      # or fills <model> in a custom command); --link reviews what a gg:// link names;
+                                      # --json prints the review document (prose → exit 1)
+gg review --tools [--json]           # the review tools: name, agent, mode, whether --model works
 gg review save <gg-link> --agent <name> (--stdin | --file <path>) [--json]
                                       # store a review document an agent wrote (overview + per-file remarks) as the review
                                       # of the change the link names; a merge preview / commit pair review belongs to the preview
 gg review save <gg-link> --dry-run [--json]
                                       # what the link would review, and the `gg diff` argument that shows it
-                                      # (the /gg-review <gg-link> [focus] skill, from `gg init`, drives both)
+                                      # (the /gg-review <gg-link> [focus] skill, from `gg init`, drives both;
+                                      # /gg-cross-review <gg-link> [2|3] [focus] runs 2–3 copies of the agent on different
+                                      # models with --no-save, merges them, settles their disagreements and stores ONE review)
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
                                       # numbered git @@ hunks per file, over the same patch a note anchors to
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>]

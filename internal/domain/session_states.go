@@ -572,7 +572,7 @@ func SessionProfile(tc config.ToolCommand) (p agentstate.Profile, custom bool, e
 	if !tc.HasScreenRules() {
 		return agentstate.Profile{}, false, nil
 	}
-	p, err = agentstate.WithScreen(agentIDFor(tc), tc.ScreenWorking, tc.ScreenWaiting, tc.ScreenQuestion)
+	p, err = agentstate.WithScreen(ToolAgentID(tc), tc.ScreenWorking, tc.ScreenWaiting, tc.ScreenQuestion)
 	if err != nil {
 		return agentstate.Profile{}, false, err
 	}
