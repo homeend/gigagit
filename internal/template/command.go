@@ -24,6 +24,7 @@ type CmdCtx struct {
 	File, Local, Base, Remote, Merged string
 	ContextFile                       string
 	Prompt                            string
+	Model                             string // <model>: the review's model ("" = the tool's default)
 }
 
 // ResolveCommand substitutes every <...> token in an external-tool command.
@@ -97,6 +98,11 @@ func resolveCommandToken(body string, inputs map[string]string, ctx CmdCtx, goos
 			return rest + " " + q, nil
 		}
 		return q, nil
+	case "model":
+		if ctx.Model == "" {
+			return "", nil // the tool's default model: the slot vanishes
+		}
+		return quoteArgFor(ctx.Model, goos), nil
 	case "bin":
 		return "", fmt.Errorf("template: <bin> is resolved when the command is generated — replace it with the tool binary")
 	case "env":
@@ -109,7 +115,7 @@ func resolveCommandToken(body string, inputs map[string]string, ctx CmdCtx, goos
 // commandTokens is the runtime vocabulary; the bool marks per-file-only tokens.
 var commandTokens = map[string]bool{
 	"op": false, "source": false, "target": false, "range": false, "conflicted-files": false,
-	"repo": false, "context-file": false, "user": false, "prompt": false,
+	"repo": false, "context-file": false, "user": false, "prompt": false, "model": false,
 	"file": true, "local": true, "base": true, "remote": true, "merged": true,
 }
 
@@ -147,6 +153,20 @@ func HasPromptSlot(tmpl string) bool {
 	}
 	return false
 }
+
+// HasModelSlot reports whether a command template carries a <model> slot —
+// then `gg review --model` fills it instead of appending the agent's flag.
+func HasModelSlot(tmpl string) bool {
+	for _, m := range tokenRe.FindAllStringSubmatch(tmpl, -1) {
+		if p, _, _ := cutColon(m[1]); p == "model" {
+			return true
+		}
+	}
+	return false
+}
+
+// QuoteArg shell-quotes one argv value for this OS (quoteArgFor).
+func QuoteArg(s string) string { return quoteArgFor(s, runtime.GOOS) }
 
 // quoteArgFor shell-quotes one argv value: POSIX single-quoting with each
 // embedded single quote escaped, or double quotes on Windows (cmd.exe).
