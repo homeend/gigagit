@@ -32,6 +32,8 @@ func main() {
 		name = "pr-view-" + a[2] + ".json"
 	case len(a) >= 2 && a[0] == "repo" && a[1] == "view":
 		name = "repo-view.json"
+	case len(a) >= 4 && a[0] == "api" && a[1] == "graphql" && a[2] == "--input":
+		os.Exit(mutation(dir, a[3]))
 	case len(a) >= 2 && a[0] == "api" && a[1] == "graphql":
 		prefix := "threads-"
 		for _, s := range a {
@@ -48,6 +50,16 @@ func main() {
 	if name == "" {
 		fmt.Fprintln(os.Stderr, "fakegh: unsupported invocation:", strings.Join(a, " "))
 		os.Exit(2)
+	}
+	if strings.HasPrefix(name, "snapshot-") && shownWrite(dir) {
+		// Only a SUCCESSFUL write GitHub would show — a submitted review, a
+		// reply, a resolve — switches to the sent snapshot; a failed send
+		// (StartReview … DeleteReview) shows nothing.
+		sent := strings.TrimSuffix(name, ".json") + "-sent.json"
+		if b2, err2 := os.ReadFile(filepath.Join(dir, sent)); err2 == nil {
+			os.Stdout.Write(b2)
+			return
+		}
 	}
 	b, err := os.ReadFile(filepath.Join(dir, name))
 	if err != nil && strings.HasPrefix(name, "snapshot-") {
@@ -94,4 +106,85 @@ func composeSnapshot(dir, n string) ([]byte, error) {
 		node[k] = v
 	}
 	return json.Marshal(doc)
+}
+
+// mutation answers one write: it appends {"op","variables","failed"} to
+// writes.jsonl (what tests assert on), fails with fail-<Op>'s text on stderr
+// when that file exists, else prints mutation-<Op>.json or a built-in answer.
+func mutation(dir, input string) int {
+	b, err := os.ReadFile(input)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fakegh:", err)
+		return 1
+	}
+	var doc struct {
+		Query     string         `json:"query"`
+		Variables map[string]any `json:"variables"`
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		fmt.Fprintln(os.Stderr, "fakegh:", err)
+		return 1
+	}
+	op := strings.TrimPrefix(doc.Query, "mutation ")
+	if i := strings.IndexAny(op, "({ "); i >= 0 {
+		op = op[:i]
+	}
+	_ = os.MkdirAll(dir, 0o755)
+	failMsg, failErr := os.ReadFile(filepath.Join(dir, "fail-"+op))
+	line, _ := json.Marshal(map[string]any{"op": op, "variables": doc.Variables, "failed": failErr == nil})
+	if f, err := os.OpenFile(filepath.Join(dir, "writes.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+		f.Write(append(line, '\n'))
+		f.Close()
+	}
+	if failErr == nil {
+		fmt.Fprintln(os.Stderr, strings.TrimSpace(string(failMsg)))
+		return 1
+	}
+	if out, err := os.ReadFile(filepath.Join(dir, "mutation-"+op+".json")); err == nil {
+		os.Stdout.Write(out)
+		return 0
+	}
+	k := countWrites(dir, op)
+	answers := map[string]string{
+		"StartReview":  `{"data":{"addPullRequestReview":{"pullRequestReview":{"id":"PRR_new"}}}}`,
+		"AddThread":    fmt.Sprintf(`{"data":{"addPullRequestReviewThread":{"thread":{"id":"PRRT_new%d","comments":{"nodes":[{"id":"PRRC_new%d","url":"https://github.com/o/r/pull/7#discussion_new%d"}]}}}}}`, k, k, k),
+		"Reply":        fmt.Sprintf(`{"data":{"addPullRequestReviewThreadReply":{"comment":{"id":"PRRC_reply%d","url":"https://github.com/o/r/pull/7#reply%d"}}}}`, k, k),
+		"SubmitReview": `{"data":{"submitPullRequestReview":{"pullRequestReview":{"id":"PRR_new","state":"COMMENTED"}}}}`,
+		"DeleteReview": `{"data":{"deletePullRequestReview":{"pullRequestReview":{"id":"PRR_new"}}}}`,
+		"Resolve":      `{"data":{"resolveReviewThread":{"thread":{"id":"x","isResolved":true}}}}`,
+		"Unresolve":    `{"data":{"unresolveReviewThread":{"thread":{"id":"x","isResolved":false}}}}`,
+	}
+	out, ok := answers[op]
+	if !ok {
+		fmt.Fprintln(os.Stderr, "fakegh: unsupported mutation:", op)
+		return 2
+	}
+	fmt.Print(out)
+	return 0
+}
+
+// shownWrite reports a recorded, successful SubmitReview / Reply / Resolve /
+// Unresolve.
+func shownWrite(dir string) bool {
+	b, _ := os.ReadFile(filepath.Join(dir, "writes.jsonl"))
+	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		var w struct {
+			Op     string `json:"op"`
+			Failed bool   `json:"failed"`
+		}
+		if json.Unmarshal([]byte(line), &w) == nil && !w.Failed {
+			switch w.Op {
+			case "SubmitReview", "Reply", "Resolve", "Unresolve":
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// countWrites is how many times op has been recorded (this call included):
+// the k in a created id, so two threads get two ids.
+func countWrites(dir, op string) int {
+	b, _ := os.ReadFile(filepath.Join(dir, "writes.jsonl"))
+	return strings.Count(string(b), `"op":"`+op+`"`)
 }

@@ -244,23 +244,28 @@ func (s *Service) PRRevalidate(ctx context.Context, n int) (PRRevalidation, erro
 		return PRRevalidation{}, err
 	}
 	var pr model.PullRequest
+	var raw []model.ForgeComment
 	changed := false
+	// Stamps written after this instant are never judged by this read: it
+	// cannot see the pending review another process is building.
+	readStart := s.forgeClock()
 	if sp, ok := p.(forge.Snapshotter); ok {
 		snap, err := sp.Snapshot(ctx, n)
 		if err != nil {
 			return PRRevalidation{}, err
 		}
-		pr = snap.PR
+		pr, raw = snap.PR, snap.Comments
 		changed = s.storeComments(ctx, n, snap.Comments, snap.Truncated)
 	} else {
 		if pr, err = p.PR(ctx, n); err != nil {
 			return PRRevalidation{}, err
 		}
-		if changed, err = s.PRCommentsRefresh(ctx, n); err != nil {
+		if raw, changed, err = s.refreshComments(ctx, n); err != nil {
 			return PRRevalidation{}, err
 		}
 	}
 	s.rememberPR(ctx, pr, true)
+	s.settleSends(ctx, pr, raw, readStart)
 	if !pr.IsOpen() {
 		s.forgeMu.Lock()
 		if s.forgeTerminal == nil {

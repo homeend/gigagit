@@ -6,7 +6,10 @@ Date: 2026-09-19 · Branch: `feat/forge-prs` · Status: approved; plan 1 of 3 (c
 
 Show the current repository's open pull requests inside gg and let the user
 read a PR — its diff, its inline review comments, its description and its
-conversation — without leaving the TUI. **Read-only:** gg never posts, edits,
+conversation — without leaving the TUI. (**Reversed 2026-10-07** by
+`2026-10-07-github-write-design.md`: gg now writes, only through
+`engine.SendToForge`; the read-only rulings below describe this first cut.)
+**Read-only:** gg never posts, edits,
 resolves or submits anything on the forge. The first (and only) provider is
 GitHub through the system `gh` CLI; the design keeps everything above one seam
 forge-neutral so GitLab (`glab`) and Gitea (`tea`) are one more implementation.

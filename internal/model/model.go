@@ -189,6 +189,9 @@ type DiffSpec struct {
 	Cached bool
 	Rev    string // "", a commit-ish, or a range string (A..B / A...B)
 	Paths  []string
+	// Unified > 0 asks for -U<n> context lines (a forge's hunks are git's
+	// default 3, whatever the user's diff.context says); 0 = git's default.
+	Unified int
 }
 
 // DiffStat is one file's terse change stat (from git --numstat).

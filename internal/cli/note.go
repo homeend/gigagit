@@ -680,13 +680,14 @@ func resolvedNotesFor(ctx context.Context, svc *domain.Service, file string, cac
 // status is the word printed for r.Status: the raw one, or the preview's
 // ("outdated" for stale, spec §1.2 — the STORE is unchanged, only the word).
 func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool, status string) {
+	src := noteSourceToken(r)
 	if indent {
-		fmt.Fprintf(w, "  %s [%s] reply  %s\n", r.Note.ID, r.Note.Source, r.Note.Summary)
+		fmt.Fprintf(w, "  %s %s reply  %s\n", r.Note.ID, src, r.Note.Summary)
 		return
 	}
 	if r.Note.IsWorkingReview() {
 		// A review of uncommitted changes: no commit, file or range to show.
-		fmt.Fprintf(w, "%s [%s] review working changes  %s\n", r.Note.ID, r.Note.Source, r.Note.Summary)
+		fmt.Fprintf(w, "%s %s review working changes  %s\n", r.Note.ID, src, r.Note.Summary)
 		return
 	}
 	if r.Note.IsReviewNote() {
@@ -696,13 +697,13 @@ func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool, status stri
 		if b := r.Note.Address.Branch; b != "" {
 			where += " (" + b + ")"
 		}
-		fmt.Fprintf(w, "%s [%s] %s  %s\n", r.Note.ID, r.Note.Source, where, r.Note.Summary)
+		fmt.Fprintf(w, "%s %s %s  %s\n", r.Note.ID, src, where, r.Note.Summary)
 		return
 	}
 	if r.Note.IsShelfLevel() {
 		// A note on a whole shelf entry: no file, side or range. Its text is
 		// the point (what the set could not carry), so it is printed too.
-		fmt.Fprintf(w, "%s [%s] shelf %s  %s\n", r.Note.ID, r.Note.Source, r.Note.Address.ShelfID, r.Note.Summary)
+		fmt.Fprintf(w, "%s %s shelf %s  %s\n", r.Note.ID, src, r.Note.Address.ShelfID, r.Note.Summary)
 		for _, l := range strings.Split(strings.TrimRight(r.Note.Rationale, "\n"), "\n") {
 			if l != "" {
 				fmt.Fprintln(w, "    "+l)
@@ -710,9 +711,26 @@ func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool, status stri
 		}
 		return
 	}
-	fmt.Fprintf(w, "%s [%s] %s %s:%d-%d %s  %s\n",
-		r.Note.ID, r.Note.Source, noteTargetLabel(r.Note.Address),
+	if r.Origin != "" {
+		status += " (from " + r.Origin + ")" // a carried note: where it lives
+	}
+	fmt.Fprintf(w, "%s %s %s %s:%d-%d %s  %s\n",
+		r.Note.ID, src, noteTargetLabel(r.Note.Address),
 		r.Note.Side, r.Range[0], r.Range[1], status, r.Note.Summary)
+}
+
+// noteSourceToken is a note line's "[source]" column, followed by its sync
+// state when it is not plain local ("[sending]", "[failed: <error>]"), so a
+// local note's line keeps the shape agents parse.
+func noteSourceToken(r domain.ResolvedNote) string {
+	t := "[" + string(r.Note.Source) + "]"
+	switch r.Sync {
+	case model.SyncSending:
+		t += " [sending]"
+	case model.SyncFailed:
+		t += " [failed: " + r.SendErr + "]"
+	}
+	return t
 }
 
 // noteStatusWord is renderNoteLine's status argument: the preview's word when

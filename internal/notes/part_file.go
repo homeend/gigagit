@@ -296,6 +296,23 @@ func (fs *partFile) Put(n model.Note) error {
 	return err
 }
 
+// edit rewrites the one record id under the part's lock; ErrNotFound when
+// this part does not hold it. fn's error aborts with nothing written.
+func (fs *partFile) edit(id string, fn func(*model.Note) error) error {
+	_, err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
+		for i := range ns {
+			if ns[i].ID == id {
+				if err := fn(&ns[i]); err != nil {
+					return nil, err
+				}
+				return ns, nil
+			}
+		}
+		return nil, ErrNotFound
+	})
+	return err
+}
+
 // Remove deletes one note; removing a root removes its replies too — a
 // review takes its remark replies (their stored parent is the review).
 func (fs *partFile) Remove(id string) error {
@@ -359,7 +376,9 @@ func dropOrphanReplies(ns []model.Note) []model.Note {
 	}
 	kept := make([]model.Note, 0, len(ns))
 	for _, n := range ns {
-		if n.IsReply() && !roots[n.StoredParent()] {
+		// A draft answer to a GitHub thread has its root on the forge, never
+		// in the store: it is not an orphan.
+		if n.IsReply() && !n.IsForgeReply() && !roots[n.StoredParent()] {
 			continue
 		}
 		kept = append(kept, n)
@@ -393,7 +412,8 @@ func capOldestFirst(ns []model.Note, max int) []model.Note {
 	}
 	roots := make([]model.Note, 0, len(ns))
 	for _, n := range ns {
-		if !n.IsReply() && !exempt[n.ID] {
+		// A forge-rooted reply is a thread of its own (nothing hangs off it).
+		if (!n.IsReply() || n.IsForgeReply()) && !exempt[n.ID] {
 			roots = append(roots, n)
 		}
 	}

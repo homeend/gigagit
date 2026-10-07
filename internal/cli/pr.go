@@ -16,13 +16,36 @@ const prUsage = `usage: gg pr list [--state all|open|closed|merged] [--search <t
        gg pr view <number> [--json]
        gg pr comments <number> [--json]
        gg pr fetch <number>
-       gg pr forget <number>`
+       gg pr forget <number>
+       gg pr send <n> (--note <id>… | --review <id> | --mine | --verdict) [--event comment|approve|request-changes] [--body <text>] [--yes]
+       gg pr send <n> --finish | --discard [--yes]
+       gg pr reply <n> <thread-or-comment-id> <text> [--send [--yes]]
+       gg pr resolve|unresolve <n> <thread-or-comment-id>
+       gg pr notes <n> [--json]
+       gg pr pending [list] [--json]
+       gg pr pending approve <id> [--yes] | reject <id> | wait <id> | cancel <id>`
 
-// cmdPR is the read-only pull-request surface: it lists and reads, fetches a
-// PR head into the private ref refs/gg/pr/<n>, and never writes to the forge.
+// cmdPR is the pull-request surface. The read verbs list and read, fetch a
+// PR head into the private ref refs/gg/pr/<n> and forget it; the write verbs
+// (send, reply, resolve, unresolve) post through one confirmed op
+// (domain.PRSendOp → engine.SendToForge).
 // Unlike the TUI — which simply hides the feature — the CLI was ASKED, so a
 // missing forge CLI is an error with the detection reason.
-func cmdPR(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func cmdPR(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
+		switch args[0] {
+		case "send":
+			return prSend(svc, args[1:], stdin, stdout, stderr)
+		case "reply":
+			return prReply(svc, args[1:], stdin, stdout, stderr)
+		case "resolve", "unresolve":
+			return prResolve(svc, args[0] == "resolve", args[1:], stdin, stdout, stderr)
+		case "notes":
+			return prNotes(svc, args[1:], stdout, stderr)
+		case "pending":
+			return prPending(svc, args[1:], stdin, stdout, stderr)
+		}
+	}
 	usage := func() int { fmt.Fprintln(stderr, prUsage); return 2 }
 	// --json may sit before or after the number (agents write both). The
 	// search flags take a value — the NEXT argument whatever it looks like
@@ -252,7 +275,11 @@ func printPRComments(w io.Writer, cs domain.PRComments) {
 		if c.Resolved {
 			who += " [resolved]" // beside the author: a body may run many lines
 		}
-		fmt.Fprintf(w, "%s %s: %s\n", commentWhere(c), who, hang(c.Body))
+		thread := ""
+		if c.ThreadID != "" {
+			thread = "[" + c.ThreadID + "] " // the handle gg pr reply / resolve take
+		}
+		fmt.Fprintf(w, "%s%s %s: %s\n", thread, commentWhere(c), who, hang(c.Body))
 	}
 	if cs.Truncated {
 		fmt.Fprintln(w, "(comment list truncated)")

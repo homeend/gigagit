@@ -35,7 +35,7 @@ func TestForgeNotesConversion(t *testing.T) {
 	ff := &fakeForge{comments: reviewThreads()}
 	svc := newForgeSvc(t, ff)
 	ctx := context.Background()
-	if got := svc.forgeNotesFor(prSet("7"), "a.go"); got != nil {
+	if got := svc.forgeNotesFor(context.Background(), prSet("7"), "a.go"); got != nil {
 		t.Fatalf("reads never fetch: want nothing before a refresh, got %d", len(got))
 	}
 	if ff.commentCalls != 0 {
@@ -44,7 +44,7 @@ func TestForgeNotesConversion(t *testing.T) {
 	if changed, err := svc.PRCommentsRefresh(ctx, 7); err != nil || !changed {
 		t.Fatalf("first refresh: changed=%v err=%v", changed, err)
 	}
-	got := svc.forgeNotesFor(prSet("7"), "a.go")
+	got := svc.forgeNotesFor(context.Background(), prSet("7"), "a.go")
 	if len(got) != 2 {
 		t.Fatalf("a.go threads = %d, want 2 (the outdated one belongs to the hub)", len(got))
 	}
@@ -66,14 +66,14 @@ func TestForgeNotesConversion(t *testing.T) {
 	if left := got[1]; left.Note.Side != model.NoteSideOld || left.Range != [2]int{3, 3} {
 		t.Fatalf("a LEFT-side comment must survive with its side: %+v", left)
 	}
-	file := svc.forgeNotesFor(prSet("7"), "b.txt")
+	file := svc.forgeNotesFor(context.Background(), prSet("7"), "b.txt")
 	if len(file) != 1 || file[0].Range != [2]int{0, 0} || file[0].Note.Side != model.NoteSideNew {
 		t.Fatalf("file-level = %+v", file)
 	}
 	if ff.commentCalls != 1 {
 		t.Fatalf("reads are served from the cache: provider calls = %d", ff.commentCalls)
 	}
-	if got := svc.forgeNotesFor(PreviewNoteSet{Source: "feat/x", Tip: "t"}, "a.go"); got != nil {
+	if got := svc.forgeNotesFor(context.Background(), PreviewNoteSet{Source: "feat/x", Tip: "t"}, "a.go"); got != nil {
 		t.Fatal("an ordinary preview has no forge notes")
 	}
 }
@@ -101,7 +101,7 @@ func TestPRCommentsRefreshReportsChange(t *testing.T) {
 	if _, err := svc.PRCommentsRefresh(ctx, 7); err == nil {
 		t.Fatal("a failed refresh reports its error")
 	}
-	if got := svc.forgeNotesFor(prSet("7"), "a.go"); len(got) != 2 {
+	if got := svc.forgeNotesFor(context.Background(), prSet("7"), "a.go"); len(got) != 2 {
 		t.Fatalf("a failed refresh keeps the previous comments, got %d", len(got))
 	}
 }
@@ -135,7 +135,9 @@ func TestForgeNotesAreReadOnly(t *testing.T) {
 	if err := svc.NoteEdit(ctx, "forge:C1", "x", ""); !errors.Is(err, ErrReadOnlyNote) {
 		t.Fatalf("NoteEdit = %v", err)
 	}
-	if _, err := svc.NoteReply(ctx, "forge:C1", model.Note{Summary: "x"}); !errors.Is(err, ErrReadOnlyNote) {
+	// A reply is the one write a forge comment takes (a local draft, spec
+	// 2026-10-07 §1.1); to a comment gg has not read it is refused.
+	if _, err := svc.NoteReply(ctx, "forge:C1", model.Note{Summary: "x"}); !errors.Is(err, ErrUnknownForgeComment) {
 		t.Fatalf("NoteReply = %v", err)
 	}
 	if err := svc.NoteRemove(ctx, "forge:C1"); !errors.Is(err, ErrReadOnlyNote) {
@@ -217,14 +219,14 @@ func TestWireNoteForgeFields(t *testing.T) {
 	if _, err := svc.PRCommentsRefresh(context.Background(), 7); err != nil {
 		t.Fatal(err)
 	}
-	root := ToWireNote(svc.forgeNotesFor(prSet("7"), "a.go")[0])
+	root := ToWireNote(svc.forgeNotesFor(context.Background(), prSet("7"), "a.go")[0])
 	if !root.ReadOnly || !root.Resolved || root.FileLevel || root.Created != "2023-11-14T22:13:20Z" {
 		t.Fatalf("resolved line thread = %+v", root)
 	}
 	if len(root.Replies) != 1 || !root.Replies[0].ReadOnly || root.Replies[0].Resolved {
 		t.Fatalf("reply = %+v", root.Replies)
 	}
-	file := ToWireNote(svc.forgeNotesFor(prSet("7"), "b.txt")[0])
+	file := ToWireNote(svc.forgeNotesFor(context.Background(), prSet("7"), "b.txt")[0])
 	if !file.ReadOnly || !file.FileLevel {
 		t.Fatalf("file-level thread = %+v", file)
 	}

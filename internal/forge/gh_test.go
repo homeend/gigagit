@@ -11,6 +11,8 @@ import (
 	"github.com/homeend/gigagit/internal/gitexec"
 )
 
+// The Provider (read) methods never mutate: no mutating token, no --input
+// (the Writer's path, gh_write.go).
 func TestGHArgvIsReadOnly(t *testing.T) {
 	t.Parallel()
 	f := gitexec.NewFakeRunner()
@@ -59,6 +61,11 @@ func TestGHArgvIsReadOnly(t *testing.T) {
 	}
 	if !slices.Contains(seen[3], "number=7") || !slices.Contains(seen[3], "owner={owner}") {
 		t.Errorf("threads argv = %v", seen[3])
+	}
+	for _, argv := range seen {
+		if slices.Contains(argv, "--input") {
+			t.Errorf("read argv %v uses --input (the write path)", argv)
+		}
 	}
 	if g.HeadRefspec(7) != "refs/pull/7/head" {
 		t.Errorf("refspec = %q", g.HeadRefspec(7))

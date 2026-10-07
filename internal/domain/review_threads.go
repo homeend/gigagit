@@ -131,22 +131,49 @@ func (r Review) RemarkThreads() (byRemark []RemarkThread, outdated []OutdatedThr
 	return byRemark, outdated
 }
 
-// Tally is the review's remark count and how many of them are resolved.
+// Tally is the review's remark count and how many of them are resolved; a
+// remark moved to a forge is no longer the review's.
 func (r Review) Tally() (remarks, resolved int) {
 	th, _ := r.RemarkThreads()
-	for _, t := range th {
+	fps := r.remarkFPs()
+	for i, t := range th {
+		if i < len(fps) && r.remarkMoved(fps[i]) {
+			continue
+		}
+		remarks++
 		if t.Resolution != nil {
 			resolved++
 		}
 	}
-	return len(th), resolved
+	return remarks, resolved
+}
+
+// remarkMoved reports a remark the forge now owns (hidden locally).
+func (r Review) remarkMoved(fp string) bool {
+	for _, x := range r.RemarkSends {
+		if x.RemarkFP == fp && x.Moved {
+			return true
+		}
+	}
+	return false
+}
+
+// remarkSend is the send entry of an unmoved remark fp (its sync state).
+func (r Review) remarkSend(fp string) *model.NoteSend {
+	for _, x := range r.RemarkSends {
+		if x.RemarkFP == fp && !x.Moved {
+			s := x.Send
+			return &s
+		}
+	}
+	return nil
 }
 
 // docTally counts a review document's remarks and how many of rs resolve
 // one of them (by fingerprint, as RemarkThreads joins). No git: NoteCounts
 // calls it for every review.
-func docTally(text string, rs []model.ThreadResolution) (remarks, resolved int) {
-	r := Review{Text: text, Resolutions: rs}
+func docTally(text string, rs []model.ThreadResolution, sends []model.RemarkSend) (remarks, resolved int) {
+	r := Review{Text: text, Resolutions: rs, RemarkSends: sends}
 	if doc, err := notebatch.ParseReview([]byte(text)); err == nil {
 		r.Doc = &doc
 	}

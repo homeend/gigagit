@@ -62,6 +62,9 @@ type Entry struct {
 	ReadAt      time.Time            `json:"read_at"`
 	OpenedAt    time.Time            `json:"opened_at"`
 	Derived     []Derived            `json:"derived,omitempty"`
+	// Groups maps a forge review gg sent to the local group it came from
+	// ("mine", "review:<id>"): the review keeps its group's colour.
+	Groups map[string]string `json:"groups,omitempty"`
 }
 
 // List is the cached open-PR listing.

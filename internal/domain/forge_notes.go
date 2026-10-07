@@ -6,15 +6,17 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/prcache"
 )
 
-// ErrReadOnlyNote is returned by every note mutation handed the id of a note
-// built at read time: a forge comment (gg reads the forge and never writes to
-// it) or a review document's note (the review is the one stored note).
+// ErrReadOnlyNote is returned by every note mutation but a REPLY handed the id
+// of a note built at read time: a forge comment (edited and deleted only on
+// the forge; a reply to it is a local draft until sent) or a review
+// document's note (the review is the one stored note).
 var ErrReadOnlyNote = errors.New("forge comments and review notes are read-only")
 
 // PRCommentsRefresh re-reads PR n's comments from the forge and caches them
@@ -24,15 +26,22 @@ var ErrReadOnlyNote = errors.New("forge comments and review notes are read-only"
 // the comments differ from what was cached. A failed read keeps the previous
 // cache.
 func (s *Service) PRCommentsRefresh(ctx context.Context, n int) (changed bool, err error) {
+	_, changed, err = s.refreshComments(ctx, n)
+	return changed, err
+}
+
+// refreshComments is PRCommentsRefresh that also hands back the comments it
+// read (PRRevalidate's settle pass needs them).
+func (s *Service) refreshComments(ctx context.Context, n int) ([]model.ForgeComment, bool, error) {
 	p, err := s.provider(ctx)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	raw, truncated, err := p.Comments(ctx, n) // provider call: never under forgeMu
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
-	return s.storeComments(ctx, n, raw, truncated), nil
+	return raw, s.storeComments(ctx, n, raw, truncated), nil
 }
 
 // storeComments caches PR n's comments in memory and on disk and reports
@@ -130,7 +139,7 @@ func (s *Service) forgeInline(set PreviewNoteSet) []model.ForgeComment {
 // thread order. They are ACTIVE by construction — the forge already vouched
 // for the position — so they never pass through resolveNotes (which, on a
 // preview, has no old side and would drop every LEFT-side comment as stale).
-func (s *Service) forgeNotesFor(set PreviewNoteSet, path string) []ResolvedNote {
+func (s *Service) forgeNotesFor(ctx context.Context, set PreviewNoteSet, path string) []ResolvedNote {
 	inline := s.forgeInline(set)
 	if len(inline) == 0 {
 		return nil
@@ -156,6 +165,34 @@ func (s *Service) forgeNotesFor(set PreviewNoteSet, path string) []ResolvedNote 
 		rootOf[c.ID] = len(roots)
 		roots = append(roots, rn)
 	}
+	// A review gg sent keeps the local group it came from (its colour).
+	if n, ok := git.ParsePRRef(set.Source); ok {
+		if groups := s.prGroups(ctx, n); len(groups) > 0 {
+			regroup := func(r *ResolvedNote) {
+				if rid := strings.TrimPrefix(r.Group, "github:"); rid != r.Group {
+					if g, ok := groups[rid]; ok {
+						r.Group = g
+					}
+				}
+			}
+			for i := range roots {
+				regroup(&roots[i])
+				for j := range roots[i].Replies {
+					regroup(&roots[i].Replies[j])
+				}
+			}
+		}
+	}
+	// Local draft replies hang under their thread, after GitHub's replies.
+	if drafts := s.forgeDrafts(ctx); len(drafts) > 0 {
+		for i := range roots {
+			for _, d := range drafts[strings.TrimPrefix(roots[i].Note.ID, model.ForgeNoteIDPrefix)] {
+				sync, serr := syncOf(d)
+				roots[i].Replies = append(roots[i].Replies, ResolvedNote{Note: d, Status: model.NoteActive,
+					Range: roots[i].Range, Sync: sync, SendErr: serr, Group: GroupMine})
+			}
+		}
+	}
 	return roots
 }
 
@@ -165,7 +202,7 @@ func (s *Service) forgeNotesFor(set PreviewNoteSet, path string) []ResolvedNote 
 func forgeNote(c model.ForgeComment, tip string) ResolvedNote {
 	// The body is markdown: the split follows its first BLOCK, so a comment
 	// that opens with a suggestion or a table is not cut through its fence.
-	summary, rest, rawFirst := markdown.Summary(c.Body)
+	summary, rest, rawFirst := markdown.Summary(forge.StripSendMarker(c.Body))
 	side := c.Side
 	if side == "" {
 		side = model.NoteSideNew
@@ -190,14 +227,19 @@ func forgeNote(c model.ForgeComment, tip string) ResolvedNote {
 	if c.Resolved {
 		n.Tags = []string{model.NoteTagResolved}
 	}
-	return ResolvedNote{Note: n, Status: model.NoteActive, Range: rng, SummarySrc: rawFirst}
+	group := "github"
+	if c.ReviewID != "" {
+		group += ":" + c.ReviewID
+	}
+	return ResolvedNote{Note: n, Status: model.NoteActive, Range: rng, SummarySrc: rawFirst,
+		Sync: model.SyncForge, Group: group}
 }
 
 // forgeNoteCounts counts the PR's cached threads per path (roots only — a
 // badge counts threads).
-func (s *Service) forgeNoteCounts(set PreviewNoteSet) (map[string]int, int) {
+func (s *Service) forgeNoteCounts(ctx context.Context, set PreviewNoteSet) (map[string]int, int) {
 	byPath, total := map[string]int{}, 0
-	for _, r := range s.forgeNotesFor(set, "") {
+	for _, r := range s.forgeNotesFor(ctx, set, "") {
 		byPath[r.Note.Address.Path]++
 		total++
 	}

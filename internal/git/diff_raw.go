@@ -38,6 +38,7 @@ func (r *Repo) DiffPatch(ctx context.Context, spec model.DiffSpec) (string, erro
 		Config("diff.noprefix=false").
 		Config("diff.mnemonicPrefix=false").
 		Arg("--no-color").
+		ArgIf(spec.Unified > 0, "-U"+strconv.Itoa(spec.Unified)).
 		ArgIf(spec.Cached, "--cached").
 		ArgIf(spec.Rev != "", spec.Rev)
 	if len(spec.Paths) > 0 {

@@ -55,7 +55,8 @@ func (s *Service) CommitStat(ctx context.Context, hash string) ([]model.DiffStat
 
 // DiffPatch returns the full patch text for spec.
 func (s *Service) DiffPatch(ctx context.Context, spec model.DiffSpec) (string, error) {
-	key := "diffpatch:" + strconv.FormatBool(spec.Cached) + ":" + spec.Rev + ":" + strings.Join(spec.Paths, "\x00")
+	key := "diffpatch:" + strconv.FormatBool(spec.Cached) + ":" + spec.Rev + ":" + strings.Join(spec.Paths, "\x00") +
+		":U" + strconv.Itoa(spec.Unified)
 	return query(ctx, s, key, func(ctx context.Context) (string, error) {
 		return s.repo.DiffPatch(ctx, spec)
 	})

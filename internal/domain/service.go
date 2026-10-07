@@ -69,6 +69,12 @@ type Service struct {
 	// whole map through invalidateNoteCounts (ruling 7) — counts read the
 	// notes store, which the summary cache knows nothing about.
 	previewCounts map[string]previewCountEntry
+	// sendIdx memoises, per notes generation, which PRs have stamped items
+	// and which local ids exist (settleSends' cheap no-op test).
+	// carriedCache holds a PR set's carried notes per tip:base:notesGen.
+	carriedCache map[string]map[string][]ResolvedNote
+	sendIdx      *sendIndexT
+	sendIdxGen   uint64
 	// notesGen rises on every count invalidation. NoteCounts computes OUTSIDE
 	// the lock, so it stores its result only when the generation it started
 	// from is still current — a mutation landing mid-compute would otherwise
@@ -119,6 +125,9 @@ type Service struct {
 	forgePRCache map[int]forgePREntry
 	forgeBase    *forgeBaseRepo
 	forgeNow     func() time.Time
+	// forgeGroups is, per PR, forge review id → the local group it was sent
+	// from (the colour a sent group keeps).
+	forgeGroups map[int]map[string]string
 	// prStore is the on-disk PR cache (prcachestore.go); resolved on first
 	// use, nil when no state dir resolves. prMaxAge / prPrefetch are
 	// [forge] cache_hours / prefetch (SetPRCachePolicy; unset = 8h / 5).

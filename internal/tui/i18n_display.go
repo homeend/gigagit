@@ -210,6 +210,16 @@ func optionDisplayName(value string) string {
 		return i18n.T("Yes")
 	case "abort":
 		return i18n.T("abort")
+	case "comment":
+		return i18n.T("comment")
+	case "approve":
+		return i18n.T("approve")
+	case "request-changes":
+		return i18n.T("request-changes")
+	case "send":
+		return i18n.T("send")
+	case "submit-with-pending":
+		return i18n.T("submit-with-pending")
 	case "add":
 		return i18n.T("add")
 	case "commit":

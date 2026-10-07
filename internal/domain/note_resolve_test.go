@@ -130,11 +130,11 @@ func TestForgeResolvedThreadCarriesAResolution(t *testing.T) {
 	if _, err := svc.PRCommentsRefresh(ctx, 7); err != nil {
 		t.Fatal(err)
 	}
-	got := svc.withResolutions(ctx, svc.forgeNotesFor(prSet("7"), "a.go"))
+	got := svc.withResolutions(ctx, svc.forgeNotesFor(context.Background(), prSet("7"), "a.go"))
 	if got[0].Note.ID != "forge:C1" || got[0].Resolution == nil {
 		t.Fatalf("resolved forge thread = %+v", got[0])
 	}
-	if w := ToWireNote(got[0]); !w.Resolved || w.Replyable {
+	if w := ToWireNote(got[0]); !w.Resolved || !w.Replyable { // a GitHub thread takes draft replies
 		t.Fatalf("wire = %+v", w)
 	}
 }

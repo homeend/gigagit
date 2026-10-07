@@ -485,11 +485,11 @@ everything it shows: right-click anywhere in it for *copy short commit id* /
 *copy commit id* / *copy commit title* / *copy date* / *copy author* — or, if
 text in the header is selected, a plain *copy* of the selection.
 
-### Pull requests (read-only)
+### Pull requests
 
 With the GitHub CLI installed and logged in (`gh auth login`), gg reads the
-repository's pull requests — and only reads: nothing is ever posted, edited or
-submitted.
+repository's pull requests, and sends your review notes to them when you ask
+(see *Sending to GitHub* below). Nothing reaches GitHub without a confirm.
 
 ```bash
 gg pr list [--json]           # open PRs, newest-updated first; known closed/merged ones stay, marked
@@ -502,6 +502,27 @@ gg pr fetch 123               # PR head (forks too) → private ref refs/gg/pr/1
 gg diff main...refs/gg/pr/123 # read the change
 gg pr forget 123              # drop the ref (and a closed PR's row)
 ```
+
+#### Sending to GitHub
+
+```bash
+gg pr notes 123 [--json]                  # what the PR's view holds: local notes, carried ones, GitHub threads
+gg pr send 123 --note <id> [--note <id>]  # one comment per note (a quote of the line when it is outside the diff)
+gg pr send 123 --mine --event approve     # every local note as ONE review, with a verdict
+gg pr send 123 --review <id>              # a stored AI review: its summary + its remarks
+gg pr send 123 --verdict --event approve  # a verdict alone
+gg pr reply 123 <thread> "text" [--send]  # a draft reply under a GitHub thread (--send posts it)
+gg pr resolve|unresolve 123 <thread>      # immediate
+gg pr send 123 --finish | --discard       # an interrupted send left a pending review
+gg pr pending [approve|reject|wait|cancel <id>]   # sends an agent queued for your approval
+```
+
+Every send shows one confirm (pass `--yes` to answer it): the target, every
+comment that will be posted and every note that is skipped, with why. A
+review is all or nothing. Once a note is on GitHub, gg deletes the local
+copy — GitHub owns it from then on. An AI agent running inside gg can only
+*queue* a send; you approve it. AI-written comments end with
+`— <agent> via gg`.
 
 The plain list holds the open pull requests (plus the ones gg already knows).
 A closed or merged PR you never fetched is found by **searching**: in the TUI

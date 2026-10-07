@@ -78,7 +78,9 @@ func TestReplyToARemarkIsStoredWithItsReview(t *testing.T) {
 	if _, err := svc.NoteReply(ctx, model.ReviewNoteIDPrefix+"deadbeef:0", model.Note{Summary: "x"}); !errors.Is(err, ErrReviewNotFound) {
 		t.Fatalf("gone review: %v", err)
 	}
-	if _, err := svc.NoteReply(ctx, "forge:12", model.Note{Summary: "x"}); !errors.Is(err, ErrReadOnlyNote) {
+	// A forge parent is a GitHub thread now (a local draft reply): one gg has
+	// not read is refused.
+	if _, err := svc.NoteReply(ctx, "forge:12", model.Note{Summary: "x"}); !errors.Is(err, ErrUnknownForgeComment) {
 		t.Fatalf("forge: %v", err)
 	}
 	// A reply to B's reply stays flat under the remark.

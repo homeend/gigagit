@@ -5737,3 +5737,79 @@ Spec `docs/superpowers/specs/2026-10-07-cross-review-design.md`, plan
   `Checkout` (`<repo>` too), the review is stored there.
 - `ToolAgentID` (was `agentIDFor`) maps a command to a built-in agent by its
   program's base name.
+
+### Sending to GitHub (plan 2 of GitHub write-back, spec `docs/superpowers/specs/2026-10-07-github-write-design.md` §1, §3)
+
+**Shape.** `forge.Writer` (optional beside the read-only `Provider`; `GH`
+implements both) posts GraphQL mutations through `gh api graphql --input
+<temp file>` (`{"query","variables"}`; gg's runner has no stdin). Every
+thread is created by `addPullRequestReviewThread(pullRequestReviewId)` —
+line threads too — because only its payload returns `thread{id}`
+(`addPullRequestReview`'s does not; verified by introspection). Replies join
+a pending review through `addPullRequestReviewThreadReply(pullRequestReviewId)`.
+`engine.SendToForge` holds the confirm (`forge.send`: `comment` / `approve` /
+`request-changes` / `abort` for a review with a verdict, `send` / `abort` for
+single notes and replies, `submit-with-pending` / `abort` when the viewer has
+a pending review, `discard` / `abort` for `--discard`) and the write order:
+start → stamp every item → AddThread (+ its replies) per item → submit (a
+blank-body refusal retries once with "N comments") → `Ledger.Settle` →
+resolve. Any failure before submit deletes the pending review — except a
+JOINED one (`submit-with-pending`), which gg never deletes.
+
+**The plan is built OUTSIDE the gate** (`domain.PRSendOp` → `planSend`):
+every domain read reserves the repo gate, which is not re-entrant — a nested
+Read behind a queued writer deadlocks. So the op holds `Plan` as a value and
+its only domain call, `Settle`, must be gate-free (`TestSettleNeverTakesTheGate`
+holds a Read with a queued writer). `settleReview` therefore parses the
+review document itself (`reviewDocOf`), never `reviewOf` (branch-tip lookups
+are queries).
+
+**Anchoring.** Hunks come from `DiffSpec{Rev: base..tip, Unified: 3}` —
+GitHub's context, whatever `diff.context` says. A stored note uses its
+RESOLVED range at the tip; a remark's text is re-found by hash in the head
+(new side) or the merge base (old side). Inside one hunk → line thread;
+changed file outside every hunk → file-level thread whose body opens with
+`> Line N:` and the lines in a fence; untouched file → skipped "not in this
+PR"; stale → "its lines changed".
+
+**Stamps and the settle pass.** `model.Note.Send` (`NoteSend{PR, Review,
+Thread, Comment, URL, At, Err}`) and, on a review note, `RemarkSends`
+(`{RemarkFP, Send, Moved}`) — keyed by remark fingerprint so `putReview`
+(which REBUILDS the note on a re-save) must carry them over. Every
+`PRRevalidate` runs `settleSends(pr, comments, readStart)`: sent (comment id,
+marker `<!-- gg:<key> -->`, or — for a review item only — the thread gg
+created, in a submitted review) → delete / `Moved`; stamp's review is the
+viewer's pending one → keep (`PRInterrupted`, `--finish`/`--discard`);
+otherwise → clear. A stamp newer than `readStart` is never judged (another
+process may be mid-send). A standalone reply is never judged sent by its
+thread (the thread existed before it). A whole review is deleted only when
+every remark moved (R4). The pass is skipped cheaply via `sendIndex` (one
+store read per notes generation). Sent forge reviews map back to their local
+group (`prcache.Entry.Groups`, `Service.forgeGroups`) so a group keeps its
+colour.
+
+**Store rules.** A draft reply to a GitHub thread is a stored note with
+`ParentID = "forge:<root comment id>"`, addressed at the PR head;
+`dropOrphanReplies` and `capOldestFirst` treat it as its own thread
+(`Note.IsForgeReply`). `notes.Store.Edit(id, fn)` is the atomic per-record
+edit stamps use. `NoteReply` accepts a forge parent; edit/remove of a
+`forge:` id stay `ErrReadOnlyNote`.
+
+**Carried notes** (§1.4): `carriedNotes(set)` — only for a PR set — finds
+stored roots on other commits / working trees whose path the PR changes and
+whose `ContextHash` is found at the head; memory-cached per tip:base:notesGen
+(never on disk — R3); `Origin` = short sha or "working tree". Badges
+(`PreviewNoteCounts`) do not count them (plan 3 decides).
+
+**Pending sends** (§3.7): `stateBaseDir("pending-sends")/<repoKey>.toml`,
+lock `<file>.lock` (+ a 5 s ErrHeld retry); expiry on every
+read-modify-write (pending > 24 h → expired; finished > 24 h → dropped).
+GOTCHA: go-toml/v2 drops a SET `time.Time` under `omitempty` — `Done` has no
+toml omitempty. CLI: inside a session (`GG_INBOX`) every write verb queues
+and long-polls (exit 0 sent, 1 rejected/failed/cancelled/expired, 3 still
+pending); `approve`/`reject` are refused there.
+
+**CLI confirm.** The send confirm is interactive only when the reader handed
+to `cli.Run` IS `os.Stdin` and a terminal; `--yes` answers it
+(`defaultAnswer`: the event for a verdict review, `discard`, else `send`) but
+never `submit-with-pending`.

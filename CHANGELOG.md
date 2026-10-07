@@ -28,6 +28,43 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the review tools and whether each takes a model.
 - Skills: using-gg v145 and reviewing-with-gg v15.
 
+## Sending review notes to GitHub (CLI)
+
+### Added
+
+- **Send your local notes to a GitHub pull request.** `gg pr send <n>
+  --note <id>` posts one note as a comment on its line (or, when the line is
+  outside the PR's diff, as a comment on the whole file that quotes the
+  line); `--mine` sends every local note the PR shows as one review;
+  `--review <id>` sends a stored AI review — its summary as the review text,
+  its remarks as comments; `--verdict` sends just a verdict. One confirm
+  lists exactly what will be posted and what is skipped (a file the PR does
+  not change, lines that changed since). A review is all or nothing: if
+  anything fails, nothing appears on GitHub and the notes stay local, marked
+  with the error.
+- **A sent note leaves gg.** Once GitHub has it, the local copy is deleted —
+  GitHub is its only home from then on. A thread moves whole: its local
+  replies and its resolved mark go with it. A remark sent out of an AI
+  review is hidden in that review, also after the review is saved again.
+- **Replies and resolve.** `gg pr reply <n> <thread> <text>` writes a local
+  draft under a GitHub thread (`--send` posts it); `gg pr resolve|unresolve
+  <n> <thread>` acts at once. `gg pr comments` now prints each thread's id.
+- **`gg pr notes <n>`** lists everything the PR's view holds: local notes on
+  its commits, notes from elsewhere whose lines the PR contains verbatim
+  (shown `(from <origin>)`), GitHub threads and draft replies.
+- **Agents never post on their own.** Inside a gg session the write verbs
+  queue the send; the user approves it with `gg pr pending approve <id>`
+  (or rejects it) and the agent's command returns the outcome.
+  `gg pr pending` lists the queue; entries expire after 24 hours.
+- **`gg note list` shows a note's sync state** — `[sending]` or
+  `[failed: <error>]` — and `--json` carries `sync`, `send_error`, `group`
+  and `origin`.
+- **Interrupted sends recover.** If gg stops mid-send, the next refresh
+  settles it: what GitHub has is deleted locally, what never arrived is
+  local again, and a review left pending on GitHub is finished with
+  `gg pr send <n> --finish` or dropped with `--discard`.
+- Skills: using-gg v146.
+
 ## Pull requests open from a cache
 
 ### Changed

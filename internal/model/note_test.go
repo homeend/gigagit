@@ -138,3 +138,23 @@ func TestStoredRootIDMapsARemarkToItsReview(t *testing.T) {
 		}
 	}
 }
+func TestNoteSendState(t *testing.T) {
+	t.Parallel()
+	var none *NoteSend
+	if none.State() != SyncLocal {
+		t.Errorf("nil send = %q", none.State())
+	}
+	if s := (&NoteSend{PR: 7, Review: "R"}); s.State() != SyncSending {
+		t.Errorf("stamped = %q", s.State())
+	}
+	if s := (&NoteSend{PR: 7, Err: "403"}); s.State() != SyncFailed {
+		t.Errorf("failed = %q", s.State())
+	}
+	if !(Note{ParentID: ForgeNoteIDPrefix + "PRRC_1"}).IsForgeReply() || (Note{ParentID: "n1"}).IsForgeReply() {
+		t.Error("IsForgeReply")
+	}
+	n := Note{RemarkSends: []RemarkSend{{RemarkFP: "fp1", Moved: true}}}
+	if rs, ok := n.RemarkSend("fp1"); !ok || !rs.Moved {
+		t.Errorf("RemarkSend = %+v, %v", rs, ok)
+	}
+}
