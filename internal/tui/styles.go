@@ -54,9 +54,11 @@ type styles struct {
 	diffGutter     lipgloss.Style
 	diffFold       lipgloss.Style
 	diffEmph       lipgloss.Style
-	searchCurBg    string // theme role search_current_bg; "" = flip (see currentHitStyle)
-	selectionBg    string // theme role selection_bg; "" = flip (see selectionStyle)
-	blameRecentBg  string // theme role blame_recent_bg; "" = bold (see blameRecentStyle)
+	searchCurBg    string         // theme role search_current_bg; "" = flip (see currentHitStyle)
+	selectionBg    string         // theme role selection_bg; "" = flip (see selectionStyle)
+	blameRecentBg  string         // theme role blame_recent_bg; "" = bold (see blameRecentStyle)
+	anchorBand     lipgloss.Style // theme role anchor_bg: an overview's other anchors in a file; zero = none
+	anchorBandCur  lipgloss.Style // theme role anchor_current_bg: the anchor the reader is on; zero = none
 	diffCursorRow  lipgloss.Style
 	diffCursorNo   lipgloss.Style
 	diffAddCursor  lipgloss.Style
@@ -161,6 +163,13 @@ func buildStyles(th theme.Theme) *styles {
 	// the Terminal theme flips).
 	s.selectionBg = th.Selection
 	s.blameRecentBg = th.BlameRecentBg
+	s.anchorBand, s.anchorBandCur = ns(), ns()
+	if th.AnchorBg != "" {
+		s.anchorBand = ns().Background(lipgloss.Color(th.AnchorBg))
+	}
+	if th.AnchorCurrentBg != "" {
+		s.anchorBandCur = ns().Background(lipgloss.Color(th.AnchorCurrentBg))
+	}
 	s.diffCursorRow = ns().Background(pick(th.CursorRowBg, legacy.CursorRowBg))
 	s.diffCursorNo = ns().Bold(true).Foreground(bright)
 	s.diffAddCursor = ns().Background(pick(th.DiffAddCursorBg, legacy.DiffAddCursorBg))

@@ -53,6 +53,11 @@ type Theme struct {
 	// which survives syntax colours and reads in any terminal.
 	BlameRecentBg string
 
+	// AnchorCurrentBg / AnchorBg are the backgrounds of an overview's
+	// anchors in a file it opened: the anchor the reader is on, and the
+	// others. "" (the Terminal theme) means none — the gutter marks them.
+	AnchorCurrentBg, AnchorBg string
+
 	// Signals.
 	NoticeHot, NoticeDim, ReviewHot, ReviewDim  string
 	NoteUser, NoteAgent, NoteStale, PickerLabel string
@@ -85,6 +90,7 @@ func (t Theme) roles() []string {
 		t.CursorRowBg, t.FieldBg, t.FieldCursorFg, t.FieldCursorBg,
 		t.MessageBlockBg, t.SaveBannerFg, t.SaveBannerBg,
 		t.SearchCurrent, t.Selection, t.BlameRecentBg,
+		t.AnchorCurrentBg, t.AnchorBg,
 		t.NoticeHot, t.NoticeDim, t.ReviewHot, t.ReviewDim,
 		t.NoteUser, t.NoteAgent, t.NoteStale, t.PickerLabel,
 		t.PickerLeft, t.PickerRight,
@@ -108,6 +114,7 @@ var Dark = Theme{
 	CursorRowBg: "237", FieldBg: "236", FieldCursorFg: "236", FieldCursorBg: "250",
 	MessageBlockBg: "236", SaveBannerFg: "#F2F2F2", SaveBannerBg: "22", SearchCurrent: "#6B5F11",
 	Selection: "#264F78", BlameRecentBg: "#1F3A26",
+	AnchorCurrentBg: "#4A3F12", AnchorBg: "#2A2614",
 	NoticeHot: "196", NoticeDim: "124", ReviewHot: "39", ReviewDim: "31",
 	NoteUser: "75", NoteAgent: "141", NoteStale: "240", PickerLabel: "245",
 	PickerLeft: "74", PickerRight: "179",
@@ -132,6 +139,7 @@ var Light = Theme{
 	CursorRowBg: "#DADAD5", FieldBg: "#DADAD5", FieldCursorFg: "#E9E9E5", FieldCursorBg: "#33393F",
 	MessageBlockBg: "#DFDFDA", SaveBannerFg: "#E9E9E5", SaveBannerBg: "#3E8E41", SearchCurrent: "#FFE680",
 	Selection: "#ADD6FF", BlameRecentBg: "#DFF5E3",
+	AnchorCurrentBg: "#F3E2A6", AnchorBg: "#F7F0D6",
 	NoticeHot: "#C0392B", NoticeDim: "#A0564C", ReviewHot: "#2F6FB8", ReviewDim: "#2A8C8C",
 	NoteUser: "#2F6FB8", NoteAgent: "#6B4FBB", NoteStale: "#8A8F8A", PickerLabel: "#5F6570",
 	PickerLeft: "#2F6FB8", PickerRight: "#A0682A",
