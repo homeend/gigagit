@@ -249,7 +249,10 @@ function armPreview(body) {
   // list; loadPreviewCounts fills them in again a moment later. Re-arming the
   // same pair (a tip that moved) keeps the numbers standing meanwhile, so the
   // badges do not blink off on every refresh.
-  if (!samePair) state.previewCounts = null;
+  if (!samePair) {
+    state.previewCounts = null;
+    state.previewReviews = [];
+  }
   // /api/preview/notes resolves branch NAMES; a PR's would 404 (a fork) or,
   // worse, read a same-named local pair's notes — a PR asks by its number.
   if (state.previewOpen.pr) loadPRCounts(state.previewOpen.pr);
@@ -288,6 +291,7 @@ async function loadPreviewCounts(source, target) {
   const po = state.previewOpen;
   if (!po || po.source !== source || po.target !== target) return; // superseded
   state.previewCounts = d.counts || {};
+  state.previewReviews = d.reviews || [];
   renderFiles();
 }
 
@@ -550,6 +554,9 @@ window.__ggSymmetricPreview = (a, b) => symmetricPreviewFlow(a, b);
 // The sidebar header's + control starts the flow. sidebar.js cannot import
 // this module (the cycle above), so the handle goes through the window.
 window.__ggAddPreview = addPreviewFlow;
+// reviews.js returns to a preview (esc from a review opened in its Reviews
+// block) through this: importing previews.js there would close a cycle.
+window.__ggOpenPreviewForPair = openPreviewForPair;
 
 
 async function removePreview(e) {

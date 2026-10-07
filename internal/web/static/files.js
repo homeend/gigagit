@@ -635,6 +635,7 @@ function openLinkCompare(body) {
   // …and the previous screen's per-file totals must not paint on this one's
   // rows: only armPreview cleared them before a pair could read the same slot.
   state.previewCounts = null;
+  state.previewReviews = [];
   state.compare = {
     a: body.left.desc,
     b: body.right.desc,
@@ -710,6 +711,18 @@ function pairCtx() {
 }
 
 
+// previewBack is where esc from a review opened in the preview's Reviews
+// block returns: the merge preview (re-opened by its names, the record path
+// when saved) or the pair (re-run as a..b). null for any other screen.
+function previewBack(reviewId) {
+  const po = openPreviewCtx();
+  if (po && !po.pr) return { kind: "preview", source: po.source, target: po.target, reviewId };
+  const p = pairCtx();
+  if (p && !p.scope) return { kind: "pair", a: p.a, b: p.b, reviewId };
+  return null;
+}
+
+
 // pairNoteCtx is the `preview` slice a pair's diff context carries: no names
 // (there are none), so every reader of source/target must ask .pair first.
 function pairNoteCtx(p) {
@@ -734,6 +747,7 @@ async function loadPairCounts() {
   const now = pairCtx();
   if (!now || now.a !== p.a || now.b !== p.b || (now.scope || "") !== scope) return; // superseded
   state.previewCounts = d.counts || {};
+  state.previewReviews = d.reviews || [];
   renderFiles();
 }
 
@@ -5029,7 +5043,8 @@ $("files-list").addEventListener("click", (e) => {
   // shows the Overview. Neither is a file (no data-i).
   if (li && li.dataset.review) {
     // The working list's Review row returns to the list; a commit's to it.
-    openReview(li.dataset.review, state.filesMode === "status" ? { kind: "list" } : reviewBackFromCommit(li.dataset.review));
+    // …and a preview's Reviews row returns to the preview.
+    openReview(li.dataset.review, state.filesMode === "status" ? { kind: "list" } : previewBack(li.dataset.review) || reviewBackFromCommit(li.dataset.review));
     return;
   }
   // A commit's Range review row opens the range its notes were written in.
@@ -5089,7 +5104,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
   if (li && li.dataset.review) {
     e.preventDefault();
     const rid = li.dataset.review;
-    reviewMenu(rid, e.clientX, e.clientY, () => openReview(rid, reviewBackFromCommit(rid)));
+    reviewMenu(rid, e.clientX, e.clientY, () => openReview(rid, previewBack(rid) || reviewBackFromCommit(rid)));
     return;
   }
   if (li && li.dataset.scope) {

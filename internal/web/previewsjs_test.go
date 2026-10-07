@@ -157,3 +157,45 @@ func TestPreviewsJSReviewMenuRows(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewReviewsBlockWired(t *testing.T) {
+	t.Parallel()
+	rv := staticSrc(t, "reviews.js")
+	for _, want := range []string{
+		`state.previewReviews`,
+		`back.kind === "preview"`,
+		`window.__ggOpenPreviewForPair`,
+		`back.kind === "pair"`,
+		`runLinkCompare("a=" + encodeURIComponent(back.a) + "&b=" + encodeURIComponent(back.b))`,
+		`d.older ? " · older tip" : ""`,
+	} {
+		if !strings.Contains(rv, want) {
+			t.Errorf("reviews.js lacks %q", want)
+		}
+	}
+	pv := staticSrc(t, "previews.js")
+	for _, want := range []string{`window.__ggOpenPreviewForPair = openPreviewForPair`, `state.previewReviews = d.reviews || []`} {
+		if !strings.Contains(pv, want) {
+			t.Errorf("previews.js lacks %q", want)
+		}
+	}
+	fs := staticSrc(t, "files.js")
+	for _, want := range []string{`state.previewReviews = d.reviews || []`, `previewBack(`} {
+		if !strings.Contains(fs, want) {
+			t.Errorf("files.js lacks %q", want)
+		}
+	}
+	lv := staticSrc(t, "live.js")
+	if !strings.Contains(lv, `await Promise.all([refreshNoteCounts(), fetchPreviews()])`) {
+		t.Error("live.js: a review hint does not re-read the counts and previews first")
+	}
+}
+
+// Review Focus 4: a PR diff and a scoped pair (one review's range) get no block.
+func TestReviewRowsHTMLSkipsPRAndScopedPair(t *testing.T) {
+	t.Parallel()
+	rv := staticSrc(t, "reviews.js")
+	if !strings.Contains(rv, `function previewScopeReviews()`) || !strings.Contains(rv, `po.pr`) || !strings.Contains(rv, `p.scope`) {
+		t.Error("reviews.js: previewScopeReviews must refuse a PR and a scoped pair")
+	}
+}
