@@ -1119,7 +1119,9 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   (`[the parser](internal/x/parse.go:40-60)`, the overview anchor grammar):
   the user reads it as a tour of the worker's worktree.
 - `agent_list` / `gg agent list [--json]` — every session of this gg;
-  `mine` marks the agents you started. `activity` is what the agent is
+  `mine` marks the agents you started. `name` is the user's name for the
+  session when it was started with one (Start agent's optional name;
+  `tool` / `label` stay the command). `activity` is what the agent is
   doing, read off its screen: `working`, `idle` (its turn is over, it waits
   for input), `question` (it waits for a decision — read the choices from
   `agent_screen`); absent when gg cannot tell. `stalled` means it printed

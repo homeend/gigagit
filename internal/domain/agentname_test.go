@@ -51,3 +51,29 @@ func TestSessionTitleReexport(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestNameReachesAgentListAndRegistry(t *testing.T) {
+	useSessions(t)
+	main, svc := newRealRepo(t)
+	s, _, err := svc.StartAgentSession(context.Background(), sleeper(), main, "", 80, 24, nil, "", SpawnRecord{Name: "viewer"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := FullSessionID(s.Info().ID)
+	var found bool
+	for _, e := range AgentList("") {
+		if e.ID == full {
+			found = true
+			if e.Name != "viewer" || e.Tool != "Sleeper" || e.Label != "Sleeper" {
+				t.Fatalf("entry %+v — tool/label stay the command, name is separate", e)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("session not listed")
+	}
+	reg := snapshotRegistry("", "", "")
+	if len(reg.Sessions) != 1 || reg.Sessions[0].Name != "viewer" || reg.Sessions[0].Label != "Sleeper" {
+		t.Fatalf("registry %+v", reg.Sessions)
+	}
+}

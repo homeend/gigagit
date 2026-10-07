@@ -30,6 +30,7 @@ type AgentEntry struct {
 	Parent   string    `json:"parent,omitempty"`
 	Tool     string    `json:"tool"`
 	Label    string    `json:"label"`
+	Name     string    `json:"name,omitempty"`
 	Worktree string    `json:"worktree"`
 	State    string    `json:"state"`
 	ExitCode int       `json:"exit_code"`
@@ -64,7 +65,7 @@ func AgentList(caller string) []AgentEntry {
 	for _, in := range Sessions().List() {
 		full := FullSessionID(in.ID)
 		rec, _ := AgentRecord(full)
-		e := AgentEntry{ID: full, Parent: rec.Parent, Tool: in.Label, Label: in.Label,
+		e := AgentEntry{ID: full, Parent: rec.Parent, Tool: in.Label, Label: in.Label, Name: in.Name,
 			Worktree: in.Dir, State: sessionStateName(in.State), ExitCode: in.ExitCode,
 			Started: in.Started, Spawned: rec.Spawned, Mine: AgentDescends(full, caller)}
 		if a, ok := SessionActivityOf(in.ID); ok {

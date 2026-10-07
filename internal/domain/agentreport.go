@@ -104,7 +104,7 @@ func AgentReportVerb(caller, text string, final bool) (AgentReport, error) {
 	r.mu.Unlock()
 	r.bc.Signal()
 	if tell {
-		SessionStates().PostNotice(ActivityNotice{ID: info.ID, Kind: "report", Label: info.Label, Dir: info.Dir, Text: ReportFirstLine(text)})
+		SessionStates().PostNotice(ActivityNotice{ID: info.ID, Kind: "report", Label: info.Title(), Dir: info.Dir, Text: ReportFirstLine(text)})
 	} else {
 		SessionStates().Wake() // no notice; the frontends still file its tour and repaint
 	}

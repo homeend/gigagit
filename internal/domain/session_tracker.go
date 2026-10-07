@@ -63,7 +63,7 @@ func (t *sessionTracker) Step(rd agentstate.Reading, info agentsession.Info, las
 		next.Options = nil
 	}
 	note := func(kind string, quiet time.Duration, spinning bool) {
-		notes = append(notes, ActivityNotice{ID: info.ID, Kind: kind, Label: info.Label, Dir: info.Dir, Quiet: quiet, Spinning: spinning})
+		notes = append(notes, ActivityNotice{ID: info.ID, Kind: kind, Label: info.Title(), Dir: info.Dir, Quiet: quiet, Spinning: spinning})
 		changed = true
 	}
 	trusted := now.Sub(info.Started) >= tm.grace

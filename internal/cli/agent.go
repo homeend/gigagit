@@ -182,6 +182,9 @@ func printAgentList(stdout io.Writer, agents []domain.AgentEntry) {
 			}
 		}
 		var tail []string
+		if a.Name != "" {
+			tail = append(tail, "name "+a.Name)
+		}
 		if a.Parent != "" {
 			tail = append(tail, "parent "+a.Parent)
 		}
@@ -222,6 +225,9 @@ func agentListOutside(svc *domain.Service, args []string, stdout, stderr io.Writ
 			name := s.Agent
 			if name == "" {
 				name = s.Label
+			}
+			if s.Name != "" {
+				name += " [" + s.Name + "]"
 			}
 			fmt.Fprintf(stdout, "  %s  %s  %s  %s\n", s.ID, s.State, name, s.Dir)
 		}

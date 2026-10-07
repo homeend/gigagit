@@ -362,3 +362,23 @@ func TestAgentListNoTrailingSpaces(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentListShowsTheName(t *testing.T) {
+	dir, _ := agentEnvFor(t, nil)
+	tc := config.ToolCommand{Category: "session", Name: "Sh", Mode: "session", Command: "sh -c 'sleep 600'"}
+	s, _, err := domain.Open(dir).StartAgentSession(context.Background(), tc, dir, "", 80, 24, nil, "", domain.SpawnRecord{Name: "viewer"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := runAgentCLI(t, dir, "", "list")
+	full := domain.FullSessionID(s.Info().ID)
+	var line string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, full) {
+			line = l
+		}
+	}
+	if code != 0 || !strings.Contains(line, "name viewer") {
+		t.Fatalf("list = %d, row %q\n%s", code, line, out)
+	}
+}

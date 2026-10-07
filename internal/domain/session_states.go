@@ -55,7 +55,7 @@ type ActivityNotice struct {
 	Seq   uint64
 	ID    SessionID
 	Kind  string        // "question" | "idle" | "stalled" | "report"
-	Label string        // the session's label
+	Label string        // the session's title (label + [name])
 	Dir   string        // its worktree
 	Quiet time.Duration // stalled: how long nothing was printed (or, Spinning, nothing but the spinner moved)
 	// Spinning: the stall is a spinner that kept ticking with no progress

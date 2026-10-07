@@ -55,7 +55,7 @@ func AgentTour(full, kind string) (AgentTourDoc, error) {
 	}
 	info := s.Info()
 	title := func(kind string) string {
-		return tourTitle(kind, info.Label, filepath.Base(info.Dir), info.Started.Local().Format("15:04"))
+		return tourTitle(kind, info.Title(), filepath.Base(info.Dir), info.Started.Local().Format("15:04"))
 	}
 	d := AgentTourDoc{Key: kind + ":" + full, Root: CheckoutKey(info.Dir), Dir: info.Dir}
 	if kind == "brief" {
