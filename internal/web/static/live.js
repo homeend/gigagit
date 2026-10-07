@@ -448,6 +448,8 @@ async function steerNavigateReview(s) {
   // sub-row is there on arrival (the TUI's review-hint refresh).
   await Promise.all([refreshNoteCounts(), fetchPreviews()]);
   await openReview(s.hint_id, { kind: "list" });
+  // A review link with a path (and line): land on that file of the review.
+  if (s.file) await openNamedFile(state.files, s, "review " + s.hint_id);
 }
 
 // steerNavigateContent lands a content link: the file ON DISK in the viewer,

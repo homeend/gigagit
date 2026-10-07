@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -287,7 +288,31 @@ func (s *Server) handleReviewLink(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	link, err := svc.ReviewLink(readCtx(r), rv.ID)
+	// ?path= names a file of the review, ?n= one of its remarks: the link
+	// then reopens the review there.
+	q := r.URL.Query()
+	path, n := q.Get("path"), q.Get("n")
+	var link string
+	var err error
+	switch {
+	case path != "" && n != "":
+		writeErr(w, http.StatusBadRequest, errors.New("pass path or n, not both"))
+		return
+	case path != "":
+		link, err = svc.ReviewFileLink(readCtx(r), rv.ID, path)
+	case n != "":
+		k, aerr := strconv.Atoi(n)
+		if aerr != nil || k < 0 {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("bad remark number %q", n))
+			return
+		}
+		if link, err = svc.ReviewRemarkLink(readCtx(r), model.ReviewNoteIDPrefix+rv.ID+":"+strconv.Itoa(k)); err != nil {
+			writeErr(w, http.StatusNotFound, err)
+			return
+		}
+	default:
+		link, err = svc.ReviewLink(readCtx(r), rv.ID)
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

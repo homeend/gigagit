@@ -50,3 +50,43 @@ func TestNoteRowLinkEndpoint(t *testing.T) {
 		}
 	}
 }
+
+// ?path= names a file of the review, ?n= one remark; both is a usage error.
+func TestReviewLinkEndpointFileAndRemark(t *testing.T) {
+	t.Parallel()
+	ts, _, sha, id := reviewServer(t, webReviewDoc)
+	var got struct{ Link string }
+	if code := getJSON(t, ts, "/api/review/"+id+"/link?path=f.txt", &got); code != 200 || !strings.HasSuffix(got.Link, "/f.txt@"+sha+"?review="+id) {
+		t.Fatalf("file = %d %q", code, got.Link)
+	}
+	if code := getJSON(t, ts, "/api/review/"+id+"/link?n=0", &got); code != 200 || !strings.HasSuffix(got.Link, "/f.txt@"+sha+":1?review="+id) {
+		t.Fatalf("remark = %d %q", code, got.Link)
+	}
+	if code := getJSON(t, ts, "/api/review/"+id+"/link?n=99", &got); code != 404 {
+		t.Fatalf("unknown remark = %d, want 404", code)
+	}
+	if code := getJSON(t, ts, "/api/review/"+id+"/link?n=x", &got); code != 400 {
+		t.Fatalf("bad n = %d, want 400", code)
+	}
+	if code := getJSON(t, ts, "/api/review/"+id+"/link?n=0&path=f.txt", &got); code != 400 {
+		t.Fatalf("both = %d, want 400", code)
+	}
+}
+
+var reviewLinkRowsWiring = []struct{ file, want, why string }{
+	{"files.js", "copy review link to this file", "a reviewed file row copies its review link"},
+	{"files.js", `"/link?path="`, "the file link is the server's"},
+	{"files.js", "copy remark link", "a remark copies its review link"},
+	{"files.js", `"/link?n="`, "the remark link is the server's"},
+	{"files.js", "copy remark id", "a remark copies the id gg note reply takes"},
+	{"live.js", "await openNamedFile(state.files, s, \"review \"", "a review link with a file lands on it"},
+}
+
+func TestReviewLinkRowsAreWired(t *testing.T) {
+	t.Parallel()
+	for _, c := range reviewLinkRowsWiring {
+		if !strings.Contains(readStatic(t, c.file), c.want) {
+			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
+		}
+	}
+}

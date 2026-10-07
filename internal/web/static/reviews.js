@@ -761,7 +761,7 @@ registerHelp({
 });
 
 
-export { previewReviewText, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { copyServerLink, previewReviewText, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;
