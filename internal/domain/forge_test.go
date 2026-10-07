@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -35,6 +37,8 @@ type fakeForge struct {
 	searchMore   bool
 	searchErr    error
 	searchCalls  []forge.PRQuery
+	writes       []string             // the write log (writeLog)
+	pending      []model.ForgeComment // a pending review's comments, hidden until submitted
 }
 
 func (f *fakeForge) Name() string { return "fake" }
@@ -91,6 +95,97 @@ func (f *fakeForge) BaseRepo(context.Context) (string, string, error) {
 	return f.slug, f.url, nil
 }
 func (f *fakeForge) HeadRefspec(int) string { return "refs/pull/x/head" }
+
+// Snapshot answers the one-call revalidation from the same script.
+func (f *fakeForge) Snapshot(ctx context.Context, n int) (forge.Snapshot, error) {
+	pr, err := f.PR(ctx, n)
+	if err != nil {
+		return forge.Snapshot{}, err
+	}
+	cs, tr, err := f.Comments(ctx, n)
+	return forge.Snapshot{PR: pr, Comments: cs, Truncated: tr}, err
+}
+
+// The fake simulates GitHub's write side: a pending review's threads and
+// replies stay hidden until SubmitReview publishes them as comments.
+func (f *fakeForge) logWrite(format string, args ...any) {
+	f.writes = append(f.writes, fmt.Sprintf(format, args...))
+}
+
+func (f *fakeForge) writeLog() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return strings.Join(f.writes, "\n")
+}
+
+func (f *fakeForge) StartReview(_ context.Context, prID, commit string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logWrite("StartReview %s %s", prID, commit)
+	return "PRR_w", nil
+}
+
+func (f *fakeForge) AddThread(_ context.Context, review string, t forge.Thread) (forge.ThreadRef, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logWrite("AddThread %s %s %d", review, t.Path, t.Line)
+	k := len(f.pending) + 1
+	c := model.ForgeComment{ID: fmt.Sprintf("PRRC_w%d", k), Kind: model.ForgeCommentInline, Path: t.Path,
+		Side: t.Side, Line: t.Line, StartLine: t.StartLine, Body: t.Body, ThreadID: fmt.Sprintf("PRRT_w%d", k), ReviewID: review}
+	if t.Line == 0 {
+		c.Kind = model.ForgeCommentFile
+	}
+	f.pending = append(f.pending, c)
+	return forge.ThreadRef{ID: c.ThreadID, CommentID: c.ID}, nil
+}
+
+func (f *fakeForge) Reply(_ context.Context, review, thread, body string) (forge.CommentRef, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logWrite("Reply %s %s", review, thread)
+	c := model.ForgeComment{ID: fmt.Sprintf("PRRC_r%d", len(f.pending)+len(f.comments)+1), Kind: model.ForgeCommentInline,
+		Body: body, ThreadID: thread, ReviewID: review}
+	if review == "" {
+		f.comments = append(f.comments, c)
+	} else {
+		f.pending = append(f.pending, c)
+	}
+	return forge.CommentRef{ID: c.ID}, nil
+}
+
+func (f *fakeForge) SubmitReview(_ context.Context, review string, ev forge.Event, body string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logWrite("SubmitReview %s", ev)
+	f.comments = append(f.comments, f.pending...)
+	f.pending = nil
+	return nil
+}
+
+func (f *fakeForge) DeletePendingReview(_ context.Context, review string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logWrite("DeletePendingReview %s", review)
+	f.pending = nil
+	return nil
+}
+
+func (f *fakeForge) Resolve(_ context.Context, thread string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logWrite("Resolve %s", thread)
+	return nil
+}
+
+func (f *fakeForge) Unresolve(_ context.Context, thread string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.logWrite("Unresolve %s", thread)
+	return nil
+}
+
+// readOnlyForge hides a provider's Writer (and Snapshotter).
+type readOnlyForge struct{ forge.Provider }
 
 func newForgeSvc(t *testing.T, ff *fakeForge) *Service {
 	t.Helper()
