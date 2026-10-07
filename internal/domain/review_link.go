@@ -190,6 +190,12 @@ func (s *Service) ReviewRemarkID(ctx context.Context, remarkID string) (string, 
 	return remarkID, nil
 }
 
+// reviewGone is ErrReviewNotFound worded for an id the user still holds.
+type reviewGone string
+
+func (g reviewGone) Error() string        { return "review " + string(g) + " no longer exists" }
+func (g reviewGone) Is(target error) bool { return target == ErrReviewNotFound }
+
 // reviewRemark finds the remark remarkID names, and its review's id.
 func (s *Service) reviewRemark(ctx context.Context, remarkID string) (ReviewRemark, string, error) {
 	rid, n, ok := model.ParseReviewNoteID(remarkID)
@@ -198,7 +204,7 @@ func (s *Service) reviewRemark(ctx context.Context, remarkID string) (ReviewRema
 	}
 	r, err := s.Review(ctx, rid)
 	if errors.Is(err, ErrReviewNotFound) {
-		return ReviewRemark{}, rid, fmt.Errorf("%w: review %s no longer exists", ErrReviewNotFound, rid)
+		return ReviewRemark{}, rid, reviewGone(rid)
 	}
 	if err != nil {
 		return ReviewRemark{}, rid, err

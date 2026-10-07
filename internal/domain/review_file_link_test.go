@@ -142,7 +142,7 @@ func TestReviewRemarkID(t *testing.T) {
 	if _, err := svc.ReviewRemarkID(ctx, model.ReviewNoteIDPrefix+rng+":7"); err == nil || !strings.Contains(err.Error(), "review "+rng+" has no remark 7") {
 		t.Fatalf("no such remark: %v", err)
 	}
-	if _, err := svc.ReviewRemarkID(ctx, model.ReviewNoteIDPrefix+"deadbeef:0"); !errors.Is(err, ErrReviewNotFound) || !strings.Contains(err.Error(), "review deadbeef no longer exists") {
+	if _, err := svc.ReviewRemarkID(ctx, model.ReviewNoteIDPrefix+"deadbeef:0"); !errors.Is(err, ErrReviewNotFound) || err.Error() != "review deadbeef no longer exists" {
 		t.Fatalf("gone review: %v", err)
 	}
 	if _, err := svc.ReviewRemarkID(ctx, "x"); err == nil {
