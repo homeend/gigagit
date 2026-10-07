@@ -93,10 +93,11 @@ func (l prLedger) Stamp(ctx context.Context, key string, s model.NoteSend) error
 	})
 }
 
-func (l prLedger) Fail(ctx context.Context, keys []string, err error) {
+func (l prLedger) Fail(ctx context.Context, keys []string, review string, err error) {
 	for _, k := range keys {
 		_ = l.editKey(ctx, k, func(cur *model.NoteSend) bool {
-			*cur = model.NoteSend{PR: l.pr, Err: err.Error(), At: l.s.forgeClock()}
+			joined := review != "" && cur.Review == review && cur.Joined
+			*cur = model.NoteSend{PR: l.pr, Review: review, Joined: joined, Err: err.Error(), At: l.s.forgeClock()}
 			return true
 		})
 	}
@@ -400,34 +401,40 @@ func (s *Service) sendIndex(ctx context.Context) sendIndexT {
 }
 
 // PRInterrupted is what an interrupted send left on GitHub: the pending
-// review gg's stamps name (it must be the PR's ViewerPendingReview) and the
-// keys waiting in it; "" when nothing of gg's is pending.
-func (s *Service) PRInterrupted(ctx context.Context, n int) (string, []string) {
+// review gg's stamps name (it must be the PR's ViewerPendingReview), the
+// keys waiting in it, and whether gg JOINED it (then it is the user's own
+// draft: finish only, never discard); "" when nothing of gg's is pending.
+func (s *Service) PRInterrupted(ctx context.Context, n int) (string, []string, bool) {
 	p, _, ok := s.PRDetailsCached(n)
 	if !ok || p.ViewerPendingReview == "" {
-		return "", nil
+		return "", nil, false
 	}
 	st := s.notesStore(ctx)
 	if st == nil {
-		return "", nil
+		return "", nil, false
 	}
 	all, err := st.LoadAll()
 	if err != nil {
-		return "", nil
+		return "", nil, false
 	}
+	// Failed stamps count too: a failure whose delete also failed keeps the
+	// review's id (the review may still hold gg's threads).
 	var keys []string
+	joined := false
 	for _, x := range all {
-		if x.Send != nil && x.Send.PR == n && x.Send.Err == "" && x.Send.Review == p.ViewerPendingReview {
+		if x.Send != nil && x.Send.PR == n && x.Send.Review == p.ViewerPendingReview {
 			keys = append(keys, x.ID)
+			joined = joined || x.Send.Joined
 		}
 		for _, r := range x.RemarkSends {
-			if !r.Moved && r.Send.PR == n && r.Send.Err == "" && r.Send.Review == p.ViewerPendingReview {
+			if !r.Moved && r.Send.PR == n && r.Send.Review == p.ViewerPendingReview {
 				keys = append(keys, RemarkKey(x.ID, r.RemarkFP))
+				joined = joined || r.Send.Joined
 			}
 		}
 	}
 	if len(keys) == 0 {
-		return "", nil
+		return "", nil, false
 	}
-	return p.ViewerPendingReview, keys
+	return p.ViewerPendingReview, keys, joined
 }

@@ -74,8 +74,10 @@ type SendPlan struct {
 // now has. Settle must not take the repo gate (the op holds a reservation).
 type SendLedger interface {
 	Stamp(ctx context.Context, key string, s model.NoteSend) error // ◌: ids known so far
-	Fail(ctx context.Context, keys []string, err error)            // ○!: the error, no ids
-	Settle(ctx context.Context) error                              // re-read the PR, settle every stamp
+	// Fail marks keys failed (○!). review is the pending review that may
+	// still hold them on the forge (a delete that failed too), "" when none.
+	Fail(ctx context.Context, keys []string, review string, err error)
+	Settle(ctx context.Context) error // re-read the PR, settle every stamp
 }
 
 // SendToForge is the one op that writes to a forge (spec 2026-10-07 §3.3):
@@ -197,13 +199,13 @@ func (op SendToForge) review(ctx context.Context, deps OpDeps, p SendPlan) (Resu
 	review := p.Pending
 	if !joined {
 		if review, err = op.Writer.StartReview(ctx, p.PRID, p.Head); err != nil {
-			op.Ledger.Fail(ctx, planKeys(p), err)
+			op.Ledger.Fail(ctx, planKeys(p), "", err)
 			return Result{}, err
 		}
 	}
 	stamp := func(key string, s model.NoteSend) {
 		if key != "" {
-			s.PR, s.Review, s.At = p.PR, review, op.now()
+			s.PR, s.Review, s.At, s.Joined = p.PR, review, op.now(), joined
 			_ = op.Ledger.Stamp(ctx, key, s)
 		}
 	}
@@ -220,10 +222,14 @@ func (op SendToForge) review(ctx context.Context, deps OpDeps, p SendPlan) (Resu
 			// `--finish` (or the browser) can submit what gg added.
 			return Result{}, fmt.Errorf("%w (your pending review on GitHub now holds gg's comments: finish or discard it)", err)
 		}
+		left := "" // the pending review is gone: the items are simply local again
 		if derr := op.Writer.DeletePendingReview(ctx, review); derr != nil {
 			err = errors.Join(err, fmt.Errorf("deleting the pending review: %w", derr))
+			// It may still hold gg's threads: keep its id on the failed
+			// items so --finish / --discard can reach it, never a re-send.
+			left = review
 		}
-		op.Ledger.Fail(ctx, planKeys(p), err)
+		op.Ledger.Fail(ctx, planKeys(p), left, err)
 		return Result{}, err
 	}
 	threads := map[string]string{} // item key → thread id
@@ -333,7 +339,7 @@ func (op SendToForge) actions(ctx context.Context, deps OpDeps, p SendPlan) (Res
 				firstErr = err
 			}
 			if it.Key != "" {
-				op.Ledger.Fail(ctx, []string{it.Key}, err)
+				op.Ledger.Fail(ctx, []string{it.Key}, "", err)
 			}
 		}
 	}
@@ -357,7 +363,7 @@ func (op SendToForge) finish(ctx context.Context, deps OpDeps, p SendPlan) (Resu
 	if choice == "abort" {
 		return Result{}.WithSummary("aborted: sending to %s", p.Target), nil
 	}
-	if err := op.Writer.SubmitReview(ctx, p.Pending, forge.EventComment, p.Body); err != nil {
+	if err := op.submit(ctx, p.Pending, forge.EventComment, p.Body, len(p.Items)); err != nil {
 		return Result{}, err
 	}
 	res := Result{Changed: true}.WithSummary("submitted the pending review on %s", p.Target)

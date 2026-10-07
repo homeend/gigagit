@@ -57,22 +57,24 @@ func (w *fakeWriter) Resolve(_ context.Context, th string) error   { return w.re
 func (w *fakeWriter) Unresolve(_ context.Context, th string) error { return w.rec("Unresolve", th) }
 
 type fakeLedger struct {
-	stamps  map[string]model.NoteSend
-	failed  map[string]string
-	settled int
+	stamps       map[string]model.NoteSend
+	failed       map[string]string
+	failedReview map[string]string // the review id a failure kept ("" = none)
+	settled      int
 }
 
 func newLedger() *fakeLedger {
-	return &fakeLedger{stamps: map[string]model.NoteSend{}, failed: map[string]string{}}
+	return &fakeLedger{stamps: map[string]model.NoteSend{}, failed: map[string]string{}, failedReview: map[string]string{}}
 }
 func (l *fakeLedger) Stamp(_ context.Context, key string, s model.NoteSend) error {
 	l.stamps[key] = s
 	return nil
 }
-func (l *fakeLedger) Fail(_ context.Context, keys []string, err error) {
+func (l *fakeLedger) Fail(_ context.Context, keys []string, review string, err error) {
 	for _, k := range keys {
 		delete(l.stamps, k)
 		l.failed[k] = err.Error()
+		l.failedReview[k] = review
 	}
 }
 func (l *fakeLedger) Settle(context.Context) error { l.settled++; return nil }
@@ -267,5 +269,58 @@ func TestSendWithNothingToSendIsAnError(t *testing.T) {
 	p := SendPlan{Target: "o/r #7", PR: 7, Mode: SendReview, Skipped: []SendSkip{{Label: "x", Reason: "not in this PR"}}}
 	if _, err, asked := runSend(t, p, &fakeWriter{}, newLedger(), OptSend); err == nil || len(asked) != 0 {
 		t.Fatalf("err %v asked %d", err, len(asked))
+	}
+}
+
+// Final review I1: a pending review gg could not delete may still hold its
+// threads — the failure keeps its id so --finish/--discard can reach it.
+func TestSendFailureWhenTheDeleteFailsKeepsTheReview(t *testing.T) {
+	t.Parallel()
+	w := &fakeWriter{fail: map[string]error{"AddThread": errors.New("network down"), "DeletePendingReview": errors.New("network down")}}
+	l := newLedger()
+	if _, err, _ := runSend(t, plan2(), w, l, OptComment); err == nil {
+		t.Fatal("want the error")
+	}
+	if l.failedReview["n1"] != "R1" || l.failed["n1"] == "" {
+		t.Fatalf("failed %v review %v", l.failed, l.failedReview)
+	}
+}
+
+func TestSendFailureAfterADeleteKeepsNoReview(t *testing.T) {
+	t.Parallel()
+	w := &fakeWriter{fail: map[string]error{"SubmitReview": errors.New("HTTP 502")}}
+	l := newLedger()
+	_, _, _ = runSend(t, plan2(), w, l, OptComment)
+	if l.failedReview["n1"] != "" {
+		t.Fatalf("the pending review was deleted: no id may stay (%v)", l.failedReview)
+	}
+}
+
+// Final review I2: stamps of a JOINED review say so — that review is the
+// user's own browser draft, which --discard must never delete.
+func TestSendJoinedStampsAreMarked(t *testing.T) {
+	t.Parallel()
+	p := plan2()
+	p.Pending = "MINE"
+	l := newLedger()
+	if _, err, _ := runSend(t, p, &fakeWriter{}, l, OptSubmitWithPending); err != nil {
+		t.Fatal(err)
+	}
+	if s := l.stamps["n1"]; !s.Joined || s.Review != "MINE" {
+		t.Fatalf("joined stamp = %+v", s)
+	}
+}
+
+// Final review (Minor 11, re-graded): --finish retries a blank body too.
+func TestFinishRetriesABlankBody(t *testing.T) {
+	t.Parallel()
+	w := &fakeWriter{fail: map[string]error{"SubmitReview": errors.New("SubmitReview: Body can't be blank")}}
+	p := SendPlan{Target: "o/r #7", PR: 7, Mode: SendFinish, Pending: "P",
+		Items: []SendItem{{Key: "a", Label: "a"}, {Key: "b", Label: "b"}}}
+	if _, err, _ := runSend(t, p, w, newLedger(), OptSend); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(w.calls, []string{"SubmitReview P COMMENT ", "SubmitReview P COMMENT 2 comments"}) {
+		t.Fatalf("calls = %q", w.calls)
 	}
 }

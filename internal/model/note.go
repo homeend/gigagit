@@ -186,6 +186,9 @@ type NoteSend struct {
 	URL     string    `toml:"url,omitempty"`
 	At      time.Time `toml:"at"`
 	Err     string    `toml:"err,omitempty"`
+	// Joined: Review is the viewer's OWN pending review gg added to
+	// (submit-with-pending) — their browser draft, which gg never deletes.
+	Joined bool `toml:"joined,omitempty"`
 }
 
 // RemarkSend is one remark of a stored review on its way to a forge;

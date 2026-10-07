@@ -93,7 +93,7 @@ func TestSettleKeepsAPendingReviewsItems(t *testing.T) {
 	if !ok || n.Send == nil || n.Send.Review != "PRR_p" {
 		t.Fatalf("an interrupted send stays stamped: %+v %v", n.Send, ok)
 	}
-	if rev, keys := svc.PRInterrupted(ctx, 7); rev != "PRR_p" || len(keys) != 1 || keys[0] != a {
+	if rev, keys, _ := svc.PRInterrupted(ctx, 7); rev != "PRR_p" || len(keys) != 1 || keys[0] != a {
 		t.Fatalf("PRInterrupted = %q %v", rev, keys)
 	}
 }
@@ -214,7 +214,7 @@ func TestLedgerStampsAndFailsRemarks(t *testing.T) {
 	if len(r2.RemarkSends) != 1 || r2.RemarkSends[0].Send.Thread != "T1" || r2.RemarkSends[0].Moved {
 		t.Fatalf("after Stamp: %+v", r2.RemarkSends)
 	}
-	l.Fail(ctx, []string{key}, errFake("HTTP 500"))
+	l.Fail(ctx, []string{key}, "", errFake("HTTP 500"))
 	r3, _ := svc.Review(ctx, r.ID)
 	if s := r3.RemarkSends[0].Send; s.Err != "HTTP 500" || s.Thread != "" {
 		t.Fatalf("after Fail: %+v", s)

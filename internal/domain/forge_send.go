@@ -23,6 +23,13 @@ var (
 	ErrNoInterruptedSend = errors.New("no interrupted send: gg has nothing waiting in a pending review")
 	ErrMixedSend         = errors.New("send new comments and replies / resolves separately")
 	ErrSendRequest       = errors.New("send request")
+	// ErrInterruptedPending: a send of gg's is still pending on the forge
+	// (interrupted, or its delete failed) — a fresh review would add its
+	// threads to that one.
+	ErrInterruptedPending = errors.New("an earlier send is still pending on GitHub: finish it (gg pr send <n> --finish) or discard it (--discard) first")
+	// ErrDiscardJoined: the pending review is the user's own draft gg added
+	// to; gg never deletes it.
+	ErrDiscardJoined = errors.New("the pending review is your own (gg added to it): finish it (--finish), or discard it on GitHub")
 )
 
 // PRSendRequest is everything a frontend collects before a send starts
@@ -79,9 +86,12 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 		OwnPR: pr.ViewerDidAuthor, Pending: pr.ViewerPendingReview, Body: req.Body}
 	switch {
 	case req.Finish || req.Discard:
-		rev, keys := s.PRInterrupted(ctx, pr.Number)
+		rev, keys, joined := s.PRInterrupted(ctx, pr.Number)
 		if rev == "" {
 			return engine.SendPlan{}, ErrNoInterruptedSend
+		}
+		if req.Discard && joined {
+			return engine.SendPlan{}, ErrDiscardJoined
 		}
 		plan.Mode, plan.Pending, plan.Body = engine.SendFinish, rev, ""
 		if req.Discard {
@@ -97,7 +107,20 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 		}
 		return s.planActions(ctx, plan, req)
 	}
-	return s.planReview(ctx, plan, pr, req)
+	if rev, _, _ := s.PRInterrupted(ctx, pr.Number); rev != "" {
+		return engine.SendPlan{}, ErrInterruptedPending
+	}
+	plan, err = s.planReview(ctx, plan, pr, req)
+	if err == nil && len(plan.Items) == 0 && !req.Verdict {
+		// Nothing sendable: posting an empty review would be a public write
+		// nobody asked for.
+		var why []string
+		for _, sk := range plan.Skipped {
+			why = append(why, sk.Label+": "+sk.Reason)
+		}
+		return engine.SendPlan{}, fmt.Errorf("%w (%s)", engine.ErrNothingToSend, strings.Join(why, "; "))
+	}
+	return plan, err
 }
 
 // prTarget names the PR for the confirm: "owner/repo #n".
