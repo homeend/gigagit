@@ -73,8 +73,8 @@ func prSend(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr 
 		return usage(fmt.Sprintf("--event %q: want comment, approve or request-changes", *event))
 	}
 	req := domain.PRSendRequest{PR: n, Review: *review, Mine: *mine, Notes: notes, Verdict: *verdict,
-		Body: *body, Finish: *finish, Discard: *discard}
-	return runPRSend(context.Background(), svc, req, *yes, defaultAnswer(req, *event), stdin, stdout, stderr)
+		Event: *event, Body: *body, Finish: *finish, Discard: *discard}
+	return runPRSend(context.Background(), svc, req, *yes, defaultAnswer(req), stdin, stdout, stderr)
 }
 
 // runPRSend sends (or, inside a gg session, queues for the user's
@@ -92,7 +92,7 @@ func runPRSend(ctx context.Context, svc *domain.Service, req domain.PRSendReques
 		fmt.Fprintln(stdout, res.Summary)
 	}
 	if err != nil {
-		if errors.Is(err, engine.ErrDecisionRequired) || strings.Contains(err.Error(), "needs a decision") {
+		if errors.Is(err, engine.ErrDecisionRequired) {
 			fmt.Fprintln(stderr, "(rerun with --yes to send without being asked)")
 		}
 		fmt.Fprintln(stderr, "error:", err)
@@ -100,6 +100,11 @@ func runPRSend(ctx context.Context, svc *domain.Service, req domain.PRSendReques
 	}
 	return 0
 }
+
+// errJoinNeedsConfirm: the user's own pending review is open on GitHub, so a
+// send would add to it — a choice only the user makes, never --yes.
+var errJoinNeedsConfirm = errors.New("you have a review pending on GitHub: gg would add these comments to it — " +
+	"answer the confirm without --yes (submit-with-pending), or submit or discard it on GitHub first")
 
 // sendNow fetches a moved head, then runs the op. yes answers the confirm
 // with answer; otherwise a terminal is asked and a pipe gets the decision
@@ -122,6 +127,14 @@ func sendNow(ctx context.Context, svc *domain.Service, req domain.PRSendRequest,
 	op, err := svc.PRSendOp(ctx, req)
 	if err != nil {
 		return engine.Result{}, err
+	}
+	if p := op.Plan; yes && p.Mode == engine.SendReview {
+		switch {
+		case p.Pending != "": // R6: --yes never answers submit-with-pending
+			return engine.Result{}, errJoinNeedsConfirm
+		case p.OwnPR && (answer == engine.OptApprove || answer == engine.OptRequestChanges):
+			return engine.Result{}, fmt.Errorf("#%d is your own pull request: GitHub takes no %s on it", req.PR, answer)
+		}
 	}
 	// Asked only when the reader handed in IS the terminal (a test's or a
 	// script's reader never is, whatever os.Stdin happens to be).

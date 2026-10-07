@@ -42,6 +42,7 @@ type PRSendRequest struct {
 	Resolve   []string `toml:"resolve,omitempty" json:"resolve,omitempty"`     // thread ids or forge comment ids
 	Unresolve []string `toml:"unresolve,omitempty" json:"unresolve,omitempty"` // thread ids or forge comment ids
 	Verdict   bool     `toml:"verdict,omitempty" json:"verdict,omitempty"`     // a verdict with no comments
+	Event     string   `toml:"event,omitempty" json:"event,omitempty"`         // the verdict asked for: comment, approve, request-changes ("" = ask)
 	Body      string   `toml:"body,omitempty" json:"body,omitempty"`
 	Finish    bool     `toml:"finish,omitempty" json:"finish,omitempty"`
 	Discard   bool     `toml:"discard,omitempty" json:"discard,omitempty"`
