@@ -74,51 +74,20 @@ func prSend(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr 
 	}
 	req := domain.PRSendRequest{PR: n, Review: *review, Mine: *mine, Notes: notes, Verdict: *verdict,
 		Body: *body, Finish: *finish, Discard: *discard}
-	answer := engine.OptSend
-	switch {
-	case *review != "" || *mine || *verdict:
-		answer = engine.OptComment
-		if *event != "" {
-			answer = *event
-		}
-	case *discard:
-		answer = engine.OptDiscard
-	}
-	return runPRSend(context.Background(), svc, req, *yes, answer, stdin, stdout, stderr)
+	return runPRSend(context.Background(), svc, req, *yes, defaultAnswer(req, *event), stdin, stdout, stderr)
 }
 
-// runPRSend fetches a moved head, then runs the op. yes answers the confirm
-// with answer; otherwise a terminal is asked and a pipe gets the decision
-// error.
+// runPRSend sends (or, inside a gg session, queues for the user's
+// approval) and prints the outcome.
 func runPRSend(ctx context.Context, svc *domain.Service, req domain.PRSendRequest, yes bool, answer string,
 	stdin io.Reader, stdout, stderr io.Writer) int {
-	if st := svc.ForgeStatus(ctx); !st.Available() {
-		fmt.Fprintf(stderr, "gg pr: %v\n", st.Err)
-		return 1
-	}
-	if rv, err := svc.PRRevalidate(ctx, req.PR); err == nil && rv.Moved {
-		fmt.Fprintf(stderr, "#%d has new commits: fetching them first\n", req.PR)
-		fop, err := svc.PRFetchOp(ctx, req.PR)
-		if err == nil {
-			_, err = runOperation(ctx, svc, fop, cliDecider{}, stderr)
+	if inGGSession() {
+		if yes {
+			fmt.Fprintln(stderr, "--yes is ignored inside a gg session: the user approves sends in gg")
 		}
-		if err != nil {
-			fmt.Fprintln(stderr, "error:", err)
-			return 1
-		}
+		return queueAndWait(ctx, svc, req, stdout, stderr)
 	}
-	op, err := svc.PRSendOp(ctx, req)
-	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
-	}
-	// Asked only when the reader handed in IS the terminal (a test's or a
-	// script's reader never is, whatever os.Stdin happens to be).
-	dec := cliDecider{in: stdin, out: stderr, interactive: stdin == io.Reader(os.Stdin) && stdinIsTerminal()}
-	if yes {
-		dec.policy = map[string]string{engine.DecisionSendForge: answer}
-	}
-	res, err := runOperation(ctx, svc, op, dec, stderr)
+	res, err := sendNow(ctx, svc, req, yes, answer, stdin, stderr)
 	if res.Summary != "" {
 		fmt.Fprintln(stdout, res.Summary)
 	}
@@ -130,6 +99,37 @@ func runPRSend(ctx context.Context, svc *domain.Service, req domain.PRSendReques
 		return 1
 	}
 	return 0
+}
+
+// sendNow fetches a moved head, then runs the op. yes answers the confirm
+// with answer; otherwise a terminal is asked and a pipe gets the decision
+// error.
+func sendNow(ctx context.Context, svc *domain.Service, req domain.PRSendRequest, yes bool, answer string,
+	stdin io.Reader, stderr io.Writer) (engine.Result, error) {
+	if st := svc.ForgeStatus(ctx); !st.Available() {
+		return engine.Result{}, fmt.Errorf("gg pr: %w", st.Err)
+	}
+	if rv, err := svc.PRRevalidate(ctx, req.PR); err == nil && rv.Moved {
+		fmt.Fprintf(stderr, "#%d has new commits: fetching them first\n", req.PR)
+		fop, err := svc.PRFetchOp(ctx, req.PR)
+		if err == nil {
+			_, err = runOperation(ctx, svc, fop, cliDecider{}, stderr)
+		}
+		if err != nil {
+			return engine.Result{}, err
+		}
+	}
+	op, err := svc.PRSendOp(ctx, req)
+	if err != nil {
+		return engine.Result{}, err
+	}
+	// Asked only when the reader handed in IS the terminal (a test's or a
+	// script's reader never is, whatever os.Stdin happens to be).
+	dec := cliDecider{in: stdin, out: stderr, interactive: stdin == io.Reader(os.Stdin) && stdinIsTerminal()}
+	if yes {
+		dec.policy = map[string]string{engine.DecisionSendForge: answer}
+	}
+	return runOperation(ctx, svc, op, dec, stderr)
 }
 
 func prReply(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
