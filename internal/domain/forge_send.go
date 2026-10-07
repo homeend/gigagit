@@ -47,8 +47,8 @@ type PRSendRequest struct {
 	// emptied box posts no body (user ruling 2026-10-08), never the stored
 	// summary.
 	BodySet bool `toml:"body_set,omitempty" json:"body_set,omitempty"`
-	Finish    bool     `toml:"finish,omitempty" json:"finish,omitempty"`
-	Discard   bool     `toml:"discard,omitempty" json:"discard,omitempty"`
+	Finish  bool `toml:"finish,omitempty" json:"finish,omitempty"`
+	Discard bool `toml:"discard,omitempty" json:"discard,omitempty"`
 }
 
 // PRSendOp builds the one op that writes to a forge. The frontend collected
