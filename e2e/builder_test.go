@@ -180,3 +180,21 @@ func TestBuildOriginIsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+// A fixture (a fake gh answer) can name a real commit, and a step can set a
+// ref — what a pull request's private refs/gg/pr/<n> needs.
+func TestBuildRefStepAndRevExpansion(t *testing.T) {
+	sb := buildSandbox(t, localScenario([]Step{
+		{Write: "a.txt", Content: "v1\n"}, {Commit: "initial"}, {Branch: "feat"},
+		{Ref: "refs/gg/pr/7", Value: "feat"},
+		{Write: ".git/fakegh/head.txt", Content: "head={{rev:feat}}"},
+	}))
+	head := strings.TrimSpace(rawGit(t, sb.LocalDir, "rev-parse", "feat"))
+	if got := strings.TrimSpace(rawGit(t, sb.LocalDir, "rev-parse", "refs/gg/pr/7")); got != head {
+		t.Fatalf("ref = %s, want %s", got, head)
+	}
+	b, _ := os.ReadFile(filepath.Join(sb.LocalDir, ".git", "fakegh", "head.txt"))
+	if string(b) != "head="+head {
+		t.Fatalf("expanded %q", b)
+	}
+}
