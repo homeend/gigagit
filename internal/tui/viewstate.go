@@ -554,7 +554,8 @@ func (m Model) listFor(p panel) panelList {
 	case panelReflog:
 		return reflogList{items: m.reflog, rows: m.reflogRows()}
 	case panelPreviews:
-		return previewList{rows: m.previews, text: m.previewRows()}
+		ents := m.previewEntries()
+		return previewList{rows: m.previews, ents: ents, text: m.previewRowsFor(ents)}
 	case panelPRs:
 		return prList{items: m.prs, text: m.prRows()}
 	case panelFiles, panelStaged:
@@ -817,6 +818,14 @@ func (m Model) backingIndex(p panel) (int, bool) {
 			return 0, false
 		}
 		return ents[u].br, true
+	}
+	if p == panelPreviews {
+		// A review sub-row is not a saved row.
+		ents := m.previewEntries()
+		if u >= len(ents) || ents[u].sub() {
+			return 0, false
+		}
+		return ents[u].pv, true
 	}
 	return u, true
 }

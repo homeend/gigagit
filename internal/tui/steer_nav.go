@@ -348,11 +348,8 @@ func (m Model) revealSavedSet(c steer.Command) Model {
 			m.filesReturnFocus = panelPreviews
 		}
 	}
-	for di, b := range m.displayIndices(panelPreviews) {
-		if b == bi {
-			m.sel[panelPreviews] = di
-			break
-		}
+	if di, ok := m.previewDisplayIndex(bi); ok {
+		m.sel[panelPreviews] = di
 	}
 	return m
 }
@@ -1002,11 +999,8 @@ func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
 			// "Go to" semantics, as everywhere else: a /-filter that hid the row
 			// would make the landing invisible.
 			m, _ = m.clearFilteringForFocus()
-			for di, b := range m.displayIndices(panelPreviews) {
-				if b == bi {
-					m.sel[panelPreviews] = di
-					break
-				}
+			if di, ok := m.previewDisplayIndex(bi); ok {
+				m.sel[panelPreviews] = di
 			}
 		}
 		if startAtOrigin(c) {

@@ -46,6 +46,9 @@ type previewRow struct {
 	sum     domain.PreviewSummary
 	notes   int            // root notes gathered along the branch, hidden ones included
 	byPath  map[string]int // the same counts per path; feeds the open preview's file list
+	// reviews are the row's AI reviews (spec R2: one of the current tip, or
+	// of an older tip whose commits still exist), newest first.
+	reviews []domain.ReviewHead
 	err     error
 }
 
@@ -128,7 +131,13 @@ func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, er
 				if byPath, total, cerr := svc.PreviewNoteCounts(ctx, set); cerr == nil {
 					row.notes, row.byPath = total, byPath
 				}
+				row.reviews, _ = svc.PreviewReviews(ctx, set) // best-effort, like the counts
 			}
+		} else if err == nil {
+			// Merged, a side missing, no base: no scope can be built, but a
+			// review whose commits still exist stays listed as an older tip
+			// (spec §8).
+			row.reviews, _ = svc.PreviewReviewsByScope(ctx, p.Target+"..."+p.Source)
 		}
 		rows = append(rows, row)
 	}
@@ -148,6 +157,7 @@ func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, er
 				if byPath, total, cerr := svc.PreviewNoteCounts(ctx, set); cerr == nil {
 					row.notes, row.byPath = total, byPath
 				}
+				row.reviews, _ = svc.PreviewReviews(ctx, set)
 			}
 		}
 		rows = append(rows, row)
@@ -176,26 +186,50 @@ func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, er
 	return previewsPayload{rows: rows}, nil
 }
 
-// previewList is the panelList behind the Previews tab: Key is the record id
-// (stable across renames and refreshes), Name the label, Date the creation.
+// previewList is the panelList behind the Previews tab, entry-based like
+// branchList: each saved row is followed by one sub-row per AI review of it
+// (previewEntries). A sub-row's Name and Date are its row's, so the stable
+// sort keeps it under its parent; backingIndex refuses it, so every preview
+// action self-gates on a sub-row.
 type previewList struct {
 	rows []previewRow
-	text []string
+	ents []pvEntry
+	text []string // one per entry
 }
 
-func (l previewList) Len() int         { return len(l.rows) }
-func (l previewList) Row(i int) string { return l.text[i] }
+func (l previewList) Len() int          { return len(l.ents) }
+func (l previewList) Row(i int) string  { return l.text[i] }
+func (l previewList) Name(i int) string { return l.rows[l.ents[i].pv].label() }
+func (l previewList) Date(i int) int64  { return l.rows[l.ents[i].pv].created().Unix() }
 
-// Haystack is the filter-match text: the row WITHOUT its ◆N note badge (the
-// statusList contract), so typing a digit never matches a pair because of how
-// many notes it carries.
+// Key is the record id for a saved row (stable across renames and refreshes;
+// selection, marks and steer landings key on it) and id\x00review for a
+// sub-row.
+func (l previewList) Key(i int) string {
+	k := l.rows[l.ents[i].pv].id()
+	if r := l.ents[i].review; r != "" {
+		k += "\x00" + r
+	}
+	return k
+}
+
+// Haystack is the filter-match text: a row and its sub-rows match as one
+// unit (branchList's rule), the row WITHOUT its ◆N note badge (the
+// statusList contract — typing a digit never matches a pair because of how
+// many notes it carries).
 func (l previewList) Haystack(i int) string {
-	return strings.TrimSuffix(l.text[i], noteBadge(l.rows[i].notes))
+	p := i
+	for p > 0 && l.ents[p].sub() {
+		p--
+	}
+	var sb strings.Builder
+	sb.WriteString(strings.TrimSuffix(l.text[p], noteBadge(l.rows[l.ents[p].pv].notes)))
+	for q := p + 1; q < len(l.ents) && l.ents[q].sub(); q++ {
+		sb.WriteByte(' ')
+		sb.WriteString(l.text[q])
+	}
+	return sb.String()
 }
-
-func (l previewList) Name(i int) string { return l.rows[i].label() }
-func (l previewList) Date(i int) int64  { return l.rows[i].created().Unix() }
-func (l previewList) Key(i int) string  { return l.rows[i].id() }
 
 // previewStateText is the right-hand cell: counts when ok, else the state.
 func previewStateText(r previewRow) string {
@@ -233,16 +267,29 @@ func previewStateText(r previewRow) string {
 	return i18n.T("%d files  ↑%d", r.sum.Files, r.sum.Ahead)
 }
 
-// previewRows renders "<label>  <source → target>  <state>" with the label
-// column padded to the widest label (display width, CJK-safe).
-func (m Model) previewRows() []string {
+// previewRows renders the Previews list: one row per entry (previewEntries).
+func (m Model) previewRows() []string { return m.previewRowsFor(m.previewEntries()) }
+
+// previewRowsFor renders one row per entry: a saved row as "<label>
+// <source → target>  <state>" with the label column padded to the widest
+// label (display width, CJK-safe), a review sub-row indented under it.
+func (m Model) previewRowsFor(ents []pvEntry) []string {
 	labels := make([]string, len(m.previews))
 	for i, r := range m.previews {
 		labels[i] = r.label()
 	}
 	w := maxLabelWidth(8, labels...)
-	out := make([]string, 0, len(m.previews))
-	for _, r := range m.previews {
+	out := make([]string, 0, len(ents))
+	for _, e := range ents {
+		if e.sub() {
+			if h, ok := m.previewReviewHead(e.pv, e.review); ok {
+				out = append(out, "  "+previewReviewRowBody(h))
+			} else {
+				out = append(out, "  └ ?")
+			}
+			continue
+		}
+		r := m.previews[e.pv]
 		// The SAME ◆N badge every other note-bearing row wears (it brings its
 		// own leading gap), never a glyph of this panel's own.
 		out = append(out, padCell(r.label(), w)+"  "+r.subject()+"  "+previewStateText(r)+noteBadge(r.notes))
