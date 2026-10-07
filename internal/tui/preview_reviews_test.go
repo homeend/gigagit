@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -197,5 +199,85 @@ func TestPreviewReviewSubRowMenu(t *testing.T) {
 	}
 	if !strings.Contains(m.footerLine(), "open review") {
 		t.Errorf("footer %q does not advertise enter on a review row", m.footerLine())
+	}
+}
+
+func TestPreviewReviewRowGating(t *testing.T) {
+	t.Parallel()
+	m := reviewPreviewsModel(t)
+	m.cfg.Tools.Command = []config.ToolCommand{captureCmd(exttool.CatReview, "echo hi")}
+	m.sel[panelPreviews] = 0
+	if r, ok := m.previewReviewRow(); !ok || r.id != "preview-review" || r.label != "Review (AI)" {
+		t.Fatalf("an ok preview: %+v %v", r, ok)
+	}
+	if !strings.Contains(m.footerLine(), "review (AI)") {
+		t.Errorf("footer %q does not advertise Review (AI)", m.footerLine())
+	}
+	m.sel[panelPreviews] = 1 // a sub-row
+	if _, ok := m.previewReviewRow(); ok {
+		t.Fatal("offered on a review sub-row")
+	}
+	m.sel[panelPreviews] = 3 // a saved comparison
+	if _, ok := m.previewReviewRow(); ok {
+		t.Fatal("offered on a comparison row")
+	}
+	m.sel[panelPreviews] = 0
+	m.previews[0].sum.State = domain.PreviewMerged
+	if _, ok := m.previewReviewRow(); ok {
+		t.Fatal("offered on a merged preview")
+	}
+	m.previews[0].sum.State = domain.PreviewOK
+	m.cfg.Tools.Command = nil
+	if _, ok := m.previewReviewRow(); ok {
+		t.Fatal("offered with no review tool")
+	}
+}
+
+func TestPreviewReviewRowTargetsTheScope(t *testing.T) {
+	t.Parallel()
+	m, _ := storedPreviewReviewModel(t)
+	m.cfg.Tools.Command = []config.ToolCommand{captureCmd(exttool.CatReview, "echo hi")}
+	m.sel[panelPreviews] = 0
+	r, ok := m.previewReviewRow()
+	if !ok {
+		t.Fatal("row not offered")
+	}
+	_, cmd := r.run(m)
+	msg, ok := cmd().(reviewTargetReadyMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("target hop = %#v", msg)
+	}
+	if msg.target.Preview != "main...feat/x" || !strings.Contains(msg.target.Range, "..") || msg.target.Kind != domain.ReviewRange {
+		t.Fatalf("target %+v, want the preview's scope", msg.target)
+	}
+}
+
+func TestPreviewShowReviewIsTheNewestCurrent(t *testing.T) {
+	t.Parallel()
+	m := reviewPreviewsModel(t)
+	m.sel[panelPreviews] = 0
+	r, ok := m.previewShowReviewRow()
+	if !ok || r.id != "preview-show-review" {
+		t.Fatalf("row %+v %v", r, ok)
+	}
+	_, cmd := r.run(m)
+	if msg, ok := cmd().(reviewViewMsg); !ok || msg.id != "r2" {
+		t.Fatalf("Show review opened %#v, want r2", msg)
+	}
+	m.previews[0].reviews = m.previews[0].reviews[1:] // only the older one left
+	if _, ok := m.previewShowReviewRow(); ok {
+		t.Fatal("Show review offered with no current review")
+	}
+}
+
+// A finished review re-reads the Previews rows too: a preview review is a
+// sub-row, and the run may end while the user is on another tab.
+func TestReviewResultRereadsThePreviews(t *testing.T) {
+	t.Parallel()
+	m := reviewPreviewsModel(t)
+	m = m.activateTab(panelBranches)
+	nm, _ := m.applyReviewResult(domain.TaskInfo{Key: "review — x", NoteID: "r9"})
+	if !nm.srcInflight[srcNotes] || !nm.srcInflight[srcPreviews] {
+		t.Fatalf("in flight: notes %v previews %v", nm.srcInflight[srcNotes], nm.srcInflight[srcPreviews])
 	}
 }

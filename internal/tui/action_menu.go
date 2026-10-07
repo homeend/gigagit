@@ -318,6 +318,12 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.showBranchReviewRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.previewReviewRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.previewShowReviewRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.branchReviewCopyLinkRow(); ok {
 		out = append(out, r)
 	}

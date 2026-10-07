@@ -122,6 +122,11 @@ func contextBindings() []footerBinding {
 			_, ok := m.selectedPreviewReview()
 			return ok
 		}, scopeRow},
+		// Footer-only: the . menu's own row is previewReviewRow.
+		{"preview-review-hint", ".", i18n.T("[.] review (AI)"), func(m Model) bool {
+			_, ok := m.previewReviewRow()
+			return ok
+		}, scopeRow},
 		{"pr-open", "enter", i18n.T("[enter] open"), func(m Model) bool { return m.canOpenPR() }, scopeRow},
 		{"pr-hub", "i", i18n.T("[i]nfo"), func(m Model) bool { return m.canOpenPR() }, scopeRow},
 		{"pr-copy", "y", i18n.T("[y] copy URL"), func(m Model) bool { return m.canOpenPR() }, scopeRow},

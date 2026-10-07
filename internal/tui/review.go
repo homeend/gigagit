@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -88,6 +89,88 @@ func (m Model) branchReviewRow() (actionRow, bool) {
 			return m, m.reviewBranchTargetCmd(name)
 		},
 	}, true
+}
+
+// previewReviewRow offers "Review (AI)" on a Previews row: a merge preview
+// that is previewable now, or a commit pair whose two commits both exist —
+// never a comparison or a review sub-row. The target needs the scope's merge
+// base, so the row resolves it off the UI thread (reviewTargetReadyMsg).
+func (m Model) previewReviewRow() (actionRow, bool) {
+	if m.focus != panelPreviews || m.inContentWindow() || !m.opsIdle() || !m.hasReviewTool() {
+		return actionRow{}, false
+	}
+	r, ok := m.selectedPreview()
+	if !ok || r.err != nil {
+		return actionRow{}, false
+	}
+	switch r.kind {
+	case rowMerge:
+		if r.sum.State != domain.PreviewOK {
+			return actionRow{}, false
+		}
+	case rowPair:
+		if r.psum.State != domain.PairOK {
+			return actionRow{}, false
+		}
+	default:
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "preview-review",
+		label: i18n.T("Review (AI)"),
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m, m.previewReviewTargetCmd(r)
+		},
+	}, true
+}
+
+// previewReviewTargetCmd builds the scope's review target off the UI thread.
+// A scope that no longer resolves (the row went stale) is an error, never a
+// review of nothing.
+func (m Model) previewReviewTargetCmd(r previewRow) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		ctx := context.Background()
+		var set domain.PreviewNoteSet
+		var err error
+		if rec, isMerge := r.merge(); isMerge {
+			set, err = svc.PreviewNotes(ctx, rec.Source, rec.Target)
+		} else {
+			set, err = svc.PairNotes(ctx, r.pair.A, r.pair.B)
+		}
+		if err == nil && !set.OK() {
+			err = errors.New("nothing to review: the preview has no changes against its base")
+		}
+		if err != nil {
+			return reviewTargetReadyMsg{svc: svc, err: err}
+		}
+		return reviewTargetReadyMsg{svc: svc, target: domain.ScopeReviewTarget(set)}
+	}
+}
+
+// previewShowReviewRow is the preview row's "Show review": its newest review
+// of the current tip (R2 — an older tip's is on its sub-row).
+func (m Model) previewShowReviewRow() (actionRow, bool) {
+	if m.focus != panelPreviews || m.inContentWindow() {
+		return actionRow{}, false
+	}
+	r, ok := m.selectedPreview()
+	if !ok {
+		return actionRow{}, false
+	}
+	for _, h := range r.reviews {
+		if h.Older {
+			continue
+		}
+		return actionRow{
+			id:    "preview-show-review",
+			label: i18n.T("Show review"),
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.openReview(h.ID, h.Summary)
+			},
+		}, true
+	}
+	return actionRow{}, false
 }
 
 // workingReviewRow offers "Review working changes" on the Files panel — the
@@ -200,14 +283,20 @@ func (m Model) applyReviewResult(info domain.TaskInfo) (Model, tea.Cmd) {
 	// The review is a saved note now: the Commits review marker and the
 	// Branches ◆N read noteCounts.Reviews, which only a srcNotes reload
 	// refreshes — shown here or not.
-	var counts, shown tea.Cmd
+	var counts, rows, shown tea.Cmd
 	m, counts = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+	if len(m.previews) > 0 {
+		// A preview review is the preview's sub-row (spec §6 Refresh). The
+		// srcNotes arrival chains a previews read only while that tab or a
+		// preview is on screen; a run takes minutes and the user moves on.
+		m, rows = m.chainPreviewsRead()
+	}
 	if !m.canShowResult(info) {
 		m, shown = m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
 	} else {
 		m, shown = m.openReview(info.NoteID, reviewTitle(label))
 	}
-	return m, tea.Batch(counts, shown)
+	return m, tea.Batch(counts, rows, shown)
 }
 
 // canShowResult: a result may open its viewer now — it belongs to the
