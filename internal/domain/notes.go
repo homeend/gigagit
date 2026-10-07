@@ -49,6 +49,16 @@ type ResolvedNote struct {
 	// intact (Note.Summary is that line as plain text). Empty for a stored
 	// note, and for a forge note whose summary is a label ("suggestion").
 	SummarySrc string
+	// Sync is where the note lives (local / sending / failed / github) and
+	// SendErr the last send's error when it failed.
+	Sync    model.SyncState
+	SendErr string
+	// Group is the note's group (spec 2026-10-07 §1.3): GroupMine,
+	// "review:<id>" or "github:<review id>".
+	Group string
+	// Origin is a carried note's home in a PR view: a short sha or
+	// OriginWorkingTree. Empty everywhere else.
+	Origin string
 }
 
 // NoteCounts are the row-painter badges: how many note THREADS (root notes,
@@ -348,6 +358,9 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 	if model.IsReviewNoteID(parentID) { // a review's remark: its thread lives with the review
 		return s.replyToRemark(ctx, parentID, n)
 	}
+	if model.IsForgeNoteID(parentID) { // a GitHub thread: a local draft until sent
+		return s.forgeReplyDraft(ctx, parentID, n)
+	}
 	if model.IsReadOnlyNoteID(parentID) {
 		return model.Note{}, ErrReadOnlyNote
 	}
@@ -628,7 +641,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		if n.IsWorkingReview() {
 			if sameWorktreePath(n.Address.Worktree, cur) {
 				h := ReviewHead{ID: n.ID, Agent: n.Author, Summary: n.Summary, Created: n.Created}
-				h.Remarks, h.Resolved = docTally(n.Rationale, remarkRes[n.ID])
+				h.Remarks, h.Resolved = docTally(n.Rationale, remarkRes[n.ID], n.RemarkSends)
 				c.WorkingReviews = append(c.WorkingReviews, h)
 			}
 			continue
@@ -638,7 +651,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 			// it is never counted in the ◆N note badges.
 			h := ReviewHead{ID: n.ID, Commit: n.Address.Commit, Branch: n.Address.Branch,
 				Agent: n.Author, Summary: n.Summary, Created: n.Created, Preview: n.Preview, Scope: n.Scope}
-			h.Remarks, h.Resolved = docTally(n.Rationale, remarkRes[n.ID])
+			h.Remarks, h.Resolved = docTally(n.Rationale, remarkRes[n.ID], n.RemarkSends)
 			if n.Preview != "" {
 				if c.PreviewReviews == nil {
 					c.PreviewReviews = map[string][]ReviewHead{}
@@ -922,7 +935,8 @@ func resolveNotes(ns []model.Note, oldLines, newLines []string) []ResolvedNote {
 		}
 		st, rg := resolveOne(n, linesFor(n.Side))
 		byID[n.ID] = len(roots)
-		roots = append(roots, ResolvedNote{Note: n, Status: st, Range: rg})
+		sync, serr := syncOf(n)
+		roots = append(roots, ResolvedNote{Note: n, Status: st, Range: rg, Sync: sync, SendErr: serr, Group: storedGroup(n)})
 	}
 	for _, n := range ns {
 		if !n.IsReply() {
@@ -932,8 +946,9 @@ func resolveNotes(ns []model.Note, oldLines, newLines []string) []ResolvedNote {
 		if !ok {
 			continue // an orphaned reply: the sweep drops it
 		}
+		sync, serr := syncOf(n)
 		roots[i].Replies = append(roots[i].Replies, ResolvedNote{
-			Note: n, Status: roots[i].Status, Range: roots[i].Range,
+			Note: n, Status: roots[i].Status, Range: roots[i].Range, Sync: sync, SendErr: serr, Group: roots[i].Group,
 		})
 	}
 	for i := range roots {
@@ -1173,4 +1188,13 @@ func (s *Service) NoteAddresses(ctx context.Context) ([]model.FileAddress, error
 		return out[i].Commit < out[j].Commit
 	})
 	return out, nil
+}
+
+// storedGroup is a stored note's group: a review is its own group, every
+// other stored note is "my draft review".
+func storedGroup(n model.Note) string {
+	if n.IsReviewNote() || n.IsWorkingReview() {
+		return "review:" + n.ID
+	}
+	return GroupMine
 }

@@ -70,6 +70,9 @@ type Review struct {
 	// Resolutions its remark resolutions; RemarkThreads joins them.
 	Replies     []model.Note
 	Resolutions []model.ThreadResolution
+	// RemarkSends are the remarks sent (or being sent) to a forge; a moved
+	// one is hidden locally.
+	RemarkSends []model.RemarkSend
 }
 
 // ReviewHead is a review without its text: what a list row needs.
@@ -236,7 +239,9 @@ func (s *Service) putReview(st notes.Store, t ReviewTarget, wt string, cmd SaveR
 	} else {
 		for _, old := range all {
 			if old.ID == n.ID {
-				n.Created = old.Created
+				// A re-save keeps what the forge already has: its moved remarks
+				// (by fingerprint) stay hidden.
+				n.Created, n.Send, n.RemarkSends = old.Created, old.Send, old.RemarkSends
 			}
 		}
 	}
@@ -280,7 +285,8 @@ func (s *Service) branchTip(ctx context.Context, name string) string {
 func (s *Service) reviewOf(ctx context.Context, n model.Note, tips map[string]string) Review {
 	if n.IsWorkingReview() {
 		r := Review{ID: n.ID, Kind: ReviewOnWorktree, Worktree: n.Address.Worktree, Files: n.Files,
-			Agent: n.Author, Summary: n.Summary, Text: n.Rationale, Created: n.Created, Updated: n.Updated}
+			Agent: n.Author, Summary: n.Summary, Text: n.Rationale, Created: n.Created, Updated: n.Updated,
+			RemarkSends: n.RemarkSends}
 		if doc, err := notebatch.ParseReview([]byte(n.Rationale)); err == nil {
 			r.Doc = &doc
 		}
@@ -294,7 +300,7 @@ func (s *Service) reviewOf(ctx context.Context, n model.Note, tips map[string]st
 	}
 	r := Review{ID: n.ID, Kind: ReviewKindOf(b, n.Address.Commit, tip),
 		Commit: n.Address.Commit, Branch: b, Scope: n.Scope, Preview: n.Preview, Agent: n.Author,
-		Summary: n.Summary, Text: n.Rationale, Created: n.Created, Updated: n.Updated}
+		Summary: n.Summary, Text: n.Rationale, Created: n.Created, Updated: n.Updated, RemarkSends: n.RemarkSends}
 	if doc, err := notebatch.ParseReview([]byte(n.Rationale)); err == nil {
 		r.Doc = &doc
 	}

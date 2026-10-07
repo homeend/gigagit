@@ -24,6 +24,13 @@ func newRealRepo(t *testing.T) (string, *Service) {
 	return dir, New(repo)
 }
 
+// newRealRepoAt is a fresh Service over an existing repo (a second process).
+func newRealRepoAt(t *testing.T, dir string) (string, *Service) {
+	t.Helper()
+	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}
+	return dir, New(repo)
+}
+
 func headHash(t *testing.T, dir string) string {
 	t.Helper()
 	out, err := func() ([]byte, error) {

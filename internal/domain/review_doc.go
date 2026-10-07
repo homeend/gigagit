@@ -166,6 +166,10 @@ func reviewDocNotes(r Review, path string, addr model.FileAddress, oldLines, new
 				continue
 			}
 			side := reviewSide(dn.Side)
+			fp := remarkFP(f.Path, side, dn.Range, dn.Summary)
+			if r.remarkMoved(fp) {
+				continue // GitHub owns it now
+			}
 			if newOnly && side == model.NoteSideOld {
 				continue
 			}
@@ -182,11 +186,18 @@ func reviewDocNotes(r Review, path string, addr model.FileAddress, oldLines, new
 			for _, kv := range dn.Meta {
 				n.Tags = append(n.Tags, kv.Key+": "+kv.Value)
 			}
-			rn := ResolvedNote{Note: n, Status: model.NoteActive, Range: dn.Range, Resolution: th.Resolution}
+			sd := r.remarkSend(fp)
+			rn := ResolvedNote{Note: n, Status: model.NoteActive, Range: dn.Range, Resolution: th.Resolution,
+				Group: "review:" + r.ID, Sync: sd.State()}
+			if sd != nil {
+				rn.SendErr = sd.Err
+			}
 			for _, rep := range th.Replies {
 				// A reply is stored at the review's address; it draws at its remark.
 				rep.Address, rep.Side, rep.Range = addr, side, dn.Range
-				rn.Replies = append(rn.Replies, ResolvedNote{Note: rep, Status: model.NoteActive, Range: dn.Range})
+				rs, re := syncOf(rep)
+				rn.Replies = append(rn.Replies, ResolvedNote{Note: rep, Status: model.NoteActive, Range: dn.Range,
+					Group: "review:" + r.ID, Sync: rs, SendErr: re})
 			}
 			out = append(out, rn)
 		}
@@ -251,6 +262,9 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 			th := threads[i]
 			root := fmt.Sprintf("%s%s:%d", model.ReviewNoteIDPrefix, r.ID, i)
 			i++
+			if r.remarkMoved(remarkFP(f.Path, side, dn.Range, dn.Summary)) {
+				continue // GitHub owns it now
+			}
 			if working && match.States[p] != WorkingFileMatches {
 				_, reviewed := match.States[p]
 				other = append(other, ReviewOtherNote{Path: p, Side: side, Range: dn.Range, Summary: dn.Summary, Changed: reviewed,

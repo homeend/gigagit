@@ -153,7 +153,7 @@ func TestForgeNotesIgnoreAPairSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := svc.forgeNotesFor(set, ""); len(got) != 0 {
+	if got := svc.forgeNotesFor(context.Background(), set, ""); len(got) != 0 {
 		t.Fatalf("a commit pair is no pull request: %v", got)
 	}
 }

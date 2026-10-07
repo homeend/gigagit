@@ -52,6 +52,13 @@ type WireNote struct {
 	// stored note: that is shown as typed.
 	MD        *MarkdownDoc      `json:"md,omitempty"`
 	SummaryMD []markdown.Inline `json:"summary_md,omitempty"`
+	// Sync is where the note lives (local / sending / failed / github),
+	// SendErr the last send's error, Group its group (GroupMine,
+	// "review:<id>", "github:<review id>"), Origin a carried note's home.
+	Sync    string `json:"sync,omitempty"`
+	SendErr string `json:"send_error,omitempty"`
+	Group   string `json:"group,omitempty"`
+	Origin  string `json:"origin,omitempty"`
 }
 
 // ToWireNote flattens one resolved thread. Line and Range are the RESOLVED
@@ -70,6 +77,8 @@ func ToWireNote(r ResolvedNote) WireNote {
 		w.ReadOnly = true
 		w.Resolved = model.NoteHasTag(r.Note, model.NoteTagResolved)
 		w.FileLevel = r.Range == [2]int{}
+		// A GitHub thread takes replies: local drafts until sent.
+		w.Replyable = r.Note.ParentID == ""
 	}
 	if r.Resolution != nil {
 		w.Resolved, w.ResolvedBy = true, r.Resolution.By
@@ -83,6 +92,7 @@ func ToWireNote(r ResolvedNote) WireNote {
 		w.ReadOnly, w.Replyable = true, true
 	}
 	w.Link, w.Remark = r.Note.Link, r.Note.Remark
+	w.Sync, w.SendErr, w.Group, w.Origin = string(r.Sync), r.SendErr, r.Group, r.Origin
 	if !r.Note.Created.IsZero() {
 		w.Created = r.Note.Created.UTC().Format(time.RFC3339)
 	}

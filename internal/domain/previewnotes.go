@@ -257,6 +257,9 @@ func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path
 		if n.IsRemarkReply() {
 			continue // shown only inside its review
 		}
+		if n.IsForgeReply() {
+			continue // drawn under its GitHub thread (forgeNotesFor)
+		}
 		if ofReview != nil && !ofReview[n.ID] && !(n.IsReply() && ofReview[n.ParentID]) {
 			continue // another review's thread, or a plain one: not this review's
 		}
@@ -284,7 +287,7 @@ func (s *Service) PreviewNotesFor(ctx context.Context, set PreviewNoteSet, path 
 	// A pull request's review threads ride along, appended AFTER the store
 	// notes are resolved: they are active by construction and must not pass
 	// through resolveNotes (no old side here — a LEFT comment would be dropped).
-	forge := s.forgeNotesFor(set, path)
+	forge := s.forgeNotesFor(ctx, set, path)
 	mine, err := s.loadPreviewNotes(ctx, set, path)
 	if err != nil {
 		if len(forge) > 0 && errors.Is(err, ErrNotesDisabled) {
@@ -317,7 +320,7 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 	// A pull request's review threads ride along exactly as in
 	// PreviewNotesFor: active by construction, appended after the store's
 	// notes, and shown alone when this machine has no store (or no notes).
-	forge := s.forgeNotesFor(set, path)
+	forge := s.forgeNotesFor(ctx, set, path)
 	mine, err := s.loadPreviewNotes(ctx, set, path)
 	if err != nil {
 		if len(forge) > 0 && errors.Is(err, ErrNotesDisabled) {
@@ -352,7 +355,7 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 	if !set.OK() {
 		return map[string][]ResolvedNote{}, nil
 	}
-	forge := s.forgeNotesFor(set, "")
+	forge := s.forgeNotesFor(ctx, set, "")
 	mine, err := s.loadPreviewNotes(ctx, set, "")
 	if err != nil {
 		if len(forge) == 0 || !errors.Is(err, ErrNotesDisabled) {
@@ -424,7 +427,7 @@ type previewCountEntry struct {
 // The maps are the cached instance, shared by every caller: READ-ONLY.
 func (s *Service) PreviewNoteCounts(ctx context.Context, set PreviewNoteSet) (map[string]int, int, error) {
 	byPath, total, err := s.previewStoreCounts(ctx, set)
-	fp, ft := s.forgeNoteCounts(set)
+	fp, ft := s.forgeNoteCounts(ctx, set)
 	if ft == 0 {
 		return byPath, total, err
 	}
