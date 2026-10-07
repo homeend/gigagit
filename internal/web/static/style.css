@@ -1,6 +1,8 @@
 :root {
   --bg: #14161a; --bg-alt: #1c1f26; --fg: #d8dee9; --dim: #7a828e;
   --accent: #6ea8fe; --sel: #2a3550; --border: #2a2e37;
+  /* note groups (spec 2026-10-07 §1.3): the TUI's note_group_1..6 (Dark); style_groups_test.go pins them */
+  --note-group-1: #E06C75; --note-group-2: #E5C07B; --note-group-3: #98C379; --note-group-4: #56B6C2; --note-group-5: #C678DD; --note-group-6: #D19A66;
   --add: #1f3d2b; --del: #46262a; --span-add: #2f6b41; --span-del: #8a3b42;
   --attn-info: #1e3350; --attn-warn: #3d3520; --attn-error: #43242a;
   --recent-bg: #1F3A26; /* blame's "changed within the last …" tint (the TUI's blame_recent_bg, Dark) */
