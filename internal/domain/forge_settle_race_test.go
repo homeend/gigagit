@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
 )
@@ -67,5 +68,65 @@ func TestSettleKeepsARemarkStampWrittenAfterItsRead(t *testing.T) {
 	}
 	if rs, ok := n.RemarkSend(fps[1]); !ok || rs.Send.Review != "PRR_fresh" {
 		t.Fatalf("another process's fresh remark stamp was lost: %+v", n.RemarkSends)
+	}
+}
+
+// editCountingStore counts the edits of one record.
+type editCountingStore struct {
+	notes.Store
+	id    string
+	edits int
+}
+
+func (c *editCountingStore) Edit(id string, fn func(*model.Note) error) error {
+	if id == c.id {
+		c.edits++
+	}
+	return c.Store.Edit(id, fn)
+}
+
+// A partly sent review's moved remarks echo on every read of the PR: the
+// settle pass must not lock and rewrite its note when nothing changes.
+func TestSettleLeavesASettledReviewUntouched(t *testing.T) {
+	t.Parallel()
+	svc, r := structuredReview(t)
+	svc.forgeNow = func() time.Time { return settleT0 }
+	ctx := context.Background()
+	fps := r.remarkFPs()
+	at := settleT0.Add(-time.Minute)
+	if err := svc.notesStore(ctx).Edit(r.ID, func(n *model.Note) error {
+		n.RemarkSends = []model.RemarkSend{
+			{RemarkFP: fps[0], Moved: true, Send: model.NoteSend{PR: 7, Review: "PRR_done", At: at}},
+			{RemarkFP: summaryFP, Moved: true, Send: model.NoteSend{PR: 7, Review: "PRR_done", At: at}},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cs := &editCountingStore{Store: svc.notesStore(ctx), id: r.ID}
+	svc.SetNotesStore(cs)
+	echo := []model.ForgeComment{{ID: "PRRC_x", Kind: model.ForgeCommentInline, ThreadID: "PRRT_x", ReviewID: "PRR_done",
+		Body: "x\n\n" + forge.SendMarker(RemarkKey(r.ID, fps[0]))}}
+	svc.settleSends(ctx, model.PullRequest{Number: 7}, echo, settleT0)
+	if cs.edits != 0 {
+		t.Fatalf("a settled review was edited %d times by a no-change settle pass", cs.edits)
+	}
+}
+
+// Re-judged live, a stamp that now proves the note SENT is not cleared: it
+// would make the note local again although GitHub has it.
+func TestSettleNeverClearsAStampThatProvesASend(t *testing.T) {
+	t.Parallel()
+	svc, _, a, _ := settleSvc(t)
+	ctx := context.Background()
+	stampNote(t, svc, a, model.NoteSend{PR: 7, Review: "PRR_gone", At: settleT0.Add(-time.Minute)})
+	svc.SetNotesStore(&racingStore{Store: svc.notesStore(ctx), id: a, race: func(n *model.Note) {
+		n.Send = &model.NoteSend{PR: 7, Thread: "PRRT_t1", Comment: "PRRC_c1", At: settleT0.Add(time.Second)}
+	}})
+	if _, err := svc.PRRevalidate(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if n, ok := noteByID(t, svc, a); ok && n.Send == nil {
+		t.Fatal("a stamp naming a comment GitHub has was cleared: the note is local again")
 	}
 }
