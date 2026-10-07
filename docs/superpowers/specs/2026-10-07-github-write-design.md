@@ -134,6 +134,8 @@ Per repository (keyed by the git common dir, the same key scheme as the
 other per-repo state), under the state dir `prcache/<key>/`:
 
 - `list.json`: the open-PR listing and when it was read;
+- `repo.json`: the forge's base repository (slug, URL) — today a
+  `gh repo view` on the first open of every session;
 - `pr-<n>.json`: one entry per recently opened PR — the PR (with body),
   threads and reviews (with review ids and thread ids), head and base
   sha, `read_at`, the group-colour map (§1.3), and the derived data of
@@ -146,11 +148,15 @@ PRs; opening a 51st drops the least recently opened entry. The fetched
 
 ### 2.2 Derived git data
 
-Keyed by `(base sha, head sha)` inside the PR entry: merge-base, the
-changed-file list (`--name-status`), the commit list, ahead/behind
-counts, and the carried-note matches (§1.4). Valid as long as the PR
-entry is (a new push gives a new sha pair and a recompute). Within one
-open, each ref is resolved once (no repeated `rev-parse --verify`).
+Keyed by `(merge base, head sha)` inside the PR entry — the diff a PR
+shows is merge-base..head, so the base branch moving on (background
+fetches, pulls) is still a hit: the changed-file list (`--name-status`),
+the file count, the commit list, and the carried-note matches (§1.4).
+The merge base and the ahead count are computed live on every open (two
+cheap calls; the merge base is the key). Derived data has its own
+computed-at time and expires under the same limit. A new push or a merge
+of the base into the PR is a new key and a recompute. Within one open,
+each ref is resolved once (no repeated `rev-parse --verify`).
 
 ### 2.3 Expiry — `[forge] cache_hours` (default 8)
 
