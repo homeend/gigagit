@@ -88,6 +88,7 @@ func TestOverviewEndpointServesTheTreeAndTheAnchors(t *testing.T) {
 			Note    string `json:"note"`
 			Missing bool   `json:"missing"`
 			Ref     string `json:"ref"`
+			Label   string `json:"label"`
 		} `json:"anchors"`
 	}
 	if code := getJSON(t, serve(t, s), "/api/overview?id="+o.ID, &body); code != http.StatusOK {
@@ -104,6 +105,9 @@ func TestOverviewEndpointServesTheTreeAndTheAnchors(t *testing.T) {
 	}
 	if body.Anchors[0].Ref != `gg overview `+o.ID+` "Tour" → f.txt:1` {
 		t.Fatalf("ref = %q", body.Anchors[0].Ref)
+	}
+	if body.Anchors[0].Label == "" {
+		t.Fatalf("anchor label missing: %+v", body.Anchors[0])
 	}
 	if !strings.Contains(string(body.Blocks), `"k":"anchor"`) {
 		t.Fatalf("blocks carry no anchor inline: %s", body.Blocks)

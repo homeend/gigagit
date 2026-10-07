@@ -31,6 +31,7 @@ type overviewAnchor struct {
 	Note    string `json:"note,omitempty"`
 	Missing bool   `json:"missing"`
 	Ref     string `json:"ref"`
+	Label   string `json:"label,omitempty"`
 }
 
 func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +59,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	anchors := make([]overviewAnchor, len(o.Anchors))
 	for i, a := range o.Anchors {
 		wa := overviewAnchor{Dest: a.Dest, Path: a.Path, Start: a.Start, End: a.End, Note: a.Note,
-			Missing: a.Missing, Ref: agentdocs.AnchorReference(o, a)}
+			Missing: a.Missing, Ref: agentdocs.AnchorReference(o, a), Label: a.Label}
 		if a.Note != "" && !a.Missing {
 			if n, ok := s.docs.FindNote(a.Note); ok && n.Root == root {
 				wa.Path, wa.Start, wa.End = n.Path, n.Start, n.End
