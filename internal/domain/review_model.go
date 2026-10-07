@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/exttool"
@@ -29,5 +30,7 @@ func ResolveReviewCommand(tc config.ToolCommand, ctx template.CmdCtx) (string, e
 	if flag == "" {
 		return "", fmt.Errorf("%w: review tool %q cannot take a model — add <model> to its command", ErrNoModelSupport, tc.Name)
 	}
-	return resolved + " " + flag + template.QuoteArg(ctx.Model), nil
+	// A multi-line config command ends in a newline: the flag must join its
+	// last line, or the shell runs it as a command of its own.
+	return strings.TrimRight(resolved, " \t\r\n") + " " + flag + template.QuoteArg(ctx.Model), nil
 }

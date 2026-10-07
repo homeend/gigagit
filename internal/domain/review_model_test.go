@@ -22,6 +22,12 @@ func TestResolveReviewCommandModel(t *testing.T) {
 	if err != nil || got != `claude -p "review a..b" --output-format json --model 'sonnet'` {
 		t.Fatalf("claude: %q %v", got, err)
 	}
+	// A multi-line ''' config command ends in a newline: the flag must
+	// join its last line, not become a command of its own.
+	multi := config.ToolCommand{Name: "Claude", Category: "review", Mode: "capture", Command: "claude -p x \\\n  --output-format json\n"}
+	if got, _ := ResolveReviewCommand(multi, template.CmdCtx{Model: "haiku"}); got != "claude -p x \\\n  --output-format json --model 'haiku'" {
+		t.Fatalf("multi-line: %q", got)
+	}
 	junie := config.ToolCommand{Name: "Junie", Category: "review", Mode: "capture", Command: `junie --task x`}
 	if got, _ := ResolveReviewCommand(junie, template.CmdCtx{Model: "my model"}); got != `junie --task x --model='my model'` {
 		t.Fatalf("junie: %q", got)
