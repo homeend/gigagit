@@ -278,6 +278,10 @@ type Model struct {
 	// old the cached copy on screen is (zero = online).
 	prRefreshing   bool
 	prOfflineSince time.Time
+	// prReland is where the user was when the open PR's head moved: the
+	// reopen that follows lands the files cursor (and an open diff, at its
+	// line) back there. Consumed by that reopen's file list.
+	prReland       *prReland
 	prCommentsLast time.Time
 	previewOpen    *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
 	previewGen     int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
@@ -1201,6 +1205,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			po.keepPath = ""
+		}
+		if m.pendingSteer == nil {
+			if tm, cmd, ok := m.relandPR(); ok {
+				return tm, cmd
+			} else if mm, isModel := tm.(Model); isModel {
+				m = mm // the reland was consumed even when no diff reopened
+			}
 		}
 		// A parked pair navigate waits on exactly this list; a parked preview
 		// navigate waits on the same message but a DIFFERENT stage — each

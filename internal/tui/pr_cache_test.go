@@ -2,9 +2,13 @@ package tui
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -76,5 +80,89 @@ func TestPRRefreshAfterARepoSwitchIsDropped(t *testing.T) {
 	mm := nm.(Model)
 	if cmd != nil || mm.prRevalidateInflight || mm.prCommentsInflight {
 		t.Fatalf("a stale-generation refresh must be dropped and free the flags (cmd=%v)", cmd != nil)
+	}
+}
+
+// feedCompareFiles runs cmd and feeds only its compare-file lists back (the
+// forge reads it also starts cannot answer in a test).
+func feedCompareFiles(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	for _, msg := range flattenCmd(t, cmd) {
+		if cf, ok := msg.(compareFilesMsg); ok {
+			nm, _ := m.Update(cf)
+			m = nm.(Model)
+		}
+	}
+	return m
+}
+
+func diffLayerCount(m Model) int {
+	n := 0
+	if m.layers != nil {
+		for _, l := range m.layers.entries {
+			if _, ok := l.(*diffView); ok {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// After a moved-head reopen the files cursor is back on the same path, and an
+// open diff reopens on that file — once, not stacked on the stale one.
+func TestMovedHeadKeepsTheFileAndDiff(t *testing.T) {
+	t.Parallel()
+	m, dir, _ := mergePreviewModel(t)
+	runGit(t, dir, "checkout", "-q", "feat/x")
+	for _, f := range []string{"b.txt", "c.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte(f+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-q", "-m", "b and c")
+	runGit(t, dir, "checkout", "-q", "main")
+	runGit(t, dir, "update-ref", "refs/gg/pr/7", "feat/x")
+	pr := model.PullRequest{Number: 7, Title: "x", State: model.PRStateOpen, Target: "main"}
+	m.forgeShown, m.prs = true, []model.PullRequest{pr}
+
+	nm, cmd := m.Update(m.openPRPreviewCmd(pr)())
+	m = feedCompareFiles(t, nm.(Model), cmd)
+	for i, l := range m.filesView.visible() {
+		if l.path == "b.txt" {
+			m.filesView.sel = i
+		}
+	}
+	tm, _ := m.openDiffForFileLine(m.filesView.visible()[m.filesView.sel])
+	m = tm.(Model)
+	if m.diffLayer() == nil || m.previewSelectedPath() != "b.txt" {
+		t.Fatal("setup: a diff of b.txt is open")
+	}
+
+	// The PR's head moves (b.txt changes again); the refresh says so.
+	runGit(t, dir, "checkout", "-q", "feat/x")
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "commit", "-q", "-am", "b2")
+	runGit(t, dir, "checkout", "-q", "main")
+	runGit(t, dir, "update-ref", "refs/gg/pr/7", "feat/x")
+	m.prRevalidateInflight, m.prCommentsInflight = false, false
+	nm, _ = m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, moved: true, pr: pr})
+	m = nm.(Model)
+	if r := m.prReland; r == nil || r.path != "b.txt" || !r.diff {
+		t.Fatalf("reland = %+v", m.prReland)
+	}
+	// The fetch landed: the open chain resolves the new pair.
+	nm, cmd = m.Update(m.openPRPreviewCmd(pr)())
+	m = feedCompareFiles(t, nm.(Model), cmd)
+	if got := m.previewSelectedPath(); got != "b.txt" {
+		t.Fatalf("cursor on %q after the reopen, want b.txt", got)
+	}
+	if m.prReland != nil {
+		t.Fatal("reland must be consumed once")
+	}
+	if n := diffLayerCount(m); n != 1 {
+		t.Fatalf("diff layers after the reopen = %d, want exactly 1", n)
 	}
 }

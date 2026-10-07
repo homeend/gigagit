@@ -96,6 +96,11 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 		return m, cmd // unchanged, or the user moved on: the next enter fetches
 	}
 	m.prRevalidateSkip = msg.n
+	r := &prReland{n: msg.n, path: m.previewSelectedPath()}
+	if v := m.diffLayer(); v != nil {
+		r.diff, r.land = true, v.cursorLineLanding()
+	}
+	m.prReland = r
 	var open tea.Cmd
 	m, open = m.openPRCmd(msg.pr)
 	m.statusMsg = i18n.T("PR #%d has new commits — updating…", msg.n)
@@ -115,4 +120,38 @@ func (m Model) prFreshnessSuffix() string {
 		return " · " + i18n.T("offline · read %s", ageString(clock.Now(), m.prOfflineSince))
 	}
 	return ""
+}
+
+// prReland is the place a moved-head reopen gives back: the file under the
+// files cursor and, when a diff was open, that diff at its line.
+type prReland struct {
+	n    int
+	path string
+	diff bool
+	land *lineLanding // nil when the diff cursor had no numbered line
+}
+
+// relandPR consumes the open PR's prReland once its reopened file list is in:
+// the cursor already sits on path (previewOpenState.keepPath); an open diff
+// reopens there, at its line. ok reports that it opened the diff.
+func (m Model) relandPR() (tea.Model, tea.Cmd, bool) {
+	r := m.prReland
+	if r == nil || m.openPRNumber() != r.n {
+		return m, nil, false
+	}
+	m.prReland = nil
+	vis := m.filesView.visible()
+	found := false
+	for i, l := range vis {
+		if l.path == r.path && r.path != "" {
+			m.filesView.sel, found = i, true
+			break
+		}
+	}
+	if !r.diff || !found {
+		return m, nil, false
+	}
+	tm, cmd := m.openDiffForFileLine(vis[m.filesView.sel])
+	tm, cmd = m.withLineLanding(r.land, tm, cmd)
+	return tm, cmd, true
 }
