@@ -182,3 +182,52 @@ func TestViewerAnchorBandsWiring(t *testing.T) {
 		t.Error("style.css has no current-band rule")
 	}
 }
+
+// fromGone: the overview that opened the shown file left the store — named
+// on the closed list, or missing from the stamps (which list every overview
+// the store holds; a close from the switcher's x arrives that way).
+func TestFromGoneJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `
+console.log([
+  fromGone({f1: "s"}, [], "f1"), fromGone({}, [], "f1"), fromGone(undefined, [], "f1"),
+  fromGone({f1: "s"}, ["f1"], "f1"), fromGone(undefined, ["f2"], "f1"),
+].join("|"));
+`)
+	if want := "false|true|false|true|false"; out != want {
+		t.Fatalf("got %s want %s", out, want)
+	}
+}
+
+// After the viewer closed, an agentdocs change must not touch the way back
+// (its refresh repainted the viewer's footer onto the page), and a marked
+// range must show over a band.
+func TestViewerAnchorBandsReviewFixes(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile("static/viewer.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	fn := src[strings.Index(src, "function viewerAgentDocs("):]
+	fn = fn[:strings.Index(fn, "\n}\n")]
+	if g, f := strings.Index(fn, "if (!viewerFileId()) return;"), strings.Index(fn, "const f = view.from;"); g < 0 || f < 0 || f < g {
+		t.Errorf("viewerAgentDocs reads view.from (at %d) before the open-viewer guard (at %d)", f, g)
+	}
+	if !strings.Contains(fn, "fromGone(stamps, closed, f.id)") {
+		t.Error("viewerAgentDocs does not use fromGone")
+	}
+	rf := src[strings.Index(src, "async function refreshFromAnchors("):]
+	rf = rf[:strings.Index(rf, "\n}\n")]
+	if !strings.Contains(rf, "!isOpen()") {
+		t.Error("refreshFromAnchors repaints a closed viewer")
+	}
+	css, err := os.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := string(css)
+	if r, a := strings.Index(c, ".vline.vanchor.vrange"), strings.Index(c, ".vline.vanchor.acur {"); r < 0 || r < a {
+		t.Errorf("no range-over-band rule after the band rules (range at %d, band at %d)", r, a)
+	}
+}

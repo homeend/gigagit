@@ -61,8 +61,15 @@ func TestFollowPassTellsTheTabsWhichOverviewClosed(t *testing.T) {
 	}
 	s.docs.RemoveOverview(o.ID)
 	s.followDocs()
-	if m := next(); m.Reason != "agentdocs" || len(m.Files) != 0 || len(m.Closed) != 1 || m.Closed[0] != o.ID {
+	m := next()
+	if m.Reason != "agentdocs" || len(m.Files) != 0 || len(m.Closed) != 1 || m.Closed[0] != o.ID {
 		t.Fatalf("remove event = %+v", m)
+	}
+	// The stamps list every overview the store holds — none is a list too:
+	// a file whose overview left must hear it even when nothing names it
+	// closed (the switcher's x unlists it before the store drops it).
+	if m.Stamps == nil {
+		t.Fatal("an agentdocs event with no overviews left carries no stamps")
 	}
 }
 

@@ -20,7 +20,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   backspace returns to the overview on the anchor you stepped to. The bands
   follow `gg session overview set` and leave with the overview. TUI and gg
   web alike; the `.` menu, the hint line and `?` help list the keys.
-- `/api/overview` anchors carry their link text (`label`).
+- `/api/overview` anchors carry their link text (`label`); an `agentdocs`
+  live event always carries `stamps` (`{}` once no overview is left), so a
+  file whose overview was closed from the switcher drops its bands.
 - e2e: a `[[tui.step]]` may hand the TUI an agent overview first
   (`overview = { title, text }`), as `gg session overview add` does.
 
@@ -28,8 +30,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 - Opening a range anchor no longer SELECTS the range: it is the current band,
   which stays while you move and scroll (space/space still selects).
-- gg web: `n` / `p` in the file viewer are the viewer's own — a `p` there no
-  longer pulls.
+- gg web: `n` / `p` in the file viewer are the viewer's own (inert in a file
+  with no bands).
 
 ## Tests: the maintenance-lock flake, second hole
 

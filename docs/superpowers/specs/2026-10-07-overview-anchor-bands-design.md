@@ -81,8 +81,8 @@ In a document with bands (both frontends):
   step wrapped.
 - One band: `n` / `p` re-centre on it. No bands: `n` / `p` do nothing.
 - gg web: the viewer ALWAYS claims `n` / `p` (inert without bands), as the
-  TUI's viewer swallows every key. Today a `p` in the web viewer falls
-  through to the global pull key; that stops.
+  TUI's viewer swallows every key. (Correction 2026-10-07: a `p` there never
+  reached the global pull — an open layer owns the keyboard, `keys.js`.)
 
 Discoverability: the `.` menu gets "Next anchor in this file" (`n`) and
 "Previous anchor in this file" (`p`) rows in a file with bands (beside the

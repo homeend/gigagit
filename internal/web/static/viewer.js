@@ -242,6 +242,14 @@ function stepBand(bands, cur, line, dir) {
   return { i: n - 1, wrapped: n > 1 };
 }
 
+// fromGone reports whether overview id left the store: named on the closed
+// list, or missing from the stamps, which list every overview the store
+// holds (a close from the switcher's x takes it off the list first, so it
+// is never named closed). No stamps: no word either way.
+function fromGone(stamps, closed, id) {
+  return closed.includes(id) || (!!stamps && !(id in stamps));
+}
+
 // bandKindAt is line's band: "cur" (wins an overlap), "other" or "".
 function bandKindAt(bands, cur, line) {
   let k = "";
@@ -656,7 +664,7 @@ async function refreshFromAnchors(f) {
   } catch {
     return;
   }
-  if (view.from !== f) return;
+  if (view.from !== f || !isOpen()) return;
   f.anchors = ov.anchors || [];
   f.stamp = ov.stamp;
   rerenderKeepingScroll();
@@ -1287,15 +1295,17 @@ function viewerAgentDocs(files, closed = [], stamps = undefined) {
     return opLine(name + " was closed", false);
   }
   viewerOpenFiles(files);
-  const f = view.from;
-  if (f && !f.closed && closed.includes(f.id)) {
-    f.closed = true; // its anchors leave the file with it
-    rerenderKeepingScroll();
-    swapFoot(true);
-  } else if (f && !f.closed && overviewStale(stamps, f.id, f.stamp)) {
-    refreshFromAnchors(f);
-  }
   if (!viewerFileId()) return;
+  // The shown file's bands follow the overview that opened it: gone with it,
+  // re-read when it changed. A closed viewer has none to follow.
+  const f = view.from;
+  if (f && !f.closed && !view.ov) {
+    if (fromGone(stamps, closed, f.id)) {
+      f.closed = true;
+      rerenderKeepingScroll();
+      swapFoot(true);
+    } else if (overviewStale(stamps, f.id, f.stamp)) refreshFromAnchors(f);
+  }
   if (view.ov) {
     if (overviewStale(stamps, view.id, view.ov.stamp)) refreshOverview();
   } else viewerFileChanged(viewerFileId());
