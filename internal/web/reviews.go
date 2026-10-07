@@ -69,6 +69,7 @@ func init() {
 		mux.HandleFunc("GET /api/review/notes", s.handleReviewNotes)
 		mux.HandleFunc("GET /api/review/{id}", s.handleReview)
 		mux.HandleFunc("GET /api/review/{id}/link", s.handleReviewLink)
+		mux.HandleFunc("GET /api/review/{id}/remark-id", s.handleReviewRemarkID)
 	})
 }
 
@@ -279,6 +280,26 @@ func workingStateWord(st domain.WorkingFileState) string {
 		return "gone"
 	}
 	return "changed"
+}
+
+// handleReviewRemarkID is remark ?n= of review {id}'s id (Copy remark id),
+// handed back only while the review holds that remark: a copied id must be
+// one gg note reply takes.
+func (s *Server) handleReviewRemarkID(w http.ResponseWriter, r *http.Request) {
+	n, err := strconv.Atoi(r.URL.Query().Get("n"))
+	if err != nil || n < 0 {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad remark number %q", r.URL.Query().Get("n")))
+		return
+	}
+	id, err := s.service().ReviewRemarkID(readCtx(r), model.ReviewNoteIDPrefix+r.PathValue("id")+":"+strconv.Itoa(n))
+	switch {
+	case errors.Is(err, domain.ErrReviewNotFound), errors.Is(err, domain.ErrNoSuchRemark):
+		writeErr(w, http.StatusNotFound, err)
+	case err != nil:
+		writeErr(w, http.StatusInternalServerError, err)
+	default:
+		writeJSON(w, map[string]any{"id": id})
+	}
 }
 
 // handleReviewLink is a review's gg link (Copy gg link on its rows): only the

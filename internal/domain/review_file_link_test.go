@@ -128,3 +128,24 @@ func TestReviewFileLinkRefusesAPathNotInTheReview(t *testing.T) {
 		t.Errorf("c.txt: %v", err)
 	}
 }
+
+// ReviewRemarkID hands back a remark id only while it names something: the
+// review must still be stored and hold that remark (Copy remark id).
+func TestReviewRemarkID(t *testing.T) {
+	t.Parallel()
+	svc, _, _, rng := reviewLinkFixture(t)
+	ctx := context.Background()
+	id := model.ReviewNoteIDPrefix + rng + ":1"
+	if got, err := svc.ReviewRemarkID(ctx, id); err != nil || got != id {
+		t.Fatalf("ReviewRemarkID = %q, %v", got, err)
+	}
+	if _, err := svc.ReviewRemarkID(ctx, model.ReviewNoteIDPrefix+rng+":7"); err == nil || !strings.Contains(err.Error(), "review "+rng+" has no remark 7") {
+		t.Fatalf("no such remark: %v", err)
+	}
+	if _, err := svc.ReviewRemarkID(ctx, model.ReviewNoteIDPrefix+"deadbeef:0"); !errors.Is(err, ErrReviewNotFound) || !strings.Contains(err.Error(), "review deadbeef no longer exists") {
+		t.Fatalf("gone review: %v", err)
+	}
+	if _, err := svc.ReviewRemarkID(ctx, "x"); err == nil {
+		t.Fatal("a malformed id was accepted")
+	}
+}

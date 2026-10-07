@@ -171,28 +171,48 @@ func (s *Service) reviewHolds(ctx context.Context, r Review, path string) (bool,
 // ReviewRemarkLink is the review-aware link of one remark, named by its id
 // review:<review id>:<n> (the id gg note reply / resolve take).
 func (s *Service) ReviewRemarkLink(ctx context.Context, remarkID string) (string, error) {
-	rid, n, ok := model.ParseReviewNoteID(remarkID)
-	if !ok {
-		return "", fmt.Errorf("not a review remark id: %q", remarkID)
-	}
-	r, err := s.Review(ctx, rid)
+	rm, rid, err := s.reviewRemark(ctx, remarkID)
 	if err != nil {
 		return "", err
+	}
+	if rm.ReviewLink == "" {
+		return "", fmt.Errorf("remark %d of review %s has no link (its path cannot be spelled)", rm.N, rid)
+	}
+	return rm.ReviewLink, nil
+}
+
+// ReviewRemarkID is remarkID while it names a remark — its review still
+// stored and holding remark n — so a copied id is one gg note reply takes.
+func (s *Service) ReviewRemarkID(ctx context.Context, remarkID string) (string, error) {
+	if _, _, err := s.reviewRemark(ctx, remarkID); err != nil {
+		return "", err
+	}
+	return remarkID, nil
+}
+
+// reviewRemark finds the remark remarkID names, and its review's id.
+func (s *Service) reviewRemark(ctx context.Context, remarkID string) (ReviewRemark, string, error) {
+	rid, n, ok := model.ParseReviewNoteID(remarkID)
+	if !ok {
+		return ReviewRemark{}, "", fmt.Errorf("not a review remark id: %q", remarkID)
+	}
+	r, err := s.Review(ctx, rid)
+	if errors.Is(err, ErrReviewNotFound) {
+		return ReviewRemark{}, rid, fmt.Errorf("%w: review %s no longer exists", ErrReviewNotFound, rid)
+	}
+	if err != nil {
+		return ReviewRemark{}, rid, err
 	}
 	rms, err := s.ReviewRemarks(ctx, r)
 	if err != nil {
-		return "", err
+		return ReviewRemark{}, rid, err
 	}
 	for _, rm := range rms {
-		if rm.N != n {
-			continue
+		if rm.N == n {
+			return rm, rid, nil
 		}
-		if rm.ReviewLink == "" {
-			return "", fmt.Errorf("remark %d of review %s has no link (its path cannot be spelled)", n, rid)
-		}
-		return rm.ReviewLink, nil
 	}
-	return "", fmt.Errorf("review %s has no remark %d", rid, n)
+	return ReviewRemark{}, rid, fmt.Errorf("%w: review %s has no remark %d", ErrNoSuchRemark, rid, n)
 }
 
 // ScopeLinkText is a commit's Range review row's link: the commit pair the

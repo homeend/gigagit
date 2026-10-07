@@ -3768,7 +3768,15 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   if (remark) {
     noteRows.push(
       { label: "copy remark link", act: () => copyServerLink("/api/review/" + encodeURIComponent(remark[1]) + "/link?n=" + remark[2], "remark " + remark[2]) },
-      { label: "copy remark id", act: () => copyText(rootId, "remark id " + rootId) }
+      // The id is checked like the link: a review deleted meanwhile has no
+      // remark to answer, and the server says so.
+      {
+        label: "copy remark id",
+        act: () =>
+          getJSON("/api/review/" + encodeURIComponent(remark[1]) + "/remark-id?n=" + remark[2])
+            .then((d) => copyText(d.id, "remark id " + d.id))
+            .catch((e) => opLine("copy remark id: " + (e.message || e), true)),
+      }
     );
   }
   const nlink = remark ? "" : linkFor(state.repo, state.worktree, noteSlotCtx(n) || state.diffCtx, n.side, n.line);
