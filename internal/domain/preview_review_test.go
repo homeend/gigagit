@@ -131,3 +131,59 @@ func TestUntaggedReviewStaysOnItsCommit(t *testing.T) {
 		t.Fatalf("ReviewsForCommit = %+v", got)
 	}
 }
+func TestPreviewReviewsCurrentThenOlder(t *testing.T) {
+	t.Parallel()
+	dir, svc, set := previewReviewRepo(t)
+	ctx := context.Background()
+	id := savePreviewReview(t, svc, set)
+	got, err := svc.PreviewReviews(ctx, set)
+	if err != nil || len(got) != 1 || got[0].ID != id || got[0].Older {
+		t.Fatalf("current: %+v %v", got, err)
+	}
+	commitFile(t, dir, "g.txt", "y\n", "second") // the source moves on
+	moved, err := svc.PreviewNotes(ctx, "feat/x", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err = svc.PreviewReviews(ctx, moved)
+	if err != nil || len(got) != 1 || !got[0].Older {
+		t.Fatalf("after a new commit: %+v %v, want one older review", got, err)
+	}
+}
+
+func TestPreviewReviewsHidesAGoneTip(t *testing.T) {
+	t.Parallel()
+	dir, svc, set := previewReviewRepo(t)
+	ctx := context.Background()
+	savePreviewReview(t, svc, set)
+	// Rewrite the branch: the reviewed tip becomes unreachable, then pruned.
+	runGitIn(t, dir, "reset", "--hard", "main")
+	commitFile(t, dir, "h.txt", "z\n", "rewritten")
+	runGitIn(t, dir, "reflog", "expire", "--expire=now", "--all")
+	runGitIn(t, dir, "gc", "--prune=now", "--quiet")
+	moved, err := svc.PreviewNotes(ctx, "feat/x", "main")
+	if err != nil || !moved.OK() {
+		t.Fatalf("PreviewNotes: %+v %v", moved, err)
+	}
+	if got, err := svc.PreviewReviews(ctx, moved); err != nil || len(got) != 0 {
+		t.Fatalf("a review of a pruned tip = %+v %v, want hidden", got, err)
+	}
+}
+
+func TestPreviewReviewsOnlyItsOwnScope(t *testing.T) {
+	t.Parallel()
+	dir, svc, set := previewReviewRepo(t)
+	ctx := context.Background()
+	savePreviewReview(t, svc, set)
+	runGitIn(t, dir, "branch", "other", "main")
+	other, err := svc.PreviewNotes(ctx, "feat/x", "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := svc.PreviewReviews(ctx, other); len(got) != 0 {
+		t.Fatalf("another preview of the same source shows %+v", got)
+	}
+	if got, _ := svc.PreviewReviews(ctx, PreviewNoteSet{}); len(got) != 0 {
+		t.Fatalf("the zero set shows %+v", got)
+	}
+}
