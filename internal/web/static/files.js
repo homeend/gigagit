@@ -3794,6 +3794,8 @@ $("diff-body").addEventListener("contextmenu", (e) => {
       label: "copy gg link to this note",
       act: () => copyLink(nlink, linkDesc("file", ((noteSlotCtx(n) || state.diffCtx) || {}).path || "", "")),
     });
+  // Features add their own rows (prsend.js: sending to GitHub in a PR's diff).
+  noteRows.push(...extraRows("note", { n, rootId, ctx: noteSlotCtx(n) || state.diffCtx }));
   noteRows.push(foldRow);
   // A forge review comment is read-only: copy its place, fold it, nothing else.
   if (!n.read_only)
