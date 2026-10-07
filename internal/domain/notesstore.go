@@ -71,8 +71,12 @@ func (s *Service) disableNotesForTest() {
 // call: FileStore.SetPolicy takes the same mutex its writer holds across the
 // lock spin, so pushing it on every read would park every reader behind a
 // contended write.
+//
+// The common dir is read straight from the repo, never through query(): the
+// first use may come from inside an op holding a reservation (the send op's
+// settle pass), and the gate is not re-entrant.
 func (s *Service) notesStore(ctx context.Context) notes.Store {
-	return s.notesStoreKeyed(func() (string, error) { return s.GitCommonDir(ctx) })
+	return s.notesStoreKeyed(func() (string, error) { return s.repo.GitCommonDir(ctx) })
 }
 
 // notesStoreKeyed is notesStore with the common-dir read supplied (see

@@ -108,3 +108,22 @@ func TestParseNumstatTruncatedRenameTrailingNul(t *testing.T) {
 		}
 	}
 }
+
+// A forge's hunks are git's DEFAULT hunks: a context size pins every
+// setting that shapes them against the user's diff.* config.
+func TestDiffPatchArgvUnifiedPinsTheHunkShape(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git diff", gitexec.Result{Stdout: "PATCH"})
+	r := &Repo{Runner: f}
+	if _, err := r.DiffPatch(context.Background(), model.DiffSpec{Rev: "a..b", Unified: 3}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"-c", "diff.mnemonicPrefix=false", "-c", "diff.noprefix=false",
+		"diff", "--no-color", "-U3", "--inter-hunk-context=0", "--diff-algorithm=myers", "--indent-heuristic", "a..b",
+	}
+	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+}

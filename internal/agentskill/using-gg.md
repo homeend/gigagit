@@ -838,8 +838,12 @@ finds the right one here.
   cancelled or expired (the reason on stderr); 3 = still pending — resume
   with `gg pr pending wait <id>`, or `gg pr pending cancel <id>`. `--yes` is
   ignored in a session; never ask the user to run `approve` for you unless
-  they want to. `gg pr reply <n> <thread> <text>` without `--send` only
-  writes a local draft. Your notes posted this way end with `— <agent> via gg`.
+  they want to. Your `--event` travels with the queued send (the user sees
+  `asks: approve`); never ask for approve / request-changes on a PR the user
+  opened (GitHub refuses it). Send draft replies (`gg pr reply`) on their
+  own, never mixed with new notes in one `--note` list. `gg pr reply <n>
+  <thread> <text>` without `--send` only writes a local draft. Your notes
+  posted this way end with `— <agent> via gg`.
 - `gg versions [<branch>]` — list a branch's recorded pre-operation
   snapshots (taken automatically before merges, rebases, resets, amends,
   and branch deletion), newest first: `<id> <short-sha> <time> <subject>`.

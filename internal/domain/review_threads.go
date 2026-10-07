@@ -158,6 +158,22 @@ func (r Review) remarkMoved(fp string) bool {
 	return false
 }
 
+// summaryFP keys the RemarkSends entry that records a review's SUMMARY
+// reached a pull request (its whole-review send was submitted while some of
+// its remarks stayed local, R4). Moved, so nothing counts it as sending; a
+// remark fingerprint is hex, so it never collides.
+const summaryFP = "summary"
+
+// summarySent reports the review's summary is already on pull request pr.
+func (r Review) summarySent(pr int) bool {
+	for _, x := range r.RemarkSends {
+		if x.RemarkFP == summaryFP && x.Moved && x.Send.PR == pr {
+			return true
+		}
+	}
+	return false
+}
+
 // remarkSend is the send entry of an unmoved remark fp (its sync state).
 func (r Review) remarkSend(fp string) *model.NoteSend {
 	for _, x := range r.RemarkSends {

@@ -5762,10 +5762,14 @@ Read behind a queued writer deadlocks. So the op holds `Plan` as a value and
 its only domain call, `Settle`, must be gate-free (`TestSettleNeverTakesTheGate`
 holds a Read with a queued writer). `settleReview` therefore parses the
 review document itself (`reviewDocOf`), never `reviewOf` (branch-tip lookups
-are queries).
+are queries). The note store and the PR cache read the git common dir
+straight from the repo on first use, never via `query()` — a fresh Service's
+first Settle opens them (`TestSettleOpensItsStoresWithoutTheGate`).
 
 **Anchoring.** Hunks come from `DiffSpec{Rev: base..tip, Unified: 3}` —
-GitHub's context, whatever `diff.context` says. A stored note uses its
+GitHub's context, whatever `diff.context` says; `Unified > 0` also pins
+`--inter-hunk-context=0 --diff-algorithm=myers --indent-heuristic` (git's
+defaults; whether GitHub uses myers is unverified). A stored note uses its
 RESOLVED range at the tip; a remark's text is re-found by hash in the head
 (new side) or the merge base (old side). Inside one hunk → line thread;
 changed file outside every hunk → file-level thread whose body opens with
@@ -5781,9 +5785,12 @@ marker `<!-- gg:<key> -->`, or — for a review item only — the thread gg
 created, in a submitted review) → delete / `Moved`; stamp's review is the
 viewer's pending one → keep (`PRInterrupted`, `--finish`/`--discard`);
 otherwise → clear. A stamp newer than `readStart` is never judged (another
-process may be mid-send). A standalone reply is never judged sent by its
-thread (the thread existed before it). A whole review is deleted only when
-every remark moved (R4). The pass is skipped cheaply via `sendIndex` (one
+process may be mid-send), and each edit re-judges the LIVE record inside
+`Store.Edit` (another process may have stamped it after LoadAll). A
+standalone reply is never judged sent by its thread (the thread existed
+before it). A whole review is deleted only when every remark moved (R4);
+otherwise it gains a moved `RemarkSends` entry keyed `summaryFP` ("summary",
+per PR) so a re-send posts the remaining remarks with an empty body. The pass is skipped cheaply via `sendIndex` (one
 store read per notes generation). Sent forge reviews map back to their local
 group (`prcache.Entry.Groups`, `Service.forgeGroups`) so a group keeps its
 colour.
@@ -5807,7 +5814,13 @@ read-modify-write (pending > 24 h → expired; finished > 24 h → dropped).
 GOTCHA: go-toml/v2 drops a SET `time.Time` under `omitempty` — `Done` has no
 toml omitempty. CLI: inside a session (`GG_INBOX`) every write verb queues
 and long-polls (exit 0 sent, 1 rejected/failed/cancelled/expired, 3 still
-pending); `approve`/`reject` are refused there.
+pending); `approve`/`reject` are refused there. `PRSendRequest.Event` carries
+the agent's `--event`. An approve the user could not answer (no terminal:
+`needsDecisionError` unwraps to `engine.ErrDecisionRequired`; `--yes` into a
+pending review: `errJoinNeedsConfirm`) leaves the entry pending.
+`planSend` routes by `noteKinds`: any draft reply or resolve makes it a
+reply/resolve send, and then any other note is `ErrMixedSend`; an id no
+longer stored is skipped there ("it no longer exists").
 
 **CLI confirm.** The send confirm is interactive only when the reader handed
 to `cli.Run` IS `os.Stdin` and a terminal; `--yes` answers it
@@ -5839,3 +5852,7 @@ Spec `docs/superpowers/specs/2026-10-07-review-links-copy-design.md`, plan
   `*domain.Resolved`): a name-less local link cannot split repo from path
   by syntax.
 
+(`defaultAnswer`: the request's event for a verdict review, `discard`, else
+`send`) but never `submit-with-pending` — `sendNow` refuses `--yes` into a
+pending review, and approve / request-changes on the viewer's own PR, before
+the op runs.

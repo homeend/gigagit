@@ -132,7 +132,17 @@ func prPending(svc *domain.Service, args []string, stdin io.Reader, stdout, stde
 // records its outcome for the agent waiting on it.
 func approvePending(ctx context.Context, svc *domain.Service, e domain.PendingSend, yes bool,
 	stdin io.Reader, stdout, stderr io.Writer) int {
-	res, err := sendNow(ctx, svc, e.Request, yes, defaultAnswer(e.Request, ""), stdin, stderr)
+	if ev := e.Request.Event; ev != "" && !yes {
+		fmt.Fprintf(stderr, "%s asks: %s\n", e.Requester, ev)
+	}
+	res, err := sendNow(ctx, svc, e.Request, yes, defaultAnswer(e.Request), stdin, stderr)
+	if errors.Is(err, engine.ErrDecisionRequired) || errors.Is(err, errJoinNeedsConfirm) {
+		// The approver could not answer here: nothing reached GitHub, and the
+		// agent's request is still good.
+		fmt.Fprintln(stderr, "error:", err)
+		fmt.Fprintf(stderr, "still pending: %s (approve it in a terminal, or in gg)\n", e.ID)
+		return 1
+	}
 	state, outcome := domain.PendingSent, res.Summary
 	switch {
 	case err != nil:
@@ -155,6 +165,13 @@ func approvePending(ctx context.Context, svc *domain.Service, e domain.PendingSe
 
 // describeRequest is a queued request in a few words (the pending list).
 func describeRequest(r domain.PRSendRequest) string {
+	if r.Event != "" {
+		return describeWhat(r) + " (asks: " + r.Event + ")"
+	}
+	return describeWhat(r)
+}
+
+func describeWhat(r domain.PRSendRequest) string {
 	switch {
 	case r.Review != "":
 		return "review " + r.Review
@@ -176,13 +193,14 @@ func describeRequest(r domain.PRSendRequest) string {
 	return "verdict"
 }
 
-// defaultAnswer is what --yes answers the confirm with: the event for a
-// review with a verdict, discard for --discard, send otherwise.
-func defaultAnswer(req domain.PRSendRequest, event string) string {
+// defaultAnswer is what --yes answers the confirm with: the asked event for
+// a review with a verdict (comment when none), discard for --discard, send
+// otherwise.
+func defaultAnswer(req domain.PRSendRequest) string {
 	switch {
 	case req.Review != "" || req.Mine || req.Verdict:
-		if event != "" {
-			return event
+		if req.Event != "" {
+			return req.Event
 		}
 		return engine.OptComment
 	case req.Discard:
