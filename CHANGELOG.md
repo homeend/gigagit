@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Tests: the maintenance-lock flake, second hole
+
+### Fixed
+
+- **CI: `copy template "basic:hi\n": open .git/objects/maintenance.lock`
+  again** (`TestSetGitConfigWritesLocalScope`). A test that sets its own
+  `GIT_CONFIG_GLOBAL` replaced the pinned test config — and with it
+  `maintenance.auto = false` — so when it was the first to build a template,
+  the fixture's commit left a detached maintenance child behind. The
+  fixture helper now passes `-c maintenance.auto=false -c gc.auto=0` on
+  every git call, and a template waits (up to 30s) for any maintenance lock
+  to clear before it is copied, covering builders with their own git helper.
+
 ## Agent console mouse: follow-up fixes
 
 ### Changed

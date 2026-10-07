@@ -6,13 +6,20 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
 
 // Run executes one git command in dir with the standard test identity,
 // failing the test on a non-zero exit. Shared by template builders and any
 // helper that still needs a bespoke git call.
+//
+// Background maintenance is switched off on the command line, not only in
+// Isolate's global config: a test that sets its own GIT_CONFIG_GLOBAL and
+// then builds a template would otherwise commit with maintenance on, and
+// git ≥ 2.46 detaches it (see Isolate).
 func Run(t *testing.T, dir string, args ...string) {
 	t.Helper()
+	args = append([]string{"-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
@@ -69,6 +76,7 @@ func TemplateRepo(t *testing.T, key string, build func(t *testing.T, dir string)
 			tmplMu.Unlock()
 			t.Fatalf("template %q did not produce a git repo: %v", key, err)
 		}
+		waitMaintenance(src)
 		tmplRepo[key] = src
 	}
 	tmplMu.Unlock()
@@ -78,6 +86,30 @@ func TemplateRepo(t *testing.T, key string, build func(t *testing.T, dir string)
 		t.Fatalf("copy template %q: %v", key, err)
 	}
 	return dst
+}
+
+// maintenanceLocks are the files a detached `git maintenance run --auto` or
+// `git gc --auto` holds while it works on a repository.
+var maintenanceLocks = []string{
+	filepath.Join(".git", "objects", "maintenance.lock"),
+	filepath.Join(".git", "gc.pid"),
+}
+
+// waitMaintenance waits (bounded) until no background maintenance holds the
+// template at dir. A builder whose git calls bypass Run can still leave a
+// detached child behind; copying while it runs lists a lock file that is
+// gone by the time CopyFS opens it. After the bound the copy goes ahead and
+// fails loudly if the child is still there.
+func waitMaintenance(dir string) {
+	deadline := time.Now().Add(30 * time.Second)
+	for _, rel := range maintenanceLocks {
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(filepath.Join(dir, rel)); os.IsNotExist(err) {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
 }
 
 // BasicRepo is the canonical fixture nearly every package uses: branch main
