@@ -143,8 +143,8 @@ func TestReviewSkillBodyCoversTheNoteSurface(t *testing.T) {
 
 func TestAllReturnsEverySkill(t *testing.T) {
 	got := All()
-	if len(got) != 4 || got[0].Name != "using-gg" || got[1].Name != "reviewing-with-gg" || got[2].Name != "delegate" || got[3].Name != "gg-review" {
-		t.Fatalf("All() = %+v, want using-gg, reviewing-with-gg, delegate, gg-review", got)
+	if len(got) != 5 || got[0].Name != "using-gg" || got[1].Name != "reviewing-with-gg" || got[2].Name != "delegate" || got[3].Name != "gg-review" || got[4].Name != "gg-cross-review" {
+		t.Fatalf("All() = %+v, want using-gg, reviewing-with-gg, delegate, gg-review, gg-cross-review", got)
 	}
 }
 
@@ -265,5 +265,27 @@ func TestUsingGGOverviewsDoNotNeedATUI(t *testing.T) {
 		if strings.Contains(UsingGG.Body(), stale) {
 			t.Errorf("using-gg.md still says %q", stale)
 		}
+	}
+}
+
+func TestGGCrossReviewFrontmatter(t *testing.T) {
+	t.Parallel()
+	f := GGCrossReview.SkillFile()
+	for _, want := range []string{"name: gg-cross-review\n", "argument-hint: \"<gg-link> [2|3] [what to focus on]\"\n", "disable-model-invocation: true\n",
+		"gg review --tools --json", "--no-save --json", "--link", "--model", "## Disagreements resolved", "## Reviewers", "gg review save", "raised_by", "--dry-run"} {
+		if !strings.Contains(f, want) {
+			t.Fatalf("gg-cross-review SKILL.md lacks %q", want)
+		}
+	}
+}
+
+func TestDogfoodGGCrossReviewCopyInSync(t *testing.T) {
+	path := filepath.Join("..", "..", ".claude", "skills", "gg-cross-review", "SKILL.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("dogfood copy missing — render it and commit: %v", err)
+	}
+	if string(data) != GGCrossReview.SkillFile() {
+		t.Error(".claude/skills/gg-cross-review/SKILL.md is out of sync — render it and commit the result")
 	}
 }
