@@ -5749,9 +5749,11 @@ Spec `docs/superpowers/specs/2026-10-07-cross-review-design.md`, plan
   escapes, `\`+newline continues, `#` at a word start; cmd.exe: `"`, `^`, no
   comments; `2>&1` / `&>` are redirections) for a `;`, `|`, `&`, line break
   or comment after the agent's arguments; `ResolveReviewCommand` then
-  refuses with `ErrNoModelSupport` naming `<model:FLAG>` (`FLAG=<model>` for
-  Junie's `--model=`, since `<model:FLAG>` joins with a space).
-  `domain.ReviewTakesModel` = that same answer, printed by `--tools`.
+  refuses with `ErrNoModelSupport` naming `<model:FLAG>` (Junie too: it
+  takes `--model x`; `--model=<model>` would leave a bare `--model=` on every
+  model-less run). On Windows the scan reads `FlattenForCmd(cmd)` — what
+  cmd.exe runs. `domain.ReviewTakesModel` = "not ErrNoModelSupport",
+  printed by `--tools` (a tool broken otherwise fails with its own error).
   `TestReviewTemplatesTakeAnAppendedModel` (exttool) runs every catalog
   review template through it on both OSes.
 - **Skills name only real `gg session` verbs**: `TestSkillsNameOnlyRealSessionVerbs`

@@ -63,11 +63,34 @@ func TestResolveReviewCommandRefusesAnUnreachableFlag(t *testing.T) {
 	} {
 		tc := config.ToolCommand{Name: "Mine", Category: "review", Mode: "capture", Command: cmd}
 		_, err := ResolveReviewCommand(tc, template.CmdCtx{Model: "opus"})
-		if !errors.Is(err, ErrNoModelSupport) || !strings.Contains(err.Error(), sep) || !strings.Contains(err.Error(), "<model:--model>") {
+		if !errors.Is(err, ErrNoModelSupport) || !strings.Contains(err.Error(), "after "+map[bool]string{true: sep, false: "`" + sep + "`"}[sep == "a line break"]) || !strings.Contains(err.Error(), "<model:--model>") {
 			t.Errorf("%q: %v", cmd, err)
 		}
 		if _, err := ResolveReviewCommand(tc, template.CmdCtx{}); err != nil {
 			t.Errorf("%q without a model: %v", cmd, err)
+		}
+	}
+	// Junie's flag is "--model=", but the fix is <model:--model> too: a
+	// "--model=<model>" would leave a bare --model= on every run without one.
+	junie := config.ToolCommand{Name: "Junie", Category: "review", Mode: "capture", Command: `junie --task x | cat`}
+	if _, err := ResolveReviewCommand(junie, template.CmdCtx{Model: "m"}); err == nil || !strings.Contains(err.Error(), "put <model:--model> ") {
+		t.Errorf("junie: %v", err)
+	}
+}
+
+// ReviewTakesModel answers only the model question: a tool broken for
+// another reason (a token the review lane cannot fill) is not reported as
+// unable to take a model — its run fails with its own error.
+func TestReviewTakesModel(t *testing.T) {
+	t.Parallel()
+	for cmd, want := range map[string]bool{
+		`claude -p x`:                 true,
+		`claude -p x | cat`:           false,
+		`printf x`:                    false,
+		`claude -p <context-file> -x`: true,
+	} {
+		if got := ReviewTakesModel(config.ToolCommand{Name: "T", Category: "review", Command: cmd}); got != want {
+			t.Errorf("%q: %v, want %v", cmd, got, want)
 		}
 	}
 }

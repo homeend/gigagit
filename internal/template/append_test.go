@@ -29,6 +29,11 @@ func TestAppendBlocker(t *testing.T) {
 		{`claude -p "it's" & echo`, "windows", "&"},
 		{`claude -p x # not a comment in cmd`, "windows", ""},
 		{`claude -p x ^& y`, "windows", ""},
+		// cmd.exe runs the command flattened (FlattenForCmd): a trailing \
+		// and a quote spanning lines join; a plain line break does not.
+		{"claude -p x \\\n  --output-format json", "windows", ""},
+		{"claude -p \"a\nb\" --output-format json", "windows", ""},
+		{"claude -p x\necho done", "windows", "a line break"},
 	} {
 		if got := AppendBlockerFor(c.cmd, c.goos); got != c.want {
 			t.Errorf("%s %q: got %q, want %q", c.goos, c.cmd, got, c.want)

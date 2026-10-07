@@ -39,21 +39,21 @@ func ResolveReviewCommand(tc config.ToolCommand, ctx template.CmdCtx) (string, e
 	// reach another program (or none) and the review would run on the
 	// default model: refuse, naming the slot that works.
 	if sep := template.AppendBlocker(resolved); sep != "" {
-		slot := "<model:" + strings.TrimSpace(flag) + ">"
-		if strings.HasSuffix(flag, "=") { // <model:FLAG> joins with a space
-			slot = flag + "<model>"
-		}
+		// <model:FLAG> joins with a space, which every agent's parser takes
+		// (Junie's "--model=" too); "--model=<model>" would leave a bare
+		// --model= on every run without a model.
+		slot := "<model:" + strings.TrimRight(strings.TrimSpace(flag), "=") + ">"
 		return "", fmt.Errorf("%w: review tool %q: gg would add the model after %s in its command, where %s would not get it — put %s right after the agent's own arguments",
 			ErrNoModelSupport, tc.Name, describeSep(sep), ToolAgentID(tc), slot)
 	}
 	return resolved + " " + flag + template.QuoteArg(ctx.Model), nil
 }
 
-// ReviewTakesModel reports whether `gg review --model` works with tc — the
-// same answer ResolveReviewCommand gives (gg review --tools prints it).
+// ReviewTakesModel reports whether tc can take `gg review --model` — the
+// model answer ResolveReviewCommand gives (gg review --tools prints it).
 func ReviewTakesModel(tc config.ToolCommand) bool {
 	_, err := ResolveReviewCommand(tc, template.CmdCtx{Model: "m"})
-	return err == nil
+	return !errors.Is(err, ErrNoModelSupport) // another error is the tool's own
 }
 
 // describeSep names an AppendBlocker result in a refusal: an operator is

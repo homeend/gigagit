@@ -18,8 +18,11 @@ func AppendBlocker(cmd string) string { return AppendBlockerFor(cmd, runtime.GOO
 // escapes, `\`+newline continues the line, `#` at a word start comments) or
 // cmd.exe (double quotes, `^` escapes, no comments).
 func AppendBlockerFor(cmd, goos string) string {
-	cmd = strings.TrimRight(cmd, " \t\r\n")
 	windows := goos == "windows"
+	if windows {
+		cmd = FlattenForCmd(cmd) // what cmd.exe runs: continuations joined
+	}
+	cmd = strings.TrimRight(cmd, " \t\r\n")
 	var quote rune // 0, '\'' or '"'
 	wordStart := true
 	rs := []rune(cmd)
@@ -53,7 +56,7 @@ func AppendBlockerFor(cmd, goos string) string {
 				return string([]rune{r, r})
 			}
 			return string(r)
-		case r == '\n':
+		case r == '\n' || r == '\r':
 			return "a line break"
 		case r == '#' && wordStart && !windows:
 			return "#"

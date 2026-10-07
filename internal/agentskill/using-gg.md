@@ -66,7 +66,7 @@ guards against removing the worktree you are standing in.
   (Claude `--model`, Codex `-m`, Junie `--model=`, Kimi `-m`, Antigravity
   `--model`) or fills `<model:FLAG>` / `<model>` in a custom command; a
   tool with neither refuses it (exit 2), and so does one whose command goes
-  on after the agent's own arguments — a `|`, `;`, `&`, `&&`, a further
+  on after the agent's own arguments — a `|`, `;`, `&`, `&&`, `||`, a further
   command line or a `#` comment would take the flag (use `<model:FLAG>`
   there); gg does not check the name — the
   agent's CLI does — but refuses a `"`, `%` or line break in it.
