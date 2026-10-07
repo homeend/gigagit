@@ -199,3 +199,24 @@ func TestReviewRowsHTMLSkipsPRAndScopedPair(t *testing.T) {
 		t.Error("reviews.js: previewScopeReviews must refuse a PR and a scoped pair")
 	}
 }
+
+// Final-review fixes, each proven in a browser (the playwright probe); these
+// pin the wiring so a refactor cannot quietly drop one.
+func TestPreviewReviewsFinalReviewWiring(t *testing.T) {
+	t.Parallel()
+	css := staticSrc(t, "style.css")
+	if !strings.Contains(css, "#previews-list li.brev {") && !strings.Contains(css, "#previews-list li.brev,") && !strings.Contains(css, ", #previews-list li.brev {") {
+		t.Error("style.css: a preview's review sub-row is not styled as a sub-row")
+	}
+	rv := staticSrc(t, "reviews.js")
+	if !strings.Contains(rv, "return previewScopeReviews()\n    .concat(commitReviewList())") {
+		t.Error("reviews.js: the opened preview's review rows are not keyboard rows (headRowIds)")
+	}
+	if !strings.Contains(rv, "previewBack(state.reviewSel) || reviewBackFromCommit(state.reviewSel)") {
+		t.Error("reviews.js: enter on a preview's review row does not return to the preview")
+	}
+	pv := staticSrc(t, "previews.js")
+	if !strings.Contains(pv, "state.previewReviews = row.reviews || [];") {
+		t.Error("previews.js: an open preview's Reviews block does not follow a refresh")
+	}
+}

@@ -11,7 +11,7 @@ import { copyText, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { mdHTML } from "./markdown.js";
 import { registerHelp } from "./menus.js";
-import { NOTE_BADGE_COLS, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
+import { NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
 import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
 import { focusPane } from "./keys.js";
@@ -203,9 +203,11 @@ function commitNoted() {
 const notedSel = (path) => "noted:" + path;
 
 
-// headRowIds are the rows above a commit's first file, top to bottom.
+// headRowIds are the rows above a commit's (or an opened preview's) first
+// file, top to bottom.
 function headRowIds() {
-  return commitReviewList()
+  return previewScopeReviews()
+    .concat(commitReviewList())
     .map((r) => r.id)
     .concat(commitScopes().map((sc) => scopeSel(sc.scope)))
     .concat(commitNoted().map(notedSel));
@@ -332,7 +334,7 @@ function openSelectedReview() {
   const noted = commitNoted().find((p) => notedSel(p) === state.reviewSel);
   if (sc) openRangeReview(sc.scope);
   else if (noted) openNotedPath(noted);
-  else openReview(state.reviewSel, reviewBackFromCommit(state.reviewSel));
+  else openReview(state.reviewSel, previewBack(state.reviewSel) || reviewBackFromCommit(state.reviewSel));
   return true;
 }
 

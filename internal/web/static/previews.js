@@ -947,7 +947,14 @@ export async function reopenPreviewIfMoved() {
     }
     // Both sides are rev-parse output here (the row comes from the server),
     // so this is a plain comparison — sameHash only matters for tipOf.
-    if (sameHash(row.source_hash, po.sourceHash) && sameHash(row.target_hash, po.targetHash)) return;
+    if (sameHash(row.source_hash, po.sourceHash) && sameHash(row.target_hash, po.targetHash)) {
+      // The tips did not move, but the reviews may have (a review run that
+      // finished, one deleted): the row carries them, so the open preview's
+      // Reviews block takes them without another fetch.
+      state.previewReviews = row.reviews || [];
+      renderFiles();
+      return;
+    }
     await openPreviewEntry(row, sameHash(row.source_hash, po.sourceHash) ? po.target : po.source);
     return;
   }
@@ -957,7 +964,10 @@ export async function reopenPreviewIfMoved() {
   // answers with the real state.
   const s = tipOf(po.source);
   const t = tipOf(po.target);
-  if (s && t && sameHash(s, po.sourceHash) && sameHash(t, po.targetHash)) return;
+  if (s && t && sameHash(s, po.sourceHash) && sameHash(t, po.targetHash)) {
+    loadPreviewCounts(po.source, po.target); // no row to read: re-read the badges and the Reviews block
+    return;
+  }
   // Name the moved ref only when both tips are actually known here; otherwise
   // the re-open speaks for itself (and stays silent if nothing changed).
   const moved = s && t ? (sameHash(s, po.sourceHash) ? po.target : po.source) : "";
