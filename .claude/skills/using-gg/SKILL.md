@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v144 -->
+<!-- gg:using-gg:v145 -->
 
 # Using gg (gigagit)
 
@@ -776,9 +776,8 @@ finds the right one here.
   checked-out branch and branches checked out in a worktree. An unmerged
   branch is a `branch-unmerged` fork (`force-delete`/`keep`): pass `--force`
   to pre-answer it.
-- `gg pr list|view|comments|fetch|forget` — READ-ONLY pull requests through the
-  forge's own CLI (GitHub's `gh` today; nothing is ever posted, edited or
-  submitted). Needs `gh` installed, logged in and able to read this repo;
+- `gg pr list|view|comments|fetch|forget` — pull requests through the
+  forge's own CLI (GitHub's `gh` today); the write verbs are below. Needs `gh` installed, logged in and able to read this repo;
   otherwise every verb exits 1 with `gg pr: no forge CLI can read this
   repository's pull requests: <why>`. `--json` may sit anywhere.
   `gg pr list [--json]` prints `#<n> <state> <author>  <source> → <target>
@@ -813,6 +812,21 @@ finds the right one here.
   already current) and prints the ref, so the change itself reads with
   `gg diff <target>...refs/gg/pr/<n>`. Fork PRs work. `gg pr forget <n>`
   deletes that ref and drops a closed row.
+  `gg pr comments` prefixes each thread root with `[<thread id>]`.
+- `gg pr notes <n> [--json]` — what the PR's view holds: local notes (with
+  `(from <origin>)` when carried from another commit or the working tree),
+  GitHub threads, draft replies; the ids `gg pr send --note` takes.
+- **Sending to GitHub — you QUEUE, the user approves.** Inside a gg session
+  (`$GG_INBOX` set) `gg pr send <n> --note <id>…|--review <id>|--mine|--verdict
+  [--event comment|approve|request-changes] [--body <text>]`, `gg pr reply <n>
+  <thread> <text> --send` and `gg pr resolve|unresolve <n> <thread>` never
+  post: they queue a pending send, print `queued <id>: …` and wait up to 10
+  minutes. Exit 0 = sent (the summary on stdout); 1 = rejected, failed,
+  cancelled or expired (the reason on stderr); 3 = still pending — resume
+  with `gg pr pending wait <id>`, or `gg pr pending cancel <id>`. `--yes` is
+  ignored in a session; never ask the user to run `approve` for you unless
+  they want to. `gg pr reply <n> <thread> <text>` without `--send` only
+  writes a local draft. Your notes posted this way end with `— <agent> via gg`.
 - `gg versions [<branch>]` — list a branch's recorded pre-operation
   snapshots (taken automatically before merges, rebases, resets, amends,
   and branch deletion), newest first: `<id> <short-sha> <time> <subject>`.
