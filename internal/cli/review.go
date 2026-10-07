@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -18,7 +19,11 @@ import (
 	"github.com/homeend/gigagit/internal/template"
 )
 
-// cmdReview implements `gg review [--tool <name>] [--model <m>] [--working |
+// maxReviewFocus caps --focus: a few sentences on what to look at, not a
+// second brief.
+const maxReviewFocus = 2000
+
+// cmdReview implements `gg review [--tool <name>] [--model <m>] [--focus <text>] [--working |
 // --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]`: runs the configured
 // review agent headless over the resolved target, prints the captured report
 // to stdout, and persists it via domain.ReviewReport — a --working review is
@@ -51,6 +56,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 	noSave := fs.Bool("no-save", false, "print the review; store nothing")
 	asJSON := fs.Bool("json", false, "with --no-save: print the review document JSON")
 	listTools := fs.Bool("tools", false, "list the review tools (--json: as JSON)")
+	focus := fs.String("focus", "", "what the reviewer should look at hardest (written into its brief)")
 	pf := addPreviewFlag(fs)
 	if err := fs.Parse(rest); err != nil {
 		return 2
@@ -58,6 +64,8 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 	if *listTools {
 		return printReviewTools(svc, *asJSON, stdout, stderr)
 	}
+	focusSet := false
+	fs.Visit(func(f *flag.Flag) { focusSet = focusSet || f.Name == "focus" })
 	switch {
 	case *asJSON && !*noSave:
 		fmt.Fprintln(stderr, "gg review: --json needs --no-save (a stored review prints its overview)")
@@ -71,6 +79,12 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 	case *linkArg != "" && *wantNotes:
 		fmt.Fprintln(stderr, "gg review: --notes does not apply to --link; use --preview, --working or a <rev> to import notes")
 		return 2
+	case focusSet && strings.TrimSpace(*focus) == "":
+		fmt.Fprintln(stderr, "gg review: --focus is empty")
+		return 2
+	case utf8.RuneCountInString(*focus) > maxReviewFocus:
+		fmt.Fprintf(stderr, "gg review: --focus is longer than %d characters\n", maxReviewFocus)
+		return 2
 	case strings.ContainsAny(*modelName, "\"%\r\n"):
 		// cmd.exe would end the quoting at a " or expand a %…%; a line
 		// break would start a new command anywhere.
@@ -78,11 +92,11 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 		return 2
 	}
 	if *working && fs.NArg() >= 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--focus <text>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
 		return 2
 	}
 	if fs.NArg() > 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--focus <text>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
 		return 2
 	}
 	if *working && *wantNotes {
@@ -143,6 +157,8 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 		}
 		target = t
 	}
+
+	target.Focus = strings.TrimSpace(*focus)
 
 	// Pick the review tool command from config.
 	cmd, err := selectReviewCommand(svc, *toolName, stderr)

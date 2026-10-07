@@ -262,3 +262,41 @@ func TestReviewModelNameIsChecked(t *testing.T) {
 		}
 	}
 }
+
+// --focus reaches the review brief the tool reads ($GG_CONTEXT_FILE), for a
+// review that prints only and for one that is stored.
+func TestReviewFocusReachesTheBrief(t *testing.T) {
+	skipOnWindows(t)
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	seen := filepath.Join(t.TempDir(), "seen.ctx")
+	writeReviewTool(t, dir, "Echo", `cp "$GG_CONTEXT_FILE" "`+seen+`"; printf '{"version":1,"summary":"S","files":[]}' > "$GG_MESSAGE_FILE"`)
+	for _, extra := range [][]string{{"--no-save", "--json"}, nil} {
+		args := append([]string{"review", "--tool", "Echo", "--focus", "the 'parser'\nerrors"}, extra...)
+		if code, out, errb := runCLI(t, dir, append(args, "HEAD")...); code != 0 {
+			t.Fatalf("%v: exit=%d out=%q stderr=%q", extra, code, out, errb)
+		}
+		brief, err := os.ReadFile(seen)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(brief), "## Focus\nThe user asked for attention on: the 'parser'\nerrors\n") {
+			t.Fatalf("%v: the brief lacks the focus:\n%s", extra, brief)
+		}
+		os.Remove(seen)
+	}
+}
+
+func TestReviewFocusIsChecked(t *testing.T) {
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	writeReviewTool(t, dir, "Echo", `printf x`)
+	for _, f := range []string{"  \n ", strings.Repeat("x", 2001)} {
+		code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--focus", f, "--no-save", "HEAD")
+		if code != 2 || !strings.Contains(errb, "--focus") {
+			t.Errorf("%d chars: exit=%d stderr=%s", len(f), code, errb)
+		}
+	}
+}

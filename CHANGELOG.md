@@ -8,13 +8,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## Review skill follow-ups
 
+### Added
+
+- **`gg review --focus <text>`: tell the reviewer what to look at hardest.**
+  gg writes the text into the review brief every review tool reads (a
+  `## Focus` section), never into the tool's command, so any text works;
+  an empty focus or one over 2000 characters exits 2.
+  `/gg-cross-review <link> [2|3] [focus]` now hands the focus to every
+  reviewer, not only to its own merge. Skills: using-gg v149,
+  gg-cross-review v3.
+
 ### Fixed
 
 - **`/gg-review` and `/gg-cross-review` named a command gg does not have.**
   Their last step said `gg session list`; it is now `gg session status`
   (exit 0 = a gg window is open on this worktree), then
   `gg session navigate <review link>`. A test fails when any skill names a
-  `gg session` verb gg lacks. Skills: gg-review v2, gg-cross-review v2.
+  `gg session` verb gg lacks. Skills: gg-review v2.
 
 ## Review links to files and remarks
 

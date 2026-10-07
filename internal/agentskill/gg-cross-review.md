@@ -35,6 +35,9 @@ review in gg. Do NOT launch gg's TUI or `gg web`; they belong to the user.
 
        gg review --tool "<tool>" --model "<model>" --link "<link>" --no-save --json > <dir>/r1.json 2> <dir>/r1.err
 
+   When the user gave a focus, every reviewer gets it: add
+   `--focus '<the focus, word for word>'` before `--link` (in single quotes;
+   a `'` inside becomes `'\''`). gg puts it in each reviewer's brief.
    One review takes minutes: never make a blocking call your client will
    time out. Wait until all have finished. A non-zero exit is a failed
    reviewer — keep its `.err` for the summary. Remember which number ran

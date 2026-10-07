@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v148 -->
+<!-- gg:using-gg:v149 -->
 
 # Using gg (gigagit)
 
@@ -74,6 +74,9 @@ guards against removing the worktree you are standing in.
   `--model`) or fills `<model:FLAG>` / `<model>` in a custom command; a
   tool with neither refuses it (exit 2); gg does not check the name — the
   agent's CLI does — but refuses a `"`, `%` or line break in it.
+  `--focus <text>` tells the reviewer what to look at hardest: gg writes it
+  into the review brief (a `## Focus` section), never into the command, so
+  any text works; empty or over 2000 characters exits 2.
   `--link <gg-link>` reviews what the link names, as `gg review save` does
   (not with `--working`, `--preview`, `--notes` or a positional). `--no-save` prints the
   review and stores nothing; with `--json` stdout is the review document

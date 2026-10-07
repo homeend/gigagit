@@ -50,6 +50,9 @@ type ReviewTarget struct {
 	// ("<a7>..<b7>"): Note.Preview. Such a review is its preview's, never
 	// its commit's. Data only — never spliced into a command.
 	Preview string
+	// Focus is what the user asked the reviewer to look at hardest; it
+	// travels in the review brief, never in a command. "" = none.
+	Focus string
 }
 
 // DisplayLabel is the human string shown for this target (status bar, viewer
@@ -151,6 +154,7 @@ func (s *Service) runReview(ctx context.Context, target ReviewTarget, resolvedCo
 		Diff:       target.Diff,
 		RangeLabel: label, // the agent's "# Range:" context header — display text, not executed
 		Working:    target.Kind == ReviewWorking,
+		Focus:      target.Focus,
 	}
 	res, err := s.Execute(ctx, op, nil, nil)
 	if err != nil {

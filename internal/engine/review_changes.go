@@ -31,6 +31,10 @@ type ReviewChanges struct {
 	// untracked files as new-file patches, and Prepare fingerprints every
 	// reviewed file (TaskInputs.ReviewFiles).
 	Working bool
+	// Focus: what the user asked the reviewer to look at hardest (free
+	// text, may span lines); "" = none. It travels in the brief, never on
+	// the tool's command line.
+	Focus string
 }
 
 var _ Operation = ReviewChanges{}
@@ -107,6 +111,10 @@ func (op ReviewChanges) reviewSummary(diffPath, stat string, truncated bool) str
 	b.WriteString("# Full unified diff: " + diffPath)
 	if truncated {
 		b.WriteString("  (truncated — inspect files with git)")
+	}
+	if op.Focus != "" {
+		b.WriteString("\n\n## Focus\nThe user asked for attention on: " + op.Focus + "\n" +
+			"Review the whole change, but look hardest there and list findings about it first.")
 	}
 	heading := "\n\n## Files changed (git diff --numstat)\n"
 	if op.Working {

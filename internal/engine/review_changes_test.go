@@ -125,3 +125,21 @@ func TestReviewOutputInstructionAsksForStructuredMarkdown(t *testing.T) {
 		}
 	}
 }
+
+// A review with a focus carries it in the brief every review tool reads, as
+// its own section; a review without one has no such section.
+func TestReviewSummaryCarriesTheFocus(t *testing.T) {
+	t.Parallel()
+	with := ReviewChanges{RangeLabel: "a..b", Focus: "error handling\nin the parser"}.reviewSummary("/d.diff", "1\t0\ta.txt\n", false)
+	want := "## Focus\nThe user asked for attention on: error handling\nin the parser\n"
+	if !strings.Contains(with, want) {
+		t.Fatalf("brief lacks the focus section %q:\n%s", want, with)
+	}
+	if strings.Index(with, "## Focus") > strings.Index(with, "## Files changed") {
+		t.Fatalf("the focus must come before the file list:\n%s", with)
+	}
+	without := ReviewChanges{RangeLabel: "a..b"}.reviewSummary("/d.diff", "1\t0\ta.txt\n", false)
+	if strings.Contains(without, "## Focus") {
+		t.Fatalf("no focus asked, yet the brief has a focus section:\n%s", without)
+	}
+}
