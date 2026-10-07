@@ -134,6 +134,14 @@ const previewReviewTestDoc = `{"version":1,"summary":"## Summary\nok","files":[{
 // one review saved on the "login" preview (main...feat/x).
 func storedPreviewReviewModel(t *testing.T) (Model, string) {
 	t.Helper()
+	m, dir, _, _ := storedPreviewReviewModelDirs(t)
+	return m, dir
+}
+
+// storedPreviewReviewModelDirs is storedPreviewReviewModel also handing back
+// its note and preview store dirs (a second Service = another gg process).
+func storedPreviewReviewModelDirs(t *testing.T) (Model, string, string, string) {
+	t.Helper()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "checkout", "-q", "-b", "feat/x")
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644); err != nil {
@@ -142,9 +150,10 @@ func storedPreviewReviewModel(t *testing.T) (Model, string) {
 	runGit(t, dir, "add", ".")
 	runGit(t, dir, "commit", "-q", "-m", "add a")
 	runGit(t, dir, "checkout", "-q", "main")
+	notesDir, previewsDir := t.TempDir(), t.TempDir()
 	svc := domain.New(repo)
-	svc.UsePreviewsDir(t.TempDir())
-	svc.UseNotesDir(t.TempDir())
+	svc.UsePreviewsDir(previewsDir)
+	svc.UseNotesDir(notesDir)
 	ctx := context.Background()
 	if _, err := svc.PreviewAdd(ctx, "feat/x", "main", "login"); err != nil {
 		t.Fatal(err)
@@ -160,7 +169,7 @@ func storedPreviewReviewModel(t *testing.T) (Model, string) {
 	updated, _ := m.Update(m.loadCmd()())
 	m = updated.(Model)
 	m = readPreviewsNow(t, m)
-	return m.activateTab(panelPreviews), dir
+	return m.activateTab(panelPreviews), dir, notesDir, previewsDir
 }
 
 // readPreviewsNow runs one srcPreviews read to completion.
@@ -534,5 +543,86 @@ func TestSteerToAFreshPreviewReviewReloadsTheRows(t *testing.T) {
 	})
 	if st := nm.filesReview; st.back.Hash != "" {
 		t.Fatalf("a preview review opened with a commit to return to: %+v", st.back)
+	}
+}
+
+// Delete review on the opened preview's Reviews block names the review: its
+// head is the preview's, not a commit's (R5 keeps it out of noteCounts.Reviews).
+func TestDeleteFromPreviewReviewsBlockQuotesTheReview(t *testing.T) {
+	t.Parallel()
+	m, _ := storedPreviewReviewModel(t)
+	m = openStoredPreview(t, m)
+	m.filesView.sel = 1
+	rows, ok := m.noteRowMenu()
+	if !ok {
+		t.Fatal("no note row menu on the review row")
+	}
+	for _, r := range rows {
+		if r.id != "delete-review" {
+			continue
+		}
+		nm, _ := r.run(m)
+		if md := nm.(Model).modal; md == nil || !strings.Contains(md.req.Prompt, "Claude Code") {
+			t.Fatalf("delete confirm %+v, want it to name the review's agent", md)
+		}
+		return
+	}
+	t.Fatal("no delete-review row")
+}
+
+// leafMsgsReversed runs cmd's leaves LAST-FIRST (tea.Batch unwrapped) until
+// pick accepts a message — the worst order for a batch whose first command
+// must not be needed by a later one.
+func leafMsgsReversed(cmd tea.Cmd, pick func(tea.Msg) bool) bool {
+	if cmd == nil {
+		return false
+	}
+	msg := cmd()
+	if b, ok := msg.(tea.BatchMsg); ok {
+		for i := len(b) - 1; i >= 0; i-- {
+			if leafMsgsReversed(b[i], pick) {
+				return true
+			}
+		}
+		return false
+	}
+	return msg != nil && pick(msg)
+}
+
+// An agent's gg process saves the review (this process's note counts are
+// cached); its navigate must show the sub-row whichever of the two reads the
+// review hint starts runs first.
+func TestSteerToAReviewSavedElsewhereShowsItsSubRow(t *testing.T) {
+	t.Parallel()
+	m, dir, notesDir, previewsDir := storedPreviewReviewModelDirs(t)
+	m = m.activateTab(panelBranches)
+	other := domain.New(testRepo(t, dir))
+	other.UseNotesDir(notesDir)
+	other.UsePreviewsDir(previewsDir)
+	ctx := context.Background()
+	set, err := other.PreviewNotes(ctx, "feat/x", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _, err := other.SaveReview(ctx, domain.SaveReview{Target: domain.ScopeReviewTarget(set), Agent: "Codex", Text: previewReviewTestDoc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nm, cmd := m.onReviewHint(reviewHintMsg{svc: m.svc, cmd: steer.Command{Cmd: "navigate", HintKind: "review", HintID: id},
+		commit: set.Tip, preview: "main...feat/x", found: true})
+	found := leafMsgsReversed(cmd, func(msg tea.Msg) bool {
+		da, ok := msg.(dataAvailableMsg)
+		if !ok || da.source != srcPreviews {
+			return false
+		}
+		updated, _ := nm.Update(da)
+		nm = updated.(Model)
+		return true
+	})
+	if !found {
+		t.Fatal("the review hint started no Previews read")
+	}
+	if n := len(nm.previews[0].reviews); n != 2 {
+		t.Fatalf("Previews row lists %d reviews after the navigate, want 2 (the new one)", n)
 	}
 }

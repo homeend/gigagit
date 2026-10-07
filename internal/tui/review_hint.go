@@ -70,6 +70,10 @@ func (m Model) onReviewHint(msg reviewHintMsg) (Model, tea.Cmd) {
 	// An agent that just saved this review (gg review save, /gg-review) wrote
 	// the store behind this process: re-read the counts — and the Previews
 	// rows, where a preview review is a sub-row — so it shows on arrival.
+	// The cache is dropped HERE, not by the srcNotes read: the two reads run
+	// concurrently, and a Previews read that won the race would classify
+	// the reviews from the stale counts (a mutex, no git).
+	nm.svc.InvalidateNoteCounts()
 	var counts, rows tea.Cmd
 	nm, counts = nm.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
 	if msg.preview != "" {

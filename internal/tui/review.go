@@ -139,7 +139,7 @@ func (m Model) previewReviewTargetCmd(r previewRow) tea.Cmd {
 			set, err = svc.PairNotes(ctx, r.pair.A, r.pair.B)
 		}
 		if err == nil && !set.OK() {
-			err = errors.New("nothing to review: the preview has no changes against its base")
+			err = errors.New(i18n.T("nothing to review: the preview has no changes against its base"))
 		}
 		if err != nil {
 			return reviewTargetReadyMsg{svc: svc, err: err}
