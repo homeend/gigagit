@@ -18,15 +18,31 @@ func (s *Service) PreviewReviews(ctx context.Context, set PreviewNoteSet) ([]Rev
 	if sc == "" {
 		return nil, nil
 	}
+	return s.classifyScopeReviews(ctx, sc, set.Tip, set.commitSet())
+}
+
+// PreviewReviewsByScope is PreviewReviews for a scope that cannot be built
+// today — a merged preview, a deleted source (spec §8): with no current tip,
+// every review whose two commits still exist is an older one (R2).
+func (s *Service) PreviewReviewsByScope(ctx context.Context, scope string) ([]ReviewHead, error) {
+	if strings.TrimSpace(scope) == "" {
+		return nil, nil
+	}
+	return s.classifyScopeReviews(ctx, scope, "", nil)
+}
+
+// classifyScopeReviews keeps scope's reviews gg can still show exactly (R2):
+// one of tip is current; any other needs both its commits (Older). in names
+// commits known to exist without a git call.
+func (s *Service) classifyScopeReviews(ctx context.Context, scope, tip string, in map[string]bool) ([]ReviewHead, error) {
 	c, err := s.NoteCounts(ctx)
 	if err != nil {
 		return nil, err
 	}
-	heads := c.PreviewReviews[sc]
+	heads := c.PreviewReviews[scope]
 	if len(heads) == 0 {
 		return nil, nil
 	}
-	in := set.commitSet()
 	exists := func(sha string) bool {
 		if sha == "" {
 			return false
@@ -39,7 +55,7 @@ func (s *Service) PreviewReviews(ctx context.Context, set PreviewNoteSet) ([]Rev
 	}
 	out := make([]ReviewHead, 0, len(heads))
 	for _, h := range heads {
-		if h.Commit == set.Tip {
+		if tip != "" && h.Commit == tip {
 			out = append(out, h)
 			continue
 		}
@@ -51,4 +67,18 @@ func (s *Service) PreviewReviews(ctx context.Context, set PreviewNoteSet) ([]Rev
 		out = append(out, h)
 	}
 	return out, nil
+}
+
+// ReviewOlder reports whether r is a preview review of a tip its preview has
+// since moved past — the review view's "older tip". A scope that no longer
+// resolves (merged, a side deleted) counts as older: its tip is not current.
+func (s *Service) ReviewOlder(ctx context.Context, r Review) bool {
+	if r.Preview == "" {
+		return false
+	}
+	set, err := s.NoteScopeResolve(ctx, r.Preview)
+	if err != nil || !set.OK() {
+		return true
+	}
+	return set.Tip != r.Commit
 }

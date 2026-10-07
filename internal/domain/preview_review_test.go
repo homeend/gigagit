@@ -187,3 +187,63 @@ func TestPreviewReviewsOnlyItsOwnScope(t *testing.T) {
 		t.Fatalf("the zero set shows %+v", got)
 	}
 }
+
+func TestPreviewReviewsByScopeKeepsExistingCommits(t *testing.T) {
+	t.Parallel()
+	dir, svc, set := previewReviewRepo(t)
+	ctx := context.Background()
+	id := savePreviewReview(t, svc, set)
+	// The preview stops being previewable: the source is merged into main.
+	runGitIn(t, dir, "checkout", "-q", "main")
+	runGitIn(t, dir, "merge", "-q", "--ff-only", "feat/x")
+	got, err := svc.PreviewReviewsByScope(ctx, "main...feat/x")
+	if err != nil || len(got) != 1 || got[0].ID != id || !got[0].Older {
+		t.Fatalf("merged preview's review = %+v %v, want it listed as older", got, err)
+	}
+	if got, _ := svc.PreviewReviewsByScope(ctx, "main...other"); len(got) != 0 {
+		t.Fatalf("another scope shows %+v", got)
+	}
+	if got, _ := svc.PreviewReviewsByScope(ctx, ""); len(got) != 0 {
+		t.Fatalf("the empty scope shows %+v", got)
+	}
+}
+
+func TestPreviewReviewsByScopeHidesAGoneTip(t *testing.T) {
+	t.Parallel()
+	dir, svc, set := previewReviewRepo(t)
+	ctx := context.Background()
+	savePreviewReview(t, svc, set)
+	runGitIn(t, dir, "checkout", "-q", "main")
+	runGitIn(t, dir, "branch", "-D", "feat/x")
+	runGitIn(t, dir, "reflog", "expire", "--expire=now", "--all")
+	runGitIn(t, dir, "gc", "--prune=now", "--quiet")
+	if got, err := svc.PreviewReviewsByScope(ctx, "main...feat/x"); err != nil || len(got) != 0 {
+		t.Fatalf("a deleted, pruned source's review = %+v %v, want hidden", got, err)
+	}
+}
+
+func TestReviewOlder(t *testing.T) {
+	t.Parallel()
+	dir, svc, set := previewReviewRepo(t)
+	ctx := context.Background()
+	id := savePreviewReview(t, svc, set)
+	r, err := svc.Review(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if svc.ReviewOlder(ctx, r) {
+		t.Fatal("a review of the current tip reads as older")
+	}
+	commitFile(t, dir, "g.txt", "y\n", "second") // the source moves on
+	if !svc.ReviewOlder(ctx, r) {
+		t.Fatal("a review of a moved tip does not read as older")
+	}
+	runGitIn(t, dir, "checkout", "-q", "main")
+	runGitIn(t, dir, "branch", "-D", "feat/x")
+	if !svc.ReviewOlder(ctx, r) {
+		t.Fatal("a review whose scope no longer resolves does not read as older")
+	}
+	if svc.ReviewOlder(ctx, Review{Commit: set.Tip}) {
+		t.Fatal("a commit review reads as older")
+	}
+}
