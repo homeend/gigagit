@@ -36,7 +36,7 @@ func TaskModeOf(tc config.ToolCommand) (TaskMode, bool) {
 // AgentName is the display name of tc's agent: the catalogue label of the
 // program it runs ("Claude Code"), else the command's own name.
 func AgentName(tc config.ToolCommand) string {
-	if id := agentIDFor(tc); id != "" {
+	if id := ToolAgentID(tc); id != "" {
 		for _, tl := range exttool.Builtins() {
 			if tl.ID == id {
 				return tl.Label
@@ -72,7 +72,7 @@ func TaskChoices(cfg config.Config, kind exttool.Category, frontend string) []Ta
 		if !ok {
 			continue
 		}
-		id := agentIDFor(tc)
+		id := ToolAgentID(tc)
 		key := "id:" + id
 		if id == "" {
 			key = "name:" + tc.Name

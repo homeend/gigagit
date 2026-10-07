@@ -99,7 +99,7 @@ func (s *Service) taskBase(ctx context.Context, tc config.ToolCommand, kind extt
 		repo = worktreeName(top)
 	}
 	return TaskSpec{
-		Kind: kind, Agent: AgentName(tc), AgentID: agentIDFor(tc), Mode: mode,
+		Kind: kind, Agent: AgentName(tc), AgentID: ToolAgentID(tc), Mode: mode,
 		Repo: repo, Worktree: top, Svc: s,
 	}, top, nil
 }

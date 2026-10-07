@@ -131,8 +131,8 @@ func TestAgentIDFor(t *testing.T) {
 		"bash":                          "",
 		"":                              "",
 	} {
-		if got := agentIDFor(config.ToolCommand{Command: cmd}); got != want {
-			t.Errorf("agentIDFor(%q) = %q, want %q", cmd, got, want)
+		if got := ToolAgentID(config.ToolCommand{Command: cmd}); got != want {
+			t.Errorf("ToolAgentID(%q) = %q, want %q", cmd, got, want)
 		}
 	}
 }
