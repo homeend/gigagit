@@ -5744,6 +5744,18 @@ Spec `docs/superpowers/specs/2026-10-07-cross-review-design.md`, plan
   breaks) and no template version moves. CLI-only today: `ReviewTask` (the
   TUI/web task path) does not set it. Blank-but-set or > 2000 runes → exit 2.
   `/gg-cross-review` passes the user's `[focus]` to every reviewer.
+- **An appended model flag must reach the agent** (2026-10-08):
+  `template.AppendBlocker` scans the resolved command (POSIX: quotes, `\`
+  escapes, `\`+newline continues, `#` at a word start; cmd.exe: `"`, `^`, no
+  comments; `2>&1` / `&>` are redirections) for a `;`, `|`, `&`, line break
+  or comment after the agent's arguments; `ResolveReviewCommand` then
+  refuses with `ErrNoModelSupport` naming `<model:FLAG>` (Junie too: it
+  takes `--model x`; `--model=<model>` would leave a bare `--model=` on every
+  model-less run). On Windows the scan reads `FlattenForCmd(cmd)` — what
+  cmd.exe runs. `domain.ReviewTakesModel` = "not ErrNoModelSupport",
+  printed by `--tools` (a tool broken otherwise fails with its own error).
+  `TestReviewTemplatesTakeAnAppendedModel` (exttool) runs every catalog
+  review template through it on both OSes.
 - **Skills name only real `gg session` verbs**: `TestSkillsNameOnlyRealSessionVerbs`
   (cli) runs every `gg session <verb> [<sub>]` in a skill body with `--help`;
   a sub-verb is real when it answers with its own flag usage

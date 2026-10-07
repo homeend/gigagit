@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Cross-review: model flag guard
+
+### Fixed
+
+- **`gg review --model` no longer runs a review on the wrong model.** gg
+  appends the agent's model flag to the end of its review command; when that
+  command goes on after the agent's own arguments (`claude -p … | tee log`,
+  a `;`, `&&`, a second command line or a `# comment`), the flag reached
+  another program or a comment and the review silently ran on the default
+  model. Such a command is now refused (exit 2) with the fix: put
+  `<model:FLAG>` right after the agent's arguments. `gg review --tools`
+  reports `model: false` for it. Every built-in review template is checked
+  on Linux and Windows.
+- **`/gg-cross-review` says what to do with two matching review tools:** ask
+  the user which one, and run every reviewer on it. Skills: using-gg v151,
+  gg-cross-review v4.
+
 ## Sending to GitHub from the terminal UI
 
 ### Added

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -42,6 +43,55 @@ func TestResolveReviewCommandModel(t *testing.T) {
 	}
 	if got, err := ResolveReviewCommand(custom, template.CmdCtx{}); err != nil || got != "printf x" {
 		t.Fatalf("no model, no change: %q %v", got, err)
+	}
+}
+
+// A command the agent's flag cannot be appended to — something after the
+// agent's own arguments would take it — is refused with a fix, not run on
+// the default model; without a model it runs as before.
+func TestResolveReviewCommandRefusesAnUnreachableFlag(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell splitting asserted")
+	}
+	for cmd, sep := range map[string]string{
+		`claude -p x | tee /tmp/log`:    "|",
+		`claude -p x # my review`:       "#",
+		`claude -p x; echo done`:        ";",
+		"claude -p x\necho done\n":      "a line break",
+		`claude -p x && notify-send ok`: "&&",
+	} {
+		tc := config.ToolCommand{Name: "Mine", Category: "review", Mode: "capture", Command: cmd}
+		_, err := ResolveReviewCommand(tc, template.CmdCtx{Model: "opus"})
+		if !errors.Is(err, ErrNoModelSupport) || !strings.Contains(err.Error(), "after "+map[bool]string{true: sep, false: "`" + sep + "`"}[sep == "a line break"]) || !strings.Contains(err.Error(), "<model:--model>") {
+			t.Errorf("%q: %v", cmd, err)
+		}
+		if _, err := ResolveReviewCommand(tc, template.CmdCtx{}); err != nil {
+			t.Errorf("%q without a model: %v", cmd, err)
+		}
+	}
+	// Junie's flag is "--model=", but the fix is <model:--model> too: a
+	// "--model=<model>" would leave a bare --model= on every run without one.
+	junie := config.ToolCommand{Name: "Junie", Category: "review", Mode: "capture", Command: `junie --task x | cat`}
+	if _, err := ResolveReviewCommand(junie, template.CmdCtx{Model: "m"}); err == nil || !strings.Contains(err.Error(), "put <model:--model> ") {
+		t.Errorf("junie: %v", err)
+	}
+}
+
+// ReviewTakesModel answers only the model question: a tool broken for
+// another reason (a token the review lane cannot fill) is not reported as
+// unable to take a model — its run fails with its own error.
+func TestReviewTakesModel(t *testing.T) {
+	t.Parallel()
+	for cmd, want := range map[string]bool{
+		`claude -p x`:                 true,
+		`claude -p x | cat`:           false,
+		`printf x`:                    false,
+		`claude -p <context-file> -x`: true,
+	} {
+		if got := ReviewTakesModel(config.ToolCommand{Name: "T", Category: "review", Command: cmd}); got != want {
+			t.Errorf("%q: %v, want %v", cmd, got, want)
+		}
 	}
 }
 
