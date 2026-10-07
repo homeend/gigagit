@@ -125,7 +125,9 @@ func (s *Server) handlePRCommentsRefresh(w http.ResponseWriter, r *http.Request)
 		writeErr(w, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]any{"changed": rv.CommentsChanged, "moved": rv.Moved, "forge_head": rv.PR.HeadSHA})
+	body := map[string]any{"changed": rv.CommentsChanged, "moved": rv.Moved, "forge_head": rv.PR.HeadSHA}
+	addInterrupted(ctx, svc, pr.Number, body)
+	writeJSON(w, body)
 }
 
 // handlePRDetails is the details overlay's one load: the PR with its

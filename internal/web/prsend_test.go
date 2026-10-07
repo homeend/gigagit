@@ -20,8 +20,9 @@ import (
 // send tests never reach a real forge.
 type writerForge struct {
 	*fakeForge
-	wmu    sync.Mutex
-	writes []string
+	wmu                    sync.Mutex
+	writes                 []string
+	failSubmit, failDelete bool // a send that breaks half-way (an interrupted send)
 }
 
 func (f *writerForge) Snapshot(ctx context.Context, n int) (forge.Snapshot, error) {
@@ -57,11 +58,17 @@ func (f *writerForge) Reply(_ context.Context, _, thread, _ string) (forge.Comme
 
 func (f *writerForge) SubmitReview(_ context.Context, _ string, ev forge.Event, body string) error {
 	f.log(fmt.Sprintf("SubmitReview %s %q", ev, body))
+	if f.failSubmit {
+		return fmt.Errorf("HTTP 502: Bad Gateway")
+	}
 	return nil
 }
 
 func (f *writerForge) DeletePendingReview(_ context.Context, review string) error {
 	f.log("DeletePendingReview " + review)
+	if f.failDelete {
+		return fmt.Errorf("HTTP 502: Bad Gateway")
+	}
 	return nil
 }
 
@@ -281,5 +288,49 @@ func TestWebSendIsWriteGuarded(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 415 {
 		t.Fatalf("a non-JSON post = %d", resp.StatusCode)
+	}
+}
+
+// W6: a send that broke half-way (submit failed, the pending review could
+// not be deleted) is named by the refresh answers, so the page can offer to
+// finish or discard it. Serial: sendServer.
+func TestRefreshAnswersCarryAnInterruptedSend(t *testing.T) {
+	ts, wf, head := sendServer(t)
+	id := addWebNote(t, ts, head, "pr7.txt", 1, "x")
+	wf.wmu.Lock()
+	wf.failSubmit, wf.failDelete = true, true
+	wf.wmu.Unlock()
+	_, out := postJSONAny(t, ts, "/api/pr/send?n=7", `{"kind":"notes","ids":["`+id+`"]}`)
+	if done, _ := findEvent(followDecide(t, ts, out["op_id"].(string), "send"), "done"); done["ok"] == true {
+		t.Fatal("the send was meant to fail")
+	}
+	wf.mu.Lock()
+	wf.open[0].ViewerPendingReview = "PRR_1" // GitHub still holds gg's pending review
+	wf.mu.Unlock()
+	type interrupted struct {
+		Count  int  `json:"count"`
+		Joined bool `json:"joined"`
+	}
+	var rv struct {
+		Interrupted *interrupted `json:"interrupted"`
+	}
+	if code := postJSON(t, ts, "/api/pr/revalidate?n=7", `{}`, "application/json", "", &rv); code != 200 || rv.Interrupted == nil || rv.Interrupted.Count != 1 {
+		t.Fatalf("revalidate = %d %+v", code, rv.Interrupted)
+	}
+	var cr struct {
+		Interrupted *interrupted `json:"interrupted"`
+	}
+	if code := postJSON(t, ts, "/api/pr/comments/refresh?n=7", `{}`, "application/json", "", &cr); code != 200 || cr.Interrupted == nil {
+		t.Fatalf("comments refresh = %d %+v", code, cr.Interrupted)
+	}
+	// Nothing pending on GitHub: no offer.
+	wf.mu.Lock()
+	wf.open[0].ViewerPendingReview = ""
+	wf.mu.Unlock()
+	var none struct {
+		Interrupted *interrupted `json:"interrupted"`
+	}
+	if code := postJSON(t, ts, "/api/pr/revalidate?n=7", `{}`, "application/json", "", &none); code != 200 || none.Interrupted != nil {
+		t.Fatalf("no pending review, yet = %d %+v", code, none.Interrupted)
 	}
 }
