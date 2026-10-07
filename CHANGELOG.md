@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Sending to GitHub: follow-ups
+
+### Fixed
+
+- **A review sent in part keeps its summary on GitHub.** When a stored
+  review was sent but some of its comments did not arrive, sending it again
+  posted its summary a second time. Now only the missing comments go; the
+  confirm says the summary is already on GitHub.
+- **`gg pr pending approve` no longer fails an agent's send you could not
+  confirm.** Approving with no terminal, or with `--yes` while your own
+  review is pending on GitHub, leaves the entry pending (nothing was
+  posted); the second case now says what to do instead of an option error.
+- **An agent's `--event` survives the queue.** `gg pr pending` shows
+  `(asks: approve)`, and `approve --yes` answers with it. Approve or
+  request-changes on your own pull request is refused by name.
+- **Comments land on the lines GitHub shows.** Finding a line's hunk now
+  ignores your `diff.interHunkContext`, `diff.algorithm` and
+  `diff.indentHeuristic` settings, which could make GitHub refuse a whole
+  review.
+- A draft reply mixed with new notes in one `gg pr send --note` list is
+  refused (send it on its own) instead of being skipped silently; a draft
+  deleted before its queued send was approved is skipped as "it no longer
+  exists".
+- A quoted line holding ```` ``` ```` no longer breaks the quote of a
+  file-level comment.
+- A send could hang the first time it ran in a fresh gg (the note store
+  opened behind the repository lock); and a refresh could clear a send
+  another gg process had just started.
+- Skills: using-gg v147.
+
 ## Cross-review: several models, one review
 
 ### Added

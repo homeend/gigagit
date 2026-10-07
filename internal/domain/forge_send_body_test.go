@@ -40,3 +40,11 @@ func TestSendBodyQuotesTheLineOfAFileLevelThread(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestQuoteLinesFenceOutgrowsAQuotedFence(t *testing.T) {
+	t.Parallel()
+	q := quoteLines(3, []string{"s := \"```go\"", "x := 1"})
+	if !strings.HasPrefix(q, "> Line 3:\n> ````\n") || !strings.HasSuffix(q, "> ````\n\n") {
+		t.Fatalf("a quoted ``` must not close the fence: %q", q)
+	}
+}

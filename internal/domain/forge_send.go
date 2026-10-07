@@ -42,6 +42,7 @@ type PRSendRequest struct {
 	Resolve   []string `toml:"resolve,omitempty" json:"resolve,omitempty"`     // thread ids or forge comment ids
 	Unresolve []string `toml:"unresolve,omitempty" json:"unresolve,omitempty"` // thread ids or forge comment ids
 	Verdict   bool     `toml:"verdict,omitempty" json:"verdict,omitempty"`     // a verdict with no comments
+	Event     string   `toml:"event,omitempty" json:"event,omitempty"`         // the verdict asked for: comment, approve, request-changes ("" = ask)
 	Body      string   `toml:"body,omitempty" json:"body,omitempty"`
 	Finish    bool     `toml:"finish,omitempty" json:"finish,omitempty"`
 	Discard   bool     `toml:"discard,omitempty" json:"discard,omitempty"`
@@ -101,8 +102,9 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 			plan.Items = append(plan.Items, engine.SendItem{Key: k, Label: k + " (waiting in the pending review)"})
 		}
 		return plan, nil
-	case len(req.Resolve)+len(req.Unresolve) > 0 || s.onlyDrafts(ctx, req.Notes):
-		if req.Review != "" || req.Mine || req.Verdict || (len(req.Notes) > 0 && !s.onlyDrafts(ctx, req.Notes)) {
+	}
+	if drafts, other := s.noteKinds(ctx, req.Notes); len(req.Resolve)+len(req.Unresolve) > 0 || drafts > 0 {
+		if req.Review != "" || req.Mine || req.Verdict || other > 0 {
 			return engine.SendPlan{}, ErrMixedSend
 		}
 		return s.planActions(ctx, plan, req)
@@ -153,22 +155,27 @@ func (s *Service) storedNotes(ctx context.Context) (map[string]model.Note, error
 	return out, nil
 }
 
-// onlyDrafts reports a non-empty id list naming only draft replies to
-// GitHub threads.
-func (s *Service) onlyDrafts(ctx context.Context, ids []string) bool {
+// noteKinds counts a --note list's draft replies to GitHub threads and its
+// other items (local notes, remarks, GitHub ids); an id no longer stored is
+// neither — a reply/resolve send skips it, any other send names it.
+func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, other int) {
 	if len(ids) == 0 {
-		return false
+		return 0, 0
 	}
 	byID, err := s.storedNotes(ctx)
 	if err != nil {
-		return false
+		return 0, len(ids)
 	}
 	for _, id := range ids {
-		if n, ok := byID[id]; !ok || !n.IsForgeReply() {
-			return false
+		n, ok := byID[id]
+		switch {
+		case ok && n.IsForgeReply():
+			drafts++
+		case ok || model.IsReviewNoteID(id) || model.IsForgeNoteID(id):
+			other++
 		}
 	}
-	return true
+	return drafts, other
 }
 
 // planActions is replies and resolves: each its own call.
@@ -180,7 +187,11 @@ func (s *Service) planActions(ctx context.Context, plan engine.SendPlan, req PRS
 			return engine.SendPlan{}, err
 		}
 		for _, id := range req.Notes {
-			d := byID[id]
+			d, ok := byID[id]
+			if !ok { // deleted since the request was made (a queued send)
+				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "reply " + id, Reason: "it no longer exists"})
+				continue
+			}
 			label := "reply: " + cutLabel(d.Summary)
 			_, root, ok := s.forgeCommentByID(strings.TrimPrefix(d.ParentID, model.ForgeNoteIDPrefix))
 			switch {
@@ -309,6 +320,10 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 			return engine.SendPlan{}, err
 		}
 		plan.Key, plan.Body, plan.Verdict = r.ID, reviewSendBody(r), true
+		if r.summarySent(pr.Number) {
+			plan.Body = ""
+			plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: "already on GitHub"})
+		}
 		for i := range r.docRemarks() {
 			s.remarkItem(ctx, &plan, r, i, pl)
 		}

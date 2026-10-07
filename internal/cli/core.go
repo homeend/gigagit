@@ -28,9 +28,9 @@ func (d cliDecider) Decide(ctx context.Context, req engine.DecisionRequest) (eng
 		return engine.DecisionResponse{Option: opt}, nil
 	}
 	if !d.interactive || d.in == nil {
-		return engine.DecisionResponse{}, fmt.Errorf(
+		return engine.DecisionResponse{}, needsDecisionError{fmt.Sprintf(
 			"%s needs a decision: %s (options: %s); rerun with the matching flag",
-			req.ID, req.Prompt, strings.Join(req.Options, ", "))
+			req.ID, req.Prompt, strings.Join(req.Options, ", "))}
 	}
 	fmt.Fprintf(d.out, "%s\n  options: %s\n> ", req.Prompt, strings.Join(req.Options, ", "))
 	// The blocking stdin read runs in its own goroutine so a cancelled ctx
@@ -57,6 +57,13 @@ func (d cliDecider) Decide(ctx context.Context, req engine.DecisionRequest) (eng
 	}
 	return engine.DecisionResponse{}, fmt.Errorf("invalid choice %q for %s", choice, req.ID)
 }
+
+// needsDecisionError is a fork the CLI could not answer: no policy for it
+// and no terminal to ask. It is an engine.ErrDecisionRequired.
+type needsDecisionError struct{ msg string }
+
+func (e needsDecisionError) Error() string { return e.msg }
+func (e needsDecisionError) Unwrap() error { return engine.ErrDecisionRequired }
 
 // syncWriter serializes writes to one underlying writer. The decider may
 // prompt from the operation goroutine while runOperation prints progress from

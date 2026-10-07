@@ -248,3 +248,43 @@ func TestASentNoteKeepsItsGroup(t *testing.T) {
 	}
 	t.Fatalf("the sent thread is not in the PR's notes: %+v", got)
 }
+
+// The send op's Settle may be the first use of the note store and the PR
+// cache in this process (a fresh Service): opening them must not take the
+// repo gate either — the op holds a reservation and a writer may queue.
+func TestSettleOpensItsStoresWithoutTheGate(t *testing.T) {
+	t.Parallel()
+	dir, head := prPreviewRepo(t)
+	_, holder := newRealRepoAt(t, dir)
+	_, svc := newRealRepoAt(t, dir) // has never opened a store
+	svc.SetForgeProviders([]forge.Provider{&fakeForge{
+		byNum: map[int]model.PullRequest{7: {Number: 7, State: "open", Target: "main", HeadSHA: head}}}})
+	ctx := context.Background()
+	gate := holder.gateFor(ctx)
+	if gate != svc.gateFor(ctx) {
+		t.Fatal("two services on one repo must share its gate")
+	}
+	held, err := gate.Acquire(ctx, repogate.Read, "op SendToForge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Release()
+	go func() {
+		if w, err := gate.Acquire(ctx, repogate.TreeWrite, "op Commit"); err == nil {
+			w.Release()
+		}
+	}()
+	for len(gate.Queue()) < 2 {
+		time.Sleep(time.Millisecond)
+	}
+	done := make(chan error, 1)
+	go func() { done <- svc.sendLedger(7).Settle(ctx) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Settle blocked on the repo gate opening its stores")
+	}
+}
