@@ -249,6 +249,7 @@ func (m Model) overviewRows() []actionRow {
 			rows = append(rows, ref)
 		}
 	}
+	rows = append(rows, m.bandRows(d)...)
 	if d.from != nil {
 		rows = append(rows, actionRow{id: "overview-back", key: "bksp", label: i18n.T("Back to overview"), run: func(m Model) (tea.Model, tea.Cmd) {
 			nm, cmd, _ := m.anchorBack(d)

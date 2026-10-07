@@ -356,3 +356,78 @@ func TestViewerTitleSkipsTheRunningAndStickyMessages(t *testing.T) {
 		t.Fatal("a sticky message sits in the viewer title")
 	}
 }
+
+func TestNStepsToTheNextBandAndWraps(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 2) // a.txt:5-8 current; bands 5-8, 12
+	f := topDoc(m)
+	m = fvKeys(t, m, keyMsg("n"))
+	if f.p.cur != 11 || f.anchorCur != "a.txt:12" || d.ov.sel != 1 {
+		t.Fatalf("n: cur=%d anchorCur=%q sel=%d", f.p.cur, f.anchorCur, d.ov.sel)
+	}
+	if !strings.Contains(m.statusMsg, "anchor 2/2 in this file · line twelve") {
+		t.Fatalf("status = %q", m.statusMsg)
+	}
+	m = fvKeys(t, m, keyMsg("n"))
+	if f.p.cur != 4 || !strings.HasSuffix(m.statusMsg, "· wrapped") {
+		t.Fatalf("wrap: cur=%d status=%q", f.p.cur, m.statusMsg)
+	}
+}
+
+func TestPStepsBackAndBackspaceReturnsOnIt(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 1) // a.txt:12
+	m = fvKeys(t, m, keyMsg("p"))
+	if f := topDoc(m); f.p.cur != 4 || f.anchorCur != "a.txt:5-8" {
+		t.Fatalf("p: cur=%d current anchor %q", f.p.cur, f.anchorCur)
+	}
+	m = fvKeys(t, m, keyMsg("backspace"))
+	if topDoc(m) != d || d.ov.sel != 2 {
+		t.Fatalf("back on sel %d, want 2 (the anchor stepped to)", d.ov.sel)
+	}
+}
+
+func TestNAndPAreInertWithoutBands(t *testing.T) {
+	t.Parallel()
+	m, f := notedViewer(t)
+	cur := f.p.cur
+	m = fvKeys(t, m, keyMsg("n"))
+	fvKeys(t, m, keyMsg("p"))
+	if f.p.cur != cur {
+		t.Fatal("n / p moved a file with no bands")
+	}
+}
+
+func TestNoteAnchorOpenShowsBandsNoneCurrent(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 3) // the note on a.txt:20
+	f := topDoc(m)
+	bs := f.bands()
+	if len(bs) != 2 || f.curBand(bs) != -1 {
+		t.Fatalf("bands=%v cur=%d", bs, f.curBand(bs))
+	}
+	fvKeys(t, m, keyMsg("p")) // the cursor on 20: the last band above it is 12
+	if f.p.cur != 11 {
+		t.Fatalf("p from the note: cur=%d want 11", f.p.cur)
+	}
+}
+
+func TestBandMenuRowsAndHint(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = openNth(t, m, d, 1)
+	ids := map[string]bool{}
+	for _, r := range m.overviewRows() {
+		ids[r.id] = true
+	}
+	if !ids["anchor-next"] || !ids["anchor-prev"] || !ids["overview-back"] {
+		t.Fatalf("rows = %v", ids)
+	}
+	m.statusMsg = ""
+	if !strings.Contains(m.View(), "[n/p] anchors") {
+		t.Fatal("hint lacks [n/p] anchors")
+	}
+}

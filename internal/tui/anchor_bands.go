@@ -1,6 +1,12 @@
 package tui
 
-import "sort"
+import (
+	"sort"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
+)
 
 // Overview anchor bands (spec 2026-10-07-overview-anchor-bands): a file an
 // overview's anchor opened draws every line / range anchor that overview
@@ -141,4 +147,66 @@ func gutterMark(k bandKind, noted bool) string {
 		return "│ "
 	}
 	return ""
+}
+
+// bandKey gives the focused document's anchor bands n / p. Declined (the
+// key keeps its other meanings) when the document has none.
+func (m Model) bandKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
+	s := msg.String()
+	if s != "n" && s != "p" {
+		return m, nil, false
+	}
+	d, ok := m.focusedDoc()
+	if !ok || d.bands() == nil {
+		return m, nil, false
+	}
+	dir := 1
+	if s == "p" {
+		dir = -1
+	}
+	return m.stepAnchorBand(d, dir), nil, true
+}
+
+// stepAnchorBand moves d to its next (dir 1) / previous band: the cursor on
+// its first line, centred as an anchor open lands, the band current, and the
+// overview's selection on its anchor so backspace comes back there.
+func (m Model) stepAnchorBand(d *openFile, dir int) Model {
+	bs := d.bands()
+	k, wrapped := stepBand(bs, d.curBand(bs), d.p.cur+1, dir)
+	if k < 0 {
+		return m
+	}
+	b, ov := bs[k], d.from
+	a := ov.ov.anchors[b.i]
+	d.anchorCur = a.dest
+	_, rows, _, _ := m.activePreview()
+	d.pendingLine, d.pendingEnd = b.start, 0
+	d.landPendingLine(rows)
+	vr, _ := m.viewerGeom()
+	ov.selectAnchor(b.i, vr)
+	label := a.target.Label
+	if label == "" {
+		label = a.dest
+	}
+	if wrapped {
+		m.statusMsg = i18n.T("anchor %d/%d in this file · %s · wrapped", k+1, len(bs), label)
+	} else {
+		m.statusMsg = i18n.T("anchor %d/%d in this file · %s", k+1, len(bs), label)
+	}
+	return m
+}
+
+// bandRows are the . menu's n / p rows in a file with bands.
+func (m Model) bandRows(d *openFile) []actionRow {
+	if d.bands() == nil {
+		return nil
+	}
+	return []actionRow{
+		{id: "anchor-next", key: "n", label: i18n.T("Next anchor in this file"), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.stepAnchorBand(d, 1), nil
+		}},
+		{id: "anchor-prev", key: "p", label: i18n.T("Previous anchor in this file"), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.stepAnchorBand(d, -1), nil
+		}},
+	}
 }

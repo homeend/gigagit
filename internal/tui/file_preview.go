@@ -628,7 +628,11 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
 	}
 	if d := m.previewDoc(p); d != nil && d.from != nil {
-		hint = i18n.T("[bksp] back") + "  " + hint // the way back to the overview leads
+		lead := i18n.T("[bksp] back")
+		if d.bands() != nil {
+			lead += "  " + i18n.T("[n/p] anchors")
+		}
+		hint = lead + "  " + hint // the way back to the overview leads
 	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 	if margin > 0 {
