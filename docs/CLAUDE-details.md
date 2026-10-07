@@ -5705,6 +5705,23 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   `yieldToWaiters` (cancelled when anyone queues behind the gate); the TUI
   cancels its prefetch on `reRoot`, a newer list and quit.
 
+### Review links: follow-ups (2026-10-08)
+
+- A landing's answer reads "in this review" while `m.filesReview` is set
+  (drainPendingFiles / drainPendingCompare); a plain navigate passes through
+  closeFilesView, which clears it.
+- `Service.reviewHolds` = the path is in `ReviewFiles` (exactly the list
+  the review view shows, new paths) — a doc-only file or a rename's old name
+  would be a link that lands on nothing. `ErrNotInReview` (`notInReview`).
+- `ReviewRemarkID` checks what `NoteReply` checks — the stored review and
+  `docRemarks()` count, NO git (a gc'd commit still copies);
+  `ReviewRemarkLink` needs the target (`reviewRemark`). Errors are typed with
+  `Is` (`reviewGone`, `noSuchRemark`, `notInReview`) so the text is not
+  doubled by a sentinel prefix. TUI: `asyncCopyRow`; web:
+  `GET /api/review/{id}/remark-id?n=`.
+- `narrowReviewShow` drops `Outdated` into `OutdatedHidden` (replies record
+  no remark path).
+
 ### Cross-review (2026-10-07)
 
 Spec `docs/superpowers/specs/2026-10-07-cross-review-design.md`, plan

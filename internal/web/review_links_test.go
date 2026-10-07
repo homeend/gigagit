@@ -65,6 +65,9 @@ func TestReviewLinkEndpointFileAndRemark(t *testing.T) {
 	if code := getJSON(t, ts, "/api/review/"+id+"/link?n=99", &got); code != 404 {
 		t.Fatalf("unknown remark = %d, want 404", code)
 	}
+	if code := getJSON(t, ts, "/api/review/"+id+"/link?path=nope.txt", &got); code != 404 {
+		t.Fatalf("a file the review does not hold = %d, want 404", code)
+	}
 	if code := getJSON(t, ts, "/api/review/"+id+"/link?n=x", &got); code != 400 {
 		t.Fatalf("bad n = %d, want 400", code)
 	}
@@ -90,5 +93,24 @@ func TestReviewLinkRowsAreWired(t *testing.T) {
 		if !strings.Contains(readStatic(t, c.file), c.want) {
 			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
 		}
+	}
+}
+
+// Copy remark id asks the server first: the id comes back only while the
+// review and its remark exist.
+func TestReviewRemarkIDEndpoint(t *testing.T) {
+	t.Parallel()
+	ts, _, _, id := reviewServer(t, webReviewDoc)
+	var got struct{ ID string }
+	if code := getJSON(t, ts, "/api/review/"+id+"/remark-id?n=0", &got); code != 200 || got.ID != "review:"+id+":0" {
+		t.Fatalf("remark 0 = %d %q", code, got.ID)
+	}
+	for _, u := range []string{"/api/review/" + id + "/remark-id?n=99", "/api/review/deadbeef/remark-id?n=0"} {
+		if code := getJSON(t, ts, u, &got); code != 404 {
+			t.Errorf("%s = %d, want 404", u, code)
+		}
+	}
+	if code := getJSON(t, ts, "/api/review/"+id+"/remark-id?n=x", &got); code != 400 {
+		t.Errorf("bad n = %d, want 400", code)
 	}
 }

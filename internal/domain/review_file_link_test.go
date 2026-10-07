@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -72,8 +74,12 @@ func TestReviewRemarkLink(t *testing.T) {
 // A working-changes review has no commit; its file link still builds.
 func TestReviewFileLinkOnAWorkingReview(t *testing.T) {
 	t.Parallel()
-	_, svc, _ := reviewRepo(t)
+	dir, svc, _ := reviewRepo(t)
 	ctx := context.Background()
+	// The review read an uncommitted change to f.txt: the file its view lists.
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	files := []model.NoteFile{{Path: "f.txt", Blob: strings.Repeat("a", 40)}}
 	id, _, err := svc.SaveReview(ctx, SaveReview{Target: WorkingReviewTarget(), Agent: "Claude Code", Text: linkReviewDoc, Files: files})
 	if err != nil {
@@ -85,5 +91,94 @@ func TestReviewFileLinkOnAWorkingReview(t *testing.T) {
 	}
 	if l := mustParse(t, fl); !strings.HasSuffix(fl, "/f.txt?review="+id) || l.Hint.ID != id {
 		t.Fatalf("working file link %q = %+v", fl, l)
+	}
+}
+
+// A file link names a file the review holds: one its change touched or one
+// its document (or a working review's fingerprint) names. Any other path
+// is refused — the link would open the review on nothing.
+func TestReviewFileLinkRefusesAPathNotInTheReview(t *testing.T) {
+	t.Parallel()
+	svc, dir, single, rng := reviewLinkFixture(t)
+	ctx := context.Background()
+	for _, id := range []string{single, rng} {
+		_, err := svc.ReviewFileLink(ctx, id, "nope.txt")
+		if !errors.Is(err, ErrNotInReview) || err.Error() != "nope.txt is not in review "+id {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+	// b.txt changed with a.txt but has no remark: it is the review's. A
+	// remark on ghost.txt, which the change does not touch, is not: the
+	// review view lists only the change's files, so its link would open on
+	// nothing.
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("z\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-q", "-m", "two files")
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	doc := `{"version":1,"summary":"ok","files":[{"path":"ghost.txt","annotations":[{"newRange":[1,1],"summary":"s"}]}]}`
+	id, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Commit: head}, Agent: "Claude", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"a.txt", "b.txt", "./b.txt"} {
+		if _, err := svc.ReviewFileLink(ctx, id, p); err != nil {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+	for _, p := range []string{"c.txt", "ghost.txt"} {
+		if _, err := svc.ReviewFileLink(ctx, id, p); !errors.Is(err, ErrNotInReview) {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+}
+
+// ReviewRemarkID hands back a remark id only while it names something: the
+// review must still be stored and hold that remark (Copy remark id).
+func TestReviewRemarkID(t *testing.T) {
+	t.Parallel()
+	svc, _, _, rng := reviewLinkFixture(t)
+	ctx := context.Background()
+	id := model.ReviewNoteIDPrefix + rng + ":1"
+	if got, err := svc.ReviewRemarkID(ctx, id); err != nil || got != id {
+		t.Fatalf("ReviewRemarkID = %q, %v", got, err)
+	}
+	if _, err := svc.ReviewRemarkID(ctx, model.ReviewNoteIDPrefix+rng+":7"); !errors.Is(err, ErrNoSuchRemark) || err.Error() != "review "+rng+" has no remark 7" {
+		t.Fatalf("no such remark: %v", err)
+	}
+	if _, err := svc.ReviewRemarkID(ctx, model.ReviewNoteIDPrefix+"deadbeef:0"); !errors.Is(err, ErrReviewNotFound) || err.Error() != "review deadbeef no longer exists" {
+		t.Fatalf("gone review: %v", err)
+	}
+	if _, err := svc.ReviewRemarkID(ctx, "x"); err == nil {
+		t.Fatal("a malformed id was accepted")
+	}
+}
+
+// A remark id is checked the way gg note reply checks it — the stored review
+// and its remark count — so it is copied even when the review's commit no
+// longer resolves here (gc'd after a rebase), where no link can be spelled.
+func TestReviewRemarkIDOfAReviewWhoseCommitIsGone(t *testing.T) {
+	t.Parallel()
+	svc, dir, _, _ := reviewLinkFixture(t)
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("lost\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "commit", "-qam", "lost")
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	id, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Commit: head}, Agent: "Claude", Text: linkReviewDoc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "reset", "-q", "--hard", "HEAD~1")
+	gitRun(t, dir, "reflog", "expire", "--expire=now", "--all")
+	gitRun(t, dir, "gc", "-q", "--prune=now")
+	rid := model.ReviewNoteIDPrefix + id + ":0"
+	if got, err := svc.ReviewRemarkID(ctx, rid); err != nil || got != rid {
+		t.Fatalf("ReviewRemarkID = %q, %v", got, err)
 	}
 }

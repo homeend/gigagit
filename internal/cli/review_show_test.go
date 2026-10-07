@@ -174,3 +174,26 @@ func TestReviewShowNarrowsToAFileOrRemarkLink(t *testing.T) {
 		t.Fatalf("file link = %d %q %q", code, out, errb)
 	}
 }
+
+// Narrowed to a file or remark, the outdated threads stay out: a reply never
+// recorded its remark's file, so none can be shown as belonging there. The
+// view says how many it left out and where they are.
+func TestReviewShowNarrowedHidesOutdatedThreads(t *testing.T) {
+	t.Parallel()
+	rs := domain.ReviewShow{ID: "rv1", Remarks: []domain.ReviewShowRemark{{N: 0, Path: "a.txt", Side: "new", Start: 1, End: 1}},
+		Outdated: []domain.ReviewShowOutdated{{Summary: "gone one"}, {Summary: "gone two"}}}
+	at := domain.Resolved{}
+	at.Addr.Path = "a.txt"
+	got := narrowReviewShow(rs, at)
+	if len(got.Outdated) != 0 || got.OutdatedHidden != 2 {
+		t.Fatalf("narrowed: outdated %v, hidden %d", got.Outdated, got.OutdatedHidden)
+	}
+	var b strings.Builder
+	printReviewShow(&b, got)
+	if strings.Contains(b.String(), "gone one") || !strings.Contains(b.String(), "2 outdated threads not shown — gg review show rv1 lists them") {
+		t.Fatalf("printed:\n%s", b.String())
+	}
+	if whole := narrowReviewShow(rs, domain.Resolved{}); len(whole.Outdated) != 2 || whole.OutdatedHidden != 0 {
+		t.Fatalf("a link with no path narrows nothing: %+v", whole)
+	}
+}

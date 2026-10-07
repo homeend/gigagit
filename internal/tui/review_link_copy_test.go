@@ -168,6 +168,23 @@ func TestReviewRemarkRowsCopyLinkAndID(t *testing.T) {
 	}
 }
 
+// Copy remark id checks the store first: a review deleted while its diff is
+// open copies nothing and says so, as Copy remark link does.
+func TestReviewRemarkIDOfADeletedReviewIsNotCopied(t *testing.T) {
+	t.Parallel()
+	m, id := openedReviewView(t)
+	m = reviewDiffOnRemark(t, m)
+	if err := m.svc.NoteRemove(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	var got string
+	m = captureClip(m, &got)
+	m = runMenuRow(t, m, "copy-remark-id")
+	if got != "" || !strings.Contains(m.statusMsg, "review "+id+" no longer exists") {
+		t.Fatalf("copied %q, status %q", got, m.statusMsg)
+	}
+}
+
 // L on a remark of a single-commit review copies the remark link (it used
 // to answer "no gg link for this place").
 func TestReviewRemarkLKeyCopiesTheRemarkLink(t *testing.T) {

@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review links: the remaining rough edges
+
+### Fixed
+
+- **A review link answers in the review's terms.** Opening a review link
+  whose file the review does not hold now answers `<file> is not in this
+  review` (it said `not in commit <sha>`, and `not in ..` for a review of
+  uncommitted changes); a landing says `opened <file> in this review`.
+- **No link to a file the review does not hold.** `Copy review link to this
+  file` (TUI, web, `/api/review/{id}/link?path=`) refuses a path the
+  review's view does not list — the files its link can land on:
+  `<path> is not in review <id>` (web: 404).
+- **`gg review show <file or remark link>` leaves out outdated threads.**
+  They record no file, so none belongs to the narrowed view; it says
+  `N outdated threads not shown — gg review show <id> lists them` (JSON:
+  `outdated_hidden`). Skill: using-gg v152.
+- **Copy remark id checks the review is still there.** In the TUI and web,
+  a review deleted meanwhile copies nothing and says `review <id> no
+  longer exists` (or `has no remark <n>`). It checks what `gg note reply`
+  checks, so an id still copies when the review's commit is gone.
+
 ## Cross-review: model flag guard
 
 ### Fixed

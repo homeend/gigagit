@@ -21,6 +21,9 @@ import (
 // would mislead whoever follows the link.
 var ErrReviewLinkMismatch = errors.New("the link does not match the review")
 
+// ErrNotInReview refuses a link to a file the review does not hold.
+var ErrNotInReview = errors.New("not in the review")
+
 // ReviewID turns an id, or "latest" (the newest stored review), into a stored
 // review's id. ErrReviewNotFound when there is none.
 func (s *Service) ReviewID(ctx context.Context, idOrLatest string) (string, error) {
@@ -128,35 +131,112 @@ func (s *Service) ReviewFileLink(ctx context.Context, id, path string) (string, 
 	if err != nil {
 		return "", err
 	}
+	path = reviewPath(path) // as the review's own paths are read ("./a.txt")
+	if ok, err := s.reviewHolds(ctx, r, path); err != nil {
+		return "", err
+	} else if !ok {
+		return "", notInReview{path: path, id: r.ID}
+	}
 	return s.linkText(ctx, model.Link{Path: path, Target: t, Side: model.NoteSideNew,
 		Hint: model.LinkHint{Kind: model.ReviewHintKind, ID: r.ID}})
+}
+
+// reviewHolds reports whether path is one of the files review r's view
+// lists (ReviewFiles: the commit's, the range's, or HEAD ↔ the working
+// tree's) — the files a link to the review can land on.
+func (s *Service) reviewHolds(ctx context.Context, r Review, path string) (bool, error) {
+	files, err := s.ReviewFiles(ctx, r)
+	if err != nil {
+		return false, err
+	}
+	for _, f := range files {
+		if f.Path == path {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ReviewRemarkLink is the review-aware link of one remark, named by its id
 // review:<review id>:<n> (the id gg note reply / resolve take).
 func (s *Service) ReviewRemarkLink(ctx context.Context, remarkID string) (string, error) {
+	rm, rid, err := s.reviewRemark(ctx, remarkID)
+	if err != nil {
+		return "", err
+	}
+	if rm.ReviewLink == "" {
+		return "", fmt.Errorf("remark %d of review %s has no link (its path cannot be spelled)", rm.N, rid)
+	}
+	return rm.ReviewLink, nil
+}
+
+// ReviewRemarkID is remarkID while it names a remark — its review still
+// stored and holding remark n — so a copied id is one gg note reply takes.
+//
+// It checks what gg note reply checks — the stored review and its remark
+// count — and no more: no git, so an id whose commit is gone still copies.
+func (s *Service) ReviewRemarkID(ctx context.Context, remarkID string) (string, error) {
 	rid, n, ok := model.ParseReviewNoteID(remarkID)
 	if !ok {
 		return "", fmt.Errorf("not a review remark id: %q", remarkID)
 	}
 	r, err := s.Review(ctx, rid)
+	if errors.Is(err, ErrReviewNotFound) {
+		return "", reviewGone(rid)
+	}
 	if err != nil {
 		return "", err
+	}
+	if n >= len(r.docRemarks()) {
+		return "", noSuchRemark{id: rid, n: n}
+	}
+	return remarkID, nil
+}
+
+// reviewGone is ErrReviewNotFound worded for an id the user still holds.
+type reviewGone string
+
+func (g reviewGone) Error() string        { return "review " + string(g) + " no longer exists" }
+func (g reviewGone) Is(target error) bool { return target == ErrReviewNotFound }
+
+// noSuchRemark is ErrNoSuchRemark naming the review and the remark.
+type noSuchRemark struct {
+	id string
+	n  int
+}
+
+func (e noSuchRemark) Error() string        { return fmt.Sprintf("review %s has no remark %d", e.id, e.n) }
+func (e noSuchRemark) Is(target error) bool { return target == ErrNoSuchRemark }
+
+// notInReview is ErrNotInReview naming the path and the review.
+type notInReview struct{ path, id string }
+
+func (e notInReview) Error() string        { return e.path + " is not in review " + e.id }
+func (e notInReview) Is(target error) bool { return target == ErrNotInReview }
+
+// reviewRemark finds the remark remarkID names, and its review's id.
+func (s *Service) reviewRemark(ctx context.Context, remarkID string) (ReviewRemark, string, error) {
+	rid, n, ok := model.ParseReviewNoteID(remarkID)
+	if !ok {
+		return ReviewRemark{}, "", fmt.Errorf("not a review remark id: %q", remarkID)
+	}
+	r, err := s.Review(ctx, rid)
+	if errors.Is(err, ErrReviewNotFound) {
+		return ReviewRemark{}, rid, reviewGone(rid)
+	}
+	if err != nil {
+		return ReviewRemark{}, rid, err
 	}
 	rms, err := s.ReviewRemarks(ctx, r)
 	if err != nil {
-		return "", err
+		return ReviewRemark{}, rid, err
 	}
 	for _, rm := range rms {
-		if rm.N != n {
-			continue
+		if rm.N == n {
+			return rm, rid, nil
 		}
-		if rm.ReviewLink == "" {
-			return "", fmt.Errorf("remark %d of review %s has no link (its path cannot be spelled)", n, rid)
-		}
-		return rm.ReviewLink, nil
 	}
-	return "", fmt.Errorf("review %s has no remark %d", rid, n)
+	return ReviewRemark{}, rid, noSuchRemark{id: rid, n: n}
 }
 
 // ScopeLinkText is a commit's Range review row's link: the commit pair the
@@ -342,6 +422,9 @@ type ReviewShow struct {
 	// whose remark is gone from the re-saved review.
 	Resolved int                  `json:"resolved"`
 	Outdated []ReviewShowOutdated `json:"outdated,omitempty"`
+	// OutdatedHidden counts the outdated threads a view narrowed to one
+	// file or remark left out (they record no file).
+	OutdatedHidden int `json:"outdated_hidden,omitempty"`
 }
 
 // ReviewShow reads review id for an agent (gg review show, gg_review_show).

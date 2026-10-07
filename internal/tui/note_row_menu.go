@@ -205,6 +205,12 @@ func (m Model) dropFilesRows(gone func(contentLine) bool) Model {
 // pair's full shas): the link is built when the row RUNS, off the Update
 // thread, then copied — and recorded in gg links — like every copy.
 func (m Model) asyncCopyLinkRow(id, label string, build func(context.Context) (string, error)) actionRow {
+	return m.asyncCopyRow(id, label, func(text string) string { return i18n.T("Copied link: %s", text) }, build)
+}
+
+// asyncCopyRow copies what build returns off the UI goroutine, notice(text)
+// saying so; build's error is the copy's failure and nothing is copied.
+func (m Model) asyncCopyRow(id, label string, notice func(string) string, build func(context.Context) (string, error)) actionRow {
 	return actionRow{id: id, label: label, run: func(m Model) (tea.Model, tea.Cmd) {
 		cp := m.copyToClipboardCmd
 		return m, func() tea.Msg {
@@ -212,7 +218,7 @@ func (m Model) asyncCopyLinkRow(id, label string, build func(context.Context) (s
 			if err != nil {
 				return clipboardCopiedMsg{err: err}
 			}
-			return cp(i18n.T("Copied link: %s", text), text)()
+			return cp(notice(text), text)()
 		}
 	}}
 }
@@ -270,7 +276,10 @@ func (m Model) reviewRemarkRows() []actionRow {
 		m.asyncCopyLinkRow("copy-remark-link", i18n.T("Copy remark link"), func(ctx context.Context) (string, error) {
 			return svc.ReviewRemarkLink(ctx, rootID)
 		}),
-		m.copyRow("copy-remark-id", i18n.T("Copy remark id"), i18n.T("Copied remark id: %s", rootID), rootID),
+		// The id is checked like the link: a review deleted meanwhile has no
+		// remark to answer.
+		m.asyncCopyRow("copy-remark-id", i18n.T("Copy remark id"), func(id string) string { return i18n.T("Copied remark id: %s", id) },
+			func(ctx context.Context) (string, error) { return svc.ReviewRemarkID(ctx, rootID) }),
 	}
 }
 

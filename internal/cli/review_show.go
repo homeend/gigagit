@@ -163,6 +163,13 @@ func printReviewShow(w io.Writer, rs domain.ReviewShow) {
 			printShowReplies(w, o.Replies)
 		}
 	}
+	switch rs.OutdatedHidden {
+	case 0:
+	case 1:
+		fmt.Fprintf(w, "\n1 outdated thread not shown — gg review show %s lists it\n", rs.ID)
+	default:
+		fmt.Fprintf(w, "\n%d outdated threads not shown — gg review show %s lists them\n", rs.OutdatedHidden, rs.ID)
+	}
 }
 
 func printShowReplies(w io.Writer, reps []domain.ReviewShowReply) {
@@ -256,5 +263,8 @@ func narrowReviewShow(rs domain.ReviewShow, at domain.Resolved) domain.ReviewSho
 		}
 	}
 	rs.Remarks = kept
+	// An outdated thread's replies never recorded their remark's file, so
+	// none can be shown as this file's: count them, and say where they are.
+	rs.OutdatedHidden, rs.Outdated = len(rs.Outdated), nil
 	return rs
 }
