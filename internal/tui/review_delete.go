@@ -50,6 +50,12 @@ func (m Model) deleteReviewRow() (actionRow, bool) {
 			return actionRow{}, false
 		}
 		id, quote = h.ID, reviewQuote(h.Agent, h.Summary)
+	case m.focus == panelPreviews && !m.inContentWindow():
+		h, ok := m.selectedPreviewReview()
+		if !ok {
+			return actionRow{}, false
+		}
+		id, quote = h.ID, reviewQuote(h.Agent, h.Summary)
 	default:
 		return actionRow{}, false
 	}

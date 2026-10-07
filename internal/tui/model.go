@@ -2860,6 +2860,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.focus == panelPreviews {
+				// A review sub-row opens the review, never its preview.
+				if h, ok := m.selectedPreviewReview(); ok {
+					return m.openReview(h.ID, h.Summary)
+				}
 				if r, ok := m.selectedPreview(); ok && m.opsIdle() {
 					if c, ok := r.compare(); ok {
 						return m.openCompareWithLoading(c.Left, c.Right, r.label())

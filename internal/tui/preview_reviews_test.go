@@ -165,3 +165,37 @@ func readPreviewsNow(t *testing.T, m Model) Model {
 	updated, _ := m.Update(cmd())
 	return updated.(Model)
 }
+
+func TestPreviewReviewSubRowEnterOpensTheReview(t *testing.T) {
+	t.Parallel()
+	m := reviewPreviewsModel(t)
+	m.sel[panelPreviews] = 1
+	_, cmd := updateKey(m, "enter")
+	if cmd == nil {
+		t.Fatal("enter on a review sub-row started nothing")
+	}
+	if msg, ok := cmd().(reviewViewMsg); !ok || msg.id != "r2" {
+		t.Fatalf("enter read %#v, want the review r2", msg)
+	}
+}
+
+// R6: Open + Copy gg link + Delete, and none of the preview row's actions.
+func TestPreviewReviewSubRowMenu(t *testing.T) {
+	t.Parallel()
+	m := reviewPreviewsModel(t)
+	m.sel[panelPreviews] = 2
+	ids := menuIDs(m)
+	for _, want := range []string{"open-review", "copy-gg-link", "delete-review"} {
+		if !ids[want] {
+			t.Errorf("sub-row menu lacks %q (%v)", want, ids)
+		}
+	}
+	for _, not := range []string{"preview-open", "preview-rename", "preview-delete", "preview-swap", "preview-review", "preview-show-review", "copy-link"} {
+		if ids[not] {
+			t.Errorf("sub-row menu offers the preview's %q", not)
+		}
+	}
+	if !strings.Contains(m.footerLine(), "open review") {
+		t.Errorf("footer %q does not advertise enter on a review row", m.footerLine())
+	}
+}

@@ -1,6 +1,10 @@
 package tui
 
 import (
+	"context"
+
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -89,4 +93,23 @@ func (m Model) previewDisplayIndex(bi int) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+// previewReviewRowMenu is a review sub-row's . menu (R6): the review row
+// menu every other surface offers — open, copy its link — with Delete review
+// (deleteReviewRow) after it.
+func (m Model) previewReviewRowMenu() []actionRow {
+	h, ok := m.selectedPreviewReview()
+	if !ok || m.inContentWindow() || m.svc == nil {
+		return nil
+	}
+	svc, id := m.svc, h.ID
+	return []actionRow{
+		{id: "open-review", label: i18n.T("Open review"), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openReview(h.ID, h.Summary)
+		}},
+		m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
+			return svc.ReviewLink(ctx, id)
+		}),
+	}
 }
