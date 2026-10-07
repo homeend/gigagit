@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/homeend/gigagit/internal/theme"
 	"github.com/pelletier/go-toml/v2"
@@ -207,6 +208,50 @@ type NotesConfig struct {
 	MaxEntries int `toml:"max_entries"`  // cap enforced on every write, oldest root first; <=0 = uncapped
 }
 
+// ForgeConfig configures the pull-request cache. TOML keys snake_case under
+// [forge]. Pointers because an explicit 0 ("always read first" / "off") must
+// overlay a non-zero default — the RefreshConfig.PRs precedent.
+type ForgeConfig struct {
+	CacheHours *int `toml:"cache_hours"` // nil = 8; 0 = always read from the forge first
+	Prefetch   *int `toml:"prefetch"`    // nil = 5; 0 = off
+}
+
+const (
+	defaultForgeCacheHours = 8
+	defaultForgePrefetch   = 5
+	maxForgePrefetch       = 50 // the cache keeps at most 50 PRs
+)
+
+// CacheMaxAge is how long a forge read stays fresh: unset or negative → 8h,
+// an explicit 0 → 0 (never fresh).
+func (f ForgeConfig) CacheMaxAge() time.Duration {
+	if f.CacheHours == nil || *f.CacheHours < 0 {
+		return defaultForgeCacheHours * time.Hour
+	}
+	return time.Duration(*f.CacheHours) * time.Hour
+}
+
+// PrefetchCount is how many PRs a list refresh may warm: unset → 5,
+// 0 or negative → off, capped at 50.
+func (f ForgeConfig) PrefetchCount() int {
+	if f.Prefetch == nil {
+		return defaultForgePrefetch
+	}
+	return max(0, min(*f.Prefetch, maxForgePrefetch))
+}
+
+// overlayForge copies each set (non-nil) field of src onto dst, by value.
+func overlayForge(dst *ForgeConfig, src ForgeConfig) {
+	if src.CacheHours != nil {
+		v := *src.CacheHours
+		dst.CacheHours = &v
+	}
+	if src.Prefetch != nil {
+		v := *src.Prefetch
+		dst.Prefetch = &v
+	}
+}
+
 // Config is the merged gigagit configuration.
 type Config struct {
 	Worktree WorktreeConfig `toml:"worktree"`
@@ -215,6 +260,7 @@ type Config struct {
 	Refresh  RefreshConfig  `toml:"refresh"`
 	Versions VersionsConfig `toml:"versions"`
 	Notes    NotesConfig    `toml:"notes"`
+	Forge    ForgeConfig    `toml:"forge"`
 	Tools    ToolsConfig    `toml:"tools"`
 	Branches BranchesConfig `toml:"branches"`
 	Console  ConsoleConfig  `toml:"console"`
@@ -265,6 +311,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayRefresh(&cfg.Refresh, layer.Refresh)
 			overlayVersions(&cfg.Versions, layer.Versions)
 			overlayNotes(&cfg.Notes, layer.Notes)
+			overlayForge(&cfg.Forge, layer.Forge)
 			overlayTools(&cfg.Tools, layer.Tools)
 			overlayBranchFilters(&cfg.Branches, layer.Branches)
 			overlayThemes(&cfg.Themes, layer.Themes)
