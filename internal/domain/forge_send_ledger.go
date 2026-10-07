@@ -199,8 +199,16 @@ func (s *Service) settleSends(ctx context.Context, pr model.PullRequest, cs []mo
 				changed = true
 			}
 		case !keep:
-			_ = st.Edit(n.ID, func(x *model.Note) error { x.Send = nil; return nil })
-			changed = true
+			// Judged again on the live record: another process may have
+			// stamped it since LoadAll.
+			err := st.Edit(n.ID, func(x *model.Note) error {
+				if _, keep := judge(x.ID, x.Send); keep || x.Send == nil {
+					return errSettleNoChange
+				}
+				x.Send = nil
+				return nil
+			})
+			changed = changed || err == nil
 		}
 	}
 	if changed {
@@ -271,53 +279,66 @@ func (s *Service) prGroups(ctx context.Context, n int) map[string]string {
 	return g
 }
 
+// errSettleNoChange aborts a settle edit with nothing written.
+var errSettleNoChange = errors.New("settle: no change")
+
 // settleReview settles one review note: each remark entry, then the note's
-// own whole-review stamp (R4: deleted only when every remark has moved).
+// own whole-review stamp (R4: deleted only when every remark has moved). n is
+// the LoadAll snapshot that said there is something to settle; the judgment
+// itself runs on the live record inside its edit, since another process may
+// have stamped it since.
 func (s *Service) settleReview(ctx context.Context, st notes.Store, n model.Note, pr int, pending string,
 	judge func(string, *model.NoteSend) (bool, bool), reviewDone map[string]bool, readStart time.Time) bool {
 	if len(n.RemarkSends) == 0 && n.Send == nil {
 		return false
 	}
-	out := make([]model.RemarkSend, 0, len(n.RemarkSends))
-	changed := false
-	for _, r := range n.RemarkSends {
-		if r.Moved || r.Send.PR != pr {
-			out = append(out, r)
-			continue
+	remove := false
+	err := st.Edit(n.ID, func(x *model.Note) error {
+		out := make([]model.RemarkSend, 0, len(x.RemarkSends))
+		changed := false
+		for _, r := range x.RemarkSends {
+			if r.Moved || r.Send.PR != pr {
+				out = append(out, r)
+				continue
+			}
+			sd := r.Send
+			sent, keep := judge(RemarkKey(x.ID, r.RemarkFP), &sd)
+			switch {
+			case sent:
+				r.Moved, changed = true, true
+				out = append(out, r)
+			case keep:
+				out = append(out, r)
+			default:
+				changed = true // gone: the remark is local again
+			}
 		}
-		sd := r.Send
-		sent, keep := judge(RemarkKey(n.ID, r.RemarkFP), &sd)
+		whole := x.Send != nil && x.Send.PR == pr && x.Send.Err == "" && x.Send.At.Before(readStart)
 		switch {
-		case sent:
-			r.Moved, changed = true, true
-			out = append(out, r)
-		case keep:
-			out = append(out, r)
+		case whole && reviewDone[x.Send.Review]:
+			// reviewDocOf parses the stored document only: no branch-tip
+			// lookup, so the settle pass never takes the repo gate (R12).
+			r := reviewDocOf(*x)
+			r.RemarkSends = out
+			if allRemarksMoved(r) {
+				remove = true
+				return errSettleNoChange
+			}
+			x.Send, x.RemarkSends = nil, out
+		case whole && x.Send.Review != pending:
+			// Its review is neither submitted nor pending: gone. Local again.
+			x.Send, x.RemarkSends = nil, out
+		case changed:
+			x.RemarkSends = out
 		default:
-			changed = true // gone: the remark is local again
+			return errSettleNoChange
 		}
+		return nil
+	})
+	if remove {
+		return st.Remove(n.ID) == nil
 	}
-	whole := n.Send != nil && n.Send.PR == pr && n.Send.Err == "" && n.Send.At.Before(readStart)
-	switch {
-	case whole && reviewDone[n.Send.Review]:
-		// reviewDocOf parses the stored document only: no branch-tip
-		// lookup, so the settle pass never takes the repo gate (R12).
-		r := reviewDocOf(n)
-		r.RemarkSends = out
-		if allRemarksMoved(r) {
-			return st.Remove(n.ID) == nil
-		}
-		_ = st.Edit(n.ID, func(x *model.Note) error { x.Send, x.RemarkSends = nil, out; return nil })
-		return true
-	case whole && n.Send.Review != pending:
-		// Its review is neither submitted nor pending: gone. Local again.
-		_ = st.Edit(n.ID, func(x *model.Note) error { x.Send, x.RemarkSends = nil, out; return nil })
-		return true
-	}
-	if changed {
-		_ = st.Edit(n.ID, func(x *model.Note) error { x.RemarkSends = out; return nil })
-	}
-	return changed
+	return err == nil
 }
 
 // reviewDocOf is a review note's document and send entries, nothing more:
