@@ -192,12 +192,9 @@ func (s *Service) planActions(ctx context.Context, plan engine.SendPlan, req PRS
 // PR n's thread id.
 func (s *Service) threadIDFor(ctx context.Context, n int, id string) (string, error) {
 	id = strings.TrimPrefix(strings.TrimSpace(id), model.ForgeNoteIDPrefix)
-	cs, ok := s.PRCommentsCached(n)
-	if !ok {
-		var err error
-		if cs, err = s.PRComments(ctx, n); err != nil {
-			return "", err
-		}
+	cs, err := s.prCommentsNow(ctx, n)
+	if err != nil {
+		return "", err
 	}
 	for _, bucket := range [][]model.ForgeComment{cs.Inline, cs.Outdated} {
 		for _, c := range bucket {
@@ -502,4 +499,69 @@ func signedBody(req PRSendRequest) string {
 		b += "\n\n— " + req.Agent + " via gg"
 	}
 	return b
+}
+
+// PRThreadRoot names a thread of PR n by any of its handles — a thread id,
+// one of its comment ids, or "forge:<comment id>" — reading the PR's
+// comments when they are not cached yet.
+func (s *Service) PRThreadRoot(ctx context.Context, n int, id string) (string, string, error) {
+	id = strings.TrimPrefix(strings.TrimSpace(id), model.ForgeNoteIDPrefix)
+	// The PR too, not only its comments: a draft reply is addressed at its
+	// head (forgeReplyDraft reads PRDetailsCached).
+	if _, err := s.PullRequest(ctx, n); err != nil {
+		return "", "", err
+	}
+	cs, err := s.prCommentsNow(ctx, n)
+	if err != nil {
+		return "", "", err
+	}
+	for _, bucket := range [][]model.ForgeComment{cs.Inline, cs.Outdated} {
+		for _, c := range bucket {
+			if (c.ID == id || c.ThreadID == id) && c.ParentID == "" {
+				return c.ID, c.ThreadID, nil
+			}
+			if c.ID == id { // a reply: its root shares its thread
+				for _, r := range bucket {
+					if r.ThreadID == c.ThreadID && r.ParentID == "" {
+						return r.ID, r.ThreadID, nil
+					}
+				}
+			}
+		}
+	}
+	return "", "", fmt.Errorf("%w: %s is not a thread of #%d", ErrSendRequest, id, n)
+}
+
+// PRNotes is everything PR n's view holds, by path: local notes (carried
+// ones too, Task 8), GitHub threads, draft replies — each with its sync
+// state. The PR's diff must be available here (gg pr fetch).
+func (s *Service) PRNotes(ctx context.Context, n int) (map[string][]ResolvedNote, error) {
+	pr, err := s.PullRequest(ctx, n)
+	if err != nil {
+		return nil, err
+	}
+	prev, err := s.PRPreview(ctx, pr)
+	if err != nil {
+		return nil, err
+	}
+	if !prev.Set.OK() {
+		return nil, fmt.Errorf("%w: #%d's diff is not available here (gg pr fetch %d)", ErrSendRequest, n, n)
+	}
+	if _, err := s.prCommentsNow(ctx, n); err != nil {
+		return nil, err
+	}
+	return s.PreviewNotesAll(ctx, prev.Set)
+}
+
+// prCommentsNow is PR n's comments from the cache, else from ONE snapshot
+// read (PRRevalidate also caches the PR and settles any stamps).
+func (s *Service) prCommentsNow(ctx context.Context, n int) (PRComments, error) {
+	if cs, ok := s.PRCommentsCached(n); ok {
+		return cs, nil
+	}
+	if _, err := s.PRRevalidate(ctx, n); err != nil {
+		return PRComments{}, err
+	}
+	cs, _ := s.PRCommentsCached(n)
+	return cs, nil
 }

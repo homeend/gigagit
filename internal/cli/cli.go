@@ -179,7 +179,7 @@ func dispatchOne(svc *domain.Service, workdir, cmd string, rest []string, stdin 
 	case "preview":
 		return cmdPreview(svc, rest, stdout, stderr)
 	case "pr":
-		return cmdPR(svc, rest, stdout, stderr)
+		return cmdPR(svc, rest, stdin, stdout, stderr)
 	case "diff":
 		return cmdDiff(svc, workdir, rest, stdout, stderr)
 	case "show":
