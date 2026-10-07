@@ -373,6 +373,6 @@ func (s *Server) handlePRRevalidate(w http.ResponseWriter, r *http.Request) {
 	if !rv.ReadAt.IsZero() {
 		readAt = rv.ReadAt.UTC().Format(time.RFC3339)
 	}
-	writeJSON(w, map[string]any{"moved": rv.Moved, "state": rv.PR.State, "head_sha": rv.PR.HeadSHA,
+	writeJSON(w, map[string]any{"moved": rv.Moved, "state": rv.PR.State, "forge_head": rv.PR.HeadSHA,
 		"comments_changed": rv.CommentsChanged, "read_at": readAt})
 }

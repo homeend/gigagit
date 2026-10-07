@@ -175,7 +175,7 @@ function offlineFresh(n) {
 function headMoved(n, r) {
   if (r.moved) return true;
   const po = state.previewOpen;
-  return !!(r.head_sha && po && po.pr === n && po.sourceHash && po.sourceHash !== r.head_sha);
+  return !!(r.forge_head && po && po.pr === n && po.sourceHash && po.sourceHash !== r.forge_head);
 }
 
 // reloadPRNotes redraws PR n's threads (or its file badges) when they changed.

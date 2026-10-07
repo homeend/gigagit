@@ -5552,3 +5552,14 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   `compareFilesMsg`. Web: `writePRs` answers `cached: true` rows before the
   live listing; `cachedPR` falls back to them (else opening a cached row
   404s); `#pr-fresh` beside `#files-title`.
+- **Review-pass rules.** Disk writes go through `prcache.Store.Update`
+  (load+edit+save under the lock). `persistEntry` never downgrades a fresh
+  full disk entry with a listed row, and replaces a disk `ReadAt` that is
+  not fresh (expired or future-stamped). `loadDiskPR` merges a fresh full
+  disk entry under a listed memory row. **"Moved" is judged against the
+  head ON SCREEN** (TUI `previewOpen.srcHash`, web `previewOpen.sourceHash`
+  vs the forge head the server answers as `forge_head`): a prefetch may already have fetched the new
+  head into `refs/gg/pr/<n>`, and then domain's `Moved` (vs that ref) is
+  false. Prefetch fetches run under `prefetchFetchBudget` and
+  `yieldToWaiters` (cancelled when anyone queues behind the gate); the TUI
+  cancels its prefetch on `reRoot`, a newer list and quit.
