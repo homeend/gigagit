@@ -571,6 +571,7 @@ function goBack(back) {
   }
   if (back && back.kind === "preview" && window.__ggOpenPreviewForPair) {
     window.__ggOpenPreviewForPair(back.source, back.target).then(() => {
+      if (!state.previewOpen) return goBack({ kind: "list" }); // it no longer opens: the notice is up, back to the list
       state.reviewSel = back.reviewId || "";
       renderFiles();
     });
@@ -578,7 +579,7 @@ function goBack(back) {
   }
   if (back && back.kind === "pair") {
     runLinkCompare("a=" + encodeURIComponent(back.a) + "&b=" + encodeURIComponent(back.b)).then((ok) => {
-      if (!ok) return;
+      if (!ok) return goBack({ kind: "list" });
       state.reviewSel = back.reviewId || "";
       renderFiles();
     });
