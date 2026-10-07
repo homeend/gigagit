@@ -46,7 +46,9 @@ func (s *Service) prPolicyLocked() (time.Duration, int) {
 }
 
 // prCacheStore resolves (once) the per-repo store keyed by git common dir;
-// nil when no state dir resolves (the cache is then memory-only).
+// nil when no state dir resolves (the cache is then memory-only). The
+// common dir is read gate-free, like notesStore's: the send op's settle pass
+// may be the first use.
 func (s *Service) prCacheStore(ctx context.Context) *prcache.Store {
 	s.forgeMu.Lock()
 	if s.prStoreReady {
@@ -57,7 +59,7 @@ func (s *Service) prCacheStore(ctx context.Context) *prcache.Store {
 	s.forgeMu.Unlock()
 	var st *prcache.Store
 	if base := stateBaseDir("prcache"); base != "" {
-		if cd, err := s.GitCommonDir(ctx); err == nil {
+		if cd, err := s.repo.GitCommonDir(ctx); err == nil {
 			st = prcache.New(filepath.Join(base, repoKey(strings.TrimSpace(cd))), prcache.DefaultMax)
 		}
 	}
