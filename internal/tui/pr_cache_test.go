@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/clock"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -164,5 +165,33 @@ func TestMovedHeadKeepsTheFileAndDiff(t *testing.T) {
 	}
 	if n := diffLayerCount(m); n != 1 {
 		t.Fatalf("diff layers after the reopen = %d, want exactly 1", n)
+	}
+}
+
+// A successful list refresh schedules a background prefetch; prefetch = 0
+// and a failed list schedule nothing.
+func TestPRListRefreshSchedulesPrefetch(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	ok := domain.ForgeStatus{Provider: "github"}
+	has := func(cmd tea.Cmd) bool {
+		for _, msg := range flattenCmd(t, cmd) {
+			if _, ok := msg.(prPrefetchedMsg); ok {
+				return true
+			}
+		}
+		return false
+	}
+	_, cmd := m.handlePRsLoaded(prsLoadedMsg{gen: m.prsGen, bg: true, status: ok, prs: testPRs()})
+	if !has(cmd) {
+		t.Fatal("a successful list refresh must schedule a prefetch")
+	}
+	off := m
+	off.cfg.Forge.Prefetch = intPtr(0)
+	if _, cmd = off.handlePRsLoaded(prsLoadedMsg{gen: off.prsGen, bg: true, status: ok, prs: testPRs()}); has(cmd) {
+		t.Fatal("prefetch = 0 must schedule nothing")
+	}
+	if _, cmd = m.handlePRsLoaded(prsLoadedMsg{gen: m.prsGen, bg: true, status: ok, err: errors.New("502")}); has(cmd) {
+		t.Fatal("a failed list must not prefetch")
 	}
 }

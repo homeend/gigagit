@@ -146,7 +146,24 @@ func (m Model) handlePRsLoaded(msg prsLoadedMsg) (Model, tea.Cmd) {
 	key := m.panelSelKey(panelPRs)
 	m.prs, m.prsErr, m.prsLoaded = msg.prs, "", true
 	m = m.restorePanelSel(panelPRs, key)
-	return m, nil
+	return m, m.prPrefetchCmd()
+}
+
+// prPrefetchedMsg lands when a background prefetch finished; nothing on
+// screen changes (the next open is simply a cache hit).
+type prPrefetchedMsg struct{ gen, n int }
+
+// prPrefetchCmd warms the recently opened PRs whose head moved ([forge]
+// prefetch; domain runs one at a time and steps aside for user ops). nil when
+// off, and in quiet (headless) mode.
+func (m Model) prPrefetchCmd() tea.Cmd {
+	if m.svc == nil || m.quiet || m.cfg.Forge.PrefetchCount() == 0 {
+		return nil
+	}
+	svc, gen := m.svc, m.prsGen
+	return func() tea.Msg {
+		return prPrefetchedMsg{gen: gen, n: svc.PRPrefetch(context.Background())}
+	}
 }
 
 func errText(err error) string {

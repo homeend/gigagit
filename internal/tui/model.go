@@ -3331,6 +3331,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opDecisionMsg:
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, m.waitForOp(m.opMsgs)
+	case prPrefetchedMsg:
+		return m, nil // nothing to draw: the next open is a cache hit
 	case prsCachedMsg:
 		return m.handlePRsCached(msg)
 	case prsLoadedMsg:
