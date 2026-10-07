@@ -50,13 +50,13 @@ func sessionRowText(info domain.SessionInfo) string { return "  " + sessionRowBo
 // 12s" / "└ ○ label  exited (0)". The Branches tab indents it to its gutter.
 func sessionRowBody(info domain.SessionInfo) string {
 	if info.State == domain.SessionExited {
-		return "└ ○ " + info.Label + "  " + i18n.T("exited (%d)", info.ExitCode)
+		return "└ ○ " + info.Title() + "  " + i18n.T("exited (%d)", info.ExitCode)
 	}
 	// The row is narrow: a known activity replaces the running age.
 	if act := sessionActivityText(info.ID); act != "" {
-		return "└ ● " + info.Label + "  " + act
+		return "└ ● " + info.Title() + "  " + act
 	}
-	return "└ ● " + info.Label + "  " + i18n.T("running %s", formatElapsed(time.Since(info.Started)))
+	return "└ ● " + info.Title() + "  " + i18n.T("running %s", formatElapsed(time.Since(info.Started)))
 }
 
 // brEntry is one Branches row: a branch, or an agent session running in the

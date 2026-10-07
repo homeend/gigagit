@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent names
+
+### Added
+
+- **Name an agent when you start it.** After picking a command in Start
+  agent (TUI and gg web), an optional name step: type `viewer`, `worker`, …
+  and the session shows as `Claude (yolo) [viewer]` on its Worktrees /
+  Branches row, in the console title, the sessions popup (filterable by the
+  name), alt+a and the activity notices. Enter on an empty field starts it
+  unnamed, as before. alt+↓ recalls the names used before in this
+  repository (the web's input offers them as suggestions). A narrow web
+  sub-row cuts the command label before the name. `agent_list` /
+  `gg agent list` and the machine-wide session registry carry `name`
+  (using-gg skill v143).
+
 ## Preview reviews: stored as the preview's own, `gg review save`, `/gg-review`
 
 ### Added

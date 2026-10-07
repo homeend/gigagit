@@ -24,6 +24,8 @@ const (
 	scopeShelf    = "shelf"
 	scopeShellCmd = "shellcmd"
 	scopeInView   = "inview"
+	// scopeAgentName: Start agent's optional session name.
+	scopeAgentName = domain.AgentNameHistoryScope
 )
 
 // searchHistLoadedMsg carries the rings read once at startup.

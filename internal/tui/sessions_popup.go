@@ -44,13 +44,14 @@ type sessionsPopup struct {
 }
 
 // sessionsPopupRows lays the sessions out repo → worktree → session. A
-// session matches query (case-insensitive) on its label, worktree or repo;
+// session matches query (case-insensitive) on its title (label and name),
+// worktree or repo;
 // a header shows only when a session under it does.
 func sessionsPopupRows(list []domain.SessionInfo, query string) (rows []string, ids []domain.SessionID) {
 	q := strings.ToLower(query)
 	byRepo := map[string]map[string][]domain.SessionInfo{}
 	for _, info := range list {
-		if q != "" && !strings.Contains(strings.ToLower(info.Label+" "+info.Dir+" "+info.Repo), q) {
+		if q != "" && !strings.Contains(strings.ToLower(info.Title()+" "+info.Dir+" "+info.Repo), q) {
 			continue
 		}
 		dirs := byRepo[info.Repo]
@@ -86,9 +87,9 @@ func sessionsPopupRows(list []domain.SessionInfo, query string) (rows []string, 
 // row is wide, so a known activity is appended: "running 12m · idle 3m".
 func sessionStateText(info domain.SessionInfo) string {
 	if info.State == domain.SessionExited {
-		return "○ " + info.Label + "  " + i18n.T("exited (%d)", info.ExitCode)
+		return "○ " + info.Title() + "  " + i18n.T("exited (%d)", info.ExitCode)
 	}
-	row := "● " + info.Label + "  " + i18n.T("running %s", formatElapsed(time.Since(info.Started)))
+	row := "● " + info.Title() + "  " + i18n.T("running %s", formatElapsed(time.Since(info.Started)))
 	if act := sessionActivityText(info.ID); act != "" {
 		row += " · " + act
 	}
@@ -335,7 +336,7 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		if p.confirmKill != id {
 			p.confirmKill = id
-			m.statusMsg = i18n.T("press k again to kill %s", s.Info().Label)
+			m.statusMsg = i18n.T("press k again to kill %s", s.Info().Title())
 			return m, nil
 		}
 		p.confirmKill = ""

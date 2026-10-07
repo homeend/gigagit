@@ -19,6 +19,7 @@ const (
 type Info struct {
 	ID      ID
 	Label   string    // menu label, e.g. "Claude" / "Claude (yolo)"
+	Name    string    // the user's name for this session ("" = unnamed), e.g. "viewer"
 	AgentID string    // exttool tool id ("claude"), "" for a custom command
 	Repo    string    // repository NAME for grouping (caller-computed)
 	Dir     string    // worktree path = the child's cwd
@@ -35,7 +36,8 @@ type Info struct {
 // StartSpec describes the program to run.
 type StartSpec struct {
 	Label, AgentID, Repo, Dir string
-	Terminal                  bool // an interactive shell (Open terminal), not an agent
+	Name                      string // the user's name for the session; "" = unnamed
+	Terminal                  bool   // an interactive shell (Open terminal), not an agent
 	// Cwd is where the process runs when that differs from Dir — a worktree
 	// git recorded under the other environment's notation, reached through
 	// its translated path. Dir stays the identity frontends group by. "" = Dir.
@@ -52,6 +54,18 @@ type StartSpec struct {
 	// first one on — evidence for replaying an emulator mismatch offline.
 	TracePath string
 }
+
+// Title is how a session is shown: its label, then the user's name in
+// brackets when it has one — "Claude (yolo) [viewer]".
+func Title(label, name string) string {
+	if name == "" {
+		return label
+	}
+	return label + " [" + name + "]"
+}
+
+// Title is the session's display title (see Title).
+func (i Info) Title() string { return Title(i.Label, i.Name) }
 
 // ScrollbackLines caps the emulator's scrollback per session.
 const ScrollbackLines = 10000

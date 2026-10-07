@@ -1792,6 +1792,8 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #sessstart-body .rnote { margin: 6px 12px; color: var(--dim); }
 #sessstart-body button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; margin: 4px 12px 8px; }
 #sessstart-body button:hover { border-color: var(--accent); }
+#sessstart-name { display: block; box-sizing: border-box; width: calc(100% - 24px); margin: 4px 12px 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 6px 8px; font: inherit; outline: none; }
+#sessstart-name:focus { border-color: var(--accent); }
 #foot .cwarn { margin-left: auto; color: #e0c06c; }
 
 /* The ctrl+\ switcher's tabs (Agents · AI tasks · Open files). */

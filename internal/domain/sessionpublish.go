@@ -64,7 +64,7 @@ func snapshotRegistry(started, wt, mcpURL string) sessionreg.Registry {
 	for _, in := range Sessions().List() {
 		r.Sessions = append(r.Sessions, sessionreg.Entry{
 			ID: agentsession.ProcTag() + "/" + string(in.ID), Dir: in.Dir, Agent: in.AgentID,
-			Label: in.Label, State: sessionStateName(in.State), Started: in.Started.UTC().Format(time.RFC3339),
+			Label: in.Label, Name: in.Name, State: sessionStateName(in.State), Started: in.Started.UTC().Format(time.RFC3339),
 		})
 	}
 	return r
@@ -157,6 +157,7 @@ type AgentHostSession struct {
 	ID    string `json:"id"`
 	Agent string `json:"agent,omitempty"`
 	Label string `json:"label,omitempty"`
+	Name  string `json:"name,omitempty"`
 	Dir   string `json:"dir"`
 	State string `json:"state"`
 }
@@ -173,7 +174,7 @@ func liveAgentHostsIn(dir string) []AgentHostInfo {
 	for _, r := range sessionreg.Live(dir) {
 		h := AgentHostInfo{PID: r.PID, Worktree: r.Worktree, MCP: r.MCP}
 		for _, e := range r.Sessions {
-			h.Sessions = append(h.Sessions, AgentHostSession{ID: e.ID, Agent: e.Agent, Label: e.Label, Dir: e.Dir, State: e.State})
+			h.Sessions = append(h.Sessions, AgentHostSession{ID: e.ID, Agent: e.Agent, Label: e.Label, Name: e.Name, Dir: e.Dir, State: e.State})
 		}
 		out = append(out, h)
 	}

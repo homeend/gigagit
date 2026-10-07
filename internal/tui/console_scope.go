@@ -107,7 +107,7 @@ func (m Model) settleConsole() (Model, tea.Cmd) {
 	}
 	if ok {
 		info := s.Info()
-		m.statusMsg = i18n.T("%s in %s keeps running in its repository — ctrl+\\ brings it back", info.Label, shortWorktreeName(info.Dir))
+		m.statusMsg = i18n.T("%s in %s keeps running in its repository — ctrl+\\ brings it back", info.Title(), shortWorktreeName(info.Dir))
 	}
 	return m.closeConsole(), nil
 }

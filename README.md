@@ -1510,6 +1510,13 @@ included — except two:
 | `esc` | → agent | close the console and go back to the screen it was shown over — **the agent keeps running** |
 | `X` | → agent | kill the agent (asks first) and remove the session, as `X` on its sub-row; on an exited agent `x` / `X` close the console and remove the session |
 
+After you pick the command, Start agent asks for an **optional name** — say
+`viewer` or `worker` — shown after the label on the session's row
+(`Claude (yolo) [viewer]`), in its console title and in the agent-sessions
+popup (whose filter matches it). Enter on an empty field skips it; `alt+↓`
+lists the names you used before in this repository. gg web's Start agent
+dialog has the same step.
+
 **The mouse reaches the agent when it asks for it.** Over the console, a
 program that turns on mouse tracking — Claude Code in its fullscreen mode,
 `mc` in Open terminal — gets the wheel, clicks and drags, so Claude scrolls

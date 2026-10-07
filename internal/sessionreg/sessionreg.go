@@ -24,7 +24,8 @@ type Entry struct {
 	Dir     string `json:"dir"`
 	Agent   string `json:"agent,omitempty"`
 	Label   string `json:"label,omitempty"`
-	State   string `json:"state"` // "running" | "exited"
+	Name    string `json:"name,omitempty"` // the user's name for the session
+	State   string `json:"state"`          // "running" | "exited"
 	Started string `json:"started,omitempty"`
 }
 
