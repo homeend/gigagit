@@ -761,9 +761,13 @@ func (m Model) drainPendingFiles() (Model, tea.Cmd) {
 		return m, nil
 	}
 	c := ps.cmd
+	in, notIn := shortHash(ps.hash), "commit "+shortHash(ps.hash)
+	if m.filesReview != nil {
+		in, notIn = "this review", "this review" // a review landing: the agent asked about the review
+	}
 	return m.drainPendingLoad(c, m.filesView.lines,
-		"opened "+c.File+" in "+shortHash(ps.hash),
-		c.File+" is not in commit "+shortHash(ps.hash))
+		"opened "+c.File+" in "+in,
+		c.File+" is not in "+notIn)
 }
 
 // drainPendingCompare selects the commanded path in a pair's freshly loaded
@@ -780,6 +784,11 @@ func (m Model) drainPendingCompare() (Model, tea.Cmd) {
 	}
 	c := ps.cmd
 	pair := c.Target.A + ".." + c.Target.B
+	if m.filesReview != nil {
+		// A review landing (a range or working-changes review): the agent
+		// asked about the review — and a working review has no pair to name.
+		pair = "this review"
+	}
 	// A link-shaped landing could not say so at dispatch — its view did not
 	// exist yet — so the notice is raised here, once the list is in hand.
 	if m.filesSets != nil && startAtOrigin(c) {

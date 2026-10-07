@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -144,5 +145,62 @@ func TestWorkingReviewLinkLandsOnTheFile(t *testing.T) {
 	}
 	if m.pendingSteer != nil {
 		t.Fatal("the landing must not stay parked")
+	}
+}
+
+// landReviewReply sends c (as an agent's waiting navigate) and returns the
+// answer the agent reads.
+func landReviewReply(t *testing.T, m Model, c steer.Command) steer.Reply {
+	t.Helper()
+	m.steerDir = t.TempDir()
+	c.ID, c.Wait = "st-review", true
+	m, cmd := m.steerNavigate(c)
+	drainCmds(t, m, cmd)
+	r, ok := steer.AwaitReply(m.steerDir, c.ID, 3*time.Second)
+	if !ok {
+		t.Fatal("no reply")
+	}
+	return r
+}
+
+// A review landing answers in the review's terms: the file is or is not "in
+// this review" — never "in commit <sha>", nor an empty ".." pair for a
+// review of uncommitted changes.
+func TestReviewLandingAnswersInTheReviewsTerms(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, reviewViewDoc)
+	sha := m.commits[0].Hash
+	c := steer.Command{Cmd: "navigate", Commit: sha, File: "nope.go", HintKind: model.ReviewHintKind, HintID: id}
+	if r := landReviewReply(t, m, c); r.OK || r.Error != "nope.go is not in this review" {
+		t.Errorf("commit review, missing file: %+v", r)
+	}
+	c.File = "a.go"
+	if r := landReviewReply(t, m, c); !r.OK || r.Detail != "opened a.go in this review" {
+		t.Errorf("commit review, its file: %+v", r)
+	}
+
+	w := stackRepoModel(t)
+	w.svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	top, err := w.svc.TopLevel(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(top, "u.txt"), []byte("u1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	doc := `{"version":1,"summary":"ok","files":[{"path":"u.txt","annotations":[{"newRange":[1,1],"summary":"on u"}]}]}`
+	wid, _, err := w.svc.SaveReview(ctx, domain.SaveReview{Target: domain.WorkingReviewTarget(), Agent: "Claude", Text: doc,
+		Files: []model.NoteFile{{Path: "u.txt", Blob: blobOfForTest("u1\n")}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wc := steer.Command{Cmd: "navigate", File: "nope.txt", Target: &steer.Target{State: "unstaged"}, HintKind: model.ReviewHintKind, HintID: wid}
+	if r := landReviewReply(t, w, wc); r.OK || r.Error != "nope.txt is not in this review" {
+		t.Errorf("working review, missing file: %+v", r)
+	}
+	wc.File = "u.txt"
+	if r := landReviewReply(t, w, wc); !r.OK || r.Detail != "opened u.txt in this review" {
+		t.Errorf("working review, its file: %+v", r)
 	}
 }
