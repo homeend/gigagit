@@ -75,6 +75,13 @@ function branchReviews(reviews, b) {
   return (reviews || []).filter((r) => r.branch === b.name && (r.commit || "").startsWith(h));
 }
 
+// previewReviewText is a merge preview's (or pair's) review sub-row: the
+// branch sub-row's text, plus "· older tip" for a review of a tip the preview
+// has since moved past — it still opens exactly what was reviewed (R2).
+function previewReviewText(r, now = new Date()) {
+  return branchReviewText(r, now) + (r && r.older ? " · older tip" : "");
+}
+
 
 // reviewActiveIn reports whether st's review overlay still owns the screen:
 // the file list (a commit review) or the comparison (a range review) on
@@ -712,7 +719,7 @@ registerHelp({
 });
 
 
-export { currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { previewReviewText, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

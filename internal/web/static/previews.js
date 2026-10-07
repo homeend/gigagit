@@ -15,6 +15,10 @@ import { extraRows, registerHelp, registerRows } from "./menus.js";
 import { copyLink, previewRowLink } from "./links.js";
 import { openLinkCompareDialog, runLinkCompare } from "./linkcompare.js";
 import { isCollapsed, toggleSection } from "./sidebar.js";
+// reviews.js reaches previews.js only through ops.js (the cycle this module
+// already has with ops.js); every name is a hoisted function called from a
+// handler, so evaluation order cannot bite.
+import { openReview, previewReviewText, reviewMenu } from "./reviews.js";
 
 // fetchPreviews loads the list and renders it. A failure leaves an EMPTY list
 // rather than the previous one: a stale row invites a click that opens a pair
@@ -145,8 +149,18 @@ function savedRowHTML(e) {
     (e.kind === "pair" ? `<span class="psub">${esc(pairStateText(e))}</span>` : "") +
     // The pair's review-note total — the merge rows' badge, one painter.
     (e.kind === "pair" ? noteBadgeHTML(e.notes) : "") +
-    `</li>`
+    `</li>` +
+    (e.kind === "pair" ? reviewSubRows(e) : "")
   );
+}
+
+// reviewSubRows paints a row's AI reviews under it (spec R3), the Branches
+// sub-row's shape: no data-id and not draggable, so every preview handler and
+// drag & drop pass them by; data-review routes click and right-click.
+function reviewSubRows(e) {
+  return (e.reviews || [])
+    .map((r) => `<li class="brev" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(previewReviewText(r))}</li>`)
+    .join("");
 }
 
 function renderPreviews() {
@@ -166,7 +180,8 @@ function renderPreviews() {
         // files.js's noteBadgeHTML — one badge painter for every list, so a
         // preview row can never drift from a file row.
         noteBadgeHTML(e.notes) +
-        `</li>`
+        `</li>` +
+        reviewSubRows(e)
     )
     // Merge previews first, then pairs, then comparisons (the server's order).
     .concat((state.savedCompares || []).map(savedRowHTML))
@@ -713,6 +728,8 @@ function findRow(id, kind) {
 
 $("previews-list").addEventListener("click", (ev) => {
   const li = ev.target.closest("li");
+  // A review sub-row opens its review (it has no data-id: no preview handler).
+  if (li && li.dataset.review) return openReview(li.dataset.review, { kind: "list" });
   if (!li || !li.dataset.id) return;
   const e = rowEntry(li);
   if (!e) return;
@@ -722,6 +739,12 @@ $("previews-list").addEventListener("click", (ev) => {
 
 $("previews-list").addEventListener("contextmenu", (ev) => {
   const li = ev.target.closest("li");
+  // A review sub-row's menu is the review row menu (R6): open, copy, delete.
+  if (li && li.dataset.review) {
+    ev.preventDefault();
+    const rid = li.dataset.review;
+    return reviewMenu(rid, ev.clientX, ev.clientY, () => openReview(rid, { kind: "list" }));
+  }
   if (!li || !li.dataset.id) return;
   ev.preventDefault();
   const e = rowEntry(li);

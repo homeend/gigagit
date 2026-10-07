@@ -328,3 +328,16 @@ console.log(JSON.stringify(notedElsewherePaths(plain, "", [])));
 		t.Errorf("noted paths:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+func TestPreviewReviewText(t *testing.T) {
+	t.Parallel()
+	got := runReviewsPure(t, `
+const now = new Date("2026-10-07T12:00:00Z");
+console.log(previewReviewText({ created: "2026-10-07T10:02:00Z", agent: "Claude Code", remarks: 5, resolved: 3 }, now));
+console.log(previewReviewText({ created: "2026-10-01T09:00:00Z", agent: "Codex", older: true }, now));
+`)
+	want := "└ Review: 10-07 10:02 Claude Code · 3/5 resolved\n└ Review: 10-01 09:00 Codex · older tip"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}

@@ -114,3 +114,25 @@ func TestPreviewsDragDropIsWired(t *testing.T) {
 		}
 	}
 }
+
+// Review sub-rows sit under their preview / pair row and route to the review,
+// never to a preview handler (Review Focus 1).
+func TestPreviewsJSReviewSubRowsWired(t *testing.T) {
+	t.Parallel()
+	src := staticSrc(t, "previews.js")
+	for _, want := range []string{
+		`previewReviewText`,
+		`class="brev" data-review=`,
+		`li.dataset.review`,
+		`openReview(li.dataset.review, { kind: "list" })`,
+		`reviewMenu(`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("previews.js lacks %q", want)
+		}
+	}
+	// The review rows carry no data-id: every preview handler's guard skips them.
+	if strings.Contains(src, `class="brev" data-id=`) {
+		t.Error("a review sub-row carries a data-id")
+	}
+}
