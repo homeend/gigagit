@@ -125,7 +125,7 @@ func TestPRCommentsMsgReloadsOnlyOnChange(t *testing.T) {
 func TestRAndIInsideAPRFilesView(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
-	m.prCommentsInflight = false
+	m.prCommentsInflight, m.prRevalidateInflight = false, false // the open's refresh landed
 	nm, cmd := m.Update(keyMsg("r"))
 	if cmd == nil || !nm.(Model).prCommentsInflight {
 		t.Fatal("r in a PR files view re-reads its comments")
