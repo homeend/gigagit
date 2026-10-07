@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -16,10 +18,12 @@ import (
 	"github.com/homeend/gigagit/internal/template"
 )
 
-// cmdReview implements `gg review [--tool <name>] [--working] [<rev>|<A..B>]`:
-// runs the configured review agent headless over the resolved target, prints
-// the captured report to stdout, and persists it via domain.ReviewReport — a
-// --working review is stored as a note in this worktree's notes.
+// cmdReview implements `gg review [--tool <name>] [--model <m>] [--working |
+// --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]`: runs the configured
+// review agent headless over the resolved target, prints the captured report
+// to stdout, and persists it via domain.ReviewReport — a --working review is
+// stored as a note in this worktree's notes; --no-save stores nothing (a
+// cross-review's reviewers). `gg review --tools [--json]` lists the tools.
 // Exit 0 on a produced report, 1 on tool failure/empty report/no review tool
 // configured, 2 on a flag/usage error.
 //
@@ -42,16 +46,35 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 	toolName := fs.String("tool", "", "review tool name (from config); default: the only one")
 	working := fs.Bool("working", false, "review uncommitted working changes")
 	wantNotes := fs.Bool("notes", false, "also ask the tool for anchored notes (agent-context v1) and import them (not with --working)")
+	modelName := fs.String("model", "", "run the review tool on this model (its CLI's model flag, or <model> in the command)")
+	linkArg := fs.String("link", "", "review what a gg:// link names (as gg review save does)")
+	noSave := fs.Bool("no-save", false, "print the review; store nothing")
+	asJSON := fs.Bool("json", false, "with --no-save: print the review document JSON")
+	listTools := fs.Bool("tools", false, "list the review tools (--json: as JSON)")
 	pf := addPreviewFlag(fs)
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
+	if *listTools {
+		return printReviewTools(svc, *asJSON, stdout, stderr)
+	}
+	switch {
+	case *asJSON && !*noSave:
+		fmt.Fprintln(stderr, "gg review: --json needs --no-save (a stored review prints its overview)")
+		return 2
+	case *linkArg != "" && (*working || pf.set() || fs.NArg() >= 1):
+		fmt.Fprintln(stderr, "gg review: --link names the change; drop --working, --preview and the positional")
+		return 2
+	case *noSave && *wantNotes:
+		fmt.Fprintln(stderr, "gg review: --notes stores notes; it does not apply to --no-save")
+		return 2
+	}
 	if *working && fs.NArg() >= 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
 		return 2
 	}
 	if fs.NArg() > 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--working] [<rev>|<A..B>]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
 		return 2
 	}
 	if *working && *wantNotes {
@@ -66,8 +89,21 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 	// hunkSpec is the patch a `hunk` annotation is numbered against; only
 	// --preview has one of its own (nil = derive it from the target as before).
 	var hunkSpec *model.DiffSpec
-	var preview string // the scope the imported notes record (a --preview review)
+	var preview string              // the scope the imported notes record (a --preview review)
+	runSvc, repoDir := svc, workdir // a --link may name another checkout
 	switch {
+	case *linkArg != "":
+		lres, lerr := resolveLinkArg(ctx, svc, *linkArg, linkShapes{Pair: true, Ref: true}, "review")
+		if lerr != nil {
+			return linkExit("review", lerr, stderr)
+		}
+		runSvc, repoDir = openLinkTarget(lres), lres.Checkout
+		t, terr := runSvc.LinkReviewTarget(ctx, lres)
+		if terr != nil {
+			fmt.Fprintln(stderr, "error:", terr)
+			return 1
+		}
+		target, arg = t, t.Range
 	case pf.set():
 		if *working || fs.NArg() >= 1 {
 			return previewUsageErr("review", stderr)
@@ -105,10 +141,16 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 	if err != nil {
 		return 1
 	}
-	resolved, err := template.ResolveCommand(cmd.Command, nil, template.CmdCtx{Range: target.Range, Repo: workdir})
+	resolved, err := domain.ResolveReviewCommand(cmd, template.CmdCtx{Range: target.Range, Repo: repoDir, Model: *modelName})
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
+		if errors.Is(err, domain.ErrNoModelSupport) {
+			return 2
+		}
 		return 1
+	}
+	if *noSave {
+		return reviewNoSave(ctx, runSvc, target, resolved, *asJSON, stdout, stderr)
 	}
 
 	if *wantNotes {
@@ -119,7 +161,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 		}
 	}
 
-	res, err := svc.ReviewReport(ctx, target, cmd.Name, resolved, []string{"GG_TASK=review"})
+	res, err := runSvc.ReviewReport(ctx, target, cmd.Name, resolved, []string{"GG_TASK=review"})
 	if err != nil {
 		// A report the store could not keep is still printed: the agent's
 		// work is not lost because the note was not written.
@@ -146,7 +188,75 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 	if !*wantNotes {
 		return 0
 	}
-	return importReviewNotes(ctx, svc, target, arg, res.Content, cmd.Name, hunkSpec, preview, stderr)
+	return importReviewNotes(ctx, runSvc, target, arg, res.Content, cmd.Name, hunkSpec, preview, stderr)
+}
+
+// reviewNoSave runs the review and prints it, storing nothing. With asJSON
+// the output is the review document itself; a reply that is not one fails
+// (exit 1, the raw text on stderr) so a caller can tell "failed" from
+// "reviewed".
+func reviewNoSave(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, resolved string, asJSON bool, stdout, stderr io.Writer) int {
+	res, err := svc.RunReview(ctx, target, resolved, []string{"GG_TASK=review"})
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	if asJSON {
+		if !res.Structured {
+			fmt.Fprintln(stderr, "error: the reply is not a gg review document:")
+			fmt.Fprintln(stderr, res.Content)
+			return 1
+		}
+		fmt.Fprintln(stdout, res.Content)
+		return 0
+	}
+	printReview(stdout, res.Content)
+	if !res.Structured {
+		fmt.Fprintln(stderr, "warning: the review is not in gg review format")
+	}
+	return 0
+}
+
+// reviewToolRow is one `gg review --tools` row.
+type reviewToolRow struct {
+	Name  string `json:"name"`
+	Agent string `json:"agent"` // the built-in agent id; "" for a custom command
+	Mode  string `json:"mode"`  // capture runs headless; interactive waits for a human
+	Model bool   `json:"model"` // --model works (a known agent flag or <model>)
+}
+
+// printReviewTools lists the review tools gg review can see: the CLI-visible,
+// valid review commands, interactive ones included with their mode.
+func printReviewTools(svc *domain.Service, asJSON bool, stdout, stderr io.Writer) int {
+	cfg, err := loadConfigFor(svc)
+	if err != nil {
+		fmt.Fprintln(stderr, "error: loading config:", err)
+		return 1
+	}
+	rows := []reviewToolRow{}
+	for _, tc := range cfg.Tools.Command {
+		if tc.Category != string(exttool.CatReview) || !config.ToolVisibleIn(tc, "cli") {
+			continue
+		}
+		if config.ValidateToolCommand(tc) != nil || template.ValidateCommandTokens(tc.Command, tc.PerFile) != nil {
+			continue
+		}
+		agent := domain.ToolAgentID(tc)
+		mode := tc.Mode
+		if mode == "" {
+			mode = string(exttool.ModeCapture)
+		}
+		rows = append(rows, reviewToolRow{Name: tc.Name, Agent: agent, Mode: mode,
+			Model: template.HasModelSlot(tc.Command) || exttool.ModelFlagFor(agent) != ""})
+	}
+	if asJSON {
+		_ = json.NewEncoder(stdout).Encode(rows)
+		return 0
+	}
+	for _, r := range rows {
+		fmt.Fprintf(stdout, "%s\t%s\t%s\tmodel=%s\n", r.Name, r.Agent, r.Mode, map[bool]string{true: "yes", false: "no"}[r.Model])
+	}
+	return 0
 }
 
 // reviewImportTarget decides which diff a review's notes anchor to (§4.5):
