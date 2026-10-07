@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v147 -->
+<!-- gg:using-gg:v148 -->
 
 # Using gg (gigagit)
 
@@ -840,8 +840,12 @@ finds the right one here.
   ignored in a session; never ask the user to run `approve` for you unless
   they want to. Your `--event` travels with the queued send (the user sees
   `asks: approve`); never ask for approve / request-changes on a PR the user
-  opened (GitHub refuses it). Send draft replies (`gg pr reply`) on their
-  own, never mixed with new notes in one `--note` list. `gg pr reply <n>
+  opened (GitHub refuses it); `--event` needs `--review`, `--mine` or
+  `--verdict`. With `--review`, `--body` replaces the review's summary as the
+  GitHub review body. The user approves a queued send in gg's terminal UI too
+  (the `!` notice centre), with your `--event` preselected. Send draft
+  replies (`gg pr reply`) on their own, never mixed with new notes in one
+  `--note` list. `gg pr reply <n>
   <thread> <text>` without `--send` only writes a local draft. Your notes
   posted this way end with `— <agent> via gg`.
 - `gg versions [<branch>]` — list a branch's recorded pre-operation

@@ -546,14 +546,29 @@ URL; `d` forgets a PR that is no longer open. `r` re-reads the list, and gg
 re-reads it in the background every `[refresh] prs` seconds (default `300`,
 `0` = off) — independently of the `[refresh] enabled` master switch.
 
-Inside a PR's diff its **review threads** show as read-only note boxes on
-their lines (`review · author · age · path R12`, left pane for a comment on the
-old side, a whole-file comment at the top of the file, `◆N` badges in the file
-list); `}` / `{`, search and *List notes…* include them, and `E` / `R` / delete
-refuse — gg never writes to the forge. `o` collapses the note at the cursor to
-one row and `O` all of them (this works for your own notes too); a resolved
-thread starts collapsed. Comments are re-read every `[refresh] prs` seconds
-while the diff is open and on `r`; `i` opens the PR hub from the diff.
+Inside a PR's diff its **review threads** show as note boxes on their lines
+(`review · author · age · path R12`, left pane for a comment on the old side,
+a whole-file comment at the top of the file, `◆N` badges in the file list);
+`}` / `{`, search and *List notes…* include them; `E` and delete stay refused
+for them. `o` collapses the note at the cursor to one row and `O` all of them
+(this works for your own notes too); a resolved thread starts collapsed.
+Comments are re-read every `[refresh] prs` seconds while the diff is open and
+on `r`; `i` opens the PR hub from the diff. The title says `refreshing…`,
+`updated` or `offline · read 3h ago`.
+
+**Sending from the PR view.** Every note box shows where it lives — `○` only
+here, `◌` being sent, `○!` the last send failed (with the error), `●` on
+GitHub — and a coloured bar for its group: your own notes ("my draft
+review"), each AI review of the PR's commits (their remarks show in the diff
+too), each GitHub review. The `.` menu on a note offers *Send to GitHub* and
+*Send my draft review…* / *Send this AI review…*; on a GitHub thread *Reply
+to note*, *Reply & send…*, *Resolve / Reopen thread* (`x`, at once on GitHub)
+and *Send draft reply* (`R` writes a local draft). The PR hub's `s` (*Send
+review…*: pick a group, edit the body) and `v` (*Verdict…*) end in the same
+confirm, which lists exactly what will be posted and offers comment, approve
+or request changes. An agent's send is never posted directly: it waits in the
+notice centre (`!`) as *Review and send… / Reject / Later*, and a send that
+was interrupted offers *Finish sending / Discard* there.
 
 In **`gg web`** the list is a *pull requests* section of the sidebar (under
 *previews*), shown only with a usable `gh`: click a row to fetch and open its
@@ -753,7 +768,8 @@ optional — an omitted key keeps the theme's own colour — and the table names
 a theme (`light`, `dark`, `terminal`), so it only applies while that theme is
 active. Run **`gg config populate`** to write the full commented list of
 roles (every key with the theme's current value and what it paints) into your
-config; the two list roles, `lanes` (7 graph-lane colours) and `syntax` (11
+config (`note_group_1` … `note_group_6` are the six review-group colours of a
+pull request's notes); the two list roles, `lanes` (7 graph-lane colours) and `syntax` (11
 syntax classes), take arrays, where an `""` entry keeps the built-in colour.
 The global and repo files layer per key, like every other setting, so a repo
 can retune one role. An invalid value is ignored — the rest of the table
