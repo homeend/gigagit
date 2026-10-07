@@ -62,7 +62,8 @@ func TestPRRefreshDrivesCommentsAndFreshness(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("changed comments must schedule a notes/counts reload")
 	}
-	if m2.prFreshnessSuffix() != "" || m2.prCommentsInflight || m2.prRevalidateInflight {
+	// New comments: the title says so until a refresh finds nothing (spec §2.4).
+	if m2.prFreshnessSuffix() != " · "+i18n.T("updated") || m2.prCommentsInflight || m2.prRevalidateInflight {
 		t.Fatalf("after a good refresh: suffix %q, comments %v, revalidate %v", m2.prFreshnessSuffix(), m2.prCommentsInflight, m2.prRevalidateInflight)
 	}
 	m2, _ = m2.prCommentsCmd(false)

@@ -100,6 +100,11 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 		po.srcHash != "" && po.srcHash != msg.pr.HeadSHA {
 		moved = true
 	}
+	if moved || msg.commentsChanged {
+		m.prUpdated = msg.n
+	} else if m.prUpdated == msg.n {
+		m.prUpdated = 0 // nothing new: the mark clears (spec §2.4)
+	}
 	if !moved || m.openPRNumber() != msg.n || !m.opsIdle() {
 		return m, cmd // unchanged, or the user moved on: the next enter fetches
 	}
@@ -126,6 +131,8 @@ func (m Model) prFreshnessSuffix() string {
 		return " · " + i18n.T("refreshing…")
 	case !m.prOfflineSince.IsZero():
 		return " · " + i18n.T("offline · read %s", ageString(clock.Now(), m.prOfflineSince))
+	case m.prUpdated == m.openPRNumber():
+		return " · " + i18n.T("updated")
 	}
 	return ""
 }
