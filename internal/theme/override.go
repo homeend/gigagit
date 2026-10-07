@@ -58,6 +58,13 @@ type Override struct {
 	PickerLeft  string `toml:"picker_left"`
 	PickerRight string `toml:"picker_right"`
 
+	NoteGroup1 string `toml:"note_group_1"`
+	NoteGroup2 string `toml:"note_group_2"`
+	NoteGroup3 string `toml:"note_group_3"`
+	NoteGroup4 string `toml:"note_group_4"`
+	NoteGroup5 string `toml:"note_group_5"`
+	NoteGroup6 string `toml:"note_group_6"`
+
 	AttentionInfo  string `toml:"attention_info_bg"`
 	AttentionWarn  string `toml:"attention_warn_bg"`
 	AttentionError string `toml:"attention_error_bg"`
@@ -127,6 +134,13 @@ var roleFields = []roleField{
 	{"picker_label", "hunk/conflict picker side labels", func(t *Theme) *string { return &t.PickerLabel }, func(o *Override) *string { return &o.PickerLabel }},
 	{"picker_left", "hunk/conflict picker: the left side's labels, ticks and output bar", func(t *Theme) *string { return &t.PickerLeft }, func(o *Override) *string { return &o.PickerLeft }},
 	{"picker_right", "hunk/conflict picker: the right side's labels, ticks and output bar", func(t *Theme) *string { return &t.PickerRight }, func(o *Override) *string { return &o.PickerRight }},
+
+	{"note_group_1", "note group colour bar 1 (a review's notes in a pull request view)", func(t *Theme) *string { return &t.NoteGroup1 }, func(o *Override) *string { return &o.NoteGroup1 }},
+	{"note_group_2", "note group colour bar 2", func(t *Theme) *string { return &t.NoteGroup2 }, func(o *Override) *string { return &o.NoteGroup2 }},
+	{"note_group_3", "note group colour bar 3", func(t *Theme) *string { return &t.NoteGroup3 }, func(o *Override) *string { return &o.NoteGroup3 }},
+	{"note_group_4", "note group colour bar 4", func(t *Theme) *string { return &t.NoteGroup4 }, func(o *Override) *string { return &o.NoteGroup4 }},
+	{"note_group_5", "note group colour bar 5", func(t *Theme) *string { return &t.NoteGroup5 }, func(o *Override) *string { return &o.NoteGroup5 }},
+	{"note_group_6", "note group colour bar 6", func(t *Theme) *string { return &t.NoteGroup6 }, func(o *Override) *string { return &o.NoteGroup6 }},
 
 	{"attention_info_bg", "agent attention band background, info tone (gg session highlight)", func(t *Theme) *string { return &t.AttentionInfo }, func(o *Override) *string { return &o.AttentionInfo }},
 	{"attention_warn_bg", "agent attention band background, warn tone", func(t *Theme) *string { return &t.AttentionWarn }, func(o *Override) *string { return &o.AttentionWarn }},
