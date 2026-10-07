@@ -241,11 +241,16 @@ func TestStartAgentNamePasteIsOneLine(t *testing.T) {
 	m = mm.(Model)
 	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("rev\niewer\t"), Paste: true})
 	m = mm.(Model)
+	// The field stays one line while it is edited: a pasted newline or tab
+	// would split it or widen it past the popup's border.
+	if p, _ := m.topLayer().(*agentStartPopup); p == nil || p.name.Value() != "rev iewer " {
+		t.Fatalf("field = %q, want the controls as spaces", p.name.Value())
+	}
 	mm, cmd := m.Update(keyMsg("enter"))
 	m = landStart(t, mm.(Model), cmd)
 	s, _ := m.consoleSession()
-	if got := s.Info().Name; got != "reviewer" {
-		t.Fatalf("name %q, want reviewer", got)
+	if got := s.Info().Name; got != "rev iewer" {
+		t.Fatalf("name %q, want %q", got, "rev iewer")
 	}
 }
 

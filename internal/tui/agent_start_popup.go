@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -222,6 +223,14 @@ func (p *agentStartPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			nm, cmd := p.start(m, name)
 			return nm.(Model), tea.Batch(record, cmd)
 		default:
+			if msg.Type == tea.KeyRunes { // a pasted newline/tab would break the one-line field
+				msg.Runes = []rune(strings.Map(func(r rune) rune {
+					if unicode.IsControl(r) {
+						return ' '
+					}
+					return r
+				}, string(msg.Runes)))
+			}
 			p.name.HandleEditKey(msg) // spaces included — do NOT swallow KeySpace
 		}
 		return m, nil

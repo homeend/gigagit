@@ -15,18 +15,16 @@ const AgentNameHistoryScope = "agentname"
 const maxAgentNameRunes = 40
 
 // CleanAgentName is the one normalisation of a user-typed session name:
-// trimmed, control characters (newlines and tabs included) dropped, cut to
-// 40 runes. Whitespace only is no name.
+// every run of control characters (newlines and tabs included) and
+// whitespace becomes one space — a control separates words, never glues
+// them — then the result is trimmed and cut to 40 runes (no trailing
+// space). Whitespace only is no name.
 func CleanAgentName(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, s)
+	s = strings.Join(strings.FieldsFunc(s, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsControl(r)
+	}), " ")
 	if r := []rune(s); len(r) > maxAgentNameRunes {
-		s = string(r[:maxAgentNameRunes])
+		s = strings.TrimRight(string(r[:maxAgentNameRunes]), " ")
 	}
 	return s
 }

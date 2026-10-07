@@ -33,6 +33,9 @@ r.push(JSON.stringify(dialogStep(n, "Escape")));                               /
 r.push(JSON.stringify(dialogStep({ ...n, cmds: [cmds[0]] }, "Escape")));       // one command: close
 r.push(JSON.stringify(dialogStep(n, "j")), JSON.stringify(dialogStep(n, "2")), JSON.stringify(dialogStep(n, "ArrowDown"))); // typing is the input's
 r.push(JSON.stringify(dialogStep(n, "Enter", true)));                          // a held enter starts nothing
+// The name input owns typing, and an Enter that only commits an IME
+// composition (Japanese/Korean/Chinese input) must not start the agent.
+r.push([nameStepOwnsKey("j", false), nameStepOwnsKey("Enter", false), nameStepOwnsKey("Escape", false), nameStepOwnsKey("Enter", true), nameStepOwnsKey("Process", false)].join(","));
 r.push(JSON.stringify(startRows("/a/b/wt").map((x) => x.label)));
 r.push(JSON.stringify(sessionMenuRows({ id: "s1", state: "running" }).map((x) => x.label)), JSON.stringify(sessionMenuRows({ id: "s2", state: "exited" }).map((x) => x.label)));
 r.push(sessionMenuRows({ id: "s3", state: "running", has_brief: true, has_report: true }).map((x) => x.id).join(","));
@@ -43,7 +46,7 @@ console.log(r.join("|"));
 		`{"sel":1}|{"sel":2}|{"sel":0}|` +
 		`{"sel":0,"phase":"name"}|{"sel":1,"phase":"approve"}|{}|{"sel":2,"phase":"name"}|` +
 		`{"phase":"name","approved":true}|{"phase":"choose"}|{"close":true}|{"close":true}|{}|{}|{"close":true}|{}|{}|{"sel":1}|` +
-		`{"start":0,"approve":false}|{"start":1,"approve":true}|{"phase":"choose"}|{"close":true}|{}|{}|{}|{}|` +
+		`{"start":0,"approve":false}|{"start":1,"approve":true}|{"phase":"choose"}|{"close":true}|{}|{}|{}|{}|true,false,false,true,true|` +
 		`["Start agent in wt","Open terminal in wt"]|["Kill session","Kill and remove session"]|["Remove session"]|` +
 		`brief,report,kill,killrm|report,remove`
 	if out != want {
@@ -64,6 +67,7 @@ var sessionsWiring = []struct{ file, want, why string }{
 	{"sessions.js", "dialogStep(dlg, e.key, e.repeat)", "key auto-repeat reaches the step: a held enter must not approve"},
 	{"sessions.js", `<datalist id="sessstart-names">`, "the name input suggests the repo's remembered names"},
 	{"sessions.js", "body.names", "the names come with the command list"},
+	{"sessions.js", "nameStepOwnsKey(e.key, e.isComposing)", "the name step's key router asks the pure rule (IME included)"},
 	{"sessions.js", "name: d.name", "the start (and its re-post after approval) carries the typed name"},
 	{"menus.js", `"session"`, "session is a registered menu key"},
 	{"sidebar.js", `extraRows("session"`, "the sub-row menu collects the session rows"},

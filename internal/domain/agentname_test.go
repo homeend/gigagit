@@ -12,12 +12,14 @@ func TestCleanAgentName(t *testing.T) {
 		{"  viewer  ", "viewer"},
 		{"", ""},
 		{" \t \n ", ""},
-		{"line one\nline two", "line oneline two"},
-		{"tab\there", "tabhere"},
-		{"bell\x07\x1b[31mred", "bell[31mred"},
+		{"\x07 \x07", ""}, // controls around a space are still no name
+		{"line one\nline two", "line one line two"},
+		{"code review\tbot", "code review bot"}, // a control separates words, never glues them
+		{"bell\x07\x1b[31mred", "bell [31mred"},
+		{"a   b", "a b"},
 		{strings.Repeat("é", 45), strings.Repeat("é", 40)},
-		// Order: trim, drop controls, cut — the cut is not re-trimmed.
-		{"  " + strings.Repeat("a", 39) + "  b", strings.Repeat("a", 39) + " "},
+		// The 40-rune cut never leaves a trailing space.
+		{"  " + strings.Repeat("a", 39) + "  b", strings.Repeat("a", 39)},
 	}
 	for _, c := range cases {
 		if got := CleanAgentName(c.in); got != c.want {

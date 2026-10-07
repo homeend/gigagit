@@ -49,6 +49,13 @@ function dialogStep(d, key, repeat) {
   return {};
 }
 
+// nameStepOwnsKey: whether a key on the name step is the input's — every
+// key but enter and esc, and an enter that only commits an IME composition
+// (Japanese/Korean/Chinese input: isComposing, or the "Process" key).
+function nameStepOwnsKey(key, composing) {
+  return !!composing || key === "Process" || (key !== "Enter" && key !== "Escape");
+}
+
 // startRows / sessionMenuRows: the menu rows as {id, label}; the impure side
 // attaches the actions by id.
 function startRows(path) {
@@ -194,7 +201,7 @@ async function startAgent(path) {
     onKey: (e) => {
       // The name step's typing (alt+↓ included) is the input's: no step,
       // no preventDefault — the stack still keeps it from gg's shortcuts.
-      if (dlg && dlg.phase === "name" && e.key !== "Enter" && e.key !== "Escape") return false;
+      if (dlg && dlg.phase === "name" && nameStepOwnsKey(e.key, e.isComposing)) return false;
       if (dlg) apply(dialogStep(dlg, e.key, e.repeat));
       e.preventDefault();
       return true; // the dialog owns the keyboard
