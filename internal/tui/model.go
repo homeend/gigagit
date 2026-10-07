@@ -293,6 +293,9 @@ type Model struct {
 	// prUpdated: the PR whose last refresh found new comments or commits
 	// (0 = none) — its title says "updated" until a refresh finds nothing.
 	prUpdated int
+	// prSeen: the PR whose view has had its first refresh — that read only
+	// fills the view, so it never says "updated".
+	prSeen int
 	// prReland is where the user was when the open PR's head moved: the
 	// reopen that follows lands the files cursor (and an open diff, at its
 	// line) back there. Consumed by that reopen's file list.

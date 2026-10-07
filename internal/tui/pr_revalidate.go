@@ -102,9 +102,12 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 		po.srcHash != "" && po.srcHash != msg.pr.HeadSHA {
 		moved = true
 	}
-	if moved || msg.commentsChanged {
+	switch {
+	case m.prSeen != msg.n:
+		m.prSeen = msg.n // the open's first read: it fills the view
+	case moved || msg.commentsChanged:
 		m.prUpdated = msg.n
-	} else if m.prUpdated == msg.n {
+	case m.prUpdated == msg.n:
 		m.prUpdated = 0 // nothing new: the mark clears (spec §2.4)
 	}
 	if !moved || m.openPRNumber() != msg.n || !m.opsIdle() {
