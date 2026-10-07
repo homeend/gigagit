@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v141 -->
+<!-- gg:using-gg:v142 -->
 
 # Using gg (gigagit)
 
@@ -378,7 +378,7 @@ one (the real file comes to the front at the place you named), and backspace
 anchor they left.
 
 - Anchor destinations: `[label](path)` (the file), `[label](path:120)` (the
-  line), `[label](path:120-140)` (the range, selected), `[label](note:t7)` (the
+  line), `[label](path:120-140)` (the range), `[label](note:t7)` (the
   file one of your temporary notes sits on, at the note). `path` is relative
   to the worktree gg is showing, in slash form; lines are 1-based and `N-M`
   needs M ≥ N; a directory does not resolve. http(s) links stay ordinary
@@ -417,6 +417,12 @@ usually not showing — `gg session overview` and `gg session note` answer `gg
 is showing worktree …` there. A worker's overview is its final
 `agent_report`: gg files it as a tour of the worker's worktree (see the
 delegate skill).
+
+In a file an anchor opened, gg draws EVERY line and range anchor your
+overview has in that file as a band (the one the user opened brighter), and
+`n` / `p` step the user through them in line order — so point at each place
+you want seen in a file with its own `path:N` / `path:N-M` anchor rather than
+one wide range.
 
 Combine with notes: `gg session note add` the remarks first, then link them
 from the overview (`[why this lock](note:t7)`). Order the anchors in the order

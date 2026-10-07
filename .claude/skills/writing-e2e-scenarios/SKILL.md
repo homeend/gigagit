@@ -96,6 +96,11 @@ screen_excludes = ["@notes/"]
   timers (notice expiry, debounces, the heartbeat) are PARKED, so a plain
   step shows the screen right after the keys (a sticky notice is still
   there). Use `wait = true` for a screen that appears after a debounce.
+- **An agent's overview** (`gg session overview add` needs a live TUI, which
+  a `[[run]]` never has): `overview = { title = "…", text = "…" }` on a
+  `[[tui.step]]` hands it to the TUI before that step's keys, shown as the
+  steer command would show it (`tui_overview_anchor_bands`). The headless
+  TUI has its own agent-docs store, so the overview is `f1` every run.
 - **Non-git state** comes from `[[run]]`s through the real CLI: `gg note
   add …`, and `gg review --tool fake …` with the fake agent declared in the
   scenario's own `.gg.toml` (an `[input]` write, as in `tui_review_mixed`):

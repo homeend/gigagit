@@ -38,11 +38,20 @@ type TUI struct {
 // TUIStep presses keys (each followed by a settle), optionally fires the
 // parked timers (wait), then checks the screen.
 type TUIStep struct {
-	Name           string   `toml:"name"`
-	Keys           []string `toml:"keys"`
-	Wait           bool     `toml:"wait"`
-	ScreenContains []string `toml:"screen_contains"`
-	ScreenExcludes []string `toml:"screen_excludes"`
+	// Overview hands the TUI an agent's overview before the keys, as `gg
+	// session overview add` does (shown unless the screen cannot take it).
+	Overview       *TUIOverview `toml:"overview"`
+	Name           string       `toml:"name"`
+	Keys           []string     `toml:"keys"`
+	Wait           bool         `toml:"wait"`
+	ScreenContains []string     `toml:"screen_contains"`
+	ScreenExcludes []string     `toml:"screen_excludes"`
+}
+
+// TUIOverview is an agent's overview: its title and markdown.
+type TUIOverview struct {
+	Title string `toml:"title"`
+	Text  string `toml:"text"`
 }
 
 var (

@@ -1469,9 +1469,15 @@ For a **guided tour** the agent writes an overview: `gg session overview add
 whose links are anchors — `[the loader](internal/tui/open_files.go:220)`, a
 range `path:120-140`, or one of its notes `note:t7`. `tab` / `shift+tab`
 select the next / previous anchor, `enter` (or a double click) opens it — the
-file comes to the front at that line, a range selected — and `backspace` in
-that file brings you back to the overview on the same anchor; the file stays
-open in the background. `r` copies a reference to the anchor for the agent
+file comes to the front at that line — and `backspace` in that file brings
+you back to the overview on the same anchor; the file stays open in the
+background. In that file **every** line and range anchor the overview has in
+it is drawn as a band — the one you opened in its own colour (theme roles
+`anchor_current_bg` / `anchor_bg`; the gutter marks them `┃` / `╎`, which is
+all the `terminal` theme shows) — and `n` / `p` step to the next / previous
+one in line order, wrapping at the ends; backspace then returns to the
+overview on the anchor you stepped to. gg web draws and steps them the same
+way. `r` copies a reference to the anchor for the agent
 (`gg overview f12 "Tour" → internal/tui/open_files.go:220`),
 `y` the whole text. `gg session overview set|list|show|rm` are the agent's
 other verbs; an overview is an open file (esc backgrounds it, X closes it, the

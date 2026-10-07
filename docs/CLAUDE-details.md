@@ -5353,6 +5353,29 @@ selection, laid-out width); never on disk, never evicted, created
   document's type grows with a large window (`.vdoc` font-size clamp
   12–17px; the 100ch column grows with it).
 
+- **Anchor bands (2026-10-07, `anchor_bands.go`).** A file an anchor opened
+  shows that overview's line/range anchors in it as bands while the overview
+  is open: `d.bands()` = `anchorBands(d.from.ov.anchors, d.path, len(lines))`
+  (note anchors never; sorted; one per clamped range; past-EOF dropped),
+  computed at draw time so a `set` moves them. `openFilesReg.remove` marks a
+  removed overview `ov.closed` — the one choke point (closeDoc, closePreview).
+  The current band is `d.anchorCur` (a dest; `bandOf` re-finds it by the
+  CLAMPED range — matching "same start, end ≤" picks `2-2` for `2-4`); an
+  anchor open sets it and no longer sets `pendingEnd` (steer landings still
+  select). Paint: `previewRowMark(…, bandKind)` lays the band under cursor
+  and selection; `gutterW` counts bands; `gutterMark` ┃ > ╎ > │. Keys:
+  `bandKey` (fileViewer after `overviewKey`; files view after
+  `previewNoteKey`, before the review view's n/p) declines without bands;
+  `stepAnchorBand` lands via `landPendingLine` and `selectAnchor`s the
+  overview so backspace returns there. Web: `view.from` carries `anchors`,
+  `stamp`, `cur`, `closed`; `viewerAgentDocs` re-reads them
+  (`refreshFromAnchors`) or drops them (closed list); the JS twins
+  (`anchorBands`/`bandOf`/`stepBand`/`bandKindAt`) live in the pinned
+  overview-model block. `openAnchorAt` must declare `t` before `from` (a TDZ
+  throw once made enter open nothing). e2e: `Headless.AddOverview` (a private
+  `agentdocs.New()` store per run — the shared one numbers ids across
+  parallel scenarios).
+
 ## Agent spawn (agent orchestration stage 2)
 
 Spec `docs/superpowers/specs/2026-10-01-agent-spawn-design.md`, plans A

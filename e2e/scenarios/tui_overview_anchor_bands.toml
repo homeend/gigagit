@@ -1,0 +1,67 @@
+name = "tui: a file an overview opened draws every anchor of it as a band; n / p walk them"
+
+# An agent's overview (gg session overview add) names three places in a.txt:
+# line 3, lines 10-12 and line 20. Opening 10-12 lands there and draws all
+# three: the opened one marked ┃ in the gutter, the others ╎ (2026-10-07,
+# overview anchor bands). n steps to the next one — line 20 — and the status
+# line names it; backspace would come back to the overview on it.
+[input]
+steps = [
+  { write = "a.txt", content = """
+line 1 of a
+line 2 of a
+line 3 of a
+line 4 of a
+line 5 of a
+line 6 of a
+line 7 of a
+line 8 of a
+line 9 of a
+line 10 of a
+line 11 of a
+line 12 of a
+line 13 of a
+line 14 of a
+line 15 of a
+line 16 of a
+line 17 of a
+line 18 of a
+line 19 of a
+line 20 of a
+line 21 of a
+line 22 of a
+line 23 of a
+line 24 of a
+line 25 of a
+line 26 of a
+line 27 of a
+line 28 of a
+line 29 of a
+line 30 of a
+line 31 of a
+line 32 of a
+line 33 of a
+line 34 of a
+line 35 of a
+line 36 of a
+line 37 of a
+line 38 of a
+line 39 of a
+line 40 of a
+""" },
+  { commit = "seed" },
+]
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+overview = { title = "Tour", text = "# Tour\n\n- [three](a.txt:3)\n- [ten to twelve](a.txt:10-12)\n- [twenty](a.txt:20)\n" }
+keys = ["tab", "tab", "enter"]
+name = "opened"
+screen_contains = ["┃ line 10 of a", "╎ line 3 of a", "╎ line 20 of a", "[n/p] anchors"]
+
+[[tui.step]]
+keys = ["n"]
+name = "stepped"
+screen_contains = ["anchor 3/3 in this file · twenty", "┃ line 20 of a", "╎ line 10 of a"]

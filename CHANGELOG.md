@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overview anchor bands: see and walk every anchor of a file
+
+### Added
+
+- **A file an overview's anchor opened draws all of that overview's anchors
+  in it.** Every line (`path:N`) and range (`path:N-M`) anchor the overview
+  has in the file is a band: the one you opened (or stepped to) in the new
+  theme role `anchor_current_bg`, the others in `anchor_bg`; the gutter marks
+  them `┃` / `╎`, so the colourless `terminal` theme shows them too. `n` /
+  `p` step to the next / previous one in line order, wrapping inside the
+  file; the status line names it (`anchor 2/5 in this file · <label>`), and
+  backspace returns to the overview on the anchor you stepped to. The bands
+  follow `gg session overview set` and leave with the overview. TUI and gg
+  web alike; the `.` menu, the hint line and `?` help list the keys.
+- `/api/overview` anchors carry their link text (`label`).
+- e2e: a `[[tui.step]]` may hand the TUI an agent overview first
+  (`overview = { title, text }`), as `gg session overview add` does.
+
+### Changed
+
+- Opening a range anchor no longer SELECTS the range: it is the current band,
+  which stays while you move and scroll (space/space still selects).
+- gg web: `n` / `p` in the file viewer are the viewer's own — a `p` there no
+  longer pulls.
+
 ## Tests: the maintenance-lock flake, second hole
 
 ### Fixed
