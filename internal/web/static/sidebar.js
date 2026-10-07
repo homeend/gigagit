@@ -43,6 +43,7 @@ function worktreeSessionRows(sessions, path, now) {
       id: s.id,
       glyph: s.state === "exited" ? "○" : "●",
       label: s.label,
+      name: s.name || "",
       meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : activityLabel(s, now) || "running " + sessAge(s.started, now),
       task: !!s.task,
       attn: activityAttn(s),
@@ -61,6 +62,19 @@ function recycleCandidates(worktrees, current, sessions) {
       live: (sessions || []).some((s) => s.worktree === w.path && s.state !== "exited"),
     }));
 }
+// sessionTitleFit: a session sub-row's title in room columns. The title
+// ends in " [name]" when the session is named; a narrow row cuts the label
+// first so the name — the reason to name a session — stays readable, then
+// cuts the name itself. elide is core.js's elideNameMiddle (injected: the
+// model stays pure).
+function sessionTitleFit(title, name, room, elide) {
+  const len = (s) => Array.from(s).length;
+  if (len(title) <= room || !name) return elide(title, room);
+  const tag = "[" + name + "]";
+  const labelRoom = room - len(tag) - 1;
+  if (labelRoom < 3) return elide(tag, room);
+  return elide(title.slice(0, title.length - tag.length - 1), labelRoom) + " " + tag;
+}
 // --- end sidebar model ---
 
 // sessionSubRows: the sub-rows of the sessions in one worktree — under its
@@ -73,7 +87,7 @@ function sessionSubRows(path, cols) {
       const room = cols - 6 - Array.from(r.meta).length;
       return (
         `<li class="wsess${r.task ? " task" : ""}${r.attn ? " attn" : ""}" data-sid="${esc(r.id)}" title="${esc(r.label + " — " + r.meta)}">` +
-        `└ <span class="glyph ${r.glyph === "●" ? "run" : "ex"}">${r.glyph}</span> ${esc(room > 4 ? elideNameMiddle(r.label, room) : r.label)}` +
+        `└ <span class="glyph ${r.glyph === "●" ? "run" : "ex"}">${r.glyph}</span> ${esc(room > 4 ? sessionTitleFit(r.label, r.name, room, elideNameMiddle) : r.label)}` +
         `<span class="wpath">${esc(r.meta)}</span></li>`
       );
     })

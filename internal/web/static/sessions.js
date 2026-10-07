@@ -24,16 +24,23 @@ function wtLeaf(path) {
 // dialog applies it. Detecting only closes; a start in flight takes no key
 // at all (a held enter must not start twice, esc must not orphan it). A
 // REPEATED enter (the key held down) does nothing anywhere: it would pick a
-// row and then approve its command before anyone could read it.
+// row and then approve its command before anyone could read it. A pick goes
+// to the optional name step (after the approval when the command needs
+// one); there every key but enter and esc is the name input's.
 function dialogStep(d, key, repeat) {
   if (d.phase === "starting" || (repeat && key === "Enter")) return {};
   if (d.phase === "detecting") return key === "Escape" ? { close: true } : {};
-  if (d.phase === "approve") {
-    if (key === "Enter") return { start: d.sel, approve: true };
+  if (d.phase === "name") {
+    if (key === "Enter") return { start: d.sel, approve: !!d.approved };
     if (key === "Escape") return d.cmds.length > 1 ? { phase: "choose" } : { close: true };
     return {};
   }
-  const pick = (i) => (d.cmds[i].approved ? { start: i, approve: false } : { sel: i, phase: "approve" });
+  if (d.phase === "approve") {
+    if (key === "Enter") return { phase: "name", approved: true };
+    if (key === "Escape") return d.cmds.length > 1 ? { phase: "choose" } : { close: true };
+    return {};
+  }
+  const pick = (i) => (d.cmds[i].approved ? { sel: i, phase: "name" } : { sel: i, phase: "approve" });
   if (key === "Escape") return { close: true };
   if (key === "ArrowDown" || key === "j") return { sel: Math.min(d.cmds.length - 1, d.sel + 1) };
   if (key === "ArrowUp" || key === "k") return { sel: Math.max(0, d.sel - 1) };
@@ -60,7 +67,7 @@ function sessionMenuRows(s) {
 }
 // --- end sessions model ---
 
-let dlg = null; // { phase, path, cmds, sel }
+let dlg = null; // { phase, path, cmds, sel, names, name, approved }
 const root = mountOverlay("sessstart");
 root.innerHTML = `<div id="sessstart-box"><div id="sessstart-title"></div><div id="sessstart-body"></div></div>`;
 root.addEventListener("click", (e) => {
@@ -81,16 +88,30 @@ const FOOT = {
   detecting: `<span>esc cancel</span>`,
   choose: `<span>↑↓ move · 1–9 / enter start · esc cancel</span>`,
   approve: `<span>enter run · esc back</span>`,
+  name: `<span>enter start · alt+↓ recent names · esc back</span>`,
   starting: `<span>starting…</span>`,
 };
 
 function render() {
   if (!dlg) return;
   const cur = dlg.cmds[dlg.sel];
-  $("sessstart-title").textContent = dlg.phase === "approve" ? "Start this agent?  (" + cur.name + ")" : "Start agent in " + wtLeaf(dlg.path);
+  $("sessstart-title").textContent =
+    dlg.phase === "approve" ? "Start this agent?  (" + cur.name + ")" : dlg.phase === "name" ? "Name this agent (optional)" : "Start agent in " + wtLeaf(dlg.path);
   const body = $("sessstart-body");
   if (dlg.phase === "detecting") body.innerHTML = `<div class="rnote">⏳ Detecting installed agents…</div>`;
-  else if (dlg.phase === "starting") body.innerHTML = `<div class="rnote">starting ${esc(cur.name)}…</div>`;
+  else if (dlg.phase === "starting") body.innerHTML = `<div class="rnote">starting ${esc(cur.name + (dlg.name.trim() ? " [" + dlg.name.trim() + "]" : ""))}…</div>`;
+  else if (dlg.phase === "name") {
+    body.innerHTML =
+      `<div class="rnote">Start ${esc(cur.name)} in ${esc(wtLeaf(dlg.path))}</div>` +
+      `<input id="sessstart-name" list="sessstart-names" maxlength="40" placeholder="optional — alt+↓ recent names" autocomplete="off">` +
+      `<datalist id="sessstart-names">${(dlg.names || []).map((n) => `<option value="${esc(n)}">`).join("")}</datalist>`;
+    const inp = $("sessstart-name");
+    inp.value = dlg.name;
+    inp.addEventListener("input", () => {
+      if (dlg) dlg.name = inp.value;
+    });
+    inp.focus();
+  }
   else if (dlg.phase === "approve")
     body.innerHTML =
       `<div class="rcmd">${esc(cur.command)}</div>` +
@@ -114,6 +135,7 @@ function apply(step) {
   if (!dlg) return;
   if (step.close) return closeDialog();
   if (step.start !== undefined) return run(step.start, step.approve);
+  if (step.phase === "choose") Object.assign(dlg, { name: "", approved: false });
   Object.assign(dlg, step);
   render();
 }
@@ -150,7 +172,7 @@ async function run(i, approve) {
   d.phase = "starting";
   render();
   try {
-    await post({ worktree: d.path, tool: d.cmds[i].name, approve });
+    await post({ worktree: d.path, tool: d.cmds[i].name, approve, name: d.name });
     if (dlg === d) closeDialog();
   } catch (e) {
     if (dlg !== d) return;
@@ -167,9 +189,12 @@ async function run(i, approve) {
 
 async function startAgent(path) {
   if (dlg) return;
-  const d = (dlg = { phase: "detecting", path, cmds: [], sel: 0 });
+  const d = (dlg = { phase: "detecting", path, cmds: [], sel: 0, names: [], name: "", approved: false });
   pushLayer("sessstart", root, {
     onKey: (e) => {
+      // The name step's typing (alt+↓ included) is the input's: no step,
+      // no preventDefault — the stack still keeps it from gg's shortcuts.
+      if (dlg && dlg.phase === "name" && e.key !== "Enter" && e.key !== "Escape") return false;
       if (dlg) apply(dialogStep(dlg, e.key, e.repeat));
       e.preventDefault();
       return true; // the dialog owns the keyboard
@@ -186,6 +211,7 @@ async function startAgent(path) {
   if (dlg !== d) return; // closed while detecting
   if (body.added && body.added.length) toast("Added " + body.added.join(", ") + " to " + body.config_path + " — edit there or in Settings → External tools");
   d.cmds = body.commands || [];
+  d.names = body.names || [];
   if (!d.cmds.length) {
     closeDialog();
     return toast('no agent found — add a [[tools.command]] block with category = "session" and mode = "session"', { err: true });
