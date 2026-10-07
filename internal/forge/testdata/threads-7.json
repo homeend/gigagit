@@ -1,8 +1,8 @@
 {"data":{"repository":{"pullRequest":{
  "reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[
-  {"path":"a.go","line":12,"startLine":10,"diffSide":"RIGHT","subjectType":"LINE","isResolved":false,"isOutdated":false,
+  {"id":"PRRT_a","path":"a.go","line":12,"startLine":10,"diffSide":"RIGHT","subjectType":"LINE","isResolved":false,"isOutdated":false,
    "comments":{"pageInfo":{"hasNextPage":false},"nodes":[
-    {"id":"C1","replyTo":null,"author":{"login":"carol"},"body":"rename this","diffHunk":"@@ -1 +1 @@\n+x","createdAt":"2026-09-02T09:00:00Z","updatedAt":"2026-09-02T09:00:00Z"},
+    {"id":"C1","replyTo":null,"author":{"login":"carol"},"body":"rename this","diffHunk":"@@ -1 +1 @@\n+x","createdAt":"2026-09-02T09:00:00Z","updatedAt":"2026-09-02T09:00:00Z","pullRequestReview":{"id":"R1"}},
     {"id":"C2","replyTo":{"id":"C1"},"author":{"login":"alice"},"body":"done","diffHunk":"@@ -1 +1 @@\n+x","createdAt":"2026-09-02T09:30:00Z","updatedAt":"2026-09-02T09:30:00Z"}]}},
   {"path":"b.go","line":null,"startLine":null,"diffSide":"RIGHT","subjectType":"FILE","isResolved":true,"isOutdated":false,
    "comments":{"pageInfo":{"hasNextPage":false},"nodes":[

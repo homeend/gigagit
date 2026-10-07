@@ -28,6 +28,15 @@ type PullRequest struct {
 	URL         string    `json:"url"`
 	Created     time.Time `json:"created"`
 	Updated     time.Time `json:"updated"`
+	// NodeID is the forge's own id for the PR (GitHub's GraphQL node id):
+	// write calls target it. Set by a snapshot read, "" from a listing.
+	NodeID string `json:"node_id,omitempty"`
+	// ViewerDidAuthor: the logged-in user opened this PR (the forge refuses
+	// their approve / request-changes).
+	ViewerDidAuthor bool `json:"viewer_did_author,omitempty"`
+	// ViewerPendingReview is the id of the user's own unsubmitted review on
+	// the forge, "" when there is none.
+	ViewerPendingReview string `json:"viewer_pending_review,omitempty"`
 }
 
 // IsOpen reports whether p is still open on the forge.
@@ -60,4 +69,6 @@ type ForgeComment struct {
 	Verdict   string           `json:"verdict,omitempty"` // review only: approved, changes_requested, commented
 	Created   time.Time        `json:"created"`
 	Updated   time.Time        `json:"updated"`
+	ThreadID  string           `json:"thread_id,omitempty"` // the review thread an inline/file comment lives in
+	ReviewID  string           `json:"review_id,omitempty"` // the review the comment was posted in
 }

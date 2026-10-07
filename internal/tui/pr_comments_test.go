@@ -62,6 +62,7 @@ func TestPRCommentsTickRunsUnderAnOpenDiff(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
 	m.prCommentsInflight = false
+	m.prRevalidateInflight = false // the open's one refresh read (it carries the comments)
 	m.loading = false
 	t0 := time.Unix(4_000_000, 0)
 	m.prCommentsLast = t0
@@ -124,7 +125,7 @@ func TestPRCommentsMsgReloadsOnlyOnChange(t *testing.T) {
 func TestRAndIInsideAPRFilesView(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
-	m.prCommentsInflight = false
+	m.prCommentsInflight, m.prRevalidateInflight = false, false // the open's refresh landed
 	nm, cmd := m.Update(keyMsg("r"))
 	if cmd == nil || !nm.(Model).prCommentsInflight {
 		t.Fatal("r in a PR files view re-reads its comments")

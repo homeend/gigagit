@@ -22,8 +22,19 @@ const prFields = "number,title,author,state,isDraft,reviewDecision,headRefName,i
 // threadsQuery is single-page by design: hasNextPage on any connection
 // surfaces as truncated rather than a pagination loop.
 const threadsQuery = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){
-reviewThreads(first:100){pageInfo{hasNextPage} nodes{path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated
-comments(first:50){pageInfo{hasNextPage} nodes{id replyTo{id} author{login} body diffHunk createdAt updatedAt}}}}
+reviewThreads(first:100){pageInfo{hasNextPage} nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated
+comments(first:50){pageInfo{hasNextPage} nodes{id replyTo{id} author{login} body diffHunk createdAt updatedAt pullRequestReview{id}}}}}
+comments(first:100){pageInfo{hasNextPage} nodes{id author{login} body createdAt updatedAt}}
+reviews(first:100){pageInfo{hasNextPage} nodes{id author{login} body state submittedAt}}}}}`
+
+// snapshotQuery is threadsQuery's pullRequest node plus the PR's own fields
+// and the viewer fields — one round trip for a whole revalidation. The
+// operation name lets the fake gh tell it from the threads read.
+const snapshotQuery = `query PRSnapshot($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){
+id number title body author{login} state isDraft reviewDecision headRefName isCrossRepository headRepositoryOwner{login} headRepository{name}
+baseRefName baseRefOid headRefOid url createdAt updatedAt viewerDidAuthor viewerLatestReview{id state}
+reviewThreads(first:100){pageInfo{hasNextPage} nodes{id path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated
+comments(first:50){pageInfo{hasNextPage} nodes{id replyTo{id} author{login} body diffHunk createdAt updatedAt pullRequestReview{id}}}}}
 comments(first:100){pageInfo{hasNextPage} nodes{id author{login} body createdAt updatedAt}}
 reviews(first:100){pageInfo{hasNextPage} nodes{id author{login} body state submittedAt}}}}}`
 
@@ -123,6 +134,17 @@ func (g *GH) Comments(ctx context.Context, n int) ([]model.ForgeComment, bool, e
 		return nil, false, err
 	}
 	return parseThreads([]byte(res.Stdout))
+}
+
+// Snapshot reads PR n and all its comments in one GraphQL call.
+func (g *GH) Snapshot(ctx context.Context, n int) (Snapshot, error) {
+	res, err := g.run(ctx, "gh api graphql (snapshot)", "api", "graphql",
+		"-F", "owner={owner}", "-F", "name={repo}", "-F", "number="+strconv.Itoa(n),
+		"-f", "query="+snapshotQuery)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return parseSnapshot([]byte(res.Stdout))
 }
 
 func (g *GH) BaseRepo(ctx context.Context) (string, string, error) {

@@ -22,6 +22,7 @@ type fakeForge struct {
 	detectGate   chan struct{} // non-nil: Detect blocks until it is closed
 	detects      atomic.Int32
 	open         []model.PullRequest
+	listErr      error                     // ListOpen's error
 	byNum        map[int]model.PullRequest // PR(n); missing → forge.ErrNotFound
 	prCalls      map[int]int
 	comments     []model.ForgeComment
@@ -47,6 +48,9 @@ func (f *fakeForge) Detect(context.Context) error {
 func (f *fakeForge) ListOpen(context.Context) ([]model.PullRequest, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
 	return append([]model.PullRequest(nil), f.open...), nil
 }
 func (f *fakeForge) Search(_ context.Context, q forge.PRQuery) ([]model.PullRequest, bool, error) {
@@ -420,34 +424,29 @@ func TestPRFetchOpIsServedFromTheListing(t *testing.T) {
 	}
 }
 
-// A pull request nobody touched for prCacheIdle is evicted: the next open asks
-// the forge again.
-func TestPRCacheEvictsIdleEntries(t *testing.T) {
+// An entry expires by READ time, not by use: within 8 hours of the forge's
+// answer two opens cost one PR() call even when nothing touched it for 7
+// hours; past 8 hours the next open asks again however often it was used.
+func TestPRCacheExpiresByReadTime(t *testing.T) {
 	t.Parallel()
 	ff := &fakeForge{url: "u", byNum: map[int]model.PullRequest{7: pr(7, "open", 1)}}
 	svc := newForgeSvc(t, ff)
+	svc.SetPRCacheStore(nil) // memory only: this is about the read clock
 	now := time.Unix(1_700_000_000, 0)
 	svc.forgeNow = func() time.Time { return now }
 	ctx := context.Background()
-	for range 2 {
-		if _, err := svc.PRFetchOp(ctx, 7); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if n, _ := ff.calls(7); n != 1 {
-		t.Fatalf("within the idle window: PR() called %d times, want 1", n)
-	}
-	now = now.Add(prCacheIdle - time.Second)
-	svc.PRFetchOp(ctx, 7) // a use: the window restarts
-	now = now.Add(prCacheIdle - time.Second)
+	svc.PRFetchOp(ctx, 7)
+	now = now.Add(7 * time.Hour)
 	svc.PRFetchOp(ctx, 7)
 	if n, _ := ff.calls(7); n != 1 {
-		t.Fatalf("a used entry must stay: PR() called %d times, want 1", n)
+		t.Fatalf("7h after the read: PR() called %d times, want 1", n)
 	}
-	now = now.Add(prCacheIdle + time.Second)
+	now = now.Add(59 * time.Minute) // used a minute ago, read 7h59m ago
+	svc.PRFetchOp(ctx, 7)
+	now = now.Add(2 * time.Minute) // 8h01m after the read
 	svc.PRFetchOp(ctx, 7)
 	if n, _ := ff.calls(7); n != 2 {
-		t.Errorf("after the idle window: PR() called %d times, want 2", n)
+		t.Errorf("past the read limit: PR() called %d times, want 2", n)
 	}
 }
 

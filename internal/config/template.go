@@ -77,6 +77,9 @@ var settingDocs = []settingDoc{
 	{"refresh", "reflog_watch", false, "refresh reflog on logs/HEAD change (off → use interval); ignored on WSL2 9p mounts"},
 	{"refresh", "remotes_watch", false, "refresh remotes on ref/FETCH_HEAD change (off → use interval); ignored on WSL2 9p mounts"},
 
+	{"forge", "cache_hours", 8, "hours a pull request read from the forge stays fresh: a fresher one opens at once from the cache and refreshes in the background, an older one is read from the forge first; 0 = always read first"},
+	{"forge", "prefetch", 5, "after the pull-request list refreshes, fetch and prepare this many recently opened PRs whose head moved, in the background; 0 = off"},
+
 	{"versions", "disabled", false, "disable branch-version snapshots before merges/rebases (default: on)"},
 	{"versions", "max_age_days", 90, "prune branch versions older than this many days; -1 = keep forever"},
 
@@ -190,7 +193,7 @@ func Template() string {
 	b.WriteString("# gg configuration — every setting with its default.\n")
 	b.WriteString("# Uncomment a line to override the default. Values shown are gg's built-in\n")
 	b.WriteString("# defaults; leaving a line commented keeps tracking the default across versions.\n")
-	for _, section := range []string{"worktree", "ui", "debug", "refresh", "versions", "notes", "branches", "tools", "console", "tasks", "agents", "web"} {
+	for _, section := range []string{"worktree", "ui", "debug", "refresh", "forge", "versions", "notes", "branches", "tools", "console", "tasks", "agents", "web"} {
 		b.WriteString("\n[" + section + "]\n")
 		for _, d := range settingDocs {
 			if d.section != section {

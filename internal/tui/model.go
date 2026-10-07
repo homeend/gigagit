@@ -273,9 +273,21 @@ type Model struct {
 	// open is the reopen a revalidation caused — that one must not ask again.
 	prRevalidateInflight bool
 	prRevalidateSkip     int
-	prCommentsLast       time.Time
-	previewOpen          *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
-	previewGen           int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
+	// prRefreshing: the open PR's forge read is in flight ("refreshing…" in
+	// its title); prOfflineSince: the last read failed — the title shows how
+	// old the cached copy on screen is (zero = online).
+	prRefreshing   bool
+	prOfflineSince time.Time
+	// prReland is where the user was when the open PR's head moved: the
+	// reopen that follows lands the files cursor (and an open diff, at its
+	// line) back there. Consumed by that reopen's file list.
+	prReland *prReland
+	// prPrefetch is the background PR prefetch this Model started (pr_panel.go):
+	// cancelled on a repo switch, a newer list, and quit.
+	prPrefetch     *prPrefetchRun
+	prCommentsLast time.Time
+	previewOpen    *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
+	previewGen     int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
@@ -1197,6 +1209,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			po.keepPath = ""
 		}
+		if m.pendingSteer == nil {
+			if tm, cmd, ok := m.relandPR(); ok {
+				return tm, cmd
+			} else if mm, isModel := tm.(Model); isModel {
+				m = mm // the reland was consumed even when no diff reopened
+			}
+		}
 		// A parked pair navigate waits on exactly this list; a parked preview
 		// navigate waits on the same message but a DIFFERENT stage — each
 		// drain checks its own stage and is a no-op for the other's pending.
@@ -1690,6 +1709,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// snapshotTargetMsg resolved before this config arrived.
 		var steerCmd tea.Cmd
 		m, steerCmd = m.reconcileSteer()
+		m = m.applyForgeConfig()
 		var tasksCmd tea.Cmd
 		m, tasksCmd = m.applyTasksConfig()
 		steerCmd = tea.Batch(steerCmd, tasksCmd)
@@ -1782,6 +1802,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// leftovers replay and the session runs watcher-less.
 			var steerCmd tea.Cmd
 			m, steerCmd = m.reconcileSteer()
+			m = m.applyForgeConfig()
 			var tasksCmd tea.Cmd
 			m, tasksCmd = m.applyTasksConfig()
 			var consoleCmd tea.Cmd
@@ -3313,6 +3334,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opDecisionMsg:
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, m.waitForOp(m.opMsgs)
+	case prPrefetchedMsg:
+		return m, nil // nothing to draw: the next open is a cache hit
+	case prsCachedMsg:
+		return m.handlePRsCached(msg)
 	case prsLoadedMsg:
 		return m.handlePRsLoaded(msg)
 
@@ -4821,6 +4846,7 @@ func (m Model) commitPageEligible() bool {
 // --cwd-file by cmd/gg). A fresh span ring is used for the new root; the cmd/gg
 // panic dump still references the original repo (acceptable for a debug aid).
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
+	m = m.stopPRPrefetch()             // the old repo's background fetches end here
 	removeSnapshotFile(m.snapshotPath) // the old repo's session ends here
 	m = m.closeSteerInbox()            // …and so does its steering inbox
 	m.steerGen++                       // drop the old watcher's in-flight msgs

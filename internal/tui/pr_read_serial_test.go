@@ -43,8 +43,11 @@ func TestReadPRsAgainstTheFakeForge(t *testing.T) {
 	if _, again := m.kickForgeProbe(); again != nil {
 		t.Fatal("the probe runs once per repo session")
 	}
-	nm, _ := m.Update(cmd())
-	m = nm.(Model)
+	// The probe batches the cached listing (none here) with the live read.
+	for _, msg := range flattenCmd(t, cmd) {
+		nm, _ := m.Update(msg)
+		m = nm.(Model)
+	}
 	if !m.forgeShown || m.forgeProvider != "github" || len(m.prs) == 0 || m.prsErr != "" {
 		t.Fatalf("shown=%v provider=%q prs=%d err=%q", m.forgeShown, m.forgeProvider, len(m.prs), m.prsErr)
 	}

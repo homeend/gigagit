@@ -108,6 +108,9 @@ body.resizing { cursor: col-resize; user-select: none; }
    says what the surface IS, and a selection here still copies. */
 #files-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: default; }
 #files-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* An open pull request's freshness: "refreshing…" / "offline · read 3h ago". */
+#pr-fresh { flex: 0 0 auto; color: var(--dim); margin-left: 0.5em; white-space: nowrap; }
+#pr-fresh:empty { display: none; }
 /* The short sha is its own target inside the title: its right-click menu
    offers the short AND the full id, the rest of the title only the full one. */
 .csha { color: var(--accent); }

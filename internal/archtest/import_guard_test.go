@@ -22,6 +22,7 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/prefix":       "frontends must reach the prefix store through internal/domain",
 		"github.com/homeend/gigagit/internal/texttmpl":     "frontends must reach the text-template store through internal/domain",
 		"github.com/homeend/gigagit/internal/linkhist":     "frontends must reach the copied-link history store through internal/domain",
+		"github.com/homeend/gigagit/internal/prcache":      "frontends must reach the pull-request cache through internal/domain",
 		"github.com/homeend/gigagit/internal/savedcompare": "frontends must reach the saved-comparison store through internal/domain",
 		"github.com/homeend/gigagit/internal/agentsession": "frontends must reach agent sessions through internal/domain",
 		"github.com/homeend/gigagit/internal/agentstate":   "frontends must reach session activity through internal/domain",
@@ -290,6 +291,25 @@ func TestLinkhistIsALeaf(t *testing.T) {
 		}
 		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
 			t.Errorf("internal/linkhist imports %s — only stdlib, internal/filelock and go-toml are allowed", imp)
+		}
+	}
+}
+
+// TestPRCacheIsALeaf pins internal/prcache's budget: per-repo JSON records
+// under an explicit root (domain resolves the XDG dir), the shared file lock
+// and the plain model types — never git, config or the forge.
+func TestPRCacheIsALeaf(t *testing.T) {
+	t.Parallel()
+	allowed := map[string]bool{
+		"github.com/homeend/gigagit/internal/filelock": true,
+		"github.com/homeend/gigagit/internal/model":    true,
+	}
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/prcache") {
+		if allowed[imp] {
+			continue
+		}
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/prcache imports %s — only stdlib, internal/filelock and internal/model are allowed", imp)
 		}
 	}
 }

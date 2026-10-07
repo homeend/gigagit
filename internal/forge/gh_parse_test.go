@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"testing"
@@ -68,6 +69,9 @@ func TestParseThreads(t *testing.T) {
 		c.StartLine != 10 || c.Side != model.NoteSideNew || c.ParentID != "" {
 		t.Errorf("C1 = %+v", c)
 	}
+	if c := by["C1"]; c.ThreadID != "PRRT_a" || c.ReviewID != "R1" {
+		t.Errorf("C1 ids = thread %q review %q", c.ThreadID, c.ReviewID)
+	}
 	if c := by["C2"]; c.ParentID != "C1" || c.Line != 12 {
 		t.Errorf("C2 = %+v", c)
 	}
@@ -99,5 +103,44 @@ func TestParseThreadsNullPullRequestIsNotFound(t *testing.T) {
 	_, _, err := parseThreads([]byte(`{"data":{"repository":{"pullRequest":null}}}`))
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestParseSnapshot(t *testing.T) {
+	t.Parallel()
+	s, err := parseSnapshot(fixture(t, "snapshot-7.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := s.PR
+	if p.Number != 7 || p.NodeID != "PR_kw7" || p.HeadSHA != "h1h1" || p.Body != "Body\ntext" ||
+		p.State != "open" || !p.ViewerDidAuthor || p.ViewerPendingReview != "PRR_p1" {
+		t.Fatalf("PR = %+v", p)
+	}
+	var inline *model.ForgeComment
+	for i := range s.Comments {
+		if s.Comments[i].ID == "PRRC_c1" {
+			inline = &s.Comments[i]
+		}
+	}
+	if inline == nil || inline.ThreadID != "PRRT_t1" || inline.ReviewID != "PRR_r1" || inline.Line != 4 {
+		t.Fatalf("inline comment = %+v", inline)
+	}
+}
+
+// A submitted (non-pending) latest review is not a pending one.
+func TestParseSnapshotIgnoresSubmittedLatestReview(t *testing.T) {
+	t.Parallel()
+	b := bytes.Replace(fixture(t, "snapshot-7.json"), []byte(`"state":"PENDING"`), []byte(`"state":"COMMENTED"`), 1)
+	s, err := parseSnapshot(b)
+	if err != nil || s.PR.ViewerPendingReview != "" {
+		t.Fatalf("pending = %q, err %v", s.PR.ViewerPendingReview, err)
+	}
+}
+
+func TestParseSnapshotNullPullRequestIsNotFound(t *testing.T) {
+	t.Parallel()
+	if _, err := parseSnapshot([]byte(`{"data":{"repository":{"pullRequest":null}}}`)); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }

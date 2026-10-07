@@ -1,0 +1,17 @@
+{"data":{"repository":{"pullRequest":{
+ "id":"PR_kw7","number":7,"title":"Add x","body":"Body\r\ntext","author":{"login":"ann"},
+ "state":"OPEN","isDraft":false,"reviewDecision":"REVIEW_REQUIRED","headRefName":"feat/x",
+ "isCrossRepository":false,"headRepositoryOwner":{"login":"ann"},"headRepository":{"name":"r"},
+ "baseRefName":"main","baseRefOid":"b0b0","headRefOid":"h1h1","url":"https://github.com/o/r/pull/7",
+ "createdAt":"2026-10-01T10:00:00Z","updatedAt":"2026-10-06T10:00:00Z",
+ "viewerDidAuthor":true,"viewerLatestReview":{"id":"PRR_p1","state":"PENDING"},
+ "reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[
+  {"id":"PRRT_t1","path":"a.go","line":4,"startLine":null,"originalLine":4,"originalStartLine":null,
+   "diffSide":"RIGHT","subjectType":"LINE","isResolved":false,"isOutdated":false,
+   "comments":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"id":"PRRC_c1","replyTo":null,"author":{"login":"bob"},"body":"why?","diffHunk":"@@ -1 +1 @@",
+     "createdAt":"2026-10-05T10:00:00Z","updatedAt":"2026-10-05T10:00:00Z","pullRequestReview":{"id":"PRR_r1"}}]}}]},
+ "comments":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+ "reviews":{"pageInfo":{"hasNextPage":false},"nodes":[
+  {"id":"PRR_r1","author":{"login":"bob"},"body":"","state":"COMMENTED","submittedAt":"2026-10-05T10:00:00Z"}]}
+}}}}

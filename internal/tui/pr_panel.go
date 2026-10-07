@@ -63,7 +63,48 @@ func (m Model) kickForgeProbe() (Model, tea.Cmd) {
 		m.refreshLastRun = map[refreshItem]time.Time{}
 	}
 	m.refreshLastRun[prsItem] = time.Now()
-	return m.readPRsCmd(context.Background(), false, false)
+	m, read := m.readPRsCmd(context.Background(), false, false)
+	// The cached listing draws the tab at once; the read replaces it.
+	return m, tea.Batch(m.cachedPRsCmd(), read)
+}
+
+// prsCachedMsg carries the cached pull-request listing (no forge call).
+type prsCachedMsg struct {
+	gen      int
+	provider string
+	prs      []model.PullRequest
+}
+
+// cachedPRsCmd reads the fresh cached listing off the UI thread; nil msg when
+// there is none.
+func (m Model) cachedPRsCmd() tea.Cmd {
+	svc, gen := m.svc, m.prsGen
+	if svc == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		prs, ok := svc.PullRequestsCached()
+		if !ok {
+			return nil
+		}
+		return prsCachedMsg{gen: gen, provider: svc.PRCacheProvider(), prs: prs}
+	}
+}
+
+// handlePRsCached shows the cached rows until the live read lands — never
+// over a live read, never across a repo switch.
+func (m Model) handlePRsCached(msg prsCachedMsg) (Model, tea.Cmd) {
+	if msg.gen != m.prsGen || m.prsLoaded {
+		return m, nil
+	}
+	m.forgeShown = true
+	if m.forgeProvider == "" {
+		m.forgeProvider = msg.provider
+	}
+	key := m.panelSelKey(panelPRs)
+	m.prs = msg.prs
+	m = m.restorePanelSel(panelPRs, key)
+	return m, nil
 }
 
 // handlePRsLoaded stores a pull-request read. The tab appears on the first
@@ -105,7 +146,44 @@ func (m Model) handlePRsLoaded(msg prsLoadedMsg) (Model, tea.Cmd) {
 	key := m.panelSelKey(panelPRs)
 	m.prs, m.prsErr, m.prsLoaded = msg.prs, "", true
 	m = m.restorePanelSel(panelPRs, key)
-	return m, nil
+	return m.prPrefetchCmd()
+}
+
+// prPrefetchedMsg lands when a background prefetch finished; nothing on
+// screen changes (the next open is simply a cache hit).
+type prPrefetchedMsg struct{ gen, n int }
+
+// prPrefetchRun is the Model's handle on its running background prefetch.
+type prPrefetchRun struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// prPrefetchCmd warms the recently opened PRs whose head moved ([forge]
+// prefetch; domain runs one at a time, bounds each fetch and yields to a
+// user op). The Model owns it: a repo switch and quit cancel it. nil when
+// off, and in quiet (headless) mode.
+func (m Model) prPrefetchCmd() (Model, tea.Cmd) {
+	if m.svc == nil || m.quiet || m.cfg.Forge.PrefetchCount() == 0 {
+		return m, nil
+	}
+	m = m.stopPRPrefetch() // a newer list supersedes a prefetch still running
+	ctx, cancel := context.WithCancel(context.Background())
+	m.prPrefetch = &prPrefetchRun{ctx: ctx, cancel: cancel}
+	svc, gen := m.svc, m.prsGen
+	return m, func() tea.Msg {
+		defer cancel()
+		return prPrefetchedMsg{gen: gen, n: svc.PRPrefetch(ctx)}
+	}
+}
+
+// stopPRPrefetch cancels the running prefetch, if any.
+func (m Model) stopPRPrefetch() Model {
+	if m.prPrefetch != nil {
+		m.prPrefetch.cancel()
+		m.prPrefetch = nil
+	}
+	return m
 }
 
 func errText(err error) string {
@@ -292,4 +370,12 @@ func (m Model) emptyPanelText(p panel) string {
 		}
 	}
 	return i18n.T("  (none)")
+}
+
+// applyForgeConfig hands [forge] cache_hours / prefetch to the Service.
+func (m Model) applyForgeConfig() Model {
+	if m.svc != nil {
+		m.svc.SetPRCachePolicy(m.cfg.Forge.CacheMaxAge(), m.cfg.Forge.PrefetchCount())
+	}
+	return m
 }

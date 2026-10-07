@@ -241,6 +241,11 @@ func (s *Service) PreviewSummary(ctx context.Context, source, target string) (Pr
 	if !ok {
 		return PreviewSummary{State: PreviewMissingTarget, SourceHash: srcHash}, nil
 	}
+	return s.previewSummaryHashes(ctx, srcHash, tgtHash)
+}
+
+// previewSummaryHashes is PreviewSummary for two resolved hashes (cached).
+func (s *Service) previewSummaryHashes(ctx context.Context, srcHash, tgtHash string) (PreviewSummary, error) {
 	key := "preview-summary:" + srcHash + ":" + tgtHash
 	v, err := s.factory.Cache("preview").GetOrLoad(key, func() (any, error) {
 		return query(ctx, s, key, func(ctx context.Context) (PreviewSummary, error) {
@@ -290,6 +295,19 @@ func (s *Service) PreviewOpen(ctx context.Context, source, target string) (Previ
 	if err != nil || sum.State != PreviewOK {
 		return PreviewEndpoints{Summary: sum}, err
 	}
+	return endpointsFor(sum)
+}
+
+// seedPreviewSummary puts a summary computed elsewhere (the PR cache) under
+// the key previewSummaryHashes reads.
+func (s *Service) seedPreviewSummary(sum PreviewSummary) {
+	_, _ = s.factory.Cache("preview").GetOrLoad("preview-summary:"+sum.SourceHash+":"+sum.TargetHash, func() (any, error) {
+		return sum, nil
+	})
+}
+
+// endpointsFor shapes an OK summary as the compare pipeline's two endpoints.
+func endpointsFor(sum PreviewSummary) (PreviewEndpoints, error) {
 	left, err := model.CommitEndpoint(sum.base)
 	if err != nil {
 		return PreviewEndpoints{Summary: sum}, err

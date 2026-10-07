@@ -22,6 +22,7 @@ import (
 type fakeForge struct {
 	mu      sync.Mutex
 	detect  error
+	detects int
 	listErr error
 	open    []model.PullRequest
 	byN     map[int]model.PullRequest
@@ -44,6 +45,7 @@ func (f *fakeForge) Name() string { return "fake" }
 func (f *fakeForge) Detect(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.detects++
 	return f.detect
 }
 func (f *fakeForge) Search(_ context.Context, q forge.PRQuery) ([]model.PullRequest, bool, error) {
@@ -110,7 +112,7 @@ func openPR(n int, title string) model.PullRequest {
 
 // prServe serves dir with f as the only forge provider and a ticker-less
 // live hub, so a test can watch emits without the global clock seams.
-func prServe(t *testing.T, dir string, f *fakeForge) (*httptest.Server, *Server) {
+func prServe(t *testing.T, dir string, f forge.Provider) (*httptest.Server, *Server) {
 	t.Helper()
 	svc := domain.Open(dir)
 	svc.SetForgeProviders([]forge.Provider{f})

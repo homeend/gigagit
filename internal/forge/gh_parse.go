@@ -88,7 +88,10 @@ type ghPage struct {
 }
 
 type ghThreadComment struct {
-	ID      string `json:"id"`
+	ID                string `json:"id"`
+	PullRequestReview *struct {
+		ID string `json:"id"`
+	} `json:"pullRequestReview"`
 	ReplyTo *struct {
 		ID string `json:"id"`
 	} `json:"replyTo"`
@@ -100,6 +103,7 @@ type ghThreadComment struct {
 }
 
 type ghThread struct {
+	ID        string `json:"id"`
 	Path      string `json:"path"`
 	Line      *int   `json:"line"`
 	StartLine *int   `json:"startLine"`
@@ -197,6 +201,10 @@ func parseThreads(b []byte) ([]model.ForgeComment, bool, error) {
 			if c.ReplyTo != nil {
 				fc.ParentID = c.ReplyTo.ID
 			}
+			fc.ThreadID = th.ID
+			if c.PullRequestReview != nil {
+				fc.ReviewID = c.PullRequestReview.ID
+			}
 			out = append(out, fc)
 		}
 	}
@@ -217,4 +225,44 @@ func parseThreads(b []byte) ([]model.ForgeComment, bool, error) {
 		})
 	}
 	return out, truncated, nil
+}
+
+// ghSnapshot is the combined read: the PR's own fields (ghPR's names are
+// GraphQL's, so it decodes the same node) plus the viewer fields; the
+// threads, comments and reviews of the same node go through parseThreads.
+type ghSnapshot struct {
+	Data struct {
+		Repository struct {
+			PullRequest *struct {
+				ghPR
+				ID                 string `json:"id"`
+				ViewerDidAuthor    bool   `json:"viewerDidAuthor"`
+				ViewerLatestReview *struct {
+					ID    string `json:"id"`
+					State string `json:"state"`
+				} `json:"viewerLatestReview"`
+			} `json:"pullRequest"`
+		} `json:"repository"`
+	} `json:"data"`
+}
+
+func parseSnapshot(b []byte) (Snapshot, error) {
+	var raw ghSnapshot
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return Snapshot{}, err
+	}
+	n := raw.Data.Repository.PullRequest
+	if n == nil {
+		return Snapshot{}, ErrNotFound
+	}
+	pr := n.ghPR.model()
+	pr.NodeID, pr.ViewerDidAuthor = n.ID, n.ViewerDidAuthor
+	if r := n.ViewerLatestReview; r != nil && r.State == "PENDING" {
+		pr.ViewerPendingReview = r.ID
+	}
+	cs, truncated, err := parseThreads(b)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return Snapshot{PR: pr, Comments: cs, Truncated: truncated}, nil
 }

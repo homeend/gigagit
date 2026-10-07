@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull requests open from a cache
+
+### Changed
+
+- **A pull request you looked at in the last hours opens at once — also
+  after a restart.** gg keeps a cache on disk per repository: the PR list,
+  each recently opened PR (its details and review comments) and the git
+  work behind its diff (merge base, commit list, changed files). The view
+  draws from it immediately and asks GitHub in the background; when the
+  answer differs, the view updates in place — new comments appear, and a
+  head that moved reloads the diff with the cursor on the same file and,
+  in an open diff, the same line. The title says `refreshing…` while
+  GitHub is asked and `offline · read 3h ago` when it cannot be reached.
+  In a test with GitHub slowed to 2 s per call, the PR list came back
+  after a restart in 0.4 s instead of 4.8 s.
+- **One GitHub call per refresh instead of two.** The background check and
+  the comment poll are one combined GraphQL read (the PR, its threads,
+  reviews and the ids a later write-back needs).
+- **No detection call at startup after a good session**, and the base
+  repository is cached too (`gh repo view` ran on every first open).
+- **The diff's git work survives the base branch moving.** It is keyed by
+  merge base and PR head, so background fetches and pulls of `main` no
+  longer throw it away.
+- **Prefetch:** after the PR list refreshes, up to 5 recently opened PRs
+  whose head moved are fetched and prepared in the background, one at a
+  time, stepping aside while one of your operations runs.
+
+### Added
+
+- `[forge] cache_hours` (default 8; `0` = always read from GitHub first)
+  and `[forge] prefetch` (default 5; `0` = off). An entry older than
+  `cache_hours` is read from GitHub first; the cache keeps the 50 most
+  recently opened PRs.
+
 ## Overview anchor bands: see and walk every anchor of a file
 
 ### Added
