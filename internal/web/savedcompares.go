@@ -48,6 +48,9 @@ type savedCompareRow struct {
 	// on the row (the merge preview row's field, same meaning).
 	Notes int    `json:"notes,omitempty"`
 	Error string `json:"error,omitempty"`
+	// Reviews are a pair's AI reviews (spec R2), newest first; a comparison
+	// has none.
+	Reviews []reviewHeadWire `json:"reviews,omitempty"`
 	// a comparison
 	Left      string `json:"left,omitempty"`
 	Right     string `json:"right,omitempty"`
@@ -261,6 +264,7 @@ func (s *Server) handleSavedCompares(w http.ResponseWriter, r *http.Request) {
 	rows := make([]savedCompareRow, 0, len(all))
 	for _, p := range pairs {
 		row := pairRow(p)
+		row.Reviews = []reviewHeadWire{}
 		row.Link = withPreviewHint(linkOf[p.ID], p.ID)
 		row.Desc = describeLinkText(r, svc, row.Link)
 		// One pair's transient git failure must not blank the list.
@@ -274,6 +278,9 @@ func (s *Server) handleSavedCompares(w http.ResponseWriter, r *http.Request) {
 				if set, serr := svc.PairNotes(ctx, p.A, p.B); serr == nil {
 					if _, total, cerr := svc.PreviewNoteCounts(ctx, set); cerr == nil {
 						row.Notes = total
+					}
+					if hs, herr := svc.PreviewReviews(ctx, set); herr == nil {
+						row.Reviews = reviewHeads(hs)
 					}
 				}
 			}

@@ -41,7 +41,7 @@ func (s *Server) handlePairNotes(w http.ResponseWriter, r *http.Request) {
 	// it never reaches git — so it needs no allowlist.
 	set.Only = q.Get("scope")
 	// Ruling 6: a pair that is not here has nothing to show — not an error.
-	out := map[string]any{"notes": []wireNote{}, "tip": set.Tip, "counts": map[string]int{}, "total": 0}
+	out := map[string]any{"notes": []wireNote{}, "tip": set.Tip, "counts": map[string]int{}, "total": 0, "reviews": []reviewHeadWire{}}
 	if !set.OK() {
 		writeJSON(w, out)
 		return
@@ -65,5 +65,12 @@ func (s *Server) handlePairNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out["notes"], out["counts"], out["total"] = notes, orEmptyCounts(counts), total
+	// The opened pair's Reviews block (spec §7) — none for a range showing
+	// ONE review's notes (scope).
+	if set.Only == "" {
+		if hs, herr := svc.PreviewReviews(ctx, set); herr == nil {
+			out["reviews"] = reviewHeads(hs)
+		}
+	}
 	writeJSON(w, out)
 }
