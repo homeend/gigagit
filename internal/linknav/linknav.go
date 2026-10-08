@@ -11,6 +11,7 @@ package linknav
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -123,6 +124,13 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 		}
 		c.File = res.Addr.Path
 		line := lineOf(res)
+		if res.Hunk > 0 && !res.Preview.OK() {
+			// A PR this repo has not fetched (ResolveOpts.UnfetchedPR): there
+			// is no patch to number a hunk in yet.
+			if n, ok := domain.PRScopeNumber(res.Preview.Target + "..." + res.Preview.Source); ok {
+				return steer.Command{}, fmt.Errorf("pull request #%d is not fetched here, so its hunks cannot be numbered — open the link by its line, or run gg pr fetch %d first", n, n)
+			}
+		}
 		if res.Hunk > 0 {
 			// PreviewHunkAnchor, never HunkLine: the numbering is the PREVIEW's
 			// patch (merge-base → tip), and a delete-only hunk has no new side

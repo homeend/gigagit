@@ -3025,7 +3025,11 @@ resolves a PR link whose `refs/gg/pr/<n>` is absent (`ResolveOpts.UnfetchedPR`,
 set by `linknav.Resolve` and the CLI's open/navigate via
 `linkShapes.UnfetchedPR`; a checkout holding the base qualifies,
 `Resolved.Preview` carries the pair with no tip) — the landing fetches it;
-compare, review, MCP keep refusing. A parked landing is held outside
+compare, review, MCP keep refusing. A checkout already holding the PR ref
+sorts first; with none, the refusal names only the base; a `#<hunk>` link to
+an unfetched PR says "gg pr fetch <n> first". The TUI's unlisted-PR arm asks
+git off-thread (`prUnlistedCheckCmd` → `prUnlistedMsg`): fetched → plain
+merge preview with the notice, not fetched → the web's one-line refusal. A parked landing is held outside
 `steerPendingTTL` while its PR's fetch op runs (`prFetchHoldsLanding`); a
 second resolve of the same PR while its fetch runs leaves the landing parked. A start-at PR link waits for `prsAnswered` (the first
 PR read's answer, cached rows included) when `kickForgeProbe` started one.

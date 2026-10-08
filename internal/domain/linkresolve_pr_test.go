@@ -66,3 +66,38 @@ func TestAPlainPreviewLinkIsNotRelaxed(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// Final review minor 2: with two checkouts of the repo, the one that has
+// fetched the PR wins over one that has not (it shows the PR without a
+// second fetch) — even when the other is the more recently opened.
+func TestAnUnfetchedPRLinkPrefersACheckoutHoldingThePR(t *testing.T) {
+	t.Parallel()
+	with := linkRepoWithBranch(t, "gigagit", "feat/x")
+	runGitIn(t, with, "update-ref", "refs/gg/pr/7", "feat/x") // fetched here, ahead of main
+	without := linkRepoWithRemote(t, "gigagit")
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	if err := repos.Touch(state, with, "gigagit", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.Touch(state, without, "gigagit", time.Unix(9000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	l, _ := model.ParseLink("gg://gigagit@main...refs/gg/pr/7")
+	got, err := ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state, UnfetchedPR: true})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if !samePathLink(got.Checkout, with) {
+		t.Fatalf("Checkout = %q, want the one holding the PR %q", got.Checkout, with)
+	}
+}
+
+// Final review minor 4: a navigation needs only the base of a PR link, so
+// its refusal names the base alone.
+func TestAnUnfetchedPRLinkRefusalNamesTheBase(t *testing.T) {
+	t.Parallel()
+	_, err := unfetchedPRResolve(t, "gg://gigagit@nosuch...refs/gg/pr/7", true)
+	if err == nil || strings.Contains(err.Error(), "holds both") || !strings.Contains(err.Error(), "nosuch") {
+		t.Fatalf("err = %v", err)
+	}
+}

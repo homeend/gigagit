@@ -135,8 +135,10 @@ guards against removing the worktree you are standing in.
   (`gg://<repo>@<base>...refs/gg/pr/<n>`, the pair its view opens on; a
   fetched PR only — `gg pr fetch <n>` first). Opening it (`gg open`, `gg
   session navigate`) lands in the PR's view — on a checkout that has not
-  fetched that PR yet, the view fetches it first; `gg review save` over it
-  stores a review that view shows (that one needs the PR fetched).
+  fetched that PR yet, the view fetches it first when the PR is in the pull
+  request list (otherwise it says so: list or search for it, then open the
+  link again); `gg review save` over it stores a review that view shows
+  (that one needs the PR fetched).
 
 ### Review notes
 
