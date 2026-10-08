@@ -304,9 +304,8 @@ func (m Model) pruneViews() Model {
 // as opposed to a console looking at another worktree. What reRoot does
 // for the identity, without the teardown: the exit directory, the session
 // registry's worktree, the session snapshot (disabled now, re-resolved off
-// thread), the steering inbox and the pending-send watch (closed for the
-// old worktree, re-homed by snapshotTargetMsg → initSteerInbox), the hosted
-// web page. A shown console's return point moves too: a close stays where
+// thread), the steering inbox (closed for the old worktree, re-homed by
+// snapshotTargetMsg → initSteerInbox), the hosted web page. A shown console's return point moves too: a close stays where
 // the user asked to be.
 func (m Model) adoptView() (Model, tea.Cmd) {
 	if m.viewed == "" || m.viewed == m.home {
@@ -318,14 +317,12 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 	removeSnapshotFile(m.snapshotPath)
 	m.snapshotPath, m.snapshotCommonDir, m.snapshotWorktree, m.lastSnapshot = "", "", "", nil
 	m = m.closeSteerInbox()
-	m = m.closePendingWatch()
 	m.steerGen++
-	m.noticeGen++ // the pending-send watch of the old worktree
 	if m.console != nil && m.console.ret != nil {
 		m.console.ret.view = m.home
 	}
 	m.statusMsg = i18n.T("switched to %s", shortWorktreeName(m.home))
-	return m, tea.Batch(snapshotTargetCmd(m.svc), m.pendingWatchCmd(m.noticeGen), m.pendingSendsReadCmd(m.noticeGen), m.webRerootCmd())
+	return m, tea.Batch(snapshotTargetCmd(m.svc), m.webRerootCmd())
 }
 
 // cycleWorktrees is alt+w: the panels show the next worktree of the list

@@ -6191,8 +6191,8 @@ tours (`agent_tours_open.go`) swap and park the tour id in
 **Trigger 2 — the user's own switch** (`switch_guard.go`): `guardedReRoot`
 takes the fast path for a listed worktree on `switchOK` → `switchView` +
 `adoptView` (home, `switchTarget`, `publishedWT`, snapshot file removed and
-re-resolved by `snapshotTargetCmd`, steering inbox + pending-send watch
-closed and re-homed on `snapshotTargetMsg`, `webRerootCmd`; a shown
+re-resolved by `snapshotTargetCmd`, steering inbox closed and re-homed on
+`snapshotTargetMsg`, `webRerootCmd`; a shown
 console's `ret.view` moves to the new home). A path NOT in the list (the
 create-and-switch result before the list re-reads) still `reRoot`s — the
 same guard that keeps other repositories on the full reload.
