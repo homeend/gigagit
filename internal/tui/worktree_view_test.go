@@ -330,3 +330,17 @@ func hasWebReroot(msgs []tea.Msg) bool {
 	}
 	return false
 }
+
+// The startup path (configReadyMsg → the per-source fan-out, never the
+// legacy dataLoadedMsg) seeds home too: without it every in-repo switch
+// would still reload and a console would have no home to return to.
+func TestConfigReadySeedsTheHomeSlot(t *testing.T) {
+	t.Parallel()
+	m := New(nil)
+	const root = "/mnt/t/others/gigagit"
+	got, _ := m.Update(configReadyMsg{top: root})
+	mm := got.(Model)
+	if mm.home != root || mm.viewed != root || mm.views[root] == nil {
+		t.Fatalf("home=%q viewed=%q views=%v", mm.home, mm.viewed, mm.views)
+	}
+}

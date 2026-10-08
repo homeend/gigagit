@@ -69,6 +69,22 @@ func (m Model) ensureView(path string) *worktreeView {
 	return v
 }
 
+// seedHome makes path gg's own worktree and the viewed one, with the live
+// service as its slot — the first load (both startup paths) and the first
+// load after a repo switch, which dropped the slots.
+func (m Model) seedHome(path string) Model {
+	if m.views == nil {
+		m.views = map[string]*worktreeView{}
+	}
+	if m.home != "" && m.views[m.viewed] != nil {
+		return m
+	}
+	m.home = filepath.Clean(path)
+	m.viewed = m.home
+	m.views[m.home] = &worktreeView{path: m.home, svc: m.svc}
+	return m
+}
+
 // saveView copies the live worktree-scoped fields into the viewed slot.
 func (m Model) saveView() Model {
 	if m.viewed == "" {

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -1773,6 +1772,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.top != "" {
 			m.currentWorktree = msg.top
 			publishedWT.Store(msg.top)
+			m = m.seedHome(msg.top) // the slots' home (worktree_view.go) — this path never sees dataLoadedMsg
 		}
 		m.linkRepoName = msg.repoName
 		// Seed refreshLastRun so the first heartbeat tick is one interval out
@@ -1833,15 +1833,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentWorktree = msg.currentWorktree
 			publishedWT.Store(msg.currentWorktree)
 			m.worktreeMarks = msg.worktreeMarks
-			if m.views == nil {
-				m.views = map[string]*worktreeView{}
-			}
-			if m.home == "" || m.views[m.viewed] == nil { // first load, or a repo switch dropped the slots
-				m.home = filepath.Clean(msg.currentWorktree)
-				m.viewed = m.home
-				m.views[m.home] = &worktreeView{path: m.home, svc: m.svc}
-			}
-			m = m.saveView()
+			m = m.seedHome(msg.currentWorktree).saveView()
 			m = m.pruneViews()
 			// The worktree's open files may have missed store changes while
 			// another worktree was current (a dismiss in the browser).
