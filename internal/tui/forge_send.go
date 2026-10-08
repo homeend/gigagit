@@ -188,7 +188,11 @@ func sendWhere(path string, line int) string {
 
 func sendItemText(mode engine.SendMode, it engine.SendItem) string {
 	if mode == engine.SendFinish || mode == engine.SendDiscard {
-		return i18n.T("%s (waiting in the pending review)", it.Key)
+		what := it.Summary
+		if what == "" {
+			what = it.Key
+		}
+		return i18n.T("%s (waiting in the pending review)", what)
 	}
 	switch it.Kind {
 	case engine.SendReply:
@@ -210,7 +214,7 @@ func sendItemText(mode engine.SendMode, it engine.SendItem) string {
 		s += " " + i18n.T("(%d replies)", n)
 	}
 	if it.Resolve {
-		s += " · " + i18n.T("resolved after sending")
+		s = i18n.T("%s · resolved after sending", s)
 	}
 	return s
 }
@@ -223,27 +227,28 @@ func sendSkipText(sk engine.SendSkip) string {
 	case sk.Reason == domain.SkipOnGitHub:
 		what = i18n.T("review summary")
 	}
-	return what + " " + sendSkipReasonText(sk.Reason)
+	return sendSkipReasonText(what, sk.Reason)
 }
 
-// sendSkipReasonText is one reason code in words; an unknown code (a newer
-// domain) shows as data in a generic frame.
-func sendSkipReasonText(reason string) string {
+// sendSkipReasonText is one skipped row: what, then why — one format per
+// reason, so a translation orders the whole row (F10). An unknown code (a
+// newer domain) shows as data in a generic frame.
+func sendSkipReasonText(what, reason string) string {
 	switch reason {
 	case domain.SkipNotInPR:
-		return i18n.T("(skipped: not in this PR)")
+		return i18n.T("%s (skipped: not in this PR)", what)
 	case domain.SkipLinesChanged:
-		return i18n.T("(skipped: its lines changed)")
+		return i18n.T("%s (skipped: its lines changed)", what)
 	case domain.SkipBeingSent:
-		return i18n.T("(skipped: already being sent)")
+		return i18n.T("%s (skipped: already being sent)", what)
 	case domain.SkipOnGitHub:
-		return i18n.T("(skipped: already on GitHub)")
+		return i18n.T("%s (skipped: already on GitHub)", what)
 	case domain.SkipGone:
-		return i18n.T("(skipped: it no longer exists)")
+		return i18n.T("%s (skipped: it no longer exists)", what)
 	case domain.SkipThreadNotInPR:
-		return i18n.T("(skipped: its thread is not in this PR)")
+		return i18n.T("%s (skipped: its thread is not in this PR)", what)
 	}
-	return i18n.T("(skipped: %s)", reason)
+	return i18n.T("%[1]s (skipped: %[2]s)", what, reason)
 }
 
 // forgeSendFinished is the op's follow-up (opFinishedMsg): re-read the PR (its threads now hold what was sent) and recount

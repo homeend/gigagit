@@ -62,7 +62,7 @@ func TestEverySkipReasonHasItsOwnWords(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
 	for _, r := range domain.SendSkipReasons() {
-		if got := sendSkipReasonText(r); got == i18n.T("(skipped: %s)", r) {
+		if got := sendSkipReasonText("x", r); got == i18n.T("%[1]s (skipped: %[2]s)", "x", r) {
 			t.Errorf("reason %q falls back to the generic text", r)
 		}
 	}
@@ -143,5 +143,35 @@ func TestSendReviewPopupAnswersTheBody(t *testing.T) {
 	p := &sendReviewPopup{pr: 7, group: "review:r1", body: newTextField("")}
 	if req := p.request(); !req.BodySet || req.Body != "" || req.Review != "r1" {
 		t.Fatalf("request = %+v", req)
+	}
+}
+
+// Item 14: an interrupted send's rows say what waits, not a ledger key.
+func TestFinishRowsShowSummaries(t *testing.T) {
+	t.Parallel()
+	got := sendItemText(engine.SendFinish, engine.SendItem{Key: "n-123", Summary: "rename this"})
+	if got != "rename this (waiting in the pending review)" {
+		t.Fatalf("row = %q", got)
+	}
+	if got := sendItemText(engine.SendFinish, engine.SendItem{Key: "n-123"}); !strings.Contains(got, "n-123") {
+		t.Fatalf("no summary falls back to the key: %q", got)
+	}
+}
+
+// Item 16: each skip row and the resolve suffix is ONE format — a translation
+// orders the whole row.
+func TestSendRowsAreWholeFormats(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("forge_send.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{`what + " " + sendSkipReasonText`, `" · " + i18n.T("resolved after sending")`} {
+		if strings.Contains(string(src), bad) {
+			t.Errorf("forge_send.go still composes %q", bad)
+		}
+	}
+	if got := sendSkipText(engine.SendSkip{Path: "a.go", Line: 3, Summary: "x", Reason: domain.SkipNotInPR}); got != "a.go:3 x (skipped: not in this PR)" {
+		t.Fatalf("skip row = %q", got)
 	}
 }
