@@ -3663,11 +3663,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			// The repo gate refused the op outright: a headless AI task holds
-			// the repository for its run. Say which, as a notice — the status
-			// line alone reads like a failed op, not a "later".
+			// the repository for its run. friendlyOpError already names it on
+			// the status line; a dispatched op additionally gets the notice —
+			// the line alone reads like a failed op, not a "later".
 			var busy *repogate.BusyError
 			if errors.As(msg.err, &busy) {
-				m.statusMsg = i18n.T("not run: %s is running", busyHolderLabel(busy.Holder))
 				m.modal = m.busyModal(busy)
 			}
 			// A lock failure is recoverable in-app; arm the notice before the
@@ -3936,7 +3936,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = false
 		m.opName = ""
 		if msg.err != nil {
-			m.statusMsg = i18n.T("error: %s", msg.err.Error())
+			m.statusMsg = friendlyOpError(msg.err)
 			return m, nil
 		}
 		m = m.withStatus(msg.status)

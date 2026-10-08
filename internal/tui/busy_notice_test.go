@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/repogate"
@@ -42,5 +43,19 @@ func TestBusyHolderLabelKnowsTheCaptureOps(t *testing.T) {
 		if got := busyHolderLabel(holder); got != want {
 			t.Errorf("%s: got %q, want %q", holder, got, want)
 		}
+	}
+}
+
+// Every dispatch path (startOp, the synchronous stage lane, popups) formats
+// errors through friendlyOpError, so the gate's refusal reads as one
+// translated line everywhere — never the raw "op ConflictAgent" label.
+func TestFriendlyOpErrorNamesTheBusyHolder(t *testing.T) {
+	t.Parallel()
+	got := friendlyOpError(&repogate.BusyError{Holder: "op ConflictAgent", Mode: repogate.Read})
+	if !statusIsError(got) {
+		t.Fatalf("want an error: line, got %q", got)
+	}
+	if !strings.Contains(got, "an AI agent resolving conflicts") || strings.Contains(got, "ConflictAgent") {
+		t.Fatalf("want the translated holder label, got %q", got)
 	}
 }
