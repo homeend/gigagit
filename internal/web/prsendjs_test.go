@@ -96,3 +96,21 @@ func TestPRSendModuleIsWired(t *testing.T) {
 		t.Error("menus.js does not know the note / pr menus")
 	}
 }
+
+// Item 8: the verdict's typed body survives a refusal; F1: only a send that
+// changed GitHub drops a kept body (an abort keeps it).
+func TestPRSendKeepsTheVerdictBody(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "prsend.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`keptBody = { pr, group: "verdict", text };`,
+		`if (ev.ok && ev.changed) keptBody = null;`,
+	} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("prsend.js lacks %q", want)
+		}
+	}
+}

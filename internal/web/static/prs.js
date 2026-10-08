@@ -162,7 +162,8 @@ function prLabel(n) {
 // read, not for your own send), the cached copy's age while the forge cannot
 // be reached, nothing otherwise. Only ever drawn for the PR on screen.
 const lastRead = new Map(); // PR number → the read_at the server last reported
-let fresh = { seen: 0, updated: 0, ownSend: false, text: "" };
+let fresh = { seen: 0, updated: 0, ownSend: null, text: "" };
+let readSeq = 0; // every comments read's start, in order (prfresh.js's sequence)
 function setPRFresh(n, text) {
   const po = state.previewOpen;
   $("pr-fresh").textContent = po && po.pr === n ? text : "";
@@ -219,11 +220,19 @@ new MutationObserver(() => {
 // diff re-opens on it, if the user is still looking at the PR).
 onHeadMoved((n) => followMovedHead(n));
 
-// A finished send: its own change is not "updated", and the PR is re-read
-// (the interrupted bar follows what GitHub now holds).
-onSendDone((n) => {
-  freshEvent(n, { kind: "sent" });
-  refreshPRComments(n);
+// refreshAfterSend re-reads PR n once a send ended. A read already running
+// started before the send landed: wait for it, then read again — the read
+// that absorbs the send's own change must start after it.
+function refreshAfterSend(n, tries = 0) {
+  if (refreshPRComments(n) === null && tries < 40) setTimeout(() => refreshAfterSend(n, tries + 1), 250);
+}
+
+// A finished send: a change it made is not "updated" (an abort or a failure
+// changed nothing, so it arms nothing), and the PR is re-read (the
+// interrupted bar follows what GitHub now holds).
+onSendDone((n, ev) => {
+  if (ev.ok && ev.changed) freshEvent(n, { kind: "sent", seq: readSeq });
+  refreshAfterSend(n);
 });
 
 // headMoved: the forge's answer says PR n's head is not the one on screen —
@@ -275,6 +284,7 @@ async function showPR(n, moved, skipComments) {
 // moved: the view was just re-opened on a moved head — that read is news.
 export function refreshPRComments(n, moved = false) {
   return runOnce("pr-comments", async () => {
+    const seq = ++readSeq;
     let r;
     try {
       r = await postJSON("/api/pr/comments/refresh?n=" + n, {});
@@ -282,7 +292,7 @@ export function refreshPRComments(n, moved = false) {
       offlineFresh(n);
       return;
     }
-    freshEvent(n, { kind: "ok", changed: !!(r.changed || moved || headMoved(n, r)) });
+    freshEvent(n, { kind: "ok", changed: !!(r.changed || moved || headMoved(n, r)), seq });
     showInterrupted(n, r.interrupted);
     if (r.changed) await reloadPRNotes(n);
     // The same read says whether the head moved: follow it OUTSIDE this
@@ -321,6 +331,7 @@ function fetchPR(n) {
 // head is still the PR's. A moved head is fetched and the diff re-opened — if
 // the user is still looking at it.
 async function revalidate(n) {
+  const seq = ++readSeq;
   freshEvent(n, { kind: "start" });
   let rv;
   try {
@@ -330,7 +341,7 @@ async function revalidate(n) {
     return;
   }
   if (rv.read_at) lastRead.set(n, rv.read_at);
-  freshEvent(n, { kind: "ok", changed: !!(rv.comments_changed || headMoved(n, rv)) });
+  freshEvent(n, { kind: "ok", changed: !!(rv.comments_changed || headMoved(n, rv)), seq });
   showInterrupted(n, rv.interrupted);
   fetchPRs(); // the row may have changed state (merged, closed)
   // One read answered both: the comments, and whether the head moved.
