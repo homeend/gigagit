@@ -101,3 +101,30 @@ func TestAnUnfetchedPRLinkRefusalNamesTheBase(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// Follow-ups 5, item 1: `gg pr forget` deletes the PR's ref but not its
+// objects, so a review saved on the PR still resolves its tip — the link's
+// unfetched landing has no commit yet and must navigate (the landing
+// fetches), not be refused as "review … compared …".
+func TestAReviewLinkToAnUnfetchedPRNavigates(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	ctx := context.Background()
+	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ScopeReviewTarget(prNoteSetOf(t, svc)), // a review saved on the PR
+		Agent: "claude", Text: twoRemarks})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runGitIn(t, repoDir(t, svc), "update-ref", "-d", "refs/gg/pr/7") // gg pr forget
+	l, err := model.ParseLink("gg://" + localLinkRoot(t, svc) + "/big.go@main...refs/gg/pr/7:5?review=" + rid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveLink(ctx, l, ResolveOpts{Cwd: svc, UnfetchedPR: true})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if got.Preview == nil || got.Preview.Tip != "" || got.Hint.ID != rid {
+		t.Fatalf("Preview = %+v hint %+v", got.Preview, got.Hint)
+	}
+}

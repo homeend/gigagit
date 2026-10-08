@@ -326,6 +326,12 @@ func reviewRemarksIn(r Review, t model.LinkTarget, repo model.LinkRepo) []Review
 // store no longer holds, or a store that cannot be read here, passes: the
 // address still means something, and the consumer says what it finds.
 func checkReviewHint(ctx context.Context, svc *Service, res Resolved) error {
+	if res.Preview != nil && res.Preview.Tip == "" {
+		// An unfetched pull request's navigation (UnfetchedPR): nothing is
+		// here yet to compare — the landing fetches the head, and the review
+		// view says what it finds.
+		return nil
+	}
 	r, err := svc.Review(ctx, res.Hint.ID)
 	if err != nil {
 		return nil
