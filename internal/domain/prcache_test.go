@@ -282,6 +282,37 @@ func TestPullRequestsFallsBackToDetect(t *testing.T) {
 	}
 }
 
+// Item 2 / Review Focus 2: a listing the CALLER cancelled (a closed page, a
+// spent budget) says nothing about gh: no Detect, and the cached verdict
+// stands — so a later REAL failure still falls back to Detect.
+func TestACancelledListingKeepsTheCachedVerdict(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ok := &fakeForge{url: "u", open: []model.PullRequest{pr(3, "open", 1)}}
+	if _, err := newCachedForgeSvc(t, ok, dir).PullRequests(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ff := &fakeForge{url: "u", listErr: context.Canceled}
+	b := newCachedForgeSvc(t, ff, dir)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := b.PullRequests(ctx); err == nil {
+		t.Fatal("want an error")
+	}
+	if n := ff.detects.Load(); n != 0 {
+		t.Fatalf("a cancelled listing ran Detect %d times", n)
+	}
+	ff.mu.Lock()
+	ff.listErr, ff.detectErr = errors.New("401"), errors.New("logged out")
+	ff.mu.Unlock()
+	if _, err := b.PullRequests(context.Background()); err == nil {
+		t.Fatal("want the 401")
+	}
+	if n := ff.detects.Load(); n != 1 {
+		t.Fatalf("Detect after a live 401 = %d, want 1", n)
+	}
+}
+
 // refspecFake fetches PR heads from a local branch (offline prefetch tests).
 type refspecFake struct {
 	*fakeForge
