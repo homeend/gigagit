@@ -5705,6 +5705,21 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   `yieldToWaiters` (cancelled when anyone queues behind the gate); the TUI
   cancels its prefetch on `reRoot`, a newer list and quit.
 
+### Reviewing a root commit (2026-10-08)
+
+- `model.DiffSpec.Root`: `Rev` is a root commit; `git.diffRevs` diffs
+  `<empty tree> <Rev>` (`emptyTree[ObjectFormat]`, sha1 + sha256). A bare
+  `git diff <sha>` compares the WORKING TREE — never use it for a commit's
+  own change. `domain.OwnChange(rev)` = `rev^..rev`, or `(rev, {Root})` when
+  `rev^` does not resolve; CLI positional, branch no-base fallback,
+  `CommitReviewTarget` and the TUI's `reviewTargetForCommit` use it.
+- A shallow clone's boundary commit looks parentless (`rev^` fails, `%P`
+  empty) but its raw object names a parent: `diffRevs` reads `cat-file
+  commit` and refuses ("fetch more history"), or the diff is the whole tree.
+- Deferred: `domain.EmptyTreeSHA1` (hunks.go `HunkDiffSpec`, `review save
+  --dry-run`) is SHA-1 only; the singleflight keys in query_cli.go ignore
+  `Root` (no Root spec reaches them yet); `<range>` is a bare sha for a root.
+
 ### Review links: follow-ups (2026-10-08)
 
 - A landing's answer reads "in this review" while `m.filesReview` is set

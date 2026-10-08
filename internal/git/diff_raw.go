@@ -73,13 +73,26 @@ var emptyTree = map[string]string{
 }
 
 // diffRevs are spec's revision arguments: Rev as given, or for a root
-// commit the empty tree and Rev (one more git call: the object format).
+// commit the empty tree and Rev (two more git calls: the commit object and
+// the object format).
+//
+// A shallow clone's oldest commit LOOKS parentless (its parent was never
+// fetched) but its object names one: diffed as a root it would be the whole
+// tree, so it is refused. Only the raw object tells the two apart.
 func (r *Repo) diffRevs(ctx context.Context, spec model.DiffSpec) ([]string, error) {
 	switch {
 	case spec.Rev == "":
 		return nil, nil
 	case !spec.Root:
 		return []string{spec.Rev}, nil
+	}
+	obj, err := r.Runner.Run(ctx, "git cat-file (root check)", gitcmd.New("cat-file").Arg("commit", spec.Rev).ToArgv())
+	if err != nil {
+		return nil, err
+	}
+	header, _, _ := strings.Cut(obj.Stdout, "\n\n")
+	if strings.HasPrefix(header, "parent ") || strings.Contains(header, "\nparent ") {
+		return nil, fmt.Errorf("%s has a parent this shallow clone does not hold: fetch more history (git fetch --deepen=1) to review its own change", spec.Rev)
 	}
 	format, err := r.ObjectFormat(ctx)
 	if err != nil {

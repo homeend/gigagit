@@ -16,7 +16,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   everything it adds (diffed against the empty tree, SHA-1 or SHA-256). The
   TUI's and a link's root-commit review had quietly given the reviewer the
   wrong diff (the working tree against that commit); they get the same fix.
-  Skill: using-gg v153.
+  A shallow clone's oldest commit only looks parentless: reviewing it alone
+  is refused with `fetch more history (git fetch --deepen=1)` rather than
+  handing the reviewer the whole tree. Skill: using-gg v153.
 
 ## Review links: the remaining rough edges
 
