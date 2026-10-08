@@ -162,3 +162,62 @@ func (m Model) viewKickCmd() tea.Cmd {
 	_, docs := m.syncAgentDocs()
 	return tea.Batch(read, m.startWatchCmd(m.watchGen), docs)
 }
+
+// abandonGoneView is the error arm's check: a read through the viewed
+// slot's service failed and its directory is no longer there (the
+// worktree was removed under us) — the slot goes, home comes back, its
+// list read will say the rest. false when the view is fine.
+func (m Model) abandonGoneView() (Model, bool) {
+	if m.viewed == "" || m.viewed == m.home || guardStat(m.viewed) == nil {
+		return m, false
+	}
+	gone := m.viewed
+	if v := m.views[gone]; v != nil {
+		if v.watcher != nil {
+			_ = v.watcher.Close()
+		}
+		closeDocWatch(v.docWatch.w)
+		delete(m.views, gone)
+	}
+	home := m.views[m.home]
+	if home == nil {
+		return m, false
+	}
+	m.viewed = "" // the gone slot must not be saved back
+	m = m.loadView(home)
+	for s := sourceKey(0); s < srcCount; s++ {
+		m.srcGen[s]++ // every read launched through the gone service is moot
+	}
+	m.srcInflight = map[sourceKey]bool{}
+	m.srcLoading = map[sourceKey]bool{}
+	m.viewKick = true
+	m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.home))
+	return m, true
+}
+
+// pruneViews drops the slots of worktrees that left the list (removed,
+// recycled, pruned). The viewed one going falls back to home: its
+// service would point at a tree that is not there.
+func (m Model) pruneViews() Model {
+	for key, v := range m.views {
+		if m.isRepoWorktree(key) || key == m.home {
+			continue
+		}
+		if v.watcher != nil {
+			_ = v.watcher.Close()
+		}
+		closeDocWatch(v.docWatch.w)
+		delete(m.views, key)
+		if key == m.viewed {
+			gone := key
+			if home := m.views[m.home]; home != nil {
+				m.viewed = "" // the gone slot must not be saved back
+				m = m.loadView(home)
+				m.srcGen[srcStatus]++
+				m.viewKick = true
+			}
+			m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.home))
+		}
+	}
+	return m
+}

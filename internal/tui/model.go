@@ -1842,6 +1842,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.views[m.home] = &worktreeView{path: m.home, svc: m.svc}
 			}
 			m = m.saveView()
+			m = m.pruneViews()
 			// The worktree's open files may have missed store changes while
 			// another worktree was current (a dismiss in the browser).
 			var docsCmd tea.Cmd
@@ -1980,6 +1981,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.startAtPreviewsSeen = true
 		}
 		if msg.err != nil {
+			if nm, gone := m.abandonGoneView(); gone {
+				return nm, nm.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})
+			}
 			// Best-effort sources must not blank the UI on a transient error;
 			// surface it on the status line only for manual reads. Silent
 			// (auto) reads that fail (e.g. context.Canceled from op preemption)
@@ -2115,6 +2119,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyBr := m.panelSelKey(panelBranches)
 			p := msg.value.(worktreesPayload)
 			m.worktrees = p.worktrees
+			m = m.pruneViews()
 			m.worktreeMarks = p.marks
 			m.bfMemo.invalidate() // worktree checkouts are exemptions (see the dataLoadedMsg site)
 			m.headTimes = p.headTimes

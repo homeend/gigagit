@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -190,5 +191,26 @@ func TestUpdateTailLaunchesTheViewKick(t *testing.T) {
 	nm, cmd := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	if nm.(Model).viewKick || cmd == nil {
 		t.Fatalf("kick=%v cmd=%v", nm.(Model).viewKick, cmd)
+	}
+}
+
+// A worktree removed while viewed: the view falls back to home and the
+// slot is gone; a removed hidden slot is dropped silently.
+func TestWorktreesReloadDropsAGoneSlot(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	m, _ = m.switchView(other)
+	m = landView(t, m)
+	if out, err := exec.Command("git", "-C", m.home, "worktree", "remove", "--force", other).CombinedOutput(); err != nil {
+		t.Fatalf("worktree remove: %v\n%s", err, out)
+	}
+	read := m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})
+	nm, _ := m.Update(read())
+	m = nm.(Model)
+	if m.viewed != m.home || m.views[filepath.Clean(other)] != nil || m.svc != m.views[m.home].svc {
+		t.Fatalf("viewed=%q slots=%v", m.viewed, m.views)
+	}
+	if !strings.Contains(m.statusMsg, "wt2") {
+		t.Fatalf("status = %q, want it to name the removed worktree", m.statusMsg)
 	}
 }
