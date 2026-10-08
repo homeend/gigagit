@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"path/filepath"
+	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -114,6 +115,62 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.sel[panelFiles], m.sel[panelStaged] = v.selFiles, v.selStaged
 	m.fileMarks = v.fileMarks
 	m.workingReviews = v.workingReviews
+	return m.markHead(m.worktreeBranch(v.path))
+}
+
+// worktreeBranch is the branch checked out in the listed worktree at path
+// ("" when detached, or not listed).
+func (m Model) worktreeBranch(path string) string {
+	key := filepath.Clean(path)
+	for _, w := range m.worktrees {
+		if filepath.Clean(w.Path) == key {
+			return w.Branch
+		}
+	}
+	return ""
+}
+
+// markHead re-marks the shared lists' per-worktree head flags for the
+// viewed worktree: Branch.IsHead (the Branches panel's *) and the commit
+// feed's local Ref.Head (the *name identity in Commits) came from reads
+// rooted at ONE worktree, and the slots share both lists. From the
+// worktree list, no git: the swap stays instant. The lists are cloned
+// where they change (domain hands out cached slices).
+func (m Model) markHead(branch string) Model {
+	var bs []model.Branch
+	for i, b := range m.branches {
+		head := branch != "" && b.Name == branch
+		if b.IsHead == head {
+			continue
+		}
+		if bs == nil {
+			bs = slices.Clone(m.branches)
+		}
+		bs[i].IsHead = head
+	}
+	if bs != nil {
+		m.branches = bs
+		m.bfMemo.invalidate()
+	}
+	var cs []model.Commit
+	for i, c := range m.commits {
+		for j, r := range c.Refs {
+			head := branch != "" && r.Name == branch
+			if r.Kind != model.RefLocal || r.Head == head {
+				continue
+			}
+			if cs == nil {
+				cs = slices.Clone(m.commits)
+			}
+			refs := slices.Clone(cs[i].Refs)
+			refs[j].Head = head
+			cs[i].Refs = refs
+		}
+	}
+	if cs != nil {
+		m.commits = cs
+		m = m.rebuildCommitGraph()
+	}
 	return m
 }
 
@@ -181,12 +238,15 @@ func (m Model) switchView(path string) (Model, bool) {
 	return m, true
 }
 
-// viewKickCmd is the live slot's wake-up: a manual status read (never
-// cancelled by a background lane), its git watcher and its open-files
-// sync. Launched by the Update tail after a switchView, which marks the
-// read in flight on the live model first.
+// viewKickCmd is the live slot's wake-up: a SILENT status read (a
+// background context would be cancelled by a starting op, so it runs on
+// context.Background; silent, so it never raises "⏳ reloading…" nor trips
+// the action gates — the slot's remembered status stays on screen until
+// the fresh one lands, and the next alt+w is never refused), its git
+// watcher and its open-files sync. Launched by the Update tail after a
+// switchView, which marks the read in flight on the live model first.
 func (m Model) viewKickCmd() tea.Cmd {
-	read := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{manual: true})
+	read := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{})
 	_, docs := m.syncAgentDocs()
 	return tea.Batch(read, m.startWatchCmd(m.watchGen), docs)
 }
@@ -266,4 +326,38 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 	}
 	m.statusMsg = i18n.T("switched to %s", shortWorktreeName(m.home))
 	return m, tea.Batch(snapshotTargetCmd(m.svc), m.pendingWatchCmd(m.noticeGen), m.pendingSendsReadCmd(m.noticeGen), m.webRerootCmd())
+}
+
+// cycleWorktrees is alt+w: the panels show the next worktree of the list
+// (the Worktrees panel's order), past the last one the first — what alt+a
+// does for a console's worktree, for every worktree, no session needed.
+// A look, not an adoption: gg's own worktree stays home, the ring comes
+// back to it. A docked console stays as it is, but its return point moves:
+// alt+w picks the BASE worktree (the one the * marks), and the alt+a /
+// alt+t ring's return stop lands there, not where the cycle started.
+func (m Model) cycleWorktrees() (Model, tea.Cmd) {
+	n := len(m.worktrees)
+	if n < 2 {
+		m.statusMsg = i18n.T("this repository has one worktree — alt+w cycles them once there are more")
+		return m, nil
+	}
+	cur := filepath.Clean(m.currentWorktree)
+	next := 0
+	for i, w := range m.worktrees {
+		if filepath.Clean(w.Path) == cur {
+			next = (i + 1) % n
+			break
+		}
+	}
+	wt := m.worktrees[next]
+	nm, ok := m.switchView(wt.Path)
+	if !ok {
+		return nm, nil
+	}
+	if nm.console != nil && nm.console.ret != nil {
+		nm.console.ret.view = nm.viewed
+	}
+	nm.pendingReturnView = ""
+	nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(wt.Path), next+1, n)
+	return nm, nil
 }

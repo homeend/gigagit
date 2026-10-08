@@ -704,7 +704,7 @@ func (m Model) sessionsKey() string {
 var consolePassthrough = map[string]bool{
 	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
 	"q": true, "ctrl+c": true, "?": true, ".": true, "ctrl+p": true, "ctrl+o": true,
-	"alt+a": true, "alt+t": true, "R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
+	"alt+a": true, "alt+t": true, "alt+w": true, "R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
 
@@ -713,7 +713,7 @@ var consolePassthrough = map[string]bool{
 // panel and the parked view, so focus moves would land on hidden panels and
 // an opener (F, S, c, p…) would open something behind it.
 var consoleFullPassthrough = map[string]bool{
-	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true,
+	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true, "alt+w": true,
 }
 
 // updateConsoleKey routes a key to/around the console per the state table
@@ -769,6 +769,10 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		// agent and comes back to the screen it was shown over.
 		if key == "alt+a" || key == "alt+t" {
 			nm, cmd := m.cycleSessions(key == "alt+t")
+			return nm, cmd, true
+		}
+		if key == "alt+w" {
+			nm, cmd := m.cycleWorktrees()
 			return nm, cmd, true
 		}
 		if key == m.stepOutKey() {

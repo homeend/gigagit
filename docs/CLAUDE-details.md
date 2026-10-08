@@ -5980,10 +5980,38 @@ runs). Saves the leaving slot and puts it to sleep (watcher + docWatch
 closed), loads the arriving one, bumps `srcGen[srcStatus]` +
 `workingReviewsGen` AND `loadGen` (a mid-session `loadCmd` — conflict
 process, task track — launched on the old slot's service) so reads in
-flight for the old slot are dropped, and sets `viewKick`. The **Update tail** launches `viewKickCmd` (a manual status read,
-`startWatchCmd`, `syncAgentDocs`) and marks the read in flight — a tail hook
-because `closeConsole` returns a Model only. Only the live slot is ever
-watched or refreshed.
+flight for the old slot are dropped, and sets `viewKick`. The **Update
+tail** launches `viewKickCmd` (a SILENT status read on
+`context.Background`, `startWatchCmd`, `syncAgentDocs`) and marks the read
+in flight (`srcInflight` only, never `srcLoading`) — a tail hook because
+`closeConsole` returns a Model only. Silent is the point: a manual read
+raised "⏳ reloading…" and every `m.loading` gate with it, so the next
+alt+w was refused until the read landed (the user: "much slower than
+alt+a, blocks on reloading"). Only the live slot is ever watched or
+refreshed.
+**Head marks are per worktree on shared lists.** `Branch.IsHead` (the
+Branches panel's `*`) and the commit feed's local `Ref.Head` (the `*name`
+identity in Commits) come from reads rooted at ONE worktree; `loadView`
+runs `markHead(worktreeBranch(path))`, which re-marks both lists from the
+worktree list (clones where a flag changes — domain hands out cached
+slices — then `rebuildCommitGraph`). No git: the swap stays instant. The
+first alt+w golden caught the stale `*`; a branches re-read fixed it but
+cost the wait above, so the local re-mark replaced it.
+
+**alt+w — `cycleWorktrees`** (2026-10-08, the refinement branch): the
+third trigger. The next worktree of `m.worktrees` (the Worktrees panel's
+order) after the viewed one, wrapping, through `switchView` — a look, like
+alt+a, never `adoptView`: home stays, the ring comes back to it. Reachable
+wherever alt+a is (`cycleReachable`), reserved inside a focused console
+(`consolePassthrough` / `consoleFullPassthrough` + the focused-console
+branch of `updateConsoleKey`); a docked console stays open and the status
+row then names its worktree — and its return point (`ret.view`) moves to
+the alt+w worktree: alt+w picks the BASE (the `*`), so the alt+a / alt+t
+ring's return stop lands there, not where the cycle started (user ruling
+2026-10-08; `pendingReturnView` is cleared too). Status: `wt-x — 2 of 3 worktrees`; one
+worktree: a status line only. Footer `[alt+w] next worktree` when the list
+has more than one and nothing runs or loads. Tests
+`worktree_cycle_test.go`, e2e `tui_worktree_cycle`.
 
 **Lifecycle.** `pruneViews` (both worktree-list arms) drops slots whose
 worktree left the list. A VIEWED worktree removed under us cannot be seen
