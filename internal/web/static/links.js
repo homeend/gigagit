@@ -2,7 +2,7 @@
 // The page never PARSES a link (the CLI does that); it only builds one for
 // whatever the user right-clicked, so a human can paste it into a chat.
 
-import { state } from "./core.js";
+import { getJSON, state } from "./core.js";
 import { copyText } from "./layers.js";
 import { opLine } from "./ops.js";
 import { registerRows } from "./menus.js";
@@ -375,6 +375,33 @@ registerRows("preview", (e) => {
   const link = previewRowLink(e);
   return link ? [copyLinkRow(link, linkDesc("preview", e.label || e.target + "..." + e.source, ""))] : [];
 });
+
+// A pull request's link: its base against gg's private head ref — the pair
+// the PR view opens on, which the SERVER names (the row's own source/target
+// are DISPLAY names; the head may live in a fork). Opening it lands in the
+// PR's view (live.js). An unfetched PR has no ref, so no link.
+registerRows("pr", (pr) =>
+  !pr.fetched
+    ? []
+    : [
+        {
+          label: "copy gg link",
+          act: async () => {
+            let p;
+            try {
+              p = await getJSON("/api/pr/link?n=" + pr.number);
+            } catch (e) {
+              opLine("pull request #" + pr.number + ": " + (e.message || e), true);
+              return;
+            }
+            const ctx = { path: "", state: "commit", compare: true, preview: { source: p.source, target: p.target } };
+            const link = linkFor(state.repo, state.worktree, ctx);
+            if (link) copyLink(link, linkDesc("preview", "PR #" + pr.number, ""));
+            else opLine("pull request #" + pr.number + ": no gg link for this pair", true);
+          },
+        },
+      ]
+);
 
 // A bookmark or shelf row copies the entry's ADDRESS plus a
 // `?<kind>=<id>` hint naming the surface it came from (spec §3.3). This is
