@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -56,24 +57,30 @@ func TestAltWWithOneWorktreeSaysSo(t *testing.T) {
 	}
 }
 
-// A docked console stays open while alt+w moves the panels away from its
-// worktree; the status row then names the console's worktree.
-func TestAltWKeepsADockedConsole(t *testing.T) {
+// alt+w under a shown console is a first hit: the console hides (the
+// session keeps running), the panels stay on its worktree, Branches takes
+// the keyboard with its cursor on that worktree's branch. The next press
+// moves on.
+func TestAltWFirstHidesTheConsoleAndFocusesBranches(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, other := addWorktree(t, m, "wt2")
 	installSessionManager(t)
 	id := startSessionIn(t, m, other, "Shell")
 	m, _ = m.showConsole(id, false)
-	if m.viewed != filepath.Clean(other) {
-		t.Fatalf("precondition: viewed = %q", m.viewed)
+	if m.viewed != filepath.Clean(other) || m.focus != panelCommits {
+		t.Fatalf("precondition: viewed=%q focus=%v", m.viewed, m.focus)
 	}
 	m = pressAlt(t, m, 'w')
-	if m.console == nil || m.viewed == filepath.Clean(other) {
-		t.Fatalf("console=%v viewed=%q", m.console != nil, m.viewed)
+	if m.console != nil || m.viewed != filepath.Clean(other) || m.focus != panelBranches || m.activeLeftTab != panelBranches {
+		t.Fatalf("first hit: console=%v viewed=%q focus=%v tab=%v", m.console != nil, m.viewed, m.focus, m.activeLeftTab)
 	}
-	if got := m.consoleWorktreeHint(); got != filepath.Clean(other) {
-		t.Fatalf("hint = %q, want %q", got, other)
+	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(other) {
+		t.Fatalf("Branches cursor on %+v, want the branch of %s", b, other)
+	}
+	m = pressAlt(t, m, 'w')
+	if m.console != nil || m.viewed == filepath.Clean(other) {
+		t.Fatalf("second hit: console=%v viewed=%q, want the next worktree", m.console != nil, m.viewed)
 	}
 }
 
@@ -118,39 +125,9 @@ func TestAltWNeverBlocksOnItsOwnReads(t *testing.T) {
 	}
 }
 
-// alt+w picks the base worktree: alt+a over a console in B, then alt+w to
-// C under it, then alt+a round to the return stop lands on C — the last
-// alt+w — not on the worktree the cycle started in.
-func TestAltAReturnStopIsTheLastAltWWorktree(t *testing.T) {
-	m := loadedModel(t)
-	m.width, m.height = 160, 40
-	m, wtB := addWorktree(t, m, "wtB")
-	m, _ = addWorktree(t, m, "wtC")
-	installSessionManager(t)
-	startSessionIn(t, m, wtB, "B")
-	start := m.viewed
-	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.viewed != filepath.Clean(wtB) {
-		t.Fatalf("alt+a: console=%v viewed=%q", m.console != nil, m.viewed)
-	}
-	m = pressAlt(t, m, 'w')
-	base := m.viewed
-	if m.console == nil || base == filepath.Clean(wtB) || base == start {
-		t.Fatalf("alt+w under the console: console=%v viewed=%q", m.console != nil, m.viewed)
-	}
-	m = pressAlt(t, m, 'a') // the ring's return stop: the console closes
-	if m.console != nil {
-		t.Fatal("return stop: console still shown")
-	}
-	if m.viewed != base {
-		t.Fatalf("return stop landed on %q, want the last alt+w worktree %q", m.viewed, base)
-	}
-}
-
-// alt+w inside a bound console unbinds it (the title hints come back, no
-// cursor) and moves the keyboard to the Branches panel: the next keys are
-// gg's, not the agent's.
-func TestAltWUnbindsAFocusedConsoleAndFocusesBranches(t *testing.T) {
+// A bound console: the first alt+w hides it and hands the keyboard to
+// Branches — the next keys are gg's, not the agent's — without moving on.
+func TestAltWHidesABoundConsoleAndFocusesBranches(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, other := addWorktree(t, m, "wt2")
@@ -162,33 +139,37 @@ func TestAltWUnbindsAFocusedConsoleAndFocusesBranches(t *testing.T) {
 		t.Fatalf("precondition: console=%+v focus=%v", m.console, m.focus)
 	}
 	m = pressAlt(t, m, 'w')
-	if m.console == nil || m.console.focused {
-		t.Fatalf("console=%+v, want shown and unbound", m.console)
+	if m.console != nil {
+		t.Fatal("the console must hide")
 	}
 	if m.focus != panelBranches || m.activeLeftTab != panelBranches || !m.panelFocused(panelBranches) {
 		t.Fatalf("focus=%v tab=%v, want the Branches panel", m.focus, m.activeLeftTab)
 	}
-	if m.console.ret.focus != panelBranches {
-		t.Fatalf("return focus = %v, want Branches (the alt+a return stop lands there)", m.console.ret.focus)
+	if m.viewed != filepath.Clean(other) {
+		t.Fatalf("viewed=%q, want the console's worktree kept", m.viewed)
 	}
 }
 
-// Without a console alt+w also lands on Branches: the switch and the
-// keyboard go together.
-func TestAltWFocusesBranchesWithoutAConsole(t *testing.T) {
+// Without a console, alt+w from another panel only takes the keyboard to
+// Branches; the worktree stays. The press after it moves on.
+func TestAltWFromAnotherPanelFocusesBranchesFirst(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, _ = addWorktree(t, m, "wt2")
 	m.focus = panelFiles
+	start := m.viewed
 	m = pressAlt(t, m, 'w')
-	if m.focus != panelBranches || m.activeLeftTab != panelBranches {
-		t.Fatalf("focus=%v tab=%v, want Branches", m.focus, m.activeLeftTab)
+	if m.focus != panelBranches || m.activeLeftTab != panelBranches || m.viewed != start {
+		t.Fatalf("focus=%v tab=%v viewed=%q, want Branches on %q", m.focus, m.activeLeftTab, m.viewed, start)
+	}
+	m = pressAlt(t, m, 'w')
+	if m.viewed == start {
+		t.Fatal("second press must move on")
 	}
 }
 
-// A ctrl+t-maximised docked console docks again on alt+w, so the Branches
-// panel it hands the keyboard to is on screen.
-func TestAltWRedocksAMaximisedConsole(t *testing.T) {
+// A ctrl+t-maximised docked console hides like a docked one.
+func TestAltWHidesAMaximisedConsoleToo(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, other := addWorktree(t, m, "wt2")
@@ -197,35 +178,35 @@ func TestAltWRedocksAMaximisedConsole(t *testing.T) {
 	m, _ = m.showConsole(id, true)
 	m.console.maximized = true
 	m = pressAlt(t, m, 'w')
-	if m.console == nil || m.console.maximized || m.console.focused || m.focus != panelBranches {
-		t.Fatalf("console=%+v focus=%v", m.console, m.focus)
+	if m.console != nil || m.focus != panelBranches || m.viewed != filepath.Clean(other) {
+		t.Fatalf("console=%v focus=%v viewed=%q", m.console != nil, m.focus, m.viewed)
 	}
 }
 
-// Over a full-screen return point the console stays full (Branches is not
-// on screen): it is unbound and keeps the keyboard; the panels beneath
-// still switched.
-func TestAltWUnderAFullScreenConsoleKeepsItFull(t *testing.T) {
+// A console over a parked diff view: alt+w hides it and the diff comes
+// back on top, as esc would; Branches has the keyboard beneath it.
+func TestAltWUnderAFullScreenConsoleHidesItAndBringsTheViewBack(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, other := addWorktree(t, m, "wt2")
 	installSessionManager(t)
 	id := startSessionIn(t, m, other, "Shell")
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)
 	m, _ = m.showConsole(id, true)
-	m.console.ret.full, m.console.maximized = true, true
-	m = pressAlt(t, m, 'w')
-	if m.console == nil || !m.console.maximized || m.console.focused || m.focus != panelCommits {
-		t.Fatalf("console=%+v focus=%v", m.console, m.focus)
+	if !m.consoleFull() || m.topLayer() != nil {
+		t.Fatalf("precondition: console=%+v top=%T", m.console, m.topLayer())
 	}
-	if m.viewed == filepath.Clean(other) {
-		t.Fatalf("viewed = %q, want the next worktree", m.viewed)
+	m = pressAlt(t, m, 'w')
+	if m.console != nil || m.topLayer() != layer(dv) || m.focus != panelBranches {
+		t.Fatalf("console=%v top=%T focus=%v", m.console != nil, m.topLayer(), m.focus)
 	}
 }
 
-// alt+a / alt+t show the next session unbound with the console column
-// focused; the return stop hands the keyboard back to the panel focused
-// before the first show — Branches once alt+w was pressed in between.
-func TestAltAReturnStopRestoresTheFocusAltWSet(t *testing.T) {
+// alt+w after alt+a: the console hides on its own worktree, Branches has
+// the keyboard with its cursor on that worktree's branch; the next alt+w
+// moves to the worktree below.
+func TestAltWAfterAltAHidesTheConsoleOnItsWorktree(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, wtA := addWorktree(t, m, "wtA")
@@ -235,24 +216,58 @@ func TestAltAReturnStopRestoresTheFocusAltWSet(t *testing.T) {
 	startSessionIn(t, m, wtB, "B")
 	m.focus = panelFiles
 	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.console.focused || m.focus != panelCommits {
+	if m.console == nil || !m.console.focused || m.focus != panelCommits {
 		t.Fatalf("after alt+a: console=%+v focus=%v", m.console, m.focus)
 	}
-	m = pressKey(t, m, "enter") // bind it
-	if !m.console.focused {
-		t.Fatal("enter did not bind the console")
+	at := m.viewed
+	m = pressAlt(t, m, 'w')
+	if m.console != nil || m.focus != panelBranches || m.viewed != at {
+		t.Fatalf("alt+w: console=%v focus=%v viewed=%q, want hidden, Branches, %q", m.console != nil, m.focus, m.viewed, at)
 	}
-	m = pressAlt(t, m, 'a') // from a bound console: the next one, unbound, column focused
-	if m.console == nil || m.console.focused || m.focus != panelCommits {
-		t.Fatalf("after the second alt+a: console=%+v focus=%v", m.console, m.focus)
+	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(at) {
+		t.Fatalf("Branches cursor on %+v, want the branch of %s", b, at)
 	}
 	m = pressAlt(t, m, 'w')
-	if m.focus != panelBranches {
-		t.Fatalf("after alt+w: focus=%v", m.focus)
+	if m.viewed == at || m.console != nil {
+		t.Fatalf("second alt+w: viewed=%q console=%v, want the next worktree", m.viewed, m.console != nil)
 	}
-	m.focus = panelCommits  // the user clicked back onto the console column
-	m = pressAlt(t, m, 'a') // the return stop
-	if m.console != nil || m.focus != panelBranches {
-		t.Fatalf("return stop: console=%v focus=%v, want no console and Branches", m.console != nil, m.focus)
+	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(m.viewed) {
+		t.Fatalf("Branches cursor on %+v, want the branch of %s", b, m.viewed)
+	}
+}
+
+// alt+w walks the BRANCHES tab's order — its branch rows with a checkout,
+// top to bottom under its sort — not the worktree list's: with the tab
+// sorted by name descending the next worktree is the row below in that
+// order.
+func TestAltWFollowsTheBranchesTabsSortOrder(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, _ = addWorktree(t, m, "wtA")
+	m, _ = addWorktree(t, m, "wtB")
+	m.sortModes[panelBranches] = sortNameAsc
+	asc := append([]int(nil), m.worktreeOrder()...)
+	m.sortModes[panelBranches] = sortNameDesc
+	sorted := m.worktreeOrder()
+	if len(sorted) != 3 || slices.Equal(sorted, asc) {
+		t.Fatalf("precondition: the sort must reorder the tab: asc=%v desc=%v", asc, sorted)
+	}
+	for i := range 3 { // the rows top to bottom, as the tab draws them
+		if name := m.branches[m.branchEntries()[m.displayIndices(panelBranches)[i]].br].Name; m.worktrees[sorted[i]].Branch != name {
+			t.Fatalf("row %d is %s, order says %s", i, name, m.worktrees[sorted[i]].Branch)
+		}
+	}
+	var visited []string
+	for range 3 {
+		m = pressAlt(t, m, 'w')
+		visited = append(visited, m.viewed)
+	}
+	var want []string
+	at := m.worktreeIndex(m.home)
+	for i := 1; i <= 3; i++ {
+		want = append(want, filepath.Clean(m.worktrees[sorted[(at+i)%3]].Path))
+	}
+	if !slices.Equal(visited, want) {
+		t.Fatalf("visited %v, want the tab's order %v", visited, want)
 	}
 }

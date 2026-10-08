@@ -83,9 +83,9 @@ func TestStagingWhileAConsoleIsShownRunsInItsWorktree(t *testing.T) {
 	}
 }
 
-// alt+a over sessions in two worktrees: three distinct views, the return
-// stop is home.
-func TestAltACyclesWorktreesAndReturnsHome(t *testing.T) {
+// alt+a over sessions in two worktrees: two distinct views, then round
+// again — the ring never stops at home.
+func TestAltACyclesWorktreesRoundAndRound(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	m, wtA := addWorktree(t, m, "wtA")
@@ -98,8 +98,8 @@ func TestAltACyclesWorktreesAndReturnsHome(t *testing.T) {
 	m = pressAlt(t, m, 'a')
 	second := m.viewed
 	m = pressAlt(t, m, 'a')
-	if m.console != nil || m.viewed != m.home {
-		t.Fatalf("return stop: console=%+v viewed=%q", m.console, m.viewed)
+	if m.console == nil || m.viewed != first {
+		t.Fatalf("third press: console=%v viewed=%q, want %q again", m.console != nil, m.viewed, first)
 	}
 	if first == second || first == m.home || second == m.home {
 		t.Fatalf("views %q %q %q must differ", first, second, m.home)

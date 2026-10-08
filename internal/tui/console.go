@@ -569,26 +569,84 @@ func runningSessionIn(dir string) (domain.SessionInfo, bool) {
 	return domain.SessionInfo{}, false
 }
 
-// sessionsByLastUsed is the running sessions of one kind (terminals or
-// agents), most recently used first.
-func sessionsByLastUsed(list []domain.SessionInfo, terminal bool) []domain.SessionInfo {
+// worktreeOrder is the BRANCHES tab's order of the worktrees — the branch
+// rows that name a checkout, top to bottom as the panel shows them (its
+// sort, by date newest first unless changed; its filter), then any
+// worktree without such a row (detached, hidden by a filter), in list
+// order — as indices into m.worktrees: what alt+w walks and what orders the
+// session ring, so "next" is the row below in the tab the user walks.
+func (m Model) worktreeOrder() []int {
+	seen := make([]bool, len(m.worktrees))
+	out := make([]int, 0, len(m.worktrees))
+	ents := m.branchEntries()
+	for _, u := range m.displayIndices(panelBranches) {
+		if u >= len(ents) || ents[u].sub() {
+			continue
+		}
+		name := m.branches[ents[u].br].Name
+		for i, w := range m.worktrees {
+			if w.Branch == name && !seen[i] {
+				seen[i] = true
+				out = append(out, i)
+				break
+			}
+		}
+	}
+	for i := range m.worktrees {
+		if !seen[i] {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// worktreeIndex is a directory's position in the Branches tab's order of
+// the worktrees (worktreeOrder), or len(m.worktrees) for one not listed.
+func (m Model) worktreeIndex(dir string) int {
+	dir = filepath.Clean(dir)
+	for pos, i := range m.worktreeOrder() {
+		if filepath.Clean(m.worktrees[i].Path) == dir {
+			return pos
+		}
+	}
+	return len(m.worktrees)
+}
+
+// sessionRing is what alt+a (agents) / alt+t (terminals) walk: this
+// repository's running sessions of one kind in the Worktrees list's order
+// — the order the eye walks — oldest first within a worktree, so the walk
+// is the same whoever was used last.
+func (m Model) sessionRing(terminal bool) []domain.SessionInfo {
 	var out []domain.SessionInfo
-	for _, info := range list {
+	for _, info := range m.repoSessions(domain.Sessions().List()) {
 		if info.State == domain.SessionRunning && info.Terminal == terminal {
 			out = append(out, info)
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].LastUsed.After(out[j].LastUsed) })
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if wa, wb := m.worktreeIndex(a.Dir), m.worktreeIndex(b.Dir); wa != wb {
+			return wa < wb
+		}
+		if !a.Started.Equal(b.Started) {
+			return a.Started.Before(b.Started)
+		}
+		return a.ID < b.ID
+	})
 	return out
 }
 
-// cycleSessions is alt+a (agents) / alt+t (terminals): show this
-// repository's most recently used session of that kind, unfocused; pressed
-// again, the next one back in last-used order, then the screen the cycle
-// started from (the console's return point), then around again. enter
-// focuses the shown one, which makes it the most recent.
+// cycleSessions is alt+a (agents) / alt+t (terminals): walk this
+// repository's running sessions of that kind, in the Worktrees list's
+// order, binding the one shown (the keyboard is the agent's at once). From
+// a bound session of the kind: the next one, around again past the last —
+// never the screen the walk started from (alt+w or the step-out key leave
+// a console). With gg's keyboard the walk starts at the viewed worktree:
+// its own session first (shown unbound → bound, hidden → shown), with none
+// there the nearest below in the list, wrapping. The only session of its
+// kind, already bound: nothing but a status line.
 func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
-	list := sessionsByLastUsed(m.repoSessions(domain.Sessions().List()), terminal)
+	list := m.sessionRing(terminal)
 	if len(list) == 0 {
 		if terminal {
 			m.statusMsg = i18n.T("no running terminal in this repository — open one from the . menu of a worktree or a checked-out branch")
@@ -599,34 +657,59 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 	}
 	// A view pushed over a shown console (the palette opened a diff from a
 	// full-screen agent) is a new starting screen: the console goes back
-	// first — its parked views slot in beneath — and the cycle starts over
-	// with the whole stack as its return point.
+	// first — its parked views slot in beneath — and the walk restarts
+	// from the viewed worktree with the whole stack as its return point.
 	if m.console != nil && m.topLayer() != nil {
 		m = m.closeConsole()
 	}
-	// The ring is the sessions then the return point: from the shown session
-	// at i go to i+1, past the last one back to the screen the cycle came
-	// from. Anything else (no console, the other kind, an exited one)
-	// starts at the most recent.
-	next := 0
+	shown := -1
 	if m.console != nil {
 		for i, info := range list {
 			if info.ID == m.console.id {
-				next = i + 1
+				shown = i
 				break
 			}
 		}
 	}
-	if next == len(list) {
-		return m.closeConsole(), nil
+	var next int
+	switch {
+	case shown >= 0 && m.console.focused && len(list) == 1:
+		if terminal {
+			m.statusMsg = i18n.T("the only running terminal in this repository — already focused")
+		} else {
+			m.statusMsg = i18n.T("the only running agent session in this repository — already focused")
+		}
+		return m, nil
+	case shown >= 0 && m.console.focused:
+		next = (shown + 1) % len(list)
+	default:
+		// gg's keyboard (no console of the kind, or an unbound one): the
+		// first session at or below the viewed worktree in list order,
+		// wrapping to the top — a shown unbound console is bound when it
+		// is that one.
+		at := m.worktreeIndex(m.viewed)
+		for i, info := range list {
+			if m.worktreeIndex(info.Dir) >= at {
+				next = i
+				break
+			}
+		}
 	}
 	info := list[next]
-	m, cmd := m.showConsole(info.ID, false)
-	// The user asked to see it: it takes its box's size although unfocused,
-	// or a PTY left wider (from a maximised spell, another viewer) cuts its
-	// lines — x/vt does not reflow.
-	m = m.syncConsoleSize()
-	m.statusMsg = i18n.T("%s in %s — %d of %d by last use  [enter] focus", info.Title(), shortWorktreeName(info.Dir), next+1, len(list))
+	var cmd tea.Cmd
+	if m.console != nil && m.console.id == info.ID {
+		m.console.focused = true
+		m.touchConsole()
+		m.focus = panelCommits
+		m = m.syncConsoleSize()
+	} else {
+		m, cmd = m.showConsole(info.ID, true)
+	}
+	if terminal {
+		m.statusMsg = i18n.T("%s in %s — terminal %d of %d", info.Title(), shortWorktreeName(info.Dir), next+1, len(list))
+	} else {
+		m.statusMsg = i18n.T("%s in %s — agent %d of %d", info.Title(), shortWorktreeName(info.Dir), next+1, len(list))
+	}
 	return m, cmd
 }
 

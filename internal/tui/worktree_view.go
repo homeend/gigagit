@@ -325,54 +325,81 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 	return m, tea.Batch(snapshotTargetCmd(m.svc), m.webRerootCmd())
 }
 
-// cycleWorktrees is alt+w: the panels show the next worktree of the list
-// (the Worktrees panel's order), past the last one the first — what alt+a
-// does for a console's worktree, for every worktree, no session needed.
-// A look, not an adoption: gg's own worktree stays home, the ring comes
-// back to it. The keyboard goes with the switch: the Branches panel takes
-// focus (its border says so), and a shown console is unbound — its title
-// hints come back, a ctrl+t-maximised one docks again — so the next keys
-// are gg's, never the agent's. Its return point moves too: alt+w picks the
-// BASE worktree (the one the * marks), and the alt+a / alt+t ring's return
-// stop lands there, Branches focused, not where the cycle started. Over a
-// full-screen return point the console stays full (Branches is not on
-// screen) and keeps the keyboard, unbound.
+// cycleWorktrees is alt+w. A press without the keyboard on the Branches
+// panel — a console shown (bound or not), another panel focused — is a
+// FIRST HIT: a shown console hides (the session keeps running; the panels
+// stay on the worktree they show), Branches takes focus (its border says
+// so) with its cursor on the viewed worktree's branch, and that is all.
+// With Branches focused the panels show the next worktree of the Worktrees
+// tab's order (its sort), past the last one the first — the same fast
+// switch alt+a makes for a console's worktree, no session needed — and the
+// Branches cursor moves to that worktree's branch. A look, never an
+// adoption: gg's own worktree stays home.
 func (m Model) cycleWorktrees() (Model, tea.Cmd) {
-	n := len(m.worktrees)
+	order := m.worktreeOrder()
+	n := len(order)
+	at := m.worktreeIndex(m.viewed)
+	if m.console != nil || !m.panelFocused(panelBranches) || m.activeLeftTab != panelBranches {
+		if m.console != nil {
+			if m.console.ret != nil {
+				m.console.ret.view = m.viewed // stay: hiding is not leaving
+				m.console.ret.focus = panelBranches
+			}
+			m = m.closeConsole()
+		}
+		m = m.activateTab(panelBranches)
+		m = m.selectWorktreeBranch(m.viewed)
+		if at < n {
+			m.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(m.viewed), at+1, n)
+		}
+		return m, nil
+	}
 	if n < 2 {
 		m.statusMsg = i18n.T("this repository has one worktree — alt+w cycles them once there are more")
 		return m, nil
 	}
-	cur := filepath.Clean(m.currentWorktree)
 	next := 0
-	for i, w := range m.worktrees {
-		if filepath.Clean(w.Path) == cur {
-			next = (i + 1) % n
-			break
-		}
+	if at < n {
+		next = (at + 1) % n
 	}
-	wt := m.worktrees[next]
+	wt := m.worktrees[order[next]]
 	nm, ok := m.switchView(wt.Path)
 	if !ok {
 		return nm, nil
 	}
-	if nm.console != nil {
-		nm.console.focused = false
-		if nm.console.maximized && !nm.consoleFull() {
-			nm.console.maximized = false
-			nm = nm.syncConsoleSize()
-		}
-	}
-	if !nm.consoleFull() {
-		nm = nm.activateTab(panelBranches)
-	}
-	if nm.console != nil && nm.console.ret != nil {
-		nm.console.ret.view = nm.viewed
-		if !nm.consoleFull() {
-			nm.console.ret.focus = panelBranches
-		}
-	}
 	nm.pendingReturnView = ""
+	nm = nm.selectWorktreeBranch(nm.viewed)
 	nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(wt.Path), next+1, n)
 	return nm, nil
+}
+
+// selectWorktreeBranch puts the Branches cursor on the branch a worktree
+// has checked out — the row alt+w lands on; a detached or unlisted one
+// leaves the cursor alone, as does a filter hiding the row.
+func (m Model) selectWorktreeBranch(path string) Model {
+	name := m.worktreeBranch(path)
+	if name == "" {
+		return m
+	}
+	bi := -1
+	for i, b := range m.branches {
+		if b.Name == name {
+			bi = i
+			break
+		}
+	}
+	if bi < 0 {
+		return m
+	}
+	ents := m.branchEntries()
+	for di, u := range m.displayIndices(panelBranches) {
+		if u < len(ents) && ents[u].br == bi && !ents[u].sub() {
+			if m.sel == nil {
+				m.sel = map[panel]int{}
+			}
+			m.sel[panelBranches] = di
+			break
+		}
+	}
+	return m
 }
