@@ -36,8 +36,8 @@ func TestPRMenuCopiesTheLink(t *testing.T) {
 }
 
 // Task 13: a navigate whose preview source is refs/gg/pr/<n> opens the PR's
-// view on the page (live.js → prs.js openPRLanding), falling back to the
-// plain merge preview when the page does not list the PR.
+// view on the page (live.js → prs.js openPRLanding); a PR the page does not
+// list is refused in one line (ruling B3, TestUnlistedPRLinkSaysOneLine).
 func TestPRLinkLandsInThePRView(t *testing.T) {
 	t.Parallel()
 	read := func(name string) string {
@@ -48,7 +48,7 @@ func TestPRLinkLandsInThePRView(t *testing.T) {
 		return string(b)
 	}
 	live, prs := read("live.js"), read("prs.js")
-	for _, want := range []string{`refs\/gg\/pr\/(\d+)`, "openPRLanding(", "is not in the pull request list here"} {
+	for _, want := range []string{`refs\/gg\/pr\/(\d+)`, "openPRLanding(", "is not in the pull request list"} {
 		if !strings.Contains(live, want) {
 			t.Errorf("live.js lacks %q", want)
 		}

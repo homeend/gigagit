@@ -99,6 +99,24 @@ export function readyLatch() {
   };
 }
 
+// exclusive runs one task at a time: try(fn) starts fn or answers null while
+// one runs; idle() settles once none runs (prs.js: a PR link landing waits
+// for a row's open in flight instead of failing in silence).
+export function exclusive() {
+  let running = null;
+  return {
+    try(fn) {
+      if (running) return null;
+      const p = Promise.resolve().then(fn);
+      running = p.finally(() => (running = null));
+      return p;
+    },
+    async idle() {
+      while (running) await running.catch(() => {});
+    },
+  };
+}
+
 // stickyFlag is soon() for reads that carry a flag a newer waiting read must
 // not drop (prs.js: the moved-head read's "updated"): soon(key, flag, make)
 // queues make(flag) — the flag ORed over every read that replaced another

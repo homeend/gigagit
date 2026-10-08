@@ -77,3 +77,21 @@ console.log(JSON.stringify([
 		}
 	}
 }
+
+// B3 (ruling 2026-10-08): the page cannot open refs/gg/pr/<n> as a plain
+// preview, so a link to a PR it does not list says so once and stops —
+// never the doomed fallback and its second red line.
+func TestUnlistedPRLinkSaysOneLine(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "live.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	if strings.Contains(src, "opened as a merge preview") {
+		t.Error("live.js still falls back to a plain preview for an unlisted PR")
+	}
+	if !strings.Contains(src, "is not in the pull request list") {
+		t.Error("live.js does not say the PR is unlisted")
+	}
+}

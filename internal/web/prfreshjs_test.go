@@ -332,3 +332,71 @@ func TestPRsJSLandingWaitsForTheList(t *testing.T) {
 		}
 	}
 }
+
+// B1: exclusive — one task at a time; idle() waits for the running one, and
+// the landing's loop (busy → wait → retry) gets its turn once it ends.
+func TestPRFreshJSExclusive(t *testing.T) {
+	t.Parallel()
+	out := runFreshModuleJS(t, `
+import { exclusive } from "./prfresh.mjs";
+const tick = () => new Promise((r) => setTimeout(r, 0));
+const ex = exclusive();
+let rel;
+const p = ex.try(() => new Promise((r) => (rel = r)));
+const busy = ex.try(async () => 1) === null;
+const log = [];
+const w = ex.idle().then(() => log.push("idle"));
+await tick();
+log.push("before");
+rel();
+await p;
+await w;
+const now = await Promise.race([ex.idle().then(() => "now"), tick().then(() => "late")]);
+let rel2;
+ex.try(() => new Promise((r) => (rel2 = r)));
+let p2;
+const got = (async () => { while (!(p2 = ex.try(async () => "mine"))) await ex.idle(); return p2; })();
+await tick();
+rel2();
+console.log(JSON.stringify({ busy, log, now, mine: await got }));
+`)
+	var got struct {
+		Busy bool     `json:"busy"`
+		Log  []string `json:"log"`
+		Now  string   `json:"now"`
+		Mine string   `json:"mine"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if !got.Busy || !slices.Equal(got.Log, []string{"before", "idle"}) || got.Now != "now" || got.Mine != "mine" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// B1: a PR link landing never calls openPR (whose false means busy AND
+// failed): it waits for the open in flight and retries through opens.try.
+func TestPRsJSLandingWaitsForAnOpenInFlight(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "prs.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	i := strings.Index(src, "export async function openPRLanding(")
+	if i < 0 {
+		t.Fatal("openPRLanding is gone")
+	}
+	body := src[i:]
+	if j := strings.Index(body, "\n}\n"); j > 0 {
+		body = body[:j]
+	}
+	for _, want := range []string{"await opens.idle()", "opens.try(() => openPRNow(pr))"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("openPRLanding lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "openPR(pr)") {
+		t.Error("openPRLanding still calls openPR")
+	}
+}

@@ -18,7 +18,7 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
-import { coveredReads, nextFresh, oncePerKey, readyLatch, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
+import { coveredReads, exclusive, nextFresh, oncePerKey, readyLatch, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
@@ -392,12 +392,16 @@ function revalidateRead(n) {
 //   - otherwise the head is fetched first, under the mask.
 // The server's PR cache makes the fetch itself cheap the second time: the
 // head sha comes from the listing, so an unchanged PR skips the network.
-// It resolves true when the PR's view is on screen (openPRLanding waits on it).
-let opening = 0;
+// It resolves true when the PR's view is on screen; false when it failed
+// (and said why) or another open runs (the mask says which).
+const opens = exclusive(); // one open at a time
 async function openPR(pr) {
+  const p = opens.try(() => openPRNow(pr));
+  return p ? p : false;
+}
+
+async function openPRNow(pr) {
   const n = pr.number;
-  if (opening) return false; // one open at a time; the mask says which
-  opening = n;
   maskOn(n, "opening " + prLabel(n) + "…");
   try {
     if (pr.fetched) {
@@ -417,7 +421,6 @@ async function openPR(pr) {
     if (how === "unfetched") opLine("pull request #" + n + ": the head did not arrive", true);
     return how === "shown";
   } finally {
-    opening = 0;
     maskOff();
   }
 }
@@ -426,6 +429,9 @@ async function openPR(pr) {
 // as a row click. true = on screen; false = the open failed (it said why);
 // null = the page does not list PR n.
 export async function openPRLanding(n) {
+  // A row's open in flight runs first: openPR would answer false (busy),
+  // which reads as "failed and said why" — the landing went silent (B1).
+  await opens.idle();
   // A link opened as the page loads (gg open --web) may beat the list: read
   // the server's listing once before calling the PR unknown.
   if (!knownPR(n)) await fetchPRs();
@@ -433,7 +439,13 @@ export async function openPRLanding(n) {
   // backoff re-reads and the "prs" event bring it), then decide.
   if (!knownPR(n)) await listLoaded.wait(LANDING_LIST_MS);
   const pr = knownPR(n);
-  return pr ? await openPR(pr) : null;
+  if (!pr) return null;
+  if (state.previewOpen && state.previewOpen.pr === n) return true; // already on screen
+  // Busy (null) waits and retries; a failed open resolves false and has
+  // already said why.
+  let p;
+  while (!(p = opens.try(() => openPRNow(pr)))) await opens.idle();
+  return await p;
 }
 
 function forgetPR(pr) {
