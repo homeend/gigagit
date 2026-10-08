@@ -118,3 +118,47 @@ func TestPlanSendRefusesANoteNotWrittenForThePR(t *testing.T) {
 		t.Fatalf("planSend of a plain note: %v", err)
 	}
 }
+
+// Review Focus 5: a review run on the PR (the TUI/web/CLI path:
+// ScopeReviewTarget) is stored with the PR's stamp and shows in the PR.
+func TestPRReviewIsStampedAndShows(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	set := prNoteSetOf(t, svc)
+	tgt := ScopeReviewTarget(set)
+	if n, ok := PRScopeNumber(tgt.Preview); !ok || n != 7 {
+		t.Fatalf("review target preview %q", tgt.Preview)
+	}
+	rid, _, err := svc.SaveReview(context.Background(), SaveReview{Target: tgt, Agent: "claude", Text: twoRemarks})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.prReviews(context.Background(), set); len(got) != 1 || got[0].ID != rid {
+		t.Fatalf("PR reviews = %+v", got)
+	}
+}
+
+// Spec §1: a review of a commit that is in the PR is the commit's, not the PR's.
+func TestPRLeavesOutAReviewOfItsCommit(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	saveHeadReview(t, svc, head, twoRemarks) // a commit review of the PR's head
+	set := prNoteSetOf(t, svc)
+	if got := svc.prReviews(context.Background(), set); len(got) != 0 {
+		t.Fatalf("PR reviews = %+v", got)
+	}
+	for _, r := range mustNotesAt(t, svc, set, "big.go") {
+		if strings.HasPrefix(r.Group, "review:") {
+			t.Fatalf("a commit review's remark drew in the PR: %+v", r)
+		}
+	}
+}
+
+func mustNotesAt(t *testing.T, svc *Service, set PreviewNoteSet, path string) []ResolvedNote {
+	t.Helper()
+	got, err := svc.PreviewNotesAt(context.Background(), set, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}

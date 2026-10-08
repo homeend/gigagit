@@ -42,8 +42,8 @@ func TestPlanSendCarriesReasonCodesAndSummaries(t *testing.T) {
 // signed by the agent and carries the send marker.
 func TestPlanSendReviewHonoursAnEditedBody(t *testing.T) {
 	t.Parallel()
-	svc, _, head := sendRepo(t)
-	rid := saveHeadReview(t, svc, head, twoRemarks)
+	svc, _, _ := sendRepo(t)
+	rid := savePRReview(t, svc, twoRemarks)
 	p, err := svc.planSend(context.Background(), PRSendRequest{PR: 7, Review: rid, Body: "Edited: two things to fix."})
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +59,7 @@ func TestPRSendGroupsListsMineThenReviews(t *testing.T) {
 	svc, _, head := sendRepo(t)
 	addPRNote(t, svc, head, "big.go", 5, "mine one")
 	addPRNote(t, svc, head, "big.go", 25, "mine two")
-	rid := saveHeadReview(t, svc, head, twoRemarks)
+	rid := savePRReview(t, svc, twoRemarks)
 	gs, err := svc.PRSendGroups(context.Background(), 7)
 	if err != nil {
 		t.Fatal(err)
@@ -79,8 +79,8 @@ func TestPRSendGroupsListsMineThenReviews(t *testing.T) {
 // stored summary still goes.
 func TestAnEmptiedReviewBodyIsPostedEmpty(t *testing.T) {
 	t.Parallel()
-	svc, _, head := sendRepo(t)
-	rid := saveHeadReview(t, svc, head, twoRemarks)
+	svc, _, _ := sendRepo(t)
+	rid := savePRReview(t, svc, twoRemarks)
 	ctx := context.Background()
 	p, err := svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid, BodySet: true, Body: "   "})
 	if err != nil {

@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// prReviews are the reviews that belong to a PR's view (plan 3, T1): one of
-// the PR's commits is the reviewed tip, or the review was saved on the PR's
-// preview link (its scope ends in "...refs/gg/pr/<n>").
+// prReviews are the reviews that belong to a PR's view: the ones run ON the
+// PR — saved with its scope "<base>...refs/gg/pr/<n>" (spec 2026-10-08). A
+// review of one of the PR's commits is that commit's.
 func (s *Service) prReviews(ctx context.Context, set PreviewNoteSet) []Review {
 	if _, ok := git.ParsePRRef(set.Source); !ok || !set.OK() {
 		return nil
@@ -27,29 +26,22 @@ func (s *Service) prReviews(ctx context.Context, set PreviewNoteSet) []Review {
 	return out
 }
 
-// prReviewHeads are the PR's review heads, newest first: commit and branch
-// reviews (NoteCounts.Reviews) whose reviewed tip is one of the PR's commits,
-// then the reviews saved on a preview whose source is the PR's ref
-// (NoteCounts.PreviewReviews — a preview review is never in Reviews).
+// prReviewHeads are the PR's review heads: the reviews saved on a scope the
+// set owns (NoteCounts.PreviewReviews — a preview review is never in
+// Reviews), in scope order.
 func (s *Service) prReviewHeads(ctx context.Context, set PreviewNoteSet) []ReviewHead {
 	c, err := s.NoteCounts(ctx)
 	if err != nil {
 		return nil
 	}
-	in := set.commitSet()
-	var out []ReviewHead
-	for _, h := range c.Reviews {
-		if in[h.Commit] {
-			out = append(out, h)
-		}
-	}
 	scopes := make([]string, 0, len(c.PreviewReviews))
 	for sc := range c.PreviewReviews {
-		if strings.HasSuffix(sc, "..."+set.Source) {
+		if set.owns(sc) {
 			scopes = append(scopes, sc)
 		}
 	}
 	sort.Strings(scopes) // no map order
+	var out []ReviewHead
 	for _, sc := range scopes {
 		out = append(out, c.PreviewReviews[sc]...)
 	}
