@@ -41,16 +41,19 @@ func writeReviewTool(t *testing.T, dir, name, command string) {
 }
 
 func TestReviewTargetForArgRangeUsedAsIs(t *testing.T) {
-	tgt := reviewTargetForArg("main..HEAD")
+	tgt := reviewTargetForArg("main..HEAD", func(string) (string, model.DiffSpec) { panic("a range is used as is") })
 	if tgt.Range != "main..HEAD" || tgt.Diff.Rev != "main..HEAD" {
 		t.Fatalf("got %+v, want Range/Diff.Rev = main..HEAD", tgt)
 	}
 }
 
 func TestReviewTargetForArgSingleCommitDiffsOwnChange(t *testing.T) {
-	tgt := reviewTargetForArg("abc123")
+	own := func(rev string) (string, model.DiffSpec) {
+		return rev + "^.." + rev, model.DiffSpec{Rev: rev + "^.." + rev}
+	}
+	tgt := reviewTargetForArg("abc123", own)
 	want := "abc123^..abc123"
-	if tgt.Range != want || tgt.Diff.Rev != want {
+	if tgt.Range != want || tgt.Diff.Rev != want || tgt.Label != "abc123" {
 		t.Fatalf("got %+v, want Range/Diff.Rev = %q (a bare rev would diff the working tree against it, not the commit's own change)", tgt, want)
 	}
 }

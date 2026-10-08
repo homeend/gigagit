@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -282,6 +284,37 @@ func TestPullRequestsFallsBackToDetect(t *testing.T) {
 	}
 }
 
+// Item 2 / Review Focus 2: a listing the CALLER cancelled (a closed page, a
+// spent budget) says nothing about gh: no Detect, and the cached verdict
+// stands — so a later REAL failure still falls back to Detect.
+func TestACancelledListingKeepsTheCachedVerdict(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ok := &fakeForge{url: "u", open: []model.PullRequest{pr(3, "open", 1)}}
+	if _, err := newCachedForgeSvc(t, ok, dir).PullRequests(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ff := &fakeForge{url: "u", listErr: context.Canceled}
+	b := newCachedForgeSvc(t, ff, dir)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := b.PullRequests(ctx); err == nil {
+		t.Fatal("want an error")
+	}
+	if n := ff.detects.Load(); n != 0 {
+		t.Fatalf("a cancelled listing ran Detect %d times", n)
+	}
+	ff.mu.Lock()
+	ff.listErr, ff.detectErr = errors.New("401"), errors.New("logged out")
+	ff.mu.Unlock()
+	if _, err := b.PullRequests(context.Background()); err == nil {
+		t.Fatal("want the 401")
+	}
+	if n := ff.detects.Load(); n != 1 {
+		t.Fatalf("Detect after a live 401 = %d, want 1", n)
+	}
+}
+
 // refspecFake fetches PR heads from a local branch (offline prefetch tests).
 type refspecFake struct {
 	*fakeForge
@@ -296,7 +329,8 @@ func TestPRPrefetch(t *testing.T) {
 	t.Parallel()
 	dir, head := prPreviewRepo(t)
 	svc, _ := countingService(t, dir)
-	svc.SetPRCacheStore(prcache.New(t.TempDir(), 0))
+	cacheDir := t.TempDir()
+	svc.SetPRCacheStore(prcache.New(cacheDir, 0))
 	ff := &fakeForge{url: dir, open: []model.PullRequest{{Number: 7, State: "open", Target: "main", HeadSHA: head}}}
 	svc.SetForgeProviders([]forge.Provider{refspecFake{ff, "refs/heads/feat"}})
 	ctx := context.Background()
@@ -331,11 +365,78 @@ func TestPRPrefetch(t *testing.T) {
 		t.Fatalf("prefetch ran under a user op (%d)", n)
 	}
 	res.Release()
+	st := prcache.New(cacheDir, 0)
+	before, _ := st.Load(7)
 	if n := svc.PRPrefetch(ctx); n != 1 {
 		t.Fatalf("prefetch after the op = %d, want 1", n)
 	}
+	if after, _ := st.Load(7); !after.OpenedAt.Equal(before.OpenedAt) {
+		t.Fatalf("a prefetch re-stamped the open time: %v → %v", before.OpenedAt, after.OpenedAt)
+	}
 	if got := revParse(t, dir, git.PRRef(7)); got != moved {
 		t.Fatalf("refs/gg/pr/7 = %s, want the moved head %s", got, moved)
+	}
+}
+
+// Item 4: the disk cache keeps the most recently OPENED PRs — the heartbeat's
+// revalidate is not an open.
+func TestARevalidateIsNotAnOpen(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ff := &fakeForge{url: "u", byNum: map[int]model.PullRequest{1: pr(1, "open", 1), 2: pr(2, "open", 1)}}
+	now := time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
+	svc := newCachedForgeSvc(t, ff, dir)
+	atClock(svc, &now)
+	ctx := context.Background()
+	for _, n := range []int{1, 2} {
+		if _, err := svc.PRFetchOp(ctx, n); err != nil {
+			t.Fatal(err)
+		}
+		now = now.Add(time.Minute)
+	}
+	if _, err := svc.PRRevalidate(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	st := prcache.New(dir, 0)
+	e1, _ := st.Load(1)
+	e2, _ := st.Load(2)
+	if !e2.OpenedAt.After(e1.OpenedAt) {
+		t.Fatalf("a revalidate re-stamped #1: opened %v, #2 opened %v", e1.OpenedAt, e2.OpenedAt)
+	}
+}
+
+// Item 3: a list refresh with nothing moved costs ONE ref read — no rev-parse
+// per cached PR — and never reads the entry of a PR the listing does not show.
+func TestPrefetchWithNothingMovedReadsNoEntry(t *testing.T) {
+	t.Parallel()
+	dir, head := prPreviewRepo(t)
+	svc, count := countingService(t, dir)
+	cache := t.TempDir()
+	svc.SetPRCacheStore(prcache.New(cache, 0))
+	ff := &fakeForge{url: dir, open: []model.PullRequest{{Number: 7, State: "open", Target: "main", HeadSHA: head}}}
+	svc.SetForgeProviders([]forge.Provider{refspecFake{ff, "refs/heads/feat"}})
+	ctx := context.Background()
+	if _, err := svc.PullRequests(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PRPreview(ctx, ff.open[0]); err != nil {
+		t.Fatal(err)
+	}
+	// An unlisted PR's entry that cannot be parsed: reading it would quarantine it.
+	if err := os.WriteFile(filepath.Join(cache, "pr-9.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const revParse = "git rev-parse verify commit (resolve)"
+	before := count(revParse)
+	svc.SetPRCachePolicy(8*time.Hour, 5)
+	if n := svc.PRPrefetch(ctx); n != 0 {
+		t.Fatalf("warmed %d", n)
+	}
+	if n := count(revParse) - before; n != 0 {
+		t.Fatalf("%d rev-parse calls for an unmoved list", n)
+	}
+	if m, _ := filepath.Glob(filepath.Join(cache, "*.corrupt-*")); len(m) != 0 {
+		t.Fatalf("an unlisted entry was read: %v", m)
 	}
 }
 

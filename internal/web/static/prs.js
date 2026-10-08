@@ -1,6 +1,6 @@
-// prs.js — pull requests (read-only): the sidebar section, its rows and
-// menu, and opening one as a PR diff on the compare screen a merge preview
-// uses. Three rules (the server enforces the first two — prs.go):
+// prs.js — pull requests: the sidebar section, its rows and menu, and
+// opening one as a PR diff on the compare screen a merge preview uses (sending
+// to GitHub lives in prsend.js). Three rules (the server enforces the first two — prs.go):
 //
 //   - the page names a pull request by its NUMBER, never by a ref or a sha;
 //   - a read never reaches the forge: the list is the server's cached lane,
@@ -18,6 +18,8 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
+import { nextFresh, sentEvent, serialReads } from "./prfresh.js";
+import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
 // loaded:false. The "prs" event normally brings the rows in, but a fast forge
@@ -155,18 +157,87 @@ function prLabel(n) {
   return "pull request #" + n + (pr && pr.title ? " \u00b7 " + pr.title : "");
 }
 
-// The open PR's freshness mark: "refreshing…" while the forge is asked, the
-// cached copy's age while it cannot be reached, nothing otherwise. Only ever
-// drawn for the PR on screen.
+// The open PR's freshness mark (prfresh.js): "refreshing…" while the forge
+// is asked, "updated" when a refresh found something new (not on the first
+// read, not for your own send), the cached copy's age while the forge cannot
+// be reached, nothing otherwise. Only ever drawn for the PR on screen.
 const lastRead = new Map(); // PR number → the read_at the server last reported
+let fresh = { seen: 0, updated: 0, ownSend: null, text: "" };
+let readSeq = 0; // every comments read's start, in order (prfresh.js's sequence)
+// The open PR's forge reads (comments refresh, revalidate) run one at a time;
+// a read asked while one runs waits for it (C9).
+const reads = serialReads((fn) => runOnce("pr-comments", fn));
 function setPRFresh(n, text) {
   const po = state.previewOpen;
   $("pr-fresh").textContent = po && po.pr === n ? text : "";
 }
-function offlineFresh(n) {
-  const age = ago(lastRead.get(n), Date.now());
-  setPRFresh(n, age ? "offline \u00b7 read " + age : "offline");
+function freshEvent(n, ev) {
+  fresh = nextFresh(fresh, { n, ...ev });
+  setPRFresh(n, fresh.text);
 }
+function offlineFresh(n) {
+  freshEvent(n, { kind: "fail", age: ago(lastRead.get(n), Date.now()) });
+}
+
+// The interrupted-send bar (W6): a send gg started that GitHub still holds as
+// a pending review — finish it, or (unless it is the user's own review gg
+// added to) discard it. Mounted here, under the open PR's compare bar.
+const ibar = document.createElement("div");
+ibar.id = "pr-interrupted";
+ibar.className = "hidden";
+$("compare-bar").after(ibar);
+const ibarCSS = document.createElement("style");
+ibarCSS.textContent = `
+#pr-interrupted { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; padding: 4px 10px; background: var(--attn-warn); border-bottom: 1px solid var(--border); }
+#pr-interrupted.hidden { display: none; }
+#pr-interrupted span { flex: 1 1 100%; }
+#pr-interrupted button { white-space: nowrap; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px; font: inherit; cursor: pointer; }
+#pr-interrupted button:hover { border-color: var(--accent); }
+`;
+document.head.append(ibarCSS);
+function showInterrupted(n, info) {
+  const po = state.previewOpen;
+  if (!info || !po || po.pr !== n || state.filesMode !== "compare") {
+    ibar.classList.add("hidden");
+    return;
+  }
+  ibar.innerHTML =
+    `<span>An earlier send to #${n} was interrupted: ${info.count === 1 ? "1 item waits" : esc(String(info.count)) + " items wait"} in a pending review on GitHub.</span>` +
+    `<button data-k="finish">Finish sending</button>` +
+    (info.joined ? "" : `<button data-k="discard">Discard</button>`);
+  ibar.classList.remove("hidden");
+}
+ibar.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  const po = state.previewOpen;
+  if (!b || !po || !po.pr) return;
+  const k = b.dataset.k;
+  sendToGitHub(po.pr, { kind: k }, (k === "finish" ? "finishing" : "discarding") + " the interrupted send on #" + po.pr);
+});
+// The bar belongs to the open PR's compare screen: it goes when that does.
+new MutationObserver(() => {
+  if ($("compare-bar").classList.contains("hidden")) ibar.classList.add("hidden");
+}).observe($("compare-bar"), { attributes: true, attributeFilter: ["class"] });
+
+// A send refused because the PR moved on GitHub: follow the new head (the
+// diff re-opens on it, if the user is still looking at the PR).
+onHeadMoved((n) => followMovedHead(n));
+
+// refreshAfterSend re-reads PR n once a send ended. A read already running
+// started before the send landed: wait for it, then read again — the read
+// that absorbs the send's own change must start after it.
+function refreshAfterSend(n) {
+  reads.soon("after-send:" + n, commentsRead(n, false));
+}
+
+// A finished send: a change it made is not "updated" (an abort or a failure
+// changed nothing, so it arms nothing), and the PR is re-read (the
+// interrupted bar follows what GitHub now holds).
+onSendDone((n, ev) => {
+  const sent = sentEvent(ev, readSeq);
+  if (sent) freshEvent(n, sent);
+  refreshAfterSend(n);
+});
 
 // headMoved: the forge's answer says PR n's head is not the one on screen —
 // "moved" from the server (its local ref is behind), or a head that differs
@@ -201,11 +272,12 @@ async function showPR(n, moved, skipComments) {
   if (body.state === "unfetched") return "unfetched";
   await openPreviewBody(body, "");
   if (body.read_at) lastRead.set(n, body.read_at);
-  setPRFresh(n, "");
+  setPRFresh(n, moved ? fresh.text : "");
+  showInterrupted(n, null); // the next refresh answer says whether one waits
   if (moved) opLine("pull request #" + n + " updated: new commits on the forge");
   // The diff is up with whatever threads the server had cached; only NOW is
   // the forge asked for the PR's comments (never on the click path).
-  if (!skipComments) refreshPRComments(n);
+  if (!skipComments) refreshPRComments(n, moved);
   return "shown";
 }
 
@@ -213,8 +285,15 @@ async function showPR(n, moved, skipComments) {
 // they changed, redraws the threads of the diff on screen. It runs after a PR
 // diff opens and on every `prs` live event; a failure is silent — the diff
 // simply stays without (newer) threads.
-export function refreshPRComments(n) {
-  return runOnce("pr-comments", async () => {
+// moved: the view was just re-opened on a moved head — that read is news.
+export function refreshPRComments(n, moved = false) {
+  return reads.run(commentsRead(n, moved));
+}
+
+// commentsRead is refreshPRComments's read, for the serial reader.
+function commentsRead(n, moved) {
+  return async () => {
+    const seq = ++readSeq;
     let r;
     try {
       r = await postJSON("/api/pr/comments/refresh?n=" + n, {});
@@ -222,12 +301,13 @@ export function refreshPRComments(n) {
       offlineFresh(n);
       return;
     }
-    setPRFresh(n, "");
+    freshEvent(n, { kind: "ok", changed: !!(r.changed || moved || headMoved(n, r)), seq });
+    showInterrupted(n, r.interrupted);
     if (r.changed) await reloadPRNotes(n);
     // The same read says whether the head moved: follow it OUTSIDE this
     // gate — the re-open asks for the comments again.
     if (headMoved(n, r)) setTimeout(() => followMovedHead(n), 0);
-  });
+  };
 }
 
 // fetchPR runs the pr-fetch op and resolves true when the head arrived.
@@ -258,22 +338,32 @@ function fetchPR(n) {
 // revalidate is the background half of a cached open: the diff is already on
 // screen (from the local head), and only now is the forge asked whether that
 // head is still the PR's. A moved head is fetched and the diff re-opened — if
-// the user is still looking at it.
-async function revalidate(n) {
-  setPRFresh(n, "refreshing\u2026");
-  let rv;
-  try {
-    rv = await postJSON("/api/pr/revalidate?n=" + n, {});
-  } catch {
-    offlineFresh(n); // offline, rate-limited: the diff on screen stands
-    return;
-  }
-  if (rv.read_at) lastRead.set(n, rv.read_at);
-  setPRFresh(n, "");
-  fetchPRs(); // the row may have changed state (merged, closed)
-  // One read answered both: the comments, and whether the head moved.
-  if (rv.comments_changed) await reloadPRNotes(n);
-  if (headMoved(n, rv)) await followMovedHead(n);
+// the user is still looking at it. It waits for a read already running (C9).
+function revalidate(n) {
+  reads.soon("revalidate:" + n, revalidateRead(n));
+}
+
+// revalidateRead is revalidate's read, for the serial reader.
+function revalidateRead(n) {
+  return async () => {
+    const seq = ++readSeq;
+    freshEvent(n, { kind: "start" });
+    let rv;
+    try {
+      rv = await postJSON("/api/pr/revalidate?n=" + n, {});
+    } catch {
+      offlineFresh(n); // offline, rate-limited: the diff on screen stands
+      return;
+    }
+    if (rv.read_at) lastRead.set(n, rv.read_at);
+    freshEvent(n, { kind: "ok", changed: !!(rv.comments_changed || headMoved(n, rv)), seq });
+    showInterrupted(n, rv.interrupted);
+    fetchPRs(); // the row may have changed state (merged, closed)
+    // One read answered both: the comments, and whether the head moved.
+    if (rv.comments_changed) await reloadPRNotes(n);
+    // Followed OUTSIDE the gate: the re-open asks for the comments again.
+    if (headMoved(n, rv)) setTimeout(() => followMovedHead(n), 0);
+  };
 }
 
 // followMovedHead fetches PR n's new head and re-opens its diff — if the user
@@ -504,8 +594,8 @@ $("pr-search-list").addEventListener("contextmenu", (ev) => {
 registerHelp({
   key: "pull requests",
   html:
-    "with a usable <b>gh</b> the sidebar lists the repository's open pull requests (read-only — gg never " +
-    "writes to the forge). The row leads with the review verdict: <b>✓</b> approved, <b>✗</b> changes " +
+    "with a usable <b>gh</b> the sidebar lists the repository's open pull requests (gg writes to GitHub only " +
+    "when you send — see <i>send to GitHub</i>). The row leads with the review verdict: <b>✓</b> approved, <b>✗</b> changes " +
     "requested, <b>●</b> review required. <b>Click</b> fetches the head and opens the PR's diff on the merge " +
     "preview screen (a loading mask covers the panes meanwhile; a pull request opened before shows at once " +
     "and is checked against the forge in the background); <b>right-click</b> for copy URL and forget. A pull request gg already knows stays " +

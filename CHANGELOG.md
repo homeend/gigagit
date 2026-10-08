@@ -37,6 +37,145 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   alt+t return stop then lands on that worktree, not where the cycle
   started.
 
+## Pull requests show only their own notes
+
+### Changed
+
+- **A pull request's view shows only what was written for it**: GitHub's
+  review threads, your draft replies to them, the notes written in that PR
+  and the AI reviews run on it. It no longer shows notes from elsewhere
+  whose lines reappear in the PR ("carried" notes — removed, with their
+  "from …" label), other notes on the PR's commits, or reviews of its
+  commits. *Send review…*, the PR list's counts and `gg pr notes` follow.
+- A note written in a PR's diff (terminal UI, gg web) and a review run on a
+  PR record the PR (`<base>...refs/gg/pr/<n>`, matched by PR number, so a
+  moved base keeps them); agents write one with `--preview
+  <base>...refs/gg/pr/<n>`. Notes written in a PR view before this change
+  carry no PR and stay on their commit. Skill v155.
+
+## Sending to GitHub — cache minors
+
+### Changed
+
+- **A pull request that moved says how many new commits it got** — "PR #7
+  updated: 2 new commits" in the terminal UI (counted against the head that
+  was on screen; a force-push counts every commit not in the old head).
+- **`[forge] cache_hours = 0` now documented as it behaves:** every open
+  reads GitHub first, a row visible in the list too.
+
+### Fixed
+
+- **A PR-list refresh no longer swallows the open pull request's refresh**
+  in the terminal UI: "new commits" and "updated" used to go missing when
+  the two overlapped. After switching repositories (`R`) the new
+  repository's first refresh is never blocked by the old one, and a Reply &
+  send written before the switch is saved but not sent.
+- **A typed review or verdict body is kept until its own send reaches
+  GitHub** (terminal UI and gg web): sending a note, resolving a thread or
+  sending another pull request no longer throws it away, and a failed
+  resolve no longer claims the text was kept.
+- **gg web reads one pull-request refresh at a time** and never gives up on
+  the read after your own send (it used to stop after 10 s).
+- **The pull-request cache keeps the PRs you opened most recently** — the
+  background refresh and prefetch no longer count as opens, and opening an
+  already-fetched PR in gg web now does.
+- **Prefetch is cheaper:** one ref read per list refresh instead of reading
+  every cached PR and resolving each head.
+- **A cancelled PR listing** (a closed page, a spent time budget) no longer
+  makes gg distrust a working `gh` and re-detect it.
+- **Windows: a PR cache write is retried** when another gg process is
+  reading the same file, instead of being dropped.
+- **Sending from gg web on a big pull request** is no longer cut off after
+  30 s of local work; the plan's backstop is 2 minutes (each `gh` call keeps
+  its own 30 s limit).
+
+## Sending to GitHub — follow-ups
+
+### Fixed
+
+- **A note named twice is sent once** (`gg pr send --note a --note a`, or a
+  repeated id from gg web), and a thread named by its id and by one of its
+  comments is resolved once.
+- **Finishing or discarding an interrupted send lists the notes by their
+  summaries**, not by internal keys (terminal UI and gg web).
+- **Your own send no longer marks the pull request "updated"** — in gg web
+  and the terminal UI — while a genuine update that follows it still shows;
+  an aborted or failed send no longer hides the next one.
+- **Verdict… in gg web keeps what you typed** when the send is refused, like
+  Send review… does; an aborted confirm keeps it too.
+- **The terminal UI keeps the review body you typed** when the send fails
+  after the popup closed: the next Send review… or Verdict… starts from it.
+- **A send planned before switching repositories (`R`) no longer starts in
+  the new one.**
+- **A pull request's group colour bars stay** after you add or edit a note
+  in its diff (they used to vanish).
+- **Two AI reviews with the same summary** get distinct rows in Send
+  review…'s chooser, each opening its own review.
+- **Translated send confirms read as whole sentences** ("<note> (skipped:
+  …)" is one phrase per reason).
+- **gg web answers a send within 30 s** when GitHub does not respond (504),
+  and says 422/502 — not 400 — when the pull request could not be read.
+- **`gg pr send` exits 1 when you answer abort** (nothing was posted).
+- **A pull request's view re-reads its files less**: file text at a commit
+  is cached, so badges and AI-review remarks no longer run `git show` on
+  every comment refresh.
+
+## Sending to GitHub from gg web; agents never send
+
+### Added
+
+- **gg web shows where every note of a pull request lives** — `○` only on
+  this machine, `◌` being sent, `○!` the last send failed (the error inside
+  the box), `●` on GitHub — and colours each review group's notes (a left
+  border, and stripes on the file list's ◆ badges), with the same colours as
+  the terminal UI's dark theme. A note carried from another commit names
+  where it is stored.
+- **Send from gg web.** Right-click a note in a pull request's diff: *Send to
+  GitHub* (*Retry* after a failure), *Send my draft review…* / *Send this AI
+  review…*; on a GitHub thread *Reply & send…*, *Resolve / Reopen on
+  GitHub* and *Send draft replies*. The pull request's right-click menu has
+  *Send review…* (pick a group, edit the body) and *Verdict…*.
+- **Every send in gg web shows what will be posted and asks first**: the
+  target, the review body, each comment (30 shown, then "+ N more"), each
+  note that is skipped and why; the buttons are the verdicts (*Comment*,
+  *Approve*, *Request changes*) or *Send* / *Cancel*.
+- **gg web says "updated"** when a refresh of the open pull request found
+  new comments or commits — not on its first read and not for your own send.
+- **An interrupted send shows a bar** under the open pull request in gg web:
+  *Finish sending* or *Discard* (never discarding your own pending review).
+
+### Changed
+
+- **Agents never send to GitHub.** An AI agent writes local notes and
+  reviews; only you send them. Inside any session gg started (agent consoles
+  and gg terminal tabs) `gg pr send`, `gg pr reply --send`, `gg pr resolve`
+  and `gg pr unresolve` refuse, and outside one they post only after you
+  answer the confirm at your terminal.
+- **Clearing an AI review's body sends no body** (it no longer falls back to
+  the stored summary). `gg pr send --review <id>` without `--body` still
+  sends the summary; `--body ""` sends none.
+
+### Removed
+
+- The pending-send queue: `gg pr pending …`, the terminal UI's notices for
+  an agent's queued send, and the agent-verdict preselection.
+- `gg pr send --yes` and `--event`, and `gg pr reply --send --yes`: the
+  confirm is always answered at your terminal.
+
+## Reviewing a repository's first commit
+
+### Fixed
+
+- **`gg review <rev>` works on a repository's first commit.** It reviewed
+  `<rev>^..<rev>`, which does not exist for a commit with no parent, and
+  failed with `unknown revision`. A root commit is now reviewed as
+  everything it adds (diffed against the empty tree, SHA-1 or SHA-256). The
+  TUI's and a link's root-commit review had quietly given the reviewer the
+  wrong diff (the working tree against that commit); they get the same fix.
+  A shallow clone's oldest commit only looks parentless: reviewing it alone
+  is refused with `fetch more history (git fetch --deepen=1)` rather than
+  handing the reviewer the whole tree. Skill: using-gg v153.
+
 ## Review links: the remaining rough edges
 
 ### Fixed

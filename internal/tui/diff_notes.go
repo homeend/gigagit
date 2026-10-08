@@ -415,7 +415,7 @@ func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int, owner *diffVi
 		return noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: kind, side: r.Note.Side, text: text, stale: stale, agent: allAgent}
 	}
 	inPR := v.forgePR > 0
-	title := owner.noteBoxTitle(r) + noteOrigin(r.Origin)
+	title := owner.noteBoxTitle(r)
 	if mk := syncMark(r.Sync, inPR); mk != "" {
 		title = mk + " " + title
 	}
@@ -434,7 +434,7 @@ func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int, owner *diffVi
 	}
 	rows = append(rows, frame(noteRowBlank, ""), frame(noteRowBottom, ""))
 	if inPR {
-		slot := groupSlot(r.Group)
+		slot := domain.GroupSlot(r.Group)
 		for i := range rows {
 			rows[i].group = slot
 		}
@@ -458,17 +458,6 @@ func syncMark(s model.SyncState, inPR bool) string {
 		return "●"
 	}
 	return "○"
-}
-
-// noteOrigin is a carried note's title tail ("" for any other note).
-func noteOrigin(origin string) string {
-	switch origin {
-	case "":
-		return ""
-	case domain.OriginWorkingTree:
-		return " · " + i18n.T("from working tree")
-	}
-	return " · " + i18n.T("from %s", origin)
 }
 
 // collapsedNoteLine is a whole thread on one row: "author: summary (N
@@ -508,7 +497,7 @@ func (v *diffView) collapsedNoteLine(r domain.ResolvedNote) noteLine {
 	nl := noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: noteRowCollapsed, side: side,
 		text: sanitizeLine(text), stale: r.Status == model.NoteStale, agent: allAgent}
 	if v.forgePR > 0 {
-		nl.group = groupSlot(r.Group)
+		nl.group = domain.GroupSlot(r.Group)
 	}
 	return nl
 }
@@ -777,7 +766,7 @@ func noteBadgeGroups(n int, groups []string) string {
 		if i == 3 {
 			break
 		}
-		if bar, ok := groupBarStyle(groupSlot(g)); ok {
+		if bar, ok := groupBarStyle(domain.GroupSlot(g)); ok {
 			b.WriteString(bar.Render("▌"))
 		}
 	}

@@ -151,10 +151,11 @@ func (s *Server) runOpStream(ctx context.Context, run *opRun, fn runFunc) {
 	}
 	run.finish(done)
 	run.cancel()
-	// A run that stored a note (the review lane) tells every open page, so
+	// A run that stored a note (the review lane) or sent notes (a PR send)
+	// tells every open page, so
 	// their ✎, review sub-rows and Previews rows re-read. Only after finish:
 	// the hub drops emits while a run is in flight.
-	if id, _ := extra["noteId"].(string); id != "" {
+	if id, _ := extra["noteId"].(string); id != "" || extra["notes_changed"] == true {
 		s.emitNotes()
 	}
 }

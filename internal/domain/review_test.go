@@ -232,10 +232,11 @@ func TestBranchReviewTarget(t *testing.T) {
 }
 
 // TestBranchReviewTargetTipAloneFallback proves the no-base, no-upstream
-// fallback reviews the tip commit's OWN change (tip^..tip), not an empty
-// "working tree vs tip" diff, and that the range is the tip's resolved SHA
-// (not the branch name). An orphan branch shares no history with main, so
-// MergeBase(main, orphan) fails and there's no configured upstream either.
+// fallback reviews the tip commit's OWN change, not a "working tree vs tip"
+// diff, and that the range is the tip's resolved SHA (not the branch name).
+// An orphan branch shares no history with main, so MergeBase(main, orphan)
+// fails and there's no configured upstream either; its tip is a root
+// commit, so its own change is everything it adds (tip^..tip does not exist).
 func TestBranchReviewTargetTipAloneFallback(t *testing.T) {
 	dir, svc := newRealRepo(t)
 	ctx := context.Background()
@@ -253,18 +254,19 @@ func TestBranchReviewTargetTipAloneFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BranchReviewTarget: %v", err)
 	}
-	wantRange := wantTip + "^.." + wantTip
-	if target.Range != wantRange {
-		t.Fatalf("Range = %q, want %q", target.Range, wantRange)
+	// The orphan's tip is a root commit: tip^..tip does not exist, so its own
+	// change is everything it adds (against the empty tree).
+	if target.Range != wantTip {
+		t.Fatalf("Range = %q, want %q", target.Range, wantTip)
 	}
-	if target.Diff.Rev != wantRange {
-		t.Fatalf("Diff.Rev = %q, want %q", target.Diff.Rev, wantRange)
+	if target.Diff.Rev != wantTip || !target.Diff.Root {
+		t.Fatalf("Diff = %+v, want the root commit's own change", target.Diff)
 	}
 	if target.Kind != ReviewBranch {
 		t.Fatalf("Kind = %v, want ReviewBranch", target.Kind)
 	}
-	if !hexRangeRE.MatchString(target.Range) {
-		t.Fatalf("Range = %q, does not look like a pure-hex range", target.Range)
+	if !hexSHA.MatchString(target.Range) { // a sha: no ref name reaches the tool
+		t.Fatalf("Range = %q, does not look like a pure-hex sha", target.Range)
 	}
 	if target.Label != "orphan" {
 		t.Fatalf("Label = %q, want the branch name \"orphan\"", target.Label)

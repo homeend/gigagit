@@ -15,6 +15,19 @@ export function noteAge(created, nowMs) {
   return Math.floor(s / (86400 * 365)) + "y";
 }
 
+// noteMark is a box's sync mark (spec 2026-10-07 §1.1): where the note lives.
+// In a PR's own diff every box says it; elsewhere a stored note is always
+// local, so only the two states that need attention show (plan 3's T3).
+export function noteMark(n, inPR) {
+  const s = n.sync || (n.read_only && n.source === "forge" ? "github" : "");
+  if (s === "sending") return { glyph: "◌", cls: "mark-sending", tip: "being sent to GitHub" };
+  if (s === "failed") return { glyph: "○!", cls: "mark-failed", tip: n.send_error || "the last send failed" };
+  if (!inPR) return null;
+  if (s === "github") return { glyph: "●", cls: "mark-github", tip: "on GitHub" };
+  if (s === "local") return { glyph: "○", cls: "mark-local", tip: "local — not on GitHub yet" };
+  return null;
+}
+
 // noteTitle is the text in a box's top border. A forge review thread
 // (read_only) names itself "review" and carries its age and the forge's
 // resolved flag; a stored note keeps "note" / "agent note" and the stale word

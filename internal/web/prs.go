@@ -319,6 +319,7 @@ func (s *Server) handlePROpen(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	svc.MarkPROpened(ctx, n) // an open: the disk cache keeps the most recently opened PRs
 	pair := res.Pair
 	body := previewOpenBody(res.Endpoints, label, pr.Source, pr.Target)
 	body["pr"] = n
@@ -330,6 +331,16 @@ func (s *Server) handlePROpen(w http.ResponseWriter, r *http.Request) {
 	// them into a copied link and never hands them back as a wire value.
 	body["link_source"], body["link_target"] = pair.Head, pair.Base
 	writeJSON(w, body)
+}
+
+// addInterrupted names an interrupted send of PR n in a refresh answer (W6):
+// GitHub still holds a pending review gg's stamps name. Cache-only — the
+// refresh that just ran is the forge read. joined: the review is the user's
+// own, which gg finishes but never discards.
+func addInterrupted(ctx context.Context, svc *domain.Service, n int, body map[string]any) {
+	if rev, keys, joined := svc.PRInterrupted(ctx, n); rev != "" {
+		body["interrupted"] = map[string]any{"count": len(keys), "joined": joined}
+	}
 }
 
 // prRevalidateBudget bounds the one forge call a cached open still makes.
@@ -373,6 +384,8 @@ func (s *Server) handlePRRevalidate(w http.ResponseWriter, r *http.Request) {
 	if !rv.ReadAt.IsZero() {
 		readAt = rv.ReadAt.UTC().Format(time.RFC3339)
 	}
-	writeJSON(w, map[string]any{"moved": rv.Moved, "state": rv.PR.State, "forge_head": rv.PR.HeadSHA,
-		"comments_changed": rv.CommentsChanged, "read_at": readAt})
+	body := map[string]any{"moved": rv.Moved, "state": rv.PR.State, "forge_head": rv.PR.HeadSHA,
+		"comments_changed": rv.CommentsChanged, "read_at": readAt}
+	addInterrupted(ctx, svc, n, body)
+	writeJSON(w, body)
 }

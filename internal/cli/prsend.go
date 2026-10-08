@@ -29,19 +29,29 @@ func prNumber(s string) (int, bool) {
 }
 
 func prSend(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	usage := func(msg string) int {
-		if msg != "" {
+	req, err := parsePRSend(args, stderr)
+	if err != nil {
+		if msg := err.Error(); msg != "" {
 			fmt.Fprintln(stderr, "error:", msg)
 		}
 		fmt.Fprintln(stderr, prUsage)
 		return 2
 	}
+	return runPRSend(context.Background(), svc, req, stdin, stdout, stderr)
+}
+
+// errUsage is a bad command line whose message the flag package already
+// printed (or that has none): usage follows.
+var errUsage = errors.New("")
+
+// parsePRSend reads `gg pr send`'s command line into the domain's request.
+func parsePRSend(args []string, stderr io.Writer) (domain.PRSendRequest, error) {
 	if len(args) == 0 {
-		return usage("")
+		return domain.PRSendRequest{}, errUsage
 	}
 	n, ok := prNumber(args[0])
 	if !ok {
-		return usage(fmt.Sprintf("%q is not a pull request number", args[0]))
+		return domain.PRSendRequest{}, fmt.Errorf("%q is not a pull request number", args[0])
 	}
 	fs := flag.NewFlagSet("pr send", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -50,13 +60,11 @@ func prSend(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr 
 	review := fs.String("review", "", "send a stored review: every unsent remark, its summary as the body")
 	mine := fs.Bool("mine", false, "send every local note the PR shows as one review")
 	verdict := fs.Bool("verdict", false, "a verdict with no comments")
-	event := fs.String("event", "", "comment, approve or request-changes (with --yes)")
 	body := fs.String("body", "", "the review body")
-	yes := fs.Bool("yes", false, "answer the confirm (never inside a gg session)")
 	finish := fs.Bool("finish", false, "submit the review an interrupted send left pending")
 	discard := fs.Bool("discard", false, "delete the review an interrupted send left pending")
 	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
-		return usage("")
+		return domain.PRSendRequest{}, errUsage
 	}
 	kinds := 0
 	for _, on := range []bool{len(notes) > 0, *review != "", *mine, *verdict, *finish, *discard} {
@@ -65,54 +73,60 @@ func prSend(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr 
 		}
 	}
 	if kinds != 1 {
-		return usage("name exactly one of --note, --review, --mine, --verdict, --finish, --discard")
-	}
-	if *event != "" && *review == "" && !*mine && !*verdict {
-		return usage("--event needs --review, --mine or --verdict")
-	}
-	switch *event {
-	case "", engine.OptComment, engine.OptApprove, engine.OptRequestChanges:
-	default:
-		return usage(fmt.Sprintf("--event %q: want comment, approve or request-changes", *event))
+		return domain.PRSendRequest{}, errors.New("name exactly one of --note, --review, --mine, --verdict, --finish, --discard")
 	}
 	req := domain.PRSendRequest{PR: n, Review: *review, Mine: *mine, Notes: notes, Verdict: *verdict,
-		Event: *event, Body: *body, Finish: *finish, Discard: *discard}
-	return runPRSend(context.Background(), svc, req, *yes, defaultAnswer(req), stdin, stdout, stderr)
+		Body: *body, Finish: *finish, Discard: *discard}
+	// --body given at all (even empty) is the user's answer for the body.
+	fs.Visit(func(f *flag.Flag) { req.BodySet = req.BodySet || f.Name == "body" })
+	return req, nil
 }
 
-// runPRSend sends (or, inside a gg session, queues for the user's
-// approval) and prints the outcome.
-func runPRSend(ctx context.Context, svc *domain.Service, req domain.PRSendRequest, yes bool, answer string,
+// inGGSession: this process runs inside a session gg started (an agent
+// console or a gg terminal tab) — gg hands each one GG_INBOX.
+func inGGSession() bool { return sessionGetenv("GG_INBOX") != "" }
+
+// errAgentSend: nothing reaches GitHub from a session gg started (user
+// ruling 2026-10-08: agents never send — they write local notes).
+var errAgentSend = errors.New("agents can't send to GitHub: the notes stay local — " +
+	"the user sends them from gg (the PR view, gg web, or gg pr send in their own terminal)")
+
+// errNeedsTerminal: a send is posted only after a human answers its confirm.
+var errNeedsTerminal = errors.New("sending to GitHub needs your answer at a terminal: run it in an interactive shell")
+
+// sendTerminal reports whether stdin is a human's terminal (test seam).
+var sendTerminal = func(stdin io.Reader) bool { return stdin == io.Reader(os.Stdin) && stdinIsTerminal() }
+
+// runPRSend posts req after a human answered its confirm at a terminal, and
+// prints the outcome. Inside a gg session it refuses (agents never send).
+// Exit 0 only when something reached GitHub: an answered abort exits 1.
+func runPRSend(ctx context.Context, svc *domain.Service, req domain.PRSendRequest,
 	stdin io.Reader, stdout, stderr io.Writer) int {
 	if inGGSession() {
-		if yes {
-			fmt.Fprintln(stderr, "--yes is ignored inside a gg session: the user approves sends in gg")
-		}
-		return queueAndWait(ctx, svc, req, stdout, stderr)
+		fmt.Fprintln(stderr, "error:", errAgentSend)
+		return 1
 	}
-	res, err := sendNow(ctx, svc, req, yes, answer, stdin, stderr)
+	if !sendTerminal(stdin) {
+		fmt.Fprintln(stderr, "error:", errNeedsTerminal)
+		return 1
+	}
+	res, err := sendNow(ctx, svc, req, stdin, stderr)
 	if res.Summary != "" {
 		fmt.Fprintln(stdout, res.Summary)
 	}
 	if err != nil {
-		if errors.Is(err, engine.ErrDecisionRequired) && !errors.Is(err, errJoinNeedsConfirm) {
-			fmt.Fprintln(stderr, "(rerun with --yes to send without being asked)")
-		}
 		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	if !res.Changed { // answered abort: nothing was posted (rebase.go's signal)
 		return 1
 	}
 	return 0
 }
 
-// errJoinNeedsConfirm: the user's own pending review is open on GitHub, so a
-// send would add to it — a choice only the user makes, never --yes.
-var errJoinNeedsConfirm = errors.New("you have a review pending on GitHub: gg would add these comments to it — " +
-	"answer the confirm without --yes (submit-with-pending), or submit or discard it on GitHub first")
-
-// sendNow fetches a moved head, then runs the op. yes answers the confirm
-// with answer; otherwise a terminal is asked and a pipe gets the decision
-// error.
-func sendNow(ctx context.Context, svc *domain.Service, req domain.PRSendRequest, yes bool, answer string,
+// sendNow fetches a moved head, then runs the op; the confirm is asked on
+// the terminal.
+func sendNow(ctx context.Context, svc *domain.Service, req domain.PRSendRequest,
 	stdin io.Reader, stderr io.Writer) (engine.Result, error) {
 	if st := svc.ForgeStatus(ctx); !st.Available() {
 		return engine.Result{}, fmt.Errorf("gg pr: %w", st.Err)
@@ -131,33 +145,13 @@ func sendNow(ctx context.Context, svc *domain.Service, req domain.PRSendRequest,
 	if err != nil {
 		return engine.Result{}, err
 	}
-	if p := op.Plan; yes && p.Mode == engine.SendReview {
-		switch {
-		case p.Pending != "": // R6: --yes never answers submit-with-pending
-			return engine.Result{}, errJoinNeedsConfirm
-		case p.OwnPR && (answer == engine.OptApprove || answer == engine.OptRequestChanges):
-			return engine.Result{}, fmt.Errorf("#%d is your own pull request: GitHub takes no %s on it", req.PR, answer)
-		}
-	}
-	// Asked only when the reader handed in IS the terminal (a test's or a
-	// script's reader never is, whatever os.Stdin happens to be).
-	dec := cliDecider{in: stdin, out: stderr, interactive: stdin == io.Reader(os.Stdin) && stdinIsTerminal()}
-	if yes {
-		dec.policy = map[string]string{engine.DecisionSendForge: answer}
-	}
-	res, err := runOperation(ctx, svc, op, dec, stderr)
-	if errors.Is(err, engine.ErrDecisionRequired) && op.Plan.Mode == engine.SendReview && op.Plan.Pending != "" {
-		// Your own review is pending: --yes is refused there, so say what to do.
-		err = fmt.Errorf("%w (%w)", err, errJoinNeedsConfirm)
-	}
-	return res, err
+	return runOperation(ctx, svc, op, cliDecider{in: stdin, out: stderr, interactive: true}, stderr)
 }
 
 func prReply(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("pr reply", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	send := fs.Bool("send", false, "send the reply at once")
-	yes := fs.Bool("yes", false, "answer the confirm")
+	send := fs.Bool("send", false, "send the reply at once (asks at the terminal)")
 	source := fs.String("source", "user", "user or agent")
 	pos, flags := splitPositionals(args, 3, "source")
 	if err := fs.Parse(flags); err != nil || len(pos) != 3 {
@@ -190,7 +184,7 @@ func prReply(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	if !*send {
 		return 0
 	}
-	return runPRSend(ctx, svc, domain.PRSendRequest{PR: n, Notes: []string{d.ID}}, *yes, engine.OptSend, stdin, stdout, stderr)
+	return runPRSend(ctx, svc, domain.PRSendRequest{PR: n, Notes: []string{d.ID}}, stdin, stdout, stderr)
 }
 
 func prResolve(svc *domain.Service, resolve bool, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -209,7 +203,7 @@ func prResolve(svc *domain.Service, resolve bool, args []string, stdin io.Reader
 	} else {
 		req.Unresolve = []string{args[1]}
 	}
-	return runPRSend(context.Background(), svc, req, false, engine.OptSend, stdin, stdout, stderr)
+	return runPRSend(context.Background(), svc, req, stdin, stdout, stderr)
 }
 
 func prNotes(svc *domain.Service, args []string, stdout, stderr io.Writer) int {

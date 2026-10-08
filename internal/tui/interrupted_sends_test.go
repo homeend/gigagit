@@ -43,7 +43,7 @@ func TestARefreshAsksForInterruptedSends(t *testing.T) {
 	m := prDiffModel(t)
 	pr := m.prs[0]
 	pr.HeadSHA = m.previewOpen.srcHash
-	_, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, pr: pr})
+	_, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.forgeGen, pr: pr})
 	found := false
 	for _, msg := range flattenCmd(t, cmd) {
 		if _, ok := msg.(interruptedMsg); ok {

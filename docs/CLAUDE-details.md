@@ -2109,10 +2109,20 @@ them on a file row.
   EVERY scope does: `PreviewNoteSet.scope()` is `Only`, else the set's own
   `Pair()` name, and `loadPreviewNotes` keeps the roots whose `Note.Preview`
   equals it plus their replies — a saved preview/pair, a pair link, CLI
-  `--preview` and MCP preview reads included. Only a pull request's set
-  (source `refs/gg/pr/<n>`) is exempt: its local notes carry no portable
-  name. A note that must show in a preview has to be WRITTEN in it (test
-  fixtures stamp `Preview`); address reads (`--rev`, `NotesAt`) stay whole.
+  `--preview` and MCP preview reads included. A pull request's set (source
+  `refs/gg/pr/<n>`) is no exception since 2026-10-08 (user ruling: a PR
+  shows only what was written for it): its notes and reviews record
+  `<base>...refs/gg/pr/<n>`, and `PreviewNoteSet.owns` matches a PR set BY
+  NUMBER (`PRScopeNumber`) — the base half moves with the PR's target (the
+  TUI/web build the set over the target branch or the base sha, an agent
+  types `origin/main`). Writers: the TUI note form (`previewNoteSet().Pair()`),
+  the web note add (`pr: n` → `domain.PRNoteScope`, stamped only on the PR's
+  tip), CLI/MCP `--preview`, batches, `ScopeReviewTarget`. `prReviewHeads` keeps
+  only `PreviewReviews` the set owns; carried notes (`forge_carried.go`,
+  `ResolvedNote.Origin`) are gone. Notes written in a PR view before then are
+  plain commit notes and stay on their commit. A note that must show in a
+  preview has to be WRITTEN in it (test fixtures stamp `Preview`); address
+  reads (`--rev`, `NotesAt`) stay whole.
 - View all notes → a review's note (2026-10-02): the TUI's enter on a note
   with `Note.Preview` goes to `openAllNotesReviewNote` (all_notes_scope.go):
   a loading diff layer over the popup, then `ScopeAtCommit` + `PairNotes`
@@ -5680,8 +5690,13 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
 - **Optimistic forge verdict.** `ForgeStatus` trusts the fresh cached
   listing's provider without `Detect` (`forgeOptimistic`); a failing list
   undoes it, sets `forgeDistrust` for the session and runs real detection.
-- **Prefetch** (`PRPrefetch`, singleflight `pr-prefetch`) walks entries by
-  last open, skips unmoved heads, stops while `gateFor(ctx).Queue()` is
+  A listing the CALLER cancelled (ctx done, or `context.Canceled` from the
+  coalesced caller) is indecisive: it neither proves nor undoes the verdict.
+- **Prefetch** (`PRPrefetch`, singleflight `pr-prefetch`) reads every local
+  head with ONE `for-each-ref refs/gg/pr/`, the entry names with a glob
+  (`Store.Numbers`, no JSON read), and `Load`s only listed open PRs whose
+  head moved (a failed ref read: all count as moved), most recently opened
+  first; it fetches through `prFetchOp(…, opened=false)`. It stops while `gateFor(ctx).Queue()` is
   non-empty (a user op holds or waits), runs `FetchPRHead` through
   `Execute` then `PRPreview`. The web runs it via `Server.goBackground`
   (ctx cancelled + waited on in `Close` — a fire-and-forget one wrote into
@@ -5693,6 +5708,23 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   `compareFilesMsg`. Web: `writePRs` answers `cached: true` rows before the
   live listing; `cachedPR` falls back to them (else opening a cached row
   404s); `#pr-fresh` beside `#files-title`.
+- **Open stamps.** Only an open stamps `OpenedAt` (the 50-entry bound and
+  prefetch order are "most recently opened"): `PRFetchOp` (TUI/CLI opens, a
+  send's head fetch), `PullRequest` (details) and `MarkPROpened` (the
+  page's open of an already-fetched PR, which never runs `PRFetchOp`).
+  `PRRevalidate` (heartbeat, send plan) and prefetch do not; an entry never
+  opened keeps a zero stamp and is trimmed first.
+- **Windows rename.** `Store.writeJSON` retries its rename for
+  `filelock.Wait` on `fs.ErrPermission` / `ERROR_SHARING_VIOLATION` (another
+  gg reading the file holds it without `FILE_SHARE_DELETE`); the rename is a
+  `Store` field so tests inject the failure.
+- **`cache_hours = 0`** reads the forge first on every open — a row visible
+  in the list too (spec §2.3/§4.5).
+- **New commits count.** A moved-head reopen counts `PRNewCommits(n, from)`
+  (`rev-list --count <head on screen>..refs/gg/pr/<n>`; `prReland.from`
+  carries the old head into `openPRPreviewCmd`): "PR #7 updated: 2 new
+  commits"; 0 or a failure keeps the countless line. TUI only — the page
+  keeps "updated: new commits on the forge".
 - **Review-pass rules.** Disk writes go through `prcache.Store.Update`
   (load+edit+save under the lock). `persistEntry` never downgrades a fresh
   full disk entry with a listed row, and replaces a disk `ReadAt` that is
@@ -5704,6 +5736,21 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   false. Prefetch fetches run under `prefetchFetchBudget` and
   `yieldToWaiters` (cancelled when anyone queues behind the gate); the TUI
   cancels its prefetch on `reRoot`, a newer list and quit.
+
+### Reviewing a root commit (2026-10-08)
+
+- `model.DiffSpec.Root`: `Rev` is a root commit; `git.diffRevs` diffs
+  `<empty tree> <Rev>` (`emptyTree[ObjectFormat]`, sha1 + sha256). A bare
+  `git diff <sha>` compares the WORKING TREE — never use it for a commit's
+  own change. `domain.OwnChange(rev)` = `rev^..rev`, or `(rev, {Root})` when
+  `rev^` does not resolve; CLI positional, branch no-base fallback,
+  `CommitReviewTarget` and the TUI's `reviewTargetForCommit` use it.
+- A shallow clone's boundary commit looks parentless (`rev^` fails, `%P`
+  empty) but its raw object names a parent: `diffRevs` reads `cat-file
+  commit` and refuses ("fetch more history"), or the diff is the whole tree.
+- Deferred: `domain.EmptyTreeSHA1` (hunks.go `HunkDiffSpec`, `review save
+  --dry-run`) is SHA-1 only; the singleflight keys in query_cli.go ignore
+  `Root` (no Root spec reaches them yet); `<range>` is a bare sha for a root.
 
 ### Review links: follow-ups (2026-10-08)
 
@@ -5848,30 +5895,43 @@ colour.
 edit stamps use. `NoteReply` accepts a forge parent; edit/remove of a
 `forge:` id stay `ErrReadOnlyNote`.
 
-**Carried notes** (§1.4): `carriedNotes(set)` — only for a PR set — finds
-stored roots on other commits / working trees whose path the PR changes and
-whose `ContextHash` is found at the head; memory-cached per tip:base:notesGen
-(never on disk — R3); `Origin` = short sha or "working tree". Badges
-(`PreviewNoteCounts`) do not count them (plan 3 decides).
+**Carried notes** (§1.4) were REMOVED 2026-10-08 (user ruling: a PR shows
+only what was written for it — see the note-scope paragraph above: `owns`,
+`PRScopeNumber`).
 
-**Pending sends** (§3.7): `stateBaseDir("pending-sends")/<repoKey>.toml`,
-lock `<file>.lock` (+ a 5 s ErrHeld retry); expiry on every
-read-modify-write (pending > 24 h → expired; finished > 24 h → dropped).
-GOTCHA: go-toml/v2 drops a SET `time.Time` under `omitempty` — `Done` has no
-toml omitempty. CLI: inside a session (`GG_INBOX`) every write verb queues
-and long-polls (exit 0 sent, 1 rejected/failed/cancelled/expired, 3 still
-pending); `approve`/`reject` are refused there. `PRSendRequest.Event` carries
-the agent's `--event`. An approve the user could not answer (no terminal:
-`needsDecisionError` unwraps to `engine.ErrDecisionRequired`; `--yes` into a
-pending review: `errJoinNeedsConfirm`) leaves the entry pending.
+**Agents never send** (user ruling 2026-10-08, plan 4 — the pending-send
+queue of §3.7 was REMOVED). Inside any session gg started (`$GG_INBOX` set:
+agent consoles and gg terminal tabs alike) `gg pr send`, `reply --send`,
+`resolve` and `unresolve` refuse (`errAgentSend`, exit 1); outside one they
+run only when `sendTerminal(stdin)` — the reader handed to `cli.Run` IS
+`os.Stdin` and a terminal — and the confirm is asked there (no `--yes`, no
+`--event`; tests swap `sendTerminal`). gg cannot tell a human at a terminal
+from an agent that fakes one, nor stop an agent running `gh` itself or
+calling gg web's loopback API; what it guarantees is that no gg tool, flag
+or skill gives an agent a send. A leftover `pending-sends/<key>.toml` in the
+state dir is ignored. **An emptied body** (2026-10-08): `PRSendRequest.BodySet`
+= the user answered the body box (the TUI/web prompt; the CLI's `--body`
+given at all), so an AI review's emptied body posts none — no fallback to
+the stored summary, no trailer, no marker.
 `planSend` routes by `noteKinds`: any draft reply or resolve makes it a
 reply/resolve send, and then any other note is `ErrMixedSend`; an id no
 longer stored is skipped there ("it no longer exists").
 
-**CLI confirm.** The send confirm is interactive only when the reader handed
-to `cli.Run` IS `os.Stdin` and a terminal; `--yes` answers it
-(`defaultAnswer`: the event for a verdict review, `discard`, else `send`) but
-never `submit-with-pending`.
+**CLI confirm.** The send confirm is always asked at the user's terminal
+(see *Agents never send*).
+
+**Follow-ups (2026-10-08, `docs/superpowers/plans/2026-10-08-github-write-followups.md`).**
+`planSend` dedupes `Notes`/`Resolve`/`Unresolve` first (`uniqIDs`, first
+occurrence wins, order kept) and `planActions` resolves a thread once even
+when named by its id and by one of its comment ids. Finish/Discard items
+carry the note's or remark's summary (`interruptedNames`; `Key` stays the
+ledger key) — `Label` reads "<summary> (waiting in the pending review)".
+An answered abort makes `gg pr send` (and `reply --send`, `resolve`,
+`unresolve`, which share `runPRSend`) exit 1: `err == nil && !res.Changed`,
+rebase.go's signal. Note placement reads file text through
+`Service.shaFile` — cached per `<40-hex sha>:<path>` (immutable), read
+through for `HEAD`, `<sha>^` or a branch — so a PR view's badges, groups and
+remark placement stop re-running `git show` on every comment change.
 
 ### Review links to files and remarks (2026-10-07)
 
@@ -5898,25 +5958,19 @@ Spec `docs/superpowers/specs/2026-10-07-review-links-copy-design.md`, plan
   `*domain.Resolved`): a name-less local link cannot split repo from path
   by syntax.
 
-(`defaultAnswer`: the request's event for a verdict review, `discard`, else
-`send`) but never `submit-with-pending` — `sendNow` refuses `--yes` into a
-pending review, and approve / request-changes on the viewer's own PR, before
-the op runs.
 
 ### Sending to GitHub from the TUI (plan 3, `docs/superpowers/plans/2026-10-07-github-write-3-tui.md`)
 
 **One entry.** Every TUI send — a note, a group, a verdict, a reply, a
-resolve, an agent's queued request, finish/discard — goes through
-`Model.forgeSendCmd(req, pendingID)`: `domain.PRSendOp` runs in a `tea.Cmd`
-(it reads under the repo gate, which is not re-entrant), its
-`forgeSendReadyMsg` arms `m.forgeSend` (plan, PR, pending id, the asked
-event) and `startOp` runs the op. A plan error is said and nothing starts (a
-queued request stays waiting). `opDecisionMsg` for `forge.send` while
-`m.forgeSend` is set swaps the engine's English prompt for
-`sendConfirmText(plan)` (translated; 6 body lines, 12 item rows, "+ N more")
-and preselects the asked event. `opFinishedMsg` consumes `m.forgeSend`
-(`forgeSendFinished`: the pending outcome via `domain.PendingOutcome`, a PR
-refresh, a badge recount); `SendToForge` maps to `srcNotes`. Skip reasons are
+resolve, finish/discard — goes through `Model.forgeSendCmd(req)`:
+`domain.PRSendOp` runs in a `tea.Cmd` (it reads under the repo gate, which
+is not re-entrant), its `forgeSendReadyMsg` arms `m.forgeSend` (plan, PR)
+and `startOp` runs the op. A plan error is said and nothing starts.
+`opDecisionMsg` for `forge.send` while `m.forgeSend` is set swaps the
+engine's English prompt for `sendConfirmText(plan)` (translated; 6 body
+lines, 12 item rows, "+ N more"); nothing is preselected. `opFinishedMsg`
+consumes `m.forgeSend` (`forgeSendFinished`: a PR refresh, a badge recount,
+the interrupted-send re-ask); `SendToForge` maps to `srcNotes`. Skip reasons are
 `domain.Skip*` codes; `SendItem.Summary` / `SendSkip.Path/Line/Summary` let
 the TUI word every row (`TestEverySkipReasonHasItsOwnWords` runs in `ja`:
 in English the fallback reads the same).
@@ -5924,32 +5978,131 @@ in English the fallback reads the same).
 **Where marks show (T3).** `diffView.forgePR` is stamped from
 `openPRNumber()` when notes arrive (`notesLoadedMsg`, `stackNotesMsg`);
 `prOfDiff()` is it while still the open PR. Inside: every root's sync mark
-and its group bar (`groupSlot` = FNV-1a % 6 + 1, pinned by a test; the bar
+and its group bar (`domain.GroupSlot` = FNV-1a % 6 + 1, pinned by a test; the bar
 is the box's left frame column). Outside: only `◌` / `○!`. GitHub threads are
 replyable/resolvable only inside (`replyableNoteTargets(ts, inPR)`).
 
-**PR reviews in the diff (T1).** `domain.prReviewHeads(set)`: commit/branch
-reviews whose tip is one of the PR's commits, plus `NoteCounts.PreviewReviews`
-of scopes ending `...refs/gg/pr/<n>` (a preview review is never in
-`Reviews`). `prReviewNotes` places unsent remarks with `remarkPlace` (shared
-with the send planner) — cached per tip:base:notesGen like carried notes.
+**PR reviews in the diff (T1).** `domain.prReviewHeads(set)`: the
+`NoteCounts.PreviewReviews` whose scope the set owns (`<base>...refs/gg/pr/<n>`
+by PR number; since 2026-10-08 a review of a PR's COMMIT is not the PR's). A
+PR set has no preview Reviews block (`PreviewReviews` returns nil for it): its
+reviews are drawn as remarks and offered as send groups. `prReviewNotes`
+places unsent remarks with `remarkPlace` (shared with the send planner) —
+cached per PR:tip:base:notesGen (two PRs may share a head and a base).
 `PreviewNotesFor/At` build the extras in a FRESH slice (`prExtras`): the
-carried and remark slices are cached instances. Counts include carried
-notes and drawn remarks (T2); `PreviewNoteGroups` feeds the badge bars.
+remark slice is a cached instance. Counts include drawn remarks (T2);
+`PreviewNoteGroups` feeds the badge bars.
 
-**Notice sources.** Pending sends (`pending_sends.go`) and interrupted sends
-(`interrupted_sends.go`) are re-derived in `rebuildNotices`, never appended
-raw; their actions are `sourced` (close the dialog, never dismiss — the queue
-or the next refresh decides). The queue file (`PendingSendsPath`) is watched
-with `filewatch` (not under Headless) and stat-polled every 2 s on the
-heartbeat; `noticeGen` drops a read from the previous repo; `closePendingWatch`
-runs on `reRoot` and quit. Tests feed one round of messages (`feedOnce`):
-`drainCmd` would chase the self-re-arming blink tick for 30 s. Interrupted
-sends are asked after each successful `PRRevalidate` (`PRInterrupted` needs
-the cached PR).
+**Notice source.** Interrupted sends (`interrupted_sends.go`) are re-derived
+in `rebuildNotices`, never appended raw; their actions are `sourced` (close
+the dialog, never dismiss — the next refresh decides). (Plan 3's pending-send
+notices were removed in plan 4: agents never send.) Tests feed one round of
+messages (`feedOnce`): `drainCmd` would chase the self-re-arming blink tick
+for 30 s. Interrupted sends are asked after each successful `PRRevalidate`
+(`PRInterrupted` needs the cached PR).
 
 **Freshness.** `prUpdated` holds the PR number whose last refresh found new
 comments or commits; `prSeen` makes the open's own first read never count.
+A changing send of mine (`err == nil && res.Changed`) arms `prOwnSend` with
+`prOwnSendSeq` = the last started read (`prReadSeq`, bumped by every
+`prRefreshCmd`, carried as `prRevalidatedMsg.seq`); the first read that
+started after it absorbs the change. A post-send read dropped because one
+was running is queued in `prRefreshAgain` and asked when that one lands.
+`reRoot` resets prSeen/prUpdated/prOwnSend/prRefreshAgain/prOfflineSince/
+prRefreshing (`closeFilesView` does not: the moved-head reopen runs through
+it after setting "updated").
+
+**Answers after `R`, kept bodies, bars.** `forgeGen` (bumped by `reRoot`
+only; `prsGen` cannot serve, every PR-list read bumps it) rides in
+`prRevalidatedMsg` (the open PR's refresh), `forgeSendReadyMsg`,
+`sendGroupsMsg`, `sendBodyMsg` and `noteMutatedMsg.sendGen` (Reply & send);
+a stale one is dropped silently and touches nothing — `reRoot` itself frees
+the read slot (`prRevalidateInflight`/`prCommentsInflight`) and forgets
+`prReland`/`prRevalidateSkip`. `prRefreshAgain` is consumed by the read of
+that PR that lands, re-asked only while the PR is open. ctrl+s in the body
+popup stores `keptSendBody{pr, group, verdict, text}`; the next Send
+review…/Verdict… of the same PR and group starts from it (over an AI
+review's stored summary); only a send FROM THAT BOX (`forgeSendState.req`,
+`(*keptSendBody).from`: `BodySet`, same PR and box) with
+`err == nil && res.Changed` drops it, and only such a failed send says "the
+text you typed is kept"; `reRoot` drops it too. `resolvePreviewCmd`
+fills `msg.groups` (`PreviewNoteGroups`) — the same-tag re-resolve a note
+edit causes assigns them, and a nil there used to wipe a PR's bars. Repeated
+chooser labels get `" (2)"`… (`i18n.T("%s (%d)")`); skip reasons are whole
+formats (`"%s (skipped: …)"`), the resolve suffix `"%s · resolved after
+sending"`.
+
+
+### Sending to GitHub from gg web (plan 4, `docs/superpowers/plans/2026-10-08-github-write-4-web.md`)
+
+**One route.** `POST /api/pr/send?n=<n>` (`internal/web/prsend.go`, write
+guarded) takes `{kind, ids, group, body, body_set}` — kinds `notes`,
+`group`, `verdict`, `resolve`, `unresolve`, `finish`, `discard`. Every id is
+checked against `PRNotes(n)` (notes: local roots, remark roots, draft
+replies; threads: GitHub roots), a group against `PRSendGroups`, the body is
+capped at 64 KiB; then `PRSendOp` is built IN THE HANDLER (outside the gate,
+R12) after an `opInFlight` check, and run with `startRun`. The 202 answer
+carries `plan`: `planWire(op.Plan)` — target, mode, verdict, own_pr,
+has_pending, the body text, item labels, skips with reasons; never a sha, a
+node id or a local key (`TestWebSendsOneNoteBehindTheConfirm`). The run's
+extra `notes_changed` makes `runOpStream` emit `notes` after finish (emits
+are dropped while a run is in flight). `GET /api/pr/send/groups` lists Send
+review's groups with their slot and an AI review's summary (the body
+prefill).
+
+**The confirm (W4).** `prsend.js`'s `sendToGitHub` keeps `resp.plan` on
+`state.op.sendPlan`; `handleOpEvent` dresses a `forge.send` decision with
+`sendDecision` (`sendplan.js`, pure: 30 items then "+ N more", skips with
+reasons, option labels) and `showModal` paints `ev.html` + `ev.labels` —
+the buttons still post the option values; esc still answers `abort`.
+
+**Marks and colours.** `domain.GroupSlot` is the one colour function (moved
+from the TUI); `WireNote.GroupSlot` (`group_slot`) is set by
+`ToWireNoteRendered` only, so agents' JSON is unchanged; `/api/pr/notes`
+answers `groups` (path → slots, `PreviewNoteGroups`). `notebox.js`'s
+`noteMark(n, inPR)` (inPR = the diff ctx is a PR's own); the border classes
+`.notebox.g1..g6` use `--note-group-1..6`, equal to `theme.Dark`'s
+(`TestWebGroupColoursAreTheDarkTheme`). Badge stripes: `noteBadgeHTML(n,
+slots)` from `state.previewGroups`.
+
+**Menus.** `menus.js` gained the `note` and `pr` menu keys; `files.js`'s
+note menu calls `extraRows("note", {n, rootId, ctx})`; `prsendrows.js`
+(pure) mirrors the TUI's `forgeNoteRows`. The group pick of Send review…
+opens at the last right-click (a capture-phase listener: `showCtxMenu` rows
+get no event). A refused send keeps the typed body for the next try.
+
+**Freshness and interrupted sends.** `prfresh.js`'s `nextFresh` is the
+TUI's prSeen/prUpdated machine plus an `ownSend` flag (a send's own change
+is never "updated"). Both refresh answers carry `interrupted: {count,
+joined}` (`addInterrupted`: `PRInterrupted`, cache only); `prs.js` mounts
+the `#pr-interrupted` bar under `#compare-bar` (Finish sending; Discard
+unless joined), hidden when the compare bar hides (a MutationObserver).
+
+**Follow-ups (2026-10-08).** Statuses of `POST /api/pr/send`: 400 a request
+fault (`badSend` wraps `errBadSend`, the words unchanged), 409 busy / head
+moved (`code: head_moved`) / an interrupted pending review, 422 a lookup the
+request cannot fix (the PR's diff not fetched) or a planning refusal, 502
+the forge CLI unavailable (`ErrForgeUnavailable`, from the lookup or the
+planning alike), 504 the forge out of budget. A `gh` call that fails at run
+time (network down, rate limit) has no sentinel and answers 422 — the handler plans under `prSendBudget` (2 min,
+a backstop: each gh call has its own 30 s timeout, and a big PR's
+local anchoring must not be cut; a var so tests shorten it). **Hosted TUI:** the page's `opInFlight`
+sees only the page's own ops; a send while the hosting TUI runs one waits on
+the repo gate inside that budget (→ 504) — there is no busy hook through
+`WebHost`. **Own send:** `prs.js` numbers every comments read and
+revalidate as it starts (`readSeq`); a finished send arms `nextFresh` only
+when its done event says `ok && changed` (an abort answers `ok` with
+`changed: false`), with the last started read's seq; the first read that
+started after it absorbs the change, changed or not; a read that was
+already running does not absorb it (it still shows "updated" when it
+reports a change). Reads run one at a time: `serialReads` (prfresh.js) over
+`runOnce("pr-comments")` carries the comments refresh AND `revalidate`; a
+read asked while one runs waits for it (`soon(key, fn)`: one per key, the
+newest wins, no give-up timer — `refreshAfterSend`, `revalidate`), and a
+moved head is followed outside the gate. `sentEvent` arms the absorb.
+Kept bodies (`prkept.js`): Send review… per group, Verdict… as group
+`"verdict"`; only a changing send from the same PR and box clears them
+(done hooks get the request body).
 
 ### Fast worktree switch — worktree view slots (`internal/tui/worktree_view.go`, 2026-10-08)
 

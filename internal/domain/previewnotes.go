@@ -50,16 +50,21 @@ type PreviewNoteSet struct {
 	Only string
 }
 
-// scope is the review whose notes the set shows: a scope shows the notes
-// written IN it (Note.Preview) and no others — not a plain note on one of its
-// commits, which is the commit's, and not another review's. "" = no such
-// filter: a pull request's set, whose local notes are written against gg's
-// private ref and carry no portable name.
-func (set PreviewNoteSet) scope() string {
-	if _, pr := git.ParsePRRef(set.Source); pr {
-		return ""
+// scope is the review whose notes the set shows (Note.Preview): a scope
+// shows the notes written IN it and no others — not a plain note on one of
+// its commits, which is the commit's, and not another review's. A pull
+// request's set is no exception (spec 2026-10-08): its notes record
+// "<base>...refs/gg/pr/<n>" and owns matches them by number.
+func (set PreviewNoteSet) scope() string { return set.Pair() }
+
+// owns reports whether a root note written in preview belongs to this set:
+// a pull request's by its number (the base half moves), any other by name.
+func (set PreviewNoteSet) owns(preview string) bool {
+	if n, ok := git.ParsePRRef(set.Source); ok {
+		m, ok := PRScopeNumber(preview)
+		return ok && m == n
 	}
-	return set.Pair()
+	return preview == set.scope()
 }
 
 // OK reports whether the pair resolved to a previewable range.
@@ -238,7 +243,7 @@ func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path
 	if sc := set.scope(); sc != "" {
 		ofReview = map[string]bool{}
 		for _, n := range all {
-			if !n.IsReply() && n.Preview == sc {
+			if !n.IsReply() && set.owns(n.Preview) {
 				ofReview[n.ID] = true
 			}
 		}
@@ -334,7 +339,7 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 		return extra, nil
 	}
 	var newLines []string
-	if b, ferr := s.ShowFile(ctx, set.Tip, path); ferr == nil {
+	if b, ferr := s.shaFile(ctx, set.Tip, path); ferr == nil {
 		newLines = splitLines(b)
 	}
 	// newLines stays nil when the path is gone from the tip: resolveOne then
@@ -344,11 +349,10 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 }
 
 // prExtras is what a path's notes gain beyond the store's own, in a FRESH
-// slice (the carried and remark slices are cached instances): a PR's carried
-// notes (§1.4), its AI reviews' remarks (plan 3, T1), then the forge's threads.
+// slice (the remark slice is a cached instance): a PR's AI reviews' remarks
+// (plan 3, T1), then the forge's threads.
 func (s *Service) prExtras(ctx context.Context, set PreviewNoteSet, path string, forge []ResolvedNote) []ResolvedNote {
 	var out []ResolvedNote
-	out = append(out, s.carriedNotes(ctx, set)[path]...)
 	out = append(out, s.prReviewNotes(ctx, set)[path]...)
 	return append(out, forge...)
 }
@@ -387,7 +391,7 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 	out := make(map[string][]ResolvedNote, len(paths))
 	for _, p := range paths {
 		var newLines []string
-		if b, ferr := s.ShowFile(ctx, set.Tip, p); ferr == nil {
+		if b, ferr := s.shaFile(ctx, set.Tip, p); ferr == nil {
 			newLines = splitLines(b)
 		}
 		// newLines nil (the path is gone from the tip) → resolveOne reports
@@ -395,9 +399,6 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 		if got := keepResolved(resolveNotes(byPath[p], nil, newLines)); len(got) > 0 {
 			out[p] = got
 		}
-	}
-	for p, rs := range s.carriedNotes(ctx, set) { // a PR's view carries identical lines (§1.4)
-		out[p] = append(out[p], rs...)
 	}
 	for p, rs := range s.prReviewNotes(ctx, set) { // its AI reviews' remarks (plan 3, T1)
 		out[p] = append(out[p], rs...)
@@ -446,16 +447,12 @@ type previewCountEntry struct {
 func (s *Service) PreviewNoteCounts(ctx context.Context, set PreviewNoteSet) (map[string]int, int, error) {
 	byPath, total, err := s.previewStoreCounts(ctx, set)
 	fp, ft := s.forgeNoteCounts(ctx, set)
-	// A PR's view also counts its carried notes and its AI reviews' drawn
-	// remarks (plan 3, T2): the }/{ steps read these counts, and a box the
-	// view shows must never sit in a file they skip.
+	// A PR's view also counts its AI reviews' drawn remarks (plan 3, T2):
+	// the }/{ steps read these counts, and a box the view shows must never
+	// sit in a file they skip.
 	extra := map[string]int{}
 	et := 0
 	if err == nil {
-		for p, rs := range s.carriedNotes(ctx, set) {
-			extra[p] += len(rs)
-			et += len(rs)
-		}
 		for p, rs := range s.prReviewNotes(ctx, set) {
 			extra[p] += len(rs)
 			et += len(rs)

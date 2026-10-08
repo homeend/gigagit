@@ -359,6 +359,7 @@ async function openScopeRange(commit, scope, still) {
   if (!c || !c.pair || c.pair.a !== d.a || c.pair.b !== d.b) return null; // superseded
   c.pair.scope = scope; // the review under its own name (pairNoteCtx)
   state.previewCounts = null; // the landing's counts were read under the pair's name
+  state.previewGroups = null;
   loadPairCounts();
   $("files-title").textContent = "Range review: " + d.label;
   return d;

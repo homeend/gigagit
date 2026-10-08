@@ -102,6 +102,14 @@ func (s *Service) persistPR(ctx context.Context, n int, edit func(e *prcache.Ent
 	_ = st.Update(n, edit) // load+edit+save under the lock: no lost update
 }
 
+// MarkPROpened stamps PR n's cache entry as just opened — for an open that
+// does not run PRFetchOp (the page opens an already-fetched PR straight from
+// its local head). The disk cache keeps the most recently opened PRs.
+func (s *Service) MarkPROpened(ctx context.Context, n int) {
+	now := s.forgeClock()
+	s.persistPR(ctx, n, func(e *prcache.Entry) { e.OpenedAt = now })
+}
+
 // cachedListing is the fresh cached open-PR listing.
 func (s *Service) cachedListing(ctx context.Context) (prcache.List, bool) {
 	st := s.prCacheStore(ctx)

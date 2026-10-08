@@ -29,8 +29,9 @@ type noteMutatedMsg struct {
 	err        error
 	clearMarks bool
 	// Reply & send (plan 3): send this saved draft to PR sendPR.
-	sendPR int
-	sendID string
+	sendPR  int
+	sendID  string
+	sendGen int // m.forgeGen when the reply was written: a repo switch drops the send
 }
 
 // diffNoteAddress is the address notes hang off for the open diff. It is the
@@ -417,7 +418,7 @@ func (m Model) toggleThreadResolved() (Model, tea.Cmd) {
 	}
 	nm, cmd := m.withNoteTargetIn(ts, func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
 		if t.forge { // a GitHub thread inside a PR's diff: resolved on GitHub (spec §3.5)
-			return m.forgeSendCmd(threadActionRequest(m.prOfDiff(), t), "")
+			return m.forgeSendCmd(threadActionRequest(m.prOfDiff(), t))
 		}
 		svc, root, want, who := m.svc, t.rootID, !t.resolved, m.identity.EffectiveName
 		if svc == nil {

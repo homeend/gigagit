@@ -57,7 +57,7 @@ func TestPRRefreshDrivesCommentsAndFreshness(t *testing.T) {
 	if !strings.Contains(m.View(), "PR #7 · x · refresh") { // the narrow test pane cuts the tail
 		t.Fatal("the freshness mark must be drawn in the files title")
 	}
-	nm, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, pr: model.PullRequest{Number: 7, State: "open"}, commentsChanged: true})
+	nm, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.forgeGen, pr: model.PullRequest{Number: 7, State: "open"}, commentsChanged: true})
 	m2 := nm.(Model)
 	if cmd == nil {
 		t.Fatal("changed comments must schedule a notes/counts reload")
@@ -66,7 +66,7 @@ func TestPRRefreshDrivesCommentsAndFreshness(t *testing.T) {
 		t.Fatalf("after a good refresh: suffix %q, comments %v, revalidate %v", m2.prFreshnessSuffix(), m2.prCommentsInflight, m2.prRevalidateInflight)
 	}
 	m2, _ = m2.prCommentsCmd(false)
-	nm, _ = m2.Update(prRevalidatedMsg{n: 7, gen: m2.prsGen, err: errors.New("offline"), readAt: clock.Now().Add(-3 * time.Hour)})
+	nm, _ = m2.Update(prRevalidatedMsg{n: 7, gen: m2.forgeGen, err: errors.New("offline"), readAt: clock.Now().Add(-3 * time.Hour)})
 	if got := nm.(Model).prFreshnessSuffix(); !strings.Contains(got, "3") {
 		t.Fatalf("offline suffix = %q", got)
 	}
@@ -76,12 +76,12 @@ func TestPRRefreshDrivesCommentsAndFreshness(t *testing.T) {
 func TestPRRefreshAfterARepoSwitchIsDropped(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
-	gen := m.prsGen
-	m.prsGen++ // what a repo switch does
+	gen := m.forgeGen
+	m.forgeGen++ // what a repo switch does (reRoot also frees the read slot)
 	nm, cmd := m.Update(prRevalidatedMsg{n: 7, gen: gen, moved: true, commentsChanged: true, pr: model.PullRequest{Number: 7}})
 	mm := nm.(Model)
-	if cmd != nil || mm.prRevalidateInflight || mm.prCommentsInflight {
-		t.Fatalf("a stale-generation refresh must be dropped and free the flags (cmd=%v)", cmd != nil)
+	if cmd != nil || mm.prUpdated != 0 || mm.prRevalidateSkip != 0 {
+		t.Fatalf("a stale-generation refresh must be dropped (cmd=%v updated=%d)", cmd != nil, mm.prUpdated)
 	}
 }
 
@@ -150,7 +150,7 @@ func TestMovedHeadKeepsTheFileAndDiff(t *testing.T) {
 	runGit(t, dir, "checkout", "-q", "main")
 	runGit(t, dir, "update-ref", "refs/gg/pr/7", "feat/x")
 	m.prRevalidateInflight, m.prCommentsInflight = false, false
-	nm, _ = m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, moved: true, pr: pr})
+	nm, _ = m.Update(prRevalidatedMsg{n: 7, gen: m.forgeGen, moved: true, pr: pr})
 	m = nm.(Model)
 	if r := m.prReland; r == nil || r.path != "b.txt" || !r.diff {
 		t.Fatalf("reland = %+v", m.prReland)
@@ -239,14 +239,14 @@ func TestMovedIsJudgedAgainstTheHeadOnScreen(t *testing.T) {
 		t.Fatal("setup: the open view has no head hash")
 	}
 	pr := model.PullRequest{Number: 7, State: model.PRStateOpen, HeadSHA: strings.Repeat("e", 40)}
-	nm, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, moved: false, pr: pr})
+	nm, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.forgeGen, moved: false, pr: pr})
 	if mm := nm.(Model); cmd == nil || mm.prRevalidateSkip != 7 {
 		t.Fatalf("a forge head unlike the one on screen must re-open (cmd=%v skip=%d)", cmd != nil, mm.prRevalidateSkip)
 	}
 	pr.HeadSHA = shown
 	// A good refresh still asks about interrupted sends (plan 3): "nothing to
 	// do" is no reopen, read off the reopen's own marker.
-	if nm, _ := m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, moved: false, pr: pr}); nm.(Model).prRevalidateSkip != 0 {
+	if nm, _ := m.Update(prRevalidatedMsg{n: 7, gen: m.forgeGen, moved: false, pr: pr}); nm.(Model).prRevalidateSkip != 0 {
 		t.Fatal("the head on screen is the forge's: nothing to do")
 	}
 }

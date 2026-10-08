@@ -179,8 +179,12 @@ func (s *Service) PullRequests(ctx context.Context) ([]model.PullRequest, error)
 		return nil, err
 	}
 	v, err := s.flight.Do("forge-prs", func() (any, error) { return s.pullRequests(ctx, p) })
+	// A listing the CALLER gave up on (a closed page, a spent budget — or the
+	// coalesced caller's cancellation) says nothing about the provider: it
+	// neither proves nor undoes the cached verdict.
+	decisive := err == nil || (ctx.Err() == nil && !errors.Is(err, context.Canceled))
 	s.forgeMu.Lock()
-	optimistic := s.forgeOptimistic && s.forgeActive == p
+	optimistic := decisive && s.forgeOptimistic && s.forgeActive == p
 	if optimistic {
 		s.forgeOptimistic = false // a list either proved the provider or undoes it
 	}
@@ -293,8 +297,8 @@ func (s *Service) PullRequest(ctx context.Context, n int) (model.PullRequest, er
 		return model.PullRequest{}, err
 	}
 	// A full read (it carries the body) feeds the cache: the details view is
-	// served from it the next time, before the forge answers.
-	s.rememberPR(ctx, pr, true)
+	// served from it the next time, before the forge answers. It is an open.
+	s.rememberPR(ctx, pr, true, true)
 	return pr, nil
 }
 
@@ -349,6 +353,12 @@ func bucketComments(cs []model.ForgeComment, truncated bool) PRComments {
 // user's own transport and credentials — and only falls back to the
 // provider's URL when no remote matches.
 func (s *Service) PRFetchOp(ctx context.Context, n int) (engine.FetchPRHead, error) {
+	return s.prFetchOp(ctx, n, true)
+}
+
+// prFetchOp is PRFetchOp; opened says whether a user opens the PR (prefetch
+// warms it without counting as an open).
+func (s *Service) prFetchOp(ctx context.Context, n int, opened bool) (engine.FetchPRHead, error) {
 	p, err := s.provider(ctx)
 	if err != nil {
 		return engine.FetchPRHead{}, err
@@ -356,7 +366,7 @@ func (s *Service) PRFetchOp(ctx context.Context, n int) (engine.FetchPRHead, err
 	// Both answers come from the cache when it has them: the listing already
 	// carried this PR's head, and the base repository does not change. A head
 	// that moved since is PRRevalidate's job, off the user's click path.
-	pr, err := s.cachedPR(ctx, p, n)
+	pr, err := s.cachedPR(ctx, p, n, opened)
 	if err != nil {
 		return engine.FetchPRHead{}, err
 	}
@@ -377,6 +387,21 @@ func (s *Service) PRFetchOp(ctx context.Context, n int) (engine.FetchPRHead, err
 		return engine.FetchPRHead{}, fmt.Errorf("pull request #%d: no remote or URL for the base repository", n)
 	}
 	return engine.FetchPRHead{Remote: remote, Refspec: p.HeadRefspec(n), Number: n, HeadSHA: pr.HeadSHA}, nil
+}
+
+// PRNewCommits counts the commits PR n's local head has that from — the
+// head a view showed before the PR moved — has not ("2 new commits"). A
+// force-push counts every commit not in the old head. 0 when from is not a
+// full sha or git cannot answer: the caller then says "new commits" alone.
+func (s *Service) PRNewCommits(ctx context.Context, n int, from string) int {
+	if !isFullSHA(from) {
+		return 0
+	}
+	c, err := s.repo.CountRange(ctx, from, git.PRRef(n))
+	if err != nil {
+		return 0
+	}
+	return c
 }
 
 // PRForgetOp builds the op that drops PR n's ref, and forgets n for this

@@ -59,7 +59,8 @@ guards against removing the worktree you are standing in.
   tree plus `?review=<id>`.
   There is no report file. Flags must precede the positional (like `gg log
   -n`). No positional reviews the current branch's work; a single `<rev>`
-  reviews just that commit's own change (`rev^..rev`); an `A..B` positional
+  reviews just that commit's own change (`rev^..rev`; a repository's first
+  commit: everything it adds); an `A..B` positional
   is used as a range; `--working` reviews uncommitted changes. `--tool`
   picks among configured `review` commands when more than one is set up.
   `--model <m>` runs the tool on that model: gg adds the agent's own flag
@@ -834,28 +835,22 @@ finds the right one here.
   `gg diff <target>...refs/gg/pr/<n>`. Fork PRs work. `gg pr forget <n>`
   deletes that ref and drops a closed row.
   `gg pr comments` prefixes each thread root with `[<thread id>]`.
-- `gg pr notes <n> [--json]` — what the PR's view holds: local notes (with
-  `(from <origin>)` when carried from another commit or the working tree),
-  GitHub threads, draft replies; the ids `gg pr send --note` takes.
-- **Sending to GitHub — you QUEUE, the user approves.** Inside a gg session
-  (`$GG_INBOX` set) `gg pr send <n> --note <id>…|--review <id>|--mine|--verdict
-  [--event comment|approve|request-changes] [--body <text>]`, `gg pr reply <n>
-  <thread> <text> --send` and `gg pr resolve|unresolve <n> <thread>` never
-  post: they queue a pending send, print `queued <id>: …` and wait up to 10
-  minutes. Exit 0 = sent (the summary on stdout); 1 = rejected, failed,
-  cancelled or expired (the reason on stderr); 3 = still pending — resume
-  with `gg pr pending wait <id>`, or `gg pr pending cancel <id>`. `--yes` is
-  ignored in a session; never ask the user to run `approve` for you unless
-  they want to. Your `--event` travels with the queued send (the user sees
-  `asks: approve`); never ask for approve / request-changes on a PR the user
-  opened (GitHub refuses it); `--event` needs `--review`, `--mine` or
-  `--verdict`. With `--review`, `--body` replaces the review's summary as the
-  GitHub review body. The user approves a queued send in gg's terminal UI too
-  (the `!` notice centre), with your `--event` preselected. Send draft
-  replies (`gg pr reply`) on their own, never mixed with new notes in one
-  `--note` list. `gg pr reply <n>
-  <thread> <text>` without `--send` only writes a local draft. Your notes
-  posted this way end with `— <agent> via gg`.
+- `gg pr notes <n> [--json]` — what the PR's view holds: the local notes
+  written for it, GitHub threads, draft replies; the ids `gg pr send --note`
+  takes. A note or review FOR a pull request is written with `--preview
+  <base>...refs/gg/pr/<n>` (after `gg pr fetch <n>`); it shows only in that
+  PR's view, and a note on a PR's commit written any other way does not.
+- **Sending to GitHub is the user's, never yours.** You cannot send
+  anything to GitHub: inside any gg session `gg pr send`, `gg pr reply
+  --send` and `gg pr resolve|unresolve` refuse ("agents can't send to
+  GitHub"), and outside one they post only after a human answers the confirm
+  at a terminal (there is no `--yes`). Write your findings as local notes
+  (`gg note add`) or a stored review (`gg review save`), and draft replies to
+  GitHub threads with `gg pr reply <n> <thread> <text>` (no `--send`: a local
+  draft). Then tell the user what is ready; they send it from gg's PR view,
+  gg web, or their own terminal. Your notes posted that way end with
+  `— <agent> via gg`. Never run `gh` to post comments, reviews or resolves
+  yourself.
 - `gg versions [<branch>]` — list a branch's recorded pre-operation
   snapshots (taken automatically before merges, rebases, resets, amends,
   and branch deletion), newest first: `<id> <short-sha> <time> <subject>`.

@@ -304,7 +304,7 @@ func (s *Service) worktreeLines(ctx context.Context, worktree, path string) []st
 
 // revLines is path's text at rev split into lines; nil when rev lacks it.
 func (s *Service) revLines(ctx context.Context, rev, path string) []string {
-	b, err := s.ShowFile(ctx, rev, path)
+	b, err := s.shaFile(ctx, rev, path)
 	if err != nil {
 		return nil
 	}
