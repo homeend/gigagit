@@ -254,3 +254,21 @@ func TestPRLinkAnswerFromALeftRepoIsDropped(t *testing.T) {
 		t.Fatalf("a stale answer copied %q (status %q)", copied, nm.(Model).statusMsg)
 	}
 }
+
+// B5: a file-less link to an unlisted PR keeps the notice that says why it
+// opened as a merge preview (steerNotice used to overwrite it) — whether
+// the TUI started at it or an agent moved the focus.
+func TestAFileLessUnlistedPRLinkKeepsItsNotice(t *testing.T) {
+	t.Parallel()
+	for _, c := range []steer.Command{
+		{Cmd: "navigate", Target: &steer.Target{State: "preview", Source: "refs/gg/pr/7", Target: "main"}},
+		{ID: "pr-5", Cmd: "navigate", Target: &steer.Target{State: "preview", Source: "refs/gg/pr/7", Target: "main"}, Wait: true},
+	} {
+		m, _ := prLinkSteerModel(t)
+		m.prs = nil
+		m, _ = m.applySteer(c)
+		if !strings.Contains(m.statusMsg, "PR #7 is not in the pull request list here") {
+			t.Errorf("start-at=%v: status = %q", startAtOrigin(c), m.statusMsg)
+		}
+	}
+}
