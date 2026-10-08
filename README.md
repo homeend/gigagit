@@ -528,7 +528,8 @@ gg pr send 123 --finish | --discard       # an interrupted send left a pending r
 
 Every send shows one confirm — the target, every comment that will be
 posted and every note that is skipped, with why — and you answer it at your
-terminal (there is no `--yes`). A review is all or nothing. Once a note is
+terminal (there is no `--yes`); answering abort posts nothing and exits 1.
+A review is all or nothing. Once a note is
 on GitHub, gg deletes the local copy — GitHub owns it from then on.
 AI-written comments end with `— <agent> via gg`.
 
