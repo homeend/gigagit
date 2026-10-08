@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -1225,8 +1226,11 @@ func (m Model) worktreeRows(ents []wtEntry) []string {
 		}
 		w := m.worktrees[e.wt]
 		marker := "  "
-		if w.Path == m.currentWorktree {
+		switch filepath.Clean(w.Path) {
+		case m.homeWorktree():
 			marker = "* "
+		case m.viewed:
+			marker = "» " // on screen because a console looks at it
 		}
 		branch := w.Branch
 		if branch == "" {

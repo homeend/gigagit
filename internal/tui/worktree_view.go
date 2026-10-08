@@ -249,3 +249,12 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 	m.statusMsg = i18n.T("switched to %s", shortWorktreeName(m.home))
 	return m, tea.Batch(snapshotTargetCmd(m.svc), m.pendingWatchCmd(m.noticeGen), m.pendingSendsReadCmd(m.noticeGen), m.webRerootCmd())
 }
+
+// homeWorktree is gg's own worktree: home once the slots are seeded, the
+// current worktree before (a test literal, the first load).
+func (m Model) homeWorktree() string {
+	if m.home != "" {
+		return m.home
+	}
+	return filepath.Clean(m.currentWorktree)
+}

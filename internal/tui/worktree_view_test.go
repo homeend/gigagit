@@ -301,3 +301,32 @@ func TestRepoSwitchDropsTheSlots(t *testing.T) {
 		t.Fatalf("views=%v viewed=%q console=%+v", m.views, m.viewed, m.console)
 	}
 }
+
+// A console looking at B does not move the hosted web page; adopting does.
+func TestAdoptViewRerootsTheWebPageLookDoesNot(t *testing.T) {
+	f := installFakeHost(t)
+	m := servingModel(t, f)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, false)
+	if hasWebReroot(drainBatch(m.viewKickCmd())) {
+		t.Fatal("a look must not reroot the page")
+	}
+	m = m.closeConsole()
+	nm, cmd := m.guardedReRoot(other, true)
+	_ = nm
+	if !hasWebReroot(drainBatch(cmd)) {
+		t.Fatal("adopt must reroot the page")
+	}
+}
+
+func hasWebReroot(msgs []tea.Msg) bool {
+	for _, msg := range msgs {
+		if _, ok := msg.(webRerootMsg); ok {
+			return true
+		}
+	}
+	return false
+}

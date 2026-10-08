@@ -627,15 +627,16 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 
 // consoleWorktreeHint is the docked console's worktree path for the status
 // row: shown while the console is unfocused (what alt+a / alt+t leave) or
-// runs in another worktree than gg's own, so which checkout it works in is
-// always in view; "" for a focused console on gg's own worktree.
+// runs in another worktree than gg's OWN (home — the panels follow the
+// console's worktree, so this says which tree gg itself lives in); "" for a
+// focused console on gg's own worktree.
 func (m Model) consoleWorktreeHint() string {
 	sess, ok := m.consoleSession()
 	if !ok {
 		return ""
 	}
 	dir := sess.Info().Dir
-	if m.console.focused && filepath.Clean(dir) == filepath.Clean(m.currentWorktree) {
+	if m.console.focused && filepath.Clean(dir) == m.homeWorktree() {
 		return ""
 	}
 	return dir
@@ -654,12 +655,12 @@ func (m Model) withConsoleWorktree(row string, w int) string {
 	if row != "" {
 		sep = " · "
 	}
-	label := lipgloss.Width(i18n.T("worktree: %s", ""))
+	label := lipgloss.Width(i18n.T("showing: %s", ""))
 	room := max(w-lipgloss.Width(row+sep)-label, min(lipgloss.Width(dir), w/2-lipgloss.Width(sep)-label))
 	if room < 8 {
 		return row
 	}
-	path := i18n.T("worktree: %s", elidePath(dir, room))
+	path := i18n.T("showing: %s", elidePath(dir, room))
 	if row == "" {
 		return path
 	}

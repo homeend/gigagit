@@ -98,3 +98,25 @@ func TestDockedConsoleHidesCommitRowHint(t *testing.T) {
 		t.Fatalf("docked console: Commits row hint = %q, want none", got)
 	}
 }
+
+// The hint names the console's worktree only when it is not gg's OWN
+// (home): while the console views it, the header already shows it.
+func TestConsoleHintIsAboutHomeNotTheView(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, true)
+	if got := m.consoleWorktreeHint(); got != filepath.Clean(other) {
+		t.Fatalf("focused console in another worktree: hint = %q, want its path", got)
+	}
+	if row := statusRowOf(m); !strings.Contains(row, "showing: ") {
+		t.Fatalf("status row %q lacks the showing label", row)
+	}
+	nm, _ := m.guardedReRoot(other, true) // adopt: now it IS gg's own
+	m = nm.(Model)
+	if got := m.consoleWorktreeHint(); got != "" {
+		t.Fatalf("after adopt a focused console on home: hint = %q, want none", got)
+	}
+}
