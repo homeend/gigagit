@@ -2799,6 +2799,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.canOpenPR() {
 				return m.copyPRURL()
 			}
+		case "L":
+			if m.canOpenPR() {
+				return m.copySelectedPRLink()
+			}
 		case "d":
 			switch m.focus {
 			case panelPRs:
@@ -3414,6 +3418,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCommentsMsg:
 		return m.handlePRCommentsMsg(msg)
 
+	case prLinkMsg:
+		return m.handlePRLinkMsg(msg)
 	case prRevalidatedMsg:
 		return m.handlePRRevalidatedMsg(msg)
 
