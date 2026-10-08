@@ -6,7 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-## Branch and tag operations beside a running agent
+## Operations beside a running AI task
+
+### Changed
+
+- **An operation that needs the whole repository is refused, not queued,
+  while a headless AI task runs.** Committing, switching, stashing or
+  `B` (create-and-switch) during an agent's conflict resolution used to
+  sit on "working…" — and freeze every refresh behind it — until the agent
+  finished. The TUI now shows a notice at once ("This operation needs the
+  repository to itself, but an AI agent resolving conflicts is running")
+  with the Headless tab as the place to wait or stop it; `gg web` shows the
+  same refusal as an error line. A short operation (a commit) still queues
+  the next one as before.
 
 ### Fixed
 

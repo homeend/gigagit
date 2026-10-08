@@ -27,6 +27,7 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/repogate"
 	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -3661,6 +3662,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
+			// The repo gate refused the op outright: a headless AI task holds
+			// the repository for its run. Say which, as a notice — the status
+			// line alone reads like a failed op, not a "later".
+			var busy *repogate.BusyError
+			if errors.As(msg.err, &busy) {
+				m.statusMsg = i18n.T("not run: %s is running", busyHolderLabel(busy.Holder))
+				m.modal = m.busyModal(busy)
+			}
 			// A lock failure is recoverable in-app; arm the notice before the
 			// generic health re-read below picks it up. Safe to reach the
 			// refreshHealthAfterOp path from here: every early return between
