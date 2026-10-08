@@ -1226,11 +1226,8 @@ func (m Model) worktreeRows(ents []wtEntry) []string {
 		}
 		w := m.worktrees[e.wt]
 		marker := "  "
-		switch filepath.Clean(w.Path) {
-		case m.homeWorktree():
-			marker = "* "
-		case m.viewed:
-			marker = "» " // on screen because a console looks at it
+		if filepath.Clean(w.Path) == filepath.Clean(m.currentWorktree) {
+			marker = "* " // the worktree the panels show — whichever way it got there
 		}
 		branch := w.Branch
 		if branch == "" {

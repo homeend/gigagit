@@ -6002,9 +6002,8 @@ clears the queue). `dropConsole` (the console stepping aside for a stash
 list / preview / solo) keeps the view on purpose: the user is working in
 that worktree; `»` and the header say so and enter on home's row returns.
 A user switch asked while a console is docked swaps the panels UNDER the
-console (an explicit ask wins), sets `ret.view` to the target, and the hint
-reads `worktree: <path>` (console elsewhere than the panels) instead of
-`showing: <path>` (panels show the console's tree). In-repo agent
+console (an explicit ask wins), sets `ret.view` to the target, and the
+status row then names the console's worktree (`worktree: <path>`). In-repo agent
 tours (`agent_tours_open.go`) swap and park the tour id in
 `consoleSwitch.tour`; the `srcStatus` arrival shows it when `!armed`.
 
@@ -6034,10 +6033,14 @@ the viewed tree, so "checked out elsewhere" is relative to it). Not yet
 routed: `goto_link`'s checkout switch and `steer_switch_ask` still `reRoot`
 (their `startAt*` replay is built around a reload — deferred).
 
-**On screen.** Worktrees rows: `*` = home (`homeWorktree()`), `»` = viewed ≠
-home. `consoleWorktreeHint` judges against HOME (the 2026-10-05 ruling
-"current worktree = gg's own"), labelled `showing: <path>` / `worktree:
-<path>` as above. The alt+a help row gained a second sentence.
+**On screen (user ruling 2026-10-08: looking == switching, so no second
+marker).** Worktrees rows: `*` = the VIEWED worktree (`currentWorktree`),
+home has no marker — it only matters for invisible plumbing (exit dir,
+steering, snapshot, web page). `consoleWorktreeHint` shows the console's
+path only when it differs from the viewed worktree (`worktree: <path>`);
+the 2026-10-05 "unfocused console always shows its path" rule is retired —
+the header names the viewed worktree. The alt+a help row gained a second
+sentence.
 
 **Tests.** `worktree_view_test.go` (slots, switchView, stale read, sleep,
 prune, adopt, repo switch), `console_view_test.go` (show/close, staging

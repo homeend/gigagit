@@ -22,9 +22,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   out of the console and you are there; what you start (diffs, staging, a
   commit, a stash) runs in that worktree. Closing the console (esc, the
   cycle's return stop, `x`) brings your own worktree back with its cursors.
-  The Worktrees panel marks the shown row with `»` (your own keeps `*`), and
-  the status row ends with `showing: <path>` while a console runs outside
-  your own worktree. A worktree removed while shown falls back to your own.
+  The Worktrees panel's `*` follows the shown worktree; the status row names
+  the console's worktree only when the panels show another one (you pressed
+  enter on a row under a docked console). A worktree removed while shown
+  falls back to your own.
 
 ## Review links: the remaining rough edges
 

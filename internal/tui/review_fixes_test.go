@@ -110,8 +110,8 @@ func TestUserSwitchUnderAConsoleSwapsAndLabelsTheHint(t *testing.T) {
 	installSessionManager(t)
 	id := startSessionIn(t, m, other, "Shell")
 	m, _ = m.showConsole(id, false)
-	if row := m.withConsoleWorktree("", 120); !strings.HasPrefix(row, "showing: ") {
-		t.Fatalf("console's worktree on screen: row = %q", row)
+	if row := m.withConsoleWorktree("", 120); row != "" {
+		t.Fatalf("console's worktree on screen: row = %q, want no hint", row)
 	}
 	nm, _ := m.guardedReRoot(m.home, true)
 	m = nm.(Model)

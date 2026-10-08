@@ -631,24 +631,24 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 }
 
 // consoleWorktreeHint is the docked console's worktree path for the status
-// row: shown while the console is unfocused (what alt+a / alt+t leave) or
-// runs in another worktree than gg's OWN (home — the panels follow the
-// console's worktree, so this says which tree gg itself lives in); "" for a
-// focused console on gg's own worktree.
+// row — only when it is NOT the worktree the panels show (the user switched
+// the panels elsewhere under a docked console, or the session runs outside
+// the repository). A console in the viewed worktree needs no reminder: the
+// panels follow it and the header names it.
 func (m Model) consoleWorktreeHint() string {
 	sess, ok := m.consoleSession()
 	if !ok {
 		return ""
 	}
 	dir := sess.Info().Dir
-	if m.console.focused && filepath.Clean(dir) == m.homeWorktree() {
+	if filepath.Clean(dir) == filepath.Clean(m.currentWorktree) {
 		return ""
 	}
 	return dir
 }
 
 // withConsoleWorktree trails the status row with the console's worktree path
-// and fits the whole row to w columns. The path keeps up to half the row:
+// (when it differs from the panels') and fits the whole row to w columns. The path keeps up to half the row:
 // the text before it is cut first, then the path in the middle (its start
 // and its directory name survive); dropped only when not even a stub fits.
 func (m Model) withConsoleWorktree(row string, w int) string {
@@ -660,19 +660,12 @@ func (m Model) withConsoleWorktree(row string, w int) string {
 	if row != "" {
 		sep = " · "
 	}
-	// "showing:" when the panels show the console's worktree; "worktree:"
-	// when the user switched the panels elsewhere under a docked console.
-	// (Two literal calls: the i18n gate wants literal keys.)
-	hint := func(path string) string { return i18n.T("worktree: %s", path) }
-	if filepath.Clean(dir) == m.viewed {
-		hint = func(path string) string { return i18n.T("showing: %s", path) }
-	}
-	label := lipgloss.Width(hint(""))
+	label := lipgloss.Width(i18n.T("worktree: %s", ""))
 	room := max(w-lipgloss.Width(row+sep)-label, min(lipgloss.Width(dir), w/2-lipgloss.Width(sep)-label))
 	if room < 8 {
 		return row
 	}
-	path := hint(elidePath(dir, room))
+	path := i18n.T("worktree: %s", elidePath(dir, room))
 	if row == "" {
 		return path
 	}
