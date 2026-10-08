@@ -77,6 +77,7 @@ func (s *Service) PRSendOp(ctx context.Context, req PRSendRequest) (engine.SendT
 }
 
 func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendPlan, error) {
+	req.Notes, req.Resolve, req.Unresolve = uniqIDs(req.Notes), uniqIDs(req.Resolve), uniqIDs(req.Unresolve)
 	rv, err := s.PRRevalidate(ctx, req.PR) // also settles what earlier sends left
 	if err != nil {
 		return engine.SendPlan{}, err
@@ -100,8 +101,10 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 		if req.Discard {
 			plan.Mode = engine.SendDiscard
 		}
+		names := s.interruptedNames(ctx, keys)
 		for _, k := range keys {
-			plan.Items = append(plan.Items, engine.SendItem{Key: k, Label: k + " (waiting in the pending review)"})
+			plan.Items = append(plan.Items, engine.SendItem{Key: k, Summary: names[k],
+				Label: names[k] + " (waiting in the pending review)"})
 		}
 		return plan, nil
 	}
@@ -129,6 +132,49 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 		return engine.SendPlan{}, fmt.Errorf("%w (%s)", engine.ErrNothingToSend, strings.Join(why, "; "))
 	}
 	return plan, err
+}
+
+// uniqIDs drops repeated ids, keeping each first occurrence in place: a
+// note named twice is one thread.
+func uniqIDs(ids []string) []string {
+	if len(ids) < 2 {
+		return ids
+	}
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// interruptedNames is what each ledger key of an interrupted send says to a
+// person: a note's summary or a remark's summary; the key itself when
+// nothing better is stored. (A summary mark is moved, so PRInterrupted
+// never lists one.)
+func (s *Service) interruptedNames(ctx context.Context, keys []string) map[string]string {
+	out := make(map[string]string, len(keys))
+	byID, _ := s.storedNotes(ctx) // nil on error: every key falls back to itself
+	for _, k := range keys {
+		out[k] = k
+		if rid, fp, ok := parseRemarkKey(k); ok {
+			if r, err := s.Review(ctx, rid); err == nil {
+				for _, d := range r.docRemarks() {
+					if d.fp == fp {
+						out[k] = cutLabel(d.summary)
+					}
+				}
+			}
+			continue
+		}
+		if n, ok := byID[k]; ok && n.Summary != "" {
+			out[k] = cutLabel(n.Summary)
+		}
+	}
+	return out
 }
 
 // prTarget names the PR for the confirm: "owner/repo #n".
@@ -218,11 +264,16 @@ func (s *Service) planActions(ctx context.Context, plan engine.SendPlan, req PRS
 		kind engine.SendKind
 		verb string
 	}{{req.Resolve, engine.SendResolve, "resolve "}, {req.Unresolve, engine.SendUnresolve, "unresolve "}} {
+		done := map[string]bool{}
 		for _, id := range x.ids {
 			th, err := s.threadIDFor(ctx, plan.PR, id)
 			if err != nil {
 				return engine.SendPlan{}, err
 			}
+			if done[th] { // a thread named by its id and by one of its comments
+				continue
+			}
+			done[th] = true
 			plan.Items = append(plan.Items, engine.SendItem{Label: x.verb + th, Kind: x.kind, ThreadID: th})
 		}
 	}
