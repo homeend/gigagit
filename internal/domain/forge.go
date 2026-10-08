@@ -389,6 +389,21 @@ func (s *Service) prFetchOp(ctx context.Context, n int, opened bool) (engine.Fet
 	return engine.FetchPRHead{Remote: remote, Refspec: p.HeadRefspec(n), Number: n, HeadSHA: pr.HeadSHA}, nil
 }
 
+// PRNewCommits counts the commits PR n's local head has that from — the
+// head a view showed before the PR moved — has not ("2 new commits"). A
+// force-push counts every commit not in the old head. 0 when from is not a
+// full sha or git cannot answer: the caller then says "new commits" alone.
+func (s *Service) PRNewCommits(ctx context.Context, n int, from string) int {
+	if !isFullSHA(from) {
+		return 0
+	}
+	c, err := s.repo.CountRange(ctx, from, git.PRRef(n))
+	if err != nil {
+		return 0
+	}
+	return c
+}
+
 // PRForgetOp builds the op that drops PR n's ref, and forgets n for this
 // session so a closed row leaves the list.
 func (s *Service) PRForgetOp(n int) engine.ForgetPR {

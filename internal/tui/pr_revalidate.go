@@ -137,7 +137,7 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 		return m, cmd // unchanged, or the user moved on: the next enter fetches
 	}
 	m.prRevalidateSkip = msg.n
-	r := &prReland{n: msg.n, path: m.previewSelectedPath()}
+	r := &prReland{n: msg.n, path: m.previewSelectedPath(), from: m.previewOpen.srcHash}
 	if v := m.diffLayer(); v != nil {
 		r.diff, r.land = true, v.cursorLineLanding()
 	}
@@ -172,6 +172,7 @@ type prReland struct {
 	path string
 	diff bool
 	land *lineLanding // nil when the diff cursor had no numbered line
+	from string       // the head on screen before the move: the reopen counts the new commits against it
 }
 
 // relandPR consumes the open PR's prReland once its reopened file list is in:

@@ -39,6 +39,7 @@ type previewOpenMsg struct {
 	groups             map[string][]string   // a PR's per-path note groups (the badges' colour bars)
 	heads              []domain.ReviewHead   // the scope's AI reviews: the file list's Reviews block
 	landNote           string                // a review whose row the cursor lands on (back from that review)
+	newCommits         int                   // a moved-head reopen: commits the new head added (0 = unknown)
 	err                error
 }
 
@@ -233,13 +234,25 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 			m.statusMsg = ""
 		}
 		if m.prRevalidateSkip == msg.prNumber {
-			m.statusMsg = i18n.T("PR #%d updated: new commits", msg.prNumber)
+			m.statusMsg = prUpdatedText(msg.prNumber, msg.newCommits)
 		}
 		var rvCmd tea.Cmd
 		m, rvCmd = m.prRevalidateCmd(msg.prNumber)
 		cmd = tea.Batch(cmd, rvCmd)
 	}
 	return m, cmd
+}
+
+// prUpdatedText is the moved-head reopen's notice (spec §2.4): with the
+// count when the reopen could count, else without.
+func prUpdatedText(n, count int) string {
+	switch {
+	case count == 1:
+		return i18n.T("PR #%d updated: 1 new commit", n)
+	case count > 1:
+		return i18n.T("PR #%d updated: %d new commits", n, count)
+	}
+	return i18n.T("PR #%d updated: new commits", n)
 }
 
 // previewStateReason is previewStateNotice's ENGLISH twin. A steer reply is

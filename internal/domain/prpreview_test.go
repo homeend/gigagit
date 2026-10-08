@@ -151,3 +151,22 @@ func TestPRPreviewStates(t *testing.T) {
 		t.Fatalf("merged = %+v, %v", got.Endpoints.Summary, err)
 	}
 }
+
+// Item 7: the commits PR n's head has that the head on screen had not; a
+// force-push counts every commit not in the old head; a non-sha is 0.
+func TestPRNewCommits(t *testing.T) {
+	t.Parallel()
+	dir, head := prPreviewRepo(t)
+	svc, _ := countingService(t, dir)
+	ctx := context.Background()
+	if n := svc.PRNewCommits(ctx, 7, revParse(t, dir, head+"~1")); n != 1 {
+		t.Fatalf("one commit on top = %d", n)
+	}
+	if n := svc.PRNewCommits(ctx, 7, "HEAD"); n != 0 {
+		t.Fatalf("a non-sha counted %d", n)
+	}
+	forcePushPR(t, dir, 7)
+	if n := svc.PRNewCommits(ctx, 7, head); n != 1 {
+		t.Fatalf("after a force-push = %d, want the 1 commit not in the old head", n)
+	}
+}
