@@ -18,7 +18,7 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
-import { nextFresh, sentEvent, serialReads } from "./prfresh.js";
+import { nextFresh, oncePerKey, sentEvent, serialReads } from "./prfresh.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
@@ -219,6 +219,20 @@ new MutationObserver(() => {
   if ($("compare-bar").classList.contains("hidden")) ibar.classList.add("hidden");
 }).observe($("compare-bar"), { attributes: true, attributeFilter: ["class"] });
 
+// followMovedHead fetches PR n's new head and re-opens its diff — if the user
+// is still looking at it. One follow per PR at a time: a waiting read that
+// lands after another already saw the move must not fetch it again (a
+// second fetch is refused red: "another operation is running").
+const followMovedHead = oncePerKey(async (n) => {
+  const po = state.previewOpen;
+  if (!po || po.pr !== n) return; // they moved on; the next open fetches
+  opLine("⟳ " + prLabel(n) + " has new commits — updating…");
+  if (await fetchPR(n)) {
+    const now = state.previewOpen;
+    if (now && now.pr === n) await showPR(n, true);
+  }
+});
+
 // A send refused because the PR moved on GitHub: follow the new head (the
 // diff re-opens on it, if the user is still looking at the PR).
 onHeadMoved((n) => followMovedHead(n));
@@ -287,7 +301,9 @@ async function showPR(n, moved, skipComments) {
 // simply stays without (newer) threads.
 // moved: the view was just re-opened on a moved head — that read is news.
 export function refreshPRComments(n, moved = false) {
-  return reads.run(commentsRead(n, moved));
+  // Queued, never dropped: the read a moved-head reopen asks for may arrive
+  // while another read is still running.
+  reads.soon("comments:" + n, commentsRead(n, moved));
 }
 
 // commentsRead is refreshPRComments's read, for the serial reader.
@@ -364,18 +380,6 @@ function revalidateRead(n) {
     // Followed OUTSIDE the gate: the re-open asks for the comments again.
     if (headMoved(n, rv)) setTimeout(() => followMovedHead(n), 0);
   };
-}
-
-// followMovedHead fetches PR n's new head and re-opens its diff — if the user
-// is still looking at it.
-async function followMovedHead(n) {
-  const po = state.previewOpen;
-  if (!po || po.pr !== n) return; // they moved on; the next open fetches
-  opLine("⟳ " + prLabel(n) + " has new commits — updating…");
-  if (await fetchPR(n)) {
-    const now = state.previewOpen;
-    if (now && now.pr === n) await showPR(n, true);
-  }
 }
 
 // openPR is the row click: serve what is here, then check the forge.

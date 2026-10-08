@@ -171,3 +171,53 @@ func TestPRsFreshnessAndInterruptedAreWired(t *testing.T) {
 		t.Error("prs.js's help still says gg never writes to the forge")
 	}
 }
+
+// B2: a second moved-head follow of the same PR while one runs is skipped;
+// another PR's, or the same PR's after the first ended, runs.
+func TestPRFreshJSOncePerKey(t *testing.T) {
+	t.Parallel()
+	out := runFreshModuleJS(t, `
+import { oncePerKey } from "./prfresh.mjs";
+const ends = [];
+const runs = [];
+const follow = oncePerKey((n) => { runs.push(n); return new Promise((r) => ends.push(r)); });
+const first = follow(7);
+await new Promise((r) => setTimeout(r, 0));
+const dup = follow(7) === null;
+follow(8);
+await new Promise((r) => setTimeout(r, 0));
+ends[0](); await first; await new Promise((r) => setTimeout(r, 0));
+follow(7);
+await new Promise((r) => setTimeout(r, 0));
+console.log(JSON.stringify({ runs, dup }));
+`)
+	var got struct {
+		Runs []int `json:"runs"`
+		Dup  bool  `json:"dup"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if !slices.Equal(got.Runs, []int{7, 8, 7}) || !got.Dup {
+		t.Fatalf("runs=%v dup=%v", got.Runs, got.Dup)
+	}
+}
+
+// B2: prs.js follows a moved head through oncePerKey, and the reopen's
+// comments read waits for a running read instead of being dropped.
+func TestPRsJSFollowsOnceAndQueuesTheReopenRead(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "prs.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{
+		"const followMovedHead = oncePerKey(",
+		`reads.soon("comments:" + n, commentsRead(n, moved))`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("prs.js lacks %q", want)
+		}
+	}
+}
