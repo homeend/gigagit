@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -367,6 +369,41 @@ func TestPRPrefetch(t *testing.T) {
 	}
 	if got := revParse(t, dir, git.PRRef(7)); got != moved {
 		t.Fatalf("refs/gg/pr/7 = %s, want the moved head %s", got, moved)
+	}
+}
+
+// Item 3: a list refresh with nothing moved costs ONE ref read — no rev-parse
+// per cached PR — and never reads the entry of a PR the listing does not show.
+func TestPrefetchWithNothingMovedReadsNoEntry(t *testing.T) {
+	t.Parallel()
+	dir, head := prPreviewRepo(t)
+	svc, count := countingService(t, dir)
+	cache := t.TempDir()
+	svc.SetPRCacheStore(prcache.New(cache, 0))
+	ff := &fakeForge{url: dir, open: []model.PullRequest{{Number: 7, State: "open", Target: "main", HeadSHA: head}}}
+	svc.SetForgeProviders([]forge.Provider{refspecFake{ff, "refs/heads/feat"}})
+	ctx := context.Background()
+	if _, err := svc.PullRequests(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PRPreview(ctx, ff.open[0]); err != nil {
+		t.Fatal(err)
+	}
+	// An unlisted PR's entry that cannot be parsed: reading it would quarantine it.
+	if err := os.WriteFile(filepath.Join(cache, "pr-9.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const revParse = "git rev-parse verify commit (resolve)"
+	before := count(revParse)
+	svc.SetPRCachePolicy(8*time.Hour, 5)
+	if n := svc.PRPrefetch(ctx); n != 0 {
+		t.Fatalf("warmed %d", n)
+	}
+	if n := count(revParse) - before; n != 0 {
+		t.Fatalf("%d rev-parse calls for an unmoved list", n)
+	}
+	if m, _ := filepath.Glob(filepath.Join(cache, "*.corrupt-*")); len(m) != 0 {
+		t.Fatalf("an unlisted entry was read: %v", m)
 	}
 }
 

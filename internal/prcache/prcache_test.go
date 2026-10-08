@@ -3,6 +3,7 @@ package prcache
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -179,14 +180,22 @@ func TestConcurrentSavesNeverTear(t *testing.T) {
 	}
 }
 
-func TestEntriesNewestOpenedFirst(t *testing.T) {
+func TestNumbersListsEntriesWithoutReadingThem(t *testing.T) {
 	t.Parallel()
-	s := New(t.TempDir(), DefaultMax)
+	dir := t.TempDir()
+	s := New(dir, DefaultMax)
 	_ = s.Save(Entry{Number: 1, OpenedAt: t0})
 	_ = s.Save(Entry{Number: 2, OpenedAt: t0.Add(time.Hour)})
-	es := s.Entries()
-	if len(es) != 2 || es[0].Number != 2 || es[1].Number != 1 {
-		t.Fatalf("Entries = %+v", es)
+	if err := os.WriteFile(filepath.Join(dir, "pr-3.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := s.Numbers()
+	slices.Sort(got)
+	if !slices.Equal(got, []int{1, 2, 3}) {
+		t.Fatalf("Numbers = %v", got)
+	}
+	if m, _ := filepath.Glob(filepath.Join(dir, "*.corrupt-*")); len(m) != 0 {
+		t.Fatalf("Numbers read an entry: %v", m)
 	}
 }
 

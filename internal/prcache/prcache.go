@@ -272,7 +272,7 @@ func (s *Store) trimLocked() error {
 	return nil
 }
 
-// numberOf parses "pr-<n>.json" (used by callers listing entries).
+// numberOf parses "pr-<n>.json" (Numbers).
 func numberOf(name string) (int, bool) {
 	s, ok := strings.CutPrefix(filepath.Base(name), "pr-")
 	if !ok {
@@ -286,20 +286,15 @@ func numberOf(name string) (int, bool) {
 	return n, err == nil
 }
 
-// Entries lists every cached entry, most recently opened first (prefetch
-// walks it).
-func (s *Store) Entries() []Entry {
+// Numbers lists the PRs that have an entry, from the file names alone — no
+// entry is read (prefetch loads only the few it may warm).
+func (s *Store) Numbers() []int {
 	names, _ := filepath.Glob(filepath.Join(s.root, "pr-*.json"))
-	var out []Entry
+	var out []int
 	for _, p := range names {
-		if _, ok := numberOf(p); !ok {
-			continue
-		}
-		var e Entry
-		if readJSON(p, &e) {
-			out = append(out, e)
+		if n, ok := numberOf(p); ok {
+			out = append(out, n)
 		}
 	}
-	slices.SortFunc(out, func(a, b Entry) int { return b.OpenedAt.Compare(a.OpenedAt) })
 	return out
 }
