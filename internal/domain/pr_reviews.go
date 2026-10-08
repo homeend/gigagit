@@ -79,7 +79,7 @@ func (s *Service) prReviewNotes(ctx context.Context, set PreviewNoteSet) map[str
 			return l
 		}
 		var l []string
-		if b, err := s.ShowFile(ctx, rev, path); err == nil {
+		if b, err := s.shaFile(ctx, rev, path); err == nil {
 			l = splitLines(b)
 		}
 		lines[k] = l
