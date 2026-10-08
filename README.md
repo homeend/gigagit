@@ -518,7 +518,7 @@ gg pr forget 123              # drop the ref (and a closed PR's row)
 ```bash
 gg pr notes 123 [--json]                  # what the PR's view holds: notes written for it, GitHub threads
 gg pr send 123 --note <id> [--note <id>]  # one comment per note (a quote of the line when it is outside the diff)
-gg pr send 123 --mine                     # every local note as ONE review; the confirm asks the verdict
+gg pr send 123 --mine                     # every note written for the PR as ONE review; the confirm asks the verdict
 gg pr send 123 --review <id> [--body …]   # a stored AI review: its summary (or your body) + its remarks
 gg pr send 123 --verdict                  # a verdict alone
 gg pr reply 123 <thread> "text" [--send]  # a draft reply under a GitHub thread (--send posts it)

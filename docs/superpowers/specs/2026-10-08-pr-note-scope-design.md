@@ -90,7 +90,7 @@ here, not re-decided.
 | Writer | Today | Change |
 |---|---|---|
 | TUI note form (`note_popup.go:122`) | skips the stamp when `previewOpen.prNumber != 0` | stamp `set.Pair()` for a PR too |
-| TUI / web / CLI AI review on a PR (`ScopeReviewTarget`, `review.go:99`) | `Preview: set.scope()` = `""` → stored as a plain commit review | gets the PR stamp through `scope()`; nothing else |
+| AI review on a PR — `gg review --link <PR link>` / `/gg-review`, cross-review, a saved preview of the PR pair (`ScopeReviewTarget`, `review.go:99`; the TUI has no Review (AI) on an opened PR) | `Preview: set.scope()` = `""` → stored as a plain commit review | gets the PR stamp through `scope()`; nothing else |
 | gg web note (`files.js` `noteScopeSpec`, `/api/notes/add`) | `noteScopeSpec` returns `""` for `pv.pr` | the request carries the PR number (`pr: n`, a new field — the page never sends a PR's names back as refs, `previews.js`); the server builds the PR's set from its cached pair (`PRPair`) and stamps `set.Pair()` only when the set's tip is the note's commit (the guard `notePreview` already applies) |
 | `gg note add/apply --preview <base>...refs/gg/pr/<n>`, MCP `gg_notes_add/apply` `preview`, agent JSON batches, `gg review save --preview` | already stamp `set.Pair()` | none — pinned by tests |
 | Replies (TUI, web, CLI, MCP) | follow their root | none |

@@ -5895,11 +5895,9 @@ colour.
 edit stamps use. `NoteReply` accepts a forge parent; edit/remove of a
 `forge:` id stay `ErrReadOnlyNote`.
 
-**Carried notes** (§1.4): `carriedNotes(set)` — only for a PR set — finds
-stored roots on other commits / working trees whose path the PR changes and
-whose `ContextHash` is found at the head; memory-cached per tip:base:notesGen
-(never on disk — R3); `Origin` = short sha or "working tree". Badges
-(`PreviewNoteCounts`) do not count them (plan 3 decides).
+**Carried notes** (§1.4) were REMOVED 2026-10-08 (user ruling: a PR shows
+only what was written for it — see the note-scope paragraph above: `owns`,
+`PRScopeNumber`).
 
 **Agents never send** (user ruling 2026-10-08, plan 4 — the pending-send
 queue of §3.7 was REMOVED). Inside any session gg started (`$GG_INBOX` set:
@@ -5984,14 +5982,16 @@ and its group bar (`domain.GroupSlot` = FNV-1a % 6 + 1, pinned by a test; the ba
 is the box's left frame column). Outside: only `◌` / `○!`. GitHub threads are
 replyable/resolvable only inside (`replyableNoteTargets(ts, inPR)`).
 
-**PR reviews in the diff (T1).** `domain.prReviewHeads(set)`: commit/branch
-reviews whose tip is one of the PR's commits, plus `NoteCounts.PreviewReviews`
-of scopes ending `...refs/gg/pr/<n>` (a preview review is never in
-`Reviews`). `prReviewNotes` places unsent remarks with `remarkPlace` (shared
-with the send planner) — cached per tip:base:notesGen like carried notes.
+**PR reviews in the diff (T1).** `domain.prReviewHeads(set)`: the
+`NoteCounts.PreviewReviews` whose scope the set owns (`<base>...refs/gg/pr/<n>`
+by PR number; since 2026-10-08 a review of a PR's COMMIT is not the PR's). A
+PR set has no preview Reviews block (`PreviewReviews` returns nil for it): its
+reviews are drawn as remarks and offered as send groups. `prReviewNotes`
+places unsent remarks with `remarkPlace` (shared with the send planner) —
+cached per PR:tip:base:notesGen (two PRs may share a head and a base).
 `PreviewNotesFor/At` build the extras in a FRESH slice (`prExtras`): the
-carried and remark slices are cached instances. Counts include carried
-notes and drawn remarks (T2); `PreviewNoteGroups` feeds the badge bars.
+remark slice is a cached instance. Counts include drawn remarks (T2);
+`PreviewNoteGroups` feeds the badge bars.
 
 **Notice source.** Interrupted sends (`interrupted_sends.go`) are re-derived
 in `rebuildNotices`, never appended raw; their actions are `sourced` (close

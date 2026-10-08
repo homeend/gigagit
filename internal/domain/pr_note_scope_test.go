@@ -162,3 +162,37 @@ func mustNotesAt(t *testing.T, svc *Service, set PreviewNoteSet, path string) []
 	}
 	return got
 }
+
+// Final review I1: a PR's reviews show as remarks in its diff and in its send
+// groups (prReviewHeads); the preview Reviews block stays off a PR, as it was
+// — it matched one base spelling only and appeared only after a reload.
+func TestPreviewReviewsStayOffAPR(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	savePRReview(t, svc, twoRemarks)
+	got, err := svc.PreviewReviews(context.Background(), prNoteSetOf(t, svc))
+	if err != nil || len(got) != 0 {
+		t.Fatalf("PreviewReviews on a PR = %+v, %v", got, err)
+	}
+}
+
+// Final review I2: two PRs over the same head and base (a PR reopened as a
+// new one) keep their own reviews' remarks — the remark cache is per PR.
+func TestPRReviewRemarksAreCachedPerPR(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	runGitIn(t, repoDir(t, svc), "update-ref", git.PRRef(9), head)
+	savePRReview(t, svc, twoRemarks) // run on #7
+	ctx := context.Background()
+	seven := prNoteSetOf(t, svc)
+	nine, err := svc.PreviewNotes(ctx, git.PRRef(9), seven.Target)
+	if err != nil || !nine.OK() || nine.Tip != seven.Tip || nine.Base != seven.Base {
+		t.Fatalf("#9 set %+v err %v", nine, err)
+	}
+	if n := len(svc.prReviewNotes(ctx, seven)["big.go"]); n != 2 {
+		t.Fatalf("#7 remarks = %d", n)
+	}
+	if got := svc.prReviewNotes(ctx, nine); len(got) != 0 {
+		t.Fatalf("#9 shows #7's remarks: %v", got)
+	}
+}

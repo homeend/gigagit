@@ -51,13 +51,14 @@ func (s *Service) prReviewHeads(ctx context.Context, set PreviewNoteSet) []Revie
 // prReviewNotes is every unsent remark of the PR's reviews, by path, placed
 // on the PR (new side: its head; old side: the merge base). A moved remark
 // lives on GitHub; one whose lines changed stays in the review view only.
-// Cached per tip:base:notes generation: READ-ONLY.
+// Cached per PR:tip:base:notes generation (two PRs may share a head and a
+// base, never their reviews): READ-ONLY.
 func (s *Service) prReviewNotes(ctx context.Context, set PreviewNoteSet) map[string][]ResolvedNote {
 	if _, ok := git.ParsePRRef(set.Source); !ok || !set.OK() {
 		return nil
 	}
 	s.mu.Lock()
-	key := set.Tip + ":" + set.Base + ":" + strconv.FormatUint(s.notesGen, 10)
+	key := set.Source + ":" + set.Tip + ":" + set.Base + ":" + strconv.FormatUint(s.notesGen, 10)
 	if c, ok := s.prReviewCache[key]; ok {
 		s.mu.Unlock()
 		return c
