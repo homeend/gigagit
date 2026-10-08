@@ -30,36 +30,46 @@ type prFetchReadyMsg struct {
 	pr  model.PullRequest
 	op  engine.FetchPRHead
 	err error
+	gen int // m.forgeGen when asked: a repo switch drops the answer
 }
 
 // openPRCmd starts enter's chain: resolve the fetch op off-thread → run it
 // (prFetchReadyMsg) → open the pair on the preview surface (opFinishedMsg).
 func (m Model) openPRCmd(p model.PullRequest) (Model, tea.Cmd) {
-	svc := m.svc
+	svc, gen := m.svc, m.forgeGen
 	if svc == nil {
 		return m, nil
 	}
 	m.statusMsg = i18n.T("fetching PR #%d…", p.Number)
 	return m, func() tea.Msg {
 		op, err := svc.PRFetchOp(context.Background(), p.Number)
-		return prFetchReadyMsg{pr: p, op: op, err: err}
+		return prFetchReadyMsg{pr: p, op: op, err: err, gen: gen}
 	}
 }
 
 // handlePRFetchReady runs the fetch and arms the open that follows it.
 func (m Model) handlePRFetchReady(msg prFetchReadyMsg) (Model, tea.Cmd) {
+	if msg.gen != m.forgeGen {
+		return m, nil // resolved for a repository the TUI has left
+	}
 	if msg.err != nil {
 		m.statusMsg = i18n.T("error: %s", firstLine(msg.err.Error()))
 		return m.failPRLanding(msg.pr.Number, firstLine(msg.err.Error()))
 	}
 	if !m.opsIdle() {
+		if po := m.pendingPROpen; po != nil && po.Number == msg.pr.Number {
+			// This PR's fetch is already running (enter and a link's landing
+			// both asked): its finish opens the view a parked landing waits for.
+			return m, nil
+		}
 		// An op started while the resolve was in flight; the user can press
-		// enter again — a link's landing is told so.
+		// enter again — said on the status line (a file-less landing has
+		// replied already), and a parked landing is told so.
+		m.statusMsg = i18n.T("PR #%d: an operation is running — open it again when it finishes", msg.pr.Number)
 		return m.failPRLanding(msg.pr.Number, "an operation is running; open the link again when it finishes")
 	}
 	pr := msg.pr
 	m.pendingPROpen = &pr
-	m.restartPRLandingClock(pr.Number)
 	return m.startOp(msg.op)
 }
 

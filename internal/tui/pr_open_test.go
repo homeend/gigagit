@@ -76,13 +76,13 @@ func TestPRFetchReadyChainsTheOpen(t *testing.T) {
 	m := prModel(t)
 	pr := m.prs[0]
 	// A resolve failure opens nothing and says why.
-	nm, cmd := m.Update(prFetchReadyMsg{pr: pr, err: errors.New("no remote for o/r")})
+	nm, cmd := m.Update(prFetchReadyMsg{pr: pr, err: errors.New("no remote for o/r"), gen: m.forgeGen})
 	mm := nm.(Model)
 	if cmd != nil || mm.pendingPROpen != nil || !strings.Contains(mm.statusMsg, "no remote") {
 		t.Fatalf("failure: cmd=%v pending=%v status=%q", cmd != nil, mm.pendingPROpen, mm.statusMsg)
 	}
 	// Success arms the chain and runs the op.
-	nm, cmd = m.Update(prFetchReadyMsg{pr: pr, op: engine.FetchPRHead{Remote: "origin", Refspec: "refs/pull/7/head", Number: 7}})
+	nm, cmd = m.Update(prFetchReadyMsg{pr: pr, op: engine.FetchPRHead{Remote: "origin", Refspec: "refs/pull/7/head", Number: 7}, gen: m.forgeGen})
 	mm = nm.(Model)
 	if cmd == nil || mm.pendingPROpen == nil || mm.pendingPROpen.Number != 7 || !mm.running {
 		t.Fatalf("success: cmd=%v pending=%+v running=%v", cmd != nil, mm.pendingPROpen, mm.running)
