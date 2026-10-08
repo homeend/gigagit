@@ -34,3 +34,26 @@ func TestPRMenuCopiesTheLink(t *testing.T) {
 		}
 	}
 }
+
+// Task 13: a navigate whose preview source is refs/gg/pr/<n> opens the PR's
+// view on the page (live.js → prs.js openPRLanding), falling back to the
+// plain merge preview when the page does not list the PR.
+func TestPRLinkLandsInThePRView(t *testing.T) {
+	t.Parallel()
+	read := func(name string) string {
+		b, err := os.ReadFile(filepath.Join("static", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	live, prs := read("live.js"), read("prs.js")
+	for _, want := range []string{`refs\/gg\/pr\/(\d+)`, "openPRLanding(", "is not in the pull request list here"} {
+		if !strings.Contains(live, want) {
+			t.Errorf("live.js lacks %q", want)
+		}
+	}
+	if !strings.Contains(prs, "export async function openPRLanding(") {
+		t.Error("prs.js does not export openPRLanding")
+	}
+}

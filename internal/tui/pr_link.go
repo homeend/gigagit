@@ -3,11 +3,15 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // A pull request's gg:// link: <base>...refs/gg/pr/<n>, the merge-preview
@@ -76,4 +80,35 @@ func (m Model) openPRLinkRow() (actionRow, bool) {
 		}
 		return m, m.copyToClipboardCmd(i18n.T("copied link to PR #%d", n), link)
 	}}, true
+}
+
+// listedPR is PR n's row in the Pull requests list.
+func (m Model) listedPR(n int) (model.PullRequest, bool) {
+	for _, p := range m.prs {
+		if p.Number == n {
+			return p, true
+		}
+	}
+	return model.PullRequest{}, false
+}
+
+// steerNavigatePR lands a PR link: the PR's view opens on its own pair (the
+// link's base spelling may differ — the pending stage is gated by number),
+// then the file and line when the link names one.
+func (m Model) steerNavigatePR(c steer.Command, p model.PullRequest) (Model, tea.Cmd) {
+	if c.File != "" && m.width > 0 && m.width < 60 {
+		return m, m.answerSteer(c, steerFail(c, "the terminal is too narrow for the diff view"))
+	}
+	m = m.steerToPanels()
+	if c.File == "" {
+		if startAtOrigin(c) {
+			m = m.steerNotice(i18n.T("▸ opened PR #%d", p.Number))
+		} else {
+			m = m.steerNotice(i18n.T("▸ agent moved the focus"))
+		}
+		nm, reply := m.navigateLanded(c, fmt.Sprintf("opened pull request #%d", p.Number))
+		return nm, tea.Batch(reply, nm.openPRPreviewCmd(p))
+	}
+	m.pendingSteer = &pendingSteer{cmd: c, stage: steerStagePreview, prNumber: p.Number, at: time.Now()}
+	return m, m.openPRPreviewCmd(p)
 }

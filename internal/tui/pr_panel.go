@@ -97,6 +97,7 @@ func (m Model) handlePRsCached(msg prsCachedMsg) (Model, tea.Cmd) {
 	if msg.gen != m.prsGen || m.prsLoaded {
 		return m, nil
 	}
+	m.prsAnswered = true
 	m.forgeShown = true
 	if m.forgeProvider == "" {
 		m.forgeProvider = msg.provider
@@ -121,6 +122,7 @@ func (m Model) handlePRsLoaded(msg prsLoadedMsg) (Model, tea.Cmd) {
 		return m, nil // superseded (a repo switch, a newer read)
 	}
 	m.prsInflight = false
+	m.prsAnswered = true // whatever it says: a start-at PR link stops waiting
 	cancelled := errors.Is(msg.err, context.Canceled) || errors.Is(msg.status.Err, context.Canceled)
 	if cancelled {
 		return m, nil // pre-empted by a user op: not a failure, and nothing new to show

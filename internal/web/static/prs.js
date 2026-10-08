@@ -388,10 +388,11 @@ function revalidateRead(n) {
 //   - otherwise the head is fetched first, under the mask.
 // The server's PR cache makes the fetch itself cheap the second time: the
 // head sha comes from the listing, so an unchanged PR skips the network.
+// It resolves true when the PR's view is on screen (openPRLanding waits on it).
 let opening = 0;
 async function openPR(pr) {
   const n = pr.number;
-  if (opening) return; // one open at a time; the mask says which
+  if (opening) return false; // one open at a time; the mask says which
   opening = n;
   maskOn(n, "opening " + prLabel(n) + "…");
   try {
@@ -400,19 +401,32 @@ async function openPR(pr) {
       if (how === "shown") {
         maskOff();
         if (pr.state === "open") revalidate(n); // a closed PR's head no longer moves
-        return;
+        return true;
       }
-      if (how === "error") return;
+      if (how === "error") return false;
     }
     $("pr-mask-text").textContent = "fetching " + prLabel(n) + "…";
-    if (!(await fetchPR(n))) return;
+    if (!(await fetchPR(n))) return false;
     pr.fetched = true; // a second click on this row shows the diff without another fetch
     $("pr-mask-text").textContent = "computing the diff of " + prLabel(n) + "…";
-    if ((await showPR(n, false)) === "unfetched") opLine("pull request #" + n + ": the head did not arrive", true);
+    const how = await showPR(n, false);
+    if (how === "unfetched") opLine("pull request #" + n + ": the head did not arrive", true);
+    return how === "shown";
   } finally {
     opening = 0;
     maskOff();
   }
+}
+
+// openPRLanding opens PR n's view for a gg:// link (live.js): the same open
+// as a row click. true = on screen; false = the open failed (it said why);
+// null = the page does not list PR n.
+export async function openPRLanding(n) {
+  // A link opened as the page loads (gg open --web) may beat the list: read
+  // the server's listing once before calling the PR unknown.
+  if (!knownPR(n)) await fetchPRs();
+  const pr = knownPR(n);
+  return pr ? await openPR(pr) : null;
 }
 
 function forgetPR(pr) {
