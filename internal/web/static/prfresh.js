@@ -55,6 +55,18 @@ export function serialReads(gate) {
   return { run, soon };
 }
 
+// stickyFlag is soon() for reads that carry a flag a newer waiting read must
+// not drop (prs.js: the moved-head read's "updated"): soon(key, flag, make)
+// queues make(flag) — the flag ORed over every read that replaced another
+// while waiting, cleared when one starts.
+export function stickyFlag(reads) {
+  const raised = new Set();
+  return (key, flag, make) => {
+    if (flag) raised.add(key);
+    reads.soon(key, () => make(raised.delete(key))());
+  };
+}
+
 // oncePerKey wraps an async fn so one call per key runs at a time: a call
 // for a key whose earlier call has not settled answers null (prs.js: the
 // moved-head follow — two reads seeing the same move must fetch once).

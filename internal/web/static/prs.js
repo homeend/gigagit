@@ -18,7 +18,7 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
-import { nextFresh, oncePerKey, sentEvent, serialReads } from "./prfresh.js";
+import { nextFresh, oncePerKey, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
@@ -167,6 +167,7 @@ let readSeq = 0; // every comments read's start, in order (prfresh.js's sequence
 // The open PR's forge reads (comments refresh, revalidate) run one at a time;
 // a read asked while one runs waits for it (C9).
 const reads = serialReads((fn) => runOnce("pr-comments", fn));
+const soonComments = stickyFlag(reads);
 function setPRFresh(n, text) {
   const po = state.previewOpen;
   $("pr-fresh").textContent = po && po.pr === n ? text : "";
@@ -302,8 +303,9 @@ async function showPR(n, moved, skipComments) {
 // moved: the view was just re-opened on a moved head — that read is news.
 export function refreshPRComments(n, moved = false) {
   // Queued, never dropped: the read a moved-head reopen asks for may arrive
-  // while another read is still running.
-  reads.soon("comments:" + n, commentsRead(n, moved));
+  // while another read is still running — and a moved read replaced while
+  // it waits keeps its "updated" (stickyFlag).
+  soonComments("comments:" + n, moved, (mv) => commentsRead(n, mv));
 }
 
 // commentsRead is refreshPRComments's read, for the serial reader.

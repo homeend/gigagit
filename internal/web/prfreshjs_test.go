@@ -214,10 +214,45 @@ func TestPRsJSFollowsOnceAndQueuesTheReopenRead(t *testing.T) {
 	src := string(b)
 	for _, want := range []string{
 		"const followMovedHead = oncePerKey(",
-		`reads.soon("comments:" + n, commentsRead(n, moved))`,
+		`soonComments("comments:" + n, moved, (mv) => commentsRead(n, mv))`,
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("prs.js lacks %q", want)
 		}
+	}
+}
+
+// B7: a moved-head comments read replaced by a plain one while it waits
+// keeps its flag ("updated"); the flag clears once a read starts.
+func TestPRFreshJSStickyFlag(t *testing.T) {
+	t.Parallel()
+	out := runFreshModuleJS(t, `
+import { serialReads, stickyFlag } from "./prfresh.mjs";
+let slot = null;
+const gate = (fn) => {
+  if (slot) return null;
+  fn();
+  return new Promise((r) => (slot = r)).then(() => { slot = null; });
+};
+const end = async () => { slot(); await new Promise((r) => setTimeout(r, 0)); };
+const reads = serialReads(gate);
+const soon = stickyFlag(reads);
+const seen = [];
+const read = (f) => () => seen.push(f);
+reads.run(() => {});            // a read in flight
+soon("comments:7", true, read);  // moved: waits
+soon("comments:7", false, read); // replaces it while it waits
+await end();                     // the waiting read runs
+await end();
+soon("comments:7", false, read); // a later plain read
+await end();
+console.log(JSON.stringify(seen));
+`)
+	var got []bool
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if !slices.Equal(got, []bool{true, false}) {
+		t.Fatalf("flags = %v, want [true false]", got)
 	}
 }
