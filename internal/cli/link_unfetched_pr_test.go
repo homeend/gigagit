@@ -1,12 +1,12 @@
 package cli
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // Follow-ups 4: a navigate takes a link to a PR this repo has not fetched
@@ -28,11 +28,25 @@ func TestUnfetchedPRLinkResolvesOnlyForANavigate(t *testing.T) {
 	if strings.Contains(errb.String(), "holds both") {
 		t.Fatalf("gg session navigate refused at resolve: %q", errb.String())
 	}
-	b, err := os.ReadFile("open.go")
-	if err != nil {
-		t.Fatal(err)
+}
+
+// gg open hands an unfetched PR's link to the launcher (the TUI's landing
+// fetches it) instead of refusing it at resolve. Serial: LaunchTUI is global.
+func TestOpenLaunchesAnUnfetchedPRLink(t *testing.T) {
+	dir := previewRepo(t)
+	svc := openCLIService(t, dir)
+	var got model.Link
+	LaunchTUI = func(_ string, at model.Link) int {
+		got = at
+		return 0
 	}
-	if !strings.Contains(string(b), `UnfetchedPR: true}, "open")`) {
-		t.Error("gg open does not take an unfetched PR link")
+	t.Cleanup(func() { LaunchTUI = nil })
+	var out, errb strings.Builder
+	link := "gg://" + filepath.ToSlash(dir) + "/a.txt@main...refs/gg/pr/7:1"
+	if code := cmdOpen(svc, []string{link}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d: %s", code, errb.String())
+	}
+	if got.Target.Preview == nil || got.Target.Preview.Source != "refs/gg/pr/7" || got.Line != 1 {
+		t.Fatalf("launched link = %+v line %d", got.Target, got.Line)
 	}
 }

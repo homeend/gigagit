@@ -14,8 +14,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   opens.** `gg open`, `gg session navigate`, the TUI's `#` and gg web's link
   box used to refuse it ("no checkout … holds both main and refs/gg/pr/7");
   when the PR is listed, its view now fetches the head first and lands on
-  the file and line. `gg review`, `gg compare` and the MCP link tools still
-  need the PR fetched. Skill v157.
+  the file and line; a link to a PR neither listed nor fetched says so in one
+  line (TUI and web alike), and a checkout that has fetched the PR is
+  preferred. `gg review`, `gg compare` and the MCP link tools still need the
+  PR fetched. Skill v158.
 - gg web: a note refused because its PR left the pull request list now says
   to search for the PR ("… — search for it and open it again").
 

@@ -203,6 +203,10 @@ func locateLink(ctx context.Context, l model.Link, opts ResolveOpts) (linkCandid
 	if p := l.Target.Preview; p != nil {
 		kept := previewCandidates(ctx, cands, p, opts)
 		if len(kept) == 0 {
+			if unfetchedPROK(p, opts) {
+				// A navigation needs only the base: the landing fetches the PR.
+				return linkCandidate{}, fmt.Errorf("%w: no checkout of %s holds %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target)
+			}
 			return linkCandidate{}, fmt.Errorf("%w: no checkout of %s holds both %s and %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target, p.Source)
 		}
 		cands = kept
@@ -430,19 +434,26 @@ func containing(ctx context.Context, cands []linkCandidate, sha string, opts Res
 // uses for a commit link; a candidate whose probe errors is simply not a
 // candidate, exactly as there.
 func previewCandidates(ctx context.Context, cands []linkCandidate, p *model.LinkPreview, opts ResolveOpts) []linkCandidate {
-	var kept []linkCandidate
+	// A checkout that has not fetched a PR (UnfetchedPR) sorts after every
+	// one that has: the latter shows it without a second fetch.
+	var kept, unfetched []linkCandidate
 	for _, c := range cands {
 		// OpenFn is defaulted once at ResolveLink's entry and never nil.
 		svc := opts.OpenFn(c.checkout)
-		if _, found, err := svc.ResolveRev(ctx, p.Source); err != nil || (!found && !unfetchedPROK(p, opts)) {
+		_, hasSource, err := svc.ResolveRev(ctx, p.Source)
+		if err != nil || (!hasSource && !unfetchedPROK(p, opts)) {
 			continue
 		}
 		if _, found, err := svc.ResolveRev(ctx, p.Target); err != nil || !found {
 			continue
 		}
+		if !hasSource {
+			unfetched = append(unfetched, c)
+			continue
+		}
 		kept = append(kept, c)
 	}
-	return kept
+	return append(kept, unfetched...)
 }
 
 // unfetchedPROK reports whether a preview's missing SOURCE may stay missing:

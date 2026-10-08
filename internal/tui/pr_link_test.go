@@ -208,6 +208,8 @@ func TestAnUnlistedPRLinkOpensAMergePreview(t *testing.T) {
 		Target: &steer.Target{State: "preview", Source: "refs/gg/pr/7", Target: "main"},
 		Line:   &steer.Line{Side: "new", No: 1}, Wait: true}
 	m, cmd := m.applySteer(c)
+	// The fetched check runs off the UI thread (prUnlistedMsg): deliver it.
+	m, cmd = send(m, cmd())
 	if !strings.Contains(m.statusMsg, "PR #7 is not in the pull request list here") {
 		t.Errorf("status = %q", m.statusMsg)
 	}
@@ -270,7 +272,8 @@ func TestAFileLessUnlistedPRLinkKeepsItsNotice(t *testing.T) {
 	} {
 		m, _ := prLinkSteerModel(t)
 		m.prs = nil
-		m, _ = m.applySteer(c)
+		m, cmd := m.applySteer(c)
+		m, _ = send(m, cmd()) // the fetched check (prUnlistedMsg)
 		if !strings.Contains(m.statusMsg, "PR #7 is not in the pull request list here") {
 			t.Errorf("start-at=%v: status = %q", startAtOrigin(c), m.statusMsg)
 		}
@@ -451,5 +454,45 @@ func TestPastingAnUnfetchedPRLinkFetchesThePR(t *testing.T) {
 	}
 	if got := cmd(); func() bool { msg, ok := got.(prFetchReadyMsg); return !ok || msg.pr.Number != 7 }() {
 		t.Fatalf("landing → %T, want the PR's fetch", got)
+	}
+}
+
+// Final review (follow-ups 4): a link to a PR the list does not hold and
+// this repo has not fetched now resolves — it must be refused in one line
+// (the web's wording), never "opened as a merge preview" over a missing ref,
+// and a file-less one must not report success.
+func TestAnUnlistedUnfetchedPRLinkIsRefused(t *testing.T) {
+	t.Parallel()
+	for _, c := range []steer.Command{
+		prLinkFileCmd("pr-11"),
+		{ID: "pr-12", Cmd: "navigate", Target: &steer.Target{State: "preview", Source: "refs/gg/pr/7", Target: "main"}, Wait: true},
+	} {
+		m, dir := prLinkUnfetchedModel(t)
+		m.prs = nil
+		m, cmd := m.applySteer(c)
+		m = drainMsgs(t, m, cmd, 8)
+		if want := "PR #7 is not in the pull request list — list or search for it, then open the link again"; !strings.Contains(m.statusMsg, want) {
+			t.Errorf("%s: status = %q", c.ID, m.statusMsg)
+		}
+		if m.previewOpen != nil {
+			t.Errorf("%s: a preview opened over a missing ref: %+v", c.ID, m.previewOpen)
+		}
+		if rep := readOneReply(t, dir, c.ID); rep.OK || !strings.Contains(rep.Error, "not in the pull request list") {
+			t.Errorf("%s: reply = %+v", c.ID, rep)
+		}
+	}
+}
+
+// Final review minor 3: a second resolve of PR #7 that FAILS while #7's
+// fetch already runs must not fail the landing that fetch is about to open.
+func TestAFailedSecondResolveKeepsTheLanding(t *testing.T) {
+	t.Parallel()
+	m, _ := prLinkUnfetchedModel(t)
+	m, _ = m.applySteer(prLinkFileCmd("pr-13"))
+	pr := testPRs()[0]
+	m.pendingPROpen, m.running = &pr, true
+	nm, _ := m.Update(prFetchReadyMsg{pr: pr, err: errors.New("no remote"), gen: m.forgeGen})
+	if nm.(Model).pendingSteer == nil {
+		t.Fatal("a failed second resolve failed the landing")
 	}
 }

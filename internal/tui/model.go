@@ -3420,6 +3420,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCommentsMsg:
 		return m.handlePRCommentsMsg(msg)
 
+	case prUnlistedMsg:
+		return m.handlePRUnlisted(msg)
 	case prLinkMsg:
 		return m.handlePRLinkMsg(msg)
 	case prRevalidatedMsg:

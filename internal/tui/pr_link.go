@@ -157,3 +157,40 @@ func (m Model) prFetchHoldsLanding() bool {
 	ps, po := m.pendingSteer, m.pendingPROpen
 	return ps != nil && ps.prNumber != 0 && po != nil && po.Number == ps.prNumber && m.running
 }
+
+// prUnlistedMsg says whether a PR the list does not hold is fetched here:
+// only then can its link open as a plain merge preview.
+type prUnlistedMsg struct {
+	c       steer.Command
+	n       int
+	fetched bool
+	gen     int // m.forgeGen when asked
+}
+
+// prUnlistedCheckCmd asks git whether PR n is fetched (refs/gg/pr/<n>).
+func (m Model) prUnlistedCheckCmd(c steer.Command, n int) tea.Cmd {
+	svc, gen := m.svc, m.forgeGen
+	return func() tea.Msg {
+		fetched := svc != nil && svc.PRFetched(context.Background())[n]
+		return prUnlistedMsg{c: c, n: n, fetched: fetched, gen: gen}
+	}
+}
+
+// handlePRUnlisted lands an unlisted PR's link: the PR's view when the list
+// arrived meanwhile, a plain merge preview when the PR is fetched here, else
+// one refusal — the web's wording (ruling B3) — never a preview over a
+// missing ref.
+func (m Model) handlePRUnlisted(msg prUnlistedMsg) (Model, tea.Cmd) {
+	c := msg.c
+	if msg.gen != m.forgeGen {
+		return m, m.answerSteer(c, steerFail(c, "the repository changed before the link landed"))
+	}
+	if p, ok := m.listedPR(msg.n); ok {
+		return m.steerNavigatePR(c, p)
+	}
+	if !msg.fetched {
+		m.statusMsg = i18n.T("PR #%d is not in the pull request list — list or search for it, then open the link again", msg.n)
+		return m, m.answerSteer(c, steerFail(c, fmt.Sprintf("pull request #%d is not in the pull request list and not fetched here — list or search for it, then open the link again", msg.n)))
+	}
+	return m.steerNavigatePlainPreview(c, i18n.T("PR #%d is not in the pull request list here — opened as a merge preview", msg.n))
+}
