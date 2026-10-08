@@ -207,6 +207,11 @@ func locateLink(ctx context.Context, l model.Link, opts ResolveOpts) (linkCandid
 				// A navigation needs only the base: the landing fetches the PR.
 				return linkCandidate{}, fmt.Errorf("%w: no checkout of %s holds %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target)
 			}
+			if n, ok := git.ParsePRRef(p.Source); ok && len(resolvingAll(ctx, cands, []string{p.Target}, opts)) > 0 {
+				// The base is here, only the PR is missing: an inspection
+				// reads its commits, so say how to get them.
+				return linkCandidate{}, fmt.Errorf("%w: pull request #%d is not fetched here — run gg pr fetch %d first (gg open fetches it)", ErrLinkUnknownRepo, n, n)
+			}
 			return linkCandidate{}, fmt.Errorf("%w: no checkout of %s holds both %s and %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target, p.Source)
 		}
 		cands = kept

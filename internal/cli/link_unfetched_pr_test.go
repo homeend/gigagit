@@ -20,12 +20,12 @@ func TestUnfetchedPRLinkResolvesOnlyForANavigate(t *testing.T) {
 	if err != nil || res.Preview == nil || res.Preview.Source != "refs/gg/pr/7" {
 		t.Fatalf("navigate: res=%+v err=%v", res.Preview, err)
 	}
-	if _, err := resolveLinkArg(t.Context(), svc, link, linkShapes{Pair: true, Ref: true}, "review save"); err == nil || !strings.Contains(err.Error(), "holds both") {
+	if _, err := resolveLinkArg(t.Context(), svc, link, linkShapes{Pair: true, Ref: true}, "review save"); err == nil || !strings.Contains(err.Error(), "gg pr fetch 7") {
 		t.Fatalf("review save: err = %v, want the refusal", err)
 	}
 	var out, errb strings.Builder
 	Run(dir, []string{"session", "navigate", link}, strings.NewReader(""), &out, &errb, "")
-	if strings.Contains(errb.String(), "holds both") {
+	if strings.Contains(errb.String(), "holds both") || strings.Contains(errb.String(), "not fetched here") {
 		t.Fatalf("gg session navigate refused at resolve: %q", errb.String())
 	}
 }

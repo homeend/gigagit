@@ -45,7 +45,7 @@ func TestAnUnfetchedPRLinkResolvesForNavigation(t *testing.T) {
 	if got.Addr.Path != "README.md" || got.Line != 1 {
 		t.Errorf("Addr = %+v line %d", got.Addr, got.Line)
 	}
-	if _, err := unfetchedPRResolve(t, link, false); !errors.Is(err, ErrLinkUnknownRepo) || !strings.Contains(err.Error(), "holds both") {
+	if _, err := unfetchedPRResolve(t, link, false); !errors.Is(err, ErrLinkUnknownRepo) || !strings.Contains(err.Error(), "gg pr fetch 7") {
 		t.Fatalf("without the option: err = %v", err)
 	}
 }
@@ -126,5 +126,21 @@ func TestAReviewLinkToAnUnfetchedPRNavigates(t *testing.T) {
 	}
 	if got.Preview == nil || got.Preview.Tip != "" || got.Hint.ID != rid {
 		t.Fatalf("Preview = %+v hint %+v", got.Preview, got.Hint)
+	}
+}
+
+// Follow-ups 5, item 2: an inspection (review, compare, gg link resolve)
+// still refuses an unfetched PR's link — it reads the PR's commits — but the
+// refusal says how to fix it instead of naming a ref the user never typed.
+func TestAnUnfetchedPRLinkInspectionSaysFetchIt(t *testing.T) {
+	t.Parallel()
+	_, err := unfetchedPRResolve(t, "gg://gigagit@main...refs/gg/pr/7", false)
+	if !errors.Is(err, ErrLinkUnknownRepo) || !strings.Contains(err.Error(), "pull request #7 is not fetched here") ||
+		!strings.Contains(err.Error(), "gg pr fetch 7") {
+		t.Fatalf("err = %v", err)
+	}
+	// Without the base the PR is not the problem: the old refusal stands.
+	if _, err := unfetchedPRResolve(t, "gg://gigagit@nosuch...refs/gg/pr/7", false); err == nil || strings.Contains(err.Error(), "gg pr fetch") {
+		t.Fatalf("no base: err = %v", err)
 	}
 }
