@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -531,4 +532,23 @@ func TestPrefetchYieldsToAWaitingOp(t *testing.T) {
 		t.Fatal("a queued user op did not cancel the prefetch fetch")
 	}
 	held.Release()
+}
+
+// B3: a coalesced caller with a live ctx gets the leader's budget
+// DeadlineExceeded: that says nothing about gh — no Detect, verdict stands.
+func TestADeadlinedListingKeepsTheCachedVerdict(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ok := &fakeForge{url: "u", open: []model.PullRequest{pr(3, "open", 1)}}
+	if _, err := newCachedForgeSvc(t, ok, dir).PullRequests(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ff := &fakeForge{url: "u", listErr: fmt.Errorf("gh: %w", context.DeadlineExceeded)}
+	b := newCachedForgeSvc(t, ff, dir)
+	if _, err := b.PullRequests(context.Background()); err == nil {
+		t.Fatal("want an error")
+	}
+	if n := ff.detects.Load(); n != 0 {
+		t.Fatalf("a deadlined listing ran Detect %d times", n)
+	}
 }

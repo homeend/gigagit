@@ -179,10 +179,12 @@ func (s *Service) PullRequests(ctx context.Context) ([]model.PullRequest, error)
 		return nil, err
 	}
 	v, err := s.flight.Do("forge-prs", func() (any, error) { return s.pullRequests(ctx, p) })
-	// A listing the CALLER gave up on (a closed page, a spent budget — or the
-	// coalesced caller's cancellation) says nothing about the provider: it
-	// neither proves nor undoes the cached verdict.
-	decisive := err == nil || (ctx.Err() == nil && !errors.Is(err, context.Canceled))
+	// A listing the CALLER gave up on (a closed page, a spent budget — or a
+	// coalesced caller gets the LEADER's cancellation or deadline) says
+	// nothing about the provider: it neither proves nor undoes the cached
+	// verdict.
+	decisive := err == nil || (ctx.Err() == nil &&
+		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded))
 	s.forgeMu.Lock()
 	optimistic := decisive && s.forgeOptimistic && s.forgeActive == p
 	if optimistic {
