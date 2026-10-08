@@ -177,9 +177,6 @@ func TestSwitchViewPutsTheLeavingSlotToSleep(t *testing.T) {
 	m, other := addWorktree(t, m, "wt2")
 	m.watchSupported = true
 	m, _ = m.switchView(other)
-	if v := m.views[m.home]; v.watcher != nil || v.docWatch.w != nil {
-		t.Fatalf("home slot still awake: %+v", v)
-	}
 	if m.watcher != nil || m.watchSupported {
 		t.Fatal("the arriving slot starts with no watcher until its kick lands")
 	}

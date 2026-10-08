@@ -142,6 +142,7 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 	// A shown console ⇔ the viewed worktree is the console's: tab out of
 	// it and the panels are already that tree's. A refusal (an op running)
 	// keeps the view and says so; the console shows regardless.
+	m.pendingReturnView = "" // a return queued by an earlier close is moot: this console's own return point rules
 	if dir := filepath.Clean(s.Info().Dir); dir != m.viewed && m.isRepoWorktree(dir) {
 		m, _ = m.switchView(dir)
 	}
@@ -149,13 +150,17 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 }
 
 // returnView brings the worktree a console was shown over back when the
-// console closes. A refusal (an op running) leaves the view where it is.
+// console closes. An operation running refuses the swap for now: the
+// return is kept (pendingReturnView) and happens when the op ends.
 func (m Model) returnView(r *consoleReturn) Model {
 	if r == nil || r.view == "" || r.view == m.viewed || !m.isRepoWorktree(r.view) {
 		return m
 	}
-	m, _ = m.switchView(r.view)
-	return m
+	nm, ok := m.switchView(r.view)
+	if !ok && !m.opsIdle() {
+		nm.pendingReturnView = r.view
+	}
+	return nm
 }
 
 // captureReturn records the screen a console is about to cover. A
@@ -655,12 +660,19 @@ func (m Model) withConsoleWorktree(row string, w int) string {
 	if row != "" {
 		sep = " · "
 	}
-	label := lipgloss.Width(i18n.T("showing: %s", ""))
+	// "showing:" when the panels show the console's worktree; "worktree:"
+	// when the user switched the panels elsewhere under a docked console.
+	// (Two literal calls: the i18n gate wants literal keys.)
+	hint := func(path string) string { return i18n.T("worktree: %s", path) }
+	if filepath.Clean(dir) == m.viewed {
+		hint = func(path string) string { return i18n.T("showing: %s", path) }
+	}
+	label := lipgloss.Width(hint(""))
 	room := max(w-lipgloss.Width(row+sep)-label, min(lipgloss.Width(dir), w/2-lipgloss.Width(sep)-label))
 	if room < 8 {
 		return row
 	}
-	path := i18n.T("showing: %s", elidePath(dir, room))
+	path := hint(elidePath(dir, room))
 	if row == "" {
 		return path
 	}

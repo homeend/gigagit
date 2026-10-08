@@ -5956,10 +5956,15 @@ comments or commits; `prSeen` makes the open's own first read never count.
 Spec `docs/superpowers/specs/2026-10-08-fast-worktree-switch-design.md`, plan
 `docs/superpowers/plans/2026-10-08-fast-worktree-switch.md`.
 
-**The slot.** `worktreeView` groups the worktree-scoped part of the Model:
+**The slot.** `worktreeView` groups the worktree-scoped DATA of the Model:
 the `domain.Service` rooted there, `status` + `conflict` + the derived
 Files/Staged index slices, the Status cursors and `fileMarks`, the working
-reviews (+gen), `docWatch`, the git `watcher` (+gen, supported), `loaded`.
+reviews, `loaded`. Generations (`loadGen`, `srcGen`, `watchGen`,
+`docWatch.gen`, `workingReviewsGen`) and watchers are NOT in the slot: the
+gens stay Model-global and only grow (a slot restoring an older one would
+let a result built for another slot land — the final review caught this),
+and a sleeping slot has no watcher (switchView closes them; the live one
+rebuilds its own on the kick).
 The Model's fields stay the LIVE copy (no reader changed); `saveView` /
 `loadView` copy out/in. `Model.views` is keyed by the cleaned path,
 `viewed` is the slot on screen, `home` the one gg's identity belongs to.
@@ -5973,8 +5978,9 @@ golden caught it; `reRoot` drops the map.
 path in `m.worktrees`; `checkSwitchTarget` reachability; refused while an op
 runs). Saves the leaving slot and puts it to sleep (watcher + docWatch
 closed), loads the arriving one, bumps `srcGen[srcStatus]` +
-`workingReviewsGen` so reads in flight for the old slot are dropped, and sets
-`viewKick`. The **Update tail** launches `viewKickCmd` (a manual status read,
+`workingReviewsGen` AND `loadGen` (a mid-session `loadCmd` — conflict
+process, task track — launched on the old slot's service) so reads in
+flight for the old slot are dropped, and sets `viewKick`. The **Update tail** launches `viewKickCmd` (a manual status read,
 `startWatchCmd`, `syncAgentDocs`) and marks the read in flight — a tail hook
 because `closeConsole` returns a Model only. Only the live slot is ever
 watched or refreshed.
@@ -5990,7 +5996,15 @@ viewed worktree is the console's. `showConsole` swaps after attaching;
 `consoleReturn.view` (captured on the first show, carried across a console
 replacing a console) is where `closeConsole` → `returnView` goes;
 `forgetConsoleReturn` clears it on a repo switch. A refusal (an op running)
-shows the console and keeps the view, said on the status line. In-repo agent
+on SHOW keeps the view, said on the status line; on CLOSE the return is
+queued in `pendingReturnView` and `opFinishedMsg` performs it (a new show
+clears the queue). `dropConsole` (the console stepping aside for a stash
+list / preview / solo) keeps the view on purpose: the user is working in
+that worktree; `»` and the header say so and enter on home's row returns.
+A user switch asked while a console is docked swaps the panels UNDER the
+console (an explicit ask wins), sets `ret.view` to the target, and the hint
+reads `worktree: <path>` (console elsewhere than the panels) instead of
+`showing: <path>` (panels show the console's tree). In-repo agent
 tours (`agent_tours_open.go`) swap and park the tour id in
 `consoleSwitch.tour`; the `srcStatus` arrival shows it when `!armed`.
 
@@ -6008,10 +6022,22 @@ the page at once and pops its pending reply. `canEnterWorktree`: a row can
 be entered when it is not on screen, or on screen only because a console
 looks at it.
 
+**Identity stays home.** `homeSvc()` (home's service, the live one before
+seeding) roots the session-snapshot target check (`snapshotTargetMsg` is
+keyed on it — a console shown before the resolve lands must not drop it),
+the hosted web page (`startWebCmd`, `webRerootCmd`) and `publishedWT` on a
+legacy load. Self-guards that mean "gg's own worktree" compare against
+`homeWorktree()`: `canDeleteWorktree` (home AND the viewed one), 
+`recycleCandidates` (both), the move popup's chdir + `pendingSwitch`.
+`worktreeForBranch` keeps `currentWorktree` on purpose (SmartSwitch runs in
+the viewed tree, so "checked out elsewhere" is relative to it). Not yet
+routed: `goto_link`'s checkout switch and `steer_switch_ask` still `reRoot`
+(their `startAt*` replay is built around a reload — deferred).
+
 **On screen.** Worktrees rows: `*` = home (`homeWorktree()`), `»` = viewed ≠
 home. `consoleWorktreeHint` judges against HOME (the 2026-10-05 ruling
-"current worktree = gg's own"), labelled `showing: <path>`. The alt+a help
-row gained a second sentence.
+"current worktree = gg's own"), labelled `showing: <path>` / `worktree:
+<path>` as above. The alt+a help row gained a second sentence.
 
 **Tests.** `worktree_view_test.go` (slots, switchView, stale read, sleep,
 prune, adopt, repo switch), `console_view_test.go` (show/close, staging

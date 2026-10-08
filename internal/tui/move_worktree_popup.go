@@ -47,7 +47,7 @@ func (p *moveWorktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		wt := p.wt
 		m = m.popLayer()
-		if wt.Path == m.currentWorktree {
+		if filepath.Clean(wt.Path) == m.homeWorktree() { // gg's OWN cwd, not a worktree a console views
 			// gg's own cwd must leave the tree before git renames it (Windows
 			// cannot rename a directory any process holds as cwd); the chained
 			// reRoot below lands us in the new path.

@@ -208,7 +208,13 @@ func (m Model) canDeleteBranch() bool {
 // working tree, so don't offer it.
 func (m Model) canDeleteWorktree() bool {
 	wt, ok := m.selectedWorktree()
-	return m.opsIdle() && ok && wt.Path != m.currentWorktree
+	if !m.opsIdle() || !ok {
+		return false
+	}
+	// Neither gg's own worktree (home — its cwd, exit dir and steering) nor
+	// the one a console has on screen (the op would run inside it).
+	key := filepath.Clean(wt.Path)
+	return key != m.homeWorktree() && key != m.viewed
 }
 
 // canMoveWorktree gates e / the rename+move menu rows on Worktrees: any

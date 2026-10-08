@@ -7,7 +7,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
-	"github.com/homeend/gigagit/internal/gitwatch"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -32,17 +31,17 @@ type worktreeView struct {
 	selStaged      int
 	fileMarks      map[string]bool
 
-	workingReviews    []domain.WorkingReview
-	workingReviewsGen int
-
-	docWatch docWatchState
-
-	watcher        *gitwatch.Watcher
-	watchGen       int
-	watchSupported bool
+	workingReviews []domain.WorkingReview
 
 	loaded bool // its first status landed (false: the panel shows loading)
 }
+
+// Generations the handlers key on (loadGen, srcGen, watchGen, docWatch.gen,
+// workingReviewsGen) are NOT in the slot: they stay Model-global and only
+// ever grow, so a slot can never restore an older one and let a result
+// built for another slot land. Watchers are not in the slot either: a
+// sleeping slot has none (switchView closes them), the live one rebuilds
+// its own on the kick.
 
 // isRepoWorktree reports whether path is a worktree of the repository on
 // screen — the only paths a slot may be made for.
@@ -96,9 +95,7 @@ func (m Model) saveView() Model {
 	v.filesIdx, v.filesIdxReview, v.stagedIdx = m.filesIdx, m.filesIdxReview, m.stagedIdx
 	v.selFiles, v.selStaged = m.sel[panelFiles], m.sel[panelStaged]
 	v.fileMarks = m.fileMarks
-	v.workingReviews, v.workingReviewsGen = m.workingReviews, m.workingReviewsGen
-	v.docWatch = m.docWatch
-	v.watcher, v.watchGen, v.watchSupported = m.watcher, m.watchGen, m.watchSupported
+	v.workingReviews = m.workingReviews
 	v.loaded = m.loadedOK
 	return m
 }
@@ -116,10 +113,28 @@ func (m Model) loadView(v *worktreeView) Model {
 	}
 	m.sel[panelFiles], m.sel[panelStaged] = v.selFiles, v.selStaged
 	m.fileMarks = v.fileMarks
-	m.workingReviews, m.workingReviewsGen = v.workingReviews, v.workingReviewsGen
-	m.docWatch = v.docWatch
-	m.watcher, m.watchGen, m.watchSupported = v.watcher, v.watchGen, v.watchSupported
+	m.workingReviews = v.workingReviews
 	return m
+}
+
+// homeWorktree is gg's own worktree: home once the slots are seeded, the
+// current worktree before (a test literal, the first load).
+func (m Model) homeWorktree() string {
+	if m.home != "" {
+		return m.home
+	}
+	return filepath.Clean(m.currentWorktree)
+}
+
+// homeSvc is the service of gg's own worktree — what the identity-bound
+// pieces (the session snapshot target, the hosted web page) are rooted at,
+// whichever slot a console has put on screen. The live service before the
+// slots are seeded, and right after a repo switch dropped them.
+func (m Model) homeSvc() *domain.Service {
+	if v := m.views[m.home]; m.home != "" && v != nil && v.svc != nil {
+		return v.svc
+	}
+	return m.svc
 }
 
 // switchView makes path's slot the live one. Same repository only: a path
@@ -153,15 +168,12 @@ func (m Model) switchView(path string) (Model, bool) {
 		_ = m.watcher.Close()
 	}
 	closeDocWatch(m.docWatch.w)
-	if v := m.views[m.viewed]; v != nil {
-		v.watcher, v.watchSupported = nil, false
-		v.docWatch = docWatchState{gen: v.docWatch.gen + 1}
-	}
 	m = m.loadView(m.ensureView(key))
 	m.watcher, m.watchSupported = nil, false
 	m.watchGen++
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1}
-	m.srcGen[srcStatus]++ // a status read launched for the old slot cannot land here
+	m.loadGen++           // a full load (loadCmd) launched on the old slot cannot land here
+	m.srcGen[srcStatus]++ // nor a status read
 	m.srcInflight[srcStatus] = false
 	m.srcLoading[srcStatus] = false
 	m.workingReviewsGen++ // likewise a reviews read
@@ -188,13 +200,7 @@ func (m Model) abandonGoneView() (Model, bool) {
 		return m, false
 	}
 	gone := m.viewed
-	if v := m.views[gone]; v != nil {
-		if v.watcher != nil {
-			_ = v.watcher.Close()
-		}
-		closeDocWatch(v.docWatch.w)
-		delete(m.views, gone)
-	}
+	delete(m.views, gone)
 	home := m.views[m.home]
 	if home == nil {
 		return m, false
@@ -215,14 +221,10 @@ func (m Model) abandonGoneView() (Model, bool) {
 // recycled, pruned). The viewed one going falls back to home: its
 // service would point at a tree that is not there.
 func (m Model) pruneViews() Model {
-	for key, v := range m.views {
+	for key := range m.views {
 		if m.isRepoWorktree(key) || key == m.home {
 			continue
 		}
-		if v.watcher != nil {
-			_ = v.watcher.Close()
-		}
-		closeDocWatch(v.docWatch.w)
 		delete(m.views, key)
 		if key == m.viewed {
 			gone := key
@@ -264,13 +266,4 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 	}
 	m.statusMsg = i18n.T("switched to %s", shortWorktreeName(m.home))
 	return m, tea.Batch(snapshotTargetCmd(m.svc), m.pendingWatchCmd(m.noticeGen), m.pendingSendsReadCmd(m.noticeGen), m.webRerootCmd())
-}
-
-// homeWorktree is gg's own worktree: home once the slots are seeded, the
-// current worktree before (a test literal, the first load).
-func (m Model) homeWorktree() string {
-	if m.home != "" {
-		return m.home
-	}
-	return filepath.Clean(m.currentWorktree)
 }

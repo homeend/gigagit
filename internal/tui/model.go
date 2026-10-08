@@ -93,12 +93,15 @@ type Model struct {
 	// views remembers the worktree-scoped state per worktree of this
 	// repository (worktree_view.go); viewed is the slot on screen, home the
 	// one gg's identity (exit dir, steering, snapshot) belongs to.
-	views         map[string]*worktreeView
-	viewed        string
-	home          string
-	viewKick      bool   // switchView ran; the Update tail launches viewKickCmd once
-	recycleBranch string // branch captured when the Recycle-a-worktree picker opened
-	recycleRemote string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
+	views    map[string]*worktreeView
+	viewed   string
+	home     string
+	viewKick bool // switchView ran; the Update tail launches viewKickCmd once
+	// pendingReturnView is where a closed console's view goes once the
+	// operation that refused the swap has finished (console.go returnView).
+	pendingReturnView string
+	recycleBranch     string // branch captured when the Recycle-a-worktree picker opened
+	recycleRemote     string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
 
 	notices                []notice                // session notice list (see notify.go)
 	driftNotices           []driftNoticeSource     // post-op drift/paused-resume findings; rebuildNotices re-renders these too
@@ -929,8 +932,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.applyDriftReport(msg.branch, msg.report, msg.paused)
 	case snapshotTargetMsg:
-		if msg.svc != m.svc {
-			return m, nil // stale: a later repo switch superseded this resolve
+		if msg.svc != m.homeSvc() {
+			return m, nil // stale: a later repo switch (or adopt) superseded this resolve; a console's view never does
 		}
 		m.snapshotCommonDir = msg.commonDir
 		m.snapshotWorktree = msg.worktree
@@ -1831,9 +1834,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tags = msg.tags
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
-			publishedWT.Store(msg.currentWorktree)
 			m.worktreeMarks = msg.worktreeMarks
 			m = m.seedHome(msg.currentWorktree).saveView()
+			publishedWT.Store(m.homeWorktree()) // gg's OWN worktree, whichever slot this load was for
 			m = m.pruneViews()
 			// The worktree's open files may have missed store changes while
 			// another worktree was current (a dismiss in the browser).
@@ -3662,6 +3665,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = false
 		m.opName = ""
 		m.opMsgs = nil
+		if p := m.pendingReturnView; p != "" {
+			// A console closed while this op ran: its view goes home now.
+			m.pendingReturnView = ""
+			m, _ = m.switchView(p)
+		}
 		m = m.cleanupPickPatchTemp()
 		// A foreground fetch is a single (uncontended) `git fetch`, so its duration
 		// is a representative measurement for the background-fetch row — record it
@@ -4971,7 +4979,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
 	m.views = map[string]*worktreeView{} // another repository: its worktrees are not these
-	m.viewed, m.home = "", ""
+	m.viewed, m.home, m.pendingReturnView = "", "", ""
 	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go
 	m = m.withWorkingReviews(nil)
 	// Disable the snapshot synchronously (no git subprocess here — reRoot runs
