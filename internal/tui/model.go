@@ -3787,9 +3787,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var prCmd tea.Cmd
 		if prOpen != nil && msg.err == nil {
 			prCmd = m.openPRPreviewCmd(*prOpen) // the head is local now: open its diff
+			m.restartPRLandingClock(prOpen.Number)
 			// Computing the pair's diff is the slow half on a big repository:
 			// say so, or the fetch's "done" reads as the end of the story.
 			m.statusMsg = i18n.T("opening PR #%d…", prOpen.Number)
+		} else if prOpen != nil {
+			m, prCmd = m.failPRLanding(prOpen.Number, firstLine(msg.err.Error()))
 		}
 		if prsReload && msg.err == nil {
 			// Batched, never assigned: a search result's fetch arms BOTH the
