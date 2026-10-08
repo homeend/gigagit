@@ -7,6 +7,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
 )
@@ -94,6 +95,9 @@ func ScopeReviewTarget(set PreviewNoteSet) ReviewTarget {
 	label := set.Target + " ... " + set.Source
 	if set.IsPair() {
 		label = shortSHA(set.Base) + ".." + shortSHA(set.Tip)
+	}
+	if _, ok := git.ParsePRRef(set.Source); ok {
+		label = NoteScopeLabel(set.scope()) // "PR #7", the TUI's and web's name for it
 	}
 	return ReviewTarget{Kind: ReviewRange, Range: spec.Rev, Label: label, Diff: spec, Commit: set.Tip, Preview: set.scope()}
 }

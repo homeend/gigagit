@@ -679,7 +679,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 						c.ScopesByCommit = map[string][]NoteScopeCount{}
 					}
 					sc := c.ScopesByCommit[n.Address.Commit]
-					i := slices.IndexFunc(sc, func(e NoteScopeCount) bool { return e.Scope == n.Preview })
+					i := slices.IndexFunc(sc, func(e NoteScopeCount) bool { return SameNoteScope(e.Scope, n.Preview) })
 					if i < 0 {
 						sc, i = append(sc, NoteScopeCount{Scope: n.Preview}), len(sc)
 					}

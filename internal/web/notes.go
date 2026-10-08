@@ -243,7 +243,7 @@ func (s *Server) notePreview(ctx context.Context, spec string, addr model.FileAd
 	// however far its branch moved since. An allowlist — no resolving needed.
 	if c, cerr := s.service().NoteCounts(ctx); cerr == nil {
 		for _, sc := range c.ScopesByCommit[addr.Commit] {
-			if sc.Scope == spec {
+			if domain.SameNoteScope(sc.Scope, spec) {
 				return spec
 			}
 		}

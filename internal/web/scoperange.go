@@ -67,7 +67,7 @@ func (s *Server) handleScopeRange(w http.ResponseWriter, r *http.Request) {
 	}
 	known := false
 	for _, sc := range counts.ScopesByCommit[commit] {
-		known = known || sc.Scope == scope
+		known = known || domain.SameNoteScope(sc.Scope, scope)
 	}
 	if !known {
 		writeErr(w, http.StatusNotFound, errors.New("no notes of that range on this commit"))

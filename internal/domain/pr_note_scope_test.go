@@ -239,3 +239,62 @@ func TestPRNoteScopeRefusesACommitOffThePR(t *testing.T) {
 		t.Fatalf("scope %q err %v", sc, err)
 	}
 }
+
+// A4: a PR's notes written over different base spellings are one review:
+// one Range review row (count summed), and opening it from any spelling
+// shows them all.
+func TestOnePRIsOneScopeWhateverTheBaseSpelling(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	base := revParse(t, repoDir(t, svc), "main")
+	a := addScopedNote(t, svc, head, "big.go", 5, "main..."+git.PRRef(7), "by name")
+	b := addScopedNote(t, svc, head, "big.go", 25, base+"..."+git.PRRef(7), "by sha")
+	c, err := svc.NoteCounts(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scs := c.ScopesByCommit[head]; len(scs) != 1 || scs[0].N != 2 {
+		t.Fatalf("scopes %+v", scs)
+	}
+	from, to, err := svc.ScopeAtCommit(context.Background(), base+"..."+git.PRRef(7), head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := svc.PairNotes(context.Background(), from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set.Only = base + "..." + git.PRRef(7) // opened from the sha spelling
+	if ids := idsAt(t, svc, set, "big.go"); !ids[a] || !ids[b] {
+		t.Fatalf("ids %v (a %s b %s)", ids, a, b)
+	}
+}
+
+func TestScopeReviewTargetNamesThePR(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	if got := ScopeReviewTarget(prNoteSetOf(t, svc)).Label; got != "PR #7" {
+		t.Fatalf("label %q", got)
+	}
+}
+
+func TestSameNoteScope(t *testing.T) {
+	t.Parallel()
+	pr7, pr8 := "main..."+git.PRRef(7), "main..."+git.PRRef(8)
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{pr7, pr7, true},
+		{pr7, "abc123..." + git.PRRef(7), true},
+		{pr7, pr8, false},
+		{"main...feat", "main...feat", true},
+		{"main...feat", "origin/main...feat", false},
+		{pr7, "", false},
+		{"", "", false},
+	} {
+		if got := SameNoteScope(tc.a, tc.b); got != tc.want {
+			t.Errorf("SameNoteScope(%q, %q) = %v", tc.a, tc.b, got)
+		}
+	}
+}
