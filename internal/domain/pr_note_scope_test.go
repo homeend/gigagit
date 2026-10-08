@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -194,5 +195,47 @@ func TestPRReviewRemarksAreCachedPerPR(t *testing.T) {
 	}
 	if got := svc.prReviewNotes(ctx, nine); len(got) != 0 {
 		t.Fatalf("#9 shows #7's remarks: %v", got)
+	}
+}
+
+// prReadsOf is how many times the fake forge was asked for PR n.
+func prReadsOf(ff *fakeForge, n int) int {
+	ff.mu.Lock()
+	defer ff.mu.Unlock()
+	return ff.prCalls[n]
+}
+
+// A1/A2: the scope comes from the row handed in (no forge read), and any
+// commit of the PR's range takes it — an older tip the page still shows.
+func TestPRNoteScopeAcceptsAnyCommitOfThePR(t *testing.T) {
+	t.Parallel()
+	svc, ff, oldHead := sendRepo(t)
+	dir := repoDir(t, svc)
+	runGitIn(t, dir, "checkout", "-q", "feat")
+	commitFile(t, dir, "other.go", "package other // moved\n", "a newer commit")
+	newHead := revParse(t, dir, "HEAD")
+	runGitIn(t, dir, "checkout", "-q", "main")
+	runGitIn(t, dir, "update-ref", git.PRRef(7), newHead)
+	pr := model.PullRequest{Number: 7, State: "open", Target: "main", HeadSHA: newHead}
+	reads := prReadsOf(ff, 7)
+	for _, c := range []string{newHead, oldHead} {
+		sc, err := svc.PRNoteScope(context.Background(), pr, c)
+		if n, ok := PRScopeNumber(sc); err != nil || !ok || n != 7 {
+			t.Fatalf("commit %s: scope %q err %v", c[:7], sc, err)
+		}
+	}
+	if prReadsOf(ff, 7) != reads {
+		t.Fatal("PRNoteScope read the forge")
+	}
+}
+
+// A2: a commit the PR no longer holds (a force-push) is refused, never plain.
+func TestPRNoteScopeRefusesACommitOffThePR(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	base := revParse(t, repoDir(t, svc), "main")
+	pr := model.PullRequest{Number: 7, State: "open", Target: "main", HeadSHA: head}
+	if sc, err := svc.PRNoteScope(context.Background(), pr, base); !errors.Is(err, ErrNoteOffPR) || sc != "" {
+		t.Fatalf("scope %q err %v", sc, err)
 	}
 }

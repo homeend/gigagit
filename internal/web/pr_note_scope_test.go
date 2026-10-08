@@ -31,18 +31,41 @@ func TestWebPRNoteIsStamped(t *testing.T) {
 	}
 }
 
-// Review Focus 4: a commit that is not the PR's tip takes no PR stamp.
-func TestWebPRNoteOffTheTipIsNotStamped(t *testing.T) {
+// A2: a commit outside the PR (its head was force-pushed under the page) is
+// refused — the note would otherwise be stored plain and leave the PR.
+func TestWebPRNoteOffThePRIsRefused(t *testing.T) {
 	ts, _, srv, _, dir := sendServerFull(t)
 	parent := strings.TrimSpace(gitRun(t, dir, "rev-parse", "main"))
 	code, out := postJSONAny(t, ts, "/api/notes/add",
 		fmt.Sprintf(`{"path":"f.txt","rev":%q,"state":"commit","side":"new","line":1,"summary":"x","pr":7}`, parent))
+	if code != 409 || !strings.Contains(fmt.Sprint(out["error"]), "#7") {
+		t.Fatalf("add = %d %v", code, out)
+	}
+	if c, err := srv.service().NoteCounts(context.Background()); err == nil && c.ByCommit[parent] != 0 {
+		t.Fatal("the refused note was stored")
+	}
+}
+
+// A1: a PR the page does not know is never read from the forge for a note.
+func TestWebNoteForAnUnknownPRReadsNoForge(t *testing.T) {
+	ts, wf, srv, head, _ := sendServerFull(t)
+	reads := func() int {
+		wf.mu.Lock()
+		defer wf.mu.Unlock()
+		return wf.prReads
+	}
+	before := reads()
+	code, out := postJSONAny(t, ts, "/api/notes/add",
+		fmt.Sprintf(`{"path":"pr7.txt","rev":%q,"state":"commit","side":"new","line":1,"summary":"x","pr":99}`, head))
 	id, _ := out["id"].(string)
 	if code != 200 || id == "" {
 		t.Fatalf("add = %d %v", code, out)
 	}
+	if n := reads() - before; n != 0 {
+		t.Fatalf("the note add read the forge %d times", n)
+	}
 	if p := storedPreview(t, srv, id); p != "" {
-		t.Fatalf("an off-tip note recorded %q", p)
+		t.Fatalf("an unknown PR stamped %q", p)
 	}
 }
 

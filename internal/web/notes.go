@@ -285,7 +285,17 @@ func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	preview := s.notePreview(r.Context(), req.Preview, addr)
 	if req.PR > 0 && addr.State == model.StateCommitted {
-		preview = s.service().PRNoteScope(r.Context(), req.PR, addr.Commit)
+		// The row the view was opened from (cachedPR): never a forge read.
+		if pr, ok := s.cachedPR(s.service(), req.PR); ok {
+			sc, err := s.service().PRNoteScope(r.Context(), pr, addr.Commit)
+			if err != nil {
+				writeErr(w, http.StatusConflict, err)
+				return
+			}
+			if sc != "" {
+				preview = sc
+			}
+		}
 	}
 	n := model.Note{
 		Source: model.NoteSourceUser, Author: s.noteAuthor(r.Context(), req.Author), Address: addr,
