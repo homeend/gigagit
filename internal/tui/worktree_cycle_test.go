@@ -117,3 +117,32 @@ func TestAltWNeverBlocksOnItsOwnReads(t *testing.T) {
 		t.Fatalf("second alt+w refused: %q (viewed %q)", m.statusMsg, m.viewed)
 	}
 }
+
+// alt+w picks the base worktree: alt+a over a console in B, then alt+w to
+// C under it, then alt+a round to the return stop lands on C — the last
+// alt+w — not on the worktree the cycle started in.
+func TestAltAReturnStopIsTheLastAltWWorktree(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, wtB := addWorktree(t, m, "wtB")
+	m, _ = addWorktree(t, m, "wtC")
+	installSessionManager(t)
+	startSessionIn(t, m, wtB, "B")
+	start := m.viewed
+	m = pressAlt(t, m, 'a')
+	if m.console == nil || m.viewed != filepath.Clean(wtB) {
+		t.Fatalf("alt+a: console=%v viewed=%q", m.console != nil, m.viewed)
+	}
+	m = pressAlt(t, m, 'w')
+	base := m.viewed
+	if m.console == nil || base == filepath.Clean(wtB) || base == start {
+		t.Fatalf("alt+w under the console: console=%v viewed=%q", m.console != nil, m.viewed)
+	}
+	m = pressAlt(t, m, 'a') // the ring's return stop: the console closes
+	if m.console != nil {
+		t.Fatal("return stop: console still shown")
+	}
+	if m.viewed != base {
+		t.Fatalf("return stop landed on %q, want the last alt+w worktree %q", m.viewed, base)
+	}
+}

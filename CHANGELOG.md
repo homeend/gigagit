@@ -32,7 +32,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   needed; the status row says `wt-x — 2 of 3 worktrees`. A fast switch
   never blocks: its status read is silent (no "⏳ reloading…", the next press
   is never refused), and the Branches panel's `*` and the Commits
-  identity's `*name` follow the shown worktree's branch at once.
+  identity's `*name` follow the shown worktree's branch at once. alt+w
+  picks the base worktree: pressed under a docked console, the alt+a /
+  alt+t return stop then lands on that worktree, not where the cycle
+  started.
 
 ## Review links: the remaining rough edges
 

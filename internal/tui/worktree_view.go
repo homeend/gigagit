@@ -332,7 +332,9 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 // (the Worktrees panel's order), past the last one the first — what alt+a
 // does for a console's worktree, for every worktree, no session needed.
 // A look, not an adoption: gg's own worktree stays home, the ring comes
-// back to it. A docked console stays as it is.
+// back to it. A docked console stays as it is, but its return point moves:
+// alt+w picks the BASE worktree (the one the * marks), and the alt+a /
+// alt+t ring's return stop lands there, not where the cycle started.
 func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	n := len(m.worktrees)
 	if n < 2 {
@@ -352,6 +354,10 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	if !ok {
 		return nm, nil
 	}
+	if nm.console != nil && nm.console.ret != nil {
+		nm.console.ret.view = nm.viewed
+	}
+	nm.pendingReturnView = ""
 	nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(wt.Path), next+1, n)
 	return nm, nil
 }

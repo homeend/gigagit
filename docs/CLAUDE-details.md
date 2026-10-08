@@ -6005,7 +6005,10 @@ alt+a, never `adoptView`: home stays, the ring comes back to it. Reachable
 wherever alt+a is (`cycleReachable`), reserved inside a focused console
 (`consolePassthrough` / `consoleFullPassthrough` + the focused-console
 branch of `updateConsoleKey`); a docked console stays open and the status
-row then names its worktree. Status: `wt-x — 2 of 3 worktrees`; one
+row then names its worktree — and its return point (`ret.view`) moves to
+the alt+w worktree: alt+w picks the BASE (the `*`), so the alt+a / alt+t
+ring's return stop lands there, not where the cycle started (user ruling
+2026-10-08; `pendingReturnView` is cleared too). Status: `wt-x — 2 of 3 worktrees`; one
 worktree: a status line only. Footer `[alt+w] next worktree` when the list
 has more than one and nothing runs or loads. Tests
 `worktree_cycle_test.go`, e2e `tui_worktree_cycle`.
