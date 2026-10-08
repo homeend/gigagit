@@ -329,7 +329,8 @@ func TestPRPrefetch(t *testing.T) {
 	t.Parallel()
 	dir, head := prPreviewRepo(t)
 	svc, _ := countingService(t, dir)
-	svc.SetPRCacheStore(prcache.New(t.TempDir(), 0))
+	cacheDir := t.TempDir()
+	svc.SetPRCacheStore(prcache.New(cacheDir, 0))
 	ff := &fakeForge{url: dir, open: []model.PullRequest{{Number: 7, State: "open", Target: "main", HeadSHA: head}}}
 	svc.SetForgeProviders([]forge.Provider{refspecFake{ff, "refs/heads/feat"}})
 	ctx := context.Background()
@@ -364,11 +365,43 @@ func TestPRPrefetch(t *testing.T) {
 		t.Fatalf("prefetch ran under a user op (%d)", n)
 	}
 	res.Release()
+	st := prcache.New(cacheDir, 0)
+	before, _ := st.Load(7)
 	if n := svc.PRPrefetch(ctx); n != 1 {
 		t.Fatalf("prefetch after the op = %d, want 1", n)
 	}
+	if after, _ := st.Load(7); !after.OpenedAt.Equal(before.OpenedAt) {
+		t.Fatalf("a prefetch re-stamped the open time: %v → %v", before.OpenedAt, after.OpenedAt)
+	}
 	if got := revParse(t, dir, git.PRRef(7)); got != moved {
 		t.Fatalf("refs/gg/pr/7 = %s, want the moved head %s", got, moved)
+	}
+}
+
+// Item 4: the disk cache keeps the most recently OPENED PRs — the heartbeat's
+// revalidate is not an open.
+func TestARevalidateIsNotAnOpen(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	ff := &fakeForge{url: "u", byNum: map[int]model.PullRequest{1: pr(1, "open", 1), 2: pr(2, "open", 1)}}
+	now := time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
+	svc := newCachedForgeSvc(t, ff, dir)
+	atClock(svc, &now)
+	ctx := context.Background()
+	for _, n := range []int{1, 2} {
+		if _, err := svc.PRFetchOp(ctx, n); err != nil {
+			t.Fatal(err)
+		}
+		now = now.Add(time.Minute)
+	}
+	if _, err := svc.PRRevalidate(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	st := prcache.New(dir, 0)
+	e1, _ := st.Load(1)
+	e2, _ := st.Load(2)
+	if !e2.OpenedAt.After(e1.OpenedAt) {
+		t.Fatalf("a revalidate re-stamped #1: opened %v, #2 opened %v", e1.OpenedAt, e2.OpenedAt)
 	}
 }
 

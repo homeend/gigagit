@@ -2,10 +2,12 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/model"
@@ -143,5 +145,45 @@ func TestWebCacheHoursZeroHoldsOnTheFirstListing(t *testing.T) {
 	f.mu.Unlock()
 	if d != 1 {
 		t.Fatalf("Detect calls = %d, want 1 (cache_hours = 0 trusts no cached verdict)", d)
+	}
+}
+
+// Item 4: opening an already-fetched PR from the page is an open — it stamps
+// the cache entry's open time (the disk cache keeps the most recently opened
+// PRs; the heartbeat's revalidate no longer stamps). Serial: prFixture.
+func TestPROpenStampsTheOpenTime(t *testing.T) {
+	dir, bare, head := prFixture(t)
+	pr := openPR(7, "Add a thing")
+	pr.HeadSHA = head
+	ts, _ := prServe(t, dir, &fakeForge{open: []model.PullRequest{pr}, baseURL: bare})
+	waitPRsLoaded(t, ts)
+	if done := runPROp(t, ts, "pr-fetch", 7); done["ok"] != true {
+		t.Fatalf("pr-fetch: %v", done)
+	}
+	opened := func() time.Time {
+		t.Helper()
+		m, _ := filepath.Glob(filepath.Join(os.Getenv("XDG_STATE_HOME"), "gg", "prcache", "*", "pr-7.json"))
+		if len(m) != 1 {
+			t.Fatalf("entries %v", m)
+		}
+		b, err := os.ReadFile(m[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var e struct {
+			OpenedAt time.Time `json:"opened_at"`
+		}
+		if err := json.Unmarshal(b, &e); err != nil {
+			t.Fatal(err)
+		}
+		return e.OpenedAt
+	}
+	before := opened()
+	time.Sleep(20 * time.Millisecond)
+	if code := getJSON(t, ts, "/api/pr/open?n=7", nil); code != 200 {
+		t.Fatalf("open = %d", code)
+	}
+	if after := opened(); !after.After(before) {
+		t.Fatalf("an open did not stamp: %v → %v", before, after)
 	}
 }

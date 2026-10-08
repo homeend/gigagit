@@ -319,6 +319,7 @@ func (s *Server) handlePROpen(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	svc.MarkPROpened(ctx, n) // an open: the disk cache keeps the most recently opened PRs
 	pair := res.Pair
 	body := previewOpenBody(res.Endpoints, label, pr.Source, pr.Target)
 	body["pr"] = n

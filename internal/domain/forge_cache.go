@@ -124,10 +124,10 @@ func (s *Service) loadDiskPR(ctx context.Context, n int) bool {
 }
 
 // cachedPR is PR n from the cache — memory, then its disk entry, then the
-// cached listing — else from the forge (and then cached). Every use stamps
-// the entry's last-open time (the disk cache keeps the most recently opened
-// PRs).
-func (s *Service) cachedPR(ctx context.Context, p forge.Provider, n int) (model.PullRequest, error) {
+// cached listing — else from the forge (and then cached). An open (opened)
+// stamps the entry's last-open time — the disk cache keeps the most
+// recently opened PRs; a prefetch is not an open.
+func (s *Service) cachedPR(ctx context.Context, p forge.Provider, n int, opened bool) (model.PullRequest, error) {
 	if !s.loadDiskPR(ctx, n) {
 		if l, ok := s.cachedListing(ctx); ok {
 			for _, row := range l.PRs {
@@ -144,32 +144,34 @@ func (s *Service) cachedPR(ctx context.Context, p forge.Provider, n int) (model.
 	e, ok := s.takePRLocked(n)
 	s.forgeMu.Unlock()
 	if ok {
-		s.persistEntry(ctx, e)
+		s.persistEntry(ctx, e, opened)
 		return e.pr, nil
 	}
 	pr, err := p.PR(ctx, n)
 	if err != nil {
 		return model.PullRequest{}, err
 	}
-	s.rememberPR(ctx, pr, true)
+	s.rememberPR(ctx, pr, true, opened)
 	return pr, nil
 }
 
-// rememberPR stores a forge answer in memory and on disk.
-func (s *Service) rememberPR(ctx context.Context, pr model.PullRequest, full bool) {
+// rememberPR stores a forge answer in memory and on disk; opened: the user
+// opened the PR (see persistEntry).
+func (s *Service) rememberPR(ctx context.Context, pr model.PullRequest, full, opened bool) {
 	s.forgeMu.Lock()
 	s.putPRLocked(pr, full)
 	e := s.forgePRCache[pr.Number]
 	s.forgeMu.Unlock()
-	s.persistEntry(ctx, e)
+	s.persistEntry(ctx, e, opened)
 }
 
-// persistEntry writes a memory entry to disk as just opened: the PR and its
-// read time when it is newer than the disk's — or the disk's is not fresh
-// (expired, or stamped in the future by a clock that moved back) — and the
-// open stamp the disk cache's bound keys on. A listed row never downgrades a
-// fresh full read on disk: its body, forge id and viewer fields are kept.
-func (s *Service) persistEntry(ctx context.Context, e forgePREntry) {
+// persistEntry writes a memory entry to disk: the PR and its read time when
+// it is newer than the disk's — or the disk's is not fresh (expired, or
+// stamped in the future by a clock that moved back) — and, for an open, the
+// open stamp the disk cache's bound keys on (an entry never opened keeps a
+// zero stamp and is the first to go). A listed row never downgrades a fresh
+// full read on disk: its body, forge id and viewer fields are kept.
+func (s *Service) persistEntry(ctx context.Context, e forgePREntry, opened bool) {
 	now := s.forgeClock()
 	s.persistPR(ctx, e.pr.Number, func(x *prcache.Entry) {
 		diskFresh := s.fresh(x.ReadAt)
@@ -184,7 +186,9 @@ func (s *Service) persistEntry(ctx context.Context, e forgePREntry) {
 			}
 			x.PR, x.Full, x.ReadAt = pr, full, e.readAt
 		}
-		x.OpenedAt = now
+		if opened {
+			x.OpenedAt = now
+		}
 	})
 }
 
@@ -264,7 +268,7 @@ func (s *Service) PRRevalidate(ctx context.Context, n int) (PRRevalidation, erro
 			return PRRevalidation{}, err
 		}
 	}
-	s.rememberPR(ctx, pr, true)
+	s.rememberPR(ctx, pr, true, false) // the heartbeat is not an open
 	s.settleSends(ctx, pr, raw, readStart)
 	if !pr.IsOpen() {
 		s.forgeMu.Lock()

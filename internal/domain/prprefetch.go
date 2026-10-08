@@ -99,7 +99,7 @@ func (s *Service) prefetchPRs(ctx context.Context) int {
 			break
 		}
 		p := listed[e.Number]
-		op, err := s.PRFetchOp(ctx, p.Number)
+		op, err := s.prFetchOp(ctx, p.Number, false) // warming is not an open
 		if err != nil {
 			continue
 		}

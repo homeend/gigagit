@@ -297,8 +297,8 @@ func (s *Service) PullRequest(ctx context.Context, n int) (model.PullRequest, er
 		return model.PullRequest{}, err
 	}
 	// A full read (it carries the body) feeds the cache: the details view is
-	// served from it the next time, before the forge answers.
-	s.rememberPR(ctx, pr, true)
+	// served from it the next time, before the forge answers. It is an open.
+	s.rememberPR(ctx, pr, true, true)
 	return pr, nil
 }
 
@@ -353,6 +353,12 @@ func bucketComments(cs []model.ForgeComment, truncated bool) PRComments {
 // user's own transport and credentials — and only falls back to the
 // provider's URL when no remote matches.
 func (s *Service) PRFetchOp(ctx context.Context, n int) (engine.FetchPRHead, error) {
+	return s.prFetchOp(ctx, n, true)
+}
+
+// prFetchOp is PRFetchOp; opened says whether a user opens the PR (prefetch
+// warms it without counting as an open).
+func (s *Service) prFetchOp(ctx context.Context, n int, opened bool) (engine.FetchPRHead, error) {
 	p, err := s.provider(ctx)
 	if err != nil {
 		return engine.FetchPRHead{}, err
@@ -360,7 +366,7 @@ func (s *Service) PRFetchOp(ctx context.Context, n int) (engine.FetchPRHead, err
 	// Both answers come from the cache when it has them: the listing already
 	// carried this PR's head, and the base repository does not change. A head
 	// that moved since is PRRevalidate's job, off the user's click path.
-	pr, err := s.cachedPR(ctx, p, n)
+	pr, err := s.cachedPR(ctx, p, n, opened)
 	if err != nil {
 		return engine.FetchPRHead{}, err
 	}
