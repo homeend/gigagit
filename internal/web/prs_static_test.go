@@ -120,3 +120,22 @@ func TestPRMaskSitsBelowEveryOverlay(t *testing.T) {
 		}
 	}
 }
+
+// C9: prs.js reads through the one serial reader — revalidate included — and
+// has no give-up timer.
+func TestPRReadsAreSerial(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile(filepath.Join("static", "prs.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(src)
+	for _, want := range []string{`serialReads(`, `reads.soon("revalidate:"`, `reads.soon("after-send:"`, `sentEvent(ev, readSeq)`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("prs.js lacks %s", want)
+		}
+	}
+	if strings.Contains(s, "tries < 40") {
+		t.Error("prs.js still gives up on a dropped post-send read")
+	}
+}

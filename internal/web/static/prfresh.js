@@ -29,3 +29,34 @@ export function nextFresh(st, ev) {
   if (ev.changed) return { ...s, updated: ev.n, text: "updated" };
   return { ...s, updated: 0, text: "" };
 }
+
+// serialReads runs the open PR's forge reads one at a time through gate
+// (prs.js: runOnce("pr-comments")). run(fn) starts fn or answers null when a
+// read is running; soon(key, fn) starts it, or runs it once the running read
+// ends — one waiting read per key, the newest wins. No give-up timer: a read
+// always ends (the server bounds it).
+export function serialReads(gate) {
+  const waiting = new Map();
+  const run = (fn) => {
+    const p = gate(fn);
+    if (p) p.then(next, next);
+    return p;
+  };
+  function next() {
+    const first = waiting.entries().next();
+    if (first.done) return;
+    const [key, fn] = first.value;
+    waiting.delete(key);
+    soon(key, fn);
+  }
+  function soon(key, fn) {
+    if (run(fn) === null) waiting.set(key, fn);
+  }
+  return { run, soon };
+}
+
+// sentEvent is the freshness event a finished send makes (F1): only a send
+// that changed GitHub is my own change; seq = the last read started.
+export function sentEvent(ev, seq) {
+  return ev.ok && ev.changed ? { kind: "sent", seq } : null;
+}

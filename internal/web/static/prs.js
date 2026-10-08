@@ -18,7 +18,7 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
-import { nextFresh } from "./prfresh.js";
+import { nextFresh, sentEvent, serialReads } from "./prfresh.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
@@ -164,6 +164,9 @@ function prLabel(n) {
 const lastRead = new Map(); // PR number → the read_at the server last reported
 let fresh = { seen: 0, updated: 0, ownSend: null, text: "" };
 let readSeq = 0; // every comments read's start, in order (prfresh.js's sequence)
+// The open PR's forge reads (comments refresh, revalidate) run one at a time;
+// a read asked while one runs waits for it (C9).
+const reads = serialReads((fn) => runOnce("pr-comments", fn));
 function setPRFresh(n, text) {
   const po = state.previewOpen;
   $("pr-fresh").textContent = po && po.pr === n ? text : "";
@@ -223,15 +226,16 @@ onHeadMoved((n) => followMovedHead(n));
 // refreshAfterSend re-reads PR n once a send ended. A read already running
 // started before the send landed: wait for it, then read again — the read
 // that absorbs the send's own change must start after it.
-function refreshAfterSend(n, tries = 0) {
-  if (refreshPRComments(n) === null && tries < 40) setTimeout(() => refreshAfterSend(n, tries + 1), 250);
+function refreshAfterSend(n) {
+  reads.soon("after-send:" + n, commentsRead(n, false));
 }
 
 // A finished send: a change it made is not "updated" (an abort or a failure
 // changed nothing, so it arms nothing), and the PR is re-read (the
 // interrupted bar follows what GitHub now holds).
 onSendDone((n, ev) => {
-  if (ev.ok && ev.changed) freshEvent(n, { kind: "sent", seq: readSeq });
+  const sent = sentEvent(ev, readSeq);
+  if (sent) freshEvent(n, sent);
   refreshAfterSend(n);
 });
 
@@ -283,7 +287,12 @@ async function showPR(n, moved, skipComments) {
 // simply stays without (newer) threads.
 // moved: the view was just re-opened on a moved head — that read is news.
 export function refreshPRComments(n, moved = false) {
-  return runOnce("pr-comments", async () => {
+  return reads.run(commentsRead(n, moved));
+}
+
+// commentsRead is refreshPRComments's read, for the serial reader.
+function commentsRead(n, moved) {
+  return async () => {
     const seq = ++readSeq;
     let r;
     try {
@@ -298,7 +307,7 @@ export function refreshPRComments(n, moved = false) {
     // The same read says whether the head moved: follow it OUTSIDE this
     // gate — the re-open asks for the comments again.
     if (headMoved(n, r)) setTimeout(() => followMovedHead(n), 0);
-  });
+  };
 }
 
 // fetchPR runs the pr-fetch op and resolves true when the head arrived.
@@ -329,24 +338,32 @@ function fetchPR(n) {
 // revalidate is the background half of a cached open: the diff is already on
 // screen (from the local head), and only now is the forge asked whether that
 // head is still the PR's. A moved head is fetched and the diff re-opened — if
-// the user is still looking at it.
-async function revalidate(n) {
-  const seq = ++readSeq;
-  freshEvent(n, { kind: "start" });
-  let rv;
-  try {
-    rv = await postJSON("/api/pr/revalidate?n=" + n, {});
-  } catch {
-    offlineFresh(n); // offline, rate-limited: the diff on screen stands
-    return;
-  }
-  if (rv.read_at) lastRead.set(n, rv.read_at);
-  freshEvent(n, { kind: "ok", changed: !!(rv.comments_changed || headMoved(n, rv)), seq });
-  showInterrupted(n, rv.interrupted);
-  fetchPRs(); // the row may have changed state (merged, closed)
-  // One read answered both: the comments, and whether the head moved.
-  if (rv.comments_changed) await reloadPRNotes(n);
-  if (headMoved(n, rv)) await followMovedHead(n);
+// the user is still looking at it. It waits for a read already running (C9).
+function revalidate(n) {
+  reads.soon("revalidate:" + n, revalidateRead(n));
+}
+
+// revalidateRead is revalidate's read, for the serial reader.
+function revalidateRead(n) {
+  return async () => {
+    const seq = ++readSeq;
+    freshEvent(n, { kind: "start" });
+    let rv;
+    try {
+      rv = await postJSON("/api/pr/revalidate?n=" + n, {});
+    } catch {
+      offlineFresh(n); // offline, rate-limited: the diff on screen stands
+      return;
+    }
+    if (rv.read_at) lastRead.set(n, rv.read_at);
+    freshEvent(n, { kind: "ok", changed: !!(rv.comments_changed || headMoved(n, rv)), seq });
+    showInterrupted(n, rv.interrupted);
+    fetchPRs(); // the row may have changed state (merged, closed)
+    // One read answered both: the comments, and whether the head moved.
+    if (rv.comments_changed) await reloadPRNotes(n);
+    // Followed OUTSIDE the gate: the re-open asks for the comments again.
+    if (headMoved(n, rv)) setTimeout(() => followMovedHead(n), 0);
+  };
 }
 
 // followMovedHead fetches PR n's new head and re-opens its diff — if the user
