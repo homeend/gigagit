@@ -548,8 +548,12 @@ async function steerNavigateLand(s) {
     if (landed) {
       if (!s.file) return;
       if (!(await openNamedFile(state.files, s, "pull request #" + n))) return;
+    } else if (n) {
+      // The page cannot open refs/gg/pr/<n> as a plain preview (ruling B3,
+      // 2026-10-08): say why once instead of a fallback that fails twice.
+      opLine("gg link: pull request #" + n + " is not in the pull request list — list or search for it, then open the link again", true);
+      return;
     } else {
-      if (n) opLine("PR #" + n + " is not in the pull request list here — opened as a merge preview");
       // The pair, never a sha: the tip is resolved here, so a tip that moved
       // between post and apply is honoured (the TUI consumer does the same).
       await openPreviewForPair(s.source, s.target);

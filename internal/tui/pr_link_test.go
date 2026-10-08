@@ -2,15 +2,18 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -38,17 +41,18 @@ func withClip(m Model, into *string) Model {
 func TestPRListLCopiesThePRLink(t *testing.T) {
 	t.Parallel()
 	m := prModel(t)
+	m.forgeGen = 3
 	_, cmd := m.Update(keyMsg("L"))
 	if cmd == nil {
 		t.Fatal("L on a PR row did nothing")
 	}
 	msg, ok := cmd().(prLinkMsg)
-	if !ok || msg.n != 7 {
+	if !ok || msg.n != 7 || msg.gen != 3 {
 		t.Fatalf("L → %#v", msg)
 	}
 	var copied string
 	m = withClip(m, &copied)
-	_, ccmd := m.Update(prLinkMsg{n: 7, source: "refs/gg/pr/7", target: "main"})
+	_, ccmd := m.Update(prLinkMsg{n: 7, source: "refs/gg/pr/7", target: "main", gen: 3})
 	if ccmd == nil {
 		t.Fatal("no copy")
 	}
@@ -234,5 +238,113 @@ func TestStartAtAPRLinkWaitsForThePRList(t *testing.T) {
 	m.startAt = mustLink(t, "gg://gigagit@main...feat/x")
 	if !m.startAtReady() {
 		t.Fatal("a plain preview link must not wait for the PR list")
+	}
+}
+
+// B6: a repo switch between L and the answer drops the old repo's pair —
+// copying it would hand out a link to the wrong repository.
+func TestPRLinkAnswerFromALeftRepoIsDropped(t *testing.T) {
+	t.Parallel()
+	m := prModel(t)
+	var copied string
+	m = withClip(m, &copied)
+	m.forgeGen = 2
+	nm, cmd := m.Update(prLinkMsg{n: 7, source: "refs/gg/pr/7", target: "main", gen: 1})
+	if cmd != nil {
+		runCopy(t, cmd)
+	}
+	if copied != "" || strings.Contains(nm.(Model).statusMsg, "copied") {
+		t.Fatalf("a stale answer copied %q (status %q)", copied, nm.(Model).statusMsg)
+	}
+}
+
+// B5: a file-less link to an unlisted PR keeps the notice that says why it
+// opened as a merge preview (steerNotice used to overwrite it) — whether
+// the TUI started at it or an agent moved the focus.
+func TestAFileLessUnlistedPRLinkKeepsItsNotice(t *testing.T) {
+	t.Parallel()
+	for _, c := range []steer.Command{
+		{Cmd: "navigate", Target: &steer.Target{State: "preview", Source: "refs/gg/pr/7", Target: "main"}},
+		{ID: "pr-5", Cmd: "navigate", Target: &steer.Target{State: "preview", Source: "refs/gg/pr/7", Target: "main"}, Wait: true},
+	} {
+		m, _ := prLinkSteerModel(t)
+		m.prs = nil
+		m, _ = m.applySteer(c)
+		if !strings.Contains(m.statusMsg, "PR #7 is not in the pull request list here") {
+			t.Errorf("start-at=%v: status = %q", startAtOrigin(c), m.statusMsg)
+		}
+	}
+}
+
+// prLinkUnfetchedModel lists PR #7 but holds no refs/gg/pr/7.
+func prLinkUnfetchedModel(t *testing.T) (Model, string) {
+	t.Helper()
+	m, dir := previewSteerModel(t)
+	m.forgeShown, m.prs = true, testPRs()
+	return m, dir
+}
+
+// prLinkFileCmd is a navigate to PR #7's a.txt:1.
+func prLinkFileCmd(id string) steer.Command {
+	return steer.Command{ID: id, Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "preview", Source: "refs/gg/pr/7", Target: "main"},
+		Line:   &steer.Line{Side: "new", No: 1}, Wait: true}
+}
+
+// B4: a listed PR whose head is not local is fetched first — the enter
+// path — instead of opening an empty view.
+func TestAPRLinkToAnUnfetchedPRFetchesIt(t *testing.T) {
+	t.Parallel()
+	m, _ := prLinkUnfetchedModel(t)
+	m, cmd := m.applySteer(prLinkFileCmd("pr-6"))
+	if cmd == nil {
+		t.Fatal("no open")
+	}
+	if got := cmd(); func() bool { msg, ok := got.(prFetchReadyMsg); return !ok || msg.pr.Number != 7 }() {
+		t.Fatalf("landing → %T, want the PR's fetch", got)
+	}
+	if m.pendingSteer == nil || m.pendingSteer.prNumber != 7 {
+		t.Fatalf("pendingSteer = %+v", m.pendingSteer)
+	}
+}
+
+// B4: a fetch that cannot run answers the parked landing at once.
+func TestAFailedPRLandingFetchAnswersTheAgent(t *testing.T) {
+	t.Parallel()
+	m, dir := prLinkUnfetchedModel(t)
+	m, _ = m.applySteer(prLinkFileCmd("pr-7"))
+	nm, cmd := m.Update(prFetchReadyMsg{pr: testPRs()[0], err: errors.New("no forge")})
+	if nm.(Model).pendingSteer != nil {
+		t.Fatal("the landing is still parked")
+	}
+	if cmd != nil {
+		drainMsgs(t, nm.(Model), cmd, 4)
+	}
+	if rep := readOneReply(t, dir, "pr-7"); rep.OK || !strings.Contains(rep.Error, "no forge") {
+		t.Fatalf("reply = %+v", rep)
+	}
+}
+
+// B4: the whole chain — fetch op armed, the landing stays parked (and its
+// clock restarts: steerPendingTTL is 5s, a fetch can take longer), the op
+// finishes, the PR's view opens and the line lands.
+func TestAPRLinkToAnUnfetchedPRLandsAfterTheFetch(t *testing.T) {
+	t.Parallel()
+	m, dir := prLinkUnfetchedModel(t)
+	m, _ = m.applySteer(prLinkFileCmd("pr-8"))
+	m.pendingSteer.at = time.Now().Add(-4 * time.Second)
+	nm, _ := m.Update(prFetchReadyMsg{pr: testPRs()[0], op: engine.FetchPRHead{Remote: "origin", Refspec: "refs/pull/7/head", Number: 7}})
+	m = nm.(Model)
+	if m.pendingPROpen == nil || m.pendingSteer == nil || time.Since(m.pendingSteer.at) > time.Second {
+		t.Fatalf("pendingPROpen=%v pendingSteer=%+v", m.pendingPROpen != nil, m.pendingSteer)
+	}
+	runGit(t, repoTop(t, m), "update-ref", "refs/gg/pr/7", "feat/x") // what the fetch op would have written
+	nm, cmd := m.Update(opFinishedMsg{res: engine.Result{Summary: "fetched"}})
+	m = drainMsgs(t, nm.(Model), cmd, 12)
+	if m.previewOpen == nil || m.previewOpen.prNumber != 7 || m.diffLayer() == nil {
+		t.Fatalf("previewOpen = %+v diff=%v", m.previewOpen, m.diffLayer() != nil)
+	}
+	if rep := readOneReply(t, dir, "pr-8"); !rep.OK {
+		t.Fatalf("reply = %+v", rep)
 	}
 }

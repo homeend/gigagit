@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull request follow-ups 3
+
+### Changed
+
+- **A note written in a pull request's view is never stored plain.** When
+  the PR has left the page's list, or its diff is gone here (`gg pr forget`
+  elsewhere, merged), gg web refuses it with a red line ("… — reopen pull
+  request #7") instead of saving a note that silently leaves the PR.
+- gg web: a link to a pull request the page does not list says so in one
+  line ("pull request #99 is not in the pull request list — list or search
+  for it, then open the link again") instead of a plain-preview fallback that
+  failed twice.
+
+### Fixed
+
+- gg web: a PR link that arrives while another PR is opening waits for that
+  open and then lands (it used to do nothing, silently); a link opened as the
+  page loads (`gg open --web`) waits for the pull request list instead of
+  falling back.
+- gg web: a moved-head comments read replaced while it waited no longer
+  loses the PR's "updated" mark.
+- TUI: a PR link to a listed PR whose head is not local fetches it first (the
+  enter path) instead of opening an empty view; a fetch that fails answers
+  the agent at once, and the fetch's time no longer runs out the landing.
+- TUI: a link to a PR the list does not hold keeps its "not in the pull
+  request list" notice; a PR link copied (`L`) just before a repo switch no
+  longer copies the old repository's link.
+
 ## Operations beside a running AI task
 
 ### Changed

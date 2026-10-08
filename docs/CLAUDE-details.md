@@ -2130,7 +2130,9 @@ them on a file row.
   types `origin/main`). Writers: the TUI note form (`previewNoteSet().Pair()`),
   the web note add (`pr: n` → `cachedPR` row → `domain.PRNoteScope`: never a
   forge read; any commit of `prev.Set.Commits` takes the stamp, a commit the
-  PR dropped (force-push) is `ErrNoteOffPR` → 409, never a plain note),
+  PR dropped (force-push) is `ErrNoteOffPR` → 409, a diff not here (forgotten,
+  merged) `ErrPRDiffGone` → 409, a row the page no longer lists → 409 —
+  ruling A 2026-10-08: never a plain note; `PRNoteScope` never answers ""),
   CLI/MCP `--preview`, batches, `ScopeReviewTarget` (label "PR #<n>").
   `prReviewHeads` keeps only `PreviewReviews` the set owns, and a send takes
   only those (`prOwnsReview`: `--review`/`review:<rid>:<k>` of another
@@ -3007,10 +3009,20 @@ round trip), gg web's PR menu `copy gg link` (`registerRows("pr")` →
 row). Landing: a navigate whose preview SOURCE parses as a PR ref
 (`domain.PRScopeNumber(target+"..."+source)`; JS `/^refs\/gg\/pr\/(\d+)$/`)
 opens the PR's own view when the list holds the row — TUI
-`steerNavigatePR` → `openPRPreviewCmd`, the pending stage gated by
+`steerNavigatePR` → `openPRLandingCmd` (a local head opens at once; otherwise
+the enter path's fetch, `prFetchReadyMsg` → `FetchPRHead` → `openPRPreviewCmd`,
+restarting the parked landing's TTL and failing it at once via
+`failPRLanding` when the fetch cannot run), the pending stage gated by
 `pendingSteer.prNumber` (the link's base spelling may differ from the view's);
-web `openPRLanding` (reads `/api/pr` once first) — else the plain merge
-preview with a notice. A start-at PR link waits for `prsAnswered` (the first
+web `openPRLanding` — it waits for a PR open in flight (`exclusive`: busy =
+null → `idle()` and retry; a failed open resolves false and has said why),
+for a read newer than the landing (`fetchPRs` over `coveredReads`) and, while
+the server's first LIVE listing is out, up to 10s (`readyLatch`, opened by
+`liveListing`: loaded and not the cached copy, which may predate the PR). Unlisted: the TUI opens the plain merge preview with a notice the
+landing keeps; the web refuses in one line (it cannot open refs/gg/pr/<n> as
+a plain preview; ruling 2026-10-08). `prLinkMsg` carries `forgeGen`. Note:
+the link resolver itself refuses a PR link whose `refs/gg/pr/<n>` is absent,
+so an unfetched PR's link fails before any frontend sees it. A start-at PR link waits for `prsAnswered` (the first
 PR read's answer, cached rows included) when `kickForgeProbe` started one.
 `/gg-review` over a PR link stores a review stamped for the PR (the set's
 `Pair()`), so it shows in the PR's view.

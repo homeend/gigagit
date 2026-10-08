@@ -999,11 +999,13 @@ func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
 	src, tgt := c.Target.Source, c.Target.Target
 	// A pull request's link (<base>...refs/gg/pr/<n>) lands in the PR's own
 	// view — its threads, its notes, its sends — when the list holds it.
+	prNote := ""
 	if n, ok := domain.PRScopeNumber(tgt + "..." + src); ok {
 		if p, ok := m.listedPR(n); ok {
 			return m.steerNavigatePR(c, p)
 		}
-		m.statusMsg = i18n.T("PR #%d is not in the pull request list here — opened as a merge preview", n)
+		prNote = i18n.T("PR #%d is not in the pull request list here — opened as a merge preview", n)
+		m.statusMsg = prNote
 	}
 	// Which saved row, if any, holds this pair. "" means a show-once open.
 	id, bi := "", -1
@@ -1023,9 +1025,12 @@ func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
 				m.sel[panelPreviews] = di
 			}
 		}
-		if startAtOrigin(c) {
+		switch {
+		case prNote != "":
+			m = m.steerNotice(prNote) // why a PR link opened as a plain preview outranks where it went
+		case startAtOrigin(c):
 			m = m.steerNotice(i18n.T("▸ opened preview %s", tgt+"..."+src))
-		} else {
+		default:
 			m = m.steerNotice(i18n.T("▸ agent moved the focus"))
 		}
 		return m.navigateLanded(c, "revealed preview "+tgt+"..."+src)

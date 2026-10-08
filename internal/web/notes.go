@@ -286,16 +286,23 @@ func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 	preview := s.notePreview(r.Context(), req.Preview, addr)
 	if req.PR > 0 && addr.State == model.StateCommitted {
 		// The row the view was opened from (cachedPR): never a forge read.
-		if pr, ok := s.cachedPR(s.service(), req.PR); ok {
-			sc, err := s.service().PRNoteScope(r.Context(), pr, addr.Commit)
-			if err != nil {
-				writeErr(w, http.StatusConflict, err)
-				return
-			}
-			if sc != "" {
-				preview = sc
-			}
+		// A note that cannot take the PR's stamp is refused (ruling A): stored
+		// plain it would silently leave the PR's view.
+		pr, ok := s.cachedPR(s.service(), req.PR)
+		if !ok {
+			writeErr(w, http.StatusConflict, fmt.Errorf("pull request #%d is not in the pull request list any more — reopen it", req.PR))
+			return
 		}
+		sc, err := s.service().PRNoteScope(r.Context(), pr, addr.Commit)
+		switch {
+		case errors.Is(err, domain.ErrNoteOffPR), errors.Is(err, domain.ErrPRDiffGone):
+			writeErr(w, http.StatusConflict, err)
+			return
+		case err != nil:
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		preview = sc
 	}
 	n := model.Note{
 		Source: model.NoteSourceUser, Author: s.noteAuthor(r.Context(), req.Author), Address: addr,

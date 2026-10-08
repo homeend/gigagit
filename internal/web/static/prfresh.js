@@ -55,6 +55,87 @@ export function serialReads(gate) {
   return { run, soon };
 }
 
+// coveredReads is a single-flight read whose late callers are not dropped:
+// a call while a read runs queues ONE more read, and its promise settles
+// when that read ends — so the caller sees an answer newer than its call
+// (prs.js fetchPRs: a cold page's link landing must see the listing).
+export function coveredReads(gate, read) {
+  let again = false;
+  let tail = null;
+  function call() {
+    const run = gate(read);
+    if (!run) {
+      again = true;
+      return tail || Promise.resolve();
+    }
+    tail = run.then(() => {
+      if (!again) return;
+      again = false;
+      return call();
+    });
+    return tail;
+  }
+  return call;
+}
+
+// liveListing reports whether a /api/pr answer is the server's LIVE listing
+// (or its settled "no forge"): a cached listing also says loaded:true, but
+// it may predate a PR a link names (prs.js: the landing's list latch).
+export function liveListing(body) {
+  return !!body.loaded && !body.cached;
+}
+
+// readyLatch: wait(ms) resolves true once open() ran (at once if it did),
+// false after ms.
+export function readyLatch() {
+  let ready = false;
+  const waiters = [];
+  return {
+    open() {
+      if (ready) return;
+      ready = true;
+      waiters.splice(0).forEach((f) => f(true));
+    },
+    wait(ms) {
+      if (ready) return Promise.resolve(true);
+      return new Promise((res) => {
+        waiters.push(res);
+        setTimeout(() => res(false), ms);
+      });
+    },
+  };
+}
+
+// exclusive runs one task at a time: try(fn) starts fn or answers null while
+// one runs; idle() settles once none runs (prs.js: a PR link landing waits
+// for a row's open in flight instead of failing in silence).
+export function exclusive() {
+  let running = null;
+  return {
+    try(fn) {
+      if (running) return null;
+      const p = Promise.resolve().then(fn);
+      running = p.finally(() => (running = null));
+      return p;
+    },
+    async idle() {
+      while (running) await running.catch(() => {});
+    },
+  };
+}
+
+// stickyFlag is soon() for reads that carry a flag a newer waiting read must
+// not drop (prs.js: the moved-head read's "updated"): soon(key, flag, make)
+// queues make(flag) — the flag ORed over every read that replaced another
+// while waiting, cleared when one starts.
+export function stickyFlag(reads) {
+  const raised = new Set();
+  return (key, flag, make) => {
+    if (flag) raised.add(key);
+    reads.soon(key, () => make(raised.delete(key))());
+  };
+}
+
 // oncePerKey wraps an async fn so one call per key runs at a time: a call
 // for a key whose earlier call has not settled answers null (prs.js: the
 // moved-head follow — two reads seeing the same move must fetch once).

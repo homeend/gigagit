@@ -50,13 +50,16 @@ func (m Model) openPRCmd(p model.PullRequest) (Model, tea.Cmd) {
 func (m Model) handlePRFetchReady(msg prFetchReadyMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		m.statusMsg = i18n.T("error: %s", firstLine(msg.err.Error()))
-		return m, nil
+		return m.failPRLanding(msg.pr.Number, firstLine(msg.err.Error()))
 	}
 	if !m.opsIdle() {
-		return m, nil // an op started while the resolve was in flight; the user can press enter again
+		// An op started while the resolve was in flight; the user can press
+		// enter again — a link's landing is told so.
+		return m.failPRLanding(msg.pr.Number, "an operation is running; open the link again when it finishes")
 	}
 	pr := msg.pr
 	m.pendingPROpen = &pr
+	m.restartPRLandingClock(pr.Number)
 	return m.startOp(msg.op)
 }
 
