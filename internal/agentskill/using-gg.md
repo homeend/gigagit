@@ -59,7 +59,8 @@ guards against removing the worktree you are standing in.
   tree plus `?review=<id>`.
   There is no report file. Flags must precede the positional (like `gg log
   -n`). No positional reviews the current branch's work; a single `<rev>`
-  reviews just that commit's own change (`rev^..rev`); an `A..B` positional
+  reviews just that commit's own change (`rev^..rev`; a repository's first
+  commit: everything it adds); an `A..B` positional
   is used as a range; `--working` reviews uncommitted changes. `--tool`
   picks among configured `review` commands when more than one is set up.
   `--model <m>` runs the tool on that model: gg adds the agent's own flag

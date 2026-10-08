@@ -215,9 +215,10 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 		if up, uerr := s.repo.UpstreamRef(ctx, tip); uerr == nil && strings.TrimSpace(up) != "" {
 			base = strings.TrimSpace(up)
 		} else {
-			// no base found: review just the tip commit's own change (vs its parent)
-			rng := tipSHA + "^.." + tipSHA
-			return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}, Commit: tipSHA, Branch: branch}, nil
+			// no base found: review just the tip commit's own change (vs its
+			// parent, or everything a root commit adds)
+			rng, diff := s.OwnChange(ctx, tipSHA)
+			return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: diff, Commit: tipSHA, Branch: branch}, nil
 		}
 	}
 	baseSHA, err := s.repo.ResolveCommit(ctx, strings.TrimSpace(base))

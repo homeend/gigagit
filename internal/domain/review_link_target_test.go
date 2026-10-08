@@ -53,10 +53,25 @@ func TestCommitReviewTargetRootCommit(t *testing.T) {
 	dir, svc := newRealRepo(t)
 	root := revParse(t, dir, "HEAD") // BasicRepo has one commit
 	tg, err := svc.CommitReviewTarget(context.Background(), root)
-	if err != nil || tg.Range != root || tg.Commit != root {
+	if err != nil || tg.Range != root || tg.Commit != root || (tg.Diff.Rev != root || !tg.Diff.Root) {
 		t.Fatalf("root: %+v %v", tg, err)
 	}
 	if _, err := svc.CommitReviewTarget(context.Background(), "main"); err == nil {
 		t.Fatal("a ref name must be refused (hex only)")
+	}
+}
+
+// A branch with no trunk and no upstream is reviewed as its tip's own change;
+// when that tip is the repository's first commit, that is everything it adds.
+func TestBranchReviewTargetOfALoneRootCommit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	runGitIn(t, dir, "init", "-q", "-b", "spike")
+	commitFile(t, dir, "a.txt", "a\n", "first")
+	svc := Open(dir)
+	root := revParse(t, dir, "HEAD")
+	tg, err := svc.BranchReviewTarget(context.Background(), "spike")
+	if err != nil || tg.Range != root || (tg.Diff.Rev != root || !tg.Diff.Root) || tg.Commit != root {
+		t.Fatalf("lone root branch: %+v %v", tg, err)
 	}
 }
