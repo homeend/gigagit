@@ -3005,8 +3005,8 @@ restarting the parked landing's TTL and failing it at once via
 web `openPRLanding` — it waits for a PR open in flight (`exclusive`: busy =
 null → `idle()` and retry; a failed open resolves false and has said why),
 for a read newer than the landing (`fetchPRs` over `coveredReads`) and, while
-the server's first listing is out, up to 10s (`readyLatch`, opened on
-`loaded`). Unlisted: the TUI opens the plain merge preview with a notice the
+the server's first LIVE listing is out, up to 10s (`readyLatch`, opened by
+`liveListing`: loaded and not the cached copy, which may predate the PR). Unlisted: the TUI opens the plain merge preview with a notice the
 landing keeps; the web refuses in one line (it cannot open refs/gg/pr/<n> as
 a plain preview; ruling 2026-10-08). `prLinkMsg` carries `forgeGen`. Note:
 the link resolver itself refuses a PR link whose `refs/gg/pr/<n>` is absent,
