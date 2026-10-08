@@ -6161,8 +6161,18 @@ branch of `updateConsoleKey`); a docked console stays open and the status
 row then names its worktree — and its return point (`ret.view`) moves to
 the alt+w worktree: alt+w picks the BASE (the `*`), so the alt+a / alt+t
 ring's return stop lands there, not where the cycle started (user ruling
-2026-10-08; `pendingReturnView` is cleared too). Status: `wt-x — 2 of 3 worktrees`; one
-worktree: a status line only. Footer `[alt+w] next worktree` when the list
+2026-10-08; `pendingReturnView` is cleared too). The keyboard goes with the
+switch (user ruling 2026-10-08): `activateTab(panelBranches)` — focus,
+`activeLeftTab`, `lastLeftPanel` — so the Branches border says where keys
+go, and a shown console is unbound (`focused = false`; a ctrl+t-maximised
+docked one docks again, `syncConsoleSize`) with `ret.focus = panelBranches`,
+so the alt+a / alt+t return stop (`closeConsole` restores `r.focus` when
+focus sat in the console's column) lands Branches-focused. Over a
+full-screen return point (`consoleFull`) Branches is off screen: the console
+stays full, unbound, focus stays on its column, `ret.focus` untouched. The
+console box's blue border = the Commits column has focus, bound or not;
+the title hints (`consoleTitleHints`) tell bound from unbound. Status:
+`wt-x — 2 of 3 worktrees`; one worktree: a status line only. Footer `[alt+w] next worktree` when the list
 has more than one and nothing runs or loads. Tests
 `worktree_cycle_test.go`, e2e `tui_worktree_cycle`.
 

@@ -36,6 +36,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   picks the base worktree: pressed under a docked console, the alt+a /
   alt+t return stop then lands on that worktree, not where the cycle
   started.
+- **alt+w / alt+a / alt+t say where the keys go.** alt+w hands the keyboard
+  to the Branches panel (its border shows it) and unbinds a shown console:
+  its key hints come back, a ctrl+t-maximised one docks again, and the next
+  keys are gg's, not the agent's (before, alt+w inside a bound console left
+  the agent bound while the panels switched). alt+a / alt+t show the next
+  session unbound with the console column focused, and their return stop
+  focuses the panel you came from — Branches after an alt+w. Over a
+  full-screen return point the console stays full and keeps the keyboard,
+  unbound.
 
 ## Pull requests show only their own notes
 

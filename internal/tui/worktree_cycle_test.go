@@ -146,3 +146,113 @@ func TestAltAReturnStopIsTheLastAltWWorktree(t *testing.T) {
 		t.Fatalf("return stop landed on %q, want the last alt+w worktree %q", m.viewed, base)
 	}
 }
+
+// alt+w inside a bound console unbinds it (the title hints come back, no
+// cursor) and moves the keyboard to the Branches panel: the next keys are
+// gg's, not the agent's.
+func TestAltWUnbindsAFocusedConsoleAndFocusesBranches(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m.activeLeftTab, m.focus = panelWorktrees, panelWorktrees
+	m, _ = m.showConsole(id, true)
+	if m.console == nil || !m.console.focused || m.focus != panelCommits {
+		t.Fatalf("precondition: console=%+v focus=%v", m.console, m.focus)
+	}
+	m = pressAlt(t, m, 'w')
+	if m.console == nil || m.console.focused {
+		t.Fatalf("console=%+v, want shown and unbound", m.console)
+	}
+	if m.focus != panelBranches || m.activeLeftTab != panelBranches || !m.panelFocused(panelBranches) {
+		t.Fatalf("focus=%v tab=%v, want the Branches panel", m.focus, m.activeLeftTab)
+	}
+	if m.console.ret.focus != panelBranches {
+		t.Fatalf("return focus = %v, want Branches (the alt+a return stop lands there)", m.console.ret.focus)
+	}
+}
+
+// Without a console alt+w also lands on Branches: the switch and the
+// keyboard go together.
+func TestAltWFocusesBranchesWithoutAConsole(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, _ = addWorktree(t, m, "wt2")
+	m.focus = panelFiles
+	m = pressAlt(t, m, 'w')
+	if m.focus != panelBranches || m.activeLeftTab != panelBranches {
+		t.Fatalf("focus=%v tab=%v, want Branches", m.focus, m.activeLeftTab)
+	}
+}
+
+// A ctrl+t-maximised docked console docks again on alt+w, so the Branches
+// panel it hands the keyboard to is on screen.
+func TestAltWRedocksAMaximisedConsole(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, true)
+	m.console.maximized = true
+	m = pressAlt(t, m, 'w')
+	if m.console == nil || m.console.maximized || m.console.focused || m.focus != panelBranches {
+		t.Fatalf("console=%+v focus=%v", m.console, m.focus)
+	}
+}
+
+// Over a full-screen return point the console stays full (Branches is not
+// on screen): it is unbound and keeps the keyboard; the panels beneath
+// still switched.
+func TestAltWUnderAFullScreenConsoleKeepsItFull(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, true)
+	m.console.ret.full, m.console.maximized = true, true
+	m = pressAlt(t, m, 'w')
+	if m.console == nil || !m.console.maximized || m.console.focused || m.focus != panelCommits {
+		t.Fatalf("console=%+v focus=%v", m.console, m.focus)
+	}
+	if m.viewed == filepath.Clean(other) {
+		t.Fatalf("viewed = %q, want the next worktree", m.viewed)
+	}
+}
+
+// alt+a / alt+t show the next session unbound with the console column
+// focused; the return stop hands the keyboard back to the panel focused
+// before the first show — Branches once alt+w was pressed in between.
+func TestAltAReturnStopRestoresTheFocusAltWSet(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, wtA := addWorktree(t, m, "wtA")
+	m, wtB := addWorktree(t, m, "wtB")
+	installSessionManager(t)
+	startSessionIn(t, m, wtA, "A")
+	startSessionIn(t, m, wtB, "B")
+	m.focus = panelFiles
+	m = pressAlt(t, m, 'a')
+	if m.console == nil || m.console.focused || m.focus != panelCommits {
+		t.Fatalf("after alt+a: console=%+v focus=%v", m.console, m.focus)
+	}
+	m = pressKey(t, m, "enter") // bind it
+	if !m.console.focused {
+		t.Fatal("enter did not bind the console")
+	}
+	m = pressAlt(t, m, 'a') // from a bound console: the next one, unbound, column focused
+	if m.console == nil || m.console.focused || m.focus != panelCommits {
+		t.Fatalf("after the second alt+a: console=%+v focus=%v", m.console, m.focus)
+	}
+	m = pressAlt(t, m, 'w')
+	if m.focus != panelBranches {
+		t.Fatalf("after alt+w: focus=%v", m.focus)
+	}
+	m.focus = panelCommits  // the user clicked back onto the console column
+	m = pressAlt(t, m, 'a') // the return stop
+	if m.console != nil || m.focus != panelBranches {
+		t.Fatalf("return stop: console=%v focus=%v, want no console and Branches", m.console != nil, m.focus)
+	}
+}
