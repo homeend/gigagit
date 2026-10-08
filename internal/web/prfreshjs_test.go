@@ -256,3 +256,79 @@ console.log(JSON.stringify(seen));
 		t.Fatalf("flags = %v, want [true false]", got)
 	}
 }
+
+// B2: coveredReads — a call made while a read runs settles only after the
+// follow-up read it queued, never on the stale answer in flight.
+func TestPRFreshJSCoveredReads(t *testing.T) {
+	t.Parallel()
+	out := runFreshModuleJS(t, `
+import { coveredReads } from "./prfresh.mjs";
+let busy = false, n = 0;
+const gate = (fn) => (busy ? null : (busy = true, fn().finally(() => (busy = false))));
+const rel = [];
+const read = () => new Promise((r) => rel.push(() => { n++; r(); }));
+const tick = () => new Promise((r) => setTimeout(r, 0));
+const call = coveredReads(gate, read);
+const log = [];
+const a = call().then(() => log.push("a:" + n));
+const b = call().then(() => log.push("b:" + n)); // mid-flight
+rel.shift()();
+await tick();
+const early = log.length; // nothing may settle on the first read alone
+rel.shift()();
+await Promise.all([a, b]);
+const idle = await Promise.race([coveredReads(() => null, read)().then(() => "now"), tick().then(() => "late")]);
+console.log(JSON.stringify({ log, early, reads: n, idle }));
+`)
+	var got struct {
+		Log   []string `json:"log"`
+		Early int      `json:"early"`
+		Reads int      `json:"reads"`
+		Idle  string   `json:"idle"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if got.Early != 0 || got.Reads != 2 || !slices.Equal(got.Log, []string{"a:2", "b:2"}) || got.Idle != "now" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// B2: readyLatch — wait(ms) is true once open() ran, false on the timeout.
+func TestPRFreshJSReadyLatch(t *testing.T) {
+	t.Parallel()
+	out := runFreshModuleJS(t, `
+import { readyLatch } from "./prfresh.mjs";
+const l = readyLatch();
+const w = l.wait(1000);
+l.open();
+console.log(JSON.stringify([await w, await l.wait(5), await readyLatch().wait(5)]));
+`)
+	var got []bool
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if !slices.Equal(got, []bool{true, true, false}) {
+		t.Fatalf("got %v", got)
+	}
+}
+
+// B2: prs.js reads the list through coveredReads and the landing waits for
+// the server's first listing.
+func TestPRsJSLandingWaitsForTheList(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "prs.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{
+		"coveredReads(",
+		"if (body.loaded) listLoaded.open();",
+		"await listLoaded.wait(LANDING_LIST_MS)",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("prs.js lacks %q", want)
+		}
+	}
+}

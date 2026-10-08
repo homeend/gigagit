@@ -18,7 +18,7 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
-import { nextFresh, oncePerKey, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
+import { coveredReads, nextFresh, oncePerKey, readyLatch, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
@@ -28,8 +28,14 @@ import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 const BACKOFF_MS = [1000, 2000, 4000];
 let backoffAt = 0;
 let backoffTimer = null;
+// listLoaded opens on the server's first answered listing ("loaded" is
+// false only while the forge is unprobed — a repo with no forge answers too).
+// A repo switch reloads the page, so it never needs a reset.
+const listLoaded = readyLatch();
+const LANDING_LIST_MS = 10000; // a link landing's wait for it (BACKOFF_MS sums to 7s)
 
 function take(body) {
+  if (body.loaded) listLoaded.open();
   state.prs = body.prs || [];
   state.prsAvailable = !!body.available;
   state.prsError = body.error || "";
@@ -49,25 +55,21 @@ function take(body) {
 
 // fetchPRs is single-flight (boot, the backoff and a live event can overlap),
 // but a call that arrives mid-flight is not DROPPED: the answer in flight may
-// predate what that call was about, so one more read runs after it.
-let again = false;
-export function fetchPRs() {
-  const run = runOnce("prs", async () => {
+// predate what that call was about, so one more read runs after it — and the
+// call's promise settles only then (coveredReads): a link landing on a cold
+// page waits for rows newer than its question.
+const readPRs = coveredReads(
+  (fn) => runOnce("prs", fn),
+  async () => {
     try {
       take(await getJSON("/api/pr"));
     } catch {
       // A failed read is not "the pull requests are gone": the rows stand.
     }
-  });
-  if (!run) {
-    again = true;
-    return Promise.resolve();
-  }
-  return run.then(() => {
-    if (!again) return;
-    again = false;
-    return fetchPRs();
-  });
+  },
+);
+export function fetchPRs() {
+  return readPRs();
 }
 
 function renderPRs() {
@@ -427,6 +429,9 @@ export async function openPRLanding(n) {
   // A link opened as the page loads (gg open --web) may beat the list: read
   // the server's listing once before calling the PR unknown.
   if (!knownPR(n)) await fetchPRs();
+  // Still unknown and the server's first listing not in: wait for it (the
+  // backoff re-reads and the "prs" event bring it), then decide.
+  if (!knownPR(n)) await listLoaded.wait(LANDING_LIST_MS);
   const pr = knownPR(n);
   return pr ? await openPR(pr) : null;
 }

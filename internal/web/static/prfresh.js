@@ -55,6 +55,50 @@ export function serialReads(gate) {
   return { run, soon };
 }
 
+// coveredReads is a single-flight read whose late callers are not dropped:
+// a call while a read runs queues ONE more read, and its promise settles
+// when that read ends — so the caller sees an answer newer than its call
+// (prs.js fetchPRs: a cold page's link landing must see the listing).
+export function coveredReads(gate, read) {
+  let again = false;
+  let tail = null;
+  function call() {
+    const run = gate(read);
+    if (!run) {
+      again = true;
+      return tail || Promise.resolve();
+    }
+    tail = run.then(() => {
+      if (!again) return;
+      again = false;
+      return call();
+    });
+    return tail;
+  }
+  return call;
+}
+
+// readyLatch: wait(ms) resolves true once open() ran (at once if it did),
+// false after ms.
+export function readyLatch() {
+  let ready = false;
+  const waiters = [];
+  return {
+    open() {
+      if (ready) return;
+      ready = true;
+      waiters.splice(0).forEach((f) => f(true));
+    },
+    wait(ms) {
+      if (ready) return Promise.resolve(true);
+      return new Promise((res) => {
+        waiters.push(res);
+        setTimeout(() => res(false), ms);
+      });
+    },
+  };
+}
+
 // stickyFlag is soon() for reads that carry a flag a newer waiting read must
 // not drop (prs.js: the moved-head read's "updated"): soon(key, flag, make)
 // queues make(flag) — the flag ORed over every read that replaced another
