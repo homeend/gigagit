@@ -691,7 +691,7 @@ func (s *Service) PRNoteScope(ctx context.Context, pr model.PullRequest, commit 
 		return "", nil
 	}
 	if !slices.Contains(prev.Set.Commits, commit) {
-		return "", fmt.Errorf("%w: pull request #%d no longer holds %s — reopen it", ErrNoteOffPR, pr.Number, shortSHA(commit))
+		return "", fmt.Errorf("%w (%s) — reopen pull request #%d", ErrNoteOffPR, shortSHA(commit), pr.Number)
 	}
 	return prev.Set.Pair(), nil
 }
