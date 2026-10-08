@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Fast worktree switch (TUI)
+
+### Added
+- A switch between worktrees of ONE repository is now a swap of remembered
+  per-worktree state (Status, cursors, marks, open files, working reviews),
+  not a reload: the screen never blanks, an open diff and the Commits cursor
+  survive, and gg's identity follows — the exit directory, the steering
+  inbox, the session registry's worktree, the session snapshot and the
+  hosted web page. The Worktrees-row `enter`, the move/repair chains, `gg
+  session` switch asks, `gg://` link checkouts and the web page's own switch
+  all take it. Another repository keeps the full reload.
+- `alt+a` / `alt+t` (and `ctrl+\` enter on a session of this repository)
+  show the session's console AND the panels of the worktree it runs in — tab
+  out of the console and you are there; what you start (diffs, staging, a
+  commit, a stash) runs in that worktree. Closing the console (esc, the
+  cycle's return stop, `x`) brings your own worktree back with its cursors.
+  The Worktrees panel marks the shown row with `»` (your own keeps `*`), and
+  the status row ends with `showing: <path>` while a console runs outside
+  your own worktree. A worktree removed while shown falls back to your own.
+
 ## Review links: the remaining rough edges
 
 ### Fixed

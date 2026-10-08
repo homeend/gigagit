@@ -5950,3 +5950,71 @@ the cached PR).
 
 **Freshness.** `prUpdated` holds the PR number whose last refresh found new
 comments or commits; `prSeen` makes the open's own first read never count.
+
+### Fast worktree switch — worktree view slots (`internal/tui/worktree_view.go`, 2026-10-08)
+
+Spec `docs/superpowers/specs/2026-10-08-fast-worktree-switch-design.md`, plan
+`docs/superpowers/plans/2026-10-08-fast-worktree-switch.md`.
+
+**The slot.** `worktreeView` groups the worktree-scoped part of the Model:
+the `domain.Service` rooted there, `status` + `conflict` + the derived
+Files/Staged index slices, the Status cursors and `fileMarks`, the working
+reviews (+gen), `docWatch`, the git `watcher` (+gen, supported), `loaded`.
+The Model's fields stay the LIVE copy (no reader changed); `saveView` /
+`loadView` copy out/in. `Model.views` is keyed by the cleaned path,
+`viewed` is the slot on screen, `home` the one gg's identity belongs to.
+Worktrees of one repository share branches/commits/stashes/tags/reflog, so
+those never move. `seedHome` runs on BOTH first-load arms (`configReadyMsg`,
+the production startup path, and `dataLoadedMsg`, the legacy `loadCmd` path
+the unit fixtures use) — the first cut only seeded the second and the e2e
+golden caught it; `reRoot` drops the map.
+
+**`switchView(path) (Model, bool)`** — same repo only (`isRepoWorktree` = a
+path in `m.worktrees`; `checkSwitchTarget` reachability; refused while an op
+runs). Saves the leaving slot and puts it to sleep (watcher + docWatch
+closed), loads the arriving one, bumps `srcGen[srcStatus]` +
+`workingReviewsGen` so reads in flight for the old slot are dropped, and sets
+`viewKick`. The **Update tail** launches `viewKickCmd` (a manual status read,
+`startWatchCmd`, `syncAgentDocs`) and marks the read in flight — a tail hook
+because `closeConsole` returns a Model only. Only the live slot is ever
+watched or refreshed.
+
+**Lifecycle.** `pruneViews` (both worktree-list arms) drops slots whose
+worktree left the list. A VIEWED worktree removed under us cannot be seen
+there — its own service cannot list worktrees — so the `dataAvailableMsg`
+error arm asks `abandonGoneView` (dir gone? → home comes back, every
+`srcGen` bumped, a worktrees read chained).
+
+**Trigger 1 — a shown console** (`console.go`): a shown console ⇔ the
+viewed worktree is the console's. `showConsole` swaps after attaching;
+`consoleReturn.view` (captured on the first show, carried across a console
+replacing a console) is where `closeConsole` → `returnView` goes;
+`forgetConsoleReturn` clears it on a repo switch. A refusal (an op running)
+shows the console and keeps the view, said on the status line. In-repo agent
+tours (`agent_tours_open.go`) swap and park the tour id in
+`consoleSwitch.tour`; the `srcStatus` arrival shows it when `!armed`.
+
+**Trigger 2 — the user's own switch** (`switch_guard.go`): `guardedReRoot`
+takes the fast path for a listed worktree on `switchOK` → `switchView` +
+`adoptView` (home, `switchTarget`, `publishedWT`, snapshot file removed and
+re-resolved by `snapshotTargetCmd`, steering inbox + pending-send watch
+closed and re-homed on `snapshotTargetMsg`, `webRerootCmd`; a shown
+console's `ret.view` moves to the new home). A path NOT in the list (the
+create-and-switch result before the list re-reads) still `reRoot`s — the
+same guard that keeps other repositories on the full reload.
+`onWebSwitchRequest` routes through `guardedReRoot`; a page switch that is
+neither a reroot nor an adopt (the worktree on screen, or refused) answers
+the page at once and pops its pending reply. `canEnterWorktree`: a row can
+be entered when it is not on screen, or on screen only because a console
+looks at it.
+
+**On screen.** Worktrees rows: `*` = home (`homeWorktree()`), `»` = viewed ≠
+home. `consoleWorktreeHint` judges against HOME (the 2026-10-05 ruling
+"current worktree = gg's own"), labelled `showing: <path>`. The alt+a help
+row gained a second sentence.
+
+**Tests.** `worktree_view_test.go` (slots, switchView, stale read, sleep,
+prune, adopt, repo switch), `console_view_test.go` (show/close, staging
+lands in the viewed tree, the alt+a ring over two worktrees, refusals),
+`view_worktrees_test.go`, the hint tests, e2e
+`tui_worktree_switch_fast.toml` (three goldens).
