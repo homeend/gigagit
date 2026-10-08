@@ -596,7 +596,13 @@ with (see `driving-tui-headless`).
 - **Frontends run operations via `domain.Execute`**, never by assembling
   `OpDeps` directly. Ops needing less than exclusive access declare
   `LockMode()` (see SmartPull's background ref-write); escalation happens
-  only at boundaries with no partial state.
+  only at boundaries with no partial state. **Ref-only ops declare
+  `RefWrite`** (`CreateBranch`, `DeleteBranch`, `CreateTag`, `DeleteTag`,
+  `DeleteBranchVersion`, `FetchPRHead`, …): the gate is strict FIFO, so a
+  TreeWrite left on the default queues behind a headless agent's
+  minutes-long Read hold (`ConflictAgent`/`CompleteConflict`) AND freezes
+  every later read with it — the TUI shows only "working…". `RenameBranch`
+  stays TreeWrite (renaming the checked-out branch rewrites HEAD).
   Frontend reads likewise go through domain queries — `Snapshot` for the TUI
   startup load, `Status`/`Worktrees` for the CLI — not direct `internal/git`
   verb calls.
