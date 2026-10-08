@@ -3020,9 +3020,14 @@ for a read newer than the landing (`fetchPRs` over `coveredReads`) and, while
 the server's first LIVE listing is out, up to 10s (`readyLatch`, opened by
 `liveListing`: loaded and not the cached copy, which may predate the PR). Unlisted: the TUI opens the plain merge preview with a notice the
 landing keeps; the web refuses in one line (it cannot open refs/gg/pr/<n> as
-a plain preview; ruling 2026-10-08). `prLinkMsg` carries `forgeGen`. Note:
-the link resolver itself refuses a PR link whose `refs/gg/pr/<n>` is absent,
-so an unfetched PR's link fails before any frontend sees it. A start-at PR link waits for `prsAnswered` (the first
+a plain preview; ruling 2026-10-08). `prLinkMsg` and `prFetchReadyMsg` carry `forgeGen`. A NAVIGATION
+resolves a PR link whose `refs/gg/pr/<n>` is absent (`ResolveOpts.UnfetchedPR`,
+set by `linknav.Resolve` and the CLI's open/navigate via
+`linkShapes.UnfetchedPR`; a checkout holding the base qualifies,
+`Resolved.Preview` carries the pair with no tip) — the landing fetches it;
+compare, review, MCP keep refusing. A parked landing is held outside
+`steerPendingTTL` while its PR's fetch op runs (`prFetchHoldsLanding`); a
+second resolve of the same PR while its fetch runs leaves the landing parked. A start-at PR link waits for `prsAnswered` (the first
 PR read's answer, cached rows included) when `kickForgeProbe` started one.
 `/gg-review` over a PR link stores a review stamped for the PR (the set's
 `Pair()`), so it shows in the PR's view.
