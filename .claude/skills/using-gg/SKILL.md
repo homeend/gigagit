@@ -851,7 +851,8 @@ finds the right one here.
   written for it, GitHub threads, draft replies; the ids `gg pr send --note`
   takes. A note or review FOR a pull request is written with `--preview
   <base>...refs/gg/pr/<n>` (after `gg pr fetch <n>`) — a review with
-  `gg review save "$(gg link --pr <n>)"`; it shows only in that PR's view,
+  `gg review save "$(gg link --pr <n>)" --agent <name> --stdin` (the
+  document on stdin); it shows only in that PR's view,
   and a note on a PR's commit written any other way does not.
 - **Sending to GitHub is the user's, never yours.** You cannot send
   anything to GitHub: inside any gg session `gg pr send`, `gg pr reply

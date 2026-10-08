@@ -466,7 +466,7 @@ func (s *Service) NotesClearAtCommit(ctx context.Context, commit, path, scope st
 	roots := map[string]bool{}
 	for _, n := range all {
 		a := n.Address
-		if n.IsReply() || n.IsReviewNote() || a.State != model.StateCommitted || a.Commit != commit || a.Path == "" || n.Preview != scope {
+		if n.IsReply() || n.IsReviewNote() || a.State != model.StateCommitted || a.Commit != commit || a.Path == "" || (scope == "" && n.Preview != "") || (scope != "" && !SameNoteScope(n.Preview, scope)) {
 			continue
 		}
 		if scope == "" && a.Path != path {

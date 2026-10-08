@@ -298,3 +298,21 @@ func TestSameNoteScope(t *testing.T) {
 		}
 	}
 }
+
+// Final review 2: deleting a PR's Range review row removes the PR's notes
+// written over every base spelling — the row counts them all.
+func TestClearingAPRScopeRowTakesEverySpelling(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	base := revParse(t, repoDir(t, svc), "main")
+	addScopedNote(t, svc, head, "big.go", 5, "main..."+git.PRRef(7), "by name")
+	addScopedNote(t, svc, head, "big.go", 25, base+"..."+git.PRRef(7), "by sha")
+	keep := addScopedNote(t, svc, head, "big.go", 5, "main..."+git.PRRef(8), "PR 8's")
+	n, err := svc.NotesClearAtCommit(context.Background(), head, "", "main..."+git.PRRef(7))
+	if err != nil || n != 2 {
+		t.Fatalf("cleared %d err %v", n, err)
+	}
+	if _, err := svc.NoteGet(context.Background(), keep); err != nil {
+		t.Fatalf("PR 8's note went too: %v", err)
+	}
+}

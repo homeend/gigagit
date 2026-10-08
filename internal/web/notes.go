@@ -244,7 +244,7 @@ func (s *Server) notePreview(ctx context.Context, spec string, addr model.FileAd
 	if c, cerr := s.service().NoteCounts(ctx); cerr == nil {
 		for _, sc := range c.ScopesByCommit[addr.Commit] {
 			if domain.SameNoteScope(sc.Scope, spec) {
-				return spec
+				return sc.Scope // the STORED name: a client's base half never passes
 			}
 		}
 	}
