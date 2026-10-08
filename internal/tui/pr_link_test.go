@@ -520,3 +520,28 @@ func TestARepoSwitchDropsAPendingPROpen(t *testing.T) {
 		t.Fatalf("the old repo's PR opened: %+v", m.previewOpen)
 	}
 }
+
+// Final review I3: a repo switch answers the landing it drops — otherwise
+// the agent's navigate waits out its whole (30s, for an unfetched PR) wait
+// and then says the view will still open.
+func TestARepoSwitchAnswersAParkedLanding(t *testing.T) {
+	t.Parallel()
+	m, dir := prLinkUnfetchedModel(t)
+	m, _ = m.applySteer(prLinkFileCmd("pr-10"))
+	if m.pendingSteer == nil {
+		t.Fatal("the landing did not park")
+	}
+	_, cmd := m.reRoot(t.TempDir())
+	// Fire the switch's commands without waiting on them: its file watcher
+	// never returns, and only the reply matters here.
+	if bm, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range bm {
+			if c != nil {
+				go c()
+			}
+		}
+	}
+	if rep := readOneReply(t, dir, "pr-10"); rep.OK || !strings.Contains(rep.Error, "repository changed") {
+		t.Fatalf("reply = %+v", rep)
+	}
+}

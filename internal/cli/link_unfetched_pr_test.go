@@ -59,7 +59,7 @@ func TestOpenLaunchesAnUnfetchedPRLink(t *testing.T) {
 // runs out it says the fetch is the reason. Serial: it writes both waits.
 func TestNavigateToAnUnfetchedPRWaitsForTheFetch(t *testing.T) {
 	oldReply, oldPR := steerReplyWaitForTest, steerPRFetchWaitForTest
-	steerReplyWaitForTest, steerPRFetchWaitForTest = 100*time.Millisecond, 600*time.Millisecond
+	steerReplyWaitForTest, steerPRFetchWaitForTest = 100*time.Millisecond, 2*time.Second
 	defer func() { steerReplyWaitForTest, steerPRFetchWaitForTest = oldReply, oldPR }()
 	repo := newCLIRepo(t)
 	link := "gg://" + filepath.ToSlash(repo) + "/README.md@main...refs/gg/pr/7:1"

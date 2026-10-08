@@ -4941,9 +4941,12 @@ func (m Model) commitPageEligible() bool {
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m = m.stopPRPrefetch()             // the old repo's background fetches end here
 	removeSnapshotFile(m.snapshotPath) // the old repo's session ends here
-	m = m.closeSteerInbox()            // …and so does its steering inbox
-	m.interrupted = nil                // …and the sends it left half done
-	m.steerGen++                       // drop the old watcher's in-flight msgs
+	// A parked landing is answered while its inbox is still open: its sender
+	// would otherwise wait out its whole wait for a view that never opens.
+	m, dropped := m.failPending("the repository changed before the link landed")
+	m = m.closeSteerInbox() // …and so does its steering inbox
+	m.interrupted = nil     // …and the sends it left half done
+	m.steerGen++            // drop the old watcher's in-flight msgs
 	// The old repo's PR freshness goes too: a PR #7 there is another PR here.
 	m.prSeen, m.prUpdated, m.prOwnSend, m.prRefreshAgain = 0, 0, 0, 0
 	m.prOfflineSince, m.prRefreshing = time.Time{}, false
@@ -5079,7 +5082,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// the blank-screen gate set above. The dataLoadedMsg success arm chains it
 	// instead, so it can only run once this repo's snapshot is in the model.
 	// The hosted web page follows the switch (nil when no page is served).
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), snapshotTargetCmd(m.svc), m.webRerootCmd())
+	return m, tea.Batch(dropped, m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), snapshotTargetCmd(m.svc), m.webRerootCmd())
 }
 
 // View implements tea.Model.

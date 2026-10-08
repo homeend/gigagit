@@ -102,30 +102,54 @@ func TestAnUnfetchedPRLinkRefusalNamesTheBase(t *testing.T) {
 	}
 }
 
-// Follow-ups 5, item 1: `gg pr forget` deletes the PR's ref but not its
-// objects, so a review saved on the PR still resolves its tip — the link's
-// unfetched landing has no commit yet and must navigate (the landing
-// fetches), not be refused as "review … compared …".
-func TestAReviewLinkToAnUnfetchedPRNavigates(t *testing.T) {
+// Follow-ups 5, item 1 (final review I1): a review link on a PR's merge
+// preview (`@main...refs/gg/pr/7?review=`) names the PR by number, so the
+// PR's own review opens on it whatever the head is now — fetched or not (gg
+// pr forget deletes the ref, not the objects) — and another change's review
+// is refused either way. Two commits, so the review is a range, not one sha.
+func TestAReviewLinkOnAPRPreviewNamesThePR(t *testing.T) {
 	t.Parallel()
-	svc, _, _ := sendRepo(t)
+	svc, ff, _ := sendRepo(t)
 	ctx := context.Background()
-	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ScopeReviewTarget(prNoteSetOf(t, svc)), // a review saved on the PR
+	dir := repoDir(t, svc)
+	runGitIn(t, dir, "checkout", "-q", "feat")
+	commitFile(t, dir, "other.go", "package other // two\n", "second")
+	head := revParse(t, dir, "HEAD")
+	runGitIn(t, dir, "checkout", "-q", "main")
+	runGitIn(t, dir, "update-ref", "refs/gg/pr/7", head)
+	pr := ff.byNum[7]
+	pr.HeadSHA = head
+	ff.byNum[7] = pr
+	mine, _, err := svc.SaveReview(ctx, SaveReview{Target: ScopeReviewTarget(prNoteSetOf(t, svc)), // a review saved on the PR
 		Agent: "claude", Text: twoRemarks})
 	if err != nil {
 		t.Fatal(err)
 	}
-	runGitIn(t, repoDir(t, svc), "update-ref", "-d", "refs/gg/pr/7") // gg pr forget
-	l, err := model.ParseLink("gg://" + localLinkRoot(t, svc) + "/big.go@main...refs/gg/pr/7:5?review=" + rid)
+	other, _, err := svc.SaveReview(ctx, SaveReview{
+		Target: ReviewTarget{Kind: ReviewRange, Range: "main.." + head, Label: "main ... feat",
+			Diff: model.DiffSpec{Rev: "main.." + head}, Commit: head, Preview: "main...feat"},
+		Agent: "claude", Text: twoRemarks})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := ResolveLink(ctx, l, ResolveOpts{Cwd: svc, UnfetchedPR: true})
-	if err != nil {
-		t.Fatalf("ResolveLink: %v", err)
+	resolve := func(rid string) error {
+		l, err := model.ParseLink("gg://" + localLinkRoot(t, svc) + "/big.go@main...refs/gg/pr/7:5?review=" + rid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = ResolveLink(ctx, l, ResolveOpts{Cwd: svc, UnfetchedPR: true})
+		return err
 	}
-	if got.Preview == nil || got.Preview.Tip != "" || got.Hint.ID != rid {
-		t.Fatalf("Preview = %+v hint %+v", got.Preview, got.Hint)
+	for _, state := range []string{"fetched", "forgotten"} {
+		if state == "forgotten" {
+			runGitIn(t, dir, "update-ref", "-d", "refs/gg/pr/7") // gg pr forget
+		}
+		if err := resolve(mine); err != nil {
+			t.Errorf("%s: the PR's review: %v", state, err)
+		}
+		if err := resolve(other); !errors.Is(err, ErrReviewLinkMismatch) {
+			t.Errorf("%s: another change's review: err = %v", state, err)
+		}
 	}
 }
 
@@ -135,7 +159,7 @@ func TestAReviewLinkToAnUnfetchedPRNavigates(t *testing.T) {
 func TestAnUnfetchedPRLinkInspectionSaysFetchIt(t *testing.T) {
 	t.Parallel()
 	_, err := unfetchedPRResolve(t, "gg://gigagit@main...refs/gg/pr/7", false)
-	if !errors.Is(err, ErrLinkUnknownRepo) || !strings.Contains(err.Error(), "pull request #7 is not fetched here") ||
+	if !errors.Is(err, ErrLinkUnknownRepo) || !strings.Contains(err.Error(), "pull request #7 is not fetched in ") || strings.Contains(err.Error(), "unknown repository") ||
 		!strings.Contains(err.Error(), "gg pr fetch 7") {
 		t.Fatalf("err = %v", err)
 	}
