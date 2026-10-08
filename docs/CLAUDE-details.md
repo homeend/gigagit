@@ -6151,32 +6151,32 @@ slices — then `rebuildCommitGraph`). No git: the swap stays instant. The
 first alt+w golden caught the stale `*`; a branches re-read fixed it but
 cost the wait above, so the local re-mark replaced it.
 
-**alt+w — `cycleWorktrees`** (2026-10-08, the refinement branch): the
-third trigger. The next worktree of `m.worktrees` (the Worktrees panel's
-order) after the viewed one, wrapping, through `switchView` — a look, like
-alt+a, never `adoptView`: home stays, the ring comes back to it. Reachable
-wherever alt+a is (`cycleReachable`), reserved inside a focused console
-(`consolePassthrough` / `consoleFullPassthrough` + the focused-console
-branch of `updateConsoleKey`); a docked console stays open and the status
-row then names its worktree — and its return point (`ret.view`) moves to
-the alt+w worktree: alt+w picks the BASE (the `*`), so esc on the console
-lands there, not where the cycle started (user ruling
-2026-10-08; `pendingReturnView` is cleared too). The keyboard goes with the
-switch (user ruling 2026-10-08): `activateTab(panelBranches)` — focus,
-`activeLeftTab`, `lastLeftPanel` — so the Branches border says where keys
-go, and a shown console is unbound (`focused = false`; a ctrl+t-maximised
-docked one docks again, `syncConsoleSize`) with `ret.focus = panelBranches`,
-so esc on the console (`closeConsole` restores `r.focus` when focus sat in
-the console's column) lands Branches-focused. Over a
-full-screen return point (`consoleFull`) Branches is off screen: the console
-stays full, unbound, focus stays on its column, `ret.focus` untouched. The
-console box's blue border = the Commits column has focus, bound or not;
-the title hints (`consoleTitleHints`) tell bound from unbound. Status:
-`wt-x — 2 of 3 worktrees`; one worktree: a status line only.
+**alt+w — `cycleWorktrees`** (2026-10-08/09, the refinement branch, user
+rulings): worktree mode. `at = worktreeIndex(m.viewed)` in
+`worktreeOrder()` — the Worktrees TAB's order (`displayIndices(panelWorktrees)`
+over `worktreeEntries`, worktree rows only, then any a filter hides, in
+list order), never the raw list, so "next" is the row below. FIRST HIT = the
+keyboard is not on Branches (`m.console != nil`, or
+`!panelFocused(panelBranches)`, or another left tab active): a shown
+console is HIDDEN — `ret.view = viewed` (hiding is not leaving: the panels
+stay), `ret.focus = panelBranches`, `closeConsole` (a full-screen one gives
+its parked view back) — then `activateTab(panelBranches)` and
+`selectWorktreeBranch(viewed)`; no advance. With Branches focused: the next
+of the order, wrapping, through `switchView` — a look, like alt+a, never
+`adoptView`: home stays — then `selectWorktreeBranch`: the Branches cursor
+(`sel[panelBranches]`, a display index over `branchEntries`, the branch row
+not a sub-row) on the worktree's checked-out branch; detached, unlisted or
+filtered out → the cursor stays. Reachable wherever alt+a is
+(`cycleReachable`), reserved inside a bound console (`consolePassthrough` /
+`consoleFullPassthrough` + the focused-console branch of
+`updateConsoleKey`). Status `wt-x — 2 of 3 worktrees` (the first hit says
+the current position); one worktree: a status line only. The console box's
+blue border = the Commits column has focus, bound or not; the title hints
+(`consoleTitleHints`) tell bound from unbound.
 
 **alt+a / alt+t — `sessionRing` + `cycleSessions`** (2026-10-09, user
 ruling): the ring is this repository's running sessions of one kind in
-the Worktrees list's order (`worktreeIndex`; unlisted dirs last), oldest
+the Worktrees TAB's order (`worktreeIndex` over `worktreeOrder`: the panel's sort; unlisted dirs last), oldest
 `Started` first within a worktree, ID as the last tie-break — never last
 use. The session shown is BOUND (`showConsole(id, true)`: Touch, cursor,
 `m.focus = panelCommits`). From a bound session of the kind: `(i+1) % n`,

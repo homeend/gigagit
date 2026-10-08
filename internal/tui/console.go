@@ -569,13 +569,35 @@ func runningSessionIn(dir string) (domain.SessionInfo, bool) {
 	return domain.SessionInfo{}, false
 }
 
-// worktreeIndex is a directory's position in the Worktrees list, or
-// len(m.worktrees) for one not listed (sorts last).
+// worktreeOrder is the Worktrees tab's order — the worktree rows as the
+// panel shows them (its sort, its filter), then any a filter hides, in list
+// order — as indices into m.worktrees: what alt+w walks and what orders
+// the session ring, so "next" is the row below.
+func (m Model) worktreeOrder() []int {
+	ents := m.worktreeEntries()
+	seen := make([]bool, len(m.worktrees))
+	out := make([]int, 0, len(m.worktrees))
+	for _, u := range m.displayIndices(panelWorktrees) {
+		if u < len(ents) && !ents[u].sub() && ents[u].wt < len(seen) && !seen[ents[u].wt] {
+			seen[ents[u].wt] = true
+			out = append(out, ents[u].wt)
+		}
+	}
+	for i := range m.worktrees {
+		if !seen[i] {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// worktreeIndex is a directory's position in the Worktrees tab's order
+// (worktreeOrder), or len(m.worktrees) for one not listed (sorts last).
 func (m Model) worktreeIndex(dir string) int {
 	dir = filepath.Clean(dir)
-	for i, w := range m.worktrees {
-		if filepath.Clean(w.Path) == dir {
-			return i
+	for pos, i := range m.worktreeOrder() {
+		if filepath.Clean(m.worktrees[i].Path) == dir {
+			return pos
 		}
 	}
 	return len(m.worktrees)

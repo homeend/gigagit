@@ -26,22 +26,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the console's worktree only when the panels show another one (you pressed
   enter on a row under a docked console). A worktree removed while shown
   falls back to your own.
-- `alt+w` cycles the worktrees themselves: each press shows the next one of
-  the Worktrees panel's list (its files, branch, conflicts, remembered per
-  worktree), around again past the last — the same fast switch, no session
-  needed; the status row says `wt-x — 2 of 3 worktrees`. A fast switch
-  never blocks: its status read is silent (no "⏳ reloading…", the next press
-  is never refused), and the Branches panel's `*` and the Commits
-  identity's `*name` follow the shown worktree's branch at once. alt+w
-  picks the base worktree: pressed under a docked console, leaving the
-  console (esc) then lands on that worktree, not where the cycle started.
-- **alt+w / alt+a / alt+t say where the keys go.** alt+w hands the keyboard
-  to the Branches panel (its border shows it) and unbinds a shown console:
-  its key hints come back, a ctrl+t-maximised one docks again, and the next
-  keys are gg's, not the agent's (before, alt+w inside a bound console left
-  the agent bound while the panels switched). esc on a console returns to
-  the panel you came from — Branches after an alt+w. Over a full-screen
-  return point the console stays full and keeps the keyboard, unbound.
+- `alt+w` is worktree mode. The first press with the keyboard elsewhere —
+  an agent or terminal console shown, another panel focused — hides the
+  console (the session keeps running), focuses the Branches panel (its
+  border shows it) and puts its cursor on the viewed worktree's branch;
+  nothing more. With Branches focused each press shows the next worktree
+  of the Worktrees tab's order (its sort, not the raw list), around again
+  past the last — its files, branch, conflicts, remembered per worktree —
+  and moves the Branches cursor to that worktree's branch; the status row
+  says `wt-x — 2 of 3 worktrees`. The same fast switch, no session needed.
+  A fast switch never blocks: its status read is silent (no "⏳ reloading…",
+  the next press is never refused), and the Branches panel's `*` and the
+  Commits identity's `*name` follow the shown worktree's branch at once.
 - **alt+a / alt+t walk the sessions in Worktrees order and bind them.** The
   ring is the Worktrees panel's order (oldest first within a worktree),
   not last use, so the next one is the one your eye expects; the session
