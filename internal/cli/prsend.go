@@ -152,7 +152,13 @@ func prReply(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	fs := flag.NewFlagSet("pr reply", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	send := fs.Bool("send", false, "send the reply at once (asks at the terminal)")
-	source := fs.String("source", "user", "user or agent")
+	// A draft written inside a session gg started is an agent's: the user
+	// must never send it believing they wrote it.
+	defSource := "user"
+	if inGGSession() {
+		defSource = "agent"
+	}
+	source := fs.String("source", defSource, "user or agent (default: agent inside a gg session)")
 	pos, flags := splitPositionals(args, 3, "source")
 	if err := fs.Parse(flags); err != nil || len(pos) != 3 {
 		fmt.Fprintln(stderr, prUsage)

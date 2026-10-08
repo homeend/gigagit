@@ -104,12 +104,12 @@ The user sends to GitHub, never you: nothing you run posts there.
 ```text
 1. gg pr list                      # the open PRs (gg pr list --search <text> for others)
 2. gg pr view <n>                  # description + conversation + verdicts
-3. gg pr comments <n>              # inline threads already open, with [<thread id>]
+3. gg pr comments <n>              # its inline threads (resolved ones marked), with [<thread id>]
 4. gg pr fetch <n>                 # its head as refs/gg/pr/<n> (local only)
 5. gg diff --stat <base>...refs/gg/pr/<n>   then   gg diff <base>...refs/gg/pr/<n> -- <file>
-6. write: notes   gg note add --preview <base>...refs/gg/pr/<n> --file <path> --new-line <n> --summary "…"
+6. write: notes   gg note add --preview <base>...refs/gg/pr/<n> --file <path> --new-line <line> --summary "…"
    or one review  gg review save "$(gg link --pr <n>)" --agent "<your name>" --stdin
-7. answer a thread: gg pr reply <n> <thread id> "<text>"   (a local DRAFT — no --send)
+7. answer a thread: gg pr reply <n> <thread id> "<text>" --source agent   (a local DRAFT — no --send)
 8. gg pr notes <n>                 # what the PR's view now holds
 9. hand back `gg link --pr <n>`
 ```

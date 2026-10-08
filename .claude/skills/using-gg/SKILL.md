@@ -147,10 +147,12 @@ guards against removing the worktree you are standing in.
   link again); `gg review save` over it stores a review that view shows
   (that one needs the PR fetched). Every verb that reads the PR's commits
   (`gg review save`, `gg compare`, `gg link resolve`) refuses an unfetched
-  PR's link with `pull request #<n> is not fetched here — run gg pr fetch
-  <n> first`. Navigating to one waits up to 30s for the view's fetch, then
-  prints `queued: the TUI is fetching pull request #<n> — the view opens
-  when the fetch finishes` (exit 0: it is still on its way).
+  PR's link with `pull request #<n> is not fetched in <checkout> — run gg pr
+  fetch <n> there first`. Navigating to a file or line of one waits up to
+  30s for the view's fetch, then prints `queued: the TUI is fetching pull
+  request #<n> — the view opens when the fetch finishes` (exit 0: it is
+  still on its way); a link with no file is answered at once (`opened pull
+  request #<n>`) and the fetch follows.
 
 ### Review notes
 
