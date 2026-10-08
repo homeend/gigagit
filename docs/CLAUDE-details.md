@@ -2981,6 +2981,28 @@ untracked file; landing the same link through `#` still opens
 `openCompareFiles(commit a, commit b)` → `CompareFiles`, the tracked-only
 diff. 3b-2 routes pair landing through the set-shaped view.
 
+### Pull request links (2026-10-08)
+
+A PR's link is the merge-preview link of the pair its view opens on:
+`gg://<repo>[/<path>]@<base>...refs/gg/pr/<n>[:<line>]` — no grammar change.
+`domain.PRLinkPair(ctx, n)` names the pair (PRPair of the cached row, else one
+`PullRequest` read; `ErrPRNotFetched` without `refs/gg/pr/<n>`). Producers:
+`gg link --pr <n> [<path>[:<line>]]` (a target flag like `--preview`), the
+TUI's `L` on a Pull requests row and in the PR hub (`prLinkCmd` → `prLinkMsg`,
+off-thread), the open PR's `.` row `pr-link-open` (the pair on screen, no
+round trip), gg web's PR menu `copy gg link` (`registerRows("pr")` →
+`GET /api/pr/link`; built by `linkFor` and recorded like every copy-gg-link
+row). Landing: a navigate whose preview SOURCE parses as a PR ref
+(`domain.PRScopeNumber(target+"..."+source)`; JS `/^refs\/gg\/pr\/(\d+)$/`)
+opens the PR's own view when the list holds the row — TUI
+`steerNavigatePR` → `openPRPreviewCmd`, the pending stage gated by
+`pendingSteer.prNumber` (the link's base spelling may differ from the view's);
+web `openPRLanding` (reads `/api/pr` once first) — else the plain merge
+preview with a notice. A start-at PR link waits for `prsAnswered` (the first
+PR read's answer, cached rows included) when `kickForgeProbe` started one.
+`/gg-review` over a PR link stores a review stamped for the PR (the set's
+`Pair()`), so it shows in the PR's view.
+
 ### Preview links (feature B, 2026-09-15)
 
 `model.LinkTarget.Preview *LinkPreview{Source, Target}` is set iff the target

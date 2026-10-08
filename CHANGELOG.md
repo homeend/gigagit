@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## Pull request follow-ups
 
+### Added
+
+- **Links to pull requests.** `L` on a Pull requests row (and in the PR
+  details), *Copy pull request link* in an open PR's `.` menu, *copy gg link*
+  in gg web's PR menu, and `gg link --pr <n>` copy the PR's gg link
+  (`gg://…@<base>...refs/gg/pr/<n>`). Hand it to an agent as
+  `/gg-review <link>` — the review shows in the PR's view — or open it
+  (`gg open`, `gg session navigate`, `#`, gg web): it lands in the PR's own
+  view with its GitHub threads, and on the file and line it names. Skill
+  v156, gg-review v3.
+
 ### Changed
 
 - **A note written in a pull request's diff joins the PR on any of its

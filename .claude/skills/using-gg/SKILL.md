@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v155 -->
+<!-- gg:using-gg:v156 -->
 
 # Using gg (gigagit)
 
@@ -138,6 +138,11 @@ guards against removing the worktree you are standing in.
   carries fingerprints taken at save time, like the lane's.
 - `gg link --review <id|latest>` — print a stored review's link (and record
   it in `gg links`); `latest` = the newest review in this repository.
+- `gg link --pr <n> [<path>[:<line>]]` — a pull request's link
+  (`gg://<repo>@<base>...refs/gg/pr/<n>`, the pair its view opens on; a
+  fetched PR only — `gg pr fetch <n>` first). Opening it (`gg open`, `gg
+  session navigate`) lands in the PR's view; `gg review save` over it stores
+  a review that view shows.
 
 ### Review notes
 
@@ -845,8 +850,9 @@ finds the right one here.
 - `gg pr notes <n> [--json]` — what the PR's view holds: the local notes
   written for it, GitHub threads, draft replies; the ids `gg pr send --note`
   takes. A note or review FOR a pull request is written with `--preview
-  <base>...refs/gg/pr/<n>` (after `gg pr fetch <n>`); it shows only in that
-  PR's view, and a note on a PR's commit written any other way does not.
+  <base>...refs/gg/pr/<n>` (after `gg pr fetch <n>`) — a review with
+  `gg review save "$(gg link --pr <n>)"`; it shows only in that PR's view,
+  and a note on a PR's commit written any other way does not.
 - **Sending to GitHub is the user's, never yours.** You cannot send
   anything to GitHub: inside any gg session `gg pr send`, `gg pr reply
   --send` and `gg pr resolve|unresolve` refuse ("agents can't send to
