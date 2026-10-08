@@ -18,7 +18,7 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
-import { coveredReads, exclusive, nextFresh, oncePerKey, readyLatch, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
+import { coveredReads, exclusive, liveListing, nextFresh, oncePerKey, readyLatch, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
@@ -28,14 +28,15 @@ import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 const BACKOFF_MS = [1000, 2000, 4000];
 let backoffAt = 0;
 let backoffTimer = null;
-// listLoaded opens on the server's first answered listing ("loaded" is
-// false only while the forge is unprobed — a repo with no forge answers too).
-// A repo switch reloads the page, so it never needs a reset.
+// listLoaded opens on the server's first LIVE listing (liveListing: a cached
+// one also says loaded:true but may predate the PR a link names; a repo with
+// no forge answers too). A repo switch reloads the page, so it never needs a
+// reset.
 const listLoaded = readyLatch();
 const LANDING_LIST_MS = 10000; // a link landing's wait for it (BACKOFF_MS sums to 7s)
 
 function take(body) {
-  if (body.loaded) listLoaded.open();
+  if (liveListing(body)) listLoaded.open();
   state.prs = body.prs || [];
   state.prsAvailable = !!body.available;
   state.prsError = body.error || "";
@@ -440,7 +441,9 @@ export async function openPRLanding(n) {
   if (!knownPR(n)) await listLoaded.wait(LANDING_LIST_MS);
   const pr = knownPR(n);
   if (!pr) return null;
-  if (state.previewOpen && state.previewOpen.pr === n) return true; // already on screen
+  // Never skip the open as "already on screen": the page's open-preview
+  // record outlives the PR view (a commit opened after it keeps it set) —
+  // the open re-shows it.
   // Busy (null) waits and retries; a failed open resolves false and has
   // already said why.
   let p;

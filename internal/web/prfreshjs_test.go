@@ -324,7 +324,7 @@ func TestPRsJSLandingWaitsForTheList(t *testing.T) {
 	src := string(b)
 	for _, want := range []string{
 		"coveredReads(",
-		"if (body.loaded) listLoaded.open();",
+		"if (liveListing(body)) listLoaded.open();",
 		"await listLoaded.wait(LANDING_LIST_MS)",
 	} {
 		if !strings.Contains(src, want) {
@@ -398,5 +398,53 @@ func TestPRsJSLandingWaitsForAnOpenInFlight(t *testing.T) {
 	}
 	if strings.Contains(body, "openPR(pr)") {
 		t.Error("openPRLanding still calls openPR")
+	}
+}
+
+// Final review #2: a CACHED listing answers loaded:true before the live one
+// lands — the cold-page landing must keep waiting for the live rows.
+func TestPRFreshJSLiveListing(t *testing.T) {
+	t.Parallel()
+	out := runFreshModuleJS(t, `
+import { liveListing } from "./prfresh.mjs";
+console.log(JSON.stringify([
+  liveListing({ loaded: true, cached: true }),
+  liveListing({ loaded: true, cached: false }),
+  liveListing({ loaded: false }),
+  liveListing({ loaded: true, available: false }),
+]));
+`)
+	var got []bool
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if !slices.Equal(got, []bool{false, true, false, true}) {
+		t.Fatalf("got %v", got)
+	}
+}
+
+// Final review #1: previewOpen outlives the PR view (a commit opened after
+// it keeps it set), so the landing never skips the open on it — it would
+// land in the commit's file list. And the latch opens on the LIVE listing.
+func TestPRsJSLandingTrustsNoStalePreviewOpen(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "prs.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	i := strings.Index(src, "export async function openPRLanding(")
+	if i < 0 {
+		t.Fatal("openPRLanding is gone")
+	}
+	body := src[i:]
+	if j := strings.Index(body, "\n}\n"); j > 0 {
+		body = body[:j]
+	}
+	if strings.Contains(body, "previewOpen") {
+		t.Error("openPRLanding trusts state.previewOpen")
+	}
+	if !strings.Contains(src, "if (liveListing(body)) listLoaded.open();") {
+		t.Error("the list latch does not wait for the live listing")
 	}
 }

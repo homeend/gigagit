@@ -78,6 +78,13 @@ export function coveredReads(gate, read) {
   return call;
 }
 
+// liveListing reports whether a /api/pr answer is the server's LIVE listing
+// (or its settled "no forge"): a cached listing also says loaded:true, but
+// it may predate a PR a link names (prs.js: the landing's list latch).
+export function liveListing(body) {
+  return !!body.loaded && !body.cached;
+}
+
 // readyLatch: wait(ms) resolves true once open() ran (at once if it did),
 // false after ms.
 export function readyLatch() {
