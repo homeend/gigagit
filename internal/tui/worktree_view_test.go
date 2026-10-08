@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/gittest"
 )
 
 // addWorktree adds a second worktree on a new branch, reloads the Worktrees
@@ -212,5 +214,90 @@ func TestWorktreesReloadDropsAGoneSlot(t *testing.T) {
 	}
 	if !strings.Contains(m.statusMsg, "wt2") {
 		t.Fatalf("status = %q, want it to name the removed worktree", m.statusMsg)
+	}
+}
+
+// enter on another worktree's row is instant: the view is its, gg's exit
+// dir and home follow, the Commits cursor and an open diff survive, the
+// screen never blanks.
+func TestInRepoSwitchAdoptsWithoutAReload(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	m.sel[panelCommits] = 0
+	m = m.pushLayer(&diffView{})
+	nm, _ := m.guardedReRoot(other, true)
+	m = nm.(Model)
+	if m.viewed != filepath.Clean(other) || m.home != m.viewed || m.switchTarget != filepath.Clean(other) || publishedWorktree() != filepath.Clean(other) {
+		t.Fatalf("viewed=%q home=%q target=%q published=%q", m.viewed, m.home, m.switchTarget, publishedWorktree())
+	}
+	if !m.ready || m.loading || m.diffLayer() == nil {
+		t.Fatalf("the in-repo switch reloaded: ready=%v loading=%v diff=%v", m.ready, m.loading, m.diffLayer())
+	}
+	if m.snapshotPath != "" {
+		t.Fatal("the old snapshot target must be disabled until the new one resolves")
+	}
+}
+
+// The snapshot target re-resolves for the adopted worktree.
+func TestAdoptViewReResolvesTheSnapshotTarget(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	nm, cmd := m.guardedReRoot(other, true)
+	m = nm.(Model)
+	for _, msg := range drainBatch(cmd) {
+		if st, ok := msg.(snapshotTargetMsg); ok {
+			nm, _ := m.Update(st)
+			m = nm.(Model)
+		}
+	}
+	if filepath.Clean(m.snapshotWorktree) != filepath.Clean(other) {
+		t.Fatalf("snapshotWorktree = %q, want %q", m.snapshotWorktree, other)
+	}
+}
+
+// A target in another repository keeps the full reload.
+func TestOtherRepoSwitchStillReRoots(t *testing.T) {
+	m := loadedModel(t)
+	nm, _ := m.guardedReRoot(gittest.BasicRepo(t, "b\n"), false)
+	m = nm.(Model)
+	if m.ready || len(m.views) != 0 {
+		t.Fatalf("ready=%v views=%v: another repo must reRoot", m.ready, m.views)
+	}
+}
+
+// A switch asked while a console views B adopts the target and the console's
+// return now points there.
+func TestSwitchWhileAConsoleIsShownAdoptsAndRetargetsTheReturn(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, false)
+	nm, _ := m.guardedReRoot(other, true)
+	m = nm.(Model)
+	if m.home != filepath.Clean(other) || m.console == nil || m.console.ret.view != m.home {
+		t.Fatalf("home=%q console=%+v", m.home, m.console)
+	}
+	m = m.closeConsole()
+	if m.viewed != filepath.Clean(other) {
+		t.Fatalf("close must stay in the adopted worktree, viewed=%q", m.viewed)
+	}
+}
+
+// reRoot to another repository drops the slots and the console's return
+// view, so a later close cannot swap to a path of the old repo.
+func TestRepoSwitchDropsTheSlots(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, false)
+	nm, _ := m.reRoot(gittest.BasicRepo(t, "b\n"))
+	m = nm.(Model)
+	if len(m.views) != 0 || m.viewed != "" || (m.console != nil && m.console.ret.view != "") {
+		t.Fatalf("views=%v viewed=%q console=%+v", m.views, m.viewed, m.console)
 	}
 }

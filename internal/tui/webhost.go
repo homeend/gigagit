@@ -152,8 +152,20 @@ func (m Model) onWebSwitchRequest(msg webSwitchRequestMsg) (Model, tea.Cmd) {
 		return m, rearm
 	}
 	m.web.pendingSwitch = append(m.web.pendingSwitch, msg.reply)
-	nm, cmd := m.reRoot(msg.path)
+	home, status := m.home, m.statusMsg
+	nm, cmd := m.guardedReRoot(msg.path, false) // a worktree of this repo: the fast path
 	m = nm.(Model)
+	if !m.loading && m.home == home {
+		// Neither a reroot nor an adopt: the worktree already on screen (nothing
+		// for the host to follow), or a refusal said on the status line.
+		var err error
+		if m.statusMsg != status {
+			err = errors.New(m.statusMsg)
+		}
+		m.web.pendingSwitch = m.web.pendingSwitch[:len(m.web.pendingSwitch)-1]
+		msg.reply <- err
+		return m, tea.Batch(cmd, rearm)
+	}
 	m.statusMsg = i18n.T("switched from the web page")
 	return m, tea.Batch(cmd, rearm)
 }

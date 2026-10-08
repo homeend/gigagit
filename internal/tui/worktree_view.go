@@ -221,3 +221,31 @@ func (m Model) pruneViews() Model {
 	}
 	return m
 }
+
+// adoptView moves gg's identity to the viewed slot — the user's own switch,
+// as opposed to a console looking at another worktree. What reRoot does
+// for the identity, without the teardown: the exit directory, the session
+// registry's worktree, the session snapshot (disabled now, re-resolved off
+// thread), the steering inbox and the pending-send watch (closed for the
+// old worktree, re-homed by snapshotTargetMsg → initSteerInbox), the hosted
+// web page. A shown console's return point moves too: a close stays where
+// the user asked to be.
+func (m Model) adoptView() (Model, tea.Cmd) {
+	if m.viewed == "" || m.viewed == m.home {
+		return m, nil
+	}
+	m.home = m.viewed
+	m.switchTarget = m.viewed
+	publishedWT.Store(m.viewed)
+	removeSnapshotFile(m.snapshotPath)
+	m.snapshotPath, m.snapshotCommonDir, m.snapshotWorktree, m.lastSnapshot = "", "", "", nil
+	m = m.closeSteerInbox()
+	m = m.closePendingWatch()
+	m.steerGen++
+	m.noticeGen++ // the pending-send watch of the old worktree
+	if m.console != nil && m.console.ret != nil {
+		m.console.ret.view = m.home
+	}
+	m.statusMsg = i18n.T("switched to %s", shortWorktreeName(m.home))
+	return m, tea.Batch(snapshotTargetCmd(m.svc), m.pendingWatchCmd(m.noticeGen), m.pendingSendsReadCmd(m.noticeGen), m.webRerootCmd())
+}

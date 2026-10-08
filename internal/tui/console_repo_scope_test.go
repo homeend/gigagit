@@ -170,3 +170,18 @@ func TestOpenAnotherReposSessionRefusedOverAnOpenWindow(t *testing.T) {
 		t.Fatal("the refusal must say why")
 	}
 }
+
+// enter on another worktree of the same repo keeps the console AND keeps
+// the screen: no reload, the view is the target.
+func TestWorktreeEnterKeepsConsoleAndScreen(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	nm, _ := m.guardedReRoot(other, true)
+	m = nm.(Model)
+	if m.console == nil || !m.ready || m.viewed != filepath.Clean(other) {
+		t.Fatalf("console=%+v ready=%v viewed=%q", m.console, m.ready, m.viewed)
+	}
+}

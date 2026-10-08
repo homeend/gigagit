@@ -31,6 +31,16 @@ func (m Model) guardedReRoot(path string, offerRepair bool) (tea.Model, tea.Cmd)
 	verdict, translated := checkSwitchTarget(guardStat, guardGOOS, path)
 	switch verdict {
 	case switchOK:
+		if m.home != "" && m.isRepoWorktree(path) {
+			// Same repository: a slot swap, then gg's identity follows.
+			// Never a reload — the repo-scoped panels, an open diff and
+			// the cursors stay.
+			nm, ok := m.switchView(path)
+			if !ok {
+				return nm, nil
+			}
+			return nm.adoptView()
+		}
 		return m.reRoot(path)
 	case switchRepairable:
 		if offerRepair {

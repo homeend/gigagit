@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/homeend/gigagit/internal/model"
+import (
+	"path/filepath"
+
+	"github.com/homeend/gigagit/internal/model"
+)
 
 // Availability predicates shared by Update's key dispatch (model.go) and the
 // footer binding registry (footer.go). Sharing them keeps the footer honest:
@@ -218,7 +222,20 @@ func (m Model) canMoveWorktree() bool {
 // canEnterWorktree gates enter on Worktrees: re-root into another worktree.
 func (m Model) canEnterWorktree() bool {
 	wt, ok := m.selectedWorktree()
-	return m.opsIdle() && ok && wt.Path != "" && wt.Path != m.currentWorktree
+	if !m.opsIdle() || !ok || wt.Path == "" {
+		return false
+	}
+	// A row can be entered when it is not on screen, or when it is on screen
+	// only because a console looks at it (enter then adopts it). Before the
+	// first load seeds the slots, the current worktree is the one on screen.
+	viewed, home := m.viewed, m.home
+	if viewed == "" {
+		viewed = filepath.Clean(m.currentWorktree)
+	}
+	if home == "" {
+		home = viewed
+	}
+	return filepath.Clean(wt.Path) != viewed || viewed != home
 }
 
 // canShowCommitFiles gates l: the commit files view needs a resolvable
