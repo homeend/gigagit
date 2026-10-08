@@ -18,7 +18,7 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
-import { coveredReads, exclusive, liveListing, nextFresh, oncePerKey, readyLatch, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
+import { coveredReads, exclusive, landPR, liveListing, nextFresh, oncePerKey, readyLatch, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
@@ -430,25 +430,22 @@ async function openPRNow(pr) {
 // as a row click. true = on screen; false = the open failed (it said why);
 // null = the page does not list PR n.
 export async function openPRLanding(n) {
-  // A row's open in flight runs first: openPR would answer false (busy),
-  // which reads as "failed and said why" — the landing went silent (B1).
-  await opens.idle();
-  // A link opened as the page loads (gg open --web) may beat the list: read
-  // the server's listing once before calling the PR unknown.
-  if (!knownPR(n)) await fetchPRs();
-  // Still unknown and the server's first listing not in: wait for it (the
-  // backoff re-reads and the "prs" event bring it), then decide.
-  if (!knownPR(n)) await listLoaded.wait(LANDING_LIST_MS);
-  const pr = knownPR(n);
-  if (!pr) return null;
-  // Never skip the open as "already on screen": the page's open-preview
-  // record outlives the PR view (a commit opened after it keeps it set) —
-  // the open re-shows it.
-  // Busy (null) waits and retries; a failed open resolves false and has
-  // already said why.
-  let p;
-  while (!(p = opens.try(() => openPRNow(pr)))) await opens.idle();
-  return await p;
+  // The order lives in landPR (prfresh.js, node-tested): a row's open in
+  // flight runs first (openPR's false means busy AND failed — the landing
+  // went silent, B1); a link opened as the page loads may beat the list, so
+  // one newer read, then the server's first live listing; never "already on
+  // screen" (the open-preview record outlives the PR view — a commit opened
+  // after it keeps it set); busy waits and retries.
+  return landPR(
+    {
+      idle: () => opens.idle(),
+      known: knownPR,
+      fetchList: fetchPRs,
+      waitList: () => listLoaded.wait(LANDING_LIST_MS),
+      tryOpen: (pr) => opens.try(() => openPRNow(pr)),
+    },
+    n,
+  );
 }
 
 function forgetPR(pr) {

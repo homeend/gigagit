@@ -127,6 +127,22 @@ export function exclusive() {
   };
 }
 
+// landPR is a PR link landing's order (prs.js openPRLanding): a running
+// open first; then the list (a read newer than the call, then the server's
+// first live listing); then the open itself, waiting while another runs —
+// tryOpen answers null while busy; a resolved false = failed and already
+// said why. null = the page does not list PR n.
+export async function landPR(d, n) {
+  await d.idle();
+  if (!d.known(n)) await d.fetchList();
+  if (!d.known(n)) await d.waitList();
+  const pr = d.known(n);
+  if (!pr) return null;
+  let p;
+  while (!(p = d.tryOpen(pr))) await d.idle();
+  return await p;
+}
+
 // stickyFlag is soon() for reads that carry a flag a newer waiting read must
 // not drop (prs.js: the moved-head read's "updated"): soon(key, flag, make)
 // queues make(flag) — the flag ORed over every read that replaced another
