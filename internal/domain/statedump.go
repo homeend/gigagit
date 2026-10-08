@@ -43,6 +43,8 @@ func WriteProcessState(w io.Writer, now time.Time) {
 			state := "holds"
 			if e.Waiting {
 				state = "waits"
+			} else if e.Long {
+				state = "holds (long-lived; excluded ops are refused, not queued)"
 			}
 			fmt.Fprintf(w, "  %s %-9s %8s  %s\n", state, e.Mode, dumpAge(now, e.Since), e.Label)
 		}

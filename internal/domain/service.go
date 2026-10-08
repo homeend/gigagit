@@ -387,7 +387,15 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 	versions.Enabled = versions.Enabled && s.FeatureEnabled(ctx, FeatureVersions)
 	versions.Format = VersionsFormat
 
-	res, err := s.gateFor(ctx).Acquire(ctx, mode, label)
+	// A CaptureTask runs an external AI agent for minutes. Its hold is
+	// long-lived: nobody queues behind it — an op that needs more than its
+	// Read allows is refused at once with a *repogate.BusyError naming it,
+	// which frontends turn into "X is running" (the TUI: a notice modal).
+	acquire := s.gateFor(ctx).Acquire
+	if _, long := op.(engine.CaptureTask); long {
+		acquire = s.gateFor(ctx).AcquireLong
+	}
+	res, err := acquire(ctx, mode, label)
 	if err != nil {
 		return engine.Result{}, err
 	}

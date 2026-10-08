@@ -56,6 +56,23 @@ type holder struct {
 	mode  Mode
 	label string
 	since time.Time // when granted (the emergency state dump shows hold times)
+	// long marks a hold that lasts minutes, not milliseconds (a headless AI
+	// task running an agent). Nobody is queued behind one: an incompatible
+	// Acquire is refused with a BusyError instead — see Acquire.
+	long bool
+}
+
+// BusyError is Acquire's refusal when the reservation would have to wait
+// for a long-lived holder (see AcquireLong). It names the holder so a
+// frontend can say what is running instead of showing a frozen "working…".
+type BusyError struct {
+	Holder string    // the holder's label, e.g. "op ConflictAgent"
+	Mode   Mode      // the holder's mode
+	Since  time.Time // when it was granted
+}
+
+func (e *BusyError) Error() string {
+	return "repository busy: " + e.Holder + " is running"
 }
 
 // waiter is one queued Acquire.
@@ -65,6 +82,7 @@ type waiter struct {
 	since time.Time     // when queued
 	ready chan struct{} // closed on grant; h is set before the close
 	h     *holder
+	long  bool // the granted holder is long-lived (AcquireLong)
 }
 
 // Gate serializes reservations for one repository.
@@ -82,20 +100,42 @@ type Reservation struct {
 
 // Acquire blocks until the reservation is granted or ctx is cancelled.
 // label names the holder in Queue() and wait spans (e.g. "op SmartPull").
+//
+// One case never waits: when an ACTIVE long-lived holder (AcquireLong) is
+// incompatible with mode, Acquire returns a *BusyError at once. Queuing
+// there would park the caller for the holder's whole run with nothing to
+// show for it, and — the queue being strict FIFO — every later read would
+// stall behind the parked writer too. A short holder keeps the old
+// behaviour: an incompatible Acquire queues and is granted on release.
 func (g *Gate) Acquire(ctx context.Context, mode Mode, label string) (*Reservation, error) {
+	return g.acquire(ctx, mode, label, false)
+}
+
+// AcquireLong is Acquire for a hold that will last minutes (a headless AI
+// task). It is granted by the same rules; the difference is for others:
+// an incompatible Acquire while it is held is refused, never queued.
+func (g *Gate) AcquireLong(ctx context.Context, mode Mode, label string) (*Reservation, error) {
+	return g.acquire(ctx, mode, label, true)
+}
+
+func (g *Gate) acquire(ctx context.Context, mode Mode, label string, long bool) (*Reservation, error) {
 	start := time.Now()
 	g.mu.Lock()
+	if busy := g.longBlocker(mode); busy != nil {
+		g.mu.Unlock()
+		return nil, busy
+	}
 	// Immediate grant only when nobody is queued: a non-empty queue means
 	// someone arrived first, and FIFO fairness (which is also the writer
 	// preference — new reads queue behind a waiting writer) wins over
 	// opportunistic overlap.
 	if len(g.waiters) == 0 && g.holdersCompatibleWith(mode) {
-		h := &holder{mode: mode, label: label, since: start}
+		h := &holder{mode: mode, label: label, since: start, long: long}
 		g.holders = append(g.holders, h)
 		g.mu.Unlock()
 		return &Reservation{g: g, h: h}, nil
 	}
-	w := &waiter{mode: mode, label: label, since: start, ready: make(chan struct{})}
+	w := &waiter{mode: mode, label: label, since: start, ready: make(chan struct{}), long: long}
 	g.waiters = append(g.waiters, w)
 	g.mu.Unlock()
 
@@ -127,6 +167,17 @@ func (g *Gate) Acquire(ctx context.Context, mode Mode, label string) (*Reservati
 	}
 }
 
+// longBlocker returns the refusal for mode when an active long-lived holder
+// excludes it, nil otherwise. Callers hold g.mu.
+func (g *Gate) longBlocker(mode Mode) *BusyError {
+	for _, h := range g.holders {
+		if h.long && !compatible(h.mode, mode) {
+			return &BusyError{Holder: h.label, Mode: h.mode, Since: h.since}
+		}
+	}
+	return nil
+}
+
 // holdersCompatibleWith reports whether mode can run beside every holder.
 // Callers hold g.mu.
 func (g *Gate) holdersCompatibleWith(mode Mode) bool {
@@ -148,7 +199,7 @@ func (g *Gate) grant() {
 			return
 		}
 		g.waiters = g.waiters[1:]
-		w.h = &holder{mode: w.mode, label: w.label, since: time.Now()}
+		w.h = &holder{mode: w.mode, label: w.label, since: time.Now(), long: w.long}
 		g.holders = append(g.holders, w.h)
 		close(w.ready)
 	}
@@ -178,6 +229,7 @@ type Entry struct {
 	Mode    Mode
 	Waiting bool
 	Since   time.Time // granted (holder) or queued (waiter)
+	Long    bool      // a long-lived hold (AcquireLong); never set on a waiter
 }
 
 // Queue snapshots current holders then waiters, in FIFO order, for
@@ -187,7 +239,7 @@ func (g *Gate) Queue() []Entry {
 	defer g.mu.Unlock()
 	out := make([]Entry, 0, len(g.holders)+len(g.waiters))
 	for _, h := range g.holders {
-		out = append(out, Entry{Label: h.label, Mode: h.mode, Since: h.since})
+		out = append(out, Entry{Label: h.label, Mode: h.mode, Since: h.since, Long: h.long})
 	}
 	for _, w := range g.waiters {
 		out = append(out, Entry{Label: w.label, Mode: w.mode, Waiting: true, Since: w.since})
