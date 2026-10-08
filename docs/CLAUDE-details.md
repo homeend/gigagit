@@ -6153,9 +6153,12 @@ cost the wait above, so the local re-mark replaced it.
 
 **alt+w — `cycleWorktrees`** (2026-10-08/09, the refinement branch, user
 rulings): worktree mode. `at = worktreeIndex(m.viewed)` in
-`worktreeOrder()` — the Worktrees TAB's order (`displayIndices(panelWorktrees)`
-over `worktreeEntries`, worktree rows only, then any a filter hides, in
-list order), never the raw list, so "next" is the row below. FIRST HIT = the
+`worktreeOrder()` — the BRANCHES tab's order of the worktrees
+(`displayIndices(panelBranches)` over `branchEntries`, branch rows only,
+each mapped to the worktree that has it checked out; then any worktree
+without such a row — detached, filtered out — in list order), never the
+raw list: the Branches tab sorts by date newest first by default, the list
+does not, which read as "bottom to top"; "next" is the row below. FIRST HIT = the
 keyboard is not on Branches (`m.console != nil`, or
 `!panelFocused(panelBranches)`, or another left tab active): a shown
 console is HIDDEN — `ret.view = viewed` (hiding is not leaving: the panels
@@ -6176,7 +6179,7 @@ blue border = the Commits column has focus, bound or not; the title hints
 
 **alt+a / alt+t — `sessionRing` + `cycleSessions`** (2026-10-09, user
 ruling): the ring is this repository's running sessions of one kind in
-the Worktrees TAB's order (`worktreeIndex` over `worktreeOrder`: the panel's sort; unlisted dirs last), oldest
+the Branches tab's order of the worktrees (`worktreeIndex` over `worktreeOrder`; unlisted dirs last), oldest
 `Started` first within a worktree, ID as the last tie-break — never last
 use. The session shown is BOUND (`showConsole(id, true)`: Touch, cursor,
 `m.focus = panelCommits`). From a bound session of the kind: `(i+1) % n`,

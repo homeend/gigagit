@@ -31,15 +31,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   console (the session keeps running), focuses the Branches panel (its
   border shows it) and puts its cursor on the viewed worktree's branch;
   nothing more. With Branches focused each press shows the next worktree
-  of the Worktrees tab's order (its sort, not the raw list), around again
-  past the last — its files, branch, conflicts, remembered per worktree —
+  in the Branches tab's order (its branch rows with a checkout, top to
+  bottom under its sort — by date newest first unless changed; not the
+  raw list), around again past the last — its files, branch, conflicts, remembered per worktree —
   and moves the Branches cursor to that worktree's branch; the status row
   says `wt-x — 2 of 3 worktrees`. The same fast switch, no session needed.
   A fast switch never blocks: its status read is silent (no "⏳ reloading…",
   the next press is never refused), and the Branches panel's `*` and the
   Commits identity's `*name` follow the shown worktree's branch at once.
 - **alt+a / alt+t walk the sessions in Worktrees order and bind them.** The
-  ring is the Worktrees panel's order (oldest first within a worktree),
+  ring is the Branches tab's order of the worktrees (oldest session first
+  within a worktree),
   not last use, so the next one is the one your eye expects; the session
   shown is bound at once — you type. With gg's keyboard the viewed
   worktree's own session comes first (hidden → shown, shown unbound →

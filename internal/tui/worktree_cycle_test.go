@@ -236,19 +236,26 @@ func TestAltWAfterAltAHidesTheConsoleOnItsWorktree(t *testing.T) {
 	}
 }
 
-// alt+w walks the Worktrees TAB's order — its sort — not the list's: with
-// the panel sorted by name descending the next worktree is the row below
-// in that order.
-func TestAltWFollowsTheWorktreesTabsSortOrder(t *testing.T) {
+// alt+w walks the BRANCHES tab's order — its branch rows with a checkout,
+// top to bottom under its sort — not the worktree list's: with the tab
+// sorted by name descending the next worktree is the row below in that
+// order.
+func TestAltWFollowsTheBranchesTabsSortOrder(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, _ = addWorktree(t, m, "wtA")
 	m, _ = addWorktree(t, m, "wtB")
-	natural := append([]int(nil), m.worktreeOrder()...)
-	m.sortModes[panelWorktrees] = sortNameDesc
+	m.sortModes[panelBranches] = sortNameAsc
+	asc := append([]int(nil), m.worktreeOrder()...)
+	m.sortModes[panelBranches] = sortNameDesc
 	sorted := m.worktreeOrder()
-	if len(sorted) != 3 || slices.Equal(sorted, natural) {
-		t.Fatalf("precondition: the sort must reorder the tab: natural=%v sorted=%v", natural, sorted)
+	if len(sorted) != 3 || slices.Equal(sorted, asc) {
+		t.Fatalf("precondition: the sort must reorder the tab: asc=%v desc=%v", asc, sorted)
+	}
+	for i := range 3 { // the rows top to bottom, as the tab draws them
+		if name := m.branches[m.branchEntries()[m.displayIndices(panelBranches)[i]].br].Name; m.worktrees[sorted[i]].Branch != name {
+			t.Fatalf("row %d is %s, order says %s", i, name, m.worktrees[sorted[i]].Branch)
+		}
 	}
 	var visited []string
 	for range 3 {

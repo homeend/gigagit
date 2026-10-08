@@ -569,18 +569,27 @@ func runningSessionIn(dir string) (domain.SessionInfo, bool) {
 	return domain.SessionInfo{}, false
 }
 
-// worktreeOrder is the Worktrees tab's order — the worktree rows as the
-// panel shows them (its sort, its filter), then any a filter hides, in list
-// order — as indices into m.worktrees: what alt+w walks and what orders
-// the session ring, so "next" is the row below.
+// worktreeOrder is the BRANCHES tab's order of the worktrees — the branch
+// rows that name a checkout, top to bottom as the panel shows them (its
+// sort, by date newest first unless changed; its filter), then any
+// worktree without such a row (detached, hidden by a filter), in list
+// order — as indices into m.worktrees: what alt+w walks and what orders the
+// session ring, so "next" is the row below in the tab the user walks.
 func (m Model) worktreeOrder() []int {
-	ents := m.worktreeEntries()
 	seen := make([]bool, len(m.worktrees))
 	out := make([]int, 0, len(m.worktrees))
-	for _, u := range m.displayIndices(panelWorktrees) {
-		if u < len(ents) && !ents[u].sub() && ents[u].wt < len(seen) && !seen[ents[u].wt] {
-			seen[ents[u].wt] = true
-			out = append(out, ents[u].wt)
+	ents := m.branchEntries()
+	for _, u := range m.displayIndices(panelBranches) {
+		if u >= len(ents) || ents[u].sub() {
+			continue
+		}
+		name := m.branches[ents[u].br].Name
+		for i, w := range m.worktrees {
+			if w.Branch == name && !seen[i] {
+				seen[i] = true
+				out = append(out, i)
+				break
+			}
 		}
 	}
 	for i := range m.worktrees {
@@ -591,8 +600,8 @@ func (m Model) worktreeOrder() []int {
 	return out
 }
 
-// worktreeIndex is a directory's position in the Worktrees tab's order
-// (worktreeOrder), or len(m.worktrees) for one not listed (sorts last).
+// worktreeIndex is a directory's position in the Branches tab's order of
+// the worktrees (worktreeOrder), or len(m.worktrees) for one not listed.
 func (m Model) worktreeIndex(dir string) int {
 	dir = filepath.Clean(dir)
 	for pos, i := range m.worktreeOrder() {
