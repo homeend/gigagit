@@ -18,7 +18,7 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
-import { nextFresh, sentEvent, serialReads } from "./prfresh.js";
+import { coveredReads, exclusive, landPR, liveListing, nextFresh, oncePerKey, prFetchDoneLine, readyLatch, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
@@ -28,8 +28,15 @@ import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 const BACKOFF_MS = [1000, 2000, 4000];
 let backoffAt = 0;
 let backoffTimer = null;
+// listLoaded opens on the server's first LIVE listing (liveListing: a cached
+// one also says loaded:true but may predate the PR a link names; a repo with
+// no forge answers too). A repo switch reloads the page, so it never needs a
+// reset.
+const listLoaded = readyLatch();
+const LANDING_LIST_MS = 10000; // a link landing's wait for it (BACKOFF_MS sums to 7s)
 
 function take(body) {
+  if (liveListing(body)) listLoaded.open();
   state.prs = body.prs || [];
   state.prsAvailable = !!body.available;
   state.prsError = body.error || "";
@@ -49,25 +56,21 @@ function take(body) {
 
 // fetchPRs is single-flight (boot, the backoff and a live event can overlap),
 // but a call that arrives mid-flight is not DROPPED: the answer in flight may
-// predate what that call was about, so one more read runs after it.
-let again = false;
-export function fetchPRs() {
-  const run = runOnce("prs", async () => {
+// predate what that call was about, so one more read runs after it — and the
+// call's promise settles only then (coveredReads): a link landing on a cold
+// page waits for rows newer than its question.
+const readPRs = coveredReads(
+  (fn) => runOnce("prs", fn),
+  async () => {
     try {
       take(await getJSON("/api/pr"));
     } catch {
       // A failed read is not "the pull requests are gone": the rows stand.
     }
-  });
-  if (!run) {
-    again = true;
-    return Promise.resolve();
-  }
-  return run.then(() => {
-    if (!again) return;
-    again = false;
-    return fetchPRs();
-  });
+  },
+);
+export function fetchPRs() {
+  return readPRs();
 }
 
 function renderPRs() {
@@ -167,6 +170,7 @@ let readSeq = 0; // every comments read's start, in order (prfresh.js's sequence
 // The open PR's forge reads (comments refresh, revalidate) run one at a time;
 // a read asked while one runs waits for it (C9).
 const reads = serialReads((fn) => runOnce("pr-comments", fn));
+const soonComments = stickyFlag(reads);
 function setPRFresh(n, text) {
   const po = state.previewOpen;
   $("pr-fresh").textContent = po && po.pr === n ? text : "";
@@ -218,6 +222,20 @@ ibar.addEventListener("click", (e) => {
 new MutationObserver(() => {
   if ($("compare-bar").classList.contains("hidden")) ibar.classList.add("hidden");
 }).observe($("compare-bar"), { attributes: true, attributeFilter: ["class"] });
+
+// followMovedHead fetches PR n's new head and re-opens its diff — if the user
+// is still looking at it. One follow per PR at a time: a waiting read that
+// lands after another already saw the move must not fetch it again (a
+// second fetch is refused red: "another operation is running").
+const followMovedHead = oncePerKey(async (n) => {
+  const po = state.previewOpen;
+  if (!po || po.pr !== n) return; // they moved on; the next open fetches
+  opLine("⟳ " + prLabel(n) + " has new commits — updating…");
+  if (await fetchPR(n)) {
+    const now = state.previewOpen;
+    if (now && now.pr === n) await showPR(n, true);
+  }
+});
 
 // A send refused because the PR moved on GitHub: follow the new head (the
 // diff re-opens on it, if the user is still looking at the PR).
@@ -287,7 +305,10 @@ async function showPR(n, moved, skipComments) {
 // simply stays without (newer) threads.
 // moved: the view was just re-opened on a moved head — that read is news.
 export function refreshPRComments(n, moved = false) {
-  return reads.run(commentsRead(n, moved));
+  // Queued, never dropped: the read a moved-head reopen asks for may arrive
+  // while another read is still running — and a moved read replaced while
+  // it waits keeps its "updated" (stickyFlag).
+  soonComments("comments:" + n, moved, (mv) => commentsRead(n, mv));
 }
 
 // commentsRead is refreshPRComments's read, for the serial reader.
@@ -324,7 +345,7 @@ function fetchPR(n) {
         // private ref, so nothing but this list needs a reload.
         followOp(resp.op_id, "fetching " + prLabel(n), "pr-fetch", (ev) => {
           fetchPRs();
-          if (!ev.ok) opLine("error: " + (ev.error || "operation failed"), true);
+          opLine(...prFetchDoneLine(ev, n));
           resolve(!!ev.ok);
         }),
       (err) => {
@@ -366,29 +387,22 @@ function revalidateRead(n) {
   };
 }
 
-// followMovedHead fetches PR n's new head and re-opens its diff — if the user
-// is still looking at it.
-async function followMovedHead(n) {
-  const po = state.previewOpen;
-  if (!po || po.pr !== n) return; // they moved on; the next open fetches
-  opLine("⟳ " + prLabel(n) + " has new commits — updating…");
-  if (await fetchPR(n)) {
-    const now = state.previewOpen;
-    if (now && now.pr === n) await showPR(n, true);
-  }
-}
-
 // openPR is the row click: serve what is here, then check the forge.
 //   - a head that is already local opens AT ONCE (a purely local read), and
 //     revalidate() updates it in the background when the forge moved on;
 //   - otherwise the head is fetched first, under the mask.
 // The server's PR cache makes the fetch itself cheap the second time: the
 // head sha comes from the listing, so an unchanged PR skips the network.
-let opening = 0;
+// It resolves true when the PR's view is on screen; false when it failed
+// (and said why) or another open runs (the mask says which).
+const opens = exclusive(); // one open at a time
 async function openPR(pr) {
+  const p = opens.try(() => openPRNow(pr));
+  return p ? p : false;
+}
+
+async function openPRNow(pr) {
   const n = pr.number;
-  if (opening) return; // one open at a time; the mask says which
-  opening = n;
   maskOn(n, "opening " + prLabel(n) + "…");
   try {
     if (pr.fetched) {
@@ -396,19 +410,42 @@ async function openPR(pr) {
       if (how === "shown") {
         maskOff();
         if (pr.state === "open") revalidate(n); // a closed PR's head no longer moves
-        return;
+        return true;
       }
-      if (how === "error") return;
+      if (how === "error") return false;
     }
     $("pr-mask-text").textContent = "fetching " + prLabel(n) + "…";
-    if (!(await fetchPR(n))) return;
+    if (!(await fetchPR(n))) return false;
     pr.fetched = true; // a second click on this row shows the diff without another fetch
     $("pr-mask-text").textContent = "computing the diff of " + prLabel(n) + "…";
-    if ((await showPR(n, false)) === "unfetched") opLine("pull request #" + n + ": the head did not arrive", true);
+    const how = await showPR(n, false);
+    if (how === "unfetched") opLine("pull request #" + n + ": the head did not arrive", true);
+    return how === "shown";
   } finally {
-    opening = 0;
     maskOff();
   }
+}
+
+// openPRLanding opens PR n's view for a gg:// link (live.js): the same open
+// as a row click. true = on screen; false = the open failed (it said why);
+// null = the page does not list PR n.
+export async function openPRLanding(n) {
+  // The order lives in landPR (prfresh.js, node-tested): a row's open in
+  // flight runs first (openPR's false means busy AND failed — the landing
+  // went silent, B1); a link opened as the page loads may beat the list, so
+  // one newer read, then the server's first live listing; never "already on
+  // screen" (the open-preview record outlives the PR view — a commit opened
+  // after it keeps it set); busy waits and retries.
+  return landPR(
+    {
+      idle: () => opens.idle(),
+      known: knownPR,
+      fetchList: fetchPRs,
+      waitList: () => listLoaded.wait(LANDING_LIST_MS),
+      tryOpen: (pr) => opens.try(() => openPRNow(pr)),
+    },
+    n,
+  );
 }
 
 function forgetPR(pr) {

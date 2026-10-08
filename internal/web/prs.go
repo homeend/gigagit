@@ -31,6 +31,7 @@ func init() {
 		mux.HandleFunc("GET /api/pr", s.handlePRs)
 		mux.HandleFunc("POST /api/pr/refresh", writeGuard(s.handlePRRefresh))
 		mux.HandleFunc("GET /api/pr/open", s.handlePROpen)
+		mux.HandleFunc("GET /api/pr/link", s.handlePRLink)
 		mux.HandleFunc("POST /api/pr/revalidate", writeGuard(s.handlePRRevalidate))
 	})
 }
@@ -314,12 +315,15 @@ func (s *Server) handlePROpen(w http.ResponseWriter, r *http.Request) {
 	}
 	// One domain call: the pair and its endpoints, the slow git parts from
 	// the PR cache when this head was seen before.
+	// An open: the disk cache keeps the most recently opened PRs. Stamped
+	// FIRST: on a full cache the entry PRPreview writes must not be the one
+	// trimmed.
+	svc.MarkPROpened(ctx, n)
 	res, err := svc.PRPreview(ctx, pr)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	svc.MarkPROpened(ctx, n) // an open: the disk cache keeps the most recently opened PRs
 	pair := res.Pair
 	body := previewOpenBody(res.Endpoints, label, pr.Source, pr.Target)
 	body["pr"] = n
@@ -331,6 +335,27 @@ func (s *Server) handlePROpen(w http.ResponseWriter, r *http.Request) {
 	// them into a copied link and never hands them back as a wire value.
 	body["link_source"], body["link_target"] = pair.Head, pair.Base
 	writeJSON(w, body)
+}
+
+// handlePRLink answers PR n's gg:// link pair: the base its view opens on
+// against gg's private head ref (domain.PRLinkPair). The page builds the link
+// itself (links.js) — the same builder every other copied link uses. A PR
+// that was never fetched has no link (409).
+func (s *Server) handlePRLink(w http.ResponseWriter, r *http.Request) {
+	svc, pr, ok := s.knownPR(w, r)
+	if !ok {
+		return
+	}
+	p, err := svc.PRLinkPair(readCtx(r), pr.Number)
+	switch {
+	case errors.Is(err, domain.ErrPRNotFetched):
+		writeErr(w, http.StatusConflict, err)
+		return
+	case err != nil:
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, map[string]any{"source": p.Head, "target": p.Base})
 }
 
 // addInterrupted names an interrupted send of PR n in a refresh answer (W6):

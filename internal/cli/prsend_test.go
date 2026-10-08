@@ -274,3 +274,63 @@ func TestPRSendAbortExitsOne(t *testing.T) {
 		t.Fatalf("an abort wrote %v", w)
 	}
 }
+
+// Follow-ups 5 (final review I2): a draft reply written inside a session gg
+// started is the agent's — never stamped as the user's own words, which the
+// user would then send believing they wrote them. Serial: swaps
+// sessionGetenv.
+func TestPRReplyInsideAGGSessionIsTheAgents(t *testing.T) {
+	dir, _, fixtures := sendPRRepo(t)
+	b, _ := os.ReadFile(filepath.Join(fixtures, "snapshot-7-sent.json"))
+	forgetest.Seed(t, fixtures, map[string]string{"snapshot-7.json": string(b)})
+	old := sessionGetenv
+	sessionGetenv = func(k string) string {
+		if k == "GG_INBOX" {
+			return "/tmp/inbox"
+		}
+		return ""
+	}
+	t.Cleanup(func() { sessionGetenv = old })
+	out, errs, code := runPR(t, dir, "reply", "7", "PRRT_new1", "on it")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	id := strings.Fields(out)[0]
+	notes, _, _ := runPR(t, dir, "notes", "7", "--json")
+	if src := wireSourceOf(t, notes, id); src != "agent" {
+		t.Fatalf("draft %s source = %q, want agent\n%s", id, src, notes)
+	}
+}
+
+// wireSourceOf finds the JSON object whose "id" is id anywhere in doc and
+// returns its "source".
+func wireSourceOf(t *testing.T, doc, id string) string {
+	t.Helper()
+	var v any
+	if err := json.Unmarshal([]byte(doc), &v); err != nil {
+		t.Fatalf("%v: %s", err, doc)
+	}
+	var walk func(any) string
+	walk = func(v any) string {
+		switch x := v.(type) {
+		case map[string]any:
+			if x["id"] == id {
+				s, _ := x["source"].(string)
+				return s
+			}
+			for _, c := range x {
+				if s := walk(c); s != "" {
+					return s
+				}
+			}
+		case []any:
+			for _, c := range x {
+				if s := walk(c); s != "" {
+					return s
+				}
+			}
+		}
+		return ""
+	}
+	return walk(v)
+}

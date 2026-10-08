@@ -131,6 +131,21 @@ guards against removing the worktree you are standing in.
   carries fingerprints taken at save time, like the lane's.
 - `gg link --review <id|latest>` — print a stored review's link (and record
   it in `gg links`); `latest` = the newest review in this repository.
+- `gg link --pr <n> [<path>[:<line>]]` — a pull request's link
+  (`gg://<repo>@<base>...refs/gg/pr/<n>`, the pair its view opens on; a
+  fetched PR only — `gg pr fetch <n>` first). Opening it (`gg open`, `gg
+  session navigate`) lands in the PR's view — on a checkout that has not
+  fetched that PR yet, the view fetches it first when the PR is in the pull
+  request list (otherwise it says so: list or search for it, then open the
+  link again); `gg review save` over it stores a review that view shows
+  (that one needs the PR fetched). Every verb that reads the PR's commits
+  (`gg review save`, `gg compare`, `gg link resolve`) refuses an unfetched
+  PR's link with `pull request #<n> is not fetched in <checkout> — run gg pr
+  fetch <n> there first`. Navigating to a file or line of one waits up to
+  30s for the view's fetch, then prints `queued: the TUI is fetching pull
+  request #<n> — the view opens when the fetch finishes` (exit 0: it is
+  still on its way); a link with no file is answered at once (`opened pull
+  request #<n>`) and the fetch follows.
 
 ### Review notes
 
@@ -159,8 +174,18 @@ are 1-based. Full guidance: `gg skill path` (the reviewing-with-gg skill).
 A stored review's remarks are threads: `gg review show` lists each remark's id
 (`review:<id>:<n>`; `review:latest:<n>` = the newest review's), and `gg note
 reply` / `resolve` / `unresolve` take it — answer another agent's review there.
-Pull-request (forge) threads stay read-only: GitHub owns their resolved state.
+Pull-request (forge) threads are not yours to change: GitHub owns their
+resolved state, and only the user resolves or sends (see `gg pr`).
 MCP: `gg_note_reply`, `gg_note_resolve`.
+
+A note written for a pull request also has a SYNC state. `gg note list`
+prints it after the `[source]` column when it is not plain local:
+`[sending]` (a send is under way) or `[failed: <error>]` (the last send
+failed; it is still local). JSON adds `sync` (`local` | `sending` | `failed`
+| `github` — a note GitHub now holds), `send_error`, and `group` (`mine` =
+your loose notes, `review:<id>` = a stored review's remarks,
+`github:<review id>` = what one GitHub review posted). A note in `github` lives
+on GitHub now: read it with `gg pr comments <n>`.
 
 Three gotchas worth knowing up front (the reviewing-with-gg skill covers
 them in full): a path with BOTH a staged and an unstaged note needs
@@ -838,8 +863,10 @@ finds the right one here.
 - `gg pr notes <n> [--json]` — what the PR's view holds: the local notes
   written for it, GitHub threads, draft replies; the ids `gg pr send --note`
   takes. A note or review FOR a pull request is written with `--preview
-  <base>...refs/gg/pr/<n>` (after `gg pr fetch <n>`); it shows only in that
-  PR's view, and a note on a PR's commit written any other way does not.
+  <base>...refs/gg/pr/<n>` (after `gg pr fetch <n>`) — a review with
+  `gg review save "$(gg link --pr <n>)" --agent <name> --stdin` (the
+  document on stdin); it shows only in that PR's view,
+  and a note on a PR's commit written any other way does not.
 - **Sending to GitHub is the user's, never yours.** You cannot send
   anything to GitHub: inside any gg session `gg pr send`, `gg pr reply
   --send` and `gg pr resolve|unresolve` refuse ("agents can't send to

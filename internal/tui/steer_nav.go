@@ -91,7 +91,10 @@ type pendingSteer struct {
 	hash   string // steerStageFiles: the commit whose file list is loading
 	source string // steerStagePreview: the pair whose compare list is loading
 	target string
-	at     time.Time
+	// prNumber is a PR link's (steerStagePreview): the PR view's number is
+	// the gate, not the pair's spelling — the view opens on its own base.
+	prNumber int
+	at       time.Time
 }
 
 // steerToPanels pops everything the refusal whitelist lets it pop, so the
@@ -984,6 +987,10 @@ func (m Model) expirePendingSteer(now time.Time) (Model, tea.Cmd) {
 	if m.pendingSteer == nil || now.Sub(m.pendingSteer.at) < steerPendingTTL {
 		return m, nil
 	}
+	if m.prFetchHoldsLanding() {
+		m.pendingSteer.at = now // the PR's fetch runs: the TTL starts when it ends
+		return m, nil
+	}
 	return m.failPending("the view did not load in time")
 }
 
@@ -994,6 +1001,27 @@ func (m Model) expirePendingSteer(now time.Time) (Model, tea.Cmd) {
 // the compare file list arrives.
 func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
 	src, tgt := c.Target.Source, c.Target.Target
+	// A pull request's link (<base>...refs/gg/pr/<n>) lands in the PR's own
+	// view — its threads, its notes, its sends — when the list holds it.
+	// Otherwise only a PR fetched here can open as a plain merge preview: a
+	// navigation resolves an unfetched one too (ResolveOpts.UnfetchedPR), so
+	// ask git off the UI thread (handlePRUnlisted).
+	if n, ok := domain.PRScopeNumber(tgt + "..." + src); ok {
+		if p, ok := m.listedPR(n); ok {
+			return m.steerNavigatePR(c, p)
+		}
+		return m, m.prUnlistedCheckCmd(c, n)
+	}
+	return m.steerNavigatePlainPreview(c, "")
+}
+
+// steerNavigatePlainPreview is steerNavigatePreview's merge-preview landing;
+// prNote ("" = none) says why a PR link opened as a plain preview.
+func (m Model) steerNavigatePlainPreview(c steer.Command, prNote string) (Model, tea.Cmd) {
+	src, tgt := c.Target.Source, c.Target.Target
+	if prNote != "" {
+		m.statusMsg = prNote
+	}
 	// Which saved row, if any, holds this pair. "" means a show-once open.
 	id, bi := "", -1
 	for i, r := range m.previews {
@@ -1012,9 +1040,12 @@ func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
 				m.sel[panelPreviews] = di
 			}
 		}
-		if startAtOrigin(c) {
+		switch {
+		case prNote != "":
+			m = m.steerNotice(prNote) // why a PR link opened as a plain preview outranks where it went
+		case startAtOrigin(c):
 			m = m.steerNotice(i18n.T("▸ opened preview %s", tgt+"..."+src))
-		} else {
+		default:
 			m = m.steerNotice(i18n.T("▸ agent moved the focus"))
 		}
 		return m.navigateLanded(c, "revealed preview "+tgt+"..."+src)
@@ -1043,11 +1074,20 @@ func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
 // here.
 func (m Model) drainPendingPreview() (Model, tea.Cmd) {
 	ps, po := m.pendingSteer, m.previewOpen
-	if ps == nil || ps.stage != steerStagePreview || m.filesView == nil || po == nil ||
-		po.source != ps.source || po.target != ps.target {
+	if ps == nil || ps.stage != steerStagePreview || m.filesView == nil || po == nil {
+		return m, nil
+	}
+	if ps.prNumber != 0 && po.prNumber != ps.prNumber {
+		return m, nil
+	}
+	if ps.prNumber == 0 && (po.source != ps.source || po.target != ps.target) {
 		return m, nil
 	}
 	c := ps.cmd
+	if ps.prNumber != 0 {
+		where := fmt.Sprintf("pull request #%d", ps.prNumber)
+		return m.drainPendingLoad(c, m.filesView.lines, "opened "+c.File+" in "+where, c.File+" is not in "+where)
+	}
 	pair := ps.target + "..." + ps.source
 	return m.drainPendingLoad(c, m.filesView.lines,
 		"opened "+c.File+" in preview "+pair,
@@ -1192,7 +1232,13 @@ func (m Model) startAtReady() bool {
 	if !m.startAtPending || !m.ready || !m.opsIdle() || m.width == 0 {
 		return false
 	}
-	if m.startAt.Target.Preview != nil {
+	if p := m.startAt.Target.Preview; p != nil {
+		// A pull request's link opens the PR's view, which needs its row:
+		// wait for the first PR read to answer — when one was started at
+		// all (kickForgeProbe; never with the forge off).
+		if _, isPR := domain.PRScopeNumber(p.Target + "..." + p.Source); isPR && m.forgeProbeKicked && !m.prsAnswered {
+			return false
+		}
 		return m.startAtPreviewsSeen
 	}
 	return true

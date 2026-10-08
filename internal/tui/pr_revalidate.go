@@ -91,6 +91,13 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 	// The comment half (reloads notes and counts on a change; answers r).
 	m, cmd := m.handlePRCommentsMsg(prCommentsMsg{number: msg.n, changed: msg.commentsChanged, manual: msg.manual, err: msg.err})
 	if msg.err != nil {
+		if again && m.openPRNumber() == msg.n {
+			// The read the post-send read waited for failed: ask it now,
+			// once (the flag is already cleared).
+			var next tea.Cmd
+			m, next = m.prRefreshCmd(msg.n, false)
+			cmd = tea.Batch(cmd, next)
+		}
 		return m, cmd // offline, rate-limited: the diff on screen stands
 	}
 	// The read cached the PR: did a send stop half way (spec §3.4, T8)?

@@ -11,6 +11,7 @@ package linknav
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -44,13 +45,19 @@ func Opts(registryPath string, cwd *domain.Service) domain.ResolveOpts {
 	}
 }
 
-// Resolve parses and resolves link text against this machine (Opts).
+// Resolve parses and resolves link text against this machine (Opts) for a
+// NAVIGATION (the TUI's # prompt, the page's link box).
 func Resolve(ctx context.Context, registryPath string, cwd *domain.Service, s string) (domain.Resolved, error) {
 	l, err := model.ParseLink(s)
 	if err != nil {
 		return domain.Resolved{}, err
 	}
-	return domain.ResolveLink(ctx, l, Opts(registryPath, cwd))
+	opts := Opts(registryPath, cwd)
+	// A navigation: a PR link lands in the PR's view, which fetches the head
+	// first — a PR this repo has not fetched yet still opens. (Opts' other
+	// users — compare, a base suggestion — need the PR's commits.)
+	opts.UnfetchedPR = true
+	return domain.ResolveLink(ctx, l, opts)
 }
 
 // RepoOnly reports whether res names a checkout and nothing in it — no path,
@@ -117,6 +124,13 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 		}
 		c.File = res.Addr.Path
 		line := lineOf(res)
+		if res.Hunk > 0 && !res.Preview.OK() {
+			// A PR this repo has not fetched (ResolveOpts.UnfetchedPR): there
+			// is no patch to number a hunk in yet.
+			if n, ok := domain.PRScopeNumber(res.Preview.Target + "..." + res.Preview.Source); ok {
+				return steer.Command{}, fmt.Errorf("pull request #%d is not fetched here, so its hunks cannot be numbered — open the link by its line, or run gg pr fetch %d first", n, n)
+			}
+		}
 		if res.Hunk > 0 {
 			// PreviewHunkAnchor, never HunkLine: the numbering is the PREVIEW's
 			// patch (merge-base → tip), and a delete-only hunk has no new side

@@ -151,6 +151,9 @@ func availableActions(m Model) []actionRow {
 			rows = append(rows, actionRow{id: "pr-hub-diff", key: "i", label: i18n.T("Pull request details…"), run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.openPRHubFromDiff()
 			}})
+			if r, ok := m.openPRLinkRow(); ok {
+				rows = append(rows, r)
+			}
 			n := m.openPRNumber()
 			rows = append(rows,
 				actionRow{id: "pr-send-review", label: i18n.T("Send review…"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openSendReview(n) }},
@@ -555,6 +558,8 @@ func actionMenuLabel(id string) (string, bool) {
 		return i18n.T("Pull request details…"), true
 	case "pr-copy":
 		return i18n.T("Copy pull request URL"), true
+	case "pr-link":
+		return i18n.T("Copy pull request link"), true
 	case "pr-search":
 		return i18n.T("Search pull requests…"), true
 	case "pr-forget":

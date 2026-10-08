@@ -196,6 +196,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("Kill")
 	case "No":
 		return i18n.T("No")
+	case "ok":
+		return i18n.T("ok")
 	case "Push branch + tags":
 		return i18n.T("Push branch + tags")
 	case "Push branch only":

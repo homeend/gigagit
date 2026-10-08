@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -194,5 +195,138 @@ func TestPRReviewRemarksAreCachedPerPR(t *testing.T) {
 	}
 	if got := svc.prReviewNotes(ctx, nine); len(got) != 0 {
 		t.Fatalf("#9 shows #7's remarks: %v", got)
+	}
+}
+
+// prReadsOf is how many times the fake forge was asked for PR n.
+func prReadsOf(ff *fakeForge, n int) int {
+	ff.mu.Lock()
+	defer ff.mu.Unlock()
+	return ff.prCalls[n]
+}
+
+// A1/A2: the scope comes from the row handed in (no forge read), and any
+// commit of the PR's range takes it — an older tip the page still shows.
+func TestPRNoteScopeAcceptsAnyCommitOfThePR(t *testing.T) {
+	t.Parallel()
+	svc, ff, oldHead := sendRepo(t)
+	dir := repoDir(t, svc)
+	runGitIn(t, dir, "checkout", "-q", "feat")
+	commitFile(t, dir, "other.go", "package other // moved\n", "a newer commit")
+	newHead := revParse(t, dir, "HEAD")
+	runGitIn(t, dir, "checkout", "-q", "main")
+	runGitIn(t, dir, "update-ref", git.PRRef(7), newHead)
+	pr := model.PullRequest{Number: 7, State: "open", Target: "main", HeadSHA: newHead}
+	reads := prReadsOf(ff, 7)
+	for _, c := range []string{newHead, oldHead} {
+		sc, err := svc.PRNoteScope(context.Background(), pr, c)
+		if n, ok := PRScopeNumber(sc); err != nil || !ok || n != 7 {
+			t.Fatalf("commit %s: scope %q err %v", c[:7], sc, err)
+		}
+	}
+	if prReadsOf(ff, 7) != reads {
+		t.Fatal("PRNoteScope read the forge")
+	}
+}
+
+// A2: a commit the PR no longer holds (a force-push) is refused, never plain.
+func TestPRNoteScopeRefusesACommitOffThePR(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	base := revParse(t, repoDir(t, svc), "main")
+	pr := model.PullRequest{Number: 7, State: "open", Target: "main", HeadSHA: head}
+	if sc, err := svc.PRNoteScope(context.Background(), pr, base); !errors.Is(err, ErrNoteOffPR) || sc != "" {
+		t.Fatalf("scope %q err %v", sc, err)
+	}
+}
+
+// A4: a PR's notes written over different base spellings are one review:
+// one Range review row (count summed), and opening it from any spelling
+// shows them all.
+func TestOnePRIsOneScopeWhateverTheBaseSpelling(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	base := revParse(t, repoDir(t, svc), "main")
+	a := addScopedNote(t, svc, head, "big.go", 5, "main..."+git.PRRef(7), "by name")
+	b := addScopedNote(t, svc, head, "big.go", 25, base+"..."+git.PRRef(7), "by sha")
+	c, err := svc.NoteCounts(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scs := c.ScopesByCommit[head]; len(scs) != 1 || scs[0].N != 2 {
+		t.Fatalf("scopes %+v", scs)
+	}
+	from, to, err := svc.ScopeAtCommit(context.Background(), base+"..."+git.PRRef(7), head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := svc.PairNotes(context.Background(), from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set.Only = base + "..." + git.PRRef(7) // opened from the sha spelling
+	if ids := idsAt(t, svc, set, "big.go"); !ids[a] || !ids[b] {
+		t.Fatalf("ids %v (a %s b %s)", ids, a, b)
+	}
+}
+
+func TestScopeReviewTargetNamesThePR(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	if got := ScopeReviewTarget(prNoteSetOf(t, svc)).Label; got != "PR #7" {
+		t.Fatalf("label %q", got)
+	}
+}
+
+func TestSameNoteScope(t *testing.T) {
+	t.Parallel()
+	pr7, pr8 := "main..."+git.PRRef(7), "main..."+git.PRRef(8)
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{pr7, pr7, true},
+		{pr7, "abc123..." + git.PRRef(7), true},
+		{pr7, pr8, false},
+		{"main...feat", "main...feat", true},
+		{"main...feat", "origin/main...feat", false},
+		{pr7, "", false},
+		{"", "", false},
+	} {
+		if got := SameNoteScope(tc.a, tc.b); got != tc.want {
+			t.Errorf("SameNoteScope(%q, %q) = %v", tc.a, tc.b, got)
+		}
+	}
+}
+
+// Final review 2: deleting a PR's Range review row removes the PR's notes
+// written over every base spelling — the row counts them all.
+func TestClearingAPRScopeRowTakesEverySpelling(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	base := revParse(t, repoDir(t, svc), "main")
+	addScopedNote(t, svc, head, "big.go", 5, "main..."+git.PRRef(7), "by name")
+	addScopedNote(t, svc, head, "big.go", 25, base+"..."+git.PRRef(7), "by sha")
+	keep := addScopedNote(t, svc, head, "big.go", 5, "main..."+git.PRRef(8), "PR 8's")
+	n, err := svc.NotesClearAtCommit(context.Background(), head, "", "main..."+git.PRRef(7))
+	if err != nil || n != 2 {
+		t.Fatalf("cleared %d err %v", n, err)
+	}
+	if _, err := svc.NoteGet(context.Background(), keep); err != nil {
+		t.Fatalf("PR 8's note went too: %v", err)
+	}
+}
+
+// Ruling A (2026-10-08): a PR whose diff is gone here (gg pr forget ran
+// elsewhere) refuses the note — it would otherwise be stored plain and
+// leave the PR view.
+func TestPRNoteScopeRefusesWhenTheDiffIsGone(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	runGitIn(t, repoDir(t, svc), "update-ref", "-d", git.PRRef(7))
+	pr := model.PullRequest{Number: 7, State: "open", Target: "main", HeadSHA: head}
+	sc, err := svc.PRNoteScope(context.Background(), pr, head)
+	if !errors.Is(err, ErrPRDiffGone) || sc != "" || !strings.Contains(err.Error(), "#7") {
+		t.Fatalf("scope %q err %v", sc, err)
 	}
 }

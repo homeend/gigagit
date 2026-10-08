@@ -16,7 +16,7 @@ import { fetchNotes, firstHeldLine, markDiffRow, setDiffRange, openCompare, open
 import { fetchBranches, takeSessions, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
 import { revealVersion } from "./versions.js";
-import { fetchPRs, refreshPRComments } from "./prs.js";
+import { fetchPRs, openPRLanding, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine, reloadForSwitch, showSwitching } from "./ops.js";
@@ -539,11 +539,27 @@ async function steerNavigateLand(s) {
     return;
   }
   if (s.state === "preview") {
-    // The pair, never a sha: the tip is resolved here, so a tip that moved
-    // between post and apply is honoured (the TUI consumer does the same).
-    await openPreviewForPair(s.source, s.target);
-    if (!s.file) return; // a file-less preview navigate only reveals the stage
-    if (!(await openNamedFile(state.files, s, "preview " + s.target + "..." + s.source))) return;
+    // A pull request's link (<base>...refs/gg/pr/<n>) lands in the PR's own
+    // view — its threads, its notes, its sends — when the page lists it.
+    const m = /^refs\/gg\/pr\/(\d+)$/.exec(s.source || "");
+    const n = m ? Number(m[1]) : 0;
+    const landed = n ? await openPRLanding(n) : null;
+    if (landed === false) return; // the open failed and said why
+    if (landed) {
+      if (!s.file) return;
+      if (!(await openNamedFile(state.files, s, "pull request #" + n))) return;
+    } else if (n) {
+      // The page cannot open refs/gg/pr/<n> as a plain preview (ruling B3,
+      // 2026-10-08): say why once instead of a fallback that fails twice.
+      opLine("gg link: pull request #" + n + " is not in the pull request list — list or search for it, then open the link again", true);
+      return;
+    } else {
+      // The pair, never a sha: the tip is resolved here, so a tip that moved
+      // between post and apply is honoured (the TUI consumer does the same).
+      await openPreviewForPair(s.source, s.target);
+      if (!s.file) return; // a file-less preview navigate only reveals the stage
+      if (!(await openNamedFile(state.files, s, "preview " + s.target + "..." + s.source))) return;
+    }
   } else if (s.state === "ref") {
     // The NAME, never a sha: the tip is resolved here, so a branch that moved
     // between post and apply is honoured (the TUI consumer does the same).

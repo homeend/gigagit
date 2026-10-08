@@ -27,6 +27,7 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/repogate"
 	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -274,6 +275,7 @@ type Model struct {
 	prs              []model.PullRequest
 	prsErr           string // first line of the last list failure; "" = fine
 	prsLoaded        bool   // a list has landed at least once (distinguishes "loading" from "none")
+	prsAnswered      bool   // a PR read answered this repo session (cached rows, a list, no forge, a failure): a start-at PR link waits for it
 	prsInflight      bool
 	prsGen           int
 	// pendingPROpen is the PR whose diff opens once its FetchPRHead succeeds
@@ -2835,6 +2837,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.canOpenPR() {
 				return m.copyPRURL()
 			}
+		case "L":
+			if m.canOpenPR() {
+				return m.copySelectedPRLink()
+			}
 		case "d":
 			switch m.focus {
 			case panelPRs:
@@ -3450,6 +3456,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCommentsMsg:
 		return m.handlePRCommentsMsg(msg)
 
+	case prUnlistedMsg:
+		return m.handlePRUnlisted(msg)
+	case prLinkMsg:
+		return m.handlePRLinkMsg(msg)
 	case prRevalidatedMsg:
 		return m.handlePRRevalidatedMsg(msg)
 
@@ -3695,6 +3705,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
+			// The repo gate refused the op outright: a headless AI task holds
+			// the repository for its run. friendlyOpError already names it on
+			// the status line; a dispatched op additionally gets the notice —
+			// the line alone reads like a failed op, not a "later".
+			var busy *repogate.BusyError
+			if errors.As(msg.err, &busy) {
+				m.modal = m.busyModal(busy)
+			}
 			// A lock failure is recoverable in-app; arm the notice before the
 			// generic health re-read below picks it up. Safe to reach the
 			// refreshHealthAfterOp path from here: every early return between
@@ -3821,9 +3839,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var prCmd tea.Cmd
 		if prOpen != nil && msg.err == nil {
 			prCmd = m.openPRPreviewCmd(*prOpen) // the head is local now: open its diff
+			m.restartPRLandingClock(prOpen.Number)
 			// Computing the pair's diff is the slow half on a big repository:
 			// say so, or the fetch's "done" reads as the end of the story.
 			m.statusMsg = i18n.T("opening PR #%d…", prOpen.Number)
+		} else if prOpen != nil {
+			m, prCmd = m.failPRLanding(prOpen.Number, firstLine(msg.err.Error()))
 		}
 		if prsReload && msg.err == nil {
 			// Batched, never assigned: a search result's fetch arms BOTH the
@@ -3961,7 +3982,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = false
 		m.opName = ""
 		if msg.err != nil {
-			m.statusMsg = i18n.T("error: %s", msg.err.Error())
+			m.statusMsg = friendlyOpError(msg.err)
 			return m, nil
 		}
 		m = m.withStatus(msg.status)
@@ -4961,9 +4982,12 @@ func (m Model) commitPageEligible() bool {
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m = m.stopPRPrefetch()             // the old repo's background fetches end here
 	removeSnapshotFile(m.snapshotPath) // the old repo's session ends here
-	m = m.closeSteerInbox()            // …and so does its steering inbox
-	m.interrupted = nil                // …and the sends it left half done
-	m.steerGen++                       // drop the old watcher's in-flight msgs
+	// A parked landing is answered while its inbox is still open: its sender
+	// would otherwise wait out its whole wait for a view that never opens.
+	m, dropped := m.failPending("the repository changed before the link landed")
+	m = m.closeSteerInbox() // …and so does its steering inbox
+	m.interrupted = nil     // …and the sends it left half done
+	m.steerGen++            // drop the old watcher's in-flight msgs
 	// The old repo's PR freshness goes too: a PR #7 there is another PR here.
 	m.prSeen, m.prUpdated, m.prOwnSend, m.prRefreshAgain = 0, 0, 0, 0
 	m.prOfflineSince, m.prRefreshing = time.Time{}, false
@@ -5027,6 +5051,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingWorktreeMoveOld = ""                // a repo switch must not fire a stale move cleanup
 	m.pendingGotoTip = ""                        // a repo switch must not fire a stale tip jump
 	m.pendingSteer = nil                         // the repo it referred to is gone; its inbox went with it
+	m.pendingPROpen = nil                        // a PR fetch's finish must not open the old repo's PR here
 	m.consoleSwitch.armed = true                 // the console keeps only a session the new repo owns
 	m.consoleSwitch.gen++                        // a new switch (openTour tells it from one in flight)
 	m.consoleSwitch.open = ""                    // a console asked for across an earlier switch is moot
@@ -5070,7 +5095,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// The forge belongs to the repository: the new Service probes afresh, and
 	// until it answers there is no Pull requests tab to stand on.
 	m.forgeShown, m.forgeProvider, m.forgeProbeKicked = false, "", false
-	m.prs, m.prsErr, m.prsLoaded, m.prsInflight = nil, "", false, false
+	m.prs, m.prsErr, m.prsLoaded, m.prsInflight, m.prsAnswered = nil, "", false, false, false
 	m.prsGen++ // drop the old repo's in-flight list read
 	if m.activeLeftTab == panelPRs {
 		if m.focus == panelPRs {
@@ -5100,7 +5125,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// the blank-screen gate set above. The dataLoadedMsg success arm chains it
 	// instead, so it can only run once this repo's snapshot is in the model.
 	// The hosted web page follows the switch (nil when no page is served).
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), snapshotTargetCmd(m.svc), m.webRerootCmd())
+	return m, tea.Batch(dropped, m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), m.refreshToolStatusesCmd(), snapshotTargetCmd(m.svc), m.webRerootCmd())
 }
 
 // View implements tea.Model.

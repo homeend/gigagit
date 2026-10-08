@@ -495,3 +495,40 @@ func TestCommandAndAtLinkCarryARange(t *testing.T) {
 		t.Errorf("AtLink = %s", got)
 	}
 }
+
+// Follow-ups 4: a navigation (Resolve) opens a link to a PR this repo has
+// not fetched yet — the landing (TUI steerNavigatePR, web openPR) fetches
+// it. Opts' other users (compare, base suggestion) need the PR's commits.
+func TestOptsOpenUnfetchedPRLinks(t *testing.T) {
+	t.Parallel()
+	if Opts("", nil).UnfetchedPR {
+		t.Fatal("linknav.Opts must not set UnfetchedPR: compare needs the PR's commits")
+	}
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"-c", "user.email=t@x", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "seed"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	res, err := Resolve(context.Background(), filepath.Join(t.TempDir(), "repos.toml"), domain.Open(dir),
+		"gg://"+filepath.ToSlash(dir)+"@main...refs/gg/pr/7")
+	if err != nil || res.Preview == nil || res.Preview.Source != "refs/gg/pr/7" {
+		t.Fatalf("Resolve = %+v, %v", res.Preview, err)
+	}
+}
+
+// Final review minor 1: a #<hunk> link to a PR this repo has not fetched
+// cannot be numbered — say so (fetch it, or use the line), never the
+// savedcompare store's "not found".
+func TestHunkLinkToAnUnfetchedPRSaysFetchIt(t *testing.T) {
+	t.Parallel()
+	res := domain.Resolved{Preview: &domain.PreviewNoteSet{Source: "refs/gg/pr/7", Target: "main"}, Hunk: 2}
+	res.Addr.Path = "a.go"
+	_, err := Command(context.Background(), domain.Open(t.TempDir()), res)
+	if err == nil || !strings.Contains(err.Error(), "gg pr fetch 7") || strings.Contains(err.Error(), "savedcompare") {
+		t.Fatalf("err = %v", err)
+	}
+}

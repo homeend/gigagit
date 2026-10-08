@@ -20,7 +20,7 @@ import (
 // is load-bearing: '#' starts a comment in every POSIX shell, so an unquoted
 // hunk link silently loses its hunk. gg deliberately applies no heuristic —
 // it says so here instead.
-const linkUsage = "usage: gg link [<path>[:<line>[-<end>]]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --ref <branch|tag> | --pair <a>..<b> | --content] [--bookmark <id> | --shelf <id>] [--no-fingerprint]\n" +
+const linkUsage = "usage: gg link [<path>[:<line>[-<end>]]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --pr <n> | --ref <branch|tag> | --pair <a>..<b> | --content] [--bookmark <id> | --shelf <id>] [--no-fingerprint]\n" +
 	"       gg link --version <branch> <id|latest>  (a branch version's preview link)\n" +
 	"       gg link --review <id|latest>  (a stored AI review's link)\n" +
 	"       gg link resolve <gg://…> [--json]\n" +
@@ -57,9 +57,14 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	noFP := fs.Bool("no-fingerprint", false, "omit the ~<fingerprint> an uncommitted line link carries")
 	version := fs.String("version", "", "a branch VERSION's preview link: --version <branch> <id|latest> (ids from `gg versions`)")
 	review := fs.String("review", "", "a stored AI REVIEW's link: --review <id|latest> (ids from gg review / gg note list)")
+	prN := fs.Int("pr", 0, "a pull request's link: <base>...refs/gg/pr/<n> (a fetched PR: gg pr fetch <n>)")
 	pf := addPreviewFlag(fs)
 	pos, err := parseSteerFlags(fs, args)
 	if err != nil {
+		return 2
+	}
+	if *prN < 0 {
+		fmt.Fprintf(stderr, "link: --pr needs a pull request number\n%s\n", linkUsage)
 		return 2
 	}
 	if *review != "" {
@@ -69,7 +74,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 			fmt.Fprintf(stderr, "link: --no-fingerprint has no meaning with --review (a review link names no line)\n%s\n", linkUsage)
 			return 2
 		}
-		if *version != "" || *cached || *rev != "" || pf.set() || *ref != "" || *pair != "" || *bookmark != "" || *shelf != "" || *content || len(pos) > 0 {
+		if *version != "" || *cached || *rev != "" || pf.set() || *prN != 0 || *ref != "" || *pair != "" || *bookmark != "" || *shelf != "" || *content || len(pos) > 0 {
 			fmt.Fprintf(stderr, "link: --review names its own target and landing; it takes no other flag or argument\n%s\n", linkUsage)
 			return 2
 		}
@@ -78,7 +83,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	if *version != "" {
 		// A version's link is its own place: the recorded pair plus the
 		// ?version= hint. No path, no other target or landing composes with it.
-		if *cached || *rev != "" || pf.set() || *ref != "" || *pair != "" || *bookmark != "" || *shelf != "" || *content {
+		if *cached || *rev != "" || pf.set() || *prN != 0 || *ref != "" || *pair != "" || *bookmark != "" || *shelf != "" || *content {
 			fmt.Fprintf(stderr, "link: --version names its own target and landing; it takes no other flag\n%s\n", linkUsage)
 			return 2
 		}
@@ -92,11 +97,11 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 		fmt.Fprintf(stderr, "link: unexpected argument %q\n%s\n", pos[1], linkUsage)
 		return 2
 	}
-	// --cached, --rev, --preview, --ref and --pair all name the TARGET, so at
+	// --cached, --rev, --preview, --pr, --ref and --pair all name the TARGET, so at
 	// most one may be set. A count, not a web of pairwise checks: the pairwise
 	// form was already two checks for two flags, and five flags would be ten.
 	set := 0
-	for _, on := range []bool{*cached, *rev != "", pf.set(), *ref != "", *pair != ""} {
+	for _, on := range []bool{*cached, *rev != "", pf.set(), *prN != 0, *ref != "", *pair != ""} {
 		if on {
 			set++
 		}
@@ -107,7 +112,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 		if pf.set() {
 			return previewUsageErr("link", stderr)
 		}
-		fmt.Fprintf(stderr, "link: --cached, --rev, --preview, --ref and --pair name the target; use one\n%s\n", linkUsage)
+		fmt.Fprintf(stderr, "link: --cached, --rev, --preview, --pr, --ref and --pair name the target; use one\n%s\n", linkUsage)
 		return 2
 	}
 	// The two hints are a LANDING, and a link lands in one place.
@@ -172,6 +177,20 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 				hint = model.LinkHint{Kind: "preview", ID: id}
 			}
 		}
+	}
+	if *prN != 0 {
+		// A pull request's link: the base its view opens on against gg's
+		// private head ref — a merge-preview link, which lands in the PR view.
+		pp, perr := svc.PRLinkPair(ctx, *prN)
+		if perr != nil {
+			fmt.Fprintln(stderr, "error:", perr)
+			return 1
+		}
+		if !model.LinkRefOK(pp.Head) || !model.LinkRefOK(pp.Base) {
+			fmt.Fprintf(stderr, "link: %s...%s cannot be expressed in a gg link\n", pp.Base, pp.Head)
+			return 1
+		}
+		prev = &model.LinkPreview{Source: pp.Head, Target: pp.Base}
 	}
 	l, err := buildLink(ctx, svc, workdir, arg, linkOpts{
 		Cached: *cached, Rev: *rev, Ref: *ref, Pair: *pair, Preview: prev, Hint: hint,
@@ -725,6 +744,10 @@ type linkShapes struct {
 	// Content is ?view=content: a file's CONTENT on disk, never a diff, so
 	// only a navigate (gg open, gg session navigate) can land it.
 	Content bool
+	// UnfetchedPR: a navigate lands a PR link in the PR's view, which
+	// fetches the head first — a PR this repo has not fetched still opens
+	// (domain.ResolveOpts.UnfetchedPR).
+	UnfetchedPR bool
 }
 
 // resolveLinkArg resolves a link positional for a consumer verb AND applies
@@ -750,7 +773,9 @@ func resolveLinkArg(ctx context.Context, svc *domain.Service, s string, allow li
 	if err != nil {
 		return domain.Resolved{}, err
 	}
-	res, err := domain.ResolveLink(ctx, l, linkResolveOpts(RepoStatePath, svc))
+	opts := linkResolveOpts(RepoStatePath, svc)
+	opts.UnfetchedPR = allow.UnfetchedPR
+	res, err := domain.ResolveLink(ctx, l, opts)
 	if err != nil {
 		return domain.Resolved{}, err
 	}

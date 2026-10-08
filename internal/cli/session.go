@@ -22,6 +22,10 @@ import (
 // than a const so a test can shorten it; production never changes it.
 var steerReplyWaitForTest = 2 * time.Second
 
+// steerPRFetchWaitForTest bounds the wait for a navigate to a pull request
+// this machine has not fetched: the TUI answers once its fetch is done.
+var steerPRFetchWaitForTest = 30 * time.Second
+
 // cmdSession is `gg session`: post a steering command to whatever gg session is
 // showing this worktree.
 func cmdSession(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -186,6 +190,33 @@ func routeFor(dir string) sessionRoute {
 // page gets a POST, a live TUI gets the inbox file, and when both are live the
 // TUI's reply decides the exit code.
 func sendSteer(d sessDir, c steer.Command, noWait bool, stdout, stderr io.Writer) int {
+	return sendSteerWaiting(d, c, noWait, defaultSteerWait(), stdout, stderr)
+}
+
+// steerWait is how long sendSteer waits for the TUI's answer and what it
+// prints when none came.
+type steerWait struct {
+	d      time.Duration
+	queued string
+}
+
+func defaultSteerWait() steerWait {
+	return steerWait{steerReplyWaitForTest, "queued: no answer from the TUI within 2s"}
+}
+
+// navigateWait is a navigate's wait: a pull request this machine has not
+// fetched lands only once the TUI's fetch is done, so it waits for that.
+func navigateWait(res domain.Resolved) steerWait {
+	if p := res.Preview; p != nil && p.Tip == "" {
+		if n, ok := domain.PRScopeNumber(p.Target + "..." + p.Source); ok {
+			return steerWait{steerPRFetchWaitForTest, fmt.Sprintf("queued: the TUI is fetching pull request #%d — the view opens when the fetch finishes", n)}
+		}
+	}
+	return defaultSteerWait()
+}
+
+// sendSteerWaiting is sendSteer with its wait spelled out.
+func sendSteerWaiting(d sessDir, c steer.Command, noWait bool, w steerWait, stdout, stderr io.Writer) int {
 	dir, r, why := d.target()
 	if why != "" {
 		fmt.Fprintln(stderr, why)
@@ -222,12 +253,12 @@ func sendSteer(d sessDir, c steer.Command, noWait bool, stdout, stderr io.Writer
 		fmt.Fprintln(stdout, id)
 		return 0
 	}
-	rep, ok := steer.AwaitReply(dir, id, steerReplyWaitForTest)
+	rep, ok := steer.AwaitReply(dir, id, w.d)
 	if !ok {
 		// The command is still in the inbox and may yet be applied — a slow
 		// answer is not a failure, and reporting one would make an agent retry
 		// and move the window twice.
-		fmt.Fprintln(stdout, "queued: no answer from the TUI within 2s")
+		fmt.Fprintln(stdout, w.queued)
 		return 0
 	}
 	return printSteerReply(rep, stdout, stderr)
@@ -578,7 +609,7 @@ func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, st
 		ctx := context.Background()
 		// navigate opts UP for a pair: it moves a live session to the place
 		// a link names, and a range is a fine place to land on (ruling R4).
-		res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true}, "navigate")
+		res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true, UnfetchedPR: true}, "navigate")
 		if err != nil {
 			return linkExit("session navigate", err, stderr)
 		}
@@ -603,7 +634,7 @@ func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, st
 		if *background {
 			return sendBackground(dir, c, *noWait, stdout, stderr)
 		}
-		return sendSteer(dir, c, *noWait, stdout, stderr)
+		return sendSteerWaiting(dir, c, *noWait, navigateWait(res), stdout, stderr)
 	}
 	if len(pos) != 0 {
 		fmt.Fprintf(stderr, "session navigate: unexpected argument %q (navigate takes a gg:// link or only flags)\n", pos[0])

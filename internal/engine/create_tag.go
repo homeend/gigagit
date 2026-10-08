@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
+
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // CreateTag creates a tag at Commit (empty = HEAD). A non-empty Message makes it
@@ -14,6 +16,9 @@ type CreateTag struct {
 	Message string // "" = lightweight, else annotated
 	Force   bool   // replace existing tag
 }
+
+// LockMode: writes one ref; never index/worktree/HEAD.
+func (op CreateTag) LockMode() repogate.Mode { return repogate.RefWrite }
 
 func (op CreateTag) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if op.Name == "" {

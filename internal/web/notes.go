@@ -243,8 +243,8 @@ func (s *Server) notePreview(ctx context.Context, spec string, addr model.FileAd
 	// however far its branch moved since. An allowlist — no resolving needed.
 	if c, cerr := s.service().NoteCounts(ctx); cerr == nil {
 		for _, sc := range c.ScopesByCommit[addr.Commit] {
-			if sc.Scope == spec {
-				return spec
+			if domain.SameNoteScope(sc.Scope, spec) {
+				return sc.Scope // the STORED name: a client's base half never passes
 			}
 		}
 	}
@@ -285,7 +285,24 @@ func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	preview := s.notePreview(r.Context(), req.Preview, addr)
 	if req.PR > 0 && addr.State == model.StateCommitted {
-		preview = s.service().PRNoteScope(r.Context(), req.PR, addr.Commit)
+		// The row the view was opened from (cachedPR): never a forge read.
+		// A note that cannot take the PR's stamp is refused (ruling A): stored
+		// plain it would silently leave the PR's view.
+		pr, ok := s.cachedPR(s.service(), req.PR)
+		if !ok {
+			writeErr(w, http.StatusConflict, fmt.Errorf("pull request #%d is not in the pull request list any more — search for it and open it again", req.PR))
+			return
+		}
+		sc, err := s.service().PRNoteScope(r.Context(), pr, addr.Commit)
+		switch {
+		case errors.Is(err, domain.ErrNoteOffPR), errors.Is(err, domain.ErrPRDiffGone):
+			writeErr(w, http.StatusConflict, err)
+			return
+		case err != nil:
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		preview = sc
 	}
 	n := model.Note{
 		Source: model.NoteSourceUser, Author: s.noteAuthor(r.Context(), req.Author), Address: addr,

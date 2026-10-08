@@ -64,7 +64,9 @@ func (set PreviewNoteSet) owns(preview string) bool {
 		m, ok := PRScopeNumber(preview)
 		return ok && m == n
 	}
-	return preview == set.scope()
+	// A PR's review opened from its commit (Only, View all notes): any
+	// spelling of that PR's base.
+	return SameNoteScope(preview, set.scope())
 }
 
 // OK reports whether the pair resolved to a previewable range.

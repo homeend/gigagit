@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -17,6 +18,7 @@ import (
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/pusherr"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // overlayAt composites fg on top of bg with fg's top-left corner at cell
@@ -96,6 +98,14 @@ var statusErrorPrefixes = []string{"error:", "files:", "commits:", "amend:", "in
 // line, and a possible MITM must never be answered with "just accept it".
 // Everything else passes through as the cleaned git message.
 func friendlyOpError(err error) string {
+	// The repo gate refused the op because a headless AI task holds the
+	// repository for its run (repogate.BusyError). One seam for every
+	// dispatch path — startOp, the synchronous stage lane, popups — so the
+	// line never shows the raw "op ConflictAgent" label.
+	var busy *repogate.BusyError
+	if errors.As(err, &busy) {
+		return i18n.T("error: %s", i18n.T("%s is running — wait for it to finish, or stop it in the Headless tab (ctrl+\\)", busyHolderLabel(busy.Holder)))
+	}
 	s := err.Error()
 	low := strings.ToLower(s)
 	if strings.Contains(low, "terminal prompts disabled") ||

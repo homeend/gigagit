@@ -64,7 +64,7 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	// (or launching) at the place it names, and a range is a fine place to
 	// land on (ruling R4) — it is only ANCHORING on one commit that a pair
 	// cannot support.
-	res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true}, "open")
+	res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true, UnfetchedPR: true}, "open")
 	if err != nil {
 		return linkExit("open", err, stderr)
 	}
@@ -114,7 +114,7 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if r := routeFor(preferredInbox(dir)); r.tuiOK || r.webOK {
 		// sendSteer is the whole routing table — a live web page is reached over
 		// HTTP exactly as `gg session navigate` reaches it.
-		code := sendSteer(sessDir{inbox: dir}, c, *noWait, stdout, stderr)
+		code := sendSteerWaiting(sessDir{inbox: dir}, c, *noWait, navigateWait(res), stdout, stderr)
 		if code == 0 {
 			fmt.Fprintln(stdout, "steered: "+res.Checkout)
 		}

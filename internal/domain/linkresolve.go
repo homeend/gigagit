@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -78,6 +79,12 @@ type ResolveOpts struct {
 	LiveFn func(commonDir, checkout string) bool
 	// OpenFn opens a service for another checkout. nil = domain.Open.
 	OpenFn func(dir string) *Service
+	// UnfetchedPR lets a preview link whose SOURCE is a pull request's ref
+	// (refs/gg/pr/<n>) resolve on a checkout that has not fetched it yet —
+	// only the base must be there. Navigation sets it (linknav.Resolve, gg
+	// open, gg session navigate): the landing fetches the PR first. Every
+	// other caller (review, MCP, compare) needs the PR's commits.
+	UnfetchedPR bool
 }
 
 // linkCandidate is one checkout that answers to the link, plus the file path
@@ -196,6 +203,17 @@ func locateLink(ctx context.Context, l model.Link, opts ResolveOpts) (linkCandid
 	if p := l.Target.Preview; p != nil {
 		kept := previewCandidates(ctx, cands, p, opts)
 		if len(kept) == 0 {
+			if unfetchedPROK(p, opts) {
+				// A navigation needs only the base: the landing fetches the PR.
+				return linkCandidate{}, fmt.Errorf("%w: no checkout of %s holds %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target)
+			}
+			if n, ok := git.ParsePRRef(p.Source); ok {
+				if base := resolvingAll(ctx, cands, []string{p.Target}, opts); len(base) > 0 {
+					// The base is here, only the PR is missing: an inspection
+					// reads its commits, so say how to get them, and where.
+					return linkCandidate{}, prNotFetchedError{n: n, checkout: base[0].checkout}
+				}
+			}
 			return linkCandidate{}, fmt.Errorf("%w: no checkout of %s holds both %s and %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target, p.Source)
 		}
 		cands = kept
@@ -423,19 +441,50 @@ func containing(ctx context.Context, cands []linkCandidate, sha string, opts Res
 // uses for a commit link; a candidate whose probe errors is simply not a
 // candidate, exactly as there.
 func previewCandidates(ctx context.Context, cands []linkCandidate, p *model.LinkPreview, opts ResolveOpts) []linkCandidate {
-	var kept []linkCandidate
+	// A checkout that has not fetched a PR (UnfetchedPR) sorts after every
+	// one that has: the latter shows it without a second fetch.
+	var kept, unfetched []linkCandidate
 	for _, c := range cands {
 		// OpenFn is defaulted once at ResolveLink's entry and never nil.
 		svc := opts.OpenFn(c.checkout)
-		if _, found, err := svc.ResolveRev(ctx, p.Source); err != nil || !found {
+		_, hasSource, err := svc.ResolveRev(ctx, p.Source)
+		if err != nil || (!hasSource && !unfetchedPROK(p, opts)) {
 			continue
 		}
 		if _, found, err := svc.ResolveRev(ctx, p.Target); err != nil || !found {
 			continue
 		}
+		if !hasSource {
+			unfetched = append(unfetched, c)
+			continue
+		}
 		kept = append(kept, c)
 	}
-	return kept
+	return append(kept, unfetched...)
+}
+
+// prNotFetchedError refuses an inspection of a pull request's link on a
+// checkout that holds its base but has not fetched the PR. It is still an
+// unknown-repository refusal (exit codes, callers' errors.Is), worded as the
+// fix rather than as a missing ref.
+type prNotFetchedError struct {
+	n        int
+	checkout string
+}
+
+func (e prNotFetchedError) Error() string {
+	return fmt.Sprintf("pull request #%d is not fetched in %s — run gg pr fetch %d there first (gg open fetches it)", e.n, e.checkout, e.n)
+}
+
+func (e prNotFetchedError) Is(target error) bool {
+	return target == ErrLinkUnknownRepo || target == ErrPRNotFetched
+}
+
+// unfetchedPROK reports whether a preview's missing SOURCE may stay missing:
+// a pull request's ref, for a caller that fetches it itself (UnfetchedPR).
+func unfetchedPROK(p *model.LinkPreview, opts ResolveOpts) bool {
+	_, ok := git.ParsePRRef(p.Source)
+	return opts.UnfetchedPR && ok
 }
 
 // linkTargetRefs lists the ref names a link's TARGET needs resolved on the
@@ -627,6 +676,15 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 			// error for a pair that is not previewable (merged, no common base):
 			// that is not an error there, but it is one here — the caller asked
 			// for this preview by name.
+			if unfetchedPROK(p, opts) {
+				// A PR this checkout has not fetched: the pair is all a
+				// navigation needs — the landing fetches the head, so there is
+				// no tip to number here yet.
+				if _, found, err := opts.OpenFn(c.checkout).ResolveRev(ctx, p.Source); err == nil && !found {
+					res.Preview = &PreviewNoteSet{Source: p.Source, Target: p.Target}
+					return res, nil
+				}
+			}
 			set, perr := opts.OpenFn(c.checkout).PreviewNotes(ctx, p.Source, p.Target)
 			if perr != nil {
 				return Resolved{}, perr

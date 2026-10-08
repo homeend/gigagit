@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -144,5 +146,31 @@ func TestPreviewNotesAtLeavesTheCachesAlone(t *testing.T) {
 	after := len(svc.prReviewNotes(ctx, set)["big.go"])
 	if before != 2 || after != before || len(a) != len(b) || len(a) != 3 {
 		t.Fatalf("caches %d → %d, reads %d / %d", before, after, len(a), len(b))
+	}
+}
+
+// A3: a review the PR does not show is refused by both send shapes.
+func TestPRSendRefusesAReviewThePRDoesNotShow(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	ctx := context.Background()
+	other, _, err := svc.SaveReview(ctx, SaveReview{
+		Target: ReviewTarget{Kind: ReviewRange, Range: "main.." + head, Label: "main ... feat",
+			Diff: model.DiffSpec{Rev: "main.." + head}, Commit: head, Preview: "main...feat"},
+		Agent: "claude", Text: twoRemarks})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, req := range []PRSendRequest{
+		{PR: 7, Review: other},
+		{PR: 7, Notes: []string{model.ReviewNoteIDPrefix + other + ":0"}},
+	} {
+		if _, err := svc.planSend(ctx, req); !errors.Is(err, ErrSendRequest) || !strings.Contains(fmt.Sprint(err), "not in this PR") {
+			t.Fatalf("%+v: err %v", req, err)
+		}
+	}
+	mine := savePRReview(t, svc, twoRemarks)
+	if _, err := svc.planSend(ctx, PRSendRequest{PR: 7, Review: mine}); err != nil {
+		t.Fatalf("the PR's own review: %v", err)
 	}
 }

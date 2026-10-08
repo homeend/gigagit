@@ -54,6 +54,150 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `[alt+a] agent` / `[alt+t] terminal`. (Reverses the 2026-10-06 ring with
   a return point.)
 
+## Pull request follow-ups 5
+
+### Changed
+
+- **Agents learn how to review a pull request.** The reviewing-with-gg skill
+  (v16) has a "Reviewing a pull request" workflow: list, view, read the open
+  threads, fetch, diff, write notes or one review on the PR, draft replies,
+  hand back `gg link --pr <n>` — the user sends. using-gg (v159) documents
+  `gg note list`'s sync state (`[sending]`, `[failed: …]`; JSON `sync`,
+  `send_error`, `group`). The planned read-only MCP PR tools are postponed:
+  `gg pr … --json` already serves agents.
+- `gg review save`, `gg compare` and `gg link resolve` on a link to a pull
+  request this machine has not fetched now say "pull request #n is not
+  fetched in <checkout> — run gg pr fetch n there first" instead of naming
+  a missing ref.
+- `gg session navigate` and `gg open` wait up to 30s for a pull request the
+  TUI has to fetch before it can land on the file, and when that runs out
+  say the fetch is the reason. A repository switch in the TUI now answers
+  a link it was still landing ("the repository changed before the link
+  landed") instead of leaving the agent waiting.
+- `gg pr reply` inside a session gg started writes the draft as the agent's
+  (`--source agent`), so the user never sends it as their own.
+
+### Fixed
+
+- A review link written on a pull request's merge preview
+  (`@main...refs/gg/pr/7?review=<id>`) opens that PR's own review whether or
+  not the PR is fetched, and refuses another change's review either way
+  (before, a fetched PR with more than one commit refused its own review).
+- TUI: a repository switch while a pull request's fetch runs no longer
+  opens that PR in the new repository.
+- gg web: the "⟳ fetching pull request head #n…" line no longer stays on
+  screen after the PR opened.
+
+## Pull request follow-ups 4
+
+### Changed
+
+- **A link to a pull request this repository has not fetched yet now
+  opens.** `gg open`, `gg session navigate`, the TUI's `#` and gg web's link
+  box used to refuse it ("no checkout … holds both main and refs/gg/pr/7");
+  when the PR is listed, its view now fetches the head first and lands on
+  the file and line; a link to a PR neither listed nor fetched says so in one
+  line (TUI and web alike), and a checkout that has fetched the PR is
+  preferred. `gg review`, `gg compare` and the MCP link tools still need the
+  PR fetched. Skill v158.
+- gg web: a note refused because its PR left the pull request list now says
+  to search for the PR ("… — search for it and open it again").
+
+### Fixed
+
+- TUI: a PR link landing no longer runs out of time while the PR's fetch
+  runs; pressing enter on the same PR during an agent's landing no longer
+  fails it; a fetch that cannot start says why on the status line; a fetch
+  resolved just before a repo switch no longer starts in the new repository.
+- gg web: a failed PR open no longer logs a second unhandled error.
+
+## Pull request follow-ups 3
+
+### Changed
+
+- **A note written in a pull request's view is never stored plain.** When
+  the PR has left the page's list, or its diff is gone here (`gg pr forget`
+  elsewhere, merged), gg web refuses it with a red line ("… — reopen pull
+  request #7") instead of saving a note that silently leaves the PR.
+- gg web: a link to a pull request the page does not list says so in one
+  line ("pull request #99 is not in the pull request list — list or search
+  for it, then open the link again") instead of a plain-preview fallback that
+  failed twice.
+
+### Fixed
+
+- gg web: a PR link that arrives while another PR is opening waits for that
+  open and then lands (it used to do nothing, silently); a link opened as the
+  page loads (`gg open --web`) waits for the pull request list instead of
+  falling back.
+- gg web: a moved-head comments read replaced while it waited no longer
+  loses the PR's "updated" mark.
+- TUI: a PR link to a listed PR whose head is not local fetches it first (the
+  enter path) instead of opening an empty view; a fetch that fails answers
+  the agent at once, and the fetch's time no longer runs out the landing.
+- TUI: a link to a PR the list does not hold keeps its "not in the pull
+  request list" notice; a PR link copied (`L`) just before a repo switch no
+  longer copies the old repository's link.
+
+## Operations beside a running AI task
+
+### Changed
+
+- **An operation that needs the whole repository is refused, not queued,
+  while a headless AI task runs.** Committing, switching, stashing or
+  `B` (create-and-switch) during an agent's conflict resolution used to
+  sit on "working…" — and freeze every refresh behind it — until the agent
+  finished. The TUI now shows a notice at once ("This operation needs the
+  repository to itself, but an AI agent resolving conflicts is running")
+  with the Headless tab as the place to wait or stop it; `gg web` shows the
+  same refusal as an error line. A short operation (a commit) still queues
+  the next one as before.
+
+### Fixed
+
+- Creating or deleting a branch or a tag while a headless AI agent resolves
+  conflicts no longer hangs on "working…" — and no longer freezes every
+  refresh behind it — until the agent finishes. These operations move refs
+  only, so they now run alongside the agent's read hold instead of queuing
+  for an exclusive one.
+
+## Pull request follow-ups
+
+### Added
+
+- **Links to pull requests.** `L` on a Pull requests row (and in the PR
+  details), *Copy pull request link* in an open PR's `.` menu, *copy gg link*
+  in gg web's PR menu, and `gg link --pr <n>` copy the PR's gg link
+  (`gg://…@<base>...refs/gg/pr/<n>`). Hand it to an agent as
+  `/gg-review <link>` — the review shows in the PR's view — or open it
+  (`gg open`, `gg session navigate`, `#`, gg web): it lands in the PR's own
+  view with its GitHub threads, and on the file and line it names. Skill
+  v156, gg-review v3.
+
+### Changed
+
+- **A note written in a pull request's diff joins the PR on any of its
+  commits** — an older head the page still shows included — and is refused
+  ("pull request #7 no longer holds … — reopen it") when the PR no longer
+  holds the commit (a force-push), instead of silently leaving the PR.
+  Writing it never asks GitHub.
+- **One pull request is one review** whatever base its notes were written
+  over: one Range review row, opening from any spelling with all of them; a
+  PR's AI review is titled "PR #7".
+- `gg pr send --review` / `--note review:…` take only a review the PR shows
+  (a review saved on a PR before PR note scope is no longer sendable from it).
+
+### Fixed
+
+- gg web: opening a PR on a full PR cache keeps its diff data; a moved head
+  is followed once (no red "another operation is running"); the reopen's
+  comments read waits for a running read instead of being dropped.
+- A PR listing that ran out of time no longer throws away the remembered
+  forge verdict.
+- Terminal UI: the re-read after your own send survives a failed read.
+- The PR cache retries transient Windows file errors when trimming and when
+  setting a corrupt file aside.
+
 ## Pull requests show only their own notes
 
 ### Changed

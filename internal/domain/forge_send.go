@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/engine"
@@ -30,6 +31,13 @@ var (
 	// ErrDiscardJoined: the pending review is the user's own draft gg added
 	// to; gg never deletes it.
 	ErrDiscardJoined = errors.New("the pending review is your own (gg added to it): finish it (--finish), or discard it on GitHub")
+	// ErrNoteOffPR: a note written in a PR's view on a commit the PR no
+	// longer holds (its head was force-pushed under the open view).
+	ErrNoteOffPR = errors.New("the pull request no longer holds this commit")
+	// ErrPRDiffGone: a note written in a PR's view whose diff this
+	// repository no longer holds (its head was forgotten, or it merged) —
+	// refused, never stored plain (ruling A, 2026-10-08).
+	ErrPRDiffGone = errors.New("the pull request's diff is not here any more")
 )
 
 // PRSendRequest is everything a frontend collects before a send starts
@@ -377,6 +385,9 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 		if err != nil {
 			return engine.SendPlan{}, err
 		}
+		if !s.prOwnsReview(ctx, prev.Set, r.ID) {
+			return engine.SendPlan{}, fmt.Errorf("%w: review %s is not in this PR", ErrSendRequest, r.ID)
+		}
 		plan.Key, plan.Body, plan.Verdict = r.ID, reviewSendBody(r), true
 		edited := strings.TrimSpace(req.Body)
 		cleared := req.BodySet && edited == ""
@@ -415,6 +426,9 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 				r, err := s.Review(ctx, rid)
 				if err != nil {
 					return engine.SendPlan{}, err
+				}
+				if !s.prOwnsReview(ctx, prev.Set, r.ID) {
+					return engine.SendPlan{}, fmt.Errorf("%w: review %s is not in this PR", ErrSendRequest, r.ID)
 				}
 				if n >= len(r.docRemarks()) {
 					return engine.SendPlan{}, fmt.Errorf("%w: %s", ErrNoSuchRemark, id)
@@ -668,23 +682,25 @@ func (s *Service) PRNotes(ctx context.Context, n int) (map[string][]ResolvedNote
 	return s.PreviewNotesAll(ctx, prev.Set)
 }
 
-// PRNoteScope is the scope a note written in PR n's view records
-// ("<base>...refs/gg/pr/<n>", spec 2026-10-08 §3) — only when commit is the
-// PR's tip, the one commit its view writes notes on; "" otherwise. The PR is
-// read from the cache when it is there (its view is open).
-func (s *Service) PRNoteScope(ctx context.Context, n int, commit string) string {
-	pr, _, ok := s.PRDetailsCached(n)
-	if !ok {
-		var err error
-		if pr, err = s.PullRequest(ctx, n); err != nil {
-			return ""
-		}
-	}
+// PRNoteScope is the scope a note written in PR pr's view records
+// ("<base>...refs/gg/pr/<n>", spec 2026-10-08 §3): any commit of the PR's
+// range takes it (the view may show an older tip than the forge's). It never
+// answers "" — a plain note would silently leave the PR: a commit the PR no
+// longer holds (its head was force-pushed under the open view) is
+// ErrNoteOffPR, a diff not available here (forgotten, merged) ErrPRDiffGone.
+// pr is the caller's cached row: no forge read.
+func (s *Service) PRNoteScope(ctx context.Context, pr model.PullRequest, commit string) (string, error) {
 	prev, err := s.PRPreview(ctx, pr)
-	if err != nil || !prev.Set.OK() || prev.Set.Tip != commit {
-		return ""
+	if err != nil {
+		return "", err
 	}
-	return prev.Set.Pair()
+	if !prev.Set.OK() {
+		return "", fmt.Errorf("%w — reopen pull request #%d", ErrPRDiffGone, pr.Number)
+	}
+	if !slices.Contains(prev.Set.Commits, commit) {
+		return "", fmt.Errorf("%w (%s) — reopen pull request #%d", ErrNoteOffPR, shortSHA(commit), pr.Number)
+	}
+	return prev.Set.Pair(), nil
 }
 
 // prCommentsNow is PR n's comments from the cache, else from ONE snapshot
