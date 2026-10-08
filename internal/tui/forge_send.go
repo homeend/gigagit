@@ -24,6 +24,7 @@ import (
 // send here is the user's own.
 type forgeSendState struct {
 	pr   int
+	req  domain.PRSendRequest // what was asked: a kept body clears only for its own box's send
 	plan engine.SendPlan
 }
 
@@ -62,7 +63,7 @@ func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
 		return m.sendDialogBusy(), nil
 	}
 	if msg.err != nil {
-		if k := m.keptSendBody; k != nil && k.pr == msg.req.PR {
+		if m.keptSendBody.from(msg.req) {
 			return m.sayInDiff(i18n.T("send: %s — the text you typed is kept", firstLine(msg.err.Error()))), nil
 		}
 		return m.sayInDiff(i18n.T("send: %s", firstLine(msg.err.Error()))), nil
@@ -70,7 +71,7 @@ func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
 	if !m.opsIdle() {
 		return m.sayInDiff(i18n.T("another operation is running — send again when it ends")), nil
 	}
-	m.forgeSend = &forgeSendState{pr: msg.req.PR, plan: msg.op.Plan}
+	m.forgeSend = &forgeSendState{pr: msg.req.PR, req: msg.req, plan: msg.op.Plan}
 	return m.startOp(msg.op)
 }
 
@@ -258,7 +259,9 @@ func (m Model) forgeSendFinished(fs *forgeSendState, res engine.Result, err erro
 	var cmds []tea.Cmd
 	if err == nil && res.Changed && fs.pr != 0 { // my own change (F1): not "updated"
 		m.prOwnSend, m.prOwnSendSeq = fs.pr, m.prReadSeq
-		m.keptSendBody = nil // the typed body reached GitHub
+		if m.keptSendBody.from(fs.req) {
+			m.keptSendBody = nil // the typed body reached GitHub
+		}
 	}
 	if fs.pr != 0 && fs.pr == m.openPRNumber() {
 		var c tea.Cmd

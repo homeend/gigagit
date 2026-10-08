@@ -230,6 +230,21 @@ type keptSendBody struct {
 	text    string
 }
 
+// from reports whether req is the send this kept body's box made (C8): the
+// same PR and the same box — Verdict…, my draft review, or that AI review.
+func (k *keptSendBody) from(req domain.PRSendRequest) bool {
+	if k == nil || !req.BodySet || k.pr != req.PR || k.verdict != req.Verdict {
+		return false
+	}
+	switch {
+	case req.Verdict:
+		return true
+	case req.Mine:
+		return k.group == domain.GroupMine
+	}
+	return req.Review != "" && k.group == "review:"+req.Review
+}
+
 // keptBodyFor is the text a failed send of the same PR and group left (F12):
 // the next body box starts from it.
 func (m Model) keptBodyFor(pr int, group string, verdict bool) (string, bool) {

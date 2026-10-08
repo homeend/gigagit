@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -31,8 +32,8 @@ func TestSendAnswersFromBeforeASwitchAreDropped(t *testing.T) {
 }
 
 // Item 17: a plan that fails after the body popup closed keeps the text; the
-// next Verdict… of the same PR starts from it; a send that changed GitHub
-// drops it.
+// next Verdict… of the same PR starts from it; its own send that changed
+// GitHub drops it (C8).
 func TestAFailedPlanKeepsTheTypedBody(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
@@ -48,9 +49,53 @@ func TestAFailedPlanKeepsTheTypedBody(t *testing.T) {
 		t.Fatalf("body = %q", got)
 	}
 	m = m.popLayer()
-	m, _ = m.forgeSendFinished(&forgeSendState{pr: 7}, engine.Result{Changed: true}, nil)
+	sent := domain.PRSendRequest{PR: 7, Verdict: true, Body: "a long thought-out verdict", BodySet: true}
+	m, _ = m.forgeSendFinished(&forgeSendState{pr: 7, req: sent}, engine.Result{Changed: true}, nil)
 	m, _ = m.openVerdict(7)
 	if got := layerOf[*sendReviewPopup](m).body.Value(); got != "" {
 		t.Fatalf("a sent body came back: %q", got)
+	}
+}
+
+// F-a: a send that did not come from the kept body's box — a resolve on the
+// same PR, a send on another PR — leaves the typed text; its own send clears it.
+func TestOnlyItsOwnSendClearsTheKeptBody(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m.keptSendBody = &keptSendBody{pr: 7, verdict: true, text: "keep me"}
+	resolve := domain.PRSendRequest{PR: 7, Resolve: []string{"PRRT_1"}}
+	m, _ = m.forgeSendFinished(&forgeSendState{pr: 7, req: resolve}, engine.Result{Changed: true}, nil)
+	other := domain.PRSendRequest{PR: 8, Verdict: true, BodySet: true}
+	m, _ = m.forgeSendFinished(&forgeSendState{pr: 8, req: other}, engine.Result{Changed: true}, nil)
+	if m.keptSendBody == nil {
+		t.Fatal("another send dropped the typed verdict body")
+	}
+	own := domain.PRSendRequest{PR: 7, Verdict: true, Body: "keep me", BodySet: true}
+	m, _ = m.forgeSendFinished(&forgeSendState{pr: 7, req: own}, engine.Result{Changed: true}, nil)
+	if m.keptSendBody != nil {
+		t.Fatal("its own send did not clear it")
+	}
+}
+
+// F-i: an aborted send of its own box keeps the text (nothing reached GitHub).
+func TestAnAbortKeepsTheKeptBody(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m.keptSendBody = &keptSendBody{pr: 7, verdict: true, text: "keep me"}
+	own := domain.PRSendRequest{PR: 7, Verdict: true, Body: "keep me", BodySet: true}
+	m, _ = m.forgeSendFinished(&forgeSendState{pr: 7, req: own}, engine.Result{}, nil)
+	if m.keptSendBody == nil {
+		t.Fatal("an abort dropped the typed body")
+	}
+}
+
+// F-b: a failed resolve says nothing about kept text.
+func TestAFailedResolveDoesNotSayTheTextIsKept(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m.keptSendBody = &keptSendBody{pr: 7, verdict: true, text: "keep me"}
+	m, _ = m.handleForgeSendReady(forgeSendReadyMsg{gen: m.forgeGen, req: domain.PRSendRequest{PR: 7, Resolve: []string{"x"}}, err: errors.New("boom")})
+	if strings.Contains(m.statusMsg, "kept") {
+		t.Fatalf("status = %q", m.statusMsg)
 	}
 }
