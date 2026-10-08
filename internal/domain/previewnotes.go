@@ -50,16 +50,21 @@ type PreviewNoteSet struct {
 	Only string
 }
 
-// scope is the review whose notes the set shows: a scope shows the notes
-// written IN it (Note.Preview) and no others — not a plain note on one of its
-// commits, which is the commit's, and not another review's. "" = no such
-// filter: a pull request's set, whose local notes are written against gg's
-// private ref and carry no portable name.
-func (set PreviewNoteSet) scope() string {
-	if _, pr := git.ParsePRRef(set.Source); pr {
-		return ""
+// scope is the review whose notes the set shows (Note.Preview): a scope
+// shows the notes written IN it and no others — not a plain note on one of
+// its commits, which is the commit's, and not another review's. A pull
+// request's set is no exception (spec 2026-10-08): its notes record
+// "<base>...refs/gg/pr/<n>" and owns matches them by number.
+func (set PreviewNoteSet) scope() string { return set.Pair() }
+
+// owns reports whether a root note written in preview belongs to this set:
+// a pull request's by its number (the base half moves), any other by name.
+func (set PreviewNoteSet) owns(preview string) bool {
+	if n, ok := git.ParsePRRef(set.Source); ok {
+		m, ok := PRScopeNumber(preview)
+		return ok && m == n
 	}
-	return set.Pair()
+	return preview == set.scope()
 }
 
 // OK reports whether the pair resolved to a previewable range.
@@ -238,7 +243,7 @@ func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path
 	if sc := set.scope(); sc != "" {
 		ofReview = map[string]bool{}
 		for _, n := range all {
-			if !n.IsReply() && n.Preview == sc {
+			if !n.IsReply() && set.owns(n.Preview) {
 				ofReview[n.ID] = true
 			}
 		}

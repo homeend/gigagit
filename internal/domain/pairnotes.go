@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/homeend/gigagit/internal/model"
 	"slices"
+	"strconv"
 	"strings"
+
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // Notes on a commit pair.
@@ -140,6 +143,9 @@ func (s *Service) pairScope(ctx context.Context, a, b string) (PreviewNoteSet, e
 // way round: a merge preview as "source → target", a commit pair as its
 // "a..b". One wording for every frontend's Range review row.
 func NoteScopeLabel(scope string) string {
+	if n, ok := PRScopeNumber(scope); ok {
+		return "PR #" + strconv.Itoa(n)
+	}
 	if target, source, ok := strings.Cut(scope, "..."); ok {
 		return source + " → " + target
 	}
@@ -259,6 +265,17 @@ func shortBranch(name string) string { return strings.TrimPrefix(name, "refs/hea
 // as opposed to a commit pair's ("<a>..<b>"). A preview review belongs to its
 // preview: it is shown there and never on a commit.
 func IsPreviewScope(scope string) bool { return strings.Contains(scope, "...") }
+
+// PRScopeNumber is the pull request a note scope names:
+// "<base>...refs/gg/pr/<n>", whatever the base's spelling — the base moves
+// with the PR's target, the note stays the PR's (spec 2026-10-08 §2).
+func PRScopeNumber(scope string) (int, bool) {
+	_, src, ok := strings.Cut(scope, "...")
+	if !ok {
+		return 0, false
+	}
+	return git.ParsePRRef(strings.TrimSpace(src))
+}
 
 // NoteReviewBranch is the branch a note's RANGE review was written on (the
 // one a commit pair's note recorded). "" for a plain note, for a preview's
