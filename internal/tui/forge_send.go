@@ -29,7 +29,7 @@ type forgeSendState struct {
 
 // forgeSendReadyMsg carries the planned op (or why there is none) back.
 type forgeSendReadyMsg struct {
-	gen int // m.forgeSendGen when the plan started: a repo switch drops it
+	gen int // m.forgeGen when the plan started: a repo switch drops it
 	req domain.PRSendRequest
 	op  engine.SendToForge
 	err error
@@ -46,7 +46,7 @@ func (m Model) forgeSendCmd(req domain.PRSendRequest) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m = m.sayInDiff(i18n.T("preparing the send to #%d…", req.PR))
-	gen := m.forgeSendGen
+	gen := m.forgeGen
 	return m, func() tea.Msg {
 		op, err := svc.PRSendOp(context.Background(), req)
 		return forgeSendReadyMsg{gen: gen, req: req, op: op, err: err}
@@ -55,7 +55,7 @@ func (m Model) forgeSendCmd(req domain.PRSendRequest) (Model, tea.Cmd) {
 
 // handleForgeSendReady starts the planned op, or says why it cannot.
 func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
-	if msg.gen != m.forgeSendGen {
+	if msg.gen != m.forgeGen {
 		return m, nil // planned in the repository before R
 	}
 	if m.modal != nil { // its op's question would replace the open dialog

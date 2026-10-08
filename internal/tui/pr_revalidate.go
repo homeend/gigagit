@@ -23,7 +23,7 @@ const prRevalidateBudget = 30 * time.Second
 
 type prRevalidatedMsg struct {
 	n               int
-	gen             int // m.prsGen when the read started: a repo switch drops it
+	gen             int // m.forgeGen when the read started: only a repo switch drops it
 	pr              model.PullRequest
 	moved           bool
 	commentsChanged bool
@@ -54,7 +54,7 @@ func (m Model) prRefreshCmd(n int, manual bool) (Model, tea.Cmd) {
 	m.prRevalidateInflight, m.prCommentsInflight, m.prRefreshing = true, true, true
 	m.prCommentsLast = time.Now()
 	m.prReadSeq++
-	svc, gen, seq := m.svc, m.prsGen, m.prReadSeq
+	svc, gen, seq := m.svc, m.forgeGen, m.prReadSeq
 	return m, func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), prRevalidateBudget)
 		defer cancel()
@@ -69,12 +69,16 @@ func (m Model) prRefreshCmd(n int, manual bool) (Model, tea.Cmd) {
 }
 
 func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
+	if msg.gen != m.forgeGen {
+		return m, nil // the old repository's read: reRoot already freed this one's slot
+	}
 	// Cleared BEFORE the "still my view" checks: a read whose view closed
-	// under it must not block every later one.
+	// under it must not block every later one (the comment half clears
+	// prCommentsInflight).
 	m.prRevalidateInflight, m.prRefreshing = false, false
-	if msg.gen != m.prsGen {
-		m.prCommentsInflight = false
-		return m, nil // another repository's answer
+	again := m.prRefreshAgain == msg.n // a post-send read waited for this one
+	if again {
+		m.prRefreshAgain = 0
 	}
 	if msg.err != nil {
 		m.prOfflineSince = msg.readAt
@@ -123,12 +127,11 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 	case m.prUpdated == msg.n:
 		m.prUpdated = 0 // nothing new: the mark clears (spec §2.4)
 	}
-	if m.prRefreshAgain == msg.n && m.openPRNumber() == msg.n {
+	if again && m.openPRNumber() == msg.n {
 		// The post-send read dropped while this one ran: ask it now.
-		m.prRefreshAgain = 0
-		var again tea.Cmd
-		m, again = m.prRefreshCmd(msg.n, false)
-		cmd = tea.Batch(cmd, again)
+		var next tea.Cmd
+		m, next = m.prRefreshCmd(msg.n, false)
+		cmd = tea.Batch(cmd, next)
 	}
 	if !moved || m.openPRNumber() != msg.n || !m.opsIdle() {
 		return m, cmd // unchanged, or the user moved on: the next enter fetches

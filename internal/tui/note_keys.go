@@ -29,8 +29,9 @@ type noteMutatedMsg struct {
 	err        error
 	clearMarks bool
 	// Reply & send (plan 3): send this saved draft to PR sendPR.
-	sendPR int
-	sendID string
+	sendPR  int
+	sendID  string
+	sendGen int // m.forgeGen when the reply was written: a repo switch drops the send
 }
 
 // diffNoteAddress is the address notes hang off for the open diff. It is the

@@ -15,8 +15,8 @@ import (
 func TestSendAnswersFromBeforeASwitchAreDropped(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
-	old := m.forgeSendGen
-	m.forgeSendGen++ // what reRoot does
+	old := m.forgeGen
+	m.forgeGen++ // what reRoot does
 	for _, msg := range []tea.Msg{
 		forgeSendReadyMsg{gen: old, req: domain.PRSendRequest{PR: 7, Mine: true}, op: engine.SendToForge{}},
 		sendGroupsMsg{gen: old, pr: 7, groups: []domain.SendGroup{{ID: domain.GroupMine, Count: 1}, {ID: "review:r1", Count: 1}}},
@@ -40,7 +40,7 @@ func TestAFailedPlanKeepsTheTypedBody(t *testing.T) {
 	p := layerOf[*sendReviewPopup](m)
 	p.body = newTextField("a long thought-out verdict")
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
-	nm, _ := m.Update(forgeSendReadyMsg{gen: m.forgeSendGen, req: domain.PRSendRequest{PR: 7, Verdict: true, BodySet: true},
+	nm, _ := m.Update(forgeSendReadyMsg{gen: m.forgeGen, req: domain.PRSendRequest{PR: 7, Verdict: true, BodySet: true},
 		err: errors.New("network down")})
 	m = nm.(Model)
 	m, _ = m.openVerdict(7)

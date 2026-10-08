@@ -162,7 +162,7 @@ func TestSendGroupChooserRowsAreUnique(t *testing.T) {
 	if opts[0] == opts[1] {
 		t.Fatalf("rows %q", opts)
 	}
-	nm, _ := m.Update(sendGroupsMsg{gen: m.forgeSendGen, pr: 7, groups: gs})
+	nm, _ := m.Update(sendGroupsMsg{gen: m.forgeGen, pr: 7, groups: gs})
 	mm := nm.(Model)
 	_, cmd := mm.modal.onResolve(mm, opts[1])
 	if b, ok := cmd().(sendBodyMsg); !ok || b.group != "review:r2" {
