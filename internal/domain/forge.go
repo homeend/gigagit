@@ -473,3 +473,36 @@ func (s *Service) PRPair(ctx context.Context, p model.PullRequest) PRPair {
 	}
 	return pair
 }
+
+// ErrPRNotFetched: a PR's link names gg's private refs/gg/pr/<n>, which only
+// a fetched PR has — a link to an unfetched one would not resolve.
+var ErrPRNotFetched = errors.New("the pull request is not fetched here")
+
+// PRLinkPair is the pair PR n's gg:// link names (<base>...refs/gg/pr/<n>):
+// the base the PR's own view uses (PRPair) and the fetched head. The row
+// comes from the cache; only a PR this session never saw costs a forge read.
+func (s *Service) PRLinkPair(ctx context.Context, n int) (PRPair, error) {
+	if !s.PRFetched(ctx)[n] {
+		return PRPair{}, fmt.Errorf("%w: gg pr fetch %d", ErrPRNotFetched, n)
+	}
+	pr, ok := model.PullRequest{}, false
+	if rows, rok := s.PullRequestsCached(); rok {
+		for _, p := range rows {
+			if p.Number == n {
+				pr, ok = p, true
+			}
+		}
+	}
+	if !ok {
+		if p, _, dok := s.PRDetailsCached(n); dok {
+			pr, ok = p, true
+		}
+	}
+	if !ok {
+		var err error
+		if pr, err = s.PullRequest(ctx, n); err != nil {
+			return PRPair{}, err
+		}
+	}
+	return s.PRPair(ctx, pr), nil
+}
