@@ -24,22 +24,26 @@ type prLinkMsg struct {
 	n              int
 	source, target string
 	err            error
+	gen            int // m.forgeGen when asked: a repo switch drops the answer
 }
 
 // prLinkCmd resolves PR n's link pair.
 func (m Model) prLinkCmd(n int) tea.Cmd {
-	svc := m.svc
+	svc, gen := m.svc, m.forgeGen
 	if svc == nil || n == 0 {
 		return nil
 	}
 	return func() tea.Msg {
 		p, err := svc.PRLinkPair(context.Background(), n)
-		return prLinkMsg{n: n, source: p.Head, target: p.Base, err: err}
+		return prLinkMsg{n: n, source: p.Head, target: p.Base, err: err, gen: gen}
 	}
 }
 
 // handlePRLinkMsg copies the link the pair names.
 func (m Model) handlePRLinkMsg(msg prLinkMsg) (Model, tea.Cmd) {
+	if msg.gen != m.forgeGen {
+		return m, nil // asked in a repository the TUI has left
+	}
 	switch {
 	case errors.Is(msg.err, domain.ErrPRNotFetched):
 		m.statusMsg = i18n.T("PR #%d is not fetched: press enter to open it first", msg.n)

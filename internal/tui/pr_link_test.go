@@ -38,17 +38,18 @@ func withClip(m Model, into *string) Model {
 func TestPRListLCopiesThePRLink(t *testing.T) {
 	t.Parallel()
 	m := prModel(t)
+	m.forgeGen = 3
 	_, cmd := m.Update(keyMsg("L"))
 	if cmd == nil {
 		t.Fatal("L on a PR row did nothing")
 	}
 	msg, ok := cmd().(prLinkMsg)
-	if !ok || msg.n != 7 {
+	if !ok || msg.n != 7 || msg.gen != 3 {
 		t.Fatalf("L → %#v", msg)
 	}
 	var copied string
 	m = withClip(m, &copied)
-	_, ccmd := m.Update(prLinkMsg{n: 7, source: "refs/gg/pr/7", target: "main"})
+	_, ccmd := m.Update(prLinkMsg{n: 7, source: "refs/gg/pr/7", target: "main", gen: 3})
 	if ccmd == nil {
 		t.Fatal("no copy")
 	}
@@ -234,5 +235,22 @@ func TestStartAtAPRLinkWaitsForThePRList(t *testing.T) {
 	m.startAt = mustLink(t, "gg://gigagit@main...feat/x")
 	if !m.startAtReady() {
 		t.Fatal("a plain preview link must not wait for the PR list")
+	}
+}
+
+// B6: a repo switch between L and the answer drops the old repo's pair —
+// copying it would hand out a link to the wrong repository.
+func TestPRLinkAnswerFromALeftRepoIsDropped(t *testing.T) {
+	t.Parallel()
+	m := prModel(t)
+	var copied string
+	m = withClip(m, &copied)
+	m.forgeGen = 2
+	nm, cmd := m.Update(prLinkMsg{n: 7, source: "refs/gg/pr/7", target: "main", gen: 1})
+	if cmd != nil {
+		runCopy(t, cmd)
+	}
+	if copied != "" || strings.Contains(nm.(Model).statusMsg, "copied") {
+		t.Fatalf("a stale answer copied %q (status %q)", copied, nm.(Model).statusMsg)
 	}
 }
