@@ -523,3 +523,26 @@ console.log(JSON.stringify([
 		t.Fatalf("got  %+v\nwant %+v", got, want)
 	}
 }
+
+// Follow-ups 5, item 6: a PR fetch's done line replaces the "⟳ fetching…"
+// line — it never stays on screen after the head arrived.
+func TestPRFreshJSFetchDoneLine(t *testing.T) {
+	t.Parallel()
+	out := runFreshModuleJS(t, `
+import { prFetchDoneLine } from "./prfresh.mjs";
+console.log(JSON.stringify([
+  prFetchDoneLine({ ok: true, summary: "fetched refs/gg/pr/7" }, 7),
+  prFetchDoneLine({ ok: true }, 7),
+  prFetchDoneLine({ ok: false, error: "no network" }, 7),
+  prFetchDoneLine({ ok: false }, 7),
+]));
+`)
+	var got [][2]any
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	want := [][2]any{{"fetched refs/gg/pr/7", false}, {"fetched pull request #7", false}, {"error: no network", true}, {"error: operation failed", true}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v\nwant %v", got, want)
+	}
+}
