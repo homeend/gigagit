@@ -1,97 +1,58 @@
 package tui
 
 import (
-	"strings"
+	"os/exec"
+	"path/filepath"
 	"testing"
-
-	"github.com/homeend/gigagit/internal/model"
 )
 
-func TestBranchRowsShowWorktreePath(t *testing.T) {
-	t.Parallel()
-	m := Model{
-		branches: []model.Branch{
-			{Name: "main", IsHead: true},
-			{Name: "feature/x"},
-			{Name: "lonely"},
-		},
-		worktrees: []model.Worktree{
-			{Path: "/repo", Branch: "main"},
-			{Path: "/repo.worktrees/x", Branch: "feature/x"},
-		},
-		sel: map[panel]int{},
+// addWorktree adds a second worktree on a new branch and returns its path.
+func addWorktree(t *testing.T, m Model, name string) string {
+	t.Helper()
+	other := filepath.Join(t.TempDir(), name)
+	if out, err := exec.Command("git", "-C", m.currentWorktree, "worktree", "add", "-b", name, other).CombinedOutput(); err != nil {
+		t.Fatalf("worktree add: %v\n%s", err, out)
 	}
-	rows := m.branchRows()
-	if !strings.Contains(rows[0], "(/repo)") {
-		t.Errorf("main should show its worktree path: %q", rows[0])
-	}
-	if !strings.Contains(rows[1], "(/repo.worktrees/x)") {
-		t.Errorf("feature/x should show its worktree path: %q", rows[1])
-	}
-	if strings.Contains(rows[2], "(") {
-		t.Errorf("lonely is in no worktree, expected no path: %q", rows[2])
-	}
-	if strings.Contains(strings.Join(rows, "\n"), "◫") {
-		t.Errorf("the ◫ glyph should be gone: %v", rows)
-	}
+	return other
 }
 
-func TestWorktreeRowsFormatAndCurrentMarker(t *testing.T) {
-	t.Parallel()
-	m := Model{
-		worktrees: []model.Worktree{
-			{Path: "/repo", Branch: "main"},
-			{Path: "/repo.worktrees/x", Branch: "feature/x"},
-		},
-		currentWorktree: "/repo",
-		sel:             map[panel]int{},
-	}
-	rows := m.worktreeRows(m.worktreeEntries())
-	if len(rows) != 2 {
-		t.Fatalf("want 2 worktree rows, got %d: %v", len(rows), rows)
-	}
-	if !strings.Contains(rows[0], "main") || !strings.Contains(rows[0], "/repo") {
-		t.Errorf("row should show branch and path: %q", rows[0])
-	}
-	if !strings.HasPrefix(rows[0], "* ") {
-		t.Errorf("current worktree should be marked: %q", rows[0])
-	}
-	if strings.HasPrefix(rows[1], "* ") {
-		t.Errorf("non-current worktree should not be marked: %q", rows[1])
-	}
-}
-
-func TestPanelLenWorktrees(t *testing.T) {
-	t.Parallel()
-	m := Model{worktrees: make([]model.Worktree, 3), sel: map[panel]int{}}
-	if n := m.panelLen(panelWorktrees); n != 3 {
-		t.Fatalf("panelLen(panelWorktrees) = %d, want 3", n)
-	}
-}
-
-// Real-repo integration: the loaded model's worktree list contains the repo's
-// own root, so the current-worktree marker actually fires (not just on synthetic
-// equal strings) and the checked-out branch gets the has-worktree marker.
-func TestWorktreeMarkersFireOnRealRepo(t *testing.T) {
-	t.Parallel()
+// The first load seeds home: one slot, viewed = home = the worktree gg runs in.
+func TestFirstLoadSeedsTheHomeSlot(t *testing.T) {
 	m := loadedModel(t)
-	marked := false
-	for _, row := range m.worktreeRows(m.worktreeEntries()) {
-		if strings.HasPrefix(row, "* ") {
-			marked = true
-		}
+	if m.home == "" || m.viewed != m.home || m.home != filepath.Clean(m.currentWorktree) {
+		t.Fatalf("home=%q viewed=%q current=%q", m.home, m.viewed, m.currentWorktree)
 	}
-	if !marked {
-		t.Errorf("no worktree row marked current; rows=%v current=%q", m.worktreeRows(m.worktreeEntries()), m.currentWorktree)
+	if v, ok := m.views[m.home]; !ok || v.svc != m.svc {
+		t.Fatalf("views[home] = %+v, want the live service", v)
 	}
-	// The checked-out branch (main) is in a worktree, so its row shows the path.
-	foundPath := false
-	for _, row := range m.branchRows() {
-		if strings.Contains(row, m.currentWorktree) {
-			foundPath = true
-		}
+}
+
+// saveView then loadView is a round trip of the Status panel, its cursor and
+// its marks; the live service is the slot's.
+func TestSaveAndLoadViewRoundTrip(t *testing.T) {
+	m := loadedModel(t)
+	m.sel[panelFiles] = 3
+	m.fileMarks = map[string]bool{"a.txt": true}
+	m = m.saveView()
+	home := m.views[m.home]
+	other := m.ensureView(addWorktree(t, m, "wt2"))
+	m = m.loadView(other)
+	if m.viewed != other.path || m.svc != other.svc || m.sel[panelFiles] != 0 || len(m.fileMarks) != 0 || m.currentWorktree != other.path {
+		t.Fatalf("after load: viewed=%q sel=%d marks=%v current=%q", m.viewed, m.sel[panelFiles], m.fileMarks, m.currentWorktree)
 	}
-	if !foundPath {
-		t.Errorf("expected the checked-out branch row to show its worktree path; rows=%v current=%q", m.branchRows(), m.currentWorktree)
+	m = m.loadView(home)
+	if m.sel[panelFiles] != 3 || !m.fileMarks["a.txt"] || m.svc != home.svc {
+		t.Fatalf("home not restored: sel=%d marks=%v", m.sel[panelFiles], m.fileMarks)
+	}
+}
+
+// ensureView is keyed by the cleaned path and reuses the slot.
+func TestEnsureViewIsKeyedByCleanPath(t *testing.T) {
+	m := loadedModel(t)
+	other := addWorktree(t, m, "wt2")
+	a := m.ensureView(other + string(filepath.Separator))
+	b := m.ensureView(other)
+	if a != b || a.path != filepath.Clean(other) {
+		t.Fatalf("slots differ: %p %p path=%q", a, b, a.path)
 	}
 }

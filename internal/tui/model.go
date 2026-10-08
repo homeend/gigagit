@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -90,8 +91,14 @@ type Model struct {
 	pickPatchTemp          string                         // patch lane's temp file; removed when its op finishes
 	reflog                 []model.ReflogEntry            // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree        string
-	recycleBranch          string // branch captured when the Recycle-a-worktree picker opened
-	recycleRemote          string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
+	// views remembers the worktree-scoped state per worktree of this
+	// repository (worktree_view.go); viewed is the slot on screen, home the
+	// one gg's identity (exit dir, steering, snapshot) belongs to.
+	views         map[string]*worktreeView
+	viewed        string
+	home          string
+	recycleBranch string // branch captured when the Recycle-a-worktree picker opened
+	recycleRemote string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
 
 	notices                []notice                // session notice list (see notify.go)
 	driftNotices           []driftNoticeSource     // post-op drift/paused-resume findings; rebuildNotices re-renders these too
@@ -541,6 +548,7 @@ func New(svc *domain.Service) Model {
 		loading:                true,
 		loadStart:              time.Now(),
 		sel:                    map[panel]int{},
+		views:                  map[string]*worktreeView{},
 		sortModes:              map[panel]sortMode{panelBranches: sortDateDesc},
 		dispModes:              map[panel]dispMode{},
 		hscroll:                map[panel]int{},
@@ -1818,6 +1826,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentWorktree = msg.currentWorktree
 			publishedWT.Store(msg.currentWorktree)
 			m.worktreeMarks = msg.worktreeMarks
+			if m.views == nil {
+				m.views = map[string]*worktreeView{}
+			}
+			if m.home == "" || m.views[m.viewed] == nil { // first load, or a repo switch dropped the slots
+				m.home = filepath.Clean(msg.currentWorktree)
+				m.viewed = m.home
+				m.views[m.home] = &worktreeView{path: m.home, svc: m.svc}
+			}
+			m = m.saveView()
 			// The worktree's open files may have missed store changes while
 			// another worktree was current (a dismiss in the browser).
 			var docsCmd tea.Cmd
@@ -4941,6 +4958,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	closeDocWatch(m.docWatch.w)                         // the old tree's files are not the new one's
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
+	m.views = map[string]*worktreeView{} // another repository: its worktrees are not these
+	m.viewed, m.home = "", ""
 	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go
 	m = m.withWorkingReviews(nil)
 	// Disable the snapshot synchronously (no git subprocess here — reRoot runs
