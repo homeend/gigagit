@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
@@ -29,10 +30,12 @@ func init() {
 	})
 }
 
-// prSendBudget bounds the forge reads a send's plan makes (the PR, its
-// comments): a forge that hangs answers 504, never a hung request. A var so
-// tests can shorten it.
-var prSendBudget = prRevalidateBudget
+// prSendBudget is a backstop over a send's planning: its forge reads (each
+// already bounded by the provider's own 30 s call timeout), a wait on the
+// repo gate, and the local anchoring of a big PR on a monorepo — which a
+// 30 s budget could cut (504) although nothing was stuck. A forge that hangs
+// still answers 504, never a hung request. A var so tests can shorten it.
+var prSendBudget = 2 * time.Minute
 
 // errBadSend marks a request the page got wrong: 400. Every other refusal is
 // a lookup the request cannot fix (prSendLookupStatus) or a planning refusal

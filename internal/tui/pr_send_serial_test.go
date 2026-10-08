@@ -225,9 +225,17 @@ func TestReplyAndSendFromThePRView(t *testing.T) {
 // PR's group bars (it used to hand the view nil groups). Serial: prSendModel.
 func TestAPRReResolveKeepsTheGroupBars(t *testing.T) {
 	m, _, head := prSendModel(t)
+	open := m.openPRPreviewCmd(model.PullRequest{Number: 7, State: "open", Target: "main"})().(previewOpenMsg)
+	nm, _ := m.Update(open)
+	m = nm.(Model)
 	addTUINote(t, m, head, 5, "mine")
 	msg := m.reopenPreviewCmd("", "refs/gg/pr/7", "main", "", "")().(previewOpenMsg)
 	if g := msg.groups["big.go"]; len(g) == 0 || g[0] != domain.GroupMine {
 		t.Fatalf("re-resolve groups = %v", msg.groups)
+	}
+	// F-i: what the HANDLER keeps — the view's bars, not just the message.
+	nm, _ = m.Update(msg)
+	if g := nm.(Model).filesPreviewGroups["big.go"]; len(g) == 0 || g[0] != domain.GroupMine {
+		t.Fatalf("after the handler groups = %v", nm.(Model).filesPreviewGroups)
 	}
 }
