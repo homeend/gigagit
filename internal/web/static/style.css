@@ -1,6 +1,8 @@
 :root {
   --bg: #14161a; --bg-alt: #1c1f26; --fg: #d8dee9; --dim: #7a828e;
   --accent: #6ea8fe; --sel: #2a3550; --border: #2a2e37;
+  /* note groups (spec 2026-10-07 §1.3): the TUI's note_group_1..6 (Dark); style_groups_test.go pins them */
+  --note-group-1: #E06C75; --note-group-2: #E5C07B; --note-group-3: #98C379; --note-group-4: #56B6C2; --note-group-5: #C678DD; --note-group-6: #D19A66;
   --add: #1f3d2b; --del: #46262a; --span-add: #2f6b41; --span-del: #8a3b42;
   --attn-info: #1e3350; --attn-warn: #3d3520; --attn-error: #43242a;
   --recent-bg: #1F3A26; /* blame's "changed within the last …" tint (the TUI's blame_recent_bg, Dark) */
@@ -412,6 +414,14 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #modal.hidden { display: none; }
 #modal-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 22px; max-width: 560px; }
 #modal-prompt { margin-bottom: 14px; white-space: pre-line; }
+/* The GitHub send confirm (sendplan.js): the body and the lists scroll on
+   their own, so a long review never pushes the buttons off screen. */
+#modal-prompt .sc-target { margin-bottom: 6px; }
+#modal-prompt .sc-note { color: var(--dim); margin: 4px 0; }
+#modal-prompt .sc-label { color: var(--dim); margin: 8px 0 2px; }
+#modal-prompt .sc-body { max-height: 25vh; overflow: auto; white-space: pre-wrap; margin: 0; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; font: inherit; }
+#modal-prompt .sc-items, #modal-prompt .sc-skipped { max-height: 30vh; overflow: auto; margin: 0; padding-left: 4px; list-style: none; white-space: normal; }
+#modal-prompt .sc-why, #modal-prompt .sc-more { color: var(--dim); }
 #modal-options { display: flex; gap: 10px; justify-content: flex-end; }
 #modal-options button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
 #modal-options button:hover { border-color: var(--accent); }
@@ -1490,6 +1500,27 @@ table.diff tr.note td.note-gap { cursor: default; }
 /* A forge review thread (a pull request's comments): read-only, its own tint. */
 .notebox.forge { border-color: #4fb3a8; }
 .notebox.forge .notetitle { color: #4fb3a8; }
+/* A PR's note groups (spec 2026-10-07 §1.3): the group's colour as the box's
+   left edge, and as stripes on a file's ◆ badge. */
+.notebox.g1 { border-left: 4px solid var(--note-group-1); }
+.notebox.g2 { border-left: 4px solid var(--note-group-2); }
+.notebox.g3 { border-left: 4px solid var(--note-group-3); }
+.notebox.g4 { border-left: 4px solid var(--note-group-4); }
+.notebox.g5 { border-left: 4px solid var(--note-group-5); }
+.notebox.g6 { border-left: 4px solid var(--note-group-6); }
+.gbar { display: inline-block; width: 3px; height: 0.9em; margin-right: 1px; vertical-align: -0.1em; }
+.gbar.g1 { background: var(--note-group-1); }
+.gbar.g2 { background: var(--note-group-2); }
+.gbar.g3 { background: var(--note-group-3); }
+.gbar.g4 { background: var(--note-group-4); }
+.gbar.g5 { background: var(--note-group-5); }
+.gbar.g6 { background: var(--note-group-6); }
+/* Sync marks (§1.1): ○ local, ◌ sending, ○! failed, ● on GitHub. */
+.notemark { font-weight: bold; }
+.notemark.mark-sending { color: var(--dim); }
+.notemark.mark-failed, .notesenderr { color: #f27a6a; }
+.notemark.mark-github { color: #4fb3a8; }
+.notesenderr { font-size: .92em; margin-top: 4px; white-space: pre-wrap; }
 /* Every box folds from its title line (click, or z / Z): the title stays, the
    body goes. The fold is a class on the ROW so it toggles without a re-render. */
 .notetitle { cursor: pointer; }

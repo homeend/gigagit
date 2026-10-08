@@ -2,12 +2,9 @@ package domain
 
 import (
 	"context"
-	"errors"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -77,38 +74,31 @@ func TestPRSendGroupsListsMineThenReviews(t *testing.T) {
 	}
 }
 
-func TestPendingOutcomeMirrorsTheApprovalRules(t *testing.T) {
+// W2 (user ruling 2026-10-08): the user cleared the body box — the review
+// posts no body at all; with no body answer (the CLI without --body) the
+// stored summary still goes.
+func TestAnEmptiedReviewBodyIsPostedEmpty(t *testing.T) {
 	t.Parallel()
-	for _, c := range []struct {
-		res     engine.Result
-		err     error
-		state   string
-		waiting bool
-	}{
-		{engine.Result{Summary: "sent 1 comments to o/r #7"}, nil, PendingSent, false},
-		{engine.Result{Summary: "aborted: sending to o/r #7"}, nil, PendingRejected, false},
-		{engine.Result{}, errors.New("HTTP 502"), PendingFailed, false},
-		{engine.Result{}, engine.ErrDecisionRequired, PendingWaiting, true},
-	} {
-		st, _, waiting := PendingOutcome(c.res, c.err)
-		if st != c.state || waiting != c.waiting {
-			t.Errorf("%+v %v → %q waiting=%v", c.res, c.err, st, waiting)
-		}
-	}
-}
-
-func TestPendingSendsPathIsTheQueueFile(t *testing.T) {
-	t.Parallel()
-	_, svc := newRealRepo(t)
+	svc, _, head := sendRepo(t)
+	rid := saveHeadReview(t, svc, head, twoRemarks)
 	ctx := context.Background()
-	p, err := svc.PendingSendsPath(ctx)
-	if err != nil || p == "" {
-		t.Fatalf("path %q, %v", p, err)
-	}
-	if _, err := svc.PendingSendAdd(ctx, PRSendRequest{PR: 7, Mine: true}, "claude"); err != nil {
+	p, err := svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid, BodySet: true, Body: "   "})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(p); err != nil {
-		t.Fatalf("the queue file is not at %s: %v", p, err)
+	if p.Body != "" {
+		t.Fatalf("an emptied body must post empty, got %q", p.Body)
+	}
+	for _, sk := range p.Skipped {
+		if sk.Label == "review summary" {
+			t.Fatalf("an emptied body is not a skipped summary: %+v", p.Skipped)
+		}
+	}
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Review: rid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(p.Body, "looks fine") || !strings.Contains(p.Body, "via gg") {
+		t.Fatalf("no body given must post the signed summary, got %q", p.Body)
 	}
 }

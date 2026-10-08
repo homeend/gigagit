@@ -17,13 +17,12 @@ const prUsage = `usage: gg pr list [--state all|open|closed|merged] [--search <t
        gg pr comments <number> [--json]
        gg pr fetch <number>
        gg pr forget <number>
-       gg pr send <n> (--note <id>… | --review <id> | --mine | --verdict) [--event comment|approve|request-changes] [--body <text>] [--yes]
-       gg pr send <n> --finish | --discard [--yes]
-       gg pr reply <n> <thread-or-comment-id> <text> [--send [--yes]]
+       gg pr send <n> (--note <id>… | --review <id> | --mine | --verdict) [--body <text>]
+       gg pr send <n> --finish | --discard
+       gg pr reply <n> <thread-or-comment-id> <text> [--send]
        gg pr resolve|unresolve <n> <thread-or-comment-id>
        gg pr notes <n> [--json]
-       gg pr pending [list] [--json]
-       gg pr pending approve <id> [--yes] | reject <id> | wait <id> | cancel <id>`
+  (send, reply --send, resolve and unresolve ask at your terminal; agents can't send)`
 
 // cmdPR is the pull-request surface. The read verbs list and read, fetch a
 // PR head into the private ref refs/gg/pr/<n> and forget it; the write verbs
@@ -42,8 +41,6 @@ func cmdPR(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr i
 			return prResolve(svc, args[0] == "resolve", args[1:], stdin, stdout, stderr)
 		case "notes":
 			return prNotes(svc, args[1:], stdout, stderr)
-		case "pending":
-			return prPending(svc, args[1:], stdin, stdout, stderr)
 		}
 	}
 	usage := func() int { fmt.Fprintln(stderr, prUsage); return 2 }

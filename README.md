@@ -518,21 +518,33 @@ gg pr forget 123              # drop the ref (and a closed PR's row)
 ```bash
 gg pr notes 123 [--json]                  # what the PR's view holds: local notes, carried ones, GitHub threads
 gg pr send 123 --note <id> [--note <id>]  # one comment per note (a quote of the line when it is outside the diff)
-gg pr send 123 --mine --event approve     # every local note as ONE review, with a verdict
-gg pr send 123 --review <id>              # a stored AI review: its summary + its remarks
-gg pr send 123 --verdict --event approve  # a verdict alone
+gg pr send 123 --mine                     # every local note as ONE review; the confirm asks the verdict
+gg pr send 123 --review <id> [--body …]   # a stored AI review: its summary (or your body) + its remarks
+gg pr send 123 --verdict                  # a verdict alone
 gg pr reply 123 <thread> "text" [--send]  # a draft reply under a GitHub thread (--send posts it)
-gg pr resolve|unresolve 123 <thread>      # immediate
+gg pr resolve|unresolve 123 <thread>
 gg pr send 123 --finish | --discard       # an interrupted send left a pending review
-gg pr pending [approve|reject|wait|cancel <id>]   # sends an agent queued for your approval
 ```
 
-Every send shows one confirm (pass `--yes` to answer it): the target, every
-comment that will be posted and every note that is skipped, with why. A
-review is all or nothing. Once a note is on GitHub, gg deletes the local
-copy — GitHub owns it from then on. An AI agent running inside gg can only
-*queue* a send; you approve it. AI-written comments end with
-`— <agent> via gg`.
+Every send shows one confirm — the target, every comment that will be
+posted and every note that is skipped, with why — and you answer it at your
+terminal (there is no `--yes`). A review is all or nothing. Once a note is
+on GitHub, gg deletes the local copy — GitHub owns it from then on.
+AI-written comments end with `— <agent> via gg`.
+
+**Agents never send to GitHub.** An AI agent writes local notes and reviews;
+you send them. Inside any session gg started (agent consoles, gg terminal
+tabs) the sending commands refuse, and gg gives agents no tool or flag that
+sends. (gg cannot stop an agent that runs `gh` itself — that belongs to the
+agent's own permission settings.)
+
+In **gg web**, a pull request's diff shows the same marks and group colours
+as the terminal UI: right-click a note for *Send to GitHub*, *Send my draft
+review…* / *Send this AI review…*, and on a GitHub thread *Reply & send…*,
+*Resolve / Reopen on GitHub*, *Send draft replies*; the pull request's
+right-click menu has *Send review…* and *Verdict…*. Each send opens the same
+confirm, listing what will be posted. A send that was cut off half-way shows
+a bar to *Finish sending* or *Discard* it.
 
 The plain list holds the open pull requests (plus the ones gg already knows).
 A closed or merged PR you never fetched is found by **searching**: in the TUI

@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,10 +71,22 @@ func addCLINote(t *testing.T, dir, head string, line int) string {
 	return n.ID
 }
 
-func TestPRSendNoteWithYes(t *testing.T) {
+// runPRAt runs gg pr with stdin as a human's terminal (the sendTerminal
+// seam): what the user would type at the confirm. Serial: swaps the seam.
+func runPRAt(t *testing.T, dir, stdin string, args ...string) (string, string, int) {
+	t.Helper()
+	old := sendTerminal
+	sendTerminal = func(io.Reader) bool { return true }
+	defer func() { sendTerminal = old }()
+	var out, errb bytes.Buffer
+	code := Run(dir, append([]string{"pr"}, args...), strings.NewReader(stdin), &out, &errb, "")
+	return out.String(), errb.String(), code
+}
+
+func TestPRSendNoteAnsweredAtATerminal(t *testing.T) {
 	dir, head, fixtures := sendPRRepo(t)
 	id := addCLINote(t, dir, head, 5)
-	out, errs, code := runPR(t, dir, "send", "7", "--note", id, "--yes")
+	out, errs, code := runPRAt(t, dir, "send\n", "send", "7", "--note", id)
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errs)
 	}
@@ -92,15 +106,48 @@ func TestPRSendNoteWithYes(t *testing.T) {
 	}
 }
 
-func TestPRSendWithoutYesInAPipeAsks(t *testing.T) {
+func TestPRSendInAPipeNeedsATerminal(t *testing.T) {
 	dir, head, fixtures := sendPRRepo(t)
 	id := addCLINote(t, dir, head, 5)
 	_, errs, code := runPR(t, dir, "send", "7", "--note", id)
-	if code == 0 || !strings.Contains(errs, "forge.send") || !strings.Contains(errs, "--yes") {
+	if code != 1 || !strings.Contains(errs, "needs your answer at a terminal") {
 		t.Fatalf("exit %d, stderr %q", code, errs)
 	}
 	if ws := forgetest.Writes(t, fixtures); len(ws) != 0 {
-		t.Fatalf("nothing may be written before the confirm: %v", ws)
+		t.Fatalf("nothing may be written without a human's answer: %v", ws)
+	}
+}
+
+// Agents never send (user ruling 2026-10-08): inside any session gg started
+// every sending verb refuses, whatever is typed, and nothing is queued.
+// Serial: swaps sessionGetenv.
+func TestPRSendRefusesInsideAGGSession(t *testing.T) {
+	dir, head, fixtures := sendPRRepo(t)
+	id := addCLINote(t, dir, head, 5)
+	b, _ := os.ReadFile(filepath.Join(fixtures, "snapshot-7-sent.json"))
+	forgetest.Seed(t, fixtures, map[string]string{"snapshot-7.json": string(b)})
+	old := sessionGetenv
+	sessionGetenv = func(k string) string {
+		if k == "GG_INBOX" {
+			return "/tmp/inbox"
+		}
+		return ""
+	}
+	t.Cleanup(func() { sessionGetenv = old })
+	for _, args := range [][]string{
+		{"send", "7", "--note", id},
+		{"send", "7", "--mine"},
+		{"reply", "7", "PRRT_new1", "hi", "--send"},
+		{"resolve", "7", "PRRT_new1"},
+		{"unresolve", "7", "PRRT_new1"},
+	} {
+		_, errs, code := runPRAt(t, dir, "send\ncomment\n", args...)
+		if code != 1 || !strings.Contains(errs, "agents can't send to GitHub") {
+			t.Errorf("%v: exit %d, stderr %q", args, code, errs)
+		}
+	}
+	if ws := forgetest.Writes(t, fixtures); len(ws) != 0 {
+		t.Fatalf("an agent's send reached the forge: %v", ws)
 	}
 }
 
@@ -110,7 +157,7 @@ func TestPRSendFailureKeepsTheNoteWithItsError(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(fixtures, "fail-SubmitReview"), []byte("HTTP 502: Bad Gateway"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, errs, code := runPR(t, dir, "send", "7", "--note", id, "--yes")
+	_, errs, code := runPRAt(t, dir, "send\n", "send", "7", "--note", id)
 	if code != 1 || !strings.Contains(errs, "HTTP 502") {
 		t.Fatalf("exit %d, stderr %q", code, errs)
 	}
@@ -128,8 +175,10 @@ func TestPRSendUsage(t *testing.T) {
 	dir, _, _ := sendPRRepo(t)
 	for _, args := range [][]string{
 		{"send"}, {"send", "x"}, {"send", "7"}, {"send", "7", "--mine", "--review", "r1"},
-		{"send", "7", "--event", "maybe", "--mine"}, {"send", "7", "--finish", "--discard"},
-		{"send", "7", "--note", "n1", "--event", "approve"}, // a verdict needs --review, --mine or --verdict
+		{"send", "7", "--finish", "--discard"},
+		{"send", "7", "--mine", "--yes"},              // no --yes: a human answers the confirm
+		{"send", "7", "--mine", "--event", "approve"}, // no --event: the confirm asks the verdict
+		{"reply", "7", "PRRT_1", "hi", "--send", "--yes"},
 	} {
 		if _, _, code := runPR(t, dir, args...); code != 2 {
 			t.Errorf("%v: exit %d, want 2", args, code)
@@ -137,12 +186,12 @@ func TestPRSendUsage(t *testing.T) {
 	}
 }
 
-func TestPRResolveIsImmediate(t *testing.T) {
+func TestPRResolveAnsweredAtATerminal(t *testing.T) {
 	dir, _, fixtures := sendPRRepo(t)
 	// Seed a thread to resolve.
 	b, _ := os.ReadFile(filepath.Join(fixtures, "snapshot-7-sent.json"))
 	forgetest.Seed(t, fixtures, map[string]string{"snapshot-7.json": string(b)})
-	out, errs, code := runPR(t, dir, "resolve", "7", "PRRT_new1")
+	out, errs, code := runPRAt(t, dir, "send\n", "resolve", "7", "PRRT_new1")
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errs)
 	}
@@ -164,7 +213,7 @@ func TestPRReplyDraftThenSend(t *testing.T) {
 		t.Fatalf("a draft reply writes nothing: %v", ws)
 	}
 	id := strings.Fields(out)[0] // "<id> draft reply to PRRT_new1"
-	if _, errs, code := runPR(t, dir, "send", "7", "--note", id, "--yes"); code != 0 {
+	if _, errs, code := runPRAt(t, dir, "send\n", "send", "7", "--note", id); code != 0 {
 		t.Fatalf("send the draft: %s", errs)
 	}
 	ws := forgetest.Writes(t, fixtures)
@@ -193,14 +242,19 @@ func writeCommit(t *testing.T, dir, name, body, msg string) {
 	runGit(t, dir, "commit", "-q", "-m", msg)
 }
 
-// With your own review pending on GitHub, --yes is always refused: the pipe's
-// "rerun with --yes" hint would send the user in a circle.
-func TestPRSendHintSkipsYesWhenAReviewIsPending(t *testing.T) {
-	dir, head, fixtures := sendPRRepo(t)
-	id := addCLINote(t, dir, head, 5)
-	editSnapshot(t, fixtures, `"viewerLatestReview":null`, `"viewerLatestReview":{"id":"PRR_mine","state":"PENDING"}`)
-	_, errs, code := runPR(t, dir, "send", "7", "--note", id)
-	if code == 0 || strings.Contains(errs, "rerun with --yes") || !strings.Contains(errs, "review pending on GitHub") {
-		t.Fatalf("exit %d, stderr %q", code, errs)
+func TestPRSendBodyFlagSetsBodySet(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		args []string
+		set  bool
+	}{
+		{[]string{"7", "--review", "r1"}, false},
+		{[]string{"7", "--review", "r1", "--body", ""}, true},
+		{[]string{"7", "--review", "r1", "--body", "mine"}, true},
+	} {
+		req, err := parsePRSend(tc.args, io.Discard)
+		if err != nil || req.BodySet != tc.set {
+			t.Errorf("%v: BodySet %v, err %v", tc.args, req.BodySet, err)
+		}
 	}
 }

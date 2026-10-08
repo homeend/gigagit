@@ -13,32 +13,29 @@ import (
 )
 
 // Sending to GitHub from the TUI (spec 2026-10-07 §3.3, plan 3). Every send
-// — a note, a group, a verdict, a reply, an agent's queued request — is
+// — a note, a group, a verdict, a reply — is
 // planned by domain.PRSendOp OFF the Update goroutine (it reads under the
 // repo gate, which is not re-entrant), then run with startOp; the op's one
 // question (forge.send) is the confirm, which the TUI renders from the plan
 // it holds (T4).
 
-// forgeSendState is the send the TUI is running: the plan its confirm shows,
-// the PR it writes to, the queued request it answers ("" = the user's own),
-// and the verdict an agent asked for (preselected in the confirm).
+// forgeSendState is the send the TUI is running: the plan its confirm shows
+// and the PR it writes to. Agents never send (user ruling 2026-10-08): every
+// send here is the user's own.
 type forgeSendState struct {
-	pr        int
-	plan      engine.SendPlan
-	pendingID string
-	event     string
+	pr   int
+	plan engine.SendPlan
 }
 
 // forgeSendReadyMsg carries the planned op (or why there is none) back.
 type forgeSendReadyMsg struct {
-	req       domain.PRSendRequest
-	pendingID string
-	op        engine.SendToForge
-	err       error
+	req domain.PRSendRequest
+	op  engine.SendToForge
+	err error
 }
 
 // forgeSendCmd plans req off the UI thread.
-func (m Model) forgeSendCmd(req domain.PRSendRequest, pendingID string) (Model, tea.Cmd) {
+func (m Model) forgeSendCmd(req domain.PRSendRequest) (Model, tea.Cmd) {
 	svc := m.svc
 	if svc == nil {
 		return m, nil
@@ -50,13 +47,11 @@ func (m Model) forgeSendCmd(req domain.PRSendRequest, pendingID string) (Model, 
 	m = m.sayInDiff(i18n.T("preparing the send to #%d…", req.PR))
 	return m, func() tea.Msg {
 		op, err := svc.PRSendOp(context.Background(), req)
-		return forgeSendReadyMsg{req: req, pendingID: pendingID, op: op, err: err}
+		return forgeSendReadyMsg{req: req, op: op, err: err}
 	}
 }
 
-// handleForgeSendReady starts the planned op, or says why it cannot. A
-// queued request whose plan fails stays queued (it may work once the PR is
-// fetched): only the op's outcome finishes it.
+// handleForgeSendReady starts the planned op, or says why it cannot.
 func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
 	if m.modal != nil { // its op's question would replace the open dialog
 		return m.sendDialogBusy(), nil
@@ -67,7 +62,7 @@ func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
 	if !m.opsIdle() {
 		return m.sayInDiff(i18n.T("another operation is running — send again when it ends")), nil
 	}
-	m.forgeSend = &forgeSendState{pr: msg.req.PR, plan: msg.op.Plan, pendingID: msg.pendingID, event: msg.req.Event}
+	m.forgeSend = &forgeSendState{pr: msg.req.PR, plan: msg.op.Plan}
 	return m.startOp(msg.op)
 }
 
@@ -243,15 +238,11 @@ func sendSkipReasonText(reason string) string {
 	return i18n.T("(skipped: %s)", reason)
 }
 
-// forgeSendFinished is the op's follow-up (opFinishedMsg): answer the queued
-// request, re-read the PR (its threads now hold what was sent) and recount
+// forgeSendFinished is the op's follow-up (opFinishedMsg): re-read the PR (its threads now hold what was sent) and recount
 // the badges. The notes themselves reload through srcNotes (the op's
 // opAffectedSources), whose arrival re-resolves the open diff's boxes.
 func (m Model) forgeSendFinished(fs *forgeSendState, res engine.Result, err error) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	if fs.pendingID != "" {
-		cmds = append(cmds, m.pendingFinishCmd(fs.pendingID, res, err))
-	}
 	if fs.pr != 0 && fs.pr == m.openPRNumber() {
 		var c tea.Cmd
 		m, c = m.prRefreshCmd(fs.pr, false)

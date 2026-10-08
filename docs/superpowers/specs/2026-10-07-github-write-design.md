@@ -5,6 +5,18 @@ publish part (§2–§3, stage 3) of
 `2026-09-27-notes-forge-agent-context-strategy.md` (branch
 `feat/notes-forge-agent`, never merged).
 
+
+> **Amended 2026-10-08 (user ruling): agents never send to GitHub.** Rule 8
+> now reads: AI-written content posts with an attribution trailer; **an
+> agent never sends anything to GitHub — it writes local notes and reviews,
+> and only the user sends them** (TUI, gg web, or `gg pr send` answered at
+> the user's own terminal). §3.7 (the pending-send queue) is withdrawn and
+> was removed in plan 4; §4.3 loses `--yes`, `--event` and `gg pr pending`;
+> §4.4 has no write tools (`pr_send`/`pr_reply`/`pr_resolve` are not
+> built); §7 item 5 is read tools + skill text only. Also 2026-10-08: an AI
+> review's body box cleared by the user posts an empty body (no fallback to
+> the stored summary).
+
 ## Goal
 
 Review a GitHub pull request inside gg: open it fast, write local notes
@@ -319,7 +331,7 @@ The body ends with `— <agent> via gg`; rationale, tags and confidence
 fold into a collapsed `<details>` block. The confirm shows the rendered
 body, so the user sees exactly what will be posted.
 
-### 3.7 Agents: the pending-send queue
+### 3.7 Agents: the pending-send queue (WITHDRAWN 2026-10-08 — agents never send; see the amendment at the top)
 
 An agent's send never posts directly. It is queued as a **pending send**
 the user approves in gg.
@@ -367,18 +379,18 @@ from the cache).
 
 ### 4.3 CLI
 
-- `gg pr send <n> [--review <id> | --mine | --note <id>…] [--event
-  comment|approve|request-changes] [--body <text>] [--yes]`
+- `gg pr send <n> [--review <id> | --mine | --note <id>…] [--body <text>]`
+  (amended 2026-10-08: no `--event`/`--yes`; the confirm is answered at the
+  user's terminal, and refused inside any gg-started session)
 - `gg pr reply <n> <thread-id> <text> [--send]`
 - `gg pr resolve|unresolve <n> <thread-id>`
-- `gg pr pending [list | approve <id> | reject <id> | wait <id> | cancel <id>]`
+- ~~`gg pr pending …`~~ (withdrawn 2026-10-08)
 - `gg note list` shows each note's sync state and group.
 
 ### 4.4 MCP
 
-`pr_send`, `pr_reply`, `pr_resolve` carry the mutating annotations and
-always queue a pending send (§3.7). Read tools report sync state and
-group.
+~~`pr_send`, `pr_reply`, `pr_resolve`~~ (withdrawn 2026-10-08: agents never
+send). Read tools report sync state and group.
 
 ### 4.5 Config
 
@@ -438,7 +450,7 @@ Nothing ever posts to real GitHub from a test.
 3. **TUI** — marks, group colours, menus, Send review popup, verdict
    only, pending-send approval, freshness mark.
 4. **Web** — the same in gg web.
-5. **MCP + skills** — agent tools; `using-gg` and `reviewing-with-gg`
+5. **MCP + skills** — read tools only (amended 2026-10-08); `using-gg` and `reviewing-with-gg`
    updates (version bump, `gg init --update`).
 
 On the merge of plan 2 the read-only ruling is formally reversed: the

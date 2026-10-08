@@ -417,7 +417,7 @@ func (m Model) toggleThreadResolved() (Model, tea.Cmd) {
 	}
 	nm, cmd := m.withNoteTargetIn(ts, func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
 		if t.forge { // a GitHub thread inside a PR's diff: resolved on GitHub (spec §3.5)
-			return m.forgeSendCmd(threadActionRequest(m.prOfDiff(), t), "")
+			return m.forgeSendCmd(threadActionRequest(m.prOfDiff(), t))
 		}
 		svc, root, want, who := m.svc, t.rootID, !t.resolved, m.identity.EffectiveName
 		if svc == nil {

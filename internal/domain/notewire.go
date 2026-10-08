@@ -59,6 +59,9 @@ type WireNote struct {
 	SendErr string `json:"send_error,omitempty"`
 	Group   string `json:"group,omitempty"`
 	Origin  string `json:"origin,omitempty"`
+	// GroupSlot is Group's colour slot (GroupSlot: 1–6). Only the rendered
+	// form (a page that paints) carries it; agents' JSON stays as it was.
+	GroupSlot int `json:"group_slot,omitempty"`
 }
 
 // ToWireNote flattens one resolved thread. Line and Range are the RESOLVED
@@ -127,6 +130,7 @@ func ToWireNotePreview(r ResolvedNote, preview bool) WireNote {
 func ToWireNoteRendered(r ResolvedNote, preview bool) WireNote {
 	w := ToWireNotePreview(r, preview)
 	attachMarkdown(&w, r)
+	attachSlots(&w, r)
 	return w
 }
 
@@ -137,6 +141,13 @@ func attachMarkdown(w *WireNote, r ResolvedNote) {
 	}
 	for i := range r.Replies {
 		attachMarkdown(&w.Replies[i], r.Replies[i])
+	}
+}
+
+func attachSlots(w *WireNote, r ResolvedNote) {
+	w.GroupSlot = GroupSlot(r.Group)
+	for i := range r.Replies {
+		attachSlots(&w.Replies[i], r.Replies[i])
 	}
 }
 

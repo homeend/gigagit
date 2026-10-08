@@ -133,7 +133,7 @@ func (m Model) openVerdict(pr int) (Model, tea.Cmd) {
 
 // request is what ctrl+s sends.
 func (p *sendReviewPopup) request() domain.PRSendRequest {
-	req := domain.PRSendRequest{PR: p.pr, Body: strings.TrimSpace(p.body.Value())}
+	req := domain.PRSendRequest{PR: p.pr, Body: strings.TrimSpace(p.body.Value()), BodySet: true}
 	switch {
 	case p.verdict:
 		req.Verdict = true
@@ -156,7 +156,7 @@ func (p *sendReviewPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.sayInDiff(i18n.T("another operation is running — send again when it ends")), nil
 		}
 		m = m.popLayer()
-		return m.forgeSendCmd(p.request(), "")
+		return m.forgeSendCmd(p.request())
 	case tea.KeyEnter:
 		p.body.InsertNewline()
 		return m, nil

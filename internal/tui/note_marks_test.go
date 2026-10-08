@@ -55,7 +55,7 @@ func TestSyncMarksInsideAPR(t *testing.T) {
 			if nl.rootID == "n2" && nl.errRow && strings.Contains(nl.text, "HTTP 502") {
 				errRow = true
 			}
-			if nl.rootID == "n2" && nl.group != groupSlot("review:r1") {
+			if nl.rootID == "n2" && nl.group != domain.GroupSlot("review:r1") {
 				t.Fatalf("row %q carries group slot %d", nl.text, nl.group)
 			}
 		}
@@ -111,7 +111,7 @@ func TestGroupBarPaintsTheLeftFrameColumn(t *testing.T) {
 	prevTheme := activeTheme()
 	defer setTheme(prevTheme)
 	setTheme(theme.Dark)
-	slot := groupSlot("review:r1")
+	slot := domain.GroupSlot("review:r1")
 	if bar, _ := groupBarStyle(slot); bar.Render("│") == st().noteFrameUser.Render("│") {
 		t.Fatal("the bar colour is indistinguishable from the frame")
 	}

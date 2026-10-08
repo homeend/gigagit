@@ -61,6 +61,7 @@ const state = {
   // path → root-note count for the open preview's gathered set (the file
   // list's ◆N badges). null means "not known yet" — draw no badge at all.
   previewCounts: null,
+  previewGroups: null, // a PR's per-file note-group slots (the ◆ badges' colour stripes)
   previewReviews: [], // the opened preview's / pair's AI reviews (its Reviews block)
   sidebar: true,
   filesHidden: false, // the file list's » control: folded to a strip (a stored preference, /api/uistate)

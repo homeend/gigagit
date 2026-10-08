@@ -93,6 +93,48 @@ func (l prLedger) Stamp(ctx context.Context, key string, s model.NoteSend) error
 	})
 }
 
+// Gone (engine.SendLiveness): keys whose local item is no longer there to
+// send — deleted (sent and settled), a remark already moved, or stamped by a
+// send still in flight (a failed stamp may be retried, so it is not gone).
+func (l prLedger) Gone(ctx context.Context, keys []string) map[string]bool {
+	st := l.s.notesStore(ctx)
+	if st == nil {
+		return nil
+	}
+	all, err := st.LoadAll()
+	if err != nil {
+		return nil // unknown: the send goes as planned
+	}
+	byID := make(map[string]model.Note, len(all))
+	for _, x := range all {
+		byID[x.ID] = x
+	}
+	inFlight := func(s model.NoteSend) bool { return s.Err == "" && s.Review+s.Thread != "" }
+	gone := map[string]bool{}
+	for _, k := range keys {
+		if rid, fp, ok := parseRemarkKey(k); ok {
+			n, have := byID[rid]
+			if !have {
+				gone[k] = true
+				continue
+			}
+			for _, r := range n.RemarkSends {
+				if r.RemarkFP == fp && (r.Moved || inFlight(r.Send)) {
+					gone[k] = true
+				}
+			}
+			continue
+		}
+		n, have := byID[k]
+		if !have || (n.Send != nil && inFlight(*n.Send)) {
+			gone[k] = true
+		}
+	}
+	return gone
+}
+
+var _ engine.SendLiveness = prLedger{}
+
 func (l prLedger) Fail(ctx context.Context, keys []string, review string, err error) {
 	for _, k := range keys {
 		_ = l.editKey(ctx, k, func(cur *model.NoteSend) bool {

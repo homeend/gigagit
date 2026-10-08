@@ -94,21 +94,22 @@ func TestAFinishedSendReasksAboutInterruptedSends(t *testing.T) {
 	t.Fatal("no interrupted-send re-check for #5 after its finish")
 }
 
-// An approved agent send answers the agent even when the stash list is open
-// (the op-finished handler returns early there).
+// A send's follow-up runs even when the stash list is open (the
+// op-finished handler returns early there): the interrupted-send notice is
+// re-asked.
 func TestASendsFollowUpRunsWithTheStashListOpen(t *testing.T) {
 	t.Parallel()
 	m := newTestModel(t)
 	m.stashView = &stashView{}
 	m.running = true
-	m.forgeSend = &forgeSendState{pr: 7, pendingID: "p1"}
+	m.forgeSend = &forgeSendState{pr: 7}
 	_, cmd := m.Update(opFinishedMsg{res: engine.Result{Summary: "sent 1 comments to o/r #7"}})
 	for _, msg := range msgsOf(cmd) {
-		if _, ok := msg.(pendingSendsMsg); ok {
+		if _, ok := msg.(interruptedMsg); ok {
 			return
 		}
 	}
-	t.Fatal("the queued send's outcome was never written back")
+	t.Fatal("the send's follow-up never ran")
 }
 
 // An answer that arrives while another dialog is open never replaces it: a

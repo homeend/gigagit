@@ -77,9 +77,19 @@ func TestPRPageSendsOnlyTheNumber(t *testing.T) {
 		t.Fatal(err)
 	}
 	js := string(b)
-	for _, bad := range []string{"refs/gg", "source=", "target=", "head_sha"} {
-		if strings.Contains(js, bad) {
-			t.Errorf("prs.js mentions %q — a PR is addressed by its number only", bad)
+	// Every module that talks about a pull request (prs.js and the send's).
+	for _, f := range []string{"prs.js", "prsend.js", "prsendrows.js", "sendplan.js", "prfresh.js"} {
+		src, err := os.ReadFile(filepath.Join("static", f))
+		if os.IsNotExist(err) && f != "prs.js" {
+			continue // a module a later task adds
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, bad := range []string{"refs/gg", "source=", "target=", "head_sha"} {
+			if strings.Contains(string(src), bad) {
+				t.Errorf("%s mentions %q — a PR is addressed by its number only", f, bad)
+			}
 		}
 	}
 	if !strings.Contains(js, `"/api/pr/open?n=" + n`) {
