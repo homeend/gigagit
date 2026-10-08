@@ -495,3 +495,21 @@ func TestCommandAndAtLinkCarryARange(t *testing.T) {
 		t.Errorf("AtLink = %s", got)
 	}
 }
+
+// Follow-ups 4: a navigation (Resolve) opens a link to a PR this repo has
+// not fetched yet — the landing (TUI steerNavigatePR, web openPR) fetches
+// it. Opts' other users (compare, base suggestion) need the PR's commits.
+func TestOptsOpenUnfetchedPRLinks(t *testing.T) {
+	t.Parallel()
+	if Opts("", nil).UnfetchedPR {
+		t.Fatal("linknav.Opts must not set UnfetchedPR: compare needs the PR's commits")
+	}
+	src, err := os.ReadFile("linknav.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := strings.Index(string(src), "func Resolve(")
+	if i < 0 || !strings.Contains(string(src)[i:], "opts.UnfetchedPR = true") {
+		t.Fatal("linknav.Resolve must set UnfetchedPR")
+	}
+}

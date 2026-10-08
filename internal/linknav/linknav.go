@@ -44,13 +44,19 @@ func Opts(registryPath string, cwd *domain.Service) domain.ResolveOpts {
 	}
 }
 
-// Resolve parses and resolves link text against this machine (Opts).
+// Resolve parses and resolves link text against this machine (Opts) for a
+// NAVIGATION (the TUI's # prompt, the page's link box).
 func Resolve(ctx context.Context, registryPath string, cwd *domain.Service, s string) (domain.Resolved, error) {
 	l, err := model.ParseLink(s)
 	if err != nil {
 		return domain.Resolved{}, err
 	}
-	return domain.ResolveLink(ctx, l, Opts(registryPath, cwd))
+	opts := Opts(registryPath, cwd)
+	// A navigation: a PR link lands in the PR's view, which fetches the head
+	// first — a PR this repo has not fetched yet still opens. (Opts' other
+	// users — compare, a base suggestion — need the PR's commits.)
+	opts.UnfetchedPR = true
+	return domain.ResolveLink(ctx, l, opts)
 }
 
 // RepoOnly reports whether res names a checkout and nothing in it — no path,

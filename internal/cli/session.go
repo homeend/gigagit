@@ -578,7 +578,7 @@ func sessionNavigate(dir sessDir, svc *domain.Service, args []string, stdout, st
 		ctx := context.Background()
 		// navigate opts UP for a pair: it moves a live session to the place
 		// a link names, and a range is a fine place to land on (ruling R4).
-		res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true}, "navigate")
+		res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true, UnfetchedPR: true}, "navigate")
 		if err != nil {
 			return linkExit("session navigate", err, stderr)
 		}

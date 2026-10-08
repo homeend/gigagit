@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -427,5 +428,28 @@ func TestAPRFetchReadyFromALeftRepoIsDropped(t *testing.T) {
 	nm, cmd := m.Update(prFetchReadyMsg{pr: testPRs()[0], op: prFetchOp7(), gen: 1})
 	if mm := nm.(Model); cmd != nil || mm.pendingPROpen != nil || mm.running {
 		t.Fatalf("cmd=%v pendingPROpen=%v running=%v", cmd != nil, mm.pendingPROpen, mm.running)
+	}
+}
+
+// Follow-ups 4: # with a link to a PR the list holds but this repo has not
+// fetched resolves (the resolver no longer refuses it) and the landing
+// fetches the PR first.
+func TestPastingAnUnfetchedPRLinkFetchesThePR(t *testing.T) {
+	t.Parallel()
+	m, _ := prLinkUnfetchedModel(t)
+	m.statePath = filepath.Join(t.TempDir(), "repos.toml")
+	m, cmd := pasteLink(t, m, linkTo(repoTop(t, m), "/a.txt@main...refs/gg/pr/7:1"))
+	m, cmd = send(m, cmd())
+	if p := layerOf[*gotoCommitPopup](m); p != nil {
+		t.Fatalf("the prompt stayed open: %q", p.err)
+	}
+	if m.pendingSteer == nil || m.pendingSteer.prNumber != 7 {
+		t.Fatalf("pendingSteer = %+v", m.pendingSteer)
+	}
+	if cmd == nil {
+		t.Fatal("no open")
+	}
+	if got := cmd(); func() bool { msg, ok := got.(prFetchReadyMsg); return !ok || msg.pr.Number != 7 }() {
+		t.Fatalf("landing → %T, want the PR's fetch", got)
 	}
 }

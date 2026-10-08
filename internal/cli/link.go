@@ -744,6 +744,10 @@ type linkShapes struct {
 	// Content is ?view=content: a file's CONTENT on disk, never a diff, so
 	// only a navigate (gg open, gg session navigate) can land it.
 	Content bool
+	// UnfetchedPR: a navigate lands a PR link in the PR's view, which
+	// fetches the head first — a PR this repo has not fetched still opens
+	// (domain.ResolveOpts.UnfetchedPR).
+	UnfetchedPR bool
 }
 
 // resolveLinkArg resolves a link positional for a consumer verb AND applies
@@ -769,7 +773,9 @@ func resolveLinkArg(ctx context.Context, svc *domain.Service, s string, allow li
 	if err != nil {
 		return domain.Resolved{}, err
 	}
-	res, err := domain.ResolveLink(ctx, l, linkResolveOpts(RepoStatePath, svc))
+	opts := linkResolveOpts(RepoStatePath, svc)
+	opts.UnfetchedPR = allow.UnfetchedPR
+	res, err := domain.ResolveLink(ctx, l, opts)
 	if err != nil {
 		return domain.Resolved{}, err
 	}
