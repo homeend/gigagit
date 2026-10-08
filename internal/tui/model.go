@@ -631,8 +631,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// one finally clears m.loading fires it.
 	if next.viewKick {
 		next.viewKick = false
-		next.srcInflight[srcStatus] = true
-		next.srcLoading[srcStatus] = true
+		for _, s := range []sourceKey{srcStatus, srcBranches} {
+			next.srcInflight[s] = true
+			next.srcLoading[s] = true
+		}
 		cmd = tea.Batch(cmd, next.viewKickCmd())
 	}
 	if next.startAtReady() {
@@ -2316,6 +2318,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// sessions show maximised); a focused console handled the key above.
 		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.cycleReachable() {
 			return m.cycleSessions(k == "alt+t")
+		}
+		// alt+w cycles the worktrees themselves: the next one of the list
+		// is shown (the fast switch), around again past the last.
+		if msg.String() == "alt+w" && m.cycleReachable() {
+			return m.cycleWorktrees()
 		}
 		// alt+x opens the text templates window (base panels only, like
 		// alt+a/alt+t; a focused console kept the key for its program above).

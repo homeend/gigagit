@@ -5978,12 +5978,28 @@ golden caught it; `reRoot` drops the map.
 path in `m.worktrees`; `checkSwitchTarget` reachability; refused while an op
 runs). Saves the leaving slot and puts it to sleep (watcher + docWatch
 closed), loads the arriving one, bumps `srcGen[srcStatus]` +
-`workingReviewsGen` AND `loadGen` (a mid-session `loadCmd` — conflict
-process, task track — launched on the old slot's service) so reads in
-flight for the old slot are dropped, and sets `viewKick`. The **Update tail** launches `viewKickCmd` (a manual status read,
-`startWatchCmd`, `syncAgentDocs`) and marks the read in flight — a tail hook
-because `closeConsole` returns a Model only. Only the live slot is ever
-watched or refreshed.
+`srcGen[srcBranches]` + `workingReviewsGen` AND `loadGen` (a mid-session
+`loadCmd` — conflict process, task track — launched on the old slot's
+service) so reads in flight for the old slot are dropped, and sets
+`viewKick`. The **Update tail** launches `viewKickCmd` (manual status AND
+branch reads, `startWatchCmd`, `syncAgentDocs`) and marks the reads in
+flight — a tail hook because `closeConsole` returns a Model only. The
+branch list is shared, but its `IsHead` marker is the worktree's: without
+the re-read the Branches panel kept `*` on home's branch after a switch
+(the alt+w golden caught it). Only the live slot is ever watched or
+refreshed.
+
+**alt+w — `cycleWorktrees`** (2026-10-08, the refinement branch): the
+third trigger. The next worktree of `m.worktrees` (the Worktrees panel's
+order) after the viewed one, wrapping, through `switchView` — a look, like
+alt+a, never `adoptView`: home stays, the ring comes back to it. Reachable
+wherever alt+a is (`cycleReachable`), reserved inside a focused console
+(`consolePassthrough` / `consoleFullPassthrough` + the focused-console
+branch of `updateConsoleKey`); a docked console stays open and the status
+row then names its worktree. Status: `wt-x — 2 of 3 worktrees`; one
+worktree: a status line only. Footer `[alt+w] next worktree` when the list
+has more than one and nothing runs or loads. Tests
+`worktree_cycle_test.go`, e2e `tui_worktree_cycle`.
 
 **Lifecycle.** `pruneViews` (both worktree-list arms) drops slots whose
 worktree left the list. A VIEWED worktree removed under us cannot be seen

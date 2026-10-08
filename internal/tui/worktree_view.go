@@ -172,23 +172,27 @@ func (m Model) switchView(path string) (Model, bool) {
 	m.watcher, m.watchSupported = nil, false
 	m.watchGen++
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1}
-	m.loadGen++           // a full load (loadCmd) launched on the old slot cannot land here
-	m.srcGen[srcStatus]++ // nor a status read
-	m.srcInflight[srcStatus] = false
-	m.srcLoading[srcStatus] = false
+	m.loadGen++ // a full load (loadCmd) launched on the old slot cannot land here
+	for _, s := range []sourceKey{srcStatus, srcBranches} {
+		m.srcGen[s]++ // nor a status read; the branch list's head marker is per worktree too
+		m.srcInflight[s] = false
+		m.srcLoading[s] = false
+	}
 	m.workingReviewsGen++ // likewise a reviews read
 	m.viewKick = true
 	return m, true
 }
 
-// viewKickCmd is the live slot's wake-up: a manual status read (never
-// cancelled by a background lane), its git watcher and its open-files
-// sync. Launched by the Update tail after a switchView, which marks the
-// read in flight on the live model first.
+// viewKickCmd is the live slot's wake-up: manual status and branch reads
+// (never cancelled by a background lane; the branch list is shared but its
+// head marker is the viewed worktree's), its git watcher and its
+// open-files sync. Launched by the Update tail after a switchView, which
+// marks the reads in flight on the live model first.
 func (m Model) viewKickCmd() tea.Cmd {
 	read := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{manual: true})
+	branches := m.readSourceCmd(context.Background(), srcBranches, reloadOpts{manual: true})
 	_, docs := m.syncAgentDocs()
-	return tea.Batch(read, m.startWatchCmd(m.watchGen), docs)
+	return tea.Batch(read, branches, m.startWatchCmd(m.watchGen), docs)
 }
 
 // abandonGoneView is the error arm's check: a read through the viewed
@@ -266,4 +270,32 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 	}
 	m.statusMsg = i18n.T("switched to %s", shortWorktreeName(m.home))
 	return m, tea.Batch(snapshotTargetCmd(m.svc), m.pendingWatchCmd(m.noticeGen), m.pendingSendsReadCmd(m.noticeGen), m.webRerootCmd())
+}
+
+// cycleWorktrees is alt+w: the panels show the next worktree of the list
+// (the Worktrees panel's order), past the last one the first — what alt+a
+// does for a console's worktree, for every worktree, no session needed.
+// A look, not an adoption: gg's own worktree stays home, the ring comes
+// back to it. A docked console stays as it is.
+func (m Model) cycleWorktrees() (Model, tea.Cmd) {
+	n := len(m.worktrees)
+	if n < 2 {
+		m.statusMsg = i18n.T("this repository has one worktree — alt+w cycles them once there are more")
+		return m, nil
+	}
+	cur := filepath.Clean(m.currentWorktree)
+	next := 0
+	for i, w := range m.worktrees {
+		if filepath.Clean(w.Path) == cur {
+			next = (i + 1) % n
+			break
+		}
+	}
+	wt := m.worktrees[next]
+	nm, ok := m.switchView(wt.Path)
+	if !ok {
+		return nm, nil
+	}
+	nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(wt.Path), next+1, n)
+	return nm, nil
 }
