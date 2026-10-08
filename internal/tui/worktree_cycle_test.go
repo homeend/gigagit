@@ -118,35 +118,6 @@ func TestAltWNeverBlocksOnItsOwnReads(t *testing.T) {
 	}
 }
 
-// alt+w picks the base worktree: alt+a over a console in B, then alt+w to
-// C under it, then alt+a round to the return stop lands on C — the last
-// alt+w — not on the worktree the cycle started in.
-func TestAltAReturnStopIsTheLastAltWWorktree(t *testing.T) {
-	m := loadedModel(t)
-	m.width, m.height = 160, 40
-	m, wtB := addWorktree(t, m, "wtB")
-	m, _ = addWorktree(t, m, "wtC")
-	installSessionManager(t)
-	startSessionIn(t, m, wtB, "B")
-	start := m.viewed
-	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.viewed != filepath.Clean(wtB) {
-		t.Fatalf("alt+a: console=%v viewed=%q", m.console != nil, m.viewed)
-	}
-	m = pressAlt(t, m, 'w')
-	base := m.viewed
-	if m.console == nil || base == filepath.Clean(wtB) || base == start {
-		t.Fatalf("alt+w under the console: console=%v viewed=%q", m.console != nil, m.viewed)
-	}
-	m = pressAlt(t, m, 'a') // the ring's return stop: the console closes
-	if m.console != nil {
-		t.Fatal("return stop: console still shown")
-	}
-	if m.viewed != base {
-		t.Fatalf("return stop landed on %q, want the last alt+w worktree %q", m.viewed, base)
-	}
-}
-
 // alt+w inside a bound console unbinds it (the title hints come back, no
 // cursor) and moves the keyboard to the Branches panel: the next keys are
 // gg's, not the agent's.
@@ -222,10 +193,9 @@ func TestAltWUnderAFullScreenConsoleKeepsItFull(t *testing.T) {
 	}
 }
 
-// alt+a / alt+t show the next session unbound with the console column
-// focused; the return stop hands the keyboard back to the panel focused
-// before the first show — Branches once alt+w was pressed in between.
-func TestAltAReturnStopRestoresTheFocusAltWSet(t *testing.T) {
+// esc after an alt+w leaves the console on the alt+w worktree with
+// Branches focused: alt+w moved the return point's focus too.
+func TestEscAfterAltWLandsOnBranches(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, wtA := addWorktree(t, m, "wtA")
@@ -235,24 +205,17 @@ func TestAltAReturnStopRestoresTheFocusAltWSet(t *testing.T) {
 	startSessionIn(t, m, wtB, "B")
 	m.focus = panelFiles
 	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.console.focused || m.focus != panelCommits {
+	if m.console == nil || !m.console.focused || m.focus != panelCommits {
 		t.Fatalf("after alt+a: console=%+v focus=%v", m.console, m.focus)
 	}
-	m = pressKey(t, m, "enter") // bind it
-	if !m.console.focused {
-		t.Fatal("enter did not bind the console")
-	}
-	m = pressAlt(t, m, 'a') // from a bound console: the next one, unbound, column focused
-	if m.console == nil || m.console.focused || m.focus != panelCommits {
-		t.Fatalf("after the second alt+a: console=%+v focus=%v", m.console, m.focus)
-	}
 	m = pressAlt(t, m, 'w')
-	if m.focus != panelBranches {
-		t.Fatalf("after alt+w: focus=%v", m.focus)
+	base := m.viewed
+	if m.focus != panelBranches || m.console == nil || m.console.focused {
+		t.Fatalf("after alt+w: focus=%v console=%+v", m.focus, m.console)
 	}
-	m.focus = panelCommits  // the user clicked back onto the console column
-	m = pressAlt(t, m, 'a') // the return stop
-	if m.console != nil || m.focus != panelBranches {
-		t.Fatalf("return stop: console=%v focus=%v, want no console and Branches", m.console != nil, m.focus)
+	m.focus = panelCommits // the user clicked back onto the console column
+	m = pressKey(t, m, "esc")
+	if m.console != nil || m.focus != panelBranches || m.viewed != base {
+		t.Fatalf("esc: console=%v focus=%v viewed=%q, want no console, Branches, %q", m.console != nil, m.focus, m.viewed, base)
 	}
 }

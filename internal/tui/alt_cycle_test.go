@@ -16,67 +16,65 @@ func pressAlt(t *testing.T, m Model, r rune) Model {
 	return mm.(Model)
 }
 
-// The ring ends on the screen the cycle started from: the stash list in the
-// right column comes back, focus with it.
-func TestAltAReturnsToTheStartingScreen(t *testing.T) {
+// alt+a over the stash list binds the agent at once; leaving the console
+// (step out, then esc) brings the stash list back, focus with it. The ring
+// itself never returns there.
+func TestAltAOverTheStashListBindsAndEscBringsItBack(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	s := startTestSession(t, m, `sleep 5`)
 	sv := &stashView{tag: "stash"}
 	m.stashView, m.focus = sv, panelCommits
 	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.console.id != s.Info().ID || m.console.focused || m.stashView != nil {
-		t.Fatalf("first alt+a: console=%+v stash=%v", m.console, m.stashView)
+	if m.console == nil || m.console.id != s.Info().ID || !m.console.focused || m.stashView != nil {
+		t.Fatalf("alt+a: console=%+v stash=%v, want the agent bound", m.console, m.stashView)
 	}
 	m = pressAlt(t, m, 'a')
+	if m.console == nil || !m.console.focused {
+		t.Fatalf("second alt+a: console=%+v, want the only agent kept", m.console)
+	}
+	mm, _ := m.Update(ctrlBracket())
+	m = press(t, mm.(Model), "esc")
 	if m.console != nil || m.stashView != sv || m.focus != panelCommits {
-		t.Fatalf("second alt+a must return: console=%+v stash=%v focus=%v", m.console, m.stashView, m.focus)
+		t.Fatalf("esc must return: console=%+v stash=%v focus=%v", m.console, m.stashView, m.focus)
 	}
 }
 
-// From a focused agent the walk starts at the agent used before it, never
-// Touches, and its return stop is the screen before the agent was shown.
-func TestAltAFromFocusedAgentReturnsToTheScreenBeforeIt(t *testing.T) {
+// From a bound agent alt+a goes to the next one in order and binds it,
+// then round again: a → b → a, never the screen before the agent.
+func TestAltAFromABoundAgentGoesRoundTheAgents(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	a := startTestSession(t, m, `sleep 5`)
 	b := startSecondSession(t, a, "b", false)
 	m.focus = panelWorktrees
-	m, _ = m.openConsole(a.Info().ID) // a is now the most recent
-	usedA, usedB := a.Info().LastUsed, b.Info().LastUsed
+	m, _ = m.openConsole(a.Info().ID)
 	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.console.id != b.Info().ID || m.console.focused {
-		t.Fatalf("alt+a in focused a: console=%+v, want b unfocused", m.console)
-	}
-	if !a.Info().LastUsed.Equal(usedA) || !b.Info().LastUsed.Equal(usedB) {
-		t.Fatal("the walk touched a session")
+	if m.console == nil || m.console.id != b.Info().ID || !m.console.focused {
+		t.Fatalf("alt+a in bound a: console=%+v, want b bound", m.console)
 	}
 	m = pressAlt(t, m, 'a')
-	if m.console != nil || m.focus != panelWorktrees {
-		t.Fatalf("return stop: console=%+v focus=%v, want the Worktrees panel", m.console, m.focus)
-	}
-	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.console.id != a.Info().ID {
-		t.Fatalf("after the return stop: console=%+v, want a", m.console)
+	if m.console == nil || m.console.id != a.Info().ID || !m.console.focused {
+		t.Fatalf("second alt+a: console=%+v, want a again", m.console)
 	}
 }
 
-// One agent, focused: alt+a goes straight back.
-func TestAltAWithOneFocusedAgentReturns(t *testing.T) {
+// One agent, bound: alt+a stays put.
+func TestAltAWithTheOnlyAgentBoundStaysPut(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	a := startTestSession(t, m, `sleep 5`)
 	m.focus = panelBranches
 	m, _ = m.openConsole(a.Info().ID)
 	m = pressAlt(t, m, 'a')
-	if m.console != nil || m.focus != panelBranches {
+	if m.console == nil || m.console.id != a.Info().ID || !m.console.focused || m.focus != panelCommits {
 		t.Fatalf("console=%+v focus=%v", m.console, m.focus)
 	}
 }
 
-// alt+t in the middle of an alt+a cycle walks terminals; the return point
+// alt+t after alt+a walks terminals; the return point (where esc goes)
 // survives the switch of kind.
-func TestAltTMidCycleKeepsTheReturnPoint(t *testing.T) {
+func TestAltTAfterAltAKeepsTheReturnPoint(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	a := startTestSession(t, m, `sleep 5`)
@@ -85,17 +83,22 @@ func TestAltTMidCycleKeepsTheReturnPoint(t *testing.T) {
 	m.stashView, m.focus = sv, panelCommits
 	m = pressAlt(t, m, 'a')
 	m = pressAlt(t, m, 't')
-	if m.console == nil || m.console.id != term.Info().ID {
-		t.Fatalf("alt+t: console=%+v, want the terminal", m.console)
+	if m.console == nil || m.console.id != term.Info().ID || !m.console.focused {
+		t.Fatalf("alt+t: console=%+v, want the terminal bound", m.console)
 	}
 	m = pressAlt(t, m, 't')
+	if m.console == nil || m.console.id != term.Info().ID {
+		t.Fatalf("second alt+t: console=%+v, want the only terminal kept", m.console)
+	}
+	mm, _ := m.Update(ctrlBracket())
+	m = press(t, mm.(Model), "esc")
 	if m.console != nil || m.stashView != sv {
-		t.Fatalf("alt+t return stop: console=%+v stash=%v", m.console, m.stashView)
+		t.Fatalf("esc: console=%+v stash=%v", m.console, m.stashView)
 	}
 }
 
 // A ctrl+t-pinned panel is a full-screen return point: the console shows
-// maximised, the pin comes back on return.
+// maximised and bound; stepping out keeps it full, esc brings the pin back.
 func TestAltAFromPinnedPanelShowsFullAndRestoresThePin(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
@@ -106,16 +109,21 @@ func TestAltAFromPinnedPanelShowsFullAndRestoresThePin(t *testing.T) {
 		t.Fatal("baseline: Branches should be pinned")
 	}
 	m = pressAlt(t, m, 'a')
-	if m.console == nil || !m.console.maximized || m.console.focused || m.fullMaxed {
+	if m.console == nil || !m.console.maximized || !m.console.focused || m.fullMaxed {
 		t.Fatalf("console=%+v fullMaxed=%v", m.console, m.fullMaxed)
 	}
-	m = pressAlt(t, m, 'a')
+	mm, _ := m.Update(ctrlBracket())
+	m = mm.(Model)
+	if m.console == nil || !m.console.maximized || m.console.focused {
+		t.Fatalf("step-out over a pin stays full-screen: %+v", m.console)
+	}
+	m = press(t, m, "esc")
 	if m.console != nil || !m.fullMaxActive() || m.fullMax != panelBranches || m.focus != panelBranches {
 		t.Fatalf("return: console=%+v pin=%v/%v focus=%v", m.console, m.fullMaxed, m.fullMax, m.focus)
 	}
 }
 
-// gg takes alt+a even inside a focused console.
+// gg takes alt+a even inside a bound console: the next agent in order.
 func TestFocusedConsoleGivesAltAToTheCycle(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
@@ -123,38 +131,44 @@ func TestFocusedConsoleGivesAltAToTheCycle(t *testing.T) {
 	other := startSecondSession(t, s, "other", false)
 	time.Sleep(2 * time.Millisecond)
 	other.Touch()
-	m, _ = m.openConsole(s.Info().ID) // s most recent, other next
+	m, _ = m.openConsole(s.Info().ID)
 	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.console.id != other.Info().ID || m.console.focused {
-		t.Fatalf("console = %+v: alt+a in a focused console cycles", m.console)
+	if m.console == nil || m.console.id != other.Info().ID || !m.console.focused {
+		t.Fatalf("console = %+v: alt+a in a bound console goes on, bound", m.console)
 	}
 }
 
-// From a diff view: sessions show full-screen and unfocused, the diff is
-// parked (the same window, cursor and all) and comes back on top.
+// From a diff view: sessions show full-screen and bound, the diff is
+// parked (the same window, cursor and all); the walk goes round, and esc
+// from an unbound console brings the diff back on top.
 func TestAltAFromDiffViewCyclesFullScreenAndReturns(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	a := startTestSession(t, m, `sleep 5`)
 	b := startSecondSession(t, a, "b", false)
 	time.Sleep(2 * time.Millisecond)
-	b.Touch() // last used: b, a
+	b.Touch() // last use must not matter: a started first
 	dv := &diffView{title: "a.go", rev: "abc123"}
 	m = m.pushLayer(dv)
 	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.console.id != b.Info().ID || m.console.focused || !m.console.maximized {
+	if m.console == nil || m.console.id != a.Info().ID || !m.console.focused || !m.console.maximized {
 		t.Fatalf("first alt+a over a diff: console=%+v", m.console)
 	}
 	if m.topLayer() != nil {
 		t.Fatal("the diff must be parked off the live stack")
 	}
 	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.console.id != a.Info().ID || !m.console.maximized {
+	if m.console == nil || m.console.id != b.Info().ID || !m.console.maximized {
 		t.Fatalf("second alt+a: console=%+v", m.console)
 	}
 	m = pressAlt(t, m, 'a')
+	if m.console == nil || m.console.id != a.Info().ID {
+		t.Fatalf("third alt+a goes round: console=%+v", m.console)
+	}
+	mm, _ := m.Update(ctrlBracket())
+	m = press(t, mm.(Model), "esc")
 	if m.console != nil || m.topLayer() != layer(dv) {
-		t.Fatalf("third alt+a must bring the same diff back: console=%+v top=%T", m.console, m.topLayer())
+		t.Fatalf("esc must bring the same diff back: console=%+v top=%T", m.console, m.topLayer())
 	}
 }
 
@@ -203,7 +217,8 @@ func TestPopupOverFullScreenAgentStaysOnTopOfTheReturnedDiff(t *testing.T) {
 }
 
 // A view pushed over a shown console is a new starting screen: alt+a there
-// brings the console's parked views back beneath it and parks the lot.
+// brings the console's parked views back beneath it and parks the lot;
+// esc later restores the whole stack.
 func TestAltAOverAViewOpenedFromTheAgentParksTheWholeStack(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
@@ -217,7 +232,8 @@ func TestAltAOverAViewOpenedFromTheAgentParksTheWholeStack(t *testing.T) {
 	if m.console == nil || !m.console.maximized || m.topLayer() != nil {
 		t.Fatalf("console=%+v top=%T", m.console, m.topLayer())
 	}
-	m = pressAlt(t, m, 'a')
+	mm, _ := m.Update(ctrlBracket())
+	m = press(t, mm.(Model), "esc")
 	if m.console != nil || len(m.layers.entries) != 2 || m.layers.entries[0] != layer(dv) || m.layers.entries[1] != layer(hv) {
 		t.Fatalf("console=%+v stack=%T, want [diff history]", m.console, m.layers.entries)
 	}
@@ -304,6 +320,8 @@ func fullScreenAgent(t *testing.T) (Model, *diffView) {
 	dv := &diffView{title: "a.go", rev: "abc123"}
 	m = m.pushLayer(dv)
 	m = pressAlt(t, m, 'a')
+	mm, _ := m.Update(ctrlBracket()) // alt+a binds; the tests want it unbound and full
+	m = mm.(Model)
 	if !m.consoleFull() || m.console.focused {
 		t.Fatalf("precondition: console=%+v", m.console)
 	}
@@ -497,15 +515,15 @@ func TestOrphanPreviewIsNotRestored(t *testing.T) {
 	}
 }
 
-// A console alt+a shows takes its box's size, focused or not: what is shown
-// is what the program lays out for (a PTY left at another size cuts its
-// lines or leaves the box half empty).
+// A console alt+a shows takes its box's size: what is shown is what the
+// program lays out for (a PTY left at another size cuts its lines or leaves
+// the box half empty).
 func TestAltAShownConsoleTakesItsBoxSize(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	s := startTestSession(t, m, `sleep 5`)
 	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.console.focused {
+	if m.console == nil || !m.console.focused {
 		t.Fatalf("console = %+v", m.console)
 	}
 	w, h := m.consoleBox()

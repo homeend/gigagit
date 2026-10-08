@@ -76,17 +76,11 @@ func TestAltACyclesOnlyThisReposSessions(t *testing.T) {
 	if _, err := domain.Sessions().Start(sessionSpecForTest("foreign", t.TempDir())); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 4; i++ { // mine, the starting screen, mine, …
+	for i := 0; i < 4; i++ { // mine, every time: the foreign one is not in the ring
 		mm, _ := m.Update(altKey('a'))
 		m = mm.(Model)
-		if i%2 == 1 {
-			if m.console != nil {
-				t.Fatalf("alt+a #%d: console = %+v, want the return stop", i+1, m.console)
-			}
-			continue
-		}
-		if m.console == nil || m.console.id != mine.Info().ID {
-			t.Fatalf("alt+a #%d: console = %+v, want only this repo's session", i+1, m.console)
+		if m.console == nil || m.console.id != mine.Info().ID || !m.console.focused {
+			t.Fatalf("alt+a #%d: console = %+v, want only this repo's session, bound", i+1, m.console)
 		}
 	}
 	if !m.hasRepoSessions(false) {

@@ -4058,9 +4058,9 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
 - **alt+a / alt+t = cycle by last use** (2026-10-01): `agentsession.Info`
   carries `LastUsed` (starts at `Started`; moves on `SendKey`/`SendText`/
   `Paste` and `Session.Touch()`) and `Terminal` (set by `StartTerminal` via
-  `StartSpec.Terminal`). `sessionsByLastUsed(list, terminal)` = running
-  sessions of one kind, newest use first. `cycleSessions` walks a RING: the
-  sessions, then the console's return point (2026-10-06). `consoleState.ret`
+  `StartSpec.Terminal`). SUPERSEDED 2026-10-09 (fast worktree switch): the
+  ring is now `sessionRing` — Worktrees order, no return stop, the shown
+  session bound; see the fast-switch section. `consoleState.ret`
   (`consoleReturn`) is captured by the first console shown over a
   non-console screen (`captureReturn`: the live layer stack is PARKED only
   when its top is a full-screen VIEW — diff/history/blame/file viewer; a
@@ -6159,20 +6159,41 @@ wherever alt+a is (`cycleReachable`), reserved inside a focused console
 (`consolePassthrough` / `consoleFullPassthrough` + the focused-console
 branch of `updateConsoleKey`); a docked console stays open and the status
 row then names its worktree — and its return point (`ret.view`) moves to
-the alt+w worktree: alt+w picks the BASE (the `*`), so the alt+a / alt+t
-ring's return stop lands there, not where the cycle started (user ruling
+the alt+w worktree: alt+w picks the BASE (the `*`), so esc on the console
+lands there, not where the cycle started (user ruling
 2026-10-08; `pendingReturnView` is cleared too). The keyboard goes with the
 switch (user ruling 2026-10-08): `activateTab(panelBranches)` — focus,
 `activeLeftTab`, `lastLeftPanel` — so the Branches border says where keys
 go, and a shown console is unbound (`focused = false`; a ctrl+t-maximised
 docked one docks again, `syncConsoleSize`) with `ret.focus = panelBranches`,
-so the alt+a / alt+t return stop (`closeConsole` restores `r.focus` when
-focus sat in the console's column) lands Branches-focused. Over a
+so esc on the console (`closeConsole` restores `r.focus` when focus sat in
+the console's column) lands Branches-focused. Over a
 full-screen return point (`consoleFull`) Branches is off screen: the console
 stays full, unbound, focus stays on its column, `ret.focus` untouched. The
 console box's blue border = the Commits column has focus, bound or not;
 the title hints (`consoleTitleHints`) tell bound from unbound. Status:
-`wt-x — 2 of 3 worktrees`; one worktree: a status line only. Footer `[alt+w] next worktree` when the list
+`wt-x — 2 of 3 worktrees`; one worktree: a status line only.
+
+**alt+a / alt+t — `sessionRing` + `cycleSessions`** (2026-10-09, user
+ruling): the ring is this repository's running sessions of one kind in
+the Worktrees list's order (`worktreeIndex`; unlisted dirs last), oldest
+`Started` first within a worktree, ID as the last tie-break — never last
+use. The session shown is BOUND (`showConsole(id, true)`: Touch, cursor,
+`m.focus = panelCommits`). From a bound session of the kind: `(i+1) % n`,
+round and round; the return stop to the starting screen is gone (a console
+is left by alt+w, esc or the step-out key; `consoleReturn` still says where
+esc goes). With gg's keyboard (no console of the kind, or an unbound one)
+the walk starts at the viewed worktree: the first session whose worktree
+index ≥ `worktreeIndex(m.viewed)`, wrapping to the first — so the viewed
+worktree's own session comes first, a shown unbound one of it is bound in
+place (`focused = true`, `syncConsoleSize`), a hidden one shown. The only
+session of the kind, bound: a status line only. A view pushed over a shown
+console still closes the console first (its parked views slot beneath) and
+restarts from the viewed worktree. Status `%s in %s — agent %d of %d` /
+`terminal`; footer `[alt+a] agent` / `[alt+t] terminal`. `sessionsByLastUsed`
+is gone. Tests `session_ring_test.go`; `alt_cycle_test.go`,
+`last_session_test.go`, `console_view_test.go` and
+`console_repo_scope_test.go` rewritten for the ring without a return stop. Footer `[alt+w] next worktree` when the list
 has more than one and nothing runs or loads. Tests
 `worktree_cycle_test.go`, e2e `tui_worktree_cycle`.
 

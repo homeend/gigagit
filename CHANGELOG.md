@@ -33,18 +33,28 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   never blocks: its status read is silent (no "⏳ reloading…", the next press
   is never refused), and the Branches panel's `*` and the Commits
   identity's `*name` follow the shown worktree's branch at once. alt+w
-  picks the base worktree: pressed under a docked console, the alt+a /
-  alt+t return stop then lands on that worktree, not where the cycle
-  started.
+  picks the base worktree: pressed under a docked console, leaving the
+  console (esc) then lands on that worktree, not where the cycle started.
 - **alt+w / alt+a / alt+t say where the keys go.** alt+w hands the keyboard
   to the Branches panel (its border shows it) and unbinds a shown console:
   its key hints come back, a ctrl+t-maximised one docks again, and the next
   keys are gg's, not the agent's (before, alt+w inside a bound console left
-  the agent bound while the panels switched). alt+a / alt+t show the next
-  session unbound with the console column focused, and their return stop
-  focuses the panel you came from — Branches after an alt+w. Over a
-  full-screen return point the console stays full and keeps the keyboard,
-  unbound.
+  the agent bound while the panels switched). esc on a console returns to
+  the panel you came from — Branches after an alt+w. Over a full-screen
+  return point the console stays full and keeps the keyboard, unbound.
+- **alt+a / alt+t walk the sessions in Worktrees order and bind them.** The
+  ring is the Worktrees panel's order (oldest first within a worktree),
+  not last use, so the next one is the one your eye expects; the session
+  shown is bound at once — you type. With gg's keyboard the viewed
+  worktree's own session comes first (hidden → shown, shown unbound →
+  bound), else the nearest below in the list; from a bound session the
+  next one, around again past the last. The stop at the starting screen is
+  gone: you leave a console with alt+w, esc or the step-out key. One
+  session of its kind, bound: nothing but a status line (`the only running
+  agent session in this repository — already focused`). The status line
+  says `Claude in wt-x — agent 2 of 5`; the footer hints read
+  `[alt+a] agent` / `[alt+t] terminal`. (Reverses the 2026-10-06 ring with
+  a return point.)
 
 ## Pull requests show only their own notes
 

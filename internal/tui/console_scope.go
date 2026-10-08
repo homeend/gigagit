@@ -47,7 +47,7 @@ func (m Model) repoSessions(list []domain.SessionInfo) []domain.SessionInfo {
 // hasRepoSessions reports a running session of one kind (terminals or agents)
 // in this repository — what alt+a / alt+t cycle.
 func (m Model) hasRepoSessions(terminal bool) bool {
-	return len(sessionsByLastUsed(m.repoSessions(domain.Sessions().List()), terminal)) > 0
+	return len(m.sessionRing(terminal)) > 0
 }
 
 // openSessionAnywhere opens a session's console; one of another repository's
