@@ -35,8 +35,9 @@ step({ n: 8, kind: "start" });
 }
 
 // Item 1 (F2): the read that absorbs my own send is the first one that
-// STARTED after it; a read in flight when the send ended neither shows nor
-// absorbs it, and a post-send read with nothing new disarms it.
+// STARTED after it; a read in flight when the send ended does not absorb it
+// (a change it reports still shows), and a post-send read with nothing new
+// disarms it.
 func TestPRFreshJSReadOrder(t *testing.T) {
 	t.Parallel()
 	got := runFreshJS(t, `

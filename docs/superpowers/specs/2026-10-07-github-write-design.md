@@ -180,7 +180,8 @@ each ref is resolved once (no repeated `rev-parse --verify`).
   discarded. The local `refs/gg/pr/<n>` is still reused when its sha
   equals the fresh head.
 - A PR row the user can see in the list still opens with its row data
-  at once, as today.
+  at once, as today — for any `cache_hours > 0`; at 0 every open reads
+  GitHub first (§4.5).
 
 ### 2.4 Background refresh
 

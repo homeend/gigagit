@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Sending to GitHub — cache minors
+
+### Changed
+
+- **A pull request that moved says how many new commits it got** — "PR #7
+  updated: 2 new commits" in the terminal UI (counted against the head that
+  was on screen; a force-push counts every commit not in the old head).
+- **`[forge] cache_hours = 0` now documented as it behaves:** every open
+  reads GitHub first, a row visible in the list too.
+
+### Fixed
+
+- **A PR-list refresh no longer swallows the open pull request's refresh**
+  in the terminal UI: "new commits" and "updated" used to go missing when
+  the two overlapped. After switching repositories (`R`) the new
+  repository's first refresh is never blocked by the old one, and a Reply &
+  send written before the switch is saved but not sent.
+- **A typed review or verdict body is kept until its own send reaches
+  GitHub** (terminal UI and gg web): sending a note, resolving a thread or
+  sending another pull request no longer throws it away, and a failed
+  resolve no longer claims the text was kept.
+- **gg web reads one pull-request refresh at a time** and never gives up on
+  the read after your own send (it used to stop after 10 s).
+- **The pull-request cache keeps the PRs you opened most recently** — the
+  background refresh and prefetch no longer count as opens, and opening an
+  already-fetched PR in gg web now does.
+- **Prefetch is cheaper:** one ref read per list refresh instead of reading
+  every cached PR and resolving each head.
+- **A cancelled PR listing** (a closed page, a spent time budget) no longer
+  makes gg distrust a working `gh` and re-detect it.
+- **Windows: a PR cache write is retried** when another gg process is
+  reading the same file, instead of being dropped.
+- **Sending from gg web on a big pull request** is no longer cut off after
+  30 s of local work; the plan's backstop is 2 minutes (each `gh` call keeps
+  its own 30 s limit).
+
 ## Sending to GitHub — follow-ups
 
 ### Fixed
