@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -24,10 +26,21 @@ type writerForge struct {
 	*fakeForge
 	wmu                    sync.Mutex
 	writes                 []string
-	failSubmit, failDelete bool // a send that breaks half-way (an interrupted send)
+	failSubmit, failDelete bool          // a send that breaks half-way (an interrupted send)
+	snapGate               chan struct{} // when non-nil, Snapshot waits for it or its ctx
 }
 
 func (f *writerForge) Snapshot(ctx context.Context, n int) (forge.Snapshot, error) {
+	f.wmu.Lock()
+	g := f.snapGate
+	f.wmu.Unlock()
+	if g != nil {
+		select {
+		case <-g:
+		case <-ctx.Done():
+			return forge.Snapshot{}, ctx.Err()
+		}
+	}
 	return snapForge{f.fakeForge}.Snapshot(ctx, n)
 }
 
@@ -88,10 +101,26 @@ func (f *writerForge) Unresolve(_ context.Context, thread string) error {
 // fake forge, with notes on (TestMain turns them off package-wide).
 func sendServer(t *testing.T) (*httptest.Server, *writerForge, string) {
 	t.Helper()
+	return sendServerWith(t)
+}
+
+// sendServerWith is sendServer listing more open pull requests (never fetched).
+func sendServerWith(t *testing.T, more ...model.PullRequest) (*httptest.Server, *writerForge, string) {
+	t.Helper()
 	dir, bare, head := prFixture(t)
 	pr := openPR(7, "Add a thing")
 	pr.HeadSHA, pr.NodeID = head, "PR_7"
-	wf := &writerForge{fakeForge: &fakeForge{open: []model.PullRequest{pr}, baseURL: bare, comments: prThreads()}}
+	cs := prThreads()
+	for i := range cs { // the threads a send resolves and replies to
+		switch cs[i].ID {
+		case "C1", "C2":
+			cs[i].ThreadID = "PRRT_c1"
+		case "C3":
+			cs[i].ThreadID = "PRRT_c3"
+		}
+	}
+	wf := &writerForge{fakeForge: &fakeForge{open: []model.PullRequest{pr}, baseURL: bare, comments: cs}}
+	wf.open = append(wf.open, more...)
 	ts, srv := prServe(t, dir, wf)
 	srv.service().UseNotesDir(t.TempDir())
 	waitPRsLoaded(t, ts)
@@ -356,5 +385,111 @@ func TestRefreshAnswersCarryAnInterruptedSend(t *testing.T) {
 	}
 	if code := postJSON(t, ts, "/api/pr/revalidate?n=7", `{}`, "application/json", "", &none); code != 200 || none.Interrupted != nil {
 		t.Fatalf("no pending review, yet = %d %+v", code, none.Interrupted)
+	}
+}
+
+// sendKind posts one send, answers its confirm with "send", and returns the
+// forge's writes.
+func sendKind(t *testing.T, ts *httptest.Server, wf *writerForge, body string) string {
+	t.Helper()
+	code, out := postJSONAny(t, ts, "/api/pr/send?n=7", body)
+	if code != 202 {
+		t.Fatalf("start %s = %d %v", body, code, out)
+	}
+	evs := followDecide(t, ts, out["op_id"].(string), "send")
+	if done, _ := findEvent(evs, "done"); done["ok"] != true {
+		t.Fatalf("done = %v", done)
+	}
+	return wf.writeLog()
+}
+
+// Serial: sendServer.
+func TestWebResolvesAndReopensAThread(t *testing.T) {
+	ts, wf, _ := sendServer(t)
+	if w := sendKind(t, ts, wf, `{"kind":"resolve","ids":["forge:C1"]}`); !strings.Contains(w, "Resolve PRRT_c1") {
+		t.Fatalf("writes %s", w)
+	}
+	if w := sendKind(t, ts, wf, `{"kind":"unresolve","ids":["forge:C3"]}`); !strings.Contains(w, "Unresolve PRRT_c3") {
+		t.Fatalf("writes %s", w)
+	}
+}
+
+// Serial: sendServer.
+func TestWebSendsADraftReply(t *testing.T) {
+	ts, wf, _ := sendServer(t)
+	// The page reads the PR's threads before anyone replies.
+	if code, out := postJSONAny(t, ts, "/api/pr/comments/refresh?n=7", `{}`); code != 200 {
+		t.Fatalf("refresh = %d %v", code, out)
+	}
+	code, out := postJSONAny(t, ts, "/api/notes/reply", `{"id":"forge:C1","summary":"done in the next push"}`)
+	id, _ := out["id"].(string)
+	if code != 200 || id == "" {
+		t.Fatalf("reply = %d %v", code, out)
+	}
+	if w := sendKind(t, ts, wf, `{"kind":"notes","ids":["`+id+`"]}`); !strings.Contains(w, "Reply PRRT_c1") {
+		t.Fatalf("writes %s", w)
+	}
+}
+
+// Review Focus 2: a forge that never answers costs the POST its budget, not
+// a hung socket; nothing is written. Serial: sendServer + a package var.
+func TestWebSendPlanHasAForgeBudget(t *testing.T) {
+	ts, wf, head := sendServer(t)
+	id := addWebNote(t, ts, head, "pr7.txt", 1, "x")
+	prev := prSendBudget
+	prSendBudget = 300 * time.Millisecond
+	defer func() { prSendBudget = prev }()
+	wf.wmu.Lock()
+	wf.snapGate = make(chan struct{}) // never closed
+	wf.wmu.Unlock()
+	start := time.Now()
+	code, out := postJSONAny(t, ts, "/api/pr/send?n=7", `{"kind":"notes","ids":["`+id+`"]}`)
+	if code != http.StatusGatewayTimeout || time.Since(start) > 5*time.Second {
+		t.Fatalf("= %d %v after %v (want 504 within the budget)", code, out, time.Since(start))
+	}
+	if w := wf.writeLog(); w != "" {
+		t.Fatalf("wrote %s", w)
+	}
+}
+
+func TestPRSendLookupStatus(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		err  error
+		want int
+	}{
+		{fmt.Errorf("%w: #8's diff is not available here", domain.ErrSendRequest), 422},
+		{context.DeadlineExceeded, 504},
+		{errors.Join(domain.ErrForgeUnavailable, errors.New("gh: not logged in")), 502},
+		{errors.New("disk on fire"), 422},
+	} {
+		if got := prSendLookupStatus(tc.err); got != tc.want {
+			t.Errorf("%v → %d, want %d", tc.err, got, tc.want)
+		}
+	}
+}
+
+// Item 9: a PR whose diff is not fetched is not the request's fault: 422.
+// Serial: sendServer.
+func TestWebSendOnAnUnfetchedPRIs422(t *testing.T) {
+	pr8 := openPR(8, "Another")
+	pr8.HeadSHA = strings.Repeat("d", 40)
+	ts, wf, _ := sendServerWith(t, pr8)
+	if code, out := postJSONAny(t, ts, "/api/pr/send?n=8", `{"kind":"notes","ids":["x"]}`); code != 422 {
+		t.Fatalf("= %d %v", code, out)
+	}
+	if w := wf.writeLog(); w != "" {
+		t.Fatalf("wrote %s", w)
+	}
+}
+
+// Final review I2: a forge that cannot be detected answers 502 whichever
+// kind reached it (verdict/finish/discard skip the lookup and fail in
+// planning).
+func TestSendErrStatusForgeUnavailable(t *testing.T) {
+	t.Parallel()
+	err := errors.Join(domain.ErrForgeUnavailable, errors.New("gh: not logged in"))
+	if got := sendErrStatus(err); got != http.StatusBadGateway {
+		t.Fatalf("sendErrStatus = %d, want 502", got)
 	}
 }

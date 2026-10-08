@@ -25,6 +25,7 @@ type sendReviewPopup struct {
 
 // sendGroupsMsg is a PR's groups with something to send.
 type sendGroupsMsg struct {
+	gen    int // m.forgeSendGen when asked
 	pr     int
 	groups []domain.SendGroup
 	err    error
@@ -32,6 +33,7 @@ type sendGroupsMsg struct {
 
 // sendBodyMsg is an AI review's summary, read to prefill the body.
 type sendBodyMsg struct {
+	gen         int // m.forgeSendGen when asked
 	pr          int
 	group, body string
 	err         error
@@ -42,13 +44,17 @@ func (m Model) openSendReview(pr int) (Model, tea.Cmd) {
 	if svc == nil || pr == 0 {
 		return m, nil
 	}
+	gen := m.forgeSendGen
 	return m, func() tea.Msg {
 		gs, err := svc.PRSendGroups(context.Background(), pr)
-		return sendGroupsMsg{pr: pr, groups: gs, err: err}
+		return sendGroupsMsg{gen: gen, pr: pr, groups: gs, err: err}
 	}
 }
 
 func (m Model) handleSendGroups(msg sendGroupsMsg) (Model, tea.Cmd) {
+	if msg.gen != m.forgeSendGen {
+		return m, nil // asked in the repository before R
+	}
 	if m.modal != nil {
 		return m.sendDialogBusy(), nil
 	}
@@ -80,8 +86,13 @@ func (m Model) handleSendGroups(msg sendGroupsMsg) (Model, tea.Cmd) {
 // sendGroupOptions are the chooser's rows plus the trailing Cancel esc maps to.
 func sendGroupOptions(groups []domain.SendGroup) []string {
 	opts := make([]string, 0, len(groups)+1)
+	seen := map[string]int{}
 	for _, g := range groups {
-		opts = append(opts, sendGroupLabel(g))
+		label := sendGroupLabel(g)
+		if seen[label]++; seen[label] > 1 { // two reviews alike: number the repeats (F13)
+			label = i18n.T("%s (%d)", label, seen[label])
+		}
+		opts = append(opts, label)
 	}
 	return append(opts, "Cancel")
 }
@@ -105,30 +116,39 @@ func sendGroupLabel(g domain.SendGroup) string {
 func (m Model) openSendReviewBody(pr int, group string) (Model, tea.Cmd) {
 	id, isReview := strings.CutPrefix(group, "review:")
 	if !isReview || m.svc == nil {
-		return m.pushLayer(&sendReviewPopup{pr: pr, group: group, body: newTextField("")}), nil
+		kept, _ := m.keptBodyFor(pr, group, false)
+		return m.pushLayer(&sendReviewPopup{pr: pr, group: group, body: newTextField(kept)}), nil
 	}
-	svc := m.svc
+	svc, gen := m.svc, m.forgeSendGen
 	return m, func() tea.Msg {
 		body, err := svc.ReviewBodyText(context.Background(), id)
-		return sendBodyMsg{pr: pr, group: group, body: body, err: err}
+		return sendBodyMsg{gen: gen, pr: pr, group: group, body: body, err: err}
 	}
 }
 
 func (m Model) handleSendBody(msg sendBodyMsg) (Model, tea.Cmd) {
+	if msg.gen != m.forgeSendGen {
+		return m, nil // asked in the repository before R
+	}
 	if m.modal != nil {
 		return m.sendDialogBusy(), nil
 	}
 	if msg.err != nil {
 		return m.sayInDiff(i18n.T("send: %s", firstLine(msg.err.Error()))), nil
 	}
-	return m.pushLayer(&sendReviewPopup{pr: msg.pr, group: msg.group, body: newTextField(msg.body)}), nil
+	body := msg.body
+	if kept, ok := m.keptBodyFor(msg.pr, msg.group, false); ok {
+		body = kept // what the user typed beats the stored summary
+	}
+	return m.pushLayer(&sendReviewPopup{pr: msg.pr, group: msg.group, body: newTextField(body)}), nil
 }
 
 func (m Model) openVerdict(pr int) (Model, tea.Cmd) {
 	if pr == 0 {
 		return m, nil
 	}
-	return m.pushLayer(&sendReviewPopup{pr: pr, verdict: true, body: newTextField("")}), nil
+	kept, _ := m.keptBodyFor(pr, "", true)
+	return m.pushLayer(&sendReviewPopup{pr: pr, verdict: true, body: newTextField(kept)}), nil
 }
 
 // request is what ctrl+s sends.
@@ -155,6 +175,7 @@ func (p *sendReviewPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if !m.opsIdle() { // refused at once: keep the popup and what was typed
 			return m.sayInDiff(i18n.T("another operation is running — send again when it ends")), nil
 		}
+		m.keptSendBody = &keptSendBody{pr: p.pr, group: p.group, verdict: p.verdict, text: p.body.Value()}
 		m = m.popLayer()
 		return m.forgeSendCmd(p.request())
 	case tea.KeyEnter:
@@ -199,4 +220,22 @@ func (p *sendReviewPopup) box(m Model) string {
 		i18n.T("[esc] cancel"),
 	}, contentW))
 	return popupBox(innerW, b.String())
+}
+
+// keptSendBody is the text of a body popup whose send has not reached GitHub.
+type keptSendBody struct {
+	pr      int
+	group   string
+	verdict bool
+	text    string
+}
+
+// keptBodyFor is the text a failed send of the same PR and group left (F12):
+// the next body box starts from it.
+func (m Model) keptBodyFor(pr int, group string, verdict bool) (string, bool) {
+	k := m.keptSendBody
+	if k == nil || k.pr != pr || k.group != group || k.verdict != verdict {
+		return "", false
+	}
+	return k.text, true
 }

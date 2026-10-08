@@ -111,7 +111,8 @@ function groupCount(g) {
 }
 
 // keptBody is a body a refused or failed send left: the next Send review…
-// of the same group starts from it, so typing is never lost.
+// of the same group (or Verdict…, group "verdict") starts from it, so typing
+// is never lost.
 let keptBody = null; // {pr, group, text}
 
 // sendReviewBody is Send review… for one group: its body (an AI review's
@@ -150,12 +151,16 @@ async function sendReviewBody(pr, group) {
 
 // verdictBody is Verdict…: an optional body, then the confirm's verdicts.
 function verdictBody(pr) {
+  const kept = keptBody && keptBody.pr === pr && keptBody.group === "verdict" ? keptBody.text : "";
   openPrompt({
     title: "Verdict on #" + pr + " — the review body (optional)",
-    value: "",
+    value: kept,
     multiline: true,
     allowEmpty: true,
-    onSubmit: (text) => sendToGitHub(pr, { kind: "verdict", body: text }, "posting a verdict on #" + pr),
+    onSubmit: (text) => {
+      keptBody = { pr, group: "verdict", text };
+      sendToGitHub(pr, { kind: "verdict", body: text }, "posting a verdict on #" + pr);
+    },
   });
 }
 
@@ -197,9 +202,10 @@ registerRows("pr", (pr) => {
   ];
 });
 
-// A send that went through clears the kept body; a refused one keeps it.
+// A send that changed GitHub clears the kept body; a refused, failed or
+// aborted one keeps it (the user may edit and send again).
 onSendDone((n, ev) => {
-  if (ev.ok) keptBody = null;
+  if (ev.ok && ev.changed) keptBody = null;
 });
 
 registerHelp({

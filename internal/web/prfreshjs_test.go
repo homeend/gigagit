@@ -15,6 +15,49 @@ import (
 // the change your own send made.
 func TestPRFreshJS(t *testing.T) {
 	t.Parallel()
+	got := runFreshJS(t, `
+step({ n: 7, kind: "start" });
+step({ n: 7, kind: "ok", changed: true });
+step({ n: 7, kind: "ok", changed: true });
+step({ n: 7, kind: "ok", changed: false });
+step({ n: 7, kind: "sent" });
+step({ n: 7, kind: "ok", changed: true });
+step({ n: 7, kind: "ok", changed: true });
+step({ n: 7, kind: "fail", age: "3h" });
+step({ n: 8, kind: "ok", changed: true });
+step({ n: 8, kind: "start" });
+`)
+	want := []string{"refreshing…", "", "updated", "", "", "", "updated", "offline · read 3h", "", "refreshing…"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("steps = %q\nwant    %q", got, want)
+	}
+}
+
+// Item 1 (F2): the read that absorbs my own send is the first one that
+// STARTED after it; a read in flight when the send ended neither shows nor
+// absorbs it, and a post-send read with nothing new disarms it.
+func TestPRFreshJSReadOrder(t *testing.T) {
+	t.Parallel()
+	got := runFreshJS(t, `
+step({ n: 7, kind: "ok", changed: false, seq: 1 });
+step({ n: 7, kind: "sent", seq: 2 });
+step({ n: 7, kind: "ok", changed: false, seq: 2 });
+step({ n: 7, kind: "ok", changed: true, seq: 3 });
+step({ n: 7, kind: "ok", changed: true, seq: 4 });
+step({ n: 7, kind: "sent", seq: 4 });
+step({ n: 7, kind: "ok", changed: false, seq: 5 });
+step({ n: 7, kind: "ok", changed: true, seq: 6 });
+`)
+	want := []string{"", "", "", "", "updated", "", "", "updated"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("steps = %q\nwant    %q", got, want)
+	}
+}
+
+// runFreshJS runs steps against prfresh.js under node and returns the text
+// after each step.
+func runFreshJS(t *testing.T, steps string) []string {
+	t.Helper()
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("node not installed; the JS guard needs it")
@@ -27,21 +70,12 @@ func TestPRFreshJS(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "prfresh.mjs"), src, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	const runner = `
+	runner := `
 import { nextFresh } from "./prfresh.mjs";
-let st = { seen: 0, updated: 0, ownSend: false };
+let st = { seen: 0, updated: 0, ownSend: null };
 const steps = [];
 const step = (ev) => { st = nextFresh(st, ev); steps.push(st.text); };
-step({ n: 7, kind: "start" });
-step({ n: 7, kind: "ok", changed: true });
-step({ n: 7, kind: "ok", changed: true });
-step({ n: 7, kind: "ok", changed: false });
-step({ n: 7, kind: "sent" });
-step({ n: 7, kind: "ok", changed: true });
-step({ n: 7, kind: "ok", changed: true });
-step({ n: 7, kind: "fail", age: "3h" });
-step({ n: 8, kind: "ok", changed: true });
-step({ n: 8, kind: "start" });
+` + steps + `
 console.log(JSON.stringify(steps));
 `
 	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(runner), 0o644); err != nil {
@@ -55,10 +89,7 @@ console.log(JSON.stringify(steps));
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	want := []string{"refreshing…", "", "updated", "", "", "", "updated", "offline · read 3h", "", "refreshing…"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("steps = %q\nwant    %q", got, want)
-	}
+	return got
 }
 
 // prs.js routes every freshness change through nextFresh and shows the
@@ -74,7 +105,8 @@ func TestPRsFreshnessAndInterruptedAreWired(t *testing.T) {
 		"fresh = nextFresh(fresh, { n, ...ev });",
 		"showInterrupted(n, rv.interrupted);",
 		"showInterrupted(n, r.interrupted);",
-		`freshEvent(n, { kind: "sent" });`,
+		`if (ev.ok && ev.changed) freshEvent(n, { kind: "sent", seq: readSeq });`,
+		`refreshAfterSend(n);`,
 	} {
 		if !strings.Contains(js, want) {
 			t.Errorf("prs.js lacks %q", want)

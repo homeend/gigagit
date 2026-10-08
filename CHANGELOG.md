@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Sending to GitHub — follow-ups
+
+### Fixed
+
+- **A note named twice is sent once** (`gg pr send --note a --note a`, or a
+  repeated id from gg web), and a thread named by its id and by one of its
+  comments is resolved once.
+- **Finishing or discarding an interrupted send lists the notes by their
+  summaries**, not by internal keys (terminal UI and gg web).
+- **Your own send no longer marks the pull request "updated"** — in gg web
+  and the terminal UI — while a genuine update that follows it still shows;
+  an aborted or failed send no longer hides the next one.
+- **Verdict… in gg web keeps what you typed** when the send is refused, like
+  Send review… does; an aborted confirm keeps it too.
+- **The terminal UI keeps the review body you typed** when the send fails
+  after the popup closed: the next Send review… or Verdict… starts from it.
+- **A send planned before switching repositories (`R`) no longer starts in
+  the new one.**
+- **A pull request's group colour bars stay** after you add or edit a note
+  in its diff (they used to vanish).
+- **Two AI reviews with the same summary** get distinct rows in Send
+  review…'s chooser, each opening its own review.
+- **Translated send confirms read as whole sentences** ("<note> (skipped:
+  …)" is one phrase per reason).
+- **gg web answers a send within 30 s** when GitHub does not respond (504),
+  and says 422/502 — not 400 — when the pull request could not be read.
+- **`gg pr send` exits 1 when you answer abort** (nothing was posted).
+- **A pull request's view re-reads its files less**: file text at a commit
+  is cached, so badges and AI-review remarks no longer run `git show` on
+  every comment refresh.
+
 ## Sending to GitHub from gg web; agents never send
 
 ### Added

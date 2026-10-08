@@ -220,3 +220,14 @@ func TestReplyAndSendFromThePRView(t *testing.T) {
 		t.Fatalf("writes %+v", ws)
 	}
 }
+
+// Item 12 / Review Focus 4: the re-resolve a note edit triggers keeps the
+// PR's group bars (it used to hand the view nil groups). Serial: prSendModel.
+func TestAPRReResolveKeepsTheGroupBars(t *testing.T) {
+	m, _, head := prSendModel(t)
+	addTUINote(t, m, head, 5, "mine")
+	msg := m.reopenPreviewCmd("", "refs/gg/pr/7", "main", "", "")().(previewOpenMsg)
+	if g := msg.groups["big.go"]; len(g) == 0 || g[0] != domain.GroupMine {
+		t.Fatalf("re-resolve groups = %v", msg.groups)
+	}
+}

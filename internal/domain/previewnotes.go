@@ -334,7 +334,7 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 		return extra, nil
 	}
 	var newLines []string
-	if b, ferr := s.ShowFile(ctx, set.Tip, path); ferr == nil {
+	if b, ferr := s.shaFile(ctx, set.Tip, path); ferr == nil {
 		newLines = splitLines(b)
 	}
 	// newLines stays nil when the path is gone from the tip: resolveOne then
@@ -387,7 +387,7 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 	out := make(map[string][]ResolvedNote, len(paths))
 	for _, p := range paths {
 		var newLines []string
-		if b, ferr := s.ShowFile(ctx, set.Tip, p); ferr == nil {
+		if b, ferr := s.shaFile(ctx, set.Tip, p); ferr == nil {
 			newLines = splitLines(b)
 		}
 		// newLines nil (the path is gone from the tip) → resolveOne reports

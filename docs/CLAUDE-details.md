@@ -5890,6 +5890,19 @@ longer stored is skipped there ("it no longer exists").
 **CLI confirm.** The send confirm is always asked at the user's terminal
 (see *Agents never send*).
 
+**Follow-ups (2026-10-08, `docs/superpowers/plans/2026-10-08-github-write-followups.md`).**
+`planSend` dedupes `Notes`/`Resolve`/`Unresolve` first (`uniqIDs`, first
+occurrence wins, order kept) and `planActions` resolves a thread once even
+when named by its id and by one of its comment ids. Finish/Discard items
+carry the note's or remark's summary (`interruptedNames`; `Key` stays the
+ledger key) — `Label` reads "<summary> (waiting in the pending review)".
+An answered abort makes `gg pr send` (and `reply --send`, `resolve`,
+`unresolve`, which share `runPRSend`) exit 1: `err == nil && !res.Changed`,
+rebase.go's signal. Note placement reads file text through
+`Service.shaFile` — cached per `<40-hex sha>:<path>` (immutable), read
+through for `HEAD`, `<sha>^` or a branch — so a PR view's badges, groups and
+remark placement stop re-running `git show` on every comment change.
+
 ### Review links to files and remarks (2026-10-07)
 
 Spec `docs/superpowers/specs/2026-10-07-review-links-copy-design.md`, plan
@@ -5958,6 +5971,27 @@ for 30 s. Interrupted sends are asked after each successful `PRRevalidate`
 
 **Freshness.** `prUpdated` holds the PR number whose last refresh found new
 comments or commits; `prSeen` makes the open's own first read never count.
+A changing send of mine (`err == nil && res.Changed`) arms `prOwnSend` with
+`prOwnSendSeq` = the last started read (`prReadSeq`, bumped by every
+`prRefreshCmd`, carried as `prRevalidatedMsg.seq`); the first read that
+started after it absorbs the change. A post-send read dropped because one
+was running is queued in `prRefreshAgain` and asked when that one lands.
+`reRoot` resets prSeen/prUpdated/prOwnSend/prRefreshAgain/prOfflineSince/
+prRefreshing (`closeFilesView` does not: the moved-head reopen runs through
+it after setting "updated").
+
+**Answers after `R`, kept bodies, bars.** `forgeSendGen` (bumped by
+`reRoot`; `prsGen` cannot serve, every PR-list read bumps it) rides in
+`forgeSendReadyMsg`, `sendGroupsMsg` and `sendBodyMsg`; a stale one is
+dropped silently. ctrl+s in the body popup stores `keptSendBody{pr, group,
+verdict, text}`; the next Send review…/Verdict… of the same PR and group
+starts from it (over an AI review's stored summary); a send with
+`err == nil && res.Changed`, or `reRoot`, drops it. `resolvePreviewCmd`
+fills `msg.groups` (`PreviewNoteGroups`) — the same-tag re-resolve a note
+edit causes assigns them, and a nil there used to wipe a PR's bars. Repeated
+chooser labels get `" (2)"`… (`i18n.T("%s (%d)")`); skip reasons are whole
+formats (`"%s (skipped: …)"`), the resolve suffix `"%s · resolved after
+sending"`.
 
 
 ### Sending to GitHub from gg web (plan 4, `docs/superpowers/plans/2026-10-08-github-write-4-web.md`)
@@ -6004,3 +6038,24 @@ is never "updated"). Both refresh answers carry `interrupted: {count,
 joined}` (`addInterrupted`: `PRInterrupted`, cache only); `prs.js` mounts
 the `#pr-interrupted` bar under `#compare-bar` (Finish sending; Discard
 unless joined), hidden when the compare bar hides (a MutationObserver).
+
+**Follow-ups (2026-10-08).** Statuses of `POST /api/pr/send`: 400 a request
+fault (`badSend` wraps `errBadSend`, the words unchanged), 409 busy / head
+moved (`code: head_moved`) / an interrupted pending review, 422 a lookup the
+request cannot fix (the PR's diff not fetched) or a planning refusal, 502
+the forge CLI unavailable (`ErrForgeUnavailable`, from the lookup or the
+planning alike), 504 the forge out of budget. A `gh` call that fails at run
+time (network down, rate limit) has no sentinel and answers 422 — the handler plans under `prSendBudget` (= `prRevalidateBudget`,
+30 s; a var so tests shorten it). **Hosted TUI:** the page's `opInFlight`
+sees only the page's own ops; a send while the hosting TUI runs one waits on
+the repo gate inside that budget (→ 504) — there is no busy hook through
+`WebHost`. **Own send:** `prs.js` numbers every comments read and
+revalidate as it starts (`readSeq`); a finished send arms `nextFresh` only
+when its done event says `ok && changed` (an abort answers `ok` with
+`changed: false`), with the last started read's seq; the first read that
+started after it absorbs the change, changed or not, and a read that was
+already running neither shows nor absorbs it. A post-send read dropped by
+`runOnce` is retried (`refreshAfterSend`, 250 ms, 40 tries). Kept bodies:
+Send review… per group, Verdict… as group `"verdict"`; only `ok && changed`
+clears them.
+

@@ -29,6 +29,7 @@ type forgeSendState struct {
 
 // forgeSendReadyMsg carries the planned op (or why there is none) back.
 type forgeSendReadyMsg struct {
+	gen int // m.forgeSendGen when the plan started: a repo switch drops it
 	req domain.PRSendRequest
 	op  engine.SendToForge
 	err error
@@ -45,18 +46,25 @@ func (m Model) forgeSendCmd(req domain.PRSendRequest) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m = m.sayInDiff(i18n.T("preparing the send to #%d…", req.PR))
+	gen := m.forgeSendGen
 	return m, func() tea.Msg {
 		op, err := svc.PRSendOp(context.Background(), req)
-		return forgeSendReadyMsg{req: req, op: op, err: err}
+		return forgeSendReadyMsg{gen: gen, req: req, op: op, err: err}
 	}
 }
 
 // handleForgeSendReady starts the planned op, or says why it cannot.
 func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
+	if msg.gen != m.forgeSendGen {
+		return m, nil // planned in the repository before R
+	}
 	if m.modal != nil { // its op's question would replace the open dialog
 		return m.sendDialogBusy(), nil
 	}
 	if msg.err != nil {
+		if k := m.keptSendBody; k != nil && k.pr == msg.req.PR {
+			return m.sayInDiff(i18n.T("send: %s — the text you typed is kept", firstLine(msg.err.Error()))), nil
+		}
 		return m.sayInDiff(i18n.T("send: %s", firstLine(msg.err.Error()))), nil
 	}
 	if !m.opsIdle() {
@@ -180,7 +188,11 @@ func sendWhere(path string, line int) string {
 
 func sendItemText(mode engine.SendMode, it engine.SendItem) string {
 	if mode == engine.SendFinish || mode == engine.SendDiscard {
-		return i18n.T("%s (waiting in the pending review)", it.Key)
+		what := it.Summary
+		if what == "" {
+			what = it.Key
+		}
+		return i18n.T("%s (waiting in the pending review)", what)
 	}
 	switch it.Kind {
 	case engine.SendReply:
@@ -202,7 +214,7 @@ func sendItemText(mode engine.SendMode, it engine.SendItem) string {
 		s += " " + i18n.T("(%d replies)", n)
 	}
 	if it.Resolve {
-		s += " · " + i18n.T("resolved after sending")
+		s = i18n.T("%s · resolved after sending", s)
 	}
 	return s
 }
@@ -215,27 +227,28 @@ func sendSkipText(sk engine.SendSkip) string {
 	case sk.Reason == domain.SkipOnGitHub:
 		what = i18n.T("review summary")
 	}
-	return what + " " + sendSkipReasonText(sk.Reason)
+	return sendSkipReasonText(what, sk.Reason)
 }
 
-// sendSkipReasonText is one reason code in words; an unknown code (a newer
-// domain) shows as data in a generic frame.
-func sendSkipReasonText(reason string) string {
+// sendSkipReasonText is one skipped row: what, then why — one format per
+// reason, so a translation orders the whole row (F10). An unknown code (a
+// newer domain) shows as data in a generic frame.
+func sendSkipReasonText(what, reason string) string {
 	switch reason {
 	case domain.SkipNotInPR:
-		return i18n.T("(skipped: not in this PR)")
+		return i18n.T("%s (skipped: not in this PR)", what)
 	case domain.SkipLinesChanged:
-		return i18n.T("(skipped: its lines changed)")
+		return i18n.T("%s (skipped: its lines changed)", what)
 	case domain.SkipBeingSent:
-		return i18n.T("(skipped: already being sent)")
+		return i18n.T("%s (skipped: already being sent)", what)
 	case domain.SkipOnGitHub:
-		return i18n.T("(skipped: already on GitHub)")
+		return i18n.T("%s (skipped: already on GitHub)", what)
 	case domain.SkipGone:
-		return i18n.T("(skipped: it no longer exists)")
+		return i18n.T("%s (skipped: it no longer exists)", what)
 	case domain.SkipThreadNotInPR:
-		return i18n.T("(skipped: its thread is not in this PR)")
+		return i18n.T("%s (skipped: its thread is not in this PR)", what)
 	}
-	return i18n.T("(skipped: %s)", reason)
+	return i18n.T("%[1]s (skipped: %[2]s)", what, reason)
 }
 
 // forgeSendFinished is the op's follow-up (opFinishedMsg): re-read the PR (its threads now hold what was sent) and recount
@@ -243,9 +256,16 @@ func sendSkipReasonText(reason string) string {
 // opAffectedSources), whose arrival re-resolves the open diff's boxes.
 func (m Model) forgeSendFinished(fs *forgeSendState, res engine.Result, err error) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	if err == nil && res.Changed && fs.pr != 0 { // my own change (F1): not "updated"
+		m.prOwnSend, m.prOwnSendSeq = fs.pr, m.prReadSeq
+		m.keptSendBody = nil // the typed body reached GitHub
+	}
 	if fs.pr != 0 && fs.pr == m.openPRNumber() {
 		var c tea.Cmd
 		m, c = m.prRefreshCmd(fs.pr, false)
+		if c == nil && (m.prRevalidateInflight || m.prCommentsInflight) {
+			m.prRefreshAgain = fs.pr // one read at a time: ask again when it lands
+		}
 		cmds = append(cmds, c, m.prCountsCmd())
 	}
 	// Whatever PR is open: a finished or discarded interrupted send must
