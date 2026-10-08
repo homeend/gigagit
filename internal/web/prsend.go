@@ -29,6 +29,21 @@ func init() {
 	})
 }
 
+// prSendBudget bounds the forge reads a send's plan makes (the PR, its
+// comments): a forge that hangs answers 504, never a hung request. A var so
+// tests can shorten it.
+var prSendBudget = prRevalidateBudget
+
+// errBadSend marks a request the page got wrong: 400. Every other refusal is
+// a lookup the request cannot fix (prSendLookupStatus) or a planning refusal
+// (sendErrStatus).
+var errBadSend = errors.New("bad send request")
+
+// badSend is a request fault whose words stay the page's message.
+type badSend struct{ error }
+
+func (b badSend) Unwrap() error { return errBadSend }
+
 const (
 	maxSendBody = 64 << 10 // a review body the user typed
 	maxSendIDs  = 500
@@ -112,18 +127,18 @@ func prSendIDs(ctx context.Context, svc *domain.Service, n int) (notes, threads 
 func prSendRequest(ctx context.Context, svc *domain.Service, n int, in prSendWire) (domain.PRSendRequest, error) {
 	req := domain.PRSendRequest{PR: n}
 	if len(in.Body) > maxSendBody {
-		return req, fmt.Errorf("the review body is over %d KiB", maxSendBody>>10)
+		return req, badSend{fmt.Errorf("the review body is over %d KiB", maxSendBody>>10)}
 	}
 	if len(in.IDs) > maxSendIDs {
-		return req, errors.New("too many ids")
+		return req, badSend{errors.New("too many ids")}
 	}
 	pick := func(allowed map[string]bool) ([]string, error) {
 		if len(in.IDs) == 0 {
-			return nil, errors.New("ids required")
+			return nil, badSend{errors.New("ids required")}
 		}
 		for _, id := range in.IDs {
 			if !allowed[id] {
-				return nil, fmt.Errorf("%q is not a note of pull request #%d", id, n)
+				return nil, badSend{fmt.Errorf("%q is not a note of pull request #%d", id, n)}
 			}
 		}
 		return in.IDs, nil
@@ -154,7 +169,7 @@ func prSendRequest(ctx context.Context, svc *domain.Service, n int, in prSendWir
 		}
 		switch {
 		case !listed:
-			err = fmt.Errorf("%q is not a group of pull request #%d with notes to send", in.Group, n)
+			err = badSend{fmt.Errorf("%q is not a group of pull request #%d with notes to send", in.Group, n)}
 		case in.Group == domain.GroupMine:
 			req.Mine = true
 		default:
@@ -168,7 +183,7 @@ func prSendRequest(ctx context.Context, svc *domain.Service, n int, in prSendWir
 	case "discard":
 		req.Discard = true
 	default:
-		err = fmt.Errorf("unknown kind %q", in.Kind)
+		err = badSend{fmt.Errorf("unknown kind %q", in.Kind)}
 	}
 	return req, err
 }
@@ -187,10 +202,15 @@ func (s *Server) handlePRSend(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, errOpBusy)
 		return
 	}
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), prSendBudget) // the planning's forge reads; the op runs on its own
+	defer cancel()
 	req, err := prSendRequest(ctx, svc, pr.Number, in)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, err)
+		status := http.StatusBadRequest
+		if !errors.Is(err, errBadSend) {
+			status = prSendLookupStatus(err)
+		}
+		writeErr(w, status, err)
 		return
 	}
 	op, err := svc.PRSendOp(ctx, req) // outside the gate (R12)
@@ -220,9 +240,23 @@ func (s *Server) handlePRSend(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"op_id": run.id, "plan": planWire(op.Plan)})
 }
 
+// prSendLookupStatus maps a failure to read the PR's notes or groups — never
+// the request's fault — to its HTTP status.
+func prSendLookupStatus(err error) int {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return http.StatusGatewayTimeout
+	case errors.Is(err, domain.ErrForgeUnavailable):
+		return http.StatusBadGateway
+	}
+	return http.StatusUnprocessableEntity
+}
+
 // sendErrStatus maps a planning refusal to its HTTP status.
 func sendErrStatus(err error) int {
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return http.StatusGatewayTimeout
 	case errors.Is(err, domain.ErrPRHeadMoved), errors.Is(err, domain.ErrInterruptedPending):
 		return http.StatusConflict
 	case errors.Is(err, domain.ErrSendRequest), errors.Is(err, domain.ErrMixedSend):
