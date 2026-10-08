@@ -847,7 +847,7 @@ func revalidated(m Model, n, seq int, changed bool) Model {
 }
 
 // Item 10: the change my own send made is not "updated"; a read already in
-// flight when the send ended neither shows nor absorbs it.
+// flight when the send ended does not absorb it (it still shows "updated" when it reports a change).
 func TestMyOwnSendIsNotUpdated(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)

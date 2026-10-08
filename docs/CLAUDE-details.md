@@ -2116,9 +2116,16 @@ them on a file row.
   NUMBER (`PRScopeNumber`) — the base half moves with the PR's target (the
   TUI/web build the set over the target branch or the base sha, an agent
   types `origin/main`). Writers: the TUI note form (`previewNoteSet().Pair()`),
-  the web note add (`pr: n` → `domain.PRNoteScope`, stamped only on the PR's
-  tip), CLI/MCP `--preview`, batches, `ScopeReviewTarget`. `prReviewHeads` keeps
-  only `PreviewReviews` the set owns; carried notes (`forge_carried.go`,
+  the web note add (`pr: n` → `cachedPR` row → `domain.PRNoteScope`: never a
+  forge read; any commit of `prev.Set.Commits` takes the stamp, a commit the
+  PR dropped (force-push) is `ErrNoteOffPR` → 409, never a plain note),
+  CLI/MCP `--preview`, batches, `ScopeReviewTarget` (label "PR #<n>").
+  `prReviewHeads` keeps only `PreviewReviews` the set owns, and a send takes
+  only those (`prOwnsReview`: `--review`/`review:<rid>:<k>` of another
+  review is "not in this PR"). One PR's spellings are one scope
+  (`SameNoteScope`): `ScopesByCommit` merges them into the first spelling's
+  row, `owns` with `Only` set matches by number, and the scope-range /
+  notePreview allowlists compare with it. Carried notes (`forge_carried.go`,
   `ResolvedNote.Origin`) are gone. Notes written in a PR view before then are
   plain commit notes and stay on their commit. A note that must show in a
   preview has to be WRITTEN in it (test fixtures stamp `Preview`); address
