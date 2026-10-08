@@ -17,7 +17,7 @@
 - A test fixture that writes a PR note stamps it: `Preview "main...refs/gg/pr/7"`, CLI `--preview main...refs/gg/pr/7`, web `"pr":7`.
 - Web tests built on `sendServerFull`/`prFixture` are SERIAL (`t.Setenv` via `isolateState`) — no `t.Parallel()`.
 - New TUI strings go through `i18n.T` with all four bundles (none planned). Engine/CLI/web prose stays English.
-- `using-gg.md` is NOT changed by this plan (no CLI surface change; A3 only refuses a request the docs never promised) → no `agentskill.Version` bump.
+- Tasks 1–9 leave `using-gg.md` alone (A3 only refuses a request the docs never promised). Task 14 changes it for `gg link --pr` → `agentskill.Version = 156`, `GGReviewVersion = 3`, dogfood copies regenerated in the same commit.
 - `gg commit` has no `-F`: `gg add <paths>` then `git commit -F <msgfile>`. Never `git add -A` (a built `bin/gg` may sit in the worktree).
 
 ## Review Focus
@@ -27,6 +27,7 @@
 3. **A PR opened offline / before its comments loaded (A1):** `cachedPR` (the listing row the view was opened from) still finds it → the note is stamped; no gh read either way.
 4. **One PR, three base spellings on one commit (A4):** one Range review row, count summed, and opening it (any spelling) shows all three notes.
 5. **A failed read with a queued post-send read (B4):** the re-read is issued once, never loops (the flag is cleared before it is issued).
+6. **A PR link opened where the PR is not listed (Task 13):** no forge, or the PR list not loaded yet (`gg open <link>` at TUI start) → a merge preview with a notice, never a silent nothing; a link whose base is spelled differently from the PR view's (`origin/main` vs `main`) still lands (the gate is the number).
 
 ---
 
@@ -759,9 +760,302 @@ func (s *Store) renameRetry(from, to string) error {
 
 ---
 
+### Task 10: `domain.PRLinkPair` + `gg link --pr <n>`
+
+**Why (user, 2026-10-08):** "There is no option to get a gg link to a PR, so how can I ask the agent to do a review?" → "create gg links menus where applicable" → "add link opening too". A PR's link is the merge-preview link `gg://<repo>[/<path>[:<line>]]@<base>...refs/gg/pr/<n>`; `/gg-review` over it stores a review stamped for the PR (probed 2026-10-08 in a scratch repo: `preview: "main...refs/gg/pr/7"`). No grammar change.
+
+**Files:**
+- Modify: `internal/domain/forge.go` (new `PRLinkPair` beside `PRPair`)
+- Modify: `internal/cli/link.go` (`--pr` flag, usage line)
+- Test: `internal/domain/pr_link_test.go` (create), `internal/cli/link_pr_test.go` (create)
+
+**Interfaces:**
+- Produces: `func (s *Service) PRLinkPair(ctx context.Context, n int) (PRPair, error)` — the pair PR n's link names: PRPair of the cached row (listing, else the full-read cache), else ONE `PullRequest` read; `ErrPRNotFetched` (new, `errors.New("the pull request is not fetched here")`, wrapped with `gg pr fetch <n>`) when `refs/gg/pr/<n>` is missing.
+
+- [ ] **Step 1: domain test (RED)** — `internal/domain/pr_link_test.go`:
+
+```go
+package domain
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/homeend/gigagit/internal/git"
+)
+
+// Task 10: PR 7's link pair is its base against gg's private head ref; a PR
+// that was never fetched has no link (it would not resolve).
+func TestPRLinkPair(t *testing.T) {
+	t.Parallel()
+	svc, ff, _ := sendRepo(t)
+	p, err := svc.PRLinkPair(context.Background(), 7)
+	if err != nil || p.Head != git.PRRef(7) || p.Base != "main" {
+		t.Fatalf("pair %+v err %v", p, err)
+	}
+	ff.byNum[8] = ff.byNum[7]
+	pr8 := ff.byNum[8]
+	pr8.Number = 8
+	ff.byNum[8] = pr8
+	if _, err := svc.PRLinkPair(context.Background(), 8); !errors.Is(err, ErrPRNotFetched) {
+		t.Fatalf("unfetched: %v", err)
+	}
+}
+```
+
+- [ ] **Step 2: run** `go test ./internal/domain/ -run TestPRLinkPair 2>&1 | tail -3` → build failure (`PRLinkPair` undefined).
+
+- [ ] **Step 3: implement** in `forge.go` after `PRPair`:
+
+```go
+// ErrPRNotFetched: a PR's link names gg's private refs/gg/pr/<n>, which only
+// a fetched PR has — a link to an unfetched one would not resolve.
+var ErrPRNotFetched = errors.New("the pull request is not fetched here")
+
+// PRLinkPair is the pair PR n's gg:// link names (<base>...refs/gg/pr/<n>):
+// the base the PR's own view uses (PRPair) and the fetched head. The row
+// comes from the cache; only a PR this session never saw costs a forge read.
+func (s *Service) PRLinkPair(ctx context.Context, n int) (PRPair, error) {
+	if !s.PRFetched(ctx)[n] {
+		return PRPair{}, fmt.Errorf("%w: gg pr fetch %d", ErrPRNotFetched, n)
+	}
+	pr, ok := model.PullRequest{}, false
+	if rows, rok := s.PullRequestsCached(); rok {
+		for _, p := range rows {
+			if p.Number == n {
+				pr, ok = p, true
+			}
+		}
+	}
+	if !ok {
+		if p, _, dok := s.PRDetailsCached(n); dok {
+			pr, ok = p, true
+		}
+	}
+	if !ok {
+		var err error
+		if pr, err = s.PullRequest(ctx, n); err != nil {
+			return PRPair{}, err
+		}
+	}
+	return s.PRPair(ctx, pr), nil
+}
+```
+
+- [ ] **Step 4: run** the test → PASS.
+
+- [ ] **Step 5: CLI test (RED)** — `internal/cli/link_pr_test.go`: build the repo the way `internal/cli/pr_note_scope_test.go` does (it has a fetched PR 7 with base `main`); run `runLink(<temp state path>, svc, dir, []string{"--pr", "7"}, &out, &errb)` → exit 0, stdout ends with `@main...refs/gg/pr/7\n`; `[]string{"--pr", "7", "big.go:5"}` → contains `/big.go:5@main...refs/gg/pr/7`; `[]string{"--pr", "7", "--rev", "HEAD"}` → exit 2 (one target); `[]string{"--pr", "x"}` → exit 2; an unfetched PR → exit 1 with `gg pr fetch` on stderr. Use the exact helper names that file uses.
+
+- [ ] **Step 6: run** `go test ./internal/cli/ -run LinkPR 2>&1 | tail -3` → FAIL (`flag provided but not defined: -pr`).
+
+- [ ] **Step 7: implement** — in `runLink`: `prN := fs.Int("pr", 0, "a pull request's link: <base>...refs/gg/pr/<n> (fetched PRs; gg pr fetch <n>)")`; add `*prN != 0` to the target count (`set`) and to the `--review`/`--version` exclusion lists; a negative `*prN` → usage exit 2. After the `pf.set()` block:
+
+```go
+	if *prN != 0 {
+		pp, perr := svc.PRLinkPair(ctx, *prN)
+		if perr != nil {
+			fmt.Fprintln(stderr, "error:", perr)
+			return 1
+		}
+		prev = &model.LinkPreview{Source: pp.Head, Target: pp.Base}
+	}
+```
+
+Usage first line gains `| --pr <n>` beside `--preview …`; the "name the target; use one" message lists `--pr`.
+
+- [ ] **Step 8: run** `go test ./internal/cli/ -run 'Link' 2>&1 | tail -3` → ok.
+
+- [ ] **Step 9: commit** — `feat(link): gg link --pr <n> prints a pull request's gg:// link`.
+
+---
+
+### Task 11: TUI — copy a PR's link
+
+**Files:**
+- Modify: `internal/tui/footer.go` (binding `pr-link`, key `L`), `internal/tui/action_menu.go` (label case `pr-link`; open-PR `.` rows), the Pull requests list key handler (where `pr-copy`/`y` runs — `grep -n '"pr-copy"' internal/tui/*.go`), `internal/tui/pr_hub.go` (`L` in the hub, keys line), `internal/tui/help.go` (one row)
+- Create: `internal/tui/pr_link.go`
+- Modify: `internal/i18n/lang/{ja,ko,zh,ru}.toml`
+- Test: `internal/tui/pr_link_test.go` (create)
+
+**Interfaces:**
+- Consumes: `domain.PRLinkPair`, `Model.previewLinkFor(source, target, path string, line int) (string, bool)` (`link.go:125`), `Model.copyToClipboardCmd(desc, text string) tea.Cmd`.
+- Produces: `func (m Model) prLinkCmd(n int) tea.Cmd` → `prLinkMsg{n int; source, target string; err error}`; `handlePRLinkMsg` copies `previewLinkFor(source, target, "", 0)` with the status `copied link to PR #%d`, an `ErrPRNotFetched` → `PR #%d is not fetched: press enter to open it first`, any other error → `error: %s`.
+
+- [ ] **Step 1: tests (RED)** — `internal/tui/pr_link_test.go` on `prDiffModel(t)` / the PR list fixture the other `pr_*_test.go` files use:
+  - `TestPRListLCopiesThePRLink`: Pull requests panel focused on #7, key `L` → returns a cmd; run it → `prLinkMsg{n:7, source:"refs/gg/pr/7", target:"main"}`; `Update` with it → the clipboard text (the fixture's clipboard seam the other copy tests read — see `stash_link_test.go`/`link_test.go`) ends with `@main...refs/gg/pr/7`, status `copied link to PR #7`.
+  - `TestUnfetchedPRLinkSaysOpenItFirst`: `Update(prLinkMsg{n: 8, err: fmt.Errorf("%w: gg pr fetch 8", domain.ErrPRNotFetched)})` → status `PR #8 is not fetched: press enter to open it first`, nothing copied.
+  - `TestOpenPRMenuHasCopyPRLink`: the `.` menu over an open PR's diff has a row `pr-link-open` labelled `Copy pull request link`; running it copies `…@<po.target>...<po.source>` synchronously (no cmd round trip — the pair is on screen).
+  - `TestPRHubLCopiesTheLink`: in the PR hub popup, `L` returns `prLinkCmd(7)`'s msg.
+
+- [ ] **Step 2: run** `go test ./internal/tui/ -run 'PRLink|PRListL|PRHubL|OpenPRMenuHasCopy' 2>&1 | tail -5` → build failure.
+
+- [ ] **Step 3: implement**
+  - `pr_link.go`: `prLinkMsg`, `prLinkCmd` (`svc.PRLinkPair(context.Background(), n)` off the Update thread), `handlePRLinkMsg` (wire in `Update`'s msg switch beside the other PR msgs).
+  - footer binding after `pr-copy`: `{"pr-link", "L", i18n.T("[L] copy link"), func(m Model) bool { return m.canOpenPR() }, scopeRow}`; `action_menu.go` label case `"pr-link": i18n.T("Copy pull request link")`; the list key handler maps `pr-link` → `prLinkCmd(<row's number>)`.
+  - open-PR `.` rows (the `m.openPRNumber() > 0` block): `actionRow{id: "pr-link-open", label: i18n.T("Copy pull request link"), run: …}` — `po := m.previewOpen`; `link, ok := m.previewLinkFor(po.source, po.target, "", 0)`; `!ok` → status `▸ no gg link for this place`; else `copyToClipboardCmd(i18n.T("copied link to PR #%d", n), link)`.
+  - hub: `case "L": return m, m.prLinkCmd(p.pr.Number)`; keys line `[y] copy URL  [L] copy link  [r] reload  [s] send review  [v] verdict`.
+  - help row in the Pull requests section: `r("L", i18n.T("copy the pull request's gg:// link — paste it to an agent (/gg-review <link>) or open it with gg open; it lands in the PR's view"))`.
+  - Bundles: every new key in ja/ko/zh/ru (replace the hub keys line key; remove the old one from all four — the orphan gate).
+
+- [ ] **Step 4: run** the tests → PASS; then `go test ./internal/i18n/ ./internal/tui/ -run 'I18n|EngineProse|DecisionOptionValues|ActionMenuLabels|CheckVerbs|FooterRendersTranslated|PR' 2>&1 | tail -3` → ok.
+
+- [ ] **Step 5: commit** — `feat(tui): copy a pull request's gg:// link (L, the . menu, the PR details)`.
+
+---
+
+### Task 12: web — copy a PR's link
+
+**Files:**
+- Modify: `internal/web/prs.go` (route `GET /api/pr/link`), `internal/web/static/links.js` (`registerRows("pr", …)`), `internal/web/static/prs.js` (help text if the PR menu is listed in `registerHelp`)
+- Test: `internal/web/pr_link_test.go` (create)
+
+**Interfaces:**
+- Produces: `GET /api/pr/link?n=<n>` → `{"source": "refs/gg/pr/<n>", "target": "<base>"}`; 404 an unknown PR (`knownPR`), 409 `ErrPRNotFetched` (message names `gg pr fetch`).
+
+- [ ] **Step 1: tests (RED)** — `internal/web/pr_link_test.go` (SERIAL, `sendServerFull`):
+  - `TestPRLinkPairOverTheWire`: `GET /api/pr/link?n=7` → 200 `{source: "refs/gg/pr/7", target: "main"}`; `n=99` → 404.
+  - `TestPRMenuCopiesTheLink` (static, parallel): `links.js` contains `registerRows("pr",` and `"/api/pr/link?n="`.
+
+- [ ] **Step 2: run** `go test ./internal/web/ -run 'PRLinkPair|PRMenuCopies' 2>&1 | tail -3` → FAIL (404 / missing strings).
+
+- [ ] **Step 3: implement**
+  - `prs.go`: `mux.HandleFunc("GET /api/pr/link", s.handlePRLink)`; handler: `svc, pr, ok := s.knownPR(w, r)`; `p, err := svc.PRLinkPair(readCtx(r), pr.Number)`; `errors.Is(err, domain.ErrPRNotFetched)` → 409, other err → 500; else `writeJSON(w, map[string]any{"source": p.Head, "target": p.Base})`.
+  - `links.js`, beside `registerRows("preview", …)`:
+
+```js
+// A pull request's link: its base against gg's private head ref, the pair the
+// PR view opens (the server names it — the row's own names are for DISPLAY).
+// Opening it lands in the PR's view (live.js). An unfetched PR has none.
+registerRows("pr", (pr) =>
+  !pr.fetched
+    ? []
+    : [{
+        label: "copy gg:// link",
+        act: async () => {
+          let p;
+          try {
+            p = await getJSON("/api/pr/link?n=" + pr.number);
+          } catch (e) {
+            opLine("pull request #" + pr.number + ": " + (e.message || e), true);
+            return;
+          }
+          const link = linkFor(state.repo, state.worktree, { preview: { source: p.source, target: p.target } });
+          if (link) copyLink(link, linkDesc("preview", "PR #" + pr.number, ""));
+          else opLine("pull request #" + pr.number + ": no gg link for this pair", true);
+        },
+      }]
+);
+```
+
+  (Match `getJSON`/`opLine`/`linkFor`'s real signatures and imports in `links.js`; the preview row's own `copyLinkRow` shows the call shape.)
+
+- [ ] **Step 4: run** the tests → PASS; `node --check internal/web/static/links.js`.
+
+- [ ] **Step 5: commit** — `feat(web): copy a pull request's gg:// link from its menu`.
+
+---
+
+### Task 13: opening a PR link lands in the PR's view (TUI + web)
+
+**Rule:** a navigate whose preview SOURCE is `refs/gg/pr/<n>` (`domain.PRScopeNumber(target+"..."+source)` in Go; `/^refs\/gg\/pr\/(\d+)$/` in JS) opens PR n's view — GitHub threads, its own notes, send — when PR n is in the frontend's PR list; with a path it then opens that file (and line) inside it. A PR the list does not hold (no forge here, not listed) opens as the plain merge preview it always did, with a notice `PR #<n> is not in the pull request list here — opened as a merge preview`. Covers `gg open`, `gg session navigate`, the TUI `#` paste prompt and the web page (all ride the steer navigate).
+
+**Files:**
+- Modify: `internal/tui/steer_nav.go` (`pendingSteer.prNumber`; `steerNavigatePreview`; `drainPendingPreview`'s gate)
+- Modify: `internal/web/static/live.js` (`steerNavigateLand`'s preview arm), `internal/web/static/prs.js` (export `openPRLanding(n)` → resolves true when the PR view is on screen)
+- Modify: i18n bundles (the notice)
+- Test: `internal/tui/pr_link_test.go`, `internal/web/pr_link_test.go`
+
+- [ ] **Step 1: TUI tests (RED)** — in `pr_link_test.go`, mirror the existing preview-landing tests (`grep -ln steerNavigatePreview internal/tui/*_test.go`):
+  - `TestAPRLinkOpensThePRView`: model with #7 in `m.prs`; `steerNavigate(steer.Command{Cmd: "navigate", Target: &steer.Target{State: "preview", Source: "refs/gg/pr/7", Target: "main"}, File: "big.go"})` → the pending stage is `steerStagePreview` with `prNumber == 7`, and the returned cmd yields a `previewOpenMsg` with `prNumber == 7`; feeding that msg + the compare list lands on `big.go`'s diff (the same drain assertions the merge-preview landing test makes).
+  - `TestAPRLinkWithABaseSpellingOfItsOwnStillDrains`: the link's target is `origin/main` while the PR view opens with `main` → still drains (the gate is the number).
+  - `TestAnUnlistedPRLinkOpensAMergePreview`: `m.prs` empty → `openPreviewCmd` path (msg `prNumber == 0`) and the notice.
+
+- [ ] **Step 2: run** `go test ./internal/tui/ -run 'PRLink' 2>&1 | tail -4` → FAIL.
+
+- [ ] **Step 3: implement (TUI)**
+  - `pendingSteer` gains `prNumber int // steerStagePreview: a PR link — the PR view's number is the gate, not the pair's spelling`.
+  - `steerNavigatePreview` head:
+
+```go
+	if n, ok := domain.PRScopeNumber(tgt + "..." + src); ok {
+		if p, ok := m.listedPR(n); ok {
+			if m.width > 0 && m.width < 60 && c.File != "" {
+				return m, m.answerSteer(c, steerFail(c, "the terminal is too narrow for the diff view"))
+			}
+			m = m.steerToPanels()
+			if c.File == "" {
+				m = m.steerNotice(i18n.T("▸ opened PR #%d", n))
+				nm, reply := m.navigateLanded(c, fmt.Sprintf("opened pull request #%d", n))
+				return nm, tea.Batch(reply, nm.openPRPreviewCmd(p))
+			}
+			m.pendingSteer = &pendingSteer{cmd: c, stage: steerStagePreview, prNumber: n, at: time.Now()}
+			return m, m.openPRPreviewCmd(p)
+		}
+		m.statusMsg = i18n.T("PR #%d is not in the pull request list here — opened as a merge preview", n)
+	}
+```
+
+  (`listedPR(n)` = the row in `m.prs` with that number — add it in `pr_link.go` if no such helper exists; match `navigateLanded`'s real return shape.)
+  - `drainPendingPreview`'s gate: `po.source != ps.source || po.target != ps.target` → `!(ps.prNumber != 0 && po.prNumber == ps.prNumber) && (po.source != ps.source || po.target != ps.target)`; the landed/failed wording uses `pull request #<n>` when `ps.prNumber != 0`.
+  - If a start-at landing (`gg open <link>` launching the TUI) can arrive before the PR list loads, it would take the fallback: check `startAtOrigin` ordering against the PR listing; if the listing is not part of the start-at wait, park the landing until the first listing (or its failure) arrives — Ruling, ledgered.
+
+- [ ] **Step 4: web test (RED)** — `pr_link_test.go`, static (parallel): `live.js` contains `refs\/gg\/pr\/(\d+)` and `openPRLanding(`; `prs.js` contains `export async function openPRLanding(`. The behaviour is proven by the browser probe below.
+
+- [ ] **Step 5: implement (web)**
+  - `prs.js`: make `openPR` return whether the view is shown (`true` after `showPR` answered `"shown"` or after a successful fetch+show; `false` otherwise), and
+
+```js
+// openPRLanding opens PR n's view for a gg:// link (live.js): the same open
+// as a row click. false = the page does not list PR n.
+export async function openPRLanding(n) {
+  const pr = knownPR(n);
+  return pr ? await openPR(pr) : false;
+}
+```
+
+  - `live.js` preview arm:
+
+```js
+  if (s.state === "preview") {
+    const m = /^refs\/gg\/pr\/(\d+)$/.exec(s.source || "");
+    const n = m ? Number(m[1]) : 0;
+    if (n && (await openPRLanding(n))) {
+      if (!s.file) return;
+      if (!(await openNamedFile(state.files, s, "pull request #" + n))) return;
+    } else {
+      if (n) opLine("PR #" + n + " is not in the pull request list here — opened as a merge preview");
+      await openPreviewForPair(s.source, s.target);
+      if (!s.file) return;
+      if (!(await openNamedFile(state.files, s, "preview " + s.target + "..." + s.source))) return;
+    }
+  } else if …
+```
+
+- [ ] **Step 6: run** `go test ./internal/tui/ ./internal/web/ -run 'PRLink|Steer|Navigate|Landing' 2>&1 | tail -4` → ok; `node --check` both JS files.
+
+- [ ] **Step 7: commit** — `feat(links): a pull request's gg:// link opens in its PR view`.
+
+---
+
+### Task 14: skill text + docs for PR links
+
+**Files:**
+- Modify: `internal/agentskill/using-gg.md` (`gg link --pr`), `internal/agentskill/gg-review.md` (a PR link reviews the whole PR and stores the review in the PR's view), `internal/agentskill/agentskill.go` (`Version = 156`, `GGReviewVersion = 3`), regenerate `.claude/skills/using-gg/SKILL.md` and `.claude/skills/gg-review/SKILL.md` with a throwaway `go run` of `agentskill` (NOT `gg init --update` before merge)
+- Modify: `README.md` (`gg link --pr`, the `L` key), `CHANGELOG.md` (the Task 9 section gains "Links to pull requests"), `docs/CLAUDE-details.md` (link section: the PR link and its landing)
+
+- [ ] **Step 1:** using-gg, in the `gg link` block: `` - `gg link --pr <n> [<path>[:<line>]]` — a pull request's link (`…@<base>...refs/gg/pr/<n>`; fetched PRs only, `gg pr fetch <n>`). Opening it lands in the PR's view; `/gg-review <link>` stores a review the PR's view shows. `` In the `gg pr notes` paragraph: a review FOR a PR is `gg review save "$(gg link --pr <n>)"`.
+- [ ] **Step 2:** gg-review.md step 1's refusal line names a pull request link among the accepted kinds; one sentence: "A pull request's link (`@<base>...refs/gg/pr/<n>`) reviews the whole PR; the review shows in its view."
+- [ ] **Step 3:** bump the two versions; regenerate the dogfood copies; `go test ./internal/agentskill/ ./internal/agentinit/ 2>&1 | tail -3` → ok (`TestDogfoodSkillCopyInSync` included).
+- [ ] **Step 4:** README/CHANGELOG/CLAUDE-details lines.
+- [ ] **Step 5: commit** — `docs: pull request links (skill v156, gg-review v3)`.
+
+---
+
 ## After the tasks
 
 1. **Browser probe (web-visible: A2, A4 label).** Scratchpad `probe/fixtures.sh <dir> <bin> <port>` with `SRC=` the worktree + a `pscope.mjs` variant: open PR #7, move the fake head (force-push: reset `refs/pull/7/head` to an unrelated commit in the bare repo + `revalidate` blocked so the page keeps the old diff), add a note (`#prompt-input`). OLD build (`~/go/bin/gg`) first: the note is stored plain (count shows on the commit, not in the PR). NEW build (`<worktree>/bin/gg`): the op line shows the red "no longer holds … reopen it", nothing stored. Assert VISIBILITY of the line. A1/B1/B2/B3/B4/B5 get no probe (no visible surface or a race).
+   **PR links (Tasks 11–13):** web — right-click the PR row → "copy gg:// link" (assert the menu row is VISIBLE, read the clipboard text via the page's link history `/api/links`), then `gg session navigate <that link with :pr7.txt:1>` against the probe page → the PR view (compare bar names PR #7) with pr7.txt open. TUI — `./tui-capture.sh` on the fixture: Pull requests panel, `L` → status `copied link to PR #7`; then `gg open <link>` lands in the PR view. OLD build first: no menu row, no `L`, and the link opens a plain merge preview.
 2. **Race gate:** `./test.sh race > .superpowers/sdd/<plan>/race.log 2>&1` in the background; green only when the log says `all green`.
 3. **Final review:** one read-only subagent on the most capable model over `git merge-base main HEAD..HEAD`, with this plan's Review Focus.
 4. Ask before merging (`gg merge -F <msgfile> --into main fix/pr-followups-2`). After: `./build.sh install`, `./build.sh web`, `gg init --update`, remove worktree + branch, check main clean, update memory `github-write-feature.md`.
