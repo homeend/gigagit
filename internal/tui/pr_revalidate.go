@@ -28,6 +28,7 @@ type prRevalidatedMsg struct {
 	moved           bool
 	commentsChanged bool
 	manual          bool      // the user pressed r: answer on the status line
+	seq             int       // m.prReadSeq when the read started
 	readAt          time.Time // when the PR was last read (the offline mark's age)
 	err             error
 }
@@ -52,13 +53,14 @@ func (m Model) prRefreshCmd(n int, manual bool) (Model, tea.Cmd) {
 	}
 	m.prRevalidateInflight, m.prCommentsInflight, m.prRefreshing = true, true, true
 	m.prCommentsLast = time.Now()
-	svc, gen := m.svc, m.prsGen
+	m.prReadSeq++
+	svc, gen, seq := m.svc, m.prsGen, m.prReadSeq
 	return m, func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), prRevalidateBudget)
 		defer cancel()
 		rv, err := svc.PRRevalidate(ctx, n)
 		msg := prRevalidatedMsg{n: n, gen: gen, pr: rv.PR, moved: rv.Moved, commentsChanged: rv.CommentsChanged,
-			manual: manual, readAt: rv.ReadAt, err: err}
+			manual: manual, readAt: rv.ReadAt, seq: seq, err: err}
 		if err != nil {
 			msg.readAt, _ = svc.PRCacheReadAt(n)
 		}
@@ -102,13 +104,28 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 		po.srcHash != "" && po.srcHash != msg.pr.HeadSHA {
 		moved = true
 	}
+	// The first read that started after my own changing send carries that
+	// change (or nothing): absorbed, never "updated" (F2).
+	own := m.prOwnSend == msg.n && msg.seq > m.prOwnSendSeq
 	switch {
 	case m.prSeen != msg.n:
 		m.prSeen = msg.n // the open's first read: it fills the view
+	case own && !moved:
+		m.prOwnSend, m.prUpdated = 0, 0
 	case moved || msg.commentsChanged:
 		m.prUpdated = msg.n
+		if own {
+			m.prOwnSend = 0
+		}
 	case m.prUpdated == msg.n:
 		m.prUpdated = 0 // nothing new: the mark clears (spec §2.4)
+	}
+	if m.prRefreshAgain == msg.n && m.openPRNumber() == msg.n {
+		// The post-send read dropped while this one ran: ask it now.
+		m.prRefreshAgain = 0
+		var again tea.Cmd
+		m, again = m.prRefreshCmd(msg.n, false)
+		cmd = tea.Batch(cmd, again)
 	}
 	if !moved || m.openPRNumber() != msg.n || !m.opsIdle() {
 		return m, cmd // unchanged, or the user moved on: the next enter fetches

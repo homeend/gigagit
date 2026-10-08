@@ -243,9 +243,15 @@ func sendSkipReasonText(reason string) string {
 // opAffectedSources), whose arrival re-resolves the open diff's boxes.
 func (m Model) forgeSendFinished(fs *forgeSendState, res engine.Result, err error) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	if err == nil && res.Changed && fs.pr != 0 { // my own change (F1): not "updated"
+		m.prOwnSend, m.prOwnSendSeq = fs.pr, m.prReadSeq
+	}
 	if fs.pr != 0 && fs.pr == m.openPRNumber() {
 		var c tea.Cmd
 		m, c = m.prRefreshCmd(fs.pr, false)
+		if c == nil && (m.prRevalidateInflight || m.prCommentsInflight) {
+			m.prRefreshAgain = fs.pr // one read at a time: ask again when it lands
+		}
 		cmds = append(cmds, c, m.prCountsCmd())
 	}
 	// Whatever PR is open: a finished or discarded interrupted send must

@@ -294,6 +294,13 @@ type Model struct {
 	// prSeen: the PR whose view has had its first refresh — that read only
 	// fills the view, so it never says "updated".
 	prSeen int
+	// prReadSeq counts PR reads as they start (prRevalidatedMsg.seq); a
+	// changing send of mine arms prOwnSend (its PR) with prOwnSendSeq (the
+	// last read started before it ended): the first read that started after
+	// it absorbs its change instead of saying "updated". prRefreshAgain: the
+	// PR whose post-send read was dropped (one read at a time), asked again
+	// when the running one lands.
+	prReadSeq, prOwnSend, prOwnSendSeq, prRefreshAgain int
 	// prReland is where the user was when the open PR's head moved: the
 	// reopen that follows lands the files cursor (and an open diff, at its
 	// line) back there. Consumed by that reopen's file list.
@@ -4908,6 +4915,9 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m = m.closeSteerInbox()            // …and so does its steering inbox
 	m.interrupted = nil                // …and the sends it left half done
 	m.steerGen++                       // drop the old watcher's in-flight msgs
+	// The old repo's PR freshness goes too: a PR #7 there is another PR here.
+	m.prSeen, m.prUpdated, m.prOwnSend, m.prRefreshAgain = 0, 0, 0, 0
+	m.prOfflineSince, m.prRefreshing = time.Time{}, false
 	if m.watcher != nil {
 		_ = m.watcher.Close()
 		m.watcher = nil
