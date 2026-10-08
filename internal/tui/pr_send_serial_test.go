@@ -81,6 +81,7 @@ func prSendFixtures(head string) map[string]string {
 func addTUINote(t *testing.T, m Model, head string, line int, sum string) string {
 	t.Helper()
 	n, err := m.svc.NoteAdd(context.Background(), model.Note{Source: model.NoteSourceUser, Summary: sum,
+		Preview: "main...refs/gg/pr/7", // written in PR #7's view
 		Address: model.FileAddress{State: model.StateCommitted, Commit: head, Path: "big.go"},
 		Side:    model.NoteSideNew, Range: [2]int{line, line}})
 	if err != nil {

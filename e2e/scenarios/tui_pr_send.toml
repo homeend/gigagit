@@ -20,7 +20,7 @@ steps = [
 ]
 
 [[run]]
-cmd  = ["note", "add", "--rev", "feat", "--file", "big.txt", "--new-line", "5", "--summary", "why changed?", "--source", "user"]
+cmd  = ["note", "add", "--preview", "main...refs/gg/pr/7", "--file", "big.txt", "--new-line", "5", "--summary", "why changed?", "--source", "user"]
 exit = 0
 
 [tui]

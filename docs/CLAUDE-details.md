@@ -2109,10 +2109,20 @@ them on a file row.
   EVERY scope does: `PreviewNoteSet.scope()` is `Only`, else the set's own
   `Pair()` name, and `loadPreviewNotes` keeps the roots whose `Note.Preview`
   equals it plus their replies — a saved preview/pair, a pair link, CLI
-  `--preview` and MCP preview reads included. Only a pull request's set
-  (source `refs/gg/pr/<n>`) is exempt: its local notes carry no portable
-  name. A note that must show in a preview has to be WRITTEN in it (test
-  fixtures stamp `Preview`); address reads (`--rev`, `NotesAt`) stay whole.
+  `--preview` and MCP preview reads included. A pull request's set (source
+  `refs/gg/pr/<n>`) is no exception since 2026-10-08 (user ruling: a PR
+  shows only what was written for it): its notes and reviews record
+  `<base>...refs/gg/pr/<n>`, and `PreviewNoteSet.owns` matches a PR set BY
+  NUMBER (`PRScopeNumber`) — the base half moves with the PR's target (the
+  TUI/web build the set over the target branch or the base sha, an agent
+  types `origin/main`). Writers: the TUI note form (`previewNoteSet().Pair()`),
+  the web note add (`pr: n` → `domain.PRNoteScope`, stamped only on the PR's
+  tip), CLI/MCP `--preview`, batches, `ScopeReviewTarget`. `prReviewHeads` keeps
+  only `PreviewReviews` the set owns; carried notes (`forge_carried.go`,
+  `ResolvedNote.Origin`) are gone. Notes written in a PR view before then are
+  plain commit notes and stay on their commit. A note that must show in a
+  preview has to be WRITTEN in it (test fixtures stamp `Preview`); address
+  reads (`--rev`, `NotesAt`) stay whole.
 - View all notes → a review's note (2026-10-02): the TUI's enter on a note
   with `Note.Preview` goes to `openAllNotesReviewNote` (all_notes_scope.go):
   a loading diff layer over the popup, then `ScopeAtCommit` + `PairNotes`
@@ -5885,11 +5895,9 @@ colour.
 edit stamps use. `NoteReply` accepts a forge parent; edit/remove of a
 `forge:` id stay `ErrReadOnlyNote`.
 
-**Carried notes** (§1.4): `carriedNotes(set)` — only for a PR set — finds
-stored roots on other commits / working trees whose path the PR changes and
-whose `ContextHash` is found at the head; memory-cached per tip:base:notesGen
-(never on disk — R3); `Origin` = short sha or "working tree". Badges
-(`PreviewNoteCounts`) do not count them (plan 3 decides).
+**Carried notes** (§1.4) were REMOVED 2026-10-08 (user ruling: a PR shows
+only what was written for it — see the note-scope paragraph above: `owns`,
+`PRScopeNumber`).
 
 **Agents never send** (user ruling 2026-10-08, plan 4 — the pending-send
 queue of §3.7 was REMOVED). Inside any session gg started (`$GG_INBOX` set:
@@ -5974,14 +5982,16 @@ and its group bar (`domain.GroupSlot` = FNV-1a % 6 + 1, pinned by a test; the ba
 is the box's left frame column). Outside: only `◌` / `○!`. GitHub threads are
 replyable/resolvable only inside (`replyableNoteTargets(ts, inPR)`).
 
-**PR reviews in the diff (T1).** `domain.prReviewHeads(set)`: commit/branch
-reviews whose tip is one of the PR's commits, plus `NoteCounts.PreviewReviews`
-of scopes ending `...refs/gg/pr/<n>` (a preview review is never in
-`Reviews`). `prReviewNotes` places unsent remarks with `remarkPlace` (shared
-with the send planner) — cached per tip:base:notesGen like carried notes.
+**PR reviews in the diff (T1).** `domain.prReviewHeads(set)`: the
+`NoteCounts.PreviewReviews` whose scope the set owns (`<base>...refs/gg/pr/<n>`
+by PR number; since 2026-10-08 a review of a PR's COMMIT is not the PR's). A
+PR set has no preview Reviews block (`PreviewReviews` returns nil for it): its
+reviews are drawn as remarks and offered as send groups. `prReviewNotes`
+places unsent remarks with `remarkPlace` (shared with the send planner) —
+cached per PR:tip:base:notesGen (two PRs may share a head and a base).
 `PreviewNotesFor/At` build the extras in a FRESH slice (`prExtras`): the
-carried and remark slices are cached instances. Counts include carried
-notes and drawn remarks (T2); `PreviewNoteGroups` feeds the badge bars.
+remark slice is a cached instance. Counts include drawn remarks (T2);
+`PreviewNoteGroups` feeds the badge bars.
 
 **Notice source.** Interrupted sends (`interrupted_sends.go`) are re-derived
 in `rebuildNotices`, never appended raw; their actions are `sourced` (close

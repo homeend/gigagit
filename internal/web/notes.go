@@ -197,6 +197,10 @@ type noteReq struct {
 	// Preview is the scope the page wrote the note in ("<target>...<source>"
 	// or "<a>..<b>"); stamped only when it resolves to the note's own commit.
 	Preview string `json:"preview"`
+	// PR is the pull request whose diff the page wrote the note in (0 =
+	// none): the server names its scope — the page never sends a PR's names
+	// back as refs (previews.js).
+	PR int `json:"pr"`
 	// Link: a reply's gg:// link or commit (domain validates it). Resolved:
 	// the thread state /api/notes/resolve sets (required there).
 	Link     string `json:"link"`
@@ -279,11 +283,15 @@ func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	preview := s.notePreview(r.Context(), req.Preview, addr)
+	if req.PR > 0 && addr.State == model.StateCommitted {
+		preview = s.service().PRNoteScope(r.Context(), req.PR, addr.Commit)
+	}
 	n := model.Note{
 		Source: model.NoteSourceUser, Author: s.noteAuthor(r.Context(), req.Author), Address: addr,
 		Side: side, Range: [2]int{first, req.Line},
 		Summary: summary, Rationale: strings.TrimSpace(req.Rationale),
-		Preview: s.notePreview(r.Context(), req.Preview, addr),
+		Preview: preview,
 	}
 	// ContextHash is left empty on purpose: domain fills it from the side text
 	// (the browser has the rendered row, but the server is the authority here).

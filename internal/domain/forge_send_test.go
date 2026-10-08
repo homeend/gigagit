@@ -44,6 +44,7 @@ func sendRepo(t *testing.T) (*Service, *fakeForge, string) {
 func addPRNote(t *testing.T, svc *Service, commit, path string, line int, sum string) string {
 	t.Helper()
 	n, err := svc.NoteAdd(context.Background(), model.Note{Source: model.NoteSourceUser, Summary: sum,
+		Preview: "main..." + git.PRRef(7), // written for PR #7, as its view writes it
 		Address: model.FileAddress{State: model.StateCommitted, Commit: commit, Path: path},
 		Side:    model.NoteSideNew, Range: [2]int{line, line}})
 	if err != nil {

@@ -12,7 +12,7 @@ func TestPRNoteGroupsReadEachFileOnce(t *testing.T) {
 	t.Parallel()
 	svc, _, head := sendRepo(t)
 	addPRNote(t, svc, head, "big.go", 5, "mine")
-	saveHeadReview(t, svc, head, twoRemarks)
+	savePRReview(t, svc, twoRemarks)
 	cr := newCountingRunner(svc.repo.Runner)
 	svc.repo.Runner = cr
 	set := prNoteSetOf(t, svc)

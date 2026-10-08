@@ -88,21 +88,6 @@ func TestMarksOutsideAPRAreOnlyTheOnesThatNeedAttention(t *testing.T) {
 	}
 }
 
-func TestCarriedNoteNamesItsOrigin(t *testing.T) {
-	t.Parallel()
-	m := prNotedModel(t)
-	v := m.diffLayer()
-	v.notes[0].Origin = "a1b2c3d"
-	v.notes[1].Origin = domain.OriginWorkingTree
-	v.relayout(0)
-	if got := titleOf(t, v, "n1"); !strings.HasSuffix(got, "· from a1b2c3d") {
-		t.Fatalf("title %q", got)
-	}
-	if got := titleOf(t, v, "n2"); !strings.HasSuffix(got, "· from working tree") {
-		t.Fatalf("title %q", got)
-	}
-}
-
 // Sets the colour profile and theme (process-global): serial.
 func TestGroupBarPaintsTheLeftFrameColumn(t *testing.T) {
 	prev := lipgloss.ColorProfile()

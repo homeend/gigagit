@@ -835,9 +835,11 @@ finds the right one here.
   `gg diff <target>...refs/gg/pr/<n>`. Fork PRs work. `gg pr forget <n>`
   deletes that ref and drops a closed row.
   `gg pr comments` prefixes each thread root with `[<thread id>]`.
-- `gg pr notes <n> [--json]` — what the PR's view holds: local notes (with
-  `(from <origin>)` when carried from another commit or the working tree),
-  GitHub threads, draft replies; the ids `gg pr send --note` takes.
+- `gg pr notes <n> [--json]` — what the PR's view holds: the local notes
+  written for it, GitHub threads, draft replies; the ids `gg pr send --note`
+  takes. A note or review FOR a pull request is written with `--preview
+  <base>...refs/gg/pr/<n>` (after `gg pr fetch <n>`); it shows only in that
+  PR's view, and a note on a PR's commit written any other way does not.
 - **Sending to GitHub is the user's, never yours.** You cannot send
   anything to GitHub: inside any gg session `gg pr send`, `gg pr reply
   --send` and `gg pr resolve|unresolve` refuse ("agents can't send to

@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull requests show only their own notes
+
+### Changed
+
+- **A pull request's view shows only what was written for it**: GitHub's
+  review threads, your draft replies to them, the notes written in that PR
+  and the AI reviews run on it. It no longer shows notes from elsewhere
+  whose lines reappear in the PR ("carried" notes — removed, with their
+  "from …" label), other notes on the PR's commits, or reviews of its
+  commits. *Send review…*, the PR list's counts and `gg pr notes` follow.
+- A note written in a PR's diff (terminal UI, gg web) and a review run on a
+  PR record the PR (`<base>...refs/gg/pr/<n>`, matched by PR number, so a
+  moved base keeps them); agents write one with `--preview
+  <base>...refs/gg/pr/<n>`. Notes written in a PR view before this change
+  carry no PR and stay on their commit. Skill v155.
+
 ## Sending to GitHub — cache minors
 
 ### Changed

@@ -415,7 +415,7 @@ func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int, owner *diffVi
 		return noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: kind, side: r.Note.Side, text: text, stale: stale, agent: allAgent}
 	}
 	inPR := v.forgePR > 0
-	title := owner.noteBoxTitle(r) + noteOrigin(r.Origin)
+	title := owner.noteBoxTitle(r)
 	if mk := syncMark(r.Sync, inPR); mk != "" {
 		title = mk + " " + title
 	}
@@ -458,17 +458,6 @@ func syncMark(s model.SyncState, inPR bool) string {
 		return "●"
 	}
 	return "○"
-}
-
-// noteOrigin is a carried note's title tail ("" for any other note).
-func noteOrigin(origin string) string {
-	switch origin {
-	case "":
-		return ""
-	case domain.OriginWorkingTree:
-		return " · " + i18n.T("from working tree")
-	}
-	return " · " + i18n.T("from %s", origin)
 }
 
 // collapsedNoteLine is a whole thread on one row: "author: summary (N

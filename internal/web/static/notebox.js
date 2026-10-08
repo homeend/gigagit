@@ -43,9 +43,7 @@ export function noteTitle(n, path, preview, nowMs) {
   }
   const stale = n.status === "stale" || n.status === "outdated";
   const word = stale ? (preview ? " (outdated)" : " (stale)") : "";
-  // A carried note (spec §1.4) names where it is stored.
-  const from = n.origin ? " · from " + n.origin : "";
-  return (n.source === "agent" ? "agent note" : "note") + (n.author ? " · " + n.author : "") + " · " + path + " " + side + lines + word + (n.resolved ? " · resolved" : "") + from;
+  return (n.source === "agent" ? "agent note" : "note") + (n.author ? " · " + n.author : "") + " · " + path + " " + side + lines + word + (n.resolved ? " · resolved" : "");
 }
 
 // seedCollapsed is the collapse set a freshly opened diff starts with: the

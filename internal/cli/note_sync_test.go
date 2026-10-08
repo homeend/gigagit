@@ -31,9 +31,4 @@ func TestRenderNoteLineSyncTokens(t *testing.T) {
 	if got := line(sending); !strings.HasPrefix(got, "n1 [user] [sending] ") {
 		t.Errorf("sending = %q", got)
 	}
-	carried := base
-	carried.Origin = "bbbbbbb"
-	if got := line(carried); !strings.Contains(got, "active (from bbbbbbb)  s") {
-		t.Errorf("carried = %q", got)
-	}
 }

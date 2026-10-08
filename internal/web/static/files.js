@@ -2812,7 +2812,8 @@ function fileNoteRowsHTML(cols, nctx = null) {
 // display pair, the PR number, and — for a PR — the pair its gg:// link names.
 // noteScopeSpec names the scope a note is written in, the way the CLI's
 // --preview spells it: a merge preview "<target>...<source>", a commit pair
-// "<a>..<b>". A pull request's names are display names, never refs: none.
+// "<a>..<b>". A pull request's names are display names, never refs: none —
+// the request carries its number (`pr`) and the server names the scope.
 // The server resolves it and stamps the note only when its tip matches.
 function noteScopeSpec(pv) {
   if (!pv || pv.pr) return "";
@@ -3353,6 +3354,7 @@ function addNotePrompt() {
           summary,
           rationale,
           preview: noteScopeSpec(ad.ctx.preview),
+          pr: (ad.ctx.preview && ad.ctx.preview.pr) || 0,
         },
         // The note now says what the band said: the saved note's bar takes over.
         // Only THIS band — one marked while the write ran is not this note's.
