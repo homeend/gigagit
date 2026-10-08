@@ -122,14 +122,14 @@ func (m Model) steerNavigatePR(c steer.Command, p model.PullRequest) (Model, tea
 // (prFetchReadyMsg → the fetch op → openPRPreviewCmd). An unrelated op does
 // not block the first: only the fetch needs idle ops (handlePRFetchReady).
 func (m Model) openPRLandingCmd(p model.PullRequest) tea.Cmd {
-	svc, open := m.svc, m.openPRPreviewCmd(p)
+	svc, gen, open := m.svc, m.forgeGen, m.openPRPreviewCmd(p)
 	return func() tea.Msg {
 		ctx := context.Background()
 		if svc.PRFetched(ctx)[p.Number] {
 			return open()
 		}
 		op, err := svc.PRFetchOp(ctx, p.Number)
-		return prFetchReadyMsg{pr: p, op: op, err: err}
+		return prFetchReadyMsg{pr: p, op: op, err: err, gen: gen}
 	}
 }
 
@@ -142,10 +142,18 @@ func (m Model) failPRLanding(n int, reason string) (Model, tea.Cmd) {
 	return m.failPending(reason)
 }
 
-// restartPRLandingClock restarts PR n's parked landing's TTL: a fetch's
-// network time must not count against steerPendingTTL.
+// restartPRLandingClock restarts PR n's parked landing's TTL once its fetch
+// finished: computing the pair's diff gets a full steerPendingTTL (the fetch
+// itself is held outside the TTL — prFetchHoldsLanding).
 func (m Model) restartPRLandingClock(n int) {
 	if ps := m.pendingSteer; ps != nil && ps.prNumber == n {
 		ps.at = time.Now()
 	}
+}
+
+// prFetchHoldsLanding reports whether the parked landing waits on its PR's
+// fetch op: network time, never counted against steerPendingTTL.
+func (m Model) prFetchHoldsLanding() bool {
+	ps, po := m.pendingSteer, m.pendingPROpen
+	return ps != nil && ps.prNumber != 0 && po != nil && po.Number == ps.prNumber && m.running
 }

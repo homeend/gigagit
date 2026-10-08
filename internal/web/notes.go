@@ -290,7 +290,7 @@ func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 		// plain it would silently leave the PR's view.
 		pr, ok := s.cachedPR(s.service(), req.PR)
 		if !ok {
-			writeErr(w, http.StatusConflict, fmt.Errorf("pull request #%d is not in the pull request list any more — reopen it", req.PR))
+			writeErr(w, http.StatusConflict, fmt.Errorf("pull request #%d is not in the pull request list any more — search for it and open it again", req.PR))
 			return
 		}
 		sc, err := s.service().PRNoteScope(r.Context(), pr, addr.Commit)

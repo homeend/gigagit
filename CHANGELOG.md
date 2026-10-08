@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull request follow-ups 4
+
+### Changed
+
+- **A link to a pull request this repository has not fetched yet now
+  opens.** `gg open`, `gg session navigate`, the TUI's `#` and gg web's link
+  box used to refuse it ("no checkout … holds both main and refs/gg/pr/7");
+  when the PR is listed, its view now fetches the head first and lands on
+  the file and line. `gg review`, `gg compare` and the MCP link tools still
+  need the PR fetched. Skill v157.
+- gg web: a note refused because its PR left the pull request list now says
+  to search for the PR ("… — search for it and open it again").
+
+### Fixed
+
+- TUI: a PR link landing no longer runs out of time while the PR's fetch
+  runs; pressing enter on the same PR during an agent's landing no longer
+  fails it; a fetch that cannot start says why on the status line; a fetch
+  resolved just before a repo switch no longer starts in the new repository.
+- gg web: a failed PR open no longer logs a second unhandled error.
+
 ## Pull request follow-ups 3
 
 ### Changed

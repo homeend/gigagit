@@ -987,6 +987,10 @@ func (m Model) expirePendingSteer(now time.Time) (Model, tea.Cmd) {
 	if m.pendingSteer == nil || now.Sub(m.pendingSteer.at) < steerPendingTTL {
 		return m, nil
 	}
+	if m.prFetchHoldsLanding() {
+		m.pendingSteer.at = now // the PR's fetch runs: the TTL starts when it ends
+		return m, nil
+	}
 	return m.failPending("the view did not load in time")
 }
 

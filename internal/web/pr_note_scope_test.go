@@ -41,7 +41,9 @@ func TestWebPRNoteOffThePRIsRefused(t *testing.T) {
 	if code != 409 || !strings.Contains(fmt.Sprint(out["error"]), "#7") {
 		t.Fatalf("add = %d %v", code, out)
 	}
-	if c, err := srv.service().NoteCounts(context.Background()); err == nil && c.ByCommit[parent] != 0 {
+	if c, err := srv.service().NoteCounts(context.Background()); err != nil {
+		t.Fatal(err)
+	} else if c.ByCommit[parent] != 0 {
 		t.Fatal("the refused note was stored")
 	}
 }
@@ -58,13 +60,15 @@ func TestWebNoteForAnUnknownPRReadsNoForge(t *testing.T) {
 	before := reads()
 	code, out := postJSONAny(t, ts, "/api/notes/add",
 		fmt.Sprintf(`{"path":"pr7.txt","rev":%q,"state":"commit","side":"new","line":1,"summary":"x","pr":99}`, head))
-	if code != 409 || !strings.Contains(fmt.Sprint(out["error"]), "#99") {
+	if code != 409 || !strings.Contains(fmt.Sprint(out["error"]), "#99") || !strings.Contains(fmt.Sprint(out["error"]), "search for it") {
 		t.Fatalf("add = %d %v", code, out)
 	}
 	if n := reads() - before; n != 0 {
 		t.Fatalf("the note add read the forge %d times", n)
 	}
-	if c, err := srv.service().NoteCounts(context.Background()); err == nil && c.ByCommit[head] != 0 {
+	if c, err := srv.service().NoteCounts(context.Background()); err != nil {
+		t.Fatal(err)
+	} else if c.ByCommit[head] != 0 {
 		t.Fatal("the refused note was stored")
 	}
 }
@@ -78,7 +82,9 @@ func TestWebPRNoteWithTheDiffGoneIsRefused(t *testing.T) {
 	if code != 409 || !strings.Contains(fmt.Sprint(out["error"]), "#7") {
 		t.Fatalf("add = %d %v", code, out)
 	}
-	if c, err := srv.service().NoteCounts(context.Background()); err == nil && c.ByCommit[head] != 0 {
+	if c, err := srv.service().NoteCounts(context.Background()); err != nil {
+		t.Fatal(err)
+	} else if c.ByCommit[head] != 0 {
 		t.Fatal("the refused note was stored")
 	}
 }

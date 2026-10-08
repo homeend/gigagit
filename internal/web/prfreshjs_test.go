@@ -325,7 +325,7 @@ func TestPRsJSLandingWaitsForTheList(t *testing.T) {
 	for _, want := range []string{
 		"coveredReads(",
 		"if (liveListing(body)) listLoaded.open();",
-		"await listLoaded.wait(LANDING_LIST_MS)",
+		"waitList: () => listLoaded.wait(LANDING_LIST_MS)",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("prs.js lacks %q", want)
@@ -391,7 +391,7 @@ func TestPRsJSLandingWaitsForAnOpenInFlight(t *testing.T) {
 	if j := strings.Index(body, "\n}\n"); j > 0 {
 		body = body[:j]
 	}
-	for _, want := range []string{"await opens.idle()", "opens.try(() => openPRNow(pr))"} {
+	for _, want := range []string{"landPR(", "idle: () => opens.idle()", "tryOpen: (pr) => opens.try(() => openPRNow(pr))"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("openPRLanding lacks %q", want)
 		}
@@ -446,5 +446,80 @@ func TestPRsJSLandingTrustsNoStalePreviewOpen(t *testing.T) {
 	}
 	if !strings.Contains(src, "if (liveListing(body)) listLoaded.open();") {
 		t.Error("the list latch does not wait for the live listing")
+	}
+}
+
+// A failed open rejects only the promise its caller holds: exclusive's own
+// bookkeeping must not leave a second, unhandled rejection behind.
+func TestPRFreshJSExclusiveRejects(t *testing.T) {
+	t.Parallel()
+	out := runFreshModuleJS(t, `
+import { exclusive } from "./prfresh.mjs";
+let unhandled = 0;
+process.on("unhandledRejection", () => { unhandled++; });
+const ex = exclusive();
+ex.try(() => Promise.reject(new Error("x"))).catch(() => {});
+await new Promise((r) => setTimeout(r, 20));
+const idle = await Promise.race([ex.idle().then(() => "now"), new Promise((r) => setTimeout(() => r("late"), 20))]);
+console.log(JSON.stringify({ unhandled, idle }));
+`)
+	var got struct {
+		Unhandled int    `json:"unhandled"`
+		Idle      string `json:"idle"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if got.Unhandled != 0 || got.Idle != "now" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// The PR link landing's order (prs.js openPRLanding → landPR): a running
+// open first, then the list (one newer read, then the first live listing),
+// then the open — waiting while another runs; a failed open is false.
+func TestPRFreshJSLandPR(t *testing.T) {
+	t.Parallel()
+	out := runFreshModuleJS(t, `
+import { landPR } from "./prfresh.mjs";
+async function run(knownAfter, opens) {
+  const log = [];
+  let stage = 0; // 0 = before fetchList, 1 = after it, 2 = after waitList
+  const d = {
+    idle: async () => log.push("idle"),
+    known: (n) => (knownAfter !== null && stage >= knownAfter ? { number: n } : null),
+    fetchList: async () => { log.push("fetchList"); stage = 1; },
+    waitList: async () => { log.push("waitList"); stage = 2; },
+    tryOpen: () => { log.push("tryOpen"); const o = opens.shift(); return o === null ? null : Promise.resolve(o); },
+  };
+  const got = await landPR(d, 7);
+  return { log, got };
+}
+console.log(JSON.stringify([
+  await run(0, [true]),
+  await run(1, [true]),
+  await run(2, [true]),
+  await run(null, []),
+  await run(0, [null, false]),
+]));
+`)
+	type res struct {
+		Log []string `json:"log"`
+		Got *bool    `json:"got"`
+	}
+	var got []res
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	tr, fa := true, false
+	want := []res{
+		{[]string{"idle", "tryOpen"}, &tr},
+		{[]string{"idle", "fetchList", "tryOpen"}, &tr},
+		{[]string{"idle", "fetchList", "waitList", "tryOpen"}, &tr},
+		{[]string{"idle", "fetchList", "waitList"}, nil},
+		{[]string{"idle", "tryOpen", "idle", "tryOpen"}, &fa},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got  %+v\nwant %+v", got, want)
 	}
 }

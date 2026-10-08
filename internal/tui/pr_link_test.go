@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -313,7 +314,7 @@ func TestAFailedPRLandingFetchAnswersTheAgent(t *testing.T) {
 	t.Parallel()
 	m, dir := prLinkUnfetchedModel(t)
 	m, _ = m.applySteer(prLinkFileCmd("pr-7"))
-	nm, cmd := m.Update(prFetchReadyMsg{pr: testPRs()[0], err: errors.New("no forge")})
+	nm, cmd := m.Update(prFetchReadyMsg{pr: testPRs()[0], err: errors.New("no forge"), gen: m.forgeGen})
 	if nm.(Model).pendingSteer != nil {
 		t.Fatal("the landing is still parked")
 	}
@@ -325,18 +326,21 @@ func TestAFailedPRLandingFetchAnswersTheAgent(t *testing.T) {
 	}
 }
 
-// B4: the whole chain — fetch op armed, the landing stays parked (and its
-// clock restarts: steerPendingTTL is 5s, a fetch can take longer), the op
+// B4: the whole chain — fetch op armed, the landing stays parked (held
+// outside steerPendingTTL while the fetch runs), the op
 // finishes, the PR's view opens and the line lands.
 func TestAPRLinkToAnUnfetchedPRLandsAfterTheFetch(t *testing.T) {
 	t.Parallel()
 	m, dir := prLinkUnfetchedModel(t)
 	m, _ = m.applySteer(prLinkFileCmd("pr-8"))
 	m.pendingSteer.at = time.Now().Add(-4 * time.Second)
-	nm, _ := m.Update(prFetchReadyMsg{pr: testPRs()[0], op: engine.FetchPRHead{Remote: "origin", Refspec: "refs/pull/7/head", Number: 7}})
+	nm, _ := m.Update(prFetchReadyMsg{pr: testPRs()[0], op: engine.FetchPRHead{Remote: "origin", Refspec: "refs/pull/7/head", Number: 7}, gen: m.forgeGen})
 	m = nm.(Model)
-	if m.pendingPROpen == nil || m.pendingSteer == nil || time.Since(m.pendingSteer.at) > time.Second {
+	if m.pendingPROpen == nil || m.pendingSteer == nil {
 		t.Fatalf("pendingPROpen=%v pendingSteer=%+v", m.pendingPROpen != nil, m.pendingSteer)
+	}
+	if m, _ = m.expirePendingSteer(time.Now().Add(2 * time.Second)); m.pendingSteer == nil {
+		t.Fatal("the landing expired while its fetch ran")
 	}
 	runGit(t, repoTop(t, m), "update-ref", "refs/gg/pr/7", "feat/x") // what the fetch op would have written
 	nm, cmd := m.Update(opFinishedMsg{res: engine.Result{Summary: "fetched"}})
@@ -346,5 +350,106 @@ func TestAPRLinkToAnUnfetchedPRLandsAfterTheFetch(t *testing.T) {
 	}
 	if rep := readOneReply(t, dir, "pr-8"); !rep.OK {
 		t.Fatalf("reply = %+v", rep)
+	}
+}
+
+// prFetchOp7 is PR #7's fetch op as PRFetchOp would resolve it.
+func prFetchOp7() engine.FetchPRHead {
+	return engine.FetchPRHead{Remote: "origin", Refspec: "refs/pull/7/head", Number: 7}
+}
+
+// The PR's fetch op is network time: a landing parked on it never expires
+// while it runs (steerPendingTTL is 5s), and expires as before after.
+func TestAPRLandingDoesNotExpireWhileItsFetchRuns(t *testing.T) {
+	t.Parallel()
+	m, _ := prLinkUnfetchedModel(t)
+	m, _ = m.applySteer(prLinkFileCmd("pr-9"))
+	pr := testPRs()[0]
+	m.pendingPROpen, m.running = &pr, true
+	m.pendingSteer.at = time.Now().Add(-10 * time.Second)
+	m, _ = m.expirePendingSteer(time.Now())
+	if m.pendingSteer == nil {
+		t.Fatal("the landing expired while its fetch ran")
+	}
+	m.running = false
+	m.pendingSteer.at = time.Now().Add(-10 * time.Second)
+	if m, _ = m.expirePendingSteer(time.Now()); m.pendingSteer != nil {
+		t.Fatal("with no fetch running the landing must expire")
+	}
+}
+
+// Enter on PR #7 while an agent's landing on #7 is fetching (or the other
+// way round): the fetch already running opens the view the landing waits
+// for — the second resolve must not fail the landing.
+func TestEnterOnTheSamePRDuringALandingFetchKeepsTheLanding(t *testing.T) {
+	t.Parallel()
+	m, dir := prLinkUnfetchedModel(t)
+	m, _ = m.applySteer(prLinkFileCmd("pr-10"))
+	pr := testPRs()[0]
+	m.pendingPROpen, m.running = &pr, true
+	nm, _ := m.Update(prFetchReadyMsg{pr: pr, op: prFetchOp7(), gen: m.forgeGen})
+	if nm.(Model).pendingSteer == nil {
+		t.Fatal("the landing was failed by a fetch of the same PR")
+	}
+	if _, ok := steer.AwaitReply(dir, "pr-10", 200*time.Millisecond); ok {
+		t.Fatal("a reply was written")
+	}
+	m.pendingPROpen = nil // an unrelated op runs
+	nm, cmd := m.Update(prFetchReadyMsg{pr: pr, op: prFetchOp7(), gen: m.forgeGen})
+	if nm.(Model).pendingSteer != nil {
+		t.Fatal("an unrelated op must fail the landing")
+	}
+	if cmd != nil {
+		drainMsgs(t, nm.(Model), cmd, 4)
+	}
+	if rep := readOneReply(t, dir, "pr-10"); rep.OK {
+		t.Fatalf("reply = %+v", rep)
+	}
+}
+
+// A file-less landing has replied already: when the fetch cannot start, the
+// status line is the only place that says why.
+func TestAFileLessPRLandingSaysWhyWhenBusy(t *testing.T) {
+	t.Parallel()
+	m := prModel(t)
+	m.running = true
+	nm, _ := m.Update(prFetchReadyMsg{pr: testPRs()[0], op: prFetchOp7(), gen: m.forgeGen})
+	if got := nm.(Model).statusMsg; got != "PR #7: an operation is running — open it again when it finishes" {
+		t.Fatalf("status = %q", got)
+	}
+}
+
+// A resolve that lands after a repo switch must not start the old repo's
+// fetch in the new one.
+func TestAPRFetchReadyFromALeftRepoIsDropped(t *testing.T) {
+	t.Parallel()
+	m := prModel(t)
+	m.forgeGen = 2
+	nm, cmd := m.Update(prFetchReadyMsg{pr: testPRs()[0], op: prFetchOp7(), gen: 1})
+	if mm := nm.(Model); cmd != nil || mm.pendingPROpen != nil || mm.running {
+		t.Fatalf("cmd=%v pendingPROpen=%v running=%v", cmd != nil, mm.pendingPROpen, mm.running)
+	}
+}
+
+// Follow-ups 4: # with a link to a PR the list holds but this repo has not
+// fetched resolves (the resolver no longer refuses it) and the landing
+// fetches the PR first.
+func TestPastingAnUnfetchedPRLinkFetchesThePR(t *testing.T) {
+	t.Parallel()
+	m, _ := prLinkUnfetchedModel(t)
+	m.statePath = filepath.Join(t.TempDir(), "repos.toml")
+	m, cmd := pasteLink(t, m, linkTo(repoTop(t, m), "/a.txt@main...refs/gg/pr/7:1"))
+	m, cmd = send(m, cmd())
+	if p := layerOf[*gotoCommitPopup](m); p != nil {
+		t.Fatalf("the prompt stayed open: %q", p.err)
+	}
+	if m.pendingSteer == nil || m.pendingSteer.prNumber != 7 {
+		t.Fatalf("pendingSteer = %+v", m.pendingSteer)
+	}
+	if cmd == nil {
+		t.Fatal("no open")
+	}
+	if got := cmd(); func() bool { msg, ok := got.(prFetchReadyMsg); return !ok || msg.pr.Number != 7 }() {
+		t.Fatalf("landing → %T, want the PR's fetch", got)
 	}
 }
