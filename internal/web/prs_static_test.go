@@ -78,7 +78,7 @@ func TestPRPageSendsOnlyTheNumber(t *testing.T) {
 	}
 	js := string(b)
 	// Every module that talks about a pull request (prs.js and the send's).
-	for _, f := range []string{"prs.js", "prsend.js", "prsendrows.js", "sendplan.js", "prfresh.js"} {
+	for _, f := range []string{"prs.js", "prsend.js", "prsendrows.js", "sendplan.js", "prfresh.js", "prkept.js"} {
 		src, err := os.ReadFile(filepath.Join("static", f))
 		if err != nil {
 			t.Fatal(err)

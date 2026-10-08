@@ -97,8 +97,9 @@ func TestPRSendModuleIsWired(t *testing.T) {
 	}
 }
 
-// Item 8: the verdict's typed body survives a refusal; F1: only a send that
-// changed GitHub drops a kept body (an abort keeps it).
+// Item 8: the verdict's typed body survives a refusal; the wiring of
+// prkept.js (TestPRKeptJS holds the rule: only its own box's changing send
+// drops a kept body).
 func TestPRSendKeepsTheVerdictBody(t *testing.T) {
 	t.Parallel()
 	b, err := os.ReadFile(filepath.Join("static", "prsend.js"))
@@ -107,7 +108,9 @@ func TestPRSendKeepsTheVerdictBody(t *testing.T) {
 	}
 	for _, want := range []string{
 		`keptBody = { pr, group: "verdict", text };`,
-		`if (ev.ok && ev.changed) keptBody = null;`,
+		`keptBody = keptAfterSend(keptBody, n, body, ev);`,
+		`keptText(keptBody, pr, "verdict")`,
+		`fn(n, ev, body)`,
 	} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("prsend.js lacks %q", want)
