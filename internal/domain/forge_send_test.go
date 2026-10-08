@@ -143,11 +143,11 @@ func TestPRSendOpNeedsAWritableForge(t *testing.T) {
 
 func TestPlanSendWholeReviewKeysEveryRemark(t *testing.T) {
 	t.Parallel()
-	svc, _, head := sendRepo(t)
+	svc, _, _ := sendRepo(t)
 	ctx := context.Background()
 	doc := `{"version":1,"summary":"looks fine","files":[{"path":"big.go","annotations":[
  {"newRange":[5,5],"summary":"check this"},{"newRange":[25,25],"summary":"and this"}]}]}`
-	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Label: "feat"},
+	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ScopeReviewTarget(prNoteSetOf(t, svc)), // a review saved on the PR
 		Agent: "claude", Text: doc})
 	if err != nil {
 		t.Fatal(err)
@@ -204,12 +204,12 @@ func TestPlanSendSkipsAStaleNoteAndLeavesItLocal(t *testing.T) {
 // again.
 func TestPartlySentReviewKeepsItsSummaryOnGitHub(t *testing.T) {
 	t.Parallel()
-	svc, ff, head := sendRepo(t)
+	svc, ff, _ := sendRepo(t)
 	svc.forgeNow = func() time.Time { return settleT0 }
 	ctx := context.Background()
 	doc := `{"version":1,"summary":"looks fine","files":[{"path":"big.go","annotations":[
  {"newRange":[5,5],"summary":"check this"},{"newRange":[25,25],"summary":"and this"}]}]}`
-	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Label: "feat"},
+	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ScopeReviewTarget(prNoteSetOf(t, svc)), // a review saved on the PR
 		Agent: "claude", Text: doc})
 	if err != nil {
 		t.Fatal(err)
@@ -274,7 +274,7 @@ func TestPartlySentReviewKeepsItsSummaryOnGitHub(t *testing.T) {
 	// Re-saved with a NEW summary: that text is not on GitHub yet, so it is
 	// the body again; the remark already there stays moved.
 	newDoc := strings.Replace(doc, "looks fine", "two things to fix", 1)
-	if _, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Label: "feat"},
+	if _, _, err := svc.SaveReview(ctx, SaveReview{Target: ScopeReviewTarget(prNoteSetOf(t, svc)), // a review saved on the PR
 		Agent: "claude", Text: newDoc, NoteID: rid}); err != nil {
 		t.Fatal(err)
 	}

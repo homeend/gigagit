@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -46,6 +47,12 @@ func (s *Service) prReviewHeads(ctx context.Context, set PreviewNoteSet) []Revie
 		out = append(out, c.PreviewReviews[sc]...)
 	}
 	return out
+}
+
+// prOwnsReview reports whether review rid is one PR set shows (its own,
+// stamped for it): a send takes no other.
+func (s *Service) prOwnsReview(ctx context.Context, set PreviewNoteSet, rid string) bool {
+	return slices.ContainsFunc(s.prReviewHeads(ctx, set), func(h ReviewHead) bool { return h.ID == rid })
 }
 
 // prReviewNotes is every unsent remark of the PR's reviews, by path, placed

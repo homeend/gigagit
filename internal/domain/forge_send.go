@@ -381,6 +381,9 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 		if err != nil {
 			return engine.SendPlan{}, err
 		}
+		if !s.prOwnsReview(ctx, prev.Set, r.ID) {
+			return engine.SendPlan{}, fmt.Errorf("%w: review %s is not in this PR", ErrSendRequest, r.ID)
+		}
 		plan.Key, plan.Body, plan.Verdict = r.ID, reviewSendBody(r), true
 		edited := strings.TrimSpace(req.Body)
 		cleared := req.BodySet && edited == ""
@@ -419,6 +422,9 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 				r, err := s.Review(ctx, rid)
 				if err != nil {
 					return engine.SendPlan{}, err
+				}
+				if !s.prOwnsReview(ctx, prev.Set, r.ID) {
+					return engine.SendPlan{}, fmt.Errorf("%w: review %s is not in this PR", ErrSendRequest, r.ID)
 				}
 				if n >= len(r.docRemarks()) {
 					return engine.SendPlan{}, fmt.Errorf("%w: %s", ErrNoSuchRemark, id)
