@@ -10,8 +10,7 @@ import (
 )
 
 // noteMark (notebox.js) is a box's sync mark (spec 2026-10-07 §1.1): every
-// state in a PR's own diff, only sending / failed elsewhere (plan 3's T3);
-// a carried note's title names its origin.
+// state in a PR's own diff, only sending / failed elsewhere (plan 3's T3).
 func TestNoteMarkJS(t *testing.T) {
 	t.Parallel()
 	node, err := exec.LookPath("node")
@@ -27,8 +26,7 @@ func TestNoteMarkJS(t *testing.T) {
 		t.Fatal(err)
 	}
 	const runner = `
-import { noteMark, noteTitle } from "./notebox.mjs";
-const now = Date.parse("2026-09-20T12:00:00Z");
+import { noteMark } from "./notebox.mjs";
 const marks = [
   noteMark({ sync: "local" }, true),
   noteMark({ sync: "sending" }, true),
@@ -39,8 +37,7 @@ const marks = [
   noteMark({ sync: "github", source: "forge", read_only: true }, false),
   noteMark({ source: "forge", read_only: true }, true),
 ];
-const carried = noteTitle({ id: "n9", source: "user", side: "new", line: 3, status: "active", origin: "a1b2c3d" }, "a.go", true, now);
-console.log(JSON.stringify({ marks, carried }));
+console.log(JSON.stringify({ marks }));
 `
 	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(runner), 0o644); err != nil {
 		t.Fatal(err)
@@ -50,8 +47,7 @@ console.log(JSON.stringify({ marks, carried }));
 		t.Fatalf("node: %v\n%s", err, out)
 	}
 	var got struct {
-		Marks   []json.RawMessage `json:"marks"`
-		Carried string            `json:"carried"`
+		Marks []json.RawMessage `json:"marks"`
 	}
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("decode %s: %v", out, err)
@@ -66,9 +62,6 @@ console.log(JSON.stringify({ marks, carried }));
 		if !strings.HasPrefix(string(got.Marks[i]), w) {
 			t.Errorf("mark %d = %s, want prefix %s", i, got.Marks[i], w)
 		}
-	}
-	if !strings.HasSuffix(got.Carried, " · from a1b2c3d") {
-		t.Errorf("carried title = %q", got.Carried)
 	}
 }
 

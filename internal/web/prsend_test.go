@@ -107,6 +107,14 @@ func sendServer(t *testing.T) (*httptest.Server, *writerForge, string) {
 // sendServerWith is sendServer listing more open pull requests (never fetched).
 func sendServerWith(t *testing.T, more ...model.PullRequest) (*httptest.Server, *writerForge, string) {
 	t.Helper()
+	ts, wf, _, head, _ := sendServerFull(t, more...)
+	return ts, wf, head
+}
+
+// sendServerFull is sendServerWith that also hands back the server and the
+// work dir.
+func sendServerFull(t *testing.T, more ...model.PullRequest) (*httptest.Server, *writerForge, *Server, string, string) {
+	t.Helper()
 	dir, bare, head := prFixture(t)
 	pr := openPR(7, "Add a thing")
 	pr.HeadSHA, pr.NodeID = head, "PR_7"
@@ -127,14 +135,14 @@ func sendServerWith(t *testing.T, more ...model.PullRequest) (*httptest.Server, 
 	if done := runPROp(t, ts, "pr-fetch", 7); done["ok"] != true {
 		t.Fatalf("pr-fetch: %v", done)
 	}
-	return ts, wf, head
+	return ts, wf, srv, head, dir
 }
 
 // addWebNote writes a note on the PR head's path:line the way the page does.
 func addWebNote(t *testing.T, ts *httptest.Server, head, path string, line int, summary string) string {
 	t.Helper()
 	code, out := postJSONAny(t, ts, "/api/notes/add",
-		fmt.Sprintf(`{"path":%q,"rev":%q,"state":"commit","side":"new","line":%d,"summary":%q}`, path, head, line, summary))
+		fmt.Sprintf(`{"path":%q,"rev":%q,"state":"commit","side":"new","line":%d,"summary":%q,"pr":7}`, path, head, line, summary))
 	id, _ := out["id"].(string)
 	if code != 200 || id == "" {
 		t.Fatalf("add note = %d %v", code, out)

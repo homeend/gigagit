@@ -668,6 +668,25 @@ func (s *Service) PRNotes(ctx context.Context, n int) (map[string][]ResolvedNote
 	return s.PreviewNotesAll(ctx, prev.Set)
 }
 
+// PRNoteScope is the scope a note written in PR n's view records
+// ("<base>...refs/gg/pr/<n>", spec 2026-10-08 §3) — only when commit is the
+// PR's tip, the one commit its view writes notes on; "" otherwise. The PR is
+// read from the cache when it is there (its view is open).
+func (s *Service) PRNoteScope(ctx context.Context, n int, commit string) string {
+	pr, _, ok := s.PRDetailsCached(n)
+	if !ok {
+		var err error
+		if pr, err = s.PullRequest(ctx, n); err != nil {
+			return ""
+		}
+	}
+	prev, err := s.PRPreview(ctx, pr)
+	if err != nil || !prev.Set.OK() || prev.Set.Tip != commit {
+		return ""
+	}
+	return prev.Set.Pair()
+}
+
 // prCommentsNow is PR n's comments from the cache, else from ONE snapshot
 // read (PRRevalidate also caches the PR and settles any stamps).
 func (s *Service) prCommentsNow(ctx context.Context, n int) (PRComments, error) {
