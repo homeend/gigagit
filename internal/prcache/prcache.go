@@ -79,6 +79,7 @@ type Store struct {
 	root   string
 	max    int
 	rename func(from, to string) error // os.Rename; tests inject a blocked one
+	remove func(string) error          // os.Remove; tests inject a blocked one
 }
 
 // New opens the cache rooted at root (created on first write), keeping at
@@ -87,7 +88,7 @@ func New(root string, max int) *Store {
 	if max <= 0 {
 		max = DefaultMax
 	}
-	return &Store{root: root, max: max, rename: os.Rename}
+	return &Store{root: root, max: max, rename: os.Rename, remove: os.Remove}
 }
 
 // Fresh reports whether a read at readAt is still within maxAge of now. A
@@ -131,7 +132,7 @@ func (s *Store) repoPath() string       { return filepath.Join(s.root, "repo.jso
 // LoadRepo reads the cached base repository.
 func (s *Store) LoadRepo() (Repo, bool) {
 	var r Repo
-	return r, readJSON(s.repoPath(), &r)
+	return r, s.readJSON(s.repoPath(), &r)
 }
 
 // SaveRepo replaces the cached base repository.
@@ -154,13 +155,13 @@ func (s *Store) locked(f func() error) error {
 
 // readJSON decodes path into v; a corrupt file is quarantined and reads as
 // absent, a missing one as absent.
-func readJSON(path string, v any) bool {
+func (s *Store) readJSON(path string, v any) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
 	if err := json.Unmarshal(b, v); err != nil {
-		_ = os.Rename(path, path+".corrupt-"+strconv.FormatInt(time.Now().Unix(), 10))
+		_ = s.renameRetry(path, path+".corrupt-"+strconv.FormatInt(time.Now().Unix(), 10))
 		return false
 	}
 	return true
@@ -192,20 +193,31 @@ func (s *Store) writeJSON(path string, v any) error {
 	return nil
 }
 
-// renameRetry is writeJSON's last step. On Windows a rename over a file
-// another gg process is reading (os.ReadFile holds it without
-// FILE_SHARE_DELETE) fails with access denied or a sharing violation — a
-// state that clears in milliseconds. Those retry for filelock.Wait, like the
-// lock itself; anything else fails at once.
-func (s *Store) renameRetry(from, to string) error {
+// retry runs op until it succeeds, fails for good, or filelock.Wait passes.
+// On Windows a rename over, a rename of, or a removal of a file another gg
+// process is reading (os.ReadFile holds it without FILE_SHARE_DELETE) fails
+// with access denied or a sharing violation — a state that clears in
+// milliseconds. Those retry, like the lock itself; anything else fails at
+// once.
+func retry(op func() error) error {
 	deadline := time.Now().Add(filelock.Wait)
 	for {
-		err := s.rename(from, to)
+		err := op()
 		if err == nil || !transientRename(err) || time.Now().After(deadline) {
 			return err
 		}
 		time.Sleep(filelock.Poll)
 	}
+}
+
+// renameRetry is writeJSON's last step and the quarantine's rename.
+func (s *Store) renameRetry(from, to string) error {
+	return retry(func() error { return s.rename(from, to) })
+}
+
+// removeRetry is the trim's and Remove's delete.
+func (s *Store) removeRetry(path string) error {
+	return retry(func() error { return s.remove(path) })
 }
 
 func transientRename(err error) bool {
@@ -215,7 +227,7 @@ func transientRename(err error) bool {
 // LoadList reads the cached listing.
 func (s *Store) LoadList() (List, bool) {
 	var l List
-	return l, readJSON(s.listPath(), &l)
+	return l, s.readJSON(s.listPath(), &l)
 }
 
 // SaveList replaces the cached listing.
@@ -226,7 +238,7 @@ func (s *Store) SaveList(l List) error {
 // Load reads PR n's entry.
 func (s *Store) Load(n int) (Entry, bool) {
 	var e Entry
-	return e, readJSON(s.entryPath(n), &e)
+	return e, s.readJSON(s.entryPath(n), &e)
 }
 
 // Save writes e and trims the directory to max entries, least recently
@@ -261,7 +273,7 @@ func (s *Store) Update(n int, edit func(e *Entry)) error {
 // Remove deletes PR n's entry; an absent one is not an error.
 func (s *Store) Remove(n int) error {
 	return s.locked(func() error {
-		if err := os.Remove(s.entryPath(n)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := s.removeRetry(s.entryPath(n)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
 		return nil
@@ -280,13 +292,13 @@ func (s *Store) trimLocked() error {
 	var all []aged
 	for _, p := range names {
 		var e Entry
-		if readJSON(p, &e) {
+		if s.readJSON(p, &e) {
 			all = append(all, aged{p, e.OpenedAt})
 		}
 	}
 	slices.SortFunc(all, func(a, b aged) int { return b.opened.Compare(a.opened) })
 	for _, a := range all[min(len(all), s.max):] {
-		if err := os.Remove(a.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := s.removeRetry(a.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("prcache: trim %s: %w", filepath.Base(a.path), err)
 		}
 	}
