@@ -496,3 +496,27 @@ func TestAFailedSecondResolveKeepsTheLanding(t *testing.T) {
 		t.Fatal("a failed second resolve failed the landing")
 	}
 }
+
+// Follow-ups 5, item 3: a repo switch while a PR's fetch op runs drops the
+// PR open it armed — the op's finish must not open the old repo's PR. (The
+// switch here re-roots onto the same checkout so the PR WOULD open: only the
+// dropped arm keeps it shut.)
+func TestARepoSwitchDropsAPendingPROpen(t *testing.T) {
+	t.Parallel()
+	m, _ := prLinkUnfetchedModel(t)
+	pr := testPRs()[0]
+	m.pendingPROpen, m.running = &pr, true
+	top := repoTop(t, m)
+	runGit(t, top, "update-ref", "refs/gg/pr/7", "feat/x") // what the fetch op would have written
+	nm, _ := m.reRoot(top)
+	m = nm.(Model)
+	if m.pendingPROpen != nil {
+		t.Fatal("pendingPROpen survived the switch")
+	}
+	m.running = true
+	nm, cmd := m.Update(opFinishedMsg{res: engine.Result{Summary: "fetched"}})
+	m = drainMsgs(t, nm.(Model), cmd, 12)
+	if m.previewOpen != nil {
+		t.Fatalf("the old repo's PR opened: %+v", m.previewOpen)
+	}
+}
