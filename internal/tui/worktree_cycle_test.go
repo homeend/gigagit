@@ -77,17 +77,17 @@ func TestAltWKeepsADockedConsole(t *testing.T) {
 	}
 }
 
-// The Branches panel's head marker (*) is worktree-specific: after a fast
-// switch it moves to the viewed worktree's branch once its read lands.
+// The Branches panel's head marker (*) is worktree-specific: a fast
+// switch moves it to the viewed worktree's branch AT ONCE, from the
+// worktree list — no git read.
 func TestFastSwitchMovesTheHeadMarkerToTheViewedBranch(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	m, other := addWorktree(t, m, "wtA")
-	nm, ok := m.switchView(other)
+	m, ok := m.switchView(other)
 	if !ok {
-		t.Fatalf("switch refused: %s", nm.statusMsg)
+		t.Fatalf("switch refused: %s", m.statusMsg)
 	}
-	m = landView(t, nm)
 	var heads []string
 	for _, b := range m.branches {
 		if b.IsHead {
@@ -96,5 +96,24 @@ func TestFastSwitchMovesTheHeadMarkerToTheViewedBranch(t *testing.T) {
 	}
 	if len(heads) != 1 || heads[0] != "wtA" {
 		t.Fatalf("head branches after the switch = %v, want [wtA]", heads)
+	}
+}
+
+// A fast switch never blocks: its reads are silent (no ⏳ reloading, no
+// guard trips), so a second alt+w right after the first moves on without
+// waiting for anything to land.
+func TestAltWNeverBlocksOnItsOwnReads(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, _ = addWorktree(t, m, "wtA")
+	m, _ = addWorktree(t, m, "wtB")
+	m = pressAlt(t, m, 'w')
+	first := m.viewed
+	if m.anySourceLoading() || !m.opsIdle() {
+		t.Fatalf("after alt+w: a source is marked loading (the ⏳ gate), opsIdle=%v", m.opsIdle())
+	}
+	m = pressAlt(t, m, 'w')
+	if m.viewed == first {
+		t.Fatalf("second alt+w refused: %q (viewed %q)", m.statusMsg, m.viewed)
 	}
 }

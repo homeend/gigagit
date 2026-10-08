@@ -29,8 +29,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - `alt+w` cycles the worktrees themselves: each press shows the next one of
   the Worktrees panel's list (its files, branch, conflicts, remembered per
   worktree), around again past the last — the same fast switch, no session
-  needed; the status row says `wt-x — 2 of 3 worktrees`. The Branches
-  panel's `*` now follows the shown worktree's branch after any fast switch.
+  needed; the status row says `wt-x — 2 of 3 worktrees`. A fast switch
+  never blocks: its status read is silent (no "⏳ reloading…", the next press
+  is never refused), and the Branches panel's `*` and the Commits
+  identity's `*name` follow the shown worktree's branch at once.
 
 ## Review links: the remaining rough edges
 

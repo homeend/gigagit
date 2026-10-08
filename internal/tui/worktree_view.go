@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"path/filepath"
+	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -114,6 +115,62 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.sel[panelFiles], m.sel[panelStaged] = v.selFiles, v.selStaged
 	m.fileMarks = v.fileMarks
 	m.workingReviews = v.workingReviews
+	return m.markHead(m.worktreeBranch(v.path))
+}
+
+// worktreeBranch is the branch checked out in the listed worktree at path
+// ("" when detached, or not listed).
+func (m Model) worktreeBranch(path string) string {
+	key := filepath.Clean(path)
+	for _, w := range m.worktrees {
+		if filepath.Clean(w.Path) == key {
+			return w.Branch
+		}
+	}
+	return ""
+}
+
+// markHead re-marks the shared lists' per-worktree head flags for the
+// viewed worktree: Branch.IsHead (the Branches panel's *) and the commit
+// feed's local Ref.Head (the *name identity in Commits) came from reads
+// rooted at ONE worktree, and the slots share both lists. From the
+// worktree list, no git: the swap stays instant. The lists are cloned
+// where they change (domain hands out cached slices).
+func (m Model) markHead(branch string) Model {
+	var bs []model.Branch
+	for i, b := range m.branches {
+		head := branch != "" && b.Name == branch
+		if b.IsHead == head {
+			continue
+		}
+		if bs == nil {
+			bs = slices.Clone(m.branches)
+		}
+		bs[i].IsHead = head
+	}
+	if bs != nil {
+		m.branches = bs
+		m.bfMemo.invalidate()
+	}
+	var cs []model.Commit
+	for i, c := range m.commits {
+		for j, r := range c.Refs {
+			head := branch != "" && r.Name == branch
+			if r.Kind != model.RefLocal || r.Head == head {
+				continue
+			}
+			if cs == nil {
+				cs = slices.Clone(m.commits)
+			}
+			refs := slices.Clone(cs[i].Refs)
+			refs[j].Head = head
+			cs[i].Refs = refs
+		}
+	}
+	if cs != nil {
+		m.commits = cs
+		m = m.rebuildCommitGraph()
+	}
 	return m
 }
 
@@ -172,27 +229,26 @@ func (m Model) switchView(path string) (Model, bool) {
 	m.watcher, m.watchSupported = nil, false
 	m.watchGen++
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1}
-	m.loadGen++ // a full load (loadCmd) launched on the old slot cannot land here
-	for _, s := range []sourceKey{srcStatus, srcBranches} {
-		m.srcGen[s]++ // nor a status read; the branch list's head marker is per worktree too
-		m.srcInflight[s] = false
-		m.srcLoading[s] = false
-	}
+	m.loadGen++           // a full load (loadCmd) launched on the old slot cannot land here
+	m.srcGen[srcStatus]++ // nor a status read
+	m.srcInflight[srcStatus] = false
+	m.srcLoading[srcStatus] = false
 	m.workingReviewsGen++ // likewise a reviews read
 	m.viewKick = true
 	return m, true
 }
 
-// viewKickCmd is the live slot's wake-up: manual status and branch reads
-// (never cancelled by a background lane; the branch list is shared but its
-// head marker is the viewed worktree's), its git watcher and its
-// open-files sync. Launched by the Update tail after a switchView, which
-// marks the reads in flight on the live model first.
+// viewKickCmd is the live slot's wake-up: a SILENT status read (a
+// background context would be cancelled by a starting op, so it runs on
+// context.Background; silent, so it never raises "⏳ reloading…" nor trips
+// the action gates — the slot's remembered status stays on screen until
+// the fresh one lands, and the next alt+w is never refused), its git
+// watcher and its open-files sync. Launched by the Update tail after a
+// switchView, which marks the read in flight on the live model first.
 func (m Model) viewKickCmd() tea.Cmd {
-	read := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{manual: true})
-	branches := m.readSourceCmd(context.Background(), srcBranches, reloadOpts{manual: true})
+	read := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{})
 	_, docs := m.syncAgentDocs()
-	return tea.Batch(read, branches, m.startWatchCmd(m.watchGen), docs)
+	return tea.Batch(read, m.startWatchCmd(m.watchGen), docs)
 }
 
 // abandonGoneView is the error arm's check: a read through the viewed

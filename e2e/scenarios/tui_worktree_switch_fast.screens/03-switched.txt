@@ -2,8 +2,8 @@ wt-x  branch feature/x                                                          
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ B R [Worktrees] P                                 ││ Commits (all) 2                                                                                         │
 │     main  /tmp/gg-tui-########/tui_worktree_swit… ││   ◇  Working tree (1)                                                                                   │
-│   * feature/x  {{root}}_____________________________________/wt-x       (feature/x) two                                                                      │
-│                                                   ││   ●      feature/x one                                                                                  │
+│   * feature/x  {{root}}_____________________________________/wt-x  ure/x (main) two                                                                          │
+│                                                   ││   ●      feature/x  one                                                                                 │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

@@ -631,10 +631,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// one finally clears m.loading fires it.
 	if next.viewKick {
 		next.viewKick = false
-		for _, s := range []sourceKey{srcStatus, srcBranches} {
-			next.srcInflight[s] = true
-			next.srcLoading[s] = true
-		}
+		next.srcInflight[srcStatus] = true // silent: no srcLoading, no ⏳ gate
 		cmd = tea.Batch(cmd, next.viewKickCmd())
 	}
 	if next.startAtReady() {

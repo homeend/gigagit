@@ -21,8 +21,11 @@ func addWorktree(t *testing.T, m Model, name string) (Model, string) {
 	if out, err := exec.Command("git", "-C", m.currentWorktree, "worktree", "add", "-b", name, other).CombinedOutput(); err != nil {
 		t.Fatalf("worktree add: %v\n%s", err, out)
 	}
-	nm, _ := m.Update(m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})())
-	return nm.(Model), other
+	for _, s := range []sourceKey{srcWorktrees, srcBranches} { // the new branch too: the head marks key on it
+		nm, _ := m.Update(m.readSourceCmd(context.Background(), s, reloadOpts{manual: true})())
+		m = nm.(Model)
+	}
+	return m, other
 }
 
 // The first load seeds home: one slot, viewed = home = the worktree gg runs in.

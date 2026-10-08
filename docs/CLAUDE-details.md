@@ -5978,16 +5978,25 @@ golden caught it; `reRoot` drops the map.
 path in `m.worktrees`; `checkSwitchTarget` reachability; refused while an op
 runs). Saves the leaving slot and puts it to sleep (watcher + docWatch
 closed), loads the arriving one, bumps `srcGen[srcStatus]` +
-`srcGen[srcBranches]` + `workingReviewsGen` AND `loadGen` (a mid-session
-`loadCmd` — conflict process, task track — launched on the old slot's
-service) so reads in flight for the old slot are dropped, and sets
-`viewKick`. The **Update tail** launches `viewKickCmd` (manual status AND
-branch reads, `startWatchCmd`, `syncAgentDocs`) and marks the reads in
-flight — a tail hook because `closeConsole` returns a Model only. The
-branch list is shared, but its `IsHead` marker is the worktree's: without
-the re-read the Branches panel kept `*` on home's branch after a switch
-(the alt+w golden caught it). Only the live slot is ever watched or
+`workingReviewsGen` AND `loadGen` (a mid-session `loadCmd` — conflict
+process, task track — launched on the old slot's service) so reads in
+flight for the old slot are dropped, and sets `viewKick`. The **Update
+tail** launches `viewKickCmd` (a SILENT status read on
+`context.Background`, `startWatchCmd`, `syncAgentDocs`) and marks the read
+in flight (`srcInflight` only, never `srcLoading`) — a tail hook because
+`closeConsole` returns a Model only. Silent is the point: a manual read
+raised "⏳ reloading…" and every `m.loading` gate with it, so the next
+alt+w was refused until the read landed (the user: "much slower than
+alt+a, blocks on reloading"). Only the live slot is ever watched or
 refreshed.
+**Head marks are per worktree on shared lists.** `Branch.IsHead` (the
+Branches panel's `*`) and the commit feed's local `Ref.Head` (the `*name`
+identity in Commits) come from reads rooted at ONE worktree; `loadView`
+runs `markHead(worktreeBranch(path))`, which re-marks both lists from the
+worktree list (clones where a flag changes — domain hands out cached
+slices — then `rebuildCommitGraph`). No git: the swap stays instant. The
+first alt+w golden caught the stale `*`; a branches re-read fixed it but
+cost the wait above, so the local re-mark replaced it.
 
 **alt+w — `cycleWorktrees`** (2026-10-08, the refinement branch): the
 third trigger. The next worktree of `m.worktrees` (the Worktrees panel's

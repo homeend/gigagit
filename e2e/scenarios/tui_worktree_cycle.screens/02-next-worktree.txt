@@ -2,7 +2,7 @@ wt-x  branch feature/x                                                          
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ [Branches] R W P ·date↓                           ││ Commits (all) 1                                                                                         │
 │   * feature/x ({{root}}_______________________________/wt-x)  ing tree (1)                                                                                   │
-│     main (/tmp/gg-tui-########/tui_worktree_cycl… ││   ●  ↓²  *main (feature/x) one                                                                          │
+│     main (/tmp/gg-tui-########/tui_worktree_cycl… ││   ●  ↓²  *feature/x (main) one                                                                          │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
