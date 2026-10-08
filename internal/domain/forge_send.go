@@ -647,9 +647,9 @@ func (s *Service) PRThreadRoot(ctx context.Context, n int, id string) (string, s
 	return "", "", fmt.Errorf("%w: %s is not a thread of #%d", ErrSendRequest, id, n)
 }
 
-// PRNotes is everything PR n's view holds, by path: local notes (carried
-// ones too, Task 8), GitHub threads, draft replies — each with its sync
-// state. The PR's diff must be available here (gg pr fetch).
+// PRNotes is everything PR n's view holds, by path: the local notes written
+// for it, its AI reviews' remarks, GitHub threads, draft replies — each with
+// its sync state. The PR's diff must be available here (gg pr fetch).
 func (s *Service) PRNotes(ctx context.Context, n int) (map[string][]ResolvedNote, error) {
 	pr, err := s.PullRequest(ctx, n)
 	if err != nil {

@@ -86,21 +86,19 @@ func TestPRDiffLeavesOutAReviewOfAnotherCommit(t *testing.T) {
 	}
 }
 
-// T2: the Files badges count carried notes and drawn remarks too.
-func TestPRCountsIncludeCarriedNotesAndRemarks(t *testing.T) {
+// T2: the Files badges count drawn remarks too.
+func TestPRCountsIncludeItsNotesAndRemarks(t *testing.T) {
 	t.Parallel()
 	svc, _, head := sendRepo(t)
 	ctx := context.Background()
 	addPRNote(t, svc, head, "big.go", 5, "on the PR")
-	mainTip := revParse(t, repoDir(t, svc), "main")
-	addPRNote(t, svc, mainTip, "big.go", 10, "carried: line 10 is the same in the PR")
 	saveHeadReview(t, svc, head, twoRemarks)
 	counts, _, err := svc.PreviewNoteCounts(ctx, prNoteSetOf(t, svc))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if counts["big.go"] != 4 {
-		t.Fatalf("big.go counts %d, want 4 (1 note + 1 carried + 2 remarks)", counts["big.go"])
+	if counts["big.go"] != 3 {
+		t.Fatalf("big.go counts %d, want 3 (1 note + 2 remarks)", counts["big.go"])
 	}
 }
 
@@ -119,22 +117,21 @@ func TestPreviewNoteGroupsByPath(t *testing.T) {
 	}
 }
 
-// The carried and remark slices are CACHED instances: the per-path answer
-// is built in a fresh slice, so two reads of one path agree and the second
-// carries no element the first appended.
+// The remark slice is a CACHED instance: the per-path answer is built in a
+// fresh slice, so two reads of one path agree and the second carries no
+// element the first appended.
 func TestPreviewNotesAtLeavesTheCachesAlone(t *testing.T) {
 	t.Parallel()
 	svc, _, head := sendRepo(t)
-	mainTip := revParse(t, repoDir(t, svc), "main")
-	addPRNote(t, svc, mainTip, "big.go", 10, "carried")
+	addPRNote(t, svc, head, "big.go", 10, "mine")
 	saveHeadReview(t, svc, head, twoRemarks)
 	set := prNoteSetOf(t, svc)
 	ctx := context.Background()
-	before := len(svc.carriedNotes(ctx, set)["big.go"]) + len(svc.prReviewNotes(ctx, set)["big.go"])
+	before := len(svc.prReviewNotes(ctx, set)["big.go"])
 	a, _ := svc.PreviewNotesAt(ctx, set, "big.go")
 	b, _ := svc.PreviewNotesAt(ctx, set, "big.go")
-	after := len(svc.carriedNotes(ctx, set)["big.go"]) + len(svc.prReviewNotes(ctx, set)["big.go"])
-	if before != 3 || after != before || len(a) != len(b) {
+	after := len(svc.prReviewNotes(ctx, set)["big.go"])
+	if before != 2 || after != before || len(a) != len(b) || len(a) != 3 {
 		t.Fatalf("caches %d → %d, reads %d / %d", before, after, len(a), len(b))
 	}
 }

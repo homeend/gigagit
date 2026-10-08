@@ -711,9 +711,6 @@ func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool, status stri
 		}
 		return
 	}
-	if r.Origin != "" {
-		status += " (from " + r.Origin + ")" // a carried note: where it lives
-	}
 	fmt.Fprintf(w, "%s %s %s %s:%d-%d %s  %s\n",
 		r.Note.ID, src, noteTargetLabel(r.Note.Address),
 		r.Note.Side, r.Range[0], r.Range[1], status, r.Note.Summary)

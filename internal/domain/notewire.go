@@ -54,11 +54,10 @@ type WireNote struct {
 	SummaryMD []markdown.Inline `json:"summary_md,omitempty"`
 	// Sync is where the note lives (local / sending / failed / github),
 	// SendErr the last send's error, Group its group (GroupMine,
-	// "review:<id>", "github:<review id>"), Origin a carried note's home.
+	// "review:<id>", "github:<review id>").
 	Sync    string `json:"sync,omitempty"`
 	SendErr string `json:"send_error,omitempty"`
 	Group   string `json:"group,omitempty"`
-	Origin  string `json:"origin,omitempty"`
 	// GroupSlot is Group's colour slot (GroupSlot: 1–6). Only the rendered
 	// form (a page that paints) carries it; agents' JSON stays as it was.
 	GroupSlot int `json:"group_slot,omitempty"`
@@ -95,7 +94,7 @@ func ToWireNote(r ResolvedNote) WireNote {
 		w.ReadOnly, w.Replyable = true, true
 	}
 	w.Link, w.Remark = r.Note.Link, r.Note.Remark
-	w.Sync, w.SendErr, w.Group, w.Origin = string(r.Sync), r.SendErr, r.Group, r.Origin
+	w.Sync, w.SendErr, w.Group = string(r.Sync), r.SendErr, r.Group
 	if !r.Note.Created.IsZero() {
 		w.Created = r.Note.Created.UTC().Format(time.RFC3339)
 	}

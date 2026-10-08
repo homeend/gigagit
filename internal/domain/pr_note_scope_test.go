@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
@@ -87,5 +88,33 @@ func TestPRScopeNumber(t *testing.T) {
 	}
 	if got := NoteScopeLabel("0123abc..." + git.PRRef(7)); got != "PR #7" {
 		t.Fatalf("label %q", got)
+	}
+}
+
+// Spec §1: a note from elsewhere whose lines reappear in the PR is not the
+// PR's (the carried notes of the 2026-10-07 spec are gone).
+func TestPRCarriesNoNoteFromElsewhere(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	mainTip := revParse(t, repoDir(t, svc), "main")
+	elsewhere := addScopedNote(t, svc, mainTip, "big.go", 10, "", "line 10 is the same in the PR")
+	set := prNoteSetOf(t, svc)
+	if ids := idsAt(t, svc, set, "big.go"); ids[elsewhere] {
+		t.Fatal("a note from main's tip shows in the PR")
+	}
+	all, err := svc.PreviewNotesAll(context.Background(), set)
+	if err != nil || len(all) != 0 {
+		t.Fatalf("PreviewNotesAll = %v, %v", all, err)
+	}
+}
+
+// Review Focus 3: the send refuses a note the PR does not show.
+func TestPlanSendRefusesANoteNotWrittenForThePR(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	plain := addScopedNote(t, svc, head, "big.go", 5, "", "a commit note")
+	_, err := svc.planSend(context.Background(), PRSendRequest{PR: 7, Notes: []string{plain}})
+	if err == nil || !strings.Contains(err.Error(), "not in this PR") {
+		t.Fatalf("planSend of a plain note: %v", err)
 	}
 }

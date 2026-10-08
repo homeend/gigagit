@@ -349,11 +349,10 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 }
 
 // prExtras is what a path's notes gain beyond the store's own, in a FRESH
-// slice (the carried and remark slices are cached instances): a PR's carried
-// notes (§1.4), its AI reviews' remarks (plan 3, T1), then the forge's threads.
+// slice (the remark slice is a cached instance): a PR's AI reviews' remarks
+// (plan 3, T1), then the forge's threads.
 func (s *Service) prExtras(ctx context.Context, set PreviewNoteSet, path string, forge []ResolvedNote) []ResolvedNote {
 	var out []ResolvedNote
-	out = append(out, s.carriedNotes(ctx, set)[path]...)
 	out = append(out, s.prReviewNotes(ctx, set)[path]...)
 	return append(out, forge...)
 }
@@ -400,9 +399,6 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 		if got := keepResolved(resolveNotes(byPath[p], nil, newLines)); len(got) > 0 {
 			out[p] = got
 		}
-	}
-	for p, rs := range s.carriedNotes(ctx, set) { // a PR's view carries identical lines (§1.4)
-		out[p] = append(out[p], rs...)
 	}
 	for p, rs := range s.prReviewNotes(ctx, set) { // its AI reviews' remarks (plan 3, T1)
 		out[p] = append(out[p], rs...)
@@ -451,16 +447,12 @@ type previewCountEntry struct {
 func (s *Service) PreviewNoteCounts(ctx context.Context, set PreviewNoteSet) (map[string]int, int, error) {
 	byPath, total, err := s.previewStoreCounts(ctx, set)
 	fp, ft := s.forgeNoteCounts(ctx, set)
-	// A PR's view also counts its carried notes and its AI reviews' drawn
-	// remarks (plan 3, T2): the }/{ steps read these counts, and a box the
-	// view shows must never sit in a file they skip.
+	// A PR's view also counts its AI reviews' drawn remarks (plan 3, T2):
+	// the }/{ steps read these counts, and a box the view shows must never
+	// sit in a file they skip.
 	extra := map[string]int{}
 	et := 0
 	if err == nil {
-		for p, rs := range s.carriedNotes(ctx, set) {
-			extra[p] += len(rs)
-			et += len(rs)
-		}
 		for p, rs := range s.prReviewNotes(ctx, set) {
 			extra[p] += len(rs)
 			et += len(rs)
