@@ -316,3 +316,17 @@ func TestClearingAPRScopeRowTakesEverySpelling(t *testing.T) {
 		t.Fatalf("PR 8's note went too: %v", err)
 	}
 }
+
+// Ruling A (2026-10-08): a PR whose diff is gone here (gg pr forget ran
+// elsewhere) refuses the note — it would otherwise be stored plain and
+// leave the PR view.
+func TestPRNoteScopeRefusesWhenTheDiffIsGone(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	runGitIn(t, repoDir(t, svc), "update-ref", "-d", git.PRRef(7))
+	pr := model.PullRequest{Number: 7, State: "open", Target: "main", HeadSHA: head}
+	sc, err := svc.PRNoteScope(context.Background(), pr, head)
+	if !errors.Is(err, ErrPRDiffGone) || sc != "" || !strings.Contains(err.Error(), "#7") {
+		t.Fatalf("scope %q err %v", sc, err)
+	}
+}

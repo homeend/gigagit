@@ -34,6 +34,10 @@ var (
 	// ErrNoteOffPR: a note written in a PR's view on a commit the PR no
 	// longer holds (its head was force-pushed under the open view).
 	ErrNoteOffPR = errors.New("the pull request no longer holds this commit")
+	// ErrPRDiffGone: a note written in a PR's view whose diff this
+	// repository no longer holds (its head was forgotten, or it merged) —
+	// refused, never stored plain (ruling A, 2026-10-08).
+	ErrPRDiffGone = errors.New("the pull request's diff is not here any more")
 )
 
 // PRSendRequest is everything a frontend collects before a send starts
@@ -680,15 +684,18 @@ func (s *Service) PRNotes(ctx context.Context, n int) (map[string][]ResolvedNote
 
 // PRNoteScope is the scope a note written in PR pr's view records
 // ("<base>...refs/gg/pr/<n>", spec 2026-10-08 §3): any commit of the PR's
-// range takes it (the view may show an older tip than the forge's); "" when
-// the PR's diff is not available here. A commit the PR no longer holds (its
-// head was force-pushed under the open view) is ErrNoteOffPR — never a plain
-// note, which would silently leave the PR. pr is the caller's cached row:
-// no forge read.
+// range takes it (the view may show an older tip than the forge's). It never
+// answers "" — a plain note would silently leave the PR: a commit the PR no
+// longer holds (its head was force-pushed under the open view) is
+// ErrNoteOffPR, a diff not available here (forgotten, merged) ErrPRDiffGone.
+// pr is the caller's cached row: no forge read.
 func (s *Service) PRNoteScope(ctx context.Context, pr model.PullRequest, commit string) (string, error) {
 	prev, err := s.PRPreview(ctx, pr)
-	if err != nil || !prev.Set.OK() {
-		return "", nil
+	if err != nil {
+		return "", err
+	}
+	if !prev.Set.OK() {
+		return "", fmt.Errorf("%w — reopen pull request #%d", ErrPRDiffGone, pr.Number)
 	}
 	if !slices.Contains(prev.Set.Commits, commit) {
 		return "", fmt.Errorf("%w (%s) — reopen pull request #%d", ErrNoteOffPR, shortSHA(commit), pr.Number)
