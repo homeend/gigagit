@@ -482,3 +482,14 @@ func TestWebSendOnAnUnfetchedPRIs422(t *testing.T) {
 		t.Fatalf("wrote %s", w)
 	}
 }
+
+// Final review I2: a forge that cannot be detected answers 502 whichever
+// kind reached it (verdict/finish/discard skip the lookup and fail in
+// planning).
+func TestSendErrStatusForgeUnavailable(t *testing.T) {
+	t.Parallel()
+	err := errors.Join(domain.ErrForgeUnavailable, errors.New("gh: not logged in"))
+	if got := sendErrStatus(err); got != http.StatusBadGateway {
+		t.Fatalf("sendErrStatus = %d, want 502", got)
+	}
+}

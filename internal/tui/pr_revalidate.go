@@ -110,6 +110,9 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 	switch {
 	case m.prSeen != msg.n:
 		m.prSeen = msg.n // the open's first read: it fills the view
+		if m.prOwnSend == msg.n {
+			m.prOwnSend = 0 // that read holds my send too: a later change is news
+		}
 	case own && !moved:
 		m.prOwnSend, m.prUpdated = 0, 0
 	case moved || msg.commentsChanged:

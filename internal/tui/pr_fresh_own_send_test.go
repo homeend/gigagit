@@ -71,3 +71,17 @@ func TestReRootForgetsPRFreshness(t *testing.T) {
 		t.Fatalf("seen %d updated %d own %d again %d", mm.prSeen, mm.prUpdated, mm.prOwnSend, mm.prRefreshAgain)
 	}
 }
+
+// Final review I1: a send's mark set while its PR was not on screen dies with
+// that PR's next first read — it must not swallow a later genuine update.
+func TestAnOwnSendMarkDoesNotOutliveTheView(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m = revalidated(m, 8, 1, false) // PR 8 was the open one
+	m.prOwnSend, m.prOwnSendSeq = 7, 1
+	m = revalidated(m, 7, 2, false) // PR 7 opens: its first read
+	m = revalidated(m, 7, 3, true)  // a colleague's comment
+	if m.prUpdated != 7 {
+		t.Fatal("a genuine update was swallowed by a stale own-send mark")
+	}
+}

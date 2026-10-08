@@ -6043,8 +6043,9 @@ unless joined), hidden when the compare bar hides (a MutationObserver).
 fault (`badSend` wraps `errBadSend`, the words unchanged), 409 busy / head
 moved (`code: head_moved`) / an interrupted pending review, 422 a lookup the
 request cannot fix (the PR's diff not fetched) or a planning refusal, 502
-the forge CLI unavailable (`ErrForgeUnavailable`), 504 the forge out of
-budget — the handler plans under `prSendBudget` (= `prRevalidateBudget`,
+the forge CLI unavailable (`ErrForgeUnavailable`, from the lookup or the
+planning alike), 504 the forge out of budget. A `gh` call that fails at run
+time (network down, rate limit) has no sentinel and answers 422 — the handler plans under `prSendBudget` (= `prRevalidateBudget`,
 30 s; a var so tests shorten it). **Hosted TUI:** the page's `opInFlight`
 sees only the page's own ops; a send while the hosting TUI runs one waits on
 the repo gate inside that budget (→ 504) — there is no busy hook through

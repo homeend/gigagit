@@ -257,6 +257,8 @@ func sendErrStatus(err error) int {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return http.StatusGatewayTimeout
+	case errors.Is(err, domain.ErrForgeUnavailable):
+		return http.StatusBadGateway
 	case errors.Is(err, domain.ErrPRHeadMoved), errors.Is(err, domain.ErrInterruptedPending):
 		return http.StatusConflict
 	case errors.Is(err, domain.ErrSendRequest), errors.Is(err, domain.ErrMixedSend):
