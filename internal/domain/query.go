@@ -410,6 +410,32 @@ func (s *Service) ShowFile(ctx context.Context, rev, path string) ([]byte, error
 	})
 }
 
+// shaFile is path's content at rev. Content at a full object id never
+// changes, so those reads are cached for the session (a PR view re-places
+// its notes on every comment change); any other rev — HEAD, <sha>^, a
+// branch — is read through. The bytes are SHARED: callers never write them.
+func (s *Service) shaFile(ctx context.Context, rev, path string) ([]byte, error) {
+	if !isFullSHA(rev) {
+		return s.ShowFile(ctx, rev, path)
+	}
+	v, err := s.factory.Cache("sha-file").GetOrLoad("sha-file:"+rev+":"+path, func() (any, error) {
+		b, err := s.ShowFile(ctx, rev, path)
+		if err != nil {
+			return nil, err
+		}
+		return cachedFile(b), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(cachedFile), nil
+}
+
+// cachedFile weighs its bytes for the cache's byte budget.
+type cachedFile []byte
+
+func (c cachedFile) Size() int { return len(c) }
+
 // CommitFiles returns the files changed by commit hash, under a Read
 // reservation, coalesced per hash.
 func (s *Service) CommitFiles(ctx context.Context, hash string) ([]model.CommitFile, error) {

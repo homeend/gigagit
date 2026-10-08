@@ -92,7 +92,7 @@ func TestStoredNoteCarriesItsSyncState(t *testing.T) {
 	t.Parallel()
 	svc, set, head, _ := prThreadSvc(t)
 	ctx := context.Background()
-	n, err := svc.NoteAdd(ctx, model.Note{Source: model.NoteSourceUser, Summary: "local",
+	n, err := svc.NoteAdd(ctx, model.Note{Source: model.NoteSourceUser, Summary: "local", Preview: set.Pair(),
 		Address: model.FileAddress{State: model.StateCommitted, Commit: head, Path: "a.go"},
 		Side:    model.NoteSideNew, Range: [2]int{1, 1}})
 	if err != nil {

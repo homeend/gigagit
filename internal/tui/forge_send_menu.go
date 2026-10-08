@@ -75,7 +75,7 @@ func (m Model) forgeNoteRows() []actionRow {
 		}
 		rows = append(rows, actionRow{id: "note-send", label: label, run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.withNoteTargetIn(local, func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
-				return m.forgeSendCmd(noteSendRequest(pr, t), "")
+				return m.forgeSendCmd(noteSendRequest(pr, t))
 			})
 		}})
 		label = i18n.T("Send my draft review…")
@@ -106,7 +106,7 @@ func (m Model) forgeNoteRows() []actionRow {
 		}
 		rows = append(rows, actionRow{id: "note-send-drafts", label: label, run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.withNoteTargetIn(drafted, func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
-				return m.forgeSendCmd(domain.PRSendRequest{PR: pr, Notes: t.drafts}, "")
+				return m.forgeSendCmd(domain.PRSendRequest{PR: pr, Notes: t.drafts})
 			})
 		}})
 	}

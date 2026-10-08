@@ -65,9 +65,9 @@ func (m Model) handlePRFetchReady(msg prFetchReadyMsg) (Model, tea.Cmd) {
 // a merged PR compared against its target BRANCH would be empty.
 func (m Model) openPRPreviewCmd(p model.PullRequest) tea.Cmd {
 	svc, gen, title := m.svc, m.previewGen, prTitle(p)
-	keep := "" // a moved-head reopen keeps the file the cursor was on
+	keep, from := "", "" // a moved-head reopen keeps the cursor's file and counts the new commits
 	if r := m.prReland; r != nil && r.n == p.Number {
-		keep = r.path
+		keep, from = r.path, r.from
 	}
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -79,6 +79,9 @@ func (m Model) openPRPreviewCmd(p model.PullRequest) tea.Cmd {
 			msg.set = r.Set
 			msg.counts, _, _ = svc.PreviewNoteCounts(ctx, r.Set)
 			msg.groups, _ = svc.PreviewNoteGroups(ctx, r.Set)
+		}
+		if err == nil && from != "" {
+			msg.newCommits = svc.PRNewCommits(ctx, p.Number, from)
 		}
 		return msg
 	}

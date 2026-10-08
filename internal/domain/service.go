@@ -69,14 +69,12 @@ type Service struct {
 	// whole map through invalidateNoteCounts (ruling 7) — counts read the
 	// notes store, which the summary cache knows nothing about.
 	previewCounts map[string]previewCountEntry
-	// sendIdx memoises, per notes generation, which PRs have stamped items
-	// and which local ids exist (settleSends' cheap no-op test).
-	// carriedCache holds a PR set's carried notes per tip:base:notesGen.
-	carriedCache map[string]map[string][]ResolvedNote
 	// prReviewCache holds a PR set's drawn review remarks per tip:base:notesGen.
 	prReviewCache map[string]map[string][]ResolvedNote
-	sendIdx       *sendIndexT
-	sendIdxGen    uint64
+	// sendIdx memoises, per notes generation, which PRs have stamped items
+	// and which local ids exist (settleSends' cheap no-op test).
+	sendIdx    *sendIndexT
+	sendIdxGen uint64
 	// notesGen rises on every count invalidation. NoteCounts computes OUTSIDE
 	// the lock, so it stores its result only when the generation it started
 	// from is still current — a mutation landing mid-compute would otherwise

@@ -77,7 +77,7 @@ var settingDocs = []settingDoc{
 	{"refresh", "reflog_watch", false, "refresh reflog on logs/HEAD change (off → use interval); ignored on WSL2 9p mounts"},
 	{"refresh", "remotes_watch", false, "refresh remotes on ref/FETCH_HEAD change (off → use interval); ignored on WSL2 9p mounts"},
 
-	{"forge", "cache_hours", 8, "hours a pull request read from the forge stays fresh: a fresher one opens at once from the cache and refreshes in the background, an older one is read from the forge first; 0 = always read first"},
+	{"forge", "cache_hours", 8, "hours a pull request read from the forge stays fresh: a fresher one opens at once from the cache and refreshes in the background, an older one is read from the forge first; 0 = always read first (an open from the list too)"},
 	{"forge", "prefetch", 5, "after the pull-request list refreshes, fetch and prepare this many recently opened PRs whose head moved, in the background; 0 = off"},
 
 	{"versions", "disabled", false, "disable branch-version snapshots before merges/rebases (default: on)"},

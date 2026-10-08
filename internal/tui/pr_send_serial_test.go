@@ -81,6 +81,7 @@ func prSendFixtures(head string) map[string]string {
 func addTUINote(t *testing.T, m Model, head string, line int, sum string) string {
 	t.Helper()
 	n, err := m.svc.NoteAdd(context.Background(), model.Note{Source: model.NoteSourceUser, Summary: sum,
+		Preview: "main...refs/gg/pr/7", // written in PR #7's view
 		Address: model.FileAddress{State: model.StateCommitted, Commit: head, Path: "big.go"},
 		Side:    model.NoteSideNew, Range: [2]int{line, line}})
 	if err != nil {
@@ -129,7 +130,7 @@ func runToModal(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
 func TestSendANoteFromTheTUI(t *testing.T) {
 	m, dir, head := prSendModel(t)
 	id := addTUINote(t, m, head, 5, "look here")
-	m, cmd := m.forgeSendCmd(domain.PRSendRequest{PR: 7, Notes: []string{id}}, "")
+	m, cmd := m.forgeSendCmd(domain.PRSendRequest{PR: 7, Notes: []string{id}})
 	m, wait := runToModal(t, m, cmd)
 	prompt := renderPrompt(m.modal.req)
 	if !strings.HasPrefix(prompt, "Send to o/r #7:") || !strings.Contains(prompt, "+ big.go:5 look here") {
@@ -164,7 +165,7 @@ func TestSendANoteFromTheTUI(t *testing.T) {
 // Serial: env. A plan error (here: nothing to send) never starts an op.
 func TestSendPlanErrorIsSaidAndNothingRuns(t *testing.T) {
 	m, _, _ := prSendModel(t)
-	m, cmd := m.forgeSendCmd(domain.PRSendRequest{PR: 7, Notes: []string{"no-such-note"}}, "")
+	m, cmd := m.forgeSendCmd(domain.PRSendRequest{PR: 7, Notes: []string{"no-such-note"}})
 	nm, _ := m.Update(cmd())
 	mm := nm.(Model)
 	if mm.running || mm.modal != nil || !strings.Contains(mm.statusMsg, "no-such-note") {
@@ -221,28 +222,21 @@ func TestReplyAndSendFromThePRView(t *testing.T) {
 	}
 }
 
-// Serial: env. An agent's queued send, approved in the TUI: the confirm
-// preselects the agent's wish, the send goes, the agent's entry says sent.
-func TestApprovedPendingSendIsSentAndAnswered(t *testing.T) {
-	m, dir, head := prSendModel(t)
-	id := addTUINote(t, m, head, 5, "look here")
-	ctx := context.Background()
-	e, err := m.svc.PendingSendAdd(ctx, domain.PRSendRequest{PR: 7, Notes: []string{id}}, "claude")
-	if err != nil {
-		t.Fatal(err)
+// Item 12 / Review Focus 4: the re-resolve a note edit triggers keeps the
+// PR's group bars (it used to hand the view nil groups). Serial: prSendModel.
+func TestAPRReResolveKeepsTheGroupBars(t *testing.T) {
+	m, _, head := prSendModel(t)
+	open := m.openPRPreviewCmd(model.PullRequest{Number: 7, State: "open", Target: "main"})().(previewOpenMsg)
+	nm, _ := m.Update(open)
+	m = nm.(Model)
+	addTUINote(t, m, head, 5, "mine")
+	msg := m.reopenPreviewCmd("", "refs/gg/pr/7", "main", "", "")().(previewOpenMsg)
+	if g := msg.groups["big.go"]; len(g) == 0 || g[0] != domain.GroupMine {
+		t.Fatalf("re-resolve groups = %v", msg.groups)
 	}
-	m = feedOnce(t, m, m.pendingSendsReadCmd(m.noticeGen))
-	n := noticeByID(m, pendingSendNoticeID(e.ID))
-	m, cmd := m.applyNoticeAction(*n, n.actions[0])
-	m, wait := runToModal(t, m, cmd)
-	nm, _ := m.resolveModal("send")
-	m, tail := driveOpKeepCmd(t, nm.(Model), wait)
-	m = feedOnce(t, m, tail) // pendingFinishCmd + the re-read (and the source reloads)
-	got, _ := m.svc.PendingSendGet(ctx, e.ID)
-	if got.State != domain.PendingSent || len(forgetest.Writes(t, filepath.Join(dir, ".git", "fakegh"))) != 3 {
-		t.Fatalf("entry %+v", got)
-	}
-	if noticeByID(m, n.id) != nil {
-		t.Fatal("a sent entry keeps its notice")
+	// F-i: what the HANDLER keeps — the view's bars, not just the message.
+	nm, _ = m.Update(msg)
+	if g := nm.(Model).filesPreviewGroups["big.go"]; len(g) == 0 || g[0] != domain.GroupMine {
+		t.Fatalf("after the handler groups = %v", nm.(Model).filesPreviewGroups)
 	}
 }

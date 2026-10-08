@@ -60,14 +60,15 @@ func TestReviewTargetForCommitNonRoot(t *testing.T) {
 	}
 }
 
-// (a') A root commit has no parent, so ^.. would fail — review the tip alone.
+// (a') A root commit has no parent, so ^.. would fail — it is reviewed as
+// everything it adds: Diff.Root (a bare Rev diffs the working tree).
 func TestReviewTargetForCommitRoot(t *testing.T) {
 	tgt := reviewTargetForCommit(model.Commit{Hash: "root0"})
 	if tgt.Range != "root0" {
 		t.Fatalf("Range = %q, want root0", tgt.Range)
 	}
-	if tgt.Diff.Rev != "root0" {
-		t.Fatalf("Diff.Rev = %q, want root0", tgt.Diff.Rev)
+	if tgt.Diff.Rev != "root0" || !tgt.Diff.Root {
+		t.Fatalf("Diff = %+v, want the root commit's own change", tgt.Diff)
 	}
 }
 

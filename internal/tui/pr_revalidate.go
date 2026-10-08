@@ -23,11 +23,12 @@ const prRevalidateBudget = 30 * time.Second
 
 type prRevalidatedMsg struct {
 	n               int
-	gen             int // m.prsGen when the read started: a repo switch drops it
+	gen             int // m.forgeGen when the read started: only a repo switch drops it
 	pr              model.PullRequest
 	moved           bool
 	commentsChanged bool
 	manual          bool      // the user pressed r: answer on the status line
+	seq             int       // m.prReadSeq when the read started
 	readAt          time.Time // when the PR was last read (the offline mark's age)
 	err             error
 }
@@ -52,13 +53,14 @@ func (m Model) prRefreshCmd(n int, manual bool) (Model, tea.Cmd) {
 	}
 	m.prRevalidateInflight, m.prCommentsInflight, m.prRefreshing = true, true, true
 	m.prCommentsLast = time.Now()
-	svc, gen := m.svc, m.prsGen
+	m.prReadSeq++
+	svc, gen, seq := m.svc, m.forgeGen, m.prReadSeq
 	return m, func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), prRevalidateBudget)
 		defer cancel()
 		rv, err := svc.PRRevalidate(ctx, n)
 		msg := prRevalidatedMsg{n: n, gen: gen, pr: rv.PR, moved: rv.Moved, commentsChanged: rv.CommentsChanged,
-			manual: manual, readAt: rv.ReadAt, err: err}
+			manual: manual, readAt: rv.ReadAt, seq: seq, err: err}
 		if err != nil {
 			msg.readAt, _ = svc.PRCacheReadAt(n)
 		}
@@ -67,12 +69,16 @@ func (m Model) prRefreshCmd(n int, manual bool) (Model, tea.Cmd) {
 }
 
 func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
+	if msg.gen != m.forgeGen {
+		return m, nil // the old repository's read: reRoot already freed this one's slot
+	}
 	// Cleared BEFORE the "still my view" checks: a read whose view closed
-	// under it must not block every later one.
+	// under it must not block every later one (the comment half clears
+	// prCommentsInflight).
 	m.prRevalidateInflight, m.prRefreshing = false, false
-	if msg.gen != m.prsGen {
-		m.prCommentsInflight = false
-		return m, nil // another repository's answer
+	again := m.prRefreshAgain == msg.n // a post-send read waited for this one
+	if again {
+		m.prRefreshAgain = 0
 	}
 	if msg.err != nil {
 		m.prOfflineSince = msg.readAt
@@ -102,19 +108,36 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 		po.srcHash != "" && po.srcHash != msg.pr.HeadSHA {
 		moved = true
 	}
+	// The first read that started after my own changing send carries that
+	// change (or nothing): absorbed, never "updated" (F2).
+	own := m.prOwnSend == msg.n && msg.seq > m.prOwnSendSeq
 	switch {
 	case m.prSeen != msg.n:
 		m.prSeen = msg.n // the open's first read: it fills the view
+		if m.prOwnSend == msg.n {
+			m.prOwnSend = 0 // that read holds my send too: a later change is news
+		}
+	case own && !moved:
+		m.prOwnSend, m.prUpdated = 0, 0
 	case moved || msg.commentsChanged:
 		m.prUpdated = msg.n
+		if own {
+			m.prOwnSend = 0
+		}
 	case m.prUpdated == msg.n:
 		m.prUpdated = 0 // nothing new: the mark clears (spec §2.4)
+	}
+	if again && m.openPRNumber() == msg.n {
+		// The post-send read dropped while this one ran: ask it now.
+		var next tea.Cmd
+		m, next = m.prRefreshCmd(msg.n, false)
+		cmd = tea.Batch(cmd, next)
 	}
 	if !moved || m.openPRNumber() != msg.n || !m.opsIdle() {
 		return m, cmd // unchanged, or the user moved on: the next enter fetches
 	}
 	m.prRevalidateSkip = msg.n
-	r := &prReland{n: msg.n, path: m.previewSelectedPath()}
+	r := &prReland{n: msg.n, path: m.previewSelectedPath(), from: m.previewOpen.srcHash}
 	if v := m.diffLayer(); v != nil {
 		r.diff, r.land = true, v.cursorLineLanding()
 	}
@@ -149,6 +172,7 @@ type prReland struct {
 	path string
 	diff bool
 	land *lineLanding // nil when the diff cursor had no numbered line
+	from string       // the head on screen before the move: the reopen counts the new commits against it
 }
 
 // relandPR consumes the open PR's prReland once its reopened file list is in:

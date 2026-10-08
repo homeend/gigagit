@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -61,18 +62,18 @@ func TestEverySkipReasonHasItsOwnWords(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
 	for _, r := range domain.SendSkipReasons() {
-		if got := sendSkipReasonText(r); got == i18n.T("(skipped: %s)", r) {
+		if got := sendSkipReasonText("x", r); got == i18n.T("%[1]s (skipped: %[2]s)", "x", r) {
 			t.Errorf("reason %q falls back to the generic text", r)
 		}
 	}
 }
 
-// The engine's English prompt is replaced by the TUI's own; the option the
-// agent asked for is preselected.
+// The engine's English prompt is replaced by the TUI's own; nothing is
+// preselected for the user (agents never send, so no wish to honour).
 func TestForgeSendDecisionUsesTheTUIsConfirm(t *testing.T) {
 	t.Parallel()
 	m := notedModel(t)
-	m.forgeSend = &forgeSendState{pr: 7, plan: engine.SendPlan{Target: "o/r #7", Verdict: true}, event: engine.OptApprove}
+	m.forgeSend = &forgeSendState{pr: 7, plan: engine.SendPlan{Target: "o/r #7", Verdict: true}}
 	req := engine.PromptReq(engine.DecisionSendForge, "Send to %s:\n%s",
 		[]string{engine.OptComment, engine.OptApprove, engine.OptRequestChanges, "abort"}, "o/r #7", "ENGLISH")
 	nm, _ := m.Update(opDecisionMsg{req: req, reply: make(chan engine.DecisionResponse, 1)})
@@ -80,7 +81,7 @@ func TestForgeSendDecisionUsesTheTUIsConfirm(t *testing.T) {
 	if mm.modal == nil || strings.Contains(renderPrompt(mm.modal.req), "ENGLISH") || !strings.HasPrefix(renderPrompt(mm.modal.req), "Send to o/r #7:") {
 		t.Fatalf("modal prompt = %q", renderPrompt(mm.modal.req))
 	}
-	if mm.modal.req.Options[mm.modal.sel] != engine.OptApprove {
+	if mm.modal.sel != 0 {
 		t.Fatalf("preselected %q", mm.modal.req.Options[mm.modal.sel])
 	}
 }
@@ -97,12 +98,11 @@ func TestThePRPollWaitsWhileTheConfirmIsOpen(t *testing.T) {
 	}
 }
 
-// Review Focus 3: a queued request whose plan fails stays queued: the error
-// is said and nothing is started or finished.
-func TestAFailedPlanLeavesAQueuedRequestWaiting(t *testing.T) {
+// A send whose plan fails says why; nothing is started.
+func TestAFailedPlanStartsNothing(t *testing.T) {
 	t.Parallel()
 	m := notedModel(t)
-	nm, cmd := m.Update(forgeSendReadyMsg{req: domain.PRSendRequest{PR: 7, Mine: true}, pendingID: "p1",
+	nm, cmd := m.Update(forgeSendReadyMsg{req: domain.PRSendRequest{PR: 7, Mine: true},
 		err: errors.New("#7's diff is not available here")})
 	mm := nm.(Model)
 	if cmd != nil || mm.forgeSend != nil || mm.running || !strings.Contains(mm.statusMsg, "not available") {
@@ -115,5 +115,63 @@ func TestSendToForgeRefreshesTheNotes(t *testing.T) {
 	srcs := opAffectedSources(engine.SendToForge{})
 	if len(srcs) != 1 || srcs[0] != srcNotes {
 		t.Fatalf("SendToForge refreshes %v, want [srcNotes]", srcs)
+	}
+}
+
+// Agents never send (user ruling 2026-10-08): the TUI has no notice source
+// for an agent's queued send, so nothing an agent writes can raise "send".
+func TestNoNoticeOffersAnAgentsSend(t *testing.T) {
+	t.Parallel()
+	m := newTestModel(t).rebuildNotices()
+	for _, n := range m.notices {
+		if strings.HasPrefix(n.id, "pending_send_") {
+			t.Fatalf("a pending-send notice exists: %+v", n)
+		}
+	}
+	src, err := os.ReadFile("notify.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(src), "pendingSendNotices") {
+		t.Fatal("notify.go still builds pending-send notices")
+	}
+}
+
+// W2: the body popup always answers the body — an emptied box posts none.
+func TestSendReviewPopupAnswersTheBody(t *testing.T) {
+	t.Parallel()
+	p := &sendReviewPopup{pr: 7, group: "review:r1", body: newTextField("")}
+	if req := p.request(); !req.BodySet || req.Body != "" || req.Review != "r1" {
+		t.Fatalf("request = %+v", req)
+	}
+}
+
+// Item 14: an interrupted send's rows say what waits, not a ledger key.
+func TestFinishRowsShowSummaries(t *testing.T) {
+	t.Parallel()
+	got := sendItemText(engine.SendFinish, engine.SendItem{Key: "n-123", Summary: "rename this"})
+	if got != "rename this (waiting in the pending review)" {
+		t.Fatalf("row = %q", got)
+	}
+	if got := sendItemText(engine.SendFinish, engine.SendItem{Key: "n-123"}); !strings.Contains(got, "n-123") {
+		t.Fatalf("no summary falls back to the key: %q", got)
+	}
+}
+
+// Item 16: each skip row and the resolve suffix is ONE format — a translation
+// orders the whole row.
+func TestSendRowsAreWholeFormats(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("forge_send.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{`what + " " + sendSkipReasonText`, `" · " + i18n.T("resolved after sending")`} {
+		if strings.Contains(string(src), bad) {
+			t.Errorf("forge_send.go still composes %q", bad)
+		}
+	}
+	if got := sendSkipText(engine.SendSkip{Path: "a.go", Line: 3, Summary: "x", Reason: domain.SkipNotInPR}); got != "a.go:3 x (skipped: not in this PR)" {
+		t.Fatalf("skip row = %q", got)
 	}
 }

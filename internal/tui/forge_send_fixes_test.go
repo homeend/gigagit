@@ -94,21 +94,22 @@ func TestAFinishedSendReasksAboutInterruptedSends(t *testing.T) {
 	t.Fatal("no interrupted-send re-check for #5 after its finish")
 }
 
-// An approved agent send answers the agent even when the stash list is open
-// (the op-finished handler returns early there).
+// A send's follow-up runs even when the stash list is open (the
+// op-finished handler returns early there): the interrupted-send notice is
+// re-asked.
 func TestASendsFollowUpRunsWithTheStashListOpen(t *testing.T) {
 	t.Parallel()
 	m := newTestModel(t)
 	m.stashView = &stashView{}
 	m.running = true
-	m.forgeSend = &forgeSendState{pr: 7, pendingID: "p1"}
+	m.forgeSend = &forgeSendState{pr: 7}
 	_, cmd := m.Update(opFinishedMsg{res: engine.Result{Summary: "sent 1 comments to o/r #7"}})
 	for _, msg := range msgsOf(cmd) {
-		if _, ok := msg.(pendingSendsMsg); ok {
+		if _, ok := msg.(interruptedMsg); ok {
 			return
 		}
 	}
-	t.Fatal("the queued send's outcome was never written back")
+	t.Fatal("the send's follow-up never ran")
 }
 
 // An answer that arrives while another dialog is open never replaces it: a
@@ -147,5 +148,24 @@ func TestARefusedSendKeepsTheTypedBody(t *testing.T) {
 	}
 	if !strings.Contains(m.statusMsg, "another operation") {
 		t.Fatalf("status %q", m.statusMsg)
+	}
+}
+
+// Item 15: two AI reviews with the same agent and summary get distinct rows,
+// and each row opens its own review.
+func TestSendGroupChooserRowsAreUnique(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	gs := []domain.SendGroup{{ID: "review:r1", Agent: "claude", Summary: "nits", Count: 1},
+		{ID: "review:r2", Agent: "claude", Summary: "nits", Count: 1}}
+	opts := sendGroupOptions(gs)
+	if opts[0] == opts[1] {
+		t.Fatalf("rows %q", opts)
+	}
+	nm, _ := m.Update(sendGroupsMsg{gen: m.forgeGen, pr: 7, groups: gs})
+	mm := nm.(Model)
+	_, cmd := mm.modal.onResolve(mm, opts[1])
+	if b, ok := cmd().(sendBodyMsg); !ok || b.group != "review:r2" {
+		t.Fatalf("the second row opened %+v", b)
 	}
 }

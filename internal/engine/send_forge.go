@@ -90,6 +90,42 @@ type SendLedger interface {
 	Settle(ctx context.Context) error // re-read the PR, settle every stamp
 }
 
+// SendLiveness is optional on a SendLedger: Gone names the item keys that
+// are no longer local — deleted, already on the forge, or stamped by another
+// send in flight — since the plan was built. A plan can wait on its confirm
+// while another frontend (a second tab, the TUI and its hosted page) sends
+// the same note; Gone is asked after the confirm, before the first write.
+type SendLiveness interface {
+	Gone(ctx context.Context, keys []string) map[string]bool
+}
+
+// ErrSentMeanwhile: everything this send held was sent (or removed) by
+// another send while it waited on its confirm.
+var ErrSentMeanwhile = fmt.Errorf("%w: it was sent or removed meanwhile", ErrNothingToSend)
+
+// dropGone removes the items another send took while this one waited
+// (SendLiveness); ok is false when the plan had items and none is left.
+func (op SendToForge) dropGone(ctx context.Context, p SendPlan) (SendPlan, bool) {
+	lv, has := op.Ledger.(SendLiveness)
+	if !has || len(p.Items) == 0 {
+		return p, true
+	}
+	gone := lv.Gone(ctx, planKeys(p))
+	if len(gone) == 0 {
+		return p, true
+	}
+	var items []SendItem
+	for _, it := range p.Items {
+		if it.Key != "" && gone[it.Key] {
+			continue
+		}
+		it.Replies = slices.DeleteFunc(slices.Clone(it.Replies), func(r SendReplyBody) bool { return gone[r.Key] })
+		items = append(items, it)
+	}
+	p.Items = items
+	return p, len(items) > 0
+}
+
 // SendToForge is the one op that writes to a forge (spec 2026-10-07 §3.3):
 // one confirm, then the writes in a fixed order. Plan is a value computed
 // by domain right before the op runs (every domain read reserves the gate,
@@ -197,6 +233,10 @@ func (op SendToForge) review(ctx context.Context, deps OpDeps, p SendPlan) (Resu
 	}
 	if choice == "abort" {
 		return Result{}.WithSummary("aborted: sending to %s", p.Target), nil
+	}
+	var live bool
+	if p, live = op.dropGone(ctx, p); !live {
+		return Result{}, ErrSentMeanwhile
 	}
 	ev := forge.EventComment
 	switch choice {
@@ -324,6 +364,10 @@ func (op SendToForge) actions(ctx context.Context, deps OpDeps, p SendPlan) (Res
 		if choice == "abort" {
 			return Result{}.WithSummary("aborted: sending to %s", p.Target), nil
 		}
+	}
+	var live bool
+	if p, live = op.dropGone(ctx, p); !live {
+		return Result{}, ErrSentMeanwhile
 	}
 	var failed int
 	var firstErr error

@@ -573,11 +573,13 @@ func TestPreviewDiffNoteRemembersThePreview(t *testing.T) {
 	}
 }
 
-// A pull request's diff is a preview whose names are forge refs, not
-// branches: its notes record no preview (the web page agrees).
-func TestPRDiffNoteRecordsNoPreview(t *testing.T) {
+// A pull request's diff is a preview over refs/gg/pr/<n>: its notes record
+// the PR's scope, so the PR's view shows them (spec 2026-10-08 §3).
+func TestPRDiffNoteRecordsThePR(t *testing.T) {
 	t.Parallel()
 	m := previewDiffModel(t, nil)
+	set := m.diffLayer().previewSet
+	set.Source, set.Target = "refs/gg/pr/42", "main"
 	m.previewOpen = &previewOpenState{prNumber: 42}
 	v := m.diffLayer()
 	for i, ln := range v.lines {
@@ -590,7 +592,7 @@ func TestPRDiffNoteRecordsNoPreview(t *testing.T) {
 	if !ok {
 		t.Fatal("the note form must open")
 	}
-	if p.preview != "" {
+	if p.preview != "main...refs/gg/pr/42" {
 		t.Fatalf("a PR diff's note recorded preview %q", p.preview)
 	}
 }

@@ -86,9 +86,8 @@ func WorkingReviewTarget() ReviewTarget {
 
 // ScopeReviewTarget is the review of a merge preview or a commit pair: Range
 // = the scope's hex pair (merge base..source tip, or a..b), Label = the human
-// pair, Commit = the tip, Preview = the scope's name. A pull request's set
-// has no portable scope name, so its review is stored untagged (as before).
-// The ONE constructor: `gg review --preview`, `gg review save`, the TUI and
+// pair, Commit = the tip, Preview = the scope's name (a pull request's:
+// "<base>...refs/gg/pr/<n>", so the review is the PR's). The ONE constructor: `gg review --preview`, `gg review save`, the TUI and
 // the web all build a scope review here.
 func ScopeReviewTarget(set PreviewNoteSet) ReviewTarget {
 	spec := set.DiffSpec()
@@ -215,9 +214,10 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 		if up, uerr := s.repo.UpstreamRef(ctx, tip); uerr == nil && strings.TrimSpace(up) != "" {
 			base = strings.TrimSpace(up)
 		} else {
-			// no base found: review just the tip commit's own change (vs its parent)
-			rng := tipSHA + "^.." + tipSHA
-			return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}, Commit: tipSHA, Branch: branch}, nil
+			// no base found: review just the tip commit's own change (vs its
+			// parent, or everything a root commit adds)
+			rng, diff := s.OwnChange(ctx, tipSHA)
+			return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: diff, Commit: tipSHA, Branch: branch}, nil
 		}
 	}
 	baseSHA, err := s.repo.ResolveCommit(ctx, strings.TrimSpace(base))

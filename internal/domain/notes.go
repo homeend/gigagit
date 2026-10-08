@@ -56,9 +56,6 @@ type ResolvedNote struct {
 	// Group is the note's group (spec 2026-10-07 §1.3): GroupMine,
 	// "review:<id>" or "github:<review id>".
 	Group string
-	// Origin is a carried note's home in a PR view: a short sha or
-	// OriginWorkingTree. Empty everywhere else.
-	Origin string
 }
 
 // NoteCounts are the row-painter badges: how many note THREADS (root notes,
@@ -736,7 +733,6 @@ func (s *Service) invalidateNoteCounts() {
 	s.mu.Lock()
 	s.noteCounts = nil
 	s.previewCounts = nil // preview badges count the same store
-	s.carriedCache = nil  // carried notes read the same store
 	s.prReviewCache = nil // remarks read the same store
 	s.notesGen++
 	s.mu.Unlock()

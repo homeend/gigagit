@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/theme"
 )
 
@@ -32,7 +33,7 @@ func TestNoteBadgeBarsWearTheirGroupsColour(t *testing.T) {
 	prevTheme := activeTheme()
 	defer setTheme(prevTheme)
 	setTheme(theme.Dark)
-	bar, _ := groupBarStyle(groupSlot("review:r1"))
+	bar, _ := groupBarStyle(domain.GroupSlot("review:r1"))
 	if !strings.Contains(noteBadgeGroups(4, []string{"review:r1"}), bar.Render("▌")) {
 		t.Fatal("the bar wears its group's colour")
 	}

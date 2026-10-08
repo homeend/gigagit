@@ -31,11 +31,14 @@ type reviewTargetReadyMsg struct {
 
 // reviewTargetForCommit builds the review scope for a single focused commit:
 // its own change, sha^..sha. A root commit has no parent, so ^.. would fail —
-// review the tip alone (git diff sha). Pure, for tests.
+// it is reviewed as everything it adds (DiffSpec.Root: against the empty
+// tree; a bare `git diff sha` would compare the working tree). Pure, for tests.
 func reviewTargetForCommit(c model.Commit) domain.ReviewTarget {
 	rng := c.Hash + "^.." + c.Hash
+	diff := model.DiffSpec{Rev: rng}
 	if len(c.Parents) == 0 {
 		rng = c.Hash
+		diff = model.DiffSpec{Rev: rng, Root: true}
 	}
 	// Label = "<short> <subject>": the commit TITLE the user recognizes, plus
 	// the short sha to keep the report filename unique-ish. Range stays hex.
@@ -43,7 +46,7 @@ func reviewTargetForCommit(c model.Commit) domain.ReviewTarget {
 	if s := strings.TrimSpace(c.Subject); s != "" {
 		label += " " + s
 	}
-	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Label: label, Diff: model.DiffSpec{Rev: rng}}
+	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Label: label, Diff: diff}
 }
 
 // --- menu rows (self-gating; each needs opsIdle AND a configured review tool) ---

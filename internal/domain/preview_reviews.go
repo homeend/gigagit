@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"strings"
+
+	"github.com/homeend/gigagit/internal/git"
 )
 
 // PreviewReviews are the reviews written for set (spec R2), newest first:
@@ -12,10 +14,12 @@ import (
 // repository: omitted (View all notes still lists it). Matching is by the
 // scope NAME, so a removed and re-added saved row, or a preview opened only
 // from a link, finds the same reviews. A tip still in the set's commit list
-// costs no git call; only a rewritten one is looked up.
+// costs no git call; only a rewritten one is looked up. A pull request's set
+// has none here: its reviews are drawn as remarks in its diff and offered as
+// its send groups (prReviewHeads, matched by PR number).
 func (s *Service) PreviewReviews(ctx context.Context, set PreviewNoteSet) ([]ReviewHead, error) {
 	sc := set.scope()
-	if sc == "" {
+	if _, pr := git.ParsePRRef(set.Source); pr || sc == "" {
 		return nil, nil
 	}
 	return s.classifyScopeReviews(ctx, sc, set.Tip, set.commitSet())

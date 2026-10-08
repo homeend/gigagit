@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -43,6 +44,7 @@ func sendRepo(t *testing.T) (*Service, *fakeForge, string) {
 func addPRNote(t *testing.T, svc *Service, commit, path string, line int, sum string) string {
 	t.Helper()
 	n, err := svc.NoteAdd(context.Background(), model.Note{Source: model.NoteSourceUser, Summary: sum,
+		Preview: "main..." + git.PRRef(7), // written for PR #7, as its view writes it
 		Address: model.FileAddress{State: model.StateCommitted, Commit: commit, Path: path},
 		Side:    model.NoteSideNew, Range: [2]int{line, line}})
 	if err != nil {
@@ -283,5 +285,70 @@ func TestPartlySentReviewKeepsItsSummaryOnGitHub(t *testing.T) {
 	}
 	if !strings.Contains(p.Body, "two things to fix") || len(p.Skipped) != 0 || len(p.Items) != 1 {
 		t.Fatalf("after a new summary: body %q skipped %+v items %+v", p.Body, p.Skipped, p.Items)
+	}
+}
+
+// Final review Important 2: two sends planned for the same note (two tabs,
+// the TUI and its hosted page) — the first posts it; the second, confirmed
+// after, must post nothing: the note is gone by the time it writes.
+func TestASecondPlanOfASentNotePostsNothing(t *testing.T) {
+	t.Parallel()
+	svc, ff, head := sendRepo(t)
+	id := addPRNote(t, svc, head, "big.go", 5, "once")
+	ctx := context.Background()
+	op1, err := svc.PRSendOp(ctx, PRSendRequest{PR: 7, Notes: []string{id}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	op2, err := svc.PRSendOp(ctx, PRSendRequest{PR: 7, Notes: []string{id}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := engine.MapDecider{engine.DecisionSendForge: engine.OptSend}
+	if _, err := svc.Execute(ctx, op1, nil, dec); err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.Execute(ctx, op2, nil, dec)
+	if !errors.Is(err, engine.ErrNothingToSend) {
+		t.Fatalf("the second send = %v, want ErrNothingToSend", err)
+	}
+	if n := strings.Count(ff.writeLog(), "StartReview"); n != 1 {
+		t.Fatalf("the note was posted %d times:\n%s", n, ff.writeLog())
+	}
+}
+
+// The same for a draft reply sent twice.
+func TestASecondPlanOfASentReplyPostsNothing(t *testing.T) {
+	t.Parallel()
+	svc, ff, _ := sendRepo(t)
+	ctx := context.Background()
+	ff.mu.Lock()
+	ff.comments = []model.ForgeComment{{ID: "C1", ThreadID: "PRRT_1", Kind: model.ForgeCommentInline, Author: "carol",
+		Path: "big.go", Side: model.NoteSideNew, Line: 5, Body: "why?"}}
+	ff.mu.Unlock()
+	if _, err := svc.PRRevalidate(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	d, err := svc.NoteReply(ctx, "forge:C1", model.Note{Source: model.NoteSourceUser, Summary: "because"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	op1, err := svc.PRSendOp(ctx, PRSendRequest{PR: 7, Notes: []string{d.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	op2, err := svc.PRSendOp(ctx, PRSendRequest{PR: 7, Notes: []string{d.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := engine.MapDecider{engine.DecisionSendForge: engine.OptSend}
+	if _, err := svc.Execute(ctx, op1, nil, dec); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Execute(ctx, op2, nil, dec); !errors.Is(err, engine.ErrNothingToSend) {
+		t.Fatalf("the second send = %v, want ErrNothingToSend", err)
+	}
+	if n := strings.Count(ff.writeLog(), "Reply"); n != 1 {
+		t.Fatalf("the reply was posted %d times:\n%s", n, ff.writeLog())
 	}
 }

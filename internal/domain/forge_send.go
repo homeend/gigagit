@@ -42,11 +42,13 @@ type PRSendRequest struct {
 	Resolve   []string `toml:"resolve,omitempty" json:"resolve,omitempty"`     // thread ids or forge comment ids
 	Unresolve []string `toml:"unresolve,omitempty" json:"unresolve,omitempty"` // thread ids or forge comment ids
 	Verdict   bool     `toml:"verdict,omitempty" json:"verdict,omitempty"`     // a verdict with no comments
-	Event     string   `toml:"event,omitempty" json:"event,omitempty"`         // the verdict asked for: comment, approve, request-changes ("" = ask)
 	Body      string   `toml:"body,omitempty" json:"body,omitempty"`
-	Finish    bool     `toml:"finish,omitempty" json:"finish,omitempty"`
-	Discard   bool     `toml:"discard,omitempty" json:"discard,omitempty"`
-	Agent     string   `toml:"agent,omitempty" json:"agent,omitempty"` // who asked (signs a --body text)
+	// BodySet: the user answered the body box, so Body is used as is — an
+	// emptied box posts no body (user ruling 2026-10-08), never the stored
+	// summary.
+	BodySet bool `toml:"body_set,omitempty" json:"body_set,omitempty"`
+	Finish  bool `toml:"finish,omitempty" json:"finish,omitempty"`
+	Discard bool `toml:"discard,omitempty" json:"discard,omitempty"`
 }
 
 // PRSendOp builds the one op that writes to a forge. The frontend collected
@@ -75,6 +77,7 @@ func (s *Service) PRSendOp(ctx context.Context, req PRSendRequest) (engine.SendT
 }
 
 func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendPlan, error) {
+	req.Notes, req.Resolve, req.Unresolve = uniqIDs(req.Notes), uniqIDs(req.Resolve), uniqIDs(req.Unresolve)
 	rv, err := s.PRRevalidate(ctx, req.PR) // also settles what earlier sends left
 	if err != nil {
 		return engine.SendPlan{}, err
@@ -98,8 +101,10 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 		if req.Discard {
 			plan.Mode = engine.SendDiscard
 		}
+		names := s.interruptedNames(ctx, keys)
 		for _, k := range keys {
-			plan.Items = append(plan.Items, engine.SendItem{Key: k, Label: k + " (waiting in the pending review)"})
+			plan.Items = append(plan.Items, engine.SendItem{Key: k, Summary: names[k],
+				Label: names[k] + " (waiting in the pending review)"})
 		}
 		return plan, nil
 	}
@@ -127,6 +132,49 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 		return engine.SendPlan{}, fmt.Errorf("%w (%s)", engine.ErrNothingToSend, strings.Join(why, "; "))
 	}
 	return plan, err
+}
+
+// uniqIDs drops repeated ids, keeping each first occurrence in place: a
+// note named twice is one thread.
+func uniqIDs(ids []string) []string {
+	if len(ids) < 2 {
+		return ids
+	}
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// interruptedNames is what each ledger key of an interrupted send says to a
+// person: a note's summary or a remark's summary; the key itself when
+// nothing better is stored. (A summary mark is moved, so PRInterrupted
+// never lists one.)
+func (s *Service) interruptedNames(ctx context.Context, keys []string) map[string]string {
+	out := make(map[string]string, len(keys))
+	byID, _ := s.storedNotes(ctx) // nil on error: every key falls back to itself
+	for _, k := range keys {
+		out[k] = k
+		if rid, fp, ok := parseRemarkKey(k); ok {
+			if r, err := s.Review(ctx, rid); err == nil {
+				for _, d := range r.docRemarks() {
+					if d.fp == fp {
+						out[k] = cutLabel(d.summary)
+					}
+				}
+			}
+			continue
+		}
+		if n, ok := byID[k]; ok && n.Summary != "" {
+			out[k] = cutLabel(n.Summary)
+		}
+	}
+	return out
 }
 
 // prTarget names the PR for the confirm: "owner/repo #n".
@@ -216,11 +264,16 @@ func (s *Service) planActions(ctx context.Context, plan engine.SendPlan, req PRS
 		kind engine.SendKind
 		verb string
 	}{{req.Resolve, engine.SendResolve, "resolve "}, {req.Unresolve, engine.SendUnresolve, "unresolve "}} {
+		done := map[string]bool{}
 		for _, id := range x.ids {
 			th, err := s.threadIDFor(ctx, plan.PR, id)
 			if err != nil {
 				return engine.SendPlan{}, err
 			}
+			if done[th] { // a thread named by its id and by one of its comments
+				continue
+			}
+			done[th] = true
 			plan.Items = append(plan.Items, engine.SendItem{Label: x.verb + th, Kind: x.kind, ThreadID: th})
 		}
 	}
@@ -294,7 +347,7 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 	plan.Mode = engine.SendReview
 	if len(req.Notes) == 0 && req.Review == "" && !req.Mine {
 		// A verdict alone needs no diff here.
-		plan.Verdict, plan.Body = true, signedBody(req)
+		plan.Verdict, plan.Body = true, typedBody(req)
 		return plan, nil
 	}
 	prev, err := s.PRPreview(ctx, pr)
@@ -326,12 +379,16 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 		}
 		plan.Key, plan.Body, plan.Verdict = r.ID, reviewSendBody(r), true
 		edited := strings.TrimSpace(req.Body)
-		if edited != "" { // the user edited the summary (plan 3, T7)
+		cleared := req.BodySet && edited == ""
+		switch {
+		case cleared:
+			plan.Body = "" // the user cleared it: no body, no trailer, no marker
+		case edited != "": // the user edited the summary (plan 3, T7)
 			plan.Body = sendBody(model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: edited}, r.ID, "")
 		}
 		// The stored summary is on GitHub already: skip it — unless the user
 		// typed a body of their own, which is new text and goes.
-		if r.summarySent(pr.Number) && (edited == "" || edited == r.summaryText()) {
+		if !cleared && r.summarySent(pr.Number) && (edited == "" || edited == r.summaryText()) {
 			plan.Body = ""
 			plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: SkipOnGitHub})
 		}
@@ -339,7 +396,7 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 			s.remarkItem(ctx, &plan, r, i, pl)
 		}
 	case req.Mine:
-		plan.Verdict, plan.Body = true, signedBody(req)
+		plan.Verdict, plan.Body = true, typedBody(req)
 		for _, p := range PreviewNotePaths(shown) {
 			for _, r := range shown[p] {
 				if r.Group == GroupMine && r.Note.Source != model.NoteSourceForge && !r.Note.IsForgeReply() {
@@ -555,14 +612,9 @@ func cutLabel(s string) string {
 	return string(r)
 }
 
-// signedBody is a typed review body, signed when an agent asked for it.
-func signedBody(req PRSendRequest) string {
-	b := strings.TrimSpace(req.Body)
-	if req.Agent != "" && b != "" {
-		b += "\n\n— " + req.Agent + " via gg"
-	}
-	return b
-}
+// typedBody is the review body the user typed (agents never send, so it
+// is never signed).
+func typedBody(req PRSendRequest) string { return strings.TrimSpace(req.Body) }
 
 // PRThreadRoot names a thread of PR n by any of its handles — a thread id,
 // one of its comment ids, or "forge:<comment id>" — reading the PR's
@@ -595,9 +647,9 @@ func (s *Service) PRThreadRoot(ctx context.Context, n int, id string) (string, s
 	return "", "", fmt.Errorf("%w: %s is not a thread of #%d", ErrSendRequest, id, n)
 }
 
-// PRNotes is everything PR n's view holds, by path: local notes (carried
-// ones too, Task 8), GitHub threads, draft replies — each with its sync
-// state. The PR's diff must be available here (gg pr fetch).
+// PRNotes is everything PR n's view holds, by path: the local notes written
+// for it, its AI reviews' remarks, GitHub threads, draft replies — each with
+// its sync state. The PR's diff must be available here (gg pr fetch).
 func (s *Service) PRNotes(ctx context.Context, n int) (map[string][]ResolvedNote, error) {
 	pr, err := s.PullRequest(ctx, n)
 	if err != nil {
@@ -614,6 +666,25 @@ func (s *Service) PRNotes(ctx context.Context, n int) (map[string][]ResolvedNote
 		return nil, err
 	}
 	return s.PreviewNotesAll(ctx, prev.Set)
+}
+
+// PRNoteScope is the scope a note written in PR n's view records
+// ("<base>...refs/gg/pr/<n>", spec 2026-10-08 §3) — only when commit is the
+// PR's tip, the one commit its view writes notes on; "" otherwise. The PR is
+// read from the cache when it is there (its view is open).
+func (s *Service) PRNoteScope(ctx context.Context, n int, commit string) string {
+	pr, _, ok := s.PRDetailsCached(n)
+	if !ok {
+		var err error
+		if pr, err = s.PullRequest(ctx, n); err != nil {
+			return ""
+		}
+	}
+	prev, err := s.PRPreview(ctx, pr)
+	if err != nil || !prev.Set.OK() || prev.Set.Tip != commit {
+		return ""
+	}
+	return prev.Set.Pair()
 }
 
 // prCommentsNow is PR n's comments from the cache, else from ONE snapshot

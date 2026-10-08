@@ -59,7 +59,7 @@ func (s *Server) handlePRNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := readCtx(r)
-	out := map[string]any{"notes": []wireNote{}, "tip": "", "counts": map[string]int{}, "total": 0}
+	out := map[string]any{"notes": []wireNote{}, "tip": "", "counts": map[string]int{}, "total": 0, "groups": map[string][]int{}}
 	if !svc.PRFetched(ctx)[pr.Number] {
 		writeJSON(w, out) // no local head yet: nothing to hang a note on
 		return
@@ -92,6 +92,20 @@ func (s *Server) handlePRNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out["notes"], out["counts"], out["total"] = notes, orEmptyCounts(counts), total
+	// The file badges' colour stripes (spec §1.3): each path's groups as
+	// colour slots, in line order.
+	groups, gerr := svc.PreviewNoteGroups(ctx, set)
+	if gerr != nil && !errors.Is(gerr, domain.ErrNotesDisabled) {
+		writeErr(w, http.StatusInternalServerError, gerr)
+		return
+	}
+	slots := map[string][]int{}
+	for p, gs := range groups {
+		for _, g := range gs {
+			slots[p] = append(slots[p], domain.GroupSlot(g))
+		}
+	}
+	out["groups"] = slots
 	writeJSON(w, out)
 }
 
@@ -111,7 +125,9 @@ func (s *Server) handlePRCommentsRefresh(w http.ResponseWriter, r *http.Request)
 		writeErr(w, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, map[string]any{"changed": rv.CommentsChanged, "moved": rv.Moved, "forge_head": rv.PR.HeadSHA})
+	body := map[string]any{"changed": rv.CommentsChanged, "moved": rv.Moved, "forge_head": rv.PR.HeadSHA}
+	addInterrupted(ctx, svc, pr.Number, body)
+	writeJSON(w, body)
 }
 
 // handlePRDetails is the details overlay's one load: the PR with its
