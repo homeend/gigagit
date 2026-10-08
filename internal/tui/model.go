@@ -264,6 +264,7 @@ type Model struct {
 	prs              []model.PullRequest
 	prsErr           string // first line of the last list failure; "" = fine
 	prsLoaded        bool   // a list has landed at least once (distinguishes "loading" from "none")
+	prsAnswered      bool   // a PR read answered this repo session (cached rows, a list, no forge, a failure): a start-at PR link waits for it
 	prsInflight      bool
 	prsGen           int
 	// pendingPROpen is the PR whose diff opens once its FetchPRHead succeeds
@@ -2799,6 +2800,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.canOpenPR() {
 				return m.copyPRURL()
 			}
+		case "L":
+			if m.canOpenPR() {
+				return m.copySelectedPRLink()
+			}
 		case "d":
 			switch m.focus {
 			case panelPRs:
@@ -3414,6 +3419,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCommentsMsg:
 		return m.handlePRCommentsMsg(msg)
 
+	case prLinkMsg:
+		return m.handlePRLinkMsg(msg)
 	case prRevalidatedMsg:
 		return m.handlePRRevalidatedMsg(msg)
 
@@ -5027,7 +5034,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// The forge belongs to the repository: the new Service probes afresh, and
 	// until it answers there is no Pull requests tab to stand on.
 	m.forgeShown, m.forgeProvider, m.forgeProbeKicked = false, "", false
-	m.prs, m.prsErr, m.prsLoaded, m.prsInflight = nil, "", false, false
+	m.prs, m.prsErr, m.prsLoaded, m.prsInflight, m.prsAnswered = nil, "", false, false, false
 	m.prsGen++ // drop the old repo's in-flight list read
 	if m.activeLeftTab == panelPRs {
 		if m.focus == panelPRs {

@@ -18,7 +18,7 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
-import { nextFresh, sentEvent, serialReads } from "./prfresh.js";
+import { nextFresh, oncePerKey, sentEvent, serialReads } from "./prfresh.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
@@ -219,6 +219,20 @@ new MutationObserver(() => {
   if ($("compare-bar").classList.contains("hidden")) ibar.classList.add("hidden");
 }).observe($("compare-bar"), { attributes: true, attributeFilter: ["class"] });
 
+// followMovedHead fetches PR n's new head and re-opens its diff — if the user
+// is still looking at it. One follow per PR at a time: a waiting read that
+// lands after another already saw the move must not fetch it again (a
+// second fetch is refused red: "another operation is running").
+const followMovedHead = oncePerKey(async (n) => {
+  const po = state.previewOpen;
+  if (!po || po.pr !== n) return; // they moved on; the next open fetches
+  opLine("⟳ " + prLabel(n) + " has new commits — updating…");
+  if (await fetchPR(n)) {
+    const now = state.previewOpen;
+    if (now && now.pr === n) await showPR(n, true);
+  }
+});
+
 // A send refused because the PR moved on GitHub: follow the new head (the
 // diff re-opens on it, if the user is still looking at the PR).
 onHeadMoved((n) => followMovedHead(n));
@@ -287,7 +301,9 @@ async function showPR(n, moved, skipComments) {
 // simply stays without (newer) threads.
 // moved: the view was just re-opened on a moved head — that read is news.
 export function refreshPRComments(n, moved = false) {
-  return reads.run(commentsRead(n, moved));
+  // Queued, never dropped: the read a moved-head reopen asks for may arrive
+  // while another read is still running.
+  reads.soon("comments:" + n, commentsRead(n, moved));
 }
 
 // commentsRead is refreshPRComments's read, for the serial reader.
@@ -366,28 +382,17 @@ function revalidateRead(n) {
   };
 }
 
-// followMovedHead fetches PR n's new head and re-opens its diff — if the user
-// is still looking at it.
-async function followMovedHead(n) {
-  const po = state.previewOpen;
-  if (!po || po.pr !== n) return; // they moved on; the next open fetches
-  opLine("⟳ " + prLabel(n) + " has new commits — updating…");
-  if (await fetchPR(n)) {
-    const now = state.previewOpen;
-    if (now && now.pr === n) await showPR(n, true);
-  }
-}
-
 // openPR is the row click: serve what is here, then check the forge.
 //   - a head that is already local opens AT ONCE (a purely local read), and
 //     revalidate() updates it in the background when the forge moved on;
 //   - otherwise the head is fetched first, under the mask.
 // The server's PR cache makes the fetch itself cheap the second time: the
 // head sha comes from the listing, so an unchanged PR skips the network.
+// It resolves true when the PR's view is on screen (openPRLanding waits on it).
 let opening = 0;
 async function openPR(pr) {
   const n = pr.number;
-  if (opening) return; // one open at a time; the mask says which
+  if (opening) return false; // one open at a time; the mask says which
   opening = n;
   maskOn(n, "opening " + prLabel(n) + "…");
   try {
@@ -396,19 +401,32 @@ async function openPR(pr) {
       if (how === "shown") {
         maskOff();
         if (pr.state === "open") revalidate(n); // a closed PR's head no longer moves
-        return;
+        return true;
       }
-      if (how === "error") return;
+      if (how === "error") return false;
     }
     $("pr-mask-text").textContent = "fetching " + prLabel(n) + "…";
-    if (!(await fetchPR(n))) return;
+    if (!(await fetchPR(n))) return false;
     pr.fetched = true; // a second click on this row shows the diff without another fetch
     $("pr-mask-text").textContent = "computing the diff of " + prLabel(n) + "…";
-    if ((await showPR(n, false)) === "unfetched") opLine("pull request #" + n + ": the head did not arrive", true);
+    const how = await showPR(n, false);
+    if (how === "unfetched") opLine("pull request #" + n + ": the head did not arrive", true);
+    return how === "shown";
   } finally {
     opening = 0;
     maskOff();
   }
+}
+
+// openPRLanding opens PR n's view for a gg:// link (live.js): the same open
+// as a row click. true = on screen; false = the open failed (it said why);
+// null = the page does not list PR n.
+export async function openPRLanding(n) {
+  // A link opened as the page loads (gg open --web) may beat the list: read
+  // the server's listing once before calling the PR unknown.
+  if (!knownPR(n)) await fetchPRs();
+  const pr = knownPR(n);
+  return pr ? await openPR(pr) : null;
 }
 
 function forgetPR(pr) {

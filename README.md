@@ -210,6 +210,7 @@ gg versions [<branch>]                 # list a branch's recorded pre-operation 
 gg versions show <branch> <id|latest>  # print the frozen change set a two-branch version recorded (Base...Ours)
 gg versions restore [--discard] <branch> <id|latest>  # restore a branch to a recorded version; --discard answers the dirty-tree prompt
 gg link --version <branch> <id|latest> # print one version's preview link (gg://…?version=<id>)
+gg link --pr <n> [<path>[:<line>]]     # a pull request's link (…@<base>...refs/gg/pr/<n>); opens in the PR's view
 gg unlock [--yes]                      # list (or with --yes remove) stranded .git/*.lock files; exit 1 while locks are present
 gg migrate [--yes]                     # list pending store migrations and what they'd discard; changes nothing without --yes
 gg merge [--into <target>] [--on-conflict=keep|abort] [--no-ff] [-m <msg> | -F <file>] <source>  # -m/-F (- = stdin) set the merge commit message and imply --no-ff
@@ -372,6 +373,7 @@ gg link --pair HEAD~3..HEAD             # …the last 3 commits' change-set (bot
 gg link --ref main --bookmark b1        # …with a landing hint appended
 gg link --content README.md             # …the file's CONTENT on disk (?view=content), no commit
 gg link --version main latest           # …a branch version's frozen preview (?version=<id>)
+gg link --pr 123                        # …a pull request: /gg-review <link> reviews it, gg open lands in its view
 gg link internal/tui/steer.go:42-57     # …a RANGE of lines (uncommitted: + a fingerprint of the block)
 gg link resolve gg://gigagit/a.go:3     # which checkout on this machine?
 gg link text gg://gigagit/a.go:42-57    # print exactly the lines a line or range link names
@@ -564,8 +566,11 @@ startup. Rows lead with their status (`✓` approved · `✗` changes requested 
 is no longer open — those stay listed, dimmed). `enter` fetches the head and
 opens the PR's diff (`base…head`, titled `PR #123 · title`) in the same view a
 merge preview uses; `i` opens the PR hub (description, conversation with review
-verdicts, outdated threads; `y` copies the URL, `r` reloads); `y` copies the PR
-URL; `d` forgets a PR that is no longer open. `r` re-reads the list, and gg
+verdicts, outdated threads; `y` copies the URL, `L` the gg link, `r` reloads); `y` copies the PR
+URL and `L` its **gg link** (`gg://…@<base>...refs/gg/pr/<n>` — hand it to an
+agent as `/gg-review <link>`, or open it with `gg open`: it lands in the PR's
+view; an open PR's `.` menu has *Copy pull request link* too); `d` forgets a PR
+that is no longer open. `r` re-reads the list, and gg
 re-reads it in the background every `[refresh] prs` seconds (default `300`,
 `0` = off) — independently of the `[refresh] enabled` master switch.
 
@@ -582,8 +587,8 @@ on `r`; `i` opens the PR hub from the diff. The title says `refreshing…`,
 **Sending from the PR view.** Every note box shows where it lives — `○` only
 here, `◌` being sent, `○!` the last send failed (with the error), `●` on
 GitHub — and a coloured bar for its group: your own notes ("my draft
-review"), each AI review of the PR's commits (their remarks show in the diff
-too), each GitHub review. The `.` menu on a note offers *Send to GitHub* and
+review"), each AI review run on the PR (its remarks show in the diff too),
+each GitHub review. The `.` menu on a note offers *Send to GitHub* and
 *Send my draft review…* / *Send this AI review…*; on a GitHub thread *Reply
 to note*, *Reply & send…*, *Resolve / Reopen thread* (`x`, at once on GitHub)
 and *Send draft reply* (`R` writes a local draft). The PR hub's `s` (*Send
@@ -595,7 +600,7 @@ was interrupted offers *Finish sending / Discard* there.
 
 In **`gg web`** the list is a *pull requests* section of the sidebar (under
 *previews*), shown only with a usable `gh`: click a row to fetch and open its
-diff, right-click for *copy URL* and *forget*, **⟳** on the header to re-read.
+diff, right-click for *copy URL*, *copy gg link* and *forget*, **⟳** on the header to re-read.
 The section has a **search** field (`A` focuses it): it asks the forge for pull
 requests of any state — text in the forge's own syntax, a chip cycling *all /
 closed / merged / open*, a bare number for a direct lookup, `Enter` to search.

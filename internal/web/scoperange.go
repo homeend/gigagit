@@ -65,9 +65,13 @@ func (s *Server) handleScopeRange(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// The STORED scope goes on to git, never the client's spelling: a PR's
+	// row matches any base by number, and the base half is a revision.
 	known := false
 	for _, sc := range counts.ScopesByCommit[commit] {
-		known = known || sc.Scope == scope
+		if !known && domain.SameNoteScope(sc.Scope, scope) {
+			known, scope = true, sc.Scope
+		}
 	}
 	if !known {
 		writeErr(w, http.StatusNotFound, errors.New("no notes of that range on this commit"))

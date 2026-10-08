@@ -269,3 +269,50 @@ func TestSaveFailsAtOnceOnAHardRenameError(t *testing.T) {
 		t.Fatalf("temp files left: %v", m)
 	}
 }
+
+// B5: the trim's remove retries a transient error (Windows: a reader holds
+// the file) instead of leaving the cache over its bound.
+func TestTrimRetriesATransientRemove(t *testing.T) {
+	t.Parallel()
+	s := New(t.TempDir(), 1)
+	fails := 2
+	s.remove = func(p string) error {
+		if fails > 0 {
+			fails--
+			return &os.PathError{Op: "remove", Path: p, Err: fs.ErrPermission}
+		}
+		return os.Remove(p)
+	}
+	for _, e := range []Entry{{Number: 1, OpenedAt: time.Unix(100, 0)}, {Number: 2, OpenedAt: time.Unix(200, 0)}} {
+		if err := s.Save(e); err != nil {
+			t.Fatalf("save %d: %v", e.Number, err)
+		}
+	}
+	if _, ok := s.Load(1); ok || fails != 0 {
+		t.Fatalf("entry 1 kept=%v, fails left %d", ok, fails)
+	}
+}
+
+// B5: a corrupt file's quarantine rename retries a transient error too.
+func TestQuarantineRetriesATransientRename(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s := New(dir, 0)
+	if err := os.WriteFile(filepath.Join(dir, "pr-3.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fails := 2
+	s.rename = func(from, to string) error {
+		if fails > 0 {
+			fails--
+			return &os.LinkError{Op: "rename", Old: from, New: to, Err: fs.ErrPermission}
+		}
+		return os.Rename(from, to)
+	}
+	if _, ok := s.Load(3); ok {
+		t.Fatal("a corrupt entry loaded")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "pr-3.json")); !errors.Is(err, fs.ErrNotExist) || fails != 0 {
+		t.Fatalf("not quarantined: %v, fails left %d", err, fails)
+	}
+}

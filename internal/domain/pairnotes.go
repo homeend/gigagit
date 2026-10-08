@@ -170,7 +170,7 @@ func (s *Service) ScopeAtCommit(ctx context.Context, scope, commit string) (a, b
 	if c, cerr := s.NoteCounts(ctx); cerr == nil {
 		if full, ferr := full(commit); ferr == nil {
 			for _, sc := range c.ScopesByCommit[full] {
-				if sc.Scope != scope || sc.Base == "" {
+				if !SameNoteScope(sc.Scope, scope) || sc.Base == "" {
 					continue
 				}
 				if base, berr := s.fullRev(ctx, sc.Base); berr == nil && base != full {
@@ -308,4 +308,16 @@ func ReviewShownOn(reviewBranch string, viewing []string) bool {
 		}
 	}
 	return false
+}
+
+// SameNoteScope reports whether two note scopes (Note.Preview) are one
+// review: the same name, or the same pull request whatever the base's
+// spelling (spec 2026-10-08 §2).
+func SameNoteScope(a, b string) bool {
+	if a == b {
+		return a != ""
+	}
+	n, ok := PRScopeNumber(a)
+	m, ok2 := PRScopeNumber(b)
+	return ok && ok2 && n == m
 }

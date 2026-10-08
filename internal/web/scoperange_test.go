@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -200,5 +201,63 @@ func TestNotesOverviewFollowsTheViewedBranch(t *testing.T) {
 	}
 	if n := count(""); n != 5 {
 		t.Fatalf("no branch named: %d notes, want all 5", n)
+	}
+}
+
+// A4: one PR's notes over two base spellings are one Range review row named
+// "PR #7", and the row opens from either spelling.
+// Serial: sendServerFull → prFixture isolates XDG state with t.Setenv.
+func TestOnePRIsOneRangeReviewRow(t *testing.T) {
+	ts, _, srv, head, dir := sendServerFull(t)
+	base := strings.TrimSpace(gitRun(t, dir, "rev-parse", "main"))
+	for _, scope := range []string{"main...refs/gg/pr/7", base + "...refs/gg/pr/7"} {
+		if _, err := srv.service().NoteAdd(context.Background(), model.Note{
+			Source: model.NoteSourceUser, Summary: "x", Preview: scope,
+			Address: model.FileAddress{State: model.StateCommitted, Commit: head, Path: "pr7.txt"},
+			Side:    model.NoteSideNew, Range: [2]int{1, 1},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var counts struct {
+		Scopes map[string][]struct {
+			Scope, Label string
+			N            int
+		} `json:"scopes_by_commit"`
+	}
+	if code := getJSON(t, ts, "/api/notes/counts", &counts); code != http.StatusOK {
+		t.Fatalf("counts = %d", code)
+	}
+	if got := counts.Scopes[head]; len(got) != 1 || got[0].N != 2 || got[0].Label != "PR #7" {
+		t.Fatalf("scopes on head = %+v", got)
+	}
+	var rng map[string]any
+	q := url.Values{"commit": {head}, "scope": {base + "...refs/gg/pr/7"}}.Encode()
+	if code := getJSON(t, ts, "/api/scope-range?"+q, &rng); code != http.StatusOK {
+		t.Fatalf("scope-range from the sha spelling = %d %v", code, rng)
+	}
+}
+
+// Final review 1: a note joining a PR's review the commit already holds is
+// stored under the STORED spelling — the client's base half is never kept
+// (nor handed to git) just because the PR number matches.
+// Serial: sendServerFull → prFixture isolates XDG state with t.Setenv.
+func TestANoteJoiningAPRScopeTakesTheStoredSpelling(t *testing.T) {
+	ts, _, srv, head, _ := sendServerFull(t)
+	if _, err := srv.service().NoteAdd(context.Background(), model.Note{
+		Source: model.NoteSourceUser, Summary: "x", Preview: "main...refs/gg/pr/7",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: head, Path: "pr7.txt"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	code, out := postJSONAny(t, ts, "/api/notes/add",
+		fmt.Sprintf(`{"path":"pr7.txt","rev":%q,"state":"commit","side":"new","line":1,"summary":"y","preview":"--fork-point...refs/gg/pr/7"}`, head))
+	id, _ := out["id"].(string)
+	if code != 200 || id == "" {
+		t.Fatalf("add = %d %v", code, out)
+	}
+	if p := storedPreview(t, srv, id); p != "main...refs/gg/pr/7" {
+		t.Fatalf("stored preview %q", p)
 	}
 }

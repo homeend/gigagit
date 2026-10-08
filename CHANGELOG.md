@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull request follow-ups
+
+### Added
+
+- **Links to pull requests.** `L` on a Pull requests row (and in the PR
+  details), *Copy pull request link* in an open PR's `.` menu, *copy gg link*
+  in gg web's PR menu, and `gg link --pr <n>` copy the PR's gg link
+  (`gg://…@<base>...refs/gg/pr/<n>`). Hand it to an agent as
+  `/gg-review <link>` — the review shows in the PR's view — or open it
+  (`gg open`, `gg session navigate`, `#`, gg web): it lands in the PR's own
+  view with its GitHub threads, and on the file and line it names. Skill
+  v156, gg-review v3.
+
+### Changed
+
+- **A note written in a pull request's diff joins the PR on any of its
+  commits** — an older head the page still shows included — and is refused
+  ("pull request #7 no longer holds … — reopen it") when the PR no longer
+  holds the commit (a force-push), instead of silently leaving the PR.
+  Writing it never asks GitHub.
+- **One pull request is one review** whatever base its notes were written
+  over: one Range review row, opening from any spelling with all of them; a
+  PR's AI review is titled "PR #7".
+- `gg pr send --review` / `--note review:…` take only a review the PR shows
+  (a review saved on a PR before PR note scope is no longer sendable from it).
+
+### Fixed
+
+- gg web: opening a PR on a full PR cache keeps its diff data; a moved head
+  is followed once (no red "another operation is running"); the reopen's
+  comments read waits for a running read instead of being dropped.
+- A PR listing that ran out of time no longer throws away the remembered
+  forge verdict.
+- Terminal UI: the re-read after your own send survives a failed read.
+- The PR cache retries transient Windows file errors when trimming and when
+  setting a corrupt file aside.
+
 ## Pull requests show only their own notes
 
 ### Changed

@@ -55,6 +55,21 @@ export function serialReads(gate) {
   return { run, soon };
 }
 
+// oncePerKey wraps an async fn so one call per key runs at a time: a call
+// for a key whose earlier call has not settled answers null (prs.js: the
+// moved-head follow — two reads seeing the same move must fetch once).
+export function oncePerKey(fn) {
+  const pending = new Set();
+  return (key, ...args) => {
+    if (pending.has(key)) return null;
+    pending.add(key);
+    const done = () => pending.delete(key);
+    const p = Promise.resolve().then(() => fn(key, ...args));
+    p.then(done, done);
+    return p;
+  };
+}
+
 // sentEvent is the freshness event a finished send makes (F1): only a send
 // that changed GitHub is my own change; seq = the last read started.
 export function sentEvent(ev, seq) {

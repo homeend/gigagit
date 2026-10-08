@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -76,5 +77,19 @@ func TestReplyAndSendAfterRDoesNotSend(t *testing.T) {
 	nm, _ := m.Update(noteMutatedMsg{sendPR: 7, sendID: "d1", sendGen: old})
 	if mm := nm.(Model); strings.Contains(mm.statusMsg, "preparing the send") {
 		t.Fatalf("status = %q", mm.statusMsg)
+	}
+}
+
+// B4: the read a post-send re-read waited for FAILED: the re-read is still
+// issued (once — the flag is cleared first).
+func TestAFailedReadStillIssuesTheQueuedReRead(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m = revalidated(m, 7, 1, false)
+	m.prRefreshAgain = 7
+	nm, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.forgeGen, pr: model.PullRequest{Number: 7}, err: errors.New("offline")})
+	mm := nm.(Model)
+	if mm.prRefreshAgain != 0 || !mm.prRevalidateInflight || cmd == nil {
+		t.Fatalf("again=%d inflight=%v cmd=%v", mm.prRefreshAgain, mm.prRevalidateInflight, cmd != nil)
 	}
 }

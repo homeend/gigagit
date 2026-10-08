@@ -12,7 +12,9 @@ launch gg's TUI or `gg web`; they belong to the user.
    `kind`, `label`, `checkout`, `diff` and `hunks`. A file or line in the
    link does not narrow the review: the whole change is reviewed. A refusal
    ("names no change") means the link is not a change — ask the user for a
-   commit, pair, merge preview, branch or working-tree link.
+   commit, pair, merge preview, pull request, branch or working-tree link.
+   A pull request's link (`@<base>...refs/gg/pr/<n>`, `gg link --pr <n>`)
+   reviews the whole PR, and the review shows in the PR's view.
 2. **Read it** in `checkout` (`cd` there first — a working link may name
    another worktree) with those values — never guess the range:
    `gg diff --stat <diff>`, then `gg diff --hunks --json <hunks>`, then

@@ -2116,9 +2116,16 @@ them on a file row.
   NUMBER (`PRScopeNumber`) — the base half moves with the PR's target (the
   TUI/web build the set over the target branch or the base sha, an agent
   types `origin/main`). Writers: the TUI note form (`previewNoteSet().Pair()`),
-  the web note add (`pr: n` → `domain.PRNoteScope`, stamped only on the PR's
-  tip), CLI/MCP `--preview`, batches, `ScopeReviewTarget`. `prReviewHeads` keeps
-  only `PreviewReviews` the set owns; carried notes (`forge_carried.go`,
+  the web note add (`pr: n` → `cachedPR` row → `domain.PRNoteScope`: never a
+  forge read; any commit of `prev.Set.Commits` takes the stamp, a commit the
+  PR dropped (force-push) is `ErrNoteOffPR` → 409, never a plain note),
+  CLI/MCP `--preview`, batches, `ScopeReviewTarget` (label "PR #<n>").
+  `prReviewHeads` keeps only `PreviewReviews` the set owns, and a send takes
+  only those (`prOwnsReview`: `--review`/`review:<rid>:<k>` of another
+  review is "not in this PR"). One PR's spellings are one scope
+  (`SameNoteScope`): `ScopesByCommit` merges them into the first spelling's
+  row, `owns` with `Only` set matches by number, and the scope-range /
+  notePreview allowlists compare with it. Carried notes (`forge_carried.go`,
   `ResolvedNote.Origin`) are gone. Notes written in a PR view before then are
   plain commit notes and stay on their commit. A note that must show in a
   preview has to be WRITTEN in it (test fixtures stamp `Preview`); address
@@ -2973,6 +2980,28 @@ returns to the field and must not close the host. Rows are TUI-local
 untracked file; landing the same link through `#` still opens
 `openCompareFiles(commit a, commit b)` → `CompareFiles`, the tracked-only
 diff. 3b-2 routes pair landing through the set-shaped view.
+
+### Pull request links (2026-10-08)
+
+A PR's link is the merge-preview link of the pair its view opens on:
+`gg://<repo>[/<path>]@<base>...refs/gg/pr/<n>[:<line>]` — no grammar change.
+`domain.PRLinkPair(ctx, n)` names the pair (PRPair of the cached row, else one
+`PullRequest` read; `ErrPRNotFetched` without `refs/gg/pr/<n>`). Producers:
+`gg link --pr <n> [<path>[:<line>]]` (a target flag like `--preview`), the
+TUI's `L` on a Pull requests row and in the PR hub (`prLinkCmd` → `prLinkMsg`,
+off-thread), the open PR's `.` row `pr-link-open` (the pair on screen, no
+round trip), gg web's PR menu `copy gg link` (`registerRows("pr")` →
+`GET /api/pr/link`; built by `linkFor` and recorded like every copy-gg-link
+row). Landing: a navigate whose preview SOURCE parses as a PR ref
+(`domain.PRScopeNumber(target+"..."+source)`; JS `/^refs\/gg\/pr\/(\d+)$/`)
+opens the PR's own view when the list holds the row — TUI
+`steerNavigatePR` → `openPRPreviewCmd`, the pending stage gated by
+`pendingSteer.prNumber` (the link's base spelling may differ from the view's);
+web `openPRLanding` (reads `/api/pr` once first) — else the plain merge
+preview with a notice. A start-at PR link waits for `prsAnswered` (the first
+PR read's answer, cached rows included) when `kickForgeProbe` started one.
+`/gg-review` over a PR link stores a review stamped for the PR (the set's
+`Pair()`), so it shows in the PR's view.
 
 ### Preview links (feature B, 2026-09-15)
 
