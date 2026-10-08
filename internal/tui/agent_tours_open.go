@@ -54,6 +54,17 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 		m = m.syncOverviews()
 		return m.showTour(o.ID), check
 	}
+	if m.isRepoWorktree(dir) {
+		// This repository: a slot swap; the tour shows once the slot's
+		// status (and with it the overviews sync) has landed.
+		nm, ok := m.switchView(dir)
+		if !ok {
+			return nm, nil
+		}
+		m = nm
+		m.consoleSwitch.tour = o.ID
+		return m, check
+	}
 	gen := m.consoleSwitch.gen
 	nm, cmd := m.guardedReRoot(dir, false)
 	m = nm.(Model)

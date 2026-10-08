@@ -51,6 +51,7 @@ type consoleReturn struct {
 	filesView    *contentPopup // the files view a preview belongs to
 	filesPreview *openFile
 	focus        panel
+	view         string // the viewed worktree the console was shown over (where a close returns)
 }
 
 // sessionWatch is the TUI's subscription to the session LIST, on a pointer
@@ -138,7 +139,23 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 		clipSeq: s.Clipboard().Seq} // a copy made before it showed is not replayed
 	m.focus = panelCommits
 	m = m.syncConsoleSizeIfFocused()
+	// A shown console ⇔ the viewed worktree is the console's: tab out of
+	// it and the panels are already that tree's. A refusal (an op running)
+	// keeps the view and says so; the console shows regardless.
+	if dir := filepath.Clean(s.Info().Dir); dir != m.viewed && m.isRepoWorktree(dir) {
+		m, _ = m.switchView(dir)
+	}
 	return m, waitSessionCmd(m.console, id, gen)
+}
+
+// returnView brings the worktree a console was shown over back when the
+// console closes. A refusal (an op running) leaves the view where it is.
+func (m Model) returnView(r *consoleReturn) Model {
+	if r == nil || r.view == "" || r.view == m.viewed || !m.isRepoWorktree(r.view) {
+		return m
+	}
+	m, _ = m.switchView(r.view)
+	return m
 }
 
 // captureReturn records the screen a console is about to cover. A
@@ -154,6 +171,7 @@ func (m Model) captureReturn() (Model, *consoleReturn) {
 		stashView: m.stashView, filesView: m.filesView, filesPreview: m.filesPreview,
 		focus: m.focus,
 		full:  m.fullMaxActive(),
+		view:  m.viewed,
 	}
 	switch m.topLayer().(type) {
 	case *diffView, *historyView, *blameView, *fileViewer:
@@ -174,6 +192,7 @@ func (m Model) forgetConsoleReturn() Model {
 	}
 	r := m.console.ret
 	r.layers, r.stashView, r.filesView, r.filesPreview = nil, nil, nil, nil
+	r.view = "" // the viewed worktree was the old repository's
 	r.full = r.fullMaxed
 	m.console.maximized = r.full
 	return m.syncConsoleSizeIfFocused()
@@ -266,6 +285,7 @@ func (m Model) closeConsole() Model {
 	}
 	r := m.console.ret
 	m = m.detachConsole()
+	m = m.returnView(r)
 	if r == nil {
 		m.focus = m.lastLeftPanel
 		return m.reconcileFullscreenFocus()

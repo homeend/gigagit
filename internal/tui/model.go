@@ -2030,6 +2030,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.restorePanelSel(panelStaged, keyStaged)
 			// An edit changes which files a working review still matches.
 			previewsChain = tea.Batch(previewsChain, m.loadWorkingReviewsCmd())
+			// A tour asked across an in-repo view switch (agent_tours_open):
+			// the slot's status landed, its overviews are synced — show it.
+			// (A repo switch's tour is the armed settle's, not this.)
+			if m.consoleSwitch.tour != "" && !m.consoleSwitch.armed {
+				tour := m.consoleSwitch.tour
+				m.consoleSwitch.tour = ""
+				m = m.syncOverviews().showTour(tour)
+			}
 			// Rebuild the commit graph so WIP pseudo-rows (◇ Working tree/Staged)
 			// stay in sync with the new status, even on the proc path (e.g. after
 			// a stash pop that triggers a status-only refresh mid-conflict process).
