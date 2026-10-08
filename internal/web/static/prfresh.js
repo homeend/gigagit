@@ -115,11 +115,14 @@ export function exclusive() {
     try(fn) {
       if (running) return null;
       const p = Promise.resolve().then(fn);
-      running = p.finally(() => (running = null));
+      const clear = () => {
+        running = null;
+      };
+      running = p.then(clear, clear); // never rejects: the caller holds p
       return p;
     },
     async idle() {
-      while (running) await running.catch(() => {});
+      while (running) await running;
     },
   };
 }

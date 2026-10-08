@@ -448,3 +448,29 @@ func TestPRsJSLandingTrustsNoStalePreviewOpen(t *testing.T) {
 		t.Error("the list latch does not wait for the live listing")
 	}
 }
+
+// A failed open rejects only the promise its caller holds: exclusive's own
+// bookkeeping must not leave a second, unhandled rejection behind.
+func TestPRFreshJSExclusiveRejects(t *testing.T) {
+	t.Parallel()
+	out := runFreshModuleJS(t, `
+import { exclusive } from "./prfresh.mjs";
+let unhandled = 0;
+process.on("unhandledRejection", () => { unhandled++; });
+const ex = exclusive();
+ex.try(() => Promise.reject(new Error("x"))).catch(() => {});
+await new Promise((r) => setTimeout(r, 20));
+const idle = await Promise.race([ex.idle().then(() => "now"), new Promise((r) => setTimeout(() => r("late"), 20))]);
+console.log(JSON.stringify({ unhandled, idle }));
+`)
+	var got struct {
+		Unhandled int    `json:"unhandled"`
+		Idle      string `json:"idle"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if got.Unhandled != 0 || got.Idle != "now" {
+		t.Fatalf("got %+v", got)
+	}
+}
