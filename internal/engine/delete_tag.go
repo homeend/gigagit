@@ -3,10 +3,15 @@ package engine
 import (
 	"context"
 	"fmt"
+
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // DeleteTag deletes a tag. Decision-free: a missing tag surfaces as a git error.
 type DeleteTag struct{ Name string }
+
+// LockMode: removes one ref; never index/worktree/HEAD.
+func (op DeleteTag) LockMode() repogate.Mode { return repogate.RefWrite }
 
 func (op DeleteTag) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if op.Name == "" {

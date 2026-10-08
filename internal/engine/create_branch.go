@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
+
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // CreateBranch creates a new local branch without switching to it.
@@ -10,6 +12,11 @@ type CreateBranch struct {
 	Name       string // required
 	StartPoint string // "" = HEAD
 }
+
+// LockMode: writes one ref; never index/worktree/HEAD. The exclusive default
+// would queue behind a headless agent's minutes-long Read hold — and, FIFO,
+// stall every later read with it.
+func (op CreateBranch) LockMode() repogate.Mode { return repogate.RefWrite }
 
 func (op CreateBranch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if op.Name == "" {

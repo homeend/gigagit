@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Branch and tag operations beside a running agent
+
+### Fixed
+
+- Creating or deleting a branch or a tag while a headless AI agent resolves
+  conflicts no longer hangs on "working…" — and no longer freezes every
+  refresh behind it — until the agent finishes. These operations move refs
+  only, so they now run alongside the agent's read hold instead of queuing
+  for an exclusive one.
+
 ## Pull request follow-ups
 
 ### Added

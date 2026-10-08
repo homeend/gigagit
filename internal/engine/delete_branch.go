@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
+
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // DeleteBranch deletes a local branch. Force is resolved reactively via the
@@ -10,6 +12,10 @@ import (
 type DeleteBranch struct {
 	Name string // required
 }
+
+// LockMode: removes one ref (plus a version snapshot ref); never
+// index/worktree/HEAD — the checked-out branch is refused up front.
+func (op DeleteBranch) LockMode() repogate.Mode { return repogate.RefWrite }
 
 func (op DeleteBranch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if op.Name == "" {
