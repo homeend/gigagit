@@ -258,3 +258,17 @@ func TestPRSendBodyFlagSetsBodySet(t *testing.T) {
 		}
 	}
 }
+
+// Item 6: an answered abort posted nothing — a wrapper must not read exit 0
+// as "sent". Serial: runPRAt swaps the terminal seam.
+func TestPRSendAbortExitsOne(t *testing.T) {
+	dir, head, fixtures := sendPRRepo(t)
+	id := addCLINote(t, dir, head, 5)
+	out, errs, code := runPRAt(t, dir, "abort\n", "send", "7", "--note", id)
+	if code != 1 || !strings.Contains(out, "aborted: sending to") {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errs)
+	}
+	if w := forgetest.Writes(t, fixtures); len(w) != 0 {
+		t.Fatalf("an abort wrote %v", w)
+	}
+}

@@ -99,6 +99,7 @@ var sendTerminal = func(stdin io.Reader) bool { return stdin == io.Reader(os.Std
 
 // runPRSend posts req after a human answered its confirm at a terminal, and
 // prints the outcome. Inside a gg session it refuses (agents never send).
+// Exit 0 only when something reached GitHub: an answered abort exits 1.
 func runPRSend(ctx context.Context, svc *domain.Service, req domain.PRSendRequest,
 	stdin io.Reader, stdout, stderr io.Writer) int {
 	if inGGSession() {
@@ -115,6 +116,9 @@ func runPRSend(ctx context.Context, svc *domain.Service, req domain.PRSendReques
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	if !res.Changed { // answered abort: nothing was posted (rebase.go's signal)
 		return 1
 	}
 	return 0
