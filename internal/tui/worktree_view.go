@@ -1,10 +1,14 @@
 package tui
 
 import (
+	"context"
 	"path/filepath"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/gitwatch"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -100,4 +104,61 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.docWatch = v.docWatch
 	m.watcher, m.watchGen, m.watchSupported = v.watcher, v.watchGen, v.watchSupported
 	return m
+}
+
+// switchView makes path's slot the live one. Same repository only: a path
+// that is not one of m.worktrees, one unreachable under this environment's
+// notation, or a swap asked while an operation runs is refused with a
+// status message. The leaving slot sleeps (its watchers close; a read in
+// flight carries the old srcStatus generation and is dropped on arrival).
+// The arriving slot is on screen at once — its remembered status, or the
+// loading marker until its first read — and viewKick makes the Update tail
+// launch its refresh, watcher and docs sync (viewKickCmd).
+func (m Model) switchView(path string) (Model, bool) {
+	key := filepath.Clean(path)
+	if key == m.viewed {
+		return m, true
+	}
+	if !m.isRepoWorktree(key) {
+		m.statusMsg = i18n.T("%s is not a worktree of this repository", path)
+		return m, false
+	}
+	if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, key); verdict != switchOK {
+		m.statusMsg = i18n.T("cannot switch: %s is not reachable from here", path)
+		return m, false
+	}
+	if !m.opsIdle() {
+		m.statusMsg = i18n.T("an operation is running — switch once it has finished")
+		return m, false
+	}
+	m = m.saveView()
+	// Put the leaving slot to sleep: close its watchers, keep its state.
+	if m.watcher != nil {
+		_ = m.watcher.Close()
+	}
+	closeDocWatch(m.docWatch.w)
+	if v := m.views[m.viewed]; v != nil {
+		v.watcher, v.watchSupported = nil, false
+		v.docWatch = docWatchState{gen: v.docWatch.gen + 1}
+	}
+	m = m.loadView(m.ensureView(key))
+	m.watcher, m.watchSupported = nil, false
+	m.watchGen++
+	m.docWatch = docWatchState{gen: m.docWatch.gen + 1}
+	m.srcGen[srcStatus]++ // a status read launched for the old slot cannot land here
+	m.srcInflight[srcStatus] = false
+	m.srcLoading[srcStatus] = false
+	m.workingReviewsGen++ // likewise a reviews read
+	m.viewKick = true
+	return m, true
+}
+
+// viewKickCmd is the live slot's wake-up: a manual status read (never
+// cancelled by a background lane), its git watcher and its open-files
+// sync. Launched by the Update tail after a switchView, which marks the
+// read in flight on the live model first.
+func (m Model) viewKickCmd() tea.Cmd {
+	read := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{manual: true})
+	_, docs := m.syncAgentDocs()
+	return tea.Batch(read, m.startWatchCmd(m.watchGen), docs)
 }

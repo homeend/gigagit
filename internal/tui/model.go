@@ -97,6 +97,7 @@ type Model struct {
 	views         map[string]*worktreeView
 	viewed        string
 	home          string
+	viewKick      bool   // switchView ran; the Update tail launches viewKickCmd once
 	recycleBranch string // branch captured when the Recycle-a-worktree picker opened
 	recycleRemote string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
 
@@ -626,6 +627,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// landing --at in an unretried "an operation is running" refusal. A
 	// central post-dispatch check re-evaluates on every message, so whichever
 	// one finally clears m.loading fires it.
+	if next.viewKick {
+		next.viewKick = false
+		next.srcInflight[srcStatus] = true
+		next.srcLoading[srcStatus] = true
+		cmd = tea.Batch(cmd, next.viewKickCmd())
+	}
 	if next.startAtReady() {
 		var atCmd tea.Cmd
 		next, atCmd = next.consumeStartAt()
