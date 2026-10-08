@@ -5680,8 +5680,13 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
 - **Optimistic forge verdict.** `ForgeStatus` trusts the fresh cached
   listing's provider without `Detect` (`forgeOptimistic`); a failing list
   undoes it, sets `forgeDistrust` for the session and runs real detection.
-- **Prefetch** (`PRPrefetch`, singleflight `pr-prefetch`) walks entries by
-  last open, skips unmoved heads, stops while `gateFor(ctx).Queue()` is
+  A listing the CALLER cancelled (ctx done, or `context.Canceled` from the
+  coalesced caller) is indecisive: it neither proves nor undoes the verdict.
+- **Prefetch** (`PRPrefetch`, singleflight `pr-prefetch`) reads every local
+  head with ONE `for-each-ref refs/gg/pr/`, the entry names with a glob
+  (`Store.Numbers`, no JSON read), and `Load`s only listed open PRs whose
+  head moved (a failed ref read: all count as moved), most recently opened
+  first; it fetches through `prFetchOp(…, opened=false)`. It stops while `gateFor(ctx).Queue()` is
   non-empty (a user op holds or waits), runs `FetchPRHead` through
   `Execute` then `PRPreview`. The web runs it via `Server.goBackground`
   (ctx cancelled + waited on in `Close` — a fire-and-forget one wrote into
@@ -5693,6 +5698,23 @@ Spec `docs/superpowers/specs/2026-10-04-working-reviews-design.md`.
   `compareFilesMsg`. Web: `writePRs` answers `cached: true` rows before the
   live listing; `cachedPR` falls back to them (else opening a cached row
   404s); `#pr-fresh` beside `#files-title`.
+- **Open stamps.** Only an open stamps `OpenedAt` (the 50-entry bound and
+  prefetch order are "most recently opened"): `PRFetchOp` (TUI/CLI opens, a
+  send's head fetch), `PullRequest` (details) and `MarkPROpened` (the
+  page's open of an already-fetched PR, which never runs `PRFetchOp`).
+  `PRRevalidate` (heartbeat, send plan) and prefetch do not; an entry never
+  opened keeps a zero stamp and is trimmed first.
+- **Windows rename.** `Store.writeJSON` retries its rename for
+  `filelock.Wait` on `fs.ErrPermission` / `ERROR_SHARING_VIOLATION` (another
+  gg reading the file holds it without `FILE_SHARE_DELETE`); the rename is a
+  `Store` field so tests inject the failure.
+- **`cache_hours = 0`** reads the forge first on every open — a row visible
+  in the list too (spec §2.3/§4.5).
+- **New commits count.** A moved-head reopen counts `PRNewCommits(n, from)`
+  (`rev-list --count <head on screen>..refs/gg/pr/<n>`; `prReland.from`
+  carries the old head into `openPRPreviewCmd`): "PR #7 updated: 2 new
+  commits"; 0 or a failure keeps the countless line. TUI only — the page
+  keeps "updated: new commits on the forge".
 - **Review-pass rules.** Disk writes go through `prcache.Store.Update`
   (load+edit+save under the lock). `persistEntry` never downgrades a fresh
   full disk entry with a listed row, and replaces a disk `ReadAt` that is
@@ -5980,13 +6002,20 @@ was running is queued in `prRefreshAgain` and asked when that one lands.
 prRefreshing (`closeFilesView` does not: the moved-head reopen runs through
 it after setting "updated").
 
-**Answers after `R`, kept bodies, bars.** `forgeSendGen` (bumped by
-`reRoot`; `prsGen` cannot serve, every PR-list read bumps it) rides in
-`forgeSendReadyMsg`, `sendGroupsMsg` and `sendBodyMsg`; a stale one is
-dropped silently. ctrl+s in the body popup stores `keptSendBody{pr, group,
-verdict, text}`; the next Send review…/Verdict… of the same PR and group
-starts from it (over an AI review's stored summary); a send with
-`err == nil && res.Changed`, or `reRoot`, drops it. `resolvePreviewCmd`
+**Answers after `R`, kept bodies, bars.** `forgeGen` (bumped by `reRoot`
+only; `prsGen` cannot serve, every PR-list read bumps it) rides in
+`prRevalidatedMsg` (the open PR's refresh), `forgeSendReadyMsg`,
+`sendGroupsMsg`, `sendBodyMsg` and `noteMutatedMsg.sendGen` (Reply & send);
+a stale one is dropped silently and touches nothing — `reRoot` itself frees
+the read slot (`prRevalidateInflight`/`prCommentsInflight`) and forgets
+`prReland`/`prRevalidateSkip`. `prRefreshAgain` is consumed by the read of
+that PR that lands, re-asked only while the PR is open. ctrl+s in the body
+popup stores `keptSendBody{pr, group, verdict, text}`; the next Send
+review…/Verdict… of the same PR and group starts from it (over an AI
+review's stored summary); only a send FROM THAT BOX (`forgeSendState.req`,
+`(*keptSendBody).from`: `BodySet`, same PR and box) with
+`err == nil && res.Changed` drops it, and only such a failed send says "the
+text you typed is kept"; `reRoot` drops it too. `resolvePreviewCmd`
 fills `msg.groups` (`PreviewNoteGroups`) — the same-tag re-resolve a note
 edit causes assigns them, and a nil there used to wipe a PR's bars. Repeated
 chooser labels get `" (2)"`… (`i18n.T("%s (%d)")`); skip reasons are whole
@@ -6045,17 +6074,23 @@ moved (`code: head_moved`) / an interrupted pending review, 422 a lookup the
 request cannot fix (the PR's diff not fetched) or a planning refusal, 502
 the forge CLI unavailable (`ErrForgeUnavailable`, from the lookup or the
 planning alike), 504 the forge out of budget. A `gh` call that fails at run
-time (network down, rate limit) has no sentinel and answers 422 — the handler plans under `prSendBudget` (= `prRevalidateBudget`,
-30 s; a var so tests shorten it). **Hosted TUI:** the page's `opInFlight`
+time (network down, rate limit) has no sentinel and answers 422 — the handler plans under `prSendBudget` (2 min,
+a backstop: each gh call has its own 30 s timeout, and a big PR's
+local anchoring must not be cut; a var so tests shorten it). **Hosted TUI:** the page's `opInFlight`
 sees only the page's own ops; a send while the hosting TUI runs one waits on
 the repo gate inside that budget (→ 504) — there is no busy hook through
 `WebHost`. **Own send:** `prs.js` numbers every comments read and
 revalidate as it starts (`readSeq`); a finished send arms `nextFresh` only
 when its done event says `ok && changed` (an abort answers `ok` with
 `changed: false`), with the last started read's seq; the first read that
-started after it absorbs the change, changed or not, and a read that was
-already running neither shows nor absorbs it. A post-send read dropped by
-`runOnce` is retried (`refreshAfterSend`, 250 ms, 40 tries). Kept bodies:
-Send review… per group, Verdict… as group `"verdict"`; only `ok && changed`
-clears them.
+started after it absorbs the change, changed or not; a read that was
+already running does not absorb it (it still shows "updated" when it
+reports a change). Reads run one at a time: `serialReads` (prfresh.js) over
+`runOnce("pr-comments")` carries the comments refresh AND `revalidate`; a
+read asked while one runs waits for it (`soon(key, fn)`: one per key, the
+newest wins, no give-up timer — `refreshAfterSend`, `revalidate`), and a
+moved head is followed outside the gate. `sentEvent` arms the absorb.
+Kept bodies (`prkept.js`): Send review… per group, Verdict… as group
+`"verdict"`; only a changing send from the same PR and box clears them
+(done hooks get the request body).
 

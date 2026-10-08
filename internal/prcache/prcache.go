@@ -76,8 +76,9 @@ type List struct {
 
 // Store is one repository's cache directory.
 type Store struct {
-	root string
-	max  int
+	root   string
+	max    int
+	rename func(from, to string) error // os.Rename; tests inject a blocked one
 }
 
 // New opens the cache rooted at root (created on first write), keeping at
@@ -86,7 +87,7 @@ func New(root string, max int) *Store {
 	if max <= 0 {
 		max = DefaultMax
 	}
-	return &Store{root: root, max: max}
+	return &Store{root: root, max: max, rename: os.Rename}
 }
 
 // Fresh reports whether a read at readAt is still within maxAge of now. A
@@ -135,7 +136,7 @@ func (s *Store) LoadRepo() (Repo, bool) {
 
 // SaveRepo replaces the cached base repository.
 func (s *Store) SaveRepo(r Repo) error {
-	return s.locked(func() error { return writeJSON(s.repoPath(), r) })
+	return s.locked(func() error { return s.writeJSON(s.repoPath(), r) })
 }
 
 // locked runs f under the directory's lock.
@@ -166,7 +167,7 @@ func readJSON(path string, v any) bool {
 }
 
 // writeJSON writes v to path atomically (temp + rename in the same dir).
-func writeJSON(path string, v any) error {
+func (s *Store) writeJSON(path string, v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -184,11 +185,31 @@ func writeJSON(path string, v any) error {
 		os.Remove(tmp.Name())
 		return err
 	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
+	if err := s.renameRetry(tmp.Name(), path); err != nil {
 		os.Remove(tmp.Name())
 		return err
 	}
 	return nil
+}
+
+// renameRetry is writeJSON's last step. On Windows a rename over a file
+// another gg process is reading (os.ReadFile holds it without
+// FILE_SHARE_DELETE) fails with access denied or a sharing violation — a
+// state that clears in milliseconds. Those retry for filelock.Wait, like the
+// lock itself; anything else fails at once.
+func (s *Store) renameRetry(from, to string) error {
+	deadline := time.Now().Add(filelock.Wait)
+	for {
+		err := s.rename(from, to)
+		if err == nil || !transientRename(err) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(filelock.Poll)
+	}
+}
+
+func transientRename(err error) bool {
+	return errors.Is(err, fs.ErrPermission) || sharingViolation(err)
 }
 
 // LoadList reads the cached listing.
@@ -199,7 +220,7 @@ func (s *Store) LoadList() (List, bool) {
 
 // SaveList replaces the cached listing.
 func (s *Store) SaveList(l List) error {
-	return s.locked(func() error { return writeJSON(s.listPath(), l) })
+	return s.locked(func() error { return s.writeJSON(s.listPath(), l) })
 }
 
 // Load reads PR n's entry.
@@ -212,7 +233,7 @@ func (s *Store) Load(n int) (Entry, bool) {
 // opened first.
 func (s *Store) Save(e Entry) error {
 	return s.locked(func() error {
-		if err := writeJSON(s.entryPath(e.Number), e); err != nil {
+		if err := s.writeJSON(s.entryPath(e.Number), e); err != nil {
 			return err
 		}
 		return s.trimLocked()
@@ -230,7 +251,7 @@ func (s *Store) Update(n int, edit func(e *Entry)) error {
 		}
 		edit(&e)
 		e.Number = n
-		if err := writeJSON(s.entryPath(n), e); err != nil {
+		if err := s.writeJSON(s.entryPath(n), e); err != nil {
 			return err
 		}
 		return s.trimLocked()
@@ -272,7 +293,7 @@ func (s *Store) trimLocked() error {
 	return nil
 }
 
-// numberOf parses "pr-<n>.json" (used by callers listing entries).
+// numberOf parses "pr-<n>.json" (Numbers).
 func numberOf(name string) (int, bool) {
 	s, ok := strings.CutPrefix(filepath.Base(name), "pr-")
 	if !ok {
@@ -286,20 +307,15 @@ func numberOf(name string) (int, bool) {
 	return n, err == nil
 }
 
-// Entries lists every cached entry, most recently opened first (prefetch
-// walks it).
-func (s *Store) Entries() []Entry {
+// Numbers lists the PRs that have an entry, from the file names alone — no
+// entry is read (prefetch loads only the few it may warm).
+func (s *Store) Numbers() []int {
 	names, _ := filepath.Glob(filepath.Join(s.root, "pr-*.json"))
-	var out []Entry
+	var out []int
 	for _, p := range names {
-		if _, ok := numberOf(p); !ok {
-			continue
-		}
-		var e Entry
-		if readJSON(p, &e) {
-			out = append(out, e)
+		if n, ok := numberOf(p); ok {
+			out = append(out, n)
 		}
 	}
-	slices.SortFunc(out, func(a, b Entry) int { return b.OpenedAt.Compare(a.OpenedAt) })
 	return out
 }

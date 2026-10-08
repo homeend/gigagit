@@ -301,9 +301,10 @@ type Model struct {
 	// PR whose post-send read was dropped (one read at a time), asked again
 	// when the running one lands.
 	prReadSeq, prOwnSend, prOwnSendSeq, prRefreshAgain int
-	// forgeSendGen is bumped by reRoot: a send plan, group list or body read
-	// started in the old repository is dropped when it lands (F11).
-	forgeSendGen int
+	// forgeGen is bumped by reRoot only: a PR forge read, send plan, group
+	// list or body read started in the old repository is dropped when it
+	// lands (F11). A PR-list read bumps prsGen, never this.
+	forgeGen int
 	// keptSendBody is the body a send's popup handed on: a failed or refused
 	// send leaves it for the next Send review…/Verdict… of the same PR and
 	// group (F12); a send that changed GitHub, or a repo switch, drops it.
@@ -872,7 +873,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// second NotesFor pass per mutation.
 		var counts tea.Cmd
 		m, counts = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
-		if msg.sendPR != 0 && msg.sendID != "" { // Reply & send: the draft is saved, now send it
+		if msg.sendPR != 0 && msg.sendID != "" && msg.sendGen == m.forgeGen { // Reply & send: the draft is saved, now send it
 			var send tea.Cmd
 			m, send = m.forgeSendCmd(domain.PRSendRequest{PR: msg.sendPR, Notes: []string{msg.sendID}})
 			return m, tea.Batch(counts, send)
@@ -4925,8 +4926,11 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// The old repo's PR freshness goes too: a PR #7 there is another PR here.
 	m.prSeen, m.prUpdated, m.prOwnSend, m.prRefreshAgain = 0, 0, 0, 0
 	m.prOfflineSince, m.prRefreshing = time.Time{}, false
-	m.forgeSendGen++     // a send planned there must not start here
+	m.forgeGen++         // a read or send planned there must not land here
 	m.keptSendBody = nil // nor its typed body prefill a box here
+	// …and its read slot: that read answers into the old generation.
+	m.prRevalidateInflight, m.prCommentsInflight = false, false
+	m.prReland, m.prRevalidateSkip = nil, 0
 	if m.watcher != nil {
 		_ = m.watcher.Close()
 		m.watcher = nil

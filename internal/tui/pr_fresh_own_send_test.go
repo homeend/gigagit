@@ -8,12 +8,13 @@ import (
 )
 
 func revalidated(m Model, n, seq int, changed bool) Model {
-	nm, _ := m.Update(prRevalidatedMsg{n: n, gen: m.prsGen, seq: seq, pr: model.PullRequest{Number: n}, commentsChanged: changed})
+	nm, _ := m.Update(prRevalidatedMsg{n: n, gen: m.forgeGen, seq: seq, pr: model.PullRequest{Number: n}, commentsChanged: changed})
 	return nm.(Model)
 }
 
 // Item 10: the change my own send made is not "updated"; a read already in
-// flight when the send ended neither shows nor absorbs it.
+// flight when the send ended does not absorb it (it still shows "updated"
+// when it reports a change).
 func TestMyOwnSendIsNotUpdated(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
@@ -54,7 +55,7 @@ func TestADroppedPostSendReadIsReasked(t *testing.T) {
 	if m.prRefreshAgain != 7 {
 		t.Fatal("the dropped read was not queued")
 	}
-	nm, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.prsGen, seq: m.prReadSeq, pr: model.PullRequest{Number: 7}})
+	nm, cmd := m.Update(prRevalidatedMsg{n: 7, gen: m.forgeGen, seq: m.prReadSeq, pr: model.PullRequest{Number: 7}})
 	if mm := nm.(Model); mm.prRefreshAgain != 0 || cmd == nil || !mm.prRevalidateInflight {
 		t.Fatalf("again=%d cmd=%v inflight=%v", mm.prRefreshAgain, cmd != nil, mm.prRevalidateInflight)
 	}

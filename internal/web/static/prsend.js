@@ -11,9 +11,11 @@ import { registerHelp, registerRows } from "./menus.js";
 import { fetchNotes, refreshNoteCounts } from "./files.js";
 import { loadPRCounts } from "./previews.js";
 import { sendRows } from "./prsendrows.js";
+import { keptAfterSend, keptText } from "./prkept.js";
 
 // Hooks for a finished send (prs.js: the freshness word, the interrupted
 // bar) — registered, so this module never imports prs.js (which imports it).
+// Each hook gets (n, the done event, the send's request body).
 const doneHooks = [];
 export function onSendDone(fn) {
   doneHooks.push(fn);
@@ -52,7 +54,7 @@ export async function sendToGitHub(n, body, label, onRefused) {
     if (ev.ok) opLine(ev.summary || "sent to #" + n);
     else opLine("send to #" + n + ": " + (ev.error || "failed"), true);
     await Promise.all([fetchNotes(), refreshNoteCounts(), loadPRCounts(n)]);
-    for (const fn of doneHooks) fn(n, ev);
+    for (const fn of doneHooks) fn(n, ev, body);
   });
   // followOp set state.op synchronously; the decision arrives later, on the
   // event stream, and reads the plan from here.
@@ -131,7 +133,7 @@ async function sendReviewBody(pr, group) {
     opLine("send review: nothing of that group is left to send", true);
     return;
   }
-  const kept = keptBody && keptBody.pr === pr && keptBody.group === group ? keptBody.text : null;
+  const kept = keptText(keptBody, pr, group);
   const title =
     group === "mine"
       ? `Send my draft review to #${pr} (${groupCount(g)}) — the review body`
@@ -151,7 +153,7 @@ async function sendReviewBody(pr, group) {
 
 // verdictBody is Verdict…: an optional body, then the confirm's verdicts.
 function verdictBody(pr) {
-  const kept = keptBody && keptBody.pr === pr && keptBody.group === "verdict" ? keptBody.text : "";
+  const kept = keptText(keptBody, pr, "verdict") ?? "";
   openPrompt({
     title: "Verdict on #" + pr + " — the review body (optional)",
     value: kept,
@@ -202,10 +204,10 @@ registerRows("pr", (pr) => {
   ];
 });
 
-// A send that changed GitHub clears the kept body; a refused, failed or
-// aborted one keeps it (the user may edit and send again).
-onSendDone((n, ev) => {
-  if (ev.ok && ev.changed) keptBody = null;
+// Only a send from the kept body's own box that changed GitHub clears it; a
+// refused, failed or aborted one — or any other send — keeps it (C8).
+onSendDone((n, ev, body) => {
+  keptBody = keptAfterSend(keptBody, n, body, ev);
 });
 
 registerHelp({

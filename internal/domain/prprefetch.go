@@ -2,10 +2,12 @@ package domain
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/prcache"
 )
 
 // PRPrefetch fetches and prepares, in the background, the most recently
@@ -71,19 +73,33 @@ func (s *Service) prefetchPRs(ctx context.Context) int {
 			listed[p.Number] = p
 		}
 	}
+	// ONE ref read answers every local head; only a listed open PR whose head
+	// moved past it is loaded from disk (a failed read: all count as moved).
+	heads := map[int]string{}
+	refs, rerr := s.repo.ForEachRef(ctx, git.PRRefPrefix)
+	for _, r := range refs {
+		if n, ok := git.ParsePRRef(r.Ref); ok {
+			heads[n] = r.Hash
+		}
+	}
+	var due []prcache.Entry
+	for _, n := range st.Numbers() {
+		p, ok := listed[n]
+		if !ok || !p.IsOpen() || p.HeadSHA == "" || (rerr == nil && heads[n] == p.HeadSHA) {
+			continue // not listed, closed, or unmoved: nothing to warm
+		}
+		if e, ok := st.Load(n); ok {
+			due = append(due, e)
+		}
+	}
+	slices.SortFunc(due, func(a, b prcache.Entry) int { return b.OpenedAt.Compare(a.OpenedAt) }) // most recently opened first
 	warmed := 0
-	for _, e := range st.Entries() {
+	for _, e := range due {
 		if warmed >= limit || ctx.Err() != nil || s.gateBusy(ctx) {
 			break
 		}
-		p, ok := listed[e.Number]
-		if !ok || !p.IsOpen() || p.HeadSHA == "" {
-			continue
-		}
-		if local, err := s.repo.ResolveCommit(ctx, git.PRRef(p.Number)); err == nil && local == p.HeadSHA {
-			continue // unmoved: nothing to warm
-		}
-		op, err := s.PRFetchOp(ctx, p.Number)
+		p := listed[e.Number]
+		op, err := s.prFetchOp(ctx, p.Number, false) // warming is not an open
 		if err != nil {
 			continue
 		}

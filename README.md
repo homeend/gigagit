@@ -909,7 +909,7 @@ finds new comments or new commits:
 
 ```toml
 [forge]
-cache_hours = 8   # a PR read within this many hours opens at once; older = read from GitHub first; 0 = always read first
+cache_hours = 8   # a PR read within this many hours opens at once; older = read from GitHub first; 0 = always read first, a listed row too
 prefetch    = 5   # after the list refreshes, prepare this many recently opened PRs whose head moved; 0 = off
 ```
 

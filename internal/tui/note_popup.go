@@ -369,7 +369,7 @@ func (m Model) noteSubmitCmd(p *notePopup) tea.Cmd {
 	}
 	summary := strings.TrimSpace(p.summary.Value())
 	rationale := strings.TrimSpace(p.rationale.Value())
-	mode, id, ranged, sendPR := p.mode, p.targetID, p.ranged, p.sendPR
+	mode, id, ranged, sendPR, gen := p.mode, p.targetID, p.ranged, p.sendPR, m.forgeGen
 	n := p.note(summary, rationale)
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -380,7 +380,7 @@ func (m Model) noteSubmitCmd(p *notePopup) tea.Cmd {
 		case noteReply:
 			d, rerr := svc.NoteReply(ctx, id, n)
 			if rerr == nil && sendPR != 0 {
-				return noteMutatedMsg{clearMarks: ranged, sendPR: sendPR, sendID: d.ID}
+				return noteMutatedMsg{clearMarks: ranged, sendPR: sendPR, sendID: d.ID, sendGen: gen}
 			}
 			err = rerr
 		default:

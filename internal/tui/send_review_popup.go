@@ -25,7 +25,7 @@ type sendReviewPopup struct {
 
 // sendGroupsMsg is a PR's groups with something to send.
 type sendGroupsMsg struct {
-	gen    int // m.forgeSendGen when asked
+	gen    int // m.forgeGen when asked
 	pr     int
 	groups []domain.SendGroup
 	err    error
@@ -33,7 +33,7 @@ type sendGroupsMsg struct {
 
 // sendBodyMsg is an AI review's summary, read to prefill the body.
 type sendBodyMsg struct {
-	gen         int // m.forgeSendGen when asked
+	gen         int // m.forgeGen when asked
 	pr          int
 	group, body string
 	err         error
@@ -44,7 +44,7 @@ func (m Model) openSendReview(pr int) (Model, tea.Cmd) {
 	if svc == nil || pr == 0 {
 		return m, nil
 	}
-	gen := m.forgeSendGen
+	gen := m.forgeGen
 	return m, func() tea.Msg {
 		gs, err := svc.PRSendGroups(context.Background(), pr)
 		return sendGroupsMsg{gen: gen, pr: pr, groups: gs, err: err}
@@ -52,7 +52,7 @@ func (m Model) openSendReview(pr int) (Model, tea.Cmd) {
 }
 
 func (m Model) handleSendGroups(msg sendGroupsMsg) (Model, tea.Cmd) {
-	if msg.gen != m.forgeSendGen {
+	if msg.gen != m.forgeGen {
 		return m, nil // asked in the repository before R
 	}
 	if m.modal != nil {
@@ -119,7 +119,7 @@ func (m Model) openSendReviewBody(pr int, group string) (Model, tea.Cmd) {
 		kept, _ := m.keptBodyFor(pr, group, false)
 		return m.pushLayer(&sendReviewPopup{pr: pr, group: group, body: newTextField(kept)}), nil
 	}
-	svc, gen := m.svc, m.forgeSendGen
+	svc, gen := m.svc, m.forgeGen
 	return m, func() tea.Msg {
 		body, err := svc.ReviewBodyText(context.Background(), id)
 		return sendBodyMsg{gen: gen, pr: pr, group: group, body: body, err: err}
@@ -127,7 +127,7 @@ func (m Model) openSendReviewBody(pr int, group string) (Model, tea.Cmd) {
 }
 
 func (m Model) handleSendBody(msg sendBodyMsg) (Model, tea.Cmd) {
-	if msg.gen != m.forgeSendGen {
+	if msg.gen != m.forgeGen {
 		return m, nil // asked in the repository before R
 	}
 	if m.modal != nil {
@@ -228,6 +228,21 @@ type keptSendBody struct {
 	group   string
 	verdict bool
 	text    string
+}
+
+// from reports whether req is the send this kept body's box made (C8): the
+// same PR and the same box — Verdict…, my draft review, or that AI review.
+func (k *keptSendBody) from(req domain.PRSendRequest) bool {
+	if k == nil || !req.BodySet || k.pr != req.PR || k.verdict != req.Verdict {
+		return false
+	}
+	switch {
+	case req.Verdict:
+		return true
+	case req.Mine:
+		return k.group == domain.GroupMine
+	}
+	return req.Review != "" && k.group == "review:"+req.Review
 }
 
 // keptBodyFor is the text a failed send of the same PR and group left (F12):

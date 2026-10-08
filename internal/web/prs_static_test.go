@@ -78,7 +78,7 @@ func TestPRPageSendsOnlyTheNumber(t *testing.T) {
 	}
 	js := string(b)
 	// Every module that talks about a pull request (prs.js and the send's).
-	for _, f := range []string{"prs.js", "prsend.js", "prsendrows.js", "sendplan.js", "prfresh.js"} {
+	for _, f := range []string{"prs.js", "prsend.js", "prsendrows.js", "sendplan.js", "prfresh.js", "prkept.js"} {
 		src, err := os.ReadFile(filepath.Join("static", f))
 		if err != nil {
 			t.Fatal(err)
@@ -118,5 +118,24 @@ func TestPRMaskSitsBelowEveryOverlay(t *testing.T) {
 		if z := zOf(id); mask >= z {
 			t.Errorf("#pr-mask z-index %d must be below #%s's %d", mask, id, z)
 		}
+	}
+}
+
+// C9: prs.js reads through the one serial reader — revalidate included — and
+// has no give-up timer.
+func TestPRReadsAreSerial(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile(filepath.Join("static", "prs.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(src)
+	for _, want := range []string{`serialReads(`, `reads.soon("revalidate:"`, `reads.soon("after-send:"`, `sentEvent(ev, readSeq)`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("prs.js lacks %s", want)
+		}
+	}
+	if strings.Contains(s, "tries < 40") {
+		t.Error("prs.js still gives up on a dropped post-send read")
 	}
 }
