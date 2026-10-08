@@ -150,3 +150,22 @@ func TestARefusedSendKeepsTheTypedBody(t *testing.T) {
 		t.Fatalf("status %q", m.statusMsg)
 	}
 }
+
+// Item 15: two AI reviews with the same agent and summary get distinct rows,
+// and each row opens its own review.
+func TestSendGroupChooserRowsAreUnique(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	gs := []domain.SendGroup{{ID: "review:r1", Agent: "claude", Summary: "nits", Count: 1},
+		{ID: "review:r2", Agent: "claude", Summary: "nits", Count: 1}}
+	opts := sendGroupOptions(gs)
+	if opts[0] == opts[1] {
+		t.Fatalf("rows %q", opts)
+	}
+	nm, _ := m.Update(sendGroupsMsg{gen: m.forgeSendGen, pr: 7, groups: gs})
+	mm := nm.(Model)
+	_, cmd := mm.modal.onResolve(mm, opts[1])
+	if b, ok := cmd().(sendBodyMsg); !ok || b.group != "review:r2" {
+		t.Fatalf("the second row opened %+v", b)
+	}
+}

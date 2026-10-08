@@ -86,8 +86,13 @@ func (m Model) handleSendGroups(msg sendGroupsMsg) (Model, tea.Cmd) {
 // sendGroupOptions are the chooser's rows plus the trailing Cancel esc maps to.
 func sendGroupOptions(groups []domain.SendGroup) []string {
 	opts := make([]string, 0, len(groups)+1)
+	seen := map[string]int{}
 	for _, g := range groups {
-		opts = append(opts, sendGroupLabel(g))
+		label := sendGroupLabel(g)
+		if seen[label]++; seen[label] > 1 { // two reviews alike: number the repeats (F13)
+			label = i18n.T("%s (%d)", label, seen[label])
+		}
+		opts = append(opts, label)
 	}
 	return append(opts, "Cancel")
 }

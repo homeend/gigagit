@@ -90,6 +90,9 @@ func (m Model) resolvePreviewCmd(id, source, target, keepPath, moved, landNote s
 			if set, serr := svc.PreviewNotes(context.Background(), source, target); serr == nil {
 				msg.set = set
 				msg.counts, _, _ = svc.PreviewNoteCounts(context.Background(), set)
+				// A PR's colour bars ride along (empty elsewhere): the same-tag
+				// re-resolve a note edit causes assigns them, so nil here wiped them.
+				msg.groups, _ = svc.PreviewNoteGroups(context.Background(), set)
 				msg.heads, _ = svc.PreviewReviews(context.Background(), set)
 			}
 		}
