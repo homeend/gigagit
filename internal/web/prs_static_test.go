@@ -80,9 +80,6 @@ func TestPRPageSendsOnlyTheNumber(t *testing.T) {
 	// Every module that talks about a pull request (prs.js and the send's).
 	for _, f := range []string{"prs.js", "prsend.js", "prsendrows.js", "sendplan.js", "prfresh.js"} {
 		src, err := os.ReadFile(filepath.Join("static", f))
-		if os.IsNotExist(err) && f != "prs.js" {
-			continue // a module a later task adds
-		}
 		if err != nil {
 			t.Fatal(err)
 		}
