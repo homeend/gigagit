@@ -314,12 +314,15 @@ func (s *Server) handlePROpen(w http.ResponseWriter, r *http.Request) {
 	}
 	// One domain call: the pair and its endpoints, the slow git parts from
 	// the PR cache when this head was seen before.
+	// An open: the disk cache keeps the most recently opened PRs. Stamped
+	// FIRST: on a full cache the entry PRPreview writes must not be the one
+	// trimmed.
+	svc.MarkPROpened(ctx, n)
 	res, err := svc.PRPreview(ctx, pr)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	svc.MarkPROpened(ctx, n) // an open: the disk cache keeps the most recently opened PRs
 	pair := res.Pair
 	body := previewOpenBody(res.Endpoints, label, pr.Source, pr.Target)
 	body["pr"] = n

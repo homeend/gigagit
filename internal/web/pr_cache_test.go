@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/prcache"
 )
 
 // The cached listing answers the first GET while the live listing is still
@@ -185,5 +186,27 @@ func TestPROpenStampsTheOpenTime(t *testing.T) {
 	}
 	if after := opened(); !after.After(before) {
 		t.Fatalf("an open did not stamp: %v → %v", before, after)
+	}
+}
+
+// B1: on a full cache, opening a PR keeps its derived data — the open is
+// stamped BEFORE PRPreview writes the entry, so the trim drops the older
+// one. Serial: sendServerFull → prFixture.
+func TestPROpenOnAFullCacheKeepsItsDerivedData(t *testing.T) {
+	ts, _, srv, _, _ := sendServerFull(t)
+	st := prcache.New(t.TempDir(), 1)
+	srv.service().SetPRCacheStore(st)
+	if err := st.Update(8, func(e *prcache.Entry) { e.OpenedAt = time.Now().Add(-time.Hour) }); err != nil {
+		t.Fatal(err)
+	}
+	if code := getJSON(t, ts, "/api/pr/open?n=7", nil); code != 200 {
+		t.Fatalf("open = %d", code)
+	}
+	e, ok := st.Load(7)
+	if !ok || len(e.Derived) == 0 || e.OpenedAt.IsZero() {
+		t.Fatalf("entry 7 ok=%v derived=%d opened=%v", ok, len(e.Derived), e.OpenedAt)
+	}
+	if _, ok := st.Load(8); ok {
+		t.Fatal("the older entry survived the trim")
 	}
 }
