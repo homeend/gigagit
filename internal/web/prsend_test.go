@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -244,8 +246,30 @@ func TestWebSendRefusesAMovedHead(t *testing.T) {
 	wf.open[0].HeadSHA = strings.Repeat("e", 40)
 	wf.mu.Unlock()
 	code, out := postJSONAny(t, ts, "/api/pr/send?n=7", `{"kind":"notes","ids":["`+id+`"]}`)
-	if code != 409 || !strings.Contains(fmt.Sprint(out["error"]), "new commits") {
-		t.Fatalf("= %d %v", code, out)
+	if code != 409 || !strings.Contains(fmt.Sprint(out["error"]), "new commits") || out["code"] != "head_moved" {
+		t.Fatalf("= %d %v (want 409, code head_moved: the page follows the head)", code, out)
+	}
+	if w := wf.writeLog(); w != "" {
+		t.Fatalf("a refused send wrote: %s", w)
+	}
+}
+
+// The page follows a moved head when a send is refused for it (final review
+// Important 1): prsend.js hands the refusal to prs.js's followMovedHead.
+func TestAHeadMovedRefusalFollowsTheHead(t *testing.T) {
+	t.Parallel()
+	read := func(f string) string {
+		b, err := os.ReadFile(filepath.Join("static", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	if js := read("prsend.js"); !strings.Contains(js, `err.data && err.data.code === "head_moved"`) || !strings.Contains(js, "export function onHeadMoved(") {
+		t.Error("prsend.js does not route a head_moved refusal")
+	}
+	if !strings.Contains(read("prs.js"), "onHeadMoved((n) => followMovedHead(n));") {
+		t.Error("prs.js does not follow the head on a refused send")
 	}
 }
 

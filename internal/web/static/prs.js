@@ -19,7 +19,7 @@ import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
 import { nextFresh } from "./prfresh.js";
-import { onSendDone, sendToGitHub } from "./prsend.js";
+import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
 // loaded:false. The "prs" event normally brings the rows in, but a fast forge
@@ -214,6 +214,10 @@ ibar.addEventListener("click", (e) => {
 new MutationObserver(() => {
   if ($("compare-bar").classList.contains("hidden")) ibar.classList.add("hidden");
 }).observe($("compare-bar"), { attributes: true, attributeFilter: ["class"] });
+
+// A send refused because the PR moved on GitHub: follow the new head (the
+// diff re-opens on it, if the user is still looking at the PR).
+onHeadMoved((n) => followMovedHead(n));
 
 // A finished send: its own change is not "updated", and the PR is re-read
 // (the interrupted bar follows what GitHub now holds).

@@ -194,6 +194,14 @@ func (s *Server) handlePRSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	op, err := svc.PRSendOp(ctx, req) // outside the gate (R12)
+	if errors.Is(err, domain.ErrPRHeadMoved) {
+		// A machine code beside the words: the page fetches the new head and
+		// re-opens the diff (the send is planned again on what is then shown).
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "code": "head_moved"})
+		return
+	}
 	if err != nil {
 		writeErr(w, sendErrStatus(err), err)
 		return

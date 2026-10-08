@@ -19,6 +19,13 @@ export function onSendDone(fn) {
   doneHooks.push(fn);
 }
 
+// A send refused because the PR moved on GitHub hands the PR to these hooks
+// (prs.js: fetch the new head and re-open the diff).
+const headMovedHooks = [];
+export function onHeadMoved(fn) {
+  headMovedHooks.push(fn);
+}
+
 // sendToGitHub starts one send of PR n; label names it on the op line. A
 // refusal (409 head moved, 400 a stale id, 422 nothing to send) is said and
 // nothing runs; onRefused hears about it.
@@ -31,7 +38,13 @@ export async function sendToGitHub(n, body, label, onRefused) {
   try {
     resp = await postJSON("/api/pr/send?n=" + n, body);
   } catch (err) {
-    opLine("send to #" + n + ": " + (err.message || err), true);
+    if (err.data && err.data.code === "head_moved") {
+      // Nothing was sent: the notes would anchor on lines the PR no longer has.
+      opLine("#" + n + " has new commits on GitHub — updating the diff; send again once it shows", true);
+      for (const fn of headMovedHooks) fn(n);
+    } else {
+      opLine("send to #" + n + ": " + (err.message || err), true);
+    }
     if (onRefused) onRefused(err);
     return;
   }
