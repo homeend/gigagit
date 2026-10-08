@@ -52,16 +52,17 @@ func (m Model) handlePRFetchReady(msg prFetchReadyMsg) (Model, tea.Cmd) {
 	if msg.gen != m.forgeGen {
 		return m, nil // resolved for a repository the TUI has left
 	}
+	if po := m.pendingPROpen; po != nil && po.Number == msg.pr.Number && m.running {
+		// This PR's fetch is already running (enter and a link's landing
+		// both asked): its finish opens the view a parked landing waits for —
+		// whatever this second resolve answered.
+		return m, nil
+	}
 	if msg.err != nil {
 		m.statusMsg = i18n.T("error: %s", firstLine(msg.err.Error()))
 		return m.failPRLanding(msg.pr.Number, firstLine(msg.err.Error()))
 	}
 	if !m.opsIdle() {
-		if po := m.pendingPROpen; po != nil && po.Number == msg.pr.Number {
-			// This PR's fetch is already running (enter and a link's landing
-			// both asked): its finish opens the view a parked landing waits for.
-			return m, nil
-		}
 		// An op started while the resolve was in flight; the user can press
 		// enter again — said on the status line (a file-less landing has
 		// replied already), and a parked landing is told so.

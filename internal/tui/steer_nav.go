@@ -1003,12 +1003,23 @@ func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
 	src, tgt := c.Target.Source, c.Target.Target
 	// A pull request's link (<base>...refs/gg/pr/<n>) lands in the PR's own
 	// view — its threads, its notes, its sends — when the list holds it.
-	prNote := ""
+	// Otherwise only a PR fetched here can open as a plain merge preview: a
+	// navigation resolves an unfetched one too (ResolveOpts.UnfetchedPR), so
+	// ask git off the UI thread (handlePRUnlisted).
 	if n, ok := domain.PRScopeNumber(tgt + "..." + src); ok {
 		if p, ok := m.listedPR(n); ok {
 			return m.steerNavigatePR(c, p)
 		}
-		prNote = i18n.T("PR #%d is not in the pull request list here — opened as a merge preview", n)
+		return m, m.prUnlistedCheckCmd(c, n)
+	}
+	return m.steerNavigatePlainPreview(c, "")
+}
+
+// steerNavigatePlainPreview is steerNavigatePreview's merge-preview landing;
+// prNote ("" = none) says why a PR link opened as a plain preview.
+func (m Model) steerNavigatePlainPreview(c steer.Command, prNote string) (Model, tea.Cmd) {
+	src, tgt := c.Target.Source, c.Target.Target
+	if prNote != "" {
 		m.statusMsg = prNote
 	}
 	// Which saved row, if any, holds this pair. "" means a show-once open.
