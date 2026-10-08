@@ -89,6 +89,33 @@ start this with `/gg-review <gg-link> [focus]`, or with
 on different models, merged and with their disagreements settled. A question
 about one file or line stays an ordinary note (`gg note add`).
 
+## Reviewing a pull request
+
+GitHub pull requests are read through `gg pr` (it needs `gh` logged in).
+The user sends to GitHub, never you: nothing you run posts there.
+
+```text
+1. gg pr list                      # the open PRs (gg pr list --search <text> for others)
+2. gg pr view <n>                  # description + conversation + verdicts
+3. gg pr comments <n>              # inline threads already open, with [<thread id>]
+4. gg pr fetch <n>                 # its head as refs/gg/pr/<n> (local only)
+5. gg diff --stat <base>...refs/gg/pr/<n>   then   gg diff <base>...refs/gg/pr/<n> -- <file>
+6. write: notes   gg note add --preview <base>...refs/gg/pr/<n> --file <path> --new-line <n> --summary "…"
+   or one review  gg review save "$(gg link --pr <n>)" --agent "<your name>" --stdin
+7. answer a thread: gg pr reply <n> <thread id> "<text>"   (a local DRAFT — no --send)
+8. gg pr notes <n>                 # what the PR's view now holds
+9. hand back `gg link --pr <n>`
+```
+
+`<base>` is the PR's target branch from `gg pr view`. A note on the PR's
+commit written WITHOUT `--preview <base>...refs/gg/pr/<n>` is the commit's,
+not the PR's: it does not show in the PR's view. Read what reviewers already
+said (steps 2–3) before you write, and do not repeat it — reply to their
+thread instead. Then tell the user what is ready: they send your notes,
+review and drafts from gg's PR view, gg web, or `gg pr send` at their own
+terminal (inside a gg session `gg pr send` refuses you). Never run `gh` to
+comment, review or resolve.
+
 ## Choosing the target
 
 A note anchors to ONE base and ONE result. The flags pick which:

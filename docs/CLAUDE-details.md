@@ -3035,6 +3035,14 @@ second resolve of the same PR while its fetch runs leaves the landing parked. A 
 PR read's answer, cached rows included) when `kickForgeProbe` started one.
 `/gg-review` over a PR link stores a review stamped for the PR (the set's
 `Pair()`), so it shows in the PR's view.
+Follow-ups 5: `checkReviewHint` passes an unfetched PR's navigation (empty
+`Preview.Tip`; `gg pr forget` leaves the objects, so the review's tip would
+still resolve and mismatch). Inspections refuse an unfetched PR link with
+"pull request #n is not fetched here — run gg pr fetch n first" when some
+checkout holds the base. `gg session navigate` / `gg open` (live TUI) wait
+`steerPRFetchWaitForTest` (30s) for such a link (`navigateWait`) and print a
+"queued: the TUI is fetching pull request #n" line on timeout. `reRoot`
+clears `pendingPROpen`. Web `fetchPR`'s done line is `prFetchDoneLine`.
 
 ### Preview links (feature B, 2026-09-15)
 
