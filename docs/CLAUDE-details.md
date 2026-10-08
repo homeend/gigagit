@@ -2109,10 +2109,20 @@ them on a file row.
   EVERY scope does: `PreviewNoteSet.scope()` is `Only`, else the set's own
   `Pair()` name, and `loadPreviewNotes` keeps the roots whose `Note.Preview`
   equals it plus their replies — a saved preview/pair, a pair link, CLI
-  `--preview` and MCP preview reads included. Only a pull request's set
-  (source `refs/gg/pr/<n>`) is exempt: its local notes carry no portable
-  name. A note that must show in a preview has to be WRITTEN in it (test
-  fixtures stamp `Preview`); address reads (`--rev`, `NotesAt`) stay whole.
+  `--preview` and MCP preview reads included. A pull request's set (source
+  `refs/gg/pr/<n>`) is no exception since 2026-10-08 (user ruling: a PR
+  shows only what was written for it): its notes and reviews record
+  `<base>...refs/gg/pr/<n>`, and `PreviewNoteSet.owns` matches a PR set BY
+  NUMBER (`PRScopeNumber`) — the base half moves with the PR's target (the
+  TUI/web build the set over the target branch or the base sha, an agent
+  types `origin/main`). Writers: the TUI note form (`previewNoteSet().Pair()`),
+  the web note add (`pr: n` → `domain.PRNoteScope`, stamped only on the PR's
+  tip), CLI/MCP `--preview`, batches, `ScopeReviewTarget`. `prReviewHeads` keeps
+  only `PreviewReviews` the set owns; carried notes (`forge_carried.go`,
+  `ResolvedNote.Origin`) are gone. Notes written in a PR view before then are
+  plain commit notes and stay on their commit. A note that must show in a
+  preview has to be WRITTEN in it (test fixtures stamp `Preview`); address
+  reads (`--rev`, `NotesAt`) stay whole.
 - View all notes → a review's note (2026-10-02): the TUI's enter on a note
   with `Note.Preview` goes to `openAllNotesReviewNote` (all_notes_scope.go):
   a loading diff layer over the popup, then `ScopeAtCommit` + `PairNotes`

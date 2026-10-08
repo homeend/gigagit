@@ -59,7 +59,9 @@ func sendPRRepo(t *testing.T) (dir, head, fixtures string) {
 func addCLINote(t *testing.T, dir, head string, line int) string {
 	t.Helper()
 	var out, errb strings.Builder
-	code := Run(dir, []string{"note", "add", "--rev", head, "--file", "big.go", "--new-line", fmt.Sprint(line),
+	// Written for PR #7 (spec 2026-10-08): --preview names the PR's diff, whose
+	// tip is head.
+	code := Run(dir, []string{"note", "add", "--preview", "main...refs/gg/pr/7", "--file", "big.go", "--new-line", fmt.Sprint(line),
 		"--summary", "look here", "--source", "user", "--json"}, strings.NewReader(""), &out, &errb, "")
 	if code != 0 {
 		t.Fatalf("note add: %s", errb.String())

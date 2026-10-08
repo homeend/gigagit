@@ -118,6 +118,9 @@ stay refused.
 
 ### 1.4 Which local notes show in a PR
 
+> **Superseded 2026-10-08** by `2026-10-08-pr-note-scope-design.md`: a PR
+> shows only notes and reviews written for it; carried notes are removed.
+
 - Every local note on any of the PR's commits (today's rule, kept; the
   `PreviewNoteSet.scope()` PR exemption stays).
 - **Carried notes**: a note stored on another commit or on the working
