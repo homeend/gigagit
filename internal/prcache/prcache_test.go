@@ -1,6 +1,8 @@
 package prcache
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -160,6 +162,8 @@ func TestConcurrentSavesNeverTear(t *testing.T) {
 	dir := t.TempDir()
 	a, b := New(dir, DefaultMax), New(dir, DefaultMax) // two "processes"
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errs []error
 	for i := range 40 {
 		wg.Add(1)
 		go func() {
@@ -168,10 +172,17 @@ func TestConcurrentSavesNeverTear(t *testing.T) {
 			if i%2 == 1 {
 				s = b
 			}
-			_ = s.Save(Entry{Number: 5, PR: model.PullRequest{Title: strings.Repeat("x", i*100)}, OpenedAt: t0})
+			if err := s.Save(Entry{Number: 5, PR: model.PullRequest{Title: strings.Repeat("x", i*100)}, OpenedAt: t0}); err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+			}
 		}()
 	}
 	wg.Wait()
+	if len(errs) != 0 {
+		t.Fatalf("saves failed: %v", errs)
+	}
 	if _, ok := a.Load(5); !ok {
 		t.Fatal("entry unreadable after concurrent saves")
 	}
@@ -220,5 +231,41 @@ func TestUpdateNeverLosesAConcurrentEdit(t *testing.T) {
 	e, ok := s.Load(4)
 	if !ok || len(e.Comments) != 20 || e.Number != 4 {
 		t.Fatalf("after 20 concurrent updates: ok=%v number=%d comments=%d", ok, e.Number, len(e.Comments))
+	}
+}
+
+// Item 5 / Review Focus 5: on Windows a rename over a file another gg is
+// reading fails for milliseconds; the write is retried, not dropped.
+func TestSaveRetriesATransientRename(t *testing.T) {
+	t.Parallel()
+	s := New(t.TempDir(), DefaultMax)
+	fails := 2
+	s.rename = func(from, to string) error {
+		if fails > 0 {
+			fails--
+			return &os.LinkError{Op: "rename", Old: from, New: to, Err: fs.ErrPermission}
+		}
+		return os.Rename(from, to)
+	}
+	if err := s.Save(Entry{Number: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.Load(5); !ok {
+		t.Fatal("the retried write is missing")
+	}
+}
+
+// Anything else fails at once: one rename, the error back, no temp left.
+func TestSaveFailsAtOnceOnAHardRenameError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s := New(dir, DefaultMax)
+	calls := 0
+	s.rename = func(string, string) error { calls++; return errors.New("disk full") }
+	if err := s.Save(Entry{Number: 5}); err == nil || calls != 1 {
+		t.Fatalf("err=%v calls=%d", err, calls)
+	}
+	if m, _ := filepath.Glob(filepath.Join(dir, "*.tmp-*")); len(m) != 0 {
+		t.Fatalf("temp files left: %v", m)
 	}
 }
