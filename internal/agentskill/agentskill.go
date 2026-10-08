@@ -30,11 +30,11 @@ var ggCrossReviewBody string
 
 // Version is bumped whenever using-gg.md (or the rendered wrappers) change.
 // Installed copies carry it so init can tell new/outdated/up-to-date apart.
-const Version = 158
+const Version = 159
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
-const ReviewVersion = 15
+const ReviewVersion = 16
 
 // DelegateVersion is the counter for the delegate skill.
 const DelegateVersion = 3

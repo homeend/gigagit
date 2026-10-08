@@ -18,7 +18,7 @@ import { loadPRCounts, openPreviewBody } from "./previews.js";
 import { fetchNotes } from "./files.js";
 import { prRowParts, ago } from "./prsrow.js";
 import { openPRDetails } from "./prdetails.js";
-import { coveredReads, exclusive, landPR, liveListing, nextFresh, oncePerKey, readyLatch, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
+import { coveredReads, exclusive, landPR, liveListing, nextFresh, oncePerKey, prFetchDoneLine, readyLatch, sentEvent, serialReads, stickyFlag } from "./prfresh.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
 
 // While the server's first listing is still in flight the answer says
@@ -345,7 +345,7 @@ function fetchPR(n) {
         // private ref, so nothing but this list needs a reload.
         followOp(resp.op_id, "fetching " + prLabel(n), "pr-fetch", (ev) => {
           fetchPRs();
-          if (!ev.ok) opLine("error: " + (ev.error || "operation failed"), true);
+          opLine(...prFetchDoneLine(ev, n));
           resolve(!!ev.ok);
         }),
       (err) => {

@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull request follow-ups 5
+
+### Changed
+
+- **Agents learn how to review a pull request.** The reviewing-with-gg skill
+  (v16) has a "Reviewing a pull request" workflow: list, view, read the open
+  threads, fetch, diff, write notes or one review on the PR, draft replies,
+  hand back `gg link --pr <n>` — the user sends. using-gg (v159) documents
+  `gg note list`'s sync state (`[sending]`, `[failed: …]`; JSON `sync`,
+  `send_error`, `group`). The planned read-only MCP PR tools are postponed:
+  `gg pr … --json` already serves agents.
+- `gg review save`, `gg compare` and `gg link resolve` on a link to a pull
+  request this machine has not fetched now say "pull request #n is not
+  fetched in <checkout> — run gg pr fetch n there first" instead of naming
+  a missing ref.
+- `gg session navigate` and `gg open` wait up to 30s for a pull request the
+  TUI has to fetch before it can land on the file, and when that runs out
+  say the fetch is the reason. A repository switch in the TUI now answers
+  a link it was still landing ("the repository changed before the link
+  landed") instead of leaving the agent waiting.
+- `gg pr reply` inside a session gg started writes the draft as the agent's
+  (`--source agent`), so the user never sends it as their own.
+
+### Fixed
+
+- A review link written on a pull request's merge preview
+  (`@main...refs/gg/pr/7?review=<id>`) opens that PR's own review whether or
+  not the PR is fetched, and refuses another change's review either way
+  (before, a fetched PR with more than one commit refused its own review).
+- TUI: a repository switch while a pull request's fetch runs no longer
+  opens that PR in the new repository.
+- gg web: the "⟳ fetching pull request head #n…" line no longer stays on
+  screen after the PR opened.
+
 ## Pull request follow-ups 4
 
 ### Changed

@@ -45,7 +45,7 @@ func TestAnUnfetchedPRLinkResolvesForNavigation(t *testing.T) {
 	if got.Addr.Path != "README.md" || got.Line != 1 {
 		t.Errorf("Addr = %+v line %d", got.Addr, got.Line)
 	}
-	if _, err := unfetchedPRResolve(t, link, false); !errors.Is(err, ErrLinkUnknownRepo) || !strings.Contains(err.Error(), "holds both") {
+	if _, err := unfetchedPRResolve(t, link, false); !errors.Is(err, ErrLinkUnknownRepo) || !strings.Contains(err.Error(), "gg pr fetch 7") {
 		t.Fatalf("without the option: err = %v", err)
 	}
 }
@@ -99,5 +99,72 @@ func TestAnUnfetchedPRLinkRefusalNamesTheBase(t *testing.T) {
 	_, err := unfetchedPRResolve(t, "gg://gigagit@nosuch...refs/gg/pr/7", true)
 	if err == nil || strings.Contains(err.Error(), "holds both") || !strings.Contains(err.Error(), "nosuch") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// Follow-ups 5, item 1 (final review I1): a review link on a PR's merge
+// preview (`@main...refs/gg/pr/7?review=`) names the PR by number, so the
+// PR's own review opens on it whatever the head is now — fetched or not (gg
+// pr forget deletes the ref, not the objects) — and another change's review
+// is refused either way. Two commits, so the review is a range, not one sha.
+func TestAReviewLinkOnAPRPreviewNamesThePR(t *testing.T) {
+	t.Parallel()
+	svc, ff, _ := sendRepo(t)
+	ctx := context.Background()
+	dir := repoDir(t, svc)
+	runGitIn(t, dir, "checkout", "-q", "feat")
+	commitFile(t, dir, "other.go", "package other // two\n", "second")
+	head := revParse(t, dir, "HEAD")
+	runGitIn(t, dir, "checkout", "-q", "main")
+	runGitIn(t, dir, "update-ref", "refs/gg/pr/7", head)
+	pr := ff.byNum[7]
+	pr.HeadSHA = head
+	ff.byNum[7] = pr
+	mine, _, err := svc.SaveReview(ctx, SaveReview{Target: ScopeReviewTarget(prNoteSetOf(t, svc)), // a review saved on the PR
+		Agent: "claude", Text: twoRemarks})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := svc.SaveReview(ctx, SaveReview{
+		Target: ReviewTarget{Kind: ReviewRange, Range: "main.." + head, Label: "main ... feat",
+			Diff: model.DiffSpec{Rev: "main.." + head}, Commit: head, Preview: "main...feat"},
+		Agent: "claude", Text: twoRemarks})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolve := func(rid string) error {
+		l, err := model.ParseLink("gg://" + localLinkRoot(t, svc) + "/big.go@main...refs/gg/pr/7:5?review=" + rid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = ResolveLink(ctx, l, ResolveOpts{Cwd: svc, UnfetchedPR: true})
+		return err
+	}
+	for _, state := range []string{"fetched", "forgotten"} {
+		if state == "forgotten" {
+			runGitIn(t, dir, "update-ref", "-d", "refs/gg/pr/7") // gg pr forget
+		}
+		if err := resolve(mine); err != nil {
+			t.Errorf("%s: the PR's review: %v", state, err)
+		}
+		if err := resolve(other); !errors.Is(err, ErrReviewLinkMismatch) {
+			t.Errorf("%s: another change's review: err = %v", state, err)
+		}
+	}
+}
+
+// Follow-ups 5, item 2: an inspection (review, compare, gg link resolve)
+// still refuses an unfetched PR's link — it reads the PR's commits — but the
+// refusal says how to fix it instead of naming a ref the user never typed.
+func TestAnUnfetchedPRLinkInspectionSaysFetchIt(t *testing.T) {
+	t.Parallel()
+	_, err := unfetchedPRResolve(t, "gg://gigagit@main...refs/gg/pr/7", false)
+	if !errors.Is(err, ErrLinkUnknownRepo) || !strings.Contains(err.Error(), "pull request #7 is not fetched in ") || strings.Contains(err.Error(), "unknown repository") ||
+		!strings.Contains(err.Error(), "gg pr fetch 7") {
+		t.Fatalf("err = %v", err)
+	}
+	// Without the base the PR is not the problem: the old refusal stands.
+	if _, err := unfetchedPRResolve(t, "gg://gigagit@nosuch...refs/gg/pr/7", false); err == nil || strings.Contains(err.Error(), "gg pr fetch") {
+		t.Fatalf("no base: err = %v", err)
 	}
 }

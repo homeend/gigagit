@@ -3035,6 +3035,17 @@ second resolve of the same PR while its fetch runs leaves the landing parked. A 
 PR read's answer, cached rows included) when `kickForgeProbe` started one.
 `/gg-review` over a PR link stores a review stamped for the PR (the set's
 `Pair()`), so it shows in the PR's view.
+Follow-ups 5: `checkReviewHint` matches a PR merge-preview link
+(`@<base>...refs/gg/pr/<n>?review=`) by PR NUMBER (`PRScopeNumber` of the
+review's `Preview` scope) — fetched or not; gg's own review links are
+pair/commit form and unaffected. Inspections refuse an unfetched PR link with
+`prNotFetchedError` (Is `ErrLinkUnknownRepo` and `ErrPRNotFetched`; names the
+checkout holding the base). `gg session navigate` / `gg open` (live TUI) wait
+`steerPRFetchWaitForTest` (30s) for such a link (`navigateWait`) and print a
+"queued: the TUI is fetching pull request #n" line on timeout. `reRoot`
+answers a parked landing (`failPending`, before `closeSteerInbox`) and clears
+`pendingPROpen`. `gg pr reply` defaults `--source agent` inside a gg session.
+Web `fetchPR`'s done line is `prFetchDoneLine`.
 
 ### Preview links (feature B, 2026-09-15)
 

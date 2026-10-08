@@ -210,8 +210,8 @@ func TestSessionNavigateFailedReplyExitsOne(t *testing.T) {
 	}
 }
 
-// NO t.Parallel(): this is the one test that writes the package-level
-// steerReplyWaitForTest, and every other session test reads it. Under
+// NO t.Parallel(): this test writes the package-level steerReplyWaitForTest
+// (as the other serial wait tests do), and every other session test reads it. Under
 // t.Parallel() that is a data race ./test.sh race would catch.
 func TestSessionNavigateTimeoutIsQueuedNotAFailure(t *testing.T) {
 	dir := t.TempDir()

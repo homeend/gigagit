@@ -175,3 +175,10 @@ export function oncePerKey(fn) {
 export function sentEvent(ev, seq) {
   return ev.ok && ev.changed ? { kind: "sent", seq } : null;
 }
+
+// prFetchDoneLine is a finished PR fetch's status line and whether it is an
+// error: it replaces the "⟳ fetching…" line the op put up.
+export function prFetchDoneLine(ev, n) {
+  if (ev.ok) return [ev.summary || "fetched pull request #" + n, false];
+  return ["error: " + (ev.error || "operation failed"), true];
+}

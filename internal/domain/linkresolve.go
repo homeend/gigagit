@@ -207,6 +207,13 @@ func locateLink(ctx context.Context, l model.Link, opts ResolveOpts) (linkCandid
 				// A navigation needs only the base: the landing fetches the PR.
 				return linkCandidate{}, fmt.Errorf("%w: no checkout of %s holds %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target)
 			}
+			if n, ok := git.ParsePRRef(p.Source); ok {
+				if base := resolvingAll(ctx, cands, []string{p.Target}, opts); len(base) > 0 {
+					// The base is here, only the PR is missing: an inspection
+					// reads its commits, so say how to get them, and where.
+					return linkCandidate{}, prNotFetchedError{n: n, checkout: base[0].checkout}
+				}
+			}
 			return linkCandidate{}, fmt.Errorf("%w: no checkout of %s holds both %s and %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target, p.Source)
 		}
 		cands = kept
@@ -454,6 +461,23 @@ func previewCandidates(ctx context.Context, cands []linkCandidate, p *model.Link
 		kept = append(kept, c)
 	}
 	return append(kept, unfetched...)
+}
+
+// prNotFetchedError refuses an inspection of a pull request's link on a
+// checkout that holds its base but has not fetched the PR. It is still an
+// unknown-repository refusal (exit codes, callers' errors.Is), worded as the
+// fix rather than as a missing ref.
+type prNotFetchedError struct {
+	n        int
+	checkout string
+}
+
+func (e prNotFetchedError) Error() string {
+	return fmt.Sprintf("pull request #%d is not fetched in %s — run gg pr fetch %d there first (gg open fetches it)", e.n, e.checkout, e.n)
+}
+
+func (e prNotFetchedError) Is(target error) bool {
+	return target == ErrLinkUnknownRepo || target == ErrPRNotFetched
 }
 
 // unfetchedPROK reports whether a preview's missing SOURCE may stay missing:

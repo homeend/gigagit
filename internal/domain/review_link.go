@@ -330,6 +330,19 @@ func checkReviewHint(ctx context.Context, svc *Service, res Resolved) error {
 	if err != nil {
 		return nil
 	}
+	if p := res.Preview; p != nil {
+		if n, ok := PRScopeNumber(p.Target + "..." + p.Source); ok {
+			// A pull request's merge preview names the PR by NUMBER, whatever
+			// its head is now (fetched or not — gg pr forget leaves the
+			// objects): the PR's own review matches it, nothing else does.
+			if rn, rok := PRScopeNumber(r.Preview); rok && rn == n {
+				return nil
+			}
+			if p.Tip == "" { // unfetched: no commit here to compare
+				return fmt.Errorf("%w: %w (review %s is not pull request #%d's)", model.ErrLink, ErrReviewLinkMismatch, r.ID, n)
+			}
+		}
+	}
 	t, err := svc.reviewTarget(ctx, r)
 	if err != nil {
 		return nil
