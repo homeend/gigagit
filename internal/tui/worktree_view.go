@@ -246,17 +246,47 @@ func (m Model) switchView(path string) (Model, bool) {
 		m.statusMsg = i18n.T("cannot switch: %s is not reachable from here", path)
 		return m, false
 	}
-	if !m.opsIdle() {
-		m.statusMsg = i18n.T("an operation is running — switch once it has finished")
+	if why := m.switchRefusal(); why != "" {
+		m.statusMsg = why
 		return m, false
 	}
+	m = m.dropWorkingTreeWindows()
 	m = m.saveView()
-	// Put the leaving slot to sleep: close its watchers, keep its state.
+	m = m.sleepView()
+	m = m.loadView(m.ensureView(key))
+	m.viewKick = true
+	return m, true
+}
+
+// switchRefusal is why the panels cannot swap right now, "" when they can:
+// an operation running (the op's slot must stay on screen until it ends),
+// or a surface that owns the keyboard — a decision, a popup being filled,
+// a process, text being typed (steerRefusal's list). A popup opened over
+// worktree A submits through m.svc: swapping under it would run its op in
+// B. The swaps that are not the user's own key (a console's return, a
+// gone slot) queue through pendingReturnView and drain when the surface
+// clears (the Update tail).
+func (m Model) switchRefusal() string {
+	switch {
+	case !m.opsIdle():
+		return i18n.T("an operation is running — switch once it has finished")
+	case m.steerRefusal() != "":
+		return i18n.T("cannot switch while a window is open")
+	}
+	return ""
+}
+
+// sleepView puts the live slot's machinery to rest before another slot is
+// loaded: its watchers close, and every generation a result could carry
+// moves on, so a full load, status read, reviews read, watcher or docs
+// sync launched for the leaving slot cannot land on the arriving one. The
+// slot's STATE stays (saveView stored it); switchView and both drop paths
+// (abandonGoneView, pruneViews) share this.
+func (m Model) sleepView() Model {
 	if m.watcher != nil {
 		_ = m.watcher.Close()
 	}
 	closeDocWatch(m.docWatch.w)
-	m = m.loadView(m.ensureView(key))
 	m.watcher, m.watchSupported = nil, false
 	m.watchGen++
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1}
@@ -265,8 +295,52 @@ func (m Model) switchView(path string) (Model, bool) {
 	m.srcInflight[srcStatus] = false
 	m.srcLoading[srcStatus] = false
 	m.workingReviewsGen++ // likewise a reviews read
-	m.viewKick = true
-	return m, true
+	return m
+}
+
+// workingTreeWindow reports a layer that shows the leaving worktree's
+// FILES: a working-tree diff (HEAD → working tree, a staged diff, a
+// stacked status view), a blame of a working file, a file viewer. Their
+// keys (stage hunks, discard, edit, note) resolve the path through
+// m.svc, so over the arriving worktree they would act on ITS file of the
+// same name. A commit's diff, a history, a compare are the repository's
+// and stay.
+func workingTreeWindow(l layer) bool {
+	switch v := l.(type) {
+	case *diffView:
+		return v.rev == "" && !v.compare
+	case *blameView:
+		return v.ctx.rev == ""
+	case *fileViewer:
+		return true
+	}
+	return false
+}
+
+// dropWorkingLayers filters a stack: the working-tree windows go, the
+// rest keep their order.
+func dropWorkingLayers(ls []layer) []layer {
+	var kept []layer
+	for _, l := range ls {
+		if !workingTreeWindow(l) {
+			kept = append(kept, l)
+		}
+	}
+	return kept
+}
+
+// dropWorkingTreeWindows closes what shows the leaving worktree's files
+// before the panels swap: the working-tree layers on the stack and the F
+// window (its tree and status letters are that worktree's). reRoot's
+// precedent, narrowed to what is tree-scoped.
+func (m Model) dropWorkingTreeWindows() Model {
+	if m.layers != nil {
+		m.layers.entries = dropWorkingLayers(m.layers.entries)
+	}
+	if m.filesView != nil {
+		m = m.closeFilesView()
+	}
+	return m
 }
 
 // viewKickCmd is the live slot's wake-up: a SILENT status read (a
@@ -282,16 +356,23 @@ func (m Model) viewKickCmd() tea.Cmd {
 	return tea.Batch(read, m.startWatchCmd(m.watchGen), docs)
 }
 
-// takeQueuedReturn performs the return a console close queued while an op
-// ran (closeConsole → pendingReturnView): called by the op's end once it
-// has dispatched nothing further in that worktree. The refresh that
-// follows reads the returned-to slot; the op's own slot refreshes on its
-// next kick.
+// takeQueuedReturn performs the return a console close (or a gone slot)
+// queued while the panels could not swap (pendingReturnView). The Update
+// tail calls it once switchRefusal clears — so after an op's end only
+// when the end dispatched nothing further in that worktree (a chained op
+// is running again, a prompt is a surface), and after a staging round or
+// a dismissed prompt too. A refusal for another reason drops the queue.
+// The op's own slot refreshes on its next kick.
 func (m Model) takeQueuedReturn() Model {
-	if p := m.pendingReturnView; p != "" {
-		m.pendingReturnView = ""
-		m, _ = m.switchView(p)
+	p := m.pendingReturnView
+	if p == "" {
+		return m
 	}
+	if m.switchRefusal() != "" {
+		return m // still held: the Update tail tries again once the surface or the op clears
+	}
+	m.pendingReturnView = ""
+	m, _ = m.switchView(p)
 	return m
 }
 
@@ -303,12 +384,21 @@ func (m Model) abandonGoneView() (Model, bool) {
 	if m.viewed == "" || m.viewed == m.home || guardStat(m.viewed) == nil {
 		return m, false
 	}
+	if m.switchRefusal() != "" {
+		// A popup over the gone tree is being filled: its submit fails
+		// against the missing directory, which is honest; a swap would run
+		// it in home. The return home queues for the surface clearing.
+		m.pendingReturnView = m.home
+		return m, false
+	}
 	gone := m.viewed
 	delete(m.views, gone)
 	home := m.views[m.home]
 	if home == nil {
 		return m, false
 	}
+	m = m.dropWorkingTreeWindows()
+	m = m.sleepView()
 	m.viewed = "" // the gone slot must not be saved back
 	m = m.loadView(home)
 	for s := sourceKey(0); s < srcCount; s++ {
@@ -329,13 +419,21 @@ func (m Model) pruneViews() Model {
 		if m.isRepoWorktree(key) || key == m.home {
 			continue
 		}
+		if key == m.viewed && m.switchRefusal() != "" {
+			// A surface over the gone tree owns the keyboard: the slot stays
+			// (its reads fail honestly), the return home queues for the
+			// surface clearing — the next list read prunes it then.
+			m.pendingReturnView = m.home
+			continue
+		}
 		delete(m.views, key)
 		if key == m.viewed {
 			gone := key
 			if home := m.views[m.home]; home != nil {
+				m = m.dropWorkingTreeWindows()
+				m = m.sleepView()
 				m.viewed = "" // the gone slot must not be saved back
 				m = m.loadView(home)
-				m.srcGen[srcStatus]++
 				m.viewKick = true
 			}
 			m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.home))

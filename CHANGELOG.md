@@ -19,12 +19,37 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   retention) a commit or merge made there still wrote version refs. The
   shown worktree now follows the config, and a Settings change or config
   reload reaches every remembered worktree.
+- A working-tree window of the worktree you were leaving — a diff of
+  uncommitted changes, a stacked status view, a blame of a working file, a
+  file viewer, the F window — stayed on top after `alt+w` / `alt+a` swapped
+  the panels, and its keys (`H`, `e`, `c`) then acted on the NEW worktree's
+  file of the same name. Those windows now close on a swap; a commit's
+  diff, a history and a compare are the repository's and stay. Likewise
+  `alt+w`'s first hit no longer puts your own worktree's parked diff back
+  over the console's worktree.
+- The panels could swap under a popup, a decision or a conflict process
+  (a session removed by an overseer, a worktree gone, a console opened for
+  a task): a commit question filled for one worktree then ran in another.
+  A swap now waits for the surface to clear, and so does a console's
+  return home — which also no longer waits for a full operation when only
+  a staging round was in flight.
+- A status read, hunk picker, conflict file or amend message loaded for
+  one worktree could land after a swap and open over another; each now
+  names the worktree it was read for and is dropped when that is not the
+  one on screen.
+- A worktree that vanished while shown left its file watcher open and let
+  its in-flight reads land on your own worktree's panels.
+- `gg session` file commands (navigate, note, overview) from an agent
+  compared the agent's worktree with gg's OWN while resolving files in the
+  worktree on SCREEN: a note from your own worktree's agent while you
+  looked at another was anchored there. They now compare with — and name
+  in their refusal — the worktree on screen.
 
 ### Added
 - A switch between worktrees of ONE repository is now a swap of remembered
   per-worktree state (Status, cursors, marks, open files, working reviews),
-  not a reload: the screen never blanks, an open diff and the Commits cursor
-  survive, and gg's identity follows — the exit directory, the steering
+  not a reload: the screen never blanks, an open commit diff and the
+  Commits cursor survive, and gg's identity follows — the exit directory, the steering
   inbox, the session registry's worktree, the session snapshot and the
   hosted web page. The Worktrees-row `enter`, the move/repair chains, `gg
   session` switch asks, `gg://` link checkouts and the web page's own switch

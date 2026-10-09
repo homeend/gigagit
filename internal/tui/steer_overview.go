@@ -28,8 +28,8 @@ func (m Model) steerOverview(c steer.Command) (Model, tea.Cmd) {
 	case "overview_add", "overview_set", "overview_show", "overview_rm":
 		// An overview id is this worktree's: an agent in another one names
 		// some other overview.
-		if c.Worktree != "" && !domain.SameCheckout(c.Worktree, m.snapshotWorktree) {
-			return m, m.answerSteer(c, steerFail(c, "gg is showing worktree "+m.snapshotWorktree+", not "+c.Worktree))
+		if why, mismatch := m.steerShownMismatch(c); mismatch {
+			return m, m.answerSteer(c, steerFail(c, why))
 		}
 	}
 	switch c.Cmd {
