@@ -216,6 +216,10 @@ func (s *Service) SetVersionsPolicy(p engine.VersionsPolicy) *Service {
 	return s
 }
 
+// VersionsPolicy is the active branch-version snapshot policy (what the
+// next operation on this service honours).
+func (s *Service) VersionsPolicy() engine.VersionsPolicy { return s.currentVersionsPolicy() }
+
 // currentVersionsPolicy resolves the active branch-version snapshot policy:
 // whatever was last set via SetVersionsPolicy, or the default (enabled, 90
 // days) when never set.

@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## Fast worktree switch (TUI)
 
+### Fixed
+- A console closed while an operation ran returned the panels home at the
+  operation's end BEFORE its chained step dispatched — a dirty switch's
+  branch switch (shelve, then switch) could then run in your own worktree
+  instead of the one the console looked at. The return now waits for the
+  chain's end; a merge/rebase continuation keeps the panels where it runs.
+- A worktree shown through a console ran its operations with the default
+  branch-version policy: with `[versions] disabled = true` (or a custom
+  retention) a commit or merge made there still wrote version refs. The
+  shown worktree now follows the config, and a Settings change or config
+  reload reaches every remembered worktree.
+
 ### Added
 - A switch between worktrees of ONE repository is now a swap of remembered
   per-worktree state (Status, cursors, marks, open files, working reviews),

@@ -1764,6 +1764,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
+		m = m.applyPoliciesToSlots() // the loader applied them to the live service; the sleeping slots too
 		m = m.applyBranchFilterConfig()
 		// Both directions: off drops the presence, on claims an inbox that
 		// snapshotTargetMsg resolved before this config arrived.
@@ -3671,11 +3672,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = false
 		m.opName = ""
 		m.opMsgs = nil
-		if p := m.pendingReturnView; p != "" {
-			// A console closed while this op ran: its view goes home now.
-			m.pendingReturnView = ""
-			m, _ = m.switchView(p)
-		}
+		// A console closed while this op ran queued the view's return home
+		// (pendingReturnView). It happens below — once this arm has decided
+		// nothing further runs in the op's worktree: a chained op (a dirty
+		// switch's shelve, then the switch) or a prompt that dispatches one
+		// keeps the queue for its own end, or the chain would run in HOME.
 		m = m.cleanupPickPatchTemp()
 		// A foreground fetch is a single (uncontended) `git fetch`, so its duration
 		// is a representative measurement for the background-fetch row — record it
@@ -3690,6 +3691,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switchTo := ""
 		chainSwitch := ""
 		repairSwitch := ""
+		holdReturn := false // a prompt raised here will dispatch in this worktree
 		var pushTags []string
 		var noticeCfg *engine.SetGitConfig
 		pendingCo := m.pendingCheckout // captured; cleared below whatever happened
@@ -3723,7 +3725,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// mismatched-arm dispatch site is structurally unable to show a wrong prompt.
 			if pendingCo.remoteRef != "" && errors.As(msg.err, &div) &&
 				div.RemoteRef == pendingCo.remoteRef && div.Local == pendingCo.base {
-				m.modal = m.checkoutDivergedModal(pendingCo)
+				m.modal = m.checkoutDivergedModal(pendingCo) // its answer dispatches an op here: the return waits
+				holdReturn = true
 			}
 			m.pendingRemoteTagSet = ""
 			m.pendingRemoteTagUnset = ""
@@ -3816,6 +3819,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A stash op (apply/pop/drop) changed the stash list as well as the
 			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
+			m = m.takeQueuedReturn()
 			var cmd tea.Cmd
 			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
 			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag), driftCmd, sendCmd)
@@ -3827,12 +3831,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// along here too, or a resume completed through the picker would never
 		// check.
 		if m.proc != nil {
+			m.pendingReturnView = "" // the process goes on in this worktree: the panels stay with it
 			pm, pcmd := m.proc.finished(m, msg.res, msg.err)
 			return pm, tea.Batch(healthCmd, pcmd, driftCmd, sendCmd)
 		}
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
 		var cmd tea.Cmd
+		if !holdReturn {
+			m = m.takeQueuedReturn()
+		}
 		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
 		// prepend them, not collapse the list back to page 0.
 		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
