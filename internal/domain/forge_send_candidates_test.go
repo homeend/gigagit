@@ -139,3 +139,50 @@ func TestPRSendCandidatesOldSideAndSendingRows(t *testing.T) {
 		t.Fatalf("old-side row = %+v, want the base's line 5", row)
 	}
 }
+
+// A draft reply row carries the planner's skip reason, as note rows do: a
+// thread the PR's comments no longer give a thread id for cannot take it.
+func TestPRSendCandidatesReplyRowsCarryASkipReason(t *testing.T) {
+	t.Parallel()
+	svc, ff, _ := sendRepo(t)
+	ctx := context.Background()
+	ff.mu.Lock()
+	ff.comments = []model.ForgeComment{
+		{ID: "C1", Kind: model.ForgeCommentInline, ThreadID: "T1", Path: "big.go", Side: model.NoteSideNew, Line: 5, StartLine: 5, Body: "please", Author: "carol"},
+		{ID: "C2", Kind: model.ForgeCommentInline, Path: "big.go", Side: model.NoteSideNew, Line: 25, StartLine: 25, Body: "no thread", Author: "carol"},
+	}
+	ff.mu.Unlock()
+	if _, err := svc.PRCommentsRefresh(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PullRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := svc.NoteReply(ctx, "forge:C1", model.Note{Source: model.NoteSourceUser, Author: "me", Summary: "fine"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad, err := svc.NoteReply(ctx, "forge:C2", model.Note{Source: model.NoteSourceUser, Author: "me", Summary: "lost"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := svc.PRSendCandidates(ctx, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Groups) != 1 || c.Groups[0].Kind != "replies" || len(c.Groups[0].Rows) != 2 {
+		t.Fatalf("groups = %+v", c.Groups)
+	}
+	for _, row := range c.Groups[0].Rows {
+		switch row.ID {
+		case ok.ID:
+			if row.Skip != "" {
+				t.Fatalf("a reply to a live thread must be sendable, got %q", row.Skip)
+			}
+		case bad.ID:
+			if row.Skip != SkipThreadNotInPR {
+				t.Fatalf("a reply to a thread-less comment: skip = %q, want %q", row.Skip, SkipThreadNotInPR)
+			}
+		}
+	}
+}

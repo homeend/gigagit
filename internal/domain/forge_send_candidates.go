@@ -177,7 +177,9 @@ func (s *Service) candidateRow(ctx context.Context, r ResolvedNote, kind string,
 	n := r.Note
 	row := SendCandidate{ID: n.ID, Kind: kind, Path: n.Address.Path, Range: r.Range, Side: string(n.Side),
 		Summary: n.Summary, Rationale: n.Rationale, Sync: r.Sync, Severity: severityOf(n.Tags)}
-	if kind != "reply" {
+	if kind == "reply" {
+		_, row.Skip = s.replySkip(n)
+	} else {
 		var scratch engine.SendPlan
 		if kind == "remark" {
 			rid, i, _ := model.ParseReviewNoteID(n.ID)
