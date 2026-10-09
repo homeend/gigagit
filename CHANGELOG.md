@@ -46,7 +46,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   nothing crosses, a commit's diff included (it waits in its worktree
   instead of following you). A result that arrives for a worktree not on
   screen — a diff, a file list, a popup's read — waits for that worktree
-  and is applied when it returns, never shown over another.
+  and is applied when it returns, never shown over another. The F window
+  gives up its file list while its worktree sleeps and re-reads it when
+  you return (the filter and the cursor's file stay).
   What a console covers (the diff under it, the stash list, a preview)
   belongs to the worktree it was shown over too: leaving the console on
   another worktree brings back only that worktree's own windows, and the

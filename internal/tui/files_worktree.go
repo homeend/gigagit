@@ -23,6 +23,7 @@ type worktreeFiles struct {
 	field     textfield         // the editor behind query while typing: cursor-aware
 	typing    bool
 	loading   bool
+	keepPath  string // the path under the cursor when the worktree went to sleep (sleepFWindow): the re-read lands the cursor on it
 }
 
 // inWorktreeFiles reports whether the files view shows the working tree (F).
@@ -98,8 +99,17 @@ func (m Model) wtSetQuery(q string) {
 		files = append(files, model.CommitFile{Path: path, Status: w.letter(path)})
 	}
 	p.lines, p.sel = commitFileLines(files), 0
-	want := "" // no query: the tree's first file row
-	if q != "" {
+	want := ""            // no query: the tree's first file row
+	if w.keepPath != "" { // back from sleep: the path the cursor was on, if the list still has it
+		for _, path := range paths {
+			if path == w.keepPath {
+				want = path
+				break
+			}
+		}
+		w.keepPath = ""
+	}
+	if q != "" && want == "" {
 		want = paths[0] // the best-ranked match
 	}
 	for i, l := range p.lines {
