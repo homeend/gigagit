@@ -157,3 +157,26 @@ func TestAllNotesCtrlLOnAThread(t *testing.T) {
 		t.Fatalf("status %q", m.statusMsg)
 	}
 }
+
+// A shelf FILE note (not only an entry-level one) has no link: the domain
+// refuses every shelf address, so View all notes neither offers ctrl+l
+// on it nor fires the copy.
+func TestAllNotesCtrlLNotOnAShelfFileNote(t *testing.T) {
+	t.Parallel()
+	m, p := shelfEntryNotesModel(t)
+	found := false
+	for i, r := range p.visible() {
+		if r.kind == anNote && r.note.Note.ID == "f1" {
+			p.sel, found = i, true
+		}
+	}
+	if !found {
+		t.Fatalf("the shelf file note is not listed:\n%s", m.View())
+	}
+	if strings.Contains(p.box(m), "[ctrl+l] copy link") {
+		t.Fatal("a shelf file note offers ctrl+l")
+	}
+	if _, c := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlL}); c != nil {
+		t.Fatal("ctrl+l on a shelf file note started a copy")
+	}
+}

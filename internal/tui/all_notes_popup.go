@@ -74,6 +74,13 @@ type anRow struct {
 	filter   string // lowercased text a query matches (notes only)
 }
 
+// linkable reports whether ctrl+l has a note link for row r: a thread
+// anywhere but on a shelf — the domain gives no link to any shelf address,
+// an entry's note or a shelved file's alike.
+func (r anRow) linkable() bool {
+	return r.kind == anNote && r.note != nil && r.note.Note.Address.State != model.StateShelf && r.target.state != model.StateShelf
+}
+
 type allNotesPopup struct {
 	popupMax
 	loading bool
@@ -369,7 +376,7 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return svc.ReviewLink(ctx, id)
 			}).run(m)
 			return u.(Model), cmd
-		case r.kind == anNote && !r.note.Note.IsShelfLevel():
+		case r.linkable():
 			id := r.note.Note.ID
 			u, cmd := m.asyncCopyLinkRow("note-copy-link", i18n.T("Copy note link"), func(ctx context.Context) (string, error) {
 				return svc.NoteLinkText(ctx, id)
@@ -689,7 +696,7 @@ func (p *allNotesPopup) box(m Model) string {
 	}
 	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) && (vis[p.sel].kind == anNote || vis[p.sel].kind == anReview) {
 		keys = append(keys, i18n.T("[ctrl+d] delete"))
-		if vis[p.sel].kind == anReview || !vis[p.sel].note.Note.IsShelfLevel() {
+		if vis[p.sel].kind == anReview || vis[p.sel].linkable() {
 			keys = append(keys, i18n.T("[ctrl+l] copy link"))
 		}
 	}
