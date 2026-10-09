@@ -18,6 +18,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   send or a detect in flight and the notices dialog keep refusing.
 
 ### Changed
+- **Session window keys.** `alt+A` / `alt+T` walk the viewed worktree's
+  own agents / terminals (nothing with none there); `alt+a` / `alt+t`
+  walk every one of the repository in the Branches tab's order. `alt+f` on
+  a focused console toggles docked ↔ maximised and binds it; `alt+b`
+  toggles whether keys go to the session.
 - The emergency unlock moved from `alt+A` to **`alt+U`** (alt+shift+u):
   `alt+A` now walks the viewed worktree's agents (below).
 - `alt+a` / `alt+t` into an agent of another worktree size the console by

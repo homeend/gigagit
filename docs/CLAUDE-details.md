@@ -4193,6 +4193,26 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   a `[[tools.command]] category="session" command='bash --norc'` block makes a
   deterministic agent. The Worktrees tab is `C-Right C-Right` from Branches.
 
+### Session window keys (2026-10-10, `docs/superpowers/specs/2026-10-10-session-window-keys.md`)
+
+A console is hidden, shown (docked in the Commits column) or maximised
+(`console.maximized`). **Focused** = the blue border = `m.focus ==
+panelCommits` with a console shown; **bound** = keys routed to the session
+= `console.focused` (the field predates the vocabulary); bound implies
+focused, unfocusing unbinds. Showing a session into a worktree sizes the
+console by THAT worktree (`showConsoleBy` resets `ret.full` to the pin
+before the swap; `displaceUnderConsole` raises it for a fullscreen view
+waiting there). Keys: `alt+a`/`alt+t` walk every agent/terminal of the
+repository in the Branches tab's order (`sessionRing`, `worktreeOrder`);
+`alt+A`/`alt+T` = `cycleSessionsIn(terminal, scoped=true)`, the ring
+restricted to the viewed worktree (`sessionRingIn`), silent with none;
+`alt+f`/`alt+b` are handled at the head of `updateConsoleKey` for a
+focused console, bound or not (alt+f flips `maximized` and `ret.full`
+together and binds; alt+b unbinds like the step-out key or binds like
+enter); both are in `consolePassthrough`/`consoleFullPassthrough`.
+`alt+w` hides a shown console on the way to the next worktree. The
+emergency unlock is `alt+U` (was `alt+A`).
+
 ### Web attach — agent consoles in `gg web` (plan 1, 2026-09-28)
 
 Spec `docs/superpowers/specs/2026-09-28-web-attach-design.md`, plan
