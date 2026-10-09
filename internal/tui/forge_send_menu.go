@@ -93,15 +93,6 @@ func (m Model) forgeNoteRows() []actionRow {
 				return m.forgeSendCmd(noteSendRequest(pr, t))
 			})
 		}})
-		label = i18n.T("Send my draft review…")
-		if local[0].group != domain.GroupMine {
-			label = i18n.T("Send this AI review…")
-		}
-		rows = append(rows, actionRow{id: "note-send-review", label: label, run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.withNoteTargetIn(local, func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
-				return m.openSendReviewBody(pr, t.group)
-			})
-		}})
 	}
 	if len(threads) > 0 {
 		rows = append(rows, actionRow{id: "note-reply-send", label: i18n.T("Reply & send…"), run: func(m Model) (tea.Model, tea.Cmd) {

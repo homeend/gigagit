@@ -3416,14 +3416,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sendPanelMsg:
 		return m.handleSendPanel(msg)
-	case sendGroupsMsg:
-		return m.handleSendGroups(msg)
 
 	case interruptedMsg:
 		return m.handleInterrupted(msg)
-
-	case sendBodyMsg:
-		return m.handleSendBody(msg)
 
 	case prHubMsg:
 		return m.handlePRHubMsg(msg)

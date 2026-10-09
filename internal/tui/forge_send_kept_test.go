@@ -20,12 +20,11 @@ func TestSendAnswersFromBeforeASwitchAreDropped(t *testing.T) {
 	m.forgeGen++ // what reRoot does
 	for _, msg := range []tea.Msg{
 		forgeSendReadyMsg{gen: old, req: domain.PRSendRequest{PR: 7, Mine: true}, op: engine.SendToForge{}},
-		sendGroupsMsg{gen: old, pr: 7, groups: []domain.SendGroup{{ID: domain.GroupMine, Count: 1}, {ID: "review:r1", Count: 1}}},
-		sendBodyMsg{gen: old, pr: 7, group: "review:r1", body: "x"},
+		sendPanelMsg{gen: old, pr: 7, cands: panelCands()},
 	} {
 		nm, cmd := m.Update(msg)
 		mm := nm.(Model)
-		if cmd != nil || mm.modal != nil || mm.running || layerOf[*sendReviewPopup](mm) != nil {
+		if cmd != nil || mm.modal != nil || mm.running || layerOf[*verdictPopup](mm) != nil || layerOf[*sendPanel](mm) != nil {
 			t.Fatalf("%T acted in the new repo", msg)
 		}
 	}
@@ -38,21 +37,21 @@ func TestAFailedPlanKeepsTheTypedBody(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
 	m, _ = m.openVerdict(7)
-	p := layerOf[*sendReviewPopup](m)
+	p := layerOf[*verdictPopup](m)
 	p.body = newTextField("a long thought-out verdict")
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
 	nm, _ := m.Update(forgeSendReadyMsg{gen: m.forgeGen, req: domain.PRSendRequest{PR: 7, Verdict: true, BodySet: true},
 		err: errors.New("network down")})
 	m = nm.(Model)
 	m, _ = m.openVerdict(7)
-	if got := layerOf[*sendReviewPopup](m).body.Value(); got != "a long thought-out verdict" {
+	if got := layerOf[*verdictPopup](m).body.Value(); got != "a long thought-out verdict" {
 		t.Fatalf("body = %q", got)
 	}
 	m = m.popLayer()
 	sent := domain.PRSendRequest{PR: 7, Verdict: true, Body: "a long thought-out verdict", BodySet: true}
 	m, _ = m.forgeSendFinished(&forgeSendState{pr: 7, req: sent}, engine.Result{Changed: true}, nil)
 	m, _ = m.openVerdict(7)
-	if got := layerOf[*sendReviewPopup](m).body.Value(); got != "" {
+	if got := layerOf[*verdictPopup](m).body.Value(); got != "" {
 		t.Fatalf("a sent body came back: %q", got)
 	}
 }

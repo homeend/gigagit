@@ -1,0 +1,40 @@
+diff: big.txt  @ PR #7 · Change line 5                                                                                          line 5  change 1/1  rows 1–20/20
+  1 line 1                                                                     │  1 line 1
+  2 line 2                                                                     │  2 line 2
+  3 line 3                                                                     │  3 line 3
+  4 line 4                                                                     │  4 line 4
+  5 line 5                                                                     │  5▎line 5 changed
+                                                                               │╭─ ○ note · agent · big.txt R5 ───────────────────────────────────────────────╮
+                                                                               ││                                                                             │
+                                                                               ││ why changed?                                                                │
+                                                                               ││                                                                             │
+                                                                               │╰─────────────────────────────────────────────────────────────────────────────╯
+                               ╔════════════════════════════════════════════════════════════════════════════════════════════════╗: low ───────────────────────╮
+                               ║                                                                                                ║                             │
+                               ║  Send to GitHub — #7                                                                 0 ticked  ║                             │
+                               ║                                                                                                ║                             │
+                               ║    ▌ Review (AI) · Claude Code · Summary · 2026-01-02 00:00                                    ║─────────────────────────────╯
+  6 line 6                     ║  > [ ] low   big.txt:5  name it                                                                ║
+  7 line 7                     ║            line 5 changed                                                                      ║
+  8 line 8                     ║    ▌ My notes                                                                                  ║
+  9 line 9                     ║    [ ]       big.txt:5  why changed?                                                           ║
+ 10 line 10                    ║                                                                                                ║
+                               ║  Body: none   [b] change  [e] edit                                                             ║
+                               ║                                                                                                ║
+                               ║  [space] tick  [a] all/none in group  [enter] open  [b] body  [e] edit body  [c] code          ║
+                               ║  [ctrl+s] send  [ctrl+t] fullscreen  [esc] close                                               ║
+                               ║                                                                                                ║
+                               ╚════════════════════════════════════════════════════════════════════════════════════════════════╝
+
+
+
+
+
+
+
+
+
+
+
+
+[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] scroll  [←→] pan  [h/b] hist  [esc] back

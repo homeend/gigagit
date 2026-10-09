@@ -479,7 +479,7 @@ func (p *sendPanel) box(m Model) string {
 			}
 		}
 	}
-	listH := max(3, h-12)
+	listH := max(3, min(len(rows), h-12)) // as tall as the list, never past the frame
 	lines := renderWindow(rows, winOpts{w: textW, h: listH, anchor: anchor})
 	body := i18n.T("Body: %s", p.bodyLabel()) + "   " + i18n.T("[b] change") + "  " + i18n.T("[e] edit")
 	hints := packHints([]string{
@@ -506,7 +506,9 @@ func panelGroupTitle(g domain.SendCandidateGroup) string {
 		return i18n.T("Draft replies")
 	}
 	parts := []string{i18n.T("Review (AI)"), g.Agent}
-	if t := strings.TrimSpace(g.Title); t != "" {
+	// The title is the summary's first line, often a markdown heading: its
+	// marks are not words.
+	if t := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(g.Title), "#")); t != "" {
 		parts = append(parts, truncate(sanitizeLine(t), 40))
 	}
 	parts = append(parts, g.Created.Local().Format("2006-01-02 15:04"))

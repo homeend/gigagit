@@ -270,3 +270,25 @@ func TestGotoNoteByReplyID(t *testing.T) {
 		t.Fatal("gotoNote by a reply id")
 	}
 }
+
+// Review Focus 2: a candidate deleted after the panel opened is skipped by
+// the planner; the plan is empty, the error is said, the panel stays.
+// Serial: env (prSendModel).
+func TestSendPanelSurvivesAGoneCandidate(t *testing.T) {
+	m, _, head := prSendModel(t)
+	id := addTUINote(t, m, head, 5, "look here")
+	m = openPR7(t, m)
+	m, cmd := m.openSendPanel(7)
+	m = drainCmds(t, m, cmd)
+	p := layerOf[*sendPanel](m)
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace})
+	if err := m.svc.NoteRemove(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	m, cmd = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	nm, _ := m.Update(cmd()) // forgeSendReadyMsg: nothing to send → said, nothing runs
+	m = nm.(Model)
+	if layerOf[*sendPanel](m) == nil || !strings.Contains(m.statusMsg, "send: ") {
+		t.Fatalf("panel %v status %q", layerOf[*sendPanel](m) != nil, m.statusMsg)
+	}
+}

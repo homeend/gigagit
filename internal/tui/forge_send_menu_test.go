@@ -36,10 +36,13 @@ func TestPRNoteMenuSendsALocalNote(t *testing.T) {
 	v.notes[0].Group = domain.GroupMine
 	v.setCursorLine(4, m.diffBodyRows())
 	ids := menuIDString(m.noteMenuRows())
-	for _, want := range []string{"note-send", "note-send-review", "note-edit", "note-reply", "note-delete"} {
+	for _, want := range []string{"note-send", "note-edit", "note-reply", "note-delete"} {
 		if !strings.Contains(ids, want) {
 			t.Errorf("rows %s lack %s", ids, want)
 		}
+	}
+	if strings.Contains(ids, "note-send-review") {
+		t.Errorf("rows %s still offer the group send (R9: the note menu sends that one note only)", ids)
 	}
 	tg, _ := m.noteNearCursor()
 	if req := noteSendRequest(7, tg); req.PR != 7 || len(req.Notes) != 1 || req.Notes[0] != "n1" {

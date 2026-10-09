@@ -156,7 +156,7 @@ func availableActions(m Model) []actionRow {
 			}
 			n := m.openPRNumber()
 			rows = append(rows,
-				actionRow{id: "pr-send-review", label: i18n.T("Send review…"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openSendReview(n) }},
+				actionRow{id: "pr-send", label: i18n.T("Send to GitHub…"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openSendPanel(n) }},
 				actionRow{id: "pr-verdict", label: i18n.T("Verdict…"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openVerdict(n) }})
 		}
 		if r, ok := m.noteListMenuRow(); ok {
