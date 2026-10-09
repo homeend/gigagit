@@ -92,12 +92,26 @@ func reviewSave(svc *domain.Service, args []string, stdin io.Reader, stdout, std
 		return 1
 	}
 	rl, lerr := tsvc.ReviewLink(ctx, id)
+	var unresolved []string
+	if ov, oerr := tsvc.ReviewOverview(ctx, id); oerr == nil {
+		unresolved = ov.Unresolved()
+	} else if !errors.Is(oerr, domain.ErrNoOverview) {
+		fmt.Fprintln(stderr, "warning: overview:", oerr)
+	}
 	if *asJSON {
-		_ = json.NewEncoder(stdout).Encode(map[string]string{"id": id, "link": rl, "warn": warn})
+		_ = json.NewEncoder(stdout).Encode(struct {
+			ID         string   `json:"id"`
+			Link       string   `json:"link"`
+			Warn       string   `json:"warn"`
+			Unresolved []string `json:"unresolved,omitempty"`
+		}{id, rl, warn, unresolved})
 	} else {
 		fmt.Fprintln(stdout, "review:", id)
 		if lerr == nil {
 			fmt.Fprintln(stdout, rl)
+		}
+		for _, d := range unresolved {
+			fmt.Fprintln(stderr, "unresolved:", d)
 		}
 	}
 	if warn != "" && !*asJSON {

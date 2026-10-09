@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -157,5 +158,32 @@ func TestReviewSaveWorkingReviewIsCurrent(t *testing.T) {
 	r, err := svc.Review(context.Background(), saved.ID)
 	if err != nil || len(r.Files) == 0 || !domain.WorkingReviewState(r.Worktree, r.Files).Current {
 		t.Fatalf("a working review stored by save must match the files it read: %+v %v", r.Files, err)
+	}
+}
+
+func TestReviewSaveReportsUnresolvedAnchors(t *testing.T) {
+	t.Parallel()
+	dir, link := reviewSaveRepo(t) // main...feat/x; f.txt is the preview's one changed file
+	doc := `{"version":1,"summary":"s","overview":"[ok](f.txt:1) [gone](nope.go:3) [note](note:t1)","files":[]}`
+	code, _, errs := runCLIStdin(t, dir, doc, "review", "save", link, "--agent", "c", "--stdin")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	if !strings.Contains(errs, "unresolved: nope.go:3\n") || !strings.Contains(errs, "unresolved: note:t1\n") || strings.Contains(errs, "unresolved: f.txt:1") {
+		t.Fatalf("stderr = %q", errs)
+	}
+	code, outJ, _ := runCLIStdin(t, dir, doc, "review", "save", link, "--agent", "c", "--stdin", "--json")
+	if code != 0 {
+		t.Fatalf("json exit %d", code)
+	}
+	var got struct {
+		ID         string   `json:"id"`
+		Unresolved []string `json:"unresolved"`
+	}
+	if err := json.Unmarshal([]byte(outJ), &got); err != nil || got.ID == "" {
+		t.Fatalf("json %q: %v", outJ, err)
+	}
+	if !slices.Equal(got.Unresolved, []string{"nope.go:3", "note:t1"}) {
+		t.Fatalf("unresolved = %v", got.Unresolved)
 	}
 }
