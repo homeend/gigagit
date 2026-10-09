@@ -145,6 +145,7 @@ func availableActions(m Model) []actionRow {
 		rows = append(rows, m.stackMenuRows()...)
 		rows = append(rows, m.diffAlignRows()...)
 		rows = append(rows, m.noteMenuRows()...)
+		rows = append(rows, m.noteCopyLinkRows()...)
 		rows = append(rows, m.noteLinkRows()...)
 		rows = append(rows, m.noteCollapseRows()...)
 		if m.openPRNumber() > 0 {
