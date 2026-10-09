@@ -706,11 +706,22 @@ func (m Model) worktreeIndex(dir string) int {
 // — the order the eye walks — oldest first within a worktree, so the walk
 // is the same whoever was used last.
 func (m Model) sessionRing(terminal bool) []domain.SessionInfo {
+	return m.sessionRingIn(terminal, "")
+}
+
+// sessionRingIn is sessionRing restricted to the worktree at dir ("" =
+// every worktree of the repository): alt+A / alt+T walk the viewed
+// worktree's own sessions only.
+func (m Model) sessionRingIn(terminal bool, dir string) []domain.SessionInfo {
 	var out []domain.SessionInfo
 	for _, info := range m.repoSessions(domain.Sessions().List()) {
-		if info.State == domain.SessionRunning && info.Terminal == terminal {
-			out = append(out, info)
+		if info.State != domain.SessionRunning || info.Terminal != terminal {
+			continue
 		}
+		if dir != "" && !model.SamePath(info.Dir, dir) {
+			continue
+		}
+		out = append(out, info)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
@@ -735,7 +746,22 @@ func (m Model) sessionRing(terminal bool) []domain.SessionInfo {
 // there the nearest below in the list, wrapping. The only session of its
 // kind, already bound: nothing but a status line.
 func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
-	list := m.sessionRing(terminal)
+	return m.cycleSessionsIn(terminal, false)
+}
+
+// cycleSessionsIn is cycleSessions with scoped = alt+A / alt+T: the walk
+// is restricted to the viewed worktree's sessions of the kind, and with
+// none there the key does nothing at all (user ruling 2026-10-10).
+func (m Model) cycleSessionsIn(terminal, scoped bool) (Model, tea.Cmd) {
+	var list []domain.SessionInfo
+	if scoped {
+		list = m.sessionRingIn(terminal, m.viewPath(m.viewed))
+		if len(list) == 0 {
+			return m, nil
+		}
+	} else {
+		list = m.sessionRing(terminal)
+	}
 	if len(list) == 0 {
 		if terminal {
 			m.statusMsg = i18n.T("no running terminal in this repository — open one from the . menu of a worktree or a checked-out branch")
@@ -939,8 +965,8 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		// alt+a / alt+t are gg's even here: the cycle starts from this
 		// agent and comes back to the screen it was shown over.
-		if key == "alt+a" || key == "alt+t" {
-			nm, cmd := m.cycleSessions(key == "alt+t")
+		if key == "alt+a" || key == "alt+t" || key == "alt+A" || key == "alt+T" {
+			nm, cmd := m.cycleSessionsIn(key == "alt+t" || key == "alt+T", key == "alt+A" || key == "alt+T")
 			return nm, cmd, true
 		}
 		if key == "alt+w" {

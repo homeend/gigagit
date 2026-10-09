@@ -2283,8 +2283,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// order, binding the one shown, round and round (no return stop).
 		// From the base panels or a full-screen view (parked while the
 		// sessions show maximised); a focused console handled the key above.
-		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.cycleReachable() {
-			return m.cycleSessions(k == "alt+t")
+		if k := msg.String(); (k == "alt+a" || k == "alt+t" || k == "alt+A" || k == "alt+T") && m.cycleReachable() {
+			return m.cycleSessionsIn(k == "alt+t" || k == "alt+T", k == "alt+A" || k == "alt+T") // shift = the viewed worktree only
 		}
 		// alt+w cycles the worktrees themselves: the next one of the list
 		// is shown (the fast switch), around again past the last.
