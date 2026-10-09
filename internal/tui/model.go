@@ -294,9 +294,9 @@ type Model struct {
 	srcGen              map[sourceKey]int                                // per-source generation; stale dataAvailableMsg dropped
 	srcInflight         map[sourceKey]bool                               // a read of this source is outstanding (coalescing)
 	srcLoading          map[sourceKey]bool                               // a manual read is in flight → consuming panels show ⏳
-	srcSince            map[sourceKey]time.Time                          // when the in-flight read of a source started (alt+A's state dump)
-	loadStart           time.Time                                        // when the full load (startup, repo switch) began — the blank screen's alt+A hint
-	lastStateDump       string                                           // the file alt+A wrote last ("" = none yet)
+	srcSince            map[sourceKey]time.Time                          // when the in-flight read of a source started (alt+U's state dump)
+	loadStart           time.Time                                        // when the full load (startup, repo switch) began — the blank screen's alt+U hint
+	lastStateDump       string                                           // the file alt+U wrote last ("" = none yet)
 	repoConfigPath      string                                           // <repo-top>/.gg.toml; the refresh-rates editor writes here
 	watchSupported      bool                                             // gitwatch.Supported(commonDir); false on WSL2 9p → watch sources fall back to polling
 	watcher             *gitwatch.Watcher                                // file-watcher; nil when unsupported or no sources enabled
@@ -2203,7 +2203,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.running && (m.stickyMsg == "" || m.statusMsg != m.stickyMsg) {
 			m.statusMsg = ""
 		}
-		// alt+A — the emergency unlock (emergency_unlock.go). While anything
+		// alt+U — the emergency unlock (emergency_unlock.go). While anything
 		// holds the interface it outranks every surface, a decision modal and
 		// a focused agent console included: nothing else can be trusted to
 		// still answer then.
@@ -2252,7 +2252,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+o" {
 			return m.openSubshell()
 		}
-		// alt+A with nothing held only writes the state dump — below the
+		// alt+U with nothing held only writes the state dump — below the
 		// focused console, which keeps the chord for its agent then.
 		if msg.String() == emergencyUnlockKey {
 			return m.emergencyUnlock()
@@ -2283,8 +2283,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// order, binding the one shown, round and round (no return stop).
 		// From the base panels or a full-screen view (parked while the
 		// sessions show maximised); a focused console handled the key above.
-		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.cycleReachable() {
-			return m.cycleSessions(k == "alt+t")
+		if k := msg.String(); (k == "alt+a" || k == "alt+t" || k == "alt+A" || k == "alt+T") && m.cycleReachable() {
+			return m.cycleSessionsIn(k == "alt+t" || k == "alt+T", k == "alt+A" || k == "alt+T") // shift = the viewed worktree only
 		}
 		// alt+w cycles the worktrees themselves: the next one of the list
 		// is shown (the fast switch), around again past the last.
@@ -5113,10 +5113,10 @@ func (m Model) View() string {
 	}
 	if m.loading && !m.ready {
 		// startup + repo-switch keep the blank screen; a load that hangs
-		// offers alt+A (the interface's only way out then).
+		// offers alt+U (the interface's only way out then).
 		line := "gigagit (loading…)"
 		if !m.loadStart.IsZero() && time.Since(m.loadStart) >= unlockHintAfterReload {
-			line += " · " + i18n.T("[alt+A] unlock")
+			line += " · " + i18n.T("[alt+U] unlock")
 		}
 		return paintFrame(line+"\n", w, h, bg, fg)
 	}

@@ -211,7 +211,7 @@ func globalBindings() []footerBinding {
 		// First of the global keys so the overflow trim drops it last: the
 		// way out once a lock outlives its normal span (the status line's
 		// own hint uses the same threshold, so a short reload never flashes it).
-		{"unlock", "alt+A", i18n.T("[alt+A] unlock"), func(m Model) bool { return m.unlockHint(time.Now()) != "" }, scopeGlobal},
+		{"unlock", "alt+U", i18n.T("[alt+U] unlock"), func(m Model) bool { return m.unlockHint(time.Now()) != "" }, scopeGlobal},
 		{"resolve", "x", i18n.T("[x] resolve"), func(m Model) bool {
 			// A session sub-row (Worktrees or Branches) owns x (remove /
 			// refuse), so the conflict hint steps back there.
@@ -282,14 +282,14 @@ func (m Model) footerOverride() (string, bool) {
 		if m.consoleFull() || (m.focus == panelCommits && !(m.filesView != nil && m.filesTreeFocused)) { // a focused tree keeps the keys (updateConsoleKey) — unless a full-screen console covers it
 			if m.consoleFull() { // already maximised; the panels are hidden; esc goes back
 				if m.consoleExited() {
-					return i18n.T("agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
+					return i18n.T("agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
 				}
-				return i18n.T("agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
+				return i18n.T("agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
 			}
 			if m.consoleExited() {
-				return i18n.T("agent console: [x] close  [ctrl+t] maximise  [esc/%s] hide  [%s] sessions  [tab] panels", m.stepOutKey(), m.sessionsKey()), true
+				return i18n.T("agent console: [x] close  [alt+f] max  [alt+b] bind  [esc/%s] hide  [%s] sessions  [tab] panels", m.stepOutKey(), m.sessionsKey()), true
 			}
-			return i18n.T("agent console: [enter] type  [X] kill+remove  [ctrl+t] maximise  [esc/%s] close  [%s] sessions  [tab] panels", m.stepOutKey(), m.sessionsKey()), true
+			return i18n.T("agent console: [enter] type  [X] kill+remove  [alt+f] max  [alt+b] bind  [esc/%s] close  [%s] sessions  [tab] panels", m.stepOutKey(), m.sessionsKey()), true
 		}
 	}
 	if m.filterTyping || m.stashFilterTyping() {

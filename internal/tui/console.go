@@ -706,11 +706,22 @@ func (m Model) worktreeIndex(dir string) int {
 // — the order the eye walks — oldest first within a worktree, so the walk
 // is the same whoever was used last.
 func (m Model) sessionRing(terminal bool) []domain.SessionInfo {
+	return m.sessionRingIn(terminal, "")
+}
+
+// sessionRingIn is sessionRing restricted to the worktree at dir ("" =
+// every worktree of the repository): alt+A / alt+T walk the viewed
+// worktree's own sessions only.
+func (m Model) sessionRingIn(terminal bool, dir string) []domain.SessionInfo {
 	var out []domain.SessionInfo
 	for _, info := range m.repoSessions(domain.Sessions().List()) {
-		if info.State == domain.SessionRunning && info.Terminal == terminal {
-			out = append(out, info)
+		if info.State != domain.SessionRunning || info.Terminal != terminal {
+			continue
 		}
+		if dir != "" && !model.SamePath(info.Dir, dir) {
+			continue
+		}
+		out = append(out, info)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
@@ -735,7 +746,22 @@ func (m Model) sessionRing(terminal bool) []domain.SessionInfo {
 // there the nearest below in the list, wrapping. The only session of its
 // kind, already bound: nothing but a status line.
 func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
-	list := m.sessionRing(terminal)
+	return m.cycleSessionsIn(terminal, false)
+}
+
+// cycleSessionsIn is cycleSessions with scoped = alt+A / alt+T: the walk
+// is restricted to the viewed worktree's sessions of the kind, and with
+// none there the key does nothing at all (user ruling 2026-10-10).
+func (m Model) cycleSessionsIn(terminal, scoped bool) (Model, tea.Cmd) {
+	var list []domain.SessionInfo
+	if scoped {
+		list = m.sessionRingIn(terminal, m.viewPath(m.viewed))
+		if len(list) == 0 {
+			return m, nil
+		}
+	} else {
+		list = m.sessionRing(terminal)
+	}
 	if len(list) == 0 {
 		if terminal {
 			m.statusMsg = i18n.T("no running terminal in this repository — open one from the . menu of a worktree or a checked-out branch")
@@ -876,7 +902,8 @@ func (m Model) sessionsKey() string {
 var consolePassthrough = map[string]bool{
 	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
 	"q": true, "ctrl+c": true, "?": true, ".": true, "ctrl+p": true, "ctrl+o": true,
-	"alt+a": true, "alt+t": true, "alt+w": true, "R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
+	"alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+f": true, "alt+b": true,
+	"R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
 
@@ -885,7 +912,7 @@ var consolePassthrough = map[string]bool{
 // panel and the parked view, so focus moves would land on hidden panels and
 // an opener (F, S, c, p…) would open something behind it.
 var consoleFullPassthrough = map[string]bool{
-	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true, "alt+w": true,
+	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+f": true, "alt+b": true,
 }
 
 // updateConsoleKey routes a key to/around the console per the state table
@@ -901,6 +928,28 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	}
 	if m.console == nil {
 		return m, nil, false
+	}
+	// The size and binding toggles of a FOCUSED console (the blue border:
+	// the Commits column has the keyboard), bound or not. alt+f: docked ↔
+	// maximized, bound and focused after either way. alt+b: bound ↔
+	// unbound (unbinding as the step-out key does; binding as enter does).
+	if m.focus == panelCommits && m.proc == nil && (key == "alt+f" || key == "alt+b") {
+		if key == "alt+f" {
+			m.console.maximized = !m.console.maximized
+			if m.console.ret != nil {
+				m.console.ret.full = m.console.maximized // the step-out key and the return agree with the toggle
+			}
+			m.console.focused = true
+			m.touchConsole()
+			return m.syncConsoleSize(), nil, true
+		}
+		if m.console.focused {
+			m.console.focused = false
+			return m, nil, true // shown and focused; the keys are gg's again
+		}
+		m.console.focused = true
+		m.touchConsole()
+		return m.syncConsoleSize(), nil, true
 	}
 	// Anything layered above the console (the sessions popup opened from it,
 	// the . menu) owns the keyboard; closing it returns to the console.
@@ -939,8 +988,8 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		// alt+a / alt+t are gg's even here: the cycle starts from this
 		// agent and comes back to the screen it was shown over.
-		if key == "alt+a" || key == "alt+t" {
-			nm, cmd := m.cycleSessions(key == "alt+t")
+		if key == "alt+a" || key == "alt+t" || key == "alt+A" || key == "alt+T" {
+			nm, cmd := m.cycleSessionsIn(key == "alt+t" || key == "alt+T", key == "alt+A" || key == "alt+T")
 			return nm, cmd, true
 		}
 		if key == "alt+w" {
