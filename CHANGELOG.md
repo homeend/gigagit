@@ -87,9 +87,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   worktree on screen and reconciles on every swap.
 - Swapping from a worktree with a current review to one without could leave
   a `✎ Review` row over the second worktree's files.
-- A swap closed EVERY files window; a commit's, a stash's and a compare's
-  files are the repository's and now stay (only the `F` window of files on
-  disk closes).
+- A swap closed EVERY files window; a commit's, a stash's and a
+  commit-to-commit compare's files are the repository's and now stay (the
+  `F` window of files on disk and a compare against the working tree or
+  the index close).
 - A `gg session` switch ask for your OWN worktree, accepted while another
   was shown and an operation ran, armed the navigate against the worktree
   still on screen; a refused swap arms nothing.

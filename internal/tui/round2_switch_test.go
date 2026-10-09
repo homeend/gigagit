@@ -172,3 +172,36 @@ func TestResumePromptFlagIsPerSlot(t *testing.T) {
 		t.Fatal("B's one-shot flag was lost on the round trip: the prompt would fire again")
 	}
 }
+
+// A compare files view with a WORKING-TREE side lists this tree's files:
+// it closes on the swap like the F window; a commit-to-commit compare stays.
+func TestSwitchViewClosesACompareWithAWorkingSide(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	m.filesView = &contentPopup{}
+	m.filesMode = filesModeCompare
+	m.filesLeft, m.filesRight = commitEP(t, "abc1234"), model.WorkTreeEndpoint()
+	m, ok := m.switchView(other)
+	if !ok {
+		t.Fatalf("refused: %s", m.statusMsg)
+	}
+	if m.filesView != nil {
+		t.Fatal("a compare against the working tree survived the swap")
+	}
+	m.filesView = &contentPopup{}
+	m.filesMode = filesModeCompare
+	m.filesLeft, m.filesRight = commitEP(t, "abc1234"), commitEP(t, "abc1235")
+	m, _ = m.switchView(m.homeWorktree())
+	if m.filesView == nil {
+		t.Fatal("a commit-to-commit compare was closed by the swap")
+	}
+}
+
+func commitEP(t *testing.T, hash string) model.Endpoint {
+	t.Helper()
+	ep, err := model.CommitEndpoint(hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ep
+}

@@ -6304,9 +6304,10 @@ submit through `m.svc` = B); the non-key swaps (`returnView`,
 tail `takeQueuedReturn`s once clear (so a staging round drains it too).
 A swap closes the leaving tree's WORKING-TREE windows
 (`dropWorkingTreeWindows`: `workingTreeWindow` = a diff with `rev == ""`,
-a blame of a working file, a file viewer; plus the F window —
-`filesModeWorktree` only: a commit's/stash's/compare's files view is the
-repository's) — their keys
+a blame of a working file, a file viewer; plus the files view when
+`filesViewIsWorkingTree`: the F window (`filesModeWorktree`) or a compare
+with a `WorkTree`/`Index` side — a commit's/stash's/commit-pair files
+view is the repository's) — their keys
 resolve paths through `m.svc`; commit diffs/history/compare stay. A
 console's parked stack records `ret.over`; `parkedLayersFor` restores
 the working-tree layers only when the view is that worktree again.
@@ -6314,8 +6315,10 @@ the working-tree layers only when the view is that worktree again.
 `switchView` and both drop paths. The commit feed is ONE shared
 `CommitFeed` re-rooted by `loadView` (`CommitFeed.SetService`: the walk's
 `--branches HEAD` is then the viewed tree's — a detached HEAD's commits,
-and no walk from a deleted old home after an adopt); the kick reads
-`srcFeed` (a reconcile) so the list catches up without a flash.
+and no walk from a deleted old home after an adopt; it cancels a walk in
+flight and moves the feed gen so no page of the old root lands, and the
+walks read `f.pager` ONCE under the lock — `-race` caught the bare read);
+the kick reads `srcFeed` (a reconcile) so the list catches up without a flash.
 `loadView` assigns `workingReviews` BEFORE `withStatus` (the Review row
 is derived from the reviews) and carries `resumePromptShown` per slot
 (saved/loaded with the status) so a round trip through another tree does

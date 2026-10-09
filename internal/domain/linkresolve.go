@@ -760,14 +760,16 @@ func linkSplit(abs, checkout string) (string, bool) {
 	// The separator goes on the KEY: keying "<checkout>/" would clean the
 	// slash away and make a sibling checkout whose name extends this one's
 	// ("…-switch-2" beside "…-switch") look like it sits inside.
-	pre := kc
-	if !strings.HasSuffix(pre, "/") {
-		pre += "/"
+	sep := "/"
+	if strings.HasSuffix(kc, "/") { // a root checkout
+		sep = ""
 	}
-	if !strings.HasPrefix(ka, pre) {
+	if !strings.HasPrefix(ka, kc+sep) {
 		return "", false
 	}
-	return a[len(pre):], true
+	// Sliced by the PATH's length, not the key's: under a case fold a key
+	// may be longer than its path (a lower-cased İ is three bytes).
+	return a[len(c)+len(sep):], true
 }
 
 // linkMovedSplit finds base as a directory segment of abs (the LAST match

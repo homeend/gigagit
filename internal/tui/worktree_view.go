@@ -409,10 +409,29 @@ func (m Model) dropWorkingTreeWindows() Model {
 	if m.layers != nil {
 		m.layers.entries = dropWorkingLayers(m.layers.entries)
 	}
-	if m.filesView != nil && m.filesMode == filesModeWorktree {
-		m = m.closeFilesView() // the F window lists THIS tree's files on disk; a commit's, a stash's, a compare's files are the repository's
+	if m.filesView != nil && m.filesViewIsWorkingTree() {
+		m = m.closeFilesView()
 	}
 	return m
+}
+
+// filesViewIsWorkingTree: the open files view lists THIS tree's files —
+// the F window (files on disk) or a compare with a working-tree or index
+// side. A commit's, a stash's, a shelf's or a commit-to-commit compare's
+// files are the repository's and stay over another worktree.
+func (m Model) filesViewIsWorkingTree() bool {
+	switch m.filesMode {
+	case filesModeWorktree:
+		return true
+	case filesModeCompare:
+		return workingSide(m.filesLeft) || workingSide(m.filesRight)
+	}
+	return false
+}
+
+func workingSide(e model.Endpoint) bool {
+	k := e.Kind()
+	return k == model.EndpointWorkTree || k == model.EndpointIndex
 }
 
 // viewKickCmd is the live slot's wake-up: a SILENT status read (a
@@ -430,8 +449,9 @@ func (m Model) viewKickCmd() tea.Cmd {
 	return tea.Batch(read, notes, feed, m.startWatchCmd(m.watchGen), docs)
 }
 
-// takeQueuedReturn performs the return a console close (or a gone slot)
-// queued while the panels could not swap (pendingReturnView). The Update
+// takeQueuedReturn performs the swap a console close, a console SHOW (its
+// own worktree) or a gone slot queued while the panels could not swap
+// (pendingReturnView). The Update
 // tail calls it once switchRefusal clears — so after an op's end only
 // when the end dispatched nothing further in that worktree (a chained op
 // is running again, a prompt is a surface), and after a staging round or

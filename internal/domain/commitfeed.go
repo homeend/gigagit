@@ -73,6 +73,14 @@ func (f *CommitFeed) SetService(s *Service) {
 	}
 	f.svc = s
 	f.pager = pagerForMode(s, f.pager.Name())
+	// A walk in flight brings back a page of the OLD root: cancel it and
+	// move the generation so neither it nor a LoadMore page can land.
+	if f.cancel != nil {
+		f.cancel()
+		f.cancel = nil
+	}
+	f.gen++
+	f.clearCacheLocked()
 }
 
 // PagerName reports the active page strategy ("plain" | "date-order").
@@ -242,10 +250,11 @@ func (f *CommitFeed) Refresh(ctx context.Context) (FeedState, error) {
 	scope := f.scope
 	initial := f.effInitial()
 	loaded := f.commits // entries are never mutated in place, so the header is enough
+	pager := f.pager    // read under the lock: SetService/SetSortMode swap it
 	f.inFlight = true
 	f.mu.Unlock()
 
-	page, err := f.pager.Page(cctx, initial, 0, gen0, scope)
+	page, err := pager.Page(cctx, initial, 0, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -313,10 +322,11 @@ func (f *CommitFeed) loadInitialWalk(ctx context.Context) (FeedState, error) {
 	f.hashes = map[string]bool{}
 	f.skip = 0
 	f.exhausted = false
+	pager := f.pager // read under the lock: SetService/SetSortMode swap it
 	f.inFlight = true
 	f.mu.Unlock()
 
-	page, err := f.pager.Page(cctx, initial, 0, gen0, scope)
+	page, err := pager.Page(cctx, initial, 0, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -384,9 +394,10 @@ func (f *CommitFeed) LoadMore(ctx context.Context) (FeedState, bool, error) {
 	skip := f.skip
 	scope := f.scope
 	size := f.effPage()
+	pager := f.pager // read under the lock: SetService/SetSortMode swap it
 	f.mu.Unlock()
 
-	page, err := f.pager.Page(ctx, size, skip, gen0, scope)
+	page, err := pager.Page(ctx, size, skip, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
