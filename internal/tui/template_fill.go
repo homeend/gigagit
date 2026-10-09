@@ -126,3 +126,22 @@ func (f *templateFill) moveLines(n int) {
 		f.fields[f.idx].Up()
 	}
 }
+
+// scrollKey walks a multi-line value (a pasted stack trace) under
+// viewWindow: ↑/↓ move the focused field's cursor a line, PgUp/PgDn a page;
+// the window follows the cursor. Reports whether it took the key.
+func (f *templateFill) scrollKey(msg tea.KeyMsg, page int) bool {
+	switch page = max(1, page); msg.Type {
+	case tea.KeyUp:
+		f.moveLines(-1)
+	case tea.KeyDown:
+		f.moveLines(1)
+	case tea.KeyPgUp:
+		f.moveLines(-page)
+	case tea.KeyPgDown:
+		f.moveLines(page)
+	default:
+		return false
+	}
+	return true
+}

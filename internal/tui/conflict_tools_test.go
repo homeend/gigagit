@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -460,4 +461,68 @@ func seedToolPick(m Model, p *conflictProcess) Model {
 	p.toolChoices, p.toolAgents, p.toolSel = m.cfg.Tools.Command, nil, 0
 	p.st = confToolPick
 	return m
+}
+
+// A stack trace pasted into a conflict tool's <user:…> value drew every line
+// in the tool-inputs box and again in the approval box, so both grew past
+// the terminal and were drawn off-screen. Both now window their text: ↑/↓
+// walk the value in its field and scroll the command under approval.
+func TestToolFillAndApprovalFitAPastedStackTrace(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		fmt.Fprintf(&b, "\tat frame%03d (src/pkg/file.go:%d)\r\n", i, i)
+	}
+	trace := strings.TrimRight(b.String(), "\r\n")
+	for _, size := range [][2]int{{80, 24}, {100, 40}, {60, 14}} {
+		m, p := conflictModelWithTools(t,
+			config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "agent <user:trace> <user:note>"})
+		cleanupToolTemp(t)
+		m.width, m.height = size[0], size[1]
+		m = seedToolPick(m, p)
+		m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+		m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(trace), Paste: true})
+		fits := func(when string, want ...string) string {
+			t.Helper()
+			screen := plain(p.render(m, ""))
+			lines := strings.Split(strings.TrimRight(screen, "\n"), "\n")
+			if len(lines) > size[1] {
+				t.Errorf("%v %s: %d lines on a %d-row terminal", size, when, len(lines), size[1])
+			}
+			for i, l := range lines {
+				if lipgloss.Width(l) > size[0] {
+					t.Errorf("%v %s: line %d is %d wide", size, when, i, lipgloss.Width(l))
+				}
+			}
+			for _, w := range want {
+				if !strings.Contains(screen, w) {
+					t.Errorf("%v %s: screen misses %q\n%s", size, when, w, screen)
+				}
+			}
+			return screen
+		}
+		if s := fits("fill after paste", "Tool inputs", "[esc] cancel", "frame199"); strings.Contains(s, "frame000") {
+			t.Errorf("%v: the field must follow the cursor to the end of the paste\n%s", size, s)
+		}
+		for i := 0; i < 199; i++ {
+			m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyUp})
+		}
+		fits("fill after up", "frame000")
+		m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyTab})
+		m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+		if p.st != confToolApprove || !strings.Contains(p.pending.resolved, "frame199") {
+			t.Fatalf("%v: after fill: st=%v", size, p.st)
+		}
+		if s := fits("approval", "Run this command?", "[enter] run", "frame000", "command text changes."); strings.Contains(s, "frame199") {
+			t.Errorf("%v: the approval box must start at the top of the command\n%s", size, s)
+		}
+		for i := 0; i < 300; i++ {
+			m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyDown})
+		}
+		fits("approval after down", "frame199", "[enter] run")
+		m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyPgUp})
+		if s := fits("approval after pgup", "[enter] run"); strings.Contains(s, "frame199") {
+			t.Errorf("%v: pgup must page back\n%s", size, s)
+		}
+	}
 }

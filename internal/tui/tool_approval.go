@@ -48,7 +48,19 @@ func (m Model) rememberToolApproval(command string) {
 // second small function rather than changing this one.
 func approvalBoxView(command string, width int) string {
 	_ = width
-	return command + "\n\n" +
-		i18n.T("Approval is remembered for this repo until the command text changes.") + "\n" +
-		i18n.T("[enter] run  [esc] cancel")
+	return command + "\n\n" + approvalNote() + "\n" + approvalHints(false)
+}
+
+// approvalNote is the approval preview's line on how long approval lasts.
+func approvalNote() string {
+	return i18n.T("Approval is remembered for this repo until the command text changes.")
+}
+
+// approvalHints are the approval preview's keys; scroll adds ↑/↓ for a
+// command that runs past its pane.
+func approvalHints(scroll bool) string {
+	if scroll {
+		return i18n.T("[enter] run  [↑/↓] scroll  [esc] cancel")
+	}
+	return i18n.T("[enter] run  [esc] cancel")
 }
