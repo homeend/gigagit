@@ -22,7 +22,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   own agents / terminals (nothing with none there); `alt+a` / `alt+t`
   walk every one of the repository in the Branches tab's order. `alt+f` on
   a focused console toggles docked ↔ maximised and binds it; `alt+b`
-  toggles whether keys go to the session.
+  toggles whether keys go to the session. Every walk puts the Branches
+  cursor on the shown session's row (the tab comes forward; the console
+  keeps the keyboard), as `alt+w` puts it on the worktree's branch.
 - The emergency unlock moved from `alt+A` to **`alt+U`** (alt+shift+u):
   `alt+A` now walks the viewed worktree's agents (below).
 - `alt+a` / `alt+t` into an agent of another worktree size the console by

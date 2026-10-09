@@ -820,6 +820,7 @@ func (m Model) cycleSessionsIn(terminal, scoped bool) (Model, tea.Cmd) {
 	} else {
 		m, cmd = m.showConsoleBy(info.ID, true, true) // the user's own alt+a / alt+t
 	}
+	m = m.selectSessionRow(info.ID) // the Branches tab shows the session's row; the console keeps the keyboard
 	if terminal {
 		m.statusMsg = i18n.T("%s in %s — terminal %d of %d", info.Title(), shortWorktreeName(info.Dir), next+1, len(list))
 	} else {

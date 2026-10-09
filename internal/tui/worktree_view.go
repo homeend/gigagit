@@ -694,6 +694,27 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	return nm, nil
 }
 
+// selectSessionRow puts the Branches cursor on the sub-row of session id
+// (under the branch of its worktree) and makes the Branches tab the one
+// shown, without moving the keyboard: the walks (alt+a/alt+t/alt+A/alt+T)
+// show where the session sits as alt+w shows where the worktree sits. A
+// session whose row is not listed (a filter hides its branch, a detached
+// worktree) leaves the cursor alone.
+func (m Model) selectSessionRow(id domain.SessionID) Model {
+	m.activeLeftTab, m.lastLeftPanel = panelBranches, panelBranches
+	ents := m.branchEntries()
+	for di, u := range m.displayIndices(panelBranches) {
+		if u < len(ents) && ents[u].sess == id {
+			if m.sel == nil {
+				m.sel = map[panel]int{}
+			}
+			m.sel[panelBranches] = di
+			break
+		}
+	}
+	return m
+}
+
 // selectWorktreeBranch puts the Branches cursor on the branch a worktree
 // has checked out — the row alt+w lands on; a detached or unlisted one
 // leaves the cursor alone, as does a filter hiding the row.
