@@ -255,10 +255,12 @@ func (m Model) reviewFileCopyLinkRow() (actionRow, bool) {
 // reviewRemarkRows are a review remark's copy rows in a review diff: its
 // review link (Copy remark link) and its id review:<id>:<n> (Copy remark id,
 // what gg note reply / resolve take). They act on the thread ROOT, so a reply
-// under the cursor copies its remark. nil when no remark is in reach.
+// under the cursor copies its remark. nil when no remark is in reach. The
+// review id is the CURSOR'S FILE's (curNoteView): a stack view names no
+// review itself, its files carry the id their own loaders stamped.
 func (m Model) reviewRemarkRows() []actionRow {
 	v, ok := m.topLayer().(*diffView)
-	if !ok || v.reviewID == "" || m.svc == nil {
+	if !ok || v.curNoteView().reviewID == "" || m.svc == nil {
 		return nil
 	}
 	rootID := ""
@@ -298,7 +300,7 @@ func (m Model) reviewRemarkLinkRow() (actionRow, bool) {
 // the ordinary link.
 func (m Model) reviewRemarkLinkAtCursorRow() (actionRow, bool) {
 	v, ok := m.topLayer().(*diffView)
-	if !ok || v.reviewID == "" || m.linkSelectionLines() > 1 {
+	if !ok || v.curNoteView().reviewID == "" || m.linkSelectionLines() > 1 {
 		return actionRow{}, false
 	}
 	row, ok := v.cursorRow()
