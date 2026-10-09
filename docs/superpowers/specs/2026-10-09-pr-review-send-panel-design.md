@@ -1,7 +1,7 @@
 # PR review: a stored overview, PR Reviews rows, one send panel — design
 
-Date: 2026-10-09. Status: design approved in brainstorm (rulings R1–R12 below);
-this document is the spec for the user's review. Three plans follow (§9).
+Date: 2026-10-09. Status: design approved in brainstorm (rulings R1–R13 below);
+this document is the spec for the user's review. Three plans follow (§10).
 
 ## 0. Vocabulary
 
@@ -373,7 +373,66 @@ stdin: one review posted, then one reply, summary stamped.
   for `notebatch` (overview field) and `engine` (`Then`) only if a row
   changes meaning.
 
-## 7. Tests
+## 7. Links to a note (R13)
+
+A note has no link today: a review remark offers *Copy remark link* only in
+the review view, and a hand-written note nothing anywhere. `L` on a noted
+line copies the line, so an agent pasted `gg://…path:N` has to guess which
+thread is meant. This section gives every thread a link in every diff.
+
+### 7.1 The link
+
+`gg://<repo>/<target>/<path>:<line>?note=<id>`: the `?<kind>=<id>` hint
+grammar (`linkHintKinds`) gains the kind `note`. The address is the note's
+own anchor — its commit, staged or working-tree target, `path:line` (the
+first line of a range, with the fingerprint for an uncommitted line, as a
+line link has) — and the hint is the note's id, a root or a reply. A remark
+keeps its existing remark link (`?review=<id>` at its line): the row below
+copies whichever the thread is, so one row serves both.
+
+Opening (`#` paste, `gg open`, `gg session navigate`, the web): the diff at
+that line with the thread expanded and the cursor on the anchor line; a
+reply's link opens its thread the same way. A note that no longer exists
+refuses with `note <id> is not here`, as a moved review link refuses
+(`checkReviewHint` precedent). `linkdesc` describes it as
+`note: <id> <author> · <summary>`.
+
+### 7.2 Where it is copied
+
+- **Every diff, `.` menu: Copy note link** (`note-copy-link`) whenever a
+  thread is in reach. Reach is today's (the cursor on the anchor line, the
+  line the box hangs under) **plus the first line below the box**, so the
+  note rows (Edit, Reply, Resolve, the send rows, Copy note link) are
+  offered from both lines next to the box. Several threads on one line: the
+  row asks which, as Edit note does.
+- **`L` on the anchor line copies the note link**, as `L` on a remark's line
+  copies the remark link today; the line link for that line stays in the
+  `.` menu's "Copy link" row. `L` on the line below the box stays the line
+  link (an ordinary line that happens to follow a box).
+- **View all notes:** `ctrl+l` and the `.` row copy the note link on a thread
+  row; review rows keep the review link.
+- **The review view** gains the plain "Copy link" row for the line (the
+  reviewed tip's address; today a review view has no line link at all).
+- **Web:** the note box's context menu gets *Copy note link*; the all-notes
+  view's thread rows the same.
+- A commit's Files view "Notes" rows keep their file link.
+
+Every row above must be offered in the STACKED view too: the parity tests in
+`diff_menu_parity_test.go` (stack-blind rows are a recurring class) gain the
+note-link row by construction, since they compare the whole menu.
+
+### 7.3 For agents
+
+- `gg note show <link|id> [--json]` prints the thread — root and replies with
+  their ids, the address, the status — so the agent reads exactly the note
+  the user pasted.
+- `gg note reply`, `gg note resolve` / `unresolve` accept a note link in place
+  of the id. `gg link --note <id>` prints the link.
+- reviewing-with-gg and using-gg document the link next to the review link;
+  gg-review's "Checking another agent's review" mentions that a pasted
+  `?note=` link is one thread to answer.
+
+## 8. Tests
 
 - notebatch: parse/canonical round-trip with and without `"overview"`; the
   64 KiB refusal; a document without the key canonicalises byte-identical to
@@ -397,8 +456,15 @@ stdin: one review posted, then one reply, summary stamped.
   reviews; `summaryMd`/`overviewMd` on the review wire.
 - CLI: `parsePRSend` combinations; `gg review save` unresolved report; `gg
   review show` overview + `"summary"`; e2e fake-gh send.
+- Note links (§7): model hint kind round-trip; domain note-link build (commit
+  / staged / working with fingerprint, a reply → its thread), resolve +
+  refusal of a gone note, `linkdesc`; TUI `note-copy-link` on the anchor line
+  and the line below the box, `L` on the anchor line, View all notes
+  `ctrl+l` on a thread, the review view's line "Copy link", parity in the
+  stack; web menu row + all-notes row (node tests); CLI `gg note show`,
+  `reply`/`resolve` by link, `gg link --note`; an e2e golden with the row.
 
-## 8. Rulings
+## 9. Rulings
 
 | # | ruling |
 |---|---|
@@ -409,24 +475,28 @@ stdin: one review posted, then one reply, summary stamped.
 | R5 | The stored overview is navigated like a temporary one: tab / shift+tab / enter / backspace, anchors against the reviewed tip. |
 | R6 | Draft replies ticked with new comments go as a second op after the review, under one confirm (`Then`). |
 | R7 | The panel opens only from the PR level (PR `.` menu, PR details `s`), labelled "Send to GitHub…", replacing "Send review…"; "Verdict…" stays; nothing ticked on open. |
-| R8 | Three plans after the spec (§9). |
+| R8 | Three plans after the spec (§10). |
 | R9 | A note's own menu sends that one note only; the group rows leave the note menu in both frontends. |
 | R10 | That row reads "Send as GitHub comment" (merged `0a1684ee`). |
 | R11 | One word: an overview is the one document kind, temporary (`gg session overview`) or stored in a review; the review's text is its summary (`ReviewDoc.Summary`, `"summary"` everywhere). |
 | R12 | The review view's first row is "≡ Summary"; a review with a stored overview gets a second row "≡ Overview" that opens the temporary overview's popup/pane over it (one word per row, one document per popup). |
+| R13 | Every thread has a link: `gg://…?note=<id>` for a note (a remark keeps its remark link); *Copy note link* in every diff's `.` menu from the line above and the first line below the box, `L` on the anchor line, `ctrl+l` in View all notes, the web menu; `gg note show <link>`; the review view gets the line "Copy link". |
 
-## 9. Plans (R8)
+## 10. Plans (R8)
 
 1. **Core**: the `Summary` rename; notebatch overview field + limits; domain
    `ReviewOverview`, `PreviewReviews` for PRs, `PRSendCandidates`,
    `BodyFrom`, `planSend` mixes; engine `Then`; CLI (`gg pr send`, `gg pr
-   notes --json`, `gg review save`/`show`); MCP review show; skills +
-   versions + `gg init --update`; e2e CLI send.
+   notes --json`, `gg review save`/`show`); the note link (model hint,
+   domain build/resolve/describe, `gg note show`, `reply`/`resolve` by link,
+   `gg link --note`); MCP review show; skills + versions + `gg init
+   --update`; e2e CLI send.
 2. **TUI**: the "≡ Summary" row; the "≡ Overview" row over the overview
-   popup; PR Reviews rows; the send panel and the removals;
+   popup; PR Reviews rows; the send panel and the removals; Copy note link
+   (`.` from both lines, `L`, View all notes, the review view's line link);
    menu/help/footer; i18n; goldens.
 3. **Web**: `summaryMd`/`overviewMd`, the "≡ Summary" rename and the
    "≡ Overview" row over the overview pane; `/api/pr/open` reviews + Reviews
    block; candidates endpoint +
-   the panel overlay; `/api/pr/send` changes and removals; node tests;
-   README web notes.
+   the panel overlay; `/api/pr/send` changes and removals; Copy note link in
+   the note menu and the all-notes view; node tests; README web notes.
