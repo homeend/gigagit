@@ -6357,9 +6357,18 @@ finds it empty), and a replayed message that moves the view ends the
 replay with the leftovers back on the slot that left. Nothing is
 re-requested; a parked window shows its loading state until its worktree
 returns. History chunks are deliberately unstamped (they write through
-the view pointer). Phases still to come: the console's parked copy on the
-slot (4), parkable popups —
-`parkable()` + a caller-intent flag on `switchView` (5), the F window's
+the view pointer). Popups: `parkableLayer` (`avail.go`) is the ONE whitelist of popups
+the USER's own swap may park (`switchViewBy(path, byUser)`,
+`userSwitchView`; `switchRefusalBy` lets `steerRefusal`'s last answer,
+`refusalWindowOwnsKeyboard`, through for a parkable top layer;
+`cycleReachable` accepts one too); intent is threaded through
+`guardedReRoot(path, offerRepair, byUser)` (true from the key handlers,
+the repo path/switcher popups and a confirmed link; false from steer asks,
+tours, the hosted page, op chains, the move popup) and `showConsoleBy(id,
+focused, byUser)` (true from `cycleSessions` only). A `gotoCommitPopup`
+with a resolve pending, the generic `contentPopup`, the palette, the
+sessions popup, the notices dialog, sends and detects in flight are never
+parkable. Phase still to come: the F window's
 list dropped on sleep (6); spec
 `docs/superpowers/specs/2026-10-09-per-worktree-window-stacks.md`.
 `sleepView` (watchers closed, the five gens bumped, `srcFeed` retired) is shared by

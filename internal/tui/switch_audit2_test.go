@@ -129,7 +129,7 @@ func TestAdoptTouchesTheRepoMRU(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	m, other := addWorktree(t, m, "wt2")
-	nm, cmd := m.guardedReRoot(other, true)
+	nm, cmd := m.guardedReRoot(other, true, true)
 	m = nm.(Model)
 	for _, msg := range drainBatch(cmd) {
 		nm, _ := m.Update(msg)

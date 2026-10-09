@@ -105,6 +105,14 @@ func (m Model) openConsole(id domain.SessionID) (Model, tea.Cmd) {
 // of the session (Touch): cycling through them must not reorder the list it
 // walks.
 func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
+	return m.showConsoleBy(id, focused, false)
+}
+
+// showConsoleBy is showConsole with the caller's intent: the user's own
+// alt+a / alt+t (cycleSessions) may park a parkable popup for the swap to
+// the console's worktree; a show asked by an agent, a task or a settle
+// waits under any popup (the swap queues).
+func (m Model) showConsoleBy(id domain.SessionID, focused, byUser bool) (Model, tea.Cmd) {
 	s, ok := domain.Sessions().Get(id)
 	if !ok {
 		m.statusMsg = i18n.T("that agent session is gone")
@@ -148,7 +156,7 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 	m.pendingReturnView = "" // a return queued by an earlier close is moot: this console's own return point rules
 	if dir := s.Info().Dir; model.KeyOf(dir) != m.viewed && m.isRepoWorktree(dir) {
 		var ok bool
-		if m, ok = m.switchView(dir); !ok {
+		if m, ok = m.switchViewBy(dir, byUser); !ok {
 			m.pendingReturnView = model.KeyOf(dir)
 		}
 	}
@@ -735,7 +743,7 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 		m.focus = panelCommits
 		m = m.syncConsoleSize()
 	} else {
-		m, cmd = m.showConsole(info.ID, true)
+		m, cmd = m.showConsoleBy(info.ID, true, true) // the user's own alt+a / alt+t
 	}
 	if terminal {
 		m.statusMsg = i18n.T("%s in %s — terminal %d of %d", info.Title(), shortWorktreeName(info.Dir), next+1, len(list))

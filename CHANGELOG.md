@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## Fast worktree switch (TUI)
 
+### Added
+- `alt+w`, `alt+a` and `alt+t` work over a popup you are filling in — a
+  commit message, a branch name, a note, a versions or git-config
+  browser: the popup waits in its worktree with what you typed and
+  submits there when you return. A swap asked by an agent (a console
+  opened for a task, a `gg session` switch ask, a console's return) still
+  waits for the popup to clear; the command palette, the sessions list, a
+  send or a detect in flight and the notices dialog keep refusing.
+
 ### Changed
 - The worktrees you look at share the repository's caches (commit diffs,
   blames, commit file lists, compare file sets, preview summaries): one

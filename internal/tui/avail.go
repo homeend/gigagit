@@ -47,7 +47,8 @@ func (m Model) cycleReachable() bool {
 	if m.filterTyping {
 		return false
 	}
-	switch l := m.topLayer().(type) {
+	top := m.topLayer()
+	switch l := top.(type) {
 	case nil, *historyView:
 		return true
 	case *diffView:
@@ -56,6 +57,34 @@ func (m Model) cycleReachable() bool {
 		return !l.search.typing
 	case *fileViewer:
 		return l.openFile == nil || l.p == nil || !l.p.search.typing
+	}
+	return parkableLayer(top) // the user's own swap parks a popup that can wait
+}
+
+// parkableLayer is the whitelist of popups the USER's own swap (alt+w,
+// alt+a/alt+t, enter on a worktree row) may park with the worktree's
+// windows: their pending work is none, or a plain read the slot's queue
+// holds until the worktree returns, and what they submit runs through the
+// service that is live again then — their own worktree's. Everything not
+// listed refuses the swap: a popup whose result moves the panels by itself
+// (a goto resolve pending, the repo switchers, the move-worktree popup), a
+// send or a detect in flight, the notices dialog, the sessions popup, the
+// palette, and the generic contentPopup (too many surfaces draw with it to
+// know what it owes). An agent-triggered swap never parks a popup (switchView's
+// default; steerRefusal is unchanged).
+func parkableLayer(l layer) bool {
+	switch v := l.(type) {
+	case *gotoCommitPopup:
+		return v.pending == nil
+	case *versionsPopup, *remoteHeadsPopup, *allNotesPopup, *gitConfigPopup,
+		*branchPopup, *commitPopup, *notePopup, *annotateTagPopup, *renameBranchPopup,
+		*rewordPopup, *commitNamePopup, *filePathPopup, *bookmarkPopup, *bookmarkPastePopup,
+		*notesListPopup, *exportPatchPopup, *applyPatchPopup, *hookEditorPopup,
+		*languagePickerPopup, *repoPathPopup, *previewRenamePopup,
+		*pairOpPopup, *reflogCheckoutPopup, *shelfRestorePopup, *shellCmdPopup,
+		*blameRecentPopup, *commitFilterPopup, *checkoutAsPopup, *hunkPicker,
+		*relatedPromptPopup:
+		return true
 	}
 	return false
 }

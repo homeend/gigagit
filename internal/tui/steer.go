@@ -242,8 +242,13 @@ func (m Model) steerRefusal() string {
 		}
 		return ""
 	}
-	return "a window is open that owns the keyboard"
+	return refusalWindowOwnsKeyboard
 }
+
+// refusalWindowOwnsKeyboard is steerRefusal's LAST answer: every other
+// check passed and only the top layer stands in the way. switchRefusalBy
+// reads it to let the user's own swap park a parkable popup.
+const refusalWindowOwnsKeyboard = "a window is open that owns the keyboard"
 
 // steerShownMismatch reports whether a command addressed to c.Worktree
 // names another worktree than the one on screen, with the refusal prose.

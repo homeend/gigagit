@@ -10,9 +10,9 @@
 
 ## Whitelist (parkable)
 
-`versionsPopup`, `remoteHeadsPopup`, `allNotesPopup`, `gitConfigPopup`, `branchPopup`, `commitPopup`, `notePopup`, `annotateTagPopup`, `renameBranchPopup`, `rewordPopup`, `commitNamePopup`, `filePathPopup`, `bookmarkPopup`, `bookmarkPastePopup`, `notesListPopup`, `exportPatchPopup`, `applyPatchPopup`, `hookEditorPopup`, `languagePickerPopup`, `repoPathPopup`, `gotoCommitPopup` (not while `pending` — a resolve in flight switches by itself), `linkHistPicker`, `previewRenamePopup`, `pairOpPopup`, `reflogCheckoutPopup`, `shelfRestorePopup`, `shellCmdPopup`, `blameRecentPopup`, `commitFilterPopup`, `checkoutAsPopup`, `hunkPicker`, `contentPopup` (a help/list box), `relatedPromptPopup`.
+`versionsPopup`, `remoteHeadsPopup`, `allNotesPopup`, `gitConfigPopup`, `branchPopup`, `commitPopup`, `notePopup`, `annotateTagPopup`, `renameBranchPopup`, `rewordPopup`, `commitNamePopup`, `filePathPopup`, `bookmarkPopup`, `bookmarkPastePopup`, `notesListPopup`, `exportPatchPopup`, `applyPatchPopup`, `hookEditorPopup`, `languagePickerPopup`, `repoPathPopup`, `gotoCommitPopup` (not while `pending` — a resolve in flight switches by itself), `linkHistPicker`, `previewRenamePopup`, `pairOpPopup`, `reflogCheckoutPopup`, `shelfRestorePopup`, `shellCmdPopup`, `blameRecentPopup`, `commitFilterPopup`, `checkoutAsPopup`, `hunkPicker`, `relatedPromptPopup`.
 
-NOT parkable (the swap refuses): `compareLoadingPopup` / a review loading, `agentStartPopup`, `linkComparePopup`, `sendReviewPopup`, `prHubPopup`, `prSearchPopup`, `noticePopup`, `sessionsPopup` (incl. quit mode), `commandPalette`, `moveWorktreePopup` (it switches views itself), `irebaseEditor`, `repoPopup` (a repo switch in the making), `eagerPrompt` (the shared feed's search), anything not listed.
+NOT parkable (the swap refuses): `compareLoadingPopup` / a review loading, `agentStartPopup`, `linkComparePopup`, `sendReviewPopup`, `prHubPopup`, `prSearchPopup`, `noticePopup`, `sessionsPopup` (incl. quit mode), `commandPalette`, `moveWorktreePopup` (it switches views itself), `irebaseEditor`, `repoPopup` (a repo switch in the making), `eagerPrompt` (the shared feed's search), the generic `contentPopup` (too many surfaces draw with it; the existing alt+a gate test pins it), anything not listed.
 
 ## Caller intent
 

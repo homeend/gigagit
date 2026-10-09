@@ -343,6 +343,20 @@ func (m Model) homeSvc() *domain.Service {
 // loading marker until its first read — and viewKick makes the Update tail
 // launch its refresh, watcher and docs sync (viewKickCmd).
 func (m Model) switchView(path string) (Model, bool) {
+	return m.switchViewBy(path, false)
+}
+
+// userSwitchView is the user's OWN swap (alt+w, alt+a/alt+t, enter on a
+// worktree row): a parkable popup on top (parkableLayer) is parked with
+// the worktree's windows instead of refusing.
+func (m Model) userSwitchView(path string) (Model, bool) {
+	return m.switchViewBy(path, true)
+}
+
+// switchViewBy is switchView with the caller's intent: byUser lets a
+// parkable popup on top be parked; an agent's swap (a console show, a
+// steer ask, a console's return, a gone slot) refuses under any popup.
+func (m Model) switchViewBy(path string, byUser bool) (Model, bool) {
 	key := model.KeyOf(path)
 	if key == m.viewed {
 		return m, true
@@ -367,7 +381,7 @@ func (m Model) switchView(path string) (Model, bool) {
 		m.statusMsg = i18n.T("cannot switch: %s is not reachable from here", path)
 		return m, false
 	}
-	if why := m.switchRefusal(); why != "" {
+	if why := m.switchRefusalBy(byUser); why != "" {
 		m.statusMsg = why
 		return m, false
 	}
@@ -387,13 +401,22 @@ func (m Model) switchView(path string) (Model, bool) {
 // gone slot) queue through pendingReturnView and drain when the surface
 // clears (the Update tail).
 func (m Model) switchRefusal() string {
+	return m.switchRefusalBy(false)
+}
+
+// switchRefusalBy is switchRefusal with the caller's intent: for the
+// user's own swap, a parkable popup on top is no refusal (it is parked);
+// steerRefusal's other answers (typing, a decision, a process) stand.
+func (m Model) switchRefusalBy(byUser bool) string {
 	switch {
 	case !m.opsIdle():
 		return i18n.T("an operation is running — switch once it has finished")
-	case m.steerRefusal() != "":
-		return i18n.T("cannot switch while a window is open")
 	}
-	return ""
+	why := m.steerRefusal()
+	if why == "" || (byUser && why == refusalWindowOwnsKeyboard && parkableLayer(m.topLayer())) {
+		return ""
+	}
+	return i18n.T("cannot switch while a window is open")
 }
 
 // viewLoading reports a viewed slot whose first status read has not
@@ -649,7 +672,7 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 		return m, nil
 	}
 	wt := m.worktrees[order[next]]
-	nm, ok := m.switchView(wt.Path)
+	nm, ok := m.userSwitchView(wt.Path)
 	if !ok {
 		return nm, nil
 	}

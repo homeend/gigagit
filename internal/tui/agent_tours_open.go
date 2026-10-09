@@ -66,7 +66,7 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 		return m, check
 	}
 	gen := m.consoleSwitch.gen
-	nm, cmd := m.guardedReRoot(dir, false)
+	nm, cmd := m.guardedReRoot(dir, false, false)
 	m = nm.(Model)
 	// Only a switch THIS call made carries the tour; a refusal (said on the
 	// status line) leaves an earlier switch in flight, which lands elsewhere.
