@@ -196,7 +196,8 @@ checkout's own working-tree notes plus EVERY commit note in the store
 (commit notes are not worktree-scoped).
 
 - `gg session status` — is a gg TUI or web page open on this worktree? Exit 1
-  when none is.
+  when none is. `showing: <path>` (JSON `showing`) when the TUI's panels show
+  another worktree of its repository than its own.
 - `gg session navigate --file <path> (--hunk N | --new-line N | --old-line N)
   [--cached | --rev <sha>]` — put the open window on that line; `--rev <sha>`
   alone reveals a commit, `--next-comment` / `--prev-comment` step the open
@@ -220,7 +221,10 @@ THAT gg, and every `gg session` verb talks to it first — even when gg now
 shows another worktree (with `--to`, only while that side is live there). A navigate to a file or a highlight sent from a
 worktree gg is not showing is NOT applied: exit 1 `gg is showing worktree <a>;
 asked the user to switch to <b>`. gg raised a notice; tell the user and wait —
-do not retry in a loop.
+do not retry in a loop. Outside a gg console, from a worktree no gg runs in
+but one SHOWS (its panels are on it), the verbs reach that gg (a gg running
+in the worktree wins; a standalone `gg web` there keeps them unless `--to
+tui`).
 
 ### gg links
 

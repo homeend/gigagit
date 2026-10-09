@@ -118,8 +118,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - An agent working in a worktree gg did not start it in could not reach
   the TUI SHOWING that worktree: `gg session` commands found no inbox
   there. They now route to the TUI whose panels show the worktree (a TUI
-  running there still wins), and `gg session status` prints `showing:`
-  (JSON `showing`) when the TUI shows a worktree that is not its own.
+  running there still wins, and so does a standalone `gg web` page there
+  unless `--to tui`), and `gg session status` prints `showing:` (JSON
+  `showing`) when the TUI shows a worktree that is not its own. The
+  `using-gg` skill says both (v161 — `gg init --update`).
 - The worktree guard called a worktree a TUI merely shows "a gg TUI is
   open here"; it now says the TUI shows it and runs in another.
 - `alt+w` during a repository switch refused silently; it says the

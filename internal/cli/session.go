@@ -367,8 +367,11 @@ func preferredInboxFor(dir, to string) string {
 		}
 	}
 	// No TUI runs in dir, but one SHOWS it (the fast switch's look): its
-	// inbox is where a command about dir's files lands on screen.
-	if _, ok := steer.Live(dir, steer.TUIPresence); !ok && to != "web" {
+	// inbox is where a command about dir's files lands on screen. A
+	// standalone gg web page live in dir keeps its commands unless --to tui.
+	_, tuiHere := steer.Live(dir, steer.TUIPresence)
+	_, webHere := steer.Live(dir, steer.WebPresence)
+	if !tuiHere && to != "web" && (to == "tui" || !webHere) {
 		if home, ok := domain.TUIViewing(dir); ok {
 			if _, live := steer.Live(home, steer.TUIPresence); live {
 				return home

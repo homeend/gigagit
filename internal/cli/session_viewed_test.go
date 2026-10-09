@@ -82,3 +82,18 @@ func TestSessionStatusSaysWhatTheTUIShows(t *testing.T) {
 		t.Fatalf("json showing = %v, want /w/other", got["showing"])
 	}
 }
+
+// A standalone gg web page live in this worktree keeps its commands: a TUI
+// that merely shows the worktree does not take them.
+func TestPreferredInboxKeepsAStandaloneWebPageHere(t *testing.T) {
+	home, cwd := t.TempDir(), t.TempDir()
+	livePresence(t, home)
+	liveWebPresence(t, cwd, "http://127.0.0.1:1/")
+	publishViewing(t, home, cwd)
+	if got := preferredInbox(cwd); got != cwd {
+		t.Fatalf("got %s, want this worktree's own inbox (its web page is live)", got)
+	}
+	if got := preferredInboxFor(cwd, "tui"); got != home {
+		t.Fatalf("--to tui: got %s, want the TUI showing this worktree, %s", got, home)
+	}
+}
