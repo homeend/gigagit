@@ -7,10 +7,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // worktreeView is the worktree-scoped part of the Model, remembered per
@@ -35,7 +37,7 @@ type worktreeView struct {
 
 	workingReviews []domain.WorkingReview
 
-	loaded bool // its first status landed (false: the panel shows loading)
+	loaded bool // its first status landed (false: the panels are empty, not clean — viewLoading says so)
 }
 
 // Generations the handlers key on (loadGen, srcGen, watchGen, docWatch.gen,
@@ -112,7 +114,7 @@ func (m Model) seedHome(path string) Model {
 	}
 	m.home = filepath.Clean(path)
 	m.viewed = m.home
-	m.views[m.home] = &worktreeView{path: m.home, svc: m.svc}
+	m.views[m.home] = &worktreeView{path: m.home, svc: m.svc, loaded: true} // seeded by a load that landed
 	return m
 }
 
@@ -128,7 +130,6 @@ func (m Model) saveView() Model {
 	v.selFiles, v.selStaged = m.sel[panelFiles], m.sel[panelStaged]
 	v.fileMarks = m.fileMarks
 	v.workingReviews = m.workingReviews
-	v.loaded = m.loadedOK
 	return m
 }
 
@@ -138,7 +139,8 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.viewed = v.path
 	m.svc = v.svc
 	m.currentWorktree = v.path
-	m = m.withStatus(v.status) // recomputes the index slices and the status stack
+	publishedView.Store(v.path) // the session registry says what this TUI shows (another gg's guard)
+	m = m.withStatus(v.status)  // recomputes the index slices and the status stack
 	m.conflict = v.conflict
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -238,6 +240,9 @@ func (m Model) switchView(path string) (Model, bool) {
 	if key == m.viewed {
 		return m, true
 	}
+	if m.home == "" {
+		return m, false // before the first load seeds the slots there is nothing to swap from
+	}
 	if !m.isRepoWorktree(key) {
 		m.statusMsg = i18n.T("%s is not a worktree of this repository", path)
 		return m, false
@@ -276,6 +281,21 @@ func (m Model) switchRefusal() string {
 	return ""
 }
 
+// viewLoading reports a viewed slot whose first status read has not
+// landed: its panels are empty, not clean.
+func (m Model) viewLoading() bool {
+	v := m.views[m.viewed]
+	return v != nil && !v.loaded
+}
+
+// markViewLoaded records the live slot's first status arrival.
+func (m Model) markViewLoaded() Model {
+	if v := m.views[m.viewed]; v != nil {
+		v.loaded = true
+	}
+	return m
+}
+
 // sleepView puts the live slot's machinery to rest before another slot is
 // loaded: its watchers close, and every generation a result could carry
 // moves on, so a full load, status read, reviews read, watcher or docs
@@ -294,6 +314,9 @@ func (m Model) sleepView() Model {
 	m.srcGen[srcStatus]++ // nor a status read
 	m.srcInflight[srcStatus] = false
 	m.srcLoading[srcStatus] = false
+	m.srcGen[srcNotes]++ // nor the note badges (per checkout)
+	m.srcInflight[srcNotes] = false
+	m.srcLoading[srcNotes] = false
 	m.workingReviewsGen++ // likewise a reviews read
 	return m
 }
@@ -352,8 +375,9 @@ func (m Model) dropWorkingTreeWindows() Model {
 // switchView, which marks the read in flight on the live model first.
 func (m Model) viewKickCmd() tea.Cmd {
 	read := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{})
+	notes := m.readSourceCmd(context.Background(), srcNotes, reloadOpts{}) // the ✎ badges are the checkout's
 	_, docs := m.syncAgentDocs()
-	return tea.Batch(read, m.startWatchCmd(m.watchGen), docs)
+	return tea.Batch(read, notes, m.startWatchCmd(m.watchGen), docs)
 }
 
 // takeQueuedReturn performs the return a console close (or a gone slot)
@@ -465,7 +489,19 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 		m.console.ret.view = m.home
 	}
 	m.statusMsg = i18n.T("switched to %s", shortWorktreeName(m.home))
-	return m, tea.Batch(snapshotTargetCmd(m.svc), m.webRerootCmd())
+	return m, tea.Batch(snapshotTargetCmd(m.svc), m.webRerootCmd(), touchRepoMRUCmd(m.home, m.linkRepoName))
+}
+
+// touchRepoMRUCmd records the adopted worktree in the repo switcher's MRU
+// off-thread (a reload's loader does this at boot; an in-repo adopt has no
+// loader).
+func touchRepoMRUCmd(path, remote string) tea.Cmd {
+	return func() tea.Msg {
+		if sp := repos.DefaultStatePath(); sp != "" {
+			_ = repos.Touch(sp, path, remote, clock.Now())
+		}
+		return nil
+	}
 }
 
 // cycleWorktrees is alt+w. A press without the keyboard on the Branches

@@ -89,8 +89,14 @@ func steerAskNotice(a *steerSwitchAsk, repoKey string) *notice {
 					nm, cmd := m.guardedReRoot(c.Worktree, false)
 					return nm.(Model), cmd
 				}
-				nm, cmd := m.reRoot(c.Worktree)
+				// guardedReRoot: a worktree of this repository is a slot swap
+				// (no reload — the replay then runs against the new slot's
+				// service at once), another repository the full reload.
+				nm, cmd := m.guardedReRoot(c.Worktree, false)
 				m = nm.(Model)
+				if m.home != "" && !domain.SameCheckout(m.home, c.Worktree) && m.ready {
+					return m, cmd // the swap was refused (a surface, an op): said on the status line, nothing to replay
+				}
 				if c.Cmd == "navigate" {
 					replay := c
 					replay.Wait, replay.Worktree, replay.From = false, "", ""

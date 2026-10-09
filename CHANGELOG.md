@@ -44,6 +44,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   worktree on SCREEN: a note from your own worktree's agent while you
   looked at another was anchored there. They now compare with — and name
   in their refusal — the worktree on screen.
+- A worktree shown for the first time rendered as CLEAN until its first
+  status read landed (seconds on a large repository); the status row now
+  says `⏳ loading…` until then. The ✎ note badges are re-read on every
+  swap (they are the checkout's).
+- The session snapshot (`gg session status`) mixed identities: your own
+  worktree's path with the shown worktree's branch, head and cursors. It
+  now names the shown worktree separately (`viewed`) and keeps `branch` /
+  `head` your own worktree's.
+- A `gg session` switch ask accepted from the notice and a `gg://` link's
+  checkout still reloaded for a worktree of the same repository; both take
+  the slot swap now (the CHANGELOG claimed it before the code did).
+- A TUI looking at another worktree now publishes that worktree in the
+  session registry too, so another gg process's guard (a recycle, a claim)
+  refuses to take the tree whose panels are on your screen.
+- Switching into a worktree registered it in the repo switcher's MRU only
+  on the next start; an in-repo switch records it at once.
+- Moving a worktree that was only shown (not your own) renamed the
+  directory under its panels; the panels go home first.
+- The `alt+A` state dump names home, the viewed worktree and a queued
+  return.
 
 ### Added
 - A switch between worktrees of ONE repository is now a swap of remembered
