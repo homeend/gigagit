@@ -53,6 +53,12 @@ type previewReturn struct {
 	id, source, target string             // a merge preview (id "" = a one-off)
 	pair               *domain.CommitPair // a commit pair (A, B, Label); nil for a merge preview
 	title              string
+	// prNumber and prTitle are the pull request the preview shows (0 = an
+	// ordinary preview): the re-open keeps its number and title, so the PR
+	// comes back as the PR (its comments, its send rows), not as a plain
+	// merge preview.
+	prNumber int
+	prTitle  string
 }
 
 // previewReturnHere is what the view on screen re-opens as when a review is
@@ -60,7 +66,7 @@ type previewReturn struct {
 // commit pair (its note scope); nil for any other view.
 func (m Model) previewReturnHere() *previewReturn {
 	if po := m.previewOpen; po != nil {
-		return &previewReturn{id: po.id, source: po.source, target: po.target, title: m.filesTitle}
+		return &previewReturn{id: po.id, source: po.source, target: po.target, title: m.filesTitle, prNumber: po.prNumber, prTitle: po.title}
 	}
 	if s := m.filesPreviewSet; s != nil && s.IsPair() && s.Only == "" {
 		return &previewReturn{pair: &domain.CommitPair{A: s.Base, B: s.Tip, Label: m.filesPairLabel}, title: m.filesTitle}

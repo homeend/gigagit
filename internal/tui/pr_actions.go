@@ -93,6 +93,7 @@ func (m Model) openPRPreviewCmd(p model.PullRequest) tea.Cmd {
 			msg.set = r.Set
 			msg.counts, _, _ = svc.PreviewNoteCounts(ctx, r.Set)
 			msg.groups, _ = svc.PreviewNoteGroups(ctx, r.Set)
+			msg.heads, _ = svc.PreviewReviews(ctx, r.Set) // the PR's stored reviews: the file list's Reviews block (R4)
 		}
 		if err == nil && from != "" {
 			msg.newCommits = svc.PRNewCommits(ctx, p.Number, from)
