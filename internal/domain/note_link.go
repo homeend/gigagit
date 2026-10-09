@@ -73,9 +73,13 @@ func (s *Service) NoteLinkText(ctx context.Context, id string) (string, error) {
 	}
 	if n.Address.State != model.StateCommitted && l.Line > 0 {
 		if lines, ok := linkSideLines(ctx, s, l, n.Address.Path); ok && l.Line <= len(lines) {
-			if l.End > l.Line && l.End <= len(lines) {
+			switch {
+			case l.End > l.Line && l.End <= len(lines):
 				l.Fingerprint = model.BlockFingerprint(lines[l.Line-1 : l.End])
-			} else {
+			case l.End > l.Line:
+				// The block runs past the file's end: a range carries a
+				// block fingerprint or none — a line's would read as stale.
+			default:
 				l.Fingerprint = model.LineFingerprint(lines[l.Line-1])
 			}
 		}

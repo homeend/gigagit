@@ -171,3 +171,28 @@ func TestNoteLinkAndThreadOfAReplyToARemark(t *testing.T) {
 		t.Fatalf("remark 0: %+v %v", replies, err)
 	}
 }
+
+// A range note whose end lies past the file's end (lines deleted since it
+// was written) gets no fingerprint: a range link carries a block
+// fingerprint or none, never a line's — which the resolver would read as a
+// stale block.
+func TestNoteLinkTextRangePastTheEndHasNoFingerprint(t *testing.T) {
+	t.Parallel()
+	dir, _ := newRealRepo(t)
+	commitFile(t, dir, "w.txt", "one\ntwo\nthree\nfour\n", "w")
+	_, svc := newRealRepoAt(t, dir)
+	svc.UseNotesDir(t.TempDir())
+	n, err := svc.NoteAdd(context.Background(), model.Note{Source: model.NoteSourceUser, Summary: "w",
+		Address: model.FileAddress{State: model.StateUnstaged, Worktree: dir, Path: "w.txt"}, Side: model.NoteSideNew, Range: [2]int{2, 4}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "w.txt", "one\ntwo\n") // the note's block now runs past the end
+	link, err := svc.NoteLinkText(context.Background(), n.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(link, "/w.txt:2-4?note="+n.ID) {
+		t.Fatalf("link = %q, want :2-4 with no fingerprint", link)
+	}
+}
