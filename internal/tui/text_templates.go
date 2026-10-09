@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -561,6 +562,8 @@ func (v *textTemplatesView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 	case tea.KeyDown, tea.KeyTab:
 		v.field = 1
 		return m, nil
+	case tea.KeyCtrlD:
+		return m.pushLayer(newContentPopup(textTemplateTokensHelpTitle(), textTemplateTokensHelp(clock.Now()))), nil
 	case tea.KeyEnter:
 		title := strings.TrimSpace(v.fTitle.Value())
 		// The title alone: a placeholder text keeps the text checks quiet.
@@ -633,10 +636,10 @@ func (v *textTemplatesView) formBox(m Model) string {
 		scopeVal = i18n.T("this repo only")
 	}
 	scopeLine := scopeCur + i18n.T("scope: ") + scopeVal
-	hint := i18n.T("[↑/↓] field  [←/→] scope  [enter] edit text in $EDITOR  [esc] back")
+	hint := i18n.T("[↑/↓] field  [←/→] scope  [enter] edit text in $EDITOR  [ctrl+d] tokens  [esc] back")
 	if v.editID != "" {
 		scopeLine = st().dim.Render(scopeLine)
-		hint = i18n.T("[↑/↓] field  [enter] edit text in $EDITOR  [esc] back")
+		hint = i18n.T("[↑/↓] field  [enter] edit text in $EDITOR  [ctrl+d] tokens  [esc] back")
 	}
 	parts := []string{title, "", viewField(cur+i18n.T("title: "), v.fTitle, v.field == 0, g.textW), scopeLine}
 	if v.formErr != "" {

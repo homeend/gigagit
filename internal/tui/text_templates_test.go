@@ -1000,3 +1000,29 @@ func TestTextTemplatesDeleteConfirmHintNamesEsc(t *testing.T) {
 	}
 	ttBoxFits(t, "confirm", box, 100, 40, "[y] delete")
 }
+
+// ctrl+d on the add/edit form opens the token cheat sheet, as the branch
+// prefix form does; the form keeps its state, and its hint advertises the key.
+func TestTextTemplatesFormCtrlDOpensTokenHelp(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 40}
+	for _, key := range []string{"n", "e"} {
+		v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "Alpha", Body: "x", Scope: model.ProfileScopeRepo}}}
+		v.update(m, keyMsg(key))
+		if box := plain(v.box(m)); !strings.Contains(box, "[ctrl+d] tokens") {
+			t.Fatalf("%s: the form hint must advertise [ctrl+d] tokens:\n%s", key, box)
+		}
+		title := v.fTitle.Value()
+		m2, _ := v.update(m, tea.KeyMsg{Type: tea.KeyCtrlD})
+		sheet := layerOf[*contentPopup](m2)
+		if sheet == nil {
+			t.Fatalf("%s: ctrl+d must push the token help sheet", key)
+		}
+		if sheet.title != textTemplateTokensHelpTitle() {
+			t.Fatalf("%s: ctrl+d pushed %q, want %q", key, sheet.title, textTemplateTokensHelpTitle())
+		}
+		if v.mode != ttForm || v.fTitle.Value() != title {
+			t.Fatalf("%s: form state must survive opening the help sheet", key)
+		}
+	}
+}

@@ -18,6 +18,9 @@ import (
 func bookmarkSwitcherHelpTitle() string { return i18n.T("Bookmark switcher (g)") }
 func shelfSwitcherHelpTitle() string    { return i18n.T("Shelf switcher (G)") }
 func prefixTokensHelpTitle() string     { return i18n.T("Prefix tokens & date formats") }
+func textTemplateTokensHelpTitle() string {
+	return i18n.T("Text template tokens & date formats")
+}
 
 // cheatRow formats one "key  description" line, key-column padded like the ?
 // help table. key is a literal key-cap (never translated); desc is the
@@ -96,35 +99,56 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 // shows real output, not stale sample dates. Token syntax (the k column, e.g.
 // "<date:FMT>") is protocol, never translated; the Examples section's second
 // column is a live-formatted date, not prose, so it stays untranslated too.
-func prefixTokensHelp(now time.Time) []contentLine {
+func prefixTokensHelp(now time.Time) []contentLine { return tokensHelp(now, false) }
+
+// textTemplateTokensHelp is the same sheet over the text-template add/edit
+// form (alt+x → n/e): the prefix grammar plus <branch>, and the rule that a
+// <…> which is not a token stays in the text (template.ResolveText).
+func textTemplateTokensHelp(now time.Time) []contentLine { return tokensHelp(now, true) }
+
+func tokensHelp(now time.Time, text bool) []contentLine {
 	tok := func(k, desc string) contentLine {
 		return contentLine{text: padRight(k, 22) + desc}
 	}
-	return []contentLine{
+	user := tok("<user:LABEL>", i18n.T("asks you for LABEL whenever the prefix is used"))
+	if text {
+		user = tok("<user:LABEL>", i18n.T("asks you for LABEL whenever the text is used"))
+	}
+	lines := []contentLine{
 		{text: i18n.T("Tokens"), heading: true},
-		tok("<user:LABEL>", i18n.T("asks you for LABEL whenever the prefix is used")),
+		user,
 		tok("<seq:NAME>", i18n.T("per-repo counter NAME (1, 2, …)")),
 		tok("<seq:NAME:N>", i18n.T("the same, zero-padded to N digits")),
 		tok("<date>", i18n.T("today as yyyy-MM-dd")),
 		tok("<date:FMT>", i18n.T("now, formatted by FMT (see below)")),
+	}
+	if text {
+		lines = append(lines, tok("<branch>", i18n.T("the branch you are on")))
+	}
+	lines = append(lines,
 		tok("<parent-branch>", i18n.T("the branch the new branch forks from")),
 		tok("<repo>", i18n.T("the repository directory name")),
 		tok("<random-alpha:N>", i18n.T("N random lowercase letters")),
 		tok("<random-num:N>", i18n.T("N random digits")),
-		{},
-		{text: i18n.T("Date format (FMT)"), heading: true},
+	)
+	if text {
+		lines = append(lines, contentLine{text: i18n.T("Any other <…> stays in the text as written.")})
+	}
+	return append(lines,
+		contentLine{},
+		contentLine{text: i18n.T("Date format (FMT)"), heading: true},
 		tok("yyyy", i18n.T("year, 4 digits")),
 		tok("MM", i18n.T("month 01–12")),
 		tok("dd", i18n.T("day 01–31")),
 		tok("HH", i18n.T("hour 00–23")),
 		tok("mm", i18n.T("minute 00–59")),
 		tok("ss", i18n.T("second 00–59")),
-		{text: i18n.T("Other characters pass through as separators (avoid yyyy/MM/dd/HH/mm/ss")},
-		{text: i18n.T("and digits inside literal text — they are format verbs, not literals).")},
-		{},
-		{text: i18n.T("Examples"), heading: true},
+		contentLine{text: i18n.T("Other characters pass through as separators (avoid yyyy/MM/dd/HH/mm/ss")},
+		contentLine{text: i18n.T("and digits inside literal text — they are format verbs, not literals).")},
+		contentLine{},
+		contentLine{text: i18n.T("Examples"), heading: true},
 		tok("<date>", now.Format("2006-01-02")),
 		tok("<date:yyyy-MM-dd>", now.Format("2006-01-02")),
 		tok("<date:yyyyMMdd-HHmm>", now.Format("20060102-1504")),
-	}
+	)
 }
