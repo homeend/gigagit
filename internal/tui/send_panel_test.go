@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -287,10 +288,10 @@ func TestSendPanelSurvivesAGoneCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, cmd = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
-	nm, _ := m.Update(cmd()) // forgeSendReadyMsg: nothing to send → said, nothing runs
+	nm, _ := m.Update(cmd()) // forgeSendReadyMsg: nothing to send → said in the panel, nothing runs
 	m = nm.(Model)
-	if layerOf[*sendPanel](m) == nil || !strings.Contains(m.statusMsg, "send: ") {
-		t.Fatalf("panel %v status %q", layerOf[*sendPanel](m) != nil, m.statusMsg)
+	if q := layerOf[*sendPanel](m); q == nil || !strings.Contains(q.notice, "send: ") || q.planning {
+		t.Fatalf("panel %v notice %q", layerOf[*sendPanel](m) != nil, p.notice)
 	}
 }
 
@@ -399,5 +400,25 @@ func TestSendPanelSurvivesAnotherSendOfThePR(t *testing.T) {
 	own := &forgeSendState{pr: 7, panel: true, req: domain.PRSendRequest{PR: 7, Notes: []string{"review:r1:1"}}}
 	if m3, _ := m.forgeSendFinished(own, engine.Result{Changed: true}, nil); layerOf[*sendPanel](m3) != nil {
 		t.Fatal("the panel's own send closes it")
+	}
+}
+
+// ctrl+s while the plan is still being prepared does not start a second
+// plan; the word goes to the panel's notice, and clears when the plan
+// arrives.
+func TestSendPanelCtrlSOnceWhilePlanning(t *testing.T) {
+	t.Parallel()
+	m, p := panelModel(t)
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace})
+	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	if cmd == nil || !p.planning || !strings.Contains(p.notice, "preparing the send to #7") {
+		t.Fatalf("first ctrl+s: cmd %v planning %v notice %q", cmd != nil, p.planning, p.notice)
+	}
+	if _, again := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS}); again != nil {
+		t.Fatal("a second ctrl+s while planning must not start a second plan")
+	}
+	m, _ = m.handleForgeSendReady(forgeSendReadyMsg{gen: m.forgeGen, panel: true, err: errors.New("boom")})
+	if p.planning || !strings.Contains(p.notice, "boom") {
+		t.Fatalf("after the plan failed: planning %v notice %q", p.planning, p.notice)
 	}
 }

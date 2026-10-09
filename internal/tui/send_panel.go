@@ -41,6 +41,7 @@ type sendPanel struct {
 	code     bool   // c: the code excerpt under the current row
 	gen      int    // m.forgeGen when opened: a repository switch makes the panel stale
 	notice   string // the bottom bar: a refused tick, "tick something to send"
+	planning bool   // ctrl+s went out and its plan has not come back: a second ctrl+s waits
 }
 
 const (
@@ -363,6 +364,10 @@ func (p *sendPanel) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEnter:
 		return p.openRow(m)
 	case tea.KeyCtrlS:
+		if p.planning {
+			p.notice = i18n.T("preparing the send to #%d…", p.pr)
+			return m, nil
+		}
 		req, ok := p.request()
 		if !ok {
 			p.notice = i18n.T("tick something to send")
@@ -379,7 +384,11 @@ func (p *sendPanel) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if p.body == bodyTyped {
 			m.keptSendBody = &keptSendBody{pr: p.pr, group: sendGroupPanel, text: p.typed}
 		}
-		return m.forgeSendCmdFrom(req, true)
+		m, cmd := m.forgeSendCmdFrom(req, true)
+		if cmd != nil {
+			p.planning, p.notice = true, i18n.T("preparing the send to #%d…", p.pr)
+		}
+		return m, cmd
 	}
 	switch msg.String() {
 	case "j":
