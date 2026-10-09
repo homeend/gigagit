@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Text templates: long pasted values fit the window
+
+### Fixed
+
+- **A stack trace pasted into a text template's variable (alt+x) no longer
+  draws the window past the screen.** The focused field shows a window that
+  follows its cursor, the other fields keep a line and a scroll marker, and
+  ↑/↓ and PgUp/PgDn walk the pasted lines (the hints say so once a value has
+  more than one line).
+- A tab in an editable field is drawn as one space: it was drawn four cells
+  wide while the field counted one, so every row of a tab-indented paste was
+  cut at the window's edge. The value keeps its tabs.
+
 ## Pull request follow-ups 5
 
 ### Changed
