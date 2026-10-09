@@ -216,13 +216,20 @@ func TestSendPanelEnterOpensTheDiffAndReturns(t *testing.T) {
 
 // Review Focus 1: opened from the PR tab's details with the PR's files not
 // open, enter says so instead of opening a diff of the wrong view.
+// Serial: env (prSendModel) — the real read path, the PR's file list
+// closed again before the panel opens.
 func TestSendPanelEnterNeedsTheOpenPR(t *testing.T) {
-	t.Parallel()
-	m := newTestModel(t)
-	m.forgeShown, m.prs = true, testPRs()
-	m, _ = m.handleSendPanel(sendPanelMsg{gen: m.forgeGen, pr: 7, cands: panelCands()})
+	m, _, head := prSendModel(t)
+	addTUINote(t, m, head, 5, "look here")
+	m = openPR7(t, m)
+	m = m.closeFilesView()
+	m, cmd := m.openSendPanel(7)
+	m = drainCmds(t, m, cmd)
 	p := layerOf[*sendPanel](m)
-	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if p == nil {
+		t.Fatal("no panel")
+	}
+	m, cmd = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil || m.diffLayer() != nil || !strings.Contains(p.notice, "open the pull request") {
 		t.Fatalf("notice %q", p.notice)
 	}
