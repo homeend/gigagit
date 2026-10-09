@@ -54,6 +54,12 @@ func (p *moveWorktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			_ = os.Chdir(filepath.Dir(wt.Path))
 			m.pendingSwitch = true // opFinishedMsg chains guardedReRoot(res.Path)
 		}
+		if k := filepath.Clean(wt.Path); k == m.viewed && k != m.homeWorktree() {
+			// Only shown (a look): the panels go home before git renames the
+			// directory their service is rooted in; the list reload prunes
+			// the slot, and a console there keeps its (now stale) dir.
+			m, _ = m.switchView(m.home)
+		}
 		m.pendingWorktreeMoveOld = wt.Path
 		return m.startOp(engine.MoveWorktree{Path: wt.Path, Dest: dest})
 	default:

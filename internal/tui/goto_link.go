@@ -149,10 +149,17 @@ func (m Model) switchToLink(p *gotoCommitPopup, sw gotoLinkSwitch) (Model, tea.C
 		return m, nil
 	}
 	m = m.popGotoPrompt()
-	nm, cmd := m.reRoot(sw.checkout)
+	// A worktree of this repository is a slot swap (guardedReRoot's fast
+	// path): the repo's previews are loaded already, so --at needs no
+	// previews read; another repository reloads and waits for its first.
+	fast := m.home != "" && m.isRepoWorktree(sw.checkout)
+	nm, cmd := m.guardedReRoot(sw.checkout, false)
 	m = nm.(Model)
+	if fast && !domain.SameCheckout(m.home, sw.checkout) {
+		return m, cmd // refused (a surface, an op): said on the status line
+	}
 	if !sw.bare {
-		m.startAt, m.startAtPending, m.startAtPreviewsSeen = sw.at, true, false
+		m.startAt, m.startAtPending, m.startAtPreviewsSeen = sw.at, true, fast
 		m.startAtAnchor = sw.line
 	}
 	return m, cmd

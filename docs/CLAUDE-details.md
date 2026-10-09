@@ -6309,7 +6309,22 @@ the working-tree layers only when the view is that worktree again.
 `unstageHunksLoadedMsg`, `conflictFileLoadedMsg`, `amendPrefillMsg`) and
 are dropped when `msg.svc != m.svc`. Steering compares a command's
 worktree with the VIEWED one (`steerShownMismatch`, `currentWorktree`);
-the inbox and presence stay home's. Slot services get the config's policies
+the inbox and presence stay home's. `worktreeView.loaded` is set by the
+slot's first `srcStatus` arrival (`markViewLoaded`; home seeded loaded) —
+`viewLoading` paints `⏳ loading…` on the status row meanwhile; the kick
+also reads `srcNotes` (badges are per checkout; `sleepView` retires it).
+The snapshot's `Repo.Viewed` names a look, `Branch`/`Head` stay home's
+(`snapRepoIdentity`). `steer_switch_ask` and `goto_link` go through
+`guardedReRoot` (fast in-repo path; a refusal is detected by `home` not
+having moved and the replay is not armed; a link's `--at` sets
+`startAtPreviewsSeen` on the fast path since the repo's previews are
+loaded). `publishedView` (set in `loadView`, cleared with `publishedWT`
+on a repo switch) rides `PublishSessions` → `Registry.Viewed`, which
+`readLive` adds to `tuis` so `tuiGuard` refuses the shown tree too.
+`adoptView` chains `touchRepoMRUCmd`. The move popup `switchView`s home
+before moving the VIEWED (non-home) tree. `switchView` refuses before
+`seedHome`. NOT done: slot keys stay `filepath.Clean` (a `CheckoutKey`
+case-fold drift is Windows/macOS-only and untestable here). Slot services get the config's policies
 (`applyServicePolicies` in `ensureView`; `applyPoliciesToSlots` on
 `configReadyMsg` and the Versions settings) — a bare `OpenTUI` would write
 version refs the config forbids. `dropConsole` (the console stepping aside for a stash

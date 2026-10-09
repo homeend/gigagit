@@ -48,6 +48,7 @@ type sessionSnapshot struct {
 type snapRepo struct {
 	CommonDir string `json:"common_dir"`
 	Worktree  string `json:"worktree"`
+	Viewed    string `json:"viewed,omitempty"` // the worktree on screen when it is not gg's own (a look)
 	Branch    string `json:"branch,omitempty"`
 	Head      string `json:"head,omitempty"`
 }
@@ -218,16 +219,27 @@ func endpointProto(e model.Endpoint) *snapEndpoint {
 // write-on-change compare ignores time). Cursor values resolve through the
 // same accessors the `.` menus use (backingIndex / selected* / focusedBookmark),
 // so what the agent sees is exactly what an action would act on.
+// snapRepoIdentity is what gg IS (its own worktree and that one's branch)
+// plus, when the panels show another worktree of the repo (a look through
+// alt+a / alt+w), which one — so an agent reading the snapshot does not
+// take the viewed slot's branch for the TUI's own.
+func (m Model) snapRepoIdentity() snapRepo {
+	r := snapRepo{CommonDir: m.snapshotCommonDir, Worktree: m.snapshotWorktree, Branch: m.status.Branch, Head: m.currentBranchTipHash()}
+	if m.viewed != "" && m.home != "" && m.viewed != m.home {
+		r.Viewed = m.viewed
+		if h := m.views[m.home]; h != nil {
+			r.Branch = h.status.Branch
+			r.Head, _ = m.branchTipHash(h.status.Branch)
+		}
+	}
+	return r
+}
+
 func buildSessionSnapshot(m Model) sessionSnapshot {
 	s := sessionSnapshot{
 		Version: 1,
 		PID:     os.Getpid(),
-		Repo: snapRepo{
-			CommonDir: m.snapshotCommonDir,
-			Worktree:  m.snapshotWorktree,
-			Branch:    m.status.Branch,
-			Head:      m.currentBranchTipHash(),
-		},
+		Repo:    m.snapRepoIdentity(),
 		Focus: snapFocus{
 			Panel:     panelProtoName(m.focus),
 			LeftTab:   panelProtoName(m.activeLeftTab),

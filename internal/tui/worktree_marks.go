@@ -17,6 +17,14 @@ var publishedWT atomic.Value // string
 
 func publishedWorktree() string { s, _ := publishedWT.Load().(string); return s }
 
+// publishedView is the worktree the panels show (the fast switch's viewed
+// slot; equal to the published worktree when the user is home) — the
+// registry lists it beside gg's own so another gg process's guard refuses
+// to take it.
+var publishedView atomic.Value // string
+
+func publishedViewed() string { s, _ := publishedView.Load().(string); return s }
+
 // worktreeMarkPrefix is the Worktrees-row mark column: ⚑ <agent> for a live
 // claim, ⊘ for a reserve, "" otherwise.
 func (m Model) worktreeMarkPrefix(path string) string {

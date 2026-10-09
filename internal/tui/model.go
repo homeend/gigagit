@@ -650,6 +650,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if next.viewKick {
 		next.viewKick = false
 		next.srcInflight[srcStatus] = true // silent: no srcLoading, no ⏳ gate
+		next.srcInflight[srcNotes] = true
 		cmd = tea.Batch(cmd, next.viewKickCmd())
 	}
 	if next.startAtReady() {
@@ -1793,6 +1794,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.top != "" {
 			m.currentWorktree = msg.top
 			publishedWT.Store(msg.top)
+			publishedView.Store(msg.top)
 			m = m.seedHome(msg.top) // the slots' home (worktree_view.go) — this path never sees dataLoadedMsg
 		}
 		m.linkRepoName = msg.repoName
@@ -2037,7 +2039,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyFiles := m.panelSelKey(panelFiles)
 			keyStaged := m.panelSelKey(panelStaged)
 			p := msg.value.(statusPayload)
-			m = m.withStatus(p.status)
+			m = m.withStatus(p.status).markViewLoaded()
 			m.conflict = p.conflict
 			m = m.restorePanelSel(panelFiles, keyFiles)
 			m = m.restorePanelSel(panelStaged, keyStaged)

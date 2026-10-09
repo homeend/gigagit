@@ -40,7 +40,10 @@ func TestPublishSessionsWritesAndRemoves(t *testing.T) {
 	defer mgr.KillAll(context.Background())
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { PublishSessions(ctx, dir, func() string { return "/tui/wt" }, ""); close(done) }()
+	go func() {
+		PublishSessions(ctx, dir, func() string { return "/tui/wt" }, func() string { return "/tui/wt" }, "")
+		close(done)
+	}()
 	id := agentsession.ProcTag() + "/" + string(s.Info().ID)
 	waitFor(t, func() bool { return len(sessionreg.Live(dir)) == 1 })
 	lv := readLive(dir)
@@ -85,7 +88,7 @@ func TestRegistryCarriesTheChannelURL(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		PublishSessions(ctx, dir, func() string { return "/wt" }, "http://127.0.0.1:9/mcp")
+		PublishSessions(ctx, dir, func() string { return "/wt" }, func() string { return "/wt" }, "http://127.0.0.1:9/mcp")
 		close(done)
 	}()
 	deadline := time.Now().Add(3 * time.Second)
@@ -101,4 +104,25 @@ func TestRegistryCarriesTheChannelURL(t *testing.T) {
 	}
 	cancel()
 	<-done
+}
+
+// A TUI looking at another worktree (the fast switch) publishes it beside
+// its own: both are "a gg TUI is open here" to another process's guard.
+func TestLiveViewListsTheViewedWorktreeToo(t *testing.T) {
+	dir := t.TempDir()
+	if err := sessionreg.Write(dir, "p1", sessionreg.Registry{PID: os.Getpid(), Worktree: "/tui/home", Viewed: "/tui/other"}); err != nil {
+		t.Fatal(err)
+	}
+	lv := readLive(dir)
+	has := func(w string) bool {
+		for _, x := range lv.tuis {
+			if x == w {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("/tui/home") || !has("/tui/other") {
+		t.Fatalf("tuis = %v, want home and viewed", lv.tuis)
+	}
 }
