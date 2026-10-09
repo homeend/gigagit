@@ -1,6 +1,10 @@
 package tui
 
-import "testing"
+import (
+	"context"
+	"os/exec"
+	"testing"
+)
 
 // The window fields live in one group: saving the live group into a slot
 // and loading an empty one leaves no window on the Model, and loading the
@@ -87,5 +91,48 @@ func TestVersionsGenIsTheSlotsOwn(t *testing.T) {
 	m = nm.(Model)
 	if p := layerOf[*versionsPopup](m); p == nil || p.loading {
 		t.Fatal("A's versions read was dropped: B's open moved A's generation")
+	}
+}
+
+// A history parked in a sleeping slot keeps its walk: the sweep leaves it.
+func TestParkedHistoryKeepsItsWalk(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	h := &historyView{}
+	stopped := false
+	h.cancel = func() { stopped = true }
+	m = m.pushLayer(h)
+	m.histWalks = &historyWalks{views: []*historyView{h}}
+	m, ok := m.switchView(other)
+	if !ok {
+		t.Fatalf("refused: %s", m.statusMsg)
+	}
+	m.sweepHistoryWalks()
+	if stopped {
+		t.Fatal("the sweep stopped a walk whose history waits in its worktree")
+	}
+}
+
+// A slot dropped with its worktree stops the walks parked in it.
+func TestDroppedSlotStopsItsParkedWalks(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	m, _ = m.switchView(other)
+	m = landView(t, m)
+	h := &historyView{}
+	stopped := false
+	h.cancel = func() { stopped = true }
+	m = m.pushLayer(h)
+	m.histWalks = &historyWalks{views: []*historyView{h}}
+	m, _ = m.switchView(home)
+	if out, err := exec.Command("git", "-C", home, "worktree", "remove", "--force", other).CombinedOutput(); err != nil {
+		t.Fatalf("worktree remove: %v\n%s", err, out)
+	}
+	read := m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})
+	nm, _ := m.Update(read())
+	m = nm.(Model)
+	if !stopped {
+		t.Fatal("the gone slot's parked history keeps its git running")
 	}
 }

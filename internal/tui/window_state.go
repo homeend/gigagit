@@ -127,3 +127,21 @@ type windowState struct {
 	// merges them back. A commit's bands stay in m.attention, repo-wide.
 	workingAttention map[attentionKey][]steerMark
 }
+
+// holds reports whether l waits in this group: on its pile or in the stack
+// a popup parked when it handed off to the files view.
+func (w windowState) holds(l layer) bool {
+	if w.layers != nil {
+		for _, e := range w.layers.entries {
+			if e == l {
+				return true
+			}
+		}
+	}
+	for _, e := range w.filesReturnLayers {
+		if e == l {
+			return true
+		}
+	}
+	return false
+}

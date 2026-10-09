@@ -276,7 +276,9 @@ func (m Model) sweepHistoryWalks() {
 
 // historyLive reports whether h is still a view the user can come back to:
 // on the stack, parked under a console (dispatchParkedAware also puts those
-// back for non-key messages) or parked by a hand-off to the files view.
+// back for non-key messages), parked by a hand-off to the files view, or
+// waiting in a sleeping worktree's slot (its windows come back on return,
+// and the walk keeps streaming into the view meanwhile).
 func (m Model) historyLive(h *historyView) bool {
 	if m.hasLayer(h) {
 		return true
@@ -287,6 +289,11 @@ func (m Model) historyLive(h *historyView) bool {
 	}
 	for _, l := range parked {
 		if l == h {
+			return true
+		}
+	}
+	for key, v := range m.views {
+		if key != m.viewed && v.windows.holds(h) {
 			return true
 		}
 	}
