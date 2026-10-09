@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## PR review, plan 2: ≡ Summary / ≡ Overview rows, PR Reviews rows, the Send to GitHub panel, Copy note link (TUI)
+
+The terminal side of the PR-review feature (spec
+`docs/superpowers/specs/2026-10-09-pr-review-send-panel-design.md`, plan
+`docs/superpowers/plans/2026-10-09-pr-review-send-panel-tui.md`).
+
+- **≡ Summary.** The review view's first row is the review's summary — the
+  text GitHub gets — under that name (the popup, the stacked review's first
+  element and the help line say so; R12).
+- **≡ Overview.** A review whose document stores an overview gets a second
+  row that opens it in the overview viewer: the temporary overview's layout,
+  anchors, `tab` / `shift+tab` / `enter` / `backspace`, bands and `n` / `p`,
+  with every anchor opening the file at the reviewed commit (the file
+  viewer, not the review's diff — the diff has no bands and its `n` / `p`
+  step changes). Anchors the review cannot resolve (a file outside its set,
+  a range past the file, a `note:` anchor) are drawn plain, skipped by
+  `tab`, and say why on enter. `y` copies the markdown; there is no anchor
+  reference (`r`) for a stored overview. `ctrl+\` lists it with the open
+  files; the agent-docs sync and `gg session overview` leave it alone.
+- **A PR's reviews.** A review stored on a pull request is a row under
+  *Reviews* in the PR's file list (the PR open path never asked for them);
+  enter opens the review view titled with the PR, esc returns to the PR —
+  its number and title kept (`previewReturn` carries them) — with the cursor
+  on the review's row. A review of an older head keeps its *older tip* mark.
+- **Send to GitHub…** replaces *Send review…* everywhere in the TUI: the PR
+  diff's `.` row and the PR details' `s` open the send panel — every unsent
+  comment of the pull request by group (each AI review newest first, *My
+  notes*, *Draft replies*), nothing ticked on open. `space` ticks (a row the
+  planner would skip says why in the bottom bar), `a` ticks or clears a
+  group, `b` cycles the body (none → each ticked review's text → typed), `e`
+  edits the body prefilled with the current choice (the typed text is kept
+  per PR while the TUI runs), `c` toggles the
+  code excerpt under the current row, `enter` opens the row's file in the PR
+  diff above the panel (esc returns, the thread under the cursor — a draft
+  reply lands on its thread too), `ctrl+s` sends ONE GitHub review through
+  the usual confirm (comment, approve or request changes); draft replies go
+  right after it. The panel stays under the confirm and closes once the send
+  went out; an abort leaves it as it was; a repository switch drops it.
+  *Verdict…* (`v`) stays with its own box.
+- **The note menu sends one note.** *Send my draft review… / Send this AI
+  review…* leave a note's `.` menu (R9); *Send as GitHub comment*, *Reply &
+  send…* and *Send draft reply* stay. The old group chooser and body step
+  are gone.
+- **A posted review whose draft replies then failed** is still the user's
+  own change: the PR is re-read as "my send" and the typed body, which
+  reached GitHub, is dropped.
+- **Copy note link.** Every hand-written thread has a link: the `.` menu's
+  *Copy note link* from the note's line and the first line below its box
+  (several threads ask which), `L` on the note's line (the line below the
+  box keeps the line link), `ctrl+l` on a thread row in View all notes. A
+  review remark keeps *Copy remark link* (`L` there too). A review's diff
+  offers the plain *Copy link* of the reviewed tip's line, which it never
+  had. The single-vs-stacked menu parity suite pins each context's link row.
+- e2e: `tui_stored_overview`, `tui_pr_reviews`, `tui_note_link` are new;
+  `tui_pr_send` sends a remark and a note from the panel; the harness
+  expands `{{rev:<name>}}` in `[[run]]` arguments too.
+
 ## PR review, plan 1: the stored overview, PR reviews, mixed sends, note links (core)
 
 The domain, document, engine, CLI and skill side of the PR-review feature

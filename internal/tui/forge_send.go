@@ -257,8 +257,11 @@ func sendSkipReasonText(what, reason string) string {
 // opAffectedSources), whose arrival re-resolves the open diff's boxes.
 func (m Model) forgeSendFinished(fs *forgeSendState, res engine.Result, err error) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	if err == nil && res.Changed && fs.pr != 0 { // my own change (F1): not "updated"
+	if res.Changed && fs.pr != 0 { // my own change (F1), even when a later step failed — the review is posted: not "updated"
 		m.prOwnSend, m.prOwnSendSeq = fs.pr, m.prReadSeq
+		if p := layerOf[*sendPanel](m); p != nil && p.pr == fs.pr {
+			m = m.removeLayer(p) // the panel's send went out (A7)
+		}
 		if m.keptSendBody.from(fs.req) {
 			m.keptSendBody = nil // the typed body reached GitHub
 		}

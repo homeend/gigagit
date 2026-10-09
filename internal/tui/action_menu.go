@@ -145,6 +145,7 @@ func availableActions(m Model) []actionRow {
 		rows = append(rows, m.stackMenuRows()...)
 		rows = append(rows, m.diffAlignRows()...)
 		rows = append(rows, m.noteMenuRows()...)
+		rows = append(rows, m.noteCopyLinkRows()...)
 		rows = append(rows, m.noteLinkRows()...)
 		rows = append(rows, m.noteCollapseRows()...)
 		if m.openPRNumber() > 0 {
@@ -156,7 +157,7 @@ func availableActions(m Model) []actionRow {
 			}
 			n := m.openPRNumber()
 			rows = append(rows,
-				actionRow{id: "pr-send-review", label: i18n.T("Send review…"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openSendReview(n) }},
+				actionRow{id: "pr-send", label: i18n.T("Send to GitHub…"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openSendPanel(n) }},
 				actionRow{id: "pr-verdict", label: i18n.T("Verdict…"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openVerdict(n) }})
 		}
 		if r, ok := m.noteListMenuRow(); ok {

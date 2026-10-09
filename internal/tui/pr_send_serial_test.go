@@ -178,10 +178,19 @@ func TestSendPlanErrorIsSaidAndNothingRuns(t *testing.T) {
 func TestSendMyDraftReviewWithAVerdict(t *testing.T) {
 	m, dir, head := prSendModel(t)
 	addTUINote(t, m, head, 5, "look here")
-	m, _ = m.openSendReviewBody(7, domain.GroupMine)
-	p := layerOf[*sendReviewPopup](m)
-	p.body = newTextField("LGTM")
-	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	m = openPR7(t, m)
+	m, cmd := m.openSendPanel(7)
+	m = drainCmds(t, m, cmd)
+	p := layerOf[*sendPanel](m)
+	if p == nil {
+		t.Fatalf("no panel (status %q)", m.statusMsg)
+	}
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace})
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	box := layerOf[*sendPanelBody](m)
+	box.body = newTextField("LGTM")
+	m, _ = box.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	m, cmd = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
 	m, wait := runToModal(t, m, cmd)
 	if got := strings.Join(m.modal.req.Options, ","); got != "comment,approve,request-changes,abort" {
 		t.Fatalf("options %s", got)
@@ -192,6 +201,9 @@ func TestSendMyDraftReviewWithAVerdict(t *testing.T) {
 	last := ws[len(ws)-1]
 	if last.Op != "SubmitReview" || last.Vars["event"] != "APPROVE" || !strings.Contains(last.Vars["body"].(string), "LGTM") {
 		t.Fatalf("submit = %+v", last)
+	}
+	if layerOf[*sendPanel](m) != nil {
+		t.Fatal("the panel closes once the send went out (A7)")
 	}
 }
 

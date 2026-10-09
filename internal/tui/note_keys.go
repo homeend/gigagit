@@ -494,6 +494,49 @@ func (m Model) noteLinkRows() []actionRow {
 	return rows
 }
 
+// noteCopyLinkRows is the . menu's "Copy note link" (R13): offered when a
+// hand-written thread is in reach — notesAtCursor's reach, the anchor line
+// and the first real line below the box. A review's remark keeps its own
+// Copy remark link row (A3); a GitHub thread has no gg link. Several threads
+// on the line: the chooser, as Edit note's.
+func (m Model) noteCopyLinkRows() []actionRow {
+	if _, ok := m.topLayer().(*diffView); !ok || m.svc == nil {
+		return nil
+	}
+	ts := linkableNoteTargets(m.notesAtCursor())
+	if len(ts) == 0 {
+		return nil
+	}
+	return []actionRow{{id: "note-copy-link", label: i18n.T("Copy note link"), run: func(m Model) (tea.Model, tea.Cmd) {
+		return m.withNoteTargetIn(ts, func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
+			return m.noteCopyLinkRowFor(t).run(m)
+		})
+	}}}
+}
+
+// linkableNoteTargets are the stored, hand-written threads of a target set:
+// not a GitHub thread, not a review's remark (which has the remark link).
+func linkableNoteTargets(ts []noteTarget) []noteTarget {
+	out := ts[:0:0]
+	for _, t := range ts {
+		if t.forge || model.IsForgeNoteID(t.rootID) || model.IsReviewNoteID(t.rootID) {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// noteCopyLinkRowFor is the Copy note link row for ONE thread: the link of
+// the targeted note (a root, or the visible reply when the root is hidden),
+// built when run — a note deleted meanwhile has no link to answer.
+func (m Model) noteCopyLinkRowFor(t noteTarget) actionRow {
+	svc, id := m.svc, t.note.ID
+	return m.asyncCopyLinkRow("note-copy-link", i18n.T("Copy note link"), func(ctx context.Context) (string, error) {
+		return svc.NoteLinkText(ctx, id)
+	})
+}
+
 // openNoteLink opens a note's link through the # prompt: the same resolve,
 // errors and cross-checkout confirm as a pasted link.
 func (m Model) openNoteLink(link string) (tea.Model, tea.Cmd) {

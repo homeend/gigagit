@@ -270,6 +270,13 @@ func (m Model) contextLinkText() (string, bool) {
 			}
 			return ranged(m.lineLinkFor(addr, side, line, text))
 		}
+		// A review's diff writes no notes (diffNoteAddress refuses it) but
+		// its lines are the reviewed tip's: the plain line link (R13). The
+		// path is the CURSOR'S FILE's (a stack names none itself); a range
+		// review's diff has cmp and takes the compare path below.
+		if v := m.diffLayer().curNoteView(); v != nil && v.reviewID != "" && v.noteAddr.Path != "" && v.cmp == nil {
+			return ranged(m.lineLinkFor(v.noteAddr, side, line, text))
+		}
 		return ranged(m.compareLinkText(side, line, text))
 	}
 	// A preview's file list: the row is a file IN THE PREVIEW, not a file of

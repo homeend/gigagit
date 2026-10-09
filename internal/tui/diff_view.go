@@ -1140,9 +1140,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Through contextLinkRow — the SAME row the `.` menu runs — so the key
 		// and the menu can never copy different text, and a test can read the
 		// exact payload off the row's copyText (there is no seam under
-		// copyToClipboardCmd itself). On a review remark L copies the
-		// remark's review link — the menu's "Copy remark link".
-		if r, ok := m.reviewRemarkLinkAtCursorRow(); ok {
+		// copyToClipboardCmd itself). On a thread's lines L copies the
+		// thread's link — a remark's review link, a note's note link (R13).
+		if r, ok := m.noteLinkAtCursorRow(); ok {
 			nm, cmd := r.run(m)
 			return nm.(Model), cmd
 		}

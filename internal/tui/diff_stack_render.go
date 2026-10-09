@@ -27,7 +27,7 @@ func (m Model) stackRow(v *diffView, dr dRow, w int, onCursor bool) string {
 		return ""
 	case lineRule: // the rule under it, the full width of the screen
 		return s.diffFold.Render(strings.Repeat("─", w))
-	case lineProse: // a row of the review's overview, rendered markdown
+	case lineProse: // a row of the review's summary, rendered markdown
 		if j := v.lines[dr.line].prose; j >= 0 && j < len(f.prose) {
 			row := f.prose[j]
 			style := lipgloss.NewStyle()
@@ -57,11 +57,11 @@ func (m Model) stackRow(v *diffView, dr dRow, w int, onCursor bool) string {
 		name = f.oldPath + " → " + f.path
 	}
 	text := mark + " " + f.status + "  " + name
-	if f.overview {
+	if f.summary {
 		// A note's summary names a worktree path: a cut loses its middle,
 		// never the "(branch)" group at its end.
 		head := mark + " ≡ "
-		text = head + elideNoteSummary(f.overviewLabel(), w-lipgloss.Width(head))
+		text = head + elideNoteSummary(f.proseLabel(), w-lipgloss.Width(head))
 	}
 	switch {
 	case f.conflict:

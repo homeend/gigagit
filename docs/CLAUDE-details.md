@@ -6082,6 +6082,83 @@ remark placement stop re-running `git show` on every comment change.
   id for `reply`/`resolve`/`unresolve` (peeled before the generic
   repository-link peel, which would refuse a file link), `gg link --note`.
 
+### PR review, plan 2 — the TUI: ≡ Summary / ≡ Overview, PR Reviews rows, the send panel, Copy note link (2026-10-10, plan `docs/superpowers/plans/2026-10-09-pr-review-send-panel-tui.md`)
+
+- **≡ Summary / ≡ Overview rows.** `contentLine.summary` is the review
+  view's first row (`openReviewSummary`, `reviewSummaryPopup`,
+  `reviewSummaryLines`); `contentLine.overviewDoc` the second, drawn when
+  `reviewViewState.overview` (a `*domain.OverviewDoc`, read in
+  `openReviewLanding` when `Doc.Overview != ""`) is set. The stacked review's
+  prose element is `stackFile.summary` (`proseLabel()` = "Summary"). The four
+  `files_view.go` guards treat both rows as "not a file".
+- **The stored overview viewer.** `openReviewOverviewDoc` builds an
+  `openFile` of kind `srcReviewOverview` (rev = the review id, path
+  `overview-<id>.md`, title `Overview: <label>`) with `ov.tip` = the reviewed
+  tip, lays it out with the temporary overview's `layOut`, marks each anchor
+  the domain could not resolve `anchor.plain` (same parser, same order as
+  `OverviewDoc.Anchors`), selects the first resolved anchor and pushes a
+  `fileViewer`; it is registered among the open files so `anchorBack` finds
+  the way back and `ctrl+\` lists it. `openAnchor` with `ov.tip != ""`
+  opens `openFileAtCommitLine(tip, path, start, end)` and stamps `from` /
+  `anchorCur` on the opened file (bands + `n`/`p` as a temporary overview's);
+  a plain anchor says "anchor %s does not resolve at the reviewed commit";
+  `stepAnchor` skips plain anchors; `paint` draws them as plain text. Guards
+  so the store never touches it: `syncOverviews` and `findOverview` consider
+  `srcOverview` only; `openAnchor`'s `SetAnchorMissing` too; `r` / the
+  `overview-ref` row are not offered. A working review (`tip == ""`) keeps
+  the temporary path (its anchors resolve against the working tree). Ruling
+  A1: the anchor opens the FILE VIEWER at the tip, not the review's diff —
+  the diff has no band machinery and its `n`/`p` step changes.
+- **PR Reviews rows.** `openPRPreviewCmd` now asks `PreviewReviews` (the
+  re-resolve path always did). `previewReturn` carries `prNumber` /
+  `prTitle`; `leaveReviewView` re-opens through `openPreviewReturnCmd` →
+  `resolvePreviewCmdAs(…, title, prNumber, …)`, because `closeFilesView`
+  drops `previewOpen` when the review view opens and the plain re-open came
+  back as "Merge preview: refs/gg/pr/7 → main".
+- **The send panel** (`send_panel.go`). `openSendPanel(pr)` reads
+  `PRSendCandidates` off-thread → `sendPanelMsg` → `handleSendPanel` (no
+  groups: "nothing to send to #n", no panel). `sendPanel` (popupMax) keeps
+  `rows []panelRow` (group headers + candidates), `ticked map[id]bool`,
+  `body` (bodyNone / bodyReview + `bodyFrom` / bodyTyped + `typed`),
+  `code`, `notice`. `request()` = `PRSendRequest{PR, Notes: ticked ids in
+  list order, Verdict: true, BodyFrom | Body+BodySet}`. ctrl+s hands it to
+  `forgeSendCmd` and the panel STAYS under the confirm (A7):
+  `forgeSendFinished` removes it when `res.Changed`; an abort or a refused
+  plan leaves it with its ticks. `enter` pushes the row's diff ABOVE the
+  panel (`openDiffForFileLine` on the PR file list's row + a `noteLanding`
+  on the candidate id; `gotoNote` matches a reply id too, `holds`); esc on
+  the diff returns to the panel (A6). The typed body is kept per PR under
+  `keptSendBody.group == sendGroupPanel` (A8); `keptSendBody.from` answers a
+  `Notes`+`BodySet` request with that key. The group title trims a markdown
+  heading's `#` from the review's title; equal-`Created` reviews sort by id.
+- **Entry points and removals.** `.` row `pr-send` "Send to GitHub…" (in a
+  PR's diff) and the PR hub's `s` open the panel; `pr-verdict` / `v` open
+  `verdictPopup` (`verdict_popup.go`, carved out of the deleted
+  `send_review_popup.go` with `keptSendBody`). Removed: the `pr-send-group`
+  chooser, `sendGroupsMsg`/`sendBodyMsg`, `openSendReview`,
+  `openSendReviewBody`, `sendGroupOptions`, and the note menu's
+  `note-send-review` row (R9; `note-send-drafts` "Send draft reply" stays —
+  one thread's own drafts, ruling A2).
+- **Then partial failure.** `forgeSendFinished` treats `res.Changed` as "my
+  own change" whatever `err` says: plan 1's "the review was posted;
+  replies: …" error comes with `Changed: true` and no Done for the replies.
+- **Copy note link.** `noteCopyLinkRows` (in the diff `.` menu after the
+  note rows) is offered for `linkableNoteTargets` of `notesAtCursor()` —
+  stored threads, never a forge thread or a review remark (which keeps
+  `copy-remark-link`, ruling A3); the reach already included the first real
+  line below the box. `noteLinkAtCursorRow` (what `L` copies, replacing
+  `reviewRemarkLinkAtCursorRow`) returns the remark link or the note link
+  for a thread whose lines hold the cursor line and no multi-line selection.
+  View all notes' `ctrl+l` copies `NoteLinkText` on an `anNote` row (no `.`
+  menu there, ruling A4). `contextLinkText` gained a review-diff arm:
+  `lineLinkFor(curNoteView().noteAddr, …)` when `reviewID != ""` and no
+  `cmp` (a range review's diff takes the compare path).
+- e2e: `{{rev:<name>}}` is expanded in `[[run]]` arguments too
+  (`harness_test.go`); a commit link in a scenario is `gg://{{cwd}}@<sha>`
+  (a bare `/<sha>` is a path and saves a working review). A golden cannot
+  hold a copied note link (the id is random per run): `tui_note_link` pins
+  the row, the package tests the payload.
+
 ### Review links to files and remarks (2026-10-07)
 
 Spec `docs/superpowers/specs/2026-10-07-review-links-copy-design.md`, plan

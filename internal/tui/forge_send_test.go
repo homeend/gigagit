@@ -138,10 +138,10 @@ func TestNoNoticeOffersAnAgentsSend(t *testing.T) {
 }
 
 // W2: the body popup always answers the body — an emptied box posts none.
-func TestSendReviewPopupAnswersTheBody(t *testing.T) {
+func TestVerdictPopupAnswersTheBody(t *testing.T) {
 	t.Parallel()
-	p := &sendReviewPopup{pr: 7, group: "review:r1", body: newTextField("")}
-	if req := p.request(); !req.BodySet || req.Body != "" || req.Review != "r1" {
+	p := &verdictPopup{pr: 7, body: newTextField("")}
+	if req := p.request(); !req.BodySet || req.Body != "" || !req.Verdict {
 		t.Fatalf("request = %+v", req)
 	}
 }

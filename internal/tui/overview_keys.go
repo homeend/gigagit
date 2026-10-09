@@ -33,7 +33,7 @@ func (m Model) overviewKey(d *openFile, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		nm, cmd := m.openAnchor(d, d.ov.sel)
 		return nm, cmd, true
 	case "r":
-		if d.ov.sel < 0 {
+		if d.ov.sel < 0 || d.src.kind == srcReviewOverview { // a stored overview has no store reference (A9)
 			return m, nil, true
 		}
 		return m, m.copyToClipboardCmd(i18n.T("Copied anchor reference"), anchorReference(d, d.ov.anchors[d.ov.sel])), true
@@ -61,7 +61,7 @@ func (d *openFile) stepAnchor(dir, rows int) {
 			i = 0
 		}
 		for k, a := range as {
-			if len(a.spans) > 0 && a.spans[0].line >= top {
+			if len(a.spans) > 0 && !a.plain && a.spans[0].line >= top {
 				i = k - 1
 				if dir < 0 {
 					i = k
@@ -72,7 +72,7 @@ func (d *openFile) stepAnchor(dir, rows int) {
 	}
 	for range n {
 		i = ((i+dir)%n + n) % n
-		if len(as[i].spans) > 0 {
+		if len(as[i].spans) > 0 && !as[i].plain {
 			d.selectAnchor(i, rows)
 			return
 		}
@@ -87,13 +87,31 @@ func (m Model) openAnchor(ov *openFile, i int) (Model, tea.Cmd) {
 	// mark records what the open found, here and in the store (the page).
 	mark := func(missing bool) {
 		a.missing = missing
-		m.docs.SetAnchorMissing(ov.id(), i, missing)
+		if ov.src.kind == srcOverview {
+			m.docs.SetAnchorMissing(ov.id(), i, missing)
+		}
 		ov.ov.paint(ov.p.lines)
 	}
 	gone := func(msg string) (Model, tea.Cmd) {
 		mark(true)
 		m.statusMsg = msg
 		return m, nil
+	}
+	if ov.src.kind == srcReviewOverview { // a stored overview: the review's files, nothing else
+		if a.plain {
+			m.statusMsg = i18n.T("anchor %s does not resolve at the reviewed commit", a.dest)
+			return m, nil
+		}
+		var cmd tea.Cmd
+		if ov.ov.tip != "" {
+			m, cmd = m.openFileAtCommitLine(ov.ov.tip, a.target.Path, a.target.Start, 0)
+		} else { // a working review: its files are the working tree's
+			m, cmd, _ = m.openFileViewerEv(a.target.Path, a.target.Start)
+		}
+		if d := topDoc(m); d != nil {
+			d.from, d.backgrounded, d.anchorCur = ov, true, a.dest
+		}
+		return m, cmd
 	}
 	if id := a.target.Note; id != "" {
 		d, n := m.findFileNote(id)
@@ -133,7 +151,9 @@ func (m Model) anchorStatted(msg anchorStatMsg) (Model, tea.Cmd) {
 	}
 	a := &ov.ov.anchors[msg.i]
 	a.missing = !msg.ok
-	m.docs.SetAnchorMissing(ov.id(), msg.i, a.missing)
+	if ov.src.kind == srcOverview {
+		m.docs.SetAnchorMissing(ov.id(), msg.i, a.missing)
+	}
 	ov.ov.paint(ov.p.lines)
 	t := a.target
 	if !msg.ok {
@@ -244,9 +264,11 @@ func (m Model) overviewRows() []actionRow {
 			rows = append(rows, actionRow{id: "overview-open", key: "enter", label: i18n.T("Open anchor"), run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.openAnchor(d, i)
 			}})
-			ref := m.copyRow("overview-ref", i18n.T("Copy anchor reference"), i18n.T("Copied anchor reference"), anchorReference(d, d.ov.anchors[i]))
-			ref.key = "r"
-			rows = append(rows, ref)
+			if d.src.kind != srcReviewOverview { // a stored overview has no store reference (A9)
+				ref := m.copyRow("overview-ref", i18n.T("Copy anchor reference"), i18n.T("Copied anchor reference"), anchorReference(d, d.ov.anchors[i]))
+				ref.key = "r"
+				rows = append(rows, ref)
+			}
 		}
 	}
 	rows = append(rows, m.bandRows(d)...)

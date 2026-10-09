@@ -21,7 +21,7 @@ func (v *diffView) searchableFile(i int) bool {
 		return false
 	}
 	f := v.stk.files[i]
-	if f.conflict || f.bin || f.overview {
+	if f.conflict || f.bin || f.summary {
 		return false
 	}
 	if d := f.d; d != nil {

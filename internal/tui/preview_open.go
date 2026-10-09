@@ -72,13 +72,27 @@ func (m Model) openPreviewLandingCmd(id, source, target, landNote string) tea.Cm
 }
 
 func (m Model) resolvePreviewCmd(id, source, target, keepPath, moved, landNote string) tea.Cmd {
-	svc, gen := m.svc, m.previewGen
 	// A re-resolve of the pair that is already open keeps the title it opened
 	// with (a PR diff must not fall back to "Merge preview: refs/gg/pr/7 → …").
 	title, prNumber := "", 0
 	if po := m.previewOpen; po != nil && po.id == id && po.source == source && po.target == target {
 		title, prNumber = po.title, po.prNumber
 	}
+	return m.resolvePreviewCmdAs(id, source, target, title, prNumber, keepPath, moved, landNote)
+}
+
+// openPreviewReturnCmd re-opens the preview a review view came from, with
+// the title and pull request it was opened as (a PR's file list must come
+// back as the PR, not as "Merge preview: refs/gg/pr/7 → main"), the cursor
+// landing on landNote's row.
+func (m Model) openPreviewReturnCmd(bp *previewReturn, landNote string) tea.Cmd {
+	return m.resolvePreviewCmdAs(bp.id, bp.source, bp.target, bp.prTitle, bp.prNumber, "", "", landNote)
+}
+
+// resolvePreviewCmdAs is resolvePreviewCmd opening as title / pull request
+// prNumber ("" / 0 = a plain preview).
+func (m Model) resolvePreviewCmdAs(id, source, target, title string, prNumber int, keepPath, moved, landNote string) tea.Cmd {
+	svc, gen := m.svc, m.previewGen
 	return func() tea.Msg {
 		eps, err := svc.PreviewOpen(context.Background(), source, target)
 		msg := previewOpenMsg{

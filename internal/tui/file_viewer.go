@@ -160,7 +160,7 @@ func (fv *fileViewer) title() string {
 		return i18n.T("View %s @ %s", fv.path, shortHash(fv.src.rev))
 	case srcShelf:
 		return i18n.T("View %s (shelf)", fv.path)
-	case srcExternal, srcNote, srcOverview:
+	case srcExternal, srcNote, srcOverview, srcReviewOverview:
 		if fv.openFile.title != "" {
 			return fv.openFile.title
 		}

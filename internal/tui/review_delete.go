@@ -146,7 +146,7 @@ func (m Model) leaveReviewView() (Model, tea.Cmd) {
 				return pairOpenMsg{pair: p, eps: eps, gen: gen, err: err, landNote: id}
 			}
 		}
-		return m, m.openPreviewLandingCmd(bp.id, bp.source, bp.target, id)
+		return m, m.openPreviewReturnCmd(bp, id)
 	}
 	if st := m.filesReview; st != nil && st.back.Hash != "" {
 		// Opened from this commit's Reviews: back to its files, the keys on

@@ -119,7 +119,7 @@ func TestASendAnswerNeverReplacesAnOpenDialog(t *testing.T) {
 	m := prDiffModel(t)
 	open := &decisionState{req: engine.DecisionRequest{ID: "other", Options: []string{"Yes", "No"}}}
 	for _, msg := range []tea.Msg{
-		sendGroupsMsg{pr: 7, groups: []domain.SendGroup{{ID: domain.GroupMine, Count: 1}, {ID: "review:r1", Count: 1}}},
+		sendPanelMsg{pr: 7, cands: panelCands()},
 		forgeSendReadyMsg{req: domain.PRSendRequest{PR: 7, Mine: true}},
 	} {
 		m.modal = open
@@ -139,33 +139,14 @@ func TestARefusedSendKeepsTheTypedBody(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
 	m, _ = m.openVerdict(7)
-	p := layerOf[*sendReviewPopup](m)
+	p := layerOf[*verdictPopup](m)
 	p.body = newTextField("a long thought-out body")
 	m.running = true
 	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
-	if cmd != nil || layerOf[*sendReviewPopup](m) == nil || layerOf[*sendReviewPopup](m).body.Value() != "a long thought-out body" {
+	if cmd != nil || layerOf[*verdictPopup](m) == nil || layerOf[*verdictPopup](m).body.Value() != "a long thought-out body" {
 		t.Fatal("the popup (and its body) went with a refused send")
 	}
 	if !strings.Contains(m.statusMsg, "another operation") {
 		t.Fatalf("status %q", m.statusMsg)
-	}
-}
-
-// Item 15: two AI reviews with the same agent and summary get distinct rows,
-// and each row opens its own review.
-func TestSendGroupChooserRowsAreUnique(t *testing.T) {
-	t.Parallel()
-	m := prDiffModel(t)
-	gs := []domain.SendGroup{{ID: "review:r1", Agent: "claude", Summary: "nits", Count: 1},
-		{ID: "review:r2", Agent: "claude", Summary: "nits", Count: 1}}
-	opts := sendGroupOptions(gs)
-	if opts[0] == opts[1] {
-		t.Fatalf("rows %q", opts)
-	}
-	nm, _ := m.Update(sendGroupsMsg{gen: m.forgeGen, pr: 7, groups: gs})
-	mm := nm.(Model)
-	_, cmd := mm.modal.onResolve(mm, opts[1])
-	if b, ok := cmd().(sendBodyMsg); !ok || b.group != "review:r2" {
-		t.Fatalf("the second row opened %+v", b)
 	}
 }

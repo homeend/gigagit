@@ -3414,14 +3414,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case forgeSendReadyMsg:
 		return m.handleForgeSendReady(msg)
 
-	case sendGroupsMsg:
-		return m.handleSendGroups(msg)
+	case sendPanelMsg:
+		return m.handleSendPanel(msg)
+	case sendPanelBodyMsg:
+		return m.handleSendPanelBody(msg)
 
 	case interruptedMsg:
 		return m.handleInterrupted(msg)
-
-	case sendBodyMsg:
-		return m.handleSendBody(msg)
 
 	case prHubMsg:
 		return m.handlePRHubMsg(msg)
@@ -5004,6 +5003,12 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m = m.reconcileFullscreenFocus()      // a resuming pin must not inherit focus from a surface that just closed
 	if dv := m.diffLayer(); dv != nil {   // the new repo invalidates any open diff
 		m = m.removeLayer(dv)
+	}
+	if b := layerOf[*sendPanelBody](m); b != nil { // …and the send panel: its candidates are the old repo's
+		m = m.removeLayer(b)
+	}
+	if p := layerOf[*sendPanel](m); p != nil {
+		m = m.removeLayer(p)
 	}
 	m = m.forgetConsoleReturn() // what a console covers is the old repo's too
 	m.diffTag = ""

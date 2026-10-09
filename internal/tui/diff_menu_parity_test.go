@@ -39,8 +39,9 @@ func parityMenuIDs(m Model) []string {
 }
 
 // diffMenuParity runs open twice — single, then stacked — lands on the first
-// note of the opened diff, and compares the two menus.
-func diffMenuParity(t *testing.T, name string, fresh func(t *testing.T) Model, open func(t *testing.T, m Model) Model) {
+// note of the opened diff, and compares the two menus; want is a row that
+// must be in both (the context's own link row, R13).
+func diffMenuParity(t *testing.T, name, want string, fresh func(t *testing.T) Model, open func(t *testing.T, m Model) Model) {
 	t.Helper()
 	menus := map[bool][]string{}
 	for _, stacked := range []bool{false, true} {
@@ -88,12 +89,15 @@ func diffMenuParity(t *testing.T, name string, fresh func(t *testing.T) Model, o
 		t.Fatalf("%s: the . menu differs between single and stacked:\n  %s\nsingle:  %s\nstacked: %s",
 			name, strings.Join(bad, "\n  "), strings.Join(single, ","), strings.Join(stack, ","))
 	}
+	if want != "" && !has(single, want) {
+		t.Fatalf("%s: the . menu lacks %s: %s", name, want, strings.Join(single, ","))
+	}
 }
 
 // A review's diff, cursor on a remark.
 func TestDiffMenuParityReviewRemark(t *testing.T) {
 	t.Parallel()
-	diffMenuParity(t, "review remark",
+	diffMenuParity(t, "review remark", "copy-link",
 		func(t *testing.T) Model { m, _ := openedReviewView(t); return m },
 		func(t *testing.T, m Model) Model { return openReviewDiff(t, m, "a.go") })
 }
@@ -101,7 +105,7 @@ func TestDiffMenuParityReviewRemark(t *testing.T) {
 // A commit's diff, cursor on a hand-written note.
 func TestDiffMenuParityCommitNote(t *testing.T) {
 	t.Parallel()
-	diffMenuParity(t, "commit note",
+	diffMenuParity(t, "commit note", "note-copy-link",
 		func(t *testing.T) Model {
 			m := stackRepoModel(t)
 			m.svc.UseNotesDir(t.TempDir())
@@ -123,7 +127,7 @@ func TestDiffMenuParityCommitNote(t *testing.T) {
 
 // The working tree's diff, cursor on a note on an unstaged line.
 func TestDiffMenuParityWorktreeNote(t *testing.T) {
-	diffMenuParity(t, "worktree note",
+	diffMenuParity(t, "worktree note", "note-copy-link",
 		func(t *testing.T) Model {
 			m := loadedNavModel(t)
 			m.svc.UseNotesDir(t.TempDir())
@@ -150,7 +154,7 @@ func TestDiffMenuParityWorktreeNote(t *testing.T) {
 // rows (Send as GitHub comment, …) must survive the stack too.
 func TestDiffMenuParityPRNote(t *testing.T) {
 	t.Parallel()
-	diffMenuParity(t, "PR note",
+	diffMenuParity(t, "PR note", "note-copy-link",
 		func(t *testing.T) Model {
 			m, _, _ := mergePreviewModel(t)
 			m.svc.UseNotesDir(t.TempDir())

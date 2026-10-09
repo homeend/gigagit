@@ -68,9 +68,12 @@ type contentLine struct {
 	// elideHead is how many leading runes of text an elided row keeps whole
 	// (a note row's "└ date " lead): the middle-cut starts after them.
 	elideHead int
-	// overview is the review view's "≡ Overview" row: enter opens the
-	// review's overview, not a file.
-	overview bool
+	// summary is the review view's "≡ Summary" row: enter opens the review's
+	// summary (the text GitHub gets), not a file.
+	summary bool
+	// overviewDoc is the review view's "≡ Overview" row (a review with a
+	// stored overview): enter opens it in the overview viewer, not a file.
+	overviewDoc bool
 	// dim draws the row faint: the review view's one-line file summary under
 	// its file (not a heading — the sticky line names directories only).
 	dim bool

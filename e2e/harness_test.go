@@ -30,6 +30,9 @@ func TestScenarios(t *testing.T) {
 				stderr.Reset()
 				wd := sb.dir(run.Cwd)
 				argv := ExpandArgs(run.Cmd, wd)
+				for i := range argv { // {{rev:<name>}}: a run may name a commit's sha (a commit link)
+					argv[i] = expandRevs(t, wd, argv[i])
+				}
 				code := (CLIRunner{}).Run(wd, argv, run.Stdin, &stdout, &stderr)
 				if code != *run.Exit {
 					// State past a failed run is unpredictable: stop here.

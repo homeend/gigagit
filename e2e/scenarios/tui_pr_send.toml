@@ -1,4 +1,4 @@
-name = "tui: a note in a pull request's diff shows its mark and is sent to GitHub from the . menu"
+name = "tui: a note and an AI remark in a pull request's diff are sent to GitHub from the Send to GitHub panel"
 
 # PR #7 = feat (line 5 changed); refs/gg/pr/7 is its head, so the open needs
 # no fetch. The fake gh answers from .git/fakegh and records every write; the
@@ -23,6 +23,11 @@ steps = [
 cmd  = ["note", "add", "--preview", "main...refs/gg/pr/7", "--file", "big.txt", "--new-line", "5", "--summary", "why changed?", "--source", "user"]
 exit = 0
 
+[[run]]
+cmd   = ["review", "save", "gg://{{cwd}}@main...refs/gg/pr/7", "--agent", "Claude Code", "--stdin"]
+stdin = '{"version":1,"summary":"## Summary\ntwo nits","files":[{"path":"big.txt","annotations":[{"newRange":[5,5],"summary":"name it","meta":{"severity":"low"}}]}]}'
+exit  = 0
+
 [tui]
 size = "160x40"
 
@@ -40,26 +45,52 @@ screen_contains = ["PR #7", "big.txt"]
 
 [[tui.step]]
 name = "pr-diff-note-marked"
-keys = ["enter"]
+keys = ["down", "down", "enter"]
 wait = true
 screen_contains = ["why changed?"]
 
 [[tui.step]]
 name = "note-menu"
 keys = [".", "s", "e", "n", "d"]
-screen_contains = ["Send as GitHub comment", "Send my draft review…", "Send review…"]
+screen_contains = ["Send as GitHub comment", "Send to GitHub…"]
+screen_excludes = ["Send my draft review…", "Send this AI review…", "Send review…"]
+
+# The panel (from the PR details' s; the . menu's Send to GitHub… row opens
+# the same): every unsent comment of the PR by group, nothing ticked.
+[[tui.step]]
+name = "panel"
+keys = ["esc", "esc", "i", "s"]
+wait = true
+screen_contains = ["Send to GitHub — #7", "0 ticked", "Review (AI) · Claude Code", "name it", "My notes", "why changed?", "Body: none"]
+
+[[tui.step]]
+name = "panel-ticked"
+keys = ["space", "down", "down", "space"]
+screen_contains = ["2 ticked"]
+
+[[tui.step]]
+name = "panel-body"
+keys = ["b"]
+screen_contains = ["Body: review text (Claude Code"]
 
 [[tui.step]]
 name = "send-confirm"
-keys = ["enter"]
+keys = ["C-s"]
 wait = true
-screen_contains = ["Send to o/r #7:", "+ big.txt:5 why changed?"]
+screen_contains = ["Send to o/r #7:", "+ big.txt:5 name it", "+ big.txt:5 why changed?", "review body:"]
 
 [[tui.step]]
 name = "sent"
 keys = ["enter"]
 wait = true
-screen_contains = ["● review · me", "why changed?"]
+screen_excludes = ["Send to GitHub — #7"]
+
+# The details close: the diff shows the thread on GitHub now.
+[[tui.step]]
+name = "sent-diff"
+keys = ["esc"]
+wait = true
+screen_contains = ["● review · me"]
 screen_excludes = ["○ note"]
 
 [expect]

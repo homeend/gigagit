@@ -20,12 +20,11 @@ func TestSendAnswersFromBeforeASwitchAreDropped(t *testing.T) {
 	m.forgeGen++ // what reRoot does
 	for _, msg := range []tea.Msg{
 		forgeSendReadyMsg{gen: old, req: domain.PRSendRequest{PR: 7, Mine: true}, op: engine.SendToForge{}},
-		sendGroupsMsg{gen: old, pr: 7, groups: []domain.SendGroup{{ID: domain.GroupMine, Count: 1}, {ID: "review:r1", Count: 1}}},
-		sendBodyMsg{gen: old, pr: 7, group: "review:r1", body: "x"},
+		sendPanelMsg{gen: old, pr: 7, cands: panelCands()},
 	} {
 		nm, cmd := m.Update(msg)
 		mm := nm.(Model)
-		if cmd != nil || mm.modal != nil || mm.running || layerOf[*sendReviewPopup](mm) != nil {
+		if cmd != nil || mm.modal != nil || mm.running || layerOf[*verdictPopup](mm) != nil || layerOf[*sendPanel](mm) != nil {
 			t.Fatalf("%T acted in the new repo", msg)
 		}
 	}
@@ -38,21 +37,21 @@ func TestAFailedPlanKeepsTheTypedBody(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
 	m, _ = m.openVerdict(7)
-	p := layerOf[*sendReviewPopup](m)
+	p := layerOf[*verdictPopup](m)
 	p.body = newTextField("a long thought-out verdict")
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
 	nm, _ := m.Update(forgeSendReadyMsg{gen: m.forgeGen, req: domain.PRSendRequest{PR: 7, Verdict: true, BodySet: true},
 		err: errors.New("network down")})
 	m = nm.(Model)
 	m, _ = m.openVerdict(7)
-	if got := layerOf[*sendReviewPopup](m).body.Value(); got != "a long thought-out verdict" {
+	if got := layerOf[*verdictPopup](m).body.Value(); got != "a long thought-out verdict" {
 		t.Fatalf("body = %q", got)
 	}
 	m = m.popLayer()
 	sent := domain.PRSendRequest{PR: 7, Verdict: true, Body: "a long thought-out verdict", BodySet: true}
 	m, _ = m.forgeSendFinished(&forgeSendState{pr: 7, req: sent}, engine.Result{Changed: true}, nil)
 	m, _ = m.openVerdict(7)
-	if got := layerOf[*sendReviewPopup](m).body.Value(); got != "" {
+	if got := layerOf[*verdictPopup](m).body.Value(); got != "" {
 		t.Fatalf("a sent body came back: %q", got)
 	}
 }
@@ -97,5 +96,48 @@ func TestAFailedResolveDoesNotSayTheTextIsKept(t *testing.T) {
 	m, _ = m.handleForgeSendReady(forgeSendReadyMsg{gen: m.forgeGen, req: domain.PRSendRequest{PR: 7, Resolve: []string{"x"}}, err: errors.New("boom")})
 	if strings.Contains(m.statusMsg, "kept") {
 		t.Fatalf("status = %q", m.statusMsg)
+	}
+}
+
+// Plan 1 Task 7: a review posted whose draft replies then failed comes back
+// as (Changed, err) with no Done for the replies. It is still the user's own
+// change: the PR is re-read as "my send" (not "updated") and the typed body,
+// which reached GitHub, is dropped.
+func TestAPostedReviewWithFailedRepliesIsStillMyChange(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m.prReadSeq = 3
+	sent := domain.PRSendRequest{PR: 7, Notes: []string{"n1"}, Verdict: true, Body: "typed", BodySet: true}
+	m.keptSendBody = &keptSendBody{pr: 7, group: sendGroupPanel, text: "typed"}
+	m, _ = m.forgeSendFinished(&forgeSendState{pr: 7, req: sent}, engine.Result{Changed: true}, errors.New("the review was posted; replies: network down"))
+	if m.prOwnSend != 7 || m.prOwnSendSeq != 3 {
+		t.Fatalf("own send not recorded: pr %d seq %d", m.prOwnSend, m.prOwnSendSeq)
+	}
+	if m.keptSendBody != nil {
+		t.Fatal("the body reached GitHub: nothing to keep")
+	}
+}
+
+// A8: the panel's typed body is kept under its own key, per PR; the verdict
+// box keeps its own; neither claims the other's text.
+func TestPanelAndVerdictKeepSeparateBodies(t *testing.T) {
+	t.Parallel()
+	var m Model
+	m.keptSendBody = &keptSendBody{pr: 7, group: sendGroupPanel, text: "panel text"}
+	if got, ok := m.keptBodyFor(7, sendGroupPanel, false); !ok || got != "panel text" {
+		t.Fatalf("panel body = %q %v", got, ok)
+	}
+	if _, ok := m.keptBodyFor(7, "", true); ok {
+		t.Fatal("the verdict box must not see the panel's text")
+	}
+	if _, ok := m.keptBodyFor(8, sendGroupPanel, false); ok {
+		t.Fatal("another PR must not see it")
+	}
+	panelReq := domain.PRSendRequest{PR: 7, Notes: []string{"n1"}, Verdict: true, Body: "panel text", BodySet: true}
+	if !m.keptSendBody.from(panelReq) {
+		t.Fatal("the panel's own send clears its kept body")
+	}
+	if m.keptSendBody.from(domain.PRSendRequest{PR: 7, Verdict: true, Body: "x", BodySet: true}) {
+		t.Fatal("a verdict-only send is not the panel's")
 	}
 }

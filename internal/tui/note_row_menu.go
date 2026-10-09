@@ -294,21 +294,22 @@ func (m Model) reviewRemarkLinkRow() (actionRow, bool) {
 	return actionRow{}, false
 }
 
-// reviewRemarkLinkAtCursorRow is what L copies on a review remark: the remark
-// link, but only for a remark whose lines hold the cursor line and with no
-// multi-line selection — a marked range, or the line under a remark, keeps
-// the ordinary link.
-func (m Model) reviewRemarkLinkAtCursorRow() (actionRow, bool) {
+// noteLinkAtCursorRow is what L copies on a thread's lines (R13): a review
+// remark's remark link, a stored note's note link — but only for a thread
+// whose lines hold the cursor line and with no multi-line selection; a
+// marked range, or the line under a box, keeps the ordinary line link. A
+// GitHub thread has no gg link.
+func (m Model) noteLinkAtCursorRow() (actionRow, bool) {
 	v, ok := m.topLayer().(*diffView)
-	if !ok || v.curNoteView().reviewID == "" || m.linkSelectionLines() > 1 {
+	if !ok || m.linkSelectionLines() > 1 {
 		return actionRow{}, false
 	}
 	row, ok := v.cursorRow()
 	if !ok {
 		return actionRow{}, false
 	}
-	for _, t := range replyableNoteTargets(m.notesAtCursor(), false) {
-		if !model.IsReviewNoteID(t.rootID) {
+	for _, t := range m.notesAtCursor() {
+		if t.forge || model.IsForgeNoteID(t.rootID) {
 			continue
 		}
 		no := row.RightNo
@@ -319,9 +320,19 @@ func (m Model) reviewRemarkLinkAtCursorRow() (actionRow, bool) {
 		if first == 0 {
 			first = t.line
 		}
-		if no >= first && no <= t.line {
+		if no < first || no > t.line {
+			continue
+		}
+		if model.IsReviewNoteID(t.rootID) {
+			if v.curNoteView().reviewID == "" {
+				continue
+			}
 			return m.reviewRemarkLinkRow()
 		}
+		if m.svc == nil {
+			continue
+		}
+		return m.noteCopyLinkRowFor(t), true
 	}
 	return actionRow{}, false
 }

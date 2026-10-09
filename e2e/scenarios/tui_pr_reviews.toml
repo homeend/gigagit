@@ -1,0 +1,55 @@
+name = "tui: a review stored on a pull request is a row of its file list; enter opens it, esc returns to the PR"
+
+# PR #7 = feat (line 5 changed); refs/gg/pr/7 is its head, so the open needs
+# no fetch. The fake gh answers from .git/fakegh. An agent stored a review
+# on the PR (gg review save on the PR link): the PR's file list lists it
+# under Reviews above its files (R4).
+[input]
+steps = [
+  { write = "big.txt", content = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n" },
+  { commit = "big" },
+  { branch = "feat" }, { switch = "feat" },
+  { write = "big.txt", content = "line 1\nline 2\nline 3\nline 4\nline 5 changed\nline 6\nline 7\nline 8\nline 9\nline 10\n" },
+  { commit = "change" },
+  { switch = "main" },
+  { ref = "refs/gg/pr/7", value = "feat" },
+  { write = ".git/fakegh/pr-list.json", content = '[{"number":7,"title":"Change line 5","author":{"login":"ann"},"state":"OPEN","isDraft":false,"reviewDecision":"","headRefName":"feat","isCrossRepository":false,"baseRefName":"main","baseRefOid":"","headRefOid":"{{rev:feat}}","url":"https://github.com/o/r/pull/7","createdAt":"2026-01-01T10:00:00Z","updatedAt":"2026-01-01T11:00:00Z"}]' },
+  { write = ".git/fakegh/pr-view-7.json", content = '{"number":7,"title":"Change line 5","author":{"login":"ann"},"state":"OPEN","isDraft":false,"headRefName":"feat","isCrossRepository":false,"baseRefName":"main","baseRefOid":"","headRefOid":"{{rev:feat}}","url":"https://github.com/o/r/pull/7","createdAt":"2026-01-01T10:00:00Z","updatedAt":"2026-01-01T11:00:00Z","body":""}' },
+  { write = ".git/fakegh/repo-view.json", content = '{"nameWithOwner":"o/r","url":"https://github.com/o/r","sshUrl":"git@github.com:o/r.git"}' },
+  { write = ".git/fakegh/snapshot-7.json", content = '{"data":{"repository":{"pullRequest":{"id":"PR_7","number":7,"title":"Change line 5","body":"","author":{"login":"ann"},"state":"OPEN","isDraft":false,"reviewDecision":"","headRefName":"feat","isCrossRepository":false,"headRepositoryOwner":{"login":"ann"},"headRepository":{"name":"r"},"baseRefName":"main","baseRefOid":"","headRefOid":"{{rev:feat}}","url":"https://github.com/o/r/pull/7","createdAt":"2026-01-01T10:00:00Z","updatedAt":"2026-01-01T11:00:00Z","viewerDidAuthor":false,"viewerLatestReview":null,"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]},"comments":{"pageInfo":{"hasNextPage":false},"nodes":[]},"reviews":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' },
+]
+
+[[run]]
+cmd   = ["review", "save", "gg://{{cwd}}@main...refs/gg/pr/7", "--agent", "Claude Code", "--stdin"]
+stdin = '{"version":1,"summary":"## Summary\nfine","files":[{"path":"big.txt","annotations":[{"newRange":[5,5],"summary":"why changed?"}]}]}'
+exit  = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "pr-tab"
+keys = ["C-right", "C-right", "C-right", "C-right"]
+wait = true
+screen_contains = ["#7", "Change line 5"]
+
+[[tui.step]]
+name = "pr-files"
+keys = ["enter"]
+wait = true
+screen_contains = ["PR #7", "Reviews", "Claude Code", "big.txt"]
+
+[[tui.step]]
+name = "review"
+keys = ["down", "enter"]
+wait = true
+screen_contains = ["≡ Summary", "big.txt"]
+
+[[tui.step]]
+name = "back"
+keys = ["esc"]
+wait = true
+screen_contains = ["PR #7", "Reviews", "Claude Code"]
+
+[expect]
+branch = "main"

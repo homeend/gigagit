@@ -1,0 +1,37 @@
+name = "tui: a hand-written note on a commit's line offers Copy note link in the diff's . menu (R13)"
+
+# A commit adding a.txt (5 lines) with a note on its line 3. The commit's
+# diff offers Copy note link beside the note's rows (what it copies —
+# gg://…?note=<id>, a random id — is pinned by the package tests).
+[input]
+steps = [
+  { write = "a.txt", content = "one\ntwo\nthree\nfour\nfive\n" },
+  { commit = "add a" },
+]
+
+[[run]]
+cmd  = ["note", "add", "--rev", "HEAD", "--file", "a.txt", "--new-line", "3", "--summary", "why three?"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "files"
+keys = ["right", "enter"]
+wait = true
+screen_contains = ["a.txt"]
+
+[[tui.step]]
+name = "diff"
+keys = ["down", "enter"]
+wait = true
+screen_contains = ["why three?"]
+
+[[tui.step]]
+name = "menu"
+keys = ["}", ".", "n", "o", "t", "e", "space", "l", "i"]
+screen_contains = ["Copy note link"]
+
+[expect]
+branch = "main"

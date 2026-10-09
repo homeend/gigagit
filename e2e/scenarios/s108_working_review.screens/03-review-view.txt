@@ -2,7 +2,7 @@ local  branch main                                                              
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Review: working changes                           ││ Commits (all) 1                                                                                         │
 │ fake · just now · 2 notes on 2 files              ││   ◇  Working tree (1)                                                                                   │
-│ > ≡ Overview                                      ││   ●  ↓   *main seed                                                                                     │
+│ > ≡ Summary                                       ││   ●  ↓   *main seed                                                                                     │
 │   A  n.txt  ◆ 1                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

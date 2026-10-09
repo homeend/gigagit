@@ -471,7 +471,12 @@ review, a file row also offers **Copy review link to this file**, and a
 review remark **Copy remark link** (`L` too) and **Copy remark id**
 (`review:<id>:<n>`, what `gg note reply` / `resolve` take) — in the TUI's
 `.` menu and the web's right-click menu, where they replace a remark's
-copy gg link to this note. Opening such a link (`#`, `gg open`,
+copy gg link to this note. A hand-written note has a link of its own
+(`gg://…<path>:<line>?note=<id>`): **Copy note link** in the TUI's `.` menu,
+offered from the note's line and the first line below its box (several
+threads ask which), `L` on the note's line, and `ctrl+l` on a thread row in
+View all notes; `gg note show <link>` reads the thread. A review's own diff
+offers the plain **Copy link** of the reviewed commit's line. Opening such a link (`#`, `gg open`,
 `gg session navigate`, the web's link dialog) opens the review on that
 file, at that line; `gg review show <link>` prints just that file's or that
 remark's notes. Quote a link that carries `#<hunk>` — an unquoted `#` starts a shell
@@ -605,13 +610,18 @@ on `r`; `i` opens the PR hub from the diff. The title says `refreshing…`,
 here, `◌` being sent, `○!` the last send failed (with the error), `●` on
 GitHub — and a coloured bar for its group: your own notes ("my draft
 review"), each AI review run on the PR (its remarks show in the diff too),
-each GitHub review. The `.` menu on a note offers *Send as GitHub comment* and
-*Send my draft review…* / *Send this AI review…*; on a GitHub thread *Reply
-to note*, *Reply & send…*, *Resolve / Reopen thread* (`x`, at once on GitHub)
-and *Send draft reply* (`R` writes a local draft). The PR hub's `s` (*Send
-review…*: pick a group, edit the body) and `v` (*Verdict…*) end in the same
-confirm, which lists exactly what will be posted and offers comment, approve
-or request changes. An agent's send is never posted directly: it waits in the
+each GitHub review. The `.` menu on a note offers *Send as GitHub comment*
+(that one note); on a GitHub thread *Reply to note*, *Reply & send…*,
+*Resolve / Reopen thread* (`x`, at once on GitHub) and *Send draft reply*
+(`R` writes a local draft). Everything else goes through **Send to
+GitHub…** — the PR diff's `.` row and the PR hub's `s` — the send panel:
+every unsent comment of the pull request by group (each AI review's
+remarks, *My notes*, *Draft replies*), nothing ticked on open; `space`
+ticks, `a` ticks a group, `b` picks the body (none, a ticked review's text,
+or typed — `e` edits it), `enter` opens a row's file, `ctrl+s` sends one
+GitHub review through the same confirm, which lists exactly what will be
+posted and offers comment, approve or request changes; draft replies go
+right after it. `v` (*Verdict…*) sends a verdict with no comments. An agent's send is never posted directly: it waits in the
 notice centre (`!`) as *Review and send… / Reject / Later*, and a send that
 was interrupted offers *Finish sending / Discard* there.
 
@@ -1438,11 +1448,17 @@ A review agent replies with ONE JSON document (the brief at
 markdown overview, a one-line summary per file, line notes, and free-form
 `meta` (a verdict, a severity, a confidence) at every level. Opening such a
 review shows the **review view** — the reviewed commit's files (a branch
-review: its range's files) with `≡ Overview` first, `◆n` and the file's
+review: its range's files) with `≡ Summary` first, `◆n` and the file's
 summary on each file the review notes (`n` / `p` step between them); enter on
-the Overview renders the overview as markdown with its meta and the notes on
-files the commit does not change; stacked, the overview is the first element.
-`o` in the overview lists those other notes to open one. Its diffs show only
+the Summary renders the review's summary as markdown with its meta and the
+notes on files the commit does not change; stacked, the summary is the first
+element. `o` in the summary lists those other notes to open one. A review
+whose document stores an **overview** (the gg-overview kind, written only
+when you ask the agent for one) gets an `≡ Overview` row under it: enter
+opens it in the overview viewer — `tab` / `shift+tab` walk its anchors,
+enter opens the file at the reviewed commit with the anchor's band (every
+anchor of that file drawn, `n` / `p` step through them), `backspace` comes
+back; anchors the review cannot resolve are plain text. Its diffs show only
 the review's notes, read-only — `gg review --notes` keeps them as your own.
 "Delete review" in the `.` menu (in the review view or on a Branches review
 row) or `ctrl+d` in View all notes deletes a review, after asking. A

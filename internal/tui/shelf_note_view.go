@@ -140,7 +140,7 @@ func (m Model) shelfNoteStackFile(id string) (stackFile, bool) {
 		for _, l := range strings.Split(strings.TrimRight(n.Rationale, "\n"), "\n") {
 			prose = append(prose, mdRow{text: elidePath(sanitizeLine(l), w), pre: true})
 		}
-		return stackFile{overview: true, load: stackLoaded, label: sanitizeLine(n.Summary), prose: prose}, true
+		return stackFile{summary: true, load: stackLoaded, label: sanitizeLine(n.Summary), prose: prose}, true
 	}
 	return stackFile{}, false
 }

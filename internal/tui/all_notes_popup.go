@@ -356,11 +356,23 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlD: // delete the review or thread under the cursor (asks first)
 		u, cmd := m.allNotesDelete(p)
 		return u.(Model), cmd
-	case tea.KeyCtrlL: // copy the review's gg link
-		if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) && vis[p.sel].kind == anReview && m.svc != nil {
-			svc, id := m.svc, vis[p.sel].review.ID
+	case tea.KeyCtrlL: // copy the review's gg link, or a thread's note link (R13)
+		vis := p.visible()
+		if p.sel < 0 || p.sel >= len(vis) || m.svc == nil {
+			return m, nil
+		}
+		svc := m.svc
+		switch r := vis[p.sel]; {
+		case r.kind == anReview:
+			id := r.review.ID
 			u, cmd := m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
 				return svc.ReviewLink(ctx, id)
+			}).run(m)
+			return u.(Model), cmd
+		case r.kind == anNote && !r.note.Note.IsShelfLevel():
+			id := r.note.Note.ID
+			u, cmd := m.asyncCopyLinkRow("note-copy-link", i18n.T("Copy note link"), func(ctx context.Context) (string, error) {
+				return svc.NoteLinkText(ctx, id)
 			}).run(m)
 			return u.(Model), cmd
 		}
@@ -677,7 +689,7 @@ func (p *allNotesPopup) box(m Model) string {
 	}
 	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) && (vis[p.sel].kind == anNote || vis[p.sel].kind == anReview) {
 		keys = append(keys, i18n.T("[ctrl+d] delete"))
-		if vis[p.sel].kind == anReview {
+		if vis[p.sel].kind == anReview || !vis[p.sel].note.Note.IsShelfLevel() {
 			keys = append(keys, i18n.T("[ctrl+l] copy link"))
 		}
 	}
