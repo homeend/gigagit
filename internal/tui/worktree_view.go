@@ -250,6 +250,9 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.workingAttention = nil                 // merged back; the live copy is m.attention
 	m.replay = append(m.replay, v.queued...) // what landed for it while it slept: the Update tail applies it
 	v.queued = nil
+	if m.console == nil {
+		m = m.restoreConsoleParked() // the console that displaced them is gone (a queued return): they are live again
+	}
 	// Always rebuilt: the WIP rows are derived from the status inside it,
 	// whether or not a head mark moved (both trees detached, tips off page).
 	return m.markHead(m.worktreeBranch(v.path)).rebuildCommitGraph()
@@ -437,38 +440,6 @@ func (m Model) sleepView() Model {
 	// bands are NOT touched: saveView put them in the slot, loadView brings
 	// the arriving slot's in. Nothing crosses, nothing is filtered.
 	return m
-}
-
-// workingTreeWindow reports a layer that shows a worktree's FILES: a
-// working-tree diff (HEAD → working tree, a staged diff, a stacked status
-// view), a blame of a working file, a file viewer. Their keys (stage
-// hunks, discard, edit, note) resolve the path through m.svc, so over
-// another worktree they would act on ITS file of the same name. Used by
-// the console's parked copy only (parkedLayersFor): a slot's stack is
-// its worktree's and never shows over another.
-func workingTreeWindow(l layer) bool {
-	switch v := l.(type) {
-	case *diffView:
-		return v.rev == "" && !v.compare
-	case *blameView:
-		return v.ctx.rev == ""
-	case *fileViewer:
-		return true
-	}
-	return false
-}
-
-// dropWorkingLayers filters a stack: the working-tree windows go, the
-// rest keep their order. Only a console's process-wide parked copy still
-// needs it (parkedLayersFor): the slots' own stacks never cross a swap.
-func dropWorkingLayers(ls []layer) []layer {
-	var kept []layer
-	for _, l := range ls {
-		if !workingTreeWindow(l) {
-			kept = append(kept, l)
-		}
-	}
-	return kept
 }
 
 // viewKickCmd is the live slot's wake-up: a SILENT status read (a

@@ -6323,11 +6323,22 @@ Process-wide on purpose: `focus`/`lastLeftPanel`/`activeLeftTab`/`fullMax*`
 notices, the typing flags, the slot-data gens, the session diff prefs.
 Working-file `attention` bands travel in `windowState.workingAttention`
 (`takeWorkingAttention` on save, merged back on load); a commit's stay in
-`m.attention`. A console's process-wide parked copy still records
-`ret.over`; `parkedLayersFor` (`workingTreeWindow`, `dropWorkingLayers`)
-restores the working-tree layers only when the view is that worktree
-again — phase 4 moves that copy onto the slot. `historyLive` scans every
-sleeping slot's pile and parked hand-off stack (`windowState.holds`) so
+`m.attention`. What a console DISPLACES (the full-screen views it covers, the stash
+list, the preview) is `windowState.consoleParked` on the slot, not on the
+console's return point (`consoleReturn` keeps `view`/`focus`/`full`/the
+pin only): `captureReturn` fills the live slot's copy, `closeConsole`
+(after `returnView`) and `dropConsole` restore the copy of the slot on
+screen THEN (`restoreConsoleParked`), and `loadView` restores a slot's
+copy when no console shows any more (a queued return that lands after
+the close). `dispatchParkedAware` puts the live copy's layers back under
+the stack for one non-key dispatch and re-parks what is still there
+(`windowState.reparkConsole`); if the handler moved the panels, the
+layers went into the leaving slot's pile with its group and are re-parked
+under THAT slot's copy. `forgetConsoleReturn` (a repo switch) clears the
+live copy. The old `parkedLayersFor`/`ret.over`/`workingTreeWindow`/
+`dropWorkingLayers` filters are gone. `historyLive` scans the live group
+and every sleeping slot's pile, parked hand-off stack and console copy
+(`windowState.holds`) so
 `sweepHistoryWalks` leaves a parked history's git running; a slot dropped
 with its worktree makes its walks dead to the per-Update sweep. Results:
 nineteen window-addressed message types embed `slotStamp` (`slot_msg.go`),

@@ -121,6 +121,15 @@ type windowState struct {
 	// worktree it was asked for: another worktree's status must not show it.
 	tour string
 
+	// consoleParked is what a shown console displaced in THIS worktree: the
+	// full-screen views it covers (they would draw over it and take the
+	// keys), the stash list and the files preview. On the slot, not on the
+	// console's return point, so a console's return to another worktree
+	// brings back only THAT worktree's own; closeConsole restores the copy
+	// of the slot on screen then, and loadView restores a slot's copy when
+	// no console shows any more (a queued return). nil = nothing displaced.
+	consoleParked *consoleParked
+
 	// workingAttention holds the `gg session highlight` bands on this
 	// worktree's WORKING files (attentionKey.commit == "") while the
 	// worktree sleeps; saveView moves them out of m.attention and loadView
@@ -128,8 +137,9 @@ type windowState struct {
 	workingAttention map[attentionKey][]steerMark
 }
 
-// holds reports whether l waits in this group: on its pile or in the stack
-// a popup parked when it handed off to the files view.
+// holds reports whether l waits in this group: on its pile, in the stack a
+// popup parked when it handed off to the files view, or displaced by a
+// console.
 func (w windowState) holds(l layer) bool {
 	if w.layers != nil {
 		for _, e := range w.layers.entries {
@@ -143,5 +153,47 @@ func (w windowState) holds(l layer) bool {
 			return true
 		}
 	}
+	if w.consoleParked != nil {
+		for _, e := range w.consoleParked.layers {
+			if e == l {
+				return true
+			}
+		}
+	}
 	return false
+}
+
+// reparkConsole moves the layers of parked that are on the pile back under
+// the console's displaced copy (dispatchParkedAware put them live for one
+// dispatch); the others stay live. A pointer receiver: the group is the
+// live Model's or a slot's.
+func (w *windowState) reparkConsole(parked []layer) {
+	if w.layers == nil {
+		return
+	}
+	was := make(map[layer]bool, len(parked))
+	for _, l := range parked {
+		was[l] = true
+	}
+	var keep, live []layer
+	for _, l := range w.layers.entries {
+		if was[l] {
+			keep = append(keep, l)
+		} else {
+			live = append(live, l)
+		}
+	}
+	if w.consoleParked == nil {
+		w.consoleParked = &consoleParked{}
+	}
+	w.consoleParked.layers = keep
+	w.layers.entries = live
+}
+
+// consoleParked is a console's displaced copy of a worktree's windows.
+type consoleParked struct {
+	layers       []layer
+	stashView    *stashView
+	filesView    *contentPopup // the files view a preview belongs to
+	filesPreview *openFile
 }

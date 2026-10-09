@@ -44,16 +44,15 @@ type consoleState struct {
 // to. Captured by the first console shown, carried over when a console
 // replaces a console, so "the screen before the agent" survives a cycle.
 type consoleReturn struct {
-	layers       []layer // the live stack, parked while the console shows
-	full         bool    // a full-screen view or a ctrl+t pin: consoles show maximised
-	fullMaxed    bool
-	fullMax      panel
-	stashView    *stashView
-	filesView    *contentPopup // the files view a preview belongs to
-	filesPreview *openFile
-	focus        panel
-	view         model.CheckoutKey // the viewed worktree the console was shown over (where a close returns)
-	over         model.CheckoutKey // the worktree the parked layers showed (a working diff restored over another one would act on it)
+	full      bool // a full-screen view or a ctrl+t pin: consoles show maximised
+	fullMaxed bool
+	fullMax   panel
+	focus     panel
+	view      model.CheckoutKey // the viewed worktree the console was shown over (where a close returns)
+	// What the console DISPLACED (the full-screen views it covers, the stash
+	// list, the preview) is not here: it waits on the worktree's slot
+	// (windowState.consoleParked), so a return to another worktree brings
+	// back only that worktree's own.
 }
 
 // sessionWatch is the TUI's subscription to the session LIST, on a pointer
@@ -181,17 +180,6 @@ func (m Model) returnView(r *consoleReturn) Model {
 	return nm
 }
 
-// parkedLayersFor is what a console's parked stack restores over the
-// worktree on screen now: all of it when that is the worktree the layers
-// showed, else without the working-tree windows (alt+w's first hit keeps
-// the console's worktree; a queued return has not happened yet).
-func (m Model) parkedLayersFor(r *consoleReturn) []layer {
-	if r.over != "" && r.over != m.viewed {
-		return dropWorkingLayers(r.layers)
-	}
-	return r.layers
-}
-
 // captureReturn records the screen a console is about to cover. A
 // full-screen VIEW on top (diff, history, blame, file viewer) is parked off
 // the live stack — it would draw over the console and keep the keys — and
@@ -202,19 +190,37 @@ func (m Model) parkedLayersFor(r *consoleReturn) []layer {
 func (m Model) captureReturn() (Model, *consoleReturn) {
 	r := &consoleReturn{
 		fullMaxed: m.fullMaxed, fullMax: m.fullMax,
-		stashView: m.stashView, filesView: m.filesView, filesPreview: m.filesPreview,
 		focus: m.focus,
 		full:  m.fullMaxActive(),
 		view:  m.viewed,
-		over:  m.viewed,
 	}
+	cp := &consoleParked{stashView: m.stashView, filesView: m.filesView, filesPreview: m.filesPreview}
 	switch m.topLayer().(type) {
 	case *diffView, *historyView, *blameView, *fileViewer:
-		r.layers = m.layers.entries
+		cp.layers = m.layers.entries
 		m.layers.entries = nil
 		r.full = true
 	}
+	m.consoleParked = cp // on the viewed worktree's slot: it travels with its windows
 	return m, r
+}
+
+// restoreConsoleParked puts back what a console displaced in the worktree
+// on screen: its parked views beneath whatever is live (a popup opened
+// over the console stays on top), its stash list, its preview (only
+// inside the files view it belongs to).
+func (m Model) restoreConsoleParked() Model {
+	cp := m.consoleParked
+	if cp == nil {
+		return m
+	}
+	m.consoleParked = nil
+	m = m.restoreLayersBeneath(cp.layers)
+	m.stashView = cp.stashView
+	if cp.filesPreview != nil && cp.filesView != nil && m.filesView == cp.filesView {
+		m.filesPreview = cp.filesPreview
+	}
+	return m
 }
 
 // forgetConsoleReturn drops what the console covers that belongs to the
@@ -226,8 +232,8 @@ func (m Model) forgetConsoleReturn() Model {
 		return m
 	}
 	r := m.console.ret
-	r.layers, r.stashView, r.filesView, r.filesPreview = nil, nil, nil, nil
-	r.view = "" // the viewed worktree was the old repository's
+	m.consoleParked = nil // the displaced views were the old checkout's
+	r.view = ""           // the viewed worktree was the old repository's
 	r.full = r.fullMaxed
 	m.console.maximized = r.full
 	return m.syncConsoleSizeIfFocused()
@@ -243,32 +249,32 @@ func (m Model) dispatchParkedAware(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg, tea.MouseMsg:
 		return m.dispatch(msg)
 	}
-	if m.console == nil || m.console.ret == nil || len(m.console.ret.layers) == 0 {
+	cp := m.consoleParked
+	if m.console == nil || cp == nil || len(cp.layers) == 0 {
 		return m.dispatch(msg)
 	}
-	r := m.console.ret
-	parked := r.layers
-	r.layers = nil // a close while handling finds them live already
+	parked := cp.layers
+	cp.layers = nil // a close while handling finds them live already
 	m = m.restoreLayersBeneath(parked)
+	view := m.viewed
 	nm, cmd := m.dispatch(msg)
 	out, ok := nm.(Model)
-	if !ok || out.console == nil || out.console.ret != r || out.layers == nil {
-		return nm, cmd // the console went: its views are live now
+	if !ok {
+		return nm, cmd
 	}
-	was := make(map[layer]bool, len(parked))
-	for _, l := range parked {
-		was[l] = true
-	}
-	var keep, live []layer
-	for _, l := range out.layers.entries {
-		if was[l] {
-			keep = append(keep, l)
-		} else {
-			live = append(live, l)
+	if out.viewed != view {
+		// The handler moved the panels: the views put back live went into
+		// the leaving slot's pile with its group (saveView). They were
+		// displaced by the console there: back under its parked copy.
+		if v := out.views[view]; v != nil {
+			v.windows.reparkConsole(parked)
 		}
+		return out, cmd
 	}
-	r.layers = keep
-	out.layers.entries = live
+	if out.console == nil || out.layers == nil {
+		return out, cmd // the console went: its views are live now
+	}
+	out.windowState.reparkConsole(parked)
 	return out, cmd
 }
 
@@ -305,8 +311,8 @@ func (m Model) detachConsole() Model {
 // (stash list, file preview, a solo): the session keeps running and the
 // return point is dropped — except a parked view, which is never lost.
 func (m Model) dropConsole() Model {
-	if m.console != nil && m.console.ret != nil {
-		m = m.restoreLayersBeneath(m.parkedLayersFor(m.console.ret)) // the view stays the console's: home's working diff must not come back over it
+	if m.console != nil {
+		m = m.restoreConsoleParked() // the slot on screen: its own displaced views only
 	}
 	return m.detachConsole()
 }
@@ -325,12 +331,8 @@ func (m Model) closeConsole() Model {
 		m.focus = m.lastLeftPanel
 		return m.reconcileFullscreenFocus()
 	}
-	m = m.restoreLayersBeneath(m.parkedLayersFor(r))
+	m = m.restoreConsoleParked() // the worktree on screen NOW (the return point, or where the user went)
 	m.fullMaxed, m.fullMax = r.fullMaxed, r.fullMax
-	m.stashView = r.stashView
-	if r.filesPreview != nil && r.filesView != nil && m.filesView == r.filesView {
-		m.filesPreview = r.filesPreview // only inside the files view it belongs to
-	}
 	if m.focus == panelCommits {
 		m.focus = r.focus
 	}

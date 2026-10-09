@@ -194,23 +194,8 @@ func TestSwitchViewParksTheWindowsInTheirWorktree(t *testing.T) {
 	}
 }
 
-func TestConsoleCloseDropsParkedWorkingLayersOverAnotherWorktree(t *testing.T) {
-	m := loadedModel(t)
-	m.width, m.height = 120, 40
-	m, other := addWorktree(t, m, "wt2")
-	installSessionManager(t)
-	id := startSessionIn(t, m, other, "Shell")
-	m = m.pushLayer(&diffView{title: "f", rev: ""}) // home's working diff
-	m, _ = m.showConsole(id, false)                 // parks it, shows other
-	m.console.ret.view = model.KeyOf(other)         // alt+w's first hit: the panels stay on other
-	m = m.closeConsole()
-	if m.viewed != model.KeyOf(other) {
-		t.Fatalf("viewed=%q", m.viewed)
-	}
-	if m.topLayer() != nil {
-		t.Fatalf("home's working diff restored over %s: %T", other, m.topLayer())
-	}
-}
+// (The console's displaced copy lives on the slot now: see
+// console_parked_test.go for the return-to-another-worktree cases.)
 
 // --- 4: steering compares with the worktree on SCREEN ---
 
