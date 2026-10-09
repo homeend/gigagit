@@ -15,12 +15,13 @@ import (
 type fileSourceKind int
 
 const (
-	srcWorktree fileSourceKind = iota // the file ON DISK in the current worktree
-	srcCommit                         // the file at a commit (rev = sha)
-	srcShelf                          // a shelf member's frozen bytes (rev = entry id)
-	srcExternal                       // a file outside the repository (an AI task's result); path is absolute
-	srcNote                           // an AI review stored as a note; rev = note id, path = "review-<id>.md"
-	srcOverview                       // an agent's overview, held in memory (openFile.ov); path = "overview-<n>.md"
+	srcWorktree       fileSourceKind = iota // the file ON DISK in the current worktree
+	srcCommit                               // the file at a commit (rev = sha)
+	srcShelf                                // a shelf member's frozen bytes (rev = entry id)
+	srcExternal                             // a file outside the repository (an AI task's result); path is absolute
+	srcNote                                 // an AI review stored as a note; rev = note id, path = "review-<id>.md"
+	srcOverview                             // an agent's overview, held in memory (openFile.ov); path = "overview-<n>.md"
+	srcReviewOverview                       // a review's STORED overview (openFile.ov, ov.tip = the reviewed tip); rev = review id, path = "overview-<id>.md"
 )
 
 // fileSource names one version of a file: the working tree, a commit or a

@@ -71,6 +71,9 @@ type contentLine struct {
 	// summary is the review view's "≡ Summary" row: enter opens the review's
 	// summary (the text GitHub gets), not a file.
 	summary bool
+	// overviewDoc is the review view's "≡ Overview" row (a review with a
+	// stored overview): enter opens it in the overview viewer, not a file.
+	overviewDoc bool
 	// dim draws the row faint: the review view's one-line file summary under
 	// its file (not a heading — the sticky line names directories only).
 	dim bool

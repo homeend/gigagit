@@ -69,7 +69,7 @@ func (m Model) syncOverviews() Model {
 	listed := map[string]bool{}
 	var gone []*openFile
 	for _, d := range m.openFiles.list(m.currentWorktree) {
-		if d.ov == nil {
+		if d.ov == nil || d.src.kind != srcOverview { // a review's stored overview is not the store's
 			continue
 		}
 		o, ok := m.docs.Overview(d.id())

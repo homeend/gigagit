@@ -1,0 +1,50 @@
+name = "tui: a review with a stored overview shows ≡ Overview; enter opens it, its anchor opens the file at the reviewed commit, backspace returns"
+
+# A commit adding a.txt (5 lines), reviewed by an agent that stored an
+# overview with one anchor into the file and one into a file the review
+# never read (drawn plain). The review view lists ≡ Summary, then
+# ≡ Overview; the overview viewer walks the anchors.
+[input]
+steps = [
+  { write = "a.txt", content = "one\ntwo\nthree\nfour\nfive\n" },
+  { commit = "add a" },
+]
+
+[[run]]
+cmd   = ["review", "save", "gg://{{cwd}}@{{rev:HEAD}}", "--agent", "Claude Code", "--stdin"]
+stdin = '{"version":1,"summary":"## Summary\nfine","overview":"Start at [line two](a.txt:2), then [outside](zzz.go:1).","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"why two?"}]}]}'
+exit  = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "files"
+keys = ["right", "enter"]
+wait = true
+screen_contains = ["Reviews", "Claude Code"]
+
+[[tui.step]]
+name = "review"
+keys = ["down", "enter"]
+wait = true
+screen_contains = ["≡ Summary", "≡ Overview", "a.txt"]
+
+[[tui.step]]
+name = "overview"
+keys = ["down", "enter"]
+screen_contains = ["Overview: ", "line two", "outside"]
+
+[[tui.step]]
+name = "anchor"
+keys = ["enter"]
+wait = true
+screen_contains = ["View a.txt @", "┃"]
+
+[[tui.step]]
+name = "back"
+keys = ["bspace"]
+screen_contains = ["Overview: ", "line two"]
+
+[expect]
+branch = "main"

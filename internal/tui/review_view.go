@@ -40,6 +40,8 @@ type reviewViewState struct {
 	// backPreview is the preview (or pair) whose Reviews block opened this
 	// review: esc re-opens it. One-shot — leaveReviewView clears it.
 	backPreview *previewReturn
+	// overview is the stored overview, resolved (the "≡ Overview" row); nil = none.
+	overview *domain.OverviewDoc
 	// older: a preview review of a tip its preview has since moved past —
 	// the header says so (R2: it still shows exactly what was reviewed).
 	older bool
@@ -78,8 +80,11 @@ type reviewViewMsg struct {
 	back      model.Commit
 	backPrev  *previewReturn
 	older     bool
-	gen       int // the loading box it answers (reviewLoadingPopup.gen)
-	err       error
+	// overview is the review's stored overview resolved at the tip (nil =
+	// none, or one that could not be read: the summary still opens).
+	overview *domain.OverviewDoc
+	gen      int // the loading box it answers (reviewLoadingPopup.gen)
+	err      error
 	// land is the navigate a review link with a file (and line) carried: it
 	// is parked until the review's file list loads, then lands there. nil =
 	// open the review at its overview.
@@ -132,6 +137,11 @@ func (m Model) openReviewLanding(id, title string, back model.Commit, bp *previe
 		if out.counts, out.err = svc.ReviewFileCounts(ctx, id); out.err != nil {
 			return out
 		}
+		if out.review.Doc.Overview != "" {
+			if od, oerr := svc.ReviewOverview(ctx, id); oerr == nil {
+				out.overview = &od
+			}
+		}
 		out.other, out.err = svc.ReviewOtherNotes(ctx, id)
 		return out
 	}
@@ -172,7 +182,7 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("not in gg review format — shown as text")
 		return m, tea.Batch(cmd, landFail)
 	}
-	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back, backPreview: msg.backPrev, older: msg.older}
+	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back, backPreview: msg.backPrev, older: msg.older, overview: msg.overview}
 	// landErr answers a landing whose review could not open its files.
 	landErr := func(err error) tea.Cmd {
 		if msg.land == nil {
@@ -283,6 +293,9 @@ func reviewTreeLines(st *reviewViewState, files []contentLine) []contentLine {
 		}
 	}
 	out := []contentLine{{text: "≡ " + i18n.T("Summary"), summary: true}}
+	if st.overview != nil {
+		out = append(out, contentLine{text: "≡ " + i18n.T("Overview"), overviewDoc: true})
+	}
 	for _, l := range files {
 		if l.path == "" {
 			out = append(out, l)
@@ -492,6 +505,50 @@ func (p *reviewOtherNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 		return m, nil
 	}
 	return p.contentPopup.update(m, msg)
+}
+
+// openReviewOverviewDoc opens the review's stored overview in the overview
+// viewer (R12, R5): the same layout, anchors and keys as a temporary one,
+// its anchors opening files at the reviewed tip (overview.tip). The
+// document is registered among the open files (ctrl+\ lists it; backspace
+// in a file it opened finds the way back), under its own source kind so the
+// agent-docs sync never touches it. The first resolved anchor is current.
+func (m Model) openReviewOverviewDoc() (Model, tea.Cmd) {
+	st := m.filesReview
+	if st == nil || st.overview == nil {
+		return m, nil
+	}
+	src := fileSource{kind: srcReviewOverview, rev: st.id}
+	path := "overview-" + st.id + ".md"
+	if d := m.openFiles.find(m.currentWorktree, docKey(src, path)); d != nil {
+		return m.bringToFront(d)
+	}
+	d := m.newOpenFile(src, path)
+	d.title = i18n.T("Overview: %s", reviewLabel(st.review))
+	d.p.prose, d.p.mode = true, modeScroll
+	d.ov = &overview{text: st.overview.Text, sel: -1, tip: st.tip}
+	rows, inner := m.viewerGeom()
+	d.layOut(rows, m.overviewWidth(inner))
+	if len(d.ov.anchors) == len(st.overview.Anchors) { // the same parser, the same order
+		for i := range d.ov.anchors {
+			d.ov.anchors[i].plain = !st.overview.Anchors[i].OK
+		}
+		d.ov.paint(d.p.lines)
+	}
+	d.stepAnchor(1, rows) // the first resolved anchor is current on open
+	m = m.pushLayer(&fileViewer{d})
+	m = m.registerDoc(d)
+	return m, nil
+}
+
+// openFileAtCommitLine is openFileAtCommit landing on line (1-based, 0 =
+// top), lines line..end selected as a link's range is.
+func (m Model) openFileAtCommitLine(rev, path string, line, end int) (Model, tea.Cmd) {
+	m, cmd := m.openFileAtCommit(rev, path)
+	if d := topDoc(m); d != nil && line > 0 {
+		d.pendingLine, d.pendingEnd = line, end
+	}
+	return m, cmd
 }
 
 // openFileAtCommit opens path as it is at commit rev in the viewer.

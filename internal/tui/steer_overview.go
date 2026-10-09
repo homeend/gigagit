@@ -68,7 +68,7 @@ func (m Model) steerOverview(c steer.Command) (Model, tea.Cmd) {
 // findOverview is the current worktree's overview with id, or nil and why.
 func (m Model) findOverview(id string) (*openFile, string) {
 	for _, d := range m.openFiles.list(m.currentWorktree) {
-		if d.ov != nil && d.id() == id {
+		if d.ov != nil && d.src.kind == srcOverview && d.id() == id {
 			return d, ""
 		}
 	}

@@ -30,6 +30,10 @@ type anchor struct {
 	target  agentdocs.Anchor
 	spans   []anchorSpan // nil: clipped away (a wide table)
 	missing bool         // its file or note was not found when last checked
+	// plain: a stored overview's anchor the review cannot open — a path
+	// outside the review's files, a range past the file, a note: anchor
+	// (R3). Drawn as text, never current, enter says why.
+	plain bool
 }
 
 // overview is the part of an open file that makes it an overview.
@@ -40,6 +44,9 @@ type overview struct {
 	w       int      // the width the rows were laid out at; 0 = never
 	mode    dispMode // the view they were laid out for (ctrl+w)
 	closed  bool     // taken out of the open files: its files lose their bands
+	// tip is the commit a STORED overview's anchors open at ("" = the
+	// working tree, a temporary overview); set with srcReviewOverview.
+	tip string
 }
 
 // overviewLines lays text out at width for view mode: the rows, and the
@@ -117,6 +124,8 @@ func (ov *overview) paint(lines []contentLine) {
 	for i, a := range ov.anchors {
 		c := mdAnchor
 		switch {
+		case a.plain:
+			c = 0
 		case i == ov.sel:
 			c = mdAnchorSel
 		case a.missing:
@@ -204,6 +213,7 @@ func (d *openFile) layOut(rows, width int) {
 		for i := range anchors {
 			if anchors[i].dest == ov.anchors[i].dest {
 				anchors[i].missing = ov.anchors[i].missing
+				anchors[i].plain = ov.anchors[i].plain
 			}
 		}
 	}

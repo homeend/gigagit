@@ -709,7 +709,7 @@ func filesGeometry(vis []contentLine, sel, rowsCap int) filesGeom {
 		body--
 	}
 	g.top = windowStart(g.s1-g.s0, body, g.anchor)
-	g.headTop = g.sticky && g.s0+g.top < len(vis) && (vis[g.s0+g.top].heading || vis[g.s0+g.top].summary)
+	g.headTop = g.sticky && g.s0+g.top < len(vis) && (vis[g.s0+g.top].heading || vis[g.s0+g.top].summary || vis[g.s0+g.top].overviewDoc)
 	return g
 }
 
@@ -737,7 +737,7 @@ func (m Model) renderFileRows(wr []winRow, vis []contentLine, g filesGeom, inner
 	}
 	body, top := renderWindowTop(wr, winOpts{w: innerW, h: rowsCap - 1, mode: p.mode, anchor: g.anchor, hscroll: p.hscroll})
 	sticky := wr[top]
-	if vis[g.s0+top].heading || vis[g.s0+top].summary {
+	if vis[g.s0+top].heading || vis[g.s0+top].summary || vis[g.s0+top].overviewDoc {
 		// The heading itself is the sticky line; its files fill the body.
 		body, _ = renderWindowTop(wr[top+1:], winOpts{w: innerW, h: rowsCap - 1, mode: p.mode, anchor: g.anchor - top - 1, hscroll: p.hscroll})
 	} else {
@@ -1119,7 +1119,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.focusTree(), nil
 		}
 		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].summary && vis[p.sel].noteID == "" && vis[p.sel].shelfNote == "" && vis[p.sel].notedPath == "" && vis[p.sel].noteScope == "") {
+		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].summary && !vis[p.sel].overviewDoc && vis[p.sel].noteID == "" && vis[p.sel].shelfNote == "" && vis[p.sel].notedPath == "" && vis[p.sel].noteScope == "") {
 			return m, nil // heading row, placeholder, or empty view
 		}
 		return m.openDiffForFileLine(vis[p.sel])
@@ -1238,6 +1238,9 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	}
 	if l.summary {
 		return m.openReviewSummary()
+	}
+	if l.overviewDoc {
+		return m.openReviewOverviewDoc()
 	}
 	if l.shelfNote != "" { // a shelved set's note: the read-only note popup, esc comes back here
 		for _, r := range m.filesShelfNotes {
