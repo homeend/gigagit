@@ -33,6 +33,9 @@ func (s *Service) NoteLinkText(ctx context.Context, id string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%w: %s", ErrNoteLinkGone, id)
 	}
+	if n.IsRemarkReply() { // its place is the remark's: the review's own link there
+		return s.ReviewRemarkLink(ctx, n.Remark)
+	}
 	repo, err := s.LinkRepo(ctx)
 	if err != nil {
 		return "", err
@@ -107,8 +110,14 @@ func checkNoteHint(ctx context.Context, svc *Service, res Resolved) error {
 
 // NoteThread is note id's thread: the root (id itself, or its parent when
 // id is a reply), the replies in creation order, and the thread's
-// resolution (nil = open). ErrNoteLinkGone when nothing holds id.
+// resolution (nil = open). A review remark's thread — asked by the remark
+// id or by one of its replies — has the remark as its root (a note built
+// at read time, as the review's diff shows it). ErrNoteLinkGone when
+// nothing holds id.
 func (s *Service) NoteThread(ctx context.Context, id string) (root model.Note, replies []model.Note, resolved *model.ThreadResolution, err error) {
+	if model.IsReviewNoteID(id) {
+		return s.remarkThread(ctx, id)
+	}
 	byID, err := s.storedNotes(ctx)
 	if err != nil {
 		return model.Note{}, nil, nil, err
@@ -116,6 +125,9 @@ func (s *Service) NoteThread(ctx context.Context, id string) (root model.Note, r
 	n, ok := byID[id]
 	if !ok {
 		return model.Note{}, nil, nil, fmt.Errorf("%w: %s", ErrNoteLinkGone, id)
+	}
+	if n.IsRemarkReply() {
+		return s.remarkThread(ctx, n.Remark)
 	}
 	root = n
 	if n.ParentID != "" {
@@ -140,4 +152,30 @@ func (s *Service) NoteThread(ctx context.Context, id string) (root model.Note, r
 		}
 	}
 	return root, replies, resolved, nil
+}
+
+// remarkThread is NoteThread for a review remark: the remark as a note (the
+// id the review's diff gives it, at the review's commit) and the replies
+// and resolution its review keeps for it.
+func (s *Service) remarkThread(ctx context.Context, remarkID string) (model.Note, []model.Note, *model.ThreadResolution, error) {
+	rm, rid, err := s.reviewRemark(ctx, remarkID)
+	if err != nil {
+		return model.Note{}, nil, nil, err
+	}
+	r, err := s.Review(ctx, rid)
+	if err != nil {
+		return model.Note{}, nil, nil, err
+	}
+	root := model.Note{ID: remarkID, Source: model.NoteSourceAgent, Author: r.Agent,
+		Address: model.FileAddress{State: model.StateCommitted, Commit: r.Commit, Path: rm.Path},
+		Side:    rm.Side, Range: [2]int{rm.Start, max(rm.End, rm.Start)},
+		Summary: rm.Summary, Rationale: rm.Rationale, Created: r.Created, Updated: r.Updated}
+	for _, kv := range rm.Meta {
+		root.Tags = append(root.Tags, kv.Key+": "+kv.Value)
+	}
+	th, _ := r.RemarkThreads()
+	if rm.N < len(th) {
+		return root, th[rm.N].Replies, th[rm.N].Resolution, nil
+	}
+	return root, nil, nil, nil
 }
