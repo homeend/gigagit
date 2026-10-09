@@ -114,15 +114,15 @@ func TestLiveViewListsTheViewedWorktreeToo(t *testing.T) {
 		t.Fatal(err)
 	}
 	lv := readLive(dir)
-	has := func(w string) bool {
-		for _, x := range lv.tuis {
+	has := func(list []string, w string) bool {
+		for _, x := range list {
 			if x == w {
 				return true
 			}
 		}
 		return false
 	}
-	if !has("/tui/home") || !has("/tui/other") {
-		t.Fatalf("tuis = %v, want home and viewed", lv.tuis)
+	if !has(lv.tuis, "/tui/home") || !has(lv.viewed, "/tui/other") {
+		t.Fatalf("tuis = %v viewed = %v, want home among the TUIs and the look among the viewed", lv.tuis, lv.viewed)
 	}
 }

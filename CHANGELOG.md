@@ -115,6 +115,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - A shown worktree removed while an operation ran lost its queued return
   home (the queue was written to a discarded copy); the panels now go home
   when the operation ends.
+- An agent working in a worktree gg did not start it in could not reach
+  the TUI SHOWING that worktree: `gg session` commands found no inbox
+  there. They now route to the TUI whose panels show the worktree (a TUI
+  running there still wins, and so does a standalone `gg web` page there
+  unless `--to tui`), and `gg session status` prints `showing:` (JSON
+  `showing`) when the TUI shows a worktree that is not its own. The
+  `using-gg` skill says both (v161 — `gg init --update`).
+- The worktree guard called a worktree a TUI merely shows "a gg TUI is
+  open here"; it now says the TUI shows it and runs in another.
+- `alt+w` during a repository switch refused silently; it says the
+  repository is still loading.
+- An agent tour parked for a worktree's status, `gg session highlight`
+  bands on working files and a navigate waiting for one status re-read all
+  outlived a swap and landed on the NEXT worktree's file of the same name;
+  the swap drops the tour and the working-file bands (a commit's stay) and
+  the parked navigate is answered as failed.
 
 ### Added
 - A switch between worktrees of ONE repository is now a swap of remembered
@@ -133,7 +149,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   The Worktrees panel's `*` follows the shown worktree; the status row names
   the console's worktree only when the panels show another one (you pressed
   enter on a row under a docked console). A worktree removed while shown
-  falls back to your own.
+  falls back to your own. Two things to know about a look: `W` (create a
+  worktree and switch) runs in the worktree ON SCREEN and then makes the
+  new one your own; and the hosted web page keeps following your own
+  worktree — it never learns of a look.
 - `alt+w` is worktree mode. The first press with the keyboard elsewhere —
   an agent or terminal console shown, another panel focused — hides the
   console (the session keeps running), focuses the Branches panel (its

@@ -6,7 +6,7 @@ package tui
 // (consoleSwitch.tour, settled with the console in settleConsoleAfterSwitch).
 
 import (
-	"path/filepath"
+	"github.com/homeend/gigagit/internal/model"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -50,7 +50,7 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 	}
 	dir := s.Info().Dir
 	check := m.checkTourCmd([]string{o.ID})
-	if filepath.Clean(dir) == filepath.Clean(m.currentWorktree) {
+	if model.SamePath(dir, m.currentWorktree) {
 		m = m.syncOverviews()
 		return m.showTour(o.ID), check
 	}

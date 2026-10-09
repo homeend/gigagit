@@ -89,7 +89,8 @@ type liveView struct {
 	agents  map[string]string // full session id -> agent tool id
 	procs   map[string]bool   // procs with a LIVE registry (plus this process)
 	byDir   map[string][]SessionRef
-	tuis    []string // TUI worktrees
+	tuis    []string // TUI worktrees (where a TUI runs)
+	viewed  []string // worktrees a TUI SHOWS while running elsewhere (the fast switch's look)
 }
 
 // sessionDead: its process's registry is live and does not list it running,
@@ -142,7 +143,7 @@ func readLive(dir string) liveView {
 				lv.tuis = append(lv.tuis, r.Worktree)
 			}
 			if r.Viewed != "" {
-				lv.tuis = append(lv.tuis, r.Viewed) // shown by that TUI: a take would pull the panels from under it
+				lv.viewed = append(lv.viewed, r.Viewed) // shown by that TUI: a take would pull the panels from under it
 			}
 			for _, e := range r.Sessions {
 				add(e)
@@ -150,6 +151,20 @@ func readLive(dir string) liveView {
 		}
 	}
 	return lv
+}
+
+// TUIViewing finds a live TUI whose panels SHOW dir while it runs elsewhere
+// (the fast switch's look) and returns its own worktree — where its steering
+// inbox is. An agent in dir that gg did not start reaches that TUI by it.
+func TUIViewing(dir string) (string, bool) { return tuiViewingIn(SessionRegistryDir(), dir) }
+
+func tuiViewingIn(reg, dir string) (string, bool) {
+	for _, r := range sessionreg.Live(reg) {
+		if r.Viewed != "" && r.Worktree != "" && SameCheckout(r.Viewed, dir) {
+			return r.Worktree, true
+		}
+	}
+	return "", false
 }
 
 // AgentHostInfo is one live gg TUI as its registry file describes it.

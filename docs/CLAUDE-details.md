@@ -6333,7 +6333,18 @@ that is gone falls back to home and says so; `pruneViews` retargets a
 bare-main repository (`Worktree.Bare`) is skipped by `worktreeOrder`,
 `canEnterWorktree` and refused by `switchView` (`bareRepository`).
 `cycleWorktrees` skips ring stops `checkSwitchTarget` finds unreachable
-(named in the status line; all unreachable = a message, no move). Worktree-scoped async results carry
+(named in the status line; all unreachable = a message, no move). The
+`home == ""` refusal (a repo switch in flight) is said too. `sleepView`
+also drops the leaving slot's steer leftovers: `consoleSwitch.tour`, the
+`attention` bands keyed without a commit (working files; a commit's are the
+repo's), and a `pendingSteer` at `steerStageStatusRetry` carries the
+`svc` it was parked for — `drainPendingStatus` fails it when the status
+that lands is another slot's. The CLI side of a look: `domain.TUIViewing`
+(registry `Viewed`) lets `preferredInboxFor` route an agent in a worktree
+no TUI runs in to the TUI SHOWING it (one running there wins; never for
+`--to web`), `gg session status` prints `showing:` from the snapshot's
+`repo.viewed`, and `liveView.viewed` (apart from `tuis`) lets `tuiGuard`
+say "a gg TUI shows this worktree (it runs in another)". Worktree-scoped async results carry
 `svc` (`statusRefreshedMsg`, `stageHunksLoadedMsg`,
 `unstageHunksLoadedMsg`, `conflictFileLoadedMsg`, `amendPrefillMsg`) and
 are dropped when `msg.svc != m.svc`. Steering compares a command's
@@ -6382,7 +6393,13 @@ create-and-switch result before the list re-reads) still `reRoot`s — the
 same guard that keeps other repositories on the full reload.
 `onWebSwitchRequest` routes through `guardedReRoot`; a page switch that is
 neither a reroot nor an adopt (the worktree on screen, or refused) answers
-the page at once and pops its pending reply. `canEnterWorktree`: a row can
+the page at once and pops its pending reply. `W` (create + switch) during
+a look: the popup anchors on the MAIN worktree's template root
+(`mainWorktreeRoot`), the op runs through `m.svc` (the VIEWED slot) and the
+create-and-switch result reRoots gg's identity to the new worktree. The
+hosted page never learns of a look (`rerootWebCmd` only on an adopt; a
+grep test, `TestWebHostAlwaysRootsAtHome`, pins every start/reroot to
+`homeSvc`). `canEnterWorktree`: a row can
 be entered when it is not on screen, or on screen only because a console
 looks at it.
 
@@ -6411,7 +6428,8 @@ sentence.
 prune, adopt, repo switch), `console_view_test.go` (show/close, staging
 lands in the viewed tree, the alt+a ring over two worktrees, refusals),
 `switch_audit_test.go` / `switch_audit2_test.go` / `review_fixes_test.go`
-/ `round2_switch_test.go` (the three review rounds' findings; domain
-`round2_switch_test.go` for `linkSplit` and `SetService`),
+/ `round2_switch_test.go` / `round2b_switch_test.go` / `round2c_switch_test.go`
+(the three review rounds' findings; domain `round2_switch_test.go` /
+`round2c_switch_test.go`, cli `session_viewed_test.go`),
 `view_worktrees_test.go`, the hint tests, e2e
 `tui_worktree_switch_fast.toml` (three goldens).
