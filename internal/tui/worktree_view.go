@@ -301,7 +301,10 @@ func (m Model) switchView(path string) (Model, bool) {
 		return m, true
 	}
 	if m.home == "" {
-		return m, false // before the first load seeds the slots there is nothing to swap from
+		// Before the first load seeds the slots (a repo switch in flight)
+		// there is nothing to swap from.
+		m.statusMsg = i18n.T("the repository is still loading — switch once it is shown")
+		return m, false
 	}
 	listed, ok := m.listedWorktree(path)
 	if !ok {
@@ -386,7 +389,15 @@ func (m Model) sleepView() Model {
 	m.srcGen[srcFeed]++ // nor a commit walk from the old root (the feed is re-rooted on load)
 	m.srcInflight[srcFeed] = false
 	m.srcLoading[srcFeed] = false
-	m.workingReviewsGen++ // likewise a reviews read
+	m.workingReviewsGen++     // likewise a reviews read
+	m.consoleSwitch.tour = "" // a tour parked for the leaving slot's status
+	// `gg session highlight` bands on WORKING files are the leaving tree's
+	// (the same path exists in the arriving one); a commit's are the repo's.
+	for k := range m.attention {
+		if k.commit == "" {
+			delete(m.attention, k)
+		}
+	}
 	return m
 }
 

@@ -133,6 +133,11 @@ func (g tuiGuard) Check(_ context.Context, t wtguard.Target) (wtguard.Result, er
 			return wtguard.Result{Fact: true, Blocker: &wtguard.Blocker{Reason: "tui", Detail: "a gg TUI is open here"}}, nil
 		}
 	}
+	for _, w := range g.lv.viewed {
+		if SameCheckout(w, t.Dir) {
+			return wtguard.Result{Fact: true, Blocker: &wtguard.Blocker{Reason: "tui", Detail: "a gg TUI shows this worktree (it runs in another)"}}, nil
+		}
+	}
 	return wtguard.Result{Fact: false}, nil
 }
 

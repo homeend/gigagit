@@ -44,18 +44,37 @@ func TestSwitchGensAreMonotonic(t *testing.T) {
 // views another one; the viewed one is not either.
 func TestOwnWorktreeGuardedWhileViewingAnother(t *testing.T) {
 	m := loadedModel(t)
+	m.width, m.height = 120, 40
 	m, other := addWorktree(t, m, "wt2")
+	m, third := addWorktree(t, m, "wt3")
 	m, _ = m.switchView(other)
-	for i, w := range m.worktrees {
-		m.sel[panelWorktrees] = i
-		if m.canDeleteWorktree() {
-			t.Fatalf("%s is deletable while %q is viewed from home %q", w.Path, m.viewed, m.home)
+	m.focus = panelWorktrees
+	seen := map[model.CheckoutKey]bool{}
+	for d := range m.panelLen(panelWorktrees) {
+		m.sel[panelWorktrees] = d
+		w, ok := m.selectedWorktree()
+		if !ok {
+			continue
+		}
+		key := model.KeyOf(w.Path)
+		seen[key] = true
+		guarded := key == m.home || key == m.viewed
+		if m.canDeleteWorktree() == guarded {
+			t.Fatalf("%s deletable=%v while %q is viewed from home %q", w.Path, !guarded, m.viewed, m.home)
 		}
 	}
+	if !seen[m.home] || !seen[m.viewed] || !seen[model.KeyOf(third)] {
+		t.Fatalf("rows seen %v; want home, the viewed and the third worktree", seen)
+	}
+	offered := false
 	for _, w := range m.recycleCandidates() {
 		if model.KeyOf(w.Path) == m.home || model.KeyOf(w.Path) == m.viewed {
 			t.Fatalf("recycle offers %s", w.Path)
 		}
+		offered = offered || model.KeyOf(w.Path) == model.KeyOf(third)
+	}
+	if !offered {
+		t.Fatal("recycle does not offer the third worktree: the guard is not selective")
 	}
 }
 

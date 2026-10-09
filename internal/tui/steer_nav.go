@@ -84,6 +84,7 @@ func (m Model) expirePendingHint(now time.Time) (Model, tea.Cmd) {
 type pendingSteer struct {
 	cmd   steer.Command
 	stage steerStage
+	svc   *domain.Service // steerStageStatusRetry: the worktree whose status re-read it waits for
 	// tag is the m.diffTag this landing belongs to (steerStageDiff) or the
 	// m.compareTag the pair's file list is loading under (steerStageCompare)
 	// -- never both at once, since a pendingSteer holds exactly one stage.
@@ -501,7 +502,7 @@ func (m Model) steerNavigateStatusFile(c steer.Command, retried bool) (Model, te
 		// The agent may have written the file a moment ago and this repo may
 		// have no usable file-watch (drvfs): re-read status once before giving
 		// up.
-		m.pendingSteer = &pendingSteer{cmd: c, stage: steerStageStatusRetry, at: time.Now()}
+		m.pendingSteer = &pendingSteer{cmd: c, stage: steerStageStatusRetry, svc: m.svc, at: time.Now()}
 		var cmd tea.Cmd
 		m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{})
 		return m, cmd
@@ -708,6 +709,9 @@ func (m Model) drainPendingStatus() (Model, tea.Cmd) {
 	// inheriting the one applySteer ran before the reload started.
 	if why := m.steerRefusal(); why != "" {
 		return m.failPending(why)
+	}
+	if ps.svc != nil && ps.svc != m.svc {
+		return m.failPending("the panels moved to another worktree before the status was re-read") // never retried against ITS file of the same name
 	}
 	m.pendingSteer = nil
 	return m.steerNavigateStatusFile(ps.cmd, true)

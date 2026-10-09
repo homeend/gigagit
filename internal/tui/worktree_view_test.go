@@ -181,9 +181,17 @@ func TestSwitchViewPutsTheLeavingSlotToSleep(t *testing.T) {
 	m := loadedModel(t)
 	m, other := addWorktree(t, m, "wt2")
 	m.watchSupported = true
+	m.srcInflight[srcStatus], m.srcLoading[srcStatus] = true, true // a status read of the leaving slot in flight
+	wg, sg, fg := m.watchGen, m.srcGen[srcStatus], m.srcGen[srcFeed]
 	m, _ = m.switchView(other)
 	if m.watcher != nil || m.watchSupported {
 		t.Fatal("the arriving slot starts with no watcher until its kick lands")
+	}
+	if m.watchGen == wg || m.srcGen[srcStatus] == sg || m.srcGen[srcFeed] == fg {
+		t.Fatalf("a result for the leaving slot could still land: watch %d→%d status %d→%d feed %d→%d", wg, m.watchGen, sg, m.srcGen[srcStatus], fg, m.srcGen[srcFeed])
+	}
+	if m.srcInflight[srcStatus] || m.srcLoading[srcStatus] {
+		t.Fatal("the leaving slot's read is still marked in flight / loading on the arriving one")
 	}
 }
 
