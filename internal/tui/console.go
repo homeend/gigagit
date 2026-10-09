@@ -155,10 +155,20 @@ func (m Model) showConsoleBy(id domain.SessionID, focused, byUser bool) (Model, 
 	// the op or the surface clears, as a console's return is.
 	m.pendingReturnView = "" // a return queued by an earlier close is moot: this console's own return point rules
 	if dir := s.Info().Dir; model.KeyOf(dir) != m.viewed && m.isRepoWorktree(dir) {
+		// The console's size is the business of the worktree it shows IN:
+		// the full-screen view captured here waits in the worktree being
+		// left, so only the pin carries over; loadView's displacement raises
+		// it again if the arriving worktree has a full-screen view of its own.
+		wasFull := ret.full
+		ret.full = ret.fullMaxed
+		m.console.maximized = ret.full
 		var ok bool
 		if m, ok = m.switchViewBy(dir, byUser); !ok {
 			m.pendingReturnView = model.KeyOf(dir)
+			ret.full = wasFull // still over the worktree whose view was captured
+			m.console.maximized = wasFull
 		}
+		m = m.syncConsoleSizeIfFocused()
 	}
 	return m, waitSessionCmd(m.console, id, gen)
 }

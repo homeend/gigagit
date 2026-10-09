@@ -170,10 +170,9 @@ func TestAltWHidesAMaximisedConsoleToo(t *testing.T) {
 	}
 }
 
-// alt+w under a full-screen console hides it and moves on; the diff the
-// console displaced belongs to home and is live again when home is the
-// next stop.
-func TestAltWUnderAFullScreenConsoleHidesItAndMovesOn(t *testing.T) {
+// alt+w under a console hides it and moves on; the diff the console
+// displaced belongs to home and is live again when home is the next stop.
+func TestAltWUnderAConsoleHidesItAndMovesOn(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, other := addWorktree(t, m, "wt2")
@@ -181,8 +180,8 @@ func TestAltWUnderAFullScreenConsoleHidesItAndMovesOn(t *testing.T) {
 	id := startSessionIn(t, m, other, "Shell")
 	dv := &diffView{title: "a.go", rev: "abc123"}
 	m = m.pushLayer(dv)
-	m, _ = m.showConsole(id, true)
-	if !m.consoleFull() || m.topLayer() != nil {
+	m, _ = m.showConsole(id, true) // docked: the diff is home's, not other's (TestConsoleSizeFollowsTheWorktreeItShowsIn)
+	if m.console == nil || m.topLayer() != nil {
 		t.Fatalf("precondition: console=%+v top=%T", m.console, m.topLayer())
 	}
 	m = pressAlt(t, m, 'w') // the ring: other → home
