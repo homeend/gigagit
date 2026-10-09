@@ -175,7 +175,7 @@ func TestWorktreeEnterKeepsConsoleAndScreen(t *testing.T) {
 	m, other := addWorktree(t, m, "wt2")
 	s := startTestSession(t, m, `sleep 5`)
 	m, _ = m.openConsole(s.Info().ID)
-	nm, _ := m.guardedReRoot(other, true)
+	nm, _ := m.guardedReRoot(other, true, true)
 	m = nm.(Model)
 	if m.console == nil || !m.ready || m.viewed != model.KeyOf(other) {
 		t.Fatalf("console=%+v ready=%v viewed=%q", m.console, m.ready, m.viewed)

@@ -155,7 +155,7 @@ func (m Model) switchToLink(p *gotoCommitPopup, sw gotoLinkSwitch) (Model, tea.C
 	// path): the repo's previews are loaded already, so --at needs no
 	// previews read; another repository reloads and waits for its first.
 	fast := m.home != "" && m.isRepoWorktree(sw.checkout)
-	nm, cmd := m.guardedReRoot(sw.checkout, false)
+	nm, cmd := m.guardedReRoot(sw.checkout, false, true)
 	m = nm.(Model)
 	if fast && m.home != model.KeyOf(sw.checkout) {
 		return m, cmd // refused (a surface, an op): said on the status line

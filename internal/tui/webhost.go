@@ -153,7 +153,7 @@ func (m Model) onWebSwitchRequest(msg webSwitchRequestMsg) (Model, tea.Cmd) {
 	}
 	m.web.pendingSwitch = append(m.web.pendingSwitch, msg.reply)
 	home, status := m.home, m.statusMsg
-	nm, cmd := m.guardedReRoot(msg.path, false) // a worktree of this repo: the fast path
+	nm, cmd := m.guardedReRoot(msg.path, false, false) // a worktree of this repo: the fast path
 	m = nm.(Model)
 	if !m.loading && m.home == home {
 		// Neither a reroot nor an adopt: the worktree already on screen (nothing

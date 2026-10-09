@@ -239,7 +239,7 @@ func TestInRepoSwitchAdoptsWithoutAReload(t *testing.T) {
 	m, other := addWorktree(t, m, "wt2")
 	m.sel[panelCommits] = 0
 	m = m.pushLayer(&diffView{rev: "abc1"}) // waits in the worktree it was opened in
-	nm, _ := m.guardedReRoot(other, true)
+	nm, _ := m.guardedReRoot(other, true, true)
 	m = nm.(Model)
 	if m.viewed != model.KeyOf(other) || m.home != m.viewed || m.switchTarget != filepath.Clean(other) || publishedWorktree() != filepath.Clean(other) {
 		t.Fatalf("viewed=%q home=%q target=%q published=%q", m.viewed, m.home, m.switchTarget, publishedWorktree())
@@ -259,7 +259,7 @@ func TestInRepoSwitchAdoptsWithoutAReload(t *testing.T) {
 func TestAdoptViewReResolvesTheSnapshotTarget(t *testing.T) {
 	m := loadedModel(t)
 	m, other := addWorktree(t, m, "wt2")
-	nm, cmd := m.guardedReRoot(other, true)
+	nm, cmd := m.guardedReRoot(other, true, true)
 	m = nm.(Model)
 	for _, msg := range drainBatch(cmd) {
 		if st, ok := msg.(snapshotTargetMsg); ok {
@@ -275,7 +275,7 @@ func TestAdoptViewReResolvesTheSnapshotTarget(t *testing.T) {
 // A target in another repository keeps the full reload.
 func TestOtherRepoSwitchStillReRoots(t *testing.T) {
 	m := loadedModel(t)
-	nm, _ := m.guardedReRoot(gittest.BasicRepo(t, "b\n"), false)
+	nm, _ := m.guardedReRoot(gittest.BasicRepo(t, "b\n"), false, true)
 	m = nm.(Model)
 	if m.ready || len(m.views) != 0 {
 		t.Fatalf("ready=%v views=%v: another repo must reRoot", m.ready, m.views)
@@ -291,7 +291,7 @@ func TestSwitchWhileAConsoleIsShownAdoptsAndRetargetsTheReturn(t *testing.T) {
 	installSessionManager(t)
 	id := startSessionIn(t, m, other, "Shell")
 	m, _ = m.showConsole(id, false)
-	nm, _ := m.guardedReRoot(other, true)
+	nm, _ := m.guardedReRoot(other, true, true)
 	m = nm.(Model)
 	if m.home != model.KeyOf(other) || m.console == nil || m.console.ret.view != m.home {
 		t.Fatalf("home=%q console=%+v", m.home, m.console)
@@ -331,7 +331,7 @@ func TestAdoptViewRerootsTheWebPageLookDoesNot(t *testing.T) {
 		t.Fatal("a look must not reroot the page")
 	}
 	m = m.closeConsole()
-	nm, cmd := m.guardedReRoot(other, true)
+	nm, cmd := m.guardedReRoot(other, true, true)
 	_ = nm
 	if !hasWebReroot(drainBatch(cmd)) {
 		t.Fatal("adopt must reroot the page")

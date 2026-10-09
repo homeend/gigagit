@@ -84,7 +84,7 @@ func TestSnapshotTargetLandsAfterAConsoleShow(t *testing.T) {
 	m := loadedModel(t)
 	m, a := addWorktree(t, m, "wtA")
 	m, b := addWorktree(t, m, "wtB")
-	nm, cmd := m.guardedReRoot(a, true)
+	nm, cmd := m.guardedReRoot(a, true, true)
 	m = nm.(Model)
 	m, _ = m.switchView(b) // a console show
 	for _, msg := range drainBatch(cmd) {
@@ -136,7 +136,7 @@ func TestUserSwitchUnderAConsoleSwapsAndLabelsTheHint(t *testing.T) {
 	if row := m.withConsoleWorktree("", 120); row != "" {
 		t.Fatalf("console's worktree on screen: row = %q, want no hint", row)
 	}
-	nm, _ := m.guardedReRoot(m.homeWorktree(), true)
+	nm, _ := m.guardedReRoot(m.homeWorktree(), true, true)
 	m = nm.(Model)
 	if m.viewed != m.home || m.console == nil || m.console.ret.view != m.home {
 		t.Fatalf("viewed=%q console=%+v", m.viewed, m.console)

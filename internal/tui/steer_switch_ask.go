@@ -87,13 +87,13 @@ func steerAskNotice(a *steerSwitchAsk, repoKey string) *notice {
 				// Checked first, as switchToLink does: an unreachable
 				// checkout is refused in place (guardedReRoot's message).
 				if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, c.Worktree); verdict != switchOK {
-					nm, cmd := m.guardedReRoot(c.Worktree, false)
+					nm, cmd := m.guardedReRoot(c.Worktree, false, false)
 					return nm.(Model), cmd
 				}
 				// guardedReRoot: a worktree of this repository is a slot swap
 				// (no reload — the replay then runs against the new slot's
 				// service at once), another repository the full reload.
-				nm, cmd := m.guardedReRoot(c.Worktree, false)
+				nm, cmd := m.guardedReRoot(c.Worktree, false, false)
 				m = nm.(Model)
 				if m.viewed != "" && m.viewed != model.KeyOf(c.Worktree) && m.ready {
 					return m, cmd // the swap was refused (a surface, an op): said on the status line, nothing to replay — home itself may be the target

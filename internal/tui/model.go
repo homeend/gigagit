@@ -2626,7 +2626,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 								// the CURRENT repo, same as the Worktrees-panel
 								// enter — a foreign-notation link gets the
 								// repair offer, not just the refusal.
-								return m.guardedReRoot(wtPath, true)
+								return m.guardedReRoot(wtPath, true, true)
 							}
 							return m, nil
 						},
@@ -2906,7 +2906,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
-				return m.guardedReRoot(wt.Path, true)
+				return m.guardedReRoot(wt.Path, true, true)
 			}
 			// Previews: enter opens the saved pair in the compare files view
 			// (target…source, the GitHub-PR diff). A pair that cannot be
@@ -2995,7 +2995,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelBranches && m.opsIdle() {
 				if b, ok := m.selectedBranch(); ok {
 					if wt, inWT := m.worktreeForBranch(b.Name); inWT {
-						return m.guardedReRoot(wt.Path, true)
+						return m.guardedReRoot(wt.Path, true, true)
 					}
 					m.statusMsg = i18n.T("%s is not checked out in another worktree", b.Name)
 					return m, nil
@@ -3741,13 +3741,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			driftCmd = m.driftCheckCmd(driftBranch, driftPaused, m.noticeGen)
 		}
 		if switchTo != "" {
-			return m.guardedReRoot(switchTo, false)
+			return m.guardedReRoot(switchTo, false, false)
 		}
 		if repairSwitch != "" {
 			// The repair just made this path reachable; the guard re-verifies
 			// (offerRepair=false — a repair that somehow didn't take refuses
 			// instead of crashing).
-			return m.guardedReRoot(repairSwitch, false)
+			return m.guardedReRoot(repairSwitch, false, false)
 		}
 		if chainSwitch != "" {
 			return m.startOp(engine.SmartSwitch{Branch: chainSwitch})
