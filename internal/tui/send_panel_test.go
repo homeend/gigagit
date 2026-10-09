@@ -424,7 +424,7 @@ func TestSendPanelCtrlSOnceWhilePlanning(t *testing.T) {
 	if _, again := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS}); again != nil {
 		t.Fatal("a second ctrl+s while planning must not start a second plan")
 	}
-	m, _ = m.handleForgeSendReady(forgeSendReadyMsg{gen: m.forgeGen, panel: true, err: errors.New("boom")})
+	m, _ = m.handleForgeSendReady(forgeSendReadyMsg{gen: m.forgeGen, panel: true, req: domain.PRSendRequest{PR: 7}, err: errors.New("boom")})
 	if p.planning || !strings.Contains(p.notice, "boom") {
 		t.Fatalf("after the plan failed: planning %v notice %q", p.planning, p.notice)
 	}
@@ -458,4 +458,20 @@ func TestSendPanelEnterFindsAFilteredFile(t *testing.T) {
 		t.Fatalf("the list's cursor is not on big.go: sel %d", m.filesView.sel)
 	}
 	_ = id
+}
+
+// Review finding I3: a plan that comes back for ANOTHER PR's panel (ctrl+s
+// on #7, esc, the panel of #8 opened meanwhile) leaves #8's panel alone —
+// its notice, its own planning.
+func TestSendPanelPlanOfAnotherPRLeavesThePanelAlone(t *testing.T) {
+	t.Parallel()
+	m, p := panelModel(t)
+	p.pr, p.planning, p.notice = 8, true, "mine"
+	m, _ = m.handleForgeSendReady(forgeSendReadyMsg{gen: m.forgeGen, panel: true, req: domain.PRSendRequest{PR: 7}, err: errors.New("boom")})
+	if !p.planning || p.notice != "mine" {
+		t.Fatalf("#8's panel was touched: planning %v notice %q", p.planning, p.notice)
+	}
+	if !strings.Contains(m.statusMsg, "boom") {
+		t.Fatalf("#7's word went nowhere: status %q", m.statusMsg)
+	}
 }

@@ -67,14 +67,16 @@ func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
 	if msg.gen != m.forgeGen {
 		return m, nil // planned in the repository before R
 	}
-	var p *sendPanel // the panel whose ctrl+s this answers: its words go to its notice
+	var p *sendPanel // the panel whose ctrl+s this answers (that PR's): its words go to its notice
 	if msg.panel {
-		if p = layerOf[*sendPanel](m); p != nil {
+		if p = layerOf[*sendPanel](m); p != nil && p.pr == msg.req.PR {
 			p.planning, p.notice = false, ""
+		} else {
+			p = nil // another PR's panel opened meanwhile: not its plan, not its notice
 		}
 	}
 	if m.modal != nil { // its op's question would replace the open dialog
-		return m.sendDialogBusy(), nil
+		return m.sayInPanel(p, i18n.T("send cancelled (another dialog opened) — send again")), nil
 	}
 	if msg.err != nil {
 		if m.keptSendBody.from(msg.req) {
@@ -83,7 +85,7 @@ func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
 		return m.sayInPanel(p, i18n.T("send: %s", firstLine(msg.err.Error()))), nil
 	}
 	if !m.opsIdle() {
-		return m.sayInDiff(i18n.T("another operation is running — send again when it ends")), nil
+		return m.sayInPanel(p, i18n.T("another operation is running — send again when it ends")), nil
 	}
 	m.forgeSend = &forgeSendState{pr: msg.req.PR, req: msg.req, plan: msg.op.Plan, panel: msg.panel}
 	return m.startOp(msg.op)
@@ -96,9 +98,11 @@ func (m Model) sendDialogBusy() Model {
 }
 
 // sayInPanel is sayInDiff for a send the panel asked for: the word goes to
-// the panel's notice (the panel has no status bar either); nil = no panel.
+// the panel's notice while the panel is on top (it has no status bar
+// either); a covered panel (enter opened a diff above it meanwhile) or
+// none: the diff's box and the status line, as every other send.
 func (m Model) sayInPanel(p *sendPanel, msg string) Model {
-	if p != nil {
+	if p != nil && m.topLayer() == p {
 		p.notice = msg
 		return m
 	}
