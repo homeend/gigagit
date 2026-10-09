@@ -17,6 +17,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   PR by number whatever its base's spelling, shows on merged and closed rows
   too, and appears in the `A` search results as well
   (`NoteCounts.PRReviewed`).
+- **gg web's Pull requests list carries the same `✎`**, in the accent
+  colour, before the verdict — in the list and the search results. It
+  arrives with the note counts (`/api/notes/counts` → `pr_reviewed`), so a
+  note written anywhere (the TUI, the CLI, an agent) marks the row live,
+  without a reload.
 
 ## Web dialogs: buttons on Start agent, a wider GitHub send confirm
 
