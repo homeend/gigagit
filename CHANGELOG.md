@@ -14,8 +14,12 @@ one by one.
 - **A reply to a review remark** links as its remark (the review link at
   the remark's lines, not a pathless link at the review note), and `gg
   note show` on it — or on the remark id itself — answers the remark as
-  the thread's root with that remark's replies and resolution.
-- **Send candidates.** Each review is read once per group; a prose review
+  the thread's root with that remark's replies and resolution. The
+  remark is found by its fingerprint, so a re-save that moved it is
+  followed; one that dropped it leaves the reply no link and an outdated
+  thread. A working review's remark root sits at the worktree's file.
+- **Send candidates.** Each review is read once (the group and its remark
+  rows share the read); a prose review
   is titled by its text's first line; two reviews saved in the same
   instant keep one order (by id); a draft reply row carries the planner's
   skip reason (its thread not in the PR), as note rows do.
@@ -24,8 +28,11 @@ one by one.
   none — a line's read as a stale block).
 - **Send panel.** Only the panel's own `ctrl+s` closes it on a change — a
   one-note send from the diff's menu while the panel waits below leaves
-  its ticks; a second `ctrl+s` while the plan is being prepared waits,
-  and "preparing…" and the plan's errors go to the panel's notice; `enter`
+  its ticks (and its candidates as listed — a note sent that way is
+  skipped as already on GitHub when ticked); a second `ctrl+s` while the
+  plan is being prepared waits, and "preparing…" and the plan's words
+  (errors, a dialog in the way) go to the panel's notice while the panel
+  is on top and belong to its PR; `enter`
   on a row whose file the list's filter hides clears the filter, opens
   the diff and parks the list's cursor on the file.
 - **Overview bands.** A stored overview's plain anchor gets no band and is
