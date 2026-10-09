@@ -6332,12 +6332,22 @@ sleeping slot's pile and parked hand-off stack (`windowState.holds`) so
 with its worktree makes its walks dead to the per-Update sweep. Results:
 nineteen window-addressed message types embed `slotStamp` (`slot_msg.go`),
 stamped by `m.stamp()` when their command is built; `Update`'s head
-(`gateSlotMsg`) drops one whose slot is not on screen — sleeping or gone —
-before any handler runs (two slots can hold the same window kind at the
-same generation, so the stamp, not the window type, says whose answer it
-is). History chunks are deliberately unstamped (they write through the
-view pointer). Phases still to come: a per-slot replay queue for sleeping
-slots (3), the console's parked copy on the slot (4), parkable popups —
+(`routeSlotMsg`, `slot_replay.go`) takes one whose slot is not on screen
+before any handler runs: a SLEEPING slot keeps it (`worktreeView.queued`,
+oldest first, `queueCap` 64 — the oldest goes), a gone slot's is dropped
+(two slots can hold the same window kind at the same generation, so the
+stamp, not the window type, says whose answer it is). `loadView` moves the
+arriving slot's queue to `Model.replay` and the Update tail (next to the
+`viewKick` arm) runs `replayQueued`: each message goes through `Update`
+itself (gate, console routing, tail invariants and the window gens all
+apply — an answer for a window closed before the swap is dropped by its
+gen), the queue is taken off the Model BEFORE dispatching (a nested Update
+finds it empty), and a replayed message that moves the view ends the
+replay with the leftovers back on the slot that left. Nothing is
+re-requested; a parked window shows its loading state until its worktree
+returns. History chunks are deliberately unstamped (they write through
+the view pointer). Phases still to come: the console's parked copy on the
+slot (4), parkable popups —
 `parkable()` + a caller-intent flag on `switchView` (5), the F window's
 list dropped on sleep (6); spec
 `docs/superpowers/specs/2026-10-09-per-worktree-window-stacks.md`.

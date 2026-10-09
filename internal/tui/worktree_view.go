@@ -42,6 +42,7 @@ type worktreeView struct {
 	resumePromptShown bool // the continue/abort prompt fired for THIS tree's paused op (model.go's flag, per slot: a round trip through another tree must not fire it again)
 
 	windows windowState // this worktree's windows while it sleeps (window_state.go): the layer pile, the files/stash views, the steer leftovers, the window gens
+	queued  []tea.Msg   // results addressed to this worktree that landed while it slept, oldest first (slot_replay.go); applied on return
 
 	loaded bool // its first status landed (false: the panels are empty, not clean — viewLoading says so)
 }
@@ -246,7 +247,9 @@ func (m Model) loadView(v *worktreeView) Model {
 		}
 		m.attention[k] = marks
 	}
-	m.workingAttention = nil // merged back; the live copy is m.attention
+	m.workingAttention = nil                 // merged back; the live copy is m.attention
+	m.replay = append(m.replay, v.queued...) // what landed for it while it slept: the Update tail applies it
+	v.queued = nil
 	// Always rebuilt: the WIP rows are derived from the status inside it,
 	// whether or not a head mark moved (both trees detached, tips off page).
 	return m.markHead(m.worktreeBranch(v.path)).rebuildCommitGraph()

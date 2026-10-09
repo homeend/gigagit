@@ -95,7 +95,8 @@ type Model struct {
 	views    map[model.CheckoutKey]*worktreeView
 	viewed   model.CheckoutKey
 	home     model.CheckoutKey
-	viewKick bool // switchView ran; the Update tail launches viewKickCmd once
+	viewKick bool      // switchView ran; the Update tail launches viewKickCmd once
+	replay   []tea.Msg // the viewed slot's queued results, moved here by loadView and applied by the Update tail (slot_replay.go)
 	// pendingReturnView is where the panels go once the op or the surface
 	// that refused a non-key swap clears: a closed console's return, a
 	// shown console's own worktree, a gone slot (console.go returnView /
@@ -554,8 +555,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nm, cmd := m.Update(hd.inner)
 		return nm, tea.Batch(tea.EnableMouseCellMotion, cmd)
 	}
-	if m.gateSlotMsg(msg) {
-		return m, nil // addressed to a worktree not on screen: sleeping (phase 3 replays it) or gone (slot_msg.go)
+	if nm, taken := m.routeSlotMsg(msg); taken {
+		return nm, nil // addressed to a worktree not on screen: it waits on its slot, or is gone (slot_msg.go)
 	}
 	before := m.statusMsg
 	nm, cmd := m.dispatchParkedAware(msg)
@@ -587,6 +588,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next.srcInflight[srcNotes] = true
 		next.srcInflight[srcFeed] = true
 		cmd = tea.Batch(cmd, next.viewKickCmd())
+	}
+	if len(next.replay) > 0 {
+		var replayCmd tea.Cmd
+		next, replayCmd = next.replayQueued() // what landed for this worktree while it slept (slot_replay.go)
+		cmd = tea.Batch(cmd, replayCmd)
 	}
 	if next.startAtReady() {
 		var atCmd tea.Cmd
