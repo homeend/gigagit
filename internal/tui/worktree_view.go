@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -65,8 +66,38 @@ func (m Model) ensureView(path string) *worktreeView {
 		return v
 	}
 	v := &worktreeView{path: key, svc: domain.OpenTUI(key)}
-	m.views[key] = v // views is a map (a pointer): the value receiver writes through
+	applyServicePolicies(v.svc, m.cfg) // the live service's policies (load.go), or an op here would write version refs the config forbids
+	m.views[key] = v                   // views is a map (a pointer): the value receiver writes through
 	return v
+}
+
+// applyServicePolicies gives svc the config's policies — the ones the live
+// service gets at load (load.go, source.go): the branch-version policy
+// (whether an op writes version refs, their retention), diff colouring,
+// EOL-only visibility, the notes cap and the PR cache. Every slot's
+// service needs them too: an op launched while another worktree is on
+// screen runs through THAT slot's service.
+func applyServicePolicies(svc *domain.Service, cfg config.Config) {
+	svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)
+	svc.SetSyntaxHighlighting(cfg.UI.SyntaxOn())
+	svc.SetVersionsPolicy(versionsPolicyFromConfig(cfg))
+	svc.SetNotesPolicy(cfg.Notes.MaxAgeDays, cfg.Notes.MaxEntries)
+	svc.SetPRCachePolicy(cfg.Forge.CacheMaxAge(), cfg.Forge.PrefetchCount())
+}
+
+// applyPoliciesToSlots re-applies m.cfg's policies to the live service and
+// every slot's: a config reload or a Settings change reaches all of them,
+// not only the worktree on screen.
+func (m Model) applyPoliciesToSlots() Model {
+	if m.svc != nil {
+		applyServicePolicies(m.svc, m.cfg)
+	}
+	for _, v := range m.views {
+		if v.svc != nil && v.svc != m.svc {
+			applyServicePolicies(v.svc, m.cfg)
+		}
+	}
+	return m
 }
 
 // seedHome makes path gg's own worktree and the viewed one, with the live
@@ -251,6 +282,19 @@ func (m Model) viewKickCmd() tea.Cmd {
 	return tea.Batch(read, m.startWatchCmd(m.watchGen), docs)
 }
 
+// takeQueuedReturn performs the return a console close queued while an op
+// ran (closeConsole → pendingReturnView): called by the op's end once it
+// has dispatched nothing further in that worktree. The refresh that
+// follows reads the returned-to slot; the op's own slot refreshes on its
+// next kick.
+func (m Model) takeQueuedReturn() Model {
+	if p := m.pendingReturnView; p != "" {
+		m.pendingReturnView = ""
+		m, _ = m.switchView(p)
+	}
+	return m
+}
+
 // abandonGoneView is the error arm's check: a read through the viewed
 // slot's service failed and its directory is no longer there (the
 // worktree was removed under us) — the slot goes, home comes back, its
@@ -313,6 +357,7 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 	}
 	m.home = m.viewed
 	m.switchTarget = m.viewed
+	m.pendingReturnView = "" // a return queued to the OLD home is moot: the user asked to be here
 	publishedWT.Store(m.viewed)
 	removeSnapshotFile(m.snapshotPath)
 	m.snapshotPath, m.snapshotCommonDir, m.snapshotWorktree, m.lastSnapshot = "", "", "", nil

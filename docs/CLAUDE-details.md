@@ -6285,8 +6285,17 @@ viewed worktree is the console's. `showConsole` swaps after attaching;
 replacing a console) is where `closeConsole` → `returnView` goes;
 `forgetConsoleReturn` clears it on a repo switch. A refusal (an op running)
 on SHOW keeps the view, said on the status line; on CLOSE the return is
-queued in `pendingReturnView` and `opFinishedMsg` performs it (a new show
-clears the queue). `dropConsole` (the console stepping aside for a stash
+queued in `pendingReturnView` and `opFinishedMsg` performs it
+(`takeQueuedReturn`) — AFTER it has decided nothing further runs in the
+op's worktree: a chained op (`chainSwitch`, `pushTags`, `noticeCfg`) and
+the diverged-checkout prompt keep the queue for their own end (the chain
+dispatches through `m.svc`, so an earlier return would run it in HOME); a
+process continuation (`m.proc`) drops it (the panels stay with the
+process); `adoptView` drops it (the user asked to be here). A new show
+clears the queue. Slot services get the config's policies
+(`applyServicePolicies` in `ensureView`; `applyPoliciesToSlots` on
+`configReadyMsg` and the Versions settings) — a bare `OpenTUI` would write
+version refs the config forbids. `dropConsole` (the console stepping aside for a stash
 list / preview / solo) keeps the view on purpose: the user is working in
 that worktree; `»` and the header say so and enter on home's row returns.
 A user switch asked while a console is docked swaps the panels UNDER the

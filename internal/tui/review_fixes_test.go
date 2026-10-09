@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // A full load (loadCmd) launched on the viewed slot's service lands after
@@ -141,5 +143,32 @@ func TestCloseConsoleDuringAnOpReturnsWhenItEnds(t *testing.T) {
 	m = nm.(Model)
 	if m.viewed != m.home || m.pendingReturnView != "" {
 		t.Fatalf("after the op: viewed=%q pending=%q", m.viewed, m.pendingReturnView)
+	}
+}
+
+// A console closed while an op runs queues the return home — but when the
+// op's end dispatches a CHAINED op (a dirty switch's shelve, then the
+// switch), that op belongs to the worktree the first one ran in. The
+// return waits for the chain's end; it never moves the panels between
+// the two.
+func TestQueuedReturnWaitsForAChainedOp(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, false)
+	m.running = true
+	m = m.closeConsole()
+	m.pendingSwitchBranch = "wt2" // the chain: switch once the shelve is done
+	nm, _ := m.Update(opFinishedMsg{res: engine.Result{Changed: true}})
+	m = nm.(Model)
+	if m.viewed != filepath.Clean(other) || m.pendingReturnView != m.home || !m.running {
+		t.Fatalf("chain dispatched: viewed=%q pending=%q running=%v; want the panels still on the op's worktree", m.viewed, m.pendingReturnView, m.running)
+	}
+	nm, _ = m.Update(opFinishedMsg{})
+	m = nm.(Model)
+	if m.viewed != m.home || m.pendingReturnView != "" {
+		t.Fatalf("after the chain: viewed=%q pending=%q", m.viewed, m.pendingReturnView)
 	}
 }

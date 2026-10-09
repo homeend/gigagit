@@ -344,3 +344,39 @@ func TestConfigReadySeedsTheHomeSlot(t *testing.T) {
 		t.Fatalf("home=%q viewed=%q views=%v", mm.home, mm.viewed, mm.views)
 	}
 }
+
+// A slot made for another worktree runs the same policies as the live
+// service: the config's branch-version policy decides whether an op run
+// THERE writes version refs, and the diff colouring, EOL and notes
+// policies follow the same config. A bare service would silently use the
+// defaults (versions on, 90 days).
+func TestASlotServiceCarriesTheConfigPolicies(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	m.cfg.Versions.Disabled = true
+	m.cfg.Versions.MaxAgeDays = 7
+	m.cfg.UI.DiffSyntax = "off"
+	v := m.ensureView(other)
+	if p := v.svc.VersionsPolicy(); p.Enabled || p.MaxAgeDays != 7 {
+		t.Fatalf("slot versions policy = %+v, want disabled, 7 days", p)
+	}
+	if v.svc.SyntaxHighlighting() {
+		t.Fatal("slot service highlights syntax although the config turned it off")
+	}
+}
+
+// A versions setting changed while several slots exist reaches every
+// slot, not only the one on screen.
+func TestVersionsSettingReachesEverySlot(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	v := m.ensureView(other)
+	m = m.toggleVersionsRecording()
+	if p := v.svc.VersionsPolicy(); p.Enabled != !m.cfg.Versions.Disabled {
+		t.Fatalf("slot versions policy = %+v after the toggle, cfg disabled=%v", p, m.cfg.Versions.Disabled)
+	}
+	m = m.saveVersionsRetention(3)
+	if p := v.svc.VersionsPolicy(); p.MaxAgeDays != 3 {
+		t.Fatalf("slot retention = %d after the save, want 3", p.MaxAgeDays)
+	}
+}
