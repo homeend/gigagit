@@ -410,3 +410,61 @@ func TestSendReviewThenFailureKeepsTheReview(t *testing.T) {
 		t.Fatal("the failed reply must be marked failed")
 	}
 }
+
+// goneLedger is a fakeLedger that reports every key gone (another send
+// took them while this one waited on its confirm).
+type goneLedger struct{ *fakeLedger }
+
+func (goneLedger) Gone(_ context.Context, keys []string) map[string]bool {
+	m := map[string]bool{}
+	for _, k := range keys {
+		m[k] = true
+	}
+	return m
+}
+
+func runSendWith(t *testing.T, p SendPlan, w *fakeWriter, l SendLedger, answer string) (Result, error) {
+	t.Helper()
+	dec := DeciderFunc(func(context.Context, DecisionRequest) (DecisionResponse, error) {
+		return DecisionResponse{Option: answer}, nil
+	})
+	op := SendToForge{Plan: p, Writer: w, Ledger: l, Now: func() time.Time { return time.Unix(100, 0) }}
+	return op.Run(context.Background(), OpDeps{Decider: dec})
+}
+
+// Every action taken by another send meanwhile: nothing changed here.
+func TestSendActionsAllGoneIsNotAChange(t *testing.T) {
+	t.Parallel()
+	p := SendPlan{Target: "o/r #7", PR: 7, Mode: SendActions, Items: []SendItem{
+		{Key: "d1", Label: "reply 1", Kind: SendReply, ThreadID: "TA", Body: "one"},
+	}}
+	w := &fakeWriter{}
+	res, err := runSendWith(t, p, w, goneLedger{newLedger()}, OptSend)
+	if !errors.Is(err, ErrSentMeanwhile) || res.Changed || len(w.calls) != 0 {
+		t.Fatalf("err %v changed %v calls %v", err, res.Changed, w.calls)
+	}
+}
+
+// The review's own items stay; only its Then replies were taken meanwhile:
+// the review is posted, zero replies, no error.
+func TestSendReviewThenAllGoneIsZeroReplies(t *testing.T) {
+	t.Parallel()
+	p := planWithThen()
+	p.Key = ""
+	for i := range p.Items {
+		p.Items[i].Key, p.Items[i].Replies = "", nil // keyless items are never "gone"
+	}
+	w := &fakeWriter{}
+	res, err := runSendWith(t, p, w, goneLedger{newLedger()}, OptComment)
+	if err != nil {
+		t.Fatalf("a review whose replies went meanwhile is not a failure: %v", err)
+	}
+	if !res.Changed || !strings.Contains(res.Summary, "sent 2 comments") || !strings.Contains(res.Summary, "0 replies") {
+		t.Fatalf("res = %+v", res)
+	}
+	for _, c := range w.calls {
+		if strings.Contains(c, "T9 addressed") {
+			t.Fatalf("a gone reply must not be posted: %v", w.calls)
+		}
+	}
+}

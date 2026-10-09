@@ -191,7 +191,7 @@ func (s *Server) registerLinkTools(srv *sdk.Server) {
 
 	sdk.AddTool(srv, &sdk.Tool{
 		Name: "gg_review_show",
-		Description: "A stored AI review: its overview and every remark (path, side, lines, summary, rationale) with the remark's own gg:// line link. " +
+		Description: "A stored AI review: its summary, its stored overview (when it has one) and every remark (path, side, lines, summary, rationale) with the remark's own gg:// line link. " +
 			"Pass a review link (gg://…?review=<id>), a review id, or \"latest\". Use it to check another agent's review.",
 		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in linkResolveIn) (*sdk.CallToolResult, domain.ReviewShow, error) {

@@ -331,6 +331,9 @@ func (op SendToForge) review(ctx context.Context, deps OpDeps, p SendPlan) (Resu
 	if p.Then != nil && len(p.Then.Items) > 0 {
 		var sent, failed int
 		sent, failed, thenErr = op.runActions(ctx, deps, *p.Then)
+		if errors.Is(thenErr, ErrNothingToSend) {
+			thenErr = nil // another send took every reply meanwhile: zero replies, not a failure
+		}
 		res = res.AppendSummary("; %d replies", sent)
 		if failed > 0 {
 			res = res.AppendSummary(" (%d failed)", failed)
@@ -397,10 +400,12 @@ func (op SendToForge) actions(ctx context.Context, deps OpDeps, p SendPlan) (Res
 			return Result{}.WithSummary("aborted: sending to %s", p.Target), nil
 		}
 	}
-	sent, failed, err := op.runActions(ctx, deps, p)
+	sent, _, err := op.runActions(ctx, deps, p)
 	settleErr := op.Ledger.Settle(ctx)
 	if err != nil {
-		return Result{Changed: sent > 0 || failed < len(p.Items)}, err
+		// Changed only when something was posted: a plan another send
+		// emptied meanwhile, or one that failed whole, changed nothing.
+		return Result{Changed: sent > 0}, err
 	}
 	res := Result{Changed: true}.WithSummary("sent %d actions to %s", sent, p.Target)
 	if settleErr != nil {

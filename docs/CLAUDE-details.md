@@ -5988,7 +5988,10 @@ state dir is ignored. **An emptied body** (2026-10-08): `PRSendRequest.BodySet`
 = the user answered the body box (the TUI/web prompt; the CLI's `--body`
 given at all), so an AI review's emptied body posts none — no fallback to
 the stored summary, no trailer, no marker.
-`planSend` routes by `noteKinds`: any draft reply or resolve makes it a
+`planSend` routes by `noteKinds` (plan 2026-10-09 revised this: a draft
+reply beside new comments becomes the review's `Then` plan — see "PR
+review, plan 1" below; the rule here is the ORIGINAL): any draft reply or
+resolve makes it a
 reply/resolve send, and then any other note is `ErrMixedSend`; an id no
 longer stored is skipped there ("it no longer exists").
 
