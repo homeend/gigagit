@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -75,4 +76,41 @@ func checkNoteHint(ctx context.Context, svc *Service, res Resolved) error {
 		return fmt.Errorf("%w: %w: note %s is not here", model.ErrLink, ErrNoteLinkGone, res.Hint.ID)
 	}
 	return nil
+}
+
+// NoteThread is note id's thread: the root (id itself, or its parent when
+// id is a reply), the replies in creation order, and the thread's
+// resolution (nil = open). ErrNoteLinkGone when nothing holds id.
+func (s *Service) NoteThread(ctx context.Context, id string) (root model.Note, replies []model.Note, resolved *model.ThreadResolution, err error) {
+	byID, err := s.storedNotes(ctx)
+	if err != nil {
+		return model.Note{}, nil, nil, err
+	}
+	n, ok := byID[id]
+	if !ok {
+		return model.Note{}, nil, nil, fmt.Errorf("%w: %s", ErrNoteLinkGone, id)
+	}
+	root = n
+	if n.ParentID != "" {
+		if p, ok := byID[n.ParentID]; ok {
+			root = p
+		}
+	}
+	for _, x := range byID {
+		if x.ParentID == root.ID {
+			replies = append(replies, x)
+		}
+	}
+	sort.Slice(replies, func(i, j int) bool { return replies[i].Created.Before(replies[j].Created) })
+	if st := s.notesStore(ctx); st != nil {
+		if all, err := st.LoadAllResolved(); err == nil {
+			for i := range all {
+				if all[i].Root == root.ID {
+					resolved = &all[i]
+					break
+				}
+			}
+		}
+	}
+	return root, replies, resolved, nil
 }

@@ -271,3 +271,18 @@ func narrowReviewShow(rs domain.ReviewShow, at domain.Resolved) domain.ReviewSho
 	rs.OutdatedHidden, rs.Outdated = len(rs.Outdated), nil
 	return rs
 }
+
+// linkNote prints note id's link (gg link --note): the note's own anchor
+// with the ?note= hint, recorded in the copied-link history like any
+// other copied link.
+func linkNote(svc *domain.Service, id string, stdout, stderr io.Writer) int {
+	ctx := context.Background()
+	text, err := svc.NoteLinkText(ctx, id)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	svc.RecordCopiedLink(ctx, text)
+	fmt.Fprintln(stdout, text)
+	return 0
+}
