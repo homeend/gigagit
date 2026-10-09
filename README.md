@@ -563,7 +563,9 @@ In the TUI the same data is a **Pull requests** tab — the fifth tab of the
 top-left box (`PR` in its header), present only when a usable `gh` was found at
 startup. Rows lead with their status (`✓` approved · `✗` changes requested ·
 `…` review required · `draft`; `merged` / `closed` / `unavailable` for a PR that
-is no longer open — those stay listed, dimmed). `enter` fetches the head and
+is no longer open — those stay listed, dimmed). A `✎` before the status marks
+a PR that holds a **local review**: an AI review saved on it, or notes written
+in its diff — kept on this machine until you send them. `enter` fetches the head and
 opens the PR's diff (`base…head`, titled `PR #123 · title`) in the same view a
 merge preview uses; `i` opens the PR hub (description, conversation with review
 verdicts, outdated threads; `y` copies the URL, `L` the gg link, `r` reloads); `y` copies the PR

@@ -238,7 +238,7 @@ func (p *prSearchPopup) box(m Model) string {
 	case len(p.res.PRs) == 0:
 		parts = append(parts, s.dim.Render(i18n.T("no pull requests match")))
 	default:
-		text := prRowsFor(p.res.PRs)
+		text := prRowsFor(p.res.PRs, m.noteCounts.PRReviewed())
 		rows := make([]winRow, len(text))
 		for i, t := range text {
 			prefix := "  "

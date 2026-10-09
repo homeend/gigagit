@@ -97,6 +97,27 @@ type NoteScopeCount struct {
 	Base   string
 }
 
+// PRReviewed is the pull requests, by number, that hold a LOCAL review: an
+// AI review saved on the PR or notes written in its view — both carry the
+// scope "<base>...refs/gg/pr/<n>", matched by number whatever the base's
+// spelling (PRScopeNumber). The Pull requests tab marks their rows (✎).
+func (c NoteCounts) PRReviewed() map[int]bool {
+	out := map[int]bool{}
+	for sc, heads := range c.PreviewReviews {
+		if n, ok := PRScopeNumber(sc); ok && len(heads) > 0 {
+			out[n] = true
+		}
+	}
+	for _, scopes := range c.ScopesByCommit {
+		for _, sc := range scopes {
+			if n, ok := PRScopeNumber(sc.Scope); ok && sc.N > 0 {
+				out[n] = true
+			}
+		}
+	}
+	return out
+}
+
 // ScopesShownOn are the reviews a COMMIT shows the reader on the viewing
 // branches: its range reviews (commit pairs) written on one of those branches
 // (ReviewShownOn). A merge preview's review is never among them — it is the
