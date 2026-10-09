@@ -225,7 +225,7 @@ func TestInRepoSwitchAdoptsWithoutAReload(t *testing.T) {
 	m.width, m.height = 120, 40
 	m, other := addWorktree(t, m, "wt2")
 	m.sel[panelCommits] = 0
-	m = m.pushLayer(&diffView{})
+	m = m.pushLayer(&diffView{rev: "abc1"}) // a commit's diff survives (a working-tree one closes: it would show the old tree's file)
 	nm, _ := m.guardedReRoot(other, true)
 	m = nm.(Model)
 	if m.viewed != filepath.Clean(other) || m.home != m.viewed || m.switchTarget != filepath.Clean(other) || publishedWorktree() != filepath.Clean(other) {

@@ -52,6 +52,7 @@ type consoleReturn struct {
 	filesPreview *openFile
 	focus        panel
 	view         string // the viewed worktree the console was shown over (where a close returns)
+	over         string // the worktree the parked layers showed (a working diff restored over another one would act on it)
 }
 
 // sessionWatch is the TUI's subscription to the session LIST, on a pointer
@@ -157,10 +158,21 @@ func (m Model) returnView(r *consoleReturn) Model {
 		return m
 	}
 	nm, ok := m.switchView(r.view)
-	if !ok && !m.opsIdle() {
-		nm.pendingReturnView = r.view
+	if !ok {
+		nm.pendingReturnView = r.view // an op or a surface: the Update tail takes it once clear
 	}
 	return nm
+}
+
+// parkedLayersFor is what a console's parked stack restores over the
+// worktree on screen now: all of it when that is the worktree the layers
+// showed, else without the working-tree windows (alt+w's first hit keeps
+// the console's worktree; a queued return has not happened yet).
+func (m Model) parkedLayersFor(r *consoleReturn) []layer {
+	if r.over != "" && r.over != m.viewed {
+		return dropWorkingLayers(r.layers)
+	}
+	return r.layers
 }
 
 // captureReturn records the screen a console is about to cover. A
@@ -177,6 +189,7 @@ func (m Model) captureReturn() (Model, *consoleReturn) {
 		focus: m.focus,
 		full:  m.fullMaxActive(),
 		view:  m.viewed,
+		over:  m.viewed,
 	}
 	switch m.topLayer().(type) {
 	case *diffView, *historyView, *blameView, *fileViewer:
@@ -276,7 +289,7 @@ func (m Model) detachConsole() Model {
 // return point is dropped — except a parked view, which is never lost.
 func (m Model) dropConsole() Model {
 	if m.console != nil && m.console.ret != nil {
-		m = m.restoreLayersBeneath(m.console.ret.layers)
+		m = m.restoreLayersBeneath(m.parkedLayersFor(m.console.ret)) // the view stays the console's: home's working diff must not come back over it
 	}
 	return m.detachConsole()
 }
@@ -295,7 +308,7 @@ func (m Model) closeConsole() Model {
 		m.focus = m.lastLeftPanel
 		return m.reconcileFullscreenFocus()
 	}
-	m = m.restoreLayersBeneath(r.layers)
+	m = m.restoreLayersBeneath(m.parkedLayersFor(r))
 	m.fullMaxed, m.fullMax = r.fullMaxed, r.fullMax
 	m.stashView = r.stashView
 	if r.filesPreview != nil && r.filesView != nil && m.filesView == r.filesView {

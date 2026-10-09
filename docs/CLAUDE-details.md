@@ -6292,7 +6292,24 @@ the diverged-checkout prompt keep the queue for their own end (the chain
 dispatches through `m.svc`, so an earlier return would run it in HOME); a
 process continuation (`m.proc`) drops it (the panels stay with the
 process); `adoptView` drops it (the user asked to be here). A new show
-clears the queue. Slot services get the config's policies
+clears the queue. `switchView` refuses under ANY surface (`switchRefusal`
+= an op running, or `steerRefusal`'s list — a popup filled over A would
+submit through `m.svc` = B); the non-key swaps (`returnView`,
+`abandonGoneView`, `pruneViews`) queue `pendingReturnView` and the Update
+tail `takeQueuedReturn`s once clear (so a staging round drains it too).
+A swap closes the leaving tree's WORKING-TREE windows
+(`dropWorkingTreeWindows`: `workingTreeWindow` = a diff with `rev == ""`,
+a blame of a working file, a file viewer; plus the F window) — their keys
+resolve paths through `m.svc`; commit diffs/history/compare stay. A
+console's parked stack records `ret.over`; `parkedLayersFor` restores
+the working-tree layers only when the view is that worktree again.
+`sleepView` (watchers closed, the five gens bumped) is shared by
+`switchView` and both drop paths. Worktree-scoped async results carry
+`svc` (`statusRefreshedMsg`, `stageHunksLoadedMsg`,
+`unstageHunksLoadedMsg`, `conflictFileLoadedMsg`, `amendPrefillMsg`) and
+are dropped when `msg.svc != m.svc`. Steering compares a command's
+worktree with the VIEWED one (`steerShownMismatch`, `currentWorktree`);
+the inbox and presence stay home's. Slot services get the config's policies
 (`applyServicePolicies` in `ensureView`; `applyPoliciesToSlots` on
 `configReadyMsg` and the Versions settings) — a bare `OpenTUI` would write
 version refs the config forbids. `dropConsole` (the console stepping aside for a stash

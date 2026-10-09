@@ -228,8 +228,9 @@ func (m Model) steerRefusal() string {
 	case nil, *diffView, *historyView, *blameView:
 		return ""
 	case *fileViewer:
-		// Poppable, unless its in-view search is being typed.
-		if l.p.search.typing {
+		// Poppable, unless its in-view search is being typed (a viewer whose
+		// document has not loaded has no search yet).
+		if l.openFile != nil && l.p != nil && l.p.search.typing {
 			return "the user is typing"
 		}
 		return ""
@@ -242,6 +243,16 @@ func (m Model) steerRefusal() string {
 		return ""
 	}
 	return "a window is open that owns the keyboard"
+}
+
+// steerShownMismatch reports whether a command addressed to c.Worktree
+// names another worktree than the one on screen, with the refusal prose.
+func (m Model) steerShownMismatch(c steer.Command) (string, bool) {
+	shown := m.currentWorktree // the viewed slot: what the user SEES, which a look (alt+a / alt+w) moves off home
+	if c.Worktree == "" || domain.SameCheckout(c.Worktree, shown) {
+		return "", false
+	}
+	return "gg is showing worktree " + shown + ", not " + c.Worktree, true
 }
 
 // steerOK / steerFail build the two reply shapes. Detail and Error are English
@@ -412,7 +423,7 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 	if why := m.steerRefusal(); why != "" {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
-	if c.Worktree != "" && steerWorktreeBound(c) && !domain.SameCheckout(c.Worktree, m.snapshotWorktree) {
+	if _, mismatch := m.steerShownMismatch(c); mismatch && steerWorktreeBound(c) {
 		return m.askSteerSwitch(c)
 	}
 	// Only navigate parks a pendingSteer, and only one can be in flight: a

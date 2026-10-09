@@ -644,6 +644,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// landing --at in an unretried "an operation is running" refusal. A
 	// central post-dispatch check re-evaluates on every message, so whichever
 	// one finally clears m.loading fires it.
+	if next.pendingReturnView != "" {
+		next = next.takeQueuedReturn() // a held return goes once the surface or the op clears (worktree_view.go)
+	}
 	if next.viewKick {
 		next.viewKick = false
 		next.srcInflight[srcStatus] = true // silent: no srcLoading, no ⏳ gate
@@ -3673,10 +3676,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.opName = ""
 		m.opMsgs = nil
 		// A console closed while this op ran queued the view's return home
-		// (pendingReturnView). It happens below — once this arm has decided
-		// nothing further runs in the op's worktree: a chained op (a dirty
-		// switch's shelve, then the switch) or a prompt that dispatches one
-		// keeps the queue for its own end, or the chain would run in HOME.
+		// (pendingReturnView). The Update tail takes it once nothing further
+		// runs in the op's worktree: a chained op (a dirty switch's shelve,
+		// then the switch) sets running again, a prompt that dispatches one
+		// is a surface — either keeps the queue, or the chain would run in
+		// HOME. A process continuation drops it below.
 		m = m.cleanupPickPatchTemp()
 		// A foreground fetch is a single (uncontended) `git fetch`, so its duration
 		// is a representative measurement for the background-fetch row — record it
@@ -3691,7 +3695,6 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switchTo := ""
 		chainSwitch := ""
 		repairSwitch := ""
-		holdReturn := false // a prompt raised here will dispatch in this worktree
 		var pushTags []string
 		var noticeCfg *engine.SetGitConfig
 		pendingCo := m.pendingCheckout // captured; cleared below whatever happened
@@ -3725,8 +3728,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// mismatched-arm dispatch site is structurally unable to show a wrong prompt.
 			if pendingCo.remoteRef != "" && errors.As(msg.err, &div) &&
 				div.RemoteRef == pendingCo.remoteRef && div.Local == pendingCo.base {
-				m.modal = m.checkoutDivergedModal(pendingCo) // its answer dispatches an op here: the return waits
-				holdReturn = true
+				m.modal = m.checkoutDivergedModal(pendingCo) // its answer dispatches an op here: the queued return waits (a surface)
 			}
 			m.pendingRemoteTagSet = ""
 			m.pendingRemoteTagUnset = ""
@@ -3819,7 +3821,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A stash op (apply/pop/drop) changed the stash list as well as the
 			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
-			m = m.takeQueuedReturn()
+			m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
 			var cmd tea.Cmd
 			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
 			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag), driftCmd, sendCmd)
@@ -3838,9 +3840,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
 		var cmd tea.Cmd
-		if !holdReturn {
-			m = m.takeQueuedReturn()
-		}
+		m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
 		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
 		// prepend them, not collapse the list back to page 0.
 		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
@@ -3989,6 +3989,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusRefreshedMsg:
 		m.running = false
 		m.opName = ""
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // read through another slot's service (an editor exit's reload, then a swap): not this worktree's
+		}
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			return m, nil
@@ -4088,6 +4091,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case amendPrefillMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // HEAD of a worktree no longer on screen
+		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("amend: %s", msg.err.Error())
 			return m, nil
@@ -4236,6 +4242,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
 
 	case conflictFileLoadedMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // loaded for a worktree no longer on screen
+		}
 		// In the conflict process, a load failure must return it to Listing (the
 		// load is not an op, so no opFinishedMsg would otherwise un-stick Working).
 		cp, inProc := m.proc.(*conflictProcess)
@@ -4288,6 +4297,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stageHunksLoadedMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // the panels swapped while the hunks loaded: the picker would stage THIS tree's file of that name
+		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("stage hunks: %s", msg.err.Error())
 			return m, nil
@@ -4307,6 +4319,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
 
 	case unstageHunksLoadedMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("unstage hunks: %s", msg.err.Error())
 			return m, nil

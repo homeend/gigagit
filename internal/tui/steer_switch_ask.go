@@ -46,7 +46,7 @@ func (m Model) askSteerSwitch(c steer.Command) (Model, tea.Cmd) {
 	}
 	m.noticesUnread = true
 	m.blinkOn = true
-	reply := m.answerSteer(c, steerFail(c, fmt.Sprintf("gg is showing worktree %s; asked the user to switch to %s", m.snapshotWorktree, c.Worktree)))
+	reply := m.answerSteer(c, steerFail(c, fmt.Sprintf("gg is showing worktree %s; asked the user to switch to %s", m.currentWorktree, c.Worktree)))
 	return m, tea.Batch(blink, reply)
 }
 
