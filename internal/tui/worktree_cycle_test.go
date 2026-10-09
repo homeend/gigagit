@@ -282,3 +282,22 @@ func TestAltWFollowsTheBranchesTabsSortOrder(t *testing.T) {
 		t.Fatalf("visited %v, want the tab's order %v", visited, want)
 	}
 }
+
+// Over a full-screen view (a diff, a history, a blame, a viewer) the
+// first-hit rule serves nothing — the Branches panel it would reveal is
+// under the view — so alt+w swaps at once; Branches is focused underneath
+// for the presses that follow.
+func TestAltWOverAFullScreenViewSwapsAtOnce(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, other := addWorktree(t, m, "wt2")
+	m.focus = panelFiles
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
+	m = pressAlt(t, m, 'w')
+	if m.viewed != model.KeyOf(other) {
+		t.Fatalf("viewed=%q: the first alt+w over a diff only focused Branches (%s)", m.viewed, m.statusMsg)
+	}
+	if !m.panelFocused(panelBranches) || m.activeLeftTab != panelBranches {
+		t.Fatalf("Branches is not focused underneath: focus=%v tab=%v", m.focus, m.activeLeftTab)
+	}
+}

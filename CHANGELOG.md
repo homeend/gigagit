@@ -18,6 +18,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   send or a detect in flight and the notices dialog keep refusing.
 
 ### Changed
+- `alt+w` over a full-screen view (a diff, a history, a blame, a file
+  viewer) switches at once: the first-hit rule that only focuses the
+  Branches panel served nothing there, the panel being under the view.
 - The worktrees you look at share the repository's caches (commit diffs,
   blames, commit file lists, compare file sets, preview summaries): one
   budget per repository instead of one per worktree, and a commit's diff

@@ -6414,7 +6414,10 @@ that is gone falls back to home and says so; `pruneViews` retargets a
 `pendingReturnView` naming the pruned slot to home. The bare entry of a
 bare-main repository (`Worktree.Bare`) is skipped by `worktreeOrder`,
 `canEnterWorktree` and refused by `switchView` (`bareRepository`).
-`cycleWorktrees` skips ring stops `checkSwitchTarget` finds unreachable
+`cycleWorktrees`' first-hit rule (focus Branches, say where you are) is
+skipped over a full-screen view (`topLayer() != nil`, no console): the
+reveal would be invisible, so the press swaps at once with Branches
+focused underneath. `cycleWorktrees` skips ring stops `checkSwitchTarget` finds unreachable
 (named in the status line; all unreachable = a message, no move). The
 `home == ""` refusal (a repo switch in flight) is said too. The steer
 leftovers (`tour`, the working-file bands, a `pendingSteer` at
