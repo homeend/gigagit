@@ -6320,9 +6320,20 @@ flight and moves the feed gen so no page of the old root lands, and the
 walks read `f.pager` ONCE under the lock — `-race` caught the bare read);
 the kick reads `srcFeed` (a reconcile) so the list catches up without a flash.
 `loadView` assigns `workingReviews` BEFORE `withStatus` (the Review row
-is derived from the reviews) and carries `resumePromptShown` per slot
+is derived from the reviews), carries `resumePromptShown` per slot
 (saved/loaded with the status) so a round trip through another tree does
-not re-fire the paused-op prompt. Worktree-scoped async results carry
+not re-fire the paused-op prompt, and ALWAYS ends in
+`rebuildCommitGraph` (the WIP rows derive from the status inside it;
+`markHead` only re-marks). A slot whose first silent status read FAILS
+with its directory still there is marked loaded and the error said
+(the `dataAvailableMsg` error arm) — never `⏳ loading…` for good. A
+queued return (`takeQueuedReturn`) or a console's `returnView` to a slot
+that is gone falls back to home and says so; `pruneViews` retargets a
+`pendingReturnView` naming the pruned slot to home. The bare entry of a
+bare-main repository (`Worktree.Bare`) is skipped by `worktreeOrder`,
+`canEnterWorktree` and refused by `switchView` (`bareRepository`).
+`cycleWorktrees` skips ring stops `checkSwitchTarget` finds unreachable
+(named in the status line; all unreachable = a message, no move). Worktree-scoped async results carry
 `svc` (`statusRefreshedMsg`, `stageHunksLoadedMsg`,
 `unstageHunksLoadedMsg`, `conflictFileLoadedMsg`, `amendPrefillMsg`) and
 are dropped when `msg.svc != m.svc`. Steering compares a command's

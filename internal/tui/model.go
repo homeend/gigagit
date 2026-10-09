@@ -2008,8 +2008,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.startAtPreviewsSeen = true
 		}
 		if msg.err != nil {
-			if nm, gone := m.abandonGoneView(); gone {
-				return nm, nm.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})
+			var gone bool
+			if m, gone = m.abandonGoneView(); gone { // kept either way: a refused drop queues the return home
+				return m, m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})
+			}
+			if msg.source == srcStatus && m.viewLoading() {
+				// The slot's first (silent) read failed and its directory is
+				// still there: say so and stop the "⏳ loading…" — the next
+				// swap in or an r reads again.
+				m = m.markViewLoaded()
+				m.statusMsg = sourceErr(msg.source, msg.err)
 			}
 			// Best-effort sources must not blank the UI on a transient error;
 			// surface it on the status line only for manual reads. Silent

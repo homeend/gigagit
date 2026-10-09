@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -62,6 +63,19 @@ func (m Model) listedWorktree(path string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// bareRepository reports whether path is the repository's bare entry of
+// the worktree list (a bare main repo with linked worktrees): listed, but
+// no working tree — never a slot.
+func (m Model) bareRepository(path string) bool {
+	key := model.KeyOf(path)
+	for _, w := range m.worktrees {
+		if w.Bare && model.KeyOf(w.Path) == key {
+			return true
+		}
+	}
+	return false
 }
 
 // isRepoWorktree reports whether path is a worktree of the repository on
@@ -192,7 +206,9 @@ func (m Model) loadView(v *worktreeView) Model {
 	}
 	m.sel[panelFiles], m.sel[panelStaged] = v.selFiles, v.selStaged
 	m.fileMarks = v.fileMarks
-	return m.markHead(m.worktreeBranch(v.path))
+	// Always rebuilt: the WIP rows are derived from the status inside it,
+	// whether or not a head mark moved (both trees detached, tips off page).
+	return m.markHead(m.worktreeBranch(v.path)).rebuildCommitGraph()
 }
 
 // worktreeBranch is the branch checked out in the listed worktree at path
@@ -212,7 +228,8 @@ func (m Model) worktreeBranch(path string) string {
 // feed's local Ref.Head (the *name identity in Commits) came from reads
 // rooted at ONE worktree, and the slots share both lists. From the
 // worktree list, no git: the swap stays instant. The lists are cloned
-// where they change (domain hands out cached slices).
+// where they change (domain hands out cached slices); the caller rebuilds
+// the graph.
 func (m Model) markHead(branch string) Model {
 	var bs []model.Branch
 	for i, b := range m.branches {
@@ -245,8 +262,7 @@ func (m Model) markHead(branch string) Model {
 		}
 	}
 	if cs != nil {
-		m.commits = cs
-		m = m.rebuildCommitGraph()
+		m.commits = cs // loadView rebuilds the graph
 	}
 	return m
 }
@@ -293,6 +309,10 @@ func (m Model) switchView(path string) (Model, bool) {
 		return m, false
 	}
 	path = listed // the spelling git lists is what is on disk
+	if m.bareRepository(path) {
+		m.statusMsg = i18n.T("%s is the bare repository — it has no working tree to show", path)
+		return m, false
+	}
 	if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, path); verdict != switchOK {
 		m.statusMsg = i18n.T("cannot switch: %s is not reachable from here", path)
 		return m, false
@@ -466,7 +486,16 @@ func (m Model) takeQueuedReturn() Model {
 		return m // still held: the Update tail tries again once the surface or the op clears
 	}
 	m.pendingReturnView = ""
-	m, _ = m.switchView(m.viewPath(p))
+	path := m.viewPath(p)
+	if path == "" || !m.isRepoWorktree(path) {
+		// The slot it named is gone (pruned, removed): home is the fallback.
+		if m.viewed == m.home {
+			return m
+		}
+		m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(string(p)), shortWorktreeName(m.homeWorktree()))
+		path = m.homeWorktree()
+	}
+	m, _ = m.switchView(path)
 	return m
 }
 
@@ -521,6 +550,9 @@ func (m Model) pruneViews() Model {
 			continue
 		}
 		delete(m.views, key)
+		if m.pendingReturnView == key {
+			m.pendingReturnView = m.home // a return queued to the gone slot goes home instead
+		}
 		if key == m.viewed {
 			gone := v.path
 			if home := m.views[m.home]; home != nil {
@@ -609,9 +641,24 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("this repository has one worktree — alt+w cycles them once there are more")
 		return m, nil
 	}
-	next := 0
+	next, tries := 0, n // viewed but unlisted: every stop is a candidate
 	if at < n {
-		next = (at + 1) % n
+		next, tries = (at+1)%n, n-1
+	}
+	// A worktree that cannot be reached from here (another environment's
+	// notation, a directory gone) is skipped, named, and the ring moves on
+	// — refusing it would leave the ring stuck behind it.
+	var skipped []string
+	for range tries {
+		if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, m.worktrees[order[next]].Path); verdict == switchOK {
+			break
+		}
+		skipped = append(skipped, shortWorktreeName(m.worktrees[order[next]].Path))
+		next = (next + 1) % n
+	}
+	if len(skipped) == tries {
+		m.statusMsg = i18n.T("no other worktree is reachable from here")
+		return m, nil
 	}
 	wt := m.worktrees[order[next]]
 	nm, ok := m.switchView(wt.Path)
@@ -620,7 +667,11 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	}
 	nm.pendingReturnView = ""
 	nm = nm.selectWorktreeBranch(wt.Path)
-	nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(wt.Path), next+1, n)
+	if len(skipped) > 0 {
+		nm.statusMsg = i18n.T("%s — %d of %d worktrees (skipped %s: not reachable from here)", shortWorktreeName(wt.Path), next+1, n, strings.Join(skipped, ", "))
+	} else {
+		nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(wt.Path), next+1, n)
+	}
 	return nm, nil
 }
 

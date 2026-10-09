@@ -171,6 +171,7 @@ func (m Model) returnView(r *consoleReturn) Model {
 	}
 	path := m.viewPath(r.view)
 	if path == "" || !m.isRepoWorktree(path) {
+		m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(string(r.view)), shortWorktreeName(m.viewPath(m.viewed)))
 		return m
 	}
 	nm, ok := m.switchView(path)
@@ -614,15 +615,15 @@ func (m Model) worktreeOrder() []int {
 		}
 		name := m.branches[ents[u].br].Name
 		for i, w := range m.worktrees {
-			if w.Branch == name && !seen[i] {
+			if w.Branch == name && !seen[i] && !w.Bare {
 				seen[i] = true
 				out = append(out, i)
 				break
 			}
 		}
 	}
-	for i := range m.worktrees {
-		if !seen[i] {
+	for i, w := range m.worktrees {
+		if !seen[i] && !w.Bare { // the bare repository has no working tree: no ring stop
 			out = append(out, i)
 		}
 	}
