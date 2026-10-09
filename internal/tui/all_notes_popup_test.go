@@ -80,7 +80,7 @@ func allNotesModel(t *testing.T) (Model, *allNotesPopup) {
 	if p == nil || !p.loading {
 		t.Fatal("the popup must open in its loading state")
 	}
-	u, _ := m.Update(allNotesMsg{ov: allNotesFixture(), gen: m.loadGen})
+	u, _ := m.Update(allNotesMsg{ov: allNotesFixture(), gen: m.allNotesGen})
 	m = u.(Model)
 	return m, layerOf[*allNotesPopup](m)
 }
@@ -291,7 +291,7 @@ func TestAllNotesEmpty(t *testing.T) {
 	t.Parallel()
 	m := footerModel()
 	m, _ = m.openAllNotes()
-	u, _ := m.Update(allNotesMsg{gen: m.loadGen})
+	u, _ := m.Update(allNotesMsg{gen: m.allNotesGen})
 	m = u.(Model)
 	if !strings.Contains(strings.Join(allNotesScreen(m), "\n"), "No notes in this repository.") {
 		t.Fatal("an empty store must say so")
@@ -401,7 +401,7 @@ func longNotesModel(t *testing.T) (Model, *allNotesPopup, string, string, string
 	m.width, m.height = 140, 40 // wider than the popup, so a tooltip has room
 	m.currentWorktree = "/repo"
 	m, _ = m.openAllNotes()
-	u, _ := m.Update(allNotesMsg{ov: ov, gen: m.loadGen})
+	u, _ := m.Update(allNotesMsg{ov: ov, gen: m.allNotesGen})
 	m = u.(Model)
 	return m, layerOf[*allNotesPopup](m), dir, subject, summary
 }
@@ -558,7 +558,7 @@ func TestAllNotesOpensReviewOfMissingCommit(t *testing.T) {
 	m.currentWorktree = "/repo"
 	m.status.Branch = "feature" // a branch's review is listed on that branch
 	m, _ = m.openAllNotes()
-	u, _ := m.Update(allNotesMsg{ov: reviewsFixture(), gen: m.loadGen})
+	u, _ := m.Update(allNotesMsg{ov: reviewsFixture(), gen: m.allNotesGen})
 	m = u.(Model)
 	p := layerOf[*allNotesPopup](m)
 	for i, r := range p.visible() {
@@ -593,7 +593,7 @@ func shelfEntryNotesModel(t *testing.T) (Model, *allNotesPopup) {
 	}}}
 	m := footerModel()
 	m, _ = m.openAllNotes()
-	u, _ := m.Update(allNotesMsg{ov: ov, gen: m.loadGen})
+	u, _ := m.Update(allNotesMsg{ov: ov, gen: m.allNotesGen})
 	m = u.(Model)
 	return m, layerOf[*allNotesPopup](m)
 }

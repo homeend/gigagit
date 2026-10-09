@@ -193,21 +193,23 @@ func (m Model) openShelfCommitFiles(e model.ShelfEntry) (Model, tea.Cmd) {
 // shelfFilesMsg carries a shelved commit's member list, tagged with the entry
 // id so a stale result (view closed / another entry opened) is dropped.
 type shelfFilesMsg struct {
-	id    string
-	files []model.CommitFile
-	notes []domain.ResolvedNote // the entry's own notes (a Notes section above the members)
-	err   error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	id        string
+	files     []model.CommitFile
+	notes     []domain.ResolvedNote // the entry's own notes (a Notes section above the members)
+	err       error
 }
 
 // loadShelfFilesCmd lists the shelved commit's tar members off the UI thread,
 // with the entry's own notes. A notes read that fails only drops the section.
 func (m Model) loadShelfFilesCmd(entryID string) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		ctx := context.Background()
 		files, err := svc.ShelfCommitFiles(ctx, entryID)
 		notes, _ := svc.ShelfNotes(ctx, entryID)
-		return shelfFilesMsg{id: entryID, files: files, notes: notes, err: err}
+		return shelfFilesMsg{slotStamp: slot, id: entryID, files: files, notes: notes, err: err}
 	}
 }
 
@@ -438,11 +440,12 @@ func fileLine(f model.CommitFile) string {
 // stale results from fast j/k movement can be dropped. commit is the resolved
 // commit behind the list (date/author filled in for a bare sha).
 type commitFilesMsg struct {
-	hash    string
-	subject string
-	commit  model.Commit
-	files   []model.CommitFile
-	reviews []domain.Review // the commit's AI reviews (@notes/)
+	slotStamp // the slot it was asked from (slot_msg.go)
+	hash      string
+	subject   string
+	commit    model.Commit
+	files     []model.CommitFile
+	reviews   []domain.Review // the commit's AI reviews (@notes/)
 	// noReviews marks a follow-live read of the list alone: the reviews
 	// follow once the cursor rests (reviewsFollowMsg).
 	noReviews bool
@@ -458,10 +461,11 @@ func (m Model) loadFilesListCmd(c model.Commit) tea.Cmd {
 		return m.loadTreeFilesCmd(c)
 	}
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		c = resolveCommitMeta(svc, c)
 		files, err := svc.CommitFiles(context.Background(), c.Hash)
-		return commitFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, files: files, err: err, noReviews: true}
+		return commitFilesMsg{slotStamp: slot, hash: c.Hash, subject: c.Subject, commit: c, files: files, err: err, noReviews: true}
 	}
 }
 
@@ -509,8 +513,9 @@ const reviewsFollowDelay = 150 * time.Millisecond
 // reviewsFollowMsg is the pause after a follow-live list landed: read the
 // commit's reviews unless a later landing (a newer gen) superseded it.
 type reviewsFollowMsg struct {
-	gen  int
-	hash string
+	slotStamp // the slot it was asked from (slot_msg.go)
+	gen       int
+	hash      string
 }
 
 // commitReviewsMsg carries a commit's reviews read after its file list.
@@ -522,8 +527,8 @@ type commitReviewsMsg struct {
 // reviewsFollowCmd schedules the reviews read for the list just shown.
 func (m Model) reviewsFollowCmd(hash string) (Model, tea.Cmd) {
 	m.reviewsFollowGen++
-	gen := m.reviewsFollowGen
-	return m, m.tick(reviewsFollowDelay, func(time.Time) tea.Msg { return reviewsFollowMsg{gen: gen, hash: hash} })
+	gen, slot := m.reviewsFollowGen, m.stamp()
+	return m, m.tick(reviewsFollowDelay, func(time.Time) tea.Msg { return reviewsFollowMsg{slotStamp: slot, gen: gen, hash: hash} })
 }
 
 // onReviewsFollow reads the rested cursor's reviews.
@@ -564,11 +569,12 @@ func (m Model) onCommitReviews(msg commitReviewsMsg) (Model, tea.Cmd) {
 // off the UI thread.
 func (m Model) loadCommitFilesCmd(c model.Commit) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		c = resolveCommitMeta(svc, c)
 		files, err := svc.CommitFiles(context.Background(), c.Hash)
 		reviews, _ := svc.ReviewsForCommit(context.Background(), c.Hash) // no store: no reviews
-		return commitFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, files: files, reviews: reviews, err: err}
+		return commitFilesMsg{slotStamp: slot, hash: c.Hash, subject: c.Subject, commit: c, files: files, reviews: reviews, err: err}
 	}
 }
 
@@ -777,9 +783,10 @@ func (m Model) canShowFilesViewMessage() bool {
 // compareFilesMsg carries a whole-tree comparison's changed files, tagged so a
 // superseded load (fast re-open) can be dropped.
 type compareFilesMsg struct {
-	tag   string
-	files []model.CommitFile
-	err   error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	tag       string
+	files     []model.CommitFile
+	err       error
 }
 
 // openCompareFiles opens the files view in compare mode for the endpoint pair
@@ -849,9 +856,10 @@ func compareFilesHash(left, right model.Endpoint) string {
 // loadCompareFilesCmd fetches the changed-file list off the UI thread.
 func (m Model) loadCompareFilesCmd(left, right model.Endpoint, tag string) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		files, err := svc.CompareFiles(context.Background(), left, right)
-		return compareFilesMsg{tag: tag, files: files, err: err}
+		return compareFilesMsg{slotStamp: slot, tag: tag, files: files, err: err}
 	}
 }
 

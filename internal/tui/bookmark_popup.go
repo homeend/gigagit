@@ -59,8 +59,9 @@ func bookmarkDisplay(b model.Bookmark) string {
 }
 
 type bookmarksLoadedMsg struct {
-	items []model.Bookmark
-	err   error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	items     []model.Bookmark
+	err       error
 	// gen is 0 for an ordinary load (openBookmarkSwitcher's ping) and the
 	// staging m.hintGen value for a Task 6 hint reveal's OWN load (fix F3);
 	// the handler only lets a hint consume the message whose gen matches
@@ -82,9 +83,10 @@ func (m Model) openBookmarkSwitcher() (Model, tea.Cmd) {
 
 func (m Model) loadBookmarksCmd() tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		bs, err := svc.BookmarkList(context.Background(), 0, 0)
-		return bookmarksLoadedMsg{items: bs, err: err}
+		return bookmarksLoadedMsg{slotStamp: slot, items: bs, err: err}
 	}
 }
 
@@ -93,9 +95,10 @@ func (m Model) loadBookmarksCmd() tea.Cmd {
 // generation guard pendingHint.tag matches against.
 func (m Model) loadBookmarksForHintCmd(tag int) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		bs, err := svc.BookmarkList(context.Background(), 0, 0)
-		return bookmarksLoadedMsg{items: bs, err: err, gen: tag}
+		return bookmarksLoadedMsg{slotStamp: slot, items: bs, err: err, gen: tag}
 	}
 }
 
@@ -506,9 +509,10 @@ func (m Model) bookmarkRemovePrompt() (Model, tea.Cmd) {
 func (m Model) bookmarkRemoveCmd(id string) tea.Cmd {
 	svc := m.svc
 	reopen := m.loadBookmarksCmd()
+	slot := m.stamp()
 	return func() tea.Msg {
 		if err := svc.BookmarkRemove(context.Background(), id); err != nil {
-			return bookmarksLoadedMsg{err: err}
+			return bookmarksLoadedMsg{slotStamp: slot, err: err}
 		}
 		return reopen()
 	}
@@ -603,16 +607,17 @@ func (m Model) loadBookmarkCompareTwoCmd(a, b model.Bookmark) tea.Cmd {
 	tag := "bookmark2:" + a.ID + ":" + b.ID
 	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), compare: true, partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
+	slot := m.stamp()
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, a) }
 		newSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, b) }
 		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: b.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
 
@@ -727,6 +732,7 @@ func (m Model) loadBookmarkCompareCmd(bm model.Bookmark) tea.Cmd {
 	v.width, _ = m.overlayDims()
 	full := filepath.Join(root, bm.Path)
 
+	slot := m.stamp()
 	return func() tea.Msg {
 		// A bookmark is a pointer. Asked first, a dead one is a notice on the
 		// switcher instead of a diff view holding git's raw "bad file".
@@ -739,7 +745,7 @@ func (m Model) loadBookmarkCompareCmd(bm model.Bookmark) tea.Cmd {
 		switch st, err := os.Stat(full); {
 		case err == nil && st.Size() > domain.MaxDiffBytes:
 			v.tooLarge = true
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		case err == nil:
 			newSrc = func(ctx context.Context) ([]byte, error) {
 				b, rerr := os.ReadFile(full)
@@ -750,14 +756,14 @@ func (m Model) loadBookmarkCompareCmd(bm model.Bookmark) tea.Cmd {
 			}
 		case !errors.Is(err, fs.ErrNotExist):
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: bm.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }

@@ -99,10 +99,11 @@ func (m Model) loadStashListCmd(tag string) tea.Cmd {
 }
 
 type stashFilesMsg struct {
-	tag   string // the stash ref
-	sha   string
-	lines []contentLine
-	err   error
+	slotStamp        // the slot it was asked from (slot_msg.go)
+	tag       string // the stash ref
+	sha       string
+	lines     []contentLine
+	err       error
 }
 
 // loadStashFilesCmd resolves the stash ref to a SHA, then loads its changed
@@ -113,14 +114,15 @@ type stashFilesMsg struct {
 // stash (skip); a failed ^3 file read degrades to the tracked-only list.
 func (m Model) loadStashFilesCmd(ref string) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		sha, err := svc.StashCommit(context.Background(), ref)
 		if err != nil {
-			return stashFilesMsg{tag: ref, err: err}
+			return stashFilesMsg{slotStamp: slot, tag: ref, err: err}
 		}
 		files, err := svc.CommitFiles(context.Background(), sha)
 		if err != nil {
-			return stashFilesMsg{tag: ref, sha: sha, err: err}
+			return stashFilesMsg{slotStamp: slot, tag: ref, sha: sha, err: err}
 		}
 		lines := commitFileLines(files)
 		if usha, uerr := svc.StashCommit(context.Background(), ref+"^3"); uerr == nil {
@@ -137,7 +139,7 @@ func (m Model) loadStashFilesCmd(ref string) tea.Cmd {
 				}
 			}
 		}
-		return stashFilesMsg{tag: ref, sha: sha, lines: lines}
+		return stashFilesMsg{slotStamp: slot, tag: ref, sha: sha, lines: lines}
 	}
 }
 

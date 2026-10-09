@@ -91,12 +91,13 @@ func (m Model) loadShelfMemberDiffCmd(id, path, subtitle, tag string) tea.Cmd {
 	body := m.diffBodyRows()
 	v := &diffView{title: path, context: subtitle, compare: true, partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
+	slot := m.stamp()
 	return func() tea.Msg {
 		ctx := context.Background()
 		old, err := svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceShelf, Locator: id, Path: path})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		oldSrc := func(context.Context) ([]byte, error) { return old, nil }
 		newSrc := domain.ByteSource(func(ctx context.Context) ([]byte, error) {
@@ -114,10 +115,10 @@ func (m Model) loadShelfMemberDiffCmd(id, path, subtitle, tag string) tea.Cmd {
 		out, err := differ.Diff(ctx, domain.Request{Key: "", Path: path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
 

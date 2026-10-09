@@ -135,8 +135,8 @@ func TestFilesViewWindowsLargeTreeCorrectly(t *testing.T) {
 		p := fmt.Sprintf("dir%04d/file%04d.go", i, i)
 		lines = append(lines, contentLine{text: p, path: p})
 	}
-	m := Model{width: 120, height: 50, filesTreeFocused: true,
-		filesTitle: "Files x (all files)", filesView: &contentPopup{lines: lines}}
+	m := Model{width: 120, height: 50, windowState: windowState{filesTreeFocused: true,
+		filesTitle: "Files x (all files)", filesView: &contentPopup{lines: lines}}}
 	boxW, boxH := 60, 48
 	rowsCap := (boxH - 2) - 2 // contentH-2 (title+hint), no search line — mirrors renderFilesView
 	for _, sel := range []int{0, 2500, 4999} {

@@ -29,6 +29,7 @@ func shelfEntrySide(e model.ShelfEntry) entrySide {
 // entryCompareMsg carries both resolved endpoints (or the failure) back to
 // the UI thread; gen-guarded by Model.entryCompareGen.
 type entryCompareMsg struct {
+	slotStamp   // the slot it was asked from (slot_msg.go)
 	gen         int
 	left, right model.Endpoint
 	err         error
@@ -54,17 +55,18 @@ func (m Model) startEntryCompare(left, right entrySide) (Model, tea.Cmd) {
 	m.entryCompareGen++
 	gen := m.entryCompareGen
 	svc := m.svc
+	slot := m.stamp()
 	return m, func() tea.Msg {
 		ctx := context.Background()
 		l, err := svc.ResolveCommitEntryEndpoint(ctx, left.sha, left.shelfID)
 		if err != nil {
-			return entryCompareMsg{gen: gen, err: err}
+			return entryCompareMsg{slotStamp: slot, gen: gen, err: err}
 		}
 		r, err := svc.ResolveCommitEntryEndpoint(ctx, right.sha, right.shelfID)
 		if err != nil {
-			return entryCompareMsg{gen: gen, err: err}
+			return entryCompareMsg{slotStamp: slot, gen: gen, err: err}
 		}
-		return entryCompareMsg{gen: gen, left: l, right: r}
+		return entryCompareMsg{slotStamp: slot, gen: gen, left: l, right: r}
 	}
 }
 

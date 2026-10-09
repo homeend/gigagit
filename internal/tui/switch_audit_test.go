@@ -155,28 +155,42 @@ func TestHunkPickerFromAnotherSlotIsDropped(t *testing.T) {
 	}
 }
 
-// --- 1: working-tree windows of the leaving worktree close on a swap ---
+// --- 1: a worktree owns its windows: they wait in it over a swap ---
 
-func TestSwitchViewDropsWorkingTreeLayers(t *testing.T) {
+// A working diff, a commit diff, a viewer and the F window opened in A
+// wait in A: nothing of them shows over B; back in A they are all there,
+// and B's own window is B's.
+func TestSwitchViewParksTheWindowsInTheirWorktree(t *testing.T) {
 	m := loadedModel(t)
+	home := m.currentWorktree
 	m, other := addWorktree(t, m, "wt2")
 	m = m.pushLayer(&diffView{title: "f", rev: ""})     // HEAD → working tree
-	m = m.pushLayer(&diffView{title: "g", rev: "abc1"}) // a commit's diff: shared
+	m = m.pushLayer(&diffView{title: "g", rev: "abc1"}) // a commit's diff
 	m = m.pushLayer(&fileViewer{openFile: &openFile{}})
 	m.filesView = &contentPopup{}
 	m.filesMode = filesModeWorktree // the F window: files on disk
+	m.wtFiles = &worktreeFiles{query: "needle"}
 	m, ok := m.switchView(other)
 	if !ok {
 		t.Fatalf("refused: %s", m.statusMsg)
 	}
-	if n := len(m.layers.entries); n != 1 {
-		t.Fatalf("%d layers survive, want only the commit diff", n)
+	if m.topLayer() != nil || m.filesView != nil || m.wtFiles != nil {
+		t.Fatalf("A's windows show over B: top=%T files=%v", m.topLayer(), m.filesView != nil)
 	}
-	if d, _ := m.topLayer().(*diffView); d == nil || d.rev != "abc1" {
-		t.Fatalf("surviving layer = %T %+v, want the commit diff", m.topLayer(), m.topLayer())
+	m = m.pushLayer(&diffView{title: "b", rev: ""}) // B's own window, on B's fresh stack
+	m, ok = m.switchView(home)
+	if !ok {
+		t.Fatalf("refused: %s", m.statusMsg)
 	}
-	if m.filesView != nil {
-		t.Fatal("the F window survived the swap")
+	if n := len(m.layers.entries); n != 3 {
+		t.Fatalf("%d layers back in A, want 3", n)
+	}
+	if m.filesView == nil || m.wtFiles == nil || m.wtFiles.query != "needle" {
+		t.Fatal("A's F window did not come back with its filter")
+	}
+	m, _ = m.switchView(other)
+	if d, _ := m.topLayer().(*diffView); d == nil || d.title != "b" {
+		t.Fatalf("B's window = %T, want its own diff", m.topLayer())
 	}
 }
 

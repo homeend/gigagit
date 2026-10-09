@@ -142,7 +142,7 @@ func TestOpenTourOnTheCurrentWorktree(t *testing.T) {
 	if !ok || topTour(m) != ovID {
 		t.Fatalf("the brief must show at once: top %q, tour %q %v", topTour(m), ovID, ok)
 	}
-	if m.consoleSwitch.armed || m.consoleSwitch.tour != "" {
+	if m.consoleSwitch.armed || m.tour != "" {
 		t.Fatalf("no switch on the current worktree: %+v", m.consoleSwitch)
 	}
 }
@@ -151,14 +151,14 @@ func TestOpenTourSwitchesWorktree(t *testing.T) {
 	m, id, wt := tourFixture(t)
 	m, _ = m.openTour(id, "brief")
 	ovID, _ := m.docs.TourID("brief:" + domain.FullSessionID(id))
-	if !m.consoleSwitch.armed || m.consoleSwitch.tour != ovID || topTour(m) != "" {
+	if !m.consoleSwitch.armed || m.tour != ovID || topTour(m) != "" {
 		t.Fatalf("a tour in another worktree waits for the switch: %+v, top %q", m.consoleSwitch, topTour(m))
 	}
 	// The switch lands (model.go: the snapshot syncs the docs, then settles).
 	m.currentWorktree = wt
 	m = m.syncOverviews()
 	m, _ = m.settleConsoleAfterSwitch()
-	if topTour(m) != ovID || m.consoleSwitch.tour != "" {
+	if topTour(m) != ovID || m.tour != "" {
 		t.Fatalf("after the switch: top %q want %q, %+v", topTour(m), ovID, m.consoleSwitch)
 	}
 }
@@ -293,8 +293,8 @@ func TestOpenTourRefusedSwitchDoesNotRideAnEarlierOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ = m.openTour(id, "brief")
-	if m.consoleSwitch.tour != "" {
-		t.Fatalf("the tour rode the earlier switch: %q", m.consoleSwitch.tour)
+	if m.tour != "" {
+		t.Fatalf("the tour rode the earlier switch: %q", m.tour)
 	}
 	if !strings.Contains(m.statusMsg, "cannot switch") {
 		t.Fatalf("status = %q", m.statusMsg)

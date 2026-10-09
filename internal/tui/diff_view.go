@@ -638,8 +638,9 @@ func (v *diffView) currentBlockOrdinal() int {
 // diffMsg delivers a fully built view from a loader; tag gates stale results
 // (same pattern as commitFilesMsg/filesHash).
 type diffMsg struct {
-	tag  string
-	view *diffView
+	slotStamp // the slot it was asked from (slot_msg.go)
+	tag       string
+	view      *diffView
 }
 
 // diffBodyRows is the viewer's visible row capacity: full height minus the
@@ -764,14 +765,15 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 		if f.Staged != 'D' {
 			newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, "", f.Path) }
 		}
+		slot := m.stamp()
 		return func() tea.Msg {
 			out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: f.Path, OldPath: f.OrigPath, Old: oldSrc, New: newSrc})
 			if err != nil {
 				v.err = err
-				return diffMsg{tag: tag, view: v}
+				return diffMsg{slotStamp: slot, tag: tag, view: v}
 			}
 			applyDiff(v, out, body)
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 	}
 
@@ -785,6 +787,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 
 	full := filepath.Join(root, f.Path)
 
+	slot := m.stamp()
 	return func() tea.Msg {
 		// New side: the working file. Stat first to size-guard without reading
 		// a giant file into memory; not-exists means deleted (absorbs the
@@ -793,7 +796,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 		switch st, err := os.Stat(full); {
 		case err == nil && st.Size() > domain.MaxDiffBytes:
 			v.tooLarge = true
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		case err == nil:
 			newSrc = func(ctx context.Context) ([]byte, error) {
 				b, rerr := os.ReadFile(full)
@@ -804,16 +807,16 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 			}
 		case !errors.Is(err, fs.ErrNotExist):
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		// Working-tree diffs are never cached (Key: "").
 		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: f.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
 
@@ -868,14 +871,15 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	if line.status != "D" {
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, hash, line.path) }
 	}
+	slot := m.stamp()
 	return func() tea.Msg {
 		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: line.path, OldPath: line.oldPath, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
 
@@ -942,14 +946,15 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 		ref := right.FileRef(line.path)
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }
 	}
+	slot := m.stamp()
 	return func() tea.Msg {
 		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: line.path, OldPath: line.oldPath, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
 
