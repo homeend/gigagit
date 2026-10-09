@@ -107,16 +107,12 @@ func (s *Service) PRSendCandidates(ctx context.Context, n int) (SendCandidates, 
 				gkind = "review"
 			}
 			g := group(r.Group, gkind)
-			if gkind == "review" && g.Agent == "" {
+			if gkind == "review" {
 				rid := strings.TrimPrefix(r.Group, "review:")
-				rv, ok := reviews[rid]
-				if !ok {
-					rv, _ = s.Review(ctx, rid)
+				if _, seen := reviews[rid]; !seen { // one read per review, on its first row
+					rv, _ := s.Review(ctx, rid) // unreadable: the group stays, untitled, undated
 					reviews[rid] = rv
-				}
-				g.Agent, g.Created = rv.Agent, rv.Created
-				if rv.Doc != nil {
-					g.Title, _, _ = strings.Cut(strings.TrimSpace(rv.Doc.Summary), "\n")
+					g.Agent, g.Created, g.Title = rv.Agent, rv.Created, candidateGroupTitle(rv)
 				}
 			}
 			g.Rows = append(g.Rows, s.candidateRow(ctx, r, kind, pl))
@@ -129,7 +125,7 @@ func (s *Service) PRSendCandidates(ctx context.Context, n int) (SendCandidates, 
 			revs = append(revs, g)
 		}
 	}
-	sort.Slice(revs, func(i, j int) bool { return revs[i].Created.After(revs[j].Created) })
+	sortCandidateGroups(revs)
 	for _, g := range revs {
 		out.Groups = append(out.Groups, *g)
 	}
@@ -149,6 +145,29 @@ func (s *Service) PRSendCandidates(ctx context.Context, n int) (SendCandidates, 
 		})
 	}
 	return out, nil
+}
+
+// candidateGroupTitle is a review group's title: the first line of the
+// review's summary — of its text when the review is prose (no document),
+// the same source its send body starts from.
+func candidateGroupTitle(r Review) string {
+	text := r.Text
+	if r.Doc != nil {
+		text = r.Doc.Summary
+	}
+	title, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	return strings.TrimSpace(title)
+}
+
+// sortCandidateGroups orders review groups newest first; two saved in the
+// same instant go by id, so the panel's order never flips between reads.
+func sortCandidateGroups(gs []*SendCandidateGroup) {
+	sort.SliceStable(gs, func(i, j int) bool {
+		if !gs[i].Created.Equal(gs[j].Created) {
+			return gs[i].Created.After(gs[j].Created)
+		}
+		return gs[i].ID < gs[j].ID
+	})
 }
 
 // candidateRow builds one row: its skip reason is what the planner would

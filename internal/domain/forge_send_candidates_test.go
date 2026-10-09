@@ -4,8 +4,10 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notebatch"
 )
 
 const sevRemarks = `{"version":1,"summary":"Looks fine\n\nmore","files":[
@@ -73,5 +75,39 @@ func TestPRSendCandidatesEmpty(t *testing.T) {
 	c, err := svc.PRSendCandidates(context.Background(), 7)
 	if err != nil || len(c.Groups) != 0 {
 		t.Fatalf("%+v %v", c, err)
+	}
+}
+
+// A review group's title is its summary's first line; a review that is
+// prose (no document) is titled by its text's first line, as the body it
+// would send starts.
+func TestCandidateGroupTitle(t *testing.T) {
+	t.Parallel()
+	if got := candidateGroupTitle(Review{Text: "  Looks good overall.\n\nOne nit below."}); got != "Looks good overall." {
+		t.Fatalf("prose title = %q", got)
+	}
+	doc := Review{Text: "raw", Doc: &notebatch.ReviewDoc{Summary: "Fine\nmore"}}
+	if got := candidateGroupTitle(doc); got != "Fine" {
+		t.Fatalf("document title = %q", got)
+	}
+}
+
+// Two reviews saved in the same instant keep one order: by id.
+func TestSortCandidateGroupsTiesByID(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 10, 1, 0, 0, 0, time.UTC)
+	gs := []*SendCandidateGroup{
+		{ID: "review:b", Kind: "review", Created: now},
+		{ID: "review:a", Kind: "review", Created: now},
+		{ID: "review:c", Kind: "review", Created: now.Add(-time.Hour)},
+		{ID: "review:d", Kind: "review", Created: now.Add(time.Hour)},
+	}
+	sortCandidateGroups(gs)
+	var ids []string
+	for _, g := range gs {
+		ids = append(ids, g.ID)
+	}
+	if !slices.Equal(ids, []string{"review:d", "review:a", "review:b", "review:c"}) {
+		t.Fatalf("order = %v", ids)
 	}
 }
