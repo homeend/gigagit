@@ -6008,6 +6008,67 @@ rebase.go's signal. Note placement reads file text through
 through for `HEAD`, `<sha>^` or a branch — so a PR view's badges, groups and
 remark placement stop re-running `git show` on every comment change.
 
+### PR review, plan 1 — stored overview, PR reviews, mixed sends, note links (2026-10-09, spec `docs/superpowers/specs/2026-10-09-pr-review-send-panel-design.md`)
+
+- **Vocabulary (spec §0).** The review's text is its SUMMARY
+  (`notebatch.ReviewDoc.Summary`, `ReviewShow.Summary` → JSON `"summary"`);
+  the OVERVIEW is the one document kind — temporary via `gg session
+  overview`, or stored in the review document's optional `"overview"` key
+  (`ReviewDoc.Overview`, JSON `"overview"`, `notebatch.MaxOverviewBytes` =
+  64 KiB pinned equal to `agentdocs.MaxOverviewBytes` by
+  `TestOverviewLimitsAgree`, since notebatch is stdlib-only). Never "tour".
+- **`domain.ReviewOverview(ctx, id) (OverviewDoc, error)`**
+  (`review_overview.go`): `agentdocs.ParseOverview` on the stored text,
+  each anchor marked `OK` when its path is one of `ReviewFiles` and its
+  lines exist at the reviewed tip (`overviewFileLines`: the working file for
+  a working review, else the tip commit's blob); a `note:` anchor is never
+  OK. `OverviewDoc.Unresolved()` is what `gg review save` prints as
+  `unresolved: <dest>` (JSON `"unresolved"`). `ErrNoOverview` when none.
+- **Settle rule** (`forge_send_ledger.go`): a review whose remarks all moved
+  is removed — unless its document holds an overview, which never leaves the
+  machine; then it stays, remarks moved, summary stamped (`summaryKey`).
+- **`PreviewReviews` for a PR set**: `classifyHeads` (factored out of
+  `classifyScopeReviews`) over `prReviewHeads` — current / `Older` / omitted
+  exactly as for a preview.
+- **`engine.SendPlan.Then`**: a `SendActions` plan the op runs AFTER the
+  review's writes (threads, submit, its resolves) succeeded, listed in the
+  one confirm under `then, as replies:`; never after abort, a review failure
+  or an interrupted review. `runActions` (factored out of `actions()`) posts
+  it; a failure inside returns `the review was posted; replies: N of M
+  failed: …` with `Changed == true`. `planKeys` deliberately excludes Then
+  keys: a review failure never marks replies that were never attempted.
+- **Domain planner**: `PRSendRequest.BodyFrom` (a notes send whose body is a
+  review's summary; `Key` = the review, the summary-sent skip applies;
+  `BodySet` wins); `noteKinds` → `(drafts, others, unknown)` id lists;
+  `planSend` builds one `SendReview` for any mix of remarks and notes with
+  `Verdict = req.Verdict`, drafts beside them become `plan.Then`; drafts
+  alone (plus unknown ids) stay the actions plan; `ErrMixedSend` for
+  resolve/unresolve with new comments and for drafts with `--review`/`--mine`.
+- **`PRSendCandidates(ctx, n)`** (`forge_send_candidates.go`): the send
+  panel's rows — groups `review:<id>` (newest first) / `GroupMine` /
+  `GroupReplies`, each row's `Skip` = what `remarkItem`/`noteItem` would say
+  against a scratch plan, `Code` = ≤ 4 lines from `sendPlace.lines`,
+  `Severity` from the `severity: <v>` tag. `WireNote.Severity/Code`; `gg pr
+  notes --json` fills `Code` from the candidates (a candidates error is
+  ignored there).
+- **CLI**: `gg pr send <n> --note … [--verdict] [--body | --body-from]`
+  (parse rule in `parsePRSend`: exactly one of note/review/mine/verdict-alone/
+  finish/discard; `--body-from` only with `--note` and not with `--body`);
+  the mixed send is a CLI package test (`TestPRSendMixedAnsweredAtATerminal`,
+  `runPRAt` + the fake gh), since e2e scenarios cannot answer a confirm.
+- **Note link** (`model.NoteHintKind = "note"`, `domain/note_link.go`):
+  `NoteLinkText(ctx, id)` builds `gg://<repo>/<path>[@target]:<line>?note=<id>`
+  from the note's own anchor (fingerprint for an uncommitted line, block
+  fingerprint for a range; a reply links its own id at its thread's anchor;
+  a remark id → `ReviewRemarkLink`; a forge id → error). `ResolveLink`
+  refuses a `?note=` whose note the chosen checkout's store lacks
+  (`checkNoteHint`: `model.ErrLink` wrapping `ErrNoteLinkGone`, `note <id>
+  is not here`); `LinkDesc` has a `note` arm (`note: <id> <author> ·
+  <summary>`). `Service.NoteThread(ctx, id)` = root, replies by creation,
+  resolution; `gg note show <id|link> [--json]`, a note link in place of an
+  id for `reply`/`resolve`/`unresolve` (peeled before the generic
+  repository-link peel, which would refuse a file link), `gg link --note`.
+
 ### Review links to files and remarks (2026-10-07)
 
 Spec `docs/superpowers/specs/2026-10-07-review-links-copy-design.md`, plan

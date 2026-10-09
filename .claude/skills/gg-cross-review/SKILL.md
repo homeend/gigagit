@@ -5,7 +5,7 @@ argument-hint: "<gg-link> [2|3] [what to focus on]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-cross-review:v4 -->
+<!-- gg:gg-cross-review:v5 -->
 
 # /gg-cross-review — several models review, you settle it
 
@@ -57,13 +57,27 @@ review in gg. Do NOT launch gg's TUI or `gg web`; they belong to the user.
    errors and stop. Each `.json` is a review document (the shape is in the
    reviewing-with-gg skill's "Review document" section).
 6. **Merge** them into ONE review document — see **Merging**.
-7. **Store it:** `gg review save <link> --agent "<you> — cross-review (<model1>, <model2>[, <model3>])" --stdin --json`
+7. **Overview (when asked).** Only when the user's request says
+   "overview", "tour" or "walk me through": add an `"overview"` string to
+   the MERGED document — written by YOU, never by the reviewers — the
+   gg-overview kind, stored with the review: first line the result in one
+   sentence, then each point with its anchor `[the parser](internal/x/parse.go:40-60)`,
+   `[this check](src/a.go:120)`, in the order you would explain it, one
+   `path:N` or `path:N-M` per place (lines of the NEW version at the
+   reviewed tip, paths repo-relative in slash form), no `note:` anchors,
+   ≤ 100 anchors, ≤ 64 KiB; last the open questions. The summary stays the
+   review — the verdict and the findings go there; the overview only walks.
+   Otherwise leave the key out.
+8. **Store it:** `gg review save <link> --agent "<you> — cross-review (<model1>, <model2>[, <model3>])" --stdin --json`
    with the merged document on stdin. A "not a gg review document" error
-   names what is wrong — fix the JSON and run it again.
-8. **Show it.** `gg session navigate <link from step 7>` opens the review in
+   names what is wrong — fix the JSON and run it again. `gg review save`
+   prints `unresolved: <dest>` for every overview anchor whose file is not
+   in the reviewed change or whose lines do not exist at the tip — fix the
+   text and save again.
+9. **Show it.** `gg session navigate <link from step 8>` opens the review in
    the gg window open on the link's worktree. Exit 1 with `no gg session for
    this worktree` means none is open: skip this step.
-9. **Reply** with the review link, the verdict first, each reviewer and its
+10. **Reply** with the review link, the verdict first, each reviewer and its
    verdict, and how many findings were agreed, how many disputed and how you
    ruled on them. Do not paste the whole review — it is in gg.
 
