@@ -73,3 +73,60 @@ func startTerminalIn(t *testing.T, m Model, dir, name string) domain.SessionID {
 	_ = name
 	return s.Info().ID
 }
+
+// alt+f on a focused session toggles docked ↔ maximized; after the toggle
+// the session is bound and focused. From an unbound focused console it
+// binds too. From another panel it does nothing.
+func TestAltFTogglesTheConsoleSizeAndBinds(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	id := startSessionIn(t, m, m.currentWorktree, "A1")
+	m, _ = m.showConsole(id, true) // docked, bound
+	if m.console == nil || m.console.maximized {
+		t.Fatalf("precondition: %+v", m.console)
+	}
+	m = pressAlt(t, m, 'f')
+	if m.console == nil || !m.console.maximized || !m.console.focused || m.focus != panelCommits {
+		t.Fatalf("after alt+f: %+v focus=%v, want maximized, bound, focused", m.console, m.focus)
+	}
+	m = pressAlt(t, m, 'f')
+	if m.console == nil || m.console.maximized || !m.console.focused {
+		t.Fatalf("after the second alt+f: %+v, want docked and still bound", m.console)
+	}
+	m.console.focused = false // unbound, still focused (the blue border)
+	m = pressAlt(t, m, 'f')
+	if m.console == nil || !m.console.maximized || !m.console.focused {
+		t.Fatalf("alt+f on an unbound focused console: %+v, want maximized and bound", m.console)
+	}
+	m.console.focused = false
+	m.focus = panelFiles // another panel has the keyboard: not focused
+	m = pressAlt(t, m, 'f')
+	if m.console == nil || !m.console.maximized || m.console.focused {
+		t.Fatalf("alt+f from another panel changed the console: %+v", m.console)
+	}
+}
+
+// alt+b on a focused session toggles bound: bound → unbound (shown,
+// focused), unbound → bound. From another panel it does nothing.
+func TestAltBTogglesTheConsoleBinding(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	id := startSessionIn(t, m, m.currentWorktree, "A1")
+	m, _ = m.showConsole(id, true)
+	m = pressAlt(t, m, 'b')
+	if m.console == nil || m.console.focused || m.focus != panelCommits {
+		t.Fatalf("after alt+b: %+v focus=%v, want unbound, shown, focused", m.console, m.focus)
+	}
+	m = pressAlt(t, m, 'b')
+	if m.console == nil || !m.console.focused {
+		t.Fatalf("after the second alt+b: %+v, want bound", m.console)
+	}
+	m.console.focused = false
+	m.focus = panelFiles
+	m = pressAlt(t, m, 'b')
+	if m.console == nil || m.console.focused {
+		t.Fatalf("alt+b from another panel bound the console: %+v", m.console)
+	}
+}

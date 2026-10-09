@@ -902,7 +902,8 @@ func (m Model) sessionsKey() string {
 var consolePassthrough = map[string]bool{
 	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
 	"q": true, "ctrl+c": true, "?": true, ".": true, "ctrl+p": true, "ctrl+o": true,
-	"alt+a": true, "alt+t": true, "alt+w": true, "R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
+	"alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+f": true, "alt+b": true,
+	"R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
 
@@ -911,7 +912,7 @@ var consolePassthrough = map[string]bool{
 // panel and the parked view, so focus moves would land on hidden panels and
 // an opener (F, S, c, p…) would open something behind it.
 var consoleFullPassthrough = map[string]bool{
-	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true, "alt+w": true,
+	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+f": true, "alt+b": true,
 }
 
 // updateConsoleKey routes a key to/around the console per the state table
@@ -927,6 +928,28 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	}
 	if m.console == nil {
 		return m, nil, false
+	}
+	// The size and binding toggles of a FOCUSED console (the blue border:
+	// the Commits column has the keyboard), bound or not. alt+f: docked ↔
+	// maximized, bound and focused after either way. alt+b: bound ↔
+	// unbound (unbinding as the step-out key does; binding as enter does).
+	if m.focus == panelCommits && m.proc == nil && (key == "alt+f" || key == "alt+b") {
+		if key == "alt+f" {
+			m.console.maximized = !m.console.maximized
+			if m.console.ret != nil {
+				m.console.ret.full = m.console.maximized // the step-out key and the return agree with the toggle
+			}
+			m.console.focused = true
+			m.touchConsole()
+			return m.syncConsoleSize(), nil, true
+		}
+		if m.console.focused {
+			m.console.focused = false
+			return m, nil, true // shown and focused; the keys are gg's again
+		}
+		m.console.focused = true
+		m.touchConsole()
+		return m.syncConsoleSize(), nil, true
 	}
 	// Anything layered above the console (the sessions popup opened from it,
 	// the . menu) owns the keyboard; closing it returns to the console.
