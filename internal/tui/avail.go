@@ -226,8 +226,8 @@ func (m Model) canMoveWorktree() bool {
 // canEnterWorktree gates enter on Worktrees: re-root into another worktree.
 func (m Model) canEnterWorktree() bool {
 	wt, ok := m.selectedWorktree()
-	if !m.opsIdle() || !ok || wt.Path == "" {
-		return false
+	if !m.opsIdle() || !ok || wt.Path == "" || wt.Bare {
+		return false // the bare repository has no working tree to enter
 	}
 	// A row can be entered when it is not on screen, or when it is on screen
 	// only because a console looks at it (enter then adopts it). Before the

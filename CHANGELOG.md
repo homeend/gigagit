@@ -97,6 +97,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The continue/abort prompt of a paused merge/rebase fired again every time
   the panels returned to that worktree; the one-shot is remembered per
   worktree now.
+- A worktree whose first status read failed (a broken `.git` file, a
+  permission) showed `⏳ loading…` for good; the error is said and the
+  panels settle.
+- `alt+w` stopped dead in front of a worktree that cannot be reached from
+  here (another environment's notation, a directory gone); it now skips it,
+  names it, and moves on — or says no other worktree is reachable.
+- A bare main repository was a stop of the `alt+w` ring, an `enter` target
+  on its Worktrees row and a switch target; it has no working tree and is
+  none of those now.
+- A console's return to a worktree removed meanwhile reported an empty name
+  (`"" is not a worktree…`) and left the panels where they were; it goes
+  home and says which worktree is gone.
+- The `WIP` rows of the Commits list stayed the leaving worktree's when no
+  head mark moved on the swap (both worktrees detached, their tips off the
+  loaded page).
 
 ### Added
 - A switch between worktrees of ONE repository is now a swap of remembered
