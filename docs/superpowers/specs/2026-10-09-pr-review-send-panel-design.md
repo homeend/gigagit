@@ -1,6 +1,6 @@
 # PR review: a stored overview, PR Reviews rows, one send panel — design
 
-Date: 2026-10-09. Status: design approved in brainstorm (rulings R1–R11 below);
+Date: 2026-10-09. Status: design approved in brainstorm (rulings R1–R12 below);
 this document is the spec for the user's review. Three plans follow (§9).
 
 ## 0. Vocabulary
@@ -22,8 +22,10 @@ the words apart in code and on screen:
   `Summary`/`"summary"`; the web wire's `overviewMd` becomes `summaryMd`.
   Mechanical, ten call sites.
 - The review view's first row "≡ Overview" shows the summary, not an
-  overview: it becomes **"≡ Review"** in the TUI (`reviewTreeLines`, the
+  overview: it becomes **"≡ Summary"** in the TUI (`reviewTreeLines`, the
   popup title stays `Review: <label>`) and the web pane (`.review-ov` bar).
+  A review that has a stored overview gets a second row, **"≡ Overview"**,
+  under it (R12).
 
 The new field is then `ReviewDoc.Overview` (JSON `"overview"`),
 `ReviewShow.Overview`/`"overview"` and `overviewMd` on the web wire: the
@@ -33,9 +35,10 @@ one word, one meaning.
 
 1. **An overview stored with a review** (§2, §4). `/gg-review` and
    `/gg-cross-review` write one only when the user asked for it (R1). It is
-   an optional field of the review document, rendered under the summary in
-   the "≡ Review" surface with tab/enter/backspace navigation like a
-   temporary overview (R5). It never leaves the machine.
+   an optional field of the review document, opened from its own
+   "≡ Overview" row beside the "≡ Summary" row, in the popup a temporary
+   overview uses, with tab/enter/backspace navigation (R5, R12). It never
+   leaves the machine.
 2. **A PR's stored reviews are visible from the PR** (§3): a Reviews block in
    the PR's file list, TUI and web, exactly as a saved preview draws its
    reviews; enter opens the existing review view (R4).
@@ -99,7 +102,7 @@ used by the save report, the TUI and the web alike.
 - `gg review show <id|link|latest>` prints the overview after the summary
   under an `Overview` line; `--json` and the MCP stored-review show carry it
   as `"overview"` (and the summary as `"summary"`, §0).
-- The review view's "≡ Review" shows it (§4).
+- The review view's "≡ Overview" row opens it (§4).
 - A send never includes it: `reviewSendBody`, `ReviewBodyText`, and the
   one-note bodies read the summary and remarks only (test: a review with an
   overview sends the same body as without).
@@ -154,15 +157,17 @@ preview (`.brev` rows from `/api/pr/open`'s new `reviews` array, same wire
 shape as a preview's). Click opens `openReview(id, {kind: "pr", pr: n})`;
 Back/esc returns to the PR view. The right-click menu is Open + Delete.
 
-## 4. The overview in "≡ Review" (R5)
+## 4. The overview's own row (R5, R12)
 
 ### 4.1 TUI
 
-`reviewOverviewPopup` (opened from the "≡ Review" row) renders the summary
-as today, then — when the review has an overview — an `Overview` heading and
-the overview's markdown with its anchors, laid out with the temporary
-overview's renderer (the same anchor styling, plain for unresolved ones).
-Keys are those of `overview_keys.go`:
+`reviewTreeLines` draws "≡ Summary" first (today's row, renamed; its popup
+unchanged), then — when the review has a stored overview — "≡ Overview".
+Enter on it opens the **temporary overview's popup** (`overview_keys.go`)
+over the review's `ReviewOverview` document: the same renderer, anchor
+styling and keys, with the anchor target switched from the working tree to
+the reviewed tip (plain for unresolved ones). No new popup type: the overview
+popup takes an anchor opener, and the review view supplies one.
 
 - `tab` / `shift+tab` move between resolved anchors (the current one
   highlighted; the first anchor is current on open), mouse click selects.
@@ -173,20 +178,22 @@ Keys are those of `overview_keys.go`:
   hidden, not destroyed.
 - `backspace` (and esc) in the opened file returns to the popup at the same
   anchor.
-- The existing copy key copies the summary only (unchanged).
+- The copy key of the overview popup copies the overview's markdown (as a
+  temporary overview's does); the summary popup's copy key is unchanged.
 
-A review without an overview draws exactly what it draws today, under the
-renamed row.
+A review without a stored overview draws exactly what it draws today, under
+the renamed row.
 
 ### 4.2 Web
 
-`reviews.js`'s `.review-ov` pane (bar renamed "Review") gets a
-`.review-overview` section under the summary markdown (hidden without one)
-rendered from `overviewMd` with the anchor handling the temporary overview
-pane uses: an anchor click opens the review's file at the tip scrolled to the
-line (bands for every anchor of the file, as that pane does), a Back control
-returns to the review pane at the same scroll. Unresolved anchors are plain
-spans.
+`reviews.js`'s file list draws "≡ Summary" (today's row, renamed; its
+`.review-ov` pane unchanged, bar "Summary") and, when the review has a stored
+overview, an "≡ Overview" row that opens the **temporary overview pane** over
+`overviewMd`: the same rendering and anchor handling, the anchor target
+switched to the reviewed tip — an anchor click opens the review's file at
+the tip scrolled to the line (bands for every anchor of the file), Back
+returns to the overview pane at the same scroll. Unresolved anchors are
+plain spans.
 
 ## 5. The send panel (R6, R7, R9, R10)
 
@@ -306,12 +313,12 @@ space tick  a all/none in group  enter open  b body  e edit body  ctrl+s send  e
   `Send to GitHub — #%d`, `%d ticked`, `Review (AI)`, `My notes`,
   `Draft replies`, `Body: %s`, `none`, `review text (%s)`, `typed`,
   `tick something to send`, `nothing to send to #%d` (exists), the key-hint
-  line, `Overview` (exists), `Review` for the renamed row (exists), `its
+  line, `Overview` (exists), `Summary` for the renamed row (exists), `its
   lines changed` (exists via the skip-reason map).
 - Goldens: `e2e/scenarios/tui_pr_send.toml` — the note-menu screen loses the
   group rows, the PR action-menu screen says "Send to GitHub…", a new screen
   shows the panel with two rows ticked; every review-view golden with the
-  "≡ Overview" row changes to "≡ Review".
+  "≡ Overview" row changes to "≡ Summary".
 
 ### 5.4 Web
 
@@ -336,8 +343,8 @@ space tick  a all/none in group  enter open  b body  e edit body  ctrl+s send  e
   `sendReviewPick`, `sendReviewBody`, `groupCount`. The note context menu
   (`sendRows`) keeps "Send as GitHub comment"/"Retry…" and "Reply & send…",
   drops the group rows (R9); `prsendjs_test.go` updated.
-- The PR view's Reviews block, the review pane rename and the overview
-  section (§3.3, §4.2) land in the same plan.
+- The PR view's Reviews block, the "≡ Summary" rename and the "≡ Overview"
+  row (§3.3, §4.2) land in the same plan.
 
 ### 5.5 CLI
 
@@ -360,7 +367,7 @@ stdin: one review posted, then one reply, summary stamped.
   notes --json` fields, `gg review show` overview and the `"summary"` JSON
   key, `Version` 161); then `gg init --update`.
 - README: the PR section (send panel, PR reviews, stored overview), the
-  review-view section (the "≡ Review" row, the overview). CHANGELOG per
+  review-view section (the "≡ Summary" and "≡ Overview" rows). CHANGELOG per
   plan. `docs/CLAUDE-details.md`: the candidates query, `Then`, the panel
   popup, the overview resolution, the `Summary` rename; CLAUDE.md map rows
   for `notebatch` (overview field) and `engine` (`Then`) only if a row
@@ -382,9 +389,9 @@ stdin: one review posted, then one reply, summary stamped.
   review.
 - TUI: panel ticks/all/body cycle/ctrl+s request shape/nothing-ticked;
   enter-opens-and-returns; the PR Reviews rows and their handoff; the
-  review popup's overview anchors (tab, enter opens at the tip, backspace);
-  the "≡ Review" row; menu rows (R9 gone, `pr-send` present); i18n gates;
-  goldens.
+  "≡ Overview" row (present only with a stored overview) and its popup's
+  anchors (tab, enter opens at the tip, backspace); the "≡ Summary" row;
+  menu rows (R9 gone, `pr-send` present); i18n gates; goldens.
 - web: `prsendrows.js`/`prsendpanel` row builder node tests; the candidates
   handler; `/api/pr/send` with `verdict`/`body_from`; `/api/pr/open`
   reviews; `summaryMd`/`overviewMd` on the review wire.
@@ -399,13 +406,14 @@ stdin: one review posted, then one reply, summary stamped.
 | R2 | It is an optional `"overview"` string in the review document; no migration; 64 KiB / 100 anchors. |
 | R3 | Anchors `path`, `path:N`, `path:N-M` resolved against the reviewed tip; no `note:` anchors; unresolved drawn plain. |
 | R4 | A PR's stored reviews are sub-rows in the PR file list, TUI and web; enter opens the review view; preview-reviews' outdated rule carries over. |
-| R5 | The overview renders under the summary in the review's "≡ Review" surface with tab / shift+tab / enter / backspace. |
+| R5 | The stored overview is navigated like a temporary one: tab / shift+tab / enter / backspace, anchors against the reviewed tip. |
 | R6 | Draft replies ticked with new comments go as a second op after the review, under one confirm (`Then`). |
 | R7 | The panel opens only from the PR level (PR `.` menu, PR details `s`), labelled "Send to GitHub…", replacing "Send review…"; "Verdict…" stays; nothing ticked on open. |
 | R8 | Three plans after the spec (§9). |
 | R9 | A note's own menu sends that one note only; the group rows leave the note menu in both frontends. |
 | R10 | That row reads "Send as GitHub comment" (merged `0a1684ee`). |
-| R11 | One word: an overview is the one document kind, temporary (`gg session overview`) or stored in a review; the review's text is its summary (`ReviewDoc.Summary`, `"summary"` everywhere) and the review view's first row is "≡ Review". |
+| R11 | One word: an overview is the one document kind, temporary (`gg session overview`) or stored in a review; the review's text is its summary (`ReviewDoc.Summary`, `"summary"` everywhere). |
+| R12 | The review view's first row is "≡ Summary"; a review with a stored overview gets a second row "≡ Overview" that opens the temporary overview's popup/pane over it (one word per row, one document per popup). |
 
 ## 9. Plans (R8)
 
@@ -414,9 +422,11 @@ stdin: one review posted, then one reply, summary stamped.
    `BodyFrom`, `planSend` mixes; engine `Then`; CLI (`gg pr send`, `gg pr
    notes --json`, `gg review save`/`show`); MCP review show; skills +
    versions + `gg init --update`; e2e CLI send.
-2. **TUI**: the "≡ Review" row; PR Reviews rows; the overview in the review
-   popup; the send panel and the removals; menu/help/footer; i18n; goldens.
-3. **Web**: `summaryMd`/`overviewMd` + the pane rename and the overview
-   section; `/api/pr/open` reviews + Reviews block; candidates endpoint +
+2. **TUI**: the "≡ Summary" row; the "≡ Overview" row over the overview
+   popup; PR Reviews rows; the send panel and the removals;
+   menu/help/footer; i18n; goldens.
+3. **Web**: `summaryMd`/`overviewMd`, the "≡ Summary" rename and the
+   "≡ Overview" row over the overview pane; `/api/pr/open` reviews + Reviews
+   block; candidates endpoint +
    the panel overlay; `/api/pr/send` changes and removals; node tests;
    README web notes.
