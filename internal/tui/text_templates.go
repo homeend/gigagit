@@ -358,6 +358,22 @@ func (v *textTemplatesView) onRendered(msg textTemplateRenderedMsg) {
 }
 
 func (v *textTemplatesView) updateFill(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	// ↑/↓ and the page keys walk a multi-line value (a pasted stack trace);
+	// the window follows the cursor.
+	switch page := max(1, v.fillRoom(m)-1); msg.Type {
+	case tea.KeyUp:
+		v.fill.moveLines(-1)
+		return m, nil
+	case tea.KeyDown:
+		v.fill.moveLines(1)
+		return m, nil
+	case tea.KeyPgUp:
+		v.fill.moveLines(-page)
+		return m, nil
+	case tea.KeyPgDown:
+		v.fill.moveLines(page)
+		return m, nil
+	}
 	done, cancel := v.fill.handleKey(msg)
 	switch {
 	case cancel:
@@ -443,16 +459,32 @@ func ttRoom(m Model, chrome int) int {
 	return termH - chrome - st().modalStyle.GetVerticalFrameSize() - 2
 }
 
+// fillHints are the fill step's key hints: ↑/↓ shows up once the focused
+// value has lines to walk.
+func (v *textTemplatesView) fillHints(textW int) []string {
+	if v.fill.multiLine() {
+		return ttHints(i18n.T("[enter/tab] next  [↑/↓] scroll  [esc] back"), textW)
+	}
+	return ttHints(i18n.T("[enter/tab] next  [esc] back"), textW)
+}
+
+// fillRoom is how many rows the fill step's fields get: what the terminal
+// leaves under the title + blank and blank + hints, 16 unless maximized.
+func (v *textTemplatesView) fillRoom(m Model) int {
+	g := v.geometry(m)
+	room := max(1, ttRoom(m, 2+1+len(v.fillHints(g.textW))))
+	if !v.maximized {
+		room = min(room, 16)
+	}
+	return room
+}
+
 func (v *textTemplatesView) fillBox(m Model) string {
 	g := v.geometry(m)
-	hints := ttHints(i18n.T("[enter/tab] next  [esc] back"), g.textW)
-	fields := v.fill.view(g.textW)
-	// title + blank, blank + hints. More fields than rows: the shown ones
-	// follow the focused field (the title carries its number).
-	if room := max(1, ttRoom(m, 2+1+len(hints))); len(fields) > room {
-		top := max(0, min(v.fill.idx-room/2, len(fields)-room))
-		fields = fields[top : top+room]
-	}
+	hints := v.fillHints(g.textW)
+	// More rows than room: the shown ones follow the focused field (the
+	// title carries its number) and a long value is windowed to its cursor.
+	fields := v.fill.viewWindow(g.textW, v.fillRoom(m))
 	// The step's position must stay readable: a title too long for the line
 	// is cut to what the rest leaves, and shown whole on the bottom bar.
 	title, at, n := v.selTitle(), v.fill.idx+1, len(v.fill.labels)

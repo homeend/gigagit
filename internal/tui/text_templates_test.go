@@ -1001,6 +1001,71 @@ func TestTextTemplatesDeleteConfirmHintNamesEsc(t *testing.T) {
 	ttBoxFits(t, "confirm", box, 100, 40, "[y] delete")
 }
 
+// A stack trace pasted into a variable used to draw every one of its lines:
+// the fill box grew past the terminal and overlayCenter drew it off-screen.
+// The focused field now shows a window that follows the cursor, the other
+// fields a line each, and ↑/↓ walk the pasted text.
+func TestTextTemplatesFillPastedStackTraceFits(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		fmt.Fprintf(&b, "\tat frame%03d (src/pkg/file.go:%d)\r\n", i, i)
+	}
+	trace := strings.TrimRight(b.String(), "\r\n")
+	for _, size := range [][2]int{{80, 24}, {100, 40}, {60, 20}, {60, 12}} {
+		for _, maxed := range []bool{false, true} {
+			m := Model{width: size[0], height: size[1]}
+			v := &textTemplatesView{items: []model.TextTemplate{{ID: "a", Title: "A", Body: "<user:trace>\n<user:note>"}}}
+			v.maximized = maxed
+			v.update(m, keyMsg("enter"))
+			v.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(trace), Paste: true})
+			fits := func(when string) string {
+				box := plain(v.box(m))
+				lines := strings.Split(strings.TrimRight(box, "\n"), "\n")
+				if len(lines) > size[1] {
+					t.Errorf("%v maxed=%v %s: fill box is %d lines tall", size, maxed, when, len(lines))
+				}
+				for i, l := range lines {
+					if lipgloss.Width(l) > size[0] {
+						t.Errorf("%v %s: line %d is %d wide", size, when, i, lipgloss.Width(l))
+					}
+				}
+				if strings.Contains(box, "…") {
+					t.Errorf("%v %s: a pasted tab pushed a row past the edge\n%s", size, when, box)
+				}
+				for _, want := range []string{"A — fill variables", "[esc] back"} {
+					if !strings.Contains(box, want) {
+						t.Errorf("%v maxed=%v %s: box misses %q\n%s", size, maxed, when, want, box)
+					}
+				}
+				return box
+			}
+			if box := fits("after paste"); !strings.Contains(box, "frame199") || strings.Contains(box, "frame000") {
+				t.Errorf("%v: the window must follow the cursor to the end of the paste\n%s", size, box)
+			} else if size[1] >= 20 && !strings.Contains(box, "note:") {
+				t.Errorf("%v: the second field must stay on screen\n%s", size, box)
+			}
+			for i := 0; i < 199; i++ {
+				v.update(m, keyMsg("up"))
+			}
+			if box := fits("after up"); !strings.Contains(box, "frame000") {
+				t.Errorf("%v: up must walk back to the first line\n%s", size, box)
+			}
+			v.update(m, keyMsg("pgdown"))
+			if box := fits("after pgdown"); strings.Contains(box, "frame000") {
+				t.Errorf("%v: pgdown must page on\n%s", size, box)
+			}
+			v.update(m, keyMsg("tab"))
+			if box := fits("on the second field"); !strings.Contains(box, "> note:") || (size[1] >= 20 && !strings.Contains(box, "frame000")) {
+				t.Errorf("%v: the focused second field must show, the trace its first line\n%s", size, box)
+			}
+			if got := v.fill.inputs()["trace"]; got != strings.ReplaceAll(trace, "\r\n", "\n") {
+				t.Fatalf("the pasted value changed: %d runes", len([]rune(got)))
+			}
+		}
+	}
+}
+
 // ctrl+d on the add/edit form opens the token cheat sheet, as the branch
 // prefix form does; the form keeps its state, and its hint advertises the key.
 func TestTextTemplatesFormCtrlDOpensTokenHelp(t *testing.T) {
