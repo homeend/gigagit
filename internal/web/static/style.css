@@ -329,6 +329,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #prs-list li.prdim, #pr-search-list li.prdim { color: var(--dim); }
 #prs-list li .prnum, #pr-search-list li .prnum { color: var(--dim); padding-right: 6px; }
 #prs-list li .prmark, #pr-search-list li .prmark { padding-right: 4px; }
+#prs-list li .prlocal, #pr-search-list li .prlocal { padding-right: 4px; color: var(--accent); }
 #prs-list li .prmark.approved, #pr-search-list li .prmark.approved { color: var(--lane2); }
 #prs-list li .prmark.changes_requested, #pr-search-list li .prmark.changes_requested { color: var(--lane7); }
 #prs-list li .prword, #pr-search-list li .prword { color: var(--dim); font-size: 11px; padding-right: 6px; }

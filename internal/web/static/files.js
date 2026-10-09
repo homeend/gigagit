@@ -2659,6 +2659,7 @@ async function refreshNoteCounts() {
       scopes_by_commit: c.scopes_by_commit || {}, // a commit's Range review rows
       reviews: c.reviews || [], // the Branches' review sub-rows
       working_reviews: c.working_reviews || [], // the working list's Review row and ✎
+      pr_reviewed: c.pr_reviewed || [], // pull requests holding a local review: their row's ✎
     };
     // The open commit's Reviews rows follow the same list, so a review saved
     // or deleted anywhere (the TUI, another tab) shows up without a reopen.
@@ -2668,8 +2669,11 @@ async function refreshNoteCounts() {
     // Counts are decoration, but a STALE badge is worse than none: a failed
     // fetch means we no longer know, so draw no ◆ at all until the next one
     // succeeds.
-    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, plain_by_commit_path: {}, scopes_by_commit: {}, reviews: [], working_reviews: [] };
+    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, plain_by_commit_path: {}, scopes_by_commit: {}, reviews: [], working_reviews: [], pr_reviewed: [] };
   }
+  // The Pull requests list (prs.js) repaints its ✎ marks; an event, since
+  // prs.js already imports this module.
+  document.dispatchEvent(new CustomEvent("gg:notecounts"));
   renderFiles();
   renderBranches(); // a review deleted anywhere leaves its branch sub-row
   renderCommits(); // the ✎ on reviewed commits
