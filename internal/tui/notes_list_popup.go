@@ -357,7 +357,21 @@ func noteListDotDecorator(e noteListEntry) rowDecorator {
 // agent layer when the picked thread is one it hides. It reports whether it
 // moved, and reveals the thread's own rows so the note the user picked is on
 // screen, not just its line.
-func (m Model) gotoNote(rootID string) (Model, bool) {
+// holds reports whether thread r is the one id names: its root, or one of
+// its replies (the send panel's draft rows name a reply).
+func holds(r domain.ResolvedNote, id string) bool {
+	if r.Note.ID == id {
+		return true
+	}
+	for _, rep := range r.Replies {
+		if rep.Note.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) gotoNote(id string) (Model, bool) {
 	v := m.diffLayer()
 	if v == nil {
 		return m, false
@@ -370,7 +384,7 @@ func (m Model) gotoNote(rootID string) (Model, bool) {
 		if v.stk != nil {
 			for i := range v.stk.files {
 				for _, r := range v.notesOf(i) {
-					if r.Note.ID == rootID {
+					if holds(r, id) {
 						file = i
 						return r, true
 					}
@@ -379,7 +393,7 @@ func (m Model) gotoNote(rootID string) (Model, bool) {
 			return domain.ResolvedNote{}, false
 		}
 		for _, r := range v.notes {
-			if r.Note.ID == rootID {
+			if holds(r, id) {
 				return r, true
 			}
 		}
