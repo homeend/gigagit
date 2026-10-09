@@ -2751,14 +2751,14 @@ name = "中文"
 "agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [%s] sessions" = "代理控制台: [x] 关闭  [esc/%s] 返回  [alt+a/alt+t] 下一个  [%s] 会话"
 "agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [%s] sessions" = "代理控制台: [enter] 输入  [X] 终止+移除  [esc/%s] 返回  [alt+a/alt+t] 下一个  [%s] 会话"
 
-# emergency unlock (alt+A)
-"[alt+A] unlock" = "[alt+A] 解锁"
-"[alt+A] stop it" = "[alt+A] 停止"
+# emergency unlock (alt+U)
+"[alt+U] unlock" = "[alt+U] 解锁"
+"[alt+U] stop it" = "[alt+U] 停止"
 "asked the running operation to stop" = "已请求正在运行的操作停止"
 "unlocked — abandoned %d stuck reads (r reloads)" = "已解锁 — 放弃了 %d 个卡住的读取 (r 重新加载)"
 "state dump: %s" = "状态转储: %s"
 "state dump failed: %s" = "状态转储失败: %s"
-"emergency unlock (alt+shift+a — a capital A, so a stray alt+a never fires it) — works over ANY window: when \"⏳ reloading…\" or an operation never ends, abandons the stuck reads (their late results are dropped; r reloads), ends the git processes still running and asks a running operation to stop; always writes a state dump (running git processes, repo locks, goroutines) under the gg state dir and names the file in the status line" = "紧急解锁 (alt+shift+a — 大写 A, 误按 alt+a 不会触发) — 在任何窗口上都可用: 当 \"⏳ reloading…\" 或某个操作一直不结束时, 放弃卡住的读取 (迟到的结果会被丢弃; r 重新加载)、结束仍在运行的 git 进程并请求正在运行的操作停止; 总会在 gg 状态目录下写出状态转储 (运行中的 git 进程、仓库锁、goroutine) 并在状态栏显示文件名"
+"emergency unlock (alt+shift+u — a capital U, so a stray alt+u never fires it) — works over ANY window: when \"⏳ reloading…\" or an operation never ends, abandons the stuck reads (their late results are dropped; r reloads), ends the git processes still running and asks a running operation to stop; always writes a state dump (running git processes, repo locks, goroutines) under the gg state dir and names the file in the status line" = "紧急解锁 (alt+shift+u — 大写 A, 误按 alt+a 不会触发) — 在任何窗口上都可用: 当 \"⏳ reloading…\" 或某个操作一直不结束时, 放弃卡住的读取 (迟到的结果会被丢弃; r 重新加载)、结束仍在运行的 git 进程并请求正在运行的操作停止; 总会在 gg 状态目录下写出状态转储 (运行中的 git 进程、仓库锁、goroutine) 并在状态栏显示文件名"
 "the running operation cannot be stopped from here — it ends when its work does" = "正在运行的操作无法在此停止 — 它会在工作完成时结束"
 "ended %d git processes" = "已结束 %d 个 git 进程"
 "older tip" = "旧的末端"

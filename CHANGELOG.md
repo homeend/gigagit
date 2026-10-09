@@ -18,6 +18,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   send or a detect in flight and the notices dialog keep refusing.
 
 ### Changed
+- The emergency unlock moved from `alt+A` to **`alt+U`** (alt+shift+u):
+  `alt+A` now walks the viewed worktree's agents (below).
 - `alt+a` / `alt+t` into an agent of another worktree size the console by
   THAT worktree: a full-screen diff left behind in the one you came from
   no longer maximises it (the diff waits where it was opened).
