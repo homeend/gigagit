@@ -221,8 +221,8 @@ func (m Model) steerRefusal() string {
 	// A console shown over a parked stack: the switch would drop what is
 	// parked, so its top answers as a live one would.
 	top := m.topLayer()
-	if top == nil && m.console != nil && m.console.ret != nil && len(m.console.ret.layers) > 0 {
-		top = m.console.ret.layers[len(m.console.ret.layers)-1]
+	if top == nil && m.console != nil && m.consoleParked != nil && len(m.consoleParked.layers) > 0 {
+		top = m.consoleParked.layers[len(m.consoleParked.layers)-1]
 	}
 	switch l := top.(type) {
 	case nil, *diffView, *historyView, *blameView:

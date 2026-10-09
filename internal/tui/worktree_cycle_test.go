@@ -184,11 +184,14 @@ func TestAltWHidesAMaximisedConsoleToo(t *testing.T) {
 	}
 }
 
-// A console over a parked diff view: alt+w hides it and the diff comes
-// back on top, as esc would; Branches has the keyboard beneath it.
-func TestAltWUnderAFullScreenConsoleHidesItAndBringsTheViewBack(t *testing.T) {
+// alt+w under a full-screen console hides it; the diff the console
+// displaced belongs to the worktree it was opened in (home) and waits
+// there — nothing of home shows over the console's worktree, and the diff
+// is back when home returns.
+func TestAltWUnderAFullScreenConsoleHidesItAndKeepsTheViewInItsWorktree(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
+	home := m.currentWorktree
 	m, other := addWorktree(t, m, "wt2")
 	installSessionManager(t)
 	id := startSessionIn(t, m, other, "Shell")
@@ -199,8 +202,15 @@ func TestAltWUnderAFullScreenConsoleHidesItAndBringsTheViewBack(t *testing.T) {
 		t.Fatalf("precondition: console=%+v top=%T", m.console, m.topLayer())
 	}
 	m = pressAlt(t, m, 'w')
-	if m.console != nil || m.topLayer() != layer(dv) || m.focus != panelBranches {
-		t.Fatalf("console=%v top=%T focus=%v", m.console != nil, m.topLayer(), m.focus)
+	if m.console != nil || m.topLayer() != nil || m.focus != panelBranches || m.viewed != model.KeyOf(other) {
+		t.Fatalf("console=%v top=%T focus=%v viewed=%q", m.console != nil, m.topLayer(), m.focus, m.viewed)
+	}
+	m, ok := m.switchView(home)
+	if !ok {
+		t.Fatalf("refused: %s", m.statusMsg)
+	}
+	if m.topLayer() != layer(dv) {
+		t.Fatalf("home's diff is not back: top=%T", m.topLayer())
 	}
 }
 

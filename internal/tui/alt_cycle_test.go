@@ -423,13 +423,13 @@ func TestUnfocusedFullScreenConsoleHints(t *testing.T) {
 func TestParkedViewReceivesItsAsyncResults(t *testing.T) {
 	m, _ := fullScreenAgent(t)
 	h := &historyView{loading: true, gen: 1}
-	m.console.ret.layers = append(m.console.ret.layers, h)
+	m.consoleParked.layers = append(m.consoleParked.layers, h)
 	mm, _ := m.Update(historyChunkMsg{view: h, gen: 1, done: true})
 	m = mm.(Model)
 	if h.loading {
 		t.Fatal("the parked history never got its list")
 	}
-	if m.console == nil || m.topLayer() != nil || len(m.console.ret.layers) != 2 {
+	if m.console == nil || m.topLayer() != nil || len(m.consoleParked.layers) != 2 {
 		t.Fatalf("the stack must stay parked: console=%+v top=%T", m.console, m.topLayer())
 	}
 }
@@ -487,7 +487,7 @@ func TestConsoleOpenedUnderAPopupLeavesItLive(t *testing.T) {
 func TestReRootDropsParkedViews(t *testing.T) {
 	m, _ := fullScreenAgent(t)
 	sv := &stashView{tag: "stash"}
-	m.console.ret.stashView = sv
+	m.consoleParked.stashView = sv
 	mm, _ := m.reRoot(m.currentWorktree)
 	m = mm.(Model)
 	if m.console == nil {

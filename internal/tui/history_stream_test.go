@@ -298,7 +298,8 @@ func TestHistorySweepKeepsParkedWalks(t *testing.T) {
 		m := Model{histWalks: &historyWalks{views: []*historyView{h}}}
 		switch park {
 		case "console":
-			m.console = &consoleState{ret: &consoleReturn{layers: []layer{h}}}
+			m.console = &consoleState{ret: &consoleReturn{}}
+			m.consoleParked = &consoleParked{layers: []layer{h}}
 		case "files":
 			m.filesReturnLayers = []layer{h}
 		}
