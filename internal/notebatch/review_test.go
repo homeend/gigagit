@@ -4,6 +4,7 @@ import (
 	"errors"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -113,5 +114,45 @@ func TestParseReviewCanonicalRoundTrips(t *testing.T) {
 	back, err := ParseReview(doc.Canonical())
 	if err != nil || !reflect.DeepEqual(doc, back) {
 		t.Fatalf("%v\n%+v\n%+v", err, doc, back)
+	}
+}
+
+func TestReviewDocOverviewRoundTrips(t *testing.T) {
+	in := `{"version":1,"summary":"s","overview":"The result.\n\n[the parser](a.go:3-4)","files":[]}`
+	doc, err := ParseReview([]byte(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Overview != "The result.\n\n[the parser](a.go:3-4)" {
+		t.Fatalf("overview = %q", doc.Overview)
+	}
+	again, err := ParseReview(doc.Canonical())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Overview != doc.Overview {
+		t.Fatalf("Canonical dropped the overview: %q", again.Overview)
+	}
+}
+
+// Without the key nothing changes: the canonical bytes are what they were.
+func TestReviewDocWithoutOverviewIsUnchanged(t *testing.T) {
+	doc, err := ParseReview([]byte(`{"version":1,"summary":"s","files":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Overview != "" {
+		t.Fatalf("overview = %q, want none", doc.Overview)
+	}
+	if strings.Contains(string(doc.Canonical()), "overview") {
+		t.Fatalf("Canonical wrote an empty overview:\n%s", doc.Canonical())
+	}
+}
+
+func TestReviewDocOverviewTooLongIsRefused(t *testing.T) {
+	big := strings.Repeat("x", MaxOverviewBytes+1)
+	_, err := ParseReview([]byte(`{"version":1,"summary":"s","overview":"` + big + `","files":[]}`))
+	if !errors.Is(err, ErrNotReviewDoc) || !strings.Contains(err.Error(), "overview exceeds 64 KiB") {
+		t.Fatalf("err = %v", err)
 	}
 }
