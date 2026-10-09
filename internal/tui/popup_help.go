@@ -125,8 +125,13 @@ func tokensHelp(now time.Time, text bool) []contentLine {
 	if text {
 		lines = append(lines, tok("<branch>", i18n.T("the branch you are on")))
 	}
+	parent := tok("<parent-branch>", i18n.T("the branch the new branch forks from"))
+	if text {
+		// No branch is being made: domain renders it as the current branch.
+		parent = tok("<parent-branch>", i18n.T("the same as <branch> here"))
+	}
 	lines = append(lines,
-		tok("<parent-branch>", i18n.T("the branch the new branch forks from")),
+		parent,
 		tok("<repo>", i18n.T("the repository directory name")),
 		tok("<random-alpha:N>", i18n.T("N random lowercase letters")),
 		tok("<random-num:N>", i18n.T("N random digits")),

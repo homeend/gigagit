@@ -198,6 +198,7 @@ func TestTextTemplateTokensHelpContent(t *testing.T) {
 		"<branch>", "<user:LABEL>", "<seq:NAME:N>", "<date:FMT>", "<random-num:N>",
 		"yyyy", "2026-06-11", "20260611-1405",
 		"stays in the text as written",
+		"the same as <branch> here", // no branch is being made
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("text template help sheet missing %q", want)
