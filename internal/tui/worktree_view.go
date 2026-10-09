@@ -41,6 +41,8 @@ type worktreeView struct {
 
 	resumePromptShown bool // the continue/abort prompt fired for THIS tree's paused op (model.go's flag, per slot: a round trip through another tree must not fire it again)
 
+	windows windowState // this worktree's windows while it sleeps (window_state.go): the layer pile, the files/stash views, the steer leftovers, the window gens
+
 	loaded bool // its first status landed (false: the panels are empty, not clean — viewLoading says so)
 }
 
@@ -119,6 +121,7 @@ func (m Model) ensureView(path string) *worktreeView {
 		svc = domain.OpenTUI(path) // home is seeded by the first load before any slot is made; total anyway
 	}
 	v := &worktreeView{key: key, path: path, svc: svc}
+	v.windows.layers = &layerStack{}   // a fresh slot: an empty pile, as the Model starts with
 	applyServicePolicies(v.svc, m.cfg) // the live service's policies (load.go), or an op here would write version refs the config forbids
 	m.views[key] = v                   // views is a map (a pointer): the value receiver writes through
 	return v
@@ -190,7 +193,28 @@ func (m Model) saveView() Model {
 	v.fileMarks = m.fileMarks
 	v.workingReviews = m.workingReviews
 	v.resumePromptShown = m.resumePromptShown
+	v.windows = m.windowState // the worktree owns its windows: one assignment, nothing filtered
+	v.windows.workingAttention = takeWorkingAttention(m.attention)
 	return m
+}
+
+// takeWorkingAttention moves the `gg session highlight` bands on WORKING
+// files (commit == "") out of attention and returns them: they are the
+// leaving tree's (the same path exists in the arriving one); a commit's
+// bands are the repository's and stay.
+func takeWorkingAttention(attention map[attentionKey][]steerMark) map[attentionKey][]steerMark {
+	var working map[attentionKey][]steerMark
+	for k, marks := range attention {
+		if k.commit != "" {
+			continue
+		}
+		if working == nil {
+			working = map[attentionKey][]steerMark{}
+		}
+		working[k] = marks
+		delete(attention, k)
+	}
+	return working
 }
 
 // loadView makes slot v the live one. The open-files registry is already
@@ -212,6 +236,17 @@ func (m Model) loadView(v *worktreeView) Model {
 	}
 	m.sel[panelFiles], m.sel[panelStaged] = v.selFiles, v.selStaged
 	m.fileMarks = v.fileMarks
+	m.windowState = v.windows // its windows, exactly as it left them (a fresh slot: none)
+	if m.layers == nil {
+		m.layers = &layerStack{}
+	}
+	for k, marks := range v.windows.workingAttention {
+		if m.attention == nil {
+			m.attention = map[attentionKey][]steerMark{}
+		}
+		m.attention[k] = marks
+	}
+	m.workingAttention = nil // merged back; the live copy is m.attention
 	// Always rebuilt: the WIP rows are derived from the status inside it,
 	// whether or not a head mark moved (both trees detached, tips off page).
 	return m.markHead(m.worktreeBranch(v.path)).rebuildCommitGraph()
@@ -330,7 +365,6 @@ func (m Model) switchView(path string) (Model, bool) {
 		m.statusMsg = why
 		return m, false
 	}
-	m = m.dropWorkingTreeWindows()
 	m = m.saveView()
 	m = m.sleepView()
 	m = m.loadView(m.ensureView(path))
@@ -396,24 +430,19 @@ func (m Model) sleepView() Model {
 	m.srcInflight[srcFeed] = false
 	m.srcLoading[srcFeed] = false
 	m.workingReviewsGen++ // likewise a reviews read
-	m.tour = ""           // a tour parked for the leaving slot's status
-	// `gg session highlight` bands on WORKING files are the leaving tree's
-	// (the same path exists in the arriving one); a commit's are the repo's.
-	for k := range m.attention {
-		if k.commit == "" {
-			delete(m.attention, k)
-		}
-	}
+	// The windows, the parked tour, the parked navigate and the working-file
+	// bands are NOT touched: saveView put them in the slot, loadView brings
+	// the arriving slot's in. Nothing crosses, nothing is filtered.
 	return m
 }
 
-// workingTreeWindow reports a layer that shows the leaving worktree's
-// FILES: a working-tree diff (HEAD → working tree, a staged diff, a
-// stacked status view), a blame of a working file, a file viewer. Their
-// keys (stage hunks, discard, edit, note) resolve the path through
-// m.svc, so over the arriving worktree they would act on ITS file of the
-// same name. A commit's diff, a history, a compare are the repository's
-// and stay.
+// workingTreeWindow reports a layer that shows a worktree's FILES: a
+// working-tree diff (HEAD → working tree, a staged diff, a stacked status
+// view), a blame of a working file, a file viewer. Their keys (stage
+// hunks, discard, edit, note) resolve the path through m.svc, so over
+// another worktree they would act on ITS file of the same name. Used by
+// the console's parked copy only (parkedLayersFor): a slot's stack is
+// its worktree's and never shows over another.
 func workingTreeWindow(l layer) bool {
 	switch v := l.(type) {
 	case *diffView:
@@ -427,7 +456,8 @@ func workingTreeWindow(l layer) bool {
 }
 
 // dropWorkingLayers filters a stack: the working-tree windows go, the
-// rest keep their order.
+// rest keep their order. Only a console's process-wide parked copy still
+// needs it (parkedLayersFor): the slots' own stacks never cross a swap.
 func dropWorkingLayers(ls []layer) []layer {
 	var kept []layer
 	for _, l := range ls {
@@ -436,39 +466,6 @@ func dropWorkingLayers(ls []layer) []layer {
 		}
 	}
 	return kept
-}
-
-// dropWorkingTreeWindows closes what shows the leaving worktree's files
-// before the panels swap: the working-tree layers on the stack and the F
-// window (its tree and status letters are that worktree's). reRoot's
-// precedent, narrowed to what is tree-scoped.
-func (m Model) dropWorkingTreeWindows() Model {
-	if m.layers != nil {
-		m.layers.entries = dropWorkingLayers(m.layers.entries)
-	}
-	if m.filesView != nil && m.filesViewIsWorkingTree() {
-		m = m.closeFilesView()
-	}
-	return m
-}
-
-// filesViewIsWorkingTree: the open files view lists THIS tree's files —
-// the F window (files on disk) or a compare with a working-tree or index
-// side. A commit's, a stash's, a shelf's or a commit-to-commit compare's
-// files are the repository's and stay over another worktree.
-func (m Model) filesViewIsWorkingTree() bool {
-	switch m.filesMode {
-	case filesModeWorktree:
-		return true
-	case filesModeCompare:
-		return workingSide(m.filesLeft) || workingSide(m.filesRight)
-	}
-	return false
-}
-
-func workingSide(e model.Endpoint) bool {
-	k := e.Kind()
-	return k == model.EndpointWorkTree || k == model.EndpointIndex
 }
 
 // viewKickCmd is the live slot's wake-up: a SILENT status read (a
@@ -537,9 +534,9 @@ func (m Model) abandonGoneView() (Model, bool) {
 	if home == nil {
 		return m, false
 	}
-	m = m.dropWorkingTreeWindows()
 	m = m.sleepView()
-	m.viewed = "" // the gone slot must not be saved back
+	m.viewed = "" // the gone slot must not be saved back: its windows and working-file bands die with it
+	takeWorkingAttention(m.attention)
 	m = m.loadView(home)
 	for s := sourceKey(0); s < srcCount; s++ {
 		m.srcGen[s]++ // every read launched through the gone service is moot
@@ -573,9 +570,9 @@ func (m Model) pruneViews() Model {
 		if key == m.viewed {
 			gone := v.path
 			if home := m.views[m.home]; home != nil {
-				m = m.dropWorkingTreeWindows()
 				m = m.sleepView()
-				m.viewed = "" // the gone slot must not be saved back
+				m.viewed = "" // the gone slot must not be saved back: its windows and working-file bands die with it
+				takeWorkingAttention(m.attention)
 				m = m.loadView(home)
 				m.viewKick = true
 			}

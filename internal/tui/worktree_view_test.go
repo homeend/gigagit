@@ -230,21 +230,25 @@ func TestWorktreesReloadDropsAGoneSlot(t *testing.T) {
 }
 
 // enter on another worktree's row is instant: the view is its, gg's exit
-// dir and home follow, the Commits cursor and an open diff survive, the
-// screen never blanks.
+// dir and home follow, the Commits cursor survives, the screen never
+// blanks; an open diff waits in the worktree it was opened in.
 func TestInRepoSwitchAdoptsWithoutAReload(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
+	was := m.viewed
 	m, other := addWorktree(t, m, "wt2")
 	m.sel[panelCommits] = 0
-	m = m.pushLayer(&diffView{rev: "abc1"}) // a commit's diff survives (a working-tree one closes: it would show the old tree's file)
+	m = m.pushLayer(&diffView{rev: "abc1"}) // waits in the worktree it was opened in
 	nm, _ := m.guardedReRoot(other, true)
 	m = nm.(Model)
 	if m.viewed != model.KeyOf(other) || m.home != m.viewed || m.switchTarget != filepath.Clean(other) || publishedWorktree() != filepath.Clean(other) {
 		t.Fatalf("viewed=%q home=%q target=%q published=%q", m.viewed, m.home, m.switchTarget, publishedWorktree())
 	}
-	if !m.ready || m.loading || m.diffLayer() == nil {
-		t.Fatalf("the in-repo switch reloaded: ready=%v loading=%v diff=%v", m.ready, m.loading, m.diffLayer())
+	if !m.ready || m.loading || m.sel[panelCommits] != 0 {
+		t.Fatalf("the in-repo switch reloaded: ready=%v loading=%v", m.ready, m.loading)
+	}
+	if m.diffLayer() != nil || len(m.views[was].windows.layers.entries) != 1 {
+		t.Fatalf("the diff did not wait in its worktree: live=%v parked=%d", m.diffLayer() != nil, len(m.views[was].windows.layers.entries))
 	}
 	if m.snapshotPath != "" {
 		t.Fatal("the old snapshot target must be disabled until the new one resolves")

@@ -113,27 +113,27 @@ func TestLoadViewDerivesRowsFromTheSlotsReviews(t *testing.T) {
 	}
 }
 
-// --- E: only the F window (files on disk) is the leaving tree's ---
+// --- E: a files view waits in its worktree, whatever it lists ---
 
-// A commit's files view (enter on a commit) is the repository's and
-// survives the swap; the F window of files on disk does not.
-func TestSwitchViewKeepsACommitsFilesWindow(t *testing.T) {
+// A commit's files view (enter on a commit) waits in the worktree it was
+// opened in like any other window: absent over B, back in A.
+func TestSwitchViewParksACommitsFilesWindow(t *testing.T) {
 	m := loadedModel(t)
+	home := m.currentWorktree
 	m, other := addWorktree(t, m, "wt2")
 	m.filesView = &contentPopup{}
 	m.filesMode = filesModeChanged
+	m.filesHash = "abc1234"
 	m, ok := m.switchView(other)
 	if !ok {
 		t.Fatalf("refused: %s", m.statusMsg)
 	}
-	if m.filesView == nil {
-		t.Fatal("a commit's files view was closed by the swap")
+	if m.filesView != nil || m.filesHash != "" {
+		t.Fatal("a commit's files view crossed the swap")
 	}
-	m.filesView = &contentPopup{}
-	m.filesMode = filesModeWorktree
-	m, _ = m.switchView(m.homeWorktree())
-	if m.filesView != nil {
-		t.Fatal("the F window (files on disk) survived the swap")
+	m, _ = m.switchView(home)
+	if m.filesView == nil || m.filesHash != "abc1234" {
+		t.Fatal("the commit's files view did not come back")
 	}
 }
 
@@ -173,10 +173,10 @@ func TestResumePromptFlagIsPerSlot(t *testing.T) {
 	}
 }
 
-// A compare files view with a WORKING-TREE side lists this tree's files:
-// it closes on the swap like the F window; a commit-to-commit compare stays.
-func TestSwitchViewClosesACompareWithAWorkingSide(t *testing.T) {
+// A compare files view waits in its worktree — a working-tree side or not.
+func TestSwitchViewParksACompareWithAWorkingSide(t *testing.T) {
 	m := loadedModel(t)
+	home := m.currentWorktree
 	m, other := addWorktree(t, m, "wt2")
 	m.filesView = &contentPopup{}
 	m.filesMode = filesModeCompare
@@ -186,14 +186,11 @@ func TestSwitchViewClosesACompareWithAWorkingSide(t *testing.T) {
 		t.Fatalf("refused: %s", m.statusMsg)
 	}
 	if m.filesView != nil {
-		t.Fatal("a compare against the working tree survived the swap")
+		t.Fatal("a compare against the working tree crossed the swap")
 	}
-	m.filesView = &contentPopup{}
-	m.filesMode = filesModeCompare
-	m.filesLeft, m.filesRight = commitEP(t, "abc1234"), commitEP(t, "abc1235")
-	m, _ = m.switchView(m.homeWorktree())
-	if m.filesView == nil {
-		t.Fatal("a commit-to-commit compare was closed by the swap")
+	m, _ = m.switchView(home)
+	if m.filesView == nil || m.filesRight != model.WorkTreeEndpoint() {
+		t.Fatal("the compare did not come back with its sides")
 	}
 }
 
