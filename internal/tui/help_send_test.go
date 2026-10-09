@@ -16,7 +16,7 @@ func helpPlainText() string {
 func TestHelpDescribesSendingFromThePRView(t *testing.T) {
 	t.Parallel()
 	text := helpPlainText()
-	for _, want := range []string{"Send to GitHub", "Reply & send", "Send review…", "Verdict…", "Review and send…", "Finish sending", "updated"} {
+	for _, want := range []string{"Send as GitHub comment", "Reply & send", "Send review…", "Verdict…", "Review and send…", "Finish sending", "updated"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("help lacks %q", want)
 		}

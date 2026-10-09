@@ -84,9 +84,9 @@ func (m Model) forgeNoteRows() []actionRow {
 	}
 	var rows []actionRow
 	if len(local) > 0 {
-		label := i18n.T("Send to GitHub")
+		label := i18n.T("Send as GitHub comment")
 		if local[0].sync == model.SyncFailed {
-			label = i18n.T("Retry sending to GitHub")
+			label = i18n.T("Retry sending as GitHub comment")
 		}
 		rows = append(rows, actionRow{id: "note-send", label: label, run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.withNoteTargetIn(local, func(m Model, t noteTarget) (tea.Model, tea.Cmd) {

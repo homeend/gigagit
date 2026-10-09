@@ -47,7 +47,7 @@ screen_contains = ["why changed?"]
 [[tui.step]]
 name = "note-menu"
 keys = [".", "s", "e", "n", "d"]
-screen_contains = ["Send to GitHub", "Send my draft review…", "Send review…"]
+screen_contains = ["Send as GitHub comment", "Send my draft review…", "Send review…"]
 
 [[tui.step]]
 name = "send-confirm"

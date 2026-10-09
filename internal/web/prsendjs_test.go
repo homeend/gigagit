@@ -53,10 +53,10 @@ console.log(JSON.stringify({
 		t.Fatalf("%v: %s", err, out)
 	}
 	want := map[string][]string{
-		"local":    {"send:Send to GitHub", "send-review:Send my draft review…"},
-		"failed":   {"send:Retry sending to GitHub", "send-review:Send my draft review…"},
+		"local":    {"send:Send as GitHub comment", "send-review:Send my draft review…"},
+		"failed":   {"send:Retry sending as GitHub comment", "send-review:Send my draft review…"},
 		"sending":  {},
-		"remark":   {"send:Send to GitHub", "send-review:Send this AI review…"},
+		"remark":   {"send:Send as GitHub comment", "send-review:Send this AI review…"},
 		"thread":   {"reply-send:Reply & send…", "resolve:Resolve on GitHub", "send-drafts:Send 2 draft replies"},
 		"resolved": {"reply-send:Reply & send…", "resolve:Reopen on GitHub"},
 		"reply":    {},
