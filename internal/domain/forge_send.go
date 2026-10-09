@@ -55,8 +55,12 @@ type PRSendRequest struct {
 	// emptied box posts no body (user ruling 2026-10-08), never the stored
 	// summary.
 	BodySet bool `toml:"body_set,omitempty" json:"body_set,omitempty"`
-	Finish  bool `toml:"finish,omitempty" json:"finish,omitempty"`
-	Discard bool `toml:"discard,omitempty" json:"discard,omitempty"`
+	// BodyFrom: a Notes send whose body is this review's summary (the panel's
+	// "review text" choice); its summary is stamped sent as a Review send's
+	// is. Ignored when BodySet.
+	BodyFrom string `toml:"body_from,omitempty" json:"body_from,omitempty"`
+	Finish   bool   `toml:"finish,omitempty" json:"finish,omitempty"`
+	Discard  bool   `toml:"discard,omitempty" json:"discard,omitempty"`
 }
 
 // PRSendOp builds the one op that writes to a forge. The frontend collected
@@ -116,20 +120,34 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 		}
 		return plan, nil
 	}
-	drafts, other, err := s.noteKinds(ctx, req.Notes)
+	drafts, others, unknown, err := s.noteKinds(ctx, req.Notes)
 	if err != nil {
 		return engine.SendPlan{}, err
 	}
-	if len(req.Resolve)+len(req.Unresolve) > 0 || drafts > 0 {
-		if req.Review != "" || req.Mine || req.Verdict || other > 0 {
+	actionsOnly := len(req.Resolve)+len(req.Unresolve) > 0 || (len(drafts) > 0 && len(others) == 0)
+	if actionsOnly {
+		if req.Review != "" || req.Mine || req.Verdict || len(others) > 0 {
 			return engine.SendPlan{}, ErrMixedSend
 		}
 		return s.planActions(ctx, plan, req)
 	}
+	if len(drafts) > 0 && (req.Review != "" || req.Mine) {
+		return engine.SendPlan{}, ErrMixedSend
+	}
 	if rev, _, _ := s.PRInterrupted(ctx, pr.Number); rev != "" {
 		return engine.SendPlan{}, ErrInterruptedPending
 	}
-	plan, err = s.planReview(ctx, plan, pr, req)
+	reviewReq := req
+	reviewReq.Notes = append(others, unknown...)
+	plan, err = s.planReview(ctx, plan, pr, reviewReq)
+	if err == nil && len(drafts) > 0 {
+		// The ticked replies go after the review, under its confirm (R6).
+		then, terr := s.planActions(ctx, engine.SendPlan{Target: plan.Target, PR: plan.PR, PRID: plan.PRID, Head: plan.Head}, PRSendRequest{PR: req.PR, Notes: drafts})
+		if terr != nil {
+			return engine.SendPlan{}, terr
+		}
+		plan.Then = &then
+	}
 	if err == nil && len(plan.Items) == 0 && !req.Verdict {
 		// Nothing sendable: posting an empty review would be a public write
 		// nobody asked for.
@@ -215,28 +233,31 @@ func (s *Service) storedNotes(ctx context.Context) (map[string]model.Note, error
 	return out, nil
 }
 
-// noteKinds counts a --note list's draft replies to GitHub threads and its
-// other items (local notes, remarks, GitHub ids); an id no longer stored is
-// neither — a reply/resolve send skips it, any other send names it. A store
-// that cannot be read is an error, never a guess.
-func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, other int, err error) {
+// noteKinds splits a --note list into the draft replies to GitHub threads,
+// the other ids gg knows (local notes, remarks, GitHub comment ids) and the
+// ids it does not (a deleted note: the planner that runs names it — a
+// skip for an actions send, an error for a review). A store that cannot be
+// read is an error, never a guess.
+func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, others, unknown []string, err error) {
 	if len(ids) == 0 {
-		return 0, 0, nil
+		return nil, nil, nil, nil
 	}
 	byID, err := s.storedNotes(ctx)
 	if err != nil {
-		return 0, 0, err
+		return nil, nil, nil, err
 	}
 	for _, id := range ids {
 		n, ok := byID[id]
 		switch {
 		case ok && n.IsForgeReply():
-			drafts++
+			drafts = append(drafts, id)
 		case ok || model.IsReviewNoteID(id) || model.IsForgeNoteID(id):
-			other++
+			others = append(others, id)
+		default:
+			unknown = append(unknown, id)
 		}
 	}
-	return drafts, other, nil
+	return drafts, others, unknown, nil
 }
 
 // planActions is replies and resolves: each its own call.
@@ -416,6 +437,21 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 			}
 		}
 	default:
+		plan.Verdict, plan.Body = req.Verdict, typedBody(req)
+		if req.BodyFrom != "" && !req.BodySet {
+			r, err := s.Review(ctx, req.BodyFrom)
+			if err != nil {
+				return engine.SendPlan{}, err
+			}
+			if !s.prOwnsReview(ctx, prev.Set, r.ID) {
+				return engine.SendPlan{}, fmt.Errorf("%w: review %s is not in this PR", ErrSendRequest, r.ID)
+			}
+			plan.Key, plan.Body = r.ID, reviewSendBody(r)
+			if r.summarySent(pr.Number) {
+				plan.Body = ""
+				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: SkipOnGitHub})
+			}
+		}
 		var byID map[string]model.Note
 		for _, id := range req.Notes {
 			switch {
