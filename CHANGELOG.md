@@ -72,6 +72,31 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   worktree identity now uses one checkout key (`model.CheckoutKey`: the
   rule the link resolver already used), and disk, git and the screen get
   the listed spelling.
+- The checkout key above made a `gg://` link's file resolve inside a
+  SIBLING checkout whose directory name extends the checkout's
+  (`…/feat-2/x.go` read as `2/x.go` of `…/feat`); the containment test is
+  separator-exact again.
+- `alt+a` on a console whose worktree could not be shown yet (an operation
+  running, a popup open) showed the console over the OLD worktree's panels
+  and never caught up; the swap is now queued and happens once the
+  operation or the surface clears — unless the console closed first.
+- The Commits list walked history from your OWN worktree's HEAD whatever
+  the panels showed: a worktree on a detached HEAD had its own commits
+  missing, and after switching into a worktree and deleting the old one the
+  walk ran from a directory that was gone. The feed now walks from the
+  worktree on screen and reconciles on every swap.
+- Swapping from a worktree with a current review to one without could leave
+  a `✎ Review` row over the second worktree's files.
+- A swap closed EVERY files window; a commit's, a stash's and a
+  commit-to-commit compare's files are the repository's and now stay (the
+  `F` window of files on disk and a compare against the working tree or
+  the index close).
+- A `gg session` switch ask for your OWN worktree, accepted while another
+  was shown and an operation ran, armed the navigate against the worktree
+  still on screen; a refused swap arms nothing.
+- The continue/abort prompt of a paused merge/rebase fired again every time
+  the panels returned to that worktree; the one-shot is remembered per
+  worktree now.
 
 ### Added
 - A switch between worktrees of ONE repository is now a swap of remembered

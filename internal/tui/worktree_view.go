@@ -38,6 +38,8 @@ type worktreeView struct {
 
 	workingReviews []domain.WorkingReview
 
+	resumePromptShown bool // the continue/abort prompt fired for THIS tree's paused op (model.go's flag, per slot: a round trip through another tree must not fire it again)
+
 	loaded bool // its first status landed (false: the panels are empty, not clean — viewLoading says so)
 }
 
@@ -167,6 +169,7 @@ func (m Model) saveView() Model {
 	v.selFiles, v.selStaged = m.sel[panelFiles], m.sel[panelStaged]
 	v.fileMarks = m.fileMarks
 	v.workingReviews = m.workingReviews
+	v.resumePromptShown = m.resumePromptShown
 	return m
 }
 
@@ -177,14 +180,18 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.svc = v.svc
 	m.currentWorktree = v.path
 	publishedView.Store(v.path) // the session registry says what this TUI shows (another gg's guard)
-	m = m.withStatus(v.status)  // recomputes the index slices and the status stack
+	if m.feed != nil {
+		m.feed.SetService(v.svc) // the shared Commits list walks from the VIEWED tree's HEAD (a detached one's commits); the kick reconciles
+	}
+	m.workingReviews = v.workingReviews // before the rows: withStatus derives the Review row from the reviews
+	m = m.withStatus(v.status)          // recomputes the index slices and the status stack
 	m.conflict = v.conflict
+	m.resumePromptShown = v.resumePromptShown
 	if m.sel == nil {
 		m.sel = map[panel]int{}
 	}
 	m.sel[panelFiles], m.sel[panelStaged] = v.selFiles, v.selStaged
 	m.fileMarks = v.fileMarks
-	m.workingReviews = v.workingReviews
 	return m.markHead(m.worktreeBranch(v.path))
 }
 
@@ -356,6 +363,9 @@ func (m Model) sleepView() Model {
 	m.srcGen[srcNotes]++ // nor the note badges (per checkout)
 	m.srcInflight[srcNotes] = false
 	m.srcLoading[srcNotes] = false
+	m.srcGen[srcFeed]++ // nor a commit walk from the old root (the feed is re-rooted on load)
+	m.srcInflight[srcFeed] = false
+	m.srcLoading[srcFeed] = false
 	m.workingReviewsGen++ // likewise a reviews read
 	return m
 }
@@ -399,10 +409,29 @@ func (m Model) dropWorkingTreeWindows() Model {
 	if m.layers != nil {
 		m.layers.entries = dropWorkingLayers(m.layers.entries)
 	}
-	if m.filesView != nil {
+	if m.filesView != nil && m.filesViewIsWorkingTree() {
 		m = m.closeFilesView()
 	}
 	return m
+}
+
+// filesViewIsWorkingTree: the open files view lists THIS tree's files —
+// the F window (files on disk) or a compare with a working-tree or index
+// side. A commit's, a stash's, a shelf's or a commit-to-commit compare's
+// files are the repository's and stay over another worktree.
+func (m Model) filesViewIsWorkingTree() bool {
+	switch m.filesMode {
+	case filesModeWorktree:
+		return true
+	case filesModeCompare:
+		return workingSide(m.filesLeft) || workingSide(m.filesRight)
+	}
+	return false
+}
+
+func workingSide(e model.Endpoint) bool {
+	k := e.Kind()
+	return k == model.EndpointWorkTree || k == model.EndpointIndex
 }
 
 // viewKickCmd is the live slot's wake-up: a SILENT status read (a
@@ -415,12 +444,14 @@ func (m Model) dropWorkingTreeWindows() Model {
 func (m Model) viewKickCmd() tea.Cmd {
 	read := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{})
 	notes := m.readSourceCmd(context.Background(), srcNotes, reloadOpts{}) // the ✎ badges are the checkout's
+	feed := m.readSourceCmd(context.Background(), srcFeed, reloadOpts{})   // reconcile: the walk now starts at this tree's HEAD
 	_, docs := m.syncAgentDocs()
-	return tea.Batch(read, notes, m.startWatchCmd(m.watchGen), docs)
+	return tea.Batch(read, notes, feed, m.startWatchCmd(m.watchGen), docs)
 }
 
-// takeQueuedReturn performs the return a console close (or a gone slot)
-// queued while the panels could not swap (pendingReturnView). The Update
+// takeQueuedReturn performs the swap a console close, a console SHOW (its
+// own worktree) or a gone slot queued while the panels could not swap
+// (pendingReturnView). The Update
 // tail calls it once switchRefusal clears — so after an op's end only
 // when the end dispatched nothing further in that worktree (a chained op
 // is running again, a prompt is a surface), and after a staging round or

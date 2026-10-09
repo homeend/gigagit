@@ -95,8 +95,8 @@ func steerAskNotice(a *steerSwitchAsk, repoKey string) *notice {
 				// service at once), another repository the full reload.
 				nm, cmd := m.guardedReRoot(c.Worktree, false)
 				m = nm.(Model)
-				if m.home != "" && m.home != model.KeyOf(c.Worktree) && m.ready {
-					return m, cmd // the swap was refused (a surface, an op): said on the status line, nothing to replay
+				if m.viewed != "" && m.viewed != model.KeyOf(c.Worktree) && m.ready {
+					return m, cmd // the swap was refused (a surface, an op): said on the status line, nothing to replay — home itself may be the target
 				}
 				if c.Cmd == "navigate" {
 					replay := c

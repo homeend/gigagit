@@ -164,6 +164,7 @@ func TestSwitchViewDropsWorkingTreeLayers(t *testing.T) {
 	m = m.pushLayer(&diffView{title: "g", rev: "abc1"}) // a commit's diff: shared
 	m = m.pushLayer(&fileViewer{openFile: &openFile{}})
 	m.filesView = &contentPopup{}
+	m.filesMode = filesModeWorktree // the F window: files on disk
 	m, ok := m.switchView(other)
 	if !ok {
 		t.Fatalf("refused: %s", m.statusMsg)
