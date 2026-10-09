@@ -36,14 +36,15 @@ The terminal side of the PR-review feature (spec
   notes*, *Draft replies*), nothing ticked on open. `space` ticks (a row the
   planner would skip says why in the bottom bar), `a` ticks or clears a
   group, `b` cycles the body (none → each ticked review's text → typed), `e`
-  edits the typed body (kept per PR while the TUI runs), `c` toggles the
+  edits the body prefilled with the current choice (the typed text is kept
+  per PR while the TUI runs), `c` toggles the
   code excerpt under the current row, `enter` opens the row's file in the PR
   diff above the panel (esc returns, the thread under the cursor — a draft
   reply lands on its thread too), `ctrl+s` sends ONE GitHub review through
   the usual confirm (comment, approve or request changes); draft replies go
   right after it. The panel stays under the confirm and closes once the send
-  went out; an abort leaves it as it was. *Verdict…* (`v`) stays with its
-  own box.
+  went out; an abort leaves it as it was; a repository switch drops it.
+  *Verdict…* (`v`) stays with its own box.
 - **The note menu sends one note.** *Send my draft review… / Send this AI
   review…* leave a note's `.` menu (R9); *Send as GitHub comment*, *Reply &
   send…* and *Send draft reply* stay. The old group chooser and body step
