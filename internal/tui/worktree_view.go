@@ -642,6 +642,15 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	n := len(order)
 	viewed := m.viewPath(m.viewed)
 	at := m.worktreeIndex(viewed)
+	// The first hit with the keyboard elsewhere only reveals where you are
+	// (Branches focused, its cursor on the viewed worktree's branch). Over a
+	// full-screen view that reveal is invisible — the panels are under it —
+	// so the press swaps at once, with Branches focused underneath for the
+	// presses that follow.
+	if m.console == nil && m.topLayer() != nil && (!m.panelFocused(panelBranches) || m.activeLeftTab != panelBranches) {
+		m = m.activateTab(panelBranches)
+		m = m.selectWorktreeBranch(viewed)
+	}
 	if m.console != nil || !m.panelFocused(panelBranches) || m.activeLeftTab != panelBranches {
 		if m.console != nil {
 			if m.console.ret != nil {
