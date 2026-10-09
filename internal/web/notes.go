@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 
@@ -140,7 +141,20 @@ func (s *Server) handleNoteCounts(w http.ResponseWriter, r *http.Request) {
 		// This worktree's working reviews, matched: the working list's Review
 		// row and its ✎ markers.
 		"working_reviews": s.workingReviewsWire(r, len(c.WorkingReviews) > 0),
+		// The pull requests holding a local review (an AI review saved on
+		// one, or notes written in its diff): the Pull requests list's ✎.
+		"pr_reviewed": prReviewedWire(c),
 	})
+}
+
+// prReviewedWire is NoteCounts.PRReviewed as a sorted array — never null.
+func prReviewedWire(c domain.NoteCounts) []int {
+	out := []int{}
+	for n := range c.PRReviewed() {
+		out = append(out, n)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // orEmptyCounts keeps the three fields OBJECTS on the wire even when notes are

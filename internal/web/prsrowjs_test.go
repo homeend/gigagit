@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -42,7 +43,10 @@ const cases = [
   { ...base, state: "closed" },
   { ...base, state: "unavailable", title: "", author: "", source: "", target: "", updated: "" },
 ];
-console.log(JSON.stringify(cases.map((c) => prRowParts(c, now))));
+const rows = cases.map((c) => prRowParts(c, now));
+// local: only a PR whose number the note counts name (pr_reviewed).
+const local = [prRowParts(base, now, [3, 7]).local, prRowParts(base, now, [70]).local, prRowParts(base, now, []).local, prRowParts(base, now).local, prRowParts({ ...base, state: "merged" }, now, [7]).local];
+console.log(JSON.stringify({ rows, local }));
 `
 	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(runner), 0o644); err != nil {
 		t.Fatal(err)
@@ -51,12 +55,19 @@ console.log(JSON.stringify(cases.map((c) => prRowParts(c, now))));
 	if err != nil {
 		t.Fatalf("node: %v\n%s", err, out)
 	}
-	var got []struct {
-		Mark, Word, Title, Tip string
-		Dim                    bool
+	var res struct {
+		Rows []struct {
+			Mark, Word, Title, Tip string
+			Dim                    bool
+		}
+		Local []bool
 	}
-	if err := json.Unmarshal(out, &got); err != nil {
+	if err := json.Unmarshal(out, &res); err != nil {
 		t.Fatalf("decode %s: %v", out, err)
+	}
+	got := res.Rows
+	if want := []bool{true, false, false, false, true}; !slices.Equal(res.Local, want) {
+		t.Errorf("local = %v, want %v", res.Local, want)
 	}
 	want := []struct {
 		mark, word, title, tip string

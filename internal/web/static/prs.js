@@ -85,18 +85,25 @@ function renderPRs() {
 
 // prRowHTML is the one row painter: the list and the search results read alike.
 function prRowHTML(pr, now) {
-  const p = prRowParts(pr, now);
+  const p = prRowParts(pr, now, (state.noteCounts && state.noteCounts.pr_reviewed) || []);
   return (
     `<li data-pr="${pr.number}" class="${(p.dim ? "prdim" : "") + (state.prBusy === pr.number ? " prbusy" : "")}" title="${esc(p.tip)}">` +
     `<span class="prnum">#${pr.number}</span>` +
     // The status cell LEADS the row: the sidebar is narrow and cuts a
     // row's tail, and the verdict is what you scan the list for.
+    (p.local ? `<span class="prlocal" title="local review: an AI review or notes kept on this machine">✎</span>` : "") +
     (p.mark ? `<span class="prmark ${esc(pr.review_state)}">${p.mark}</span>` : "") +
     (p.word ? `<span class="prword">${esc(p.word)}</span>` : "") +
     esc(p.title) +
     `</li>`
   );
 }
+
+// A note written or deleted anywhere reloads the counts: repaint the ✎.
+document.addEventListener("gg:notecounts", () => {
+  if (state.prsAvailable) renderPRs(); // not before the list landed: no "no open pull requests" flash
+  renderSearch();
+});
 
 // knownPR finds a pull request the page was shown — in the list, or among the
 // search results (a closed PR found by searching is in no list until fetched).
@@ -633,7 +640,8 @@ registerHelp({
   html:
     "with a usable <b>gh</b> the sidebar lists the repository's open pull requests (gg writes to GitHub only " +
     "when you send — see <i>send to GitHub</i>). The row leads with the review verdict: <b>✓</b> approved, <b>✗</b> changes " +
-    "requested, <b>●</b> review required. <b>Click</b> fetches the head and opens the PR's diff on the merge " +
+    "requested, <b>●</b> review required; a <b>✎</b> before it marks a pull request holding a <i>local</i> review — an AI " +
+    "review saved on it, or notes written in its diff (gg keeps both on this machine, sent or not). <b>Click</b> fetches the head and opens the PR's diff on the merge " +
     "preview screen (a loading mask covers the panes meanwhile; a pull request opened before shows at once " +
     "and is checked against the forge in the background); <b>right-click</b> for copy URL and forget. A pull request gg already knows stays " +
     "listed, dimmed, after it is closed or merged. <b>A</b> (or a click) puts the caret in the section's " +

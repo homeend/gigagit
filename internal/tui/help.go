@@ -139,6 +139,7 @@ func helpContent() []contentLine {
 		r("s", i18n.T("save the reversed pair (target → source) as a second preview")),
 		h(i18n.T("Pull requests panel")),
 		r("", i18n.T("a fifth tab in the top-left box, present only when a forge CLI (GitHub's gh, signed in) can read this repository's pull requests; gg writes to the forge only when you send something (below). Open pull requests are listed; one gg already knows stays listed, dimmed and marked, after it is merged or closed")),
+		r("", i18n.T("✎ before a pull request's status: it holds a local review — an AI review saved on it, or notes written in its diff (gg keeps both on this machine, sent or not)")),
 		r("enter", i18n.T("fetch the pull request's head into a private ref (refs/gg/pr/<n>, never shown in the graph) and open its diff — base…head, the same view as a merge preview")),
 		r("i", i18n.T("pull request details: title, state, description, the conversation with review verdicts, and outdated review threads ([y] copies the URL, [L] its gg:// link, [r] reloads, [/] filters, [ctrl+t] fullscreen)")),
 		r("y", i18n.T("copy the pull request's URL")),

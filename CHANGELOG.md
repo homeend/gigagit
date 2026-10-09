@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull requests tab marks a local review
+
+### Added
+
+- **A pull request with a local review now says so in the TUI's Pull
+  requests tab.** Its status cell starts with `✎` — the Commits list's
+  review mark — when an AI review was saved on the PR or notes were written
+  in its diff (gg keeps both locally; a sent note keeps the mark). The mark follows the
+  PR by number whatever its base's spelling, shows on merged and closed rows
+  too, and appears in the `A` search results as well
+  (`NoteCounts.PRReviewed`).
+- **gg web's Pull requests list carries the same `✎`**, in the accent
+  colour, before the verdict — in the list and the search results. It
+  arrives with the note counts (`/api/notes/counts` → `pr_reviewed`), so a
+  note written anywhere (the TUI, the CLI, an agent) marks the row live,
+  without a reload.
+
 ## Web dialogs: buttons on Start agent, a wider GitHub send confirm
 
 ### Fixed

@@ -20,8 +20,10 @@ export function ago(iso, nowMs) {
 }
 
 // prRowParts: mark = the review verdict, word = why the row is not a plain
-// open PR (draft / closed / merged / unavailable), dim = no longer open.
-export function prRowParts(pr, nowMs) {
+// open PR (draft / closed / merged / unavailable), dim = no longer open,
+// local = the PR holds a local review (reviewed: the note counts'
+// pr_reviewed numbers — an AI review saved on it, or notes in its diff).
+export function prRowParts(pr, nowMs, reviewed) {
   const open = pr.state === "open";
   const word = open ? (pr.draft ? "draft" : "") : pr.state || "";
   const pair = pr.source || pr.target ? (pr.source || "?") + " → " + (pr.target || "?") : "";
@@ -32,5 +34,6 @@ export function prRowParts(pr, nowMs) {
     title: pr.title || (pr.state === "unavailable" ? "(no longer on the forge)" : ""),
     tip,
     dim: !open,
+    local: !!(reviewed && reviewed.includes(pr.number)),
   };
 }

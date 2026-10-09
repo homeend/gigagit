@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -90,6 +91,29 @@ func TestPRRows(t *testing.T) {
 	// Numbers share one column: "#7" is padded to "#101".
 	if strings.Index(rows[0], "Add") != strings.Index(rows[2], "Fork") {
 		t.Errorf("titles are not aligned:\n%q\n%q", rows[0], rows[2])
+	}
+}
+
+// A PR with a LOCAL review — an AI review saved on it, or notes written in
+// its view — wears ✎ (the Commits list's review mark) at the head of its
+// status cell, merged or open; a PR without one is unchanged.
+func TestPRRowsMarkALocalReview(t *testing.T) {
+	t.Parallel()
+	m := prModel(t)
+	m.noteCounts = domain.NoteCounts{
+		PreviewReviews: map[string][]domain.ReviewHead{"main...refs/gg/pr/7": {{ID: "r1"}}},
+		ScopesByCommit: map[string][]domain.NoteScopeCount{"abc": {{Scope: "origin/main...refs/gg/pr/12", N: 2}}},
+	}
+	rows := m.prRows()
+	if !strings.HasPrefix(rows[0], "#7   ✎ ✓") {
+		t.Errorf("reviewed open row = %q, want ✎ before the verdict", rows[0])
+	}
+	if !strings.HasPrefix(rows[1], "#12  ✎ merged") {
+		t.Errorf("noted merged row = %q, want ✎ before the state word", rows[1])
+	}
+	m.noteCounts = domain.NoteCounts{}
+	if rows := m.prRows(); strings.Contains(strings.Join(rows, "\n"), "✎") {
+		t.Errorf("no local review, yet a ✎: %q", rows)
 	}
 }
 
