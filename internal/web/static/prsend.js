@@ -215,7 +215,7 @@ registerHelp({
   html:
     "in a pull request's own diff each note says where it lives — <b>○</b> local, <b>◌</b> sending, " +
     "<b>○!</b> the last send failed (the error under it), <b>●</b> on GitHub — and its left border is its " +
-    "group's colour (one per AI review, one for your own notes). <b>Right-click</b> a note: Send to GitHub, " +
+    "group's colour (one per AI review, one for your own notes). <b>Right-click</b> a note: Send as GitHub comment, " +
     "Send my draft review… / Send this AI review…, and on a GitHub thread Reply &amp; send…, Resolve / Reopen on " +
     "GitHub, Send draft replies. The pull request's right-click menu has <b>Send review…</b> and <b>Verdict…</b>. " +
     "Every send shows what will be posted and waits for your answer; agents never send",

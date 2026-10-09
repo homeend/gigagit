@@ -54,7 +54,7 @@ func TestPRNoteMenuRetriesAFailedNote(t *testing.T) {
 	v.notes[0].Sync, v.notes[0].SendErr = model.SyncFailed, "HTTP 502"
 	v.setCursorLine(4, m.diffBodyRows())
 	for _, r := range m.noteMenuRows() {
-		if r.id == "note-send" && r.label != "Retry sending to GitHub" {
+		if r.id == "note-send" && r.label != "Retry sending as GitHub comment" {
 			t.Fatalf("label %q", r.label)
 		}
 	}

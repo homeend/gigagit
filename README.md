@@ -542,7 +542,7 @@ sends. (gg cannot stop an agent that runs `gh` itself — that belongs to the
 agent's own permission settings.)
 
 In **gg web**, a pull request's diff shows the same marks and group colours
-as the terminal UI: right-click a note for *Send to GitHub*, *Send my draft
+as the terminal UI: right-click a note for *Send as GitHub comment*, *Send my draft
 review…* / *Send this AI review…*, and on a GitHub thread *Reply & send…*,
 *Resolve / Reopen on GitHub*, *Send draft replies*; the pull request's
 right-click menu has *Send review…* and *Verdict…*. Each send opens the same
@@ -591,7 +591,7 @@ on `r`; `i` opens the PR hub from the diff. The title says `refreshing…`,
 here, `◌` being sent, `○!` the last send failed (with the error), `●` on
 GitHub — and a coloured bar for its group: your own notes ("my draft
 review"), each AI review run on the PR (its remarks show in the diff too),
-each GitHub review. The `.` menu on a note offers *Send to GitHub* and
+each GitHub review. The `.` menu on a note offers *Send as GitHub comment* and
 *Send my draft review…* / *Send this AI review…*; on a GitHub thread *Reply
 to note*, *Reply & send…*, *Resolve / Reopen thread* (`x`, at once on GitHub)
 and *Send draft reply* (`R` writes a local draft). The PR hub's `s` (*Send

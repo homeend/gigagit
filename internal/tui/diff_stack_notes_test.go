@@ -482,7 +482,7 @@ func TestStackNotesAtCursorReadTheCursorsFile(t *testing.T) {
 // A stacked PR diff is still the PR's diff: the stack view itself names no
 // file (its files carry the preview set their own loaders stamped), so the
 // PR number is read off the files — otherwise forgePR stayed 0 in a stack and
-// the . menu lost Send to GitHub, the send marks and the group bars.
+// the . menu lost Send as GitHub comment, the send marks and the group bars.
 func TestStackOfAPRDiffKeepsThePRNumber(t *testing.T) {
 	t.Parallel()
 	v := stackViewOf(t, cursorRows(10), cursorRows(10))
@@ -513,7 +513,7 @@ func TestStackOfAPRDiffKeepsThePRNumber(t *testing.T) {
 	v.setCursorLine(li, m.diffBodyRows())
 	ids := menuIDString(m.noteMenuRows())
 	if !strings.Contains(ids, "note-send") {
-		t.Fatalf("stacked PR diff, cursor on B's note: want Send to GitHub, got rows %q", ids)
+		t.Fatalf("stacked PR diff, cursor on B's note: want Send as GitHub comment, got rows %q", ids)
 	}
 
 	// A stack over a PR view whose files are NOT the PR's (a worktree stack)

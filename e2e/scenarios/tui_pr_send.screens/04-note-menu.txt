@@ -15,7 +15,7 @@ diff: big.txt  @ PR #7 · Change line 5                                         
   9 line 9                                         ║                                                        ║
  10 line 10                                        ║  Actions  send█                                        ║
                                                    ║                                                        ║
-                                                   ║  > Send to GitHub                                      ║
+                                                   ║  > Send as GitHub comment                              ║
                                                    ║    Send my draft review…                               ║
                                                    ║    Send review…                                        ║
                                                    ║                                                        ║

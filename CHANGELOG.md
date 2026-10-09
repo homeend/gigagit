@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## Stacked PR diff: the note rows are back
 
+### Changed
+
+- **TUI + gg web:** the note menu's one-note send reads **Send as GitHub
+  comment** (and *Retry sending as GitHub comment* after a failure) instead of
+  *Send to GitHub*, so it no longer reads like the whole-review sends beside
+  it.
+
 ### Fixed
 
 - **TUI:** in a STACKED diff of a pull request, the `.` menu on a note or an
