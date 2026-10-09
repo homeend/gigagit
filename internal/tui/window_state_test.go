@@ -4,6 +4,8 @@ import (
 	"context"
 	"os/exec"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // The window fields live in one group: saving the live group into a slot
@@ -134,5 +136,39 @@ func TestDroppedSlotStopsItsParkedWalks(t *testing.T) {
 	m = nm.(Model)
 	if !stopped {
 		t.Fatal("the gone slot's parked history keeps its git running")
+	}
+}
+
+// A result asked from A lands while B is shown, with B's own popup of the
+// same kind open at the same generation: the gate drops it by its slot
+// stamp, so B's popup is never filled with A's answer.
+func TestResultForASleepingSlotIsDroppedAtTheGate(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	m, cmdA := m.openBranchVersions("main", false, false) // A's popup, A's gen
+	if cmdA == nil {
+		t.Fatal("precondition: the versions read was not launched")
+	}
+	m = forceSwitch(t, m, other)
+	m, _ = m.openBranchVersions("main", false, false) // B's popup, B's gen (the same number)
+	nm, _ := m.Update(cmdA())
+	m = nm.(Model)
+	if p := layerOf[*versionsPopup](m); p == nil || !p.loading {
+		t.Fatal("A's versions answer filled B's popup: the result was not gated by its slot")
+	}
+}
+
+// A result stamped for a slot that is gone is dropped the same way: it
+// must never fall through to a handler acting on the worktree on screen.
+func TestResultForAGoneSlotIsDroppedAtTheGate(t *testing.T) {
+	m := loadedModel(t)
+	m, _ = m.openBranchVersions("main", false, false)
+	gen := m.versionsGen
+	msg := versionsLoadedMsg{gen: gen, branch: "main"}
+	msg.slot = model.KeyOf("/nowhere/gone")
+	nm, _ := m.Update(msg)
+	m = nm.(Model)
+	if p := layerOf[*versionsPopup](m); p == nil || !p.loading {
+		t.Fatal("a gone slot's answer filled the popup on screen")
 	}
 }

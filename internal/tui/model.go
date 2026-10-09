@@ -554,6 +554,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nm, cmd := m.Update(hd.inner)
 		return nm, tea.Batch(tea.EnableMouseCellMotion, cmd)
 	}
+	if m.gateSlotMsg(msg) {
+		return m, nil // addressed to a worktree not on screen: sleeping (phase 3 replays it) or gone (slot_msg.go)
+	}
 	before := m.statusMsg
 	nm, cmd := m.dispatchParkedAware(msg)
 	// Invariant this relies on: every dispatch path returns a Model (true of

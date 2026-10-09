@@ -37,17 +37,19 @@ type remoteHeadsPopup struct {
 // a repo switch drops the slot, a popup reopened bumps it); stale results
 // are dropped.
 type remoteHeadNamesMsg struct {
-	names []string
-	err   error
-	gen   int
+	slotStamp // the slot it was asked from (slot_msg.go)
+	names     []string
+	err       error
+	gen       int
 }
 
 // remoteHeadsMsg is the async result of the UnfetchedRemoteHeads phase.
 type remoteHeadsMsg struct {
-	remote string
-	heads  []model.RemoteHead
-	err    error
-	gen    int
+	slotStamp // the slot it was asked from (slot_msg.go)
+	remote    string
+	heads     []model.RemoteHead
+	err       error
+	gen       int
 }
 
 // openRemoteHeadsBrowser pushes a loading remoteHeadsPopup and starts the
@@ -65,9 +67,10 @@ func (m Model) openRemoteHeadsBrowser() (Model, tea.Cmd) {
 func (m Model) loadRemoteHeadNamesCmd() tea.Cmd {
 	svc := m.svc
 	gen := m.remoteHeadsGen
+	slot := m.stamp()
 	return func() tea.Msg {
 		names, err := svc.RemoteNames(context.Background())
-		return remoteHeadNamesMsg{names: names, err: err, gen: gen}
+		return remoteHeadNamesMsg{slotStamp: slot, names: names, err: err, gen: gen}
 	}
 }
 
@@ -75,9 +78,10 @@ func (m Model) loadRemoteHeadNamesCmd() tea.Cmd {
 func (m Model) loadRemoteHeadsCmd(remote string) tea.Cmd {
 	svc := m.svc
 	gen := m.remoteHeadsGen
+	slot := m.stamp()
 	return func() tea.Msg {
 		heads, err := svc.UnfetchedRemoteHeads(context.Background(), remote)
-		return remoteHeadsMsg{remote: remote, heads: heads, err: err, gen: gen}
+		return remoteHeadsMsg{slotStamp: slot, remote: remote, heads: heads, err: err, gen: gen}
 	}
 }
 

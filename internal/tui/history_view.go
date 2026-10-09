@@ -416,14 +416,15 @@ func (m Model) loadHistoryDiffFullCmd(fc model.FileCommit, tag string) tea.Cmd {
 	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial, long: m.diffLong, width: width,
 		noteAddr: historyNoteAddress(fc)}
 	key, oldSrc, newSrc := m.historyDiffSources(fc)
+	slot := m.stamp()
 	return func() tea.Msg {
 		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: fc.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
 

@@ -77,16 +77,17 @@ func (m Model) loadCompareTwoRefsCmd(left, right model.FileRef, title, subtitle,
 	body := m.diffBodyRows()
 	v := &diffView{title: title, context: subtitle, compare: true, partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
+	slot := m.stamp()
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, left) }
 		newSrc := func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, right) }
 		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: right.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
 
@@ -105,15 +106,16 @@ func (m Model) loadCompareFocusedVsBookmarkCmd(ref model.FileRef, label string, 
 		long:    m.diffLong,
 	}
 	v.width, _ = m.overlayDims()
+	slot := m.stamp()
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }
 		newSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, bm) }
 		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: bm.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }

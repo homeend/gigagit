@@ -117,9 +117,10 @@ func (m Model) onStoredDeleted(msg storedDeletedMsg) (Model, tea.Cmd) {
 	}
 	if p := layerOf[*allNotesPopup](m); p != nil {
 		svc, gen := m.svc, m.allNotesGen // the open popup's own gen: the re-read lands on it
+		slot := m.stamp()
 		cmds = append(cmds, func() tea.Msg {
 			ov, err := svc.NotesOverview(context.Background())
-			return allNotesMsg{ov: ov, err: err, gen: gen}
+			return allNotesMsg{slotStamp: slot, ov: ov, err: err, gen: gen}
 		})
 	}
 	var counts tea.Cmd

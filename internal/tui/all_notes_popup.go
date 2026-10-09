@@ -92,9 +92,10 @@ type allNotesPopup struct {
 // asked under (a window gen, the slot's own: a repo switch drops the slot,
 // a popup reopened bumps it).
 type allNotesMsg struct {
-	ov  domain.NotesOverview
-	err error
-	gen int
+	slotStamp // the slot it was asked from (slot_msg.go)
+	ov        domain.NotesOverview
+	err       error
+	gen       int
 }
 
 // openAllNotes pushes the popup in its loading state and reads the overview
@@ -106,9 +107,10 @@ func (m Model) openAllNotes() (Model, tea.Cmd) {
 	m.allNotesGen++
 	m = m.pushLayer(&allNotesPopup{loading: true, folded: map[string]bool{}})
 	svc, gen := m.svc, m.allNotesGen
+	slot := m.stamp()
 	return m, func() tea.Msg {
 		ov, err := svc.NotesOverview(context.Background())
-		return allNotesMsg{ov: ov, err: err, gen: gen}
+		return allNotesMsg{slotStamp: slot, ov: ov, err: err, gen: gen}
 	}
 }
 
