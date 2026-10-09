@@ -71,10 +71,13 @@ documents lack it: no migration, no format bump (`version` stays 1).
   keeps it (a re-save through `Canonical` must not drop it — round-trip
   test).
 - Limits, checked by `ParseReview`: an overview over 64 KiB
-  (`agentdocs.MaxOverviewBytes`) fails the parse with an `ErrNotReviewDoc`
-  error (`overview exceeds 64 KiB`), so `gg review save` refuses with a clear
-  message instead of storing a truncated one. Links past the 100th anchor
-  (`agentdocs.MaxAnchors`) stay plain text, as in a temporary overview.
+  (`notebatch.MaxOverviewBytes`, a constant of its own — notebatch is a
+  stdlib-only leaf and must not import agentdocs; a domain test pins it
+  equal to `agentdocs.MaxOverviewBytes`) fails the parse with an
+  `ErrNotReviewDoc` error (`overview exceeds 64 KiB`), so `gg review save`
+  refuses with a clear message instead of storing a truncated one. Links
+  past the 100th anchor (`agentdocs.MaxAnchors`) stay plain text, as in a
+  temporary overview.
 
 ### 2.2 Anchors (R3)
 
@@ -106,6 +109,11 @@ used by the save report, the TUI and the web alike.
 - A send never includes it: `reviewSendBody`, `ReviewBodyText`, and the
   one-note bodies read the summary and remarks only (test: a review with an
   overview sends the same body as without).
+- A send never deletes it: today the settle pass removes a review note once
+  every remark has moved to GitHub (`allRemarksMoved`). A review whose
+  document holds an overview is kept instead — its remarks marked moved, its
+  summary stamped sent, the review still listed and openable (the remarks
+  read as on GitHub). Only a review without an overview is removed as today.
 
 ### 2.4 Who writes it (R1)
 
@@ -353,10 +361,13 @@ space tick  a all/none in group  enter open  b body  e edit body  ctrl+s send  e
 `--review`, `--mine`, `--verdict`-alone, `--finish`, `--discard`, where
 `--note` may add `--verdict` and one of `--body`/`--body-from`;
 `--body-from` with anything but `--note` is a usage error. `--review` and
-`--mine` are unchanged. A new e2e scenario beside `pr_readonly` (the fake
-gh the e2e builder already provides) runs `gg pr send --note <remark> --note
-<draft> --verdict --body-from <review>` with the confirm answered from
-stdin: one review posted, then one reply, summary stamped.
+`--mine` are unchanged. `gg pr send` refuses a stdin that is not a terminal
+(`errNeedsTerminal`) and the e2e harness's stdin never is one, so the
+end-to-end send is a CLI package test in the `runPRAt` style (the
+`sendTerminal` seam, the fake gh seeded with `forgetest.Seed`): `gg pr send
+7 --note <remark> --note <draft> --verdict --body-from <review>` answered
+`comment` posts one review then one reply (`forgetest.Writes` order
+StartReview, AddThread, SubmitReview, Reply) and stamps the summary.
 
 ## 6. Docs and skills
 
@@ -455,7 +466,9 @@ note-link row by construction, since they compare the whole menu.
   handler; `/api/pr/send` with `verdict`/`body_from`; `/api/pr/open`
   reviews; `summaryMd`/`overviewMd` on the review wire.
 - CLI: `parsePRSend` combinations; `gg review save` unresolved report; `gg
-  review show` overview + `"summary"`; e2e fake-gh send.
+  review show` overview + `"summary"`; the fake-gh mixed send (CLI package
+  test, §5.5); the settle pass keeps a review with an overview after a full
+  send.
 - Note links (§7): model hint kind round-trip; domain note-link build (commit
   / staged / working with fingerprint, a reply → its thread), resolve +
   refusal of a gone note, `linkdesc`; TUI `note-copy-link` on the anchor line
@@ -490,7 +503,7 @@ note-link row by construction, since they compare the whole menu.
    notes --json`, `gg review save`/`show`); the note link (model hint,
    domain build/resolve/describe, `gg note show`, `reply`/`resolve` by link,
    `gg link --note`); MCP review show; skills + versions + `gg init
-   --update`; e2e CLI send.
+   --update`; the CLI fake-gh send test.
 2. **TUI**: the "≡ Summary" row; the "≡ Overview" row over the overview
    popup; PR Reviews rows; the send panel and the removals; Copy note link
    (`.` from both lines, `L`, View all notes, the review view's line link);
