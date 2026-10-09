@@ -10,10 +10,25 @@ import (
 
 // prOfView is the pull request v is the diff OF (0 = none): a PR's files
 // view is open AND v shows that PR's own pair — not merely any diff opened
-// over it (a commit note's diff, a working-tree diff).
+// over it (a commit note's diff, a working-tree diff). A stack names no file
+// itself: its files carry the set their own loaders stamped, and a stack is
+// all the PR's files or none of them, so the first loaded file answers.
 func (m Model) prOfView(v *diffView) int {
 	ps := m.filesPreviewSet
-	if v == nil || v.previewSet == nil || ps == nil || v.previewSet.Source != ps.Source {
+	if v == nil || ps == nil {
+		return 0
+	}
+	set := v.previewSet
+	if v.stk != nil {
+		set = nil
+		for i := range v.stk.files {
+			if d := v.stk.files[i].d; d != nil && d.previewSet != nil {
+				set = d.previewSet
+				break
+			}
+		}
+	}
+	if set == nil || set.Source != ps.Source {
 		return 0
 	}
 	return m.openPRNumber()
