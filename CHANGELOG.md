@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Stacked PR diff: the note rows are back
+
+### Fixed
+
+- **TUI:** in a STACKED diff of a pull request, the `.` menu on a note or an
+  AI remark lost every note row — Send to GitHub, Send this AI review…, Reply
+  & send…, Resolve thread, Open / Edit / Delete note, Collapse note — and
+  only the PR-level Send review… survived; the send marks and group bars did
+  not draw either. Two causes: the note reach read the single-file note list
+  (a stack keeps its notes per file), and a stack view, which names no file,
+  never got the PR number its files carry. The reach is now the cursor's
+  file (an anchor resolved inside that file's own line range, so a line
+  number that repeats across files never reaches a neighbour's note), and a
+  stack of the PR's files is the PR's diff.
+
 ## gg-overview: a name for presenting a result in gg
 
 ### Added

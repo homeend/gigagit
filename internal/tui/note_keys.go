@@ -288,13 +288,21 @@ func (v *diffView) noteTargetIn(r domain.ResolvedNote) (noteTarget, bool) {
 // every thread anchored on the nearest real line above it (rows directly
 // above the cursor). Both sides adjacent means the cursor line's own threads
 // win. Anything further away is out of reach: the keys are inert and the .
-// menu offers no note rows. Order follows v.notes (resolution order), so a
-// chooser lists several threads on one line stably.
+// menu offers no note rows. Order follows the file's notes (resolution
+// order), so a chooser lists several threads on one line stably. Stacked, the
+// reach is the cursor's FILE: a stack keeps notes per file (the single-file
+// list is empty), and a line number repeats across files, so the anchor is
+// resolved inside that file's own range — A's line 5 never reaches B's note.
 func (m Model) notesAtCursor() []noteTarget {
 	v := m.diffLayer()
-	if v == nil || len(v.notes) == 0 || v.curLine < 0 || v.curLine >= len(v.lines) {
+	if v == nil || v.curLine < 0 || v.curLine >= len(v.lines) {
 		return nil
 	}
+	notes := v.curNotes()
+	if len(notes) == 0 {
+		return nil
+	}
+	lo, hi := v.fileLineRange(v.curFile())
 	prev := -1
 	for li := v.curLine - 1; li >= 0; li-- {
 		if v.lines[li].Fold == 0 {
@@ -303,12 +311,12 @@ func (m Model) notesAtCursor() []noteTarget {
 		}
 	}
 	var at, above []noteTarget
-	for _, r := range v.notes {
+	for _, r := range notes {
 		t, ok := v.noteTargetIn(r)
 		if !ok {
 			continue
 		}
-		li, _ := v.noteAnchorLine(r)
+		li, _ := v.noteAnchorLineIn(lo, hi, r)
 		switch {
 		case li < 0:
 			// the anchor is not in this view at all

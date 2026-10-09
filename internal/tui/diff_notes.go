@@ -226,6 +226,28 @@ func (v *diffView) notesOf(i int) []domain.ResolvedNote {
 	return nil
 }
 
+// allNotes are every note the view shows: the file's own unstacked, every
+// loaded file's in a stack. For "is there anything" and whole-view toggles;
+// per-file actions read curNotes.
+func (v *diffView) allNotes() []domain.ResolvedNote {
+	if v == nil {
+		return nil
+	}
+	if v.stk == nil {
+		return v.notes
+	}
+	var all []domain.ResolvedNote
+	for i := range v.stk.files {
+		all = append(all, v.notesOf(i)...)
+	}
+	return all
+}
+
+// hasNotes reports whether any note is shown — stacked, in any loaded file.
+func (v *diffView) hasNotes() bool {
+	return len(v.allNotes()) > 0
+}
+
 // curNotes are the notes of the file the note keys act on: stacked, the file
 // under the cursor (whose address is what c/E/R and Remove all use), else the
 // view's own.
@@ -581,19 +603,20 @@ func (m Model) toggleNoteCollapse() Model {
 // toggleAllNotesCollapse folds every thread when any is open, else unfolds all.
 func (m Model) toggleAllNotesCollapse() Model {
 	v := m.diffLayer()
-	if v == nil || len(v.notes) == 0 {
+	all := v.allNotes()
+	if len(all) == 0 {
 		return m
 	}
 	if v.collapsed == nil {
 		v.collapsed = map[string]bool{}
 	}
 	want := false
-	for _, r := range v.notes {
+	for _, r := range all {
 		if !v.collapsed[r.Note.ID] {
 			want = true
 		}
 	}
-	for _, r := range v.notes {
+	for _, r := range all {
 		v.collapsed[r.Note.ID] = want
 	}
 	m.relayoutKeepingCursor(v)
@@ -602,12 +625,13 @@ func (m Model) toggleAllNotesCollapse() Model {
 
 // allNotesCollapsed reports whether O would expand (every thread is folded).
 func (v *diffView) allNotesCollapsed() bool {
-	for _, r := range v.notes {
+	all := v.allNotes()
+	for _, r := range all {
 		if !v.collapsed[r.Note.ID] {
 			return false
 		}
 	}
-	return len(v.notes) > 0
+	return len(all) > 0
 }
 
 // noteBoxTitle is the text in a box's top rule: "agent note" or "note", the
@@ -777,7 +801,7 @@ func noteBadgeGroups(n int, groups []string) string {
 // has no room left for them, so the menu and ? are where they are advertised).
 func (m Model) noteCollapseRows() []actionRow {
 	v, ok := m.topLayer().(*diffView)
-	if !ok || len(v.notes) == 0 {
+	if !ok || !v.hasNotes() {
 		return nil
 	}
 	var rows []actionRow

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -438,5 +440,88 @@ func TestStackRemoveAllFollowsTheCursorsFile(t *testing.T) {
 	}
 	if p.path != "b.go" || p.total != 1 {
 		t.Fatalf("the confirmation names %q with %d notes, want b.go with 1", p.path, p.total)
+	}
+}
+
+// The note keys' reach (., o, the send rows) is the file under the cursor:
+// a stack keeps its notes per file, so the single-file list is empty there
+// and every note row used to vanish from a stacked diff's . menu. Line
+// numbers repeat across files, so the anchor is resolved inside the cursor's
+// file — A's line 5 never reaches B's note.
+func TestStackNotesAtCursorReadTheCursorsFile(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, cursorRows(10), cursorRows(10))
+	noteOnStackFile(v, 0, 5, "on A")
+	noteOnStackFile(v, 1, 5, "on B")
+	m := diffModel()
+	m.height, m.width = 30, 120
+	m = m.pushLayer(v)
+	v.rebuild()
+	v.relayout(v.width)
+
+	at := func(file int) []noteTarget {
+		lo, hi := v.fileLineRange(file)
+		li, visible := v.lineAnchorIn(lo, hi, 5, false)
+		if li < 0 || !visible {
+			t.Fatalf("file %d: line 5 not visible (li=%d)", file, li)
+		}
+		v.setCursorLine(li, m.diffBodyRows())
+		return m.notesAtCursor()
+	}
+	if ts := at(1); len(ts) != 1 || ts[0].rootID != "on B" {
+		t.Fatalf("cursor on B's line 5: want B's note, got %+v", ts)
+	}
+	if ts := at(0); len(ts) != 1 || ts[0].rootID != "on A" {
+		t.Fatalf("cursor on A's line 5: want A's note, got %+v", ts)
+	}
+	if !v.hasNotes() {
+		t.Fatal("a stack with notes must report notes (the collapse rows depend on it)")
+	}
+}
+
+// A stacked PR diff is still the PR's diff: the stack view itself names no
+// file (its files carry the preview set their own loaders stamped), so the
+// PR number is read off the files — otherwise forgePR stayed 0 in a stack and
+// the . menu lost Send to GitHub, the send marks and the group bars.
+func TestStackOfAPRDiffKeepsThePRNumber(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, cursorRows(10), cursorRows(10))
+	pr := &domain.PreviewNoteSet{Source: "refs/gg/pr/7", Tip: "t", Base: "b"}
+	for i := range v.stk.files {
+		v.stk.files[i].d.previewSet = pr
+	}
+	m := diffModel()
+	m.svc = domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m.height, m.width = 30, 120
+	m.filesPreviewSet = pr
+	m.previewOpen = &previewOpenState{prNumber: 7}
+	m.filesView = newContentPopup("PR #7", nil)
+	m = m.pushLayer(v)
+	if got := m.prOfView(v); got != 7 {
+		t.Fatalf("a stack of PR #7's files: prOfView %d", got)
+	}
+
+	noteOnStackFile(v, 1, 5, "on B")
+	u, _ := m.Update(stackNotesMsg{gen: v.stk.gen, idx: 1, notes: v.stk.files[1].d.notes})
+	m = u.(Model)
+	v = m.diffLayer()
+	if v.forgePR != 7 {
+		t.Fatalf("the stack's notes arrived: forgePR %d, want 7", v.forgePR)
+	}
+	lo, hi := v.fileLineRange(1)
+	li, _ := v.lineAnchorIn(lo, hi, 5, false)
+	v.setCursorLine(li, m.diffBodyRows())
+	ids := menuIDString(m.noteMenuRows())
+	if !strings.Contains(ids, "note-send") {
+		t.Fatalf("stacked PR diff, cursor on B's note: want Send to GitHub, got rows %q", ids)
+	}
+
+	// A stack over a PR view whose files are NOT the PR's (a worktree stack)
+	// is no PR diff.
+	for i := range v.stk.files {
+		v.stk.files[i].d.previewSet = nil
+	}
+	if got := m.prOfView(v); got != 0 {
+		t.Fatalf("a non-PR stack over a PR view: prOfView %d", got)
 	}
 }
