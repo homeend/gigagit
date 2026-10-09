@@ -26,14 +26,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   retention) a commit or merge made there still wrote version refs. The
   shown worktree now follows the config, and a Settings change or config
   reload reaches every remembered worktree.
-- A working-tree window of the worktree you were leaving — a diff of
-  uncommitted changes, a stacked status view, a blame of a working file, a
-  file viewer, the F window — stayed on top after `alt+w` / `alt+a` swapped
-  the panels, and its keys (`H`, `e`, `c`) then acted on the NEW worktree's
-  file of the same name. Those windows now close on a swap; a commit's
-  diff, a history and a compare are the repository's and stay. Likewise
-  `alt+w`'s first hit no longer puts your own worktree's parked diff back
-  over the console's worktree.
+- **Each worktree keeps its own windows.** A window of the worktree you
+  were leaving — a diff, a blame, a file viewer, a history, a compare, the
+  F window, the stash list — used to stay on top after `alt+w` / `alt+a`
+  swapped the panels, and the keys of a working-tree one (`H`, `e`, `c`)
+  then acted on the NEW worktree's file of the same name. Now a swap parks
+  every window, the pending steps of a `gg session` navigate and the
+  `highlight` bands on working files in the worktree they belong to, and
+  brings them back exactly as they were when that worktree returns;
+  nothing crosses, a commit's diff included (it waits in its worktree
+  instead of following you). A result that arrives for a worktree not on
+  screen — a diff, a file list, a popup's read — is kept off the one shown.
+  Likewise `alt+w`'s first hit no longer puts your own worktree's parked
+  diff back over the console's worktree.
 - The panels could swap under a popup, a decision or a conflict process
   (a session removed by an overseer, a worktree gone, a console opened for
   a task): a commit question filled for one worktree then ran in another.
@@ -142,8 +147,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Added
 - A switch between worktrees of ONE repository is now a swap of remembered
   per-worktree state (Status, cursors, marks, open files, working reviews),
-  not a reload: the screen never blanks, an open commit diff and the
-  Commits cursor survive, and gg's identity follows — the exit directory, the steering
+  not a reload: the screen never blanks, the Commits cursor survives (an
+  open window waits in its worktree), and gg's identity follows — the exit directory, the steering
   inbox, the session registry's worktree, the session snapshot and the
   hosted web page. The Worktrees-row `enter`, the move/repair chains, `gg
   session` switch asks, `gg://` link checkouts and the web page's own switch

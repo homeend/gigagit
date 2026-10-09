@@ -6302,15 +6302,45 @@ clears the queue. `switchView` refuses under ANY surface (`switchRefusal`
 submit through `m.svc` = B); the non-key swaps (`returnView`,
 `abandonGoneView`, `pruneViews`) queue `pendingReturnView` and the Update
 tail `takeQueuedReturn`s once clear (so a staging round drains it too).
-A swap closes the leaving tree's WORKING-TREE windows
-(`dropWorkingTreeWindows`: `workingTreeWindow` = a diff with `rev == ""`,
-a blame of a working file, a file viewer; plus the files view when
-`filesViewIsWorkingTree`: the F window (`filesModeWorktree`) or a compare
-with a `WorkTree`/`Index` side — a commit's/stash's/commit-pair files
-view is the repository's) — their keys
-resolve paths through `m.svc`; commit diffs/history/compare stay. A
-console's parked stack records `ret.over`; `parkedLayersFor` restores
-the working-tree layers only when the view is that worktree again.
+**A worktree owns its windows** (`window_state.go`, 2026-10-09): the
+Model EMBEDS `windowState` — the layer pile, every `files*` field, the
+preview, `wtFiles`, `stashView`, `diffTag`/`diffNav`/`diffNotice`, the
+diff's `noteLand`/`diffLand`/`hunkReload`, `pendingCompare`,
+`pendingSteer`/`pendingHint`/`hintGen`, the parked `tour`, and the WINDOW
+generations (`versionsGen`, `previewGen`, `wtPreviewGen`, `reviewsFollowGen`,
+`reviewOpenGen`, `entryCompareGen`, `gitConfigGen`, plus `remoteHeadsGen` and
+`allNotesGen`, which replaced the two popups' keying on `loadGen` — a
+slot-data gen `sleepView` bumps, which would strand a parked popup) — so
+readers keep `m.filesView`; `worktreeView.windows` holds the sleeping
+copy and `saveView`/`loadView` swap the group with ONE assignment
+(`layers` seeded per slot). Nothing crosses and nothing is filtered: a
+commit's diff waits in its worktree too (user ruling; the old
+`dropWorkingTreeWindows`/`filesViewIsWorkingTree`/`workingSide` rules are
+gone). The checklist for "is it a window field" is `closeFilesView`.
+Process-wide on purpose: `focus`/`lastLeftPanel`/`activeLeftTab`/`fullMax*`
+(alt+w's first-hit rule, `showConsole`'s Commits-column invariants),
+`eager` (walks the shared feed), `startAt*`, the modal/process/console/
+notices, the typing flags, the slot-data gens, the session diff prefs.
+Working-file `attention` bands travel in `windowState.workingAttention`
+(`takeWorkingAttention` on save, merged back on load); a commit's stay in
+`m.attention`. A console's process-wide parked copy still records
+`ret.over`; `parkedLayersFor` (`workingTreeWindow`, `dropWorkingLayers`)
+restores the working-tree layers only when the view is that worktree
+again — phase 4 moves that copy onto the slot. `historyLive` scans every
+sleeping slot's pile and parked hand-off stack (`windowState.holds`) so
+`sweepHistoryWalks` leaves a parked history's git running; a slot dropped
+with its worktree makes its walks dead to the per-Update sweep. Results:
+nineteen window-addressed message types embed `slotStamp` (`slot_msg.go`),
+stamped by `m.stamp()` when their command is built; `Update`'s head
+(`gateSlotMsg`) drops one whose slot is not on screen — sleeping or gone —
+before any handler runs (two slots can hold the same window kind at the
+same generation, so the stamp, not the window type, says whose answer it
+is). History chunks are deliberately unstamped (they write through the
+view pointer). Phases still to come: a per-slot replay queue for sleeping
+slots (3), the console's parked copy on the slot (4), parkable popups —
+`parkable()` + a caller-intent flag on `switchView` (5), the F window's
+list dropped on sleep (6); spec
+`docs/superpowers/specs/2026-10-09-per-worktree-window-stacks.md`.
 `sleepView` (watchers closed, the five gens bumped, `srcFeed` retired) is shared by
 `switchView` and both drop paths. The commit feed is ONE shared
 `CommitFeed` re-rooted by `loadView` (`CommitFeed.SetService`: the walk's
@@ -6334,12 +6364,10 @@ bare-main repository (`Worktree.Bare`) is skipped by `worktreeOrder`,
 `canEnterWorktree` and refused by `switchView` (`bareRepository`).
 `cycleWorktrees` skips ring stops `checkSwitchTarget` finds unreachable
 (named in the status line; all unreachable = a message, no move). The
-`home == ""` refusal (a repo switch in flight) is said too. `sleepView`
-also drops the leaving slot's steer leftovers: `consoleSwitch.tour`, the
-`attention` bands keyed without a commit (working files; a commit's are the
-repo's), and a `pendingSteer` at `steerStageStatusRetry` carries the
-`svc` it was parked for — `drainPendingStatus` fails it when the status
-that lands is another slot's. The CLI side of a look: `domain.TUIViewing`
+`home == ""` refusal (a repo switch in flight) is said too. The steer
+leftovers (`tour`, the working-file bands, a `pendingSteer` at
+`steerStageStatusRetry`) wait in their slot's window group — another
+slot's status never drains them. The CLI side of a look: `domain.TUIViewing`
 (registry `Viewed`) lets `preferredInboxFor` route an agent in a worktree
 no TUI runs in to the TUI SHOWING it (one running there wins; never for
 `--to web`), `gg session status` prints `showing:` from the snapshot's
@@ -6388,8 +6416,8 @@ that worktree; `»` and the header say so and enter on home's row returns.
 A user switch asked while a console is docked swaps the panels UNDER the
 console (an explicit ask wins), sets `ret.view` to the target, and the
 status row then names the console's worktree (`worktree: <path>`). In-repo agent
-tours (`agent_tours_open.go`) swap and park the tour id in
-`consoleSwitch.tour`; the `srcStatus` arrival shows it when `!armed`.
+tours (`agent_tours_open.go`) swap and park the tour id in `m.tour` (a
+window field, the slot's); the `srcStatus` arrival shows it when `!armed`.
 
 **Trigger 2 — the user's own switch** (`switch_guard.go`): `guardedReRoot`
 takes the fast path for a listed worktree on `switchOK` → `switchView` +
