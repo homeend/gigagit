@@ -6247,8 +6247,7 @@ not a sub-row) on the worktree's checked-out branch; detached, unlisted or
 filtered out → the cursor stays. Reachable wherever alt+a is
 (`cycleReachable`), reserved inside a bound console (`consolePassthrough` /
 `consoleFullPassthrough` + the focused-console branch of
-`updateConsoleKey`). Status `wt-x — 2 of 3 worktrees` (the first hit says
-the current position); one worktree: a status line only. The console box's
+`updateConsoleKey`). Status `wt-x — 2 of 3 worktrees`; one worktree: a status line only. The console box's
 blue border = the Commits column has focus, bound or not; the title hints
 (`consoleTitleHints`) tell bound from unbound.
 
@@ -6318,7 +6317,7 @@ commit's diff waits in its worktree too (user ruling; the old
 `dropWorkingTreeWindows`/`filesViewIsWorkingTree`/`workingSide` rules are
 gone). The checklist for "is it a window field" is `closeFilesView`.
 Process-wide on purpose: `focus`/`lastLeftPanel`/`activeLeftTab`/`fullMax*`
-(alt+w's first-hit rule, `showConsole`'s Commits-column invariants),
+(alt+w lands the Branches cursor, `showConsole`'s Commits-column invariants),
 `eager` (walks the shared feed), `startAt*`, the modal/process/console/
 notices, the typing flags, the slot-data gens, the session diff prefs.
 Working-file `attention` bands travel in `windowState.workingAttention`
@@ -6414,10 +6413,12 @@ that is gone falls back to home and says so; `pruneViews` retargets a
 `pendingReturnView` naming the pruned slot to home. The bare entry of a
 bare-main repository (`Worktree.Bare`) is skipped by `worktreeOrder`,
 `canEnterWorktree` and refused by `switchView` (`bareRepository`).
-`cycleWorktrees`' first-hit rule (focus Branches, say where you are) is
-skipped over a full-screen view (`topLayer() != nil`, no console): the
-reveal would be invisible, so the press swaps at once with Branches
-focused underneath. `cycleWorktrees` skips ring stops `checkSwitchTarget` finds unreachable
+`cycleWorktrees` has NO first-hit step (user ruling 2026-10-09: alt+w
+switches in any window state): every press moves to the next worktree,
+hiding a shown console on the way (`ret.view` stays, `closeConsole`) and
+activating the Branches tab so the cursor lands on the new branch; only
+`switchRefusalBy` (an op, a decision, a process, a popup with work in
+flight) refuses. `cycleWorktrees` skips ring stops `checkSwitchTarget` finds unreachable
 (named in the status line; all unreachable = a message, no move). The
 `home == ""` refusal (a repo switch in flight) is said too. The steer
 leftovers (`tour`, the working-file bands, a `pendingSteer` at

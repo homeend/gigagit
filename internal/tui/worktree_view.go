@@ -642,30 +642,20 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	n := len(order)
 	viewed := m.viewPath(m.viewed)
 	at := m.worktreeIndex(viewed)
-	// The first hit with the keyboard elsewhere only reveals where you are
-	// (Branches focused, its cursor on the viewed worktree's branch). Over a
-	// full-screen view that reveal is invisible — the panels are under it —
-	// so the press swaps at once, with Branches focused underneath for the
-	// presses that follow.
-	if m.console == nil && m.topLayer() != nil && (!m.panelFocused(panelBranches) || m.activeLeftTab != panelBranches) {
-		m = m.activateTab(panelBranches)
-		m = m.selectWorktreeBranch(viewed)
-	}
-	if m.console != nil || !m.panelFocused(panelBranches) || m.activeLeftTab != panelBranches {
-		if m.console != nil {
-			if m.console.ret != nil {
-				m.console.ret.view = m.viewed // stay: hiding is not leaving
-				m.console.ret.focus = panelBranches
-			}
-			m = m.closeConsole()
+	// One press, one worktree: a shown console hides on the way (the
+	// session keeps running; its return point stays where it is), the
+	// Branches panel follows the ring so its cursor can sit on the new
+	// worktree's branch. No reveal-first step: in any window state the
+	// press moves on — only an operation, a decision, a process or a popup
+	// with work in flight refuse (switchRefusalBy).
+	if m.console != nil {
+		if m.console.ret != nil {
+			m.console.ret.view = m.viewed // hiding is not leaving: a later return point is this worktree
+			m.console.ret.focus = panelBranches
 		}
-		m = m.activateTab(panelBranches)
-		m = m.selectWorktreeBranch(viewed)
-		if at < n {
-			m.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(viewed), at+1, n)
-		}
-		return m, nil
+		m = m.closeConsole()
 	}
+	m = m.activateTab(panelBranches)
 	if n < 2 {
 		m.statusMsg = i18n.T("this repository has one worktree — alt+w cycles them once there are more")
 		return m, nil
