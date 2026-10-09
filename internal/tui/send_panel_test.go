@@ -429,3 +429,33 @@ func TestSendPanelCtrlSOnceWhilePlanning(t *testing.T) {
 		t.Fatalf("after the plan failed: planning %v notice %q", p.planning, p.notice)
 	}
 }
+
+// enter on a row whose file the PR's list has filtered away still opens it:
+// the filter clears, the diff opens, and the list's cursor sits on the file
+// so esc from the diff returns there. Serial: env (prSendModel).
+func TestSendPanelEnterFindsAFilteredFile(t *testing.T) {
+	m, _, head := prSendModel(t)
+	id := addTUINote(t, m, head, 5, "look here")
+	m = openPR7(t, m)
+	m.filesView.query = "zzz" // hides big.go
+	m, cmd := m.openSendPanel(7)
+	m = drainCmds(t, m, cmd)
+	p := layerOf[*sendPanel](m)
+	if p == nil {
+		t.Fatal("no panel")
+	}
+	m, cmd = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = drainCmds(t, m, cmd)
+	v := m.diffLayer()
+	if v == nil || !v.cursorOnNote() || p.notice != "" {
+		t.Fatalf("enter: diff %v notice %q", v != nil, p.notice)
+	}
+	if m.filesView.query != "" {
+		t.Fatalf("the filter %q still hides the file", m.filesView.query)
+	}
+	vis := m.filesView.visible()
+	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) || vis[m.filesView.sel].path != "big.go" {
+		t.Fatalf("the list's cursor is not on big.go: sel %d", m.filesView.sel)
+	}
+	_ = id
+}

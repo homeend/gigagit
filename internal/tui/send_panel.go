@@ -312,9 +312,19 @@ func (p *sendPanel) openRow(m Model) (Model, tea.Cmd) {
 		p.notice = i18n.T("open the pull request to see the file")
 		return m, nil
 	}
-	for _, l := range m.filesView.visible() {
-		if l.path != c.Path {
+	// Every row of the list, not only the filtered view: a file the user's
+	// query hides is still in the PR. The filter clears and the list's cursor
+	// parks on the file, so esc from the diff lands there.
+	for _, l := range m.filesView.lines {
+		if l.path != c.Path || l.heading {
 			continue
+		}
+		m.filesView.query = ""
+		for i, v := range m.filesView.visible() {
+			if v.path == c.Path && !v.heading {
+				m.filesView.sel = i
+				break
+			}
 		}
 		u, cmd := m.openDiffForFileLine(l)
 		m = u.(Model)
