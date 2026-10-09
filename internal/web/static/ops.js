@@ -654,6 +654,9 @@ function escapeOption(opts) {
 // caller built and escaped (the GitHub send confirm) — and one button per
 // option, worded by ev.labels when given (the answer is still the option).
 function showModal(ev) {
+  // A built body (the send confirm's file paths and review text) widens the
+  // box to the viewport; what still does not fit wraps (style.css).
+  $("modal-box").classList.toggle("wide", !!ev.html);
   if (ev.html) $("modal-prompt").innerHTML = ev.html;
   else $("modal-prompt").textContent = ev.prompt;
   $("modal-options").innerHTML = (ev.options || [])

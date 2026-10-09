@@ -40,6 +40,10 @@ r.push(JSON.stringify(startRows("/a/b/wt").map((x) => x.label)));
 r.push(JSON.stringify(sessionMenuRows({ id: "s1", state: "running" }).map((x) => x.label)), JSON.stringify(sessionMenuRows({ id: "s2", state: "exited" }).map((x) => x.label)));
 r.push(sessionMenuRows({ id: "s3", state: "running", has_brief: true, has_report: true }).map((x) => x.id).join(","));
 r.push(sessionMenuRows({ id: "s4", state: "exited", has_report: true }).map((x) => x.id).join(","));
+// Every step a mouse can finish: buttons are the keys' steps, esc says back
+// when it returns to the list.
+const bl = (x) => dialogButtons(x).map((b) => b.label + ":" + b.key).join(",");
+r.push([bl(n), bl({ ...n, cmds: [cmds[0]] }), bl({ phase: "approve", cmds, sel: 1 }), bl(d), bl({ phase: "detecting", cmds: [] }), bl({ phase: "starting", cmds })].join(";"));
 console.log(r.join("|"));
 `)
 	want := `approved|approve on start|not found|` +
@@ -48,7 +52,8 @@ console.log(r.join("|"));
 		`{"phase":"name","approved":true}|{"phase":"choose"}|{"close":true}|{"close":true}|{}|{}|{"close":true}|{}|{}|{"sel":1}|` +
 		`{"start":0,"approve":false}|{"start":1,"approve":true}|{"phase":"choose"}|{"close":true}|{}|{}|{}|{}|true,false,false,true,true|` +
 		`["Start agent in wt","Open terminal in wt"]|["Kill session","Kill and remove session"]|["Remove session"]|` +
-		`brief,report,kill,killrm|report,remove`
+		`brief,report,kill,killrm|report,remove|` +
+		`start:Enter,back:Escape;start:Enter,cancel:Escape;run:Enter,back:Escape;cancel:Escape;cancel:Escape;`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
