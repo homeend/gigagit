@@ -13,7 +13,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **A pull request with a local review now says so in the TUI's Pull
   requests tab.** Its status cell starts with `✎` — the Commits list's
   review mark — when an AI review was saved on the PR or notes were written
-  in its diff (both stay on this machine until sent). The mark follows the
+  in its diff (gg keeps both locally; a sent note keeps the mark). The mark follows the
   PR by number whatever its base's spelling, shows on merged and closed rows
   too, and appears in the `A` search results as well
   (`NoteCounts.PRReviewed`).

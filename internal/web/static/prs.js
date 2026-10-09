@@ -641,7 +641,7 @@ registerHelp({
     "with a usable <b>gh</b> the sidebar lists the repository's open pull requests (gg writes to GitHub only " +
     "when you send — see <i>send to GitHub</i>). The row leads with the review verdict: <b>✓</b> approved, <b>✗</b> changes " +
     "requested, <b>●</b> review required; a <b>✎</b> before it marks a pull request holding a <i>local</i> review — an AI " +
-    "review saved on it, or notes written in its diff, kept on this machine until you send them. <b>Click</b> fetches the head and opens the PR's diff on the merge " +
+    "review saved on it, or notes written in its diff (gg keeps both on this machine, sent or not). <b>Click</b> fetches the head and opens the PR's diff on the merge " +
     "preview screen (a loading mask covers the panes meanwhile; a pull request opened before shows at once " +
     "and is checked against the forge in the background); <b>right-click</b> for copy URL and forget. A pull request gg already knows stays " +
     "listed, dimmed, after it is closed or merged. <b>A</b> (or a click) puts the caret in the section's " +
