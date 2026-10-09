@@ -90,7 +90,9 @@ func (f *templateFill) viewWindow(contentWidth, room int) []string {
 	focusTop, focusLen := 0, 0
 	for i, l := range f.labels {
 		cursor, maxLines := "  ", 2
-		if i == f.idx {
+		if i != f.idx {
+			f.scrolls[i] = 0 // an unfocused value shows its first line
+		} else {
 			// The other fields keep their (at most two) rows on screen.
 			cursor, maxLines = "> ", max(2, room-2*(len(f.fields)-1))
 		}

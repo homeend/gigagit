@@ -1056,8 +1056,8 @@ func TestTextTemplatesFillPastedStackTraceFits(t *testing.T) {
 				t.Errorf("%v: pgdown must page on\n%s", size, box)
 			}
 			v.update(m, keyMsg("tab"))
-			if box := fits("on the second field"); !strings.Contains(box, "> note:") {
-				t.Errorf("%v: the focused second field must show\n%s", size, box)
+			if box := fits("on the second field"); !strings.Contains(box, "> note:") || (size[1] >= 20 && !strings.Contains(box, "frame000")) {
+				t.Errorf("%v: the focused second field must show, the trace its first line\n%s", size, box)
 			}
 			if got := v.fill.inputs()["trace"]; got != strings.ReplaceAll(trace, "\r\n", "\n") {
 				t.Fatalf("the pasted value changed: %d runes", len([]rune(got)))
