@@ -5579,7 +5579,9 @@ Spec `docs/superpowers/specs/2026-10-07-preview-reviews-design.md`, plan 1
   via `WorkingReviewFiles`), else `WorkingReviewState` never says current.
 - **`gg-review` skill**: `Skill.front` adds `argument-hint` +
   `disable-model-invocation: true` to the SKILL.md form only; installed
-  wherever `delegate` is.
+  wherever `gg-delegate` is (named `delegate` until skill v4; the old
+  name is in `agentskill.Retired()`, whose marked copies `agentinit.Install`
+  removes — a whole file + its emptied dir, or just the block).
 - **TUI (plan 2,
   `docs/superpowers/plans/2026-10-07-preview-reviews-2-tui.md`).**
   `readPreviews` attaches `previewRow.reviews`: `PreviewReviews(set)` for an

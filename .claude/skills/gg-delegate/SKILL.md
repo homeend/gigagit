@@ -1,4 +1,11 @@
-# delegate — hand work to worker agents through gg
+---
+name: gg-delegate
+description: Use when the user asks you to delegate a task to worker agents through gg — start workers in their own worktrees, brief them, wait for their reports and check the result; also the protocol a worker started by gg follows.
+---
+
+<!-- gg:gg-delegate:v4 -->
+
+# gg-delegate — hand work to worker agents through gg
 
 Use this when the user gives you a task to **delegate**: you become the
 **overseer**, gg starts **worker** agents in their own worktrees, and you
@@ -43,10 +50,11 @@ fix, then report").
 | **fix** | change code and tests in its worktree; commit on its branch with gg; never push, never merge | what changed (anchors), how it was verified, the commits |
 | **report** | — (added to any kind) | the final report written as a tour (below) |
 
-"Report as a gg overview / tour" always means the worker's **final
-`agent_report`** — gg files it as a tour of the worker's worktree. Never
-write `gg session overview` into a brief: it targets the worktree the
-user's gg is showing, not the worker's.
+"Report as a gg-overview" (or "as a gg overview / tour") always means the
+worker's **final `agent_report`** — gg files it as a tour of the worker's
+worktree (the gg-overview skill's worker section). Never write `gg session
+overview` into a brief: it targets the worktree the user's gg is showing,
+not the worker's.
 
 A fix that the investigation shows is larger or riskier than the task
 expected: stop at the report and let the overseer (you) or the user decide.
@@ -190,8 +198,8 @@ You were started by gg with one line: read your task. Then:
    a review reviews the branch under review; a *fix* asked to annotate its
    change reviews its own branch.
 5. Finish with `agent_report {text, final: true}` (`gg agent report --final
-   -F -`). **This report is your overview:** gg files it as a tour of your
-   worktree, so write it as markdown with anchors — first line a one-sentence
+   -F -`). **This report is your gg-overview:** gg files it as a tour of
+   your worktree, so write it as markdown with anchors — first line a one-sentence
    summary (rows and notices show it), then what you found or changed,
    most important first, each with an anchor (`[the race](src/a.go:10-30)`),
    then what you skipped and why, and what the overseer must do next.

@@ -1,9 +1,11 @@
 // Package agentskill carries the skills that teach AI coding agents to drive gg:
 // "using-gg" (the git CLI surface), "reviewing-with-gg" (the review-notes
-// lane), "delegate" (overseeing worker agents; the worker protocol) and
-// "gg-review" (the user's /gg-review <gg-link> command) and "gg-cross-review"
-// (/gg-cross-review: several models review, the agent merges and settles). The content is compiled into the binary (go:embed); installed copies
-// are derived artifacts that change only when a newer binary's init runs.
+// lane), "gg-delegate" (overseeing worker agents; the worker protocol),
+// "gg-review" (the user's /gg-review <gg-link> command), "gg-cross-review"
+// (/gg-cross-review: several models review, the agent merges and settles) and
+// "gg-overview" (presenting a result in gg: line notes + an overview tour).
+// The content is compiled into the binary (go:embed); installed copies are
+// derived artifacts that change only when a newer binary's init runs.
 package agentskill
 
 import (
@@ -19,7 +21,7 @@ var usingBody string
 //go:embed reviewing-with-gg.md
 var reviewBody string
 
-//go:embed delegate.md
+//go:embed gg-delegate.md
 var delegateBody string
 
 //go:embed gg-review.md
@@ -28,22 +30,29 @@ var ggReviewBody string
 //go:embed gg-cross-review.md
 var ggCrossReviewBody string
 
+//go:embed gg-overview.md
+var ggOverviewBody string
+
 // Version is bumped whenever using-gg.md (or the rendered wrappers) change.
 // Installed copies carry it so init can tell new/outdated/up-to-date apart.
-const Version = 159
+const Version = 160
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
 const ReviewVersion = 16
 
-// DelegateVersion is the counter for the delegate skill.
-const DelegateVersion = 3
+// DelegateVersion is the counter for the gg-delegate skill (named delegate
+// through v3).
+const DelegateVersion = 4
 
 // GGReviewVersion is the counter for the gg-review skill.
 const GGReviewVersion = 3
 
 // GGCrossReviewVersion is the counter for the gg-cross-review skill.
 const GGCrossReviewVersion = 4
+
+// GGOverviewVersion is the counter for the gg-overview skill.
+const GGOverviewVersion = 1
 
 // Skill is one embedded skill: its identity, its own version counter, and the
 // rendered forms init installs. Markers are per-skill ("gg:<name>:v<N>"), so
@@ -86,11 +95,12 @@ var ReviewingWithGG = newSkill("reviewing-with-gg",
 	"Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.",
 	ReviewVersion, reviewBody)
 
-// Delegate is the playbook for handing work to worker agents through gg's
+// GGDelegate is the playbook for handing work to worker agents through gg's
 // agent tools (the overseer's loop) and the protocol a worker follows; gg's
-// kickoff line points every spawned worker at it. Short name on purpose:
-// users type it (/delegate <task>).
-var Delegate = newSkill("delegate",
+// kickoff line points every spawned worker at it. Users type it
+// (/gg-delegate <task>); it was named delegate until gg skills took the gg-
+// prefix (see Retired).
+var GGDelegate = newSkill("gg-delegate",
 	"Use when the user asks you to delegate a task to worker agents through gg — start workers in their own worktrees, brief them, wait for their reports and check the result; also the protocol a worker started by gg follows.",
 	DelegateVersion, delegateBody)
 
@@ -119,8 +129,27 @@ var GGCrossReview = func() Skill {
 	return s
 }()
 
+// GGOverview is how an agent presents a result in gg — temporary notes on the
+// lines plus an overview document whose links are anchors into the code. The
+// name is the phrase users say ("use gg-overview to visualise the result"),
+// so the model may load it on its own; users may also type /gg-overview.
+var GGOverview = func() Skill {
+	s := newSkill("gg-overview",
+		"Use when the user says gg-overview, or asks to visualise, present or walk them through a result in gg — temporary notes on the exact lines plus an overview whose links open the code.",
+		GGOverviewVersion, ggOverviewBody)
+	s.front = "argument-hint: \"[what to present]\"\n"
+	return s
+}()
+
 // All is the install set, in a stable order.
-func All() []Skill { return []Skill{UsingGG, ReviewingWithGG, Delegate, GGReview, GGCrossReview} }
+func All() []Skill {
+	return []Skill{UsingGG, ReviewingWithGG, GGDelegate, GGReview, GGCrossReview, GGOverview}
+}
+
+// Retired are names gg once installed skills under. Only their name and
+// markers matter: init removes gg's own copies under them (a marked file or
+// block, never a file without the marker).
+func Retired() []Skill { return []Skill{newSkill("delegate", "", 0, "")} }
 
 // Body is the canonical markdown body — no frontmatter, no markers.
 func (s Skill) Body() string { return s.body }

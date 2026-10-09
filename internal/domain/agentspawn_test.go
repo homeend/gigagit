@@ -98,8 +98,8 @@ func TestSpawnSlotsAreRaceFree(t *testing.T) {
 
 // The kickoff points the worker at its protocol, so briefs need not repeat it.
 func TestKickoffNamesTheDelegateSkill(t *testing.T) {
-	if !strings.Contains(AgentKickoff, "Worker protocol section of the delegate skill") || !strings.Contains(AgentKickoff, "gg agent task") ||
-		!strings.Contains(AgentKickoff, "gg skill path delegate") {
+	if !strings.Contains(AgentKickoff, "Worker protocol section of the gg-delegate skill") || !strings.Contains(AgentKickoff, "gg agent task") ||
+		!strings.Contains(AgentKickoff, "gg skill path gg-delegate") {
 		t.Fatalf("kickoff = %q", AgentKickoff)
 	}
 }
