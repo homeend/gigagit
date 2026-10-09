@@ -36,7 +36,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   brings them back exactly as they were when that worktree returns;
   nothing crosses, a commit's diff included (it waits in its worktree
   instead of following you). A result that arrives for a worktree not on
-  screen — a diff, a file list, a popup's read — is kept off the one shown.
+  screen — a diff, a file list, a popup's read — waits for that worktree
+  and is applied when it returns, never shown over another.
   Likewise `alt+w`'s first hit no longer puts your own worktree's parked
   diff back over the console's worktree.
 - The panels could swap under a popup, a decision or a conflict process
