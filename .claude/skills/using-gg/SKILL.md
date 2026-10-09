@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v160 -->
+<!-- gg:using-gg:v161 -->
 
 # Using gg (gigagit)
 
@@ -53,7 +53,7 @@ guards against removing the worktree you are standing in.
   (`--patch`).
 - `gg review [--tool <name>] [--working] [<rev>|<A..B>]` — runs a configured
   AI review agent headless. The agent replies with the gg review document
-  (JSON: a markdown overview plus per-file line notes); stdout is the
+  (JSON: a markdown summary plus per-file line notes); stdout is the
   overview, its meta, then one `path:line — summary` line per note (`-line`
   = a removed line). A reply that is not the document prints as it came,
   with `warning: the review is not in gg review format` on stderr. The
@@ -94,14 +94,16 @@ guards against removing the worktree you are standing in.
   still printed, then `error: review not saved: …` on stderr, exit 1.
 - `gg review show [--json] <review-link|id|latest>` — read a STORED review
   back (another agent's, or your own earlier one): a header line `review <id>
-  · <agent> · <date> · <what it reviewed>`, the overview, then one numbered
+  · <agent> · <date> · <what it reviewed>`, the summary, then the stored
+  overview (when the review has one) under an `Overview` line, then one numbered
   remark per line, `[n] <path>:<line> — <summary>` (`-<line>` = a removed
   line, `<a>-<b>` = a range), its rationale and the remark's own gg:// line
   link indented beneath — hand that link to `gg link text` for the exact
-  code. `--json`: `{id, agent, created, branch, base, tip, link, overview,
-  meta, remarks: [{n, path, side, start, end, summary, rationale, meta,
+  code. `--json`: `{id, agent, created, branch, base, tip, link, summary,
+  overview, meta, remarks: [{n, path, side, start, end, summary, rationale, meta,
   link, review_link}]}` (`base` is empty for a one-commit review; `remarks`
-  is `[]` for a review that is not in the document format). Each remark also
+  is `[]` for a review that is not in the document format; `summary` is the
+  review's text, `overview` the stored overview and absent when none). Each remark also
   prints its id `review:<id>:<n>` — what `gg note reply` / `gg note resolve`
   take — and its REVIEW link (the line link plus `?review=<id>`, which
   reopens the review at the remark). A review link WITH a path names one
@@ -138,6 +140,9 @@ guards against removing the worktree you are standing in.
   carries fingerprints taken at save time, like the lane's.
 - `gg link --review <id|latest>` — print a stored review's link (and record
   it in `gg links`); `latest` = the newest review in this repository.
+- `gg link --note <id>` — print a stored note's link (`?note=<id>` on the
+  note's own anchor; a reply's id links its thread's anchor), recorded in
+  `gg links`. A GitHub comment has none.
 - `gg link --pr <n> [<path>[:<line>]]` — a pull request's link
   (`gg://<repo>@<base>...refs/gg/pr/<n>`, the pair its view opens on; a
   fetched PR only — `gg pr fetch <n>` first). Opening it (`gg open`, `gg
@@ -160,9 +165,10 @@ guards against removing the worktree you are standing in.
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]   # numbered git @@ hunks per file
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>] \
               --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] [--json]
-gg note reply [<repo-link>] <note-id|review:<id>:<n>> --summary "…" [--rationale "…"] [--link <commit|gg://…>] [--json]
-gg note resolve   [<repo-link>] <note-id|review:<id>:<n>> [--json]   # resolve a thread (any of its ids); a resolved thread folds
-gg note unresolve [<repo-link>] <note-id|review:<id>:<n>>            # reopen it (exit 1 when it is not resolved)
+gg note show  [--json] <note-id|note-link>                          # one thread: root, replies (with ids), resolved?
+gg note reply [<repo-link>] <note-id|note-link|review:<id>:<n>> --summary "…" [--rationale "…"] [--link <commit|gg://…>] [--json]
+gg note resolve   [<repo-link>] <note-id|note-link|review:<id>:<n>> [--json]   # resolve a thread (any of its ids); a resolved thread folds
+gg note unresolve [<repo-link>] <note-id|note-link|review:<id>:<n>>            # reopen it (exit 1 when it is not resolved)
 gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--json]   # agent-context v1 or a comments batch
 gg note list  [<link> | --file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
 gg note list  --shelf <entry-id>                                   # notes gg left on a whole shelf entry
@@ -181,6 +187,11 @@ are 1-based. Full guidance: `gg skill path` (the reviewing-with-gg skill).
 A stored review's remarks are threads: `gg review show` lists each remark's id
 (`review:<id>:<n>`; `review:latest:<n>` = the newest review's), and `gg note
 reply` / `resolve` / `unresolve` take it — answer another agent's review there.
+A NOTE link (`gg://…?note=<id>`, what the user copies off a note in gg) stands
+for the id in `gg note show` / `reply` / `resolve` / `unresolve` and names the
+checkout whose store holds the note; `gg note show <link|id>` prints the
+thread (`--json`: `{note, replies, resolved, link}`). A link to a note that
+was deleted since is refused: `note <id> is not here`.
 Pull-request (forge) threads are not yours to change: GitHub owns their
 resolved state, and only the user resolves or sends (see `gg pr`).
 MCP: `gg_note_reply`, `gg_note_resolve`.
@@ -255,6 +266,7 @@ gg://<repo>@<sha>?bookmark=<id>            a trailing ?<kind>=<id> hint: bookmar
 gg://<repo>@<a>..<b>?preview=<id>          a SAVED pair (or, on a <target>...<source> link, a saved merge preview)
 gg://<repo>@<base>..<ours>?version=<unix>-<op>   a RECORDED BRANCH VERSION's frozen preview (the id `gg versions` prints)
 gg://<repo>@<sha>?review=<id>              a STORED AI REVIEW of one commit (<base>..<tip> for a range or branch review)
+gg://<repo>/<path>[@<target>]:<line>?note=<id>   a STORED NOTE (a root or a reply): its own anchor line plus the thread's id
 ```
 
 `@ref:<name>` keeps the NAME on purpose: it addresses the branch, not
@@ -291,6 +303,11 @@ their gg. A review link moved onto another change is refused (exit 1, `the
 link does not match the review`); a review deleted since the link was copied
 still resolves its address, and `gg review show` says `review <id> not found`.
 Review links are machine-local like version links.
+`?note=<id>` names a STORED NOTE — the thread the user means, on its own
+anchor line (so every verb that ignores hints still lands on the line);
+`gg note show <link>` prints the thread, `gg note reply|resolve <link>`
+answer it. A note deleted since the link was copied is refused (`note <id>
+is not here`). Machine-local like review links.
 A link to an UNCOMMITTED line (the working tree, `@staged`, `?view=content`)
 ends `:<n>~<fp>`: a fingerprint of that line's text, added by every copy path
 (`gg link` too; `--no-fingerprint` prints the plain form). The file may have
@@ -872,7 +889,16 @@ finds the right one here.
   `gg pr comments` prefixes each thread root with `[<thread id>]`.
 - `gg pr notes <n> [--json]` — what the PR's view holds: the local notes
   written for it, GitHub threads, draft replies; the ids `gg pr send --note`
-  takes. A note or review FOR a pull request is written with `--preview
+  takes. JSON adds `severity` (a remark's `meta.severity`) and `code` (the
+  ≤ 4 lines the note is about, at the PR's tip).
+  `gg pr send <n> --note <id>… [--verdict] [--body <text> | --body-from
+  <review>]` (the user's command, never yours) may mix review remarks, the
+  user's notes and draft replies: one GitHub review, then the replies, under
+  one confirm; `--verdict` makes the confirm offer comment / approve /
+  request changes; `--body-from <review>` posts that review's summary as the
+  body (`--body <text>` a text of the user's own). `gg pr send <n> (--review
+  <id> | --mine | --verdict) [--body <text>]` and `--finish | --discard` are
+  the other forms. A note or review FOR a pull request is written with `--preview
   <base>...refs/gg/pr/<n>` (after `gg pr fetch <n>`) — a review with
   `gg review save "$(gg link --pr <n>)" --agent <name> --stdin` (the
   document on stdin); it shows only in that PR's view,

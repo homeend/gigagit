@@ -68,7 +68,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 	fs.Visit(func(f *flag.Flag) { focusSet = focusSet || f.Name == "focus" })
 	switch {
 	case *asJSON && !*noSave:
-		fmt.Fprintln(stderr, "gg review: --json needs --no-save (a stored review prints its overview)")
+		fmt.Fprintln(stderr, "gg review: --json needs --no-save (a stored review prints its summary)")
 		return 2
 	case *linkArg != "" && (*working || pf.set() || fs.NArg() >= 1):
 		fmt.Fprintln(stderr, "gg review: --link names the change; drop --working, --preview and the positional")
@@ -457,7 +457,7 @@ func printReview(w io.Writer, content string) {
 		}
 		return
 	}
-	fmt.Fprintln(w, strings.TrimRight(doc.Overview, "\n"))
+	fmt.Fprintln(w, strings.TrimRight(doc.Summary, "\n"))
 	if len(doc.Meta) > 0 {
 		fmt.Fprintf(w, "\n%s\n", metaText(doc.Meta))
 	}

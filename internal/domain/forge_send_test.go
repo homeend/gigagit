@@ -352,3 +352,133 @@ func TestASecondPlanOfASentReplyPostsNothing(t *testing.T) {
 		t.Fatalf("the reply was posted %d times:\n%s", n, ff.writeLog())
 	}
 }
+
+func TestPlanSendMixesReviewsNotesAndAVerdict(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	rid := savePRReview(t, svc, twoRemarks)
+	mine := addPRNote(t, svc, head, "big.go", 25, "mine too")
+	p, err := svc.planSend(context.Background(), PRSendRequest{PR: 7,
+		Notes: []string{"review:" + rid + ":0", mine}, Verdict: true, BodyFrom: rid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Mode != engine.SendReview || !p.Verdict || len(p.Items) != 2 || p.Key != rid {
+		t.Fatalf("plan = %+v", p)
+	}
+	if !strings.Contains(p.Body, "looks fine") {
+		t.Fatalf("body = %q, want the review's summary", p.Body)
+	}
+}
+
+func TestPlanSendTypedBodyBeatsBodyFrom(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	rid := savePRReview(t, svc, twoRemarks)
+	mine := addPRNote(t, svc, head, "big.go", 25, "mine")
+	p, err := svc.planSend(context.Background(), PRSendRequest{PR: 7, Notes: []string{mine}, BodyFrom: rid, Body: "typed", BodySet: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Body != "typed" || p.Key != "" {
+		t.Fatalf("body %q key %q", p.Body, p.Key)
+	}
+}
+
+// Review Focus 3: --body-from a review the PR does not own is refused.
+func TestPlanSendBodyFromAForeignReview(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	mine := addPRNote(t, svc, head, "big.go", 25, "mine")
+	tg := ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Label: head[:7]} // the commit's own review, not the PR's
+	other, _, err := svc.SaveReview(context.Background(), SaveReview{Target: tg, Agent: "c", Text: twoRemarks})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.planSend(context.Background(), PRSendRequest{PR: 7, Notes: []string{mine}, BodyFrom: other})
+	if err == nil || !strings.Contains(err.Error(), "is not in this PR") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestPlanSendDraftsBesideNotesBecomeThen(t *testing.T) {
+	t.Parallel()
+	svc, ff, head := sendRepo(t)
+	ctx := context.Background()
+	ff.mu.Lock()
+	ff.comments = []model.ForgeComment{{ID: "C1", Kind: model.ForgeCommentInline, ThreadID: "T1", Path: "big.go", Side: model.NoteSideNew, Line: 5, StartLine: 5, Body: "please", Author: "carol"}}
+	ff.mu.Unlock()
+	if _, err := svc.PRCommentsRefresh(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PullRequest(ctx, 7); err != nil { // a draft is addressed at the PR's head: the PR must be read
+		t.Fatal(err)
+	}
+	mine := addPRNote(t, svc, head, "big.go", 25, "mine")
+	d, err := svc.NoteReply(ctx, "forge:C1", model.Note{Source: model.NoteSourceUser, Author: "me", Summary: "done"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{mine, d.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Mode != engine.SendReview || len(p.Items) != 1 || p.Then == nil || len(p.Then.Items) != 1 || p.Then.Items[0].Key != d.ID || p.Then.Mode != engine.SendActions {
+		t.Fatalf("plan = %+v then = %+v", p, p.Then)
+	}
+	// Drafts alone are still the actions plan, with no Then.
+	p2, err := svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{d.ID}})
+	if err != nil || p2.Mode != engine.SendActions || p2.Then != nil {
+		t.Fatalf("drafts alone: %+v %v", p2, err)
+	}
+	// A resolve with a new comment is still mixed.
+	if _, err := svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{mine}, Resolve: []string{"T1"}}); !errors.Is(err, ErrMixedSend) {
+		t.Fatalf("resolve + note: %v", err)
+	}
+	if _, err := svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{d.ID}, Mine: true}); !errors.Is(err, ErrMixedSend) {
+		t.Fatalf("draft + --mine: %v", err)
+	}
+}
+
+// The panel always asks for a verdict (spec §5.3): with only draft replies
+// ticked that is the plain replies send; a body (typed or a review's
+// summary) beside drafts alone makes a verdict review that carries it, the
+// replies after it. Nothing is refused, nothing dropped.
+func TestPlanSendDraftsOnlyWithAVerdictOrABody(t *testing.T) {
+	t.Parallel()
+	svc, ff, head := sendRepo(t)
+	ctx := context.Background()
+	ff.mu.Lock()
+	ff.comments = []model.ForgeComment{{ID: "C1", Kind: model.ForgeCommentInline, ThreadID: "T1", Path: "big.go", Side: model.NoteSideNew, Line: 5, StartLine: 5, Body: "please", Author: "carol"}}
+	ff.mu.Unlock()
+	if _, err := svc.PRCommentsRefresh(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PullRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	rid := savePRReview(t, svc, twoRemarks)
+	d, err := svc.NoteReply(ctx, "forge:C1", model.Note{Source: model.NoteSourceUser, Author: "me", Summary: "done"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{d.ID}, Verdict: true})
+	if err != nil || p.Mode != engine.SendActions || p.Then != nil || len(p.Items) != 1 {
+		t.Fatalf("drafts + verdict: %+v %v", p, err)
+	}
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{d.ID}, Verdict: true, BodyFrom: rid})
+	if err != nil || p.Mode != engine.SendReview || !p.Verdict || p.Key != rid || !strings.Contains(p.Body, "looks fine") || len(p.Items) != 0 || p.Then == nil || len(p.Then.Items) != 1 {
+		t.Fatalf("drafts + body-from: %+v %v", p, err)
+	}
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{d.ID}, Body: "typed", BodySet: true})
+	if err != nil || p.Mode != engine.SendReview || !p.Verdict || p.Body != "typed" || p.Then == nil || len(p.Then.Items) != 1 {
+		t.Fatalf("drafts + body: %+v %v", p, err)
+	}
+	// Every new comment skipped (a note on a file the PR does not change)
+	// and no verdict: the replies go alone, the skip on their confirm.
+	off := addPRNote(t, svc, head, "other.go", 1, "outside")
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{off, d.ID}})
+	if err != nil || p.Mode != engine.SendActions || len(p.Items) != 1 || p.Then != nil || len(p.Skipped) != 1 || p.Skipped[0].Reason != SkipNotInPR {
+		t.Fatalf("skipped note + draft: %+v %v", p, err)
+	}
+}

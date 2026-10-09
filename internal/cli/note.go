@@ -27,13 +27,28 @@ import (
 // succeeded, and the sweep is best-effort maintenance.
 const notesSweepBudget = 2 * time.Second
 
-// cmdNote dispatches `gg note <add|reply|rm|list|clear|apply> ...`.
+// cmdNote dispatches `gg note <add|show|reply|rm|list|clear|apply> ...`.
 func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg note <add|reply|resolve|unresolve|rm|list|clear|apply> ...")
+		fmt.Fprintln(stderr, "usage: gg note <add|show|reply|resolve|unresolve|rm|list|clear|apply> ...")
 		return 2
 	}
 	sub, rest := args[0], args[1:]
+	if sub == "show" {
+		return noteShow(svc, rest, stdout, stderr)
+	}
+	// A NOTE link (?note=<id>) in place of an id: for reply / resolve /
+	// unresolve it names the thread and its checkout — the id replaces it.
+	if len(rest) > 0 && isLinkArg(rest[0]) && (sub == "reply" || sub == "resolve" || sub == "unresolve") {
+		if l, err := model.ParseLink(rest[0]); err == nil && l.Hint.Kind == model.NoteHintKind {
+			res, err := resolveLinkArg(context.Background(), svc, rest[0], linkShapes{Ref: true, Pair: true}, "note "+sub)
+			if err != nil {
+				return linkExit("note "+sub, err, stderr)
+			}
+			svc = openLinkTarget(res)
+			rest = append([]string{res.Hint.ID}, rest[1:]...)
+		}
+	}
 	// A gg:// link as the FIRST positional names the target — and the
 	// CHECKOUT. The note is stored where the link points, and the housekeeping
 	// below (including the `reload notes` post to a live session) then belongs

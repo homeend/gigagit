@@ -415,7 +415,7 @@ type ReviewShowOutdated struct {
 }
 
 // ReviewShow is a stored review as an agent reads it: who, what it compared
-// (Base is empty for one commit), its link, its overview (a prose review's
+// (Base is empty for one commit), its link, its summary (a prose review's
 // whole text) and its remarks (never nil).
 type ReviewShow struct {
 	ID      string    `json:"id"`
@@ -427,8 +427,10 @@ type ReviewShow struct {
 	Link    string    `json:"link"`
 	// Working: a review of uncommitted changes (HEAD ↔ the working tree);
 	// Base and Tip are then empty.
-	Working  bool               `json:"working,omitempty"`
-	Overview string             `json:"overview"`
+	Working bool   `json:"working,omitempty"`
+	Summary string `json:"summary"`
+	// Overview is the stored overview's markdown (spec §2), "" when none.
+	Overview string             `json:"overview,omitempty"`
 	Meta     map[string]string  `json:"meta,omitempty"`
 	Remarks  []ReviewShowRemark `json:"remarks"`
 	// Resolved counts the resolved remarks; Outdated lists the threads
@@ -461,12 +463,13 @@ func (s *Service) ReviewShow(ctx context.Context, id string) (ReviewShow, error)
 		return ReviewShow{}, err
 	}
 	out := ReviewShow{ID: r.ID, Agent: r.Agent, Created: r.Created, Branch: r.Branch, Tip: t.Commit,
-		Link: link, Overview: r.Text, Remarks: []ReviewShowRemark{}, Working: r.Kind == ReviewOnWorktree}
+		Link: link, Summary: r.Text, Remarks: []ReviewShowRemark{}, Working: r.Kind == ReviewOnWorktree}
 	if t.Pair != nil {
 		out.Base, out.Tip = t.Pair.A, t.Pair.B
 	}
 	if r.Doc != nil {
-		out.Overview, out.Meta = r.Doc.Overview, metaMap(r.Doc.Meta)
+		out.Summary, out.Meta = r.Doc.Summary, metaMap(r.Doc.Meta)
+		out.Overview = r.Doc.Overview
 	}
 	th, outdated := r.RemarkThreads()
 	for _, x := range reviewRemarksIn(r, t, repo) {

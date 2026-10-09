@@ -23,6 +23,7 @@ import (
 const linkUsage = "usage: gg link [<path>[:<line>[-<end>]]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --pr <n> | --ref <branch|tag> | --pair <a>..<b> | --content] [--bookmark <id> | --shelf <id>] [--no-fingerprint]\n" +
 	"       gg link --version <branch> <id|latest>  (a branch version's preview link)\n" +
 	"       gg link --review <id|latest>  (a stored AI review's link)\n" +
+	"       gg link --note <id>  (a stored note's link)\n" +
 	"       gg link resolve <gg://…> [--json]\n" +
 	"       gg link text <gg://…> [--json]  (the lines a line or range link names)\n" +
 	"       gg links [--json]  (this repo's copied-link history)\n" +
@@ -57,6 +58,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	noFP := fs.Bool("no-fingerprint", false, "omit the ~<fingerprint> an uncommitted line link carries")
 	version := fs.String("version", "", "a branch VERSION's preview link: --version <branch> <id|latest> (ids from `gg versions`)")
 	review := fs.String("review", "", "a stored AI REVIEW's link: --review <id|latest> (ids from gg review / gg note list)")
+	note := fs.String("note", "", "a stored NOTE's link: --note <id> (a root or a reply; ids from gg note list)")
 	prN := fs.Int("pr", 0, "a pull request's link: <base>...refs/gg/pr/<n> (a fetched PR: gg pr fetch <n>)")
 	pf := addPreviewFlag(fs)
 	pos, err := parseSteerFlags(fs, args)
@@ -66,6 +68,15 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	if *prN < 0 {
 		fmt.Fprintf(stderr, "link: --pr needs a pull request number\n%s\n", linkUsage)
 		return 2
+	}
+	if *note != "" {
+		// A note's link is its own place: the note's anchor plus the ?note=
+		// hint. No path, no other target or landing composes with it.
+		if *version != "" || *review != "" || *cached || *rev != "" || pf.set() || *prN != 0 || *ref != "" || *pair != "" || *bookmark != "" || *shelf != "" || *content || *noFP || len(pos) > 0 {
+			fmt.Fprintf(stderr, "link: --note names its own target and landing; it takes no other flag or argument\n%s\n", linkUsage)
+			return 2
+		}
+		return linkNote(svc, *note, stdout, stderr)
 	}
 	if *review != "" {
 		// A review's link is its own place: the reviewed change plus the

@@ -61,25 +61,30 @@ func parsePRSend(args []string, stderr io.Writer) (domain.PRSendRequest, error) 
 	mine := fs.Bool("mine", false, "send every local note the PR shows as one review")
 	verdict := fs.Bool("verdict", false, "a verdict with no comments")
 	body := fs.String("body", "", "the review body")
+	bodyFrom := fs.String("body-from", "", "with --note: the review whose summary is the body")
 	finish := fs.Bool("finish", false, "submit the review an interrupted send left pending")
 	discard := fs.Bool("discard", false, "delete the review an interrupted send left pending")
 	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
 		return domain.PRSendRequest{}, errUsage
 	}
+	hasNotes := len(notes) > 0
 	kinds := 0
-	for _, on := range []bool{len(notes) > 0, *review != "", *mine, *verdict, *finish, *discard} {
+	for _, on := range []bool{hasNotes, *review != "", *mine, *verdict && !hasNotes, *finish, *discard} {
 		if on {
 			kinds++
 		}
 	}
 	if kinds != 1 {
-		return domain.PRSendRequest{}, errors.New("name exactly one of --note, --review, --mine, --verdict, --finish, --discard")
+		return domain.PRSendRequest{}, errors.New("name exactly one of --note, --review, --mine, --verdict, --finish, --discard (--note may add --verdict)")
 	}
-	req := domain.PRSendRequest{PR: n, Review: *review, Mine: *mine, Notes: notes, Verdict: *verdict,
-		Body: *body, Finish: *finish, Discard: *discard}
 	// --body given at all (even empty) is the user's answer for the body.
-	fs.Visit(func(f *flag.Flag) { req.BodySet = req.BodySet || f.Name == "body" })
-	return req, nil
+	bodySet := false
+	fs.Visit(func(f *flag.Flag) { bodySet = bodySet || f.Name == "body" })
+	if *bodyFrom != "" && (!hasNotes || bodySet) {
+		return domain.PRSendRequest{}, errors.New("--body-from goes with --note and replaces --body")
+	}
+	return domain.PRSendRequest{PR: n, Review: *review, Mine: *mine, Notes: notes, Verdict: *verdict,
+		Body: *body, BodySet: bodySet, BodyFrom: *bodyFrom, Finish: *finish, Discard: *discard}, nil
 }
 
 // inGGSession: this process runs inside a session gg started (an agent
@@ -231,11 +236,25 @@ func prNotes(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
+	// The code excerpts come from the send candidates; a failure there
+	// must not break the listing.
+	codes := map[string][]string{}
+	if *asJSON {
+		if c, err := svc.PRSendCandidates(context.Background(), n); err == nil {
+			for _, g := range c.Groups {
+				for _, row := range g.Rows {
+					codes[row.ID] = row.Code
+				}
+			}
+		}
+	}
 	var wires []domain.WireNote
 	for _, p := range domain.PreviewNotePaths(byPath) {
 		for _, r := range byPath[p] {
 			if *asJSON {
-				wires = append(wires, domain.ToWireNotePreview(r, true))
+				w := domain.ToWireNotePreview(r, true)
+				w.Code = codes[w.ID]
+				wires = append(wires, w)
 				continue
 			}
 			renderNoteLine(stdout, r, false, noteStatusWord(r, true))

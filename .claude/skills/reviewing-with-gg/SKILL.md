@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v16 -->
+<!-- gg:reviewing-with-gg:v17 -->
 
 # Reviewing with gg
 
@@ -53,13 +53,20 @@ id). Notes land on `<b>`, new side only. Hand back `gg link --preview <a>..<b>`
 ## Checking another agent's review
 
 When the human pastes a review link (`gg://…?review=<id>`) and asks you to
-check it: `gg review show <link>` prints the other agent's overview and every
+check it: `gg review show <link>` prints the other agent's summary and every
 remark, numbered, each with its own line link, its thread id
 (`review:<id>:<n>`), its replies and whether it is resolved. For each remark,
 read the code it points at (`gg link text <remark-link>`, or `gg diff
 <review-link>` for the whole reviewed change) and decide whether it holds. Do
 not re-review from scratch unless asked; the job is to check the remarks you
 were handed.
+
+A pasted NOTE link (`gg://…?note=<id>`) is one thread, not a review:
+`gg note show <link>` prints it — the root, its replies with their ids,
+whether it is resolved — and `gg note reply <link> --summary "…"` /
+`gg note resolve <link>` answer it (the link stands for the id and names
+the checkout). A line link with no `?note=` names a line, not a thread:
+`gg note list --file <path>` shows what hangs there.
 
 Answer IN the remark's thread — the human and the review's author read it
 there (TUI, gg web, `gg review show`):
@@ -294,12 +301,24 @@ section. Reply with ONLY this JSON document, written to the file named by
 }
 ```
 
-`"summary"` is shown as rendered markdown in the review's overview, so give it
+`"summary"` is shown as rendered markdown at the top of the review view, so give it
 structure: `## Summary` (1–3 sentences on what the change does), `## Findings`
 (one `- ` bullet per finding, most important first, with files and symbols in
 `code` spans such as `src/app.go:42`; `- None.` when there is nothing), and
 `## Verdict` (approve, comment or request changes, with a one-line reason).
 It is a JSON string, so every line break is written as `\n`.
+
+`"overview"` (optional) is a stored overview — the gg-overview document
+kind, markdown whose links are anchors into the reviewed change: `path`,
+`path:N`, `path:N-M` (lines of the new version at the reviewed tip, paths
+repo-relative in slash form; no `note:` anchors), ≤ 100 anchors, ≤ 64 KiB.
+It is local only — never part of what gg sends to GitHub — and gg shows it
+as its own "≡ Overview" row in the review view, walked with tab and enter
+like a temporary overview. Write one only when the user asked for an
+overview / tour / walk-through. `gg review save` prints `unresolved:
+<dest>` for an anchor that names no file of the reviewed change or lines
+past its end; `gg review show` prints the overview after the summary and
+its JSON carries it as `"overview"` (the review's text is `"summary"`).
 
 Lines are 1-based and inclusive; `"newRange"` names lines of the new version,
 `"oldRange"` a removed line. `"meta"` is optional and free-form (string

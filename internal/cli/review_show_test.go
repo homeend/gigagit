@@ -197,3 +197,63 @@ func TestReviewShowNarrowedHidesOutdatedThreads(t *testing.T) {
 		t.Fatalf("a link with no path narrows nothing: %+v", whole)
 	}
 }
+
+// The review's text is its SUMMARY on the wire (spec §0): "overview" is
+// the stored walk, added later.
+func TestReviewShowJSONSaysSummary(t *testing.T) {
+	t.Parallel()
+	dir, _ := reviewedRepo(t) // review_show_test.go's fixture: one stored review on HEAD
+	code, out, errs := runCLI(t, dir, "review", "show", "--json", "latest")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["summary"]; !ok {
+		t.Fatalf("no \"summary\" key: %s", out)
+	}
+	if _, ok := got["overview"]; ok {
+		t.Fatalf("\"overview\" must not carry the summary any more: %s", out)
+	}
+}
+
+func TestReviewShowPrintsTheOverview(t *testing.T) {
+	t.Parallel()
+	dir, link := reviewSaveRepo(t)
+	doc := `{"version":1,"summary":"the summary","overview":"Walk: [here](f.txt:1)","files":[]}`
+	if code, _, errs := runCLIStdin(t, dir, doc, "review", "save", link, "--agent", "c", "--stdin"); code != 0 {
+		t.Fatalf("save: %s", errs)
+	}
+	code, out, _ := runCLI(t, dir, "review", "show", "latest")
+	if code != 0 || !strings.Contains(out, "the summary\n") || !strings.Contains(out, "\nOverview\nWalk: [here](f.txt:1)") {
+		t.Fatalf("show =\n%s", out)
+	}
+	_, outJ, _ := runCLI(t, dir, "review", "show", "--json", "latest")
+	var got struct {
+		Summary  string `json:"summary"`
+		Overview string `json:"overview"`
+	}
+	if err := json.Unmarshal([]byte(outJ), &got); err != nil || got.Summary != "the summary" || got.Overview != "Walk: [here](f.txt:1)" {
+		t.Fatalf("json %q: %v", outJ, err)
+	}
+}
+
+// Review Focus 1: a prose review has no document — its text is the summary,
+// there is no overview, nothing panics. The CLI refuses to save prose, so
+// the review is stored through the service the CLI itself opens.
+func TestReviewShowProseReview(t *testing.T) {
+	t.Parallel()
+	dir, _ := reviewedRepo(t) // review_show_test.go: one document review on HEAD
+	svc := openCLIService(t, dir)
+	head := strings.TrimSpace(runGit(t, dir, "rev-parse", "HEAD"))
+	tg := domain.ReviewTarget{Kind: domain.ReviewRange, Range: head + "^.." + head, Commit: head}
+	if _, _, err := svc.SaveReview(context.Background(), domain.SaveReview{Target: tg, Agent: "c", Text: "just prose, not a document"}); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := runCLI(t, dir, "review", "show", "latest")
+	if code != 0 || !strings.Contains(out, "just prose, not a document") || strings.Contains(out, "\nOverview\n") {
+		t.Fatalf("exit %d out=%q err=%q", code, out, errs)
+	}
+}

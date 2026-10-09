@@ -77,6 +77,11 @@ type SendPlan struct {
 	Pending string // the viewer's pending review on the forge ("" = none)
 	Items   []SendItem
 	Skipped []SendSkip
+	// Then is a SendActions plan run AFTER this review's writes succeeded
+	// (spec §5.2, R6): the draft replies ticked beside new comments. One
+	// op, one reservation, one confirm (describePlan lists it); never run
+	// after an abort, a failed or an interrupted review. nil = none.
+	Then *SendPlan
 }
 
 // SendLedger is domain's record of a send: stamps on the local items while
@@ -208,6 +213,15 @@ func describePlan(p SendPlan) string {
 	for _, s := range p.Skipped {
 		fmt.Fprintf(&b, "  - %s (skipped: %s)\n", s.Label, s.Reason)
 	}
+	if p.Then != nil && len(p.Then.Items) > 0 {
+		fmt.Fprintf(&b, "then, as replies:\n")
+		for _, it := range p.Then.Items {
+			fmt.Fprintf(&b, "  + %s\n", it.Label)
+		}
+		for _, s := range p.Then.Skipped {
+			fmt.Fprintf(&b, "  - %s (skipped: %s)\n", s.Label, s.Reason)
+		}
+	}
 	return strings.TrimRight(b.String(), "\n")
 }
 
@@ -303,9 +317,6 @@ func (op SendToForge) review(ctx context.Context, deps OpDeps, p SendPlan) (Resu
 		return fail(err)
 	}
 	res := Result{Changed: true}.WithSummary("sent %d comments to %s", len(p.Items), p.Target)
-	if err := op.Ledger.Settle(ctx); err != nil {
-		res = res.AppendSummary("; local copies are removed at the next refresh (%v)", err)
-	}
 	var unresolved int
 	for _, it := range p.Items {
 		if it.Resolve {
@@ -314,8 +325,28 @@ func (op SendToForge) review(ctx context.Context, deps OpDeps, p SendPlan) (Resu
 			}
 		}
 	}
+	// The review is on the forge whole (threads, verdict, its resolves):
+	// now the replies it was confirmed with, then one settle for both.
+	var thenErr error
+	if p.Then != nil && len(p.Then.Items) > 0 {
+		var sent, failed int
+		sent, failed, thenErr = op.runActions(ctx, deps, *p.Then)
+		if errors.Is(thenErr, ErrNothingToSend) {
+			thenErr = nil // another send took every reply meanwhile: zero replies, not a failure
+		}
+		res = res.AppendSummary("; %d replies", sent)
+		if failed > 0 {
+			res = res.AppendSummary(" (%d failed)", failed)
+		}
+	}
+	if err := op.Ledger.Settle(ctx); err != nil {
+		res = res.AppendSummary("; local copies are removed at the next refresh (%v)", err)
+	}
 	if unresolved > 0 {
 		res = res.AppendSummary("; %d threads could not be resolved", unresolved)
+	}
+	if thenErr != nil {
+		return res, fmt.Errorf("the review was posted; replies: %w", thenErr)
 	}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
@@ -335,6 +366,10 @@ func (op SendToForge) submit(ctx context.Context, review string, ev forge.Event,
 	return op.Writer.SubmitReview(ctx, review, ev, fallback)
 }
 
+// planKeys names the local items the review phase stamps and fails: the
+// review itself, its threads and their replies. A Then plan's keys are
+// deliberately NOT here — a review failure never marks the replies that
+// were never attempted; runActions fails them one by one.
 func planKeys(p SendPlan) []string {
 	var keys []string
 	if p.Key != "" {
@@ -365,48 +400,64 @@ func (op SendToForge) actions(ctx context.Context, deps OpDeps, p SendPlan) (Res
 			return Result{}.WithSummary("aborted: sending to %s", p.Target), nil
 		}
 	}
+	sent, _, err := op.runActions(ctx, deps, p)
+	settleErr := op.Ledger.Settle(ctx)
+	if err != nil {
+		// Changed only when something was posted: a plan another send
+		// emptied meanwhile, or one that failed whole, changed nothing.
+		return Result{Changed: sent > 0}, err
+	}
+	res := Result{Changed: true}.WithSummary("sent %d actions to %s", sent, p.Target)
+	if settleErr != nil {
+		res = res.AppendSummary("; local copies are removed at the next refresh (%v)", settleErr)
+	}
+	deps.emit(ctx, Done{Result: res})
+	return res, nil
+}
+
+// runActions posts p's replies / resolves one by one with no confirm (the
+// caller confirmed — actions() for its own plan, review() for a Then plan
+// under the review's confirm). It drops the items another send took
+// meanwhile and stamps each reply as it goes; the error names the failures.
+func (op SendToForge) runActions(ctx context.Context, deps OpDeps, p SendPlan) (sent, failed int, err error) {
 	var live bool
 	if p, live = op.dropGone(ctx, p); !live {
-		return Result{}, ErrSentMeanwhile
+		return 0, 0, ErrSentMeanwhile
 	}
-	var failed int
 	var firstErr error
 	for _, it := range p.Items {
-		var err error
+		deps.emit(ctx, Progress{Step: "sending", Detail: it.Label})
+		var e error
 		switch it.Kind {
 		case SendReply:
 			if it.Key != "" {
 				_ = op.Ledger.Stamp(ctx, it.Key, model.NoteSend{PR: p.PR, Thread: it.ThreadID, At: op.now()})
 			}
 			var c forge.CommentRef
-			if c, err = op.Writer.Reply(ctx, "", it.ThreadID, it.Body); err == nil && it.Key != "" {
+			if c, e = op.Writer.Reply(ctx, "", it.ThreadID, it.Body); e == nil && it.Key != "" {
 				_ = op.Ledger.Stamp(ctx, it.Key, model.NoteSend{PR: p.PR, Thread: it.ThreadID, Comment: c.ID, URL: c.URL, At: op.now()})
 			}
 		case SendResolve:
-			err = op.Writer.Resolve(ctx, it.ThreadID)
+			e = op.Writer.Resolve(ctx, it.ThreadID)
 		case SendUnresolve:
-			err = op.Writer.Unresolve(ctx, it.ThreadID)
+			e = op.Writer.Unresolve(ctx, it.ThreadID)
 		}
-		if err != nil {
+		if e != nil {
 			failed++
 			if firstErr == nil {
-				firstErr = err
+				firstErr = e
 			}
 			if it.Key != "" {
-				op.Ledger.Fail(ctx, []string{it.Key}, "", err)
+				op.Ledger.Fail(ctx, []string{it.Key}, "", e)
 			}
+			continue
 		}
+		sent++
 	}
-	settleErr := op.Ledger.Settle(ctx)
 	if failed > 0 {
-		return Result{Changed: failed < len(p.Items)}, fmt.Errorf("%d of %d failed: %w", failed, len(p.Items), firstErr)
+		return sent, failed, fmt.Errorf("%d of %d failed: %w", failed, len(p.Items), firstErr)
 	}
-	res := Result{Changed: true}.WithSummary("sent %d actions to %s", len(p.Items), p.Target)
-	if settleErr != nil {
-		res = res.AppendSummary("; local copies are removed at the next refresh (%v)", settleErr)
-	}
-	deps.emit(ctx, Done{Result: res})
-	return res, nil
+	return sent, 0, nil
 }
 
 func (op SendToForge) finish(ctx context.Context, deps OpDeps, p SendPlan) (Result, error) {

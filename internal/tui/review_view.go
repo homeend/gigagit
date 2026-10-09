@@ -381,7 +381,7 @@ func (m Model) openReviewOverview() (Model, tea.Cmd) {
 // meta, then the other notes as "path:line — summary" rows.
 func reviewOverviewLines(st *reviewViewState) []contentLine {
 	doc := st.review.Doc
-	out := prMarkdownLines(doc.Overview, "")
+	out := prMarkdownLines(doc.Summary, "")
 	if len(doc.Meta) > 0 {
 		out = append(out, contentLine{text: ""}, contentLine{text: reviewMetaText(doc.Meta)})
 	}
@@ -456,7 +456,7 @@ func (p *reviewOverviewPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if !p.typing { // while the / filter is capturing, every key is query text
 		switch msg.String() {
 		case "y":
-			return m, m.copyToClipboardCmd(i18n.T("copied the review overview"), p.st.review.Doc.Overview)
+			return m, m.copyToClipboardCmd(i18n.T("copied the review overview"), p.st.review.Doc.Summary)
 		case "o":
 			if len(p.st.other) == 0 {
 				return m, nil

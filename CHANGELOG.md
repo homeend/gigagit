@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## PR review, plan 1: the stored overview, PR reviews, mixed sends, note links (core)
+
+The domain, document, engine, CLI and skill side of the PR-review feature
+(spec `docs/superpowers/specs/2026-10-09-pr-review-send-panel-design.md`).
+The TUI rows and send panel (plan 2) and the web (plan 3) follow.
+
+### Added
+
+- **A review can store an overview.** The review document takes an optional
+  `"overview"` string — the gg-overview document kind (markdown whose links
+  are anchors `path`, `path:N`, `path:N-M` into the reviewed change), ≤ 64
+  KiB, ≤ 100 anchors, kept with the review and never sent to GitHub.
+  `gg review save` prints `unresolved: <dest>` (JSON `"unresolved"`) for an
+  anchor naming no file of the reviewed change or lines past its end;
+  `gg review show` prints it under `Overview` after the summary, and its
+  JSON carries it as `"overview"`. The gg-review and gg-cross-review skills
+  write one only when the user asked for an overview / tour / walk-through.
+- **A fully sent review keeps its overview.** A review whose every remark
+  went to GitHub used to be removed locally; one with a stored overview now
+  stays, its remarks moved and its summary stamped sent.
+- **A pull request's reviews are listed from the PR.** `PreviewReviews`
+  answers for a PR's set (current / older / gone, like a preview's) — the
+  rows the TUI and web draw in plan 2/3.
+- **One mixed send.** `gg pr send <n> --note <id>… [--verdict] [--body
+  <text> | --body-from <review>]` takes review remarks, your notes and draft
+  replies together: one GitHub review (with a verdict when asked, the body
+  typed or taken from a stored review's summary), then the replies, under
+  one confirm; a failure among the replies says `the review was posted;
+  replies: N of M failed`. Drafts alone are still the actions send.
+- **Send candidates.** `PRSendCandidates` lists everything a PR's send panel
+  offers — each AI review newest first, your notes, the draft replies — each
+  row with its severity, a ≤ 4-line code excerpt and the reason it cannot be
+  ticked; `gg pr notes --json` gains `severity` and `code`.
+- **Links to a note.** `gg://…?note=<id>` names a stored note (a root or a
+  reply) on its own anchor line: `gg link --note <id>` prints one, `gg note
+  show <id|link>` prints the thread (`--json`: `{note, replies, resolved,
+  link}`), and `gg note reply|resolve|unresolve` take the link in place of
+  the id. A link to a note deleted since is refused (`note <id> is not
+  here`); the link history labels it `note: <id> <author> · <summary>`.
+
+### Changed
+
+- **The review's text is its summary.** `ReviewDoc.Overview` is now
+  `ReviewDoc.Summary`, and `gg review show --json` (and MCP `gg_review_show`)
+  carry it as `"summary"` — `"overview"` is the stored overview from now on.
+  Agents reading the old key: this is a wire change.
+- Skills: using-gg v161, reviewing-with-gg v17, gg-review v4,
+  gg-cross-review v5, gg-overview v2 (`gg init --update`).
+
 ## Stacked review diff: the remark rows are back, and the menus are checked
 
 ### Fixed

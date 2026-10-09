@@ -17,7 +17,8 @@ const prUsage = `usage: gg pr list [--state all|open|closed|merged] [--search <t
        gg pr comments <number> [--json]
        gg pr fetch <number>
        gg pr forget <number>
-       gg pr send <n> (--note <id>… | --review <id> | --mine | --verdict) [--body <text>]
+       gg pr send <n> --note <id>… [--verdict] [--body <text> | --body-from <review>]
+       gg pr send <n> (--review <id> | --mine | --verdict) [--body <text>]
        gg pr send <n> --finish | --discard
        gg pr reply <n> <thread-or-comment-id> <text> [--send]
        gg pr resolve|unresolve <n> <thread-or-comment-id>

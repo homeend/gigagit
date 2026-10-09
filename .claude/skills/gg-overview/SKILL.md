@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v1 -->
+<!-- gg:gg-overview:v2 -->
 
 # gg-overview — present a result in gg
 
@@ -76,6 +76,11 @@ Notes and overviews are TEMPORARY: they live in the running gg's memory and
 are gone when the user closes them or quits gg. If the user wants the result
 kept, store a review instead (reviewing-with-gg's `gg review save`, or `gg
 note` review notes).
+
+A review can carry an overview of its own: `/gg-review <link> overview …`
+writes the same document into the review's `"overview"` field
+(reviewing-with-gg's "Review document"), and gg keeps it with the review,
+anchored at the reviewed change.
 
 When the user later pastes `gg overview f<n> "<title>" → <dest>` or `gg note
 t<n> <path>:<lines>`, they copied a reference to one of your anchors or

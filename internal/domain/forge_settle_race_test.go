@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -186,5 +188,79 @@ func TestSettleRemovesASentReviewInOneLockedWrite(t *testing.T) {
 	}
 	if c.removes != 0 {
 		t.Fatalf("removed by %d separate Remove call(s) after the judging Edit", c.removes)
+	}
+}
+
+// settleSentReview stamps review rid as sent whole to PR #7 with every
+// remark posted, and makes the fake forge show those threads.
+func settleSentReview(t *testing.T, svc *Service, ff *fakeForge, rid string) {
+	t.Helper()
+	ctx := context.Background()
+	r, _ := svc.Review(ctx, rid)
+	fps := r.remarkFPs()
+	at := settleT0.Add(-time.Minute)
+	if err := svc.notesStore(ctx).Edit(rid, func(n *model.Note) error {
+		n.Send = &model.NoteSend{PR: 7, Review: "PRR_done", At: at}
+		for i, fp := range fps {
+			n.RemarkSends = append(n.RemarkSends, model.RemarkSend{RemarkFP: fp,
+				Send: model.NoteSend{PR: 7, Review: "PRR_done", Thread: fmt.Sprintf("PRRT_%d", i), At: at}})
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ff.mu.Lock()
+	for i, fp := range fps {
+		th := fmt.Sprintf("PRRT_%d", i)
+		ff.comments = append(ff.comments, model.ForgeComment{ID: "PRRC_" + th, Kind: model.ForgeCommentInline, Path: "big.go",
+			Line: 5, Body: "x\n\n" + forge.SendMarker(RemarkKey(rid, fp)), ThreadID: th, ReviewID: "PRR_done"})
+	}
+	ff.mu.Unlock()
+	svc.invalidateNoteCounts()
+	if _, err := svc.PRRevalidate(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A review with a stored overview survives a full send (spec §2.3): every
+// remark moved, the summary stamped, the review still listed. One without
+// an overview is removed as before.
+func TestSettleKeepsAReviewWithAnOverview(t *testing.T) {
+	t.Parallel()
+	svc, ff, head := sendRepo(t)
+	svc.forgeNow = func() time.Time { return settleT0 }
+	ctx := context.Background()
+	doc := `{"version":1,"summary":"s","overview":"[here](big.go:5)","files":[{"path":"big.go","annotations":[{"newRange":[5,5],"summary":"x"}]}]}`
+	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Label: "feat"}, Agent: "claude", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	settleSentReview(t, svc, ff, rid)
+	r, err := svc.Review(ctx, rid)
+	if err != nil {
+		t.Fatalf("the review was removed: %v", err)
+	}
+	if !allRemarksMoved(r) || !r.summarySent(7) {
+		t.Fatalf("remarks moved %v, summary sent %v", allRemarksMoved(r), r.summarySent(7))
+	}
+	// …and the overview never reaches a body.
+	if b := reviewSendBody(r); strings.Contains(b, "[here](big.go:5)") {
+		t.Fatalf("the send body carries the overview: %q", b)
+	}
+}
+
+func TestSettleRemovesAReviewWithoutAnOverview(t *testing.T) {
+	t.Parallel()
+	svc, ff, head := sendRepo(t)
+	svc.forgeNow = func() time.Time { return settleT0 }
+	ctx := context.Background()
+	doc := `{"version":1,"summary":"s","files":[{"path":"big.go","annotations":[{"newRange":[5,5],"summary":"x"}]}]}`
+	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: head + "^.." + head, Label: "feat"}, Agent: "claude", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	settleSentReview(t, svc, ff, rid)
+	if _, err := svc.Review(ctx, rid); !errors.Is(err, ErrReviewNotFound) {
+		t.Fatalf("a fully sent review without an overview must be removed; err = %v", err)
 	}
 }

@@ -61,6 +61,10 @@ type WireNote struct {
 	// GroupSlot is Group's colour slot (GroupSlot: 1–6). Only the rendered
 	// form (a page that paints) carries it; agents' JSON stays as it was.
 	GroupSlot int `json:"group_slot,omitempty"`
+	// Severity is a remark's meta "severity"; Code the ≤ 4 lines the note
+	// is about, at the PR's tip (gg pr notes --json only).
+	Severity string   `json:"severity,omitempty"`
+	Code     []string `json:"code,omitempty"`
 }
 
 // ToWireNote flattens one resolved thread. Line and Range are the RESOLVED
@@ -95,6 +99,7 @@ func ToWireNote(r ResolvedNote) WireNote {
 	}
 	w.Link, w.Remark = r.Note.Link, r.Note.Remark
 	w.Sync, w.SendErr, w.Group = string(r.Sync), r.SendErr, r.Group
+	w.Severity = severityOf(r.Note.Tags)
 	if !r.Note.Created.IsZero() {
 		w.Created = r.Note.Created.UTC().Format(time.RFC3339)
 	}

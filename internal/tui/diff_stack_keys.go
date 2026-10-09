@@ -34,7 +34,7 @@ func (m Model) buildTreeStack() []stackFile {
 	if st := m.filesReview; st != nil && st.review.Doc != nil && len(out) > 0 {
 		// The review view's overview reads first, above the files.
 		ov := stackFile{overview: true, load: stackLoaded,
-			prose: mdRows(markdown.Parse(st.review.Doc.Overview), m.stackProseWidth())}
+			prose: mdRows(markdown.Parse(st.review.Doc.Summary), m.stackProseWidth())}
 		if len(st.review.Doc.Meta) > 0 {
 			ov.prose = append(ov.prose, mdRow{}, mdRow{text: reviewMetaText(st.review.Doc.Meta)})
 		}

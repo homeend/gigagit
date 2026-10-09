@@ -10,11 +10,13 @@ import (
 )
 
 // The structured review document: agent-context v1 with a markdown top-level
-// summary (the review's overview) and a free-form "meta" object at every level
-// in place of fixed fields, so what a review says about itself (a verdict, a
-// severity, a confidence) can grow without a format change:
+// summary (the review's own text), an optional stored overview (markdown
+// whose links are anchors into the reviewed change) and a free-form "meta"
+// object at every level in place of fixed fields, so what a review says
+// about itself (a verdict, a severity, a confidence) can grow without a
+// format change:
 //
-//	{"version":1,"summary":"<markdown>","meta":{…},
+//	{"version":1,"summary":"<markdown>","overview":"<markdown, optional>","meta":{…},
 //	 "files":[{"path":"…","summary":"…","meta":{…},
 //	   "annotations":[{"newRange":[a,b]|"oldRange":[a,b],
 //	                   "summary":"…","rationale":"…","meta":{…}}]}]}
@@ -47,18 +49,28 @@ type ReviewFile struct {
 	Notes         []ReviewNote
 }
 
-// ReviewDoc is a parsed review document. Overview is the markdown summary.
+// MaxOverviewBytes caps a review's stored overview (spec §2.1). It equals
+// agentdocs.MaxOverviewBytes — pinned by a domain test, since this package
+// must stay stdlib-only.
+const MaxOverviewBytes = 64 << 10
+
+// ReviewDoc is a parsed review document. Summary is the review's own
+// markdown text (what a forge gets as the review body); Overview is the
+// optional stored walk — markdown whose links are anchors into the reviewed
+// change (spec §2), local only.
 type ReviewDoc struct {
+	Summary  string
 	Overview string
 	Meta     []MetaKV
 	Files    []ReviewFile
 }
 
 type rawReview struct {
-	Version *int            `json:"version"`
-	Summary string          `json:"summary"`
-	Meta    json.RawMessage `json:"meta"`
-	Files   []struct {
+	Version  *int            `json:"version"`
+	Summary  string          `json:"summary"`
+	Overview string          `json:"overview"`
+	Meta     json.RawMessage `json:"meta"`
+	Files    []struct {
 		Path        string          `json:"path"`
 		Summary     string          `json:"summary"`
 		Meta        json.RawMessage `json:"meta"`
@@ -94,7 +106,13 @@ func ParseReview(data []byte) (ReviewDoc, error) {
 	if strings.TrimSpace(raw.Summary) == "" {
 		return ReviewDoc{}, notDoc("summary is empty")
 	}
-	doc := ReviewDoc{Overview: raw.Summary}
+	if len(raw.Overview) > MaxOverviewBytes {
+		return ReviewDoc{}, notDoc("overview exceeds 64 KiB (%d bytes)", len(raw.Overview))
+	}
+	if strings.TrimSpace(raw.Overview) == "" {
+		raw.Overview = "" // absent or blank = none (spec §2.1)
+	}
+	doc := ReviewDoc{Summary: raw.Summary, Overview: raw.Overview}
 	var err error
 	if doc.Meta, err = metaKVs(raw.Meta); err != nil {
 		return ReviewDoc{}, err
@@ -246,10 +264,11 @@ type canonFile struct {
 }
 
 type canonDoc struct {
-	Version int         `json:"version"`
-	Summary string      `json:"summary"`
-	Meta    canonMeta   `json:"meta,omitempty"`
-	Files   []canonFile `json:"files,omitempty"`
+	Version  int         `json:"version"`
+	Summary  string      `json:"summary"`
+	Overview string      `json:"overview,omitempty"`
+	Meta     canonMeta   `json:"meta,omitempty"`
+	Files    []canonFile `json:"files,omitempty"`
 }
 
 func toCanonMeta(kvs []MetaKV) canonMeta {
@@ -266,7 +285,7 @@ func toCanonMeta(kvs []MetaKV) canonMeta {
 // Canonical is the document in its documented shape, indented: what gg stores,
 // so a stored review reads the same whatever wrapping the agent used.
 func (d ReviewDoc) Canonical() []byte {
-	c := canonDoc{Version: 1, Summary: d.Overview, Meta: toCanonMeta(d.Meta)}
+	c := canonDoc{Version: 1, Summary: d.Summary, Overview: d.Overview, Meta: toCanonMeta(d.Meta)}
 	for _, f := range d.Files {
 		cf := canonFile{Path: f.Path, Summary: f.Summary, Meta: toCanonMeta(f.Meta)}
 		for _, n := range f.Notes {

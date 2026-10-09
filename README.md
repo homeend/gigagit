@@ -477,6 +477,17 @@ file, at that line; `gg review show <link>` prints just that file's or that
 remark's notes. Quote a link that carries `#<hunk>` — an unquoted `#` starts a shell
 comment.
 
+A stored review can carry an **overview** of its own: ask the agent for an
+overview / tour / walk-through and the gg-review skill adds one to the review
+document (`"overview"`: markdown whose links are anchors into the reviewed
+change, ≤ 64 KiB, ≤ 100 anchors). It is kept with the review on this machine
+and never sent to GitHub; `gg review save` reports `unresolved: <dest>` for an
+anchor it cannot place, and `gg review show` prints it after the summary.
+A **note has a link too**: `gg link --note <id>` prints `gg://…?note=<id>`
+on the note's own line, `gg note show <id|link>` prints the thread, and
+`gg note reply|resolve <link>` answer it — hand an agent the note link rather
+than the line above or below the box.
+
 The browser UI copies the same things the TUI's `.` menu does, from where they
 are on screen. In an open commit, the file list's top bar stays on screen while
 the list scrolls, and its **»** control folds the list to a slim strip so the
@@ -519,7 +530,10 @@ gg pr forget 123              # drop the ref (and a closed PR's row)
 
 ```bash
 gg pr notes 123 [--json]                  # what the PR's view holds: notes written for it, GitHub threads
-gg pr send 123 --note <id> [--note <id>]  # one comment per note (a quote of the line when it is outside the diff)
+gg pr send 123 --note <id> [--note <id>] [--verdict] [--body … | --body-from <review>]
+                                          # the ticked notes, AI remarks and draft replies as ONE review (then the
+                                          # replies), under one confirm; --verdict asks comment/approve/request changes,
+                                          # --body-from posts a stored review's summary as the body
 gg pr send 123 --mine                     # every note written for the PR as ONE review; the confirm asks the verdict
 gg pr send 123 --review <id> [--body …]   # a stored AI review: its summary (or your body) + its remarks
 gg pr send 123 --verdict                  # a verdict alone

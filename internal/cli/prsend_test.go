@@ -334,3 +334,108 @@ func wireSourceOf(t *testing.T, doc, id string) string {
 	}
 	return walk(v)
 }
+
+func TestPRNotesJSONCarriesSeverityAndCode(t *testing.T) {
+	dir, head, _ := sendPRRepo(t)
+	id := addCLINote(t, dir, head, 5)
+	out, _, code := runPR(t, dir, "notes", "7", "--json")
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	var got []struct {
+		ID   string   `json:"id"`
+		Code []string `json:"code"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil || len(got) != 1 || got[0].ID != id {
+		t.Fatalf("json %q: %v", out, err)
+	}
+	if len(got[0].Code) != 1 || got[0].Code[0] != "line 5 changed" {
+		t.Fatalf("no code excerpt for %s:\n%s", id, out)
+	}
+}
+
+func TestParsePRSendNoteWithVerdictAndBodyFrom(t *testing.T) {
+	req, err := parsePRSend([]string{"7", "--note", "a", "--note", "b", "--verdict", "--body-from", "r1"}, io.Discard)
+	if err != nil || req.PR != 7 || len(req.Notes) != 2 || !req.Verdict || req.BodyFrom != "r1" || req.BodySet {
+		t.Fatalf("req %+v err %v", req, err)
+	}
+	for _, bad := range [][]string{
+		{"7", "--body-from", "r1"},                               // body-from needs --note
+		{"7", "--review", "r1", "--body-from", "r1"},             // not with --review
+		{"7", "--note", "a", "--body", "x", "--body-from", "r1"}, // one body source
+		{"7", "--mine", "--verdict"},                             // verdict rides --note only
+	} {
+		if _, err := parsePRSend(bad, io.Discard); err == nil {
+			t.Errorf("%v: want a usage error", bad)
+		}
+	}
+	// --verdict alone is still the verdict-only send.
+	if req, err := parsePRSend([]string{"7", "--verdict"}, io.Discard); err != nil || !req.Verdict || len(req.Notes) != 0 {
+		t.Fatalf("verdict alone: %+v %v", req, err)
+	}
+}
+
+// reseedSnapshot rewrites the fake gh's PR snapshot with the given review
+// threads (the same JSON sendPRRepo seeds, threads interpolated).
+func reseedSnapshot(t *testing.T, fixtures, head, threads string) {
+	t.Helper()
+	snap := fmt.Sprintf(`{"data":{"repository":{"pullRequest":{"id":"PR_7","number":7,"title":"t","body":"","author":{"login":"ann"},
+"state":"OPEN","isDraft":false,"reviewDecision":"","headRefName":"feat","isCrossRepository":false,"headRepositoryOwner":{"login":"ann"},
+"headRepository":{"name":"r"},"baseRefName":"main","baseRefOid":"","headRefOid":"%s","url":"https://github.com/o/r/pull/7",
+"createdAt":"2026-10-01T10:00:00Z","updatedAt":"2026-10-06T10:00:00Z","viewerDidAuthor":false,"viewerLatestReview":null,
+"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[%s]},"comments":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+"reviews":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}`, head, threads)
+	forgetest.Seed(t, fixtures, map[string]string{"snapshot-7.json": snap})
+}
+
+// saveCLIReview stores doc as PR #7's review through the CLI and returns its id.
+func saveCLIReview(t *testing.T, dir, doc string) string {
+	t.Helper()
+	code, link, errb := runCLI(t, dir, "link", "--pr", "7")
+	if code != 0 {
+		t.Fatalf("link --pr: %s", errb)
+	}
+	code, out, errb := runCLIStdin(t, dir, doc, "review", "save", strings.TrimSpace(link), "--agent", "c", "--stdin", "--json")
+	if code != 0 {
+		t.Fatalf("review save: %s", errb)
+	}
+	var got struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil || got.ID == "" {
+		t.Fatalf("review save json %q: %v", out, err)
+	}
+	return got.ID
+}
+
+// The spec's end-to-end send (§5.5): a remark, a draft reply, a verdict and
+// the review's summary as the body — one review, then one reply.
+func TestPRSendMixedAnsweredAtATerminal(t *testing.T) {
+	dir, head, fixtures := sendPRRepo(t)
+	// A thread on big.go:5 to reply to, seeded into the PR snapshot.
+	thread := `{"id":"PRRT_1","path":"big.go","line":5,"startLine":null,"originalLine":5,"originalStartLine":null,"diffSide":"RIGHT",
+"subjectType":"LINE","isResolved":false,"isOutdated":false,"comments":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"PRRC_1",
+"replyTo":null,"author":{"login":"carol"},"body":"please","diffHunk":"","createdAt":"2026-10-07T10:00:00Z","updatedAt":"2026-10-07T10:00:00Z",
+"pullRequestReview":{"id":"PRR_1"}}]}}`
+	reseedSnapshot(t, fixtures, head, thread)
+	rid := saveCLIReview(t, dir, `{"version":1,"summary":"Looks fine","files":[{"path":"big.go","annotations":[{"newRange":[5,5],"summary":"check"}]}]}`)
+	out, errs, code := runPR(t, dir, "reply", "7", "PRRC_1", "done")
+	if code != 0 {
+		t.Fatalf("reply: %s %s", out, errs)
+	}
+	draft := strings.Fields(out)[0] // "<id> draft reply to <thread>"
+	out, errs, code = runPRAt(t, dir, "comment\n", "send", "7", "--note", "review:"+rid+":0", "--note", draft, "--verdict", "--body-from", rid)
+	if code != 0 {
+		t.Fatalf("exit %d: %s\n%s", code, errs, out)
+	}
+	var ops []string
+	for _, w := range forgetest.Writes(t, fixtures) {
+		ops = append(ops, w.Op)
+	}
+	if strings.Join(ops, ",") != "StartReview,AddThread,SubmitReview,Reply" {
+		t.Fatalf("writes = %v", ops)
+	}
+	if !strings.Contains(out, "sent 1 comments to o/r #7") || !strings.Contains(out, "1 replies") {
+		t.Fatalf("stdout = %q", out)
+	}
+}

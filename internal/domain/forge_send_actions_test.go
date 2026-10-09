@@ -20,13 +20,19 @@ func draftReply(t *testing.T, svc *Service, sum string) string {
 	return d.ID
 }
 
-func TestPlanSendRefusesADraftReplyMixedWithNotes(t *testing.T) {
+// A draft reply beside a new comment is one send (spec §5.2, R6): the
+// comment goes as the review, the reply after it as the plan's Then.
+func TestPlanSendDraftReplyBesideANoteGoesAfterIt(t *testing.T) {
 	t.Parallel()
 	svc, _, head, _ := prThreadSvc(t)
 	d := draftReply(t, svc, "on it")
 	n := addPRNote(t, svc, head, "a.go", 3, "a new comment")
-	if _, err := svc.planSend(context.Background(), PRSendRequest{PR: 7, Notes: []string{n, d}}); !errors.Is(err, ErrMixedSend) {
-		t.Fatalf("err = %v, want ErrMixedSend (a draft reply is sent on its own)", err)
+	p, err := svc.planSend(context.Background(), PRSendRequest{PR: 7, Notes: []string{n, d}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Mode != engine.SendReview || len(p.Items) != 1 || p.Then == nil || len(p.Then.Items) != 1 || p.Then.Items[0].Key != d {
+		t.Fatalf("plan = %+v then = %+v", p, p.Then)
 	}
 }
 

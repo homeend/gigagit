@@ -164,16 +164,32 @@ func mustNotesAt(t *testing.T, svc *Service, set PreviewNoteSet, path string) []
 	return got
 }
 
-// Final review I1: a PR's reviews show as remarks in its diff and in its send
-// groups (prReviewHeads); the preview Reviews block stays off a PR, as it was
-// — it matched one base spelling only and appeared only after a reload.
-func TestPreviewReviewsStayOffAPR(t *testing.T) {
+// A PR's stored reviews are listed from the PR (spec §3.1, R4), classified
+// as a preview's: current at the head, older once the head moved on while
+// both commits exist, omitted once one is gone.
+func TestPreviewReviewsOfAPR(t *testing.T) {
 	t.Parallel()
-	svc, _, _ := sendRepo(t)
-	savePRReview(t, svc, twoRemarks)
-	got, err := svc.PreviewReviews(context.Background(), prNoteSetOf(t, svc))
-	if err != nil || len(got) != 0 {
-		t.Fatalf("PreviewReviews on a PR = %+v, %v", got, err)
+	svc, ff, head := sendRepo(t)
+	rid := savePRReview(t, svc, twoRemarks)
+	ctx := context.Background()
+	set := prNoteSetOf(t, svc)
+	got, err := svc.PreviewReviews(ctx, set)
+	if err != nil || len(got) != 1 || got[0].ID != rid || got[0].Older {
+		t.Fatalf("current: %+v, %v", got, err)
+	}
+	// The head moves on (a new commit on the PR branch): the review is older.
+	dir := repoDir(t, svc)
+	runGitIn(t, dir, "checkout", "-q", "feat")
+	commitFile(t, dir, "other.go", "package other // v2\n", "more")
+	runGitIn(t, dir, "update-ref", git.PRRef(7), revParse(t, dir, "HEAD"))
+	runGitIn(t, dir, "checkout", "-q", "main")
+	ff.mu.Lock()
+	ff.byNum[7] = model.PullRequest{Number: 7, State: "open", Target: "main", HeadSHA: revParse(t, dir, git.PRRef(7)), NodeID: "PR_7"}
+	ff.mu.Unlock()
+	svc.invalidateNoteCounts()
+	got, err = svc.PreviewReviews(ctx, prNoteSetOf(t, svc)) // re-resolves the PR at its new head
+	if err != nil || len(got) != 1 || !got[0].Older {
+		t.Fatalf("older: %+v, %v (head was %s)", got, err, head[:7])
 	}
 }
 

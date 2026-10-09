@@ -1,17 +1,17 @@
 ---
 name: gg-review
-description: Review the change a gg:// link names and store the review in gg — an overview plus per-file remarks — with gg review save.
+description: Review the change a gg:// link names and store the review in gg — a summary plus per-file remarks — with gg review save.
 argument-hint: "<gg-link> [what to focus on]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-review:v3 -->
+<!-- gg:gg-review:v4 -->
 
 # /gg-review — a full review stored in gg
 
 The user typed `/gg-review <gg-link> [focus]`: the first word after the
 command is a `gg://` link, the rest (optional) is what they want you to look
-at. Review the change the link names and store ONE review — an overview plus
+at. Review the change the link names and store ONE review — a summary plus
 per-file remarks — in gg, where the user reads it beside the code. Do NOT
 launch gg's TUI or `gg web`; they belong to the user.
 
@@ -37,13 +37,27 @@ launch gg's TUI or `gg web`; they belong to the user.
    `files[].annotations[]` are the remarks, `newRange` lines of the new
    version (`oldRange` for a removed line), `meta.severity` = bug | risk |
    design | nit. Put the user's focus first in Findings when they gave one.
-4. **Store it:** `gg review save <link> --agent "<your name, e.g. Claude Code>" --stdin --json`
+4. **Overview (when asked).** Only when the user's request says
+   "overview", "tour" or "walk me through" (or `/gg-review <link> overview
+   …`): add an `"overview"` string to the document — the gg-overview kind,
+   stored with the review: first line the result in one sentence, then
+   each point with its anchor `[the parser](internal/x/parse.go:40-60)`,
+   `[this check](src/a.go:120)`, in the order you would explain it, one
+   `path:N` or `path:N-M` per place (lines of the NEW version at the
+   reviewed tip, paths repo-relative in slash form), no `note:` anchors,
+   ≤ 100 anchors, ≤ 64 KiB; last the open questions. The summary stays the
+   review — the verdict and the findings go there; the overview only walks.
+   Otherwise leave the key out.
+5. **Store it:** `gg review save <link> --agent "<your name, e.g. Claude Code>" --stdin --json`
    with the document on stdin. A "not a gg review document" error names what
-   is wrong — fix the JSON and run it again.
-5. **Show it.** `gg session navigate <link from step 4>` opens the review in
+   is wrong — fix the JSON and run it again. `gg review save` prints
+   `unresolved: <dest>` for every overview anchor whose file is not in the
+   reviewed change or whose lines do not exist at the tip — fix the text and
+   save again.
+6. **Show it.** `gg session navigate <link from step 5>` opens the review in
    the gg window open on the link's worktree. Exit 1 with `no gg session for
    this worktree` means none is open: skip this step.
-6. **Reply** with the review link and a three-line summary (verdict first).
+7. **Reply** with the review link and a three-line summary (verdict first).
    Do not paste the whole review into the chat — it is in gg.
 
 A question about ONE file or line ("what does this function do?", "is this

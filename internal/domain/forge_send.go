@@ -55,8 +55,12 @@ type PRSendRequest struct {
 	// emptied box posts no body (user ruling 2026-10-08), never the stored
 	// summary.
 	BodySet bool `toml:"body_set,omitempty" json:"body_set,omitempty"`
-	Finish  bool `toml:"finish,omitempty" json:"finish,omitempty"`
-	Discard bool `toml:"discard,omitempty" json:"discard,omitempty"`
+	// BodyFrom: a Notes send whose body is this review's summary (the panel's
+	// "review text" choice); its summary is stamped sent as a Review send's
+	// is. Ignored when BodySet.
+	BodyFrom string `toml:"body_from,omitempty" json:"body_from,omitempty"`
+	Finish   bool   `toml:"finish,omitempty" json:"finish,omitempty"`
+	Discard  bool   `toml:"discard,omitempty" json:"discard,omitempty"`
 }
 
 // PRSendOp builds the one op that writes to a forge. The frontend collected
@@ -116,21 +120,54 @@ func (s *Service) planSend(ctx context.Context, req PRSendRequest) (engine.SendP
 		}
 		return plan, nil
 	}
-	drafts, other, err := s.noteKinds(ctx, req.Notes)
+	drafts, others, unknown, err := s.noteKinds(ctx, req.Notes)
 	if err != nil {
 		return engine.SendPlan{}, err
 	}
-	if len(req.Resolve)+len(req.Unresolve) > 0 || drafts > 0 {
-		if req.Review != "" || req.Mine || req.Verdict || other > 0 {
+	// Draft replies alone are the replies send — the panel's verdict ask
+	// means nothing there and is ignored — unless a body came with them
+	// (typed, or a review's summary): then a verdict review carries the
+	// body and the replies follow it, exactly like a notes send.
+	// carries: the request asks for more than comments — a verdict, or a
+	// body (typed, or a review's summary) — so a review with no comment
+	// left is still something to post.
+	hasBody := (req.BodySet && strings.TrimSpace(req.Body) != "") || (req.BodyFrom != "" && !req.BodySet)
+	carries := req.Verdict || hasBody
+	actionsOnly := len(req.Resolve)+len(req.Unresolve) > 0 || (len(drafts) > 0 && len(others) == 0 && !hasBody)
+	if actionsOnly {
+		if req.Review != "" || req.Mine || len(others) > 0 || (req.Verdict && len(drafts) == 0) {
 			return engine.SendPlan{}, ErrMixedSend
 		}
 		return s.planActions(ctx, plan, req)
 	}
+	if len(drafts) > 0 && (req.Review != "" || req.Mine) {
+		return engine.SendPlan{}, ErrMixedSend
+	}
 	if rev, _, _ := s.PRInterrupted(ctx, pr.Number); rev != "" {
 		return engine.SendPlan{}, ErrInterruptedPending
 	}
-	plan, err = s.planReview(ctx, plan, pr, req)
-	if err == nil && len(plan.Items) == 0 && !req.Verdict {
+	reviewReq := req
+	reviewReq.Notes = append(others, unknown...)
+	plan, err = s.planReview(ctx, plan, pr, reviewReq)
+	if err == nil && len(drafts) > 0 {
+		then, terr := s.planActions(ctx, engine.SendPlan{Target: plan.Target, PR: plan.PR, PRID: plan.PRID, Head: plan.Head}, PRSendRequest{PR: req.PR, Notes: drafts})
+		if terr != nil {
+			return engine.SendPlan{}, terr
+		}
+		if len(plan.Items) == 0 && !carries {
+			// Every new comment was skipped and nothing else was asked:
+			// no review to post, so the replies go alone — the skips
+			// listed on their confirm, never dropped in silence.
+			then.Skipped = append(plan.Skipped, then.Skipped...)
+			return then, nil
+		}
+		// The ticked replies go after the review, under its confirm (R6).
+		plan.Then = &then
+	}
+	if err == nil && len(plan.Items) == 0 && carries {
+		plan.Verdict = true // a review with no comments is a verdict review
+	}
+	if err == nil && len(plan.Items) == 0 && !carries {
 		// Nothing sendable: posting an empty review would be a public write
 		// nobody asked for.
 		var why []string
@@ -215,28 +252,31 @@ func (s *Service) storedNotes(ctx context.Context) (map[string]model.Note, error
 	return out, nil
 }
 
-// noteKinds counts a --note list's draft replies to GitHub threads and its
-// other items (local notes, remarks, GitHub ids); an id no longer stored is
-// neither — a reply/resolve send skips it, any other send names it. A store
-// that cannot be read is an error, never a guess.
-func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, other int, err error) {
+// noteKinds splits a --note list into the draft replies to GitHub threads,
+// the other ids gg knows (local notes, remarks, GitHub comment ids) and the
+// ids it does not (a deleted note: the planner that runs names it — a
+// skip for an actions send, an error for a review). A store that cannot be
+// read is an error, never a guess.
+func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, others, unknown []string, err error) {
 	if len(ids) == 0 {
-		return 0, 0, nil
+		return nil, nil, nil, nil
 	}
 	byID, err := s.storedNotes(ctx)
 	if err != nil {
-		return 0, 0, err
+		return nil, nil, nil, err
 	}
 	for _, id := range ids {
 		n, ok := byID[id]
 		switch {
 		case ok && n.IsForgeReply():
-			drafts++
+			drafts = append(drafts, id)
 		case ok || model.IsReviewNoteID(id) || model.IsForgeNoteID(id):
-			other++
+			others = append(others, id)
+		default:
+			unknown = append(unknown, id)
 		}
 	}
-	return drafts, other, nil
+	return drafts, others, unknown, nil
 }
 
 // planActions is replies and resolves: each its own call.
@@ -353,7 +393,7 @@ func (s *Service) sendPlacer(ctx context.Context, set PreviewNoteSet, files []mo
 // "my draft review", or a verdict alone.
 func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model.PullRequest, req PRSendRequest) (engine.SendPlan, error) {
 	plan.Mode = engine.SendReview
-	if len(req.Notes) == 0 && req.Review == "" && !req.Mine {
+	if len(req.Notes) == 0 && req.Review == "" && !req.Mine && (req.BodyFrom == "" || req.BodySet) {
 		// A verdict alone needs no diff here.
 		plan.Verdict, plan.Body = true, typedBody(req)
 		return plan, nil
@@ -361,6 +401,14 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 	prev, err := s.PRPreview(ctx, pr)
 	if err != nil {
 		return engine.SendPlan{}, err
+	}
+	if len(req.Notes) == 0 && req.Review == "" && !req.Mine {
+		// A verdict alone whose body is a stored review's summary.
+		plan.Verdict = true
+		if err := s.applyBodyFrom(ctx, &plan, prev.Set, pr, req); err != nil {
+			return engine.SendPlan{}, err
+		}
+		return plan, nil
 	}
 	if prev.Endpoints.Summary.State != PreviewOK {
 		return engine.SendPlan{}, fmt.Errorf("%w: #%d's diff is not available here (gg pr fetch %d)", ErrSendRequest, pr.Number, pr.Number)
@@ -416,6 +464,10 @@ func (s *Service) planReview(ctx context.Context, plan engine.SendPlan, pr model
 			}
 		}
 	default:
+		plan.Verdict, plan.Body = req.Verdict, typedBody(req)
+		if err := s.applyBodyFrom(ctx, &plan, prev.Set, pr, req); err != nil {
+			return engine.SendPlan{}, err
+		}
 		var byID map[string]model.Note
 		for _, id := range req.Notes {
 			switch {
@@ -629,6 +681,29 @@ func cutLabel(s string) string {
 // typedBody is the review body the user typed (agents never send, so it
 // is never signed).
 func typedBody(req PRSendRequest) string { return strings.TrimSpace(req.Body) }
+
+// applyBodyFrom makes a stored review's summary the plan's body
+// (PRSendRequest.BodyFrom): the review must be one the PR owns; its id
+// becomes the plan's Key so the summary is stamped sent, and a summary
+// already on GitHub is skipped. A typed body (BodySet) wins.
+func (s *Service) applyBodyFrom(ctx context.Context, plan *engine.SendPlan, set PreviewNoteSet, pr model.PullRequest, req PRSendRequest) error {
+	if req.BodyFrom == "" || req.BodySet {
+		return nil
+	}
+	r, err := s.Review(ctx, req.BodyFrom)
+	if err != nil {
+		return err
+	}
+	if !s.prOwnsReview(ctx, set, r.ID) {
+		return fmt.Errorf("%w: review %s is not in this PR", ErrSendRequest, r.ID)
+	}
+	plan.Key, plan.Body = r.ID, reviewSendBody(r)
+	if r.summarySent(pr.Number) {
+		plan.Body = ""
+		plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: "review summary", Reason: SkipOnGitHub})
+	}
+	return nil
+}
 
 // PRThreadRoot names a thread of PR n by any of its handles — a thread id,
 // one of its comment ids, or "forge:<comment id>" — reading the PR's

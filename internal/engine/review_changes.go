@@ -147,7 +147,7 @@ func ReviewOutputInstruction() string {
 		"          \"rationale\": \"<why it matters / how it fails>\",\n" +
 		"          \"meta\": { \"severity\": \"bug | risk | design | nit\", \"confidence\": \"low | medium | high\" } }\n" +
 		"      ] }\n  ]\n}\n\n" +
-		"\"summary\" is rendered as markdown in the review's overview, so structure it:\n" +
+		"\"summary\" is rendered as markdown at the top of the review view, so structure it:\n" +
 		"  ## Summary   — 1-3 sentences: what the change does.\n" +
 		"  ## Findings  — one bullet (\"- \") per finding, most important first, naming\n" +
 		"                 files and symbols as `code` spans (e.g. `src/app.go:42`);\n" +

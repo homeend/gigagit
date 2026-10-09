@@ -76,7 +76,7 @@ func (s *Service) ReviewBodyText(ctx context.Context, id string) (string, error)
 		return "", err
 	}
 	if r.Doc != nil {
-		return strings.TrimSpace(r.Doc.Overview), nil
+		return strings.TrimSpace(r.Doc.Summary), nil
 	}
 	return strings.TrimSpace(r.Text), nil
 }

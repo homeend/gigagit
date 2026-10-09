@@ -332,3 +332,139 @@ func TestSendPlanBodyTextDropsTheMarker(t *testing.T) {
 		t.Fatalf("BodyText = %q", got)
 	}
 }
+
+func planWithThen() SendPlan {
+	p := plan2()
+	p.Then = &SendPlan{Target: p.Target, PR: p.PR, Mode: SendActions, Items: []SendItem{
+		{Key: "d1", Label: "reply: addressed", Kind: SendReply, ThreadID: "T9", Body: "addressed"},
+	}}
+	return p
+}
+
+// A Then plan runs after the review's writes, inside the review's confirm.
+func TestSendReviewThenRepliesUnderOneConfirm(t *testing.T) {
+	t.Parallel()
+	w, l := &fakeWriter{}, newLedger()
+	res, err, asked := runSend(t, planWithThen(), w, l, OptComment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(asked) != 1 {
+		t.Fatalf("asked %d times, want one confirm", len(asked))
+	}
+	if !strings.Contains(asked[0].Prompt, "then, as replies:") || !strings.Contains(asked[0].Prompt, "reply: addressed") {
+		t.Fatalf("the confirm must list the replies:\n%s", asked[0].Prompt)
+	}
+	last := w.calls[len(w.calls)-1]
+	if !strings.HasPrefix(last, "Reply  T9 addressed") && !strings.Contains(last, "T9 addressed") {
+		t.Fatalf("the reply must be the last write: %v", w.calls)
+	}
+	if !strings.Contains(res.Summary, "sent 2 comments") || !strings.Contains(res.Summary, "1 repl") {
+		t.Fatalf("summary = %q", res.Summary)
+	}
+	if _, ok := l.stamps["d1"]; !ok {
+		t.Fatal("the reply must be stamped")
+	}
+}
+
+func TestSendReviewAbortRunsNoThen(t *testing.T) {
+	t.Parallel()
+	w, l := &fakeWriter{}, newLedger()
+	if _, err, _ := runSend(t, planWithThen(), w, l, "abort"); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.calls) != 0 || len(l.stamps) != 0 {
+		t.Fatalf("abort wrote %v / stamped %v", w.calls, l.stamps)
+	}
+}
+
+func TestSendReviewFailureRunsNoThen(t *testing.T) {
+	t.Parallel()
+	w, l := &fakeWriter{fail: map[string]error{"SubmitReview": errors.New("boom")}}, newLedger()
+	if _, err, _ := runSend(t, planWithThen(), w, l, OptComment); err == nil {
+		t.Fatal("want the submit error")
+	}
+	for _, c := range w.calls {
+		if strings.HasPrefix(c, "Reply  T9") || strings.Contains(c, "T9 addressed") {
+			t.Fatalf("a failed review must not post its replies: %v", w.calls)
+		}
+	}
+	if _, stamped := l.stamps["d1"]; stamped {
+		t.Fatal("a reply of a failed review must not be stamped")
+	}
+}
+
+func TestSendReviewThenFailureKeepsTheReview(t *testing.T) {
+	t.Parallel()
+	w, l := &fakeWriter{fail: map[string]error{"Reply": errors.New("502")}}, newLedger()
+	p := planWithThen()
+	p.Items[0].Replies = nil // the fake fails the FIRST Reply: make it the Then one
+	res, err, _ := runSend(t, p, w, l, OptComment)
+	if err == nil || !strings.Contains(err.Error(), "the review was posted") || !strings.Contains(err.Error(), "1 of 1 failed") {
+		t.Fatalf("err = %v", err)
+	}
+	if !res.Changed {
+		t.Fatal("the review went: Changed must be true")
+	}
+	if l.failed["d1"] == "" {
+		t.Fatal("the failed reply must be marked failed")
+	}
+}
+
+// goneLedger is a fakeLedger that reports every key gone (another send
+// took them while this one waited on its confirm).
+type goneLedger struct{ *fakeLedger }
+
+func (goneLedger) Gone(_ context.Context, keys []string) map[string]bool {
+	m := map[string]bool{}
+	for _, k := range keys {
+		m[k] = true
+	}
+	return m
+}
+
+func runSendWith(t *testing.T, p SendPlan, w *fakeWriter, l SendLedger, answer string) (Result, error) {
+	t.Helper()
+	dec := DeciderFunc(func(context.Context, DecisionRequest) (DecisionResponse, error) {
+		return DecisionResponse{Option: answer}, nil
+	})
+	op := SendToForge{Plan: p, Writer: w, Ledger: l, Now: func() time.Time { return time.Unix(100, 0) }}
+	return op.Run(context.Background(), OpDeps{Decider: dec})
+}
+
+// Every action taken by another send meanwhile: nothing changed here.
+func TestSendActionsAllGoneIsNotAChange(t *testing.T) {
+	t.Parallel()
+	p := SendPlan{Target: "o/r #7", PR: 7, Mode: SendActions, Items: []SendItem{
+		{Key: "d1", Label: "reply 1", Kind: SendReply, ThreadID: "TA", Body: "one"},
+	}}
+	w := &fakeWriter{}
+	res, err := runSendWith(t, p, w, goneLedger{newLedger()}, OptSend)
+	if !errors.Is(err, ErrSentMeanwhile) || res.Changed || len(w.calls) != 0 {
+		t.Fatalf("err %v changed %v calls %v", err, res.Changed, w.calls)
+	}
+}
+
+// The review's own items stay; only its Then replies were taken meanwhile:
+// the review is posted, zero replies, no error.
+func TestSendReviewThenAllGoneIsZeroReplies(t *testing.T) {
+	t.Parallel()
+	p := planWithThen()
+	p.Key = ""
+	for i := range p.Items {
+		p.Items[i].Key, p.Items[i].Replies = "", nil // keyless items are never "gone"
+	}
+	w := &fakeWriter{}
+	res, err := runSendWith(t, p, w, goneLedger{newLedger()}, OptComment)
+	if err != nil {
+		t.Fatalf("a review whose replies went meanwhile is not a failure: %v", err)
+	}
+	if !res.Changed || !strings.Contains(res.Summary, "sent 2 comments") || !strings.Contains(res.Summary, "0 replies") {
+		t.Fatalf("res = %+v", res)
+	}
+	for _, c := range w.calls {
+		if strings.Contains(c, "T9 addressed") {
+			t.Fatalf("a gone reply must not be posted: %v", w.calls)
+		}
+	}
+}
