@@ -865,9 +865,10 @@ viewer/preview (`L` there is bound only while a selection is live); CLI
 selection. `gg link text` / `gg_link_text` print the lines over
 `Service.LinkText` (uncommitted → `linkSideLines`; a commit's `:old:` = its
 parent; a pair's = commit a). `gg note add <range link>` stores `Range
-[a,b]`; every note whose range spans several lines draws a bar (`▎`,
-`cellMark.note` / `diffView.noteSpans`) in the gutter's separator column
-beside its lines. The CLI's old `splitLinkRange` shim (highlight add only,
+[a,b]`; every note draws a bar (`▎`, `cellMark.note` / `diffView.noteSpans`)
+in the gutter's separator column beside its lines — a one-line note beside
+its one line too (user ruling 2026-10-09: next to a ranged note's bar, a box
+without one read as belonging to no line). The CLI's old `splitLinkRange` shim (highlight add only,
 broke on `~fp`) is gone. Web this round: `steerWire.EndLine` + the op line
 "the link names lines a-b"; no selection restore, no range copy.
 

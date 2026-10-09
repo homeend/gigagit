@@ -247,3 +247,37 @@ func mustReviewID(t *testing.T, m Model) string {
 	}
 	return rs[0].ID
 }
+
+// A STACKED review diff keeps its remark rows: the stack view names no review
+// (its files carry the id their own loaders stamped), so Copy remark link /
+// Copy remark id and the L key used to vanish the moment S was pressed.
+func TestStackedReviewDiffKeepsTheRemarkRows(t *testing.T) {
+	t.Parallel()
+	m, id := openedReviewView(t)
+	m = tempPromptStore(t, m)
+	m = m.setStackedPref(true)
+	m = openReviewDiff(t, m, "a.go")
+	v := m.diffLayer()
+	if v == nil || v.stk == nil {
+		t.Fatal("the review diff must have opened stacked")
+	}
+	m, moved := m.landOnNote(1)
+	if !moved {
+		t.Fatal("the stack must land on the remark")
+	}
+	v = m.diffLayer()
+	if !v.cursorOnNote() {
+		t.Fatalf("the cursor must rest on the remark's line (line %d)", v.curLine)
+	}
+	ids := menuIDString(m.noteMenuRows())
+	if !strings.Contains(ids, "copy-remark-link") || !strings.Contains(ids, "copy-remark-id") {
+		t.Fatalf("stacked review diff, cursor on the remark: want the remark rows, got %q", ids)
+	}
+	var got string
+	m = captureClip(m, &got)
+	nm, cmd := m.diffLayer().update(m, synthKey("L"))
+	drainCmds(t, nm, cmd)
+	if !strings.Contains(got, ":3?review="+id) {
+		t.Fatalf("L in a stack copied %q (notice %q), want the remark link", got, nm.diffNotice)
+	}
+}

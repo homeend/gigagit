@@ -52,12 +52,21 @@ func TestRangedNoteMarksItsLines(t *testing.T) {
 		}
 	}
 
-	// A single-line note marks nothing.
+	// A single-line note marks its one line too (user ruling 2026-10-09: with
+	// several boxes on screen a note without a bar reads as belonging to no
+	// line at all).
 	one := notedView([]domain.ResolvedNote{rootNote("n2", 4, "one line", "", model.NoteSourceUser, model.NoteActive)})
-	for _, line := range m.diffPaneLines(one, 80, 12, 0, 0, "off") {
-		if strings.Contains(line, noteBarGlyph) {
-			t.Fatalf("a one-line note drew a bar: %q", ansiStrip(line))
+	oneBarred := map[int]bool{}
+	for i, line := range m.diffPaneLines(one, 80, 12, 0, 0, "off") {
+		if i >= len(one.disp) || one.disp[i].note != nil {
+			continue
 		}
+		if _, right, _ := strings.Cut(ansiStrip(line), "│"); strings.Contains(right, noteBarGlyph) {
+			oneBarred[one.disp[i].row.RightNo] = true
+		}
+	}
+	if len(oneBarred) != 1 || !oneBarred[4] {
+		t.Errorf("a one-line note on 4 barred lines %v, want exactly line 4", oneBarred)
 	}
 
 	// A hidden agent layer hides its ranges.
