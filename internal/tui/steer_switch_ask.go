@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -94,7 +95,7 @@ func steerAskNotice(a *steerSwitchAsk, repoKey string) *notice {
 				// service at once), another repository the full reload.
 				nm, cmd := m.guardedReRoot(c.Worktree, false)
 				m = nm.(Model)
-				if m.home != "" && !domain.SameCheckout(m.home, c.Worktree) && m.ready {
+				if m.home != "" && m.home != model.KeyOf(c.Worktree) && m.ready {
 					return m, cmd // the swap was refused (a surface, an op): said on the status line, nothing to replay
 				}
 				if c.Cmd == "navigate" {

@@ -23,8 +23,9 @@ import (
 // branches, commits, stashes, tags and the reflog, so none of those is
 // here.
 type worktreeView struct {
-	path string          // cleaned worktree path (the map key)
-	svc  *domain.Service // rooted at path: every read and op of that tree
+	key  model.CheckoutKey // the map key: the path's identity (model.KeyOf)
+	path string            // the worktree path as LISTED (`git worktree list`): what reaches disk, git and the screen
+	svc  *domain.Service   // rooted at path: every read and op of that tree
 
 	status         model.WorkingTreeStatus
 	conflict       domain.ConflictState
@@ -47,27 +48,55 @@ type worktreeView struct {
 // sleeping slot has none (switchView closes them), the live one rebuilds
 // its own on the kick.
 
+// listedWorktree is the Worktrees list's own spelling of the worktree
+// path names (by checkout key: a session, a link or the user's cwd may
+// spell it in another case on a folding platform), and whether it is
+// listed. The listed spelling is the one that reaches disk and git.
+func (m Model) listedWorktree(path string) (string, bool) {
+	key := model.KeyOf(path)
+	for _, w := range m.worktrees {
+		if model.KeyOf(w.Path) == key {
+			return filepath.Clean(w.Path), true
+		}
+	}
+	return "", false
+}
+
 // isRepoWorktree reports whether path is a worktree of the repository on
 // screen — the only paths a slot may be made for.
 func (m Model) isRepoWorktree(path string) bool {
-	dir := filepath.Clean(path)
+	_, ok := m.listedWorktree(path)
+	return ok
+}
+
+// viewPath is the on-disk path behind a slot key: the slot's listed
+// spelling, else the list's, else "" (not a worktree of this repo).
+func (m Model) viewPath(k model.CheckoutKey) string {
+	if v := m.views[k]; v != nil {
+		return v.path
+	}
 	for _, w := range m.worktrees {
-		if filepath.Clean(w.Path) == dir {
-			return true
+		if model.KeyOf(w.Path) == k {
+			return filepath.Clean(w.Path)
 		}
 	}
-	return false
+	return ""
 }
 
 // ensureView is the slot for path, made on first use with a service rooted
 // there. Home is seeded by the first load (dataLoadedMsg), so a caller
 // asking for home gets the live slot back.
 func (m Model) ensureView(path string) *worktreeView {
-	key := filepath.Clean(path)
+	key := model.KeyOf(path)
 	if v, ok := m.views[key]; ok {
 		return v
 	}
-	v := &worktreeView{path: key, svc: domain.OpenTUI(key)}
+	if listed, ok := m.listedWorktree(path); ok {
+		path = listed // the service roots at the spelling git lists
+	} else {
+		path = filepath.Clean(path)
+	}
+	v := &worktreeView{key: key, path: path, svc: domain.OpenTUI(path)}
 	applyServicePolicies(v.svc, m.cfg) // the live service's policies (load.go), or an op here would write version refs the config forbids
 	m.views[key] = v                   // views is a map (a pointer): the value receiver writes through
 	return v
@@ -107,14 +136,19 @@ func (m Model) applyPoliciesToSlots() Model {
 // load after a repo switch, which dropped the slots.
 func (m Model) seedHome(path string) Model {
 	if m.views == nil {
-		m.views = map[string]*worktreeView{}
+		m.views = map[model.CheckoutKey]*worktreeView{}
 	}
 	if m.home != "" && m.views[m.viewed] != nil {
 		return m
 	}
-	m.home = filepath.Clean(path)
+	m.home = model.KeyOf(path)
 	m.viewed = m.home
-	m.views[m.home] = &worktreeView{path: m.home, svc: m.svc, loaded: true} // seeded by a load that landed
+	if listed, ok := m.listedWorktree(path); ok {
+		path = listed
+	} else {
+		path = filepath.Clean(path)
+	}
+	m.views[m.home] = &worktreeView{key: m.home, path: path, svc: m.svc, loaded: true} // seeded by a load that landed
 	return m
 }
 
@@ -123,7 +157,10 @@ func (m Model) saveView() Model {
 	if m.viewed == "" {
 		return m
 	}
-	v := m.ensureView(m.viewed)
+	v := m.views[m.viewed]
+	if v == nil {
+		return m
+	}
 	v.svc = m.svc
 	v.status, v.conflict = m.status, m.conflict
 	v.filesIdx, v.filesIdxReview, v.stagedIdx = m.filesIdx, m.filesIdxReview, m.stagedIdx
@@ -136,7 +173,7 @@ func (m Model) saveView() Model {
 // loadView makes slot v the live one. The open-files registry is already
 // keyed per worktree (openFilesReg.byWT) and stays shared.
 func (m Model) loadView(v *worktreeView) Model {
-	m.viewed = v.path
+	m.viewed = v.key
 	m.svc = v.svc
 	m.currentWorktree = v.path
 	publishedView.Store(v.path) // the session registry says what this TUI shows (another gg's guard)
@@ -154,9 +191,9 @@ func (m Model) loadView(v *worktreeView) Model {
 // worktreeBranch is the branch checked out in the listed worktree at path
 // ("" when detached, or not listed).
 func (m Model) worktreeBranch(path string) string {
-	key := filepath.Clean(path)
+	key := model.KeyOf(path)
 	for _, w := range m.worktrees {
-		if filepath.Clean(w.Path) == key {
+		if model.KeyOf(w.Path) == key {
 			return w.Branch
 		}
 	}
@@ -210,8 +247,8 @@ func (m Model) markHead(branch string) Model {
 // homeWorktree is gg's own worktree: home once the slots are seeded, the
 // current worktree before (a test literal, the first load).
 func (m Model) homeWorktree() string {
-	if m.home != "" {
-		return m.home
+	if v := m.views[m.home]; m.home != "" && v != nil {
+		return v.path
 	}
 	return filepath.Clean(m.currentWorktree)
 }
@@ -236,18 +273,20 @@ func (m Model) homeSvc() *domain.Service {
 // loading marker until its first read — and viewKick makes the Update tail
 // launch its refresh, watcher and docs sync (viewKickCmd).
 func (m Model) switchView(path string) (Model, bool) {
-	key := filepath.Clean(path)
+	key := model.KeyOf(path)
 	if key == m.viewed {
 		return m, true
 	}
 	if m.home == "" {
 		return m, false // before the first load seeds the slots there is nothing to swap from
 	}
-	if !m.isRepoWorktree(key) {
+	listed, ok := m.listedWorktree(path)
+	if !ok {
 		m.statusMsg = i18n.T("%s is not a worktree of this repository", path)
 		return m, false
 	}
-	if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, key); verdict != switchOK {
+	path = listed // the spelling git lists is what is on disk
+	if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, path); verdict != switchOK {
 		m.statusMsg = i18n.T("cannot switch: %s is not reachable from here", path)
 		return m, false
 	}
@@ -258,7 +297,7 @@ func (m Model) switchView(path string) (Model, bool) {
 	m = m.dropWorkingTreeWindows()
 	m = m.saveView()
 	m = m.sleepView()
-	m = m.loadView(m.ensureView(key))
+	m = m.loadView(m.ensureView(path))
 	m.viewKick = true
 	return m, true
 }
@@ -396,7 +435,7 @@ func (m Model) takeQueuedReturn() Model {
 		return m // still held: the Update tail tries again once the surface or the op clears
 	}
 	m.pendingReturnView = ""
-	m, _ = m.switchView(p)
+	m, _ = m.switchView(m.viewPath(p))
 	return m
 }
 
@@ -405,7 +444,7 @@ func (m Model) takeQueuedReturn() Model {
 // worktree was removed under us) — the slot goes, home comes back, its
 // list read will say the rest. false when the view is fine.
 func (m Model) abandonGoneView() (Model, bool) {
-	if m.viewed == "" || m.viewed == m.home || guardStat(m.viewed) == nil {
+	if m.viewed == "" || m.viewed == m.home || guardStat(m.viewPath(m.viewed)) == nil {
 		return m, false
 	}
 	if m.switchRefusal() != "" {
@@ -415,8 +454,8 @@ func (m Model) abandonGoneView() (Model, bool) {
 		m.pendingReturnView = m.home
 		return m, false
 	}
-	gone := m.viewed
-	delete(m.views, gone)
+	gone := m.viewPath(m.viewed)
+	delete(m.views, m.viewed)
 	home := m.views[m.home]
 	if home == nil {
 		return m, false
@@ -431,7 +470,7 @@ func (m Model) abandonGoneView() (Model, bool) {
 	m.srcInflight = map[sourceKey]bool{}
 	m.srcLoading = map[sourceKey]bool{}
 	m.viewKick = true
-	m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.home))
+	m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.homeWorktree()))
 	return m, true
 }
 
@@ -439,8 +478,8 @@ func (m Model) abandonGoneView() (Model, bool) {
 // recycled, pruned). The viewed one going falls back to home: its
 // service would point at a tree that is not there.
 func (m Model) pruneViews() Model {
-	for key := range m.views {
-		if m.isRepoWorktree(key) || key == m.home {
+	for key, v := range m.views {
+		if m.isRepoWorktree(v.path) || key == m.home {
 			continue
 		}
 		if key == m.viewed && m.switchRefusal() != "" {
@@ -452,7 +491,7 @@ func (m Model) pruneViews() Model {
 		}
 		delete(m.views, key)
 		if key == m.viewed {
-			gone := key
+			gone := v.path
 			if home := m.views[m.home]; home != nil {
 				m = m.dropWorkingTreeWindows()
 				m = m.sleepView()
@@ -460,7 +499,7 @@ func (m Model) pruneViews() Model {
 				m = m.loadView(home)
 				m.viewKick = true
 			}
-			m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.home))
+			m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.homeWorktree()))
 		}
 	}
 	return m
@@ -478,9 +517,10 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.home = m.viewed
-	m.switchTarget = m.viewed
+	home := m.homeWorktree()
+	m.switchTarget = home
 	m.pendingReturnView = "" // a return queued to the OLD home is moot: the user asked to be here
-	publishedWT.Store(m.viewed)
+	publishedWT.Store(home)
 	removeSnapshotFile(m.snapshotPath)
 	m.snapshotPath, m.snapshotCommonDir, m.snapshotWorktree, m.lastSnapshot = "", "", "", nil
 	m = m.closeSteerInbox()
@@ -488,8 +528,8 @@ func (m Model) adoptView() (Model, tea.Cmd) {
 	if m.console != nil && m.console.ret != nil {
 		m.console.ret.view = m.home
 	}
-	m.statusMsg = i18n.T("switched to %s", shortWorktreeName(m.home))
-	return m, tea.Batch(snapshotTargetCmd(m.svc), m.webRerootCmd(), touchRepoMRUCmd(m.home, m.linkRepoName))
+	m.statusMsg = i18n.T("switched to %s", shortWorktreeName(home))
+	return m, tea.Batch(snapshotTargetCmd(m.svc), m.webRerootCmd(), touchRepoMRUCmd(home, m.linkRepoName))
 }
 
 // touchRepoMRUCmd records the adopted worktree in the repo switcher's MRU
@@ -517,7 +557,8 @@ func touchRepoMRUCmd(path, remote string) tea.Cmd {
 func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	order := m.worktreeOrder()
 	n := len(order)
-	at := m.worktreeIndex(m.viewed)
+	viewed := m.viewPath(m.viewed)
+	at := m.worktreeIndex(viewed)
 	if m.console != nil || !m.panelFocused(panelBranches) || m.activeLeftTab != panelBranches {
 		if m.console != nil {
 			if m.console.ret != nil {
@@ -527,9 +568,9 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 			m = m.closeConsole()
 		}
 		m = m.activateTab(panelBranches)
-		m = m.selectWorktreeBranch(m.viewed)
+		m = m.selectWorktreeBranch(viewed)
 		if at < n {
-			m.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(m.viewed), at+1, n)
+			m.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(viewed), at+1, n)
 		}
 		return m, nil
 	}
@@ -547,7 +588,7 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 		return nm, nil
 	}
 	nm.pendingReturnView = ""
-	nm = nm.selectWorktreeBranch(nm.viewed)
+	nm = nm.selectWorktreeBranch(wt.Path)
 	nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(wt.Path), next+1, n)
 	return nm, nil
 }

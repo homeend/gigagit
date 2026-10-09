@@ -64,6 +64,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   directory under its panels; the panels go home first.
 - The `alt+A` state dump names home, the viewed worktree and a queued
   return.
+- On Windows and macOS a session, a `gg://` link or your shell's cwd can
+  spell a worktree in another case than `git worktree list` does; the
+  remembered worktrees compared paths byte for byte, so such a console
+  never swapped the panels, a second slot could be made for one directory
+  and the self-guard could offer to delete your own worktree. Every
+  worktree identity now uses one checkout key (`model.CheckoutKey`: the
+  rule the link resolver already used), and disk, git and the screen get
+  the listed spelling.
 
 ### Added
 - A switch between worktrees of ONE repository is now a swap of remembered

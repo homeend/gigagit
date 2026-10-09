@@ -18,9 +18,9 @@ func TestWorktreeRowsMarkTheViewedOne(t *testing.T) {
 			t.Fatalf("rows = %q: only the viewed row carries * ", rows)
 		}
 	}
-	m, _ = m.switchView(m.home)
+	m, _ = m.switchView(m.homeWorktree())
 	for _, r := range m.worktreeRows(m.worktreeEntries()) {
-		if strings.HasPrefix(r, "* ") != strings.Contains(r, m.home) {
+		if strings.HasPrefix(r, "* ") != strings.Contains(r, m.homeWorktree()) {
 			t.Fatalf("rows = %q: * must be back on home", rows)
 		}
 	}

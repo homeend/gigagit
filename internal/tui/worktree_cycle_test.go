@@ -1,10 +1,11 @@
 package tui
 
 import (
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // alt+w walks the Worktrees panel's list: from the viewed worktree to the
@@ -21,7 +22,7 @@ func TestAltWCyclesTheWorktreesAndWraps(t *testing.T) {
 	home := m.home
 	start := -1
 	for i, w := range m.worktrees {
-		if filepath.Clean(w.Path) == home {
+		if model.KeyOf(w.Path) == home {
 			start = i
 		}
 	}
@@ -30,7 +31,7 @@ func TestAltWCyclesTheWorktreesAndWraps(t *testing.T) {
 	}
 	for step := 1; step <= 3; step++ {
 		m = pressAlt(t, m, 'w')
-		want := filepath.Clean(m.worktrees[(start+step)%3].Path)
+		want := model.KeyOf(m.worktrees[(start+step)%3].Path)
 		if m.viewed != want {
 			t.Fatalf("press %d: viewed = %q, want %q", step, m.viewed, want)
 		}
@@ -68,18 +69,18 @@ func TestAltWFirstHidesTheConsoleAndFocusesBranches(t *testing.T) {
 	installSessionManager(t)
 	id := startSessionIn(t, m, other, "Shell")
 	m, _ = m.showConsole(id, false)
-	if m.viewed != filepath.Clean(other) || m.focus != panelCommits {
+	if m.viewed != model.KeyOf(other) || m.focus != panelCommits {
 		t.Fatalf("precondition: viewed=%q focus=%v", m.viewed, m.focus)
 	}
 	m = pressAlt(t, m, 'w')
-	if m.console != nil || m.viewed != filepath.Clean(other) || m.focus != panelBranches || m.activeLeftTab != panelBranches {
+	if m.console != nil || m.viewed != model.KeyOf(other) || m.focus != panelBranches || m.activeLeftTab != panelBranches {
 		t.Fatalf("first hit: console=%v viewed=%q focus=%v tab=%v", m.console != nil, m.viewed, m.focus, m.activeLeftTab)
 	}
 	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(other) {
 		t.Fatalf("Branches cursor on %+v, want the branch of %s", b, other)
 	}
 	m = pressAlt(t, m, 'w')
-	if m.console != nil || m.viewed == filepath.Clean(other) {
+	if m.console != nil || m.viewed == model.KeyOf(other) {
 		t.Fatalf("second hit: console=%v viewed=%q, want the next worktree", m.console != nil, m.viewed)
 	}
 }
@@ -145,7 +146,7 @@ func TestAltWHidesABoundConsoleAndFocusesBranches(t *testing.T) {
 	if m.focus != panelBranches || m.activeLeftTab != panelBranches || !m.panelFocused(panelBranches) {
 		t.Fatalf("focus=%v tab=%v, want the Branches panel", m.focus, m.activeLeftTab)
 	}
-	if m.viewed != filepath.Clean(other) {
+	if m.viewed != model.KeyOf(other) {
 		t.Fatalf("viewed=%q, want the console's worktree kept", m.viewed)
 	}
 }
@@ -178,7 +179,7 @@ func TestAltWHidesAMaximisedConsoleToo(t *testing.T) {
 	m, _ = m.showConsole(id, true)
 	m.console.maximized = true
 	m = pressAlt(t, m, 'w')
-	if m.console != nil || m.focus != panelBranches || m.viewed != filepath.Clean(other) {
+	if m.console != nil || m.focus != panelBranches || m.viewed != model.KeyOf(other) {
 		t.Fatalf("console=%v focus=%v viewed=%q", m.console != nil, m.focus, m.viewed)
 	}
 }
@@ -224,14 +225,14 @@ func TestAltWAfterAltAHidesTheConsoleOnItsWorktree(t *testing.T) {
 	if m.console != nil || m.focus != panelBranches || m.viewed != at {
 		t.Fatalf("alt+w: console=%v focus=%v viewed=%q, want hidden, Branches, %q", m.console != nil, m.focus, m.viewed, at)
 	}
-	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(at) {
+	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(m.viewPath(at)) {
 		t.Fatalf("Branches cursor on %+v, want the branch of %s", b, at)
 	}
 	m = pressAlt(t, m, 'w')
 	if m.viewed == at || m.console != nil {
 		t.Fatalf("second alt+w: viewed=%q console=%v, want the next worktree", m.viewed, m.console != nil)
 	}
-	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(m.viewed) {
+	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(m.viewPath(m.viewed)) {
 		t.Fatalf("Branches cursor on %+v, want the branch of %s", b, m.viewed)
 	}
 }
@@ -257,15 +258,15 @@ func TestAltWFollowsTheBranchesTabsSortOrder(t *testing.T) {
 			t.Fatalf("row %d is %s, order says %s", i, name, m.worktrees[sorted[i]].Branch)
 		}
 	}
-	var visited []string
+	var visited []model.CheckoutKey
 	for range 3 {
 		m = pressAlt(t, m, 'w')
 		visited = append(visited, m.viewed)
 	}
-	var want []string
-	at := m.worktreeIndex(m.home)
+	var want []model.CheckoutKey
+	at := m.worktreeIndex(m.homeWorktree())
 	for i := 1; i <= 3; i++ {
-		want = append(want, filepath.Clean(m.worktrees[sorted[(at+i)%3]].Path))
+		want = append(want, model.KeyOf(m.worktrees[sorted[(at+i)%3]].Path))
 	}
 	if !slices.Equal(visited, want) {
 		t.Fatalf("visited %v, want the tab's order %v", visited, want)

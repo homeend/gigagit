@@ -78,7 +78,7 @@ func TestQueuedReturnDrainsAfterAStagingRound(t *testing.T) {
 	m, _ = m.showConsole(id, false)
 	m.running = true // a stage in flight
 	m = m.closeConsole()
-	if m.viewed != filepath.Clean(other) || m.pendingReturnView != m.home {
+	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home {
 		t.Fatalf("viewed=%q pending=%q", m.viewed, m.pendingReturnView)
 	}
 	nm, _ := m.Update(statusRefreshedMsg{status: m.status})
@@ -108,7 +108,7 @@ func TestConsoleCloseUnderADecisionQueuesTheReturn(t *testing.T) {
 	m, _ = m.showConsole(id, false)
 	m.modal = &decisionState{} // a commit question over the console's worktree
 	m = m.closeConsole()
-	if m.viewed != filepath.Clean(other) || m.pendingReturnView != m.home {
+	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home {
 		t.Fatalf("swapped under the decision: viewed=%q pending=%q", m.viewed, m.pendingReturnView)
 	}
 	m.modal = nil
@@ -125,8 +125,8 @@ func TestPruneViewsHoldsUnderADecision(t *testing.T) {
 	m.modal = &decisionState{}
 	m = dropWorktreeFromList(m, other)
 	m = m.pruneViews()
-	if m.viewed != filepath.Clean(other) || m.pendingReturnView != m.home || m.views[filepath.Clean(other)] == nil {
-		t.Fatalf("swapped under the decision: viewed=%q pending=%q slot kept=%v", m.viewed, m.pendingReturnView, m.views[filepath.Clean(other)] != nil)
+	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home || m.views[model.KeyOf(other)] == nil {
+		t.Fatalf("swapped under the decision: viewed=%q pending=%q slot kept=%v", m.viewed, m.pendingReturnView, m.views[model.KeyOf(other)] != nil)
 	}
 }
 
@@ -187,9 +187,9 @@ func TestConsoleCloseDropsParkedWorkingLayersOverAnotherWorktree(t *testing.T) {
 	id := startSessionIn(t, m, other, "Shell")
 	m = m.pushLayer(&diffView{title: "f", rev: ""}) // home's working diff
 	m, _ = m.showConsole(id, false)                 // parks it, shows other
-	m.console.ret.view = filepath.Clean(other)      // alt+w's first hit: the panels stay on other
+	m.console.ret.view = model.KeyOf(other)         // alt+w's first hit: the panels stay on other
 	m = m.closeConsole()
-	if m.viewed != filepath.Clean(other) {
+	if m.viewed != model.KeyOf(other) {
 		t.Fatalf("viewed=%q", m.viewed)
 	}
 	if m.topLayer() != nil {
@@ -202,7 +202,7 @@ func TestConsoleCloseDropsParkedWorkingLayersOverAnotherWorktree(t *testing.T) {
 func TestSteerFileCommandsCompareWithTheViewedWorktree(t *testing.T) {
 	m := loadedModel(t)
 	m, other := viewedOther(t, m)
-	if why, mismatch := m.steerShownMismatch(steer.Command{Worktree: m.home}); !mismatch || !strings.Contains(why, filepath.Clean(other)) {
+	if why, mismatch := m.steerShownMismatch(steer.Command{Worktree: m.homeWorktree()}); !mismatch || !strings.Contains(why, filepath.Clean(other)) {
 		t.Fatalf("home's agent while %s is shown: mismatch=%v why=%q", other, mismatch, why)
 	}
 	if why, mismatch := m.steerShownMismatch(steer.Command{Worktree: other}); mismatch {

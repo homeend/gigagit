@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/model"
+
 	"github.com/homeend/gigagit/internal/domain"
 )
 
@@ -55,7 +57,7 @@ func TestAltABindsTheViewedWorktreesOwnSessionFirst(t *testing.T) {
 	m, other := addWorktree(t, m, "wt2")
 	installSessionManager(t)
 	startSessionIn(t, m, other, "Other")
-	home := startSessionIn(t, m, m.home, "Home")
+	home := startSessionIn(t, m, m.homeWorktree(), "Home")
 	m = pressAlt(t, m, 'a')
 	if m.console == nil || m.console.id != home || !m.console.focused {
 		t.Fatalf("console=%+v, want the viewed worktree's own session bound", m.console)
@@ -92,7 +94,7 @@ func TestAltAStartsAtTheViewedWorktreeAndWraps(t *testing.T) {
 		t.Fatal("switchView refused")
 	}
 	m = pressAlt(t, m, 'a')
-	if m.console == nil || m.console.id != idA || m.viewed != filepath.Clean(wtA) {
+	if m.console == nil || m.console.id != idA || m.viewed != model.KeyOf(wtA) {
 		t.Fatalf("console=%+v viewed=%q, want A (wrapped from the end)", m.console, m.viewed)
 	}
 }
@@ -172,11 +174,11 @@ func TestAltAAfterAltWStartsFromTheViewedWorktree(t *testing.T) {
 		t.Fatalf("alt+a: console=%+v, want B (the first below home)", m.console)
 	}
 	m = pressAlt(t, m, 'w') // first hit: hides B's console, Branches focused, still wtB
-	if m.viewed != filepath.Clean(wtB) || m.console != nil || m.focus != panelBranches {
+	if m.viewed != model.KeyOf(wtB) || m.console != nil || m.focus != panelBranches {
 		t.Fatalf("alt+w: viewed=%q console=%v focus=%v", m.viewed, m.console != nil, m.focus)
 	}
 	m = pressAlt(t, m, 'w') // moves on to wtC
-	if m.viewed != filepath.Clean(wtC) {
+	if m.viewed != model.KeyOf(wtC) {
 		t.Fatalf("second alt+w: viewed=%q, want wtC", m.viewed)
 	}
 	m = pressAlt(t, m, 'a')

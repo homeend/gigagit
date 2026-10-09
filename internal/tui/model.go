@@ -94,13 +94,13 @@ type Model struct {
 	// views remembers the worktree-scoped state per worktree of this
 	// repository (worktree_view.go); viewed is the slot on screen, home the
 	// one gg's identity (exit dir, steering, snapshot) belongs to.
-	views    map[string]*worktreeView
-	viewed   string
-	home     string
+	views    map[model.CheckoutKey]*worktreeView
+	viewed   model.CheckoutKey
+	home     model.CheckoutKey
 	viewKick bool // switchView ran; the Update tail launches viewKickCmd once
 	// pendingReturnView is where a closed console's view goes once the
 	// operation that refused the swap has finished (console.go returnView).
-	pendingReturnView string
+	pendingReturnView model.CheckoutKey
 	recycleBranch     string // branch captured when the Recycle-a-worktree picker opened
 	recycleRemote     string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
 
@@ -566,7 +566,7 @@ func New(svc *domain.Service) Model {
 		loading:                true,
 		loadStart:              time.Now(),
 		sel:                    map[panel]int{},
-		views:                  map[string]*worktreeView{},
+		views:                  map[model.CheckoutKey]*worktreeView{},
 		sortModes:              map[panel]sortMode{panelBranches: sortDateDesc},
 		dispModes:              map[panel]dispMode{},
 		hscroll:                map[panel]int{},
@@ -5030,7 +5030,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	closeDocWatch(m.docWatch.w)                         // the old tree's files are not the new one's
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
-	m.views = map[string]*worktreeView{} // another repository: its worktrees are not these
+	m.views = map[model.CheckoutKey]*worktreeView{} // another repository: its worktrees are not these
 	m.viewed, m.home, m.pendingReturnView = "", "", ""
 	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go
 	m = m.withWorkingReviews(nil)

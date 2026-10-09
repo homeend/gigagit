@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"path/filepath"
-
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -213,8 +211,8 @@ func (m Model) canDeleteWorktree() bool {
 	}
 	// Neither gg's own worktree (home — its cwd, exit dir and steering) nor
 	// the one a console has on screen (the op would run inside it).
-	key := filepath.Clean(wt.Path)
-	return key != m.homeWorktree() && key != m.viewed
+	key := model.KeyOf(wt.Path)
+	return key != model.KeyOf(m.homeWorktree()) && key != m.viewed
 }
 
 // canMoveWorktree gates e / the rename+move menu rows on Worktrees: any
@@ -236,12 +234,12 @@ func (m Model) canEnterWorktree() bool {
 	// first load seeds the slots, the current worktree is the one on screen.
 	viewed, home := m.viewed, m.home
 	if viewed == "" {
-		viewed = filepath.Clean(m.currentWorktree)
+		viewed = model.KeyOf(m.currentWorktree)
 	}
 	if home == "" {
 		home = viewed
 	}
-	return filepath.Clean(wt.Path) != viewed || viewed != home
+	return model.KeyOf(wt.Path) != viewed || viewed != home
 }
 
 // canShowCommitFiles gates l: the commit files view needs a resolvable
