@@ -160,3 +160,19 @@ func TestSwapRederivesTheWipRows(t *testing.T) {
 		t.Fatalf("%d WIP rows over the clean worktree: home's rows survived the swap", len(m.wipRows))
 	}
 }
+
+// The viewed tree is gone while an op runs: the slot cannot go yet, but the
+// return home it queues must reach the model (the caller keeps the copy).
+func TestGoneViewUnderAnOpQueuesTheReturnHome(t *testing.T) {
+	m := loadedModel(t)
+	m, other := viewedOther(t, m)
+	if err := os.RemoveAll(other); err != nil {
+		t.Fatal(err)
+	}
+	m.running = true
+	nm, _ := m.Update(dataAvailableMsg{source: srcStatus, gen: m.srcGen[srcStatus], err: errors.New("gone")})
+	m = nm.(Model)
+	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home {
+		t.Fatalf("viewed=%q pending=%q; want the slot kept and the return home queued", m.viewed, m.pendingReturnView)
+	}
+}

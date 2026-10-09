@@ -112,6 +112,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The `WIP` rows of the Commits list stayed the leaving worktree's when no
   head mark moved on the swap (both worktrees detached, their tips off the
   loaded page).
+- A shown worktree removed while an operation ran lost its queued return
+  home (the queue was written to a discarded copy); the panels now go home
+  when the operation ends.
 
 ### Added
 - A switch between worktrees of ONE repository is now a swap of remembered

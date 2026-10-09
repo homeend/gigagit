@@ -641,22 +641,22 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("this repository has one worktree — alt+w cycles them once there are more")
 		return m, nil
 	}
-	next := 0
+	next, tries := 0, n // viewed but unlisted: every stop is a candidate
 	if at < n {
-		next = (at + 1) % n
+		next, tries = (at+1)%n, n-1
 	}
 	// A worktree that cannot be reached from here (another environment's
 	// notation, a directory gone) is skipped, named, and the ring moves on
 	// — refusing it would leave the ring stuck behind it.
 	var skipped []string
-	for range n - 1 {
+	for range tries {
 		if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, m.worktrees[order[next]].Path); verdict == switchOK {
 			break
 		}
 		skipped = append(skipped, shortWorktreeName(m.worktrees[order[next]].Path))
 		next = (next + 1) % n
 	}
-	if len(skipped) == n-1 {
+	if len(skipped) == tries {
 		m.statusMsg = i18n.T("no other worktree is reachable from here")
 		return m, nil
 	}
