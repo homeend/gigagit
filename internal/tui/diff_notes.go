@@ -164,9 +164,10 @@ func (ns noteSpans) at(file int, old bool, no int) (lipgloss.Style, bool) {
 	return lipgloss.Style{}, false
 }
 
-// noteSpans lists the ranges the view's notes cover — only notes about more
-// than one line: a single-line note already sits right under its line. A
-// hidden agent layer hides its ranges too, and so does a note with no box.
+// noteSpans lists the lines the view's notes cover, a single-line note's one
+// line included (user ruling 2026-10-09: beside a ranged note's bar, a box
+// without one reads as belonging to no line). A hidden agent layer hides its
+// ranges too, and so does a note with no box.
 func (v *diffView) noteSpans() noteSpans {
 	var out noteSpans
 	s := st()
@@ -176,8 +177,8 @@ func (v *diffView) noteSpans() noteSpans {
 			lo, hi = v.fileLineRange(file)
 		}
 		for _, r := range ns {
-			if r.Range[1] <= r.Range[0] || r.Note.IsReply() {
-				continue
+			if r.Range[0] <= 0 || r.Range[1] < r.Range[0] || r.Note.IsReply() {
+				continue // a file-level note, a broken range, a reply (its root marks the lines)
 			}
 			agent := r.Note.Source == model.NoteSourceAgent
 			if agent && v.hideAgent {

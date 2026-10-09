@@ -55,6 +55,32 @@ The TUI rows and send panel (plan 2) and the web (plan 3) follow.
 - Skills: using-gg v161, reviewing-with-gg v17, gg-review v4,
   gg-cross-review v5, gg-overview v2 (`gg init --update`).
 
+## Stacked review diff: the remark rows are back, and the menus are checked
+
+### Fixed
+
+- **TUI:** in a STACKED review diff (the review view with `S` on), the `.`
+  menu on a remark had no *Copy remark link* / *Copy remark id*, and `L`
+  copied nothing: both read the review id off the stack's top view, which
+  names no review — its files carry the id their own loaders stamped. They
+  now ask the cursor's file, as the note rows do.
+
+### Changed
+
+- **TUI:** a one-line note draws the gutter bar (`▎`) beside its line, as a
+  ranged note does beside each of its lines. Until now only a note about
+  several lines had one, so next to such a note a single-line box looked as
+  if it belonged to no line.
+
+### Tests
+
+- **TUI:** single-vs-stacked `.` menu parity. Four tests open the same diff
+  single-file and stacked — a review's remark, a commit's note, a working-tree
+  note, a pull request's note — land on the note and compare the whole menu;
+  the only rows allowed to differ are the stack's own (fold, fold all, jump),
+  each with its reason in the test. A row that reads the stack's top view
+  instead of the cursor's file fails the build instead of waiting to be found.
+
 ## Stacked PR diff: the note rows are back
 
 ### Changed
