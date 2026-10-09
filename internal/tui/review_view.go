@@ -18,7 +18,7 @@ import (
 
 // The review view: a structured AI review (domain.Review.Doc) opens as the
 // files view of the reviewed commit — or, for a range review, of its range —
-// in a review mode: an "≡ Overview" row first, ◆n on each file the review
+// in a review mode: an "≡ Summary" row first, ◆n on each file the review
 // notes, the file's one-line summary under it, and in the diff ONLY the
 // review's notes (read-only, built at read time). A prose review opens in the
 // viewer with its markdown rendered instead.
@@ -270,7 +270,7 @@ func reviewMetaLine(st *reviewViewState) string {
 	return strings.Join(parts, " · ")
 }
 
-// reviewTreeLines is the review mode's file list: the Overview row, then the
+// reviewTreeLines is the review mode's file list: the Summary row, then the
 // commit's files with ◆n on each file the review places notes on and that
 // file's summary (dim, not a file) under it.
 func reviewTreeLines(st *reviewViewState, files []contentLine) []contentLine {
@@ -282,7 +282,7 @@ func reviewTreeLines(st *reviewViewState, files []contentLine) []contentLine {
 			}
 		}
 	}
-	out := []contentLine{{text: "≡ " + i18n.T("Overview"), overview: true}}
+	out := []contentLine{{text: "≡ " + i18n.T("Summary"), summary: true}}
 	for _, l := range files {
 		if l.path == "" {
 			out = append(out, l)
@@ -351,22 +351,22 @@ func (m Model) reviewReadOnlyNotice() string {
 	return i18n.T("▸ review notes are read-only — gg review --notes keeps them")
 }
 
-// reviewOverviewPopup is the review's overview: its markdown rendered, its
+// reviewSummaryPopup is the review's summary: its markdown rendered, its
 // meta, and the notes the tree cannot place ("Other notes"). It is prose to
 // read, so it has no row cursor; o lists the other notes to open one, y copies
-// the overview's markdown.
-type reviewOverviewPopup struct {
+// the summary's markdown.
+type reviewSummaryPopup struct {
 	*contentPopup
 	st *reviewViewState
 }
 
-// openReviewOverview pushes the overview of the open review view.
-func (m Model) openReviewOverview() (Model, tea.Cmd) {
+// openReviewSummary pushes the summary of the open review view.
+func (m Model) openReviewSummary() (Model, tea.Cmd) {
 	st := m.filesReview
 	if st == nil || st.review.Doc == nil {
 		return m, nil
 	}
-	cp := newContentPopup(i18n.T("Review: %s", reviewLabel(st.review)), reviewOverviewLines(st))
+	cp := newContentPopup(i18n.T("Review: %s", reviewLabel(st.review)), reviewSummaryLines(st))
 	cp.mode = modeWrap // prose
 	cp.noCursor = true
 	cp.prose = true
@@ -374,12 +374,12 @@ func (m Model) openReviewOverview() (Model, tea.Cmd) {
 	if n := len(st.other); n > 0 {
 		cp.keys += "  " + i18n.T("[o] other notes (%d)", n)
 	}
-	return m.pushLayer(&reviewOverviewPopup{contentPopup: cp, st: st}), nil
+	return m.pushLayer(&reviewSummaryPopup{contentPopup: cp, st: st}), nil
 }
 
-// reviewOverviewLines lays out the overview: the markdown, the document's
+// reviewSummaryLines lays out the summary: the markdown, the document's
 // meta, then the other notes as "path:line — summary" rows.
-func reviewOverviewLines(st *reviewViewState) []contentLine {
+func reviewSummaryLines(st *reviewViewState) []contentLine {
 	doc := st.review.Doc
 	out := prMarkdownLines(doc.Summary, "")
 	if len(doc.Meta) > 0 {
@@ -452,11 +452,11 @@ func reviewMetaText(meta []notebatch.MetaKV) string {
 	return strings.Join(parts, " · ")
 }
 
-func (p *reviewOverviewPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+func (p *reviewSummaryPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if !p.typing { // while the / filter is capturing, every key is query text
 		switch msg.String() {
 		case "y":
-			return m, m.copyToClipboardCmd(i18n.T("copied the review overview"), p.st.review.Doc.Summary)
+			return m, m.copyToClipboardCmd(i18n.T("copied the review summary"), p.st.review.Doc.Summary)
 		case "o":
 			if len(p.st.other) == 0 {
 				return m, nil

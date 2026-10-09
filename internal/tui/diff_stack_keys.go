@@ -20,7 +20,7 @@ func (m Model) buildTreeStack() []stackFile {
 	}
 	var out []stackFile
 	for _, l := range m.filesView.visible() {
-		if l.shelfNote != "" { // a shelved set's note: its text reads in place, like a review's overview
+		if l.shelfNote != "" { // a shelved set's note: its text reads in place, like a review's summary
 			if f, ok := m.shelfNoteStackFile(l.shelfNote); ok {
 				out = append(out, f)
 			}
@@ -32,8 +32,8 @@ func (m Model) buildTreeStack() []stackFile {
 		out = append(out, stackFile{path: l.path, oldPath: l.oldPath, status: l.status, line: l})
 	}
 	if st := m.filesReview; st != nil && st.review.Doc != nil && len(out) > 0 {
-		// The review view's overview reads first, above the files.
-		ov := stackFile{overview: true, load: stackLoaded,
+		// The review view's summary reads first, above the files.
+		ov := stackFile{summary: true, load: stackLoaded,
 			prose: mdRows(markdown.Parse(st.review.Doc.Summary), m.stackProseWidth())}
 		if len(st.review.Doc.Meta) > 0 {
 			ov.prose = append(ov.prose, mdRow{}, mdRow{text: reviewMetaText(st.review.Doc.Meta)})
@@ -273,8 +273,8 @@ func (m Model) stackJumpMenu(v *diffView) Model {
 		f := v.stk.files[i]
 		idx := i
 		label := f.status + "  " + f.path
-		if f.overview {
-			label = "≡ " + f.overviewLabel()
+		if f.summary {
+			label = "≡ " + f.proseLabel()
 		}
 		rows = append(rows, actionRow{
 			id:    "stack-file",

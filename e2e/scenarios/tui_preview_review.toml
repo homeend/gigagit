@@ -41,7 +41,7 @@ screen_contains = ["Reviews", "└ Review:", "a.txt"]
 [[tui.step]]
 name = "review-view"
 keys = ["down", "enter"]
-screen_contains = ["Review: feature → main", "Overview"]
+screen_contains = ["Review: feature → main", "Summary"]
 
 [[tui.step]]
 name = "back-to-preview"

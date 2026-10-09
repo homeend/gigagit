@@ -34,7 +34,7 @@ screen_contains = ["Reviews", "D  a.txt"]
 [[tui.step]]
 name = "review"
 keys = ["down", "enter"]
-screen_contains = ["Overview", "a.txt"]
+screen_contains = ["Summary", "a.txt"]
 
 # a.txt's row: the review-aware file link sits beside Copy review link.
 [[tui.step]]

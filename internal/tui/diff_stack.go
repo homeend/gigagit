@@ -36,7 +36,7 @@ const (
 	linePlace                  // a stacked file's one-line state: loading / binary / too large / error / no difference / conflict
 	lineGap                    // the blank line that opens a stacked file
 	lineRule                   // the rule under a stacked file's header
-	lineProse                  // one rendered row of the review view's overview (diffLine.prose indexes it)
+	lineProse                  // one rendered row of the review view's summary (diffLine.prose indexes it)
 	lineImage                  // one row of a stacked image file's small side-by-side pair (diffLine.prose indexes it)
 )
 
@@ -107,22 +107,22 @@ type stackFile struct {
 	bin                   bool // numstat says binary
 	start                 int  // index of this file's FIRST line in v.lines (its blank line; the header on the first file)
 	hdr                   int  // index of this file's header line (stamped by spliceStack)
-	// overview is the review view's overview, the stack's first element: no
+	// summary is the review view's summary, the stack's first element: no
 	// file and no diff — prose is its markdown, rendered once when the stack
 	// is built. Never loaded (load stays stackLoaded with a nil d).
-	overview bool
-	prose    []mdRow
-	// label names a prose element that is not the review's overview — a
-	// shelved set's note, by its summary; "" = "Overview".
+	summary bool
+	prose   []mdRow
+	// label names a prose element that is not the review's summary — a
+	// shelved set's note, by its summary; "" = "Summary".
 	label string
 }
 
-// overviewLabel is a prose element's header text.
-func (f stackFile) overviewLabel() string {
+// proseLabel is a prose element's header text.
+func (f stackFile) proseLabel() string {
 	if f.label != "" {
 		return f.label
 	}
-	return i18n.T("Overview")
+	return i18n.T("Summary")
 }
 
 // diffStack is the open stack: which list it came from and its files.
@@ -220,7 +220,7 @@ func (v *diffView) spliceStack() {
 		if f.collapsed {
 			continue
 		}
-		if f.overview {
+		if f.summary {
 			for j := range f.prose {
 				v.lines = append(v.lines, diffLine{file: i, kind: lineProse, prose: j})
 			}
@@ -715,8 +715,8 @@ func (v *diffView) syncStackTitle() {
 	}
 	f := v.stk.files[v.curFile()]
 	v.title = f.path
-	if f.overview {
-		v.title = f.overviewLabel()
+	if f.summary {
+		v.title = f.proseLabel()
 	}
 }
 

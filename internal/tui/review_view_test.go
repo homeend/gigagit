@@ -57,8 +57,8 @@ func TestReviewViewTree(t *testing.T) {
 		t.Fatalf("review view not open: filesView=%v review=%v mode=%v", m.filesView != nil, m.filesReview, m.filesMode)
 	}
 	vis := m.filesView.visible()
-	if !vis[0].overview || !strings.Contains(vis[0].text, "Overview") {
-		t.Fatalf("first row %+v, want the Overview row", vis[0])
+	if !vis[0].summary || !strings.Contains(vis[0].text, "Summary") {
+		t.Fatalf("first row %+v, want the Summary row", vis[0])
 	}
 	a, i := filesLine(t, m, "a.go")
 	if !strings.Contains(a.text, "◆ 1") {
@@ -67,10 +67,10 @@ func TestReviewViewTree(t *testing.T) {
 	if !strings.Contains(vis[i+1].text, "adds A") || vis[i+1].path != "" || !vis[i+1].dim || vis[i+1].heading {
 		t.Fatalf("row after a.go %+v, want its summary (dim, not a heading: the sticky line names directories)", vis[i+1])
 	}
-	// The Overview row leads the box itself: no "." directory line above it.
+	// The Summary row leads the box itself: no "." directory line above it.
 	view := ansi.Strip(m.View())
 	if strings.Contains(view, "│ .  ") || strings.Contains(view, "│ . ") {
-		t.Fatalf("a root-dir sticky line sits above the Overview:\n%s", view)
+		t.Fatalf("a root-dir sticky line sits above the Summary:\n%s", view)
 	}
 	for _, l := range vis {
 		if l.noteID != "" {
@@ -85,12 +85,12 @@ func TestReviewViewTree(t *testing.T) {
 	}
 }
 
-func TestReviewOverviewPopupRendersMarkdown(t *testing.T) {
+func TestReviewSummaryPopupRendersMarkdown(t *testing.T) {
 	t.Parallel()
 	m, _ := openedReviewView(t)
 	u, _ := m.openDiffForFileLine(m.filesView.visible()[0])
 	m = u.(Model)
-	p := layerOf[*reviewOverviewPopup](m)
+	p := layerOf[*reviewSummaryPopup](m)
 	if p == nil {
 		t.Fatalf("no overview popup; top %T", m.topLayer())
 	}
@@ -249,9 +249,9 @@ func TestReviewViewNPStepsFilesWithNotes(t *testing.T) {
 	}
 }
 
-// Stacked, the review's overview is the first element: its own header, then
+// Stacked, the review's summary is the first element: its own header, then
 // the rendered markdown, then the files; N from it lands on the first file.
-func TestReviewStackPutsTheOverviewFirst(t *testing.T) {
+func TestReviewStackPutsTheSummaryFirst(t *testing.T) {
 	t.Parallel()
 	m, _ := openedReviewView(t)
 	m = m.setStackedPref(true)
@@ -259,13 +259,13 @@ func TestReviewStackPutsTheOverviewFirst(t *testing.T) {
 	u, cmd := m.openDiffForFileLine(l)
 	m = drainCmds(t, u.(Model), cmd)
 	v := m.diffLayer()
-	if v == nil || v.stk == nil || len(v.stk.files) == 0 || !v.stk.files[0].overview {
-		t.Fatalf("stack %+v, want the overview first", v)
+	if v == nil || v.stk == nil || len(v.stk.files) == 0 || !v.stk.files[0].summary {
+		t.Fatalf("stack %+v, want the summary first", v)
 	}
 	w, _ := m.overlayDims()
 	hdr := ansi.Strip(m.stackRow(v, dRow{line: v.stk.files[0].hdr, kind: lineHeader}, w, false))
-	if !strings.Contains(hdr, "Overview") {
-		t.Fatalf("overview header %q", hdr)
+	if !strings.Contains(hdr, "Summary") {
+		t.Fatalf("summary header %q", hdr)
 	}
 	var prose []string
 	for i, ln := range v.lines {
@@ -278,7 +278,7 @@ func TestReviewStackPutsTheOverviewFirst(t *testing.T) {
 		t.Fatalf("overview rows:\n%s", text)
 	}
 	for _, f := range v.stk.files[1:] {
-		if f.overview || f.path == "" {
+		if f.summary || f.path == "" {
 			t.Fatalf("only the first element is the overview: %+v", f)
 		}
 	}
@@ -289,14 +289,14 @@ func TestReviewStackPutsTheOverviewFirst(t *testing.T) {
 	}
 }
 
-// Through the real key path: enter on ≡ Overview opens the overview.
-func TestReviewOverviewOpensOnEnterKey(t *testing.T) {
+// Through the real key path: enter on ≡ Summary opens the summary.
+func TestReviewSummaryOpensOnEnterKey(t *testing.T) {
 	t.Parallel()
 	m, _ := openedReviewView(t)
 	m.filesView.sel = 0
 	m, _ = updateKey(m, "enter")
-	if layerOf[*reviewOverviewPopup](m) == nil {
-		t.Fatalf("enter on the Overview row: top %T", m.topLayer())
+	if layerOf[*reviewSummaryPopup](m) == nil {
+		t.Fatalf("enter on the Summary row: top %T", m.topLayer())
 	}
 }
 
@@ -357,7 +357,7 @@ func TestReviewViewOpensFromTheBranchesTab(t *testing.T) {
 	if m.filesReview == nil || m.focus != panelCommits || !m.filesTreeFocused {
 		t.Fatalf("review=%v focus=%v tree=%v", m.filesReview != nil, m.focus, m.filesTreeFocused)
 	}
-	if view := ansi.Strip(m.View()); !strings.Contains(view, "≡ Overview") {
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "≡ Summary") {
 		t.Fatalf("the review view is not on screen:\n%s", view)
 	}
 	m, _ = updateKey(m, "esc")
@@ -366,9 +366,9 @@ func TestReviewViewOpensFromTheBranchesTab(t *testing.T) {
 	}
 }
 
-// The overview is prose to read, not rows to pick: no "> " cursor and no
+// The summary is prose to read, not rows to pick: no "> " cursor and no
 // reverse-video band over its first paragraph.
-func TestReviewOverviewHasNoCursor(t *testing.T) {
+func TestReviewSummaryHasNoCursor(t *testing.T) {
 	t.Parallel()
 	m, _ := openedReviewView(t)
 	m.filesView.sel = 0
@@ -378,8 +378,8 @@ func TestReviewOverviewHasNoCursor(t *testing.T) {
 		t.Fatalf("overview not shown:\n%s", view)
 	}
 	for _, l := range strings.Split(view, "\n") {
-		if strings.Contains(l, "> Overview") || strings.Contains(l, "> Looks fine") {
-			t.Fatalf("a row cursor sits in the overview: %q", l)
+		if strings.Contains(l, "> Summary") || strings.Contains(l, "> Looks fine") {
+			t.Fatalf("a row cursor sits in the summary: %q", l)
 		}
 	}
 	if !strings.Contains(view, "[o] other notes (1)") {
@@ -403,7 +403,7 @@ func TestReviewOverviewOtherNotesKey(t *testing.T) {
 		t.Fatalf("other-notes list lacks the selected note:\n%s", view)
 	}
 	m, _ = updateKey(m, "esc")
-	if _, ok := m.topLayer().(*reviewOverviewPopup); !ok {
+	if _, ok := m.topLayer().(*reviewSummaryPopup); !ok {
 		t.Fatalf("esc from the list: top %T, want the overview", m.topLayer())
 	}
 	m, _ = updateKey(m, "o")
@@ -431,7 +431,7 @@ func TestReviewOverviewNoOtherNotes(t *testing.T) {
 }
 
 // With an agent console docked (unfocused), the review view's tree keeps the
-// keyboard: enter on ≡ Overview opens the overview, not the console.
+// keyboard: enter on ≡ Summary opens the summary, not the console.
 func TestReviewTreeKeepsKeysWithConsoleDocked(t *testing.T) {
 	t.Parallel()
 	m, _ := openedReviewView(t)
@@ -441,7 +441,7 @@ func TestReviewTreeKeepsKeysWithConsoleDocked(t *testing.T) {
 	if m.console.focused {
 		t.Fatal("enter on the tree focused the docked console")
 	}
-	if layerOf[*reviewOverviewPopup](m) == nil {
+	if layerOf[*reviewSummaryPopup](m) == nil {
 		t.Fatalf("enter on Overview with a console docked: top %T", m.topLayer())
 	}
 }
@@ -566,5 +566,30 @@ func TestReviewAgeUsesTheFrozenClock(t *testing.T) {
 	got := reviewMetaLine(&reviewViewState{review: domain.Review{Created: created, Agent: "a"}})
 	if want := ageString(at, created); !strings.Contains(got, want) {
 		t.Fatalf("reviewMetaLine = %q, want the age %q against the frozen clock", got, want)
+	}
+}
+
+// R12: the first row is the review's SUMMARY — the text GitHub gets — under
+// that name; "Overview" is the stored overview's row.
+func TestReviewViewFirstRowIsSummary(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	vis := m.filesView.visible()
+	if len(vis) == 0 || !vis[0].summary || vis[0].text != "≡ Summary" {
+		t.Fatalf("first row = %+v, want the ≡ Summary row", vis[0])
+	}
+	for _, l := range vis {
+		if strings.Contains(l.text, "≡ Overview") {
+			t.Fatalf("a review without a stored overview draws no Overview row: %q", l.text)
+		}
+	}
+	u, _ := m.openDiffForFileLine(vis[0])
+	m = u.(Model)
+	p := layerOf[*reviewSummaryPopup](m)
+	if p == nil {
+		t.Fatal("enter on ≡ Summary must open the summary popup")
+	}
+	if !strings.Contains(ansi.Strip(m.View()), "Review: ") {
+		t.Fatal("the summary popup keeps its Review: <label> title")
 	}
 }

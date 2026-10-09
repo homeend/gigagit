@@ -130,7 +130,7 @@ func TestShelfNoteInTheStack(t *testing.T) {
 		t.Fatalf("want the note + 2 files, got %d: %+v", len(fs), fs)
 	}
 	nf := fs[0]
-	if !nf.overview || nf.label != "Recycled from /x/wt-a (feat)" {
+	if !nf.summary || nf.label != "Recycled from /x/wt-a (feat)" {
 		t.Fatalf("the note leads the stack as a prose element labelled by its summary, got %+v", nf)
 	}
 	var prose []string
@@ -154,12 +154,12 @@ func TestShelfNoteInTheStack(t *testing.T) {
 		t.Fatalf("files follow the note in list order: %+v", fs[1:])
 	}
 
-	// The header names the note, not "Overview".
+	// The header names the note, not "Summary".
 	stk := &diffStack{files: fs}
 	v := &diffView{stk: stk}
 	v.rebuild()
 	hdr := m.stackRow(v, dRow{line: fs[0].hdr, kind: lineHeader}, 100, false)
-	if !strings.Contains(hdr, "wt-a (feat)") || strings.Contains(hdr, "Overview") {
+	if !strings.Contains(hdr, "wt-a (feat)") || strings.Contains(hdr, "Summary") {
 		t.Fatalf("the note's header names its summary: %q", hdr)
 	}
 }

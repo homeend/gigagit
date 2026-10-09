@@ -39,13 +39,13 @@ screen_contains = ["All notes", "TAILWORD"]
 keys = ["esc", "esc"]
 
 # The reviewed commit's Files view → its review row → the review view's
-# ≡ Overview → enter shows the overview, ctrl+t maximizes it.
+# ≡ Summary → enter shows the summary, ctrl+t maximizes it.
 [[tui.step]]
 name = "overview"
 keys = ["right", "enter", "down", "enter", "enter", "C-t"]
 screen_contains = ["Overview", "Verdict"]
 
-# S in the review view stacks its files under the review's Overview, whose
+# S in the review view stacks its files under the review's Summary, whose
 # prose wraps in the same centred 120-column reading column.
 [[tui.step]]
 name = "stack-overview"

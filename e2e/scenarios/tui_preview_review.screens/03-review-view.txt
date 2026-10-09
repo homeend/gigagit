@@ -2,7 +2,7 @@ local  branch main                                                              
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Review: feature → main                            ││ Commits (all) 2                                                                                         │
 │ Claude Code · just now · 1 notes on 1 files       ││   ●  ↓   feature grow a                                                                                 │
-│ > ≡ Overview                                      ││   ●  ↓   *main   add a                                                                                  │
+│ > ≡ Summary                                       ││   ●  ↓   *main   add a                                                                                  │
 │   M  a.txt  ◆ 1                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

@@ -88,4 +88,4 @@ screen_contains = ["a new file, untracked", "review · fake"]
 [[tui.step]]
 name = "review-view"
 keys = ["esc", "up", "enter"]
-screen_contains = ["≡ Overview", "Review: working changes"]
+screen_contains = ["≡ Summary", "Review: working changes"]
