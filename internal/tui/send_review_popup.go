@@ -230,13 +230,22 @@ type keptSendBody struct {
 	text    string
 }
 
+// sendGroupPanel keys the send panel's typed body in keptSendBody: one per
+// PR, whatever is ticked (A8).
+const sendGroupPanel = "panel"
+
 // from reports whether req is the send this kept body's box made (C8): the
-// same PR and the same box — Verdict…, my draft review, or that AI review.
+// same PR and the same box — the send panel (a Notes send), Verdict…, my
+// draft review, or that AI review.
 func (k *keptSendBody) from(req domain.PRSendRequest) bool {
-	if k == nil || !req.BodySet || k.pr != req.PR || k.verdict != req.Verdict {
+	if k == nil || !req.BodySet || k.pr != req.PR {
 		return false
 	}
 	switch {
+	case len(req.Notes) > 0:
+		return k.group == sendGroupPanel && !k.verdict
+	case k.verdict != req.Verdict:
+		return false
 	case req.Verdict:
 		return true
 	case req.Mine:

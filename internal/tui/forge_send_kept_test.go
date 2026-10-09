@@ -99,3 +99,46 @@ func TestAFailedResolveDoesNotSayTheTextIsKept(t *testing.T) {
 		t.Fatalf("status = %q", m.statusMsg)
 	}
 }
+
+// Plan 1 Task 7: a review posted whose draft replies then failed comes back
+// as (Changed, err) with no Done for the replies. It is still the user's own
+// change: the PR is re-read as "my send" (not "updated") and the typed body,
+// which reached GitHub, is dropped.
+func TestAPostedReviewWithFailedRepliesIsStillMyChange(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m.prReadSeq = 3
+	sent := domain.PRSendRequest{PR: 7, Notes: []string{"n1"}, Verdict: true, Body: "typed", BodySet: true}
+	m.keptSendBody = &keptSendBody{pr: 7, group: sendGroupPanel, text: "typed"}
+	m, _ = m.forgeSendFinished(&forgeSendState{pr: 7, req: sent}, engine.Result{Changed: true}, errors.New("the review was posted; replies: network down"))
+	if m.prOwnSend != 7 || m.prOwnSendSeq != 3 {
+		t.Fatalf("own send not recorded: pr %d seq %d", m.prOwnSend, m.prOwnSendSeq)
+	}
+	if m.keptSendBody != nil {
+		t.Fatal("the body reached GitHub: nothing to keep")
+	}
+}
+
+// A8: the panel's typed body is kept under its own key, per PR; the verdict
+// box keeps its own; neither claims the other's text.
+func TestPanelAndVerdictKeepSeparateBodies(t *testing.T) {
+	t.Parallel()
+	var m Model
+	m.keptSendBody = &keptSendBody{pr: 7, group: sendGroupPanel, text: "panel text"}
+	if got, ok := m.keptBodyFor(7, sendGroupPanel, false); !ok || got != "panel text" {
+		t.Fatalf("panel body = %q %v", got, ok)
+	}
+	if _, ok := m.keptBodyFor(7, "", true); ok {
+		t.Fatal("the verdict box must not see the panel's text")
+	}
+	if _, ok := m.keptBodyFor(8, sendGroupPanel, false); ok {
+		t.Fatal("another PR must not see it")
+	}
+	panelReq := domain.PRSendRequest{PR: 7, Notes: []string{"n1"}, Verdict: true, Body: "panel text", BodySet: true}
+	if !m.keptSendBody.from(panelReq) {
+		t.Fatal("the panel's own send clears its kept body")
+	}
+	if m.keptSendBody.from(domain.PRSendRequest{PR: 7, Verdict: true, Body: "x", BodySet: true}) {
+		t.Fatal("a verdict-only send is not the panel's")
+	}
+}
