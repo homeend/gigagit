@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## Fast worktree switch (TUI)
 
+### Changed
+- The worktrees you look at share the repository's caches (commit diffs,
+  blames, commit file lists, compare file sets, preview summaries): one
+  budget per repository instead of one per worktree, and a commit's diff
+  viewed from one worktree is a hit from another. Nothing worktree-bound
+  enters them — a diff or blame of uncommitted changes is never cached.
+
 ### Fixed
 - A console closed while an operation ran returned the panels home at the
   operation's end BEFORE its chained step dispatched — a dirty switch's

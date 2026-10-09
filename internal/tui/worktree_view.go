@@ -112,7 +112,13 @@ func (m Model) ensureView(path string) *worktreeView {
 	} else {
 		path = filepath.Clean(path)
 	}
-	v := &worktreeView{key: key, path: path, svc: domain.OpenTUI(path)}
+	var svc *domain.Service
+	if home := m.views[m.home]; home != nil && home.svc != nil {
+		svc = domain.OpenTUISharing(path, home.svc) // the repository's caches are one set: a diff cached from home is a hit here
+	} else {
+		svc = domain.OpenTUI(path) // home is seeded by the first load before any slot is made; total anyway
+	}
+	v := &worktreeView{key: key, path: path, svc: svc}
 	applyServicePolicies(v.svc, m.cfg) // the live service's policies (load.go), or an op here would write version refs the config forbids
 	m.views[key] = v                   // views is a map (a pointer): the value receiver writes through
 	return v

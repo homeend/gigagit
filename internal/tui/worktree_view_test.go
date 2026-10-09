@@ -5,9 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -388,5 +390,28 @@ func TestVersionsSettingReachesEverySlot(t *testing.T) {
 	m = m.saveVersionsRetention(3)
 	if p := v.svc.VersionsPolicy(); p.MaxAgeDays != 3 {
 		t.Fatalf("slot retention = %d after the save, want 3", p.MaxAgeDays)
+	}
+}
+
+// A slot's service shares home's caches: a diff cached through home is a
+// hit through the slot (the same key with other content comes back as
+// home's answer).
+func TestSlotServicesShareHomesCaches(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	v := m.ensureView(other)
+	bytes := func(s string) domain.ByteSource {
+		return func(context.Context) ([]byte, error) { return []byte(s), nil }
+	}
+	first, err := m.svc.Differ().Diff(context.Background(), domain.Request{Key: "slot:k", Path: "a.go", Old: bytes("x\n"), New: bytes("y\n")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := v.svc.Differ().Diff(context.Background(), domain.Request{Key: "slot:k", Path: "a.go", Old: bytes("x\n"), New: bytes("z\n")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(second, first) {
+		t.Fatal("the slot's service computed its own diff: it does not share home's caches")
 	}
 }
