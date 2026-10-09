@@ -27,7 +27,7 @@ recipe.
    <worktree> — starting gg web for the overview") and start the web page
    yourself, DETACHED — it runs until the user stops it, so never wait on
    it: `gg web --open` in that worktree, in the background, its output in a
-   log file (`nohup gg web --open >"$TMPDIR/gg-web.log" 2>&1 &` in sh;
+   log file (`nohup gg web --open >"${TMPDIR:-/tmp}/gg-web.log" 2>&1 &` in sh;
    `Start-Process gg -ArgumentList 'web','--open' -WindowStyle Hidden
    -RedirectStandardError $env:TEMP\gg-web.log` in PowerShell). Run `gg
    session overview list` again until it exits 0 (a few seconds; give up
