@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Conflict tools: long pasted values fit the window
+
+### Fixed
+
+- **A stack trace pasted into a conflict tool's `<user:…>` value no longer
+  draws the tool-inputs box or the approval box past the screen.** The
+  inputs box windows its fields like the text templates' fill step (↑/↓ and
+  PgUp/PgDn walk the value). The approval box shows the command in a pane
+  that ↑/↓ and PgUp/PgDn scroll, with its shown range on the rule; the
+  approval note now wraps instead of being cut.
+
 ## Text template token help
 
 ### Added

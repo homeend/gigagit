@@ -358,20 +358,7 @@ func (v *textTemplatesView) onRendered(msg textTemplateRenderedMsg) {
 }
 
 func (v *textTemplatesView) updateFill(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
-	// ↑/↓ and the page keys walk a multi-line value (a pasted stack trace);
-	// the window follows the cursor.
-	switch page := max(1, v.fillRoom(m)-1); msg.Type {
-	case tea.KeyUp:
-		v.fill.moveLines(-1)
-		return m, nil
-	case tea.KeyDown:
-		v.fill.moveLines(1)
-		return m, nil
-	case tea.KeyPgUp:
-		v.fill.moveLines(-page)
-		return m, nil
-	case tea.KeyPgDown:
-		v.fill.moveLines(page)
+	if v.fill.scrollKey(msg, v.fillRoom(m)-1) {
 		return m, nil
 	}
 	done, cancel := v.fill.handleKey(msg)
