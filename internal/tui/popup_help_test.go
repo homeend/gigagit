@@ -183,3 +183,30 @@ func TestPrefixTokensHelpContent(t *testing.T) {
 		}
 	}
 }
+
+// The text-template sheet is the prefix sheet plus what only a text template
+// has: <branch>, and a <…> that is not a token staying literal.
+func TestTextTemplateTokensHelpContent(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 6, 11, 14, 5, 9, 0, time.UTC)
+	var joined strings.Builder
+	for _, l := range textTemplateTokensHelp(now) {
+		joined.WriteString(l.text + "\n")
+	}
+	s := joined.String()
+	for _, want := range []string{
+		"<branch>", "<user:LABEL>", "<seq:NAME:N>", "<date:FMT>", "<random-num:N>",
+		"yyyy", "2026-06-11", "20260611-1405",
+		"stays in the text as written",
+		"the same as <branch> here", // no branch is being made
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("text template help sheet missing %q", want)
+		}
+	}
+	for _, l := range prefixTokensHelp(now) {
+		if strings.Contains(l.text, "<branch>") || strings.Contains(l.text, "as written") {
+			t.Errorf("the prefix sheet must not list text-only rules: %q", l.text)
+		}
+	}
+}

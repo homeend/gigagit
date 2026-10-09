@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Text template token help
+
+### Added
+
+- **`ctrl+d` on the text-template form (`alt+x` → `n`/`e`) opens a token
+  cheat sheet**, like the branch-prefix form's: every token with what it
+  becomes, `<branch>`, the rule that any other `<…>` stays as written, the
+  date-format verbs and live examples. The form's key hints advertise it.
+
 ## Text templates: long pasted values fit the window
 
 ### Fixed
