@@ -3,7 +3,7 @@ diff: big.txt  @ PR #7 · Change line 5                                         
   2 line 2                                                                     │  2 line 2
   3 line 3                                                                     │  3 line 3
   4 line 4                                                                     │  4 line 4
-  5 line 5                                                                     │  5 line 5 changed
+  5 line 5                                                                     │  5▎line 5 changed
                                                                                │╭─ ○ note · agent · big.txt R5 ───────────────────────────────────────────────╮
                                                                                ││                                                                             │
                                                                                ││ why changed?                                                                │

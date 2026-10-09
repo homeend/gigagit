@@ -16,6 +16,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   names no review — its files carry the id their own loaders stamped. They
   now ask the cursor's file, as the note rows do.
 
+### Changed
+
+- **TUI:** a one-line note draws the gutter bar (`▎`) beside its line, as a
+  ranged note does beside each of its lines. Until now only a note about
+  several lines had one, so next to such a note a single-line box looked as
+  if it belonged to no line.
+
 ### Tests
 
 - **TUI:** single-vs-stacked `.` menu parity. Four tests open the same diff
