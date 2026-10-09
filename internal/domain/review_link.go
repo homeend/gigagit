@@ -427,10 +427,10 @@ type ReviewShow struct {
 	Link    string    `json:"link"`
 	// Working: a review of uncommitted changes (HEAD ↔ the working tree);
 	// Base and Tip are then empty.
-	Working  bool               `json:"working,omitempty"`
-	Overview string             `json:"overview"`
-	Meta     map[string]string  `json:"meta,omitempty"`
-	Remarks  []ReviewShowRemark `json:"remarks"`
+	Working bool               `json:"working,omitempty"`
+	Summary string             `json:"summary"`
+	Meta    map[string]string  `json:"meta,omitempty"`
+	Remarks []ReviewShowRemark `json:"remarks"`
 	// Resolved counts the resolved remarks; Outdated lists the threads
 	// whose remark is gone from the re-saved review.
 	Resolved int                  `json:"resolved"`
@@ -461,12 +461,12 @@ func (s *Service) ReviewShow(ctx context.Context, id string) (ReviewShow, error)
 		return ReviewShow{}, err
 	}
 	out := ReviewShow{ID: r.ID, Agent: r.Agent, Created: r.Created, Branch: r.Branch, Tip: t.Commit,
-		Link: link, Overview: r.Text, Remarks: []ReviewShowRemark{}, Working: r.Kind == ReviewOnWorktree}
+		Link: link, Summary: r.Text, Remarks: []ReviewShowRemark{}, Working: r.Kind == ReviewOnWorktree}
 	if t.Pair != nil {
 		out.Base, out.Tip = t.Pair.A, t.Pair.B
 	}
 	if r.Doc != nil {
-		out.Overview, out.Meta = r.Doc.Overview, metaMap(r.Doc.Meta)
+		out.Summary, out.Meta = r.Doc.Summary, metaMap(r.Doc.Meta)
 	}
 	th, outdated := r.RemarkThreads()
 	for _, x := range reviewRemarksIn(r, t, repo) {

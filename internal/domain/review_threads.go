@@ -171,7 +171,7 @@ const summaryFP = "summary"
 // summaryText is r's summary as stored: a document's overview, else its text.
 func (r Review) summaryText() string {
 	if r.Doc != nil {
-		return strings.TrimSpace(r.Doc.Overview)
+		return strings.TrimSpace(r.Doc.Summary)
 	}
 	return strings.TrimSpace(r.Text)
 }

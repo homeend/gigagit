@@ -15,7 +15,7 @@ func TestParseReviewFullDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Overview != "## Overview\nok" || len(doc.Files) != 1 || len(doc.Files[0].Notes) != 2 {
+	if doc.Summary != "## Overview\nok" || len(doc.Files) != 1 || len(doc.Files[0].Notes) != 2 {
 		t.Fatalf("%+v", doc)
 	}
 	if doc.Files[0].Summary != "one line" {
@@ -98,7 +98,7 @@ func TestParseReviewUnwrapsFenceAndEnvelope(t *testing.T) {
 		"envelope":            `{"type":"result","result":` + strconv.Quote(body) + `}`,
 		"envelope with fence": `{"type":"result","result":` + strconv.Quote("```json\n"+body+"\n```") + `}`,
 	} {
-		if doc, err := ParseReview([]byte(in)); err != nil || doc.Overview != "ok" {
+		if doc, err := ParseReview([]byte(in)); err != nil || doc.Summary != "ok" {
 			t.Errorf("%s: %+v %v", name, doc, err)
 		}
 	}

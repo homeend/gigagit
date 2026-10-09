@@ -197,3 +197,24 @@ func TestReviewShowNarrowedHidesOutdatedThreads(t *testing.T) {
 		t.Fatalf("a link with no path narrows nothing: %+v", whole)
 	}
 }
+
+// The review's text is its SUMMARY on the wire (spec §0): "overview" is
+// the stored walk, added later.
+func TestReviewShowJSONSaysSummary(t *testing.T) {
+	t.Parallel()
+	dir, _ := reviewedRepo(t) // review_show_test.go's fixture: one stored review on HEAD
+	code, out, errs := runCLI(t, dir, "review", "show", "--json", "latest")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["summary"]; !ok {
+		t.Fatalf("no \"summary\" key: %s", out)
+	}
+	if _, ok := got["overview"]; ok {
+		t.Fatalf("\"overview\" must not carry the summary any more: %s", out)
+	}
+}

@@ -457,7 +457,7 @@ func printReview(w io.Writer, content string) {
 		}
 		return
 	}
-	fmt.Fprintln(w, strings.TrimRight(doc.Overview, "\n"))
+	fmt.Fprintln(w, strings.TrimRight(doc.Summary, "\n"))
 	if len(doc.Meta) > 0 {
 		fmt.Fprintf(w, "\n%s\n", metaText(doc.Meta))
 	}

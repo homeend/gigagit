@@ -47,11 +47,12 @@ type ReviewFile struct {
 	Notes         []ReviewNote
 }
 
-// ReviewDoc is a parsed review document. Overview is the markdown summary.
+// ReviewDoc is a parsed review document. Summary is the review's own
+// markdown text (what a forge gets as the review body).
 type ReviewDoc struct {
-	Overview string
-	Meta     []MetaKV
-	Files    []ReviewFile
+	Summary string
+	Meta    []MetaKV
+	Files   []ReviewFile
 }
 
 type rawReview struct {
@@ -94,7 +95,7 @@ func ParseReview(data []byte) (ReviewDoc, error) {
 	if strings.TrimSpace(raw.Summary) == "" {
 		return ReviewDoc{}, notDoc("summary is empty")
 	}
-	doc := ReviewDoc{Overview: raw.Summary}
+	doc := ReviewDoc{Summary: raw.Summary}
 	var err error
 	if doc.Meta, err = metaKVs(raw.Meta); err != nil {
 		return ReviewDoc{}, err
@@ -266,7 +267,7 @@ func toCanonMeta(kvs []MetaKV) canonMeta {
 // Canonical is the document in its documented shape, indented: what gg stores,
 // so a stored review reads the same whatever wrapping the agent used.
 func (d ReviewDoc) Canonical() []byte {
-	c := canonDoc{Version: 1, Summary: d.Overview, Meta: toCanonMeta(d.Meta)}
+	c := canonDoc{Version: 1, Summary: d.Summary, Meta: toCanonMeta(d.Meta)}
 	for _, f := range d.Files {
 		cf := canonFile{Path: f.Path, Summary: f.Summary, Meta: toCanonMeta(f.Meta)}
 		for _, n := range f.Notes {

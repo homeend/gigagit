@@ -117,7 +117,7 @@ func printReviewShow(w io.Writer, rs domain.ReviewShow) {
 	if len(rs.Remarks) > 0 {
 		fmt.Fprintf(w, "%d of %d resolved\n", rs.Resolved, len(rs.Remarks))
 	}
-	fmt.Fprintln(w, strings.TrimRight(rs.Overview, "\n"))
+	fmt.Fprintln(w, strings.TrimRight(rs.Summary, "\n"))
 	if len(rs.Meta) > 0 {
 		fmt.Fprintf(w, "\n%s\n", metaMapText(rs.Meta))
 	}

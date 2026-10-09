@@ -77,7 +77,7 @@ func quoteLines(line int, text []string) string {
 func reviewSendBody(r Review) string {
 	text := r.Text
 	if r.Doc != nil {
-		text = r.Doc.Overview
+		text = r.Doc.Summary
 	}
 	n := model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: strings.TrimSpace(text)}
 	return sendBody(n, r.ID, "")

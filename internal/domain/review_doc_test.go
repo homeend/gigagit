@@ -45,8 +45,8 @@ func TestSaveReviewStoresCanonicalJSON(t *testing.T) {
 	if _, err := notebatch.ParseReview([]byte(r.Text)); err != nil {
 		t.Fatal(err)
 	}
-	if r.Doc.Overview != "## Overview\nfine" {
-		t.Fatalf("overview %q", r.Doc.Overview)
+	if r.Doc.Summary != "## Overview\nfine" {
+		t.Fatalf("overview %q", r.Doc.Summary)
 	}
 }
 
