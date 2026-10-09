@@ -753,14 +753,18 @@ func cleanLinkRelPath(rel string) (string, error) {
 func linkSplit(abs, checkout string) (string, bool) {
 	a := filepath.ToSlash(filepath.Clean(abs))
 	c := filepath.ToSlash(filepath.Clean(checkout))
-	if linkPathKey(a) == linkPathKey(c) {
+	ka, kc := linkPathKey(a), linkPathKey(c)
+	if ka == kc {
 		return "", true
 	}
-	pre := c
+	// The separator goes on the KEY: keying "<checkout>/" would clean the
+	// slash away and make a sibling checkout whose name extends this one's
+	// ("…-switch-2" beside "…-switch") look like it sits inside.
+	pre := kc
 	if !strings.HasSuffix(pre, "/") {
 		pre += "/"
 	}
-	if !strings.HasPrefix(linkPathKey(a), linkPathKey(pre)) {
+	if !strings.HasPrefix(ka, pre) {
 		return "", false
 	}
 	return a[len(pre):], true

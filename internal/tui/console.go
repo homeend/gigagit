@@ -142,20 +142,31 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 	m.focus = panelCommits
 	m = m.syncConsoleSizeIfFocused()
 	// A shown console ⇔ the viewed worktree is the console's: tab out of
-	// it and the panels are already that tree's. A refusal (an op running)
-	// keeps the view and says so; the console shows regardless.
+	// it and the panels are already that tree's. A refusal (an op running,
+	// a surface) keeps the view for now and says so; the console shows
+	// regardless and the swap is QUEUED — the Update tail performs it once
+	// the op or the surface clears, as a console's return is.
 	m.pendingReturnView = "" // a return queued by an earlier close is moot: this console's own return point rules
 	if dir := s.Info().Dir; model.KeyOf(dir) != m.viewed && m.isRepoWorktree(dir) {
-		m, _ = m.switchView(dir)
+		var ok bool
+		if m, ok = m.switchView(dir); !ok {
+			m.pendingReturnView = model.KeyOf(dir)
+		}
 	}
 	return m, waitSessionCmd(m.console, id, gen)
 }
 
 // returnView brings the worktree a console was shown over back when the
 // console closes. An operation running refuses the swap for now: the
-// return is kept (pendingReturnView) and happens when the op ends.
+// return is kept (pendingReturnView) and happens when the op ends. A
+// return point already on screen cancels whatever was queued — a show
+// whose swap never happened.
 func (m Model) returnView(r *consoleReturn) Model {
-	if r == nil || r.view == "" || r.view == m.viewed {
+	if r == nil || r.view == "" {
+		return m
+	}
+	if r.view == m.viewed {
+		m.pendingReturnView = "" // a show queued while the panels could not swap is moot: the return point is on screen
 		return m
 	}
 	path := m.viewPath(r.view)

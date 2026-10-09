@@ -98,8 +98,10 @@ type Model struct {
 	viewed   model.CheckoutKey
 	home     model.CheckoutKey
 	viewKick bool // switchView ran; the Update tail launches viewKickCmd once
-	// pendingReturnView is where a closed console's view goes once the
-	// operation that refused the swap has finished (console.go returnView).
+	// pendingReturnView is where the panels go once the op or the surface
+	// that refused a non-key swap clears: a closed console's return, a
+	// shown console's own worktree, a gone slot (console.go returnView /
+	// showConsole, worktree_view.go takeQueuedReturn).
 	pendingReturnView model.CheckoutKey
 	recycleBranch     string // branch captured when the Recycle-a-worktree picker opened
 	recycleRemote     string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
@@ -660,6 +662,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next.viewKick = false
 		next.srcInflight[srcStatus] = true // silent: no srcLoading, no ⏳ gate
 		next.srcInflight[srcNotes] = true
+		next.srcInflight[srcFeed] = true
 		cmd = tea.Batch(cmd, next.viewKickCmd())
 	}
 	if next.startAtReady() {

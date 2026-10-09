@@ -6285,8 +6285,11 @@ error arm asks `abandonGoneView` (dir gone? → home comes back, every
 viewed worktree is the console's. `showConsole` swaps after attaching;
 `consoleReturn.view` (captured on the first show, carried across a console
 replacing a console) is where `closeConsole` → `returnView` goes;
-`forgetConsoleReturn` clears it on a repo switch. A refusal (an op running)
-on SHOW keeps the view, said on the status line; on CLOSE the return is
+`forgetConsoleReturn` clears it on a repo switch. A refusal (an op running,
+a surface) on SHOW keeps the view for now, said on the status line, and
+QUEUES the console's worktree in `pendingReturnView` (the Update tail
+swaps once clear; `returnView` clears the queue when its return point is
+already on screen — the console closed before the swap); on CLOSE the return is
 queued in `pendingReturnView` and `opFinishedMsg` performs it
 (`takeQueuedReturn`) — AFTER it has decided nothing further runs in the
 op's worktree: a chained op (`chainSwitch`, `pushTags`, `noticeCfg`) and
@@ -6301,12 +6304,22 @@ submit through `m.svc` = B); the non-key swaps (`returnView`,
 tail `takeQueuedReturn`s once clear (so a staging round drains it too).
 A swap closes the leaving tree's WORKING-TREE windows
 (`dropWorkingTreeWindows`: `workingTreeWindow` = a diff with `rev == ""`,
-a blame of a working file, a file viewer; plus the F window) — their keys
+a blame of a working file, a file viewer; plus the F window —
+`filesModeWorktree` only: a commit's/stash's/compare's files view is the
+repository's) — their keys
 resolve paths through `m.svc`; commit diffs/history/compare stay. A
 console's parked stack records `ret.over`; `parkedLayersFor` restores
 the working-tree layers only when the view is that worktree again.
-`sleepView` (watchers closed, the five gens bumped) is shared by
-`switchView` and both drop paths. Worktree-scoped async results carry
+`sleepView` (watchers closed, the five gens bumped, `srcFeed` retired) is shared by
+`switchView` and both drop paths. The commit feed is ONE shared
+`CommitFeed` re-rooted by `loadView` (`CommitFeed.SetService`: the walk's
+`--branches HEAD` is then the viewed tree's — a detached HEAD's commits,
+and no walk from a deleted old home after an adopt); the kick reads
+`srcFeed` (a reconcile) so the list catches up without a flash.
+`loadView` assigns `workingReviews` BEFORE `withStatus` (the Review row
+is derived from the reviews) and carries `resumePromptShown` per slot
+(saved/loaded with the status) so a round trip through another tree does
+not re-fire the paused-op prompt. Worktree-scoped async results carry
 `svc` (`statusRefreshedMsg`, `stageHunksLoadedMsg`,
 `unstageHunksLoadedMsg`, `conflictFileLoadedMsg`, `amendPrefillMsg`) and
 are dropped when `msg.svc != m.svc`. Steering compares a command's
@@ -6317,8 +6330,8 @@ slot's first `srcStatus` arrival (`markViewLoaded`; home seeded loaded) —
 also reads `srcNotes` (badges are per checkout; `sleepView` retires it).
 The snapshot's `Repo.Viewed` names a look, `Branch`/`Head` stay home's
 (`snapRepoIdentity`). `steer_switch_ask` and `goto_link` go through
-`guardedReRoot` (fast in-repo path; a refusal is detected by `home` not
-having moved and the replay is not armed; a link's `--at` sets
+`guardedReRoot` (fast in-repo path; a refusal is detected by `viewed` not
+being the target — home itself may be the target — and the replay is not armed; a link's `--at` sets
 `startAtPreviewsSeen` on the fast path since the repo's previews are
 loaded). `publishedView` (set in `loadView`, cleared with `publishedWT`
 on a repo switch) rides `PublishSessions` → `Registry.Viewed`, which
@@ -6383,5 +6396,8 @@ sentence.
 **Tests.** `worktree_view_test.go` (slots, switchView, stale read, sleep,
 prune, adopt, repo switch), `console_view_test.go` (show/close, staging
 lands in the viewed tree, the alt+a ring over two worktrees, refusals),
+`switch_audit_test.go` / `switch_audit2_test.go` / `review_fixes_test.go`
+/ `round2_switch_test.go` (the three review rounds' findings; domain
+`round2_switch_test.go` for `linkSplit` and `SetService`),
 `view_worktrees_test.go`, the hint tests, e2e
 `tui_worktree_switch_fast.toml` (three goldens).

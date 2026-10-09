@@ -61,6 +61,20 @@ func (s *Service) CommitFeed() *CommitFeed {
 	return &CommitFeed{svc: s, hashes: map[string]bool{}, cache: map[string]cachedScope{}, pager: pagerForMode(s, mode)}
 }
 
+// SetService re-roots the feed at another worktree of the same repository:
+// the walk's HEAD is that tree's (a detached HEAD's commits show only from
+// its own checkout), the page strategy stays. The loaded accumulation is
+// kept — the next Refresh reconciles page 0 from the new root.
+func (f *CommitFeed) SetService(s *Service) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.svc == s {
+		return
+	}
+	f.svc = s
+	f.pager = pagerForMode(s, f.pager.Name())
+}
+
 // PagerName reports the active page strategy ("plain" | "date-order").
 func (f *CommitFeed) PagerName() string {
 	f.mu.Lock()
