@@ -4210,7 +4210,10 @@ restricted to the viewed worktree (`sessionRingIn`), silent with none;
 focused console, bound or not (alt+f flips `maximized` and `ret.full`
 together and binds; alt+b unbinds like the step-out key or binds like
 enter); both are in `consolePassthrough`/`consoleFullPassthrough`.
-`alt+w` hides a shown console on the way to the next worktree. The
+Every walk ends in `selectSessionRow(id)`: the Branches tab comes
+forward and its cursor lands on the session's sub-row (`branchEntry.sess`)
+without moving focus. `alt+w` hides a shown console on the way to the
+next worktree. The
 emergency unlock is `alt+U` (was `alt+A`).
 
 ### Web attach — agent consoles in `gg web` (plan 1, 2026-09-28)

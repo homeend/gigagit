@@ -130,3 +130,34 @@ func TestAltBTogglesTheConsoleBinding(t *testing.T) {
 		t.Fatalf("alt+b from another panel bound the console: %+v", m.console)
 	}
 }
+
+// The session walks put the Branches cursor on the shown session's row
+// (its sub-row under the branch of its worktree), the Branches tab active,
+// while the console keeps the keyboard.
+func TestSessionWalksSelectTheSessionsBranchesRow(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	a1 := startSessionIn(t, m, home, "A1")
+	b1 := startSessionIn(t, m, other, "B1")
+	m.activeLeftTab, m.focus = panelWorktrees, panelFiles
+	for _, want := range []domain.SessionID{a1, b1, a1} {
+		m = pressAlt(t, m, 'a')
+		if m.console == nil || m.console.id != want {
+			t.Fatalf("console=%+v, want %s", m.console, want)
+		}
+		if m.activeLeftTab != panelBranches || m.focus != panelCommits {
+			t.Fatalf("tab=%v focus=%v, want the Branches tab shown and the console keeping the keyboard", m.activeLeftTab, m.focus)
+		}
+		e, ok := m.selectedBranchEntry()
+		if !ok || e.sess != want {
+			t.Fatalf("Branches cursor on %+v, want the row of %s", e, want)
+		}
+	}
+	m = pressAlt(t, m, 'A') // the scoped walk too
+	if e, ok := m.selectedBranchEntry(); !ok || e.sess != a1 {
+		t.Fatalf("after alt+A: Branches cursor on %+v, want A1's row", e)
+	}
+}
