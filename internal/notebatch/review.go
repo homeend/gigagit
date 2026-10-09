@@ -109,6 +109,9 @@ func ParseReview(data []byte) (ReviewDoc, error) {
 	if len(raw.Overview) > MaxOverviewBytes {
 		return ReviewDoc{}, notDoc("overview exceeds 64 KiB (%d bytes)", len(raw.Overview))
 	}
+	if strings.TrimSpace(raw.Overview) == "" {
+		raw.Overview = "" // absent or blank = none (spec §2.1)
+	}
 	doc := ReviewDoc{Summary: raw.Summary, Overview: raw.Overview}
 	var err error
 	if doc.Meta, err = metaKVs(raw.Meta); err != nil {

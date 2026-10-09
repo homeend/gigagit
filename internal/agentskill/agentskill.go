@@ -111,7 +111,7 @@ var GGDelegate = newSkill("gg-delegate",
 // are no slash commands.
 var GGReview = func() Skill {
 	s := newSkill("gg-review",
-		"Review the change a gg:// link names and store the review in gg — an overview plus per-file remarks — with gg review save.",
+		"Review the change a gg:// link names and store the review in gg — a summary plus per-file remarks — with gg review save.",
 		GGReviewVersion, ggReviewBody)
 	s.front = "argument-hint: \"<gg-link> [what to focus on]\"\n" + "disable-model-invocation: true\n"
 	return s

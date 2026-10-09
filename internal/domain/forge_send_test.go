@@ -439,3 +439,46 @@ func TestPlanSendDraftsBesideNotesBecomeThen(t *testing.T) {
 		t.Fatalf("draft + --mine: %v", err)
 	}
 }
+
+// The panel always asks for a verdict (spec §5.3): with only draft replies
+// ticked that is the plain replies send; a body (typed or a review's
+// summary) beside drafts alone makes a verdict review that carries it, the
+// replies after it. Nothing is refused, nothing dropped.
+func TestPlanSendDraftsOnlyWithAVerdictOrABody(t *testing.T) {
+	t.Parallel()
+	svc, ff, head := sendRepo(t)
+	ctx := context.Background()
+	ff.mu.Lock()
+	ff.comments = []model.ForgeComment{{ID: "C1", Kind: model.ForgeCommentInline, ThreadID: "T1", Path: "big.go", Side: model.NoteSideNew, Line: 5, StartLine: 5, Body: "please", Author: "carol"}}
+	ff.mu.Unlock()
+	if _, err := svc.PRCommentsRefresh(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PullRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	rid := savePRReview(t, svc, twoRemarks)
+	d, err := svc.NoteReply(ctx, "forge:C1", model.Note{Source: model.NoteSourceUser, Author: "me", Summary: "done"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{d.ID}, Verdict: true})
+	if err != nil || p.Mode != engine.SendActions || p.Then != nil || len(p.Items) != 1 {
+		t.Fatalf("drafts + verdict: %+v %v", p, err)
+	}
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{d.ID}, Verdict: true, BodyFrom: rid})
+	if err != nil || p.Mode != engine.SendReview || !p.Verdict || p.Key != rid || !strings.Contains(p.Body, "looks fine") || len(p.Items) != 0 || p.Then == nil || len(p.Then.Items) != 1 {
+		t.Fatalf("drafts + body-from: %+v %v", p, err)
+	}
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{d.ID}, Body: "typed", BodySet: true})
+	if err != nil || p.Mode != engine.SendReview || !p.Verdict || p.Body != "typed" || p.Then == nil || len(p.Then.Items) != 1 {
+		t.Fatalf("drafts + body: %+v %v", p, err)
+	}
+	// Every new comment skipped (a note on a file the PR does not change)
+	// and no verdict: the replies go alone, the skip on their confirm.
+	off := addPRNote(t, svc, head, "other.go", 1, "outside")
+	p, err = svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{off, d.ID}})
+	if err != nil || p.Mode != engine.SendActions || len(p.Items) != 1 || p.Then != nil || len(p.Skipped) != 1 || p.Skipped[0].Reason != SkipNotInPR {
+		t.Fatalf("skipped note + draft: %+v %v", p, err)
+	}
+}

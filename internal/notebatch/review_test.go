@@ -156,3 +156,14 @@ func TestReviewDocOverviewTooLongIsRefused(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// Spec §2.1: absent or blank = no overview.
+func TestReviewDocBlankOverviewIsNone(t *testing.T) {
+	doc, err := ParseReview([]byte(`{"version":1,"summary":"s","overview":"  \n\t","files":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Overview != "" || strings.Contains(string(doc.Canonical()), "overview") {
+		t.Fatalf("overview = %q canonical = %s", doc.Overview, doc.Canonical())
+	}
+}

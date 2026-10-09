@@ -415,7 +415,7 @@ type ReviewShowOutdated struct {
 }
 
 // ReviewShow is a stored review as an agent reads it: who, what it compared
-// (Base is empty for one commit), its link, its overview (a prose review's
+// (Base is empty for one commit), its link, its summary (a prose review's
 // whole text) and its remarks (never nil).
 type ReviewShow struct {
 	ID      string    `json:"id"`

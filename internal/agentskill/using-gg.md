@@ -46,7 +46,7 @@ guards against removing the worktree you are standing in.
   (`--patch`).
 - `gg review [--tool <name>] [--working] [<rev>|<A..B>]` — runs a configured
   AI review agent headless. The agent replies with the gg review document
-  (JSON: a markdown overview plus per-file line notes); stdout is the
+  (JSON: a markdown summary plus per-file line notes); stdout is the
   overview, its meta, then one `path:line — summary` line per note (`-line`
   = a removed line). A reply that is not the document prints as it came,
   with `warning: the review is not in gg review format` on stderr. The

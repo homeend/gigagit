@@ -17,16 +17,57 @@ func TestNoteLinkTextCommittedNote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasSuffix(link, "/big.go@"+head+":5?note="+id) {
-		t.Fatalf("link = %q", link)
+	// A note written for a PR is addressed at the PR's scope, where its
+	// view shows it — never at the bare tip commit, whose own diff hides
+	// scoped notes.
+	if !strings.HasSuffix(link, "/big.go@main...refs/gg/pr/7:5?note="+id) {
+		t.Fatalf("link = %q (head %s)", link, head[:7])
 	}
 	// A reply links its own id at the thread's anchor.
 	rep, err := svc.NoteReply(context.Background(), id, model.Note{Source: model.NoteSourceUser, Author: "me", Summary: "and"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rl, err := svc.NoteLinkText(context.Background(), rep.ID); err != nil || !strings.HasSuffix(rl, "/big.go@"+head+":5?note="+rep.ID) {
+	if rl, err := svc.NoteLinkText(context.Background(), rep.ID); err != nil || !strings.HasSuffix(rl, "/big.go@main...refs/gg/pr/7:5?note="+rep.ID) {
 		t.Fatalf("reply link = %q, %v", rl, err)
+	}
+}
+
+// A note on a commit's own diff (no scope) is addressed at the commit; one
+// written in a commit-pair scope at the pair.
+func TestNoteLinkTextPlainAndPairNotes(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	ctx := context.Background()
+	plain, err := svc.NoteAdd(ctx, model.Note{Source: model.NoteSourceUser, Summary: "plain",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: head, Path: "big.go"}, Side: model.NoteSideNew, Range: [2]int{5, 5}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, err := svc.NoteLinkText(ctx, plain.ID); err != nil || !strings.HasSuffix(l, "/big.go@"+head+":5?note="+plain.ID) {
+		t.Fatalf("plain: %q %v", l, err)
+	}
+	base := revParse(t, repoDir(t, svc), head+"^")
+	pair, err := svc.NoteAdd(ctx, model.Note{Source: model.NoteSourceUser, Summary: "pair", Preview: base[:7] + ".." + head[:7],
+		Address: model.FileAddress{State: model.StateCommitted, Commit: head, Path: "big.go"}, Side: model.NoteSideNew, Range: [2]int{5, 5}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, err := svc.NoteLinkText(ctx, pair.ID); err != nil || !strings.HasSuffix(l, "/big.go@"+base[:7]+".."+head[:7]+":5?note="+pair.ID) {
+		t.Fatalf("pair: %q %v", l, err)
+	}
+}
+
+// A shelf-entry note has no place a link can name.
+func TestNoteLinkTextShelfNoteIsRefused(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	n := model.Note{ID: "5he1f001", Source: model.NoteSourceAgent, Author: "gg", Summary: "shelved", Address: ShelfEntryNote("e1")}
+	if err := svc.notesStore(context.Background()).Put(n); err != nil { // NoteAdd wants the entry; the link needs only the record
+		t.Fatal(err)
+	}
+	if l, err := svc.NoteLinkText(context.Background(), n.ID); err == nil || !strings.Contains(err.Error(), "shelf") {
+		t.Fatalf("shelf note: %q %v", l, err)
 	}
 }
 

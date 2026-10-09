@@ -72,7 +72,7 @@ func quoteLines(line int, text []string) string {
 	return b.String()
 }
 
-// reviewSendBody is a whole review's GitHub body: its overview (or its
+// reviewSendBody is a whole review's GitHub body: its summary (or its
 // prose), signed by its agent, marked with the review note's id.
 func reviewSendBody(r Review) string {
 	text := r.Text

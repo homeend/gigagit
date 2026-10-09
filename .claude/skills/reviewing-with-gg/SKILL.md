@@ -301,7 +301,7 @@ section. Reply with ONLY this JSON document, written to the file named by
 }
 ```
 
-`"summary"` is shown as rendered markdown in the review's overview, so give it
+`"summary"` is shown as rendered markdown at the top of the review view, so give it
 structure: `## Summary` (1–3 sentences on what the change does), `## Findings`
 (one `- ` bullet per finding, most important first, with files and symbols in
 `code` spans such as `src/app.go:42`; `- None.` when there is nothing), and

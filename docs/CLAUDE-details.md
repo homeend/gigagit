@@ -6045,8 +6045,17 @@ remark placement stop re-running `git show` on every comment change.
   `BodySet` wins); `noteKinds` → `(drafts, others, unknown)` id lists;
   `planSend` builds one `SendReview` for any mix of remarks and notes with
   `Verdict = req.Verdict`, drafts beside them become `plan.Then`; drafts
-  alone (plus unknown ids) stay the actions plan; `ErrMixedSend` for
+  alone (plus unknown ids) stay the actions plan — the panel's `Verdict`
+  is ignored there — unless a body came (typed, or `BodyFrom`): then a
+  verdict review carries it and the drafts follow as `Then`. Every new
+  comment skipped and nothing else asked (`carries` = verdict or body):
+  the drafts go alone with the skips on their confirm. `ErrMixedSend` for
   resolve/unresolve with new comments and for drafts with `--review`/`--mine`.
+  **Note link addresses**: a note written in a scope (`Note.Preview`: a PR,
+  a merge preview, a pair) links `@<target>...<source>` / `@<a>..<b>`
+  (`scopeLinkTarget`), never the bare tip commit whose own diff hides
+  scoped notes; a reply takes its root's address and scope; a shelf-entry
+  note has no link (refused).
 - **`PRSendCandidates(ctx, n)`** (`forge_send_candidates.go`): the send
   panel's rows — groups `review:<id>` (newest first) / `GroupMine` /
   `GroupReplies`, each row's `Skip` = what `remarkItem`/`noteItem` would say

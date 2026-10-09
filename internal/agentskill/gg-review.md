@@ -2,7 +2,7 @@
 
 The user typed `/gg-review <gg-link> [focus]`: the first word after the
 command is a `gg://` link, the rest (optional) is what they want you to look
-at. Review the change the link names and store ONE review — an overview plus
+at. Review the change the link names and store ONE review — a summary plus
 per-file remarks — in gg, where the user reads it beside the code. Do NOT
 launch gg's TUI or `gg web`; they belong to the user.
 

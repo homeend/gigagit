@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -36,14 +37,29 @@ func (s *Service) NoteLinkText(ctx context.Context, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// A reply's place is its thread's: the root's address and scope.
+	scope := n.Preview
+	if n.ParentID != "" {
+		if root, ok := byID[n.ParentID]; ok {
+			n.Address, n.Side, n.Range, scope = root.Address, root.Side, root.Range, root.Preview
+		}
+	}
 	l := model.Link{Repo: repo, Path: n.Address.Path, Side: n.Side, Line: n.Range[0],
-		Hint: model.LinkHint{Kind: model.NoteHintKind, ID: n.ID}}
+		Hint: model.LinkHint{Kind: model.NoteHintKind, ID: id}}
 	if n.Range[1] > n.Range[0] {
 		l.End = n.Range[1]
 	}
 	switch n.Address.State {
+	case model.StateShelf:
+		return "", fmt.Errorf("note %s is on a shelf entry: it has no link", id)
 	case model.StateCommitted:
 		l.Target = model.LinkTarget{State: model.StateCommitted, Commit: n.Address.Commit}
+		if scope != "" {
+			// A note written in a scope (a pull request, a merge preview,
+			// a commit pair) is shown by that scope's view and hidden by
+			// the bare commit's own diff: the link names the scope.
+			l.Target = scopeLinkTarget(scope)
+		}
 	case model.StateStaged:
 		l.Target = model.LinkTarget{State: model.StateStaged}
 	default:
@@ -64,13 +80,24 @@ func (s *Service) NoteLinkText(ctx context.Context, id string) (string, error) {
 	return linkTextIn(repo, l)
 }
 
+// scopeLinkTarget is the link target of a note scope (Note.Preview):
+// "<target>...<source>" is a merge preview or pull request, "<a>..<b>" a
+// commit pair — the two spellings the link grammar already carries.
+func scopeLinkTarget(scope string) model.LinkTarget {
+	if target, source, ok := strings.Cut(scope, "..."); ok {
+		return model.LinkTarget{State: model.StateCommitted, Preview: &model.LinkPreview{Source: source, Target: target}}
+	}
+	a, b, _ := strings.Cut(scope, "..")
+	return model.LinkTarget{State: model.StateCommitted, Pair: &model.LinkPair{A: a, B: b}}
+}
+
 // checkNoteHint refuses a ?note= link whose note the chosen checkout's
 // store does not hold (a deleted note): the line would open, the thread
 // the user meant would not be there.
 func checkNoteHint(ctx context.Context, svc *Service, res Resolved) error {
 	byID, err := svc.storedNotes(ctx)
 	if err != nil {
-		return nil // no store here: the address still opens, the hint is dropped with a notice
+		return nil // no store here: the address still opens; the consumer finds no thread
 	}
 	if _, ok := byID[res.Hint.ID]; !ok {
 		return fmt.Errorf("%w: %w: note %s is not here", model.ErrLink, ErrNoteLinkGone, res.Hint.ID)
