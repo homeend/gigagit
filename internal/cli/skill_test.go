@@ -167,19 +167,25 @@ func TestSkillUsageErrors(t *testing.T) {
 	}
 }
 
-// The worker kickoff names the delegate skill; a worker without it installed
-// fetches it the way the other two are fetched.
-func TestSkillPathDelegate(t *testing.T) {
+// The worker kickoff names the gg-delegate skill; a worker without it
+// installed fetches it the way the others are fetched. The old name
+// (delegate) still answers, for a kickoff line from an older gg.
+func TestSkillPathDelegateAndOverview(t *testing.T) {
 	cache := t.TempDir()
 	old := SkillCacheDir
 	SkillCacheDir = cache
 	t.Cleanup(func() { SkillCacheDir = old })
-	code, out, errb := runCLI(t, newRepoDir(t), "skill", "path", "delegate")
-	if code != 0 {
-		t.Fatalf("exit=%d stderr=%s", code, errb)
-	}
-	data, err := os.ReadFile(strings.TrimSpace(out))
-	if err != nil || string(data) != agentskill.Delegate.SkillFile() {
-		t.Fatalf("delegate skill at %q: %v", out, err)
+	for _, c := range []struct {
+		arg  string
+		want agentskill.Skill
+	}{{"gg-delegate", agentskill.GGDelegate}, {"delegate", agentskill.GGDelegate}, {"gg-overview", agentskill.GGOverview}} {
+		code, out, errb := runCLI(t, newRepoDir(t), "skill", "path", c.arg)
+		if code != 0 {
+			t.Fatalf("%s: exit=%d stderr=%s", c.arg, code, errb)
+		}
+		data, err := os.ReadFile(strings.TrimSpace(out))
+		if err != nil || string(data) != c.want.SkillFile() {
+			t.Fatalf("%s skill at %q: %v", c.arg, out, err)
+		}
 	}
 }

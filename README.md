@@ -1102,8 +1102,9 @@ Then, once and in this order: accept that command's update in Settings →
 External tools if it offers one (the command needs `<prompt>`; the update
 changes its text), start it yourself from Start agent (the one-time approval
 of that text), and run `gg init --mcp` so Claude Code loads gg's MCP
-server. The simplest way in is the **delegate** skill (installed by `gg init`):
-type `/delegate <the task>` in the overseer's console and it plans, briefs,
+server. The simplest way in is the **gg-delegate** skill (installed by `gg init`;
+named `delegate` before — `gg init --update` replaces the old copy):
+type `/gg-delegate <the task>` in the overseer's console and it plans, briefs,
 starts and waits on the workers by itself. Underneath, the overseer calls the
 `agent_start` tool — or
 `gg agent start --worktree <path|name> --tool "Claude (yolo)" --prompt-file
@@ -1553,6 +1554,13 @@ the lines in its file viewer, with `d` / `r` / `}` / `{` and **dismiss** and
 that serves its own web page (`[web]`, `gg --web`) shows the same notes in
 both — dismiss one in the browser and it leaves the terminal. A standalone
 `gg web` answers `gg session note` itself when no TUI is running.
+
+Notes plus an overview are what gg calls a **gg-overview**: say "use
+gg-overview to visualise the result" (or type `/gg-overview [what]`) and an
+agent with gg's skills installed (`gg init`) puts its findings in your gg —
+notes on the lines, then the tour. With no gg running in that worktree it
+says so and starts `gg web --open` itself. A worker agent's final report is
+its gg-overview, filed as a tour of the worker's worktree.
 
 For a **guided tour** the agent writes an overview: `gg session overview add
 --title "…" < tour.md` shows a markdown document that lives in memory,

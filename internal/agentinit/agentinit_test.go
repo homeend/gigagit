@@ -382,10 +382,14 @@ func TestInstallWritesBothSkillsInEveryMode(t *testing.T) {
 		if !agentskill.ReviewingWithGG.HasMarker(review) {
 			t.Errorf("%s: reviewing-with-gg not installed at %s", id, d.ReviewTarget)
 		}
-		dt := d.TargetOf(agentskill.Delegate)
+		dt := d.TargetOf(agentskill.GGDelegate)
 		del, err := os.ReadFile(dt)
-		if err != nil || !agentskill.Delegate.HasMarker(del) {
-			t.Errorf("%s: delegate not installed at %s (%v)", id, dt, err)
+		if err != nil || !agentskill.GGDelegate.HasMarker(del) {
+			t.Errorf("%s: gg-delegate not installed at %s (%v)", id, dt, err)
+		}
+		ot := d.TargetOf(agentskill.GGOverview)
+		if ov, err := os.ReadFile(ot); err != nil || !agentskill.GGOverview.HasMarker(ov) {
+			t.Errorf("%s: gg-overview not installed at %s (%v)", id, ot, err)
 		}
 		gt := d.TargetOf(agentskill.GGReview)
 		if gr, err := os.ReadFile(gt); err != nil || !agentskill.GGReview.HasMarker(gr) {
@@ -428,15 +432,29 @@ func TestStatusIsTheWorstOfTheTwoSkills(t *testing.T) {
 	if got, _ := byID(Detect(proj, home), "claude-project"); got.Status != StatusOutdated {
 		t.Fatalf("review skill missing = %v, want StatusOutdated", got.Status)
 	}
-	// …and so is a missing delegate skill (a refresh adds it).
+	// …and so is a missing gg-delegate skill (a refresh adds it).
 	if err := Install(d); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(d.TargetOf(agentskill.Delegate)); err != nil {
+	if err := os.Remove(d.TargetOf(agentskill.GGDelegate)); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := byID(Detect(proj, home), "claude-project"); got.Status != StatusOutdated {
-		t.Fatalf("delegate skill missing = %v, want StatusOutdated", got.Status)
+		t.Fatalf("gg-delegate skill missing = %v, want StatusOutdated", got.Status)
+	}
+	// …and so is a copy left under a retired name (a refresh removes it).
+	if err := Install(d); err != nil {
+		t.Fatal(err)
+	}
+	old := d.TargetOf(agentskill.Retired()[0])
+	if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(old, []byte("<!-- gg:delegate:v3 -->\n\nold"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := byID(Detect(proj, home), "claude-project"); got.Status != StatusOutdated {
+		t.Fatalf("retired delegate copy present = %v, want StatusOutdated", got.Status)
 	}
 	// using-gg itself missing = new.
 	if err := os.Remove(d.Target); err != nil {
@@ -444,5 +462,72 @@ func TestStatusIsTheWorstOfTheTwoSkills(t *testing.T) {
 	}
 	if got, _ := byID(Detect(proj, home), "claude-project"); got.Status != StatusNew {
 		t.Fatalf("using-gg missing = %v, want StatusNew", got.Status)
+	}
+}
+
+// delegate was renamed gg-delegate: a refresh removes gg's own copy under the
+// old name in every mode — a whole file (and its emptied skill directory) or
+// a block in a shared file — and never a file gg did not write.
+func TestInstallRemovesRetiredSkillCopies(t *testing.T) {
+	t.Parallel()
+	oldBlock := "<!-- gg:delegate:v3:begin -->\n\nold delegate\n<!-- gg:delegate:end -->"
+	proj, home := fixture(t, []string{".claude", ".cursor", "AGENTS.md"}, nil)
+	if err := os.WriteFile(filepath.Join(proj, "AGENTS.md"), []byte("before\n\n"+oldBlock+"\n\nafter\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	retired := agentskill.Retired()[0]
+	for _, id := range []string{"claude-project", "cursor"} {
+		d, _ := byID(Detect(proj, home), id)
+		old := d.TargetOf(retired)
+		if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(old, []byte("<!-- gg:delegate:v3 -->\n\nold"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, id := range []string{"claude-project", "cursor", "agents-md"} {
+		d, ok := byID(Detect(proj, home), id)
+		if !ok {
+			t.Fatalf("%s not detected", id)
+		}
+		if err := Install(d); err != nil {
+			t.Fatalf("%s install: %v", id, err)
+		}
+		if id == "agents-md" {
+			data, _ := os.ReadFile(d.Target)
+			s := string(data)
+			if strings.Contains(s, "old delegate") || retired.HasMarker(data) {
+				t.Errorf("the retired block survived in %s:\n%s", d.Target, s)
+			}
+			if !strings.HasPrefix(s, "before\n\n") || !strings.Contains(s, "\n\nafter\n") || !agentskill.GGDelegate.HasMarker(data) {
+				t.Errorf("block mode must keep the surroundings and add gg-delegate:\n%s", s)
+			}
+			continue
+		}
+		old := d.TargetOf(retired)
+		if _, err := os.Stat(old); !os.IsNotExist(err) {
+			t.Errorf("%s: retired copy %s survived (%v)", id, old, err)
+		}
+		if id == "claude-project" {
+			if _, err := os.Stat(filepath.Dir(old)); !os.IsNotExist(err) {
+				t.Errorf("the emptied %s directory survived", filepath.Dir(old))
+			}
+		}
+	}
+	// A file under the old name that gg did not write is the user's: kept.
+	d, _ := byID(Detect(proj, home), "claude-project")
+	mine := d.TargetOf(retired)
+	if err := os.MkdirAll(filepath.Dir(mine), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mine, []byte("my own delegate skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Install(d); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(mine); err != nil || string(data) != "my own delegate skill" {
+		t.Errorf("the user's own delegate skill was touched: %q %v", data, err)
 	}
 }

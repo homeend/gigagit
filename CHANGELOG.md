@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg-overview: a name for presenting a result in gg
+
+### Added
+
+- **gg-overview skill.** Notes on the lines plus an overview tour now have
+  a name: tell an agent "use gg-overview to visualise the result" (or type
+  `/gg-overview [what to present]`) and it finishes its edits, adds notes on
+  the exact lines, writes the overview with anchors in explaining order and
+  replies with the overview's id and a short summary instead of a long chat
+  answer. With no gg running in that worktree it tells you so and starts
+  `gg web --open` itself (detached); it never starts the TUI. A worker
+  agent's gg-overview is its final report. Installed by `gg init` beside the
+  other skills; `gg skill path gg-overview` prints it.
+
+### Changed
+
+- **The delegate skill is now gg-delegate** — gg's own skills carry the
+  `gg-` prefix. Type `/gg-delegate <task>`; the worker kickoff line points
+  at `gg skill path gg-delegate` (`gg skill path delegate` still answers).
+  `gg init --update` removes the copy installed
+  under the old name — the `delegate/` skill folder, the `.mdc` file or the
+  block in a shared AGENTS.md — but only one gg wrote (it carries gg's
+  marker); a `delegate` skill of your own stays.
+
 ## Web dialogs: buttons on Start agent, a wider GitHub send confirm
 
 ### Fixed

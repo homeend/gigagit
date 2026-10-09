@@ -1,6 +1,6 @@
 // Package agentinit detects installed AI coding agents and installs the
-// embedded gg skills (using-gg and reviewing-with-gg) into their instruction
-// locations. The agent registry is hardcoded — supporting a new agent is a
+// embedded gg skills (agentskill.All) into their instruction locations, and
+// removes gg's own copies under a retired skill name. The agent registry is hardcoded — supporting a new agent is a
 // code change (one Builtins entry), never a runtime definition.
 package agentinit
 
@@ -201,17 +201,70 @@ func combinedStatus(usingTarget string, mode Mode) Status {
 			out = StatusOutdated
 		}
 	}
+	for _, sk := range agentskill.Retired() {
+		if data, err := os.ReadFile(SkillTarget(usingTarget, mode, sk)); err == nil && sk.HasMarker(data) {
+			out = StatusOutdated // a refresh removes it
+		}
+	}
 	return out
 }
 
 // Install writes EVERY embedded skill into d's targets according to the
-// agent's mode, creating parent directories as needed. Shared files keep all
-// surrounding content — and each skill's own block — byte-for-byte. Idempotent.
+// agent's mode, creating parent directories as needed, and first removes
+// gg's copies under a retired name. Shared files keep all surrounding content
+// — and each skill's own block — byte-for-byte. Idempotent.
 func Install(d Detection) error {
+	for _, sk := range agentskill.Retired() {
+		if err := removeSkill(sk, d.TargetOf(sk), d.Agent.Mode); err != nil {
+			return err
+		}
+	}
 	for _, sk := range agentskill.All() {
 		if err := installSkill(sk, d.TargetOf(sk), d.Agent.Mode); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// removeSkill deletes gg's installed copy of sk at target: the whole file
+// (and its skill directory once empty) or, in a shared file, only sk's block
+// and the blank lines that set it apart. A file without sk's marker is not
+// gg's and stays.
+func removeSkill(sk agentskill.Skill, target string, mode Mode) error {
+	data, err := os.ReadFile(target)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !sk.HasMarker(data) {
+		return nil
+	}
+	if mode == ModeBlock {
+		loc := sk.BlockRe().FindIndex(data)
+		if loc == nil {
+			return nil
+		}
+		before := strings.TrimRight(string(data[:loc[0]]), "\n")
+		after := strings.TrimLeft(string(data[loc[1]:]), "\n")
+		var out string
+		switch {
+		case before == "":
+			out = after
+		case after == "":
+			out = before + "\n"
+		default:
+			out = before + "\n\n" + after
+		}
+		return os.WriteFile(target, []byte(out), 0o644)
+	}
+	if err := os.Remove(target); err != nil {
+		return err
+	}
+	if mode == ModeSkillFile {
+		_ = os.Remove(filepath.Dir(target)) // only succeeds when empty
 	}
 	return nil
 }

@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v159 -->
+<!-- gg:using-gg:v160 -->
 
 # Using gg (gigagit)
 
@@ -169,7 +169,7 @@ gg note list  --shelf <entry-id>                                   # notes gg le
 gg note rm    [<repo-link>] <note-id>
 gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
 gg review --notes [--tool <name>] [<rev>|<A..B>]                 # also keep the review's notes as permanent notes (not with --working)
-gg skill path [review|using-gg|delegate]                         # print the bundled skill's path
+gg skill path [review|using-gg|gg-delegate|gg-overview]          # print the bundled skill's path
 ```
 
 Notes are machine-local review remarks anchored to a line range on one side of
@@ -442,9 +442,12 @@ reference to one of your notes: run `gg session note show t<n>` to see which
 remark they mean (if it answers `no note t<n>`, the user closed it — the path
 and lines still say where it was).
 
-**Overviews — a guided tour through several files.** When the user asks to be
-shown or walked through something that spans several files, write an
-overview: a short markdown document that lives in gg's memory — the TUI's, or
+**Overviews — a guided tour through several files.** Notes plus an overview
+are what gg calls a **gg-overview**: when the user says "gg-overview" or asks
+to be shown, walked through or have a result visualised in gg, follow the
+gg-overview skill (the recipe: check gg runs — start `gg web --open` detached
+if not — notes, then the overview, then a short reply; `gg skill path
+gg-overview` prints it). The overview is a short markdown document that lives in gg's memory — the TUI's, or
 a gg web page's when no TUI runs (a TUI serving its own page shares one set
 with it: same ids, closing one in either closes it in both) — whose links
 are ANCHORS. The user tabs from anchor to anchor, presses enter to open
@@ -491,7 +494,7 @@ A worker agent started by gg runs in its OWN worktree, which the user's gg is
 usually not showing — `gg session overview` and `gg session note` answer `gg
 is showing worktree …` there. A worker's overview is its final
 `agent_report`: gg files it as a tour of the worker's worktree (see the
-delegate skill).
+gg-delegate skill).
 
 In a file an anchor opened, gg draws EVERY line and range anchor your
 overview has in that file as a band (the one the user opened brighter), and
@@ -1207,7 +1210,7 @@ a WSL/Windows pair (one repo, two hosts) is never judged dead from this side
 
 ### Starting another agent
 
-To hand a task to worker agents, follow the **delegate** skill (the
+To hand a task to worker agents, follow the **gg-delegate** skill (the
 overseer's playbook: plan, brief, start, the wait loop, check, finish — and
 the worker protocol). This section is the tool reference.
 
