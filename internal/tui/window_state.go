@@ -214,6 +214,7 @@ func (w *windowState) sleepFWindow() {
 	}
 	f.all, f.untracked, f.letters = nil, nil, nil
 	f.loading = true
+	f.gen++ // a read in flight now is the old list's
 	w.filesView.lines = []contentLine{{text: i18n.T("(loading…)")}}
 	w.filesView.sel = 0
 }

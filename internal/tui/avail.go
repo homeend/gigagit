@@ -75,12 +75,16 @@ func (m Model) cycleReachable() bool {
 func parkableLayer(l layer) bool {
 	switch v := l.(type) {
 	case *gotoCommitPopup:
-		return v.pending == nil
+		return v.pending == nil && !v.resolving // its resolve moves the panels by itself
+	case *commitPopup:
+		return !v.generating // the generate task's result and spinner need the box on screen
+	case *repoPathPopup:
+		return !v.resolving
 	case *versionsPopup, *remoteHeadsPopup, *allNotesPopup, *gitConfigPopup,
-		*branchPopup, *commitPopup, *notePopup, *annotateTagPopup, *renameBranchPopup,
+		*branchPopup, *notePopup, *annotateTagPopup, *renameBranchPopup,
 		*rewordPopup, *commitNamePopup, *filePathPopup, *bookmarkPopup, *bookmarkPastePopup,
 		*notesListPopup, *exportPatchPopup, *applyPatchPopup, *hookEditorPopup,
-		*languagePickerPopup, *repoPathPopup, *previewRenamePopup,
+		*languagePickerPopup, *previewRenamePopup,
 		*pairOpPopup, *reflogCheckoutPopup, *shelfRestorePopup, *shellCmdPopup,
 		*blameRecentPopup, *commitFilterPopup, *checkoutAsPopup, *hunkPicker,
 		*relatedPromptPopup:

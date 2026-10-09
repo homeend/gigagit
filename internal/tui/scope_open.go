@@ -29,12 +29,13 @@ type scopeBack struct {
 // scopeOpenMsg is a Range review row's range, resolved off the UI thread. It
 // carries the previewGen it was dispatched under, like pairOpenMsg.
 type scopeOpenMsg struct {
-	scope string
-	back  model.Commit
-	a, b  string
-	eps   domain.PairEndpoints
-	gen   int
-	err   error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	scope     string
+	back      model.Commit
+	a, b      string
+	eps       domain.PairEndpoints
+	gen       int
+	err       error
 }
 
 // scopeTitle names an opened review: a commit pair's is a range review, a
@@ -56,9 +57,10 @@ func (m Model) openScopeRow(scope string) (Model, tea.Cmd) {
 	if back.Hash == "" {
 		back.Hash = m.filesHash
 	}
+	slot := m.stamp()
 	return m, func() tea.Msg {
 		ctx := context.Background()
-		msg := scopeOpenMsg{scope: scope, back: back, gen: gen}
+		msg := scopeOpenMsg{slotStamp: slot, scope: scope, back: back, gen: gen}
 		if msg.a, msg.b, msg.err = svc.ScopeAtCommit(ctx, scope, back.Hash); msg.err != nil {
 			return msg
 		}

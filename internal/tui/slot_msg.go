@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/homeend/gigagit/internal/model"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/model"
+)
 
 // slotMsg is a message addressed to the worktree slot it was asked from. A
 // window-addressed result (a diff, a file list, a popup's read) is stamped
@@ -16,6 +20,15 @@ import "github.com/homeend/gigagit/internal/model"
 // pointer (a history walk's chunks) is deliberately NOT stamped: its view
 // waits in the slot and keeps filling.
 type slotMsg interface{ slotKey() model.CheckoutKey }
+
+// sharedWriter is a slot-addressed message that ALSO carries process-wide
+// state (a shelf list is the repository's, shown by the Shelf tab): the
+// shared part is applied when the message is queued for a sleeping slot,
+// and the message is marked so its replay does not write a by-then older
+// value over a newer one.
+type sharedWriter interface {
+	applyShared(m Model) (Model, tea.Msg)
+}
 
 // slotStamp is the embeddable stamp; the zero value ("") is unaddressed
 // and passes the gate (tests that build messages by hand, and messages

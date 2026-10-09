@@ -213,6 +213,45 @@ func (m Model) captureReturn() (Model, *consoleReturn) {
 	return m, r
 }
 
+// displaceUnderConsole is captureReturn for a worktree ARRIVING under a
+// shown console (a console opened into a worktree whose parked windows
+// wait on its pile, a queued return landing while a console shows): the
+// whole pile, the stash list and the preview go under the console's copy —
+// a focused console takes every key, so a view left live over it would
+// feed the user's keystrokes to an agent they cannot see. They come back
+// with restoreConsoleParked when the console closes. A full-screen view
+// among them shows the console maximised, as a captured one does.
+func (m Model) displaceUnderConsole() Model {
+	if m.console == nil || m.layers == nil && m.stashView == nil && m.filesPreview == nil {
+		return m
+	}
+	cp := m.consoleParked
+	if cp == nil {
+		cp = &consoleParked{}
+		m.consoleParked = cp
+	}
+	if m.layers != nil && len(m.layers.entries) > 0 {
+		switch m.topLayer().(type) {
+		case *diffView, *historyView, *blameView, *fileViewer:
+			if r := m.console.ret; r != nil && !r.full {
+				r.full = true
+				m.console.maximized = true
+			}
+		}
+		cp.layers = append(cp.layers, m.layers.entries...)
+		m.layers.entries = nil
+	}
+	if m.stashView != nil {
+		cp.stashView = m.stashView
+		m.stashView = nil
+	}
+	if m.filesPreview != nil {
+		cp.filesView, cp.filesPreview = m.filesView, m.filesPreview
+		m.filesPreview = nil
+	}
+	return m
+}
+
 // restoreConsoleParked puts back what a console displaced in the worktree
 // on screen: its parked views beneath whatever is live (a popup opened
 // over the console stays on top), its stash list, its preview (only

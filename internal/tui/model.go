@@ -1342,7 +1342,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case historyChunkMsg:
 		return m.onHistoryChunk(msg)
 	case historyDiffMsg:
-		if h := layerOf[*historyView](m); h != nil && h.diffTag == msg.tag {
+		if h := msg.hist; h != nil && h.diffTag == msg.tag { // wherever the history waits
 			h.diff = msg.view
 		}
 		return m, nil
@@ -1414,7 +1414,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if !msg.hintBucket {
+		if !msg.hintBucket && !msg.sharedDone {
 			m.shelfEntries = msg.entries
 		}
 		if msg.open {
@@ -1623,7 +1623,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case lsFilesMsg:
-		if m.inWorktreeFiles() && m.wtFiles.loading {
+		if m.inWorktreeFiles() && m.wtFiles.loading && msg.gen == m.wtFiles.gen {
 			return m.wtLoaded(msg)
 		}
 		return m, nil // the window closed before the list arrived
@@ -3500,11 +3500,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A parked hint reveal expires here, not inside drainSteer: the #
 		// prompt's pasted link and the --at landing stage one too, and with
 		// steering off drainSteer returns before it would look.
-		var hexp tea.Cmd
+		var hexp, pexp tea.Cmd
 		m, hexp = m.expirePendingHint(time.Now())
+		m, pexp = m.expireParkedSteer(time.Now()) // the navigates waiting in the SLEEPING worktrees
 		var scmd tea.Cmd
 		m, scmd = m.drainSteer()
-		return m, tea.Batch(cmd, hexp, scmd, m.heartbeatCmd())
+		return m, tea.Batch(cmd, hexp, pexp, scmd, m.heartbeatCmd())
 
 	case steerStartedMsg:
 		if msg.gen != m.steerGen || !m.steerActive() {

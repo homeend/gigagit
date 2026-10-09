@@ -52,7 +52,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   What a console covers (the diff under it, the stash list, a preview)
   belongs to the worktree it was shown over too: leaving the console on
   another worktree brings back only that worktree's own windows, and the
-  covered ones are back when theirs returns.
+  covered ones are back when theirs returns. A console opened into a
+  worktree whose windows wait there covers them the same way — a focused
+  console never leaves a window on top that would feed your keys to an
+  agent you cannot see. A `gg session` navigate parked in a worktree you
+  left expires there like a live one.
 - The panels could swap under a popup, a decision or a conflict process
   (a session removed by an overseer, a worktree gone, a console opened for
   a task): a commit question filled for one worktree then ran in another.

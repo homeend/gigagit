@@ -14,6 +14,10 @@ type shelfLoadedMsg struct {
 	entries   []model.ShelfEntry
 	err       error
 	open      bool // true → (re)open the shelf popup; false → silent refresh
+	// sharedDone: the entries already reached m.shelfEntries when the
+	// message was queued for a sleeping slot (sharedWriter); the replay must
+	// not write them again over a newer list.
+	sharedDone bool
 	// hintBucket is true for a Task 6 hint reveal's OWN load (see
 	// loadShelfForHintCmd): entries then come from the HINT's bucket, which
 	// may not be the default one, so the handler must never let it
@@ -244,4 +248,14 @@ func (m Model) reflogShelfRow() (actionRow, bool) {
 			return m.pushLayer(&commitNamePopup{commit: c, forShelf: true, name: newTextField(c.Subject)}), nil
 		},
 	}, true
+}
+
+// applyShared lands the repository's shelf list at once when the message
+// is queued for a sleeping slot (slot_replay.go); the popup part replays.
+func (msg shelfLoadedMsg) applyShared(m Model) (Model, tea.Msg) {
+	if msg.err == nil && !msg.hintBucket {
+		m.shelfEntries = msg.entries
+		msg.sharedDone = true
+	}
+	return m, msg
 }

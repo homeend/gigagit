@@ -90,6 +90,7 @@ type historyChunkMsg struct {
 }
 
 type historyDiffMsg struct {
+	hist *historyView // the history the pane belongs to: written through, so a history waiting in a sleeping worktree gets its diff too
 	tag  string
 	view *diffView
 }
@@ -380,7 +381,7 @@ func historyNoteAddress(fc model.FileCommit) model.FileAddress {
 
 // loadHistoryDiffCmd builds the right-pane diff for fc: the file at fc vs its
 // first parent, addressing the correct (possibly renamed) blob names.
-func (m Model) loadHistoryDiffCmd(fc model.FileCommit, tag string) tea.Cmd {
+func (m Model) loadHistoryDiffCmd(h *historyView, fc model.FileCommit, tag string) tea.Cmd {
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
 	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial,
@@ -390,10 +391,10 @@ func (m Model) loadHistoryDiffCmd(fc model.FileCommit, tag string) tea.Cmd {
 		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: fc.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return historyDiffMsg{tag: tag, view: v}
+			return historyDiffMsg{hist: h, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return historyDiffMsg{tag: tag, view: v}
+		return historyDiffMsg{hist: h, tag: tag, view: v}
 	}
 }
 
@@ -427,7 +428,7 @@ func (h *historyView) selectCmd(m Model) tea.Cmd {
 	fc := h.commits[h.sel]
 	h.diffTag = "histdiff:" + fc.Hash + ":" + h.ctx.path
 	h.diff = &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, loading: true}
-	return m.loadHistoryDiffCmd(fc, h.diffTag)
+	return m.loadHistoryDiffCmd(h, fc, h.diffTag)
 }
 
 // Temporary stubs so the package compiles; real implementations land in the
