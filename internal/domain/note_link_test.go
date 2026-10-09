@@ -227,3 +227,62 @@ func TestNoteLinkTextStagedAndRangeNotes(t *testing.T) {
 		t.Fatalf("range: %q %v, want suffix %q", l, err, want)
 	}
 }
+
+// Review finding I1: a reply follows its remark across a re-save (the
+// remark's fingerprint, not the index it was written under) — its link
+// names the remark's new place, and its thread is that remark's. A reply
+// whose remark the re-save dropped keeps an outdated thread: root = the
+// summary it answered, no live remark.
+func TestNoteLinkAndThreadOfAReplyFollowItsRemarkAcrossAReSave(t *testing.T) {
+	t.Parallel()
+	svc, rid, tg := threadReview(t)
+	ctx := context.Background()
+	rep, err := svc.NoteReply(ctx, remarkID(rid, 2), model.Note{Source: model.NoteSourceUser, Author: "me", Summary: "on third"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resave(t, svc, rid, tg, threadDocReversed) // "third" is remark 0 now
+	want, err := svc.ReviewRemarkLink(ctx, remarkID(rid, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := svc.NoteLinkText(ctx, rep.ID); err != nil || got != want {
+		t.Fatalf("reply link = %q, %v; want the moved remark's %q", got, err, want)
+	}
+	root, replies, _, err := svc.NoteThread(ctx, rep.ID)
+	if err != nil || root.ID != remarkID(rid, 0) || root.Summary != "third" || len(replies) != 1 || replies[0].ID != rep.ID {
+		t.Fatalf("thread after the re-save: root %+v replies %+v err %v", root, replies, err)
+	}
+	resave(t, svc, rid, tg, threadDocWithoutThird) // the remark is gone: the thread is outdated
+	if _, err := svc.NoteLinkText(ctx, rep.ID); err == nil {
+		t.Fatal("a reply whose remark is gone has no link")
+	}
+	root, replies, _, err = svc.NoteThread(ctx, rep.ID)
+	if err != nil || root.ID != rep.Remark || root.Summary != "third" || root.Address.Path != "" || len(replies) != 1 || replies[0].ID != rep.ID {
+		t.Fatalf("outdated thread: root %+v replies %+v err %v", root, replies, err)
+	}
+}
+
+// Review finding I4: a working review's remark thread is rooted at the
+// worktree's address (the review's own), never at an empty commit.
+func TestNoteThreadOfAWorkingReviewRemarkIsAtTheWorktree(t *testing.T) {
+	t.Parallel()
+	dir, _ := newRealRepo(t)
+	commitFile(t, dir, "w.txt", "one\ntwo\n", "w")
+	writeFile(t, dir, "w.txt", "one\ntwo changed\n")
+	_, svc := newRealRepoAt(t, dir)
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	rid, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewWorking}, Agent: "A",
+		Text: `{"version":1,"summary":"w","files":[{"path":"w.txt","annotations":[{"newRange":[2,2],"summary":"changed"}]}]}`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, _, _, err := svc.NoteThread(ctx, remarkID(rid, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root.Address.State != model.StateUnstaged || root.Address.Worktree == "" || root.Address.Commit != "" || root.Address.Path != "w.txt" {
+		t.Fatalf("root address = %+v, want the worktree's", root.Address)
+	}
+}
