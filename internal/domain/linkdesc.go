@@ -34,9 +34,10 @@ func truncateDesc(s string) string {
 //	preview:  <target>...<source>
 //	commit:   <short> <subject>
 //	stash:    <subject>
+//	note:     <id> <author> · <summary>
 //	file:     <path>
 //
-// commit and stash are the only kinds whose free text is a SUBJECT rather
+// commit, stash, review and note are the only kinds whose free text is a SUBJECT rather
 // than the id itself (a stash's subject is the only thing that makes its
 // row recognisable once stash@{N} is gone from the link); every other kind,
 // including a caller-chosen fallback kind for a shape the table has no row
@@ -49,6 +50,8 @@ func LinkDesc(kind, id, subject string) string {
 		return "stash: " + truncateDesc(subject)
 	case "review":
 		return "review: " + id + " " + truncateDesc(subject)
+	case "note":
+		return "note: " + id + " " + truncateDesc(subject)
 	default:
 		return kind + ": " + truncateDesc(id)
 	}
@@ -127,6 +130,14 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 		// same set without a label, rather than printing an id nobody can read.
 		if kind, label, ok := s.savedSetLabel(ctx, l.Hint.ID); ok {
 			return kind, label, ""
+		}
+	case model.NoteHintKind:
+		// The stored note, when this store holds it: "note: <id> <author> ·
+		// <summary>"; a miss falls THROUGH to the address arms.
+		if byID, err := s.storedNotes(ctx); err == nil {
+			if n, ok := byID[l.Hint.ID]; ok {
+				return "note", n.ID, strings.TrimSpace(n.Author + " · " + cutLabel(n.Summary))
+			}
 		}
 	case model.ReviewHintKind:
 		// The stored review, when this store holds it: "review: <id> <agent>

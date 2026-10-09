@@ -89,7 +89,7 @@ type LinkTarget struct {
 // git: there the hint is the only content source, and the link has no address
 // at all. That link cannot travel between machines, by construction.
 type LinkHint struct {
-	Kind string // one of linkHintKinds ("bookmark", "shelf", "stash", "preview", "view", "version", "review"); "" = no hint
+	Kind string // one of linkHintKinds ("bookmark", "shelf", "stash", "preview", "view", "version", "review", "note"); "" = no hint
 	ID   string // the machine-local id; never empty when Kind is set
 }
 
@@ -126,10 +126,19 @@ func (h LinkHint) String() string {
 // for a range or a branch — so every hint-blind verb sees the reviewed change;
 // the consumer opens the review itself. A lookup key, machine-local like
 // "version": reviews live in the local note store.
-var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true, "view": true, "version": true, "review": true}
+//
+// "note" names a STORED NOTE (a root or a reply) by id. The address is the
+// note's own anchor — its commit, index or working-tree target, path and
+// first line — so every hint-blind verb lands on the line; the consumer
+// opens the thread. Machine-local like "review".
+var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true, "view": true, "version": true, "review": true, "note": true}
 
 // ReviewHintKind is the hint a review link carries (?review=<id>).
 const ReviewHintKind = "review"
+
+// NoteHintKind is the hint a note link carries (?note=<id>): a stored note,
+// a root or a reply.
+const NoteHintKind = "note"
 
 // The content hint: gg://<repo>/<path>[:<line>]?view=content names a file's
 // CONTENT on disk in the worktree — never a diff, never a commit.

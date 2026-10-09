@@ -769,3 +769,13 @@ func TestReviewHintRoundTrips(t *testing.T) {
 		t.Fatalf("the unknown-kind error must list review: %v", err)
 	}
 }
+
+func TestLinkNoteHintRoundTrips(t *testing.T) {
+	l, err := ParseLink("gg://repo/a.go:12?note=3091b73a")
+	if err != nil || l.Hint.Kind != NoteHintKind || l.Hint.ID != "3091b73a" || l.Line != 12 {
+		t.Fatalf("%+v %v", l, err)
+	}
+	if got := l.String(); got != "gg://repo/a.go:12?note=3091b73a" {
+		t.Fatalf("String = %q", got)
+	}
+}

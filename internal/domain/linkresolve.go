@@ -141,6 +141,12 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 			return Resolved{}, err
 		}
 	}
+	if res.Hint.Kind == model.NoteHintKind {
+		// Likewise a note link: the note must still be in the store.
+		if err := checkNoteHint(ctx, reviewHintService(ctx, res.Checkout, opts), res); err != nil {
+			return Resolved{}, err
+		}
+	}
 	return res, nil
 }
 
