@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/model"
+
 	"github.com/homeend/gigagit/internal/agentsession"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
@@ -40,7 +42,7 @@ func TestShownConsoleViewsItsWorktreeAndCloseReturns(t *testing.T) {
 	id := startSessionIn(t, m, other, "Shell")
 	m.sel[panelFiles] = 1
 	m, _ = m.showConsole(id, false)
-	if m.viewed != filepath.Clean(other) || m.console == nil || m.console.ret.view != m.home {
+	if m.viewed != model.KeyOf(other) || m.console == nil || m.console.ret.view != m.home {
 		t.Fatalf("viewed=%q console=%+v", m.viewed, m.console)
 	}
 	m = landView(t, m)
@@ -77,7 +79,7 @@ func TestStagingWhileAConsoleIsShownRunsInItsWorktree(t *testing.T) {
 	if !strings.Contains(string(out), "b-only.txt") {
 		t.Fatalf("B's index = %q", out)
 	}
-	out, _ = exec.Command("git", "-C", m.home, "diff", "--cached", "--name-only").Output()
+	out, _ = exec.Command("git", "-C", m.homeWorktree(), "diff", "--cached", "--name-only").Output()
 	if strings.Contains(string(out), "b-only.txt") {
 		t.Fatal("home's index took the stage")
 	}

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/model"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -175,7 +177,7 @@ func TestWorktreeEnterKeepsConsoleAndScreen(t *testing.T) {
 	m, _ = m.openConsole(s.Info().ID)
 	nm, _ := m.guardedReRoot(other, true)
 	m = nm.(Model)
-	if m.console == nil || !m.ready || m.viewed != filepath.Clean(other) {
+	if m.console == nil || !m.ready || m.viewed != model.KeyOf(other) {
 		t.Fatalf("console=%+v ready=%v viewed=%q", m.console, m.ready, m.viewed)
 	}
 }

@@ -113,7 +113,7 @@ func TestConsoleHintAppearsWhenThePanelsLeaveTheConsolesWorktree(t *testing.T) {
 	if got := m.consoleWorktreeHint(); got != "" {
 		t.Fatalf("panels show the console's worktree: hint = %q, want none", got)
 	}
-	nm, _ := m.guardedReRoot(m.home, true)
+	nm, _ := m.guardedReRoot(m.homeWorktree(), true)
 	m = nm.(Model)
 	if got := m.consoleWorktreeHint(); got != filepath.Clean(other) {
 		t.Fatalf("panels moved home under the console: hint = %q, want %q", got, other)

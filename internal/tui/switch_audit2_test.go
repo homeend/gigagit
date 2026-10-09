@@ -35,7 +35,7 @@ func TestAFreshSlotShowsLoadingUntilItsStatusLands(t *testing.T) {
 	if m.viewLoading() {
 		t.Fatal("the status landed: the marker must go")
 	}
-	m, _ = m.switchView(m.home)
+	m, _ = m.switchView(m.homeWorktree())
 	m, _ = m.switchView(other)
 	if m.viewLoading() {
 		t.Fatal("a slot seen once keeps its remembered status: no marker")
@@ -63,11 +63,11 @@ func TestViewKickReadsTheNoteBadges(t *testing.T) {
 
 func TestSnapshotNamesTheViewedWorktreeAndHomesBranch(t *testing.T) {
 	m := loadedModel(t)
-	m.snapshotWorktree = m.home
+	m.snapshotWorktree = m.homeWorktree()
 	homeBranch := m.status.Branch
 	m, other := viewedOther(t, m)
 	s := buildSessionSnapshot(m)
-	if s.Repo.Worktree != m.home || s.Repo.Viewed != filepath.Clean(other) {
+	if s.Repo.Worktree != m.homeWorktree() || s.Repo.Viewed != filepath.Clean(other) {
 		t.Fatalf("worktree=%q viewed=%q, want home %q and viewed %q", s.Repo.Worktree, s.Repo.Viewed, m.home, other)
 	}
 	if s.Repo.Branch != homeBranch {
@@ -82,14 +82,14 @@ func TestAcceptedSteerAskSwitchesWithoutAReload(t *testing.T) {
 	m.width, m.height = 120, 40
 	m, other := addWorktree(t, m, "wt2")
 	m.steerDir = filepath.Join(t.TempDir(), "steer")
-	m.snapshotWorktree = m.home
+	m.snapshotWorktree = m.homeWorktree()
 	m, _ = m.applySteer(steer.Command{ID: "n1", Cmd: "navigate", File: "x.go", Worktree: other})
 	n := noticeByID(m, "steer_switch")
 	if n == nil {
 		t.Fatal("no ask")
 	}
 	m, _ = m.applyNoticeAction(*n, noticeActionByLabel(t, n, i18n.T("Switch to %s and show", filepath.Base(other))))
-	if m.viewed != filepath.Clean(other) || m.home != m.viewed || !m.ready || m.loading {
+	if m.viewed != model.KeyOf(other) || m.home != m.viewed || !m.ready || m.loading {
 		t.Fatalf("viewed=%q home=%q ready=%v loading=%v: want the slot swap, no reload", m.viewed, m.home, m.ready, m.loading)
 	}
 	if m.startAtCmd == nil || !m.startAtPending {
@@ -104,7 +104,7 @@ func TestLinkCheckoutSwitchesWithoutAReload(t *testing.T) {
 	p := &gotoCommitPopup{}
 	m = m.pushLayer(p)
 	m, _ = m.switchToLink(p, gotoLinkSwitch{checkout: other, bare: true})
-	if m.viewed != filepath.Clean(other) || m.home != m.viewed || !m.ready || m.loading {
+	if m.viewed != model.KeyOf(other) || m.home != m.viewed || !m.ready || m.loading {
 		t.Fatalf("viewed=%q home=%q ready=%v loading=%v: want the slot swap, no reload", m.viewed, m.home, m.ready, m.loading)
 	}
 }
@@ -118,7 +118,7 @@ func TestStateDumpNamesHomeAndViewed(t *testing.T) {
 	var b strings.Builder
 	m.writeTUIState(&b, time.Now())
 	out := b.String()
-	for _, want := range []string{"home: " + m.home, "viewed: " + filepath.Clean(other), "pending return: " + m.home} {
+	for _, want := range []string{"home: " + m.homeWorktree(), "viewed: " + filepath.Clean(other), "pending return: " + m.homeWorktree()} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("dump lacks %q:\n%s", want, out)
 		}

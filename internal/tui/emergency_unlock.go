@@ -186,7 +186,7 @@ func (m Model) writeStateDump(now time.Time) (string, error) {
 func (m Model) writeTUIState(b *strings.Builder, now time.Time) {
 	fmt.Fprintln(b, "\n== tui ==")
 	fmt.Fprintf(b, "worktree: %s\n", m.currentWorktree)
-	fmt.Fprintf(b, "home: %s\nviewed: %s\npending return: %s\n", m.home, m.viewed, m.pendingReturnView)
+	fmt.Fprintf(b, "home: %s\nviewed: %s\npending return: %s\n", m.homeWorktree(), m.viewPath(m.viewed), m.viewPath(m.pendingReturnView))
 	fmt.Fprintf(b, "running: %v  op: %q", m.running, m.opName)
 	if m.running && !m.opStart.IsZero() {
 		fmt.Fprintf(b, "  for %s", now.Sub(m.opStart).Round(100*time.Millisecond))

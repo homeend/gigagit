@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/model"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/gittest"
@@ -31,7 +33,7 @@ func addWorktree(t *testing.T, m Model, name string) (Model, string) {
 // The first load seeds home: one slot, viewed = home = the worktree gg runs in.
 func TestFirstLoadSeedsTheHomeSlot(t *testing.T) {
 	m := loadedModel(t)
-	if m.home == "" || m.viewed != m.home || m.home != filepath.Clean(m.currentWorktree) {
+	if m.home == "" || m.viewed != m.home || m.home != model.KeyOf(m.currentWorktree) {
 		t.Fatalf("home=%q viewed=%q current=%q", m.home, m.viewed, m.currentWorktree)
 	}
 	if v, ok := m.views[m.home]; !ok || v.svc != m.svc {
@@ -50,7 +52,7 @@ func TestSaveAndLoadViewRoundTrip(t *testing.T) {
 	m, otherPath := addWorktree(t, m, "wt2")
 	other := m.ensureView(otherPath)
 	m = m.loadView(other)
-	if m.viewed != other.path || m.svc != other.svc || m.sel[panelFiles] != 0 || len(m.fileMarks) != 0 || m.currentWorktree != other.path {
+	if m.viewed != other.key || m.svc != other.svc || m.sel[panelFiles] != 0 || len(m.fileMarks) != 0 || m.currentWorktree != other.path {
 		t.Fatalf("after load: viewed=%q sel=%d marks=%v current=%q", m.viewed, m.sel[panelFiles], m.fileMarks, m.currentWorktree)
 	}
 	m = m.loadView(home)
@@ -117,7 +119,7 @@ func TestSwitchViewShowsTheOtherWorktreesStatusAndRestoresHome(t *testing.T) {
 	m.sel[panelFiles] = 1
 	m.fileMarks = map[string]bool{"home.txt": true}
 	m, ok := m.switchView(other)
-	if !ok || m.viewed != filepath.Clean(other) || !m.viewKick {
+	if !ok || m.viewed != model.KeyOf(other) || !m.viewKick {
 		t.Fatalf("switch: ok=%v viewed=%q kick=%v msg=%q", ok, m.viewed, m.viewKick, m.statusMsg)
 	}
 	if m.home == m.viewed {
@@ -131,7 +133,7 @@ func TestSwitchViewShowsTheOtherWorktreesStatusAndRestoresHome(t *testing.T) {
 	if !seen {
 		t.Fatalf("status after switch = %+v, want wt2's untracked file", m.status.Files)
 	}
-	m, _ = m.switchView(m.home)
+	m, _ = m.switchView(m.homeWorktree())
 	if m.sel[panelFiles] != 1 || !m.fileMarks["home.txt"] || m.viewed != m.home {
 		t.Fatalf("home not restored: sel=%d marks=%v viewed=%q", m.sel[panelFiles], m.fileMarks, m.viewed)
 	}
@@ -152,7 +154,7 @@ func TestSwitchViewDropsAStaleStatusRead(t *testing.T) {
 	before := m.status
 	nm, _ := m.Update(stale())
 	m = nm.(Model)
-	if len(m.status.Files) != len(before.Files) || m.viewed != filepath.Clean(other) {
+	if len(m.status.Files) != len(before.Files) || m.viewed != model.KeyOf(other) {
 		t.Fatalf("a stale read landed: %+v", m.status.Files)
 	}
 }
@@ -162,7 +164,7 @@ func TestSwitchViewDropsAStaleStatusRead(t *testing.T) {
 func TestSwitchViewRefusals(t *testing.T) {
 	m := loadedModel(t)
 	m, other := addWorktree(t, m, "wt2")
-	if nm, ok := m.switchView(m.viewed); !ok || nm.viewKick {
+	if nm, ok := m.switchView(m.viewPath(m.viewed)); !ok || nm.viewKick {
 		t.Fatalf("same path: ok=%v kick=%v", ok, nm.viewKick)
 	}
 	if _, ok := m.switchView(t.TempDir()); ok {
@@ -203,13 +205,13 @@ func TestWorktreesReloadDropsAGoneSlot(t *testing.T) {
 	m, other := addWorktree(t, m, "wt2")
 	m, _ = m.switchView(other)
 	m = landView(t, m)
-	if out, err := exec.Command("git", "-C", m.home, "worktree", "remove", "--force", other).CombinedOutput(); err != nil {
+	if out, err := exec.Command("git", "-C", m.homeWorktree(), "worktree", "remove", "--force", other).CombinedOutput(); err != nil {
 		t.Fatalf("worktree remove: %v\n%s", err, out)
 	}
 	read := m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})
 	nm, _ := m.Update(read())
 	m = nm.(Model)
-	if m.viewed != m.home || m.views[filepath.Clean(other)] != nil || m.svc != m.views[m.home].svc {
+	if m.viewed != m.home || m.views[model.KeyOf(other)] != nil || m.svc != m.views[m.home].svc {
 		t.Fatalf("viewed=%q slots=%v", m.viewed, m.views)
 	}
 	if !strings.Contains(m.statusMsg, "wt2") {
@@ -228,7 +230,7 @@ func TestInRepoSwitchAdoptsWithoutAReload(t *testing.T) {
 	m = m.pushLayer(&diffView{rev: "abc1"}) // a commit's diff survives (a working-tree one closes: it would show the old tree's file)
 	nm, _ := m.guardedReRoot(other, true)
 	m = nm.(Model)
-	if m.viewed != filepath.Clean(other) || m.home != m.viewed || m.switchTarget != filepath.Clean(other) || publishedWorktree() != filepath.Clean(other) {
+	if m.viewed != model.KeyOf(other) || m.home != m.viewed || m.switchTarget != filepath.Clean(other) || publishedWorktree() != filepath.Clean(other) {
 		t.Fatalf("viewed=%q home=%q target=%q published=%q", m.viewed, m.home, m.switchTarget, publishedWorktree())
 	}
 	if !m.ready || m.loading || m.diffLayer() == nil {
@@ -277,11 +279,11 @@ func TestSwitchWhileAConsoleIsShownAdoptsAndRetargetsTheReturn(t *testing.T) {
 	m, _ = m.showConsole(id, false)
 	nm, _ := m.guardedReRoot(other, true)
 	m = nm.(Model)
-	if m.home != filepath.Clean(other) || m.console == nil || m.console.ret.view != m.home {
+	if m.home != model.KeyOf(other) || m.console == nil || m.console.ret.view != m.home {
 		t.Fatalf("home=%q console=%+v", m.home, m.console)
 	}
 	m = m.closeConsole()
-	if m.viewed != filepath.Clean(other) {
+	if m.viewed != model.KeyOf(other) {
 		t.Fatalf("close must stay in the adopted worktree, viewed=%q", m.viewed)
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/model"
+
 	"github.com/homeend/gigagit/internal/engine"
 )
 
@@ -16,10 +18,10 @@ func TestSwitchViewDropsAStaleFullLoad(t *testing.T) {
 	m, _ = m.switchView(other)
 	m = landView(t, m)
 	stale := m.loadCmd()
-	m, _ = m.switchView(m.home)
+	m, _ = m.switchView(m.homeWorktree())
 	nm, _ := m.Update(stale())
 	m = nm.(Model)
-	if m.currentWorktree != m.home || m.viewed != m.home || m.svc != m.views[m.home].svc {
+	if m.currentWorktree != m.homeWorktree() || m.viewed != m.home || m.svc != m.views[m.home].svc {
 		t.Fatalf("a stale load landed: current=%q viewed=%q", m.currentWorktree, m.viewed)
 	}
 }
@@ -29,7 +31,7 @@ func TestSwitchViewDropsAStaleFullLoad(t *testing.T) {
 func TestSwitchGensAreMonotonic(t *testing.T) {
 	m := loadedModel(t)
 	m, other := addWorktree(t, m, "wt2")
-	for i, to := range []string{other, m.home, other} {
+	for i, to := range []string{other, m.homeWorktree(), other} {
 		w, r, d := m.watchGen, m.workingReviewsGen, m.docWatch.gen
 		m, _ = m.switchView(to)
 		if m.watchGen <= w || m.workingReviewsGen <= r || m.docWatch.gen <= d {
@@ -51,7 +53,7 @@ func TestOwnWorktreeGuardedWhileViewingAnother(t *testing.T) {
 		}
 	}
 	for _, w := range m.recycleCandidates() {
-		if filepath.Clean(w.Path) == m.home || filepath.Clean(w.Path) == m.viewed {
+		if model.KeyOf(w.Path) == m.home || model.KeyOf(w.Path) == m.viewed {
 			t.Fatalf("recycle offers %s", w.Path)
 		}
 	}
@@ -97,7 +99,7 @@ func TestLegacyLoadWhileViewingKeepsPublishedHome(t *testing.T) {
 	m = landView(t, m)
 	nm, _ := m.Update(m.loadCmd()())
 	m = nm.(Model)
-	if m.currentWorktree != filepath.Clean(other) || publishedWorktree() != m.home {
+	if m.currentWorktree != filepath.Clean(other) || publishedWorktree() != m.homeWorktree() {
 		t.Fatalf("current=%q published=%q home=%q", m.currentWorktree, publishedWorktree(), m.home)
 	}
 }
@@ -115,7 +117,7 @@ func TestUserSwitchUnderAConsoleSwapsAndLabelsTheHint(t *testing.T) {
 	if row := m.withConsoleWorktree("", 120); row != "" {
 		t.Fatalf("console's worktree on screen: row = %q, want no hint", row)
 	}
-	nm, _ := m.guardedReRoot(m.home, true)
+	nm, _ := m.guardedReRoot(m.homeWorktree(), true)
 	m = nm.(Model)
 	if m.viewed != m.home || m.console == nil || m.console.ret.view != m.home {
 		t.Fatalf("viewed=%q console=%+v", m.viewed, m.console)
@@ -136,7 +138,7 @@ func TestCloseConsoleDuringAnOpReturnsWhenItEnds(t *testing.T) {
 	m, _ = m.showConsole(id, false)
 	m.running = true
 	m = m.closeConsole()
-	if m.viewed != filepath.Clean(other) || m.pendingReturnView != m.home {
+	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home {
 		t.Fatalf("viewed=%q pending=%q", m.viewed, m.pendingReturnView)
 	}
 	nm, _ := m.Update(opFinishedMsg{})
@@ -163,7 +165,7 @@ func TestQueuedReturnWaitsForAChainedOp(t *testing.T) {
 	m.pendingSwitchBranch = "wt2" // the chain: switch once the shelve is done
 	nm, _ := m.Update(opFinishedMsg{res: engine.Result{Changed: true}})
 	m = nm.(Model)
-	if m.viewed != filepath.Clean(other) || m.pendingReturnView != m.home || !m.running {
+	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home || !m.running {
 		t.Fatalf("chain dispatched: viewed=%q pending=%q running=%v; want the panels still on the op's worktree", m.viewed, m.pendingReturnView, m.running)
 	}
 	nm, _ = m.Update(opFinishedMsg{})

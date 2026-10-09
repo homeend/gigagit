@@ -47,18 +47,18 @@ func (p *moveWorktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		wt := p.wt
 		m = m.popLayer()
-		if filepath.Clean(wt.Path) == m.homeWorktree() { // gg's OWN cwd, not a worktree a console views
+		if model.SamePath(wt.Path, m.homeWorktree()) { // gg's OWN cwd, not a worktree a console views
 			// gg's own cwd must leave the tree before git renames it (Windows
 			// cannot rename a directory any process holds as cwd); the chained
 			// reRoot below lands us in the new path.
 			_ = os.Chdir(filepath.Dir(wt.Path))
 			m.pendingSwitch = true // opFinishedMsg chains guardedReRoot(res.Path)
 		}
-		if k := filepath.Clean(wt.Path); k == m.viewed && k != m.homeWorktree() {
+		if k := model.KeyOf(wt.Path); k == m.viewed && k != m.home {
 			// Only shown (a look): the panels go home before git renames the
 			// directory their service is rooted in; the list reload prunes
 			// the slot, and a console there keeps its (now stale) dir.
-			m, _ = m.switchView(m.home)
+			m, _ = m.switchView(m.homeWorktree())
 		}
 		m.pendingWorktreeMoveOld = wt.Path
 		return m.startOp(engine.MoveWorktree{Path: wt.Path, Dest: dest})

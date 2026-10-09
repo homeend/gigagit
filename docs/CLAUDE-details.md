@@ -6323,8 +6323,15 @@ on a repo switch) rides `PublishSessions` → `Registry.Viewed`, which
 `readLive` adds to `tuis` so `tuiGuard` refuses the shown tree too.
 `adoptView` chains `touchRepoMRUCmd`. The move popup `switchView`s home
 before moving the VIEWED (non-home) tree. `switchView` refuses before
-`seedHome`. NOT done: slot keys stay `filepath.Clean` (a `CheckoutKey`
-case-fold drift is Windows/macOS-only and untestable here). Slot services get the config's policies
+`seedHome`. Slot identity is `model.CheckoutKey` (`m.views`, `viewed`,
+`home`, `pendingReturnView`, `consoleReturn.view/over`; `worktreeView`
+keeps `key` + the LISTED `path`): `listedWorktree` resolves any spelling
+to the list's, `viewPath`/`homeWorktree` give a key's on-disk path for
+I/O and prose, `openFilesReg` keys on it internally; domain's
+`linkPathKey`/`SameCheckout` delegate to `model.KeyOf`. The fold is a
+per-platform `atomic.Bool` (`model.SetCaseInsensitivePaths`) so a
+SEQUENTIAL test on Linux exercises the Windows/macOS rule
+(`checkout_key_test.go`). Slot services get the config's policies
 (`applyServicePolicies` in `ensureView`; `applyPoliciesToSlots` on
 `configReadyMsg` and the Versions settings) — a bare `OpenTUI` would write
 version refs the config forbids. `dropConsole` (the console stepping aside for a stash

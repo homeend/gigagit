@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // consoleRepaint is the minimum spacing of console repaints: a chatty agent
@@ -51,8 +52,8 @@ type consoleReturn struct {
 	filesView    *contentPopup // the files view a preview belongs to
 	filesPreview *openFile
 	focus        panel
-	view         string // the viewed worktree the console was shown over (where a close returns)
-	over         string // the worktree the parked layers showed (a working diff restored over another one would act on it)
+	view         model.CheckoutKey // the viewed worktree the console was shown over (where a close returns)
+	over         model.CheckoutKey // the worktree the parked layers showed (a working diff restored over another one would act on it)
 }
 
 // sessionWatch is the TUI's subscription to the session LIST, on a pointer
@@ -144,7 +145,7 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 	// it and the panels are already that tree's. A refusal (an op running)
 	// keeps the view and says so; the console shows regardless.
 	m.pendingReturnView = "" // a return queued by an earlier close is moot: this console's own return point rules
-	if dir := filepath.Clean(s.Info().Dir); dir != m.viewed && m.isRepoWorktree(dir) {
+	if dir := s.Info().Dir; model.KeyOf(dir) != m.viewed && m.isRepoWorktree(dir) {
 		m, _ = m.switchView(dir)
 	}
 	return m, waitSessionCmd(m.console, id, gen)
@@ -154,10 +155,14 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 // console closes. An operation running refuses the swap for now: the
 // return is kept (pendingReturnView) and happens when the op ends.
 func (m Model) returnView(r *consoleReturn) Model {
-	if r == nil || r.view == "" || r.view == m.viewed || !m.isRepoWorktree(r.view) {
+	if r == nil || r.view == "" || r.view == m.viewed {
 		return m
 	}
-	nm, ok := m.switchView(r.view)
+	path := m.viewPath(r.view)
+	if path == "" || !m.isRepoWorktree(path) {
+		return m
+	}
+	nm, ok := m.switchView(path)
 	if !ok {
 		nm.pendingReturnView = r.view // an op or a surface: the Update tail takes it once clear
 	}
@@ -616,9 +621,9 @@ func (m Model) worktreeOrder() []int {
 // worktreeIndex is a directory's position in the Branches tab's order of
 // the worktrees (worktreeOrder), or len(m.worktrees) for one not listed.
 func (m Model) worktreeIndex(dir string) int {
-	dir = filepath.Clean(dir)
+	key := model.KeyOf(dir)
 	for pos, i := range m.worktreeOrder() {
-		if filepath.Clean(m.worktrees[i].Path) == dir {
+		if model.KeyOf(m.worktrees[i].Path) == key {
 			return pos
 		}
 	}
@@ -700,7 +705,7 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 		// first session at or below the viewed worktree in list order,
 		// wrapping to the top — a shown unbound console is bound when it
 		// is that one.
-		at := m.worktreeIndex(m.viewed)
+		at := m.worktreeIndex(m.viewPath(m.viewed))
 		for i, info := range list {
 			if m.worktreeIndex(info.Dir) >= at {
 				next = i

@@ -812,18 +812,12 @@ func linkNameEq(a, b string) bool {
 
 // linkPathKey normalises a path for comparison: slash form, and case-folded on
 // the platforms whose filesystems are case-insensitive.
-func linkPathKey(p string) string {
-	s := filepath.ToSlash(p)
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		return strings.ToLower(s)
-	}
-	return s
-}
+// linkPathKey is model.KeyOf's rule (one rule for every comparison of
+// checkout paths; the fold is model's per-platform switch).
+func linkPathKey(p string) string { return string(model.KeyOf(p)) }
 
 // samePathLink reports whether two absolute paths name the same place.
-func samePathLink(a, b string) bool {
-	return linkPathKey(filepath.Clean(a)) == linkPathKey(filepath.Clean(b))
-}
+func samePathLink(a, b string) bool { return model.SamePath(a, b) }
 
 // SameCheckout reports whether two absolute checkout paths name the same
 // place, by the SAME rule the link resolver uses to deduplicate candidates

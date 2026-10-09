@@ -29,7 +29,7 @@ func (r *openFilesReg) list(wt string) []*openFile {
 	if r == nil {
 		return nil
 	}
-	return r.byWT[wt]
+	return r.byWT[string(model.KeyOf(wt))]
 }
 
 // find is wt's open document with key, or nil.
@@ -51,6 +51,7 @@ func (r *openFilesReg) touch(wt string, d *openFile, shown func(*openFile) bool)
 	if r.byWT == nil {
 		r.byWT = map[string][]*openFile{}
 	}
+	wt = string(model.KeyOf(wt)) // one list per checkout, whatever its spelling
 	l := []*openFile{d}
 	for _, e := range r.byWT[wt] {
 		if e != d {
@@ -92,6 +93,7 @@ func (r *openFilesReg) remove(wt string, d *openFile) {
 	if r == nil {
 		return
 	}
+	wt = string(model.KeyOf(wt))
 	l := r.byWT[wt][:0:0]
 	for _, e := range r.byWT[wt] {
 		if e == d && d.ov != nil {

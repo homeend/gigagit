@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -269,7 +271,7 @@ func TestPageSwitchReRootsTheTUI(t *testing.T) {
 	old := m.svc
 	nm, cmd := m.Update(req)
 	m = nm.(Model)
-	if m.svc == old || m.switchTarget != filepath.Clean(other) || m.home != filepath.Clean(other) {
+	if m.svc == old || m.switchTarget != filepath.Clean(other) || m.home != model.KeyOf(other) {
 		t.Fatalf("the TUI must move to the page's worktree: target=%q home=%q", m.switchTarget, m.home)
 	}
 	if m.statusMsg != "switched from the web page" {
