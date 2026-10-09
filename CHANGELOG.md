@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## PR review, follow-ups: the deferred minors of plans 1 and 2
+
+The review findings plans 1 (core) and 2 (TUI) carried as minors, fixed
+one by one.
+
+- **A reply to a review remark** links as its remark (the review link at
+  the remark's lines, not a pathless link at the review note), and `gg
+  note show` on it — or on the remark id itself — answers the remark as
+  the thread's root with that remark's replies and resolution.
+- **Send candidates.** Each review is read once per group; a prose review
+  is titled by its text's first line; two reviews saved in the same
+  instant keep one order (by id); a draft reply row carries the planner's
+  skip reason (its thread not in the PR), as note rows do.
+- **Note links.** A range note whose block now runs past the file's end
+  links without a fingerprint (a range carries a block fingerprint or
+  none — a line's read as a stale block).
+- **Send panel.** Only the panel's own `ctrl+s` closes it on a change — a
+  one-note send from the diff's menu while the panel waits below leaves
+  its ticks; a second `ctrl+s` while the plan is being prepared waits,
+  and "preparing…" and the plan's errors go to the panel's notice; `enter`
+  on a row whose file the list's filter hides clears the filter, opens
+  the diff and parks the list's cursor on the file.
+- **Overview bands.** A stored overview's plain anchor gets no band and is
+  never current, so `n` / `p` cannot land on it.
+- **View all notes.** `ctrl+l` is offered on no shelf note (a shelved file's
+  note showed the hint and the copy failed).
+- Tests pin the old-side candidate row, rows being sent, staged and range
+  note links, a gone review in a send, the summary stamp after a mixed
+  CLI send, the older review row's esc return and the panel's enter with
+  the PR's file list closed.
+
+Not changed, by ruling: `gg pr notes --json` reads the PR twice (both
+cached); `linkNote` stays in `cli/review_show.go`; a dropped send step
+under another dialog still says "send cancelled … send again"; `L`
+copies the note link on every line of a ranged note (the remark
+behaviour). Deferred to plan 3's skill bump: the `--body-from` settle
+note in using-gg, and the open-files protocol naming a stored overview's
+review id.
+
 ## PR review, plan 2: ≡ Summary / ≡ Overview rows, PR Reviews rows, the Send to GitHub panel, Copy note link (TUI)
 
 The terminal side of the PR-review feature (spec
