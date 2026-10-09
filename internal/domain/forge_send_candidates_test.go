@@ -186,3 +186,29 @@ func TestPRSendCandidatesReplyRowsCarryASkipReason(t *testing.T) {
 		}
 	}
 }
+
+// Review finding I2: the remark rows' skip judgement uses the review the
+// group already read — one note-store read per review, not one per remark.
+func TestPRSendCandidatesReadsEachReviewOnce(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	ctx := context.Background()
+	if _, err := svc.PullRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	savePRReview(t, svc, `{"version":1,"summary":"three","files":[{"path":"big.go","annotations":[
+ {"newRange":[5,5],"summary":"a"},{"newRange":[25,25],"summary":"b"},{"newRange":[26,26],"summary":"c"}]}]}`)
+	reads := 0
+	svc.onReviewRead = func(string) { reads++ }
+	if _, err := svc.PRNotes(ctx, 7); err != nil { // prime the listing's own remark cache
+		t.Fatal(err)
+	}
+	reads = 0
+	c, err := svc.PRSendCandidates(ctx, 7)
+	if err != nil || len(c.Groups) != 1 || len(c.Groups[0].Rows) != 3 {
+		t.Fatalf("%+v %v", c, err)
+	}
+	if reads != 1 {
+		t.Fatalf("the candidates read the review %d times for 3 remarks, want 1", reads)
+	}
+}

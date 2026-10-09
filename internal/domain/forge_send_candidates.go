@@ -92,7 +92,7 @@ func (s *Service) PRSendCandidates(ctx context.Context, n int) (SendCandidates, 
 			for _, rep := range r.Replies {
 				if rep.Note.IsForgeReply() && rep.Sync != model.SyncSending && rep.Sync != model.SyncForge {
 					g := group(GroupReplies, "replies")
-					g.Rows = append(g.Rows, s.candidateRow(ctx, rep, "reply", pl))
+					g.Rows = append(g.Rows, s.candidateRow(ctx, rep, "reply", pl, reviews))
 				}
 			}
 			if r.Note.Source == model.NoteSourceForge || r.Note.IsForgeReply() || r.Sync == model.SyncSending || r.Sync == model.SyncForge {
@@ -110,12 +110,14 @@ func (s *Service) PRSendCandidates(ctx context.Context, n int) (SendCandidates, 
 			if gkind == "review" {
 				rid := strings.TrimPrefix(r.Group, "review:")
 				if _, seen := reviews[rid]; !seen { // one read per review, on its first row
-					rv, _ := s.Review(ctx, rid) // unreadable: the group stays, untitled, undated
+					rv, err := s.Review(ctx, rid) // unreadable: the group stays, untitled, undated
 					reviews[rid] = rv
-					g.Agent, g.Created, g.Title = rv.Agent, rv.Created, candidateGroupTitle(rv)
+					if err == nil {
+						g.Agent, g.Created, g.Title = rv.Agent, rv.Created, candidateGroupTitle(rv)
+					}
 				}
 			}
-			g.Rows = append(g.Rows, s.candidateRow(ctx, r, kind, pl))
+			g.Rows = append(g.Rows, s.candidateRow(ctx, r, kind, pl, reviews))
 		}
 	}
 	// Order: reviews newest first, mine, replies; rows by path then line.
@@ -173,7 +175,9 @@ func sortCandidateGroups(gs []*SendCandidateGroup) {
 // candidateRow builds one row: its skip reason is what the planner would
 // say today (noteItem / remarkItem against a scratch plan), its code the
 // lines at the tip (the base for an old-side note), at most four.
-func (s *Service) candidateRow(ctx context.Context, r ResolvedNote, kind string, pl *sendPlace) SendCandidate {
+// reviews is the group pass's one read per review: a remark row judges
+// against it instead of reading the store again.
+func (s *Service) candidateRow(ctx context.Context, r ResolvedNote, kind string, pl *sendPlace, reviews map[string]Review) SendCandidate {
 	n := r.Note
 	row := SendCandidate{ID: n.ID, Kind: kind, Path: n.Address.Path, Range: r.Range, Side: string(n.Side),
 		Summary: n.Summary, Rationale: n.Rationale, Sync: r.Sync, Severity: severityOf(n.Tags)}
@@ -183,7 +187,7 @@ func (s *Service) candidateRow(ctx context.Context, r ResolvedNote, kind string,
 		var scratch engine.SendPlan
 		if kind == "remark" {
 			rid, i, _ := model.ParseReviewNoteID(n.ID)
-			if rv, err := s.Review(ctx, rid); err == nil {
+			if rv, ok := reviews[rid]; ok && rv.ID != "" {
 				s.remarkItem(ctx, &scratch, rv, i, pl)
 			}
 		} else {

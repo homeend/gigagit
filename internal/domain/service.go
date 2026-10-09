@@ -125,6 +125,9 @@ type Service struct {
 	forgePRCache map[int]forgePREntry
 	forgeBase    *forgeBaseRepo
 	forgeNow     func() time.Time
+	// onReviewRead sees every Review(id) read (nil = none): a test seam that
+	// counts the store reads a listing makes.
+	onReviewRead func(id string)
 	// forgeGroups is, per PR, forge review id → the local group it was sent
 	// from (the colour a sent group keeps).
 	forgeGroups map[int]map[string]string
