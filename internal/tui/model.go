@@ -36,6 +36,8 @@ import (
 
 // Model is the root Bubble Tea model.
 type Model struct {
+	windowState // the viewed worktree's windows (window_state.go): swapped with the slot, every field promoted
+
 	width, height int
 
 	loading bool
@@ -74,9 +76,6 @@ type Model struct {
 	pendingDriftBranch     string                         // branch to DriftAfter-check once this op finishes (armed by startOp for rebase/merge/pull/ContinueOp)
 	pendingDriftPaused     bool                           // true when the armed op is resuming a merge/rebase paused for conflicts (see notify.go's driftNotice)
 	pendingGotoTip         string                         // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
-	pendingSteer           *pendingSteer                  // parked navigate (steer_nav.go); drained by the load it waits on
-	pendingHint            *pendingHint                   // navigate whose hint (steer_nav.go) is being revealed; drained by bookmarksLoadedMsg/shelfLoadedMsg
-	hintGen                int                            // generation guard for pendingHint (fix F3): bumped on every stage, stamped into the hint's OWN load so an unrelated bookmark/shelf load in flight can never be mistaken for it
 	startAt                model.Link                     // --at: where to land once the preconditions below have landed
 	startAtAnchor          *steer.Line                    // what became of startAt's fingerprinted line (a # paste that switched checkout); nil = nothing to say
 	startAtPending         bool                           // consumed exactly once, by startAtReady's last precondition
@@ -86,13 +85,25 @@ type Model struct {
 	pendingRemoteTagAdds   []string                       // tags to optimistically add to remoteTagNames on PushTags success
 	pushCheckGen           int                            // generation guard for the async pre-push remote-tag check
 	pickGen                int                            // generation guard for the async cherry-pick commit probe
-	entryCompareGen        int                            // drops stale commit-entry compare resolves (the pickGen pattern)
 	linkHistGen            int                            // drops a copied-link history load a newer host has superseded
 	pickPatchTemp          string                         // patch lane's temp file; removed when its op finishes
 	reflog                 []model.ReflogEntry            // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree        string
-	recycleBranch          string // branch captured when the Recycle-a-worktree picker opened
-	recycleRemote          string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
+	// views remembers the worktree-scoped state per worktree of this
+	// repository (worktree_view.go); viewed is the slot on screen, home the
+	// one gg's identity (exit dir, steering, snapshot) belongs to.
+	views    map[model.CheckoutKey]*worktreeView
+	viewed   model.CheckoutKey
+	home     model.CheckoutKey
+	viewKick bool      // switchView ran; the Update tail launches viewKickCmd once
+	replay   []tea.Msg // the viewed slot's queued results, moved here by loadView and applied by the Update tail (slot_replay.go)
+	// pendingReturnView is where the panels go once the op or the surface
+	// that refused a non-key swap clears: a closed console's return, a
+	// shown console's own worktree, a gone slot (console.go returnView /
+	// showConsole, worktree_view.go takeQueuedReturn).
+	pendingReturnView model.CheckoutKey
+	recycleBranch     string // branch captured when the Recycle-a-worktree picker opened
+	recycleRemote     string // its remote-tracking ref ("origin/foo") when picked on the Remotes tab; "" = local
 
 	notices                []notice                // session notice list (see notify.go)
 	driftNotices           []driftNoticeSource     // post-op drift/paused-resume findings; rebuildNotices re-renders these too
@@ -100,8 +111,6 @@ type Model struct {
 	noticesUnread          bool                    // blink while true; opening the ! dialog clears it
 	blinkOn                bool                    // current blink phase (style alternation)
 	noticeGen              int                     // stale-drop guard for repoHealthMsg across repo switches
-	gitConfigGen           int                     // stale-drop guard for explorer row loads
-	versionsGen            int                     // stale-drop guard for the branch-versions popup's loads
 	blinkGen               int                     // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
 	noticeSessionDismissed map[string]bool         // "Not now" ids; cleared on reRoot (re-evaluated next load)
 	repoHealth             model.RepoHealth        // last health snapshot (Settings Commit-graph row)
@@ -129,10 +138,9 @@ type Model struct {
 	pendingSeqBump      []string
 	pendingSwitch       bool
 	switchTarget        string
-	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
-	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	pendingSources      []sourceKey     // sources to refresh after this op; nil = all (set at the startOp call site)
-	identity            model.Identity  // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
+	pendingSwitchBranch string         // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	pendingSources      []sourceKey    // sources to refresh after this op; nil = all (set at the startOp call site)
+	identity            model.Identity // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
 
 	mark              *markState      // the m-key mark; nil = none (see mark.go)
 	blameRecentLast   string          // last text submitted to the blame view's d-key age dialog; seeds the next one (the on/off state lives on the blameView and dies with it)
@@ -142,14 +150,9 @@ type Model struct {
 	previewCompareSet map[string]bool // Previews rows toggled into the ◉ compare selection (keyed by row id; preview_marks.go)
 	actionMenu        *actionMenu     // . action menu (list + run available actions); nil = closed
 
-	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
 	docs          *agentdocs.Store                         // the store the open files' notes live in: agentdocs.Shared(), which a hosted gg web page reads too
 	docsSub       *docsTrack                               // the TUI's one subscription to docs (agentdocs_track.go)
-	wtFiles       *worktreeFiles                           // F's working-tree mode of the files view (nil otherwise)
-	filesFull     bool                                     // ctrl+t: the files view spans the whole body
-	previewFull   bool                                     // ctrl+t on a focused preview: it spans the whole body
-	wtPreviewGen  int                                      // bumped per cursor move in F's window: drops a superseded preview settle
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
 	histWalks     *historyWalks                            // file-history walks still running; Update stops the ones whose view went away (sweepHistoryWalks)
@@ -168,35 +171,10 @@ type Model struct {
 	conflict          domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 	resumePromptShown bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
 
-	filesMode         filesMode              // authoritative source mode (changed/fullTree/compare/stash)
-	filesView         *contentPopup          // commit files tree replacing the left column; nil = closed
-	filesTitle        string                 // "Files <short-hash> <subject>", updated with the content — rendered/localized display text; NEVER parsed
-	filesContext      string                 // diff-view context payload (ref/subject or compare label) mirroring filesTitle's content sans any "Files "/panel framing; the diff view's "@ <context>" header reads THIS, not filesTitle
-	filesCommit       model.Commit           // the RESOLVED commit the view is showing (date/author/subject), incl. the ones fetched for a bare sha; backs the date line and filesViewCommit's fallback. Zero UnixTime = unknown: no date line is drawn and no row is spent
-	filesHash         string                 // commit the view wants; gates stale async results
-	filesLeft         model.Endpoint         // compare mode: older side
-	filesRight        model.Endpoint         // compare mode: newer side
-	compareTag        string                 // gates stale compareFilesMsg results
-	comparePair       *comparePairState      // branch-pair compare extension (origin filter); nil for every other compare
-	filesSets         *domain.LinkComparison // link compare: the two file sets, for per-member byte sources; nil for every endpoint compare
-	linkCompareWant   string                 // tag of the link compare in flight; "" = none (a stale or cancelled load is dropped)
-	filesStashTag     string                 // when the files tree is showing a stash: its ref (gates stash-file loads)
-	filesShelfID      string                 // shelf mode: the shelved-commit entry id (gates shelf-file loads, keys member refs)
-	filesShelfLabel   string                 // shelf mode: "shelf #<short>" display label for diff contexts
-	filesShelfNotes   []domain.ResolvedNote  // shelf mode: the entry's own notes, listed above its members (a Notes section) and read by enter on their rows
-	filesReturnFocus  panel                  // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
-	filesReturnLayers []layer                // layer stack parked by a popup that handed off to the files view (handOffToFilesView); esc/l restore it, every other teardown drops it (closeFilesView zeroes it)
-	filesTreeFocused  bool                   // true = the tree side owns vertical movement (←/→/tab)
-	filesReadInflight bool                   // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
-	filesPreview      *openFile              // full-tree mode: the file shown in the right column (nil = none)
-
-	diffTag       string      // request key of the wanted diff; gates stale async results
-	diffNav       diffNavKind // which list the open diff was opened from (Home/End file-stepping)
-	diffNotice    string      // transient bottom-left diff-view notice (file arrival / no-file); cleared on the next key
-	diffPartial   bool        // session default for new diffs (false = full); the f key toggles it
-	diffLong      longMode    // session: long-line mode for new diffs (0 = scroll); w cycles
-	diffImgLayout imgLayout   // session: how an image pair is laid out in a diff; ctrl+w cycles
-	diffCursor    string      // session override of [ui] diff_cursor ("" = follow config); the . menu's Cursor marker row cycles it
+	diffPartial   bool      // session default for new diffs (false = full); the f key toggles it
+	diffLong      longMode  // session: long-line mode for new diffs (0 = scroll); w cycles
+	diffImgLayout imgLayout // session: how an image pair is laid out in a diff; ctrl+w cycles
+	diffCursor    string    // session override of [ui] diff_cursor ("" = follow config); the . menu's Cursor marker row cycles it
 	// diffStacked is the S key's preference: a diff opened from a file list
 	// shows EVERY file of that list in one scroll (diff_stack.go). Read from
 	// promptstate at startup and written back on every flip — machine-local,
@@ -208,47 +186,6 @@ type Model struct {
 
 	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
 	notesAgentOff bool              // `a`: hide agent-written notes for this session
-	// noteLand parks the landing a }/{ FILE step owes the user: the step opens
-	// the next noted file asynchronously, so the note to sit on is not known
-	// until that file's notes arrive (notesLoadedMsg). nil = nothing parked.
-	noteLand *noteLanding
-	// hunkReload parks the re-read a staging round owes a SINGLE-file
-	// working-tree diff: a stack reconciles itself on every status write, one
-	// file does not (diff_stack_hunks.go). nil = nothing parked.
-	hunkReload *hunkReload
-	// diffLand parks the LINE a re-opened single diff owes the reader: leaving
-	// a stack with S re-opens the file asynchronously, and a fresh view lands
-	// on its first change block, not on the line being read. nil = nothing.
-	diffLand *lineLanding
-
-	// filesPreviewSet / filesPreviewCounts are the open preview's note scope
-	// and its per-path badge counts; nil/empty when the files view is not
-	// showing a preview. Stamped onto each diff the view opens.
-	filesPreviewSet    *domain.PreviewNoteSet
-	filesPreviewCounts map[string]int
-	filesPreviewGroups map[string][]string // a PR's per-path note groups: the badges' colour bars
-	// filesPreviewReviews are the open preview's (or pair's) AI reviews: the
-	// Reviews block on top of its file list. filesPairLabel is an open saved
-	// pair's label, kept so a review opened from it can re-open it.
-	filesPreviewReviews []domain.ReviewHead
-	filesPairLabel      string
-	// filesReview is the files view's REVIEW mode (review_view.go): set
-	// after the view opens on a structured review; nil otherwise.
-	filesReview *reviewViewState
-	// filesLandNote is the review whose row the next commit file list puts
-	// the cursor on (esc from a review opened from that list); "" = none.
-	filesLandNote string
-	// filesLandScope is its twin for a Range review row (the scope it names).
-	filesLandScope string
-	// filesBack is set while a range opened from a commit's Range review row
-	// shows: esc returns to that commit's files, the cursor on the row.
-	filesBack *scopeBack
-	// reviewsFollowGen numbers follow-live list landings: only the latest
-	// one's pause reads the commit's reviews (reviewsFollowMsg).
-	reviewsFollowGen int
-	// reviewOpenGen numbers review opens: a read answers only the loading
-	// box of its own open (reviewLoadingPopup).
-	reviewOpenGen int
 
 	previews []previewRow // saved merge previews + live summaries (srcPreviews)
 	// rerootNotes asks the next full snapshot to chain a note-counts read: a
@@ -319,16 +256,12 @@ type Model struct {
 	// cancelled on a repo switch, a newer list, and quit.
 	prPrefetch     *prPrefetchRun
 	prCommentsLast time.Time
-	previewOpen    *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
-	previewGen     int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
 	// arrival arm: the fresh rows are the first moment the new id exists.
 	previewFocusID  string // record id to select after the reload ("" = leave the cursor be)
 	previewFocusTab bool   // also make Previews the active/focused tab (the tab's own keys only)
-
-	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
 	svc                 *domain.Service                                  // command layer; all git access goes through svc
 	clipWrite           func(tty io.Writer, text string) (string, error) // the clipboard writer behind copyToClipboardCmd; New sets the real one
@@ -361,9 +294,9 @@ type Model struct {
 	srcGen              map[sourceKey]int                                // per-source generation; stale dataAvailableMsg dropped
 	srcInflight         map[sourceKey]bool                               // a read of this source is outstanding (coalescing)
 	srcLoading          map[sourceKey]bool                               // a manual read is in flight → consuming panels show ⏳
-	srcSince            map[sourceKey]time.Time                          // when the in-flight read of a source started (alt+A's state dump)
-	loadStart           time.Time                                        // when the full load (startup, repo switch) began — the blank screen's alt+A hint
-	lastStateDump       string                                           // the file alt+A wrote last ("" = none yet)
+	srcSince            map[sourceKey]time.Time                          // when the in-flight read of a source started (alt+U's state dump)
+	loadStart           time.Time                                        // when the full load (startup, repo switch) began — the blank screen's alt+U hint
+	lastStateDump       string                                           // the file alt+U wrote last ("" = none yet)
 	repoConfigPath      string                                           // <repo-top>/.gg.toml; the refresh-rates editor writes here
 	watchSupported      bool                                             // gitwatch.Supported(commonDir); false on WSL2 9p → watch sources fall back to polling
 	watcher             *gitwatch.Watcher                                // file-watcher; nil when unsupported or no sources enabled
@@ -556,6 +489,7 @@ func New(svc *domain.Service) Model {
 		loading:                true,
 		loadStart:              time.Now(),
 		sel:                    map[panel]int{},
+		views:                  map[model.CheckoutKey]*worktreeView{},
 		sortModes:              map[panel]sortMode{panelBranches: sortDateDesc},
 		dispModes:              map[panel]dispMode{},
 		hscroll:                map[panel]int{},
@@ -621,6 +555,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nm, cmd := m.Update(hd.inner)
 		return nm, tea.Batch(tea.EnableMouseCellMotion, cmd)
 	}
+	if nm, taken := m.routeSlotMsg(msg); taken {
+		return nm, nil // addressed to a worktree not on screen: it waits on its slot, or is gone (slot_msg.go)
+	}
 	before := m.statusMsg
 	nm, cmd := m.dispatchParkedAware(msg)
 	// Invariant this relies on: every dispatch path returns a Model (true of
@@ -642,6 +579,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// landing --at in an unretried "an operation is running" refusal. A
 	// central post-dispatch check re-evaluates on every message, so whichever
 	// one finally clears m.loading fires it.
+	if next.pendingReturnView != "" {
+		next = next.takeQueuedReturn() // a held return goes once the surface or the op clears (worktree_view.go)
+	}
+	if next.viewKick {
+		next.viewKick = false
+		next.srcInflight[srcStatus] = true // silent: no srcLoading, no ⏳ gate
+		next.srcInflight[srcNotes] = true
+		next.srcInflight[srcFeed] = true
+		cmd = tea.Batch(cmd, next.viewKickCmd())
+	}
+	if len(next.replay) > 0 {
+		var replayCmd tea.Cmd
+		next, replayCmd = next.replayQueued() // what landed for this worktree while it slept (slot_replay.go)
+		cmd = tea.Batch(cmd, replayCmd)
+	}
 	if next.startAtReady() {
 		var atCmd tea.Cmd
 		next, atCmd = next.consumeStartAt()
@@ -939,8 +891,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.applyDriftReport(msg.branch, msg.report, msg.paused)
 	case snapshotTargetMsg:
-		if msg.svc != m.svc {
-			return m, nil // stale: a later repo switch superseded this resolve
+		if msg.svc != m.homeSvc() {
+			return m, nil // stale: a later repo switch (or adopt) superseded this resolve; a console's view never does
 		}
 		m.snapshotCommonDir = msg.commonDir
 		m.snapshotWorktree = msg.worktree
@@ -1390,7 +1342,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case historyChunkMsg:
 		return m.onHistoryChunk(msg)
 	case historyDiffMsg:
-		if h := layerOf[*historyView](m); h != nil && h.diffTag == msg.tag {
+		if h := msg.hist; h != nil && h.diffTag == msg.tag { // wherever the history waits
 			h.diff = msg.view
 		}
 		return m, nil
@@ -1462,7 +1414,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if !msg.hintBucket {
+		if !msg.hintBucket && !msg.sharedDone {
 			m.shelfEntries = msg.entries
 		}
 		if msg.open {
@@ -1671,7 +1623,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case lsFilesMsg:
-		if m.inWorktreeFiles() && m.wtFiles.loading {
+		if m.inWorktreeFiles() && m.wtFiles.loading && msg.gen == m.wtFiles.gen {
 			return m.wtLoaded(msg)
 		}
 		return m, nil // the window closed before the list arrived
@@ -1689,8 +1641,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onThreadResolved(msg)
 	case remoteHeadNamesMsg:
 		p := layerOf[*remoteHeadsPopup](m)
-		if p == nil || msg.gen != m.loadGen {
-			return m, nil // closed or repo switched before the read returned
+		if p == nil || msg.gen != m.remoteHeadsGen {
+			return m, nil // closed, or reopened, before the read returned
 		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("browse remote branches: %s", msg.err.Error())
@@ -1712,7 +1664,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case remoteHeadsMsg:
 		p := layerOf[*remoteHeadsPopup](m)
-		if p == nil || msg.gen != m.loadGen || msg.remote != p.remote {
+		if p == nil || msg.gen != m.remoteHeadsGen || msg.remote != p.remote {
 			return m, nil
 		}
 		if msg.err != nil {
@@ -1757,6 +1709,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
+		m = m.applyPoliciesToSlots() // the loader applied them to the live service; the sleeping slots too
 		m = m.applyBranchFilterConfig()
 		// Both directions: off drops the presence, on claims an inbox that
 		// snapshotTargetMsg resolved before this config arrived.
@@ -1782,6 +1735,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.top != "" {
 			m.currentWorktree = msg.top
 			publishedWT.Store(msg.top)
+			publishedView.Store(msg.top)
+			m = m.seedHome(msg.top) // the slots' home (worktree_view.go) — this path never sees dataLoadedMsg
 		}
 		m.linkRepoName = msg.repoName
 		// Seed refreshLastRun so the first heartbeat tick is one interval out
@@ -1840,8 +1795,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tags = msg.tags
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
-			publishedWT.Store(msg.currentWorktree)
 			m.worktreeMarks = msg.worktreeMarks
+			m = m.seedHome(msg.currentWorktree).saveView()
+			publishedWT.Store(m.homeWorktree()) // gg's OWN worktree, whichever slot this load was for
+			m = m.pruneViews()
 			// The worktree's open files may have missed store changes while
 			// another worktree was current (a dismiss in the browser).
 			var docsCmd tea.Cmd
@@ -1980,6 +1937,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.startAtPreviewsSeen = true
 		}
 		if msg.err != nil {
+			var gone bool
+			if m, gone = m.abandonGoneView(); gone { // kept either way: a refused drop queues the return home
+				return m, m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})
+			}
+			if msg.source == srcStatus && m.viewLoading() {
+				// The slot's first (silent) read failed and its directory is
+				// still there: say so and stop the "⏳ loading…" — the next
+				// swap in or an r reads again.
+				m = m.markViewLoaded()
+				m.statusMsg = sourceErr(msg.source, msg.err)
+			}
 			// Best-effort sources must not blank the UI on a transient error;
 			// surface it on the status line only for manual reads. Silent
 			// (auto) reads that fail (e.g. context.Canceled from op preemption)
@@ -2020,12 +1988,20 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyFiles := m.panelSelKey(panelFiles)
 			keyStaged := m.panelSelKey(panelStaged)
 			p := msg.value.(statusPayload)
-			m = m.withStatus(p.status)
+			m = m.withStatus(p.status).markViewLoaded()
 			m.conflict = p.conflict
 			m = m.restorePanelSel(panelFiles, keyFiles)
 			m = m.restorePanelSel(panelStaged, keyStaged)
 			// An edit changes which files a working review still matches.
 			previewsChain = tea.Batch(previewsChain, m.loadWorkingReviewsCmd())
+			// A tour asked across an in-repo view switch (agent_tours_open):
+			// the slot's status landed, its overviews are synced — show it.
+			// (A repo switch's tour is the armed settle's, not this.)
+			if m.tour != "" && !m.consoleSwitch.armed {
+				tour := m.tour
+				m.tour = ""
+				m = m.syncOverviews().showTour(tour)
+			}
 			// Rebuild the commit graph so WIP pseudo-rows (◇ Working tree/Staged)
 			// stay in sync with the new status, even on the proc path (e.g. after
 			// a stash pop that triggers a status-only refresh mid-conflict process).
@@ -2115,6 +2091,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyBr := m.panelSelKey(panelBranches)
 			p := msg.value.(worktreesPayload)
 			m.worktrees = p.worktrees
+			m = m.pruneViews()
 			m.worktreeMarks = p.marks
 			m.bfMemo.invalidate() // worktree checkouts are exemptions (see the dataLoadedMsg site)
 			m.headTimes = p.headTimes
@@ -2226,7 +2203,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.running && (m.stickyMsg == "" || m.statusMsg != m.stickyMsg) {
 			m.statusMsg = ""
 		}
-		// alt+A — the emergency unlock (emergency_unlock.go). While anything
+		// alt+U — the emergency unlock (emergency_unlock.go). While anything
 		// holds the interface it outranks every surface, a decision modal and
 		// a focused agent console included: nothing else can be trusted to
 		// still answer then.
@@ -2275,7 +2252,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+o" {
 			return m.openSubshell()
 		}
-		// alt+A with nothing held only writes the state dump — below the
+		// alt+U with nothing held only writes the state dump — below the
 		// focused console, which keeps the chord for its agent then.
 		if msg.String() == emergencyUnlockKey {
 			return m.emergencyUnlock()
@@ -2302,12 +2279,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+p" && m.paletteReachable() {
 			return m.openCommandPalette()
 		}
-		// alt+a / alt+t cycle the running agents / terminals by last use,
-		// shown unfocused, then back to the screen the cycle started from.
+		// alt+a / alt+t walk the running agents / terminals in Worktrees
+		// order, binding the one shown, round and round (no return stop).
 		// From the base panels or a full-screen view (parked while the
 		// sessions show maximised); a focused console handled the key above.
-		if k := msg.String(); (k == "alt+a" || k == "alt+t") && m.cycleReachable() {
-			return m.cycleSessions(k == "alt+t")
+		if k := msg.String(); (k == "alt+a" || k == "alt+t" || k == "alt+A" || k == "alt+T") && m.cycleReachable() {
+			return m.cycleSessionsIn(k == "alt+t" || k == "alt+T", k == "alt+A" || k == "alt+T") // shift = the viewed worktree only
+		}
+		// alt+w cycles the worktrees themselves: the next one of the list
+		// is shown (the fast switch), around again past the last.
+		if msg.String() == "alt+w" && m.cycleReachable() {
+			return m.cycleWorktrees()
 		}
 		// alt+x opens the text templates window (base panels only, like
 		// alt+a/alt+t; a focused console kept the key for its program above).
@@ -2644,7 +2626,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 								// the CURRENT repo, same as the Worktrees-panel
 								// enter — a foreign-notation link gets the
 								// repair offer, not just the refusal.
-								return m.guardedReRoot(wtPath, true)
+								return m.guardedReRoot(wtPath, true, true)
 							}
 							return m, nil
 						},
@@ -2924,7 +2906,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
-				return m.guardedReRoot(wt.Path, true)
+				return m.guardedReRoot(wt.Path, true, true)
 			}
 			// Previews: enter opens the saved pair in the compare files view
 			// (target…source, the GitHub-PR diff). A pair that cannot be
@@ -3013,7 +2995,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelBranches && m.opsIdle() {
 				if b, ok := m.selectedBranch(); ok {
 					if wt, inWT := m.worktreeForBranch(b.Name); inWT {
-						return m.guardedReRoot(wt.Path, true)
+						return m.guardedReRoot(wt.Path, true, true)
 					}
 					m.statusMsg = i18n.T("%s is not checked out in another worktree", b.Name)
 					return m, nil
@@ -3517,11 +3499,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A parked hint reveal expires here, not inside drainSteer: the #
 		// prompt's pasted link and the --at landing stage one too, and with
 		// steering off drainSteer returns before it would look.
-		var hexp tea.Cmd
+		var hexp, pexp tea.Cmd
 		m, hexp = m.expirePendingHint(time.Now())
+		m, pexp = m.expireParkedSteer(time.Now()) // the navigates waiting in the SLEEPING worktrees
 		var scmd tea.Cmd
 		m, scmd = m.drainSteer()
-		return m, tea.Batch(cmd, hexp, scmd, m.heartbeatCmd())
+		return m, tea.Batch(cmd, hexp, pexp, scmd, m.heartbeatCmd())
 
 	case steerStartedMsg:
 		if msg.gen != m.steerGen || !m.steerActive() {
@@ -3643,6 +3626,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = false
 		m.opName = ""
 		m.opMsgs = nil
+		// A console closed while this op ran queued the view's return home
+		// (pendingReturnView). The Update tail takes it once nothing further
+		// runs in the op's worktree: a chained op (a dirty switch's shelve,
+		// then the switch) sets running again, a prompt that dispatches one
+		// is a surface — either keeps the queue, or the chain would run in
+		// HOME. A process continuation drops it below.
 		m = m.cleanupPickPatchTemp()
 		// A foreground fetch is a single (uncontended) `git fetch`, so its duration
 		// is a representative measurement for the background-fetch row — record it
@@ -3690,7 +3679,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// mismatched-arm dispatch site is structurally unable to show a wrong prompt.
 			if pendingCo.remoteRef != "" && errors.As(msg.err, &div) &&
 				div.RemoteRef == pendingCo.remoteRef && div.Local == pendingCo.base {
-				m.modal = m.checkoutDivergedModal(pendingCo)
+				m.modal = m.checkoutDivergedModal(pendingCo) // its answer dispatches an op here: the queued return waits (a surface)
 			}
 			m.pendingRemoteTagSet = ""
 			m.pendingRemoteTagUnset = ""
@@ -3752,13 +3741,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			driftCmd = m.driftCheckCmd(driftBranch, driftPaused, m.noticeGen)
 		}
 		if switchTo != "" {
-			return m.guardedReRoot(switchTo, false)
+			return m.guardedReRoot(switchTo, false, false)
 		}
 		if repairSwitch != "" {
 			// The repair just made this path reachable; the guard re-verifies
 			// (offerRepair=false — a repair that somehow didn't take refuses
 			// instead of crashing).
-			return m.guardedReRoot(repairSwitch, false)
+			return m.guardedReRoot(repairSwitch, false, false)
 		}
 		if chainSwitch != "" {
 			return m.startOp(engine.SmartSwitch{Branch: chainSwitch})
@@ -3783,6 +3772,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A stash op (apply/pop/drop) changed the stash list as well as the
 			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
+			m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
 			var cmd tea.Cmd
 			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
 			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag), driftCmd, sendCmd)
@@ -3794,12 +3784,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// along here too, or a resume completed through the picker would never
 		// check.
 		if m.proc != nil {
+			m.pendingReturnView = "" // the process goes on in this worktree: the panels stay with it
 			pm, pcmd := m.proc.finished(m, msg.res, msg.err)
 			return pm, tea.Batch(healthCmd, pcmd, driftCmd, sendCmd)
 		}
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
 		var cmd tea.Cmd
+		m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
 		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
 		// prepend them, not collapse the list back to page 0.
 		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
@@ -3948,6 +3940,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusRefreshedMsg:
 		m.running = false
 		m.opName = ""
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // read through another slot's service (an editor exit's reload, then a swap): not this worktree's
+		}
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			return m, nil
@@ -4047,6 +4042,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case amendPrefillMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // HEAD of a worktree no longer on screen
+		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("amend: %s", msg.err.Error())
 			return m, nil
@@ -4195,6 +4193,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
 
 	case conflictFileLoadedMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // loaded for a worktree no longer on screen
+		}
 		// In the conflict process, a load failure must return it to Listing (the
 		// load is not an op, so no opFinishedMsg would otherwise un-stick Working).
 		cp, inProc := m.proc.(*conflictProcess)
@@ -4247,6 +4248,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stageHunksLoadedMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // the panels swapped while the hunks loaded: the picker would stage THIS tree's file of that name
+		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("stage hunks: %s", msg.err.Error())
 			return m, nil
@@ -4266,6 +4270,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
 
 	case unstageHunksLoadedMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("unstage hunks: %s", msg.err.Error())
 			return m, nil
@@ -4972,6 +4979,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	closeDocWatch(m.docWatch.w)                         // the old tree's files are not the new one's
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
+	m.views = map[model.CheckoutKey]*worktreeView{} // another repository: its worktrees are not these
+	m.viewed, m.home, m.pendingReturnView = "", "", ""
 	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go
 	m = m.withWorkingReviews(nil)
 	// Disable the snapshot synchronously (no git subprocess here — reRoot runs
@@ -5026,7 +5035,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.consoleSwitch.armed = true                 // the console keeps only a session the new repo owns
 	m.consoleSwitch.gen++                        // a new switch (openTour tells it from one in flight)
 	m.consoleSwitch.open = ""                    // a console asked for across an earlier switch is moot
-	m.consoleSwitch.tour = ""                    // …and so is a tour
+	m.tour = ""                                  // …and so is a tour
 	m.pendingHint = nil                          // ditto: its navigate referred to the old repo
 	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
 	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one
@@ -5109,10 +5118,10 @@ func (m Model) View() string {
 	}
 	if m.loading && !m.ready {
 		// startup + repo-switch keep the blank screen; a load that hangs
-		// offers alt+A (the interface's only way out then).
+		// offers alt+U (the interface's only way out then).
 		line := "gigagit (loading…)"
 		if !m.loadStart.IsZero() && time.Since(m.loadStart) >= unlockHintAfterReload {
-			line += " · " + i18n.T("[alt+A] unlock")
+			line += " · " + i18n.T("[alt+U] unlock")
 		}
 		return paintFrame(line+"\n", w, h, bg, fg)
 	}

@@ -4,7 +4,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
-	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -33,8 +32,8 @@ func (m Model) steerFiles(c steer.Command) (Model, tea.Cmd) {
 func (m Model) steerNavigateBackground(c steer.Command) (Model, tea.Cmd) {
 	// Another worktree is refused, not asked about: the switch notice would
 	// be the very screen change a background open promises not to make.
-	if c.Worktree != "" && !domain.SameCheckout(c.Worktree, m.snapshotWorktree) {
-		return m, m.answerSteer(c, steerFail(c, "gg is showing worktree "+m.snapshotWorktree+", not "+c.Worktree))
+	if why, mismatch := m.steerShownMismatch(c); mismatch {
+		return m, m.answerSteer(c, steerFail(c, why))
 	}
 	ctx, cancel := updateThreadCtx(updateThreadGitTimeout)
 	defer cancel()

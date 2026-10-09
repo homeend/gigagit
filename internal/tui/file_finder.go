@@ -16,17 +16,22 @@ const fileFinderLimit = 200
 
 // lsFilesMsg is the async result of the LsFiles domain call.
 type lsFilesMsg struct {
-	paths []string
-	err   error
+	slotStamp     // the slot it was asked from (slot_msg.go)
+	gen       int // worktreeFiles.gen at the read
+	paths     []string
+	err       error
 }
 
 // loadLsFilesCmd returns a Cmd that calls LsFiles off-thread and delivers
 // lsFilesMsg back to Update.
 func (m Model) loadLsFilesCmd() tea.Cmd {
-	svc := m.svc
+	svc, slot, gen := m.svc, m.stamp(), 0
+	if m.wtFiles != nil {
+		gen = m.wtFiles.gen
+	}
 	return func() tea.Msg {
 		paths, err := svc.LsFiles(context.Background())
-		return lsFilesMsg{paths: paths, err: err}
+		return lsFilesMsg{slotStamp: slot, gen: gen, paths: paths, err: err}
 	}
 }
 

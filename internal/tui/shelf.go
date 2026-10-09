@@ -10,9 +10,14 @@ import (
 )
 
 type shelfLoadedMsg struct {
-	entries []model.ShelfEntry
-	err     error
-	open    bool // true → (re)open the shelf popup; false → silent refresh
+	slotStamp // the slot it was asked from (slot_msg.go)
+	entries   []model.ShelfEntry
+	err       error
+	open      bool // true → (re)open the shelf popup; false → silent refresh
+	// sharedDone: the entries already reached m.shelfEntries when the
+	// message was queued for a sleeping slot (sharedWriter); the replay must
+	// not write them again over a newer list.
+	sharedDone bool
 	// hintBucket is true for a Task 6 hint reveal's OWN load (see
 	// loadShelfForHintCmd): entries then come from the HINT's bucket, which
 	// may not be the default one, so the handler must never let it
@@ -30,9 +35,10 @@ type shelfLoadedMsg struct {
 // should (re)open the popup, so a stray refresh can't pop it open.
 func (m Model) loadShelfCmd(open bool) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		es, err := svc.ShelfList(context.Background(), "", 0, 0)
-		return shelfLoadedMsg{entries: es, err: err, open: open}
+		return shelfLoadedMsg{slotStamp: slot, entries: es, err: err, open: open}
 	}
 }
 
@@ -53,6 +59,7 @@ func (m Model) loadShelfCmd(open bool) tea.Cmd {
 // m.shelfEntries, which is not this bucket's list.
 func (m Model) loadShelfForHintCmd(id string, tag int) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		e, ferr := svc.ShelfFind(context.Background(), id)
 		if ferr != nil {
@@ -61,10 +68,10 @@ func (m Model) loadShelfForHintCmd(id string, tag int) tea.Cmd {
 			// absent-hint branch already handles "not found in the list"
 			// with the right notice, and treating this as msg.err would
 			// wrongly blank the general m.shelfEntries cache.
-			return shelfLoadedMsg{open: true, hintBucket: true, gen: tag}
+			return shelfLoadedMsg{slotStamp: slot, open: true, hintBucket: true, gen: tag}
 		}
 		es, err := svc.ShelfList(context.Background(), e.Bucket, 0, 0)
-		return shelfLoadedMsg{entries: es, err: err, open: true, hintBucket: true, gen: tag}
+		return shelfLoadedMsg{slotStamp: slot, entries: es, err: err, open: true, hintBucket: true, gen: tag}
 	}
 }
 
@@ -241,4 +248,14 @@ func (m Model) reflogShelfRow() (actionRow, bool) {
 			return m.pushLayer(&commitNamePopup{commit: c, forShelf: true, name: newTextField(c.Subject)}), nil
 		},
 	}, true
+}
+
+// applyShared lands the repository's shelf list at once when the message
+// is queued for a sleeping slot (slot_replay.go); the popup part replays.
+func (msg shelfLoadedMsg) applyShared(m Model) (Model, tea.Msg) {
+	if msg.err == nil && !msg.hintBucket {
+		m.shelfEntries = msg.entries
+		msg.sharedDone = true
+	}
+	return m, msg
 }

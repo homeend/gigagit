@@ -6,7 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
-	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -54,8 +53,8 @@ func fileNoteProto(d *openFile, n agentdocs.Note, text bool) steer.FileNote {
 func (m Model) steerNoteAdd(c steer.Command) (Model, tea.Cmd) {
 	// Another worktree is refused, not asked about: the switch notice would
 	// be the very screen change a note promises not to make.
-	if c.Worktree != "" && !domain.SameCheckout(c.Worktree, m.snapshotWorktree) {
-		return m, m.answerSteer(c, steerFail(c, "gg is showing worktree "+m.snapshotWorktree+", not "+c.Worktree))
+	if why, mismatch := m.steerShownMismatch(c); mismatch {
+		return m, m.answerSteer(c, steerFail(c, why))
 	}
 	src := fileSource{kind: srcWorktree}
 	var d *openFile

@@ -34,7 +34,7 @@ func setGuardSeams(t *testing.T, goos string, existing ...string) {
 func TestGuardedReRootReachableSwitches(t *testing.T) {
 	m := newTestModel(t)
 	setGuardSeams(t, "linux", "/ok/path")
-	u, cmd := m.guardedReRoot("/ok/path", false)
+	u, cmd := m.guardedReRoot("/ok/path", false, true)
 	got := u.(Model)
 	if got.switchTarget != "/ok/path" || !got.loading {
 		t.Fatalf("reachable target must reRoot: switchTarget=%q loading=%v", got.switchTarget, got.loading)
@@ -48,7 +48,7 @@ func TestGuardedReRootUnreachableRefuses(t *testing.T) {
 	m := newTestModel(t)
 	m.loading = false         // newTestModel starts in the app-bootstrap loading state; isolate the refusal path
 	setGuardSeams(t, "linux") // nothing exists
-	u, cmd := m.guardedReRoot("/gone", true)
+	u, cmd := m.guardedReRoot("/gone", true, true)
 	got := u.(Model)
 	if got.loading || got.switchTarget != "" {
 		t.Fatal("unreachable target must not start a switch")
@@ -68,7 +68,7 @@ func TestGuardedReRootRepairableWithoutOfferRefuses(t *testing.T) {
 	m := newTestModel(t)
 	m.loading = false // newTestModel starts in the app-bootstrap loading state; isolate the refusal path
 	setGuardSeams(t, "windows", `T:\x`)
-	u, _ := m.guardedReRoot("/mnt/t/x", false)
+	u, _ := m.guardedReRoot("/mnt/t/x", false, true)
 	got := u.(Model)
 	if got.modal != nil || got.loading {
 		t.Fatal("repairable without offerRepair must plain-refuse")
@@ -82,7 +82,7 @@ func TestGuardedReRootRepairableOffersModal(t *testing.T) {
 	m := newTestModel(t)
 	m.loading = false // newTestModel starts in the app-bootstrap loading state; isolate the "offer itself must not switch" check
 	setGuardSeams(t, "windows", `T:\x`)
-	u, cmd := m.guardedReRoot("/mnt/t/x", true)
+	u, cmd := m.guardedReRoot("/mnt/t/x", true, true)
 	got := u.(Model)
 	if cmd != nil || got.loading {
 		t.Fatal("the offer itself must not switch")

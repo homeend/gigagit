@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/clock"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -83,7 +84,7 @@ func (m Model) reloadStatusCmd(summary string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		st, err := svc.Status(context.Background())
-		return statusRefreshedMsg{summary: summary, status: st, err: err}
+		return statusRefreshedMsg{svc: svc, summary: summary, status: st, err: err}
 	}
 }
 
@@ -91,6 +92,7 @@ func (m Model) reloadStatusCmd(summary string) tea.Cmd {
 // read. It refreshes ONLY the Status panel (not the full snapshot) so repeated
 // staging stays snappy on huge repos.
 type statusRefreshedMsg struct {
+	svc     *domain.Service // the slot it was read through; nil = untagged (tests)
 	summary string
 	status  model.WorkingTreeStatus
 	err     error
@@ -114,10 +116,10 @@ func (m Model) stageCmd(op engine.Operation) tea.Cmd {
 					return stageIgnoredMsg{op: st, ignored: ignored}
 				}
 			}
-			return statusRefreshedMsg{err: err}
+			return statusRefreshedMsg{svc: svc, err: err}
 		}
 		st, serr := svc.Status(context.Background())
-		return statusRefreshedMsg{summary: renderSummary(res), status: st, err: serr}
+		return statusRefreshedMsg{svc: svc, summary: renderSummary(res), status: st, err: serr}
 	}
 }
 
@@ -137,15 +139,16 @@ func (m Model) stageForceCmd(op engine.Stage) tea.Cmd {
 		res, err := svc.Execute(context.Background(), op, nil,
 			engine.MapDecider{engine.IgnoredPathsDecisionID: "force-add"})
 		if err != nil {
-			return statusRefreshedMsg{err: err}
+			return statusRefreshedMsg{svc: svc, err: err}
 		}
 		st, serr := svc.Status(context.Background())
-		return statusRefreshedMsg{summary: renderSummary(res), status: st, err: serr}
+		return statusRefreshedMsg{svc: svc, summary: renderSummary(res), status: st, err: serr}
 	}
 }
 
 // amendPrefillMsg carries HEAD's message for the amend popup.
 type amendPrefillMsg struct {
+	svc *domain.Service
 	msg string
 	err error
 }
@@ -156,7 +159,7 @@ func (m Model) amendPrefillCmd() tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		s, err := svc.LastCommitMessage(context.Background())
-		return amendPrefillMsg{msg: s, err: err}
+		return amendPrefillMsg{svc: svc, msg: s, err: err}
 	}
 }
 
@@ -311,6 +314,7 @@ func (m Model) loadIrebaseCmd(branch, onto string) tea.Cmd {
 // conflictFileLoadedMsg carries a conflicted file's marker text for the picker,
 // with the marker size it must be parsed at (0 clamps to git's default 7).
 type conflictFileLoadedMsg struct {
+	svc        *domain.Service
 	path       string
 	content    []byte
 	markerSize int
@@ -325,12 +329,13 @@ func (m Model) loadConflictFileCmd(path string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		c, size, err := svc.ConflictPickerFile(context.Background(), path)
-		return conflictFileLoadedMsg{path: path, content: c, markerSize: size, err: err}
+		return conflictFileLoadedMsg{svc: svc, path: path, content: c, markerSize: size, err: err}
 	}
 }
 
 // stageHunksLoadedMsg carries the two sides for the staging picker.
 type stageHunksLoadedMsg struct {
+	svc         *domain.Service
 	path        string
 	index, work []byte
 	err         error
@@ -343,18 +348,19 @@ func (m Model) loadStageHunksCmd(path string) tea.Cmd {
 	return func() tea.Msg {
 		idx, err := svc.ShowFile(context.Background(), "", path)
 		if err != nil {
-			return stageHunksLoadedMsg{path: path, err: err}
+			return stageHunksLoadedMsg{svc: svc, path: path, err: err}
 		}
 		work, werr := svc.WorktreeFile(context.Background(), path)
 		if werr != nil {
-			return stageHunksLoadedMsg{path: path, err: werr}
+			return stageHunksLoadedMsg{svc: svc, path: path, err: werr}
 		}
-		return stageHunksLoadedMsg{path: path, index: idx, work: work}
+		return stageHunksLoadedMsg{svc: svc, path: path, index: idx, work: work}
 	}
 }
 
 // unstageHunksLoadedMsg carries the two sides for the unstaging picker.
 type unstageHunksLoadedMsg struct {
+	svc         *domain.Service
 	path        string
 	index, head []byte
 	err         error
@@ -367,12 +373,12 @@ func (m Model) loadUnstageHunksCmd(path string) tea.Cmd {
 	return func() tea.Msg {
 		idx, err := svc.ShowFile(context.Background(), "", path)
 		if err != nil {
-			return unstageHunksLoadedMsg{path: path, err: err}
+			return unstageHunksLoadedMsg{svc: svc, path: path, err: err}
 		}
 		head, herr := svc.ShowFile(context.Background(), "HEAD", path)
 		if herr != nil {
-			return unstageHunksLoadedMsg{path: path, err: herr}
+			return unstageHunksLoadedMsg{svc: svc, path: path, err: herr}
 		}
-		return unstageHunksLoadedMsg{path: path, index: idx, head: head}
+		return unstageHunksLoadedMsg{svc: svc, path: path, index: idx, head: head}
 	}
 }

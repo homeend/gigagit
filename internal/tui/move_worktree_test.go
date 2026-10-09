@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -241,6 +243,7 @@ func TestRenameCurrentWorktreeReRoots(t *testing.T) {
 	// (see engine.MoveWorktree), so this is safe to fake without actually
 	// rebinding the model's git.Repo.
 	m.currentWorktree = oldPath
+	m.home = model.KeyOf(oldPath) // gg's OWN worktree (the move follows home, not a viewed slot)
 
 	// The popup's update os.Chdir's the real process out of the worktree being
 	// renamed (production behavior, needed on Windows) — restore the test

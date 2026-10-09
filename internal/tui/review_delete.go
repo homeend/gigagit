@@ -116,10 +116,11 @@ func (m Model) onStoredDeleted(msg storedDeletedMsg) (Model, tea.Cmd) {
 		m = m.dropFilesRows(func(l contentLine) bool { return l.noteID == msg.id })
 	}
 	if p := layerOf[*allNotesPopup](m); p != nil {
-		svc, gen := m.svc, m.loadGen
+		svc, gen := m.svc, m.allNotesGen // the open popup's own gen: the re-read lands on it
+		slot := m.stamp()
 		cmds = append(cmds, func() tea.Msg {
 			ov, err := svc.NotesOverview(context.Background())
-			return allNotesMsg{ov: ov, err: err, gen: gen}
+			return allNotesMsg{slotStamp: slot, ov: ov, err: err, gen: gen}
 		})
 	}
 	var counts tea.Cmd
@@ -141,9 +142,10 @@ func (m Model) leaveReviewView() (Model, tea.Cmd) {
 		m.filesReview = &cp
 		if bp.pair != nil {
 			svc, gen, p := m.svc, m.previewGen, *bp.pair
+			slot := m.stamp()
 			return m, func() tea.Msg {
 				eps, err := svc.PairOpen(context.Background(), p.A, p.B)
-				return pairOpenMsg{pair: p, eps: eps, gen: gen, err: err, landNote: id}
+				return pairOpenMsg{slotStamp: slot, pair: p, eps: eps, gen: gen, err: err, landNote: id}
 			}
 		}
 		return m, m.openPreviewReturnCmd(bp, id)

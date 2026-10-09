@@ -1347,3 +1347,31 @@ func (m Model) markLandedRange(v *diffView, no, end int, old bool, body int) (Mo
 	v.lsel = lineSel{on: true, anchor: ls, end: le, fixed: true}
 	return m, end
 }
+
+// expireParkedSteer is expirePendingSteer/expirePendingHint for the SLEEPING
+// worktrees: a navigate parked in a slot the user left keeps waiting there,
+// and its sender gives up after the TTL; without this it would run on the
+// slot's next status read, minutes later, for a waiter that is gone.
+func (m Model) expireParkedSteer(now time.Time) (Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	for key, v := range m.views {
+		if key == m.viewed {
+			continue
+		}
+		w := &v.windows
+		if ps := w.pendingSteer; ps != nil && now.Sub(ps.at) >= steerPendingTTL {
+			w.pendingSteer = nil
+			cmds = append(cmds, m.answerSteer(ps.cmd, steerFail(ps.cmd, "the view did not load in time")))
+		}
+		if ph := w.pendingHint; ph != nil && now.Sub(ph.at) >= pendingHintTTL {
+			w.pendingHint = nil
+			if ph.mustAnswer {
+				cmds = append(cmds, m.answerSteer(ph.cmd, steerFail(ph.cmd, "the "+ph.cmd.HintKind+" list did not load in time")))
+			}
+		}
+	}
+	if len(cmds) == 0 {
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
+}

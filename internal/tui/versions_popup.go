@@ -58,26 +58,29 @@ func (m Model) versionsFeatureEnabled() bool {
 // versionsLoadedMsg carries a branch's recorded versions (both the initial
 // load and the post-delete re-read).
 type versionsLoadedMsg struct {
-	gen    int
-	branch string
-	rows   []model.BranchVersion
-	err    error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	gen       int
+	branch    string
+	rows      []model.BranchVersion
+	err       error
 }
 
 // versionBranchesLoadedMsg carries the branch-mode branch list.
 type versionBranchesLoadedMsg struct {
-	gen  int
-	rows []model.VersionedBranch
-	err  error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	gen       int
+	rows      []model.VersionedBranch
+	err       error
 }
 
 // loadBranchVersionsCmd fetches one branch's recorded versions off the UI
 // thread.
 func (m Model) loadBranchVersionsCmd(gen int, branch string) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		rows, err := svc.BranchVersions(context.Background(), branch)
-		return versionsLoadedMsg{gen: gen, branch: branch, rows: rows, err: err}
+		return versionsLoadedMsg{slotStamp: slot, gen: gen, branch: branch, rows: rows, err: err}
 	}
 }
 
@@ -85,9 +88,10 @@ func (m Model) loadBranchVersionsCmd(gen int, branch string) tea.Cmd {
 // the UI thread.
 func (m Model) loadVersionBranchesCmd(gen int) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		rows, err := svc.AllVersionBranches(context.Background())
-		return versionBranchesLoadedMsg{gen: gen, rows: rows, err: err}
+		return versionBranchesLoadedMsg{slotStamp: slot, gen: gen, rows: rows, err: err}
 	}
 }
 
@@ -371,12 +375,13 @@ func (p *versionsPopup) onDelete(m Model) (Model, tea.Cmd) {
 // reusing gen so a stale reopen/repo-switch drops the result.
 func (m Model) versionDeleteCmd(gen int, branch, ref string) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		if _, err := svc.Execute(context.Background(), engine.DeleteBranchVersion{Ref: ref}, nil, nil); err != nil {
-			return versionsLoadedMsg{gen: gen, branch: branch, err: err}
+			return versionsLoadedMsg{slotStamp: slot, gen: gen, branch: branch, err: err}
 		}
 		rows, err := svc.BranchVersions(context.Background(), branch)
-		return versionsLoadedMsg{gen: gen, branch: branch, rows: rows, err: err}
+		return versionsLoadedMsg{slotStamp: slot, gen: gen, branch: branch, rows: rows, err: err}
 	}
 }
 

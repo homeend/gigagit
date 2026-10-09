@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // consoleRepaint is the minimum spacing of console repaints: a chatty agent
@@ -43,14 +44,15 @@ type consoleState struct {
 // to. Captured by the first console shown, carried over when a console
 // replaces a console, so "the screen before the agent" survives a cycle.
 type consoleReturn struct {
-	layers       []layer // the live stack, parked while the console shows
-	full         bool    // a full-screen view or a ctrl+t pin: consoles show maximised
-	fullMaxed    bool
-	fullMax      panel
-	stashView    *stashView
-	filesView    *contentPopup // the files view a preview belongs to
-	filesPreview *openFile
-	focus        panel
+	full      bool // a full-screen view or a ctrl+t pin: consoles show maximised
+	fullMaxed bool
+	fullMax   panel
+	focus     panel
+	view      model.CheckoutKey // the viewed worktree the console was shown over (where a close returns)
+	// What the console DISPLACED (the full-screen views it covers, the stash
+	// list, the preview) is not here: it waits on the worktree's slot
+	// (windowState.consoleParked), so a return to another worktree brings
+	// back only that worktree's own.
 }
 
 // sessionWatch is the TUI's subscription to the session LIST, on a pointer
@@ -103,6 +105,14 @@ func (m Model) openConsole(id domain.SessionID) (Model, tea.Cmd) {
 // of the session (Touch): cycling through them must not reorder the list it
 // walks.
 func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
+	return m.showConsoleBy(id, focused, false)
+}
+
+// showConsoleBy is showConsole with the caller's intent: the user's own
+// alt+a / alt+t (cycleSessions) may park a parkable popup for the swap to
+// the console's worktree; a show asked by an agent, a task or a settle
+// waits under any popup (the swap queues).
+func (m Model) showConsoleBy(id domain.SessionID, focused, byUser bool) (Model, tea.Cmd) {
 	s, ok := domain.Sessions().Get(id)
 	if !ok {
 		m.statusMsg = i18n.T("that agent session is gone")
@@ -138,7 +148,54 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 		clipSeq: s.Clipboard().Seq} // a copy made before it showed is not replayed
 	m.focus = panelCommits
 	m = m.syncConsoleSizeIfFocused()
+	// A shown console ⇔ the viewed worktree is the console's: tab out of
+	// it and the panels are already that tree's. A refusal (an op running,
+	// a surface) keeps the view for now and says so; the console shows
+	// regardless and the swap is QUEUED — the Update tail performs it once
+	// the op or the surface clears, as a console's return is.
+	m.pendingReturnView = "" // a return queued by an earlier close is moot: this console's own return point rules
+	if dir := s.Info().Dir; model.KeyOf(dir) != m.viewed && m.isRepoWorktree(dir) {
+		// The console's size is the business of the worktree it shows IN:
+		// the full-screen view captured here waits in the worktree being
+		// left, so only the pin carries over; loadView's displacement raises
+		// it again if the arriving worktree has a full-screen view of its own.
+		wasFull := ret.full
+		ret.full = ret.fullMaxed
+		m.console.maximized = ret.full
+		var ok bool
+		if m, ok = m.switchViewBy(dir, byUser); !ok {
+			m.pendingReturnView = model.KeyOf(dir)
+			ret.full = wasFull // still over the worktree whose view was captured
+			m.console.maximized = wasFull
+		}
+		m = m.syncConsoleSizeIfFocused()
+	}
 	return m, waitSessionCmd(m.console, id, gen)
+}
+
+// returnView brings the worktree a console was shown over back when the
+// console closes. An operation running refuses the swap for now: the
+// return is kept (pendingReturnView) and happens when the op ends. A
+// return point already on screen cancels whatever was queued — a show
+// whose swap never happened.
+func (m Model) returnView(r *consoleReturn) Model {
+	if r == nil || r.view == "" {
+		return m
+	}
+	if r.view == m.viewed {
+		m.pendingReturnView = "" // a show queued while the panels could not swap is moot: the return point is on screen
+		return m
+	}
+	path := m.viewPath(r.view)
+	if path == "" || !m.isRepoWorktree(path) {
+		m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(string(r.view)), shortWorktreeName(m.viewPath(m.viewed)))
+		return m
+	}
+	nm, ok := m.switchView(path)
+	if !ok {
+		nm.pendingReturnView = r.view // an op or a surface: the Update tail takes it once clear
+	}
+	return nm
 }
 
 // captureReturn records the screen a console is about to cover. A
@@ -151,17 +208,76 @@ func (m Model) showConsole(id domain.SessionID, focused bool) (Model, tea.Cmd) {
 func (m Model) captureReturn() (Model, *consoleReturn) {
 	r := &consoleReturn{
 		fullMaxed: m.fullMaxed, fullMax: m.fullMax,
-		stashView: m.stashView, filesView: m.filesView, filesPreview: m.filesPreview,
 		focus: m.focus,
 		full:  m.fullMaxActive(),
+		view:  m.viewed,
 	}
+	cp := &consoleParked{stashView: m.stashView, filesView: m.filesView, filesPreview: m.filesPreview}
 	switch m.topLayer().(type) {
 	case *diffView, *historyView, *blameView, *fileViewer:
-		r.layers = m.layers.entries
+		cp.layers = m.layers.entries
 		m.layers.entries = nil
 		r.full = true
 	}
+	m.consoleParked = cp // on the viewed worktree's slot: it travels with its windows
 	return m, r
+}
+
+// displaceUnderConsole is captureReturn for a worktree ARRIVING under a
+// shown console (a console opened into a worktree whose parked windows
+// wait on its pile, a queued return landing while a console shows): the
+// whole pile, the stash list and the preview go under the console's copy —
+// a focused console takes every key, so a view left live over it would
+// feed the user's keystrokes to an agent they cannot see. They come back
+// with restoreConsoleParked when the console closes. A full-screen view
+// among them shows the console maximised, as a captured one does.
+func (m Model) displaceUnderConsole() Model {
+	if m.console == nil || m.layers == nil && m.stashView == nil && m.filesPreview == nil {
+		return m
+	}
+	cp := m.consoleParked
+	if cp == nil {
+		cp = &consoleParked{}
+		m.consoleParked = cp
+	}
+	if m.layers != nil && len(m.layers.entries) > 0 {
+		switch m.topLayer().(type) {
+		case *diffView, *historyView, *blameView, *fileViewer:
+			if r := m.console.ret; r != nil && !r.full {
+				r.full = true
+				m.console.maximized = true
+			}
+		}
+		cp.layers = append(cp.layers, m.layers.entries...)
+		m.layers.entries = nil
+	}
+	if m.stashView != nil {
+		cp.stashView = m.stashView
+		m.stashView = nil
+	}
+	if m.filesPreview != nil {
+		cp.filesView, cp.filesPreview = m.filesView, m.filesPreview
+		m.filesPreview = nil
+	}
+	return m
+}
+
+// restoreConsoleParked puts back what a console displaced in the worktree
+// on screen: its parked views beneath whatever is live (a popup opened
+// over the console stays on top), its stash list, its preview (only
+// inside the files view it belongs to).
+func (m Model) restoreConsoleParked() Model {
+	cp := m.consoleParked
+	if cp == nil {
+		return m
+	}
+	m.consoleParked = nil
+	m = m.restoreLayersBeneath(cp.layers)
+	m.stashView = cp.stashView
+	if cp.filesPreview != nil && cp.filesView != nil && m.filesView == cp.filesView {
+		m.filesPreview = cp.filesPreview
+	}
+	return m
 }
 
 // forgetConsoleReturn drops what the console covers that belongs to the
@@ -173,7 +289,8 @@ func (m Model) forgetConsoleReturn() Model {
 		return m
 	}
 	r := m.console.ret
-	r.layers, r.stashView, r.filesView, r.filesPreview = nil, nil, nil, nil
+	m.consoleParked = nil // the displaced views were the old checkout's
+	r.view = ""           // the viewed worktree was the old repository's
 	r.full = r.fullMaxed
 	m.console.maximized = r.full
 	return m.syncConsoleSizeIfFocused()
@@ -189,32 +306,32 @@ func (m Model) dispatchParkedAware(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg, tea.MouseMsg:
 		return m.dispatch(msg)
 	}
-	if m.console == nil || m.console.ret == nil || len(m.console.ret.layers) == 0 {
+	cp := m.consoleParked
+	if m.console == nil || cp == nil || len(cp.layers) == 0 {
 		return m.dispatch(msg)
 	}
-	r := m.console.ret
-	parked := r.layers
-	r.layers = nil // a close while handling finds them live already
+	parked := cp.layers
+	cp.layers = nil // a close while handling finds them live already
 	m = m.restoreLayersBeneath(parked)
+	view := m.viewed
 	nm, cmd := m.dispatch(msg)
 	out, ok := nm.(Model)
-	if !ok || out.console == nil || out.console.ret != r || out.layers == nil {
-		return nm, cmd // the console went: its views are live now
+	if !ok {
+		return nm, cmd
 	}
-	was := make(map[layer]bool, len(parked))
-	for _, l := range parked {
-		was[l] = true
-	}
-	var keep, live []layer
-	for _, l := range out.layers.entries {
-		if was[l] {
-			keep = append(keep, l)
-		} else {
-			live = append(live, l)
+	if out.viewed != view {
+		// The handler moved the panels: the views put back live went into
+		// the leaving slot's pile with its group (saveView). They were
+		// displaced by the console there: back under its parked copy.
+		if v := out.views[view]; v != nil {
+			v.windows.reparkConsole(parked)
 		}
+		return out, cmd
 	}
-	r.layers = keep
-	out.layers.entries = live
+	if out.console == nil || out.layers == nil {
+		return out, cmd // the console went: its views are live now
+	}
+	out.windowState.reparkConsole(parked)
 	return out, cmd
 }
 
@@ -251,8 +368,8 @@ func (m Model) detachConsole() Model {
 // (stash list, file preview, a solo): the session keeps running and the
 // return point is dropped — except a parked view, which is never lost.
 func (m Model) dropConsole() Model {
-	if m.console != nil && m.console.ret != nil {
-		m = m.restoreLayersBeneath(m.console.ret.layers)
+	if m.console != nil {
+		m = m.restoreConsoleParked() // the slot on screen: its own displaced views only
 	}
 	return m.detachConsole()
 }
@@ -266,16 +383,13 @@ func (m Model) closeConsole() Model {
 	}
 	r := m.console.ret
 	m = m.detachConsole()
+	m = m.returnView(r)
 	if r == nil {
 		m.focus = m.lastLeftPanel
 		return m.reconcileFullscreenFocus()
 	}
-	m = m.restoreLayersBeneath(r.layers)
+	m = m.restoreConsoleParked() // the worktree on screen NOW (the return point, or where the user went)
 	m.fullMaxed, m.fullMax = r.fullMaxed, r.fullMax
-	m.stashView = r.stashView
-	if r.filesPreview != nil && r.filesView != nil && m.filesView == r.filesView {
-		m.filesPreview = r.filesPreview // only inside the files view it belongs to
-	}
 	if m.focus == panelCommits {
 		m.focus = r.focus
 	}
@@ -544,26 +658,110 @@ func runningSessionIn(dir string) (domain.SessionInfo, bool) {
 	return domain.SessionInfo{}, false
 }
 
-// sessionsByLastUsed is the running sessions of one kind (terminals or
-// agents), most recently used first.
-func sessionsByLastUsed(list []domain.SessionInfo, terminal bool) []domain.SessionInfo {
-	var out []domain.SessionInfo
-	for _, info := range list {
-		if info.State == domain.SessionRunning && info.Terminal == terminal {
-			out = append(out, info)
+// worktreeOrder is the BRANCHES tab's order of the worktrees — the branch
+// rows that name a checkout, top to bottom as the panel shows them (its
+// sort, by date newest first unless changed; its filter), then any
+// worktree without such a row (detached, hidden by a filter), in list
+// order — as indices into m.worktrees: what alt+w walks and what orders the
+// session ring, so "next" is the row below in the tab the user walks.
+func (m Model) worktreeOrder() []int {
+	seen := make([]bool, len(m.worktrees))
+	out := make([]int, 0, len(m.worktrees))
+	ents := m.branchEntries()
+	for _, u := range m.displayIndices(panelBranches) {
+		if u >= len(ents) || ents[u].sub() {
+			continue
+		}
+		name := m.branches[ents[u].br].Name
+		for i, w := range m.worktrees {
+			if w.Branch == name && !seen[i] && !w.Bare {
+				seen[i] = true
+				out = append(out, i)
+				break
+			}
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].LastUsed.After(out[j].LastUsed) })
+	for i, w := range m.worktrees {
+		if !seen[i] && !w.Bare { // the bare repository has no working tree: no ring stop
+			out = append(out, i)
+		}
+	}
 	return out
 }
 
-// cycleSessions is alt+a (agents) / alt+t (terminals): show this
-// repository's most recently used session of that kind, unfocused; pressed
-// again, the next one back in last-used order, then the screen the cycle
-// started from (the console's return point), then around again. enter
-// focuses the shown one, which makes it the most recent.
+// worktreeIndex is a directory's position in the Branches tab's order of
+// the worktrees (worktreeOrder), or len(m.worktrees) for one not listed.
+func (m Model) worktreeIndex(dir string) int {
+	key := model.KeyOf(dir)
+	for pos, i := range m.worktreeOrder() {
+		if model.KeyOf(m.worktrees[i].Path) == key {
+			return pos
+		}
+	}
+	return len(m.worktrees)
+}
+
+// sessionRing is what alt+a (agents) / alt+t (terminals) walk: this
+// repository's running sessions of one kind in the Worktrees list's order
+// — the order the eye walks — oldest first within a worktree, so the walk
+// is the same whoever was used last.
+func (m Model) sessionRing(terminal bool) []domain.SessionInfo {
+	return m.sessionRingIn(terminal, "")
+}
+
+// sessionRingIn is sessionRing restricted to the worktree at dir ("" =
+// every worktree of the repository): alt+A / alt+T walk the viewed
+// worktree's own sessions only.
+func (m Model) sessionRingIn(terminal bool, dir string) []domain.SessionInfo {
+	var out []domain.SessionInfo
+	for _, info := range m.repoSessions(domain.Sessions().List()) {
+		if info.State != domain.SessionRunning || info.Terminal != terminal {
+			continue
+		}
+		if dir != "" && !model.SamePath(info.Dir, dir) {
+			continue
+		}
+		out = append(out, info)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if wa, wb := m.worktreeIndex(a.Dir), m.worktreeIndex(b.Dir); wa != wb {
+			return wa < wb
+		}
+		if !a.Started.Equal(b.Started) {
+			return a.Started.Before(b.Started)
+		}
+		return a.ID < b.ID
+	})
+	return out
+}
+
+// cycleSessions is alt+a (agents) / alt+t (terminals): walk this
+// repository's running sessions of that kind, in the Worktrees list's
+// order, binding the one shown (the keyboard is the agent's at once). From
+// a bound session of the kind: the next one, around again past the last —
+// never the screen the walk started from (alt+w or the step-out key leave
+// a console). With gg's keyboard the walk starts at the viewed worktree:
+// its own session first (shown unbound → bound, hidden → shown), with none
+// there the nearest below in the list, wrapping. The only session of its
+// kind, already bound: nothing but a status line.
 func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
-	list := sessionsByLastUsed(m.repoSessions(domain.Sessions().List()), terminal)
+	return m.cycleSessionsIn(terminal, false)
+}
+
+// cycleSessionsIn is cycleSessions with scoped = alt+A / alt+T: the walk
+// is restricted to the viewed worktree's sessions of the kind, and with
+// none there the key does nothing at all (user ruling 2026-10-10).
+func (m Model) cycleSessionsIn(terminal, scoped bool) (Model, tea.Cmd) {
+	var list []domain.SessionInfo
+	if scoped {
+		list = m.sessionRingIn(terminal, m.viewPath(m.viewed))
+		if len(list) == 0 {
+			return m, nil
+		}
+	} else {
+		list = m.sessionRing(terminal)
+	}
 	if len(list) == 0 {
 		if terminal {
 			m.statusMsg = i18n.T("no running terminal in this repository — open one from the . menu of a worktree or a checked-out branch")
@@ -574,55 +772,82 @@ func (m Model) cycleSessions(terminal bool) (Model, tea.Cmd) {
 	}
 	// A view pushed over a shown console (the palette opened a diff from a
 	// full-screen agent) is a new starting screen: the console goes back
-	// first — its parked views slot in beneath — and the cycle starts over
-	// with the whole stack as its return point.
+	// first — its parked views slot in beneath — and the walk restarts
+	// from the viewed worktree with the whole stack as its return point.
 	if m.console != nil && m.topLayer() != nil {
 		m = m.closeConsole()
 	}
-	// The ring is the sessions then the return point: from the shown session
-	// at i go to i+1, past the last one back to the screen the cycle came
-	// from. Anything else (no console, the other kind, an exited one)
-	// starts at the most recent.
-	next := 0
+	shown := -1
 	if m.console != nil {
 		for i, info := range list {
 			if info.ID == m.console.id {
-				next = i + 1
+				shown = i
 				break
 			}
 		}
 	}
-	if next == len(list) {
-		return m.closeConsole(), nil
+	var next int
+	switch {
+	case shown >= 0 && m.console.focused && len(list) == 1:
+		if terminal {
+			m.statusMsg = i18n.T("the only running terminal in this repository — already focused")
+		} else {
+			m.statusMsg = i18n.T("the only running agent session in this repository — already focused")
+		}
+		return m, nil
+	case shown >= 0 && m.console.focused:
+		next = (shown + 1) % len(list)
+	default:
+		// gg's keyboard (no console of the kind, or an unbound one): the
+		// first session at or below the viewed worktree in list order,
+		// wrapping to the top — a shown unbound console is bound when it
+		// is that one.
+		at := m.worktreeIndex(m.viewPath(m.viewed))
+		for i, info := range list {
+			if m.worktreeIndex(info.Dir) >= at {
+				next = i
+				break
+			}
+		}
 	}
 	info := list[next]
-	m, cmd := m.showConsole(info.ID, false)
-	// The user asked to see it: it takes its box's size although unfocused,
-	// or a PTY left wider (from a maximised spell, another viewer) cuts its
-	// lines — x/vt does not reflow.
-	m = m.syncConsoleSize()
-	m.statusMsg = i18n.T("%s in %s — %d of %d by last use  [enter] focus", info.Title(), shortWorktreeName(info.Dir), next+1, len(list))
+	var cmd tea.Cmd
+	if m.console != nil && m.console.id == info.ID {
+		m.console.focused = true
+		m.touchConsole()
+		m.focus = panelCommits
+		m = m.syncConsoleSize()
+	} else {
+		m, cmd = m.showConsoleBy(info.ID, true, true) // the user's own alt+a / alt+t
+	}
+	m = m.selectSessionRow(info.ID) // the Branches tab shows the session's row; the console keeps the keyboard
+	if terminal {
+		m.statusMsg = i18n.T("%s in %s — terminal %d of %d", info.Title(), shortWorktreeName(info.Dir), next+1, len(list))
+	} else {
+		m.statusMsg = i18n.T("%s in %s — agent %d of %d", info.Title(), shortWorktreeName(info.Dir), next+1, len(list))
+	}
 	return m, cmd
 }
 
 // consoleWorktreeHint is the docked console's worktree path for the status
-// row: shown while the console is unfocused (what alt+a / alt+t leave) or
-// runs in another worktree than gg's own, so which checkout it works in is
-// always in view; "" for a focused console on gg's own worktree.
+// row — only when it is NOT the worktree the panels show (the user switched
+// the panels elsewhere under a docked console, or the session runs outside
+// the repository). A console in the viewed worktree needs no reminder: the
+// panels follow it and the header names it.
 func (m Model) consoleWorktreeHint() string {
 	sess, ok := m.consoleSession()
 	if !ok {
 		return ""
 	}
 	dir := sess.Info().Dir
-	if m.console.focused && filepath.Clean(dir) == filepath.Clean(m.currentWorktree) {
+	if filepath.Clean(dir) == filepath.Clean(m.currentWorktree) {
 		return ""
 	}
 	return dir
 }
 
 // withConsoleWorktree trails the status row with the console's worktree path
-// and fits the whole row to w columns. The path keeps up to half the row:
+// (when it differs from the panels') and fits the whole row to w columns. The path keeps up to half the row:
 // the text before it is cut first, then the path in the middle (its start
 // and its directory name survive); dropped only when not even a stub fits.
 func (m Model) withConsoleWorktree(row string, w int) string {
@@ -678,7 +903,8 @@ func (m Model) sessionsKey() string {
 var consolePassthrough = map[string]bool{
 	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
 	"q": true, "ctrl+c": true, "?": true, ".": true, "ctrl+p": true, "ctrl+o": true,
-	"alt+a": true, "alt+t": true, "R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
+	"alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+f": true, "alt+b": true,
+	"R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
 	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
 }
 
@@ -687,7 +913,7 @@ var consolePassthrough = map[string]bool{
 // panel and the parked view, so focus moves would land on hidden panels and
 // an opener (F, S, c, p…) would open something behind it.
 var consoleFullPassthrough = map[string]bool{
-	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true,
+	"q": true, "ctrl+c": true, "?": true, "ctrl+o": true, "alt+a": true, "alt+t": true, "alt+A": true, "alt+T": true, "alt+w": true, "alt+f": true, "alt+b": true,
 }
 
 // updateConsoleKey routes a key to/around the console per the state table
@@ -703,6 +929,28 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	}
 	if m.console == nil {
 		return m, nil, false
+	}
+	// The size and binding toggles of a FOCUSED console (the blue border:
+	// the Commits column has the keyboard), bound or not. alt+f: docked ↔
+	// maximized, bound and focused after either way. alt+b: bound ↔
+	// unbound (unbinding as the step-out key does; binding as enter does).
+	if m.focus == panelCommits && m.proc == nil && (key == "alt+f" || key == "alt+b") {
+		if key == "alt+f" {
+			m.console.maximized = !m.console.maximized
+			if m.console.ret != nil {
+				m.console.ret.full = m.console.maximized // the step-out key and the return agree with the toggle
+			}
+			m.console.focused = true
+			m.touchConsole()
+			return m.syncConsoleSize(), nil, true
+		}
+		if m.console.focused {
+			m.console.focused = false
+			return m, nil, true // shown and focused; the keys are gg's again
+		}
+		m.console.focused = true
+		m.touchConsole()
+		return m.syncConsoleSize(), nil, true
 	}
 	// Anything layered above the console (the sessions popup opened from it,
 	// the . menu) owns the keyboard; closing it returns to the console.
@@ -741,8 +989,12 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		// alt+a / alt+t are gg's even here: the cycle starts from this
 		// agent and comes back to the screen it was shown over.
-		if key == "alt+a" || key == "alt+t" {
-			nm, cmd := m.cycleSessions(key == "alt+t")
+		if key == "alt+a" || key == "alt+t" || key == "alt+A" || key == "alt+T" {
+			nm, cmd := m.cycleSessionsIn(key == "alt+t" || key == "alt+T", key == "alt+A" || key == "alt+T")
+			return nm, cmd, true
+		}
+		if key == "alt+w" {
+			nm, cmd := m.cycleWorktrees()
 			return nm, cmd, true
 		}
 		if key == m.stepOutKey() {

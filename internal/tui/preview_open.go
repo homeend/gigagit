@@ -27,6 +27,7 @@ type previewOpenState struct {
 // surface taking the left column — must be dropped, never re-open the view
 // behind the user's back.
 type previewOpenMsg struct {
+	slotStamp          // the slot it was asked from (slot_msg.go)
 	id, source, target string
 	keepPath           string
 	moved              string // ref whose tip moved; the "moved" notice, emitted only if the view really re-opens
@@ -93,9 +94,10 @@ func (m Model) openPreviewReturnCmd(bp *previewReturn, landNote string) tea.Cmd 
 // prNumber ("" / 0 = a plain preview).
 func (m Model) resolvePreviewCmdAs(id, source, target, title string, prNumber int, keepPath, moved, landNote string) tea.Cmd {
 	svc, gen := m.svc, m.previewGen
+	slot := m.stamp()
 	return func() tea.Msg {
 		eps, err := svc.PreviewOpen(context.Background(), source, target)
-		msg := previewOpenMsg{
+		msg := previewOpenMsg{slotStamp: slot,
 			id: id, source: source, target: target, title: title, prNumber: prNumber,
 			keepPath: keepPath, moved: moved, gen: gen, eps: eps, err: err, landNote: landNote,
 		}

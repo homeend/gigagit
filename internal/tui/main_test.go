@@ -46,7 +46,7 @@ func TestMain(m *testing.M) {
 	domain.PreviewsDisabled = true
 	domain.ToolStatusesDisabled = true // never probe the machine's real agents
 	domain.ForgeDisabled = true        // no test may shell out to the real gh; see pr_read_serial_test.go
-	// alt+A ends every git in the PROCESS; parallel tests share it.
+	// alt+U ends every git in the PROCESS; parallel tests share it.
 	endGitProcesses = func() int { endGitCalls.Add(1); return 0 }
 	dir, err := os.MkdirTemp("", "gg-tui-xdg")
 	if err != nil {

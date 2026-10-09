@@ -23,6 +23,8 @@ type worktreeFiles struct {
 	field     textfield         // the editor behind query while typing: cursor-aware
 	typing    bool
 	loading   bool
+	keepPath  string // the path under the cursor when the worktree went to sleep (sleepFWindow): the re-read lands the cursor on it
+	gen       int    // the list read the window waits for: sleepFWindow bumps it, so a read in flight at sleep (queued, replayed) cannot beat the return's fresh one
 }
 
 // inWorktreeFiles reports whether the files view shows the working tree (F).
@@ -98,8 +100,17 @@ func (m Model) wtSetQuery(q string) {
 		files = append(files, model.CommitFile{Path: path, Status: w.letter(path)})
 	}
 	p.lines, p.sel = commitFileLines(files), 0
-	want := "" // no query: the tree's first file row
-	if q != "" {
+	want := ""            // no query: the tree's first file row
+	if w.keepPath != "" { // back from sleep: the path the cursor was on, if the list still has it
+		for _, path := range paths {
+			if path == w.keepPath {
+				want = path
+				break
+			}
+		}
+		w.keepPath = ""
+	}
+	if q != "" && want == "" {
 		want = paths[0] // the best-ranked match
 	}
 	for i, l := range p.lines {
@@ -336,8 +347,9 @@ const wtPreviewSettle = 150 * time.Millisecond
 // wtPreviewMsg is the settle tick for the row at path; gen drops every tick
 // a later cursor move superseded.
 type wtPreviewMsg struct {
-	gen  int
-	path string
+	slotStamp // the slot it was asked from (slot_msg.go)
+	gen       int
+	path      string
 }
 
 // wtCursorMoved schedules the live preview for the row now under the
@@ -351,7 +363,8 @@ func (m Model) wtCursorMoved() (Model, tea.Cmd) {
 		return m, nil
 	}
 	gen := m.wtPreviewGen
-	return m, m.tick(wtPreviewSettle, func(time.Time) tea.Msg { return wtPreviewMsg{gen: gen, path: path} })
+	slot := m.stamp()
+	return m, m.tick(wtPreviewSettle, func(time.Time) tea.Msg { return wtPreviewMsg{slotStamp: slot, gen: gen, path: path} })
 }
 
 // wtPreviewSettled shows the settled row's working-tree file in the right

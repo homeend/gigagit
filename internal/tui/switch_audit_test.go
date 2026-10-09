@@ -1,0 +1,211 @@
+package tui
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
+)
+
+// viewedOther puts the model on a second worktree's slot with its status
+// landed, the kick consumed.
+func viewedOther(t *testing.T, m Model) (Model, string) {
+	t.Helper()
+	m, other := addWorktree(t, m, "wt2")
+	m, ok := m.switchView(other)
+	if !ok {
+		t.Fatalf("switchView(%s) refused: %s", other, m.statusMsg)
+	}
+	m = landView(t, m)
+	m.viewKick = false
+	return m, other
+}
+
+func dropWorktreeFromList(m Model, path string) Model {
+	var kept []model.Worktree
+	for _, w := range m.worktrees {
+		if filepath.Clean(w.Path) != filepath.Clean(path) {
+			kept = append(kept, w)
+		}
+	}
+	m.worktrees = kept
+	return m
+}
+
+// --- 6: the drop paths sleep the gone slot like switchView does ---
+
+func TestPruneViewsSleepsTheGoneSlot(t *testing.T) {
+	m := loadedModel(t)
+	m, other := viewedOther(t, m)
+	wg, lg, dg, rg := m.watchGen, m.loadGen, m.docWatch.gen, m.workingReviewsGen
+	m = dropWorktreeFromList(m, other)
+	m = m.pruneViews()
+	if m.viewed != m.home || !m.viewKick {
+		t.Fatalf("viewed=%q kick=%v", m.viewed, m.viewKick)
+	}
+	if m.watchGen == wg || m.loadGen == lg || m.docWatch.gen == dg || m.workingReviewsGen == rg {
+		t.Fatalf("gone slot not put to sleep: watch %d→%d load %d→%d doc %d→%d reviews %d→%d", wg, m.watchGen, lg, m.loadGen, dg, m.docWatch.gen, rg, m.workingReviewsGen)
+	}
+}
+
+func TestAbandonGoneViewSleepsTheGoneSlot(t *testing.T) {
+	m := loadedModel(t)
+	m, other := viewedOther(t, m)
+	wg, lg, dg, rg := m.watchGen, m.loadGen, m.docWatch.gen, m.workingReviewsGen
+	if err := os.RemoveAll(other); err != nil {
+		t.Fatal(err)
+	}
+	m, ok := m.abandonGoneView()
+	if !ok || m.viewed != m.home {
+		t.Fatalf("ok=%v viewed=%q", ok, m.viewed)
+	}
+	if m.watchGen == wg || m.loadGen == lg || m.docWatch.gen == dg || m.workingReviewsGen == rg {
+		t.Fatalf("gone slot not put to sleep: watch %d→%d load %d→%d doc %d→%d reviews %d→%d", wg, m.watchGen, lg, m.loadGen, dg, m.docWatch.gen, rg, m.workingReviewsGen)
+	}
+}
+
+// --- 5: a queued return drains after a staging round, not only after an op ---
+
+func TestQueuedReturnDrainsAfterAStagingRound(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, false)
+	m.running = true // a stage in flight
+	m = m.closeConsole()
+	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home {
+		t.Fatalf("viewed=%q pending=%q", m.viewed, m.pendingReturnView)
+	}
+	nm, _ := m.Update(statusRefreshedMsg{status: m.status})
+	m = nm.(Model)
+	if m.viewed != m.home || m.pendingReturnView != "" {
+		t.Fatalf("after the staging round: viewed=%q pending=%q", m.viewed, m.pendingReturnView)
+	}
+}
+
+// --- 2: no swap under a popup, a decision or a process; the return queues ---
+
+func TestSwitchViewRefusesUnderADecision(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	m.modal = &decisionState{}
+	if nm, ok := m.switchView(other); ok || nm.viewed != m.home {
+		t.Fatalf("switched under a decision: ok=%v viewed=%q", ok, nm.viewed)
+	}
+}
+
+func TestConsoleCloseUnderADecisionQueuesTheReturn(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, false)
+	m.modal = &decisionState{} // a commit question over the console's worktree
+	m = m.closeConsole()
+	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home {
+		t.Fatalf("swapped under the decision: viewed=%q pending=%q", m.viewed, m.pendingReturnView)
+	}
+	m.modal = nil
+	nm, _ := m.Update(struct{}{}) // any message once the surface is clear
+	m = nm.(Model)
+	if m.viewed != m.home || m.pendingReturnView != "" {
+		t.Fatalf("after the decision: viewed=%q pending=%q", m.viewed, m.pendingReturnView)
+	}
+}
+
+func TestPruneViewsHoldsUnderADecision(t *testing.T) {
+	m := loadedModel(t)
+	m, other := viewedOther(t, m)
+	m.modal = &decisionState{}
+	m = dropWorktreeFromList(m, other)
+	m = m.pruneViews()
+	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home || m.views[model.KeyOf(other)] == nil {
+		t.Fatalf("swapped under the decision: viewed=%q pending=%q slot kept=%v", m.viewed, m.pendingReturnView, m.views[model.KeyOf(other)] != nil)
+	}
+}
+
+// --- 3: a result computed through another slot's service is dropped ---
+
+func TestStatusFromAnotherSlotIsDropped(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	v := m.ensureView(other)
+	was := m.status.Branch
+	nm, _ := m.Update(statusRefreshedMsg{svc: v.svc, status: model.WorkingTreeStatus{Branch: "ghost"}})
+	m = nm.(Model)
+	if m.status.Branch != was {
+		t.Fatalf("another slot's status landed: branch %q, want %q", m.status.Branch, was)
+	}
+}
+
+func TestHunkPickerFromAnotherSlotIsDropped(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	v := m.ensureView(other)
+	nm, _ := m.Update(stageHunksLoadedMsg{svc: v.svc, path: "f", index: []byte("a\n"), work: []byte("b\n")})
+	m = nm.(Model)
+	if m.topLayer() != nil {
+		t.Fatalf("a picker opened for another slot's hunks: %T", m.topLayer())
+	}
+}
+
+// --- 1: a worktree owns its windows: they wait in it over a swap ---
+
+// A working diff, a commit diff, a viewer and the F window opened in A
+// wait in A: nothing of them shows over B; back in A they are all there,
+// and B's own window is B's.
+func TestSwitchViewParksTheWindowsInTheirWorktree(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	m = m.pushLayer(&diffView{title: "f", rev: ""})     // HEAD → working tree
+	m = m.pushLayer(&diffView{title: "g", rev: "abc1"}) // a commit's diff
+	m = m.pushLayer(&fileViewer{openFile: &openFile{}})
+	m.filesView = &contentPopup{}
+	m.filesMode = filesModeWorktree // the F window: files on disk
+	m.wtFiles = &worktreeFiles{query: "needle"}
+	m, ok := m.switchView(other)
+	if !ok {
+		t.Fatalf("refused: %s", m.statusMsg)
+	}
+	if m.topLayer() != nil || m.filesView != nil || m.wtFiles != nil {
+		t.Fatalf("A's windows show over B: top=%T files=%v", m.topLayer(), m.filesView != nil)
+	}
+	m = m.pushLayer(&diffView{title: "b", rev: ""}) // B's own window, on B's fresh stack
+	m, ok = m.switchView(home)
+	if !ok {
+		t.Fatalf("refused: %s", m.statusMsg)
+	}
+	if n := len(m.layers.entries); n != 3 {
+		t.Fatalf("%d layers back in A, want 3", n)
+	}
+	if m.filesView == nil || m.wtFiles == nil || m.wtFiles.query != "needle" {
+		t.Fatal("A's F window did not come back with its filter")
+	}
+	m, _ = m.switchView(other)
+	if d, _ := m.topLayer().(*diffView); d == nil || d.title != "b" {
+		t.Fatalf("B's window = %T, want its own diff", m.topLayer())
+	}
+}
+
+// (The console's displaced copy lives on the slot now: see
+// console_parked_test.go for the return-to-another-worktree cases.)
+
+// --- 4: steering compares with the worktree on SCREEN ---
+
+func TestSteerFileCommandsCompareWithTheViewedWorktree(t *testing.T) {
+	m := loadedModel(t)
+	m, other := viewedOther(t, m)
+	if why, mismatch := m.steerShownMismatch(steer.Command{Worktree: m.homeWorktree()}); !mismatch || !strings.Contains(why, filepath.Clean(other)) {
+		t.Fatalf("home's agent while %s is shown: mismatch=%v why=%q", other, mismatch, why)
+	}
+	if why, mismatch := m.steerShownMismatch(steer.Command{Worktree: other}); mismatch {
+		t.Fatalf("the shown worktree's agent refused: %q", why)
+	}
+}

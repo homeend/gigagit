@@ -74,7 +74,7 @@ func TestNameReachesAgentListAndRegistry(t *testing.T) {
 	if !found {
 		t.Fatal("session not listed")
 	}
-	reg := snapshotRegistry("", "", "")
+	reg := snapshotRegistry("", "", "", "")
 	if len(reg.Sessions) != 1 || reg.Sessions[0].Name != "viewer" || reg.Sessions[0].Label != "Sleeper" {
 		t.Fatalf("registry %+v", reg.Sessions)
 	}

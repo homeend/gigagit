@@ -83,12 +83,13 @@ func (m Model) openPRPreviewCmd(p model.PullRequest) tea.Cmd {
 	if r := m.prReland; r != nil && r.n == p.Number {
 		keep, from = r.path, r.from
 	}
+	slot := m.stamp()
 	return func() tea.Msg {
 		ctx := context.Background()
 		// One domain call: the pair, its endpoints, its note set — the slow
 		// git parts from the PR cache when this head was seen before.
 		r, err := svc.PRPreview(ctx, p)
-		msg := previewOpenMsg{source: r.Pair.Head, target: r.Pair.Base, gen: gen, eps: r.Endpoints, err: err, title: title, prNumber: p.Number, keepPath: keep}
+		msg := previewOpenMsg{slotStamp: slot, source: r.Pair.Head, target: r.Pair.Base, gen: gen, eps: r.Endpoints, err: err, title: title, prNumber: p.Number, keepPath: keep}
 		if err == nil && r.Endpoints.Summary.State == domain.PreviewOK && r.Set.OK() {
 			msg.set = r.Set
 			msg.counts, _, _ = svc.PreviewNoteCounts(ctx, r.Set)

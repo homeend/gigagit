@@ -4132,9 +4132,9 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
 - **alt+a / alt+t = cycle by last use** (2026-10-01): `agentsession.Info`
   carries `LastUsed` (starts at `Started`; moves on `SendKey`/`SendText`/
   `Paste` and `Session.Touch()`) and `Terminal` (set by `StartTerminal` via
-  `StartSpec.Terminal`). `sessionsByLastUsed(list, terminal)` = running
-  sessions of one kind, newest use first. `cycleSessions` walks a RING: the
-  sessions, then the console's return point (2026-10-06). `consoleState.ret`
+  `StartSpec.Terminal`). SUPERSEDED 2026-10-09 (fast worktree switch): the
+  ring is now `sessionRing` — Worktrees order, no return stop, the shown
+  session bound; see the fast-switch section. `consoleState.ret`
   (`consoleReturn`) is captured by the first console shown over a
   non-console screen (`captureReturn`: the live layer stack is PARKED only
   when its top is a full-screen VIEW — diff/history/blame/file viewer; a
@@ -4193,6 +4193,29 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   `--gg` wrapper script that exports `XDG_CONFIG_HOME` and `exec`s the binary;
   a `[[tools.command]] category="session" command='bash --norc'` block makes a
   deterministic agent. The Worktrees tab is `C-Right C-Right` from Branches.
+
+### Session window keys (2026-10-10, `docs/superpowers/specs/2026-10-10-session-window-keys.md`)
+
+A console is hidden, shown (docked in the Commits column) or maximised
+(`console.maximized`). **Focused** = the blue border = `m.focus ==
+panelCommits` with a console shown; **bound** = keys routed to the session
+= `console.focused` (the field predates the vocabulary); bound implies
+focused, unfocusing unbinds. Showing a session into a worktree sizes the
+console by THAT worktree (`showConsoleBy` resets `ret.full` to the pin
+before the swap; `displaceUnderConsole` raises it for a fullscreen view
+waiting there). Keys: `alt+a`/`alt+t` walk every agent/terminal of the
+repository in the Branches tab's order (`sessionRing`, `worktreeOrder`);
+`alt+A`/`alt+T` = `cycleSessionsIn(terminal, scoped=true)`, the ring
+restricted to the viewed worktree (`sessionRingIn`), silent with none;
+`alt+f`/`alt+b` are handled at the head of `updateConsoleKey` for a
+focused console, bound or not (alt+f flips `maximized` and `ret.full`
+together and binds; alt+b unbinds like the step-out key or binds like
+enter); both are in `consolePassthrough`/`consoleFullPassthrough`.
+Every walk ends in `selectSessionRow(id)`: the Branches tab comes
+forward and its cursor lands on the session's sub-row (`branchEntry.sess`)
+without moving focus. `alt+w` hides a shown console on the way to the
+next worktree. The
+emergency unlock is `alt+U` (was `alt+A`).
 
 ### Web attach — agent consoles in `gg web` (plan 1, 2026-09-28)
 
@@ -6330,3 +6353,353 @@ Kept bodies (`prkept.js`): Send review… per group, Verdict… as group
 `"verdict"`; only a changing send from the same PR and box clears them
 (done hooks get the request body).
 
+### Fast worktree switch — worktree view slots (`internal/tui/worktree_view.go`, 2026-10-08)
+
+Spec `docs/superpowers/specs/2026-10-08-fast-worktree-switch-design.md`, plan
+`docs/superpowers/plans/2026-10-08-fast-worktree-switch.md`.
+
+**The slot.** `worktreeView` groups the worktree-scoped DATA of the Model:
+the `domain.Service` rooted there, `status` + `conflict` + the derived
+Files/Staged index slices, the Status cursors and `fileMarks`, the working
+reviews, `loaded`. Generations (`loadGen`, `srcGen`, `watchGen`,
+`docWatch.gen`, `workingReviewsGen`) and watchers are NOT in the slot: the
+gens stay Model-global and only grow (a slot restoring an older one would
+let a result built for another slot land — the final review caught this),
+and a sleeping slot has no watcher (switchView closes them; the live one
+rebuilds its own on the kick).
+The Model's fields stay the LIVE copy (no reader changed); `saveView` /
+`loadView` copy out/in. `Model.views` is keyed by the cleaned path,
+`viewed` is the slot on screen, `home` the one gg's identity belongs to.
+Worktrees of one repository share branches/commits/stashes/tags/reflog, so
+those never move. `seedHome` runs on BOTH first-load arms (`configReadyMsg`,
+the production startup path, and `dataLoadedMsg`, the legacy `loadCmd` path
+the unit fixtures use) — the first cut only seeded the second and the e2e
+golden caught it; `reRoot` drops the map.
+
+**`switchView(path) (Model, bool)`** — same repo only (`isRepoWorktree` = a
+path in `m.worktrees`; `checkSwitchTarget` reachability; refused while an op
+runs). Saves the leaving slot and puts it to sleep (watcher + docWatch
+closed), loads the arriving one, bumps `srcGen[srcStatus]` +
+`workingReviewsGen` AND `loadGen` (a mid-session `loadCmd` — conflict
+process, task track — launched on the old slot's service) so reads in
+flight for the old slot are dropped, and sets `viewKick`. The **Update
+tail** launches `viewKickCmd` (a SILENT status read on
+`context.Background`, `startWatchCmd`, `syncAgentDocs`) and marks the read
+in flight (`srcInflight` only, never `srcLoading`) — a tail hook because
+`closeConsole` returns a Model only. Silent is the point: a manual read
+raised "⏳ reloading…" and every `m.loading` gate with it, so the next
+alt+w was refused until the read landed (the user: "much slower than
+alt+a, blocks on reloading"). Only the live slot is ever watched or
+refreshed.
+**Head marks are per worktree on shared lists.** `Branch.IsHead` (the
+Branches panel's `*`) and the commit feed's local `Ref.Head` (the `*name`
+identity in Commits) come from reads rooted at ONE worktree; `loadView`
+runs `markHead(worktreeBranch(path))`, which re-marks both lists from the
+worktree list (clones where a flag changes — domain hands out cached
+slices — then `rebuildCommitGraph`). No git: the swap stays instant. The
+first alt+w golden caught the stale `*`; a branches re-read fixed it but
+cost the wait above, so the local re-mark replaced it.
+
+**alt+w — `cycleWorktrees`** (2026-10-08/09, the refinement branch, user
+rulings): worktree mode. `at = worktreeIndex(m.viewed)` in
+`worktreeOrder()` — the BRANCHES tab's order of the worktrees
+(`displayIndices(panelBranches)` over `branchEntries`, branch rows only,
+each mapped to the worktree that has it checked out; then any worktree
+without such a row — detached, filtered out — in list order), never the
+raw list: the Branches tab sorts by date newest first by default, the list
+does not, which read as "bottom to top"; "next" is the row below. FIRST HIT = the
+keyboard is not on Branches (`m.console != nil`, or
+`!panelFocused(panelBranches)`, or another left tab active): a shown
+console is HIDDEN — `ret.view = viewed` (hiding is not leaving: the panels
+stay), `ret.focus = panelBranches`, `closeConsole` (a full-screen one gives
+its parked view back) — then `activateTab(panelBranches)` and
+`selectWorktreeBranch(viewed)`; no advance. With Branches focused: the next
+of the order, wrapping, through `switchView` — a look, like alt+a, never
+`adoptView`: home stays — then `selectWorktreeBranch`: the Branches cursor
+(`sel[panelBranches]`, a display index over `branchEntries`, the branch row
+not a sub-row) on the worktree's checked-out branch; detached, unlisted or
+filtered out → the cursor stays. Reachable wherever alt+a is
+(`cycleReachable`), reserved inside a bound console (`consolePassthrough` /
+`consoleFullPassthrough` + the focused-console branch of
+`updateConsoleKey`). Status `wt-x — 2 of 3 worktrees`; one worktree: a status line only. The console box's
+blue border = the Commits column has focus, bound or not; the title hints
+(`consoleTitleHints`) tell bound from unbound.
+
+**alt+a / alt+t — `sessionRing` + `cycleSessions`** (2026-10-09, user
+ruling): the ring is this repository's running sessions of one kind in
+the Branches tab's order of the worktrees (`worktreeIndex` over `worktreeOrder`; unlisted dirs last), oldest
+`Started` first within a worktree, ID as the last tie-break — never last
+use. The session shown is BOUND (`showConsole(id, true)`: Touch, cursor,
+`m.focus = panelCommits`). From a bound session of the kind: `(i+1) % n`,
+round and round; the return stop to the starting screen is gone (a console
+is left by alt+w, esc or the step-out key; `consoleReturn` still says where
+esc goes). With gg's keyboard (no console of the kind, or an unbound one)
+the walk starts at the viewed worktree: the first session whose worktree
+index ≥ `worktreeIndex(m.viewed)`, wrapping to the first — so the viewed
+worktree's own session comes first, a shown unbound one of it is bound in
+place (`focused = true`, `syncConsoleSize`), a hidden one shown. The only
+session of the kind, bound: a status line only. A view pushed over a shown
+console still closes the console first (its parked views slot beneath) and
+restarts from the viewed worktree. Status `%s in %s — agent %d of %d` /
+`terminal`; footer `[alt+a] agent` / `[alt+t] terminal`. `sessionsByLastUsed`
+is gone. Tests `session_ring_test.go`; `alt_cycle_test.go`,
+`last_session_test.go`, `console_view_test.go` and
+`console_repo_scope_test.go` rewritten for the ring without a return stop. Footer `[alt+w] next worktree` when the list
+has more than one and nothing runs or loads. Tests
+`worktree_cycle_test.go`, e2e `tui_worktree_cycle`.
+
+**Lifecycle.** `pruneViews` (both worktree-list arms) drops slots whose
+worktree left the list. A VIEWED worktree removed under us cannot be seen
+there — its own service cannot list worktrees — so the `dataAvailableMsg`
+error arm asks `abandonGoneView` (dir gone? → home comes back, every
+`srcGen` bumped, a worktrees read chained).
+
+**Trigger 1 — a shown console** (`console.go`): a shown console ⇔ the
+viewed worktree is the console's. `showConsole` swaps after attaching;
+`consoleReturn.view` (captured on the first show, carried across a console
+replacing a console) is where `closeConsole` → `returnView` goes;
+`forgetConsoleReturn` clears it on a repo switch. A refusal (an op running,
+a surface) on SHOW keeps the view for now, said on the status line, and
+QUEUES the console's worktree in `pendingReturnView` (the Update tail
+swaps once clear; `returnView` clears the queue when its return point is
+already on screen — the console closed before the swap); on CLOSE the return is
+queued in `pendingReturnView` and `opFinishedMsg` performs it
+(`takeQueuedReturn`) — AFTER it has decided nothing further runs in the
+op's worktree: a chained op (`chainSwitch`, `pushTags`, `noticeCfg`) and
+the diverged-checkout prompt keep the queue for their own end (the chain
+dispatches through `m.svc`, so an earlier return would run it in HOME); a
+process continuation (`m.proc`) drops it (the panels stay with the
+process); `adoptView` drops it (the user asked to be here). A new show
+clears the queue. `switchView` refuses under ANY surface (`switchRefusal`
+= an op running, or `steerRefusal`'s list — a popup filled over A would
+submit through `m.svc` = B); the non-key swaps (`returnView`,
+`abandonGoneView`, `pruneViews`) queue `pendingReturnView` and the Update
+tail `takeQueuedReturn`s once clear (so a staging round drains it too).
+**A worktree owns its windows** (`window_state.go`, 2026-10-09): the
+Model EMBEDS `windowState` — the layer pile, every `files*` field, the
+preview, `wtFiles`, `stashView`, `diffTag`/`diffNav`/`diffNotice`, the
+diff's `noteLand`/`diffLand`/`hunkReload`, `pendingCompare`,
+`pendingSteer`/`pendingHint`/`hintGen`, the parked `tour`, and the WINDOW
+generations (`versionsGen`, `previewGen`, `wtPreviewGen`, `reviewsFollowGen`,
+`reviewOpenGen`, `entryCompareGen`, `gitConfigGen`, plus `remoteHeadsGen` and
+`allNotesGen`, which replaced the two popups' keying on `loadGen` — a
+slot-data gen `sleepView` bumps, which would strand a parked popup) — so
+readers keep `m.filesView`; `worktreeView.windows` holds the sleeping
+copy and `saveView`/`loadView` swap the group with ONE assignment
+(`layers` seeded per slot). Nothing crosses and nothing is filtered: a
+commit's diff waits in its worktree too (user ruling; the old
+`dropWorkingTreeWindows`/`filesViewIsWorkingTree`/`workingSide` rules are
+gone). The checklist for "is it a window field" is `closeFilesView`.
+Process-wide on purpose: `focus`/`lastLeftPanel`/`activeLeftTab`/`fullMax*`
+(alt+w lands the Branches cursor, `showConsole`'s Commits-column invariants),
+`eager` (walks the shared feed), `startAt*`, the modal/process/console/
+notices, the typing flags, the slot-data gens, the session diff prefs.
+Working-file `attention` bands travel in `windowState.workingAttention`
+(`takeWorkingAttention` on save, merged back on load); a commit's stay in
+`m.attention`. What a console DISPLACES (the full-screen views it covers, the stash
+list, the preview) is `windowState.consoleParked` on the slot, not on the
+console's return point (`consoleReturn` keeps `view`/`focus`/`full`/the
+pin only): `captureReturn` fills the live slot's copy, `closeConsole`
+(after `returnView`) and `dropConsole` restore the copy of the slot on
+screen THEN (`restoreConsoleParked`), and `loadView` restores a slot's
+copy when no console shows any more (a queued return that lands after
+the close). `dispatchParkedAware` puts the live copy's layers back under
+the stack for one non-key dispatch and re-parks what is still there
+(`windowState.reparkConsole`); if the handler moved the panels, the
+layers went into the leaving slot's pile with its group and are re-parked
+under THAT slot's copy. `forgetConsoleReturn` (a repo switch) clears the
+live copy. A show that SWAPS to the console's worktree resets `ret.full`
+to the pin before the swap (the captured full-screen view waits in the
+worktree being left) and `displaceUnderConsole` raises it again if the
+arriving worktree has one; a refused swap restores the captured value.
+`loadView` under a SHOWN console (`displaceUnderConsole`: a
+console opened into a worktree whose parked windows wait on its pile, a
+queued return landing while a console shows) moves the arriving pile, stash
+list and preview under the console's copy — a focused console takes every
+key, so a view left live over it would feed keystrokes to a hidden agent. The old `parkedLayersFor`/`ret.over`/`workingTreeWindow`/
+`dropWorkingLayers` filters are gone. `historyLive` scans the live group
+and every sleeping slot's pile, parked hand-off stack and console copy
+(`windowState.holds`) so
+`sweepHistoryWalks` leaves a parked history's git running; a slot dropped
+with its worktree makes its walks dead to the per-Update sweep. Results:
+nineteen window-addressed message types embed `slotStamp` (`slot_msg.go`),
+stamped by `m.stamp()` when their command is built; `Update`'s head
+(`routeSlotMsg`, `slot_replay.go`) takes one whose slot is not on screen
+before any handler runs: a SLEEPING slot keeps it (`worktreeView.queued`,
+oldest first, `queueCap` 64 — the oldest goes), a gone slot's is dropped
+(two slots can hold the same window kind at the same generation, so the
+stamp, not the window type, says whose answer it is). `loadView` moves the
+arriving slot's queue to `Model.replay` and the Update tail (next to the
+`viewKick` arm) runs `replayQueued`: each message goes through `Update`
+itself (gate, console routing, tail invariants and the window gens all
+apply — an answer for a window closed before the swap is dropped by its
+gen), the queue is taken off the Model BEFORE dispatching (a nested Update
+finds it empty), and a replayed message that moves the view ends the
+replay with the leftovers back on the slot that left. Nothing is
+re-requested; a parked window shows its loading state until its worktree
+returns. History chunks and the history pane's diff (`historyDiffMsg.hist`) are
+deliberately unstamped: they write through the view pointer, wherever the
+history waits. `TestEveryStampedMessageConstructorCarriesItsSlot` greps
+that every literal of a stamped type carries `slotStamp:` (or a `// stamped
+by <caller>` note where a wrapper stamps the result). A stamped message
+that also carries process-wide state implements `sharedWriter`
+(`shelfLoadedMsg` → `m.shelfEntries`): the shared part lands when the
+message is queued and the replay skips it (`sharedDone`). The parked
+navigates expire too: `expireParkedSteer` (heartbeat) sweeps every sleeping
+slot's `pendingSteer`/`pendingHint`. `parkableLayer` refuses a popup with
+work in flight (`commitPopup.generating`, `gotoCommitPopup.resolving`,
+`repoPathPopup.resolving`). The F window's `wtFiles.gen` (bumped by
+`sleepFWindow`, carried by `lsFilesMsg`) keeps a read in flight at sleep
+from beating the return's fresh one. Popups: `parkableLayer` (`avail.go`) is the ONE whitelist of popups
+the USER's own swap may park (`switchViewBy(path, byUser)`,
+`userSwitchView`; `switchRefusalBy` lets `steerRefusal`'s last answer,
+`refusalWindowOwnsKeyboard`, through for a parkable top layer;
+`cycleReachable` accepts one too); intent is threaded through
+`guardedReRoot(path, offerRepair, byUser)` (true from the key handlers,
+the repo path/switcher popups and a confirmed link; false from steer asks,
+tours, the hosted page, op chains, the move popup) and `showConsoleBy(id,
+focused, byUser)` (true from `cycleSessions` only). A `gotoCommitPopup`
+with a resolve pending, the generic `contentPopup`, the palette, the
+sessions popup, the notices dialog, sends and detects in flight are never
+parkable. Memory: `windowState.sleepFWindow` (called by `switchViewBy`
+on the leaving slot's copy only — `saveView` alone runs at the first load
+too and must not blank a live window) drops the F window's `wtFiles.all`/
+`untracked`/`letters` and `filesView.lines`, keeps the filter and
+`wtFiles.keepPath` (the cursor's file); `viewKickCmd` re-issues
+`loadLsFilesCmd` (its `lsFilesMsg` is slot-stamped) when the returned F
+window is loading, and `wtSetQuery` lands the cursor on `keepPath` once.
+Everything else parked is bounded by what the user opened. Spec
+`docs/superpowers/specs/2026-10-09-per-worktree-window-stacks.md`.
+`sleepView` (watchers closed, the five gens bumped, `srcFeed` retired) is shared by
+`switchView` and both drop paths. The commit feed is ONE shared
+`CommitFeed` re-rooted by `loadView` (`CommitFeed.SetService`: the walk's
+`--branches HEAD` is then the viewed tree's — a detached HEAD's commits,
+and no walk from a deleted old home after an adopt; it cancels a walk in
+flight and moves the feed gen so no page of the old root lands, and the
+walks read `f.pager` ONCE under the lock — `-race` caught the bare read);
+the kick reads `srcFeed` (a reconcile) so the list catches up without a flash.
+`loadView` assigns `workingReviews` BEFORE `withStatus` (the Review row
+is derived from the reviews), carries `resumePromptShown` per slot
+(saved/loaded with the status) so a round trip through another tree does
+not re-fire the paused-op prompt, and ALWAYS ends in
+`rebuildCommitGraph` (the WIP rows derive from the status inside it;
+`markHead` only re-marks). A slot whose first silent status read FAILS
+with its directory still there is marked loaded and the error said
+(the `dataAvailableMsg` error arm) — never `⏳ loading…` for good. A
+queued return (`takeQueuedReturn`) or a console's `returnView` to a slot
+that is gone falls back to home and says so; `pruneViews` retargets a
+`pendingReturnView` naming the pruned slot to home. The bare entry of a
+bare-main repository (`Worktree.Bare`) is skipped by `worktreeOrder`,
+`canEnterWorktree` and refused by `switchView` (`bareRepository`).
+`cycleWorktrees` has NO first-hit step (user ruling 2026-10-09: alt+w
+switches in any window state): every press moves to the next worktree,
+hiding a shown console on the way (`ret.view` stays, `closeConsole`) and
+activating the Branches tab so the cursor lands on the new branch; only
+`switchRefusalBy` (an op, a decision, a process, a popup with work in
+flight) refuses. `cycleWorktrees` skips ring stops `checkSwitchTarget` finds unreachable
+(named in the status line; all unreachable = a message, no move). The
+`home == ""` refusal (a repo switch in flight) is said too. The steer
+leftovers (`tour`, the working-file bands, a `pendingSteer` at
+`steerStageStatusRetry`) wait in their slot's window group — another
+slot's status never drains them. The CLI side of a look: `domain.TUIViewing`
+(registry `Viewed`) lets `preferredInboxFor` route an agent in a worktree
+no TUI runs in to the TUI SHOWING it (one running there wins; never for
+`--to web`), `gg session status` prints `showing:` from the snapshot's
+`repo.viewed`, and `liveView.viewed` (apart from `tuis`) lets `tuiGuard`
+say "a gg TUI shows this worktree (it runs in another)". Worktree-scoped async results carry
+`svc` (`statusRefreshedMsg`, `stageHunksLoadedMsg`,
+`unstageHunksLoadedMsg`, `conflictFileLoadedMsg`, `amendPrefillMsg`) and
+are dropped when `msg.svc != m.svc`. Steering compares a command's
+worktree with the VIEWED one (`steerShownMismatch`, `currentWorktree`);
+the inbox and presence stay home's. `worktreeView.loaded` is set by the
+slot's first `srcStatus` arrival (`markViewLoaded`; home seeded loaded) —
+`viewLoading` paints `⏳ loading…` on the status row meanwhile; the kick
+also reads `srcNotes` (badges are per checkout; `sleepView` retires it).
+The snapshot's `Repo.Viewed` names a look, `Branch`/`Head` stay home's
+(`snapRepoIdentity`). `steer_switch_ask` and `goto_link` go through
+`guardedReRoot` (fast in-repo path; a refusal is detected by `viewed` not
+being the target — home itself may be the target — and the replay is not armed; a link's `--at` sets
+`startAtPreviewsSeen` on the fast path since the repo's previews are
+loaded). `publishedView` (set in `loadView`, cleared with `publishedWT`
+on a repo switch) rides `PublishSessions` → `Registry.Viewed`, which
+`readLive` adds to `tuis` so `tuiGuard` refuses the shown tree too.
+`adoptView` chains `touchRepoMRUCmd`. The move popup `switchView`s home
+before moving the VIEWED (non-home) tree. `switchView` refuses before
+`seedHome`. Slot identity is `model.CheckoutKey` (`m.views`, `viewed`,
+`home`, `pendingReturnView`, `consoleReturn.view/over`; `worktreeView`
+keeps `key` + the LISTED `path`): `listedWorktree` resolves any spelling
+to the list's, `viewPath`/`homeWorktree` give a key's on-disk path for
+I/O and prose, `openFilesReg` keys on it internally; domain's
+`linkPathKey`/`SameCheckout` delegate to `model.KeyOf`. The fold is a
+per-platform `atomic.Bool` (`model.SetCaseInsensitivePaths`) so a
+SEQUENTIAL test on Linux exercises the Windows/macOS rule
+(`checkout_key_test.go`). Slot services get the config's policies
+(`applyServicePolicies` in `ensureView`; `applyPoliciesToSlots` on
+`configReadyMsg` and the Versions settings) — a bare `OpenTUI` would write
+version refs the config forbids. A slot's service is built with
+`domain.OpenTUISharing(path, home.svc)`: it vends its six caches (diff,
+blame, sha-file, commit-files, compare-files, preview) from HOME's
+`cache.Factory`, so the repository has one cache budget and a commit diff
+cached through one worktree is a hit from another. Safe because every
+cached key is content-addressed (a full hash, a hash pair, a hash + path;
+a ref endpoint has no `CacheTag`) and working-tree diffs/blames are read
+through (`Key ""` / `rev ""`). No process-wide map: a repo switch drops the
+slots and their caches with them. `dropConsole` (the console stepping aside for a stash
+list / preview / solo) keeps the view on purpose: the user is working in
+that worktree; `»` and the header say so and enter on home's row returns.
+A user switch asked while a console is docked swaps the panels UNDER the
+console (an explicit ask wins), sets `ret.view` to the target, and the
+status row then names the console's worktree (`worktree: <path>`). In-repo agent
+tours (`agent_tours_open.go`) swap and park the tour id in `m.tour` (a
+window field, the slot's); the `srcStatus` arrival shows it when `!armed`.
+
+**Trigger 2 — the user's own switch** (`switch_guard.go`): `guardedReRoot`
+takes the fast path for a listed worktree on `switchOK` → `switchView` +
+`adoptView` (home, `switchTarget`, `publishedWT`, snapshot file removed and
+re-resolved by `snapshotTargetCmd`, steering inbox closed and re-homed on
+`snapshotTargetMsg`, `webRerootCmd`; a shown
+console's `ret.view` moves to the new home). A path NOT in the list (the
+create-and-switch result before the list re-reads) still `reRoot`s — the
+same guard that keeps other repositories on the full reload.
+`onWebSwitchRequest` routes through `guardedReRoot`; a page switch that is
+neither a reroot nor an adopt (the worktree on screen, or refused) answers
+the page at once and pops its pending reply. `W` (create + switch) during
+a look: the popup anchors on the MAIN worktree's template root
+(`mainWorktreeRoot`), the op runs through `m.svc` (the VIEWED slot) and the
+create-and-switch result reRoots gg's identity to the new worktree. The
+hosted page never learns of a look (`rerootWebCmd` only on an adopt; a
+grep test, `TestWebHostAlwaysRootsAtHome`, pins every start/reroot to
+`homeSvc`). `canEnterWorktree`: a row can
+be entered when it is not on screen, or on screen only because a console
+looks at it.
+
+**Identity stays home.** `homeSvc()` (home's service, the live one before
+seeding) roots the session-snapshot target check (`snapshotTargetMsg` is
+keyed on it — a console shown before the resolve lands must not drop it),
+the hosted web page (`startWebCmd`, `webRerootCmd`) and `publishedWT` on a
+legacy load. Self-guards that mean "gg's own worktree" compare against
+`homeWorktree()`: `canDeleteWorktree` (home AND the viewed one), 
+`recycleCandidates` (both), the move popup's chdir + `pendingSwitch`.
+`worktreeForBranch` keeps `currentWorktree` on purpose (SmartSwitch runs in
+the viewed tree, so "checked out elsewhere" is relative to it). Not yet
+routed: `goto_link`'s checkout switch and `steer_switch_ask` still `reRoot`
+(their `startAt*` replay is built around a reload — deferred).
+
+**On screen (user ruling 2026-10-08: looking == switching, so no second
+marker).** Worktrees rows: `*` = the VIEWED worktree (`currentWorktree`),
+home has no marker — it only matters for invisible plumbing (exit dir,
+steering, snapshot, web page). `consoleWorktreeHint` shows the console's
+path only when it differs from the viewed worktree (`worktree: <path>`);
+the 2026-10-05 "unfocused console always shows its path" rule is retired —
+the header names the viewed worktree. The alt+a help row gained a second
+sentence.
+
+**Tests.** `worktree_view_test.go` (slots, switchView, stale read, sleep,
+prune, adopt, repo switch), `console_view_test.go` (show/close, staging
+lands in the viewed tree, the alt+a ring over two worktrees, refusals),
+`switch_audit_test.go` / `switch_audit2_test.go` / `review_fixes_test.go`
+/ `round2_switch_test.go` / `round2b_switch_test.go` / `round2c_switch_test.go`
+(the three review rounds' findings; domain `round2_switch_test.go` /
+`round2c_switch_test.go`, cli `session_viewed_test.go`),
+`view_worktrees_test.go`, the hint tests, e2e
+`tui_worktree_switch_fast.toml` (three goldens).

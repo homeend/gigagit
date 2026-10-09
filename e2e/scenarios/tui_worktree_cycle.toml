@@ -1,0 +1,35 @@
+name = "tui: alt+w shows the next worktree, then wraps to the starting one"
+
+# Two worktrees; wt-x has an untracked file the main checkout does not.
+# alt+w from the main checkout shows wt-x at once (its file, its branch
+# marker, its header path, its position in the Branches tab — row 1, newest
+# first — in the status row); a second
+# alt+w wraps back to the main checkout.
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" }, { commit = "one" },
+  { branch = "feature/x" },
+  { worktree = "wt-x", branch = "feature/x" },
+  { write = "x-only.txt", content = "x\n", cwd = "wt-x" },
+]
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "start"
+wait = true
+screen_contains = ["branch main"]
+screen_excludes = ["x-only.txt"]
+
+[[tui.step]]
+name = "next-worktree"
+keys = ["M-w"]
+screen_contains = ["[Files 1]", "A x-only.txt", "* feature/x", "wt-x  branch feature/x", "1 of 2 worktrees"]
+screen_excludes = ["reloading"]
+
+[[tui.step]]
+name = "wrapped"
+keys = ["M-w"]
+screen_contains = ["2 of 2 worktrees", "* main"]
+screen_excludes = ["x-only.txt", "reloading"]

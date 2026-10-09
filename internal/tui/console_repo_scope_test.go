@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/model"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -76,17 +78,11 @@ func TestAltACyclesOnlyThisReposSessions(t *testing.T) {
 	if _, err := domain.Sessions().Start(sessionSpecForTest("foreign", t.TempDir())); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 4; i++ { // mine, the starting screen, mine, …
+	for i := 0; i < 4; i++ { // mine, every time: the foreign one is not in the ring
 		mm, _ := m.Update(altKey('a'))
 		m = mm.(Model)
-		if i%2 == 1 {
-			if m.console != nil {
-				t.Fatalf("alt+a #%d: console = %+v, want the return stop", i+1, m.console)
-			}
-			continue
-		}
-		if m.console == nil || m.console.id != mine.Info().ID {
-			t.Fatalf("alt+a #%d: console = %+v, want only this repo's session", i+1, m.console)
+		if m.console == nil || m.console.id != mine.Info().ID || !m.console.focused {
+			t.Fatalf("alt+a #%d: console = %+v, want only this repo's session, bound", i+1, m.console)
 		}
 	}
 	if !m.hasRepoSessions(false) {
@@ -168,5 +164,20 @@ func TestOpenAnotherReposSessionRefusedOverAnOpenWindow(t *testing.T) {
 	}
 	if m.statusMsg == "" {
 		t.Fatal("the refusal must say why")
+	}
+}
+
+// enter on another worktree of the same repo keeps the console AND keeps
+// the screen: no reload, the view is the target.
+func TestWorktreeEnterKeepsConsoleAndScreen(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	nm, _ := m.guardedReRoot(other, true, true)
+	m = nm.(Model)
+	if m.console == nil || !m.ready || m.viewed != model.KeyOf(other) {
+		t.Fatalf("console=%+v ready=%v viewed=%q", m.console, m.ready, m.viewed)
 	}
 }

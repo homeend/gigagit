@@ -32,7 +32,7 @@ func stageDoc() *hunkpick.Doc {
 func TestConflictPickerEnterWalksUndecidedAndWraps(t *testing.T) {
 	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc()) // 2 regions
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	m, _ = e.update(m, keyMsg("enter"))
 	if e.bi != 1 {
 		t.Fatalf("enter must move to the next undecided region, bi=%d", e.bi)
@@ -64,7 +64,7 @@ func TestConflictPickerEnterWalksUndecidedAndWraps(t *testing.T) {
 func TestConflictPickerCtrlSGateAndApply(t *testing.T) {
 	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	got := captureApply(e)
 	e.bi = 1
 	m, _ = e.update(m, key("ctrl+s"))
@@ -87,7 +87,7 @@ func TestStagePickerEnterWalksHunksCtrlSApplies(t *testing.T) {
 	if len(e.blocks) != 2 {
 		t.Fatalf("fixture: want 2 hunks, got %d", len(e.blocks))
 	}
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	got := captureApply(e)
 	m, _ = e.update(m, keyMsg("enter"))
 	if e.bi != 1 || *got != nil {
@@ -106,7 +106,7 @@ func TestStagePickerEnterWalksHunksCtrlSApplies(t *testing.T) {
 func TestPickerCtrlSWorksUnderOutputFocus(t *testing.T) {
 	t.Parallel()
 	e := newStagePicker("f.txt", stageDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m := Model{width: 80, height: 30, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	got := captureApply(e)
 	m, _ = e.update(m, keyMsg("tab"))
 	if !e.outFocused {
@@ -121,7 +121,7 @@ func TestPickerCtrlSWorksUnderOutputFocus(t *testing.T) {
 func TestPickerEnterUnderOutputFocusReturnsGrid(t *testing.T) {
 	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m := Model{width: 80, height: 30, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	m, _ = e.update(m, keyMsg("tab"))
 	m, _ = e.update(m, keyMsg("down"))
 	m, _ = e.update(m, keyMsg("enter"))
@@ -136,7 +136,7 @@ func TestPickerEnterUnderOutputFocusReturnsGrid(t *testing.T) {
 func TestPickerHintsNameNextPrevAndCtrlS(t *testing.T) {
 	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 160, height: 30}
+	m := Model{width: 160, height: 30, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	out := e.render(m, "")
 	for _, tok := range []string{"[n] next hunk", "[p] prev hunk", "[enter] next unresolved", "[ctrl+s] apply"} {
 		if !strings.Contains(out, tok) {
@@ -189,7 +189,7 @@ func TestConflictProcessPickerCtrlSApplies(t *testing.T) {
 func TestConflictPickerSkipDecidesAndAdvances(t *testing.T) {
 	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc()) // 2 regions
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	m, _ = e.update(m, key("s"))
 	if !e.blocks[0].Skipped() || e.bi != 1 || e.doc.Pending() != 1 {
 		t.Fatalf("s must skip region 0 and land on the next undecided: skipped=%v bi=%d pending=%d", e.blocks[0].Skipped(), e.bi, e.doc.Pending())
@@ -219,7 +219,7 @@ func TestConflictPickerSkipDecidesAndAdvances(t *testing.T) {
 func TestStagePickerSkipResetsHunkAndSteps(t *testing.T) {
 	t.Parallel()
 	e := newStagePicker("f.txt", stageDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	m, _ = e.update(m, key("i")) // stage hunk 0 (working side)
 	if e.blocks[0].Mode == hunkpick.Untouched {
 		t.Fatal("fixture: i must change hunk 0")
@@ -238,7 +238,7 @@ func TestStagePickerSkipResetsHunkAndSteps(t *testing.T) {
 func TestPickerNextPrevWrap(t *testing.T) {
 	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	m, _ = e.update(m, key("p"))
 	if e.bi != 1 {
 		t.Fatalf("p on the first region must wrap to the last, bi=%d", e.bi)
@@ -260,7 +260,7 @@ func TestStagePickerOpensWithNothingTicked(t *testing.T) {
 		"stage":   newStagePicker("f.txt", stageDoc()),
 		"unstage": newUnstagePicker("f.txt", stageDoc()),
 	} {
-		m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+		m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 		if out := e.render(m, ""); strings.Contains(out, "[x]") || strings.Contains(out, "[~]") {
 			t.Fatalf("%s: nothing may be ticked on open:\n%s", name, out)
 		}
@@ -277,7 +277,7 @@ func TestStagePickerOpensWithNothingTicked(t *testing.T) {
 func TestStagePickerFirstPickStartsEmpty(t *testing.T) {
 	t.Parallel()
 	e := newStagePicker("f.txt", stageDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	m, _ = e.update(m, keyMsg("right"))
 	m, _ = e.update(m, key(" "))
 	got := captureApply(e)
@@ -292,7 +292,7 @@ func TestStagePickerFirstPickStartsEmpty(t *testing.T) {
 func TestStagePickerUntickAllReturnsToUntouched(t *testing.T) {
 	t.Parallel()
 	e := newStagePicker("f.txt", stageDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	for _, k := range []string{" ", " ", "i", "i", "c", "c"} {
 		m, _ = e.update(m, key(k))
 		_ = m
@@ -316,7 +316,7 @@ func TestStagePickerTakesAnEmptyWorkingSide(t *testing.T) {
 	d := hunkpick.FromDiff([]byte("a\nb\nc\n"), []byte("a\nc\n"))
 	d.StartUntouched()
 	e := newStagePicker("f.txt", d)
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	m, _ = e.update(m, key("i"))
 	if !e.blocks[0].Skipped() {
 		t.Fatalf("i on a deletion must take the empty side, mode=%v", e.blocks[0].Mode)

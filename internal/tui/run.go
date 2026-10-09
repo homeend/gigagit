@@ -120,9 +120,10 @@ func Run(svc *domain.Service, opts RunOptions) (string, error) {
 	// Publish this TUI's agent sessions so another gg process (an agent's
 	// `gg worktree list/claim`) sees them; the file goes when Run returns.
 	publishedWT.Store(m.currentWorktree)
+	publishedView.Store(m.currentWorktree)
 	pubCtx, pubCancel := context.WithCancel(context.Background())
 	defer pubCancel()
-	go domain.PublishSessions(pubCtx, domain.SessionRegistryDir(), publishedWorktree, m.agentURL())
+	go domain.PublishSessions(pubCtx, domain.SessionRegistryDir(), publishedWorktree, publishedViewed, m.agentURL())
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithFilter(quitFilter))
 	// Wrap off for the TUI's lifetime (see autowrapOff): a glyph the terminal
 	// draws wider than gg measured must clip at the right edge, never wrap

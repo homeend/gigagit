@@ -1,6 +1,8 @@
 package tui
 
-import "github.com/homeend/gigagit/internal/model"
+import (
+	"github.com/homeend/gigagit/internal/model"
+)
 
 // Availability predicates shared by Update's key dispatch (model.go) and the
 // footer binding registry (footer.go). Sharing them keeps the footer honest:
@@ -45,7 +47,8 @@ func (m Model) cycleReachable() bool {
 	if m.filterTyping {
 		return false
 	}
-	switch l := m.topLayer().(type) {
+	top := m.topLayer()
+	switch l := top.(type) {
 	case nil, *historyView:
 		return true
 	case *diffView:
@@ -54,6 +57,38 @@ func (m Model) cycleReachable() bool {
 		return !l.search.typing
 	case *fileViewer:
 		return l.openFile == nil || l.p == nil || !l.p.search.typing
+	}
+	return parkableLayer(top) // the user's own swap parks a popup that can wait
+}
+
+// parkableLayer is the whitelist of popups the USER's own swap (alt+w,
+// alt+a/alt+t, enter on a worktree row) may park with the worktree's
+// windows: their pending work is none, or a plain read the slot's queue
+// holds until the worktree returns, and what they submit runs through the
+// service that is live again then — their own worktree's. Everything not
+// listed refuses the swap: a popup whose result moves the panels by itself
+// (a goto resolve pending, the repo switchers, the move-worktree popup), a
+// send or a detect in flight, the notices dialog, the sessions popup, the
+// palette, and the generic contentPopup (too many surfaces draw with it to
+// know what it owes). An agent-triggered swap never parks a popup (switchView's
+// default; steerRefusal is unchanged).
+func parkableLayer(l layer) bool {
+	switch v := l.(type) {
+	case *gotoCommitPopup:
+		return v.pending == nil && !v.resolving // its resolve moves the panels by itself
+	case *commitPopup:
+		return !v.generating // the generate task's result and spinner need the box on screen
+	case *repoPathPopup:
+		return !v.resolving
+	case *versionsPopup, *remoteHeadsPopup, *allNotesPopup, *gitConfigPopup,
+		*branchPopup, *notePopup, *annotateTagPopup, *renameBranchPopup,
+		*rewordPopup, *commitNamePopup, *filePathPopup, *bookmarkPopup, *bookmarkPastePopup,
+		*notesListPopup, *exportPatchPopup, *applyPatchPopup, *hookEditorPopup,
+		*languagePickerPopup, *previewRenamePopup,
+		*pairOpPopup, *reflogCheckoutPopup, *shelfRestorePopup, *shellCmdPopup,
+		*blameRecentPopup, *commitFilterPopup, *checkoutAsPopup, *hunkPicker,
+		*relatedPromptPopup:
+		return true
 	}
 	return false
 }
@@ -204,7 +239,13 @@ func (m Model) canDeleteBranch() bool {
 // working tree, so don't offer it.
 func (m Model) canDeleteWorktree() bool {
 	wt, ok := m.selectedWorktree()
-	return m.opsIdle() && ok && wt.Path != m.currentWorktree
+	if !m.opsIdle() || !ok {
+		return false
+	}
+	// Neither gg's own worktree (home — its cwd, exit dir and steering) nor
+	// the one a console has on screen (the op would run inside it).
+	key := model.KeyOf(wt.Path)
+	return key != model.KeyOf(m.homeWorktree()) && key != m.viewed
 }
 
 // canMoveWorktree gates e / the rename+move menu rows on Worktrees: any
@@ -218,7 +259,20 @@ func (m Model) canMoveWorktree() bool {
 // canEnterWorktree gates enter on Worktrees: re-root into another worktree.
 func (m Model) canEnterWorktree() bool {
 	wt, ok := m.selectedWorktree()
-	return m.opsIdle() && ok && wt.Path != "" && wt.Path != m.currentWorktree
+	if !m.opsIdle() || !ok || wt.Path == "" || wt.Bare {
+		return false // the bare repository has no working tree to enter
+	}
+	// A row can be entered when it is not on screen, or when it is on screen
+	// only because a console looks at it (enter then adopts it). Before the
+	// first load seeds the slots, the current worktree is the one on screen.
+	viewed, home := m.viewed, m.home
+	if viewed == "" {
+		viewed = model.KeyOf(m.currentWorktree)
+	}
+	if home == "" {
+		home = viewed
+	}
+	return model.KeyOf(wt.Path) != viewed || viewed != home
 }
 
 // canShowCommitFiles gates l: the commit files view needs a resolvable

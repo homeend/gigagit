@@ -152,8 +152,20 @@ func (m Model) onWebSwitchRequest(msg webSwitchRequestMsg) (Model, tea.Cmd) {
 		return m, rearm
 	}
 	m.web.pendingSwitch = append(m.web.pendingSwitch, msg.reply)
-	nm, cmd := m.reRoot(msg.path)
+	home, status := m.home, m.statusMsg
+	nm, cmd := m.guardedReRoot(msg.path, false, false) // a worktree of this repo: the fast path
 	m = nm.(Model)
+	if !m.loading && m.home == home {
+		// Neither a reroot nor an adopt: the worktree already on screen (nothing
+		// for the host to follow), or a refusal said on the status line.
+		var err error
+		if m.statusMsg != status {
+			err = errors.New(m.statusMsg)
+		}
+		m.web.pendingSwitch = m.web.pendingSwitch[:len(m.web.pendingSwitch)-1]
+		msg.reply <- err
+		return m, tea.Batch(cmd, rearm)
+	}
 	m.statusMsg = i18n.T("switched from the web page")
 	return m, tea.Batch(cmd, rearm)
 }
@@ -240,7 +252,7 @@ func (m Model) openInBrowser() (Model, tea.Cmd) {
 	}
 	m.web.starting = true
 	m.statusMsg = i18n.T("web page: starting…")
-	return m, startWebCmd(m.svc, m.web, m.webAddr(), true)
+	return m, startWebCmd(m.homeSvc(), m.web, m.webAddr(), true)
 }
 
 // startupWebCmd serves at launch when [web] serve or --web asks for it (the
@@ -253,7 +265,7 @@ func (m Model) startupWebCmd() tea.Cmd {
 		return nil
 	}
 	m.web.starting = true // a pointer: the flag survives the value copy
-	return startWebCmd(m.svc, m.web, m.webAddr(), false)
+	return startWebCmd(m.homeSvc(), m.web, m.webAddr(), false)
 }
 
 func (m Model) onWebStarted(msg webStartedMsg) (Model, tea.Cmd) {
@@ -299,7 +311,7 @@ func (m Model) steerServe(c steer.Command) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.web.starting = true
-	return m, startWebCmd(m.svc, m.web, m.webAddr(), false)
+	return m, startWebCmd(m.homeSvc(), m.web, m.webAddr(), false)
 }
 
 // webStatusText is the Settings row value.
@@ -326,7 +338,7 @@ func (m Model) webRerootCmd() tea.Cmd {
 	if !m.webServing() {
 		return nil
 	}
-	return rerootWebCmd(m.web.host, m.svc)
+	return rerootWebCmd(m.web.host, m.homeSvc()) // the page follows gg's own worktree, never a console's view
 }
 
 // closeWeb ends the hosted page (Run's exit path). The pages get their

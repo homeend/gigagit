@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -46,7 +47,7 @@ func (m Model) askSteerSwitch(c steer.Command) (Model, tea.Cmd) {
 	}
 	m.noticesUnread = true
 	m.blinkOn = true
-	reply := m.answerSteer(c, steerFail(c, fmt.Sprintf("gg is showing worktree %s; asked the user to switch to %s", m.snapshotWorktree, c.Worktree)))
+	reply := m.answerSteer(c, steerFail(c, fmt.Sprintf("gg is showing worktree %s; asked the user to switch to %s", m.currentWorktree, c.Worktree)))
 	return m, tea.Batch(blink, reply)
 }
 
@@ -86,11 +87,17 @@ func steerAskNotice(a *steerSwitchAsk, repoKey string) *notice {
 				// Checked first, as switchToLink does: an unreachable
 				// checkout is refused in place (guardedReRoot's message).
 				if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, c.Worktree); verdict != switchOK {
-					nm, cmd := m.guardedReRoot(c.Worktree, false)
+					nm, cmd := m.guardedReRoot(c.Worktree, false, false)
 					return nm.(Model), cmd
 				}
-				nm, cmd := m.reRoot(c.Worktree)
+				// guardedReRoot: a worktree of this repository is a slot swap
+				// (no reload — the replay then runs against the new slot's
+				// service at once), another repository the full reload.
+				nm, cmd := m.guardedReRoot(c.Worktree, false, false)
 				m = nm.(Model)
+				if m.viewed != "" && m.viewed != model.KeyOf(c.Worktree) && m.ready {
+					return m, cmd // the swap was refused (a surface, an op): said on the status line, nothing to replay — home itself may be the target
+				}
 				if c.Cmd == "navigate" {
 					replay := c
 					replay.Wait, replay.Worktree, replay.From = false, "", ""

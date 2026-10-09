@@ -213,10 +213,11 @@ func blameAge(now, t time.Time) string {
 
 // blameMsg carries the async blame result, tag-gated like historyDiffMsg.
 type blameMsg struct {
-	tag   string
-	lines []model.BlameLine
-	tok   [][]syntax.Tok
-	err   error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	tag       string
+	lines     []model.BlameLine
+	tok       [][]syntax.Tok
+	err       error
 }
 
 // loadBlameCmd fetches blame off the UI thread, lexing the blamed content in
@@ -225,12 +226,13 @@ type blameMsg struct {
 // mid-load cannot flip the answer under the closure.
 func (m Model) loadBlameCmd(ctx navContext, tag string) tea.Cmd {
 	svc, on := m.svc, m.cfg.UI.SyntaxOn()
+	slot := m.stamp()
 	return func() tea.Msg {
 		ls, err := svc.Blame(context.Background(), ctx.rev, ctx.path)
 		if err != nil {
-			return blameMsg{tag: tag, lines: ls, err: err}
+			return blameMsg{slotStamp: slot, tag: tag, lines: ls, err: err}
 		}
-		return blameMsg{tag: tag, lines: ls, tok: lexBlame(ctx.path, ls, on)}
+		return blameMsg{slotStamp: slot, tag: tag, lines: ls, tok: lexBlame(ctx.path, ls, on)}
 	}
 }
 

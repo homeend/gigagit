@@ -14,7 +14,7 @@ import (
 func TestMismatchedNavigateAsksInsteadOfLanding(t *testing.T) {
 	t.Parallel()
 	m, dir := steerModel(t)
-	m.snapshotWorktree = "/w/a"
+	m.snapshotWorktree, m.currentWorktree = "/w/a", "/w/a" // gg IS /w/a and SHOWS /w/a
 	c := steer.Command{ID: "n1", Cmd: "navigate", File: "x.go", Wait: true, Worktree: "/w/b", From: dir}
 	m, cmd := m.applySteer(c)
 	if cmd == nil {
@@ -36,7 +36,7 @@ func TestMismatchedNavigateAsksInsteadOfLanding(t *testing.T) {
 func TestMatchingOrUnboundCommandsApplyAsToday(t *testing.T) {
 	t.Parallel()
 	m, _ := steerModel(t)
-	m.snapshotWorktree = "/w/a"
+	m.snapshotWorktree, m.currentWorktree = "/w/a", "/w/a" // gg IS /w/a and SHOWS /w/a
 	for _, c := range []steer.Command{
 		{ID: "f1", Cmd: "focus", Panel: "branches", Worktree: "/w/b"},
 		{ID: "n2", Cmd: "navigate", File: "x.go", Worktree: "/w/a/"},
@@ -53,7 +53,7 @@ func TestMatchingOrUnboundCommandsApplyAsToday(t *testing.T) {
 func TestIgnoringTheAskForgetsIt(t *testing.T) {
 	t.Parallel()
 	m, _ := steerModel(t)
-	m.snapshotWorktree = "/w/a"
+	m.snapshotWorktree, m.currentWorktree = "/w/a", "/w/a" // gg IS /w/a and SHOWS /w/a
 	m, _ = m.applySteer(steer.Command{ID: "n1", Cmd: "navigate", File: "x.go", Worktree: "/w/b"})
 	n := noticeByID(m, "steer_switch")
 	m, _ = m.applyNoticeAction(*n, noticeActionByLabel(t, n, i18n.T("Ignore")))
@@ -70,7 +70,7 @@ func TestAcceptingTheAskSwitchesAndReplays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.snapshotWorktree = "/w/a"
+	m.snapshotWorktree, m.currentWorktree = "/w/a", "/w/a" // gg IS /w/a and SHOWS /w/a
 	m, _ = m.applySteer(steer.Command{ID: "n1", Cmd: "navigate", File: "x.go", Wait: true, Worktree: other})
 	n := noticeByID(m, "steer_switch")
 	if n == nil {

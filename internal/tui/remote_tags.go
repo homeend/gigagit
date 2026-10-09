@@ -88,12 +88,8 @@ func tagsAtCommit(tags []model.Tag, hash string) []model.Tag {
 
 // currentBranchTipHash returns the short commit hash at the current branch tip.
 func (m Model) currentBranchTipHash() string {
-	for _, b := range m.branches {
-		if b.Name == m.status.Branch {
-			return b.Hash
-		}
-	}
-	return ""
+	h, _ := m.branchTipHash(m.status.Branch)
+	return h
 }
 
 // pushCurrentOp builds the Push operation for the current branch.
