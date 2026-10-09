@@ -1632,8 +1632,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onThreadResolved(msg)
 	case remoteHeadNamesMsg:
 		p := layerOf[*remoteHeadsPopup](m)
-		if p == nil || msg.gen != m.loadGen {
-			return m, nil // closed or repo switched before the read returned
+		if p == nil || msg.gen != m.remoteHeadsGen {
+			return m, nil // closed, or reopened, before the read returned
 		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("browse remote branches: %s", msg.err.Error())
@@ -1655,7 +1655,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case remoteHeadsMsg:
 		p := layerOf[*remoteHeadsPopup](m)
-		if p == nil || msg.gen != m.loadGen || msg.remote != p.remote {
+		if p == nil || msg.gen != m.remoteHeadsGen || msg.remote != p.remote {
 			return m, nil
 		}
 		if msg.err != nil {

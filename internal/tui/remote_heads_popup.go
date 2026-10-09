@@ -32,9 +32,10 @@ type remoteHeadsPopup struct {
 	hscroll   int                // modeScroll horizontal offset
 }
 
-// remoteHeadNamesMsg is the async result of the RemoteNames phase. gen is the
-// loadGen value captured at launch; stale results (repo switched while the
-// read was in flight) are dropped.
+// remoteHeadNamesMsg is the async result of the RemoteNames phase. gen is
+// the remoteHeadsGen value stamped at open (a window gen, the slot's own:
+// a repo switch drops the slot, a popup reopened bumps it); stale results
+// are dropped.
 type remoteHeadNamesMsg struct {
 	names []string
 	err   error
@@ -55,6 +56,7 @@ func (m Model) openRemoteHeadsBrowser() (Model, tea.Cmd) {
 	if !m.opsIdle() || layerOf[*remoteHeadsPopup](m) != nil {
 		return m, nil
 	}
+	m.remoteHeadsGen++
 	m = m.pushLayer(&remoteHeadsPopup{loading: true})
 	return m, m.loadRemoteHeadNamesCmd()
 }
@@ -62,7 +64,7 @@ func (m Model) openRemoteHeadsBrowser() (Model, tea.Cmd) {
 // loadRemoteHeadNamesCmd lists remote names off the UI thread.
 func (m Model) loadRemoteHeadNamesCmd() tea.Cmd {
 	svc := m.svc
-	gen := m.loadGen
+	gen := m.remoteHeadsGen
 	return func() tea.Msg {
 		names, err := svc.RemoteNames(context.Background())
 		return remoteHeadNamesMsg{names: names, err: err, gen: gen}
@@ -72,7 +74,7 @@ func (m Model) loadRemoteHeadNamesCmd() tea.Cmd {
 // loadRemoteHeadsCmd runs the ls-remote phase for remote off the UI thread.
 func (m Model) loadRemoteHeadsCmd(remote string) tea.Cmd {
 	svc := m.svc
-	gen := m.loadGen
+	gen := m.remoteHeadsGen
 	return func() tea.Msg {
 		heads, err := svc.UnfetchedRemoteHeads(context.Background(), remote)
 		return remoteHeadsMsg{remote: remote, heads: heads, err: err, gen: gen}

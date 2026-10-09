@@ -116,7 +116,7 @@ func (m Model) onStoredDeleted(msg storedDeletedMsg) (Model, tea.Cmd) {
 		m = m.dropFilesRows(func(l contentLine) bool { return l.noteID == msg.id })
 	}
 	if p := layerOf[*allNotesPopup](m); p != nil {
-		svc, gen := m.svc, m.loadGen
+		svc, gen := m.svc, m.allNotesGen // the open popup's own gen: the re-read lands on it
 		cmds = append(cmds, func() tea.Msg {
 			ov, err := svc.NotesOverview(context.Background())
 			return allNotesMsg{ov: ov, err: err, gen: gen}

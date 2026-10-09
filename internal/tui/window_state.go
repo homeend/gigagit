@@ -35,6 +35,8 @@ type windowState struct {
 	entryCompareGen int             // drops stale commit-entry compare resolves (the pickGen pattern)
 	gitConfigGen    int             // stale-drop guard for explorer row loads
 	versionsGen     int             // stale-drop guard for the branch-versions popup's loads
+	remoteHeadsGen  int             // stale-drop guard for the remote-heads popup's two reads (its own, not loadGen: a swap bumps loadGen and would strand a parked popup)
+	allNotesGen     int             // stale-drop guard for the all-notes overview read (likewise)
 	pendingCompare  *pendingCompare // focused file awaiting the compare-mode picker; nil = none
 	stashView       *stashView      // stash list in the right column (over Commits); nil = closed
 	wtFiles         *worktreeFiles  // F's working-tree mode of the files view (nil otherwise)
