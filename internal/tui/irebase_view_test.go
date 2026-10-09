@@ -39,7 +39,7 @@ func TestIrebaseEditorNewestFirstAndPlanOrder(t *testing.T) {
 func TestIrebaseEditorActionsAndReorder(t *testing.T) {
 	t.Parallel()
 	e := newIrebaseEditor("work", "main", edRows(), "/bin/gg")
-	m := Model{layers: &layerStack{entries: []layer{e}}}
+	m := Model{windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	// focus top row (h3, newest), drop it
 	m, _ = e.update(m, key("d"))
 	if e.rows[0].action != rebaseplan.Drop {
@@ -68,7 +68,7 @@ func TestIrebaseEditorActionsAndReorder(t *testing.T) {
 func TestIrebaseEditorSquashOnOldestRefused(t *testing.T) {
 	t.Parallel()
 	e := newIrebaseEditor("work", "main", edRows(), "/bin/gg")
-	m := Model{layers: &layerStack{entries: []layer{e}}}
+	m := Model{windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	// move to the bottom (oldest) row and squash → refused
 	m, _ = e.update(m, key("j"))
 	m, _ = e.update(m, key("j")) // now on h1 (oldest, last row)
@@ -81,7 +81,7 @@ func TestIrebaseEditorSquashOnOldestRefused(t *testing.T) {
 func TestIrebaseEditorReword(t *testing.T) {
 	t.Parallel()
 	e := newIrebaseEditor("work", "main", edRows(), "/bin/gg")
-	m := Model{layers: &layerStack{entries: []layer{e}}}
+	m := Model{windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	m, _ = e.update(m, key("r")) // open reword for h3
 	if e.reword == nil {
 		t.Fatal("r must open reword input")

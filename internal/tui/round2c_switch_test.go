@@ -29,13 +29,13 @@ func TestSwitchViewBeforeTheSlotsAreSeededSaysSo(t *testing.T) {
 func TestSwitchViewDropsAParkedTour(t *testing.T) {
 	m := loadedModel(t)
 	m, other := addWorktree(t, m, "wt2")
-	m.consoleSwitch.tour = "ov-1"
+	m.tour = "ov-1"
 	m, ok := m.switchView(other)
 	if !ok {
 		t.Fatalf("refused: %s", m.statusMsg)
 	}
-	if m.consoleSwitch.tour != "" {
-		t.Fatalf("tour %q survived the swap: it would show over another worktree's status", m.consoleSwitch.tour)
+	if m.tour != "" {
+		t.Fatalf("tour %q survived the swap: it would show over another worktree's status", m.tour)
 	}
 }
 

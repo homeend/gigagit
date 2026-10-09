@@ -62,7 +62,7 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 			return nm, nil
 		}
 		m = nm
-		m.consoleSwitch.tour = o.ID
+		m.tour = o.ID
 		return m, check
 	}
 	gen := m.consoleSwitch.gen
@@ -71,7 +71,7 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 	// Only a switch THIS call made carries the tour; a refusal (said on the
 	// status line) leaves an earlier switch in flight, which lands elsewhere.
 	if m.consoleSwitch.gen != gen {
-		m.consoleSwitch.tour = o.ID
+		m.tour = o.ID
 	}
 	return m, tea.Batch(cmd, check)
 }

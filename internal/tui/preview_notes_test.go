@@ -357,7 +357,7 @@ func previewOpenMsgFixture(gen int) previewOpenMsg {
 func TestPreviewOpenArmsTheNoteScopeAfterTheCompareOpens(t *testing.T) {
 	t.Parallel()
 	msg := previewOpenMsgFixture(7)
-	m := Model{width: 100, height: 40, previewGen: 7}
+	m := Model{width: 100, height: 40, windowState: windowState{previewGen: 7}}
 	stale := &domain.PreviewNoteSet{Source: "old", Target: "old", Tip: "dead"}
 	m.filesPreviewSet, m.filesPreviewCounts = stale, map[string]int{"stale.txt": 9}
 
@@ -388,7 +388,7 @@ func TestPreviewOpenArmsTheNoteScopeAfterTheCompareOpens(t *testing.T) {
 func TestPreviewOpenRefreshReplacesCountsAndKeepsTheView(t *testing.T) {
 	t.Parallel()
 	msg := previewOpenMsgFixture(7)
-	m := Model{width: 100, height: 40, previewGen: 7}
+	m := Model{width: 100, height: 40, windowState: windowState{previewGen: 7}}
 	m.filesView = &contentPopup{}
 	m.compareTag = compareTagFor(msg.eps.Left, msg.eps.Right)
 	m.previewOpen = &previewOpenState{id: "p1", source: "feat", target: "main",

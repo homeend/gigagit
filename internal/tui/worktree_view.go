@@ -395,8 +395,8 @@ func (m Model) sleepView() Model {
 	m.srcGen[srcFeed]++ // nor a commit walk from the old root (the feed is re-rooted on load)
 	m.srcInflight[srcFeed] = false
 	m.srcLoading[srcFeed] = false
-	m.workingReviewsGen++     // likewise a reviews read
-	m.consoleSwitch.tour = "" // a tour parked for the leaving slot's status
+	m.workingReviewsGen++ // likewise a reviews read
+	m.tour = ""           // a tour parked for the leaving slot's status
 	// `gg session highlight` bands on WORKING files are the leaving tree's
 	// (the same path exists in the arriving one); a commit's are the repo's.
 	for k := range m.attention {

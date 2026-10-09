@@ -44,7 +44,7 @@ func TestReviewTreeLinesMarksAWorkingReviewsFiles(t *testing.T) {
 // review's notes anchor.
 func TestStampReviewNotesAddressesAWorkingReviewAtTheWorktree(t *testing.T) {
 	t.Parallel()
-	m := Model{filesReview: &reviewViewState{id: "rv", review: domain.Review{Kind: domain.ReviewOnWorktree, Worktree: "/wt"}}}
+	m := Model{windowState: windowState{filesReview: &reviewViewState{id: "rv", review: domain.Review{Kind: domain.ReviewOnWorktree, Worktree: "/wt"}}}}
 	dv := &diffView{}
 	m.stampReviewNotes(dv, "a.txt")
 	want := model.FileAddress{State: model.StateUnstaged, Worktree: "/wt", Path: "a.txt"}

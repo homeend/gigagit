@@ -22,7 +22,7 @@ import (
 // 0:foo 1:bar 2:A 3:B 4:C — the literals are NOT searchable.
 func pickerSearchModel() (Model, *hunkPicker) {
 	e := newConflictPicker("f.txt", pickerDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	return m, e
 }
 
@@ -87,7 +87,7 @@ func emptyIncomingSideDoc() *hunkpick.Doc {
 func TestPickerSearchStepHonorsSideOnEmptySide(t *testing.T) {
 	t.Parallel()
 	e := newConflictPicker("f.txt", emptyCurrentSideDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	m = typePicker(m, e, "/", "needle", "enter")
 	if len(e.search.hits) != 2 {
 		t.Fatalf("hits = %v, want 2", e.search.hits)
@@ -112,7 +112,7 @@ func TestPickerSearchStepHonorsSideOnEmptySide(t *testing.T) {
 	// wants the first hit STRICTLY after) skips straight past it to the next
 	// hit two blocks away.
 	e2 := newConflictPicker("f.txt", emptyIncomingSideDoc())
-	m2 := Model{layers: &layerStack{entries: []layer{e2}}, width: 80, height: 24}
+	m2 := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e2}}}}
 	m2 = typePicker(m2, e2, "/", "needle", "enter")
 	if len(e2.search.hits) != 2 {
 		t.Fatalf("hits = %v, want 2", e2.search.hits)

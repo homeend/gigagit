@@ -36,6 +36,8 @@ import (
 
 // Model is the root Bubble Tea model.
 type Model struct {
+	windowState // the viewed worktree's windows (window_state.go): swapped with the slot, every field promoted
+
 	width, height int
 
 	loading bool
@@ -74,9 +76,6 @@ type Model struct {
 	pendingDriftBranch     string                         // branch to DriftAfter-check once this op finishes (armed by startOp for rebase/merge/pull/ContinueOp)
 	pendingDriftPaused     bool                           // true when the armed op is resuming a merge/rebase paused for conflicts (see notify.go's driftNotice)
 	pendingGotoTip         string                         // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
-	pendingSteer           *pendingSteer                  // parked navigate (steer_nav.go); drained by the load it waits on
-	pendingHint            *pendingHint                   // navigate whose hint (steer_nav.go) is being revealed; drained by bookmarksLoadedMsg/shelfLoadedMsg
-	hintGen                int                            // generation guard for pendingHint (fix F3): bumped on every stage, stamped into the hint's OWN load so an unrelated bookmark/shelf load in flight can never be mistaken for it
 	startAt                model.Link                     // --at: where to land once the preconditions below have landed
 	startAtAnchor          *steer.Line                    // what became of startAt's fingerprinted line (a # paste that switched checkout); nil = nothing to say
 	startAtPending         bool                           // consumed exactly once, by startAtReady's last precondition
@@ -86,7 +85,6 @@ type Model struct {
 	pendingRemoteTagAdds   []string                       // tags to optimistically add to remoteTagNames on PushTags success
 	pushCheckGen           int                            // generation guard for the async pre-push remote-tag check
 	pickGen                int                            // generation guard for the async cherry-pick commit probe
-	entryCompareGen        int                            // drops stale commit-entry compare resolves (the pickGen pattern)
 	linkHistGen            int                            // drops a copied-link history load a newer host has superseded
 	pickPatchTemp          string                         // patch lane's temp file; removed when its op finishes
 	reflog                 []model.ReflogEntry            // HEAD reflog; shown by the Reflog tab in the bottom slot
@@ -112,8 +110,6 @@ type Model struct {
 	noticesUnread          bool                    // blink while true; opening the ! dialog clears it
 	blinkOn                bool                    // current blink phase (style alternation)
 	noticeGen              int                     // stale-drop guard for repoHealthMsg across repo switches
-	gitConfigGen           int                     // stale-drop guard for explorer row loads
-	versionsGen            int                     // stale-drop guard for the branch-versions popup's loads
 	blinkGen               int                     // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
 	noticeSessionDismissed map[string]bool         // "Not now" ids; cleared on reRoot (re-evaluated next load)
 	repoHealth             model.RepoHealth        // last health snapshot (Settings Commit-graph row)
@@ -141,10 +137,9 @@ type Model struct {
 	pendingSeqBump      []string
 	pendingSwitch       bool
 	switchTarget        string
-	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
-	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	pendingSources      []sourceKey     // sources to refresh after this op; nil = all (set at the startOp call site)
-	identity            model.Identity  // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
+	pendingSwitchBranch string         // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	pendingSources      []sourceKey    // sources to refresh after this op; nil = all (set at the startOp call site)
+	identity            model.Identity // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
 
 	mark              *markState      // the m-key mark; nil = none (see mark.go)
 	blameRecentLast   string          // last text submitted to the blame view's d-key age dialog; seeds the next one (the on/off state lives on the blameView and dies with it)
@@ -154,14 +149,9 @@ type Model struct {
 	previewCompareSet map[string]bool // Previews rows toggled into the ◉ compare selection (keyed by row id; preview_marks.go)
 	actionMenu        *actionMenu     // . action menu (list + run available actions); nil = closed
 
-	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
 	docs          *agentdocs.Store                         // the store the open files' notes live in: agentdocs.Shared(), which a hosted gg web page reads too
 	docsSub       *docsTrack                               // the TUI's one subscription to docs (agentdocs_track.go)
-	wtFiles       *worktreeFiles                           // F's working-tree mode of the files view (nil otherwise)
-	filesFull     bool                                     // ctrl+t: the files view spans the whole body
-	previewFull   bool                                     // ctrl+t on a focused preview: it spans the whole body
-	wtPreviewGen  int                                      // bumped per cursor move in F's window: drops a superseded preview settle
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
 	histWalks     *historyWalks                            // file-history walks still running; Update stops the ones whose view went away (sweepHistoryWalks)
@@ -180,35 +170,10 @@ type Model struct {
 	conflict          domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 	resumePromptShown bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
 
-	filesMode         filesMode              // authoritative source mode (changed/fullTree/compare/stash)
-	filesView         *contentPopup          // commit files tree replacing the left column; nil = closed
-	filesTitle        string                 // "Files <short-hash> <subject>", updated with the content — rendered/localized display text; NEVER parsed
-	filesContext      string                 // diff-view context payload (ref/subject or compare label) mirroring filesTitle's content sans any "Files "/panel framing; the diff view's "@ <context>" header reads THIS, not filesTitle
-	filesCommit       model.Commit           // the RESOLVED commit the view is showing (date/author/subject), incl. the ones fetched for a bare sha; backs the date line and filesViewCommit's fallback. Zero UnixTime = unknown: no date line is drawn and no row is spent
-	filesHash         string                 // commit the view wants; gates stale async results
-	filesLeft         model.Endpoint         // compare mode: older side
-	filesRight        model.Endpoint         // compare mode: newer side
-	compareTag        string                 // gates stale compareFilesMsg results
-	comparePair       *comparePairState      // branch-pair compare extension (origin filter); nil for every other compare
-	filesSets         *domain.LinkComparison // link compare: the two file sets, for per-member byte sources; nil for every endpoint compare
-	linkCompareWant   string                 // tag of the link compare in flight; "" = none (a stale or cancelled load is dropped)
-	filesStashTag     string                 // when the files tree is showing a stash: its ref (gates stash-file loads)
-	filesShelfID      string                 // shelf mode: the shelved-commit entry id (gates shelf-file loads, keys member refs)
-	filesShelfLabel   string                 // shelf mode: "shelf #<short>" display label for diff contexts
-	filesShelfNotes   []domain.ResolvedNote  // shelf mode: the entry's own notes, listed above its members (a Notes section) and read by enter on their rows
-	filesReturnFocus  panel                  // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
-	filesReturnLayers []layer                // layer stack parked by a popup that handed off to the files view (handOffToFilesView); esc/l restore it, every other teardown drops it (closeFilesView zeroes it)
-	filesTreeFocused  bool                   // true = the tree side owns vertical movement (←/→/tab)
-	filesReadInflight bool                   // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
-	filesPreview      *openFile              // full-tree mode: the file shown in the right column (nil = none)
-
-	diffTag       string      // request key of the wanted diff; gates stale async results
-	diffNav       diffNavKind // which list the open diff was opened from (Home/End file-stepping)
-	diffNotice    string      // transient bottom-left diff-view notice (file arrival / no-file); cleared on the next key
-	diffPartial   bool        // session default for new diffs (false = full); the f key toggles it
-	diffLong      longMode    // session: long-line mode for new diffs (0 = scroll); w cycles
-	diffImgLayout imgLayout   // session: how an image pair is laid out in a diff; ctrl+w cycles
-	diffCursor    string      // session override of [ui] diff_cursor ("" = follow config); the . menu's Cursor marker row cycles it
+	diffPartial   bool      // session default for new diffs (false = full); the f key toggles it
+	diffLong      longMode  // session: long-line mode for new diffs (0 = scroll); w cycles
+	diffImgLayout imgLayout // session: how an image pair is laid out in a diff; ctrl+w cycles
+	diffCursor    string    // session override of [ui] diff_cursor ("" = follow config); the . menu's Cursor marker row cycles it
 	// diffStacked is the S key's preference: a diff opened from a file list
 	// shows EVERY file of that list in one scroll (diff_stack.go). Read from
 	// promptstate at startup and written back on every flip — machine-local,
@@ -220,47 +185,6 @@ type Model struct {
 
 	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
 	notesAgentOff bool              // `a`: hide agent-written notes for this session
-	// noteLand parks the landing a }/{ FILE step owes the user: the step opens
-	// the next noted file asynchronously, so the note to sit on is not known
-	// until that file's notes arrive (notesLoadedMsg). nil = nothing parked.
-	noteLand *noteLanding
-	// hunkReload parks the re-read a staging round owes a SINGLE-file
-	// working-tree diff: a stack reconciles itself on every status write, one
-	// file does not (diff_stack_hunks.go). nil = nothing parked.
-	hunkReload *hunkReload
-	// diffLand parks the LINE a re-opened single diff owes the reader: leaving
-	// a stack with S re-opens the file asynchronously, and a fresh view lands
-	// on its first change block, not on the line being read. nil = nothing.
-	diffLand *lineLanding
-
-	// filesPreviewSet / filesPreviewCounts are the open preview's note scope
-	// and its per-path badge counts; nil/empty when the files view is not
-	// showing a preview. Stamped onto each diff the view opens.
-	filesPreviewSet    *domain.PreviewNoteSet
-	filesPreviewCounts map[string]int
-	filesPreviewGroups map[string][]string // a PR's per-path note groups: the badges' colour bars
-	// filesPreviewReviews are the open preview's (or pair's) AI reviews: the
-	// Reviews block on top of its file list. filesPairLabel is an open saved
-	// pair's label, kept so a review opened from it can re-open it.
-	filesPreviewReviews []domain.ReviewHead
-	filesPairLabel      string
-	// filesReview is the files view's REVIEW mode (review_view.go): set
-	// after the view opens on a structured review; nil otherwise.
-	filesReview *reviewViewState
-	// filesLandNote is the review whose row the next commit file list puts
-	// the cursor on (esc from a review opened from that list); "" = none.
-	filesLandNote string
-	// filesLandScope is its twin for a Range review row (the scope it names).
-	filesLandScope string
-	// filesBack is set while a range opened from a commit's Range review row
-	// shows: esc returns to that commit's files, the cursor on the row.
-	filesBack *scopeBack
-	// reviewsFollowGen numbers follow-live list landings: only the latest
-	// one's pause reads the commit's reviews (reviewsFollowMsg).
-	reviewsFollowGen int
-	// reviewOpenGen numbers review opens: a read answers only the loading
-	// box of its own open (reviewLoadingPopup).
-	reviewOpenGen int
 
 	previews []previewRow // saved merge previews + live summaries (srcPreviews)
 	// rerootNotes asks the next full snapshot to chain a note-counts read: a
@@ -331,16 +255,12 @@ type Model struct {
 	// cancelled on a repo switch, a newer list, and quit.
 	prPrefetch     *prPrefetchRun
 	prCommentsLast time.Time
-	previewOpen    *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
-	previewGen     int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
 	// arrival arm: the fresh rows are the first moment the new id exists.
 	previewFocusID  string // record id to select after the reload ("" = leave the cursor be)
 	previewFocusTab bool   // also make Previews the active/focused tab (the tab's own keys only)
-
-	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
 	svc                 *domain.Service                                  // command layer; all git access goes through svc
 	clipWrite           func(tty io.Writer, text string) (string, error) // the clipboard writer behind copyToClipboardCmd; New sets the real one
@@ -2068,9 +1988,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A tour asked across an in-repo view switch (agent_tours_open):
 			// the slot's status landed, its overviews are synced — show it.
 			// (A repo switch's tour is the armed settle's, not this.)
-			if m.consoleSwitch.tour != "" && !m.consoleSwitch.armed {
-				tour := m.consoleSwitch.tour
-				m.consoleSwitch.tour = ""
+			if m.tour != "" && !m.consoleSwitch.armed {
+				tour := m.tour
+				m.tour = ""
 				m = m.syncOverviews().showTour(tour)
 			}
 			// Rebuild the commit graph so WIP pseudo-rows (◇ Working tree/Staged)
@@ -5100,7 +5020,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.consoleSwitch.armed = true                 // the console keeps only a session the new repo owns
 	m.consoleSwitch.gen++                        // a new switch (openTour tells it from one in flight)
 	m.consoleSwitch.open = ""                    // a console asked for across an earlier switch is moot
-	m.consoleSwitch.tour = ""                    // …and so is a tour
+	m.tour = ""                                  // …and so is a tour
 	m.pendingHint = nil                          // ditto: its navigate referred to the old repo
 	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
 	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one
