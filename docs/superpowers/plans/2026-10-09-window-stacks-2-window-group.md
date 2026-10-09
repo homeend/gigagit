@@ -90,7 +90,7 @@ func TestWindowStateRoundTrip(t *testing.T) {
 
 - [ ] **Step 2: Watch it fail to compile** (`m.windowState` undefined).
 
-- [ ] **Step 3: Create `window_state.go`** with the struct and its doc comment (why: a worktree owns its windows; the checklist = `closeFilesView`; what stays out and why), move the field declarations out of `model.go` into it, and add `windowState` as the first unnamed field of `Model`. Move `tour` out of `consoleSwitch`; fix its three readers (`console_scope.go`, `sleepView`, the tour filing in `agent_tours*.go`) to `m.tour`. `go build ./... && go vet ./internal/tui`.
+- [ ] **Step 3: Grep `Model{` in `internal/tui` (tests, `Headless`, the snapshot) for window-field names: every keyed literal that names one must move it under `windowState: windowState{…}`.** Then **create `window_state.go`** with the struct and its doc comment (why: a worktree owns its windows; the checklist = `closeFilesView`; what stays out and why), move the field declarations out of `model.go` into it, and add `windowState` as the first unnamed field of `Model`. Move `tour` out of `consoleSwitch`; fix its three readers (`console_scope.go`, `sleepView`, the tour filing in `agent_tours*.go`) to `m.tour`. `go build ./... && go vet ./internal/tui`.
 
 - [ ] **Step 4: Field audit** — `grep -o 'm\.\w*' internal/tui/files_view.go` over `closeFilesView`'s body and the spec's table; each name must be declared in `window_state.go` (a shell loop over `grep -c "^\s*<name> " internal/tui/window_state.go`). List the result in the commit message.
 
@@ -245,7 +245,8 @@ func TestDroppedSlotStopsItsParkedWalks(t *testing.T) { /* same setup, then drop
 **Interfaces:**
 - `type slotMsg interface{ slotKey() model.CheckoutKey }` — a message addressed to the slot it was asked from.
 - `func (m Model) forSlot() model.CheckoutKey { return m.viewed }` — stamped by the cmd constructors.
-- The gate in `Update`, before the switch: `if sm, ok := msg.(slotMsg); ok && sm.slotKey() != "" && sm.slotKey() != m.viewed { if _, ok := m.views[sm.slotKey()]; ok { return m, nil /* phase 3: queue */ } }` (a gone slot's message is dropped the same way).
+- The gate in `Update`, before the switch: `if sm, ok := msg.(slotMsg); ok && sm.slotKey() != "" && sm.slotKey() != m.viewed { return m, nil /* phase 3: queue when the slot exists */ }`. It drops whether or not the slot still exists: a message for a pruned slot must never fall through to a handler that would act on the worktree on screen.
+- NOT gated: a message whose handler writes only through the window's own pointer and touches no Model state (`historyChunkMsg` / the walk's done message through `h *historyView`): a parked history keeps streaming into its view (Task 4 keeps its walk alive for exactly that). Verify `onHistoryChunk` has no Model side effect before leaving it unstamped; the same test applies to any other candidate.
 
 Messages to stamp (handlers that mutate Model state beyond the window — the review's list; confirm each by grep at execution): `diffMsg` (→ `drainPendingDiff`, `loadNotesCmd`), `compareFilesMsg`, `commitFilesMsg`, `linkCompareLoadedMsg`, `previewOpenMsg`, `versionsMsg`/the versions popup's loads, `remoteHeadNamesMsg`/`remoteHeadsMsg`, the all-notes landing, `gitConfigRowsMsg`, `entryCompareMsg`, `historyChunkMsg`/`historyDoneMsg`, the blame load, the file viewer's load, `stashFilesMsg`, `shelfFilesMsg`, the stage/unstage-hunk results, `amendPrefillMsg`, `conflictFileMsg`, `gotoLinkResolvedMsg`. A message already keyed by a slot-scoped gen or tag that is now in the group needs the stamp too: the gate is what keeps its handler's SIDE effects (focus, a view opened, `statusMsg`) off the other worktree.
 

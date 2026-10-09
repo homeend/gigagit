@@ -23,6 +23,7 @@
 1. Two services sharing a factory must NOT share the `Differ` value itself: the differ carries per-service options (syntax on/off), only the cache behind it is shared (Task 1's test builds the differ from each service).
 2. `cache.memFactory.Cache` is called from two services concurrently: it locks (`f.mu`), the LRU locks too; the race gate proves it with `TestSharedCachesFromTwoServicesRace`.
 3. A plain `OpenTUI` / `New` keeps a private factory (the CLI, MCP, web and tests see no change): `TestNewServiceDoesNotShareCaches`.
+4. Key audit (done at planning, re-check at execution): `sha-file:` only for a full SHA (`isFullSHA`), `commit-files:` + a hash (every caller passes a feed/stash/review commit hash), `compare-files:` only for commit↔commit (`CacheTag` = the hash; a ref endpoint has no tag by design), `blame:` + a hash (rev "" is read through), `preview`/`pair` keys are resolved hashes, every diff `Request.Key` is `<hash>^..<hash>:<path>` / `<hash>..<hash>:<path>` or "" (working side). Nothing keys on `HEAD` or a worktree path, so sharing cannot cross worktrees.
 
 ---
 
@@ -46,6 +47,7 @@ package domain
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"testing"
 )
@@ -66,7 +68,7 @@ func TestSharedServicesHitOneDiffCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second != first {
+	if !reflect.DeepEqual(second, first) { // Diff is a value with slices; a hit is the very same answer, a miss shows the "z"
 		t.Fatal("B computed its own diff: the caches are not shared")
 	}
 }
@@ -93,7 +95,7 @@ func TestNewServiceDoesNotShareCaches(t *testing.T) {
 	_, b := newRealRepoAt(t, dir)
 	first, _ := a.Differ().Diff(context.Background(), Request{Key: "private:k", Path: "a.go", Old: "x\n", New: "y\n"})
 	second, _ := b.Differ().Diff(context.Background(), Request{Key: "private:k", Path: "a.go", Old: "x\n", New: "z\n"})
-	if second == first {
+	if reflect.DeepEqual(second, first) {
 		t.Fatal("two plain services share a cache")
 	}
 }
