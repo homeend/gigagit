@@ -379,7 +379,7 @@ func (p *sendPanel) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if p.body == bodyTyped {
 			m.keptSendBody = &keptSendBody{pr: p.pr, group: sendGroupPanel, text: p.typed}
 		}
-		return m.forgeSendCmd(req)
+		return m.forgeSendCmdFrom(req, true)
 	}
 	switch msg.String() {
 	case "j":

@@ -23,21 +23,29 @@ import (
 // and the PR it writes to. Agents never send (user ruling 2026-10-08): every
 // send here is the user's own.
 type forgeSendState struct {
-	pr   int
-	req  domain.PRSendRequest // what was asked: a kept body clears only for its own box's send
-	plan engine.SendPlan
+	pr    int
+	req   domain.PRSendRequest // what was asked: a kept body clears only for its own box's send
+	plan  engine.SendPlan
+	panel bool // the send panel's own ctrl+s: a change closes the panel (A7); any other send leaves it
 }
 
 // forgeSendReadyMsg carries the planned op (or why there is none) back.
 type forgeSendReadyMsg struct {
-	gen int // m.forgeGen when the plan started: a repo switch drops it
-	req domain.PRSendRequest
-	op  engine.SendToForge
-	err error
+	gen   int // m.forgeGen when the plan started: a repo switch drops it
+	panel bool
+	req   domain.PRSendRequest
+	op    engine.SendToForge
+	err   error
 }
 
 // forgeSendCmd plans req off the UI thread.
 func (m Model) forgeSendCmd(req domain.PRSendRequest) (Model, tea.Cmd) {
+	return m.forgeSendCmdFrom(req, false)
+}
+
+// forgeSendCmdFrom is forgeSendCmd with the send's origin: panel marks the
+// send panel's own ctrl+s, the one send whose change closes the panel.
+func (m Model) forgeSendCmdFrom(req domain.PRSendRequest, panel bool) (Model, tea.Cmd) {
 	svc := m.svc
 	if svc == nil {
 		return m, nil
@@ -50,7 +58,7 @@ func (m Model) forgeSendCmd(req domain.PRSendRequest) (Model, tea.Cmd) {
 	gen := m.forgeGen
 	return m, func() tea.Msg {
 		op, err := svc.PRSendOp(context.Background(), req)
-		return forgeSendReadyMsg{gen: gen, req: req, op: op, err: err}
+		return forgeSendReadyMsg{gen: gen, panel: panel, req: req, op: op, err: err}
 	}
 }
 
@@ -71,7 +79,7 @@ func (m Model) handleForgeSendReady(msg forgeSendReadyMsg) (Model, tea.Cmd) {
 	if !m.opsIdle() {
 		return m.sayInDiff(i18n.T("another operation is running — send again when it ends")), nil
 	}
-	m.forgeSend = &forgeSendState{pr: msg.req.PR, req: msg.req, plan: msg.op.Plan}
+	m.forgeSend = &forgeSendState{pr: msg.req.PR, req: msg.req, plan: msg.op.Plan, panel: msg.panel}
 	return m.startOp(msg.op)
 }
 
@@ -259,8 +267,8 @@ func (m Model) forgeSendFinished(fs *forgeSendState, res engine.Result, err erro
 	var cmds []tea.Cmd
 	if res.Changed && fs.pr != 0 { // my own change (F1), even when a later step failed — the review is posted: not "updated"
 		m.prOwnSend, m.prOwnSendSeq = fs.pr, m.prReadSeq
-		if p := layerOf[*sendPanel](m); p != nil && p.pr == fs.pr {
-			m = m.removeLayer(p) // the panel's send went out (A7)
+		if p := layerOf[*sendPanel](m); fs.panel && p != nil && p.pr == fs.pr {
+			m = m.removeLayer(p) // the panel's own send went out (A7); another send leaves its ticks
 		}
 		if m.keptSendBody.from(fs.req) {
 			m.keptSendBody = nil // the typed body reached GitHub

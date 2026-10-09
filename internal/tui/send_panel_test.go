@@ -176,7 +176,7 @@ func TestSendPanelClosesOnAChangeStaysOnAbort(t *testing.T) {
 	t.Parallel()
 	m, p := panelModel(t)
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace})
-	fs := &forgeSendState{pr: 7, req: domain.PRSendRequest{PR: 7, Notes: []string{"review:r1:1"}}}
+	fs := &forgeSendState{pr: 7, panel: true, req: domain.PRSendRequest{PR: 7, Notes: []string{"review:r1:1"}}}
 	m2, _ := m.forgeSendFinished(fs, engine.Result{}, nil) // aborted
 	if q := layerOf[*sendPanel](m2); q == nil || !q.ticked["review:r1:1"] {
 		t.Fatal("an abort must leave the panel as it was")
@@ -382,5 +382,22 @@ func TestSendPanelKeptTextRules(t *testing.T) {
 	p = layerOf[*sendPanel](m)
 	if p.typed != "typed before" || p.bodyLabel() != "typed" {
 		t.Fatalf("reopened: typed %q body %q", p.typed, p.bodyLabel())
+	}
+}
+
+// Only the panel's OWN send closes it: a one-note send from the diff's menu
+// while the panel waits below leaves the panel with its ticks.
+func TestSendPanelSurvivesAnotherSendOfThePR(t *testing.T) {
+	t.Parallel()
+	m, p := panelModel(t)
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace})
+	other := &forgeSendState{pr: 7, req: domain.PRSendRequest{PR: 7, Notes: []string{"n9"}}}
+	m2, _ := m.forgeSendFinished(other, engine.Result{Changed: true}, nil)
+	if q := layerOf[*sendPanel](m2); q == nil || !q.ticked["review:r1:1"] {
+		t.Fatal("a send from elsewhere must leave the panel as it was")
+	}
+	own := &forgeSendState{pr: 7, panel: true, req: domain.PRSendRequest{PR: 7, Notes: []string{"review:r1:1"}}}
+	if m3, _ := m.forgeSendFinished(own, engine.Result{Changed: true}, nil); layerOf[*sendPanel](m3) != nil {
+		t.Fatal("the panel's own send closes it")
 	}
 }
