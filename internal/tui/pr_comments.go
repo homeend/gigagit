@@ -27,9 +27,10 @@ type prCommentsMsg struct {
 
 // prCountsMsg carries the PR file list's refreshed per-path note counts.
 type prCountsMsg struct {
-	gen    int
-	counts map[string]int
-	groups map[string][]string // per-path note groups (nil: the plain badge)
+	slotStamp // the slot it was asked from (slot_msg.go)
+	gen       int
+	counts    map[string]int
+	groups    map[string][]string // per-path note groups (nil: the plain badge)
 }
 
 // openPRNumber is the pull request whose diff the files view shows (0 = none).
@@ -112,6 +113,7 @@ func (m Model) prCountsCmd() tea.Cmd {
 		return nil
 	}
 	svc, set, gen := m.svc, *m.filesPreviewSet, m.previewGen
+	slot := m.stamp()
 	return func() tea.Msg {
 		ctx := context.Background()
 		counts, _, err := svc.PreviewNoteCounts(ctx, set)
@@ -119,7 +121,7 @@ func (m Model) prCountsCmd() tea.Cmd {
 			return nil
 		}
 		groups, _ := svc.PreviewNoteGroups(ctx, set) // an error leaves the plain badge
-		return prCountsMsg{gen: gen, counts: counts, groups: groups}
+		return prCountsMsg{slotStamp: slot, gen: gen, counts: counts, groups: groups}
 	}
 }
 

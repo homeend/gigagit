@@ -21,6 +21,9 @@ func (m Model) routeSlotMsg(msg tea.Msg) (Model, bool) {
 		return m, false
 	}
 	if v := m.views[k]; v != nil {
+		if sw, ok := msg.(sharedWriter); ok {
+			m, msg = sw.applyShared(m) // the process-wide part lands now; the replay skips it
+		}
 		v.queued = append(v.queued, msg)
 		if len(v.queued) > queueCap {
 			v.queued = v.queued[len(v.queued)-queueCap:]
@@ -50,6 +53,9 @@ func (m Model) replayQueued() (Model, tea.Cmd) {
 		if m.viewed != was {
 			if v := m.views[was]; v != nil {
 				v.queued = append(append([]tea.Msg{}, q[i+1:]...), v.queued...)
+				if len(v.queued) > queueCap {
+					v.queued = v.queued[len(v.queued)-queueCap:]
+				}
 			}
 			break
 		}

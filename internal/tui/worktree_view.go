@@ -252,6 +252,8 @@ func (m Model) loadView(v *worktreeView) Model {
 	v.queued = nil
 	if m.console == nil {
 		m = m.restoreConsoleParked() // the console that displaced them is gone (a queued return): they are live again
+	} else {
+		m = m.displaceUnderConsole() // a console shows: the arriving pile goes under it, as a captured one would
 	}
 	// Always rebuilt: the WIP rows are derived from the status inside it,
 	// whether or not a head mark moved (both trees detached, tips off page).

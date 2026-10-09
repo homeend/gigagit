@@ -167,9 +167,10 @@ func (m Model) openPreviewSrc(src fileSource, path string, load func(context.Con
 // fileContentMsg carries a previewed file's content lines, tagged so a stale load
 // (the user opened another file) is dropped.
 type fileContentMsg struct {
-	tag   string
-	lines []contentLine
-	err   error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	tag       string
+	lines     []contentLine
+	err       error
 	// img is set when the file is an image (PNG/JPEG/GIF): lines then hold
 	// only the info line, and the document fits the cells to its box.
 	img image.Image
@@ -193,10 +194,10 @@ func loadFileContentSrcCmd(tag, path string, syntaxOn bool, load func(context.Co
 	return func() tea.Msg {
 		data, err := load(context.Background())
 		if err != nil {
-			return fileContentMsg{tag: tag, err: err}
+			return fileContentMsg{tag: tag, err: err} // stamped by loadDocWith
 		}
 		if len(data) > domain.MaxDiffBytes {
-			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(file too large to preview)")}}}
+			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(file too large to preview)")}}} // stamped by loadDocWith
 		}
 		// A binary file is never shown as text: its bytes would cost a
 		// wrap layout per frame (an 11 KB "line" of a JPEG took 600 ms a
@@ -208,11 +209,11 @@ func loadFileContentSrcCmd(tag, path string, syntaxOn bool, load func(context.Co
 				info := i18n.T("(%s image %d×%d, %s)", kind, b.Dx(), b.Dy(), fmtBytes(len(data)))
 				// The working copy is bounded (a screen is at most a few
 				// hundred cells wide): every re-fit samples it, not the photo.
-				return fileContentMsg{tag: tag, lines: []contentLine{{text: info}}, img: termimg.Shrink(img, previewImagePx, previewImagePx)}
+				return fileContentMsg{tag: tag, lines: []contentLine{{text: info}}, img: termimg.Shrink(img, previewImagePx, previewImagePx)} // stamped by loadDocWith
 			}
-			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(binary file, %s — not shown)", fmtBytes(len(data)))}}}
+			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(binary file, %s — not shown)", fmtBytes(len(data)))}}} // stamped by loadDocWith
 		}
-		return fileContentMsg{tag: tag, lines: fileContentLinesTok(data, lexPreview(path, data, syntaxOn))}
+		return fileContentMsg{tag: tag, lines: fileContentLinesTok(data, lexPreview(path, data, syntaxOn))} // stamped by loadDocWith
 	}
 }
 
@@ -222,9 +223,9 @@ func loadMarkdownSrcCmd(tag string, load func(context.Context) ([]byte, error)) 
 	return func() tea.Msg {
 		data, err := load(context.Background())
 		if err != nil {
-			return fileContentMsg{tag: tag, err: err}
+			return fileContentMsg{tag: tag, err: err} // stamped by loadDocWith
 		}
-		return fileContentMsg{tag: tag, lines: prMarkdownLines(string(data), "")}
+		return fileContentMsg{tag: tag, lines: prMarkdownLines(string(data), "")} // stamped by loadDocWith
 	}
 }
 

@@ -6335,7 +6335,11 @@ the stack for one non-key dispatch and re-parks what is still there
 (`windowState.reparkConsole`); if the handler moved the panels, the
 layers went into the leaving slot's pile with its group and are re-parked
 under THAT slot's copy. `forgetConsoleReturn` (a repo switch) clears the
-live copy. The old `parkedLayersFor`/`ret.over`/`workingTreeWindow`/
+live copy. `loadView` under a SHOWN console (`displaceUnderConsole`: a
+console opened into a worktree whose parked windows wait on its pile, a
+queued return landing while a console shows) moves the arriving pile, stash
+list and preview under the console's copy — a focused console takes every
+key, so a view left live over it would feed keystrokes to a hidden agent. The old `parkedLayersFor`/`ret.over`/`workingTreeWindow`/
 `dropWorkingLayers` filters are gone. `historyLive` scans the live group
 and every sleeping slot's pile, parked hand-off stack and console copy
 (`windowState.holds`) so
@@ -6356,8 +6360,20 @@ gen), the queue is taken off the Model BEFORE dispatching (a nested Update
 finds it empty), and a replayed message that moves the view ends the
 replay with the leftovers back on the slot that left. Nothing is
 re-requested; a parked window shows its loading state until its worktree
-returns. History chunks are deliberately unstamped (they write through
-the view pointer). Popups: `parkableLayer` (`avail.go`) is the ONE whitelist of popups
+returns. History chunks and the history pane's diff (`historyDiffMsg.hist`) are
+deliberately unstamped: they write through the view pointer, wherever the
+history waits. `TestEveryStampedMessageConstructorCarriesItsSlot` greps
+that every literal of a stamped type carries `slotStamp:` (or a `// stamped
+by <caller>` note where a wrapper stamps the result). A stamped message
+that also carries process-wide state implements `sharedWriter`
+(`shelfLoadedMsg` → `m.shelfEntries`): the shared part lands when the
+message is queued and the replay skips it (`sharedDone`). The parked
+navigates expire too: `expireParkedSteer` (heartbeat) sweeps every sleeping
+slot's `pendingSteer`/`pendingHint`. `parkableLayer` refuses a popup with
+work in flight (`commitPopup.generating`, `gotoCommitPopup.resolving`,
+`repoPathPopup.resolving`). The F window's `wtFiles.gen` (bumped by
+`sleepFWindow`, carried by `lsFilesMsg`) keeps a read in flight at sleep
+from beating the return's fresh one. Popups: `parkableLayer` (`avail.go`) is the ONE whitelist of popups
 the USER's own swap may park (`switchViewBy(path, byUser)`,
 `userSwitchView`; `switchRefusalBy` lets `steerRefusal`'s last answer,
 `refusalWindowOwnsKeyboard`, through for a parkable top layer;

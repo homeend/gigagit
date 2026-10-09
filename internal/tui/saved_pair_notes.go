@@ -23,11 +23,12 @@ import (
 // pairNotesMsg is a commit pair's note scope, resolved off the UI thread. A
 // zero set means the scope could not be built; the handler then does nothing.
 type pairNotesMsg struct {
-	a, b   string
-	set    domain.PreviewNoteSet
-	counts map[string]int
-	heads  []domain.ReviewHead // the pair's AI reviews (none for a single review's range)
-	gen    int
+	slotStamp // the slot it was asked from (slot_msg.go)
+	a, b      string
+	set       domain.PreviewNoteSet
+	counts    map[string]int
+	heads     []domain.ReviewHead // the pair's AI reviews (none for a single review's range)
+	gen       int
 }
 
 // pairNotesCmd resolves the scope for commits a..b. Build it AFTER
@@ -42,9 +43,10 @@ func (m Model) pairNotesCmd(a, b, only string) tea.Cmd {
 	if svc == nil {
 		return nil
 	}
+	slot := m.stamp()
 	return func() tea.Msg {
 		ctx := context.Background()
-		msg := pairNotesMsg{a: a, b: b, gen: gen}
+		msg := pairNotesMsg{slotStamp: slot, a: a, b: b, gen: gen}
 		set, err := svc.PairNotes(ctx, a, b)
 		if err != nil || !set.OK() {
 			return msg
