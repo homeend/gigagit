@@ -61,12 +61,14 @@ User rulings (2026-10-09):
 
 ### What moves into the slot
 
-The Model keeps its fields as the LIVE copy (no reader changes); the slot
-gains a `windows windowState` group that `saveView` / `loadView` copy out
-and in, as the status group is copied today. The group is one struct so
-the copy is one assignment and a new window field cannot be forgotten
-half-way: it is either in `windowState` (per worktree) or it is process
-state. The checklist for "is it a window field" is `closeFilesView`
+The Model EMBEDS a `windowState` struct holding the window fields, so
+every reader keeps spelling `m.filesView`, `m.layers`, `m.diffTag` (Go
+promotes the fields); the slot gains a `windows windowState` that
+`saveView` / `loadView` copy out and in with one assignment, as the status
+group is copied today. One struct means a new window field cannot be
+forgotten half-way: it is either in `windowState` (per worktree) or it is
+process state. A fresh slot's group starts empty (`layers` is seeded with
+an empty stack as the Model's is). The checklist for "is it a window field" is `closeFilesView`
 (`files_view.go`): everything that function resets belongs to the group,
 plus the layer stack, the popups' pending state and the steer leftovers.
 
@@ -100,11 +102,12 @@ the window group → sleep (watchers, slot-data gens) → load both groups →
 kick. The leaving worktree's windows are exactly where it left them when
 it comes back.
 
-`workingTreeWindow`, `dropWorkingLayers`, `dropWorkingTreeWindows`,
-`filesViewIsWorkingTree`, `workingSide`, `parkedLayersFor`,
-`consoleReturn.over`, the attention pruning and `pendingSteer.svc` are
-deleted. Their tests become "waits in its worktree and is back on return"
-tests (below).
+`dropWorkingLayers`, `dropWorkingTreeWindows`, `filesViewIsWorkingTree`,
+`workingSide`, the attention pruning and `pendingSteer.svc` are deleted in
+phase 2. `workingTreeWindow`, `parkedLayersFor` and `consoleReturn.over`
+guard the console's process-wide parked copy and go in phase 4, when that
+copy moves onto the slot. Their tests become "waits in its worktree and is
+back on return" tests (below).
 
 ### Generations
 
