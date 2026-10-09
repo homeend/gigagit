@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Web dialogs: buttons on Start agent, a wider GitHub send confirm
+
+### Fixed
+
+- **gg web's Start agent dialog needed the keyboard to finish.** Every step
+  now has buttons: the name step **start** and **back**, the approval
+  **run** and **back** (cancel when there is only one agent), the agent
+  list and the detecting wait **cancel**. A button does exactly what its
+  key does.
+- **The GitHub send confirm scrolled sideways on a long file path.** The
+  box was capped at 560px; it now grows with the window (up to 1200px,
+  never past the viewport) and wraps whatever still does not fit, so an
+  item's path and its first line read without a horizontal scrollbar.
+
 ## Mouse after a terminal handover
 
 ### Fixed

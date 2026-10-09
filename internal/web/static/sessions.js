@@ -56,6 +56,17 @@ function nameStepOwnsKey(key, composing) {
   return !!composing || key === "Process" || (key !== "Enter" && key !== "Escape");
 }
 
+// dialogButtons: the step's buttons as {key, label} — a click is the key's
+// step, so a mouse user never needs the keyboard. Enter's button comes
+// first; esc's says "back" when it returns to the list.
+function dialogButtons(d) {
+  const esc = (d.phase === "name" || d.phase === "approve") && d.cmds.length > 1 ? "back" : "cancel";
+  if (d.phase === "name") return [{ key: "Enter", label: "start" }, { key: "Escape", label: esc }];
+  if (d.phase === "approve") return [{ key: "Enter", label: "run" }, { key: "Escape", label: esc }];
+  if (d.phase === "choose" || d.phase === "detecting") return [{ key: "Escape", label: "cancel" }];
+  return [];
+}
+
 // startRows / sessionMenuRows: the menu rows as {id, label}; the impure side
 // attaches the actions by id.
 function startRows(path) {
@@ -88,7 +99,8 @@ root.addEventListener("click", (e) => {
     dlg.sel = Number(li.dataset.i);
     return apply(dialogStep(dlg, "Enter"));
   }
-  if (e.target.closest("button[data-run]")) apply(dialogStep(dlg, "Enter"));
+  const btn = e.target.closest("button[data-key]");
+  if (btn) apply(dialogStep(dlg, btn.dataset.key));
 });
 
 const FOOT = {
@@ -122,13 +134,15 @@ function render() {
   else if (dlg.phase === "approve")
     body.innerHTML =
       `<div class="rcmd">${esc(cur.command)}</div>` +
-      `<div class="rnote">This runs on your machine with your permissions. Approval is remembered for this repo until the command text changes.</div>` +
-      `<button data-run="1">run</button>`;
+      `<div class="rnote">This runs on your machine with your permissions. Approval is remembered for this repo until the command text changes.</div>`;
   else
     body.innerHTML =
       "<ul>" +
       dlg.cmds.map((c, i) => `<li data-i="${i}"${i === dlg.sel ? ' class="sel"' : ""}>${i + 1}  ${esc(c.name)}<span class="detail">${commandRowState(c)}</span></li>`).join("") +
       "</ul>";
+  const btns = dialogButtons(dlg);
+  if (btns.length)
+    body.insertAdjacentHTML("beforeend", `<div class="sbtns">${btns.map((b, i) => `<button data-key="${b.key}"${i === 0 && b.key === "Enter" ? ' class="primary"' : ""}>${esc(b.label)}</button>`).join("")}</div>`);
   pushFoot("sessstart", FOOT[dlg.phase]);
 }
 
