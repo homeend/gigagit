@@ -334,3 +334,22 @@ func wireSourceOf(t *testing.T, doc, id string) string {
 	}
 	return walk(v)
 }
+
+func TestPRNotesJSONCarriesSeverityAndCode(t *testing.T) {
+	dir, head, _ := sendPRRepo(t)
+	id := addCLINote(t, dir, head, 5)
+	out, _, code := runPR(t, dir, "notes", "7", "--json")
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	var got []struct {
+		ID   string   `json:"id"`
+		Code []string `json:"code"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil || len(got) != 1 || got[0].ID != id {
+		t.Fatalf("json %q: %v", out, err)
+	}
+	if len(got[0].Code) != 1 || got[0].Code[0] != "line 5 changed" {
+		t.Fatalf("no code excerpt for %s:\n%s", id, out)
+	}
+}

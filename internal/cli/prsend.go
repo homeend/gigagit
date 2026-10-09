@@ -231,11 +231,25 @@ func prNotes(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
+	// The code excerpts come from the send candidates; a failure there
+	// must not break the listing.
+	codes := map[string][]string{}
+	if *asJSON {
+		if c, err := svc.PRSendCandidates(context.Background(), n); err == nil {
+			for _, g := range c.Groups {
+				for _, row := range g.Rows {
+					codes[row.ID] = row.Code
+				}
+			}
+		}
+	}
 	var wires []domain.WireNote
 	for _, p := range domain.PreviewNotePaths(byPath) {
 		for _, r := range byPath[p] {
 			if *asJSON {
-				wires = append(wires, domain.ToWireNotePreview(r, true))
+				w := domain.ToWireNotePreview(r, true)
+				w.Code = codes[w.ID]
+				wires = append(wires, w)
 				continue
 			}
 			renderNoteLine(stdout, r, false, noteStatusWord(r, true))
