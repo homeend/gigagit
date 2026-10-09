@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Mouse after a terminal handover
+
+### Fixed
+
+- **The mouse went dead for the rest of the session after the first editor,
+  `ctrl+o` subshell, "Run shell command…", terminal-mode external tool or
+  AI agent, tool-config edit or template edit.** Clicks on the tabs, rows
+  and the `.` menu and the wheel all stopped — the terminal, not gg,
+  dropped them: Bubble Tea's terminal release switches mouse tracking off
+  and its restore brings back the alt screen and bracketed paste but never
+  the mouse. Every handover now re-enables mouse tracking the moment the
+  TUI is back (`handoverDoneMsg` in `internal/tui/autowrap.go`, answered
+  at the top of `Update`). Proven under tmux: the pane's mouse flags drop
+  during the child and are back once it exits.
 ## Conflict tools: long pasted values fit the window
 
 ### Fixed

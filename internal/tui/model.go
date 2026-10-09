@@ -612,6 +612,15 @@ func (m Model) Init() tea.Cmd {
 // start link the moment startAtReady() holds (see the inline rationale
 // below).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if hd, ok := msg.(handoverDoneMsg); ok {
+		// The terminal is ours again: mouse tracking back on (Bubble Tea's
+		// restore leaves it off — see handoverDoneMsg), then the child's result.
+		if hd.inner == nil {
+			return m, tea.EnableMouseCellMotion
+		}
+		nm, cmd := m.Update(hd.inner)
+		return nm, tea.Batch(tea.EnableMouseCellMotion, cmd)
+	}
 	before := m.statusMsg
 	nm, cmd := m.dispatchParkedAware(msg)
 	// Invariant this relies on: every dispatch path returns a Model (true of
