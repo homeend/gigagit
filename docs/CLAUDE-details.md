@@ -6374,7 +6374,15 @@ SEQUENTIAL test on Linux exercises the Windows/macOS rule
 (`checkout_key_test.go`). Slot services get the config's policies
 (`applyServicePolicies` in `ensureView`; `applyPoliciesToSlots` on
 `configReadyMsg` and the Versions settings) — a bare `OpenTUI` would write
-version refs the config forbids. `dropConsole` (the console stepping aside for a stash
+version refs the config forbids. A slot's service is built with
+`domain.OpenTUISharing(path, home.svc)`: it vends its six caches (diff,
+blame, sha-file, commit-files, compare-files, preview) from HOME's
+`cache.Factory`, so the repository has one cache budget and a commit diff
+cached through one worktree is a hit from another. Safe because every
+cached key is content-addressed (a full hash, a hash pair, a hash + path;
+a ref endpoint has no `CacheTag`) and working-tree diffs/blames are read
+through (`Key ""` / `rev ""`). No process-wide map: a repo switch drops the
+slots and their caches with them. `dropConsole` (the console stepping aside for a stash
 list / preview / solo) keeps the view on purpose: the user is working in
 that worktree; `»` and the header say so and enter on home's row returns.
 A user switch asked while a console is docked swaps the panels UNDER the

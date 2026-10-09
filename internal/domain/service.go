@@ -235,7 +235,7 @@ func (s *Service) currentVersionsPolicy() engine.VersionsPolicy {
 // command (rev-parse --show-toplevel, see openWith). The scriptable CLI uses
 // this: a real terminal can service an ssh/credential prompt.
 func Open(workdir string) *Service {
-	return openWith(workdir, false, observ.NewRing(200))
+	return openWith(workdir, false, observ.NewRing(200), nil)
 }
 
 // OpenTUI is Open for the interactive TUI: its runner forces ssh BatchMode so an
@@ -243,7 +243,13 @@ func Open(workdir string) *Service {
 // (mirroring the always-on GIT_TERMINAL_PROMPT=0 for HTTPS). Used by the repo
 // switcher's reRoot; cmd/gg wires the initial session via OpenTUIWithRing.
 func OpenTUI(workdir string) *Service {
-	return openWith(workdir, true, observ.NewRing(200))
+	return openWith(workdir, true, observ.NewRing(200), nil)
+}
+
+// OpenTUISharing is OpenTUI for a worktree slot of the repository FROM
+// serves: its caches are from's (NewSharing).
+func OpenTUISharing(workdir string, from *Service) *Service {
+	return openWith(workdir, true, observ.NewRing(200), from.factory)
 }
 
 // OpenTUIWithRing is OpenTUI with a caller-supplied span ring: cmd/gg keeps the
@@ -251,10 +257,12 @@ func OpenTUI(workdir string) *Service {
 // session's git spans. This keeps the runner stack built in exactly one place —
 // any change to the wrapping here reaches both the initial session and reRoot.
 func OpenTUIWithRing(workdir string, ring *observ.Ring) *Service {
-	return openWith(workdir, true, ring)
+	return openWith(workdir, true, ring, nil)
 }
 
-func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
+// openWith builds the runner stack; a nil factory is a private one, else
+// the Service vends its caches from it (NewSharing).
+func openWith(workdir string, sshBatch bool, ring *observ.Ring, factory cache.Factory) *Service {
 	workdir, resolved := resolveRoot(workdir, sshBatch, ring)
 	er := gitexec.NewExecRunner("git", workdir, ring)
 	if sshBatch {
@@ -265,6 +273,9 @@ func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
 		repo.Root = workdir // known: working-tree reads skip the rev-parse
 	}
 	s := New(repo)
+	if factory != nil {
+		s.factory = factory
+	}
 	s.workdir = workdir
 	if ring != nil {
 		s.forgeRec = ring // guarded: a nil *Ring in the interface would not be a nil Recorder
@@ -301,6 +312,19 @@ func resolveRoot(workdir string, sshBatch bool, rec observ.Recorder) (string, bo
 // New wraps an existing repo (tests, callers with their own runner wiring).
 func New(repo *git.Repo) *Service {
 	return &Service{repo: repo, factory: cache.NewFactory(0, 0)}
+}
+
+// NewSharing is New over FROM's caches: a Service for another worktree of
+// the same repository, so a commit diff, a blame, a commit's file list, a
+// pair's file set or a preview summary cached through one worktree is a
+// hit from the other, and the repository has one cache budget however
+// many of its worktrees are open. Every cache the factory vends is keyed
+// by content (a full hash, a hash pair, a hash + path); a working-tree
+// diff or blame is never cached (Key "" / rev ""), so nothing that depends
+// on WHICH worktree asked can enter a shared cache. The differ itself
+// stays per Service: it carries the Service's own options.
+func NewSharing(repo *git.Repo, from *Service) *Service {
+	return &Service{repo: repo, factory: from.factory}
 }
 
 // Root is the directory every git invocation of this Service runs in: the
