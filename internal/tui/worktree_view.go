@@ -386,6 +386,9 @@ func (m Model) switchViewBy(path string, byUser bool) (Model, bool) {
 		return m, false
 	}
 	m = m.saveView()
+	if v := m.views[m.viewed]; v != nil {
+		v.windows.sleepFWindow() // the leaving slot's copy only: the group is about to be replaced
+	}
 	m = m.sleepView()
 	m = m.loadView(m.ensureView(path))
 	m.viewKick = true
@@ -477,7 +480,11 @@ func (m Model) viewKickCmd() tea.Cmd {
 	notes := m.readSourceCmd(context.Background(), srcNotes, reloadOpts{}) // the ✎ badges are the checkout's
 	feed := m.readSourceCmd(context.Background(), srcFeed, reloadOpts{})   // reconcile: the walk now starts at this tree's HEAD
 	_, docs := m.syncAgentDocs()
-	return tea.Batch(read, notes, feed, m.startWatchCmd(m.watchGen), docs)
+	var files tea.Cmd
+	if m.inWorktreeFiles() && m.wtFiles.loading {
+		files = m.loadLsFilesCmd() // a returned F window gave its list up while sleeping (sleepFWindow)
+	}
+	return tea.Batch(read, notes, feed, m.startWatchCmd(m.watchGen), docs, files)
 }
 
 // takeQueuedReturn performs the swap a console close, a console SHOW (its

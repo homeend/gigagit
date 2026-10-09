@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -196,4 +197,23 @@ type consoleParked struct {
 	stashView    *stashView
 	filesView    *contentPopup // the files view a preview belongs to
 	filesPreview *openFile
+}
+
+// sleepFWindow is the one thing a sleeping group gives up: the F window's
+// on-disk list and its rendered tree (~100 bytes per path, twice, on a
+// million-file tree — not worth keeping six times). The window, its filter
+// and the path under the cursor stay; the kick re-reads the list when the
+// worktree returns (viewKickCmd) and wtLoaded puts the cursor back.
+func (w *windowState) sleepFWindow() {
+	f := w.wtFiles
+	if f == nil || w.filesMode != filesModeWorktree || w.filesView == nil {
+		return
+	}
+	if sel := w.filesView.sel; sel >= 0 && sel < len(w.filesView.visible()) {
+		f.keepPath = w.filesView.visible()[sel].path
+	}
+	f.all, f.untracked, f.letters = nil, nil, nil
+	f.loading = true
+	w.filesView.lines = []contentLine{{text: i18n.T("(loading…)")}}
+	w.filesView.sel = 0
 }

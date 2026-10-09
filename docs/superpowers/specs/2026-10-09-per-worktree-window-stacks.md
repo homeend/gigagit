@@ -1,8 +1,14 @@
 # Per-worktree window stacks — design
 
-Date: 2026-10-09. Status: agreed in conversation; reviewed read-only by a
-second model (verdict "reasonable with the listed changes") and revised
-with every required change. Builds on
+Date: 2026-10-09. Status: IMPLEMENTED — phases 1–6 merged into
+`feat/fast-worktree-switch` the same day (plans
+`docs/superpowers/plans/2026-10-09-window-stacks-{1..6}-*.md`). Agreed in
+conversation; reviewed read-only by a second model (verdict "reasonable
+with the listed changes") and revised with every required change before
+building. Differences from the text below, decided while building: the
+whitelist is one function (`parkableLayer`) rather than a method; the
+generic `contentPopup` is not parkable; `switchView(path, byUser)` is
+`switchViewBy` with `switchView`/`userSwitchView` wrappers. Builds on
 `2026-10-08-fast-worktree-switch-design.md` (the slots) and the three
 audit rounds merged into `feat/fast-worktree-switch` (last `7cbbcb5c`).
 

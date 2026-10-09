@@ -6368,8 +6368,14 @@ tours, the hosted page, op chains, the move popup) and `showConsoleBy(id,
 focused, byUser)` (true from `cycleSessions` only). A `gotoCommitPopup`
 with a resolve pending, the generic `contentPopup`, the palette, the
 sessions popup, the notices dialog, sends and detects in flight are never
-parkable. Phase still to come: the F window's
-list dropped on sleep (6); spec
+parkable. Memory: `windowState.sleepFWindow` (called by `switchViewBy`
+on the leaving slot's copy only — `saveView` alone runs at the first load
+too and must not blank a live window) drops the F window's `wtFiles.all`/
+`untracked`/`letters` and `filesView.lines`, keeps the filter and
+`wtFiles.keepPath` (the cursor's file); `viewKickCmd` re-issues
+`loadLsFilesCmd` (its `lsFilesMsg` is slot-stamped) when the returned F
+window is loading, and `wtSetQuery` lands the cursor on `keepPath` once.
+Everything else parked is bounded by what the user opened. Spec
 `docs/superpowers/specs/2026-10-09-per-worktree-window-stacks.md`.
 `sleepView` (watchers closed, the five gens bumped, `srcFeed` retired) is shared by
 `switchView` and both drop paths. The commit feed is ONE shared
