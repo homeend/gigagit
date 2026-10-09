@@ -39,6 +39,7 @@ type sendPanel struct {
 	bodyFrom string
 	typed    string
 	code     bool   // c: the code excerpt under the current row
+	gen      int    // m.forgeGen when opened: a repository switch makes the panel stale
 	notice   string // the bottom bar: a refused tick, "tick something to send"
 }
 
@@ -86,7 +87,7 @@ func (m Model) handleSendPanel(msg sendPanelMsg) (Model, tea.Cmd) {
 	if old := layerOf[*sendPanel](m); old != nil {
 		m = m.removeLayer(old)
 	}
-	p := &sendPanel{pr: msg.pr, cands: msg.cands, ticked: map[string]bool{}, code: true}
+	p := &sendPanel{pr: msg.pr, cands: msg.cands, ticked: map[string]bool{}, code: true, gen: m.forgeGen}
 	sortPanelGroups(p.cands.Groups)
 	for g := range p.cands.Groups {
 		p.rows = append(p.rows, panelRow{group: g, cand: -1})
@@ -97,6 +98,9 @@ func (m Model) handleSendPanel(msg sendPanelMsg) (Model, tea.Cmd) {
 	p.sel = p.firstCandidate()
 	if kept, ok := m.keptBodyFor(msg.pr, sendGroupPanel, false); ok {
 		p.typed = kept // what the user typed last time survives an abort or a failure
+		if p.typed != "" {
+			p.body = bodyTyped // …and stays the body: a quick ctrl+s must not drop it
+		}
 	}
 	return m.pushLayer(p), nil
 }
@@ -313,8 +317,12 @@ func (p *sendPanel) openRow(m Model) (Model, tea.Cmd) {
 		}
 		u, cmd := m.openDiffForFileLine(l)
 		m = u.(Model)
-		if m.diffLayer() != nil {
+		if dv := m.diffLayer(); dv != nil {
 			m.noteLand = &noteLanding{id: c.ID, tag: m.diffTag}
+			if m.topLayer() != dv { // a diff already open BELOW the panel was reused in place: show it
+				m = m.removeLayer(dv)
+				m = m.pushLayer(dv)
+			}
 		}
 		return m, cmd
 	}
@@ -327,7 +335,9 @@ func (p *sendPanel) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlC:
 		return m, tea.Quit
 	case tea.KeyEsc:
-		m.keptSendBody = &keptSendBody{pr: p.pr, group: sendGroupPanel, text: p.typed}
+		if p.typed != "" { // one kept slot: a verdict box's text must not be wiped by an empty panel
+			m.keptSendBody = &keptSendBody{pr: p.pr, group: sendGroupPanel, text: p.typed}
+		}
 		return m.popLayer(), nil
 	case tea.KeyUp:
 		p.move(-1)
@@ -358,6 +368,10 @@ func (p *sendPanel) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.notice = i18n.T("tick something to send")
 			return m, nil
 		}
+		if p.gen != m.forgeGen {
+			p.notice = i18n.T("the repository changed — open the panel again")
+			return m, nil
+		}
 		if !m.opsIdle() {
 			p.notice = i18n.T("another operation is running — send again when it ends")
 			return m, nil
@@ -378,11 +392,47 @@ func (p *sendPanel) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.cycleBody()
 		p.notice = ""
 	case "e":
-		return m.pushLayer(&sendPanelBody{panel: p, body: newTextField(p.typed)}), nil
+		return p.editBody(m)
 	case "c":
 		p.code = !p.code
 	}
 	return m, nil
+}
+
+// editBody is e: the body box prefilled with the CURRENT body (spec §5.3) —
+// the typed text, or a chosen review's text, read off the UI thread.
+func (p *sendPanel) editBody(m Model) (Model, tea.Cmd) {
+	if p.body != bodyReview || m.svc == nil {
+		return m.pushLayer(&sendPanelBody{panel: p, body: newTextField(p.typed)}), nil
+	}
+	svc, gen, pr, id := m.svc, m.forgeGen, p.pr, p.bodyFrom
+	return m, func() tea.Msg {
+		text, err := svc.ReviewBodyText(context.Background(), id)
+		return sendPanelBodyMsg{gen: gen, pr: pr, text: text, err: err}
+	}
+}
+
+// sendPanelBodyMsg is editBody's read of a review's text.
+type sendPanelBodyMsg struct {
+	gen  int
+	pr   int
+	text string
+	err  error
+}
+
+// handleSendPanelBody opens the body box over the panel that asked, prefilled
+// with the review's text (an unreadable review: an empty box and a word).
+func (m Model) handleSendPanelBody(msg sendPanelBodyMsg) (Model, tea.Cmd) {
+	p := layerOf[*sendPanel](m)
+	if msg.gen != m.forgeGen || p == nil || p.pr != msg.pr || m.topLayer() != p {
+		return m, nil
+	}
+	text := msg.text
+	if msg.err != nil {
+		p.notice = i18n.T("send: %s", firstLine(msg.err.Error()))
+		text = ""
+	}
+	return m.pushLayer(&sendPanelBody{panel: p, body: newTextField(text)}), nil
 }
 
 // sendPanelBody is e: the typed body's box over the panel; ctrl+s keeps it

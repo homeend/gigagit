@@ -135,3 +135,32 @@ func TestStoredOverviewIsNotAStoreOverview(t *testing.T) {
 		t.Fatal("y copies the overview's markdown")
 	}
 }
+
+// Review finding 2: a WORKING review's overview (tip "") is still a stored
+// overview — no anchor reference, plain anchors stay plain and say why —
+// while its resolved anchors open the working-tree file.
+func TestStoredOverviewOfAWorkingReviewIsStillStored(t *testing.T) {
+	t.Parallel()
+	m, _ := reviewWithOverview(t)
+	m.filesReview.tip = "" // as a review of uncommitted changes has it
+	u, cmd := m.openDiffForFileLine(overviewRow(t, m))
+	m = drainCmds(t, u.(Model), cmd)
+	d := topDoc(m)
+	if d == nil || d.src.kind != srcReviewOverview || d.ov.tip != "" {
+		t.Fatalf("doc %+v", d)
+	}
+	for _, r := range m.overviewRows() {
+		if r.id == "overview-ref" {
+			t.Fatal("no anchor reference for a stored overview (A9)")
+		}
+	}
+	m, cmd = m.openAnchor(d, 1) // zzz.go:1: plain
+	if cmd != nil || topDoc(m) != d || !strings.Contains(m.statusMsg, "zzz.go:1") {
+		t.Fatalf("plain anchor: cmd %v top %v status %q", cmd != nil, topDoc(m) == d, m.statusMsg)
+	}
+	m, cmd = m.openAnchor(d, 0) // a.go:1: the working-tree file
+	m = drainCmds(t, m, cmd)
+	if f := topDoc(m); f == nil || f == d || f.src.kind != srcWorktree || f.path != "a.go" || f.from != d {
+		t.Fatalf("resolved anchor opened %+v", f)
+	}
+}

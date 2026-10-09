@@ -33,7 +33,7 @@ func (m Model) overviewKey(d *openFile, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		nm, cmd := m.openAnchor(d, d.ov.sel)
 		return nm, cmd, true
 	case "r":
-		if d.ov.sel < 0 || d.ov.tip != "" { // a stored overview has no store reference (A9)
+		if d.ov.sel < 0 || d.src.kind == srcReviewOverview { // a stored overview has no store reference (A9)
 			return m, nil, true
 		}
 		return m, m.copyToClipboardCmd(i18n.T("Copied anchor reference"), anchorReference(d, d.ov.anchors[d.ov.sel])), true
@@ -97,12 +97,17 @@ func (m Model) openAnchor(ov *openFile, i int) (Model, tea.Cmd) {
 		m.statusMsg = msg
 		return m, nil
 	}
-	if ov.ov.tip != "" { // a stored overview: files at the reviewed tip, nothing else
+	if ov.src.kind == srcReviewOverview { // a stored overview: the review's files, nothing else
 		if a.plain {
 			m.statusMsg = i18n.T("anchor %s does not resolve at the reviewed commit", a.dest)
 			return m, nil
 		}
-		m, cmd := m.openFileAtCommitLine(ov.ov.tip, a.target.Path, a.target.Start, a.target.End)
+		var cmd tea.Cmd
+		if ov.ov.tip != "" {
+			m, cmd = m.openFileAtCommitLine(ov.ov.tip, a.target.Path, a.target.Start, 0)
+		} else { // a working review: its files are the working tree's
+			m, cmd, _ = m.openFileViewerEv(a.target.Path, a.target.Start)
+		}
 		if d := topDoc(m); d != nil {
 			d.from, d.backgrounded, d.anchorCur = ov, true, a.dest
 		}
@@ -146,7 +151,9 @@ func (m Model) anchorStatted(msg anchorStatMsg) (Model, tea.Cmd) {
 	}
 	a := &ov.ov.anchors[msg.i]
 	a.missing = !msg.ok
-	m.docs.SetAnchorMissing(ov.id(), msg.i, a.missing)
+	if ov.src.kind == srcOverview {
+		m.docs.SetAnchorMissing(ov.id(), msg.i, a.missing)
+	}
 	ov.ov.paint(ov.p.lines)
 	t := a.target
 	if !msg.ok {
@@ -257,7 +264,7 @@ func (m Model) overviewRows() []actionRow {
 			rows = append(rows, actionRow{id: "overview-open", key: "enter", label: i18n.T("Open anchor"), run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.openAnchor(d, i)
 			}})
-			if d.ov.tip == "" { // a stored overview has no store reference (A9)
+			if d.src.kind != srcReviewOverview { // a stored overview has no store reference (A9)
 				ref := m.copyRow("overview-ref", i18n.T("Copy anchor reference"), i18n.T("Copied anchor reference"), anchorReference(d, d.ov.anchors[i]))
 				ref.key = "r"
 				rows = append(rows, ref)

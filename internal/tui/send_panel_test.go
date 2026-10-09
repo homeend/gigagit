@@ -110,7 +110,8 @@ func TestSendPanelBodyCycle(t *testing.T) {
 	if !strings.HasPrefix(p.bodyLabel(), "review text (Claude Code") {
 		t.Fatalf("→ %q, want the review's text", p.bodyLabel())
 	}
-	m, _ = p.update(m, key("e"))
+	m, cmd := p.update(m, key("e")) // a review body: its text is read off-thread (none stored here: an empty box)
+	m = drainCmds(t, m, cmd)
 	box := layerOf[*sendPanelBody](m)
 	if box == nil {
 		t.Fatal("e opens the body box")
@@ -290,5 +291,96 @@ func TestSendPanelSurvivesAGoneCandidate(t *testing.T) {
 	m = nm.(Model)
 	if layerOf[*sendPanel](m) == nil || !strings.Contains(m.statusMsg, "send: ") {
 		t.Fatalf("panel %v status %q", layerOf[*sendPanel](m) != nil, m.statusMsg)
+	}
+}
+
+// Review finding 1: enter with a diff already open BELOW the panel (the
+// panel's main entry is the PR diff's . menu) must still show the row's
+// diff on top; esc returns to the panel. Serial: env (prSendModel).
+func TestSendPanelEnterOverAnOpenDiff(t *testing.T) {
+	m, _, head := prSendModel(t)
+	id := addTUINote(t, m, head, 5, "look here")
+	m = openPR7(t, m)
+	l, _ := filesLine(t, m, "big.go")
+	u, cmd := m.openDiffForFileLine(l)
+	m = drainCmds(t, u.(Model), cmd)
+	if m.diffLayer() == nil {
+		t.Fatal("no PR diff")
+	}
+	m, cmd = m.openSendPanel(7)
+	m = drainCmds(t, m, cmd)
+	p := layerOf[*sendPanel](m)
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace})
+	m, cmd = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = drainCmds(t, m, cmd)
+	v, isDiff := m.topLayer().(*diffView)
+	if !isDiff || !v.cursorOnNote() {
+		t.Fatalf("top %T on note %v", m.topLayer(), isDiff && v.cursorOnNote())
+	}
+	m, _ = v.update(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if q, ok := m.topLayer().(*sendPanel); !ok || !q.ticked[id] {
+		t.Fatalf("esc: top %T", m.topLayer())
+	}
+}
+
+// Review finding 3: a repository switch drops the panel (its candidates
+// and PR are the old repository's); a stale panel refuses ctrl+s.
+func TestSendPanelDoesNotSurviveARepoSwitch(t *testing.T) {
+	t.Parallel()
+	m, p := panelModel(t)
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace})
+	m.forgeGen++ // what reRoot does, among other things
+	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	if cmd != nil || !strings.Contains(p.notice, "repository changed") {
+		t.Fatalf("stale ctrl+s: cmd %v notice %q", cmd != nil, p.notice)
+	}
+	m2, p2 := panelModel(t)
+	m2, _ = p2.update(m2, key("e"))
+	nm, _ := m2.reRoot(t.TempDir())
+	m2 = nm.(Model)
+	if layerOf[*sendPanel](m2) != nil || layerOf[*sendPanelBody](m2) != nil {
+		t.Fatal("reRoot left the panel (or its body box) on the stack")
+	}
+}
+
+// Review finding 4 (spec §5.3): e prefills the box with the CURRENT body —
+// a chosen review's text, not an empty box. Serial: env (prSendModel).
+func TestSendPanelEditPrefillsTheReviewText(t *testing.T) {
+	m, _, head := prSendModel(t)
+	addTUINote(t, m, head, 5, "look here")
+	savePRReviewTUI(t, m, `{"version":1,"summary":"## Summary\ntwo nits","files":[{"path":"big.go","annotations":[{"newRange":[5,5],"summary":"name it"}]}]}`)
+	m = openPR7(t, m)
+	m, cmd := m.openSendPanel(7)
+	m = drainCmds(t, m, cmd)
+	p := layerOf[*sendPanel](m)
+	if p == nil || p.cands.Groups[0].Kind != "review" {
+		t.Fatalf("panel %+v", p)
+	}
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace}) // the remark
+	m, _ = p.update(m, key("b"))                       // review text
+	m, cmd = p.update(m, key("e"))
+	m = drainCmds(t, m, cmd)
+	box := layerOf[*sendPanelBody](m)
+	if box == nil || !strings.Contains(box.body.Value(), "two nits") {
+		t.Fatalf("box %v value %q", box != nil, box.body.Value())
+	}
+}
+
+// Review findings 5 and 6: esc keeps nothing when nothing was typed (the
+// verdict box's kept text survives), and a reopened panel with kept text
+// starts with the body "typed", not "none".
+func TestSendPanelKeptTextRules(t *testing.T) {
+	t.Parallel()
+	m, p := panelModel(t)
+	m.keptSendBody = &keptSendBody{pr: 7, verdict: true, text: "my verdict"}
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if got, ok := m.keptBodyFor(7, "", true); !ok || got != "my verdict" {
+		t.Fatalf("the verdict's kept text went: %q %v", got, ok)
+	}
+	m.keptSendBody = &keptSendBody{pr: 7, group: sendGroupPanel, text: "typed before"}
+	m, _ = m.handleSendPanel(sendPanelMsg{gen: m.forgeGen, pr: 7, cands: panelCands()})
+	p = layerOf[*sendPanel](m)
+	if p.typed != "typed before" || p.bodyLabel() != "typed" {
+		t.Fatalf("reopened: typed %q body %q", p.typed, p.bodyLabel())
 	}
 }
