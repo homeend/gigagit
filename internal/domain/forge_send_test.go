@@ -482,3 +482,22 @@ func TestPlanSendDraftsOnlyWithAVerdictOrABody(t *testing.T) {
 		t.Fatalf("skipped note + draft: %+v %v", p, err)
 	}
 }
+
+// A send naming a review that is gone (deleted since the panel listed it)
+// is refused as a request error — never planned against nothing.
+func TestPlanSendOfAGoneReviewIsRefused(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	ctx := context.Background()
+	rid := savePRReview(t, svc, twoRemarks)
+	mine := addPRNote(t, svc, head, "big.go", 25, "mine")
+	if err := svc.NoteRemove(ctx, rid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{mine}, BodyFrom: rid}); !errors.Is(err, ErrReviewNotFound) {
+		t.Fatalf("--body-from a gone review: %v", err)
+	}
+	if _, err := svc.planSend(ctx, PRSendRequest{PR: 7, Notes: []string{"review:" + rid + ":0"}}); !errors.Is(err, ErrReviewNotFound) {
+		t.Fatalf("a remark of a gone review: %v", err)
+	}
+}

@@ -196,3 +196,34 @@ func TestNoteLinkTextRangePastTheEndHasNoFingerprint(t *testing.T) {
 		t.Fatalf("link = %q, want :2-4 with no fingerprint", link)
 	}
 }
+
+// A staged note links at @staged with the index's text fingerprinted; a
+// range note carries the block's fingerprint over :a-b.
+func TestNoteLinkTextStagedAndRangeNotes(t *testing.T) {
+	t.Parallel()
+	dir, _ := newRealRepo(t)
+	commitFile(t, dir, "w.txt", "one\ntwo\nthree\n", "w")
+	writeFile(t, dir, "w.txt", "one\ntwo staged\nthree\n")
+	runGitIn(t, dir, "add", "w.txt")
+	writeFile(t, dir, "w.txt", "one\ntwo working\nthree\n") // the working copy differs from the index
+	_, svc := newRealRepoAt(t, dir)
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	staged, err := svc.NoteAdd(ctx, model.Note{Source: model.NoteSourceUser, Summary: "s",
+		Address: model.FileAddress{State: model.StateStaged, Worktree: dir, Path: "w.txt"}, Side: model.NoteSideNew, Range: [2]int{2, 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, err := svc.NoteLinkText(ctx, staged.ID); err != nil || !strings.HasSuffix(l, "/w.txt@staged:2~"+model.LineFingerprint("two staged")+"?note="+staged.ID) {
+		t.Fatalf("staged: %q %v", l, err)
+	}
+	rng, err := svc.NoteAdd(ctx, model.Note{Source: model.NoteSourceUser, Summary: "r",
+		Address: model.FileAddress{State: model.StateUnstaged, Worktree: dir, Path: "w.txt"}, Side: model.NoteSideNew, Range: [2]int{1, 3}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "/w.txt:1-3~" + model.BlockFingerprint([]string{"one", "two working", "three"}) + "?note=" + rng.ID
+	if l, err := svc.NoteLinkText(ctx, rng.ID); err != nil || !strings.HasSuffix(l, want) {
+		t.Fatalf("range: %q %v, want suffix %q", l, err, want)
+	}
+}

@@ -111,3 +111,31 @@ func TestSortCandidateGroupsTiesByID(t *testing.T) {
 		t.Fatalf("order = %v", ids)
 	}
 }
+
+// A remark on the old side lists its code from the PR's base, and a note
+// already being sent (or on GitHub) is not a candidate at all.
+func TestPRSendCandidatesOldSideAndSendingRows(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	ctx := context.Background()
+	if _, err := svc.PullRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	rid := savePRReview(t, svc, `{"version":1,"summary":"old side","files":[{"path":"big.go","annotations":[{"oldRange":[5,5],"summary":"was here"}]}]}`)
+	sending := addPRNote(t, svc, head, "big.go", 25, "already going")
+	// Stamped after the read starts: the settle pass never judges it, so it
+	// stays "sending" through the listing.
+	stampNote(t, svc, sending, model.NoteSend{PR: 7, Review: "PRR_x", At: time.Now().Add(time.Minute)})
+	svc.invalidateNoteCounts()
+	c, err := svc.PRSendCandidates(ctx, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Groups) != 1 || c.Groups[0].ID != "review:"+rid {
+		t.Fatalf("a sending note must not be a candidate; groups = %+v", c.Groups)
+	}
+	row := c.Groups[0].Rows[0]
+	if row.Side != "old" || row.Range != [2]int{5, 5} || !slices.Equal(row.Code, []string{"line 5"}) {
+		t.Fatalf("old-side row = %+v, want the base's line 5", row)
+	}
+}
