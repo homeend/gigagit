@@ -59,7 +59,10 @@ type conflictProcess struct {
 	toolSel     int
 	toolFill    *templateFill   // <user:…> collection while confToolFill
 	pending     *pendingToolRun // resolved run while confToolApprove/executing (Task 7)
-	toolRunning string          // capture-mode run in flight: the tool's name, for the "running" box
+	// approveScroll is the first shown line of a command too long for the
+	// approval box.
+	approveScroll int
+	toolRunning   string // capture-mode run in flight: the tool's name, for the "running" box
 }
 
 // startConflictProcess fills the active-process slot from the current
@@ -388,7 +391,7 @@ func (p *conflictProcess) gateOrRun(m Model) (Model, tea.Cmd) {
 	if m.toolCommandApproved(p.pending.tc.Command) {
 		return p.runPending(m)
 	}
-	p.st = confToolApprove
+	p.st, p.approveScroll = confToolApprove, 0
 	return m, nil
 }
 
@@ -410,6 +413,21 @@ func (p *conflictProcess) runPending(m Model) (Model, tea.Cmd) {
 
 // updateToolApprove: enter approves (persisted) and runs; esc cancels.
 func (p *conflictProcess) updateToolApprove(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	page := max(1, p.approveRows(m)-1)
+	switch msg.Type {
+	case tea.KeyUp:
+		p.approveScroll = max(0, p.approveScroll-1)
+		return m, nil
+	case tea.KeyDown:
+		p.approveScroll++ // the render clamps
+		return m, nil
+	case tea.KeyPgUp:
+		p.approveScroll = max(0, p.approveScroll-page)
+		return m, nil
+	case tea.KeyPgDown:
+		p.approveScroll += page
+		return m, nil
+	}
 	switch msg.String() {
 	case "esc":
 		p.cleanupPending()
@@ -424,6 +442,9 @@ func (p *conflictProcess) updateToolApprove(m Model, msg tea.KeyMsg) (Model, tea
 
 // updateToolFill collects <user:…> values, then proceeds like startToolRun.
 func (p *conflictProcess) updateToolFill(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if p.toolFill.scrollKey(msg, p.fillRoom(m)-1) {
+		return m, nil
+	}
 	done, cancel := p.toolFill.handleKey(msg)
 	if cancel {
 		p.toolFill = nil
@@ -575,16 +596,26 @@ func (p *conflictProcess) render(m Model, below string) string {
 	case confToolPick:
 		return overlayCenter(bg, conflictToolPickBox(m, p.toolChoices, p.toolAgents, p.toolSel), w, h)
 	case confToolFill:
-		var b strings.Builder
-		b.WriteString(i18n.T("Tool inputs") + "\n\n")
-		for _, line := range p.toolFill.view(popupContentWidth(w)) {
-			b.WriteString(line + "\n")
-		}
-		b.WriteString("\n" + i18n.T("[tab/enter] next  [esc] cancel"))
-		return overlayCenter(bg, popupBox(popupInnerWidth(w), b.String()), w, h)
+		textW := popupContentWidth(w)
+		parts := []string{i18n.T("Tool inputs"), ""}
+		parts = append(parts, p.toolFill.viewWindow(textW, p.fillRoom(m))...)
+		parts = append(parts, "")
+		parts = append(parts, p.fillHints(textW)...)
+		return overlayCenter(bg, popupBox(popupInnerWidth(w), strings.Join(parts, "\n")), w, h)
 	case confToolApprove:
-		header := i18n.T("Run this command?  (%s)", p.pending.tc.Name) + "\n\n"
-		return overlayCenter(bg, popupBox(popupInnerWidth(w), header+approvalBoxView(p.pending.resolved, w)), w, h)
+		// A long command (a pasted stack trace in a <user:…> value) scrolls
+		// in a pane; the approval's own lines stay under it.
+		textW := popupContentWidth(w)
+		rows, rule := ttTextPane(p.pending.resolved, textW, p.approveRows(m), &p.approveScroll)
+		parts := []string{i18n.T("Run this command?  (%s)", p.pending.tc.Name), ""}
+		parts = append(parts, rows...)
+		if p.approveLong(m) {
+			parts = append(parts, rule)
+		}
+		parts = append(parts, "")
+		parts = append(parts, wrapParts(strings.Fields(approvalNote()), textW, " ")...)
+		parts = append(parts, ttHints(approvalHints(p.approveLong(m)), textW)...)
+		return overlayCenter(bg, popupBox(popupInnerWidth(w), strings.Join(parts, "\n")), w, h)
 	case confToolMark:
 		msg := i18n.T("The tool changed %s.", p.pending.file) + "\n\n" +
 			i18n.T("Mark it as resolved (git add)?") + "\n\n" +
@@ -659,6 +690,38 @@ func (p *conflictProcess) indicator(m Model) string {
 		}
 		return i18n.T("Resolving conflicts · %d left — [↑/↓] file  per-file keys in the box  [A] all  [L] leave", len(p.files))
 	}
+}
+
+// fillHints are the tool-inputs step's key hints: ↑/↓ shows up once the
+// focused value has lines to walk.
+func (p *conflictProcess) fillHints(textW int) []string {
+	if p.toolFill.multiLine() {
+		return ttHints(i18n.T("[tab/enter] next  [↑/↓] scroll  [esc] cancel"), textW)
+	}
+	return ttHints(i18n.T("[tab/enter] next  [esc] cancel"), textW)
+}
+
+// fillRoom is how many rows the tool-inputs step's fields get: what the
+// terminal leaves under the title + blank and blank + hints.
+func (p *conflictProcess) fillRoom(m Model) int {
+	w, _ := m.overlayDims()
+	return max(1, ttRoom(m, 2+1+len(p.fillHints(popupContentWidth(w)))))
+}
+
+// approveRows is the approval step's command height: the whole command when
+// it fits, else what the terminal leaves under the title + blank and above
+// the rule, blank, note and hints (the scrolling hints: the wider of the two).
+func (p *conflictProcess) approveRows(m Model) int {
+	w, _ := m.overlayDims()
+	textW := popupContentWidth(w)
+	chrome := 2 + 1 + 1 + len(wrapParts(strings.Fields(approvalNote()), textW, " ")) + len(ttHints(approvalHints(true), textW))
+	return max(1, min(max(3, ttRoom(m, chrome)), len(ttWrapText(p.pending.resolved, textW))))
+}
+
+// approveLong reports whether the command runs past its pane (it scrolls).
+func (p *conflictProcess) approveLong(m Model) bool {
+	w, _ := m.overlayDims()
+	return len(ttWrapText(p.pending.resolved, popupContentWidth(w))) > p.approveRows(m)
 }
 
 // conflictMsgBox draws a small centered message box (progress / error).

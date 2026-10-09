@@ -143,8 +143,58 @@ func TestReviewSkillBodyCoversTheNoteSurface(t *testing.T) {
 
 func TestAllReturnsEverySkill(t *testing.T) {
 	got := All()
-	if len(got) != 5 || got[0].Name != "using-gg" || got[1].Name != "reviewing-with-gg" || got[2].Name != "delegate" || got[3].Name != "gg-review" || got[4].Name != "gg-cross-review" {
-		t.Fatalf("All() = %+v, want using-gg, reviewing-with-gg, delegate, gg-review, gg-cross-review", got)
+	if len(got) != 6 || got[0].Name != "using-gg" || got[1].Name != "reviewing-with-gg" || got[2].Name != "gg-delegate" || got[3].Name != "gg-review" || got[4].Name != "gg-cross-review" || got[5].Name != "gg-overview" {
+		t.Fatalf("All() = %+v, want using-gg, reviewing-with-gg, gg-delegate, gg-review, gg-cross-review, gg-overview", got)
+	}
+}
+
+// delegate was renamed gg-delegate: init must still recognise the old name's
+// copies to remove them, and a retired name never collides with a live one.
+func TestRetiredNames(t *testing.T) {
+	got := Retired()
+	if len(got) != 1 || got[0].Name != "delegate" {
+		t.Fatalf("Retired() = %+v, want delegate", got)
+	}
+	if !got[0].HasMarker([]byte("<!-- gg:delegate:v3 -->")) || got[0].HasMarker([]byte(GGDelegate.Marker())) {
+		t.Fatal("the retired marker must match only the old name")
+	}
+	for _, r := range got {
+		for _, s := range All() {
+			if r.Name == s.Name {
+				t.Fatalf("%s is both retired and installed", r.Name)
+			}
+		}
+	}
+}
+
+// gg-overview is the name the user says ("use gg-overview to visualise the
+// result"): the model may load it on its own, and its description carries
+// the phrase so the agent connects it.
+func TestGGOverviewSkill(t *testing.T) {
+	t.Parallel()
+	f := GGOverview.SkillFile()
+	for _, want := range []string{"name: gg-overview\n", "argument-hint:", "gg-overview",
+		"gg session note add", "gg session overview add", "gg web --open", "agent_report"} {
+		if !strings.Contains(f, want) {
+			t.Fatalf("gg-overview SKILL.md lacks %q", want)
+		}
+	}
+	if strings.Contains(f, "disable-model-invocation") {
+		t.Fatal("gg-overview must be loadable on the model's own initiative")
+	}
+	if !strings.Contains(GGOverview.Description, "gg-overview") {
+		t.Fatal("the description must name the phrase the user says")
+	}
+}
+
+func TestDogfoodGGOverviewCopyInSync(t *testing.T) {
+	path := filepath.Join("..", "..", ".claude", "skills", "gg-overview", "SKILL.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("dogfood copy missing — run `gg init --update` and commit it: %v", err)
+	}
+	if string(data) != GGOverview.SkillFile() {
+		t.Error(".claude/skills/gg-overview/SKILL.md is out of sync — run `gg init --update` and commit the result")
 	}
 }
 
@@ -162,27 +212,27 @@ func TestGGReviewFrontmatter(t *testing.T) {
 }
 
 func TestDogfoodDelegateSkillCopyInSync(t *testing.T) {
-	path := filepath.Join("..", "..", ".claude", "skills", "delegate", "SKILL.md")
+	path := filepath.Join("..", "..", ".claude", "skills", "gg-delegate", "SKILL.md")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("dogfood copy missing — run `gg init --update` and commit it: %v", err)
 	}
-	if string(data) != Delegate.SkillFile() {
-		t.Error(".claude/skills/delegate/SKILL.md is out of sync — run `gg init --update` and commit the result")
+	if string(data) != GGDelegate.SkillFile() {
+		t.Error(".claude/skills/gg-delegate/SKILL.md is out of sync — run `gg init --update` and commit the result")
 	}
 }
 
 // The delegate skill is the playbook both roles follow: the overseer's loop
 // over the agent tools, and the worker protocol the kickoff line points at.
 func TestDelegateSkillCoversBothRoles(t *testing.T) {
-	b := Delegate.Body()
+	b := GGDelegate.Body()
 	for _, want := range []string{
 		"## Overseer", "## Worker protocol",
 		"agent_start", "agent_wait", "agent_screen", "agent_send", "agent_kill", "agent_task", "agent_report",
 		"gg worktree list --free", "timed_out", "final",
 	} {
 		if !strings.Contains(b, want) {
-			t.Errorf("delegate skill lacks %q", want)
+			t.Errorf("gg-delegate skill lacks %q", want)
 		}
 	}
 }

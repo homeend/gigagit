@@ -87,6 +87,15 @@ func (f textfield) styledLinesCursor(focused bool, width int) ([]string, int) {
 			if pad := width - len(chunk); pad > 0 {
 				chunk = append(chunk, []rune(strings.Repeat(" ", pad))...)
 			}
+			// A tab is drawn as one space: the chunking counts one cell per
+			// rune, and a raw tab (lipgloss widens it to four) pushed every
+			// row of a pasted stack trace past the popup's edge. The value
+			// itself keeps its tabs.
+			for i, r := range chunk {
+				if r == '\t' {
+					chunk[i] = ' '
+				}
+			}
 			if li == curLine && curCol >= start && curCol < start+width {
 				cc := curCol - start
 				cursorIdx = len(out)

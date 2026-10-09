@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/template"
@@ -13,6 +15,9 @@ type templateFill struct {
 	labels []string
 	fields []textfield
 	idx    int
+	// scrolls is each field's first shown display line under viewWindow
+	// (sized lazily; view ignores it).
+	scrolls []int
 }
 
 func newTemplateFill(value string) templateFill {
@@ -69,4 +74,74 @@ func (f *templateFill) view(contentWidth int) []string {
 		lines[i] = viewField(cursor+l+": ", f.fields[i], i == f.idx, contentWidth)
 	}
 	return lines
+}
+
+// viewWindow is view for a window with room rows for the fields. A value
+// that runs over many lines (a pasted stack trace) no longer draws them all:
+// the focused field shows a window that follows its cursor in the rows the
+// others leave, the other fields one line and a scroll marker, and on a
+// terminal too short for all that the rows shown follow the focused field.
+func (f *templateFill) viewWindow(contentWidth, room int) []string {
+	room = max(1, room)
+	if len(f.scrolls) != len(f.fields) {
+		f.scrolls = make([]int, len(f.fields))
+	}
+	var lines []string
+	focusTop, focusLen := 0, 0
+	for i, l := range f.labels {
+		cursor, maxLines := "  ", 2
+		if i != f.idx {
+			f.scrolls[i] = 0 // an unfocused value shows its first line
+		} else {
+			// The other fields keep their (at most two) rows on screen.
+			cursor, maxLines = "> ", max(2, room-2*(len(f.fields)-1))
+		}
+		block := strings.Split(viewFieldWindow(cursor+l+": ", f.fields[i], i == f.idx, contentWidth, maxLines, &f.scrolls[i]), "\n")
+		if i == f.idx {
+			focusTop, focusLen = len(lines), len(block)
+		}
+		lines = append(lines, block...)
+	}
+	if len(lines) <= room {
+		return lines
+	}
+	top := max(0, min(focusTop-max(0, room-focusLen)/2, len(lines)-room))
+	return lines[top : top+room]
+}
+
+// multiLine reports whether the focused field holds more than one line.
+func (f *templateFill) multiLine() bool {
+	return f.idx >= 0 && f.idx < len(f.fields) && strings.ContainsRune(f.fields[f.idx].Value(), '\n')
+}
+
+// moveLines moves the focused field's cursor n lines down (up when n < 0).
+func (f *templateFill) moveLines(n int) {
+	if f.idx < 0 || f.idx >= len(f.fields) {
+		return
+	}
+	for ; n > 0; n-- {
+		f.fields[f.idx].Down()
+	}
+	for ; n < 0; n++ {
+		f.fields[f.idx].Up()
+	}
+}
+
+// scrollKey walks a multi-line value (a pasted stack trace) under
+// viewWindow: ↑/↓ move the focused field's cursor a line, PgUp/PgDn a page;
+// the window follows the cursor. Reports whether it took the key.
+func (f *templateFill) scrollKey(msg tea.KeyMsg, page int) bool {
+	switch page = max(1, page); msg.Type {
+	case tea.KeyUp:
+		f.moveLines(-1)
+	case tea.KeyDown:
+		f.moveLines(1)
+	case tea.KeyPgUp:
+		f.moveLines(-page)
+	case tea.KeyPgDown:
+		f.moveLines(page)
+	default:
+		return false
+	}
+	return true
 }

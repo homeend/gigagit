@@ -7,10 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 func TestAutowrapOffBracketsTheBody(t *testing.T) {
@@ -158,4 +163,44 @@ func TestNoRawExecProcessInTUI(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestHandoverDoneWrapsTheCallback: the exec callback's own result rides
+// inside handoverDoneMsg, so Update can tell "the terminal is ours again"
+// apart from the child's result. A nil callback still yields the wrapper.
+func TestHandoverDoneWrapsTheCallback(t *testing.T) {
+	t.Parallel()
+	want := errors.New("child failed")
+	got := handoverDone(func(err error) tea.Msg { return shellDoneMsg{err: err} })(want)
+	hd, ok := got.(handoverDoneMsg)
+	if !ok {
+		t.Fatalf("msg = %T, want handoverDoneMsg", got)
+	}
+	if inner, ok := hd.inner.(shellDoneMsg); !ok || inner.err != want {
+		t.Fatalf("inner = %#v, want the callback's own shellDoneMsg", hd.inner)
+	}
+	if got := handoverDone(nil)(nil); got != (handoverDoneMsg{}) {
+		t.Fatalf("nil callback: msg = %#v, want an empty handoverDoneMsg", got)
+	}
+}
+
+// TestHandoverDoneReenablesMouse pins the fix for the dead mouse after the
+// first editor / subshell / terminal-mode tool of a session: Bubble Tea's
+// ReleaseTerminal switches mouse tracking off and RestoreTerminal never
+// switches it back on, so Update must issue EnableMouseCellMotion when the
+// handover returns — and still deliver the child's own result.
+func TestHandoverDoneReenablesMouse(t *testing.T) {
+	t.Parallel()
+	m := Model{}
+	nm, cmd := m.Update(handoverDoneMsg{inner: shellDoneMsg{err: errors.New("boom")}})
+	if got := nm.(Model).statusMsg; got != i18n.T("shell: %s", "boom") {
+		t.Fatalf("statusMsg = %q: the inner message must still be dispatched", got)
+	}
+	wantType := reflect.TypeOf(tea.EnableMouseCellMotion())
+	for _, msg := range runCmdMsgs(cmd) {
+		if reflect.TypeOf(msg) == wantType {
+			return
+		}
+	}
+	t.Fatalf("no EnableMouseCellMotion in the handover-done command: the mouse stays dead after a handover")
 }

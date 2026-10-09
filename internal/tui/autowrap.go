@@ -44,7 +44,33 @@ func autowrapOff(w io.Writer, body func() error) error {
 // re-enters the alt screen — so the wide-glyph clip guard holds for the
 // rest of the session.
 func handover(cmd *exec.Cmd, fn tea.ExecCallback) tea.Cmd {
-	return tea.Exec(&handoverCmd{Cmd: cmd}, fn)
+	return tea.Exec(&handoverCmd{Cmd: cmd}, handoverDone(fn))
+}
+
+// handoverDoneMsg is a handover's callback result, wrapped so Update knows
+// the terminal is gg's again.
+//
+// Why: Bubble Tea's ReleaseTerminal switches the terminal's mouse tracking
+// off (CSI ?1002 l, ?1006 l) and RestoreTerminal brings back the alt
+// screen and bracketed paste but never the mouse — so the first editor,
+// subshell or terminal-mode tool of a session left every later click and
+// wheel event dead at the terminal (2026-10-09). Update answers this
+// message with EnableMouseCellMotion before delivering inner.
+type handoverDoneMsg struct {
+	inner tea.Msg // the caller's own result; nil for a nil callback
+}
+
+// handoverDone wraps a handover's callback so its result rides in a
+// handoverDoneMsg. A nil callback yields an empty wrapper: the mouse still
+// has to come back.
+func handoverDone(fn tea.ExecCallback) tea.ExecCallback {
+	return func(err error) tea.Msg {
+		var inner tea.Msg
+		if fn != nil {
+			inner = fn(err)
+		}
+		return handoverDoneMsg{inner: inner}
+	}
 }
 
 // handoverCmd is Bubble Tea's own exec.Cmd adapter (stdio set only when the

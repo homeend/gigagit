@@ -118,6 +118,107 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   says `Claude in wt-x — agent 2 of 5`; the footer hints read
   `[alt+a] agent` / `[alt+t] terminal`. (Reverses the 2026-10-06 ring with
   a return point.)
+## gg-overview: a name for presenting a result in gg
+
+### Added
+
+- **gg-overview skill.** Notes on the lines plus an overview tour now have
+  a name: tell an agent "use gg-overview to visualise the result" (or type
+  `/gg-overview [what to present]`) and it finishes its edits, adds notes on
+  the exact lines, writes the overview with anchors in explaining order and
+  replies with the overview's id and a short summary instead of a long chat
+  answer. With no gg running in that worktree it tells you so and starts
+  `gg web --open` itself (detached); it never starts the TUI. A worker
+  agent's gg-overview is its final report. Installed by `gg init` beside the
+  other skills; `gg skill path gg-overview` prints it.
+
+### Changed
+
+- **The delegate skill is now gg-delegate** — gg's own skills carry the
+  `gg-` prefix. Type `/gg-delegate <task>`; the worker kickoff line points
+  at `gg skill path gg-delegate` (`gg skill path delegate` still answers).
+  `gg init --update` removes the copy installed
+  under the old name — the `delegate/` skill folder, the `.mdc` file or the
+  block in a shared AGENTS.md — but only one gg wrote (it carries gg's
+  marker); a `delegate` skill of your own stays.
+
+## Pull requests tab marks a local review
+
+### Added
+
+- **A pull request with a local review now says so in the TUI's Pull
+  requests tab.** Its status cell starts with `✎` — the Commits list's
+  review mark — when an AI review was saved on the PR or notes were written
+  in its diff (gg keeps both locally; a sent note keeps the mark). The mark follows the
+  PR by number whatever its base's spelling, shows on merged and closed rows
+  too, and appears in the `A` search results as well
+  (`NoteCounts.PRReviewed`).
+- **gg web's Pull requests list carries the same `✎`**, in the accent
+  colour, before the verdict — in the list and the search results. It
+  arrives with the note counts (`/api/notes/counts` → `pr_reviewed`), so a
+  note written anywhere (the TUI, the CLI, an agent) marks the row live,
+  without a reload.
+
+## Web dialogs: buttons on Start agent, a wider GitHub send confirm
+
+### Fixed
+
+- **gg web's Start agent dialog needed the keyboard to finish.** Every step
+  now has buttons: the name step **start** and **back**, the approval
+  **run** and **back** (cancel when there is only one agent), the agent
+  list and the detecting wait **cancel**. A button does exactly what its
+  key does.
+- **The GitHub send confirm scrolled sideways on a long file path.** The
+  box was capped at 560px; it now grows with the window (up to 1200px,
+  never past the viewport) and wraps whatever still does not fit, so an
+  item's path and its first line read without a horizontal scrollbar.
+
+## Mouse after a terminal handover
+
+### Fixed
+
+- **The mouse went dead for the rest of the session after the first editor,
+  `ctrl+o` subshell, "Run shell command…", terminal-mode external tool or
+  AI agent, tool-config edit or template edit.** Clicks on the tabs, rows
+  and the `.` menu and the wheel all stopped — the terminal, not gg,
+  dropped them: Bubble Tea's terminal release switches mouse tracking off
+  and its restore brings back the alt screen and bracketed paste but never
+  the mouse. Every handover now re-enables mouse tracking the moment the
+  TUI is back (`handoverDoneMsg` in `internal/tui/autowrap.go`, answered
+  at the top of `Update`). Proven under tmux: the pane's mouse flags drop
+  during the child and are back once it exits.
+## Conflict tools: long pasted values fit the window
+
+### Fixed
+
+- **A stack trace pasted into a conflict tool's `<user:…>` value no longer
+  draws the tool-inputs box or the approval box past the screen.** The
+  inputs box windows its fields like the text templates' fill step (↑/↓ and
+  PgUp/PgDn walk the value). The approval box shows the command in a pane
+  that ↑/↓ and PgUp/PgDn scroll, with its shown range on the rule; the
+  approval note now wraps instead of being cut.
+
+## Text template token help
+
+### Added
+
+- **`ctrl+d` on the text-template form (`alt+x` → `n`/`e`) opens a token
+  cheat sheet**, like the branch-prefix form's: every token with what it
+  becomes, `<branch>`, the rule that any other `<…>` stays as written, the
+  date-format verbs and live examples. The form's key hints advertise it.
+
+## Text templates: long pasted values fit the window
+
+### Fixed
+
+- **A stack trace pasted into a text template's variable (alt+x) no longer
+  draws the window past the screen.** The focused field shows a window that
+  follows its cursor, the other fields keep a line and a scroll marker, and
+  ↑/↓ and PgUp/PgDn walk the pasted lines (the hints say so once a value has
+  more than one line).
+- A tab in an editable field is drawn as one space: it was drawn four cells
+  wide while the field counted one, so every row of a tab-indented paste was
+  cut at the window's edge. The value keeps its tabs.
 
 ## Pull request follow-ups 5
 

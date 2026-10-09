@@ -329,6 +329,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #prs-list li.prdim, #pr-search-list li.prdim { color: var(--dim); }
 #prs-list li .prnum, #pr-search-list li .prnum { color: var(--dim); padding-right: 6px; }
 #prs-list li .prmark, #pr-search-list li .prmark { padding-right: 4px; }
+#prs-list li .prlocal, #pr-search-list li .prlocal { padding-right: 4px; color: var(--accent); }
 #prs-list li .prmark.approved, #pr-search-list li .prmark.approved { color: var(--lane2); }
 #prs-list li .prmark.changes_requested, #pr-search-list li .prmark.changes_requested { color: var(--lane7); }
 #prs-list li .prword, #pr-search-list li .prword { color: var(--dim); font-size: 11px; padding-right: 6px; }
@@ -420,7 +421,11 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #modal-prompt .sc-note { color: var(--dim); margin: 4px 0; }
 #modal-prompt .sc-label { color: var(--dim); margin: 8px 0 2px; }
 #modal-prompt .sc-body { max-height: 25vh; overflow: auto; white-space: pre-wrap; margin: 0; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; font: inherit; }
-#modal-prompt .sc-items, #modal-prompt .sc-skipped { max-height: 30vh; overflow: auto; margin: 0; padding-left: 4px; list-style: none; white-space: normal; }
+#modal-prompt .sc-items, #modal-prompt .sc-skipped { max-height: 30vh; overflow-y: auto; overflow-x: hidden; margin: 0; padding-left: 4px; list-style: none; white-space: normal; overflow-wrap: anywhere; }
+/* The send confirm grows with the viewport so a long path fits on its row;
+   past that it wraps — never a sideways scrollbar. */
+#modal-box.wide { width: max-content; max-width: min(1200px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; box-sizing: border-box; }
+#modal-box.wide .sc-body { overflow-wrap: anywhere; }
 #modal-prompt .sc-why, #modal-prompt .sc-more { color: var(--dim); }
 #modal-options { display: flex; gap: 10px; justify-content: flex-end; }
 #modal-options button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
@@ -1832,8 +1837,10 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #sessstart-body li .detail { color: var(--dim); margin-left: 2ch; }
 #sessstart-body .rcmd { margin: 6px 12px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
 #sessstart-body .rnote { margin: 6px 12px; color: var(--dim); }
-#sessstart-body button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; margin: 4px 12px 8px; }
-#sessstart-body button:hover { border-color: var(--accent); }
+#sessstart-body .sbtns { display: flex; gap: 8px; justify-content: flex-end; margin: 6px 12px 8px; }
+#sessstart-body button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
+#sessstart-body button.primary { border-color: var(--accent); }
+#sessstart-body button:hover { border-color: var(--accent); background: var(--sel); }
 #sessstart-name { display: block; box-sizing: border-box; width: calc(100% - 24px); margin: 4px 12px 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 6px 8px; font: inherit; outline: none; }
 #sessstart-name:focus { border-color: var(--accent); }
 #foot .cwarn { margin-left: auto; color: #e0c06c; }

@@ -1,8 +1,9 @@
 package cli
 
-// `gg skill path [review|using-gg]` materialises an embedded skill in the user
-// cache dir and prints its absolute path — so an agent can read gg's skill
-// without `gg init` ever having run in this repository.
+// `gg skill path [review|using-gg|gg-delegate|gg-overview]` materialises an
+// embedded skill in the user cache dir and prints its absolute path — so an
+// agent can read gg's skill without `gg init` ever having run in this
+// repository.
 
 import (
 	"errors"
@@ -23,14 +24,15 @@ var SkillCacheDir string
 // skillUsage is what every caller mistake — and -h/--help — prints. It names
 // the default and the cache's refresh rule, because both decide whether an
 // agent gets the skill this binary carries or a stale one.
-const skillUsage = `usage: gg skill path [review|using-gg|delegate]
+const skillUsage = `usage: gg skill path [review|using-gg|gg-delegate|gg-overview]
 
 Writes the embedded skill under the user cache dir and prints its absolute
 path. The default is review (reviewing-with-gg); using-gg is the git CLI
-skill. A cached copy whose marker names a different version is rewritten to
+skill, gg-delegate the worker-agent playbook, gg-overview how to present a
+result in gg. A cached copy whose marker names a different version is rewritten to
 this binary's version, so the path always holds the current skill.`
 
-// cmdSkill implements `gg skill path [review|using-gg]`.
+// cmdSkill implements `gg skill path [review|using-gg|gg-delegate|gg-overview]`.
 func cmdSkill(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] != "path" {
 		fmt.Fprintln(stderr, skillUsage)
@@ -61,10 +63,12 @@ func cmdSkill(args []string, stdout, stderr io.Writer) int {
 		sk = agentskill.ReviewingWithGG
 	case "using-gg", "using":
 		sk = agentskill.UsingGG
-	case "delegate":
-		sk = agentskill.Delegate
+	case "gg-delegate", "delegate": // delegate: the name before the gg- prefix
+		sk = agentskill.GGDelegate
+	case "gg-overview":
+		sk = agentskill.GGOverview
 	default:
-		fmt.Fprintf(stderr, "skill: unknown skill %q (use review, using-gg or delegate)\n", name)
+		fmt.Fprintf(stderr, "skill: unknown skill %q (use review, using-gg, gg-delegate or gg-overview)\n", name)
 		fmt.Fprintln(stderr, skillUsage)
 		return 2
 	}

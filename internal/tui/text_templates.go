@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -357,6 +358,9 @@ func (v *textTemplatesView) onRendered(msg textTemplateRenderedMsg) {
 }
 
 func (v *textTemplatesView) updateFill(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if v.fill.scrollKey(msg, v.fillRoom(m)-1) {
+		return m, nil
+	}
 	done, cancel := v.fill.handleKey(msg)
 	switch {
 	case cancel:
@@ -442,16 +446,32 @@ func ttRoom(m Model, chrome int) int {
 	return termH - chrome - st().modalStyle.GetVerticalFrameSize() - 2
 }
 
+// fillHints are the fill step's key hints: ↑/↓ shows up once the focused
+// value has lines to walk.
+func (v *textTemplatesView) fillHints(textW int) []string {
+	if v.fill.multiLine() {
+		return ttHints(i18n.T("[enter/tab] next  [↑/↓] scroll  [esc] back"), textW)
+	}
+	return ttHints(i18n.T("[enter/tab] next  [esc] back"), textW)
+}
+
+// fillRoom is how many rows the fill step's fields get: what the terminal
+// leaves under the title + blank and blank + hints, 16 unless maximized.
+func (v *textTemplatesView) fillRoom(m Model) int {
+	g := v.geometry(m)
+	room := max(1, ttRoom(m, 2+1+len(v.fillHints(g.textW))))
+	if !v.maximized {
+		room = min(room, 16)
+	}
+	return room
+}
+
 func (v *textTemplatesView) fillBox(m Model) string {
 	g := v.geometry(m)
-	hints := ttHints(i18n.T("[enter/tab] next  [esc] back"), g.textW)
-	fields := v.fill.view(g.textW)
-	// title + blank, blank + hints. More fields than rows: the shown ones
-	// follow the focused field (the title carries its number).
-	if room := max(1, ttRoom(m, 2+1+len(hints))); len(fields) > room {
-		top := max(0, min(v.fill.idx-room/2, len(fields)-room))
-		fields = fields[top : top+room]
-	}
+	hints := v.fillHints(g.textW)
+	// More rows than room: the shown ones follow the focused field (the
+	// title carries its number) and a long value is windowed to its cursor.
+	fields := v.fill.viewWindow(g.textW, v.fillRoom(m))
 	// The step's position must stay readable: a title too long for the line
 	// is cut to what the rest leaves, and shown whole on the bottom bar.
 	title, at, n := v.selTitle(), v.fill.idx+1, len(v.fill.labels)
@@ -561,6 +581,8 @@ func (v *textTemplatesView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 	case tea.KeyDown, tea.KeyTab:
 		v.field = 1
 		return m, nil
+	case tea.KeyCtrlD:
+		return m.pushLayer(newContentPopup(textTemplateTokensHelpTitle(), textTemplateTokensHelp(clock.Now()))), nil
 	case tea.KeyEnter:
 		title := strings.TrimSpace(v.fTitle.Value())
 		// The title alone: a placeholder text keeps the text checks quiet.
@@ -633,10 +655,10 @@ func (v *textTemplatesView) formBox(m Model) string {
 		scopeVal = i18n.T("this repo only")
 	}
 	scopeLine := scopeCur + i18n.T("scope: ") + scopeVal
-	hint := i18n.T("[↑/↓] field  [←/→] scope  [enter] edit text in $EDITOR  [esc] back")
+	hint := i18n.T("[↑/↓] field  [←/→] scope  [enter] edit text in $EDITOR  [ctrl+d] tokens  [esc] back")
 	if v.editID != "" {
 		scopeLine = st().dim.Render(scopeLine)
-		hint = i18n.T("[↑/↓] field  [enter] edit text in $EDITOR  [esc] back")
+		hint = i18n.T("[↑/↓] field  [enter] edit text in $EDITOR  [ctrl+d] tokens  [esc] back")
 	}
 	parts := []string{title, "", viewField(cur+i18n.T("title: "), v.fTitle, v.field == 0, g.textW), scopeLine}
 	if v.formErr != "" {

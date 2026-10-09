@@ -242,7 +242,7 @@ func TestPRSearchFits(t *testing.T) {
 func TestPRRowsForMatchesTheTab(t *testing.T) {
 	t.Parallel()
 	m := prModel(t)
-	if got, want := strings.Join(prRowsFor(m.prs), "\n"), strings.Join(m.prRows(), "\n"); got != want {
+	if got, want := strings.Join(prRowsFor(m.prs, m.noteCounts.PRReviewed()), "\n"), strings.Join(m.prRows(), "\n"); got != want {
 		t.Errorf("row painter drifted:\n%s\n--\n%s", got, want)
 	}
 }
