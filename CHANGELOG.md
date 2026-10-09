@@ -18,9 +18,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   send or a detect in flight and the notices dialog keep refusing.
 
 ### Changed
-- `alt+w` over a full-screen view (a diff, a history, a blame, a file
-  viewer) switches at once: the first-hit rule that only focuses the
-  Branches panel served nothing there, the panel being under the view.
+- `alt+w` moves to the next worktree on every press, whatever is on
+  screen — a diff, a history, the F window, a popup you are filling in, a
+  console (hidden on the way). The old first press, which only focused the
+  Branches panel, is gone; only an operation, a decision, a process or a
+  popup with work in flight still refuse.
 - The worktrees you look at share the repository's caches (commit diffs,
   blames, commit file lists, compare file sets, preview summaries): one
   budget per repository instead of one per worktree, and a commit's diff
@@ -186,11 +188,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   worktree and switch) runs in the worktree ON SCREEN and then makes the
   new one your own; and the hosted web page keeps following your own
   worktree — it never learns of a look.
-- `alt+w` is worktree mode. The first press with the keyboard elsewhere —
-  an agent or terminal console shown, another panel focused — hides the
-  console (the session keeps running), focuses the Branches panel (its
-  border shows it) and puts its cursor on the viewed worktree's branch;
-  nothing more. With Branches focused each press shows the next worktree
+- `alt+w` is worktree mode. Each press shows the next worktree
   in the Branches tab's order (its branch rows with a checkout, top to
   bottom under its sort — by date newest first unless changed; not the
   raw list), around again past the last — its files, branch, conflicts, remembered per worktree —

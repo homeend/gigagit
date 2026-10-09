@@ -173,13 +173,9 @@ func TestAltAAfterAltWStartsFromTheViewedWorktree(t *testing.T) {
 	if m.console == nil || m.console.id != idB || !m.console.focused {
 		t.Fatalf("alt+a: console=%+v, want B (the first below home)", m.console)
 	}
-	m = pressAlt(t, m, 'w') // first hit: hides B's console, Branches focused, still wtB
-	if m.viewed != model.KeyOf(wtB) || m.console != nil || m.focus != panelBranches {
-		t.Fatalf("alt+w: viewed=%q console=%v focus=%v", m.viewed, m.console != nil, m.focus)
-	}
-	m = pressAlt(t, m, 'w') // moves on to wtC
-	if m.viewed != model.KeyOf(wtC) {
-		t.Fatalf("second alt+w: viewed=%q, want wtC", m.viewed)
+	m = pressAlt(t, m, 'w') // hides B's console and moves on to wtC in one press
+	if m.viewed != model.KeyOf(wtC) || m.console != nil || m.focus != panelBranches {
+		t.Fatalf("alt+w: viewed=%q console=%v focus=%v, want wtC, hidden, Branches", m.viewed, m.console != nil, m.focus)
 	}
 	m = pressAlt(t, m, 'a')
 	if m.console == nil || m.console.id != idC || !m.console.focused {
