@@ -18,6 +18,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   send or a detect in flight and the notices dialog keep refusing.
 
 ### Changed
+- `alt+a` / `alt+t` into an agent of another worktree size the console by
+  THAT worktree: a full-screen diff left behind in the one you came from
+  no longer maximises it (the diff waits where it was opened).
 - `alt+w` moves to the next worktree on every press, whatever is on
   screen — a diff, a history, the F window, a popup you are filling in, a
   console (hidden on the way). The old first press, which only focused the

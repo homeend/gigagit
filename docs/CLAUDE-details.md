@@ -6334,7 +6334,11 @@ the stack for one non-key dispatch and re-parks what is still there
 (`windowState.reparkConsole`); if the handler moved the panels, the
 layers went into the leaving slot's pile with its group and are re-parked
 under THAT slot's copy. `forgetConsoleReturn` (a repo switch) clears the
-live copy. `loadView` under a SHOWN console (`displaceUnderConsole`: a
+live copy. A show that SWAPS to the console's worktree resets `ret.full`
+to the pin before the swap (the captured full-screen view waits in the
+worktree being left) and `displaceUnderConsole` raises it again if the
+arriving worktree has one; a refused swap restores the captured value.
+`loadView` under a SHOWN console (`displaceUnderConsole`: a
 console opened into a worktree whose parked windows wait on its pile, a
 queued return landing while a console shows) moves the arriving pile, stash
 list and preview under the console's copy — a focused console takes every
