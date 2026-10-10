@@ -22,6 +22,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## alt+w under a console: hide first, then move
 
 ### Changed
+- `alt+a` / `alt+t` (and the scoped `alt+A` / `alt+T`): the Branches tab
+  now **shows a dimmed cursor on the session's row** while the console has
+  the keyboard — the walk always put the cursor there, but an unfocused
+  panel drew none, so you could not see which agent or terminal you were
+  on. Only the active left tab under a bound console draws it; every other
+  unfocused panel stays cursorless.
 - `alt+w` pressed while an agent or terminal console is shown now only
   **hides the console** and shows the worktree it was looking at — its
   panels, the Branches cursor on its branch, the status line saying

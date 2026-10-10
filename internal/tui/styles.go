@@ -24,6 +24,7 @@ type styles struct {
 	focusedPanel lipgloss.Style
 	bluredPanel  lipgloss.Style
 	selectedRow  lipgloss.Style
+	ghostRow     lipgloss.Style // the active left tab's cursor row while a bound console has the keyboard (dim, reversed)
 	modalStyle   lipgloss.Style
 	statusErr    lipgloss.Style // was statusErrStyle
 	errorText    lipgloss.Style // was errorStyle
@@ -135,6 +136,7 @@ func buildStyles(th theme.Theme) *styles {
 	s.focusedPanel = ns().Border(lipgloss.RoundedBorder()).BorderForeground(pick(th.FocusBorder, legacy.FocusBorder)).Padding(0, 1)
 	s.bluredPanel = ns().Border(lipgloss.RoundedBorder()).BorderForeground(dim).Padding(0, 1)
 	s.selectedRow = ns().Reverse(true)
+	s.ghostRow = ns().Foreground(dim).Reverse(true)
 	s.modalStyle = ns().Border(lipgloss.DoubleBorder()).BorderForeground(pick(th.ModalBorder, legacy.ModalBorder)).Padding(1, 2)
 	s.statusErr = ns().Bold(true).Foreground(pick(th.StatusErrFg, legacy.StatusErrFg)).Background(pick(th.ErrBg, legacy.ErrBg))
 	s.errorText = ns().Foreground(pick(th.ErrFg, legacy.ErrFg))

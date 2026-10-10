@@ -4215,7 +4215,11 @@ together and binds; alt+b unbinds like the step-out key or binds like
 enter); both are in `consolePassthrough`/`consoleFullPassthrough`.
 Every walk ends in `selectSessionRow(id)`: the Branches tab comes
 forward and its cursor lands on the session's sub-row (`branchEntry.sess`)
-without moving focus. `alt+w` under a shown console hides it and shows
+without moving focus — and `renderPanel` draws that cursor DIMMED
+(`ghostRow`, `> ` prefix) on the active left tab while a console is bound
+(`console.focused`): the focus is on the covered Commits column, so no
+panel would show one otherwise (user: "agent row should be selected",
+2026-10-10). `alt+w` under a shown console hides it and shows
 its worktree; the next press moves to the next worktree. The
 emergency unlock is `alt+U` (was `alt+A`).
 
