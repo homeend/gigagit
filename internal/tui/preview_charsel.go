@@ -12,8 +12,8 @@ import (
 // a tab; a control rune the preview never shows is not in the row), dead on
 // a placeholder or an image row. An overview document is laid out by gg
 // itself: its rows carry the layout's wrap joins and hang indents
-// (contentLine.cont/hard/lead), and the mode never switches its view (a
-// switch re-lays it). Note boxes under lines are not lines: never rows,
+// (contentLine.cont/hard/lead); its cut view switches to scroll as a file's
+// does, re-laid at once (layOut) before the rows are taken. Note boxes under lines are not lines: never rows,
 // never copied. The rows reuse the content popup's csRows (the Summary
 // popup's display-row layout is its own adapter, content_popup.go).
 
@@ -102,6 +102,12 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		if msg.String() != "v" || p.search.typing {
 			return m, nil, false
 		}
+		if p.mode == modeCutoff { // a cut line hides the cursor (and reads "…"): scroll while on
+			p.csMode, p.csSwapped, p.mode, p.hscroll = p.mode, true, modeScroll, 0
+			if d := m.previewDoc(p); d != nil && d.ov != nil {
+				d.layOut(rows, d.ov.w) // an overview lays itself out: re-lay it for the view now
+			}
+		}
 		p.csRows = make([]charRow, len(p.lines))
 		for i, l := range p.lines {
 			if !l.src || l.cells != nil {
@@ -111,18 +117,12 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 			p.csRows[i] = charRow{text: previewCharText(l), wraps: l.cont, hard: l.cont && l.hard}
 		}
 		if !p.cs.enter(p.csRows, pos{row: p.cur}) {
+			p.previewCharLeave() // the view back
 			m.statusMsg = i18n.T("▸ nothing to select")
 			return m, nil, true
 		}
 		p.lsel.clear() // one selection kind at a time
 		p.csLines = p.lines
-		overview := false
-		if d := m.previewDoc(p); d != nil && d.ov != nil {
-			overview = true
-		}
-		if p.mode == modeCutoff && !overview { // a cut line hides the cursor: scroll while on
-			p.csMode, p.csSwapped, p.mode, p.hscroll = p.mode, true, modeScroll, 0
-		}
 		p.cur = p.cs.cur.row
 		p.ensureCursorVisible(rows)
 		return m, nil, true

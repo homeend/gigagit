@@ -229,3 +229,36 @@ func TestViewerCharSelLeavesWhenTheDocumentIsDetached(t *testing.T) {
 		t.Fatal("a detached document must leave the mode")
 	}
 }
+
+// An overview in the cut view: a cut row reads "prefix…", so the mode
+// switches the document to scroll (re-laying it) before it starts — the
+// copy is the whole line, never the ellipsis — and leaving puts cut back.
+func TestViewerCharSelOverviewCutViewScrollsWhileOn(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("z", 170)
+	m, d := shownOverview(t, "# Tour\n\n```\n"+long+"\n```\n")
+	p := d.p
+	for p.mode != modeCutoff {
+		m = feedPreview(m, "ctrl+w")
+		_ = m.View()
+	}
+	var got string
+	m = captureClip(m, &got)
+	m = feedPreview(m, "v")
+	if !p.cs.on || p.mode != modeScroll {
+		t.Fatalf("v in the cut view: on=%v mode %v, want scroll", p.cs.on, p.mode)
+	}
+	for i := 0; i < len(p.lines) && !strings.Contains(p.lines[p.cs.cur.row].raw, "z"); i++ {
+		m = feedPreview(m, "j")
+	}
+	m = feedPreview(m, "space", "end")
+	u, cmd := m.Update(keyMsg("enter"))
+	m = drainCmds(t, u.(Model), cmd)
+	if strings.TrimSpace(got) != long {
+		t.Fatalf("copied %q, want the whole line", got)
+	}
+	_ = m.View()
+	if p.mode != modeCutoff {
+		t.Fatalf("after the copy the view is %v, want cut back", p.mode)
+	}
+}
