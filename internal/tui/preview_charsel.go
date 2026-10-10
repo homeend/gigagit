@@ -36,9 +36,17 @@ func previewCharText(l contentLine) []rune {
 // is dead too: the selection stays inside the file it started in (headers,
 // rules and placeholders are no source lines).
 func previewCharRows(p *contentPopup, s *fileStream, file int) []charRow {
+	lo, hi := 0, len(p.lines) // the live span: a stack's file body, one range check per row
+	if s != nil {
+		lo, hi = 0, 0
+		if file >= 0 && file < len(s.files) && s.files[file].shows() {
+			lo = s.files[file].body
+			hi = min(lo+len(s.files[file].lines), len(p.lines))
+		}
+	}
 	rows := make([]charRow, len(p.lines))
 	for i, l := range p.lines {
-		if !l.src || l.cells != nil || s != nil && s.fileAt(i) != file {
+		if !l.src || l.cells != nil || i < lo || i >= hi {
 			rows[i] = charRow{dead: true}
 			continue
 		}

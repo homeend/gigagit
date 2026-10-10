@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -201,5 +202,31 @@ func TestSplitActivePreviewWidth(t *testing.T) {
 	_, inner := sv.geomOf(m, sv.left)
 	if want := max(inner-sv.left.doc().gutterW(), 1); w != want {
 		t.Fatalf("width %d, want %d", w, want)
+	}
+}
+
+// The mode's rows over a big stack cost one pass over the stream, not a
+// file lookup per line (a monorepo review: every file landing rebuilds
+// them). Measured against the same lines in ONE file — the same pass with
+// no lookup to multiply — so the bound holds on a loaded machine.
+func TestStackCharRowsAreLinearInTheStream(t *testing.T) {
+	t.Parallel()
+	rowsOf := func(files, lines, at int) ([]charRow, *fileStream, time.Duration) {
+		s := &fileStream{}
+		for range files {
+			s.files = append(s.files, streamFile{path: "f.go", lines: srcLines(lines), loaded: true})
+		}
+		p := &contentPopup{lines: s.build()}
+		t0 := time.Now()
+		rows := previewCharRows(p, s, at)
+		return rows, s, time.Since(t0)
+	}
+	_, _, one := rowsOf(1, 100000, -1) // every row dead: the bare pass
+	rows, s, many := rowsOf(1000, 100, 500)
+	if live := s.files[500].body; rows[live].dead || !rows[live-1].dead || !rows[s.files[501].body].dead {
+		t.Fatal("only file 500's lines are live")
+	}
+	if many > 10*one+5*time.Millisecond {
+		t.Fatalf("1000 files took %v, the same lines in one file %v: not one pass", many, one)
 	}
 }
