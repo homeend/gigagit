@@ -71,6 +71,9 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	if nm, cmd, ok := m.previewCharKey(msg); ok { // the copy mode is modal: first
+		return nm, cmd
+	}
 	if nm, cmd, ok := m.previewSelectKey(msg); ok {
 		return nm, cmd
 	}

@@ -574,11 +574,19 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 		}
 		// The character selection's stripe and cursor ride the hit channel
 		// (sel spans), on the cursor side only.
+		// An empty row has no rune to paint them on: it gets one blank cell
+		// (vim's visual mode shows an empty line the same way).
 		if sp := v.charSpansOn(dr.line); sp != nil {
 			if v.onOld {
 				lh = append(lh, sp...)
+				if sideText(r, true) == "" { // a CRLF blank line is "\r": it draws empty too
+					r.Left, dr.left = " ", roomForCursor(dr.left)
+				}
 			} else {
 				rh = append(rh, sp...)
+				if sideText(r, false) == "" {
+					r.Right, dr.right = " ", roomForCursor(dr.right)
+				}
 			}
 		}
 		switch v.long {

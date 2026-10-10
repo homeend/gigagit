@@ -155,6 +155,9 @@ func (m Model) docShown(d *openFile) bool {
 // detachDoc takes d out of whatever frame shows it, so it can be shown in
 // another: a document is in one frame at a time.
 func (m Model) detachDoc(d *openFile) Model {
+	if d.p.cs.on {
+		d.p.previewCharLeave() // put aside: it never comes back already in the copy mode
+	}
 	if m.filesPreview == d {
 		m.filesPreview = nil
 		m = m.focusTree()

@@ -83,7 +83,7 @@ func overviewLines(text string, width int, mode dispMode) ([]contentLine, []anch
 			a.spans = append(a.spans, anchorSpan{line: i, from: k, to: j})
 			k = j
 		}
-		lines[i] = contentLine{text: row.text, raw: row.text, src: true, cls: cls, noWrap: true}
+		lines[i] = contentLine{text: row.text, raw: row.text, src: true, cls: cls, noWrap: true, cont: row.cont, hard: row.hard, lead: row.lead}
 	}
 	return lines, anchors
 }
@@ -111,6 +111,11 @@ func overviewView(rows []mdRow, width int, mode dispMode) []mdRow {
 				piece = mdRow{text: string([]rune(rest.text)[:1]), cls: rest.cls[:1]}
 			}
 			piece.pre = row.pre
+			if rest.text != row.text { // a piece after the first continues it mid-word
+				piece.cont, piece.hard = true, true
+			} else {
+				piece.cont, piece.hard, piece.lead = row.cont, row.hard, row.lead
+			}
 			out = append(out, piece)
 			n := len([]rune(piece.text))
 			rest = mdRow{text: string([]rune(rest.text)[n:]), cls: rest.cls[n:]}

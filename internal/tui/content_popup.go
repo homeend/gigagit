@@ -38,6 +38,13 @@ type contentLine struct {
 	// zero, which reads as "nothing to copy here".
 	raw string
 	src bool
+	// cont / hard / lead are an OVERVIEW's layout facts (overviewLines, from
+	// its mdRows) for the character selection: cont marks a wrap continuation
+	// (a copy joins it with one space, or with nothing when hard — the break
+	// split a word), lead the leading runes that are layout (a list item's
+	// hang indent), never copied. Zero everywhere else.
+	cont, hard bool
+	lead       int
 	// cells is an IMAGE row: text is one ▀ per cell and cells carry each
 	// cell's two colours (termimg); the renderer paints them with a row
 	// decorator. nil for every text row.
@@ -135,11 +142,21 @@ type contentPopup struct {
 	// with the mode — when the width changes (the rows re-wrap, so a
 	// position would name other runes). pageH is the pager height the last
 	// render used (pgup/pgdn, keeping the cursor on screen).
-	cs      textSel
-	csRows  []charRow
-	csSeg   []charSeg
-	csW     int
-	pageH   int
+	cs     textSel
+	csRows []charRow
+	csSeg  []charSeg
+	csW    int
+	pageH  int
+	// csMode is the display mode v found when it was not wrap: the mode lays
+	// the text out wrapped while it is on (a cut row would let the cursor walk
+	// past what the box shows) and puts csMode back when it ends. csSwapped
+	// says whether there is one to put back.
+	csMode    dispMode
+	csSwapped bool
+	// csLines is the FILE PREVIEW's lines the character selection was built
+	// over (preview_charsel.go): a load or a re-layout replaces p.lines, and
+	// the mode — whose rows index the old ones — leaves.
+	csLines []contentLine
 	mode    dispMode // text display mode; z cycles
 	hscroll int      // modeScroll horizontal offset
 	footer  string   // optional line above the hint (e.g. commit author · date); "" = none
@@ -474,8 +491,14 @@ func (p *contentPopup) box(m Model) string {
 	}
 	if p.cs.on && p.csW != bodyW {
 		p.cs.leave() // the rows re-wrapped (a resize, ctrl+t): positions mean other runes
+		p.charLeft()
 	}
 	if p.cs.on {
+		for k, seg := range p.csSeg { // an empty line the mode paints on gets its blank cell
+			if len(p.csRows[k].text) == 0 && seg.line < len(wr) && p.cs.touches(k) {
+				wr[seg.line].text += charRoom(p.cs, k, "") // the line is its lead alone
+			}
+		}
 		for i := range wr {
 			wr[i].emph = p.charEmphFor(i, len([]rune(wr[i].text)))
 		}
@@ -716,7 +739,9 @@ func (p *contentPopup) layoutWidths(m Model) (inner, textW, margin, gutter, body
 }
 
 // charLead is the layout runes a non-block row's text sits behind ("  ", or
-// "> " on the cursor row): the selection never covers them.
+// "> " on the cursor row): the selection never covers them. A wrapped row's
+// hang indent (a list item's "10. ") is not part of it: wrapSegOffsets
+// measures that per segment.
 func (p *contentPopup) charLead() int {
 	if p.block {
 		return 0
@@ -773,11 +798,39 @@ func (p *contentPopup) charPage() int       { return max(p.pageH, 1) }
 // charEnter turns the mode on at display row `at` (the pager's top line);
 // false when there is nothing to select.
 func (p *contentPopup) charEnter(m Model, at int) bool {
+	swap := p.mode != modeWrap
+	if swap { // one display line per line until now: wrap, and keep the place
+		p.csMode, p.csSwapped, p.mode, p.hscroll = p.mode, true, modeWrap, 0
+	}
 	p.charLayout(m)
+	if swap {
+		for k, seg := range p.csSeg {
+			if seg.line >= at {
+				at, p.sel = k, k
+				break
+			}
+		}
+	}
 	if p.pageH == 0 { // no render yet: the page capacity until the box measures itself
 		p.pageH = m.contentPageRows()
 	}
-	return p.cs.enter(p.csRows, pos{row: at})
+	if !p.cs.enter(p.csRows, pos{row: at}) {
+		p.charLeft()
+		return false
+	}
+	return true
+}
+
+// charLeft is the mode ended: the display mode v swapped away comes back,
+// the pager top mapped from its wrapped row to that row's line.
+func (p *contentPopup) charLeft() {
+	if !p.csSwapped {
+		return
+	}
+	if p.sel >= 0 && p.sel < len(p.csSeg) {
+		p.sel = p.csSeg[p.sel].line
+	}
+	p.mode, p.csSwapped = p.csMode, false
 }
 
 // charFollow keeps the cursor's row on screen: the pager's top (sel) moves
@@ -833,6 +886,8 @@ func (p *contentPopup) charKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 	if p.cs.on {
 		p.charFollow() // the mode gone, the pager stays where the reader was
+	} else {
+		p.charLeft()
 	}
 	if res.notice != "" {
 		m.statusMsg = res.notice

@@ -236,7 +236,13 @@ func (m Model) toggleFullTree() (Model, tea.Cmd) {
 
 // focusTree / focusRight move focus within an open files view. focusRight is
 // inert in compare and shelf modes (no commit-list side to focus).
-func (m Model) focusTree() Model { m.filesTreeFocused, m.previewFull = true, false; return m }
+func (m Model) focusTree() Model {
+	m.filesTreeFocused, m.previewFull = true, false
+	if m.filesPreview != nil && m.filesPreview.p.cs.on {
+		m.filesPreview.p.previewCharLeave() // the copy mode goes with the keys
+	}
+	return m
+}
 func (m Model) focusRight() Model {
 	if !m.inCompareMode() && !m.inShelfFiles() {
 		m.filesTreeFocused = false
@@ -910,6 +916,10 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// selection, then a committed query, then the preview's own esc.
 	// previewSearchKey covers the first and third in one call, so the selection
 	// hook runs first and declines while the search is typing.
+	// The character selection is MODAL: while it is on every key is its own.
+	if nm, cmd, handled := m.previewCharKey(msg); handled {
+		return nm, cmd
+	}
 	if nm, cmd, handled := m.previewSelectKey(msg); handled {
 		return nm, cmd
 	}

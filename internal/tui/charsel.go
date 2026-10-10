@@ -5,6 +5,7 @@ import (
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -375,6 +376,10 @@ func charSelKey(cs *textSel, host charHost, msg tea.KeyMsg) charSelResult {
 		}
 		res.copy = charSelText(rows, lo, hi)
 		res.count = cs.count(rows)
+		if res.copy == "" { // an empty row alone: say so and stay
+			res.notice = i18n.T("▸ the selection is empty — nothing to copy")
+			return res
+		}
 		cs.leave()
 	case "esc":
 		cs.esc()
@@ -399,14 +404,39 @@ func copiedCharsText(n int) string {
 	return i18n.T("Copied %d characters", n)
 }
 
+// touches reports whether the mode paints anything on row `row`: the cursor
+// sits on it or the fixed range covers it.
+func (s textSel) touches(row int) bool {
+	if !s.on {
+		return false
+	}
+	if s.cur.row == row {
+		return true
+	}
+	lo, hi, ok := s.bounds()
+	return ok && lo.row <= row && row <= hi.row
+}
+
+// charRoom is an empty row's text as one blank cell while the mode paints on
+// it: the cursor (or the stripe) needs a cell, as vim's visual mode shows an
+// empty line. Any other text is returned as is.
+func charRoom(cs textSel, row int, text string) string {
+	if text == "" && cs.touches(row) {
+		return " "
+	}
+	return text
+}
+
 // charSelEmph is the emphasis mask of row `row` (n runes): emphSel on the
 // covered runes; the cursor emphSelCur inside the stripe (a hole in it) and
 // emphCur outside it — the current-hit style, visible on its own in every
 // theme, where a hole in no stripe would be bold alone. nil when untouched.
+// An empty row (n 0) is the one blank cell its host gives it (charRoom).
 func charSelEmph(cs textSel, row, n int) []emphLevel {
 	if !cs.on {
 		return nil
 	}
+	n = max(n, 1)
 	var out []emphLevel
 	set := func(i int, l emphLevel) {
 		if i < 0 || i >= n {
@@ -476,4 +506,42 @@ func charSelSpans(cs textSel, row int) []hitSpan {
 		out = append(out, hitSpan{start: cs.cur.col, end: cs.cur.col + 1, sel: cs.covers(cs.cur.row, cs.cur.col), cur: true})
 	}
 	return out
+}
+
+// --- code hosts (diff, blame, the View-file preview): one row per source
+// line, painted on the sanitized display text --------------------------------
+
+// charSpansDisp is the selection on row `row` of SOURCE text as spans in the
+// sanitized display's rune space (dispCol): a tab's every cell is covered.
+func charSpansDisp(cs textSel, row int, text string) []hitSpan {
+	spans := charSelSpans(cs, row)
+	for i := range spans {
+		spans[i].start = dispCol(text, spans[i].start)
+		if spans[i].end < 1<<29 {
+			spans[i].end = dispCol(text, spans[i].end)
+		}
+	}
+	return spans
+}
+
+// charPanCells is the horizontal offset (display cells) that keeps source
+// column col of text inside a window `width` cells wide starting at off: off
+// itself when the cursor already shows, else the least move that shows it.
+// disp is the host's own display sanitizer (sanitizeLine's tab stops, or
+// the preview's sanitizeForDisplay).
+func charPanCells(text string, col, off, width int, disp func(string) string) int {
+	r := []rune(text)
+	col = min(max(col, 0), len(r))
+	before := lipgloss.Width(disp(string(r[:col])))
+	after := before + 1 // the cell past the end (an empty row's cursor)
+	if col < len(r) {
+		after = lipgloss.Width(disp(string(r[:col+1])))
+	}
+	switch {
+	case before < off:
+		off = before
+	case after > off+width:
+		off = after - width
+	}
+	return max(off, 0)
 }

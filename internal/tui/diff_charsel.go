@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // The diff view as a character-selection host (charsel.go): the rows are
@@ -37,11 +38,7 @@ func (v *diffView) charRows() []charRow {
 			}
 			out = append(out, charRow{dead: true})
 		case ln.isBody() && sidePresent(ln.Row, v.onOld):
-			if v.onOld {
-				out = append(out, charRow{text: []rune(ln.Row.Left)})
-			} else {
-				out = append(out, charRow{text: []rune(ln.Row.Right)})
-			}
+			out = append(out, charRow{text: []rune(sideText(ln.Row, v.onOld))})
 		default:
 			out = append(out, charRow{dead: true})
 		}
@@ -53,10 +50,15 @@ func (v *diffView) charPage() int { return max(v.csPage, 1) }
 
 // dispCol is the sanitized-cell rune index of source column col of text:
 // the same expansion sanitizeCell applies (a tab to the next 4-column stop,
-// a control rune to one cell, every other rune to one).
+// a control rune to one cell, every other rune to one). A column past the
+// text's end is one cell per rune it is past: the empty row's cursor cell.
 func dispCol(text string, col int) int {
 	idx, c := 0, 0
-	for i, r := range []rune(text) {
+	runes := []rune(text)
+	if col > len(runes) {
+		idx += col - len(runes)
+	}
+	for i, r := range runes {
 		if i >= col {
 			break
 		}
@@ -88,18 +90,17 @@ func (v *diffView) charSpansOn(li int) []hitSpan {
 	if !ln.isBody() || !sidePresent(ln.Row, v.onOld) {
 		return nil
 	}
-	text := ln.Row.Right
-	if v.onOld {
-		text = ln.Row.Left
+	return charSpansDisp(v.cs, li-lo, sideText(ln.Row, v.onOld))
+}
+
+// roomForCursor is an empty wrap segment as one blank cell: the cursor (or
+// the stripe) of the character selection needs a cell to paint on.
+func roomForCursor(seg cellSeg) cellSeg {
+	if len(seg.disp) > 0 {
+		return seg
 	}
-	spans := charSelSpans(v.cs, li-lo)
-	for i := range spans {
-		spans[i].start = dispCol(text, spans[i].start)
-		if spans[i].end < 1<<29 {
-			spans[i].end = dispCol(text, spans[i].end)
-		}
-	}
-	return spans
+	seg.disp, seg.emph, seg.cls = []rune{' '}, make([]emphLevel, 1), make([]syntax.Class, 1)
+	return seg
 }
 
 // proseCharRow is a rendered markdown row as the mode's row: its layout
@@ -172,7 +173,26 @@ func (m Model) diffCharEnter(v *diffView) bool {
 		v.csBase, _ = v.fileLineRange(v.csFile)
 	}
 	v.csPage = m.diffBodyRows()
-	return v.cs.enter(v.charRows(), pos{row: v.curLine - v.csBase})
+	if !v.cs.enter(v.charRows(), pos{row: v.curLine - v.csBase}) {
+		return false
+	}
+	if v.long == longTruncate { // a cut line hides the cursor: scroll while on
+		v.csLong, v.csSwapped, v.long, v.hOffset = v.long, true, longScroll, 0
+		v.relayout(v.width)
+	}
+	v.setCursorLine(v.csBase+v.cs.cur.row, m.diffBodyRows()) // a skipped row (a header): the line cursor lands with it
+	return true
+}
+
+// charEnded puts back the long-line mode the character selection swapped
+// away (truncate → scroll while on) once the mode is off; it reports whether
+// it did — the caller relays out.
+func (v *diffView) charEnded() bool {
+	if v.cs.on || !v.csSwapped {
+		return false
+	}
+	v.long, v.csSwapped, v.hOffset = v.csLong, false, 0
+	return true
 }
 
 // diffCharKey gives the character selection every key while it is on, and
@@ -204,6 +224,8 @@ func (m Model) diffCharKey(v *diffView, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	if v.cs.on {
 		v.setCursorLine(v.csBase+v.cs.cur.row, m.diffBodyRows()) // the view scrolls with the cursor
 		v.charPan(m)
+	} else if v.charEnded() {
+		v.relayout(v.width)
 	}
 	if res.notice != "" {
 		m.diffNotice = res.notice

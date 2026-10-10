@@ -19,6 +19,9 @@ func (m Model) activePreview() (p *contentPopup, rows, innerW int, ok bool) {
 	}
 	if fv, isViewer := m.topLayer().(*fileViewer); isViewer {
 		rows, innerW = fv.geom(m)
+		if fv.p.prose { // renderPreviewBox lays a prose document in the reading column
+			innerW, _ = readingColumn(innerW, m.readingWidth())
+		}
 		return fv.p, rows, max(innerW-fv.gutterW(), 1), true
 	}
 	if m.filesPreview != nil && !m.filesTreeFocused {

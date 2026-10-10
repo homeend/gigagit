@@ -109,12 +109,18 @@ type diffView struct {
 	// first line csBase — the model's row 0). csPage is the body height the
 	// last key saw (pgup/pgdn). Left with the line selection wherever the
 	// line indexes change meaning (rebuild, relayout, a reload).
-	cs      textSel
-	csBase  int
-	csFile  int
-	csPage  int
-	wrapArm wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
-	fileArm fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
+	cs     textSel
+	csBase int
+	csFile int
+	csPage int
+	// csLong is the long-line mode v found in truncate: a cut line would let
+	// the character cursor walk past what the pane shows, so the mode runs
+	// the view in scroll (the pane pans with the cursor) and puts csLong
+	// back when it ends (charEnded). csSwapped says there is one to put back.
+	csLong    longMode
+	csSwapped bool
+	wrapArm   wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
+	fileArm   fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
 	// noteVisited: a }/{ jump (or a file step's landing) has put the cursor on
 	// one of THIS file's notes. Until then a jump that finds nothing beyond the
 	// cursor falls back to the file's first/last note (see jumpNote) — a fresh
@@ -267,10 +273,14 @@ func (v *diffView) rebuildLines() {
 				v.cs, v.csBase = cs, lo
 			}
 		}
+		if v.charEnded() {
+			v.relayout(v.width)
+		}
 		return
 	}
 	v.lsel.clear() // …and so do the line indexes it holds
 	v.cs.leave()
+	v.charEnded() // before the relayout below: the reader's long-line mode back
 	if v.partial {
 		lines, blocks := textdiff.Collapse(v.full, v.fullBlocks, diffContext)
 		v.lines, v.blocks = wrapLines(lines), blocks

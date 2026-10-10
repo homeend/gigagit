@@ -306,6 +306,8 @@ func (m Model) footerOverride() (string, bool) {
 		switch {
 		case m.wtFiles.typing:
 			return i18n.T("filter: fuzzy, 'exact, ^prefix, suffix$, !not  [↑↓] move  [enter] keep  [esc] clear"), true
+		case m.filesPreview != nil && !m.filesTreeFocused && m.filesPreview.p.cs.on:
+			return charSelHint(m.filesPreview.p.cs, m.filesPreview.p.csRows), true
 		case m.filesPreview != nil && !m.filesTreeFocused && m.filesPreview.p.lsel.on:
 			return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 		case m.filesPreview != nil && !m.filesTreeFocused:
@@ -315,6 +317,9 @@ func (m Model) footerOverride() (string, bool) {
 	}
 	if m.filesView != nil {
 		if m.filesPreview != nil && !m.filesTreeFocused {
+			if m.filesPreview.p.cs.on {
+				return charSelHint(m.filesPreview.p.cs, m.filesPreview.p.csRows), true
+			}
 			if m.filesPreview.p.lsel.on {
 				return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 			}

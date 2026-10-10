@@ -27,12 +27,22 @@ type blameView struct {
 	sel    int            // line cursor (index into lines)
 	// lsel is the line selection over lines (space/space/enter, spec §4.7).
 	// Cleared by blameMsg: a reload replaces the very lines it indexes.
-	lsel    lineSel
-	mode    dispMode // text display mode; z cycles (applies to the whole gutter│code row)
-	hscroll int      // modeScroll horizontal offset
-	loading bool
-	err     error
-	tag     string // gates stale loads
+	lsel lineSel
+	// cs is the character selection (charsel.go) over the lines' source text
+	// (blame_charsel.go): csRows are its rows, built on v (a reload leaves the
+	// mode), csPage the body height, csMode the display mode v swapped away
+	// from (cutoff runs as scroll while the mode is on; csSwapped = one to
+	// put back).
+	cs        textSel
+	csRows    []charRow
+	csPage    int
+	csMode    dispMode
+	csSwapped bool
+	mode      dispMode // text display mode; z cycles (applies to the whole gutter│code row)
+	hscroll   int      // modeScroll horizontal offset
+	loading   bool
+	err       error
+	tag       string // gates stale loads
 	// search is the in-view text search (spec §4.3); san caches every line's
 	// display text (what the window paints) so a keystroke does not
 	// re-sanitize a 40k-line file, and searchOrig is what esc restores.
@@ -273,6 +283,12 @@ func (b *blameView) render(m Model, _ string) string {
 	// Right-aligned badges, like the diff's: the age-filter badge (-7d, +30d,
 	// +1d -7d) and the search badge share the slot as "-7d · /q  1/3".
 	bd := b.search.badge()
+	if m.statusMsg != "" && !m.running && m.statusMsg != m.stickyMsg {
+		// Blame covers the status bar: a message for the user (a copy, the
+		// copy mode's notice) sits on the header until the next key clears
+		// it — the file viewer's title-line rule.
+		bd = strings.TrimSpace(m.statusMsg + "  " + bd)
+	}
 	if b.recent.on {
 		rb := b.recent.f.String()
 		if bd != "" {
@@ -293,6 +309,9 @@ func (b *blameView) render(m Model, _ string) string {
 		// The selection variant replaces the lot, so the way out (esc) is
 		// always on screen.
 		hint = truncate(i18n.T("[space] mark end  [enter] copy  [esc] unmark  [↑↓] extend"), w)
+	}
+	if b.cs.on {
+		hint = truncate(charSelHint(b.cs, b.csRows), w)
 	}
 
 	gw := blameGutterW
@@ -356,14 +375,19 @@ func (b *blameView) render(m Model, _ string) string {
 			}
 		}
 		if b.tok == nil { // no lexer / colouring off: the plain (pre-syntax) path
-			wr[i-lo] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), emph: emph, style: st, body: bodySt}
+			text := b.charRoom(i, sanitizeLine(ln.Content))
+			wr[i-lo] = winRow{prefix: gutter + "│", text: text, emph: b.charEmph(emph, i, text), style: st, body: bodySt}
 			continue
 		}
 		// sanitizeCell expands exactly like sanitizeLine but also returns the
 		// per-display-rune class mask, so tabs and control glyphs keep the
 		// colours aligned with the columns they land on.
 		disp, _, cls := sanitizeCell(ln.Content, nil, tokAt(b.tok, i+1))
-		wr[i-lo] = winRow{prefix: gutter + "│", text: string(disp), cls: cls, emph: emph, style: st, body: bodySt}
+		text := b.charRoom(i, string(disp))
+		if len(disp) == 0 && text != "" {
+			cls = nil // the empty row's blank cursor cell has no class
+		}
+		wr[i-lo] = winRow{prefix: gutter + "│", text: text, cls: cls, emph: b.charEmph(emph, i, text), style: st, body: bodySt}
 	}
 
 	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel - lo, hscroll: b.hscroll, prefixW: gw + 1, charWrap: true})
@@ -406,6 +430,11 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	// covers the first and third in one call, so the selection hook runs first
 	// and declines while the search is typing. b is NOT two-stage at all: it
 	// always leaves (never trap the user behind a search or a selection).
+	// The character selection is MODAL: while it is on every key is its own,
+	// before the line selection and the search.
+	if nm, cmd, handled := m.blameCharKey(b, msg); handled {
+		return nm, cmd
+	}
 	if nm, cmd, handled := m.blameSelectKey(b, msg); handled {
 		return nm, cmd
 	}
