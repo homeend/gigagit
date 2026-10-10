@@ -633,9 +633,9 @@ ticks, `a` ticks a group, `b` picks the body (none, a ticked review's text,
 or typed — `e` edits it), `enter` opens a row's file, `ctrl+s` sends one
 GitHub review through the same confirm, which lists exactly what will be
 posted and offers comment, approve or request changes; draft replies go
-right after it. `v` (*Verdict…*) sends a verdict with no comments (the web
-page: the same, as a panel overlay from the pull request's right-click
-menu). An agent's send is never posted directly: it waits in the
+right after it (the web page: the same panel, as an overlay from the pull
+request's right-click menu). `v` (*Verdict…*) sends a verdict with no
+comments. An agent's send is never posted directly: it waits in the
 notice centre (`!`) as *Review and send… / Reject / Later*, and a send that
 was interrupted offers *Finish sending / Discard* there.
 

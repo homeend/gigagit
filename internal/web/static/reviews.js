@@ -498,7 +498,7 @@ export function openReviewOverview() {
   const rv = state.review;
   if (!rv || !rv.data.overviewMd) return;
   const d = rv.data;
-  openStoredOverview({ id: rv.id, title: d.label || rv.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: "" });
+  openStoredOverview({ id: rv.id, title: d.label || rv.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: d.overviewText || "" });
 }
 
 // reviewSummaryHTML is the Summary: the review's markdown, its meta, the
@@ -771,7 +771,10 @@ registerHelp({
   html:
     "an AI review is stored with the commit it reviewed: a commit's reviews head its file list under " +
     "<b>Reviews</b>, and a branch's reviews of its current tip sit under its row. Click one to open the review " +
-    "— <b>≡ Summary</b> (the summary, meta and notes it could not place), then the files, ◆N on each the review " +
+    "— <b>≡ Summary</b> (the summary, meta and notes it could not place), <b>≡ Overview</b> when the review stores an " +
+    "overview (click it: the overview opens in the viewer, <b>tab</b> walks its anchors, <b>enter</b> opens the file at " +
+    "the reviewed commit with its bands, <b>backspace</b> comes back, <b>y</b> copies its text; an anchor the review " +
+    "cannot resolve is plain text), then the files, ◆N on each the review " +
     "notes, with the review's notes in the diffs, read-only. On the review's file list <b>,</b> / <b>.</b> move to " +
     "the previous / next file the review notes. esc goes back; right-click a review row or the " +
     "Summary for <b>Delete review</b>. A <b>range review</b> — notes written over a commit pair — is stored on the " +

@@ -54,6 +54,12 @@ The gg web page gets what plans 1 and 2 gave the domain and the TUI (spec
 - using-gg: `--body-from` settles like `--review` (a review whose every
   remark and summary are on GitHub is removed; one with a stored overview
   is kept) — v162.
+- Review pass (Opus): the stored overview's `y` copies its markdown
+  (`overviewText` on the wire — it copied an empty string); the bands of a
+  file opened from a stored overview survive an agent's docs changing (the
+  page-local way back is never in the stamps); help rows for ≡ Overview and
+  Copy note link; a working review's empty `overviewTip` pinned; the dead
+  kind-`group` branch left `prkept.js`.
 
 ## PR review, follow-ups: the deferred minors of plans 1 and 2
 

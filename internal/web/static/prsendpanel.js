@@ -266,6 +266,6 @@ registerHelp({
     "a pull request's right-click menu opens one panel over every unsent local comment — each AI review's remarks, " +
     "<b>My notes</b>, <b>Draft replies</b> — nothing ticked. <b>space</b> ticks, <b>a</b> all/none in the group, " +
     "<b>b</b> cycles the body (none, a ticked review's text, typed), <b>c</b> shows the code under every row, " +
-    "<b>enter</b> opens the row's file in the diff (the panel reopens with its ticks), <b>ctrl+s</b> / Send posts ONE GitHub " +
+    "<b>enter</b> opens the row's file in the diff (reopen the panel from the PR menu — its ticks are kept), <b>ctrl+s</b> / Send posts ONE GitHub " +
     "review behind the ordinary confirm; a skipped row says why and cannot be ticked",
 });

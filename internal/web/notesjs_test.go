@@ -546,6 +546,9 @@ func TestCopyNoteLinkIsWired(t *testing.T) {
 	if !strings.Contains(f, `label: "Copy note link"`) || !strings.Contains(f, `"/api/notes/link?id=" + encodeURIComponent(n.id)`) {
 		t.Error("files.js: the note menu has no Copy note link row")
 	}
+	if !strings.Contains(f, `<b>Copy note link</b>`) {
+		t.Error("files.js: the note menu's help does not mention Copy note link")
+	}
 	a := readStatic(t, "allnotes.js")
 	for _, want := range []string{`function anCopyLinkURL(`, `e.key === "l" && e.ctrlKey`, `"ctrl+l copy link"`} {
 		if !strings.Contains(a, want) {

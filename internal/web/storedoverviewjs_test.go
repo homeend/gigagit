@@ -11,7 +11,9 @@ import (
 func TestStoredOverviewIsWired(t *testing.T) {
 	t.Parallel()
 	rv := readStatic(t, "reviews.js")
-	for _, want := range []string{`data-ovdoc="1"`, `≡ Overview`, `d.overviewMd`, `openStoredOverview({`} {
+	for _, want := range []string{`data-ovdoc="1"`, `≡ Overview`, `d.overviewMd`, `openStoredOverview({`,
+		`text: d.overviewText || ""`, // y copies the overview's markdown (§4.1)
+		`<b>≡ Overview</b>`} {        // its help row
 		if !strings.Contains(rv, want) {
 			t.Errorf("reviews.js lacks %q", want)
 		}
@@ -20,7 +22,9 @@ func TestStoredOverviewIsWired(t *testing.T) {
 	for _, want := range []string{`export function openStoredOverview(`, `function showStoredOverview(`, `view.ov.stored`, `storedAnchorOpen(`, `f.stored`, `if (view.ov && view.ov.stored) return Promise.resolve(true);`,
 		// never registered: the open-files list never names it, so a change of
 		// that list (the one its own anchor's open causes) must not close it
-		`return isOpen() && !(view.ov && view.ov.stored) ? view.id : "";`} {
+		`return isOpen() && !(view.ov && view.ov.stored) ? view.id : "";`,
+		// an agent's docs changing must not "close" the way back (the stored id is never in the stamps)
+		`if (f && !f.closed && !f.stored && !view.ov) {`} {
 		if !strings.Contains(v, want) {
 			t.Errorf("viewer.js lacks %q", want)
 		}

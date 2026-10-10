@@ -350,8 +350,8 @@ func (s *Server) handleReviewLink(w http.ResponseWriter, r *http.Request) {
 
 // addStoredOverview puts a review's stored overview on the view's answer
 // (spec §4.2): the document's blocks, its anchors resolved against the
-// reviewed change (ReviewOverview; a plain one the review cannot open), and
-// the tip they open at — "" for a working review, whose anchors open the
+// reviewed change (ReviewOverview; a plain one the review cannot open), its
+// markdown text (what y copies) and the tip they open at — "" for a working review, whose anchors open the
 // working tree. An unreadable overview leaves the keys out: the ≡ Overview
 // row then does not show, the review still opens.
 func addStoredOverview(ctx context.Context, svc *domain.Service, rv domain.Review, out map[string]any) {
@@ -366,6 +366,7 @@ func addStoredOverview(ctx context.Context, svc *domain.Service, rv domain.Revie
 	}
 	out["overviewMd"] = od.Doc.Blocks
 	out["overviewAnchors"] = anchors
+	out["overviewText"] = od.Text // y copies the overview's markdown (§4.1)
 	tip := ""
 	if rv.Kind != domain.ReviewOnWorktree {
 		_, tip, _ = svc.ReviewRevs(ctx, rv)

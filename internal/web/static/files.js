@@ -3460,7 +3460,8 @@ registerHelp({
     "in an open diff: click a line to anchor, then <b>c</b> to write a note on it (summary + optional rationale). " +
     "<b>E</b> edits and <b>R</b> replies to the nearest ◆ above the anchored line, <b>}</b>/<b>{</b> step between " +
     "notes, and <b>a</b> folds agent-written notes away. Right-click a ◆ row for the same actions plus " +
-    "<b>remove</b>. A file with notes carries a ◆N badge in the file list; notes are machine-local and never " +
+    "<b>remove</b> and <b>Copy note link</b> (a gg link that opens the thread; a review remark has <b>copy remark link</b> " +
+    "instead). A file with notes carries a ◆N badge in the file list; notes are machine-local and never " +
     "committed",
 });
 

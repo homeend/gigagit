@@ -1375,7 +1375,7 @@ function viewerAgentDocs(files, closed = [], stamps = undefined) {
   // The shown file's bands follow the overview that opened it: gone with it,
   // re-read when it changed. A closed viewer has none to follow.
   const f = view.from;
-  if (f && !f.closed && !view.ov) {
+  if (f && !f.closed && !f.stored && !view.ov) { // a stored overview's way back is page-local: never in the stamps
     if (fromGone(stamps, closed, f.id)) {
       f.closed = true;
       rerenderKeepingScroll();

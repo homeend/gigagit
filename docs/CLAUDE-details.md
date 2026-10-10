@@ -6191,7 +6191,7 @@ remark placement stop re-running `git show` on every comment change.
   follow). `addStoredOverview(ctx, svc, rv, out)` (`reviews.go`) adds, when
   `rv.Doc.Overview != ""`, `overviewMd` (the `OverviewDoc.Doc.Blocks`),
   `overviewAnchors` (`overviewAnchor` + `Plain: !a.OK`, `Missing: !a.OK`,
-  no `ref`) and `overviewTip` (`ReviewRevs` tip; `""` for a working
+  no `ref`), `overviewText` (what `y` copies) and `overviewTip` (`ReviewRevs` tip; `""` for a working
   review); an unreadable overview leaves the keys out.
 - **The stored overview viewer** (`viewer.js`). `openStoredOverview({id,
   title, blocks, anchors, tip, text})` → `showStoredOverview(doc)` sets
@@ -6206,7 +6206,8 @@ remark placement stop re-running `git show` on every comment change.
   path, line}`) and stamps `view.from = {…, stored}`, `anchorBack` re-shows
   the kept copy (the file backgrounded, as a temporary overview's), `paintTitle`
   "Overview: <label>", `docName`, `copyAnchorRef` refuses, `refreshFromAnchors`
-  returns, `viewerFoot` offers esc close only. Pure: `stepAnchor` passes
+  returns, `viewerFoot` offers tab / enter / y / esc close / ctrl+\\ (no
+  reference, no background). Pure: `stepAnchor` passes
   over `a.plain`, `anchorBands`/`bandOf` make no band for it, `anchorStatus`
   says "anchor %s does not resolve at the reviewed commit". The row is
   `li.rovd[data-ovdoc]` (`renderReviewFiles`), routed in `files.js` to

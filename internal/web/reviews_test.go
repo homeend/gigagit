@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // webReviewDoc is a review document of newRepoDir's tip: one note on f.txt
@@ -282,12 +283,16 @@ func TestReviewViewCarriesTheStoredOverview(t *testing.T) {
 		OverviewMd      []any                `json:"overviewMd"`
 		OverviewAnchors []overviewAnchorResp `json:"overviewAnchors"`
 		OverviewTip     string               `json:"overviewTip"`
+		OverviewText    string               `json:"overviewText"`
 	}
 	if code := getJSON(t, ts, "/api/review/"+id, &got); code != http.StatusOK {
 		t.Fatalf("code %d", code)
 	}
 	if got.SummaryMd == nil || len(got.OverviewMd) == 0 || got.OverviewTip != sha {
 		t.Fatalf("summaryMd %v overviewMd %d blocks tip %q (want %q)", got.SummaryMd != nil, len(got.OverviewMd), got.OverviewTip, sha)
+	}
+	if !strings.HasPrefix(got.OverviewText, "Start at [the file](f.txt:1)") {
+		t.Fatalf("overviewText = %q (y copies the overview's markdown, §4.1)", got.OverviewText)
 	}
 	if len(got.OverviewAnchors) != 3 {
 		t.Fatalf("anchors = %+v", got.OverviewAnchors)
@@ -300,5 +305,29 @@ func TestReviewViewCarriesTheStoredOverview(t *testing.T) {
 	}
 	if a := got.OverviewAnchors[2]; !a.Plain {
 		t.Fatalf("a note: anchor must be plain (R3): %+v", a)
+	}
+}
+
+// Review Focus 4: a working review's stored overview opens the working
+// tree — its overviewTip is "" (the page's storedAnchorOpen reads it).
+func TestWorkingReviewOverviewTipIsEmpty(t *testing.T) {
+	t.Parallel()
+	ts, svc, _, _ := workingReviewServer(t)
+	doc := `{"version":1,"summary":"w","files":[{"path":"w.txt","annotations":[{"newRange":[1,1],"summary":"A"}]}],"overview":"See [w](w.txt:1)."}`
+	id, _, err := svc.SaveReview(context.Background(), domain.SaveReview{Target: domain.WorkingReviewTarget(), Agent: "Claude", Text: doc,
+		Files: []model.NoteFile{{Path: "w.txt", Blob: sha1Blob("hello\n")}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		OverviewMd  []any  `json:"overviewMd"`
+		OverviewTip string `json:"overviewTip"`
+		Working     bool   `json:"working"`
+	}
+	if code := getJSON(t, ts, "/api/review/"+id, &got); code != http.StatusOK || !got.Working || len(got.OverviewMd) == 0 {
+		t.Fatalf("code %d working %v overview %d", code, got.Working, len(got.OverviewMd))
+	}
+	if got.OverviewTip != "" {
+		t.Fatalf("a working review's overviewTip = %q, want \"\" (anchors open the working tree)", got.OverviewTip)
 	}
 }
