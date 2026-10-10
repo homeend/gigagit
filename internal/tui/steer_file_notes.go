@@ -18,11 +18,12 @@ import (
 // first: the note can only be checked against loaded lines. tag names the
 // document, which may have been closed by the time the load lands.
 type noteLandedMsg struct {
-	load fileContentMsg
-	cmd  steer.Command
-	tag  string
-	path string
-	lead string // "; closed <path> (20 files open)" when the open pushed a file out
+	slotStamp // the load's own stamp: the whole landing waits for its worktree (slot_msg.go)
+	load      fileContentMsg
+	cmd       steer.Command
+	tag       string
+	path      string
+	lead      string // "; closed <path> (20 files open)" when the open pushed a file out
 }
 
 func (m Model) steerFileNote(c steer.Command) (Model, tea.Cmd) {
@@ -102,7 +103,8 @@ func (m Model) steerNoteAdd(c steer.Command) (Model, tea.Cmd) {
 	}
 	load, tag := m.loadDoc(d), d.tag
 	return m, func() tea.Msg {
-		return noteLandedMsg{load: load().(fileContentMsg), cmd: c, tag: tag, path: path, lead: lead}
+		l := load().(fileContentMsg)
+		return noteLandedMsg{slotStamp: l.slotStamp, load: l, cmd: c, tag: tag, path: path, lead: lead}
 	}
 }
 

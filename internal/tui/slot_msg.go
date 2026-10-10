@@ -30,6 +30,13 @@ type sharedWriter interface {
 	applyShared(m Model) (Model, tea.Msg)
 }
 
+// staleFor is implemented by a message the sleeping slot would discard at
+// replay anyway: the gate drops it at once instead of keeping it in the
+// queue (a worktree's whole file list, for as long as nobody returns).
+type staleFor interface {
+	staleFor(v *worktreeView) bool
+}
+
 // slotStamp is the embeddable stamp; the zero value ("") is unaddressed
 // and passes the gate (tests that build messages by hand, and messages
 // that are not window-addressed).

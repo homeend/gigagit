@@ -4139,7 +4139,9 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   non-console screen (`captureReturn`: the live layer stack is PARKED only
   when its top is a full-screen VIEW — diff/history/blame/file viewer; a
   popup or editor on top stays live and keeps the keyboard, so a console
-  opening on its own never takes it — and the ctrl+t pin / stash list / file
+  opening on its own never takes it; the USER's own alt+a/alt+w parks a
+  `parkableLayer` popup with the worktree's windows instead, see the
+  fast-switch section — and the ctrl+t pin / stash list / file
   preview (restored only inside the same files view) / focus saved) and carried over
   when a console replaces a console, so "the screen before the agent"
   survives a cycle; `closeConsole` restores it (parked layers go BENEATH
@@ -6407,14 +6409,14 @@ rulings): worktree mode. `at = worktreeIndex(m.viewed)` in
 each mapped to the worktree that has it checked out; then any worktree
 without such a row — detached, filtered out — in list order), never the
 raw list: the Branches tab sorts by date newest first by default, the list
-does not, which read as "bottom to top"; "next" is the row below. FIRST HIT = the
-keyboard is not on Branches (`m.console != nil`, or
-`!panelFocused(panelBranches)`, or another left tab active): a shown
-console is HIDDEN — `ret.view = viewed` (hiding is not leaving: the panels
-stay), `ret.focus = panelBranches`, `closeConsole` (a full-screen one gives
-its parked view back) — then `activateTab(panelBranches)` and
-`selectWorktreeBranch(viewed)`; no advance. With Branches focused: the next
-of the order, wrapping, through `switchView` — a look, like alt+a, never
+does not, which read as "bottom to top"; "next" is the row below. Every press
+(no first-hit step — user ruling 2026-10-09): `switchRefusalBy(true)` is
+asked FIRST (an op, a decision, a process, a non-parkable popup refuse
+whole: nothing on screen changes), then a shown console is HIDDEN —
+`ret.view = viewed` (hiding is not leaving: the panels stay),
+`ret.focus = panelBranches`, `closeConsole` (a full-screen one gives its
+parked view back) — then `activateTab(panelBranches)` and the next of the
+order, wrapping, through `userSwitchView` — a look, like alt+a, never
 `adoptView`: home stays — then `selectWorktreeBranch`: the Branches cursor
 (`sel[panelBranches]`, a display index over `branchEntries`, the branch row
 not a sub-row) on the worktree's checked-out branch; detached, unlisted or
@@ -6652,6 +6654,38 @@ console (an explicit ask wins), sets `ret.view` to the target, and the
 status row then names the console's worktree (`worktree: <path>`). In-repo agent
 tours (`agent_tours_open.go`) swap and park the tour id in `m.tour` (a
 window field, the slot's); the `srcStatus` arrival shows it when `!armed`.
+
+**Post-merge hunt (2026-10-10, fix/fast-switch-hunt).** Three read-only
+reviews (timing, memory/lifetime, docs-vs-code) over main `d57f3b97`. The
+invariants they pinned, now tests in `hunt_fixes_test.go`:
+`loadView` restores `m.windowState` BEFORE `withStatus` (whose
+`reconcileStatusStack` acts on the live pile — the arriving worktree's, never
+the leaving one's); `saveView` copies fields only and `parkView` (the swap
+path) is the one that takes the working-file attention bands; every message
+whose handler writes into a window embeds `slotStamp`
+(`TestWindowMessagesEmbedTheirSlotStamp` names the nine found unstamped:
+`stackFileMsg` — `stackCmd` carries the loader's stamp —, `stackNotesMsg`,
+`stackStatMsg`, `treeFilesMsg`, `notesLoadedMsg`, `allNotesScopeMsg`,
+`contentLandedMsg`/`noteLandedMsg` — the wrapper carries the load's stamp —,
+`versionHintLoadedMsg`, `stashListMsg`); an `opFinishedMsg` with a stash
+list open builds the list reload BEFORE `takeQueuedReturn` (after the swap
+`m.stashView` is the arriving worktree's); a slot dropped by `pruneViews`,
+`abandonGoneView` or `reRoot` answers its parked navigate/hint first
+(`failParkedSteer`, same reply as the TTL expiry); the four rebase/squash/
+drop range loads carry `svc` and refuse a mismatch; `dropConsole` cancels a
+`pendingReturnView` the console's own queued show set; the slot gate drops
+a message whose `staleFor(v)` says the slot would discard it at replay
+(`lsFilesMsg` after `sleepFWindow`); `stashPopup`, `worktreePopup`,
+`tagPopup` are parkable and `textfield.HandleEditKey` ignores `msg.Alt`;
+alt+f/alt+b sit BELOW the layered-above check in `updateConsoleKey`,
+`unbindConsole` is shared by alt+b and the step-out key (docks a
+ctrl+t-maximised console), and `cycleWorktrees` asks `switchRefusalBy`
+before hiding the console. Deferred (reported, not fixed): the tag cache,
+forge state and `preflightOut` are per Service, not shared by
+`NewSharing` (a design change: route repository-scoped reads through
+`homeSvc()` or share a struct beside the factory); a recycled worktree keeps
+its slot's parked windows (slots are dropped by path and recycling keeps
+the path); `sleepFWindow` does not cover the files view's full-tree mode.
 
 **Trigger 2 — the user's own switch** (`switch_guard.go`): `guardedReRoot`
 takes the fast path for a listed worktree on `switchOK` → `switchView` +

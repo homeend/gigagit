@@ -195,7 +195,18 @@ func (m Model) saveView() Model {
 	v.workingReviews = m.workingReviews
 	v.resumePromptShown = m.resumePromptShown
 	v.windows = m.windowState // the worktree owns its windows: one assignment, nothing filtered
-	v.windows.workingAttention = takeWorkingAttention(m.attention)
+	return m
+}
+
+// parkView is saveView for a worktree that is LEAVING the screen: the
+// `gg session highlight` bands on its working files go with it (the same
+// path exists in the arriving tree and must not wear them). A save in
+// place — a full load re-seeding the viewed slot — keeps them live.
+func (m Model) parkView() Model {
+	m = m.saveView()
+	if v := m.views[m.viewed]; v != nil {
+		v.windows.workingAttention = takeWorkingAttention(m.attention)
+	}
 	return m
 }
 
@@ -228,6 +239,13 @@ func (m Model) loadView(v *worktreeView) Model {
 	if m.feed != nil {
 		m.feed.SetService(v.svc) // the shared Commits list walks from the VIEWED tree's HEAD (a detached one's commits); the kick reconciles
 	}
+	m.windowState = v.windows // its windows, exactly as it left them (a fresh slot: none)
+	if m.layers == nil {
+		m.layers = &layerStack{}
+	}
+	// The windows come first: withStatus reconciles an open working-tree
+	// stack against the status it is handed, and that stack must be THIS
+	// worktree's — over the leaving one's pile it popped the leaving diff.
 	m.workingReviews = v.workingReviews // before the rows: withStatus derives the Review row from the reviews
 	m = m.withStatus(v.status)          // recomputes the index slices and the status stack
 	m.conflict = v.conflict
@@ -237,10 +255,6 @@ func (m Model) loadView(v *worktreeView) Model {
 	}
 	m.sel[panelFiles], m.sel[panelStaged] = v.selFiles, v.selStaged
 	m.fileMarks = v.fileMarks
-	m.windowState = v.windows // its windows, exactly as it left them (a fresh slot: none)
-	if m.layers == nil {
-		m.layers = &layerStack{}
-	}
 	for k, marks := range v.windows.workingAttention {
 		if m.attention == nil {
 			m.attention = map[attentionKey][]steerMark{}
@@ -387,7 +401,7 @@ func (m Model) switchViewBy(path string, byUser bool) (Model, bool) {
 		m.statusMsg = why
 		return m, false
 	}
-	m = m.saveView()
+	m = m.parkView()
 	if v := m.views[m.viewed]; v != nil {
 		v.windows.sleepFWindow() // the leaving slot's copy only: the group is about to be replaced
 	}
@@ -523,26 +537,27 @@ func (m Model) takeQueuedReturn() Model {
 // slot's service failed and its directory is no longer there (the
 // worktree was removed under us) — the slot goes, home comes back, its
 // list read will say the rest. false when the view is fine.
-func (m Model) abandonGoneView() (Model, bool) {
+func (m Model) abandonGoneView() (Model, tea.Cmd, bool) {
 	if m.viewed == "" || m.viewed == m.home || guardStat(m.viewPath(m.viewed)) == nil {
-		return m, false
+		return m, nil, false
 	}
 	if m.switchRefusal() != "" {
 		// A popup over the gone tree is being filled: its submit fails
 		// against the missing directory, which is honest; a swap would run
 		// it in home. The return home queues for the surface clearing.
 		m.pendingReturnView = m.home
-		return m, false
+		return m, nil, false
 	}
 	gone := m.viewPath(m.viewed)
 	delete(m.views, m.viewed)
 	home := m.views[m.home]
 	if home == nil {
-		return m, false
+		return m, nil, false
 	}
 	m = m.sleepView()
 	m.viewed = "" // the gone slot must not be saved back: its windows and working-file bands die with it
 	takeWorkingAttention(m.attention)
+	steerCmd := m.failParkedSteer(&m.windowState, "the worktree is gone") // the live group is the gone slot's: what it owes is answered, not lost
 	m = m.loadView(home)
 	for s := sourceKey(0); s < srcCount; s++ {
 		m.srcGen[s]++ // every read launched through the gone service is moot
@@ -551,13 +566,14 @@ func (m Model) abandonGoneView() (Model, bool) {
 	m.srcLoading = map[sourceKey]bool{}
 	m.viewKick = true
 	m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.homeWorktree()))
-	return m, true
+	return m, steerCmd, true
 }
 
 // pruneViews drops the slots of worktrees that left the list (removed,
 // recycled, pruned). The viewed one going falls back to home: its
 // service would point at a tree that is not there.
-func (m Model) pruneViews() Model {
+func (m Model) pruneViews() (Model, tea.Cmd) {
+	var cmds []tea.Cmd // what the dropped slots still owed: a parked navigate or hint is answered, not lost
 	for key, v := range m.views {
 		if m.isRepoWorktree(v.path) || key == m.home {
 			continue
@@ -579,13 +595,19 @@ func (m Model) pruneViews() Model {
 				m = m.sleepView()
 				m.viewed = "" // the gone slot must not be saved back: its windows and working-file bands die with it
 				takeWorkingAttention(m.attention)
+				cmds = append(cmds, m.failParkedSteer(&m.windowState, "the worktree is gone")) // the live group is the gone slot's
 				m = m.loadView(home)
 				m.viewKick = true
 			}
 			m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.homeWorktree()))
+			continue
 		}
+		cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree is gone"))
 	}
-	return m
+	if len(cmds) == 0 {
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // adoptView moves gg's identity to the viewed slot — the user's own switch,
@@ -648,6 +670,10 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	// worktree's branch. No reveal-first step: in any window state the
 	// press moves on — only an operation, a decision, a process or a popup
 	// with work in flight refuse (switchRefusalBy).
+	if why := m.switchRefusalBy(true); why != "" {
+		m.statusMsg = why // refused whole: the console stays, the focus stays (userSwitchView would say the same, after the hide)
+		return m, nil
+	}
 	if m.console != nil {
 		if m.console.ret != nil {
 			m.console.ret.view = m.viewed // hiding is not leaving: a later return point is this worktree

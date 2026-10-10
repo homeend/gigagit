@@ -603,24 +603,26 @@ func resolveCommitMeta(svc *domain.Service, c model.Commit) model.Commit {
 // already built (the dir-major sort runs off the UI thread — the tree can be
 // 10^4–10^5 files on a large repo).
 type treeFilesMsg struct {
-	hash    string
-	subject string
-	commit  model.Commit
-	lines   []contentLine
-	err     error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	hash      string
+	subject   string
+	commit    model.Commit
+	lines     []contentLine
+	err       error
 }
 
 // loadTreeFilesCmd fetches every file in commit c's tree (ls-tree) AND builds the
 // content lines off the UI thread, so the render thread only assigns the result.
 func (m Model) loadTreeFilesCmd(c model.Commit) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		c = resolveCommitMeta(svc, c)
 		files, err := svc.TreeFiles(context.Background(), c.Hash)
 		if err != nil {
-			return treeFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, err: err}
+			return treeFilesMsg{slotStamp: slot, hash: c.Hash, subject: c.Subject, commit: c, err: err}
 		}
-		return treeFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, lines: commitFileLines(files)}
+		return treeFilesMsg{slotStamp: slot, hash: c.Hash, subject: c.Subject, commit: c, lines: commitFileLines(files)}
 	}
 }
 

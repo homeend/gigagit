@@ -75,7 +75,8 @@ func (m Model) steerNavigateBackground(c steer.Command) (Model, tea.Cmd) {
 	load := m.loadDoc(d)
 	lead, evicted := "opened "+c.File+" in the background", evictedPath(ev)
 	return m, func() tea.Msg {
-		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, path: c.File, line: line, lead: lead, evicted: evicted}
+		l := load().(fileContentMsg)
+		return contentLandedMsg{slotStamp: l.slotStamp, load: l, cmd: c, path: c.File, line: line, lead: lead, evicted: evicted}
 	}
 }
 
@@ -116,6 +117,7 @@ func (m Model) steerFileFocus(c steer.Command) (Model, tea.Cmd) {
 		return m, m.answerSteer(c, steerOK(c, landedDetail(lead, line, d.p.lines, "")))
 	}
 	return m, func() tea.Msg {
-		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, path: d.path, line: line, lead: lead}
+		l := load().(fileContentMsg)
+		return contentLandedMsg{slotStamp: l.slotStamp, load: l, cmd: c, path: d.path, line: line, lead: lead}
 	}
 }

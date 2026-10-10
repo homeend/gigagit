@@ -19,8 +19,7 @@ import (
 // The checklist for "does a field belong here" is closeFilesView
 // (files_view.go): everything it resets is a window field. What stays on
 // the Model and why: focus, lastLeftPanel, activeLeftTab and the ctrl+t
-// pin (alt+w's first-hit rule and showConsole's Commits-column invariants
-// read them across a swap); eager (it walks the SHARED commit feed);
+// pin (showConsole's Commits-column invariants read them across a swap); eager (it walks the SHARED commit feed);
 // startAt* (fires within one Update, never outlives a swap); the modal,
 // the process, the console, notices, the action menu and the typing flags
 // (the operation's and the keyboard's surfaces, never parked); the slot-

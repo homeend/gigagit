@@ -366,8 +366,9 @@ const stackMaxInflight = 3
 // NOT diffMsg — that handler replaces the whole view (*dv = *msg.view), which
 // would throw the stack away.
 type stackFileMsg struct {
-	gen, idx int
-	view     *diffView
+	slotStamp // the loader's own stamp, carried over by stackCmd (slot_msg.go)
+	gen, idx  int
+	view      *diffView
 }
 
 // stackNotesMsg delivers ONE file's resolved review notes into the stack that
@@ -376,9 +377,10 @@ type stackFileMsg struct {
 // WHOLE view's notes, so in a stack it would drop every answer but the last
 // and write that one over file 0.
 type stackNotesMsg struct {
-	gen, idx int
-	notes    []domain.ResolvedNote
-	err      error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	gen, idx  int
+	notes     []domain.ResolvedNote
+	err       error
 }
 
 // stackNotesCmd resolves file idx's review notes off the UI thread, against
@@ -391,19 +393,20 @@ func (m Model) stackNotesCmd(gen, idx int, d *diffView) tea.Cmd {
 		return nil
 	}
 	svc, addr, set, rows, rid := m.svc, d.noteAddr, d.previewSet, d.full, d.reviewID
+	slot := m.stamp()
 	return func() tea.Msg {
 		dd := domain.Diff{Result: textdiff.Result{Rows: rows}}
 		if rid != "" {
 			ns, err := svc.ReviewNotesFor(context.Background(), rid, addr.Path, dd)
-			return stackNotesMsg{gen: gen, idx: idx, notes: ns, err: err}
+			return stackNotesMsg{slotStamp: slot, gen: gen, idx: idx, notes: ns, err: err}
 		}
 		if set != nil {
 			ns, err := svc.PreviewNotesFor(context.Background(), *set, addr.Path, dd)
-			return stackNotesMsg{gen: gen, idx: idx, notes: ns, err: err}
+			return stackNotesMsg{slotStamp: slot, gen: gen, idx: idx, notes: ns, err: err}
 		}
 		ns, err := svc.NotesFor(context.Background(), addr, dd)
 		// A range review's notes show in the review, not in the commit's stack.
-		return stackNotesMsg{gen: gen, idx: idx, notes: domain.PlainNotes(ns), err: err}
+		return stackNotesMsg{slotStamp: slot, gen: gen, idx: idx, notes: domain.PlainNotes(ns), err: err}
 	}
 }
 
@@ -617,7 +620,7 @@ func (m Model) stackFileCmd(f stackFile) tea.Cmd {
 func stackCmd(gen, idx int, c tea.Cmd) tea.Cmd {
 	return func() tea.Msg {
 		if d, ok := c().(diffMsg); ok {
-			return stackFileMsg{gen: gen, idx: idx, view: d.view}
+			return stackFileMsg{slotStamp: d.slotStamp, gen: gen, idx: idx, view: d.view}
 		}
 		return nil
 	}
@@ -722,8 +725,9 @@ func (v *diffView) syncStackTitle() {
 
 // stackStatMsg carries one numstat read for the stack that asked for it.
 type stackStatMsg struct {
-	gen   int
-	stats []model.DiffStat
+	slotStamp // the slot it was asked from (slot_msg.go)
+	gen       int
+	stats     []model.DiffStat
 }
 
 // stackStatCmd asks git for the whole stack's +/− counts in ONE read, wherever
@@ -738,6 +742,7 @@ func (m Model) stackStatCmd(stk *diffStack) tea.Cmd {
 		return nil
 	}
 	gen := stk.gen
+	slot := m.stamp()
 	switch {
 	case stk.src == diffNavStatus || stk.src == diffNavStaged:
 		cached := stk.staged
@@ -746,7 +751,7 @@ func (m Model) stackStatCmd(stk *diffStack) tea.Cmd {
 			if err != nil {
 				return nil
 			}
-			return stackStatMsg{gen: gen, stats: stats}
+			return stackStatMsg{slotStamp: slot, gen: gen, stats: stats}
 		}
 	case m.inCompareMode():
 		l, r := m.filesLeft, m.filesRight
@@ -759,7 +764,7 @@ func (m Model) stackStatCmd(stk *diffStack) tea.Cmd {
 			if err != nil {
 				return nil
 			}
-			return stackStatMsg{gen: gen, stats: stats}
+			return stackStatMsg{slotStamp: slot, gen: gen, stats: stats}
 		}
 	case stk.src == diffNavTree && m.filesHash != "" && !m.inShelfFiles() && !m.inFullTree():
 		hash := m.filesHash
@@ -768,7 +773,7 @@ func (m Model) stackStatCmd(stk *diffStack) tea.Cmd {
 			if err != nil {
 				return nil
 			}
-			return stackStatMsg{gen: gen, stats: stats}
+			return stackStatMsg{slotStamp: slot, gen: gen, stats: stats}
 		}
 	}
 	return nil

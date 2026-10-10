@@ -22,12 +22,13 @@ import (
 
 // allNotesScopeMsg is that range, resolved off the UI thread.
 type allNotesScopeMsg struct {
-	tag   string // the loading layer's diffTag: a mismatch drops the result
-	t     anTarget
-	id    string
-	scope string
-	a, b  string
-	set   domain.PreviewNoteSet
+	slotStamp        // the slot it was asked from (slot_msg.go)
+	tag       string // the loading layer's diffTag: a mismatch drops the result
+	t         anTarget
+	id        string
+	scope     string
+	a, b      string
+	set       domain.PreviewNoteSet
 	// line is the file's row in the range: its status decides which sides the
 	// diff reads (an added file has no old side), its old path follows a rename.
 	line contentLine
@@ -52,7 +53,7 @@ func (m Model) openAllNotesReviewNote(p *allNotesPopup, t anTarget, n model.Note
 	m.diffNotice = ""
 	m.diffNav = diffNavNone // no source list to step through
 	m.noteLand = &noteLanding{id: n.ID, tag: tag}
-	msg := allNotesScopeMsg{tag: tag, t: t, id: n.ID, scope: n.Preview}
+	msg := allNotesScopeMsg{slotStamp: m.stamp(), tag: tag, t: t, id: n.ID, scope: n.Preview}
 	return m, func() tea.Msg {
 		ctx := context.Background()
 		if msg.a, msg.b, msg.err = svc.ScopeAtCommit(ctx, msg.scope, t.commit); msg.err != nil {

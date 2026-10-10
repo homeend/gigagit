@@ -21,6 +21,9 @@ func (m Model) routeSlotMsg(msg tea.Msg) (Model, bool) {
 		return m, false
 	}
 	if v := m.views[k]; v != nil {
+		if s, ok := msg.(staleFor); ok && s.staleFor(v) {
+			return m, true // the slot would drop it on return: not worth keeping
+		}
 		if sw, ok := msg.(sharedWriter); ok {
 			m, msg = sw.applyShared(m) // the process-wide part lands now; the replay skips it
 		}

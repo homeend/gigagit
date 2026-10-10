@@ -117,7 +117,7 @@ func TestPruneViewsRetargetsAQueuedReturn(t *testing.T) {
 	m = landView(t, m)
 	m.pendingReturnView = model.KeyOf(a)
 	m = dropWorktreeFromList(m, a)
-	m = m.pruneViews()
+	m, _ = m.pruneViews()
 	if m.pendingReturnView != m.home {
 		t.Fatalf("pending = %q after the slot it named was pruned; want home %q", m.pendingReturnView, m.home)
 	}
