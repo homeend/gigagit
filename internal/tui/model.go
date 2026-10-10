@@ -181,6 +181,9 @@ type Model struct {
 	// promptstate at startup and written back on every flip — machine-local,
 	// and independent of the web's own stacked pref (design R7).
 	diffStacked bool
+	// reviewStacked is the review overview split's stacked mode (S there):
+	// its own promptstate key (split_prefs.go), never the diff view's.
+	reviewStacked bool
 	// stackSeq numbers the stacks this session has opened: each one's
 	// generation, so a rebuilt stack drops the answers owed to the old one.
 	stackSeq int
@@ -495,6 +498,7 @@ func New(svc *domain.Service) Model {
 func (m Model) loadPrefs() Model {
 	if m.promptStore != nil {
 		m.diffStacked = m.promptStore.StackedDiff()
+		m.reviewStacked = m.promptStore.StackedReviewFiles()
 		m.repoGrouped = m.promptStore.RepoGrouped()
 	}
 	return m
@@ -1094,15 +1098,32 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.docWatchEvent(msg)
 	case docWatchClosedMsg:
 		return m, nil // the watcher was closed: its listen loop ends here
+	case stackPaneMsg:
+		return m.stackPaneLanded(msg)
 	case fileContentMsg:
 		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
 			if d.ov != nil {
-				d.layOut(rows, m.overviewWidth(inner))
+				w := m.overviewWidth(inner)
+				if m.splitShowing(d) != nil { // a split pane is its own reading column
+					w = inner
+				}
+				d.layOut(rows, w)
 				return m, nil
 			}
 			m.alignDocNotes(d, msg)
 			if n := d.fill(msg, rows, inner); n != "" {
 				m.statusMsg = n
+			}
+			if msg.err != nil && d.from != nil && d.from.ov != nil && m.splitShowing(d) != nil {
+				// An overview's anchor steered to a file the commit does not
+				// have: name it, and mark the anchor gone (openAnchor's rule).
+				m.statusMsg = i18n.T("no file %s", d.path)
+				for i := range d.from.ov.anchors {
+					if d.from.ov.anchors[i].dest == d.anchorCur {
+						d.from.ov.anchors[i].missing = true
+					}
+				}
+				d.from.ov.paint(d.from.p.lines)
 			}
 			return m, nil
 		}

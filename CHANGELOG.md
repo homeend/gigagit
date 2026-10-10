@@ -31,6 +31,61 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - `v` on a stack header moves the line cursor with the character cursor at
   once, not on the next key.
 
+## Review split: N/P step the overview from the file pane
+
+### Added
+- In the review overview split, N / P on the (single) file pane step to the
+  overview's next / previous anchor — the order ↑/↓ walk on the overview —
+  opening its file on the right while the focus stays there. n / p still
+  walk this file's anchors; stacked, N / P stay the file headers. The help
+  screen gained the split's keys.
+
+### Fixed
+- A path too wide for its frame title now keeps the directory holding the
+  file, cut in its middle, instead of dropping it: sibling files (copies of
+  one `bench.js` in `load-a-…/` and `load-b-…/`) no longer show the same
+  title, so stepping anchors between them visibly moves. The web page
+  shortens paths the same way.
+- The gg-overview and gg-review skills tell the agent to anchor the lines
+  that show the point — the file that differs, not an identical copy beside
+  it.
+
+## Tidy `gg init` output
+
+### Changed
+- `gg init` (and `--update`, `--list`) lists each agent's status first and
+  then where its skills live — the skills folder (`~/.claude/skills/`) or the
+  one managed file (`~/.codex/AGENTS.md`), with the home folded to `~` — and
+  names the installed skills once on a `Skills:` line. Each result is one
+  short line per agent (`✓ refreshed Claude Code (global)`; `updated` when
+  the copy was outdated) instead of every skill's full path.
+
+## The review overview beside its files
+
+### Added
+- Enter on a review's "≡ Overview" row opens a SPLIT: the overview on the
+  left, the file it points at (at the reviewed commit) on the right. ↑/↓ on
+  the overview step anchor to anchor and the file pane follows; enter
+  focuses the file; tab / shift+tab / alt+←/→ switch sides, backspace
+  focuses the overview, esc closes the split back to the review tree with
+  the cursor on the Overview row. The file pane keeps every viewer key
+  (cursor, selection, search, anchor bands with n/p, `.` menu); the mouse
+  focuses the side it clicks, selects (and steers to) an anchor, and a
+  double click on one focuses the file.
+- `S` in the split stacks every reviewed file into one lazily loaded scroll:
+  a header per file with its note count, `-` / `_` fold one / all, N/P step
+  files, n/p walk the overview's anchors across files (opening a folded or
+  unread file on the way). The choice is remembered on its own, apart from
+  the diff view's stacked mode.
+
+### Internal
+- `internal/tui/split_view.go`: a generic two-pane full-screen layer
+  (`splitView` + the `pane` interface), reusable for other left/right
+  pairings; `docPane` wraps an open file in the preview box, `overviewPane`
+  steers, `stackPane` is the stacked stream (`split_stack.go`). The six
+  "which document is the keyboard on" seams answer through `splitFocus`.
+  The diff view is untouched. Headless e2e runs isolate the new preference.
+
 ## Character selection: the v copy mode (TUI)
 
 A modal copy mode in the spirit of vim's visual mode and tmux's copy mode,

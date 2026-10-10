@@ -157,20 +157,7 @@ func (fv *fileViewer) render(m Model, _ string) string {
 }
 
 // title names the version on screen: the working tree, a commit or a shelf.
-func (fv *fileViewer) title() string {
-	switch fv.src.kind {
-	case srcCommit:
-		return i18n.T("View %s @ %s", fv.path, shortHash(fv.src.rev))
-	case srcShelf:
-		return i18n.T("View %s (shelf)", fv.path)
-	case srcExternal, srcNote, srcOverview, srcReviewOverview:
-		if fv.openFile.title != "" {
-			return fv.openFile.title
-		}
-		return fv.path
-	}
-	return i18n.T("View %s (working tree)", fv.path)
-}
+func (fv *fileViewer) title() string { return fv.openFile.frameTitle() }
 
 // liveDoc finds the document a load result belongs to, and the content size
 // of the frame showing it: any full-screen viewer on the stack (covered ones
@@ -180,6 +167,14 @@ func (fv *fileViewer) title() string {
 func (m Model) liveDoc(tag string) (d *openFile, rows, innerW int, ok bool) {
 	if m.layers != nil {
 		for i := len(m.layers.entries) - 1; i >= 0; i-- {
+			if sv, isSplit := m.layers.entries[i].(*splitView); isSplit {
+				for _, p := range []pane{sv.left, sv.right} {
+					if d := p.doc(); d != nil && d.tag == tag {
+						rows, innerW = sv.geomOf(m, p)
+						return d, rows, innerW, true
+					}
+				}
+			}
 			if fv, isViewer := m.layers.entries[i].(*fileViewer); isViewer && fv.tag == tag {
 				rows, innerW = fv.geom(m)
 				return fv.openFile, rows, innerW, true

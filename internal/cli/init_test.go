@@ -195,3 +195,45 @@ func TestInitMCPFlag(t *testing.T) {
 		t.Fatalf("init --mcp = %d %q", code, out)
 	}
 }
+
+// TestInitOutputIsTidy: the listing shows each agent's skills ROOT with the
+// home folded to ~, names the skills once, and every result line is one
+// short line per agent — never every skill's full path again.
+func TestInitOutputIsTidy(t *testing.T) {
+	proj, home := initFixture(t)
+	if code, _, errb := runInitCmd(t, proj, "", "--agents", "claude-global"); code != 0 {
+		t.Fatalf("seed install failed: %s", errb)
+	}
+	code, out, errb := runInitCmd(t, proj, "", "--update")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb)
+	}
+	if strings.Contains(out, home) {
+		t.Errorf("home must print as ~:\n%s", out)
+	}
+	if !strings.Contains(out, "~"+string(filepath.Separator)+filepath.Join(".claude", "skills")+string(filepath.Separator)) {
+		t.Errorf("listing should show the skills root ~/.claude/skills/:\n%s", out)
+	}
+	if strings.Contains(out, "SKILL.md") {
+		t.Errorf("no per-skill file paths:\n%s", out)
+	}
+	var names []string
+	for _, sk := range agentskill.All() {
+		names = append(names, sk.Name)
+	}
+	if n := strings.Count(out, "gg-overview"); n != 1 {
+		t.Errorf("skill names should appear once (got %d):\n%s", n, out)
+	}
+	if !strings.Contains(out, strings.Join(names, ", ")) {
+		t.Errorf("listing should name every skill once:\n%s", out)
+	}
+	var result string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(l, "✓") {
+			result = l
+		}
+	}
+	if !strings.Contains(result, "Claude Code (global)") || !strings.Contains(result, "refreshed") || strings.Contains(result, "→") {
+		t.Errorf("result line = %q, want one short line", result)
+	}
+}

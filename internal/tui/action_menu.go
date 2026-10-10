@@ -102,7 +102,8 @@ func availableActions(m Model) []actionRow {
 		// parity block target the files view, so they may ONLY appear when the
 		// files view is genuinely front — never when a diff/history/blame sits over
 		// it (opening a diff or h/b from the files view leaves it live underneath).
-		frontIsFilesView := !onStackFile && m.diffLayer() == nil
+		_, onSplit := m.topLayer().(*splitView) // a review split: its panes are the front, not the tree under it
+		frontIsFilesView := !onStackFile && !onSplit && m.diffLayer() == nil
 		if onStackFile {
 			if r, ok := m.surfaceExternalRow(); ok {
 				rows = append(rows, r)

@@ -126,11 +126,7 @@ func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.W
 			fmt.Fprintf(stderr, "init: %s: %v\n", d.Agent.Label, err)
 			return 1
 		}
-		if d.Status == agentinit.StatusNew {
-			fmt.Fprintf(stdout, "✓ installed %s → %s%s\n", d.Agent.Label, d.Target, reviewTargetSuffix(d))
-		} else {
-			fmt.Fprintf(stdout, "✓ refreshed %s → %s%s\n", d.Agent.Label, d.Target, reviewTargetSuffix(d))
-		}
+		fmt.Fprintf(stdout, "✓ %-9s %s\n", installVerb(d.Status), d.Agent.Label)
 	}
 	return 0
 }
@@ -155,11 +151,7 @@ func initCustom(workdir, raw string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "init: %s: %v\n", d.Target, err)
 		return 1
 	}
-	verb := "installed"
-	if d.Status != agentinit.StatusNew {
-		verb = "refreshed"
-	}
-	fmt.Fprintf(stdout, "✓ %s Custom → %s%s\n", verb, d.Target, reviewTargetSuffix(d))
+	fmt.Fprintf(stdout, "✓ %s Custom → %s (%s)\n", installVerb(d.Status), shownPlace(d), skillNames())
 	if p := initTargetsPath(); p != "" {
 		if err := agentinit.AddCustomTarget(p, ct); err != nil {
 			fmt.Fprintf(stderr, "init: could not remember %s (%v); --update will not refresh it\n", d.Target, err)
@@ -182,25 +174,53 @@ func initTargetsPath() string {
 	return ""
 }
 
-// reviewTargetSuffix names the other skills' installs alongside the using-gg
-// one printed on the success line — install writes EVERY skill, so the user
-// must not read the line as installing only one.
-func reviewTargetSuffix(d agentinit.Detection) string {
-	var parts []string
-	for _, sk := range agentskill.All() {
-		if sk.Name == agentskill.UsingGG.Name {
-			continue
-		}
-		if t := d.TargetOf(sk); t == "" || t == d.Target {
-			parts = append(parts, "+ "+sk.Name)
-		} else {
-			parts = append(parts, fmt.Sprintf("+ %s → %s", sk.Name, t))
-		}
+// installVerb is the result line's verb for a target that had status st
+// before the install.
+func installVerb(st agentinit.Status) string {
+	switch st {
+	case agentinit.StatusNew:
+		return "installed"
+	case agentinit.StatusOutdated:
+		return "updated"
 	}
-	return " (" + strings.Join(parts, ", ") + ")"
+	return "refreshed"
 }
 
-// printList renders the numbered checkbox listing.
+// skillNames lists every embedded skill once — the listing names them here
+// instead of repeating each skill's path per agent.
+func skillNames() string {
+	var names []string
+	for _, sk := range agentskill.All() {
+		names = append(names, sk.Name)
+	}
+	return strings.Join(names, ", ")
+}
+
+// shownPlace is where d's skills live, as printed: the skills root for a
+// per-skill layout (<root>/<skill>/SKILL.md or <dir>/<skill>.mdc), the one
+// file for a block layout; the home directory folds to ~.
+func shownPlace(d agentinit.Detection) string {
+	place := d.Target
+	switch d.Agent.Mode {
+	case agentinit.ModeSkillFile:
+		place = filepath.Dir(filepath.Dir(d.Target)) + string(filepath.Separator)
+	case agentinit.ModePlainFile:
+		place = filepath.Dir(d.Target) + string(filepath.Separator)
+	}
+	if home := InitHomeDir; home != "" {
+		if rel, err := filepath.Rel(home, place); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			tail := ""
+			if strings.HasSuffix(place, string(filepath.Separator)) {
+				tail = string(filepath.Separator)
+			}
+			place = "~" + string(filepath.Separator) + rel + tail
+		}
+	}
+	return place
+}
+
+// printList renders the numbered checkbox listing, then names the skills
+// every target receives.
 func printList(w io.Writer, dets []agentinit.Detection) {
 	fmt.Fprintln(w, "Detected agents:")
 	for i, d := range dets {
@@ -208,8 +228,9 @@ func printList(w io.Writer, dets []agentinit.Detection) {
 		if d.Status.Checked() {
 			box = "[x]"
 		}
-		fmt.Fprintf(w, "  %d. %s %-26s %s  %s\n", i+1, box, d.Agent.Label, d.Target, d.Status)
+		fmt.Fprintf(w, "  %d. %s %-26s %-10s  %s\n", i+1, box, d.Agent.Label, d.Status, shownPlace(d))
 	}
+	fmt.Fprintf(w, "Skills: %s\n", skillNames())
 }
 
 // checkedDefaults returns the targets that already have the skill installed.

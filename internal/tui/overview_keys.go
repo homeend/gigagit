@@ -171,6 +171,9 @@ func (m Model) anchorStatted(msg anchorStatMsg) (Model, tea.Cmd) {
 
 // topDoc is the document of the full-screen viewer on top, or nil.
 func topDoc(m Model) *openFile {
+	if _, d, _, _, ok := m.splitFocus(); ok {
+		return d
+	}
 	if fv, ok := m.topLayer().(*fileViewer); ok {
 		return fv.openFile
 	}
@@ -202,16 +205,24 @@ func anchorReference(ov *openFile, a anchor) string {
 	return agentdocs.AnchorReference(ov.overviewCopy(), agentdocs.Anchor{Dest: a.dest})
 }
 
-// overviewClick is a left click in the viewer showing overview fv: on an
-// anchor it selects it, and a second click on the same anchor (a double
-// click) opens it. gg laid the rows out itself, so row y is a line and
-// column x a rune — no wrapping to undo, only the horizontal scroll's pan.
+// overviewClick is a left click in the full-screen viewer showing overview
+// fv: its content sits in the reading column under the border and title.
 func (m Model) overviewClick(fv *fileViewer, x, y int) (Model, tea.Cmd) {
-	d := fv.openFile
 	w, _ := m.overlayDims()
 	rows, _ := m.viewerGeom()
 	_, margin := readingColumn(w-4, m.readingWidth())
-	row, col := y-2, x-2-margin // border + title line; border + padding + margin
+	return m.overviewClickIn(fv.openFile, fv, x, y, rows, margin)
+}
+
+// overviewClickIn is a left click at (x, y) in the frame l showing overview
+// d, its rows starting at row 2 and column 2+margin (border + title; border
+// + padding + margin): on an anchor it selects it, and a second click on the
+// same anchor (a double click) opens it. gg laid the rows out itself, so row
+// y is a line and column x a rune — no wrapping to undo, only the horizontal
+// scroll's pan. In a split, selecting steers the file pane and opening moves
+// the focus to it.
+func (m Model) overviewClickIn(d *openFile, l layer, x, y, rows, margin int) (Model, tea.Cmd) {
+	row, col := y-2, x-2-margin
 	if row < 0 || row >= rows || col < 0 {
 		return m, nil
 	}
@@ -230,12 +241,22 @@ func (m Model) overviewClick(fv *fileViewer, x, y int) (Model, tea.Cmd) {
 			break
 		}
 	}
+	sv, inSplit := l.(*splitView)
 	for i, a := range d.ov.anchors {
 		for _, s := range a.spans {
 			if s.line == line && at >= s.from && at < s.to {
 				var double bool
 				// row carries the anchor: a click on another anchor is no double.
-				if m, double = m.registerClick(clickTarget{zone: zoneLayer, layer: fv, row: i}); double {
+				m, double = m.registerClick(clickTarget{zone: zoneLayer, layer: l, row: i})
+				switch {
+				case inSplit:
+					d.selectAnchorAt(i, line, rows)
+					nm, cmd := m.steerSplit(sv)
+					if double {
+						sv.onLeft = false
+					}
+					return nm, cmd
+				case double:
 					return m.openAnchor(d, i)
 				}
 				d.selectAnchorAt(i, line, rows) // where it was clicked: no scroll under the second click
@@ -252,6 +273,9 @@ func (m Model) overviewRows() []actionRow {
 	d, ok := m.focusedDoc()
 	if !ok {
 		return nil
+	}
+	if sv, _, _, _, inSplit := m.splitFocus(); inSplit && sv.left.doc() == d && d.ov != nil {
+		return m.splitOverviewRows(sv, d)
 	}
 	var rows []actionRow
 	if d.ov != nil {
@@ -272,11 +296,38 @@ func (m Model) overviewRows() []actionRow {
 		}
 	}
 	rows = append(rows, m.bandRows(d)...)
-	if d.from != nil {
+	if d.from != nil && m.splitShowing(d) == nil { // in a split the overview is on screen: backspace is the split's
 		rows = append(rows, actionRow{id: "overview-back", key: "bksp", label: i18n.T("Back to overview"), run: func(m Model) (tea.Model, tea.Cmd) {
 			nm, cmd, _ := m.anchorBack(d)
 			return nm, cmd
 		}})
 	}
 	return rows
+}
+
+// splitOverviewRows are the . menu's rows for the overview pane of split
+// sv: the walk by the split's keys (each step steers the file pane), Open
+// anchor (steer and focus the file pane), and Copy overview.
+func (m Model) splitOverviewRows(sv *splitView, d *openFile) []actionRow {
+	step := func(dir int) func(Model) (tea.Model, tea.Cmd) {
+		return func(m Model) (tea.Model, tea.Cmd) {
+			rows, _ := sv.geomOf(m, sv.left)
+			d.stepAnchor(dir, rows)
+			return m.steerSplit(sv)
+		}
+	}
+	rows := []actionRow{
+		{id: "overview-next", key: "↓", label: i18n.T("Next anchor"), run: step(1)},
+		{id: "overview-prev", key: "↑", label: i18n.T("Previous anchor"), run: step(-1)},
+	}
+	if d.ov.sel >= 0 {
+		rows = append(rows, actionRow{id: "overview-open", key: "enter", label: i18n.T("Open anchor"), run: func(m Model) (tea.Model, tea.Cmd) {
+			nm, cmd := m.steerSplit(sv)
+			sv.onLeft = false
+			return nm, cmd
+		}})
+	}
+	cp := m.copyRow("overview-copy", i18n.T("Copy overview"), i18n.T("copied"), d.ov.text)
+	cp.key = "y"
+	return append(rows, cp)
 }

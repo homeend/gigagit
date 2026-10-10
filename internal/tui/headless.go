@@ -77,13 +77,13 @@ func NewHeadless(svc *domain.Service, opts HeadlessOptions) (*Headless, error) {
 	// An agent's notes and overviews live in a store of this run's own: the
 	// process-wide one numbers documents across parallel scenarios.
 	m.docs = agentdocs.New()
-	// Prompt memory (dismissed prompts, the stacked-diff preference) lives
-	// beside StatePath too: New opened the machine-global store, which
-	// parallel scenarios would share.
-	m.promptStore, m.diffStacked = nil, false
+	// Prompt memory (dismissed prompts, the stacked-diff and stacked-review
+	// preferences) lives beside StatePath too: New opened the machine-global
+	// store, which parallel scenarios would share.
+	m.promptStore, m.diffStacked, m.reviewStacked = nil, false, false
 	if opts.StatePath != "" {
 		ps := promptstate.NewFileStore(filepath.Join(filepath.Dir(opts.StatePath), "prompts.toml"))
-		m.promptStore, m.diffStacked = ps, ps.StackedDiff()
+		m.promptStore, m.diffStacked, m.reviewStacked = ps, ps.StackedDiff(), ps.StackedReviewFiles()
 	}
 	h := &Headless{m: m, w: w, h: hgt, theme: baseTheme, lang: baseLang}
 	if err := h.settle([]tea.Cmd{h.m.Init()}); err != nil {

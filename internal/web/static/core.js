@@ -287,7 +287,39 @@ function elidePath(s, n) {
       }
     }
   }
+  if (keepR === last) {
+    // The directory holding the name ranks right after the name: too wide to
+    // keep whole, it is cut in its middle rather than dropped, so sibling
+    // files stay apart (the TUI's cutParent).
+    const cut = cutParent(segs, trail, n);
+    if (cut !== null) return cut;
+  }
   return build(keepL, keepR);
+}
+
+// ELIDE_PARENT_MIN is the fewest columns a cut parent directory keeps.
+const ELIDE_PARENT_MIN = 10;
+
+// cutParent renders segs with the name whole and the directory before it cut
+// in its middle, keeping the first segment when room allows, else none; null
+// when not even ELIDE_PARENT_MIN columns are left for the directory.
+function cutParent(segs, trail, n) {
+  const last = segs.length - 1;
+  const p = last - 1;
+  const tail = segs[last].sep + segs[last].text + trail;
+  for (const keepL of [1, 0]) {
+    if (keepL > p) continue;
+    let b = "";
+    for (let i = 0; i < keepL; i++) b += segs[i].sep + segs[i].text;
+    if (keepL < p) {
+      if (keepL > 0) b += segs[keepL].sep;
+      b += "…";
+    }
+    b += segs[p].sep;
+    const room = n - runes(b).length - runes(tail).length;
+    if (room >= ELIDE_PARENT_MIN) return b + elideNameMiddle(segs[p].text, room) + tail;
+  }
+  return null;
 }
 
 

@@ -71,6 +71,16 @@ func (r *openFilesReg) touch(wt string, d *openFile, shown func(*openFile) bool)
 	return evicted
 }
 
+// has reports whether d is in wt's open files.
+func (r *openFilesReg) has(wt string, d *openFile) bool {
+	for _, e := range r.list(wt) {
+		if e == d {
+			return true
+		}
+	}
+	return false
+}
+
 // findTag is the open document tagged tag in any worktree's list, or nil.
 // Tags are unique, so a load result finds its document even after a
 // worktree switch (its loading flag must still clear).
@@ -134,6 +144,9 @@ func (m Model) docShown(d *openFile) bool {
 			if fv, ok := l.(*fileViewer); ok && fv.openFile == d {
 				return true
 			}
+			if sv, ok := l.(*splitView); ok && sv.holds(d) {
+				return true
+			}
 		}
 	}
 	return false
@@ -148,6 +161,22 @@ func (m Model) detachDoc(d *openFile) Model {
 	if m.filesPreview == d {
 		m.filesPreview = nil
 		m = m.focusTree()
+	}
+	// A document shown in a split pane leaves for another frame (a document
+	// is in one frame at a time): the file pane is emptied and the split
+	// stays; the overview leaving takes the split down, as esc does — there
+	// is nothing left to steer.
+	if sv := m.splitShowing(d); sv != nil {
+		if sv.left.doc() == d {
+			if o := sv.right.doc(); o != nil {
+				o.backgrounded = true
+			}
+			return m.closeSplit(sv)
+		}
+		if dp, ok := sv.right.(*docPane); ok && dp.d == d {
+			dp.d = nil
+		}
+		return m
 	}
 	if m.layers != nil {
 		for _, l := range m.layers.entries {
@@ -189,7 +218,12 @@ func evictedPath(ev *openFile) string {
 }
 
 // docLoaded reports whether d holds its file's lines (not a placeholder).
-func docLoaded(d *openFile) bool { return len(d.p.lines) > 0 && d.p.lines[0].src }
+func docLoaded(d *openFile) bool {
+	if d.stream != nil { // a split stack: its files load one by one, the stream is always the document
+		return len(d.p.lines) > 0
+	}
+	return len(d.p.lines) > 0 && d.p.lines[0].src
+}
 
 // backgroundDoc takes d off the screen and keeps it open (ctrl+]): the screen
 // returns to whatever was beneath it.
@@ -230,6 +264,9 @@ func (m Model) closeDoc(d *openFile) Model {
 // focusedDoc is the open file the keyboard is on: a full-screen viewer on
 // top, else the files view's focused preview.
 func (m Model) focusedDoc() (*openFile, bool) {
+	if _, d, _, _, ok := m.splitFocus(); ok {
+		return d, true
+	}
 	if fv, ok := m.topLayer().(*fileViewer); ok {
 		return fv.openFile, true
 	}
@@ -240,7 +277,7 @@ func (m Model) focusedDoc() (*openFile, bool) {
 // file — ctrl+] for the mouse.
 func (m Model) backgroundRow() (actionRow, bool) {
 	d, ok := m.focusedDoc()
-	if !ok {
+	if !ok || d.stream != nil { // a split's stacked stream is no open file
 		return actionRow{}, false
 	}
 	return actionRow{

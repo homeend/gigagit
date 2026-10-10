@@ -22,6 +22,7 @@ const (
 	srcNote                                 // an AI review stored as a note; rev = note id, path = "review-<id>.md"
 	srcOverview                             // an agent's overview, held in memory (openFile.ov); path = "overview-<n>.md"
 	srcReviewOverview                       // a review's STORED overview (openFile.ov, ov.tip = the reviewed tip); rev = review id, path = "overview-<id>.md"
+	srcReviewStack                          // a review split's stacked stream (openFile.stream), never registered; rev = review id, path = "files-<id>"
 )
 
 // fileSource names one version of a file: the working tree, a commit or a
@@ -107,6 +108,27 @@ type openFile struct {
 	// pendingEnd is the last line (1-based) of the range a link asked for
 	// (0 = none): landPendingLine selects pendingLine..pendingEnd.
 	pendingEnd int
+	// stream is set on a split stack's document only (split_stack.go): its
+	// lines are several files', so bands and the current band are found per
+	// file through it.
+	stream *fileStream
+}
+
+// frameTitle names the version a frame shows: the working tree, a commit,
+// a shelf, or a titled document (a result, an overview).
+func (d *openFile) frameTitle() string {
+	switch d.src.kind {
+	case srcCommit:
+		return i18n.T("View %s @ %s", d.path, shortHash(d.src.rev))
+	case srcShelf:
+		return i18n.T("View %s (shelf)", d.path)
+	case srcExternal, srcNote, srcOverview, srcReviewOverview, srcReviewStack:
+		if d.title != "" {
+			return d.title
+		}
+		return d.path
+	}
+	return i18n.T("View %s (working tree)", d.path)
 }
 
 // keepPlace makes the next fill — a reload of a file the user is reading —

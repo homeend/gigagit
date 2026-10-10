@@ -37,6 +37,11 @@ type Store interface {
 	StackedDiff() bool
 	// SetStackedDiff persists it.
 	SetStackedDiff(on bool) error
+	// StackedReviewFiles reports whether a review's overview split opens its
+	// files stacked (the S key there). Its own key, independent of StackedDiff.
+	StackedReviewFiles() bool
+	// SetStackedReviewFiles persists it.
+	SetStackedReviewFiles(on bool) error
 	// RepoGrouped reports whether the TUI repo switcher opens grouped (ctrl+g).
 	RepoGrouped() bool
 	// SetRepoGrouped persists it.
