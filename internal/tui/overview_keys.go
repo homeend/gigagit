@@ -79,6 +79,28 @@ func (d *openFile) stepAnchor(dir, rows int) {
 	}
 }
 
+// pageAtEnd pages the overview where the anchor walk would wrap: a step
+// down from the last anchor with text still below it scrolls a page down, a
+// step up from the first with text above it a page up — the text past the
+// ends is read before the walk starts over. It reports whether it paged.
+func (d *openFile) pageAtEnd(dir, rows int) bool {
+	as, sel := d.ov.anchors, d.ov.sel
+	if sel < 0 || sel >= len(as) {
+		return false
+	}
+	for i := sel + dir; i >= 0 && i < len(as); i += dir {
+		if len(as[i].spans) > 0 && !as[i].plain {
+			return false // a next anchor short of the end: no wrap
+		}
+	}
+	top := d.p.clampTop(d.p.sel, rows)
+	if (dir > 0 && d.p.clampTop(top+1, rows) == top) || (dir < 0 && top == 0) {
+		return false
+	}
+	d.p.scrollBy(dir*rows, rows)
+	return true
+}
+
 // openAnchor opens overview ov's anchor i in the foreground: a file at its
 // line (a range selected), or the file a note sits on at the note. A target
 // that is gone is marked and named in the status line instead.
