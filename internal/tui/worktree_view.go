@@ -228,6 +228,13 @@ func (m Model) loadView(v *worktreeView) Model {
 	if m.feed != nil {
 		m.feed.SetService(v.svc) // the shared Commits list walks from the VIEWED tree's HEAD (a detached one's commits); the kick reconciles
 	}
+	m.windowState = v.windows // its windows, exactly as it left them (a fresh slot: none)
+	if m.layers == nil {
+		m.layers = &layerStack{}
+	}
+	// The windows come first: withStatus reconciles an open working-tree
+	// stack against the status it is handed, and that stack must be THIS
+	// worktree's — over the leaving one's pile it popped the leaving diff.
 	m.workingReviews = v.workingReviews // before the rows: withStatus derives the Review row from the reviews
 	m = m.withStatus(v.status)          // recomputes the index slices and the status stack
 	m.conflict = v.conflict
@@ -237,10 +244,6 @@ func (m Model) loadView(v *worktreeView) Model {
 	}
 	m.sel[panelFiles], m.sel[panelStaged] = v.selFiles, v.selStaged
 	m.fileMarks = v.fileMarks
-	m.windowState = v.windows // its windows, exactly as it left them (a fresh slot: none)
-	if m.layers == nil {
-		m.layers = &layerStack{}
-	}
 	for k, marks := range v.windows.workingAttention {
 		if m.attention == nil {
 			m.attention = map[attentionKey][]steerMark{}
