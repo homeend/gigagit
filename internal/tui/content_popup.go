@@ -726,7 +726,9 @@ func (p *contentPopup) layoutWidths(m Model) (inner, textW, margin, gutter, body
 }
 
 // charLead is the layout runes a non-block row's text sits behind ("  ", or
-// "> " on the cursor row): the selection never covers them.
+// "> " on the cursor row): the selection never covers them. A wrapped row's
+// hang indent (a list item's "10. ") is not part of it: wrapSegOffsets
+// measures that per segment.
 func (p *contentPopup) charLead() int {
 	if p.block {
 		return 0

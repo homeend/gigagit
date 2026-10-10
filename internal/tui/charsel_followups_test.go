@@ -174,3 +174,84 @@ func TestSummaryCharSelWrapsWhileOn(t *testing.T) {
 		_ = m
 	}
 }
+
+const charSelListDoc = `{"version":1,"summary":"Items:\n\n10. The tenth item is long enough to wrap inside the reading column more than once, so that its hang indent shows on the continuation rows below it.\n11. short","files":[{"path":"a.go","annotations":[{"newRange":[1,1],"summary":"adds A"}]}]}`
+
+// A numbered item's continuation rows hang behind a lead wider than two
+// runes ("10. "): the copy never carries the hang indent, and the stripe
+// lands on the very runes it copies — in the popup and in the stack.
+func TestCharSelNumberedListLead(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, charSelListDoc)
+	m, cmd := m.openReview(id, "Review")
+	m = drainCmds(t, m, cmd)
+	pm, _ := m.openReviewSummary()
+	p := pm.topLayer().(*reviewSummaryPopup)
+	var got string
+	pm = captureClip(pm, &got)
+	pm = feedKeys(pm, "v")
+	cont := -1
+	for i, r := range p.csRows {
+		if r.wraps && strings.HasPrefix(string(p.csRows[i-1].text), "10.") {
+			cont = i
+			break
+		}
+	}
+	if cont < 0 {
+		t.Fatalf("no continuation of the numbered item: %q", charRowTexts(p.csRows))
+	}
+	for p.cs.cur.row < cont {
+		pm = feedKeys(pm, "j")
+	}
+	pm = feedKeys(pm, "home", "space", "l")
+	seg := p.csSeg[cont]
+	if seg.off <= 2 {
+		t.Fatalf("the continuation sits at %d, want behind the 2-rune lead AND the hang indent", seg.off)
+	}
+	wr := []rune(p.csRows[cont].text)
+	n := seg.off + len(wr)
+	mask := p.charEmphFor(seg.line, n+8)
+	if mask == nil || mask[seg.off] != emphSel || mask[seg.off+1] != emphSelCur {
+		t.Fatalf("popup mask at off %d = %v", seg.off, mask)
+	}
+	u, cmd := pm.Update(keyMsg("enter"))
+	drainCmds(t, u.(Model), cmd)
+	if want := string(wr[:2]); got != want || strings.HasPrefix(got, " ") {
+		t.Fatalf("popup copied %q, want %q", got, want)
+	}
+
+	// The stack's summary element.
+	m = m.setStackedPref(true)
+	l, _ := filesLine(t, m, "a.go")
+	su, cmd := m.openDiffForFileLine(l)
+	sm := drainCmds(t, su.(Model), cmd)
+	v := sm.diffLayer()
+	sm = captureClip(sm, &got)
+	contLine := -1
+	for i, ln := range v.lines {
+		if ln.kind != lineProse {
+			continue
+		}
+		f, _ := v.stackFileAt(i)
+		if r := f.prose[ln.prose]; r.cont && r.lead > 2 {
+			contLine = i
+			break
+		}
+	}
+	if contLine < 0 {
+		t.Fatal("no prose continuation with a lead wider than two runes")
+	}
+	v.setCursorLine(contLine, sm.diffBodyRows())
+	sm = feedDiff(sm, "v", "space", "l")
+	f, _ := v.stackFileAt(contLine)
+	row := f.prose[v.lines[contLine].prose]
+	pmask := v.charEmphProse(contLine, len([]rune(row.text)))
+	if pmask == nil || pmask[row.lead] != emphSel || pmask[row.lead+1] != emphSelCur {
+		t.Fatalf("stack mask (lead %d) = %v", row.lead, pmask)
+	}
+	u, cmd = sm.Update(keyMsg("enter"))
+	drainCmds(t, u.(Model), cmd)
+	if want := string([]rune(row.text)[row.lead : row.lead+2]); got != want {
+		t.Fatalf("stack copied %q, want %q", got, want)
+	}
+}
