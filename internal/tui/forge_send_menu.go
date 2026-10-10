@@ -38,10 +38,29 @@ func (m Model) prOfView(v *diffView) int {
 // own stamp, and only while that PR is still the open one.
 func (m Model) prOfDiff() int {
 	v := m.diffLayer()
-	if v == nil || v.forgePR == 0 || v.forgePR != m.openPRNumber() {
+	if v == nil {
+		return 0
+	}
+	if pr := m.reviewPROf(v); pr != 0 {
+		return pr
+	}
+	if v.forgePR == 0 || v.forgePR != m.openPRNumber() {
 		return 0
 	}
 	return v.forgePR
+}
+
+// reviewPROf is the pull request whose Reviews block opened the review view
+// v is a diff of (0 = none, or v is not that review's diff): its remarks are
+// the PR's, so they send there as from the PR's own diff. A stack carries the
+// review id on its files (curNoteView), not on its own layer. The marks and
+// group bars stay the PR diff's own (prOfView).
+func (m Model) reviewPROf(v *diffView) int {
+	st, nv := m.filesReview, v.curNoteView()
+	if st == nil || st.backPreview == nil || nv == nil || nv.reviewID == "" || nv.reviewID != st.id {
+		return 0
+	}
+	return st.backPreview.prNumber
 }
 
 // noteSendRequest sends one local root (a note or an AI review's remark).

@@ -155,6 +155,19 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest("#ctx-menu")) hideCtxMenu();
 });
 
+// The menu sits at the pointer in viewport coordinates: once anything under
+// it scrolls (the wheel over a diff) or the window resizes, the row it was
+// opened for has moved away, so it closes. Capture phase — scroll does not
+// bubble. A tall menu scrolls itself (max-height): that one stays.
+function closeCtxMenuOnScroll(e) {
+  const menu = $("ctx-menu");
+  if (!menu._items) return; // closed: nothing to do
+  if (e.target instanceof Node && menu.contains(e.target)) return; // the menu's own scroll
+  hideCtxMenu();
+}
+document.addEventListener("scroll", closeCtxMenuOnScroll, true);
+window.addEventListener("resize", closeCtxMenuOnScroll);
+
 
 // A clipboard write is otherwise silent — you cannot tell a success from a
 // no-op without pasting. `what` names what landed (the TUI reports the same

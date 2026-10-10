@@ -565,7 +565,8 @@ sends. (gg cannot stop an agent that runs `gh` itself — that belongs to the
 agent's own permission settings.)
 
 In **gg web**, a pull request's diff shows the same marks and group colours
-as the terminal UI: right-click a note for *Send as GitHub comment*, and on a
+as the terminal UI: right-click a note for *Send as GitHub comment* (a
+review opened from the PR's Reviews block offers it on its remarks too), and on a
 GitHub thread *Reply & send…*, *Resolve / Reopen on GitHub*, *Send draft
 replies*; the pull request's right-click menu has *Send to GitHub…* — one
 panel over every unsent note, remark and draft reply, nothing ticked on
@@ -623,7 +624,8 @@ here, `◌` being sent, `○!` the last send failed (with the error), `●` on
 GitHub — and a coloured bar for its group: your own notes ("my draft
 review"), each AI review run on the PR (its remarks show in the diff too),
 each GitHub review. The `.` menu on a note offers *Send as GitHub comment*
-(that one note); on a GitHub thread *Reply to note*, *Reply & send…*,
+(that one note — also on a remark in a review opened from the pull
+request's Reviews block); on a GitHub thread *Reply to note*, *Reply & send…*,
 *Resolve / Reopen thread* (`x`, at once on GitHub) and *Send draft reply*
 (`R` writes a local draft). Everything else goes through **Send to
 GitHub…** — the PR diff's `.` row and the PR hub's `s` — the send panel:

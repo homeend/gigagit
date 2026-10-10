@@ -10,7 +10,7 @@ import { followOp, opBusy, opLine } from "./ops.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { fetchNotes, refreshNoteCounts } from "./files.js";
 import { loadPRCounts } from "./previews.js";
-import { sendRows } from "./prsendrows.js";
+import { prOfCtx, sendRows } from "./prsendrows.js";
 import { keptAfterSend, keptText } from "./prkept.js";
 
 // Hooks for a finished send (prs.js: the freshness word, the interrupted
@@ -59,12 +59,6 @@ export async function sendToGitHub(n, body, label, onRefused) {
   // followOp set state.op synchronously; the decision arrives later, on the
   // event stream, and reads the plan from here.
   if (state.op && state.op.id === resp.op_id) state.op.sendPlan = resp.plan;
-}
-
-// prOfCtx is the PR a diff context is the diff OF (0 = none): the rows exist
-// in a PR's own diff only.
-function prOfCtx(ctx) {
-  return (ctx && ctx.preview && ctx.preview.pr) || 0;
 }
 
 // replyAndSend writes a local draft reply to a GitHub thread, then sends it.
