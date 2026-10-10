@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Every overview opens beside its code
+
+### Added
+- An agent's overview (`gg session overview`) opens as the split too, in a
+  window 60 columns or wider: the overview on the left, the working-tree
+  file its selected anchor points at on the right, with the agent's notes.
+  A note anchor shows the note's line; a gone note is struck through. `S`
+  stacks the files the anchors name. The ctrl+\ switcher, `gg session files
+  focus` and backspace from a file an anchor opened bring an overview back
+  the same way; narrower, the full-screen viewer opens as before.
+- The review's remarks show beside the code: read-only boxes under the lines
+  they talk about, in the single file pane and in the stacked one (each
+  box names its file's line). A remark on a line the change deleted stays
+  in the diff. `d` and `r` on one say it is read-only.
+
+### Changed
+- In the split, moving on the file — the arrow keys, clicks, search, paging
+  and also `n` / `p` — no longer moves the overview's selection: the anchor
+  whose block the cursor is in is marked on the overview in that block's
+  colour instead. ↑/↓ on the overview and `N` / `P` on the file pane still
+  move it. A reopened review overview stacks its anchored files when the
+  review view is closed (it used to refuse).
+
 ## Review split: clicks land on the line drawn
 
 ### Fixed

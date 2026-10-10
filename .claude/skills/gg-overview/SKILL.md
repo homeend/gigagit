@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v3 -->
+<!-- gg:gg-overview:v4 -->
 
 # gg-overview — present a result in gg
 
@@ -52,8 +52,10 @@ recipe.
    `--rationale`. Several short notes beat one long one. Each answers `noted
    … as t<n>` — keep the ids for step 5.
 5. **The overview.** Markdown, written in the order you would explain it —
-   tab walks the anchors top to bottom (in a stored review's overview the
-   TUI shows it beside the file: ↑/↓ walk the anchors, tab switches sides):
+   the anchors are walked top to bottom (the TUI shows an overview beside
+   the file each anchor points to: ↑/↓ walk the anchors and the file follows,
+   a note anchor shows your note, tab switches sides; a narrow terminal
+   shows it full-screen, where tab walks them):
    - first line: the result in one sentence;
    - then each point with its anchor: `[the parser](internal/x/parse.go:40-60)`,
      `[this check](src/a.go:120)`, `[why this lock](note:t7)` (opens the file
