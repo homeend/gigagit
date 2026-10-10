@@ -1719,6 +1719,9 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 .vnote.outdated { opacity: .6; }
 .vnote-title { color: var(--accent); font-size: .9em; margin-bottom: 4px; }
 .vnote-why { margin-top: 6px; color: var(--dim); }
+/* a review's remark (spec 2026-10-11 §6): read-only, the review's colour */
+.vnote.remark { border-color: var(--dim); }
+.vnote.remark .vnote-title { color: var(--dim); }
 .vnote-acts { margin-top: 6px; display: flex; gap: 8px; }
 .vnote-acts button { font: inherit; font-size: .9em; color: var(--fg); background: none; border: 1px solid var(--border); border-radius: 3px; padding: 1px 8px; cursor: pointer; }
 .vnote-acts button:hover { border-color: var(--accent); color: var(--accent); }

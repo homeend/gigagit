@@ -311,7 +311,7 @@ function remarksReview(from) {
 // anchors, sel}). from is the way back to the overview an anchor opened this
 // file from ({id, sel}, one step deep, this tab's); range the lines that
 // anchor named.
-const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null, notes: [], ov: null, from: null, range: null };
+const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null, notes: [], remarks: [], ov: null, from: null, range: null };
 const viewerSearch = new Search();
 const places = new Map(); // id → {cur, top}: where THIS tab left each file
 let loadSeq = 0; // bumped by every open: a reload that sees it move drops (L9)
@@ -389,8 +389,9 @@ function fetchOverview(id) {
   return getJSON("/api/overview?id=" + encodeURIComponent(id));
 }
 
-function fetchContent(src, rev, path) {
-  return getJSON("/api/file-content?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path));
+function fetchContent(src, rev, path, review = "") {
+  return getJSON("/api/file-content?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path) +
+    (review ? "&review=" + encodeURIComponent(review) : ""));
 }
 
 // reportCursor tells the server this tab's line, debounced: the switcher of
@@ -461,8 +462,11 @@ $("viewer-body").addEventListener("contextmenu", (e) => {
 // openViewer shows path at one version and registers it as this tab's open
 // file (reused when already open). id (the switcher) brings an entry back by
 // id. The cursor lands per pickLine; a second call replaces the file on
-// screen, which stays open in the background.
-async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "" }) {
+// screen, which stays open in the background. from is the way back an
+// overview's link opened this file with — set before its first render, so
+// its bands and its stored review's remarks draw at once; steer marks the
+// split's own steering of its right column.
+async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "", from = null, steer = false }) {
   const seq = ++loadSeq;
   openSeq = seq;
   for (const [k, at] of closedAt) if (at < seq) closedAt.delete(k); // closed before this open: no open in flight can land
@@ -474,7 +478,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
     if (reg.file.source === "overview") {
       ovMine = ++ovSeq; // a refresh started before this fetch is older than its answer
       ov = await fetchOverview(reg.file.id);
-    } else body = await fetchContent(reg.file.source, reg.file.rev || "", reg.file.path);
+    } else body = await fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksReview(from));
   } catch (e) {
     reportShown(seq, reg);
     opLine("view failed: " + (e.message || e), true);
@@ -487,14 +491,16 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
     return { ok: false, notice: "" };
   }
   const f = reg.file;
-  view.from = view.range = null; // an anchor's open sets them after
-  view.rangeOwn = false;
   // A refresh that started after this fetch and landed first is newer: keep it.
   if (ov && view.ov && view.id === f.id && !ovAnswerApplies(ovMine, ovApplied)) ov = view.ov;
   if (ov) return showOverview(f, ov, ovMine);
+  view.from = from; // an overview's link: its bands and remarks draw at once
+  view.range = null;
+  view.rangeOwn = false;
   view.ov = null;
   Object.assign(view, { id: f.id, src: f.source, rev: f.rev || "", path: f.path, lines: body.lines || [] });
   view.notes = notesOf(body, view.src);
+  view.remarks = body.remarks || [];
   view.placeholder = placeholderFor(body, view.lines);
   view.image = imageOf(body, view.src, view.rev, view.path);
   const place = line > 0 ? null : places.get(f.id);
@@ -530,7 +536,7 @@ function reportShown(seq, reg) {
 // showOverview puts overview ov (entry f) on screen in document mode, where
 // this tab left it; mine is its fetch's place in the refresh order.
 function showOverview(f, ov, mine) {
-  Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], cur: 0, placeholder: "", image: null });
+  Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
   view.ov = { ...ov, sel: -1, want: "" };
   ovApplied = Math.max(ovApplied, mine);
   const place = places.get(f.id);
@@ -559,7 +565,7 @@ export function openStoredOverview({ id, title, blocks, anchors, tip, text }) {
 }
 
 function showStoredOverview(doc) {
-  Object.assign(view, { id: doc.id, src: "overview", rev: "", path: "", lines: [], notes: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
+  Object.assign(view, { id: doc.id, src: "overview", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
   view.ov = { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc };
   const first = view.ov.anchors.findIndex((a) => !a.plain);
   if (first >= 0) view.ov.sel = first; // the TUI lands on the first resolved anchor
@@ -637,14 +643,14 @@ function renderViewer() {
     let html = "";
     const bands = viewBands(), curB = view.from ? bandOf(bands, view.from.anchors || [], view.from.cur, view.lines.length) : -1;
     view.lines.forEach((l, i) => {
-      const noted = noteAtLine(view.notes, i + 1) ? " vnoted" : "";
+      const noted = noteAtLine(shownNotes(), i + 1) ? " vnoted" : "";
       const ranged = view.range && view.range.start <= i + 1 && i + 1 <= view.range.end ? " vrange" : "";
       const bk = bandKindAt(bands, curB, i + 1);
       const banded = bk ? " vanchor" + (bk === "cur" ? " acur" : "") : "";
       html +=
         `<div class="vline${i + 1 === view.cur ? " vcur" : ""}${noted}${ranged}${banded}" data-i="${i}"><span class="vno">${i + 1}</span>` +
         `<span class="vtext">${renderCell(l.text, null, l.tok, "", viewerSearch.query ? viewerSearch.hitsOn(i, 0) : null) || " "}</span></div>`;
-      for (const n of boxesAfter(view.notes, i)) html += noteBoxHTML(n);
+      for (const n of boxesAfter(shownNotes(), i)) html += noteBoxHTML(n);
     });
     body.innerHTML = html;
   }
@@ -720,8 +726,7 @@ function stepViewerAnchor(dir) {
   if (!bands.length) return;
   const r = stepBand(bands, bandOf(bands, f.anchors, f.cur, view.lines.length), view.cur, dir);
   const b = bands[r.i], a = f.anchors[b.i];
-  f.cur = f.dest = a.dest; // backAnchor returns to it
-  f.sel = b.i;
+  f.cur = a.dest; // W5: the current band only — the overview's selection (f.sel / f.dest) stays
   view.cur = b.start;
   rerenderKeepingScroll();
   centerCursor();
@@ -769,12 +774,9 @@ async function openAnchorAt(i) {
     // working review: the working tree); the kept copy is the way back.
     const stored = { ...view.ov.stored, scrollTop: $("viewer-body").scrollTop };
     const back = { id, sel: view.ov.sel, dest: a.dest, anchors: view.ov.anchors, cur: a.dest, stored };
-    const r = await openViewer(storedAnchorOpen(stored.tip, a));
+    const r = await openViewer({ ...storedAnchorOpen(stored.tip, a), from: back });
     if (!r.ok) return;
-    view.from = back;
     armBack();
-    rerenderKeepingScroll();
-    swapFoot(true);
     return;
   }
   const t = anchorTarget(a);
@@ -782,12 +784,9 @@ async function openAnchorAt(i) {
   // The overview's anchors travel with the way back: the file draws its
   // own as bands (viewBands), the opened one current — a note is no band.
   const from = { id, sel: view.ov.sel, dest: a.dest, anchors: view.ov.anchors, stamp: view.ov.stamp, cur: t.note ? "" : a.dest };
-  const r = await openViewer({ src: "worktree", path: t.path, line: t.line });
+  const r = await openViewer({ src: "worktree", path: t.path, line: t.line, from });
   if (!r.ok) return;
-  view.from = from;
   armBack();
-  rerenderKeepingScroll();
-  swapFoot(true);
   if (t.note) $("viewer-body").querySelector(`.vnote[data-note="${t.note}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
@@ -893,13 +892,21 @@ function notesOf(body, src) {
   return src === "worktree" ? body.notes || [] : [];
 }
 
+// shownNotes is every box the file draws: the agent's notes, then the
+// review's remarks (spec 2026-10-11 §6). Code that talks to the store keeps
+// view.notes.
+function shownNotes() {
+  return mergeNotes(view.notes, view.remarks);
+}
+
 function noteBoxHTML(n) {
   return (
-    `<div class="vnote${n.outdated ? " outdated" : ""}" data-note="${esc(n.id)}">` +
+    `<div class="vnote${n.outdated ? " outdated" : ""}${n.readonly ? " remark" : ""}" data-note="${esc(n.id)}">` +
     `<div class="vnote-title">${esc(noteBoxTitle(n))}</div>` +
     `<div class="vnote-sum">${esc(n.summary)}</div>` +
     (n.rationale ? `<div class="vnote-why">${esc(n.rationale)}</div>` : "") +
-    `<div class="vnote-acts"><button data-nact="dismiss">dismiss</button><button data-nact="ref">copy reference</button></div></div>`
+    (n.readonly ? "" : `<div class="vnote-acts"><button data-nact="dismiss">dismiss</button><button data-nact="ref">copy reference</button></div>`) +
+    `</div>`
   );
 }
 
@@ -933,12 +940,12 @@ function copyNoteRef(n) {
 // stepNote is } / {: the next note in this file, then the next open file
 // with notes, landing on its first (last) note.
 async function stepNote(dir) {
-  const line = nextNoteLine(view.notes, view.cur, dir);
+  const line = nextNoteLine(shownNotes(), view.cur, dir);
   if (line) {
     view.cur = line;
     paintCursor();
     for (const b of $("viewer-body").querySelectorAll(".vnote")) {
-      if (noteAtLine(view.notes, line)?.id === b.dataset.note) b.scrollIntoView({ block: "nearest" });
+      if (noteAtLine(shownNotes(), line)?.id === b.dataset.note) b.scrollIntoView({ block: "nearest" });
     }
     cursorRow()?.scrollIntoView({ block: "nearest" });
     return;
@@ -950,7 +957,8 @@ async function stepNote(dir) {
   const id = nextNotedFile(files, view.id, dir);
   if (!id) return opLine(view.notes.length ? "no more notes" : "no notes", false);
   const r = await openViewer({ id });
-  const t = dir > 0 ? view.notes[0] : view.notes[view.notes.length - 1];
+  const ns = shownNotes();
+  const t = dir > 0 ? ns[0] : ns[ns.length - 1];
   if (r.ok && t) {
     view.cur = t.start;
     paintCursor();
@@ -1032,8 +1040,8 @@ function viewerKey(e) {
     case "End": case "G": view.cur = view.lines.length; paintCursor(); break;
     case "w": cycleTextMode(); break;
     case ".": menuAtCursor(); break;
-    case "d": { const n = noteAtLine(view.notes, view.cur); if (!n) return false; dismissNote(n.id); break; }
-    case "r": { const n = noteAtLine(view.notes, view.cur); if (!n) return false; copyNoteRef(n); break; }
+    case "d": { const n = noteAtLine(shownNotes(), view.cur); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
+    case "r": { const n = noteAtLine(shownNotes(), view.cur); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
     case "}": stepNote(1); break;
     case "{": stepNote(-1); break;
     case "n": stepViewerAnchor(1); break; // always ours: a p in the viewer is never pull
@@ -1128,9 +1136,8 @@ function viewerFoot() {
   }
   const back = view.from ? `<button data-vact="back" title="or your browser's Back">bksp back</button>` : "";
   const bandKeys = view.from && viewBands().length ? "<span>n p anchors</span>" : "";
-  const notes = view.notes.length
-    ? `<span>} { notes</span><button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>`
-    : "";
+  const notes = (shownNotes().length ? `<span>} { notes</span>` : "") +
+    (view.notes.length ? `<button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>` : "");
   return (
     back + bandKeys + `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
     `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\\ open files</button><button data-vact="close">esc close</button>`
@@ -1152,8 +1159,8 @@ $("foot").addEventListener("click", (e) => {
     case "bg": backgroundViewer(); break;
     case "files": openSwitcher(); break;
     case "close": closeViewer(escHow(!!view.ov, view.notes.length)); break;
-    case "dismiss": { const n = noteAtLine(view.notes, view.cur); if (n) dismissNote(n.id); else opLine("no note on this line", false); break; }
-    case "ref": { const n = noteAtLine(view.notes, view.cur); if (n) copyNoteRef(n); else opLine("no note on this line", false); break; }
+    case "dismiss": { const n = noteAtLine(shownNotes(), view.cur); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
+    case "ref": { const n = noteAtLine(shownNotes(), view.cur); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
     case "aopen": if (view.ov && view.ov.sel >= 0) openAnchorAt(view.ov.sel); else opLine("no anchor selected — tab selects one", false); break;
     case "aref": if (view.ov) copyAnchorRef(); break;
     case "ytext": if (view.ov) copyText(view.ov.text, "overview text"); break;
@@ -1366,7 +1373,7 @@ async function viewerFileChanged(id) {
   const seq = loadSeq;
   let body;
   try {
-    body = await fetchContent(view.src, view.rev, view.path);
+    body = await fetchContent(view.src, view.rev, view.path, remarksReview(view.from));
   } catch {
     return; // the next change retries; a dead server paints its own veil
   }
@@ -1375,6 +1382,7 @@ async function viewerFileChanged(id) {
   const top = el.scrollTop, left = el.scrollLeft;
   view.lines = body.lines || [];
   view.notes = body.missing ? view.notes : notesOf(body, view.src); // a deleted file keeps its notes for its return
+  view.remarks = body.missing ? view.remarks : body.remarks || [];
   view.placeholder = placeholderFor(body, view.lines);
   view.image = imageOf(body, view.src, view.rev, view.path);
   view.cur = keepLine(view.cur, view.lines.length, !!body.missing);
