@@ -430,3 +430,20 @@ func TestBandMenuRowsAndHint(t *testing.T) {
 		t.Fatal("hint lacks [n/p] anchors")
 	}
 }
+
+// In the copy mode a file opened from an anchor drops the [bksp] back /
+// [n/p] anchors lead: both keys wait while the mode is on.
+func TestAnchorFileHintInTheCopyMode(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = fvKeys(t, m, keyMsg("tab"))
+	m = openNth(t, m, d, 1)
+	if _, ok := m.topLayer().(*fileViewer); !ok {
+		t.Fatalf("top = %T, want the viewer", m.topLayer())
+	}
+	m = fvKeys(t, m, keyMsg("v"))
+	v := m.View()
+	if !strings.Contains(v, "[enter] copy") || strings.Contains(v, "[bksp] back") {
+		t.Fatalf("hint in the mode:\n%s", v)
+	}
+}
