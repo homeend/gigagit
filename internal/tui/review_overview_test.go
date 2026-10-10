@@ -146,7 +146,7 @@ func TestStoredOverviewIsNotAStoreOverview(t *testing.T) {
 func TestStoredOverviewOfAWorkingReviewIsStillStored(t *testing.T) {
 	t.Parallel()
 	m, _ := reviewWithOverview(t)
-	m.filesReview.tip = "" // as a review of uncommitted changes has it
+	m.filesReview.tip = ""              // as a review of uncommitted changes has it
 	m, cmd := m.openReviewOverviewDoc() // the full-screen viewer: the narrow door and the switcher's frame
 	m = drainCmds(t, m, cmd)
 	d := topDoc(m)
