@@ -3,6 +3,8 @@ package tui
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -67,5 +69,50 @@ func TestStashOpEndWithAQueuedReturnReloadsTheLeavingList(t *testing.T) {
 	m = nm.(Model)
 	if m.stashView == nil || m.stashView.loading {
 		t.Fatal("A's stash list did not receive its reload on return")
+	}
+}
+
+// A stacked file's diff is re-labelled by stackCmd; the stamp its loader
+// carried must survive the wrap, or the answer lands on whatever worktree is
+// shown and is dropped — leaving the stack's inflight count stuck.
+func TestStackFileResultWaitsForItsWorktree(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	// A COMMIT's stack: the status reconcile that rebuilds a working-tree
+	// stack on every status write never touches it, so a lost answer stays
+	// lost — the file loading for good, the inflight slot never freed.
+	m = m.pushLayer(&diffView{title: "stack", stk: &diffStack{gen: 5, src: diffNavTree, files: []stackFile{{path: "a.txt", load: stackLoading}}}})
+	m.diffLayer().stk.inflight = 1
+	stamp := m.stamp() // taken when the loader is built, as the real loaders do
+	inner := func() tea.Msg { return diffMsg{slotStamp: stamp, view: &diffView{title: "a.txt"}} }
+	cmd := stackCmd(5, 0, inner)
+	m = forceSwitch(t, m, other)
+	nm, _ := m.Update(cmd())
+	m = nm.(Model)
+	if v := m.views[model.KeyOf(home)]; v == nil || len(v.queued) != 1 {
+		t.Fatal("the stack file's answer was not queued for its worktree")
+	}
+	m = forceSwitch(t, m, home)
+	nm, _ = m.Update(heartbeatMsg{})
+	m = nm.(Model)
+	dv := m.diffLayer()
+	if dv == nil || dv.stk == nil || dv.stk.files[0].load != stackLoaded || dv.stk.inflight != 0 {
+		t.Fatalf("A's stack did not receive its file on return: %+v", dv.stk)
+	}
+}
+
+// Every message whose handler writes into a WINDOW (a diff, the files view,
+// a popup, the stash list) carries its slot: these were found unstamped
+// after the merge, and each one misrouted a worktree's answer.
+func TestWindowMessagesEmbedTheirSlotStamp(t *testing.T) {
+	t.Parallel()
+	for _, msg := range []any{
+		stackFileMsg{}, stackNotesMsg{}, stackStatMsg{}, treeFilesMsg{}, notesLoadedMsg{},
+		allNotesScopeMsg{}, contentLandedMsg{}, noteLandedMsg{}, versionHintLoadedMsg{}, stashListMsg{},
+	} {
+		if _, ok := msg.(slotMsg); !ok {
+			t.Errorf("%T does not embed slotStamp", msg)
+		}
 	}
 }

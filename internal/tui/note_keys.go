@@ -17,9 +17,10 @@ import (
 // notesLoadedMsg carries the resolved notes for one open diff. tag gates a
 // stale result exactly like diffMsg (the diff may have been stepped away).
 type notesLoadedMsg struct {
-	tag   string
-	notes []domain.ResolvedNote
-	err   error
+	slotStamp // the slot it was asked from (slot_msg.go): status:<path> names no worktree
+	tag       string
+	notes     []domain.ResolvedNote
+	err       error
 }
 
 // noteMutatedMsg reports the outcome of an add/edit/reply/remove.
@@ -139,6 +140,7 @@ func (m Model) loadNotesCmd() tea.Cmd {
 		return nil
 	}
 	svc, tag, rows := m.svc, m.diffTag, v.full
+	slot := m.stamp()
 	// A preview gathers its notes along the branch and resolves them against
 	// the tip's content; every other view reads the address's own notes.
 	set, rid, all := v.previewSet, v.reviewID, v.rangeNotes
@@ -146,17 +148,17 @@ func (m Model) loadNotesCmd() tea.Cmd {
 		d := domain.Diff{Result: textdiff.Result{Rows: rows}}
 		if rid != "" {
 			ns, err := svc.ReviewNotesFor(context.Background(), rid, addr.Path, d)
-			return notesLoadedMsg{tag: tag, notes: ns, err: err}
+			return notesLoadedMsg{slotStamp: slot, tag: tag, notes: ns, err: err}
 		}
 		if set != nil {
 			ns, err := svc.PreviewNotesFor(context.Background(), *set, addr.Path, d)
-			return notesLoadedMsg{tag: tag, notes: ns, err: err}
+			return notesLoadedMsg{slotStamp: slot, tag: tag, notes: ns, err: err}
 		}
 		ns, err := svc.NotesFor(context.Background(), addr, d)
 		if !all { // a range review's notes show in the review, not here
 			ns = domain.PlainNotes(ns)
 		}
-		return notesLoadedMsg{tag: tag, notes: ns, err: err}
+		return notesLoadedMsg{slotStamp: slot, tag: tag, notes: ns, err: err}
 	}
 }
 

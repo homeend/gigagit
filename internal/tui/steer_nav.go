@@ -387,7 +387,8 @@ func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
 	// cursor landed (a link's line may be past the end of a file that shrank).
 	lead, evicted := "opened "+c.File, evictedPath(ev)
 	return m, func() tea.Msg {
-		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, path: c.File, line: line, lead: lead, evicted: evicted}
+		l := load().(fileContentMsg)
+		return contentLandedMsg{slotStamp: l.slotStamp, load: l, cmd: c, path: c.File, line: line, lead: lead, evicted: evicted}
 	}
 }
 
@@ -396,12 +397,13 @@ func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
 // Update fills the document from load, then replies. lead opens the reply
 // ("opened a.txt"); evicted is a file the open closed over the cap, or "".
 type contentLandedMsg struct {
-	load    fileContentMsg
-	cmd     steer.Command
-	path    string // the file loaded: a file_focus by id names no File
-	line    int
-	lead    string
-	evicted string
+	slotStamp // the load's own stamp: the whole landing waits for its worktree (slot_msg.go)
+	load      fileContentMsg
+	cmd       steer.Command
+	path      string // the file loaded: a file_focus by id names no File
+	line      int
+	lead      string
+	evicted   string
 }
 
 // landedDetail is the reply for a landed open file: lead, the line the
