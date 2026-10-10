@@ -20,15 +20,22 @@ func (m Model) routeSlotMsg(msg tea.Msg) (Model, bool) {
 	if k == "" || k == m.viewed {
 		return m, false
 	}
-	if v := m.views[k]; v != nil {
-		if s, ok := msg.(staleFor); ok && s.staleFor(v) {
-			return m, true // the slot would drop it on return: not worth keeping
-		}
+	v := m.views[k]
+	if v == nil {
+		// A gone slot's message is dropped — all but its process-wide part
+		// (a shelf list, a PR row), which is nobody's in particular.
 		if sw, ok := msg.(sharedWriter); ok {
-			m, msg = sw.applyShared(m) // the process-wide part lands now; the replay skips it
+			m, _ = sw.applyShared(m)
 		}
-		v.queued = trimQueue(append(v.queued, msg))
+		return m, true
 	}
+	if s, ok := msg.(staleFor); ok && s.staleFor(v) {
+		return m, true // the slot would drop it on return: not worth keeping
+	}
+	if sw, ok := msg.(sharedWriter); ok {
+		m, msg = sw.applyShared(m) // the process-wide part lands now; the replay skips it
+	}
+	v.queued = trimQueue(append(v.queued, msg))
 	return m, true
 }
 

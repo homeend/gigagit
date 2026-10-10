@@ -3,7 +3,10 @@ package tui
 import (
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -232,5 +235,57 @@ func TestBranchesArrivalKeepsTheViewedHeadMark(t *testing.T) {
 	m = mm.(Model)
 	if headOf(m.branches) != "wt2" {
 		t.Fatalf("after the stale arrival * is on %q, want the viewed wt2", headOf(m.branches))
+	}
+}
+
+// A sharedWriter addressed to a slot that is GONE (pruned while its read
+// was in flight) still lands its repository-wide part: the shelf list and
+// a PR row are nobody's in particular.
+func TestSharedPartOfAMessageForAGoneSlotStillLands(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	entries := []model.ShelfEntry{{ID: "s1"}}
+	msg := shelfLoadedMsg{slotStamp: slotStamp{slot: model.KeyOf("/gone/worktree")}, entries: entries}
+	m, took := m.routeSlotMsg(msg)
+	if !took {
+		t.Fatal("the gate must take a message for a gone slot")
+	}
+	if len(m.shelfEntries) != 1 || m.shelfEntries[0].ID != "s1" {
+		t.Fatalf("the shelf list (shared) was lost with the gone slot: %+v", m.shelfEntries)
+	}
+}
+
+// A click on another left panel moves the focus without unbinding the
+// console (the next key does): the ghost cursor is the BOUND console's
+// stand-in for the missing Commits focus, so it must not be drawn beside
+// the clicked panel's real cursor.
+func TestGhostCursorNeedsTheCommitsFocus(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	startSessionIn(t, m, other, "Shell")
+	m = pressAlt(t, m, 'a')
+	if m.console == nil || !m.console.focused {
+		t.Fatal("precondition: the console is bound")
+	}
+	m.focus = panelFiles // a click on the Files panel
+	out := ansi.Strip(m.renderPanel(panelBranches, "Branches", m.branchRows(), nil, 60, 12))
+	if strings.Contains(out, "> ") {
+		t.Fatalf("the ghost cursor is drawn while another panel has the focus:\n%s", out)
+	}
+}
+
+// The file-path popup's list is read off-thread and lands unstamped on the
+// live pile: parked while loading, it would never fill ("(loading…)" for
+// good) — like the other popups with work in flight, it parks only once
+// the list landed.
+func TestFilePathPopupIsNotParkableWhileLoading(t *testing.T) {
+	t.Parallel()
+	if parkableLayer(&filePathPopup{loading: true}) {
+		t.Fatal("a loading file-path popup must refuse the swap")
+	}
+	if !parkableLayer(&filePathPopup{}) {
+		t.Fatal("a loaded file-path popup parks")
 	}
 }
