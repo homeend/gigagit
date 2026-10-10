@@ -451,7 +451,7 @@ $("review").addEventListener("click", (e) => {
 // conflict run's overview, which is plain text).
 function reviewDoc(ev) {
   if (ev.structured === undefined) return null;
-  return { structured: !!ev.structured, overviewMd: ev.overviewMd, docMeta: ev.docMeta || "", notes: ev.notes || [] };
+  return { structured: !!ev.structured, summaryMd: ev.summaryMd, docMeta: ev.docMeta || "", notes: ev.notes || [] };
 }
 
 // reportWhere is the report viewer's path line: the note a review is stored
@@ -476,7 +476,7 @@ function openReport(title, noteId, content, doc, unsaved) {
   $("report-warn").style.display = doc && !structured ? "" : "none";
   $("report-warn").textContent = doc && !structured ? "not in gg review format — shown as text" : "";
   if (structured) {
-    $("report-md").innerHTML = mdHTML(doc.overviewMd, esc);
+    $("report-md").innerHTML = mdHTML(doc.summaryMd, esc);
     $("report-meta").textContent = doc.docMeta;
     $("report-notes").innerHTML = doc.notes
       .map((n) => `<li>${esc(n.path + ":" + n.line + " — " + n.summary)}${n.meta ? `<span class="meta">${esc(n.meta)}</span>` : ""}</li>`)

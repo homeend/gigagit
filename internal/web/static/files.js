@@ -21,7 +21,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { noteMark, noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewOverview } from "./reviews.js";
+import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -1055,7 +1055,7 @@ function renderFiles() {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
     $("conflict-note").classList.add("hidden");
-    if (reviewActive()) return renderReviewFiles(); // ≡ Overview + the reviewed files (reviews.js)
+    if (reviewActive()) return renderReviewFiles(); // ≡ Summary + the reviewed files (reviews.js)
     if (symActive()) return renderSymLists(); // two aligned lists (symcompare.js)
     // A commit file's notes are keyed "<sha>:<path>" — the sha this row's diff
     // would open — and count only the notes written outside any range: a range
@@ -1231,7 +1231,7 @@ function fileDiffURL(f) {
 
 async function openFile(i) {
   clearDiffHunks();
-  if (reviewActive()) state.review.onOverview = false; // a file, not the Overview, is on screen now
+  if (reviewActive()) state.review.onSummary = false; // a file, not the Summary, is on screen now
   state.reviewSel = "";
   // The layout switch sits in the SYNC prefix: an esc during a slow diff
   // load steps back to the files stage, and the fetch completing later
@@ -5084,8 +5084,8 @@ $("files-list").addEventListener("click", (e) => {
     openShelfNotes(c.shelfEntry, c.shelfLabel, li.dataset.note);
     return;
   }
-  // A commit's review row opens the review; the review view's Overview row
-  // shows the Overview. Neither is a file (no data-i).
+  // A commit's review row opens the review; the review view's Summary row
+  // shows the Summary. Neither is a file (no data-i).
   if (li && li.dataset.review) {
     // The working list's Review row returns to the list; a commit's to it.
     // …and a preview's Reviews row returns to the preview.
@@ -5104,7 +5104,7 @@ $("files-list").addEventListener("click", (e) => {
   }
   if (li && li.dataset.ov && reviewActive()) {
     state.pane = "files";
-    showReviewOverview();
+    showReviewSummary();
     return;
   }
   if (li && li.dataset.i !== undefined && (e.ctrlKey || e.metaKey) && state.filesMode === "status") {
@@ -5145,7 +5145,7 @@ function fileExt(path) {
 $("files-list").addEventListener("contextmenu", (e) => {
   const li = e.target.closest("li");
   // A commit's note rows are not files: Open + Delete only (the TUI's
-  // noteRowMenu). The review view's Overview row: Delete review.
+  // noteRowMenu). The review view's Summary row: Delete review.
   if (li && li.dataset.review) {
     e.preventDefault();
     const rid = li.dataset.review;

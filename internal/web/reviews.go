@@ -133,7 +133,7 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		"meta": "", "notes": 0, "note_files": 0, "other": []map[string]string{},
 	}
 	if rv.Doc == nil {
-		out["overviewMd"] = markdown.Parse(rv.Text) // a prose review: its text is the overview
+		out["summaryMd"] = markdown.Parse(rv.Text) // a prose review: its text is the summary
 		writeJSON(w, out)
 		return
 	}
@@ -174,7 +174,7 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out["summaries"] = sums
-	out["overviewMd"] = markdown.Parse(rv.Doc.Summary)
+	out["summaryMd"] = markdown.Parse(rv.Doc.Summary)
 	out["meta"] = reviewMetaText(rv.Doc.Meta)
 	out["notes"], out["note_files"] = rv.Doc.NoteCount()
 	_, out["resolved"] = rv.Tally()

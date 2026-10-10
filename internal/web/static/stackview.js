@@ -14,7 +14,7 @@ import { $, esc, getJSON, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { registerHelp } from "./menus.js";
 import { focusPane } from "./keys.js";
-import { reviewActive, reviewOverviewHTML, showReviewOverview } from "./reviews.js";
+import { reviewActive, reviewSummaryHTML, showReviewSummary } from "./reviews.js";
 import { seedCollapsed } from "./notebox.js";
 import { noteHTML } from "./shelfnotes.js";
 import {
@@ -117,8 +117,8 @@ async function buildStack(list, group, anchorIdx) {
   if (state.stack !== st) return; // superseded while the counts loaded
   paintStack(st);
   st.painted = true;
-  // A review's stack opened on its Overview stays at the top, where it is.
-  if (reviewActive() && state.review.onOverview) {
+  // A review's stack opened on its Summary stays at the top, where it is.
+  if (reviewActive() && state.review.onSummary) {
     $("diff-pane").scrollTop = 0;
     renderFiles();
     updateDiffNav();
@@ -198,9 +198,9 @@ function sectionHTML(s, k) {
 
 function paintStack(st) {
   const body = $("diff-body");
-  // A review's stack starts with its Overview (reviews.js), above the files;
+  // A review's stack starts with its Summary (reviews.js), above the files;
   // a shelf entry's, with its own notes.
-  const ov = reviewActive() ? `<div class="stk-ov">${reviewOverviewHTML()}</div>` : "";
+  const ov = reviewActive() ? `<div class="stk-ov">${reviewSummaryHTML()}</div>` : "";
   body.innerHTML = `<div class="stk">${ov}${stackNotesHTML()}${st.slots.map(sectionHTML).join("")}</div>`;
   measureChrome();
   const n = st.slots.length;
@@ -813,14 +813,14 @@ function syncCursor() {
   syncRaf = 0;
   const st = state.stack;
   if (!st) return;
-  // In a review's stack the Overview is what is read until the first file's
-  // header reaches the line: the list highlights ≡ Overview meanwhile.
+  // In a review's stack the Summary is what is read until the first file's
+  // header reaches the line: the list highlights ≡ Summary meanwhile.
   if (reviewActive()) {
     const first = document.querySelector("#diff-body .stk-file");
     const line = $("diff-pane").getBoundingClientRect().top + $("diff-header").offsetHeight + 1;
     const top = !first || first.getBoundingClientRect().top > line;
-    if (top !== state.review.onOverview) {
-      state.review.onOverview = top;
+    if (top !== state.review.onSummary) {
+      state.review.onSummary = top;
       st.anchor = -1; // re-claimed below once a file is read
       renderFiles();
       followInList();
@@ -1034,8 +1034,8 @@ function toggleStacked() {
   syncStackChrome();
   if (state.layout !== "diff" || !activeFileList().length) return; // an empty symmetric view has nothing to show
   if (!on) teardownStack();
-  // A review on its Overview keeps the Overview: alone, or atop the stack.
-  if (reviewActive() && state.review.onOverview) return showReviewOverview();
+  // A review on its Summary keeps the Summary: alone, or atop the stack.
+  if (reviewActive() && state.review.onSummary) return showReviewSummary();
   openFile(state.fileCursor);
 }
 

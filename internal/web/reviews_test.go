@@ -119,7 +119,8 @@ type reviewViewResp struct {
 	} `json:"files"`
 	Counts     map[string]int    `json:"counts"`
 	Summaries  map[string]string `json:"summaries"`
-	OverviewMd any               `json:"overviewMd"`
+	SummaryMd  any               `json:"summaryMd"`
+	OverviewMd any               `json:"overviewMd"` // the STORED overview (Task 2); nil without one
 	Meta       string            `json:"meta"`
 	Text       string            `json:"text"`
 	Notes      int               `json:"notes"`
@@ -148,8 +149,14 @@ func TestReviewViewShape(t *testing.T) {
 	if len(got.Other) != 1 || got.Other[0].Path != "zzz.go" || got.Other[0].Line != "1" {
 		t.Errorf("other notes = %+v, want zzz.go:1", got.Other)
 	}
-	if got.Notes != 2 || got.NoteFiles != 2 || got.OverviewMd == nil || got.Meta != "verdict: approve" {
-		t.Errorf("notes %d on %d files, overview %v, meta %q", got.Notes, got.NoteFiles, got.OverviewMd, got.Meta)
+	if got.Notes != 2 || got.NoteFiles != 2 || got.Meta != "verdict: approve" {
+		t.Errorf("notes %d on %d files, meta %q", got.Notes, got.NoteFiles, got.Meta)
+	}
+	if got.SummaryMd == nil {
+		t.Fatal("the review's summary must arrive as summaryMd (R11: the review text is its summary)")
+	}
+	if got.OverviewMd != nil {
+		t.Fatal("a review without a stored overview sends no overviewMd")
 	}
 	if !strings.Contains(got.Text, `"summary"`) || got.Label != sha[:7] {
 		t.Errorf("text %q / label %q", got.Text, got.Label)
@@ -163,7 +170,7 @@ func TestReviewViewProse(t *testing.T) {
 	if code := getJSON(t, ts, "/api/review/"+id, &got); code != http.StatusOK {
 		t.Fatalf("GET = %d", code)
 	}
-	if got.Structured || len(got.Files) != 0 || got.Text != "just prose" || got.OverviewMd == nil {
+	if got.Structured || len(got.Files) != 0 || got.Text != "just prose" || got.SummaryMd == nil {
 		t.Errorf("prose review = %+v", got)
 	}
 }

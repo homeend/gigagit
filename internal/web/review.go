@@ -404,12 +404,12 @@ func (s *Server) toolRepoKey(ctx context.Context, svc *domain.Service) string {
 }
 
 // addReviewDoc puts a structured review on the done payload the way the page
-// paints it: the overview as a parsed markdown tree (the page never parses
+// paints it: the summary as a parsed markdown tree (the page never parses
 // markdown), the document meta and one row per note — "2-3" / "-4" (an
 // old-side line) as the CLI prints them.
 func addReviewDoc(out map[string]any, doc notebatch.ReviewDoc) {
 	out["structured"] = true
-	out["overviewMd"] = markdown.Parse(doc.Summary)
+	out["summaryMd"] = markdown.Parse(doc.Summary)
 	out["docMeta"] = reviewMetaText(doc.Meta)
 	notes := []map[string]string{}
 	for _, f := range doc.Files {

@@ -371,9 +371,9 @@ func TestReviewDonePayloadCarriesTheStructuredReview(t *testing.T) {
 	if last["structured"] != true {
 		t.Fatalf("structured = %v", last["structured"])
 	}
-	md, _ := json.Marshal(last["overviewMd"])
+	md, _ := json.Marshal(last["summaryMd"])
 	if !strings.Contains(string(md), "Verdict") || !strings.Contains(string(md), "ship it") {
-		t.Fatalf("overviewMd = %s", md)
+		t.Fatalf("summaryMd = %s", md)
 	}
 	notes, _ := last["notes"].([]any)
 	if len(notes) != 2 {
