@@ -1,6 +1,8 @@
 package tui
 
 import (
+	tea "github.com/charmbracelet/bubbletea"
+
 	"regexp"
 	"strings"
 	"testing"
@@ -332,4 +334,35 @@ func TestDiffCharSelLeavesOnAReload(t *testing.T) {
 	if !strings.Contains(m.renderDiffView(), "x") {
 		t.Fatal("the reloaded text must show")
 	}
+}
+
+// The wheel scrolls the Summary popup like ↑/↓ — and, in the copy mode,
+// moves the pager only (the preview's rule): the cursor stays where it is,
+// and the next key brings the view back to it.
+func TestSummaryPopupWheelScrolls(t *testing.T) {
+	t.Parallel()
+	m, p := openedSummaryPopup(t)
+	wheel := func(m Model, b tea.MouseButton) Model {
+		u, _ := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: b, X: 50, Y: 10})
+		return u.(Model)
+	}
+	m = wheel(m, tea.MouseButtonWheelDown)
+	if p.sel == 0 {
+		t.Fatal("the wheel must scroll the Summary popup")
+	}
+	m = wheel(m, tea.MouseButtonWheelUp)
+	if p.sel != 0 {
+		t.Fatalf("wheel up: top %d, want 0", p.sel)
+	}
+	m = feedKeys(m, "v")
+	cur := p.cs.cur
+	m = wheel(m, tea.MouseButtonWheelDown)
+	if p.sel == 0 || p.cs.cur != cur || !p.cs.on {
+		t.Fatalf("in the mode the wheel moves the pager only: top %d cursor %+v (was %+v)", p.sel, p.cs.cur, cur)
+	}
+	m = feedKeys(m, "l")
+	if p.cs.cur.row < p.sel {
+		t.Fatalf("the next key must bring the cursor row %d back into view (top %d)", p.cs.cur.row, p.sel)
+	}
+	_ = m
 }

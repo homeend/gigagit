@@ -148,12 +148,19 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// The layer stack (surfaces + centered popups) is above any content window;
 	// surfaces (history/blame) are keyboard-only (v1) and popups swallow mouse
 	// rather than hit-test the hidden background — except the help / `?` cheat-sheet
-	// viewer (a contentPopup), which scrolls with the wheel. List-style popups
+	// viewer (a contentPopup) and the review's Summary, which scroll with the
+	// wheel. List-style popups
 	// accept a double-click as enter; the full-screen readers accept a
 	// right-click as `.`.
 	if l := m.topLayer(); l != nil {
 		if cp, ok := l.(*contentPopup); ok && wheel != 0 {
 			cp.move(wheel)
+		}
+		// The review's Summary is a pager too (it embeds the content popup).
+		// In the copy mode the wheel moves the pager only, never the
+		// character cursor — the next key brings the view back to it.
+		if sp, ok := l.(*reviewSummaryPopup); ok && wheel != 0 {
+			sp.move(wheel)
 		}
 		if fv, ok := l.(*fileViewer); ok && fv.ov != nil && msg.Button == tea.MouseButtonLeft && m.actionMenu == nil {
 			return m.overviewClick(fv, msg.X, msg.Y)
