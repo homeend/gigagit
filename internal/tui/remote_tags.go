@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -102,6 +103,7 @@ func (m Model) pushCurrentOp() engine.Operation {
 // check and push directly" so P never hangs.
 type pushTagCheckMsg struct {
 	gen       int
+	svc       *domain.Service // the worktree P was pressed in; nil = untagged (tests)
 	tipTags   []model.Tag
 	remoteSet map[string]bool // nil on timeout/error → skip the tag check
 	err       error
@@ -115,7 +117,7 @@ func (m Model) pushTagCheckCmd(gen int, tipTags []model.Tag) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		set, err := svc.RemoteTagsFresh(ctx)
-		return pushTagCheckMsg{gen: gen, tipTags: tipTags, remoteSet: set, err: err}
+		return pushTagCheckMsg{gen: gen, svc: svc, tipTags: tipTags, remoteSet: set, err: err}
 	}
 }
 

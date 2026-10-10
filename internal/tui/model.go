@@ -3549,6 +3549,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.gen != m.pushCheckGen {
 			return m, nil // superseded (another P / op / repo switch)
 		}
+		if msg.svc != nil && msg.svc != m.svc {
+			// The panels swapped during the check (alt+w, a console): the
+			// push would go through the worktree on screen NOW, with ITS
+			// branch. The worktree P was pressed in is the only honest target.
+			m.statusMsg = i18n.T("push cancelled (the worktree on screen changed) — press P again there")
+			return m, nil
+		}
 		if m.running {
 			// An op started during the 5s check — never start a push under it.
 			m.statusMsg = i18n.T("push cancelled (an operation is running) — press P again")
