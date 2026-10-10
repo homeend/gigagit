@@ -3774,7 +3774,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the worktree the op ran in (stamped for its slot), and after the
 			// swap m.stashView is the arriving worktree's — usually none.
 			listCmd := m.loadStashListCmd(m.stashView.tag)
-			m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
+			m = m.takeQueuedReturnAfterOp(srcs) // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
 			var cmd tea.Cmd
 			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
 			return m, tea.Batch(healthCmd, cmd, listCmd, driftCmd, sendCmd)
@@ -3807,7 +3807,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, prCmd = m.failPRLanding(prOpen.Number, firstLine(msg.err.Error()))
 		}
 		var cmd tea.Cmd
-		m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
+		m = m.takeQueuedReturnAfterOp(srcs) // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
 		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
 		// prepend them, not collapse the list back to page 0.
 		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})

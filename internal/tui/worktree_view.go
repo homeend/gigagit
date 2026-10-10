@@ -246,11 +246,20 @@ func (m Model) listedBranch(path string) (string, bool) {
 func (m Model) dropRecycledWindows() (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	for key, v := range m.views {
-		if key == m.viewed || !v.branchKnown {
+		if key == m.viewed {
 			continue
 		}
 		branch, listed := m.listedBranch(v.path)
-		if !listed || branch == v.branch || branch == "" {
+		if !listed {
+			continue
+		}
+		if !v.branchKnown {
+			// No record (a slot never parked, or one re-baselined after its
+			// own HEAD-moving op): this list is the baseline.
+			v.branch, v.branchKnown = branch, true
+			continue
+		}
+		if branch == v.branch || branch == "" {
 			continue
 		}
 		if v.branch == "" {
@@ -611,6 +620,25 @@ func (m Model) takeQueuedReturn() Model {
 		path = m.homeWorktree()
 	}
 	m, _ = m.switchView(path)
+	return m
+}
+
+// takeQueuedReturnAfterOp is takeQueuedReturn at an op's end, BEFORE the
+// op's reload: the leaving slot's branch record (saveView) comes from the
+// pre-op worktree list, so after a HEAD-moving op (srcs names the reflog,
+// or is nil — every source) the list's next arrival would read the op's
+// own checkout as a recycle and drop its windows. The slot's record is
+// marked unknown instead: dropRecycledWindows takes its baseline from
+// that arrival.
+func (m Model) takeQueuedReturnAfterOp(srcs []sourceKey) Model {
+	was := m.viewed
+	m = m.takeQueuedReturn()
+	if m.viewed == was || srcs != nil && !slices.Contains(srcs, srcReflog) {
+		return m
+	}
+	if v := m.views[was]; v != nil {
+		v.branchKnown = false
+	}
 	return m
 }
 
