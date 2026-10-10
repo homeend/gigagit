@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -11,7 +12,7 @@ import (
 // width columns: "the loop" = a.txt:2, "my note" = the note.
 func agentOverviewModel(t *testing.T, width int) Model {
 	t.Helper()
-	m := loadedNavModel(t)
+	m := tempPromptStore(t, loadedNavModel(t)) // S writes its choice: never the machine's store
 	if err := os.WriteFile(filepath.Join(m.currentWorktree, "b.txt"), []byte("b1\nb2\nb3\nb4\nb5\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -134,5 +135,46 @@ func TestAnchorBackOpensTheSplitWhenWide(t *testing.T) {
 	m = pressDrain(t, m, "backspace")
 	if sv := m.splitLayer(); sv == nil || m.topLayer() != sv {
 		t.Fatalf("top %T", m.topLayer())
+	}
+}
+
+// S on an agent overview stacks the files its anchors name, first-anchored
+// order (spec 2026-10-10-overview-split-all R4).
+func TestStackOnAnAgentOverviewListsTheAnchoredFiles(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModel(t, 120) // anchors: a.txt:2, the note on b.txt
+	m = pressDrain(t, m, "S")
+	sp, ok := m.splitLayer().right.(*stackPane)
+	if !ok {
+		t.Fatalf("right %T, want the stack", m.splitLayer().right)
+	}
+	var got []string
+	for _, f := range sp.stream.files {
+		got = append(got, f.path)
+	}
+	if strings.Join(got, ",") != "a.txt,b.txt" {
+		t.Fatalf("files %v, want the anchored files in first-anchored order", got)
+	}
+	if !strings.Contains(sp.d.title, "Tour") {
+		t.Fatalf("title %q names the overview", sp.d.title)
+	}
+}
+
+// A review's overview reopened after its review view closed stacks its
+// anchored files too: the review tree is gone.
+func TestStackOnAReviewOverviewAfterTheReviewClosed(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModel(t)
+	ov := sv.left.doc()
+	m = pressDrain(t, m, "esc")
+	m.filesReview = nil // the review view is gone
+	m, _ = m.bringToFront(ov)
+	m = pressDrain(t, m, "S")
+	sp, ok := m.splitLayer().right.(*stackPane)
+	if !ok {
+		t.Fatalf("right %T, want the stack", m.splitLayer().right)
+	}
+	if len(sp.stream.files) != 2 || sp.stream.files[0].path != "a.go" || sp.stream.files[1].path != "b.go" {
+		t.Fatalf("files %+v: a.go, b.go (zzz.go and the note are plain at the commit)", sp.stream.files)
 	}
 }

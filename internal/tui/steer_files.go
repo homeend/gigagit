@@ -106,6 +106,14 @@ func (m Model) steerFileFocus(c steer.Command) (Model, tea.Cmd) {
 	if d.ov != nil {
 		lead = "focused " + agentdocs.OverviewName(d.id(), d.title)
 	}
+	if d.ov != nil && m.splitShowing(d) != nil {
+		// An overview came up as the split: its own rows are laid out, and
+		// what the split starts loading is the file beside it, not d.
+		if n := d.landPendingLine(m.docRows(d)); n != "" {
+			m.statusMsg = n
+		}
+		return m, tea.Batch(load, m.answerSteer(c, steerOK(c, landedDetail(lead, line, d.p.lines, ""))))
+	}
 	if load == nil {
 		rows, _ := m.viewerGeom()
 		if m.filesPreview == d {

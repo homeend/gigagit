@@ -28,15 +28,16 @@ func TestSplitXOnTheOverviewClosesTheSplit(t *testing.T) {
 	}
 }
 
-// Final review C2: S with no review behind the split is refused, never a nil
-// review dereference.
-func TestSplitSWithoutAReviewIsRefused(t *testing.T) {
+// Final review C2: S with no review behind the split never dereferences a
+// nil review — it stacks the overview's anchored files (spec
+// 2026-10-10-overview-split-all R4).
+func TestSplitSWithoutAReviewStacksTheAnchoredFiles(t *testing.T) {
 	t.Parallel()
 	m, sv := reviewSplitModel(t)
 	m.filesReview = nil
-	m = pressDrain(t, m, "S")
-	if _, ok := sv.right.(*docPane); !ok || m.statusMsg == "" {
-		t.Fatalf("right %T status %q", sv.right, m.statusMsg)
+	pressDrain(t, m, "S")
+	if sp, ok := sv.right.(*stackPane); !ok || len(sp.stream.files) != 2 {
+		t.Fatalf("right %T", sv.right)
 	}
 }
 

@@ -53,22 +53,38 @@ const stackMaxLoads = 3
 // while building a pane would be lost with the copy).
 var splitStackGen atomic.Int64
 
-// newStackPane builds the pane over the review tree's files (its rows with
-// a path, in tree order); over streamFoldOver files all but the overview's
-// selected anchor's file open folded. Nothing is loaded yet: the caller's
-// steer (or pump) starts the loads.
+// newStackPane builds the pane over the stack's files (stackFiles); over
+// streamFoldOver files all but the overview's selected anchor's file open
+// folded. Nothing is loaded yet: the caller's steer (or pump) starts the
+// loads.
 func (m Model) newStackPane(sv *splitView) pane {
 	ov := sv.left.doc()
-	st := m.reviewOf(ov)
-	if st == nil {
-		return &docPane{stackable: true}
-	}
 	target := ""
 	if ov != nil && ov.ov != nil && ov.ov.sel >= 0 && ov.ov.sel < len(ov.ov.anchors) {
-		target = ov.ov.anchors[ov.ov.sel].target.Path
+		target, _, _, _ = m.anchorPlace(ov, ov.ov.sel)
 	}
-	s := &fileStream{}
-	if m.filesView != nil {
+	files, key, title := m.stackFiles(ov)
+	s := &fileStream{files: files}
+	if len(s.files) > streamFoldOver {
+		for i := range s.files {
+			s.files[i].folded = s.files[i].path != target
+		}
+	}
+	d := m.newOpenFile(fileSource{kind: srcReviewStack, rev: key}, "files-"+key)
+	d.title = title
+	d.stream, d.from = s, ov
+	p := &stackPane{docPane: docPane{d: d, stackable: true}, sv: sv, stream: s, gen: splitStackGen.Add(1), park: -1}
+	p.rebuild(m)
+	return p
+}
+
+// stackFiles is the stack's file list for overview ov (spec
+// 2026-10-10-overview-split-all §5): its review tree's files when that
+// review view is open, else the files ov's anchors name — a file anchor's
+// path, a note anchor's file — each once, first-anchored order; with the
+// key the stack document is filed under and its title.
+func (m Model) stackFiles(ov *openFile) (files []streamFile, key, title string) {
+	if st := m.reviewOf(ov); st != nil && m.filesView != nil {
 		for _, l := range m.filesView.lines {
 			if l.path == "" {
 				continue
@@ -77,20 +93,20 @@ func (m Model) newStackPane(sv *splitView) pane {
 			if l.status == "D" { // the review deleted it: nothing to read at the tip
 				f.loaded, f.err = true, errors.New(i18n.T("(not at this commit)"))
 			}
-			s.files = append(s.files, f)
+			files = append(files, f)
 		}
+		return files, st.id, i18n.T("Files: %s", reviewLabel(st.review))
 	}
-	if len(s.files) > streamFoldOver {
-		for i := range s.files {
-			s.files[i].folded = s.files[i].path != target
+	seen := map[string]bool{}
+	for i := range ov.ov.anchors {
+		path, _, _, ok := m.anchorPlace(ov, i)
+		if !ok || seen[path] {
+			continue
 		}
+		seen[path] = true
+		files = append(files, streamFile{path: path})
 	}
-	d := m.newOpenFile(fileSource{kind: srcReviewStack, rev: st.id}, "files-"+st.id)
-	d.title = i18n.T("Files: %s", reviewLabel(st.review))
-	d.stream, d.from = s, ov
-	p := &stackPane{docPane: docPane{d: d, stackable: true}, sv: sv, stream: s, gen: splitStackGen.Add(1), park: -1}
-	p.rebuild(m)
-	return p
+	return files, ov.id(), i18n.T("Files: %s", ov.title)
 }
 
 // rebuild lays the stream out again keeping the cursor's (file, line) and
@@ -434,10 +450,6 @@ func (p *stackPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m Model) toggleReviewStacked(sv *splitView) (Model, tea.Cmd) {
 	ov := sv.left.doc()
 	if ov == nil || ov.ov == nil {
-		return m, nil
-	}
-	if m.reviewOf(ov) == nil { // the review the stack lists is gone
-		m.statusMsg = i18n.T("the review is no longer open")
 		return m, nil
 	}
 	switch r := sv.right.(type) {
