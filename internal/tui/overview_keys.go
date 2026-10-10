@@ -93,8 +93,16 @@ func (d *openFile) pageAtEnd(dir, rows int) bool {
 			return false // a next anchor short of the end: no wrap
 		}
 	}
-	top := d.p.clampTop(d.p.sel, rows)
-	if (dir > 0 && d.p.clampTop(top+1, rows) == top) || (dir < 0 && top == 0) {
+	top, last := d.p.clampTop(d.p.sel, rows), d.p.lastVisible(rows)
+	// Paging reads on past the anchor: from a window at or past it. One the
+	// reader scrolled back over (home, pgup) walks the anchors as before.
+	if len(as[sel].spans) == 0 {
+		return false
+	}
+	if line := as[sel].spans[0].line; (dir > 0 && line > last) || (dir < 0 && line < top) {
+		return false
+	}
+	if (dir > 0 && last >= len(d.p.lines)-1) || (dir < 0 && top == 0) { // the end shows: wrap
 		return false
 	}
 	d.p.scrollBy(dir*rows, rows)

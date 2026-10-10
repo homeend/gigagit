@@ -322,3 +322,56 @@ func TestOverviewSplitUpPagesAboveTheFirstAnchor(t *testing.T) {
 	}
 	_ = m
 }
+
+// In the wrap view ↓ past the last anchor wraps as soon as the end is on
+// screen, never paging on to a pane holding only the last line.
+func TestOverviewSplitDownWrapsOnceTheEndShowsInTheWrapView(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModelOf(t, "Start at [A](a.go:3), then [B](b.go:3)."+longTail(80)+"\n\nTHE END")
+	ov := sv.left.doc()
+	for range 4 {
+		if ov.p.mode == modeWrap {
+			break
+		}
+		m = pressDrain(t, m, "ctrl+w")
+	}
+	if ov.p.mode != modeWrap {
+		t.Fatalf("mode %v: ctrl+w must reach the wrap view", ov.p.mode)
+	}
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 1 {
+		t.Fatalf("sel %d, want the last anchor", ov.ov.sel)
+	}
+	rows, _ := sv.geomOf(m, sv.left)
+	for range 40 {
+		endShown := ov.p.lastVisible(rows) >= len(ov.p.lines)-1
+		m = pressDrain(t, m, "down")
+		if endShown {
+			if ov.ov.sel != 0 {
+				t.Fatalf("the end was on screen and ↓ paged on (top %d of %d)", ov.p.sel, len(ov.p.lines))
+			}
+			return
+		}
+		if ov.ov.sel != 1 {
+			t.Fatalf("↓ wrapped with text below (top %d of %d)", ov.p.sel, len(ov.p.lines))
+		}
+	}
+	t.Fatal("↓ never reached the end")
+}
+
+// ↓ on the last anchor scrolled out of view (home) walks the anchors as
+// before: the page-through runs only from a window showing the anchor.
+func TestOverviewSplitDownFromAScrolledAwayLastAnchorWraps(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModelOf(t, "THE TOP"+longTail(80)+"\n\nStart at [A](a.go:3), then [B](b.go:3)."+longTail(80))
+	ov := sv.left.doc()
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 1 {
+		t.Fatalf("sel %d, want the last anchor", ov.ov.sel)
+	}
+	m = pressDrain(t, m, "home")
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 0 {
+		t.Fatalf("↓ paged from a window without the anchor: sel %d top %d", ov.ov.sel, ov.p.sel)
+	}
+}
