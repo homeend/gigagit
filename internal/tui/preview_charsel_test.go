@@ -173,3 +173,26 @@ func previewTexts(lines []contentLine) []string {
 	}
 	return out
 }
+
+// A prose document in the full-screen viewer is drawn in the reading
+// column, not the frame's full width: the mode's pan keeps the cursor inside
+// THAT column (a long code line in an overview, which opens in scroll).
+func TestViewerCharSelPansInsideTheReadingColumn(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("y", 170)
+	m, d := shownOverview(t, "# Tour\n\n```\n"+long+"\n```\n")
+	m.width, m.height = 200, 40
+	_ = m.View() // lay the overview out at this width
+	p := d.p
+	m = feedPreview(m, "v")
+	for i := 0; i < len(p.lines) && !strings.HasPrefix(p.lines[p.cs.cur.row].raw, "y"); i++ {
+		m = feedPreview(m, "j")
+	}
+	m = feedPreview(m, "end")
+	_, inner := m.viewerGeom()
+	col, _ := readingColumn(inner, m.readingWidth())
+	cell := previewDispCol(p.csRows[p.cs.cur.row].text, p.lines[p.cs.cur.row].lead, p.cs.cur.col)
+	if cell < p.hscroll || cell >= p.hscroll+col {
+		t.Fatalf("cursor cell %d is outside the reading column [%d, %d)", cell, p.hscroll, p.hscroll+col)
+	}
+}
