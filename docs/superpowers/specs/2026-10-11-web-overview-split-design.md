@@ -208,10 +208,11 @@ the link the file was opened from, not the last band stepped to.
 steers (the focus goes left); a click on a line moves the cursor there (today)
 and updates the mark.
 
-**Browser history:** the split adds no history entry. A one-document viewer
-that already armed one (§5's backspace way in) uses it up when it turns into
-the split, so the browser's Back never leaves the page from inside the split
-and never re-opens the overview it already shows.
+**Browser history:** the split adds no history entry, and the browser's Back
+does nothing special inside it (as on any other overlay of the page). A
+one-document viewer that already armed one (§5's backspace way in) uses it up
+when it turns into the split, so Back never re-opens the overview the split
+already shows.
 
 ## 9. Bottom bar and help
 
