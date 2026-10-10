@@ -44,6 +44,17 @@ type worktreeView struct {
 	windows windowState // this worktree's windows while it sleeps (window_state.go): the layer pile, the files/stash views, the steer leftovers, the window gens
 	queued  []tea.Msg   // results addressed to this worktree that landed while it slept, oldest first (slot_replay.go); applied on return
 
+	// branch is the branch the worktree list showed checked out here when
+	// the slot last left the screen ("" = detached); branchKnown says the
+	// list had it. A sleeping worktree listed on ANOTHER branch later was
+	// recycled (or checked out from a terminal): its parked windows were
+	// opened over a tree that is gone and are dropped (dropRecycledWindows)
+	// — a slot is kept by path, and a recycle keeps the path. The branch,
+	// not HEAD: a commit an agent makes there moves HEAD and must keep a
+	// half-typed box.
+	branch      string
+	branchKnown bool
+
 	loaded bool // its first status landed (false: the panels are empty, not clean — viewLoading says so)
 }
 
@@ -202,7 +213,50 @@ func (m Model) saveView() Model {
 	v.workingReviews = m.workingReviews
 	v.resumePromptShown = m.resumePromptShown
 	v.windows = m.windowState // the worktree owns its windows: one assignment, nothing filtered
+	v.branch, v.branchKnown = m.listedBranch(v.path)
 	return m
+}
+
+// listedBranch is the branch the worktree list shows checked out at path
+// ("" when detached) and whether the list has the path at all.
+func (m Model) listedBranch(path string) (string, bool) {
+	key := model.KeyOf(path)
+	for _, w := range m.worktrees {
+		if model.KeyOf(w.Path) == key {
+			return w.Branch, true
+		}
+	}
+	return "", false
+}
+
+// dropRecycledWindows is the worktree-list arrival's check on every
+// SLEEPING slot: one the list now shows on another branch than the one it
+// slept with was recycled (engine.RecycleWorktree keeps the path) or
+// checked out from a terminal. Its parked windows — a commit box, a hunk
+// picker, a diff of the old tree — would submit into or describe the new
+// one, so they go: the parked navigate is answered first, then the group
+// is a fresh one (what loadView gives a new slot), the queued results and
+// the file marks with it. The record moves to the new branch.
+func (m Model) dropRecycledWindows() (Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	for key, v := range m.views {
+		if key == m.viewed || !v.branchKnown {
+			continue
+		}
+		branch, listed := m.listedBranch(v.path)
+		if !listed || branch == v.branch {
+			continue
+		}
+		cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree was checked out onto another branch"))
+		v.windows = windowState{layers: &layerStack{}}
+		v.queued = nil
+		v.fileMarks = nil
+		v.branch = branch
+	}
+	if len(cmds) == 0 {
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // parkView is saveView for a worktree that is LEAVING the screen: the
@@ -581,7 +635,8 @@ func (m Model) abandonGoneView() (Model, tea.Cmd, bool) {
 // recycled, pruned). The viewed one going falls back to home: its
 // service would point at a tree that is not there.
 func (m Model) pruneViews() (Model, tea.Cmd) {
-	var cmds []tea.Cmd // what the dropped slots still owed: a parked navigate or hint is answered, not lost
+	m, recycled := m.dropRecycledWindows()
+	cmds := []tea.Cmd{recycled} // what the dropped slots still owed: a parked navigate or hint is answered, not lost
 	for key, v := range m.views {
 		if m.isRepoWorktree(v.path) || key == m.home {
 			continue
@@ -613,10 +668,21 @@ func (m Model) pruneViews() (Model, tea.Cmd) {
 		}
 		cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree is gone"))
 	}
-	if len(cmds) == 0 {
-		return m, nil
+	return m, batchLive(cmds)
+}
+
+// batchLive is tea.Batch over the non-nil entries, nil when there are none.
+func batchLive(cmds []tea.Cmd) tea.Cmd {
+	var live []tea.Cmd
+	for _, c := range cmds {
+		if c != nil {
+			live = append(live, c)
+		}
 	}
-	return m, tea.Batch(cmds...)
+	if len(live) == 0 {
+		return nil
+	}
+	return tea.Batch(live...)
 }
 
 // adoptView moves gg's identity to the viewed slot — the user's own switch,

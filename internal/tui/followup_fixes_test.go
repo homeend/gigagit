@@ -68,3 +68,54 @@ func TestAGoneWorktreeReleasesItsOpenFiles(t *testing.T) {
 		t.Fatalf("home's open files were touched: %d", n)
 	}
 }
+
+// A sleeping worktree checked out onto another branch (recycled, or a
+// checkout from a terminal) drops its parked windows: a commit box or a
+// hunk picker opened over the old tree would otherwise submit into the
+// new one when the worktree returns. Slots are dropped by path and a
+// recycle keeps the path, so the branch is what tells.
+func TestASleepingWorktreeRecycledOntoAnotherBranchDropsItsWindows(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	m = forceSwitch(t, m, other)
+	m = m.pushLayer(&commitPopup{})
+	m = forceSwitch(t, m, home) // wt2 sleeps with the commit box parked
+	key := model.KeyOf(other)
+	if n := len(m.views[key].windows.layers.entries); n != 1 {
+		t.Fatalf("precondition: %d parked layers, want 1", n)
+	}
+	if out, err := exec.Command("git", "-C", other, "checkout", "-b", "recycled").CombinedOutput(); err != nil {
+		t.Fatalf("checkout: %v\n%s", err, out)
+	}
+	nm, _ := m.Update(m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})())
+	m = nm.(Model)
+	if v := m.views[key]; v == nil {
+		t.Fatal("the slot was dropped; want kept with its windows cleared")
+	} else if n := len(v.windows.layers.entries); n != 0 {
+		t.Fatalf("the recycled worktree keeps %d parked layers", n)
+	}
+	m = forceSwitch(t, m, other)
+	if m.topLayer() != nil {
+		t.Fatalf("the old branch's %T came back on the new one", m.topLayer())
+	}
+}
+
+// A commit made in a sleeping worktree (an agent at work there) moves its
+// HEAD but not its branch: the parked windows stay.
+func TestASleepingWorktreeCommittingOnItsBranchKeepsItsWindows(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	m = forceSwitch(t, m, other)
+	m = m.pushLayer(&commitPopup{})
+	m = forceSwitch(t, m, home)
+	if out, err := exec.Command("git", "-C", other, "commit", "--allow-empty", "-q", "-m", "agent work").CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v\n%s", err, out)
+	}
+	nm, _ := m.Update(m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})())
+	m = nm.(Model)
+	if n := len(m.views[model.KeyOf(other)].windows.layers.entries); n != 1 {
+		t.Fatalf("a commit on the same branch cleared the parked windows (%d left)", n)
+	}
+}
