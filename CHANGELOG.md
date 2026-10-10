@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review split: clicks land on the line drawn
+
+### Fixed
+- A click on a file in the review overview split puts the cursor on the
+  line drawn under the pointer when lines wrap (ctrl+w) or a note box hangs
+  under a line — it used to count rows as lines and land further down. A
+  click on a note box lands on the line the note belongs to.
+- n / p in the split's file pane keep the overview's selection in view by
+  the overview pane's own height.
+- The file pane's footer names N / P shorter (`[N/P] overview`), and the
+  help's review-view row says ≡ Overview opens beside the files.
+
 ## Review split: N/P step the overview from the file pane
 
 ### Added

@@ -242,7 +242,7 @@ func TestOverviewSplitNPOnTheFilePaneStepOverviewAnchors(t *testing.T) {
 	if ov.ov.sel != 1 || sv.right.doc().path != "b.go" || sv.onLeft {
 		t.Fatalf("P: sel %d right %s onLeft %v", ov.ov.sel, sv.right.doc().path, sv.onLeft)
 	}
-	if h := sv.right.hint(m); !strings.Contains(h, "[N/P] overview anchors") {
+	if h := sv.right.hint(m); !strings.Contains(h, "[N/P] overview") {
 		t.Fatalf("hint %q: N/P is advertised", h)
 	}
 }

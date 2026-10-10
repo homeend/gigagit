@@ -217,6 +217,18 @@ func (m Model) splitShowing(d *openFile) *splitView {
 	return nil
 }
 
+// docRows is the content rows of the frame showing d: its split pane's when
+// a split shows it, the full-screen viewer's otherwise (where a background
+// document returns).
+func (m Model) docRows(d *openFile) int {
+	if sv := m.splitShowing(d); sv != nil {
+		rows, _ := sv.geomOf(m, sv.paneOf(d))
+		return rows
+	}
+	rows, _ := m.viewerGeom()
+	return rows
+}
+
 // splitMouse is a press over split sv: the wheel scrolls the side under the
 // pointer without moving the focus; a left click focuses that side, then
 // selects (and steers) an anchor of an overview or puts a file's cursor on
@@ -245,8 +257,9 @@ func (m Model) splitMouse(sv *splitView, msg tea.MouseMsg, wheel int) (Model, te
 		if d.ov != nil {
 			return m.overviewClickIn(d, sv, x, msg.Y, rows, 0)
 		}
-		if row := msg.Y - 2; row >= 0 && row < rows {
-			if line := d.p.clampTop(d.p.sel, rows) + row; line < len(d.p.lines) {
+		if row := msg.Y - 2; row < rows {
+			_, inner := sv.geomOf(m, side)
+			if line := d.p.lineAtRow(row, rows, max(inner-d.gutterW(), 1)); line >= 0 {
 				d.p.cur = line
 			}
 		}

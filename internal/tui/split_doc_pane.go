@@ -57,7 +57,7 @@ func (p *docPane) hint(m Model) string {
 	}
 	h := i18n.T("[alt+↑↓] line  [spc] mark  [/] find  [X] close  [↑/↓] scroll  [ctrl+w] view")
 	if p.stackable {
-		h = i18n.T("[N/P] overview anchors") + "  " + i18n.T("[S] stacked") + "  " + h
+		h = i18n.T("[N/P] overview") + "  " + i18n.T("[S] stacked") + "  " + h
 	}
 	if p.d.bands() != nil {
 		h = i18n.T("[n/p] anchors") + "  " + h
