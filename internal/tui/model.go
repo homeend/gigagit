@@ -1077,6 +1077,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.filesView == nil || !m.inFullTree() || msg.hash != m.filesHash {
 			return m, nil // view closed, switched back to changed files, or stale
 		}
+		keep := m.treeKeepPath
+		m.treeSlept, m.treeKeepPath = false, "" // the tree a sleep gave up is back (or failed: the next kick asks again)
 		if msg.err != nil {
 			m.statusMsg = i18n.T("files: %s", msg.err.Error())
 			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
@@ -1086,6 +1088,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.filesView.lines = msg.lines // pre-built off-thread
 		m.filesView.sel = 0
+		if keep != "" { // back from sleep: the path the cursor was on, if the tree still has it
+			for i, l := range m.filesView.visible() {
+				if l.path == keep {
+					m.filesView.sel = i
+					break
+				}
+			}
+		}
 		m.filesTitle = i18n.T("Files %s (all files) %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = i18n.T("%s (all files) %s", shortHash(msg.hash), msg.subject)
 		m.filesCommit = msg.commit

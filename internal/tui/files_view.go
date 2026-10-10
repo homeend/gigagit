@@ -89,6 +89,7 @@ func (m Model) closeFilesView() Model {
 	// a fresh open from the panels all tear the view down for a reason that
 	// makes the parked popup meaningless. See handOffToFilesView.
 	m.filesReturnLayers = nil
+	m.treeSlept, m.treeKeepPath = false, ""
 	// A merge preview resolve in flight was dispatched for the view that just
 	// closed: bump the generation so its result is dropped instead of
 	// re-opening the view behind the user (handlePreviewOpenMsg re-stamps the
@@ -609,6 +610,13 @@ type treeFilesMsg struct {
 	commit    model.Commit
 	lines     []contentLine
 	err       error
+}
+
+// staleFor: the slot gave its full tree up while sleeping (sleepFWindow)
+// and the kick re-reads it on return — the answer in flight would be
+// dropped at replay, so the gate drops it now rather than queue the tree.
+func (msg treeFilesMsg) staleFor(v *worktreeView) bool {
+	return v.windows.treeSlept
 }
 
 // loadTreeFilesCmd fetches every file in commit c's tree (ls-tree) AND builds the

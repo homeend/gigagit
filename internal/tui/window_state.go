@@ -65,6 +65,8 @@ type windowState struct {
 	filesTreeFocused  bool                   // true = the tree side owns vertical movement (←/→/tab)
 	filesReadInflight bool                   // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
 	filesPreview      *openFile              // full-tree mode: the file shown in the right column (nil = none)
+	treeSlept         bool                   // full-tree mode: the worktree slept and gave the tree up (sleepFWindow); the kick re-reads it, the answer clears this
+	treeKeepPath      string                 // full-tree mode: the path under the cursor when the tree was given up; the re-read lands the cursor on it
 
 	diffTag    string      // request key of the wanted diff; gates stale async results
 	diffNav    diffNavKind // which list the open diff was opened from (Home/End file-stepping)
@@ -200,12 +202,26 @@ type consoleParked struct {
 
 // sleepFWindow is the one thing a sleeping group gives up: the F window's
 // on-disk list and its rendered tree (~100 bytes per path, twice, on a
-// million-file tree — not worth keeping six times). The window, its filter
-// and the path under the cursor stay; the kick re-reads the list when the
-// worktree returns (viewKickCmd) and wtLoaded puts the cursor back.
+// million-file tree — not worth keeping six times), and likewise a
+// commit's FULL tree (filesModeFullTree: every path at the commit, as
+// large). The window, its filter and the path under the cursor stay; the
+// kick re-reads the list when the worktree returns (viewKickCmd) and
+// wtLoaded / the treeFilesMsg arm put the cursor back.
 func (w *windowState) sleepFWindow() {
+	if w.filesView == nil {
+		return
+	}
+	if w.filesMode == filesModeFullTree {
+		if sel := w.filesView.sel; sel >= 0 && sel < len(w.filesView.visible()) {
+			w.treeKeepPath = w.filesView.visible()[sel].path
+		}
+		w.filesView.lines = []contentLine{{text: i18n.T("(loading…)")}}
+		w.filesView.sel = 0
+		w.treeSlept = true
+		return
+	}
 	f := w.wtFiles
-	if f == nil || w.filesMode != filesModeWorktree || w.filesView == nil {
+	if f == nil || w.filesMode != filesModeWorktree {
 		return
 	}
 	if sel := w.filesView.sel; sel >= 0 && sel < len(w.filesView.visible()) {

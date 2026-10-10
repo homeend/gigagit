@@ -261,12 +261,15 @@ func (m Model) dropRecycledWindows() (Model, tea.Cmd) {
 
 // parkView is saveView for a worktree that is LEAVING the screen: the
 // `gg session highlight` bands on its working files go with it (the same
-// path exists in the arriving tree and must not wear them). A save in
-// place — a full load re-seeding the viewed slot — keeps them live.
+// path exists in the arriving tree and must not wear them), and its big
+// file lists are given up (sleepFWindow — the slot's copy only: the live
+// group is about to be replaced). A save in place — a full load
+// re-seeding the viewed slot — keeps them live.
 func (m Model) parkView() Model {
 	m = m.saveView()
 	if v := m.views[m.viewed]; v != nil {
 		v.windows.workingAttention = takeWorkingAttention(m.attention)
+		v.windows.sleepFWindow()
 	}
 	return m
 }
@@ -464,9 +467,6 @@ func (m Model) switchViewBy(path string, byUser bool) (Model, bool) {
 		return m, false
 	}
 	m = m.parkView()
-	if v := m.views[m.viewed]; v != nil {
-		v.windows.sleepFWindow() // the leaving slot's copy only: the group is about to be replaced
-	}
 	m = m.sleepView()
 	m = m.loadView(m.ensureView(path))
 	m.viewKick = true
@@ -559,8 +559,11 @@ func (m Model) viewKickCmd() tea.Cmd {
 	feed := m.readSourceCmd(context.Background(), srcFeed, reloadOpts{})   // reconcile: the walk now starts at this tree's HEAD
 	_, docs := m.syncAgentDocs()
 	var files tea.Cmd
-	if m.inWorktreeFiles() && m.wtFiles.loading {
+	switch {
+	case m.inWorktreeFiles() && m.wtFiles.loading:
 		files = m.loadLsFilesCmd() // a returned F window gave its list up while sleeping (sleepFWindow)
+	case m.inFullTree() && m.treeSlept && m.filesView != nil:
+		files = m.loadTreeFilesCmd(m.filesViewCommit()) // likewise a commit's full tree
 	}
 	return tea.Batch(read, notes, feed, m.startWatchCmd(m.watchGen), docs, files)
 }

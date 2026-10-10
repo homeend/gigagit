@@ -119,3 +119,68 @@ func TestASleepingWorktreeCommittingOnItsBranchKeepsItsWindows(t *testing.T) {
 		t.Fatalf("a commit on the same branch cleared the parked windows (%d left)", n)
 	}
 }
+
+// fullTreeIn opens commit hash's full file tree in the live slot, as the
+// `a` toggle leaves it once the read landed: two files, the cursor on the
+// second.
+func fullTreeIn(m Model, hash string) Model {
+	m.filesMode = filesModeFullTree
+	m.filesHash = hash
+	m.filesView = &contentPopup{lines: []contentLine{{text: "A.md", path: "A.md"}, {text: "README.md", path: "README.md"}}, sel: 1}
+	return m
+}
+
+// A sleeping worktree gives up its full-tree file list as it gives up F's:
+// on a large repository the tree is as big. The window stays; the kick
+// re-reads it when the worktree returns, and the cursor lands back on its
+// path.
+func TestASleepingFullTreeGivesUpItsLinesAndReReadsOnReturn(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	hash := m.commits[0].Hash
+	m = forceSwitch(t, m, other)
+	m = fullTreeIn(m, hash)
+	m = forceSwitch(t, m, home)
+	w := &m.views[model.KeyOf(other)].windows
+	if lines := w.filesView.lines; len(lines) != 1 || !isLoadingPlaceholder(lines[0].text) {
+		t.Fatalf("the sleeping full tree keeps its lines: %d", len(lines))
+	}
+	m = forceSwitch(t, m, other)
+	var read bool
+	for _, msg := range runCmds(m.viewKickCmd()) {
+		if tm, ok := msg.(treeFilesMsg); ok && tm.hash == hash {
+			read = true
+			nm, _ := m.Update(tm)
+			m = nm.(Model)
+		}
+	}
+	if !read {
+		t.Fatal("the kick did not re-read the returned worktree's full tree")
+	}
+	lines := m.filesView.visible()
+	if len(lines) != 1 || lines[0].path != "README.md" {
+		t.Fatalf("the re-read did not land: %+v", lines)
+	}
+	if m.filesView.sel != 0 {
+		t.Fatalf("sel = %d, want the row of README.md (0)", m.filesView.sel)
+	}
+}
+
+// A tree read in flight when the worktree went to sleep is not queued for
+// it: the slot gave the tree up and the kick re-reads it on return, so
+// the gate drops the (large) stale answer as it drops a stale F list.
+func TestAStaleFullTreeIsNotQueuedForASleepingSlot(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	hash := m.commits[0].Hash
+	m = forceSwitch(t, m, other)
+	m = fullTreeIn(m, hash)
+	m = forceSwitch(t, m, home)
+	key := model.KeyOf(other)
+	nm, _ := m.Update(treeFilesMsg{slotStamp: slotStamp{slot: key}, hash: hash, lines: []contentLine{{text: "x", path: "x"}}})
+	if n := len(nm.(Model).views[key].queued); n != 0 {
+		t.Fatalf("a tree the slot gave up was queued (%d)", n)
+	}
+}
