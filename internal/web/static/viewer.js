@@ -447,6 +447,7 @@ viewerRoot.addEventListener("click", (e) => {
   if (e.target.id === "viewer") closeViewer(escHow(!!view.ov, view.notes.length)); // the backdrop is esc; the box is not
 });
 $("viewer-body").addEventListener("click", (e) => {
+  if (split && split.left) focusSplit(false);
   const anc = e.target.closest("a.md-anchor");
   if (anc) {
     e.preventDefault(); // a single click opens (ruling 2)
@@ -478,6 +479,16 @@ $("viewer-body").addEventListener("click", (e) => {
   view.cur = Number(row.dataset.i) + 1;
   if (clearViewerRange()) return;
   paintCursor();
+});
+$("viewer-ov-body").addEventListener("click", (e) => {
+  if (!split) return;
+  const anc = e.target.closest("a.md-anchor");
+  focusSplit(true);
+  if (!anc) return;
+  e.preventDefault();
+  selectAnchor(Number(anc.dataset.a));
+  split.here = -1;
+  steerSplit();
 });
 $("viewer-body").addEventListener("mousedown", (e) => {
   if (e.shiftKey && e.target.closest(".vno")) e.preventDefault(); // no text selection from the old caret
@@ -701,6 +712,7 @@ function renderViewer() {
     body.innerHTML = html;
   }
   viewerSearchBar.paint();
+  syncHere();
 }
 
 // ---- an agent's overview (agentdocs) ---------------------------------------
@@ -835,7 +847,25 @@ function splitKey(e) {
     return true;
   }
   if (split.left) return splitOverviewKey(e);
+  switch (e.key) {
+    case "Backspace": e.preventDefault(); focusSplit(true); return true;
+    case "N": case "P": e.preventDefault(); stepSplitAnchor(e.key === "N" ? 1 : -1); return true;
+  }
   return fileKey(e);
+}
+
+// syncHere recomputes the link the right column's cursor marks on the
+// overview (spec §7) and repaints the left column's links when it moved.
+function syncHere() {
+  if (!split) return;
+  const f = view.from, bands = viewBands(), n = view.lines.length;
+  const cur = f ? bandOf(bands, f.anchors, f.cur, n) : -1;
+  const sel = split.ov.anchors[split.ov.sel];
+  const selB = sel && f ? bandOf(bands, f.anchors, sel.dest, n) : -1;
+  const here = hereOf(bands, cur, view.cur, selB);
+  if (here === split.here) return;
+  split.here = here;
+  paintAnchors();
 }
 
 // splitOverviewKey is a key on the left column (spec §8).
@@ -864,6 +894,7 @@ function stepSplitAnchor(dir) {
   const i = stepAnchor(split.ov.anchors, split.ov.sel, dir);
   if (i < 0) return;
   selectAnchor(i);
+  split.here = -1; // the landing recomputes it
   steerSplit();
 }
 
@@ -927,6 +958,7 @@ function stepViewerAnchor(dir) {
   view.cur = b.start;
   rerenderKeepingScroll();
   centerCursor();
+  syncHere();
   opLine("anchor " + (r.i + 1) + "/" + bands.length + " in this file · " + (a.label || a.dest) + (r.wrapped ? " · wrapped" : ""), false);
 }
 
@@ -1176,6 +1208,7 @@ function paintCursor() {
     row.scrollIntoView({ block: "nearest" });
   }
   reportCursor();
+  syncHere();
 }
 
 function centerCursor() {
@@ -1334,6 +1367,16 @@ function viewerFoot() {
       `<button data-vact="ytext">y copy text</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
+  if (split) {
+    const bandKeysS = viewBands().length ? "<span>n p bands</span>" : "";
+    const notesS = (shownNotes().length ? `<span>} { notes</span>` : "") +
+      (view.notes.length ? `<button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>` : "");
+    return (
+      `<button data-vact="sov">tab overview</button><span>N P overview links</span>` + bandKeysS +
+      `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notesS +
+      `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+    );
+  }
   if (view.ov && view.ov.stored) {
     return (
       `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button>` +
@@ -1377,6 +1420,7 @@ $("foot").addEventListener("click", (e) => {
     case "aref": if (ovDoc()) copyAnchorRef(); break;
     case "ytext": if (ovDoc()) copyText(ovDoc().text, "overview text"); break;
     case "sfile": if (split) enterSplitFile(); break;
+    case "sov": focusSplit(true); break;
     case "back": if (view.from) anchorBack(); break;
   }
 });

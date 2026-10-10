@@ -63,3 +63,16 @@ func TestOverviewSplitIsWired(t *testing.T) {
 		}
 	}
 }
+
+// Spec 2026-10-11 §7 / §8: the right column's own keys, and the mark follows
+// every cursor move.
+func TestOverviewSplitRightColumnIsWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{`function syncHere()`, `hereOf(bands, cur, view.cur, selB)`, `case "Backspace": e.preventDefault(); focusSplit(true); return true;`,
+		`case "N": case "P":`, `$("viewer-ov-body").addEventListener("click"`} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+}
