@@ -104,8 +104,17 @@ type diffView struct {
 	// on a header — so folding a file and unfolding it gives the range back.
 	selKept   selHold
 	selKeptAt lineSel
-	wrapArm   wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
-	fileArm   fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
+	// cs is the character selection (charsel.go, spec 2026-10-10) over the
+	// CURSOR SIDE's lines; stacked, over ONE element's lines (csFile, its
+	// first line csBase — the model's row 0). csPage is the body height the
+	// last key saw (pgup/pgdn). Left with the line selection wherever the
+	// line indexes change meaning (rebuild, relayout, a reload).
+	cs      textSel
+	csBase  int
+	csFile  int
+	csPage  int
+	wrapArm wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
+	fileArm fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
 	// noteVisited: a }/{ jump (or a file step's landing) has put the cursor on
 	// one of THIS file's notes. Until then a jump that finds nothing beyond the
 	// cursor falls back to the file's first/last note (see jumpNote) — a fresh
@@ -243,12 +252,14 @@ func (v *diffView) rebuildLines() {
 		// itself after the rebuild.
 		held := v.holdSel()
 		v.lsel.clear()
+		v.cs.leave()
 		v.spliceStack() // the stack builds its own lines/blocks from its files
 		v.relayout(v.width)
 		v.restoreSel(held)
 		return
 	}
 	v.lsel.clear() // …and so do the line indexes it holds
+	v.cs.leave()
 	if v.partial {
 		lines, blocks := textdiff.Collapse(v.full, v.fullBlocks, diffContext)
 		v.lines, v.blocks = wrapLines(lines), blocks
@@ -1051,6 +1062,11 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// selection, then a committed query, then the view's own esc. diffSearchKey
 	// handles the first and third in one call, so the selection hook runs first
 	// and declines while the search is typing.
+	// The character selection (charsel.go) is MODAL: while it is on, every
+	// key is its own, before the line selection and the search hooks.
+	if nm, cmd, handled := m.diffCharKey(v, msg); handled {
+		return nm, cmd
+	}
 	if nm, cmd, handled := m.diffSelectKey(v, msg); handled {
 		return nm, cmd
 	}
@@ -1334,6 +1350,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.partial = !v.partial
 		v.rebuild()
 		v.lsel.clear() // folded runs appear or open: a stack's held ends mean other lines now
+		v.cs.leave()
 		m.diffPartial = v.partial
 		if len(v.dispBlocks) > 0 {
 			v.focusBlock(ord, body) // re-anchor the same change (count is mode-invariant)
@@ -1350,6 +1367,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.refindAfterRebuild()
 	case "ctrl+w":
 		v.lsel.clear() // relayout + reanchor moves what a line index means
+		v.cs.leave()
 		ord := v.currentBlockOrdinal()
 		cr, hadRow := v.cursorRow()
 		v.stackHold = v.anchorAt(v.curLine)

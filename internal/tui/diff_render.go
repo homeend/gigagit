@@ -441,6 +441,9 @@ func (m Model) renderDiffView() string {
 	if v.lsel.on {
 		hint = diffSelectHint()
 	}
+	if v.cs.on {
+		hint = charSelHint(v.cs, v.charRows())
+	}
 	if v.stk == nil && v.hasImages() {
 		hint = v.imageHint()
 	}
@@ -567,6 +570,15 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 			// flag rides along so the current hit lights up on both.
 			if r.Kind == textdiff.Same && len(lh) == 0 {
 				lh = rh
+			}
+		}
+		// The character selection's stripe and cursor ride the hit channel
+		// (sel spans), on the cursor side only.
+		if sp := v.charSpansOn(dr.line); sp != nil {
+			if v.onOld {
+				lh = append(lh, sp...)
+			} else {
+				rh = append(rh, sp...)
 			}
 		}
 		switch v.long {
