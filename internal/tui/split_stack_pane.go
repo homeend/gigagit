@@ -8,6 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -142,6 +144,7 @@ func (p *stackPane) rebuild(m Model) {
 	screenRow := d.p.cur - d.p.sel
 	sel := d.p.lsel
 	d.p.lines = s.build()
+	p.mapBoxes() // the files' notes follow their lines to the new stream places
 	d.p.lsel.clear()
 	if sel.on { // a marked range stays on its file's lines (a load elsewhere renumbers the stream)
 		a, okA := back(selA)
@@ -166,6 +169,75 @@ func (p *stackPane) rebuild(m Model) {
 		d.p.sel = d.p.clampTop(d.p.cur-screenRow, rows)
 	}
 	d.p.ensureCursorVisible(rows)
+}
+
+// mapBoxes lays every shown file's notes onto the stream: file line k is
+// stream line body+k (1-based), as the bands are mapped.
+func (p *stackPane) mapBoxes() {
+	var out []agentdocs.Note
+	for _, f := range p.stream.files {
+		if !f.shows() {
+			continue
+		}
+		for _, b := range f.boxes {
+			if b.End > len(f.lines) {
+				continue
+			}
+			b.Start += f.body
+			b.End += f.body
+			out = append(out, b)
+		}
+	}
+	p.d.reviewNotes = out
+	p.d.syncNoteRows()
+}
+
+// splitStackNotesMsg is a review's remarks on stream file `file` of the stack
+// tagged tag (generation gen).
+type splitStackNotesMsg struct {
+	slotStamp
+	tag   string
+	gen   int64
+	file  int
+	notes []domain.ResolvedNote
+	err   error
+}
+
+// fileNotes gives file i, just loaded, its notes: a review's remarks are
+// fetched off the UI thread (the command); an agent overview's notes come
+// from the store at once, only while they sit on exactly these lines.
+func (m Model) fileNotes(p *stackPane, i int) tea.Cmd {
+	ov, f := p.sv.left.doc(), &p.stream.files[i]
+	if ov == nil || !f.shows() {
+		return nil
+	}
+	if ov.src.kind == srcReviewOverview {
+		if m.svc == nil {
+			return nil
+		}
+		svc, id, path, lines, slot, tag, gen := m.svc, ov.src.rev, f.path, rawOf(f.lines), m.stamp(), p.d.tag, p.gen
+		return func() tea.Msg {
+			ns, err := svc.ReviewFileNotes(context.Background(), id, path, lines)
+			return splitStackNotesMsg{slotStamp: slot, tag: tag, gen: gen, file: i, notes: ns, err: err}
+		}
+	}
+	if m.docs != nil && anchorSource(ov).kind == srcWorktree {
+		if ns, fp := m.docs.Notes(domain.CheckoutKey(m.currentWorktree), f.path); len(ns) > 0 && fp == agentdocs.Print(rawOf(f.lines)) {
+			f.boxes, f.notes = ns, len(ns)
+		}
+	}
+	return nil
+}
+
+// stackNotesLanded adopts a file's remarks for the stack still showing it.
+func (m Model) stackNotesLanded(msg splitStackNotesMsg) Model {
+	_, p := m.stackPaneByTag(msg.tag)
+	if p == nil || p.gen != msg.gen || msg.err != nil || msg.file < 0 || msg.file >= len(p.stream.files) {
+		return m
+	}
+	p.stream.files[msg.file].boxes = remarkBoxes(msg.notes)
+	p.mapBoxes()
+	return m
 }
 
 func (p *stackPane) title() string {
@@ -257,6 +329,7 @@ func (m Model) stackPaneLanded(msg stackPaneMsg) (Model, tea.Cmd) {
 	case len(msg.lines) > 0 && !msg.lines[0].src: // a placeholder the loader named (binary, too large, an image)
 		f.lines, f.err = nil, errors.New(msg.lines[0].text)
 	}
+	notes := m.fileNotes(p, msg.file)
 	p.rebuild(m)
 	rows, _ := sv.geomOf(m, p)
 	if p.want.set && p.want.file == msg.file {
@@ -269,7 +342,7 @@ func (m Model) stackPaneLanded(msg stackPaneMsg) (Model, tea.Cmd) {
 		p.park = -1
 		m = m.stackLand(sv, p, i)
 	}
-	return m, p.pump(m)
+	return m, tea.Batch(p.pump(m), notes)
 }
 
 // parkedIn reports whether overview anchor i opens in the file at path.

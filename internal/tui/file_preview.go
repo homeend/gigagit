@@ -529,7 +529,9 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	var notes []agentdocs.Note
 	var bands []anchorBand // an overview's anchors in the file it opened
 	gut, boxH, curB := 0, 0, -1
+	boxNote := func(n agentdocs.Note) agentdocs.Note { return n }
 	if d := m.previewDoc(p); d != nil && d.gutterW() > 0 {
+		boxNote = d.boxNote // a stack's notes name their file's lines
 		boxH = noteBoxMaxRows(rowsCap)
 		notes, gut = d.shownNotes(), d.gutterW()
 		bands = d.bands()
@@ -581,7 +583,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 		wr = append(wr, r)
 		for _, n := range notes {
 			if n.End == row+1 {
-				for _, nl := range noteBoxLines(n, innerW-gut-noteBoxFrame, boxH) {
+				for _, nl := range noteBoxLines(boxNote(n), innerW-gut-noteBoxFrame, boxH) {
 					wr = append(wr, fileNoteRow(nl, innerW, gut))
 				}
 			}

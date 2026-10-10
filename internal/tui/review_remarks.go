@@ -68,6 +68,20 @@ func (d *openFile) shownNotes() []agentdocs.Note {
 	return out
 }
 
+// boxNote is note n as its box and full view name it: in a stack, at its
+// file's own lines (shownNotes holds stream lines); elsewhere n itself.
+func (d *openFile) boxNote(n agentdocs.Note) agentdocs.Note {
+	if d.stream == nil {
+		return n
+	}
+	if fi := d.stream.fileAt(n.Start - 1); fi >= 0 {
+		off := d.stream.files[fi].body
+		n.Start -= off
+		n.End -= off
+	}
+	return n
+}
+
 // readOnlyNote: a review's remark, or any note in a stack.
 func (d *openFile) readOnlyNote(n *agentdocs.Note) bool {
 	return d.stream != nil || strings.HasPrefix(n.ID, model.ReviewNoteIDPrefix)

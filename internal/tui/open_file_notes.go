@@ -222,7 +222,7 @@ func (d *openFile) noteRowsUnder(from, to int) int {
 	rows := 0
 	for _, n := range d.shownNotes() {
 		if i := n.End - 1; i >= from && i < to {
-			rows += len(noteBoxLines(n, d.noteW-noteBoxFrame, d.noteH))
+			rows += len(noteBoxLines(d.boxNote(n), d.noteW-noteBoxFrame, d.noteH)) // as drawn
 		}
 	}
 	return rows

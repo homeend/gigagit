@@ -1102,6 +1102,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.stackPaneLanded(msg)
 	case reviewNotesMsg:
 		return m.reviewNotesLanded(msg), nil
+	case splitStackNotesMsg:
+		return m.stackNotesLanded(msg), nil
 	case fileContentMsg:
 		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
 			if d.ov != nil {

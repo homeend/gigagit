@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -84,4 +86,80 @@ func TestRemarkBoxTitleHidesTheInternalID(t *testing.T) {
 	if got := noteTitle(n); strings.Contains(got, "32fff194") || !strings.Contains(got, "review") {
 		t.Fatalf("title %q", got)
 	}
+}
+
+// The stack draws each file's remarks at their stream lines.
+func TestStackDrawsEachFilesRemarksAtTheirStreamLines(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModel(t)
+	pressDrain(t, m, "S")
+	sp := sv.right.(*stackPane)
+	ns := sp.d.shownNotes()
+	if len(ns) != 2 {
+		t.Fatalf("notes %+v: a.go's and b.go's remarks", ns)
+	}
+	for _, n := range ns {
+		f := sp.stream.files[sp.stream.fileAt(n.Start-1)]
+		if n.Start-f.body != 3 { // line 3 of its file
+			t.Fatalf("note %q at stream line %d, %s body %d", n.Summary, n.Start, f.path, f.body)
+		}
+	}
+}
+
+// Every note in the stack is read-only.
+func TestStackNotesAreReadOnly(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModel(t)
+	m = pressDrain(t, m, "S")
+	m = pressDrain(t, m, "tab")
+	sp := sv.right.(*stackPane)
+	sp.d.p.cur = sp.d.shownNotes()[0].Start - 1
+	m = pressDrain(t, m, "d")
+	if !strings.Contains(m.statusMsg, "S opens the file") || len(sp.d.shownNotes()) != 2 {
+		t.Fatalf("status %q notes %d", m.statusMsg, len(sp.d.shownNotes()))
+	}
+}
+
+// An agent overview's stack draws the agent's note on its file; one whose
+// file changed since the note was placed is not drawn at a wrong line.
+func TestStackDrawsTheAgentsNotes(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModel(t, 120) // b.txt: a note on line 3
+	m = pressDrain(t, m, "S")
+	sp := m.splitLayer().right.(*stackPane)
+	ns := sp.d.shownNotes()
+	if len(ns) != 1 || ns[0].Summary != "the note" {
+		t.Fatalf("notes %+v", ns)
+	}
+	f := sp.stream.files[sp.stream.fileAt(ns[0].Start-1)]
+	if f.path != "b.txt" || ns[0].Start-f.body != 3 {
+		t.Fatalf("note at stream %d in %s (body %d)", ns[0].Start, f.path, f.body)
+	}
+}
+
+func TestStackSkipsAnAgentNoteOnChangedContent(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModel(t, 120)
+	if err := os.WriteFile(filepath.Join(m.currentWorktree, "b.txt"), []byte("x1\nx2\nx3\nx4\nx5\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m = pressDrain(t, m, "S")
+	sp := m.splitLayer().right.(*stackPane)
+	if ns := sp.d.shownNotes(); len(ns) != 0 {
+		t.Fatalf("notes %+v: the store's lines no longer match the file", ns)
+	}
+}
+
+// A box in the stack names its file's line, not the stream's.
+func TestStackBoxTitleNamesTheFilesLine(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModel(t)
+	m = pressDrain(t, m, "S")
+	sp := sv.right.(*stackPane)
+	for _, n := range sp.d.shownNotes() {
+		if got := noteTitle(sp.d.boxNote(n)); !strings.Contains(got, "line 3") {
+			t.Fatalf("title %q for a remark on its file's line 3 (stream line %d)", got, n.Start)
+		}
+	}
+	_ = m
 }

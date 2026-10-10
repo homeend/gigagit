@@ -49,7 +49,7 @@ func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		}
 	case "enter":
 		if n := d.noteAt(d.p.cur + 1); n != nil {
-			return m.openFileNote(*n), nil, true
+			return m.openFileNote(d.boxNote(*n)), nil, true
 		}
 	case "r":
 		if n := d.noteAt(d.p.cur + 1); n != nil && d.readOnlyNote(n) {
@@ -156,7 +156,7 @@ func (m Model) fileNoteRows() []actionRow {
 		n = *at
 	}
 	rows = append(rows, actionRow{id: "note-show", key: "enter", label: i18n.T("Show full note"), run: func(m Model) (tea.Model, tea.Cmd) {
-		return m.openFileNote(n), nil
+		return m.openFileNote(d.boxNote(n)), nil
 	}})
 	if d.readOnlyNote(&n) { // the review's (or a stack's): nothing to copy a reference to or dismiss
 		return rows
