@@ -21,7 +21,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { noteMark, noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
+import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -5102,6 +5102,10 @@ $("files-list").addEventListener("click", (e) => {
     openNotedPath(li.dataset.noted);
     return;
   }
+  if (li && li.dataset.ovdoc && reviewActive()) {
+    openReviewOverview(); // the stored overview, in the viewer
+    return;
+  }
   if (li && li.dataset.ov && reviewActive()) {
     state.pane = "files";
     showReviewSummary();
@@ -5160,6 +5164,11 @@ $("files-list").addEventListener("contextmenu", (e) => {
   if (li && li.dataset.noted) {
     e.preventDefault();
     notedRowMenu(li.dataset.noted, e.clientX, e.clientY);
+    return;
+  }
+  if (li && li.dataset.ovdoc && reviewActive()) {
+    e.preventDefault();
+    reviewMenu(state.review.id, e.clientX, e.clientY);
     return;
   }
   if (li && li.dataset.ov && reviewActive()) {

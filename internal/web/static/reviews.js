@@ -18,6 +18,7 @@ import { focusPane } from "./keys.js";
 import { openNotesWindow } from "./shelfnotes.js";
 import { runLinkCompare } from "./linkcompare.js";
 import { copyLink } from "./links.js";
+import { openStoredOverview } from "./viewer.js";
 
 // --- reviews pure (guarded against Go) ---
 // reviewStamp is a review's time as the TUI prints it: local
@@ -472,6 +473,9 @@ function renderReviewFiles() {
   const anyBadge = state.files.some((f) => counts[f.path] > 0);
   const cols = fileCols(anyBadge ? NOTE_BADGE_COLS : 0);
   let html = `<li class="rov${rv.onSummary ? " sel" : ""}" data-ov="1" title="the review's summary — the text GitHub gets — its meta and the notes it could not place on a line">≡ Summary</li>`;
+  if (d.overviewMd) {
+    html += `<li class="rovd" data-ovdoc="1" title="the overview stored with the review: a walk through the change, its links opening the files at the reviewed commit">≡ Overview</li>`;
+  }
   state.files.forEach((f, i) => {
     html +=
       `<li class="${!rv.onSummary && i === state.fileCursor ? "sel" : ""}" data-i="${i}">` +
@@ -486,6 +490,15 @@ function renderReviewFiles() {
   $("files-list").innerHTML = html;
 }
 
+
+// openReviewOverview opens the review's stored overview (R12) in the
+// viewer's stored mode: anchors open the files at the reviewed tip.
+export function openReviewOverview() {
+  const rv = state.review;
+  if (!rv || !rv.data.overviewMd) return;
+  const d = rv.data;
+  openStoredOverview({ id: rv.id, title: d.label || rv.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: "" });
+}
 
 // reviewSummaryHTML is the Summary: the review's markdown, its meta, the
 // notes it could not place on a line, and Copy — a centred reading column.

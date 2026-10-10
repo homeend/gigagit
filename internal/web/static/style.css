@@ -1882,6 +1882,7 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
    Overview pane. */
 #files-list li.rev { color: var(--accent); }
 #files-list li.rov { font-weight: bold; }
+#files-list li.rovd { font-weight: bold; }
 #files-list li.rsum { color: var(--dim); cursor: default; padding-left: 36px; overflow: hidden; text-overflow: ellipsis; }
 #branches-list li.brev, #previews-list li.brev { color: var(--dim); padding-left: 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #branches-list li.brev:hover, #previews-list li.brev:hover { color: var(--fg); }

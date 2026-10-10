@@ -110,18 +110,27 @@ function nextNotedFile(files, mine, dir) {
 // {dest, path, start, end, note, missing, ref}, in document order.
 
 // stepAnchor is tab (dir 1) / shift+tab (-1) from sel (-1 = none),
-// wrapping; -1 when there are none.
+// wrapping; -1 when there are none. The next anchor that can open — a
+// plain one (a stored overview's unresolved anchor) is text, passed over.
 function stepAnchor(anchors, sel, dir) {
   const n = anchors.length;
   if (!n) return -1;
-  if (sel < 0) return dir > 0 ? 0 : n - 1;
-  return (((sel + dir) % n) + n) % n;
+  let i = sel < 0 ? (dir > 0 ? 0 : n - 1) : (((sel + dir) % n) + n) % n;
+  for (let k = 0; k < n; k++, i = (((i + dir) % n) + n) % n) if (!anchors[i].plain) return i;
+  return -1;
 }
 
 // anchorStatus is what opening a missing anchor says ("" = it opens).
 function anchorStatus(a) {
+  if (a.plain) return "anchor " + a.dest + " does not resolve at the reviewed commit";
   if (!a.missing) return "";
   return a.note ? "note " + a.note + " is gone" : "no file " + a.path;
+}
+
+// storedAnchorOpen is where a stored overview's anchor opens: the file at
+// the reviewed tip, or — a working review (tip "") — the working tree.
+function storedAnchorOpen(tip, a) {
+  return { src: tip ? "commit" : "worktree", rev: tip || "", path: a.path, line: a.start || 0 };
 }
 
 // anchorTarget is where an anchor lands: a file at a line (0 = its top) to
@@ -159,6 +168,7 @@ function escHow(isOverview, noteCount) {
 // its id and title (the agent's words — the server's OverviewName), a file
 // by its path.
 function docName(v) {
+  if (v.ov && v.ov.stored) return "overview of review " + v.ov.stored.id.slice("review-overview:".length);
   return v.ov ? "overview " + v.id + " " + JSON.stringify(v.ov.title) : v.path;
 }
 
@@ -199,11 +209,12 @@ function releaseAfterFailedOpen(regId, shownId) {
 }
 // anchorBands is the bands an overview's anchors make in path (nLines
 // lines): its line and range anchors — never a file's or a note's — sorted
-// by start then end, one per range, past the end dropped, cut at it.
+// by start then end, one per range, past the end dropped, cut at it. A
+// plain anchor (a stored overview's unresolved one) makes none.
 function anchorBands(anchors, path, nLines) {
   const out = [], seen = new Set();
   anchors.forEach((a, i) => {
-    if (a.note || a.path !== path || !(a.start > 0) || a.start > nLines) return;
+    if (a.plain || a.note || a.path !== path || !(a.start > 0) || a.start > nLines) return;
     const end = Math.min(Math.max(a.end || 0, a.start), nLines), k = a.start + ":" + end;
     if (seen.has(k)) return;
     seen.add(k);
@@ -217,7 +228,7 @@ function anchorBands(anchors, path, nLines) {
 function bandOf(bands, anchors, dest, nLines) {
   if (!dest) return -1;
   for (const a of anchors) {
-    if (a.dest !== dest || a.note || !(a.start > 0)) continue;
+    if (a.dest !== dest || a.plain || a.note || !(a.start > 0)) continue;
     const end = Math.min(Math.max(a.end || 0, a.start), nLines);
     const k = bands.findIndex((b) => b.start === a.start && b.end === end);
     if (k >= 0) return k;
@@ -310,8 +321,11 @@ function isOpen() {
   return !viewerRoot.classList.contains("hidden");
 }
 
+// viewerFileId is the open-files id this viewer shows; "" for a stored
+// overview, which is page-local and never registered (so a change of the
+// list — the one its own anchor's open causes — never closes it).
 function viewerFileId() {
-  return isOpen() ? view.id : "";
+  return isOpen() && !(view.ov && view.ov.stored) ? view.id : "";
 }
 
 function rememberPlace() {
@@ -501,12 +515,40 @@ function showOverview(f, ov, mine) {
   return { ok: true, notice: "" };
 }
 
+// ---- a review's STORED overview (spec §4.2) --------------------------------
+// The same document kind as an agent's temporary overview, drawn by the
+// same code, with three differences: it is page-local (never registered
+// with the open-files list — nothing to focus, refresh or close there), its
+// anchors open the file at the reviewed tip (a working review: the working
+// tree), and Back re-shows the copy kept here. A plain anchor (the review
+// could not resolve it, R3) is text: tab skips it, enter says why, no band.
+export function openStoredOverview({ id, title, blocks, anchors, tip, text }) {
+  if (isOpen()) rememberPlace();
+  loadSeq++; // an open in flight must not land over it
+  showStoredOverview({ id: "review-overview:" + id, title, blocks, anchors: anchors || [], tip: tip || "", text: text || "" });
+}
+
+function showStoredOverview(doc) {
+  Object.assign(view, { id: doc.id, src: "overview", rev: "", path: "", lines: [], notes: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
+  view.ov = { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc };
+  const first = view.ov.anchors.findIndex((a) => !a.plain);
+  if (first >= 0) view.ov.sel = first; // the TUI lands on the first resolved anchor
+  viewerSearchBar.reset();
+  viewerRoot.style.bottom = $("foot").offsetHeight + "px";
+  pushLayer("viewer", viewerRoot, { onKey: viewerKey });
+  swapFoot(true);
+  paintTitle();
+  renderViewer();
+  $("viewer-body").scrollTop = doc.scrollTop || 0;
+  $("viewer-body").focus({ preventScroll: true });
+}
+
 // closeViewer takes the viewer down. "close" (esc, the backdrop — see escHow) lets go of
 // the file — gone from the list unless another tab shows it; "background"
 // (ctrl+], the . menu's hand-offs) keeps it open (ruling L4).
 function closeViewer(how = "close") {
   const id = view.id, line = view.cur;
-  if (id) {
+  if (id && !(view.ov && view.ov.stored)) { // a stored overview was never registered: nothing to tell
     rememberPlace();
     if (how === "close") places.delete(id);
     ofQueue(how === "close" ? { op: "close", id } : { op: "background", id, line });
@@ -531,6 +573,7 @@ function dropViewer() {
 }
 
 function backgroundViewer() {
+  if (view.ov && view.ov.stored) return closeViewer("close"); // page-local: nothing to background
   const name = docName(view);
   closeViewer("background");
   opLine(name + " is in the background", false);
@@ -541,7 +584,7 @@ function paintTitle() {
   const el = $("viewer-title");
   if (view.ov) {
     el.title = view.ov.title;
-    el.textContent = "Overview " + view.id + " · " + view.ov.title;
+    el.textContent = view.ov.stored ? "Overview: " + view.ov.title : "Overview " + view.id + " · " + view.ov.title;
     return;
   }
   const lead = "View ", tail = " (" + versionLabel(view.src, view.rev) + ")";
@@ -608,6 +651,7 @@ function selectAnchor(i) {
 // caller (openAnchorAt) resumes on a list re-checked after its call unless
 // every refresh it could wait on fails.
 function refreshOverview() {
+  if (view.ov && view.ov.stored) return Promise.resolve(true); // immutable: nothing to re-check
   if (!view.ov || !viewerFileId()) return Promise.resolve(false);
   ovLastSeq = ++ovSeq;
   ovLast = refreshOverviewAs(ovLastSeq);
@@ -658,6 +702,7 @@ function stepViewerAnchor(dir) {
 // its anchors; a failed read keeps the last ones (a closed overview arrives
 // on the closed list instead).
 async function refreshFromAnchors(f) {
+  if (f.stored) return; // a stored overview's anchors never move
   let ov;
   try {
     ov = await fetchOverview(f.id);
@@ -689,6 +734,19 @@ async function openAnchorAt(i) {
   const a = view.ov.anchors[view.ov.sel];
   if (!a) return opLine("that anchor is no longer in the overview", false);
   if (a.missing) return opLine(anchorStatus(a), false);
+  if (view.ov.stored) {
+    // A stored overview's anchor opens the file at the reviewed tip (a
+    // working review: the working tree); the kept copy is the way back.
+    const stored = { ...view.ov.stored, scrollTop: $("viewer-body").scrollTop };
+    const back = { id, sel: view.ov.sel, dest: a.dest, anchors: view.ov.anchors, cur: a.dest, stored };
+    const r = await openViewer(storedAnchorOpen(stored.tip, a));
+    if (!r.ok) return;
+    view.from = back;
+    armBack();
+    rerenderKeepingScroll();
+    swapFoot(true);
+    return;
+  }
   const t = anchorTarget(a);
   if (!t.path) return opLine("note " + t.note + " is gone", false);
   // The overview's anchors travel with the way back: the file draws its
@@ -716,6 +774,17 @@ window.addEventListener("popstate", () => {
 // open. One step deep.
 async function anchorBack() {
   const f = view.from, id = view.id;
+  if (f && f.stored) {
+    // Back to a stored overview re-shows the kept copy; the file it opened
+    // stays open in the background, as a temporary overview's does.
+    view.from = null;
+    rememberPlace();
+    ofQueue({ op: "background", id: view.id, line: view.cur });
+    loadSeq++;
+    showStoredOverview(f.stored);
+    selectAnchor(backAnchor(view.ov.anchors, f));
+    return;
+  }
   view.from = null;
   swapFoot(true);
   let files = null, err = null;
@@ -754,6 +823,7 @@ async function anchorBack() {
 }
 
 function copyAnchorRef() {
+  if (view.ov.stored) return opLine("a stored overview's anchor has no reference — copy the review link instead", false);
   const a = view.ov.anchors[view.ov.sel];
   if (!a) return opLine("no anchor selected — tab selects one", false);
   copyText(a.ref, "anchor reference");
@@ -780,7 +850,7 @@ function overviewKey(e) {
     case "PageUp": scrollDoc(-(body.clientHeight - 40)); break;
     case "Home": case "g": body.scrollTop = 0; break;
     case "End": case "G": body.scrollTop = body.scrollHeight; break;
-    case "Escape": closeViewer(escHow(true, 0)); break; // an overview steps aside; x closes it
+    case "Escape": closeViewer(view.ov.stored ? "close" : escHow(true, 0)); break; // an overview steps aside (a stored one closes); x closes it
     default: return false;
   }
   e.preventDefault();
@@ -1014,6 +1084,12 @@ function viewerSearchKey(e) {
 // viewer is open #foot shows them, and gets its own chips back on close.
 // viewerFoot is the chips; a file with an agent's notes adds theirs.
 function viewerFoot() {
+  if (view.ov && view.ov.stored) {
+    return (
+      `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button>` +
+      `<button data-vact="ytext">y copy text</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+    );
+  }
   if (view.ov) {
     return (
       `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button><button data-vact="aref">r reference</button>` +
