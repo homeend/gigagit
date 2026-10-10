@@ -24,7 +24,7 @@ func (b *blameView) selectedLines() []string {
 	}
 	var out []string
 	for i := lo; i <= hi; i++ {
-		out = append(out, b.lines[i].Content)
+		out = append(out, blameText(b.lines[i]))
 	}
 	return out
 }
@@ -39,7 +39,7 @@ func (m Model) blameCopyLineRows(b *blameView) []actionRow {
 	}
 	ln := b.lines[b.sel]
 	rows := []actionRow{
-		m.copyRow("copy-line", i18n.T("Copy line"), i18n.T("Copied line %d", ln.LineNo), ln.Content),
+		m.copyRow("copy-line", i18n.T("Copy line"), i18n.T("Copied line %d", ln.LineNo), blameText(ln)),
 	}
 	if sel := b.selectedLines(); len(sel) > 0 {
 		rows = append(rows, clearingCopyRow(m.copyRow("copy-selected-lines",

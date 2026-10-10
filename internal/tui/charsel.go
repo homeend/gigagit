@@ -5,6 +5,7 @@ import (
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -505,4 +506,40 @@ func charSelSpans(cs textSel, row int) []hitSpan {
 		out = append(out, hitSpan{start: cs.cur.col, end: cs.cur.col + 1, sel: cs.covers(cs.cur.row, cs.cur.col), cur: true})
 	}
 	return out
+}
+
+// --- code hosts (diff, blame, the View-file preview): one row per source
+// line, painted on the sanitized display text --------------------------------
+
+// charSpansDisp is the selection on row `row` of SOURCE text as spans in the
+// sanitized display's rune space (dispCol): a tab's every cell is covered.
+func charSpansDisp(cs textSel, row int, text string) []hitSpan {
+	spans := charSelSpans(cs, row)
+	for i := range spans {
+		spans[i].start = dispCol(text, spans[i].start)
+		if spans[i].end < 1<<29 {
+			spans[i].end = dispCol(text, spans[i].end)
+		}
+	}
+	return spans
+}
+
+// charPanCells is the horizontal offset (display cells) that keeps source
+// column col of text inside a window `width` cells wide starting at off: off
+// itself when the cursor already shows, else the least move that shows it.
+func charPanCells(text string, col, off, width int) int {
+	r := []rune(text)
+	col = min(max(col, 0), len(r))
+	before := lipgloss.Width(sanitizeLine(string(r[:col])))
+	after := before + 1 // the cell past the end (an empty row's cursor)
+	if col < len(r) {
+		after = lipgloss.Width(sanitizeLine(string(r[:col+1])))
+	}
+	switch {
+	case before < off:
+		off = before
+	case after > off+width:
+		off = after - width
+	}
+	return max(off, 0)
 }

@@ -90,15 +90,7 @@ func (v *diffView) charSpansOn(li int) []hitSpan {
 	if !ln.isBody() || !sidePresent(ln.Row, v.onOld) {
 		return nil
 	}
-	text := sideText(ln.Row, v.onOld)
-	spans := charSelSpans(v.cs, li-lo)
-	for i := range spans {
-		spans[i].start = dispCol(text, spans[i].start)
-		if spans[i].end < 1<<29 {
-			spans[i].end = dispCol(text, spans[i].end)
-		}
-	}
-	return spans
+	return charSpansDisp(v.cs, li-lo, sideText(ln.Row, v.onOld))
 }
 
 // roomForCursor is an empty wrap segment as one blank cell: the cursor (or
