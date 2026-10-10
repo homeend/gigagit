@@ -139,3 +139,23 @@ func TestBlameLineCopiesDropTheCarriageReturn(t *testing.T) {
 		t.Fatalf("Copy selected lines = %q", row.copyText)
 	}
 }
+
+// Blame covers the status bar: the copy's confirmation (and the mode's
+// notices) ride the header line, as the file viewer's title line does.
+func TestBlameShowsTheStatusOnItsHeader(t *testing.T) {
+	t.Parallel()
+	m, b := charBlameModel("one", "two")
+	var got string
+	m = captureClip(m, &got)
+	m = typeBlame(m, b, "v", "space", "l")
+	m, cmd := b.update(m, keyMsg("enter"))
+	m = drainCmds(t, m, cmd)
+	head := strings.SplitN(b.render(m, ""), "\n", 2)[0]
+	if got != "on" || !strings.Contains(head, "Copied 2 characters") {
+		t.Fatalf("copied %q; header %q", got, head)
+	}
+	u, _ := m.Update(keyMsg("j"))
+	if head := strings.SplitN(b.render(u.(Model), ""), "\n", 2)[0]; strings.Contains(head, "Copied") {
+		t.Fatalf("the next key must clear it: header %q", head)
+	}
+}

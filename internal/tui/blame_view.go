@@ -283,6 +283,12 @@ func (b *blameView) render(m Model, _ string) string {
 	// Right-aligned badges, like the diff's: the age-filter badge (-7d, +30d,
 	// +1d -7d) and the search badge share the slot as "-7d · /q  1/3".
 	bd := b.search.badge()
+	if m.statusMsg != "" && !m.running && m.statusMsg != m.stickyMsg {
+		// Blame covers the status bar: a message for the user (a copy, the
+		// copy mode's notice) sits on the header until the next key clears
+		// it — the file viewer's title-line rule.
+		bd = strings.TrimSpace(m.statusMsg + "  " + bd)
+	}
 	if b.recent.on {
 		rb := b.recent.f.String()
 		if bd != "" {
