@@ -63,7 +63,7 @@ func (b *blameView) charPan(m Model) {
 	if b.mode != modeScroll || !b.cs.on || b.cs.cur.row >= len(b.csRows) {
 		return
 	}
-	b.hscroll = charPanCells(string(b.csRows[b.cs.cur.row].text), b.cs.cur.col, b.hscroll, b.codeWidth(m))
+	b.hscroll = charPanCells(string(b.csRows[b.cs.cur.row].text), b.cs.cur.col, b.hscroll, b.codeWidth(m), sanitizeLine)
 }
 
 // charEnded puts back the display mode v swapped away (cutoff runs as

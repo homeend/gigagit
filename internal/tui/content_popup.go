@@ -38,6 +38,13 @@ type contentLine struct {
 	// zero, which reads as "nothing to copy here".
 	raw string
 	src bool
+	// cont / hard / lead are an OVERVIEW's layout facts (overviewLines, from
+	// its mdRows) for the character selection: cont marks a wrap continuation
+	// (a copy joins it with one space, or with nothing when hard — the break
+	// split a word), lead the leading runes that are layout (a list item's
+	// hang indent), never copied. Zero everywhere else.
+	cont, hard bool
+	lead       int
 	// cells is an IMAGE row: text is one ▀ per cell and cells carry each
 	// cell's two colours (termimg); the renderer paints them with a row
 	// decorator. nil for every text row.
@@ -144,9 +151,13 @@ type contentPopup struct {
 	// says whether there is one to put back.
 	csMode    dispMode
 	csSwapped bool
-	mode      dispMode // text display mode; z cycles
-	hscroll   int      // modeScroll horizontal offset
-	footer    string   // optional line above the hint (e.g. commit author · date); "" = none
+	// csLines is the FILE PREVIEW's lines the character selection was built
+	// over (preview_charsel.go): a load or a re-layout replaces p.lines, and
+	// the mode — whose rows index the old ones — leaves.
+	csLines []contentLine
+	mode    dispMode // text display mode; z cycles
+	hscroll int      // modeScroll horizontal offset
+	footer  string   // optional line above the hint (e.g. commit author · date); "" = none
 	// keys are the window's own bindings ("[y] copy  [o] other notes"): a line
 	// on the hints' margin right above them, set off from the content by a
 	// blank line — actions, not one more line of the text. "" = none.

@@ -527,13 +527,15 @@ func charSpansDisp(cs textSel, row int, text string) []hitSpan {
 // charPanCells is the horizontal offset (display cells) that keeps source
 // column col of text inside a window `width` cells wide starting at off: off
 // itself when the cursor already shows, else the least move that shows it.
-func charPanCells(text string, col, off, width int) int {
+// disp is the host's own display sanitizer (sanitizeLine's tab stops, or
+// the preview's sanitizeForDisplay).
+func charPanCells(text string, col, off, width int, disp func(string) string) int {
 	r := []rune(text)
 	col = min(max(col, 0), len(r))
-	before := lipgloss.Width(sanitizeLine(string(r[:col])))
+	before := lipgloss.Width(disp(string(r[:col])))
 	after := before + 1 // the cell past the end (an empty row's cursor)
 	if col < len(r) {
-		after = lipgloss.Width(sanitizeLine(string(r[:col+1])))
+		after = lipgloss.Width(disp(string(r[:col+1])))
 	}
 	switch {
 	case before < off:

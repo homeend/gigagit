@@ -909,6 +909,10 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// selection, then a committed query, then the preview's own esc.
 	// previewSearchKey covers the first and third in one call, so the selection
 	// hook runs first and declines while the search is typing.
+	// The character selection is MODAL: while it is on every key is its own.
+	if nm, cmd, handled := m.previewCharKey(msg); handled {
+		return nm, cmd
+	}
 	if nm, cmd, handled := m.previewSelectKey(msg); handled {
 		return nm, cmd
 	}

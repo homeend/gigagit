@@ -525,6 +525,9 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		curB = d.curBand(bands)
 		d.noteW, d.noteH = max(innerW-gut, 4), noteBoxMaxRows(rowsCap)
 	}
+	if p.cs.on && p.previewCharStale() {
+		p.previewCharLeave() // a load or a re-layout replaced the lines the mode indexed
+	}
 	start := p.clampTop(p.sel, rowsCap)
 	wr := make([]winRow, 0, rowsCap)
 	cursorOff := m.cursorStyle() == "off"
@@ -549,6 +552,12 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 			if hs := p.search.hitsOn(row, 0); len(hs) > 0 {
 				r.emph = overlayHits(nil, 0, len([]rune(l.text)), hs)
 			}
+		}
+		if p.cs.on && l.cells == nil { // the copy mode's stripe and cursor
+			if r.text = charRoom(p.cs, row, r.text); r.text != l.text {
+				r.cls = nil // the empty row's blank cursor cell has no class
+			}
+			r.emph = p.previewCharEmph(r.emph, row, r.text)
 		}
 		noted := false // the range mark: this line is under a note
 		for _, n := range notes {
@@ -627,6 +636,9 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	}
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
+	}
+	if p.cs.on {
+		hint = charSelHint(p.cs, p.csRows)
 	}
 	if d := m.previewDoc(p); d != nil && d.from != nil {
 		lead := i18n.T("[bksp] back")

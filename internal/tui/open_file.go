@@ -195,6 +195,9 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 	d.syncNotes() // the Model aligned the store to these lines before the fill (alignDocNotes)
 	p.cur, p.sel = 0, 0
 	p.lsel.clear()
+	if p.cs.on {
+		p.previewCharLeave() // its rows index the lines this fill replaced
+	}
 	if docLoaded(d) {
 		keep := d.keep
 		d.keep.line, d.keep.top = 0, 0
