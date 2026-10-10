@@ -257,3 +257,47 @@ func TestReviewViewRange(t *testing.T) {
 		t.Errorf("range review notes = %d %+v, want one", code, notes.Notes)
 	}
 }
+
+const webReviewDocWithOverview = `{"version":1,"summary":"fine","files":[
+ {"path":"f.txt","annotations":[{"newRange":[1,1],"summary":"A"}]}],
+ "overview":"Start at [the file](f.txt:1), then [outside](nope.go:3) and [a note](note:t1)."}`
+
+type overviewAnchorResp struct {
+	Dest    string `json:"dest"`
+	Path    string `json:"path"`
+	Start   int    `json:"start"`
+	Missing bool   `json:"missing"`
+	Plain   bool   `json:"plain"`
+}
+
+// §2.3/§4.2: a review with a stored overview sends it as overviewMd with
+// its anchors resolved against the reviewed tip — a file outside the
+// review's set or a note: anchor is plain — and the tip the anchors open at.
+func TestReviewViewCarriesTheStoredOverview(t *testing.T) {
+	t.Parallel()
+	ts, _, sha, id := reviewServer(t, webReviewDocWithOverview)
+	var got struct {
+		SummaryMd       any                  `json:"summaryMd"`
+		OverviewMd      []any                `json:"overviewMd"`
+		OverviewAnchors []overviewAnchorResp `json:"overviewAnchors"`
+		OverviewTip     string               `json:"overviewTip"`
+	}
+	if code := getJSON(t, ts, "/api/review/"+id, &got); code != http.StatusOK {
+		t.Fatalf("code %d", code)
+	}
+	if got.SummaryMd == nil || len(got.OverviewMd) == 0 || got.OverviewTip != sha {
+		t.Fatalf("summaryMd %v overviewMd %d blocks tip %q (want %q)", got.SummaryMd != nil, len(got.OverviewMd), got.OverviewTip, sha)
+	}
+	if len(got.OverviewAnchors) != 3 {
+		t.Fatalf("anchors = %+v", got.OverviewAnchors)
+	}
+	if a := got.OverviewAnchors[0]; a.Dest != "f.txt:1" || a.Path != "f.txt" || a.Start != 1 || a.Plain || a.Missing {
+		t.Fatalf("resolved anchor = %+v", a)
+	}
+	if a := got.OverviewAnchors[1]; !a.Plain || !a.Missing {
+		t.Fatalf("a file outside the review must be plain: %+v", a)
+	}
+	if a := got.OverviewAnchors[2]; !a.Plain {
+		t.Fatalf("a note: anchor must be plain (R3): %+v", a)
+	}
+}

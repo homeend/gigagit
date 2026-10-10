@@ -32,6 +32,10 @@ type overviewAnchor struct {
 	Missing bool   `json:"missing"`
 	Ref     string `json:"ref"`
 	Label   string `json:"label,omitempty"`
+	// Plain: a stored overview's anchor the review cannot open (R3) — a
+	// path outside its files, a range past the file, a note: anchor. Drawn
+	// plain; tab skips it; enter says why.
+	Plain bool `json:"plain,omitempty"`
 }
 
 func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
