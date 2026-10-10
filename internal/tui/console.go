@@ -317,14 +317,19 @@ func (m Model) dispatchParkedAware(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// The stash list and the files preview are displaced the same way and
 	// take their reads (a stash list's entries, a preview's bytes) only
 	// while live: back beneath the handler too, parked again after.
-	stash, preview, previewOf := cp.stashView, cp.filesPreview, cp.filesView
-	cp.stashView, cp.filesPreview, cp.filesView = nil, nil, nil
-	if stash != nil && m.stashView == nil {
+	var stash *stashView
+	var preview *openFile
+	var previewOf *contentPopup
+	if cp.stashView != nil && m.stashView == nil {
+		stash, cp.stashView = cp.stashView, nil
 		m.stashView = stash
 	}
-	if preview != nil && m.filesPreview == nil && previewOf != nil && m.filesView == previewOf {
+	if cp.filesPreview != nil && m.filesPreview == nil && cp.filesView != nil && m.filesView == cp.filesView {
+		preview, previewOf = cp.filesPreview, cp.filesView
+		cp.filesPreview, cp.filesView = nil, nil
 		m.filesPreview = preview
 	}
+	// One not put back (a live one in its place) stays parked as it is.
 	view := m.viewed
 	nm, cmd := m.dispatch(msg)
 	out, ok := nm.(Model)

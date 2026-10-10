@@ -625,15 +625,18 @@ func (m Model) takeQueuedReturn() Model {
 
 // takeQueuedReturnAfterOp is takeQueuedReturn at an op's end, BEFORE the
 // op's reload: the leaving slot's branch record (saveView) comes from the
-// pre-op worktree list, so after a HEAD-moving op (srcs names the reflog,
-// or is nil — every source) the list's next arrival would read the op's
-// own checkout as a recycle and drop its windows. The slot's record is
-// marked unknown instead: dropRecycledWindows takes its baseline from
-// that arrival.
+// pre-op worktree list, so after an op whose reload re-reads the LIST
+// (srcs names srcWorktrees, or is nil — every source: the switch and
+// checkout ops) that arrival would read the op's own checkout as a
+// recycle and drop its windows. The slot's record is marked unknown
+// instead and dropRecycledWindows takes its baseline from that arrival.
+// An op that reads no list (a commit) keeps the record: the branch did
+// not change, and an unknown record would wait for a later list — a
+// recycle meanwhile would be adopted, not caught.
 func (m Model) takeQueuedReturnAfterOp(srcs []sourceKey) Model {
 	was := m.viewed
 	m = m.takeQueuedReturn()
-	if m.viewed == was || srcs != nil && !slices.Contains(srcs, srcReflog) {
+	if m.viewed == was || srcs != nil && !slices.Contains(srcs, srcWorktrees) {
 		return m
 	}
 	if v := m.views[was]; v != nil {

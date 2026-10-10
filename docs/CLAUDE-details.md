@@ -6824,9 +6824,12 @@ slot's group holds it; `remoteTagsMsg` is gated by `remoteTagsGen`
 pending one (`pendingKey` = `model.KeyOf`); `dispatchParkedAware` puts
 the console-parked stash list and preview back beneath the handler and
 re-parks them (`reparkConsoleViews`); `takeQueuedReturnAfterOp` marks
-the leaving slot's branch record unknown after a HEAD-moving op (its
-sources name the reflog, or are "all") and `dropRecycledWindows` adopts
-the next list as that slot's baseline instead of skipping it; the
+the leaving slot's branch record unknown after an op whose reload
+re-reads the worktree list (its sources name `srcWorktrees`, or are
+"all" — the switch/checkout ops; `CheckoutRemoteBranch` now lists it
+too, guard `TestBranchChangingOpsReloadTheWorktreeList`) and
+`dropRecycledWindows` adopts the next list as that slot's baseline
+instead of skipping it — a commit keeps its record; the
 `alt+w` footer hint gates on `worktreeOrder()` and the hide-first hint
 with one worktree says so. **Reported, not fixed:** create-and-switch /
 repair-and-switch / move-home go through `reRoot` (the new path is not

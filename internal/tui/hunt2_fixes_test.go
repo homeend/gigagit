@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/syntax"
@@ -488,6 +489,40 @@ func TestBranchesArrivalBeforeTheWorktreeListKeepsTheReadsHead(t *testing.T) {
 	for _, b := range m.branches {
 		if b.Name == "main" && !b.IsHead {
 			t.Fatal("the read's own head mark was cleared with no worktree list to re-mark from")
+		}
+	}
+}
+
+// Only an op whose reload re-reads the worktree LIST re-baselines the
+// leaving slot: after a commit (no list read) the record stays known, or
+// the slot would sit un-baselined and a recycle meanwhile would be adopted
+// instead of caught.
+func TestQueuedReturnAfterACommitKeepsTheBranchRecord(t *testing.T) {
+	m := loadedModel(t)
+	home := m.home
+	m, other := addWorktree(t, m, "wt2")
+	m.pendingReturnView = model.KeyOf(other)
+	m.running = true
+	m.pendingSources = opAffectedSources(engine.Commit{}) // status, feed, branches, reflog — no worktree list
+	mm, _ := m.Update(opFinishedMsg{})
+	m = mm.(Model)
+	if m.viewed != model.KeyOf(other) {
+		t.Fatalf("precondition: the queued return went (viewed=%q)", m.viewed)
+	}
+	if v := m.views[home]; !v.branchKnown || v.branch != "main" {
+		t.Fatalf("home's record = %q known=%v, want main kept", v.branch, v.branchKnown)
+	}
+}
+
+// Every op that can change the checked-out branch re-reads the worktree
+// list, so the re-baseline above fires for it (the unmapped switch/checkout
+// ops read every source).
+func TestBranchChangingOpsReloadTheWorktreeList(t *testing.T) {
+	t.Parallel()
+	for _, op := range []engine.Operation{engine.CheckoutRemoteBranch{}, engine.SmartSwitch{}, engine.SmartCheckout{}, engine.Checkout{}, engine.RenameBranch{}, engine.RestoreBranchVersion{}} {
+		srcs := opAffectedSources(op)
+		if srcs != nil && !slices.Contains(srcs, srcWorktrees) {
+			t.Errorf("%T reloads %v without the worktree list", op, srcs)
 		}
 	}
 }
