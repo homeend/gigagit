@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/i18n"
@@ -102,6 +104,23 @@ func (p *contentPopup) previewCharLeave() {
 	}
 }
 
+// charPan keeps the character cursor inside a scrolled view's text column:
+// the pan runs on the row's display cells, its lead (the hang indent the
+// layout put in front, never selectable) included; a cursor back on the
+// first rune pans the lead into view too.
+func (p *contentPopup) charPan(innerW int) {
+	if p.mode != modeScroll || !p.cs.on {
+		return
+	}
+	row := p.cs.cur.row
+	lead := min(max(p.lines[row].lead, 0), len([]rune(p.lines[row].raw)))
+	disp := strings.Repeat(" ", lead) + string(p.csRows[row].text)
+	p.hscroll = charPanCells(disp, lead+p.cs.cur.col, p.hscroll, innerW, sanitizeForDisplay)
+	if p.cs.cur.col == 0 && p.hscroll <= lead {
+		p.hscroll = 0
+	}
+}
+
 // previewCharKey gives the focused preview's character selection every key
 // while it is on, and v when it is off; it runs BEFORE the line selection and
 // the search hooks. handled == true means the caller must return.
@@ -147,15 +166,7 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	if p.cs.on {
 		p.cur = p.cs.cur.row // the line cursor (and the pager) follows
 		p.ensureCursorVisible(rows)
-		if p.mode == modeScroll {
-			lead := min(max(p.lines[p.cur].lead, 0), len([]rune(p.lines[p.cur].raw)))
-			text := p.csRows[p.cur].text
-			off := charPanCells(string(text), p.cs.cur.col, max(p.hscroll-lead, 0), max(innerW-lead, 1), sanitizeForDisplay)
-			p.hscroll = off + lead
-			if p.cs.cur.col == 0 && lead > 0 && p.hscroll <= lead {
-				p.hscroll = 0
-			}
-		}
+		p.charPan(innerW)
 	} else {
 		p.previewCharLeave()
 	}
