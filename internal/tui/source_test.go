@@ -375,7 +375,7 @@ func TestOpAffectedSources(t *testing.T) {
 		{engine.DeleteBranch{}, []sourceKey{srcBranches, srcFeed, srcNotes}},
 		{engine.RenameBranch{}, []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees, srcNotes, srcReflog}},
 		{engine.FastForward{}, []sourceKey{srcStatus, srcFeed, srcBranches, srcReflog}},
-		{engine.CheckoutRemoteBranch{}, []sourceKey{srcStatus, srcBranches, srcRemotes, srcFeed, srcReflog}},
+		{engine.CheckoutRemoteBranch{}, []sourceKey{srcStatus, srcBranches, srcRemotes, srcFeed, srcReflog, srcWorktrees}},
 		{engine.RestoreBranchVersion{}, []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees, srcReflog}},
 		{engine.Stash{}, nil}, // unmapped → all (safe default)
 	}

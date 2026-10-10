@@ -6188,6 +6188,14 @@ remark placement stop re-running `git show` on every comment change.
   hold a copied note link (the id is random per run): `tui_note_link` pins
   the row, the package tests the payload.
 
+### Character selection — the v copy mode (2026-10-10, spec `docs/superpowers/specs/2026-10-10-char-select-design.md`)
+
+- **Model** (`charsel.go`, pure): `pos{row, col}` over a host's `charRow{text []rune, wraps, dead}`; `textSel{on, fixed, anchor, cur, want}` (the type is `textSel` — `charSel` is the console's mouse drag) with `enter/leave/press/esc/bounds/count` and the moves (`left/right` run across rows, `vertical` keeps `want`, `word` walks `wordStarts`); `charSelText` joins (`wraps` = one space, else `\n`, dead rows skipped); `charSelKey(cs, host, msg) charSelResult{handled, copy, notice, bump}` — every key while on except ctrl+c; `charSelHint`, `copiedCharsText`; `charSelEmph(cs, row, n)` / `shiftMask` for mask painters, `charSelSpans(cs, row)` (`hitSpan{sel: true}`, the cursor `cur`) for the diff's cell painters.
+- **Painting**: `emphSel` / `emphSelCur` (`textsearch.go`); `overlayHits` maps a `sel` span; `styledRuns` paints them with `selectionStyle(base)` and `currentHitStyle(selectionStyle(base))`.
+- **Summary popup** (`contentPopup`): `cs`, `csRows`/`csSeg` (`charSeg{line, off, pad}`) laid out by `charLayout` from `layoutWidths` + `wrapRow` + `wrapSegOffsets` (the inverse of `wrapSegMask`; `wrapHangWords` keeps the break's space at a segment's end, so a wrap segment's trailing spaces are dropped from the selectable text); rows are DISPLAY rows (the pager's unit), the "  " lead and the hang indent are pads; `charEmphFor(line, n)` fills `winRow.emph`; `charFollow` scrolls the pager; `box()` leaves the mode when `csW != bodyW` (a resize re-wraps); the keys line and the hint swap while on. `reviewSummaryPopup.update` routes `charKey` first, then `v`.
+- **Diff** (`diff_charsel.go`): `diffView.cs/csBase/csFile/csPage`; `charRows` over `charRange()` (the stream, or a stack element's `fileLineRange(csFile)`), dead where `!isBody || !sidePresent`, prose rows from `f.prose` with `wraps = mdRow.cont`; `charSpansOn(li)` converts columns with `dispCol` (sanitizeCell's tab expansion) and `renderDiffView` appends them to the cursor side's `lh`/`rh`; `charEmphProse` for `stackRow`'s prose case; `diffCharKey` runs before `diffSelectKey` (modal), `diffCharEnter` clears `lsel`, the line cursor follows (`setCursorLine`), a bump in a stack says `stackCharBoundNotice`. The mode leaves wherever `lsel.clear()` runs in `diff_view.go` (a rebuild — a reload, `f`, `ctrl+w` — not a plain resize); a stack re-splice (`rebuildLines`) keeps it at the element's new `csBase` unless the element's own line count changed. `charPan` keeps the cursor's display column in the pane in scroll mode (`charPaneText`); a click on the other pane is ignored while on (`mouse.go`). A loose cursor paints `emphCur` (visible in every theme), one inside the stripe `emphSelCur`.
+- `mdRow.cont` marks a wrap continuation (`mdWrap`, carried by `mdPrefix`).
+
 ### PR review, plan 3 — the web: summaryMd / the stored overview, PR Reviews, the send panel, Copy note link (2026-10-10, plan `docs/superpowers/plans/2026-10-10-pr-review-send-panel-web.md`)
 
 - **Wire keys.** `/api/review/{id}` and the review done event hand the
@@ -6444,7 +6452,8 @@ rebuilds its own on the kick).
 The Model's fields stay the LIVE copy (no reader changed); `saveView` /
 `loadView` copy out/in. `Model.views` is keyed by the cleaned path,
 `viewed` is the slot on screen, `home` the one gg's identity belongs to.
-Worktrees of one repository share branches/commits/stashes/tags/reflog, so
+Worktrees of one repository share branches/commits/stashes/tags (NOT the
+HEAD reflog: git keeps it per worktree, and the slot keeps it), so
 those never move. `seedHome` runs on BOTH first-load arms (`configReadyMsg`,
 the production startup path, and `dataLoadedMsg`, the legacy `loadCmd` path
 the unit fixtures use) — the first cut only seeded the second and the e2e
@@ -6794,6 +6803,52 @@ copy; `trimQueue` copies the kept tail into a fresh slice; `pruneViews`
 releases a gone worktree's open files (`openFilesReg.drop`; a repository
 switch keeps them on purpose — the open-files ruling); the PR view's
 freshness state is in `windowState` (the PR section above).
+**Second hunt (2026-10-10, fix/fast-switch-hunt-2, tests in
+`hunt2_fixes_test.go`; reviews: the operation boundary, the three keys
+as a state machine, the replay queue + the shared state).** Every
+message whose handler reaches `startOp` after an async step names its
+worktree — the Service it was asked through or a slot stamp — and drops
+a mismatch (`TestAsyncOpStartersNameTheirWorktree`: `pushTagCheckMsg`
+and `pickProbeMsg` joined the range loads); `statusRefreshedMsg.staging`
+says whether a staging round ends — only that clears `running` (the
+editor exit's `reloadStatusCmd` owns no op); `effectiveTop` (the live
+top, or the console-parked top under a shown console) is what BOTH
+`steerRefusal` and `switchRefusalBy` judge, so a parkable popup
+displaced under a console still parks on the user's own swap;
+`closeConsole` maps a return focus on another top-slot tab to the shown
+one and `selectSessionRow` re-pins `leftMax`/the return point's
+`fullMax` as `activateTab` does; the HEAD reflog is per worktree
+(`worktreeView.reflog`, `sleepView` retires its read, the kick re-reads
+it); the `srcBranches` arm re-marks the viewed head (`markHead`) on every
+arrival; the PR fetch's follow-up is built BEFORE `takeQueuedReturn`
+like the stash arm's; `shelfAddedMsg`/`shelfSetAddedMsg` are stamped
+(the marks they consume are their worktree's); `routeSlotMsg` applies a
+`sharedWriter`'s shared part for a GONE slot too; the ghost cursor needs
+the Commits focus; `filePathPopup` is parkable only once its list
+landed; `pickerLexedMsg` writes through the picker's pointer when any
+slot's group holds it; `remoteTagsMsg` is gated by `remoteTagsGen`
+(moved only by `reRoot` — `loadGen` moves on every swap now);
+`applyCommitMessage` keeps a sleeping repo worktree's message as its
+pending one (`pendingKey` = `model.KeyOf`); `dispatchParkedAware` puts
+the console-parked stash list and preview back beneath the handler and
+re-parks them (`reparkConsoleViews`); `takeQueuedReturnAfterOp` marks
+the leaving slot's branch record unknown after an op whose reload
+re-reads the worktree list (its sources name `srcWorktrees`, or are
+"all" — the switch/checkout ops; `CheckoutRemoteBranch` now lists it
+too, guard `TestBranchChangingOpsReloadTheWorktreeList`) and
+`dropRecycledWindows` adopts the next list as that slot's baseline
+instead of skipping it — a commit keeps its record; the
+`alt+w` footer hint gates on `worktreeOrder()` and the hide-first hint
+with one worktree says so. **Reported, not fixed:** create-and-switch /
+repair-and-switch / move-home go through `reRoot` (the new path is not
+listed yet) and so drop every sleeping slot's parked windows and queue,
+answering parked steers with the repository-changed prose; a recycled
+sleeping worktree's open documents whose reload was queued stay
+`loading` until re-opened; `alt+w` over an open commit files view lands
+the focus on the covered Branches panel (the commit list shows no
+cursor until tab); `alt+a` over a view pushed onto another worktree's
+console restarts the walk from the return worktree; `noteMutatedMsg`
+clears the line selection of whatever diff is live.
 
 **Trigger 2 — the user's own switch** (`switch_guard.go`): `guardedReRoot`
 takes the fast path for a listed worktree on `switchOK` → `switchView` +

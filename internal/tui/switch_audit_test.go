@@ -81,7 +81,7 @@ func TestQueuedReturnDrainsAfterAStagingRound(t *testing.T) {
 	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home {
 		t.Fatalf("viewed=%q pending=%q", m.viewed, m.pendingReturnView)
 	}
-	nm, _ := m.Update(statusRefreshedMsg{status: m.status})
+	nm, _ := m.Update(statusRefreshedMsg{staging: true, status: m.status})
 	m = nm.(Model)
 	if m.viewed != m.home || m.pendingReturnView != "" {
 		t.Fatalf("after the staging round: viewed=%q pending=%q", m.viewed, m.pendingReturnView)

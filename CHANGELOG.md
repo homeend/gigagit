@@ -32,6 +32,31 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   "which document is the keyboard on" seams answer through `splitFocus`.
   The diff view is untouched. Headless e2e runs isolate the new preference.
 
+## Character selection: the v copy mode (TUI)
+
+A modal copy mode in the spirit of vim's visual mode and tmux's copy mode,
+spec `docs/superpowers/specs/2026-10-10-char-select-design.md`: `v` enters
+it and shows a character cursor, `←→↑↓` / `hjkl` / `w b` / `home end` /
+`pgup pgdn` move, `space` fixes the start (again: restart), `enter` or `y`
+copies the covered text and leaves, `esc` drops the start, then leaves.
+While it is on every other key waits.
+
+- **Where.** The review's Summary popup, the stacked review view (its
+  summary element, or one file on the cursor's side — the element bounds
+  the selection) and the single diff view (the cursor's side; `v` clears a
+  live line selection, one kind at a time). Blame and the View-file preview
+  follow later through the same model.
+- **What is copied.** The rendered text, never the markdown: a wrapped
+  prose row joins with one space, any other row with a newline; a diff
+  copies the side's source lines (tabs kept), absent cells and folded
+  lines skipped. The status line counts the characters.
+- **How it is drawn.** The covered runes wear the `selection_bg` stripe,
+  the cursor cell the current-hit style over it; the footer shows the
+  mode's keys. One pure model (`charsel.go`) with thin host adapters; the
+  painting rides the per-rune emphasis mask (`emphSel`, `emphSelCur`).
+- The mode leaves when its rows change meaning: a popup resize or `ctrl+t`,
+  a diff reload; stacked, it survives another file arriving and leaves
+  only when its own element's lines change.
 ## One focused border at a time beside a docked console
 
 ### Fixed
@@ -280,6 +305,36 @@ review id.
   retention) a commit or merge made there still wrote version refs. The
   shown worktree now follows the config, and a Settings change or config
   reload reaches every remembered worktree.
+- **Second hunt.** Seventeen more fixes from three read-only reviews
+  (the operation boundary, the three keys as a state machine, the replay
+  queue and the shared state). The ones you could meet: `P` with a tagged
+  tip waited up to 5 s for the remote-tag check with nothing marked busy,
+  and a swap meanwhile pushed the OTHER worktree's branch (no prompt when
+  the tags were already remote) — the check and the bookmark switcher's
+  cherry-pick probe now name their worktree and are dropped on a
+  mismatch; the editor's exit re-read cleared the busy flag of an
+  operation started before it landed (the swap refusal lifted mid-op, and
+  a second op key could cancel or orphan the first); a half-typed commit
+  box parked under a console (`alt+a` onto that worktree's agent) refused
+  every switch with "a window is open" and nothing on screen; closing a
+  console opened from the Worktrees (Remotes, Previews, PRs) tab put the
+  keyboard on that hidden tab after the walk showed Branches; the Reflog
+  tab kept the previous worktree's HEAD reflog after `alt+w` (it is per
+  worktree, now kept by the slot and re-read on the swap); a branches
+  read in flight through the leaving worktree put the `*` back on its
+  branch; a shelf write that landed after a swap consumed the marks of
+  the worktree on screen; a PR fetch's diff opened in the worktree a
+  queued return swapped to; a remote-tags read was dropped by every
+  in-repo swap; a commit-message task for a sleeping worktree was not
+  kept as its pending message (and `c` there opened an empty box); a
+  checkout followed by a queued return had its own worktree read as
+  recycled (windows dropped); the file-path popup parked while loading
+  and read "(loading…)" for good; a parked hunk picker never got its
+  syntax colours; a stash list or preview displaced under a console lost
+  its read; a shared shelf list or PR row addressed to a removed
+  worktree was dropped whole; the ghost cursor was drawn beside a
+  clicked panel's real one; the footer advertised `alt+w` beside a bare
+  entry and the hide-first hint promised a next worktree with one.
 - **Each worktree keeps its own windows.** A window of the worktree you
   were leaving — a diff, a blame, a file viewer, a history, a compare, the
   F window, the stash list — used to stay on top after `alt+w` / `alt+a`

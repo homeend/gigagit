@@ -96,6 +96,7 @@ func (m Model) reloadStatusCmd(summary string) tea.Cmd {
 // staging stays snappy on huge repos.
 type statusRefreshedMsg struct {
 	svc     *domain.Service // the slot it was read through; nil = untagged (tests)
+	staging bool            // a staging round's result: the round set the busy flag and its end clears it (an editor exit's read owns no op)
 	summary string
 	status  model.WorkingTreeStatus
 	err     error
@@ -119,10 +120,10 @@ func (m Model) stageCmd(op engine.Operation) tea.Cmd {
 					return stageIgnoredMsg{op: st, ignored: ignored}
 				}
 			}
-			return statusRefreshedMsg{svc: svc, err: err}
+			return statusRefreshedMsg{svc: svc, staging: true, err: err}
 		}
 		st, serr := svc.Status(context.Background())
-		return statusRefreshedMsg{svc: svc, summary: renderSummary(res), status: st, err: serr}
+		return statusRefreshedMsg{svc: svc, staging: true, summary: renderSummary(res), status: st, err: serr}
 	}
 }
 
@@ -142,10 +143,10 @@ func (m Model) stageForceCmd(op engine.Stage) tea.Cmd {
 		res, err := svc.Execute(context.Background(), op, nil,
 			engine.MapDecider{engine.IgnoredPathsDecisionID: "force-add"})
 		if err != nil {
-			return statusRefreshedMsg{svc: svc, err: err}
+			return statusRefreshedMsg{svc: svc, staging: true, err: err}
 		}
 		st, serr := svc.Status(context.Background())
-		return statusRefreshedMsg{svc: svc, summary: renderSummary(res), status: st, err: serr}
+		return statusRefreshedMsg{svc: svc, staging: true, summary: renderSummary(res), status: st, err: serr}
 	}
 }
 

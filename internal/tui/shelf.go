@@ -87,8 +87,9 @@ func (m Model) focusedShelfAddress() (model.FileAddress, bool) {
 }
 
 type shelfAddedMsg struct {
-	entry model.ShelfEntry
-	err   error
+	slotStamp // the worktree the file was marked in: its marks are consumed, not the viewed one's (slot_msg.go)
+	entry     model.ShelfEntry
+	err       error
 	// unmark is the Status file-mark to drop on success ("" = the file was
 	// the cursor row, not a mark): a shelved mark is consumed, like a stashed
 	// one.
@@ -98,32 +99,33 @@ type shelfAddedMsg struct {
 // shelfAddCmd freezes addr's bytes into the default bucket off the UI thread.
 // unmark names the file-mark to clear once it lands ("" for none).
 func (m Model) shelfAddCmd(addr model.FileAddress, unmark string) tea.Cmd {
-	svc := m.svc
+	svc, slot := m.svc, m.stamp()
 	return func() tea.Msg {
 		e, err := svc.ShelfAdd(context.Background(), addr, "")
-		return shelfAddedMsg{entry: e, err: err, unmark: unmark}
+		return shelfAddedMsg{slotStamp: slot, entry: e, err: err, unmark: unmark}
 	}
 }
 
 // shelfSetAddedMsg reports a marked SET shelved as one files entry. paths
 // are the members' Status paths: their marks are consumed on success.
 type shelfSetAddedMsg struct {
-	entry model.ShelfEntry
-	paths []string
-	err   error
+	slotStamp // the worktree the files were marked in (slot_msg.go)
+	entry     model.ShelfEntry
+	paths     []string
+	err       error
 }
 
 // shelfAddFilesCmd freezes the addresses into ONE files entry (a tar with one
 // member per file) off the UI thread — the set stays together on the shelf.
 func (m Model) shelfAddFilesCmd(addrs []model.FileAddress, label string) tea.Cmd {
-	svc := m.svc
+	svc, slot := m.svc, m.stamp()
 	return func() tea.Msg {
 		e, err := svc.ShelfAddFiles(context.Background(), addrs, label)
 		paths := make([]string, 0, len(addrs))
 		for _, a := range addrs {
 			paths = append(paths, a.Path)
 		}
-		return shelfSetAddedMsg{entry: e, paths: paths, err: err}
+		return shelfSetAddedMsg{slotStamp: slot, entry: e, paths: paths, err: err}
 	}
 }
 
@@ -202,10 +204,10 @@ func (m Model) shelfAddRow() (actionRow, bool) {
 // entry (from commitNamePopup); empty is fine — ShelfAddCommit/PutCommit fall
 // back to a default display.
 func (m Model) shelfAddCommitCmd(sha, label string) tea.Cmd {
-	svc := m.svc
+	svc, slot := m.svc, m.stamp()
 	return func() tea.Msg {
 		e, err := svc.ShelfAddCommit(context.Background(), sha, label)
-		return shelfAddedMsg{entry: e, err: err}
+		return shelfAddedMsg{slotStamp: slot, entry: e, err: err}
 	}
 }
 

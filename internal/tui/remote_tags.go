@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -31,7 +32,7 @@ type remoteTagsMsg struct {
 // the manual .-menu action and the background scheduler lane.
 func (m Model) remoteTagsCmd(ctx context.Context, manual bool) tea.Cmd {
 	svc := m.svc
-	gen := m.loadGen // snapshot at launch; handler drops stale results on repo switch
+	gen := m.remoteTagsGen // snapshot at launch; handler drops stale results on a repository switch (an in-repo swap keeps them)
 	return func() tea.Msg {
 		start := time.Now()
 		names, err := svc.RemoteTags(ctx)
@@ -102,6 +103,7 @@ func (m Model) pushCurrentOp() engine.Operation {
 // check and push directly" so P never hangs.
 type pushTagCheckMsg struct {
 	gen       int
+	svc       *domain.Service // the worktree P was pressed in; nil = untagged (tests)
 	tipTags   []model.Tag
 	remoteSet map[string]bool // nil on timeout/error → skip the tag check
 	err       error
@@ -115,7 +117,7 @@ func (m Model) pushTagCheckCmd(gen int, tipTags []model.Tag) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		set, err := svc.RemoteTagsFresh(ctx)
-		return pushTagCheckMsg{gen: gen, tipTags: tipTags, remoteSet: set, err: err}
+		return pushTagCheckMsg{gen: gen, svc: svc, tipTags: tipTags, remoteSet: set, err: err}
 	}
 }
 

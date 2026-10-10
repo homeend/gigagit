@@ -823,7 +823,10 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 		// so no panel would show a cursor: the active left tab keeps a dimmed
 		// one, so the row alt+a / alt+t landed on (the session's sub-row,
 		// selectSessionRow) stays visible under the console.
-		ghost := !isFocused && p == m.activeLeftTab && m.console != nil && m.console.focused
+		// A click elsewhere moves the focus before the next key unbinds the
+		// console (consoleBorderFocused's own guard): no ghost beside a real
+		// cursor.
+		ghost := !isFocused && p == m.activeLeftTab && m.focus == panelCommits && m.console != nil && m.console.focused
 		// Only the rows the window will actually show need their (potentially
 		// expensive) per-row text built. In cutoff/scroll mode each row is exactly
 		// one display line, so the visible span is [start,end) and off-window rows

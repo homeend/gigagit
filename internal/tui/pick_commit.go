@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -23,6 +24,7 @@ type pickTarget struct {
 // pickProbeMsg is the async result of the commit-existence probe.
 type pickProbeMsg struct {
 	gen    int
+	svc    *domain.Service // the worktree the switcher was opened in; nil = untagged (tests)
 	target pickTarget
 	line   model.LogLine // short sha + subject when found
 	found  bool
@@ -38,7 +40,7 @@ func (m Model) startPickCommit(t pickTarget) (Model, tea.Cmd) {
 	svc := m.svc
 	return m, func() tea.Msg {
 		line, found, err := svc.CommitLookup(context.Background(), t.sha)
-		return pickProbeMsg{gen: gen, target: t, line: line, found: found, err: err}
+		return pickProbeMsg{gen: gen, svc: svc, target: t, line: line, found: found, err: err}
 	}
 }
 
@@ -47,6 +49,9 @@ func (m Model) startPickCommit(t pickTarget) (Model, tea.Cmd) {
 func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 	if msg.gen != m.pickGen || m.running {
 		return m, nil // stale (switcher closed / repo switched) or an op raced in
+	}
+	if msg.svc != nil && msg.svc != m.svc {
+		return m, nil // the switcher parked with its worktree (a swap): its confirm must not open over, nor pick into, this one
 	}
 	if m.modal != nil {
 		// Another dialog opened while the probe ran — never clobber it.

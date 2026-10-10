@@ -114,3 +114,26 @@ func TestRenderWindowDecorateReceivesGeometryAndPreservesWidth(t *testing.T) {
 		t.Fatalf("wrap visualLine sequence = %+v", got)
 	}
 }
+
+// wrapSegOffsets is the inverse of wrapSegMask's mapping: where each display
+// segment's TEXT starts in the logical row, and how many leading layout
+// spaces it carries.
+func TestWrapSegOffsets(t *testing.T) {
+	t.Parallel()
+	text := "- one two three"
+	segs, indent := wrapRow(text, 9, winOpts{}, 0)
+	if len(segs) < 2 {
+		t.Fatalf("segs = %q, want a wrap", segs)
+	}
+	offs, pads := wrapSegOffsets(text, segs, indent)
+	if offs[0] != 0 || pads[0] != 0 {
+		t.Fatalf("first = %d/%d", offs[0], pads[0])
+	}
+	// The second segment's text starts where the first's ended (wrapHangWords
+	// keeps the break's space at the end of the segment before it) and sits
+	// behind the hang indent.
+	first := len([]rune(segs[0]))
+	if offs[1] != first || pads[1] != indent {
+		t.Fatalf("second = off %d pad %d, want off %d pad %d (segs %q)", offs[1], pads[1], first, indent, segs)
+	}
+}

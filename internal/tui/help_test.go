@@ -177,3 +177,19 @@ func TestHelpNoHiddenSectionAtWideWidth(t *testing.T) {
 		t.Fatal("no hidden-keys section expected at a width where everything fits")
 	}
 }
+
+// The v copy mode is documented where its hosts are: the review view and
+// the diff.
+func TestHelpListsTheCharacterSelection(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	for _, l := range helpContent() {
+		b.WriteString(l.text + "\n")
+	}
+	text := b.String()
+	for _, want := range []string{"select characters of the summary", "select characters to copy, on the cursor's side"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("help lacks %q", want)
+		}
+	}
+}

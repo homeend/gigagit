@@ -82,7 +82,7 @@ func TestReRootClearsRemoteTagNames(t *testing.T) {
 	}
 }
 
-// Stale remoteTagsMsg (gen != loadGen) must not overwrite remoteTagNames and
+// Stale remoteTagsMsg (gen != remoteTagsGen) must not overwrite remoteTagNames and
 // must still free the background lane if it was occupied by remoteTagsItem.
 func TestRemoteTagsMsgStaleGenDropped(t *testing.T) {
 	t.Parallel()
@@ -91,7 +91,7 @@ func TestRemoteTagsMsgStaleGenDropped(t *testing.T) {
 		remoteTagNames: oldNames,
 		bgBusy:         true,
 		bgActiveItem:   remoteTagsItem,
-		loadGen:        2, // current gen after a repo switch
+		remoteTagsGen:  2, // current gen after a repo switch
 	}
 	// Send a stale background message with gen=1 (captured before the switch).
 	u, _ := m.Update(remoteTagsMsg{names: map[string]bool{"new": true}, manual: false, gen: 1})
@@ -109,10 +109,10 @@ func TestRemoteTagsMsgStaleGenDropped(t *testing.T) {
 	}
 }
 
-// Current-gen remoteTagsMsg (gen == loadGen) must still apply names normally.
+// Current-gen remoteTagsMsg (gen == remoteTagsGen) must still apply names normally.
 func TestRemoteTagsMsgCurrentGenApplied(t *testing.T) {
 	t.Parallel()
-	m := Model{loadGen: 2}
+	m := Model{remoteTagsGen: 2}
 	u, _ := m.Update(remoteTagsMsg{names: map[string]bool{"v2": true}, manual: false, gen: 2})
 	got := u.(Model)
 	if !got.remoteTagNames["v2"] {
