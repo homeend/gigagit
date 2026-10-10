@@ -220,3 +220,19 @@ func TestSplitFocusedBoxIsLit(t *testing.T) {
 		t.Fatal("the focused box differs from the unfocused one")
 	}
 }
+
+// docRows measures a document in the frame that shows it: a split's pane,
+// else the full-screen viewer.
+func TestDocRowsIsTheFrameShowingTheDocument(t *testing.T) {
+	t.Parallel()
+	m, sv := testSplit(t)
+	m.height = 40
+	want, _ := sv.geomOf(m, sv.right)
+	if got := m.docRows(sv.right.doc()); got != want {
+		t.Fatalf("split pane rows %d, want %d", got, want)
+	}
+	vr, _ := m.viewerGeom()
+	if got := m.docRows(splitDoc("elsewhere.go", "e", 3)); got != vr {
+		t.Fatalf("a document in no split: %d, want the viewer's %d", got, vr)
+	}
+}

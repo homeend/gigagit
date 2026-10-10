@@ -43,6 +43,33 @@ func (p *contentPopup) rowsSpan(from, to int) int {
 	return n
 }
 
+// lineAtRow is the line drawn on content row `row` (0 = the first row under
+// the title) of a window rowsCap rows tall whose text column is bodyW wide,
+// laid out as renderPreviewBoxOpts lays it: from the pager's top, a wrapped
+// line takes a row per segment (wrapRow, the layout renderWindow uses) and
+// the note boxes under a line are its rows too. -1 = below the last line.
+func (p *contentPopup) lineAtRow(row, rowsCap, bodyW int) int {
+	if row < 0 {
+		return -1
+	}
+	o := winOpts{w: bodyW, mode: modeWrap, charWrap: !p.prose}
+	for line := p.clampTop(p.sel, rowsCap); line < len(p.lines); line++ {
+		h := 1
+		if p.mode == modeWrap {
+			segs, _ := wrapRow(p.lines[line].text, bodyW, o, 0)
+			h = max(len(segs), 1)
+		}
+		if p.extraRows != nil {
+			h += p.extraRows(line, line+1)
+		}
+		if row < h {
+			return line
+		}
+		row -= h
+	}
+	return -1
+}
+
 // clampTop clamps a pager top line for this preview. It is previewClamp,
 // except that rows hanging under lines count: the last screenful is the
 // lowest top from which everything to the end of the file still fits, so a

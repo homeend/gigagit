@@ -202,8 +202,7 @@ func (m Model) stepAnchorBand(d *openFile, dir int) Model {
 	_, rows, _, _ := m.activePreview()
 	d.pendingLine, d.pendingEnd = b.start, 0
 	d.landPendingLine(rows)
-	vr, _ := m.viewerGeom()
-	ov.selectAnchor(b.i, vr)
+	ov.selectAnchor(b.i, m.docRows(ov)) // the overview's own frame: a split pane is shorter
 	label := a.target.Label
 	if label == "" {
 		label = a.dest
