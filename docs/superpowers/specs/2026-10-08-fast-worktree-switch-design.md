@@ -1,6 +1,14 @@
 # Fast worktree switch — design
 
-Date: 2026-10-08. Status: agreed in conversation, awaiting written review.
+Date: 2026-10-08. Status: IMPLEMENTED (merged to main `d57f3b97`, 2026-10-10),
+with later rulings superseding parts of this text — read it with
+`2026-10-09-per-worktree-window-stacks.md` and
+`2026-10-10-session-window-keys.md`: the walks have NO return stop; an open
+diff/history does NOT follow a swap (each worktree keeps its own windows);
+there is no separate "shown" marker nor a `.`-menu "Switch here" (the
+Worktrees panel's `*` follows the viewed worktree); the status hint reads
+`worktree: …` and the footer `[alt+a] agent`; alt+w has no first-hit step;
+the emergency unlock is alt+U.
 
 ## Purpose
 

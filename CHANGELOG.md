@@ -26,15 +26,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   cursor on the shown session's row (the tab comes forward; the console
   keeps the keyboard), as `alt+w` puts it on the worktree's branch.
 - The emergency unlock moved from `alt+A` to **`alt+U`** (alt+shift+u):
-  `alt+A` now walks the viewed worktree's agents (below).
+  `alt+A` now walks the viewed worktree's agents (above).
 - `alt+a` / `alt+t` into an agent of another worktree size the console by
   THAT worktree: a full-screen diff left behind in the one you came from
   no longer maximises it (the diff waits where it was opened).
 - `alt+w` moves to the next worktree on every press, whatever is on
   screen — a diff, a history, the F window, a popup you are filling in, a
-  console (hidden on the way). The old first press, which only focused the
-  Branches panel, is gone; only an operation, a decision, a process or a
-  popup with work in flight still refuse.
+  console (hidden on the way) — and puts the keyboard on the Branches tab.
+  The old first press, which only focused the Branches panel, is gone;
+  only an operation, a decision, a process, a popup with work in flight
+  and the few popups whose result moves the panels by themselves (the
+  repo and worktree switchers, settings, text templates, the sessions
+  list, the palette, the notices dialog) still keep the key.
 - The worktrees you look at share the repository's caches (commit diffs,
   blames, commit file lists, compare file sets, preview summaries): one
   budget per repository instead of one per worktree, and a commit's diff
@@ -42,6 +45,38 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   enters them — a diff or blame of uncommitted changes is never cached.
 
 ### Fixed
+- **Post-merge hunt (three read-only reviews).** A worktree switch wrote the
+  arriving worktree's status while the leaving worktree's windows were
+  still live: a clean arriving tree popped the leaving working-tree diff
+  stack for good. A stash operation ending with a stash list open and a
+  console closed meanwhile dereferenced nil (the list reload is now built
+  before the queued return, stamped for its worktree). Nine window-addressed
+  results carried no slot stamp — a commit's stacked diff stayed loading
+  with its inflight count stuck, a full-tree files read left the files
+  view unable to move, one worktree's review notes painted the other's
+  diff of the same path, a steered open or note replied on the wrong
+  worktree, a version hint could collide — they queue for their worktree
+  now, and a guard test names them. A full load took the `gg session
+  highlight` bands on working files off the screen (the slot save moved
+  them; only a swap does now). `alt+f`/`alt+b` acted under a popup or the
+  `.` menu; `alt+b` did not dock a ctrl+t-maximised console as the step-out
+  key does; `alt+w` during an operation hid the console and moved the
+  focus without switching; the maximised console's footer offered
+  `[alt+f] max` instead of dock. A worktree removed with a `gg session
+  navigate` parked in its slot left the sender waiting out its timeout;
+  the slot answers before it goes (a repository switch too). A rebase,
+  squash or drop range read started in one worktree ran through the
+  other's service after a switch. A console whose show was queued during
+  an operation and then stepped aside for a stash list left the panels
+  jumping to its worktree afterwards. The stash, add-worktree and tag
+  popups park with their worktree; a text field no longer inserts the
+  letter of an alt key (alt+w typed a `w`). A worktree's F file list that
+  lands after its F window slept is dropped at the gate instead of queued.
+  The four bundles' `alt+U` help row said "a capital A"; the bound
+  console's footer now offers `[alt+f] max  [alt+b] unbind`; the scoped
+  walks' "only session" line names the worktree; docs and comments that
+  still described the first-hit `alt+w`, the cycle's return stop or
+  `alt+A` as the unlock were corrected.
 - A console closed while an operation ran returned the panels home at the
   operation's end BEFORE its chained step dispatched — a dirty switch's
   branch switch (shelve, then switch) could then run in your own worktree
@@ -109,7 +144,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   on the next start; an in-repo switch records it at once.
 - Moving a worktree that was only shown (not your own) renamed the
   directory under its panels; the panels go home first.
-- The `alt+A` state dump names home, the viewed worktree and a queued
+- The `alt+U` state dump names home, the viewed worktree and a queued
   return.
 - On Windows and macOS a session, a `gg://` link or your shell's cwd can
   spell a worktree in another case than `git worktree list` does; the
@@ -191,8 +226,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - `alt+a` / `alt+t` (and `ctrl+\` enter on a session of this repository)
   show the session's console AND the panels of the worktree it runs in — tab
   out of the console and you are there; what you start (diffs, staging, a
-  commit, a stash) runs in that worktree. Closing the console (esc, the
-  cycle's return stop, `x`) brings your own worktree back with its cursors.
+  commit, a stash) runs in that worktree. Closing the console (esc, `x`)
+  brings your own worktree back with its cursors.
   The Worktrees panel's `*` follows the shown worktree; the status row names
   the console's worktree only when the panels show another one (you pressed
   enter on a row under a docked console). A worktree removed while shown
@@ -1230,7 +1265,7 @@ The TUI rows and send panel (plan 2) and the web (plan 3) follow.
   a dirty tree now gets the same question. TUI, web and CLI
   (`gg pull --on-dirty shelve|discard|abort`).
 
-## alt+A unlocks a stuck "⏳ reloading…" and writes a state dump
+## alt+A unlocks a stuck "⏳ reloading…" and writes a state dump (the key is now alt+U)
 
 ### Fixed
 

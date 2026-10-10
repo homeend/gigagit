@@ -97,9 +97,9 @@ func (m Model) openConsole(id domain.SessionID) (Model, tea.Cmd) {
 	return m.showConsole(id, true)
 }
 
-// showConsole shows session id, focused or not (alt+a / alt+t show one
-// unfocused): docked in the Commits column, or maximised when the screen it
-// covers is full-screen. What it covers — the pin, the stash list or file
+// showConsole shows session id, focused (bound) or not (alt+a / alt+t bind
+// the one shown; a task's console opens unbound): docked in the Commits
+// column, or maximised when the screen it covers is full-screen. What it covers — the pin, the stash list or file
 // preview, a parked layer stack, focus — goes into its return point, which
 // a console replacing a console carries over. Only a focused show is a use
 // of the session (Touch): cycling through them must not reorder the list it
@@ -808,9 +808,14 @@ func (m Model) cycleSessionsIn(terminal, scoped bool) (Model, tea.Cmd) {
 	var next int
 	switch {
 	case shown >= 0 && m.console.focused && len(list) == 1:
-		if terminal {
+		switch {
+		case scoped && terminal:
+			m.statusMsg = i18n.T("the only running terminal in this worktree — already bound")
+		case scoped:
+			m.statusMsg = i18n.T("the only running agent session in this worktree — already bound")
+		case terminal:
 			m.statusMsg = i18n.T("the only running terminal in this repository — already focused")
-		} else {
+		default:
 			m.statusMsg = i18n.T("the only running agent session in this repository — already focused")
 		}
 		return m, nil

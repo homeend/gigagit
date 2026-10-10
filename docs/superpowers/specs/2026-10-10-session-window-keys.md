@@ -1,7 +1,8 @@
 # Session window keys — design
 
-Date: 2026-10-10. Status: agreed in conversation (rulings below), to build
-on `feat/fast-worktree-switch-2` after the per-worktree window stacks.
+Date: 2026-10-10. Status: IMPLEMENTED on `feat/fast-worktree-switch-2`,
+merged to main `d57f3b97` the same day (post-merge fixes: alt+b docks a
+ctrl+t-maximised console; alt+f/alt+b yield to a popup above the console).
 
 ## Purpose
 

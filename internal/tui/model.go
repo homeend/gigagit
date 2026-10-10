@@ -2239,8 +2239,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		// The agent console: a FOCUSED console owns every key except the two
-		// reserved ones (spec), ahead of ctrl+o / ctrl+p / the layer stack —
+		// The agent console: a BOUND console owns every key except gg's own
+		// (the step-out key, the sessions popup, the alt keys), ahead of
+		// ctrl+o / ctrl+p / the layer stack —
 		// agents use those chords themselves. An unfocused console only
 		// claims enter / ctrl+t / esc (and swallows Commits-scoped keys)
 		// while its column has focus.
