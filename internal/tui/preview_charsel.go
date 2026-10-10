@@ -141,6 +141,7 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 	if p.cs.on && p.previewCharStale() {
 		p.previewCharLeave()
+		return m, nil, true // the key was meant for the mode: it goes with it
 	}
 	p.pageH = rows
 	if !p.cs.on {

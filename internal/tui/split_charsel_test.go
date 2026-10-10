@@ -250,3 +250,26 @@ func TestClearLayersLeavesTheMode(t *testing.T) {
 		t.Fatal("clearing the stack kept the file pane's mode")
 	}
 }
+
+// Text replaced under the copy mode (a reload) ends the mode on the next
+// key, and that key goes with it: a ↓ meant for the mode's cursor never
+// steps the overview's anchor.
+func TestCharSelStaleDropSwallowsTheKey(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModel(t)
+	ov := sv.left.doc()
+	m = pressDrain(t, m, "v")
+	if !ov.p.cs.on {
+		t.Fatal("v must enter the mode on the overview")
+	}
+	sel := ov.ov.sel
+	ov.p.lines = append([]contentLine(nil), ov.p.lines...) // a reload
+	m = pressDrain(t, m, "down")
+	if ov.p.cs.on {
+		t.Fatal("stale text must end the mode")
+	}
+	if ov.ov.sel != sel {
+		t.Fatalf("the dropped mode's key stepped the anchor: %d → %d", sel, ov.ov.sel)
+	}
+	_ = m
+}
