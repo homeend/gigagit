@@ -479,6 +479,64 @@ func wrapSegMask[T any](text string, m []T, segs []string, indent, bodyW int) []
 	return plain
 }
 
+// wrapSegOffsets is wrapSegMask's mapping the other way round: for each
+// display segment of a wrapped row, where its TEXT starts in the logical
+// row's runes (the break's dropped spaces skipped) and how many leading
+// layout spaces it carries (the hang indent on a continuation). The same
+// try-indent-then-zero rule as wrapSegMask, so the two never disagree; a
+// layout it cannot explain (never, by construction) answers consecutive
+// offsets with no pads.
+func wrapSegOffsets(text string, segs []string, indent int) (offs, pads []int) {
+	try := func(pad int) ([]int, []int) {
+		offs := make([]int, len(segs))
+		pads := make([]int, len(segs))
+		rest := []rune(text)
+		off := 0
+		for i, s := range segs {
+			r := []rune(s)
+			p := 0
+			if i > 0 {
+				p = pad
+			}
+			if len(r) < p {
+				return nil, nil
+			}
+			for _, c := range r[:p] {
+				if c != ' ' {
+					return nil, nil
+				}
+			}
+			body := r[p:]
+			// The break dropped the spaces it fell on: skip them in the source.
+			for off < len(rest) && rest[off] == ' ' && (len(body) == 0 || body[0] != ' ') {
+				off++
+			}
+			if off+len(body) > len(rest) || string(rest[off:off+len(body)]) != string(body) {
+				return nil, nil
+			}
+			offs[i], pads[i] = off, p
+			off += len(body)
+		}
+		return offs, pads
+	}
+	if indent > 0 {
+		if o, p := try(indent); o != nil {
+			return o, p
+		}
+	}
+	if o, p := try(0); o != nil {
+		return o, p
+	}
+	offs = make([]int, len(segs))
+	pads = make([]int, len(segs))
+	off := 0
+	for i, s := range segs {
+		offs[i] = off
+		off += len([]rune(s))
+	}
+	return offs, pads
+}
+
 // hslice returns the display-column window [off, off+w) of raw text s. Width-
 // aware so wide glyphs never split. The caller pads the result to w.
 func hslice(s string, off, w int) string {

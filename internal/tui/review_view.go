@@ -389,7 +389,7 @@ func (m Model) openReviewSummary() (Model, tea.Cmd) {
 	cp.mode = modeWrap // prose
 	cp.noCursor = true
 	cp.prose = true
-	cp.keys = i18n.T("[y] copy")
+	cp.keys = i18n.T("[y] copy  [v] select")
 	if n := len(st.other); n > 0 {
 		cp.keys += "  " + i18n.T("[o] other notes (%d)", n)
 	}
@@ -472,8 +472,16 @@ func reviewMetaText(meta []notebatch.MetaKV) string {
 }
 
 func (p *reviewSummaryPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if nm, cmd, handled := p.charKey(m, msg); handled { // the mode owns every key (C5)
+		return nm, cmd
+	}
 	if !p.typing { // while the / filter is capturing, every key is query text
 		switch msg.String() {
+		case "v":
+			if !p.charEnter(m, p.sel) {
+				m.statusMsg = i18n.T("▸ nothing to select")
+			}
+			return m, nil
 		case "y":
 			return m, m.copyToClipboardCmd(i18n.T("copied the review summary"), p.st.review.Doc.Summary)
 		case "o":
