@@ -128,6 +128,26 @@ review id.
   walks' "only session" line names the worktree; docs and comments that
   still described the first-hit `alt+w`, the cycle's return stop or
   `alt+A` as the unlock were corrected.
+- **Hunt follow-ups.** Every worktree you looked at probed GitHub again,
+  re-read the tags and re-resolved the repository's preflight — the forge
+  verdict, the PR caches, the tag cache and the preflight verdicts are
+  the repository's now, shared by every worktree's slot (one `gh` probe
+  per session, as documented), and a slot's `gh` calls reach the
+  operation log. A worktree recycled (or checked out onto another branch
+  from a terminal) while another was on screen came back with the windows
+  parked over its old tree — a commit box or a hunk picker would have
+  submitted into the new branch; they are dropped when the worktree list
+  shows the branch changed (a commit made there keeps them). A commit's
+  full file tree (`a`) stayed in memory while its worktree slept; it is
+  given up and re-read on return like the F list, the cursor back on its
+  file. The open PR view's "refreshing…"/"updated" state and its one read
+  slot were process-wide: a refresh in flight in one worktree blocked the
+  PR view in another and cleared its mark; the state parks with the view,
+  and a PR row still follows the forge at once. Housekeeping: the viewed
+  slot no longer keeps a copy of its windows, the replay queue's trim
+  releases what it drops, a removed worktree's open files are released,
+  and a listed worktree's slot is made without a `git rev-parse` on the
+  UI thread.
 - A console closed while an operation ran returned the panels home at the
   operation's end BEFORE its chained step dispatched — a dirty switch's
   branch switch (shelve, then switch) could then run in your own worktree
