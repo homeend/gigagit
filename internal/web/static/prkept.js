@@ -1,6 +1,6 @@
 // prkept.js — the body a send's box keeps until that send reaches GitHub
 // (pure: node-tested by prkeptjs_test.go). kept = {pr, group, text}; group
-// "verdict" is Verdict…, "mine" my draft review, "review:<id>" an AI review.
+// "verdict" is Verdict… (the send panel keeps its own ticks and body).
 
 // keptText is the kept text for PR pr's box group, or null.
 export function keptText(kept, pr, group) {
@@ -12,6 +12,5 @@ export function keptText(kept, pr, group) {
 // it — a resolve, a reply or another PR's send leaves the typed text.
 export function keptAfterSend(kept, n, body, ev) {
   if (!kept || !ev.ok || !ev.changed || kept.pr !== n || !body) return kept;
-  const group = body.kind === "verdict" ? "verdict" : body.kind === "group" ? body.group : null;
-  return group === kept.group ? null : kept;
+  return body.kind === "verdict" && kept.group === "verdict" ? null : kept;
 }

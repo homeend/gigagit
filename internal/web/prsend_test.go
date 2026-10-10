@@ -262,7 +262,8 @@ func TestWebSendRefusesForgedValues(t *testing.T) {
 		{"n=7", `{"kind":"notes","ids":["../x"]}`, 400},
 		{"n=7", `{"kind":"notes","ids":["forge:C1"]}`, 400}, // a GitHub thread is not a note to send
 		{"n=7", `{"kind":"resolve","ids":["forge:NOPE"]}`, 400},
-		{"n=7", `{"kind":"group","group":"review:not-listed"}`, 400},
+		{"n=7", `{"kind":"group","group":"mine"}`, 400},              // the kind is gone (W6)
+		{"n=7", `{"kind":"notes","ids":["review:deadbeef:0"]}`, 400}, // a remark of a review the PR does not list
 		{"n=7", `{"kind":"verdict","body":"` + big + `"}`, 400},
 	} {
 		if code, out := postJSONAny(t, ts, "/api/pr/send?"+tc.q, tc.body); code != tc.code {
@@ -310,20 +311,37 @@ func TestAHeadMovedRefusalFollowsTheHead(t *testing.T) {
 	}
 }
 
-// Serial: sendServer.
-func TestWebSendGroupsListsMine(t *testing.T) {
-	ts, _, head := sendServer(t)
-	addWebNote(t, ts, head, "pr7.txt", 1, "x")
-	var out struct {
-		Groups []struct {
-			ID    string `json:"id"`
-			Count int    `json:"count"`
-			Slot  int    `json:"slot"`
-		} `json:"groups"`
+// §5.4: the panel's send is kind notes with a verdict and the body taken
+// from a review (body_from): one review op — start, the remark, submit
+// with that body. Serial: sendServer.
+func TestWebSendNotesWithVerdictAndBodyFrom(t *testing.T) {
+	ts, wf, srv, head, _ := sendServerFull(t)
+	rid := savePRReviewWeb(t, srv, prReviewDoc)
+	mine := addWebNote(t, ts, head, "pr7.txt", 1, "mine too")
+	code, out := postJSONAny(t, ts, "/api/pr/send?n=7", `{"kind":"notes","ids":["review:`+rid+`:0","`+mine+`"],"verdict":true,"body_from":"`+rid+`"}`)
+	if code != 202 {
+		t.Fatalf("start = %d %v", code, out)
 	}
-	if code := getJSON(t, ts, "/api/pr/send/groups?n=7", &out); code != 200 || len(out.Groups) != 1 ||
-		out.Groups[0].ID != "mine" || out.Groups[0].Count != 1 || out.Groups[0].Slot != 5 {
-		t.Fatalf("= %d %+v", code, out)
+	plan, _ := json.Marshal(out["plan"])
+	if !strings.Contains(string(plan), `"verdict":true`) || !strings.Contains(string(plan), "pr review") {
+		t.Fatalf("plan = %s (want the verdict and the review's summary as the body)", plan)
+	}
+	evs := followDecide(t, ts, out["op_id"].(string), "comment")
+	done, _ := findEvent(evs, "done")
+	if done["ok"] != true || !strings.Contains(wf.writeLog(), "SubmitReview COMMENT") {
+		t.Fatalf("done %v, writes %s", done, wf.writeLog())
+	}
+	// A body_from the PR does not own is refused.
+	if code, _ := postJSONAny(t, ts, "/api/pr/send?n=7", `{"kind":"notes","ids":["`+mine+`"],"body_from":"deadbeef"}`); code != 400 && code != 404 {
+		t.Fatalf("a foreign body_from = %d, want a refusal", code)
+	}
+}
+
+// The groups route left with kind group (W6).
+func TestWebSendGroupsRouteIsGone(t *testing.T) {
+	ts, _, _ := sendServer(t)
+	if code := getJSON(t, ts, "/api/pr/send/groups?n=7", nil); code != 404 && code != 405 {
+		t.Fatalf("/api/pr/send/groups = %d, want gone", code)
 	}
 }
 

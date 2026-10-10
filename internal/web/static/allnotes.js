@@ -11,7 +11,7 @@ import { $, charWidth, elideNoteSummary, esc, getJSON, postJSON, state } from ".
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { opLine, showLocalConfirm } from "./ops.js";
-import { openReview, openScopeRange, viewBranches } from "./reviews.js";
+import { copyServerLink, openReview, openScopeRange, viewBranches } from "./reviews.js";
 import { openCommitByHash } from "./commits.js";
 import { armRangeNotes, landNote, showRangeNotes, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
 import { openShelfNotes } from "./shelfnotes.js";
@@ -165,6 +165,15 @@ function anBuildRows(ov) {
 // anVisible is the rows on screen: with a query, the matching notes and
 // reviews and their ancestors (folds ignored — a match must be seen); without
 // one, every row not under a folded heading.
+// anCopyLinkURL is what ctrl+l copies on row r: a thread's note link, a
+// review's review link; "" for a shelf note (no link) and any other row.
+function anCopyLinkURL(r) {
+  if (!r) return "";
+  if (r.kind === "review") return "/api/review/" + encodeURIComponent(r.review.id) + "/link";
+  if (r.kind !== "note" || !r.target || r.target.shelf || r.target.state === "shelf") return "";
+  return "/api/notes/link?id=" + encodeURIComponent(r.note.id);
+}
+
 function anVisible(rows, query, folded) {
   const out = [];
   if (query) {
@@ -250,6 +259,7 @@ function render() {
   const hints = ["↑/↓ move", "enter open / fold", "←/→ fold"];
   const cur = vis[an.sel];
   if (cur && (cur.kind === "note" || cur.kind === "review")) hints.push("ctrl+d delete");
+  if (anCopyLinkURL(cur)) hints.push("ctrl+l copy link");
   hints.push("type to filter", "esc close");
   $("allnotes-hints").textContent = hints.join("   ");
   if (an.loading) return void (list.innerHTML = `<li class="empty">(loading…)</li>`);
@@ -510,6 +520,13 @@ function anKey(e) {
     closeAllNotes();
     return true;
   }
+  if (e.key === "l" && e.ctrlKey) {
+    // Copy note link (R13): a thread's own link, a review's review link.
+    e.preventDefault();
+    const url = anCopyLinkURL(visible()[an.sel]);
+    if (url) copyServerLink(url, "link");
+    return true;
+  }
   if (e.key === "ArrowDown" || (e.key === "n" && e.ctrlKey)) {
     e.preventDefault();
     move(1);
@@ -573,7 +590,7 @@ registerHelp({
     "☰ / command palette → <b>view all notes…</b>: every note this checkout can see, as a tree — " +
     "working tree, commits (with their AI reviews), other (shelf entries, their own notes first) → directory → file → note, " +
     "each note with its status, author, place and age. Type to filter, ←/→ fold, enter or a click opens " +
-    "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking",
+    "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking, <b>ctrl+l</b> copies the note's or the review's gg link",
 });
 
 export { openAllNotes };

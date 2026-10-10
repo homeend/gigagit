@@ -6,7 +6,7 @@ import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
-import { openSelectedReview, reviewActive, showReviewOverview, stepCommitReviews, stepReviewFile } from "./reviews.js";
+import { openSelectedReview, reviewActive, showReviewSummary, stepCommitReviews, stepReviewFile } from "./reviews.js";
 import { addNotePrompt, rangeKey, clearDiffRange, clearRowSelection, cycleFilesSort, cycleImageLayout, flipImage, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepChange, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, rangeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
@@ -28,17 +28,17 @@ function moveCursor(delta) {
     stepCommitCursor(delta);
   } else {
     const list = state.filesMode === "status" ? state.statusEntries : state.files;
-    // The review view's ≡ Overview sits above its first file.
+    // The review view's ≡ Summary sits above its first file.
     if (reviewActive()) {
       const rv = state.review;
-      if (rv.onOverview && delta > 0 && list.length) {
-        rv.onOverview = false;
+      if (rv.onSummary && delta > 0 && list.length) {
+        rv.onSummary = false;
         state.fileCursor = 0;
-      } else if (!rv.onOverview && delta < 0 && state.fileCursor === 0) {
-        if (state.layout === "diff") return showReviewOverview();
-        rv.onOverview = true;
+      } else if (!rv.onSummary && delta < 0 && state.fileCursor === 0) {
+        if (state.layout === "diff") return showReviewSummary();
+        rv.onSummary = true;
         return renderFiles();
-      } else if (rv.onOverview) return;
+      } else if (rv.onSummary) return;
       else state.fileCursor = Math.max(0, Math.min(list.length - 1, state.fileCursor + delta));
       if (state.stack && state.layout === "diff") return openFile(state.fileCursor);
       return renderFiles();
@@ -176,7 +176,7 @@ document.addEventListener("keydown", (e) => {
       // A zero-match filter leaves state.cursor pointing at an invisible
       // row (or the hint row) — nothing there to open.
       if (!(state.cfilter && state.cfilter.matches.length === 0)) openCommit(state.cursor);
-    } else if (reviewActive() && state.review.onOverview) showReviewOverview();
+    } else if (reviewActive() && state.review.onSummary) showReviewSummary();
     else if (openSelectedReview()) return;
     else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
   } else if (e.key === "Escape") {

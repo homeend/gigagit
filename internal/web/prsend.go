@@ -16,7 +16,7 @@ import (
 
 // Sending to GitHub from the page (spec 2026-10-07 §4.2). The page names
 // WHAT to send with values this server handed it — the PR number, note and
-// remark ids, GitHub thread ids, a group id — and every one is checked
+// remark ids, GitHub thread ids — and every one is checked
 // against the PR's cached notes before anything is planned. The plan is
 // built here, in the handler, outside the repo gate (R12); the op parks on
 // its one confirm in the page's modal, which draws the plan the answer
@@ -26,7 +26,7 @@ import (
 func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("POST /api/pr/send", writeGuard(s.handlePRSend))
-		mux.HandleFunc("GET /api/pr/send/groups", s.handlePRSendGroups)
+		mux.HandleFunc("GET /api/pr/send/candidates", s.handlePRSendCandidates)
 	})
 }
 
@@ -54,11 +54,15 @@ const (
 
 // prSendWire is the page's request: what to send, never how.
 type prSendWire struct {
-	Kind    string   `json:"kind"` // notes | group | verdict | resolve | unresolve | finish | discard
+	Kind    string   `json:"kind"` // notes | verdict | resolve | unresolve | finish | discard
 	IDs     []string `json:"ids"`
-	Group   string   `json:"group"`
 	Body    string   `json:"body"`
 	BodySet bool     `json:"body_set"`
+	// Verdict and BodyFrom ride a notes send (the panel, spec §5.4): one
+	// GitHub review with a verdict, its body a stored review's summary
+	// unless a typed body (BodySet) wins.
+	Verdict  bool   `json:"verdict"`
+	BodyFrom string `json:"body_from"`
 }
 
 type sendItemWire struct {
@@ -156,29 +160,18 @@ func prSendRequest(ctx context.Context, svc *domain.Service, n int, in prSendWir
 		switch in.Kind {
 		case "notes":
 			req.Notes, err = pick(notes)
+			req.Verdict, req.Body, req.BodySet = in.Verdict, in.Body, in.BodySet
+			if in.BodyFrom != "" {
+				if len(in.BodyFrom) > 64 {
+					return req, badSend{errors.New("bad body_from")}
+				}
+				req.BodyFrom = strings.TrimPrefix(in.BodyFrom, "review:") // the domain checks the PR owns it
+			}
 		case "resolve":
 			req.Resolve, err = pick(threads)
 		default:
 			req.Unresolve, err = pick(threads)
 		}
-	case "group":
-		groups, gerr := svc.PRSendGroups(ctx, n)
-		if gerr != nil {
-			return req, gerr
-		}
-		listed := false
-		for _, g := range groups {
-			listed = listed || g.ID == in.Group
-		}
-		switch {
-		case !listed:
-			err = badSend{fmt.Errorf("%q is not a group of pull request #%d with notes to send", in.Group, n)}
-		case in.Group == domain.GroupMine:
-			req.Mine = true
-		default:
-			req.Review = strings.TrimPrefix(in.Group, "review:")
-		}
-		req.Body, req.BodySet = in.Body, in.BodySet
 	case "verdict":
 		req.Verdict, req.Body = true, in.Body
 	case "finish":
@@ -266,35 +259,74 @@ func sendErrStatus(err error) int {
 		return http.StatusConflict
 	case errors.Is(err, domain.ErrSendRequest), errors.Is(err, domain.ErrMixedSend):
 		return http.StatusBadRequest
+	case errors.Is(err, domain.ErrReviewNotFound): // a body_from or remark of a review that is gone
+		return http.StatusNotFound
 	}
 	return http.StatusUnprocessableEntity
 }
 
-// handlePRSendGroups is Send review…'s group list: each group with its
-// colour slot and, for an AI review, its summary as the body prefill.
-func (s *Server) handlePRSendGroups(w http.ResponseWriter, r *http.Request) {
+// The send panel's list (spec §5.4): the domain's SendCandidates, row for
+// row — ids the page posts back are checked against the PR's notes again
+// when it sends (prSendRequest), never trusted from here.
+type candidateRowWire struct {
+	ID        string   `json:"id"`
+	Kind      string   `json:"kind"`
+	Severity  string   `json:"severity"`
+	Path      string   `json:"path"`
+	Range     [2]int   `json:"range"`
+	Side      string   `json:"side"`
+	Summary   string   `json:"summary"`
+	Rationale string   `json:"rationale"`
+	Sync      string   `json:"sync"`
+	Code      []string `json:"code"`
+	Skip      string   `json:"skip"`
+}
+
+type candidateGroupWire struct {
+	ID      string             `json:"id"`
+	Kind    string             `json:"kind"`
+	Agent   string             `json:"agent"`
+	Title   string             `json:"title"`
+	Created string             `json:"created"`
+	Slot    int                `json:"slot"`
+	Rows    []candidateRowWire `json:"rows"`
+}
+
+func candidatesWire(c domain.SendCandidates) []candidateGroupWire {
+	out := make([]candidateGroupWire, 0, len(c.Groups))
+	for _, g := range c.Groups {
+		gw := candidateGroupWire{ID: g.ID, Kind: g.Kind, Agent: g.Agent, Title: g.Title, Slot: g.Slot, Rows: []candidateRowWire{}}
+		if !g.Created.IsZero() {
+			gw.Created = wireTime(g.Created)
+		}
+		for _, r := range g.Rows {
+			code := r.Code
+			if code == nil {
+				code = []string{}
+			}
+			gw.Rows = append(gw.Rows, candidateRowWire{ID: r.ID, Kind: r.Kind, Severity: r.Severity, Path: r.Path, Range: r.Range,
+				Side: r.Side, Summary: r.Summary, Rationale: r.Rationale, Sync: string(r.Sync), Code: code, Skip: r.Skip})
+		}
+		out = append(out, gw)
+	}
+	return out
+}
+
+// handlePRSendCandidates is the send panel's list (spec §5.4).
+func (s *Server) handlePRSendCandidates(w http.ResponseWriter, r *http.Request) {
 	svc, pr, ok := s.knownPR(w, r)
 	if !ok {
 		return
 	}
 	ctx := readCtx(r)
-	groups, err := svc.PRSendGroups(ctx, pr.Number)
+	c, err := svc.PRSendCandidates(ctx, pr.Number)
 	if err != nil {
-		writeErr(w, http.StatusUnprocessableEntity, err)
+		writeErr(w, prSendLookupStatus(err), err)
 		return
-	}
-	out := []map[string]any{}
-	for _, g := range groups {
-		body := ""
-		if id, ok := strings.CutPrefix(g.ID, "review:"); ok {
-			body, _ = svc.ReviewBodyText(ctx, id)
-		}
-		out = append(out, map[string]any{"id": g.ID, "agent": g.Agent, "summary": g.Summary, "count": g.Count,
-			"slot": domain.GroupSlot(g.ID), "body": body})
 	}
 	own := false
 	if p, _, ok := svc.PRDetailsCached(pr.Number); ok {
 		own = p.ViewerDidAuthor
 	}
-	writeJSON(w, map[string]any{"groups": out, "own_pr": own})
+	writeJSON(w, map[string]any{"pr": c.PR, "head": c.Head, "own_pr": own, "groups": candidatesWire(c)})
 }

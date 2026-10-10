@@ -59,7 +59,7 @@ func (s *Server) handlePRNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := readCtx(r)
-	out := map[string]any{"notes": []wireNote{}, "tip": "", "counts": map[string]int{}, "total": 0, "groups": map[string][]int{}}
+	out := map[string]any{"notes": []wireNote{}, "tip": "", "counts": map[string]int{}, "total": 0, "groups": map[string][]int{}, "reviews": []reviewHeadWire{}}
 	if !svc.PRFetched(ctx)[pr.Number] {
 		writeJSON(w, out) // no local head yet: nothing to hang a note on
 		return
@@ -106,6 +106,11 @@ func (s *Server) handlePRNotes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out["groups"] = slots
+	// The PR's stored reviews (R4): the Reviews block of its file list, the
+	// shape a merge preview's block already reads.
+	if hs, herr := svc.PreviewReviews(ctx, set); herr == nil {
+		out["reviews"] = reviewHeads(hs)
+	}
 	writeJSON(w, out)
 }
 

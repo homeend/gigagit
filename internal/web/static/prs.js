@@ -127,6 +127,7 @@ function refreshPRs() {
   if (run) run.catch(() => {});
 }
 window.__ggRefreshPRs = refreshPRs;
+window.__ggOpenPRLanding = openPRLanding; // a PR review's way back (reviews.js goBack)
 
 // --- the loading mask ---------------------------------------------------------
 // Opening a pull request is seconds of network and git with nothing to look

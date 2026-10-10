@@ -172,12 +172,12 @@ func TestReviewViewWiring(t *testing.T) {
 		`"/api/notes/remove"`,
 		`["cancel", "delete"]`, // cancel first; esc answers it
 		"Delete review",
-		"copyText(", // the Overview's Copy
+		"copyText(", // the Summary's Copy
 	)
 	wiringCheck(t, "files.js",
 		"leaveReview()",     // esc from a review's file list
 		"li.dataset.review", // the click/contextmenu routes
-		"showReviewOverview()",
+		"showReviewSummary()",
 	)
 	wiringCheck(t, "files.js", "reviews: c.reviews || []", "renderBranches()",
 		"cr.list = state.noteCounts.reviews.filter(", // the open commit's rows follow the counts
@@ -188,16 +188,16 @@ func TestReviewViewWiring(t *testing.T) {
 	wiringCheck(t, "keys.js", "stepCommitReviews(delta)", "openSelectedReview()")
 }
 
-// Stacked, a review's Overview is the first element of the stack (the TUI's
-// stacked review view), and toggling the stack on the Overview keeps it.
-func TestReviewOverviewTopsTheStack(t *testing.T) {
+// Stacked, a review's Summary is the first element of the stack (the TUI's
+// stacked review view), and toggling the stack on the Summary keeps it.
+func TestReviewSummaryTopsTheStack(t *testing.T) {
 	t.Parallel()
 	wiringCheck(t, "stackview.js",
-		`const ov = reviewActive() ? `+"`"+`<div class="stk-ov">${reviewOverviewHTML()}</div>`+"`"+` : "";`,
-		"if (reviewActive() && state.review.onOverview) return showReviewOverview();",
-		"state.review.onOverview = top;",
+		`const ov = reviewActive() ? `+"`"+`<div class="stk-ov">${reviewSummaryHTML()}</div>`+"`"+` : "";`,
+		"if (reviewActive() && state.review.onSummary) return showReviewSummary();",
+		"state.review.onSummary = top;",
 	)
-	wiringCheck(t, "reviews.js", "return openStack(0); // buildStack lands on the Overview")
+	wiringCheck(t, "reviews.js", "return openStack(0); // buildStack lands on the Summary")
 	wiringCheck(t, "style.css", ".review-ov { padding: 12px 16px; max-width: 110ch; margin: 0 auto; }")
 }
 
@@ -339,5 +339,47 @@ console.log(previewReviewText({ created: "2026-10-01T09:00:00Z", agent: "Codex",
 	want := "└ Review: 10-07 10:02 Claude Code · 3/5 resolved\n└ Review: 10-01 09:00 Codex · older tip"
 	if got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// R11/R12: the review view's first row is "≡ Summary" and reads summaryMd;
+// the word "overview" is kept for the stored overview alone.
+func TestReviewSummaryRowIsWired(t *testing.T) {
+	t.Parallel()
+	js := readStatic(t, "reviews.js")
+	for _, want := range []string{`≡ Summary`, `d.summaryMd`, `function showReviewSummary(`, `function reviewSummaryHTML(`, `onSummary`} {
+		if !strings.Contains(js, want) {
+			t.Errorf("reviews.js lacks %q", want)
+		}
+	}
+	for _, gone := range []string{`function showReviewOverview(`, `function reviewOverviewHTML(`, `onOverview`, `setDiffTitle("≡ Overview")`} {
+		if strings.Contains(js, gone) {
+			t.Errorf("reviews.js still has %q", gone)
+		}
+	}
+	if r := readStatic(t, "review.js"); !strings.Contains(r, `summaryMd`) || strings.Contains(r, `overviewMd`) {
+		t.Error("review.js must read the done event's summaryMd")
+	}
+}
+
+// R4 / W1: the PR view's Reviews block reads /api/pr/notes' reviews; a
+// review opened from it returns to the PR (kind "pr"), never to a commit.
+func TestPRReviewsBlockIsWired(t *testing.T) {
+	t.Parallel()
+	if p := readStatic(t, "previews.js"); !strings.Contains(strings.SplitN(p, "export async function loadPRCounts", 2)[1], "state.previewReviews = d.reviews || [];") {
+		t.Error("loadPRCounts does not keep the PR's reviews")
+	}
+	rv := readStatic(t, "reviews.js")
+	if strings.Contains(rv, `po.pr ? [] :`) {
+		t.Error("previewScopeReviews still hides a pull request's reviews")
+	}
+	if !strings.Contains(rv, `back.kind === "pr"`) || !strings.Contains(rv, `window.__ggOpenPRLanding`) {
+		t.Error("goBack has no pr arm")
+	}
+	if !strings.Contains(readStatic(t, "files.js"), `{ kind: "pr", pr: po.pr, reviewId }`) {
+		t.Error("previewBack does not name the pull request")
+	}
+	if !strings.Contains(readStatic(t, "prs.js"), `window.__ggOpenPRLanding = openPRLanding;`) {
+		t.Error("prs.js does not publish openPRLanding for the review's way back")
 	}
 }

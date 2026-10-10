@@ -231,3 +231,25 @@ func TestViewerAnchorBandsReviewFixes(t *testing.T) {
 		t.Errorf("no range-over-band rule after the band rules (range at %d, band at %d)", r, a)
 	}
 }
+
+// R3 / TUI follow-up 12: a stored overview's plain anchor is text — tab
+// skips it, it makes no band and is never the current band, enter on it
+// says why; a working review's overview (tip "") opens the working tree,
+// a commit's the file at the reviewed tip.
+func TestViewerStoredOverviewAnchorsJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `
+const as = [{dest:"a:1", path:"a", start:1}, {dest:"nope:3", path:"nope", start:3, plain:true, missing:true}, {dest:"a:5-6", path:"a", start:5, end:6}];
+const r = [];
+r.push(stepAnchor(as, 0, 1), stepAnchor(as, 2, 1), stepAnchor(as, 2, -1), stepAnchor([as[1]], -1, 1));
+r.push(anchorStatus(as[1]), anchorStatus({dest:"x", missing:true, path:"x"}), anchorStatus(as[0]));
+const bands = anchorBands([{dest:"a:40", path:"a", start:40, plain:true, missing:true}, ...as], "a", 100);
+r.push(JSON.stringify(bands), bandOf(bands, as, "nope:3", 100));
+r.push(JSON.stringify(storedAnchorOpen("", as[0])), JSON.stringify(storedAnchorOpen("abc123", as[2])));
+console.log(r.join("|"));
+`)
+	want := `2|0|0|-1|anchor nope:3 does not resolve at the reviewed commit|no file x||[{"start":1,"end":1,"i":1},{"start":5,"end":6,"i":3}]|-1|{"src":"worktree","rev":"","path":"a","line":1}|{"src":"commit","rev":"abc123","path":"a","line":5}`
+	if out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}

@@ -26,6 +26,7 @@ func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("GET /api/notes", s.handleNotes)
 		mux.HandleFunc("GET /api/notes/counts", s.handleNoteCounts)
+		mux.HandleFunc("GET /api/notes/link", s.handleNoteLink)
 		mux.HandleFunc("POST /api/notes/add", writeGuard(s.handleNoteAdd))
 		mux.HandleFunc("POST /api/notes/edit", writeGuard(s.handleNoteEdit))
 		mux.HandleFunc("POST /api/notes/reply", writeGuard(s.handleNoteReply))
@@ -529,4 +530,26 @@ func (s *Server) workingReviewsWire(r *http.Request, some bool) []map[string]any
 			"remarks": remarks, "resolved": resolved})
 	}
 	return out
+}
+
+// handleNoteLink is Copy note link (R13): the note's gg:// link from the
+// domain's one builder — a reply gets its thread's link with its own id.
+// 404 a note that is gone; 400 a note that has no link (a GitHub comment,
+// a shelf note) or no id.
+func (s *Server) handleNoteLink(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if id == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("a note id is required"))
+		return
+	}
+	link, err := s.service().NoteLinkText(readCtx(r), id)
+	switch {
+	case errors.Is(err, domain.ErrNoteLinkGone), errors.Is(err, domain.ErrReviewNotFound):
+		writeErr(w, http.StatusNotFound, err)
+		return
+	case err != nil:
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, map[string]any{"link": link})
 }

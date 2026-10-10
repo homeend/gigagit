@@ -4,8 +4,8 @@
 // and the op parks on ONE confirm — drawn from that plan (sendplan.js) in
 // the ordinary decision modal. Nothing is posted without that answer, and
 // agents never send (user ruling 2026-10-08).
-import { getJSON, postJSON, state } from "./core.js";
-import { openPrompt, showCtxMenu } from "./layers.js";
+import { postJSON, state } from "./core.js";
+import { openPrompt } from "./layers.js";
 import { followOp, opBusy, opLine } from "./ops.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { fetchNotes, refreshNoteCounts } from "./files.js";
@@ -67,11 +67,6 @@ function prOfCtx(ctx) {
   return (ctx && ctx.preview && ctx.preview.pr) || 0;
 }
 
-// The pointer of the last right-click: a row's act() gets no event, and
-// Send review…'s group pick opens where the menu was.
-let lastXY = [200, 200];
-document.addEventListener("contextmenu", (e) => (lastXY = [e.clientX, e.clientY]), true);
-
 // replyAndSend writes a local draft reply to a GitHub thread, then sends it.
 function replyAndSend(n, pr) {
   openPrompt({
@@ -96,7 +91,6 @@ registerRows("note", ({ n, rootId, ctx }) => {
   const pr = prOfCtx(ctx);
   const acts = {
     send: () => sendToGitHub(pr, { kind: "notes", ids: [n.id] }, "sending to #" + pr),
-    "send-review": () => sendReviewBody(pr, n.group || "mine"),
     "reply-send": () => replyAndSend(n, pr),
     resolve: () =>
       sendToGitHub(pr, { kind: n.resolved ? "unresolve" : "resolve", ids: [rootId] }, (n.resolved ? "reopening" : "resolving") + " a thread on #" + pr),
@@ -107,49 +101,9 @@ registerRows("note", ({ n, rootId, ctx }) => {
   return rows.length ? [{ sep: true }, ...rows] : [];
 });
 
-function groupCount(g) {
-  if (g.id === "mine") return g.count === 1 ? "1 note" : g.count + " notes";
-  return g.count === 1 ? "1 remark" : g.count + " remarks";
-}
-
-// keptBody is a body a refused or failed send left: the next Send review…
-// of the same group (or Verdict…, group "verdict") starts from it, so typing
-// is never lost.
+// keptBody is a body a refused or failed send left: the next Verdict… (group
+// "verdict") starts from it, so typing is never lost.
 let keptBody = null; // {pr, group, text}
-
-// sendReviewBody is Send review… for one group: its body (an AI review's
-// summary prefilled, empty for my draft review), then the confirm, whose
-// buttons are the verdicts.
-async function sendReviewBody(pr, group) {
-  let g;
-  try {
-    const d = await getJSON("/api/pr/send/groups?n=" + pr);
-    g = (d.groups || []).find((x) => x.id === group);
-  } catch (e) {
-    opLine("send review: " + (e.message || e), true);
-    return;
-  }
-  if (!g) {
-    opLine("send review: nothing of that group is left to send", true);
-    return;
-  }
-  const kept = keptText(keptBody, pr, group);
-  const title =
-    group === "mine"
-      ? `Send my draft review to #${pr} (${groupCount(g)}) — the review body`
-      : `Send ${g.agent || "AI"} review to #${pr} (${groupCount(g)}) — the review body`;
-  openPrompt({
-    title,
-    value: kept !== null ? kept : g.body || "",
-    multiline: true,
-    allowEmpty: true,
-    onSubmit: (text) => {
-      keptBody = { pr, group, text };
-      // An AI review's box always answers the body: emptied = no body.
-      sendToGitHub(pr, { kind: "group", group, body: text, body_set: group !== "mine" }, "sending the review to #" + pr);
-    },
-  });
-}
 
 // verdictBody is Verdict…: an optional body, then the confirm's verdicts.
 function verdictBody(pr) {
@@ -166,43 +120,18 @@ function verdictBody(pr) {
   });
 }
 
-// sendReviewPick is the PR menu's Send review…: one group goes straight to
-// its body; several are picked first.
-async function sendReviewPick(pr) {
-  let d;
-  try {
-    d = await getJSON("/api/pr/send/groups?n=" + pr);
-  } catch (e) {
-    opLine("send review: " + (e.message || e), true);
-    return;
-  }
-  const gs = d.groups || [];
-  if (!gs.length) {
-    opLine("#" + pr + " has no local notes to send", false);
-    return;
-  }
-  if (gs.length === 1) return sendReviewBody(pr, gs[0].id);
-  showCtxMenu(
-    [
-      { header: "send which review to #" + pr + "?" },
-      ...gs.map((g) => ({
-        label: g.id === "mine" ? `my draft review · ${groupCount(g)}` : `${g.agent}: ${g.summary} · ${groupCount(g)}`,
-        act: () => sendReviewBody(pr, g.id),
-      })),
-    ],
-    lastXY[0],
-    lastXY[1]
-  );
-}
-
 registerRows("pr", (pr) => {
   if (!pr || pr.state !== "open" || !pr.fetched) return [];
-  return [
-    { sep: true },
-    { label: "Send review…", act: () => sendReviewPick(pr.number) },
-    { label: "Verdict…", act: () => verdictBody(pr.number) },
-  ];
+  return [{ sep: true }];
 });
+// Verdict… follows Send to GitHub… (prsendpanel.js, imported right after
+// this module): its contributor is registered once that import has run.
+queueMicrotask(() =>
+  registerRows("pr", (pr) => {
+    if (!pr || pr.state !== "open" || !pr.fetched) return [];
+    return [{ label: "Verdict…", act: () => verdictBody(pr.number) }];
+  })
+);
 
 // Only a send from the kept body's own box that changed GitHub clears it; a
 // refused, failed or aborted one — or any other send — keeps it (C8).
@@ -215,9 +144,10 @@ registerHelp({
   html:
     "in a pull request's own diff each note says where it lives — <b>○</b> local, <b>◌</b> sending, " +
     "<b>○!</b> the last send failed (the error under it), <b>●</b> on GitHub — and its left border is its " +
-    "group's colour (one per AI review, one for your own notes). <b>Right-click</b> a note: Send as GitHub comment, " +
-    "Send my draft review… / Send this AI review…, and on a GitHub thread Reply &amp; send…, Resolve / Reopen on " +
-    "GitHub, Send draft replies. The pull request's right-click menu has <b>Send review…</b> and <b>Verdict…</b>. " +
-    "Every send shows what will be posted and waits for your answer; agents never send",
+    "group's colour (one per AI review, one for your own notes). The pull request's right-click menu has " +
+    "<b>Send to GitHub…</b> — one panel over every unsent note, remark and draft reply, nothing ticked on open — and " +
+    "<b>Verdict…</b>. Right-click a note: Send as GitHub comment, and on a GitHub thread Reply &amp; send…, " +
+    "Resolve / Reopen on GitHub, Send draft replies. Every send shows what will be posted and waits for your answer; " +
+    "agents never send",
 });
 

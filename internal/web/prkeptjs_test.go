@@ -35,8 +35,7 @@ console.log(JSON.stringify({
   abort: left(keptAfterSend(v, 7, { kind: "verdict", body: "keep me" }, { ok: true, changed: false })),
   failed: left(keptAfterSend(v, 7, { kind: "verdict", body: "keep me" }, { ok: false })),
   own: left(keptAfterSend(v, 7, { kind: "verdict", body: "keep me" }, ok)),
-  group: left(keptAfterSend({ pr: 7, group: "review:r1", text: "t" }, 7, { kind: "group", group: "review:r1" }, ok)),
-  otherBox: left(keptAfterSend({ pr: 7, group: "review:r1", text: "t" }, 7, { kind: "group", group: "mine" }, ok)),
+  otherBox: left(keptAfterSend(v, 7, { kind: "notes", ids: ["n1"], verdict: true }, ok)), // the panel's send is not the verdict box's
 }));
 `
 	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(runner), 0o644); err != nil {
@@ -51,7 +50,7 @@ console.log(JSON.stringify({
 		t.Fatalf("%v: %s", err, out)
 	}
 	keep := map[string]bool{"text": true, "resolve": true, "otherPR2": true, "abort": true, "failed": true, "otherBox": true}
-	for _, k := range []string{"text", "otherGroup", "otherPR", "resolve", "otherPR2", "abort", "failed", "own", "group", "otherBox"} {
+	for _, k := range []string{"text", "otherGroup", "otherPR", "resolve", "otherPR2", "abort", "failed", "own", "otherBox"} {
 		if keep[k] != (got[k] != nil) {
 			t.Errorf("%s = %v (want kept=%v)", k, got[k], keep[k])
 		}

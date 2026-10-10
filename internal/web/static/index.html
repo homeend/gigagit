@@ -175,6 +175,19 @@
     <div id="prdetails-body"></div>
   </div>
 </div>
+<!-- prsendpanel.js: the Send to GitHub… panel over a pull request's unsent notes. -->
+<div id="prsendpanel" class="hidden">
+  <div id="prsendpanel-box">
+    <h2><span id="prsendpanel-title"></span><button id="prsendpanel-close" title="close (esc)">esc</button></h2>
+    <div id="prsendpanel-notice"></div>
+    <ul id="prsendpanel-list"></ul>
+    <div id="prsendpanel-body">
+      <label>Body <select id="prsendpanel-bodysel"></select></label>
+      <textarea id="prsendpanel-typed" class="hidden" rows="4" placeholder="the review body"></textarea>
+    </div>
+    <div id="prsendpanel-foot"><span id="prsendpanel-hints">↑/↓ move · space tick · a all/none in group · b body · c code · enter open · ctrl+s send · esc close</span><button id="prsendpanel-send">Send</button></div>
+  </div>
+</div>
 <!-- linkcompare.js: compare two gg:// links. -->
 <div id="linkcmp" class="hidden">
   <div id="linkcmp-box">

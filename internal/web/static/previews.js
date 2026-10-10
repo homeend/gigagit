@@ -274,6 +274,7 @@ export async function loadPRCounts(n) {
   if (!po || po.pr !== n) return; // superseded
   state.previewCounts = d.counts || {};
   state.previewGroups = d.groups || {}; // a PR's per-file group slots (the badges' stripes)
+  state.previewReviews = d.reviews || []; // the PR's stored reviews (R4): the Reviews block
   renderFiles();
 }
 

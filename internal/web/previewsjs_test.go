@@ -191,12 +191,13 @@ func TestPreviewReviewsBlockWired(t *testing.T) {
 	}
 }
 
-// Review Focus 4: a PR diff and a scoped pair (one review's range) get no block.
-func TestReviewRowsHTMLSkipsPRAndScopedPair(t *testing.T) {
+// Review Focus 4: a scoped pair (one review's range) gets no block. A PR
+// diff gets one since R4 (its stored reviews ride /api/pr/notes).
+func TestReviewRowsHTMLSkipsScopedPair(t *testing.T) {
 	t.Parallel()
 	rv := staticSrc(t, "reviews.js")
-	if !strings.Contains(rv, `function previewScopeReviews()`) || !strings.Contains(rv, `po.pr`) || !strings.Contains(rv, `p.scope`) {
-		t.Error("reviews.js: previewScopeReviews must refuse a PR and a scoped pair")
+	if !strings.Contains(rv, `function previewScopeReviews()`) || !strings.Contains(rv, `p.scope`) || strings.Contains(rv, `po.pr ? []`) {
+		t.Error("reviews.js: previewScopeReviews must refuse a scoped pair and keep a PR's reviews")
 	}
 }
 

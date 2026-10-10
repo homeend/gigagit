@@ -3,7 +3,7 @@
 // review document; the server reads it (/api/review/{id}) and builds its line
 // notes at read time, read-only. The page lists a commit's reviews above its
 // files, a branch's under its row, and opens one as a review view: the
-// commit's files (a range review: the compare of its range) with ≡ Overview
+// commit's files (a range review: the compare of its range) with ≡ Summary
 // first and only the review's notes in the diffs.
 
 import { $, esc, getJSON, postJSON, runOnce, state } from "./core.js";
@@ -18,6 +18,7 @@ import { focusPane } from "./keys.js";
 import { openNotesWindow } from "./shelfnotes.js";
 import { runLinkCompare } from "./linkcompare.js";
 import { copyLink } from "./links.js";
+import { openStoredOverview } from "./viewer.js";
 
 // --- reviews pure (guarded against Go) ---
 // reviewStamp is a review's time as the TUI prints it: local
@@ -95,7 +96,7 @@ function reviewActiveIn(st) {
 }
 // nextNotedFile is the index of the next (dir 1) or previous (dir -1) file
 // after from that the review places notes on, or -1 when there is none that
-// way (the TUI's stepReviewFile stays put at the ends). from -1 = the Overview.
+// way (the TUI's stepReviewFile stays put at the ends). from -1 = the Summary.
 function nextNotedFile(files, counts, from, dir) {
   for (let i = from + dir; i >= 0 && i < files.length; i += dir) {
     if ((counts[files[i].path] || 0) > 0) return i;
@@ -253,13 +254,13 @@ function reviewRowsHTML() {
 }
 
 
-// previewScopeReviews is the opened merge preview's (or unscoped pair's) AI
-// reviews — its Reviews block. None for a pull request (no scope) or a range
+// previewScopeReviews is the opened merge preview's — or pull request's —
+// (or unscoped pair's) AI reviews — its Reviews block. None for a range
 // opened from a commit's Range review row (one review's notes: p.scope).
 function previewScopeReviews() {
   if (state.filesMode !== "compare" || state.layout === "list") return [];
   const po = state.previewOpen;
-  if (po && po.tip && state.compare && state.compare.bHash === po.tip) return po.pr ? [] : state.previewReviews || [];
+  if (po && po.tip && state.compare && state.compare.bHash === po.tip) return state.previewReviews || [];
   const p = state.compare && state.compare.pair;
   if (p && !p.scope) return state.previewReviews || [];
   return [];
@@ -410,7 +411,8 @@ function setReviewHeader() {
 // its file list returns: {kind: "commit", sha, short, subject, reviewId} (a
 // commit's Reviews row), {kind: "preview", source, target, reviewId} or
 // {kind: "pair", a, b, reviewId} (an opened preview's Reviews row: back to
-// it), {kind: "popup", run} (View all notes: run reopens it) or
+// it), {kind: "pr", pr, reviewId} (a pull request's Reviews row: back to
+// the PR), {kind: "popup", run} (View all notes: run reopens it) or
 // {kind: "list"}.
 async function openReview(id, back) {
   const gen = ++state.detailGen; // a newer open or esc supersedes this one
@@ -455,13 +457,13 @@ async function openReview(id, back) {
   }
   state.files = files;
   state.fileCursor = 0;
-  state.review = { id, data: d, files, cmp, onOverview: true, back: back || { kind: "list" } };
+  state.review = { id, data: d, files, cmp, onSummary: true, back: back || { kind: "list" } };
   setReviewHeader();
-  showReviewOverview();
+  showReviewSummary();
 }
 
 
-// renderReviewFiles is the review view's list: ≡ Overview, then the files —
+// renderReviewFiles is the review view's list: ≡ Summary, then the files —
 // ◆n on each the review notes, and that file's summary (dim, not a file)
 // under it.
 function renderReviewFiles() {
@@ -471,10 +473,13 @@ function renderReviewFiles() {
   const counts = d.counts || {};
   const anyBadge = state.files.some((f) => counts[f.path] > 0);
   const cols = fileCols(anyBadge ? NOTE_BADGE_COLS : 0);
-  let html = `<li class="rov${rv.onOverview ? " sel" : ""}" data-ov="1" title="the review's summary, meta and the notes it could not place on a line">≡ Overview</li>`;
+  let html = `<li class="rov${rv.onSummary ? " sel" : ""}" data-ov="1" title="the review's summary — the text GitHub gets — its meta and the notes it could not place on a line">≡ Summary</li>`;
+  if (d.overviewMd) {
+    html += `<li class="rovd" data-ovdoc="1" title="the overview stored with the review: a walk through the change, its links opening the files at the reviewed commit">≡ Overview</li>`;
+  }
   state.files.forEach((f, i) => {
     html +=
-      `<li class="${!rv.onOverview && i === state.fileCursor ? "sel" : ""}" data-i="${i}">` +
+      `<li class="${!rv.onSummary && i === state.fileCursor ? "sel" : ""}" data-i="${i}">` +
       `<span class="st ${esc(f.status)}">${esc(f.status)}</span>` +
       filePathHTML(f.path, cols) +
       noteBadgeHTML(counts[f.path]) +
@@ -487,16 +492,25 @@ function renderReviewFiles() {
 }
 
 
-// reviewOverviewHTML is the Overview: the review's markdown, its meta, the
+// openReviewOverview opens the review's stored overview (R12) in the
+// viewer's stored mode: anchors open the files at the reviewed tip.
+export function openReviewOverview() {
+  const rv = state.review;
+  if (!rv || !rv.data.overviewMd) return;
+  const d = rv.data;
+  openStoredOverview({ id: rv.id, title: d.label || rv.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: d.overviewText || "" });
+}
+
+// reviewSummaryHTML is the Summary: the review's markdown, its meta, the
 // notes it could not place on a line, and Copy — a centred reading column.
-function reviewOverviewHTML() {
+function reviewSummaryHTML() {
   const d = state.review.data;
   const other = d.other || [];
   return (
     `<div class="review-ov">` +
     `<div class="review-ov-bar"><span class="meta">${esc(reviewMetaLine(d))}</span>` +
     `<button id="review-copy" title="copy the review's text">copy</button></div>` +
-    (d.overviewMd ? `<div class="md">${mdHTML(d.overviewMd, esc)}</div>` : "") +
+    (d.summaryMd ? `<div class="md">${mdHTML(d.summaryMd, esc)}</div>` : "") +
     (d.meta ? `<div class="review-ov-meta">${esc(d.meta)}</div>` : "") +
     (other.length
       ? `<h4>Other notes</h4><ul class="review-other">` +
@@ -514,13 +528,13 @@ function reviewOverviewHTML() {
 }
 
 
-// showReviewOverview shows the Overview: alone in the diff pane, or — with
+// showReviewSummary shows the Summary: alone in the diff pane, or — with
 // the stacked view on — as the first element of the stack, above the files
 // (the TUI's stacked review view).
-function showReviewOverview() {
+function showReviewSummary() {
   const rv = state.review;
   if (!rv) return;
-  rv.onOverview = true;
+  rv.onSummary = true;
   if (stackOn()) {
     if (state.layout !== "diff") {
       state.pane = "files";
@@ -529,11 +543,11 @@ function showReviewOverview() {
       setReviewHeader();
     }
     if (state.stack && state.stack.list === state.files) {
-      $("diff-pane").scrollTop = 0; // the stack's top IS the Overview
+      $("diff-pane").scrollTop = 0; // the stack's top IS the Summary
       renderFiles();
       return;
     }
-    return openStack(0); // buildStack lands on the Overview, not on file 0
+    return openStack(0); // buildStack lands on the Summary, not on file 0
   }
   teardownStack();
   state.detailGen++; // a file diff still loading must not land over the overview
@@ -547,8 +561,8 @@ function showReviewOverview() {
   state.diffRow = state.diffRange = null;
   state.notes = [];
   state.lastDiff = null;
-  setDiffTitle("≡ Overview");
-  $("diff-body").innerHTML = reviewOverviewHTML();
+  setDiffTitle("≡ Summary");
+  $("diff-body").innerHTML = reviewSummaryHTML();
   renderFiles();
   updateDiffNav();
 }
@@ -569,6 +583,14 @@ function goBack(back) {
     state.reviewSel = back.reviewId || "";
     openCommitByHash(back.sha, back.subject || "").then((ok) => {
       if (ok) setCommitTitle(back.sha, back.short || "", back.subject || "");
+    });
+    return;
+  }
+  if (back && back.kind === "pr" && window.__ggOpenPRLanding) {
+    window.__ggOpenPRLanding(back.pr).then((ok) => {
+      if (!ok) return goBack({ kind: "list" }); // the PR no longer opens: back to the list
+      state.reviewSel = back.reviewId || "";
+      renderFiles();
     });
     return;
   }
@@ -625,10 +647,10 @@ function reviewHead(id) {
 
 
 // reviewMenu is the right-click menu of a review row (a commit's, a branch's
-// sub-row, the review view's Overview).
+// sub-row, the review view's Summary).
 // reviewMenu is a review row's right-click menu: a review is opened or
 // removed, nothing else (the TUI's noteRowMenu). open is what a click on the
-// row does; the open review's own Overview row passes none.
+// row does; the open review's own Summary row passes none.
 function reviewMenu(id, x, y, open) {
   const rows = open ? [{ label: "Open review", act: open }] : [];
   rows.push({ label: "Copy gg link", act: () => copyServerLink("/api/review/" + encodeURIComponent(id) + "/link", "review: " + id) });
@@ -735,10 +757,10 @@ function deleteReview(id) {
 // the cursor goes to the previous / next file with notes; it does not open it.
 function stepReviewFile(dir) {
   const rv = state.review;
-  const from = rv.onOverview ? -1 : state.fileCursor;
+  const from = rv.onSummary ? -1 : state.fileCursor;
   const i = nextNotedFile(state.files, (rv.data && rv.data.counts) || {}, from, dir);
   if (i < 0) return;
-  rv.onOverview = false;
+  rv.onSummary = false;
   state.fileCursor = i;
   renderFiles();
 }
@@ -749,10 +771,13 @@ registerHelp({
   html:
     "an AI review is stored with the commit it reviewed: a commit's reviews head its file list under " +
     "<b>Reviews</b>, and a branch's reviews of its current tip sit under its row. Click one to open the review " +
-    "— <b>≡ Overview</b> (the summary, meta and notes it could not place), then the files, ◆N on each the review " +
+    "— <b>≡ Summary</b> (the summary, meta and notes it could not place), <b>≡ Overview</b> when the review stores an " +
+    "overview (click it: the overview opens in the viewer, <b>tab</b> walks its anchors, <b>enter</b> opens the file at " +
+    "the reviewed commit with its bands, <b>backspace</b> comes back, <b>y</b> copies its text; an anchor the review " +
+    "cannot resolve is plain text), then the files, ◆N on each the review " +
     "notes, with the review's notes in the diffs, read-only. On the review's file list <b>,</b> / <b>.</b> move to " +
     "the previous / next file the review notes. esc goes back; right-click a review row or the " +
-    "Overview for <b>Delete review</b>. A <b>range review</b> — notes written over a commit pair — is stored on the " +
+    "Summary for <b>Delete review</b>. A <b>range review</b> — notes written over a commit pair — is stored on the " +
     "pair's newer commit: it carries <b>✎</b> in the commit list like an AI-reviewed one, and lists them as one row under <b>Range reviews</b> (◆N) — click it to " +
     "open the range, every file with its notes; esc returns to the commit. What was created on a branch shows on " +
     "that branch only: on another branch — the one it was merged into included — a range review and a branch's AI " +
@@ -762,7 +787,7 @@ registerHelp({
 });
 
 
-export { copyServerLink, previewReviewText, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewOverviewHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewOverview };
+export { copyServerLink, previewReviewText, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, notedRowMenu, scopeRowMenu, reviewShownOn, viewBranches, openNotedPath, openScopeRange, reviewMarkTitle, leaveRangeReview, openRangeReview, nextNotedFile, stepReviewFile, reviewSummaryHTML, branchReviewText, branchReviews, confirmDeleteReview, leaveReview, openReview, openSelectedReview, stepCommitReviews, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, setReviewHeader, showReviewSummary };
 
 $("diff-body").addEventListener("click", (e) => {
   if (e.target.id !== "review-copy" || !state.review) return;

@@ -21,7 +21,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { noteMark, noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewOverview } from "./reviews.js";
+import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -717,6 +717,7 @@ function pairCtx() {
 // when saved) or the pair (re-run as a..b). null for any other screen.
 function previewBack(reviewId) {
   const po = openPreviewCtx();
+  if (po && po.pr) return { kind: "pr", pr: po.pr, reviewId };
   if (po && !po.pr) return { kind: "preview", source: po.source, target: po.target, reviewId };
   const p = pairCtx();
   if (p && !p.scope) return { kind: "pair", a: p.a, b: p.b, reviewId };
@@ -1055,7 +1056,7 @@ function renderFiles() {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
     $("conflict-note").classList.add("hidden");
-    if (reviewActive()) return renderReviewFiles(); // ≡ Overview + the reviewed files (reviews.js)
+    if (reviewActive()) return renderReviewFiles(); // ≡ Summary + the reviewed files (reviews.js)
     if (symActive()) return renderSymLists(); // two aligned lists (symcompare.js)
     // A commit file's notes are keyed "<sha>:<path>" — the sha this row's diff
     // would open — and count only the notes written outside any range: a range
@@ -1231,7 +1232,7 @@ function fileDiffURL(f) {
 
 async function openFile(i) {
   clearDiffHunks();
-  if (reviewActive()) state.review.onOverview = false; // a file, not the Overview, is on screen now
+  if (reviewActive()) state.review.onSummary = false; // a file, not the Summary, is on screen now
   state.reviewSel = "";
   // The layout switch sits in the SYNC prefix: an esc during a slow diff
   // load steps back to the files stage, and the fetch completing later
@@ -3459,7 +3460,8 @@ registerHelp({
     "in an open diff: click a line to anchor, then <b>c</b> to write a note on it (summary + optional rationale). " +
     "<b>E</b> edits and <b>R</b> replies to the nearest ◆ above the anchored line, <b>}</b>/<b>{</b> step between " +
     "notes, and <b>a</b> folds agent-written notes away. Right-click a ◆ row for the same actions plus " +
-    "<b>remove</b>. A file with notes carries a ◆N badge in the file list; notes are machine-local and never " +
+    "<b>remove</b> and <b>Copy note link</b> (a gg link that opens the thread; a review remark has <b>copy remark link</b> " +
+    "instead). A file with notes carries a ◆N badge in the file list; notes are machine-local and never " +
     "committed",
 });
 
@@ -3802,6 +3804,11 @@ $("diff-body").addEventListener("contextmenu", (e) => {
       }
     );
   }
+  // Copy note link (R13): a thread's own link, ?note=<id>, from the
+  // domain's builder — a hand-written thread or a draft reply; a remark
+  // keeps its remark link, a GitHub comment has none.
+  if (!remark && n.source !== "forge" && !String(n.id).startsWith("forge:"))
+    noteRows.push({ label: "Copy note link", act: () => copyServerLink("/api/notes/link?id=" + encodeURIComponent(n.id), "note " + n.id) });
   const nlink = remark ? "" : linkFor(state.repo, state.worktree, noteSlotCtx(n) || state.diffCtx, n.side, n.line);
   if (nlink)
     noteRows.push({
@@ -5084,8 +5091,8 @@ $("files-list").addEventListener("click", (e) => {
     openShelfNotes(c.shelfEntry, c.shelfLabel, li.dataset.note);
     return;
   }
-  // A commit's review row opens the review; the review view's Overview row
-  // shows the Overview. Neither is a file (no data-i).
+  // A commit's review row opens the review; the review view's Summary row
+  // shows the Summary. Neither is a file (no data-i).
   if (li && li.dataset.review) {
     // The working list's Review row returns to the list; a commit's to it.
     // …and a preview's Reviews row returns to the preview.
@@ -5102,9 +5109,13 @@ $("files-list").addEventListener("click", (e) => {
     openNotedPath(li.dataset.noted);
     return;
   }
+  if (li && li.dataset.ovdoc && reviewActive()) {
+    openReviewOverview(); // the stored overview, in the viewer
+    return;
+  }
   if (li && li.dataset.ov && reviewActive()) {
     state.pane = "files";
-    showReviewOverview();
+    showReviewSummary();
     return;
   }
   if (li && li.dataset.i !== undefined && (e.ctrlKey || e.metaKey) && state.filesMode === "status") {
@@ -5145,7 +5156,7 @@ function fileExt(path) {
 $("files-list").addEventListener("contextmenu", (e) => {
   const li = e.target.closest("li");
   // A commit's note rows are not files: Open + Delete only (the TUI's
-  // noteRowMenu). The review view's Overview row: Delete review.
+  // noteRowMenu). The review view's Summary row: Delete review.
   if (li && li.dataset.review) {
     e.preventDefault();
     const rid = li.dataset.review;
@@ -5160,6 +5171,11 @@ $("files-list").addEventListener("contextmenu", (e) => {
   if (li && li.dataset.noted) {
     e.preventDefault();
     notedRowMenu(li.dataset.noted, e.clientX, e.clientY);
+    return;
+  }
+  if (li && li.dataset.ovdoc && reviewActive()) {
+    e.preventDefault();
+    reviewMenu(state.review.id, e.clientX, e.clientY);
     return;
   }
   if (li && li.dataset.ov && reviewActive()) {

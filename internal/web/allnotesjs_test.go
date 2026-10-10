@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -14,7 +15,7 @@ import (
 // missing commit's notes read "missing"; a query keeps the matching notes and
 // their ancestors (folds ignored), no query hides a folded heading's subtree.
 const allNotesHarness = `
-import { anBuildRows, anVisible, anAgo } from "./an.mjs";
+import { anBuildRows, anVisible, anAgo, anCopyLinkURL } from "./an.mjs";
 const note = (id, summary, author) => ({ id, summary, author, source: "user", status: "active", side: "new", range: [1, 1], replies: [] });
 const ov = {
   worktree: "repo",
@@ -40,7 +41,8 @@ const folded = anVisible(rows, "", { commits: true }).map((r) => r.kind);
 const reviewQ = anVisible(rows, "claude", {}).map((r) => r.kind);
 const entryQ = anVisible(rows, "renamed", {}).map((r) => r.kind === "note" ? r.note.id + "@" + r.target.shelf : r.text);
 console.log(JSON.stringify({ shape, spans, q, folded, reviewQ, entryQ,
-  ago: [anAgo(5000), anAgo(120000), anAgo(7200000), anAgo(3 * 86400000)] }));
+  ago: [anAgo(5000), anAgo(120000), anAgo(7200000), anAgo(3 * 86400000)],
+  links: rows.filter((r) => r.kind === "note" || r.kind === "review").map((r) => anCopyLinkURL(r)) }));
 `
 
 func TestAllNotesRowsMatchTheTUITree(t *testing.T) {
@@ -50,7 +52,7 @@ func TestAllNotesRowsMatchTheTUITree(t *testing.T) {
 		t.Skip("node not installed; the JS guard needs it")
 	}
 	mod := jsFunc(t, "allnotes.js", "anBuildRows") + "\n" + jsFunc(t, "allnotes.js", "anVisible") + "\n" +
-		jsFunc(t, "allnotes.js", "anAgo") + "\nexport { anBuildRows, anVisible, anAgo };\n"
+		jsFunc(t, "allnotes.js", "anAgo") + "\n" + jsFunc(t, "allnotes.js", "anCopyLinkURL") + "\nexport { anBuildRows, anVisible, anAgo, anCopyLinkURL };\n"
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "an.mjs"), []byte(mod), 0o644); err != nil {
 		t.Fatal(err)
@@ -70,6 +72,7 @@ func TestAllNotesRowsMatchTheTUITree(t *testing.T) {
 		ReviewQ []string `json:"reviewQ"`
 		EntryQ  []string `json:"entryQ"`
 		Ago     []string `json:"ago"`
+		Links   []string `json:"links"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &got); err != nil {
 		t.Fatalf("not the harness JSON: %v\n%s", err, out)
@@ -125,5 +128,11 @@ func TestAllNotesRowsMatchTheTUITree(t *testing.T) {
 	}
 	if strings.Join(got.Ago, ",") != "5s,2m,2h,3d" {
 		t.Fatalf("ago = %v", got.Ago)
+	}
+	// R13 / W8: ctrl+l copies a thread's note link, a review's review link,
+	// nothing for a shelf entry's note or a shelved file's note.
+	wantLinks := []string{"/api/notes/link?id=n1", "/api/review/r1/link", "/api/notes/link?id=n2", "/api/notes/link?id=n3", "/api/notes/link?id=n4", "", "", "", ""}
+	if !slices.Equal(got.Links, wantLinks) {
+		t.Errorf("links = %q\nwant   %q", got.Links, wantLinks)
 	}
 }

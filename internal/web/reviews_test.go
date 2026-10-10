@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // webReviewDoc is a review document of newRepoDir's tip: one note on f.txt
@@ -25,6 +26,7 @@ type reviewHeadResp struct {
 	Agent   string `json:"agent"`
 	Summary string `json:"summary"`
 	Created string `json:"created"`
+	Older   bool   `json:"older"`
 }
 
 // reviewServer serves a two-commit repo holding one review (text) of its tip.
@@ -119,7 +121,8 @@ type reviewViewResp struct {
 	} `json:"files"`
 	Counts     map[string]int    `json:"counts"`
 	Summaries  map[string]string `json:"summaries"`
-	OverviewMd any               `json:"overviewMd"`
+	SummaryMd  any               `json:"summaryMd"`
+	OverviewMd any               `json:"overviewMd"` // the STORED overview (Task 2); nil without one
 	Meta       string            `json:"meta"`
 	Text       string            `json:"text"`
 	Notes      int               `json:"notes"`
@@ -148,8 +151,14 @@ func TestReviewViewShape(t *testing.T) {
 	if len(got.Other) != 1 || got.Other[0].Path != "zzz.go" || got.Other[0].Line != "1" {
 		t.Errorf("other notes = %+v, want zzz.go:1", got.Other)
 	}
-	if got.Notes != 2 || got.NoteFiles != 2 || got.OverviewMd == nil || got.Meta != "verdict: approve" {
-		t.Errorf("notes %d on %d files, overview %v, meta %q", got.Notes, got.NoteFiles, got.OverviewMd, got.Meta)
+	if got.Notes != 2 || got.NoteFiles != 2 || got.Meta != "verdict: approve" {
+		t.Errorf("notes %d on %d files, meta %q", got.Notes, got.NoteFiles, got.Meta)
+	}
+	if got.SummaryMd == nil {
+		t.Fatal("the review's summary must arrive as summaryMd (R11: the review text is its summary)")
+	}
+	if got.OverviewMd != nil {
+		t.Fatal("a review without a stored overview sends no overviewMd")
 	}
 	if !strings.Contains(got.Text, `"summary"`) || got.Label != sha[:7] {
 		t.Errorf("text %q / label %q", got.Text, got.Label)
@@ -163,7 +172,7 @@ func TestReviewViewProse(t *testing.T) {
 	if code := getJSON(t, ts, "/api/review/"+id, &got); code != http.StatusOK {
 		t.Fatalf("GET = %d", code)
 	}
-	if got.Structured || len(got.Files) != 0 || got.Text != "just prose" || got.OverviewMd == nil {
+	if got.Structured || len(got.Files) != 0 || got.Text != "just prose" || got.SummaryMd == nil {
 		t.Errorf("prose review = %+v", got)
 	}
 }
@@ -248,5 +257,77 @@ func TestReviewViewRange(t *testing.T) {
 	}
 	if code := getJSON(t, ts, "/api/review/notes?id="+id+"&path=f.txt&status=M", &notes); code != http.StatusOK || len(notes.Notes) != 1 {
 		t.Errorf("range review notes = %d %+v, want one", code, notes.Notes)
+	}
+}
+
+const webReviewDocWithOverview = `{"version":1,"summary":"fine","files":[
+ {"path":"f.txt","annotations":[{"newRange":[1,1],"summary":"A"}]}],
+ "overview":"Start at [the file](f.txt:1), then [outside](nope.go:3) and [a note](note:t1)."}`
+
+type overviewAnchorResp struct {
+	Dest    string `json:"dest"`
+	Path    string `json:"path"`
+	Start   int    `json:"start"`
+	Missing bool   `json:"missing"`
+	Plain   bool   `json:"plain"`
+}
+
+// §2.3/§4.2: a review with a stored overview sends it as overviewMd with
+// its anchors resolved against the reviewed tip — a file outside the
+// review's set or a note: anchor is plain — and the tip the anchors open at.
+func TestReviewViewCarriesTheStoredOverview(t *testing.T) {
+	t.Parallel()
+	ts, _, sha, id := reviewServer(t, webReviewDocWithOverview)
+	var got struct {
+		SummaryMd       any                  `json:"summaryMd"`
+		OverviewMd      []any                `json:"overviewMd"`
+		OverviewAnchors []overviewAnchorResp `json:"overviewAnchors"`
+		OverviewTip     string               `json:"overviewTip"`
+		OverviewText    string               `json:"overviewText"`
+	}
+	if code := getJSON(t, ts, "/api/review/"+id, &got); code != http.StatusOK {
+		t.Fatalf("code %d", code)
+	}
+	if got.SummaryMd == nil || len(got.OverviewMd) == 0 || got.OverviewTip != sha {
+		t.Fatalf("summaryMd %v overviewMd %d blocks tip %q (want %q)", got.SummaryMd != nil, len(got.OverviewMd), got.OverviewTip, sha)
+	}
+	if !strings.HasPrefix(got.OverviewText, "Start at [the file](f.txt:1)") {
+		t.Fatalf("overviewText = %q (y copies the overview's markdown, §4.1)", got.OverviewText)
+	}
+	if len(got.OverviewAnchors) != 3 {
+		t.Fatalf("anchors = %+v", got.OverviewAnchors)
+	}
+	if a := got.OverviewAnchors[0]; a.Dest != "f.txt:1" || a.Path != "f.txt" || a.Start != 1 || a.Plain || a.Missing {
+		t.Fatalf("resolved anchor = %+v", a)
+	}
+	if a := got.OverviewAnchors[1]; !a.Plain || !a.Missing {
+		t.Fatalf("a file outside the review must be plain: %+v", a)
+	}
+	if a := got.OverviewAnchors[2]; !a.Plain {
+		t.Fatalf("a note: anchor must be plain (R3): %+v", a)
+	}
+}
+
+// Review Focus 4: a working review's stored overview opens the working
+// tree — its overviewTip is "" (the page's storedAnchorOpen reads it).
+func TestWorkingReviewOverviewTipIsEmpty(t *testing.T) {
+	t.Parallel()
+	ts, svc, _, _ := workingReviewServer(t)
+	doc := `{"version":1,"summary":"w","files":[{"path":"w.txt","annotations":[{"newRange":[1,1],"summary":"A"}]}],"overview":"See [w](w.txt:1)."}`
+	id, _, err := svc.SaveReview(context.Background(), domain.SaveReview{Target: domain.WorkingReviewTarget(), Agent: "Claude", Text: doc,
+		Files: []model.NoteFile{{Path: "w.txt", Blob: sha1Blob("hello\n")}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		OverviewMd  []any  `json:"overviewMd"`
+		OverviewTip string `json:"overviewTip"`
+		Working     bool   `json:"working"`
+	}
+	if code := getJSON(t, ts, "/api/review/"+id, &got); code != http.StatusOK || !got.Working || len(got.OverviewMd) == 0 {
+		t.Fatalf("code %d working %v overview %d", code, got.Working, len(got.OverviewMd))
+	}
+	if got.OverviewTip != "" {
+		t.Fatalf("a working review's overviewTip = %q, want \"\" (anchors open the working tree)", got.OverviewTip)
 	}
 }
