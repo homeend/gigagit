@@ -502,7 +502,7 @@ func (m Model) switchRefusalBy(byUser bool) string {
 		return i18n.T("an operation is running — switch once it has finished")
 	}
 	why := m.steerRefusal()
-	if why == "" || (byUser && why == refusalWindowOwnsKeyboard && parkableLayer(m.topLayer())) {
+	if why == "" || (byUser && why == refusalWindowOwnsKeyboard && parkableLayer(m.effectiveTop())) {
 		return ""
 	}
 	return i18n.T("cannot switch while a window is open")

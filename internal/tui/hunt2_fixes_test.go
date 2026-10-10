@@ -99,3 +99,38 @@ func TestStagingResultClearsBusy(t *testing.T) {
 		t.Fatal("a staging round's result must clear the busy flag it set")
 	}
 }
+
+// A parkable popup that arrived UNDER a shown console (B's half-typed
+// commit box, displaced when alt+a showed B's agent) is still parkable: the
+// user's own swap must judge the same top steerRefusal does — the parked
+// one — not the empty live pile, which made alt+w say "cannot switch while
+// a window is open" with nothing but the console on screen.
+func TestAltWUnderAConsoleOverAParkedPopupHidesIt(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Agent")
+	home := m.home
+	m, ok := m.switchView(other)
+	if !ok {
+		t.Fatalf("switchView refused: %s", m.statusMsg)
+	}
+	box := &commitPopup{title: newTextField("half a message")}
+	m = m.pushLayer(box)
+	m = pressAlt(t, m, 'w') // the box parks with wt2; home shows
+	if m.viewed != home || m.topLayer() != nil {
+		t.Fatalf("precondition: viewed=%q top=%T", m.viewed, m.topLayer())
+	}
+	m, _ = m.showConsoleBy(id, true, true) // alt+a onto wt2's agent: wt2 arrives under the console
+	if m.viewed != model.KeyOf(other) || m.topLayer() != nil || m.consoleParked == nil || len(m.consoleParked.layers) != 1 {
+		t.Fatalf("precondition: viewed=%q top=%T parked=%+v", m.viewed, m.topLayer(), m.consoleParked)
+	}
+	m, _ = m.cycleWorktrees()
+	if m.console != nil {
+		t.Fatalf("alt+w must hide the console first (status %q)", m.statusMsg)
+	}
+	if m.topLayer() != box {
+		t.Fatalf("the parked box must be live again, got %T", m.topLayer())
+	}
+}

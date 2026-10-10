@@ -218,13 +218,7 @@ func (m Model) steerRefusal() string {
 	case m.stashView != nil && m.stashView.typing:
 		return "the user is typing"
 	}
-	// A console shown over a parked stack: the switch would drop what is
-	// parked, so its top answers as a live one would.
-	top := m.topLayer()
-	if top == nil && m.console != nil && m.consoleParked != nil && len(m.consoleParked.layers) > 0 {
-		top = m.consoleParked.layers[len(m.consoleParked.layers)-1]
-	}
-	switch l := top.(type) {
+	switch l := m.effectiveTop().(type) {
 	case nil, *diffView, *historyView, *blameView:
 		return ""
 	case *fileViewer:
@@ -243,6 +237,20 @@ func (m Model) steerRefusal() string {
 		return ""
 	}
 	return refusalWindowOwnsKeyboard
+}
+
+// effectiveTop is the top window a switch would act on: the live top, or —
+// under a console shown over a parked stack — the parked top, since the
+// switch would carry it with the worktree as a live one. steerRefusal and
+// switchRefusalBy judge the SAME window: a parkable popup displaced under
+// a console (B's commit box, when alt+a showed B's agent) is parkable
+// still, and must not refuse the user's own swap as "a window is open".
+func (m Model) effectiveTop() layer {
+	top := m.topLayer()
+	if top == nil && m.console != nil && m.consoleParked != nil && len(m.consoleParked.layers) > 0 {
+		top = m.consoleParked.layers[len(m.consoleParked.layers)-1]
+	}
+	return top
 }
 
 // refusalWindowOwnsKeyboard is steerRefusal's LAST answer: every other
