@@ -441,6 +441,9 @@ func (m Model) renderDiffView() string {
 	if v.lsel.on {
 		hint = diffSelectHint()
 	}
+	if v.cs.on {
+		hint = charSelHint(v.cs, v.charRows())
+	}
 	if v.stk == nil && v.hasImages() {
 		hint = v.imageHint()
 	}
@@ -567,6 +570,15 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 			// flag rides along so the current hit lights up on both.
 			if r.Kind == textdiff.Same && len(lh) == 0 {
 				lh = rh
+			}
+		}
+		// The character selection's stripe and cursor ride the hit channel
+		// (sel spans), on the cursor side only.
+		if sp := v.charSpansOn(dr.line); sp != nil {
+			if v.onOld {
+				lh = append(lh, sp...)
+			} else {
+				rh = append(rh, sp...)
 			}
 		}
 		switch v.long {
@@ -958,6 +970,10 @@ func hotEmphBody(text string, spans []textdiff.Span, toks []syntax.Tok, tw int, 
 // foreground: an ordinary hit / word-diff span keeps bold (diffEmph's 231
 // foreground would become a white block), and the CURRENT hit is untouched
 // because currentHitStyle flips the reverse back off by design.
+//
+// A character selection (charsel.go) rides the same mask: emphSel wears the
+// selection stripe, emphSelCur the current-hit style over it, so the cursor
+// stays visible inside the range.
 func styledRuns(disp []rune, emph []emphLevel, cls []syntax.Class, base lipgloss.Style) string {
 	s := st()
 	rev := base.GetReverse()
@@ -969,6 +985,10 @@ func styledRuns(disp []rune, emph []emphLevel, cls []syntax.Class, base lipgloss
 		}
 		seg := string(disp[i:j])
 		switch emph[i] {
+		case emphSelCur: // the character selection's cursor: visible inside the stripe
+			b.WriteString(s.currentHitStyle(s.selectionStyle(base)).Render(seg))
+		case emphSel: // the character selection's stripe (styles.selectionStyle)
+			b.WriteString(s.selectionStyle(base).Render(seg))
 		case emphCur:
 			b.WriteString(s.currentHitStyle(base).Render(seg))
 		case emphHit, emphWord:

@@ -82,6 +82,12 @@ type contentLine struct {
 // contentPopup is a generic read-only viewer popup: any list of lines with
 // repo-popup-style type-to-filter search and cursor-driven scrolling. The
 // help window is its first consumer.
+// charSeg maps one of the character selection's display rows back to the
+// box's logical line: the line's index in visible(), the rune offset of the
+// row's text in that line's winRow text, and the layout runes (lead, hang
+// indent) before it.
+type charSeg struct{ line, off, pad int }
+
 type contentPopup struct {
 	popupMax
 	title string
@@ -120,7 +126,18 @@ type contentPopup struct {
 	// then exactly the plain one-row-per-line arithmetic.
 	extraRows func(from, to int) int
 	// lsel is the preview's line selection over lines (space/space/enter).
-	lsel    lineSel
+	lsel lineSel
+	// cs is the character selection (charsel.go, spec 2026-10-10): a modal
+	// copy mode over the DISPLAY rows the box draws. csRows / csSeg are its
+	// layout, rebuilt on v for the box's current width (csW) and dropped —
+	// with the mode — when the width changes (the rows re-wrap, so a
+	// position would name other runes). pageH is the pager height the last
+	// render used (pgup/pgdn, keeping the cursor on screen).
+	cs      textSel
+	csRows  []charRow
+	csSeg   []charSeg
+	csW     int
+	pageH   int
 	mode    dispMode // text display mode; z cycles
 	hscroll int      // modeScroll horizontal offset
 	footer  string   // optional line above the hint (e.g. commit author · date); "" = none
@@ -414,32 +431,9 @@ func (p *contentPopup) render(m Model, below string) string {
 // box draws the viewer box. Headings render bold, the cursor row reversed; the
 // window follows the cursor via the same windowRows helper the panels use.
 func (p *contentPopup) box(m Model) string {
-	w, _ := m.overlayDims()
-	inner := popupResolveWidth(w, p.maximized, contentPopupWidth(w))
-	if p.fitContent {
-		inner = popupFitWidth(w, p.maximized, contentPopupWidth(w), p.widestLine())
-	}
+	inner, textW, margin, gutter, bodyW := p.layoutWidths(m)
 	s := st()
-	// lipgloss wraps text at Width minus the horizontal padding; truncate to
-	// that true text width so a full-width row can never spill onto a wrap line.
-	textW := inner - s.modalStyle.GetHorizontalPadding()
-	margin := 0
-	if p.prose {
-		textW, margin = readingColumn(textW, m.readingWidth())
-	}
-
-	// In block mode the indent sits OUTSIDE the window: rows are laid out at
-	// bodyW and the gutter is added to each finished line here. That keeps a
-	// WRAPPED continuation on the same margin as the line it belongs to (spaces
-	// baked into the row text would be consumed by its first display line only)
-	// AND keeps the band's tint off the gutter — the band is the message, so it
-	// starts where the text starts.
-	gutter := 0
-	if p.block {
-		gutter = messageBlockGutter
-	}
 	pad := strings.Repeat(" ", gutter)
-	bodyW := textW - 2*gutter
 
 	vis := p.visible()
 	wr := make([]winRow, len(vis))
@@ -474,6 +468,14 @@ func (p *contentPopup) box(m Model) string {
 			if !l.heading || i == p.sel {
 				wr[i].elideHead = 2
 			}
+		}
+	}
+	if p.cs.on && p.csW != bodyW {
+		p.cs.leave() // the rows re-wrapped (a resize, ctrl+t): positions mean other runes
+	}
+	if p.cs.on {
+		for i := range wr {
+			wr[i].emph = p.charEmphFor(i, len([]rune(wr[i].text)))
 		}
 	}
 	capRows := m.contentPageRows()
@@ -523,11 +525,13 @@ func (p *contentPopup) box(m Model) string {
 	if p.noCursor {
 		var total int
 		win, total = p.pagerWindow(wr, o, capRows)
+		p.pageH = len(win)
 		overflow = total > len(win)
 		pos, of = p.sel+1, total
 	} else {
 		o.h = wrapContentLines(wr, o, capRows)
 		win = renderWindow(wr, o)
+		p.pageH = o.h
 	}
 
 	var b strings.Builder
@@ -572,16 +576,26 @@ func (p *contentPopup) box(m Model) string {
 		}
 		b.WriteString(notePad + st().saveBanner.Width(noteW).Render(truncate(i18n.T("saved to %s", p.saved), noteW)) + "\n\n")
 	}
-	if p.keys != "" {
+	keys := p.keys
+	if p.cs.on {
+		keys = charSelHint(p.cs, p.csRows)
+	}
+	if keys != "" {
 		if !p.block && p.saved == "" {
 			b.WriteString("\n")
 		}
-		b.WriteString(pad + truncate(p.keys, textW-gutter) + "\n")
+		b.WriteString(pad + truncate(keys, textW-gutter) + "\n")
 	}
 	if p.hintGap() {
 		b.WriteString("\n")
 	}
 	hint := i18n.T("[/] search  [ctrl+w] mode  [s] save  [ctrl+t] full  [q] close")
+	if p.cs.on {
+		hint = i18n.T("[esc] leave the selection")
+		if p.cs.fixed {
+			hint = i18n.T("[esc] drop the start")
+		}
+	}
 	if overflow {
 		hint = fmt.Sprintf("%d/%d  %s", pos, of, hint)
 	}
@@ -677,4 +691,152 @@ func (p *contentPopup) widestLine() int {
 // ends with one, and block mode writes one below its band.
 func (p *contentPopup) hintGap() bool {
 	return p.keys == "" && p.saved == "" && !(p.block && p.footer == "")
+}
+
+// layoutWidths is the box's width arithmetic — the inner box, the text
+// width, the prose margin, block mode's gutter and the body width rows are
+// laid out at — shared by the render and the character selection's layout.
+func (p *contentPopup) layoutWidths(m Model) (inner, textW, margin, gutter, bodyW int) {
+	w, _ := m.overlayDims()
+	inner = popupResolveWidth(w, p.maximized, contentPopupWidth(w))
+	if p.fitContent {
+		inner = popupFitWidth(w, p.maximized, contentPopupWidth(w), p.widestLine())
+	}
+	textW = inner - st().modalStyle.GetHorizontalPadding()
+	if p.prose {
+		textW, margin = readingColumn(textW, m.readingWidth())
+	}
+	if p.block {
+		gutter = messageBlockGutter
+	}
+	bodyW = textW - 2*gutter
+	return inner, textW, margin, gutter, bodyW
+}
+
+// charLead is the layout runes a non-block row's text sits behind ("  ", or
+// "> " on the cursor row): the selection never covers them.
+func (p *contentPopup) charLead() int {
+	if p.block {
+		return 0
+	}
+	return 2
+}
+
+// charLayout rebuilds the character selection's rows for the box's current
+// width: in wrap mode one row per display segment (wrapRow, the layout
+// renderWindow uses), with the lead and the hang indent stripped and marked
+// as the segment's pad; in the other modes one row per line.
+func (p *contentPopup) charLayout(m Model) {
+	_, _, _, _, bodyW := p.layoutWidths(m)
+	p.csW = bodyW
+	p.csRows, p.csSeg = nil, nil
+	lead := p.charLead()
+	o := winOpts{w: bodyW, mode: p.mode, charWrap: p.charWrap}
+	for i, l := range p.visible() {
+		text := strings.Repeat(" ", lead) + l.text
+		if p.mode != modeWrap || l.noWrap {
+			r := []rune(text)
+			p.csRows = append(p.csRows, charRow{text: r[min(lead, len(r)):]})
+			p.csSeg = append(p.csSeg, charSeg{line: i, off: lead, pad: lead})
+			continue
+		}
+		segs, indent := wrapRow(text, bodyW, o, 0)
+		offs, pads := wrapSegOffsets(text, segs, indent)
+		softBreak := false // the segment before ended on a space (a word break)
+		for si, s := range segs {
+			r := []rune(s)
+			pad := pads[si]
+			if si == 0 {
+				pad = min(lead, len(r))
+			}
+			// The wrapper keeps the break's space at a segment's end: layout,
+			// not text — the join adds the one space a copy wants. A break
+			// with no space (a word wider than the line) joins with nothing.
+			body := r[pad:]
+			trimmed := false
+			for len(body) > 0 && body[len(body)-1] == ' ' {
+				body = body[:len(body)-1]
+				trimmed = true
+			}
+			p.csRows = append(p.csRows, charRow{text: body, wraps: si > 0, hard: si > 0 && !softBreak})
+			softBreak = trimmed
+			p.csSeg = append(p.csSeg, charSeg{line: i, off: offs[si] + (pad - pads[si]), pad: pad})
+		}
+	}
+}
+
+func (p *contentPopup) charRows() []charRow { return p.csRows }
+func (p *contentPopup) charPage() int       { return max(p.pageH, 1) }
+
+// charEnter turns the mode on at display row `at` (the pager's top line);
+// false when there is nothing to select.
+func (p *contentPopup) charEnter(m Model, at int) bool {
+	p.charLayout(m)
+	if p.pageH == 0 { // no render yet: the page capacity until the box measures itself
+		p.pageH = m.contentPageRows()
+	}
+	return p.cs.enter(p.csRows, pos{row: at})
+}
+
+// charFollow keeps the cursor's row on screen: the pager's top (sel) moves
+// the least it must.
+func (p *contentPopup) charFollow() {
+	h := p.charPage()
+	if p.cs.cur.row < p.sel {
+		p.sel = p.cs.cur.row
+	}
+	if p.cs.cur.row >= p.sel+h {
+		p.sel = p.cs.cur.row - h + 1
+	}
+}
+
+// charEmphFor is line i's emphasis mask (n = its winRow text's runes): the
+// selection of every display row that belongs to it, placed behind each
+// row's pad. nil when the mode is off or the line is untouched.
+func (p *contentPopup) charEmphFor(i, n int) []emphLevel {
+	if !p.cs.on {
+		return nil
+	}
+	var out []emphLevel
+	for k, seg := range p.csSeg {
+		if seg.line != i {
+			continue
+		}
+		m := charSelEmph(p.cs, k, len(p.csRows[k].text))
+		if m == nil {
+			continue
+		}
+		if out == nil {
+			out = make([]emphLevel, n)
+		}
+		for j, l := range m {
+			if at := seg.off + j; at >= 0 && at < n && l != emphNone {
+				out[at] = l
+			}
+		}
+	}
+	return out
+}
+
+// charKey routes a key to the mode while it is on; handled says the host
+// must return. The copy goes to the clipboard with its count on the status
+// line; a notice goes to the status line too.
+func (p *contentPopup) charKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
+	if !p.cs.on {
+		return m, nil, false
+	}
+	res := charSelKey(&p.cs, p, msg)
+	if !res.handled {
+		return m, nil, false
+	}
+	if p.cs.on {
+		p.charFollow() // the mode gone, the pager stays where the reader was
+	}
+	if res.notice != "" {
+		m.statusMsg = res.notice
+	}
+	if res.copy != "" {
+		return m, m.copyToClipboardCmd(copiedCharsText(res.count), res.copy), true
+	}
+	return m, nil, true
 }
