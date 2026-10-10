@@ -83,3 +83,16 @@ func TestStackCharSelCursorShowsOnAnEmptyRow(t *testing.T) {
 		t.Fatalf("no reversed cell on the empty prose row: %q", line)
 	}
 }
+
+// v on a row the mode skips (a stack header) lands the character cursor on
+// the first live row — and the line cursor goes there AT ONCE, not on the
+// next key.
+func TestStackCharSelFromAHeaderMovesTheLineCursorAtOnce(t *testing.T) {
+	t.Parallel()
+	m, v, first := openedReviewStack(t)
+	v.setCursorLine(v.stk.files[0].hdr, m.diffBodyRows())
+	m = feedDiff(m, "v")
+	if !v.cs.on || v.curLine != first {
+		t.Fatalf("v on the header: curLine %d, want the first prose line %d", v.curLine, first)
+	}
+}

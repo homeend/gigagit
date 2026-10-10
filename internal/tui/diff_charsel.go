@@ -188,7 +188,11 @@ func (m Model) diffCharEnter(v *diffView) bool {
 		v.csBase, _ = v.fileLineRange(v.csFile)
 	}
 	v.csPage = m.diffBodyRows()
-	return v.cs.enter(v.charRows(), pos{row: v.curLine - v.csBase})
+	if !v.cs.enter(v.charRows(), pos{row: v.curLine - v.csBase}) {
+		return false
+	}
+	v.setCursorLine(v.csBase+v.cs.cur.row, m.diffBodyRows()) // a skipped row (a header): the line cursor lands with it
+	return true
 }
 
 // diffCharKey gives the character selection every key while it is on, and
