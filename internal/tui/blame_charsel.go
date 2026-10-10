@@ -104,6 +104,7 @@ func (m Model) blameCharKey(b *blameView, msg tea.KeyMsg) (Model, tea.Cmd, bool)
 			b.csMode, b.csSwapped, b.mode, b.hscroll = b.mode, true, modeScroll, 0
 		}
 		b.sel = b.cs.cur.row
+		b.charPan(m) // a view panned right before v shows the cursor at once
 		return m, nil, true
 	}
 	res := charSelKey(&b.cs, b, msg)

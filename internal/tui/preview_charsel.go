@@ -157,6 +157,7 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		p.csLines = p.lines
 		p.cur = p.cs.cur.row
 		p.ensureCursorVisible(rows)
+		p.charPan(innerW) // a view panned right before v shows the cursor at once
 		return m, nil, true
 	}
 	res := charSelKey(&p.cs, p, msg)
