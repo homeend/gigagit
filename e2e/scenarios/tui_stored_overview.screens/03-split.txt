@@ -37,4 +37,4 @@
 │                                                                              ││                                                                              │
 │                                                                              ││                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
-[tab] other side  [bksp] left side  [esc] close  [↑↓] anchor  [enter] open  [/] find  [y] copy  [.] menu
+anchor 1/2 · line two  [tab] other side  [bksp] left side  [esc] close  [↑↓] anchor  [enter] open  [/] find  [y] copy  [.] menu

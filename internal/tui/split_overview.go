@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
@@ -53,6 +55,11 @@ func (p *overviewPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, m.copyToClipboardCmd(i18n.T("copied"), d.ov.text)
 	case "r":
 		return m, nil // a stored overview has no store reference (A9)
+	case "X", "ctrl+]":
+		// The overview is what the split steers by: it leaves the screen the
+		// way esc takes it (kept open in the background, only the switcher's x
+		// closes it), never leaving a split with nothing to steer.
+		return m.closeSplit(p.sv), nil
 	}
 	return p.docPane.update(m, msg)
 }
@@ -77,13 +84,30 @@ func (m Model) steerSplit(sv *splitView) (Model, tea.Cmd) {
 	if a.plain || a.target.Note != "" || a.target.Path == "" {
 		return m, nil
 	}
+	var cmd tea.Cmd
 	switch r := sv.right.(type) {
 	case *docPane:
-		return m.docSteer(sv, r, ov, a)
+		m, cmd = m.docSteer(sv, r, ov, a)
 	case *stackPane:
-		return m.stackSteer(sv, r, a)
+		m, cmd = m.stackSteer(sv, r, a)
 	}
-	return m, nil
+	k, n := 0, 0 // the anchor's place among those a steer can reach
+	for i, x := range ov.ov.anchors {
+		if x.plain || x.target.Note != "" || x.target.Path == "" {
+			continue
+		}
+		if n++; i == ov.ov.sel {
+			k = n
+		}
+	}
+	label := a.target.Label
+	if label == "" {
+		label = a.dest
+	}
+	if m.statusMsg == "" || !strings.HasPrefix(m.statusMsg, i18n.T("no file %s", a.target.Path)) {
+		m.statusMsg = i18n.T("anchor %d/%d · %s", k, n, label)
+	}
+	return m, cmd
 }
 
 // docSteer is the single-mode steer: the anchor's file at the tip in the
@@ -159,8 +183,8 @@ func (m Model) openReviewOverviewSplit() (Model, tea.Cmd) {
 	d := m.reviewOverviewDoc(st, rows, inner)
 	m = m.detachDoc(d) // a viewer still showing it (opened narrow before) gives it up
 	sv := &splitView{onLeft: true}
-	sv.left = &overviewPane{docPane: docPane{d: d}, sv: sv}
-	sv.right = &docPane{}
+	sv.left = &overviewPane{docPane: docPane{d: d, stackable: true}, sv: sv}
+	sv.right = &docPane{stackable: true}
 	if m.reviewStacked {
 		sv.right = m.newStackPane(sv, st)
 	}

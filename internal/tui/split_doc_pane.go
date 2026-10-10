@@ -12,6 +12,9 @@ import (
 type docPane struct {
 	d     *openFile
 	empty string
+	// stackable: S toggles the review split's file pane single ⇄ stacked
+	// (the review split's panes only).
+	stackable bool
 }
 
 func (p *docPane) doc() *openFile { return p.d }
@@ -53,6 +56,9 @@ func (p *docPane) hint(m Model) string {
 		return ""
 	}
 	h := i18n.T("[alt+↑↓] line  [spc] mark  [/] find  [X] close  [↑/↓] scroll  [ctrl+w] view")
+	if p.stackable {
+		h = i18n.T("[S] stacked") + "  " + h
+	}
 	if p.d.bands() != nil {
 		h = i18n.T("[n/p] anchors") + "  " + h
 	}
@@ -87,7 +93,7 @@ func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	scroll := func(delta int) { pp.scrollBy(delta, rows) }
 	switch msg.String() {
 	case "S": // single ⇄ stacked, from either pane of the review split
-		if sv := m.splitLayer(); sv != nil && m.topLayer() == sv {
+		if sv := m.splitLayer(); p.stackable && sv != nil && m.topLayer() == sv {
 			return m.toggleReviewStacked(sv)
 		}
 	case "X":

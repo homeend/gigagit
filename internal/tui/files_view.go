@@ -46,6 +46,7 @@ func (m Model) filesCommitBadges() bool {
 // place that defines "no files view is open". Replaces the per-site partial
 // resets (esc, l, narrow-close, repo-switch) that each cleared a different subset.
 func (m Model) closeFilesView() Model {
+	m = m.dropSplits() // a review split steers through this view: it goes with it
 	m.filesMode = filesModeChanged
 	m.filesView = nil
 	m.filesTitle = ""

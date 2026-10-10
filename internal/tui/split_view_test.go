@@ -172,15 +172,21 @@ func TestSplitLiveDocFindsEitherPane(t *testing.T) {
 	}
 }
 
-func TestSplitDetachingAPaneDocumentClosesTheSplit(t *testing.T) {
+// A document leaves its pane for another frame (a document is in one frame
+// at a time): the file pane empties and the split stays; the left document
+// leaving takes the split down, the other document kept in the background.
+func TestSplitDetachingAPaneDocument(t *testing.T) {
 	t.Parallel()
 	m, sv := testSplit(t)
 	m = m.detachDoc(sv.right.doc())
-	if m.hasLayer(sv) {
-		t.Fatal("a document taken to another frame takes the split down")
+	if !m.hasLayer(sv) || sv.right.doc() != nil {
+		t.Fatal("the file pane empties, the split stays")
 	}
-	if !sv.left.doc().backgrounded {
-		t.Fatal("the other pane's document stays open in the background")
+	m, sv = testSplit(t)
+	right := sv.right.doc()
+	m = m.detachDoc(sv.left.doc())
+	if m.hasLayer(sv) || !right.backgrounded {
+		t.Fatal("the left document leaving closes the split, the right one kept in the background")
 	}
 }
 

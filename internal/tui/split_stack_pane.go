@@ -69,7 +69,11 @@ func (m Model) newStackPane(sv *splitView, st *reviewViewState) pane {
 			if l.path == "" {
 				continue
 			}
-			s.files = append(s.files, streamFile{path: l.path, status: l.status, notes: st.counts[l.path]})
+			f := streamFile{path: l.path, status: l.status, notes: st.counts[l.path]}
+			if l.status == "D" { // the review deleted it: nothing to read at the tip
+				f.loaded, f.err = true, errors.New(i18n.T("(not at this commit)"))
+			}
+			s.files = append(s.files, f)
 		}
 	}
 	if len(s.files) > streamFoldOver {
@@ -80,7 +84,7 @@ func (m Model) newStackPane(sv *splitView, st *reviewViewState) pane {
 	d := m.newOpenFile(fileSource{kind: srcReviewStack, rev: st.id}, "files-"+st.id)
 	d.title = i18n.T("Files: %s", reviewLabel(st.review))
 	d.stream, d.from = s, ov
-	p := &stackPane{docPane: docPane{d: d}, sv: sv, stream: s, gen: splitStackGen.Add(1), park: -1}
+	p := &stackPane{docPane: docPane{d: d, stackable: true}, sv: sv, stream: s, gen: splitStackGen.Add(1), park: -1}
 	p.rebuild(m)
 	return p
 }
@@ -90,15 +94,46 @@ func (m Model) newStackPane(sv *splitView, st *reviewViewState) pane {
 func (p *stackPane) rebuild(m Model) {
 	d, s := p.d, p.stream
 	rows, _ := p.sv.geomOf(m, p)
+	// where is a stream line, as (file, offset into its body); back maps it
+	// into the new stream, ok false when that file shows no lines any more.
+	type place struct{ file, off int }
+	where := func(line int) place {
+		f := s.fileAt(line)
+		if f < 0 {
+			return place{-1, 0}
+		}
+		return place{f, line - s.files[f].body}
+	}
+	back := func(pl place) (int, bool) {
+		if pl.file < 0 || pl.file >= len(s.files) || pl.off < 0 || !s.files[pl.file].shows() || pl.off >= len(s.files[pl.file].lines) {
+			return 0, false
+		}
+		return s.files[pl.file].body + pl.off, true
+	}
 	file, off := -1, 0
+	var selA, selE place
 	if len(d.p.lines) > 0 {
-		if file = s.fileAt(d.p.cur); file >= 0 {
-			off = d.p.cur - s.files[file].body
+		cur := where(d.p.cur)
+		file, off = cur.file, cur.off
+		if d.p.lsel.on {
+			selA, selE = where(d.p.lsel.anchor), where(d.p.lsel.end)
 		}
 	}
 	screenRow := d.p.cur - d.p.sel
+	sel := d.p.lsel
 	d.p.lines = s.build()
 	d.p.lsel.clear()
+	if sel.on { // a marked range stays on its file's lines (a load elsewhere renumbers the stream)
+		a, okA := back(selA)
+		e, okE := back(selE)
+		if okA && (okE || !sel.fixed) {
+			sel.anchor, sel.end = a, e
+			d.p.lsel = sel
+		}
+	}
+	if d.p.search.active() { // the hits index the old stream
+		d.p.search.refindFrom(previewSearchLines(d.p), d.p.searchPos(rows))
+	}
 	if file < 0 {
 		return
 	}
@@ -132,7 +167,11 @@ func (p *stackPane) hint(Model) string {
 // (the working tree for a working review).
 func (p *stackPane) loadCmd(m Model, i int) tea.Cmd {
 	path := p.stream.files[i].path
-	src, svc := anchorSource(p.sv.left.doc()), m.svc
+	ov := p.sv.left.doc()
+	if ov == nil || ov.ov == nil {
+		return nil // no overview to say which commit: the split is closing
+	}
+	src, svc := anchorSource(ov), m.svc
 	loader := func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, src.rev, path) }
 	if src.kind == srcWorktree {
 		loader = func(ctx context.Context) ([]byte, error) { return svc.WorktreeFile(ctx, path) }
@@ -326,6 +365,12 @@ func (m Model) stepStreamAnchor(sv *splitView, p *stackPane, dir int) (Model, te
 
 func (p *stackPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	d := p.d
+	if s := msg.String(); s != "n" && s != "p" {
+		// A parked landing belongs to the step that parked it: any other key
+		// abandons it, so a late load never yanks the cursor from where the
+		// reader went (the stacked diff's hunt rule).
+		p.park, p.want.set = -1, false
+	}
 	if nm, cmd, ok := m.previewSelectKey(msg); ok {
 		return nm, cmd
 	}
@@ -384,10 +429,14 @@ func (m Model) toggleReviewStacked(sv *splitView) (Model, tea.Cmd) {
 	if ov == nil || ov.ov == nil {
 		return m, nil
 	}
+	if m.filesReview == nil { // the review the stack lists is gone
+		m.statusMsg = i18n.T("the review is no longer open")
+		return m, nil
+	}
 	switch r := sv.right.(type) {
 	case *stackPane:
 		m = m.setReviewStackedPref(false)
-		dp := &docPane{}
+		dp := &docPane{stackable: true}
 		sv.right = dp
 		fi := r.stream.fileAt(r.d.p.cur)
 		if fi < 0 {

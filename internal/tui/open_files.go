@@ -159,16 +159,21 @@ func (m Model) detachDoc(d *openFile) Model {
 		m.filesPreview = nil
 		m = m.focusTree()
 	}
-	// A document shown in a split pane leaves for another frame: the split
-	// comes down (a document is in one frame at a time) and the other pane's
-	// document stays open in the background.
+	// A document shown in a split pane leaves for another frame (a document
+	// is in one frame at a time): the file pane is emptied and the split
+	// stays; the overview leaving takes the split down, as esc does — there
+	// is nothing left to steer.
 	if sv := m.splitShowing(d); sv != nil {
-		for _, p := range []pane{sv.left, sv.right} {
-			if o := p.doc(); o != nil && o != d {
+		if sv.left.doc() == d {
+			if o := sv.right.doc(); o != nil {
 				o.backgrounded = true
 			}
+			return m.closeSplit(sv)
 		}
-		return m.removeLayer(sv)
+		if dp, ok := sv.right.(*docPane); ok && dp.d == d {
+			dp.d = nil
+		}
+		return m
 	}
 	if m.layers != nil {
 		for _, l := range m.layers.entries {
@@ -269,7 +274,7 @@ func (m Model) focusedDoc() (*openFile, bool) {
 // file — ctrl+] for the mouse.
 func (m Model) backgroundRow() (actionRow, bool) {
 	d, ok := m.focusedDoc()
-	if !ok {
+	if !ok || d.stream != nil { // a split's stacked stream is no open file
 		return actionRow{}, false
 	}
 	return actionRow{

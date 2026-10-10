@@ -123,13 +123,35 @@ func (sv *splitView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		sv.onLeft = true
 		return m, nil
 	case "esc":
-		m = m.removeLayer(sv)
-		if sv.onClose != nil {
-			m = sv.onClose(m)
-		}
-		return m, nil
+		return m.closeSplit(sv), nil
 	}
 	return f.update(m, msg)
+}
+
+// closeSplit pops sv and runs its onClose: esc, and every other way the
+// split is left on purpose (X on the overview, backgrounding the overview).
+func (m Model) closeSplit(sv *splitView) Model {
+	m = m.removeLayer(sv)
+	if sv.onClose != nil {
+		m = sv.onClose(m)
+	}
+	return m
+}
+
+// dropSplits takes every split off the stack, its panes' documents left
+// open in the background: the files view a split was opened from is closing
+// (a narrow resize, a deleted review, another view replacing it), so there
+// is nothing for the split to steer through or return to.
+func (m Model) dropSplits() Model {
+	for sv := m.splitLayer(); sv != nil; sv = m.splitLayer() {
+		for _, p := range []pane{sv.left, sv.right} {
+			if d := p.doc(); d != nil {
+				d.backgrounded = true
+			}
+		}
+		m = m.removeLayer(sv)
+	}
+	return m
 }
 
 // render owns the screen: the two boxes joined, one hint line under them —

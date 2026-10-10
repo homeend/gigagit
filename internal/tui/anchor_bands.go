@@ -221,6 +221,19 @@ func (m Model) bandRows(d *openFile) []actionRow {
 	if d.bands() == nil {
 		return nil
 	}
+	if d.stream != nil { // a split's stack: the walk crosses files (stepStreamAnchor)
+		sv, sp := m.stackPaneByTag(d.tag)
+		if sp == nil {
+			return nil
+		}
+		step := func(dir int) func(Model) (tea.Model, tea.Cmd) {
+			return func(m Model) (tea.Model, tea.Cmd) { return m.stepStreamAnchor(sv, sp, dir) }
+		}
+		return []actionRow{
+			{id: "anchor-next", key: "n", label: i18n.T("Next anchor"), run: step(1)},
+			{id: "anchor-prev", key: "p", label: i18n.T("Previous anchor"), run: step(-1)},
+		}
+	}
 	return []actionRow{
 		{id: "anchor-next", key: "n", label: i18n.T("Next anchor in this file"), run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.stepAnchorBand(d, 1), nil

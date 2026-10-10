@@ -37,4 +37,4 @@
 │                                                                              ││                                                                              │
 │                                                                              ││                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
-[tab] other side  [bksp] left side  [esc] close  [n/p] anchors  [alt+↑↓] line  [spc] mark  [/] find  [X] close  [↑/↓] scroll  [ctrl+w] view
+anchor 2/2 · beta  [tab] other side  [bksp] left side  [esc] close  [n/p] anchors  [S] stacked  [alt+↑↓] line  [spc] mark  [/] find  [X] close  [↑/↓] scroll  […
