@@ -447,3 +447,26 @@ func TestAnchorFileHintInTheCopyMode(t *testing.T) {
 		t.Fatalf("hint in the mode:\n%s", v)
 	}
 }
+
+// In the copy mode a click on an anchor neither selects nor opens it: the
+// mode is modal, the mouse included.
+func TestOverviewClickWaitsInTheCopyMode(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = fvKeys(t, m, keyMsg("v"))
+	if !d.p.cs.on {
+		t.Fatal("v enters the mode")
+	}
+	sel := d.ov.sel
+	w, _ := m.overlayDims()
+	_, margin := readingColumn(w-4, m.readingWidth())
+	s := d.ov.anchors[1].spans[0]
+	click := tea.MouseMsg{X: 2 + margin + s.from + 1, Y: 2 + s.line - d.p.sel, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress}
+	for range 2 {
+		tm, cmd := m.Update(click)
+		m = pumpAll(t, tm.(Model), cmd)
+	}
+	if d.ov.sel != sel || topDoc(m) != d || !d.p.cs.on {
+		t.Fatalf("sel %d→%d top %v on %v: the click acted in the mode", sel, d.ov.sel, topDoc(m), d.p.cs.on)
+	}
+}

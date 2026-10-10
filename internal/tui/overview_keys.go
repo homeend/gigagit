@@ -223,7 +223,7 @@ func (m Model) overviewClick(fv *fileViewer, x, y int) (Model, tea.Cmd) {
 // the focus to it.
 func (m Model) overviewClickIn(d *openFile, l layer, x, y, rows, margin int) (Model, tea.Cmd) {
 	row, col := y-2, x-2-margin
-	if row < 0 || row >= rows || col < 0 {
+	if row < 0 || row >= rows || col < 0 || d.p.cs.on { // the copy mode is modal: a click waits
 		return m, nil
 	}
 	if d.p.mode == modeScroll {
