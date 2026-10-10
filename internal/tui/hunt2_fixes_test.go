@@ -70,3 +70,32 @@ func TestAsyncOpStartersNameTheirWorktree(t *testing.T) {
 		}
 	}
 }
+
+// The editor's exit re-reads the status with no op of its own; its result
+// must not clear the busy flag of an op started meanwhile (a pull pressed
+// before the slow read landed): with it cleared the swap refusal lifted
+// mid-op, and a second op key overwrote the first op's channel.
+func TestEditorStatusReadKeepsARunningOpBusy(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.running, m.opName = true, "pull"
+	mm, _ := m.Update(m.reloadStatusCmd("")())
+	m = mm.(Model)
+	if !m.running || m.opName != "pull" {
+		t.Fatalf("the editor's status read cleared the running op (running=%v opName=%q)", m.running, m.opName)
+	}
+	if m.switchRefusalBy(true) == "" {
+		t.Fatal("alt+w must stay refused while the op runs")
+	}
+}
+
+// A staging round's own result does clear it: that round set it.
+func TestStagingResultClearsBusy(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.running = true
+	mm, _ := m.Update(statusRefreshedMsg{svc: m.svc, staging: true, status: m.status})
+	if mm.(Model).running {
+		t.Fatal("a staging round's result must clear the busy flag it set")
+	}
+}

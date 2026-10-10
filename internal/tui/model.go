@@ -3933,8 +3933,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case statusRefreshedMsg:
-		m.running = false
-		m.opName = ""
+		if msg.staging {
+			// The round that set the busy flag is over. An editor exit's
+			// re-read (reloadStatusCmd) owns no op: an op started before it
+			// landed keeps its flag, or the swap refusal would lift mid-op.
+			m.running = false
+			m.opName = ""
+		}
 		if msg.svc != nil && msg.svc != m.svc {
 			return m, nil // read through another slot's service (an editor exit's reload, then a swap): not this worktree's
 		}
