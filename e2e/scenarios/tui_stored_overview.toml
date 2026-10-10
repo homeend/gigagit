@@ -1,18 +1,21 @@
-name = "tui: a review with a stored overview shows ≡ Overview; enter opens it, its anchor opens the file at the reviewed commit, backspace returns"
+name = "tui: a review's stored overview opens as a split — the overview steers the file pane, S stacks every file, esc returns to the ≡ Overview row"
 
-# A commit adding a.txt (5 lines), reviewed by an agent that stored an
-# overview with one anchor into the file and one into a file the review
-# never read (drawn plain). The review view lists ≡ Summary, then
-# ≡ Overview; the overview viewer walks the anchors.
+# A commit adding a.txt (5 lines) and b.txt (3 lines), reviewed by an agent
+# that stored an overview with one anchor into each file and one into a file
+# the review never read (drawn plain). The review view lists ≡ Summary, then
+# ≡ Overview; enter opens the split: the overview on the left, the anchor's
+# file on the right. ↓ steers to the next anchor, enter focuses the file,
+# backspace returns, S stacks both files, esc closes back to the tree.
 [input]
 steps = [
   { write = "a.txt", content = "one\ntwo\nthree\nfour\nfive\n" },
-  { commit = "add a" },
+  { write = "b.txt", content = "alpha\nbeta\ngamma\n" },
+  { commit = "add a and b" },
 ]
 
 [[run]]
 cmd   = ["review", "save", "gg://{{cwd}}@{{rev:HEAD}}", "--agent", "Claude Code", "--stdin"]
-stdin = '{"version":1,"summary":"## Summary\nfine","overview":"Start at [line two](a.txt:2), then [outside](zzz.go:1).","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"why two?"}]}]}'
+stdin = '{"version":1,"summary":"## Summary\nfine","overview":"Start at [line two](a.txt:2), then [beta](b.txt:2), then [outside](zzz.go:1).","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"why two?"}]},{"path":"b.txt","annotations":[{"newRange":[2,2],"summary":"beta?"}]}]}'
 exit  = 0
 
 [tui]
@@ -28,23 +31,40 @@ screen_contains = ["Reviews", "Claude Code"]
 name = "review"
 keys = ["down", "enter"]
 wait = true
-screen_contains = ["≡ Summary", "≡ Overview", "a.txt"]
+screen_contains = ["≡ Summary", "≡ Overview", "a.txt", "b.txt"]
 
 [[tui.step]]
-name = "overview"
+name = "split"
 keys = ["down", "enter"]
-screen_contains = ["Overview: ", "line two", "outside"]
-
-[[tui.step]]
-name = "anchor"
-keys = ["enter"]
 wait = true
-screen_contains = ["View a.txt @", "┃"]
+screen_contains = ["Overview: ", "line two", "View a.txt @", "two", "[↑↓] anchor"]
 
 [[tui.step]]
-name = "back"
+name = "steer"
+keys = ["down"]
+wait = true
+screen_contains = ["View b.txt @", "beta"]
+
+[[tui.step]]
+name = "focus-right"
+keys = ["enter"]
+screen_contains = ["[n/p] anchors"]
+
+[[tui.step]]
+name = "back-left"
 keys = ["bspace"]
-screen_contains = ["Overview: ", "line two"]
+screen_contains = ["[↑↓] anchor"]
+
+[[tui.step]]
+name = "stacked"
+keys = ["S"]
+wait = true
+screen_contains = ["━━ a.txt", "━━ b.txt", "Files: ", "file 3/3"]
+
+[[tui.step]]
+name = "close"
+keys = ["esc"]
+screen_contains = ["≡ Overview"]
 
 [expect]
 branch = "main"

@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The review overview beside its files
+
+### Added
+- Enter on a review's "≡ Overview" row opens a SPLIT: the overview on the
+  left, the file it points at (at the reviewed commit) on the right. ↑/↓ on
+  the overview step anchor to anchor and the file pane follows; enter
+  focuses the file; tab / shift+tab / alt+←/→ switch sides, backspace
+  focuses the overview, esc closes the split back to the review tree with
+  the cursor on the Overview row. The file pane keeps every viewer key
+  (cursor, selection, search, anchor bands with n/p, `.` menu); the mouse
+  focuses the side it clicks, selects (and steers to) an anchor, and a
+  double click on one focuses the file.
+- `S` in the split stacks every reviewed file into one lazily loaded scroll:
+  a header per file with its note count, `-` / `_` fold one / all, N/P step
+  files, n/p walk the overview's anchors across files (opening a folded or
+  unread file on the way). The choice is remembered on its own, apart from
+  the diff view's stacked mode.
+
+### Internal
+- `internal/tui/split_view.go`: a generic two-pane full-screen layer
+  (`splitView` + the `pane` interface), reusable for other left/right
+  pairings; `docPane` wraps an open file in the preview box, `overviewPane`
+  steers, `stackPane` is the stacked stream (`split_stack.go`). The six
+  "which document is the keyboard on" seams answer through `splitFocus`.
+  The diff view is untouched. Headless e2e runs isolate the new preference.
+
 ## One focused border at a time beside a docked console
 
 ### Fixed

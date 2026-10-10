@@ -492,6 +492,9 @@ document (`"overview"`: markdown whose links are anchors into the reviewed
 change, ≤ 64 KiB, ≤ 100 anchors). It is kept with the review on this machine
 and never sent to GitHub; `gg review save` reports `unresolved: <dest>` for an
 anchor it cannot place, and `gg review show` prints it after the summary.
+In the TUI the review's *≡ Overview* row opens it as a split — the overview on
+the left, the file its selected anchor points at on the right (or every
+reviewed file stacked, `S`) — and walking the anchors steers the file pane.
 A **note has a link too**: `gg link --note <id>` prints `gg://…?note=<id>`
 on the note's own line, `gg note show <id|link>` prints the thread, and
 `gg note reply|resolve <link>` answer it — hand an agent the note link rather
@@ -577,7 +580,10 @@ its ticks through a cancel or a refusal, and `enter` on a row opens its file
 in the diff (reopened, the panel remembers the ticks). A pull request's
 stored reviews head its file list under **Reviews**; a review's *≡ Summary*
 row shows its text and, when one was stored, *≡ Overview* opens the overview
-whose links open the files at the reviewed commit. Right-click a note for
+beside the file its links point at, at the reviewed commit: ↑/↓ walk the
+anchors and the file pane follows, enter (or tab) focuses the file, backspace
+returns to the overview, `S` stacks every reviewed file in one scroll, esc
+returns to the tree. Right-click a note for
 *Copy note link*; in *View all notes* `ctrl+l` copies it. A send that was
 cut off half-way shows a bar to *Finish sending* or *Discard* it.
 

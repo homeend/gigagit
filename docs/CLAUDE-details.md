@@ -6845,3 +6845,53 @@ lands in the viewed tree, the alt+a ring over two worktrees, refusals),
 `round2c_switch_test.go`, cli `session_viewed_test.go`),
 `view_worktrees_test.go`, the hint tests, e2e
 `tui_worktree_switch_fast.toml` (three goldens).
+
+### Review overview split — the split layer (2026-10-10, spec `docs/superpowers/specs/2026-10-10-review-overview-split-design.md`)
+
+Enter on a review's *≡ Overview* row opens `splitView` (`internal/tui/split_view.go`),
+a generic full-screen layer of two `pane`s side by side (equal halves, one hint
+line under them; the split's own keys lead it). The **pane contract**:
+`update`/`render(w,h,focused)`/`title`/`hint`/`captures`/`doc`. The split owns
+tab/shift+tab/alt+←/→ (switch sides), backspace (focus left), esc (pop, then
+`onClose`) and ctrl+c; everything else goes to the focused pane — except that a
+pane's `captures` sees the key first (a search being typed takes every key; esc
+belongs to a live line selection or a committed search). Mouse: `splitMouse`
+(wheel scrolls the side under the pointer, left click focuses that side and
+selects/steers an anchor or places the cursor, right = that side's `.` menu,
+middle = esc).
+
+**The one seam:** `splitFocus()` answers for a split ON TOP whose focused pane
+shows a document — `activePreview`, `focusedDoc`, `topDoc` ask it first;
+`liveDoc` (load results by tag, either pane), `previewDoc`, `docShown` scan the
+split's panes; `detachDoc` on a pane's document pops the whole split (a
+document is in one frame at a time), backgrounding the other pane's document.
+
+**Panes.** `docPane` = an open file drawn with `renderPreviewBoxOpts` (cursor
+hidden when unfocused) and the viewer's key order minus the split's keys.
+`overviewPane` = the stored overview (`reviewOverviewDoc`, shared with the
+narrow full-screen door `openReviewOverviewDoc`): ↑/↓ step anchors and
+`steerSplit`; enter steers and focuses right. `docSteer` (single mode) puts the
+anchor's file at the tip (`anchorSource`: working tree for a working review) in
+the right pane, `from` = the overview and `anchorCur` = the anchor (so bands and
+n/p work), the previous file left open in the background. `stackPane`
+(`split_stack_pane.go`) is ONE unregistered `srcReviewStack` document whose
+lines are `fileStream.build()` (`split_stack.go`): blank, header
+(`stackHeader`, "━━ path (status) ◆n"), rule, then the file's lines or one
+placeholder. **Every (file, line) ↔ stream index goes through the table**
+(`streamLine`, `fileAt`, `nextHeader`) — line numbers repeat across files;
+`bands()`/`curBand()` map each file's bands to stream lines when `d.stream` is
+set, and `docLoaded` is true for any non-empty stream. Loads: `stackPaneMsg`
+tagged by the document's tag + a package-atomic generation, three at a time,
+cursor's file first; `rebuild` keeps the cursor's (file, offset) AND its
+screen row (a load above the reader must not move it). A steer or n/p step into
+a folded/unread file unfolds it and parks (`park`, an anchor index) until the
+load lands; S single→stacked parks a (file, line) in `want`. S remembers its
+choice in promptstate `tui_stacked_review_files` (`reviewStacked`), never the
+diff's; `Headless` isolates it like `diffStacked`.
+
+Gotchas: the review tree refuses every row below 60 columns before the overview
+branch, so the split's own <60 fallback is reachable only by direct call; a pane
+embedding `docPane` must override `render` when it overrides `title` (no
+virtual dispatch through an embedded struct). Tests: `split_view_test.go`,
+`split_overview_test.go`, `split_stack_test.go`, `split_stack_pane_test.go`,
+`split_mouse_test.go`, `split_prefs_test.go`, e2e `tui_stored_overview.toml`.
