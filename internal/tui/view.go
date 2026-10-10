@@ -819,6 +819,11 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 		cmpSet := m.compareSetDisplayIndices(p)
 		sel := m.sel[p]
 		isFocused := m.panelFocused(p)
+		// A bound console has the keyboard and the Commits column the focus,
+		// so no panel would show a cursor: the active left tab keeps a dimmed
+		// one, so the row alt+a / alt+t landed on (the session's sub-row,
+		// selectSessionRow) stays visible under the console.
+		ghost := !isFocused && p == m.activeLeftTab && m.console != nil && m.console.focused
 		// Only the rows the window will actually show need their (potentially
 		// expensive) per-row text built. In cutoff/scroll mode each row is exactly
 		// one display line, so the visible span is [start,end) and off-window rows
@@ -870,14 +875,16 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 				prefix = "◉ "
 			} else if marked[i] {
 				prefix = "◆ "
-			} else if i == sel && isFocused {
+			} else if i == sel && (isFocused || ghost) {
 				prefix = "> "
 			}
 			if i == sel && isFocused {
 				st = s.selectedRow
+			} else if i == sel && ghost {
+				st = s.ghostRow
 			}
 			var deco rowDecorator
-			if i != sel || !isFocused {
+			if i != sel || !(isFocused || ghost) {
 				if i < len(decos) {
 					deco = decos[i]
 				}
