@@ -3772,10 +3772,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A stash op (apply/pop/drop) changed the stash list as well as the
 			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
+			// The list reload is built BEFORE the queued return: it belongs to
+			// the worktree the op ran in (stamped for its slot), and after the
+			// swap m.stashView is the arriving worktree's — usually none.
+			listCmd := m.loadStashListCmd(m.stashView.tag)
 			m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
 			var cmd tea.Cmd
 			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
-			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag), driftCmd, sendCmd)
+			return m, tea.Batch(healthCmd, cmd, listCmd, driftCmd, sendCmd)
 		}
 		// A job an active process started just returned: let the process advance
 		// its state machine (it typically triggers a reload itself). This is the
