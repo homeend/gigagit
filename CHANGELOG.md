@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Character selection follow-ups: the deferred minors
+
+### Changed
+- ↓ on an overview split's last anchor pages through the text below it and
+  wraps to the first anchor only once the end is on screen; ↑ on the first
+  anchor pages up through text above it the same way.
+
+### Fixed
+- The copy mode keeps its cursor on screen on a row whose indent alone is
+  as wide as the pane (deep nesting in a narrow split pane).
+- A key pressed after the text under the copy mode reloaded no longer runs
+  as a plain key (in the split it stepped the overview's anchor).
+- The stacked file pane says "the selection stays in this file" when the
+  copy cursor stops at the file's edge, as the stacked diff does.
+- A popup handing off to an operation no longer leaves a split's pane in
+  the copy mode.
+
 ## Character selection in the overview split
 
 ### Added

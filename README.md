@@ -494,8 +494,9 @@ and never sent to GitHub; `gg review save` reports `unresolved: <dest>` for an
 anchor it cannot place, and `gg review show` prints it after the summary.
 In the TUI the review's *≡ Overview* row opens it as a split — the overview on
 the left, the file its selected anchor points at on the right (or every
-reviewed file stacked, `S`) — and walking the anchors steers the file pane;
-`N`/`P` on the file pane step to the overview's next / previous anchor. The
+reviewed file stacked, `S`) — and walking the anchors steers the file pane
+(↓ past the last anchor pages through the text below it before it wraps to
+the first; ↑ above the first the same way); `N`/`P` on the file pane step to the overview's next / previous anchor. The
 review's remarks show as read-only boxes under their lines (a remark on a
 line the change deleted stays in the diff). Moving on the file never moves
 the overview's selection: the anchor whose block the cursor is in is marked
