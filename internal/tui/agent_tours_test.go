@@ -128,10 +128,27 @@ func TestClosedReportTourComesBackOnlyWithANewReport(t *testing.T) {
 }
 
 func topTour(m Model) string {
+	if sv, ok := m.topLayer().(*splitView); ok && sv.left.doc() != nil {
+		return sv.left.doc().id()
+	}
 	if fv := layerOf[*fileViewer](m); fv != nil && fv.openFile != nil {
 		return fv.id()
 	}
 	return ""
+}
+
+// Final review I1: a tour opens as the split when the window is wide
+// enough, as every overview does (spec 2026-10-10-overview-split-all R3).
+func TestOpenTourOpensTheSplitWhenWide(t *testing.T) {
+	m, id, wt := tourFixture(t)
+	m.currentWorktree = wt
+	m.width, m.height = 120, 40
+	m, _ = m.openTour(id, "brief")
+	ovID, _ := m.docs.TourID("brief:" + domain.FullSessionID(id))
+	sv, ok := m.topLayer().(*splitView)
+	if !ok || sv.left.doc().id() != ovID {
+		t.Fatalf("top %T: the brief opens beside its files", m.topLayer())
+	}
 }
 
 func TestOpenTourOnTheCurrentWorktree(t *testing.T) {

@@ -23,6 +23,9 @@ type overviewPane struct {
 }
 
 func (p *overviewPane) hint(Model) string {
+	if p.d != nil && p.d.src.kind == srcOverview { // an agent's: r copies a reference to the anchor
+		return i18n.T("[↑↓] anchor  [enter] open  [r] reference  [/] find  [y] copy  [.] menu")
+	}
 	return i18n.T("[↑↓] anchor  [enter] open  [/] find  [y] copy  [.] menu")
 }
 
@@ -54,7 +57,10 @@ func (p *overviewPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "y":
 		return m, m.copyToClipboardCmd(i18n.T("copied"), d.ov.text)
 	case "r":
-		return m, nil // a stored overview has no store reference (A9)
+		if d.ov.sel < 0 || d.src.kind == srcReviewOverview { // a stored overview has no store reference (A9)
+			return m, nil
+		}
+		return m, m.copyToClipboardCmd(i18n.T("Copied anchor reference"), anchorReference(d, d.ov.anchors[d.ov.sel]))
 	case "X", "ctrl+]":
 		// The overview is what the split steers by: it leaves the screen the
 		// way esc takes it (kept open in the background, only the switcher's x
@@ -268,7 +274,11 @@ func (m Model) openOverviewSplit(ov *openFile) (Model, tea.Cmd) {
 	if sv := m.splitShowing(ov); sv != nil && sv.left.doc() == ov {
 		m = m.removeLayer(sv)
 		sv.onLeft = true
-		return m.pushLayer(sv), nil
+		m = m.pushLayer(sv)
+		if sv.right.doc() == nil { // its file was taken out (ctrl+\ on it): show the anchor again
+			return m.steerSplit(sv)
+		}
+		return m, nil
 	}
 	lw, _, bh := m.splitGeom()
 	rows, inner := paneGeom(lw, bh)

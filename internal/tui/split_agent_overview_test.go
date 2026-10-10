@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // agentOverviewModel is a worktree with a.txt (40 lines) and b.txt (5
@@ -176,5 +178,76 @@ func TestStackOnAReviewOverviewAfterTheReviewClosed(t *testing.T) {
 	}
 	if len(sp.stream.files) != 2 || sp.stream.files[0].path != "a.go" || sp.stream.files[1].path != "b.go" {
 		t.Fatalf("files %+v: a.go, b.go (zzz.go and the note are plain at the commit)", sp.stream.files)
+	}
+}
+
+// Final review I2: a resize below the split's width turns it into the
+// overview's full-screen viewer — the narrow door every way in uses.
+func TestNarrowResizeTurnsTheSplitIntoTheViewer(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModel(t, 120)
+	ov := findOverviewDoc(t, m)
+	u, _ := m.Update(tea.WindowSizeMsg{Width: 50, Height: 30})
+	m = u.(Model)
+	fv, ok := m.topLayer().(*fileViewer)
+	if m.splitLayer() != nil || !ok || fv.openFile != ov {
+		t.Fatalf("top %T split %v: the overview, full-screen", m.topLayer(), m.splitLayer() != nil)
+	}
+}
+
+// Final review I2: a closing files view takes only the split that steers
+// through it (a review's); an agent overview's split stays.
+func TestFilesViewClosingKeepsAnAgentSplit(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModel(t, 120)
+	m = m.closeFilesView()
+	if m.splitLayer() == nil {
+		t.Fatal("an agent overview's split does not depend on the files view")
+	}
+}
+
+// Final review I3: the right pane's file taken out to the full-screen viewer
+// (ctrl+\ on it), backspace brings the split back WITH a file on the right.
+func TestSplitComesBackWithItsFileAfterTheFileWasTakenOut(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModel(t, 120)
+	a := m.splitLayer().right.doc()
+	m, cmd := m.bringToFront(a) // the switcher's enter on a.txt
+	m = drainCmds(t, m, cmd)
+	m = pressDrain(t, m, "backspace")
+	sv := m.splitLayer()
+	if sv == nil || m.topLayer() != sv || sv.right.doc() == nil {
+		t.Fatalf("top %T right %v: the split comes back with its file", m.topLayer(), sv != nil && sv.right.doc() != nil)
+	}
+}
+
+// Final review I4: r copies the selected anchor's reference on an agent
+// overview in the split, by key and by the . menu (a stored review's
+// overview has none, A9).
+func TestSplitAgentOverviewRCopiesTheAnchorReference(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModel(t, 120)
+	var got string
+	m = captureClip(m, &got)
+	m = pressDrain(t, m, "r")
+	if !strings.Contains(got, "a.txt:2") {
+		t.Fatalf("copied %q, want the anchor's reference", got)
+	}
+	got = ""
+	runMenuRow(t, m, "overview-ref")
+	if !strings.Contains(got, "a.txt:2") {
+		t.Fatalf("menu copied %q", got)
+	}
+}
+
+// Found in the fix pass: the . menu over an agent overview's split (no files
+// view under it) is the split's, never the hidden Commits panel's actions.
+func TestSplitMenuWithoutAFilesViewIsTheSplits(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModel(t, 120)
+	for _, l := range menuLabels(m) {
+		if l == "Show as list" || l == "Show as graph" {
+			t.Fatalf("the Commits panel's rows leak into the split's menu: %q", menuLabels(m))
+		}
 	}
 }

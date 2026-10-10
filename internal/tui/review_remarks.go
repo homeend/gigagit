@@ -118,5 +118,6 @@ func (m Model) reviewNotesLanded(msg reviewNotesMsg) Model {
 	}
 	d.reviewNotes, d.reviewNotesOf = remarkBoxes(msg.notes), msg.review
 	d.syncNoteRows()
+	d.p.ensureCursorVisible(m.docRows(d)) // a box above the cursor must not push the steered line out
 	return m
 }

@@ -94,6 +94,13 @@ func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 	// list's most-recently-shown order, which every step here would reshuffle
 	// (a third file would never come up).
 	var others []*openFile
+	if m.splitShowing(d) != nil { // a split's file pane steps its own notes: the split stays
+		if len(mine) == 0 {
+			return m, nil, false
+		}
+		m.statusMsg = i18n.T("no more notes")
+		return m, nil, true
+	}
 	for _, e := range m.openFiles.list(m.currentWorktree) {
 		if e != d && len(e.shownNotes()) > 0 {
 			others = append(others, e)

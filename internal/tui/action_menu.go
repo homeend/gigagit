@@ -659,7 +659,7 @@ func rowByID(rows []actionRow, id string) (actionRow, bool) {
 // editor, hunk picker) are NOT content windows.
 func (m Model) inContentWindow() bool {
 	switch m.topLayer().(type) {
-	case *historyView, *blameView, *fileViewer:
+	case *historyView, *blameView, *fileViewer, *splitView: // a split stands with or without a files view under it
 		return true
 	}
 	if m.diffLayer() != nil || m.filesView != nil {

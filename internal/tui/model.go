@@ -592,6 +592,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// closing (leftColumnPanels empties below 40 columns and refills on
 		// widen), so this is a pin-resume point like reRoot/closeStashView.
 		m = m.reconcileFullscreenFocus()
+		if msg.Width > 0 && msg.Width < splitMinWidth {
+			m = m.narrowSplits() // two panes no longer fit: the overview goes full-screen
+		}
 		if m.filesView != nil && msg.Width > 0 && msg.Width < 40 {
 			// The narrow layout has no left column; without this the view
 			// would keep capturing keys while invisible.
@@ -2009,7 +2012,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.tour != "" && !m.consoleSwitch.armed {
 				tour := m.tour
 				m.tour = ""
-				m = m.syncOverviews().showTour(tour)
+				var show tea.Cmd
+				m, show = m.syncOverviews().showTour(tour)
+				previewsChain = tea.Batch(previewsChain, show)
 			}
 			// Rebuild the commit graph so WIP pseudo-rows (◇ Working tree/Staged)
 			// stay in sync with the new status, even on the proc path (e.g. after

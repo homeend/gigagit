@@ -327,6 +327,11 @@ func (m Model) splitOverviewRows(sv *splitView, d *openFile) []actionRow {
 			return nm, cmd
 		}})
 	}
+	if i := d.ov.sel; i >= 0 && d.src.kind != srcReviewOverview { // a stored overview has no store reference (A9)
+		ref := m.copyRow("overview-ref", i18n.T("Copy anchor reference"), i18n.T("Copied anchor reference"), anchorReference(d, d.ov.anchors[i]))
+		ref.key = "r"
+		rows = append(rows, ref)
+	}
 	cp := m.copyRow("overview-copy", i18n.T("Copy overview"), i18n.T("copied"), d.ov.text)
 	cp.key = "y"
 	return append(rows, cp)

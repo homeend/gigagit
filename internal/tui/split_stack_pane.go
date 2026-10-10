@@ -237,6 +237,8 @@ func (m Model) stackNotesLanded(msg splitStackNotesMsg) Model {
 	}
 	p.stream.files[msg.file].boxes = remarkBoxes(msg.notes)
 	p.mapBoxes()
+	rows, _ := p.sv.geomOf(m, p)
+	p.d.p.ensureCursorVisible(rows) // a box above the cursor must not push it out
 	return m
 }
 

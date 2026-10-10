@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // The file an overview of a review steered to draws the review's remark on
@@ -160,6 +161,40 @@ func TestStackBoxTitleNamesTheFilesLine(t *testing.T) {
 		if got := noteTitle(sp.d.boxNote(n)); !strings.Contains(got, "line 3") {
 			t.Fatalf("title %q for a remark on its file's line 3 (stream line %d)", got, n.Start)
 		}
+	}
+	_ = m
+}
+
+// Final review M11 (re-graded Important): } past the last note in a split
+// stays in the split — it never opens another steered file full-screen.
+func TestNextNotePastTheLastStaysInTheSplit(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModel(t)
+	m = pressDrain(t, m, "tab")
+	m = pressDrain(t, m, "N") // b.go: its remark fetched, then
+	m = pressDrain(t, m, "P") // back to a.go
+	sv.right.doc().p.cur = 2  // on the remark, the last note in a.go
+	m = pressDrain(t, m, "}")
+	if m.topLayer() != sv || sv.right.doc().path != "a.go" {
+		t.Fatalf("top %T right %s: } left the split", m.topLayer(), sv.right.doc().path)
+	}
+}
+
+// Final review M7 (re-graded Important): remarks landing after the steer
+// keep the cursor's line — the anchor the user asked for — on screen.
+func TestLateRemarksKeepTheCursorLineOnScreen(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModel(t)
+	m.height = 12 // the pane shows 8 rows
+	r := sv.right.doc()
+	rows := m.docRows(r)
+	r.p.sel, r.p.cur = 0, 2 // line 3, on screen
+	long := strings.Repeat("a reason\n", 20)
+	m = m.reviewNotesLanded(reviewNotesMsg{tag: r.tag, review: r.reviewOfFrom(), notes: []domain.ResolvedNote{
+		{Range: [2]int{1, 1}, Note: model.Note{ID: "review:x:9", Summary: "big", Rationale: long}},
+	}})
+	if r.p.cur < r.p.sel || r.p.cur > r.p.lastVisible(rows) {
+		t.Fatalf("cur %d top %d last visible %d: the box pushed the cursor line off screen", r.p.cur, r.p.sel, r.p.lastVisible(rows))
 	}
 	_ = m
 }

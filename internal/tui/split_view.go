@@ -159,18 +159,47 @@ func (m Model) closeSplit(sv *splitView) Model {
 	return m
 }
 
-// dropSplits takes every split off the stack, its panes' documents left
-// open in the background: the files view a split was opened from is closing
-// (a narrow resize, a deleted review, another view replacing it), so there
-// is nothing for the split to steer through or return to.
+// dropSplits takes the splits that steer through the open review view off
+// the stack, their panes' documents left open in the background: that files
+// view is closing (a narrow resize, a deleted review, another view replacing
+// it), so there is nothing for them to steer through or return to. A split
+// over any other overview does not depend on it and stays.
 func (m Model) dropSplits() Model {
-	for sv := m.splitLayer(); sv != nil; sv = m.splitLayer() {
+	if m.layers == nil {
+		return m
+	}
+	for i := len(m.layers.entries) - 1; i >= 0; i-- {
+		sv, ok := m.layers.entries[i].(*splitView)
+		if !ok || m.reviewOf(sv.left.doc()) == nil {
+			continue
+		}
 		for _, p := range []pane{sv.left, sv.right} {
 			if d := p.doc(); d != nil {
 				d.backgrounded = true
 			}
 		}
 		m = m.removeLayer(sv)
+	}
+	return m
+}
+
+// narrowSplits is a resize below splitMinWidth: every split closes (its
+// documents stay open in the background), and the one on top gives way to
+// its overview's full-screen viewer — the door a narrow terminal opens.
+func (m Model) narrowSplits() Model {
+	if m.layers == nil {
+		return m
+	}
+	for i := len(m.layers.entries) - 1; i >= 0; i-- {
+		sv, ok := m.layers.entries[i].(*splitView)
+		if !ok {
+			continue
+		}
+		top, ov := m.topLayer() == sv, sv.left.doc()
+		m = m.closeSplit(sv)
+		if top && ov != nil {
+			m = m.pushLayer(&fileViewer{ov})
+		}
 	}
 	return m
 }
