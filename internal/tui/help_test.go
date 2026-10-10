@@ -188,7 +188,7 @@ func TestHelpListsTheCharacterSelection(t *testing.T) {
 	}
 	text := b.String()
 	for _, want := range []string{"select characters of the summary", "select characters to copy, on the cursor's side",
-		"select characters of the blamed code to copy", "in a file viewer or preview: select characters to copy"} {
+		"select characters of the blamed code to copy", "in a file viewer, a preview or either side of an overview's split: select characters to copy"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help lacks %q", want)
 		}

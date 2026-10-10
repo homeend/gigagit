@@ -471,3 +471,38 @@ func TestDiffCharSelCursorShowsOnACRLFBlankRow(t *testing.T) {
 		t.Fatalf("no cursor cell on the CRLF blank row: %q", on)
 	}
 }
+
+// v on a view already panned right: the cursor (column 0) is brought into
+// view at once, not on the first key — diff, blame and preview alike.
+func TestCharSelEnterPansTheCursorIntoView(t *testing.T) {
+	t.Parallel()
+	t.Run("diff", func(t *testing.T) {
+		m := openedDiffModel(12, textRows(strings.Repeat("x", 200), "y"), nil)
+		v := m.diffLayer()
+		v.setCursorLine(0, m.diffBodyRows())
+		v.long = longScroll
+		v.relayout(v.width)
+		v.hOffset = 150
+		feedDiff(m, "v")
+		if !v.cs.on || v.hOffset != 0 {
+			t.Fatalf("on %v hOffset %d", v.cs.on, v.hOffset)
+		}
+	})
+	t.Run("blame", func(t *testing.T) {
+		m, b := charBlameModel(strings.Repeat("x", 200), "y")
+		b.mode, b.hscroll = modeScroll, 150
+		typeBlame(m, b, "v")
+		if !b.cs.on || b.hscroll != 0 {
+			t.Fatalf("on %v hscroll %d", b.cs.on, b.hscroll)
+		}
+	})
+	t.Run("preview", func(t *testing.T) {
+		m := previewTabModel(t)
+		p := m.filesPreview.p
+		p.mode, p.hscroll = modeScroll, 50
+		feedPreview(m, "v")
+		if !p.cs.on || p.hscroll != 0 {
+			t.Fatalf("on %v hscroll %d", p.cs.on, p.hscroll)
+		}
+	})
+}

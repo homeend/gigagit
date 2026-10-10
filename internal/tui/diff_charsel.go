@@ -181,6 +181,7 @@ func (m Model) diffCharEnter(v *diffView) bool {
 		v.relayout(v.width)
 	}
 	v.setCursorLine(v.csBase+v.cs.cur.row, m.diffBodyRows()) // a skipped row (a header): the line cursor lands with it
+	v.charPan(m)                                             // a view panned right before v shows the cursor at once
 	return true
 }
 

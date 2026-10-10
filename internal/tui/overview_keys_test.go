@@ -430,3 +430,43 @@ func TestBandMenuRowsAndHint(t *testing.T) {
 		t.Fatal("hint lacks [n/p] anchors")
 	}
 }
+
+// In the copy mode a file opened from an anchor drops the [bksp] back /
+// [n/p] anchors lead: both keys wait while the mode is on.
+func TestAnchorFileHintInTheCopyMode(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = fvKeys(t, m, keyMsg("tab"))
+	m = openNth(t, m, d, 1)
+	if _, ok := m.topLayer().(*fileViewer); !ok {
+		t.Fatalf("top = %T, want the viewer", m.topLayer())
+	}
+	m = fvKeys(t, m, keyMsg("v"))
+	v := m.View()
+	if !strings.Contains(v, "[enter] copy") || strings.Contains(v, "[bksp] back") {
+		t.Fatalf("hint in the mode:\n%s", v)
+	}
+}
+
+// In the copy mode a click on an anchor neither selects nor opens it: the
+// mode is modal, the mouse included.
+func TestOverviewClickWaitsInTheCopyMode(t *testing.T) {
+	t.Parallel()
+	m, d, _ := tourModel(t)
+	m = fvKeys(t, m, keyMsg("v"))
+	if !d.p.cs.on {
+		t.Fatal("v enters the mode")
+	}
+	sel := d.ov.sel
+	w, _ := m.overlayDims()
+	_, margin := readingColumn(w-4, m.readingWidth())
+	s := d.ov.anchors[1].spans[0]
+	click := tea.MouseMsg{X: 2 + margin + s.from + 1, Y: 2 + s.line - d.p.sel, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress}
+	for range 2 {
+		tm, cmd := m.Update(click)
+		m = pumpAll(t, tm.(Model), cmd)
+	}
+	if d.ov.sel != sel || topDoc(m) != d || !d.p.cs.on {
+		t.Fatalf("sel %d→%d top %v on %v: the click acted in the mode", sel, d.ov.sel, topDoc(m), d.p.cs.on)
+	}
+}

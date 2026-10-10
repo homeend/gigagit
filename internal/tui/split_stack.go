@@ -96,6 +96,14 @@ func (s *fileStream) fileAt(line int) int {
 	return at
 }
 
+// fileAtOr is fileAt on a stream, -1 with no stream.
+func (s *fileStream) fileAtOr(line int) int {
+	if s == nil {
+		return -1
+	}
+	return s.fileAt(line)
+}
+
 // streamLine is file's 1-based line as a stream index: clamped to the
 // file's last line; the header when the file shows no lines (unloaded,
 // folded, failed, empty).

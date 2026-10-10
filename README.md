@@ -501,6 +501,9 @@ line the change deleted stays in the diff). Moving on the file never moves
 the overview's selection: the anchor whose block the cursor is in is marked
 in that block's colour. ctrl+\ or `gg session files focus` on an overview
 open it this way too.
+`v` on either side selects characters to copy (the modal copy mode: `space`
+start, `enter`/`y` copy, `esc` leave; `tab` waits, and stacked the selection
+stays inside one file).
 A **note has a link too**: `gg link --note <id>` prints `gg://…?note=<id>`
 on the note's own line, `gg note show <id|link>` prints the thread, and
 `gg note reply|resolve <link>` answer it — hand an agent the note link rather

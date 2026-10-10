@@ -653,7 +653,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	if p.cs.on {
 		hint = charSelHint(p.cs, p.csRows)
 	}
-	if d := m.previewDoc(p); d != nil && d.from != nil {
+	if d := m.previewDoc(p); d != nil && d.from != nil && !p.cs.on { // the mode is modal: both keys wait
 		lead := i18n.T("[bksp] back")
 		if d.bands() != nil {
 			lead += "  " + i18n.T("[n/p] anchors")

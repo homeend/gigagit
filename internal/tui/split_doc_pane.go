@@ -29,15 +29,16 @@ func (p *docPane) title() string {
 	return p.d.frameTitle()
 }
 
-// captures: a search being typed takes every key; esc belongs to a live
-// line selection (it unmarks) or a committed search (it clears) before it
-// closes the split — the viewer's order.
+// captures: the character selection and a search being typed take every
+// key (the mode is modal: tab and the split's other keys wait); esc belongs
+// to a live line selection (it unmarks) or a committed search (it clears)
+// before it closes the split — the viewer's order.
 func (p *docPane) captures(msg tea.KeyMsg) bool {
 	if p.d == nil {
 		return false
 	}
 	pp := p.d.p
-	if pp.search.typing {
+	if pp.cs.on || pp.search.typing {
 		return true
 	}
 	return msg.String() == "esc" && (pp.lsel.on || pp.search.query != "")
@@ -54,6 +55,9 @@ func (p *docPane) render(m Model, w, h int, focused bool) string {
 func (p *docPane) hint(m Model) string {
 	if p.d == nil {
 		return ""
+	}
+	if h, on := paneCharHint(p.d); on {
+		return h
 	}
 	h := i18n.T("[alt+↑↓] line  [spc] mark  [/] find  [X] close  [↑/↓] scroll  [ctrl+w] view")
 	if p.stackable {
@@ -74,6 +78,9 @@ func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.openActionMenu(), nil
 		}
 		return m, nil
+	}
+	if nm, cmd, ok := m.previewCharKey(msg); ok { // modal: before every other key
+		return nm, cmd
 	}
 	if nm, cmd, ok := m.previewSelectKey(msg); ok {
 		return nm, cmd
@@ -142,4 +149,13 @@ func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// paneCharHint is the mode's keys while d's character selection is on: the
+// split's hint line is then that alone (every other key waits).
+func paneCharHint(d *openFile) (string, bool) {
+	if d == nil || !d.p.cs.on {
+		return "", false
+	}
+	return charSelHint(d.p.cs, d.p.csRows), true
 }
