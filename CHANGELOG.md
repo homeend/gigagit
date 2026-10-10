@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Character selection: the v copy mode (TUI)
+
+A modal copy mode in the spirit of vim's visual mode and tmux's copy mode,
+spec `docs/superpowers/specs/2026-10-10-char-select-design.md`: `v` enters
+it and shows a character cursor, `←→↑↓` / `hjkl` / `w b` / `home end` /
+`pgup pgdn` move, `space` fixes the start (again: restart), `enter` or `y`
+copies the covered text and leaves, `esc` drops the start, then leaves.
+While it is on every other key waits.
+
+- **Where.** The review's Summary popup, the stacked review view (its
+  summary element, or one file on the cursor's side — the element bounds
+  the selection) and the single diff view (the cursor's side; `v` clears a
+  live line selection, one kind at a time). Blame and the View-file preview
+  follow later through the same model.
+- **What is copied.** The rendered text, never the markdown: a wrapped
+  prose row joins with one space, any other row with a newline; a diff
+  copies the side's source lines (tabs kept), absent cells and folded
+  lines skipped. The status line counts the characters.
+- **How it is drawn.** The covered runes wear the `selection_bg` stripe,
+  the cursor cell the current-hit style over it; the footer shows the
+  mode's keys. One pure model (`charsel.go`) with thin host adapters; the
+  painting rides the per-rune emphasis mask (`emphSel`, `emphSelCur`).
+- The mode leaves when its rows change meaning: a popup resize or `ctrl+t`,
+  a diff reload, a fold, `ctrl+w`.
+
 ## alt+w under a console: hide first, then move
 
 ### Changed
