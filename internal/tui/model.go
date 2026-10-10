@@ -4265,6 +4265,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if !live {
+			// Parked with its worktree (a swap during the lex) or displaced
+			// under a console: the picker waits in a slot's group and comes
+			// back as it is, so the runs go through its pointer now.
+			live = m.windowState.holds(msg.picker)
+			for _, v := range m.views {
+				live = live || v.windows.holds(msg.picker)
+			}
+		}
+		if !live {
 			return m, nil
 		}
 		msg.picker.setSyntax(msg.cur, msg.inc)

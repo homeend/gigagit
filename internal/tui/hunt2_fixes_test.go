@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os/exec"
 	"reflect"
 	"slices"
 	"strings"
@@ -9,7 +10,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // Second post-merge hunt of the fast worktree switch (2026-10-10): the
@@ -366,5 +369,106 @@ func TestCommitMessageForASleepingWorktreeIsKeptPending(t *testing.T) {
 	}
 	if pendingKey(other) != string(model.KeyOf(other)) {
 		t.Fatal("pendingKey must be the checkout key every other per-worktree map uses")
+	}
+}
+
+// A hunk picker's syntax runs land through the picker's own pointer: a
+// picker parked with its worktree (alt+w during the lex) is still live
+// — nothing recomputes the runs, so a dropped lex left it plain for good.
+func TestParkedHunkPickerStillGetsItsSyntax(t *testing.T) {
+	m := loadedModel(t)
+	p := &hunkPicker{}
+	m = m.pushLayer(p)
+	m, other := addWorktree(t, m, "wt2")
+	m = forceSwitch(t, m, other)
+	if m.topLayer() != nil {
+		t.Fatal("precondition: the picker parked with home")
+	}
+	runs := [][]syntax.Tok{{{Start: 0, End: 1}}}
+	mm, _ := m.Update(pickerLexedMsg{picker: p, cur: runs, inc: runs})
+	_ = mm
+	if p.curTok == nil {
+		t.Fatal("the parked picker's lex was dropped")
+	}
+}
+
+// A worktree arriving under a shown console has its stash list displaced
+// (consoleParked); the list's own read, replayed then, must still fill it:
+// the console-parked dispatch restores the stash list and the preview
+// beneath the handler as it does the layers.
+func TestParkedStashListUnderAConsoleStillFills(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m.stashView = &stashView{tag: "t1", loading: true}
+	m, _ = m.openConsole(s.Info().ID) // captureReturn parks the stash list under the console
+	if m.stashView != nil || m.consoleParked == nil || m.consoleParked.stashView == nil {
+		t.Fatalf("precondition: stashView=%v parked=%+v", m.stashView, m.consoleParked)
+	}
+	mm, _ := m.Update(stashListMsg{slotStamp: m.stamp(), tag: "t1", entries: []model.StashEntry{{Ref: "stash@{0}"}}})
+	m = mm.(Model)
+	sv := m.consoleParked.stashView
+	if sv == nil || sv.loading || len(sv.entries) != 1 {
+		t.Fatalf("the parked stash list did not take its read: %+v", sv)
+	}
+	if m.stashView != nil {
+		t.Fatal("the stash list must be parked again after the dispatch")
+	}
+}
+
+// A queued return taken at an op's end swaps BEFORE the op's reload: the
+// leaving slot recorded the pre-op list's branch, and a checkout op's own
+// worktree was then "recycled" by the list arrival (its windows dropped).
+// After a HEAD-moving op the leaving slot takes its baseline from the next
+// list instead.
+func TestQueuedReturnAfterACheckoutDoesNotRecycleTheOpsWorktree(t *testing.T) {
+	m := loadedModel(t)
+	home := m.home
+	m, other := addWorktree(t, m, "wt2")
+	dv := &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(dv)                      // a window open in home over the op
+	m.pendingReturnView = model.KeyOf(other) // a console show queued the swap while the op ran
+	m.running = true
+	m.pendingSources = nil // a checkout: every source, the worktree list included
+	if out, err := exec.Command("git", "-C", m.currentWorktree, "checkout", "-q", "-b", "feat/x").CombinedOutput(); err != nil {
+		t.Fatalf("checkout: %v\n%s", err, out)
+	}
+	mm, cmd := m.Update(opFinishedMsg{})
+	m = mm.(Model)
+	if m.viewed != model.KeyOf(other) {
+		t.Fatalf("precondition: the queued return went (viewed=%q)", m.viewed)
+	}
+	for _, msg := range runCmds(cmd) {
+		if da, ok := msg.(dataAvailableMsg); ok && da.source == srcWorktrees {
+			mm, _ = m.Update(da)
+			m = mm.(Model)
+		}
+	}
+	if v := m.views[home]; v == nil || !v.windows.holds(dv) {
+		t.Fatal("the checkout's own worktree was treated as recycled: its window is gone")
+	}
+	if v := m.views[home]; v.branch != "feat/x" || !v.branchKnown {
+		t.Fatalf("home's record = %q known=%v, want the post-op branch", v.branch, v.branchKnown)
+	}
+}
+
+// With one worktree (the bare entry does not count) the footer does not
+// advertise alt+w, and the hide-first step says there is no next one.
+func TestAltWHintsWithOneWorktree(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m.worktrees = append(m.worktrees, model.Worktree{Path: "/bare.git", Bare: true})
+	b, _ := bindingByID("next-worktree")
+	if b.when(m) {
+		t.Fatal("the footer advertises alt+w with one worktree beside the bare entry")
+	}
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	m, _ = m.cycleWorktrees()
+	if m.console != nil {
+		t.Fatal("the press hides the console")
+	}
+	if m.statusMsg == i18n.T("console hidden — alt+w again for the next worktree") {
+		t.Fatalf("the hint promises a next worktree there is none: %q", m.statusMsg)
 	}
 }
