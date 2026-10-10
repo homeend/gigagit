@@ -42,6 +42,7 @@ const (
 	mdAnchor     // an overview's anchor (overview.go)
 	mdAnchorSel  // the selected anchor
 	mdAnchorGone // an anchor whose file or note is gone
+	mdAnchorHere // the anchor whose band a split's right-hand cursor is in
 	mdClassEnd
 )
 
@@ -80,6 +81,8 @@ func (s *styles) mdStyle(base lipgloss.Style, c syntax.Class) lipgloss.Style {
 		return base.Reverse(true).Bold(true)
 	case mdAnchorGone:
 		return base.Faint(true).Strikethrough(true)
+	case mdAnchorHere: // the band colour the cursor sits in on the right
+		return st().anchorBand.Inherit(base).Underline(true).Bold(true)
 	}
 	return base
 }

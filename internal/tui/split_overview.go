@@ -101,7 +101,7 @@ func (m Model) steerSplit(sv *splitView) (Model, tea.Cmd) {
 	case *docPane:
 		m, cmd = m.docSteer(sv, r, ov, a)
 	case *stackPane:
-		m, cmd = m.stackSteer(sv, r, a)
+		m, cmd = m.stackSteer(sv, r, ov.ov.sel)
 	}
 	k, n := 0, 0 // the anchor's place among those a steer can reach
 	for i, x := range ov.ov.anchors {

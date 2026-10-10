@@ -90,11 +90,11 @@ func TestOverviewSplitEnterFocusesRightAndBackspaceReturns(t *testing.T) {
 	if sv.onLeft {
 		t.Fatal("enter focuses the right pane")
 	}
-	// a.go has two bands, 1-3 (sorted first) and 3; on 3, n wraps to 1-3 and
-	// the overview's selection follows to that anchor.
+	// a.go has two bands, 1-3 (sorted first) and 3; on 3, n wraps to 1-3:
+	// the overview marks that anchor and keeps its selection (R2).
 	m = pressDrain(t, m, "n")
-	if sv.left.doc().ov.sel != 4 || sv.right.doc().anchorCur != "a.go:1-3" {
-		t.Fatalf("sel %d anchor %q", sv.left.doc().ov.sel, sv.right.doc().anchorCur)
+	if sv.left.doc().ov.sel != 0 || sv.left.doc().ov.here() != 4 || sv.right.doc().anchorCur != "a.go:1-3" {
+		t.Fatalf("sel %d here %d anchor %q", sv.left.doc().ov.sel, sv.left.doc().ov.here(), sv.right.doc().anchorCur)
 	}
 	m = pressDrain(t, m, "backspace")
 	if !sv.onLeft || m.topLayer() != sv {

@@ -101,7 +101,17 @@ func (sv *splitView) paneOf(d *openFile) pane {
 	return nil
 }
 
+// update is updateKey, then the overview's mark follows the right-hand
+// cursor wherever the key left it.
 func (sv *splitView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	nm, cmd := sv.updateKey(m, msg)
+	if nm.splitLayer() == sv {
+		nm.syncOverviewHere(sv)
+	}
+	return nm, cmd
+}
+
+func (sv *splitView) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
@@ -235,6 +245,14 @@ func (m Model) docRows(d *openFile) int {
 // the row clicked; a right click opens the . menu of the side it lands on;
 // a middle click is esc (it closes the split, as on every reader).
 func (m Model) splitMouse(sv *splitView, msg tea.MouseMsg, wheel int) (Model, tea.Cmd) {
+	nm, cmd := m.splitMousePress(sv, msg, wheel)
+	if nm.splitLayer() == sv {
+		nm.syncOverviewHere(sv)
+	}
+	return nm, cmd
+}
+
+func (m Model) splitMousePress(sv *splitView, msg tea.MouseMsg, wheel int) (Model, tea.Cmd) {
 	lw, _, _ := m.splitGeom()
 	side, x := sv.right, msg.X-lw
 	if msg.X < lw {

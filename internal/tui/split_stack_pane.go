@@ -263,7 +263,8 @@ func (p *stackPane) fileIndex(path string) int {
 }
 
 // stackLand puts the cursor on overview anchor i's line in the stream,
-// centred, and makes it the current band; the overview's selection follows.
+// centred, and makes it the current band. The overview's selection is not
+// touched: a steer has selected i already, and n / p only mark it (R2).
 func (m Model) stackLand(sv *splitView, p *stackPane, i int) Model {
 	ov := sv.left.doc()
 	a := ov.ov.anchors[i]
@@ -275,17 +276,13 @@ func (m Model) stackLand(sv *splitView, p *stackPane, i int) Model {
 	p.d.anchorCur = a.dest
 	p.d.p.cur = p.stream.streamLine(fi, a.target.Start)
 	p.d.p.sel = p.d.p.clampTop(p.d.p.cur-rows/2, rows)
-	if ov.ov.sel != i {
-		lr, _ := sv.geomOf(m, sv.left)
-		ov.selectAnchor(i, lr)
-	}
 	return m
 }
 
-// stackSteer shows the overview's selected anchor a in the stream: its file
-// unfolded and, once loaded, the cursor on its line.
-func (m Model) stackSteer(sv *splitView, p *stackPane, a anchor) (Model, tea.Cmd) {
-	i := sv.left.doc().ov.sel
+// stackSteer shows overview anchor i in the stream: its file unfolded and,
+// once loaded, the cursor on its line.
+func (m Model) stackSteer(sv *splitView, p *stackPane, i int) (Model, tea.Cmd) {
+	a := sv.left.doc().ov.anchors[i]
 	fi := p.fileIndex(a.target.Path)
 	if fi < 0 {
 		m.statusMsg = i18n.T("no file %s", a.target.Path)
@@ -348,9 +345,7 @@ func (m Model) stepStreamAnchor(sv *splitView, p *stackPane, dir int) (Model, te
 	}
 	wrapped := cur >= 0 && ((dir > 0 && next <= cur) || (dir < 0 && next >= cur))
 	o := order[next]
-	lr, _ := sv.geomOf(m, sv.left)
-	ov.selectAnchor(o.i, lr)
-	m, cmd := m.stackSteer(sv, p, ov.ov.anchors[o.i])
+	m, cmd := m.stackSteer(sv, p, o.i)
 	label := ov.ov.anchors[o.i].target.Label
 	if label == "" {
 		label = ov.ov.anchors[o.i].dest
