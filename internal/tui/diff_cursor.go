@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/i18n"
@@ -372,9 +374,19 @@ func (v *diffView) cursorCell() (text string, no int, ok bool) {
 		return "", 0, false
 	}
 	if v.onOld {
-		return r.Left, r.LeftNo, true
+		return sideText(r, true), r.LeftNo, true
 	}
-	return r.Right, r.RightNo, true
+	return sideText(r, false), r.RightNo, true
+}
+
+// sideText is one side's SOURCE text as the diff shows it: a CRLF line's
+// trailing \r is line-ending layout (sanitizeCell drops it from the cell), so
+// no copy carries it.
+func sideText(r textdiff.Row, old bool) string {
+	if old {
+		return strings.TrimSuffix(r.Left, "\r")
+	}
+	return strings.TrimSuffix(r.Right, "\r")
 }
 
 // selectedLines is the cursor side's SOURCE text for every logical line the
@@ -400,11 +412,7 @@ func (v *diffView) selectedLines() []string {
 		if !ln.isBody() || !sidePresent(ln.Row, v.onOld) {
 			continue
 		}
-		if v.onOld {
-			out = append(out, ln.Row.Left)
-		} else {
-			out = append(out, ln.Row.Right)
-		}
+		out = append(out, sideText(ln.Row, v.onOld))
 	}
 	return out
 }

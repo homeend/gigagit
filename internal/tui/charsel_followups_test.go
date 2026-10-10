@@ -113,3 +113,31 @@ func TestDiffCharSelEmptySelectionSaysSoAndStays(t *testing.T) {
 		t.Fatalf("clip %q on=%v notice %q", got, v.cs.on, m.diffNotice)
 	}
 }
+
+// A CRLF file's lines end in \r: the diff never shows it, so neither
+// selection may copy it, and the character cursor never sits on it.
+func TestDiffSelectionsDropTheCarriageReturn(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, textRows("ab\r", "cd\r"), nil)
+	v := m.diffLayer()
+	v.setCursorLine(0, m.diffBodyRows())
+	var got string
+	m = captureClip(m, &got)
+	m = feedDiff(m, "v", "end")
+	if v.cs.cur.col != 1 {
+		t.Fatalf("end lands on col %d, want 1 (b, not the \\r)", v.cs.cur.col)
+	}
+	m = feedDiff(m, "home", "space", "j", "end")
+	u, cmd := m.Update(keyMsg("enter"))
+	m = drainCmds(t, u.(Model), cmd)
+	if got != "ab\ncd" {
+		t.Fatalf("character selection copied %q", got)
+	}
+	v.setCursorLine(0, m.diffBodyRows())
+	m = feedDiff(m, "space", "j")
+	u, cmd = m.Update(keyMsg("enter"))
+	drainCmds(t, u.(Model), cmd)
+	if got != "ab\ncd" {
+		t.Fatalf("line selection copied %q", got)
+	}
+}

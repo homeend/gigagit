@@ -38,11 +38,7 @@ func (v *diffView) charRows() []charRow {
 			}
 			out = append(out, charRow{dead: true})
 		case ln.isBody() && sidePresent(ln.Row, v.onOld):
-			if v.onOld {
-				out = append(out, charRow{text: []rune(ln.Row.Left)})
-			} else {
-				out = append(out, charRow{text: []rune(ln.Row.Right)})
-			}
+			out = append(out, charRow{text: []rune(sideText(ln.Row, v.onOld))})
 		default:
 			out = append(out, charRow{dead: true})
 		}
@@ -94,10 +90,7 @@ func (v *diffView) charSpansOn(li int) []hitSpan {
 	if !ln.isBody() || !sidePresent(ln.Row, v.onOld) {
 		return nil
 	}
-	text := ln.Row.Right
-	if v.onOld {
-		text = ln.Row.Left
-	}
+	text := sideText(ln.Row, v.onOld)
 	spans := charSelSpans(v.cs, li-lo)
 	for i := range spans {
 		spans[i].start = dispCol(text, spans[i].start)
