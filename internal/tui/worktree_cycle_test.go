@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/homeend/gigagit/internal/i18n"
 	"slices"
 	"strings"
 	"testing"
@@ -58,9 +59,11 @@ func TestAltWWithOneWorktreeSaysSo(t *testing.T) {
 	}
 }
 
-// alt+w under a console: one press hides it (the session keeps running)
-// AND moves to the next worktree, the Branches cursor on its branch.
-func TestAltWHidesTheConsoleAndMovesOn(t *testing.T) {
+// alt+w under a console: the first press only hides it (the session
+// keeps running) and shows the worktree the console was looking at — its
+// panels, the Branches cursor on its branch — so you see where you are;
+// the next press moves to the next worktree.
+func TestAltWUnderAConsoleHidesItFirstThenMovesOn(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, other := addWorktree(t, m, "wt2")
@@ -71,8 +74,18 @@ func TestAltWHidesTheConsoleAndMovesOn(t *testing.T) {
 		t.Fatalf("precondition: viewed=%q focus=%v", m.viewed, m.focus)
 	}
 	m = pressAlt(t, m, 'w')
-	if m.console != nil || m.viewed == model.KeyOf(other) || m.focus != panelBranches || m.activeLeftTab != panelBranches {
-		t.Fatalf("console=%v viewed=%q focus=%v tab=%v, want hidden, the next worktree, Branches", m.console != nil, m.viewed, m.focus, m.activeLeftTab)
+	if m.console != nil || m.viewed != model.KeyOf(other) || m.focus != panelBranches || m.activeLeftTab != panelBranches {
+		t.Fatalf("first press: console=%v viewed=%q focus=%v tab=%v, want hidden, STILL wt2, Branches", m.console != nil, m.viewed, m.focus, m.activeLeftTab)
+	}
+	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(other) {
+		t.Fatalf("Branches cursor on %+v, want the branch of %s", b, other)
+	}
+	if m.statusMsg != i18n.T("console hidden — alt+w again for the next worktree") {
+		t.Fatalf("status = %q", m.statusMsg)
+	}
+	m = pressAlt(t, m, 'w')
+	if m.viewed == model.KeyOf(other) || m.focus != panelBranches {
+		t.Fatalf("second press: viewed=%q focus=%v, want the next worktree", m.viewed, m.focus)
 	}
 	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(m.viewPath(m.viewed)) {
 		t.Fatalf("Branches cursor on %+v, want the branch of %s", b, m.viewed)
@@ -120,7 +133,7 @@ func TestAltWNeverBlocksOnItsOwnReads(t *testing.T) {
 	}
 }
 
-func TestAltWHidesABoundConsoleAndMovesOn(t *testing.T) {
+func TestAltWHidesABoundConsoleFirst(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, other := addWorktree(t, m, "wt2")
@@ -138,8 +151,12 @@ func TestAltWHidesABoundConsoleAndMovesOn(t *testing.T) {
 	if m.focus != panelBranches || m.activeLeftTab != panelBranches || !m.panelFocused(panelBranches) {
 		t.Fatalf("focus=%v tab=%v, want the Branches panel", m.focus, m.activeLeftTab)
 	}
+	if m.viewed != model.KeyOf(other) {
+		t.Fatalf("viewed=%q, want the console's worktree still (the hide is the first step)", m.viewed)
+	}
+	m = pressAlt(t, m, 'w')
 	if m.viewed == model.KeyOf(other) {
-		t.Fatalf("viewed=%q, want the next worktree", m.viewed)
+		t.Fatalf("second press: viewed=%q, want the next worktree", m.viewed)
 	}
 }
 
@@ -165,14 +182,14 @@ func TestAltWHidesAMaximisedConsoleToo(t *testing.T) {
 	m, _ = m.showConsole(id, true)
 	m.console.maximized = true
 	m = pressAlt(t, m, 'w')
-	if m.console != nil || m.focus != panelBranches || m.viewed == model.KeyOf(other) {
-		t.Fatalf("console=%v focus=%v viewed=%q", m.console != nil, m.focus, m.viewed)
+	if m.console != nil || m.focus != panelBranches || m.viewed != model.KeyOf(other) {
+		t.Fatalf("console=%v focus=%v viewed=%q, want hidden, Branches, still wt2", m.console != nil, m.focus, m.viewed)
 	}
 }
 
-// alt+w under a console hides it and moves on; the diff the console
-// displaced belongs to home and is live again when home is the next stop.
-func TestAltWUnderAConsoleHidesItAndMovesOn(t *testing.T) {
+// alt+w under a console hides it; the diff the console displaced belongs
+// to home and is live again when the next press lands on home.
+func TestAltWUnderAConsoleRestoresHomesDiffOnTheWayBack(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, other := addWorktree(t, m, "wt2")
@@ -184,15 +201,19 @@ func TestAltWUnderAConsoleHidesItAndMovesOn(t *testing.T) {
 	if m.console == nil || m.topLayer() != nil {
 		t.Fatalf("precondition: console=%+v top=%T", m.console, m.topLayer())
 	}
+	m = pressAlt(t, m, 'w') // hides: other's panels, no diff (the diff is home's)
+	if m.console != nil || m.viewed != model.KeyOf(other) || m.topLayer() != nil {
+		t.Fatalf("first press: console=%v viewed=%q top=%T, want hidden, wt2, no window", m.console != nil, m.viewed, m.topLayer())
+	}
 	m = pressAlt(t, m, 'w') // the ring: other → home
-	if m.console != nil || m.viewed != m.home || m.topLayer() != layer(dv) {
-		t.Fatalf("console=%v viewed=%q top=%T, want hidden, home, home's diff", m.console != nil, m.viewed, m.topLayer())
+	if m.viewed != m.home || m.topLayer() != layer(dv) {
+		t.Fatalf("second press: viewed=%q top=%T, want home, home's diff", m.viewed, m.topLayer())
 	}
 }
 
-// alt+w after alt+a: the console hides and the panels move to the next
-// worktree in one press, the Branches cursor on its branch.
-func TestAltWAfterAltAHidesTheConsoleAndMovesOn(t *testing.T) {
+// alt+w after alt+a: the first press hides the console and shows its
+// worktree, the Branches cursor on its branch; the second moves on.
+func TestAltWAfterAltAHidesTheConsoleThenMovesOn(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, wtA := addWorktree(t, m, "wtA")
@@ -207,11 +228,15 @@ func TestAltWAfterAltAHidesTheConsoleAndMovesOn(t *testing.T) {
 	}
 	at := m.viewed
 	m = pressAlt(t, m, 'w')
-	if m.console != nil || m.focus != panelBranches || m.viewed == at {
-		t.Fatalf("alt+w: console=%v focus=%v viewed=%q, want hidden, Branches, the next worktree", m.console != nil, m.focus, m.viewed)
+	if m.console != nil || m.focus != panelBranches || m.viewed != at {
+		t.Fatalf("alt+w: console=%v focus=%v viewed=%q, want hidden, Branches, the console's worktree", m.console != nil, m.focus, m.viewed)
 	}
-	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(m.viewPath(m.viewed)) {
-		t.Fatalf("Branches cursor on %+v, want the branch of %s", b, m.viewed)
+	if b, ok := m.selectedBranch(); !ok || b.Name != m.worktreeBranch(m.viewPath(at)) {
+		t.Fatalf("Branches cursor on %+v, want the branch of %s", b, at)
+	}
+	m = pressAlt(t, m, 'w')
+	if m.viewed == at {
+		t.Fatalf("second alt+w: viewed=%q, want the next worktree", m.viewed)
 	}
 }
 

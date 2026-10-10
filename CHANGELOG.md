@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## alt+w under a console: hide first, then move
+
+### Changed
+- `alt+w` pressed while an agent or terminal console is shown now only
+  **hides the console** and shows the worktree it was looking at — its
+  panels, the Branches cursor on its branch, the status line saying
+  `console hidden — alt+w again for the next worktree` — so you see where
+  you are before moving on; the **next press** moves to the next
+  worktree. The session keeps running. (Reverses "one press hides and
+  moves on"; with no console shown, one press moves as before.)
+
 ## PR review, plan 3: the web
 
 The gg web page gets what plans 1 and 2 gave the domain and the TUI (spec

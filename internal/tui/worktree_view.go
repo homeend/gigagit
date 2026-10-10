@@ -751,12 +751,14 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	n := len(order)
 	viewed := m.viewPath(m.viewed)
 	at := m.worktreeIndex(viewed)
-	// One press, one worktree: a shown console hides on the way (the
-	// session keeps running; its return point stays where it is), the
-	// Branches panel follows the ring so its cursor can sit on the new
-	// worktree's branch. No reveal-first step: in any window state the
-	// press moves on — only an operation, a decision, a process or a popup
-	// with work in flight refuse (switchRefusalBy).
+	// Only an operation, a decision, a process or a popup with work in
+	// flight refuse (switchRefusalBy); in any other window state the press
+	// acts. Under a shown console (an agent, a terminal) the press HIDES it
+	// and shows the worktree it was looking at — its panels, the Branches
+	// cursor on its branch — without moving on: you see where you are
+	// before the ring takes you further (user ruling 2026-10-10; the
+	// session keeps running, its return point stays where it is). The next
+	// press moves to the next worktree.
 	if why := m.switchRefusalBy(true); why != "" {
 		m.statusMsg = why // refused whole: the console stays, the focus stays (userSwitchView would say the same, after the hide)
 		return m, nil
@@ -767,6 +769,9 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 			m.console.ret.focus = panelBranches
 		}
 		m = m.closeConsole()
+		m = m.activateTab(panelBranches).selectWorktreeBranch(viewed)
+		m.statusMsg = i18n.T("console hidden — alt+w again for the next worktree")
+		return m, nil
 	}
 	m = m.activateTab(panelBranches)
 	if n < 2 {
