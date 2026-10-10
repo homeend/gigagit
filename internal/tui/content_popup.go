@@ -474,6 +474,11 @@ func (p *contentPopup) box(m Model) string {
 		p.cs.leave() // the rows re-wrapped (a resize, ctrl+t): positions mean other runes
 	}
 	if p.cs.on {
+		for k, seg := range p.csSeg { // an empty line the mode paints on gets its blank cell
+			if len(p.csRows[k].text) == 0 && seg.line < len(wr) && p.cs.touches(k) {
+				wr[seg.line].text += charRoom(p.cs, k, "") // the line is its lead alone
+			}
+		}
 		for i := range wr {
 			wr[i].emph = p.charEmphFor(i, len([]rune(wr[i].text)))
 		}

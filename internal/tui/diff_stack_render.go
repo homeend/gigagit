@@ -36,7 +36,11 @@ func (m Model) stackRow(v *diffView, dr dRow, w int, onCursor bool) string {
 			}
 			// Laid out at the reading column (stackProseWidth), which the
 			// lead centres in the row.
-			return colouredLine(stackProseLead(w, m.stackProseWidth()), row.text, row.cls, v.charEmphProse(dr.line, len([]rune(row.text))), style, nil, w)
+			text := row.text
+			if lo, _ := v.charRange(); v.cs.on {
+				text = charRoom(v.cs, dr.line-lo, text)
+			}
+			return colouredLine(stackProseLead(w, m.stackProseWidth()), text, row.cls, v.charEmphProse(dr.line, len([]rune(text))), style, nil, w)
 		}
 		return ""
 	case lineImage: // a row of an image file's thumbnail pair

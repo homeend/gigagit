@@ -399,14 +399,39 @@ func copiedCharsText(n int) string {
 	return i18n.T("Copied %d characters", n)
 }
 
+// touches reports whether the mode paints anything on row `row`: the cursor
+// sits on it or the fixed range covers it.
+func (s textSel) touches(row int) bool {
+	if !s.on {
+		return false
+	}
+	if s.cur.row == row {
+		return true
+	}
+	lo, hi, ok := s.bounds()
+	return ok && lo.row <= row && row <= hi.row
+}
+
+// charRoom is an empty row's text as one blank cell while the mode paints on
+// it: the cursor (or the stripe) needs a cell, as vim's visual mode shows an
+// empty line. Any other text is returned as is.
+func charRoom(cs textSel, row int, text string) string {
+	if text == "" && cs.touches(row) {
+		return " "
+	}
+	return text
+}
+
 // charSelEmph is the emphasis mask of row `row` (n runes): emphSel on the
 // covered runes; the cursor emphSelCur inside the stripe (a hole in it) and
 // emphCur outside it — the current-hit style, visible on its own in every
 // theme, where a hole in no stripe would be bold alone. nil when untouched.
+// An empty row (n 0) is the one blank cell its host gives it (charRoom).
 func charSelEmph(cs textSel, row, n int) []emphLevel {
 	if !cs.on {
 		return nil
 	}
+	n = max(n, 1)
 	var out []emphLevel
 	set := func(i int, l emphLevel) {
 		if i < 0 || i >= n {

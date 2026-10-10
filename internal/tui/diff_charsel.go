@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // The diff view as a character-selection host (charsel.go): the rows are
@@ -53,10 +54,15 @@ func (v *diffView) charPage() int { return max(v.csPage, 1) }
 
 // dispCol is the sanitized-cell rune index of source column col of text:
 // the same expansion sanitizeCell applies (a tab to the next 4-column stop,
-// a control rune to one cell, every other rune to one).
+// a control rune to one cell, every other rune to one). A column past the
+// text's end is one cell per rune it is past: the empty row's cursor cell.
 func dispCol(text string, col int) int {
 	idx, c := 0, 0
-	for i, r := range []rune(text) {
+	runes := []rune(text)
+	if col > len(runes) {
+		idx += col - len(runes)
+	}
+	for i, r := range runes {
 		if i >= col {
 			break
 		}
@@ -100,6 +106,16 @@ func (v *diffView) charSpansOn(li int) []hitSpan {
 		}
 	}
 	return spans
+}
+
+// roomForCursor is an empty wrap segment as one blank cell: the cursor (or
+// the stripe) of the character selection needs a cell to paint on.
+func roomForCursor(seg cellSeg) cellSeg {
+	if len(seg.disp) > 0 {
+		return seg
+	}
+	seg.disp, seg.emph, seg.cls = []rune{' '}, make([]emphLevel, 1), make([]syntax.Class, 1)
+	return seg
 }
 
 // proseCharRow is a rendered markdown row as the mode's row: its layout
