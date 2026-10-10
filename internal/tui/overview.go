@@ -221,7 +221,7 @@ func (d *openFile) layOut(rows, width int) {
 	if ov.sel >= len(anchors) {
 		ov.sel = -1
 	}
-	d.fill(fileContentMsg{tag: d.tag, lines: lines, reload: docLoaded(d)}, rows, width)
+	d.fill(fileContentMsg{tag: d.tag, lines: lines, reload: docLoaded(d)}, rows, width) // stamped by nobody: applied in place, never dispatched
 	if ov.sel >= 0 {
 		d.selectAnchor(ov.sel, rows)
 		return

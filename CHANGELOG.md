@@ -57,6 +57,224 @@ behaviour). Deferred to plan 3's skill bump: the `--body-from` settle
 note in using-gg, and the open-files protocol naming a stored overview's
 review id.
 
+## Fast worktree switch (TUI)
+
+### Added
+- `alt+w`, `alt+a` and `alt+t` work over a popup you are filling in — a
+  commit message, a branch name, a note, a versions or git-config
+  browser: the popup waits in its worktree with what you typed and
+  submits there when you return. A swap asked by an agent (a console
+  opened for a task, a `gg session` switch ask, a console's return) still
+  waits for the popup to clear; the command palette, the sessions list, a
+  send or a detect in flight and the notices dialog keep refusing.
+
+### Changed
+- **Session window keys.** `alt+A` / `alt+T` walk the viewed worktree's
+  own agents / terminals (nothing with none there); `alt+a` / `alt+t`
+  walk every one of the repository in the Branches tab's order. `alt+f` on
+  a focused console toggles docked ↔ maximised and binds it; `alt+b`
+  toggles whether keys go to the session. Every walk puts the Branches
+  cursor on the shown session's row (the tab comes forward; the console
+  keeps the keyboard), as `alt+w` puts it on the worktree's branch.
+- The emergency unlock moved from `alt+A` to **`alt+U`** (alt+shift+u):
+  `alt+A` now walks the viewed worktree's agents (below).
+- `alt+a` / `alt+t` into an agent of another worktree size the console by
+  THAT worktree: a full-screen diff left behind in the one you came from
+  no longer maximises it (the diff waits where it was opened).
+- `alt+w` moves to the next worktree on every press, whatever is on
+  screen — a diff, a history, the F window, a popup you are filling in, a
+  console (hidden on the way). The old first press, which only focused the
+  Branches panel, is gone; only an operation, a decision, a process or a
+  popup with work in flight still refuse.
+- The worktrees you look at share the repository's caches (commit diffs,
+  blames, commit file lists, compare file sets, preview summaries): one
+  budget per repository instead of one per worktree, and a commit's diff
+  viewed from one worktree is a hit from another. Nothing worktree-bound
+  enters them — a diff or blame of uncommitted changes is never cached.
+
+### Fixed
+- A console closed while an operation ran returned the panels home at the
+  operation's end BEFORE its chained step dispatched — a dirty switch's
+  branch switch (shelve, then switch) could then run in your own worktree
+  instead of the one the console looked at. The return now waits for the
+  chain's end; a merge/rebase continuation keeps the panels where it runs.
+- A worktree shown through a console ran its operations with the default
+  branch-version policy: with `[versions] disabled = true` (or a custom
+  retention) a commit or merge made there still wrote version refs. The
+  shown worktree now follows the config, and a Settings change or config
+  reload reaches every remembered worktree.
+- **Each worktree keeps its own windows.** A window of the worktree you
+  were leaving — a diff, a blame, a file viewer, a history, a compare, the
+  F window, the stash list — used to stay on top after `alt+w` / `alt+a`
+  swapped the panels, and the keys of a working-tree one (`H`, `e`, `c`)
+  then acted on the NEW worktree's file of the same name. Now a swap parks
+  every window, the pending steps of a `gg session` navigate and the
+  `highlight` bands on working files in the worktree they belong to, and
+  brings them back exactly as they were when that worktree returns;
+  nothing crosses, a commit's diff included (it waits in its worktree
+  instead of following you). A result that arrives for a worktree not on
+  screen — a diff, a file list, a popup's read — waits for that worktree
+  and is applied when it returns, never shown over another. The F window
+  gives up its file list while its worktree sleeps and re-reads it when
+  you return (the filter and the cursor's file stay).
+  What a console covers (the diff under it, the stash list, a preview)
+  belongs to the worktree it was shown over too: leaving the console on
+  another worktree brings back only that worktree's own windows, and the
+  covered ones are back when theirs returns. A console opened into a
+  worktree whose windows wait there covers them the same way — a focused
+  console never leaves a window on top that would feed your keys to an
+  agent you cannot see. A `gg session` navigate parked in a worktree you
+  left expires there like a live one.
+- The panels could swap under a popup, a decision or a conflict process
+  (a session removed by an overseer, a worktree gone, a console opened for
+  a task): a commit question filled for one worktree then ran in another.
+  A swap now waits for the surface to clear, and so does a console's
+  return home — which also no longer waits for a full operation when only
+  a staging round was in flight.
+- A status read, hunk picker, conflict file or amend message loaded for
+  one worktree could land after a swap and open over another; each now
+  names the worktree it was read for and is dropped when that is not the
+  one on screen.
+- A worktree that vanished while shown left its file watcher open and let
+  its in-flight reads land on your own worktree's panels.
+- `gg session` file commands (navigate, note, overview) from an agent
+  compared the agent's worktree with gg's OWN while resolving files in the
+  worktree on SCREEN: a note from your own worktree's agent while you
+  looked at another was anchored there. They now compare with — and name
+  in their refusal — the worktree on screen.
+- A worktree shown for the first time rendered as CLEAN until its first
+  status read landed (seconds on a large repository); the status row now
+  says `⏳ loading…` until then. The ✎ note badges are re-read on every
+  swap (they are the checkout's).
+- The session snapshot (`gg session status`) mixed identities: your own
+  worktree's path with the shown worktree's branch, head and cursors. It
+  now names the shown worktree separately (`viewed`) and keeps `branch` /
+  `head` your own worktree's.
+- A `gg session` switch ask accepted from the notice and a `gg://` link's
+  checkout still reloaded for a worktree of the same repository; both take
+  the slot swap now (the CHANGELOG claimed it before the code did).
+- A TUI looking at another worktree now publishes that worktree in the
+  session registry too, so another gg process's guard (a recycle, a claim)
+  refuses to take the tree whose panels are on your screen.
+- Switching into a worktree registered it in the repo switcher's MRU only
+  on the next start; an in-repo switch records it at once.
+- Moving a worktree that was only shown (not your own) renamed the
+  directory under its panels; the panels go home first.
+- The `alt+A` state dump names home, the viewed worktree and a queued
+  return.
+- On Windows and macOS a session, a `gg://` link or your shell's cwd can
+  spell a worktree in another case than `git worktree list` does; the
+  remembered worktrees compared paths byte for byte, so such a console
+  never swapped the panels, a second slot could be made for one directory
+  and the self-guard could offer to delete your own worktree. Every
+  worktree identity now uses one checkout key (`model.CheckoutKey`: the
+  rule the link resolver already used), and disk, git and the screen get
+  the listed spelling.
+- The checkout key above made a `gg://` link's file resolve inside a
+  SIBLING checkout whose directory name extends the checkout's
+  (`…/feat-2/x.go` read as `2/x.go` of `…/feat`); the containment test is
+  separator-exact again.
+- `alt+a` on a console whose worktree could not be shown yet (an operation
+  running, a popup open) showed the console over the OLD worktree's panels
+  and never caught up; the swap is now queued and happens once the
+  operation or the surface clears — unless the console closed first.
+- The Commits list walked history from your OWN worktree's HEAD whatever
+  the panels showed: a worktree on a detached HEAD had its own commits
+  missing, and after switching into a worktree and deleting the old one the
+  walk ran from a directory that was gone. The feed now walks from the
+  worktree on screen and reconciles on every swap.
+- Swapping from a worktree with a current review to one without could leave
+  a `✎ Review` row over the second worktree's files.
+- A swap closed EVERY files window; a commit's, a stash's and a
+  commit-to-commit compare's files are the repository's and now stay (the
+  `F` window of files on disk and a compare against the working tree or
+  the index close).
+- A `gg session` switch ask for your OWN worktree, accepted while another
+  was shown and an operation ran, armed the navigate against the worktree
+  still on screen; a refused swap arms nothing.
+- The continue/abort prompt of a paused merge/rebase fired again every time
+  the panels returned to that worktree; the one-shot is remembered per
+  worktree now.
+- A worktree whose first status read failed (a broken `.git` file, a
+  permission) showed `⏳ loading…` for good; the error is said and the
+  panels settle.
+- `alt+w` stopped dead in front of a worktree that cannot be reached from
+  here (another environment's notation, a directory gone); it now skips it,
+  names it, and moves on — or says no other worktree is reachable.
+- A bare main repository was a stop of the `alt+w` ring, an `enter` target
+  on its Worktrees row and a switch target; it has no working tree and is
+  none of those now.
+- A console's return to a worktree removed meanwhile reported an empty name
+  (`"" is not a worktree…`) and left the panels where they were; it goes
+  home and says which worktree is gone.
+- The `WIP` rows of the Commits list stayed the leaving worktree's when no
+  head mark moved on the swap (both worktrees detached, their tips off the
+  loaded page).
+- A shown worktree removed while an operation ran lost its queued return
+  home (the queue was written to a discarded copy); the panels now go home
+  when the operation ends.
+- An agent working in a worktree gg did not start it in could not reach
+  the TUI SHOWING that worktree: `gg session` commands found no inbox
+  there. They now route to the TUI whose panels show the worktree (a TUI
+  running there still wins, and so does a standalone `gg web` page there
+  unless `--to tui`), and `gg session status` prints `showing:` (JSON
+  `showing`) when the TUI shows a worktree that is not its own. The
+  `using-gg` skill says both (v161 — `gg init --update`).
+- The worktree guard called a worktree a TUI merely shows "a gg TUI is
+  open here"; it now says the TUI shows it and runs in another.
+- `alt+w` during a repository switch refused silently; it says the
+  repository is still loading.
+- An agent tour parked for a worktree's status, `gg session highlight`
+  bands on working files and a navigate waiting for one status re-read all
+  outlived a swap and landed on the NEXT worktree's file of the same name;
+  the swap drops the tour and the working-file bands (a commit's stay) and
+  the parked navigate is answered as failed.
+
+### Added
+- A switch between worktrees of ONE repository is now a swap of remembered
+  per-worktree state (Status, cursors, marks, open files, working reviews),
+  not a reload: the screen never blanks, the Commits cursor survives (an
+  open window waits in its worktree), and gg's identity follows — the exit directory, the steering
+  inbox, the session registry's worktree, the session snapshot and the
+  hosted web page. The Worktrees-row `enter`, the move/repair chains, `gg
+  session` switch asks, `gg://` link checkouts and the web page's own switch
+  all take it. Another repository keeps the full reload.
+- `alt+a` / `alt+t` (and `ctrl+\` enter on a session of this repository)
+  show the session's console AND the panels of the worktree it runs in — tab
+  out of the console and you are there; what you start (diffs, staging, a
+  commit, a stash) runs in that worktree. Closing the console (esc, the
+  cycle's return stop, `x`) brings your own worktree back with its cursors.
+  The Worktrees panel's `*` follows the shown worktree; the status row names
+  the console's worktree only when the panels show another one (you pressed
+  enter on a row under a docked console). A worktree removed while shown
+  falls back to your own. Two things to know about a look: `W` (create a
+  worktree and switch) runs in the worktree ON SCREEN and then makes the
+  new one your own; and the hosted web page keeps following your own
+  worktree — it never learns of a look.
+- `alt+w` is worktree mode. Each press shows the next worktree
+  in the Branches tab's order (its branch rows with a checkout, top to
+  bottom under its sort — by date newest first unless changed; not the
+  raw list), around again past the last — its files, branch, conflicts, remembered per worktree —
+  and moves the Branches cursor to that worktree's branch; the status row
+  says `wt-x — 2 of 3 worktrees`. The same fast switch, no session needed.
+  A fast switch never blocks: its status read is silent (no "⏳ reloading…",
+  the next press is never refused), and the Branches panel's `*` and the
+  Commits identity's `*name` follow the shown worktree's branch at once.
+- **alt+a / alt+t walk the sessions in Worktrees order and bind them.** The
+  ring is the Branches tab's order of the worktrees (oldest session first
+  within a worktree),
+  not last use, so the next one is the one your eye expects; the session
+  shown is bound at once — you type. With gg's keyboard the viewed
+  worktree's own session comes first (hidden → shown, shown unbound →
+  bound), else the nearest below in the list; from a bound session the
+  next one, around again past the last. The stop at the starting screen is
+  gone: you leave a console with alt+w, esc or the step-out key. One
+  session of its kind, bound: nothing but a status line (`the only running
+  agent session in this repository — already focused`). The status line
+  says `Claude in wt-x — agent 2 of 5`; the footer hints read
+  `[alt+a] agent` / `[alt+t] terminal`. (Reverses the 2026-10-06 ring with
+  a return point.)
+
 ## PR review, plan 2: ≡ Summary / ≡ Overview rows, PR Reviews rows, the Send to GitHub panel, Copy note link (TUI)
 
 The terminal side of the PR-review feature (spec

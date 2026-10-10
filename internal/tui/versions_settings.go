@@ -27,7 +27,7 @@ func (m Model) saveVersionsRetention(days int) Model {
 		return m
 	}
 	m.cfg.Versions.MaxAgeDays = days
-	m.svc.SetVersionsPolicy(versionsPolicyFromConfig(m.cfg))
+	m = m.applyPoliciesToSlots() // every slot: an op in any worktree honours the new policy
 	if m.repoConfigPath == "" {
 		m.statusMsg = i18n.T("retention set (not saved: no repo config path)")
 		return m
@@ -43,7 +43,7 @@ func (m Model) saveVersionsRetention(days int) Model {
 // updating the live policy (mirrors saveVersionsRetention).
 func (m Model) toggleVersionsRecording() Model {
 	m.cfg.Versions.Disabled = !m.cfg.Versions.Disabled
-	m.svc.SetVersionsPolicy(versionsPolicyFromConfig(m.cfg))
+	m = m.applyPoliciesToSlots() // every slot: an op in any worktree honours the new policy
 	if m.repoConfigPath == "" {
 		m.statusMsg = i18n.T("recording toggled (not saved: no repo config path)")
 		return m

@@ -22,34 +22,10 @@ func startSecondSession(t *testing.T, first *domain.AgentSession, label string, 
 	return s
 }
 
-func TestSessionsByLastUsedNewestFirstRunningOfOneKind(t *testing.T) {
-	t.Parallel()
-	at := func(min int) time.Time { return time.Date(2026, 9, 30, 12, min, 0, 0, time.UTC) }
-	list := []domain.SessionInfo{
-		{ID: "s1", State: domain.SessionRunning, LastUsed: at(55)},
-		{ID: "s2", State: domain.SessionExited, LastUsed: at(59)}, // newest, but closed
-		{ID: "s3", State: domain.SessionRunning, LastUsed: at(58)},
-		{ID: "s4", State: domain.SessionRunning, LastUsed: at(56)},
-		{ID: "s5", State: domain.SessionRunning, LastUsed: at(57), Terminal: true},
-	}
-	ids := func(l []domain.SessionInfo) (out []domain.SessionID) {
-		for _, i := range l {
-			out = append(out, i.ID)
-		}
-		return out
-	}
-	if got := ids(sessionsByLastUsed(list, false)); len(got) != 3 || got[0] != "s3" || got[1] != "s4" || got[2] != "s1" {
-		t.Fatalf("agents = %v, want [s3 s4 s1]", got)
-	}
-	if got := ids(sessionsByLastUsed(list, true)); len(got) != 1 || got[0] != "s5" {
-		t.Fatalf("terminals = %v, want [s5]", got)
-	}
-}
-
-// alt+a shows the last-used agent UNFOCUSED; each further alt+a steps one
-// further back in last-used order (wrapping); enter focuses the shown one,
-// which makes it the most recent.
-func TestAltACyclesAgentsByLastUseAndEnterPromotes(t *testing.T) {
+// alt+a walks the agents of a worktree in start order, whatever was used
+// last, binding each; after the last the first again; esc leaves, and the
+// next alt+a starts over at the viewed worktree's first.
+func TestAltAWalksAgentsInStartOrderWhateverWasUsedLast(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	a := startTestSession(t, m, `sleep 5`) // swaps in the test manager
@@ -67,8 +43,8 @@ func TestAltACyclesAgentsByLastUseAndEnterPromotes(t *testing.T) {
 	}
 	shows := func(want *domain.AgentSession, what string) {
 		t.Helper()
-		if m.console == nil || m.console.id != want.Info().ID || m.console.focused {
-			t.Fatalf("%s: console = %+v, want %s shown unfocused", what, m.console, want.Info().Label)
+		if m.console == nil || m.console.id != want.Info().ID || !m.console.focused {
+			t.Fatalf("%s: console = %+v, want %s bound", what, m.console, want.Info().Label)
 		}
 	}
 	press(altKey('a'))
@@ -78,25 +54,14 @@ func TestAltACyclesAgentsByLastUseAndEnterPromotes(t *testing.T) {
 	press(altKey('a'))
 	shows(c, "third alt+a")
 	press(altKey('a'))
-	if m.console != nil {
-		t.Fatalf("fourth alt+a returns to the starting screen, console = %+v", m.console)
-	}
-	press(altKey('a'))
-	shows(a, "fifth alt+a starts over")
-	press(altKey('a'))
-	press(altKey('a'))
-	shows(c, "back on the third")
-	press(keyMsg("enter"))
-	if !m.console.focused {
-		t.Fatal("enter focuses the shown session")
-	}
+	shows(a, "fourth alt+a goes round")
 	press(ctrlBracket())
-	if got := sessionsByLastUsed(domain.Sessions().List(), false); got[0].ID != c.Info().ID {
-		t.Fatalf("after enter the most recent agent is %s, want c", got[0].Label)
+	press(keyMsg("esc")) // leave the console: the next alt+a starts over
+	if m.console != nil {
+		t.Fatalf("esc: console = %+v", m.console)
 	}
-	press(keyMsg("esc")) // close the console: the next alt+a starts from the top
 	press(altKey('a'))
-	shows(c, "alt+a after enter")
+	shows(a, "alt+a after esc")
 	press(altKey('t'))
 	shows(term, "alt+t")
 }

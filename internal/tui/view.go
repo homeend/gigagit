@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -498,6 +499,15 @@ func (m Model) renderInterface() string {
 			statusLine = i18n.T("⏳ reloading…")
 		} else {
 			statusLine = i18n.T("⏳ reloading…") + " · " + statusLine
+		}
+	} else if m.viewLoading() && !m.running {
+		// A worktree shown for the first time: its panels are empty until
+		// its first status lands (silent, so no ⏳ gate) — say so, or an
+		// empty Files panel reads as a clean tree.
+		if statusLine == "" {
+			statusLine = i18n.T("⏳ loading…")
+		} else {
+			statusLine = i18n.T("⏳ loading…") + " · " + statusLine
 		}
 	}
 	if hint := m.unlockHint(time.Now()); hint != "" {
@@ -1235,8 +1245,8 @@ func (m Model) worktreeRows(ents []wtEntry) []string {
 		}
 		w := m.worktrees[e.wt]
 		marker := "  "
-		if w.Path == m.currentWorktree {
-			marker = "* "
+		if filepath.Clean(w.Path) == filepath.Clean(m.currentWorktree) {
+			marker = "* " // the worktree the panels show — whichever way it got there
 		}
 		branch := w.Branch
 		if branch == "" {

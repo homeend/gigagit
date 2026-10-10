@@ -62,11 +62,12 @@ func (m Model) remoteRecycleRow() (actionRow, bool) {
 }
 
 // recycleCandidates is every worktree the picker lists: linked or main, not
-// bare, and not the one gg is running in.
+// bare, not the one gg is running in (home) and not the one a console has
+// on screen.
 func (m Model) recycleCandidates() []model.Worktree {
 	var out []model.Worktree
 	for _, w := range m.worktrees {
-		if w.Bare || w.Path == "" || domain.SameCheckout(w.Path, m.currentWorktree) {
+		if w.Bare || w.Path == "" || domain.SameCheckout(w.Path, m.homeWorktree()) || domain.SameCheckout(w.Path, m.currentWorktree) {
 			continue
 		}
 		out = append(out, w)

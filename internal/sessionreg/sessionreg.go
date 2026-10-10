@@ -34,8 +34,9 @@ type Registry struct {
 	Proc     string  `json:"-"` // from the file name (Live fills it)
 	PID      int     `json:"pid"`
 	Started  string  `json:"started,omitempty"`
-	Worktree string  `json:"worktree"`      // the TUI's own worktree
-	MCP      string  `json:"mcp,omitempty"` // the TUI's agent channel URL ("" = none); never a token
+	Worktree string  `json:"worktree"`         // the TUI's own worktree
+	Viewed   string  `json:"viewed,omitempty"` // the worktree its panels show when that is another one (the fast switch)
+	MCP      string  `json:"mcp,omitempty"`    // the TUI's agent channel URL ("" = none); never a token
 	Sessions []Entry `json:"sessions"`
 }
 

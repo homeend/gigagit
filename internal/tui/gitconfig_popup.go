@@ -54,11 +54,12 @@ type configEdit struct {
 // itself failed) — so the notice/Settings health state never races the
 // config write it's supposed to observe.
 type gitConfigRowsMsg struct {
-	gen     int
-	rows    []model.GitConfigRow
-	err     error
-	summary string
-	health  *model.RepoHealth
+	slotStamp // the slot it was asked from (slot_msg.go)
+	gen       int
+	rows      []model.GitConfigRow
+	err       error
+	summary   string
+	health    *model.RepoHealth
 }
 
 // openGitConfigExplorer pushes the loading popup and reads the rows off the
@@ -68,9 +69,10 @@ func (m Model) openGitConfigExplorer() (Model, tea.Cmd) {
 	m = m.pushLayer(&gitConfigPopup{loading: true})
 	svc := m.svc
 	gen := m.gitConfigGen
+	slot := m.stamp()
 	return m, func() tea.Msg {
 		rows, err := svc.GitConfigRows(context.Background())
-		return gitConfigRowsMsg{gen: gen, rows: rows, err: err}
+		return gitConfigRowsMsg{slotStamp: slot, gen: gen, rows: rows, err: err}
 	}
 }
 
@@ -399,17 +401,18 @@ func (p *gitConfigPopup) editEnter(m Model) (Model, tea.Cmd) {
 func (m Model) gitConfigWriteCmd(op engine.SetGitConfig) tea.Cmd {
 	svc := m.svc
 	gen := m.gitConfigGen
+	slot := m.stamp()
 	return func() tea.Msg {
 		res, err := svc.Execute(context.Background(), op, nil, nil)
 		if err != nil {
-			return gitConfigRowsMsg{gen: gen, err: err}
+			return gitConfigRowsMsg{slotStamp: slot, gen: gen, err: err}
 		}
 		rows, rerr := svc.GitConfigRows(context.Background())
 		var health *model.RepoHealth
 		if h, herr := svc.RepoHealth(context.Background()); herr == nil {
 			health = &h
 		}
-		return gitConfigRowsMsg{gen: gen, rows: rows, err: rerr, summary: renderSummary(res), health: health}
+		return gitConfigRowsMsg{slotStamp: slot, gen: gen, rows: rows, err: rerr, summary: renderSummary(res), health: health}
 	}
 }
 

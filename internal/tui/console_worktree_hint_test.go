@@ -17,10 +17,11 @@ func statusRowOf(m Model) string {
 	return lines[len(lines)-1]
 }
 
-// The docked console's worktree path is in the status row while the console
-// is unfocused (what alt+a leaves) or runs in another worktree than gg's own;
-// a focused console on gg's own worktree needs no reminder.
-func TestConsoleWorktreeHintWhenUnfocusedOrForeign(t *testing.T) {
+// The status row names the console's worktree only when it is NOT the one
+// the panels show (the user switched the panels elsewhere under a docked
+// console, or the session runs outside the repository); a console in the
+// viewed worktree — focused or not — needs no reminder: the header says it.
+func TestConsoleWorktreeHintOnlyWhenTheConsoleIsElsewhere(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	if m.currentWorktree == "" {
@@ -31,15 +32,12 @@ func TestConsoleWorktreeHintWhenUnfocusedOrForeign(t *testing.T) {
 	}
 	own := startTestSession(t, m, `sleep 5`)
 	m, _ = m.showConsole(own.Info().ID, false)
-	if got := m.consoleWorktreeHint(); filepath.Clean(got) != filepath.Clean(m.currentWorktree) {
-		t.Fatalf("unfocused, own worktree: hint = %q, want %q", got, m.currentWorktree)
-	}
-	if row := statusRowOf(m); !strings.Contains(row, m.currentWorktree) {
-		t.Fatalf("status row %q lacks the worktree path %q", row, m.currentWorktree)
+	if got := m.consoleWorktreeHint(); got != "" {
+		t.Fatalf("unfocused, viewed worktree: hint = %q, want none", got)
 	}
 	m, _ = m.showConsole(own.Info().ID, true)
 	if got := m.consoleWorktreeHint(); got != "" {
-		t.Fatalf("focused, own worktree: hint = %q, want none", got)
+		t.Fatalf("focused, viewed worktree: hint = %q, want none", got)
 	}
 	other := t.TempDir()
 	far, err := domain.Sessions().Start(sessionSpecForTest("c", other))
@@ -48,7 +46,10 @@ func TestConsoleWorktreeHintWhenUnfocusedOrForeign(t *testing.T) {
 	}
 	m, _ = m.showConsole(far.Info().ID, true)
 	if got := m.consoleWorktreeHint(); got != other {
-		t.Fatalf("focused, other worktree: hint = %q, want %q", got, other)
+		t.Fatalf("console outside the repository: hint = %q, want %q", got, other)
+	}
+	if row := statusRowOf(m); !strings.Contains(row, "worktree: ") {
+		t.Fatalf("status row %q lacks the worktree label", row)
 	}
 }
 
@@ -96,5 +97,25 @@ func TestDockedConsoleHidesCommitRowHint(t *testing.T) {
 	}
 	if got := m.commitBranchHint(); got != "" {
 		t.Fatalf("docked console: Commits row hint = %q, want none", got)
+	}
+}
+
+// A console of another worktree of the repository: the panels follow it,
+// so there is no hint; enter on home's row under the docked console moves
+// the panels and the hint names the console's worktree.
+func TestConsoleHintAppearsWhenThePanelsLeaveTheConsolesWorktree(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, true)
+	if got := m.consoleWorktreeHint(); got != "" {
+		t.Fatalf("panels show the console's worktree: hint = %q, want none", got)
+	}
+	nm, _ := m.guardedReRoot(m.homeWorktree(), true, true)
+	m = nm.(Model)
+	if got := m.consoleWorktreeHint(); got != filepath.Clean(other) {
+		t.Fatalf("panels moved home under the console: hint = %q, want %q", got, other)
 	}
 }

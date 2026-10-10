@@ -366,6 +366,18 @@ func preferredInboxFor(dir, to string) string {
 			return own
 		}
 	}
+	// No TUI runs in dir, but one SHOWS it (the fast switch's look): its
+	// inbox is where a command about dir's files lands on screen. A
+	// standalone gg web page live in dir keeps its commands unless --to tui.
+	_, tuiHere := steer.Live(dir, steer.TUIPresence)
+	_, webHere := steer.Live(dir, steer.WebPresence)
+	if !tuiHere && to != "web" && (to == "tui" || !webHere) {
+		if home, ok := domain.TUIViewing(dir); ok {
+			if _, live := steer.Live(home, steer.TUIPresence); live {
+				return home
+			}
+		}
+	}
 	return dir
 }
 
@@ -435,8 +447,12 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 	r := routeFor(dir)
 	view := sessionOpenViewAt(snapPath)
 	link := snapshotCursorLink(snapPath)
+	showing := snapshotShowing(snapPath)
 	if *asJSON {
 		out := map[string]any{"worktree": r.worktree(), "view": view, "cursor_link": link}
+		if showing != "" {
+			out["showing"] = showing // the worktree on the TUI's screen when it is not its own
+		}
 		if r.tuiOK {
 			out["tui"] = map[string]any{"pid": r.tui.PID, "started": r.tui.Started}
 		} else {
@@ -463,6 +479,9 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 		return 1
 	}
 	fmt.Fprintln(stdout, "worktree:", r.worktree())
+	if showing != "" {
+		fmt.Fprintln(stdout, "showing:", showing)
+	}
 	if r.tuiOK {
 		fmt.Fprintf(stdout, "tui: pid %d (since %s)\n", r.tui.PID, r.tui.Started)
 	}
@@ -502,6 +521,28 @@ func snapshotCursorLink(path string) string {
 }
 
 // worktree is whichever live presence knows it (both record the same path).
+// snapshotShowing reads repo.viewed out of a session snapshot: the worktree
+// the TUI's panels show when that is not its own ("" otherwise, or when the
+// snapshot cannot be read — the routing is still reported).
+func snapshotShowing(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var snap struct {
+		Repo struct {
+			Viewed string `json:"viewed"`
+		} `json:"repo"`
+	}
+	if json.Unmarshal(data, &snap) != nil {
+		return ""
+	}
+	return snap.Repo.Viewed
+}
+
 func (r sessionRoute) worktree() string {
 	if r.tuiOK && r.tui.Worktree != "" {
 		return r.tui.Worktree

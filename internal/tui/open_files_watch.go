@@ -64,9 +64,10 @@ func (m Model) loadDoc(d *openFile) tea.Cmd { return m.loadDocWith(d, m.docLoade
 // placeholder, not as a read error.
 func (m Model) loadDocWith(d *openFile, load func(context.Context) ([]byte, error)) tea.Cmd {
 	d.loading = true
-	if d.ov != nil { // an overview is in memory: the frame lays it out (layOut)
+	slot := m.stamp() // the document belongs to the viewed worktree: a result landing while it sleeps waits for it
+	if d.ov != nil {  // an overview is in memory: the frame lays it out (layOut)
 		tag, loadNo := d.tag, d.fills+1
-		return func() tea.Msg { return fileContentMsg{tag: tag, loadNo: loadNo} }
+		return func() tea.Msg { return fileContentMsg{slotStamp: slot, tag: tag, loadNo: loadNo} }
 	}
 	read := loadFileContentSrcCmd(d.tag, d.path, m.cfg.UI.SyntaxOn(), load)
 	if d.markdown {
@@ -77,6 +78,8 @@ func (m Model) loadDocWith(d *openFile, load func(context.Context) ([]byte, erro
 	if abs == "" {
 		return func() tea.Msg {
 			msg := read().(fileContentMsg)
+			msg.slotStamp = slot
+			msg.slotStamp = slot
 			msg.loadNo = loadNo
 			return msg
 		}
@@ -84,9 +87,10 @@ func (m Model) loadDocWith(d *openFile, load func(context.Context) ([]byte, erro
 	return func() tea.Msg {
 		st := statDisk(abs)
 		if st.missing {
-			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(file deleted on disk)")}}, disk: st, loadNo: loadNo}
+			return fileContentMsg{slotStamp: slot, tag: tag, lines: []contentLine{{text: i18n.T("(file deleted on disk)")}}, disk: st, loadNo: loadNo}
 		}
 		msg := read().(fileContentMsg)
+		msg.slotStamp = slot
 		msg.disk = st
 		msg.loadNo = loadNo
 		return msg

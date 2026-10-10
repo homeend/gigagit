@@ -207,10 +207,11 @@ func servedModel(t *testing.T) Model {
 // switch goes through.
 func TestWebSwitchClosesAnIdleSettingsWindow(t *testing.T) {
 	m := servedModel(t)
+	m, other := addWorktree(t, m, "wt2") // a real switch: the one on screen is answered at once
 	m = m.pushLayer(&settingsPopup{})
 	m = m.pushLayer(&webSettingsPopup{})
 	reply := make(chan error, 1)
-	m, _ = m.onWebSwitchRequest(webSwitchRequestMsg{path: modelTop(t, m), reply: reply})
+	m, _ = m.onWebSwitchRequest(webSwitchRequestMsg{path: other, reply: reply})
 	select {
 	case err := <-reply:
 		t.Fatalf("the switch was answered at once (refused?): %v", err)

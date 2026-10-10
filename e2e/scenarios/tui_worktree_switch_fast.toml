@@ -1,0 +1,34 @@
+name = "tui: enter on a Worktrees row switches instantly and keeps the Commits cursor"
+
+# Two worktrees; wt-x has an untracked file the main checkout does not. The
+# Commits cursor is moved to the second row first. Enter on wt-x's row shows
+# its Status at once (no blank, no reload), the header path is wt-x, the
+# Commits cursor is still on the second row, and wt-x's row carries the
+# current marker.
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" }, { commit = "one" },
+  { write = "a.txt", content = "a2\n" }, { commit = "two" },
+  { branch = "feature/x" },
+  { worktree = "wt-x", branch = "feature/x" },
+  { write = "x-only.txt", content = "x\n", cwd = "wt-x" },
+]
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "cursor-on-second-commit"
+keys = ["right", "down", "left"]
+screen_contains = ["one", "two"]
+
+[[tui.step]]
+name = "worktrees-tab"
+keys = ["C-right", "C-right"]
+screen_contains = ["[Worktrees]", "feature/x"]
+
+[[tui.step]]
+name = "switched"
+keys = ["down", "enter"]
+screen_contains = ["[Files 1]", "A x-only.txt", "* feature/x", "wt-x  branch feature/x"]
+screen_excludes = ["reloading"]

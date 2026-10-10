@@ -3,8 +3,11 @@ package tui
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -252,22 +255,24 @@ func servingModel(t *testing.T, f *fakeWebHost) Model {
 	return runOne(t, m, cmd)
 }
 
-// A switch asked from the page re-roots the TUI, and the page's answer waits
-// until the host has followed.
+// A switch asked from the page to another worktree of the repository moves
+// the TUI there (the fast slot swap; gg's identity follows), and the page's
+// answer waits until the host has followed.
 func TestPageSwitchReRootsTheTUI(t *testing.T) {
 	f := installFakeHost(t)
 	m := servingModel(t, f)
-	done := askSwitch(t, f, m.currentWorktree)
+	m, other := addWorktree(t, m, "wt2")
+	done := askSwitch(t, f, other)
 	msg := waitWebSwitchCmd(m.web)()
 	req, ok := msg.(webSwitchRequestMsg)
-	if !ok || req.path != m.currentWorktree {
+	if !ok || req.path != other {
 		t.Fatalf("msg = %#v, want the page's switch request", msg)
 	}
 	old := m.svc
 	nm, cmd := m.Update(req)
 	m = nm.(Model)
-	if m.svc == old || m.switchTarget != m.currentWorktree {
-		t.Fatal("the TUI must re-root on the page's request")
+	if m.svc == old || m.switchTarget != filepath.Clean(other) || m.home != model.KeyOf(other) {
+		t.Fatalf("the TUI must move to the page's worktree: target=%q home=%q", m.switchTarget, m.home)
 	}
 	if m.statusMsg != "switched from the web page" {
 		t.Fatalf("status = %q", m.statusMsg)
@@ -339,5 +344,27 @@ func TestCloseWebEndsTheSwitchWait(t *testing.T) {
 	// A page asking after the close gets an answer too, never a hang.
 	if err := <-askSwitch(t, f, m.currentWorktree); err == nil {
 		t.Fatal("a closed terminal must refuse")
+	}
+}
+
+// A switch asked from the page to the worktree already on screen has nothing
+// to follow: it is answered at once, without a reroot.
+func TestPageSwitchToTheCurrentWorktreeAnswersAtOnce(t *testing.T) {
+	f := installFakeHost(t)
+	m := servingModel(t, f)
+	done := askSwitch(t, f, m.currentWorktree)
+	req := waitWebSwitchCmd(m.web)().(webSwitchRequestMsg)
+	nm, _ := m.Update(req)
+	m = nm.(Model)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("switch = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a no-op switch must be answered without a host follow")
+	}
+	if len(f.reroots) != 0 || len(m.web.pendingSwitch) != 0 {
+		t.Fatalf("reroots=%d pending=%d, want none", len(f.reroots), len(m.web.pendingSwitch))
 	}
 }

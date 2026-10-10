@@ -27,10 +27,23 @@ var (
 // pendingPushTags capture-only-on-success pattern, wired in opFinishedMsg).
 // Anything else → refuse with a status message, session untouched — never
 // the raw chdir crash.
-func (m Model) guardedReRoot(path string, offerRepair bool) (tea.Model, tea.Cmd) {
+// byUser is the caller's intent for a same-repository swap: the user's own
+// key (enter on a worktree row, a typed path, a link confirmed) may park a
+// parkable popup; an async or agent-driven switch refuses under any popup.
+func (m Model) guardedReRoot(path string, offerRepair, byUser bool) (tea.Model, tea.Cmd) {
 	verdict, translated := checkSwitchTarget(guardStat, guardGOOS, path)
 	switch verdict {
 	case switchOK:
+		if m.home != "" && m.isRepoWorktree(path) {
+			// Same repository: a slot swap, then gg's identity follows.
+			// Never a reload — the repo-scoped panels, an open diff and
+			// the cursors stay.
+			nm, ok := m.switchViewBy(path, byUser)
+			if !ok {
+				return nm, nil
+			}
+			return nm.adoptView()
+		}
 		return m.reRoot(path)
 	case switchRepairable:
 		if offerRepair {

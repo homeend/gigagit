@@ -30,14 +30,15 @@ func isLinkText(s string) bool { return strings.HasPrefix(s, model.LinkScheme) }
 // gotoLinkResolvedMsg carries the off-thread resolve of a pasted link. text is
 // the exact submitted text (the tag-gate key).
 type gotoLinkResolvedMsg struct {
-	text     string
-	svc      *domain.Service // the session's service at dispatch: a repo switch replaces it, which retires this resolve
-	checkout string          // the link's checkout: its absolute top level
-	same     bool            // it is THIS session's checkout
-	bare     bool            // a repository link: nothing in it to land on
-	cmd      steer.Command   // the navigate to apply (same && !bare; also built, unused, for a switch)
-	at       model.Link      // the landing link for a repo switch (!same && !bare)
-	err      error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	text      string
+	svc       *domain.Service // the session's service at dispatch: a repo switch replaces it, which retires this resolve
+	checkout  string          // the link's checkout: its absolute top level
+	same      bool            // it is THIS session's checkout
+	bare      bool            // a repository link: nothing in it to land on
+	cmd       steer.Command   // the navigate to apply (same && !bare; also built, unused, for a switch)
+	at        model.Link      // the landing link for a repo switch (!same && !bare)
+	err       error
 }
 
 // gotoLinkSwitch is the prompt's confirm state: the link names another
@@ -58,13 +59,14 @@ type gotoLinkSwitch struct {
 // may not be this one.
 func (m Model) resolveLinkCmd(text string) tea.Cmd {
 	svc, statePath := m.svc, m.statePath
+	slot := m.stamp()
 	return func() tea.Msg {
 		ctx := context.Background()
 		res, err := linknav.Resolve(ctx, statePath, svc, text)
 		if err != nil {
-			return gotoLinkResolvedMsg{text: text, svc: svc, err: err}
+			return gotoLinkResolvedMsg{slotStamp: slot, text: text, svc: svc, err: err}
 		}
-		msg := gotoLinkResolvedMsg{text: text, svc: svc, checkout: res.Checkout}
+		msg := gotoLinkResolvedMsg{slotStamp: slot, text: text, svc: svc, checkout: res.Checkout}
 		// A TopLevel failure (the checkout vanished mid-session) reads as
 		// "another checkout": the confirm then names this very path, and the
 		// switch re-opens it — the honest recovery, not a silent no-op.
@@ -149,10 +151,17 @@ func (m Model) switchToLink(p *gotoCommitPopup, sw gotoLinkSwitch) (Model, tea.C
 		return m, nil
 	}
 	m = m.popGotoPrompt()
-	nm, cmd := m.reRoot(sw.checkout)
+	// A worktree of this repository is a slot swap (guardedReRoot's fast
+	// path): the repo's previews are loaded already, so --at needs no
+	// previews read; another repository reloads and waits for its first.
+	fast := m.home != "" && m.isRepoWorktree(sw.checkout)
+	nm, cmd := m.guardedReRoot(sw.checkout, false, true)
 	m = nm.(Model)
+	if fast && m.home != model.KeyOf(sw.checkout) {
+		return m, cmd // refused (a surface, an op): said on the status line
+	}
 	if !sw.bare {
-		m.startAt, m.startAtPending, m.startAtPreviewsSeen = sw.at, true, false
+		m.startAt, m.startAtPending, m.startAtPreviewsSeen = sw.at, true, fast
 		m.startAtAnchor = sw.line
 	}
 	return m, cmd

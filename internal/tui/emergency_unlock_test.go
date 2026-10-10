@@ -14,7 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 )
 
-// endGitCalls counts the (stubbed, see TestMain) alt+A git kills.
+// endGitCalls counts the (stubbed, see TestMain) alt+U git kills.
 var endGitCalls atomic.Int64
 
 // sourceMsgs runs a reload command and returns the messages it produced,
@@ -71,7 +71,7 @@ func TestSilentReadSupersedingManualDoesNotStrandLoading(t *testing.T) {
 	}
 }
 
-// alt+A is the emergency unlock: a read that never comes back (a hung git
+// alt+U is the emergency unlock: a read that never comes back (a hung git
 // on a monorepo) holds "⏳ reloading…" and every action gate forever. The key
 // clears the lock from any screen, and the hung read landing late must not
 // lock the interface again.
@@ -84,17 +84,17 @@ func TestEmergencyUnlockClearsAStuckReload(t *testing.T) {
 		t.Fatal("precondition: a manual reload locks actions")
 	}
 	m = m.pushLayer(&compareLoadingPopup{tag: "x", subject: "y"}) // any screen
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A"), Alt: true})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("U"), Alt: true})
 	m = updated.(Model)
 	if endGitCalls.Load() == 0 {
-		t.Fatal("a locked alt+A must end the git processes a hung read holds")
+		t.Fatal("a locked alt+U must end the git processes a hung read holds")
 	}
 	if !m.opsIdle() || m.anySourceLoading() || m.anySourceInflight() {
-		t.Fatalf("alt+A must unlock: loading=%v srcLoading=%v inflight=%v",
+		t.Fatalf("alt+U must unlock: loading=%v srcLoading=%v inflight=%v",
 			m.loading, m.srcLoading, m.srcInflight)
 	}
 	if m.statusMsg == "" {
-		t.Fatal("alt+A must say what it did")
+		t.Fatal("alt+U must say what it did")
 	}
 	m = landAll(m, sourceMsgs(t, hung)) // the hung reads finally return
 	if !m.opsIdle() || m.anySourceLoading() {
@@ -102,7 +102,7 @@ func TestEmergencyUnlockClearsAStuckReload(t *testing.T) {
 	}
 }
 
-// alt+A on a running operation asks it to stop (git gets SIGTERM and frees its
+// alt+U on a running operation asks it to stop (git gets SIGTERM and frees its
 // lockfiles) rather than pretending it ended: the op still holds its repo
 // reservation until its Done arrives.
 func TestEmergencyUnlockCancelsARunningOp(t *testing.T) {
@@ -112,27 +112,27 @@ func TestEmergencyUnlockCancelsARunningOp(t *testing.T) {
 	cancelled := false
 	m.running = true
 	m.opCancel = func() { cancelled = true }
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A"), Alt: true})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("U"), Alt: true})
 	m = updated.(Model)
 	if !cancelled {
-		t.Fatal("alt+A must cancel the running operation")
+		t.Fatal("alt+U must cancel the running operation")
 	}
 	if m.statusMsg == "" {
-		t.Fatal("alt+A must say what it did")
+		t.Fatal("alt+U must say what it did")
 	}
 }
 
-// With nothing held, alt+A only writes the state dump: no source generation
+// With nothing held, alt+U only writes the state dump: no source generation
 // moves, so no read in flight is thrown away.
 func TestEmergencyUnlockIdleOnlyDumps(t *testing.T) {
 	t.Parallel()
 	m := newTestModel(t)
 	m.loading = false
 	gens := maps.Clone(m.srcGen)
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A"), Alt: true})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("U"), Alt: true})
 	m = updated.(Model)
 	if !maps.Equal(gens, m.srcGen) {
-		t.Fatalf("idle alt+A must not abandon reads: %v → %v", gens, m.srcGen)
+		t.Fatalf("idle alt+U must not abandon reads: %v → %v", gens, m.srcGen)
 	}
 	if !strings.Contains(m.statusMsg, m.lastStateDump) {
 		t.Fatalf("the status line must name the dump: %q", m.statusMsg)
@@ -155,7 +155,7 @@ func TestEmergencyDumpRecordsTheStuckState(t *testing.T) {
 	m := newTestModel(t)
 	m.loading = false
 	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A"), Alt: true})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("U"), Alt: true})
 	m = updated.(Model)
 	data, err := os.ReadFile(m.lastStateDump)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestEmergencyDumpRecordsTheStuckState(t *testing.T) {
 	}
 }
 
-// A reload that outlives its normal span points at alt+A; a short one never
+// A reload that outlives its normal span points at alt+U; a short one never
 // flashes the hint.
 func TestUnlockHintAppearsOnlyOnAStuckReload(t *testing.T) {
 	t.Parallel()
@@ -175,18 +175,18 @@ func TestUnlockHintAppearsOnlyOnAStuckReload(t *testing.T) {
 	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
 	now := time.Now()
 	if h := m.unlockHint(now); h != "" {
-		t.Fatalf("a fresh reload must not offer alt+A: %q", h)
+		t.Fatalf("a fresh reload must not offer alt+U: %q", h)
 	}
 	if h := m.unlockHint(now.Add(unlockHintAfterReload)); h == "" {
-		t.Fatal("a reload stuck past the threshold must offer alt+A")
+		t.Fatal("a reload stuck past the threshold must offer alt+U")
 	}
 	m.srcSince[srcStatus] = now.Add(-time.Minute)
-	if !strings.Contains(m.footerLine(), "alt+A") {
-		t.Fatalf("the footer must offer alt+A on a stuck reload: %q", m.footerLine())
+	if !strings.Contains(m.footerLine(), "alt+U") {
+		t.Fatalf("the footer must offer alt+U on a stuck reload: %q", m.footerLine())
 	}
 }
 
-// alt+A on an op parked on its own decision answers it abort, so the dead op
+// alt+U on an op parked on its own decision answers it abort, so the dead op
 // never leaves a modal behind (the reply is buffered: this cannot block).
 func TestEmergencyUnlockAbortsTheOpsDecision(t *testing.T) {
 	t.Parallel()
@@ -196,7 +196,7 @@ func TestEmergencyUnlockAbortsTheOpsDecision(t *testing.T) {
 	m.opCancel = func() {}
 	reply := make(chan engine.DecisionResponse, 1)
 	m.modal = &decisionState{req: engine.DecisionRequest{Options: []string{"continue", "abort"}}, reply: reply}
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A"), Alt: true})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("U"), Alt: true})
 	m = updated.(Model)
 	if m.modal != nil {
 		t.Fatal("the op's decision must close")
@@ -211,14 +211,14 @@ func TestEmergencyUnlockAbortsTheOpsDecision(t *testing.T) {
 	}
 }
 
-// An op without a cancel cannot be stopped; alt+A says so rather than imply
+// An op without a cancel cannot be stopped; alt+U says so rather than imply
 // the interface is free.
 func TestEmergencyUnlockSaysAnUnstoppableOpRuns(t *testing.T) {
 	t.Parallel()
 	m := newTestModel(t)
 	m.loading = false
 	m.running = true
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A"), Alt: true})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("U"), Alt: true})
 	m = updated.(Model)
 	if !strings.Contains(m.statusMsg, "cannot be stopped") || m.lastError != m.statusMsg {
 		t.Fatalf("status = %q, lastError = %q", m.statusMsg, m.lastError)
@@ -237,5 +237,19 @@ func TestLowercaseAltANeverUnlocks(t *testing.T) {
 	m = updated.(Model)
 	if m.opsIdle() || m.lastStateDump != "" || endGitCalls.Load() != before {
 		t.Fatal("alt+a must not unlock")
+	}
+}
+
+// alt+A no longer unlocks: it walks the viewed worktree's agents (the
+// session window keys, 2026-10-10). alt+U is the unlock.
+func TestAltShiftAIsNotTheUnlockAnyMore(t *testing.T) {
+	t.Parallel()
+	m := newTestModel(t)
+	m.loading = false
+	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A"), Alt: true})
+	m = updated.(Model)
+	if m.lastStateDump != "" {
+		t.Fatal("alt+A wrote a state dump: it is no longer the emergency unlock")
 	}
 }

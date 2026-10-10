@@ -13,11 +13,12 @@ import (
 // the previewGen it was dispatched under, like previewOpenMsg: a second enter
 // or a closed view in the meantime makes this one stale, and it is dropped.
 type pairOpenMsg struct {
-	pair     domain.CommitPair
-	eps      domain.PairEndpoints
-	gen      int
-	landNote string // a review whose row the cursor lands on (back from that review)
-	err      error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	pair      domain.CommitPair
+	eps       domain.PairEndpoints
+	gen       int
+	landNote  string // a review whose row the cursor lands on (back from that review)
+	err       error
 }
 
 func pairTitle(label string) string { return i18n.T("Saved diff: %s", label) }
@@ -43,9 +44,10 @@ func (m Model) openPairRow(r previewRow) (Model, tea.Cmd) {
 		return m, nil
 	}
 	svc, gen, p := m.svc, m.previewGen, r.pair
+	slot := m.stamp()
 	return m, func() tea.Msg {
 		eps, err := svc.PairOpen(context.Background(), p.A, p.B)
-		return pairOpenMsg{pair: p, eps: eps, gen: gen, err: err}
+		return pairOpenMsg{slotStamp: slot, pair: p, eps: eps, gen: gen, err: err}
 	}
 }
 

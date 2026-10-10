@@ -6,7 +6,7 @@ package tui
 // (consoleSwitch.tour, settled with the console in settleConsoleAfterSwitch).
 
 import (
-	"path/filepath"
+	"github.com/homeend/gigagit/internal/model"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -50,17 +50,28 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 	}
 	dir := s.Info().Dir
 	check := m.checkTourCmd([]string{o.ID})
-	if filepath.Clean(dir) == filepath.Clean(m.currentWorktree) {
+	if model.SamePath(dir, m.currentWorktree) {
 		m = m.syncOverviews()
 		return m.showTour(o.ID), check
 	}
+	if m.isRepoWorktree(dir) {
+		// This repository: a slot swap; the tour shows once the slot's
+		// status (and with it the overviews sync) has landed.
+		nm, ok := m.switchView(dir)
+		if !ok {
+			return nm, nil
+		}
+		m = nm
+		m.tour = o.ID
+		return m, check
+	}
 	gen := m.consoleSwitch.gen
-	nm, cmd := m.guardedReRoot(dir, false)
+	nm, cmd := m.guardedReRoot(dir, false, false)
 	m = nm.(Model)
 	// Only a switch THIS call made carries the tour; a refusal (said on the
 	// status line) leaves an earlier switch in flight, which lands elsewhere.
 	if m.consoleSwitch.gen != gen {
-		m.consoleSwitch.tour = o.ID
+		m.tour = o.ID
 	}
 	return m, tea.Batch(cmd, check)
 }

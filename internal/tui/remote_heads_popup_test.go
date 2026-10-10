@@ -61,7 +61,7 @@ func TestRemoteHeadsSingleRemoteFlow(t *testing.T) {
 	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openRemoteHeadsBrowser()
-	m, cmd := send(m, remoteHeadNamesMsg{names: []string{"origin"}, gen: m.loadGen})
+	m, cmd := send(m, remoteHeadNamesMsg{names: []string{"origin"}, gen: m.remoteHeadsGen})
 	p := layerOf[*remoteHeadsPopup](m)
 	if p == nil || p.remote != "origin" || !p.loading {
 		t.Fatalf("popup = %+v, want remote=origin still loading", p)
@@ -70,7 +70,7 @@ func TestRemoteHeadsSingleRemoteFlow(t *testing.T) {
 		t.Fatal("a single remote must fire the heads load directly")
 	}
 	heads := []model.RemoteHead{{Name: "hidden/a", Hash: "a"}, {Name: "team/b", Hash: "b"}}
-	m, _ = send(m, remoteHeadsMsg{remote: "origin", heads: heads, gen: m.loadGen})
+	m, _ = send(m, remoteHeadsMsg{remote: "origin", heads: heads, gen: m.remoteHeadsGen})
 	if p.loading || len(p.visible) != 2 {
 		t.Fatalf("after heads: loading=%v visible=%v", p.loading, p.visible)
 	}
@@ -91,7 +91,7 @@ func TestRemoteHeadsRemoteChooser(t *testing.T) {
 	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openRemoteHeadsBrowser()
-	m, _ = send(m, remoteHeadNamesMsg{names: []string{"origin", "fork"}, gen: m.loadGen})
+	m, _ = send(m, remoteHeadNamesMsg{names: []string{"origin", "fork"}, gen: m.remoteHeadsGen})
 	p := layerOf[*remoteHeadsPopup](m)
 	if p == nil || p.loading || p.remote != "" || len(p.visible) != 2 {
 		t.Fatalf("chooser: %+v", p)
@@ -108,7 +108,7 @@ func TestRemoteHeadsStaleGenDropped(t *testing.T) {
 	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openRemoteHeadsBrowser()
-	m, _ = send(m, remoteHeadNamesMsg{names: []string{"origin"}, gen: m.loadGen - 1})
+	m, _ = send(m, remoteHeadNamesMsg{names: []string{"origin"}, gen: m.remoteHeadsGen - 1})
 	p := layerOf[*remoteHeadsPopup](m)
 	if p == nil || !p.loading || p.remote != "" {
 		t.Fatalf("stale msg must be dropped: %+v", p)

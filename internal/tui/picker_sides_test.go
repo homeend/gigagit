@@ -14,7 +14,7 @@ import (
 func TestPickerOutputMarksPickedSides(t *testing.T) {
 	t.Parallel()
 	e := newStagePicker("f.txt", stageDoc()) // a→A, b, c→C
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	e.ensureOutput()
 	for i, s := range e.outSide {
 		if s != outNone {
@@ -44,7 +44,7 @@ func TestPickerOutputMarksPickedSides(t *testing.T) {
 func TestConflictPickerOutputMarksSides(t *testing.T) {
 	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m := Model{width: 80, height: 24, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	m, _ = e.update(m, key("c"))
 	_ = m
 	e.ensureOutput()

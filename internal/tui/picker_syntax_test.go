@@ -203,7 +203,7 @@ func TestPickerGridColoursCodeAndKeepsCursorPlain(t *testing.T) {
 	defer lipgloss.SetColorProfile(prev)
 
 	e := newConflictPicker("f.go", pickerSyntaxDoc()).withSyntax(true)
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 30}
+	m := Model{width: 100, height: 30, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	out := e.render(m, "")
 
 	kw := "38;5;" + st().syntaxColor(syntax.Keyword)
@@ -250,7 +250,7 @@ func TestPickerRenderUnwiredIsPlain(t *testing.T) {
 
 	mk := func(on bool) string {
 		e := newConflictPicker("f.go", pickerSyntaxDoc()).withSyntax(on)
-		m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 30}
+		m := Model{width: 100, height: 30, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 		return e.render(m, "")
 	}
 	off, on := mk(false), mk(true)
@@ -384,7 +384,7 @@ func TestPickerEmptySideBlockIsHandled(t *testing.T) {
 	if len(e.sanCur[0]) != 1 || e.sanCur[0][0].mask.empty() || e.sanCur[0][0].mask.cls[0] != syntax.Keyword {
 		t.Errorf("the current side should still be coloured: %+v", e.sanCur[0])
 	}
-	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 30}
+	m := Model{width: 100, height: 30, windowState: windowState{layers: &layerStack{entries: []layer{e}}}}
 	if out := e.render(m, ""); out == "" {
 		t.Error("render produced nothing")
 	}

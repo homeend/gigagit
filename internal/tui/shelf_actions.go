@@ -20,9 +20,10 @@ import (
 func (m Model) shelfRemoveCmd(entryID string) tea.Cmd {
 	svc := m.svc
 	reload := m.loadShelfCmd(true) // reopen the popup after the remove
+	slot := m.stamp()
 	return func() tea.Msg {
 		if err := svc.ShelfRemove(context.Background(), entryID); err != nil {
-			return shelfLoadedMsg{err: err}
+			return shelfLoadedMsg{slotStamp: slot, err: err}
 		}
 		return reload()
 	}
@@ -155,16 +156,17 @@ func (m Model) loadShelfCompareTwoCmd(a, b model.ShelfEntry, title, ctx string) 
 	tag := "shelf2:" + a.ID + ":" + b.ID
 	v := m.newShelfCompareTwoView(title, ctx, false)
 	aID, bID := a.ID, b.ID
+	slot := m.stamp()
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, aID) }
 		newSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, bID) }
 		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: b.Origin.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }
 
@@ -182,13 +184,14 @@ func (m Model) loadShelfCompareCmd(e model.ShelfEntry) tea.Cmd {
 	entryID := e.ID
 	full := filepath.Join(root, e.Origin.Path)
 
+	slot := m.stamp()
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, entryID) }
 		var newSrc domain.ByteSource
 		switch st, err := os.Stat(full); {
 		case err == nil && st.Size() > domain.MaxDiffBytes:
 			v.tooLarge = true
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		case err == nil:
 			newSrc = func(ctx context.Context) ([]byte, error) {
 				b, rerr := os.ReadFile(full)
@@ -199,14 +202,14 @@ func (m Model) loadShelfCompareCmd(e model.ShelfEntry) tea.Cmd {
 			}
 		case !errors.Is(err, fs.ErrNotExist):
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: e.Origin.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
-			return diffMsg{tag: tag, view: v}
+			return diffMsg{slotStamp: slot, tag: tag, view: v}
 		}
 		applyDiff(v, out, body)
-		return diffMsg{tag: tag, view: v}
+		return diffMsg{slotStamp: slot, tag: tag, view: v}
 	}
 }

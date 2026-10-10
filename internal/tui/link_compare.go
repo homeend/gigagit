@@ -26,6 +26,7 @@ func linkCompareTag(left, right string) string { return "links:" + left + "\x00"
 // linkCompareLoadedMsg carries a finished comparison (or its failure) back to
 // the UI thread, tagged so a superseded or cancelled load is dropped.
 type linkCompareLoadedMsg struct {
+	slotStamp           // the slot it was asked from (slot_msg.go)
 	tag                 string
 	c                   domain.LinkComparison
 	leftDesc, rightDesc string
@@ -68,18 +69,19 @@ func (m Model) startLinkCompareAfter(left, right string, pre func(context.Contex
 	}
 	m.linkCompareWant = tag
 	svc, statePath := m.svc, m.statePath
+	slot := m.stamp()
 	return m, func() tea.Msg {
 		ctx := context.Background()
 		if pre != nil {
 			if err := pre(ctx); err != nil {
-				return linkCompareLoadedMsg{tag: tag, err: err}
+				return linkCompareLoadedMsg{slotStamp: slot, tag: tag, err: err}
 			}
 		}
 		c, err := svc.CompareLinks(ctx, left, right, linknav.Opts(statePath, svc))
 		if err != nil {
-			return linkCompareLoadedMsg{tag: tag, err: err}
+			return linkCompareLoadedMsg{slotStamp: slot, tag: tag, err: err}
 		}
-		return linkCompareLoadedMsg{tag: tag, c: c,
+		return linkCompareLoadedMsg{slotStamp: slot, tag: tag, c: c,
 			leftDesc: describeLinkText(ctx, svc, c.LeftText), rightDesc: describeLinkText(ctx, svc, c.RightText)}
 	}
 }

@@ -284,14 +284,14 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				confirm: true,
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 					if opt == "Yes" {
-						return m.popLayer().guardedReRoot(target, false)
+						return m.popLayer().guardedReRoot(target, false, true)
 					}
 					return m, nil
 				},
 			}
 			return m, nil
 		}
-		tm, cmd := m.popLayer().guardedReRoot(target, false)
+		tm, cmd := m.popLayer().guardedReRoot(target, false, true)
 		return tm.(Model), cmd
 	case tea.KeyCtrlD:
 		vis := p.visible()

@@ -18,7 +18,6 @@ import (
 type consoleSwitch struct {
 	armed bool             // reRoot ran; the console has not been checked against the new repo yet
 	open  domain.SessionID // the session the switch was asked for, opened once the repo has loaded
-	tour  string           // an agent tour (overview id) to show once the worktree has loaded
 	gen   int              // counts reRoots: tells a switch a call made from one already in flight
 }
 
@@ -47,7 +46,7 @@ func (m Model) repoSessions(list []domain.SessionInfo) []domain.SessionInfo {
 // hasRepoSessions reports a running session of one kind (terminals or agents)
 // in this repository — what alt+a / alt+t cycle.
 func (m Model) hasRepoSessions(terminal bool) bool {
-	return len(sessionsByLastUsed(m.repoSessions(domain.Sessions().List()), terminal)) > 0
+	return len(m.sessionRing(terminal)) > 0
 }
 
 // openSessionAnywhere opens a session's console; one of another repository's
@@ -80,7 +79,8 @@ func (m Model) openSessionAnywhere(id domain.SessionID) (Model, tea.Cmd) {
 // for opens; otherwise a console showing a session the new repository does
 // not own closes. The session itself keeps running.
 func (m Model) settleConsoleAfterSwitch() (Model, tea.Cmd) {
-	tour := m.consoleSwitch.tour
+	tour := m.tour
+	m.tour = "" // consumed here (a window field now: the switch reset no longer zeroes it)
 	m, cmd := m.settleConsole()
 	if tour != "" {
 		m = m.showTour(tour) // the snapshot synced the worktree's overviews first

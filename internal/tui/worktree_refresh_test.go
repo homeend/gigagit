@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -87,13 +88,12 @@ func TestCreateWorktreeRefreshesRefsOnly(t *testing.T) {
 	}
 }
 
-// TestCreateAndSwitchUsesFullReRoot pins the switch path (W): the create-and-
-// switch confirm arms pendingSwitch so the op reRoots into the new worktree
-// (full load) instead of the partial refresh. pendingSources is now set by
-// startOp via opAffectedSources — it is captured by the opFinishedMsg handler
-// but discarded when reRoot fires (pendingSwitch path wins over the per-source
-// registry), so the switch still results in a full load.
-func TestCreateAndSwitchUsesFullReRoot(t *testing.T) {
+// TestCreateAndSwitchReRootsOnlyForAnUnlistedWorktree pins the switch path
+// (W): the create-and-switch confirm arms pendingSwitch so the op switches
+// into the new worktree. A path the Worktrees list does not know yet (the
+// op just made it) takes the full reRoot; a listed one takes the fast slot
+// swap and never blanks the screen.
+func TestCreateAndSwitchReRootsOnlyForAnUnlistedWorktree(t *testing.T) {
 	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := New(domain.New(repo))
@@ -104,14 +104,23 @@ func TestCreateAndSwitchUsesFullReRoot(t *testing.T) {
 	m = m.pushLayer(p)
 	m, _ = m.startCreateFromPopup(p, true) // W: create and switch
 	if !m.pendingSwitch {
-		t.Fatal("create-and-switch must arm pendingSwitch for the reRoot")
+		t.Fatal("create-and-switch must arm pendingSwitch for the switch")
 	}
-	// Prove the outcome: when the op finishes with a path, reRoot fires (full reload).
-	// reRoot sets loading=true, ready=false — not a targeted per-source refresh.
+	// A listed path (the current worktree itself): the fast path, no reload.
 	updated, _ := m.Update(opFinishedMsg{res: engine.Result{Path: dir}})
-	mm := updated.(Model)
-	if !mm.loading || mm.ready {
-		t.Fatalf("reRoot path: opFinishedMsg with Path must set loading=true ready=false, got loading=%v ready=%v", mm.loading, mm.ready)
+	if mm := updated.(Model); mm.loading || !mm.ready {
+		t.Fatalf("a listed worktree must not reload: loading=%v ready=%v", mm.loading, mm.ready)
+	}
+	// An unlisted path (what the create op really hands back — the list has
+	// not been re-read yet): reRoot.
+	wt3 := filepath.Join(t.TempDir(), "wt3")
+	if out, err := exec.Command("git", "-C", dir, "worktree", "add", "-b", "feature-z", wt3).CombinedOutput(); err != nil {
+		t.Fatalf("worktree add: %v\n%s", err, out)
+	}
+	m.pendingSwitch = true
+	updated, _ = m.Update(opFinishedMsg{res: engine.Result{Path: wt3}})
+	if mm := updated.(Model); !mm.loading || mm.ready {
+		t.Fatalf("an unlisted worktree must reRoot: loading=%v ready=%v", mm.loading, mm.ready)
 	}
 }
 

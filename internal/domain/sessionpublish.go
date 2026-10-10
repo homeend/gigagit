@@ -24,7 +24,7 @@ type SessionRef struct {
 // rewritten on every session-list change, touched every second, removed on
 // return. worktree reports the TUI's current worktree (it changes on reRoot);
 // mcpURL is the TUI's agent channel ("" = none), published for discovery.
-func PublishSessions(ctx context.Context, dir string, worktree func() string, mcpURL string) {
+func PublishSessions(ctx context.Context, dir string, worktree, viewed func() string, mcpURL string) {
 	if dir == "" {
 		return
 	}
@@ -36,12 +36,14 @@ func PublishSessions(ctx context.Context, dir string, worktree func() string, mc
 	// holds open fails) — retried on the next tick so a new session is never
 	// left unlisted until the NEXT change.
 	dirty := false
-	write := func() { dirty = sessionreg.Write(dir, proc, snapshotRegistry(started, worktree(), mcpURL)) != nil }
+	write := func() {
+		dirty = sessionreg.Write(dir, proc, snapshotRegistry(started, worktree(), viewed(), mcpURL)) != nil
+	}
 	write()
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	defer sessionreg.Remove(dir, proc)
-	lastWT := worktree()
+	lastWT, lastViewed := worktree(), viewed()
 	for {
 		select {
 		case <-ctx.Done():
@@ -49,8 +51,8 @@ func PublishSessions(ctx context.Context, dir string, worktree func() string, mc
 		case <-changed:
 			write()
 		case <-tick.C:
-			if wt := worktree(); wt != lastWT || dirty {
-				lastWT = wt
+			if wt, vw := worktree(), viewed(); wt != lastWT || vw != lastViewed || dirty {
+				lastWT, lastViewed = wt, vw
 				write()
 			} else if sessionreg.Touch(dir, proc) != nil {
 				write() // swept by a reader while we stalled
@@ -59,8 +61,11 @@ func PublishSessions(ctx context.Context, dir string, worktree func() string, mc
 	}
 }
 
-func snapshotRegistry(started, wt, mcpURL string) sessionreg.Registry {
+func snapshotRegistry(started, wt, viewed, mcpURL string) sessionreg.Registry {
 	r := sessionreg.Registry{PID: os.Getpid(), Started: started, Worktree: wt, MCP: mcpURL}
+	if viewed != "" && !SameCheckout(viewed, wt) {
+		r.Viewed = viewed // the TUI looks at another worktree of its repo (the fast switch): it is taken too
+	}
 	for _, in := range Sessions().List() {
 		r.Sessions = append(r.Sessions, sessionreg.Entry{
 			ID: agentsession.ProcTag() + "/" + string(in.ID), Dir: in.Dir, Agent: in.AgentID,
@@ -84,7 +89,8 @@ type liveView struct {
 	agents  map[string]string // full session id -> agent tool id
 	procs   map[string]bool   // procs with a LIVE registry (plus this process)
 	byDir   map[string][]SessionRef
-	tuis    []string // TUI worktrees
+	tuis    []string // TUI worktrees (where a TUI runs)
+	viewed  []string // worktrees a TUI SHOWS while running elsewhere (the fast switch's look)
 }
 
 // sessionDead: its process's registry is live and does not list it running,
@@ -127,7 +133,7 @@ func readLive(dir string) liveView {
 		d := filepath.Clean(e.Dir)
 		lv.byDir[d] = append(lv.byDir[d], SessionRef{ID: e.ID, Agent: e.Agent, State: e.State})
 	}
-	for _, e := range snapshotRegistry("", "", "").Sessions {
+	for _, e := range snapshotRegistry("", "", "", "").Sessions {
 		add(e)
 	}
 	if dir != "" {
@@ -136,12 +142,29 @@ func readLive(dir string) liveView {
 			if r.Worktree != "" {
 				lv.tuis = append(lv.tuis, r.Worktree)
 			}
+			if r.Viewed != "" {
+				lv.viewed = append(lv.viewed, r.Viewed) // shown by that TUI: a take would pull the panels from under it
+			}
 			for _, e := range r.Sessions {
 				add(e)
 			}
 		}
 	}
 	return lv
+}
+
+// TUIViewing finds a live TUI whose panels SHOW dir while it runs elsewhere
+// (the fast switch's look) and returns its own worktree — where its steering
+// inbox is. An agent in dir that gg did not start reaches that TUI by it.
+func TUIViewing(dir string) (string, bool) { return tuiViewingIn(SessionRegistryDir(), dir) }
+
+func tuiViewingIn(reg, dir string) (string, bool) {
+	for _, r := range sessionreg.Live(reg) {
+		if r.Viewed != "" && r.Worktree != "" && SameCheckout(r.Viewed, dir) {
+			return r.Worktree, true
+		}
+	}
+	return "", false
 }
 
 // AgentHostInfo is one live gg TUI as its registry file describes it.

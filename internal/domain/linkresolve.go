@@ -759,17 +759,23 @@ func cleanLinkRelPath(rel string) (string, error) {
 func linkSplit(abs, checkout string) (string, bool) {
 	a := filepath.ToSlash(filepath.Clean(abs))
 	c := filepath.ToSlash(filepath.Clean(checkout))
-	if linkPathKey(a) == linkPathKey(c) {
+	ka, kc := linkPathKey(a), linkPathKey(c)
+	if ka == kc {
 		return "", true
 	}
-	pre := c
-	if !strings.HasSuffix(pre, "/") {
-		pre += "/"
+	// The separator goes on the KEY: keying "<checkout>/" would clean the
+	// slash away and make a sibling checkout whose name extends this one's
+	// ("…-switch-2" beside "…-switch") look like it sits inside.
+	sep := "/"
+	if strings.HasSuffix(kc, "/") { // a root checkout
+		sep = ""
 	}
-	if !strings.HasPrefix(linkPathKey(a), linkPathKey(pre)) {
+	if !strings.HasPrefix(ka, kc+sep) {
 		return "", false
 	}
-	return a[len(pre):], true
+	// Sliced by the PATH's length, not the key's: under a case fold a key
+	// may be longer than its path (a lower-cased İ is three bytes).
+	return a[len(c)+len(sep):], true
 }
 
 // linkMovedSplit finds base as a directory segment of abs (the LAST match
@@ -818,18 +824,12 @@ func linkNameEq(a, b string) bool {
 
 // linkPathKey normalises a path for comparison: slash form, and case-folded on
 // the platforms whose filesystems are case-insensitive.
-func linkPathKey(p string) string {
-	s := filepath.ToSlash(p)
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		return strings.ToLower(s)
-	}
-	return s
-}
+// linkPathKey is model.KeyOf's rule (one rule for every comparison of
+// checkout paths; the fold is model's per-platform switch).
+func linkPathKey(p string) string { return string(model.KeyOf(p)) }
 
 // samePathLink reports whether two absolute paths name the same place.
-func samePathLink(a, b string) bool {
-	return linkPathKey(filepath.Clean(a)) == linkPathKey(filepath.Clean(b))
-}
+func samePathLink(a, b string) bool { return model.SamePath(a, b) }
 
 // SameCheckout reports whether two absolute checkout paths name the same
 // place, by the SAME rule the link resolver uses to deduplicate candidates
