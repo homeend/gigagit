@@ -35,3 +35,28 @@ func TestStackedDiffRoundTripsAndIsIndependentOfWebUI(t *testing.T) {
 		t.Fatal("set false must read back false")
 	}
 }
+
+// The review split's own stacked pref round-trips and never touches the
+// diff view's (spec §4.3: two keys, two postures).
+func TestStackedReviewFilesIsItsOwnPref(t *testing.T) {
+	t.Parallel()
+	fs := NewFileStore(filepath.Join(t.TempDir(), "prompts.toml"))
+	if fs.StackedReviewFiles() {
+		t.Fatal("a fresh store must read false")
+	}
+	if err := fs.SetStackedReviewFiles(true); err != nil {
+		t.Fatal(err)
+	}
+	if !fs.StackedReviewFiles() || fs.StackedDiff() {
+		t.Fatalf("review %v diff %v: the review pref must not set the diff's", fs.StackedReviewFiles(), fs.StackedDiff())
+	}
+	if err := fs.SetStackedDiff(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := fs.SetStackedReviewFiles(false); err != nil {
+		t.Fatal(err)
+	}
+	if fs.StackedReviewFiles() || !fs.StackedDiff() {
+		t.Fatal("clearing the review pref must leave the diff's alone")
+	}
+}

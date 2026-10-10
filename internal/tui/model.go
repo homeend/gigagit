@@ -180,6 +180,9 @@ type Model struct {
 	// promptstate at startup and written back on every flip — machine-local,
 	// and independent of the web's own stacked pref (design R7).
 	diffStacked bool
+	// reviewStacked is the review overview split's stacked mode (S there):
+	// its own promptstate key (split_prefs.go), never the diff view's.
+	reviewStacked bool
 	// stackSeq numbers the stacks this session has opened: each one's
 	// generation, so a rebuilt stack drops the answers owed to the old one.
 	stackSeq int
@@ -494,6 +497,7 @@ func New(svc *domain.Service) Model {
 func (m Model) loadPrefs() Model {
 	if m.promptStore != nil {
 		m.diffStacked = m.promptStore.StackedDiff()
+		m.reviewStacked = m.promptStore.StackedReviewFiles()
 		m.repoGrouped = m.promptStore.RepoGrouped()
 	}
 	return m
