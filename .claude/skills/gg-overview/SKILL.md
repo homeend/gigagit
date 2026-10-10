@@ -52,7 +52,8 @@ recipe.
    `--rationale`. Several short notes beat one long one. Each answers `noted
    … as t<n>` — keep the ids for step 5.
 5. **The overview.** Markdown, written in the order you would explain it —
-   tab walks the anchors top to bottom:
+   tab walks the anchors top to bottom (in a stored review's overview the
+   TUI shows it beside the file: ↑/↓ walk the anchors, tab switches sides):
    - first line: the result in one sentence;
    - then each point with its anchor: `[the parser](internal/x/parse.go:40-60)`,
      `[this check](src/a.go:120)`, `[why this lock](note:t7)` (opens the file

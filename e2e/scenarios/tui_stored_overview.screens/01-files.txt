@@ -1,12 +1,12 @@
 local  branch main                                                                                                {{root}}________________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Files 8aa1935 add a                               ││ Commits (all) 1                                                                                         │
-│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓ ✎ *main add a                                                                                    │
+│ Files 49ff094 add a and b                         ││ Commits (all) 1                                                                                         │
+│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓ ✎ *main add a and b                                                                              │
 │ > Reviews                                         ││                                                                                                         │
-│     └ 2026-01-02 00:00 Claude Code · 0/1 resolved ││                                                                                                         │
+│     └ 2026-01-02 00:00 Claude Code · 0/2 resolved ││                                                                                                         │
 │   A  .gg.toml                                     ││                                                                                                         │
 │   A  a.txt                                        ││                                                                                                         │
-│                                                   ││                                                                                                         │
+│   A  b.txt                                        ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
@@ -37,4 +37,4 @@ local  branch main                                                              
 │                                                   ││                                                                                                         │
 ╰───────────────────────────────────────────────────╯╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 tree: [↑/↓] move  [enter] diff  [a] all files  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view  [ctrl+t] full  [i] msg  [esc/l] close
-⎇ main · # 8aa1935 · @ gg-e2e
+⎇ main · # 49ff094 · @ gg-e2e

@@ -46,6 +46,7 @@ func (m Model) filesCommitBadges() bool {
 // place that defines "no files view is open". Replaces the per-site partial
 // resets (esc, l, narrow-close, repo-switch) that each cleared a different subset.
 func (m Model) closeFilesView() Model {
+	m = m.dropSplits() // a review split steers through this view: it goes with it
 	m.filesMode = filesModeChanged
 	m.filesView = nil
 	m.filesTitle = ""
@@ -1258,7 +1259,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		return m.openReviewSummary()
 	}
 	if l.overviewDoc {
-		return m.openReviewOverviewDoc()
+		return m.openReviewOverviewSplit()
 	}
 	if l.shelfNote != "" { // a shelved set's note: the read-only note popup, esc comes back here
 		for _, r := range m.filesShelfNotes {

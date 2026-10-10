@@ -70,7 +70,7 @@ func clickEnterLayer(l layer) bool {
 // key. Every other layer swallows the right button.
 func rightClickMenuLayer(l layer) bool {
 	switch l.(type) {
-	case *historyView, *blameView, *diffView:
+	case *historyView, *blameView, *diffView, *splitView:
 		return true
 	}
 	return false
@@ -152,6 +152,9 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// accept a double-click as enter; the full-screen readers accept a
 	// right-click as `.`.
 	if l := m.topLayer(); l != nil {
+		if sv, ok := l.(*splitView); ok && m.actionMenu == nil {
+			return m.splitMouse(sv, msg, wheel)
+		}
 		if cp, ok := l.(*contentPopup); ok && wheel != 0 {
 			cp.move(wheel)
 		}

@@ -470,11 +470,22 @@ func previewRowMark(p *contentPopup, row int, cursorOff bool, l contentLine, ban
 	return rowStyle, marked
 }
 
+// previewBoxOpts is how a preview box is drawn: focused (the lit border),
+// viewer (the full-screen viewer's reading column, hint row and title-line
+// status) and cursorOff (no cursor row — an unfocused split pane).
+type previewBoxOpts struct{ focused, viewer, cursorOff bool }
+
 // renderPreviewBox draws one file preview as a bordered box: title, the
 // windowed lines (cursor band, selection stripe, search emphasis, syntax
 // classes) and the hint line. The files view's right column and the
 // full-screen fileViewer both draw through it, so they cannot drift apart.
 func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, focused, viewer bool) string {
+	return m.renderPreviewBoxOpts(p, title, boxW, boxH, previewBoxOpts{focused: focused, viewer: viewer})
+}
+
+// renderPreviewBoxOpts is renderPreviewBox with every drawing choice explicit.
+func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH int, o previewBoxOpts) string {
+	focused, viewer := o.focused, o.viewer
 	contentH := boxH - 2 // top/bottom border
 	if contentH < 1 {
 		contentH = 1
@@ -527,7 +538,7 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	}
 	start := p.clampTop(p.sel, rowsCap)
 	wr := make([]winRow, 0, rowsCap)
-	cursorOff := m.cursorStyle() == "off"
+	cursorOff := m.cursorStyle() == "off" || o.cursorOff
 	for row := start; row < len(vis) && len(wr) < rowsCap; row++ {
 		l := vis[row]
 		r := winRow{text: l.text, cls: l.cls}

@@ -14,6 +14,9 @@ import (
 // right-column preview answers while it is focused (the tree side owns the
 // keys otherwise).
 func (m Model) activePreview() (p *contentPopup, rows, innerW int, ok bool) {
+	if _, d, rows, innerW, ok := m.splitFocus(); ok {
+		return d.p, rows, max(innerW-d.gutterW(), 1), true
+	}
 	if fv, isViewer := m.topLayer().(*fileViewer); isViewer {
 		rows, innerW = fv.geom(m)
 		return fv.p, rows, max(innerW-fv.gutterW(), 1), true

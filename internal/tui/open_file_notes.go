@@ -246,6 +246,13 @@ func (m Model) previewDoc(p *contentPopup) *openFile {
 			if fv, ok := l.(*fileViewer); ok && fv.p == p {
 				return fv.openFile
 			}
+			if sv, ok := l.(*splitView); ok {
+				for _, pn := range []pane{sv.left, sv.right} {
+					if d := pn.doc(); d != nil && d.p == p {
+						return d
+					}
+				}
+			}
 		}
 	}
 	return nil

@@ -201,9 +201,10 @@ func TestHeadlessPromptMemoryFollowsStatePath(t *testing.T) {
 	dir := headlessRepo(t)
 	a := newHeadless(t, dir)
 	a.m = a.m.setStackedPref(true)
+	a.m = a.m.setReviewStackedPref(true)
 	b := newHeadless(t, dir)
-	if b.m.diffStacked {
-		t.Fatal("a second Headless with its own StatePath must not inherit the first one's stacked preference")
+	if b.m.diffStacked || b.m.reviewStacked {
+		t.Fatal("a second Headless with its own StatePath must not inherit the first one's stacked preferences")
 	}
 }
 
