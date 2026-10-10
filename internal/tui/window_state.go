@@ -228,6 +228,27 @@ func (w *windowState) reparkConsole(parked []layer) {
 	w.layers.entries = live
 }
 
+// reparkConsoleViews is reparkConsole for the stash list and the files
+// preview a console-parked dispatch put back live: whichever of them is
+// still there goes under the console's copy again (a close during the
+// handling leaves them live, and the live ones are not these).
+func (w *windowState) reparkConsoleViews(stash *stashView, preview *openFile, previewOf *contentPopup) {
+	if stash != nil && w.stashView == stash {
+		if w.consoleParked == nil {
+			w.consoleParked = &consoleParked{}
+		}
+		w.consoleParked.stashView = stash
+		w.stashView = nil
+	}
+	if preview != nil && w.filesPreview == preview {
+		if w.consoleParked == nil {
+			w.consoleParked = &consoleParked{}
+		}
+		w.consoleParked.filesPreview, w.consoleParked.filesView = preview, previewOf
+		w.filesPreview = nil
+	}
+}
+
 // consoleParked is a console's displaced copy of a worktree's windows.
 type consoleParked struct {
 	layers       []layer

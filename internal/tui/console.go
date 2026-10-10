@@ -308,12 +308,23 @@ func (m Model) dispatchParkedAware(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.dispatch(msg)
 	}
 	cp := m.consoleParked
-	if m.console == nil || cp == nil || len(cp.layers) == 0 {
+	if m.console == nil || cp == nil || len(cp.layers) == 0 && cp.stashView == nil && cp.filesPreview == nil {
 		return m.dispatch(msg)
 	}
 	parked := cp.layers
 	cp.layers = nil // a close while handling finds them live already
 	m = m.restoreLayersBeneath(parked)
+	// The stash list and the files preview are displaced the same way and
+	// take their reads (a stash list's entries, a preview's bytes) only
+	// while live: back beneath the handler too, parked again after.
+	stash, preview, previewOf := cp.stashView, cp.filesPreview, cp.filesView
+	cp.stashView, cp.filesPreview, cp.filesView = nil, nil, nil
+	if stash != nil && m.stashView == nil {
+		m.stashView = stash
+	}
+	if preview != nil && m.filesPreview == nil && previewOf != nil && m.filesView == previewOf {
+		m.filesPreview = preview
+	}
 	view := m.viewed
 	nm, cmd := m.dispatch(msg)
 	out, ok := nm.(Model)
@@ -326,13 +337,15 @@ func (m Model) dispatchParkedAware(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// displaced by the console there: back under its parked copy.
 		if v := out.views[view]; v != nil {
 			v.windows.reparkConsole(parked)
+			v.windows.reparkConsoleViews(stash, preview, previewOf)
 		}
 		return out, cmd
 	}
-	if out.console == nil || out.layers == nil {
+	if out.console == nil {
 		return out, cmd // the console went: its views are live now
 	}
-	out.windowState.reparkConsole(parked)
+	out.windowState.reparkConsole(parked) // a nil pile (no layer ever pushed) is its own no-op
+	out.windowState.reparkConsoleViews(stash, preview, previewOf)
 	return out, cmd
 }
 
