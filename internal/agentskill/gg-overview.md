@@ -44,9 +44,9 @@ recipe.
    `--rationale`. Several short notes beat one long one. Each answers `noted
    … as t<n>` — keep the ids for step 5.
 5. **The overview.** Markdown, written in the order you would explain it —
-   the anchors are walked top to bottom (the TUI shows an overview beside
-   the file each anchor points to: ↑/↓ walk the anchors and the file follows,
-   a note anchor shows your note, tab switches sides; a narrow terminal
+   the anchors are walked top to bottom (the TUI and gg web show an overview
+   beside the file each anchor points to: ↑/↓ walk the anchors and the file follows,
+   a note anchor shows your note, tab switches sides; a narrow terminal or window
    shows it full-screen, where tab walks them):
    - first line: the result in one sentence;
    - then each point with its anchor: `[the parser](internal/x/parse.go:40-60)`,

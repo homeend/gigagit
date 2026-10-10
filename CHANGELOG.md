@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: every overview opens beside its code
+
+### Added
+- In gg web an overview — a review's stored one (the *≡ Overview* row) or an
+  agent's (`gg session overview`, the open-files switcher, `gg session files
+  focus`) — opens as two columns inside the viewer when the box is 900px
+  wide or more: the overview on the left, the file its selected link points
+  to on the right. ↑/↓ walk the links and the file follows, enter or tab
+  moves into the file, tab / backspace come back, `N`/`P` step the overview
+  from the file, a click on a link shows its file. The link whose band holds
+  the file's cursor is marked in the bands' colour. Esc closes both (an
+  agent's overview stays in the switcher). A narrower window shows one
+  document as before; backspace from a file opened there comes back into the
+  split when the window has grown.
+- A file opened from a review's overview shows the review's remarks as
+  read-only boxes under their lines (a remark on a line the change deleted
+  is left out); `/api/file-content` takes `review=<id>` for them.
+
+### Changed
+- `n`/`p` in a file an overview opened step its bands without moving the
+  overview's selection, so backspace returns to the link you opened.
+
 ## Every overview opens beside its code
 
 ### Added

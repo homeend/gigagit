@@ -772,8 +772,9 @@ registerHelp({
     "an AI review is stored with the commit it reviewed: a commit's reviews head its file list under " +
     "<b>Reviews</b>, and a branch's reviews of its current tip sit under its row. Click one to open the review " +
     "— <b>≡ Summary</b> (the summary, meta and notes it could not place), <b>≡ Overview</b> when the review stores an " +
-    "overview (click it: the overview opens in the viewer, <b>tab</b> walks its anchors, <b>enter</b> opens the file at " +
-    "the reviewed commit with its bands, <b>backspace</b> comes back, <b>y</b> copies its text; an anchor the review " +
+    "overview (click it: the overview opens beside the file its link points to at the reviewed commit, with its bands and the " +
+    "review's remarks; <b>↑↓</b> walk its links and the file follows, <b>tab</b> switches sides, <b>y</b> copies its text — a narrow " +
+    "window shows the overview alone, <b>tab</b> walks its anchors, <b>enter</b> opens the file, <b>backspace</b> comes back; an anchor the review " +
     "cannot resolve is plain text), then the files, ◆N on each the review " +
     "notes, with the review's notes in the diffs, read-only. On the review's file list <b>,</b> / <b>.</b> move to " +
     "the previous / next file the review notes. esc goes back; right-click a review row or the " +

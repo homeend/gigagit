@@ -90,3 +90,14 @@ func TestOverviewSplitLiveIsWired(t *testing.T) {
 		}
 	}
 }
+
+// The split is advertised: the viewer's help entry and the ≡ Overview row's.
+func TestOverviewSplitIsAdvertised(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(readStatic(t, "viewer.js"), "opens beside the file its selected link points to") {
+		t.Error("viewer.js help lacks the split")
+	}
+	if !strings.Contains(readStatic(t, "reviews.js"), "beside the file") {
+		t.Error("reviews.js ≡ Overview help lacks the split")
+	}
+}
