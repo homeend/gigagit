@@ -361,3 +361,25 @@ func TestReviewSummaryRowIsWired(t *testing.T) {
 		t.Error("review.js must read the done event's summaryMd")
 	}
 }
+
+// R4 / W1: the PR view's Reviews block reads /api/pr/notes' reviews; a
+// review opened from it returns to the PR (kind "pr"), never to a commit.
+func TestPRReviewsBlockIsWired(t *testing.T) {
+	t.Parallel()
+	if p := readStatic(t, "previews.js"); !strings.Contains(strings.SplitN(p, "export async function loadPRCounts", 2)[1], "state.previewReviews = d.reviews || [];") {
+		t.Error("loadPRCounts does not keep the PR's reviews")
+	}
+	rv := readStatic(t, "reviews.js")
+	if strings.Contains(rv, `po.pr ? [] :`) {
+		t.Error("previewScopeReviews still hides a pull request's reviews")
+	}
+	if !strings.Contains(rv, `back.kind === "pr"`) || !strings.Contains(rv, `window.__ggOpenPRLanding`) {
+		t.Error("goBack has no pr arm")
+	}
+	if !strings.Contains(readStatic(t, "files.js"), `{ kind: "pr", pr: po.pr, reviewId }`) {
+		t.Error("previewBack does not name the pull request")
+	}
+	if !strings.Contains(readStatic(t, "prs.js"), `window.__ggOpenPRLanding = openPRLanding;`) {
+		t.Error("prs.js does not publish openPRLanding for the review's way back")
+	}
+}

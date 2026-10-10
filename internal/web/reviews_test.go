@@ -25,6 +25,7 @@ type reviewHeadResp struct {
 	Agent   string `json:"agent"`
 	Summary string `json:"summary"`
 	Created string `json:"created"`
+	Older   bool   `json:"older"`
 }
 
 // reviewServer serves a two-commit repo holding one review (text) of its tip.

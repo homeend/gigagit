@@ -254,13 +254,13 @@ function reviewRowsHTML() {
 }
 
 
-// previewScopeReviews is the opened merge preview's (or unscoped pair's) AI
-// reviews — its Reviews block. None for a pull request (no scope) or a range
+// previewScopeReviews is the opened merge preview's — or pull request's —
+// (or unscoped pair's) AI reviews — its Reviews block. None for a range
 // opened from a commit's Range review row (one review's notes: p.scope).
 function previewScopeReviews() {
   if (state.filesMode !== "compare" || state.layout === "list") return [];
   const po = state.previewOpen;
-  if (po && po.tip && state.compare && state.compare.bHash === po.tip) return po.pr ? [] : state.previewReviews || [];
+  if (po && po.tip && state.compare && state.compare.bHash === po.tip) return state.previewReviews || [];
   const p = state.compare && state.compare.pair;
   if (p && !p.scope) return state.previewReviews || [];
   return [];
@@ -411,7 +411,8 @@ function setReviewHeader() {
 // its file list returns: {kind: "commit", sha, short, subject, reviewId} (a
 // commit's Reviews row), {kind: "preview", source, target, reviewId} or
 // {kind: "pair", a, b, reviewId} (an opened preview's Reviews row: back to
-// it), {kind: "popup", run} (View all notes: run reopens it) or
+// it), {kind: "pr", pr, reviewId} (a pull request's Reviews row: back to
+// the PR), {kind: "popup", run} (View all notes: run reopens it) or
 // {kind: "list"}.
 async function openReview(id, back) {
   const gen = ++state.detailGen; // a newer open or esc supersedes this one
@@ -582,6 +583,14 @@ function goBack(back) {
     state.reviewSel = back.reviewId || "";
     openCommitByHash(back.sha, back.subject || "").then((ok) => {
       if (ok) setCommitTitle(back.sha, back.short || "", back.subject || "");
+    });
+    return;
+  }
+  if (back && back.kind === "pr" && window.__ggOpenPRLanding) {
+    window.__ggOpenPRLanding(back.pr).then((ok) => {
+      if (!ok) return goBack({ kind: "list" }); // the PR no longer opens: back to the list
+      state.reviewSel = back.reviewId || "";
+      renderFiles();
     });
     return;
   }

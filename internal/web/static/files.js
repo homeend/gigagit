@@ -717,6 +717,7 @@ function pairCtx() {
 // when saved) or the pair (re-run as a..b). null for any other screen.
 function previewBack(reviewId) {
   const po = openPreviewCtx();
+  if (po && po.pr) return { kind: "pr", pr: po.pr, reviewId };
   if (po && !po.pr) return { kind: "preview", source: po.source, target: po.target, reviewId };
   const p = pairCtx();
   if (p && !p.scope) return { kind: "pair", a: p.a, b: p.b, reviewId };
