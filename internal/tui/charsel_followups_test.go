@@ -96,3 +96,20 @@ func TestStackCharSelFromAHeaderMovesTheLineCursorAtOnce(t *testing.T) {
 		t.Fatalf("v on the header: curLine %d, want the first prose line %d", v.curLine, first)
 	}
 }
+
+// A fixed range that covers no rune (an empty row alone) copies nothing: the
+// mode says so and stays, never leaving in silence.
+func TestDiffCharSelEmptySelectionSaysSoAndStays(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, textRows("abc", "", "def"), nil)
+	v := m.diffLayer()
+	v.setCursorLine(1, m.diffBodyRows())
+	got := "untouched"
+	m = captureClip(m, &got)
+	m = feedDiff(m, "v", "space")
+	u, cmd := m.Update(keyMsg("enter"))
+	m = drainCmds(t, u.(Model), cmd)
+	if got != "untouched" || !v.cs.on || m.diffNotice != "▸ the selection is empty — nothing to copy" {
+		t.Fatalf("clip %q on=%v notice %q", got, v.cs.on, m.diffNotice)
+	}
+}

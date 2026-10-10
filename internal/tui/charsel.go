@@ -375,6 +375,10 @@ func charSelKey(cs *textSel, host charHost, msg tea.KeyMsg) charSelResult {
 		}
 		res.copy = charSelText(rows, lo, hi)
 		res.count = cs.count(rows)
+		if res.copy == "" { // an empty row alone: say so and stay
+			res.notice = i18n.T("▸ the selection is empty — nothing to copy")
+			return res
+		}
 		cs.leave()
 	case "esc":
 		cs.esc()
