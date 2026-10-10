@@ -20,6 +20,7 @@ type opEventMsg struct{ event engine.Event }
 // rebaseRangeLoadedMsg carries the commit range for a single-commit move/drop,
 // loaded off the UI thread; the handler builds the plan and runs the rebase.
 type rebaseRangeLoadedMsg struct {
+	svc                  *domain.Service // the service the range was read through: a switch since makes the result stale
 	branch, onto, target string
 	edit                 rebaseplan.Edit
 	commits              []model.RangeCommit
@@ -31,13 +32,14 @@ func (m Model) loadRebaseRangeCmd(branch, onto, target string, e rebaseplan.Edit
 	svc := m.svc
 	return func() tea.Msg {
 		cs, err := svc.CommitRange(context.Background(), onto, branch)
-		return rebaseRangeLoadedMsg{branch: branch, onto: onto, target: target, edit: e, commits: cs, err: err}
+		return rebaseRangeLoadedMsg{svc: svc, branch: branch, onto: onto, target: target, edit: e, commits: cs, err: err}
 	}
 }
 
 // squashRangeLoadedMsg carries the onto..branch range for a squash, loaded off
 // the UI thread; the handler builds the squash plan and runs the rebase.
 type squashRangeLoadedMsg struct {
+	svc          *domain.Service // the service the range was read through: a switch since makes the result stale
 	branch, onto string
 	targets      []string
 	commits      []model.RangeCommit
@@ -49,13 +51,14 @@ func (m Model) loadSquashRangeCmd(branch, onto string, targets []string) tea.Cmd
 	svc := m.svc
 	return func() tea.Msg {
 		cs, err := svc.CommitRange(context.Background(), onto, branch)
-		return squashRangeLoadedMsg{branch: branch, onto: onto, targets: targets, commits: cs, err: err}
+		return squashRangeLoadedMsg{svc: svc, branch: branch, onto: onto, targets: targets, commits: cs, err: err}
 	}
 }
 
 // dropRangeLoadedMsg carries the onto..branch range for a multi-commit drop,
 // loaded off the UI thread; the handler builds the drop plan and runs the rebase.
 type dropRangeLoadedMsg struct {
+	svc          *domain.Service // the service the range was read through: a switch since makes the result stale
 	branch, onto string
 	targets      []string
 	commits      []model.RangeCommit
@@ -67,7 +70,7 @@ func (m Model) loadDropRangeCmd(branch, onto string, targets []string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		cs, err := svc.CommitRange(context.Background(), onto, branch)
-		return dropRangeLoadedMsg{branch: branch, onto: onto, targets: targets, commits: cs, err: err}
+		return dropRangeLoadedMsg{svc: svc, branch: branch, onto: onto, targets: targets, commits: cs, err: err}
 	}
 }
 
@@ -296,6 +299,7 @@ func (m Model) awaitingDecision() bool {
 
 // irebaseLoadedMsg carries the range commits for the interactive-rebase editor.
 type irebaseLoadedMsg struct {
+	svc          *domain.Service // the service the range was read through: a switch since makes the result stale
 	branch, onto string
 	commits      []model.RangeCommit
 	err          error
@@ -307,7 +311,7 @@ func (m Model) loadIrebaseCmd(branch, onto string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		cs, err := svc.CommitRange(context.Background(), onto, branch)
-		return irebaseLoadedMsg{branch: branch, onto: onto, commits: cs, err: err}
+		return irebaseLoadedMsg{svc: svc, branch: branch, onto: onto, commits: cs, err: err}
 	}
 }
 

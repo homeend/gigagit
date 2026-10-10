@@ -370,6 +370,12 @@ func (m Model) detachConsole() Model {
 func (m Model) dropConsole() Model {
 	if m.console != nil {
 		m = m.restoreConsoleParked() // the slot on screen: its own displaced views only
+		// A show queued while its worktree could not be swapped in
+		// (showConsoleBy) goes with the console: the panels must not jump
+		// there once the operation ends, with nothing to show.
+		if sess, ok := m.consoleSession(); ok && m.pendingReturnView == model.KeyOf(sess.Info().Dir) {
+			m.pendingReturnView = ""
+		}
 	}
 	return m.detachConsole()
 }

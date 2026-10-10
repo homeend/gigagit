@@ -537,26 +537,27 @@ func (m Model) takeQueuedReturn() Model {
 // slot's service failed and its directory is no longer there (the
 // worktree was removed under us) — the slot goes, home comes back, its
 // list read will say the rest. false when the view is fine.
-func (m Model) abandonGoneView() (Model, bool) {
+func (m Model) abandonGoneView() (Model, tea.Cmd, bool) {
 	if m.viewed == "" || m.viewed == m.home || guardStat(m.viewPath(m.viewed)) == nil {
-		return m, false
+		return m, nil, false
 	}
 	if m.switchRefusal() != "" {
 		// A popup over the gone tree is being filled: its submit fails
 		// against the missing directory, which is honest; a swap would run
 		// it in home. The return home queues for the surface clearing.
 		m.pendingReturnView = m.home
-		return m, false
+		return m, nil, false
 	}
 	gone := m.viewPath(m.viewed)
 	delete(m.views, m.viewed)
 	home := m.views[m.home]
 	if home == nil {
-		return m, false
+		return m, nil, false
 	}
 	m = m.sleepView()
 	m.viewed = "" // the gone slot must not be saved back: its windows and working-file bands die with it
 	takeWorkingAttention(m.attention)
+	steerCmd := m.failParkedSteer(&m.windowState, "the worktree is gone") // the live group is the gone slot's: what it owes is answered, not lost
 	m = m.loadView(home)
 	for s := sourceKey(0); s < srcCount; s++ {
 		m.srcGen[s]++ // every read launched through the gone service is moot
@@ -565,13 +566,14 @@ func (m Model) abandonGoneView() (Model, bool) {
 	m.srcLoading = map[sourceKey]bool{}
 	m.viewKick = true
 	m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.homeWorktree()))
-	return m, true
+	return m, steerCmd, true
 }
 
 // pruneViews drops the slots of worktrees that left the list (removed,
 // recycled, pruned). The viewed one going falls back to home: its
 // service would point at a tree that is not there.
-func (m Model) pruneViews() Model {
+func (m Model) pruneViews() (Model, tea.Cmd) {
+	var cmds []tea.Cmd // what the dropped slots still owed: a parked navigate or hint is answered, not lost
 	for key, v := range m.views {
 		if m.isRepoWorktree(v.path) || key == m.home {
 			continue
@@ -593,13 +595,19 @@ func (m Model) pruneViews() Model {
 				m = m.sleepView()
 				m.viewed = "" // the gone slot must not be saved back: its windows and working-file bands die with it
 				takeWorkingAttention(m.attention)
+				cmds = append(cmds, m.failParkedSteer(&m.windowState, "the worktree is gone")) // the live group is the gone slot's
 				m = m.loadView(home)
 				m.viewKick = true
 			}
 			m.statusMsg = i18n.T("%s is gone — showing %s", shortWorktreeName(gone), shortWorktreeName(m.homeWorktree()))
+			continue
 		}
+		cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree is gone"))
 	}
-	return m
+	if len(cmds) == 0 {
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // adoptView moves gg's identity to the viewed slot — the user's own switch,

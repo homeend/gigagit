@@ -1,6 +1,10 @@
 package tui
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -8,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // A working-tree stack open in A is A's window: loading B (a clean tree)
@@ -201,5 +206,85 @@ func TestMaximisedConsoleFooterSaysDock(t *testing.T) {
 	hint, _ := m.footerOverride()
 	if !strings.Contains(hint, "[alt+f] dock") || strings.Contains(hint, "[alt+f] max") {
 		t.Fatalf("footer %q, want [alt+f] dock", hint)
+	}
+}
+
+// A navigate parked in a worktree that is then removed is answered when
+// its slot goes — the sender would otherwise wait out its whole timeout
+// for a view that never opens. (A local navigate's refusal is the status
+// line's startAtFailMsg; a `gg session navigate --wait` gets the reply.)
+func TestPrunedSlotAnswersItsParkedNavigate(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	if err := os.WriteFile(filepath.Join(home, "only-home.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.switchView(other)
+	m, _ = m.steerNavigateStatusFile(steer.Command{Cmd: "navigate", File: "only-home.txt"}, false)
+	if m.pendingSteer == nil {
+		t.Fatal("precondition: parked in wt2")
+	}
+	m, _ = m.switchView(home) // wt2 sleeps with the navigate parked
+	if out, err := exec.Command("git", "-C", home, "worktree", "remove", "--force", other).CombinedOutput(); err != nil {
+		t.Fatalf("worktree remove: %v\n%s", err, out)
+	}
+	nm, cmd := m.Update(m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})())
+	m = nm.(Model)
+	if m.views[model.KeyOf(other)] != nil {
+		t.Fatal("precondition: the slot was not pruned")
+	}
+	var failed bool
+	for _, msg := range runCmds(cmd) {
+		if _, ok := msg.(startAtFailMsg); ok {
+			failed = true
+		}
+	}
+	if !failed {
+		t.Fatal("the parked navigate was dropped with its slot, unanswered")
+	}
+}
+
+// A console whose show was queued (its worktree could not be shown during
+// an operation) and that then steps aside for another right-column owner
+// takes its queued show with it: the panels must not jump to its worktree
+// once the operation ends.
+func TestDroppedConsoleCancelsItsQueuedShow(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m.running = true
+	m, _ = m.showConsole(id, false)
+	if m.console == nil || m.pendingReturnView != model.KeyOf(other) {
+		t.Fatalf("precondition: console=%v pending=%q", m.console != nil, m.pendingReturnView)
+	}
+	m = m.dropConsole()
+	if m.pendingReturnView != "" {
+		t.Fatalf("pendingReturnView=%q after the console was dropped, want none", m.pendingReturnView)
+	}
+}
+
+// A rebase-range read started in one worktree must not start the rebase
+// through another worktree's service after a switch (as stageHunksLoadedMsg
+// already refuses).
+func TestRangeLoadsRefuseAnotherWorktreesService(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	aSvc := m.svc
+	m, _ = m.switchView(other)
+	for name, msg := range map[string]tea.Msg{
+		"rebase":  rebaseRangeLoadedMsg{svc: aSvc, branch: "main", onto: "HEAD~1", commits: []model.RangeCommit{{Hash: "a"}}},
+		"squash":  squashRangeLoadedMsg{svc: aSvc, branch: "main", onto: "HEAD~1", commits: []model.RangeCommit{{Hash: "a"}}},
+		"drop":    dropRangeLoadedMsg{svc: aSvc, branch: "main", onto: "HEAD~1", commits: []model.RangeCommit{{Hash: "a"}}},
+		"irebase": irebaseLoadedMsg{svc: aSvc, branch: "main", onto: "HEAD~1", commits: []model.RangeCommit{{Hash: "a"}}},
+	} {
+		nm, _ := m.Update(msg)
+		got := nm.(Model)
+		if got.running || got.topLayer() != nil || got.statusMsg != "" {
+			t.Errorf("%s: a stale range load acted on the switched-to worktree: running=%v top=%T status=%q", name, got.running, got.topLayer(), got.statusMsg)
+		}
 	}
 }

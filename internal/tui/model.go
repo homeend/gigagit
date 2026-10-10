@@ -1798,7 +1798,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.worktreeMarks = msg.worktreeMarks
 			m = m.seedHome(msg.currentWorktree).saveView()
 			publishedWT.Store(m.homeWorktree()) // gg's OWN worktree, whichever slot this load was for
-			m = m.pruneViews()
+			var pruneCmd tea.Cmd
+			m, pruneCmd = m.pruneViews()
 			// The worktree's open files may have missed store changes while
 			// another worktree was current (a dismiss in the browser).
 			var docsCmd tea.Cmd
@@ -1817,7 +1818,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, tasksCmd = m.applyTasksConfig()
 			var consoleCmd tea.Cmd
 			m, consoleCmd = m.settleConsoleAfterSwitch() // m.worktrees now lists THIS repo's worktrees
-			steerCmd = tea.Batch(steerCmd, tasksCmd, consoleCmd)
+			steerCmd = tea.Batch(steerCmd, tasksCmd, consoleCmd, pruneCmd)
 			// Rebind the per-repo Settings write target on the legacy load path —
 			// configReadyMsg only covers app startup. Without this, every Settings
 			// write after a repo switch ("Show graph", "Commit sort", refresh
@@ -1938,8 +1939,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			var gone bool
-			if m, gone = m.abandonGoneView(); gone { // kept either way: a refused drop queues the return home
-				return m, m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})
+			var goneCmd tea.Cmd
+			if m, goneCmd, gone = m.abandonGoneView(); gone { // kept either way: a refused drop queues the return home
+				return m, tea.Batch(goneCmd, m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true}))
 			}
 			if msg.source == srcStatus && m.viewLoading() {
 				// The slot's first (silent) read failed and its directory is
@@ -2091,7 +2093,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyBr := m.panelSelKey(panelBranches)
 			p := msg.value.(worktreesPayload)
 			m.worktrees = p.worktrees
-			m = m.pruneViews()
+			var pruneCmd tea.Cmd
+			m, pruneCmd = m.pruneViews()
+			previewsChain = tea.Batch(previewsChain, pruneCmd) // what a pruned slot still owed (a parked navigate's reply)
 			m.worktreeMarks = p.marks
 			m.bfMemo.invalidate() // worktree checkouts are exemptions (see the dataLoadedMsg site)
 			m.headTimes = p.headTimes
@@ -4085,6 +4089,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case irebaseLoadedMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // the panels swapped while the range loaded: the rebase would run through the other worktree's service
+		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("interactive rebase: %s", msg.err.Error())
 			return m, nil
@@ -4102,6 +4109,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case rebaseRangeLoadedMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // the panels swapped while the range loaded: the rebase would run through the other worktree's service
+		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("rebase: %s", msg.err.Error())
 			return m, nil
@@ -4119,6 +4129,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
 
 	case squashRangeLoadedMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // the panels swapped while the range loaded: the rebase would run through the other worktree's service
+		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("squash: %s", msg.err.Error())
 			return m, nil
@@ -4179,6 +4192,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
 
 	case dropRangeLoadedMsg:
+		if msg.svc != nil && msg.svc != m.svc {
+			return m, nil // the panels swapped while the range loaded: the rebase would run through the other worktree's service
+		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("drop: %s", msg.err.Error())
 			return m, nil
@@ -4983,6 +4999,11 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	closeDocWatch(m.docWatch.w)                         // the old tree's files are not the new one's
 	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
+	for key, v := range m.views {
+		if key != m.viewed { // the viewed one's is the live group, failPending answered it above
+			dropped = tea.Batch(dropped, m.failParkedSteer(&v.windows, "the repository changed before the link landed"))
+		}
+	}
 	m.views = map[model.CheckoutKey]*worktreeView{} // another repository: its worktrees are not these
 	m.viewed, m.home, m.pendingReturnView = "", "", ""
 	m.workingReviewsGen++ // the old repo's working reviews (Review row, ✎) go
