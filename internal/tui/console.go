@@ -97,9 +97,9 @@ func (m Model) openConsole(id domain.SessionID) (Model, tea.Cmd) {
 	return m.showConsole(id, true)
 }
 
-// showConsole shows session id, focused or not (alt+a / alt+t show one
-// unfocused): docked in the Commits column, or maximised when the screen it
-// covers is full-screen. What it covers — the pin, the stash list or file
+// showConsole shows session id, focused (bound) or not (alt+a / alt+t bind
+// the one shown; a task's console opens unbound): docked in the Commits
+// column, or maximised when the screen it covers is full-screen. What it covers — the pin, the stash list or file
 // preview, a parked layer stack, focus — goes into its return point, which
 // a console replacing a console carries over. Only a focused show is a use
 // of the session (Touch): cycling through them must not reorder the list it
@@ -370,6 +370,12 @@ func (m Model) detachConsole() Model {
 func (m Model) dropConsole() Model {
 	if m.console != nil {
 		m = m.restoreConsoleParked() // the slot on screen: its own displaced views only
+		// A show queued while its worktree could not be swapped in
+		// (showConsoleBy) goes with the console: the panels must not jump
+		// there once the operation ends, with nothing to show.
+		if sess, ok := m.consoleSession(); ok && m.pendingReturnView == model.KeyOf(sess.Info().Dir) {
+			m.pendingReturnView = ""
+		}
 	}
 	return m.detachConsole()
 }
@@ -394,6 +400,19 @@ func (m Model) closeConsole() Model {
 		m.focus = r.focus
 	}
 	return m.reconcileFullscreenFocus()
+}
+
+// unbindConsole is the step-out: the keys are gg's again. Over a
+// full-screen return point the console stays full-screen (a second press or
+// esc goes back); a ctrl+t-maximised docked one docks again. alt+b's
+// unbinding is this same step.
+func (m Model) unbindConsole() Model {
+	m.console.focused = false
+	if m.console.maximized && !m.consoleFull() {
+		m.console.maximized = false
+		m = m.syncConsoleSize()
+	}
+	return m
 }
 
 // consoleBox is the box the console occupies now: the Commits column, or the
@@ -789,9 +808,14 @@ func (m Model) cycleSessionsIn(terminal, scoped bool) (Model, tea.Cmd) {
 	var next int
 	switch {
 	case shown >= 0 && m.console.focused && len(list) == 1:
-		if terminal {
+		switch {
+		case scoped && terminal:
+			m.statusMsg = i18n.T("the only running terminal in this worktree — already bound")
+		case scoped:
+			m.statusMsg = i18n.T("the only running agent session in this worktree — already bound")
+		case terminal:
 			m.statusMsg = i18n.T("the only running terminal in this repository — already focused")
-		} else {
+		default:
 			m.statusMsg = i18n.T("the only running agent session in this repository — already focused")
 		}
 		return m, nil
@@ -930,6 +954,11 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if m.console == nil {
 		return m, nil, false
 	}
+	// Anything layered above the console (the sessions popup opened from it,
+	// the . menu) owns the keyboard; closing it returns to the console.
+	if m.topLayer() != nil || m.actionMenu != nil {
+		return m, nil, false
+	}
 	// The size and binding toggles of a FOCUSED console (the blue border:
 	// the Commits column has the keyboard), bound or not. alt+f: docked ↔
 	// maximized, bound and focused after either way. alt+b: bound ↔
@@ -945,17 +974,11 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			return m.syncConsoleSize(), nil, true
 		}
 		if m.console.focused {
-			m.console.focused = false
-			return m, nil, true // shown and focused; the keys are gg's again
+			return m.unbindConsole(), nil, true // shown and focused; the keys are gg's again
 		}
 		m.console.focused = true
 		m.touchConsole()
 		return m.syncConsoleSize(), nil, true
-	}
-	// Anything layered above the console (the sessions popup opened from it,
-	// the . menu) owns the keyboard; closing it returns to the console.
-	if m.topLayer() != nil || m.actionMenu != nil {
-		return m, nil, false
 	}
 	// Focus left the console's column (a mouse click on another panel): the
 	// keyboard is gg's again. A full-screen console hides every panel, so
@@ -998,15 +1021,7 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			return nm, cmd, true
 		}
 		if key == m.stepOutKey() {
-			m.console.focused = false
-			// Over a full-screen return point the console stays full-screen
-			// (a second press or esc goes back); a ctrl+t-maximised docked
-			// one docks again.
-			if m.console.maximized && !m.consoleFull() {
-				m.console.maximized = false
-				m = m.syncConsoleSize()
-			}
-			return m, nil, true
+			return m.unbindConsole(), nil, true
 		}
 		if msg.Type == tea.KeyRunes {
 			msg.Runes, m.console.highHalf = joinSurrogates(m.console.highHalf, msg.Runes)

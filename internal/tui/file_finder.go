@@ -22,6 +22,14 @@ type lsFilesMsg struct {
 	err       error
 }
 
+// staleFor: the slot's F window moved on (sleepFWindow bumped its gen, or
+// the window is gone) — the list would be dropped at replay, so the gate
+// drops it now rather than queue every path of the tree.
+func (msg lsFilesMsg) staleFor(v *worktreeView) bool {
+	f := v.windows.wtFiles
+	return f == nil || f.gen != msg.gen
+}
+
 // loadLsFilesCmd returns a Cmd that calls LsFiles off-thread and delivers
 // lsFilesMsg back to Update.
 func (m Model) loadLsFilesCmd() tea.Cmd {

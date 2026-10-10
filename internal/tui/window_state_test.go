@@ -39,7 +39,7 @@ func TestWindowStateRoundTrip(t *testing.T) {
 // the gen tests drive the slot mechanics directly.
 func forceSwitch(t *testing.T, m Model, path string) Model {
 	t.Helper()
-	m = m.saveView()
+	m = m.parkView()
 	m = m.sleepView()
 	return m.loadView(m.ensureView(path))
 }

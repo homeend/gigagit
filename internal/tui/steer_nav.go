@@ -387,7 +387,8 @@ func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
 	// cursor landed (a link's line may be past the end of a file that shrank).
 	lead, evicted := "opened "+c.File, evictedPath(ev)
 	return m, func() tea.Msg {
-		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, path: c.File, line: line, lead: lead, evicted: evicted}
+		l := load().(fileContentMsg)
+		return contentLandedMsg{slotStamp: l.slotStamp, load: l, cmd: c, path: c.File, line: line, lead: lead, evicted: evicted}
 	}
 }
 
@@ -396,12 +397,13 @@ func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
 // Update fills the document from load, then replies. lead opens the reply
 // ("opened a.txt"); evicted is a file the open closed over the cap, or "".
 type contentLandedMsg struct {
-	load    fileContentMsg
-	cmd     steer.Command
-	path    string // the file loaded: a file_focus by id names no File
-	line    int
-	lead    string
-	evicted string
+	slotStamp // the load's own stamp: the whole landing waits for its worktree (slot_msg.go)
+	load      fileContentMsg
+	cmd       steer.Command
+	path      string // the file loaded: a file_focus by id names no File
+	line      int
+	lead      string
+	evicted   string
 }
 
 // landedDetail is the reply for a landed open file: lead, the line the
@@ -1352,6 +1354,28 @@ func (m Model) markLandedRange(v *diffView, no, end int, old bool, body int) (Mo
 // worktrees: a navigate parked in a slot the user left keeps waiting there,
 // and its sender gives up after the TTL; without this it would run on the
 // slot's next status read, minutes later, for a waiter that is gone.
+// failParkedSteer answers what a window group still owes before the group
+// is dropped (its worktree removed, the repository switched): the sender of
+// a parked navigate or a hint that must be answered would otherwise wait
+// out its whole timeout for a view that never opens.
+func (m Model) failParkedSteer(w *windowState, reason string) tea.Cmd {
+	var cmds []tea.Cmd
+	if ps := w.pendingSteer; ps != nil {
+		w.pendingSteer = nil
+		cmds = append(cmds, m.answerSteer(ps.cmd, steerFail(ps.cmd, reason)))
+	}
+	if ph := w.pendingHint; ph != nil {
+		w.pendingHint = nil
+		if ph.mustAnswer {
+			cmds = append(cmds, m.answerSteer(ph.cmd, steerFail(ph.cmd, reason)))
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
 func (m Model) expireParkedSteer(now time.Time) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	for key, v := range m.views {

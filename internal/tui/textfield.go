@@ -210,6 +210,9 @@ func (f textfield) View(focused bool) string {
 func (f *textfield) HandleEditKey(msg tea.KeyMsg) bool {
 	switch msg.Type {
 	case tea.KeyRunes:
+		if msg.Alt {
+			return false // alt+<letter> is a gg key (alt+w, alt+a, …), never text
+		}
 		f.insert(msg.Runes)
 	case tea.KeySpace:
 		f.insert([]rune{' '})

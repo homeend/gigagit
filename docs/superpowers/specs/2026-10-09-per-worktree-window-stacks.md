@@ -95,7 +95,7 @@ plus the layer stack, the popups' pending state and the steer leftovers.
 | `pendingSteer` | a navigate waiting on a load | yes |
 | `consoleSwitch.tour` | a tour waiting on the slot's status | yes |
 | `resumePromptShown` | the paused-op prompt's one-shot | yes (already) |
-| `focus`, `lastLeftPanel`, `activeLeftTab`, `fullMax`, `fullMaxed` | where the keyboard is, the pin | **no** — alt+w's first-hit rule and `showConsole`'s Commits-column invariants read them process-wide |
+| `focus`, `lastLeftPanel`, `activeLeftTab`, `fullMax`, `fullMaxed` | where the keyboard is, the pin | **no** — `showConsole`'s Commits-column invariants read them process-wide (alt+w's first-hit rule, the original reason, is gone since 2026-10-09) |
 | `eager` | the ctrl+f deep search | **no** — it walks the shared feed |
 | `startAtCmd`, `startAtPending` | a `--at` navigate | **no** — fires within one Update, never outlives a swap |
 | `modal`, `proc`, `console`, `notices*`, `actionMenu`, `recall*`, `filterTyping`, `highlightTyping` | the operation's surfaces, the console, process-wide input | no |

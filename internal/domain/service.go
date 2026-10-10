@@ -101,12 +101,70 @@ type Service struct {
 	textGlobal texttmpl.Store // lazily resolved; nil disables text templates
 	textRepo   texttmpl.Store // lazily resolved; nil disables text templates
 
+	// repoState is what belongs to the REPOSITORY rather than this worktree:
+	// the forge verdict and its caches, the tag cache. One per repository:
+	// NewSharing hands a worktree slot's Service the pointer of the Service
+	// it shares with, so a forge probe or a tags read through one worktree
+	// answers from every other.
+	*repoState
+	// forgeLocal is THIS Service's instance of the provider the shared
+	// verdict names (forgeLocalName), rooted at its own workdir: the
+	// worktree that probed may be removed later, and a gh rooted there would
+	// fail every later call. Guarded by forgeMu.
+	forgeLocal     forge.Provider
+	forgeLocalName string
+
+	// preflightMu guards the resolved verdicts. reRoot builds a FRESH Service,
+	// so a cached resolution can never outlive the repo it describes. Per
+	// Service, NOT in repoState: the legacy review-commands probe reads the
+	// asking worktree's committed .gg.toml (review_upgrade.go), which differs
+	// by branch — one worktree's verdict is not the other's.
+	preflightMu   sync.Mutex
+	preflightDone bool
+	preflightOut  []preflight.Verdict
+	// preflightMarks is the store-format marker map preflightOut was resolved
+	// from. Every cached Preflight call re-reads the markers and compares:
+	// another gg process sharing this repo can migrate a store underneath a
+	// long-lived Service (a `gg mcp` server never re-roots), and the cache
+	// must not outlive the state it describes.
+	preflightMarks map[string]int
+	// gitDirMu guards gitDirPath — this worktree's git dir, resolved once on
+	// first use (a repo's git dir never moves during a session; reRoot builds
+	// a fresh Service). "" = not yet resolved; a failed resolution retries on
+	// the next call. Backs the stat-level paused-op probe in conflictState.
+	gitDirMu   sync.Mutex
+	gitDirPath string
+
+	// showEOLOnly, when false (the default), hides files whose only unstaged
+	// change is line endings (CRLF↔LF) from Status/Snapshot. atomic because the
+	// TUI re-applies it from config inside loadCmd on every reload, which races
+	// op-triggered status refreshes reading it on another goroutine.
+	showEOLOnly atomic.Bool
+
+	// syntaxOff, when false (the zero value, i.e. the default), keeps diff
+	// syntax colouring ON. Named so the zero value means "on": the Service is
+	// constructed before config loads, and the CLI/web frontends may never
+	// call SetSyntaxHighlighting at all, so they must still get colours.
+	syntaxOff atomic.Bool
+
+	// versionsPolicy stores the engine.VersionsPolicy injected into every
+	// Execute. nil (never set) resolves to the default: enabled, 90 days.
+	versionsPolicy atomic.Value
+}
+
+// repoState is the repository-scoped half of a Service (see Service.repoState):
+// shared by every Service of one repository (NewSharing), private to a
+// Service built alone. reRoot builds a FRESH Service with a fresh one, so a
+// cached verdict can never outlive the repo it describes. The preflight
+// verdicts are NOT here (see Service.preflightMu).
+type repoState struct {
 	// forgeMu guards forge detection and the known-PR set (forge.go). It is
 	// never held across a provider call (the probe is a network round trip and
 	// Preflight reads forgeProbe under it), and never while taking preflightMu
 	// (Preflight holds preflightMu then takes forgeMu — the reverse deadlocks).
 	forgeMu         sync.Mutex
-	forgeProviders  []forge.Provider // nil = forge.Default; tests inject
+	forgeProviders  []forge.Provider // nil = forgeFactory; tests inject (one instance for every worktree)
+	forgeFactory    forgeFactory     // nil = forge.Default; builds the providers rooted at a worktree (tests record the dir)
 	forgeRec        observ.Recorder  // the session's span ring, so gh calls reach the operation log; nil for a Service built by New
 	forgeProbed     bool
 	forgeOptimistic bool           // forgeActive came from the cached listing, not Detect (until a list proves it)
@@ -140,41 +198,6 @@ type Service struct {
 	prPrefetch   int
 	prPolicySet  bool
 
-	// preflightMu guards the resolved verdicts. reRoot builds a FRESH Service,
-	// so a cached resolution can never outlive the repo it describes.
-	preflightMu   sync.Mutex
-	preflightDone bool
-	preflightOut  []preflight.Verdict
-	// preflightMarks is the store-format marker map preflightOut was resolved
-	// from. Every cached Preflight call re-reads the markers and compares:
-	// another gg process sharing this repo can migrate a store underneath a
-	// long-lived Service (a `gg mcp` server never re-roots), and the cache
-	// must not outlive the state it describes.
-	preflightMarks map[string]int
-
-	// gitDirMu guards gitDirPath — this worktree's git dir, resolved once on
-	// first use (a repo's git dir never moves during a session; reRoot builds
-	// a fresh Service). "" = not yet resolved; a failed resolution retries on
-	// the next call. Backs the stat-level paused-op probe in conflictState.
-	gitDirMu   sync.Mutex
-	gitDirPath string
-
-	// showEOLOnly, when false (the default), hides files whose only unstaged
-	// change is line endings (CRLF↔LF) from Status/Snapshot. atomic because the
-	// TUI re-applies it from config inside loadCmd on every reload, which races
-	// op-triggered status refreshes reading it on another goroutine.
-	showEOLOnly atomic.Bool
-
-	// syntaxOff, when false (the zero value, i.e. the default), keeps diff
-	// syntax colouring ON. Named so the zero value means "on": the Service is
-	// constructed before config loads, and the CLI/web frontends may never
-	// call SetSyntaxHighlighting at all, so they must still get colours.
-	syntaxOff atomic.Bool
-
-	// versionsPolicy stores the engine.VersionsPolicy injected into every
-	// Execute. nil (never set) resolves to the default: enabled, 90 days.
-	versionsPolicy atomic.Value
-
 	// tagsMu guards the fingerprint-validated Tags cache. The full tags read
 	// sorts by creatordate, which makes git read every tag object — seconds on
 	// a big pack — so tagsCached revalidates with the cheap TagsFingerprint
@@ -185,6 +208,11 @@ type Service struct {
 	tagsVal []model.Tag
 	tagsOK  bool
 }
+
+func newRepoState() *repoState { return &repoState{} }
+
+// forgeFactory builds the forge providers for a worktree (forge.Default).
+type forgeFactory func(workdir string, rec observ.Recorder) []forge.Provider
 
 // SetShowEOLOnlyChanges controls whether a file whose ONLY unstaged change is
 // line endings (CRLF↔LF) is surfaced as modified. The default (false) drops
@@ -250,9 +278,19 @@ func OpenTUI(workdir string) *Service {
 }
 
 // OpenTUISharing is OpenTUI for a worktree slot of the repository FROM
-// serves: its caches are from's (NewSharing).
+// serves: its caches and repository state are from's (NewSharing). Its
+// gh calls record into from's ring — the session's operation log — not
+// into a ring of its own nobody reads.
 func OpenTUISharing(workdir string, from *Service) *Service {
-	return openWith(workdir, true, observ.NewRing(200), from.factory)
+	return openWith(workdir, true, observ.NewRing(200), from)
+}
+
+// OpenTUISharingRooted is OpenTUISharing for a worktree whose TOP LEVEL
+// the caller already knows (an entry of `git worktree list`): it trusts
+// root and skips resolveRoot's rev-parse — a slot is made on the TUI's
+// Update thread, where a git round trip is a stall.
+func OpenTUISharingRooted(root string, from *Service) *Service {
+	return openAt(root, true, true, observ.NewRing(200), from)
 }
 
 // OpenTUIWithRing is OpenTUI with a caller-supplied span ring: cmd/gg keeps the
@@ -263,10 +301,18 @@ func OpenTUIWithRing(workdir string, ring *observ.Ring) *Service {
 	return openWith(workdir, true, ring, nil)
 }
 
-// openWith builds the runner stack; a nil factory is a private one, else
-// the Service vends its caches from it (NewSharing).
-func openWith(workdir string, sshBatch bool, ring *observ.Ring, factory cache.Factory) *Service {
+// openWith builds the runner stack over the resolved worktree root; with a
+// FROM the Service shares from's caches and repository state (NewSharing),
+// else both are private.
+func openWith(workdir string, sshBatch bool, ring *observ.Ring, from *Service) *Service {
 	workdir, resolved := resolveRoot(workdir, sshBatch, ring)
+	return openAt(workdir, resolved, sshBatch, ring, from)
+}
+
+// openAt is openWith after root resolution: resolved says workdir is a
+// worktree top level (the repo then skips its own rev-parse for
+// working-tree reads).
+func openAt(workdir string, resolved, sshBatch bool, ring *observ.Ring, from *Service) *Service {
 	er := gitexec.NewExecRunner("git", workdir, ring)
 	if sshBatch {
 		er = er.WithSSHBatchMode()
@@ -276,10 +322,11 @@ func openWith(workdir string, sshBatch bool, ring *observ.Ring, factory cache.Fa
 		repo.Root = workdir // known: working-tree reads skip the rev-parse
 	}
 	s := New(repo)
-	if factory != nil {
-		s.factory = factory
-	}
 	s.workdir = workdir
+	if from != nil {
+		s.factory, s.repoState = from.factory, from.repoState // the shared state keeps ITS recorder: from's ring
+		return s
+	}
 	if ring != nil {
 		s.forgeRec = ring // guarded: a nil *Ring in the interface would not be a nil Recorder
 	}
@@ -314,20 +361,26 @@ func resolveRoot(workdir string, sshBatch bool, rec observ.Recorder) (string, bo
 
 // New wraps an existing repo (tests, callers with their own runner wiring).
 func New(repo *git.Repo) *Service {
-	return &Service{repo: repo, factory: cache.NewFactory(0, 0)}
+	return &Service{repo: repo, factory: cache.NewFactory(0, 0), repoState: newRepoState()}
 }
 
-// NewSharing is New over FROM's caches: a Service for another worktree of
-// the same repository, so a commit diff, a blame, a commit's file list, a
-// pair's file set or a preview summary cached through one worktree is a
-// hit from the other, and the repository has one cache budget however
-// many of its worktrees are open. Every cache the factory vends is keyed
-// by content (a full hash, a hash pair, a hash + path); a working-tree
-// diff or blame is never cached (Key "" / rev ""), so nothing that depends
-// on WHICH worktree asked can enter a shared cache. The differ itself
-// stays per Service: it carries the Service's own options.
+// NewSharing is New over FROM's caches and repository state: a Service for
+// another worktree of the same repository, so a commit diff, a blame, a
+// commit's file list, a pair's file set or a preview summary cached
+// through one worktree is a hit from the other, and the repository has
+// one cache budget however many of its worktrees are open. Every cache
+// the factory vends is keyed by content (a full hash, a hash pair, a hash
+// + path); a working-tree diff or blame is never cached (Key "" / rev ""),
+// so nothing that depends on WHICH worktree asked can enter a shared
+// cache. The repoState is shared too (one forge probe, one tag cache per
+// repository — neither depends on the asking worktree; the provider each
+// Service CALLS is rooted at its own worktree, see forgeLocal). The
+// preflight verdicts, the differ and the singleflight stay per Service:
+// a preflight probe reads the asking worktree's committed config, the
+// differ carries the Service's own options, the flight coalesces
+// per-worktree reads (status).
 func NewSharing(repo *git.Repo, from *Service) *Service {
-	return &Service{repo: repo, factory: from.factory}
+	return &Service{repo: repo, factory: from.factory, repoState: from.repoState}
 }
 
 // Root is the directory every git invocation of this Service runs in: the

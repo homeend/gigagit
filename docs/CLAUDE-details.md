@@ -4139,7 +4139,9 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   non-console screen (`captureReturn`: the live layer stack is PARKED only
   when its top is a full-screen VIEW — diff/history/blame/file viewer; a
   popup or editor on top stays live and keeps the keyboard, so a console
-  opening on its own never takes it — and the ctrl+t pin / stash list / file
+  opening on its own never takes it; the USER's own alt+a/alt+w parks a
+  `parkableLayer` popup with the worktree's windows instead, see the
+  fast-switch section — and the ctrl+t pin / stash list / file
   preview (restored only inside the same files view) / focus saved) and carried over
   when a console replaces a console, so "the screen before the agent"
   survives a cycle; `closeConsole` restores it (parked layers go BENEATH
@@ -6321,7 +6323,13 @@ started after it absorbs the change. A post-send read dropped because one
 was running is queued in `prRefreshAgain` and asked when that one lands.
 `reRoot` resets prSeen/prUpdated/prOwnSend/prRefreshAgain/prOfflineSince/
 prRefreshing (`closeFilesView` does not: the moved-head reopen runs through
-it after setting "updated").
+it after setting "updated"). All of it, with the read slot
+(`prRevalidateInflight`/`prCommentsInflight`/`prCommentsLast`),
+`prRevalidateSkip` and `prReland`, lives in `windowState`: it is the open
+PR VIEW's and parks with it (hunt follow-up); `prRevalidatedMsg` is
+slot-stamped and lands the PR row through `applyShared` (`followPRRow`)
+whichever worktree asked. `forgeGen`, `keptSendBody` and the prefetch stay
+process-wide.
 
 **Answers after `R`, kept bodies, bars.** `forgeGen` (bumped by `reRoot`
 only; `prsGen` cannot serve, every PR-list read bumps it) rides in
@@ -6469,14 +6477,14 @@ rulings): worktree mode. `at = worktreeIndex(m.viewed)` in
 each mapped to the worktree that has it checked out; then any worktree
 without such a row — detached, filtered out — in list order), never the
 raw list: the Branches tab sorts by date newest first by default, the list
-does not, which read as "bottom to top"; "next" is the row below. FIRST HIT = the
-keyboard is not on Branches (`m.console != nil`, or
-`!panelFocused(panelBranches)`, or another left tab active): a shown
-console is HIDDEN — `ret.view = viewed` (hiding is not leaving: the panels
-stay), `ret.focus = panelBranches`, `closeConsole` (a full-screen one gives
-its parked view back) — then `activateTab(panelBranches)` and
-`selectWorktreeBranch(viewed)`; no advance. With Branches focused: the next
-of the order, wrapping, through `switchView` — a look, like alt+a, never
+does not, which read as "bottom to top"; "next" is the row below. Every press
+(no first-hit step — user ruling 2026-10-09): `switchRefusalBy(true)` is
+asked FIRST (an op, a decision, a process, a non-parkable popup refuse
+whole: nothing on screen changes), then a shown console is HIDDEN —
+`ret.view = viewed` (hiding is not leaving: the panels stay),
+`ret.focus = panelBranches`, `closeConsole` (a full-screen one gives its
+parked view back) — then `activateTab(panelBranches)` and the next of the
+order, wrapping, through `userSwitchView` — a look, like alt+a, never
 `adoptView`: home stays — then `selectWorktreeBranch`: the Branches cursor
 (`sel[panelBranches]`, a display index over `branchEntries`, the branch row
 not a sub-row) on the worktree's checked-out branch; detached, unlisted or
@@ -6623,13 +6631,21 @@ tours, the hosted page, op chains, the move popup) and `showConsoleBy(id,
 focused, byUser)` (true from `cycleSessions` only). A `gotoCommitPopup`
 with a resolve pending, the generic `contentPopup`, the palette, the
 sessions popup, the notices dialog, sends and detects in flight are never
-parkable. Memory: `windowState.sleepFWindow` (called by `switchViewBy`
-on the leaving slot's copy only — `saveView` alone runs at the first load
-too and must not blank a live window) drops the F window's `wtFiles.all`/
-`untracked`/`letters` and `filesView.lines`, keeps the filter and
-`wtFiles.keepPath` (the cursor's file); `viewKickCmd` re-issues
+parkable. Memory: `windowState.sleepFWindow` (called by `parkView`, the
+swap path, on the leaving slot's copy only — `saveView` alone runs at the
+first load too and must not blank a live window) drops the F window's
+`wtFiles.all`/`untracked`/`letters` and `filesView.lines`, keeps the filter
+and `wtFiles.keepPath` (the cursor's file); `viewKickCmd` re-issues
 `loadLsFilesCmd` (its `lsFilesMsg` is slot-stamped) when the returned F
 window is loading, and `wtSetQuery` lands the cursor on `keepPath` once.
+The same for a commit's FULL tree (`filesModeFullTree`): the lines go,
+`treeSlept`/`treeKeepPath` are set, the kick re-issues `loadTreeFilesCmd`,
+the `treeFilesMsg` arm lands the cursor on the kept path, and
+`treeFilesMsg.staleFor` drops a tree in flight for a slot that gave its
+tree up; a failed re-read stays `treeSlept` (the next return asks again).
+Only `parkView` copies the live group into the slot and `loadView` clears
+the copy once the group is live: a slot holds a window copy only while
+it SLEEPS (the only readers of a slot's copy skip the viewed one).
 Everything else parked is bounded by what the user opened. Spec
 `docs/superpowers/specs/2026-10-09-per-worktree-window-stacks.md`.
 `sleepView` (watchers closed, the five gens bumped, `srcFeed` retired) is shared by
@@ -6699,14 +6715,25 @@ SEQUENTIAL test on Linux exercises the Windows/macOS rule
 (`applyServicePolicies` in `ensureView`; `applyPoliciesToSlots` on
 `configReadyMsg` and the Versions settings) — a bare `OpenTUI` would write
 version refs the config forbids. A slot's service is built with
-`domain.OpenTUISharing(path, home.svc)`: it vends its six caches (diff,
-blame, sha-file, commit-files, compare-files, preview) from HOME's
-`cache.Factory`, so the repository has one cache budget and a commit diff
-cached through one worktree is a hit from another. Safe because every
-cached key is content-addressed (a full hash, a hash pair, a hash + path;
-a ref endpoint has no `CacheTag`) and working-tree diffs/blames are read
-through (`Key ""` / `rev ""`). No process-wide map: a repo switch drops the
-slots and their caches with them. `dropConsole` (the console stepping aside for a stash
+`domain.OpenTUISharingRooted(path, home.svc)` (the list's path IS the top
+level: no `rev-parse` on the Update thread; `OpenTUISharing` for an
+unlisted path): it vends its six caches (diff, blame, sha-file,
+commit-files, compare-files, preview) from HOME's `cache.Factory`, so the
+repository has one cache budget and a commit diff cached through one
+worktree is a hit from another. Safe because every cached key is
+content-addressed (a full hash, a hash pair, a hash + path; a ref endpoint
+has no `CacheTag`) and working-tree diffs/blames are read through (`Key
+""` / `rev ""`). It shares home's `repoState` too (`domain/service.go`):
+the forge verdict and its PR caches, the on-disk PR store and the tag
+cache are the REPOSITORY's — one `gh` probe per session whichever
+worktree asks, and a slot's `gh` calls record into home's ring (the
+operation log). The provider a Service CALLS is its own instance rooted
+at its own worktree (`forgeLocal`, built by name from the shared
+verdict): the worktree that probed may be removed later. The preflight
+verdicts stay per Service (the legacy review-commands probe reads the
+asking worktree's committed `.gg.toml`), as do the differ and the
+singleflight. No process-wide map: a repo switch drops the slots and their
+caches with them. `dropConsole` (the console stepping aside for a stash
 list / preview / solo) keeps the view on purpose: the user is working in
 that worktree; `»` and the header say so and enter on home's row returns.
 A user switch asked while a console is docked swaps the panels UNDER the
@@ -6714,6 +6741,49 @@ console (an explicit ask wins), sets `ret.view` to the target, and the
 status row then names the console's worktree (`worktree: <path>`). In-repo agent
 tours (`agent_tours_open.go`) swap and park the tour id in `m.tour` (a
 window field, the slot's); the `srcStatus` arrival shows it when `!armed`.
+
+**Post-merge hunt (2026-10-10, fix/fast-switch-hunt).** Three read-only
+reviews (timing, memory/lifetime, docs-vs-code) over main `d57f3b97`. The
+invariants they pinned, now tests in `hunt_fixes_test.go`:
+`loadView` restores `m.windowState` BEFORE `withStatus` (whose
+`reconcileStatusStack` acts on the live pile — the arriving worktree's, never
+the leaving one's); `saveView` copies fields only and `parkView` (the swap
+path) is the one that takes the working-file attention bands; every message
+whose handler writes into a window embeds `slotStamp`
+(`TestWindowMessagesEmbedTheirSlotStamp` names the nine found unstamped:
+`stackFileMsg` — `stackCmd` carries the loader's stamp —, `stackNotesMsg`,
+`stackStatMsg`, `treeFilesMsg`, `notesLoadedMsg`, `allNotesScopeMsg`,
+`contentLandedMsg`/`noteLandedMsg` — the wrapper carries the load's stamp —,
+`versionHintLoadedMsg`, `stashListMsg`); an `opFinishedMsg` with a stash
+list open builds the list reload BEFORE `takeQueuedReturn` (after the swap
+`m.stashView` is the arriving worktree's); a slot dropped by `pruneViews`,
+`abandonGoneView` or `reRoot` answers its parked navigate/hint first
+(`failParkedSteer`, same reply as the TTL expiry); the four rebase/squash/
+drop range loads carry `svc` and refuse a mismatch; `dropConsole` cancels a
+`pendingReturnView` the console's own queued show set; the slot gate drops
+a message whose `staleFor(v)` says the slot would discard it at replay
+(`lsFilesMsg` after `sleepFWindow`); `stashPopup`, `worktreePopup`,
+`tagPopup` are parkable and `textfield.HandleEditKey` ignores `msg.Alt`;
+alt+f/alt+b sit BELOW the layered-above check in `updateConsoleKey`,
+`unbindConsole` is shared by alt+b and the step-out key (docks a
+ctrl+t-maximised console), and `cycleWorktrees` asks `switchRefusalBy`
+before hiding the console. **Follow-ups (2026-10-10,
+fix/fast-switch-followups, tests in `followup_fixes_test.go`):** the
+repository-scoped Service state is a shared `repoState` (above); a
+sleeping slot records the branch the worktree list showed when it left
+the screen (`worktreeView.branch`, set by `saveView`) and
+`dropRecycledWindows` (run by `pruneViews` on every list arrival) answers
+its parked navigate and gives it a fresh window group, dropping its queue
+and file marks, when the list shows it on another branch — the branch,
+not HEAD, so a commit an agent makes there keeps a half-typed box, and a
+detached listing on either side (a rebase, a bisect) is no recycle; the
+fresh group carries the window generations (`windowState.fresh`);
+`prRevalidatedMsg.rowDone` keeps a replay from reverting a PR row;
+`sleepFWindow` covers the full-tree mode; the viewed slot keeps no window
+copy; `trimQueue` copies the kept tail into a fresh slice; `pruneViews`
+releases a gone worktree's open files (`openFilesReg.drop`; a repository
+switch keeps them on purpose — the open-files ruling); the PR view's
+freshness state is in `windowState` (the PR section above).
 
 **Trigger 2 — the user's own switch** (`switch_guard.go`): `guardedReRoot`
 takes the fast path for a listed worktree on `switchOK` → `switchView` +

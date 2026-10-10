@@ -14,18 +14,20 @@ import (
 // thread: the record's branch and that branch's rows (newest first), with
 // idx the record's row. found=false is a miss, err a failed read.
 type versionHintLoadedMsg struct {
-	gen    int
-	branch string
-	rows   []model.BranchVersion
-	idx    int
-	found  bool
-	err    error
+	slotStamp // the slot it was asked from (slot_msg.go): hintGen is the worktree's own counter
+	gen       int
+	branch    string
+	rows      []model.BranchVersion
+	idx       int
+	found     bool
+	err       error
 }
 
 // loadVersionForHintCmd runs domain.FindVersion (one for-each-ref) plus the
 // branch's row list off the Update thread, stamped with the hint generation.
 func (m Model) loadVersionForHintCmd(c steer.Command, gen int) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	id := c.HintID
 	var a, b string
 	if c.Target != nil {
@@ -33,16 +35,16 @@ func (m Model) loadVersionForHintCmd(c steer.Command, gen int) tea.Cmd {
 	}
 	return func() tea.Msg {
 		if svc == nil {
-			return versionHintLoadedMsg{gen: gen}
+			return versionHintLoadedMsg{slotStamp: slot, gen: gen}
 		}
 		ctx := context.Background()
 		branch, v, ok, err := svc.FindVersion(ctx, id, a, b)
 		if err != nil || !ok {
-			return versionHintLoadedMsg{gen: gen, err: err}
+			return versionHintLoadedMsg{slotStamp: slot, gen: gen, err: err}
 		}
 		rows, err := svc.BranchVersions(ctx, branch)
 		if err != nil {
-			return versionHintLoadedMsg{gen: gen, err: err}
+			return versionHintLoadedMsg{slotStamp: slot, gen: gen, err: err}
 		}
 		idx := -1
 		for i := range rows {
@@ -52,9 +54,9 @@ func (m Model) loadVersionForHintCmd(c steer.Command, gen int) tea.Cmd {
 			}
 		}
 		if idx < 0 {
-			return versionHintLoadedMsg{gen: gen}
+			return versionHintLoadedMsg{slotStamp: slot, gen: gen}
 		}
-		return versionHintLoadedMsg{gen: gen, branch: branch, rows: rows, idx: idx, found: true}
+		return versionHintLoadedMsg{slotStamp: slot, gen: gen, branch: branch, rows: rows, idx: idx, found: true}
 	}
 }
 

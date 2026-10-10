@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"time"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -19,8 +21,7 @@ import (
 // The checklist for "does a field belong here" is closeFilesView
 // (files_view.go): everything it resets is a window field. What stays on
 // the Model and why: focus, lastLeftPanel, activeLeftTab and the ctrl+t
-// pin (alt+w's first-hit rule and showConsole's Commits-column invariants
-// read them across a swap); eager (it walks the SHARED commit feed);
+// pin (showConsole's Commits-column invariants read them across a swap); eager (it walks the SHARED commit feed);
 // startAt* (fires within one Update, never outlives a swap); the modal,
 // the process, the console, notices, the action menu and the typing flags
 // (the operation's and the keyboard's surfaces, never parked); the slot-
@@ -66,6 +67,42 @@ type windowState struct {
 	filesTreeFocused  bool                   // true = the tree side owns vertical movement (←/→/tab)
 	filesReadInflight bool                   // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
 	filesPreview      *openFile              // full-tree mode: the file shown in the right column (nil = none)
+	treeSlept         bool                   // full-tree mode: the worktree slept and gave the tree up (sleepFWindow); the kick re-reads it, the answer clears this
+	treeKeepPath      string                 // full-tree mode: the path under the cursor when the tree was given up; the re-read lands the cursor on it
+
+	// The open PR view's freshness (pr_revalidate.go, pr_comments.go) is the
+	// WINDOW's: it parks with the PR view and another worktree's PR view has
+	// its own. The comment reads: one at a time, and when the last one
+	// started (the comment poll's own clock).
+	prCommentsInflight bool
+	prCommentsLast     time.Time
+	// prRevalidateInflight: one background "is this PR's head still current?"
+	// read per open (pr_revalidate.go). prRevalidateSkip names the PR whose NEXT
+	// open is the reopen a revalidation caused — that one must not ask again.
+	prRevalidateInflight bool
+	prRevalidateSkip     int
+	// prRefreshing: the open PR's forge read is in flight ("refreshing…" in
+	// its title); prOfflineSince: the last read failed — the title shows how
+	// old the cached copy on screen is (zero = online).
+	prRefreshing   bool
+	prOfflineSince time.Time
+	// prUpdated: the PR whose last refresh found new comments or commits
+	// (0 = none) — its title says "updated" until a refresh finds nothing.
+	prUpdated int
+	// prSeen: the PR whose view has had its first refresh — that read only
+	// fills the view, so it never says "updated".
+	prSeen int
+	// prReadSeq counts PR reads as they start (prRevalidatedMsg.seq); a
+	// changing send of mine arms prOwnSend (its PR) with prOwnSendSeq (the
+	// last read started before it ended): the first read that started after
+	// it absorbs its change instead of saying "updated". prRefreshAgain: the
+	// PR whose post-send read was dropped (one read at a time), asked again
+	// when the running one lands.
+	prReadSeq, prOwnSend, prOwnSendSeq, prRefreshAgain int
+	// prReland is where the user was when the open PR's head moved: the
+	// reopen that follows lands the files cursor (and an open diff, at its
+	// line) back there. Consumed by that reopen's file list.
+	prReland *prReland
 
 	diffTag    string      // request key of the wanted diff; gates stale async results
 	diffNav    diffNavKind // which list the open diff was opened from (Home/End file-stepping)
@@ -199,18 +236,58 @@ type consoleParked struct {
 	filesPreview *openFile
 }
 
+// fresh is an empty group for a worktree whose windows are dropped
+// (dropRecycledWindows): what a new slot gets, with every window
+// generation carried past w's — a result still in flight for a dropped
+// window, stamped with w's count, must not be accepted by a window opened
+// after it that reached the same count.
+func (w windowState) fresh() windowState {
+	return windowState{
+		layers:           &layerStack{},
+		hintGen:          w.hintGen + 1,
+		entryCompareGen:  w.entryCompareGen + 1,
+		gitConfigGen:     w.gitConfigGen + 1,
+		versionsGen:      w.versionsGen + 1,
+		remoteHeadsGen:   w.remoteHeadsGen + 1,
+		allNotesGen:      w.allNotesGen + 1,
+		wtPreviewGen:     w.wtPreviewGen + 1,
+		reviewsFollowGen: w.reviewsFollowGen + 1,
+		reviewOpenGen:    w.reviewOpenGen + 1,
+		previewGen:       w.previewGen + 1,
+		prReadSeq:        w.prReadSeq + 1,
+	}
+}
+
 // sleepFWindow is the one thing a sleeping group gives up: the F window's
 // on-disk list and its rendered tree (~100 bytes per path, twice, on a
-// million-file tree — not worth keeping six times). The window, its filter
-// and the path under the cursor stay; the kick re-reads the list when the
-// worktree returns (viewKickCmd) and wtLoaded puts the cursor back.
+// million-file tree — not worth keeping six times), and likewise a
+// commit's FULL tree (filesModeFullTree: every path at the commit, as
+// large). The window, its filter and the path under the cursor stay; the
+// kick re-reads the list when the worktree returns (viewKickCmd) and
+// wtLoaded / the treeFilesMsg arm put the cursor back.
 func (w *windowState) sleepFWindow() {
+	if w.filesView == nil {
+		return
+	}
+	if w.filesMode == filesModeFullTree {
+		if sel := w.filesView.sel; sel >= 0 && sel < len(w.filesView.visible()) {
+			if p := w.filesView.visible()[sel].path; p != "" { // a second sleep while the re-read is in flight sits on the placeholder: the kept path stands
+				w.treeKeepPath = p
+			}
+		}
+		w.filesView.lines = []contentLine{{text: i18n.T("(loading…)")}}
+		w.filesView.sel = 0
+		w.treeSlept = true
+		return
+	}
 	f := w.wtFiles
-	if f == nil || w.filesMode != filesModeWorktree || w.filesView == nil {
+	if f == nil || w.filesMode != filesModeWorktree {
 		return
 	}
 	if sel := w.filesView.sel; sel >= 0 && sel < len(w.filesView.visible()) {
-		f.keepPath = w.filesView.visible()[sel].path
+		if p := w.filesView.visible()[sel].path; p != "" { // likewise
+			f.keepPath = p
+		}
 	}
 	f.all, f.untracked, f.letters = nil, nil, nil
 	f.loading = true

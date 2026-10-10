@@ -85,16 +85,18 @@ func (v *stashView) setQuery(q string) {
 }
 
 type stashListMsg struct {
-	tag     string
-	entries []model.StashEntry
-	err     error
+	slotStamp // the slot it was asked from (slot_msg.go): the list is that worktree's window
+	tag       string
+	entries   []model.StashEntry
+	err       error
 }
 
 func (m Model) loadStashListCmd(tag string) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		es, err := svc.StashList(context.Background())
-		return stashListMsg{tag: tag, entries: es, err: err}
+		return stashListMsg{slotStamp: slot, tag: tag, entries: es, err: err}
 	}
 }
 

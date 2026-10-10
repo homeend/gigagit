@@ -38,11 +38,12 @@ func (m Model) paletteReachable() bool {
 	}
 }
 
-// cycleReachable reports where alt+a / alt+t may start a cycle: a screen
-// the cycle can come back to. The base panels, or a poppable full-screen
-// view on top (diff, history, blame, file viewer — the views steerRefusal
-// pops), parked while the sessions show; never a popup, an editor holding
-// an operation's input, or text being typed.
+// cycleReachable reports where alt+a / alt+t / alt+w may start a walk.
+// The base panels, or a poppable full-screen view on top (diff, history,
+// blame, file viewer — the views steerRefusal pops), parked while the
+// sessions show, or a parkable popup (the user's own swap parks it with
+// the worktree); never an editor holding an operation's input, a popup
+// with work in flight, or text being typed.
 func (m Model) cycleReachable() bool {
 	if m.filterTyping {
 		return false
@@ -87,7 +88,7 @@ func parkableLayer(l layer) bool {
 		*languagePickerPopup, *previewRenamePopup,
 		*pairOpPopup, *reflogCheckoutPopup, *shelfRestorePopup, *shellCmdPopup,
 		*blameRecentPopup, *commitFilterPopup, *checkoutAsPopup, *hunkPicker,
-		*relatedPromptPopup:
+		*relatedPromptPopup, *stashPopup, *worktreePopup, *tagPopup:
 		return true
 	}
 	return false

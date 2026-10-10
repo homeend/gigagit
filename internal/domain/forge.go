@@ -84,12 +84,9 @@ func (s *Service) ForgeStatus(ctx context.Context) ForgeStatus {
 		}
 		done := make(chan struct{})
 		s.forgeProbing = done
-		ps, rec := s.forgeProviders, s.forgeRec
 		s.forgeMu.Unlock()
 
-		if ps == nil && !ForgeDisabled {
-			ps = forge.Default(s.workdir, rec)
-		}
+		ps := s.providersAt(s.workdir)
 		var active forge.Provider
 		probeErr := ErrForgeUnavailable
 		for _, p := range ps {
@@ -132,16 +129,28 @@ func (s *Service) optimisticProviderLocked(l *prcache.List) forge.Provider {
 	if l == nil || l.Provider == "" {
 		return nil
 	}
-	ps := s.forgeProviders
-	if ps == nil && !ForgeDisabled {
-		ps = forge.Default(s.workdir, s.forgeRec)
-	}
-	for _, p := range ps {
+	for _, p := range s.providersAt(s.workdir) {
 		if p.Name() == l.Provider {
 			return p
 		}
 	}
 	return nil
+}
+
+// providersAt is the provider set rooted at workdir: the injected ones
+// (tests, one instance for every worktree), else the factory's (tests),
+// else forge.Default's — nil when the forge is disabled. Callers may hold
+// forgeMu: nothing here takes it.
+func (s *Service) providersAt(workdir string) []forge.Provider {
+	switch {
+	case s.forgeProviders != nil:
+		return s.forgeProviders
+	case ForgeDisabled:
+		return nil
+	case s.forgeFactory != nil:
+		return s.forgeFactory(workdir, s.forgeRec)
+	}
+	return forge.Default(workdir, s.forgeRec)
 }
 
 // forgeProbe snapshots detection for the preflight resolver WITHOUT probing.
@@ -157,14 +166,30 @@ func (s *Service) forgeProbe() *preflight.ForgeProbe {
 	return &preflight.ForgeProbe{Provider: s.forgeActive.Name()}
 }
 
-// provider returns the active provider, probing if nobody has yet.
+// provider returns the active provider, probing if nobody has yet — THIS
+// Service's instance of it (forgeLocal), rooted at its own worktree: the
+// shared verdict names the provider, the worktree that probed may be gone
+// by the time this one calls.
 func (s *Service) provider(ctx context.Context) (forge.Provider, error) {
 	if st := s.ForgeStatus(ctx); !st.Available() {
 		return nil, st.Err
 	}
 	s.forgeMu.Lock()
 	defer s.forgeMu.Unlock()
-	return s.forgeActive, nil
+	if s.forgeActive == nil {
+		return nil, ErrForgeUnavailable // undone between the status and the lock (a failed optimistic list)
+	}
+	name := s.forgeActive.Name()
+	if s.forgeLocal != nil && s.forgeLocalName == name {
+		return s.forgeLocal, nil
+	}
+	for _, p := range s.providersAt(s.workdir) {
+		if p.Name() == name {
+			s.forgeLocal, s.forgeLocalName = p, name
+			return p, nil
+		}
+	}
+	return s.forgeActive, nil // the set changed under the verdict: the probing instance, better than nothing
 }
 
 // PullRequests lists the open pull requests plus every KNOWN one that is no
@@ -186,7 +211,7 @@ func (s *Service) PullRequests(ctx context.Context) ([]model.PullRequest, error)
 	decisive := err == nil || (ctx.Err() == nil &&
 		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded))
 	s.forgeMu.Lock()
-	optimistic := decisive && s.forgeOptimistic && s.forgeActive == p
+	optimistic := decisive && s.forgeOptimistic && s.forgeActive != nil && s.forgeActive.Name() == p.Name()
 	if optimistic {
 		s.forgeOptimistic = false // a list either proved the provider or undoes it
 	}

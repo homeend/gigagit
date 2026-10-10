@@ -42,7 +42,7 @@ func TestPruneViewsSleepsTheGoneSlot(t *testing.T) {
 	m, other := viewedOther(t, m)
 	wg, lg, dg, rg := m.watchGen, m.loadGen, m.docWatch.gen, m.workingReviewsGen
 	m = dropWorktreeFromList(m, other)
-	m = m.pruneViews()
+	m, _ = m.pruneViews()
 	if m.viewed != m.home || !m.viewKick {
 		t.Fatalf("viewed=%q kick=%v", m.viewed, m.viewKick)
 	}
@@ -58,7 +58,7 @@ func TestAbandonGoneViewSleepsTheGoneSlot(t *testing.T) {
 	if err := os.RemoveAll(other); err != nil {
 		t.Fatal(err)
 	}
-	m, ok := m.abandonGoneView()
+	m, _, ok := m.abandonGoneView()
 	if !ok || m.viewed != m.home {
 		t.Fatalf("ok=%v viewed=%q", ok, m.viewed)
 	}
@@ -124,7 +124,7 @@ func TestPruneViewsHoldsUnderADecision(t *testing.T) {
 	m, other := viewedOther(t, m)
 	m.modal = &decisionState{}
 	m = dropWorktreeFromList(m, other)
-	m = m.pruneViews()
+	m, _ = m.pruneViews()
 	if m.viewed != model.KeyOf(other) || m.pendingReturnView != m.home || m.views[model.KeyOf(other)] == nil {
 		t.Fatalf("swapped under the decision: viewed=%q pending=%q slot kept=%v", m.viewed, m.pendingReturnView, m.views[model.KeyOf(other)] != nil)
 	}

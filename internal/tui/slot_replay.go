@@ -21,15 +21,28 @@ func (m Model) routeSlotMsg(msg tea.Msg) (Model, bool) {
 		return m, false
 	}
 	if v := m.views[k]; v != nil {
+		if s, ok := msg.(staleFor); ok && s.staleFor(v) {
+			return m, true // the slot would drop it on return: not worth keeping
+		}
 		if sw, ok := msg.(sharedWriter); ok {
 			m, msg = sw.applyShared(m) // the process-wide part lands now; the replay skips it
 		}
-		v.queued = append(v.queued, msg)
-		if len(v.queued) > queueCap {
-			v.queued = v.queued[len(v.queued)-queueCap:]
-		}
+		v.queued = trimQueue(append(v.queued, msg))
 	}
 	return m, true
+}
+
+// trimQueue bounds q to queueCap, oldest first to go, in a FRESH slice: a
+// reslice of the grown array would keep the dropped messages — and the
+// file lists, diffs and trees they carry — reachable until the slot's
+// next trim.
+func trimQueue(q []tea.Msg) []tea.Msg {
+	if len(q) <= queueCap {
+		return q
+	}
+	kept := make([]tea.Msg, queueCap)
+	copy(kept, q[len(q)-queueCap:])
+	return kept
 }
 
 // replayQueued applies what landed for the viewed worktree while it slept
@@ -52,10 +65,7 @@ func (m Model) replayQueued() (Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		if m.viewed != was {
 			if v := m.views[was]; v != nil {
-				v.queued = append(append([]tea.Msg{}, q[i+1:]...), v.queued...)
-				if len(v.queued) > queueCap {
-					v.queued = v.queued[len(v.queued)-queueCap:]
-				}
+				v.queued = trimQueue(append(append([]tea.Msg{}, q[i+1:]...), v.queued...))
 			}
 			break
 		}

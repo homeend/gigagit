@@ -15,7 +15,7 @@ import (
 )
 
 // WriteProcessState writes the process-wide half of the emergency state dump
-// (the TUI's alt+A): the git subprocesses still running, the git slot ceiling,
+// (the TUI's alt+U): the git subprocesses still running, the git slot ceiling,
 // every busy repo reservation, the session's recent failures and every
 // goroutine's stack. It runs NO git — it is read when git is what hangs — and
 // takes only short-held locks. Argv is redacted; no file contents appear.

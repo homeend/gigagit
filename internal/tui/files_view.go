@@ -89,6 +89,7 @@ func (m Model) closeFilesView() Model {
 	// a fresh open from the panels all tear the view down for a reason that
 	// makes the parked popup meaningless. See handOffToFilesView.
 	m.filesReturnLayers = nil
+	m.treeSlept, m.treeKeepPath = false, ""
 	// A merge preview resolve in flight was dispatched for the view that just
 	// closed: bump the generation so its result is dropped instead of
 	// re-opening the view behind the user (handlePreviewOpenMsg re-stamps the
@@ -603,24 +604,33 @@ func resolveCommitMeta(svc *domain.Service, c model.Commit) model.Commit {
 // already built (the dir-major sort runs off the UI thread — the tree can be
 // 10^4–10^5 files on a large repo).
 type treeFilesMsg struct {
-	hash    string
-	subject string
-	commit  model.Commit
-	lines   []contentLine
-	err     error
+	slotStamp // the slot it was asked from (slot_msg.go)
+	hash      string
+	subject   string
+	commit    model.Commit
+	lines     []contentLine
+	err       error
+}
+
+// staleFor: the slot gave its full tree up while sleeping (sleepFWindow)
+// and the kick re-reads it on return — the answer in flight would be
+// dropped at replay, so the gate drops it now rather than queue the tree.
+func (msg treeFilesMsg) staleFor(v *worktreeView) bool {
+	return v.windows.treeSlept
 }
 
 // loadTreeFilesCmd fetches every file in commit c's tree (ls-tree) AND builds the
 // content lines off the UI thread, so the render thread only assigns the result.
 func (m Model) loadTreeFilesCmd(c model.Commit) tea.Cmd {
 	svc := m.svc
+	slot := m.stamp()
 	return func() tea.Msg {
 		c = resolveCommitMeta(svc, c)
 		files, err := svc.TreeFiles(context.Background(), c.Hash)
 		if err != nil {
-			return treeFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, err: err}
+			return treeFilesMsg{slotStamp: slot, hash: c.Hash, subject: c.Subject, commit: c, err: err}
 		}
-		return treeFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, lines: commitFileLines(files)}
+		return treeFilesMsg{slotStamp: slot, hash: c.Hash, subject: c.Subject, commit: c, lines: commitFileLines(files)}
 	}
 }
 
