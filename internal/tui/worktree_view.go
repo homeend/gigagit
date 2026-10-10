@@ -772,16 +772,15 @@ func touchRepoMRUCmd(path, remote string) tea.Cmd {
 	}
 }
 
-// cycleWorktrees is alt+w. A press without the keyboard on the Branches
-// panel — a console shown (bound or not), another panel focused — is a
-// FIRST HIT: a shown console hides (the session keeps running; the panels
+// cycleWorktrees is alt+w. Under a shown console (bound or not) the press
+// is a FIRST HIT: the console hides (the session keeps running; the panels
 // stay on the worktree they show), Branches takes focus (its border says
 // so) with its cursor on the viewed worktree's branch, and that is all.
-// With Branches focused the panels show the next worktree of the Worktrees
-// tab's order (its sort), past the last one the first — the same fast
-// switch alt+a makes for a console's worktree, no session needed — and the
-// Branches cursor moves to that worktree's branch. A look, never an
-// adoption: gg's own worktree stays home.
+// Otherwise — whichever panel has the keyboard — the panels show the next
+// worktree of the Worktrees tab's order (its sort), past the last one the
+// first — the same fast switch alt+a makes for a console's worktree, no
+// session needed — and the Branches cursor moves to that worktree's
+// branch. A look, never an adoption: gg's own worktree stays home.
 func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	order := m.worktreeOrder()
 	n := len(order)
@@ -806,7 +805,11 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 		}
 		m = m.closeConsole()
 		m = m.activateTab(panelBranches).selectWorktreeBranch(viewed)
-		m.statusMsg = i18n.T("console hidden — alt+w again for the next worktree")
+		if n < 2 {
+			m.statusMsg = i18n.T("console hidden — this repository has one worktree, alt+w cycles them once there are more")
+		} else {
+			m.statusMsg = i18n.T("console hidden — alt+w again for the next worktree")
+		}
 		return m, nil
 	}
 	m = m.activateTab(panelBranches)
