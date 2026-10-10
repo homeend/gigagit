@@ -101,12 +101,32 @@ func (d *openFile) bands() []anchorBand {
 	if d.from == nil || d.from.ov == nil || d.from.ov.closed || !docLoaded(d) || d.p.img != nil {
 		return nil
 	}
-	return anchorBands(d.from.ov.anchors, d.path, len(d.p.lines))
+	if d.stream == nil {
+		return anchorBands(d.from.ov.anchors, d.path, len(d.p.lines))
+	}
+	var out []anchorBand // a split stack: each file's bands, at its place in the stream
+	for _, f := range d.stream.files {
+		if !f.shows() {
+			continue
+		}
+		for _, b := range anchorBands(d.from.ov.anchors, f.path, len(f.lines)) {
+			out = append(out, anchorBand{start: f.body + b.start, end: f.body + b.end, i: b.i})
+		}
+	}
+	return out
 }
 
 // curBand is the index in bands of d's current anchor, or -1.
 func (d *openFile) curBand(bands []anchorBand) int {
 	if d.from == nil || d.from.ov == nil {
+		return -1
+	}
+	if d.stream != nil {
+		for k, b := range bands {
+			if d.from.ov.anchors[b.i].dest == d.anchorCur {
+				return k
+			}
+		}
 		return -1
 	}
 	return bandOf(bands, d.from.ov.anchors, d.anchorCur, len(d.p.lines))

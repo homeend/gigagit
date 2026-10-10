@@ -1097,6 +1097,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.docWatchEvent(msg)
 	case docWatchClosedMsg:
 		return m, nil // the watcher was closed: its listen loop ends here
+	case stackPaneMsg:
+		return m.stackPaneLanded(msg)
 	case fileContentMsg:
 		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
 			if d.ov != nil {

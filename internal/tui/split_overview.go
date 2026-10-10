@@ -3,6 +3,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -79,6 +80,8 @@ func (m Model) steerSplit(sv *splitView) (Model, tea.Cmd) {
 	switch r := sv.right.(type) {
 	case *docPane:
 		return m.docSteer(sv, r, ov, a)
+	case *stackPane:
+		return m.stackSteer(sv, r, a)
 	}
 	return m, nil
 }
@@ -173,5 +176,8 @@ func (m Model) openReviewOverviewSplit() (Model, tea.Cmd) {
 	return m.steerSplit(sv)
 }
 
-// newStackPane is Task 5's stacked file pane; single mode until it exists.
-func (m Model) newStackPane(sv *splitView, st *reviewViewState) pane { return &docPane{} }
+// anchorTarget is a place in a file as an anchor target: path at line
+// (1-based; 0 = the top).
+func anchorTarget(path string, line int) agentdocs.Anchor {
+	return agentdocs.Anchor{Path: path, Start: line}
+}

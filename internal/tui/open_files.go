@@ -210,7 +210,12 @@ func evictedPath(ev *openFile) string {
 }
 
 // docLoaded reports whether d holds its file's lines (not a placeholder).
-func docLoaded(d *openFile) bool { return len(d.p.lines) > 0 && d.p.lines[0].src }
+func docLoaded(d *openFile) bool {
+	if d.stream != nil { // a split stack: its files load one by one, the stream is always the document
+		return len(d.p.lines) > 0
+	}
+	return len(d.p.lines) > 0 && d.p.lines[0].src
+}
 
 // backgroundDoc takes d off the screen and keeps it open (ctrl+]): the screen
 // returns to whatever was beneath it.

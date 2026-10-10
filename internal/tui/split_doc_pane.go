@@ -86,6 +86,10 @@ func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	_, rows, inner, _ := m.activePreview()
 	scroll := func(delta int) { pp.scrollBy(delta, rows) }
 	switch msg.String() {
+	case "S": // single ⇄ stacked, from either pane of the review split
+		if sv := m.splitLayer(); sv != nil && m.topLayer() == sv {
+			return m.toggleReviewStacked(sv)
+		}
 	case "X":
 		p.d = nil // out of the pane first: closeDoc's detach must not find it here
 		return m.closeDoc(d), nil

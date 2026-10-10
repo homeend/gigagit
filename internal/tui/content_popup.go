@@ -47,13 +47,15 @@ type contentLine struct {
 	// heading lines never carry one.
 	cls     []syntax.Class
 	heading bool
-	noWrap  bool   // a preformatted line (code, a table row): cut in wrap mode, never reflowed
-	elide   bool   // the text holds a path: a cut loses its MIDDLE (elidePath), never its end
-	path    string // file's (new) path
-	oldPath string // set only for renames/copies
-	status  string // model.CommitFile.Status letter ("A","M","D","R","C","T")
-	sha     string // per-line commit override (a -u stash's ^3 parent); "" = the view's hash
-	noteID  string // an @notes/ entry: the AI review (a note) it shows; "" = a real file
+	noWrap  bool // a preformatted line (code, a table row): cut in wrap mode, never reflowed
+	// stackHeader marks a split stack's file header row (split_stack.go).
+	stackHeader bool
+	elide       bool   // the text holds a path: a cut loses its MIDDLE (elidePath), never its end
+	path        string // file's (new) path
+	oldPath     string // set only for renames/copies
+	status      string // model.CommitFile.Status letter ("A","M","D","R","C","T")
+	sha         string // per-line commit override (a -u stash's ^3 parent); "" = the view's hash
+	noteID      string // an @notes/ entry: the AI review (a note) it shows; "" = a real file
 	// shelfNote is a shelved set's note row (its note id): no path, so every
 	// file action passes it by; enter reads the note, the stack shows its text.
 	shelfNote string
