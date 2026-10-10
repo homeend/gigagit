@@ -472,3 +472,22 @@ func TestAltWHintsWithOneWorktree(t *testing.T) {
 		t.Fatalf("the hint promises a next worktree there is none: %q", m.statusMsg)
 	}
 }
+
+// On the startup fan-out the branches may land BEFORE the worktree list:
+// with no list to say which branch the viewed worktree has, the read's own
+// `%(HEAD)` stands (re-marking from an empty list cleared every `*`).
+func TestBranchesArrivalBeforeTheWorktreeListKeepsTheReadsHead(t *testing.T) {
+	m := loadedModel(t)
+	m.worktrees = nil
+	bs := slices.Clone(m.branches)
+	for i := range bs {
+		bs[i].IsHead = bs[i].Name == "main"
+	}
+	mm, _ := m.Update(dataAvailableMsg{source: srcBranches, gen: m.srcGen[srcBranches], value: bs})
+	m = mm.(Model)
+	for _, b := range m.branches {
+		if b.Name == "main" && !b.IsHead {
+			t.Fatal("the read's own head mark was cleared with no worktree list to re-mark from")
+		}
+	}
+}

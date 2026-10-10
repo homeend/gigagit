@@ -2008,8 +2008,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.bfMemo.invalidate()
 			// The read may have run through a worktree that has since left the
 			// screen (a swap during a background read): the list is the
-			// repository's, the `*` is the VIEWED worktree's.
-			m = m.markHead(m.worktreeBranch(m.currentWorktree))
+			// repository's, the `*` is the VIEWED worktree's — when the
+			// worktree list can say which branch that is (on the startup
+			// fan-out it may land later: the read's own `%(HEAD)` stands).
+			if branch, listed := m.listedBranch(m.currentWorktree); listed {
+				m = m.markHead(branch)
+			}
 			m.identWValid = false // tracked upstreams feed the ident width; rescan in rebuild
 			m = m.restorePanelSel(panelBranches, key)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
