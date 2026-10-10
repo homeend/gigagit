@@ -53,6 +53,10 @@ recipe.
    - one `path:N` or `path:N-M` anchor per place you want seen — gg draws
      every anchor in a file as a band and `n` / `p` step through them, so
      prefer several precise anchors over one wide range;
+   - anchor the lines that SHOW the point, not a neighbour of them: files
+     with the same content (one script copied into sibling directories)
+     look identical in the viewer, so anchor the file that differs (each
+     directory's config, not the shared script);
    - last: what you skipped, open questions, what the user should do next.
    Limits: ≤ 64 KiB, ≤ 100 anchors.
    Add it: `gg session overview add --title "<short title>" --file <md>` (or

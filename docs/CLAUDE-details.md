@@ -6928,7 +6928,9 @@ narrow full-screen door `openReviewOverviewDoc`): ↑/↓ step anchors and
 `steerSplit`; enter steers and focuses right. `docSteer` (single mode) puts the
 anchor's file at the tip (`anchorSource`: working tree for a working review) in
 the right pane, `from` = the overview and `anchorCur` = the anchor (so bands and
-n/p work), the previous file left open in the background. `stackPane`
+n/p work), the previous file left open in the background; N/P on that single
+file pane are `splitView.update`'s (`stepOverviewAnchor` = ↑/↓ on the overview,
+focus kept right) — a `stackPane` keeps N/P for its headers. `stackPane`
 (`split_stack_pane.go`) is ONE unregistered `srcReviewStack` document whose
 lines are `fileStream.build()` (`split_stack.go`): blank, header
 (`stackHeader`, "━━ path (status) ◆n"), rule, then the file's lines or one

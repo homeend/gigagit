@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review split: N/P step the overview from the file pane
+
+### Added
+- In the review overview split, N / P on the (single) file pane step to the
+  overview's next / previous anchor — the order ↑/↓ walk on the overview —
+  opening its file on the right while the focus stays there. n / p still
+  walk this file's anchors; stacked, N / P stay the file headers. The help
+  screen gained the split's keys.
+
+### Fixed
+- A path too wide for its frame title now keeps the directory holding the
+  file, cut in its middle, instead of dropping it: sibling files (copies of
+  one `bench.js` in `load-a-…/` and `load-b-…/`) no longer show the same
+  title, so stepping anchors between them visibly moves. The web page
+  shortens paths the same way.
+- The gg-overview and gg-review skills tell the agent to anchor the lines
+  that show the point — the file that differs, not an identical copy beside
+  it.
+
 ## Tidy `gg init` output
 
 ### Changed

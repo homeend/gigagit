@@ -219,3 +219,30 @@ func TestOverviewSplitMenuRows(t *testing.T) {
 		t.Fatal("the file pane keeps its band rows")
 	}
 }
+
+// N / P on the single file pane step the overview's anchors in its own
+// order — ↑ / ↓ on the overview — crossing files, the focus kept right.
+func TestOverviewSplitNPOnTheFilePaneStepOverviewAnchors(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModel(t)
+	ov := sv.left.doc()
+	m = pressDrain(t, m, "enter")
+	m = pressDrain(t, m, "N")
+	if ov.ov.sel != 1 || sv.right.doc().path != "b.go" || sv.right.doc().p.cur != 2 || sv.onLeft {
+		t.Fatalf("N: sel %d right %s cur %d onLeft %v", ov.ov.sel, sv.right.doc().path, sv.right.doc().p.cur, sv.onLeft)
+	}
+	if !strings.Contains(m.statusMsg, "anchor 2/") {
+		t.Fatalf("status %q: the step names the anchor", m.statusMsg)
+	}
+	m = pressDrain(t, m, "N") // zzz.go and note:t1 are plain: skipped
+	if ov.ov.sel != 4 || sv.right.doc().path != "a.go" || sv.right.doc().anchorCur != "a.go:1-3" || sv.onLeft {
+		t.Fatalf("N again: sel %d right %s anchor %q", ov.ov.sel, sv.right.doc().path, sv.right.doc().anchorCur)
+	}
+	m = pressDrain(t, m, "P")
+	if ov.ov.sel != 1 || sv.right.doc().path != "b.go" || sv.onLeft {
+		t.Fatalf("P: sel %d right %s onLeft %v", ov.ov.sel, sv.right.doc().path, sv.onLeft)
+	}
+	if h := sv.right.hint(m); !strings.Contains(h, "[N/P] overview anchors") {
+		t.Fatalf("hint %q: N/P is advertised", h)
+	}
+}

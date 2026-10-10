@@ -494,7 +494,8 @@ and never sent to GitHub; `gg review save` reports `unresolved: <dest>` for an
 anchor it cannot place, and `gg review show` prints it after the summary.
 In the TUI the review's *≡ Overview* row opens it as a split — the overview on
 the left, the file its selected anchor points at on the right (or every
-reviewed file stacked, `S`) — and walking the anchors steers the file pane.
+reviewed file stacked, `S`) — and walking the anchors steers the file pane;
+`N`/`P` on the file pane step to the overview's next / previous anchor.
 A **note has a link too**: `gg link --note <id>` prints `gg://…?note=<id>`
 on the note's own line, `gg note show <id|link>` prints the thread, and
 `gg note reply|resolve <link>` answer it — hand an agent the note link rather
