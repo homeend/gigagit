@@ -124,6 +124,17 @@ func (sv *splitView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	case "esc":
 		return m.closeSplit(sv), nil
+	case "N", "P":
+		// The single file pane: the overview's next / previous anchor, as
+		// ↑ / ↓ on the overview, the focus kept right. (The stacked pane's
+		// N / P walk its file headers.)
+		if _, single := f.(*docPane); single && !sv.onLeft {
+			dir := 1
+			if msg.String() == "P" {
+				dir = -1
+			}
+			return m.stepOverviewAnchor(sv, dir)
+		}
 	}
 	return f.update(m, msg)
 }

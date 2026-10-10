@@ -64,6 +64,18 @@ func (p *overviewPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	return p.docPane.update(m, msg)
 }
 
+// stepOverviewAnchor steps the overview's anchor selection by dir and
+// steers the right pane to it, leaving the focus where it is.
+func (m Model) stepOverviewAnchor(sv *splitView, dir int) (Model, tea.Cmd) {
+	ov := sv.left.doc()
+	if ov == nil || ov.ov == nil {
+		return m, nil
+	}
+	rows, _ := sv.geomOf(m, sv.left)
+	ov.stepAnchor(dir, rows)
+	return m.steerSplit(sv)
+}
+
 // anchorSource is where an overview's anchors open: the reviewed tip, or
 // the working tree for a working review.
 func anchorSource(ov *openFile) fileSource {
