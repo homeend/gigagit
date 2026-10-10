@@ -1,9 +1,8 @@
 package tui
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -121,10 +120,13 @@ func (p *contentPopup) charPan(innerW int) {
 		return
 	}
 	row := p.cs.cur.row
-	lead := min(max(p.lines[row].lead, 0), len([]rune(p.lines[row].raw)))
-	disp := strings.Repeat(" ", lead) + string(p.csRows[row].text)
+	raw := []rune(p.lines[row].raw)
+	lead := min(max(p.lines[row].lead, 0), len(raw))
+	disp := string(raw[:lead]) + string(p.csRows[row].text)
 	p.hscroll = charPanCells(disp, lead+p.cs.cur.col, p.hscroll, innerW, sanitizeForDisplay)
-	if p.cs.cur.col == 0 && p.hscroll <= lead {
+	// Column 0 shows the row's lead too, unless the lead alone fills the pane
+	// (deep nesting in a narrow pane): then the pan above stands.
+	if p.cs.cur.col == 0 && p.hscroll <= lead && lipgloss.Width(sanitizeForDisplay(string(raw[:lead]))) < innerW {
 		p.hscroll = 0
 	}
 }
