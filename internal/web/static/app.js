@@ -52,6 +52,7 @@ import { fetchPreviews } from "./previews.js";
 import { fetchPRs } from "./prs.js";
 import "./prdetails.js";
 import "./prsend.js";
+import "./prsendpanel.js";
 import "./linkcompare.js";
 import { applyStartAt, connectLive } from "./live.js";
 

@@ -81,7 +81,7 @@ func TestPRSendModuleIsWired(t *testing.T) {
 		return string(b)
 	}
 	js := read("prsend.js")
-	for _, want := range []string{`"/api/pr/send?n=" + n`, `"/api/pr/send/groups?n=" + pr`, `registerRows("note"`, `registerRows("pr"`} {
+	for _, want := range []string{`"/api/pr/send?n=" + n`, `registerRows("note"`, `registerRows("pr"`} {
 		if !strings.Contains(js, want) {
 			t.Errorf("prsend.js lacks %q", want)
 		}
@@ -171,5 +171,40 @@ console.log(JSON.stringify({ shape, opts, req1, req2, req3, req4, all, none }));
 		`"all":["d1","review:r1:1"],"none":[]}`
 	if got := strings.TrimSpace(string(out)); got != want {
 		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+}
+
+// §5.4 / R7: the PR menu's Send to GitHub… opens the panel; Send review…
+// and its helpers are gone; the panel module is imported, reads the
+// candidates, posts through sendToGitHub, and keeps its ticks per PR.
+func TestPRSendPanelIsWired(t *testing.T) {
+	t.Parallel()
+	js := readStatic(t, "prsend.js")
+	for _, want := range []string{`label: "Verdict…"`, `export async function sendToGitHub(`} {
+		if !strings.Contains(js, want) {
+			t.Errorf("prsend.js lacks %q", want)
+		}
+	}
+	for _, gone := range []string{`sendReviewPick`, `sendReviewBody`, `groupCount`, `"Send review…"`, `kind: "group"`, `send/groups`} {
+		if strings.Contains(js, gone) {
+			t.Errorf("prsend.js still has %q", gone)
+		}
+	}
+	p := readStatic(t, "prsendpanel.js")
+	for _, want := range []string{`label: "Send to GitHub…"`, `openSendPanel(pr.number)`, `"/api/pr/send/candidates?n=" + n`, `panelRows(`, `bodyOptions(`, `panelRequest(`, `tickAllInGroup(`, `sendToGitHub(`, `pushLayer("prsendpanel"`, `nothing to send to #`, `registerHelp({`, `onSendDone(`, `onHeadMoved(`,
+		// W7: an aborted send is a successful no-op (ok, not changed) — the panel and its ticks stay
+		`if (!ev.ok || !ev.changed) {`} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prsendpanel.js lacks %q", want)
+		}
+	}
+	if !strings.Contains(readStatic(t, "app.js"), `import "./prsendpanel.js";`) {
+		t.Error("app.js does not import prsendpanel.js")
+	}
+	if !strings.Contains(readStatic(t, "index.html"), `id="prsendpanel"`) {
+		t.Error("index.html has no panel overlay")
+	}
+	if !strings.Contains(readStatic(t, "style.css"), `#prsendpanel`) {
+		t.Error("style.css has no panel rules")
 	}
 }
