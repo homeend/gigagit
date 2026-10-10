@@ -24,7 +24,7 @@ func TestStoredOverviewIsWired(t *testing.T) {
 		// that list (the one its own anchor's open causes) must not close it
 		`return isOpen() && !(view.ov && view.ov.stored) ? view.id : "";`,
 		// an agent's docs changing must not "close" the way back (the stored id is never in the stamps)
-		`if (f && !f.closed && !f.stored && !view.ov) {`} {
+		`if (f && !f.closed && !f.stored && !view.ov && !split) {`} {
 		if !strings.Contains(v, want) {
 			t.Errorf("viewer.js lacks %q", want)
 		}

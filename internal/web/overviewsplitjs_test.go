@@ -76,3 +76,17 @@ func TestOverviewSplitRightColumnIsWired(t *testing.T) {
 		}
 	}
 }
+
+// Spec 2026-10-11 §5 / §10: the split follows the store, collapses when the
+// box narrows, and backspace in a file comes back INTO the split.
+func TestOverviewSplitLiveIsWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{`function refreshSplitOverview()`, `function splitOverviewGone(`, `function narrowSplit()`,
+		`function backIntoSplit(f)`, `if (f && splitFits(boxWidth())) return backIntoSplit(f);`,
+		`window.addEventListener("resize"`, `if (split) return; // the split adds no history entry`} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+}

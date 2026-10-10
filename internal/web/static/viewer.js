@@ -838,6 +838,95 @@ async function steerSplit() {
   if (r.ok && a.note) $("viewer-body").querySelector(`.vnote[data-note="${a.note}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
+// splitName is how a status line names the split's overview.
+function splitName() {
+  return "overview " + split.id + " " + JSON.stringify(split.ov.title);
+}
+
+// refreshSplitOverview re-reads the left column's overview after the store
+// moved it (spec §10), keeping the selection by its destination; the right
+// column's bands follow. An older answer landing after a newer one drops.
+async function refreshSplitOverview() {
+  const sp = split;
+  const mine = ++sp.seq;
+  let ov;
+  try {
+    ov = await fetchOverview(sp.id);
+  } catch {
+    return;
+  }
+  if (split !== sp || sp.seq !== mine) return;
+  sp.ov = { ...ov, sel: keepAnchor(ov.anchors || [], sp.ov.want, sp.ov.sel), want: sp.ov.want };
+  paintSplitTitle();
+  renderSplitOverview();
+  if (view.from && !view.from.stored && view.from.id === sp.id) {
+    view.from.anchors = sp.ov.anchors;
+    view.from.stamp = ov.stamp;
+    rerenderKeepingScroll();
+  }
+  swapFoot(true);
+}
+
+// splitOverviewGone: the left column's overview left the store (closed by
+// the agent, or by x in a switcher) — the split collapses to the right
+// column's file, its bands gone (spec §10).
+function splitOverviewGone(name) {
+  leaveSplit();
+  if (view.from) view.from.closed = true;
+  if (view.id) {
+    paintTitle();
+    rerenderKeepingScroll();
+    swapFoot(true);
+    $("viewer-body").focus({ preventScroll: true });
+  } else dropViewer();
+  opLine(name + " was closed", false);
+}
+
+// narrowSplit: the box narrowed below the split's width (W7) — the overview
+// stays as today's one document, the right column's file goes to the
+// background (the TUI's narrowSplits). Widening never re-splits on its own.
+function narrowSplit() {
+  const sp = split;
+  leaveSplit();
+  if (view.id) {
+    rememberPlace();
+    ofQueue({ op: "background", id: view.id, line: view.cur });
+  }
+  loadSeq++; // a steer in flight must not land over the overview
+  if (sp.ov.stored) showStoredOverview(sp.ov.stored);
+  else {
+    ofQueue({ op: "focus", id: sp.id });
+    showOverview({ id: sp.id, path: sp.path }, sp.ov, ovApplied);
+  }
+  selectAnchor(sp.ov.sel);
+}
+
+window.addEventListener("resize", () => {
+  if (split && isOpen() && !splitFits($("viewer-box").clientWidth)) narrowSplit();
+});
+
+// backIntoSplit is backspace / Back in a file an overview opened when the
+// box is wide enough (spec §5): the overview comes back in the left column
+// with the link selected, the file stays in the right column where the
+// reader left it. The one history entry the open armed is used up.
+async function backIntoSplit(f) {
+  let ov;
+  if (f.stored) ov = { title: f.stored.title, blocks: f.stored.blocks, anchors: f.stored.anchors, text: f.stored.text, stored: f.stored };
+  else {
+    try {
+      ov = await fetchOverview(f.id);
+    } catch (e) {
+      return opLine(e.status === 404 ? "the overview was closed" : "back failed: " + (e.message || e), e.status !== 404);
+    }
+  }
+  if (!isOpen() || view.from !== f) return; // something else took the screen meanwhile
+  f.anchors = ov.anchors || [];
+  if (ov.stamp) f.stamp = ov.stamp;
+  openSplit(f.stored ? "" : f.id, "", { ...ov, sel: backAnchor(f.anchors, f), want: f.dest }, { steer: false });
+  rerenderKeepingScroll();
+  if (ownBack) history.back(); // the popstate it fires meets the split and does nothing
+}
+
 // splitKey is a key in the split (W2): tab switches columns; the overview
 // steps its links and steers; the file keeps every file key.
 function splitKey(e) {
@@ -1021,6 +1110,7 @@ async function openAnchorAt(i) {
 
 window.addEventListener("popstate", () => {
   ownBack = history.state?.gg === "back"; // Forward can put it back on top
+  if (split) return; // the split adds no history entry
   if (!view.from || !isOpen()) return;
   if (topLayer()?.id === "console") { closeConsole(); return armBack(); } // the agent keeps running; the next Back comes back
   if (topLayer()?.id !== "viewer") return armBack(); // a popup is over the file: Back leaves both alone
@@ -1032,6 +1122,7 @@ window.addEventListener("popstate", () => {
 // open. One step deep.
 async function anchorBack() {
   const f = view.from, id = view.id;
+  if (f && splitFits(boxWidth())) return backIntoSplit(f);
   if (f && f.stored) {
     // Back to a stored overview re-shows the kept copy; the file it opened
     // stays open in the background, as a temporary overview's does.
@@ -1615,6 +1706,7 @@ function viewerHello() {
 // viewerOpenFiles: the list changed. A file this viewer shows that left it
 // was closed in another tab's switcher (x) — this viewer goes too.
 function viewerOpenFiles(files) {
+  if (split && split.id && !files.some((f) => f.id === split.id)) splitOverviewGone(splitName());
   const id = viewerFileId();
   if (!id || files.some((f) => f.id === id)) return;
   const name = docName(view);
@@ -1658,6 +1750,10 @@ async function viewerFileChanged(id) {
 // re-read, which aligns its notes (or re-checks its anchors — only when its
 // stamp moved: a change elsewhere in the store leaves it as it is).
 function viewerAgentDocs(files, closed = [], stamps = undefined) {
+  if (split && split.id) { // the split's left column follows the store too
+    if (fromGone(stamps, closed, split.id)) splitOverviewGone(splitName());
+    else if (overviewStale(stamps, split.id, split.ov.stamp)) refreshSplitOverview();
+  }
   const id = viewerFileId();
   if (id && view.ov && closed.includes(id)) {
     const name = docName(view);
@@ -1670,7 +1766,7 @@ function viewerAgentDocs(files, closed = [], stamps = undefined) {
   // The shown file's bands follow the overview that opened it: gone with it,
   // re-read when it changed. A closed viewer has none to follow.
   const f = view.from;
-  if (f && !f.closed && !f.stored && !view.ov) { // a stored overview's way back is page-local: never in the stamps
+  if (f && !f.closed && !f.stored && !view.ov && !split) { // a stored overview's way back is page-local: never in the stamps; the split follows its own
     if (fromGone(stamps, closed, f.id)) {
       f.closed = true;
       rerenderKeepingScroll();
