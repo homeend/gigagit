@@ -820,6 +820,12 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 // worktree) leaves the cursor alone.
 func (m Model) selectSessionRow(id domain.SessionID) Model {
 	m.activeLeftTab, m.lastLeftPanel = panelBranches, panelBranches
+	if m.leftMaxed && slices.Contains(m.leftTabs(), m.leftMax) {
+		m.leftMax = panelBranches // activateTab's re-pin: a `t`-maximised top-slot tab stays maximised as the shown one
+	}
+	if m.console != nil && m.console.ret != nil && m.console.ret.fullMaxed && slices.Contains(m.leftTabs(), m.console.ret.fullMax) {
+		m.console.ret.fullMax = panelBranches // likewise the ctrl+t pin the console's return point carries
+	}
 	ents := m.branchEntries()
 	for di, u := range m.displayIndices(panelBranches) {
 		if u < len(ents) && ents[u].sess == id {

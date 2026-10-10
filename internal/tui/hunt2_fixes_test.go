@@ -134,3 +134,46 @@ func TestAltWUnderAConsoleOverAParkedPopupHidesIt(t *testing.T) {
 		t.Fatalf("the parked box must be live again, got %T", m.topLayer())
 	}
 }
+
+// The walk (alt+a) shows the Branches tab for its session row; closing the
+// console must put the keyboard on the tab that is SHOWN, not on the tab
+// the console was opened from (Worktrees), which is not on screen: no lit
+// border, no cursor, a footer for the wrong panel, and enter switching to a
+// worktree row the user cannot see.
+func TestClosingAConsoleOpenedFromAnotherTabFocusesTheShownTab(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	installSessionManager(t)
+	startSessionIn(t, m, m.currentWorktree, "A1")
+	m.activeLeftTab, m.focus, m.lastLeftPanel = panelWorktrees, panelWorktrees, panelWorktrees
+	m = pressAlt(t, m, 'a')
+	if m.console == nil || m.activeLeftTab != panelBranches {
+		t.Fatalf("precondition: console=%v tab=%v", m.console != nil, m.activeLeftTab)
+	}
+	mm, _ := m.Update(ctrlBracket()) // unbind
+	m = mm.(Model)
+	mm, _ = m.Update(ctrlBracket()) // close
+	m = mm.(Model)
+	if m.console != nil {
+		t.Fatal("precondition: the second ctrl+] closes the console")
+	}
+	if m.focus != m.activeLeftTab {
+		t.Fatalf("focus=%v but the shown tab is %v", m.focus, m.activeLeftTab)
+	}
+}
+
+// A `t`-maximised Worktrees tab stays maximised as Branches when the walk
+// shows the Branches tab (activateTab's own re-pin rule): the pin must
+// not name a hidden tab.
+func TestTheWalkRepinsAMaximisedLeftTab(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	installSessionManager(t)
+	startSessionIn(t, m, m.currentWorktree, "A1")
+	m.activeLeftTab, m.focus, m.lastLeftPanel = panelWorktrees, panelWorktrees, panelWorktrees
+	m.leftMaxed, m.leftMax = true, panelWorktrees
+	m = pressAlt(t, m, 'a')
+	if m.leftMax != panelBranches {
+		t.Fatalf("leftMax=%v, want the shown Branches tab", m.leftMax)
+	}
+}

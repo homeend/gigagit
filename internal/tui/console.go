@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/charmbracelet/lipgloss"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -398,6 +399,15 @@ func (m Model) closeConsole() Model {
 	m.fullMaxed, m.fullMax = r.fullMaxed, r.fullMax
 	if m.focus == panelCommits {
 		m.focus = r.focus
+		// The walk showed the Branches tab for its session row
+		// (selectSessionRow): a return point on another top-slot tab names a
+		// panel that is not on screen — the keyboard goes to the shown one.
+		if slices.Contains(m.leftTabs(), r.focus) && r.focus != m.activeLeftTab {
+			m.focus = m.activeLeftTab
+		}
+	}
+	if m.fullMaxed && slices.Contains(m.leftTabs(), m.fullMax) && m.fullMax != m.activeLeftTab {
+		m.fullMax = m.activeLeftTab // a pin on a top-slot tab follows the shown tab, as activateTab re-pins
 	}
 	return m.reconcileFullscreenFocus()
 }
