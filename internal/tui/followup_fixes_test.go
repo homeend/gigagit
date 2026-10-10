@@ -184,3 +184,45 @@ func TestAStaleFullTreeIsNotQueuedForASleepingSlot(t *testing.T) {
 		t.Fatalf("a tree the slot gave up was queued (%d)", n)
 	}
 }
+
+// The open PR view's freshness state (its one read slot, "refreshing…",
+// "updated", the reland) is the window's: it parks with the PR view and a
+// PR view in another worktree has its own. A read in flight in A used to
+// block every refresh in B.
+func TestAPRViewsRefreshStateParksWithItsWorktree(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	m.prRevalidateInflight, m.prRefreshing, m.prUpdated = true, true, 7
+	m = forceSwitch(t, m, other)
+	if m.prRevalidateInflight || m.prRefreshing || m.prUpdated != 0 {
+		t.Fatal("the leaving worktree's PR refresh state came along")
+	}
+	m, cmd := m.prRefreshCmd(9, false)
+	if cmd == nil {
+		t.Fatal("a PR refresh in the arriving worktree is blocked by the leaving one's read")
+	}
+	m = forceSwitch(t, m, m.homeWorktree())
+	if !m.prRevalidateInflight || m.prUpdated != 7 {
+		t.Fatal("home's PR refresh state did not come back")
+	}
+}
+
+// A revalidation that lands while its worktree sleeps waits for it (the
+// view it describes is parked), but the PR ROW is the repository's: the
+// list follows the forge at once.
+func TestAParkedPRRevalidationQueuesButUpdatesTheRowNow(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	m.prs = []model.PullRequest{{Number: 7, Title: "old"}}
+	m = forceSwitch(t, m, other)
+	key := model.KeyOf(home)
+	nm, _ := m.Update(prRevalidatedMsg{slotStamp: slotStamp{slot: key}, n: 7, gen: m.forgeGen, pr: model.PullRequest{Number: 7, Title: "new"}})
+	m = nm.(Model)
+	if n := len(m.views[key].queued); n != 1 {
+		t.Fatalf("queued %d, want 1 (the view's part waits for home)", n)
+	}
+	if m.prs[0].Title != "new" {
+		t.Fatalf("the PR row did not follow the forge: %q", m.prs[0].Title)
+	}
+}

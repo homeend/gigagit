@@ -115,7 +115,7 @@ func TestWindowMessagesEmbedTheirSlotStamp(t *testing.T) {
 	t.Parallel()
 	for _, msg := range []any{
 		stackFileMsg{}, stackNotesMsg{}, stackStatMsg{}, treeFilesMsg{}, notesLoadedMsg{},
-		allNotesScopeMsg{}, contentLandedMsg{}, noteLandedMsg{}, versionHintLoadedMsg{}, stashListMsg{},
+		allNotesScopeMsg{}, contentLandedMsg{}, noteLandedMsg{}, versionHintLoadedMsg{}, stashListMsg{}, prRevalidatedMsg{},
 	} {
 		if _, ok := msg.(slotMsg); !ok {
 			t.Errorf("%T does not embed slotStamp", msg)

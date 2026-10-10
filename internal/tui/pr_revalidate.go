@@ -22,6 +22,7 @@ import (
 const prRevalidateBudget = 30 * time.Second
 
 type prRevalidatedMsg struct {
+	slotStamp       // the slot whose PR view asked (slot_msg.go): the view's part waits for it, the PR row lands at once (applyShared)
 	n               int
 	gen             int // m.forgeGen when the read started: only a repo switch drops it
 	pr              model.PullRequest
@@ -54,18 +55,42 @@ func (m Model) prRefreshCmd(n int, manual bool) (Model, tea.Cmd) {
 	m.prRevalidateInflight, m.prCommentsInflight, m.prRefreshing = true, true, true
 	m.prCommentsLast = time.Now()
 	m.prReadSeq++
-	svc, gen, seq := m.svc, m.forgeGen, m.prReadSeq
+	svc, gen, seq, slot := m.svc, m.forgeGen, m.prReadSeq, m.stamp()
 	return m, func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), prRevalidateBudget)
 		defer cancel()
 		rv, err := svc.PRRevalidate(ctx, n)
-		msg := prRevalidatedMsg{n: n, gen: gen, pr: rv.PR, moved: rv.Moved, commentsChanged: rv.CommentsChanged,
+		msg := prRevalidatedMsg{slotStamp: slot, n: n, gen: gen, pr: rv.PR, moved: rv.Moved, commentsChanged: rv.CommentsChanged,
 			manual: manual, readAt: rv.ReadAt, seq: seq, err: err}
 		if err != nil {
 			msg.readAt, _ = svc.PRCacheReadAt(n)
 		}
 		return msg
 	}
+}
+
+// applyShared lands the PR ROW at once when the message is queued for a
+// sleeping slot (slot_replay.go): the list is the repository's and follows
+// the forge (merged, closed, retitled) whichever worktree asked; the view's
+// part (the freshness marks, a moved head's reopen) replays on return.
+func (msg prRevalidatedMsg) applyShared(m Model) (Model, tea.Msg) {
+	if msg.gen == m.forgeGen && msg.err == nil {
+		m = m.followPRRow(msg.pr)
+	}
+	return m, msg
+}
+
+// followPRRow replaces pr's row in the PR list (cloned: domain hands out a
+// cached slice).
+func (m Model) followPRRow(pr model.PullRequest) Model {
+	for i := range m.prs {
+		if m.prs[i].Number == pr.Number {
+			m.prs = append([]model.PullRequest(nil), m.prs...)
+			m.prs[i] = pr
+			break
+		}
+	}
+	return m
 }
 
 func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
@@ -102,11 +127,7 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 	}
 	// The read cached the PR: did a send stop half way (spec §3.4, T8)?
 	cmd = tea.Batch(cmd, m.interruptedCmd(msg.n))
-	for i := range m.prs { // the row follows the forge (merged, closed, retitled)
-		if m.prs[i].Number == msg.n {
-			m.prs[i] = msg.pr
-		}
-	}
+	m = m.followPRRow(msg.pr) // the row follows the forge (merged, closed, retitled)
 	// "Moved" is judged against the head ON SCREEN too: a background prefetch
 	// may already have fetched the new head into the local ref, and then the
 	// domain (which compares with that ref) says nothing moved.

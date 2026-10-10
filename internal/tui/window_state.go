@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"time"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -67,6 +69,40 @@ type windowState struct {
 	filesPreview      *openFile              // full-tree mode: the file shown in the right column (nil = none)
 	treeSlept         bool                   // full-tree mode: the worktree slept and gave the tree up (sleepFWindow); the kick re-reads it, the answer clears this
 	treeKeepPath      string                 // full-tree mode: the path under the cursor when the tree was given up; the re-read lands the cursor on it
+
+	// The open PR view's freshness (pr_revalidate.go, pr_comments.go) is the
+	// WINDOW's: it parks with the PR view and another worktree's PR view has
+	// its own. The comment reads: one at a time, and when the last one
+	// started (the comment poll's own clock).
+	prCommentsInflight bool
+	prCommentsLast     time.Time
+	// prRevalidateInflight: one background "is this PR's head still current?"
+	// read per open (pr_revalidate.go). prRevalidateSkip names the PR whose NEXT
+	// open is the reopen a revalidation caused — that one must not ask again.
+	prRevalidateInflight bool
+	prRevalidateSkip     int
+	// prRefreshing: the open PR's forge read is in flight ("refreshing…" in
+	// its title); prOfflineSince: the last read failed — the title shows how
+	// old the cached copy on screen is (zero = online).
+	prRefreshing   bool
+	prOfflineSince time.Time
+	// prUpdated: the PR whose last refresh found new comments or commits
+	// (0 = none) — its title says "updated" until a refresh finds nothing.
+	prUpdated int
+	// prSeen: the PR whose view has had its first refresh — that read only
+	// fills the view, so it never says "updated".
+	prSeen int
+	// prReadSeq counts PR reads as they start (prRevalidatedMsg.seq); a
+	// changing send of mine arms prOwnSend (its PR) with prOwnSendSeq (the
+	// last read started before it ended): the first read that started after
+	// it absorbs its change instead of saying "updated". prRefreshAgain: the
+	// PR whose post-send read was dropped (one read at a time), asked again
+	// when the running one lands.
+	prReadSeq, prOwnSend, prOwnSendSeq, prRefreshAgain int
+	// prReland is where the user was when the open PR's head moved: the
+	// reopen that follows lands the files cursor (and an open diff, at its
+	// line) back there. Consumed by that reopen's file list.
+	prReland *prReland
 
 	diffTag    string      // request key of the wanted diff; gates stale async results
 	diffNav    diffNavKind // which list the open diff was opened from (Home/End file-stepping)
