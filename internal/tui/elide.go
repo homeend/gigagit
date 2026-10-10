@@ -33,9 +33,9 @@ func splitPathSegs(s string) []pathSeg {
 // elidePath shortens a filesystem path to at most n display columns by
 // dropping WHOLE segments from the middle, marked by a single "…". Segments
 // survive by priority: the final segment (the file/repo name) first, then the
-// directory just before it, then the path's FIRST segment (a glimpse of where
-// the path starts), then alternating right/left working inward — the
-// outermost parts first, the middle last. The dropped run is always
+// directory just before it (cut in its middle when too wide whole), then the
+// path's FIRST segment (a glimpse of where the path starts), then alternating
+// right/left working inward — the outermost parts first, the middle last. The dropped run is always
 // contiguous, so the result reads head + "…" + tail. Separators are kept as
 // written (/ or \), as is a trailing separator (directory headings).
 //
@@ -113,7 +113,53 @@ func elidePath(s string, n int) string {
 			}
 		}
 	}
+	if keepR == last {
+		// The directory holding the name ranks right after the name: too wide
+		// to keep whole, it is cut in its middle rather than dropped, so
+		// sibling files (x/load-a-long/bench.js, x/load-b-long/bench.js) stay
+		// apart. The first segment joins it while the cut keeps parentMin
+		// columns; the segments between them go.
+		if cut, ok := cutParent(segs, trail, n); ok {
+			return cut
+		}
+	}
 	return build(keepL, keepR)
+}
+
+// parentMin is the fewest columns a cut parent directory keeps — below it
+// the cut tells nothing apart and the directory is dropped instead.
+const parentMin = 10
+
+// cutParent renders segs with the name whole and the directory before it cut
+// in its middle, keeping the first segment when room allows ("/aa/…/dir…cut/
+// name"), else none ("…/dir…cut/name"). ok false = not even parentMin
+// columns are left for the directory.
+func cutParent(segs []pathSeg, trail string, n int) (string, bool) {
+	last := len(segs) - 1
+	p := last - 1
+	tail := segs[last].sep + segs[last].text + trail
+	for _, keepL := range []int{1, 0} {
+		if keepL > p {
+			continue
+		}
+		var b strings.Builder
+		for i := 0; i < keepL; i++ {
+			b.WriteString(segs[i].sep)
+			b.WriteString(segs[i].text)
+		}
+		if keepL < p {
+			if keepL > 0 {
+				b.WriteString(segs[keepL].sep)
+			}
+			b.WriteString("…")
+		}
+		b.WriteString(segs[p].sep)
+		room := n - lipgloss.Width(b.String()) - lipgloss.Width(tail)
+		if room >= parentMin {
+			return b.String() + elideNameMiddle(segs[p].text, room) + tail, true
+		}
+	}
+	return "", false
 }
 
 // elideNameMiddle cuts a bare name (no separators) to at most n display

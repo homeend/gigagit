@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -34,6 +35,13 @@ func TestElidePath(t *testing.T) {
 		{"internal/tui/some/", 12, "…/tui/some/"},
 		// Single segment: cut inside the name (beginning + ending survive).
 		{"justonename", 6, "just…e"},
+		// The directory holding the name, too wide to keep whole, is cut in
+		// its middle rather than dropped, so sibling files stay apart; the
+		// first segment joins it while the cut keeps parentMin columns.
+		{"/aa/abcdefghijklmnopqrst/cc.go", 24, "/aa/abcdefghi…qrst/cc.go"},
+		{"/aa/xx/abcdefghijklmnopqrst/cc.go", 26, "/aa/…/abcdefghi…qrst/cc.go"},
+		{"/aaaaaaaa/abcdefghijklmnopqrst/cc.go", 24, "…/abcdefghij…pqrst/cc.go"},
+		{"abcdefghijklmnopqrst/cc.go", 20, "abcdefghi…qrst/cc.go"},
 	}
 	for _, c := range cases {
 		if got := elidePath(c.in, c.n); got != c.want {
@@ -66,5 +74,29 @@ func TestElideNameMiddle(t *testing.T) {
 		if got := elideNameMiddle(c.in, c.n); got != c.want {
 			t.Errorf("elideNameMiddle(%q, %d) = %q, want %q", c.in, c.n, got, c.want)
 		}
+	}
+}
+
+// Three byte-identical bench.js files in sibling benchmark directories: a
+// frame title too narrow for the directory whole keeps a middle cut of it,
+// so the titles still tell the files apart (a review overview's anchors
+// stepping between them looked like nothing moved).
+func TestElidePathKeepsSiblingDirsApart(t *testing.T) {
+	t.Parallel()
+	dirs := []string{
+		"load-config-target-defaults-preset-env-typescript",
+		"load-config-assumptions-target-defaults-preset-env-plugin-typescript-decorators",
+	}
+	seen := map[string]bool{}
+	for _, d := range dirs {
+		title := "View benchmark/babel-core/" + d + "/bench.js @ 774ace5"
+		got := elidePath(title, 60)
+		if lipgloss.Width(got) > 60 || !strings.HasSuffix(got, "/bench.js @ 774ace5") {
+			t.Fatalf("elidePath(%q, 60) = %q: want the name whole within 60 columns", title, got)
+		}
+		if seen[got] {
+			t.Fatalf("two sibling directories elide to the same title %q", got)
+		}
+		seen[got] = true
 	}
 }
