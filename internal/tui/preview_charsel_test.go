@@ -1,6 +1,8 @@
 package tui
 
 import (
+	tea "github.com/charmbracelet/bubbletea"
+
 	"strings"
 	"testing"
 )
@@ -194,5 +196,36 @@ func TestViewerCharSelPansInsideTheReadingColumn(t *testing.T) {
 	cell := previewDispCol(p.csRows[p.cs.cur.row].text, p.lines[p.cs.cur.row].lead, p.cs.cur.col)
 	if cell < p.hscroll || cell >= p.hscroll+col {
 		t.Fatalf("cursor cell %d is outside the reading column [%d, %d)", cell, p.hscroll, p.hscroll+col)
+	}
+}
+
+// A click on the tree takes the keys from the preview: the mode leaves with
+// them (it would otherwise paint on, swallowing nothing, and resurface when
+// the preview is focused again), and the reader's view comes back.
+func TestPreviewCharSelLeavesWhenTheTreeTakesFocus(t *testing.T) {
+	t.Parallel()
+	m := previewTabModel(t)
+	p := m.filesPreview.p
+	p.mode = modeCutoff
+	m = feedPreview(m, "v")
+	u, _ := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 3, Y: 4})
+	m = u.(Model)
+	if !m.filesTreeFocused {
+		t.Fatal("the click must focus the tree")
+	}
+	if p.cs.on || p.mode != modeCutoff {
+		t.Fatalf("after the tree took focus: on=%v mode %v", p.cs.on, p.mode)
+	}
+}
+
+// A document put aside (detached: a navigate, another viewer on top of it)
+// leaves the mode, so it never comes back already in it.
+func TestViewerCharSelLeavesWhenTheDocumentIsDetached(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "two.txt", "one\ntwo\n", 0)
+	m = feedPreview(m, "v", "space")
+	m = m.detachDoc(fv.openFile)
+	if fv.p.cs.on {
+		t.Fatal("a detached document must leave the mode")
 	}
 }

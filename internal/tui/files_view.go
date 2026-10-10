@@ -235,7 +235,13 @@ func (m Model) toggleFullTree() (Model, tea.Cmd) {
 
 // focusTree / focusRight move focus within an open files view. focusRight is
 // inert in compare and shelf modes (no commit-list side to focus).
-func (m Model) focusTree() Model { m.filesTreeFocused, m.previewFull = true, false; return m }
+func (m Model) focusTree() Model {
+	m.filesTreeFocused, m.previewFull = true, false
+	if m.filesPreview != nil && m.filesPreview.p.cs.on {
+		m.filesPreview.p.previewCharLeave() // the copy mode goes with the keys
+	}
+	return m
+}
 func (m Model) focusRight() Model {
 	if !m.inCompareMode() && !m.inShelfFiles() {
 		m.filesTreeFocused = false
