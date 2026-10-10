@@ -38,7 +38,7 @@ func overviewRow(t *testing.T, m Model) contentLine {
 
 // R12: a review with a stored overview draws "≡ Overview" under "≡ Summary";
 // enter opens it in the overview viewer with the first anchor current.
-func TestStoredOverviewRowOpensTheViewer(t *testing.T) {
+func TestStoredOverviewRowOpensTheSplit(t *testing.T) {
 	t.Parallel()
 	m, _ := reviewWithOverview(t)
 	vis := m.filesView.visible()
@@ -47,14 +47,18 @@ func TestStoredOverviewRowOpensTheViewer(t *testing.T) {
 	}
 	u, cmd := m.openDiffForFileLine(vis[1])
 	m = drainCmds(t, u.(Model), cmd)
-	d := topDoc(m)
-	if d == nil || d.ov == nil || d.src.kind != srcReviewOverview {
-		t.Fatalf("top = %T, want the overview viewer", m.topLayer())
+	sv := m.splitLayer()
+	if sv == nil || m.topLayer() != sv {
+		t.Fatalf("top = %T, want the overview split", m.topLayer())
+	}
+	d := sv.left.doc()
+	if d == nil || d.ov == nil || d.src.kind != srcReviewOverview || topDoc(m) != d {
+		t.Fatalf("left = %+v: the overview, focused", d)
 	}
 	if d.ov.tip == "" || d.ov.sel != 0 {
 		t.Fatalf("tip %q sel %d: the reviewed tip is stamped and the first anchor is current", d.ov.tip, d.ov.sel)
 	}
-	if view := ansi.Strip(m.View()); !strings.Contains(view, "the change") || !strings.Contains(view, "Overview: ") {
+	if view := ansi.Strip(sv.render(m, "")); !strings.Contains(view, "the change") || !strings.Contains(view, "Overview: ") {
 		t.Fatalf("view:\n%s", view)
 	}
 }
@@ -65,8 +69,8 @@ func TestStoredOverviewRowOpensTheViewer(t *testing.T) {
 func TestStoredOverviewUnresolvedAnchorIsPlainAndSkipped(t *testing.T) {
 	t.Parallel()
 	m, _ := reviewWithOverview(t)
-	u, cmd := m.openDiffForFileLine(overviewRow(t, m))
-	m = drainCmds(t, u.(Model), cmd)
+	m, cmd := m.openReviewOverviewDoc() // the full-screen viewer: the narrow door and the switcher's frame
+	m = drainCmds(t, m, cmd)
 	d := topDoc(m)
 	if len(d.ov.anchors) != 3 || d.ov.anchors[0].plain || !d.ov.anchors[1].plain || !d.ov.anchors[2].plain {
 		t.Fatalf("anchors = %+v", d.ov.anchors)
@@ -91,8 +95,8 @@ func TestStoredOverviewUnresolvedAnchorIsPlainAndSkipped(t *testing.T) {
 func TestStoredOverviewAnchorOpensTheFileAtTheTip(t *testing.T) {
 	t.Parallel()
 	m, sha := reviewWithOverview(t)
-	u, cmd := m.openDiffForFileLine(overviewRow(t, m))
-	m = drainCmds(t, u.(Model), cmd)
+	m, cmd := m.openReviewOverviewDoc() // the full-screen viewer: the narrow door and the switcher's frame
+	m = drainCmds(t, m, cmd)
 	ov := topDoc(m)
 	fv := m.topLayer().(*fileViewer)
 	m, cmd = fv.update(m, tea.KeyMsg{Type: tea.KeyEnter}) // the viewer's enter → openAnchor
@@ -115,8 +119,8 @@ func TestStoredOverviewAnchorOpensTheFileAtTheTip(t *testing.T) {
 func TestStoredOverviewIsNotAStoreOverview(t *testing.T) {
 	t.Parallel()
 	m, _ := reviewWithOverview(t)
-	u, cmd := m.openDiffForFileLine(overviewRow(t, m))
-	m = drainCmds(t, u.(Model), cmd)
+	m, cmd := m.openReviewOverviewDoc() // the full-screen viewer: the narrow door and the switcher's frame
+	m = drainCmds(t, m, cmd)
 	d := topDoc(m)
 	m = m.syncOverviews()
 	if topDoc(m) != d {
@@ -143,8 +147,8 @@ func TestStoredOverviewOfAWorkingReviewIsStillStored(t *testing.T) {
 	t.Parallel()
 	m, _ := reviewWithOverview(t)
 	m.filesReview.tip = "" // as a review of uncommitted changes has it
-	u, cmd := m.openDiffForFileLine(overviewRow(t, m))
-	m = drainCmds(t, u.(Model), cmd)
+	m, cmd := m.openReviewOverviewDoc() // the full-screen viewer: the narrow door and the switcher's frame
+	m = drainCmds(t, m, cmd)
 	d := topDoc(m)
 	if d == nil || d.src.kind != srcReviewOverview || d.ov.tip != "" {
 		t.Fatalf("doc %+v", d)

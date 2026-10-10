@@ -1258,7 +1258,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		return m.openReviewSummary()
 	}
 	if l.overviewDoc {
-		return m.openReviewOverviewDoc()
+		return m.openReviewOverviewSplit()
 	}
 	if l.shelfNote != "" { // a shelved set's note: the read-only note popup, esc comes back here
 		for _, r := range m.filesShelfNotes {

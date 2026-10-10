@@ -71,6 +71,16 @@ func (r *openFilesReg) touch(wt string, d *openFile, shown func(*openFile) bool)
 	return evicted
 }
 
+// has reports whether d is in wt's open files.
+func (r *openFilesReg) has(wt string, d *openFile) bool {
+	for _, e := range r.list(wt) {
+		if e == d {
+			return true
+		}
+	}
+	return false
+}
+
 // findTag is the open document tagged tag in any worktree's list, or nil.
 // Tags are unique, so a load result finds its document even after a
 // worktree switch (its loading flag must still clear).

@@ -513,28 +513,22 @@ func (p *reviewOtherNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 	return p.contentPopup.update(m, msg)
 }
 
-// openReviewOverviewDoc opens the review's stored overview in the overview
-// viewer (R12, R5): the same layout, anchors and keys as a temporary one,
-// its anchors opening files at the reviewed tip (overview.tip). The
-// document is registered among the open files (ctrl+\ lists it; backspace
-// in a file it opened finds the way back), under its own source kind so the
-// agent-docs sync never touches it. The first resolved anchor is current.
-func (m Model) openReviewOverviewDoc() (Model, tea.Cmd) {
-	st := m.filesReview
-	if st == nil || st.overview == nil {
-		return m, nil
-	}
+// reviewOverviewDoc is the review's stored overview as an open document
+// (R12, R5): found among the open files, or built — laid out at rows×width,
+// its anchors the review could not resolve marked plain, the first resolved
+// one current. Registered by the caller once it is in its frame, under its
+// own source kind so the agent-docs sync never touches it.
+func (m Model) reviewOverviewDoc(st *reviewViewState, rows, width int) *openFile {
 	src := fileSource{kind: srcReviewOverview, rev: st.id}
 	path := "overview-" + st.id + ".md"
 	if d := m.openFiles.find(m.currentWorktree, docKey(src, path)); d != nil {
-		return m.bringToFront(d)
+		return d
 	}
 	d := m.newOpenFile(src, path)
 	d.title = i18n.T("Overview: %s", reviewLabel(st.review))
 	d.p.prose, d.p.mode = true, modeScroll
 	d.ov = &overview{text: st.overview.Text, sel: -1, tip: st.tip}
-	rows, inner := m.viewerGeom()
-	d.layOut(rows, m.overviewWidth(inner))
+	d.layOut(rows, width)
 	if len(d.ov.anchors) == len(st.overview.Anchors) { // the same parser, the same order
 		for i := range d.ov.anchors {
 			d.ov.anchors[i].plain = !st.overview.Anchors[i].OK
@@ -542,6 +536,25 @@ func (m Model) openReviewOverviewDoc() (Model, tea.Cmd) {
 		d.ov.paint(d.p.lines)
 	}
 	d.stepAnchor(1, rows) // the first resolved anchor is current on open
+	return d
+}
+
+// openReviewOverviewDoc opens the review's stored overview in the
+// full-screen overview viewer, its anchors opening files at the reviewed tip
+// (overview.tip) — the narrow terminal's door; the review tree's enter opens
+// the split (openReviewOverviewSplit). The document is registered among the
+// open files (ctrl+\ lists it; backspace in a file it opened finds the way
+// back).
+func (m Model) openReviewOverviewDoc() (Model, tea.Cmd) {
+	st := m.filesReview
+	if st == nil || st.overview == nil {
+		return m, nil
+	}
+	rows, inner := m.viewerGeom()
+	d := m.reviewOverviewDoc(st, rows, m.overviewWidth(inner))
+	if m.openFiles.has(m.currentWorktree, d) {
+		return m.bringToFront(d)
+	}
 	m = m.pushLayer(&fileViewer{d})
 	m = m.registerDoc(d)
 	return m, nil

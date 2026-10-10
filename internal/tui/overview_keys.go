@@ -256,6 +256,9 @@ func (m Model) overviewRows() []actionRow {
 	if !ok {
 		return nil
 	}
+	if sv, _, _, _, inSplit := m.splitFocus(); inSplit && sv.left.doc() == d && d.ov != nil {
+		return m.splitOverviewRows(sv, d)
+	}
 	var rows []actionRow
 	if d.ov != nil {
 		rows = append(rows, actionRow{id: "overview-next", key: "tab", label: i18n.T("Next anchor"), run: func(m Model) (tea.Model, tea.Cmd) {
@@ -275,11 +278,38 @@ func (m Model) overviewRows() []actionRow {
 		}
 	}
 	rows = append(rows, m.bandRows(d)...)
-	if d.from != nil {
+	if d.from != nil && m.splitShowing(d) == nil { // in a split the overview is on screen: backspace is the split's
 		rows = append(rows, actionRow{id: "overview-back", key: "bksp", label: i18n.T("Back to overview"), run: func(m Model) (tea.Model, tea.Cmd) {
 			nm, cmd, _ := m.anchorBack(d)
 			return nm, cmd
 		}})
 	}
 	return rows
+}
+
+// splitOverviewRows are the . menu's rows for the overview pane of split
+// sv: the walk by the split's keys (each step steers the file pane), Open
+// anchor (steer and focus the file pane), and Copy overview.
+func (m Model) splitOverviewRows(sv *splitView, d *openFile) []actionRow {
+	step := func(dir int) func(Model) (tea.Model, tea.Cmd) {
+		return func(m Model) (tea.Model, tea.Cmd) {
+			rows, _ := sv.geomOf(m, sv.left)
+			d.stepAnchor(dir, rows)
+			return m.steerSplit(sv)
+		}
+	}
+	rows := []actionRow{
+		{id: "overview-next", key: "↓", label: i18n.T("Next anchor"), run: step(1)},
+		{id: "overview-prev", key: "↑", label: i18n.T("Previous anchor"), run: step(-1)},
+	}
+	if d.ov.sel >= 0 {
+		rows = append(rows, actionRow{id: "overview-open", key: "enter", label: i18n.T("Open anchor"), run: func(m Model) (tea.Model, tea.Cmd) {
+			nm, cmd := m.steerSplit(sv)
+			sv.onLeft = false
+			return nm, cmd
+		}})
+	}
+	cp := m.copyRow("overview-copy", i18n.T("Copy overview"), i18n.T("copied"), d.ov.text)
+	cp.key = "y"
+	return append(rows, cp)
 }
