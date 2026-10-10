@@ -205,16 +205,24 @@ func anchorReference(ov *openFile, a anchor) string {
 	return agentdocs.AnchorReference(ov.overviewCopy(), agentdocs.Anchor{Dest: a.dest})
 }
 
-// overviewClick is a left click in the viewer showing overview fv: on an
-// anchor it selects it, and a second click on the same anchor (a double
-// click) opens it. gg laid the rows out itself, so row y is a line and
-// column x a rune — no wrapping to undo, only the horizontal scroll's pan.
+// overviewClick is a left click in the full-screen viewer showing overview
+// fv: its content sits in the reading column under the border and title.
 func (m Model) overviewClick(fv *fileViewer, x, y int) (Model, tea.Cmd) {
-	d := fv.openFile
 	w, _ := m.overlayDims()
 	rows, _ := m.viewerGeom()
 	_, margin := readingColumn(w-4, m.readingWidth())
-	row, col := y-2, x-2-margin // border + title line; border + padding + margin
+	return m.overviewClickIn(fv.openFile, fv, x, y, rows, margin)
+}
+
+// overviewClickIn is a left click at (x, y) in the frame l showing overview
+// d, its rows starting at row 2 and column 2+margin (border + title; border
+// + padding + margin): on an anchor it selects it, and a second click on the
+// same anchor (a double click) opens it. gg laid the rows out itself, so row
+// y is a line and column x a rune — no wrapping to undo, only the horizontal
+// scroll's pan. In a split, selecting steers the file pane and opening moves
+// the focus to it.
+func (m Model) overviewClickIn(d *openFile, l layer, x, y, rows, margin int) (Model, tea.Cmd) {
+	row, col := y-2, x-2-margin
 	if row < 0 || row >= rows || col < 0 {
 		return m, nil
 	}
@@ -233,12 +241,22 @@ func (m Model) overviewClick(fv *fileViewer, x, y int) (Model, tea.Cmd) {
 			break
 		}
 	}
+	sv, inSplit := l.(*splitView)
 	for i, a := range d.ov.anchors {
 		for _, s := range a.spans {
 			if s.line == line && at >= s.from && at < s.to {
 				var double bool
 				// row carries the anchor: a click on another anchor is no double.
-				if m, double = m.registerClick(clickTarget{zone: zoneLayer, layer: fv, row: i}); double {
+				m, double = m.registerClick(clickTarget{zone: zoneLayer, layer: l, row: i})
+				switch {
+				case inSplit:
+					d.selectAnchorAt(i, line, rows)
+					nm, cmd := m.steerSplit(sv)
+					if double {
+						sv.onLeft = false
+					}
+					return nm, cmd
+				case double:
 					return m.openAnchor(d, i)
 				}
 				d.selectAnchorAt(i, line, rows) // where it was clicked: no scroll under the second click

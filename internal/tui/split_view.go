@@ -183,3 +183,46 @@ func (m Model) splitShowing(d *openFile) *splitView {
 	}
 	return nil
 }
+
+// splitMouse is a press over split sv: the wheel scrolls the side under the
+// pointer without moving the focus; a left click focuses that side, then
+// selects (and steers) an anchor of an overview or puts a file's cursor on
+// the row clicked; a right click opens the . menu of the side it lands on;
+// a middle click is esc (it closes the split, as on every reader).
+func (m Model) splitMouse(sv *splitView, msg tea.MouseMsg, wheel int) (Model, tea.Cmd) {
+	lw, _, _ := m.splitGeom()
+	side, x := sv.right, msg.X-lw
+	if msg.X < lw {
+		side, x = sv.left, msg.X
+	}
+	rows, _ := sv.geomOf(m, side)
+	d := side.doc()
+	if wheel != 0 {
+		if d != nil {
+			d.p.scrollBy(wheel, rows)
+		}
+		return m, nil
+	}
+	switch msg.Button {
+	case tea.MouseButtonLeft:
+		sv.onLeft = side == sv.left
+		if d == nil {
+			return m, nil
+		}
+		if d.ov != nil {
+			return m.overviewClickIn(d, sv, x, msg.Y, rows, 0)
+		}
+		if row := msg.Y - 2; row >= 0 && row < rows {
+			if line := d.p.clampTop(d.p.sel, rows) + row; line < len(d.p.lines) {
+				d.p.cur = line
+			}
+		}
+		return m, nil
+	case tea.MouseButtonRight:
+		sv.onLeft = side == sv.left
+		return sv.update(m, synthKey("."))
+	case tea.MouseButtonMiddle:
+		return sv.update(m, synthKey("esc"))
+	}
+	return m, nil
+}
