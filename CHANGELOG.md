@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Tidy `gg init` output
+
+### Changed
+- `gg init` (and `--update`, `--list`) lists each agent's status first and
+  then where its skills live — the skills folder (`~/.claude/skills/`) or the
+  one managed file (`~/.codex/AGENTS.md`), with the home folded to `~` — and
+  names the installed skills once on a `Skills:` line. Each result is one
+  short line per agent (`✓ refreshed Claude Code (global)`; `updated` when
+  the copy was outdated) instead of every skill's full path.
+
 ## The review overview beside its files
 
 ### Added
