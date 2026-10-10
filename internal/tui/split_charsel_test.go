@@ -153,7 +153,9 @@ func TestSplitCloseLeavesTheMode(t *testing.T) {
 	ov := sv.left.doc()
 	m = pressDrain(t, m, "v")
 	u, _ := m.Update(tea.WindowSizeMsg{Width: 50, Height: 30})
-	_ = u
+	if u.(Model).splitLayer() != nil {
+		t.Fatal("a narrow resize must close the split")
+	}
 	if ov.p.cs.on {
 		t.Fatal("the overview came back in the mode")
 	}
@@ -161,7 +163,9 @@ func TestSplitCloseLeavesTheMode(t *testing.T) {
 	m2 = pressDrain(t, m2, "tab")
 	d := sv2.right.doc()
 	m2 = pressDrain(t, m2, "v")
-	m2.dropSplits()
+	if m2 = m2.dropSplits(); m2.splitLayer() != nil {
+		t.Fatal("dropSplits must take the split off the stack")
+	}
 	if d.p.cs.on {
 		t.Fatal("dropSplits kept the file pane's mode")
 	}
@@ -200,10 +204,22 @@ func TestSplitStackCharSelSurvivesALoadAndStaysInItsFile(t *testing.T) {
 func TestSplitActivePreviewWidth(t *testing.T) {
 	t.Parallel()
 	m, sv := reviewSplitModel(t)
-	_, _, w, _ := m.activePreview()
-	_, inner := sv.geomOf(m, sv.left)
-	if want := max(inner-sv.left.doc().gutterW(), 1); w != want {
-		t.Fatalf("width %d, want %d", w, want)
+	m.cfg.UI.ReadingWidth = readingWidthMin // a reading column narrower than the pane
+	for _, side := range []pane{sv.left, sv.right} {
+		if side == sv.right {
+			m = pressDrain(t, m, "tab")
+			if side.doc().gutterW() == 0 {
+				t.Fatal("the file pane must have a gutter to subtract")
+			}
+		}
+		p, _, w, ok := m.activePreview()
+		if !ok || p != side.doc().p {
+			t.Fatalf("activePreview is not the focused pane (onLeft %v)", sv.onLeft)
+		}
+		_, inner := sv.geomOf(m, side)
+		if want := max(inner-side.doc().gutterW(), 1); w != want {
+			t.Fatalf("onLeft %v: width %d, want %d (pane %d)", sv.onLeft, w, want, inner)
+		}
 	}
 }
 
@@ -296,5 +312,77 @@ func TestSplitStackCharSelBumpSaysItStaysInTheFile(t *testing.T) {
 	}
 	if want := i18n.T("▸ the selection stays in this file"); m.statusMsg != want {
 		t.Fatalf("status %q, want %q", m.statusMsg, want)
+	}
+}
+
+// The overview side in the mode owns the split keys as the file side does,
+// and a click on the file side leaves it.
+func TestSplitOverviewCharSelOwnsTheSplitKeys(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModel(t)
+	lw, _, _ := m.splitGeom()
+	ov := sv.left.doc()
+	m = pressDrain(t, m, "v")
+	m = pressDrain(t, m, "tab")
+	if !sv.onLeft || !ov.p.cs.on {
+		t.Fatalf("tab left the overview's mode: onLeft %v on %v", sv.onLeft, ov.p.cs.on)
+	}
+	click(t, m, lw+5, 5)
+	if sv.onLeft || ov.p.cs.on {
+		t.Fatalf("onLeft %v on %v: a click on the file side leaves the mode", sv.onLeft, ov.p.cs.on)
+	}
+}
+
+// A right click on the mode's own side waits (the menu key is the mode's);
+// on the other side it moves the focus and leaves the mode; a middle click
+// is esc — it backs out of the mode and the split stays.
+func TestSplitMouseButtonsInTheMode(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name       string
+		button     tea.MouseButton
+		otherSide  bool
+		on, onLeft bool
+		menu       bool
+	}{
+		{"right on its side", tea.MouseButtonRight, false, true, false, false},
+		{"right on the other side", tea.MouseButtonRight, true, false, true, true},
+		{"middle", tea.MouseButtonMiddle, false, false, false, false},
+	} {
+		m, sv := reviewSplitModel(t)
+		lw, _, _ := m.splitGeom()
+		m = pressDrain(t, m, "tab")
+		d := sv.right.doc()
+		m = pressDrain(t, m, "v")
+		x := lw + 5
+		if c.otherSide {
+			x = 5
+		}
+		u, cmd := m.Update(mouseMsg(x, 5, c.button))
+		m = drainCmds(t, u.(Model), cmd)
+		if d.p.cs.on != c.on || sv.onLeft != c.onLeft || m.splitLayer() != sv || (m.actionMenu != nil) != c.menu {
+			t.Errorf("%s: on %v onLeft %v split %v menu %v", c.name, d.p.cs.on, sv.onLeft, m.splitLayer() == sv, m.actionMenu != nil)
+		}
+	}
+}
+
+// A stack rebuilt with the mode's file showing no lines (folded) ends the
+// mode instead of leaving it on another file's rows.
+func TestSplitStackRebuildLeavesTheModeWhenItsFileGoes(t *testing.T) {
+	t.Parallel()
+	m, sv, sp := stackedSplitModel(t)
+	m = pressDrain(t, m, "tab")
+	m = pressDrain(t, m, "N")
+	m = pressDrain(t, m, "alt+down")
+	m = pressDrain(t, m, "alt+down") // b.go line 1
+	d := sv.right.doc()
+	m = pressDrain(t, m, "v")
+	if !d.p.cs.on || sp.stream.fileAt(d.p.cs.cur.row) != 1 {
+		t.Fatalf("the mode must start in b.go: on %v row %d", d.p.cs.on, d.p.cs.cur.row)
+	}
+	sp.stream.files[1].folded = true
+	sp.rebuild(m)
+	if d.p.cs.on {
+		t.Fatalf("the mode outlived its file: cs %+v", d.p.cs)
 	}
 }
