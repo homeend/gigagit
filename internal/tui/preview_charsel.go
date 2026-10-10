@@ -185,6 +185,9 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	if res.notice != "" {
 		m.statusMsg = res.notice
 	}
+	if d := m.previewDoc(p); res.bump && d != nil && d.stream != nil { // a stack: say what stopped it
+		m.statusMsg = i18n.T("▸ the selection stays in this file")
+	}
 	if res.copy != "" {
 		return m, m.copyToClipboardCmd(copiedCharsText(res.count), res.copy), true
 	}

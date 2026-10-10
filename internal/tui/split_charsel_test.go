@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // v on the split's file pane: the mode copies the line's text and leaves.
@@ -272,4 +274,27 @@ func TestCharSelStaleDropSwallowsTheKey(t *testing.T) {
 		t.Fatalf("the dropped mode's key stepped the anchor: %d → %d", sel, ov.ov.sel)
 	}
 	_ = m
+}
+
+// A move that bumps a stacked file's edge says why the cursor stopped, as
+// the stacked diff does.
+func TestSplitStackCharSelBumpSaysItStaysInTheFile(t *testing.T) {
+	t.Parallel()
+	m, sv, sp := stackedSplitModel(t)
+	m = pressDrain(t, m, "tab")
+	m = pressDrain(t, m, "N")
+	m = pressDrain(t, m, "alt+down")
+	m = pressDrain(t, m, "alt+down") // b.go line 1
+	d := sv.right.doc()
+	m = pressDrain(t, m, "v")
+	m.statusMsg = ""
+	for range 4 {
+		m = pressDrain(t, m, "k")
+	}
+	if sp.stream.fileAt(d.p.cs.cur.row) != 1 {
+		t.Fatalf("the cursor left b.go: row %d", d.p.cs.cur.row)
+	}
+	if want := i18n.T("▸ the selection stays in this file"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q", m.statusMsg, want)
+	}
 }
