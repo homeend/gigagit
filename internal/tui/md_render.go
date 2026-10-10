@@ -93,8 +93,13 @@ type mdRow struct {
 	pre bool
 	// cont marks a wrap CONTINUATION of the row before it (mdWrap broke a
 	// paragraph at width): a copy that spans the break joins the two with
-	// one space (charsel.go), never a newline.
+	// one space (charsel.go), never a newline — or with nothing when hard:
+	// the break split a word wider than the line (a URL, CJK prose).
 	cont bool
+	hard bool
+	// lead is how many leading runes are LAYOUT (a list item's hang indent, a
+	// nested prefix on a continuation row — mdPrefix): a copy strips them.
+	lead int
 }
 
 // mdRun is a stretch of runes of one class, the unit inline layout works in.
@@ -206,7 +211,11 @@ func mdPrefix(rows []mdRow, first, rest string, c syntax.Class) []mdRow {
 			p = first
 		}
 		lead := mdPlainRow(p, c)
-		rows[i] = mdRow{text: lead.text + rows[i].text, cls: append(lead.cls, rows[i].cls...), pre: rows[i].pre, cont: rows[i].cont}
+		extra := 0
+		if i > 0 { // a continuation's prefix is layout; the first row's marker is text
+			extra = len([]rune(lead.text))
+		}
+		rows[i] = mdRow{text: lead.text + rows[i].text, cls: append(lead.cls, rows[i].cls...), pre: rows[i].pre, cont: rows[i].cont, hard: rows[i].hard, lead: rows[i].lead + extra}
 	}
 	return rows
 }
@@ -504,11 +513,13 @@ func mdWrap(text []rune, cls []syntax.Class, width int) []mdRow {
 		return []mdRow{{text: string(text), cls: cls}}
 	}
 	var out []mdRow
+	hardNext := false // the next row follows a break with no space at it
 	emit := func(a, b int) {
 		for b > a && text[b-1] == ' ' {
 			b--
 		}
-		out = append(out, mdRow{text: string(text[a:b]), cls: cls[a:b:b]})
+		out = append(out, mdRow{text: string(text[a:b]), cls: cls[a:b:b], hard: hardNext})
+		hardNext = false
 	}
 	start, w, lastSpace := 0, 0, -1
 	for i := 0; i < len(text); i++ {
@@ -524,8 +535,9 @@ func mdWrap(text []rune, cls []syntax.Class, width int) []mdRow {
 				emit(start, lastSpace)
 				start = lastSpace + 1
 			} else {
-				emit(start, i)
+				emit(start, i) // a word wider than the line: split it
 				start = i
+				hardNext = true
 			}
 			w, lastSpace = 0, -1
 			for k := start; k < i && k < len(text); k++ {

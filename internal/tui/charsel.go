@@ -33,7 +33,8 @@ func (p pos) before(q pos) bool { return p.row < q.row || (p.row == q.row && p.c
 // charRow is one row of a host's text.
 type charRow struct {
 	text  []rune
-	wraps bool // continues the previous row: a copy joins them with one space
+	wraps bool // continues the previous row: a copy joins them with one space…
+	hard  bool // …or with nothing: the break split a word (a URL, CJK prose), no space was there
 	dead  bool // not selectable: an absent diff cell, a folded line, a placeholder
 }
 
@@ -305,9 +306,11 @@ func charSelText(rows []charRow, lo, hi pos) string {
 			e = min(hi.col+1, len(r.text))
 		}
 		if !first {
-			if r.wraps {
+			switch {
+			case r.wraps && r.hard:
+			case r.wraps:
 				b.WriteByte(' ')
-			} else {
+			default:
 				b.WriteByte('\n')
 			}
 		}
@@ -397,7 +400,9 @@ func copiedCharsText(n int) string {
 }
 
 // charSelEmph is the emphasis mask of row `row` (n runes): emphSel on the
-// covered runes, emphSelCur on the cursor; nil when the row is untouched.
+// covered runes; the cursor emphSelCur inside the stripe (a hole in it) and
+// emphCur outside it — the current-hit style, visible on its own in every
+// theme, where a hole in no stripe would be bold alone. nil when untouched.
 func charSelEmph(cs textSel, row, n int) []emphLevel {
 	if !cs.on {
 		return nil
@@ -425,7 +430,11 @@ func charSelEmph(cs textSel, row, n int) []emphLevel {
 		}
 	}
 	if cs.cur.row == row {
-		set(cs.cur.col, emphSelCur)
+		if cs.covers(cs.cur.row, cs.cur.col) {
+			set(cs.cur.col, emphSelCur)
+		} else {
+			set(cs.cur.col, emphCur)
+		}
 	}
 	return out
 }
@@ -464,7 +473,7 @@ func charSelSpans(cs textSel, row int) []hitSpan {
 		out = append(out, hitSpan{start: a, end: e, sel: true})
 	}
 	if cs.cur.row == row {
-		out = append(out, hitSpan{start: cs.cur.col, end: cs.cur.col + 1, sel: true, cur: true})
+		out = append(out, hitSpan{start: cs.cur.col, end: cs.cur.col + 1, sel: cs.covers(cs.cur.row, cs.cur.col), cur: true})
 	}
 	return out
 }

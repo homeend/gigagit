@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -134,5 +136,63 @@ func TestDiffCharSelOnALoadingViewSaysSo(t *testing.T) {
 	m = feedDiff(m, "v")
 	if v.cs.on || m.diffNotice == "" {
 		t.Fatalf("on=%v notice=%q", v.cs.on, m.diffNotice)
+	}
+}
+
+// F3: a click on the other pane must not flip the side while the mode is
+// on (the fixed start names this side's runes).
+func TestDiffCharSelIgnoresAClickOnTheOtherPane(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, textRows("one", "two", "three"), nil)
+	v := m.diffLayer()
+	v.setCursorLine(0, m.diffBodyRows())
+	m = feedDiff(m, "v", "space", "l")
+	u, _ := m.Update(tea.MouseMsg{X: 2, Y: 2, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	m = u.(Model)
+	if v.onOld || !v.cs.on || !v.cs.fixed {
+		t.Fatalf("the click flipped the side or left the mode: onOld=%v cs=%+v", v.onOld, v.cs)
+	}
+}
+
+// F4: a stack file arriving (the loader's re-splice) keeps the mode and
+// its range in the element it was in.
+func TestStackCharSelSurvivesAFileArriving(t *testing.T) {
+	t.Parallel()
+	m, v := navStackModel(t, sameRowsTUI(10, 2), nil) // file 1 not fetched yet
+	body := m.diffBodyRows()
+	first := -1
+	for i, ln := range v.lines {
+		if ln.file == 0 && ln.isBody() {
+			first = i
+			break
+		}
+	}
+	v.setCursorLine(first, body)
+	m = feedDiff(m, "v", "space", "l", "j")
+	anchor, cur := v.cs.anchor, v.cs.cur
+	u, _ := m.Update(stackFileMsg{gen: v.stk.gen, idx: 1, view: diffViewWith(sameRowsTUI(10, 4), blocksOf(sameRowsTUI(10, 4)))})
+	nv := u.(Model).diffLayer()
+	if !nv.cs.on || !nv.cs.fixed || nv.cs.anchor != anchor || nv.cs.cur != cur || nv.csFile != 0 {
+		t.Fatalf("the arrival dropped the mode: %+v file %d", nv.cs, nv.csFile)
+	}
+	if lo, _ := nv.fileLineRange(0); nv.csBase != lo {
+		t.Fatalf("csBase %d, want the element's first line %d", nv.csBase, lo)
+	}
+}
+
+// F7: in scroll mode the pane pans so the cursor stays on screen.
+func TestDiffCharSelPansToKeepTheCursorOnScreen(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, textRows(strings.Repeat("x", 200), "y"), nil)
+	v := m.diffLayer()
+	v.setCursorLine(0, m.diffBodyRows())
+	m = feedDiff(m, "v", "end")
+	tw := v.charPaneText(m)
+	if v.hOffset == 0 || 199 < v.hOffset || 199 >= v.hOffset+tw {
+		t.Fatalf("end: hOffset %d, pane text width %d — the cursor (col 199) is off screen", v.hOffset, tw)
+	}
+	m = feedDiff(m, "home")
+	if v.hOffset != 0 {
+		t.Fatalf("home: hOffset %d, want 0", v.hOffset)
 	}
 }

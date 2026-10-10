@@ -29,7 +29,8 @@ While it is on every other key waits.
   mode's keys. One pure model (`charsel.go`) with thin host adapters; the
   painting rides the per-rune emphasis mask (`emphSel`, `emphSelCur`).
 - The mode leaves when its rows change meaning: a popup resize or `ctrl+t`,
-  a diff reload, a fold, `ctrl+w`.
+  a diff reload; stacked, it survives another file arriving and leaves
+  only when its own element's lines change.
 ## One focused border at a time beside a docked console
 
 ### Fixed

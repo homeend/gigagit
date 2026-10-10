@@ -30,9 +30,9 @@ func (v *diffView) charRows() []charRow {
 	for li := lo; li <= hi; li++ {
 		ln := v.lines[li]
 		switch {
-		case ln.kind == lineProse: // the stack's summary element (Task 5)
+		case ln.kind == lineProse: // the stack's summary element
 			if f, ok := v.stackFileAt(li); ok && ln.prose >= 0 && ln.prose < len(f.prose) {
-				out = append(out, charRow{text: []rune(f.prose[ln.prose].text), wraps: f.prose[ln.prose].cont})
+				out = append(out, proseCharRow(f.prose[ln.prose]))
 				continue
 			}
 			out = append(out, charRow{dead: true})
@@ -102,7 +102,17 @@ func (v *diffView) charSpansOn(li int) []hitSpan {
 	return spans
 }
 
-// charEmphProse is the mask of a stack's prose row (Task 5 paints it).
+// proseCharRow is a rendered markdown row as the mode's row: its layout
+// lead (a list item's hang indent on a continuation) stripped, the join
+// rule from the wrapper.
+func proseCharRow(r mdRow) charRow {
+	text := []rune(r.text)
+	lead := min(max(r.lead, 0), len(text))
+	return charRow{text: text[lead:], wraps: r.cont, hard: r.hard}
+}
+
+// charEmphProse is the mask of a stack's prose row (n = its display runes):
+// the mode's mask placed behind the row's layout lead.
 func (v *diffView) charEmphProse(li, n int) []emphLevel {
 	if !v.cs.on {
 		return nil
@@ -111,7 +121,45 @@ func (v *diffView) charEmphProse(li, n int) []emphLevel {
 	if li < lo || li > hi {
 		return nil
 	}
-	return charSelEmph(v.cs, li-lo, n)
+	lead := 0
+	if f, ok := v.stackFileAt(li); ok && v.lines[li].kind == lineProse && v.lines[li].prose >= 0 && v.lines[li].prose < len(f.prose) {
+		lead = min(max(f.prose[v.lines[li].prose].lead, 0), n)
+	}
+	return shiftMask(charSelEmph(v.cs, li-lo, n-lead), lead, n)
+}
+
+// charPaneText is a pane's text width in scroll mode: the pane less its
+// gutter and the separator column (diffPaneLines' arithmetic).
+func (v *diffView) charPaneText(m Model) int {
+	w, _ := m.overlayDims()
+	paneW := (w - 1) / 2
+	if paneW < 4 {
+		paneW = 4
+	}
+	return max(paneW-v.gutter()-1, 1)
+}
+
+// charPan keeps the cursor's display column inside the pane in scroll mode
+// (←/→ are the mode's own keys, so nothing else could pan).
+func (v *diffView) charPan(m Model) {
+	if v.long != longScroll || !v.cs.on {
+		return
+	}
+	rows := v.charRows()
+	if v.cs.cur.row < 0 || v.cs.cur.row >= len(rows) {
+		return
+	}
+	col := dispCol(string(rows[v.cs.cur.row].text), v.cs.cur.col)
+	tw := v.charPaneText(m)
+	switch {
+	case col < v.hOffset:
+		v.hOffset = col
+	case col >= v.hOffset+tw:
+		v.hOffset = col - tw + 1
+	}
+	if v.hOffset < 0 {
+		v.hOffset = 0
+	}
 }
 
 // diffCharEnter is v: the mode on at the cursor line, column 0 — stacked,
@@ -155,6 +203,7 @@ func (m Model) diffCharKey(v *diffView, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 	if v.cs.on {
 		v.setCursorLine(v.csBase+v.cs.cur.row, m.diffBodyRows()) // the view scrolls with the cursor
+		v.charPan(m)
 	}
 	if res.notice != "" {
 		m.diffNotice = res.notice

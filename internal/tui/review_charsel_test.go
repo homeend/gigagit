@@ -138,3 +138,69 @@ func TestSummaryCharSelPaintsAndHints(t *testing.T) {
 		t.Fatalf("row 0 mask = %v", mask)
 	}
 }
+
+// F2: a copy or a leave must not scroll the popup back to the top.
+func TestSummaryCharSelKeepsThePagerPlace(t *testing.T) {
+	t.Parallel()
+	m, p := openedSummaryPopup(t)
+	var got string
+	m = captureClip(m, &got)
+	m = feedKeys(m, "down", "down", "down")
+	if p.sel != 3 {
+		t.Fatalf("pager top = %d, want 3", p.sel)
+	}
+	m = feedKeys(m, "v", "space", "l")
+	u, cmd := m.Update(keyMsg("enter"))
+	m = drainCmds(t, u.(Model), cmd)
+	if p.sel != 3 || p.cs.on {
+		t.Fatalf("after the copy the pager top = %d (on=%v), want 3", p.sel, p.cs.on)
+	}
+	m = feedKeys(m, "v", "esc")
+	if p.sel != 3 {
+		t.Fatalf("after leaving the pager top = %d, want 3", p.sel)
+	}
+}
+
+const charSelURLDoc = `{"version":1,"summary":"See https://example.com/a/very/long/path/that/no/reading/column/can/hold/on/one/line/without/breaking/it/somewhere/in/the/middle/of/the/url/x for details.","files":[]}`
+
+// F5: a wrap that broke a long word (a URL) joins with nothing.
+func TestSummaryCharSelHardWrapJoinsWithoutASpace(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, charSelURLDoc)
+	m, cmd := m.openReview(id, "Review")
+	m = drainCmds(t, m, cmd)
+	m, _ = m.openReviewSummary()
+	p := m.topLayer().(*reviewSummaryPopup)
+	var got string
+	m = captureClip(m, &got)
+	m = feedKeys(m, "v")
+	rows := p.charRows()
+	hardAt := -1
+	for i, r := range rows {
+		if r.wraps && r.hard {
+			hardAt = i
+			break
+		}
+	}
+	if hardAt < 1 {
+		t.Fatalf("no hard-wrapped row among %d rows: %q", len(rows), charRowTexts(rows))
+	}
+	for p.cs.cur.row < hardAt-1 {
+		m = feedKeys(m, "j")
+	}
+	m = feedKeys(m, "end", "space", "j", "home")
+	u, cmd := m.Update(keyMsg("enter"))
+	drainCmds(t, u.(Model), cmd)
+	prev := rows[hardAt-1].text
+	if want := string(prev[len(prev)-1]) + string(rows[hardAt].text[0]); got != want {
+		t.Fatalf("copied %q, want %q (no space at a hard break)", got, want)
+	}
+}
+
+func charRowTexts(rows []charRow) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = string(r.text)
+	}
+	return out
+}

@@ -182,7 +182,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				// diffPaneLines exactly. A click on the │ separator leaves the
 				// side alone, and a live selection is locked to its side, so
 				// only the row moves then.
-				if !dv.lsel.on {
+				if !dv.lsel.on && !dv.cs.on { // a character selection is locked to its side too
 					w, _ := m.overlayDims()
 					paneW := (w - 1) / 2
 					if paneW < 4 {

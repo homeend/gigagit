@@ -270,8 +270,11 @@ func TestCharSelEmphMask(t *testing.T) {
 		t.Fatalf("row 2 = %v, want nil", m)
 	}
 	loose := textSel{on: true, cur: pos{0, 2}}
-	if m := charSelEmph(loose, 0, 3); !equalEmph(m, []emphLevel{emphNone, emphNone, emphSelCur}) {
-		t.Fatalf("not fixed = %v, want the cursor only", m)
+	if m := charSelEmph(loose, 0, 3); !equalEmph(m, []emphLevel{emphNone, emphNone, emphCur}) {
+		t.Fatalf("not fixed = %v, want the cursor alone, drawn as a current hit (visible with no stripe around it)", m)
+	}
+	if sp := charSelSpans(loose, 0); len(sp) != 1 || sp[0] != (hitSpan{start: 2, end: 3, cur: true}) {
+		t.Fatalf("loose spans = %+v, want a plain cur span", sp)
 	}
 	if m := shiftMask([]emphLevel{emphSel, emphSelCur}, 2, 5); !equalEmph(m, []emphLevel{emphNone, emphNone, emphSel, emphSelCur, emphNone}) {
 		t.Fatalf("shift = %v", m)
@@ -320,5 +323,15 @@ func TestCharSelCopyCountMatchesTheHint(t *testing.T) {
 	r := feedSel(&cs, h, "enter")
 	if r.copy != "Verdict\n\nThe " || r.count != 11 || !strings.Contains(hint, "11 chars") {
 		t.Fatalf("copy %q count %d hint %q", r.copy, r.count, hint)
+	}
+}
+
+// F5: a hard wrap break (a word wider than the line, CJK prose) joins with
+// nothing — the text had no space there.
+func TestCharSelTextHardWrapJoinsWithNothing(t *testing.T) {
+	t.Parallel()
+	rows := []charRow{{text: []rune("https://exa")}, {text: []rune("mple.com/x"), wraps: true, hard: true}, {text: []rune("next"), wraps: true}}
+	if got := charSelText(rows, pos{0, 0}, pos{2, 3}); got != "https://example.com/x next" {
+		t.Fatalf("got %q", got)
 	}
 }

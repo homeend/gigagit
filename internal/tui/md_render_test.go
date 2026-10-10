@@ -251,3 +251,24 @@ func TestMdWrapMarksContinuations(t *testing.T) {
 		t.Fatalf("quote rows = %+v", q)
 	}
 }
+
+// F5/F6: a hard split marks its continuation hard (no space to join on); a
+// list item's continuation carries its hang indent as lead (layout, not text).
+func TestMdWrapMarksHardBreaksAndLeads(t *testing.T) {
+	t.Parallel()
+	hard := mdRows(markdown.Parse("abcdefghij"), 4)
+	if len(hard) < 2 || !hard[1].cont || !hard[1].hard {
+		t.Fatalf("hard = %+v", hard)
+	}
+	soft := mdRows(markdown.Parse("one two three"), 9)
+	if len(soft) < 2 || !soft[1].cont || soft[1].hard {
+		t.Fatalf("soft = %+v", soft)
+	}
+	list := mdRows(markdown.Parse("- one two three four"), 11)
+	if len(list) < 2 || list[0].lead != 0 || list[1].lead != 2 || !list[1].cont {
+		t.Fatalf("list = %+v", list)
+	}
+	if r := proseCharRow(list[1]); string(r.text) != strings.TrimLeft(list[1].text, " ") || !r.wraps {
+		t.Fatalf("proseCharRow = %+v", r)
+	}
+}

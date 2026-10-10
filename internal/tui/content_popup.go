@@ -592,6 +592,9 @@ func (p *contentPopup) box(m Model) string {
 	hint := i18n.T("[/] search  [ctrl+w] mode  [s] save  [ctrl+t] full  [q] close")
 	if p.cs.on {
 		hint = i18n.T("[esc] leave the selection")
+		if p.cs.fixed {
+			hint = i18n.T("[esc] drop the start")
+		}
 	}
 	if overflow {
 		hint = fmt.Sprintf("%d/%d  %s", pos, of, hint)
@@ -739,6 +742,7 @@ func (p *contentPopup) charLayout(m Model) {
 		}
 		segs, indent := wrapRow(text, bodyW, o, 0)
 		offs, pads := wrapSegOffsets(text, segs, indent)
+		softBreak := false // the segment before ended on a space (a word break)
 		for si, s := range segs {
 			r := []rune(s)
 			pad := pads[si]
@@ -746,12 +750,16 @@ func (p *contentPopup) charLayout(m Model) {
 				pad = min(lead, len(r))
 			}
 			// The wrapper keeps the break's space at a segment's end: layout,
-			// not text — the join adds the one space a copy wants.
+			// not text — the join adds the one space a copy wants. A break
+			// with no space (a word wider than the line) joins with nothing.
 			body := r[pad:]
+			trimmed := false
 			for len(body) > 0 && body[len(body)-1] == ' ' {
 				body = body[:len(body)-1]
+				trimmed = true
 			}
-			p.csRows = append(p.csRows, charRow{text: body, wraps: si > 0})
+			p.csRows = append(p.csRows, charRow{text: body, wraps: si > 0, hard: si > 0 && !softBreak})
+			softBreak = trimmed
 			p.csSeg = append(p.csSeg, charSeg{line: i, off: offs[si] + (pad - pads[si]), pad: pad})
 		}
 	}
@@ -764,6 +772,9 @@ func (p *contentPopup) charPage() int       { return max(p.pageH, 1) }
 // false when there is nothing to select.
 func (p *contentPopup) charEnter(m Model, at int) bool {
 	p.charLayout(m)
+	if p.pageH == 0 { // no render yet: the page capacity until the box measures itself
+		p.pageH = m.contentPageRows()
+	}
 	return p.cs.enter(p.csRows, pos{row: at})
 }
 
@@ -818,7 +829,9 @@ func (p *contentPopup) charKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	if !res.handled {
 		return m, nil, false
 	}
-	p.charFollow()
+	if p.cs.on {
+		p.charFollow() // the mode gone, the pager stays where the reader was
+	}
 	if res.notice != "" {
 		m.statusMsg = res.notice
 	}

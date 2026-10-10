@@ -39,3 +39,25 @@ func TestCharSelLevelsPaintStripeAndCursor(t *testing.T) {
 		t.Fatalf("a search hit still maps to emphCur: %v", emph)
 	}
 }
+
+// F1: in the terminal theme (selection_bg and search_current_bg unset) the
+// cursor must show before a start is fixed: emphCur reverses the cell.
+func TestCharSelCursorIsVisibleInTheTerminalTheme(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+	prevTheme := activeTheme()
+	defer setTheme(prevTheme)
+	setTheme(theme.Terminal)
+	s := st()
+	base := lipgloss.NewStyle()
+	got := styledRuns([]rune("ab"), []emphLevel{emphNone, emphCur}, make([]syntax.Class, 2), base)
+	if want := s.currentHitStyle(base).Render("b"); !strings.Contains(got, want) || !strings.Contains(want, "7m") {
+		t.Fatalf("got %q, want the cursor reversed (%q)", got, want)
+	}
+	// Inside a stripe (reverse on) the cursor flips back off: a hole, still visible.
+	inside := styledRuns([]rune("ab"), []emphLevel{emphSel, emphSelCur}, make([]syntax.Class, 2), base)
+	if !strings.Contains(inside, s.selectionStyle(base).Render("a")) || !strings.Contains(inside, s.currentHitStyle(s.selectionStyle(base)).Render("b")) {
+		t.Fatalf("inside = %q", inside)
+	}
+}

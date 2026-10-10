@@ -252,10 +252,21 @@ func (v *diffView) rebuildLines() {
 		// itself after the rebuild.
 		held := v.holdSel()
 		v.lsel.clear()
+		// The character selection lives in ONE element: it survives a
+		// re-splice that leaves that element's lines alone (another file
+		// arriving, a fold elsewhere) at the element's new base, and leaves
+		// when the element itself changed (its own file arrived).
+		cs, csFile := v.cs, v.csFile
+		lo0, hi0 := v.fileLineRange(csFile)
 		v.cs.leave()
 		v.spliceStack() // the stack builds its own lines/blocks from its files
 		v.relayout(v.width)
 		v.restoreSel(held)
+		if cs.on {
+			if lo, hi := v.fileLineRange(csFile); hi-lo == hi0-lo0 {
+				v.cs, v.csBase = cs, lo
+			}
+		}
 		return
 	}
 	v.lsel.clear() // …and so do the line indexes it holds
