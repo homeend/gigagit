@@ -579,12 +579,12 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 		if sp := v.charSpansOn(dr.line); sp != nil {
 			if v.onOld {
 				lh = append(lh, sp...)
-				if r.Left == "" {
+				if sideText(r, true) == "" { // a CRLF blank line is "\r": it draws empty too
 					r.Left, dr.left = " ", roomForCursor(dr.left)
 				}
 			} else {
 				rh = append(rh, sp...)
-				if r.Right == "" {
+				if sideText(r, false) == "" {
 					r.Right, dr.right = " ", roomForCursor(dr.right)
 				}
 			}

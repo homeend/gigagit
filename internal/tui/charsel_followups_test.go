@@ -457,3 +457,17 @@ func TestDiffCharSelScrollsWhileOnInTruncateMode(t *testing.T) {
 		t.Fatalf("after a rebuild: on=%v long %v, want truncate back", v.cs.on, v.long)
 	}
 }
+
+// A CRLF file's blank line is "\r": it draws empty, so it needs the cursor
+// cell as much as a truly empty line does.
+func TestDiffCharSelCursorShowsOnACRLFBlankRow(t *testing.T) {
+	defer terminalPaint()()
+	m := openedDiffModel(12, textRows("abc\r", "\r", "def\r"), nil)
+	v := m.diffLayer()
+	v.setCursorLine(1, m.diffBodyRows())
+	m = feedDiff(m, "v")
+	on := strings.Split(m.renderDiffView(), "\n")[2]
+	if right := on[strings.Index(on, "│"):]; !reverseCell.MatchString(right) {
+		t.Fatalf("no cursor cell on the CRLF blank row: %q", on)
+	}
+}
