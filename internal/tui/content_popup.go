@@ -823,7 +823,7 @@ func (p *contentPopup) charKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		m.statusMsg = res.notice
 	}
 	if res.copy != "" {
-		return m, m.copyToClipboardCmd(copiedCharsText(len([]rune(res.copy))), res.copy), true
+		return m, m.copyToClipboardCmd(copiedCharsText(res.count), res.copy), true
 	}
 	return m, nil, true
 }

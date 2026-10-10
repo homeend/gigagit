@@ -163,7 +163,7 @@ func (m Model) diffCharKey(v *diffView, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		m.diffNotice = m.stackCharBoundNotice(v)
 	}
 	if res.copy != "" {
-		return m, m.copyToClipboardCmd(copiedCharsText(len([]rune(res.copy))), res.copy), true
+		return m, m.copyToClipboardCmd(copiedCharsText(res.count), res.copy), true
 	}
 	return m, nil, true
 }

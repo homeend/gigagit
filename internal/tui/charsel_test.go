@@ -307,3 +307,18 @@ func TestCharSelHintAndCopiedText(t *testing.T) {
 		t.Fatalf("%q / %q", copiedCharsText(1), copiedCharsText(3))
 	}
 }
+
+// A copy's count is the runes it COVERS, as the hint promised, never the
+// copied string's length (the joins add newlines and spaces).
+func TestCharSelCopyCountMatchesTheHint(t *testing.T) {
+	t.Parallel()
+	h := fakeHost{rows: rowsOf("Verdict", "", "The change"), page: 10}
+	var cs textSel
+	cs.enter(h.rows, pos{0, 0})
+	feedSel(&cs, h, "space", "j", "j", "l", "l", "l")
+	hint := charSelHint(cs, h.rows)
+	r := feedSel(&cs, h, "enter")
+	if r.copy != "Verdict\n\nThe " || r.count != 11 || !strings.Contains(hint, "11 chars") {
+		t.Fatalf("copy %q count %d hint %q", r.copy, r.count, hint)
+	}
+}

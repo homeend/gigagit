@@ -326,6 +326,7 @@ func charSelText(rows []charRow, lo, hi pos) string {
 type charSelResult struct {
 	handled bool
 	copy    string
+	count   int // the runes the copy COVERS (what the hint counted; the joins add more)
 	notice  string
 	bump    bool
 }
@@ -370,6 +371,7 @@ func charSelKey(cs *textSel, host charHost, msg tea.KeyMsg) charSelResult {
 			return res
 		}
 		res.copy = charSelText(rows, lo, hi)
+		res.count = cs.count(rows)
 		cs.leave()
 	case "esc":
 		cs.esc()
