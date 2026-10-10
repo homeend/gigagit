@@ -32,7 +32,7 @@ func (v *diffView) charRows() []charRow {
 		switch {
 		case ln.kind == lineProse: // the stack's summary element (Task 5)
 			if f, ok := v.stackFileAt(li); ok && ln.prose >= 0 && ln.prose < len(f.prose) {
-				out = append(out, charRow{text: []rune(f.prose[ln.prose].text), wraps: false}) // Task 5: mdRow.cont
+				out = append(out, charRow{text: []rune(f.prose[ln.prose].text), wraps: f.prose[ln.prose].cont})
 				continue
 			}
 			out = append(out, charRow{dead: true})

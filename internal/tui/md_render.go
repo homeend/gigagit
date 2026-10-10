@@ -91,6 +91,10 @@ type mdRow struct {
 	// pre marks a PREFORMATTED row — a code line, a table row: a host that
 	// wraps at draw time must cut it instead (contentLine.noWrap).
 	pre bool
+	// cont marks a wrap CONTINUATION of the row before it (mdWrap broke a
+	// paragraph at width): a copy that spans the break joins the two with
+	// one space (charsel.go), never a newline.
+	cont bool
 }
 
 // mdRun is a stretch of runes of one class, the unit inline layout works in.
@@ -202,7 +206,7 @@ func mdPrefix(rows []mdRow, first, rest string, c syntax.Class) []mdRow {
 			p = first
 		}
 		lead := mdPlainRow(p, c)
-		rows[i] = mdRow{text: lead.text + rows[i].text, cls: append(lead.cls, rows[i].cls...), pre: rows[i].pre}
+		rows[i] = mdRow{text: lead.text + rows[i].text, cls: append(lead.cls, rows[i].cls...), pre: rows[i].pre, cont: rows[i].cont}
 	}
 	return rows
 }
@@ -539,6 +543,9 @@ func mdWrap(text []rune, cls []syntax.Class, width int) []mdRow {
 	}
 	if start < len(text) {
 		emit(start, len(text))
+	}
+	for i := 1; i < len(out); i++ {
+		out[i].cont = true
 	}
 	return out
 }

@@ -237,3 +237,17 @@ func TestSyntaxStyleMarkdownClasses(t *testing.T) {
 		t.Error("an unknown class renders as the base")
 	}
 }
+
+// A wrapped paragraph's continuation rows say so (cont), and a prefix
+// (a quote bar) keeps the flag.
+func TestMdWrapMarksContinuations(t *testing.T) {
+	t.Parallel()
+	rows := mdRows(markdown.Parse("one two three four"), 9)
+	if len(rows) < 2 || rows[0].cont || !rows[1].cont {
+		t.Fatalf("rows = %+v", rows)
+	}
+	q := mdRows(markdown.Parse("> one two three four"), 11)
+	if len(q) < 2 || q[0].cont || !q[1].cont {
+		t.Fatalf("quote rows = %+v", q)
+	}
+}
