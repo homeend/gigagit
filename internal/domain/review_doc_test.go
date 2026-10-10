@@ -168,3 +168,27 @@ func TestReviewFilesOfABranchReviewAreTheRangeFiles(t *testing.T) {
 		t.Fatalf("counts %v", counts)
 	}
 }
+
+// ReviewFileNotes places a review's remarks on the file at the reviewed
+// tip: a remark on a line the commit deleted has no line there and is left
+// out (spec 2026-10-10-overview-split-all R1), as is one past the end.
+func TestReviewFileNotesKeepsOnlyLinesAtTheTip(t *testing.T) {
+	t.Parallel()
+	dir, svc, _ := reviewRepo(t)
+	commitFile(t, dir, "g.txt", "one\ntwo\nthree\n", "add g")
+	tip := revParse(t, dir, "HEAD")
+	ctx := context.Background()
+	doc := `{"version":1,"summary":"s","files":[{"path":"g.txt","annotations":[` +
+		`{"newRange":[3,3],"summary":"kept"},{"oldRange":[1,1],"summary":"on a deleted line"},{"newRange":[9,9],"summary":"past the end"}]}]}`
+	id, _, err := svc.SaveReview(ctx, SaveReview{Target: ReviewTarget{Kind: ReviewRange, Range: tip + "^.." + tip, Label: "g"}, Agent: "Claude", Text: doc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ns, err := svc.ReviewFileNotes(ctx, id, "g.txt", []string{"one", "two", "three"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ns) != 1 || ns[0].Note.Summary != "kept" || ns[0].Range != [2]int{3, 3} || ns[0].Note.Author != "Claude" {
+		t.Fatalf("notes %+v", ns)
+	}
+}

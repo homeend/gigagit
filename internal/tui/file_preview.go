@@ -531,7 +531,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	gut, boxH, curB := 0, 0, -1
 	if d := m.previewDoc(p); d != nil && d.gutterW() > 0 {
 		boxH = noteBoxMaxRows(rowsCap)
-		notes, gut = d.notes, d.gutterW()
+		notes, gut = d.shownNotes(), d.gutterW()
 		bands = d.bands()
 		curB = d.curBand(bands)
 		d.noteW, d.noteH = max(innerW-gut, 4), noteBoxMaxRows(rowsCap)
@@ -640,7 +640,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 			hint = p.extraHint + "  " + hint
 		}
 	}
-	if d := m.previewDoc(p); d != nil && len(d.notes) > 0 {
+	if d := m.previewDoc(p); d != nil && len(d.shownNotes()) > 0 {
 		// An annotated file's own hint: the note keys, then the two exits —
 		// all inside an 80-column viewer — and the everyday keys last.
 		hint = i18n.T("%d/%d  [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [↑/↓] scroll", start+1, len(vis))

@@ -146,6 +146,26 @@ func (s *Service) ReviewNotesFor(ctx context.Context, reviewID, path string, d D
 	return reviewDocNotes(r, path, addr, oldLines, newLines, false), nil
 }
 
+// ReviewFileNotes is the review's remarks on path placed on the file at the
+// reviewed tip, whose text is lines: new-side remarks only — a remark on a
+// line the commit deleted has no line there and is left out (spec
+// 2026-10-10-overview-split-all R1). A working review has none on a file
+// that no longer matches, as ReviewNotesFor.
+func (s *Service) ReviewFileNotes(ctx context.Context, reviewID, path string, lines []string) ([]ResolvedNote, error) {
+	r, err := s.Review(ctx, reviewID)
+	if err != nil || r.Doc == nil {
+		return nil, err
+	}
+	addr := model.FileAddress{State: model.StateCommitted, Commit: r.Commit, Path: path}
+	if r.Kind == ReviewOnWorktree {
+		if WorkingReviewState(r.Worktree, r.Files).States[reviewPath(path)] != WorkingFileMatches {
+			return nil, nil
+		}
+		addr = model.FileAddress{State: model.StateUnstaged, Worktree: r.Worktree, Path: path}
+	}
+	return reviewDocNotes(r, path, addr, nil, lines, true), nil
+}
+
 // reviewDocNotes are review r's document notes on path, numbered in document
 // order ("review:<id>:<n>") and anchored at addr. A note whose side is absent
 // or too short is left out; newOnly drops old-side notes.

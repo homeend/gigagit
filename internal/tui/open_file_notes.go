@@ -113,8 +113,9 @@ func (d *openFile) clearNotes() int {
 
 // noteAt is the first note covering the 1-based line, or nil.
 func (d *openFile) noteAt(line int) *agentdocs.Note {
-	for i := range d.notes {
-		if n := &d.notes[i]; n.Start <= line && line <= n.End {
+	ns := d.shownNotes()
+	for i := range ns {
+		if n := &ns[i]; n.Start <= line && line <= n.End {
 			return n
 		}
 	}
@@ -149,7 +150,7 @@ const noteGutterW = 2
 // gutterW is the width of d's range-mark gutter: none without notes or
 // anchor bands, so an ordinary file is laid out exactly as before.
 func (d *openFile) gutterW() int {
-	if (len(d.notes) == 0 && d.bands() == nil) || !docLoaded(d) || d.p.img != nil {
+	if (len(d.shownNotes()) == 0 && d.bands() == nil) || !docLoaded(d) || d.p.img != nil {
 		return 0
 	}
 	return noteGutterW
@@ -157,6 +158,9 @@ func (d *openFile) gutterW() int {
 
 // noteTitle is the box's top-rule text: who, which note, which lines.
 func noteTitle(n agentdocs.Note) string {
+	if strings.HasPrefix(n.ID, model.ReviewNoteIDPrefix) { // a review's remark: its id means nothing here
+		n.ID = i18n.T("review")
+	}
 	switch {
 	case n.Outdated && n.Start == n.End:
 		return i18n.T("%s · %s · line %d · outdated", n.Author, n.ID, n.Start)
@@ -216,7 +220,7 @@ func (m Model) openFileNote(n agentdocs.Note) Model {
 // line indexes): a box hangs under the line its note ENDS on.
 func (d *openFile) noteRowsUnder(from, to int) int {
 	rows := 0
-	for _, n := range d.notes {
+	for _, n := range d.shownNotes() {
 		if i := n.End - 1; i >= from && i < to {
 			rows += len(noteBoxLines(n, d.noteW-noteBoxFrame, d.noteH))
 		}
@@ -228,7 +232,7 @@ func (d *openFile) noteRowsUnder(from, to int) int {
 // takes it away when the last one goes, so a file without notes is back on
 // the plain one-row-per-line path.
 func (d *openFile) syncNoteRows() {
-	if len(d.notes) == 0 {
+	if len(d.shownNotes()) == 0 {
 		d.p.extraRows = nil
 		return
 	}

@@ -16,7 +16,7 @@ import (
 // anyFileNotes reports whether any open file of this worktree has notes.
 func (m Model) anyFileNotes() bool {
 	for _, d := range m.openFiles.list(m.currentWorktree) {
-		if len(d.notes) > 0 {
+		if len(d.shownNotes()) > 0 {
 			return true
 		}
 	}
@@ -37,6 +37,10 @@ func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	case "{":
 		return m.stepFileNote(d, -1)
 	case "d":
+		if n := d.noteAt(d.p.cur + 1); n != nil && d.readOnlyNote(n) {
+			m.statusMsg = d.readOnlyText()
+			return m, nil, true
+		}
 		if n := d.noteAt(d.p.cur + 1); n != nil {
 			id := n.ID // the copy n points into is rebuilt by the removal
 			d.removeNote(id)
@@ -48,6 +52,10 @@ func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 			return m.openFileNote(*n), nil, true
 		}
 	case "r":
+		if n := d.noteAt(d.p.cur + 1); n != nil && d.readOnlyNote(n) {
+			m.statusMsg = d.readOnlyText()
+			return m, nil, true
+		}
 		if n := d.noteAt(d.p.cur + 1); n != nil {
 			return m, m.copyToClipboardCmd(i18n.T("Copied note reference %s", n.ID), agentdocs.NoteReference(*n)), true
 		}
@@ -61,8 +69,9 @@ func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 	line := d.p.cur + 1
 	var hit *agentdocs.Note
-	for i := range d.notes {
-		n := &d.notes[i]
+	mine := d.shownNotes()
+	for i := range mine {
+		n := &mine[i]
 		if dir > 0 && n.Start > line {
 			hit = n
 			break
@@ -86,7 +95,7 @@ func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 	// (a third file would never come up).
 	var others []*openFile
 	for _, e := range m.openFiles.list(m.currentWorktree) {
-		if e != d && len(e.notes) > 0 {
+		if e != d && len(e.shownNotes()) > 0 {
 			others = append(others, e)
 		}
 	}
@@ -105,9 +114,10 @@ func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 				e = o // keep going: the LAST one before d
 			}
 		}
-		target := e.notes[0]
+		ens := e.shownNotes()
+		target := ens[0]
 		if dir < 0 {
-			target = e.notes[len(e.notes)-1]
+			target = ens[len(ens)-1]
 		}
 		e.pendingLine = target.Start
 		nm, load := m.bringToFront(e)
@@ -117,7 +127,7 @@ func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 		}
 		return nm, load, true
 	}
-	if len(d.notes) == 0 {
+	if len(mine) == 0 {
 		return m, nil, false // nothing anywhere to step to: not our key
 	}
 	m.statusMsg = i18n.T("no more notes")
@@ -128,7 +138,7 @@ func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 // the keys for the mouse. None while it has no notes.
 func (m Model) fileNoteRows() []actionRow {
 	d, ok := m.focusedDoc()
-	if !ok || len(d.notes) == 0 {
+	if !ok || len(d.shownNotes()) == 0 {
 		return nil
 	}
 	rows := []actionRow{
@@ -141,13 +151,16 @@ func (m Model) fileNoteRows() []actionRow {
 			return nm, cmd
 		}},
 	}
-	n := d.notes[0] // the menu has no cursor of its own: offer the first note
+	n := d.shownNotes()[0] // the menu has no cursor of its own: offer the first note
 	if at := d.noteAt(d.p.cur + 1); at != nil {
 		n = *at
 	}
 	rows = append(rows, actionRow{id: "note-show", key: "enter", label: i18n.T("Show full note"), run: func(m Model) (tea.Model, tea.Cmd) {
 		return m.openFileNote(n), nil
 	}})
+	if d.readOnlyNote(&n) { // the review's (or a stack's): nothing to copy a reference to or dismiss
+		return rows
+	}
 	ref := m.copyRow("copy-note-ref", i18n.T("Copy note reference"), i18n.T("Copied note reference %s", n.ID), agentdocs.NoteReference(n))
 	ref.key = "r"
 	return append(rows, ref, actionRow{id: "note-dismiss", key: "d", label: i18n.T("Dismiss note"), run: func(m Model) (tea.Model, tea.Cmd) {
@@ -161,7 +174,7 @@ func (m Model) fileNoteRows() []actionRow {
 // while d carries notes: the note keys, then the exits, then the rest — in
 // place of hint, so the exits are never pushed off the line.
 func (m Model) noteHint(d *openFile, hint string) string {
-	if d == nil || len(d.notes) == 0 {
+	if d == nil || len(d.shownNotes()) == 0 {
 		return hint
 	}
 	return i18n.T("file: [}/{] notes  [d] dismiss  [r] reference  [esc] background  [X] close  [enter] full note  [alt+↑↓] line  [/] find  [←/tab] back to tree")

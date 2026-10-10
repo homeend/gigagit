@@ -1100,6 +1100,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil // the watcher was closed: its listen loop ends here
 	case stackPaneMsg:
 		return m.stackPaneLanded(msg)
+	case reviewNotesMsg:
+		return m.reviewNotesLanded(msg), nil
 	case fileContentMsg:
 		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
 			if d.ov != nil {
@@ -1125,7 +1127,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				d.from.ov.paint(d.from.p.lines)
 			}
-			return m, nil
+			return m, m.reviewNotesCmd(d)
 		}
 		return m, nil // no frame shows that document any more: a stale load
 	case commitMessageMsg:

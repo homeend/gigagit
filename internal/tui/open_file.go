@@ -84,6 +84,12 @@ type openFile struct {
 	// agentdocs store; View draws this copy, never the store, so a change
 	// made in the browser cannot shift the rows mid-frame.
 	notes []agentdocs.Note
+	// reviewNotes are the remarks of review reviewNotesOf on this file, as
+	// read-only boxes, while that review's overview is d.from
+	// (review_remarks.go); for a split's stack, every file's notes at their
+	// stream lines. Never the store's: shownNotes draws both.
+	reviewNotes   []agentdocs.Note
+	reviewNotesOf string
 	// docs/root are the store the document's notes live in and the root
 	// they are filed under, set when it joins the open-files list
 	// (adoptDoc); nil for a document no list holds (F's live preview), which
@@ -259,8 +265,8 @@ func (d *openFile) landPendingLine(rows int) (notice string) {
 		p.lsel = lineSel{on: true, anchor: p.cur, end: min(end, n) - 1, fixed: true}
 	}
 	if p.extraRows != nil {
-		p.ensureCursorVisible(rows)  // a note box above may have pushed the line out
-		for _, nt := range d.notes { // landing on a note (an overview's anchor): bring its box in, as } does
+		p.ensureCursorVisible(rows)         // a note box above may have pushed the line out
+		for _, nt := range d.shownNotes() { // landing on a note (an overview's anchor): bring its box in, as } does
 			if nt.Start == line {
 				for p.sel < p.cur && p.rowsSpan(p.sel, nt.End) > rows {
 					p.sel++

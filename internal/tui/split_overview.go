@@ -174,7 +174,7 @@ func (m Model) docSteer(sv *splitView, r *docPane, ov *openFile, a anchor) (Mode
 		land(d)
 		if docLoaded(d) {
 			d.landPendingLine(rows)
-			return m, nil
+			return m, m.remarksOnSteer(d)
 		}
 		return m, m.loadDoc(d)
 	}
@@ -193,10 +193,20 @@ func (m Model) docSteer(sv *splitView, r *docPane, ov *openFile, a anchor) (Mode
 	m = m.registerDoc(d)
 	if docLoaded(d) && !d.onDisk() {
 		d.landPendingLine(rows)
-		return m, nil
+		return m, m.remarksOnSteer(d)
 	}
 	d.keepPlace()
 	return m, m.loadDoc(d)
+}
+
+// remarksOnSteer fetches the review's remarks on a loaded document a steer
+// landed on, unless it carries that review's already (a reload re-fetches
+// them through the load).
+func (m Model) remarksOnSteer(d *openFile) tea.Cmd {
+	if id := d.reviewOfFrom(); id == "" || id == d.reviewNotesOf {
+		return nil
+	}
+	return m.reviewNotesCmd(d)
 }
 
 // landOnOverviewRow puts the review tree's cursor on its ≡ Overview row —
