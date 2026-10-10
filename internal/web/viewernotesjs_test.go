@@ -253,3 +253,47 @@ console.log(r.join("|"));
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
+
+// Spec 2026-10-11 §7 / W7 / §6: the mark the right column's cursor puts on
+// the overview, the split's breakpoint, the review a file's remarks come from.
+func TestViewerSplitModelJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", voPureStart, voPureEnd, `
+const bands = [{start: 2, end: 4, i: 0}, {start: 3, end: 6, i: 2}, {start: 9, end: 9, i: 5}];
+console.log([
+  hereOf(bands, -1, 3, -1),  // overlap, no current band: the first
+  hereOf(bands, 1, 3, -1),   // overlap: the current band wins
+  hereOf(bands, -1, 5, -1),  // only the second covers 5
+  hereOf(bands, -1, 7, -1),  // none covers 7
+  hereOf(bands, -1, 9, 2),   // band 2 is the selection's: no second mark
+  hereOf([], -1, 1, -1),
+  splitFits(899), splitFits(900), SPLIT_MIN_PX,
+  remarksReview({stored: {id: "review-overview:abc"}}),
+  remarksReview({stored: {id: "review-overview:abc"}, closed: true}),
+  remarksReview({id: "f3"}), remarksReview(null),
+].join("|"));
+`)
+	want := `0|2|2|-1|-1|-1|false|true|900|abc|||`
+	if out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+// W6: a remark's box names the review, never its internal id; the boxes a
+// file draws are the agent's notes then the remarks, by start line.
+func TestViewerRemarkNotesJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", vnPureStart, vnPureEnd, `
+const ns = [{id: "t1", start: 4, end: 4, author: "a"}];
+const rs = [{id: "review:x:0", start: 2, end: 3, author: "Claude", readonly: true}, {id: "review:x:1", start: 4, end: 4, author: "Claude", readonly: true}];
+console.log([
+  noteBoxTitle(rs[0]), noteBoxTitle(rs[1]),
+  mergeNotes(ns, rs).map((n) => n.id).join(","),
+  mergeNotes(ns, []) === ns, mergeNotes(ns, undefined) === ns,
+].join("|"));
+`)
+	want := `review · Claude · lines 2–3|review · Claude · line 4|review:x:0,t1,review:x:1|true|true`
+	if out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}

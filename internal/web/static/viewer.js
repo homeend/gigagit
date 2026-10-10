@@ -67,6 +67,7 @@ function keepLine(cur, count, placeholder) {
 // summary, rationale, author, outdated, ref}, lines 1-based.
 function noteBoxTitle(n) {
   const at = n.start === n.end ? "line " + n.start : "lines " + n.start + "–" + n.end;
+  if (n.readonly) return "review · " + n.author + " · " + at; // a review's remark: its id is internal
   return "note " + n.id + " · " + n.author + " · " + at + (n.outdated ? " · outdated" : "");
 }
 
@@ -102,6 +103,12 @@ function nextNotedFile(files, mine, dir) {
   if (dir > 0) return (others.find((f) => num(f.id) > num(mine)) || others[0]).id;
   const before = others.filter((f) => num(f.id) < num(mine));
   return (before.length ? before[before.length - 1] : others[others.length - 1]).id;
+}
+// mergeNotes is every box a file draws: an agent's notes, then a review's
+// remarks, by start line — an agent's note first on a tie (sort is stable).
+function mergeNotes(notes, remarks) {
+  if (!remarks || !remarks.length) return notes;
+  return [...notes, ...remarks].sort((a, b) => a.start - b.start);
 }
 // --- end note model ---
 
@@ -271,6 +278,29 @@ function bandKindAt(bands, cur, line) {
     }
   }
   return k;
+}
+
+// SPLIT_MIN_PX is the box width the split needs (W7): about 60 characters a
+// column at the viewer's 12px monospace; a narrower box shows one document.
+const SPLIT_MIN_PX = 900;
+function splitFits(boxWidth) {
+  return boxWidth >= SPLIT_MIN_PX;
+}
+
+// hereOf is the anchor the right column's cursor marks on the overview
+// (spec §7): the band covering line — the current band (cur) wins an
+// overlap, then the first — as its anchor index; -1 when no band covers it
+// or it is the selection's band (selBand: the selection is already marked).
+function hereOf(bands, cur, line, selBand) {
+  const covers = (b) => b.start <= line && line <= b.end;
+  const k = cur >= 0 && cur < bands.length && covers(bands[cur]) ? cur : bands.findIndex(covers);
+  return k < 0 || k === selBand ? -1 : bands[k].i;
+}
+
+// remarksReview is the review whose remarks a file opened from overview
+// way back from carries: a stored overview's review; "" otherwise.
+function remarksReview(from) {
+  return from && from.stored && !from.closed ? String(from.stored.id).replace(/^review-overview:/, "") : "";
 }
 // --- end overview model ---
 
