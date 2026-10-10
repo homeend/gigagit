@@ -592,10 +592,22 @@ func (m Model) renderConsole(boxW, boxH int) string {
 		lines = append(lines, padRight("", innerW))
 	}
 	style := s.bluredPanel
-	if m.focus == panelCommits {
+	if m.consoleBorderFocused() {
 		style = s.focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))
+}
+
+// consoleBorderFocused: the console's border is lit while it gets gg's keys
+// — not merely while its column has the focus (a files tree beside it holds
+// the keys then), and not on a stale console.focused after a click moved the
+// focus to a left panel (the next key clears it, updateConsoleKey). One lit
+// border at a time.
+func (m Model) consoleBorderFocused() bool {
+	if m.console == nil {
+		return false
+	}
+	return m.consoleFull() || (m.focus == panelCommits && m.consoleOwnsKeys())
 }
 
 // consumeConsoleClip copies the child's newest OSC 52 write (a fullscreen
