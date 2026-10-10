@@ -68,7 +68,12 @@ func overlayHits(emph []emphLevel, off, n int, hits []hitSpan) []emphLevel {
 			copy(out, emph)
 		}
 		lvl := emphHit
-		if h.cur {
+		switch {
+		case h.sel && h.cur:
+			lvl = emphSelCur
+		case h.sel:
+			lvl = emphSel
+		case h.cur:
 			lvl = emphCur
 		}
 		for i := lo; i < hi; i++ {
