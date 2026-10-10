@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"github.com/homeend/gigagit/internal/textdiff"
 	"github.com/homeend/gigagit/internal/theme"
 )
 
@@ -253,5 +254,82 @@ func TestCharSelNumberedListLead(t *testing.T) {
 	drainCmds(t, u.(Model), cmd)
 	if want := string([]rune(row.text)[row.lead : row.lead+2]); got != want {
 		t.Fatalf("stack copied %q, want %q", got, want)
+	}
+}
+
+// pgdown / pgup step a real page: the body's row count, the line cursor and
+// the view following.
+func TestDiffCharSelPagesByTheBody(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, sameRowsTUI(60, 10, 50), nil)
+	v := m.diffLayer()
+	v.setCursorLine(0, m.diffBodyRows())
+	page := m.diffBodyRows()
+	if page < 2 {
+		t.Fatalf("body %d rows: the page must be more than one", page)
+	}
+	m = feedDiff(m, "v", "pgdown")
+	if v.cs.cur.row != page || v.curLine != page {
+		t.Fatalf("pgdown: row %d curLine %d, want %d", v.cs.cur.row, v.curLine, page)
+	}
+	if v.curLine < v.offset || v.curLine >= v.offset+page {
+		t.Fatalf("the cursor line %d left the view [%d, %d)", v.curLine, v.offset, v.offset+page)
+	}
+	m = feedDiff(m, "pgup")
+	if v.cs.cur.row != 0 || v.offset != 0 {
+		t.Fatalf("pgup: row %d offset %d, want 0 0", v.cs.cur.row, v.offset)
+	}
+}
+
+// Review Focus 1 inside a host: wide runes are one step each and copy whole.
+func TestDiffCharSelWideRunes(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, textRows("日本語 ok"), nil)
+	v := m.diffLayer()
+	v.setCursorLine(0, m.diffBodyRows())
+	var got string
+	m = captureClip(m, &got)
+	m = feedDiff(m, "v", "l", "space", "l")
+	if sp := v.charSpansOn(0); len(sp) != 2 || sp[0].start != 1 || sp[0].end != 3 {
+		t.Fatalf("spans %+v, want the stripe over runes 1..3 (本語)", sp)
+	}
+	u, cmd := m.Update(keyMsg("enter"))
+	drainCmds(t, u.(Model), cmd)
+	if got != "本語" {
+		t.Fatalf("copied %q, want 本語", got)
+	}
+}
+
+// v on a folded file: its element has no live row — nothing to select, and
+// the mode stays off.
+func TestStackCharSelOnACollapsedFile(t *testing.T) {
+	t.Parallel()
+	m, v, _ := openedReviewStack(t)
+	v.setCursorLine(v.stk.files[1].hdr, m.diffBodyRows())
+	m = feedDiff(m, "-")
+	if !v.stk.files[1].collapsed {
+		t.Fatal("- must fold a.go")
+	}
+	m = feedDiff(m, "v")
+	if v.cs.on || m.diffNotice != "▸ nothing to select" {
+		t.Fatalf("v on a folded file: on=%v notice %q", v.cs.on, m.diffNotice)
+	}
+}
+
+// A reload (a diffMsg for the open view) arriving mid-mode leaves it: the
+// line indexes now name other lines.
+func TestDiffCharSelLeavesOnAReload(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, textRows("one", "two", "three"), nil)
+	m = feedDiff(m, "v", "space", "l")
+	loaded := diffViewWith([]textdiff.Row{{Kind: textdiff.Same, Left: "x", Right: "x", LeftNo: 1, RightNo: 1}}, nil)
+	loaded.relayout(m.width)
+	u, _ := m.Update(diffMsg{tag: m.diffTag, view: loaded})
+	m = u.(Model)
+	if v := m.diffLayer(); v.cs.on {
+		t.Fatalf("a reload must leave the mode: %+v", v.cs)
+	}
+	if !strings.Contains(m.renderDiffView(), "x") {
+		t.Fatal("the reloaded text must show")
 	}
 }
