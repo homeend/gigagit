@@ -230,3 +230,23 @@ func TestStackCharRowsAreLinearInTheStream(t *testing.T) {
 		t.Fatalf("1000 files took %v, the same lines in one file %v: not one pass", many, one)
 	}
 }
+
+// An op handoff or a steer clears the whole layer stack: a split on it is
+// retired the way a close retires it — no pane is left in the copy mode.
+func TestClearLayersLeavesTheMode(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModel(t)
+	m = pressDrain(t, m, "tab")
+	d := sv.right.doc()
+	m = pressDrain(t, m, "v")
+	if !d.p.cs.on {
+		t.Fatal("v must enter the mode on the file pane")
+	}
+	m = m.clearLayers() // a popup's op handoff: the files view stays
+	if len(m.layers.entries) != 0 {
+		t.Fatalf("the stack must be empty: %d", len(m.layers.entries))
+	}
+	if d.p.cs.on {
+		t.Fatal("clearing the stack kept the file pane's mode")
+	}
+}

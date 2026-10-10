@@ -88,9 +88,15 @@ func (m Model) popLayer() Model {
 // the op must land in the main panels. A popup handing off to a WINDOW never
 // uses this — see handOffToFilesView. (The full-screen diff is a stack layer
 // and is pushed/popped like any other, preserving the surface it was opened
-// over.)
+// over.) A split on the stack is retired, not closed: its onClose would
+// steer the files view the op is about to replace.
 func (m Model) clearLayers() Model {
 	if m.layers != nil {
+		for _, l := range m.layers.entries {
+			if sv, ok := l.(*splitView); ok {
+				sv.retire()
+			}
+		}
 		m.layers.entries = nil
 	}
 	return m
