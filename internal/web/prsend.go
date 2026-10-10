@@ -27,6 +27,7 @@ func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("POST /api/pr/send", writeGuard(s.handlePRSend))
 		mux.HandleFunc("GET /api/pr/send/groups", s.handlePRSendGroups)
+		mux.HandleFunc("GET /api/pr/send/candidates", s.handlePRSendCandidates)
 	})
 }
 
@@ -297,4 +298,70 @@ func (s *Server) handlePRSendGroups(w http.ResponseWriter, r *http.Request) {
 		own = p.ViewerDidAuthor
 	}
 	writeJSON(w, map[string]any{"groups": out, "own_pr": own})
+}
+
+// The send panel's list (spec §5.4): the domain's SendCandidates, row for
+// row — ids the page posts back are checked against the PR's notes again
+// when it sends (prSendRequest), never trusted from here.
+type candidateRowWire struct {
+	ID        string   `json:"id"`
+	Kind      string   `json:"kind"`
+	Severity  string   `json:"severity"`
+	Path      string   `json:"path"`
+	Range     [2]int   `json:"range"`
+	Side      string   `json:"side"`
+	Summary   string   `json:"summary"`
+	Rationale string   `json:"rationale"`
+	Sync      string   `json:"sync"`
+	Code      []string `json:"code"`
+	Skip      string   `json:"skip"`
+}
+
+type candidateGroupWire struct {
+	ID      string             `json:"id"`
+	Kind    string             `json:"kind"`
+	Agent   string             `json:"agent"`
+	Title   string             `json:"title"`
+	Created string             `json:"created"`
+	Slot    int                `json:"slot"`
+	Rows    []candidateRowWire `json:"rows"`
+}
+
+func candidatesWire(c domain.SendCandidates) []candidateGroupWire {
+	out := make([]candidateGroupWire, 0, len(c.Groups))
+	for _, g := range c.Groups {
+		gw := candidateGroupWire{ID: g.ID, Kind: g.Kind, Agent: g.Agent, Title: g.Title, Slot: g.Slot, Rows: []candidateRowWire{}}
+		if !g.Created.IsZero() {
+			gw.Created = wireTime(g.Created)
+		}
+		for _, r := range g.Rows {
+			code := r.Code
+			if code == nil {
+				code = []string{}
+			}
+			gw.Rows = append(gw.Rows, candidateRowWire{ID: r.ID, Kind: r.Kind, Severity: r.Severity, Path: r.Path, Range: r.Range,
+				Side: r.Side, Summary: r.Summary, Rationale: r.Rationale, Sync: string(r.Sync), Code: code, Skip: r.Skip})
+		}
+		out = append(out, gw)
+	}
+	return out
+}
+
+// handlePRSendCandidates is the send panel's list (spec §5.4).
+func (s *Server) handlePRSendCandidates(w http.ResponseWriter, r *http.Request) {
+	svc, pr, ok := s.knownPR(w, r)
+	if !ok {
+		return
+	}
+	ctx := readCtx(r)
+	c, err := svc.PRSendCandidates(ctx, pr.Number)
+	if err != nil {
+		writeErr(w, prSendLookupStatus(err), err)
+		return
+	}
+	own := false
+	if p, _, ok := svc.PRDetailsCached(pr.Number); ok {
+		own = p.ViewerDidAuthor
+	}
+	writeJSON(w, map[string]any{"pr": c.PR, "head": c.Head, "own_pr": own, "groups": candidatesWire(c)})
 }
