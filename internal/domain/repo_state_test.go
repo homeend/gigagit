@@ -94,3 +94,18 @@ func TestSharingServicesKeepTheirOwnFlight(t *testing.T) {
 	}
 	var _ forge.Provider = ff
 }
+
+// OpenTUISharingRooted trusts the root it is given (the worktree list's
+// top level): no rev-parse — a slot is made on the Update thread.
+func TestOpenTUISharingRootedSkipsTheRootProbe(t *testing.T) {
+	t.Parallel()
+	_, home := newRealRepo(t)
+	dir := t.TempDir() // not a repository: resolveRoot would leave Root empty
+	s := OpenTUISharingRooted(dir, home)
+	if s.repo.Root != dir || s.Root() != dir {
+		t.Fatalf("repo.Root = %q, Root() = %q; want %q in both without a probe", s.repo.Root, s.Root(), dir)
+	}
+	if s.repoState != home.repoState {
+		t.Error("the rooted slot has its own repoState; want home's")
+	}
+}

@@ -271,6 +271,14 @@ func OpenTUISharing(workdir string, from *Service) *Service {
 	return openWith(workdir, true, observ.NewRing(200), from)
 }
 
+// OpenTUISharingRooted is OpenTUISharing for a worktree whose TOP LEVEL
+// the caller already knows (an entry of `git worktree list`): it trusts
+// root and skips resolveRoot's rev-parse — a slot is made on the TUI's
+// Update thread, where a git round trip is a stall.
+func OpenTUISharingRooted(root string, from *Service) *Service {
+	return openAt(root, true, true, observ.NewRing(200), from)
+}
+
 // OpenTUIWithRing is OpenTUI with a caller-supplied span ring: cmd/gg keeps the
 // ring (and, via Repo, the repo) so its panic-dump defer can include the
 // session's git spans. This keeps the runner stack built in exactly one place —
@@ -279,10 +287,18 @@ func OpenTUIWithRing(workdir string, ring *observ.Ring) *Service {
 	return openWith(workdir, true, ring, nil)
 }
 
-// openWith builds the runner stack; with a FROM the Service shares from's
-// caches and repository state (NewSharing), else both are private.
+// openWith builds the runner stack over the resolved worktree root; with a
+// FROM the Service shares from's caches and repository state (NewSharing),
+// else both are private.
 func openWith(workdir string, sshBatch bool, ring *observ.Ring, from *Service) *Service {
 	workdir, resolved := resolveRoot(workdir, sshBatch, ring)
+	return openAt(workdir, resolved, sshBatch, ring, from)
+}
+
+// openAt is openWith after root resolution: resolved says workdir is a
+// worktree top level (the repo then skips its own rev-parse for
+// working-tree reads).
+func openAt(workdir string, resolved, sshBatch bool, ring *observ.Ring, from *Service) *Service {
 	er := gitexec.NewExecRunner("git", workdir, ring)
 	if sshBatch {
 		er = er.WithSSHBatchMode()

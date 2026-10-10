@@ -110,15 +110,22 @@ func (m Model) ensureView(path string) *worktreeView {
 	if v, ok := m.views[key]; ok {
 		return v
 	}
-	if listed, ok := m.listedWorktree(path); ok {
-		path = listed // the service roots at the spelling git lists
+	listedPath, listed := m.listedWorktree(path)
+	if listed {
+		path = listedPath // the service roots at the spelling git lists
 	} else {
 		path = filepath.Clean(path)
 	}
 	var svc *domain.Service
-	if home := m.views[m.home]; home != nil && home.svc != nil {
-		svc = domain.OpenTUISharing(path, home.svc) // the repository's caches are one set: a diff cached from home is a hit here
-	} else {
+	switch home := m.views[m.home]; {
+	case home != nil && home.svc != nil && listed:
+		// The list's path IS the worktree top level: no rev-parse on the
+		// Update thread. The repository's caches and state are one set: a
+		// diff cached from home is a hit here, the forge is probed once.
+		svc = domain.OpenTUISharingRooted(path, home.svc)
+	case home != nil && home.svc != nil:
+		svc = domain.OpenTUISharing(path, home.svc)
+	default:
 		svc = domain.OpenTUI(path) // home is seeded by the first load before any slot is made; total anyway
 	}
 	v := &worktreeView{key: key, path: path, svc: svc}
@@ -264,6 +271,7 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.workingAttention = nil                 // merged back; the live copy is m.attention
 	m.replay = append(m.replay, v.queued...) // what landed for it while it slept: the Update tail applies it
 	v.queued = nil
+	v.windows = windowState{} // the live group is the Model's now; a copy here would keep every window closed from now on alive until the next swap
 	if m.console == nil {
 		m = m.restoreConsoleParked() // the console that displaced them is gone (a queued return): they are live again
 	} else {
@@ -586,6 +594,7 @@ func (m Model) pruneViews() (Model, tea.Cmd) {
 			continue
 		}
 		delete(m.views, key)
+		m.openFiles.drop(v.path) // its documents cannot be reloaded from a tree that is gone
 		if m.pendingReturnView == key {
 			m.pendingReturnView = m.home // a return queued to the gone slot goes home instead
 		}
