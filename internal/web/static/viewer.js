@@ -794,8 +794,12 @@ function openSplit(id, path, ov, { steer = true } = {}) {
   if (same) {
     split.ov = { ...ov, sel: keepAnchor(ov.anchors || [], split.ov.want, split.ov.sel), want: split.ov.want, stored: ov.stored || split.ov.stored };
     split.left = true;
+    if (view.id) ofQueue({ op: "focus", id: view.id }); // the tab shows the file, not the overview the open just focused
   } else {
-    if (view.ov) Object.assign(view, { id: "", ov: null, src: "worktree", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
+    // The right column starts empty unless it keeps the file it shows (the
+    // way back): never the lines of a file closed earlier, or of another
+    // overview's link — the steer fills it.
+    if (view.ov || !view.id || steer) Object.assign(view, { id: "", ov: null, src: "worktree", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
     split = { id, path, ov: { ...ov, sel: ov.sel >= 0 ? ov.sel : -1, want: ov.want || "" }, left: true, here: -1, seq: 0 };
     if (split.ov.sel < 0) split.ov.sel = stepAnchor(split.ov.anchors, -1, 1);
   }
@@ -803,10 +807,10 @@ function openSplit(id, path, ov, { steer = true } = {}) {
   paintSplitTitle();
   renderSplitOverview();
   paintSplitFocus();
+  paintTitle(); // the right column's title is cut to its half
   if (split.ov.sel >= 0) selectAnchor(split.ov.sel);
   if (!view.id) {
     view.placeholder = split.ov.sel >= 0 ? "" : "(no link in this overview opens a file)";
-    paintTitle();
     renderViewer();
   }
   if (!same && steer) steerSplit();

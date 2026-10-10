@@ -101,3 +101,21 @@ func TestOverviewSplitIsAdvertised(t *testing.T) {
 		t.Error("reviews.js ≡ Overview help lacks the split")
 	}
 }
+
+// Final review: the split's right title is re-cut to its half on every open
+// (backIntoSplit keeps a file whose title was cut for the whole box — the
+// end, the file NAME, would be clipped); a fresh split never shows the last
+// file's lines; reusing a split re-reports its file as the one shown.
+func TestOverviewSplitFinalFixesAreWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		"  paintSplitFocus();\n  paintTitle(); // the right column's title is cut to its half",
+		"if (view.ov || !view.id || steer) Object.assign(view, {",
+		`if (view.id) ofQueue({ op: "focus", id: view.id }); // the tab shows the file, not the overview`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+}
