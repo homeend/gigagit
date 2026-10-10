@@ -312,6 +312,35 @@ function remarksReview(from) {
 // file from ({id, sel}, one step deep, this tab's); range the lines that
 // anchor named.
 const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null, notes: [], remarks: [], ov: null, from: null, range: null };
+
+// split is the overview beside the file (spec 2026-10-11 §4; null = none):
+// id its open-files id ("" for a stored overview), path its entry's path, ov
+// its document (view.ov's shape: {title, text, blocks, anchors, sel, want,
+// stamp, stored?}), left whether the overview has the keys, here the anchor
+// the right column's cursor marks (-1 = none), seq its refreshes' order.
+let split = null;
+
+// ovDoc is the overview the overview keys and paint act on: the split's left
+// column, else document mode's; ovEl the element it is drawn in.
+function ovDoc() {
+  return split ? split.ov : view.ov;
+}
+function ovEl() {
+  return split ? $("viewer-ov-body") : $("viewer-body");
+}
+
+// boxWidth is the viewer box's width — measured while it is up, else the
+// width it will open at (94vw).
+function boxWidth() {
+  return isOpen() ? $("viewer-box").clientWidth : Math.round(window.innerWidth * 0.94);
+}
+
+// raiseViewer puts the viewer's layer and chips up (idempotent).
+function raiseViewer() {
+  viewerRoot.style.bottom = $("foot").offsetHeight + "px"; // the bar stays in sight
+  pushLayer("viewer", viewerRoot, { onKey: viewerKey });
+  swapFoot(true);
+}
 const viewerSearch = new Search();
 const places = new Map(); // id → {cur, top}: where THIS tab left each file
 let loadSeq = 0; // bumped by every open: a reload that sees it move drops (L9)
@@ -406,11 +435,13 @@ function reportCursor() {
 // The markup is built at import: bindSearchBar needs its bar in the DOM.
 const viewerRoot = mountOverlay("viewer");
 viewerRoot.innerHTML =
-  `<div id="viewer-box"><div id="viewer-title"></div>` +
+  `<div id="viewer-box">` +
+  `<div id="viewer-ov" class="hidden"><div id="viewer-ov-title"></div><div id="viewer-ov-body" tabindex="-1"></div></div>` +
+  `<div id="viewer-file"><div id="viewer-title"></div>` +
   `<div id="viewer-search" class="hidden search-bar"><span id="viewer-search-lead">/</span>` +
   `<input id="viewer-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this file — enter keeps it, ] [ step, esc clears">` +
   `<span id="viewer-search-count"></span></div>` +
-  `<div id="viewer-body" tabindex="-1"></div></div>`;
+  `<div id="viewer-body" tabindex="-1"></div></div></div>`;
 
 viewerRoot.addEventListener("click", (e) => {
   if (e.target.id === "viewer") closeViewer(escHow(!!view.ov, view.notes.length)); // the backdrop is esc; the box is not
@@ -497,6 +528,10 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   view.from = from; // an overview's link: its bands and remarks draw at once
   view.range = null;
   view.rangeOwn = false;
+  if (split && !steer) { // another way of opening a plain file: the split steps aside (as esc)
+    if (split.id) ofQueue({ op: "background", id: split.id });
+    leaveSplit();
+  }
   view.ov = null;
   Object.assign(view, { id: f.id, src: f.source, rev: f.rev || "", path: f.path, lines: body.lines || [] });
   view.notes = notesOf(body, view.src);
@@ -508,14 +543,12 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   const landed = line > 0 ? landLine(line, view.lines.length, f.path) : { line: view.placeholder && body.missing ? want : clampLine(want || 1, view.lines.length), notice: "" };
   view.cur = landed.line;
   viewerSearchBar.reset(); // a new file is a new search
-  viewerRoot.style.bottom = $("foot").offsetHeight + "px"; // the bar stays in sight
-  pushLayer("viewer", viewerRoot, { onKey: viewerKey });
-  swapFoot(true);
+  raiseViewer();
   paintTitle();
   renderViewer();
   centerCursor();
   if (place) $("viewer-body").scrollTop = place.top;
-  $("viewer-body").focus({ preventScroll: true });
+  if (!split || !split.left) $("viewer-body").focus({ preventScroll: true });
   // A reopen lands where THIS tab left the file; the server (every tab's
   // switcher) still has the line it last heard.
   if (landed.line !== (f.line || 0)) reportCursor();
@@ -536,9 +569,10 @@ function reportShown(seq, reg) {
 // showOverview puts overview ov (entry f) on screen in document mode, where
 // this tab left it; mine is its fetch's place in the refresh order.
 function showOverview(f, ov, mine) {
+  ovApplied = Math.max(ovApplied, mine);
+  if (splitFits(boxWidth())) return openSplit(f.id, f.path, { ...ov, sel: -1, want: "" });
   Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
   view.ov = { ...ov, sel: -1, want: "" };
-  ovApplied = Math.max(ovApplied, mine);
   const place = places.get(f.id);
   viewerSearchBar.reset();
   viewerRoot.style.bottom = $("foot").offsetHeight + "px";
@@ -565,6 +599,7 @@ export function openStoredOverview({ id, title, blocks, anchors, tip, text }) {
 }
 
 function showStoredOverview(doc) {
+  if (splitFits(boxWidth())) return openSplit("", "", { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc });
   Object.assign(view, { id: doc.id, src: "overview", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
   view.ov = { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc };
   const first = view.ov.anchors.findIndex((a) => !a.plain);
@@ -583,6 +618,12 @@ function showStoredOverview(doc) {
 // the file — gone from the list unless another tab shows it; "background"
 // (ctrl+], the . menu's hand-offs) keeps it open (ruling L4).
 function closeViewer(how = "close") {
+  if (split) { // W3: the whole split goes — an agent's overview and the file to the background
+    const sp = split;
+    leaveSplit();
+    if (sp.id) ofQueue({ op: "background", id: sp.id });
+    how = "background";
+  }
   const id = view.id, line = view.cur;
   if (id && !(view.ov && view.ov.stored)) { // a stored overview was never registered: nothing to tell
     rememberPlace();
@@ -601,6 +642,7 @@ function viewerClosedFile(id) {
 // dropViewer takes the viewer down WITHOUT telling the server — the file is
 // already gone from the list (closed everywhere) or never registered.
 function dropViewer() {
+  if (split) leaveSplit();
   view.id = "";
   loadSeq++; // an open or reload in flight must not bring it back
   clearTimeout(cursorTimer);
@@ -620,7 +662,11 @@ function paintTitle() {
   const el = $("viewer-title");
   if (view.ov) {
     el.title = view.ov.title;
-    el.textContent = view.ov.stored ? "Overview: " + view.ov.title : "Overview " + view.id + " · " + view.ov.title;
+    el.textContent = ovTitle(view.ov, view.id);
+    return;
+  }
+  if (!view.id) { // the split's right column before a link opened a file
+    el.title = el.textContent = "";
     return;
   }
   const lead = "View ", tail = " (" + versionLabel(view.src, view.rev) + ")";
@@ -660,22 +706,173 @@ function renderViewer() {
 // ---- an agent's overview (agentdocs) ---------------------------------------
 // paintAnchors marks the selected anchor and the missing ones.
 function paintAnchors() {
-  for (const el of $("viewer-body").querySelectorAll("a.md-anchor")) {
-    const a = view.ov.anchors[Number(el.dataset.a)];
-    el.classList.toggle("asel", Number(el.dataset.a) === view.ov.sel);
+  const ov = ovDoc();
+  for (const el of ovEl().querySelectorAll("a.md-anchor")) {
+    const i = Number(el.dataset.a), a = ov.anchors[i];
+    el.classList.toggle("asel", i === ov.sel);
     el.classList.toggle("agone", !!(a && a.missing));
+    el.classList.toggle("ahere", !!split && i === split.here);
   }
 }
 
 function anchorEl(i) {
-  return $("viewer-body").querySelector(`a.md-anchor[data-a="${i}"]`);
+  return ovEl().querySelector(`a.md-anchor[data-a="${i}"]`);
 }
 
 function selectAnchor(i) {
-  view.ov.sel = i;
-  view.ov.want = view.ov.anchors[i]?.dest || ""; // kept while a refresh drops it, back when it returns
+  const ov = ovDoc();
+  ov.sel = i;
+  ov.want = ov.anchors[i]?.dest || ""; // kept while a refresh drops it, back when it returns
   paintAnchors();
   anchorEl(i)?.scrollIntoView({ block: "nearest" });
+}
+
+// ---- the overview split (spec 2026-10-11) -----------------------------------
+// ovTitle is an overview's title line: a stored one by its title, an
+// agent's by its id and title.
+function ovTitle(ov, id) {
+  return ov.stored ? "Overview: " + ov.title : "Overview " + id + " · " + ov.title;
+}
+
+function paintSplitTitle() {
+  const el = $("viewer-ov-title");
+  el.title = split.ov.title;
+  el.textContent = ovTitle(split.ov, split.id);
+}
+
+function renderSplitOverview() {
+  const body = $("viewer-ov-body"), top = body.scrollTop;
+  body.innerHTML = `<div class="vdoc md">${mdHTML({ blocks: split.ov.blocks }, esc, { anchors: true })}</div>`;
+  body.scrollTop = top;
+  paintAnchors();
+}
+
+// paintSplitFocus shows the split's columns and puts the keys in the
+// focused one; without a split the box is today's one document.
+function paintSplitFocus() {
+  $("viewer-box").classList.toggle("split", !!split);
+  $("viewer-ov").classList.toggle("hidden", !split);
+  $("viewer-ov").classList.toggle("colfocus", !!split && split.left);
+  $("viewer-file").classList.toggle("colfocus", !!split && !split.left);
+  if (!split) return;
+  (split.left ? $("viewer-ov-body") : $("viewer-body")).focus({ preventScroll: true });
+  swapFoot(true);
+}
+
+function focusSplit(left) {
+  if (!split) return;
+  split.left = left;
+  paintSplitFocus();
+}
+
+// leaveSplit drops the left column (the viewer stays up on the right file).
+function leaveSplit() {
+  split = null;
+  paintSplitFocus();
+}
+
+// openSplit puts overview ov in the left column (spec §5) — id its
+// open-files id ("" = a stored overview, ov.stored set). A split already
+// showing it keeps its place and selection (the new document's anchors
+// replace the old, the selection kept by destination); a new one selects the
+// first link that can open when none is selected and, unless told not to,
+// steers the right column to it.
+function openSplit(id, path, ov, { steer = true } = {}) {
+  const same = !!split && (id ? split.id === id : !!split.ov.stored && !!ov.stored && split.ov.stored.id === ov.stored.id);
+  if (same) {
+    split.ov = { ...ov, sel: keepAnchor(ov.anchors || [], split.ov.want, split.ov.sel), want: split.ov.want, stored: ov.stored || split.ov.stored };
+    split.left = true;
+  } else {
+    if (view.ov) Object.assign(view, { id: "", ov: null, src: "worktree", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
+    split = { id, path, ov: { ...ov, sel: ov.sel >= 0 ? ov.sel : -1, want: ov.want || "" }, left: true, here: -1, seq: 0 };
+    if (split.ov.sel < 0) split.ov.sel = stepAnchor(split.ov.anchors, -1, 1);
+  }
+  raiseViewer();
+  paintSplitTitle();
+  renderSplitOverview();
+  paintSplitFocus();
+  if (split.ov.sel >= 0) selectAnchor(split.ov.sel);
+  if (!view.id) {
+    view.placeholder = split.ov.sel >= 0 ? "" : "(no link in this overview opens a file)";
+    paintTitle();
+    renderViewer();
+  }
+  if (!same && steer) steerSplit();
+  return { ok: true, notice: "" };
+}
+
+// steerSplit shows the selected link's target in the right column (spec §5):
+// the file at the link's line with the overview's links as bands (a stored
+// overview: at the reviewed tip, with its remarks), or a note's file at the
+// note. A link that cannot open says why and leaves the right column as it
+// was. The focus stays where it is; no history entry. Quick steps settle on
+// the last one (openViewer's loadSeq).
+async function steerSplit() {
+  const sp = split;
+  const a = sp && sp.ov.anchors[sp.ov.sel];
+  if (!a) return;
+  const why = anchorStatus(a);
+  if (why) return opLine(why, false);
+  let target;
+  if (sp.ov.stored) target = storedAnchorOpen(sp.ov.stored.tip, a);
+  else {
+    const t = anchorTarget(a);
+    if (!t.path) return opLine("note " + t.note + " is gone", false);
+    target = { src: "worktree", path: t.path, line: t.line };
+  }
+  const from = { id: sp.id || sp.ov.stored.id, sel: sp.ov.sel, dest: a.dest, anchors: sp.ov.anchors, stamp: sp.ov.stamp, cur: a.note ? "" : a.dest };
+  if (sp.ov.stored) from.stored = sp.ov.stored;
+  const r = await openViewer({ ...target, from, steer: true });
+  if (r.ok && a.note) $("viewer-body").querySelector(`.vnote[data-note="${a.note}"]`)?.scrollIntoView({ block: "nearest" });
+}
+
+// splitKey is a key in the split (W2): tab switches columns; the overview
+// steps its links and steers; the file keeps every file key.
+function splitKey(e) {
+  if (e.key === "Tab") {
+    e.preventDefault();
+    focusSplit(!split.left);
+    return true;
+  }
+  if (split.left) return splitOverviewKey(e);
+  return fileKey(e);
+}
+
+// splitOverviewKey is a key on the left column (spec §8).
+function splitOverviewKey(e) {
+  const body = $("viewer-ov-body");
+  switch (e.key) {
+    case "ArrowDown": case "j": stepSplitAnchor(1); break;
+    case "ArrowUp": case "k": stepSplitAnchor(-1); break;
+    case "Enter": enterSplitFile(); break;
+    case "r": copyAnchorRef(); break;
+    case "y": copyText(split.ov.text, "overview text"); break;
+    case "PageDown": case " ": body.scrollBy({ top: body.clientHeight - 40 }); break;
+    case "PageUp": body.scrollBy({ top: -(body.clientHeight - 40) }); break;
+    case "Home": case "g": body.scrollTop = 0; break;
+    case "End": case "G": body.scrollTop = body.scrollHeight; break;
+    case "Escape": closeViewer("background"); break; // W3
+    default: return false;
+  }
+  e.preventDefault();
+  return true;
+}
+
+// stepSplitAnchor is ↓ / ↑ on the overview (and N / P from the file): the
+// next link that can open, shown in the right column at once.
+function stepSplitAnchor(dir) {
+  const i = stepAnchor(split.ov.anchors, split.ov.sel, dir);
+  if (i < 0) return;
+  selectAnchor(i);
+  steerSplit();
+}
+
+// enterSplitFile is enter on the overview: into the right column, steering
+// first when it does not show the selected link yet.
+function enterSplitFile() {
+  const a = split.ov.anchors[split.ov.sel];
+  if (a && (!view.id || !view.from || view.from.dest !== a.dest)) steerSplit();
+  focusSplit(false);
 }
 
 // refreshOverview re-reads the overview on screen (the server re-checks its
@@ -852,8 +1049,9 @@ async function anchorBack() {
 }
 
 function copyAnchorRef() {
-  if (view.ov.stored) return opLine("a stored overview's anchor has no reference — copy the review link instead", false);
-  const a = view.ov.anchors[view.ov.sel];
+  const ov = ovDoc();
+  if (ov.stored) return opLine("a stored overview's anchor has no reference — copy the review link instead", false);
+  const a = ov.anchors[ov.sel];
   if (!a) return opLine("no anchor selected — tab selects one", false);
   copyText(a.ref, "anchor reference");
 }
@@ -1016,7 +1214,14 @@ function viewerKey(e) {
     return true;
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (split) return splitKey(e);
   if (view.ov) return overviewKey(e);
+  return fileKey(e);
+}
+
+// fileKey is a key on the file the viewer shows (one document, or the
+// split's right column); false = not the file's.
+function fileKey(e) {
   // shift+↓ / shift+↑ mark lines from the cursor (it stays, as a shift+click
   // leaves it); L copies the link — the band's, else the cursor line's.
   if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
@@ -1122,6 +1327,13 @@ function viewerSearchKey(e) {
 // viewer is open #foot shows them, and gets its own chips back on close.
 // viewerFoot is the chips; a file with an agent's notes adds theirs.
 function viewerFoot() {
+  if (split && split.left) {
+    return (
+      `<span>↑↓ links</span><button data-vact="sfile">enter open</button><button data-vact="sfile">tab file</button>` +
+      (split.ov.stored ? "" : `<button data-vact="aref">r reference</button>`) +
+      `<button data-vact="ytext">y copy text</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+    );
+  }
   if (view.ov && view.ov.stored) {
     return (
       `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button>` +
@@ -1162,8 +1374,9 @@ $("foot").addEventListener("click", (e) => {
     case "dismiss": { const n = noteAtLine(shownNotes(), view.cur); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
     case "ref": { const n = noteAtLine(shownNotes(), view.cur); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
     case "aopen": if (view.ov && view.ov.sel >= 0) openAnchorAt(view.ov.sel); else opLine("no anchor selected — tab selects one", false); break;
-    case "aref": if (view.ov) copyAnchorRef(); break;
-    case "ytext": if (view.ov) copyText(view.ov.text, "overview text"); break;
+    case "aref": if (ovDoc()) copyAnchorRef(); break;
+    case "ytext": if (ovDoc()) copyText(ovDoc().text, "overview text"); break;
+    case "sfile": if (split) enterSplitFile(); break;
     case "back": if (view.from) anchorBack(); break;
   }
 });

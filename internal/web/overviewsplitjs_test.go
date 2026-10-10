@@ -35,3 +35,31 @@ func TestViewerRemarksAndMarkOnlyBandsAreWired(t *testing.T) {
 		}
 	}
 }
+
+// Spec 2026-10-11 §3–§5: the box has a left column, the two overview doors
+// open the split when the box is wide enough, and the split steers the right
+// column through openViewer.
+func TestOverviewSplitIsWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`<div id="viewer-ov" class="hidden"><div id="viewer-ov-title"></div><div id="viewer-ov-body" tabindex="-1"></div></div>`,
+		`<div id="viewer-file">`,
+		`let split = null;`,
+		`function openSplit(id, path, ov, { steer = true } = {})`,
+		`if (splitFits(boxWidth())) return openSplit(f.id, f.path, `,
+		`if (splitFits(boxWidth())) return openSplit("", "", `,
+		`await openViewer({ ...target, from, steer: true })`,
+		`if (split) return splitKey(e);`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	css := readStatic(t, "style.css")
+	for _, want := range []string{`#viewer-ov.hidden { display: none; }`, `#viewer-file {`, `.md a.md-anchor.ahere`} {
+		if !strings.Contains(css, want) {
+			t.Errorf("style.css lacks %q", want)
+		}
+	}
+}
