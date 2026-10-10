@@ -140,16 +140,15 @@ run of ↓ shows only the last link's file.
 
 ## 6. Review remarks (W6)
 
-**Server.** `GET /api/review/{id}/file-notes?path=<p>` answers
-`{notes: [...]}`: the server reads `path` at the review's tip (a working
-review: the working tree) and calls `domain.ReviewFileNotes(ctx, id, path,
-lines)`. Each note is the viewer's note wire (`id, start, end, summary,
-rationale, author`) plus `readonly: true`. A gone review is 404; a path the
-review never saw answers no notes.
+**Server.** `GET /api/file-content` takes `review=<id>`: the server places
+that review's remarks on the bytes it just read (`domain.ReviewFileNotes`,
+new-side only) and answers them as `remarks` (the viewer's note wire plus
+`readonly: true`) beside the lines — one read, so a late answer can never
+pair one file's remarks with another's lines. An unknown review answers no
+remarks.
 
-**Client.** A file whose `view.from.stored` names a review fetches its
-remarks after its lines land (and after a reload of the file), tagged by
-`loadSeq` so a late answer for another file drops. They live in
+**Client.** A file whose `view.from.stored` names a review asks for its
+remarks with its lines (and on a reload of the file). They live in
 `view.remarks`; every note reader (`boxesAfter`, `noteAtLine`,
 `nextNoteLine`, the gutter mark, `}` / `{`) reads `shownNotes()` = the
 agent's notes then the remarks, by start line; the agent-notes code paths
@@ -296,9 +295,9 @@ sel)` (overlaps, equal-to-selection → -1, no bands); the breakpoint decision;
 the stack's file list (review order vs first-linked order, note links,
 duplicates); stack line ↔ file/line mapping; the remark box title.
 
-**Go:** `/api/review/{id}/file-notes` — a remark on a kept line comes back,
-one on a deleted line does not, a working review's changed file answers
-none, a gone review is 404, a bad path is refused.
+**Go:** `/api/file-content?review=` — a remark on a kept line comes back,
+one on a deleted line does not, an unknown review answers the file without
+remarks.
 
 **Browser (rebuilt binary, assertions on what is VISIBLE):**
 - a stored overview opens as two visible columns at 1400px and as today's

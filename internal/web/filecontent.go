@@ -100,6 +100,10 @@ type fileContentBody struct {
 	// Notes are an agent's notes on a working-tree file, aligned to the
 	// bytes just read (agentdocs): lines and notes come from ONE read.
 	Notes []noteRow `json:"notes,omitempty"`
+	// Remarks are a review's remarks on the file (review=<id>: a file a
+	// stored overview opened), placed on these very bytes — read-only boxes
+	// (spec 2026-10-11 §6).
+	Remarks []noteRow `json:"remarks,omitempty"`
 }
 
 // noteRow is one agent note as the viewer draws it; Ref is what r copies.
@@ -112,6 +116,7 @@ type noteRow struct {
 	Author    string `json:"author"`
 	Outdated  bool   `json:"outdated,omitempty"`
 	Ref       string `json:"ref"`
+	ReadOnly  bool   `json:"readonly,omitempty"` // a review's remark: no dismiss, no reference
 }
 
 // notesFor aligns path's notes to data, the working-tree bytes just read,
@@ -127,6 +132,25 @@ func (s *Server) notesFor(ctx context.Context, path string, data []byte) []noteR
 	for i, n := range ns {
 		out[i] = noteRow{ID: n.ID, Start: n.Start, End: n.End, Summary: n.Summary, Rationale: n.Rationale,
 			Author: n.Author, Outdated: n.Outdated, Ref: agentdocs.NoteReference(n)}
+	}
+	return out
+}
+
+// remarksFor is review id's remarks on path placed on data — the file at the
+// reviewed tip, or the working tree for a working review — for the page's
+// read-only boxes (spec 2026-10-11 §6). A remark on a line the commit
+// deleted has no line here and is left out (domain.ReviewFileNotes). An
+// unknown review, or one that places none, has none: the file still shows.
+// The id only ever matches a stored review's id — it never reaches a git argv.
+func remarksFor(ctx context.Context, svc *domain.Service, id, path string, data []byte) []noteRow {
+	ns, err := svc.ReviewFileNotes(ctx, id, path, agentdocs.Lines(data))
+	if err != nil || len(ns) == 0 {
+		return nil
+	}
+	out := make([]noteRow, len(ns))
+	for i, n := range ns {
+		out[i] = noteRow{ID: n.Note.ID, Start: n.Range[0], End: max(n.Range[1], n.Range[0]), Summary: n.Note.Summary,
+			Rationale: n.Note.Rationale, Author: n.Note.Author, ReadOnly: true}
 	}
 	return out
 }
@@ -166,6 +190,7 @@ func (s *Server) handleFileStamp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	path, src, rev := q.Get("path"), q.Get("src"), q.Get("rev")
+	review := q.Get("review")
 	if path == "" || !isGitArgSafe(path) || (rev != "" && !isGitArgSafe(rev)) {
 		writeErr(w, http.StatusBadRequest, errors.New("invalid path/rev"))
 		return
@@ -221,6 +246,9 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	body := fileContentBody{Lines: contentRows(path, data, svc.SyntaxHighlighting()), Stamp: stamp}
 	if src == "" || src == "worktree" {
 		body.Notes = s.notesFor(ctx, path, data)
+	}
+	if review != "" {
+		body.Remarks = remarksFor(ctx, svc, review, path, data)
 	}
 	writeJSON(w, body)
 }
