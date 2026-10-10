@@ -195,7 +195,18 @@ func (m Model) saveView() Model {
 	v.workingReviews = m.workingReviews
 	v.resumePromptShown = m.resumePromptShown
 	v.windows = m.windowState // the worktree owns its windows: one assignment, nothing filtered
-	v.windows.workingAttention = takeWorkingAttention(m.attention)
+	return m
+}
+
+// parkView is saveView for a worktree that is LEAVING the screen: the
+// `gg session highlight` bands on its working files go with it (the same
+// path exists in the arriving tree and must not wear them). A save in
+// place — a full load re-seeding the viewed slot — keeps them live.
+func (m Model) parkView() Model {
+	m = m.saveView()
+	if v := m.views[m.viewed]; v != nil {
+		v.windows.workingAttention = takeWorkingAttention(m.attention)
+	}
 	return m
 }
 
@@ -390,7 +401,7 @@ func (m Model) switchViewBy(path string, byUser bool) (Model, bool) {
 		m.statusMsg = why
 		return m, false
 	}
-	m = m.saveView()
+	m = m.parkView()
 	if v := m.views[m.viewed]; v != nil {
 		v.windows.sleepFWindow() // the leaving slot's copy only: the group is about to be replaced
 	}

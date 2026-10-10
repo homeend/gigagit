@@ -116,3 +116,18 @@ func TestWindowMessagesEmbedTheirSlotStamp(t *testing.T) {
 		}
 	}
 }
+
+// A full load saves the viewed slot's fields in place; it is not a swap,
+// so the `gg session highlight` bands on working files stay live — they
+// used to move into the slot and vanish from the screen until the next
+// switch, which then overwrote the stashed copy.
+func TestFullLoadKeepsTheWorkingFileBandsLive(t *testing.T) {
+	m := loadedModel(t)
+	k := attentionKey{path: "a.txt", state: "worktree"}
+	m.attention = map[attentionKey][]steerMark{k: {{side: "new", start: 1, end: 2}}}
+	nm, cmd := m.Update(m.loadCmd()())
+	m = settleLoad(t, nm.(Model), cmd)
+	if len(m.attention[k]) != 1 {
+		t.Fatal("the full load took the working-file bands off the screen")
+	}
+}
