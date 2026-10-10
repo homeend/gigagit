@@ -1100,7 +1100,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fileContentMsg:
 		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
 			if d.ov != nil {
-				d.layOut(rows, m.overviewWidth(inner))
+				w := m.overviewWidth(inner)
+				if m.splitShowing(d) != nil { // a split pane is its own reading column
+					w = inner
+				}
+				d.layOut(rows, w)
 				return m, nil
 			}
 			m.alignDocNotes(d, msg)

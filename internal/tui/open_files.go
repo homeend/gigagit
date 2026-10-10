@@ -134,6 +134,9 @@ func (m Model) docShown(d *openFile) bool {
 			if fv, ok := l.(*fileViewer); ok && fv.openFile == d {
 				return true
 			}
+			if sv, ok := l.(*splitView); ok && sv.holds(d) {
+				return true
+			}
 		}
 	}
 	return false
@@ -145,6 +148,17 @@ func (m Model) detachDoc(d *openFile) Model {
 	if m.filesPreview == d {
 		m.filesPreview = nil
 		m = m.focusTree()
+	}
+	// A document shown in a split pane leaves for another frame: the split
+	// comes down (a document is in one frame at a time) and the other pane's
+	// document stays open in the background.
+	if sv := m.splitShowing(d); sv != nil {
+		for _, p := range []pane{sv.left, sv.right} {
+			if o := p.doc(); o != nil && o != d {
+				o.backgrounded = true
+			}
+		}
+		return m.removeLayer(sv)
 	}
 	if m.layers != nil {
 		for _, l := range m.layers.entries {
@@ -227,6 +241,9 @@ func (m Model) closeDoc(d *openFile) Model {
 // focusedDoc is the open file the keyboard is on: a full-screen viewer on
 // top, else the files view's focused preview.
 func (m Model) focusedDoc() (*openFile, bool) {
+	if _, d, _, _, ok := m.splitFocus(); ok {
+		return d, true
+	}
 	if fv, ok := m.topLayer().(*fileViewer); ok {
 		return fv.openFile, true
 	}

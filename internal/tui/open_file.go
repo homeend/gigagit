@@ -109,6 +109,23 @@ type openFile struct {
 	pendingEnd int
 }
 
+// frameTitle names the version a frame shows: the working tree, a commit,
+// a shelf, or a titled document (a result, an overview).
+func (d *openFile) frameTitle() string {
+	switch d.src.kind {
+	case srcCommit:
+		return i18n.T("View %s @ %s", d.path, shortHash(d.src.rev))
+	case srcShelf:
+		return i18n.T("View %s (shelf)", d.path)
+	case srcExternal, srcNote, srcOverview, srcReviewOverview:
+		if d.title != "" {
+			return d.title
+		}
+		return d.path
+	}
+	return i18n.T("View %s (working tree)", d.path)
+}
+
 // keepPlace makes the next fill — a reload of a file the user is reading —
 // restore the cursor and the window top instead of starting at the top.
 // A placeholder is no place: the one saved before it (a file deleted on

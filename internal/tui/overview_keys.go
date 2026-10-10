@@ -171,6 +171,9 @@ func (m Model) anchorStatted(msg anchorStatMsg) (Model, tea.Cmd) {
 
 // topDoc is the document of the full-screen viewer on top, or nil.
 func topDoc(m Model) *openFile {
+	if _, d, _, _, ok := m.splitFocus(); ok {
+		return d
+	}
 	if fv, ok := m.topLayer().(*fileViewer); ok {
 		return fv.openFile
 	}
