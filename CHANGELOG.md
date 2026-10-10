@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Character selection in the overview split
+
+### Added
+- `v` selects characters to copy on either side of an overview's split —
+  the overview, the file and the stacked files — with the same modal copy
+  mode as the viewer. While it is on, `tab`, backspace, `alt+←/→` and `N`/`P`
+  wait and `esc` backs out of the mode before it closes the split; a click
+  on the other side moves there and leaves the mode. Stacked, the selection
+  stays inside the file it started in and survives other files loading.
+
+### Fixed
+- `v` on a view already scrolled right (diff, blame, the file preview)
+  brings the cursor into view at once instead of on the first key.
+- The preview's copy mode no longer stops the cursor short of the column's
+  edge on an indented overview row (a code block inside a list item).
+- In the copy mode a file opened from an overview anchor no longer leads its
+  hint with `[bksp] back` / `[n/p] anchors` (both wait), and a click on an
+  overview's anchor waits instead of selecting or opening it.
+
 ## Every overview opens beside its code
 
 ### Added
