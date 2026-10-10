@@ -289,3 +289,82 @@ func TestFilePathPopupIsNotParkableWhileLoading(t *testing.T) {
 		t.Fatal("a loaded file-path popup parks")
 	}
 }
+
+// A shelf write's result consumes the MARKS of the worktree the files were
+// marked in: stamped, it waits for that slot instead of deleting the same
+// paths from whatever worktree is on screen when the tar lands.
+func TestShelfResultConsumesTheMarksOfItsOwnWorktree(t *testing.T) {
+	m := loadedModel(t)
+	home := m.home
+	m, other := viewedOther(t, m)
+	m.fileMarks = map[string]bool{"a.go": true} // wt2's own marks on the same paths
+	mm, _ := m.Update(shelfSetAddedMsg{slotStamp: slotStamp{slot: home}, paths: []string{"a.go"}})
+	m = mm.(Model)
+	if !m.fileMarks["a.go"] {
+		t.Fatal("home's shelf result consumed wt2's mark")
+	}
+	if q := m.views[home].queued; len(q) != 1 {
+		t.Fatalf("home's slot holds %d queued, want its shelf result", len(q))
+	}
+	mm, _ = m.Update(shelfAddedMsg{slotStamp: slotStamp{slot: home}, unmark: "a.go"})
+	if m = mm.(Model); !m.fileMarks["a.go"] {
+		t.Fatal("home's single-file shelf result consumed wt2's mark")
+	}
+	_ = other
+}
+
+// The PR fetch's follow-up (open the PR's diff) is built BEFORE the queued
+// return swaps the panels — as the stash arm's list reload is — so it is
+// stamped for the worktree the fetch ran in, not opened in the one swapped
+// to.
+func TestPRFetchFollowUpIsBuiltBeforeTheQueuedReturn(t *testing.T) {
+	m := loadedModel(t)
+	home := m.home
+	m, other := viewedOther(t, m)
+	m.pendingReturnView = home // a console closed while the fetch ran
+	m.pendingPROpen = &model.PullRequest{Number: 7}
+	m.running = true
+	mm, cmd := m.Update(opFinishedMsg{})
+	m = mm.(Model)
+	if m.viewed != home {
+		t.Fatalf("precondition: the queued return went (viewed=%q)", m.viewed)
+	}
+	var stamp model.CheckoutKey
+	for _, msg := range runCmds(cmd) {
+		if po, ok := msg.(previewOpenMsg); ok && po.prNumber == 7 {
+			stamp = po.slotKey()
+		}
+	}
+	if stamp != model.KeyOf(other) {
+		t.Fatalf("the PR open is stamped %q, want the fetch's worktree %q", stamp, model.KeyOf(other))
+	}
+}
+
+// The remote's tag set is the repository's: a read in flight survives an
+// in-repo swap (only a repository switch retires it).
+func TestRemoteTagsReadSurvivesASwap(t *testing.T) {
+	m := loadedModel(t)
+	msg := m.remoteTagsCmd(t.Context(), true)().(remoteTagsMsg) // no origin here: the names come from the test
+	msg.err, msg.names = nil, map[string]bool{"v1": true}
+	m, _ = viewedOther(t, m)
+	mm, _ := m.Update(msg)
+	if m = mm.(Model); !m.remoteTagNames["v1"] {
+		t.Fatal("the remote tags read was dropped by the in-repo swap")
+	}
+}
+
+// A commit-message task that ends while its worktree sleeps leaves the
+// message as THAT worktree's pending one (c there opens it), with the
+// notice saying where; "not here" used to mean another repository.
+func TestCommitMessageForASleepingWorktreeIsKeptPending(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	m.pendingCommitMsg = map[string]pendingMessage{}
+	m, _ = m.applyCommitMessage(domain.TaskInfo{Key: "k", Agent: "claude", Worktree: other, Result: "feat: x"})
+	if pm, ok := m.pendingCommitMsg[pendingKey(other)]; !ok || pm.text != "feat: x" {
+		t.Fatalf("pending for wt2 = %+v, %v", pm, ok)
+	}
+	if pendingKey(other) != string(model.KeyOf(other)) {
+		t.Fatal("pendingKey must be the checkout key every other per-worktree map uses")
+	}
+}
