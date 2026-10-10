@@ -427,3 +427,33 @@ func TestStackCharSelLeavesOnASessionNavigate(t *testing.T) {
 		t.Fatalf("after the landing j must step from line 5: on line %d", row.RightNo)
 	}
 }
+
+// In the diff's truncate mode a long line is cut at the pane, so the cursor
+// walked past the cut: the mode switches the view to scroll while it is on
+// (the pane pans with the cursor) and puts truncate back when it ends.
+func TestDiffCharSelScrollsWhileOnInTruncateMode(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, textRows(strings.Repeat("x", 200), "y"), nil)
+	v := m.diffLayer()
+	v.long = longTruncate
+	v.relayout(v.width)
+	v.setCursorLine(0, m.diffBodyRows())
+	m = feedDiff(m, "v")
+	if v.long != longScroll {
+		t.Fatalf("v in truncate mode: long %v, want scroll", v.long)
+	}
+	m = feedDiff(m, "end")
+	if v.hOffset == 0 {
+		t.Fatal("end must pan to the cursor")
+	}
+	m = feedDiff(m, "esc")
+	if v.cs.on || v.long != longTruncate || v.hOffset != 0 {
+		t.Fatalf("after esc: on=%v long %v hOffset %d, want truncate back at 0", v.cs.on, v.long, v.hOffset)
+	}
+	// A rebuild ending the mode (f, the partial toggle) puts it back too.
+	m = feedDiff(m, "v")
+	v.rebuild()
+	if v.cs.on || v.long != longTruncate {
+		t.Fatalf("after a rebuild: on=%v long %v, want truncate back", v.cs.on, v.long)
+	}
+}

@@ -184,7 +184,22 @@ func (m Model) diffCharEnter(v *diffView) bool {
 	if !v.cs.enter(v.charRows(), pos{row: v.curLine - v.csBase}) {
 		return false
 	}
+	if v.long == longTruncate { // a cut line hides the cursor: scroll while on
+		v.csLong, v.csSwapped, v.long, v.hOffset = v.long, true, longScroll, 0
+		v.relayout(v.width)
+	}
 	v.setCursorLine(v.csBase+v.cs.cur.row, m.diffBodyRows()) // a skipped row (a header): the line cursor lands with it
+	return true
+}
+
+// charEnded puts back the long-line mode the character selection swapped
+// away (truncate → scroll while on) once the mode is off; it reports whether
+// it did — the caller relays out.
+func (v *diffView) charEnded() bool {
+	if v.cs.on || !v.csSwapped {
+		return false
+	}
+	v.long, v.csSwapped, v.hOffset = v.csLong, false, 0
 	return true
 }
 
@@ -217,6 +232,8 @@ func (m Model) diffCharKey(v *diffView, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	if v.cs.on {
 		v.setCursorLine(v.csBase+v.cs.cur.row, m.diffBodyRows()) // the view scrolls with the cursor
 		v.charPan(m)
+	} else if v.charEnded() {
+		v.relayout(v.width)
 	}
 	if res.notice != "" {
 		m.diffNotice = res.notice
