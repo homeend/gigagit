@@ -18,10 +18,12 @@ import (
 type emphLevel uint8
 
 const (
-	emphNone emphLevel = iota // plain: the syntax class (if any) paints
-	emphWord                  // inside a word-diff span (what sanitizeCell marks)
-	emphHit                   // inside a search hit
-	emphCur                   // inside the CURRENT search hit
+	emphNone   emphLevel = iota // plain: the syntax class (if any) paints
+	emphWord                    // inside a word-diff span (what sanitizeCell marks)
+	emphHit                     // inside a search hit
+	emphCur                     // inside the CURRENT search hit
+	emphSel                     // inside a CHARACTER selection (charsel.go): the selection stripe
+	emphSelCur                  // the character selection's CURSOR cell
 )
 
 // hitSpan is a search hit reduced to what a painter needs: a half-open range of
@@ -30,6 +32,9 @@ const (
 type hitSpan struct {
 	start, end int
 	cur        bool
+	// sel marks a CHARACTER-selection span (charsel.go) rather than a search
+	// hit: it paints emphSel, and with cur set emphSelCur (the cursor cell).
+	sel bool
 }
 
 // overlayHits paints hit spans onto a display-rune emphasis mask. emph is the
