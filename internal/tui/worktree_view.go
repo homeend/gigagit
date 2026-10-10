@@ -44,6 +44,17 @@ type worktreeView struct {
 	windows windowState // this worktree's windows while it sleeps (window_state.go): the layer pile, the files/stash views, the steer leftovers, the window gens
 	queued  []tea.Msg   // results addressed to this worktree that landed while it slept, oldest first (slot_replay.go); applied on return
 
+	// branch is the branch the worktree list showed checked out here when
+	// the slot last left the screen ("" = detached); branchKnown says the
+	// list had it. A sleeping worktree listed on ANOTHER branch later was
+	// recycled (or checked out from a terminal): its parked windows were
+	// opened over a tree that is gone and are dropped (dropRecycledWindows)
+	// — a slot is kept by path, and a recycle keeps the path. The branch,
+	// not HEAD: a commit an agent makes there moves HEAD and must keep a
+	// half-typed box.
+	branch      string
+	branchKnown bool
+
 	loaded bool // its first status landed (false: the panels are empty, not clean — viewLoading says so)
 }
 
@@ -110,15 +121,22 @@ func (m Model) ensureView(path string) *worktreeView {
 	if v, ok := m.views[key]; ok {
 		return v
 	}
-	if listed, ok := m.listedWorktree(path); ok {
-		path = listed // the service roots at the spelling git lists
+	listedPath, listed := m.listedWorktree(path)
+	if listed {
+		path = listedPath // the service roots at the spelling git lists
 	} else {
 		path = filepath.Clean(path)
 	}
 	var svc *domain.Service
-	if home := m.views[m.home]; home != nil && home.svc != nil {
-		svc = domain.OpenTUISharing(path, home.svc) // the repository's caches are one set: a diff cached from home is a hit here
-	} else {
+	switch home := m.views[m.home]; {
+	case home != nil && home.svc != nil && listed:
+		// The list's path IS the worktree top level: no rev-parse on the
+		// Update thread. The repository's caches and state are one set: a
+		// diff cached from home is a hit here, the forge is probed once.
+		svc = domain.OpenTUISharingRooted(path, home.svc)
+	case home != nil && home.svc != nil:
+		svc = domain.OpenTUISharing(path, home.svc)
+	default:
 		svc = domain.OpenTUI(path) // home is seeded by the first load before any slot is made; total anyway
 	}
 	v := &worktreeView{key: key, path: path, svc: svc}
@@ -194,18 +212,72 @@ func (m Model) saveView() Model {
 	v.fileMarks = m.fileMarks
 	v.workingReviews = m.workingReviews
 	v.resumePromptShown = m.resumePromptShown
-	v.windows = m.windowState // the worktree owns its windows: one assignment, nothing filtered
+	v.branch, v.branchKnown = m.listedBranch(v.path)
 	return m
+}
+
+// listedBranch is the branch the worktree list shows checked out at path
+// ("" when detached) and whether the list has the path at all.
+func (m Model) listedBranch(path string) (string, bool) {
+	key := model.KeyOf(path)
+	for _, w := range m.worktrees {
+		if model.KeyOf(w.Path) == key {
+			return w.Branch, true
+		}
+	}
+	return "", false
+}
+
+// dropRecycledWindows is the worktree-list arrival's check on every
+// SLEEPING slot: one the list now shows on another branch than the one it
+// slept with was recycled (engine.RecycleWorktree keeps the path) or
+// checked out from a terminal. Its parked windows — a commit box, a hunk
+// picker, a diff of the old tree — would submit into or describe the new
+// one, so they go: the parked navigate is answered first, then the group
+// is a fresh one (what loadView gives a new slot, the generations
+// carried), the queued results and the file marks with it. The record
+// moves to the new branch. A DETACHED listing ("") on either side is no
+// recycle: a rebase, a bisect or a checkout --detach in that worktree
+// lists it detached and lists its branch again when done — the windows
+// stay, and a record taken detached adopts the branch the list shows.
+func (m Model) dropRecycledWindows() (Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	for key, v := range m.views {
+		if key == m.viewed || !v.branchKnown {
+			continue
+		}
+		branch, listed := m.listedBranch(v.path)
+		if !listed || branch == v.branch || branch == "" {
+			continue
+		}
+		if v.branch == "" {
+			v.branch = branch
+			continue
+		}
+		cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree was checked out onto another branch"))
+		v.windows = v.windows.fresh()
+		v.queued = nil
+		v.fileMarks = nil
+		v.branch = branch
+	}
+	if len(cmds) == 0 {
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // parkView is saveView for a worktree that is LEAVING the screen: the
 // `gg session highlight` bands on its working files go with it (the same
-// path exists in the arriving tree and must not wear them). A save in
-// place — a full load re-seeding the viewed slot — keeps them live.
+// path exists in the arriving tree and must not wear them), and its big
+// file lists are given up (sleepFWindow — the slot's copy only: the live
+// group is about to be replaced). A save in place — a full load
+// re-seeding the viewed slot — keeps them live.
 func (m Model) parkView() Model {
 	m = m.saveView()
 	if v := m.views[m.viewed]; v != nil {
+		v.windows = m.windowState // the worktree owns its windows: one assignment, nothing filtered (only a LEAVING slot keeps a copy)
 		v.windows.workingAttention = takeWorkingAttention(m.attention)
+		v.windows.sleepFWindow()
 	}
 	return m
 }
@@ -264,6 +336,7 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.workingAttention = nil                 // merged back; the live copy is m.attention
 	m.replay = append(m.replay, v.queued...) // what landed for it while it slept: the Update tail applies it
 	v.queued = nil
+	v.windows = windowState{} // the live group is the Model's now; a copy here would keep every window closed from now on alive until the next swap
 	if m.console == nil {
 		m = m.restoreConsoleParked() // the console that displaced them is gone (a queued return): they are live again
 	} else {
@@ -402,9 +475,6 @@ func (m Model) switchViewBy(path string, byUser bool) (Model, bool) {
 		return m, false
 	}
 	m = m.parkView()
-	if v := m.views[m.viewed]; v != nil {
-		v.windows.sleepFWindow() // the leaving slot's copy only: the group is about to be replaced
-	}
 	m = m.sleepView()
 	m = m.loadView(m.ensureView(path))
 	m.viewKick = true
@@ -497,8 +567,11 @@ func (m Model) viewKickCmd() tea.Cmd {
 	feed := m.readSourceCmd(context.Background(), srcFeed, reloadOpts{})   // reconcile: the walk now starts at this tree's HEAD
 	_, docs := m.syncAgentDocs()
 	var files tea.Cmd
-	if m.inWorktreeFiles() && m.wtFiles.loading {
+	switch {
+	case m.inWorktreeFiles() && m.wtFiles.loading:
 		files = m.loadLsFilesCmd() // a returned F window gave its list up while sleeping (sleepFWindow)
+	case m.inFullTree() && m.treeSlept && m.filesView != nil:
+		files = m.loadTreeFilesCmd(m.filesViewCommit()) // likewise a commit's full tree
 	}
 	return tea.Batch(read, notes, feed, m.startWatchCmd(m.watchGen), docs, files)
 }
@@ -550,6 +623,7 @@ func (m Model) abandonGoneView() (Model, tea.Cmd, bool) {
 	}
 	gone := m.viewPath(m.viewed)
 	delete(m.views, m.viewed)
+	m.openFiles.drop(gone) // its documents cannot be reloaded from a tree that is gone
 	home := m.views[m.home]
 	if home == nil {
 		return m, nil, false
@@ -573,7 +647,8 @@ func (m Model) abandonGoneView() (Model, tea.Cmd, bool) {
 // recycled, pruned). The viewed one going falls back to home: its
 // service would point at a tree that is not there.
 func (m Model) pruneViews() (Model, tea.Cmd) {
-	var cmds []tea.Cmd // what the dropped slots still owed: a parked navigate or hint is answered, not lost
+	m, recycled := m.dropRecycledWindows()
+	cmds := []tea.Cmd{recycled} // what the dropped slots still owed: a parked navigate or hint is answered, not lost
 	for key, v := range m.views {
 		if m.isRepoWorktree(v.path) || key == m.home {
 			continue
@@ -586,6 +661,7 @@ func (m Model) pruneViews() (Model, tea.Cmd) {
 			continue
 		}
 		delete(m.views, key)
+		m.openFiles.drop(v.path) // its documents cannot be reloaded from a tree that is gone
 		if m.pendingReturnView == key {
 			m.pendingReturnView = m.home // a return queued to the gone slot goes home instead
 		}
@@ -604,10 +680,21 @@ func (m Model) pruneViews() (Model, tea.Cmd) {
 		}
 		cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree is gone"))
 	}
-	if len(cmds) == 0 {
-		return m, nil
+	return m, batchLive(cmds)
+}
+
+// batchLive is tea.Batch over the non-nil entries, nil when there are none.
+func batchLive(cmds []tea.Cmd) tea.Cmd {
+	var live []tea.Cmd
+	for _, c := range cmds {
+		if c != nil {
+			live = append(live, c)
+		}
 	}
-	return m, tea.Batch(cmds...)
+	if len(live) == 0 {
+		return nil
+	}
+	return tea.Batch(live...)
 }
 
 // adoptView moves gg's identity to the viewed slot — the user's own switch,

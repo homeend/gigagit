@@ -106,6 +106,22 @@ func (r *openFilesReg) remove(wt string, d *openFile) {
 	r.byWT[wt] = l
 }
 
+// drop releases wt's whole list: the worktree is gone (pruneViews), so its
+// documents cannot be reloaded and nothing will show them again. An
+// overview among them stops drawing its anchors, as remove does.
+func (r *openFilesReg) drop(wt string) {
+	if r == nil {
+		return
+	}
+	wt = string(model.KeyOf(wt))
+	for _, d := range r.byWT[wt] {
+		if d.ov != nil {
+			d.ov.closed = true
+		}
+	}
+	delete(r.byWT, wt)
+}
+
 // docShown reports whether d is in a frame: the files view's preview or a
 // full-screen viewer anywhere on the stack (a covered one is still shown —
 // it comes back when the window above it closes).

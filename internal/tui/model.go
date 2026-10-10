@@ -214,32 +214,6 @@ type Model struct {
 	// pendingPRsReload re-reads the PR list once the running ForgetPR lands
 	// (the list is not a registry source, so pendingSources cannot carry it).
 	pendingPRsReload bool
-	// The open PR diff's comment reads (pr_comments.go): one at a time, and
-	// when the last one started (the comment poll's own clock).
-	prCommentsInflight bool
-	// prRevalidateInflight: one background "is this PR's head still current?"
-	// read per open (pr_revalidate.go). prRevalidateSkip names the PR whose NEXT
-	// open is the reopen a revalidation caused — that one must not ask again.
-	prRevalidateInflight bool
-	prRevalidateSkip     int
-	// prRefreshing: the open PR's forge read is in flight ("refreshing…" in
-	// its title); prOfflineSince: the last read failed — the title shows how
-	// old the cached copy on screen is (zero = online).
-	prRefreshing   bool
-	prOfflineSince time.Time
-	// prUpdated: the PR whose last refresh found new comments or commits
-	// (0 = none) — its title says "updated" until a refresh finds nothing.
-	prUpdated int
-	// prSeen: the PR whose view has had its first refresh — that read only
-	// fills the view, so it never says "updated".
-	prSeen int
-	// prReadSeq counts PR reads as they start (prRevalidatedMsg.seq); a
-	// changing send of mine arms prOwnSend (its PR) with prOwnSendSeq (the
-	// last read started before it ended): the first read that started after
-	// it absorbs its change instead of saying "updated". prRefreshAgain: the
-	// PR whose post-send read was dropped (one read at a time), asked again
-	// when the running one lands.
-	prReadSeq, prOwnSend, prOwnSendSeq, prRefreshAgain int
 	// forgeGen is bumped by reRoot only: a PR forge read, send plan, group
 	// list or body read started in the old repository is dropped when it
 	// lands (F11). A PR-list read bumps prsGen, never this.
@@ -248,14 +222,9 @@ type Model struct {
 	// send leaves it for the next Send review…/Verdict… of the same PR and
 	// group (F12); a send that changed GitHub, or a repo switch, drops it.
 	keptSendBody *keptSendBody
-	// prReland is where the user was when the open PR's head moved: the
-	// reopen that follows lands the files cursor (and an open diff, at its
-	// line) back there. Consumed by that reopen's file list.
-	prReland *prReland
 	// prPrefetch is the background PR prefetch this Model started (pr_panel.go):
 	// cancelled on a repo switch, a newer list, and quit.
-	prPrefetch     *prPrefetchRun
-	prCommentsLast time.Time
+	prPrefetch *prPrefetchRun
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
@@ -1077,15 +1046,25 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.filesView == nil || !m.inFullTree() || msg.hash != m.filesHash {
 			return m, nil // view closed, switched back to changed files, or stale
 		}
-		if msg.err != nil {
+		if msg.err != nil { // a failed re-read of a given-up tree stays treeSlept: the next return asks again
 			m.statusMsg = i18n.T("files: %s", msg.err.Error())
 			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
 				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
-		m.filesView.lines = msg.lines // pre-built off-thread
+		keep := m.treeKeepPath
+		m.treeSlept, m.treeKeepPath = false, "" // the tree a sleep gave up is back
+		m.filesView.lines = msg.lines           // pre-built off-thread
 		m.filesView.sel = 0
+		if keep != "" { // back from sleep: the path the cursor was on, if the tree still has it
+			for i, l := range m.filesView.visible() {
+				if l.path == keep {
+					m.filesView.sel = i
+					break
+				}
+			}
+		}
 		m.filesTitle = i18n.T("Files %s (all files) %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = i18n.T("%s (all files) %s", shortHash(msg.hash), msg.subject)
 		m.filesCommit = msg.commit
