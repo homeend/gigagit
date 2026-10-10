@@ -133,14 +133,20 @@ type contentPopup struct {
 	// with the mode — when the width changes (the rows re-wrap, so a
 	// position would name other runes). pageH is the pager height the last
 	// render used (pgup/pgdn, keeping the cursor on screen).
-	cs      textSel
-	csRows  []charRow
-	csSeg   []charSeg
-	csW     int
-	pageH   int
-	mode    dispMode // text display mode; z cycles
-	hscroll int      // modeScroll horizontal offset
-	footer  string   // optional line above the hint (e.g. commit author · date); "" = none
+	cs     textSel
+	csRows []charRow
+	csSeg  []charSeg
+	csW    int
+	pageH  int
+	// csMode is the display mode v found when it was not wrap: the mode lays
+	// the text out wrapped while it is on (a cut row would let the cursor walk
+	// past what the box shows) and puts csMode back when it ends. csSwapped
+	// says whether there is one to put back.
+	csMode    dispMode
+	csSwapped bool
+	mode      dispMode // text display mode; z cycles
+	hscroll   int      // modeScroll horizontal offset
+	footer    string   // optional line above the hint (e.g. commit author · date); "" = none
 	// keys are the window's own bindings ("[y] copy  [o] other notes"): a line
 	// on the hints' margin right above them, set off from the content by a
 	// blank line — actions, not one more line of the text. "" = none.
@@ -472,6 +478,7 @@ func (p *contentPopup) box(m Model) string {
 	}
 	if p.cs.on && p.csW != bodyW {
 		p.cs.leave() // the rows re-wrapped (a resize, ctrl+t): positions mean other runes
+		p.charLeft()
 	}
 	if p.cs.on {
 		for k, seg := range p.csSeg { // an empty line the mode paints on gets its blank cell
@@ -776,11 +783,39 @@ func (p *contentPopup) charPage() int       { return max(p.pageH, 1) }
 // charEnter turns the mode on at display row `at` (the pager's top line);
 // false when there is nothing to select.
 func (p *contentPopup) charEnter(m Model, at int) bool {
+	swap := p.mode != modeWrap
+	if swap { // one display line per line until now: wrap, and keep the place
+		p.csMode, p.csSwapped, p.mode, p.hscroll = p.mode, true, modeWrap, 0
+	}
 	p.charLayout(m)
+	if swap {
+		for k, seg := range p.csSeg {
+			if seg.line >= at {
+				at, p.sel = k, k
+				break
+			}
+		}
+	}
 	if p.pageH == 0 { // no render yet: the page capacity until the box measures itself
 		p.pageH = m.contentPageRows()
 	}
-	return p.cs.enter(p.csRows, pos{row: at})
+	if !p.cs.enter(p.csRows, pos{row: at}) {
+		p.charLeft()
+		return false
+	}
+	return true
+}
+
+// charLeft is the mode ended: the display mode v swapped away comes back,
+// the pager top mapped from its wrapped row to that row's line.
+func (p *contentPopup) charLeft() {
+	if !p.csSwapped {
+		return
+	}
+	if p.sel >= 0 && p.sel < len(p.csSeg) {
+		p.sel = p.csSeg[p.sel].line
+	}
+	p.mode, p.csSwapped = p.csMode, false
 }
 
 // charFollow keeps the cursor's row on screen: the pager's top (sel) moves
@@ -836,6 +871,8 @@ func (p *contentPopup) charKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 	if p.cs.on {
 		p.charFollow() // the mode gone, the pager stays where the reader was
+	} else {
+		p.charLeft()
 	}
 	if res.notice != "" {
 		m.statusMsg = res.notice

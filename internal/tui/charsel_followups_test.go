@@ -141,3 +141,36 @@ func TestDiffSelectionsDropTheCarriageReturn(t *testing.T) {
 		t.Fatalf("line selection copied %q", got)
 	}
 }
+
+// v in the popup's cutoff or scroll mode lays the text out wrapped while the
+// mode is on — a cut row would let the cursor walk past what the box shows —
+// and leaving puts the reader's mode back.
+func TestSummaryCharSelWrapsWhileOn(t *testing.T) {
+	t.Parallel()
+	for _, presses := range []int{1, 2} {
+		m, p := openedSummaryPopup(t)
+		for k := 0; k < presses; k++ {
+			m = feedKeys(m, "ctrl+w")
+		}
+		mode := p.mode
+		if mode == modeWrap {
+			t.Fatalf("%d ctrl+w presses left the popup wrapped", presses)
+		}
+		m = feedKeys(m, "down", "down", "down") // the pager top on line 3, the long paragraph
+		m = feedKeys(m, "v")
+		if !p.cs.on || p.mode != modeWrap {
+			t.Fatalf("v in mode %v: on=%v mode %v, want wrapped", mode, p.cs.on, p.mode)
+		}
+		if line := p.csSeg[p.cs.cur.row].line; line != 3 || p.csSeg[p.sel].line != 3 {
+			t.Fatalf("v: the cursor on line %d, the pager top on line %d — want both on line 3", line, p.csSeg[p.sel].line)
+		}
+		if long := len(p.csRows); long < 5 {
+			t.Fatalf("the long paragraph must wrap into several rows, got %d rows", long)
+		}
+		m = feedKeys(m, "esc")
+		if p.cs.on || p.mode != mode || p.sel != 3 {
+			t.Fatalf("after esc: on=%v mode %v top %d, want %v back on line 3", p.cs.on, p.mode, p.sel, mode)
+		}
+		_ = m
+	}
+}
