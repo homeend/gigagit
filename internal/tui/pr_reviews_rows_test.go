@@ -106,4 +106,15 @@ func TestPRReviewsRowOlder(t *testing.T) {
 	if m.filesReview == nil || m.filesReview.id != id || !m.filesReview.older {
 		t.Fatalf("review view: %+v", m.filesReview)
 	}
+	// esc returns to the PR's file list — still PR #7 — with the cursor on
+	// the older review's row.
+	m, cmd = m.leaveReviewView()
+	m = drainCmds(t, m, cmd)
+	if m.filesReview != nil || m.previewOpen == nil || m.previewOpen.prNumber != 7 || !strings.Contains(m.filesTitle, "#7") {
+		t.Fatalf("after esc: review %v previewOpen %+v title %q", m.filesReview != nil, m.previewOpen, m.filesTitle)
+	}
+	vis := m.filesView.visible()
+	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) || vis[m.filesView.sel].noteID != id {
+		t.Fatalf("cursor not on the older review's row: sel %d", m.filesView.sel)
+	}
 }

@@ -41,6 +41,7 @@ type sendPanel struct {
 	code     bool   // c: the code excerpt under the current row
 	gen      int    // m.forgeGen when opened: a repository switch makes the panel stale
 	notice   string // the bottom bar: a refused tick, "tick something to send"
+	planning bool   // ctrl+s went out and its plan has not come back: a second ctrl+s waits
 }
 
 const (
@@ -311,9 +312,19 @@ func (p *sendPanel) openRow(m Model) (Model, tea.Cmd) {
 		p.notice = i18n.T("open the pull request to see the file")
 		return m, nil
 	}
-	for _, l := range m.filesView.visible() {
-		if l.path != c.Path {
+	// Every row of the list, not only the filtered view: a file the user's
+	// query hides is still in the PR. The filter clears and the list's cursor
+	// parks on the file, so esc from the diff lands there.
+	for _, l := range m.filesView.lines {
+		if l.path != c.Path || l.heading {
 			continue
+		}
+		m.filesView.query = ""
+		for i, v := range m.filesView.visible() {
+			if v.path == c.Path && !v.heading {
+				m.filesView.sel = i
+				break
+			}
 		}
 		u, cmd := m.openDiffForFileLine(l)
 		m = u.(Model)
@@ -363,6 +374,10 @@ func (p *sendPanel) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEnter:
 		return p.openRow(m)
 	case tea.KeyCtrlS:
+		if p.planning {
+			p.notice = i18n.T("preparing the send to #%d…", p.pr)
+			return m, nil
+		}
 		req, ok := p.request()
 		if !ok {
 			p.notice = i18n.T("tick something to send")
@@ -379,7 +394,11 @@ func (p *sendPanel) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if p.body == bodyTyped {
 			m.keptSendBody = &keptSendBody{pr: p.pr, group: sendGroupPanel, text: p.typed}
 		}
-		return m.forgeSendCmd(req)
+		m, cmd := m.forgeSendCmdFrom(req, true)
+		if cmd != nil {
+			p.planning, p.notice = true, i18n.T("preparing the send to #%d…", p.pr)
+		}
+		return m, cmd
 	}
 	switch msg.String() {
 	case "j":

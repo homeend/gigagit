@@ -51,6 +51,26 @@ func TestAnchorBandsFilterAndKinds(t *testing.T) {
 	}
 }
 
+// A plain anchor (a stored overview's range the review cannot open, R3)
+// gets no band and is never the current band: n/p must not land on it,
+// and a resolved anchor on the same lines keeps its own band.
+func TestAnchorBandsSkipPlainAnchors(t *testing.T) {
+	t.Parallel()
+	plain := anc("x:40-60", "x", 40, 60)
+	plain.plain = true
+	twin := anc("x:5-8", "x", 5, 8)
+	twin.plain = true
+	as := []anchor{plain, twin, anc("x:5-8", "x", 5, 8), anc("x:12", "x", 12, 0)}
+	got := anchorBands(as, "x", 100)
+	want := []anchorBand{band(5, 8, 2), band(12, 12, 3)}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	if k := bandOf(got, as, "x:40-60", 100); k != -1 {
+		t.Fatalf("a plain anchor has band %d", k)
+	}
+}
+
 func TestAnchorBandsDedupeAndOrder(t *testing.T) {
 	t.Parallel()
 	as := []anchor{anc("x:9-10", "x", 9, 10), anc("x:2", "x", 2, 0), anc("./x:9-10", "x", 9, 10), anc("x:2-4", "x", 2, 4)}

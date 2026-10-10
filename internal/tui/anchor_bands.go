@@ -25,8 +25,8 @@ func anchorBands(anchors []anchor, path string, nLines int) []anchorBand {
 	seen := map[[2]int]bool{}
 	for i, a := range anchors {
 		t := a.target
-		if t.Note != "" || t.Path != path || t.Start <= 0 || t.Start > nLines {
-			continue
+		if a.plain || t.Note != "" || t.Path != path || t.Start <= 0 || t.Start > nLines {
+			continue // a plain anchor (R3) is text: no band, never current
 		}
 		end := min(max(t.End, t.Start), nLines)
 		k := [2]int{t.Start, end}
@@ -53,7 +53,7 @@ func bandOf(bands []anchorBand, anchors []anchor, dest string, nLines int) int {
 	}
 	for _, a := range anchors {
 		t := a.target
-		if a.dest != dest || t.Note != "" || t.Start <= 0 {
+		if a.plain || a.dest != dest || t.Note != "" || t.Start <= 0 {
 			continue
 		}
 		end := min(max(t.End, t.Start), nLines)

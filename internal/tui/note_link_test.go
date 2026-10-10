@@ -54,10 +54,12 @@ func TestCopyNoteLinkOnTheAnchorLine(t *testing.T) {
 	if !ok || r.label != "Copy note link" {
 		t.Fatalf("row %+v ok %v", r, ok)
 	}
+	var got string
+	m = captureClip(m, &got)
 	u, cmd := r.run(m)
 	m = drainCmds(t, u.(Model), cmd)
-	if !strings.Contains(m.statusMsg, "?note="+id) || !strings.Contains(m.statusMsg, "a.txt:18~") {
-		t.Fatalf("status %q", m.statusMsg)
+	if !strings.Contains(got, "?note="+id) || !strings.Contains(got, "a.txt:18~") {
+		t.Fatalf("copied %q (status %q)", got, m.statusMsg)
 	}
 }
 
@@ -70,10 +72,12 @@ func TestCopyNoteLinkBelowTheBox(t *testing.T) {
 	if !ok {
 		t.Fatalf("no Copy note link below the box; menu %v", menuIDs(m))
 	}
+	var got string
+	m = captureClip(m, &got)
 	u, cmd := r.run(m)
 	m = drainCmds(t, u.(Model), cmd)
-	if !strings.Contains(m.statusMsg, "?note="+id) {
-		t.Fatalf("status %q", m.statusMsg)
+	if !strings.Contains(got, "?note="+id) {
+		t.Fatalf("copied %q (status %q)", got, m.statusMsg)
 	}
 }
 
@@ -81,11 +85,13 @@ func TestCopyNoteLinkBelowTheBox(t *testing.T) {
 func TestLCopiesTheNoteLinkOnTheAnchorLine(t *testing.T) {
 	t.Parallel()
 	m, id := worktreeNoteDiff(t)
+	var got string
+	m = captureClip(m, &got)
 	v := m.diffLayer()
 	u, cmd := v.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
 	m = drainCmds(t, u, cmd)
-	if !strings.Contains(m.statusMsg, "?note="+id) {
-		t.Fatalf("L on the anchor line: %q", m.statusMsg)
+	if !strings.Contains(got, "?note="+id) {
+		t.Fatalf("L on the anchor line copied %q (status %q)", got, m.statusMsg)
 	}
 }
 
@@ -94,11 +100,13 @@ func TestLBelowTheBoxCopiesTheLineLink(t *testing.T) {
 	t.Parallel()
 	m, id := worktreeNoteDiff(t)
 	m = belowTheBox(t, m)
+	var got string
+	m = captureClip(m, &got)
 	v := m.diffLayer()
 	u, cmd := v.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
 	m = drainCmds(t, u, cmd)
-	if strings.Contains(m.statusMsg, "?note="+id) || !strings.Contains(m.statusMsg, "a.txt:19") {
-		t.Fatalf("L below the box: %q", m.statusMsg)
+	if strings.Contains(got, "?note="+id) || !strings.Contains(got, "a.txt:19") {
+		t.Fatalf("L below the box copied %q (status %q)", got, m.statusMsg)
 	}
 }
 
@@ -151,9 +159,34 @@ func TestAllNotesCtrlLOnAThread(t *testing.T) {
 	if !strings.Contains(p.box(m), "[ctrl+l] copy link") {
 		t.Fatal("hint")
 	}
+	var got string
+	m = captureClip(m, &got) // never the machine's clipboard: the copy is read back here
 	u, c := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlL})
 	m = drainCmds(t, u, c)
-	if !strings.Contains(m.statusMsg, "?note="+id) {
-		t.Fatalf("status %q", m.statusMsg)
+	if !strings.Contains(got, "?note="+id) {
+		t.Fatalf("copied %q (status %q)", got, m.statusMsg)
+	}
+}
+
+// A shelf FILE note (not only an entry-level one) has no link: the domain
+// refuses every shelf address, so View all notes neither offers ctrl+l
+// on it nor fires the copy.
+func TestAllNotesCtrlLNotOnAShelfFileNote(t *testing.T) {
+	t.Parallel()
+	m, p := shelfEntryNotesModel(t)
+	found := false
+	for i, r := range p.visible() {
+		if r.kind == anNote && r.note.Note.ID == "f1" {
+			p.sel, found = i, true
+		}
+	}
+	if !found {
+		t.Fatalf("the shelf file note is not listed:\n%s", m.View())
+	}
+	if strings.Contains(p.box(m), "[ctrl+l] copy link") {
+		t.Fatal("a shelf file note offers ctrl+l")
+	}
+	if _, c := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlL}); c != nil {
+		t.Fatal("ctrl+l on a shelf file note started a copy")
 	}
 }

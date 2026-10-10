@@ -61,8 +61,9 @@ type WireNote struct {
 	// GroupSlot is Group's colour slot (GroupSlot: 1–6). Only the rendered
 	// form (a page that paints) carries it; agents' JSON stays as it was.
 	GroupSlot int `json:"group_slot,omitempty"`
-	// Severity is a remark's meta "severity"; Code the ≤ 4 lines the note
-	// is about, at the PR's tip (gg pr notes --json only).
+	// Severity is the note's "severity: <v>" tag — a remark's meta folds
+	// into one, a hand-written note may carry one; Code the ≤ 4 lines the
+	// note is about, at the PR's tip (gg pr notes --json only).
 	Severity string   `json:"severity,omitempty"`
 	Code     []string `json:"code,omitempty"`
 }

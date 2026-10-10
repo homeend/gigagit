@@ -4,8 +4,10 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notebatch"
 )
 
 const sevRemarks = `{"version":1,"summary":"Looks fine\n\nmore","files":[
@@ -73,5 +75,140 @@ func TestPRSendCandidatesEmpty(t *testing.T) {
 	c, err := svc.PRSendCandidates(context.Background(), 7)
 	if err != nil || len(c.Groups) != 0 {
 		t.Fatalf("%+v %v", c, err)
+	}
+}
+
+// A review group's title is its summary's first line; a review that is
+// prose (no document) is titled by its text's first line, as the body it
+// would send starts.
+func TestCandidateGroupTitle(t *testing.T) {
+	t.Parallel()
+	if got := candidateGroupTitle(Review{Text: "  Looks good overall.\n\nOne nit below."}); got != "Looks good overall." {
+		t.Fatalf("prose title = %q", got)
+	}
+	doc := Review{Text: "raw", Doc: &notebatch.ReviewDoc{Summary: "Fine\nmore"}}
+	if got := candidateGroupTitle(doc); got != "Fine" {
+		t.Fatalf("document title = %q", got)
+	}
+}
+
+// Two reviews saved in the same instant keep one order: by id.
+func TestSortCandidateGroupsTiesByID(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 10, 1, 0, 0, 0, time.UTC)
+	gs := []*SendCandidateGroup{
+		{ID: "review:b", Kind: "review", Created: now},
+		{ID: "review:a", Kind: "review", Created: now},
+		{ID: "review:c", Kind: "review", Created: now.Add(-time.Hour)},
+		{ID: "review:d", Kind: "review", Created: now.Add(time.Hour)},
+	}
+	sortCandidateGroups(gs)
+	var ids []string
+	for _, g := range gs {
+		ids = append(ids, g.ID)
+	}
+	if !slices.Equal(ids, []string{"review:d", "review:a", "review:b", "review:c"}) {
+		t.Fatalf("order = %v", ids)
+	}
+}
+
+// A remark on the old side lists its code from the PR's base, and a note
+// already being sent (or on GitHub) is not a candidate at all.
+func TestPRSendCandidatesOldSideAndSendingRows(t *testing.T) {
+	t.Parallel()
+	svc, _, head := sendRepo(t)
+	ctx := context.Background()
+	if _, err := svc.PullRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	rid := savePRReview(t, svc, `{"version":1,"summary":"old side","files":[{"path":"big.go","annotations":[{"oldRange":[5,5],"summary":"was here"}]}]}`)
+	sending := addPRNote(t, svc, head, "big.go", 25, "already going")
+	// Stamped after the read starts: the settle pass never judges it, so it
+	// stays "sending" through the listing.
+	stampNote(t, svc, sending, model.NoteSend{PR: 7, Review: "PRR_x", At: time.Now().Add(time.Minute)})
+	svc.invalidateNoteCounts()
+	c, err := svc.PRSendCandidates(ctx, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Groups) != 1 || c.Groups[0].ID != "review:"+rid {
+		t.Fatalf("a sending note must not be a candidate; groups = %+v", c.Groups)
+	}
+	row := c.Groups[0].Rows[0]
+	if row.Side != "old" || row.Range != [2]int{5, 5} || !slices.Equal(row.Code, []string{"line 5"}) {
+		t.Fatalf("old-side row = %+v, want the base's line 5", row)
+	}
+}
+
+// A draft reply row carries the planner's skip reason, as note rows do: a
+// thread the PR's comments no longer give a thread id for cannot take it.
+func TestPRSendCandidatesReplyRowsCarryASkipReason(t *testing.T) {
+	t.Parallel()
+	svc, ff, _ := sendRepo(t)
+	ctx := context.Background()
+	ff.mu.Lock()
+	ff.comments = []model.ForgeComment{
+		{ID: "C1", Kind: model.ForgeCommentInline, ThreadID: "T1", Path: "big.go", Side: model.NoteSideNew, Line: 5, StartLine: 5, Body: "please", Author: "carol"},
+		{ID: "C2", Kind: model.ForgeCommentInline, Path: "big.go", Side: model.NoteSideNew, Line: 25, StartLine: 25, Body: "no thread", Author: "carol"},
+	}
+	ff.mu.Unlock()
+	if _, err := svc.PRCommentsRefresh(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PullRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := svc.NoteReply(ctx, "forge:C1", model.Note{Source: model.NoteSourceUser, Author: "me", Summary: "fine"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad, err := svc.NoteReply(ctx, "forge:C2", model.Note{Source: model.NoteSourceUser, Author: "me", Summary: "lost"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := svc.PRSendCandidates(ctx, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Groups) != 1 || c.Groups[0].Kind != "replies" || len(c.Groups[0].Rows) != 2 {
+		t.Fatalf("groups = %+v", c.Groups)
+	}
+	for _, row := range c.Groups[0].Rows {
+		switch row.ID {
+		case ok.ID:
+			if row.Skip != "" {
+				t.Fatalf("a reply to a live thread must be sendable, got %q", row.Skip)
+			}
+		case bad.ID:
+			if row.Skip != SkipThreadNotInPR {
+				t.Fatalf("a reply to a thread-less comment: skip = %q, want %q", row.Skip, SkipThreadNotInPR)
+			}
+		}
+	}
+}
+
+// Review finding I2: the remark rows' skip judgement uses the review the
+// group already read — one note-store read per review, not one per remark.
+func TestPRSendCandidatesReadsEachReviewOnce(t *testing.T) {
+	t.Parallel()
+	svc, _, _ := sendRepo(t)
+	ctx := context.Background()
+	if _, err := svc.PullRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	savePRReview(t, svc, `{"version":1,"summary":"three","files":[{"path":"big.go","annotations":[
+ {"newRange":[5,5],"summary":"a"},{"newRange":[25,25],"summary":"b"},{"newRange":[26,26],"summary":"c"}]}]}`)
+	reads := 0
+	svc.onReviewRead = func(string) { reads++ }
+	if _, err := svc.PRNotes(ctx, 7); err != nil { // prime the listing's own remark cache
+		t.Fatal(err)
+	}
+	reads = 0
+	c, err := svc.PRSendCandidates(ctx, 7)
+	if err != nil || len(c.Groups) != 1 || len(c.Groups[0].Rows) != 3 {
+		t.Fatalf("%+v %v", c, err)
+	}
+	if reads != 1 {
+		t.Fatalf("the candidates read the review %d times for 3 remarks, want 1", reads)
 	}
 }

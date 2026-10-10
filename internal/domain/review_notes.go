@@ -351,6 +351,9 @@ func (s *Service) Reviews(ctx context.Context) ([]Review, error) {
 
 // Review is one stored review by note id; ErrReviewNotFound when gone.
 func (s *Service) Review(ctx context.Context, id string) (Review, error) {
+	if s.onReviewRead != nil {
+		s.onReviewRead(id)
+	}
 	ns, th, err := s.reviewNotes(ctx)
 	if err != nil {
 		return Review{}, err

@@ -279,6 +279,22 @@ func (s *Service) noteKinds(ctx context.Context, ids []string) (drafts, others, 
 	return drafts, others, unknown, nil
 }
 
+// replySkip is the planner's verdict on draft reply d: the thread id it
+// posts to, or the skip reason — its thread is not among the cached
+// comments (or has no thread id), or it is already being sent. The
+// candidates list asks the same question, so a row says what the plan
+// would.
+func (s *Service) replySkip(d model.Note) (threadID, skip string) {
+	_, root, ok := s.forgeCommentByID(strings.TrimPrefix(d.ParentID, model.ForgeNoteIDPrefix))
+	switch {
+	case !ok || root.ThreadID == "":
+		return "", SkipThreadNotInPR
+	case d.Send.State() == model.SyncSending:
+		return "", SkipBeingSent
+	}
+	return root.ThreadID, ""
+}
+
 // planActions is replies and resolves: each its own call.
 func (s *Service) planActions(ctx context.Context, plan engine.SendPlan, req PRSendRequest) (engine.SendPlan, error) {
 	plan.Mode = engine.SendActions
@@ -294,17 +310,13 @@ func (s *Service) planActions(ctx context.Context, plan engine.SendPlan, req PRS
 				continue
 			}
 			label := "reply: " + cutLabel(d.Summary)
-			_, root, ok := s.forgeCommentByID(strings.TrimPrefix(d.ParentID, model.ForgeNoteIDPrefix))
-			switch {
-			case !ok || root.ThreadID == "":
-				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: SkipThreadNotInPR, Summary: cutLabel(d.Summary)})
-				continue
-			case d.Send.State() == model.SyncSending:
-				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: SkipBeingSent, Summary: cutLabel(d.Summary)})
+			threadID, skip := s.replySkip(d)
+			if skip != "" {
+				plan.Skipped = append(plan.Skipped, engine.SendSkip{Label: label, Reason: skip, Summary: cutLabel(d.Summary)})
 				continue
 			}
 			plan.Items = append(plan.Items, engine.SendItem{Key: d.ID, Label: label, Kind: engine.SendReply,
-				ThreadID: root.ThreadID, Body: sendBody(d, d.ID, ""), Summary: cutLabel(d.Summary)})
+				ThreadID: threadID, Body: sendBody(d, d.ID, ""), Summary: cutLabel(d.Summary)})
 		}
 	}
 	for _, x := range []struct {

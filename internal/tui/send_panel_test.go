@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -176,7 +177,7 @@ func TestSendPanelClosesOnAChangeStaysOnAbort(t *testing.T) {
 	t.Parallel()
 	m, p := panelModel(t)
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace})
-	fs := &forgeSendState{pr: 7, req: domain.PRSendRequest{PR: 7, Notes: []string{"review:r1:1"}}}
+	fs := &forgeSendState{pr: 7, panel: true, req: domain.PRSendRequest{PR: 7, Notes: []string{"review:r1:1"}}}
 	m2, _ := m.forgeSendFinished(fs, engine.Result{}, nil) // aborted
 	if q := layerOf[*sendPanel](m2); q == nil || !q.ticked["review:r1:1"] {
 		t.Fatal("an abort must leave the panel as it was")
@@ -215,13 +216,20 @@ func TestSendPanelEnterOpensTheDiffAndReturns(t *testing.T) {
 
 // Review Focus 1: opened from the PR tab's details with the PR's files not
 // open, enter says so instead of opening a diff of the wrong view.
+// Serial: env (prSendModel) — the real read path, the PR's file list
+// closed again before the panel opens.
 func TestSendPanelEnterNeedsTheOpenPR(t *testing.T) {
-	t.Parallel()
-	m := newTestModel(t)
-	m.forgeShown, m.prs = true, testPRs()
-	m, _ = m.handleSendPanel(sendPanelMsg{gen: m.forgeGen, pr: 7, cands: panelCands()})
+	m, _, head := prSendModel(t)
+	addTUINote(t, m, head, 5, "look here")
+	m = openPR7(t, m)
+	m = m.closeFilesView()
+	m, cmd := m.openSendPanel(7)
+	m = drainCmds(t, m, cmd)
 	p := layerOf[*sendPanel](m)
-	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if p == nil {
+		t.Fatal("no panel")
+	}
+	m, cmd = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil || m.diffLayer() != nil || !strings.Contains(p.notice, "open the pull request") {
 		t.Fatalf("notice %q", p.notice)
 	}
@@ -287,10 +295,10 @@ func TestSendPanelSurvivesAGoneCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, cmd = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
-	nm, _ := m.Update(cmd()) // forgeSendReadyMsg: nothing to send → said, nothing runs
+	nm, _ := m.Update(cmd()) // forgeSendReadyMsg: nothing to send → said in the panel, nothing runs
 	m = nm.(Model)
-	if layerOf[*sendPanel](m) == nil || !strings.Contains(m.statusMsg, "send: ") {
-		t.Fatalf("panel %v status %q", layerOf[*sendPanel](m) != nil, m.statusMsg)
+	if q := layerOf[*sendPanel](m); q == nil || !strings.Contains(q.notice, "send: ") || q.planning {
+		t.Fatalf("panel %v notice %q", layerOf[*sendPanel](m) != nil, p.notice)
 	}
 }
 
@@ -382,5 +390,88 @@ func TestSendPanelKeptTextRules(t *testing.T) {
 	p = layerOf[*sendPanel](m)
 	if p.typed != "typed before" || p.bodyLabel() != "typed" {
 		t.Fatalf("reopened: typed %q body %q", p.typed, p.bodyLabel())
+	}
+}
+
+// Only the panel's OWN send closes it: a one-note send from the diff's menu
+// while the panel waits below leaves the panel with its ticks.
+func TestSendPanelSurvivesAnotherSendOfThePR(t *testing.T) {
+	t.Parallel()
+	m, p := panelModel(t)
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace})
+	other := &forgeSendState{pr: 7, req: domain.PRSendRequest{PR: 7, Notes: []string{"n9"}}}
+	m2, _ := m.forgeSendFinished(other, engine.Result{Changed: true}, nil)
+	if q := layerOf[*sendPanel](m2); q == nil || !q.ticked["review:r1:1"] {
+		t.Fatal("a send from elsewhere must leave the panel as it was")
+	}
+	own := &forgeSendState{pr: 7, panel: true, req: domain.PRSendRequest{PR: 7, Notes: []string{"review:r1:1"}}}
+	if m3, _ := m.forgeSendFinished(own, engine.Result{Changed: true}, nil); layerOf[*sendPanel](m3) != nil {
+		t.Fatal("the panel's own send closes it")
+	}
+}
+
+// ctrl+s while the plan is still being prepared does not start a second
+// plan; the word goes to the panel's notice, and clears when the plan
+// arrives.
+func TestSendPanelCtrlSOnceWhilePlanning(t *testing.T) {
+	t.Parallel()
+	m, p := panelModel(t)
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeySpace})
+	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	if cmd == nil || !p.planning || !strings.Contains(p.notice, "preparing the send to #7") {
+		t.Fatalf("first ctrl+s: cmd %v planning %v notice %q", cmd != nil, p.planning, p.notice)
+	}
+	if _, again := p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS}); again != nil {
+		t.Fatal("a second ctrl+s while planning must not start a second plan")
+	}
+	m, _ = m.handleForgeSendReady(forgeSendReadyMsg{gen: m.forgeGen, panel: true, req: domain.PRSendRequest{PR: 7}, err: errors.New("boom")})
+	if p.planning || !strings.Contains(p.notice, "boom") {
+		t.Fatalf("after the plan failed: planning %v notice %q", p.planning, p.notice)
+	}
+}
+
+// enter on a row whose file the PR's list has filtered away still opens it:
+// the filter clears, the diff opens, and the list's cursor sits on the file
+// so esc from the diff returns there. Serial: env (prSendModel).
+func TestSendPanelEnterFindsAFilteredFile(t *testing.T) {
+	m, _, head := prSendModel(t)
+	id := addTUINote(t, m, head, 5, "look here")
+	m = openPR7(t, m)
+	m.filesView.query = "zzz" // hides big.go
+	m, cmd := m.openSendPanel(7)
+	m = drainCmds(t, m, cmd)
+	p := layerOf[*sendPanel](m)
+	if p == nil {
+		t.Fatal("no panel")
+	}
+	m, cmd = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = drainCmds(t, m, cmd)
+	v := m.diffLayer()
+	if v == nil || !v.cursorOnNote() || p.notice != "" {
+		t.Fatalf("enter: diff %v notice %q", v != nil, p.notice)
+	}
+	if m.filesView.query != "" {
+		t.Fatalf("the filter %q still hides the file", m.filesView.query)
+	}
+	vis := m.filesView.visible()
+	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) || vis[m.filesView.sel].path != "big.go" {
+		t.Fatalf("the list's cursor is not on big.go: sel %d", m.filesView.sel)
+	}
+	_ = id
+}
+
+// Review finding I3: a plan that comes back for ANOTHER PR's panel (ctrl+s
+// on #7, esc, the panel of #8 opened meanwhile) leaves #8's panel alone —
+// its notice, its own planning.
+func TestSendPanelPlanOfAnotherPRLeavesThePanelAlone(t *testing.T) {
+	t.Parallel()
+	m, p := panelModel(t)
+	p.pr, p.planning, p.notice = 8, true, "mine"
+	m, _ = m.handleForgeSendReady(forgeSendReadyMsg{gen: m.forgeGen, panel: true, req: domain.PRSendRequest{PR: 7}, err: errors.New("boom")})
+	if !p.planning || p.notice != "mine" {
+		t.Fatalf("#8's panel was touched: planning %v notice %q", p.planning, p.notice)
+	}
+	if !strings.Contains(m.statusMsg, "boom") {
+		t.Fatalf("#7's word went nowhere: status %q", m.statusMsg)
 	}
 }

@@ -352,11 +352,6 @@ func noteListDotDecorator(e noteListEntry) rowDecorator {
 	}
 }
 
-// gotoNote lands the diff cursor on one thread's anchor line, expanding the
-// view when the anchor hides under a fold (exactly what } does) and lifting the
-// agent layer when the picked thread is one it hides. It reports whether it
-// moved, and reveals the thread's own rows so the note the user picked is on
-// screen, not just its line.
 // holds reports whether thread r is the one id names: its root, or one of
 // its replies (the send panel's draft rows name a reply).
 func holds(r domain.ResolvedNote, id string) bool {
@@ -371,6 +366,11 @@ func holds(r domain.ResolvedNote, id string) bool {
 	return false
 }
 
+// gotoNote lands the diff cursor on one thread's anchor line, expanding the
+// view when the anchor hides under a fold (exactly what } does) and lifting the
+// agent layer when the picked thread is one it hides. It reports whether it
+// moved, and reveals the thread's own rows so the note the user picked is on
+// screen, not just its line.
 func (m Model) gotoNote(id string) (Model, bool) {
 	v := m.diffLayer()
 	if v == nil {

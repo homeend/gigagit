@@ -438,4 +438,14 @@ func TestPRSendMixedAnsweredAtATerminal(t *testing.T) {
 	if !strings.Contains(out, "sent 1 comments to o/r #7") || !strings.Contains(out, "1 replies") {
 		t.Fatalf("stdout = %q", out)
 	}
+	// The summary went with that review: a later send of the same review
+	// (its second remark here) lists the summary as already on GitHub.
+	rid2 := saveCLIReview(t, dir, `{"version":1,"summary":"Looks fine","files":[{"path":"big.go","annotations":[{"newRange":[5,5],"summary":"check"},{"newRange":[25,25],"summary":"second"}]}]}`)
+	if out, errs, code := runPRAt(t, dir, "comment\n", "send", "7", "--note", "review:"+rid2+":0", "--verdict", "--body-from", rid2); code != 0 {
+		t.Fatalf("first send of %s: %d %s\n%s", rid2, code, errs, out)
+	}
+	out, errs, code = runPRAt(t, dir, "send\n", "send", "7", "--note", "review:"+rid2+":1", "--body-from", rid2)
+	if code != 0 || !strings.Contains(errs, "review summary (skipped: already on GitHub)") { // the plan prints on stderr
+		t.Fatalf("second send: %d %s\n%s", code, errs, out)
+	}
 }
