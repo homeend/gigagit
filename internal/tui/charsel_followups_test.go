@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/textdiff"
 	"github.com/homeend/gigagit/internal/theme"
 )
@@ -365,4 +366,64 @@ func TestSummaryPopupWheelScrolls(t *testing.T) {
 		t.Fatalf("the next key must bring the cursor row %d back into view (top %d)", p.cs.cur.row, p.sel)
 	}
 	_ = m
+}
+
+// A `gg session navigate` arriving while the copy mode is on leaves it: the
+// fixed start names runes the landing moved away from, and the next key must
+// not yank the cursor back to the old place.
+func TestCharSelLeavesOnASessionNavigate(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	nav := func(m Model, id string, no int) Model {
+		c := steer.Command{
+			ID: id, Cmd: "navigate", File: "a.txt",
+			Target: &steer.Target{State: "unstaged"},
+			Line:   &steer.Line{Side: "new", No: no},
+		}
+		m, cmd := m.applySteer(c)
+		return pumpDiff(t, m, cmd)
+	}
+	m = nav(m, "n-1", 18)
+	m = feedDiff(m, "v", "space", "l")
+	if v := m.diffLayer(); !v.cs.on {
+		t.Fatal("v must start the mode")
+	}
+	m = nav(m, "n-2", 5)
+	v := m.diffLayer()
+	if v.cs.on {
+		t.Fatalf("a navigate must leave the mode: %+v", v.cs)
+	}
+	m = feedDiff(m, "j")
+	if row, ok := v.cursorRow(); !ok || row.RightNo != 6 {
+		t.Fatalf("after the landing j must step from line 5: on line %d", row.RightNo)
+	}
+}
+
+// …and inside a stack, where the landing rebuilds the open view in place.
+func TestStackCharSelLeavesOnASessionNavigate(t *testing.T) {
+	m := loadedNavModel(t)
+	m = tempPromptStore(t, m)
+	m = m.setStackedPref(true)
+	nav := func(m Model, id string, no int) Model {
+		m, cmd := m.applySteer(steer.Command{
+			ID: id, Cmd: "navigate", File: "a.txt",
+			Target: &steer.Target{State: "unstaged"},
+			Line:   &steer.Line{Side: "new", No: no},
+		})
+		return pumpDiff(t, m, cmd)
+	}
+	m = nav(m, "sn-1", 18)
+	m = feedDiff(m, "v", "space", "l")
+	if v := m.diffLayer(); v == nil || v.stk == nil || !v.cs.on {
+		t.Fatal("v must start the mode in the stack")
+	}
+	m = nav(m, "sn-2", 5)
+	v := m.diffLayer()
+	if v.cs.on {
+		t.Fatalf("a navigate must leave the mode: %+v", v.cs)
+	}
+	m = feedDiff(m, "j")
+	if row, ok := v.cursorRow(); !ok || row.RightNo != 6 {
+		t.Fatalf("after the landing j must step from line 5: on line %d", row.RightNo)
+	}
 }
