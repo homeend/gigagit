@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Character selection follow-ups: blame, the View-file preview, and fixes (TUI)
+
+### Added
+- **Blame** and the **View-file preview** (the files view's right column
+  and the full-screen viewer) host the `v` copy mode too — the same keys as
+  the diff's. Blame copies the code (tabs kept), never the commit gutter;
+  the preview skips placeholders, image rows and note boxes, and an
+  overview's wrapped paragraph copies joined with one space.
+- The mouse wheel scrolls the review's **Summary** popup (it did nothing);
+  in the copy mode it moves the pager only, the cursor stays.
+
+### Fixed
+- The cursor was invisible on an **empty row** — it now sits on one blank
+  cell (the diff, the Summary popup, the stacked summary, blame, preview).
+- A cut view hid the cursor past the cut: the diff's truncate mode and the
+  blame / preview cutoff mode run as scroll while the mode is on (the pane
+  pans with the cursor); the Summary popup wraps. Leaving puts the reader's
+  view back.
+- A **CRLF** line's `\r` is no longer copied — by Copy line, the line
+  selection or the character selection (diff and blame).
+- An **empty selection** says "▸ the selection is empty — nothing to copy"
+  and keeps the mode, instead of leaving in silence.
+- `v` on a stack header moves the line cursor with the character cursor at
+  once, not on the next key.
+
 ## Character selection: the v copy mode (TUI)
 
 A modal copy mode in the spirit of vim's visual mode and tmux's copy mode,
@@ -19,7 +44,7 @@ While it is on every other key waits.
   summary element, or one file on the cursor's side — the element bounds
   the selection) and the single diff view (the cursor's side; `v` clears a
   live line selection, one kind at a time). Blame and the View-file preview
-  follow later through the same model.
+  joined in the follow-ups (above).
 - **What is copied.** The rendered text, never the markdown: a wrapped
   prose row joins with one space, any other row with a newline; a diff
   copies the side's source lines (tabs kept), absent cells and folded
