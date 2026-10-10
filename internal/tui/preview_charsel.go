@@ -29,6 +29,22 @@ func previewCharText(l contentLine) []rune {
 	return out[min(max(l.lead, 0), len(out)):]
 }
 
+// previewCharRows is the mode's rows over p.lines: a placeholder or an image
+// row is dead. In a stack's stream (s non-nil) every row outside file `file`
+// is dead too: the selection stays inside the file it started in (headers,
+// rules and placeholders are no source lines).
+func previewCharRows(p *contentPopup, s *fileStream, file int) []charRow {
+	rows := make([]charRow, len(p.lines))
+	for i, l := range p.lines {
+		if !l.src || l.cells != nil || s != nil && s.fileAt(i) != file {
+			rows[i] = charRow{dead: true}
+			continue
+		}
+		rows[i] = charRow{text: previewCharText(l), wraps: l.cont, hard: l.cont && l.hard}
+	}
+	return rows
+}
+
 // previewDispCol is the display rune index of column col of a row's text
 // (sanitizeForDisplay: a tab is four cells), behind the line's lead. A column
 // past the end is one cell per rune it is past (the empty row's cursor).
@@ -108,14 +124,11 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 				d.layOut(rows, d.ov.w) // an overview lays itself out: re-lay it for the view now
 			}
 		}
-		p.csRows = make([]charRow, len(p.lines))
-		for i, l := range p.lines {
-			if !l.src || l.cells != nil {
-				p.csRows[i] = charRow{dead: true}
-				continue
-			}
-			p.csRows[i] = charRow{text: previewCharText(l), wraps: l.cont, hard: l.cont && l.hard}
+		var stream *fileStream
+		if d := m.previewDoc(p); d != nil {
+			stream = d.stream
 		}
+		p.csRows = previewCharRows(p, stream, stream.fileAtOr(p.cur))
 		if !p.cs.enter(p.csRows, pos{row: p.cur}) {
 			p.previewCharLeave() // the view back
 			m.statusMsg = i18n.T("▸ nothing to select")

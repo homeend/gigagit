@@ -253,7 +253,7 @@ func (m Model) overviewClickIn(d *openFile, l layer, x, y, rows, margin int) (Mo
 					d.selectAnchorAt(i, line, rows)
 					nm, cmd := m.steerSplit(sv)
 					if double {
-						sv.onLeft = false
+						sv.focus(false)
 					}
 					return nm, cmd
 				case double:
@@ -323,7 +323,7 @@ func (m Model) splitOverviewRows(sv *splitView, d *openFile) []actionRow {
 	if d.ov.sel >= 0 {
 		rows = append(rows, actionRow{id: "overview-open", key: "enter", label: i18n.T("Open anchor"), run: func(m Model) (tea.Model, tea.Cmd) {
 			nm, cmd := m.steerSplit(sv)
-			sv.onLeft = false
+			sv.focus(false)
 			return nm, cmd
 		}})
 	}
