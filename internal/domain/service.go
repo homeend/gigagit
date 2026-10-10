@@ -102,11 +102,32 @@ type Service struct {
 	textRepo   texttmpl.Store // lazily resolved; nil disables text templates
 
 	// repoState is what belongs to the REPOSITORY rather than this worktree:
-	// the forge verdict and its caches, the preflight verdicts, the tag cache.
-	// One per repository: NewSharing hands a worktree slot's Service the
-	// pointer of the Service it shares with, so a forge probe, a tags read or
-	// a preflight resolved through one worktree answers from every other.
+	// the forge verdict and its caches, the tag cache. One per repository:
+	// NewSharing hands a worktree slot's Service the pointer of the Service
+	// it shares with, so a forge probe or a tags read through one worktree
+	// answers from every other.
 	*repoState
+	// forgeLocal is THIS Service's instance of the provider the shared
+	// verdict names (forgeLocalName), rooted at its own workdir: the
+	// worktree that probed may be removed later, and a gh rooted there would
+	// fail every later call. Guarded by forgeMu.
+	forgeLocal     forge.Provider
+	forgeLocalName string
+
+	// preflightMu guards the resolved verdicts. reRoot builds a FRESH Service,
+	// so a cached resolution can never outlive the repo it describes. Per
+	// Service, NOT in repoState: the legacy review-commands probe reads the
+	// asking worktree's committed .gg.toml (review_upgrade.go), which differs
+	// by branch — one worktree's verdict is not the other's.
+	preflightMu   sync.Mutex
+	preflightDone bool
+	preflightOut  []preflight.Verdict
+	// preflightMarks is the store-format marker map preflightOut was resolved
+	// from. Every cached Preflight call re-reads the markers and compares:
+	// another gg process sharing this repo can migrate a store underneath a
+	// long-lived Service (a `gg mcp` server never re-roots), and the cache
+	// must not outlive the state it describes.
+	preflightMarks map[string]int
 	// gitDirMu guards gitDirPath — this worktree's git dir, resolved once on
 	// first use (a repo's git dir never moves during a session; reRoot builds
 	// a fresh Service). "" = not yet resolved; a failed resolution retries on
@@ -134,14 +155,16 @@ type Service struct {
 // repoState is the repository-scoped half of a Service (see Service.repoState):
 // shared by every Service of one repository (NewSharing), private to a
 // Service built alone. reRoot builds a FRESH Service with a fresh one, so a
-// cached verdict can never outlive the repo it describes.
+// cached verdict can never outlive the repo it describes. The preflight
+// verdicts are NOT here (see Service.preflightMu).
 type repoState struct {
 	// forgeMu guards forge detection and the known-PR set (forge.go). It is
 	// never held across a provider call (the probe is a network round trip and
 	// Preflight reads forgeProbe under it), and never while taking preflightMu
 	// (Preflight holds preflightMu then takes forgeMu — the reverse deadlocks).
 	forgeMu         sync.Mutex
-	forgeProviders  []forge.Provider // nil = forge.Default; tests inject
+	forgeProviders  []forge.Provider // nil = forgeFactory; tests inject (one instance for every worktree)
+	forgeFactory    forgeFactory     // nil = forge.Default; builds the providers rooted at a worktree (tests record the dir)
 	forgeRec        observ.Recorder  // the session's span ring, so gh calls reach the operation log; nil for a Service built by New
 	forgeProbed     bool
 	forgeOptimistic bool           // forgeActive came from the cached listing, not Detect (until a list proves it)
@@ -175,18 +198,6 @@ type repoState struct {
 	prPrefetch   int
 	prPolicySet  bool
 
-	// preflightMu guards the resolved verdicts. reRoot builds a FRESH Service,
-	// so a cached resolution can never outlive the repo it describes.
-	preflightMu   sync.Mutex
-	preflightDone bool
-	preflightOut  []preflight.Verdict
-	// preflightMarks is the store-format marker map preflightOut was resolved
-	// from. Every cached Preflight call re-reads the markers and compares:
-	// another gg process sharing this repo can migrate a store underneath a
-	// long-lived Service (a `gg mcp` server never re-roots), and the cache
-	// must not outlive the state it describes.
-	preflightMarks map[string]int
-
 	// tagsMu guards the fingerprint-validated Tags cache. The full tags read
 	// sorts by creatordate, which makes git read every tag object — seconds on
 	// a big pack — so tagsCached revalidates with the cheap TagsFingerprint
@@ -199,6 +210,9 @@ type repoState struct {
 }
 
 func newRepoState() *repoState { return &repoState{} }
+
+// forgeFactory builds the forge providers for a worktree (forge.Default).
+type forgeFactory func(workdir string, rec observ.Recorder) []forge.Provider
 
 // SetShowEOLOnlyChanges controls whether a file whose ONLY unstaged change is
 // line endings (CRLF↔LF) is surfaced as modified. The default (false) drops
@@ -358,11 +372,13 @@ func New(repo *git.Repo) *Service {
 // the factory vends is keyed by content (a full hash, a hash pair, a hash
 // + path); a working-tree diff or blame is never cached (Key "" / rev ""),
 // so nothing that depends on WHICH worktree asked can enter a shared
-// cache. The repoState is shared too (one forge probe, one tag cache, one
-// preflight resolution per repository — none of it depends on the asking
-// worktree). The differ and the singleflight stay per Service: the differ
-// carries the Service's own options, the flight coalesces per-worktree
-// reads (status).
+// cache. The repoState is shared too (one forge probe, one tag cache per
+// repository — neither depends on the asking worktree; the provider each
+// Service CALLS is rooted at its own worktree, see forgeLocal). The
+// preflight verdicts, the differ and the singleflight stay per Service:
+// a preflight probe reads the asking worktree's committed config, the
+// differ carries the Service's own options, the flight coalesces
+// per-worktree reads (status).
 func NewSharing(repo *git.Repo, from *Service) *Service {
 	return &Service{repo: repo, factory: from.factory, repoState: from.repoState}
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"testing"
 
@@ -224,5 +225,134 @@ func TestAParkedPRRevalidationQueuesButUpdatesTheRowNow(t *testing.T) {
 	}
 	if m.prs[0].Title != "new" {
 		t.Fatalf("the PR row did not follow the forge: %q", m.prs[0].Title)
+	}
+}
+
+// --- review findings on the follow-ups ---
+
+// A sleeping worktree in a rebase (or bisect, or detached on purpose) is
+// listed detached: that is not a recycle. Its windows stay, both into
+// the detached state and out of it.
+func TestASleepingWorktreeDetachedByARebaseKeepsItsWindows(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	m = forceSwitch(t, m, other)
+	m = m.pushLayer(&commitPopup{})
+	m = forceSwitch(t, m, home)
+	key := model.KeyOf(other)
+	for _, step := range [][]string{{"checkout", "--detach"}, {"checkout", "wt2"}} {
+		if out, err := exec.Command("git", append([]string{"-C", other}, step...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", step, err, out)
+		}
+		nm, _ := m.Update(m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})())
+		m = nm.(Model)
+		if n := len(m.views[key].windows.layers.entries); n != 1 {
+			t.Fatalf("after git %v: the parked windows were dropped (%d left)", step, n)
+		}
+	}
+}
+
+// The recycle reset keeps the window generations moving: a result in
+// flight for a window dropped by the reset, stamped N, must not be
+// accepted by a window opened after it that reached N again.
+func TestTheRecycleResetKeepsTheWindowGenerations(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	m = forceSwitch(t, m, other)
+	m.remoteHeadsGen = 5
+	m = forceSwitch(t, m, home)
+	if out, err := exec.Command("git", "-C", other, "checkout", "-b", "recycled").CombinedOutput(); err != nil {
+		t.Fatalf("checkout: %v\n%s", err, out)
+	}
+	nm, _ := m.Update(m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})())
+	m = nm.(Model)
+	if g := m.views[model.KeyOf(other)].windows.remoteHeadsGen; g <= 5 {
+		t.Fatalf("remoteHeadsGen = %d after the reset, want above 5", g)
+	}
+}
+
+// A PR refresh replayed on return does not put back the row it carried:
+// the list may have moved on (a reload showed the PR merged) since
+// applyShared landed it.
+func TestAReplayedPRRevalidationDoesNotRevertTheRow(t *testing.T) {
+	m := loadedModel(t)
+	home := m.currentWorktree
+	m, other := addWorktree(t, m, "wt2")
+	m.prs = []model.PullRequest{{Number: 7, Title: "old"}}
+	m = forceSwitch(t, m, other)
+	key := model.KeyOf(home)
+	nm, _ := m.Update(prRevalidatedMsg{slotStamp: slotStamp{slot: key}, n: 7, gen: m.forgeGen, pr: model.PullRequest{Number: 7, Title: "open"}})
+	m = nm.(Model)
+	m.prs = []model.PullRequest{{Number: 7, Title: "merged"}} // a list reload meanwhile
+	m = forceSwitch(t, m, home)
+	m, _ = m.replayQueued()
+	if m.prs[0].Title != "merged" {
+		t.Fatalf("the replay reverted the PR row to %q", m.prs[0].Title)
+	}
+}
+
+// Leaving a worktree again while its re-read is still in flight (the
+// list shows the loading placeholder) keeps the path the cursor was on.
+func TestASecondSleepKeepsTheRememberedCursorPath(t *testing.T) {
+	var w windowState
+	w.filesMode = filesModeFullTree
+	w.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
+	w.treeSlept, w.treeKeepPath = true, "README.md"
+	w.sleepFWindow()
+	if w.treeKeepPath != "README.md" {
+		t.Fatalf("treeKeepPath = %q, want README.md kept", w.treeKeepPath)
+	}
+	var f windowState
+	f.filesMode = filesModeWorktree
+	f.wtFiles = &worktreeFiles{keepPath: "a.txt", loading: true}
+	f.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
+	f.sleepFWindow()
+	if f.wtFiles.keepPath != "a.txt" {
+		t.Fatalf("F keepPath = %q, want a.txt kept", f.wtFiles.keepPath)
+	}
+}
+
+// A failed re-read of the given-up tree leaves it marked slept, so the
+// next return asks again.
+func TestAFailedTreeReReadIsAskedAgainOnTheNextReturn(t *testing.T) {
+	m := loadedModel(t)
+	hash := m.commits[0].Hash
+	m = fullTreeIn(m, hash)
+	m.treeSlept = true
+	nm, _ := m.Update(treeFilesMsg{slotStamp: m.stamp(), hash: hash, err: context.Canceled})
+	if !nm.(Model).treeSlept {
+		t.Fatal("a failed re-read cleared treeSlept: nothing asks again")
+	}
+}
+
+// A full load re-seeding the viewed slot does not copy the live windows
+// into it either (the slot's copy exists for a SLEEPING worktree).
+func TestAFullLoadLeavesNoWindowCopyOnTheViewedSlot(t *testing.T) {
+	m := loadedModel(t)
+	m = m.pushLayer(&diffView{title: "f"})
+	nm, cmd := m.Update(m.loadCmd()())
+	m = settleLoad(t, nm.(Model), cmd)
+	if v := m.views[m.viewed]; v.windows.layers != nil {
+		t.Fatal("the full load copied the live windows into the viewed slot")
+	}
+}
+
+// abandonGoneView releases the gone worktree's open files as pruneViews
+// does.
+func TestAbandonGoneViewReleasesItsOpenFiles(t *testing.T) {
+	m := loadedModel(t)
+	m, other := viewedOther(t, m)
+	m.openFiles.touch(other, wtDoc("a.txt"), noneShown)
+	if err := os.RemoveAll(other); err != nil {
+		t.Fatal(err)
+	}
+	m, _, ok := m.abandonGoneView()
+	if !ok {
+		t.Fatal("precondition: not abandoned")
+	}
+	if n := len(m.openFiles.list(other)); n != 0 {
+		t.Fatalf("the gone worktree still has %d open files", n)
 	}
 }

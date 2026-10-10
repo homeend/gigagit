@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"slices"
+	"sync"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/forge"
@@ -61,7 +63,10 @@ func TestSharingServicesShareTheTagCache(t *testing.T) {
 	}
 }
 
-func TestSharingServicesShareThePreflightVerdicts(t *testing.T) {
+// Preflight stays per Service: one of its probes (the legacy review
+// commands) reads the asking worktree's committed .gg.toml, which differs
+// by branch, so a verdict resolved through one worktree is not the other's.
+func TestSharingServicesKeepTheirOwnPreflight(t *testing.T) {
 	t.Parallel()
 	dir := cleanDir(t)
 	cr := newCountingRunner(gitexec.NewExecRunner("git", dir, observ.NewRing(50)))
@@ -77,8 +82,45 @@ func TestSharingServicesShareThePreflightVerdicts(t *testing.T) {
 	if _, err := slot.Preflight(ctx); err != nil {
 		t.Fatalf("slot Preflight: %v", err)
 	}
-	if n := cr.count("git version"); n != 0 {
-		t.Errorf("the slot's Preflight ran git version %d times, want 0 (home's verdicts are the repository's)", n)
+	if n := cr.count("git version"); n != 1 {
+		t.Errorf("the slot's Preflight ran git version %d times, want 1 (its own resolution)", n)
+	}
+}
+
+// The shared forge VERDICT is the repository's, but the provider a slot
+// calls is rooted at the slot's own worktree: the probing worktree may be
+// removed later (gg started in a linked worktree, moved home, removed it),
+// and a gh rooted there would fail every call for the rest of the session.
+func TestSharingServicesCallTheForgeFromTheirOwnWorktree(t *testing.T) {
+	t.Parallel()
+	ff := &fakeForge{}
+	var mu sync.Mutex
+	var dirs []string
+	factory := func(workdir string, _ observ.Recorder) []forge.Provider {
+		mu.Lock()
+		dirs = append(dirs, workdir)
+		mu.Unlock()
+		return []forge.Provider{ff}
+	}
+	homeDir, home := newRealRepo(t)
+	home.workdir = homeDir
+	home.forgeFactory = factory
+	slotDir := t.TempDir()
+	slot := NewSharing(home.Repo(), home)
+	slot.workdir = slotDir
+	if st := home.ForgeStatus(context.Background()); !st.Available() {
+		t.Fatalf("home status = %+v", st)
+	}
+	if _, err := slot.PullRequests(context.Background()); err != nil {
+		t.Fatalf("slot PullRequests: %v", err)
+	}
+	if n := ff.detects.Load(); n != 1 {
+		t.Errorf("Detect ran %d times, want 1", n)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Contains(dirs, slotDir) {
+		t.Fatalf("the slot called the forge through %v; want a provider rooted at its own %s", dirs, slotDir)
 	}
 }
 

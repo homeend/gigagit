@@ -212,7 +212,6 @@ func (m Model) saveView() Model {
 	v.fileMarks = m.fileMarks
 	v.workingReviews = m.workingReviews
 	v.resumePromptShown = m.resumePromptShown
-	v.windows = m.windowState // the worktree owns its windows: one assignment, nothing filtered
 	v.branch, v.branchKnown = m.listedBranch(v.path)
 	return m
 }
@@ -235,8 +234,12 @@ func (m Model) listedBranch(path string) (string, bool) {
 // checked out from a terminal. Its parked windows — a commit box, a hunk
 // picker, a diff of the old tree — would submit into or describe the new
 // one, so they go: the parked navigate is answered first, then the group
-// is a fresh one (what loadView gives a new slot), the queued results and
-// the file marks with it. The record moves to the new branch.
+// is a fresh one (what loadView gives a new slot, the generations
+// carried), the queued results and the file marks with it. The record
+// moves to the new branch. A DETACHED listing ("") on either side is no
+// recycle: a rebase, a bisect or a checkout --detach in that worktree
+// lists it detached and lists its branch again when done — the windows
+// stay, and a record taken detached adopts the branch the list shows.
 func (m Model) dropRecycledWindows() (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	for key, v := range m.views {
@@ -244,11 +247,15 @@ func (m Model) dropRecycledWindows() (Model, tea.Cmd) {
 			continue
 		}
 		branch, listed := m.listedBranch(v.path)
-		if !listed || branch == v.branch {
+		if !listed || branch == v.branch || branch == "" {
+			continue
+		}
+		if v.branch == "" {
+			v.branch = branch
 			continue
 		}
 		cmds = append(cmds, m.failParkedSteer(&v.windows, "the worktree was checked out onto another branch"))
-		v.windows = windowState{layers: &layerStack{}}
+		v.windows = v.windows.fresh()
 		v.queued = nil
 		v.fileMarks = nil
 		v.branch = branch
@@ -268,6 +275,7 @@ func (m Model) dropRecycledWindows() (Model, tea.Cmd) {
 func (m Model) parkView() Model {
 	m = m.saveView()
 	if v := m.views[m.viewed]; v != nil {
+		v.windows = m.windowState // the worktree owns its windows: one assignment, nothing filtered (only a LEAVING slot keeps a copy)
 		v.windows.workingAttention = takeWorkingAttention(m.attention)
 		v.windows.sleepFWindow()
 	}
@@ -615,6 +623,7 @@ func (m Model) abandonGoneView() (Model, tea.Cmd, bool) {
 	}
 	gone := m.viewPath(m.viewed)
 	delete(m.views, m.viewed)
+	m.openFiles.drop(gone) // its documents cannot be reloaded from a tree that is gone
 	home := m.views[m.home]
 	if home == nil {
 		return m, nil, false

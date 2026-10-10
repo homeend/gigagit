@@ -6580,8 +6580,10 @@ The same for a commit's FULL tree (`filesModeFullTree`): the lines go,
 `treeSlept`/`treeKeepPath` are set, the kick re-issues `loadTreeFilesCmd`,
 the `treeFilesMsg` arm lands the cursor on the kept path, and
 `treeFilesMsg.staleFor` drops a tree in flight for a slot that gave its
-tree up. `loadView` clears the slot's `windows` copy once the group is
-live (the only readers of a slot's copy skip the viewed one).
+tree up; a failed re-read stays `treeSlept` (the next return asks again).
+Only `parkView` copies the live group into the slot and `loadView` clears
+the copy once the group is live: a slot holds a window copy only while
+it SLEEPS (the only readers of a slot's copy skip the viewed one).
 Everything else parked is bounded by what the user opened. Spec
 `docs/superpowers/specs/2026-10-09-per-worktree-window-stacks.md`.
 `sleepView` (watchers closed, the five gens bumped, `srcFeed` retired) is shared by
@@ -6660,11 +6662,15 @@ worktree is a hit from another. Safe because every cached key is
 content-addressed (a full hash, a hash pair, a hash + path; a ref endpoint
 has no `CacheTag`) and working-tree diffs/blames are read through (`Key
 ""` / `rev ""`). It shares home's `repoState` too (`domain/service.go`):
-the forge verdict and its PR caches, the on-disk PR store, the preflight
-verdicts and the tag cache are the REPOSITORY's — one `gh` probe per
-session whichever worktree asks, and a slot's `gh` calls record into
-home's ring (the operation log). The differ and the singleflight stay per
-Service. No process-wide map: a repo switch drops the slots and their
+the forge verdict and its PR caches, the on-disk PR store and the tag
+cache are the REPOSITORY's — one `gh` probe per session whichever
+worktree asks, and a slot's `gh` calls record into home's ring (the
+operation log). The provider a Service CALLS is its own instance rooted
+at its own worktree (`forgeLocal`, built by name from the shared
+verdict): the worktree that probed may be removed later. The preflight
+verdicts stay per Service (the legacy review-commands probe reads the
+asking worktree's committed `.gg.toml`), as do the differ and the
+singleflight. No process-wide map: a repo switch drops the slots and their
 caches with them. `dropConsole` (the console stepping aside for a stash
 list / preview / solo) keeps the view on purpose: the user is working in
 that worktree; `»` and the header say so and enter on home's row returns.
@@ -6707,7 +6713,10 @@ the screen (`worktreeView.branch`, set by `saveView`) and
 `dropRecycledWindows` (run by `pruneViews` on every list arrival) answers
 its parked navigate and gives it a fresh window group, dropping its queue
 and file marks, when the list shows it on another branch — the branch,
-not HEAD, so a commit an agent makes there keeps a half-typed box;
+not HEAD, so a commit an agent makes there keeps a half-typed box, and a
+detached listing on either side (a rebase, a bisect) is no recycle; the
+fresh group carries the window generations (`windowState.fresh`);
+`prRevalidatedMsg.rowDone` keeps a replay from reverting a PR row;
 `sleepFWindow` covers the full-tree mode; the viewed slot keeps no window
 copy; `trimQueue` copies the kept tail into a fresh slice; `pruneViews`
 releases a gone worktree's open files (`openFilesReg.drop`; a repository

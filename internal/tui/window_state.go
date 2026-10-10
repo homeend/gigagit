@@ -236,6 +236,28 @@ type consoleParked struct {
 	filesPreview *openFile
 }
 
+// fresh is an empty group for a worktree whose windows are dropped
+// (dropRecycledWindows): what a new slot gets, with every window
+// generation carried past w's — a result still in flight for a dropped
+// window, stamped with w's count, must not be accepted by a window opened
+// after it that reached the same count.
+func (w windowState) fresh() windowState {
+	return windowState{
+		layers:           &layerStack{},
+		hintGen:          w.hintGen + 1,
+		entryCompareGen:  w.entryCompareGen + 1,
+		gitConfigGen:     w.gitConfigGen + 1,
+		versionsGen:      w.versionsGen + 1,
+		remoteHeadsGen:   w.remoteHeadsGen + 1,
+		allNotesGen:      w.allNotesGen + 1,
+		wtPreviewGen:     w.wtPreviewGen + 1,
+		reviewsFollowGen: w.reviewsFollowGen + 1,
+		reviewOpenGen:    w.reviewOpenGen + 1,
+		previewGen:       w.previewGen + 1,
+		prReadSeq:        w.prReadSeq + 1,
+	}
+}
+
 // sleepFWindow is the one thing a sleeping group gives up: the F window's
 // on-disk list and its rendered tree (~100 bytes per path, twice, on a
 // million-file tree — not worth keeping six times), and likewise a
@@ -249,7 +271,9 @@ func (w *windowState) sleepFWindow() {
 	}
 	if w.filesMode == filesModeFullTree {
 		if sel := w.filesView.sel; sel >= 0 && sel < len(w.filesView.visible()) {
-			w.treeKeepPath = w.filesView.visible()[sel].path
+			if p := w.filesView.visible()[sel].path; p != "" { // a second sleep while the re-read is in flight sits on the placeholder: the kept path stands
+				w.treeKeepPath = p
+			}
 		}
 		w.filesView.lines = []contentLine{{text: i18n.T("(loading…)")}}
 		w.filesView.sel = 0
@@ -261,7 +285,9 @@ func (w *windowState) sleepFWindow() {
 		return
 	}
 	if sel := w.filesView.sel; sel >= 0 && sel < len(w.filesView.visible()) {
-		f.keepPath = w.filesView.visible()[sel].path
+		if p := w.filesView.visible()[sel].path; p != "" { // likewise
+			f.keepPath = p
+		}
 	}
 	f.all, f.untracked, f.letters = nil, nil, nil
 	f.loading = true

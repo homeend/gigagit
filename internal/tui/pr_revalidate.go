@@ -32,6 +32,7 @@ type prRevalidatedMsg struct {
 	seq             int       // m.prReadSeq when the read started
 	readAt          time.Time // when the PR was last read (the offline mark's age)
 	err             error
+	rowDone         bool // the PR row already followed pr when the message was queued (applyShared): the replay must not put it back over a newer list
 }
 
 // prRevalidateCmd asks the forge about PR n off the UI thread. The reopen a
@@ -76,6 +77,7 @@ func (m Model) prRefreshCmd(n int, manual bool) (Model, tea.Cmd) {
 func (msg prRevalidatedMsg) applyShared(m Model) (Model, tea.Msg) {
 	if msg.gen == m.forgeGen && msg.err == nil {
 		m = m.followPRRow(msg.pr)
+		msg.rowDone = true
 	}
 	return m, msg
 }
@@ -127,7 +129,9 @@ func (m Model) handlePRRevalidatedMsg(msg prRevalidatedMsg) (Model, tea.Cmd) {
 	}
 	// The read cached the PR: did a send stop half way (spec §3.4, T8)?
 	cmd = tea.Batch(cmd, m.interruptedCmd(msg.n))
-	m = m.followPRRow(msg.pr) // the row follows the forge (merged, closed, retitled)
+	if !msg.rowDone {
+		m = m.followPRRow(msg.pr) // the row follows the forge (merged, closed, retitled)
+	}
 	// "Moved" is judged against the head ON SCREEN too: a background prefetch
 	// may already have fetched the new head into the local ref, and then the
 	// domain (which compares with that ref) says nothing moved.
