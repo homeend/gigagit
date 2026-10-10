@@ -32,7 +32,7 @@ type remoteTagsMsg struct {
 // the manual .-menu action and the background scheduler lane.
 func (m Model) remoteTagsCmd(ctx context.Context, manual bool) tea.Cmd {
 	svc := m.svc
-	gen := m.loadGen // snapshot at launch; handler drops stale results on repo switch
+	gen := m.remoteTagsGen // snapshot at launch; handler drops stale results on a repository switch (an in-repo swap keeps them)
 	return func() tea.Msg {
 		start := time.Now()
 		names, err := svc.RemoteTags(ctx)

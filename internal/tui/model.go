@@ -84,6 +84,7 @@ type Model struct {
 	pendingScopeClear      bool                           // armed by startOp for checkout-family ops; a Changed success drops the solo/scope (the reRoot precedent, but for a same-worktree switch)
 	pendingRemoteTagAdds   []string                       // tags to optimistically add to remoteTagNames on PushTags success
 	pushCheckGen           int                            // generation guard for the async pre-push remote-tag check
+	remoteTagsGen          int                            // generation guard for the remote-tag lookup: the remote's tags are the repository's, so only a repository switch (reRoot) moves it — not an in-repo swap (loadGen)
 	pickGen                int                            // generation guard for the async cherry-pick commit probe
 	linkHistGen            int                            // drops a copied-link history load a newer host has superseded
 	pickPatchTemp          string                         // patch lane's temp file; removed when its op finishes
@@ -3442,10 +3443,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.manual && m.bgBusy && m.bgActiveItem.isRemoteTags {
 			m.bgBusy = false
 		}
-		// Drop stale results from a previous repo: reRoot bumps loadGen, so any
-		// in-flight remoteTagsCmd that was launched before the switch must not
-		// overwrite the new repo's (empty) remoteTagNames with old-repo names.
-		if msg.gen != m.loadGen {
+		// Drop stale results from a previous repo: reRoot bumps remoteTagsGen,
+		// so any in-flight remoteTagsCmd that was launched before the switch
+		// must not overwrite the new repo's (empty) remoteTagNames with
+		// old-repo names. An in-repo swap keeps it: the remote's tags are the
+		// repository's.
+		if msg.gen != m.remoteTagsGen {
 			return m, nil
 		}
 		if msg.err != nil {
@@ -5048,6 +5051,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.diffTag = ""
 	m.remoteTagNames = nil // tag names from a different repo must not bleed into the new one
 	m.pushCheckGen++       // drop any in-flight pre-push tag check from the old repo
+	m.remoteTagsGen++      // and any in-flight remote-tag lookup
 	m.pickGen++            // drop any in-flight cherry-pick probe from the old repo
 	m.entryCompareGen++    // drop any in-flight commit-entry compare resolve from the old repo
 	m = m.cleanupPickPatchTemp()
