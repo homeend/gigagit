@@ -53,6 +53,9 @@ func (m Model) notedStackFile(v *diffView, i int) bool {
 	if f.conflict {
 		return false // header + resolver line: no lines to anchor on
 	}
+	if n, ok := m.reviewRemarkCount(f.path); ok {
+		return n > 0
+	}
 	if m.previewNoteScope() != nil {
 		return m.filesPreviewCounts[f.path] > 0 && !m.previewPathGoneAtTip(f.path)
 	}

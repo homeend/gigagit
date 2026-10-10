@@ -761,6 +761,9 @@ func (m Model) nextNotedFile(dir int) (int, bool) {
 // notedFilePath reports whether a path carries notes at the open diff's
 // provenance: by path for a working-tree diff, by "<sha>:<path>" for a commit.
 func (m Model) notedFilePath(path string) bool {
+	if n, ok := m.reviewRemarkCount(path); ok {
+		return n > 0
+	}
 	if m.previewNoteScope() != nil {
 		// A preview gathers notes from every commit on the branch, so the
 		// tip-keyed ByCommitPath map would miss most of them.
@@ -777,6 +780,18 @@ func (m Model) notedFilePath(path string) bool {
 		return m.noteCounts.PlainByCommitPath[v.rev+":"+path] > 0
 	}
 	return m.noteCounts.ByPath[path] > 0
+}
+
+// reviewRemarkCount is how many remarks the open review view places on
+// path, when the diff on top is that review's (its notes are the review's,
+// never the store's — so the store's counts cannot say which files } and {
+// may step to). ok = false outside a review view.
+func (m Model) reviewRemarkCount(path string) (int, bool) {
+	v, st := m.diffLayer(), m.filesReview
+	if v == nil || st == nil || v.reviewID == "" || v.reviewID != st.id {
+		return 0, false
+	}
+	return st.counts[path], true
 }
 
 // noteMenuRows are the . menu's note rows — Edit / Reply / Delete — offered

@@ -39,6 +39,11 @@ one by one.
   never current, so `n` / `p` cannot land on it.
 - **View all notes.** `ctrl+l` is offered on no shelf note (a shelved file's
   note showed the hint and the copy failed).
+- **`}` / `{` in a review view** (found while testing: a review opened from
+  a commit-pair link). The walk from one file's last remark to the next
+  file asked the note store's counts, which hold no review remark, so it
+  said "no next file with notes". It now asks the review view's own
+  counts, single and stacked alike.
 - Tests pin the old-side candidate row, rows being sent, staged and range
   note links, a gone review in a send, the summary stamp after a mixed
   CLI send, the older review row's esc return and the panel's enter with
