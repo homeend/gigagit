@@ -593,3 +593,30 @@ func TestReviewViewFirstRowIsSummary(t *testing.T) {
 		t.Fatal("the summary popup keeps its Review: <label> title")
 	}
 }
+
+// One focused border at a time, and it is on what the keys reach: a focused
+// files tree beside an unfocused docked console lights the tree, not the
+// console (user report 2026-10-10: both were drawn focused); a click on
+// the console moves the focus — and the lit border — to it.
+func TestOneFocusedBorderBesideADockedConsole(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.console = &consoleState{id: "s1"}
+	if !m.filesTreeBorderFocused() || m.consoleBorderFocused() {
+		t.Fatalf("tree has the keys: tree lit %v, console lit %v", m.filesTreeBorderFocused(), m.consoleBorderFocused())
+	}
+	m = m.focusConsoleByClick()
+	if !m.consoleOwnsKeys() {
+		t.Fatal("the click did not give the console the keys")
+	}
+	if m.filesTreeBorderFocused() || !m.consoleBorderFocused() {
+		t.Fatalf("console has the keys: tree lit %v, console lit %v", m.filesTreeBorderFocused(), m.consoleBorderFocused())
+	}
+	// A click on a left panel moves the focus there; console.focused is only
+	// cleared by the next key (updateConsoleKey), and the console must not
+	// stay lit beside the panel meanwhile.
+	m.focus = panelBranches
+	if m.consoleBorderFocused() || !m.panelFocused(panelBranches) {
+		t.Fatalf("Branches has the focus: console lit %v, Branches lit %v", m.consoleBorderFocused(), m.panelFocused(panelBranches))
+	}
+}

@@ -1560,8 +1560,15 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 
 	style := s.bluredPanel
-	if m.filesTreeFocused {
+	if m.filesTreeBorderFocused() {
 		style = s.focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))
+}
+
+// filesTreeBorderFocused: the files tree's border is lit while it gets the
+// keys — a focused docked console takes them (consoleOwnsKeys) and its
+// border with them.
+func (m Model) filesTreeBorderFocused() bool {
+	return m.filesTreeFocused && !m.consoleBorderFocused()
 }

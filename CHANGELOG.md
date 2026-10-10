@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## One focused border at a time beside a docked console
+
+### Fixed
+- A commit's or review's files tree with a docked agent console beside it
+  drew **both** borders focused, though the keys went to the tree. The
+  lit border now follows the keys: the tree's while it has them, the
+  console's once it is focused (enter, a click) — and a click on a left
+  panel no longer leaves the console lit beside it.
+
 ## A PR's review sends its remarks; a scroll closes the web menu
 
 ### Fixed
