@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## PR review, plan 3: the web
+
+The gg web page gets what plans 1 and 2 gave the domain and the TUI (spec
+`docs/superpowers/specs/2026-10-09-pr-review-send-panel-design.md`, plan
+`docs/superpowers/plans/2026-10-10-pr-review-send-panel-web.md`).
+
+- **≡ Summary / ≡ Overview.** The review wire (`/api/review/{id}`, the
+  AI-review done event) hands the review's text as `summaryMd`; the review
+  view's first row and pane are "≡ Summary". A review whose document
+  stores an overview sends it as `overviewMd` + `overviewAnchors` (an
+  anchor the review cannot resolve is `plain`) + `overviewTip`, and gets an
+  "≡ Overview" row that opens it in the viewer's **stored mode**: page-local
+  (never an open file), its anchors open the file at the reviewed tip (a
+  working review: the working tree) with bands, backspace / the browser's
+  Back returns to the kept copy; plain anchors are text — tab skips them,
+  enter says "anchor … does not resolve at the reviewed commit".
+- **A pull request's stored reviews** head its file list under Reviews:
+  `/api/pr/notes` answers them beside the counts (W1), so the block follows
+  every open, send and note change; a review opened from it returns to the
+  PR (back kind `pr`).
+- **Send to GitHub… panel** on the pull request's right-click menu, over
+  `GET /api/pr/send/candidates?n=` (W2): every unsent note, remark and
+  draft reply by group, nothing ticked on open; space / a / b / c / enter /
+  ctrl+s as in the TUI, Send posts ONE GitHub review with a verdict behind
+  the ordinary confirm. The ticks and the body are kept per PR while the
+  page lives (esc, enter on a row, a cancel, a refusal keep them); only a
+  send that changed GitHub closes the panel (W7); the head moving closes it
+  too. Pure builders (`panelRows`, `bodyOptions`, `panelRequest`,
+  `tickAllInGroup`) in `prsendrows.js`, node-pinned (W4).
+- **`/api/pr/send`** kind `notes` takes `verdict` and `body_from`; kind
+  `group` and `GET /api/pr/send/groups` are gone with "Send review…" and
+  the note menu's "Send my draft review… / Send this AI review…" rows (R9,
+  W6); "Verdict…" stays.
+- **Copy note link.** `GET /api/notes/link?id=` (a reply: its thread's link
+  with its own id; 404 gone, 400 a GitHub comment or shelf note); the note
+  menu's "Copy note link" row (a remark keeps "copy remark link"); View all
+  notes copies on `ctrl+l` (a review row: its review link; never a shelf
+  note), with the hint (W8).
+- Amendments while planning: W1 PR reviews ride `/api/pr/notes`; W2 the
+  candidates route takes `?n=`; W3 candidate text is plain; W4 the pure
+  builders live in `prsendrows.js`; W5 the stored overview is a page-local
+  viewer mode; W6 the panel's entry is the PR menu row; W7 the panel
+  closes on a changing send only; W8 Copy note link copies the clicked
+  note's link; W9 the TUI's open-files naming of a stored overview stays
+  deferred. Browser-checked over CDP (headless Chromium) on scratch repos.
+- using-gg: `--body-from` settles like `--review` (a review whose every
+  remark and summary are on GitHub is removed; one with a stored overview
+  is kept) — v162.
+
 ## PR review, follow-ups: the deferred minors of plans 1 and 2
 
 The review findings plans 1 (core) and 2 (TUI) carried as minors, fixed

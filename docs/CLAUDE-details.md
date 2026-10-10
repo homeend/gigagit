@@ -6182,6 +6182,67 @@ remark placement stop re-running `git show` on every comment change.
   hold a copied note link (the id is random per run): `tui_note_link` pins
   the row, the package tests the payload.
 
+### PR review, plan 3 — the web: summaryMd / the stored overview, PR Reviews, the send panel, Copy note link (2026-10-10, plan `docs/superpowers/plans/2026-10-10-pr-review-send-panel-web.md`)
+
+- **Wire keys.** `/api/review/{id}` and the review done event hand the
+  review's text as `summaryMd` (`reviews.go`, `review.go` `addReviewDoc`);
+  `reviews.js` draws it as "≡ Summary" (`showReviewSummary`,
+  `reviewSummaryHTML`, `state.review.onSummary` — stackview/keys/files
+  follow). `addStoredOverview(ctx, svc, rv, out)` (`reviews.go`) adds, when
+  `rv.Doc.Overview != ""`, `overviewMd` (the `OverviewDoc.Doc.Blocks`),
+  `overviewAnchors` (`overviewAnchor` + `Plain: !a.OK`, `Missing: !a.OK`,
+  no `ref`) and `overviewTip` (`ReviewRevs` tip; `""` for a working
+  review); an unreadable overview leaves the keys out.
+- **The stored overview viewer** (`viewer.js`). `openStoredOverview({id,
+  title, blocks, anchors, tip, text})` → `showStoredOverview(doc)` sets
+  `view.ov.stored = doc` (id `review-overview:<id>`, the first resolved
+  anchor selected) and pushes the viewer layer; nothing is posted to
+  `/api/open-files`. Guards on `view.ov.stored` / `f.stored`: `viewerFileId`
+  answers `""` (so `viewerOpenFiles` — the registry change the anchor's own
+  open causes — never closes it, `viewerHello` posts nothing),
+  `closeViewer` posts nothing, `backgroundViewer`/esc close it,
+  `refreshOverview` resolves true, `openAnchorAt` opens
+  `storedAnchorOpen(tip, a)` (`{src: tip ? "commit" : "worktree", rev,
+  path, line}`) and stamps `view.from = {…, stored}`, `anchorBack` re-shows
+  the kept copy (the file backgrounded, as a temporary overview's), `paintTitle`
+  "Overview: <label>", `docName`, `copyAnchorRef` refuses, `refreshFromAnchors`
+  returns, `viewerFoot` offers esc close only. Pure: `stepAnchor` passes
+  over `a.plain`, `anchorBands`/`bandOf` make no band for it, `anchorStatus`
+  says "anchor %s does not resolve at the reviewed commit". The row is
+  `li.rovd[data-ovdoc]` (`renderReviewFiles`), routed in `files.js` to
+  `openReviewOverview()`; its context menu is the review's.
+- **PR Reviews.** `handlePRNotes` adds `reviews` (`reviewHeads(PreviewReviews(set))`);
+  `loadPRCounts` keeps `state.previewReviews`; `previewScopeReviews` no
+  longer refuses a PR; `previewBack` → `{kind: "pr", pr, reviewId}`; `goBack`'s
+  `pr` arm re-lands through `window.__ggOpenPRLanding` (prs.js).
+- **The send panel.** `GET /api/pr/send/candidates?n=` (`handlePRSendCandidates`,
+  `candidatesWire`: groups/rows/code never null, `own_pr` from
+  `PRDetailsCached`). `prSendWire` gained `Verdict`, `BodyFrom` (the notes
+  arm; `review:` prefix trimmed, the domain checks ownership;
+  `ErrReviewNotFound` → 404 in `sendErrStatus`); kind `group`, `Group`,
+  `handlePRSendGroups` and its route are gone. `prsendpanel.js`:
+  `openSendPanel(n)` fetches, `kept: Map<pr, {ticked: Set, body}>` is the
+  page state, `panel` the open overlay (`sel`, `open` folds, `code`,
+  `notice`); `render` draws `panelRows(cands, ticked)`; `send` posts
+  `panelRequest` through `sendToGitHub(pr, req, label, onRefused)`;
+  `onSendDone`: the panel's own send (`body.kind === "notes" && body.verdict`)
+  with `ev.ok && ev.changed` drops the kept state and closes, otherwise the
+  notice says cancelled / the error; `onHeadMoved` closes. The PR menu row
+  "Send to GitHub…" is registered by `prsendpanel.js`; `prsend.js` registers
+  the separator and, in a `queueMicrotask`, "Verdict…" (so the order holds
+  without an import cycle). `prsendrows.js`: `sendRows` lost `send-review`;
+  `panelRows`, `bodyOptions`, `panelRequest`, `tickAllInGroup` are pure.
+- **Copy note link.** `GET /api/notes/link?id=` (`handleNoteLink`:
+  `NoteLinkText`; `ErrNoteLinkGone`/`ErrReviewNotFound` → 404, else 400).
+  `files.js` note menu row "Copy note link" for `!remark && source !== "forge"`;
+  `allnotes.js` pure `anCopyLinkURL(row)` (`/api/notes/link?id=` for a note
+  row whose target is not a shelf, `/api/review/<id>/link` for a review row,
+  `""` otherwise), `ctrl+l` in `anKey`, the hint.
+- Browser checks ran headless (Chromium over raw CDP, `cdp.mjs` in the
+  session scratchpad; the fake gh built from `internal/forge/testdata/fakegh`
+  with the base repo's URLs pointing at a local bare clone, since `git
+  remote get-url` applies `insteadOf` and defeats the slug match).
+
 ### Review links to files and remarks (2026-10-07)
 
 Spec `docs/superpowers/specs/2026-10-07-review-links-copy-design.md`, plan

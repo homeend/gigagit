@@ -565,12 +565,20 @@ sends. (gg cannot stop an agent that runs `gh` itself — that belongs to the
 agent's own permission settings.)
 
 In **gg web**, a pull request's diff shows the same marks and group colours
-as the terminal UI: right-click a note for *Send as GitHub comment*, *Send my draft
-review…* / *Send this AI review…*, and on a GitHub thread *Reply & send…*,
-*Resolve / Reopen on GitHub*, *Send draft replies*; the pull request's
-right-click menu has *Send review…* and *Verdict…*. Each send opens the same
-confirm, listing what will be posted. A send that was cut off half-way shows
-a bar to *Finish sending* or *Discard* it.
+as the terminal UI: right-click a note for *Send as GitHub comment*, and on a
+GitHub thread *Reply & send…*, *Resolve / Reopen on GitHub*, *Send draft
+replies*; the pull request's right-click menu has *Send to GitHub…* — one
+panel over every unsent note, remark and draft reply, nothing ticked on
+open; tick any mix (`space`, `a` for a whole group), pick the body (none, a
+ticked review's text, typed), *Send* (`ctrl+s`) — and *Verdict…*. Each send
+opens the same confirm, listing what will be posted; the panel stays with
+its ticks through a cancel or a refusal, and `enter` on a row opens its file
+in the diff (reopened, the panel remembers the ticks). A pull request's
+stored reviews head its file list under **Reviews**; a review's *≡ Summary*
+row shows its text and, when one was stored, *≡ Overview* opens the overview
+whose links open the files at the reviewed commit. Right-click a note for
+*Copy note link*; in *View all notes* `ctrl+l` copies it. A send that was
+cut off half-way shows a bar to *Finish sending* or *Discard* it.
 
 The plain list holds the open pull requests (plus the ones gg already knows).
 A closed or merged PR you never fetched is found by **searching**: in the TUI
@@ -625,7 +633,9 @@ ticks, `a` ticks a group, `b` picks the body (none, a ticked review's text,
 or typed — `e` edits it), `enter` opens a row's file, `ctrl+s` sends one
 GitHub review through the same confirm, which lists exactly what will be
 posted and offers comment, approve or request changes; draft replies go
-right after it. `v` (*Verdict…*) sends a verdict with no comments. An agent's send is never posted directly: it waits in the
+right after it. `v` (*Verdict…*) sends a verdict with no comments (the web
+page: the same, as a panel overlay from the pull request's right-click
+menu). An agent's send is never posted directly: it waits in the
 notice centre (`!`) as *Review and send… / Reject / Later*, and a send that
 was interrupted offers *Finish sending / Discard* there.
 
@@ -1468,9 +1478,12 @@ the review's notes, read-only — `gg review --notes` keeps them as your own.
 row) or `ctrl+d` in View all notes deletes a review, after asking. A
 reviewed commit carries `✎` in the Commits list (after its tip markers). The
 browser UI (`gg web`) shows the same reviews: a commit's under **Reviews**
-above its files, a branch's under its row; clicking one opens the review
-view (Overview in the diff pane, read-only review notes in the diffs), and a
-right-click offers **Delete review**. A reply that is not the document is kept as text and opens
+above its files, a branch's under its row, a pull request's under
+**Reviews** above the PR's files; clicking one opens the review view
+(`≡ Summary` in the diff pane, `≡ Overview` — when the review stores one —
+in the overview viewer with its anchors opening the files at the reviewed
+commit, read-only review notes in the diffs), and a right-click offers
+**Delete review**. A reply that is not the document is kept as text and opens
 rendered as markdown. Catalog defaults ship for Claude Code, Codex, Junie,
 Kimi Code and Antigravity; their documents come back through
 `$GG_MESSAGE_FILE`, fed the diff via `$GG_REVIEW_DIFF`. Review commands an

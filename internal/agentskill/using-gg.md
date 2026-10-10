@@ -893,7 +893,9 @@ finds the right one here.
   user's notes and draft replies: one GitHub review, then the replies, under
   one confirm; `--verdict` makes the confirm offer comment / approve /
   request changes; `--body-from <review>` posts that review's summary as the
-  body (`--body <text>` a text of the user's own). `gg pr send <n> (--review
+  body (`--body <text>` a text of the user's own) and settles like
+  `--review`: a review whose every remark and summary are then on GitHub is
+  removed from the store, one with a stored overview is kept. `gg pr send <n> (--review
   <id> | --mine | --verdict) [--body <text>]` and `--finish | --discard` are
   the other forms. A note or review FOR a pull request is written with `--preview
   <base>...refs/gg/pr/<n>` (after `gg pr fetch <n>`) — a review with
