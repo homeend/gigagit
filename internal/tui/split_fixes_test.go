@@ -176,7 +176,7 @@ func TestStackDeletedFileIsNotAtThisCommit(t *testing.T) {
 	t.Parallel()
 	m, sv := reviewSplitModel(t)
 	m.filesView.lines = []contentLine{{path: "gone.go", status: "D"}, {path: "a.go", status: "M"}}
-	sp := m.newStackPane(sv, m.filesReview).(*stackPane)
+	sp := m.newStackPane(sv).(*stackPane)
 	f := sp.stream.files[0]
 	if !f.loaded || f.err == nil || f.err.Error() != "(not at this commit)" {
 		t.Fatalf("deleted file = %+v", f)

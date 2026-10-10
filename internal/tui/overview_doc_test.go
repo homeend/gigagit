@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 	"strings"
 	"testing"
 
@@ -30,9 +31,17 @@ func shownOverview(t *testing.T, text string) (Model, *openFile) {
 	t.Helper()
 	m := loadedNavModel(t)
 	d := storeOverview(t, m, "Tour", text)
-	m = m.registerDoc(d)
-	m, cmd := m.bringToFront(d)
+	m, cmd := inViewer(m, d)
 	return pumpAll(t, m, cmd), d
+}
+
+// inViewer shows overview d in the full-screen viewer — the door below 60
+// columns (showOverview); a wide bringToFront opens the split instead.
+func inViewer(m Model, d *openFile) (Model, tea.Cmd) {
+	m = m.pushLayer(&fileViewer{d})
+	m = m.registerDoc(d)
+	d.keepPlace()
+	return m, m.loadDoc(d)
 }
 
 func TestOverviewDocIsABackgroundedInMemoryOpenFile(t *testing.T) {

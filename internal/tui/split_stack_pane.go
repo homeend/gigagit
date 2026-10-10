@@ -57,8 +57,12 @@ var splitStackGen atomic.Int64
 // a path, in tree order); over streamFoldOver files all but the overview's
 // selected anchor's file open folded. Nothing is loaded yet: the caller's
 // steer (or pump) starts the loads.
-func (m Model) newStackPane(sv *splitView, st *reviewViewState) pane {
+func (m Model) newStackPane(sv *splitView) pane {
 	ov := sv.left.doc()
+	st := m.reviewOf(ov)
+	if st == nil {
+		return &docPane{stackable: true}
+	}
 	target := ""
 	if ov != nil && ov.ov != nil && ov.ov.sel >= 0 && ov.ov.sel < len(ov.ov.anchors) {
 		target = ov.ov.anchors[ov.ov.sel].target.Path
@@ -244,12 +248,18 @@ func (m Model) stackPaneLanded(msg stackPaneMsg) (Model, tea.Cmd) {
 		p.d.p.cur = p.stream.streamLine(msg.file, p.want.line)
 		p.d.p.sel = p.d.p.clampTop(p.d.p.cur-rows/2, rows)
 	}
-	if ov := sv.left.doc(); p.park >= 0 && ov != nil && p.park < len(ov.ov.anchors) && ov.ov.anchors[p.park].target.Path == f.path {
+	if ov := sv.left.doc(); p.park >= 0 && ov != nil && p.park < len(ov.ov.anchors) && m.parkedIn(ov, p.park, f.path) {
 		i := p.park
 		p.park = -1
 		m = m.stackLand(sv, p, i)
 	}
 	return m, p.pump(m)
+}
+
+// parkedIn reports whether overview anchor i opens in the file at path.
+func (m Model) parkedIn(ov *openFile, i int, path string) bool {
+	at, _, _, ok := m.anchorPlace(ov, i)
+	return ok && at == path
 }
 
 // fileIndex is path's index in the stream, or -1.
@@ -266,15 +276,14 @@ func (p *stackPane) fileIndex(path string) int {
 // centred, and makes it the current band. The overview's selection is not
 // touched: a steer has selected i already, and n / p only mark it (R2).
 func (m Model) stackLand(sv *splitView, p *stackPane, i int) Model {
-	ov := sv.left.doc()
-	a := ov.ov.anchors[i]
-	fi := p.fileIndex(a.target.Path)
-	if fi < 0 {
+	path, line, dest, ok := m.anchorPlace(sv.left.doc(), i)
+	fi := p.fileIndex(path)
+	if !ok || fi < 0 {
 		return m
 	}
 	rows, _ := sv.geomOf(m, p)
-	p.d.anchorCur = a.dest
-	p.d.p.cur = p.stream.streamLine(fi, a.target.Start)
+	p.d.anchorCur = dest
+	p.d.p.cur = p.stream.streamLine(fi, line)
 	p.d.p.sel = p.d.p.clampTop(p.d.p.cur-rows/2, rows)
 	return m
 }
@@ -282,10 +291,13 @@ func (m Model) stackLand(sv *splitView, p *stackPane, i int) Model {
 // stackSteer shows overview anchor i in the stream: its file unfolded and,
 // once loaded, the cursor on its line.
 func (m Model) stackSteer(sv *splitView, p *stackPane, i int) (Model, tea.Cmd) {
-	a := sv.left.doc().ov.anchors[i]
-	fi := p.fileIndex(a.target.Path)
+	path, _, _, ok := m.anchorPlace(sv.left.doc(), i)
+	fi := p.fileIndex(path)
+	if !ok {
+		return m, nil
+	}
 	if fi < 0 {
-		m.statusMsg = i18n.T("no file %s", a.target.Path)
+		m.statusMsg = i18n.T("no file %s", path)
 		return m, nil
 	}
 	p.park, p.want.set = -1, false // the newest step wins
@@ -424,7 +436,7 @@ func (m Model) toggleReviewStacked(sv *splitView) (Model, tea.Cmd) {
 	if ov == nil || ov.ov == nil {
 		return m, nil
 	}
-	if m.filesReview == nil { // the review the stack lists is gone
+	if m.reviewOf(ov) == nil { // the review the stack lists is gone
 		m.statusMsg = i18n.T("the review is no longer open")
 		return m, nil
 	}
@@ -456,7 +468,7 @@ func (m Model) toggleReviewStacked(sv *splitView) (Model, tea.Cmd) {
 			path, line, cur = r.d.path, r.d.p.cur+1, r.d.anchorCur
 			r.d.backgrounded = true
 		}
-		p := m.newStackPane(sv, m.filesReview).(*stackPane)
+		p := m.newStackPane(sv).(*stackPane)
 		sv.right = p
 		p.d.anchorCur = cur
 		if fi := p.fileIndex(path); fi >= 0 {

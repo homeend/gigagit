@@ -182,13 +182,12 @@ func TestStackPaneSToggleRoundTripsKeepingTheFile(t *testing.T) {
 func TestStackOverAHundredFilesOpensFolded(t *testing.T) {
 	t.Parallel()
 	m, sv := reviewSplitModel(t)
-	st := m.filesReview
 	var many []contentLine
 	for i := 0; i < 101; i++ {
 		many = append(many, contentLine{path: "f" + strconv.Itoa(i) + ".go", status: "M"})
 	}
 	m.filesView.lines = append(append([]contentLine{}, many...), contentLine{path: "a.go", status: "M"})
-	sp := m.newStackPane(sv, st).(*stackPane)
+	sp := m.newStackPane(sv).(*stackPane)
 	folded := 0
 	for _, f := range sp.stream.files {
 		if f.folded {
