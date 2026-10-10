@@ -3803,6 +3803,11 @@ $("diff-body").addEventListener("contextmenu", (e) => {
       }
     );
   }
+  // Copy note link (R13): a thread's own link, ?note=<id>, from the
+  // domain's builder — a hand-written thread or a draft reply; a remark
+  // keeps its remark link, a GitHub comment has none.
+  if (!remark && n.source !== "forge" && !String(n.id).startsWith("forge:"))
+    noteRows.push({ label: "Copy note link", act: () => copyServerLink("/api/notes/link?id=" + encodeURIComponent(n.id), "note " + n.id) });
   const nlink = remark ? "" : linkFor(state.repo, state.worktree, noteSlotCtx(n) || state.diffCtx, n.side, n.line);
   if (nlink)
     noteRows.push({

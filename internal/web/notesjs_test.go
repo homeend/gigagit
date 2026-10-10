@@ -537,3 +537,19 @@ console.log(JSON.stringify({ html: noteRowsHTML("new", 3, 4) }));
 		t.Errorf("%d rendered rationales, want only the forge note that carried a tree\n%s", n, got.HTML)
 	}
 }
+
+// R13 / W8: the note box's menu copies the clicked note's link through
+// /api/notes/link; View all notes copies on ctrl+l and says so.
+func TestCopyNoteLinkIsWired(t *testing.T) {
+	t.Parallel()
+	f := readStatic(t, "files.js")
+	if !strings.Contains(f, `label: "Copy note link"`) || !strings.Contains(f, `"/api/notes/link?id=" + encodeURIComponent(n.id)`) {
+		t.Error("files.js: the note menu has no Copy note link row")
+	}
+	a := readStatic(t, "allnotes.js")
+	for _, want := range []string{`function anCopyLinkURL(`, `e.key === "l" && e.ctrlKey`, `"ctrl+l copy link"`} {
+		if !strings.Contains(a, want) {
+			t.Errorf("allnotes.js lacks %q", want)
+		}
+	}
+}
