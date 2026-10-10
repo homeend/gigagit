@@ -118,3 +118,60 @@ func TestPRReviewsRowOlder(t *testing.T) {
 		t.Fatalf("cursor not on the older review's row: sel %d", m.filesView.sel)
 	}
 }
+
+// A review opened from the PR's Reviews block is the PR's review: a remark's
+// . menu there offers Send as GitHub comment to that PR, as the PR's own diff
+// does (user report 2026-10-10: the option was missing in the review view).
+// Serial: env (prSendModel).
+func TestPRReviewViewRemarkMenuSendsToThePR(t *testing.T) {
+	prReviewViewRemarkSends(t, false)
+}
+
+// The same in the stacked view (the user's report was a stacked diff): the
+// stack's own layer carries no review id, its files do.
+// Serial: env (prSendModel).
+func TestPRReviewViewRemarkMenuSendsToThePRStacked(t *testing.T) {
+	prReviewViewRemarkSends(t, true)
+}
+
+func prReviewViewRemarkSends(t *testing.T, stacked bool) {
+	t.Helper()
+	m, _, _ := prSendModel(t)
+	m = tempPromptStore(t, m).setStackedPref(stacked)
+	id := savePRReviewTUI(t, m, `{"version":1,"summary":"fine","files":[{"path":"big.go","annotations":[{"newRange":[5,5],"summary":"why?"}]}]}`)
+	m = openPR7(t, m)
+	u, cmd := m.openDiffForFileLine(reviewRow(t, m, id))
+	m = drainCmds(t, u.(Model), cmd)
+	if m.filesReview == nil || m.filesReview.id != id {
+		t.Fatalf("review view: %+v", m.filesReview)
+	}
+	var file contentLine
+	for _, l := range m.filesView.visible() {
+		if l.path == "big.go" {
+			file = l
+		}
+	}
+	if file.path == "" {
+		t.Fatalf("no big.go row in the review view:\n%s", m.View())
+	}
+	u, cmd = m.openDiffForFileLine(file)
+	m = drainCmds(t, u.(Model), cmd)
+	if v := m.diffLayer(); v == nil || (v.stk != nil) != stacked {
+		t.Fatalf("diff stacked = %v, want %v", v != nil && v.stk != nil, stacked)
+	}
+	m, ok := m.landOnNote(1)
+	if !ok {
+		t.Fatalf("no remark to land on:\n%s", m.View())
+	}
+	if pr := m.prOfDiff(); pr != 7 {
+		t.Fatalf("prOfDiff = %d, want 7 (the PR the review was opened from)", pr)
+	}
+	ids := menuIDString(m.noteMenuRows())
+	if !strings.Contains(ids, "note-send") {
+		t.Fatalf("remark menu %s lacks note-send", ids)
+	}
+	tg, _ := m.noteNearCursor()
+	if req := noteSendRequest(7, tg); req.PR != 7 || len(req.Notes) != 1 || req.Notes[0] != model.ReviewNoteIDPrefix+id+":0" {
+		t.Fatalf("request %+v", req)
+	}
+}

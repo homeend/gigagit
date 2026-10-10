@@ -22,6 +22,15 @@ export function sendRows(n, pr) {
   return rows;
 }
 
+// prOfCtx is the PR a note's diff context sends to (0 = none): the PR's own
+// diff (ctx.preview.pr), or a review view opened from that PR's Reviews block
+// (ctx.sendPR — kept off ctx.preview, whose pr also steers the note fetch
+// and the link builder).
+export function prOfCtx(ctx) {
+  if (!ctx) return 0;
+  return (ctx.preview && ctx.preview.pr) || ctx.sendPR || 0;
+}
+
 // --- the send panel (spec §5.4; the TUI's send_panel.go row for row) ---
 // panelRows lays the panel's list: a header per group (its colour slot, the
 // agent and date for a review, the all/none state of its tickable rows),

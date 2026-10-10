@@ -30,6 +30,27 @@ While it is on every other key waits.
   painting rides the per-rune emphasis mask (`emphSel`, `emphSelCur`).
 - The mode leaves when its rows change meaning: a popup resize or `ctrl+t`,
   a diff reload, a fold, `ctrl+w`.
+## One focused border at a time beside a docked console
+
+### Fixed
+- A commit's or review's files tree with a docked agent console beside it
+  drew **both** borders focused, though the keys went to the tree. The
+  lit border now follows the keys: the tree's while it has them, the
+  console's once it is focused (enter, a click) — and a click on a left
+  panel no longer leaves the console lit beside it.
+
+## A PR's review sends its remarks; a scroll closes the web menu
+
+### Fixed
+- A review opened from a pull request's **Reviews** block (TUI and gg web,
+  single file or stacked) offered no *Send as GitHub comment* on its
+  remarks — the review view had dropped the PR it came from. A remark's
+  `.` menu (TUI) and right-click menu (web) now send it to that PR, the
+  same one-note send as from the PR's own diff. A review opened any other
+  way (View all notes, a link) still has no PR to send to.
+- gg web: the right-click menu stayed on screen when the page under it
+  scrolled (the mouse wheel over a diff), floating over unrelated lines. A
+  scroll outside the menu, or a window resize, now closes it.
 
 ## alt+w under a console: hide first, then move
 
