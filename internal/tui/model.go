@@ -2005,6 +2005,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			key := m.panelSelKey(panelBranches)
 			m.branches = msg.value.([]model.Branch)
 			m.bfMemo.invalidate()
+			// The read may have run through a worktree that has since left the
+			// screen (a swap during a background read): the list is the
+			// repository's, the `*` is the VIEWED worktree's.
+			m = m.markHead(m.worktreeBranch(m.currentWorktree))
 			m.identWValid = false // tracked upstreams feed the ident width; rescan in rebuild
 			m = m.restorePanelSel(panelBranches, key)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)

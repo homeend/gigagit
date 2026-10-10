@@ -2,6 +2,7 @@ package tui
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -202,5 +203,34 @@ func TestReflogFollowsTheWorktree(t *testing.T) {
 	}
 	if len(m.reflog) != len(homeLog) {
 		t.Fatalf("back home before any read: %d entries, want home's %d from the slot", len(m.reflog), len(homeLog))
+	}
+}
+
+// A branches read launched through the leaving worktree lands after the
+// swap with ITS `%(HEAD)`: the list is the repository's and stays, but the
+// `*` mark is the viewed worktree's and is re-marked on every arrival, not
+// only on the swap.
+func TestBranchesArrivalKeepsTheViewedHeadMark(t *testing.T) {
+	m := loadedModel(t)
+	m, _ = viewedOther(t, m)
+	headOf := func(bs []model.Branch) string {
+		for _, b := range bs {
+			if b.IsHead {
+				return b.Name
+			}
+		}
+		return ""
+	}
+	if headOf(m.branches) != "wt2" {
+		t.Fatalf("precondition: * on %q, want wt2", headOf(m.branches))
+	}
+	stale := slices.Clone(m.branches)
+	for i := range stale {
+		stale[i].IsHead = stale[i].Name == "main" // read through home's service
+	}
+	mm, _ := m.Update(dataAvailableMsg{source: srcBranches, gen: m.srcGen[srcBranches], value: stale})
+	m = mm.(Model)
+	if headOf(m.branches) != "wt2" {
+		t.Fatalf("after the stale arrival * is on %q, want the viewed wt2", headOf(m.branches))
 	}
 }
