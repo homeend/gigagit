@@ -3789,11 +3789,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
-		var cmd tea.Cmd
-		m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
-		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
-		// prepend them, not collapse the list back to page 0.
-		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
+		// The PR fetch's follow-up is built BEFORE the queued return, as the
+		// stash arm's list reload is: the PR's diff opens in the worktree the
+		// fetch ran in (stamped for its slot, applied on return), and its
+		// landing clock is that worktree's parked steer.
 		var prCmd tea.Cmd
 		if prOpen != nil && msg.err == nil {
 			prCmd = m.openPRPreviewCmd(*prOpen) // the head is local now: open its diff
@@ -3804,6 +3803,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if prOpen != nil {
 			m, prCmd = m.failPRLanding(prOpen.Number, firstLine(msg.err.Error()))
 		}
+		var cmd tea.Cmd
+		m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
+		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
+		// prepend them, not collapse the list back to page 0.
+		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
 		if prsReload && msg.err == nil {
 			// Batched, never assigned: a search result's fetch arms BOTH the
 			// open above and this re-read.
