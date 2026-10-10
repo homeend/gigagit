@@ -288,3 +288,54 @@ func TestRangeLoadsRefuseAnotherWorktreesService(t *testing.T) {
 		}
 	}
 }
+
+// The plain editors the spec promised would wait with their worktree
+// (add-worktree, stash, tag: no result of their own in flight) are
+// parkable; the user's alt+w over them switches instead of typing into them.
+func TestPlainFormPopupsArePark(t *testing.T) {
+	t.Parallel()
+	for name, l := range map[string]layer{
+		"stash":        &stashPopup{},
+		"add worktree": &worktreePopup{},
+		"tag":          &tagPopup{},
+	} {
+		if !parkableLayer(l) {
+			t.Errorf("%s: not parkable, alt+w types into it", name)
+		}
+	}
+}
+
+// A text field never takes an alt+letter as text: alt+w, alt+a and the
+// other alt keys are gg's, and a field that inserted the letter made the
+// key both switch and type.
+func TestTextfieldIgnoresAltLetters(t *testing.T) {
+	t.Parallel()
+	var f textfield
+	if f.HandleEditKey(altKey('w')) || string(f.runes) != "" {
+		t.Fatalf("alt+w inserted %q", string(f.runes))
+	}
+	f.HandleEditKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	if string(f.runes) != "w" {
+		t.Fatalf("a plain w did not insert: %q", string(f.runes))
+	}
+}
+
+// A file list the sleeping slot will certainly discard (its F window was
+// put to sleep: the generation moved on) is dropped at the gate instead of
+// waiting in the queue — on a large tree that is every path of the
+// worktree, kept for as long as nobody returns.
+func TestStaleFileListIsNotQueuedForASleepingSlot(t *testing.T) {
+	m := loadedModel(t)
+	m, other := addWorktree(t, m, "wt2")
+	v := m.ensureView(other)
+	v.windows.wtFiles = &worktreeFiles{gen: 3}
+	key := model.KeyOf(other)
+	nm, _ := m.Update(lsFilesMsg{slotStamp: slotStamp{slot: key}, gen: 2, paths: []string{"a"}})
+	if n := len(nm.(Model).views[key].queued); n != 0 {
+		t.Fatalf("a stale file list was queued (%d)", n)
+	}
+	nm, _ = m.Update(lsFilesMsg{slotStamp: slotStamp{slot: key}, gen: 3, paths: []string{"a"}})
+	if n := len(nm.(Model).views[key].queued); n != 1 {
+		t.Fatalf("the current file list was not queued (%d)", n)
+	}
+}

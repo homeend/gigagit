@@ -87,7 +87,7 @@ func parkableLayer(l layer) bool {
 		*languagePickerPopup, *previewRenamePopup,
 		*pairOpPopup, *reflogCheckoutPopup, *shelfRestorePopup, *shellCmdPopup,
 		*blameRecentPopup, *commitFilterPopup, *checkoutAsPopup, *hunkPicker,
-		*relatedPromptPopup:
+		*relatedPromptPopup, *stashPopup, *worktreePopup, *tagPopup:
 		return true
 	}
 	return false
