@@ -321,6 +321,11 @@ func (m Model) docLoader(d *openFile) func(context.Context) ([]byte, error) {
 // gets a new one (spec ruling 9). A working-tree file, or one whose load
 // never landed, is read again at the reader's place.
 func (m Model) bringToFront(d *openFile) (Model, tea.Cmd) {
+	if d.ov != nil { // every overview comes up beside its code when it fits
+		if w, _ := m.overlayDims(); w >= splitMinWidth {
+			return m.openOverviewSplit(d)
+		}
+	}
 	if m.filesPreview == d && m.topLayer() == nil {
 		m.filesTreeFocused = false
 		return m.registerDoc(d), nil

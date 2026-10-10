@@ -85,22 +85,27 @@ func (m Model) steerOverviewAdd(c steer.Command) (Model, tea.Cmd) {
 	d.layOut(rows, m.overviewWidth(inner))
 	busy := m.steerRefusal()
 	var detail string
+	show := false
 	switch {
 	case c.Background:
 		detail = "added " + d.id() + " in the background"
 	case busy != "":
 		detail = "added " + d.id() + " in the background (" + busy + ")"
 	default:
-		m = m.pushLayer(&fileViewer{d})
+		show = true
 		detail = "showing " + d.id()
 	}
 	status := m.statusMsg
 	m, ev := m.registerDocEv(d)
+	var showCmd tea.Cmd
+	if show { // beside its code when the screen is wide enough (showOverview)
+		m, showCmd = m.showOverview(d)
+	}
 	m.statusMsg = status // an agent's overview never takes over the status line
 	if p := evictedPath(ev); p != "" {
 		detail += "; closed " + p + " (" + strconv.Itoa(maxOpenFiles) + " files open)"
 	}
-	return m, m.checkAnchorsCmd(d, c, detail)
+	return m, tea.Batch(showCmd, m.checkAnchorsCmd(d, c, detail))
 }
 
 func (m Model) steerOverviewSet(c steer.Command) (Model, tea.Cmd) {

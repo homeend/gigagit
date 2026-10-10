@@ -23,6 +23,9 @@ type overviewPane struct {
 }
 
 func (p *overviewPane) hint(Model) string {
+	if p.d != nil && p.d.src.kind == srcOverview { // an agent's: r copies a reference to the anchor
+		return i18n.T("[↑↓] anchor  [enter] open  [r] reference  [/] find  [y] copy  [.] menu")
+	}
 	return i18n.T("[↑↓] anchor  [enter] open  [/] find  [y] copy  [.] menu")
 }
 
@@ -54,7 +57,10 @@ func (p *overviewPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "y":
 		return m, m.copyToClipboardCmd(i18n.T("copied"), d.ov.text)
 	case "r":
-		return m, nil // a stored overview has no store reference (A9)
+		if d.ov.sel < 0 || d.src.kind == srcReviewOverview { // a stored overview has no store reference (A9)
+			return m, nil
+		}
+		return m, m.copyToClipboardCmd(i18n.T("Copied anchor reference"), anchorReference(d, d.ov.anchors[d.ov.sel]))
 	case "X", "ctrl+]":
 		// The overview is what the split steers by: it leaves the screen the
 		// way esc takes it (kept open in the background, only the switcher's x
@@ -85,27 +91,31 @@ func anchorSource(ov *openFile) fileSource {
 	return fileSource{kind: srcCommit, rev: ov.ov.tip}
 }
 
-// steerSplit shows the overview's selected anchor on the right pane. A
-// plain anchor is never selected, so there is always a target.
+// steerSplit shows the overview's selected anchor on the right pane: a
+// file anchor's place, or a note anchor's note (anchorPlace).
 func (m Model) steerSplit(sv *splitView) (Model, tea.Cmd) {
 	ov := sv.left.doc()
 	if ov == nil || ov.ov == nil || ov.ov.sel < 0 || ov.ov.sel >= len(ov.ov.anchors) {
 		return m, nil
 	}
 	a := ov.ov.anchors[ov.ov.sel]
-	if a.plain || a.target.Note != "" || a.target.Path == "" {
+	path, line, dest, ok := m.anchorPlace(ov, ov.ov.sel)
+	if !ok {
+		if a.target.Note != "" && ov.src.kind == srcOverview {
+			m.statusMsg = i18n.T("note %s is gone", a.target.Note)
+		}
 		return m, nil
 	}
 	var cmd tea.Cmd
 	switch r := sv.right.(type) {
 	case *docPane:
-		m, cmd = m.docSteer(sv, r, ov, a)
+		m, cmd = m.docSteer(sv, r, ov, anchor{dest: dest, target: anchorTarget(path, line)})
 	case *stackPane:
-		m, cmd = m.stackSteer(sv, r, a)
+		m, cmd = m.stackSteer(sv, r, ov.ov.sel)
 	}
 	k, n := 0, 0 // the anchor's place among those a steer can reach
 	for i, x := range ov.ov.anchors {
-		if x.plain || x.target.Note != "" || x.target.Path == "" {
+		if !steerable(ov, x) {
 			continue
 		}
 		if n++; i == ov.ov.sel {
@@ -120,6 +130,38 @@ func (m Model) steerSplit(sv *splitView) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("anchor %d/%d · %s", k, n, label)
 	}
 	return m, cmd
+}
+
+// steerable reports whether a steer can reach anchor a of overview ov: a
+// file anchor, or a note anchor of an agent's overview (a stored overview's
+// note anchors are plain).
+func steerable(ov *openFile, a anchor) bool {
+	return !a.plain && (a.target.Path != "" || a.target.Note != "" && ov.src.kind == srcOverview)
+}
+
+// anchorPlace is where overview anchor i opens in a split: a file anchor's
+// path and line with its band (dest), or a note anchor's file and first line
+// with no band (dest "" — a note is no band, as openAnchor has it). ok false:
+// a plain anchor, a stored overview's note, or a note that is gone — marked
+// missing.
+func (m Model) anchorPlace(ov *openFile, i int) (path string, line int, dest string, ok bool) {
+	a := &ov.ov.anchors[i]
+	if !steerable(ov, *a) {
+		return "", 0, "", false
+	}
+	if id := a.target.Note; id != "" {
+		d, n := m.findFileNote(id)
+		if n == nil {
+			a.missing = true
+			if m.docs != nil {
+				m.docs.SetAnchorMissing(ov.id(), i, true)
+			}
+			ov.ov.paint(ov.p.lines)
+			return "", 0, "", false
+		}
+		return d.path, n.Start, "", true
+	}
+	return a.target.Path, a.target.Start, a.dest, true
 }
 
 // docSteer is the single-mode steer: the anchor's file at the tip in the
@@ -138,7 +180,7 @@ func (m Model) docSteer(sv *splitView, r *docPane, ov *openFile, a anchor) (Mode
 		land(d)
 		if docLoaded(d) {
 			d.landPendingLine(rows)
-			return m, nil
+			return m, m.remarksOnSteer(d)
 		}
 		return m, m.loadDoc(d)
 	}
@@ -157,10 +199,20 @@ func (m Model) docSteer(sv *splitView, r *docPane, ov *openFile, a anchor) (Mode
 	m = m.registerDoc(d)
 	if docLoaded(d) && !d.onDisk() {
 		d.landPendingLine(rows)
-		return m, nil
+		return m, m.remarksOnSteer(d)
 	}
 	d.keepPlace()
 	return m, m.loadDoc(d)
+}
+
+// remarksOnSteer fetches the review's remarks on a loaded document a steer
+// landed on, unless it carries that review's already (a reload re-fetches
+// them through the load).
+func (m Model) remarksOnSteer(d *openFile) tea.Cmd {
+	if id := d.reviewOfFrom(); id == "" || id == d.reviewNotesOf {
+		return nil
+	}
+	return m.reviewNotesCmd(d)
 }
 
 // landOnOverviewRow puts the review tree's cursor on its ≡ Overview row —
@@ -192,23 +244,69 @@ func (m Model) openReviewOverviewSplit() (Model, tea.Cmd) {
 	}
 	lw, _, bh := m.splitGeom()
 	rows, inner := paneGeom(lw, bh)
-	d := m.reviewOverviewDoc(st, rows, inner)
-	m = m.detachDoc(d) // a viewer still showing it (opened narrow before) gives it up
+	return m.openOverviewSplit(m.reviewOverviewDoc(st, rows, inner))
+}
+
+// reviewOf is the open review view whose stored overview ov is, or nil.
+func (m Model) reviewOf(ov *openFile) *reviewViewState {
+	if st := m.filesReview; st != nil && ov != nil && ov.src.kind == srcReviewOverview && ov.src.rev == st.id {
+		return st
+	}
+	return nil
+}
+
+// showOverview is the door an overview comes to the front through (spec
+// 2026-10-10-overview-split-all §3): the split on a terminal 60 columns or
+// wider, the full-screen viewer below.
+func (m Model) showOverview(d *openFile) (Model, tea.Cmd) {
+	if w, _ := m.overlayDims(); w >= splitMinWidth {
+		return m.openOverviewSplit(d)
+	}
+	m = m.detachDoc(d)
+	m = m.pushLayer(&fileViewer{d})
+	return m.registerDoc(d), nil
+}
+
+// openOverviewSplit puts overview ov on the left of a split, its selected
+// anchor's place on the right (stacked when the user chose so), the focus
+// on the overview. A split already showing ov is raised instead.
+func (m Model) openOverviewSplit(ov *openFile) (Model, tea.Cmd) {
+	if sv := m.splitShowing(ov); sv != nil && sv.left.doc() == ov {
+		m = m.removeLayer(sv)
+		sv.onLeft = true
+		m = m.pushLayer(sv)
+		if sv.right.doc() == nil { // its file was taken out (ctrl+\ on it): show the anchor again
+			return m.steerSplit(sv)
+		}
+		return m, nil
+	}
+	lw, _, bh := m.splitGeom()
+	rows, inner := paneGeom(lw, bh)
+	m = m.detachDoc(ov) // a viewer still showing it gives it up
+	if ov.ov.w != inner || ov.ov.mode != ov.p.mode {
+		ov.layOut(rows, inner)
+	}
 	sv := &splitView{onLeft: true}
-	sv.left = &overviewPane{docPane: docPane{d: d, stackable: true}, sv: sv}
+	sv.left = &overviewPane{docPane: docPane{d: ov, stackable: true}, sv: sv}
 	sv.right = &docPane{stackable: true}
 	if m.reviewStacked {
-		sv.right = m.newStackPane(sv, st)
+		sv.right = m.newStackPane(sv)
 	}
 	sv.onClose = func(m Model) Model {
-		d.backgrounded = true
+		ov.backgrounded = true
 		if rd := sv.right.doc(); rd != nil {
 			rd.backgrounded = true
 		}
-		return m.landOnOverviewRow()
+		if m.reviewOf(ov) != nil {
+			return m.landOnOverviewRow()
+		}
+		return m
 	}
 	m = m.pushLayer(sv)
-	m = m.registerDoc(d)
+	m = m.registerDoc(ov)
+	if ov.ov.sel < 0 {
+		ov.stepAnchor(1, rows)
+	}
 	return m.steerSplit(sv)
 }
 

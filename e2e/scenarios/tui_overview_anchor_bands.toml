@@ -1,10 +1,12 @@
 name = "tui: a file an overview opened draws every anchor of it as a band; n / p walk them"
 
 # An agent's overview (gg session overview add) names three places in a.txt:
-# line 3, lines 10-12 and line 20. Opening 10-12 lands there and draws all
-# three: the opened one marked ┃ in the gutter, the others ╎ (2026-10-07,
-# overview anchor bands). n steps to the next one — line 20 — and the status
-# line names it; backspace would come back to the overview on it.
+# line 3, lines 10-12 and line 20. It opens beside the file (2026-10-10,
+# overview split for every overview); ↓ steps to 10-12, which the file pane
+# shows with all three drawn: the steered one marked ┃ in the gutter, the
+# others ╎ (2026-10-07, overview anchor bands). tab moves to the file, where
+# n steps to the next one — line 20 — and the status line names it; the
+# overview keeps its selection and marks that anchor.
 [input]
 steps = [
   { write = "a.txt", content = """
@@ -57,7 +59,7 @@ size = "160x40"
 
 [[tui.step]]
 overview = { title = "Tour", text = "# Tour\n\n- [three](a.txt:3)\n- [ten to twelve](a.txt:10-12)\n- [twenty](a.txt:20)\n" }
-keys = ["tab", "tab", "enter"]
+keys = ["down", "tab"]
 name = "opened"
 screen_contains = ["┃ line 10 of a", "╎ line 3 of a", "╎ line 20 of a", "[n/p] anchors"]
 

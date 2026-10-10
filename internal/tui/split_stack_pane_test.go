@@ -96,12 +96,13 @@ func TestStackPaneBandWalkCrossesFiles(t *testing.T) {
 	m = pressDrain(t, m, "tab")
 	d, ov := sv.right.doc(), sv.left.doc()
 	m = pressDrain(t, m, "n")
-	if d.anchorCur != "b.go:3" || ov.ov.sel != 1 || d.p.cur != sp.stream.streamLine(1, 3) {
-		t.Fatalf("n: anchor %q sel %d cur %d", d.anchorCur, ov.ov.sel, d.p.cur)
+	// R2: n walks the bands and marks the overview, never moves its selection.
+	if d.anchorCur != "b.go:3" || ov.ov.sel != 0 || ov.ov.here() != 1 || d.p.cur != sp.stream.streamLine(1, 3) {
+		t.Fatalf("n: anchor %q sel %d here %d cur %d", d.anchorCur, ov.ov.sel, ov.ov.here(), d.p.cur)
 	}
 	m = pressDrain(t, m, "n")
-	if d.anchorCur != "a.go:1-3" || ov.ov.sel != 4 || !strings.Contains(m.statusMsg, "wrapped") {
-		t.Fatalf("n wraps to the first band: %q %d %q", d.anchorCur, ov.ov.sel, m.statusMsg)
+	if d.anchorCur != "a.go:1-3" || ov.ov.sel != 0 || ov.ov.here() != 4 || !strings.Contains(m.statusMsg, "wrapped") {
+		t.Fatalf("n wraps to the first band: %q sel %d here %d %q", d.anchorCur, ov.ov.sel, ov.ov.here(), m.statusMsg)
 	}
 	pressDrain(t, m, "p")
 	if d.anchorCur != "b.go:3" {
@@ -181,13 +182,12 @@ func TestStackPaneSToggleRoundTripsKeepingTheFile(t *testing.T) {
 func TestStackOverAHundredFilesOpensFolded(t *testing.T) {
 	t.Parallel()
 	m, sv := reviewSplitModel(t)
-	st := m.filesReview
 	var many []contentLine
 	for i := 0; i < 101; i++ {
 		many = append(many, contentLine{path: "f" + strconv.Itoa(i) + ".go", status: "M"})
 	}
 	m.filesView.lines = append(append([]contentLine{}, many...), contentLine{path: "a.go", status: "M"})
-	sp := m.newStackPane(sv, st).(*stackPane)
+	sp := m.newStackPane(sv).(*stackPane)
 	folded := 0
 	for _, f := range sp.stream.files {
 		if f.folded {

@@ -6949,6 +6949,39 @@ load lands; S single→stacked parks a (file, line) in `want`. S remembers its
 choice in promptstate `tui_stacked_review_files` (`reviewStacked`), never the
 diff's; `Headless` isolates it like `diffStacked`.
 
+**Every overview (2026-10-10, spec `2026-10-10-overview-split-all-design.md`).**
+`showOverview(d)` is the door: `openOverviewSplit(ov)` at 60+ columns, the
+full-screen viewer below. `bringToFront` routes any `d.ov != nil` there (ctrl+\,
+`file_focus` — which answers at once, the split's command loads the RIGHT file —
+and `anchorBack`); `steerOverviewAdd` shows through it. A split already showing
+the overview is raised, never doubled. `openReviewOverviewSplit` = width check +
+`reviewOverviewDoc` + `openOverviewSplit`; `reviewOf(ov)` is the open review
+view of THIS overview (onClose lands on its ≡ row only then). **`anchorPlace(ov,
+i)`** is the one anchor → (path, line, dest) resolver for steers, the stack and
+parking: a note anchor of an agent overview (`srcOverview`) resolves through
+`findFileNote` (no band: dest ""), a gone note is marked missing. `stackFiles(ov)`
+= the review tree's files when `reviewOf` is set, else the anchored files in
+first-anchored order (key `ov.id()`, title "Files: <title>").
+**R2 (user ruling):** the right side never moves the overview's selection —
+`stepAnchorBand` skips `selectAnchor` in a split, `stackLand` never selects,
+`stackSteer(sv,p,i)` takes the index. `syncOverviewHere(sv)` runs after every
+split key (`update` wraps `updateKey`) and mouse press: `overview.mark` = 1 +
+the anchor whose band holds the right cursor (0 = none; zero-safe), painted
+`mdAnchorHere` (the `anchorBand` colour + underline + bold); `layOut` clears it.
+**Remarks:** `domain.ReviewFileNotes(id, path, lines)` = new-side remarks only
+(R1: a remark on a deleted line is left out). `openFile.reviewNotes` /
+`reviewNotesOf` hold them while `d.from` is that review's overview
+(`reviewOfFrom`); `shownNotes()` = store notes + remarks — EVERY drawing/key
+reader goes through it, store-facing code (`noteByID`, `hasNotes`, counts,
+`removeNote`) stays on `d.notes`. Fetched after a load (`fileContentMsg` →
+`reviewNotesCmd`) and on a steer to a loaded file (`remarksOnSteer`).
+`readOnlyNote` (review prefix, or any stack note) makes d/r refuse and drops the
+. menu's reference/dismiss rows; `noteTitle` shows "review" for a remark id. A
+stack keeps per-file `streamFile.boxes` (review: `splitStackNotesMsg`; agent: the
+store's notes only when their fingerprint matches the stacked lines),
+`mapBoxes` lays them on stream lines each rebuild, `boxNote` maps one back to
+its file's lines for the box title / full view / row count.
+
 Gotchas: the review tree refuses every row below 60 columns before the overview
 branch, so the split's own <60 fallback is reachable only by direct call; a pane
 embedding `docPane` must override `render` when it overrides `title` (no

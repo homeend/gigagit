@@ -83,7 +83,9 @@ func (m Model) settleConsoleAfterSwitch() (Model, tea.Cmd) {
 	m.tour = "" // consumed here (a window field now: the switch reset no longer zeroes it)
 	m, cmd := m.settleConsole()
 	if tour != "" {
-		m = m.showTour(tour) // the snapshot synced the worktree's overviews first
+		var show tea.Cmd
+		m, show = m.showTour(tour) // the snapshot synced the worktree's overviews first
+		cmd = tea.Batch(cmd, show)
 	}
 	return m, cmd
 }

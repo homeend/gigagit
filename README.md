@@ -495,7 +495,12 @@ anchor it cannot place, and `gg review show` prints it after the summary.
 In the TUI the review's *≡ Overview* row opens it as a split — the overview on
 the left, the file its selected anchor points at on the right (or every
 reviewed file stacked, `S`) — and walking the anchors steers the file pane;
-`N`/`P` on the file pane step to the overview's next / previous anchor.
+`N`/`P` on the file pane step to the overview's next / previous anchor. The
+review's remarks show as read-only boxes under their lines (a remark on a
+line the change deleted stays in the diff). Moving on the file never moves
+the overview's selection: the anchor whose block the cursor is in is marked
+in that block's colour. ctrl+\ or `gg session files focus` on an overview
+open it this way too.
 A **note has a link too**: `gg link --note <id>` prints `gg://…?note=<id>`
 on the note's own line, `gg note show <id|link>` prints the thread, and
 `gg note reply|resolve <link>` answer it — hand an agent the note link rather
@@ -1629,7 +1634,11 @@ its gg-overview, filed as a tour of the worker's worktree.
 For a **guided tour** the agent writes an overview: `gg session overview add
 --title "…" < tour.md` shows a markdown document that lives in memory,
 whose links are anchors — `[the loader](internal/tui/open_files.go:220)`, a
-range `path:120-140`, or one of its notes `note:t7`. `tab` / `shift+tab`
+range `path:120-140`, or one of its notes `note:t7`. In a window 60 columns
+or wider it opens **beside the file** each anchor points to, as a stored
+review's overview does: ↑/↓ walk the anchors and the working-tree file on the
+right follows (a note anchor shows that note's line), tab switches sides, `S`
+stacks the files the anchors name. Narrower, it opens full-screen: `tab` / `shift+tab`
 select the next / previous anchor, `enter` (or a double click) opens it — the
 file comes to the front at that line — and `backspace` in that file brings
 you back to the overview on the same anchor; the file stays open in the

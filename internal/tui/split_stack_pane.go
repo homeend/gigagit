@@ -8,6 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -53,18 +55,38 @@ const stackMaxLoads = 3
 // while building a pane would be lost with the copy).
 var splitStackGen atomic.Int64
 
-// newStackPane builds the pane over the review tree's files (its rows with
-// a path, in tree order); over streamFoldOver files all but the overview's
-// selected anchor's file open folded. Nothing is loaded yet: the caller's
-// steer (or pump) starts the loads.
-func (m Model) newStackPane(sv *splitView, st *reviewViewState) pane {
+// newStackPane builds the pane over the stack's files (stackFiles); over
+// streamFoldOver files all but the overview's selected anchor's file open
+// folded. Nothing is loaded yet: the caller's steer (or pump) starts the
+// loads.
+func (m Model) newStackPane(sv *splitView) pane {
 	ov := sv.left.doc()
 	target := ""
 	if ov != nil && ov.ov != nil && ov.ov.sel >= 0 && ov.ov.sel < len(ov.ov.anchors) {
-		target = ov.ov.anchors[ov.ov.sel].target.Path
+		target, _, _, _ = m.anchorPlace(ov, ov.ov.sel)
 	}
-	s := &fileStream{}
-	if m.filesView != nil {
+	files, key, title := m.stackFiles(ov)
+	s := &fileStream{files: files}
+	if len(s.files) > streamFoldOver {
+		for i := range s.files {
+			s.files[i].folded = s.files[i].path != target
+		}
+	}
+	d := m.newOpenFile(fileSource{kind: srcReviewStack, rev: key}, "files-"+key)
+	d.title = title
+	d.stream, d.from = s, ov
+	p := &stackPane{docPane: docPane{d: d, stackable: true}, sv: sv, stream: s, gen: splitStackGen.Add(1), park: -1}
+	p.rebuild(m)
+	return p
+}
+
+// stackFiles is the stack's file list for overview ov (spec
+// 2026-10-10-overview-split-all §5): its review tree's files when that
+// review view is open, else the files ov's anchors name — a file anchor's
+// path, a note anchor's file — each once, first-anchored order; with the
+// key the stack document is filed under and its title.
+func (m Model) stackFiles(ov *openFile) (files []streamFile, key, title string) {
+	if st := m.reviewOf(ov); st != nil && m.filesView != nil {
 		for _, l := range m.filesView.lines {
 			if l.path == "" {
 				continue
@@ -73,20 +95,20 @@ func (m Model) newStackPane(sv *splitView, st *reviewViewState) pane {
 			if l.status == "D" { // the review deleted it: nothing to read at the tip
 				f.loaded, f.err = true, errors.New(i18n.T("(not at this commit)"))
 			}
-			s.files = append(s.files, f)
+			files = append(files, f)
 		}
+		return files, st.id, i18n.T("Files: %s", reviewLabel(st.review))
 	}
-	if len(s.files) > streamFoldOver {
-		for i := range s.files {
-			s.files[i].folded = s.files[i].path != target
+	seen := map[string]bool{}
+	for i := range ov.ov.anchors {
+		path, _, _, ok := m.anchorPlace(ov, i)
+		if !ok || seen[path] {
+			continue
 		}
+		seen[path] = true
+		files = append(files, streamFile{path: path})
 	}
-	d := m.newOpenFile(fileSource{kind: srcReviewStack, rev: st.id}, "files-"+st.id)
-	d.title = i18n.T("Files: %s", reviewLabel(st.review))
-	d.stream, d.from = s, ov
-	p := &stackPane{docPane: docPane{d: d, stackable: true}, sv: sv, stream: s, gen: splitStackGen.Add(1), park: -1}
-	p.rebuild(m)
-	return p
+	return files, ov.id(), i18n.T("Files: %s", ov.title)
 }
 
 // rebuild lays the stream out again keeping the cursor's (file, line) and
@@ -122,6 +144,7 @@ func (p *stackPane) rebuild(m Model) {
 	screenRow := d.p.cur - d.p.sel
 	sel := d.p.lsel
 	d.p.lines = s.build()
+	p.mapBoxes() // the files' notes follow their lines to the new stream places
 	d.p.lsel.clear()
 	if sel.on { // a marked range stays on its file's lines (a load elsewhere renumbers the stream)
 		a, okA := back(selA)
@@ -146,6 +169,77 @@ func (p *stackPane) rebuild(m Model) {
 		d.p.sel = d.p.clampTop(d.p.cur-screenRow, rows)
 	}
 	d.p.ensureCursorVisible(rows)
+}
+
+// mapBoxes lays every shown file's notes onto the stream: file line k is
+// stream line body+k (1-based), as the bands are mapped.
+func (p *stackPane) mapBoxes() {
+	var out []agentdocs.Note
+	for _, f := range p.stream.files {
+		if !f.shows() {
+			continue
+		}
+		for _, b := range f.boxes {
+			if b.End > len(f.lines) {
+				continue
+			}
+			b.Start += f.body
+			b.End += f.body
+			out = append(out, b)
+		}
+	}
+	p.d.reviewNotes = out
+	p.d.syncNoteRows()
+}
+
+// splitStackNotesMsg is a review's remarks on stream file `file` of the stack
+// tagged tag (generation gen).
+type splitStackNotesMsg struct {
+	slotStamp
+	tag   string
+	gen   int64
+	file  int
+	notes []domain.ResolvedNote
+	err   error
+}
+
+// fileNotes gives file i, just loaded, its notes: a review's remarks are
+// fetched off the UI thread (the command); an agent overview's notes come
+// from the store at once, only while they sit on exactly these lines.
+func (m Model) fileNotes(p *stackPane, i int) tea.Cmd {
+	ov, f := p.sv.left.doc(), &p.stream.files[i]
+	if ov == nil || !f.shows() {
+		return nil
+	}
+	if ov.src.kind == srcReviewOverview {
+		if m.svc == nil {
+			return nil
+		}
+		svc, id, path, lines, slot, tag, gen := m.svc, ov.src.rev, f.path, rawOf(f.lines), m.stamp(), p.d.tag, p.gen
+		return func() tea.Msg {
+			ns, err := svc.ReviewFileNotes(context.Background(), id, path, lines)
+			return splitStackNotesMsg{slotStamp: slot, tag: tag, gen: gen, file: i, notes: ns, err: err}
+		}
+	}
+	if m.docs != nil && anchorSource(ov).kind == srcWorktree {
+		if ns, fp := m.docs.Notes(domain.CheckoutKey(m.currentWorktree), f.path); len(ns) > 0 && fp == agentdocs.Print(rawOf(f.lines)) {
+			f.boxes, f.notes = ns, len(ns)
+		}
+	}
+	return nil
+}
+
+// stackNotesLanded adopts a file's remarks for the stack still showing it.
+func (m Model) stackNotesLanded(msg splitStackNotesMsg) Model {
+	_, p := m.stackPaneByTag(msg.tag)
+	if p == nil || p.gen != msg.gen || msg.err != nil || msg.file < 0 || msg.file >= len(p.stream.files) {
+		return m
+	}
+	p.stream.files[msg.file].boxes = remarkBoxes(msg.notes)
+	p.mapBoxes()
+	rows, _ := p.sv.geomOf(m, p)
+	p.d.p.ensureCursorVisible(rows) // a box above the cursor must not push it out
+	return m
 }
 
 func (p *stackPane) title() string {
@@ -237,6 +331,7 @@ func (m Model) stackPaneLanded(msg stackPaneMsg) (Model, tea.Cmd) {
 	case len(msg.lines) > 0 && !msg.lines[0].src: // a placeholder the loader named (binary, too large, an image)
 		f.lines, f.err = nil, errors.New(msg.lines[0].text)
 	}
+	notes := m.fileNotes(p, msg.file)
 	p.rebuild(m)
 	rows, _ := sv.geomOf(m, p)
 	if p.want.set && p.want.file == msg.file {
@@ -244,12 +339,18 @@ func (m Model) stackPaneLanded(msg stackPaneMsg) (Model, tea.Cmd) {
 		p.d.p.cur = p.stream.streamLine(msg.file, p.want.line)
 		p.d.p.sel = p.d.p.clampTop(p.d.p.cur-rows/2, rows)
 	}
-	if ov := sv.left.doc(); p.park >= 0 && ov != nil && p.park < len(ov.ov.anchors) && ov.ov.anchors[p.park].target.Path == f.path {
+	if ov := sv.left.doc(); p.park >= 0 && ov != nil && p.park < len(ov.ov.anchors) && m.parkedIn(ov, p.park, f.path) {
 		i := p.park
 		p.park = -1
 		m = m.stackLand(sv, p, i)
 	}
-	return m, p.pump(m)
+	return m, tea.Batch(p.pump(m), notes)
+}
+
+// parkedIn reports whether overview anchor i opens in the file at path.
+func (m Model) parkedIn(ov *openFile, i int, path string) bool {
+	at, _, _, ok := m.anchorPlace(ov, i)
+	return ok && at == path
 }
 
 // fileIndex is path's index in the stream, or -1.
@@ -263,32 +364,31 @@ func (p *stackPane) fileIndex(path string) int {
 }
 
 // stackLand puts the cursor on overview anchor i's line in the stream,
-// centred, and makes it the current band; the overview's selection follows.
+// centred, and makes it the current band. The overview's selection is not
+// touched: a steer has selected i already, and n / p only mark it (R2).
 func (m Model) stackLand(sv *splitView, p *stackPane, i int) Model {
-	ov := sv.left.doc()
-	a := ov.ov.anchors[i]
-	fi := p.fileIndex(a.target.Path)
-	if fi < 0 {
+	path, line, dest, ok := m.anchorPlace(sv.left.doc(), i)
+	fi := p.fileIndex(path)
+	if !ok || fi < 0 {
 		return m
 	}
 	rows, _ := sv.geomOf(m, p)
-	p.d.anchorCur = a.dest
-	p.d.p.cur = p.stream.streamLine(fi, a.target.Start)
+	p.d.anchorCur = dest
+	p.d.p.cur = p.stream.streamLine(fi, line)
 	p.d.p.sel = p.d.p.clampTop(p.d.p.cur-rows/2, rows)
-	if ov.ov.sel != i {
-		lr, _ := sv.geomOf(m, sv.left)
-		ov.selectAnchor(i, lr)
-	}
 	return m
 }
 
-// stackSteer shows the overview's selected anchor a in the stream: its file
-// unfolded and, once loaded, the cursor on its line.
-func (m Model) stackSteer(sv *splitView, p *stackPane, a anchor) (Model, tea.Cmd) {
-	i := sv.left.doc().ov.sel
-	fi := p.fileIndex(a.target.Path)
+// stackSteer shows overview anchor i in the stream: its file unfolded and,
+// once loaded, the cursor on its line.
+func (m Model) stackSteer(sv *splitView, p *stackPane, i int) (Model, tea.Cmd) {
+	path, _, _, ok := m.anchorPlace(sv.left.doc(), i)
+	fi := p.fileIndex(path)
+	if !ok {
+		return m, nil
+	}
 	if fi < 0 {
-		m.statusMsg = i18n.T("no file %s", a.target.Path)
+		m.statusMsg = i18n.T("no file %s", path)
 		return m, nil
 	}
 	p.park, p.want.set = -1, false // the newest step wins
@@ -348,9 +448,7 @@ func (m Model) stepStreamAnchor(sv *splitView, p *stackPane, dir int) (Model, te
 	}
 	wrapped := cur >= 0 && ((dir > 0 && next <= cur) || (dir < 0 && next >= cur))
 	o := order[next]
-	lr, _ := sv.geomOf(m, sv.left)
-	ov.selectAnchor(o.i, lr)
-	m, cmd := m.stackSteer(sv, p, ov.ov.anchors[o.i])
+	m, cmd := m.stackSteer(sv, p, o.i)
 	label := ov.ov.anchors[o.i].target.Label
 	if label == "" {
 		label = ov.ov.anchors[o.i].dest
@@ -429,10 +527,6 @@ func (m Model) toggleReviewStacked(sv *splitView) (Model, tea.Cmd) {
 	if ov == nil || ov.ov == nil {
 		return m, nil
 	}
-	if m.filesReview == nil { // the review the stack lists is gone
-		m.statusMsg = i18n.T("the review is no longer open")
-		return m, nil
-	}
 	switch r := sv.right.(type) {
 	case *stackPane:
 		m = m.setReviewStackedPref(false)
@@ -461,7 +555,7 @@ func (m Model) toggleReviewStacked(sv *splitView) (Model, tea.Cmd) {
 			path, line, cur = r.d.path, r.d.p.cur+1, r.d.anchorCur
 			r.d.backgrounded = true
 		}
-		p := m.newStackPane(sv, m.filesReview).(*stackPane)
+		p := m.newStackPane(sv).(*stackPane)
 		sv.right = p
 		p.d.anchorCur = cur
 		if fi := p.fileIndex(path); fi >= 0 {

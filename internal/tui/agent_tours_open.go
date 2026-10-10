@@ -52,7 +52,8 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 	check := m.checkTourCmd([]string{o.ID})
 	if model.SamePath(dir, m.currentWorktree) {
 		m = m.syncOverviews()
-		return m.showTour(o.ID), check
+		m, show := m.showTour(o.ID)
+		return m, tea.Batch(show, check)
 	}
 	if m.isRepoWorktree(dir) {
 		// This repository: a slot swap; the tour shows once the slot's
@@ -76,10 +77,11 @@ func (m Model) openTour(id domain.SessionID, kind string) (Model, tea.Cmd) {
 	return m, tea.Batch(cmd, check)
 }
 
-// showTour pushes the viewer on the current worktree's overview ovID.
-func (m Model) showTour(ovID string) Model {
+// showTour shows the current worktree's overview ovID the way every
+// overview comes up (showOverview: the split when it fits).
+func (m Model) showTour(ovID string) (Model, tea.Cmd) {
 	if d, _ := m.findOverview(ovID); d != nil {
-		return m.pushLayer(&fileViewer{d})
+		return m.showOverview(d)
 	}
-	return m
+	return m, nil
 }

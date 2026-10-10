@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"strconv"
 	"strings"
 
@@ -23,9 +24,13 @@ type streamFile struct {
 	loaded       bool  // lines (or err) are final
 	loading      bool  // a load is out for it
 	err          error // the load failed, or the loader named a placeholder
-	start        int   // the block's first stream line (the blank; the header on the first file)
-	hdr          int   // the header line
-	body         int   // the first content line, or the placeholder
+	// boxes are the file's notes (a review's remarks, or the agent's notes
+	// on a working-tree file), at its own 1-based lines; rebuild maps them
+	// to stream lines.
+	boxes []agentdocs.Note
+	start int // the block's first stream line (the blank; the header on the first file)
+	hdr   int // the header line
+	body  int // the first content line, or the placeholder
 }
 
 // fileStream is the table the pane rebuilds the document's lines from.

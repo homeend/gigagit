@@ -40,10 +40,14 @@ type anchor struct {
 type overview struct {
 	text    string // the agent's markdown, as sent
 	anchors []anchor
-	sel     int      // the selected anchor; -1 = none
-	w       int      // the width the rows were laid out at; 0 = never
-	mode    dispMode // the view they were laid out for (ctrl+w)
-	closed  bool     // taken out of the open files: its files lose their bands
+	sel     int // the selected anchor; -1 = none
+	// mark is 1 + the anchor whose band the split's right-hand cursor sits
+	// in, painted apart from sel (spec 2026-10-10-overview-split-all R2);
+	// 0 = none, so a zero overview marks nothing. here() reads it.
+	mark   int
+	w      int      // the width the rows were laid out at; 0 = never
+	mode   dispMode // the view they were laid out for (ctrl+w)
+	closed bool     // taken out of the open files: its files lose their bands
 	// tip is the commit a STORED overview's anchors open at ("" = the
 	// working tree, a temporary overview); set with srcReviewOverview.
 	tip string
@@ -124,6 +128,9 @@ func overviewView(rows []mdRow, width int, mode dispMode) []mdRow {
 	return out
 }
 
+// here is the marked anchor's index, or -1.
+func (ov *overview) here() int { return ov.mark - 1 }
+
 // paint gives every anchor span its class: selected, gone, or plain.
 func (ov *overview) paint(lines []contentLine) {
 	for i, a := range ov.anchors {
@@ -133,6 +140,8 @@ func (ov *overview) paint(lines []contentLine) {
 			c = 0
 		case i == ov.sel:
 			c = mdAnchorSel
+		case i == ov.here():
+			c = mdAnchorHere
 		case a.missing:
 			c = mdAnchorGone
 		}
@@ -223,6 +232,7 @@ func (d *openFile) layOut(rows, width int) {
 		}
 	}
 	ov.anchors, ov.w, ov.mode = anchors, width, d.p.mode
+	ov.mark = 0 // an index into the old anchors: the next right-side event marks again
 	if ov.sel >= len(anchors) {
 		ov.sel = -1
 	}

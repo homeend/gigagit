@@ -31,8 +31,7 @@ func tourModel(t *testing.T) (Model, *openFile, agentdocs.Note) {
 		"- [missing](missing.txt)\n" +
 		"- [gone note](note:t999999)\n"
 	d := storeOverview(t, m, "Tour", text)
-	m = m.registerDoc(d)
-	m, cmd = m.bringToFront(d)
+	m, cmd = inViewer(m, d)
 	return pumpAll(t, m, cmd), d, n
 }
 
