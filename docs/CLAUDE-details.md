@@ -4215,8 +4215,8 @@ together and binds; alt+b unbinds like the step-out key or binds like
 enter); both are in `consolePassthrough`/`consoleFullPassthrough`.
 Every walk ends in `selectSessionRow(id)`: the Branches tab comes
 forward and its cursor lands on the session's sub-row (`branchEntry.sess`)
-without moving focus. `alt+w` hides a shown console on the way to the
-next worktree. The
+without moving focus. `alt+w` under a shown console hides it and shows
+its worktree; the next press moves to the next worktree. The
 emergency unlock is `alt+U` (was `alt+A`).
 
 ### Web attach — agent consoles in `gg web` (plan 1, 2026-09-28)
@@ -6477,13 +6477,18 @@ rulings): worktree mode. `at = worktreeIndex(m.viewed)` in
 each mapped to the worktree that has it checked out; then any worktree
 without such a row — detached, filtered out — in list order), never the
 raw list: the Branches tab sorts by date newest first by default, the list
-does not, which read as "bottom to top"; "next" is the row below. Every press
-(no first-hit step — user ruling 2026-10-09): `switchRefusalBy(true)` is
-asked FIRST (an op, a decision, a process, a non-parkable popup refuse
-whole: nothing on screen changes), then a shown console is HIDDEN —
-`ret.view = viewed` (hiding is not leaving: the panels stay),
-`ret.focus = panelBranches`, `closeConsole` (a full-screen one gives its
-parked view back) — then `activateTab(panelBranches)` and the next of the
+does not, which read as "bottom to top"; "next" is the row below. Every press:
+`switchRefusalBy(true)` is asked FIRST (an op, a decision, a process, a
+non-parkable popup refuse whole: nothing on screen changes). Under a shown
+console the press only HIDES it (user ruling 2026-10-10, reversing the
+2026-10-09 "one press hides and moves"): `ret.view = viewed` (hiding is
+not leaving: the panels stay), `ret.focus = panelBranches`,
+`closeConsole` (a full-screen one gives its parked view back),
+`activateTab(panelBranches)` + `selectWorktreeBranch(viewed)`, status
+"console hidden — alt+w again for the next worktree" — no move: the
+user sees the worktree the console looked at before the ring takes them
+further. Otherwise (no first-hit step over a window or a popup — user
+ruling 2026-10-09) `activateTab(panelBranches)` and the next of the
 order, wrapping, through `userSwitchView` — a look, like alt+a, never
 `adoptView`: home stays — then `selectWorktreeBranch`: the Branches cursor
 (`sel[panelBranches]`, a display index over `branchEntries`, the branch row
@@ -6669,10 +6674,11 @@ that is gone falls back to home and says so; `pruneViews` retargets a
 `pendingReturnView` naming the pruned slot to home. The bare entry of a
 bare-main repository (`Worktree.Bare`) is skipped by `worktreeOrder`,
 `canEnterWorktree` and refused by `switchView` (`bareRepository`).
-`cycleWorktrees` has NO first-hit step (user ruling 2026-10-09: alt+w
-switches in any window state): every press moves to the next worktree,
-hiding a shown console on the way (`ret.view` stays, `closeConsole`) and
-activating the Branches tab so the cursor lands on the new branch; only
+`cycleWorktrees` has no first-hit step over a window or a popup (user
+ruling 2026-10-09: alt+w switches in any window state), but under a shown
+console the press only hides it and shows its worktree (user ruling
+2026-10-10); the next press moves to the next worktree, activating the
+Branches tab so the cursor lands on the new branch; only
 `switchRefusalBy` (an op, a decision, a process, a popup with work in
 flight) refuses. `cycleWorktrees` skips ring stops `checkSwitchTarget` finds unreachable
 (named in the status line; all unreachable = a message, no move). The
