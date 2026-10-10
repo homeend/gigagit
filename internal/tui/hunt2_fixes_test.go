@@ -177,3 +177,30 @@ func TestTheWalkRepinsAMaximisedLeftTab(t *testing.T) {
 		t.Fatalf("leftMax=%v, want the shown Branches tab", m.leftMax)
 	}
 }
+
+// The HEAD reflog is PER WORKTREE (git keeps it under worktrees/<name>/logs/
+// HEAD), not the repository's: the slot keeps it, the kick re-reads it, and
+// a read launched through the leaving worktree cannot land on the arriving
+// one. The Reflog tab used to keep showing the previous worktree's moves.
+func TestReflogFollowsTheWorktree(t *testing.T) {
+	m := loadedModel(t)
+	homeLog := m.reflog
+	if len(homeLog) == 0 {
+		t.Fatal("precondition: home has a reflog")
+	}
+	gen := m.srcGen[srcReflog]
+	m, _ = viewedOther(t, m) // the kick lands: wt2's own reflog
+	if m.srcGen[srcReflog] == gen {
+		t.Fatal("a swap must retire a reflog read in flight through the leaving worktree")
+	}
+	if len(m.reflog) == 0 || len(m.reflog) == len(homeLog) && m.reflog[0].Subject == homeLog[0].Subject && m.reflog[0].Selector == homeLog[0].Selector {
+		t.Fatalf("after the swap the Reflog tab still shows home's log (%d entries)", len(m.reflog))
+	}
+	m, ok := m.switchView(m.homeWorktree())
+	if !ok {
+		t.Fatal(m.statusMsg)
+	}
+	if len(m.reflog) != len(homeLog) {
+		t.Fatalf("back home before any read: %d entries, want home's %d from the slot", len(m.reflog), len(homeLog))
+	}
+}

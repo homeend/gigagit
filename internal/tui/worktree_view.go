@@ -21,8 +21,9 @@ import (
 // not a reload. The Model's own fields are the LIVE copy — every reader and
 // renderer is untouched — and switchView copies out to the leaving slot
 // and in from the arriving one. Worktrees of one repository share
-// branches, commits, stashes, tags and the reflog, so none of those is
-// here.
+// branches, commits, stashes and tags, so none of those is here; the HEAD
+// reflog is each worktree's own (git keeps it under worktrees/<name>/
+// logs/HEAD) and lives in the slot.
 type worktreeView struct {
 	key  model.CheckoutKey // the map key: the path's identity (model.KeyOf)
 	path string            // the worktree path as LISTED (`git worktree list`): what reaches disk, git and the screen
@@ -38,6 +39,7 @@ type worktreeView struct {
 	fileMarks      map[string]bool
 
 	workingReviews []domain.WorkingReview
+	reflog         []model.ReflogEntry // this worktree's HEAD reflog (per worktree, not the repository's)
 
 	resumePromptShown bool // the continue/abort prompt fired for THIS tree's paused op (model.go's flag, per slot: a round trip through another tree must not fire it again)
 
@@ -211,6 +213,7 @@ func (m Model) saveView() Model {
 	v.selFiles, v.selStaged = m.sel[panelFiles], m.sel[panelStaged]
 	v.fileMarks = m.fileMarks
 	v.workingReviews = m.workingReviews
+	v.reflog = m.reflog
 	v.resumePromptShown = m.resumePromptShown
 	v.branch, v.branchKnown = m.listedBranch(v.path)
 	return m
@@ -321,6 +324,7 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.workingReviews = v.workingReviews // before the rows: withStatus derives the Review row from the reviews
 	m = m.withStatus(v.status)          // recomputes the index slices and the status stack
 	m.conflict = v.conflict
+	m.reflog = v.reflog // its own HEAD reflog (a fresh slot: none until the kick's read)
 	m.resumePromptShown = v.resumePromptShown
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -547,6 +551,9 @@ func (m Model) sleepView() Model {
 	m.srcGen[srcFeed]++ // nor a commit walk from the old root (the feed is re-rooted on load)
 	m.srcInflight[srcFeed] = false
 	m.srcLoading[srcFeed] = false
+	m.srcGen[srcReflog]++ // nor the HEAD reflog (per worktree)
+	m.srcInflight[srcReflog] = false
+	m.srcLoading[srcReflog] = false
 	m.workingReviewsGen++ // likewise a reviews read
 	// The windows, the parked tour, the parked navigate and the working-file
 	// bands are NOT touched: saveView put them in the slot, loadView brings
@@ -563,8 +570,9 @@ func (m Model) sleepView() Model {
 // switchView, which marks the read in flight on the live model first.
 func (m Model) viewKickCmd() tea.Cmd {
 	read := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{})
-	notes := m.readSourceCmd(context.Background(), srcNotes, reloadOpts{}) // the ✎ badges are the checkout's
-	feed := m.readSourceCmd(context.Background(), srcFeed, reloadOpts{})   // reconcile: the walk now starts at this tree's HEAD
+	notes := m.readSourceCmd(context.Background(), srcNotes, reloadOpts{})   // the ✎ badges are the checkout's
+	feed := m.readSourceCmd(context.Background(), srcFeed, reloadOpts{})     // reconcile: the walk now starts at this tree's HEAD
+	reflog := m.readSourceCmd(context.Background(), srcReflog, reloadOpts{}) // the HEAD reflog is this worktree's own
 	_, docs := m.syncAgentDocs()
 	var files tea.Cmd
 	switch {
@@ -573,7 +581,7 @@ func (m Model) viewKickCmd() tea.Cmd {
 	case m.inFullTree() && m.treeSlept && m.filesView != nil:
 		files = m.loadTreeFilesCmd(m.filesViewCommit()) // likewise a commit's full tree
 	}
-	return tea.Batch(read, notes, feed, m.startWatchCmd(m.watchGen), docs, files)
+	return tea.Batch(read, notes, feed, reflog, m.startWatchCmd(m.watchGen), docs, files)
 }
 
 // takeQueuedReturn performs the swap a console close, a console SHOW (its
