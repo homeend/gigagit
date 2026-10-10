@@ -2768,8 +2768,8 @@ name = "中文"
 "Go to its worktree" = "转到其工作树"
 "[x] close  [esc] back" = "[x] 关闭  [esc] 返回"
 "[enter] type  [X] kill+remove  [esc] back" = "[enter] 输入  [X] 终止+移除  [esc] 返回"
-"agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions" = "代理控制台: [x] 关闭  [esc/%s] 返回  [alt+a/alt+t] 下一个  [alt+f] 最大化  [alt+b] 绑定  [%s] 会话"
-"agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions" = "代理控制台: [enter] 输入  [X] 终止+移除  [esc/%s] 返回  [alt+a/alt+t] 下一个  [alt+f] 最大化  [alt+b] 绑定  [%s] 会话"
+"agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] dock  [alt+b] bind  [%s] sessions" = "代理控制台: [x] 关闭  [esc/%s] 返回  [alt+a/alt+t] 下一个  [alt+f] 停靠  [alt+b] 绑定  [%s] 会话"
+"agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] dock  [alt+b] bind  [%s] sessions" = "代理控制台: [enter] 输入  [X] 终止+移除  [esc/%s] 返回  [alt+a/alt+t] 下一个  [alt+f] 停靠  [alt+b] 绑定  [%s] 会话"
 
 # emergency unlock (alt+U)
 "[alt+U] unlock" = "[alt+U] 解锁"

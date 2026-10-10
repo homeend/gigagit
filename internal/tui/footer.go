@@ -282,9 +282,9 @@ func (m Model) footerOverride() (string, bool) {
 		if m.consoleFull() || (m.focus == panelCommits && !(m.filesView != nil && m.filesTreeFocused)) { // a focused tree keeps the keys (updateConsoleKey) — unless a full-screen console covers it
 			if m.consoleFull() { // already maximised; the panels are hidden; esc goes back
 				if m.consoleExited() {
-					return i18n.T("agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
+					return i18n.T("agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] dock  [alt+b] bind  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
 				}
-				return i18n.T("agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
+				return i18n.T("agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] dock  [alt+b] bind  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
 			}
 			if m.consoleExited() {
 				return i18n.T("agent console: [x] close  [alt+f] max  [alt+b] bind  [esc/%s] hide  [%s] sessions  [tab] panels", m.stepOutKey(), m.sessionsKey()), true

@@ -2768,8 +2768,8 @@ name = "日本語"
 "Go to its worktree" = "そのワークツリーへ移動"
 "[x] close  [esc] back" = "[x] 閉じる  [esc] 戻る"
 "[enter] type  [X] kill+remove  [esc] back" = "[enter] 入力  [X] 強制終了+削除  [esc] 戻る"
-"agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions" = "エージェントコンソール: [x] 閉じる  [esc/%s] 戻る  [alt+a/alt+t] 次へ  [alt+f] 最大化  [alt+b] バインド  [%s] セッション"
-"agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions" = "エージェントコンソール: [enter] 入力  [X] 強制終了+削除  [esc/%s] 戻る  [alt+a/alt+t] 次へ  [alt+f] 最大化  [alt+b] バインド  [%s] セッション"
+"agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] dock  [alt+b] bind  [%s] sessions" = "エージェントコンソール: [x] 閉じる  [esc/%s] 戻る  [alt+a/alt+t] 次へ  [alt+f] ドック  [alt+b] バインド  [%s] セッション"
+"agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] dock  [alt+b] bind  [%s] sessions" = "エージェントコンソール: [enter] 入力  [X] 強制終了+削除  [esc/%s] 戻る  [alt+a/alt+t] 次へ  [alt+f] ドック  [alt+b] バインド  [%s] セッション"
 
 # emergency unlock (alt+U)
 "[alt+U] unlock" = "[alt+U] ロック解除"

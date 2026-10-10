@@ -2768,8 +2768,8 @@ name = "한국어"
 "Go to its worktree" = "해당 워크트리로 이동"
 "[x] close  [esc] back" = "[x] 닫기  [esc] 돌아가기"
 "[enter] type  [X] kill+remove  [esc] back" = "[enter] 입력  [X] 종료+제거  [esc] 돌아가기"
-"agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions" = "에이전트 콘솔: [x] 닫기  [esc/%s] 돌아가기  [alt+a/alt+t] 다음  [alt+f] 최대화  [alt+b] 바인딩  [%s] 세션"
-"agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions" = "에이전트 콘솔: [enter] 입력  [X] 종료+제거  [esc/%s] 돌아가기  [alt+a/alt+t] 다음  [alt+f] 최대화  [alt+b] 바인딩  [%s] 세션"
+"agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] dock  [alt+b] bind  [%s] sessions" = "에이전트 콘솔: [x] 닫기  [esc/%s] 돌아가기  [alt+a/alt+t] 다음  [alt+f] 도킹  [alt+b] 바인딩  [%s] 세션"
+"agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] dock  [alt+b] bind  [%s] sessions" = "에이전트 콘솔: [enter] 입력  [X] 종료+제거  [esc/%s] 돌아가기  [alt+a/alt+t] 다음  [alt+f] 도킹  [alt+b] 바인딩  [%s] 세션"
 
 # emergency unlock (alt+U)
 "[alt+U] unlock" = "[alt+U] 잠금 해제"

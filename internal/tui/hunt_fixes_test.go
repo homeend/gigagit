@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -129,5 +130,76 @@ func TestFullLoadKeepsTheWorkingFileBandsLive(t *testing.T) {
 	m = settleLoad(t, nm.(Model), cmd)
 	if len(m.attention[k]) != 1 {
 		t.Fatal("the full load took the working-file bands off the screen")
+	}
+}
+
+// alt+f / alt+b belong to the console only while it has the keyboard: a
+// popup or the . menu layered above it owns every key, these two included.
+func TestAltFAndAltBUnderAPopupLeaveTheConsoleAlone(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	id := startSessionIn(t, m, m.currentWorktree, "A1")
+	m, _ = m.showConsole(id, true) // docked, bound
+	m = m.pushLayer(&contentPopup{title: "over it"})
+	m = pressAlt(t, m, 'f')
+	if m.console == nil || m.console.maximized {
+		t.Fatalf("alt+f under a popup resized the console: %+v", m.console)
+	}
+	m = pressAlt(t, m, 'b')
+	if m.console == nil || !m.console.focused {
+		t.Fatalf("alt+b under a popup unbound the console: %+v", m.console)
+	}
+}
+
+// alt+b unbinding is the step-out key's unbinding: a docked console the
+// user had ctrl+t-maximised docks again (one shown over a full-screen view
+// stays full-screen, as there).
+func TestAltBUnbindDocksACtrlTMaximisedConsole(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	id := startSessionIn(t, m, m.currentWorktree, "A1")
+	m, _ = m.showConsole(id, true) // docked, bound
+	m.console.maximized = true     // ctrl+t over the Commits column: the pin (ret.full) stays docked
+	m = pressAlt(t, m, 'b')
+	if m.console == nil || m.console.focused || m.console.maximized {
+		t.Fatalf("after alt+b: %+v, want unbound and docked", m.console)
+	}
+}
+
+// alt+w during an operation is refused whole: the console stays shown and
+// the keyboard focus stays where it was — the refusal comes before the
+// hide and the Branches focus, not after them.
+func TestAltWDuringAnOpChangesNothing(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	id := startSessionIn(t, m, other, "Shell")
+	m, _ = m.showConsole(id, false)
+	m.running = true
+	m = pressAlt(t, m, 'w')
+	if m.console == nil || m.viewed != model.KeyOf(other) || m.focus != panelCommits {
+		t.Fatalf("console=%v viewed=%q focus=%v, want the console still shown and focused", m.console != nil, m.viewed, m.focus)
+	}
+}
+
+// A maximised console's footer offers alt+f as the way back to the Commits
+// column, not another "max".
+func TestMaximisedConsoleFooterSaysDock(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	installSessionManager(t)
+	id := startSessionIn(t, m, m.currentWorktree, "A1")
+	m, _ = m.showConsole(id, true)
+	m = pressAlt(t, m, 'f') // maximised, bound
+	m.console.focused = false
+	if !m.consoleFull() {
+		t.Fatalf("precondition: %+v", m.console)
+	}
+	hint, _ := m.footerOverride()
+	if !strings.Contains(hint, "[alt+f] dock") || strings.Contains(hint, "[alt+f] max") {
+		t.Fatalf("footer %q, want [alt+f] dock", hint)
 	}
 }

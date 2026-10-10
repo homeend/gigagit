@@ -396,6 +396,19 @@ func (m Model) closeConsole() Model {
 	return m.reconcileFullscreenFocus()
 }
 
+// unbindConsole is the step-out: the keys are gg's again. Over a
+// full-screen return point the console stays full-screen (a second press or
+// esc goes back); a ctrl+t-maximised docked one docks again. alt+b's
+// unbinding is this same step.
+func (m Model) unbindConsole() Model {
+	m.console.focused = false
+	if m.console.maximized && !m.consoleFull() {
+		m.console.maximized = false
+		m = m.syncConsoleSize()
+	}
+	return m
+}
+
 // consoleBox is the box the console occupies now: the Commits column, or the
 // whole body when maximised.
 func (m Model) consoleBox() (w, h int) {
@@ -930,6 +943,11 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if m.console == nil {
 		return m, nil, false
 	}
+	// Anything layered above the console (the sessions popup opened from it,
+	// the . menu) owns the keyboard; closing it returns to the console.
+	if m.topLayer() != nil || m.actionMenu != nil {
+		return m, nil, false
+	}
 	// The size and binding toggles of a FOCUSED console (the blue border:
 	// the Commits column has the keyboard), bound or not. alt+f: docked ↔
 	// maximized, bound and focused after either way. alt+b: bound ↔
@@ -945,17 +963,11 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			return m.syncConsoleSize(), nil, true
 		}
 		if m.console.focused {
-			m.console.focused = false
-			return m, nil, true // shown and focused; the keys are gg's again
+			return m.unbindConsole(), nil, true // shown and focused; the keys are gg's again
 		}
 		m.console.focused = true
 		m.touchConsole()
 		return m.syncConsoleSize(), nil, true
-	}
-	// Anything layered above the console (the sessions popup opened from it,
-	// the . menu) owns the keyboard; closing it returns to the console.
-	if m.topLayer() != nil || m.actionMenu != nil {
-		return m, nil, false
 	}
 	// Focus left the console's column (a mouse click on another panel): the
 	// keyboard is gg's again. A full-screen console hides every panel, so
@@ -998,15 +1010,7 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			return nm, cmd, true
 		}
 		if key == m.stepOutKey() {
-			m.console.focused = false
-			// Over a full-screen return point the console stays full-screen
-			// (a second press or esc goes back); a ctrl+t-maximised docked
-			// one docks again.
-			if m.console.maximized && !m.consoleFull() {
-				m.console.maximized = false
-				m = m.syncConsoleSize()
-			}
-			return m, nil, true
+			return m.unbindConsole(), nil, true
 		}
 		if msg.Type == tea.KeyRunes {
 			msg.Runes, m.console.highHalf = joinSurrogates(m.console.highHalf, msg.Runes)

@@ -662,6 +662,10 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	// worktree's branch. No reveal-first step: in any window state the
 	// press moves on — only an operation, a decision, a process or a popup
 	// with work in flight refuse (switchRefusalBy).
+	if why := m.switchRefusalBy(true); why != "" {
+		m.statusMsg = why // refused whole: the console stays, the focus stays (userSwitchView would say the same, after the hide)
+		return m, nil
+	}
 	if m.console != nil {
 		if m.console.ret != nil {
 			m.console.ret.view = m.viewed // hiding is not leaving: a later return point is this worktree

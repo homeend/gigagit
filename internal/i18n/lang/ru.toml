@@ -2768,8 +2768,8 @@ name = "Русский"
 "Go to its worktree" = "Перейти в её рабочее дерево"
 "[x] close  [esc] back" = "[x] закрыть  [esc] назад"
 "[enter] type  [X] kill+remove  [esc] back" = "[enter] ввод  [X] завершить+убрать  [esc] назад"
-"agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions" = "консоль агента: [x] закрыть  [esc/%s] назад  [alt+a/alt+t] далее  [alt+f] развернуть  [alt+b] привязать  [%s] сеансы"
-"agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] max  [alt+b] bind  [%s] sessions" = "консоль агента: [enter] ввод  [X] завершить+убрать  [esc/%s] назад  [alt+a/alt+t] далее  [alt+f] развернуть  [alt+b] привязать  [%s] сеансы"
+"agent console: [x] close  [esc/%s] back  [alt+a/alt+t] next  [alt+f] dock  [alt+b] bind  [%s] sessions" = "консоль агента: [x] закрыть  [esc/%s] назад  [alt+a/alt+t] далее  [alt+f] свернуть в колонку  [alt+b] привязать  [%s] сеансы"
+"agent console: [enter] type  [X] kill+remove  [esc/%s] back  [alt+a/alt+t] next  [alt+f] dock  [alt+b] bind  [%s] sessions" = "консоль агента: [enter] ввод  [X] завершить+убрать  [esc/%s] назад  [alt+a/alt+t] далее  [alt+f] свернуть в колонку  [alt+b] привязать  [%s] сеансы"
 
 # emergency unlock (alt+U)
 "[alt+U] unlock" = "[alt+U] разблокировать"
