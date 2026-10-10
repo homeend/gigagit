@@ -1319,6 +1319,16 @@ async function openFile(i) {
 }
 
 
+// reviewSendPR is the pull request a review view was opened from (its
+// Reviews block; 0 = any other way in): the review's remarks are that PR's,
+// so the note menu offers Send as GitHub comment there as in the PR's own
+// diff (prsend.js reads it through prOfCtx).
+function reviewSendPR() {
+  const back = state.review && state.review.back;
+  return back && back.kind === "pr" ? back.pr || 0 : 0;
+}
+
+
 // commitDiffCtx is the note context of ONE row of a commit / compare /
 // preview file list — what state.diffCtx becomes when that row is opened
 // alone. It is a function, not an inline literal, because a STACK builds the
@@ -1329,7 +1339,7 @@ function commitDiffCtx(f) {
   // A review view's lane is the review's own notes, read-only: its diffs show
   // those and nothing else (the TUI's review mode).
   if (reviewActive()) {
-    return { path: f.path, rev: state.review.data.tip, state: "commit", notes: true, review: state.review.id, status: f.status, old: f.old_path || "", compare: false };
+    return { path: f.path, rev: state.review.data.tip, state: "commit", notes: true, review: state.review.id, status: f.status, old: f.old_path || "", compare: false, sendPR: reviewSendPR() };
   }
   const cmp = state.filesMode === "compare";
   const prev = openPreviewCtx();

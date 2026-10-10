@@ -208,3 +208,71 @@ func TestPRSendPanelIsWired(t *testing.T) {
 		t.Error("style.css has no panel rules")
 	}
 }
+
+// prOfCtx names the PR a note menu's GitHub rows send to: a PR's own diff
+// (ctx.preview.pr) or a review view opened from that PR's Reviews block
+// (ctx.sendPR) — the latter never rides ctx.preview, whose pr also steers
+// the note fetch and the link builder.
+func TestPRSendPROfCtxJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	src, err := os.ReadFile(filepath.Join("static", "prsendrows.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "prsendrows.mjs"), src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const runner = `
+import { prOfCtx } from "./prsendrows.mjs";
+console.log(JSON.stringify({
+  prDiff: prOfCtx({ path: "a", preview: { pr: 7 } }),
+  review: prOfCtx({ path: "a", review: "r1", sendPR: 7 }),
+  plainReview: prOfCtx({ path: "a", review: "r1" }),
+  pair: prOfCtx({ path: "a", preview: { pr: 0, pair: { a: "x", b: "y" } } }),
+  none: prOfCtx(null),
+}));
+`
+	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(runner), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, filepath.Join(dir, "run.mjs")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	var got map[string]int
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	want := map[string]int{"prDiff": 7, "review": 7, "plainReview": 0, "pair": 0, "none": 0}
+	for k, w := range want {
+		if got[k] != w {
+			t.Errorf("%s = %d, want %d", k, got[k], w)
+		}
+	}
+}
+
+// A review view opened from a PR's Reviews block stamps the PR on its note
+// context (sendPR, from state.review.back), and the note menu's GitHub rows
+// read it through prOfCtx — the user's "no option to send note as a github
+// comment" in a PR review's (stacked) diff.
+func TestReviewViewCtxCarriesThePR(t *testing.T) {
+	t.Parallel()
+	read := func(f string) string {
+		b, err := os.ReadFile(filepath.Join("static", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	if f := read("files.js"); !strings.Contains(f, `sendPR: reviewSendPR()`) || !strings.Contains(f, `back.kind === "pr"`) {
+		t.Error("files.js: the review view's note ctx does not carry the PR it was opened from (sendPR)")
+	}
+	if js := read("prsend.js"); !strings.Contains(js, `import { prOfCtx, sendRows } from "./prsendrows.js";`) || strings.Contains(js, "function prOfCtx") {
+		t.Error("prsend.js does not read the PR through prsendrows.js's prOfCtx")
+	}
+}
