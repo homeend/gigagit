@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/charmbracelet/lipgloss"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -307,12 +308,28 @@ func (m Model) dispatchParkedAware(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.dispatch(msg)
 	}
 	cp := m.consoleParked
-	if m.console == nil || cp == nil || len(cp.layers) == 0 {
+	if m.console == nil || cp == nil || len(cp.layers) == 0 && cp.stashView == nil && cp.filesPreview == nil {
 		return m.dispatch(msg)
 	}
 	parked := cp.layers
 	cp.layers = nil // a close while handling finds them live already
 	m = m.restoreLayersBeneath(parked)
+	// The stash list and the files preview are displaced the same way and
+	// take their reads (a stash list's entries, a preview's bytes) only
+	// while live: back beneath the handler too, parked again after.
+	var stash *stashView
+	var preview *openFile
+	var previewOf *contentPopup
+	if cp.stashView != nil && m.stashView == nil {
+		stash, cp.stashView = cp.stashView, nil
+		m.stashView = stash
+	}
+	if cp.filesPreview != nil && m.filesPreview == nil && cp.filesView != nil && m.filesView == cp.filesView {
+		preview, previewOf = cp.filesPreview, cp.filesView
+		cp.filesPreview, cp.filesView = nil, nil
+		m.filesPreview = preview
+	}
+	// One not put back (a live one in its place) stays parked as it is.
 	view := m.viewed
 	nm, cmd := m.dispatch(msg)
 	out, ok := nm.(Model)
@@ -325,13 +342,15 @@ func (m Model) dispatchParkedAware(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// displaced by the console there: back under its parked copy.
 		if v := out.views[view]; v != nil {
 			v.windows.reparkConsole(parked)
+			v.windows.reparkConsoleViews(stash, preview, previewOf)
 		}
 		return out, cmd
 	}
-	if out.console == nil || out.layers == nil {
+	if out.console == nil {
 		return out, cmd // the console went: its views are live now
 	}
-	out.windowState.reparkConsole(parked)
+	out.windowState.reparkConsole(parked) // a nil pile (no layer ever pushed) is its own no-op
+	out.windowState.reparkConsoleViews(stash, preview, previewOf)
 	return out, cmd
 }
 
@@ -398,6 +417,15 @@ func (m Model) closeConsole() Model {
 	m.fullMaxed, m.fullMax = r.fullMaxed, r.fullMax
 	if m.focus == panelCommits {
 		m.focus = r.focus
+		// The walk showed the Branches tab for its session row
+		// (selectSessionRow): a return point on another top-slot tab names a
+		// panel that is not on screen — the keyboard goes to the shown one.
+		if slices.Contains(m.leftTabs(), r.focus) && r.focus != m.activeLeftTab {
+			m.focus = m.activeLeftTab
+		}
+	}
+	if m.fullMaxed && slices.Contains(m.leftTabs(), m.fullMax) && m.fullMax != m.activeLeftTab {
+		m.fullMax = m.activeLeftTab // a pin on a top-slot tab follows the shown tab, as activateTab re-pins
 	}
 	return m.reconcileFullscreenFocus()
 }

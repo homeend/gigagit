@@ -236,7 +236,7 @@ func globalBindings() []footerBinding {
 		}, scopeGlobal},
 		{"last-agent", "alt+a", i18n.T("[alt+a] agent"), func(m Model) bool { return m.hasRepoSessions(false) }, scopeGlobal},
 		{"last-terminal", "alt+t", i18n.T("[alt+t] terminal"), func(m Model) bool { return m.hasRepoSessions(true) }, scopeGlobal},
-		{"next-worktree", "alt+w", i18n.T("[alt+w] next worktree"), func(m Model) bool { return len(m.worktrees) > 1 && !m.running && !m.loading }, scopeGlobal},
+		{"next-worktree", "alt+w", i18n.T("[alt+w] next worktree"), func(m Model) bool { return len(m.worktreeOrder()) > 1 && !m.running && !m.loading }, scopeGlobal}, // the ring's own count: the bare entry is no stop
 		{"notices", "!", i18n.T("[!] notices"), func(m Model) bool { return len(m.notices) > 0 }, scopeGlobal},
 		{"last-error", "E", i18n.T("[E] full message"), func(m Model) bool { return m.lastError != "" }, scopeGlobal},
 		{"find", "F", i18n.T("[F] find file"), Model.opsIdle, scopeGlobal},

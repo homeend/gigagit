@@ -94,7 +94,7 @@ func TestCloseConsoleRestoresCommits(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
 	s := startTestSession(t, m, `sleep 5`)
-	m.focus = panelWorktrees
+	m = m.activateTab(panelWorktrees) // the tab the console is opened from is the one shown
 	m = m.rememberLeftFocus()
 	m, _ = m.openConsole(s.Info().ID)
 	m = m.closeConsole()

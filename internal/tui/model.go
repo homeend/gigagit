@@ -84,6 +84,7 @@ type Model struct {
 	pendingScopeClear      bool                           // armed by startOp for checkout-family ops; a Changed success drops the solo/scope (the reRoot precedent, but for a same-worktree switch)
 	pendingRemoteTagAdds   []string                       // tags to optimistically add to remoteTagNames on PushTags success
 	pushCheckGen           int                            // generation guard for the async pre-push remote-tag check
+	remoteTagsGen          int                            // generation guard for the remote-tag lookup: the remote's tags are the repository's, so only a repository switch (reRoot) moves it — not an in-repo swap (loadGen)
 	pickGen                int                            // generation guard for the async cherry-pick commit probe
 	linkHistGen            int                            // drops a copied-link history load a newer host has superseded
 	pickPatchTemp          string                         // patch lane's temp file; removed when its op finishes
@@ -2005,6 +2006,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			key := m.panelSelKey(panelBranches)
 			m.branches = msg.value.([]model.Branch)
 			m.bfMemo.invalidate()
+			// The read may have run through a worktree that has since left the
+			// screen (a swap during a background read): the list is the
+			// repository's, the `*` is the VIEWED worktree's — when the
+			// worktree list can say which branch that is (on the startup
+			// fan-out it may land later: the read's own `%(HEAD)` stands).
+			if branch, listed := m.listedBranch(m.currentWorktree); listed {
+				m = m.markHead(branch)
+			}
 			m.identWValid = false // tracked upstreams feed the ident width; rescan in rebuild
 			m = m.restorePanelSel(panelBranches, key)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
@@ -3438,10 +3447,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.manual && m.bgBusy && m.bgActiveItem.isRemoteTags {
 			m.bgBusy = false
 		}
-		// Drop stale results from a previous repo: reRoot bumps loadGen, so any
-		// in-flight remoteTagsCmd that was launched before the switch must not
-		// overwrite the new repo's (empty) remoteTagNames with old-repo names.
-		if msg.gen != m.loadGen {
+		// Drop stale results from a previous repo: reRoot bumps remoteTagsGen,
+		// so any in-flight remoteTagsCmd that was launched before the switch
+		// must not overwrite the new repo's (empty) remoteTagNames with
+		// old-repo names. An in-repo swap keeps it: the remote's tags are the
+		// repository's.
+		if msg.gen != m.remoteTagsGen {
 			return m, nil
 		}
 		if msg.err != nil {
@@ -3548,6 +3559,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pushTagCheckMsg:
 		if msg.gen != m.pushCheckGen {
 			return m, nil // superseded (another P / op / repo switch)
+		}
+		if msg.svc != nil && msg.svc != m.svc {
+			// The panels swapped during the check (alt+w, a console): the
+			// push would go through the worktree on screen NOW, with ITS
+			// branch. The worktree P was pressed in is the only honest target.
+			m.statusMsg = i18n.T("push cancelled (the worktree on screen changed) — press P again there")
+			return m, nil
 		}
 		if m.running {
 			// An op started during the 5s check — never start a push under it.
@@ -3760,7 +3778,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the worktree the op ran in (stamped for its slot), and after the
 			// swap m.stashView is the arriving worktree's — usually none.
 			listCmd := m.loadStashListCmd(m.stashView.tag)
-			m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
+			m = m.takeQueuedReturnAfterOp(srcs) // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
 			var cmd tea.Cmd
 			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
 			return m, tea.Batch(healthCmd, cmd, listCmd, driftCmd, sendCmd)
@@ -3778,11 +3796,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
-		var cmd tea.Cmd
-		m = m.takeQueuedReturn() // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
-		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
-		// prepend them, not collapse the list back to page 0.
-		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
+		// The PR fetch's follow-up is built BEFORE the queued return, as the
+		// stash arm's list reload is: the PR's diff opens in the worktree the
+		// fetch ran in (stamped for its slot, applied on return), and its
+		// landing clock is that worktree's parked steer.
 		var prCmd tea.Cmd
 		if prOpen != nil && msg.err == nil {
 			prCmd = m.openPRPreviewCmd(*prOpen) // the head is local now: open its diff
@@ -3793,6 +3810,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if prOpen != nil {
 			m, prCmd = m.failPRLanding(prOpen.Number, firstLine(msg.err.Error()))
 		}
+		var cmd tea.Cmd
+		m = m.takeQueuedReturnAfterOp(srcs) // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
+		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
+		// prepend them, not collapse the list back to page 0.
+		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
 		if prsReload && msg.err == nil {
 			// Batched, never assigned: a search result's fetch arms BOTH the
 			// open above and this re-read.
@@ -3926,8 +3948,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case statusRefreshedMsg:
-		m.running = false
-		m.opName = ""
+		if msg.staging {
+			// The round that set the busy flag is over. An editor exit's
+			// re-read (reloadStatusCmd) owns no op: an op started before it
+			// landed keeps its flag, or the swap refusal would lift mid-op.
+			m.running = false
+			m.opName = ""
+		}
 		if msg.svc != nil && msg.svc != m.svc {
 			return m, nil // read through another slot's service (an editor exit's reload, then a swap): not this worktree's
 		}
@@ -4239,6 +4266,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !live {
 			if cp, ok := m.proc.(*conflictProcess); ok && cp.picker == msg.picker {
 				live = true
+			}
+		}
+		if !live {
+			// Parked with its worktree (a swap during the lex) or displaced
+			// under a console: the picker waits in a slot's group and comes
+			// back as it is, so the runs go through its pointer now.
+			live = m.windowState.holds(msg.picker)
+			for _, v := range m.views {
+				live = live || v.windows.holds(msg.picker)
 			}
 		}
 		if !live {
@@ -5028,6 +5064,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.diffTag = ""
 	m.remoteTagNames = nil // tag names from a different repo must not bleed into the new one
 	m.pushCheckGen++       // drop any in-flight pre-push tag check from the old repo
+	m.remoteTagsGen++      // and any in-flight remote-tag lookup
 	m.pickGen++            // drop any in-flight cherry-pick probe from the old repo
 	m.entryCompareGen++    // drop any in-flight commit-entry compare resolve from the old repo
 	m = m.cleanupPickPatchTemp()

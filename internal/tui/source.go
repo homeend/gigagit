@@ -360,8 +360,9 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcBranches, srcRemotes, srcFeed}
 	case engine.CheckoutRemoteBranch:
 		// Map + fetch + local tracking branch, possibly a HEAD move (switch
-		// intent): everything AddFetchMappings touches plus status.
-		return []sourceKey{srcStatus, srcBranches, srcRemotes, srcFeed, srcReflog}
+		// intent): everything AddFetchMappings touches plus status, and the
+		// worktree list (its branch column; the slot's recycle baseline).
+		return []sourceKey{srcStatus, srcBranches, srcRemotes, srcFeed, srcReflog, srcWorktrees}
 	case engine.CreateWorktree, engine.CreateWorktreeForBranch:
 		return []sourceKey{srcBranches, srcWorktrees}
 	case engine.RemoveWorktree:

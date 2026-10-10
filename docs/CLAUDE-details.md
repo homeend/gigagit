@@ -6452,7 +6452,8 @@ rebuilds its own on the kick).
 The Model's fields stay the LIVE copy (no reader changed); `saveView` /
 `loadView` copy out/in. `Model.views` is keyed by the cleaned path,
 `viewed` is the slot on screen, `home` the one gg's identity belongs to.
-Worktrees of one repository share branches/commits/stashes/tags/reflog, so
+Worktrees of one repository share branches/commits/stashes/tags (NOT the
+HEAD reflog: git keeps it per worktree, and the slot keeps it), so
 those never move. `seedHome` runs on BOTH first-load arms (`configReadyMsg`,
 the production startup path, and `dataLoadedMsg`, the legacy `loadCmd` path
 the unit fixtures use) — the first cut only seeded the second and the e2e
@@ -6802,6 +6803,52 @@ copy; `trimQueue` copies the kept tail into a fresh slice; `pruneViews`
 releases a gone worktree's open files (`openFilesReg.drop`; a repository
 switch keeps them on purpose — the open-files ruling); the PR view's
 freshness state is in `windowState` (the PR section above).
+**Second hunt (2026-10-10, fix/fast-switch-hunt-2, tests in
+`hunt2_fixes_test.go`; reviews: the operation boundary, the three keys
+as a state machine, the replay queue + the shared state).** Every
+message whose handler reaches `startOp` after an async step names its
+worktree — the Service it was asked through or a slot stamp — and drops
+a mismatch (`TestAsyncOpStartersNameTheirWorktree`: `pushTagCheckMsg`
+and `pickProbeMsg` joined the range loads); `statusRefreshedMsg.staging`
+says whether a staging round ends — only that clears `running` (the
+editor exit's `reloadStatusCmd` owns no op); `effectiveTop` (the live
+top, or the console-parked top under a shown console) is what BOTH
+`steerRefusal` and `switchRefusalBy` judge, so a parkable popup
+displaced under a console still parks on the user's own swap;
+`closeConsole` maps a return focus on another top-slot tab to the shown
+one and `selectSessionRow` re-pins `leftMax`/the return point's
+`fullMax` as `activateTab` does; the HEAD reflog is per worktree
+(`worktreeView.reflog`, `sleepView` retires its read, the kick re-reads
+it); the `srcBranches` arm re-marks the viewed head (`markHead`) on every
+arrival; the PR fetch's follow-up is built BEFORE `takeQueuedReturn`
+like the stash arm's; `shelfAddedMsg`/`shelfSetAddedMsg` are stamped
+(the marks they consume are their worktree's); `routeSlotMsg` applies a
+`sharedWriter`'s shared part for a GONE slot too; the ghost cursor needs
+the Commits focus; `filePathPopup` is parkable only once its list
+landed; `pickerLexedMsg` writes through the picker's pointer when any
+slot's group holds it; `remoteTagsMsg` is gated by `remoteTagsGen`
+(moved only by `reRoot` — `loadGen` moves on every swap now);
+`applyCommitMessage` keeps a sleeping repo worktree's message as its
+pending one (`pendingKey` = `model.KeyOf`); `dispatchParkedAware` puts
+the console-parked stash list and preview back beneath the handler and
+re-parks them (`reparkConsoleViews`); `takeQueuedReturnAfterOp` marks
+the leaving slot's branch record unknown after an op whose reload
+re-reads the worktree list (its sources name `srcWorktrees`, or are
+"all" — the switch/checkout ops; `CheckoutRemoteBranch` now lists it
+too, guard `TestBranchChangingOpsReloadTheWorktreeList`) and
+`dropRecycledWindows` adopts the next list as that slot's baseline
+instead of skipping it — a commit keeps its record; the
+`alt+w` footer hint gates on `worktreeOrder()` and the hide-first hint
+with one worktree says so. **Reported, not fixed:** create-and-switch /
+repair-and-switch / move-home go through `reRoot` (the new path is not
+listed yet) and so drop every sleeping slot's parked windows and queue,
+answering parked steers with the repository-changed prose; a recycled
+sleeping worktree's open documents whose reload was queued stay
+`loading` until re-opened; `alt+w` over an open commit files view lands
+the focus on the covered Branches panel (the commit list shows no
+cursor until tab); `alt+a` over a view pushed onto another worktree's
+console restarts the walk from the return worktree; `noteMutatedMsg`
+clears the line selection of whatever diff is live.
 
 **Trigger 2 — the user's own switch** (`switch_guard.go`): `guardedReRoot`
 takes the fast path for a listed worktree on `switchOK` → `switchView` +

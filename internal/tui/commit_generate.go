@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"path/filepath"
+	"github.com/homeend/gigagit/internal/model"
 	"strings"
 	"time"
 
@@ -110,6 +110,15 @@ func (p *commitPopup) fill(msg string) {
 // worktree's pending message.
 func (m Model) applyCommitMessage(info domain.TaskInfo) (Model, tea.Cmd) {
 	if !m.taskHere(info) {
+		if m.isRepoWorktree(info.Worktree) {
+			// A sleeping worktree of this repository: the message waits as
+			// ITS pending one — c there opens it filled.
+			if m.pendingCommitMsg == nil {
+				m.pendingCommitMsg = map[string]pendingMessage{}
+			}
+			m.pendingCommitMsg[pendingKey(info.Worktree)] = pendingMessage{text: info.Result, from: info.Agent}
+			return m.stickyNotice(i18n.T("commit message from %s ready in %s — press c there", info.Agent, shortWorktreeName(info.Worktree)))
+		}
 		return m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
 	}
 	if p := m.topCommitPopup(); p != nil && !p.amend {
@@ -130,7 +139,7 @@ func (m Model) applyCommitMessage(info domain.TaskInfo) (Model, tea.Cmd) {
 }
 
 // pendingKey is a worktree's key in Model.pendingCommitMsg.
-func pendingKey(worktree string) string { return filepath.Clean(worktree) }
+func pendingKey(worktree string) string { return string(model.KeyOf(worktree)) } // the checkout key every per-worktree map uses (case-folded where the filesystem is)
 
 // openCommitBox opens the commit popup, filled from this worktree's pending
 // message when one waits.

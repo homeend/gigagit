@@ -81,9 +81,11 @@ func parkableLayer(l layer) bool {
 		return !v.generating // the generate task's result and spinner need the box on screen
 	case *repoPathPopup:
 		return !v.resolving
+	case *filePathPopup:
+		return !v.loading // its file list lands on the live pile only: parked before, it would read "(loading…)" for good
 	case *versionsPopup, *remoteHeadsPopup, *allNotesPopup, *gitConfigPopup,
 		*branchPopup, *notePopup, *annotateTagPopup, *renameBranchPopup,
-		*rewordPopup, *commitNamePopup, *filePathPopup, *bookmarkPopup, *bookmarkPastePopup,
+		*rewordPopup, *commitNamePopup, *bookmarkPopup, *bookmarkPastePopup,
 		*notesListPopup, *exportPatchPopup, *applyPatchPopup, *hookEditorPopup,
 		*languagePickerPopup, *previewRenamePopup,
 		*pairOpPopup, *reflogCheckoutPopup, *shelfRestorePopup, *shellCmdPopup,

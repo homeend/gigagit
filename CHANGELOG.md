@@ -279,6 +279,36 @@ review id.
   retention) a commit or merge made there still wrote version refs. The
   shown worktree now follows the config, and a Settings change or config
   reload reaches every remembered worktree.
+- **Second hunt.** Seventeen more fixes from three read-only reviews
+  (the operation boundary, the three keys as a state machine, the replay
+  queue and the shared state). The ones you could meet: `P` with a tagged
+  tip waited up to 5 s for the remote-tag check with nothing marked busy,
+  and a swap meanwhile pushed the OTHER worktree's branch (no prompt when
+  the tags were already remote) — the check and the bookmark switcher's
+  cherry-pick probe now name their worktree and are dropped on a
+  mismatch; the editor's exit re-read cleared the busy flag of an
+  operation started before it landed (the swap refusal lifted mid-op, and
+  a second op key could cancel or orphan the first); a half-typed commit
+  box parked under a console (`alt+a` onto that worktree's agent) refused
+  every switch with "a window is open" and nothing on screen; closing a
+  console opened from the Worktrees (Remotes, Previews, PRs) tab put the
+  keyboard on that hidden tab after the walk showed Branches; the Reflog
+  tab kept the previous worktree's HEAD reflog after `alt+w` (it is per
+  worktree, now kept by the slot and re-read on the swap); a branches
+  read in flight through the leaving worktree put the `*` back on its
+  branch; a shelf write that landed after a swap consumed the marks of
+  the worktree on screen; a PR fetch's diff opened in the worktree a
+  queued return swapped to; a remote-tags read was dropped by every
+  in-repo swap; a commit-message task for a sleeping worktree was not
+  kept as its pending message (and `c` there opened an empty box); a
+  checkout followed by a queued return had its own worktree read as
+  recycled (windows dropped); the file-path popup parked while loading
+  and read "(loading…)" for good; a parked hunk picker never got its
+  syntax colours; a stash list or preview displaced under a console lost
+  its read; a shared shelf list or PR row addressed to a removed
+  worktree was dropped whole; the ghost cursor was drawn beside a
+  clicked panel's real one; the footer advertised `alt+w` beside a bare
+  entry and the hide-first hint promised a next worktree with one.
 - **Each worktree keeps its own windows.** A window of the worktree you
   were leaving — a diff, a blame, a file viewer, a history, a compare, the
   F window, the stash list — used to stay on top after `alt+w` / `alt+a`

@@ -21,8 +21,9 @@ import (
 // not a reload. The Model's own fields are the LIVE copy — every reader and
 // renderer is untouched — and switchView copies out to the leaving slot
 // and in from the arriving one. Worktrees of one repository share
-// branches, commits, stashes, tags and the reflog, so none of those is
-// here.
+// branches, commits, stashes and tags, so none of those is here; the HEAD
+// reflog is each worktree's own (git keeps it under worktrees/<name>/
+// logs/HEAD) and lives in the slot.
 type worktreeView struct {
 	key  model.CheckoutKey // the map key: the path's identity (model.KeyOf)
 	path string            // the worktree path as LISTED (`git worktree list`): what reaches disk, git and the screen
@@ -38,6 +39,7 @@ type worktreeView struct {
 	fileMarks      map[string]bool
 
 	workingReviews []domain.WorkingReview
+	reflog         []model.ReflogEntry // this worktree's HEAD reflog (per worktree, not the repository's)
 
 	resumePromptShown bool // the continue/abort prompt fired for THIS tree's paused op (model.go's flag, per slot: a round trip through another tree must not fire it again)
 
@@ -211,6 +213,7 @@ func (m Model) saveView() Model {
 	v.selFiles, v.selStaged = m.sel[panelFiles], m.sel[panelStaged]
 	v.fileMarks = m.fileMarks
 	v.workingReviews = m.workingReviews
+	v.reflog = m.reflog
 	v.resumePromptShown = m.resumePromptShown
 	v.branch, v.branchKnown = m.listedBranch(v.path)
 	return m
@@ -243,11 +246,20 @@ func (m Model) listedBranch(path string) (string, bool) {
 func (m Model) dropRecycledWindows() (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	for key, v := range m.views {
-		if key == m.viewed || !v.branchKnown {
+		if key == m.viewed {
 			continue
 		}
 		branch, listed := m.listedBranch(v.path)
-		if !listed || branch == v.branch || branch == "" {
+		if !listed {
+			continue
+		}
+		if !v.branchKnown {
+			// No record (a slot never parked, or one re-baselined after its
+			// own HEAD-moving op): this list is the baseline.
+			v.branch, v.branchKnown = branch, true
+			continue
+		}
+		if branch == v.branch || branch == "" {
 			continue
 		}
 		if v.branch == "" {
@@ -321,6 +333,7 @@ func (m Model) loadView(v *worktreeView) Model {
 	m.workingReviews = v.workingReviews // before the rows: withStatus derives the Review row from the reviews
 	m = m.withStatus(v.status)          // recomputes the index slices and the status stack
 	m.conflict = v.conflict
+	m.reflog = v.reflog // its own HEAD reflog (a fresh slot: none until the kick's read)
 	m.resumePromptShown = v.resumePromptShown
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -502,7 +515,7 @@ func (m Model) switchRefusalBy(byUser bool) string {
 		return i18n.T("an operation is running — switch once it has finished")
 	}
 	why := m.steerRefusal()
-	if why == "" || (byUser && why == refusalWindowOwnsKeyboard && parkableLayer(m.topLayer())) {
+	if why == "" || (byUser && why == refusalWindowOwnsKeyboard && parkableLayer(m.effectiveTop())) {
 		return ""
 	}
 	return i18n.T("cannot switch while a window is open")
@@ -547,6 +560,9 @@ func (m Model) sleepView() Model {
 	m.srcGen[srcFeed]++ // nor a commit walk from the old root (the feed is re-rooted on load)
 	m.srcInflight[srcFeed] = false
 	m.srcLoading[srcFeed] = false
+	m.srcGen[srcReflog]++ // nor the HEAD reflog (per worktree)
+	m.srcInflight[srcReflog] = false
+	m.srcLoading[srcReflog] = false
 	m.workingReviewsGen++ // likewise a reviews read
 	// The windows, the parked tour, the parked navigate and the working-file
 	// bands are NOT touched: saveView put them in the slot, loadView brings
@@ -563,8 +579,9 @@ func (m Model) sleepView() Model {
 // switchView, which marks the read in flight on the live model first.
 func (m Model) viewKickCmd() tea.Cmd {
 	read := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{})
-	notes := m.readSourceCmd(context.Background(), srcNotes, reloadOpts{}) // the ✎ badges are the checkout's
-	feed := m.readSourceCmd(context.Background(), srcFeed, reloadOpts{})   // reconcile: the walk now starts at this tree's HEAD
+	notes := m.readSourceCmd(context.Background(), srcNotes, reloadOpts{})   // the ✎ badges are the checkout's
+	feed := m.readSourceCmd(context.Background(), srcFeed, reloadOpts{})     // reconcile: the walk now starts at this tree's HEAD
+	reflog := m.readSourceCmd(context.Background(), srcReflog, reloadOpts{}) // the HEAD reflog is this worktree's own
 	_, docs := m.syncAgentDocs()
 	var files tea.Cmd
 	switch {
@@ -573,7 +590,7 @@ func (m Model) viewKickCmd() tea.Cmd {
 	case m.inFullTree() && m.treeSlept && m.filesView != nil:
 		files = m.loadTreeFilesCmd(m.filesViewCommit()) // likewise a commit's full tree
 	}
-	return tea.Batch(read, notes, feed, m.startWatchCmd(m.watchGen), docs, files)
+	return tea.Batch(read, notes, feed, reflog, m.startWatchCmd(m.watchGen), docs, files)
 }
 
 // takeQueuedReturn performs the swap a console close, a console SHOW (its
@@ -603,6 +620,28 @@ func (m Model) takeQueuedReturn() Model {
 		path = m.homeWorktree()
 	}
 	m, _ = m.switchView(path)
+	return m
+}
+
+// takeQueuedReturnAfterOp is takeQueuedReturn at an op's end, BEFORE the
+// op's reload: the leaving slot's branch record (saveView) comes from the
+// pre-op worktree list, so after an op whose reload re-reads the LIST
+// (srcs names srcWorktrees, or is nil — every source: the switch and
+// checkout ops) that arrival would read the op's own checkout as a
+// recycle and drop its windows. The slot's record is marked unknown
+// instead and dropRecycledWindows takes its baseline from that arrival.
+// An op that reads no list (a commit) keeps the record: the branch did
+// not change, and an unknown record would wait for a later list — a
+// recycle meanwhile would be adopted, not caught.
+func (m Model) takeQueuedReturnAfterOp(srcs []sourceKey) Model {
+	was := m.viewed
+	m = m.takeQueuedReturn()
+	if m.viewed == was || srcs != nil && !slices.Contains(srcs, srcWorktrees) {
+		return m
+	}
+	if v := m.views[was]; v != nil {
+		v.branchKnown = false
+	}
 	return m
 }
 
@@ -736,16 +775,15 @@ func touchRepoMRUCmd(path, remote string) tea.Cmd {
 	}
 }
 
-// cycleWorktrees is alt+w. A press without the keyboard on the Branches
-// panel — a console shown (bound or not), another panel focused — is a
-// FIRST HIT: a shown console hides (the session keeps running; the panels
+// cycleWorktrees is alt+w. Under a shown console (bound or not) the press
+// is a FIRST HIT: the console hides (the session keeps running; the panels
 // stay on the worktree they show), Branches takes focus (its border says
 // so) with its cursor on the viewed worktree's branch, and that is all.
-// With Branches focused the panels show the next worktree of the Worktrees
-// tab's order (its sort), past the last one the first — the same fast
-// switch alt+a makes for a console's worktree, no session needed — and the
-// Branches cursor moves to that worktree's branch. A look, never an
-// adoption: gg's own worktree stays home.
+// Otherwise — whichever panel has the keyboard — the panels show the next
+// worktree of the Worktrees tab's order (its sort), past the last one the
+// first — the same fast switch alt+a makes for a console's worktree, no
+// session needed — and the Branches cursor moves to that worktree's
+// branch. A look, never an adoption: gg's own worktree stays home.
 func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	order := m.worktreeOrder()
 	n := len(order)
@@ -770,7 +808,11 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 		}
 		m = m.closeConsole()
 		m = m.activateTab(panelBranches).selectWorktreeBranch(viewed)
-		m.statusMsg = i18n.T("console hidden — alt+w again for the next worktree")
+		if n < 2 {
+			m.statusMsg = i18n.T("console hidden — this repository has one worktree, alt+w cycles them once there are more")
+		} else {
+			m.statusMsg = i18n.T("console hidden — alt+w again for the next worktree")
+		}
 		return m, nil
 	}
 	m = m.activateTab(panelBranches)
@@ -820,6 +862,12 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 // worktree) leaves the cursor alone.
 func (m Model) selectSessionRow(id domain.SessionID) Model {
 	m.activeLeftTab, m.lastLeftPanel = panelBranches, panelBranches
+	if m.leftMaxed && slices.Contains(m.leftTabs(), m.leftMax) {
+		m.leftMax = panelBranches // activateTab's re-pin: a `t`-maximised top-slot tab stays maximised as the shown one
+	}
+	if m.console != nil && m.console.ret != nil && m.console.ret.fullMaxed && slices.Contains(m.leftTabs(), m.console.ret.fullMax) {
+		m.console.ret.fullMax = panelBranches // likewise the ctrl+t pin the console's return point carries
+	}
 	ents := m.branchEntries()
 	for di, u := range m.displayIndices(panelBranches) {
 		if u < len(ents) && ents[u].sess == id {
