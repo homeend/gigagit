@@ -1,5 +1,5 @@
 ╭──────────────────────────────────────────────────────────────────────────────╮╭──────────────────────────────────────────────────────────────────────────────╮
-│ Tour                                                                         ││ View a.txt (working tree)                                               2/40 │
+│ Tour                                                                         ││ View a.txt (working tree)                                  2/40  file | diff │
 │ Tour                                                                         ││   line 2 of a                                                                │
 │                                                                              ││ ╎ line 3 of a                                                                │
 │ • three                                                                      ││   line 4 of a                                                                │
@@ -37,4 +37,4 @@
 │                                                                              ││   line 36 of a                                                               │
 │                                                                              ││   line 37 of a                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
-anchor 3/3 in this file · twenty  [tab] other side  [bksp] left side  [esc] close  [n/p] anchors  [N/P] overview  [S] stacked  [alt+↑↓] line  [spc] mark  [/] f…
+anchor 3/3 in this file · twenty  [tab] other side  [bksp] left side  [esc] close  [n/p] anchors  [D] diff  [N/P] overview  [S] stacked  [alt+↑↓] line  [spc] m…
