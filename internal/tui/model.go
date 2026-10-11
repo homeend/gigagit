@@ -1131,7 +1131,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// mark an earlier check left (the file appeared). A reload
 				// (the disk or the notes changed) names it only when the mark
 				// flips: a store change reloads a deleted file every time.
-				gone := msg.err != nil || msg.disk.missing
+				gone := msg.disk.missing || readGone(msg.err, d.src.kind == srcWorktree)
 				if changed := m.markFileAnchors(d.from, d.path, gone); gone && (!msg.reload || changed) {
 					m.statusMsg = i18n.T("no file %s", d.path)
 				}

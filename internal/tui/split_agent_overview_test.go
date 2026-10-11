@@ -407,3 +407,52 @@ func TestSplitReloadThatFindsTheFileDeletedNamesIt(t *testing.T) {
 		t.Fatalf("status %q missing %v, want %q and the mark", m.statusMsg, sv.left.doc().ov.anchors[2].missing, want)
 	}
 }
+
+// unreadable makes the worktree file name unreadable (permission denied)
+// and restores it at the end; a root run reads it anyway, so it skips.
+func unreadable(t *testing.T, m Model, name string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a 0000 file")
+	}
+	p := filepath.Join(m.currentWorktree, name)
+	if err := os.Chmod(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(p, 0o644) })
+}
+
+// A working file that is there but cannot be read is not a file that is
+// gone: the split's failed read marks no ✗ (the store's check says present).
+func TestSplitUnreadableFileIsNotMarkedMissing(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	ov := m.splitLayer().left.doc()
+	unreadable(t, m, "c.txt")
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 2 || ov.ov.anchors[2].missing || docsMissing(t, m, ov, 2) {
+		t.Fatalf("sel %d missing %v: an unreadable file is still there", ov.ov.sel, ov.ov.anchors[2].missing)
+	}
+}
+
+// The same in the stack: a read failing for any reason but "not there"
+// marks nothing.
+func TestStackUnreadableFileIsNotMarkedMissing(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	sv := m.splitLayer()
+	ov := sv.left.doc()
+	unreadable(t, m, "c.txt")
+	m = pressDrain(t, m, "S")
+	sp, ok := sv.right.(*stackPane)
+	if !ok {
+		t.Fatalf("right %T, want the stack", sv.right)
+	}
+	if f := sp.stream.files[sp.fileIndex("c.txt")]; f.err == nil {
+		t.Fatal("the read must fail: the test needs an unreadable file")
+	}
+	if ov.ov.anchors[2].missing || docsMissing(t, m, ov, 2) {
+		t.Fatal("an unreadable file is still there: no ✗")
+	}
+}

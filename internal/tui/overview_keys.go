@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -129,6 +131,14 @@ func (m Model) markFileAnchors(ov *openFile, path string, missing bool) (changed
 		ov.ov.paint(ov.p.lines)
 	}
 	return changed
+}
+
+// readGone reports whether a failed read means the file is not there: any
+// error reading a commit (git names no other kind), only "does not exist"
+// in the working tree — a file it cannot read (permissions) is there, as the
+// store's own check finds it.
+func readGone(err error, worktree bool) bool {
+	return err != nil && (!worktree || errors.Is(err, fs.ErrNotExist))
 }
 
 // openAnchor opens overview ov's anchor i in the foreground: a file at its
