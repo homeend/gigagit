@@ -123,11 +123,17 @@ func (m Model) steerSplit(sv *splitView) (Model, tea.Cmd) {
 	switch r := sv.right.(type) {
 	case *docPane:
 		m, cmd = m.docSteer(sv, r, ov, anchor{dest: dest, target: anchorTarget(path, line)})
+		if r.d != nil {
+			ov.ov.beginStep(r.d)
+		}
 	case *stackPane:
 		m, cmd = m.stackSteer(sv, r, ov.ov.sel)
 	}
 	if m.statusMsg == "" || !strings.HasPrefix(m.statusMsg, i18n.T("no file %s", a.target.Path)) {
 		m.statusMsg = anchorHint(ov)
+	}
+	if r, ok := sv.right.(*docPane); ok && r.d != nil {
+		m = m.stepContent(r.d) // a file already in: compare now (a load compares when it lands)
 	}
 	return m, cmd
 }

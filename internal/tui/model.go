@@ -1123,6 +1123,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if n := d.fill(msg, rows, inner); n != "" {
 				m.statusMsg = n
 			}
+			m = m.stepContent(d)
 			if msg.err != nil && d.from != nil && d.from.ov != nil && m.splitShowing(d) != nil {
 				// An overview's anchor steered to a file the commit does not
 				// have: name it, and mark the anchor gone (openAnchor's rule).

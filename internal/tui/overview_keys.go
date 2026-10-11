@@ -140,6 +140,7 @@ func (m Model) openAnchor(ov *openFile, i int) (Model, tea.Cmd) {
 		}
 		if d := topDoc(m); d != nil {
 			d.from, d.backgrounded, d.anchorCur = ov, true, a.dest
+			ov.ov.beginStep(d)
 		}
 		return m, cmd
 	}
@@ -195,6 +196,7 @@ func (m Model) anchorStatted(msg anchorStatMsg) (Model, tea.Cmd) {
 		// The range is drawn as the current band (anchor_bands.go), not
 		// selected: the reader's own marking stays theirs.
 		d.from, d.backgrounded, d.anchorCur = ov, true, msg.dest
+		ov.ov.beginStep(d)
 	}
 	return m, cmd
 }

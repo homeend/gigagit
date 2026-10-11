@@ -628,3 +628,21 @@ func (dd *docDiff) rowNumber(i int) int {
 	}
 	return 0
 }
+
+// stepContent compares the file a link step opened, once its lines are in,
+// with the previous step's: another path with the very same text says so
+// on the status line (spec §7). A placeholder is no content.
+func (m Model) stepContent(d *openFile) Model {
+	if d.from == nil || d.from.ov == nil || d.loading || !docLoaded(d) || d.p.img != nil {
+		return m
+	}
+	st := &d.from.ov.step
+	if st.cur.tag != d.tag || st.cur.known {
+		return m
+	}
+	st.cur.text, st.cur.known = rawOf(d.p.lines), true
+	if p := st.prev; p.known && p.path != st.cur.path && sameText(p.text, st.cur.text) {
+		m.statusMsg = i18n.T("same content as %s", elidePath(p.path, 48))
+	}
+	return m
+}

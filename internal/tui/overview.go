@@ -55,11 +55,29 @@ type overview struct {
 	// overview's links open (split_diff.go): held here, not by a file, so
 	// it survives link steps and the narrow viewer; forgetDiff ends it.
 	diff, diffPartial bool
+	// step is the last two files a link step opened (split_diff.go): a step
+	// to the previous one's very text says so (spec §7).
+	step struct{ prev, cur stepFile }
 }
 
-// forgetDiff ends the overview's D / f choice: its split or viewer closed.
+// stepFile is a file a link step opened: its path, the document (tag) and,
+// once its lines are in (known), their text.
+type stepFile struct {
+	path, tag string
+	text      []string
+	known     bool
+}
+
+// forgetDiff ends the overview's D / f choice and its step record: its
+// split or viewer closed.
 func (o *overview) forgetDiff() {
 	o.diff, o.diffPartial = false, false
+	o.step.prev, o.step.cur = stepFile{}, stepFile{}
+}
+
+// beginStep records that a link step opened d.
+func (o *overview) beginStep(d *openFile) {
+	o.step.prev, o.step.cur = o.step.cur, stepFile{path: d.path, tag: d.tag}
 }
 
 // overviewLines lays text out at width for view mode: the rows, and the

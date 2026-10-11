@@ -280,3 +280,23 @@ func TestCopyLineOnADeletedRowNamesItsOldNumber(t *testing.T) {
 		t.Fatalf("copied %q (%q), want the deleted line's text as line 5", got, m.statusMsg)
 	}
 }
+
+// Spec §7 (D6): a link step to a file whose text is the previous step's
+// file's says so; another path is required, and only the previous step
+// counts.
+func TestSameContentAsThePreviousLinksFile(t *testing.T) {
+	t.Parallel()
+	m, _ := diffSplitModel(t)
+	m = pressDrain(t, m, "N") // b.txt
+	if strings.Contains(m.statusMsg, "same content") {
+		t.Fatalf("a.txt → b.txt differ: %q", m.statusMsg)
+	}
+	m = pressDrain(t, m, "N") // c.txt: b.txt's text
+	if m.statusMsg != "same content as b.txt" {
+		t.Fatalf("status %q", m.statusMsg)
+	}
+	m = pressDrain(t, m, "N") // wraps to a.txt
+	if strings.Contains(m.statusMsg, "same content") {
+		t.Fatalf("c.txt → a.txt differ: %q", m.statusMsg)
+	}
+}
