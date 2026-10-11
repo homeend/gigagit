@@ -469,6 +469,7 @@ $("viewer-body").addEventListener("click", (e) => {
     const st = split.stack, head = e.target.closest(".vstk-head"), row = e.target.closest(".vline[data-k]");
     const picked = getSelection();
     if (!picked.isCollapsed && $("viewer-body").contains(picked.anchorNode)) return;
+    if (head || row) st.want = null; // the reader's own place wins over a step still loading
     if (head) {
       st.cur = { k: Number(head.dataset.k), line: 0 };
       if (e.target.closest(".vstk-fold")) return foldStackFile();
@@ -1346,6 +1347,8 @@ async function loadStackFile(st, k) {
   }
   if (!split || split.stack !== st) return; // the stack left the screen while this loaded
   st.inFlight--;
+  k = st.slots.indexOf(s); // a refresh of the links may have moved (or dropped) the file meanwhile
+  if (k < 0) return pumpStack(st);
   if (!body) s.load = "error";
   else {
     s.load = "ok";
@@ -1436,10 +1439,14 @@ function stackCurFile(st) {
 }
 
 // stackKey is a key on the stack (spec §11): lines across files, bands,
-// headers, folds; the single-file keys say S opens the file.
+// headers, folds; the single-file keys say S opens the file. A key that
+// moves the cursor drops a step still waiting for its file: a late read
+// never pulls the cursor from where the reader went (the TUI's rule).
+const STACK_MOVES = new Set(["ArrowDown", "j", "ArrowUp", "k", "PageDown", " ", "PageUp", "Home", "g", "End", "G", "N", "P", "n", "p", "-", "_"]);
 function stackKey(e) {
   const st = split.stack;
   if (!st.slots.length && e.key !== "Escape" && e.key !== "Backspace") return false;
+  if (STACK_MOVES.has(e.key)) st.want = null;
   switch (e.key) {
     case "Backspace": focusSplit(true); break;
     case "ArrowDown": case "j": st.cur = stackMove(st.slots, st.cur, 1); paintStackCursor(); break;
@@ -1493,6 +1500,8 @@ function stepStackAnchor(dir) {
 // foldStackFile is -: the cursor's file folds to its header (or unfolds).
 function foldStackFile() {
   const st = split.stack, k = st.cur.k, s = st.slots[k];
+  if (!s) return;
+  st.want = null;
   s.collapsed = !s.collapsed;
   st.cur = { k, line: 0 };
   repaintStackFile(st, k);
@@ -1503,6 +1512,7 @@ function foldStackFile() {
 // foldAllStack is _: every file folds, or — all folded — every file opens.
 function foldAllStack() {
   const st = split.stack, fold = st.slots.some((s) => !s.collapsed);
+  st.want = null;
   for (const s of st.slots) s.collapsed = fold;
   st.cur = { k: st.cur.k, line: 0 };
   renderStack();

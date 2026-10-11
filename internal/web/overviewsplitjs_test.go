@@ -154,6 +154,9 @@ func TestOverviewSplitStackIsWired(t *testing.T) {
 		`st.slots = restack(st.slots, stackFiles(stackReviewFiles(sp), sp.ov.anchors));`,
 		"<button data-vact=\"stack\">S ",
 		`<b>S</b> stacks`,
+		`k = st.slots.indexOf(s); // a refresh of the links may have moved (or dropped) the file meanwhile`,
+		`if (STACK_MOVES.has(e.key)) st.want = null;`,
+		`if (head || row) st.want = null;`,
 	} {
 		if !strings.Contains(v, want) {
 			t.Errorf("viewer.js lacks %q", want)
