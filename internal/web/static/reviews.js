@@ -10,7 +10,7 @@ import { $, esc, getJSON, postJSON, runOnce, state } from "./core.js";
 import { copyText, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { mdHTML } from "./markdown.js";
-import { registerHelp } from "./menus.js";
+import { extraRows, registerHelp } from "./menus.js";
 import { NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
 import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
@@ -649,11 +649,15 @@ function reviewHead(id) {
 // reviewMenu is the right-click menu of a review row (a commit's, a branch's
 // sub-row, the review view's Summary).
 // reviewMenu is a review row's right-click menu: a review is opened or
-// removed, nothing else (the TUI's noteRowMenu). open is what a click on the
-// row does; the open review's own Summary row passes none.
+// removed (the TUI's noteRowMenu), plus what features register for it — pr
+// is the pull request the row was reached from (its Reviews block, or a
+// review opened from there), 0 elsewhere. open is what a click on the row
+// does; the open review's own Summary row passes none.
 function reviewMenu(id, x, y, open) {
   const rows = open ? [{ label: "Open review", act: open }] : [];
   rows.push({ label: "Copy gg link", act: () => copyServerLink("/api/review/" + encodeURIComponent(id) + "/link", "review: " + id) });
+  const back = previewBack(id) || (state.review && state.review.id === id ? state.review.back : null);
+  rows.push(...extraRows("review", { id, pr: back && back.kind === "pr" ? back.pr || 0 : 0 }));
   rows.push({ label: "Delete review", danger: true, act: () => confirmDeleteReview(id) });
   showCtxMenu(rows, x, y);
 }

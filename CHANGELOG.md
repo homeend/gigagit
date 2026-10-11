@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: Send to GitHub… on a pull request's review
+
+### Added
+- A review's right-click menu in a pull request's Reviews block — and on
+  the review opened from there — offers **Send to GitHub…**, the same send
+  panel the pull request's own menu opens (only for an open pull request).
+
 ## Send panel: → and ← show and hide a row
 
 ### Added

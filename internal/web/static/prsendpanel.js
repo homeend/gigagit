@@ -280,10 +280,18 @@ registerRows("pr", (pr) => {
   return [{ label: "Send to GitHub…", act: () => openSendPanel(pr.number) }];
 });
 
+// The same row on a review of the pull request — its Reviews block, or the
+// review opened from there — under the same gate as the PR menu's.
+registerRows("review", ({ pr }) => {
+  const p = pr && (state.prs || []).find((x) => x.number === pr);
+  if (!p || p.state !== "open" || !p.fetched) return [];
+  return [{ label: "Send to GitHub…", act: () => openSendPanel(pr) }];
+});
+
 registerHelp({
   key: "Send to GitHub…",
   html:
-    "a pull request's right-click menu opens one panel over every unsent local comment — each AI review's remarks, " +
+    "a pull request's right-click menu — or a review's, reached from the pull request — opens one panel over every unsent local comment — each AI review's remarks, " +
     "<b>My notes</b>, <b>Draft replies</b> — nothing ticked. <b>space</b> ticks, <b>a</b> all/none in the group, " +
     "<b>b</b> cycles the body (none, a ticked review's text, typed), <b>c</b> shows the code under every row, " +
     "<b>enter</b> opens the row's file in the diff (reopen the panel from the PR menu — its ticks are kept), <b>ctrl+s</b> / Send posts ONE GitHub " +
