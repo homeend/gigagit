@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // ReviewFileDiff is one file of a review as the change the review covered:
@@ -116,4 +117,46 @@ func reviewShort(h string) string {
 		return h[:7]
 	}
 	return h
+}
+
+// WorkingFileDiff is path's change from HEAD to the file on disk: what an
+// agent overview's file shows when D flips it (spec 2026-10-11-overview-
+// split-diff §3, D4). Changed is false when no row changed; a file HEAD does
+// not have is an add (Status A). No remarks: an agent's notes are the
+// frontend's own. Never cached — the working tree moves under one key.
+func (s *Service) WorkingFileDiff(ctx context.Context, path string) (ReviewFileDiff, error) {
+	path = reviewPath(path)
+	out := ReviewFileDiff{Left: "HEAD", Right: "working tree"}
+	inHead := false
+	oldSrc := func(ctx context.Context) ([]byte, error) {
+		b, err := s.ShowFile(ctx, "HEAD", path)
+		if err != nil && ctx.Err() == nil {
+			return nil, nil // not in HEAD: the file is new
+		}
+		inHead = err == nil
+		return b, err
+	}
+	newSrc := absentOnError(func(ctx context.Context) ([]byte, error) {
+		return s.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
+	})
+	d, err := s.Differ().Diff(ctx, Request{Path: path, Old: oldSrc, New: newSrc})
+	if err != nil {
+		return ReviewFileDiff{}, err
+	}
+	out.Diff = d
+	if !inHead {
+		out.Status = "A"
+	}
+	out.Changed = d.Binary || d.TooLarge || rowsChange(d.Result.Rows)
+	return out, nil
+}
+
+// rowsChange reports whether any aligned row is not an unchanged one.
+func rowsChange(rows []textdiff.Row) bool {
+	for _, r := range rows {
+		if r.Kind != textdiff.Same {
+			return true
+		}
+	}
+	return false
 }
