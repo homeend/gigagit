@@ -484,7 +484,7 @@ func TestSplitDiffCharSelEndsOnAClickOnTheOverview(t *testing.T) {
 	x, y := -1, -1 // on the overview's plain word "Look": a click there follows no link
 	for row, l := range strings.Split(ansi.Strip(m.View()), "\n") {
 		if i := strings.Index(l, "Look at"); i >= 0 {
-			x, y = len([]rune(l[:i])), row
+			x, y = ansi.StringWidth(l[:i]), row // cells, as the mouse counts
 			break
 		}
 	}

@@ -72,7 +72,8 @@ func (d *openFile) shownP() *contentPopup {
 // line it is on now, at the same distance from the top when that fits.
 // A diff already showing is replaced the same way (a reload). left reports
 // whether that ended a copy mode: it leaves first, so the view mode carried
-// over is the reader's, never the mode's cut-view-as-scroll.
+// over is the reader's, never the mode's cut-view-as-scroll. (d is a file,
+// never an overview, so a view restored to cut needs no re-lay here.)
 func (d *openFile) showDiff(res domain.ReviewFileDiff, err error, agent, partial bool, rows int) (left bool) {
 	for _, p := range []*contentPopup{d.p, d.diffP()} {
 		if p != nil && p.cs.on {
