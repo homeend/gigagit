@@ -475,3 +475,40 @@ func TestSendPanelPlanOfAnotherPRLeavesThePanelAlone(t *testing.T) {
 		t.Fatalf("#7's word went nowhere: status %q", m.statusMsg)
 	}
 }
+
+// → shows a row whole — its summary wrapped to the end, the rationale and
+// the code under it; ← hides it again, and ← on a hidden row climbs to its
+// group's header. A row no key opened stays one cut line.
+func TestSendPanelArrowsShowAndHideARow(t *testing.T) {
+	t.Parallel()
+	m, p := panelModel(t)
+	// A cut row keeps both ends of its text (elide), so the marker sits mid-summary.
+	long := "lock released twice " + strings.Repeat("and the waiter wakes ", 4) + "MID-OF-SUMMARY " + strings.Repeat("on a stale value ", 4) + "end"
+	p.cands.Groups[0].Rows[0].Summary = long
+	p.cands.Groups[0].Rows[0].Rationale = "first paragraph of the why\n\nWHY-SECOND-PARAGRAPH"
+	p.code = false
+	view := ansi.Strip(m.View())
+	if strings.Contains(view, "MID-OF-SUMMARY") || strings.Contains(view, "WHY-SECOND-PARAGRAPH") {
+		t.Fatalf("a hidden row shows whole:\n%s", view)
+	}
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyRight})
+	view = ansi.Strip(m.View())
+	for _, want := range []string{"MID-OF-SUMMARY", "first paragraph of the why", "WHY-SECOND-PARAGRAPH", "          a"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("→ lacks %q:\n%s", want, view)
+		}
+	}
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyLeft})
+	if p.open["review:r1:1"] || strings.Contains(ansi.Strip(m.View()), "MID-OF-SUMMARY") {
+		t.Fatal("← must hide the row")
+	}
+	sel := p.sel
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyLeft})
+	if p.rows[p.sel].cand >= 0 || p.sel >= sel {
+		t.Fatalf("← on a hidden row climbs to the header: sel %d → %d", sel, p.sel)
+	}
+	_, _ = p.update(m, tea.KeyMsg{Type: tea.KeyRight}) // a header: nothing to show
+	if len(p.open) != 0 {
+		t.Fatalf("→ on a header opened %v", p.open)
+	}
+}

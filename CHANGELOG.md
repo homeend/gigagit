@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Send panel: → and ← show and hide a row
+
+### Added
+- In the Send to GitHub panel — the TUI's and the web page's — `→` shows
+  the current row whole: its summary wrapped to the end, the rationale and
+  the code under it. `←` hides it again, and on a hidden row climbs to its
+  group's header, the way a tree's left does. The TUI used to show only the
+  code of the current row; its long rows stay cut until `→` opens them.
+
 ## gg web: the overview split stacks its files (S)
 
 ### Added
