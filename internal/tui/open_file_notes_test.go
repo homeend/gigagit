@@ -156,7 +156,7 @@ func TestEscKeepsANotedFileAndXDropsItWithItsNotes(t *testing.T) {
 	src := fileSource{kind: srcWorktree}
 	d := bgDoc(m, src, "a.txt", 5)
 	d.backgrounded = false // opened in the foreground
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	n, err := d.addNote(2, 2, "s", "", "")
 	if err != nil {
 		t.Fatal(err)

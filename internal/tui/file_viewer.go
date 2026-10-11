@@ -15,6 +15,9 @@ import (
 // here), so the two viewers cannot drift apart.
 type fileViewer struct {
 	*openFile // the document shown: its lines, cursor, selection, search
+	// step: an overview's link step opened this viewer (the narrow
+	// fallback of the split) — the one viewer D flips (split_diff.go).
+	step bool
 }
 
 // openFileViewer pushes the viewer for path and starts its load off the UI
@@ -41,7 +44,7 @@ func (m Model) openFileViewerEv(path string, line int) (Model, tea.Cmd, *openFil
 		}
 	}
 	d.pendingLine = line
-	fv := &fileViewer{d}
+	fv := &fileViewer{openFile: d}
 	m = m.pushLayer(fv)
 	m, ev := m.registerDocEv(d)
 	return m, m.loadDoc(d), ev
@@ -65,9 +68,17 @@ func (m Model) viewerGeom() (rows, innerW int) {
 	return rows, innerW
 }
 
-// update swallows every key. The shared preview hooks go first in the files
-// view's order — selection, then search — and the pager/cursor keys follow.
+// update is updateKey, then the file's cursor follows the diff's (a diff
+// showing: split_diff.go).
 func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	nm, cmd := fv.updateKey(m, msg)
+	fv.mirrorDiffCursor()
+	return nm, cmd
+}
+
+// updateKey swallows every key. The shared preview hooks go first in the files
+// view's order — selection, then search — and the pager/cursor keys follow.
+func (fv *fileViewer) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
@@ -80,6 +91,12 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if nm, cmd, ok := m.previewSearchKey(msg); ok {
 		return nm, cmd
 	}
+	if msg.String() == "D" && (m.canFlip(fv.openFile) || fv.diff != nil) { // the narrow fallback's file ⇄ diff
+		return m.flipDiff(fv.openFile)
+	}
+	if nm, cmd, ok := m.diffKey(fv.openFile, msg); ok {
+		return nm, cmd
+	}
 	if nm, cmd, ok := m.previewNoteKey(msg); ok {
 		return nm, cmd
 	}
@@ -89,7 +106,7 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if nm, cmd, ok := m.bandKey(msg); ok {
 		return nm, cmd
 	}
-	p := fv.p
+	p := fv.shownP()
 	rows, _ := fv.geom(m)
 	scroll := func(delta int) { p.scrollBy(delta, rows) }
 	switch msg.String() {
@@ -153,7 +170,11 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // render owns the screen: one preview box the size of the terminal.
 func (fv *fileViewer) render(m Model, _ string) string {
 	w, h := m.overlayDims()
-	return m.renderPreviewBox(fv.p, fv.title(), w, h, true, true)
+	o := previewBoxOpts{focused: true, viewer: true}
+	if m.canFlip(fv.openFile) {
+		o.sw = diffSwitch(fv.from.ov.diff)
+	}
+	return m.renderPreviewBoxOpts(fv.shownP(), fv.title(), w, h, o)
 }
 
 // title names the version on screen: the working tree, a commit or a shelf.

@@ -317,7 +317,7 @@ func TestCommitViewerCopyFileLinkChecksTheDisk(t *testing.T) {
 	m := loadedNavModel(t)
 	d := newOpenFile(fileSource{kind: srcCommit, rev: strings.Repeat("ab", 20)}, "a.txt")
 	d.p.lines = fileContentLinesTok([]byte("an older\nversion\n"), nil)
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	m, copied := runFileLinkRow(t, m, false)
 	if copied != "" || !strings.Contains(m.statusMsg, "differs from this version") {
 		t.Fatalf("copied %q status %q, want nothing and the differs notice", copied, m.statusMsg)

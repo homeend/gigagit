@@ -563,7 +563,7 @@ func (m Model) openReviewOverviewDoc() (Model, tea.Cmd) {
 	if m.openFiles.has(m.currentWorktree, d) {
 		return m.bringToFront(d)
 	}
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	m = m.registerDoc(d)
 	return m, nil
 }
@@ -587,7 +587,7 @@ func (m Model) openFileAtCommit(rev, path string) (Model, tea.Cmd) {
 	} else {
 		m = m.detachDoc(d)
 	}
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	m = m.registerDoc(d)
 	return m, m.loadDoc(d)
 }

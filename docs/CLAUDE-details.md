@@ -7040,3 +7040,42 @@ through to the page's diff toggle; `openViewer` reads the diff WITH the file
 menu refuses a deleted row on the push. Tests: `review_file_diff_test.go`,
 `reviewdiff_test.go`, `splitdiffjs_test.go` (the pure model + wiring guards);
 the visible behaviour was checked with a Playwright script (not committed).
+
+**TUI: file ⇄ review diff (2026-10-11, same spec, plan 2).** The open file
+keeps its FILE popup in `d.p` (lines and cursor are file lines, so links, note
+adds, reloads, `gg session files` and `syncOverviewHere` stay right); a second
+`contentPopup` in `d.diff` (`split_diff.go`) holds the rows
+(`split_diff_rows.go`: `unifiedDiffRows`, `rowOfNew`/`rowOfOld`,
+`rowNewLine`, `foldDiffRows`, notices, `diffTitle`). Every frame and key path
+asks `d.shownP()` (`activePreview`, `previewDoc` via `d.shows(p)`, both
+renderers, the pane/viewer scroll keys, the split's mouse); after every key or
+click `mirrorDiffCursor` puts `d.p.cur` on the cursor row's new line (a
+deleted row: the next one), and whatever moves `d.p.cur` while the diff shows
+(`landPendingLine`: a steer, n / p) calls `followIntoDiff`. The renderer's
+diff branch draws the row number + sign in `winRow.prefix` (frozen; v, search
+and copy never see it; `gutterW` = 2 + `numW`), tints − / + rows with the diff
+view's cell styles (a band shows only in the gutter mark on a changed row) and
+takes notes and bands in ROW space (`rowNotes` — the agent's notes on new lines
+plus `ReviewFileDiff`'s remarks on their side — `rowBands`, `rowCurBand`;
+`boxNote` maps a box back to its file lines). The choice is `ov.ov.diff` /
+`diffPartial` on the overview: `flipDiff` (D in `splitView.updateKey` from
+either side, `fileViewer`), `diffKey` (f, enter on a ⋯ fold), the read
+`diffReadCmd` → `reviewDiffMsg` (stored: `ReviewFileDiff`; agent:
+`domain.WorkingFileDiff`) checked against `diffWanted` WHEN IT LANDS
+(`diffSeq` drops older reads), so a D during a step's load wins; the fill
+(`diffOnLoad`, a reload re-reads with the old diff kept on screen) and a
+loaded steer (`diffOnSteer`) start reads. A document leaving its frame
+(`detachDoc`, the steer's replaced file, the split's onClose / retire) drops
+its diff; the choice is forgotten by the split's onClose, an overview viewer's
+esc / X / ctrl+] (`backgroundDoc` / `closeDoc` of `d.ov`), and `retire`;
+`narrowSplits` restores it. `canFlip`: an open overview's link file in that
+overview's single split pane or in a `fileViewer` (never a stack, never the
+files-view preview). D6 = `overview.step` (`beginStep` at a steer /
+`openAnchor`, `stepContent` once the lines are in). The title switch is
+`previewBoxOpts.sw` (`diffSwitch`; `switchHalf` hit-tests a click on title
+row 1 of the right box; the narrow viewer's is drawn, not clickable). Gotcha:
+a stored overview's anchor to a file the review did not change is PLAIN, so
+"no change to this file in the review" is reachable only for a listed but
+unchanged file (a pure rename). Tests: `split_diff_rows_test.go`,
+`split_diff_test.go`, `split_diff_keys_test.go`, e2e
+`tui_overview_split_diff`.

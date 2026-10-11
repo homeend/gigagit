@@ -45,7 +45,7 @@ func (m Model) openReviewNote(id, title string) (Model, tea.Cmd) {
 	d.p.mode = modeWrap // prose
 	d.p.prose = true
 	d.p.extraHint = i18n.T("[y] copy")
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	m = m.registerDoc(d)
 	return m, m.loadDoc(d)
 }
@@ -65,7 +65,7 @@ func (m Model) openResultFile(path, title string, apply func(Model) (Model, tea.
 	if apply != nil {
 		d.p.extraHint = i18n.T("[a] apply") + "  " + d.p.extraHint
 	}
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	m = m.registerDoc(d)
 	return m, m.loadDoc(d)
 }

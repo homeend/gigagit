@@ -1105,6 +1105,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.stackPaneLanded(msg)
 	case reviewNotesMsg:
 		return m.reviewNotesLanded(msg), nil
+	case reviewDiffMsg:
+		return m.diffLanded(msg), nil
 	case splitStackNotesMsg:
 		return m.stackNotesLanded(msg), nil
 	case fileContentMsg:
@@ -1121,6 +1123,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if n := d.fill(msg, rows, inner); n != "" {
 				m.statusMsg = n
 			}
+			m = m.stepContent(d)
 			if d.from != nil && d.from.ov != nil && m.splitShowing(d) != nil {
 				// An overview's anchor steered to a file: one the commit does
 				// not have, or a working file deleted, is named and its anchors
@@ -1132,7 +1135,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.markFileAnchors(d.from, d.path, gone)
 			}
-			return m, m.reviewNotesCmd(d)
+			return m, tea.Batch(m.reviewNotesCmd(d), m.diffOnLoad(d))
 		}
 		return m, nil // no frame shows that document any more: a stale load
 	case commitMessageMsg:

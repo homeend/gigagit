@@ -15,14 +15,14 @@ import (
 // keys otherwise).
 func (m Model) activePreview() (p *contentPopup, rows, innerW int, ok bool) {
 	if _, d, rows, innerW, ok := m.splitFocus(); ok {
-		return d.p, rows, max(innerW-d.gutterW(), 1), true
+		return d.shownP(), rows, max(innerW-d.gutterW(), 1), true
 	}
 	if fv, isViewer := m.topLayer().(*fileViewer); isViewer {
 		rows, innerW = fv.geom(m)
 		if fv.p.prose { // renderPreviewBox lays a prose document in the reading column
 			innerW, _ = readingColumn(innerW, m.readingWidth())
 		}
-		return fv.p, rows, max(innerW-fv.gutterW(), 1), true
+		return fv.shownP(), rows, max(innerW-fv.gutterW(), 1), true
 	}
 	if m.filesPreview != nil && !m.filesTreeFocused {
 		return m.filesPreview.p, m.filePreviewRowsCap(), max(m.filePreviewInnerW()-m.filesPreview.gutterW(), 1), true
@@ -231,8 +231,12 @@ func (m Model) previewCopyLineRows() []actionRow {
 	}
 	var rows []actionRow
 	if p.cur >= 0 && p.cur < len(p.lines) && p.lines[p.cur].src {
+		no := p.cur + 1
+		if d, ok := m.focusedDoc(); ok && d.diff != nil && d.diff.p == p { // a diff row: its own line's number
+			no = d.diff.rowNumber(p.cur)
+		}
 		rows = append(rows, m.copyRow("copy-line", i18n.T("Copy line"),
-			i18n.T("Copied line %d", p.cur+1), p.lines[p.cur].raw))
+			i18n.T("Copied line %d", no), p.lines[p.cur].raw))
 	}
 	if sel := p.selectedLines(); len(sel) > 0 {
 		rows = append(rows, clearingCopyRow(m.copyRow("copy-selected-lines",
@@ -282,6 +286,12 @@ func (m Model) previewSelectKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		// without a selection the key keeps whatever the host gives it.
 		if !p.lsel.on {
 			return m, nil, false
+		}
+		if d, ok := m.focusedDoc(); ok && d.diff != nil && d.diff.p == p {
+			if _, _, has := d.diffMarkedLines(); !has {
+				m.statusMsg = i18n.T("a deleted line has no link in the reviewed version")
+				return m, nil, true
+			}
 		}
 		if row, ok := m.contextFileLinkRow(); ok {
 			nm, cmd := row.run(m)

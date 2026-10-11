@@ -512,10 +512,11 @@ wide or more (one document otherwise): ↑/↓ walk the links and the file
 follows, tab switches sides, `N`/`P` step the overview from the file, the
 review's remarks show as read-only boxes and the link whose band holds the
 cursor is marked.
-In the file a link opened, `D` (or the *file | diff* switch in its title)
-shows the review's change to that file instead — one column, the whole file,
-deleted lines red with − and added green with + — and keeps doing so for the
-next links until `D` again or esc; `f` there shows the changed lines only.
+In the file a link opened — in the TUI and in gg web — `D` (or the
+*file | diff* switch in its title) shows the review's change to that file
+instead — one column, the whole file, deleted lines red with − and added green
+with + — and keeps doing so for the next links until `D` again or esc; `f`
+there shows the changed lines only.
 A **note has a link too**: `gg link --note <id>` prints `gg://…?note=<id>`
 on the note's own line, `gg note show <id|link>` prints the thread, and
 `gg note reply|resolve <link>` answer it — hand an agent the note link rather

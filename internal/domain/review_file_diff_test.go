@@ -166,3 +166,31 @@ func TestReviewFileDiffOfAGoneReview(t *testing.T) {
 		t.Fatalf("err = %v, want ErrReviewNotFound", err)
 	}
 }
+
+// Spec 2026-10-11-overview-split-diff §3 (D4): an agent overview's file
+// diffs HEAD against the file on disk; the same text is no change, a file
+// HEAD lacks is an add.
+func TestWorkingFileDiffHeadToDisk(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	commitFile(t, dir, "a.txt", "one\ntwo\nthree\n", "add a")
+	ctx := context.Background()
+	same, err := svc.WorkingFileDiff(ctx, "a.txt")
+	if err != nil || same.Changed || same.Left != "HEAD" || same.Right != "working tree" {
+		t.Fatalf("unchanged: %+v %v", same, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\nthree\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.WorkingFileDiff(ctx, "a.txt")
+	if err != nil || !got.Changed || got.Status != "" || got.Notes != nil || rowKinds(got.Diff) != "same:one>one,change:two>TWO,same:three>three" {
+		t.Fatalf("changed: %+v rows %q %v", got, rowKinds(got.Diff), err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	added, err := svc.WorkingFileDiff(ctx, "new.txt")
+	if err != nil || !added.Changed || added.Status != "A" || rowKinds(added.Diff) != "add:>x" {
+		t.Fatalf("untracked: %+v rows %q %v", added, rowKinds(added.Diff), err)
+	}
+}

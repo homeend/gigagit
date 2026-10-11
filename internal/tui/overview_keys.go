@@ -161,6 +161,8 @@ func (m Model) openAnchor(ov *openFile, i int) (Model, tea.Cmd) {
 		}
 		if d := topDoc(m); d != nil {
 			d.from, d.backgrounded, d.anchorCur = ov, true, a.dest
+			ov.ov.beginStep(d)
+			m.markStepViewer(d)
 		}
 		return m, cmd
 	}
@@ -173,7 +175,9 @@ func (m Model) openAnchor(ov *openFile, i int) (Model, tea.Cmd) {
 		d.pendingLine, d.pendingEnd = n.Start, 0
 		d.anchorCur = "" // a note is no band: none is current
 		d.from, d.backgrounded = ov, true
-		return m.bringToFront(d)
+		nm, cmd := m.bringToFront(d)
+		nm.markStepViewer(d)
+		return nm, cmd
 	}
 	// The file is stat'ed off the UI thread (a slow mount must not freeze the
 	// screen); anchorStatted opens it if the overview is still in front.
@@ -216,6 +220,8 @@ func (m Model) anchorStatted(msg anchorStatMsg) (Model, tea.Cmd) {
 		// The range is drawn as the current band (anchor_bands.go), not
 		// selected: the reader's own marking stays theirs.
 		d.from, d.backgrounded, d.anchorCur = ov, true, msg.dest
+		ov.ov.beginStep(d)
+		m.markStepViewer(d)
 	}
 	return m, cmd
 }

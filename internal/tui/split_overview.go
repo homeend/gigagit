@@ -123,11 +123,17 @@ func (m Model) steerSplit(sv *splitView) (Model, tea.Cmd) {
 	switch r := sv.right.(type) {
 	case *docPane:
 		m, cmd = m.docSteer(sv, r, ov, anchor{dest: dest, target: anchorTarget(path, line)})
+		if r.d != nil {
+			ov.ov.beginStep(r.d)
+		}
 	case *stackPane:
 		m, cmd = m.stackSteer(sv, r, ov.ov.sel)
 	}
 	if m.statusMsg == "" || !strings.HasPrefix(m.statusMsg, i18n.T("no file %s", a.target.Path)) {
 		m.statusMsg = anchorHint(ov)
+	}
+	if r, ok := sv.right.(*docPane); ok && r.d != nil {
+		m = m.stepContent(r.d) // a file already in: compare now (a load compares when it lands)
 	}
 	return m, cmd
 }
@@ -214,7 +220,7 @@ func (m Model) docSteer(sv *splitView, r *docPane, ov *openFile, a anchor) (Mode
 		land(d)
 		if docLoaded(d) {
 			d.landPendingLine(rows)
-			return m, m.remarksOnSteer(d)
+			return m, tea.Batch(m.remarksOnSteer(d), m.diffOnSteer(d))
 		}
 		return m, m.loadDoc(d)
 	}
@@ -226,6 +232,7 @@ func (m Model) docSteer(sv *splitView, r *docPane, ov *openFile, a anchor) (Mode
 	}
 	if old := r.d; old != nil {
 		old.backgrounded = true
+		old.dropDiff(rows) // out of the overview's frame: the file again
 	}
 	d.backgrounded = true // esc on the split steps aside; only X closes
 	land(d)
@@ -233,7 +240,7 @@ func (m Model) docSteer(sv *splitView, r *docPane, ov *openFile, a anchor) (Mode
 	m = m.registerDoc(d)
 	if docLoaded(d) && !d.onDisk() {
 		d.landPendingLine(rows)
-		return m, m.remarksOnSteer(d)
+		return m, tea.Batch(m.remarksOnSteer(d), m.diffOnSteer(d))
 	}
 	d.keepPlace()
 	return m, m.loadDoc(d)
@@ -297,7 +304,7 @@ func (m Model) showOverview(d *openFile) (Model, tea.Cmd) {
 		return m.openOverviewSplit(d)
 	}
 	m = m.detachDoc(d)
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	return m.registerDoc(d), nil
 }
 
@@ -328,8 +335,10 @@ func (m Model) openOverviewSplit(ov *openFile) (Model, tea.Cmd) {
 	}
 	sv.onClose = func(m Model) Model {
 		ov.backgrounded = true
+		ov.ov.forgetDiff() // the next opening starts on the file (D3)
 		if rd := sv.right.doc(); rd != nil {
 			rd.backgrounded = true
+			rd.dropDiff(m.docRows(rd))
 		}
 		if m.reviewOf(ov) != nil {
 			return m.landOnOverviewRow()

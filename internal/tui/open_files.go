@@ -155,6 +155,7 @@ func (m Model) docShown(d *openFile) bool {
 // detachDoc takes d out of whatever frame shows it, so it can be shown in
 // another: a document is in one frame at a time.
 func (m Model) detachDoc(d *openFile) Model {
+	d.dropDiff(m.docRows(d)) // the diff shows only where an overview's step put it (spec §6)
 	if d.p.cs.on {
 		d.p.previewCharLeave() // put aside: it never comes back already in the copy mode
 	}
@@ -229,6 +230,9 @@ func docLoaded(d *openFile) bool {
 // returns to whatever was beneath it.
 func (m Model) backgroundDoc(d *openFile) Model {
 	d.backgrounded = true
+	if d.ov != nil { // the overview leaves the screen: its D / f choice ends
+		d.ov.forgetDiff()
+	}
 	m = m.detachDoc(d)
 	if d.ov != nil {
 		m.statusMsg = i18n.T("overview %s is in the background — ctrl+\\ lists open files", d.overviewLabel())
@@ -255,6 +259,9 @@ func (m Model) closeDoc(d *openFile) Model {
 	}
 	if d.ov != nil && m.docs != nil {
 		m.docs.RemoveOverview(d.id()) // and the overview, in the page too
+	}
+	if d.ov != nil {
+		d.ov.forgetDiff()
 	}
 	m = m.detachDoc(d)
 	m.openFiles.remove(m.currentWorktree, d)
@@ -331,7 +338,7 @@ func (m Model) bringToFront(d *openFile) (Model, tea.Cmd) {
 		return m.registerDoc(d), nil
 	}
 	m = m.detachDoc(d)
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	m = m.registerDoc(d)
 	if !d.onDisk() && docLoaded(d) {
 		return m, nil

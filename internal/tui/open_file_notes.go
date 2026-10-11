@@ -150,6 +150,12 @@ const noteGutterW = 2
 // gutterW is the width of d's range-mark gutter: none without notes or
 // anchor bands, so an ordinary file is laid out exactly as before.
 func (d *openFile) gutterW() int {
+	if d.diff != nil { // the diff's rows: the range mark, then the number and the sign
+		if d.diff.notice != "" {
+			return 0
+		}
+		return noteGutterW + d.diff.numW
+	}
 	if (len(d.shownNotes()) == 0 && d.bands() == nil) || !docLoaded(d) || d.p.img != nil {
 		return 0
 	}
@@ -232,6 +238,13 @@ func (d *openFile) noteRowsUnder(from, to int) int {
 // takes it away when the last one goes, so a file without notes is back on
 // the plain one-row-per-line path.
 func (d *openFile) syncNoteRows() {
+	if dd := d.diff; dd != nil {
+		dd.placed = d.placeRowNotes()
+		dd.p.extraRows = nil
+		if len(d.rowNotes()) > 0 {
+			dd.p.extraRows = d.diffNoteRowsUnder
+		}
+	}
 	if len(d.shownNotes()) == 0 {
 		d.p.extraRows = nil
 		return
@@ -242,17 +255,17 @@ func (d *openFile) syncNoteRows() {
 // previewDoc is the open document p belongs to — a viewer on the stack or
 // the files view's preview — or nil (the help window, F's live preview).
 func (m Model) previewDoc(p *contentPopup) *openFile {
-	if d := m.filesPreview; d != nil && d.p == p {
+	if d := m.filesPreview; d != nil && d.shows(p) {
 		return d
 	}
 	if m.layers != nil {
 		for _, l := range m.layers.entries {
-			if fv, ok := l.(*fileViewer); ok && fv.p == p {
+			if fv, ok := l.(*fileViewer); ok && fv.shows(p) {
 				return fv.openFile
 			}
 			if sv, ok := l.(*splitView); ok {
 				for _, pn := range []pane{sv.left, sv.right} {
-					if d := pn.doc(); d != nil && d.p == p {
+					if d := pn.doc(); d != nil && d.shows(p) {
 						return d
 					}
 				}

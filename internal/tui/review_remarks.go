@@ -71,6 +71,11 @@ func (d *openFile) shownNotes() []agentdocs.Note {
 // boxNote is note n as its box and full view name it: in a stack, at its
 // file's own lines (shownNotes holds stream lines); elsewhere n itself.
 func (d *openFile) boxNote(n agentdocs.Note) agentdocs.Note {
+	if d.diff != nil { // the diff holds notes at rows: the file's own lines
+		if o, ok := d.rowNoteOrigin(n.ID); ok {
+			return o
+		}
+	}
 	if d.stream == nil {
 		return n
 	}

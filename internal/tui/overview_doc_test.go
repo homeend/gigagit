@@ -38,7 +38,7 @@ func shownOverview(t *testing.T, text string) (Model, *openFile) {
 // inViewer shows overview d in the full-screen viewer — the door below 60
 // columns (showOverview); a wide bringToFront opens the split instead.
 func inViewer(m Model, d *openFile) (Model, tea.Cmd) {
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	m = m.registerDoc(d)
 	d.keepPlace()
 	return m, m.loadDoc(d)

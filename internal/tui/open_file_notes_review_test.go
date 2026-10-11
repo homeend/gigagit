@@ -81,7 +81,7 @@ func TestBraceKeyReachesEveryAnnotatedFile(t *testing.T) {
 		}
 	}
 	m.openFiles.touch(m.currentWorktree, a, m.docShown)
-	m = m.pushLayer(&fileViewer{a})
+	m = m.pushLayer(&fileViewer{openFile: a})
 	m = fvKeys(t, m, key("}")) // a's own note
 	var seen []string
 	for i := 0; i < 3; i++ {
@@ -157,7 +157,7 @@ func TestPageDownStopsAtTheFirstLineNotYetShown(t *testing.T) {
 	d.fill(fileContentMsg{lines: docLines(200)}, 10, 80)
 	m.adoptDoc(d)
 	m.openFiles.touch(m.currentWorktree, d, m.docShown)
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	if _, err := d.addNote(2, 2, "tall", numbered("r", 80), ""); err != nil {
 		t.Fatal(err)
 	}

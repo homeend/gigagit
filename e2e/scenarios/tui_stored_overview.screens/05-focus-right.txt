@@ -1,5 +1,5 @@
 ╭──────────────────────────────────────────────────────────────────────────────╮╭──────────────────────────────────────────────────────────────────────────────╮
-│ Overview: 49ff094                                                            ││ View b.txt @ 49ff094                                                         │
+│ Overview: 49ff094                                                            ││ View b.txt @ 49ff094                                             file | diff │
 │ Start at line two, then beta, then outside.                                  ││   alpha                                                                      │
 │                                                                              ││ ┃ beta                                                                       │
 │                                                                              ││   ╭─ Claude Code · review · line 2 ────────────────────────────────────────╮ │
@@ -37,4 +37,4 @@
 │                                                                              ││                                                                              │
 │                                                                              ││                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────╯
-anchor 2/2 · beta  [tab] other side  [bksp] left side  [esc] close  [n/p] anchors  [N/P] overview  [S] stacked  [alt+↑↓] line  [spc] mark  [/] find  [X] close …
+anchor 2/2 · beta  [tab] other side  [bksp] left side  [esc] close  [n/p] anchors  [D] diff  [N/P] overview  [S] stacked  [alt+↑↓] line  [spc] mark  [/] find  …

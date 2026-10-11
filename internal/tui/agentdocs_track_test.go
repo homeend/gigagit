@@ -113,7 +113,7 @@ func TestEscKeepsAFileWhoseNotesCameFromTheStore(t *testing.T) {
 	src := fileSource{kind: srcWorktree}
 	d := bgDoc(m, src, "a.txt", 5)
 	d.backgrounded = false // opened in the foreground
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	if _, err := m.docs.AddNote(d.root, d.path, rawOf(d.p.lines), 2, 2, "from elsewhere", "", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestEscDuringAReReadKeepsTheStoresNotes(t *testing.T) {
 	m := privateDocsModel(t)
 	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 5)
 	d.backgrounded = false // opened in the foreground
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	if _, err := m.docs.AddNote(d.root, d.path, append([]string{"NEW"}, rawOf(d.p.lines)...), 2, 2, "s", "", ""); err != nil {
 		t.Fatal(err)
 	}
