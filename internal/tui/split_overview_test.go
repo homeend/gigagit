@@ -405,3 +405,26 @@ func TestOverviewSplitPagingFromAGoneNoteNamesNoAnchor(t *testing.T) {
 		t.Fatalf("status %q names a gone note as a place", m.statusMsg)
 	}
 }
+
+// Paging from a last anchor whose file is not there names no anchor: the
+// steer said "no file", and paging never relabels it as a place.
+func TestOverviewSplitPagingFromAMissingFileNamesNoAnchor(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [gone](missing.txt:1)."+longTail(80)+"\n\nTHE END")
+	sv := m.splitLayer()
+	ov := sv.left.doc()
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 2 || !ov.ov.anchors[2].missing {
+		t.Fatalf("sel %d missing %v: ↓↓ selects the missing file", ov.ov.sel, ov.ov.anchors[2].missing)
+	}
+	rows, _ := sv.geomOf(m, sv.left)
+	top := ov.p.clampTop(ov.p.sel, rows)
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 2 || ov.p.clampTop(ov.p.sel, rows) <= top {
+		t.Fatalf("↓ must page from the missing file: sel %d top %d → %d", ov.ov.sel, top, ov.p.clampTop(ov.p.sel, rows))
+	}
+	if strings.HasPrefix(m.statusMsg, "anchor ") {
+		t.Fatalf("status %q names a missing file as a place", m.statusMsg)
+	}
+}
