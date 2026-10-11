@@ -38,6 +38,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   overview) no longer ends the mode silently on the next frame: the next
   key ends it and is swallowed, so a ↓ meant for the cursor never steps the
   overview's anchor.
+- Paging from an overview anchor whose file is not there (or whose note is
+  gone) no longer names it as "anchor n/n" on the status line.
 
 ## gg web: every overview opens beside its code
 
