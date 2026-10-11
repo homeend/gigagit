@@ -124,9 +124,18 @@ func (p *contentPopup) charPan(innerW int) {
 	lead := min(max(p.lines[row].lead, 0), len(raw))
 	disp := string(raw[:lead]) + string(p.csRows[row].text)
 	p.hscroll = charPanCells(disp, lead+p.cs.cur.col, p.hscroll, innerW, sanitizeForDisplay)
-	// Column 0 shows the row's lead too, unless the lead alone fills the pane
-	// (deep nesting in a narrow pane): then the pan above stands.
-	if p.cs.cur.col == 0 && p.hscroll <= lead && lipgloss.Width(sanitizeForDisplay(string(raw[:lead]))) < innerW {
+	// Column 0 shows the row's lead too, unless the lead and the cursor's own
+	// cell(s) do not fit the pane (deep nesting in a narrow pane): then the
+	// pan above stands. Both sides are display cells (a tab lead is four).
+	if p.cs.cur.col != 0 {
+		return
+	}
+	leadW := lipgloss.Width(sanitizeForDisplay(string(raw[:lead])))
+	curW := 1 // the empty row's cursor
+	if text := p.csRows[row].text; len(text) > 0 {
+		curW = lipgloss.Width(sanitizeForDisplay(string(text[0])))
+	}
+	if p.hscroll <= leadW && leadW+curW <= innerW {
 		p.hscroll = 0
 	}
 }
