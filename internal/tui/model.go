@@ -1128,12 +1128,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// An overview's anchor steered to a file: one the commit does
 				// not have, or a working file deleted, is named and its anchors
 				// marked gone (openAnchor's rule); one that is there clears a
-				// mark an earlier check left (the file appeared).
+				// mark an earlier check left (the file appeared). A reload
+				// (the disk or the notes changed) names it only when the mark
+				// flips: a store change reloads a deleted file every time.
 				gone := msg.err != nil || msg.disk.missing
-				if gone {
+				if changed := m.markFileAnchors(d.from, d.path, gone); gone && (!msg.reload || changed) {
 					m.statusMsg = i18n.T("no file %s", d.path)
 				}
-				m.markFileAnchors(d.from, d.path, gone)
 			}
 			return m, tea.Batch(m.reviewNotesCmd(d), m.diffOnLoad(d))
 		}

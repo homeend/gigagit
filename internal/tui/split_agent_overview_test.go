@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // agentOverviewModel is a worktree with a.txt (40 lines) and b.txt (5
@@ -344,5 +346,64 @@ func TestStackLoadOfADeletedFileMarksItsAnchor(t *testing.T) {
 	}
 	if ov.ov.anchors[0].missing {
 		t.Fatal("a.txt loaded: its anchor stays found")
+	}
+}
+
+// A deleted file shown in the split reloads on every store change (its
+// notes re-align): the reload repeats nothing new, so it leaves the status
+// line alone — "no file" is said when the mark changes.
+func TestSplitReloadOfADeletedFileKeepsTheStatus(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	sv := m.splitLayer()
+	if err := os.Remove(filepath.Join(m.currentWorktree, "c.txt")); err != nil {
+		t.Fatal(err)
+	}
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if want := i18n.T("no file %s", "c.txt"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q on the steer", m.statusMsg, want)
+	}
+	m.statusMsg = "something else"
+	m = pumpAll(t, m, m.reloadDocCmd(sv.right.doc()))
+	if m.statusMsg != "something else" {
+		t.Fatalf("status %q: a reload that changed no mark rewrote the status", m.statusMsg)
+	}
+}
+
+// A steer to an anchor already marked at the add still names the file: a
+// first load says it whether or not the mark changes.
+func TestSplitSteerToAnAlreadyMissingFileNamesIt(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).")
+	ov := m.splitLayer().left.doc()
+	if !ov.ov.anchors[2].missing {
+		t.Fatal("c.txt was not there at the add: its anchor starts missing")
+	}
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if want := i18n.T("no file %s", "c.txt"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q", m.statusMsg, want)
+	}
+}
+
+// The shown file deleted on disk: the watcher's reload flips the mark and
+// says so once.
+func TestSplitReloadThatFindsTheFileDeletedNamesIt(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	sv := m.splitLayer()
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if ov := sv.left.doc(); ov.ov.sel != 2 || ov.ov.anchors[2].missing {
+		t.Fatalf("sel %d missing %v: c.txt loads found", ov.ov.sel, ov.ov.anchors[2].missing)
+	}
+	if err := os.Remove(filepath.Join(m.currentWorktree, "c.txt")); err != nil {
+		t.Fatal(err)
+	}
+	m.statusMsg = ""
+	m = pumpAll(t, m, m.reloadDocCmd(sv.right.doc()))
+	if want := i18n.T("no file %s", "c.txt"); m.statusMsg != want || !sv.left.doc().ov.anchors[2].missing {
+		t.Fatalf("status %q missing %v, want %q and the mark", m.statusMsg, sv.left.doc().ov.anchors[2].missing, want)
 	}
 }
