@@ -168,10 +168,14 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		if d := m.previewDoc(p); d != nil {
 			stream = d.stream
 		}
-		p.csRows = previewCharRows(p, stream, stream.fileAtOr(p.cur))
+		file := stream.fileAtOr(p.cur)
+		p.csRows = previewCharRows(p, stream, file)
 		if !p.cs.enter(p.csRows, pos{row: p.cur}) {
 			p.previewCharLeave() // the view back
 			m.statusMsg = i18n.T("▸ nothing to select")
+			if stream != nil && file >= 0 && file < len(stream.files) && stream.files[file].folded {
+				m.statusMsg = i18n.T("▸ unfold the file (-) to select in it")
+			}
 			return m, nil, true
 		}
 		p.lsel.clear() // one selection kind at a time
