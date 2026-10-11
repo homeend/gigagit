@@ -1,9 +1,8 @@
 package tui
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -121,10 +120,13 @@ func (p *contentPopup) charPan(innerW int) {
 		return
 	}
 	row := p.cs.cur.row
-	lead := min(max(p.lines[row].lead, 0), len([]rune(p.lines[row].raw)))
-	disp := strings.Repeat(" ", lead) + string(p.csRows[row].text)
+	raw := []rune(p.lines[row].raw)
+	lead := min(max(p.lines[row].lead, 0), len(raw))
+	disp := string(raw[:lead]) + string(p.csRows[row].text)
 	p.hscroll = charPanCells(disp, lead+p.cs.cur.col, p.hscroll, innerW, sanitizeForDisplay)
-	if p.cs.cur.col == 0 && p.hscroll <= lead {
+	// Column 0 shows the row's lead too, unless the lead alone fills the pane
+	// (deep nesting in a narrow pane): then the pan above stands.
+	if p.cs.cur.col == 0 && p.hscroll <= lead && lipgloss.Width(sanitizeForDisplay(string(raw[:lead]))) < innerW {
 		p.hscroll = 0
 	}
 }
@@ -139,6 +141,7 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 	if p.cs.on && p.previewCharStale() {
 		p.previewCharLeave()
+		return m, nil, true // the key was meant for the mode: it goes with it
 	}
 	p.pageH = rows
 	if !p.cs.on {
@@ -181,6 +184,9 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 	if res.notice != "" {
 		m.statusMsg = res.notice
+	}
+	if d := m.previewDoc(p); res.bump && d != nil && d.stream != nil { // a stack: say what stopped it
+		m.statusMsg = i18n.T("▸ the selection stays in this file")
 	}
 	if res.copy != "" {
 		return m, m.copyToClipboardCmd(copiedCharsText(res.count), res.copy), true

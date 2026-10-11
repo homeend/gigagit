@@ -52,9 +52,15 @@ func (p *overviewPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	_, rows, _, _ := m.activePreview()
 	switch msg.String() {
 	case "down", "j":
+		if d.pageAtEnd(1, rows) { // text below the last anchor is read before the wrap
+			return m, nil
+		}
 		d.stepAnchor(1, rows)
 		return m.steerSplit(p.sv)
 	case "up", "k":
+		if d.pageAtEnd(-1, rows) {
+			return m, nil
+		}
 		d.stepAnchor(-1, rows)
 		return m.steerSplit(p.sv)
 	case "enter":

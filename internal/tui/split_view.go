@@ -98,6 +98,17 @@ func (sv *splitView) leaveChars() {
 	}
 }
 
+// retire leaves sv's panes as a split taken off the stack without its close
+// leaves them: their documents in the background, neither in the copy mode.
+func (sv *splitView) retire() {
+	for _, p := range []pane{sv.left, sv.right} {
+		if d := p.doc(); d != nil {
+			d.backgrounded = true
+		}
+	}
+	sv.leaveChars()
+}
+
 // geomOf is pane p's content size in this split.
 func (sv *splitView) geomOf(m Model, p pane) (rows, innerW int) {
 	lw, rw, bh := m.splitGeom()
@@ -197,12 +208,7 @@ func (m Model) dropSplits() Model {
 		if !ok || m.reviewOf(sv.left.doc()) == nil {
 			continue
 		}
-		for _, p := range []pane{sv.left, sv.right} {
-			if d := p.doc(); d != nil {
-				d.backgrounded = true
-			}
-		}
-		sv.leaveChars()
+		sv.retire()
 		m = m.removeLayer(sv)
 	}
 	return m
@@ -299,7 +305,8 @@ func (m Model) docRows(d *openFile) int {
 // pointer without moving the focus; a left click focuses that side, then
 // selects (and steers) an anchor of an overview or puts a file's cursor on
 // the row clicked; a right click opens the . menu of the side it lands on;
-// a middle click is esc (it closes the split, as on every reader).
+// a middle click is esc (it closes the split, as on every reader — or, in
+// the copy mode, backs out of the mode).
 func (m Model) splitMouse(sv *splitView, msg tea.MouseMsg, wheel int) (Model, tea.Cmd) {
 	nm, cmd := m.splitMousePress(sv, msg, wheel)
 	if nm.splitLayer() == sv {
