@@ -505,6 +505,12 @@ open it this way too.
 `v` on either side selects characters to copy (the modal copy mode: `space`
 start, `enter`/`y` copy, `esc` leave; `tab` waits, and stacked the selection
 stays inside one file).
+In gg web the review's *≡ Overview* row, an agent's overview and the
+open-files switcher open the same split inside the viewer when it is 900px
+wide or more (one document otherwise): ↑/↓ walk the links and the file
+follows, tab switches sides, `N`/`P` step the overview from the file, the
+review's remarks show as read-only boxes and the link whose band holds the
+cursor is marked.
 A **note has a link too**: `gg link --note <id>` prints `gg://…?note=<id>`
 on the note's own line, `gg note show <id|link>` prints the thread, and
 `gg note reply|resolve <link>` answer it — hand an agent the note link rather

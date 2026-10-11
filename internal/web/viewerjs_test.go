@@ -178,7 +178,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", "ovApplied = Math.max(ovApplied, mine);", "an open's overview counts as applied"},
 	{"viewer.js", "if (ov && view.ov && view.id === f.id && !ovAnswerApplies(ovMine, ovApplied)) ov = view.ov;", "a re-open's late answer keeps the newer text already on screen"},
 	{"viewer.js", "want: view.ov.want", "the selected destination survives a refresh (follow-up 4)"},
-	{"viewer.js", "view.ov.want = view.ov.anchors[i]?.dest || \"\"", "selecting an anchor remembers its destination"},
+	{"viewer.js", "ov.want = ov.anchors[i]?.dest || \"\"", "selecting an anchor remembers its destination"},
 	{"viewer.js", "ovApplied = mine;", "an applied answer records its order"},
 	{"viewer.js", `history.pushState({ gg: "back" }, "")`, "an anchor's open gives the browser's Back a way back (one entry)"},
 	{"viewer.js", `window.addEventListener("popstate", () => {`, "the browser's Back in an anchored file returns to the overview"},

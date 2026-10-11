@@ -67,6 +67,7 @@ function keepLine(cur, count, placeholder) {
 // summary, rationale, author, outdated, ref}, lines 1-based.
 function noteBoxTitle(n) {
   const at = n.start === n.end ? "line " + n.start : "lines " + n.start + "–" + n.end;
+  if (n.readonly) return "review · " + n.author + " · " + at; // a review's remark: its id is internal
   return "note " + n.id + " · " + n.author + " · " + at + (n.outdated ? " · outdated" : "");
 }
 
@@ -102,6 +103,12 @@ function nextNotedFile(files, mine, dir) {
   if (dir > 0) return (others.find((f) => num(f.id) > num(mine)) || others[0]).id;
   const before = others.filter((f) => num(f.id) < num(mine));
   return (before.length ? before[before.length - 1] : others[others.length - 1]).id;
+}
+// mergeNotes is every box a file draws: an agent's notes, then a review's
+// remarks, by start line — an agent's note first on a tie (sort is stable).
+function mergeNotes(notes, remarks) {
+  if (!remarks || !remarks.length) return notes;
+  return [...notes, ...remarks].sort((a, b) => a.start - b.start);
 }
 // --- end note model ---
 
@@ -272,6 +279,29 @@ function bandKindAt(bands, cur, line) {
   }
   return k;
 }
+
+// SPLIT_MIN_PX is the box width the split needs (W7): about 60 characters a
+// column at the viewer's 12px monospace; a narrower box shows one document.
+const SPLIT_MIN_PX = 900;
+function splitFits(boxWidth) {
+  return boxWidth >= SPLIT_MIN_PX;
+}
+
+// hereOf is the anchor the right column's cursor marks on the overview
+// (spec §7): the band covering line — the current band (cur) wins an
+// overlap, then the first — as its anchor index; -1 when no band covers it
+// or it is the selection's band (selBand: the selection is already marked).
+function hereOf(bands, cur, line, selBand) {
+  const covers = (b) => b.start <= line && line <= b.end;
+  const k = cur >= 0 && cur < bands.length && covers(bands[cur]) ? cur : bands.findIndex(covers);
+  return k < 0 || k === selBand ? -1 : bands[k].i;
+}
+
+// remarksReview is the review whose remarks a file opened from overview
+// way back from carries: a stored overview's review; "" otherwise.
+function remarksReview(from) {
+  return from && from.stored && !from.closed ? String(from.stored.id).replace(/^review-overview:/, "") : "";
+}
 // --- end overview model ---
 
 // --- the overlay -------------------------------------------------------------
@@ -281,7 +311,36 @@ function bandKindAt(bands, cur, line) {
 // anchors, sel}). from is the way back to the overview an anchor opened this
 // file from ({id, sel}, one step deep, this tab's); range the lines that
 // anchor named.
-const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null, notes: [], ov: null, from: null, range: null };
+const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null, notes: [], remarks: [], ov: null, from: null, range: null };
+
+// split is the overview beside the file (spec 2026-10-11 §4; null = none):
+// id its open-files id ("" for a stored overview), path its entry's path, ov
+// its document (view.ov's shape: {title, text, blocks, anchors, sel, want,
+// stamp, stored?}), left whether the overview has the keys, here the anchor
+// the right column's cursor marks (-1 = none), seq its refreshes' order.
+let split = null;
+
+// ovDoc is the overview the overview keys and paint act on: the split's left
+// column, else document mode's; ovEl the element it is drawn in.
+function ovDoc() {
+  return split ? split.ov : view.ov;
+}
+function ovEl() {
+  return split ? $("viewer-ov-body") : $("viewer-body");
+}
+
+// boxWidth is the viewer box's width — measured while it is up, else the
+// width it will open at (94vw).
+function boxWidth() {
+  return isOpen() ? $("viewer-box").clientWidth : Math.round(window.innerWidth * 0.94);
+}
+
+// raiseViewer puts the viewer's layer and chips up (idempotent).
+function raiseViewer() {
+  viewerRoot.style.bottom = $("foot").offsetHeight + "px"; // the bar stays in sight
+  pushLayer("viewer", viewerRoot, { onKey: viewerKey });
+  swapFoot(true);
+}
 const viewerSearch = new Search();
 const places = new Map(); // id → {cur, top}: where THIS tab left each file
 let loadSeq = 0; // bumped by every open: a reload that sees it move drops (L9)
@@ -359,8 +418,9 @@ function fetchOverview(id) {
   return getJSON("/api/overview?id=" + encodeURIComponent(id));
 }
 
-function fetchContent(src, rev, path) {
-  return getJSON("/api/file-content?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path));
+function fetchContent(src, rev, path, review = "") {
+  return getJSON("/api/file-content?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path) +
+    (review ? "&review=" + encodeURIComponent(review) : ""));
 }
 
 // reportCursor tells the server this tab's line, debounced: the switcher of
@@ -375,16 +435,19 @@ function reportCursor() {
 // The markup is built at import: bindSearchBar needs its bar in the DOM.
 const viewerRoot = mountOverlay("viewer");
 viewerRoot.innerHTML =
-  `<div id="viewer-box"><div id="viewer-title"></div>` +
+  `<div id="viewer-box">` +
+  `<div id="viewer-ov" class="hidden"><div id="viewer-ov-title"></div><div id="viewer-ov-body" tabindex="-1"></div></div>` +
+  `<div id="viewer-file"><div id="viewer-title"></div>` +
   `<div id="viewer-search" class="hidden search-bar"><span id="viewer-search-lead">/</span>` +
   `<input id="viewer-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this file — enter keeps it, ] [ step, esc clears">` +
   `<span id="viewer-search-count"></span></div>` +
-  `<div id="viewer-body" tabindex="-1"></div></div>`;
+  `<div id="viewer-body" tabindex="-1"></div></div></div>`;
 
 viewerRoot.addEventListener("click", (e) => {
   if (e.target.id === "viewer") closeViewer(escHow(!!view.ov, view.notes.length)); // the backdrop is esc; the box is not
 });
 $("viewer-body").addEventListener("click", (e) => {
+  if (split && split.left) focusSplit(false);
   const anc = e.target.closest("a.md-anchor");
   if (anc) {
     e.preventDefault(); // a single click opens (ruling 2)
@@ -417,6 +480,16 @@ $("viewer-body").addEventListener("click", (e) => {
   if (clearViewerRange()) return;
   paintCursor();
 });
+$("viewer-ov-body").addEventListener("click", (e) => {
+  if (!split) return;
+  const anc = e.target.closest("a.md-anchor");
+  focusSplit(true);
+  if (!anc) return;
+  e.preventDefault();
+  selectAnchor(Number(anc.dataset.a));
+  split.here = -1;
+  steerSplit();
+});
 $("viewer-body").addEventListener("mousedown", (e) => {
   if (e.shiftKey && e.target.closest(".vno")) e.preventDefault(); // no text selection from the old caret
 });
@@ -431,8 +504,11 @@ $("viewer-body").addEventListener("contextmenu", (e) => {
 // openViewer shows path at one version and registers it as this tab's open
 // file (reused when already open). id (the switcher) brings an entry back by
 // id. The cursor lands per pickLine; a second call replaces the file on
-// screen, which stays open in the background.
-async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "" }) {
+// screen, which stays open in the background. from is the way back an
+// overview's link opened this file with — set before its first render, so
+// its bands and its stored review's remarks draw at once; steer marks the
+// split's own steering of its right column.
+async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "", from = null, steer = false }) {
   const seq = ++loadSeq;
   openSeq = seq;
   for (const [k, at] of closedAt) if (at < seq) closedAt.delete(k); // closed before this open: no open in flight can land
@@ -444,7 +520,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
     if (reg.file.source === "overview") {
       ovMine = ++ovSeq; // a refresh started before this fetch is older than its answer
       ov = await fetchOverview(reg.file.id);
-    } else body = await fetchContent(reg.file.source, reg.file.rev || "", reg.file.path);
+    } else body = await fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksReview(from));
   } catch (e) {
     reportShown(seq, reg);
     opLine("view failed: " + (e.message || e), true);
@@ -457,14 +533,20 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
     return { ok: false, notice: "" };
   }
   const f = reg.file;
-  view.from = view.range = null; // an anchor's open sets them after
-  view.rangeOwn = false;
   // A refresh that started after this fetch and landed first is newer: keep it.
   if (ov && view.ov && view.id === f.id && !ovAnswerApplies(ovMine, ovApplied)) ov = view.ov;
   if (ov) return showOverview(f, ov, ovMine);
+  view.from = from; // an overview's link: its bands and remarks draw at once
+  view.range = null;
+  view.rangeOwn = false;
+  if (split && !steer) { // another way of opening a plain file: the split steps aside (as esc)
+    if (split.id) ofQueue({ op: "background", id: split.id });
+    leaveSplit();
+  }
   view.ov = null;
   Object.assign(view, { id: f.id, src: f.source, rev: f.rev || "", path: f.path, lines: body.lines || [] });
   view.notes = notesOf(body, view.src);
+  view.remarks = body.remarks || [];
   view.placeholder = placeholderFor(body, view.lines);
   view.image = imageOf(body, view.src, view.rev, view.path);
   const place = line > 0 ? null : places.get(f.id);
@@ -472,14 +554,12 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   const landed = line > 0 ? landLine(line, view.lines.length, f.path) : { line: view.placeholder && body.missing ? want : clampLine(want || 1, view.lines.length), notice: "" };
   view.cur = landed.line;
   viewerSearchBar.reset(); // a new file is a new search
-  viewerRoot.style.bottom = $("foot").offsetHeight + "px"; // the bar stays in sight
-  pushLayer("viewer", viewerRoot, { onKey: viewerKey });
-  swapFoot(true);
+  raiseViewer();
   paintTitle();
   renderViewer();
   centerCursor();
   if (place) $("viewer-body").scrollTop = place.top;
-  $("viewer-body").focus({ preventScroll: true });
+  if (!split || !split.left) $("viewer-body").focus({ preventScroll: true });
   // A reopen lands where THIS tab left the file; the server (every tab's
   // switcher) still has the line it last heard.
   if (landed.line !== (f.line || 0)) reportCursor();
@@ -500,9 +580,10 @@ function reportShown(seq, reg) {
 // showOverview puts overview ov (entry f) on screen in document mode, where
 // this tab left it; mine is its fetch's place in the refresh order.
 function showOverview(f, ov, mine) {
-  Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], cur: 0, placeholder: "", image: null });
-  view.ov = { ...ov, sel: -1, want: "" };
   ovApplied = Math.max(ovApplied, mine);
+  if (splitFits(boxWidth())) return openSplit(f.id, f.path, { ...ov, sel: -1, want: "" });
+  Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
+  view.ov = { ...ov, sel: -1, want: "" };
   const place = places.get(f.id);
   viewerSearchBar.reset();
   viewerRoot.style.bottom = $("foot").offsetHeight + "px";
@@ -529,7 +610,8 @@ export function openStoredOverview({ id, title, blocks, anchors, tip, text }) {
 }
 
 function showStoredOverview(doc) {
-  Object.assign(view, { id: doc.id, src: "overview", rev: "", path: "", lines: [], notes: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
+  if (splitFits(boxWidth())) return openSplit("", "", { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc });
+  Object.assign(view, { id: doc.id, src: "overview", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
   view.ov = { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc };
   const first = view.ov.anchors.findIndex((a) => !a.plain);
   if (first >= 0) view.ov.sel = first; // the TUI lands on the first resolved anchor
@@ -547,6 +629,12 @@ function showStoredOverview(doc) {
 // the file — gone from the list unless another tab shows it; "background"
 // (ctrl+], the . menu's hand-offs) keeps it open (ruling L4).
 function closeViewer(how = "close") {
+  if (split) { // W3: the whole split goes — an agent's overview and the file to the background
+    const sp = split;
+    leaveSplit();
+    if (sp.id) ofQueue({ op: "background", id: sp.id });
+    how = "background";
+  }
   const id = view.id, line = view.cur;
   if (id && !(view.ov && view.ov.stored)) { // a stored overview was never registered: nothing to tell
     rememberPlace();
@@ -565,6 +653,7 @@ function viewerClosedFile(id) {
 // dropViewer takes the viewer down WITHOUT telling the server — the file is
 // already gone from the list (closed everywhere) or never registered.
 function dropViewer() {
+  if (split) leaveSplit();
   view.id = "";
   loadSeq++; // an open or reload in flight must not bring it back
   clearTimeout(cursorTimer);
@@ -584,7 +673,11 @@ function paintTitle() {
   const el = $("viewer-title");
   if (view.ov) {
     el.title = view.ov.title;
-    el.textContent = view.ov.stored ? "Overview: " + view.ov.title : "Overview " + view.id + " · " + view.ov.title;
+    el.textContent = ovTitle(view.ov, view.id);
+    return;
+  }
+  if (!view.id) { // the split's right column before a link opened a file
+    el.title = el.textContent = "";
     return;
   }
   const lead = "View ", tail = " (" + versionLabel(view.src, view.rev) + ")";
@@ -607,39 +700,303 @@ function renderViewer() {
     let html = "";
     const bands = viewBands(), curB = view.from ? bandOf(bands, view.from.anchors || [], view.from.cur, view.lines.length) : -1;
     view.lines.forEach((l, i) => {
-      const noted = noteAtLine(view.notes, i + 1) ? " vnoted" : "";
+      const noted = noteAtLine(shownNotes(), i + 1) ? " vnoted" : "";
       const ranged = view.range && view.range.start <= i + 1 && i + 1 <= view.range.end ? " vrange" : "";
       const bk = bandKindAt(bands, curB, i + 1);
       const banded = bk ? " vanchor" + (bk === "cur" ? " acur" : "") : "";
       html +=
         `<div class="vline${i + 1 === view.cur ? " vcur" : ""}${noted}${ranged}${banded}" data-i="${i}"><span class="vno">${i + 1}</span>` +
         `<span class="vtext">${renderCell(l.text, null, l.tok, "", viewerSearch.query ? viewerSearch.hitsOn(i, 0) : null) || " "}</span></div>`;
-      for (const n of boxesAfter(view.notes, i)) html += noteBoxHTML(n);
+      for (const n of boxesAfter(shownNotes(), i)) html += noteBoxHTML(n);
     });
     body.innerHTML = html;
   }
   viewerSearchBar.paint();
+  syncHere();
 }
 
 // ---- an agent's overview (agentdocs) ---------------------------------------
 // paintAnchors marks the selected anchor and the missing ones.
 function paintAnchors() {
-  for (const el of $("viewer-body").querySelectorAll("a.md-anchor")) {
-    const a = view.ov.anchors[Number(el.dataset.a)];
-    el.classList.toggle("asel", Number(el.dataset.a) === view.ov.sel);
+  const ov = ovDoc();
+  for (const el of ovEl().querySelectorAll("a.md-anchor")) {
+    const i = Number(el.dataset.a), a = ov.anchors[i];
+    el.classList.toggle("asel", i === ov.sel);
     el.classList.toggle("agone", !!(a && a.missing));
+    el.classList.toggle("ahere", !!split && i === split.here);
   }
 }
 
 function anchorEl(i) {
-  return $("viewer-body").querySelector(`a.md-anchor[data-a="${i}"]`);
+  return ovEl().querySelector(`a.md-anchor[data-a="${i}"]`);
 }
 
 function selectAnchor(i) {
-  view.ov.sel = i;
-  view.ov.want = view.ov.anchors[i]?.dest || ""; // kept while a refresh drops it, back when it returns
+  const ov = ovDoc();
+  ov.sel = i;
+  ov.want = ov.anchors[i]?.dest || ""; // kept while a refresh drops it, back when it returns
   paintAnchors();
   anchorEl(i)?.scrollIntoView({ block: "nearest" });
+}
+
+// ---- the overview split (spec 2026-10-11) -----------------------------------
+// ovTitle is an overview's title line: a stored one by its title, an
+// agent's by its id and title.
+function ovTitle(ov, id) {
+  return ov.stored ? "Overview: " + ov.title : "Overview " + id + " · " + ov.title;
+}
+
+function paintSplitTitle() {
+  const el = $("viewer-ov-title");
+  el.title = split.ov.title;
+  el.textContent = ovTitle(split.ov, split.id);
+}
+
+function renderSplitOverview() {
+  const body = $("viewer-ov-body"), top = body.scrollTop;
+  body.innerHTML = `<div class="vdoc md">${mdHTML({ blocks: split.ov.blocks }, esc, { anchors: true })}</div>`;
+  body.scrollTop = top;
+  paintAnchors();
+}
+
+// paintSplitFocus shows the split's columns and puts the keys in the
+// focused one; without a split the box is today's one document.
+function paintSplitFocus() {
+  $("viewer-box").classList.toggle("split", !!split);
+  $("viewer-ov").classList.toggle("hidden", !split);
+  $("viewer-ov").classList.toggle("colfocus", !!split && split.left);
+  $("viewer-file").classList.toggle("colfocus", !!split && !split.left);
+  if (!split) return;
+  (split.left ? $("viewer-ov-body") : $("viewer-body")).focus({ preventScroll: true });
+  swapFoot(true);
+}
+
+function focusSplit(left) {
+  if (!split) return;
+  split.left = left;
+  paintSplitFocus();
+}
+
+// leaveSplit drops the left column (the viewer stays up on the right file).
+function leaveSplit() {
+  split = null;
+  paintSplitFocus();
+}
+
+// openSplit puts overview ov in the left column (spec §5) — id its
+// open-files id ("" = a stored overview, ov.stored set). A split already
+// showing it keeps its place and selection (the new document's anchors
+// replace the old, the selection kept by destination); a new one selects the
+// first link that can open when none is selected and, unless told not to,
+// steers the right column to it.
+function openSplit(id, path, ov, { steer = true } = {}) {
+  const same = !!split && (id ? split.id === id : !!split.ov.stored && !!ov.stored && split.ov.stored.id === ov.stored.id);
+  if (same) {
+    split.ov = { ...ov, sel: keepAnchor(ov.anchors || [], split.ov.want, split.ov.sel), want: split.ov.want, stored: ov.stored || split.ov.stored };
+    split.left = true;
+    if (view.id) ofQueue({ op: "focus", id: view.id }); // the tab shows the file, not the overview the open just focused
+  } else {
+    // The right column starts empty unless it keeps the file it shows (the
+    // way back): never the lines of a file closed earlier, or of another
+    // overview's link — the steer fills it.
+    if (view.ov || !view.id || steer) Object.assign(view, { id: "", ov: null, src: "worktree", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
+    split = { id, path, ov: { ...ov, sel: ov.sel >= 0 ? ov.sel : -1, want: ov.want || "" }, left: true, here: -1, seq: 0 };
+    if (split.ov.sel < 0) split.ov.sel = stepAnchor(split.ov.anchors, -1, 1);
+  }
+  raiseViewer();
+  paintSplitTitle();
+  renderSplitOverview();
+  paintSplitFocus();
+  paintTitle(); // the right column's title is cut to its half
+  if (split.ov.sel >= 0) selectAnchor(split.ov.sel);
+  if (!view.id) {
+    view.placeholder = split.ov.sel >= 0 ? "" : "(no link in this overview opens a file)";
+    renderViewer();
+  }
+  if (!same && steer) steerSplit();
+  return { ok: true, notice: "" };
+}
+
+// steerSplit shows the selected link's target in the right column (spec §5):
+// the file at the link's line with the overview's links as bands (a stored
+// overview: at the reviewed tip, with its remarks), or a note's file at the
+// note. A link that cannot open says why and leaves the right column as it
+// was. The focus stays where it is; no history entry. Quick steps settle on
+// the last one (openViewer's loadSeq).
+async function steerSplit() {
+  const sp = split;
+  const a = sp && sp.ov.anchors[sp.ov.sel];
+  if (!a) return;
+  const why = anchorStatus(a);
+  if (why) return opLine(why, false);
+  let target;
+  if (sp.ov.stored) target = storedAnchorOpen(sp.ov.stored.tip, a);
+  else {
+    const t = anchorTarget(a);
+    if (!t.path) return opLine("note " + t.note + " is gone", false);
+    target = { src: "worktree", path: t.path, line: t.line };
+  }
+  const from = { id: sp.id || sp.ov.stored.id, sel: sp.ov.sel, dest: a.dest, anchors: sp.ov.anchors, stamp: sp.ov.stamp, cur: a.note ? "" : a.dest };
+  if (sp.ov.stored) from.stored = sp.ov.stored;
+  const r = await openViewer({ ...target, from, steer: true });
+  if (r.ok && a.note) $("viewer-body").querySelector(`.vnote[data-note="${a.note}"]`)?.scrollIntoView({ block: "nearest" });
+}
+
+// splitName is how a status line names the split's overview.
+function splitName() {
+  return "overview " + split.id + " " + JSON.stringify(split.ov.title);
+}
+
+// refreshSplitOverview re-reads the left column's overview after the store
+// moved it (spec §10), keeping the selection by its destination; the right
+// column's bands follow. An older answer landing after a newer one drops.
+async function refreshSplitOverview() {
+  const sp = split;
+  const mine = ++sp.seq;
+  let ov;
+  try {
+    ov = await fetchOverview(sp.id);
+  } catch {
+    return;
+  }
+  if (split !== sp || sp.seq !== mine) return;
+  sp.ov = { ...ov, sel: keepAnchor(ov.anchors || [], sp.ov.want, sp.ov.sel), want: sp.ov.want };
+  paintSplitTitle();
+  renderSplitOverview();
+  if (view.from && !view.from.stored && view.from.id === sp.id) {
+    view.from.anchors = sp.ov.anchors;
+    view.from.stamp = ov.stamp;
+    rerenderKeepingScroll();
+  }
+  swapFoot(true);
+}
+
+// splitOverviewGone: the left column's overview left the store (closed by
+// the agent, or by x in a switcher) — the split collapses to the right
+// column's file, its bands gone (spec §10).
+function splitOverviewGone(name) {
+  leaveSplit();
+  if (view.from) view.from.closed = true;
+  if (view.id) {
+    paintTitle();
+    rerenderKeepingScroll();
+    swapFoot(true);
+    $("viewer-body").focus({ preventScroll: true });
+  } else dropViewer();
+  opLine(name + " was closed", false);
+}
+
+// narrowSplit: the box narrowed below the split's width (W7) — the overview
+// stays as today's one document, the right column's file goes to the
+// background (the TUI's narrowSplits). Widening never re-splits on its own.
+function narrowSplit() {
+  const sp = split;
+  leaveSplit();
+  if (view.id) {
+    rememberPlace();
+    ofQueue({ op: "background", id: view.id, line: view.cur });
+  }
+  loadSeq++; // a steer in flight must not land over the overview
+  if (sp.ov.stored) showStoredOverview(sp.ov.stored);
+  else {
+    ofQueue({ op: "focus", id: sp.id });
+    showOverview({ id: sp.id, path: sp.path }, sp.ov, ovApplied);
+  }
+  selectAnchor(sp.ov.sel);
+}
+
+window.addEventListener("resize", () => {
+  if (split && isOpen() && !splitFits($("viewer-box").clientWidth)) narrowSplit();
+});
+
+// backIntoSplit is backspace / Back in a file an overview opened when the
+// box is wide enough (spec §5): the overview comes back in the left column
+// with the link selected, the file stays in the right column where the
+// reader left it. The one history entry the open armed is used up.
+async function backIntoSplit(f) {
+  let ov;
+  if (f.stored) ov = { title: f.stored.title, blocks: f.stored.blocks, anchors: f.stored.anchors, text: f.stored.text, stored: f.stored };
+  else {
+    try {
+      ov = await fetchOverview(f.id);
+    } catch (e) {
+      return opLine(e.status === 404 ? "the overview was closed" : "back failed: " + (e.message || e), e.status !== 404);
+    }
+  }
+  if (!isOpen() || view.from !== f) return; // something else took the screen meanwhile
+  f.anchors = ov.anchors || [];
+  if (ov.stamp) f.stamp = ov.stamp;
+  openSplit(f.stored ? "" : f.id, "", { ...ov, sel: backAnchor(f.anchors, f), want: f.dest }, { steer: false });
+  rerenderKeepingScroll();
+  if (ownBack) history.back(); // the popstate it fires meets the split and does nothing
+}
+
+// splitKey is a key in the split (W2): tab switches columns; the overview
+// steps its links and steers; the file keeps every file key.
+function splitKey(e) {
+  if (e.key === "Tab") {
+    e.preventDefault();
+    focusSplit(!split.left);
+    return true;
+  }
+  if (split.left) return splitOverviewKey(e);
+  switch (e.key) {
+    case "Backspace": e.preventDefault(); focusSplit(true); return true;
+    case "N": case "P": e.preventDefault(); stepSplitAnchor(e.key === "N" ? 1 : -1); return true;
+  }
+  return fileKey(e);
+}
+
+// syncHere recomputes the link the right column's cursor marks on the
+// overview (spec §7) and repaints the left column's links when it moved.
+function syncHere() {
+  if (!split) return;
+  const f = view.from, bands = viewBands(), n = view.lines.length;
+  const cur = f ? bandOf(bands, f.anchors, f.cur, n) : -1;
+  const sel = split.ov.anchors[split.ov.sel];
+  const selB = sel && f ? bandOf(bands, f.anchors, sel.dest, n) : -1;
+  const here = hereOf(bands, cur, view.cur, selB);
+  if (here === split.here) return;
+  split.here = here;
+  paintAnchors();
+}
+
+// splitOverviewKey is a key on the left column (spec §8).
+function splitOverviewKey(e) {
+  const body = $("viewer-ov-body");
+  switch (e.key) {
+    case "ArrowDown": case "j": stepSplitAnchor(1); break;
+    case "ArrowUp": case "k": stepSplitAnchor(-1); break;
+    case "Enter": enterSplitFile(); break;
+    case "r": copyAnchorRef(); break;
+    case "y": copyText(split.ov.text, "overview text"); break;
+    case "PageDown": case " ": body.scrollBy({ top: body.clientHeight - 40 }); break;
+    case "PageUp": body.scrollBy({ top: -(body.clientHeight - 40) }); break;
+    case "Home": case "g": body.scrollTop = 0; break;
+    case "End": case "G": body.scrollTop = body.scrollHeight; break;
+    case "Escape": closeViewer("background"); break; // W3
+    default: return false;
+  }
+  e.preventDefault();
+  return true;
+}
+
+// stepSplitAnchor is ↓ / ↑ on the overview (and N / P from the file): the
+// next link that can open, shown in the right column at once.
+function stepSplitAnchor(dir) {
+  const i = stepAnchor(split.ov.anchors, split.ov.sel, dir);
+  if (i < 0) return;
+  selectAnchor(i);
+  split.here = -1; // the landing recomputes it
+  steerSplit();
+}
+
+// enterSplitFile is enter on the overview: into the right column, steering
+// first when it does not show the selected link yet.
+function enterSplitFile() {
+  const a = split.ov.anchors[split.ov.sel];
+  if (a && (!view.id || !view.from || view.from.dest !== a.dest)) steerSplit();
+  focusSplit(false);
 }
 
 // refreshOverview re-reads the overview on screen (the server re-checks its
@@ -690,11 +1047,11 @@ function stepViewerAnchor(dir) {
   if (!bands.length) return;
   const r = stepBand(bands, bandOf(bands, f.anchors, f.cur, view.lines.length), view.cur, dir);
   const b = bands[r.i], a = f.anchors[b.i];
-  f.cur = f.dest = a.dest; // backAnchor returns to it
-  f.sel = b.i;
+  f.cur = a.dest; // W5: the current band only — the overview's selection (f.sel / f.dest) stays
   view.cur = b.start;
   rerenderKeepingScroll();
   centerCursor();
+  syncHere();
   opLine("anchor " + (r.i + 1) + "/" + bands.length + " in this file · " + (a.label || a.dest) + (r.wrapped ? " · wrapped" : ""), false);
 }
 
@@ -739,12 +1096,9 @@ async function openAnchorAt(i) {
     // working review: the working tree); the kept copy is the way back.
     const stored = { ...view.ov.stored, scrollTop: $("viewer-body").scrollTop };
     const back = { id, sel: view.ov.sel, dest: a.dest, anchors: view.ov.anchors, cur: a.dest, stored };
-    const r = await openViewer(storedAnchorOpen(stored.tip, a));
+    const r = await openViewer({ ...storedAnchorOpen(stored.tip, a), from: back });
     if (!r.ok) return;
-    view.from = back;
     armBack();
-    rerenderKeepingScroll();
-    swapFoot(true);
     return;
   }
   const t = anchorTarget(a);
@@ -752,17 +1106,15 @@ async function openAnchorAt(i) {
   // The overview's anchors travel with the way back: the file draws its
   // own as bands (viewBands), the opened one current — a note is no band.
   const from = { id, sel: view.ov.sel, dest: a.dest, anchors: view.ov.anchors, stamp: view.ov.stamp, cur: t.note ? "" : a.dest };
-  const r = await openViewer({ src: "worktree", path: t.path, line: t.line });
+  const r = await openViewer({ src: "worktree", path: t.path, line: t.line, from });
   if (!r.ok) return;
-  view.from = from;
   armBack();
-  rerenderKeepingScroll();
-  swapFoot(true);
   if (t.note) $("viewer-body").querySelector(`.vnote[data-note="${t.note}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
 window.addEventListener("popstate", () => {
   ownBack = history.state?.gg === "back"; // Forward can put it back on top
+  if (split) return; // the split adds no history entry
   if (!view.from || !isOpen()) return;
   if (topLayer()?.id === "console") { closeConsole(); return armBack(); } // the agent keeps running; the next Back comes back
   if (topLayer()?.id !== "viewer") return armBack(); // a popup is over the file: Back leaves both alone
@@ -774,6 +1126,7 @@ window.addEventListener("popstate", () => {
 // open. One step deep.
 async function anchorBack() {
   const f = view.from, id = view.id;
+  if (f && splitFits(boxWidth())) return backIntoSplit(f);
   if (f && f.stored) {
     // Back to a stored overview re-shows the kept copy; the file it opened
     // stays open in the background, as a temporary overview's does.
@@ -823,8 +1176,9 @@ async function anchorBack() {
 }
 
 function copyAnchorRef() {
-  if (view.ov.stored) return opLine("a stored overview's anchor has no reference — copy the review link instead", false);
-  const a = view.ov.anchors[view.ov.sel];
+  const ov = ovDoc();
+  if (ov.stored) return opLine("a stored overview's anchor has no reference — copy the review link instead", false);
+  const a = ov.anchors[ov.sel];
   if (!a) return opLine("no anchor selected — tab selects one", false);
   copyText(a.ref, "anchor reference");
 }
@@ -863,13 +1217,21 @@ function notesOf(body, src) {
   return src === "worktree" ? body.notes || [] : [];
 }
 
+// shownNotes is every box the file draws: the agent's notes, then the
+// review's remarks (spec 2026-10-11 §6). Code that talks to the store keeps
+// view.notes.
+function shownNotes() {
+  return mergeNotes(view.notes, view.remarks);
+}
+
 function noteBoxHTML(n) {
   return (
-    `<div class="vnote${n.outdated ? " outdated" : ""}" data-note="${esc(n.id)}">` +
+    `<div class="vnote${n.outdated ? " outdated" : ""}${n.readonly ? " remark" : ""}" data-note="${esc(n.id)}">` +
     `<div class="vnote-title">${esc(noteBoxTitle(n))}</div>` +
     `<div class="vnote-sum">${esc(n.summary)}</div>` +
     (n.rationale ? `<div class="vnote-why">${esc(n.rationale)}</div>` : "") +
-    `<div class="vnote-acts"><button data-nact="dismiss">dismiss</button><button data-nact="ref">copy reference</button></div></div>`
+    (n.readonly ? "" : `<div class="vnote-acts"><button data-nact="dismiss">dismiss</button><button data-nact="ref">copy reference</button></div>`) +
+    `</div>`
   );
 }
 
@@ -903,12 +1265,12 @@ function copyNoteRef(n) {
 // stepNote is } / {: the next note in this file, then the next open file
 // with notes, landing on its first (last) note.
 async function stepNote(dir) {
-  const line = nextNoteLine(view.notes, view.cur, dir);
+  const line = nextNoteLine(shownNotes(), view.cur, dir);
   if (line) {
     view.cur = line;
     paintCursor();
     for (const b of $("viewer-body").querySelectorAll(".vnote")) {
-      if (noteAtLine(view.notes, line)?.id === b.dataset.note) b.scrollIntoView({ block: "nearest" });
+      if (noteAtLine(shownNotes(), line)?.id === b.dataset.note) b.scrollIntoView({ block: "nearest" });
     }
     cursorRow()?.scrollIntoView({ block: "nearest" });
     return;
@@ -920,7 +1282,8 @@ async function stepNote(dir) {
   const id = nextNotedFile(files, view.id, dir);
   if (!id) return opLine(view.notes.length ? "no more notes" : "no notes", false);
   const r = await openViewer({ id });
-  const t = dir > 0 ? view.notes[0] : view.notes[view.notes.length - 1];
+  const ns = shownNotes();
+  const t = dir > 0 ? ns[0] : ns[ns.length - 1];
   if (r.ok && t) {
     view.cur = t.start;
     paintCursor();
@@ -940,6 +1303,7 @@ function paintCursor() {
     row.scrollIntoView({ block: "nearest" });
   }
   reportCursor();
+  syncHere();
 }
 
 function centerCursor() {
@@ -978,7 +1342,14 @@ function viewerKey(e) {
     return true;
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (split) return splitKey(e);
   if (view.ov) return overviewKey(e);
+  return fileKey(e);
+}
+
+// fileKey is a key on the file the viewer shows (one document, or the
+// split's right column); false = not the file's.
+function fileKey(e) {
   // shift+↓ / shift+↑ mark lines from the cursor (it stays, as a shift+click
   // leaves it); L copies the link — the band's, else the cursor line's.
   if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
@@ -1002,8 +1373,8 @@ function viewerKey(e) {
     case "End": case "G": view.cur = view.lines.length; paintCursor(); break;
     case "w": cycleTextMode(); break;
     case ".": menuAtCursor(); break;
-    case "d": { const n = noteAtLine(view.notes, view.cur); if (!n) return false; dismissNote(n.id); break; }
-    case "r": { const n = noteAtLine(view.notes, view.cur); if (!n) return false; copyNoteRef(n); break; }
+    case "d": { const n = noteAtLine(shownNotes(), view.cur); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
+    case "r": { const n = noteAtLine(shownNotes(), view.cur); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
     case "}": stepNote(1); break;
     case "{": stepNote(-1); break;
     case "n": stepViewerAnchor(1); break; // always ours: a p in the viewer is never pull
@@ -1084,6 +1455,23 @@ function viewerSearchKey(e) {
 // viewer is open #foot shows them, and gets its own chips back on close.
 // viewerFoot is the chips; a file with an agent's notes adds theirs.
 function viewerFoot() {
+  if (split && split.left) {
+    return (
+      `<span>↑↓ links</span><button data-vact="sfile">enter open</button><button data-vact="sfile">tab file</button>` +
+      (split.ov.stored ? "" : `<button data-vact="aref">r reference</button>`) +
+      `<button data-vact="ytext">y copy text</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+    );
+  }
+  if (split) {
+    const bandKeysS = viewBands().length ? "<span>n p bands</span>" : "";
+    const notesS = (shownNotes().length ? `<span>} { notes</span>` : "") +
+      (view.notes.length ? `<button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>` : "");
+    return (
+      `<button data-vact="sov">tab overview</button><span>N P overview links</span>` + bandKeysS +
+      `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notesS +
+      `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+    );
+  }
   if (view.ov && view.ov.stored) {
     return (
       `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button>` +
@@ -1098,9 +1486,8 @@ function viewerFoot() {
   }
   const back = view.from ? `<button data-vact="back" title="or your browser's Back">bksp back</button>` : "";
   const bandKeys = view.from && viewBands().length ? "<span>n p anchors</span>" : "";
-  const notes = view.notes.length
-    ? `<span>} { notes</span><button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>`
-    : "";
+  const notes = (shownNotes().length ? `<span>} { notes</span>` : "") +
+    (view.notes.length ? `<button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>` : "");
   return (
     back + bandKeys + `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
     `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\\ open files</button><button data-vact="close">esc close</button>`
@@ -1122,11 +1509,13 @@ $("foot").addEventListener("click", (e) => {
     case "bg": backgroundViewer(); break;
     case "files": openSwitcher(); break;
     case "close": closeViewer(escHow(!!view.ov, view.notes.length)); break;
-    case "dismiss": { const n = noteAtLine(view.notes, view.cur); if (n) dismissNote(n.id); else opLine("no note on this line", false); break; }
-    case "ref": { const n = noteAtLine(view.notes, view.cur); if (n) copyNoteRef(n); else opLine("no note on this line", false); break; }
+    case "dismiss": { const n = noteAtLine(shownNotes(), view.cur); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
+    case "ref": { const n = noteAtLine(shownNotes(), view.cur); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
     case "aopen": if (view.ov && view.ov.sel >= 0) openAnchorAt(view.ov.sel); else opLine("no anchor selected — tab selects one", false); break;
-    case "aref": if (view.ov) copyAnchorRef(); break;
-    case "ytext": if (view.ov) copyText(view.ov.text, "overview text"); break;
+    case "aref": if (ovDoc()) copyAnchorRef(); break;
+    case "ytext": if (ovDoc()) copyText(ovDoc().text, "overview text"); break;
+    case "sfile": if (split) enterSplitFile(); break;
+    case "sov": focusSplit(true); break;
     case "back": if (view.from) anchorBack(); break;
   }
 });
@@ -1321,6 +1710,7 @@ function viewerHello() {
 // viewerOpenFiles: the list changed. A file this viewer shows that left it
 // was closed in another tab's switcher (x) — this viewer goes too.
 function viewerOpenFiles(files) {
+  if (split && split.id && !files.some((f) => f.id === split.id)) splitOverviewGone(splitName());
   const id = viewerFileId();
   if (!id || files.some((f) => f.id === id)) return;
   const name = docName(view);
@@ -1336,7 +1726,7 @@ async function viewerFileChanged(id) {
   const seq = loadSeq;
   let body;
   try {
-    body = await fetchContent(view.src, view.rev, view.path);
+    body = await fetchContent(view.src, view.rev, view.path, remarksReview(view.from));
   } catch {
     return; // the next change retries; a dead server paints its own veil
   }
@@ -1345,6 +1735,7 @@ async function viewerFileChanged(id) {
   const top = el.scrollTop, left = el.scrollLeft;
   view.lines = body.lines || [];
   view.notes = body.missing ? view.notes : notesOf(body, view.src); // a deleted file keeps its notes for its return
+  view.remarks = body.missing ? view.remarks : body.remarks || [];
   view.placeholder = placeholderFor(body, view.lines);
   view.image = imageOf(body, view.src, view.rev, view.path);
   view.cur = keepLine(view.cur, view.lines.length, !!body.missing);
@@ -1363,6 +1754,10 @@ async function viewerFileChanged(id) {
 // re-read, which aligns its notes (or re-checks its anchors — only when its
 // stamp moved: a change elsewhere in the store leaves it as it is).
 function viewerAgentDocs(files, closed = [], stamps = undefined) {
+  if (split && split.id) { // the split's left column follows the store too
+    if (fromGone(stamps, closed, split.id)) splitOverviewGone(splitName());
+    else if (overviewStale(stamps, split.id, split.ov.stamp)) refreshSplitOverview();
+  }
   const id = viewerFileId();
   if (id && view.ov && closed.includes(id)) {
     const name = docName(view);
@@ -1375,7 +1770,7 @@ function viewerAgentDocs(files, closed = [], stamps = undefined) {
   // The shown file's bands follow the overview that opened it: gone with it,
   // re-read when it changed. A closed viewer has none to follow.
   const f = view.from;
-  if (f && !f.closed && !f.stored && !view.ov) { // a stored overview's way back is page-local: never in the stamps
+  if (f && !f.closed && !f.stored && !view.ov && !split) { // a stored overview's way back is page-local: never in the stamps; the split follows its own
     if (fromGone(stamps, closed, f.id)) {
       f.closed = true;
       rerenderKeepingScroll();
@@ -1409,9 +1804,12 @@ registerHelp({
     "a file row's or a shelved file's <b>view file</b> (right-click / <b>.</b>), or a pasted content link, opens the file full-page: " +
     "<b>↑↓ j k</b> line, <b>shift+↓↑</b> mark lines from the cursor (or shift+click a number), <b>L</b> copy their link, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close; " +
     "an agent's notes (<code>gg session note</code>) sit under their lines: <b>} {</b> next / previous note, <b>d</b> dismiss, <b>r</b> copy its reference; " +
-    "an agent's overview (<code>gg session overview</code>) opens as a document: <b>tab / shift+tab</b> select an anchor, <b>enter</b> or a click opens it, " +
-    "<b>r</b> copies its reference, <b>y</b> the text, <b>esc</b> steps aside (<b>x</b> in the switcher closes it); <b>backspace</b> (or the browser's Back) in the file an anchor opened comes back; " +
-    "in that file the overview's line and range anchors are tinted bands, the one you are on brighter, and <b>n / p</b> step through them (in line order, wrapping)",
+    "an agent's overview (<code>gg session overview</code>) or a review's stored one opens beside the file its selected link points to when the window is wide enough: " +
+    "<b>↑↓</b> step its links and the file follows, <b>enter</b> or <b>tab</b> moves into the file, <b>tab / backspace</b> back, <b>N / P</b> step the overview from the file, " +
+    "the link whose band holds the cursor is marked in the bands' colour, a review's remarks show as read-only boxes, a click on a link shows its file; " +
+    "<b>r</b> copies a link's reference, <b>y</b> the text, <b>esc</b> closes both (an agent's overview stays in the switcher; <b>x</b> there closes it). " +
+    "A narrow window shows the overview alone: <b>tab / shift+tab</b> select a link, <b>enter</b> or a click opens it, <b>backspace</b> (or the browser's Back) in that file comes back. " +
+    "In the file the overview's line and range links are tinted bands, the one you are on brighter, and <b>n / p</b> step through them (in line order, wrapping) without moving the overview's selection",
 });
 
 export { closeViewer, dropViewer, evictedText, markViewerRange, openViewer, openWorktreeFileDiff, versionLabel, viewerAgentDocs, viewerClosedFile, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };

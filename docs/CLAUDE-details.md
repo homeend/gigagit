@@ -6989,3 +6989,33 @@ embedding `docPane` must override `render` when it overrides `title` (no
 virtual dispatch through an embedded struct). Tests: `split_view_test.go`,
 `split_overview_test.go`, `split_stack_test.go`, `split_stack_pane_test.go`,
 `split_mouse_test.go`, `split_prefs_test.go`, e2e `tui_stored_overview.toml`.
+
+**gg web (2026-10-11, spec `2026-10-11-web-overview-split-design.md`, plan 1).**
+The split lives in the viewer overlay's box (`viewer.js`): `#viewer-ov` (left,
+hidden by id) beside `#viewer-file` (today's title/search/body). `view` stays
+the ONE file — the right column's — so every file behaviour works unchanged;
+the page-local `split` (`{id, path, ov, left, here, seq}`; id "" = a stored
+overview) holds the left column, and `ovDoc()`/`ovEl()` point the overview
+paint and keys (`paintAnchors`, `selectAnchor`, `copyAnchorRef`) at it. The
+doors `showOverview` / `showStoredOverview` open `openSplit` when
+`splitFits(boxWidth())` (≥ 900px, W7), document mode otherwise; a split
+already showing the overview is reused. `steerSplit` → `openViewer({…, from,
+steer: true})`: `openViewer` now sets `view.from` BEFORE its first render and
+asks `/api/file-content?review=<id>` (`remarksReview(from)`) — the review's
+remarks ride the same read (`remarksFor` → `domain.ReviewFileNotes`), so a late
+answer can never pair one file's remarks with another's lines; an open that
+is not the split's own steering leaves the split (overview → background).
+`shownNotes()` = agent notes + remarks (`mergeNotes`) for every reader; a
+remark (`readonly`) box has no buttons, d/r say read-only. W5: n/p
+(`stepViewerAnchor`) write only `from.cur` — never `from.sel`/`from.dest` — in
+the split AND the one-document viewer (the TUI's full-screen viewer still
+moves its selection). `syncHere()` (from `paintCursor`, `renderViewer`,
+`stepViewerAnchor`) → `hereOf` → `.ahere`. `closeViewer` takes the split down
+first (W3: both to the background), `dropViewer` too; `refreshSplitOverview`
+(seq-guarded) / `splitOverviewGone` follow the store; `narrowSplit` on a
+resize below the breakpoint; `anchorBack` → `backIntoSplit` when wide (file
+kept where the reader left it; the armed history entry used up, popstate
+ignores a split). Tests: `overviewsplitjs_test.go` (wiring), the pure
+`TestViewerSplitModelJS` / `TestViewerRemarkNotesJS`,
+`filecontent_remarks_test.go`; the visible behaviour was checked with a
+Playwright script against a rebuilt binary (not committed).

@@ -1706,9 +1706,21 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
    viewer's keys while it is open (the viewer draws no hint line of its own). */
 #viewer { position: fixed; top: 0; left: 0; right: 0; bottom: var(--foot-h, 25px); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 21; }
 #viewer.hidden { display: none; }
-#viewer-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; height: 92%; display: flex; flex-direction: column; }
+#viewer-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; height: 92%; display: flex; flex-direction: row; }
 #viewer-title { padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
 #viewer-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
+/* The overview split (spec 2026-10-11 §3): the overview in a left column,
+   the file in the right; equal halves, the focused column's title underlined. */
+#viewer-file { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+#viewer-ov { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+#viewer-ov.hidden { display: none; }
+#viewer-ov-title { padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
+#viewer-ov-body { flex: 1; overflow: auto; padding: 6px 0; }
+#viewer-ov-body:focus { outline: none; }
+#viewer-box.split #viewer-ov-title, #viewer-box.split #viewer-title { color: var(--dim); }
+#viewer-box.split .colfocus > #viewer-ov-title, #viewer-box.split .colfocus > #viewer-title { color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
+/* the link whose band holds the right column's cursor (spec §7): the bands' amber */
+.md a.md-anchor.ahere { background: color-mix(in srgb, #d4a72c 24%, transparent); font-weight: bold; text-decoration: underline; }
 .vline { display: flex; white-space: pre-wrap; cursor: default; }
 .vline.vcur { background: var(--sel); }
 body.lm-scroll .vline.vcur .vno { background: var(--sel); }
@@ -1719,6 +1731,9 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 .vnote.outdated { opacity: .6; }
 .vnote-title { color: var(--accent); font-size: .9em; margin-bottom: 4px; }
 .vnote-why { margin-top: 6px; color: var(--dim); }
+/* a review's remark (spec 2026-10-11 §6): read-only, the review's colour */
+.vnote.remark { border-color: var(--dim); }
+.vnote.remark .vnote-title { color: var(--dim); }
 .vnote-acts { margin-top: 6px; display: flex; gap: 8px; }
 .vnote-acts button { font: inherit; font-size: .9em; color: var(--fg); background: none; border: 1px solid var(--border); border-radius: 3px; padding: 1px 8px; cursor: pointer; }
 .vnote-acts button:hover { border-color: var(--accent); color: var(--accent); }
