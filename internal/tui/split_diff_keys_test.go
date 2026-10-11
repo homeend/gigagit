@@ -408,3 +408,74 @@ func TestRowNotesArePlacedOnceAndFollowChanges(t *testing.T) {
 		t.Fatal("a change re-places them")
 	}
 }
+
+// v in the split's diff view selects the diff's rows, not the file's: a
+// deleted row and the context under it copy as their plain text (no +/-
+// marker), and the line cursor follows the character cursor.
+func TestSplitDiffCharSelCopiesTheRowsText(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	m = pressDrain(t, m, "D") // the diff shows, the file pane focused
+	d := sv.right.doc()
+	if d.diff == nil || sv.onLeft {
+		t.Fatalf("diff %v onLeft %v: D shows the diff and moves into it", d.diff != nil, sv.onLeft)
+	}
+	d.diff.p.cur = rowOfOld(d.diff.rows, 5) // "l5", deleted
+	var got string
+	m = captureClip(m, &got)
+	m = pressDrain(t, m, "v")
+	if !d.diff.p.cs.on || d.p.cs.on {
+		t.Fatalf("diff mode %v, file mode %v: v enters the diff's own", d.diff.p.cs.on, d.p.cs.on)
+	}
+	for _, k := range []string{"space", "j", "end"} {
+		m = pressDrain(t, m, k)
+	}
+	if d.diff.p.cur != rowOfOld(d.diff.rows, 6) {
+		t.Fatalf("cur %d: the line cursor follows the character cursor", d.diff.p.cur)
+	}
+	m = pressDrain(t, m, "enter")
+	if got != "l5\nl6" || d.diff.p.cs.on {
+		t.Fatalf("copied %q (on %v), want the rows' plain text and the mode left", got, d.diff.p.cs.on)
+	}
+}
+
+// The mode is modal in the diff view too: D waits; esc leaves, then D
+// puts the file back.
+func TestSplitDiffCharSelIsModal(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	m = pressDrain(t, m, "D")
+	d := sv.right.doc()
+	m = pressDrain(t, m, "v")
+	m = pressDrain(t, m, "D")
+	if d.diff == nil || !d.diff.p.cs.on {
+		t.Fatalf("diff %v: D must wait while the mode is on", d.diff != nil)
+	}
+	m = pressDrain(t, m, "esc")
+	if d.diff.p.cs.on {
+		t.Fatal("esc leaves the mode")
+	}
+	m = pressDrain(t, m, "D")
+	if d.diff != nil {
+		t.Fatal("D after the mode puts the file back")
+	}
+}
+
+// A click on the overview moves the keys there and ends the diff view's
+// mode: it lives only where the keys go.
+func TestSplitDiffCharSelEndsOnAClickOnTheOverview(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	m = pressDrain(t, m, "D")
+	d := sv.right.doc()
+	m = pressDrain(t, m, "v")
+	if !d.diff.p.cs.on {
+		t.Fatal("v enters the diff's mode")
+	}
+	u, cmd := m.Update(mouseMsg(5, 5, tea.MouseButtonLeft))
+	m = drainCmds(t, u.(Model), cmd)
+	if !sv.onLeft || d.diff.p.cs.on {
+		t.Fatalf("onLeft %v diff mode %v: the click moves the keys and ends the mode", sv.onLeft, d.diff.p.cs.on)
+	}
+	_ = m
+}
