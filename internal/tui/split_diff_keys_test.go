@@ -523,3 +523,30 @@ func TestSplitDiffReloadInTheModeKeepsTheCutView(t *testing.T) {
 		t.Fatalf("status %q, want %q", m.statusMsg, want)
 	}
 }
+
+// v in the diff the narrow viewer shows selects the diff's rows too.
+func TestNarrowViewersDiffCharSelCopiesTheRowsText(t *testing.T) {
+	t.Parallel()
+	m, _ := diffSplitModel(t)
+	u, cmd := m.Update(tea.WindowSizeMsg{Width: 58, Height: 12})
+	m = drainCmds(t, u.(Model), cmd)
+	m = pressDrain(t, m, "enter")
+	m = pressDrain(t, m, "D")
+	d := topDoc(m)
+	if d == nil || d.diff == nil {
+		t.Fatal("the narrow viewer shows the diff")
+	}
+	d.diff.p.cur = rowOfOld(d.diff.rows, 5) // "l5", deleted
+	var got string
+	m = captureClip(m, &got)
+	m = pressDrain(t, m, "v")
+	if !d.diff.p.cs.on || d.p.cs.on {
+		t.Fatalf("diff mode %v, file mode %v: v enters the diff's own", d.diff.p.cs.on, d.p.cs.on)
+	}
+	for _, k := range []string{"space", "j", "end", "enter"} {
+		m = pressDrain(t, m, k)
+	}
+	if got != "l5\nl6" || d.diff.p.cs.on {
+		t.Fatalf("copied %q (on %v), want the rows' plain text and the mode left", got, d.diff.p.cs.on)
+	}
+}
