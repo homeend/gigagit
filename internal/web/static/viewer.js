@@ -9,7 +9,7 @@ import { collapseDiffRows, cycleTextMode, openFile, openWorkingTree, renderCell 
 import { diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows } from "./splitdiff.js";
 import { mdHTML } from "./markdown.js";
 import { saveUI } from "./uistate.js";
-import { SPLIT_STACK_MAX_IN_FLIGHT, anchorPath, newSlots, placeholderRows, restack, shows, slotOf, stackFiles, stackTitle } from "./splitstack.js";
+import { SPLIT_STACK_MAX_IN_FLIGHT, anchorPath, newSlots, nextHeader, placeholderRows, restack, shows, slotOf, stackBands, stackEnd, stackFiles, stackMove, stackTitle, stepStackBand } from "./splitstack.js";
 import { clearOpLine, opLine } from "./ops.js";
 import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
@@ -465,6 +465,17 @@ viewerRoot.addEventListener("click", (e) => {
 });
 $("viewer-body").addEventListener("click", (e) => {
   if (split && split.left) focusSplit(false);
+  if (split && split.stack) { // the stack's own lines and headers (spec §11)
+    const st = split.stack, head = e.target.closest(".vstk-head"), row = e.target.closest(".vline[data-k]");
+    const picked = getSelection();
+    if (!picked.isCollapsed && $("viewer-body").contains(picked.anchorNode)) return;
+    if (head) {
+      st.cur = { k: Number(head.dataset.k), line: 0 };
+      if (e.target.closest(".vstk-fold")) return foldStackFile();
+    } else if (row) st.cur = { k: Number(row.dataset.k), line: Number(row.dataset.i) + 1 };
+    else return;
+    return paintStackCursor();
+  }
   const fold = e.target.closest(".vfold");
   if (fold && view.diff) {
     view.diff.open.add(Number(fold.dataset.fold));
@@ -522,6 +533,10 @@ $("viewer-body").addEventListener("mousedown", (e) => {
   if (e.shiftKey && e.target.closest(".vno")) e.preventDefault(); // no text selection from the old caret
 });
 $("viewer-body").addEventListener("contextmenu", (e) => {
+  if (split && split.stack) {
+    e.preventDefault();
+    return opLine(SINGLE_ONLY, false);
+  }
   const row = e.target.closest(".vline[data-i], .vline[data-r]");
   if (row && row.dataset.r !== undefined) {
     view.diff.row = Number(row.dataset.r);
@@ -937,6 +952,15 @@ async function refreshSplitOverview() {
   sp.ov = { ...ov, sel: keepAnchor(ov.anchors || [], sp.ov.want, sp.ov.sel), want: sp.ov.want };
   paintSplitTitle();
   renderSplitOverview();
+  if (sp.stack) { // the links moved: the files they name follow, the read ones kept
+    const st = sp.stack, path = st.slots[st.cur.k]?.path;
+    st.slots = restack(st.slots, stackFiles(stackReviewFiles(sp), sp.ov.anchors));
+    const k = path ? slotOf(st.slots, path) : -1;
+    st.cur = k >= 0 ? { k, line: st.cur.line } : { k: 0, line: 0 };
+    if (st.want && slotOf(st.slots, st.want.path) < 0) st.want = null;
+    rerenderKeepingScroll();
+    paintStackCursor();
+  }
   if (view.from && !view.from.stored && view.from.id === sp.id) {
     view.from.anchors = sp.ov.anchors;
     view.from.stamp = ov.stamp;
@@ -1020,6 +1044,7 @@ function splitKey(e) {
     case "D": if (!split.stack) break; e.preventDefault(); opLine(SINGLE_ONLY, false); return true;
   }
   if (split.left) return splitOverviewKey(e);
+  if (split.stack) return stackKey(e);
   switch (e.key) {
     case "Backspace": e.preventDefault(); focusSplit(true); return true;
     case "N": case "P": e.preventDefault(); stepSplitAnchor(e.key === "N" ? 1 : -1); return true;
@@ -1031,11 +1056,24 @@ function splitKey(e) {
 // overview (spec §7) and repaints the left column's links when it moved.
 function syncHere() {
   if (!split) return;
-  const f = view.from, bands = viewBands(), n = view.lines.length;
-  const cur = f ? bandOf(bands, f.anchors, f.cur, n) : -1;
-  const sel = split.ov.anchors[split.ov.sel];
-  const selB = sel && f ? bandOf(bands, f.anchors, sel.dest, n) : -1;
-  const here = hereOf(bands, cur, view.cur, selB);
+  let here;
+  if (split.stack) { // the stack: the band at the cursor's (file, line)
+    const st = split.stack, s = st.slots[st.cur.k], anchors = split.ov.anchors;
+    here = -1;
+    if (shows(s) && st.cur.line > 0) {
+      const n = s.lines.length, bands = anchorBands(anchors, s.path, n);
+      const cur = stackCurFile(st) === st.cur.k ? bandOf(bands, anchors, st.curDest, n) : -1;
+      const sel = anchors[split.ov.sel];
+      const selB = sel && anchorPath(sel) === s.path ? bandOf(bands, anchors, sel.dest, n) : -1;
+      here = hereOf(bands, cur, st.cur.line, selB);
+    }
+  } else {
+    const f = view.from, bands = viewBands(), n = view.lines.length;
+    const cur = f ? bandOf(bands, f.anchors, f.cur, n) : -1;
+    const sel = split.ov.anchors[split.ov.sel];
+    const selB = sel && f ? bandOf(bands, f.anchors, sel.dest, n) : -1;
+    here = hereOf(bands, cur, view.cur, selB);
+  }
   if (here === split.here) return;
   split.here = here;
   paintAnchors();
@@ -1075,6 +1113,7 @@ function stepSplitAnchor(dir) {
 // enterSplitFile is enter on the overview: into the right column, steering
 // first when it does not show the selected link yet.
 function enterSplitFile() {
+  if (split.stack) return focusSplit(false); // the step already scrolled the stack
   const a = split.ov.anchors[split.ov.sel];
   if (a && (!view.id || !view.from || view.from.dest !== a.dest)) steerSplit();
   focusSplit(false);
@@ -1394,6 +1433,80 @@ function stackNoteLine(s, id) {
 function stackCurFile(st) {
   const a = st.curDest ? split.ov.anchors.find((x) => x.dest === st.curDest) : null;
   return a ? slotOf(st.slots, anchorPath(a)) : -1;
+}
+
+// stackKey is a key on the stack (spec §11): lines across files, bands,
+// headers, folds; the single-file keys say S opens the file.
+function stackKey(e) {
+  const st = split.stack;
+  if (!st.slots.length && e.key !== "Escape" && e.key !== "Backspace") return false;
+  switch (e.key) {
+    case "Backspace": focusSplit(true); break;
+    case "ArrowDown": case "j": st.cur = stackMove(st.slots, st.cur, 1); paintStackCursor(); break;
+    case "ArrowUp": case "k": st.cur = stackMove(st.slots, st.cur, -1); paintStackCursor(); break;
+    case "PageDown": case " ": st.cur = stackMove(st.slots, st.cur, pageRows()); paintStackCursor(); break;
+    case "PageUp": st.cur = stackMove(st.slots, st.cur, -pageRows()); paintStackCursor(); break;
+    case "Home": case "g": st.cur = { k: 0, line: 0 }; paintStackCursor(); break;
+    case "End": case "G": st.cur = stackEnd(st.slots); paintStackCursor(); break;
+    case "N": case "P": { const h = nextHeader(st.slots, st.cur, e.key === "N" ? 1 : -1); if (h) { st.cur = h; paintStackCursor("start"); } break; }
+    case "n": stepStackAnchor(1); break;
+    case "p": stepStackAnchor(-1); break;
+    case "-": foldStackFile(); break;
+    case "_": foldAllStack(); break;
+    case "/": case "@": case "L": case ".": case "}": case "{": case "f": opLine(SINGLE_ONLY, false); break;
+    case "d": case "r": {
+      const s = st.slots[st.cur.k];
+      if (s && st.cur.line && noteAtLine(mergeNotes(s.notes, s.remarks), st.cur.line)) opLine(STACK_READONLY, false);
+      else opLine("no note on this line", false);
+      break;
+    }
+    case "w": cycleTextMode(); break;
+    case "Escape": closeViewer("background"); break; // W3
+    default: return false;
+  }
+  e.preventDefault();
+  return true;
+}
+
+// stepStackAnchor is n / p in the stack: the next / previous band across
+// the read files, the cursor on its first line, the band current — the
+// overview's selection stays (W5).
+function stepStackAnchor(dir) {
+  const st = split.stack, anchors = split.ov.anchors;
+  const bands = stackBands(st.slots, (p, n) => anchorBands(anchors, p, n));
+  if (!bands.length) return opLine("no links in the files read so far", false);
+  const ck = stackCurFile(st);
+  let cur = -1;
+  if (ck >= 0 && shows(st.slots[ck])) {
+    const s = st.slots[ck], fb = anchorBands(anchors, s.path, s.lines.length), b = fb[bandOf(fb, anchors, st.curDest, s.lines.length)];
+    if (b) cur = bands.findIndex((x) => x.k === ck && x.start === b.start && x.end === b.end);
+  }
+  const r = stepStackBand(bands, cur, st.cur, dir), b = bands[r.i], a = anchors[b.i];
+  st.curDest = a.dest;
+  st.cur = { k: b.k, line: b.start };
+  repaintStackFile(st, b.k);
+  if (ck >= 0 && ck !== b.k) repaintStackFile(st, ck);
+  paintStackCursor("center");
+  opLine("anchor " + (r.i + 1) + "/" + bands.length + " in the stack · " + (a.label || a.dest) + (r.wrapped ? " · wrapped" : ""), false);
+}
+
+// foldStackFile is -: the cursor's file folds to its header (or unfolds).
+function foldStackFile() {
+  const st = split.stack, k = st.cur.k, s = st.slots[k];
+  s.collapsed = !s.collapsed;
+  st.cur = { k, line: 0 };
+  repaintStackFile(st, k);
+  paintStackCursor();
+  pumpStack(st);
+}
+
+// foldAllStack is _: every file folds, or — all folded — every file opens.
+function foldAllStack() {
+  const st = split.stack, fold = st.slots.some((s) => !s.collapsed);
+  for (const s of st.slots) s.collapsed = fold;
+  st.cur = { k: st.cur.k, line: 0 };
+  renderStack();
+  paintStackCursor("start");
 }
 
 // refreshOverview re-reads the overview on screen (the server re-checks its
@@ -2072,7 +2185,15 @@ function viewerFoot() {
     return (
       `<span>↑↓ links</span><button data-vact="sfile">enter open</button><button data-vact="sfile">tab file</button>` +
       (split.ov.stored ? "" : `<button data-vact="aref">r reference</button>`) +
-      `<button data-vact="ytext">y copy text</button>` + diffChips() + `<button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+      `<button data-vact="ytext">y copy text</button><button data-vact="stack">S ${split.stack ? "single file" : "stack files"}</button>` + diffChips() +
+      `<button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+    );
+  }
+  if (split && split.stack) {
+    return (
+      `<button data-vact="sov">tab overview</button><span>N P files</span><span>n p bands</span>` +
+      `<button data-vact="sfold">- fold</button><button data-vact="sfoldall">_ fold all</button><button data-vact="stack">S single file</button>` +
+      `<span>↑↓ j k line</span><button data-vact="wrap">w long lines</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   if (split) {
@@ -2080,7 +2201,7 @@ function viewerFoot() {
     const notesS = (shownNotes().length ? `<span>} { notes</span>` : "") +
       (view.notes.length ? `<button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>` : "");
     return (
-      `<button data-vact="sov">tab overview</button><span>N P overview links</span>` + bandKeysS + diffChips() +
+      `<button data-vact="sov">tab overview</button><span>N P overview links</span>` + bandKeysS + `<button data-vact="stack">S stack files</button>` + diffChips() +
       `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notesS +
       `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
@@ -2132,6 +2253,9 @@ $("foot").addEventListener("click", (e) => {
     case "back": if (view.from) anchorBack(); break;
     case "dflip": flipDiff(); break;
     case "dfold": if (view.diff && !view.diff.notice) toggleDiffFold(); break;
+    case "stack": if (split) toggleSplitStack(); break;
+    case "sfold": if (split && split.stack) foldStackFile(); break;
+    case "sfoldall": if (split && split.stack) foldAllStack(); break;
   }
 });
 
@@ -2426,6 +2550,8 @@ registerHelp({
     "an agent's overview (<code>gg session overview</code>) or a review's stored one opens beside the file its selected link points to when the window is wide enough: " +
     "<b>↑↓</b> step its links and the file follows, <b>enter</b> or <b>tab</b> moves into the file, <b>tab / backspace</b> back, <b>N / P</b> step the overview from the file, " +
     "the link whose band holds the cursor is marked in the bands' colour, a review's remarks show as read-only boxes, a click on a link shows its file; " +
+    "<b>S</b> stacks every file of the review (or every file the links name) in one scroll beside the overview — <b>↑↓</b> lines across files, <b>N / P</b> file headers, <b>n / p</b> bands, " +
+    "<b>- / _</b> fold one / all, the review's remarks and an agent's notes read-only, <b>S</b> again back to the single file at the cursor; " +
     "<b>r</b> copies a link's reference, <b>y</b> the text, <b>esc</b> closes both (an agent's overview stays in the switcher; <b>x</b> there closes it). " +
     "A narrow window shows the overview alone: <b>tab / shift+tab</b> select a link, <b>enter</b> or a click opens it, <b>backspace</b> (or the browser's Back) in that file comes back. " +
     "In a file an overview's link opened, <b>D</b> (or the <b>file | diff</b> switch in its title) flips to the change the review made to it — an agent's overview: HEAD → the working tree — " +

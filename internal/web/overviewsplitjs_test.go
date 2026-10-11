@@ -143,6 +143,17 @@ func TestOverviewSplitStackIsWired(t *testing.T) {
 		`{ root: $("viewer-body"), rootMargin: "100% 0px" }`,
 		`st.inFlight < SPLIT_STACK_MAX_IN_FLIGHT`,
 		`await openViewer({ ...target, from, steer: true });`,
+		`function stackKey(e)`,
+		`if (split.stack) return stackKey(e);`,
+		`case "N": case "P": { const h = nextHeader(st.slots, st.cur, e.key === "N" ? 1 : -1); if (h) { st.cur = h; paintStackCursor("start"); } break; }`,
+		`case "/": case "@": case "L": case ".": case "}": case "{": case "f": opLine(SINGLE_ONLY, false); break;`,
+		`opLine(STACK_READONLY, false)`,
+		`function stepStackAnchor(dir)`,
+		`function foldStackFile()`,
+		`function foldAllStack()`,
+		`st.slots = restack(st.slots, stackFiles(stackReviewFiles(sp), sp.ov.anchors));`,
+		"<button data-vact=\"stack\">S ",
+		`<b>S</b> stacks`,
 	} {
 		if !strings.Contains(v, want) {
 			t.Errorf("viewer.js lacks %q", want)
