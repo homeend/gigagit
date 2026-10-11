@@ -124,9 +124,18 @@ func (p *contentPopup) charPan(innerW int) {
 	lead := min(max(p.lines[row].lead, 0), len(raw))
 	disp := string(raw[:lead]) + string(p.csRows[row].text)
 	p.hscroll = charPanCells(disp, lead+p.cs.cur.col, p.hscroll, innerW, sanitizeForDisplay)
-	// Column 0 shows the row's lead too, unless the lead alone fills the pane
-	// (deep nesting in a narrow pane): then the pan above stands.
-	if p.cs.cur.col == 0 && p.hscroll <= lead && lipgloss.Width(sanitizeForDisplay(string(raw[:lead]))) < innerW {
+	// Column 0 shows the row's lead too, unless the lead and the cursor's own
+	// cell(s) do not fit the pane (deep nesting in a narrow pane): then the
+	// pan above stands. Both sides are display cells (a tab lead is four).
+	if p.cs.cur.col != 0 {
+		return
+	}
+	leadW := lipgloss.Width(sanitizeForDisplay(string(raw[:lead])))
+	curW := 1 // the empty row's cursor
+	if text := p.csRows[row].text; len(text) > 0 {
+		curW = lipgloss.Width(sanitizeForDisplay(string(text[0])))
+	}
+	if p.hscroll <= leadW && leadW+curW <= innerW {
 		p.hscroll = 0
 	}
 }
@@ -141,6 +150,7 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 	if p.cs.on && p.previewCharStale() {
 		p.previewCharLeave()
+		m.statusMsg = i18n.T("▸ the text reloaded: copy mode ended")
 		return m, nil, true // the key was meant for the mode: it goes with it
 	}
 	p.pageH = rows
@@ -158,10 +168,14 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		if d := m.previewDoc(p); d != nil {
 			stream = d.stream
 		}
-		p.csRows = previewCharRows(p, stream, stream.fileAtOr(p.cur))
+		file := stream.fileAtOr(p.cur)
+		p.csRows = previewCharRows(p, stream, file)
 		if !p.cs.enter(p.csRows, pos{row: p.cur}) {
 			p.previewCharLeave() // the view back
 			m.statusMsg = i18n.T("▸ nothing to select")
+			if stream != nil && file >= 0 && file < len(stream.files) && stream.files[file].folded {
+				m.statusMsg = i18n.T("▸ unfold the file (-) to select in it")
+			}
 			return m, nil, true
 		}
 		p.lsel.clear() // one selection kind at a time

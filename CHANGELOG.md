@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Character selection: the last minors
+
+### Changed
+- While ↓/↑ page an overview split past its last (first) anchor, the
+  status line keeps naming the selected anchor ("anchor k/n · label").
+- `v` on a folded file in the stacked pane says "▸ unfold the file (-) to
+  select in it" instead of "▸ nothing to select".
+- A key the copy mode swallows because its text reloaded says so: "▸ the
+  text reloaded: copy mode ended".
+
+### Fixed
+- The copy mode's pan back to a row's indent measures the indent and the
+  cursor in screen cells: a tab indent no longer stays half hidden, and a
+  wide first character is never cut by the pane's edge.
+- Text reloaded under the copy mode (a load, a resize that re-wraps an
+  overview) no longer ends the mode silently on the next frame: the next
+  key ends it and is swallowed, so a ↓ meant for the cursor never steps the
+  overview's anchor.
+
 ## gg web: every overview opens beside its code
 
 ### Added

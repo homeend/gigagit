@@ -260,12 +260,19 @@ func TestClearLayersLeavesTheMode(t *testing.T) {
 	if !d.p.cs.on {
 		t.Fatal("v must enter the mode on the file pane")
 	}
+	ov := sv.left.doc()
+	if ov.backgrounded { // the file pane's doc is backgrounded by its steer; the overview is not
+		t.Fatal("a shown split's overview must not start backgrounded")
+	}
 	m = m.clearLayers() // a popup's op handoff: the files view stays
 	if len(m.layers.entries) != 0 {
 		t.Fatalf("the stack must be empty: %d", len(m.layers.entries))
 	}
 	if d.p.cs.on {
 		t.Fatal("clearing the stack kept the file pane's mode")
+	}
+	if !ov.backgrounded || !d.backgrounded {
+		t.Fatalf("clearing the stack must retire both panes' docs: overview %v, file %v", ov.backgrounded, d.backgrounded)
 	}
 }
 
@@ -281,7 +288,8 @@ func TestCharSelStaleDropSwallowsTheKey(t *testing.T) {
 		t.Fatal("v must enter the mode on the overview")
 	}
 	sel := ov.ov.sel
-	ov.p.lines = append([]contentLine(nil), ov.p.lines...) // a reload
+	ov.p.lines = append(append([]contentLine(nil), ov.p.lines...), ov.p.lines...) // a reload, longer
+	_ = m.View()                                                                  // Bubble Tea renders after every update: before the next key
 	m = pressDrain(t, m, "down")
 	if ov.p.cs.on {
 		t.Fatal("stale text must end the mode")
@@ -289,7 +297,9 @@ func TestCharSelStaleDropSwallowsTheKey(t *testing.T) {
 	if ov.ov.sel != sel {
 		t.Fatalf("the dropped mode's key stepped the anchor: %d → %d", sel, ov.ov.sel)
 	}
-	_ = m
+	if want := i18n.T("▸ the text reloaded: copy mode ended"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q: a swallowed key must say why", m.statusMsg, want)
+	}
 }
 
 // A move that bumps a stacked file's edge says why the cursor stopped, as
@@ -384,5 +394,34 @@ func TestSplitStackRebuildLeavesTheModeWhenItsFileGoes(t *testing.T) {
 	sp.rebuild(m)
 	if d.p.cs.on {
 		t.Fatalf("the mode outlived its file: cs %+v", d.p.cs)
+	}
+}
+
+// v on a folded stacked file says how to select in it; a file with no text
+// to select keeps the plain "nothing to select".
+func TestSplitStackCharSelOnAFoldedFileSaysUnfold(t *testing.T) {
+	t.Parallel()
+	m, sv, sp := stackedSplitModel(t)
+	m = pressDrain(t, m, "tab")
+	d := sv.right.doc()
+	fi := sp.stream.fileAt(d.p.cur)
+	m = pressDrain(t, m, "-")
+	if !sp.stream.files[fi].folded {
+		t.Fatal("- must fold the cursor's file")
+	}
+	m = pressDrain(t, m, "v")
+	if d.p.cs.on {
+		t.Fatal("a folded file has nothing to select")
+	}
+	if want := i18n.T("▸ unfold the file (-) to select in it"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q", m.statusMsg, want)
+	}
+	m = pressDrain(t, m, "-") // unfolded again, but now empty
+	sp.stream.files[fi].lines = nil
+	sp.rebuild(m)
+	d.p.cur = sp.stream.files[fi].hdr
+	m = pressDrain(t, m, "v")
+	if want := i18n.T("▸ nothing to select"); m.statusMsg != want {
+		t.Fatalf("an empty file: status %q, want %q", m.statusMsg, want)
 	}
 }

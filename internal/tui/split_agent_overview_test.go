@@ -14,6 +14,13 @@ import (
 // width columns: "the loop" = a.txt:2, "my note" = the note.
 func agentOverviewModel(t *testing.T, width int) Model {
 	t.Helper()
+	return agentOverviewModelOf(t, width, "")
+}
+
+// agentOverviewModelOf is agentOverviewModel with tail after the overview's
+// anchors.
+func agentOverviewModelOf(t *testing.T, width int, tail string) Model {
+	t.Helper()
 	m := tempPromptStore(t, loadedNavModel(t)) // S writes its choice: never the machine's store
 	if err := os.WriteFile(filepath.Join(m.currentWorktree, "b.txt"), []byte("b1\nb2\nb3\nb4\nb5\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -27,7 +34,7 @@ func agentOverviewModel(t *testing.T, width int) Model {
 		t.Fatalf("note add: %+v", r)
 	}
 	nm.filterTyping = false
-	nm, _ = applyOverview(t, nm, overviewAddCmd("o-1", "Tour", "Look at [the loop](a.txt:2) and [my note](note:"+r.Notes[0].ID+")."))
+	nm, _ = applyOverview(t, nm, overviewAddCmd("o-1", "Tour", "Look at [the loop](a.txt:2) and [my note](note:"+r.Notes[0].ID+")."+tail))
 	return nm
 }
 

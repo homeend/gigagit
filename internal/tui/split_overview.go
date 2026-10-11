@@ -53,13 +53,13 @@ func (p *overviewPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "down", "j":
 		if d.pageAtEnd(1, rows) { // text below the last anchor is read before the wrap
-			return m, nil
+			return m.keepAnchorHint(d), nil
 		}
 		d.stepAnchor(1, rows)
 		return m.steerSplit(p.sv)
 	case "up", "k":
 		if d.pageAtEnd(-1, rows) {
-			return m, nil
+			return m.keepAnchorHint(d), nil
 		}
 		d.stepAnchor(-1, rows)
 		return m.steerSplit(p.sv)
@@ -126,7 +126,17 @@ func (m Model) steerSplit(sv *splitView) (Model, tea.Cmd) {
 	case *stackPane:
 		m, cmd = m.stackSteer(sv, r, ov.ov.sel)
 	}
-	k, n := 0, 0 // the anchor's place among those a steer can reach
+	if m.statusMsg == "" || !strings.HasPrefix(m.statusMsg, i18n.T("no file %s", a.target.Path)) {
+		m.statusMsg = anchorHint(ov)
+	}
+	return m, cmd
+}
+
+// anchorHint names overview ov's selected anchor by its place among those a
+// steer can reach: "anchor k/n · label".
+func anchorHint(ov *openFile) string {
+	a := ov.ov.anchors[ov.ov.sel]
+	k, n := 0, 0
 	for i, x := range ov.ov.anchors {
 		if !steerable(ov, x) {
 			continue
@@ -139,10 +149,19 @@ func (m Model) steerSplit(sv *splitView) (Model, tea.Cmd) {
 	if label == "" {
 		label = a.dest
 	}
-	if m.statusMsg == "" || !strings.HasPrefix(m.statusMsg, i18n.T("no file %s", a.target.Path)) {
-		m.statusMsg = i18n.T("anchor %d/%d · %s", k, n, label)
+	return i18n.T("anchor %d/%d · %s", k, n, label)
+}
+
+// keepAnchorHint restates the selected anchor's hint while ↓/↑ page the
+// overview past its end anchor: the selection has not moved, so the place
+// it names stays on the status line.
+func (m Model) keepAnchorHint(ov *openFile) Model {
+	if ov.ov.sel >= 0 && ov.ov.sel < len(ov.ov.anchors) {
+		if _, _, _, ok := m.anchorPlace(ov, ov.ov.sel); ok {
+			m.statusMsg = anchorHint(ov)
+		}
 	}
-	return m, cmd
+	return m
 }
 
 // steerable reports whether a steer can reach anchor a of overview ov: a

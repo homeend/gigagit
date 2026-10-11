@@ -2,6 +2,9 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"strings"
 	"testing"
@@ -334,5 +337,71 @@ func TestViewerCharSelKeepsTheCursorPastAWideLead(t *testing.T) {
 	cell := previewDispCol(p.csRows[p.cs.cur.row].text, lead, p.cs.cur.col)
 	if cell < p.hscroll || cell >= p.hscroll+col {
 		t.Fatalf("cursor cell %d off screen: hscroll %d, column %d", cell, p.hscroll, col)
+	}
+}
+
+// charPanned is a scrolled viewer row in the mode, its cursor on column 0:
+// lead in front of text, the view panned to hscroll.
+func charPanned(lead, text string, hscroll, innerW int) *contentPopup {
+	p := &contentPopup{mode: modeScroll, hscroll: hscroll}
+	p.lines = []contentLine{{raw: lead + text, lead: len([]rune(lead))}}
+	p.csRows = []charRow{{text: []rune(text)}}
+	p.cs = textSel{on: true}
+	p.charPan(innerW)
+	return p
+}
+
+func TestCharPanSnapCountsTheCursorRunesWidth(t *testing.T) {
+	t.Parallel()
+	// a 3-cell lead fits a 4-cell pane, but the 2-cell first rune behind it
+	// does not: the snap to column 0 would cut the cursor in half.
+	p := charPanned("   ", "世界", 0, 4)
+	if right := 3 + 2; right > p.hscroll+4 {
+		t.Fatalf("cursor cells [3,5) cut by the pane: hscroll %d, width 4", p.hscroll)
+	}
+}
+
+func TestCharPanSnapMeasuresTheLeadInCells(t *testing.T) {
+	t.Parallel()
+	// a tab lead is one rune but four cells: a view panned 3 cells in still
+	// hides part of the lead, so column 0 snaps it back into view.
+	p := charPanned("\t", "abc", 3, 10)
+	if p.hscroll != 0 {
+		t.Fatalf("hscroll %d: column 0 must show the whole lead", p.hscroll)
+	}
+}
+
+// Text reloaded under the mode: the frame paints no selection (its rows
+// index the old text), but the mode stays for the next key to end — a
+// render cannot say why. Not parallel: it sets the colour profile.
+func TestPreviewCharSelStaleTextPaintsNoSelection(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	m := previewTabModel(t)
+	p := m.filesPreview.p
+	m = feedPreview(m, "v", "space", "l")
+	row := func() string {
+		for _, l := range strings.Split(m.View(), "\n") {
+			if strings.Contains(ansi.Strip(l), "indented") {
+				return l
+			}
+		}
+		t.Fatal("the row is not on screen")
+		return ""
+	}
+	painted := row()
+	p.lines = append([]contentLine(nil), p.lines...) // a reload
+	stale := row()
+	if !p.cs.on {
+		t.Fatal("a render must leave the mode to the next key")
+	}
+	p.previewCharLeave()
+	plain := row()
+	if painted == plain {
+		t.Fatal("the stripe must show before the reload")
+	}
+	if stale != plain {
+		t.Fatalf("stale text painted the selection:\n%q\nwant\n%q", stale, plain)
 	}
 }
