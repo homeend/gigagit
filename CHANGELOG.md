@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: the overview split shows the file or its review diff
+
+### Added
+- In an overview's split, **D** (from either side, or a click on the
+  **file | diff** switch at the right end of the file's title) flips the file
+  a link opened to the change the review made to it — the review's stored
+  range, a commit's own change, or HEAD → the working tree for a working
+  review or an agent's overview — as one column: every line of the file,
+  each with its number, deleted lines on the red tint with −, added on the
+  green with +, the changed words marked, the link's lines banded in the
+  gutter and the review's remarks under their lines (one on a deleted line
+  too). The cursor, search, v, line marking, n / p and } / { work on the
+  rows; a link or a mark on deleted lines only says it has no link in the
+  reviewed version. The choice holds while you step the overview's links
+  (and through a resize to the narrow viewer, where D flips the same way)
+  until D again or the split closes; **f** shows the changed lines only, a
+  ⋯ fold opening with enter. A file the review left alone, a binary or too
+  large one, or a gone review says so instead.
+- Two links in a row that open identical files say `same content as <path>`.
+- `domain.WorkingFileDiff` (HEAD → disk for one file) behind an agent
+  overview's diff.
+
 ## gg web: the overview split shows the file or its review diff
 
 ### Added

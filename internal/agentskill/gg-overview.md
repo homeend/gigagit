@@ -46,7 +46,8 @@ recipe.
 5. **The overview.** Markdown, written in the order you would explain it —
    the anchors are walked top to bottom (the TUI and gg web show an overview
    beside the file each anchor points to: ↑/↓ walk the anchors and the file follows,
-   a note anchor shows your note, tab switches sides; a narrow terminal or window
+   D flips the file to the review's diff of it (HEAD → disk for yours), a note
+   anchor shows your note, tab switches sides; a narrow terminal or window
    shows it full-screen, where tab walks them):
    - first line: the result in one sentence;
    - then each point with its anchor: `[the parser](internal/x/parse.go:40-60)`,
