@@ -28,6 +28,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - `domain.WorkingFileDiff` (HEAD → disk for one file) behind an agent
   overview's diff.
 
+## Overview anchors: the missing mark follows the file
+
+### Fixed
+- In an overview split, an anchor whose file is gone is marked ✗ whichever
+  way it is found: a working file deleted after the agent added the
+  overview (it loads as "file deleted on disk"), or a file the stacked pane
+  fails to read. The mark reaches the store, so gg web shows it too and a
+  later sync keeps it.
+- A file that appears after its anchor was marked clears the ✗ the next
+  time a steer or the stack reads it.
+
 ## gg web: the overview split shows the file or its review diff
 
 ### Added

@@ -1124,16 +1124,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = n
 			}
 			m = m.stepContent(d)
-			if msg.err != nil && d.from != nil && d.from.ov != nil && m.splitShowing(d) != nil {
-				// An overview's anchor steered to a file the commit does not
-				// have: name it, and mark the anchor gone (openAnchor's rule).
-				m.statusMsg = i18n.T("no file %s", d.path)
-				for i := range d.from.ov.anchors {
-					if d.from.ov.anchors[i].dest == d.anchorCur {
-						d.from.ov.anchors[i].missing = true
-					}
+			if d.from != nil && d.from.ov != nil && m.splitShowing(d) != nil {
+				// An overview's anchor steered to a file: one the commit does
+				// not have, or a working file deleted, is named and its anchors
+				// marked gone (openAnchor's rule); one that is there clears a
+				// mark an earlier check left (the file appeared).
+				gone := msg.err != nil || msg.disk.missing
+				if gone {
+					m.statusMsg = i18n.T("no file %s", d.path)
 				}
-				d.from.ov.paint(d.from.p.lines)
+				m.markFileAnchors(d.from, d.path, gone)
 			}
 			return m, tea.Batch(m.reviewNotesCmd(d), m.diffOnLoad(d))
 		}
