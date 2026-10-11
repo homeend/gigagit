@@ -84,16 +84,16 @@ func (sv *splitView) focus(left bool) {
 	if !left {
 		other = sv.left
 	}
-	if d := other.doc(); d != nil && d.p.cs.on {
-		d.p.previewCharLeave()
+	if d := other.doc(); d != nil && d.shownP().cs.on {
+		d.shownP().previewCharLeave()
 	}
 }
 
 // leaveChars ends both panes' character selections: the split is going.
 func (sv *splitView) leaveChars() {
 	for _, p := range []pane{sv.left, sv.right} {
-		if d := p.doc(); d != nil && d.p.cs.on {
-			d.p.previewCharLeave()
+		if d := p.doc(); d != nil && d.shownP().cs.on {
+			d.shownP().previewCharLeave()
 		}
 	}
 }
@@ -140,6 +140,7 @@ func (sv *splitView) paneOf(d *openFile) pane {
 func (sv *splitView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	nm, cmd := sv.updateKey(m, msg)
 	if nm.splitLayer() == sv {
+		mirrorPanes(sv)
 		nm.syncOverviewHere(sv)
 	}
 	return nm, cmd
@@ -310,6 +311,7 @@ func (m Model) docRows(d *openFile) int {
 func (m Model) splitMouse(sv *splitView, msg tea.MouseMsg, wheel int) (Model, tea.Cmd) {
 	nm, cmd := m.splitMousePress(sv, msg, wheel)
 	if nm.splitLayer() == sv {
+		mirrorPanes(sv)
 		nm.syncOverviewHere(sv)
 	}
 	return nm, cmd
@@ -325,11 +327,11 @@ func (m Model) splitMousePress(sv *splitView, msg tea.MouseMsg, wheel int) (Mode
 	d := side.doc()
 	if wheel != 0 {
 		if d != nil {
-			d.p.scrollBy(wheel, rows)
+			d.shownP().scrollBy(wheel, rows)
 		}
 		return m, nil
 	}
-	if d != nil && d.p.cs.on && side == sv.focused() && msg.Button == tea.MouseButtonLeft {
+	if d != nil && d.shownP().cs.on && side == sv.focused() && msg.Button == tea.MouseButtonLeft {
 		return m, nil // the mode is modal: a click never moves its cursor
 	}
 	switch msg.Button {
@@ -343,8 +345,9 @@ func (m Model) splitMousePress(sv *splitView, msg tea.MouseMsg, wheel int) (Mode
 		}
 		if row := msg.Y - 2; row < rows {
 			_, inner := sv.geomOf(m, side)
-			if line := d.p.lineAtRow(row, rows, max(inner-d.gutterW(), 1)); line >= 0 {
-				d.p.cur = line
+			sp := d.shownP()
+			if line := sp.lineAtRow(row, rows, max(inner-d.gutterW(), 1)); line >= 0 {
+				sp.cur = line
 			}
 		}
 		return m, nil

@@ -65,9 +65,17 @@ func (m Model) viewerGeom() (rows, innerW int) {
 	return rows, innerW
 }
 
-// update swallows every key. The shared preview hooks go first in the files
-// view's order — selection, then search — and the pager/cursor keys follow.
+// update is updateKey, then the file's cursor follows the diff's (a diff
+// showing: split_diff.go).
 func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	nm, cmd := fv.updateKey(m, msg)
+	fv.mirrorDiffCursor()
+	return nm, cmd
+}
+
+// updateKey swallows every key. The shared preview hooks go first in the files
+// view's order — selection, then search — and the pager/cursor keys follow.
+func (fv *fileViewer) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
@@ -89,7 +97,7 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if nm, cmd, ok := m.bandKey(msg); ok {
 		return nm, cmd
 	}
-	p := fv.p
+	p := fv.shownP()
 	rows, _ := fv.geom(m)
 	scroll := func(delta int) { p.scrollBy(delta, rows) }
 	switch msg.String() {
@@ -153,7 +161,7 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // render owns the screen: one preview box the size of the terminal.
 func (fv *fileViewer) render(m Model, _ string) string {
 	w, h := m.overlayDims()
-	return m.renderPreviewBox(fv.p, fv.title(), w, h, true, true)
+	return m.renderPreviewBox(fv.shownP(), fv.title(), w, h, true, true)
 }
 
 // title names the version on screen: the working tree, a commit or a shelf.

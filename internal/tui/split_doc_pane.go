@@ -37,7 +37,7 @@ func (p *docPane) captures(msg tea.KeyMsg) bool {
 	if p.d == nil {
 		return false
 	}
-	pp := p.d.p
+	pp := p.d.shownP()
 	if pp.cs.on || pp.search.typing {
 		return true
 	}
@@ -48,7 +48,7 @@ func (p *docPane) render(m Model, w, h int, focused bool) string {
 	if p.d == nil {
 		return m.renderPreviewBoxOpts(&contentPopup{}, p.title(), w, h, previewBoxOpts{focused: focused, cursorOff: true})
 	}
-	return m.renderPreviewBoxOpts(p.d.p, p.title(), w, h, previewBoxOpts{focused: focused, cursorOff: !focused})
+	return m.renderPreviewBoxOpts(p.d.shownP(), p.title(), w, h, previewBoxOpts{focused: focused, cursorOff: !focused})
 }
 
 // hint is the viewer's everyday keys; a file with bands leads with n/p.
@@ -95,7 +95,7 @@ func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return nm, cmd
 	}
 	d := p.d
-	pp := d.p
+	pp := d.shownP()
 	_, rows, inner, _ := m.activePreview()
 	scroll := func(delta int) { pp.scrollBy(delta, rows) }
 	switch msg.String() {
@@ -154,8 +154,9 @@ func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // paneCharHint is the mode's keys while d's character selection is on: the
 // split's hint line is then that alone (every other key waits).
 func paneCharHint(d *openFile) (string, bool) {
-	if d == nil || !d.p.cs.on {
+	if d == nil || !d.shownP().cs.on {
 		return "", false
 	}
-	return charSelHint(d.p.cs, d.p.csRows), true
+	sp := d.shownP()
+	return charSelHint(sp.cs, sp.csRows), true
 }

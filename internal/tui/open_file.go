@@ -118,11 +118,19 @@ type openFile struct {
 	// lines are several files', so bands and the current band are found per
 	// file through it.
 	stream *fileStream
+	// diff is the review diff shown in place of the file (split_diff.go);
+	// nil = the file shows. diffSeq numbers its reads: an answer for an
+	// older one is dropped.
+	diff    *docDiff
+	diffSeq int
 }
 
 // frameTitle names the version a frame shows: the working tree, a commit,
 // a shelf, or a titled document (a result, an overview).
 func (d *openFile) frameTitle() string {
+	if d.diff != nil {
+		return diffTitle(d.path, d.diff.res)
+	}
 	switch d.src.kind {
 	case srcCommit:
 		return i18n.T("View %s @ %s", d.path, shortHash(d.src.rev))
@@ -275,5 +283,6 @@ func (d *openFile) landPendingLine(rows int) (notice string) {
 			}
 		}
 	}
+	d.followIntoDiff(rows) // the diff showing follows the line
 	return notice
 }

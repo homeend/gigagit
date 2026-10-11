@@ -530,12 +530,25 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	var bands []anchorBand // an overview's anchors in the file it opened
 	gut, boxH, curB := 0, 0, -1
 	boxNote := func(n agentdocs.Note) agentdocs.Note { return n }
+	var dd *docDiff // the review diff's rows (split_diff.go): notes, bands and the gutter on rows
+	cursorOff := m.cursorStyle() == "off" || o.cursorOff
+	if d := m.previewDoc(p); d != nil && d.diff != nil && d.diff.p == p {
+		if d.diff.notice == "" {
+			dd = d.diff
+		} else {
+			cursorOff = true // a notice is no row to stand on
+		}
+	}
 	if d := m.previewDoc(p); d != nil && d.gutterW() > 0 {
 		boxNote = d.boxNote // a stack's notes name their file's lines
 		boxH = noteBoxMaxRows(rowsCap)
 		notes, gut = d.shownNotes(), d.gutterW()
 		bands = d.bands()
 		curB = d.curBand(bands)
+		if dd != nil {
+			notes, bands = d.rowNotes(), d.rowBands()
+			curB = d.rowCurBand(bands)
+		}
 		d.noteW, d.noteH = max(innerW-gut, 4), noteBoxMaxRows(rowsCap)
 	}
 	// A load or a re-layout replaced the lines the mode indexed: paint no
@@ -544,7 +557,6 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	csOn := p.cs.on && !p.previewCharStale()
 	start := p.clampTop(p.sel, rowsCap)
 	wr := make([]winRow, 0, rowsCap)
-	cursorOff := m.cursorStyle() == "off" || o.cursorOff
 	for row := start; row < len(vis) && len(wr) < rowsCap; row++ {
 		l := vis[row]
 		r := winRow{text: l.text, cls: l.cls}
@@ -559,12 +571,20 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 		// [ui] diff_cursor governs the preview cursor too; "number" falls back
 		// to the band, because there is no gutter to carry a number.
 		kind := bandKindAt(bands, curB, row+1)
-		if rowStyle, marked := previewRowMark(p, row, cursorOff, l, kind); marked {
+		if dd != nil {
+			dr := dd.rows[row]
+			if rowStyle, marked := diffRowStyle(p, row, cursorOff, l, dr, kind); marked {
+				r.style = rowStyle
+			}
+			if dr.words != nil {
+				r.emph = append([]emphLevel(nil), dr.words...)
+			}
+		} else if rowStyle, marked := previewRowMark(p, row, cursorOff, l, kind); marked {
 			r.style = rowStyle
 		}
 		if p.search.active() {
 			if hs := p.search.hitsOn(row, 0); len(hs) > 0 {
-				r.emph = overlayHits(nil, 0, len([]rune(l.text)), hs)
+				r.emph = overlayHits(r.emph, 0, len([]rune(l.text)), hs)
 			}
 		}
 		if csOn && l.cells == nil { // the copy mode's stripe and cursor
@@ -581,6 +601,9 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 			}
 		}
 		r.prefix = gutterMark(kind, noted)
+		if dd != nil { // the range mark's two columns, then the row's number and sign
+			r.prefix = padRight(r.prefix, noteGutterW) + diffNum(dd.rows[row], dd.numW)
+		}
 		wr = append(wr, r)
 		for _, n := range notes {
 			if n.End == row+1 {
@@ -632,7 +655,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 	if viewer { // the full-screen viewer can also step aside, keeping the file open
 		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] close  [ctrl+]] background  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	}
-	if d, ok := m.focusedDoc(); ok && d.p == p && d.backgrounded { // esc steps aside, X closes
+	if d, ok := m.focusedDoc(); ok && d.shownP() == p && d.backgrounded { // esc steps aside, X closes
 		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] background  [X] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	}
 	if d := m.previewDoc(p); d != nil && d.ov != nil {
