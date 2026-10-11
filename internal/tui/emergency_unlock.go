@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -171,15 +174,35 @@ func (m Model) writeStateDump(now time.Time) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, "state-"+now.Format("20060102-150405.000")+".txt")
 	var b strings.Builder
 	fmt.Fprintf(&b, "gg emergency state dump · %s\n", now.Format(time.RFC3339))
 	m.writeTUIState(&b, now)
 	domain.WriteProcessState(&b, now)
-	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
-		return "", err
+	// The name is the millisecond; a second dump in the same one (another
+	// press, another gg) takes -2, -3, … — created exclusively, so a dump
+	// never overwrites another.
+	base := filepath.Join(dir, "state-"+now.Format("20060102-150405.000"))
+	for n := 1; ; n++ {
+		path := base + ".txt"
+		if n > 1 {
+			path = base + "-" + strconv.Itoa(n) + ".txt"
+		}
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, fs.ErrExist) && n < 100 {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		_, werr := f.WriteString(b.String())
+		if cerr := f.Close(); werr == nil {
+			werr = cerr
+		}
+		if werr != nil {
+			return "", werr
+		}
+		return path, nil
 	}
-	return path, nil
 }
 
 // writeTUIState is the dump's TUI section: what gates actions and why.

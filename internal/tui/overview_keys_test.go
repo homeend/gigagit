@@ -362,7 +362,9 @@ func TestNStepsToTheNextBandAndWraps(t *testing.T) {
 	m = openNth(t, m, d, 2) // a.txt:5-8 current; bands 5-8, 12
 	f := topDoc(m)
 	m = fvKeys(t, m, keyMsg("n"))
-	if f.p.cur != 11 || f.anchorCur != "a.txt:12" || d.ov.sel != 1 {
+	// W5: n / p mark the band only — the overview's selection stays on the
+	// link the file was opened from (2), in the full-screen viewer too.
+	if f.p.cur != 11 || f.anchorCur != "a.txt:12" || d.ov.sel != 2 {
 		t.Fatalf("n: cur=%d anchorCur=%q sel=%d", f.p.cur, f.anchorCur, d.ov.sel)
 	}
 	if !strings.Contains(m.statusMsg, "anchor 2/2 in this file · line twelve") {
@@ -374,7 +376,7 @@ func TestNStepsToTheNextBandAndWraps(t *testing.T) {
 	}
 }
 
-func TestPStepsBackAndBackspaceReturnsOnIt(t *testing.T) {
+func TestPStepsBackAndBackspaceReturnsToTheOpenedLink(t *testing.T) {
 	t.Parallel()
 	m, d, _ := tourModel(t)
 	m = openNth(t, m, d, 1) // a.txt:12
@@ -382,9 +384,12 @@ func TestPStepsBackAndBackspaceReturnsOnIt(t *testing.T) {
 	if f := topDoc(m); f.p.cur != 4 || f.anchorCur != "a.txt:5-8" {
 		t.Fatalf("p: cur=%d current anchor %q", f.p.cur, f.anchorCur)
 	}
+	if d.ov.sel != 1 {
+		t.Fatalf("p moved the overview's selection to %d (W5: it stays on 1)", d.ov.sel)
+	}
 	m = fvKeys(t, m, keyMsg("backspace"))
-	if topDoc(m) != d || d.ov.sel != 2 {
-		t.Fatalf("back on sel %d, want 2 (the anchor stepped to)", d.ov.sel)
+	if topDoc(m) != d || d.ov.sel != 1 {
+		t.Fatalf("back on sel %d, want 1 (the link the file was opened from)", d.ov.sel)
 	}
 }
 

@@ -188,24 +188,22 @@ func (m Model) bandKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 }
 
 // stepAnchorBand moves d to its next (dir 1) / previous band: the cursor on
-// its first line, centred as an anchor open lands, the band current, and —
-// in the full-screen viewer — the overview's selection on its anchor so
-// backspace comes back there. In a split the overview only marks it (R2).
+// its first line, centred as an anchor open lands, the band current. The
+// overview's selection never moves — in a split it only marks the band
+// (R2), and the full-screen viewer follows the same rule (W5), so backspace
+// returns to the link the file was opened from.
 func (m Model) stepAnchorBand(d *openFile, dir int) Model {
 	bs := d.bands()
 	k, wrapped := stepBand(bs, d.curBand(bs), d.p.cur+1, dir)
 	if k < 0 {
 		return m
 	}
-	b, ov := bs[k], d.from
-	a := ov.ov.anchors[b.i]
+	b := bs[k]
+	a := d.from.ov.anchors[b.i]
 	d.anchorCur = a.dest
 	_, rows, _, _ := m.activePreview()
 	d.pendingLine, d.pendingEnd = b.start, 0
 	d.landPendingLine(rows)
-	if m.splitShowing(d) == nil { // a split's overview moves only by its own keys (R2)
-		ov.selectAnchor(b.i, m.docRows(ov))
-	}
 	label := a.target.Label
 	if label == "" {
 		label = a.dest

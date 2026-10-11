@@ -253,3 +253,28 @@ func TestAltShiftAIsNotTheUnlockAnyMore(t *testing.T) {
 		t.Fatal("alt+A wrote a state dump: it is no longer the emergency unlock")
 	}
 }
+
+// Two dumps in the same millisecond (two parallel presses, two gg
+// processes) each get their own file: a dump never overwrites another.
+func TestStateDumpNamesNeverCollide(t *testing.T) {
+	t.Parallel()
+	m := newTestModel(t)
+	now := time.Now()
+	a, err := m.writeStateDump(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := m.writeStateDump(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(a); os.Remove(b) })
+	if a == b {
+		t.Fatalf("both dumps went to %s", a)
+	}
+	for _, p := range []string{a, b} {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("dump %s: %v", p, err)
+		}
+	}
+}

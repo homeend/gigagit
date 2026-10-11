@@ -7008,8 +7008,9 @@ is not the split's own steering leaves the split (overview → background).
 `shownNotes()` = agent notes + remarks (`mergeNotes`) for every reader; a
 remark (`readonly`) box has no buttons, d/r say read-only. W5: n/p
 (`stepViewerAnchor`) write only `from.cur` — never `from.sel`/`from.dest` — in
-the split AND the one-document viewer (the TUI's full-screen viewer still
-moves its selection). `syncHere()` (from `paintCursor`, `renderViewer`,
+the split AND the one-document viewer (the TUI's full-screen viewer too since
+2026-10-12: `stepAnchorBand` never calls `selectAnchor`, so backspace returns
+to the link the file was opened from). `syncHere()` (from `paintCursor`, `renderViewer`,
 `stepViewerAnchor`) → `hereOf` → `.ahere`. `closeViewer` takes the split down
 first (W3: both to the background), `dropViewer` too; `refreshSplitOverview`
 (seq-guarded) / `splitOverviewGone` follow the store; `narrowSplit` on a

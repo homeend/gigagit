@@ -71,15 +71,21 @@ func TestRankPerf(t *testing.T) {
 	// Warm-up run.
 	_ = Rank("e", paths, 20)
 
-	// Timed run.
-	start := time.Now()
-	results := Rank("e", paths, 20)
-	elapsed := time.Since(start)
+	// The fastest of a few timed runs: one run lands on a busy moment when
+	// the whole suite runs in parallel under -race (a single 422ms run was
+	// seen), the fastest one still shows a pathological slowdown.
+	var results []Match
+	elapsed := time.Duration(1<<63 - 1)
+	for range 5 {
+		start := time.Now()
+		results = Rank("e", paths, 20)
+		elapsed = min(elapsed, time.Since(start))
+	}
 
 	if len(results) == 0 {
 		t.Fatal("expected matches for query 'e'")
 	}
-	t.Logf("Rank over %d paths took %v; top result: %s (score=%d)", n, elapsed, results[0].S, results[0].Score)
+	t.Logf("Rank over %d paths took %v (fastest of 5); top result: %s (score=%d)", n, elapsed, results[0].S, results[0].Score)
 
 	// Assert we complete well under 30ms. Boundary chosen to be very generous
 	// to avoid flakiness on loaded machines while still catching pathological slowness.
