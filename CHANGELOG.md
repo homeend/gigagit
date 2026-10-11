@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: the send panel shows a remark's whole summary
+
+### Fixed
+- In the Send to GitHub panel an opened row — its ▸, now at the front of
+  every row, or `c` for all — wraps, so the whole summary reads above the
+  rationale and code instead of ending in "…". A closed row stays one line
+  and shows its full summary on hover. The ▸ no longer drops onto a line of
+  its own under a long row.
+
 ## TUI: the overview split shows the file or its review diff
 
 ### Added

@@ -80,13 +80,18 @@ function render() {
       }
       const box = r.tickable ? `<input type="checkbox" data-id="${esc(r.id)}"${r.ticked ? " checked" : ""}>` : `<span class="pskip">–</span>`;
       const sev = r.severity ? `<span class="psev ${esc(r.severity)}">${esc(r.severity)}</span>` : "";
+      // An open row (its ▸, or c for all) wraps, so the whole summary reads
+      // above its rationale and code; a closed one is one clipped line whose
+      // summary shows in full on hover.
+      const open = panel.open.has(r.id) || panel.code;
       const more =
-        panel.open.has(r.id) || panel.code
+        open && (r.rationale || r.code.length)
           ? `<div class="pmore">${r.rationale ? `<div class="prat">${esc(r.rationale)}</div>` : ""}${r.code.length ? `<pre class="pcode">${esc(r.code.join("\n"))}</pre>` : ""}</div>`
           : "";
       return (
-        `<li class="prow g${r.slot}${sel}${r.tickable ? "" : " pdis"}" data-i="${i}">${box} ${sev}<a class="pwhere" data-id="${esc(r.id)}">${esc(r.where)}</a> ${esc(r.summary)}` +
-        `${r.skip ? `<span class="pskipwhy"> (skipped: ${esc(r.skip)})</span>` : ""}<span class="pfold">${r.rationale || r.code.length ? "▸" : ""}</span>${more}</li>`
+        `<li class="prow g${r.slot}${sel}${r.tickable ? "" : " pdis"}${open ? " open" : ""}" data-i="${i}">${box} <span class="pfold">${open ? "▾" : "▸"}</span>${sev}` +
+        `<a class="pwhere" data-id="${esc(r.id)}">${esc(r.where)}</a> <span class="psum" title="${esc(r.summary)}">${esc(r.summary)}</span>` +
+        `${r.skip ? `<span class="pskipwhy"> (skipped: ${esc(r.skip)})</span>` : ""}${more}</li>`
       );
     })
     .join("");
