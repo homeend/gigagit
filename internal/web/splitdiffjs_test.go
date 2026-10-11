@@ -83,8 +83,7 @@ func TestSplitDiffIsWired(t *testing.T) {
 		`function canFlip()`,
 		`function diffWanted(from = view.from)`,
 		`diffWanted(from) ? fetchDiff(from, reg.file.path) : null`,
-		`view.diff = dres ? buildDiff(dres, from) : null;`,
-		`if (!from) diffPref = null;`,
+		"if (!from) {\n    diffPref = null;",
 		`if (seq !== loadSeq || id !== view.id || view.from !== from || !diffWanted()) return;`,
 		`} else if (view.diff) {`,
 		`<div id="viewer-mode" class="hidden"><button data-mode="file">file</button><button data-mode="diff">diff</button></div>`,
@@ -144,6 +143,27 @@ func TestSameContentLineIsWired(t *testing.T) {
 		`const step = { key: from.id, path: f.path, lines: view.placeholder || view.image ? [] : view.lines.map((l) => l.text || "") };`,
 		`if (!landed.notice && !reg.evicted && sameContent(lastStep, step)) opLine("same content as " + elidePath(lastStep.path, 60), false);`,
 		`lastStep = step;`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+}
+
+// Final review: a link step that lands re-reads the choice (a D pressed
+// while it loaded wins), a notice has no cursor to move, a gone overview's
+// file has no D, another overview's split forgets this one's choice, and a
+// plain open forgets the last step.
+func TestSplitDiffReviewFixesAreWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`view.diff = dres && diffWanted(from) ? buildDiff(dres, from) : null;`,
+		`if (diffWanted(from) && !dres) refreshDiff(); // D pressed while the step loaded`,
+		"if (dv && dv.notice) return; // a notice has no rows: no cursor to move",
+		`return !!view.id && !view.ov && !!view.from && !view.from.closed;`,
+		`if (diffPref && diffPref.key !== key) diffPref = null; // another overview's choice ends with its split`,
+		"if (!from) {\n    diffPref = null; // a file opened any other way: the overview's choice ends (§6)\n    lastStep = null;",
 	} {
 		if !strings.Contains(v, want) {
 			t.Errorf("viewer.js lacks %q", want)

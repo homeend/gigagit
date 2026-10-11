@@ -563,7 +563,10 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   // A refresh that started after this fetch and landed first is newer: keep it.
   if (ov && view.ov && view.id === f.id && !ovAnswerApplies(ovMine, ovApplied)) ov = view.ov;
   if (ov) return showOverview(f, ov, ovMine);
-  if (!from) diffPref = null; // a file opened any other way: the overview's choice ends (§6)
+  if (!from) {
+    diffPref = null; // a file opened any other way: the overview's choice ends (§6)
+    lastStep = null;
+  }
   view.from = from; // an overview's link: its bands and remarks draw at once
   view.range = null;
   view.rangeOwn = false;
@@ -581,7 +584,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   const want = pickLine(line, place, f.line || 0);
   const landed = line > 0 ? landLine(line, view.lines.length, f.path) : { line: view.placeholder && body.missing ? want : clampLine(want || 1, view.lines.length), notice: "" };
   view.cur = landed.line;
-  view.diff = dres ? buildDiff(dres, from) : null; // read with the file: no flash of it first
+  view.diff = dres && diffWanted(from) ? buildDiff(dres, from) : null; // read with the file: no flash of it first; a D pressed meanwhile wins
   viewerSearchBar.reset(); // a new file is a new search
   raiseViewer();
   paintTitle();
@@ -592,6 +595,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   // A reopen lands where THIS tab left the file; the server (every tab's
   // switcher) still has the line it last heard.
   if (landed.line !== (f.line || 0)) reportCursor();
+  if (diffWanted(from) && !dres) refreshDiff(); // D pressed while the step loaded
   clearOpLine(f.path + " opened in the background"); // it is in front now
   if (landed.notice) opLine(landed.notice, false);
   if (reg.evicted) opLine(evictedText(reg.evicted, reg.cap), false);
@@ -842,6 +846,9 @@ function openSplit(id, path, ov, { steer = true } = {}) {
     // The right column starts empty unless it keeps the file it shows (the
     // way back): never the lines of a file closed earlier, or of another
     // overview's link — the steer fills it.
+    const key = id || (ov.stored && ov.stored.id);
+    if (diffPref && diffPref.key !== key) diffPref = null; // another overview's choice ends with its split
+    if (lastStep && lastStep.key !== key) lastStep = null;
     if (view.ov || !view.id || steer) Object.assign(view, { id: "", ov: null, src: "worktree", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
     split = { id, path, ov: { ...ov, sel: ov.sel >= 0 ? ov.sel : -1, want: ov.want || "" }, left: true, here: -1, seq: 0 };
     if (split.ov.sel < 0) split.ov.sel = stepAnchor(split.ov.anchors, -1, 1);
@@ -1293,7 +1300,7 @@ function rerenderKeepingScroll() {
 // ---- the right column's diff (spec 2026-10-11-overview-split-diff) --------
 // canFlip: D acts on a file an overview's link opened (§6).
 function canFlip() {
-  return !!view.id && !view.ov && !!view.from;
+  return !!view.id && !view.ov && !!view.from && !view.from.closed;
 }
 
 // diffWanted: the overview that opened the file asks for its diff.
@@ -1357,10 +1364,13 @@ async function refreshDiff() {
   const from = view.from, id = view.id, seq = loadSeq, was = view.diff;
   const got = await fetchDiff(from, view.path);
   if (seq !== loadSeq || id !== view.id || view.from !== from || !diffWanted()) return;
-  view.diff = buildDiff(got, from);
-  if (was) Object.assign(view.diff, { partial: was.partial, open: was.open });
-  paintTitle();
-  rerenderKeepingScroll();
+  keepCursorPlace(() => {
+    view.diff = buildDiff(got, from);
+    if (was) Object.assign(view.diff, { partial: was.partial, open: was.open });
+    paintTitle();
+    renderViewer();
+  });
+  swapFoot(true);
 }
 
 // keepCursorPlace repaints with paint and puts the cursor's row back where
@@ -1562,6 +1572,7 @@ function pageRows() {
 
 function moveCursor(delta) {
   const dv = view.diff;
+  if (dv && dv.notice) return; // a notice has no rows: no cursor to move
   if (dv && !dv.notice) {
     const shown = dv.shown && dv.shown.length ? dv.shown : dv.rows.map((r) => r.i);
     if (!shown.length) return;
