@@ -324,3 +324,25 @@ func TestSplitSteerToAFileThatAppearedClearsTheMark(t *testing.T) {
 		t.Fatal("the store still says the anchor is missing")
 	}
 }
+
+// Stacked, a file deleted after the add fails to load in the stream: its
+// anchor is marked missing, here and in the store.
+func TestStackLoadOfADeletedFileMarksItsAnchor(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	sv := m.splitLayer()
+	ov := sv.left.doc()
+	if err := os.Remove(filepath.Join(m.currentWorktree, "c.txt")); err != nil {
+		t.Fatal(err)
+	}
+	m = pressDrain(t, m, "S")
+	if _, ok := sv.right.(*stackPane); !ok {
+		t.Fatalf("right %T, want the stack", sv.right)
+	}
+	if !ov.ov.anchors[2].missing || !docsMissing(t, m, ov, 2) {
+		t.Fatalf("missing %v: the stream's failed load marks the anchor", ov.ov.anchors[2].missing)
+	}
+	if ov.ov.anchors[0].missing {
+		t.Fatal("a.txt loaded: its anchor stays found")
+	}
+}

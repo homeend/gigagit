@@ -353,6 +353,9 @@ func (m Model) stackPaneLanded(msg stackPaneMsg) (Model, tea.Cmd) {
 	case len(msg.lines) > 0 && !msg.lines[0].src: // a placeholder the loader named (binary, too large, an image)
 		f.lines, f.err = nil, errors.New(msg.lines[0].text)
 	}
+	if ov := sv.left.doc(); ov != nil && ov.ov != nil { // the steer's rule: a failed read is a file not there
+		m.markFileAnchors(ov, f.path, msg.err != nil)
+	}
 	notes := m.fileNotes(p, msg.file)
 	p.rebuild(m)
 	rows, _ := sv.geomOf(m, p)
@@ -411,6 +414,7 @@ func (m Model) stackSteer(sv *splitView, p *stackPane, i int) (Model, tea.Cmd) {
 	}
 	if fi < 0 {
 		m.statusMsg = i18n.T("no file %s", path)
+		m.markFileAnchors(sv.left.doc(), path, true)
 		return m, nil
 	}
 	p.park, p.want.set = -1, false // the newest step wins

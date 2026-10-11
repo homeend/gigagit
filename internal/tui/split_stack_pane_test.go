@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 func stackedSplitModel(t *testing.T) (Model, *splitView, *stackPane) {
@@ -196,5 +198,28 @@ func TestStackOverAHundredFilesOpensFolded(t *testing.T) {
 	}
 	if folded != 101 || sp.stream.files[len(sp.stream.files)-1].folded {
 		t.Fatalf("folded %d of %d; the target stays open", folded, len(sp.stream.files))
+	}
+}
+
+// An anchor whose file the stream lacks says "no file" and is marked
+// missing, as the single-file pane marks one.
+func TestStackSteerToAFileTheStreamLacksMarksTheAnchor(t *testing.T) {
+	t.Parallel()
+	m, sv, sp := stackedSplitModel(t)
+	ov := sv.left.doc()
+	var kept []streamFile
+	for _, f := range sp.stream.files {
+		if f.path != "b.go" {
+			kept = append(kept, f)
+		}
+	}
+	sp.stream.files = kept // the stream lost b.go (near-unreachable: it is built from the anchors' files)
+	sp.rebuild(m)
+	m = pressDrain(t, m, "down") // anchor B, on b.go
+	if a := ov.ov.anchors[ov.ov.sel]; a.target.Path != "b.go" || !a.missing {
+		t.Fatalf("anchor %+v: the steer to a file the stream lacks marks it missing", a.target)
+	}
+	if want := i18n.T("no file %s", "b.go"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q", m.statusMsg, want)
 	}
 }
