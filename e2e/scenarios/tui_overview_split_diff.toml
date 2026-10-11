@@ -1,0 +1,80 @@
+name = "tui: the overview split's file flips to the review's diff with D — one column, the choice holds while stepping anchors, esc forgets it"
+
+# A commit that changes a.txt (two → TWO, four deleted) and adds a line to
+# b.txt, reviewed by an agent with an overview anchoring a.txt:2 then
+# b.txt:2, a remark on a.txt's new line 2 and one on its deleted line 4.
+# The split opens on the file; D shows the diff (deleted rows −, added +,
+# both remarks under their rows, the title's file | diff switch); N steps
+# to b.txt still as a diff; D flips back; esc closes; reopening starts on
+# the file.
+[input]
+steps = [
+  { write = "a.txt", content = "one\ntwo\nthree\nfour\nfive\n" },
+  { write = "b.txt", content = "alpha\n" },
+  { commit = "add a and b" },
+  { write = "a.txt", content = "one\nTWO\nthree\nfive\n" },
+  { write = "b.txt", content = "alpha\nbeta\n" },
+  { commit = "edit a and b" },
+]
+
+[[run]]
+cmd   = ["review", "save", "gg://{{cwd}}@{{rev:HEAD}}", "--agent", "Claude Code", "--stdin"]
+stdin = '{"version":1,"summary":"## Summary\nfine","overview":"Start at [two](a.txt:2), then [beta](b.txt:2).","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"why upper case?"},{"oldRange":[4,4],"summary":"why drop four?"}]}]}'
+exit  = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "files"
+keys = ["right", "enter"]
+wait = true
+screen_contains = ["Reviews", "Claude Code"]
+
+[[tui.step]]
+name = "review"
+keys = ["down", "enter"]
+wait = true
+screen_contains = ["≡ Summary", "≡ Overview", "a.txt", "b.txt"]
+
+[[tui.step]]
+name = "split"
+keys = ["down", "enter"]
+wait = true
+screen_contains = ["Overview: ", "View a.txt @", "file | diff", "[↑↓] anchor"]
+
+[[tui.step]]
+name = "focus"
+keys = ["enter"]
+screen_contains = ["[D] diff"]
+
+[[tui.step]]
+name = "diff"
+keys = ["D"]
+wait = true
+screen_contains = ["Diff a.txt (", " → ", "2 − two", "2 + TWO", "4 − four", "why upper case?", "why drop four?", "[D] file", "[f] changed only"]
+
+[[tui.step]]
+name = "step"
+keys = ["N"]
+wait = true
+screen_contains = ["Diff b.txt (", "2 + beta"]
+
+[[tui.step]]
+name = "file"
+keys = ["D"]
+screen_contains = ["View b.txt @", "[D] diff"]
+
+[[tui.step]]
+name = "close"
+keys = ["esc"]
+screen_contains = ["≡ Overview"]
+
+[[tui.step]]
+name = "reopen"
+keys = ["enter"]
+wait = true
+screen_contains = ["View b.txt @"]
+
+[expect]
+branch = "main"
