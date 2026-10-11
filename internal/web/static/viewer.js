@@ -595,6 +595,11 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   clearOpLine(f.path + " opened in the background"); // it is in front now
   if (landed.notice) opLine(landed.notice, false);
   if (reg.evicted) opLine(evictedText(reg.evicted, reg.cap), false);
+  if (from) { // a link step (§7): the same text as the previous step's file says so
+    const step = { key: from.id, path: f.path, lines: view.placeholder || view.image ? [] : view.lines.map((l) => l.text || "") };
+    if (!landed.notice && !reg.evicted && sameContent(lastStep, step)) opLine("same content as " + elidePath(lastStep.path, 60), false);
+    lastStep = step;
+  }
   return { ok: true, notice: landed.notice };
 }
 

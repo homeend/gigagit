@@ -134,3 +134,19 @@ func TestSplitDiffKeysAreWired(t *testing.T) {
 		t.Errorf("noteAtLine(shownNotes(), view.cur) appears %d times: every d / r path must read noteAtCursor()", n)
 	}
 }
+
+// Spec §7: a link step whose file holds the previous step's very text, at
+// another path, says so — after the open's own notices, which win.
+func TestSameContentLineIsWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`const step = { key: from.id, path: f.path, lines: view.placeholder || view.image ? [] : view.lines.map((l) => l.text || "") };`,
+		`if (!landed.notice && !reg.evicted && sameContent(lastStep, step)) opLine("same content as " + elidePath(lastStep.path, 60), false);`,
+		`lastStep = step;`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+}
