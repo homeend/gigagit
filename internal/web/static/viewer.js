@@ -456,6 +456,11 @@ viewerRoot.addEventListener("click", (e) => {
 });
 $("viewer-body").addEventListener("click", (e) => {
   if (split && split.left) focusSplit(false);
+  const fold = e.target.closest(".vfold");
+  if (fold && view.diff) {
+    view.diff.open.add(Number(fold.dataset.fold));
+    return rerenderKeepingScroll();
+  }
   const anc = e.target.closest("a.md-anchor");
   if (anc) {
     e.preventDefault(); // a single click opens (ruling 2)
@@ -468,12 +473,13 @@ $("viewer-body").addEventListener("click", (e) => {
     if (n) act.dataset.nact === "dismiss" ? dismissNote(n.id) : copyNoteRef(n);
     return;
   }
-  const row = e.target.closest(".vline[data-i]");
+  const row = e.target.closest(".vline[data-i], .vline[data-r]");
   if (!row) return;
+  // A diff row stands for its new line (a deleted one: the line below it).
+  const dv = view.diff, hit = row.dataset.r !== undefined ? rowNewLine(dv.rows, Number(row.dataset.r)) : Number(row.dataset.i) + 1;
   // Shift+click on a line NUMBER marks the lines from the cursor to it (the
   // cursor stays): the range "copy file link" then names.
   if (e.shiftKey && e.target.closest(".vno")) {
-    const hit = Number(row.dataset.i) + 1;
     getSelection().removeAllRanges();
     view.rangeOwn = true; // the reader's own range: a click or esc clears it
     view.range = viewerRange(Math.min(view.cur || hit, hit), Math.max(view.cur || hit, hit), view.lines.length);
@@ -484,7 +490,8 @@ $("viewer-body").addEventListener("click", (e) => {
   // click) is copying, not pointing: the cursor and the band stay.
   const picked = getSelection();
   if (!picked.isCollapsed && $("viewer-body").contains(picked.anchorNode)) return;
-  view.cur = Number(row.dataset.i) + 1;
+  if (row.dataset.r !== undefined) dv.row = Number(row.dataset.r);
+  view.cur = hit;
   if (clearViewerRange()) return;
   paintCursor();
 });
@@ -506,8 +513,11 @@ $("viewer-body").addEventListener("mousedown", (e) => {
   if (e.shiftKey && e.target.closest(".vno")) e.preventDefault(); // no text selection from the old caret
 });
 $("viewer-body").addEventListener("contextmenu", (e) => {
-  const row = e.target.closest(".vline[data-i]");
-  if (row) view.cur = Number(row.dataset.i) + 1;
+  const row = e.target.closest(".vline[data-i], .vline[data-r]");
+  if (row && row.dataset.r !== undefined) {
+    view.diff.row = Number(row.dataset.r);
+    view.cur = rowNewLine(view.diff.rows, view.diff.row);
+  } else if (row) view.cur = Number(row.dataset.i) + 1;
   e.preventDefault();
   paintCursor();
   openViewerMenu(e.clientX, e.clientY);
@@ -1411,6 +1421,40 @@ function diffRowsHTML() {
   return html;
 }
 
+// onDeletedRow: the diff's cursor is on a line the review deleted — no
+// line at the reviewed version to link or copy (§5).
+function onDeletedRow() {
+  const dv = view.diff;
+  return !!dv && !dv.notice && dv.rows[dv.row]?.kind === "del";
+}
+
+// noteAtCursor is the box d / r act on: in a diff the one covering the
+// cursor's row (an old-side remark included), else the one on the line.
+function noteAtCursor() {
+  const dv = view.diff;
+  if (dv && !dv.notice) return noteAtRow(placeNotes(dv.rows, diffNotes()), dv.row);
+  return noteAtLine(shownNotes(), view.cur);
+}
+
+// toggleDiffFold is f in a diff: the changed lines only ⇄ the whole file,
+// held with D's choice (§4).
+function toggleDiffFold() {
+  const dv = view.diff;
+  dv.partial = !dv.partial;
+  dv.open = new Set();
+  if (diffPref && view.from && diffPref.key === view.from.id) diffPref.partial = dv.partial;
+  keepCursorPlace(renderViewer);
+  swapFoot(true);
+}
+
+// diffChips are the footer's D / f chips: D wherever it acts, f in a diff.
+function diffChips() {
+  if (!canFlip()) return "";
+  const dv = view.diff;
+  return `<button data-vact="dflip">D file / diff</button>` +
+    (dv && !dv.notice ? `<button data-vact="dfold">f ${dv.partial ? "whole file" : "changed only"}</button>` : "");
+}
+
 // paintModeSwitch shows the title's file | diff switch when D can act, the
 // half in force lit (§4).
 function paintModeSwitch() {
@@ -1442,7 +1486,20 @@ function copyNoteRef(n) {
 // stepNote is } / {: the next note in this file, then the next open file
 // with notes, landing on its first (last) note.
 async function stepNote(dir) {
-  const line = nextNoteLine(shownNotes(), view.cur, dir);
+  const dv = view.diff;
+  if (dv && !dv.notice) {
+    const r = nextNoteRow(placeNotes(dv.rows, diffNotes()), dv.row, dir);
+    if (r >= 0) {
+      dv.row = r;
+      view.cur = rowNewLine(dv.rows, r);
+      paintCursor();
+      const n = noteAtCursor();
+      for (const b of $("viewer-body").querySelectorAll(".vnote")) if (n && b.dataset.note === n.id) b.scrollIntoView({ block: "nearest" });
+      cursorRow()?.scrollIntoView({ block: "nearest" });
+      return;
+    }
+  }
+  const line = view.diff ? 0 : nextNoteLine(shownNotes(), view.cur, dir);
   if (line) {
     view.cur = line;
     paintCursor();
@@ -1475,6 +1532,8 @@ function cursorRow() {
 }
 
 function paintCursor() {
+  syncDiffRow();
+  if (view.diff && !view.diff.notice && !cursorRow()) rerenderKeepingScroll(); // the row was folded: keep() shows it now
   for (const el of $("viewer-body").querySelectorAll(".vcur")) el.classList.remove("vcur");
   const row = cursorRow();
   if (row) {
@@ -1497,6 +1556,15 @@ function pageRows() {
 }
 
 function moveCursor(delta) {
+  const dv = view.diff;
+  if (dv && !dv.notice) {
+    const shown = dv.shown && dv.shown.length ? dv.shown : dv.rows.map((r) => r.i);
+    if (!shown.length) return;
+    const at = Math.max(0, shown.indexOf(dv.row));
+    dv.row = shown[Math.min(Math.max(at + delta, 0), shown.length - 1)];
+    view.cur = rowNewLine(dv.rows, dv.row);
+    return paintCursor();
+  }
   view.cur = clampLine(view.cur + delta, view.lines.length);
   paintCursor();
 }
@@ -1548,12 +1616,13 @@ function fileKey(e) {
     case "ArrowUp": case "k": moveCursor(-1); break;
     case "PageDown": case " ": moveCursor(pageRows()); break;
     case "PageUp": moveCursor(-pageRows()); break;
-    case "Home": case "g": view.cur = clampLine(1, view.lines.length); paintCursor(); break;
-    case "End": case "G": view.cur = view.lines.length; paintCursor(); break;
+    case "Home": case "g": if (view.diff) moveCursor(-Infinity); else { view.cur = clampLine(1, view.lines.length); paintCursor(); } break;
+    case "End": case "G": if (view.diff) moveCursor(Infinity); else { view.cur = view.lines.length; paintCursor(); } break;
+    case "f": if (!view.diff) return false; if (!view.diff.notice) toggleDiffFold(); break;
     case "w": cycleTextMode(); break;
     case ".": menuAtCursor(); break;
-    case "d": { const n = noteAtLine(shownNotes(), view.cur); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
-    case "r": { const n = noteAtLine(shownNotes(), view.cur); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
+    case "d": { const n = noteAtCursor(); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
+    case "r": { const n = noteAtCursor(); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
     case "}": stepNote(1); break;
     case "{": stepNote(-1); break;
     case "D": if (!canFlip()) return false; flipDiff(); break;
@@ -1585,19 +1654,23 @@ function goToViewerHit(i) {
   // The cursor follows the hit: the . menu then acts on the line found.
   const h = viewerSearch.hits[i];
   if (h) {
-    view.cur = h.row + 1;
+    if (view.diff) {
+      view.diff.row = h.row;
+      view.cur = rowNewLine(view.diff.rows, h.row);
+    } else view.cur = h.row + 1;
     paintCursor();
   }
 }
 
 const viewerSearchBar = bindSearchBar("viewer-search", {
   search: viewerSearch,
-  here: () => ({ row: Math.max(0, view.cur - 1), side: 0, col: -1 }),
-  origin: () => ({ top: $("viewer-body").scrollTop, left: $("viewer-body").scrollLeft, cur: view.cur }),
+  here: () => ({ row: view.diff ? view.diff.row : Math.max(0, view.cur - 1), side: 0, col: -1 }),
+  origin: () => ({ top: $("viewer-body").scrollTop, left: $("viewer-body").scrollLeft, cur: view.cur, row: view.diff ? view.diff.row : -1 }),
   restore: (o) => {
     $("viewer-body").scrollTop = o.top;
     $("viewer-body").scrollLeft = o.left;
     view.cur = o.cur;
+    if (view.diff && o.row >= 0) view.diff.row = o.row;
     paintCursor();
   },
   render: () => {
@@ -1639,7 +1712,7 @@ function viewerFoot() {
     return (
       `<span>↑↓ links</span><button data-vact="sfile">enter open</button><button data-vact="sfile">tab file</button>` +
       (split.ov.stored ? "" : `<button data-vact="aref">r reference</button>`) +
-      `<button data-vact="ytext">y copy text</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+      `<button data-vact="ytext">y copy text</button>` + diffChips() + `<button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   if (split) {
@@ -1647,7 +1720,7 @@ function viewerFoot() {
     const notesS = (shownNotes().length ? `<span>} { notes</span>` : "") +
       (view.notes.length ? `<button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>` : "");
     return (
-      `<button data-vact="sov">tab overview</button><span>N P overview links</span>` + bandKeysS +
+      `<button data-vact="sov">tab overview</button><span>N P overview links</span>` + bandKeysS + diffChips() +
       `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notesS +
       `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
@@ -1669,7 +1742,7 @@ function viewerFoot() {
   const notes = (shownNotes().length ? `<span>} { notes</span>` : "") +
     (view.notes.length ? `<button data-vact="dismiss">d dismiss</button><button data-vact="ref">r reference</button>` : "");
   return (
-    back + bandKeys + `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
+    back + bandKeys + diffChips() + `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` + notes +
     `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\\ open files</button><button data-vact="close">esc close</button>`
   );
 }
@@ -1689,14 +1762,16 @@ $("foot").addEventListener("click", (e) => {
     case "bg": backgroundViewer(); break;
     case "files": openSwitcher(); break;
     case "close": closeViewer(escHow(!!view.ov, view.notes.length)); break;
-    case "dismiss": { const n = noteAtLine(shownNotes(), view.cur); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
-    case "ref": { const n = noteAtLine(shownNotes(), view.cur); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
+    case "dismiss": { const n = noteAtCursor(); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else dismissNote(n.id); break; }
+    case "ref": { const n = noteAtCursor(); if (!n) opLine("no note on this line", false); else if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
     case "aopen": if (view.ov && view.ov.sel >= 0) openAnchorAt(view.ov.sel); else opLine("no anchor selected — tab selects one", false); break;
     case "aref": if (ovDoc()) copyAnchorRef(); break;
     case "ytext": if (ovDoc()) copyText(ovDoc().text, "overview text"); break;
     case "sfile": if (split) enterSplitFile(); break;
     case "sov": focusSplit(true); break;
     case "back": if (view.from) anchorBack(); break;
+    case "dflip": flipDiff(); break;
+    case "dfold": if (view.diff && !view.diff.notice) toggleDiffFold(); break;
   }
 });
 
@@ -1747,7 +1822,9 @@ function stepViewerRange(dir) {
   view.range = got.range;
   view.rangeOwn = true;
   if (!paintViewerBand(prev, view.range)) rerenderKeepingScroll();
-  const row = $("viewer-body").querySelector(`.vline[data-i="${got.end - 1}"]`);
+  const row = view.diff
+    ? $("viewer-body").querySelector(`.vline[data-r="${view.diff.by[got.end]}"]`)
+    : $("viewer-body").querySelector(`.vline[data-i="${got.end - 1}"]`);
   if (row) row.scrollIntoView({ block: "nearest" });
 }
 
@@ -1756,7 +1833,7 @@ function stepViewerRange(dir) {
 // second, a step must not. False when the body is not the file's lines.
 function paintViewerBand(prev, next) {
   const body = $("viewer-body");
-  if (view.ov || view.image || view.placeholder || !body.querySelector(".vline")) return false;
+  if (view.ov || view.diff || view.image || view.placeholder || !body.querySelector(".vline")) return false;
   const has = (r, n) => !!r && r.start <= n && n <= r.end;
   // Only the lines that enter or leave the band: a step is one line.
   for (const r of [prev, next]) {
@@ -1790,6 +1867,7 @@ function viewerLinkHere() {
 
 // copyViewerLinkHere is L: the menu's first row without the menu.
 function copyViewerLinkHere() {
+  if (onDeletedRow() && !view.range) return opLine("a deleted line has no link in the reviewed version", false);
   const got = viewerLinkHere();
   if (got) copyViewerLink(got.link);
 }
@@ -1820,8 +1898,8 @@ function openViewerMenu(x, y) {
   const items = [];
   // The band's lines, else the cursor line (viewerLinkHere — L copies the same).
   const here = viewerLinkHere();
-  if (here) items.push({ label: here.label, act: () => copyViewerLink(here.link) });
-  if (line && view.lines[line - 1]) items.push({ label: "copy line", act: () => copyText(view.lines[line - 1].text, "line " + line) });
+  if (here && !(onDeletedRow() && !view.range)) items.push({ label: here.label, act: () => copyViewerLink(here.link) });
+  if (line && view.lines[line - 1] && !onDeletedRow()) items.push({ label: "copy line", act: () => copyText(view.lines[line - 1].text, "line " + line) });
   items.push({ sep: true });
   if (view.src === "worktree") items.push({ label: "diff (working tree changes)", act: () => viewerDiffWorktree(view.path) });
   if (view.src === "commit") items.push({ label: "diff (this commit's change)", act: () => viewerDiffCommit(view.rev, view.path) });
@@ -1990,6 +2068,9 @@ registerHelp({
     "the link whose band holds the cursor is marked in the bands' colour, a review's remarks show as read-only boxes, a click on a link shows its file; " +
     "<b>r</b> copies a link's reference, <b>y</b> the text, <b>esc</b> closes both (an agent's overview stays in the switcher; <b>x</b> there closes it). " +
     "A narrow window shows the overview alone: <b>tab / shift+tab</b> select a link, <b>enter</b> or a click opens it, <b>backspace</b> (or the browser's Back) in that file comes back. " +
+    "In a file an overview's link opened, <b>D</b> (or the <b>file | diff</b> switch in its title) flips to the change the review made to it — an agent's overview: HEAD → the working tree — " +
+    "drawn as one column, the whole file with the deleted lines red with − and the added green with +, the link's lines banded and the review's remarks under their lines (one on a deleted line too); " +
+    "the choice holds while you step the overview's links until <b>D</b> again or <b>esc</b>; <b>f</b> in the diff shows the changed lines only. " +
     "In the file the overview's line and range links are tinted bands, the one you are on brighter, and <b>n / p</b> step through them (in line order, wrapping) without moving the overview's selection",
 });
 

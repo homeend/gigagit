@@ -69,6 +69,7 @@ console.log([
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
+
 // Spec §6 / §8: the viewer reads a diff for a file an overview's link
 // opened when that overview's choice says so, before the first paint; D and
 // the title's switch flip it; every close forgets the choice; a late read
@@ -100,5 +101,36 @@ func TestSplitDiffIsWired(t *testing.T) {
 	}
 	if !strings.Contains(readStatic(t, "files.js"), "collapseDiffRows,") {
 		t.Error("files.js does not export collapseDiffRows")
+	}
+}
+
+// Spec §5: in a diff the cursor walks every shown row, a click or a hit
+// lands on its row, } / { step the boxes by row (old-side remarks too),
+// d / r and the footer act on the box at the cursor's row, L and the menu
+// refuse a deleted line, f folds, and the footer and help advertise D / f.
+func TestSplitDiffKeysAreWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`function onDeletedRow()`,
+		`function noteAtCursor()`,
+		`"a deleted line has no link in the reviewed version"`,
+		`if (here && !(onDeletedRow() && !view.range)) items.push`,
+		`case "f": if (!view.diff) return false; if (!view.diff.notice) toggleDiffFold(); break;`,
+		`const line = view.diff ? 0 : nextNoteLine(shownNotes(), view.cur, dir);`,
+		`nextNoteRow(placeNotes(dv.rows, diffNotes()), dv.row, dir)`,
+		`view.diff.row = h.row;`,
+		`const fold = e.target.closest(".vfold");`,
+		`e.target.closest(".vline[data-i], .vline[data-r]")`,
+		`case "dflip": flipDiff(); break;`,
+		`case "dfold": if (view.diff && !view.diff.notice) toggleDiffFold(); break;`,
+		`<b>D</b>`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	if n := strings.Count(v, "noteAtLine(shownNotes(), view.cur)"); n != 1 { // noteAtCursor's own file branch only
+		t.Errorf("noteAtLine(shownNotes(), view.cur) appears %d times: every d / r path must read noteAtCursor()", n)
 	}
 }
