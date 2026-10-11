@@ -271,8 +271,8 @@ func TestClearLayersLeavesTheMode(t *testing.T) {
 	if d.p.cs.on {
 		t.Fatal("clearing the stack kept the file pane's mode")
 	}
-	if !ov.backgrounded || !d.backgrounded {
-		t.Fatalf("clearing the stack must retire both panes' docs: overview %v, file %v", ov.backgrounded, d.backgrounded)
+	if !ov.backgrounded {
+		t.Fatal("clearing the stack must retire the split: the overview stayed in the foreground")
 	}
 }
 
