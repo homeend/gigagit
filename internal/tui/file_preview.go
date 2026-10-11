@@ -538,9 +538,10 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 		curB = d.curBand(bands)
 		d.noteW, d.noteH = max(innerW-gut, 4), noteBoxMaxRows(rowsCap)
 	}
-	if p.cs.on && p.previewCharStale() {
-		p.previewCharLeave() // a load or a re-layout replaced the lines the mode indexed
-	}
+	// A load or a re-layout replaced the lines the mode indexed: paint no
+	// selection, but leave the mode to the next key (previewCharKey ends it,
+	// swallows that key and says why) — a render cannot say anything.
+	csOn := p.cs.on && !p.previewCharStale()
 	start := p.clampTop(p.sel, rowsCap)
 	wr := make([]winRow, 0, rowsCap)
 	cursorOff := m.cursorStyle() == "off" || o.cursorOff
@@ -566,7 +567,7 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 				r.emph = overlayHits(nil, 0, len([]rune(l.text)), hs)
 			}
 		}
-		if p.cs.on && l.cells == nil { // the copy mode's stripe and cursor
+		if csOn && l.cells == nil { // the copy mode's stripe and cursor
 			if r.text = charRoom(p.cs, row, r.text); r.text != l.text {
 				r.cls = nil // the empty row's blank cursor cell has no class
 			}

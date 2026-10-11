@@ -288,7 +288,8 @@ func TestCharSelStaleDropSwallowsTheKey(t *testing.T) {
 		t.Fatal("v must enter the mode on the overview")
 	}
 	sel := ov.ov.sel
-	ov.p.lines = append([]contentLine(nil), ov.p.lines...) // a reload
+	ov.p.lines = append(append([]contentLine(nil), ov.p.lines...), ov.p.lines...) // a reload, longer
+	_ = m.View()                                                                  // Bubble Tea renders after every update: before the next key
 	m = pressDrain(t, m, "down")
 	if ov.p.cs.on {
 		t.Fatal("stale text must end the mode")

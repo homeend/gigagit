@@ -2,6 +2,9 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"strings"
 	"testing"
@@ -365,5 +368,40 @@ func TestCharPanSnapMeasuresTheLeadInCells(t *testing.T) {
 	p := charPanned("\t", "abc", 3, 10)
 	if p.hscroll != 0 {
 		t.Fatalf("hscroll %d: column 0 must show the whole lead", p.hscroll)
+	}
+}
+
+// Text reloaded under the mode: the frame paints no selection (its rows
+// index the old text), but the mode stays for the next key to end — a
+// render cannot say why. Not parallel: it sets the colour profile.
+func TestPreviewCharSelStaleTextPaintsNoSelection(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	m := previewTabModel(t)
+	p := m.filesPreview.p
+	m = feedPreview(m, "v", "space", "l")
+	row := func() string {
+		for _, l := range strings.Split(m.View(), "\n") {
+			if strings.Contains(ansi.Strip(l), "indented") {
+				return l
+			}
+		}
+		t.Fatal("the row is not on screen")
+		return ""
+	}
+	painted := row()
+	p.lines = append([]contentLine(nil), p.lines...) // a reload
+	stale := row()
+	if !p.cs.on {
+		t.Fatal("a render must leave the mode to the next key")
+	}
+	p.previewCharLeave()
+	plain := row()
+	if painted == plain {
+		t.Fatal("the stripe must show before the reload")
+	}
+	if stale != plain {
+		t.Fatalf("stale text painted the selection:\n%q\nwant\n%q", stale, plain)
 	}
 }
