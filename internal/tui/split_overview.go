@@ -154,11 +154,12 @@ func anchorHint(ov *openFile) string {
 
 // keepAnchorHint restates the selected anchor's hint while ↓/↑ page the
 // overview past its end anchor: the selection has not moved, so the place
-// it names stays on the status line. An anchor its steer found missing (a
-// file not there, a note that is gone) had no hint and gets none.
+// it names stays on the status line. An anchor no steer reaches, or one its
+// steer found missing (a file not there, a note that is gone), had no hint
+// and gets none.
 func (m Model) keepAnchorHint(ov *openFile) Model {
 	if ov.ov.sel >= 0 && ov.ov.sel < len(ov.ov.anchors) {
-		if !ov.ov.anchors[ov.ov.sel].missing { // ↓/↑ never select a plain anchor
+		if a := ov.ov.anchors[ov.ov.sel]; steerable(ov, a) && !a.missing { // a click selects a plain one too
 			m.statusMsg = anchorHint(ov)
 		}
 	}

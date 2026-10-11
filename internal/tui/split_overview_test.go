@@ -418,6 +418,10 @@ func TestOverviewSplitPagingFromAMissingFileNamesNoAnchor(t *testing.T) {
 	if ov.ov.sel != 2 || !ov.ov.anchors[2].missing {
 		t.Fatalf("sel %d missing %v: ↓↓ selects the missing file", ov.ov.sel, ov.ov.anchors[2].missing)
 	}
+	m = m.syncOverviews() // the store changed (a note added, the page): its flags come back
+	if !ov.ov.anchors[2].missing {
+		t.Fatal("a store sync cleared the missing mark (the add checked the file)")
+	}
 	rows, _ := sv.geomOf(m, sv.left)
 	top := ov.p.clampTop(ov.p.sel, rows)
 	m = pressDrain(t, m, "down")
@@ -426,5 +430,27 @@ func TestOverviewSplitPagingFromAMissingFileNamesNoAnchor(t *testing.T) {
 	}
 	if strings.HasPrefix(m.statusMsg, "anchor ") {
 		t.Fatalf("status %q names a missing file as a place", m.statusMsg)
+	}
+}
+
+// A click selects any anchor, a plain one too: paging from it names no
+// anchor (its steer had no hint).
+func TestOverviewSplitPagingFromAClickedPlainAnchorNamesNoAnchor(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModelOf(t, "Start at [A](a.go:3), then [Z](zzz.go:3)."+longTail(80)+"\n\nTHE END")
+	ov := sv.left.doc()
+	if !ov.ov.anchors[1].plain {
+		t.Fatal("zzz.go is outside the review: its anchor must be plain")
+	}
+	rows, _ := sv.geomOf(m, sv.left)
+	ov.selectAnchorAt(1, ov.ov.anchors[1].spans[0].line, rows) // overviewClickIn's select
+	m.statusMsg = ""
+	top := ov.p.clampTop(ov.p.sel, rows)
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 1 || ov.p.clampTop(ov.p.sel, rows) <= top {
+		t.Fatalf("↓ must page from the plain anchor: sel %d top %d → %d", ov.ov.sel, top, ov.p.clampTop(ov.p.sel, rows))
+	}
+	if strings.HasPrefix(m.statusMsg, "anchor ") {
+		t.Fatalf("status %q names a plain anchor as a place", m.statusMsg)
 	}
 }
