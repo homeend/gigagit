@@ -499,10 +499,10 @@ reviewed file stacked, `S`) — and walking the anchors steers the file pane
 the first; ↑ above the first the same way); `N`/`P` on the file pane step
 to the overview's next / previous anchor. The review's remarks show as
 read-only boxes under their lines (a remark on a line the change deleted
-stays in the diff). Moving on the file never moves
-the overview's selection: the anchor whose block the cursor is in is marked
-in that block's colour. ctrl+\ or `gg session files focus` on an overview
-open it this way too.
+stays in the diff). Moving on the file never moves the overview's
+selection: the anchor whose block the cursor is in is marked in that
+block's colour. ctrl+\ or `gg session files focus` on an overview open it
+this way too.
 `v` on either side selects characters to copy (the modal copy mode: `space`
 start, `enter`/`y` copy, `esc` leave; `tab` waits, and stacked the selection
 stays inside one file).
