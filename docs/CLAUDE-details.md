@@ -7019,3 +7019,24 @@ ignores a split). Tests: `overviewsplitjs_test.go` (wiring), the pure
 `TestViewerSplitModelJS` / `TestViewerRemarkNotesJS`,
 `filecontent_remarks_test.go`; the visible behaviour was checked with a
 Playwright script against a rebuilt binary (not committed).
+
+**gg web: file ⇄ review diff (2026-10-11, spec `2026-10-11-overview-split-diff-design.md`, plan 1).**
+`domain.ReviewFileDiff(id, path)` = the review's STORED range (`reviewRevs`; a
+single commit's parent, "empty" for a root) or HEAD → disk for a working
+review; status / old path from `ReviewFiles` (not listed = `Changed` false, no
+read); the cached Differ; `ReviewNotesFor` remarks on BOTH sides.
+`/api/diff?review=` serves it (+ `changed`, `status`, `old_path`, `left_label`,
+`right_label`, `remarks` with `side: "old"`); an agent overview reads
+`wt=head`. Page: `static/splitdiff.js` (pure, node-guarded) makes one-column
+rows (`unifiedRows`: a run's deletions, then its additions) and every row ↔
+new-line map; `view.cur` stays a NEW line everywhere and `view.diff.row` is the
+cursor's row (`syncDiffRow` re-finds it when something moved the line; a
+deleted row stands for the line below it). The choice lives in `diffPref`
+keyed by `from.id` (cleared by `dropViewer`, a plain-file open, the overview
+leaving the store). Gotchas: D works from either split column and does
+nothing until the right column's file has loaded; f in file mode still falls
+through to the page's diff toggle; `openViewer` reads the diff WITH the file
+(no flash); an older guard pins `const here = viewerLinkHere();`, so the
+menu refuses a deleted row on the push. Tests: `review_file_diff_test.go`,
+`reviewdiff_test.go`, `splitdiffjs_test.go` (the pure model + wiring guards);
+the visible behaviour was checked with a Playwright script (not committed).
