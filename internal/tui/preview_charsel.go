@@ -150,6 +150,7 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 	if p.cs.on && p.previewCharStale() {
 		p.previewCharLeave()
+		m.statusMsg = i18n.T("▸ the text reloaded: copy mode ended")
 		return m, nil, true // the key was meant for the mode: it goes with it
 	}
 	p.pageH = rows

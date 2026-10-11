@@ -289,7 +289,9 @@ func TestCharSelStaleDropSwallowsTheKey(t *testing.T) {
 	if ov.ov.sel != sel {
 		t.Fatalf("the dropped mode's key stepped the anchor: %d → %d", sel, ov.ov.sel)
 	}
-	_ = m
+	if want := i18n.T("▸ the text reloaded: copy mode ended"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q: a swallowed key must say why", m.statusMsg, want)
+	}
 }
 
 // A move that bumps a stacked file's edge says why the cursor stopped, as
