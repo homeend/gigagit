@@ -570,3 +570,61 @@ func switchHalf(col, innerW int) int {
 	}
 	return 0
 }
+
+// noteAtCursor is the note under the cursor, as the file names it: in a
+// diff the box under the cursor's row (an old-side remark too), else the
+// note on the cursor's line.
+func (d *openFile) noteAtCursor() *agentdocs.Note {
+	if dd := d.diff; dd != nil {
+		if dd.notice != "" {
+			return nil
+		}
+		row := dd.p.cur + 1
+		for _, n := range d.rowNotes() {
+			if n.Start <= row && row <= n.End {
+				if o, ok := d.rowNoteOrigin(n.ID); ok {
+					return &o
+				}
+			}
+		}
+		return nil
+	}
+	return d.noteAt(d.p.cur + 1)
+}
+
+// diffMarkedLines is the new lines a marking in the diff covers: the first
+// and the last row inside it with a new line. ok false: it covers deleted
+// rows (or folds) only — no link in the reviewed version.
+func (d *openFile) diffMarkedLines() (line, last int, ok bool) {
+	dd := d.diff
+	if dd == nil || dd.notice != "" {
+		return 0, 0, false
+	}
+	lo, hi, on := dd.p.lsel.bounds(dd.p.cur)
+	if !on {
+		lo, hi = dd.p.cur, dd.p.cur
+	}
+	for i := max(lo, 0); i <= hi && i < len(dd.rows); i++ {
+		if r := dd.rows[i]; r.nu > 0 && r.kind != diffFold {
+			if line == 0 {
+				line = r.nu
+			}
+			last = r.nu
+		}
+	}
+	return line, last, line > 0
+}
+
+// diffRowNumber is the number a row's own line has: its new line, a
+// deleted row's old one; 0 for a fold.
+func (dd *docDiff) rowNumber(i int) int {
+	if i < 0 || i >= len(dd.rows) {
+		return 0
+	}
+	if r := dd.rows[i]; r.kind == diffDel {
+		return r.old
+	} else if r.kind != diffFold {
+		return r.nu
+	}
+	return 0
+}

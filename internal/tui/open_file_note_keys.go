@@ -28,7 +28,7 @@ func (m Model) anyFileNotes() bool {
 // that carries none, so those keys keep whatever else they mean there.
 func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	d, ok := m.focusedDoc()
-	if !ok || !m.anyFileNotes() {
+	if !ok || !m.anyFileNotes() && len(d.rowNotes()) == 0 {
 		return m, nil, false
 	}
 	switch msg.String() {
@@ -37,26 +37,26 @@ func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	case "{":
 		return m.stepFileNote(d, -1)
 	case "d":
-		if n := d.noteAt(d.p.cur + 1); n != nil && d.readOnlyNote(n) {
+		if n := d.noteAtCursor(); n != nil && d.readOnlyNote(n) {
 			m.statusMsg = d.readOnlyText()
 			return m, nil, true
 		}
-		if n := d.noteAt(d.p.cur + 1); n != nil {
+		if n := d.noteAtCursor(); n != nil {
 			id := n.ID // the copy n points into is rebuilt by the removal
 			d.removeNote(id)
 			m.statusMsg = i18n.T("note %s dismissed", id)
 			return m, nil, true
 		}
 	case "enter":
-		if n := d.noteAt(d.p.cur + 1); n != nil {
+		if n := d.noteAtCursor(); n != nil {
 			return m.openFileNote(d.boxNote(*n)), nil, true
 		}
 	case "r":
-		if n := d.noteAt(d.p.cur + 1); n != nil && d.readOnlyNote(n) {
+		if n := d.noteAtCursor(); n != nil && d.readOnlyNote(n) {
 			m.statusMsg = d.readOnlyText()
 			return m, nil, true
 		}
-		if n := d.noteAt(d.p.cur + 1); n != nil {
+		if n := d.noteAtCursor(); n != nil {
 			return m, m.copyToClipboardCmd(i18n.T("Copied note reference %s", n.ID), agentdocs.NoteReference(*n)), true
 		}
 	}
@@ -67,9 +67,11 @@ func (m Model) previewNoteKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 // by start line from the cursor; past its last one, the next open file with
 // notes comes to the front on its first (last) note.
 func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
-	line := d.p.cur + 1
+	line, mine, p := d.p.cur+1, d.shownNotes(), d.p
+	if d.diff != nil && d.diff.notice == "" { // the diff's boxes, by row (split_diff.go)
+		line, mine, p = d.diff.p.cur+1, d.rowNotes(), d.diff.p
+	}
 	var hit *agentdocs.Note
-	mine := d.shownNotes()
 	for i := range mine {
 		n := &mine[i]
 		if dir > 0 && n.Start > line {
@@ -82,11 +84,11 @@ func (m Model) stepFileNote(d *openFile, dir int) (Model, tea.Cmd, bool) {
 	}
 	if hit != nil {
 		_, rows, _, _ := m.activePreview()
-		d.p.cur = hit.Start - 1
-		d.p.ensureCursorVisible(rows)
+		p.cur = hit.Start - 1
+		p.ensureCursorVisible(rows)
 		// Bring the box in too, as far as that keeps the cursor line on screen.
-		for d.p.sel < d.p.cur && d.p.rowsSpan(d.p.sel, hit.End) > rows {
-			d.p.sel++
+		for p.sel < p.cur && p.rowsSpan(p.sel, hit.End) > rows {
+			p.sel++
 		}
 		return m, nil, true
 	}
@@ -159,7 +161,7 @@ func (m Model) fileNoteRows() []actionRow {
 		}},
 	}
 	n := d.shownNotes()[0] // the menu has no cursor of its own: offer the first note
-	if at := d.noteAt(d.p.cur + 1); at != nil {
+	if at := d.noteAtCursor(); at != nil {
 		n = *at
 	}
 	rows = append(rows, actionRow{id: "note-show", key: "enter", label: i18n.T("Show full note"), run: func(m Model) (tea.Model, tea.Cmd) {

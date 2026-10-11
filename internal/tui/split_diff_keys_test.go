@@ -202,3 +202,81 @@ func TestAgentOverviewUnchangedFileSaysSo(t *testing.T) {
 		t.Fatal("the notice shows")
 	}
 }
+
+// Spec §4: an old-side remark sits under its deleted row; d / r say
+// read-only, enter opens it, } / { walk the boxes by row.
+func TestOldSideRemarkIsReachableAndReadOnly(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	m = pressDrain(t, m, "D")
+	d := sv.right.doc()
+	d.diff.p.cur = rowOfOld(d.diff.rows, 5)
+	m = pressDrain(t, m, "d")
+	if !strings.Contains(m.statusMsg, "read-only") {
+		t.Fatalf("d on the deleted line's remark: %q", m.statusMsg)
+	}
+	m = pressDrain(t, m, "{")
+	if r := d.diff.rows[d.diff.p.cur]; r.kind != diffAdd || r.nu != 3 {
+		t.Fatalf("{ lands on the remark above (L3), got %+v", r)
+	}
+	m = pressDrain(t, m, "}")
+	if r := d.diff.rows[d.diff.p.cur]; r.kind != diffDel || r.old != 5 {
+		t.Fatalf("} lands on the deleted line's remark, got %+v", r)
+	}
+	m = pressDrain(t, m, "enter")
+	if cp, ok := m.topLayer().(*contentPopup); !ok || !strings.Contains(cp.title, "line 5") {
+		t.Fatalf("enter opens the whole remark: top %T", m.topLayer())
+	}
+}
+
+// Spec §5: a marking that covers only deleted rows has no link.
+func TestMarkingDeletedRowsOnlyRefusesTheLink(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	m = pressDrain(t, m, "D")
+	d := sv.right.doc()
+	d.diff.p.cur = rowOfOld(d.diff.rows, 5)
+	m = pressDrain(t, m, " ")
+	m = pressDrain(t, m, " ")
+	m = pressDrain(t, m, "L")
+	if m.statusMsg != "a deleted line has no link in the reviewed version" {
+		t.Fatalf("L = %q", m.statusMsg)
+	}
+}
+
+// A marking over a changed pair links the new line it covers.
+func TestMarkingAChangedPairLinksItsNewLine(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	m = pressDrain(t, m, "D")
+	d := sv.right.doc()
+	d.diff.p.cur = rowOfOld(d.diff.rows, 3) // −l3, then +L3
+	m = pressDrain(t, m, " ")
+	m = pressDrain(t, m, "alt+down")
+	line, last, ok := d.diffMarkedLines()
+	if !ok || line != 3 || last != 3 {
+		t.Fatalf("marked lines %d..%d ok %v, want 3..3", line, last, ok)
+	}
+	_ = m
+}
+
+// Spec §5: on a deleted row the copied line is the deleted text, named by
+// its old number.
+func TestCopyLineOnADeletedRowNamesItsOldNumber(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	m = pressDrain(t, m, "D")
+	d := sv.right.doc()
+	d.diff.p.cur = rowOfOld(d.diff.rows, 5)
+	rows := m.previewCopyLineRows()
+	if len(rows) == 0 || rows[0].id != "copy-line" {
+		t.Fatalf("rows %+v", rows)
+	}
+	var got string
+	m = captureClip(m, &got)
+	u, cmd := rows[0].run(m)
+	m = drainCmds(t, u.(Model), cmd)
+	if got != "l5" || !strings.Contains(m.statusMsg, "Copied line 5") {
+		t.Fatalf("copied %q (%q), want the deleted line's text as line 5", got, m.statusMsg)
+	}
+}

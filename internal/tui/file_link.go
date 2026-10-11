@@ -30,6 +30,9 @@ type fileLinkCheckedMsg struct {
 func (m Model) fileRowPath() (path string, line int, text string, ok bool) {
 	if d, ok := m.focusedDoc(); ok {
 		p := d.p
+		if _, _, has := d.diffMarkedLines(); d.diff != nil && !has {
+			return d.path, 0, "", d.src.kind == srcWorktree // a deleted row: no line in the reviewed version
+		}
 		if p.cur < 0 || p.cur >= len(p.lines) || !p.lines[p.cur].src {
 			// Still loading, or a placeholder: no line to name. The disk file
 			// itself is still linkable; another version cannot be checked.
@@ -117,7 +120,14 @@ func (m Model) contextFileLinkRow() (actionRow, bool) {
 	// A live selection in the viewer or the preview: the link names its lines.
 	var block []string
 	last := 0
-	if d, ok := m.focusedDoc(); ok && d.p.lsel.on {
+	if d, ok := m.focusedDoc(); ok && d.diff != nil && d.diff.p.lsel.on { // a marking in the diff: the new lines it covers
+		if lo, hi, ok := d.diffMarkedLines(); ok && hi <= len(d.p.lines) && docLoaded(d) {
+			line, last, raw = lo, hi, d.p.lines[lo-1].raw
+			for _, cl := range d.p.lines[lo-1 : hi] {
+				block = append(block, cl.raw)
+			}
+		}
+	} else if d, ok := m.focusedDoc(); ok && d.p.lsel.on {
 		if lo, hi, ok := d.p.lsel.bounds(d.p.cur); ok && lo >= 0 && hi < len(d.p.lines) && d.p.lines[lo].src && d.p.lines[hi].src {
 			line, last, raw = lo+1, hi+1, d.p.lines[lo].raw
 			for _, cl := range d.p.lines[lo : hi+1] {
