@@ -260,12 +260,19 @@ func TestClearLayersLeavesTheMode(t *testing.T) {
 	if !d.p.cs.on {
 		t.Fatal("v must enter the mode on the file pane")
 	}
+	ov := sv.left.doc()
+	if ov.backgrounded { // the file pane's doc is backgrounded by its steer; the overview is not
+		t.Fatal("a shown split's overview must not start backgrounded")
+	}
 	m = m.clearLayers() // a popup's op handoff: the files view stays
 	if len(m.layers.entries) != 0 {
 		t.Fatalf("the stack must be empty: %d", len(m.layers.entries))
 	}
 	if d.p.cs.on {
 		t.Fatal("clearing the stack kept the file pane's mode")
+	}
+	if !ov.backgrounded || !d.backgrounded {
+		t.Fatalf("clearing the stack must retire both panes' docs: overview %v, file %v", ov.backgrounded, d.backgrounded)
 	}
 }
 
