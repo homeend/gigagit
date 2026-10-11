@@ -50,6 +50,7 @@ function saveUI(patch) {
     files_hidden: false,
     sym_compare: false,
     stacked_diff: false,
+    stacked_review_files: false,
     commit_tall: false,
     repo_grouped: false,
     sidebar_width: 0,

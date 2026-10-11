@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: the overview split stacks its files (S)
+
+### Added
+- **S** (from either column of gg web's overview split, or the footer's
+  *S stack files*) turns the file column into one scroll of every file —
+  the review's files in its order when that review is open, else the files
+  the overview's links name, in the order first linked — each under a header
+  with its status letter and its path (a file the review deleted says
+  `(deleted at the reviewed commit)`). Files are read as they come near the
+  view, at most four at a time, and carry the links' bands and the review's
+  remarks (an agent's overview: its notes) as read-only boxes. ↑↓ / j k move
+  across files, N / P step the headers, n / p the bands (the overview's
+  selection stays), `-` folds the file at the cursor and `_` all of them; a
+  step on the overview scrolls the stack to the link's line and marks its
+  band. **S** again opens the file at the cursor — as the review's diff when
+  D was on. D, /, L and the . menu say `this acts on a single file — S opens
+  it`; d / r on a box say the notes are read-only in the stack. The choice is
+  remembered for the next split (`stacked_review_files` in the web layout).
+- A test that parses every gg web module as the browser does (a broken
+  module once passed `node --check` unnoticed).
+
 ## gg web: the send panel shows a remark's whole summary
 
 ### Fixed

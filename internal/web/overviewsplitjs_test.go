@@ -119,3 +119,59 @@ func TestOverviewSplitFinalFixesAreWired(t *testing.T) {
 		}
 	}
 }
+
+// Spec 2026-10-11 §11 (plan 2): S stacks the files in the right column and
+// back; the stack is its own state (split.stack) with the single file
+// stepped aside; loads are guarded by the stack they were started for; the
+// pref is remembered; D and the single-file keys say so in the stack.
+func TestOverviewSplitStackIsWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`from "./splitstack.js"`,
+		`const SINGLE_ONLY = "this acts on a single file — S opens it";`,
+		`const STACK_READONLY = "notes are read-only in the stack — S opens the file";`,
+		`function toggleSplitStack()`,
+		`function enterStack(at)`,
+		`async function leaveStack(open = false)`,
+		`if (split && split.stack) return renderStack();`,
+		`if (!split || split.stack !== st) return; // the stack left the screen while this loaded`,
+		`saveUI({ stacked_review_files: true });`,
+		`saveUI({ stacked_review_files: false });`,
+		`state.ui && state.ui.stacked_review_files`,
+		`case "S": e.preventDefault(); toggleSplitStack(); return true;`,
+		`{ root: $("viewer-body"), rootMargin: "100% 0px" }`,
+		`st.inFlight < SPLIT_STACK_MAX_IN_FLIGHT`,
+		`await openViewer({ ...target, from, steer: true });`,
+		`function stackKey(e)`,
+		`if (split.stack) return stackKey(e);`,
+		`case "N": case "P": { const h = nextHeader(st.slots, st.cur, e.key === "N" ? 1 : -1); if (h) { st.cur = h; paintStackCursor("start"); } break; }`,
+		`case "/": case "@": case "L": case ".": case "}": case "{": case "f": opLine(SINGLE_ONLY, false); break;`,
+		`opLine(STACK_READONLY, false)`,
+		`function stepStackAnchor(dir)`,
+		`function foldStackFile()`,
+		`function foldAllStack()`,
+		`st.slots = restack(st.slots, stackFiles(stackReviewFiles(sp), sp.ov.anchors));`,
+		"<button data-vact=\"stack\">S ",
+		`<b>S</b> stacks`,
+		`k = st.slots.indexOf(s); // a refresh of the links may have moved (or dropped) the file meanwhile`,
+		`if (STACK_MOVES.has(e.key)) st.want = null;`,
+		`if (head || row) st.want = null;`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	// S back must keep the overview's D choice: entering the stack never clears it.
+	if i := strings.Index(v, "function enterStack(at)"); i < 0 {
+		t.Error("viewer.js lacks enterStack")
+	} else if j := strings.Index(v[i:], "\n}\n"); j < 0 || strings.Contains(v[i:i+j], "diffPref = null") {
+		t.Error("enterStack must keep diffPref (S back returns to the held D choice)")
+	}
+	css := readStatic(t, "style.css")
+	for _, want := range []string{`.vstk-head {`, `.vstk-head.vcur`, `.vstk-ph {`} {
+		if !strings.Contains(css, want) {
+			t.Errorf("style.css lacks %q", want)
+		}
+	}
+}
