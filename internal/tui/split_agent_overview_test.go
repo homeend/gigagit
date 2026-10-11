@@ -328,7 +328,8 @@ func TestSplitSteerToAFileThatAppearedClearsTheMark(t *testing.T) {
 }
 
 // Stacked, a file deleted after the add fails to load in the stream: its
-// anchor is marked missing, here and in the store.
+// anchor is marked missing, here and in the store; a file that loads clears
+// a mark an earlier check left.
 func TestStackLoadOfADeletedFileMarksItsAnchor(t *testing.T) {
 	t.Parallel()
 	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
@@ -337,6 +338,7 @@ func TestStackLoadOfADeletedFileMarksItsAnchor(t *testing.T) {
 	if err := os.Remove(filepath.Join(m.currentWorktree, "c.txt")); err != nil {
 		t.Fatal(err)
 	}
+	ov.ov.anchors[0].missing = true // an earlier check found a.txt gone; it is back
 	m = pressDrain(t, m, "S")
 	if _, ok := sv.right.(*stackPane); !ok {
 		t.Fatalf("right %T, want the stack", sv.right)
@@ -345,7 +347,7 @@ func TestStackLoadOfADeletedFileMarksItsAnchor(t *testing.T) {
 		t.Fatalf("missing %v: the stream's failed load marks the anchor", ov.ov.anchors[2].missing)
 	}
 	if ov.ov.anchors[0].missing {
-		t.Fatal("a.txt loaded: its anchor stays found")
+		t.Fatal("a.txt loaded: the stream's read clears its mark")
 	}
 }
 
