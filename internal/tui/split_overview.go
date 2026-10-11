@@ -214,7 +214,7 @@ func (m Model) docSteer(sv *splitView, r *docPane, ov *openFile, a anchor) (Mode
 		land(d)
 		if docLoaded(d) {
 			d.landPendingLine(rows)
-			return m, m.remarksOnSteer(d)
+			return m, tea.Batch(m.remarksOnSteer(d), m.diffOnSteer(d))
 		}
 		return m, m.loadDoc(d)
 	}
@@ -226,6 +226,7 @@ func (m Model) docSteer(sv *splitView, r *docPane, ov *openFile, a anchor) (Mode
 	}
 	if old := r.d; old != nil {
 		old.backgrounded = true
+		old.dropDiff(rows) // out of the overview's frame: the file again
 	}
 	d.backgrounded = true // esc on the split steps aside; only X closes
 	land(d)
@@ -233,7 +234,7 @@ func (m Model) docSteer(sv *splitView, r *docPane, ov *openFile, a anchor) (Mode
 	m = m.registerDoc(d)
 	if docLoaded(d) && !d.onDisk() {
 		d.landPendingLine(rows)
-		return m, m.remarksOnSteer(d)
+		return m, tea.Batch(m.remarksOnSteer(d), m.diffOnSteer(d))
 	}
 	d.keepPlace()
 	return m, m.loadDoc(d)
@@ -328,8 +329,10 @@ func (m Model) openOverviewSplit(ov *openFile) (Model, tea.Cmd) {
 	}
 	sv.onClose = func(m Model) Model {
 		ov.backgrounded = true
+		ov.ov.forgetDiff() // the next opening starts on the file (D3)
 		if rd := sv.right.doc(); rd != nil {
 			rd.backgrounded = true
+			rd.dropDiff(m.docRows(rd))
 		}
 		if m.reviewOf(ov) != nil {
 			return m.landOnOverviewRow()

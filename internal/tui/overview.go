@@ -51,6 +51,15 @@ type overview struct {
 	// tip is the commit a STORED overview's anchors open at ("" = the
 	// working tree, a temporary overview); set with srcReviewOverview.
 	tip string
+	// diff / diffPartial are the choice D and f made for the files this
+	// overview's links open (split_diff.go): held here, not by a file, so
+	// it survives link steps and the narrow viewer; forgetDiff ends it.
+	diff, diffPartial bool
+}
+
+// forgetDiff ends the overview's D / f choice: its split or viewer closed.
+func (o *overview) forgetDiff() {
+	o.diff, o.diffPartial = false, false
 }
 
 // overviewLines lays text out at width for view mode: the rows, and the

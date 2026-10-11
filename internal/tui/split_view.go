@@ -104,6 +104,10 @@ func (sv *splitView) retire() {
 	for _, p := range []pane{sv.left, sv.right} {
 		if d := p.doc(); d != nil {
 			d.backgrounded = true
+			d.dropDiff(1) // the place is re-found when the file is shown again
+			if d.ov != nil {
+				d.ov.forgetDiff()
+			}
 		}
 	}
 	sv.leaveChars()
@@ -169,6 +173,10 @@ func (sv *splitView) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	case "esc":
 		return m.closeSplit(sv), nil
+	case "D": // the file ⇄ its review diff, from either side (split_diff.go)
+		if r, ok := sv.right.(*docPane); ok && r.d != nil {
+			return m.flipDiff(r.d)
+		}
 	case "N", "P":
 		// The single file pane: the overview's next / previous anchor, as
 		// ↑ / ↓ on the overview, the focus kept right. (The stacked pane's
@@ -228,7 +236,14 @@ func (m Model) narrowSplits() Model {
 			continue
 		}
 		top, ov := m.topLayer() == sv, sv.left.doc()
+		var keep overview // the D / f choice survives the resize (spec §6)
+		if ov != nil && ov.ov != nil {
+			keep = *ov.ov
+		}
 		m = m.closeSplit(sv)
+		if ov != nil && ov.ov != nil {
+			ov.ov.diff, ov.ov.diffPartial = keep.diff, keep.diffPartial
+		}
 		if top && ov != nil {
 			m = m.pushLayer(&fileViewer{ov})
 		}
@@ -333,6 +348,18 @@ func (m Model) splitMousePress(sv *splitView, msg tea.MouseMsg, wheel int) (Mode
 	}
 	if d != nil && d.shownP().cs.on && side == sv.focused() && msg.Button == tea.MouseButtonLeft {
 		return m, nil // the mode is modal: a click never moves its cursor
+	}
+	if msg.Button == tea.MouseButtonLeft && msg.Y == 1 && side == sv.right { // the title's file | diff
+		if r, ok := sv.right.(*docPane); ok && r.d != nil && m.canFlip(r.d) {
+			_, inner := sv.geomOf(m, side)
+			if half := switchHalf(x-2, inner); half != 0 {
+				sv.focus(false)
+				if (half == 2) != r.d.from.ov.diff {
+					return m.flipDiff(r.d)
+				}
+				return m, nil
+			}
+		}
 	}
 	switch msg.Button {
 	case tea.MouseButtonLeft:

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -15,11 +16,11 @@ import (
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
-// diffSplitModel is a commit that edits a.txt (line 3 changed, line 5
-// deleted, line 7 added at the end) and leaves b.txt and c.txt (the same
-// text) alone, reviewed with a remark on new line 3 and one on old line 5;
-// its overview anchors a.txt:3, b.txt:1, c.txt:1 — opened as the split, the
-// focus on the file.
+// diffSplitModel is a commit that edits a.txt (20 lines: line 3 changed,
+// line 5 deleted, l21 added at the end) and gives b.txt and c.txt the same
+// new second line, reviewed with a remark on a.txt's new line 3 and one on
+// its old line 5; its overview anchors a.txt:3, b.txt:2, c.txt:2 — opened as
+// the split, the focus on the file.
 func diffSplitModel(t *testing.T) (Model, *splitView) {
 	t.Helper()
 	dir := t.TempDir()
@@ -39,12 +40,19 @@ func diffSplitModel(t *testing.T) (Model, *splitView) {
 		}
 	}
 	git("init", "-b", "main")
-	write("a.txt", "l1\nl2\nl3\nl4\nl5\nl6\n")
+	var old []string
+	for i := 1; i <= 20; i++ {
+		old = append(old, "l"+strconv.Itoa(i))
+	}
+	write("a.txt", strings.Join(old, "\n")+"\n")
 	write("b.txt", "b1\nb2\n")
 	write("c.txt", "b1\nb2\n")
 	git("add", ".")
 	git("commit", "-m", "c0")
-	write("a.txt", "l1\nl2\nL3\nl4\nl6\nl7\n")
+	nu := append([]string{"l1", "l2", "L3", "l4"}, old[5:]...)
+	write("a.txt", strings.Join(append(nu, "l21"), "\n")+"\n")
+	write("b.txt", "b1\nB2\n")
+	write("c.txt", "b1\nB2\n")
 	git("add", ".")
 	git("commit", "-m", "c1")
 
@@ -58,7 +66,7 @@ func diffSplitModel(t *testing.T) (Model, *splitView) {
 	m = tempPromptStore(t, m)
 	m.svc.UseNotesDir(t.TempDir())
 	sha := m.commits[0].Hash
-	ov, _ := json.Marshal("Look at [three](a.txt:3), then [b](b.txt:1), then [c](c.txt:1).")
+	ov, _ := json.Marshal("Look at [three](a.txt:3), then [b](b.txt:2), then [c](c.txt:2).")
 	doc := `{"version":1,"summary":"## Summary\nok","overview":` + string(ov) + `,"files":[{"path":"a.txt","annotations":[{"newRange":[3,3],"summary":"why L3?"},{"oldRange":[5,5],"summary":"why drop l5?"}]}]}`
 	tg := domain.ReviewTarget{Kind: domain.ReviewRange, Range: sha + "^.." + sha, Label: shortHash(sha)}
 	id, _, err := m.svc.SaveReview(context.Background(), domain.SaveReview{Target: tg, Agent: "Claude", Text: doc})
@@ -83,14 +91,6 @@ func diffSplitModel(t *testing.T) (Model, *splitView) {
 	return m, sv
 }
 
-// flipForTest shows d's review diff as the D key will (Task 4 wires the key).
-func flipForTest(t *testing.T, m Model, d *openFile) Model {
-	t.Helper()
-	res, err := m.svc.ReviewFileDiff(context.Background(), d.from.src.rev, d.path)
-	d.showDiff(res, err, false, false, m.docRows(d))
-	return m
-}
-
 func TestDiffShowsRowsAndKeepsTheCursorLineBothWays(t *testing.T) {
 	t.Parallel()
 	m, sv := diffSplitModel(t)
@@ -98,7 +98,7 @@ func TestDiffShowsRowsAndKeepsTheCursorLineBothWays(t *testing.T) {
 	if d.p.cur != 2 {
 		t.Fatalf("file cursor on line %d, want 3", d.p.cur+1)
 	}
-	m = flipForTest(t, m, d)
+	m = pressDrain(t, m, "D")
 	if d.diff == nil || d.diff.notice != "" {
 		t.Fatalf("diff = %+v", d.diff)
 	}
@@ -112,7 +112,7 @@ func TestDiffShowsRowsAndKeepsTheCursorLineBothWays(t *testing.T) {
 	if k := d.diff.rows[d.diff.p.cur].kind; k != diffDel || d.p.cur != 2 {
 		t.Fatalf("on a %v row the mirrored file line is %d, want 3 (the next new line)", k, d.p.cur+1)
 	}
-	d.dropDiff(m.docRows(d))
+	m = pressDrain(t, m, "D")
 	if d.diff != nil || d.p.cur != 2 {
 		t.Fatalf("back on the file: diff %v cursor line %d", d.diff, d.p.cur+1)
 	}
@@ -122,9 +122,9 @@ func TestDiffDrawsSignsBandAndBothSidesRemarks(t *testing.T) {
 	t.Parallel()
 	m, sv := diffSplitModel(t)
 	d := sv.right.doc()
-	m = flipForTest(t, m, d)
+	m = pressDrain(t, m, "D")
 	screen := ansi.Strip(m.View())
-	for _, want := range []string{"3 − l3", "3 + L3", "5 − l5", "6 + l7", "why L3?", "why drop l5?"} {
+	for _, want := range []string{"3 − l3", "3 + L3", "5 − l5", "20 + l21", "why L3?", "why drop l5?"} {
 		if !strings.Contains(screen, want) {
 			t.Fatalf("screen lacks %q:\n%s", want, screen)
 		}

@@ -473,7 +473,11 @@ func previewRowMark(p *contentPopup, row int, cursorOff bool, l contentLine, ban
 // previewBoxOpts is how a preview box is drawn: focused (the lit border),
 // viewer (the full-screen viewer's reading column, hint row and title-line
 // status) and cursorOff (no cursor row — an unfocused split pane).
-type previewBoxOpts struct{ focused, viewer, cursorOff bool }
+type previewBoxOpts struct {
+	focused, viewer, cursorOff bool
+	// sw is the title's file | diff switch (split_diff.go); "" = none.
+	sw string
+}
 
 // renderPreviewBox draws one file preview as a bordered box: title, the
 // windowed lines (cursor band, selection stripe, search emphasis, syntax
@@ -625,6 +629,9 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 		// (a missing anchor, a copy, a dismissed note) sits on the title line
 		// until the next key clears it.
 		right = strings.TrimSpace(m.statusMsg + "  " + right)
+	}
+	if o.sw != "" { // the file | diff switch ends the title line
+		right = strings.TrimSpace(right + "  " + o.sw)
 	}
 	lines := make([]string, 0, contentH)
 	lines = append(lines, titleWithRight(title, right, innerW, true))

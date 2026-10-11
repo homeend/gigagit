@@ -48,7 +48,11 @@ func (p *docPane) render(m Model, w, h int, focused bool) string {
 	if p.d == nil {
 		return m.renderPreviewBoxOpts(&contentPopup{}, p.title(), w, h, previewBoxOpts{focused: focused, cursorOff: true})
 	}
-	return m.renderPreviewBoxOpts(p.d.shownP(), p.title(), w, h, previewBoxOpts{focused: focused, cursorOff: !focused})
+	o := previewBoxOpts{focused: focused, cursorOff: !focused}
+	if m.canFlip(p.d) {
+		o.sw = diffSwitch(p.d.from.ov.diff)
+	}
+	return m.renderPreviewBoxOpts(p.d.shownP(), p.title(), w, h, o)
 }
 
 // hint is the viewer's everyday keys; a file with bands leads with n/p.
@@ -86,6 +90,9 @@ func (p *docPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return nm, cmd
 	}
 	if nm, cmd, ok := m.previewSearchKey(msg); ok {
+		return nm, cmd
+	}
+	if nm, cmd, ok := m.diffKey(p.d, msg); ok {
 		return nm, cmd
 	}
 	if nm, cmd, ok := m.previewNoteKey(msg); ok {

@@ -88,6 +88,12 @@ func (fv *fileViewer) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if nm, cmd, ok := m.previewSearchKey(msg); ok {
 		return nm, cmd
 	}
+	if msg.String() == "D" && (m.canFlip(fv.openFile) || fv.diff != nil) { // the narrow fallback's file ⇄ diff
+		return m.flipDiff(fv.openFile)
+	}
+	if nm, cmd, ok := m.diffKey(fv.openFile, msg); ok {
+		return nm, cmd
+	}
 	if nm, cmd, ok := m.previewNoteKey(msg); ok {
 		return nm, cmd
 	}
@@ -161,7 +167,11 @@ func (fv *fileViewer) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // render owns the screen: one preview box the size of the terminal.
 func (fv *fileViewer) render(m Model, _ string) string {
 	w, h := m.overlayDims()
-	return m.renderPreviewBox(fv.shownP(), fv.title(), w, h, true, true)
+	o := previewBoxOpts{focused: true, viewer: true}
+	if m.canFlip(fv.openFile) {
+		o.sw = diffSwitch(fv.from.ov.diff)
+	}
+	return m.renderPreviewBoxOpts(fv.shownP(), fv.title(), w, h, o)
 }
 
 // title names the version on screen: the working tree, a commit or a shelf.

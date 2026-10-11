@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
@@ -394,4 +396,177 @@ func mirrorPanes(sv *splitView) {
 			d.mirrorDiffCursor()
 		}
 	}
+}
+
+// canFlip reports whether D acts on d here (spec §6): a file an open
+// overview's link opened, shown in that overview's split (its single file
+// side) or in a full-screen viewer (the narrow fallback). Anywhere else D
+// keeps doing nothing.
+func (m Model) canFlip(d *openFile) bool {
+	if d == nil || d.stream != nil || d.from == nil || d.from.ov == nil || d.from.ov.closed {
+		return false
+	}
+	if sv := m.splitShowing(d); sv != nil {
+		r, ok := sv.right.(*docPane)
+		return ok && r.d == d && sv.left.doc() == d.from
+	}
+	if m.layers != nil {
+		for _, l := range m.layers.entries {
+			if fv, ok := l.(*fileViewer); ok && fv.openFile == d {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// diffWanted reports whether d should show its diff now: D can act on it
+// and its overview's choice says diff. Read when a load or a read LANDS, so
+// a D pressed meanwhile wins.
+func (m Model) diffWanted(d *openFile) bool { return m.canFlip(d) && d.from.ov.diff }
+
+// flipDiff is D on d: the overview's choice flips; the file comes back at
+// once, the diff is read (or, while the file still loads, read when it
+// lands). A diff left showing where D no longer acts (its overview gone)
+// goes away.
+func (m Model) flipDiff(d *openFile) (Model, tea.Cmd) {
+	if !m.canFlip(d) {
+		if d != nil && d.diff != nil {
+			d.dropDiff(m.docRows(d))
+		}
+		return m, nil
+	}
+	ov := d.from.ov
+	ov.diff = !ov.diff
+	if !ov.diff {
+		d.dropDiff(m.docRows(d))
+		return m, nil
+	}
+	if d.loading {
+		return m, nil // the fill reads it (diffOnLoad)
+	}
+	return m, m.diffReadCmd(d)
+}
+
+// diffKey is f (the changed lines only ⇄ the whole file) and enter on a ⋯
+// fold, while d's diff shows. Declined otherwise.
+func (m Model) diffKey(d *openFile, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
+	if d == nil || d.diff == nil || d.diff.notice != "" {
+		return m, nil, false
+	}
+	dd, rows := d.diff, m.docRows(d)
+	switch msg.String() {
+	case "f":
+		dd.partial = !dd.partial
+		if d.from != nil && d.from.ov != nil {
+			d.from.ov.diffPartial = dd.partial
+		}
+		d.refoldDiff(rows)
+		return m, nil, true
+	case "enter":
+		if r := dd.p.cur; r >= 0 && r < len(dd.rows) && dd.rows[r].kind == diffFold && !dd.p.lsel.on {
+			at := dd.rows[r].at
+			dd.open[at] = true
+			d.refoldDiff(rows)
+			for i, x := range dd.rows {
+				if x.at == at {
+					dd.p.cur = i
+					break
+				}
+			}
+			dd.p.ensureCursorVisible(rows)
+			return m, nil, true
+		}
+	}
+	return m, nil, false
+}
+
+// reviewDiffMsg is a read of the diff of the document tagged tag (read
+// number seq): a stored review's ReviewFileDiff, or an agent overview's
+// HEAD → disk (agent).
+type reviewDiffMsg struct {
+	slotStamp
+	tag   string
+	seq   int
+	agent bool
+	res   domain.ReviewFileDiff
+	err   error
+}
+
+// diffReadCmd reads d's diff off the UI thread: the review's stored range
+// for a stored overview's file, HEAD → the file on disk for an agent's.
+func (m Model) diffReadCmd(d *openFile) tea.Cmd {
+	if m.svc == nil || d.from == nil {
+		return nil
+	}
+	d.diffSeq++
+	svc, tag, seq, path, slot := m.svc, d.tag, d.diffSeq, d.path, m.stamp()
+	agent, id := d.from.src.kind != srcReviewOverview, d.from.src.rev
+	return func() tea.Msg {
+		ctx := context.Background()
+		var res domain.ReviewFileDiff
+		var err error
+		if agent {
+			res, err = svc.WorkingFileDiff(ctx, path)
+		} else {
+			res, err = svc.ReviewFileDiff(ctx, id, path)
+		}
+		return reviewDiffMsg{slotStamp: slot, tag: tag, seq: seq, agent: agent, res: res, err: err}
+	}
+}
+
+// diffOnLoad is the read a file's load starts: its diff again when one
+// shows (a reload: the shown diff stays until the new one lands), or the
+// first when its overview's choice says diff.
+func (m Model) diffOnLoad(d *openFile) tea.Cmd {
+	if d.diff != nil || m.diffWanted(d) {
+		return m.diffReadCmd(d)
+	}
+	return nil
+}
+
+// diffOnSteer is the read a steer to an already loaded file starts.
+func (m Model) diffOnSteer(d *openFile) tea.Cmd {
+	if d.diff != nil || d.loading || !m.diffWanted(d) {
+		return nil
+	}
+	return m.diffReadCmd(d)
+}
+
+// diffLanded shows a read's diff — when it is the document's latest read
+// and the choice still says diff.
+func (m Model) diffLanded(msg reviewDiffMsg) Model {
+	d := m.openFiles.findTag(msg.tag)
+	if d == nil || msg.seq != d.diffSeq || !m.diffWanted(d) {
+		return m
+	}
+	d.showDiff(msg.res, msg.err, msg.agent, d.from.ov.diffPartial, m.docRows(d))
+	return m
+}
+
+// diffSwitch is the title's switch: file | diff, the half in force in
+// reverse video.
+func diffSwitch(on bool) string {
+	f, d := i18n.T("file"), i18n.T("diff")
+	rev := lipgloss.NewStyle().Reverse(true)
+	if on {
+		d = rev.Render(d)
+	} else {
+		f = rev.Render(f)
+	}
+	return f + " | " + d
+}
+
+// switchHalf is the switch's half under column col of a title innerW wide
+// (0-based, the switch at its right end): 1 file, 2 diff, 0 neither.
+func switchHalf(col, innerW int) int {
+	f, d := lipgloss.Width(i18n.T("file")), lipgloss.Width(i18n.T("diff"))
+	start := innerW - f - 3 - d
+	switch {
+	case col >= start && col < start+f:
+		return 1
+	case col >= innerW-d && col < innerW:
+		return 2
+	}
+	return 0
 }

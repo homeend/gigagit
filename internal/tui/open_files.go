@@ -230,6 +230,9 @@ func docLoaded(d *openFile) bool {
 // returns to whatever was beneath it.
 func (m Model) backgroundDoc(d *openFile) Model {
 	d.backgrounded = true
+	if d.ov != nil { // the overview leaves the screen: its D / f choice ends
+		d.ov.forgetDiff()
+	}
 	m = m.detachDoc(d)
 	if d.ov != nil {
 		m.statusMsg = i18n.T("overview %s is in the background — ctrl+\\ lists open files", d.overviewLabel())
@@ -256,6 +259,9 @@ func (m Model) closeDoc(d *openFile) Model {
 	}
 	if d.ov != nil && m.docs != nil {
 		m.docs.RemoveOverview(d.id()) // and the overview, in the page too
+	}
+	if d.ov != nil {
+		d.ov.forgetDiff()
 	}
 	m = m.detachDoc(d)
 	m.openFiles.remove(m.currentWorktree, d)

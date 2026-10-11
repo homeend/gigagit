@@ -1105,6 +1105,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.stackPaneLanded(msg)
 	case reviewNotesMsg:
 		return m.reviewNotesLanded(msg), nil
+	case reviewDiffMsg:
+		return m.diffLanded(msg), nil
 	case splitStackNotesMsg:
 		return m.stackNotesLanded(msg), nil
 	case fileContentMsg:
@@ -1132,7 +1134,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				d.from.ov.paint(d.from.p.lines)
 			}
-			return m, m.reviewNotesCmd(d)
+			return m, tea.Batch(m.reviewNotesCmd(d), m.diffOnLoad(d))
 		}
 		return m, nil // no frame shows that document any more: a stale load
 	case commitMessageMsg:
