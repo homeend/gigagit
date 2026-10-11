@@ -109,6 +109,27 @@ func (d *openFile) pageAtEnd(dir, rows int) bool {
 	return true
 }
 
+// markFileAnchors records whether overview ov's file anchors on path found
+// their file: on the anchors, in the store for an agent's overview (the page
+// shows the mark, and a sync brings it back), and in the overview's paint.
+// A note anchor has no path: it keeps its own mark.
+func (m Model) markFileAnchors(ov *openFile, path string, missing bool) {
+	changed := false
+	for i := range ov.ov.anchors {
+		a := &ov.ov.anchors[i]
+		if a.target.Path != path || a.missing == missing {
+			continue
+		}
+		a.missing, changed = missing, true
+		if ov.src.kind == srcOverview && m.docs != nil {
+			m.docs.SetAnchorMissing(ov.id(), i, missing)
+		}
+	}
+	if changed {
+		ov.ov.paint(ov.p.lines)
+	}
+}
+
 // openAnchor opens overview ov's anchor i in the foreground: a file at its
 // line (a range selected), or the file a note sits on at the note. A target
 // that is gone is marked and named in the status line instead.

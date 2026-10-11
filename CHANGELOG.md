@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Overview anchors: the missing mark follows the file
+
+### Fixed
+- In an overview split, an anchor whose file is gone is marked ✗ whichever
+  way it is found: a working file deleted after the agent added the
+  overview (it loads as "file deleted on disk"), or a file the stacked pane
+  fails to read. The mark reaches the store, so gg web shows it too and a
+  later sync keeps it.
+- A file that appears after its anchor was marked clears the ✗ the next
+  time a steer or the stack reads it.
+
 ## gg web: the overview split shows the file or its review diff
 
 ### Added

@@ -198,3 +198,28 @@ func TestStackOverAHundredFilesOpensFolded(t *testing.T) {
 		t.Fatalf("folded %d of %d; the target stays open", folded, len(sp.stream.files))
 	}
 }
+
+// An anchor whose file the stream does not list (the agent's overview text
+// gained it after the stack was built) is not a file that is gone: the
+// steer marks nothing — only a read decides.
+func TestStackSteerToAFileTheStreamLacksMarksNothing(t *testing.T) {
+	t.Parallel()
+	m, sv, sp := stackedSplitModel(t)
+	ov := sv.left.doc()
+	var kept []streamFile
+	for _, f := range sp.stream.files {
+		if f.path != "b.go" {
+			kept = append(kept, f)
+		}
+	}
+	sp.stream.files = kept // the stream lacks b.go, which exists at the tip
+	sp.rebuild(m)
+	m = pressDrain(t, m, "down") // anchor B, on b.go
+	a := ov.ov.anchors[ov.ov.sel]
+	if a.target.Path != "b.go" {
+		t.Fatalf("sel %d on %q, want anchor B", ov.ov.sel, a.target.Path)
+	}
+	if a.missing {
+		t.Fatal("b.go exists: an anchor the stack does not list must not be marked gone")
+	}
+}

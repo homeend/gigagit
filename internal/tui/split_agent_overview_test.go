@@ -18,12 +18,17 @@ func agentOverviewModel(t *testing.T, width int) Model {
 }
 
 // agentOverviewModelOf is agentOverviewModel with tail after the overview's
-// anchors.
-func agentOverviewModelOf(t *testing.T, width int, tail string) Model {
+// anchors and the extra files written (each "x1\nx2\n…") before it is added.
+func agentOverviewModelOf(t *testing.T, width int, tail string, extra ...string) Model {
 	t.Helper()
 	m := tempPromptStore(t, loadedNavModel(t)) // S writes its choice: never the machine's store
 	if err := os.WriteFile(filepath.Join(m.currentWorktree, "b.txt"), []byte("b1\nb2\nb3\nb4\nb5\n"), 0o644); err != nil {
 		t.Fatal(err)
+	}
+	for _, name := range extra {
+		if err := os.WriteFile(filepath.Join(m.currentWorktree, name), []byte("x1\nx2\nx3\nx4\nx5\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	m.width = width
 	m.filterTyping = true // the note's add never moves the screen
@@ -256,5 +261,88 @@ func TestSplitMenuWithoutAFilesViewIsTheSplits(t *testing.T) {
 		if l == "Show as list" || l == "Show as graph" {
 			t.Fatalf("the Commits panel's rows leak into the split's menu: %q", menuLabels(m))
 		}
+	}
+}
+
+// docsMissing is the store's missing flag of agent overview ov's anchor i
+// (what the page shows and a sync brings back).
+func docsMissing(t *testing.T, m Model, ov *openFile, i int) bool {
+	t.Helper()
+	o, ok := m.docs.Overview(ov.id())
+	if !ok || i >= len(o.Anchors) {
+		t.Fatalf("overview %s has no anchor %d in the store", ov.id(), i)
+	}
+	return o.Anchors[i].Missing
+}
+
+// A file deleted after the agent added its overview: the steer's failed
+// load marks the anchor missing in the store too, so a sync keeps the ✗.
+func TestSplitSteerToADeletedFileMarksTheStore(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	sv := m.splitLayer()
+	ov := sv.left.doc()
+	if ov.ov.anchors[2].missing || docsMissing(t, m, ov, 2) {
+		t.Fatal("c.txt was there at the add: its anchor starts found")
+	}
+	if err := os.Remove(filepath.Join(m.currentWorktree, "c.txt")); err != nil {
+		t.Fatal(err)
+	}
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 2 || !ov.ov.anchors[2].missing {
+		t.Fatalf("sel %d missing %v: the failed load marks the anchor", ov.ov.sel, ov.ov.anchors[2].missing)
+	}
+	if !docsMissing(t, m, ov, 2) {
+		t.Fatal("the store (the page) never heard the anchor is missing")
+	}
+	m = m.syncOverviews()
+	if !ov.ov.anchors[2].missing {
+		t.Fatal("a store sync cleared the ✗")
+	}
+}
+
+// A file that was missing at the add and appears later: the steer's load
+// clears the anchor's mark, here and in the store.
+func TestSplitSteerToAFileThatAppearedClearsTheMark(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).")
+	sv := m.splitLayer()
+	ov := sv.left.doc()
+	if !ov.ov.anchors[2].missing || !docsMissing(t, m, ov, 2) {
+		t.Fatal("c.txt was not there at the add: its anchor starts missing")
+	}
+	if err := os.WriteFile(filepath.Join(m.currentWorktree, "c.txt"), []byte("c1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 2 || ov.ov.anchors[2].missing {
+		t.Fatalf("sel %d missing %v: the load found the file", ov.ov.sel, ov.ov.anchors[2].missing)
+	}
+	if docsMissing(t, m, ov, 2) {
+		t.Fatal("the store still says the anchor is missing")
+	}
+}
+
+// Stacked, a file deleted after the add fails to load in the stream: its
+// anchor is marked missing, here and in the store.
+func TestStackLoadOfADeletedFileMarksItsAnchor(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	sv := m.splitLayer()
+	ov := sv.left.doc()
+	if err := os.Remove(filepath.Join(m.currentWorktree, "c.txt")); err != nil {
+		t.Fatal(err)
+	}
+	m = pressDrain(t, m, "S")
+	if _, ok := sv.right.(*stackPane); !ok {
+		t.Fatalf("right %T, want the stack", sv.right)
+	}
+	if !ov.ov.anchors[2].missing || !docsMissing(t, m, ov, 2) {
+		t.Fatalf("missing %v: the stream's failed load marks the anchor", ov.ov.anchors[2].missing)
+	}
+	if ov.ov.anchors[0].missing {
+		t.Fatal("a.txt loaded: its anchor stays found")
 	}
 }
