@@ -413,7 +413,8 @@ func TestRowNotesArePlacedOnceAndFollowChanges(t *testing.T) {
 
 // v in the split's diff view selects the diff's rows, not the file's: a
 // deleted row and the context under it copy as their plain text (no +/-
-// marker), and the line cursor follows the character cursor.
+// marker, and not the remark box "why drop l5?" drawn between them), and
+// the line cursor follows the character cursor.
 func TestSplitDiffCharSelCopiesTheRowsText(t *testing.T) {
 	t.Parallel()
 	m, sv := diffSplitModel(t)
@@ -448,6 +449,9 @@ func TestSplitDiffCharSelIsModal(t *testing.T) {
 	m, sv := diffSplitModel(t)
 	m = pressDrain(t, m, "D")
 	d := sv.right.doc()
+	if d.diff == nil {
+		t.Fatal("D shows the diff")
+	}
 	m = pressDrain(t, m, "v")
 	m = pressDrain(t, m, "D")
 	if d.diff == nil || !d.diff.p.cs.on {
@@ -470,11 +474,24 @@ func TestSplitDiffCharSelEndsOnAClickOnTheOverview(t *testing.T) {
 	m, sv := diffSplitModel(t)
 	m = pressDrain(t, m, "D")
 	d := sv.right.doc()
+	if d.diff == nil {
+		t.Fatal("D shows the diff")
+	}
 	m = pressDrain(t, m, "v")
 	if !d.diff.p.cs.on {
 		t.Fatal("v enters the diff's mode")
 	}
-	u, cmd := m.Update(mouseMsg(5, 5, tea.MouseButtonLeft))
+	x, y := -1, -1 // on the overview's plain word "Look": a click there follows no link
+	for row, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+		if i := strings.Index(l, "Look at"); i >= 0 {
+			x, y = len([]rune(l[:i])), row
+			break
+		}
+	}
+	if x < 0 {
+		t.Fatal("the overview's text is not on screen")
+	}
+	u, cmd := m.Update(mouseMsg(x, y, tea.MouseButtonLeft))
 	m = drainCmds(t, u.(Model), cmd)
 	if !sv.onLeft || d.diff.p.cs.on {
 		t.Fatalf("onLeft %v diff mode %v: the click moves the keys and ends the mode", sv.onLeft, d.diff.p.cs.on)
