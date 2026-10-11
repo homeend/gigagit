@@ -38,6 +38,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   later sync keeps it.
 - A file that appears after its anchor was marked clears the ✗ the next
   time a steer or the stack reads it.
+- A working file that is there but cannot be read (permissions) is not
+  marked ✗, and "no file x" is no longer re-said on the status line each
+  time a deleted file's notes reload it.
 
 ## gg web: the overview split shows the file or its review diff
 
