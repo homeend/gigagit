@@ -22,6 +22,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   group's header, the way a tree's left does. The TUI used to show only the
   code of the current row; its long rows stay cut until `→` opens them.
 
+## gg web: the overview split's stack, small fixes
+
+### Fixed
+- S back from the stack on a file that cannot be read keeps the stack (the
+  cursor where it was) and says `could not open <path>: <why> — the stack
+  stays`, instead of a right column stuck on "(opening …)".
+- ctrl+] in the stack names the overview it sends to the background
+  (`overview f2 "Tour" is in the background`); a stored overview just closes.
+- S pressed while a link's file is still loading stacks on that link, not on
+  the file the previous link showed.
+- A stack the split leaves (S back, another overview) cancels its file reads
+  and lets go of its watcher.
+- An empty stack's title reads `Files: <title> · no files`, not `file 1/0`.
+
 ## gg web: the overview split stacks its files (S)
 
 ### Added

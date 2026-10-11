@@ -168,8 +168,8 @@ async function apiFetch(url, init) {
 }
 
 
-async function getJSON(url) {
-  const resp = await apiFetch(url);
+async function getJSON(url, init) {
+  const resp = await apiFetch(url, init);
   const body = await resp.json();
   if (!resp.ok) {
     const err = new Error(body.error || resp.statusText);

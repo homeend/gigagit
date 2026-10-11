@@ -13,7 +13,7 @@ func TestViewerRemarksAndMarkOnlyBandsAreWired(t *testing.T) {
 	t.Parallel()
 	v := readStatic(t, "viewer.js")
 	for _, want := range []string{
-		`function fetchContent(src, rev, path, review = "")`,
+		`function fetchContent(src, rev, path, review = "", init = undefined)`,
 		`"&review=" + encodeURIComponent(review)`,
 		`async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id = "", from = null, steer = false })`,
 		`fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksReview(from))`,
@@ -157,6 +157,10 @@ func TestOverviewSplitStackIsWired(t *testing.T) {
 		`k = st.slots.indexOf(s); // a refresh of the links may have moved (or dropped) the file meanwhile`,
 		`if (STACK_MOVES.has(e.key)) st.want = null;`,
 		`if (head || row) st.want = null;`,
+		`if (split && split.stack) leaveStack(); // another overview takes the split: its stack goes first`,
+		`st.abort.abort(); // its reads are cancelled, never left to finish for nothing`,
+		`{ signal: st.abort.signal }`,
+		`" — the stack stays"`,
 	} {
 		if !strings.Contains(v, want) {
 			t.Errorf("viewer.js lacks %q", want)
