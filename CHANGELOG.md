@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The overview split's diff: copy mode follow-ups
+
+### Fixed
+- The review diff reloading while `v` runs in its cut view keeps the cut
+  view (it used to come back scrolling for good), and the status line says
+  "▸ the text reloaded: copy mode ended".
+
 ## gg web: Send to GitHub… on a pull request's review
 
 ### Added
