@@ -60,6 +60,7 @@ out.restack = re.map((s) => s.path + ":" + s.load).join(",") + "|" + (re[0] === 
 // 8. placeholder rows, the title
 out.ph = [S.placeholderRows({ n: 0 }), S.placeholderRows({ n: 40 }), S.placeholderRows({ n: 9000 })].join(",");
 out.title = S.stackTitle("PR #7 review", 1, 3);
+out.titleEmpty = S.stackTitle("Notes only", 0, 0);
 console.log(JSON.stringify(out));
 `
 
@@ -105,6 +106,7 @@ func TestSplitStackJS(t *testing.T) {
 		"restack":     "c:ok,new:idle,a:ok|true",
 		"ph":          "3,40,2000",
 		"title":       "Files: PR #7 review · file 2/3",
+		"titleEmpty":  "Files: Notes only · no files",
 	}
 	for k, v := range want {
 		if got[k] != v {

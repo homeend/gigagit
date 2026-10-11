@@ -435,9 +435,9 @@ function fetchOverview(id) {
   return getJSON("/api/overview?id=" + encodeURIComponent(id));
 }
 
-function fetchContent(src, rev, path, review = "") {
+function fetchContent(src, rev, path, review = "", init = undefined) {
   return getJSON("/api/file-content?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path) +
-    (review ? "&review=" + encodeURIComponent(review) : ""));
+    (review ? "&review=" + encodeURIComponent(review) : ""), init);
 }
 
 // reportCursor tells the server this tab's line, debounced: the switcher of
@@ -576,7 +576,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   } catch (e) {
     reportShown(seq, reg);
     opLine("view failed: " + (e.message || e), true);
-    return { ok: false, notice: "" };
+    return { ok: false, notice: "", error: String(e.message || e) };
   }
   // A newer open won, the viewer closed, or x closed this file everywhere
   // while it loaded here.
@@ -729,6 +729,12 @@ function dropViewer() {
 
 function backgroundViewer() {
   if (view.ov && view.ov.stored) return closeViewer("close"); // page-local: nothing to background
+  if (split && split.stack) { // the stack is no open file: the overview is what steps aside
+    const name = split.id ? splitName() : "";
+    closeViewer("background");
+    if (name) opLine(name + " is in the background", false);
+    return;
+  }
   const name = docName(view);
   closeViewer("background");
   opLine(name + " is in the background", false);
@@ -880,6 +886,7 @@ function openSplit(id, path, ov, { steer = true } = {}) {
     // The right column starts empty unless it keeps the file it shows (the
     // way back): never the lines of a file closed earlier, or of another
     // overview's link — the steer fills it.
+    if (split && split.stack) leaveStack(); // another overview takes the split: its stack goes first
     const key = id || (ov.stored && ov.stored.id);
     if (diffPref && diffPref.key !== key) diffPref = null; // another overview's choice ends with its split
     if (lastStep && lastStep.key !== key) lastStep = null;
@@ -1142,8 +1149,10 @@ function toggleSplitStack() {
   saveUI({ stacked_review_files: true });
   const a = split.ov.anchors[split.ov.sel];
   // The stack opens on the file the right column shows (its lines come
-  // along: no second read), else on the selected link's.
-  if (view.id && !view.ov) return enterStack({ path: view.path, line: view.cur, dest: view.from ? view.from.cur || "" : "", file: view });
+  // along: no second read), else on the selected link's — also when a step
+  // to that link is still loading (the file shown is the previous link's).
+  const stepping = !!a && !anchorStatus(a) && !!anchorPath(a) && !!view.from && view.from.dest !== a.dest;
+  if (view.id && !view.ov && !stepping) return enterStack({ path: view.path, line: view.cur, dest: view.from ? view.from.cur || "" : "", file: view });
   enterStack(a ? { path: anchorPath(a), line: a.start || 0, dest: a.note ? "" : a.dest } : null);
 }
 
@@ -1155,7 +1164,7 @@ function enterStack(at) {
   const sp = split;
   const files = stackFiles(stackReviewFiles(sp), sp.ov.anchors);
   const k = at ? slotOf(files, at.path) : -1;
-  const st = { slots: newSlots(files, k), cur: { k: Math.max(k, 0), line: 0 }, curDest: (at && at.dest) || "", near: new Set(), inFlight: 0, want: null, observer: null };
+  const st = { slots: newSlots(files, k), cur: { k: Math.max(k, 0), line: 0 }, curDest: (at && at.dest) || "", near: new Set(), inFlight: 0, want: null, observer: null, abort: new AbortController() };
   const s = k >= 0 ? st.slots[k] : null;
   if (s && at.file && s.load === "idle") { // the single file's read moves into its slot
     Object.assign(s, { load: "ok", lines: at.file.lines, n: at.file.lines.length, notes: at.file.notes, remarks: at.file.remarks, why: at.file.placeholder || (at.file.image ? "(an image — S opens it)" : "") });
@@ -1181,6 +1190,7 @@ function enterStack(at) {
 async function leaveStack(open = false) {
   const st = split.stack;
   if (st.observer) st.observer.disconnect();
+  st.abort.abort(); // its reads are cancelled, never left to finish for nothing
   split.stack = null;
   if (!open) return;
   const sp = split, s = st.slots[st.cur.k];
@@ -1200,7 +1210,27 @@ async function leaveStack(open = false) {
   paintTitle();
   renderViewer();
   swapFoot(true);
-  await openViewer({ ...target, from, steer: true });
+  const r = await openViewer({ ...target, from, steer: true });
+  // The file could not be read: the stack comes back as it was, rather
+  // than a column left saying "(opening …)". A newer open or a close that
+  // took the screen meanwhile is left alone.
+  if (!r.ok && r.error !== undefined && split === sp && !sp.stack && !view.id) restoreStack(st, s.path + ": " + r.error);
+}
+
+// restoreStack puts stack st back after S back failed to open its file:
+// the cursor where it was, the cancelled reads started over, the choice
+// remembered as stacked again.
+function restoreStack(st, why) {
+  const back = { ...st, near: new Set(), inFlight: 0, want: null, observer: null, abort: new AbortController() };
+  for (const s of back.slots) if (s.load === "loading") s.load = "idle";
+  view.placeholder = "";
+  split.stack = back;
+  saveUI({ stacked_review_files: true });
+  paintTitle();
+  renderViewer();
+  paintStackCursor("center");
+  swapFoot(true);
+  opLine("could not open " + why + " — the stack stays", false);
 }
 
 // stackCols is how many characters a header's path may take.
@@ -1341,8 +1371,9 @@ async function loadStackFile(st, k) {
   const at = sp.ov.stored ? storedAnchorOpen(sp.ov.stored.tip, { path: s.path }) : { src: "worktree", rev: "" };
   let body = null;
   try {
-    body = await fetchContent(at.src, at.rev, s.path, sp.ov.stored ? remarksReview({ stored: sp.ov.stored }) : "");
+    body = await fetchContent(at.src, at.rev, s.path, sp.ov.stored ? remarksReview({ stored: sp.ov.stored }) : "", { signal: st.abort.signal });
   } catch (e) {
+    if (st.abort.signal.aborted) return; // the stack was dropped: its reads were cancelled
     s.error = "(load failed: " + (e.message || e) + ")";
   }
   if (!split || split.stack !== st) return; // the stack left the screen while this loaded
