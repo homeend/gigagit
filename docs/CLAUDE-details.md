@@ -7041,6 +7041,36 @@ menu refuses a deleted row on the push. Tests: `review_file_diff_test.go`,
 `reviewdiff_test.go`, `splitdiffjs_test.go` (the pure model + wiring guards);
 the visible behaviour was checked with a Playwright script (not committed).
 
+**gg web: the stacked file column (2026-10-12, spec `2026-10-11-web-overview-split-design.md` §11, plan 2).**
+`S` in either split column (`splitKey` takes it before the columns, so it never
+reaches `keys.js`'s page-level `toggleStacked`) puts `split.stack` in the right
+column: `{slots, cur: {k, line}, curDest, near, inFlight, want, observer}`. The
+cursor is a (file, line) pair — line 0 = the header — never a global row.
+`enterStack` backgrounds the single file and EMPTIES `view`, so every file path
+(`canFlip`, `viewBands`, `cursorRow`, `viewerFileId`, `reportCursor`,
+`viewerFileChanged`, `diffChips`) goes quiet by itself; the single file's read
+moves into its slot (no second read); `diffPref` is kept. The pure half is
+`static/splitstack.js` (import-free: `stackFiles` — the review's files when
+`state.review.id` is the stored overview's review, else first-linked —
+`newSlots`, `stackMove`, `nextHeader`, `stackBands`, `stepStackBand`,
+`restack`); the DOM half is in `viewer.js` (`renderStack` per-file sections,
+`repaintStackFile` keeps the reader's place when a section above grows,
+an `IntersectionObserver` rooted at `#viewer-body`, `pumpStack` at most 4 reads
+— its own constant, `stack.js`'s is 3 — a steered file (`want`, newest step
+wins) first). Gotchas: `bandOf` matches bands by range, so only the current
+link's own file may light one current (`stackCurFile`); a load landing after
+the stack left is dropped (`split.stack !== st`); `leaveSplit` tears the stack
+down for esc / narrow / gone. `S` back (`leaveStack(true)`) opens the cursor's
+file through `openViewer({…, from, steer: true})` with `from` built as
+`steerSplit` builds it, so a held D brings the diff back; a deleted or failed
+file refuses. The pref is `stacked_review_files` (`promptstate.WebUI`, web
+only); `openSplit` (new split, steering) enters the stack when it is on;
+`backIntoSplit` keeps its file. Agent notes in the stack are a load-time
+snapshot. Tests: `splitstackjs_test.go`, `TestOverviewSplitStackIsWired`,
+`uistate_test.go`, `TestStaticModulesParse` (every module parsed as `.mjs` —
+`node --check x.js` passes a broken module); the visible behaviour was checked
+with a Playwright script (not committed).
+
 **TUI: file ⇄ review diff (2026-10-11, same spec, plan 2).** The open file
 keeps its FILE popup in `d.p` (lines and cursor are file lines, so links, note
 adds, reloads, `gg session files` and `syncOverviewHere` stay right); a second

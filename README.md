@@ -512,6 +512,8 @@ wide or more (one document otherwise): ↑/↓ walk the links and the file
 follows, tab switches sides, `N`/`P` step the overview from the file, the
 review's remarks show as read-only boxes and the link whose band holds the
 cursor is marked.
+`S` stacks every file in one scroll beside the overview (`N`/`P` headers,
+`-`/`_` fold, `S` again back to the file at the cursor).
 In the file a link opened — in the TUI and in gg web — `D` (or the
 *file | diff* switch in its title) shows the review's change to that file
 instead — one column, the whole file, deleted lines red with − and added green
