@@ -143,5 +143,5 @@ export function placeholderRows(s) {
 
 // stackTitle is the right column's title line in the stack.
 export function stackTitle(label, k, n) {
-  return "Files: " + label + " · file " + (k + 1) + "/" + n;
+  return "Files: " + label + (n ? " · file " + (k + 1) + "/" + n : " · no files");
 }
