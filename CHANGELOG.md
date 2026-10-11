@@ -11,9 +11,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Fixed
 - In an overview split, an anchor whose file is gone is marked ✗ whichever
   way it is found: a working file deleted after the agent added the
-  overview (it loads as "file deleted on disk"), a file the stacked pane
-  fails to read, or one the stack does not list. The mark reaches the
-  store, so gg web shows it too and a later sync keeps it.
+  overview (it loads as "file deleted on disk"), or a file the stacked pane
+  fails to read. The mark reaches the store, so gg web shows it too and a
+  later sync keeps it.
 - A file that appears after its anchor was marked clears the ✗ the next
   time a steer or the stack reads it.
 

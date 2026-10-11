@@ -414,7 +414,6 @@ func (m Model) stackSteer(sv *splitView, p *stackPane, i int) (Model, tea.Cmd) {
 	}
 	if fi < 0 {
 		m.statusMsg = i18n.T("no file %s", path)
-		m.markFileAnchors(sv.left.doc(), path, true)
 		return m, nil
 	}
 	p.park, p.want.set = -1, false // the newest step wins

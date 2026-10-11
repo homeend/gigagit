@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/homeend/gigagit/internal/i18n"
 )
 
 func stackedSplitModel(t *testing.T) (Model, *splitView, *stackPane) {
@@ -201,9 +199,10 @@ func TestStackOverAHundredFilesOpensFolded(t *testing.T) {
 	}
 }
 
-// An anchor whose file the stream lacks says "no file" and is marked
-// missing, as the single-file pane marks one.
-func TestStackSteerToAFileTheStreamLacksMarksTheAnchor(t *testing.T) {
+// An anchor whose file the stream does not list (the agent's overview text
+// gained it after the stack was built) is not a file that is gone: the
+// steer marks nothing — only a read decides.
+func TestStackSteerToAFileTheStreamLacksMarksNothing(t *testing.T) {
 	t.Parallel()
 	m, sv, sp := stackedSplitModel(t)
 	ov := sv.left.doc()
@@ -213,13 +212,14 @@ func TestStackSteerToAFileTheStreamLacksMarksTheAnchor(t *testing.T) {
 			kept = append(kept, f)
 		}
 	}
-	sp.stream.files = kept // the stream lost b.go (near-unreachable: it is built from the anchors' files)
+	sp.stream.files = kept // the stream lacks b.go, which exists at the tip
 	sp.rebuild(m)
 	m = pressDrain(t, m, "down") // anchor B, on b.go
-	if a := ov.ov.anchors[ov.ov.sel]; a.target.Path != "b.go" || !a.missing {
-		t.Fatalf("anchor %+v: the steer to a file the stream lacks marks it missing", a.target)
+	a := ov.ov.anchors[ov.ov.sel]
+	if a.target.Path != "b.go" {
+		t.Fatalf("sel %d on %q, want anchor B", ov.ov.sel, a.target.Path)
 	}
-	if want := i18n.T("no file %s", "b.go"); m.statusMsg != want {
-		t.Fatalf("status %q, want %q", m.statusMsg, want)
+	if a.missing {
+		t.Fatal("b.go exists: an anchor the stack does not list must not be marked gone")
 	}
 }
