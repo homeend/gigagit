@@ -1740,7 +1740,7 @@ function noteBoxHTML(n, acts = !n.readonly) {
     `<div class="vnote-title">${esc(noteBoxTitle(n))}</div>` +
     `<div class="vnote-sum">${esc(n.summary)}</div>` +
     (n.rationale ? `<div class="vnote-why">${esc(n.rationale)}</div>` : "") +
-    (acts ? `<div class="vnote-acts"><button data-nact="dismiss">dismiss</button><button data-nact="ref">copy reference</button></div>`) +
+    (acts ? `<div class="vnote-acts"><button data-nact="dismiss">dismiss</button><button data-nact="ref">copy reference</button></div>` : "") +
     `</div>`
   );
 }
