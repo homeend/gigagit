@@ -136,7 +136,8 @@ func (m Model) markFileAnchors(ov *openFile, path string, missing bool) (changed
 // readGone reports whether a failed read means the file is not there: any
 // error reading a commit (git names no other kind), only "does not exist"
 // in the working tree — a file it cannot read (permissions) is there, as the
-// store's own check finds it.
+// store's stat check finds it. (Odd paths — a directory now there, a parent
+// turned file — read as there here while that check says gone.)
 func readGone(err error, worktree bool) bool {
 	return err != nil && (!worktree || errors.Is(err, fs.ErrNotExist))
 }

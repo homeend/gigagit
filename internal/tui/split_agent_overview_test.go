@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -411,11 +412,12 @@ func TestSplitReloadThatFindsTheFileDeletedNamesIt(t *testing.T) {
 }
 
 // unreadable makes the worktree file name unreadable (permission denied)
-// and restores it at the end; a root run reads it anyway, so it skips.
+// and restores it at the end. Windows (chmod 0 only sets read-only) and a
+// root run read it anyway, so they skip.
 func unreadable(t *testing.T, m Model, name string) {
 	t.Helper()
-	if os.Geteuid() == 0 {
-		t.Skip("root reads a 0000 file")
+	if runtime.GOOS == "windows" || os.Getuid() == 0 {
+		t.Skip("the file stays readable: Windows or root")
 	}
 	p := filepath.Join(m.currentWorktree, name)
 	if err := os.Chmod(p, 0); err != nil {
