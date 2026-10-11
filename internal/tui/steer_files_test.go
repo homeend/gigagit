@@ -110,7 +110,7 @@ func TestBackgroundNavigateOfAShownFileMovesNothing(t *testing.T) {
 	m := loadedNavModel(t)
 	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 40)
 	d.p.cur = 2
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	nm, cmd := m.applySteer(bgNav("b-4", "a.txt", 30))
 	nm = pumpAll(t, nm, cmd)
 	if d.p.cur != 2 {

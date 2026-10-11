@@ -346,3 +346,65 @@ func TestHelpListsD(t *testing.T) {
 		t.Fatal("help lists D for the overview split")
 	}
 }
+
+// Review finding 1 (spec §6): a file brought back on its own — ctrl+] then
+// the switcher — shows as the file, with no switch, even while its
+// overview's choice says diff.
+func TestTheSwitcherBringsAFileBackAsTheFile(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModel(t, 160)
+	sv := m.splitLayer()
+	m = pressDrain(t, m, "enter")
+	m = pressDrain(t, m, "D")
+	d := sv.right.doc()
+	m = pressDrain(t, m, "ctrl+]")
+	if d.diff != nil {
+		t.Fatal("ctrl+] takes the file out of the split: the file again")
+	}
+	m, cmd := m.bringToFront(d)
+	m = drainCmds(t, m, cmd)
+	if d.diff != nil || m.canFlip(d) {
+		t.Fatalf("the switcher's file: diff %v canFlip %v", d.diff != nil, m.canFlip(d))
+	}
+	if strings.Contains(ansi.Strip(m.View()), "file | diff") {
+		t.Fatal("no switch on a file opened another way")
+	}
+}
+
+// Review finding 2: the wheel scrolls the diff the narrow viewer shows.
+func TestWheelScrollsTheNarrowViewersDiff(t *testing.T) {
+	t.Parallel()
+	m, _ := diffSplitModel(t)
+	u, cmd := m.Update(tea.WindowSizeMsg{Width: 58, Height: 12})
+	m = drainCmds(t, u.(Model), cmd)
+	m = pressDrain(t, m, "enter")
+	m = pressDrain(t, m, "D")
+	d := topDoc(m)
+	if d == nil || d.diff == nil {
+		t.Fatal("the narrow viewer shows the diff")
+	}
+	before := d.diff.p.sel
+	u, cmd = m.Update(tea.MouseMsg{X: 10, Y: 5, Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	m = drainCmds(t, u.(Model), cmd)
+	if d.diff.p.sel <= before {
+		t.Fatalf("diff top %d → %d: the wheel scrolls what is shown", before, d.diff.p.sel)
+	}
+}
+
+// Review finding 3: the boxes' places on rows are laid out once (rows ×
+// notes), not on every pager call — and follow a note's change.
+func TestRowNotesArePlacedOnceAndFollowChanges(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	m = pressDrain(t, m, "D")
+	d := sv.right.doc()
+	a, b := d.rowNotes(), d.rowNotes()
+	if len(a) != 2 || &a[0] != &b[0] {
+		t.Fatal("rowNotes hands out the placed copy, never a fresh scan")
+	}
+	d.diff.remarks = d.diff.remarks[:1]
+	d.syncNoteRows()
+	if len(d.rowNotes()) != 1 {
+		t.Fatal("a change re-places them")
+	}
+}

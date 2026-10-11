@@ -16,7 +16,7 @@ func notedViewer(t *testing.T) (Model, *openFile) {
 	d.fill(fileContentMsg{lines: docLines(40)}, 10, 80)
 	m.adoptDoc(d)
 	m.openFiles.touch(m.currentWorktree, d, m.docShown)
-	return m.pushLayer(&fileViewer{d}), d
+	return m.pushLayer(&fileViewer{openFile: d}), d
 }
 
 func boxText(m Model, d *openFile, w, h int) []string {

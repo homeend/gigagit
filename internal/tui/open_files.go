@@ -338,7 +338,7 @@ func (m Model) bringToFront(d *openFile) (Model, tea.Cmd) {
 		return m.registerDoc(d), nil
 	}
 	m = m.detachDoc(d)
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	m = m.registerDoc(d)
 	if !d.onDisk() && docLoaded(d) {
 		return m, nil

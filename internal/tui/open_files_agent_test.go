@@ -29,7 +29,7 @@ func TestOpenFilesProtoListsIDsLinesAndState(t *testing.T) {
 	a := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 10)
 	a.p.cur = 4
 	c := bgDoc(m, fileSource{kind: srcCommit, rev: "0123456789abcdef0123456789abcdef01234567"}, "b.txt", 3)
-	m = m.pushLayer(&fileViewer{c})
+	m = m.pushLayer(&fileViewer{openFile: c})
 	got := m.openFilesProto()
 	if len(got) != 2 {
 		t.Fatalf("got %+v, want 2 files", got)

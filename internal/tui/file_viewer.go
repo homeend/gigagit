@@ -15,6 +15,9 @@ import (
 // here), so the two viewers cannot drift apart.
 type fileViewer struct {
 	*openFile // the document shown: its lines, cursor, selection, search
+	// step: an overview's link step opened this viewer (the narrow
+	// fallback of the split) — the one viewer D flips (split_diff.go).
+	step bool
 }
 
 // openFileViewer pushes the viewer for path and starts its load off the UI
@@ -41,7 +44,7 @@ func (m Model) openFileViewerEv(path string, line int) (Model, tea.Cmd, *openFil
 		}
 	}
 	d.pendingLine = line
-	fv := &fileViewer{d}
+	fv := &fileViewer{openFile: d}
 	m = m.pushLayer(fv)
 	m, ev := m.registerDocEv(d)
 	return m, m.loadDoc(d), ev

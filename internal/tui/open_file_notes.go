@@ -239,6 +239,7 @@ func (d *openFile) noteRowsUnder(from, to int) int {
 // the plain one-row-per-line path.
 func (d *openFile) syncNoteRows() {
 	if dd := d.diff; dd != nil {
+		dd.placed = d.placeRowNotes()
 		dd.p.extraRows = nil
 		if len(d.rowNotes()) > 0 {
 			dd.p.extraRows = d.diffNoteRowsUnder

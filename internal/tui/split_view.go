@@ -245,7 +245,7 @@ func (m Model) narrowSplits() Model {
 			ov.ov.diff, ov.ov.diffPartial = keep.diff, keep.diffPartial
 		}
 		if top && ov != nil {
-			m = m.pushLayer(&fileViewer{ov})
+			m = m.pushLayer(&fileViewer{openFile: ov})
 		}
 	}
 	return m

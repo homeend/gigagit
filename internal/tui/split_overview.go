@@ -304,7 +304,7 @@ func (m Model) showOverview(d *openFile) (Model, tea.Cmd) {
 		return m.openOverviewSplit(d)
 	}
 	m = m.detachDoc(d)
-	m = m.pushLayer(&fileViewer{d})
+	m = m.pushLayer(&fileViewer{openFile: d})
 	return m.registerDoc(d), nil
 }
 

@@ -46,6 +46,10 @@ type docDiff struct {
 	open    map[int]bool
 	remarks []rowNote
 	numW    int
+	// placed is rowNotes' answer, laid out by syncNoteRows whenever the
+	// rows, the remarks or the agent's notes change — the pager asks for
+	// it on every line it counts.
+	placed []agentdocs.Note
 }
 
 // rowNote is a remark of the review on one side of the diff.
@@ -274,6 +278,14 @@ func (d *openFile) rowCurBand(rb []anchorBand) int {
 // first / last row + 1): the agent's notes on new lines, the review's
 // remarks on their side. A note no row shows is left out.
 func (d *openFile) rowNotes() []agentdocs.Note {
+	if d.diff == nil {
+		return nil
+	}
+	return d.diff.placed
+}
+
+// placeRowNotes lays the notes out on the rows (rowNotes).
+func (d *openFile) placeRowNotes() []agentdocs.Note {
 	dd := d.diff
 	if dd == nil || dd.notice != "" {
 		return nil
@@ -413,11 +425,19 @@ func (m Model) canFlip(d *openFile) bool {
 	if m.layers != nil {
 		for _, l := range m.layers.entries {
 			if fv, ok := l.(*fileViewer); ok && fv.openFile == d {
-				return true
+				return fv.step // a viewer the switcher opened shows the file
 			}
 		}
 	}
 	return false
+}
+
+// markStepViewer marks the viewer on top, when it shows d, as one an
+// overview's link step opened (canFlip).
+func (m Model) markStepViewer(d *openFile) {
+	if fv, ok := m.topLayer().(*fileViewer); ok && fv.openFile == d {
+		fv.step = true
+	}
 }
 
 // diffWanted reports whether d should show its diff now: D can act on it
