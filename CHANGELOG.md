@@ -27,6 +27,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - A test that parses every gg web module as the browser does (a broken
   module once passed `node --check` unnoticed).
 
+## gg web: the send panel shows a remark's whole summary
+
+### Fixed
+- In the Send to GitHub panel an opened row — its ▸, now at the front of
+  every row, or `c` for all — wraps, so the whole summary reads above the
+  rationale and code instead of ending in "…". A closed row stays one line
+  and shows its full summary on hover. The ▸ no longer drops onto a line of
+  its own under a long row.
+
 ## TUI: the overview split shows the file or its review diff
 
 ### Added
@@ -59,6 +68,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   later sync keeps it.
 - A file that appears after its anchor was marked clears the ✗ the next
   time a steer or the stack reads it.
+- A working file that is there but cannot be read (permissions) is not
+  marked ✗, and "no file x" is no longer re-said on the status line each
+  time a deleted file's notes reload it.
 
 ## gg web: the overview split shows the file or its review diff
 

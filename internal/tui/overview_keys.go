@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -112,9 +114,9 @@ func (d *openFile) pageAtEnd(dir, rows int) bool {
 // markFileAnchors records whether overview ov's file anchors on path found
 // their file: on the anchors, in the store for an agent's overview (the page
 // shows the mark, and a sync brings it back), and in the overview's paint.
-// A note anchor has no path: it keeps its own mark.
-func (m Model) markFileAnchors(ov *openFile, path string, missing bool) {
-	changed := false
+// A note anchor has no path: it keeps its own mark. changed reports whether
+// any anchor's mark flipped.
+func (m Model) markFileAnchors(ov *openFile, path string, missing bool) (changed bool) {
 	for i := range ov.ov.anchors {
 		a := &ov.ov.anchors[i]
 		if a.target.Path != path || a.missing == missing {
@@ -128,6 +130,16 @@ func (m Model) markFileAnchors(ov *openFile, path string, missing bool) {
 	if changed {
 		ov.ov.paint(ov.p.lines)
 	}
+	return changed
+}
+
+// readGone reports whether a failed read means the file is not there: any
+// error reading a commit (git names no other kind), only "does not exist"
+// in the working tree — a file it cannot read (permissions) is there, as the
+// store's stat check finds it. (Odd paths — a directory now there, a parent
+// turned file — read as there here while that check says gone.)
+func readGone(err error, worktree bool) bool {
+	return err != nil && (!worktree || errors.Is(err, fs.ErrNotExist))
 }
 
 // openAnchor opens overview ov's anchor i in the foreground: a file at its

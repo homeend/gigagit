@@ -3,10 +3,13 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // agentOverviewModel is a worktree with a.txt (40 lines) and b.txt (5
@@ -326,7 +329,8 @@ func TestSplitSteerToAFileThatAppearedClearsTheMark(t *testing.T) {
 }
 
 // Stacked, a file deleted after the add fails to load in the stream: its
-// anchor is marked missing, here and in the store.
+// anchor is marked missing, here and in the store; a file that loads clears
+// a mark an earlier check left.
 func TestStackLoadOfADeletedFileMarksItsAnchor(t *testing.T) {
 	t.Parallel()
 	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
@@ -335,6 +339,7 @@ func TestStackLoadOfADeletedFileMarksItsAnchor(t *testing.T) {
 	if err := os.Remove(filepath.Join(m.currentWorktree, "c.txt")); err != nil {
 		t.Fatal(err)
 	}
+	ov.ov.anchors[0].missing = true // an earlier check found a.txt gone; it is back
 	m = pressDrain(t, m, "S")
 	if _, ok := sv.right.(*stackPane); !ok {
 		t.Fatalf("right %T, want the stack", sv.right)
@@ -343,6 +348,115 @@ func TestStackLoadOfADeletedFileMarksItsAnchor(t *testing.T) {
 		t.Fatalf("missing %v: the stream's failed load marks the anchor", ov.ov.anchors[2].missing)
 	}
 	if ov.ov.anchors[0].missing {
-		t.Fatal("a.txt loaded: its anchor stays found")
+		t.Fatal("a.txt loaded: the stream's read clears its mark")
+	}
+}
+
+// A deleted file shown in the split reloads on every store change (its
+// notes re-align): the reload repeats nothing new, so it leaves the status
+// line alone — "no file" is said when the mark changes.
+func TestSplitReloadOfADeletedFileKeepsTheStatus(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	sv := m.splitLayer()
+	if err := os.Remove(filepath.Join(m.currentWorktree, "c.txt")); err != nil {
+		t.Fatal(err)
+	}
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if want := i18n.T("no file %s", "c.txt"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q on the steer", m.statusMsg, want)
+	}
+	m.statusMsg = "something else"
+	m = pumpAll(t, m, m.reloadDocCmd(sv.right.doc()))
+	if m.statusMsg != "something else" {
+		t.Fatalf("status %q: a reload that changed no mark rewrote the status", m.statusMsg)
+	}
+}
+
+// A steer to an anchor already marked at the add still names the file: a
+// first load says it whether or not the mark changes.
+func TestSplitSteerToAnAlreadyMissingFileNamesIt(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).")
+	ov := m.splitLayer().left.doc()
+	if !ov.ov.anchors[2].missing {
+		t.Fatal("c.txt was not there at the add: its anchor starts missing")
+	}
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if want := i18n.T("no file %s", "c.txt"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q", m.statusMsg, want)
+	}
+}
+
+// The shown file deleted on disk: the watcher's reload flips the mark and
+// says so once.
+func TestSplitReloadThatFindsTheFileDeletedNamesIt(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	sv := m.splitLayer()
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if ov := sv.left.doc(); ov.ov.sel != 2 || ov.ov.anchors[2].missing {
+		t.Fatalf("sel %d missing %v: c.txt loads found", ov.ov.sel, ov.ov.anchors[2].missing)
+	}
+	if err := os.Remove(filepath.Join(m.currentWorktree, "c.txt")); err != nil {
+		t.Fatal(err)
+	}
+	m.statusMsg = ""
+	m = pumpAll(t, m, m.reloadDocCmd(sv.right.doc()))
+	if want := i18n.T("no file %s", "c.txt"); m.statusMsg != want || !sv.left.doc().ov.anchors[2].missing {
+		t.Fatalf("status %q missing %v, want %q and the mark", m.statusMsg, sv.left.doc().ov.anchors[2].missing, want)
+	}
+}
+
+// unreadable makes the worktree file name unreadable (permission denied)
+// and restores it at the end. Windows (chmod 0 only sets read-only) and a
+// root run read it anyway, so they skip.
+func unreadable(t *testing.T, m Model, name string) {
+	t.Helper()
+	if runtime.GOOS == "windows" || os.Getuid() == 0 {
+		t.Skip("the file stays readable: Windows or root")
+	}
+	p := filepath.Join(m.currentWorktree, name)
+	if err := os.Chmod(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(p, 0o644) })
+}
+
+// A working file that is there but cannot be read is not a file that is
+// gone: the split's failed read marks no ✗ (the store's check says present).
+func TestSplitUnreadableFileIsNotMarkedMissing(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	ov := m.splitLayer().left.doc()
+	unreadable(t, m, "c.txt")
+	m = pressDrain(t, m, "down")
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 2 || ov.ov.anchors[2].missing || docsMissing(t, m, ov, 2) {
+		t.Fatalf("sel %d missing %v: an unreadable file is still there", ov.ov.sel, ov.ov.anchors[2].missing)
+	}
+}
+
+// The same in the stack: a read failing for any reason but "not there"
+// marks nothing.
+func TestStackUnreadableFileIsNotMarkedMissing(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, " See [c](c.txt:1).", "c.txt")
+	sv := m.splitLayer()
+	ov := sv.left.doc()
+	unreadable(t, m, "c.txt")
+	m = pressDrain(t, m, "S")
+	sp, ok := sv.right.(*stackPane)
+	if !ok {
+		t.Fatalf("right %T, want the stack", sv.right)
+	}
+	if f := sp.stream.files[sp.fileIndex("c.txt")]; f.err == nil {
+		t.Fatal("the read must fail: the test needs an unreadable file")
+	}
+	if ov.ov.anchors[2].missing || docsMissing(t, m, ov, 2) {
+		t.Fatal("an unreadable file is still there: no ✗")
 	}
 }
