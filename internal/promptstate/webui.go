@@ -21,6 +21,10 @@ type WebUI struct {
 	// StackedDiff is gg web's stacked diff view: every file of the open change
 	// set in one scroll (header + diff per file) instead of one file at a time.
 	StackedDiff bool `toml:"stacked_diff,omitempty"`
+	// StackedReviewFiles is gg web's overview split with the stacked file
+	// column (S): every file in one scroll instead of one at a time. The
+	// TUI keeps its own (tui_stacked_review_files).
+	StackedReviewFiles bool `toml:"stacked_review_files,omitempty"`
 	// CommitTall is gg web's commit message box size: the ⤢ control swaps the
 	// everyday three lines for a tall box, and the choice is remembered here
 	// (a random port makes browser storage useless).

@@ -40,10 +40,13 @@ type uiStateWire struct {
 	SymCompare bool `json:"sym_compare"`
 	// StackedDiff is the stacked (all files, one scroll) diff view: on or off
 	// (stackview.js).
-	StackedDiff  bool   `json:"stacked_diff"`
-	SidebarWidth int    `json:"sidebar_width"`
-	FilesWidth   int    `json:"files_width"`
-	Graph        string `json:"graph"`
+	StackedDiff bool `json:"stacked_diff"`
+	// StackedReviewFiles is the overview split's stacked file column (S):
+	// on or off (viewer.js).
+	StackedReviewFiles bool   `json:"stacked_review_files"`
+	SidebarWidth       int    `json:"sidebar_width"`
+	FilesWidth         int    `json:"files_width"`
+	Graph              string `json:"graph"`
 	// DiffView is the diff pane's view mode: "changed" (changed lines only,
 	// the TUI's f) or "full" (the default).
 	DiffView string `json:"diff_view"`
@@ -79,20 +82,21 @@ func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 	}
 	st, saved := store.WebUIState()
 	writeJSON(w, uiStateWire{
-		Saved:         saved,
-		Sections:      st.Sections,
-		SidebarHidden: st.SidebarHidden,
-		FilesHidden:   st.FilesHidden,
-		SymCompare:    st.SymCompare,
-		StackedDiff:   st.StackedDiff,
-		CommitTall:    st.CommitTall,
-		RepoGrouped:   st.RepoGrouped,
-		SidebarWidth:  st.SidebarWidth,
-		FilesWidth:    st.FilesWidth,
-		Graph:         st.Graph,
-		Sorts:         allowedSorts(st.Sorts), // re-resolved: the file is editable by hand
-		DiffView:      allowedDiffView(st.DiffView),
-		TextMode:      allowedTextMode(st.TextMode),
+		Saved:              saved,
+		Sections:           st.Sections,
+		SidebarHidden:      st.SidebarHidden,
+		FilesHidden:        st.FilesHidden,
+		SymCompare:         st.SymCompare,
+		StackedDiff:        st.StackedDiff,
+		StackedReviewFiles: st.StackedReviewFiles,
+		CommitTall:         st.CommitTall,
+		RepoGrouped:        st.RepoGrouped,
+		SidebarWidth:       st.SidebarWidth,
+		FilesWidth:         st.FilesWidth,
+		Graph:              st.Graph,
+		Sorts:              allowedSorts(st.Sorts), // re-resolved: the file is editable by hand
+		DiffView:           allowedDiffView(st.DiffView),
+		TextMode:           allowedTextMode(st.TextMode),
 	})
 }
 
@@ -108,19 +112,20 @@ func (s *Server) handleUIStateSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := store.SetWebUIState(promptstate.WebUI{
-		Sections:      allowedSections(in.Sections),
-		SidebarHidden: in.SidebarHidden,
-		FilesHidden:   in.FilesHidden,
-		SymCompare:    in.SymCompare,
-		StackedDiff:   in.StackedDiff,
-		CommitTall:    in.CommitTall,
-		RepoGrouped:   in.RepoGrouped,
-		SidebarWidth:  clampPaneWidth(in.SidebarWidth),
-		FilesWidth:    clampPaneWidth(in.FilesWidth),
-		Graph:         allowedGraph(in.Graph),
-		Sorts:         allowedSorts(in.Sorts),
-		DiffView:      allowedDiffView(in.DiffView),
-		TextMode:      allowedTextMode(in.TextMode),
+		Sections:           allowedSections(in.Sections),
+		SidebarHidden:      in.SidebarHidden,
+		FilesHidden:        in.FilesHidden,
+		SymCompare:         in.SymCompare,
+		StackedDiff:        in.StackedDiff,
+		StackedReviewFiles: in.StackedReviewFiles,
+		CommitTall:         in.CommitTall,
+		RepoGrouped:        in.RepoGrouped,
+		SidebarWidth:       clampPaneWidth(in.SidebarWidth),
+		FilesWidth:         clampPaneWidth(in.FilesWidth),
+		Graph:              allowedGraph(in.Graph),
+		Sorts:              allowedSorts(in.Sorts),
+		DiffView:           allowedDiffView(in.DiffView),
+		TextMode:           allowedTextMode(in.TextMode),
 	}); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
