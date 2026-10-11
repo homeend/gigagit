@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: the overview split shows the file or its review diff
+
+### Added
+- In an overview's split, **D** (or the **file | diff** switch in the right
+  column's title) flips the file a link opened to the change the review made
+  to it — the review's stored range (a PR: merge base → head), a commit's own
+  change, or HEAD → the working tree for a working review or an agent's
+  overview — drawn as one column with the whole file, deleted lines red with
+  −, added green with +, the link's lines banded and the review's remarks
+  under their lines (one on a deleted line too). The choice holds while you
+  step the overview's links until D again or esc; **f** shows the changed
+  lines only. The narrow one-document viewer flips the same way.
+- Two links in a row that open identical files say `same content as <path>`.
+
 ## Character selection: the last minors
 
 ### Changed
