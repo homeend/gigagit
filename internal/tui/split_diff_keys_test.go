@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // Spec §6 (D3): with the diff showing, every link stepped to opens as a
@@ -411,7 +413,8 @@ func TestRowNotesArePlacedOnceAndFollowChanges(t *testing.T) {
 
 // v in the split's diff view selects the diff's rows, not the file's: a
 // deleted row and the context under it copy as their plain text (no +/-
-// marker), and the line cursor follows the character cursor.
+// marker, and not the remark box "why drop l5?" drawn between them), and
+// the line cursor follows the character cursor.
 func TestSplitDiffCharSelCopiesTheRowsText(t *testing.T) {
 	t.Parallel()
 	m, sv := diffSplitModel(t)
@@ -446,6 +449,9 @@ func TestSplitDiffCharSelIsModal(t *testing.T) {
 	m, sv := diffSplitModel(t)
 	m = pressDrain(t, m, "D")
 	d := sv.right.doc()
+	if d.diff == nil {
+		t.Fatal("D shows the diff")
+	}
 	m = pressDrain(t, m, "v")
 	m = pressDrain(t, m, "D")
 	if d.diff == nil || !d.diff.p.cs.on {
@@ -468,14 +474,79 @@ func TestSplitDiffCharSelEndsOnAClickOnTheOverview(t *testing.T) {
 	m, sv := diffSplitModel(t)
 	m = pressDrain(t, m, "D")
 	d := sv.right.doc()
+	if d.diff == nil {
+		t.Fatal("D shows the diff")
+	}
 	m = pressDrain(t, m, "v")
 	if !d.diff.p.cs.on {
 		t.Fatal("v enters the diff's mode")
 	}
-	u, cmd := m.Update(mouseMsg(5, 5, tea.MouseButtonLeft))
+	x, y := -1, -1 // on the overview's plain word "Look": a click there follows no link
+	for row, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+		if i := strings.Index(l, "Look at"); i >= 0 {
+			x, y = len([]rune(l[:i])), row
+			break
+		}
+	}
+	if x < 0 {
+		t.Fatal("the overview's text is not on screen")
+	}
+	u, cmd := m.Update(mouseMsg(x, y, tea.MouseButtonLeft))
 	m = drainCmds(t, u.(Model), cmd)
 	if !sv.onLeft || d.diff.p.cs.on {
 		t.Fatalf("onLeft %v diff mode %v: the click moves the keys and ends the mode", sv.onLeft, d.diff.p.cs.on)
 	}
 	_ = m
+}
+
+// The diff reloaded while v runs in the cut view (which scrolls while the
+// mode is on): the new diff keeps the reader's cut view, not the mode's
+// scroll, and the status says why the mode ended.
+func TestSplitDiffReloadInTheModeKeepsTheCutView(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	m = pressDrain(t, m, "D")
+	d := sv.right.doc()
+	if d.diff == nil {
+		t.Fatal("D shows the diff")
+	}
+	d.diff.p.mode = modeCutoff
+	m = pressDrain(t, m, "v")
+	if !d.diff.p.cs.on || d.diff.p.mode != modeScroll {
+		t.Fatalf("on %v mode %v: v in the cut view scrolls while on", d.diff.p.cs.on, d.diff.p.mode)
+	}
+	m = m.diffLanded(reviewDiffMsg{tag: d.tag, seq: d.diffSeq, agent: d.diff.agent, res: d.diff.res})
+	if d.diff.p.cs.on || d.diff.p.mode != modeCutoff {
+		t.Fatalf("on %v mode %v: the reload ends the mode and keeps the cut view", d.diff.p.cs.on, d.diff.p.mode)
+	}
+	if want := i18n.T("▸ the text reloaded: copy mode ended"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q", m.statusMsg, want)
+	}
+}
+
+// v in the diff the narrow viewer shows selects the diff's rows too.
+func TestNarrowViewersDiffCharSelCopiesTheRowsText(t *testing.T) {
+	t.Parallel()
+	m, _ := diffSplitModel(t)
+	u, cmd := m.Update(tea.WindowSizeMsg{Width: 58, Height: 12})
+	m = drainCmds(t, u.(Model), cmd)
+	m = pressDrain(t, m, "enter")
+	m = pressDrain(t, m, "D")
+	d := topDoc(m)
+	if d == nil || d.diff == nil {
+		t.Fatal("the narrow viewer shows the diff")
+	}
+	d.diff.p.cur = rowOfOld(d.diff.rows, 5) // "l5", deleted
+	var got string
+	m = captureClip(m, &got)
+	m = pressDrain(t, m, "v")
+	if !d.diff.p.cs.on || d.p.cs.on {
+		t.Fatalf("diff mode %v, file mode %v: v enters the diff's own", d.diff.p.cs.on, d.p.cs.on)
+	}
+	for _, k := range []string{"space", "j", "end", "enter"} {
+		m = pressDrain(t, m, k)
+	}
+	if got != "l5\nl6" || d.diff.p.cs.on {
+		t.Fatalf("copied %q (on %v), want the rows' plain text and the mode left", got, d.diff.p.cs.on)
+	}
 }
