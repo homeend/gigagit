@@ -21,8 +21,8 @@ diff: big.txt  @ PR #7 · Change line 5                                         
  10 line 10                    ║                        ║                                              ║                        ║
                                ║  Body: review text (Cla║  > comment                                   ║                        ║
                                ║                        ║    approve                                   ║                        ║
-                               ║  [space] tick  [a] all/║    request-changes                           ║body  [c] code          ║
-                               ║  [ctrl+s] send  [ctrl+t║    abort                                     ║                        ║
+                               ║  [space] tick  [a] all/║    request-changes                           ║] body  [e] edit body   ║
+                               ║  [c] code  [ctrl+s] sen║    abort                                     ║                        ║
                                ║                        ║                                              ║                        ║
                                ╚════════════════════════║  [↑/↓] choose  [enter] confirm  [esc] abort  ║════════════════════════╝
                                                         ║                                              ║

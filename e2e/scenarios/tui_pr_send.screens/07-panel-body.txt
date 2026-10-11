@@ -21,8 +21,8 @@ diff: big.txt  @ PR #7 · Change line 5                                         
  10 line 10                    ║                                                                                                ║
                                ║  Body: review text (Claude Code · 00:00)   [b] change  [e] edit                                ║
                                ║                                                                                                ║
-                               ║  [space] tick  [a] all/none in group  [enter] open  [b] body  [e] edit body  [c] code          ║
-                               ║  [ctrl+s] send  [ctrl+t] fullscreen  [esc] close                                               ║
+                               ║  [space] tick  [a] all/none in group  [enter] open  [→/←] show/hide  [b] body  [e] edit body   ║
+                               ║  [c] code  [ctrl+s] send  [ctrl+t] fullscreen  [esc] close                                     ║
                                ║                                                                                                ║
                                ╚════════════════════════════════════════════════════════════════════════════════════════════════╝
 

@@ -659,8 +659,9 @@ request's Reviews block); on a GitHub thread *Reply to note*, *Reply & send…*,
 GitHub…** — the PR diff's `.` row and the PR hub's `s` — the send panel:
 every unsent comment of the pull request by group (each AI review's
 remarks, *My notes*, *Draft replies*), nothing ticked on open; `space`
-ticks, `▸` on a row (or `c` for all) opens its whole summary, rationale and
-code, `a` ticks a group, `b` picks the body (none, a ticked review's text,
+ticks, `→` (or the web page's `▸`) shows a row whole — its summary, rationale
+and code — and `←` hides it again or climbs to the group (`c` on the web page:
+every row), `a` ticks a group, `b` picks the body (none, a ticked review's text,
 or typed — `e` edits it), `enter` opens a row's file, `ctrl+s` sends one
 GitHub review through the same confirm, which lists exactly what will be
 posted and offers comment, approve or request changes; draft replies go

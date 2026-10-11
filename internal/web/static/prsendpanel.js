@@ -118,6 +118,19 @@ function move(d) {
   render();
 }
 
+// fold is → (show) and ← (hide): a shown row wraps whole above its
+// rationale and code. ← on a hidden row climbs to its group's header, a
+// tree's left; a header does nothing (the TUI's fold, key for key).
+function fold(show) {
+  const rs = rows(), r = rs[panel.sel];
+  if (!r || r.kind !== "row") return;
+  panel.notice = "";
+  if (show) panel.open.add(r.id);
+  else if (panel.open.has(r.id)) panel.open.delete(r.id);
+  else while (panel.sel > 0 && rs[panel.sel].kind !== "group") panel.sel--;
+  render();
+}
+
 function tick(r) {
   const k = keptFor(panel.pr);
   if (r.kind === "group") k.ticked = tickAllInGroup(panel.cands, k.ticked, r.id);
@@ -229,6 +242,8 @@ function onKey(e) {
     case "PageUp": move(-10); break;
     case "Home": panel.sel = 0; render(); break;
     case "End": panel.sel = rs.length - 1; render(); break;
+    case "ArrowRight": fold(true); break;
+    case "ArrowLeft": fold(false); break;
     case " ": if (r) tick(r); break;
     case "a": if (r) { k.ticked = tickAllInGroup(panel.cands, k.ticked, r.kind === "group" ? r.id : r.group); render(); } break;
     case "b": cycleBody(); break;

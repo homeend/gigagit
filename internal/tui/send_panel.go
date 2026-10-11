@@ -38,10 +38,11 @@ type sendPanel struct {
 	body     int
 	bodyFrom string
 	typed    string
-	code     bool   // c: the code excerpt under the current row
-	gen      int    // m.forgeGen when opened: a repository switch makes the panel stale
-	notice   string // the bottom bar: a refused tick, "tick something to send"
-	planning bool   // ctrl+s went out and its plan has not come back: a second ctrl+s waits
+	code     bool            // c: the code excerpt under the current row
+	open     map[string]bool // → / ←: rows shown whole — the summary wrapped, the rationale, the code
+	gen      int             // m.forgeGen when opened: a repository switch makes the panel stale
+	notice   string          // the bottom bar: a refused tick, "tick something to send"
+	planning bool            // ctrl+s went out and its plan has not come back: a second ctrl+s waits
 }
 
 const (
@@ -88,7 +89,7 @@ func (m Model) handleSendPanel(msg sendPanelMsg) (Model, tea.Cmd) {
 	if old := layerOf[*sendPanel](m); old != nil {
 		m = m.removeLayer(old)
 	}
-	p := &sendPanel{pr: msg.pr, cands: msg.cands, ticked: map[string]bool{}, code: true, gen: m.forgeGen}
+	p := &sendPanel{pr: msg.pr, cands: msg.cands, ticked: map[string]bool{}, open: map[string]bool{}, code: true, gen: m.forgeGen}
 	sortPanelGroups(p.cands.Groups)
 	for g := range p.cands.Groups {
 		p.rows = append(p.rows, panelRow{group: g, cand: -1})
@@ -254,6 +255,30 @@ func (p *sendPanel) move(d int) {
 	p.notice = ""
 }
 
+// fold is → (open) and ← (close): an opened row shows whole — its summary
+// wrapped, the rationale and the code under it. ← on a closed row climbs to
+// its group's header, a tree's left; a header does nothing.
+func (p *sendPanel) fold(open bool) {
+	_, c, ok := p.candAt(p.sel)
+	if !ok || c == nil {
+		return
+	}
+	p.notice = ""
+	switch {
+	case open:
+		p.open[c.ID] = true
+	case p.open[c.ID]:
+		delete(p.open, c.ID)
+	default:
+		for i := p.sel; i >= 0; i-- {
+			if p.rows[i].cand < 0 {
+				p.sel = i
+				return
+			}
+		}
+	}
+}
+
 // tick is space: the row under the cursor (a skip row says why instead; a
 // header ticks its group).
 func (p *sendPanel) tick() {
@@ -355,6 +380,12 @@ func (p *sendPanel) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyDown:
 		p.move(1)
+		return m, nil
+	case tea.KeyRight:
+		p.fold(true)
+		return m, nil
+	case tea.KeyLeft:
+		p.fold(false)
 		return m, nil
 	case tea.KeyPgUp:
 		p.move(-10)
@@ -499,7 +530,9 @@ func (b *sendPanelBody) render(m Model, below string) string {
 }
 
 // render: title + count, the groups in their colour, the rows, the code
-// excerpt under the current row, the Body row, the key hints.
+// excerpt under the current row, the Body row, the key hints. The list
+// wraps only an opened row (→) and its rationale, hung at panelHang under
+// the code's indent; every other row is cut to one line.
 func (p *sendPanel) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
@@ -522,7 +555,7 @@ func (p *sendPanel) box(m Model) string {
 			anchor = len(rows)
 		}
 		if r.cand < 0 {
-			row := winRow{text: prefix + "▌ " + panelGroupTitle(g)}
+			row := winRow{text: prefix + "▌ " + panelGroupTitle(g), noWrap: true}
 			if style, ok := groupBarStyle(g.Slot); ok {
 				row.style = style.Bold(true)
 			} else {
@@ -535,24 +568,32 @@ func (p *sendPanel) box(m Model) string {
 			continue
 		}
 		c := g.Rows[r.cand]
-		row := winRow{text: prefix + panelRowText(c, p.ticked[c.ID]), elide: true, elideHead: len([]rune(prefix)) + 10}
+		open := p.open[c.ID]
+		row := winRow{text: prefix + panelRowText(c, p.ticked[c.ID]), elide: true, elideHead: len([]rune(prefix)) + 10, noWrap: !open, hang: panelHang}
 		if i == p.sel {
 			row.style = st().selectedRow
 		} else if c.Skip != "" {
 			row.style = st().dim
 		}
 		rows = append(rows, row)
-		if i == p.sel && p.code && c.Skip == "" {
+		indent := strings.Repeat(" ", panelHang)
+		if open && strings.TrimSpace(c.Rationale) != "" {
+			for _, l := range strings.Split(strings.TrimSpace(c.Rationale), "\n") {
+				rows = append(rows, winRow{text: indent + sanitizeLine(l), style: st().dim, hang: panelHang})
+			}
+		}
+		if open || (i == p.sel && p.code && c.Skip == "") {
 			for _, l := range c.Code {
-				rows = append(rows, winRow{text: "          " + sanitizeLine(l), style: st().dim, noWrap: true})
+				rows = append(rows, winRow{text: indent + sanitizeLine(l), style: st().dim, noWrap: true})
 			}
 		}
 	}
-	listH := max(3, min(len(rows), h-12)) // as tall as the list, never past the frame
-	lines := renderWindow(rows, winOpts{w: textW, h: listH, anchor: anchor})
+	opts := winOpts{w: textW, mode: modeWrap, anchor: anchor}
+	opts.h = max(3, wrapContentLines(rows, opts, h-12)) // as tall as the list, never past the frame
+	lines := renderWindow(rows, opts)
 	body := i18n.T("Body: %s", p.bodyLabel()) + "   " + i18n.T("[b] change") + "  " + i18n.T("[e] edit")
 	hints := packHints([]string{
-		i18n.T("[space] tick"), i18n.T("[a] all/none in group"), i18n.T("[enter] open"), i18n.T("[b] body"),
+		i18n.T("[space] tick"), i18n.T("[a] all/none in group"), i18n.T("[enter] open"), i18n.T("[→/←] show/hide"), i18n.T("[b] body"),
 		i18n.T("[e] edit body"), i18n.T("[c] code"), i18n.T("[ctrl+s] send"), i18n.T("[ctrl+t] fullscreen"), i18n.T("[esc] close"),
 	}, textW)
 	parts := []string{head, ""}
@@ -564,6 +605,10 @@ func (p *sendPanel) box(m Model) string {
 	parts = append(parts, "", hints)
 	return popupBox(innerW, strings.Join(parts, "\n"))
 }
+
+// panelHang is the column an opened row's wrapped summary, its rationale
+// and the code excerpt start at.
+const panelHang = 10
 
 // panelGroupTitle: "Review (AI) · <agent> · <title> · <date>" (the title
 // only when the review has one), "My notes", "Draft replies".
