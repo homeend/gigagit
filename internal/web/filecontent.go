@@ -117,6 +117,7 @@ type noteRow struct {
 	Outdated  bool   `json:"outdated,omitempty"`
 	Ref       string `json:"ref"`
 	ReadOnly  bool   `json:"readonly,omitempty"` // a review's remark: no dismiss, no reference
+	Side      string `json:"side,omitempty"`     // "old": a remark on a line the review deleted (the diff lays it there)
 }
 
 // notesFor aligns path's notes to data, the working-tree bytes just read,
@@ -147,12 +148,7 @@ func remarksFor(ctx context.Context, svc *domain.Service, id, path string, data 
 	if err != nil || len(ns) == 0 {
 		return nil
 	}
-	out := make([]noteRow, len(ns))
-	for i, n := range ns {
-		out[i] = noteRow{ID: n.Note.ID, Start: n.Range[0], End: max(n.Range[1], n.Range[0]), Summary: n.Note.Summary,
-			Rationale: n.Note.Rationale, Author: n.Note.Author, ReadOnly: true}
-	}
-	return out
+	return remarkRows(ns)
 }
 
 // diskStamp names a stat for the page to compare: "<size>:<mtime ns>",

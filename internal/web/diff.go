@@ -163,6 +163,10 @@ func diffHunkTags(rows []textdiff.Row) (tags hunkRowTags, count int) {
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	q := r.URL.Query()
+	if id := q.Get("review"); id != "" { // a review's change to one file (the overview split's diff)
+		s.handleReviewDiff(w, r, id)
+		return
+	}
 	if wt := q.Get("wt"); wt != "" {
 		s.handleWorktreeDiff(w, r, wt)
 		return
