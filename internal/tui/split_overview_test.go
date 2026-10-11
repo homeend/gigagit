@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // A review of stackRepoModel's tip (a.go, b.go, c.go each gain a func on
@@ -289,6 +291,9 @@ func TestOverviewSplitDownPagesPastTheLastAnchor(t *testing.T) {
 		if now := ov.p.clampTop(ov.p.sel, rows); now <= top {
 			t.Fatalf("page %d: ↓ did not scroll (top %d → %d)", pages, top, now)
 		}
+		if want := i18n.T("anchor %d/%d · %s", 2, 2, "B"); m.statusMsg != want {
+			t.Fatalf("page %d: status %q, want %q: paging keeps the anchor hint", pages, m.statusMsg, want)
+		}
 		pages++
 	}
 	if pages < 2 {
@@ -373,5 +378,30 @@ func TestOverviewSplitDownFromAScrolledAwayLastAnchorWraps(t *testing.T) {
 	m = pressDrain(t, m, "down")
 	if ov.ov.sel != 0 {
 		t.Fatalf("↓ paged from a window without the anchor: sel %d top %d", ov.ov.sel, ov.p.sel)
+	}
+}
+
+// Paging from a last anchor no steer reaches (a note that is gone) names no
+// anchor: the steer that selected it said the note is gone, and paging never
+// relabels it as a place.
+func TestOverviewSplitPagingFromAGoneNoteNamesNoAnchor(t *testing.T) {
+	t.Parallel()
+	m := agentOverviewModelOf(t, 120, longTail(80)+"\n\nTHE END")
+	sv := m.splitLayer()
+	ov := sv.left.doc()
+	b := m.openFiles.find(m.currentWorktree, docKey(fileSource{kind: srcWorktree}, "b.txt"))
+	b.removeNote(b.notes[0].ID)
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 1 || !ov.ov.anchors[1].missing {
+		t.Fatalf("sel %d missing %v: ↓ selects the gone note", ov.ov.sel, ov.ov.anchors[1].missing)
+	}
+	rows, _ := sv.geomOf(m, sv.left)
+	top := ov.p.clampTop(ov.p.sel, rows)
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 1 || ov.p.clampTop(ov.p.sel, rows) <= top {
+		t.Fatalf("↓ must page from the gone note: sel %d top %d → %d", ov.ov.sel, top, ov.p.clampTop(ov.p.sel, rows))
+	}
+	if strings.HasPrefix(m.statusMsg, "anchor ") {
+		t.Fatalf("status %q names a gone note as a place", m.statusMsg)
 	}
 }
