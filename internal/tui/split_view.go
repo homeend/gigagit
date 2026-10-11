@@ -75,6 +75,40 @@ func (sv *splitView) focused() pane {
 	return sv.right
 }
 
+// focus puts the keyboard on the left side (or the right): the one way a
+// split's focus moves. The side without it leaves its character selection —
+// the mode lives only where the keys go.
+func (sv *splitView) focus(left bool) {
+	sv.onLeft = left
+	other := sv.right
+	if !left {
+		other = sv.left
+	}
+	if d := other.doc(); d != nil && d.p.cs.on {
+		d.p.previewCharLeave()
+	}
+}
+
+// leaveChars ends both panes' character selections: the split is going.
+func (sv *splitView) leaveChars() {
+	for _, p := range []pane{sv.left, sv.right} {
+		if d := p.doc(); d != nil && d.p.cs.on {
+			d.p.previewCharLeave()
+		}
+	}
+}
+
+// retire leaves sv's panes as a split taken off the stack without its close
+// leaves them: their documents in the background, neither in the copy mode.
+func (sv *splitView) retire() {
+	for _, p := range []pane{sv.left, sv.right} {
+		if d := p.doc(); d != nil {
+			d.backgrounded = true
+		}
+	}
+	sv.leaveChars()
+}
+
 // geomOf is pane p's content size in this split.
 func (sv *splitView) geomOf(m Model, p pane) (rows, innerW int) {
 	lw, rw, bh := m.splitGeom()
@@ -121,16 +155,16 @@ func (sv *splitView) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "tab", "shift+tab":
-		sv.onLeft = !sv.onLeft
+		sv.focus(!sv.onLeft)
 		return m, nil
 	case "alt+left":
-		sv.onLeft = true
+		sv.focus(true)
 		return m, nil
 	case "alt+right":
-		sv.onLeft = false
+		sv.focus(false)
 		return m, nil
 	case "backspace":
-		sv.onLeft = true
+		sv.focus(true)
 		return m, nil
 	case "esc":
 		return m.closeSplit(sv), nil
@@ -152,6 +186,7 @@ func (sv *splitView) updateKey(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // closeSplit pops sv and runs its onClose: esc, and every other way the
 // split is left on purpose (X on the overview, backgrounding the overview).
 func (m Model) closeSplit(sv *splitView) Model {
+	sv.leaveChars()
 	m = m.removeLayer(sv)
 	if sv.onClose != nil {
 		m = sv.onClose(m)
@@ -173,11 +208,7 @@ func (m Model) dropSplits() Model {
 		if !ok || m.reviewOf(sv.left.doc()) == nil {
 			continue
 		}
-		for _, p := range []pane{sv.left, sv.right} {
-			if d := p.doc(); d != nil {
-				d.backgrounded = true
-			}
-		}
+		sv.retire()
 		m = m.removeLayer(sv)
 	}
 	return m
@@ -214,7 +245,9 @@ func (sv *splitView) render(m Model, _ string) string {
 	// The way between the sides and the exit lead: the hint is cut at the
 	// screen's width, and the pane's own keys teach themselves by doing.
 	hint := i18n.T("[tab] other side  [bksp] left side  [esc] close")
-	if h := sv.focused().hint(m); h != "" {
+	if h, on := paneCharHint(sv.focused().doc()); on {
+		hint = h // the mode is modal: the split's keys wait
+	} else if h := sv.focused().hint(m); h != "" {
 		hint += "  " + h
 	}
 	if m.statusMsg != "" && !m.running && m.statusMsg != m.stickyMsg {
@@ -272,7 +305,8 @@ func (m Model) docRows(d *openFile) int {
 // pointer without moving the focus; a left click focuses that side, then
 // selects (and steers) an anchor of an overview or puts a file's cursor on
 // the row clicked; a right click opens the . menu of the side it lands on;
-// a middle click is esc (it closes the split, as on every reader).
+// a middle click is esc (it closes the split, as on every reader — or, in
+// the copy mode, backs out of the mode).
 func (m Model) splitMouse(sv *splitView, msg tea.MouseMsg, wheel int) (Model, tea.Cmd) {
 	nm, cmd := m.splitMousePress(sv, msg, wheel)
 	if nm.splitLayer() == sv {
@@ -295,9 +329,12 @@ func (m Model) splitMousePress(sv *splitView, msg tea.MouseMsg, wheel int) (Mode
 		}
 		return m, nil
 	}
+	if d != nil && d.p.cs.on && side == sv.focused() && msg.Button == tea.MouseButtonLeft {
+		return m, nil // the mode is modal: a click never moves its cursor
+	}
 	switch msg.Button {
 	case tea.MouseButtonLeft:
-		sv.onLeft = side == sv.left
+		sv.focus(side == sv.left)
 		if d == nil {
 			return m, nil
 		}
@@ -312,7 +349,7 @@ func (m Model) splitMousePress(sv *splitView, msg tea.MouseMsg, wheel int) (Mode
 		}
 		return m, nil
 	case tea.MouseButtonRight:
-		sv.onLeft = side == sv.left
+		sv.focus(side == sv.left)
 		return sv.update(m, synthKey("."))
 	case tea.MouseButtonMiddle:
 		return sv.update(m, synthKey("esc"))

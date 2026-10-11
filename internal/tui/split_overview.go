@@ -23,6 +23,9 @@ type overviewPane struct {
 }
 
 func (p *overviewPane) hint(Model) string {
+	if h, on := paneCharHint(p.d); on {
+		return h
+	}
 	if p.d != nil && p.d.src.kind == srcOverview { // an agent's: r copies a reference to the anchor
 		return i18n.T("[↑↓] anchor  [enter] open  [r] reference  [/] find  [y] copy  [.] menu")
 	}
@@ -34,8 +37,12 @@ func (p *overviewPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if d == nil || d.ov == nil {
 		return p.docPane.update(m, msg)
 	}
-	// A line selection and a search come first, as in the viewer: enter on
-	// a marked range copies it, a typed search takes every key.
+	// The character selection, a line selection and a search come first, as
+	// in the viewer: the mode takes every key (up/down move its cursor, never
+	// steer), enter on a marked range copies it, a typed search takes every key.
+	if nm, cmd, ok := m.previewCharKey(msg); ok {
+		return nm, cmd
+	}
 	if nm, cmd, ok := m.previewSelectKey(msg); ok {
 		return nm, cmd
 	}
@@ -45,14 +52,20 @@ func (p *overviewPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	_, rows, _, _ := m.activePreview()
 	switch msg.String() {
 	case "down", "j":
+		if d.pageAtEnd(1, rows) { // text below the last anchor is read before the wrap
+			return m, nil
+		}
 		d.stepAnchor(1, rows)
 		return m.steerSplit(p.sv)
 	case "up", "k":
+		if d.pageAtEnd(-1, rows) {
+			return m, nil
+		}
 		d.stepAnchor(-1, rows)
 		return m.steerSplit(p.sv)
 	case "enter":
 		nm, cmd := m.steerSplit(p.sv)
-		p.sv.onLeft = false
+		p.sv.focus(false)
 		return nm, cmd
 	case "y":
 		return m, m.copyToClipboardCmd(i18n.T("copied"), d.ov.text)
@@ -273,7 +286,7 @@ func (m Model) showOverview(d *openFile) (Model, tea.Cmd) {
 func (m Model) openOverviewSplit(ov *openFile) (Model, tea.Cmd) {
 	if sv := m.splitShowing(ov); sv != nil && sv.left.doc() == ov {
 		m = m.removeLayer(sv)
-		sv.onLeft = true
+		sv.focus(true)
 		m = m.pushLayer(sv)
 		if sv.right.doc() == nil { // its file was taken out (ctrl+\ on it): show the anchor again
 			return m.steerSplit(sv)

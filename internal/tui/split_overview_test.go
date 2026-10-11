@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -12,7 +14,18 @@ import (
 // plain (zzz.go) and one note: anchor — opened as the split.
 func reviewSplitModel(t *testing.T) (Model, *splitView) {
 	t.Helper()
-	doc := `{"version":1,"summary":"## Summary\nfine","overview":"Start at [A](a.go:3), then [B](b.go:3), [gone](zzz.go:1), [a note](note:t1), last [A again](a.go:1-3).","files":[{"path":"a.go","annotations":[{"newRange":[3,3],"summary":"A"}]},{"path":"b.go","annotations":[{"newRange":[3,3],"summary":"B"}]}]}`
+	return reviewSplitModelOf(t, "Start at [A](a.go:3), then [B](b.go:3), [gone](zzz.go:1), [a note](note:t1), last [A again](a.go:1-3).")
+}
+
+// reviewSplitModelOf is reviewSplitModel over a review whose overview is
+// text.
+func reviewSplitModelOf(t *testing.T, text string) (Model, *splitView) {
+	t.Helper()
+	ov, err := json.Marshal(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := `{"version":1,"summary":"## Summary\nfine","overview":` + string(ov) + `,"files":[{"path":"a.go","annotations":[{"newRange":[3,3],"summary":"A"}]},{"path":"b.go","annotations":[{"newRange":[3,3],"summary":"B"}]}]}`
 	m, id := reviewViewModel(t, doc)
 	m, cmd := m.openReview(id, "review")
 	m = drainCmds(t, m, cmd)
@@ -244,5 +257,121 @@ func TestOverviewSplitNPOnTheFilePaneStepOverviewAnchors(t *testing.T) {
 	}
 	if h := sv.right.hint(m); !strings.Contains(h, "[N/P] overview") {
 		t.Fatalf("hint %q: N/P is advertised", h)
+	}
+}
+
+// longTail is n short paragraphs: text taller than a split pane.
+func longTail(n int) string {
+	var b strings.Builder
+	for i := range n {
+		b.WriteString("\n\npara " + strconv.Itoa(i))
+	}
+	return b.String()
+}
+
+// ↓ on the last anchor with text still below it pages down; it wraps to the
+// first anchor only once the end is on screen.
+func TestOverviewSplitDownPagesPastTheLastAnchor(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModelOf(t, "Start at [A](a.go:3), then [B](b.go:3)."+longTail(80)+"\n\nTHE END")
+	ov := sv.left.doc()
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 1 {
+		t.Fatalf("sel %d, want the last anchor", ov.ov.sel)
+	}
+	rows, _ := sv.geomOf(m, sv.left)
+	pages := 0
+	for top := ov.p.clampTop(ov.p.sel, rows); ov.p.clampTop(top+1, rows) > top; top = ov.p.clampTop(ov.p.sel, rows) {
+		m = pressDrain(t, m, "down")
+		if ov.ov.sel != 1 {
+			t.Fatalf("page %d: ↓ wrapped to anchor %d with text below (top %d)", pages, ov.ov.sel, top)
+		}
+		if now := ov.p.clampTop(ov.p.sel, rows); now <= top {
+			t.Fatalf("page %d: ↓ did not scroll (top %d → %d)", pages, top, now)
+		}
+		pages++
+	}
+	if pages < 2 {
+		t.Fatalf("the tail must take pages: %d", pages)
+	}
+	if !strings.Contains(ansi.Strip(m.View()), "THE END") {
+		t.Fatal("the end is not on screen")
+	}
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 0 || ov.p.clampTop(ov.p.sel, rows) != 0 {
+		t.Fatalf("at the end ↓ wraps to the first anchor: sel %d top %d", ov.ov.sel, ov.p.sel)
+	}
+}
+
+// ↑ on the first anchor with text above it pages up before it wraps.
+func TestOverviewSplitUpPagesAboveTheFirstAnchor(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModelOf(t, "THE TOP"+longTail(80)+"\n\nStart at [A](a.go:3), then [B](b.go:3).")
+	ov := sv.left.doc()
+	rows, _ := sv.geomOf(m, sv.left)
+	top := ov.p.clampTop(ov.p.sel, rows)
+	if ov.ov.sel != 0 || top == 0 {
+		t.Fatalf("sel %d top %d: the split opens on the first anchor, below the top", ov.ov.sel, top)
+	}
+	m = pressDrain(t, m, "up")
+	if ov.ov.sel != 0 {
+		t.Fatalf("↑ wrapped to anchor %d with text above", ov.ov.sel)
+	}
+	if now := ov.p.clampTop(ov.p.sel, rows); now >= top {
+		t.Fatalf("↑ did not scroll (top %d → %d)", top, now)
+	}
+	_ = m
+}
+
+// In the wrap view ↓ past the last anchor wraps as soon as the end is on
+// screen, never paging on to a pane holding only the last line.
+func TestOverviewSplitDownWrapsOnceTheEndShowsInTheWrapView(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModelOf(t, "Start at [A](a.go:3), then [B](b.go:3)."+longTail(80)+"\n\nTHE END")
+	ov := sv.left.doc()
+	for range 4 {
+		if ov.p.mode == modeWrap {
+			break
+		}
+		m = pressDrain(t, m, "ctrl+w")
+	}
+	if ov.p.mode != modeWrap {
+		t.Fatalf("mode %v: ctrl+w must reach the wrap view", ov.p.mode)
+	}
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 1 {
+		t.Fatalf("sel %d, want the last anchor", ov.ov.sel)
+	}
+	rows, _ := sv.geomOf(m, sv.left)
+	for range 40 {
+		endShown := ov.p.lastVisible(rows) >= len(ov.p.lines)-1
+		m = pressDrain(t, m, "down")
+		if endShown {
+			if ov.ov.sel != 0 {
+				t.Fatalf("the end was on screen and ↓ paged on (top %d of %d)", ov.p.sel, len(ov.p.lines))
+			}
+			return
+		}
+		if ov.ov.sel != 1 {
+			t.Fatalf("↓ wrapped with text below (top %d of %d)", ov.p.sel, len(ov.p.lines))
+		}
+	}
+	t.Fatal("↓ never reached the end")
+}
+
+// ↓ on the last anchor scrolled out of view (home) walks the anchors as
+// before: the page-through runs only from a window showing the anchor.
+func TestOverviewSplitDownFromAScrolledAwayLastAnchorWraps(t *testing.T) {
+	t.Parallel()
+	m, sv := reviewSplitModelOf(t, "THE TOP"+longTail(80)+"\n\nStart at [A](a.go:3), then [B](b.go:3)."+longTail(80))
+	ov := sv.left.doc()
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 1 {
+		t.Fatalf("sel %d, want the last anchor", ov.ov.sel)
+	}
+	m = pressDrain(t, m, "home")
+	m = pressDrain(t, m, "down")
+	if ov.ov.sel != 0 {
+		t.Fatalf("↓ paged from a window without the anchor: sel %d top %d", ov.ov.sel, ov.p.sel)
 	}
 }

@@ -262,3 +262,77 @@ func TestViewerCharSelOverviewCutViewScrollsWhileOn(t *testing.T) {
 		t.Fatalf("after the copy the view is %v, want cut back", p.mode)
 	}
 }
+
+// An indented row (a code block inside a list item) pans on its display
+// cells, lead included: at the row's end the cursor sits in the column's
+// last cell — not `lead` cells short of it — and home pans back to 0.
+func TestViewerCharSelPansAnIndentedRowToTheLastCell(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("y", 170)
+	m, d := shownOverview(t, "# Tour\n\n- item\n\n  ```\n  "+long+"\n  ```\n")
+	m.width, m.height = 200, 40
+	_ = m.View()
+	p := d.p
+	p.mode = modeScroll
+	rows, _ := m.viewerGeom()
+	d.layOut(rows, d.ov.w)
+	m = feedPreview(m, "v")
+	for i := 0; i < len(p.lines) && !strings.Contains(p.lines[p.cs.cur.row].raw, "yyy"); i++ {
+		m = feedPreview(m, "j")
+	}
+	lead := p.lines[p.cs.cur.row].lead
+	if lead == 0 {
+		t.Fatalf("the code row must hang behind the item's lead: %q", previewTexts(p.lines))
+	}
+	m = feedPreview(m, "end")
+	_, inner := m.viewerGeom()
+	col, _ := readingColumn(inner, m.readingWidth())
+	col = max(col-d.gutterW(), 1)
+	cell := previewDispCol(p.csRows[p.cs.cur.row].text, lead, p.cs.cur.col)
+	if cell != p.hscroll+col-1 {
+		t.Fatalf("cursor cell %d, hscroll %d, column %d: want the last cell %d", cell, p.hscroll, col, p.hscroll+col-1)
+	}
+	m = feedPreview(m, "home")
+	if p.hscroll != 0 {
+		t.Fatalf("home: hscroll %d", p.hscroll)
+	}
+	_ = m
+}
+
+// A row whose hanging lead is as wide as the pane (deep nesting, a narrow
+// window) still shows its cursor at column 0: the pan never snaps back to
+// the left edge when the lead alone fills the column.
+func TestViewerCharSelKeepsTheCursorPastAWideLead(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	b.WriteString("# Tour\n\n")
+	for i := range 8 {
+		b.WriteString(strings.Repeat("  ", i) + "- item\n\n")
+	}
+	ind := strings.Repeat("  ", 8)
+	b.WriteString(ind + "```\n" + ind + strings.Repeat("y", 60) + "\n" + ind + "```\n")
+	m, d := shownOverview(t, b.String())
+	m.width, m.height = 200, 40
+	_ = m.View()
+	p := d.p
+	p.mode = modeScroll
+	rows, _ := m.viewerGeom()
+	d.layOut(rows, 200)
+	m.width = 18 // the pane narrows under the laid-out rows
+	m = feedPreview(m, "v")
+	for i := 0; i < len(p.lines) && !strings.Contains(p.lines[p.cs.cur.row].raw, "yyy"); i++ {
+		m = feedPreview(m, "j")
+	}
+	m = feedPreview(m, "end", "home")
+	lead := p.lines[p.cs.cur.row].lead
+	_, inner := m.viewerGeom()
+	col, _ := readingColumn(inner, m.readingWidth())
+	col = max(col-d.gutterW(), 1)
+	if lead < col {
+		t.Fatalf("lead %d must fill the column %d: %q", lead, col, previewTexts(p.lines))
+	}
+	cell := previewDispCol(p.csRows[p.cs.cur.row].text, lead, p.cs.cur.col)
+	if cell < p.hscroll || cell >= p.hscroll+col {
+		t.Fatalf("cursor cell %d off screen: hscroll %d, column %d", cell, p.hscroll, col)
+	}
+}

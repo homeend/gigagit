@@ -2,6 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -27,6 +28,30 @@ func previewCharText(l contentLine) []rune {
 		}
 	}
 	return out[min(max(l.lead, 0), len(out)):]
+}
+
+// previewCharRows is the mode's rows over p.lines: a placeholder or an image
+// row is dead. In a stack's stream (s non-nil) every row outside file `file`
+// is dead too: the selection stays inside the file it started in (headers,
+// rules and placeholders are no source lines).
+func previewCharRows(p *contentPopup, s *fileStream, file int) []charRow {
+	lo, hi := 0, len(p.lines) // the live span: a stack's file body, one range check per row
+	if s != nil {
+		lo, hi = 0, 0
+		if file >= 0 && file < len(s.files) && s.files[file].shows() {
+			lo = s.files[file].body
+			hi = min(lo+len(s.files[file].lines), len(p.lines))
+		}
+	}
+	rows := make([]charRow, len(p.lines))
+	for i, l := range p.lines {
+		if !l.src || l.cells != nil || i < lo || i >= hi {
+			rows[i] = charRow{dead: true}
+			continue
+		}
+		rows[i] = charRow{text: previewCharText(l), wraps: l.cont, hard: l.cont && l.hard}
+	}
+	return rows
 }
 
 // previewDispCol is the display rune index of column col of a row's text
@@ -86,6 +111,26 @@ func (p *contentPopup) previewCharLeave() {
 	}
 }
 
+// charPan keeps the character cursor inside a scrolled view's text column:
+// the pan runs on the row's display cells, its lead (the hang indent the
+// layout put in front, never selectable) included; a cursor back on the
+// first rune pans the lead into view too.
+func (p *contentPopup) charPan(innerW int) {
+	if p.mode != modeScroll || !p.cs.on {
+		return
+	}
+	row := p.cs.cur.row
+	raw := []rune(p.lines[row].raw)
+	lead := min(max(p.lines[row].lead, 0), len(raw))
+	disp := string(raw[:lead]) + string(p.csRows[row].text)
+	p.hscroll = charPanCells(disp, lead+p.cs.cur.col, p.hscroll, innerW, sanitizeForDisplay)
+	// Column 0 shows the row's lead too, unless the lead alone fills the pane
+	// (deep nesting in a narrow pane): then the pan above stands.
+	if p.cs.cur.col == 0 && p.hscroll <= lead && lipgloss.Width(sanitizeForDisplay(string(raw[:lead]))) < innerW {
+		p.hscroll = 0
+	}
+}
+
 // previewCharKey gives the focused preview's character selection every key
 // while it is on, and v when it is off; it runs BEFORE the line selection and
 // the search hooks. handled == true means the caller must return.
@@ -96,6 +141,7 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	}
 	if p.cs.on && p.previewCharStale() {
 		p.previewCharLeave()
+		return m, nil, true // the key was meant for the mode: it goes with it
 	}
 	p.pageH = rows
 	if !p.cs.on {
@@ -108,14 +154,11 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 				d.layOut(rows, d.ov.w) // an overview lays itself out: re-lay it for the view now
 			}
 		}
-		p.csRows = make([]charRow, len(p.lines))
-		for i, l := range p.lines {
-			if !l.src || l.cells != nil {
-				p.csRows[i] = charRow{dead: true}
-				continue
-			}
-			p.csRows[i] = charRow{text: previewCharText(l), wraps: l.cont, hard: l.cont && l.hard}
+		var stream *fileStream
+		if d := m.previewDoc(p); d != nil {
+			stream = d.stream
 		}
+		p.csRows = previewCharRows(p, stream, stream.fileAtOr(p.cur))
 		if !p.cs.enter(p.csRows, pos{row: p.cur}) {
 			p.previewCharLeave() // the view back
 			m.statusMsg = i18n.T("▸ nothing to select")
@@ -125,6 +168,7 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		p.csLines = p.lines
 		p.cur = p.cs.cur.row
 		p.ensureCursorVisible(rows)
+		p.charPan(innerW) // a view panned right before v shows the cursor at once
 		return m, nil, true
 	}
 	res := charSelKey(&p.cs, p, msg)
@@ -134,20 +178,15 @@ func (m Model) previewCharKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	if p.cs.on {
 		p.cur = p.cs.cur.row // the line cursor (and the pager) follows
 		p.ensureCursorVisible(rows)
-		if p.mode == modeScroll {
-			lead := min(max(p.lines[p.cur].lead, 0), len([]rune(p.lines[p.cur].raw)))
-			text := p.csRows[p.cur].text
-			off := charPanCells(string(text), p.cs.cur.col, max(p.hscroll-lead, 0), max(innerW-lead, 1), sanitizeForDisplay)
-			p.hscroll = off + lead
-			if p.cs.cur.col == 0 && lead > 0 && p.hscroll <= lead {
-				p.hscroll = 0
-			}
-		}
+		p.charPan(innerW)
 	} else {
 		p.previewCharLeave()
 	}
 	if res.notice != "" {
 		m.statusMsg = res.notice
+	}
+	if d := m.previewDoc(p); res.bump && d != nil && d.stream != nil { // a stack: say what stopped it
+		m.statusMsg = i18n.T("▸ the selection stays in this file")
 	}
 	if res.copy != "" {
 		return m, m.copyToClipboardCmd(copiedCharsText(res.count), res.copy), true

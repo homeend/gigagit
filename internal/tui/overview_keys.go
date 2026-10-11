@@ -79,6 +79,36 @@ func (d *openFile) stepAnchor(dir, rows int) {
 	}
 }
 
+// pageAtEnd pages the overview where the anchor walk would wrap: a step
+// down from the last anchor with text still below it scrolls a page down, a
+// step up from the first with text above it a page up — the text past the
+// ends is read before the walk starts over. It reports whether it paged.
+func (d *openFile) pageAtEnd(dir, rows int) bool {
+	as, sel := d.ov.anchors, d.ov.sel
+	if sel < 0 || sel >= len(as) {
+		return false
+	}
+	for i := sel + dir; i >= 0 && i < len(as); i += dir {
+		if len(as[i].spans) > 0 && !as[i].plain {
+			return false // a next anchor short of the end: no wrap
+		}
+	}
+	top, last := d.p.clampTop(d.p.sel, rows), d.p.lastVisible(rows)
+	// Paging reads on past the anchor: from a window at or past it. One the
+	// reader scrolled back over (home, pgup) walks the anchors as before.
+	if len(as[sel].spans) == 0 {
+		return false
+	}
+	if line := as[sel].spans[0].line; (dir > 0 && line > last) || (dir < 0 && line < top) {
+		return false
+	}
+	if (dir > 0 && last >= len(d.p.lines)-1) || (dir < 0 && top == 0) { // the end shows: wrap
+		return false
+	}
+	d.p.scrollBy(dir*rows, rows)
+	return true
+}
+
 // openAnchor opens overview ov's anchor i in the foreground: a file at its
 // line (a range selected), or the file a note sits on at the note. A target
 // that is gone is marked and named in the status line instead.
@@ -223,7 +253,7 @@ func (m Model) overviewClick(fv *fileViewer, x, y int) (Model, tea.Cmd) {
 // the focus to it.
 func (m Model) overviewClickIn(d *openFile, l layer, x, y, rows, margin int) (Model, tea.Cmd) {
 	row, col := y-2, x-2-margin
-	if row < 0 || row >= rows || col < 0 {
+	if row < 0 || row >= rows || col < 0 || d.p.cs.on { // the copy mode is modal: a click waits
 		return m, nil
 	}
 	if d.p.mode == modeScroll {
@@ -253,7 +283,7 @@ func (m Model) overviewClickIn(d *openFile, l layer, x, y, rows, margin int) (Mo
 					d.selectAnchorAt(i, line, rows)
 					nm, cmd := m.steerSplit(sv)
 					if double {
-						sv.onLeft = false
+						sv.focus(false)
 					}
 					return nm, cmd
 				case double:
@@ -323,7 +353,7 @@ func (m Model) splitOverviewRows(sv *splitView, d *openFile) []actionRow {
 	if d.ov.sel >= 0 {
 		rows = append(rows, actionRow{id: "overview-open", key: "enter", label: i18n.T("Open anchor"), run: func(m Model) (tea.Model, tea.Cmd) {
 			nm, cmd := m.steerSplit(sv)
-			sv.onLeft = false
+			sv.focus(false)
 			return nm, cmd
 		}})
 	}

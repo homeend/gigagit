@@ -141,6 +141,11 @@ func (p *stackPane) rebuild(m Model) {
 			selA, selE = where(d.p.lsel.anchor), where(d.p.lsel.end)
 		}
 	}
+	var csA, csC place // the character selection's ends, when its mode is on
+	csOn := d.p.cs.on && !d.p.previewCharStale()
+	if csOn {
+		csA, csC = where(d.p.cs.anchor.row), where(d.p.cs.cur.row)
+	}
 	screenRow := d.p.cur - d.p.sel
 	sel := d.p.lsel
 	d.p.lines = s.build()
@@ -152,6 +157,20 @@ func (p *stackPane) rebuild(m Model) {
 		if okA && (okE || !sel.fixed) {
 			sel.anchor, sel.end = a, e
 			d.p.lsel = sel
+		}
+	}
+	if csOn { // the mode stays on its file's lines (the line selection's rule)
+		a, okA := back(csA)
+		c, okC := back(csC)
+		if okC && !okA && !d.p.cs.fixed {
+			a, okA, csA = c, true, csC
+		}
+		if okA && okC && csA.file == csC.file {
+			d.p.cs.anchor.row, d.p.cs.cur.row = a, c
+			d.p.csRows = previewCharRows(d.p, s, csC.file)
+			d.p.csLines = d.p.lines
+		} else {
+			d.p.previewCharLeave() // its file shows no lines any more
 		}
 	}
 	if d.p.search.active() { // the hits index the old stream
@@ -254,6 +273,9 @@ func (p *stackPane) render(m Model, w, h int, focused bool) string {
 }
 
 func (p *stackPane) hint(Model) string {
+	if h, on := paneCharHint(p.d); on {
+		return h
+	}
 	return i18n.T("[n/p] anchor  [N/P] file  [-] fold  [_] fold all  [S] single  [alt+↑↓] line  [spc] mark  [/] find")
 }
 
@@ -468,6 +490,9 @@ func (p *stackPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		// abandons it, so a late load never yanks the cursor from where the
 		// reader went (the stacked diff's hunt rule).
 		p.park, p.want.set = -1, false
+	}
+	if nm, cmd, ok := m.previewCharKey(msg); ok { // modal: n/p, -, S and the rest wait
+		return nm, cmd
 	}
 	if nm, cmd, ok := m.previewSelectKey(msg); ok {
 		return nm, cmd

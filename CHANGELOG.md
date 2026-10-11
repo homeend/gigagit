@@ -28,6 +28,42 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - `n`/`p` in a file an overview opened step its bands without moving the
   overview's selection, so backspace returns to the link you opened.
 
+## Character selection follow-ups: the deferred minors
+
+### Changed
+- ↓ on an overview split's last anchor pages through the text below it and
+  wraps to the first anchor only once the end is on screen; ↑ on the first
+  anchor pages up through text above it the same way.
+
+### Fixed
+- The copy mode keeps its cursor on screen on a row whose indent alone is
+  as wide as the pane (deep nesting in a narrow split pane).
+- A key pressed after the text under the copy mode reloaded no longer runs
+  as a plain key (in the split it stepped the overview's anchor).
+- The stacked file pane says "the selection stays in this file" when the
+  copy cursor stops at the file's edge, as the stacked diff does.
+- A popup handing off to an operation no longer leaves a split's pane in
+  the copy mode.
+
+## Character selection in the overview split
+
+### Added
+- `v` selects characters to copy on either side of an overview's split —
+  the overview, the file and the stacked files — with the same modal copy
+  mode as the viewer. While it is on, `tab`, backspace, `alt+←/→` and `N`/`P`
+  wait and `esc` backs out of the mode before it closes the split; a click
+  on the other side moves there and leaves the mode. Stacked, the selection
+  stays inside the file it started in and survives other files loading.
+
+### Fixed
+- `v` on a view already scrolled right (diff, blame, the file preview)
+  brings the cursor into view at once instead of on the first key.
+- The preview's copy mode no longer stops the cursor short of the column's
+  edge on an indented overview row (a code block inside a list item).
+- In the copy mode a file opened from an overview anchor no longer leads its
+  hint with `[bksp] back` / `[n/p] anchors` (both wait), and a click on an
+  overview's anchor waits instead of selecting or opening it.
+
 ## Every overview opens beside its code
 
 ### Added
