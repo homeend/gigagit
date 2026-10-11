@@ -1,6 +1,9 @@
 package web
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 const sdPureStart = "// --- split diff model (pure; guarded against Go) ---"
 const sdPureEnd = "// --- end split diff model ---"
@@ -64,5 +67,38 @@ console.log([
 		"old.txt → new.txt|3a4d954 → 774ace5|a.txt|HEAD → working tree|true|false|false|false|false|false"
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+// Spec §6 / §8: the viewer reads a diff for a file an overview's link
+// opened when that overview's choice says so, before the first paint; D and
+// the title's switch flip it; every close forgets the choice; a late read
+// never lands on a newer file or a flipped-back choice.
+func TestSplitDiffIsWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`from "./splitdiff.js"`,
+		`let diffPref = null;`,
+		`function canFlip()`,
+		`function diffWanted(from = view.from)`,
+		`diffWanted(from) ? fetchDiff(from, reg.file.path) : null`,
+		`view.diff = dres ? buildDiff(dres, from) : null;`,
+		`if (!from) diffPref = null;`,
+		`if (seq !== loadSeq || id !== view.id || view.from !== from || !diffWanted()) return;`,
+		`} else if (view.diff) {`,
+		`<div id="viewer-mode" class="hidden"><button data-mode="file">file</button><button data-mode="diff">diff</button></div>`,
+		`case "D": if (!canFlip()) return false; flipDiff(); break;`,
+		"diffPref = null;\n  lastStep = null;",
+		`if (view.diff) refreshDiff();`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	if !strings.Contains(readStatic(t, "style.css"), "#viewer-mode.hidden { display: none; }") {
+		t.Error("style.css: #viewer-mode.hidden has no rule (gg web hides by id)")
+	}
+	if !strings.Contains(readStatic(t, "files.js"), "collapseDiffRows,") {
+		t.Error("files.js does not export collapseDiffRows")
 	}
 }

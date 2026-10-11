@@ -5,7 +5,8 @@ import { $, charWidth, elidePath, esc, fmtBytes, getJSON, postJSON, state, tabId
 import { closeLayer, copyText, footOwned, mountOverlay, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer } from "./layers.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
-import { cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
+import { collapseDiffRows, cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
+import { diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows } from "./splitdiff.js";
 import { mdHTML } from "./markdown.js";
 import { clearOpLine, opLine } from "./ops.js";
 import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
@@ -311,7 +312,7 @@ function remarksReview(from) {
 // anchors, sel}). from is the way back to the overview an anchor opened this
 // file from ({id, sel}, one step deep, this tab's); range the lines that
 // anchor named.
-const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null, notes: [], remarks: [], ov: null, from: null, range: null };
+const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "", image: null, notes: [], remarks: [], ov: null, from: null, range: null, diff: null };
 
 // split is the overview beside the file (spec 2026-10-11 §4; null = none):
 // id its open-files id ("" for a stored overview), path its entry's path, ov
@@ -319,6 +320,13 @@ const view = { id: "", src: "worktree", rev: "", path: "", lines: [], cur: 0, pl
 // stamp, stored?}), left whether the overview has the keys, here the anchor
 // the right column's cursor marks (-1 = none), seq its refreshes' order.
 let split = null;
+// diffPref is the D / f choice (spec 2026-10-11-overview-split-diff §6):
+// {key, on, partial}, key the overview whose links it holds for (a file's
+// from.id). Page-local; gone when that overview's split or viewer closes.
+let diffPref = null;
+// lastStep is the file the previous link step showed ({key, path, lines}):
+// the next step that opens the same text says so (§7).
+let lastStep = null;
 
 // ovDoc is the overview the overview keys and paint act on: the split's left
 // column, else document mode's; ovEl the element it is drawn in.
@@ -437,7 +445,7 @@ const viewerRoot = mountOverlay("viewer");
 viewerRoot.innerHTML =
   `<div id="viewer-box">` +
   `<div id="viewer-ov" class="hidden"><div id="viewer-ov-title"></div><div id="viewer-ov-body" tabindex="-1"></div></div>` +
-  `<div id="viewer-file"><div id="viewer-title"></div>` +
+  `<div id="viewer-file"><div id="viewer-mode" class="hidden"><button data-mode="file">file</button><button data-mode="diff">diff</button></div><div id="viewer-title"></div>` +
   `<div id="viewer-search" class="hidden search-bar"><span id="viewer-search-lead">/</span>` +
   `<input id="viewer-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this file — enter keeps it, ] [ step, esc clears">` +
   `<span id="viewer-search-count"></span></div>` +
@@ -480,6 +488,10 @@ $("viewer-body").addEventListener("click", (e) => {
   if (clearViewerRange()) return;
   paintCursor();
 });
+$("viewer-mode").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-mode]");
+  if (b && (b.dataset.mode === "diff") !== diffWanted()) flipDiff();
+});
 $("viewer-ov-body").addEventListener("click", (e) => {
   if (!split) return;
   const anc = e.target.closest("a.md-anchor");
@@ -513,14 +525,19 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   openSeq = seq;
   for (const [k, at] of closedAt) if (at < seq) closedAt.delete(k); // closed before this open: no open in flight can land
   if (isOpen()) rememberPlace();
-  let reg, body, ov, ovMine;
+  let reg, body, ov, ovMine, dres;
   try {
     await ofSync; // a failed open's report reaches the server first
     reg = id ? await ofPost({ op: "focus", id }) : await ofPost({ op: "open", src, rev, path, line });
     if (reg.file.source === "overview") {
       ovMine = ++ovSeq; // a refresh started before this fetch is older than its answer
       ov = await fetchOverview(reg.file.id);
-    } else body = await fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksReview(from));
+    } else {
+      [body, dres] = await Promise.all([
+        fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksReview(from)),
+        diffWanted(from) ? fetchDiff(from, reg.file.path) : null,
+      ]);
+    }
   } catch (e) {
     reportShown(seq, reg);
     opLine("view failed: " + (e.message || e), true);
@@ -536,6 +553,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   // A refresh that started after this fetch and landed first is newer: keep it.
   if (ov && view.ov && view.id === f.id && !ovAnswerApplies(ovMine, ovApplied)) ov = view.ov;
   if (ov) return showOverview(f, ov, ovMine);
+  if (!from) diffPref = null; // a file opened any other way: the overview's choice ends (§6)
   view.from = from; // an overview's link: its bands and remarks draw at once
   view.range = null;
   view.rangeOwn = false;
@@ -544,7 +562,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
     leaveSplit();
   }
   view.ov = null;
-  Object.assign(view, { id: f.id, src: f.source, rev: f.rev || "", path: f.path, lines: body.lines || [] });
+  Object.assign(view, { id: f.id, src: f.source, rev: f.rev || "", path: f.path, lines: body.lines || [], diff: null });
   view.notes = notesOf(body, view.src);
   view.remarks = body.remarks || [];
   view.placeholder = placeholderFor(body, view.lines);
@@ -553,6 +571,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   const want = pickLine(line, place, f.line || 0);
   const landed = line > 0 ? landLine(line, view.lines.length, f.path) : { line: view.placeholder && body.missing ? want : clampLine(want || 1, view.lines.length), notice: "" };
   view.cur = landed.line;
+  view.diff = dres ? buildDiff(dres, from) : null; // read with the file: no flash of it first
   viewerSearchBar.reset(); // a new file is a new search
   raiseViewer();
   paintTitle();
@@ -582,7 +601,7 @@ function reportShown(seq, reg) {
 function showOverview(f, ov, mine) {
   ovApplied = Math.max(ovApplied, mine);
   if (splitFits(boxWidth())) return openSplit(f.id, f.path, { ...ov, sel: -1, want: "" });
-  Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
+  Object.assign(view, { id: f.id, src: "overview", rev: "", path: f.path, lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
   view.ov = { ...ov, sel: -1, want: "" };
   const place = places.get(f.id);
   viewerSearchBar.reset();
@@ -611,7 +630,7 @@ export function openStoredOverview({ id, title, blocks, anchors, tip, text }) {
 
 function showStoredOverview(doc) {
   if (splitFits(boxWidth())) return openSplit("", "", { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc });
-  Object.assign(view, { id: doc.id, src: "overview", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
+  Object.assign(view, { id: doc.id, src: "overview", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
   view.ov = { title: doc.title, blocks: doc.blocks, anchors: doc.anchors, text: doc.text, sel: -1, want: "", stored: doc };
   const first = view.ov.anchors.findIndex((a) => !a.plain);
   if (first >= 0) view.ov.sel = first; // the TUI lands on the first resolved anchor
@@ -654,6 +673,9 @@ function viewerClosedFile(id) {
 // already gone from the list (closed everywhere) or never registered.
 function dropViewer() {
   if (split) leaveSplit();
+  diffPref = null;
+  lastStep = null;
+  view.diff = null;
   view.id = "";
   loadSeq++; // an open or reload in flight must not bring it back
   clearTimeout(cursorTimer);
@@ -671,6 +693,7 @@ function backgroundViewer() {
 // paintTitle cuts the PATH in the middle, never the file name, to fit.
 function paintTitle() {
   const el = $("viewer-title");
+  paintModeSwitch();
   if (view.ov) {
     el.title = view.ov.title;
     el.textContent = ovTitle(view.ov, view.id);
@@ -680,18 +703,23 @@ function paintTitle() {
     el.title = el.textContent = "";
     return;
   }
-  const lead = "View ", tail = " (" + versionLabel(view.src, view.rev) + ")";
-  const cols = Math.floor((el.clientWidth - 28) / charWidth()) - lead.length - tail.length;
-  el.title = view.path;
-  el.textContent = lead + (cols > 0 ? elidePath(view.path, cols) : view.path) + tail;
+  const dv = view.diff, name = dv ? dv.name : view.path;
+  const lead = dv ? "Diff " : "View ", tail = " (" + (dv ? dv.range : versionLabel(view.src, view.rev)) + ")";
+  const mode = $("viewer-mode"), sw = mode.classList.contains("hidden") ? 0 : mode.offsetWidth + 12;
+  el.style.paddingRight = sw ? 14 + sw + "px" : "";
+  const cols = Math.floor((el.clientWidth - 28 - sw) / charWidth()) - lead.length - tail.length;
+  el.title = name;
+  el.textContent = lead + (cols > 0 ? elidePath(name, cols) : name) + tail;
 }
 
 function renderViewer() {
-  if (viewerSearch.query) viewerSearch.refind(view.lines.map((l, i) => ({ row: i, side: 0, text: l.text || "" })));
+  if (viewerSearch.query) viewerSearch.refind(view.diff ? view.diff.rows.map((r) => ({ row: r.i, side: 0, text: r.text })) : view.lines.map((l, i) => ({ row: i, side: 0, text: l.text || "" })));
   const body = $("viewer-body");
   if (view.ov) {
     body.innerHTML = `<div class="vdoc md">${mdHTML({ blocks: view.ov.blocks }, esc, { anchors: true })}</div>`;
     paintAnchors();
+  } else if (view.diff) {
+    body.innerHTML = view.diff.notice ? `<div class="notice">${esc(view.diff.notice)}</div>` : diffRowsHTML();
   } else if (view.placeholder) {
     body.innerHTML = `<div class="notice">${esc(view.placeholder)}</div>`;
   } else if (view.image) {
@@ -799,7 +827,7 @@ function openSplit(id, path, ov, { steer = true } = {}) {
     // The right column starts empty unless it keeps the file it shows (the
     // way back): never the lines of a file closed earlier, or of another
     // overview's link — the steer fills it.
-    if (view.ov || !view.id || steer) Object.assign(view, { id: "", ov: null, src: "worktree", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false });
+    if (view.ov || !view.id || steer) Object.assign(view, { id: "", ov: null, src: "worktree", rev: "", path: "", lines: [], notes: [], remarks: [], cur: 0, placeholder: "", image: null, from: null, range: null, rangeOwn: false, diff: null });
     split = { id, path, ov: { ...ov, sel: ov.sel >= 0 ? ov.sel : -1, want: ov.want || "" }, left: true, here: -1, seq: 0 };
     if (split.ov.sel < 0) split.ov.sel = stepAnchor(split.ov.anchors, -1, 1);
   }
@@ -876,6 +904,8 @@ async function refreshSplitOverview() {
 // column's file, its bands gone (spec §10).
 function splitOverviewGone(name) {
   leaveSplit();
+  diffPref = null;
+  view.diff = null;
   if (view.from) view.from.closed = true;
   if (view.id) {
     paintTitle();
@@ -974,6 +1004,7 @@ function splitOverviewKey(e) {
     case "PageUp": body.scrollBy({ top: -(body.clientHeight - 40) }); break;
     case "Home": case "g": body.scrollTop = 0; break;
     case "End": case "G": body.scrollTop = body.scrollHeight; break;
+    case "D": if (!canFlip()) return false; flipDiff(); break;
     case "Escape": closeViewer("background"); break; // W3
     default: return false;
   }
@@ -1244,6 +1275,152 @@ function rerenderKeepingScroll() {
   body.scrollLeft = left;
 }
 
+// ---- the right column's diff (spec 2026-10-11-overview-split-diff) --------
+// canFlip: D acts on a file an overview's link opened (§6).
+function canFlip() {
+  return !!view.id && !view.ov && !!view.from;
+}
+
+// diffWanted: the overview that opened the file asks for its diff.
+function diffWanted(from = view.from) {
+  return !!from && !!diffPref && diffPref.on && diffPref.key === from.id;
+}
+
+// fetchDiff reads path's diff for from: {d, status} — status a failed
+// read's HTTP status (500 when it had none), 0 when it answered.
+async function fetchDiff(from, path) {
+  const url = diffSource(from, path);
+  if (!url) return { d: null, status: 0 };
+  try {
+    return { d: await getJSON(url), status: 0 };
+  } catch (e) {
+    return { d: null, status: e.status || 500 };
+  }
+}
+
+// buildDiff is view.diff for one read; the cursor's row follows view.cur.
+function buildDiff({ d, status }, from) {
+  const agent = !from.stored;
+  const notice = diffNotice(d, status, agent);
+  const rows = notice ? [] : unifiedRows(d);
+  const by = lineRows(rows), head = diffHead(d, view.path, agent);
+  const partial = !!diffPref && diffPref.key === from.id && diffPref.partial;
+  return { rows, by, row: Math.max(0, rowOfLine(rows, by, view.cur)), notice, name: head.name, range: head.range,
+    remarks: (d && d.remarks) || [], partial, open: new Set(), shown: null };
+}
+
+// flipDiff is D and the title's switch: the file ⇄ its diff, the choice
+// held for the overview's next links (§6); the cursor keeps its line and
+// its place on screen.
+async function flipDiff() {
+  if (!canFlip()) return;
+  const from = view.from, on = !diffWanted();
+  diffPref = { key: from.id, on, partial: !!diffPref && diffPref.key === from.id && diffPref.partial };
+  if (!on) {
+    keepCursorPlace(() => {
+      view.diff = null;
+      paintTitle();
+      renderViewer();
+    });
+    return swapFoot(true);
+  }
+  paintTitle(); // the switch shows the choice while the read is out
+  const seq = loadSeq, id = view.id;
+  const got = await fetchDiff(from, view.path);
+  if (seq !== loadSeq || id !== view.id || view.from !== from || !diffWanted()) return;
+  keepCursorPlace(() => {
+    view.diff = buildDiff(got, from);
+    paintTitle();
+    renderViewer();
+  });
+  swapFoot(true);
+}
+
+// refreshDiff re-reads the shown diff (the file moved on disk), keeping the
+// fold state; the cursor keeps its line.
+async function refreshDiff() {
+  const from = view.from, id = view.id, seq = loadSeq, was = view.diff;
+  const got = await fetchDiff(from, view.path);
+  if (seq !== loadSeq || id !== view.id || view.from !== from || !diffWanted()) return;
+  view.diff = buildDiff(got, from);
+  if (was) Object.assign(view.diff, { partial: was.partial, open: was.open });
+  paintTitle();
+  rerenderKeepingScroll();
+}
+
+// keepCursorPlace repaints with paint and puts the cursor's row back where
+// it was on screen — centred when it was off screen.
+function keepCursorPlace(paint) {
+  const body = $("viewer-body"), top = body.getBoundingClientRect().top;
+  const before = cursorRow(), off = before ? before.getBoundingClientRect().top - top : -1;
+  paint();
+  const after = cursorRow();
+  if (!after) return;
+  if (off < 0 || off > body.clientHeight - after.offsetHeight) after.scrollIntoView({ block: "center" });
+  else body.scrollTop += after.getBoundingClientRect().top - top - off;
+}
+
+// syncDiffRow puts the diff's cursor row on view.cur when something moved
+// the line (n / p, a hit, a note); a deleted row stands for the line below
+// it, so a cursor there stays.
+function syncDiffRow() {
+  const dv = view.diff;
+  if (!dv || dv.notice || !dv.rows.length) return;
+  if (rowNewLine(dv.rows, dv.row) !== view.cur) dv.row = Math.max(0, rowOfLine(dv.rows, dv.by, view.cur));
+}
+
+// diffNotes is every box the diff draws: the agent's notes (new side), then
+// the review's remarks on both sides.
+function diffNotes() {
+  return [...view.notes, ...view.diff.remarks];
+}
+
+// diffRowsHTML is the diff's rows (§4): one column, deleted lines red with
+// −, added green with +, the bands, the marked range and the note boxes;
+// with f the unchanged runs fold, never a banded or noted row or the
+// cursor's.
+function diffRowsHTML() {
+  const dv = view.diff, rows = dv.rows, bands = viewBands(), f = view.from;
+  const curB = f ? bandOf(bands, f.anchors || [], f.cur, view.lines.length) : -1;
+  syncDiffRow();
+  const noted = new Set(), after = new Map();
+  for (const p of placeNotes(rows, diffNotes())) {
+    for (let k = p.first; k <= p.last; k++) noted.add(k);
+    if (!after.has(p.last)) after.set(p.last, []);
+    after.get(p.last).push(p.n);
+  }
+  const keep = (r) => r.i === dv.row || noted.has(r.i) || !!rowBand(rows, r.i, bands, curB);
+  const items = (dv.partial && collapseDiffRows(rows, dv.open, keep)) || rows;
+  dv.shown = [];
+  let html = "";
+  for (const r of items) {
+    if (r.fold) {
+      html += `<div class="vfold" data-fold="${r.start}">⋯ ${r.fold} unchanged line${r.fold === 1 ? "" : "s"}</div>`;
+      continue;
+    }
+    dv.shown.push(r.i);
+    const bk = rowBand(rows, r.i, bands, curB);
+    const ranged = view.range && r.nu && view.range.start <= r.nu && r.nu <= view.range.end ? " vrange" : "";
+    const cls = "vline vd-" + r.kind + (r.i === dv.row ? " vcur" : "") + (noted.has(r.i) ? " vnoted" : "") + ranged + (bk ? " vanchor" + (bk === "cur" ? " acur" : "") : "");
+    const sign = r.kind === "add" ? "+" : r.kind === "del" ? "−" : " ";
+    html +=
+      `<div class="${cls}" data-r="${r.i}"><span class="vno">${r.kind === "del" ? r.old : r.nu}</span><span class="vsign">${sign}</span>` +
+      `<span class="vtext">${renderCell(r.text, r.spans, r.tok, r.kind === "del" ? "l" : "r", viewerSearch.query ? viewerSearch.hitsOn(r.i, 0) : null) || " "}</span></div>`;
+    for (const n of after.get(r.i) || []) html += noteBoxHTML(n);
+  }
+  return html;
+}
+
+// paintModeSwitch shows the title's file | diff switch when D can act, the
+// half in force lit (§4).
+function paintModeSwitch() {
+  const sw = $("viewer-mode"), on = canFlip();
+  sw.classList.toggle("hidden", !on);
+  if (!on) return;
+  const diff = diffWanted();
+  for (const b of sw.querySelectorAll("button")) b.classList.toggle("on", (b.dataset.mode === "diff") === diff);
+}
+
 // dismissNote removes a note everywhere (every tab, and a TUI hosting this
 // page, hear it from the store).
 async function dismissNote(id) {
@@ -1292,6 +1469,8 @@ async function stepNote(dir) {
 }
 
 function cursorRow() {
+  const dv = view.diff;
+  if (dv) return dv.notice ? null : $("viewer-body").querySelector(`.vline[data-r="${dv.row}"]`);
   return $("viewer-body").querySelector(`.vline[data-i="${view.cur - 1}"]`);
 }
 
@@ -1377,6 +1556,7 @@ function fileKey(e) {
     case "r": { const n = noteAtLine(shownNotes(), view.cur); if (!n) return false; if (n.readonly) opLine("review remarks are read-only", false); else copyNoteRef(n); break; }
     case "}": stepNote(1); break;
     case "{": stepNote(-1); break;
+    case "D": if (!canFlip()) return false; flipDiff(); break;
     case "n": stepViewerAnchor(1); break; // always ours: a p in the viewer is never pull
     case "p": stepViewerAnchor(-1); break;
     // A noted file steps aside on esc (the TUI's rule); the server decides
@@ -1744,6 +1924,7 @@ async function viewerFileChanged(id) {
   renderViewer();
   el.scrollTop = top;
   el.scrollLeft = left;
+  if (view.diff) refreshDiff(); // the working tree moved: the diff with it
   if (isOpen()) swapFoot(true);
 }
 

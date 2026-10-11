@@ -1711,7 +1711,7 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 #viewer-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 /* The overview split (spec 2026-10-11 §3): the overview in a left column,
    the file in the right; equal halves, the focused column's title underlined. */
-#viewer-file { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+#viewer-file { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; position: relative; }
 #viewer-ov { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
 #viewer-ov.hidden { display: none; }
 #viewer-ov-title { padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
@@ -1757,6 +1757,20 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 .vline.vanchor.vrange, .vline.vanchor.acur.vrange { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .vline.vanchor.vcur { background: var(--sel); }
 .vtext { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+/* The overview split's diff (spec 2026-10-11-overview-split-diff §4). */
+#viewer-mode { position: absolute; top: 7px; right: 10px; z-index: 1; display: flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+#viewer-mode.hidden { display: none; }
+#viewer-mode button { font: inherit; font-size: 12px; color: var(--dim); background: none; border: 0; padding: 2px 10px; cursor: pointer; }
+#viewer-mode button + button { border-left: 1px solid var(--border); }
+#viewer-mode button.on { color: var(--fg); background: var(--sel); }
+.vsign { flex: none; width: 1.4em; text-align: center; color: var(--dim); }
+.vline.vd-add .vtext, .vline.vd-add .vsign { background: var(--add); }
+.vline.vd-del .vtext, .vline.vd-del .vsign { background: var(--del); }
+.vline.vd-del .vno { opacity: .6; }
+.vline.vd-add.vanchor .vtext, .vline.vd-del.vanchor .vtext { box-shadow: inset 0 0 0 999px color-mix(in srgb, #d4a72c 14%, transparent); }
+.vline.vd-add.vcur .vtext, .vline.vd-del.vcur .vtext, .vline.vd-add.vcur .vsign, .vline.vd-del.vcur .vsign { background: var(--sel); }
+.vfold { text-align: center; color: var(--dim); background: var(--bg-alt); border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); cursor: pointer; user-select: none; }
+.vfold:hover { color: var(--fg); }
 #viewer-body .hit { background: var(--hit-bg); color: inherit; }
 #viewer-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
 #openfiles { position: fixed; top: 0; left: 0; right: 0; bottom: var(--foot-h, 25px); background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 22; }
