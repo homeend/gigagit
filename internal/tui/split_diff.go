@@ -70,20 +70,22 @@ func (d *openFile) shownP() *contentPopup {
 // showDiff puts res on screen in place of the file (or, with err, nothing
 // changed or nothing drawable, its notice), the cursor on the row of the
 // line it is on now, at the same distance from the top when that fits.
-// A diff already showing is replaced the same way (a reload).
-func (d *openFile) showDiff(res domain.ReviewFileDiff, err error, agent, partial bool, rows int) {
+// A diff already showing is replaced the same way (a reload). left reports
+// whether that ended a copy mode: it leaves first, so the view mode carried
+// over is the reader's, never the mode's cut-view-as-scroll.
+func (d *openFile) showDiff(res domain.ReviewFileDiff, err error, agent, partial bool, rows int) (left bool) {
+	for _, p := range []*contentPopup{d.p, d.diffP()} {
+		if p != nil && p.cs.on {
+			p.previewCharLeave()
+			left = true
+		}
+	}
 	line, off, mode, open := d.p.cur+1, d.p.cur-d.p.sel, d.p.mode, map[int]bool{}
 	if old := d.diff; old != nil {
 		if old.notice == "" {
 			line, off = rowNewLine(old.rows, old.p.cur), old.p.cur-old.p.sel
 		}
 		mode, open = old.p.mode, old.open
-		if old.p.cs.on {
-			old.p.previewCharLeave()
-		}
-	}
-	if d.p.cs.on {
-		d.p.previewCharLeave()
 	}
 	dd := &docDiff{res: res, agent: agent, partial: partial, notice: diffNoticeText(res, err, agent), open: open}
 	dd.p = &contentPopup{title: d.path, charWrap: true, mode: mode}
@@ -92,7 +94,7 @@ func (d *openFile) showDiff(res domain.ReviewFileDiff, err error, agent, partial
 		dd.p.lines = []contentLine{{text: dd.notice}}
 		dd.p.noCursor = true
 		d.syncNoteRows()
-		return
+		return left
 	}
 	dd.all = unifiedDiffRows(res.Diff)
 	for _, n := range res.Notes {
@@ -105,6 +107,15 @@ func (d *openFile) showDiff(res domain.ReviewFileDiff, err error, agent, partial
 	if r < dd.p.sel || r > dd.p.lastVisible(rows) {
 		dd.p.sel = dd.p.clampTop(r-rows/2, rows)
 	}
+	return left
+}
+
+// diffP is the diff's popup, nil with no diff showing.
+func (d *openFile) diffP() *contentPopup {
+	if d.diff == nil {
+		return nil
+	}
+	return d.diff.p
 }
 
 // diffRowNear is the row of new line line, else of the first line after it
@@ -560,7 +571,9 @@ func (m Model) diffLanded(msg reviewDiffMsg) Model {
 	if d == nil || msg.seq != d.diffSeq || !m.diffWanted(d) {
 		return m
 	}
-	d.showDiff(msg.res, msg.err, msg.agent, d.from.ov.diffPartial, m.docRows(d))
+	if d.showDiff(msg.res, msg.err, msg.agent, d.from.ov.diffPartial, m.docRows(d)) {
+		m.statusMsg = i18n.T("▸ the text reloaded: copy mode ended")
+	}
 	return m
 }
 

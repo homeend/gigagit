@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // Spec §6 (D3): with the diff showing, every link stepped to opens as a
@@ -478,4 +480,29 @@ func TestSplitDiffCharSelEndsOnAClickOnTheOverview(t *testing.T) {
 		t.Fatalf("onLeft %v diff mode %v: the click moves the keys and ends the mode", sv.onLeft, d.diff.p.cs.on)
 	}
 	_ = m
+}
+
+// The diff reloaded while v runs in the cut view (which scrolls while the
+// mode is on): the new diff keeps the reader's cut view, not the mode's
+// scroll, and the status says why the mode ended.
+func TestSplitDiffReloadInTheModeKeepsTheCutView(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	m = pressDrain(t, m, "D")
+	d := sv.right.doc()
+	if d.diff == nil {
+		t.Fatal("D shows the diff")
+	}
+	d.diff.p.mode = modeCutoff
+	m = pressDrain(t, m, "v")
+	if !d.diff.p.cs.on || d.diff.p.mode != modeScroll {
+		t.Fatalf("on %v mode %v: v in the cut view scrolls while on", d.diff.p.cs.on, d.diff.p.mode)
+	}
+	m = m.diffLanded(reviewDiffMsg{tag: d.tag, seq: d.diffSeq, agent: d.diff.agent, res: d.diff.res})
+	if d.diff.p.cs.on || d.diff.p.mode != modeCutoff {
+		t.Fatalf("on %v mode %v: the reload ends the mode and keeps the cut view", d.diff.p.cs.on, d.diff.p.mode)
+	}
+	if want := i18n.T("▸ the text reloaded: copy mode ended"); m.statusMsg != want {
+		t.Fatalf("status %q, want %q", m.statusMsg, want)
+	}
 }
