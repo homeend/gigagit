@@ -119,3 +119,45 @@ func TestOverviewSplitFinalFixesAreWired(t *testing.T) {
 		}
 	}
 }
+
+// Spec 2026-10-11 §11 (plan 2): S stacks the files in the right column and
+// back; the stack is its own state (split.stack) with the single file
+// stepped aside; loads are guarded by the stack they were started for; the
+// pref is remembered; D and the single-file keys say so in the stack.
+func TestOverviewSplitStackIsWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`from "./splitstack.js"`,
+		`const SINGLE_ONLY = "this acts on a single file — S opens it";`,
+		`const STACK_READONLY = "notes are read-only in the stack — S opens the file";`,
+		`function toggleSplitStack()`,
+		`function enterStack(at)`,
+		`async function leaveStack(open = false)`,
+		`if (split && split.stack) return renderStack();`,
+		`if (!split || split.stack !== st) return; // the stack left the screen while this loaded`,
+		`saveUI({ stacked_review_files: true });`,
+		`saveUI({ stacked_review_files: false });`,
+		`state.ui && state.ui.stacked_review_files`,
+		`case "S": e.preventDefault(); toggleSplitStack(); return true;`,
+		`{ root: $("viewer-body"), rootMargin: "100% 0px" }`,
+		`st.inFlight < SPLIT_STACK_MAX_IN_FLIGHT`,
+		`await openViewer({ ...target, from, steer: true });`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	// S back must keep the overview's D choice: entering the stack never clears it.
+	if i := strings.Index(v, "function enterStack(at)"); i < 0 {
+		t.Error("viewer.js lacks enterStack")
+	} else if j := strings.Index(v[i:], "\n}\n"); j < 0 || strings.Contains(v[i:i+j], "diffPref = null") {
+		t.Error("enterStack must keep diffPref (S back returns to the held D choice)")
+	}
+	css := readStatic(t, "style.css")
+	for _, want := range []string{`.vstk-head {`, `.vstk-head.vcur`, `.vstk-ph {`} {
+		if !strings.Contains(css, want) {
+			t.Errorf("style.css lacks %q", want)
+		}
+	}
+}
