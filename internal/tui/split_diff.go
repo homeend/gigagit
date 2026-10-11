@@ -646,3 +646,17 @@ func (m Model) stepContent(d *openFile) Model {
 	}
 	return m
 }
+
+// diffHint is the hint line's D (and, in a diff, f) for d.
+func diffHint(d *openFile) string {
+	if dd := d.diff; dd != nil {
+		if dd.notice != "" {
+			return i18n.T("[D] file")
+		}
+		if dd.partial {
+			return i18n.T("[D] file") + "  " + i18n.T("[f] whole file")
+		}
+		return i18n.T("[D] file") + "  " + i18n.T("[f] changed only")
+	}
+	return i18n.T("[D] diff")
+}

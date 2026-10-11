@@ -67,6 +67,9 @@ func (p *docPane) hint(m Model) string {
 	if p.stackable {
 		h = i18n.T("[N/P] overview") + "  " + i18n.T("[S] stacked") + "  " + h
 	}
+	if m.canFlip(p.d) {
+		h = diffHint(p.d) + "  " + h
+	}
 	if p.d.bands() != nil {
 		h = i18n.T("[n/p] anchors") + "  " + h
 	}

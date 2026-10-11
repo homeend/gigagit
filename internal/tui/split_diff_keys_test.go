@@ -300,3 +300,49 @@ func TestSameContentAsThePreviousLinksFile(t *testing.T) {
 		t.Fatalf("c.txt → a.txt differ: %q", m.statusMsg)
 	}
 }
+
+// Spec §9: the hint line lists D, and f while the diff shows.
+func TestSplitHintListsD(t *testing.T) {
+	t.Parallel()
+	m, sv := diffSplitModel(t)
+	if h := sv.right.hint(m); !strings.Contains(h, "[D] diff") {
+		t.Fatalf("hint %q", h)
+	}
+	m = pressDrain(t, m, "D")
+	if h := sv.right.hint(m); !strings.Contains(h, "[D] file") || !strings.Contains(h, "[f] changed only") {
+		t.Fatalf("diff hint %q", h)
+	}
+	m = pressDrain(t, m, "f")
+	if h := sv.right.hint(m); !strings.Contains(h, "[f] whole file") {
+		t.Fatalf("folded hint %q", h)
+	}
+	m = pressDrain(t, m, "D")
+	m = pressDrain(t, m, "esc")
+	if h := sv.right.hint(m); strings.Contains(h, "[D]") {
+		t.Fatalf("closed split's file: %q", h)
+	}
+}
+
+func TestNarrowViewerHintListsD(t *testing.T) {
+	t.Parallel()
+	m, _ := diffSplitModel(t)
+	u, cmd := m.Update(tea.WindowSizeMsg{Width: 58, Height: 40})
+	m = drainCmds(t, u.(Model), cmd)
+	m = pressDrain(t, m, "enter")
+	if !strings.Contains(ansi.Strip(m.View()), "[D] diff") {
+		t.Fatalf("the narrow viewer's hint lists D:\n%s", ansi.Strip(m.View()))
+	}
+}
+
+func TestHelpListsD(t *testing.T) {
+	t.Parallel()
+	found := false
+	for _, l := range helpContent() {
+		if strings.HasPrefix(l.text, "D ") && strings.Contains(l.text, "review's diff") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("help lists D for the overview split")
+	}
+}

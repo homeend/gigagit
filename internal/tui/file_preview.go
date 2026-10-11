@@ -689,6 +689,9 @@ func (m Model) renderPreviewBoxOpts(p *contentPopup, title string, boxW, boxH in
 		if d.bands() != nil {
 			lead += "  " + i18n.T("[n/p] anchors")
 		}
+		if m.canFlip(d) {
+			lead += "  " + diffHint(d)
+		}
 		hint = lead + "  " + hint // the way back to the overview leads
 	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
