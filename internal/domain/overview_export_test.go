@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/overviewhtml"
 )
 
@@ -72,5 +75,76 @@ func TestExportStoredOverviewAbsent(t *testing.T) {
 	rid := savePRReview(t, svc, `{"version":1,"summary":"no overview","files":[{"path":"big.go","annotations":[{"newRange":[5,5],"summary":"x"}]}]}`)
 	if _, _, err := svc.ExportOverviewHTML(context.Background(), OverviewSource{ReviewID: rid}); !errors.Is(err, ErrNoOverview) {
 		t.Fatalf("err = %v, want ErrNoOverview", err)
+	}
+}
+
+func TestExportAgentOverview(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	commitFile(t, dir, "a.txt", "one\ntwo\nthree\n", "add a")
+	commitFile(t, dir, "img.bin", "\x00\x01\x02", "add bin")
+	commitFile(t, dir, "c.txt", "same\n", "add c")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\nthree\nfour\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	text := "Look at [two](a.txt:2), [the note](note:t1), [gone](nope.txt:1), [bin](img.bin), [far](a.txt:40), [lost note](note:t9), [c](c.txt)."
+	page, name, err := svc.ExportOverviewHTML(context.Background(), OverviewSource{
+		Title: "My investigation", Text: text,
+		NoteSpans: map[string]NoteSpan{"t1": {Path: "a.txt", Start: 3, End: 4}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "my-investigation.html" {
+		t.Errorf("name = %q", name)
+	}
+	e := exportBlob(t, page)
+	if e.Kind != "agent" || e.Left != "HEAD" || e.Right != "working tree" {
+		t.Errorf("kind/range = %q %q %q", e.Kind, e.Left, e.Right)
+	}
+	got := map[string]overviewhtml.Anchor{}
+	for _, a := range e.Anchors {
+		got[a.Dest] = a
+	}
+	if a := got["note:t1"]; a.Missing || a.Path != "a.txt" || a.Start != 3 || a.End != 4 {
+		t.Errorf("note anchor = %+v", a)
+	}
+	if !got["nope.txt:1"].Missing || !got["a.txt:40"].Missing || !got["note:t9"].Missing || got["a.txt:2"].Missing || got["img.bin"].Missing {
+		t.Errorf("missing flags = %+v", got)
+	}
+	if len(e.Files) != 3 || e.Files[0].Path != "a.txt" || !e.Files[0].Changed || len(e.Files[0].Lines) != 4 || len(e.Files[0].Diff) == 0 {
+		t.Fatalf("files = %+v", e.Files)
+	}
+	if e.Files[1].Path != "img.bin" || e.Files[1].Placeholder == "" || e.Files[1].Lines != nil {
+		t.Errorf("img.bin must be a placeholder: %+v", e.Files[1])
+	}
+	if c := e.Files[2]; c.Path != "c.txt" || c.Changed || c.Diff != nil || len(c.Lines) != 1 {
+		t.Errorf("c.txt must be unchanged with no diff (D says \"unchanged in this range\"): %+v", c)
+	}
+}
+
+func TestAgentOverviewSourceResolvesNotes(t *testing.T) {
+	t.Parallel()
+	docs := agentdocs.New()
+	n, err := docs.AddNote("r", "a.txt", []string{"one", "two", "three"}, 2, 3, "look", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, err := docs.AddOverview("r", "/w", "Tour", "[n](note:"+n.ID+") and [a](a.txt:1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := AgentOverviewSource(docs, o.ID, "r")
+	if err != nil || src.Title != "Tour" || src.Text != o.Text {
+		t.Fatalf("src = %+v %v", src, err)
+	}
+	if got := src.NoteSpans[n.ID]; got != (NoteSpan{Path: "a.txt", Start: 2, End: 3}) {
+		t.Errorf("note span = %+v", got)
+	}
+	if _, err := AgentOverviewSource(docs, o.ID, "other"); !errors.Is(err, ErrNoAgentOverview) {
+		t.Errorf("another root: %v", err)
+	}
+	if _, err := AgentOverviewSource(docs, "f999999", "r"); !errors.Is(err, ErrNoAgentOverview) {
+		t.Errorf("unknown id: %v", err)
 	}
 }

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
@@ -27,6 +28,29 @@ type OverviewSource struct {
 	Title     string
 	Text      string
 	NoteSpans map[string]NoteSpan
+}
+
+// ErrNoAgentOverview: no overview with that id in this worktree.
+var ErrNoAgentOverview = errors.New("no such overview")
+
+// AgentOverviewSource is overview id's export source from the in-memory
+// store a TUI or gg web holds, its note anchors resolved there; root is the
+// caller's CheckoutKey (an overview of another worktree is not found).
+func AgentOverviewSource(docs *agentdocs.Store, id, root string) (OverviewSource, error) {
+	o, ok := docs.Overview(id)
+	if !ok || o.Root != root {
+		return OverviewSource{}, ErrNoAgentOverview
+	}
+	src := OverviewSource{Title: o.Title, Text: o.Text, NoteSpans: map[string]NoteSpan{}}
+	for _, a := range o.Anchors {
+		if a.Note == "" {
+			continue
+		}
+		if n, found := docs.FindNote(a.Note); found && n.Root == root {
+			src.NoteSpans[a.Note] = NoteSpan{Path: n.Path, Start: n.Start, End: n.End}
+		}
+	}
+	return src, nil
 }
 
 // exportReader reads one anchored path's frozen bytes and its diff.
