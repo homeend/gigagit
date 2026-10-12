@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // NoteSource is who wrote a note. The TUI's `a` key hides the agent layer;
@@ -132,7 +134,16 @@ type Note struct {
 	Summary     string      `toml:"summary"`
 	Rationale   string      `toml:"rationale,omitempty"`
 	Tags        []string    `toml:"tags,omitempty"`
-	Confidence  float64     `toml:"confidence,omitempty"`
+	// LegacyConfidence is the pre-format-3 confidence number, read only so
+	// the store can turn it into meta (notes.upgrade); never written again.
+	LegacyConfidence float64 `toml:"confidence,omitempty"`
+	// Meta is the author's free key/values (spec 2026-10-12-note-meta §2):
+	// gg owns no vocabulary. Display is the author's declaration of how they
+	// are shown; Added is meta written onto the note later by someone else
+	// (on a review note: per remark, by fingerprint).
+	Meta    []notemeta.KV    `toml:"meta,omitempty"`
+	Display notemeta.Display `toml:"display,omitempty"`
+	Added   []notemeta.Added `toml:"added,omitempty"`
 	// Scope is the reviewed range (hex "a..b") of a review note; "" otherwise.
 	Scope string `toml:"scope,omitempty"`
 	// Preview names the scope a note was written in, when it was written in
@@ -305,4 +316,20 @@ func NoteContextHash(lines []string) string {
 	}
 	sum := sha256.Sum256([]byte(strings.Join(trimmed, "\n")))
 	return hex.EncodeToString(sum[:])
+}
+
+// MetaValue is n's effective value for key: an added entry (for the note
+// itself, not a remark) over the author's own; "" when neither has one.
+func MetaValue(n Note, key string) string {
+	for i := len(n.Added) - 1; i >= 0; i-- {
+		if a := n.Added[i]; a.RemarkFP == "" && a.Key == key {
+			return a.Value
+		}
+	}
+	for _, kv := range n.Meta {
+		if kv.Key == key {
+			return kv.Value
+		}
+	}
+	return ""
 }

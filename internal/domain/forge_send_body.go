@@ -2,7 +2,6 @@ package domain
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/forge"
@@ -20,7 +19,7 @@ func sendBody(n model.Note, key, quote string) string {
 	agent := n.Source == model.NoteSourceAgent
 	rat := strings.TrimSpace(n.Rationale)
 	switch {
-	case agent && (rat != "" || len(n.Tags) > 0 || n.Confidence > 0):
+	case agent && (rat != "" || len(n.Tags) > 0 || len(n.Meta) > 0):
 		b.WriteString("\n\n<details><summary>Details</summary>\n\n")
 		if rat != "" {
 			b.WriteString(rat + "\n\n")
@@ -28,8 +27,8 @@ func sendBody(n model.Note, key, quote string) string {
 		for _, t := range n.Tags {
 			b.WriteString("- " + t + "\n")
 		}
-		if n.Confidence > 0 {
-			b.WriteString("\nconfidence: " + strconv.FormatFloat(n.Confidence, 'g', -1, 64) + "\n")
+		for _, kv := range n.Meta {
+			b.WriteString("- " + kv.Key + ": " + kv.Value + "\n")
 		}
 		b.WriteString("\n</details>")
 	case rat != "":
