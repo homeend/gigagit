@@ -56,3 +56,30 @@ func TestOverviewSurfacesAreWired(t *testing.T) {
 		t.Error("index.html help lacks the overview rows")
 	}
 }
+
+// R10: a PR view's Overviews block — its rows come from /api/pr/notes only,
+// are cleared wherever the Reviews block is, and route click / right-click /
+// enter to the overview.
+func TestPRViewOverviewsAreWired(t *testing.T) {
+	t.Parallel()
+	pv := readStatic(t, "previews.js")
+	if !strings.Contains(pv, `state.previewOverviews = d.overviews || []`) {
+		t.Error("previews.js does not keep the PR's overviews")
+	}
+	for _, f := range []string{"previews.js", "files.js"} {
+		src := readStatic(t, f)
+		if r, o := strings.Count(src, "state.previewReviews = [];"), strings.Count(src, "state.previewOverviews = [];"); r != o {
+			t.Errorf("%s clears the Reviews block %d times and the Overviews block %d times", f, r, o)
+		}
+	}
+	rv := readStatic(t, "reviews.js")
+	for _, want := range []string{`<li class="sect">Overviews</li>`, `data-overview=`, `function previewScopeOverviews()`, `"overview:" + `} {
+		if !strings.Contains(rv, want) {
+			t.Errorf("reviews.js lacks %q", want)
+		}
+	}
+	fs := readStatic(t, "files.js")
+	if strings.Count(fs, "li.dataset.overview") < 2 {
+		t.Error("files.js does not route a click and a right-click on an Overviews row")
+	}
+}

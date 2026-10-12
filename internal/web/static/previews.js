@@ -253,6 +253,7 @@ function armPreview(body) {
     state.previewCounts = null;
     state.previewGroups = null;
     state.previewReviews = [];
+    state.previewOverviews = [];
   }
   // /api/preview/notes resolves branch NAMES; a PR's would 404 (a fork) or,
   // worse, read a same-named local pair's notes — a PR asks by its number.
@@ -275,6 +276,7 @@ export async function loadPRCounts(n) {
   state.previewCounts = d.counts || {};
   state.previewGroups = d.groups || {}; // a PR's per-file group slots (the badges' stripes)
   state.previewReviews = d.reviews || []; // the PR's stored reviews (R4): the Reviews block
+  state.previewOverviews = d.overviews || []; // the PR's permanent overviews (R10): the Overviews block
   renderFiles();
 }
 

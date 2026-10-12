@@ -24,7 +24,8 @@ import { badgeRunCols, badgeRunHTML, fitNoteTitle, frameClass, metaDetailsHTML, 
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, refreshReviewMeta, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
-import { closeGoneOverview } from "./viewer.js";
+import { closeGoneOverview, openPermanentOverview } from "./viewer.js";
+import { overviewMenu } from "./overviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -651,6 +652,7 @@ function openLinkCompare(body) {
   state.previewCounts = null;
   state.previewGroups = null;
   state.previewReviews = [];
+  state.previewOverviews = [];
   state.compare = {
     a: body.left.desc,
     b: body.right.desc,
@@ -5189,6 +5191,7 @@ $("files-list").addEventListener("click", (e) => {
   }
   // A commit's review row opens the review; the review view's Summary row
   // shows the Summary. Neither is a file (no data-i).
+  if (li && li.dataset.overview) return openPermanentOverview(li.dataset.overview); // a PR view's Overviews row
   if (li && li.dataset.review) {
     // The working list's Review row returns to the list; a commit's to it.
     // …and a preview's Reviews row returns to the preview.
@@ -5253,6 +5256,10 @@ $("files-list").addEventListener("contextmenu", (e) => {
   const li = e.target.closest("li");
   // A commit's note rows are not files: Open + Delete only (the TUI's
   // noteRowMenu). The review view's Summary row: Delete review.
+  if (li && li.dataset.overview) {
+    e.preventDefault();
+    return overviewMenu(li.dataset.overview, e.clientX, e.clientY);
+  }
   if (li && li.dataset.review) {
     e.preventDefault();
     const rid = li.dataset.review;
