@@ -16,8 +16,9 @@ import (
 //go:embed assets
 var assets embed.FS
 
-// MaxBytes caps the rendered page.
-const MaxBytes = 16 << 20
+// MaxBytes caps the rendered page. Not a browser limit (browsers open far
+// larger pages); a guard against an accidental giant file to share.
+const MaxBytes = 30 << 20
 
 // TooLargeError: the page would pass MaxBytes. Largest names the biggest
 // files ("path (x MB)", largest first, at most three) — what to drop.

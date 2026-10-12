@@ -76,14 +76,20 @@ func TestScopeModuleLeavesNoModuleSyntax(t *testing.T) {
 
 func TestRenderRefusesTooLarge(t *testing.T) {
 	t.Parallel()
-	e := fixture()
 	big := strings.Repeat("x", 1<<20)
-	for i := range 20 {
-		e.Files = append(e.Files, File{Path: fmt.Sprintf("d/%02d.txt", i), Lines: []Line{{Text: big}}})
+	withMB := func(n int) Export {
+		e := fixture()
+		for i := range n {
+			e.Files = append(e.Files, File{Path: fmt.Sprintf("d/%02d.txt", i), Lines: []Line{{Text: big}}})
+		}
+		return e
 	}
-	_, err := Render(e)
+	if _, err := Render(withMB(20)); err != nil { // a 20 MB page is fine (the cap was 16 MB)
+		t.Fatalf("20 MB: %v", err)
+	}
+	_, err := Render(withMB(40))
 	var tl *TooLargeError
-	if !errors.As(err, &tl) || len(tl.Largest) != 3 || !strings.Contains(err.Error(), "16 MB cap") {
+	if !errors.As(err, &tl) || len(tl.Largest) != 3 || !strings.Contains(err.Error(), "30 MB cap") {
 		t.Fatalf("err = %v", err)
 	}
 }
