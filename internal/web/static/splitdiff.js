@@ -118,14 +118,43 @@ function noteAtRow(placed, row) {
   return p ? p.n : null;
 }
 
-// diffSource is the url a file's diff is read from (§3): a stored review
-// overview's link through the review lane, an agent's HEAD → the working
-// tree; "" = none.
+// storedRef is a stored overview's owner: a review's stored overview
+// ("review-overview:<id>") or a permanent overview ("overview:<id>").
+function storedRef(stored) {
+  const s = String((stored && stored.id) || "");
+  if (s.startsWith("review-overview:")) return { kind: "review", id: s.slice("review-overview:".length) };
+  if (s.startsWith("overview:")) return { kind: "overview", id: s.slice("overview:".length) };
+  return { kind: "", id: "" };
+}
+
+// storedQuery is the lane a stored overview's reads go through: its remarks
+// on a file, its D diff, its export ("" = none).
+function storedQuery(stored) {
+  const r = storedRef(stored);
+  return r.id ? r.kind + "=" + encodeURIComponent(r.id) : "";
+}
+
+// remarksQuery is the remarks lane of a file opened from way back from: a
+// stored overview still open; "" otherwise.
+function remarksQuery(from) {
+  return from && from.stored && !from.closed ? storedQuery(from.stored) : "";
+}
+
+// goneStoredOverview: ov is a permanent overview no longer among ids (the
+// counts' overview_ids) — deleted elsewhere, so the page closes it.
+function goneStoredOverview(ov, ids) {
+  const r = storedRef(ov && ov.stored);
+  return r.kind === "overview" && !(ids || []).includes(r.id);
+}
+
+// diffSource is the url a file's diff is read from (§3): a stored
+// overview's link through its lane (a review's or a permanent overview's),
+// an agent's HEAD → the working tree; "" = none.
 function diffSource(from, path) {
   if (!from || !path) return "";
   if (from.stored) {
-    const id = String(from.stored.id || "").replace(/^review-overview:/, "");
-    return id ? "/api/diff?" + new URLSearchParams({ review: id, path }) : "";
+    const q = storedQuery(from.stored);
+    return q ? "/api/diff?" + q + "&" + new URLSearchParams({ path }) : "";
   }
   return "/api/diff?" + new URLSearchParams({ wt: "head", path });
 }
@@ -134,14 +163,15 @@ const D_SHOWS = " — D shows the file";
 
 // diffNotice is what the column says instead of rows (§4); "" = draw the
 // rows. status is a failed read's HTTP status (0 = it did not fail).
-function diffNotice(d, status, agent) {
-  if (status === 404 && !agent) return "the review is gone" + D_SHOWS;
+function diffNotice(d, status, agent, owner = "review") {
+  const ov = owner === "overview";
+  if (status === 404 && !agent) return (ov ? "the overview is gone" : "the review is gone") + D_SHOWS;
   if (status) return "could not read the diff" + D_SHOWS;
   if (!d) return "no diff for this file" + D_SHOWS;
   if (d.binary) return "binary file" + D_SHOWS;
   if (d.too_large) return "diff too large" + D_SHOWS;
   if (d.changed === false || !(d.rows || []).some((r) => r.kind !== "same"))
-    return (agent ? "no changes in the working tree" : "no change to this file in the review") + D_SHOWS;
+    return (agent ? "no changes in the working tree" : ov ? "no change to this file in the overview's commit" : "no change to this file in the review") + D_SHOWS;
   return "";
 }
 
@@ -165,4 +195,4 @@ function sameContent(prev, cur) {
 }
 // --- end split diff model ---
 
-export { diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows };
+export { goneStoredOverview, remarksQuery, storedQuery, storedRef, diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows };

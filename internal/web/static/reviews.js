@@ -533,7 +533,7 @@ export function openReviewOverview() {
   const rv = state.review;
   if (!rv || !rv.data.overviewMd) return;
   const d = rv.data;
-  openStoredOverview({ id: rv.id, title: d.label || rv.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: d.overviewText || "" });
+  openStoredOverview({ kind: "review", id: rv.id, title: d.label || rv.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: d.overviewText || "" });
 }
 
 // reviewSummaryHTML is the Summary: the review's markdown, its meta, the

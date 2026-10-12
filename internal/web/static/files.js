@@ -24,6 +24,7 @@ import { badgeRunCols, badgeRunHTML, fitNoteTitle, frameClass, metaDetailsHTML, 
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, refreshReviewMeta, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
+import { closeGoneOverview } from "./viewer.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -2684,7 +2685,11 @@ async function refreshNoteCounts() {
       reviews: c.reviews || [], // the Branches' review sub-rows
       working_reviews: c.working_reviews || [], // the working list's Review row and ✎
       pr_reviewed: c.pr_reviewed || [], // pull requests holding a local review: their row's ✎
+      overviews: c.overviews || [], // permanent overviews: the commit rows' ≡, menu rows, branch sub-rows
+      overview_ids: c.overview_ids || [], // every overview (a PR's too): an open one no longer here closes
     };
+    // Only on a successful read: the failure fallback's [] would close them all.
+    closeGoneOverview(state.noteCounts.overview_ids);
     // The open commit's Reviews rows follow the same list, so a review saved
     // or deleted anywhere (the TUI, another tab) shows up without a reopen.
     const cr = state.commitReviews;
@@ -2693,7 +2698,7 @@ async function refreshNoteCounts() {
     // Counts are decoration, but a STALE badge is worse than none: a failed
     // fetch means we no longer know, so draw no ◆ at all until the next one
     // succeeds.
-    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, plain_by_commit_path: {}, scopes_by_commit: {}, reviews: [], working_reviews: [], pr_reviewed: [] };
+    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {}, plain_by_commit_path: {}, scopes_by_commit: {}, reviews: [], working_reviews: [], pr_reviewed: [], overviews: [], overview_ids: [] };
   }
   // The Pull requests list (prs.js) repaints its ✎ marks; an event, since
   // prs.js already imports this module.

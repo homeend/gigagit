@@ -268,12 +268,9 @@ console.log([
   hereOf(bands, -1, 9, 2),   // band 2 is the selection's: no second mark
   hereOf([], -1, 1, -1),
   splitFits(899), splitFits(900), SPLIT_MIN_PX,
-  remarksReview({stored: {id: "review-overview:abc"}}),
-  remarksReview({stored: {id: "review-overview:abc"}, closed: true}),
-  remarksReview({id: "f3"}), remarksReview(null),
 ].join("|"));
 `)
-	want := `0|2|2|-1|-1|-1|false|true|900|abc|||`
+	want := `0|2|2|-1|-1|-1|false|true|900`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
@@ -294,6 +291,40 @@ console.log([
 `)
 	want := `review · Claude · lines 2–3|review · Claude · line 4|review:x:0,t1,review:x:1|true|true`
 	if out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+func TestStoredRefJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "splitdiff.js", sdPureStart, sdPureEnd, `
+console.log([
+  JSON.stringify(storedRef({ id: "review-overview:ab12" })),
+  JSON.stringify(storedRef({ id: "overview:cd34" })),
+  JSON.stringify(storedRef({ id: "f7" })), JSON.stringify(storedRef(null)),
+  storedQuery({ id: "review-overview:ab12" }), storedQuery({ id: "overview:cd34" }), storedQuery(null) === "",
+  remarksQuery({ stored: { id: "overview:cd34" } }), remarksQuery({ stored: { id: "overview:cd34" }, closed: true }) === "",
+  remarksQuery({ id: "f7" }) === "", remarksQuery(null) === "",
+  remarksQuery({ stored: { id: "review-overview:abc" } }), remarksQuery({ stored: { id: "review-overview:abc" }, closed: true }) === "",
+  goneStoredOverview({ stored: { id: "overview:cd34" } }, ["ab12"]), goneStoredOverview({ stored: { id: "overview:cd34" } }, ["cd34"]),
+  goneStoredOverview({ stored: { id: "review-overview:ab12" } }, []), goneStoredOverview(null, []),
+].join("|"));
+`)
+	want := `{"kind":"review","id":"ab12"}|{"kind":"overview","id":"cd34"}|{"kind":"","id":""}|{"kind":"","id":""}|review=ab12|overview=cd34|true|overview=cd34|true|true|true|review=abc|true|true|false|false|false`
+	if out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+func TestNoteBoxTitleOwnerJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", vnPureStart, vnPureEnd, `
+console.log([
+  noteBoxTitle({ readonly: true, author: "Claude", start: 2, end: 2 }),
+  noteBoxTitle({ readonly: true, kind: "overview", author: "Claude", start: 2, end: 3 }),
+].join("|"));
+`)
+	if want := "review · Claude · line 2|overview · Claude · lines 2–3"; out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }

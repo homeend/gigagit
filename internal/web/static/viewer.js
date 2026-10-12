@@ -6,7 +6,7 @@ import { closeLayer, copyText, footOwned, mountOverlay, popFoot, pushFoot, pushL
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { collapseDiffRows, cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
-import { diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows } from "./splitdiff.js";
+import { goneStoredOverview, remarksQuery, storedQuery, storedRef, diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows } from "./splitdiff.js";
 import { mdHTML } from "./markdown.js";
 import { frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./notemeta.js";
 import { saveUI } from "./uistate.js";
@@ -71,7 +71,7 @@ function keepLine(cur, count, placeholder) {
 // summary, rationale, author, outdated, ref}, lines 1-based.
 function noteBoxTitle(n) {
   const at = n.start === n.end ? "line " + n.start : "lines " + n.start + "–" + n.end;
-  if (n.readonly) return "review · " + n.author + " · " + at; // a review's remark: its id is internal
+  if (n.readonly) return (n.kind || "review") + " · " + n.author + " · " + at; // a review's or an overview's remark: its id is internal
   return "note " + n.id + " · " + n.author + " · " + at + (n.outdated ? " · outdated" : "");
 }
 
@@ -179,7 +179,10 @@ function escHow(isOverview, noteCount) {
 // its id and title (the agent's words — the server's OverviewName), a file
 // by its path.
 function docName(v) {
-  if (v.ov && v.ov.stored) return "overview of review " + v.ov.stored.id.slice("review-overview:".length);
+  if (v.ov && v.ov.stored) {
+    const r = storedRef(v.ov.stored);
+    return r.kind === "overview" ? "overview " + JSON.stringify(v.ov.title) : "overview of review " + r.id;
+  }
   return v.ov ? "overview " + v.id + " " + JSON.stringify(v.ov.title) : v.path;
 }
 
@@ -301,11 +304,6 @@ function hereOf(bands, cur, line, selBand) {
   return k < 0 || k === selBand ? -1 : bands[k].i;
 }
 
-// remarksReview is the review whose remarks a file opened from overview
-// way back from carries: a stored overview's review; "" otherwise.
-function remarksReview(from) {
-  return from && from.stored && !from.closed ? String(from.stored.id).replace(/^review-overview:/, "") : "";
-}
 // --- end overview model ---
 
 // --- the overlay -------------------------------------------------------------
@@ -436,9 +434,11 @@ function fetchOverview(id) {
   return getJSON("/api/overview?id=" + encodeURIComponent(id));
 }
 
-function fetchContent(src, rev, path, review = "", init = undefined) {
+// fetchContent reads a file; remarks is a stored overview's lane
+// (storedQuery: "review=<id>" | "overview=<id>"), "" for none.
+function fetchContent(src, rev, path, remarks = "", init = undefined) {
   return getJSON("/api/file-content?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path) +
-    (review ? "&review=" + encodeURIComponent(review) : ""), init);
+    (remarks ? "&" + remarks : ""), init);
 }
 
 // reportCursor tells the server this tab's line, debounced: the switcher of
@@ -570,7 +570,7 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
       ov = await fetchOverview(reg.file.id);
     } else {
       [body, dres] = await Promise.all([
-        fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksReview(from)),
+        fetchContent(reg.file.source, reg.file.rev || "", reg.file.path, remarksQuery(from)),
         diffWanted(from) ? fetchDiff(from, reg.file.path) : null,
       ]);
     }
@@ -667,10 +667,31 @@ function showOverview(f, ov, mine) {
 // anchors open the file at the reviewed tip (a working review: the working
 // tree), and Back re-shows the copy kept here. A plain anchor (the review
 // could not resolve it, R3) is text: tab skips it, enter says why, no band.
-export function openStoredOverview({ id, title, blocks, anchors, tip, text }) {
+export function openStoredOverview({ id, kind = "review", title, blocks, anchors, tip, text }) {
   if (isOpen()) rememberPlace();
   loadSeq++; // an open in flight must not land over it
-  showStoredOverview({ id: "review-overview:" + id, title, blocks, anchors: anchors || [], tip: tip || "", text: text || "" });
+  showStoredOverview({ id: (kind === "overview" ? "overview:" : "review-overview:") + id, title, blocks, anchors: anchors || [], tip: tip || "", text: text || "" });
+}
+
+// openPermanentOverview opens permanent overview id (spec 2026-10-12 §10):
+// the stored mode, its anchors opening the files at the overview's commit.
+export async function openPermanentOverview(id) {
+  let d;
+  try {
+    d = await getJSON("/api/overview/" + encodeURIComponent(id));
+  } catch (e) {
+    return opLine(e.status === 404 ? "that overview no longer exists" : "overview: " + (e.message || e), true);
+  }
+  openStoredOverview({ kind: "overview", id, title: "Overview: " + d.title, blocks: d.blocks, anchors: d.anchors || [], tip: d.commit, text: d.text || "" });
+}
+
+// closeGoneOverview closes the viewer when it shows a permanent overview the
+// refreshed counts no longer hold (the TUI's dropGoneOverviews).
+export function closeGoneOverview(ids) {
+  const ov = split ? split.ov : view.ov;
+  if (!isOpen() || !goneStoredOverview(ov, ids)) return;
+  closeViewer("close");
+  opLine("the overview was deleted", false);
 }
 
 function showStoredOverview(doc) {
@@ -1373,7 +1394,7 @@ async function loadStackFile(st, k) {
   const at = sp.ov.stored ? storedAnchorOpen(sp.ov.stored.tip, { path: s.path }) : { src: "worktree", rev: "" };
   let body = null;
   try {
-    body = await fetchContent(at.src, at.rev, s.path, sp.ov.stored ? remarksReview({ stored: sp.ov.stored }) : "", { signal: st.abort.signal });
+    body = await fetchContent(at.src, at.rev, s.path, sp.ov.stored ? storedQuery(sp.ov.stored) : "", { signal: st.abort.signal });
   } catch (e) {
     if (st.abort.signal.aborted) return; // the stack was dropped: its reads were cancelled
     s.error = "(load failed: " + (e.message || e) + ")";
@@ -1735,7 +1756,7 @@ async function exportOverviewHTML() {
   const ov = ovDoc();
   if (!ov) return;
   const q = ov.stored
-    ? "review=" + encodeURIComponent(String(ov.stored.id).replace(/^review-overview:/, ""))
+    ? storedQuery(ov.stored)
     : "id=" + encodeURIComponent(split ? split.id : view.id);
   opLine("exporting the overview…", false);
   let res;
@@ -1863,7 +1884,7 @@ async function fetchDiff(from, path) {
 // buildDiff is view.diff for one read; the cursor's row follows view.cur.
 function buildDiff({ d, status }, from) {
   const agent = !from.stored;
-  const notice = diffNotice(d, status, agent);
+  const notice = diffNotice(d, status, agent, storedRef(from.stored).kind);
   const rows = notice ? [] : unifiedRows(d);
   const by = lineRows(rows), head = diffHead(d, view.path, agent);
   const partial = !!diffPref && diffPref.key === from.id && diffPref.partial;
@@ -2552,7 +2573,7 @@ async function viewerFileChanged(id) {
   const seq = loadSeq;
   let body;
   try {
-    body = await fetchContent(view.src, view.rev, view.path, remarksReview(view.from));
+    body = await fetchContent(view.src, view.rev, view.path, remarksQuery(view.from));
   } catch {
     return; // the next change retries; a dead server paints its own veil
   }

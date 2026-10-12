@@ -37,3 +37,36 @@ func TestStoredOverviewIsWired(t *testing.T) {
 		t.Error("style.css lacks the overview row's rule")
 	}
 }
+
+// Spec 2026-10-12-permanent-overviews §10: a permanent overview opens in the
+// viewer's stored mode, and every lane names its kind (review= / overview=).
+func TestPermanentOverviewIsWired(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`export async function openPermanentOverview(id)`,
+		`getJSON("/api/overview/" + encodeURIComponent(id))`,
+		`kind: "overview"`,
+		`function fetchContent(src, rev, path, remarks = "", init = undefined)`,
+		`(remarks ? "&" + remarks : "")`,
+		`remarksQuery(from)`,
+		`export function closeGoneOverview(ids)`,
+		`"the overview was deleted"`,
+		`"/api/overview-export?" + q`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	for _, gone := range []string{`replace(/^review-overview:/, "")`, `function remarksReview(`} {
+		if strings.Contains(v, gone) {
+			t.Errorf("viewer.js still has %q (storedRef reads the kind)", gone)
+		}
+	}
+	if sd := readStatic(t, "splitdiff.js"); strings.Contains(sd, `replace(/^review-overview:/, "")`) || !strings.Contains(sd, `storedQuery(from.stored)`) {
+		t.Error("splitdiff.js does not ask storedQuery for the stored overview's lane")
+	}
+	if f := readStatic(t, "files.js"); !strings.Contains(f, `overviews: c.overviews || []`) || !strings.Contains(f, `closeGoneOverview(state.noteCounts.overview_ids)`) {
+		t.Error("files.js does not keep the counts' overviews or close a gone one")
+	}
+}
