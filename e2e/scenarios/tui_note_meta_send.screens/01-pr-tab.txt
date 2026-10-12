@@ -1,8 +1,8 @@
 local  branch main                                                                                                 {{root}}_______________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ B R W P [Pull requests]                           ││ Commits (all) 2                                                                                         │
-│ > #7  ✎  Change line 5  ann  feat → main          ││   ●  ↓   feat  change                                                                                   │
-│                                                   ││   ●  ↓   *main big                                                                                      │
+│ > #7  ✎  Change line 5  ann  feat → main          ││   ●  ↓    feat  change                                                                                  │
+│                                                   ││   ●  ↓    *main big                                                                                     │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

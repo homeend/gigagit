@@ -1,8 +1,8 @@
 local  branch main                                                                                                      {{root}}__________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Review: 3e3fa0a                                   ││ Commits (all) 2                                                                                         │
-│ Claude Code · just now · 3 notes on 2 files       ││   ●  ↓ ✎ *main cache config  ◆ 1                                                                        │
-│ 1 issue · 1 note · 1 good · 2 for author · 1 for… ││   ●      main  base                                                                                     │
+│ Claude Code · just now · 3 notes on 2 files       ││   ●  ↓ ✎  *main cache config  ◆ 1                                                                       │
+│ 1 issue · 1 note · 1 good · 2 for author · 1 for… ││   ●       main  base                                                                                    │
 │ > ≡ Summary                                       ││                                                                                                         │
 │   M  caching.ts  ◆ 1  good 1                      ││                                                                                                         │
 │   M  configuration.ts  ◆ 2  issue 1 note 1        ││                                                                                                         │
