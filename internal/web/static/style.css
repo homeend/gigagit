@@ -2001,6 +2001,15 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #prsendpanel-list li.g3 { border-left-color: var(--note-group-3); } #prsendpanel-list li.g4 { border-left-color: var(--note-group-4); }
 #prsendpanel-list li.g5 { border-left-color: var(--note-group-5); } #prsendpanel-list li.g6 { border-left-color: var(--note-group-6); }
 #prsendpanel-list .psev { font-size: .85em; padding: 0 4px; border-radius: 3px; background: var(--dim); color: var(--bg); margin-right: 4px; }
+/* the severity's colour from the note's badges (note meta); id + 3 classes beat .psev */
+#prsendpanel-list .psev.mc-red.ms-filled { background: var(--meta-red); }
+#prsendpanel-list .psev.mc-orange.ms-filled { background: var(--meta-orange); }
+#prsendpanel-list .psev.mc-yellow.ms-filled { background: var(--meta-yellow); }
+#prsendpanel-list .psev.mc-green.ms-filled { background: var(--meta-green); }
+#prsendpanel-list .psev.mc-blue.ms-filled { background: var(--meta-blue); }
+#prsendpanel-list .psev.mc-purple.ms-filled { background: var(--meta-purple); }
+#prsendpanel-list .psev.mc-grey.ms-filled { background: var(--meta-grey); }
+#prsendpanel-list .pmeta { white-space: normal; }
 #prsendpanel-list .pwhere { color: var(--accent); cursor: pointer; margin-right: 6px; }
 #prsendpanel-list .pskip { display: inline-block; width: 13px; text-align: center; color: var(--dim); }
 #prsendpanel-list .pdate, #prsendpanel-list .pskipwhy { color: var(--dim); margin-left: 8px; font-weight: normal; }

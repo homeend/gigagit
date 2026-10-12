@@ -137,3 +137,31 @@ func TestReviewViewDrawsMetaCounts(t *testing.T) {
 		}
 	}
 }
+
+// R9: the send panel keeps nothing ticked and no filter; meta shows only in an
+// OPENED row, and the collapsed row's severity chip takes the badge colour.
+func TestSendPanelDrawsMetaInOpenedRows(t *testing.T) {
+	t.Parallel()
+	p, rows := readStatic(t, "prsendpanel.js"), readStatic(t, "prsendrows.js")
+	for _, want := range []string{
+		`severityColour(r.display, r.severity)`,
+		`<div class="pmeta">${badgeRunHTML(r.display, esc)}${metaLinesHTML(r.display, esc)}</div>`,
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prsendpanel.js lacks %s", want)
+		}
+	}
+	if !strings.Contains(rows, `display: r.display || null`) {
+		t.Errorf("prsendrows.js does not carry the row's display")
+	}
+	// R9/R12: what opens ticked, what a tick does and where the cursor starts
+	// never read meta.
+	for _, fn := range []struct{ file, name string }{{"prsendpanel.js", "tick"}, {"prsendpanel.js", "firstCandidate"}, {"prsendrows.js", "tickAllInGroup"}} {
+		if body := jsFunc(t, fn.file, fn.name); strings.Contains(body, "display") {
+			t.Errorf("%s %s reads meta: %s", fn.file, fn.name, body)
+		}
+	}
+	if i := strings.Index(rows, "ticked: !r.skip && ticked.has(r.id)"); i < 0 {
+		t.Errorf("prsendrows.js: a row's tick is no longer only the kept set")
+	}
+}
