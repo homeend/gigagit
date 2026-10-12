@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // Target is how one item anchors. Exactly one of Hunk / NewLine / OldLine is
@@ -38,14 +40,17 @@ func (t Target) IsSet() bool {
 // as the agent wrote it (the caller normalises notation); ReplyTo, when set,
 // makes this a reply and leaves Path and Target empty.
 type Item struct {
-	Path       string
-	ReplyTo    string
-	Target     Target
-	Summary    string
-	Rationale  string
-	Author     string
-	Tags       []string
-	Confidence float64
+	Path      string
+	ReplyTo   string
+	Target    Target
+	Summary   string
+	Rationale string
+	Author    string
+	Tags      []string
+	// Meta and Display are the author's meta and declaration (spec
+	// 2026-10-12-note-meta); a confidence word folds into Meta.
+	Meta    []notemeta.KV
+	Display notemeta.Display
 	// Link is an address the note points at (a gg:// link or a revision).
 	// Resolve, set only on a reply, is its thread's state after the reply.
 	Link    string
@@ -58,17 +63,20 @@ type Item struct {
 type Batch struct {
 	Items    []Item
 	Contexts []string
+	// Problems are the dropped meta / display parts, for the caller to echo.
+	Problems []notemeta.Problem
 }
 
-// confidenceWords maps hunk's three-value confidence enum onto model.Note's
-// float64 field. Anything else is dropped (0 = unset), as hunk does.
-var confidenceWords = map[string]float64{"low": 0.3, "medium": 0.6, "high": 0.9}
+// confidenceWords is hunk's three-value confidence enum; it becomes the
+// meta key "confidence". Anything else is dropped, as hunk does.
+var confidenceWords = map[string]bool{"low": true, "medium": true, "high": true}
 
 type rawTop struct {
 	Version  *int              `json:"version"`
 	Summary  *string           `json:"summary"`
 	Files    []json.RawMessage `json:"files"`
 	Comments []json.RawMessage `json:"comments"`
+	Display  json.RawMessage   `json:"display"`
 }
 
 type rawFile struct {
@@ -78,27 +86,31 @@ type rawFile struct {
 }
 
 type rawAnnotation struct {
-	Summary    *string `json:"summary"`
-	Rationale  *string `json:"rationale"`
-	Author     *string `json:"author"`
-	Tags       []any   `json:"tags"`
-	Confidence *string `json:"confidence"`
-	OldRange   []any   `json:"oldRange"`
-	NewRange   []any   `json:"newRange"`
+	Summary    *string         `json:"summary"`
+	Rationale  *string         `json:"rationale"`
+	Author     *string         `json:"author"`
+	Tags       []any           `json:"tags"`
+	Confidence *string         `json:"confidence"`
+	OldRange   []any           `json:"oldRange"`
+	NewRange   []any           `json:"newRange"`
+	Meta       json.RawMessage `json:"meta"`
+	Display    json.RawMessage `json:"display"`
 }
 
 type rawComment struct {
-	FilePath   string  `json:"filePath"`
-	ReplyTo    string  `json:"replyTo"`
-	NewLine    *int    `json:"newLine"`
-	OldLine    *int    `json:"oldLine"`
-	Hunk       *int    `json:"hunk"`
-	HunkNumber *int    `json:"hunkNumber"`
-	Summary    *string `json:"summary"`
-	Rationale  *string `json:"rationale"`
-	Author     *string `json:"author"`
-	Link       *string `json:"link"`
-	Resolve    *bool   `json:"resolve"`
+	FilePath   string          `json:"filePath"`
+	ReplyTo    string          `json:"replyTo"`
+	NewLine    *int            `json:"newLine"`
+	OldLine    *int            `json:"oldLine"`
+	Hunk       *int            `json:"hunk"`
+	HunkNumber *int            `json:"hunkNumber"`
+	Summary    *string         `json:"summary"`
+	Rationale  *string         `json:"rationale"`
+	Author     *string         `json:"author"`
+	Link       *string         `json:"link"`
+	Resolve    *bool           `json:"resolve"`
+	Meta       json.RawMessage `json:"meta"`
+	Display    json.RawMessage `json:"display"`
 }
 
 // Parse reads either supported shape, chosen by the top-level key, and returns
@@ -134,6 +146,11 @@ func parseAgentContext(top rawTop) (Batch, error) {
 		return Batch{}, fmt.Errorf("unsupported agent-context version %d (gg reads version 1)", *top.Version)
 	}
 	var b Batch
+	batchDisplay, dprobs, err := notemeta.ParseDisplay(top.Display)
+	if err != nil {
+		return Batch{}, err
+	}
+	b.Problems = append(b.Problems, dprobs...)
 	if s := trimPtr(top.Summary); s != "" {
 		b.Contexts = append(b.Contexts, s)
 	}
@@ -184,8 +201,8 @@ func parseAgentContext(top rawTop) (Batch, error) {
 					it.Tags = append(it.Tags, s)
 				}
 			}
-			if a.Confidence != nil {
-				it.Confidence = confidenceWords[strings.ToLower(strings.TrimSpace(*a.Confidence))]
+			if it.Meta, it.Display, err = itemMeta(where, a.Confidence, a.Meta, a.Display, batchDisplay, &b); err != nil {
+				return Batch{}, err
 			}
 			b.Items = append(b.Items, it)
 		}
@@ -211,6 +228,10 @@ func parseComments(top rawTop) (Batch, error) {
 			Author:    trimPtr(c.Author),
 			ReplyTo:   strings.TrimSpace(c.ReplyTo),
 			Link:      trimPtr(c.Link),
+		}
+		var err error
+		if it.Meta, it.Display, err = itemMeta(where, nil, c.Meta, c.Display, nil, &b); err != nil {
+			return Batch{}, err
 		}
 		if it.ReplyTo != "" {
 			// A reply inherits its parent's anchor: naming a target too is a
@@ -304,4 +325,33 @@ func trimPtr(p *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*p)
+}
+
+// itemMeta builds one item's meta (a confidence word first, then the
+// agent's object) and its effective display (the batch's, replaced key by
+// key by the item's), recording what was dropped.
+func itemMeta(where string, conf *string, rawMeta, rawDisplay json.RawMessage, batch notemeta.Display, b *Batch) ([]notemeta.KV, notemeta.Display, error) {
+	var meta []notemeta.KV
+	if conf != nil {
+		if w := strings.ToLower(strings.TrimSpace(*conf)); confidenceWords[w] {
+			meta = append(meta, notemeta.KV{Key: "confidence", Value: w})
+		}
+	}
+	kv, err := metaKVs(rawMeta)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: meta must be an object", where)
+	}
+	meta = append(meta, kv...)
+	meta, probs := notemeta.CheckMeta(meta)
+	for _, p := range probs {
+		b.Problems = append(b.Problems, notemeta.Problem(where+": "+string(p)))
+	}
+	d, dprobs, err := notemeta.ParseDisplay(rawDisplay)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %v", where, err)
+	}
+	for _, p := range dprobs {
+		b.Problems = append(b.Problems, notemeta.Problem(where+": "+string(p)))
+	}
+	return meta, notemeta.Effective(batch, d), nil
 }

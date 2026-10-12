@@ -22,7 +22,7 @@ func TestParseAgentContextV1(t *testing.T) {
 	}
 	i0 := b.Items[0]
 	if i0.Path != "src/search.ts" || i0.Target.NewLine != [2]int{15, 23} || i0.Summary != "prefix beats substring" ||
-		i0.Rationale != "why" || i0.Author != "sonnet" || len(i0.Tags) != 1 || i0.Confidence != 0.9 {
+		i0.Rationale != "why" || i0.Author != "sonnet" || len(i0.Tags) != 1 || len(i0.Meta) != 1 || i0.Meta[0].Value != "high" {
 		t.Fatalf("item 0 = %+v", i0)
 	}
 	if b.Items[1].Target.OldLine != [2]int{40, 40} || b.Items[1].Target.NewLine != [2]int{0, 0} {
@@ -133,14 +133,20 @@ func TestParseOneBadItemRejectsEverything(t *testing.T) {
 
 func TestParseConfidenceWords(t *testing.T) {
 	t.Parallel()
-	for word, want := range map[string]float64{"low": 0.3, "medium": 0.6, "high": 0.9, "bogus": 0} {
+	for word, want := range map[string]string{"low": "low", "medium": "medium", "high": "high", "bogus": ""} {
 		in := `{"files":[{"path":"a.go","annotations":[{"newRange":[1,1],"summary":"s","confidence":"` + word + `"}]}]}`
 		b, err := Parse([]byte(in))
 		if err != nil {
 			t.Fatalf("%s: %v", word, err)
 		}
-		if b.Items[0].Confidence != want {
-			t.Errorf("confidence %q = %v, want %v", word, b.Items[0].Confidence, want)
+		got := ""
+		for _, kv := range b.Items[0].Meta {
+			if kv.Key == "confidence" {
+				got = kv.Value
+			}
+		}
+		if got != want {
+			t.Errorf("confidence %q = %q, want %q", word, got, want)
 		}
 	}
 }

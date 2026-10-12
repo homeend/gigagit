@@ -7111,6 +7111,38 @@ unchanged file (a pure rename). Tests: `split_diff_rows_test.go`,
 `split_diff_test.go`, `split_diff_keys_test.go`, e2e
 `tui_overview_split_diff`.
 
+### Note meta (core, 2026-10-12)
+
+Spec `docs/superpowers/specs/2026-10-12-note-meta-design.md`. Every note
+(stored note, reply, review remark, temporary open-file note) may carry
+`Meta []notemeta.KV` (free key/values — gg owns no vocabulary) and a
+`Display notemeta.Display`: per key `show` (badge / frame / count / line),
+`label`, `order`, `style` (filled/text), `as` (level/audience), and per value
+`color` (red orange yellow green blue purple grey), `glyph` (one safe
+character), `level` (high/medium/low/info), `audience` (author/reviewer).
+Only the semantics are read by consumers, never key names; nothing ever
+acts on a meta value. A review document declares `display` at document,
+file and remark level; nearer replaces farther key by key
+(`notemeta.Effective`); a reply with none uses its root's
+(`domain.NoteMeta(n, root)`). Built-in declaration only for `status`.
+
+- Storage: `Note.Meta`, `Note.Display`, `Note.Added` (meta written later
+  by someone other than the author; on a review note an entry carries the
+  remark's fingerprint, the RemarkSends precedent, and `SaveReview` re-saves
+  keep it). `SetNoteMeta(id, by, kv)` rewrites the author's meta in place
+  when `by` is the author, otherwise adds; remarks are always added meta.
+  `SetNoteDisplay` on a remark is refused (`ErrRemarkDisplay`).
+- Format: each notes file carries `format = 3` (never a git-ref marker —
+  the store is machine-local). Older files convert on read (`key: value`
+  tags → meta; the confidence number → `confidence` meta via
+  `LegacyConfidence`, decode-only). A file with `format > 3` reads, every
+  write fails `notes.ErrNewerFormat`. Already-installed gg builds drop the
+  new fields when they save a part: accepted (spec R10).
+- `notebatch.ReviewDoc.Canonical()` keeps `display` at all three levels
+  (SaveReview stores the canonical form).
+- Wire: `WireNote.Meta` + `WireNote.Display` (the `notemeta.Resolved`,
+  nil when empty); `ToWireNoteIn(r, root)` for replies.
+
 ## Permanent overviews (2026-10-12)
 
 Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
@@ -7183,7 +7215,8 @@ opened from disk with no gg and no network.
   `.vline/.vno/.vsign/.vtext/.vd-*/.vrange`. Dark only, like gg web.
   `json.Marshal` escapes `<>&` + U+2028/9, so file text cannot close the
   blob's `<script>`; an inlined asset holding `</script`/`</style` is an
-  error. 16 MB cap → `*TooLargeError` naming the three largest files.
+  error. 30 MB cap (a guard, not a browser limit; the per-file 10 MB is gg's
+  `MaxDiffBytes`) → `*TooLargeError` naming the three largest files.
 - **Frontends:** web `GET /api/overview-export?id=|review=` (attachment,
   413 over the cap) + `E` / the `E export html` chip in `viewer.js`
   (`exportOverviewHTML`, a fetch → blob download so an error shows in the

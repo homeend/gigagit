@@ -668,8 +668,12 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 		}
 		t += " " + i18n.T("(stale)")
 	}
-	if model.IsReviewNoteID(r.Note.ID) && len(r.Note.Tags) > 0 {
-		t += " · " + sanitizeLine(strings.Join(r.Note.Tags, " · ")) // the review's meta
+	if model.IsReviewNoteID(r.Note.ID) && len(r.Note.Meta) > 0 {
+		var kv []string
+		for _, m := range r.Note.Meta {
+			kv = append(kv, m.Key+": "+m.Value)
+		}
+		t += " · " + sanitizeLine(strings.Join(kv, " · ")) // the review's meta
 	}
 	if r.Resolution != nil {
 		t += " · " + i18n.T("resolved")

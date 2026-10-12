@@ -185,3 +185,21 @@ func TestSessionNoteUsageErrorsExitTwo(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionNoteAddPostsMetaAndDisplay(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	livePresence(t, dir)
+	seen := answer(t, dir, func(c steer.Command) steer.Reply {
+		return steer.Reply{ID: c.ID, OK: true, Detail: "noted", Notes: twoNotes[:1]}
+	})
+	var out, errb bytes.Buffer
+	args := []string{"note", "add", "a.go:1", "--summary", "s", "--meta", "kind=issue", "--display", `{"kind":{"show":["badge"]}}`}
+	if code := runSession(dir, nil, args, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d (stderr %q)", code, errb.String())
+	}
+	c := <-seen
+	if c.Meta["kind"] != "issue" || !strings.Contains(string(c.Display), `"badge"`) {
+		t.Fatalf("posted meta %v display %s", c.Meta, c.Display)
+	}
+}

@@ -594,7 +594,7 @@ func TestRenderNoteLineBranchReview(t *testing.T) {
 		Address: model.FileAddress{State: model.StateCommitted, Commit: "49cd78100000000000000000000000000000000", Branch: "feature"},
 		Summary: "Review: feature"}
 	var b strings.Builder
-	renderNoteLine(&b, domain.ResolvedNote{Note: n}, false, "")
+	renderNoteLine(&b, domain.ResolvedNote{Note: n}, nil, "")
 	if got, want := b.String(), "d8665f79 [agent] review 49cd781 (feature)  Review: feature\n"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}

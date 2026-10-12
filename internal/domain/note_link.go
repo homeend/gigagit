@@ -234,8 +234,8 @@ func (s *Service) remarkThread(ctx context.Context, remarkID string) (model.Note
 		Address: reviewRootAddress(r, rm.Path),
 		Side:    rm.Side, Range: [2]int{rm.Start, max(rm.End, rm.Start)},
 		Summary: rm.Summary, Rationale: rm.Rationale, Created: r.Created, Updated: r.Updated}
-	for _, kv := range rm.Meta {
-		root.Tags = append(root.Tags, kv.Key+": "+kv.Value)
+	if f, dn, ok := r.docRemarkAt(rm.N); ok {
+		r.remarkMeta(&root, f, dn, remarkFP(f.Path, reviewSide(dn.Side), dn.Range, dn.Summary))
 	}
 	th, _ := r.RemarkThreads()
 	if rm.N < len(th) {

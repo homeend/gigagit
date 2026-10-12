@@ -17,6 +17,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // partFile is ONE file of the store, rewritten atomically (temp+rename, the
@@ -41,7 +42,13 @@ func (fs *partFile) SetPolicy(p Policy) {
 // ErrCorrupt is wrapped by a read of a part file that is not valid TOML.
 var ErrCorrupt = errors.New("notes: store is corrupt")
 
+// Format is the notes file layout this build writes (spec
+// 2026-10-12-note-meta §2.5): 3 = meta, display and added meta on notes.
+// A file without the key is older and is converted as it is read.
+const Format = 3
+
 type index struct {
+	Format   int                      `toml:"format,omitempty"`
 	Notes    []model.Note             `toml:"notes"`
 	Resolved []model.ThreadResolution `toml:"resolved,omitempty"`
 }
@@ -72,7 +79,24 @@ func (fs *partFile) readIndex() (index, error) {
 	if err := toml.Unmarshal(data, &idx); err != nil {
 		return index{}, fmt.Errorf("%w: %s: %v", ErrCorrupt, fs.path, err)
 	}
+	for i := range idx.Notes {
+		upgrade(&idx.Notes[i])
+	}
 	return idx, nil
+}
+
+// upgrade converts a note read from a pre-format-3 file: "key: value" tags
+// and the confidence number become meta (spec §2.5). Idempotent.
+func upgrade(n *model.Note) {
+	plain, kv := notemeta.SplitTags(n.Tags)
+	if len(kv) > 0 {
+		n.Tags = plain
+		n.Meta = append(n.Meta, kv...)
+	}
+	if n.LegacyConfidence > 0 {
+		n.Meta = append(n.Meta, notemeta.KV{Key: "confidence", Value: notemeta.ConfidenceWord(n.LegacyConfidence)})
+		n.LegacyConfidence = 0
+	}
 }
 
 // LoadResolved returns this part's thread resolutions. Never writes.
@@ -101,6 +125,7 @@ func (fs *partFile) write(idx index) error {
 		}
 		return nil
 	}
+	idx.Format = Format
 	data, err := toml.Marshal(idx)
 	if err != nil {
 		return err
@@ -153,6 +178,9 @@ func (fs *partFile) mutateCap(apply func([]model.Note) ([]model.Note, error), ca
 	before, err := fs.readIndex()
 	if err != nil {
 		return 0, err
+	}
+	if before.Format > Format {
+		return 0, ErrNewerFormat
 	}
 	// apply gets a CLONE: it may edit records in place (Put replaces by ID),
 	// and the unchanged-check below has to compare against the state actually
@@ -238,6 +266,9 @@ func (fs *partFile) mutateResolved(apply func(ns []model.Note, rs []model.Thread
 	before, err := fs.readIndex()
 	if err != nil {
 		return err
+	}
+	if before.Format > Format {
+		return ErrNewerFormat
 	}
 	rs, err := apply(before.Notes, slices.Clone(before.Resolved))
 	if err != nil {

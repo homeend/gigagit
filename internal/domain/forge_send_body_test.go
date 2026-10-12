@@ -6,6 +6,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 func TestSendBodyUserNote(t *testing.T) {
@@ -20,9 +21,9 @@ func TestSendBodyUserNote(t *testing.T) {
 func TestSendBodyAgentNoteFoldsDetailsAndSigns(t *testing.T) {
 	t.Parallel()
 	got := sendBody(model.Note{Source: model.NoteSourceAgent, Author: "claude", Summary: "nil deref",
-		Rationale: "p can be nil here", Tags: []string{"severity: bug"}, Confidence: 0.8}, "remark:r1:ab12", "")
+		Rationale: "p can be nil here", Meta: []notemeta.KV{{Key: "severity", Value: "bug"}, {Key: "confidence", Value: "0.8"}}}, "remark:r1:ab12", "")
 	for _, s := range []string{"nil deref\n\n<details><summary>Details</summary>\n\np can be nil here",
-		"- severity: bug", "confidence: 0.8", "</details>", "— claude via gg", forge.SendMarker("remark:r1:ab12")} {
+		"- severity: bug", "- confidence: 0.8", "</details>", "— claude via gg", forge.SendMarker("remark:r1:ab12")} {
 		if !strings.Contains(got, s) {
 			t.Errorf("body lacks %q:\n%s", s, got)
 		}

@@ -1,8 +1,10 @@
 package agentdocs
 
 import (
+	"encoding/json"
 	"strconv"
 
+	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -26,8 +28,18 @@ func NotedDetail(n Note, lead string) string { return "noted " + span(n) + " as 
 // NoteWire is the note in its protocol form; text (note_show) is the lines
 // it sits on.
 func NoteWire(n Note, fileID string, text []string) steer.FileNote {
-	return steer.FileNote{ID: n.ID, FileID: fileID, Path: n.Path, Start: n.Start, End: n.End,
+	w := steer.FileNote{ID: n.ID, FileID: fileID, Path: n.Path, Start: n.Start, End: n.End,
 		Summary: n.Summary, Rationale: n.Rationale, Author: n.Author, Outdated: n.Outdated, Text: text}
+	if len(n.Meta) > 0 {
+		w.Meta = map[string]string{}
+		for _, kv := range n.Meta {
+			w.Meta[kv.Key] = kv.Value
+		}
+	}
+	if r := notemeta.Resolve(n.Meta, n.Display, nil); !r.Empty() {
+		w.Display, _ = json.Marshal(r)
+	}
+	return w
 }
 
 // OverviewName is how a reply names an overview: its id and title (the

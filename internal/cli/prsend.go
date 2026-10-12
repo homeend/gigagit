@@ -257,9 +257,9 @@ func prNotes(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 				wires = append(wires, w)
 				continue
 			}
-			renderNoteLine(stdout, r, false, noteStatusWord(r, true))
+			renderNoteLine(stdout, r, nil, noteStatusWord(r, true))
 			for _, rep := range r.Replies {
-				renderNoteLine(stdout, rep, true, noteStatusWord(rep, true))
+				renderNoteLine(stdout, rep, &r.Note, noteStatusWord(rep, true))
 			}
 		}
 	}

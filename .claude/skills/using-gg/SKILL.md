@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v165 -->
+<!-- gg:using-gg:v166 -->
 
 # Using gg (gigagit)
 
@@ -188,9 +188,11 @@ guards against removing the worktree you are standing in.
 ```bash
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]   # numbered git @@ hunks per file
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>] \
-              --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] [--json]
+              --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] \
+              [--meta k=v ...] [--display <json|@file>] [--json]
 gg note show  [--json] <note-id|note-link>                          # one thread: root, replies (with ids), resolved?
-gg note reply [<repo-link>] <note-id|note-link|review:<id>:<n>> --summary "…" [--rationale "…"] [--link <commit|gg://…>] [--json]
+gg note reply [<repo-link>] <note-id|note-link|review:<id>:<n>> --summary "…" [--rationale "…"] [--link <commit|gg://…>] [--meta k=v ...] [--display <json|@file>] [--json]
+gg note meta  [<repo-link>] <note-id|review:<id>:<n>> set k=v ... | unset k ... | display <json|@file> [--author <name>]   # meta: free key/values, a glance aid (never sends or resolves anything); see the review skills for the suggested keys and the display declaration
 gg note resolve   [<repo-link>] <note-id|note-link|review:<id>:<n>> [--json]   # resolve a thread (any of its ids); a resolved thread folds
 gg note unresolve [<repo-link>] <note-id|note-link|review:<id>:<n>>            # reopen it (exit 1 when it is not resolved)
 gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--json]   # agent-context v1 or a comments batch
@@ -453,7 +455,7 @@ reads each one in a box under its lines in the gg TUI and in the gg web
 page's file viewer.
 
 - `gg session note add <path>:<start>[-<end>] --summary "…" [--rationale "…"]
-  [--author <name>] [--json]` — put a note on those lines of the file AS IT IS
+  [--author <name>] [--meta k=v ...] [--display <json|@file>] [--json]` — put a note on those lines of the file AS IT IS
   ON DISK. A file that is not open is opened in the background first. Answers
   `noted <path>:<lines> as t<n>`. `<path>` is repo-relative; an open file's id
   (`f3:10-12`) works too. Limits: 50 notes per file, summary 500 characters,

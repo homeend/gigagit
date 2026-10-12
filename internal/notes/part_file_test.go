@@ -14,6 +14,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // noteAt builds a root note created at t0+d seconds.
@@ -54,7 +55,7 @@ func TestPutLoadRoundTrip(t *testing.T) {
 	n := noteAt("aaaaaaaa", 1)
 	n.Rationale = "because"
 	n.Tags = []string{"perf", "api"}
-	n.Confidence = 0.5
+	n.Meta = []notemeta.KV{{Key: "confidence", Value: "0.5"}}
 	n.Preview = "main...feat"
 	if err := fs.Put(n); err != nil {
 		t.Fatalf("Put: %v", err)
@@ -64,7 +65,7 @@ func TestPutLoadRoundTrip(t *testing.T) {
 		t.Fatalf("Load = %v (%d), err %v", got, len(got), err)
 	}
 	if got[0].Summary != "saaaaaaaa" || got[0].Rationale != "because" ||
-		got[0].Tags[1] != "api" || got[0].Confidence != 0.5 ||
+		got[0].Tags[1] != "api" || !reflect.DeepEqual(got[0].Meta, n.Meta) ||
 		got[0].Address.Path != "a/b.go" || got[0].Side != model.NoteSideNew ||
 		got[0].Range != [2]int{2, 2} || !got[0].Created.Equal(n.Created) ||
 		got[0].Preview != "main...feat" {

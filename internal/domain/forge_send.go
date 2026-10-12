@@ -11,6 +11,7 @@ import (
 	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
+	"github.com/homeend/gigagit/internal/notes"
 )
 
 // Sending to a forge (spec 2026-10-07 §3): the frontend collects a
@@ -68,6 +69,13 @@ type PRSendRequest struct {
 // and renders the bodies (R12: outside the gate, right before Execute); the
 // op confirms and writes.
 func (s *Service) PRSendOp(ctx context.Context, req PRSendRequest) (engine.SendToForge, error) {
+	// A send stamps its notes as it posts; a notes file this build may not
+	// write would lose the stamps and the next send would post again.
+	if fs, ok := s.notesStore(ctx).(*notes.FileStore); ok {
+		if newer := fs.NewerParts(); len(newer) > 0 {
+			return engine.SendToForge{}, fmt.Errorf("%w (%s)", notes.ErrNewerFormat, newer[0])
+		}
+	}
 	p, err := s.provider(ctx)
 	if err != nil {
 		return engine.SendToForge{}, err
@@ -602,9 +610,7 @@ func (s *Service) remarkItem(ctx context.Context, plan *engine.SendPlan, r Revie
 		return
 	}
 	note := model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: dn.Summary, Rationale: dn.Rationale}
-	for _, kv := range dn.Meta {
-		note.Tags = append(note.Tags, kv.Key+": "+kv.Value)
-	}
+	r.remarkMeta(&note, file, dn, fp)
 	key := RemarkKey(r.ID, fp)
 	th := threadFor(path, side, rng, want, pl.hunks[path], func(q string) string { return sendBody(note, key, q) })
 	it := engine.SendItem{Key: key, Label: threadLabel(th, rng[0], dn.Summary), Kind: engine.SendThread, Thread: th,

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -32,6 +33,31 @@ type Note struct {
 	Rationale string
 	Author    string
 	Outdated  bool // its lines are gone from the file
+	// Meta and Display are the agent's free meta and its declaration (spec
+	// 2026-10-12-note-meta), kept in memory with the note.
+	Meta    []notemeta.KV
+	Display notemeta.Display
+}
+
+// NoteText is what an agent writes on a temporary note.
+type NoteText struct {
+	Summary, Rationale, Author string
+	Meta                       []notemeta.KV
+	Display                    notemeta.Display
+}
+
+// MetaFromMap is a protocol meta object as gg's ordered meta: keys sorted.
+func MetaFromMap(m map[string]string) []notemeta.KV {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]notemeta.KV, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, notemeta.KV{Key: k, Value: m[k]})
+	}
+	return out
 }
 
 type note struct {
@@ -81,6 +107,13 @@ func canon(lines []string) []string { return Lines([]byte(strings.Join(lines, "\
 // aligning the path's notes to lines first. The errors are English protocol
 // prose for the agent that asked.
 func (s *Store) AddNote(root, path string, lines []string, start, end int, summary, rationale, author string) (Note, error) {
+	return s.AddNoteMeta(root, path, lines, start, end, NoteText{Summary: summary, Rationale: rationale, Author: author})
+}
+
+// AddNoteMeta is AddNote with the note's meta and display declaration.
+func (s *Store) AddNoteMeta(root, path string, lines []string, start, end int, t NoteText) (Note, error) {
+	summary, rationale, author := t.Summary, t.Rationale, t.Author
+	meta, _ := notemeta.CheckMeta(t.Meta)
 	lines = canon(lines)
 	summary = strings.TrimSpace(summary)
 	s.mu.Lock()
@@ -127,7 +160,8 @@ func (s *Store) AddNote(root, path string, lines []string, start, end int, summa
 	s.noteSeq++
 	n := &note{
 		Note: Note{ID: "t" + strconv.FormatInt(s.noteSeq, 10), Seq: s.noteSeq, Root: root, Path: path,
-			Start: start, End: end, Summary: summary, Rationale: rationale, Author: author},
+			Start: start, End: end, Summary: summary, Rationale: rationale, Author: author,
+			Meta: meta, Display: t.Display},
 		anchor: append([]string(nil), lines[start-1:end]...),
 	}
 	f.notes = append(f.notes, n)

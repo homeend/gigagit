@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // The structured review document: agent-context v1 with a markdown top-level
@@ -30,8 +32,8 @@ import (
 var ErrNotReviewDoc = errors.New("notebatch: not a gg review document")
 
 // MetaKV is one meta entry, the value rendered as text (a string as is, any
-// other JSON value as its compact JSON).
-type MetaKV struct{ Key, Value string }
+// other JSON value as its compact JSON). It is notemeta's KV.
+type MetaKV = notemeta.KV
 
 // ReviewNote is one annotation. Side is "new" or "old"; Range is 1-based and
 // inclusive on that side.
@@ -40,12 +42,14 @@ type ReviewNote struct {
 	Range              [2]int
 	Summary, Rationale string
 	Meta               []MetaKV
+	Display            notemeta.Display
 }
 
 // ReviewFile is the review of one path: its one-line summary and its notes.
 type ReviewFile struct {
 	Path, Summary string
 	Meta          []MetaKV
+	Display       notemeta.Display
 	Notes         []ReviewNote
 }
 
@@ -62,7 +66,10 @@ type ReviewDoc struct {
 	Summary  string
 	Overview string
 	Meta     []MetaKV
+	Display  notemeta.Display
 	Files    []ReviewFile
+	// Problems are the dropped parts of its declarations (unknown fields).
+	Problems []notemeta.Problem
 }
 
 type rawReview struct {
@@ -70,16 +77,19 @@ type rawReview struct {
 	Summary  string          `json:"summary"`
 	Overview string          `json:"overview"`
 	Meta     json.RawMessage `json:"meta"`
+	Display  json.RawMessage `json:"display"`
 	Files    []struct {
 		Path        string          `json:"path"`
 		Summary     string          `json:"summary"`
 		Meta        json.RawMessage `json:"meta"`
+		Display     json.RawMessage `json:"display"`
 		Annotations []struct {
 			NewRange   []int           `json:"newRange"`
 			OldRange   []int           `json:"oldRange"`
 			Summary    string          `json:"summary"`
 			Rationale  string          `json:"rationale"`
 			Meta       json.RawMessage `json:"meta"`
+			Display    json.RawMessage `json:"display"`
 			Tags       []string        `json:"tags"`
 			Confidence string          `json:"confidence"`
 		} `json:"annotations"`
@@ -117,12 +127,18 @@ func ParseReview(data []byte) (ReviewDoc, error) {
 	if doc.Meta, err = metaKVs(raw.Meta); err != nil {
 		return ReviewDoc{}, err
 	}
+	if doc.Display, err = docDisplay(raw.Display, "display", &doc.Problems); err != nil {
+		return ReviewDoc{}, err
+	}
 	for i, f := range raw.Files {
 		if strings.TrimSpace(f.Path) == "" {
 			return ReviewDoc{}, notDoc("files[%d]: path is empty", i)
 		}
 		rf := ReviewFile{Path: f.Path, Summary: f.Summary}
 		if rf.Meta, err = metaKVs(f.Meta); err != nil {
+			return ReviewDoc{}, err
+		}
+		if rf.Display, err = docDisplay(f.Display, fmt.Sprintf("files[%d].display", i), &doc.Problems); err != nil {
 			return ReviewDoc{}, err
 		}
 		for j, a := range f.Annotations {
@@ -148,6 +164,9 @@ func ParseReview(data []byte) (ReviewDoc, error) {
 				return ReviewDoc{}, notDoc("%s: summary is empty", where)
 			}
 			if n.Meta, err = metaKVs(a.Meta); err != nil {
+				return ReviewDoc{}, err
+			}
+			if n.Display, err = docDisplay(a.Display, where+".display", &doc.Problems); err != nil {
 				return ReviewDoc{}, err
 			}
 			if len(a.Tags) > 0 {
@@ -177,7 +196,7 @@ func foldMeta(meta []MetaKV, key, value string) []MetaKV {
 			return meta
 		}
 	}
-	meta = append(meta, MetaKV{key, value})
+	meta = append(meta, MetaKV{Key: key, Value: value})
 	sort.Slice(meta, func(i, j int) bool { return meta[i].Key < meta[j].Key })
 	return meta
 }
@@ -203,7 +222,7 @@ func metaKVs(raw json.RawMessage) ([]MetaKV, error) {
 				s = string(v)
 			}
 		}
-		out = append(out, MetaKV{k, s})
+		out = append(out, MetaKV{Key: k, Value: s})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out, nil
@@ -249,26 +268,29 @@ func unwrap(data []byte) []byte {
 type canonMeta map[string]string
 
 type canonNote struct {
-	NewRange  *[2]int   `json:"newRange,omitempty"`
-	OldRange  *[2]int   `json:"oldRange,omitempty"`
-	Summary   string    `json:"summary"`
-	Rationale string    `json:"rationale,omitempty"`
-	Meta      canonMeta `json:"meta,omitempty"`
+	NewRange  *[2]int          `json:"newRange,omitempty"`
+	OldRange  *[2]int          `json:"oldRange,omitempty"`
+	Summary   string           `json:"summary"`
+	Rationale string           `json:"rationale,omitempty"`
+	Meta      canonMeta        `json:"meta,omitempty"`
+	Display   notemeta.Display `json:"display,omitempty"`
 }
 
 type canonFile struct {
-	Path        string      `json:"path"`
-	Summary     string      `json:"summary,omitempty"`
-	Meta        canonMeta   `json:"meta,omitempty"`
-	Annotations []canonNote `json:"annotations,omitempty"`
+	Path        string           `json:"path"`
+	Summary     string           `json:"summary,omitempty"`
+	Meta        canonMeta        `json:"meta,omitempty"`
+	Display     notemeta.Display `json:"display,omitempty"`
+	Annotations []canonNote      `json:"annotations,omitempty"`
 }
 
 type canonDoc struct {
-	Version  int         `json:"version"`
-	Summary  string      `json:"summary"`
-	Overview string      `json:"overview,omitempty"`
-	Meta     canonMeta   `json:"meta,omitempty"`
-	Files    []canonFile `json:"files,omitempty"`
+	Version  int              `json:"version"`
+	Summary  string           `json:"summary"`
+	Overview string           `json:"overview,omitempty"`
+	Meta     canonMeta        `json:"meta,omitempty"`
+	Display  notemeta.Display `json:"display,omitempty"`
+	Files    []canonFile      `json:"files,omitempty"`
 }
 
 func toCanonMeta(kvs []MetaKV) canonMeta {
@@ -285,12 +307,12 @@ func toCanonMeta(kvs []MetaKV) canonMeta {
 // Canonical is the document in its documented shape, indented: what gg stores,
 // so a stored review reads the same whatever wrapping the agent used.
 func (d ReviewDoc) Canonical() []byte {
-	c := canonDoc{Version: 1, Summary: d.Summary, Overview: d.Overview, Meta: toCanonMeta(d.Meta)}
+	c := canonDoc{Version: 1, Summary: d.Summary, Overview: d.Overview, Meta: toCanonMeta(d.Meta), Display: d.Display}
 	for _, f := range d.Files {
-		cf := canonFile{Path: f.Path, Summary: f.Summary, Meta: toCanonMeta(f.Meta)}
+		cf := canonFile{Path: f.Path, Summary: f.Summary, Meta: toCanonMeta(f.Meta), Display: f.Display}
 		for _, n := range f.Notes {
 			r := n.Range
-			cn := canonNote{Summary: n.Summary, Rationale: n.Rationale, Meta: toCanonMeta(n.Meta)}
+			cn := canonNote{Summary: n.Summary, Rationale: n.Rationale, Meta: toCanonMeta(n.Meta), Display: n.Display}
 			if n.Side == "old" {
 				cn.OldRange = &r
 			} else {
@@ -313,4 +335,19 @@ func (d ReviewDoc) NoteCount() (notes, files int) {
 		}
 	}
 	return notes, files
+}
+
+// docDisplay parses one level's declaration. A declaration is never worth
+// the document (spec §3.5): a malformed one is dropped and named, like an
+// unknown field.
+func docDisplay(raw json.RawMessage, where string, probs *[]notemeta.Problem) (notemeta.Display, error) {
+	d, ps, err := notemeta.ParseDisplay(raw)
+	if err != nil {
+		*probs = append(*probs, notemeta.Problem(where+": "+err.Error()+" (ignored)"))
+		return nil, nil
+	}
+	for _, p := range ps {
+		*probs = append(*probs, notemeta.Problem(where+": "+string(p)))
+	}
+	return d, nil
 }
