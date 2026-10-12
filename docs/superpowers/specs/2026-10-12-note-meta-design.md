@@ -276,28 +276,31 @@ stands.
 Imports: stdlib only (a DAG leaf). `model`, `notebatch`, `agentdocs`,
 `domain` and the frontends import it.
 
-- `Validate(d model.Display) (model.Display, []Problem)` — the cleaned
-  declaration and what was dropped; `CheckMeta([]MetaKV) ([]MetaKV, []Problem)`.
-- `Effective(levels ...*model.Display) model.Display` — inheritance (§2.3).
-- `Resolve(meta []MetaKV, d model.Display, added []AddedMeta) Resolved`:
+- Types `KV`, `Added`, `Display` / `Key` / `Value`, `Problem`.
+- `ParseDisplay(raw []byte) (Display, []Problem, error)` — malformed JSON is
+  an error, an unknown field a problem; `CheckMeta([]KV) ([]KV, []Problem)`
+  — the limits.
+- `Effective(levels ...Display) Display` — inheritance (§2.3), farthest
+  first.
+- `Resolve(meta []KV, d Display, added []Added) Resolved` (re-validates the
+  declaration on every call):
 
 ```go
 type Resolved struct {
 	Badges   []Badge  // ordered: Key, Value, Color, Glyph, Style
 	Frame    string   // colour name, "" = default
 	Lines    []Line   // Label, Value
-	Counted  []MetaKV // the key/values this note contributes to counts
+	Counted  []Counted // Key, Label, Value, Color this note contributes to counts
 	Level    string   // "" when unset
 	Audience string   // "" when unset
-	Stored   []MetaKV // meta shown nowhere (details row only)
+	Stored   []KV     // meta shown nowhere (details row only)
 	Added    []Change // Key, author's value, added value, by
 	Problems []Problem
 }
 ```
 
-- `Count(rs []Resolved) []CountGroup` — per counted key, per value, in
-  order; plus the audience totals (`author` / `reviewer`) when any note set
-  one.
+- `Count(rs []Resolved) Counts` — per counted key, per value, in
+  first-seen order; plus the audience totals (`author` / `reviewer`).
 - `GlyphOK(string) bool` — the safe set (§3.3).
 - Constants for places, colours, semantics; the built-in `status`
   declaration.
@@ -308,10 +311,10 @@ type Resolved struct {
 
 On the notes store's existing `Edit` path, under the part lock:
 
-- `SetNoteMeta(ctx, ref NoteRef, by string, kv []MetaKV)` /
+- `SetNoteMeta(ctx, ref NoteRef, by string, kv []notemeta.KV)` /
   `UnsetNoteMeta(ctx, ref, by string, keys []string)` — `by` is the writer
   (the user's name, or the agent's label from `--author`).
-- `SetNoteDisplay(ctx, ref, d *model.Display)` (nil clears)
+- `SetNoteDisplay(ctx, ref, d notemeta.Display)` (empty clears)
 
 `NoteRef` = a note id, or a review note id + remark fingerprint (the form
 `[[resolved]]` uses; `review:<id>:<n>` and `review:latest:<n>` resolve to
@@ -555,9 +558,10 @@ A test parses the default block from the skill text and validates it with
 
 - `notemeta`: validation (every dropped-field kind), inheritance, `as`
   precedence, added-meta overlay, counts, limits, glyph set.
-- Notes store: format-3 round trip (`Meta`, `Display`, `[[meta]]`), the
-  conversion (tags, confidence, plain tags kept, rewrite only when
-  changed), orphan `[[meta]]` sweep, marker stamping.
+- Notes store: format-3 round trip (`Meta`, `Display`, `Added`), the
+  `format = 3` stamp, the conversion on read (tags, confidence, plain tags
+  kept, a read-only command never rewrites), `ErrNewerFormat` on a newer
+  file.
 - `notebatch`: the three shapes with `meta` + `display`.
 - Domain: the operations, remark refusal, `review:latest:<n>` refs,
   resolved display on every query, counts.
@@ -614,8 +618,8 @@ grammar, semantics, the format-3 limit); skills with the version bump.
 
 ## 14. Plans
 
-1. **Core**: `model` types, `notemeta`, notes store format 3 + conversion +
-   `[[meta]]`, `notebatch` shapes, domain operations and resolved display
+1. **Core**: `notemeta`, the note fields, notes store format 3 + conversion
+   + added meta on the note, `notebatch` shapes, domain operations and resolved display
    and counts, CLI, MCP, `gg session note` / agentdocs.
 2. **TUI**: theme roles, note box (badges, frame, lines, details), review
    sidebar counts, send panel expanded row, Mark menu, i18n, goldens.

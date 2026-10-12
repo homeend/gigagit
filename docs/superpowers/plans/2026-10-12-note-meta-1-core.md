@@ -1179,7 +1179,8 @@ func TestWriteStampsFormat3AndRoundTripsMeta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(ns[0].Meta, n.Meta) || !reflect.DeepEqual(ns[0].Display, n.Display) || !reflect.DeepEqual(ns[0].Added, n.Added) {
+	if !reflect.DeepEqual(ns[0].Meta, n.Meta) || !reflect.DeepEqual(ns[0].Display, n.Display) ||
+		len(ns[0].Added) != 1 || !ns[0].Added[0].At.Equal(n.Added[0].At) || ns[0].Added[0].Value != "agreed" {
 		t.Fatalf("round trip lost meta: %+v", ns[0])
 	}
 }
@@ -2210,21 +2211,12 @@ func noteMetaCmd(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 	fs := flag.NewFlagSet("note meta", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	author := fs.String("author", "", "who writes (default: $GG_AGENT, else agent)")
-	var pos []string
-	rest := args[2:]
-	for len(rest) > 0 {
-		if err := fs.Parse(rest); err != nil {
-			return 2
-		}
-		if fs.NArg() == 0 {
-			break
-		}
-		pos = append(pos, fs.Arg(0))
-		rest = fs.Args()[1:]
+	pos, err := parseSteerFlags(fs, args[2:]) // flags may sit between the values
+	if err != nil {
+		return 2
 	}
 	by := noteAuthorDefault(*author)
 	ctx := context.Background()
-	var err error
 	switch verb {
 	case "set":
 		var m metaFlag
@@ -2323,15 +2315,17 @@ func metaText(r notemeta.Resolved) []string {
 ```
 
   and pass `Meta: kv, Display: disp` in the `model.Note{…}` literal (sub name `"note reply"` in `noteReply`).
-- `renderNoteLine`: after each `fmt.Fprintf` of a root (not the reply/indent branch — replies get it too, indented 6), print `metaText(domain.NoteMeta(r.Note, nil))` lines prefixed with 4 spaces (6 for `indent`). Implement as a deferred helper at the top: `defer printMetaLines(w, r, indent)` with
+- `renderNoteLine(w, r, indent bool, status)` becomes `renderNoteLine(w, r, root *model.Note, status)` — `root == nil` is a thread root, otherwise the reply's root (so a reply's meta uses its root's declaration). Update its four callers (`note.go:875,877`, `prsend.go:260,262`: pass `nil` for the root line and `&r.Note` for each reply). Inside, replace `if indent` with `if root != nil` and add at the top `defer printMetaLines(w, r, root)`:
 
 ```go
-func printMetaLines(w io.Writer, r domain.ResolvedNote, indent bool) {
+// printMetaLines prints a note's resolved meta under its line (4 spaces;
+// 6 under a reply).
+func printMetaLines(w io.Writer, r domain.ResolvedNote, root *model.Note) {
 	pad := "    "
-	if indent {
+	if root != nil {
 		pad = "      "
 	}
-	for _, l := range metaText(domain.NoteMeta(r.Note, nil)) {
+	for _, l := range metaText(domain.NoteMeta(r.Note, root)) {
 		fmt.Fprintln(w, pad+l)
 	}
 }
@@ -2390,10 +2384,12 @@ func TestNoteAddAndMetaTools(t *testing.T) {
 
 ```go
 	Meta    map[string]string `json:"meta,omitempty" jsonschema:"free key/values (suggested: kind, severity, intent, audience); see the review skills"`
-	Display json.RawMessage   `json:"display,omitempty" jsonschema:"how the meta keys are shown: {key: {show: [badge|frame|count|line], values: {value: {color, glyph, level, audience}}}}"`
+	// Display is typed any, as gg_notes_apply's batch is: the SDK's schema
+	// inference has no case for json.RawMessage. Re-marshalled for ParseDisplay.
+	Display any `json:"display,omitempty" jsonschema:"how the meta keys are shown: {key: {show: [badge|frame|count|line], values: {value: {color, glyph, level, audience}}}}"`
 ```
 
-- a helper `func metaFromTool(m map[string]string, raw json.RawMessage) ([]notemeta.KV, notemeta.Display, []notemeta.Problem, error)` — keys sorted for determinism, `CheckMeta` + `ParseDisplay`; a malformed display is the tool's error.
+- a helper `func metaFromTool(m map[string]string, display any) ([]notemeta.KV, notemeta.Display, []notemeta.Problem, error)` — keys sorted for determinism, `CheckMeta`; `display` (when non-nil) `json.Marshal`ed and passed to `ParseDisplay`; a malformed display is the tool's error.
 - pass `Meta`/`Display` into the `model.Note` literals; append problems to a `Warning string` field on `noteOut` (add `Warning string \`json:"warning,omitempty"\``).
 - register:
 
@@ -2451,7 +2447,7 @@ type noteMetaIn struct {
 	Action  string            `json:"action" jsonschema:"set, unset or display"`
 	Meta    map[string]string `json:"meta,omitempty" jsonschema:"set: the key/values"`
 	Keys    []string          `json:"keys,omitempty" jsonschema:"unset: the keys"`
-	Display json.RawMessage   `json:"display,omitempty" jsonschema:"display: the declaration (empty clears)"`
+	Display any               `json:"display,omitempty" jsonschema:"display: the declaration (empty clears)"`
 	Author  string            `json:"author,omitempty" jsonschema:"who writes (default: $GG_AGENT, else agent)"`
 }
 
