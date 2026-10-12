@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/notemeta"
+	"github.com/homeend/gigagit/internal/preflight"
 	"github.com/homeend/gigagit/internal/theme"
 )
 
@@ -123,5 +125,19 @@ func TestMetaCounts(t *testing.T) {
 	}
 	if metaCountsText(notemeta.Counts{}) != "" {
 		t.Fatal("empty counts must say nothing")
+	}
+}
+
+func TestNoticeForNewerNotes(t *testing.T) {
+	t.Parallel()
+	v := preflight.Resolve(domain.Features(), preflight.Probes{Newer: map[string]bool{domain.StoreNotes: true}})
+	var got []notice
+	for _, n := range noticesForVerdicts(v, "repo") {
+		if n.id == noticeFeatureDisabledPrefix+domain.FeatureNoteEdits {
+			got = append(got, n)
+		}
+	}
+	if len(got) != 1 || len(got[0].detail) != 2 {
+		t.Fatalf("notices = %+v", got)
 	}
 }

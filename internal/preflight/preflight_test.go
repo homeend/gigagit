@@ -185,3 +185,18 @@ func TestForgeUsable(t *testing.T) {
 		t.Error("ForgeUsable must not need store probes")
 	}
 }
+
+func TestNewerLocalUnsatisfiable(t *testing.T) {
+	t.Parallel()
+	f := Feature{ID: "note-edits", Requires: []Requirement{NewerLocal{Store: "notes"}}}
+	v := Resolve([]Feature{f}, Probes{Newer: map[string]bool{"notes": true}})
+	if v[0].State != Unsatisfiable || v[0].Remedy.Format == "" || v[0].Reason.Format == "" {
+		t.Fatalf("verdict = %+v", v[0])
+	}
+	if Resolve([]Feature{f}, Probes{})[0].State != Satisfied {
+		t.Fatal("no newer file must be satisfied")
+	}
+	if (NewerLocal{}).NeedsStoreProbes() || (NewerLocal{}).RepairStore() != "" {
+		t.Fatal("machine-local, never repairable")
+	}
+}

@@ -15,6 +15,11 @@ const (
 	FeatureNotes = "notes"
 	StoreNotes   = "notes"
 
+	// FeatureNoteEdits is writing notes: a notes file a newer gg wrote
+	// (format above notes.Format) stays readable but refuses every write —
+	// the notice says so (spec 2026-10-12-note-meta §10).
+	FeatureNoteEdits = "note-edits"
+
 	StoreVersions       = "versions"
 	StorePreviews       = "previews"
 	StoreReviewCommands = "review-commands"
@@ -116,6 +121,11 @@ func Features() []preflight.Feature {
 					}
 				},
 			},
+		},
+		{
+			ID:          FeatureNoteEdits,
+			Criticality: preflight.Optional,
+			Requires:    []preflight.Requirement{preflight.NewerLocal{Store: StoreNotes}},
 		},
 		{
 			ID:          FeatureStructuredReviews,

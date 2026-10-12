@@ -2,9 +2,13 @@ package domain
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/notemeta"
+	"github.com/homeend/gigagit/internal/preflight"
 )
 
 const countsDoc = `{"version":1,"summary":"x",
@@ -66,5 +70,44 @@ func TestSendCandidateCarriesMeta(t *testing.T) {
 	row := c.Groups[0].Rows[0]
 	if len(row.Meta.Badges) != 1 || row.Meta.Badges[0].Value != "issue" || row.Meta.Audience != "author" || row.Severity != "bug" {
 		t.Fatalf("row = %+v", row)
+	}
+}
+
+func TestPreflightNewerNotesFormat(t *testing.T) {
+	t.Parallel()
+	svc, _, _, tip := metaReview(t, metaDoc)
+	dir := t.TempDir()
+	svc.UseNotesDir(dir)
+	commitNote(t, svc, tip, "A")
+	ctx := context.Background()
+	state := func() (edits, notes preflight.State) {
+		svc.invalidatePreflight()
+		vs, err := svc.Preflight(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range vs {
+			switch v.Feature.ID {
+			case FeatureNoteEdits:
+				edits = v.State
+			case FeatureNotes:
+				notes = v.State
+			}
+		}
+		return
+	}
+	if e, n := state(); e != preflight.Satisfied || n != preflight.Satisfied {
+		t.Fatalf("format 3: edits %v notes %v", e, n)
+	}
+	p := filepath.Join(dir, "commits.toml")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(strings.Replace(string(data), "format = 3", "format = 4", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if e, n := state(); e != preflight.Unsatisfiable || n != preflight.Satisfied {
+		t.Fatalf("format 4: edits %v (want unsatisfiable), notes %v (stay readable)", e, n)
 	}
 }
