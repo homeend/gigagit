@@ -65,6 +65,13 @@ func (m Model) onCommitOverview(msg commitOverviewMsg) (Model, tea.Cmd) {
 			return m.showOverview(d) // the same save: the open copy comes to the front
 		}
 		m = m.closeDoc(d) // re-saved since it was read: the stale copy goes
+		// Its files keep the remarks fetched for the old save under the same
+		// id: drop them, so the next steer fetches the new ones.
+		for _, f := range m.openFiles.list(m.currentWorktree) {
+			if f.reviewNotesOf == msg.id {
+				f.reviewNotes, f.reviewNotesOf = nil, ""
+			}
+		}
 	}
 	d := m.newOpenFile(src, path)
 	d.title = i18n.T("Overview: %s", msg.ov.Title)

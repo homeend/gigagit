@@ -115,13 +115,19 @@ func TestReSavedOverviewReopensFresh(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _, err := m.svc.SaveOverview(ctx, domain.SaveOverview{Target: tg, Agent: "Claude Code", Text: []byte(
-		`{"version":1,"title":"Tour of a","overview":"Revised: see [b](b.go:3).","files":[]}`)})
+		`{"version":1,"title":"Tour of a","overview":"Revised: [the func](a.go:3).","files":[{"path":"a.go","annotations":[{"newRange":[3,3],"summary":"revised remark"}]}]}`)})
 	if err != nil || got.ID != id {
 		t.Fatalf("re-save = %+v %v", got, err)
 	}
+	m = pressDrain(t, m, "esc") // backgrounded, then opened again (. menu / a link)
 	m = openCommitOverviewT(t, m, id)
 	if ov := m.splitLayer().left.doc(); ov == nil || !strings.Contains(ov.ov.text, "Revised") {
 		t.Fatalf("the open overview kept the old text: %+v", ov.ov)
+	}
+	// The file beside it (the same a.go doc, already loaded) shows the new remark.
+	rd := m.splitLayer().right.doc()
+	if ns := rd.shownNotes(); len(ns) != 1 || ns[0].Summary != "revised remark" {
+		t.Fatalf("the file beside it shows %+v", ns)
 	}
 }
 
@@ -147,5 +153,19 @@ func TestOverviewRemarksStayInTheOverview(t *testing.T) {
 	m = drainCmds(t, m, cmd)
 	if len(rd.shownNotes()) != 0 {
 		t.Fatal("the Files view preview shows the overview's remarks")
+	}
+}
+
+// esc backgrounds the overview; opening it again (the same save) shows the
+// file beside it with its remark again.
+func TestOverviewRoundTripKeepsRemarks(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m = openCommitOverviewT(t, m, id)
+	m = pressDrain(t, m, "esc")
+	m = openCommitOverviewT(t, m, id)
+	rd := m.splitLayer().right.doc()
+	if ns := rd.shownNotes(); len(ns) != 1 || ns[0].Summary != "the func" {
+		t.Fatalf("after the round trip the file shows %+v", ns)
 	}
 }
