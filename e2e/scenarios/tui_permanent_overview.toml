@@ -4,7 +4,8 @@ name = "tui: a permanent overview — └ Overview under its branch, ≡ on the 
 # permanent overview on HEAD (main) linking a.txt:2 (with a remark) and
 # b.txt:2. The Branches list shows a └ Overview row under main (its tip is
 # the overview's commit); the Commits row shows ≡ in its own marker cell;
-# the . menu offers "Open overview: How a and b work"; enter on it opens
+# the . menu offers "Open overview: How a and b work" and "Export as HTML:
+# How a and b work"; enter on the first opens
 # the split — the overview left, a.txt at the commit right with the
 # remark; ↓ steers to b.txt; esc closes it.
 [input]
@@ -36,7 +37,7 @@ screen_contains = ["≡", "add a and b"]
 [[tui.step]]
 name = "menu"
 keys = ["."]
-screen_contains = ["Open overview: How a and b work"]
+screen_contains = ["Open overview: How a and b work", "Export as HTML: How a and b work"]
 
 # The menu filters as you type: "overview" leaves the one row, enter runs it.
 [[tui.step]]

@@ -23,7 +23,7 @@ local  branch main                                                              
 │                                                  ║    Shelf this commit                                   ║                                                  │
 │                                                  ║    Export commit as patch                              ║                                                  │
 ╰──────────────────────────────────────────────────║    Open overview: How a and b work                     ║                                                  │
-╭──────────────────────────────────────────────────║    Rename branch main                                  ║                                                  │
+╭──────────────────────────────────────────────────║    Export as HTML: How a and b work                    ║                                                  │
 │ [Staged 0] Reflog 1                              ║                                                        ║                                                  │
 │   (none)                                         ║  type to filter  [enter] run  [ctrl+w] view            ║                                                  │
 │                                                  ║  [esc] close                                           ║                                                  │
