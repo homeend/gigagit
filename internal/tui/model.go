@@ -212,6 +212,13 @@ type Model struct {
 	// pendingPROpen is the PR whose diff opens once its FetchPRHead succeeds
 	// (the pendingSwitch pattern; opFinishedMsg consumes and clears it).
 	pendingPROpen *model.PullRequest
+	// pendingPRLink is the PR whose link is copied once its FetchPRHead
+	// succeeds: Copy link on an unfetched PR fetches it first (pr_link.go).
+	pendingPRLink int
+	// prLinkWait is Copy link's chain in flight (resolve → fetch → copy): the
+	// status line wears ⏳ and the elapsed time until the link is copied or
+	// the chain fails, so a slow forge never reads as a dead key.
+	prLinkWait prLinkWait
 	// forgeSend is the send being run (forge_send.go): its plan renders the
 	// confirm, its follow-up runs when the op ends. nil = none.
 	forgeSend *forgeSendState
@@ -3707,6 +3714,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		pendingCo := m.pendingCheckout // captured; cleared below whatever happened
 		prOpen := m.pendingPROpen      // captured; cleared below whatever happened
 		m.pendingPROpen = nil
+		prLink := m.pendingPRLink // captured; cleared below whatever happened
+		m.pendingPRLink = 0
 		prsReload := m.pendingPRsReload
 		m.pendingPRsReload = false
 		fs := m.forgeSend // a send's follow-up (forge_send.go); cleared whatever happened
@@ -3863,6 +3872,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("opening PR #%d…", prOpen.Number)
 		} else if prOpen != nil {
 			m, prCmd = m.failPRLanding(prOpen.Number, firstLine(msg.err.Error()))
+		}
+		if prLink != 0 && msg.err == nil {
+			prCmd = tea.Batch(prCmd, m.prLinkCmd(prLink)) // the ref exists now: copy the link
+			m.statusMsg = i18n.T("copying the link to PR #%d…", prLink)
+		} else if prLink != 0 {
+			m.prLinkWait = prLinkWait{} // the fetch failed: its error is on the status line
 		}
 		var cmd tea.Cmd
 		m = m.takeQueuedReturnAfterOp(srcs) // before the refresh marks sources loading; a chain or a prompt holds it (switchRefusal)
@@ -5128,6 +5143,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingGotoTip = ""                        // a repo switch must not fire a stale tip jump
 	m.pendingSteer = nil                         // the repo it referred to is gone; its inbox went with it
 	m.pendingPROpen = nil                        // a PR fetch's finish must not open the old repo's PR here
+	m.pendingPRLink = 0                          // nor copy the old repo's PR link
+	m.prLinkWait = prLinkWait{}                  // whose wait marker goes with it
 	m.consoleSwitch.armed = true                 // the console keeps only a session the new repo owns
 	m.consoleSwitch.gen++                        // a new switch (openTour tells it from one in flight)
 	m.consoleSwitch.open = ""                    // a console asked for across an earlier switch is moot

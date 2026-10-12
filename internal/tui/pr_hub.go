@@ -106,7 +106,7 @@ func (p *prHubPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			return m, m.copyToClipboardCmd(i18n.T("copied PR URL"), p.pr.URL)
 		case "L":
-			return m, m.prLinkCmd(p.pr.Number)
+			return m.askPRLink(p.pr.Number)
 		case "r":
 			p.lines, p.sel, p.query = prHubLoading(p.pr), 0, ""
 			return m, m.loadPRHubCmd(p.pr.Number)

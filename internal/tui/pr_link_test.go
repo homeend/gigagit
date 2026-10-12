@@ -69,12 +69,82 @@ func TestPRListLCopiesThePRLink(t *testing.T) {
 	}
 }
 
-func TestUnfetchedPRLinkSaysOpenItFirst(t *testing.T) {
+// Copy link on a PR this repo has not fetched fetches it first (the link
+// names refs/gg/pr/<n>, which only a fetch writes), then copies.
+func TestUnfetchedPRLinkFetchesThenCopies(t *testing.T) {
 	t.Parallel()
 	m := prModel(t)
-	nm, cmd := m.Update(prLinkMsg{n: 8, err: fmt.Errorf("%w: gg pr fetch 8", domain.ErrPRNotFetched)})
-	if cmd != nil || nm.(Model).statusMsg != "PR #8 is not fetched: press enter to open it first" {
-		t.Fatalf("cmd=%v status=%q", cmd != nil, nm.(Model).statusMsg)
+	m, _ = m.askPRLink(7)
+	if m.prLinkWait.n != 7 || !strings.Contains(m.View(), "⏳ copying the link to PR #7…") {
+		t.Fatalf("wait=%+v status line missing", m.prLinkWait)
+	}
+	nm, cmd := m.Update(prLinkMsg{n: 7, err: fmt.Errorf("%w: gg pr fetch 7", domain.ErrPRNotFetched), gen: m.forgeGen})
+	m = nm.(Model)
+	if cmd == nil || m.prLinkWait.n != 7 || !strings.Contains(m.View(), "⏳ fetching PR #7 to copy its link…") {
+		t.Fatalf("cmd=%v wait=%+v status line missing", cmd != nil, m.prLinkWait)
+	}
+	pr := testPRs()[0]
+	nm, cmd = m.Update(prFetchReadyMsg{pr: pr, op: prFetchOp7(), gen: m.forgeGen, copyLink: true})
+	m = nm.(Model)
+	if cmd == nil || m.pendingPRLink != 7 || m.pendingPROpen != nil || !m.running {
+		t.Fatalf("cmd=%v pendingPRLink=%d pendingPROpen=%v running=%v", cmd != nil, m.pendingPRLink, m.pendingPROpen, m.running)
+	}
+	nm, cmd = m.Update(opFinishedMsg{})
+	m = nm.(Model)
+	if m.pendingPRLink != 0 {
+		t.Fatalf("pendingPRLink=%d after the fetch", m.pendingPRLink)
+	}
+	asked := false
+	for _, msg := range runCmds(cmd) {
+		if l, ok := msg.(prLinkMsg); ok && l.n == 7 {
+			asked = true
+		}
+	}
+	if !asked {
+		t.Fatal("the finished fetch did not ask for the link again")
+	}
+	if m.prLinkWait.n != 7 {
+		t.Fatal("the wait marker went before the link was copied")
+	}
+	var copied string
+	m = withClip(m, &copied)
+	nm, cmd = m.Update(prLinkMsg{n: 7, source: "refs/gg/pr/7", target: "main", gen: m.forgeGen})
+	runCopy(t, cmd)
+	if nm.(Model).prLinkWait.n != 0 || !strings.HasSuffix(copied, "@main...refs/gg/pr/7") {
+		t.Fatalf("wait=%+v copied %q", nm.(Model).prLinkWait, copied)
+	}
+}
+
+// A failed fetch copies nothing.
+func TestUnfetchedPRLinkFetchFailureCopiesNothing(t *testing.T) {
+	t.Parallel()
+	m := prModel(t)
+	m.pendingPRLink, m.running, m.prLinkWait = 7, true, prLinkWait{n: 7, at: time.Now()}
+	nm, cmd := m.Update(opFinishedMsg{err: errors.New("network down")})
+	if nm.(Model).pendingPRLink != 0 || nm.(Model).prLinkWait.n != 0 {
+		t.Fatal("pendingPRLink or the wait marker kept")
+	}
+	for _, msg := range runCmds(cmd) {
+		if _, ok := msg.(prLinkMsg); ok {
+			t.Fatal("a failed fetch asked for the link")
+		}
+	}
+}
+
+// Another op running: the fetch cannot start, and the status line says so.
+func TestUnfetchedPRLinkWhileBusySaysWhy(t *testing.T) {
+	t.Parallel()
+	m := prModel(t)
+	m.running, m.prLinkWait = true, prLinkWait{n: 7, at: time.Now()}
+	nm, _ := m.Update(prFetchReadyMsg{pr: testPRs()[0], op: prFetchOp7(), gen: m.forgeGen, copyLink: true})
+	if nm.(Model).prLinkWait.n != 0 {
+		t.Fatal("the wait marker outlived a fetch that never started")
+	}
+	if got := nm.(Model).statusMsg; got != "PR #7: an operation is running — copy the link again when it finishes" {
+		t.Fatalf("status = %q", got)
+	}
+	if nm.(Model).pendingPRLink != 0 {
+		t.Fatal("armed a copy with no fetch")
 	}
 }
 
