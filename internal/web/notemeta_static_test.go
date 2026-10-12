@@ -98,3 +98,21 @@ func TestDiffNoteBoxMetaJS(t *testing.T) {
 		t.Errorf("a note without meta draws none: %s", b4)
 	}
 }
+
+// The viewer's boxes (an agent's temporary notes, a review's remarks) draw
+// the same display.
+func TestViewerNoteBoxDrawsMeta(t *testing.T) {
+	t.Parallel()
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{
+		`from "./notemeta.js"`,
+		`frameClass(n.display)`,
+		`<div class="vnote-title">${titleMetaHTML(n.display, esc)}${esc(noteBoxTitle(n))}</div>`,
+		`metaLinesHTML(n.display, esc)`,
+		`metaDetailsHTML(n.display, esc)`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %s", want)
+		}
+	}
+}

@@ -8,6 +8,7 @@ import { bindSearchBar } from "./searchbar.js";
 import { collapseDiffRows, cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
 import { diffHead, diffNotice, diffSource, lineRows, nextNoteRow, noteAtRow, placeNotes, rowBand, rowNewLine, rowOfLine, sameContent, unifiedRows } from "./splitdiff.js";
 import { mdHTML } from "./markdown.js";
+import { frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./notemeta.js";
 import { saveUI } from "./uistate.js";
 import { SPLIT_STACK_MAX_IN_FLIGHT, anchorPath, newSlots, nextHeader, placeholderRows, restack, shows, slotOf, stackBands, stackEnd, stackFiles, stackMove, stackTitle, stepStackBand } from "./splitstack.js";
 import { clearOpLine, opLine } from "./ops.js";
@@ -1810,12 +1811,18 @@ function shownNotes() {
   return mergeNotes(view.notes, view.remarks);
 }
 
+// noteBoxHTML is one box: its meta chips lead the title, a declared frame
+// recolours the border, line rows sit above the summary and details rows
+// below the rationale (spec 2026-10-12-note-meta §7).
 function noteBoxHTML(n, acts = !n.readonly) {
+  const fc = frameClass(n.display);
   return (
-    `<div class="vnote${n.outdated ? " outdated" : ""}${n.readonly ? " remark" : ""}" data-note="${esc(n.id)}">` +
-    `<div class="vnote-title">${esc(noteBoxTitle(n))}</div>` +
+    `<div class="vnote${n.outdated ? " outdated" : ""}${n.readonly ? " remark" : ""}${fc ? " " + fc : ""}" data-note="${esc(n.id)}">` +
+    `<div class="vnote-title">${titleMetaHTML(n.display, esc)}${esc(noteBoxTitle(n))}</div>` +
+    metaLinesHTML(n.display, esc) +
     `<div class="vnote-sum">${esc(n.summary)}</div>` +
     (n.rationale ? `<div class="vnote-why">${esc(n.rationale)}</div>` : "") +
+    metaDetailsHTML(n.display, esc) +
     (acts ? `<div class="vnote-acts"><button data-nact="dismiss">dismiss</button><button data-nact="ref">copy reference</button></div>` : "") +
     `</div>`
   );
