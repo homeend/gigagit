@@ -37,6 +37,12 @@ func (s *Service) ReviewFileDiff(ctx context.Context, reviewID, path string) (Re
 	if err != nil {
 		return ReviewFileDiff{}, err
 	}
+	return s.reviewFileDiffOf(ctx, r, path)
+}
+
+// reviewFileDiffOf is ReviewFileDiff over an already read review r (a
+// permanent overview presents itself as one: OverviewFileDiff).
+func (s *Service) reviewFileDiffOf(ctx context.Context, r Review, path string) (ReviewFileDiff, error) {
 	path = reviewPath(path)
 	base, tip, _ := s.reviewRevs(ctx, r)
 	working := r.Kind == ReviewOnWorktree
@@ -93,7 +99,9 @@ func (s *Service) ReviewFileDiff(ctx context.Context, reviewID, path string) (Re
 	}
 	out.Diff = d
 	if !d.Binary && !d.TooLarge {
-		out.Notes, _ = s.ReviewNotesFor(ctx, reviewID, path, d)
+		if r.Doc != nil {
+			out.Notes = reviewNotesOf(r, path, d)
+		}
 	}
 	return out, nil
 }

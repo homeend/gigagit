@@ -31,6 +31,9 @@ type NoteCommitNotes struct {
 	Missing  bool
 	Files    []NoteFileNotes
 	Reviews  []Review // AI reviews stored on the commit (newest first)
+	// Overviews are the permanent overviews stored on the commit (newest
+	// first); a pull request's never (R10).
+	Overviews []Overview
 }
 
 // NoteShelfNotes is one shelf entry's files with notes. Missing: the entry
@@ -73,6 +76,7 @@ func (o NotesOverview) Count() int {
 	for _, c := range o.Commits {
 		count(c.Files)
 		n += len(c.Reviews)
+		n += len(c.Overviews)
 	}
 	for _, s := range o.Shelves {
 		count(s.Files)
@@ -209,6 +213,18 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 		}
 		c.Reviews = append(c.Reviews, r)
 	}
+	ovs, _ := s.Overviews(ctx) // newest first
+	for _, o := range ovs {
+		if o.Scope != "" {
+			continue // a PR's overview lives in its PR's view only (R10)
+		}
+		c := commits[o.Commit]
+		if c == nil {
+			c = s.overviewCommit(ctx, o.Commit)
+			commits[o.Commit] = c
+		}
+		c.Overviews = append(c.Overviews, o)
+	}
 	ov.WorkingReviews, _ = s.WorkingReviews(ctx)
 	for _, c := range commits {
 		s.fillCommitFileStatus(ctx, c)
@@ -295,7 +311,7 @@ func sortNoteFiles(fs []NoteFileNotes) {
 // ShownOn keeps what the reader on the viewing branches is shown: every plain
 // note and every preview's note (it opens in its preview), a range review's
 // notes and an AI review only when they were created on one of those branches
-// (ReviewShownOn). A commit left with neither notes nor reviews is dropped;
+// (ReviewShownOn). A commit left with no notes, reviews or overviews is dropped;
 // the working tree and the shelves hold no reviews and pass through. The
 // receiver is not modified.
 func (o NotesOverview) ShownOn(viewing []string) NotesOverview {
@@ -317,7 +333,8 @@ func (o NotesOverview) ShownOn(viewing []string) NotesOverview {
 			}
 		}
 		kept.Reviews = ReviewsShownOn(c.Reviews, viewing)
-		if len(kept.Files) > 0 || len(kept.Reviews) > 0 {
+		// A commit overview shows from any branch the commit is on (R5).
+		if len(kept.Files) > 0 || len(kept.Reviews) > 0 || len(kept.Overviews) > 0 {
 			out.Commits = append(out.Commits, kept)
 		}
 	}
