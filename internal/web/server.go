@@ -22,6 +22,7 @@ import (
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/web/static"
 )
 
 // Server serves the probe's JSON API and static assets for one repository.
@@ -212,7 +213,7 @@ func (s *Server) open(path string) *domain.Service {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleIndex)
-	mux.Handle("GET /static/", http.FileServerFS(staticFS))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static.FS)))
 	mux.HandleFunc("GET /api/repo", s.handleRepo)
 	// The page's liveness probe (static/serverdown.js). It must never touch
 	// the repository: reads serialise under the per-repo gate, so a probe

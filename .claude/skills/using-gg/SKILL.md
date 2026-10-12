@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v164 -->
+<!-- gg:using-gg:v166 -->
 
 # Using gg (gigagit)
 
@@ -92,6 +92,10 @@ guards against removing the worktree you are standing in.
   Exit 0 on a produced report, 1 on tool failure/empty report/no review tool
   configured, 2 on a usage error. A report the note store cannot keep is
   still printed, then `error: review not saved: …` on stderr, exit 1.
+- `gg review export [--out <path>|-] [--force] <review-link|id|latest>` — a
+  stored review's OVERVIEW as one self-contained HTML file to share outside gg
+  (every file a link names at the review's tip + its diff; no notes). Exit 1
+  `review <id> has no overview`; exit 2 on an existing file without `--force`.
 - `gg review show [--json] <review-link|id|latest>` — read a STORED review
   back (another agent's, or your own earlier one): a header line `review <id>
   · <agent> · <date> · <what it reviewed>`, the summary, then the stored
@@ -127,6 +131,26 @@ guards against removing the worktree you are standing in.
   gg:// link; `--json` → `{id, link, warn}`. Exit 1 on input that is not a
   review document (nothing stored) or a link naming no change, 2 on a usage
   error or a malformed link.
+- `gg overview save [<gg-link>] --agent <name> (--stdin | --file <path>) [--title <t>] [--json] [--dry-run]`
+  — store a PERMANENT overview (the gg-overview document as JSON:
+  `{"version":1,"title":"…","overview":"<markdown with path:N-M links>","files":[{"path":"…","annotations":[{"newRange":[a,b],"summary":"…","rationale":"…"}]}]}`;
+  no summary, no meta, no oldRange) on HEAD, on the commit or `@ref:`
+  branch tip a link names, or on a pull request (`gg link --pr <n>`). Lines
+  are the file AT that commit. gg refuses the whole save — nothing stored,
+  every problem listed on stderr, exit 1 — for a `note:` link, a path not in
+  the commit, lines past a file's end, or (for a commit, not a PR) an
+  anchored file that differs on disk: `<path>: uncommitted changes` /
+  `<path>: differs from <sha7> on disk`. The same commit (or PR) and title
+  replaces. Prints `overview <id> stored on <where>: <title>` and the
+  overview's `gg://…?overview=<id>` link; `--json` → `{id, link, commit,
+  branch, pr, title, replaced, warn}`. A permanent overview is shown only as
+  itself: never as a note, a remark or a review, never sent to GitHub.
+- `gg overview list [--all] [--json]` — HEAD's overviews (`--all`: the
+  repository's): id, commit, `on-branch | was-tip | commit | pr`, date,
+  agent, title.
+- `gg overview show <id|link> [--json]` — the title, the commit, the link,
+  the markdown and each remark; `--json` carries the stored `document`.
+- `gg overview rm <id>` — delete one.
 - `gg review save <gg-link> --dry-run [--json]` — store nothing; print what
   the link would review and how to read it; `--json` → `{kind, label, range,
   diff, hunks, checkout}`. `kind` = preview | pair | commit | branch |
@@ -505,6 +529,12 @@ anchor they left.
 - `gg session overview list [--json]` — `<id>\t<state>\t<n> anchors\t<title>`;
   `show <id> [--json]` — `<id>\t<title>`, a blank line, the text; `rm <id>` —
   `closed <id>`. `gg session files focus <id>` brings one to the front.
+- `gg session overview export <id> [--out <path>|-] [--force]` — the overview
+  as ONE self-contained HTML file the user can share outside gg (the split,
+  offline: every file a link names, as on disk now, with its HEAD → working
+  tree diff; no notes). Default path: the export dir, `<title-slug>.html`;
+  `--out -` prints it. Prints `✓ wrote <path>`; an existing different file
+  needs `--force` (exit 2 without). Run it in the overview's worktree.
 - Answers you may get (exit 1): `no gg session for this worktree` (start gg
   first); `no overview f<n>` (the user closed it — add a new one); `20
   overviews are open; remove one first`; `gg is showing worktree <a>, not

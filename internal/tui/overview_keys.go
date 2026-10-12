@@ -363,6 +363,7 @@ func (m Model) overviewRows() []actionRow {
 				rows = append(rows, ref)
 			}
 		}
+		rows = append(rows, m.overviewExportRow(d))
 	}
 	rows = append(rows, m.bandRows(d)...)
 	if d.from != nil && m.splitShowing(d) == nil { // in a split the overview is on screen: backspace is the split's
@@ -403,5 +404,5 @@ func (m Model) splitOverviewRows(sv *splitView, d *openFile) []actionRow {
 	}
 	cp := m.copyRow("overview-copy", i18n.T("Copy overview"), i18n.T("copied"), d.ov.text)
 	cp.key = "y"
-	return append(rows, cp)
+	return append(rows, m.overviewExportRow(d), cp)
 }

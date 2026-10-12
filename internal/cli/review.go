@@ -46,6 +46,9 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 	if len(rest) > 0 && rest[0] == "save" {
 		return reviewSave(svc, rest[1:], stdin, stdout, stderr)
 	}
+	if len(rest) > 0 && rest[0] == "export" {
+		return reviewExport(svc, rest[1:], stdout, stderr)
+	}
 	fs := flag.NewFlagSet("review", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	toolName := fs.String("tool", "", "review tool name (from config); default: the only one")
@@ -92,11 +95,11 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdin io.Read
 		return 2
 	}
 	if *working && fs.NArg() >= 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--focus <text>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--focus <text>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewExportUsage, "usage: "))
 		return 2
 	}
 	if fs.NArg() > 1 {
-		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--focus <text>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: "))
+		fmt.Fprintln(stderr, "usage: gg review [--tool <name>] [--model <m>] [--focus <text>] [--working | --link <gg-link> | <rev>|<A..B>] [--no-save [--json]]\n       gg review --tools [--json]\n       "+strings.TrimPrefix(reviewShowUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewSaveUsage, "usage: ")+"\n       "+strings.TrimPrefix(reviewExportUsage, "usage: "))
 		return 2
 	}
 	if *working && *wantNotes {

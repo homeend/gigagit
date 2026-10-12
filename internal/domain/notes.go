@@ -83,8 +83,14 @@ type NoteCounts struct {
 	// newest first: never in a ◆N badge, never in Reviews (the Branches
 	// sub-rows). Unmatched — matching reads files (Service.WorkingReviews).
 	WorkingReviews []ReviewHead
-	ByCommitPath   map[string]int // commit notes, by "<sha>:<path>"
-	ByShelf        map[string]int // notes on a whole shelf entry, by entry id
+	// Overviews are the permanent overviews stored on a commit, newest
+	// first: the Commits list's ≡ and the Branches tab's overview rows. Never
+	// in a ◆N badge, never in Reviews (spec 2026-10-12 R9).
+	Overviews []OverviewHead
+	// PreviewOverviews are a pull request's overviews, by scope (R10).
+	PreviewOverviews map[string][]OverviewHead
+	ByCommitPath     map[string]int // commit notes, by "<sha>:<path>"
+	ByShelf          map[string]int // notes on a whole shelf entry, by entry id
 }
 
 // NoteScopeCount is one scope's share of a commit's notes: the scope as the
@@ -353,6 +359,9 @@ func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) e
 		if n.ID != id {
 			continue
 		}
+		if n.IsOverviewNote() {
+			return ErrOverviewNote
+		}
 		n.Summary, n.Rationale, n.Updated = summary, rationale, notes.Now().UTC()
 		if err := st.Put(n); err != nil {
 			return err
@@ -400,6 +409,9 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 	root, ok := byID[parentID]
 	if !ok {
 		return model.Note{}, ErrNoteNotFound
+	}
+	if root.IsOverviewNote() {
+		return model.Note{}, ErrOverviewNote
 	}
 	if root.IsRemarkReply() { // answering an answer: stay in its remark's thread
 		return s.replyInThread(ctx, root, n)
@@ -460,7 +472,8 @@ func (s *Service) NotesClear(ctx context.Context, addr model.FileAddress) (int, 
 		}
 		addr.Worktree = wt
 	}
-	dropped, err := st.Sweep(func(n model.Note) bool { return !sameNoteTarget(n.Address, addr) })
+	// A permanent overview is never a note to clear: gg overview rm (R9).
+	dropped, err := st.Sweep(func(n model.Note) bool { return n.IsOverviewNote() || !sameNoteTarget(n.Address, addr) })
 	if dropped > 0 {
 		s.invalidateNoteCounts()
 	}
@@ -558,6 +571,9 @@ func (s *Service) loadNotesAt(ctx context.Context, addr model.FileAddress) ([]mo
 	}
 	mine := make([]model.Note, 0, len(all))
 	for _, n := range all {
+		if n.IsOverviewNote() {
+			continue // an overview is listed by gg overview, never as a note (R9)
+		}
 		if sameNoteTarget(n.Address, addr) {
 			mine = append(mine, n)
 		}
@@ -667,6 +683,17 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 			}
 			continue
 		}
+		if n.IsOverviewNote() {
+			if n.Preview != "" {
+				if c.PreviewOverviews == nil {
+					c.PreviewOverviews = map[string][]OverviewHead{}
+				}
+				c.PreviewOverviews[n.Preview] = append(c.PreviewOverviews[n.Preview], overviewHead(n))
+				continue
+			}
+			c.Overviews = append(c.Overviews, overviewHead(n))
+			continue
+		}
 		if n.IsReviewNote() {
 			// A review has its own marker (✎ in Commits, ◆ in Branches):
 			// it is never counted in the ◆N note badges.
@@ -733,6 +760,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		sort.Slice(sc, func(a, b int) bool { return sc[a].Scope < sc[b].Scope })
 	}
 	sort.SliceStable(c.Reviews, func(a, b int) bool { return c.Reviews[a].Created.After(c.Reviews[b].Created) })
+	sort.SliceStable(c.Overviews, func(a, b int) bool { return c.Overviews[a].Created.After(c.Overviews[b].Created) })
 	sort.SliceStable(c.WorkingReviews, func(a, b int) bool { return c.WorkingReviews[a].Created.After(c.WorkingReviews[b].Created) })
 	for _, hs := range c.PreviewReviews {
 		sort.SliceStable(hs, func(a, b int) bool { return hs[a].Created.After(hs[b].Created) })
@@ -1189,7 +1217,7 @@ func (s *Service) NoteAddresses(ctx context.Context) ([]model.FileAddress, error
 	seen := map[string]bool{}
 	var out []model.FileAddress
 	for _, n := range all {
-		if n.IsReply() {
+		if n.IsReply() || n.IsOverviewNote() { // an overview is gg overview's (R9)
 			continue
 		}
 		a := n.Address
@@ -1217,6 +1245,9 @@ func (s *Service) NoteAddresses(ctx context.Context) ([]model.FileAddress, error
 func storedGroup(n model.Note) string {
 	if n.IsReviewNote() || n.IsWorkingReview() {
 		return "review:" + n.ID
+	}
+	if n.IsOverviewNote() {
+		return "overview:" + n.ID // never anyone's draft review
 	}
 	return GroupMine
 }

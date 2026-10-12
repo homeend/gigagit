@@ -174,6 +174,13 @@ func (s *Service) SaveReview(ctx context.Context, cmd SaveReview) (string, strin
 	if st == nil {
 		return "", "", ErrNotesDisabled
 	}
+	return s.saveNoteWithRetry(ctx, st, func() (string, error) { return s.putReview(st, t, wt, cmd) })
+}
+
+// saveNoteWithRetry runs put until it stores: a corrupt store is moved aside
+// once (warn says where), a held lock is retried within reviewRetryBudget
+// with jitter. Every entry-level note writer (reviews, overviews) uses it.
+func (s *Service) saveNoteWithRetry(ctx context.Context, st notes.Store, put func() (string, error)) (string, string, error) {
 	start := time.Now()
 	elapsed := func() time.Duration {
 		if reviewClock != nil {
@@ -183,7 +190,7 @@ func (s *Service) SaveReview(ctx context.Context, cmd SaveReview) (string, strin
 	}
 	warn := ""
 	for {
-		id, err := s.putReview(st, t, wt, cmd)
+		id, err := put()
 		if err == nil {
 			s.invalidateNoteCounts()
 			return id, warn, nil

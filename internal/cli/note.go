@@ -882,6 +882,9 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 	}
 	kept := make([]domain.ResolvedNote, 0, len(res))
 	for _, r := range res {
+		if r.Note.IsOverviewNote() {
+			continue // gg overview list (R9)
+		}
 		if noteTypeMatches(*typ, r.Note.Source) {
 			kept = append(kept, r)
 		}

@@ -172,6 +172,13 @@ gg review save <gg-link> --dry-run [--json]
                                       # (the /gg-review <gg-link> [focus] skill, from `gg init`, drives both;
                                       # /gg-cross-review <gg-link> [2|3] [focus] runs 2–3 copies of the agent on different
                                       # models with --no-save, merges them, settles their disagreements and stores ONE review)
+gg overview save [<gg-link>] --agent <name> (--stdin | --file <path>) [--title <t>] [--json] [--dry-run]
+                                      # store an agent's overview PERMANENTLY on HEAD / a commit / a branch tip / a PR;
+                                      # refused whole (nothing stored) on a note: link, a missing path, lines past the end,
+                                      # or an anchored file with uncommitted changes
+gg overview list [--all] [--json]    # HEAD's permanent overviews (--all: the repository's)
+gg overview show <id|link> [--json]  # one overview: its markdown and remarks
+gg overview rm <id>                  # delete one
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
                                       # numbered git @@ hunks per file, over the same patch a note anchors to
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>]
@@ -503,6 +510,13 @@ stays in the diff). Moving on the file never moves the overview's
 selection: the anchor whose block the cursor is in is marked in that
 block's colour. ctrl+\ or `gg session files focus` on an overview open it
 this way too.
+**Export as HTML** (the `.` menu of an overview or of a review's ≡ Overview row
+in the TUI; `E` in gg web;
+`gg review export <id>` / `gg session overview export <id>`) saves any
+overview — a stored review's or an agent's — as ONE self-contained `.html`
+file you can hand to someone without gg: the same split, offline, with every
+file a link names (at the review's tip, or the working tree) and its diff;
+no notes, no other files.
 `v` on either side selects characters to copy (the modal copy mode: `space`
 start, `enter`/`y` copy, `esc` leave; `tab` waits, and stacked the selection
 stays inside one file).
