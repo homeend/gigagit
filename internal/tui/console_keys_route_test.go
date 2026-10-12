@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -179,4 +180,55 @@ func TestFocusedConsoleJoinsSurrogateHalves(t *testing.T) {
 		m = mm.(Model)
 	}
 	waitScreen(t, s, "f0 9f 91 8d")
+}
+
+// alt+x (text templates) reaches gg past an UNFOCUSED console, docked or
+// full-screen: the text is often meant for the agent, so the user must not
+// have to leave its column to write it. Closing the window returns to it.
+func TestUnfocusedConsoleLetsAltXOpenTextTemplates(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	mm, _ := m.Update(ctrlBracket()) // docked focused → docked unfocused
+	m = mm.(Model)
+	m = pressAlt(t, m, 'x')
+	if _, ok := m.topLayer().(*textTemplatesView); !ok {
+		t.Fatalf("docked unfocused console: alt+x top = %T, want the text templates window", m.topLayer())
+	}
+	m = press(t, m, "esc")
+	if m.topLayer() != nil || m.console == nil {
+		t.Fatalf("esc: top=%T console=%v, want back on the console", m.topLayer(), m.console != nil)
+	}
+
+	m, _ = fullScreenAgent(t)
+	m = pressAlt(t, m, 'x')
+	if _, ok := m.topLayer().(*textTemplatesView); !ok {
+		t.Fatalf("full-screen unfocused console: alt+x top = %T, want the text templates window", m.topLayer())
+	}
+	if out := m.View(); !strings.Contains(out, "Text templates") {
+		t.Fatalf("the window is not drawn over the full-screen console:\n%s", out)
+	}
+}
+
+// A terminal session opens in the same console: alt+x reaches gg past it
+// too once it is unfocused.
+func TestUnfocusedTerminalLetsAltXOpenTextTemplates(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	startTestSession(t, m, `sleep 5`) // installs a test session manager
+	s, err := m.svc.StartTerminal(t.Context(), "sh", m.currentWorktree, m.currentWorktree, 80, 20, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Info().Terminal {
+		t.Fatal("precondition: a terminal session")
+	}
+	m, _ = m.openConsole(s.Info().ID)
+	mm, _ := m.Update(ctrlBracket())
+	m = mm.(Model)
+	m = pressAlt(t, m, 'x')
+	if _, ok := m.topLayer().(*textTemplatesView); !ok {
+		t.Fatalf("unfocused terminal: alt+x top = %T, want the text templates window", m.topLayer())
+	}
 }
