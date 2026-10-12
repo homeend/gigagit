@@ -11,7 +11,8 @@ import { copyText, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { mdHTML } from "./markdown.js";
 import { extraRows, registerHelp } from "./menus.js";
-import { NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
+import { NOTE_BADGE_COLS, previewBack, loadPairCounts, enterFilesStage, fileCols, filePathHTML, noteBadgeHTML, refreshNoteCounts, renderCompareBar, renderFiles, setCommitTitle, setDiffTitle, setFilesCounts, setFilesKind, setFilesMeta, setLayout, updateDiffNav } from "./files.js";
+import { badgeRunHTML, countsRunHTML, countsText } from "./notemeta.js";
 import { openStack, stackOn, teardownStack } from "./stackview.js";
 import { openCommitByHash } from "./commits.js";
 import { focusPane } from "./keys.js";
@@ -404,6 +405,7 @@ function setReviewHeader() {
   setFilesKind("review", "a stored AI review — its notes are read-only");
   $("files-title").textContent = "Review " + d.label + (d.older ? " · older tip" : "");
   setFilesMeta(reviewMetaLine(d));
+  setFilesCounts(countsText(d.meta_counts));
 }
 
 
@@ -483,12 +485,45 @@ function renderReviewFiles() {
       `<span class="st ${esc(f.status)}">${esc(f.status)}</span>` +
       filePathHTML(f.path, cols) +
       noteBadgeHTML(counts[f.path]) +
+      reviewCountsTailHTML(d, f.path) +
       workingStateHTML(d, f.path) +
       `</li>`;
     const sum = (d.summaries || {})[f.path];
     if (sum) html += `<li class="rsum" title="${esc(sum)}">${esc(sum)}</li>`;
   });
   $("files-list").innerHTML = html;
+}
+
+
+// refreshReviewMeta re-reads the open review after a mark: the header's
+// counts and each file's tail follow the new status (the TUI re-reads both).
+// Only while the review view is what the page shows: a review left for a
+// commit or a PR keeps state.review, and its counts must not land under that
+// header. A review closed or replaced meanwhile is left alone.
+export async function refreshReviewMeta() {
+  const rv = state.review;
+  if (!rv || !reviewActive()) return;
+  let d;
+  try {
+    d = await getJSON("/api/review/" + encodeURIComponent(rv.id));
+  } catch {
+    return;
+  }
+  if (state.review !== rv || !reviewActive()) return;
+  rv.data.meta_counts = d.meta_counts;
+  rv.data.meta_by_file = d.meta_by_file;
+  rv.data.other = d.other;
+  setFilesCounts(countsText(d.meta_counts));
+  renderFiles();
+}
+
+
+// reviewCountsTailHTML is a file row's compact meta counts ("issue 1 good 1",
+// placed remarks only — what ◆N counts). The path keeps its budget: the tail
+// is the first thing the row's CSS ellipsis takes.
+function reviewCountsTailHTML(d, path) {
+  const run = countsRunHTML((d.meta_by_file || {})[path], esc);
+  return run ? `<span class="rcounts">${run}</span>` : "";
 }
 
 
@@ -518,7 +553,8 @@ function reviewSummaryHTML() {
           .map((n) => {
             const thread = [n.replies ? n.replies + (n.replies === "1" ? " reply" : " replies") : "", n.resolved ? "resolved" : ""].filter(Boolean).join(" · ");
             const head = n.outdated ? "outdated: " + n.summary : n.path + ":" + n.line + " — " + n.summary + (n.changed ? " (changed since the review)" : "");
-            return `<li>${esc(head + (thread ? " — " + thread : ""))}</li>`;
+            const run = badgeRunHTML(n.display, esc); // its meta chips lead (spec §6.2)
+            return `<li>${run ? run + "  " : ""}${esc(head + (thread ? " — " + thread : ""))}</li>`;
           })
           .join("") +
         `</ul>`

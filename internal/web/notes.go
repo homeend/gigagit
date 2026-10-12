@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // Review notes — the web half of phase 1.
@@ -31,6 +32,7 @@ func init() {
 		mux.HandleFunc("POST /api/notes/edit", writeGuard(s.handleNoteEdit))
 		mux.HandleFunc("POST /api/notes/reply", writeGuard(s.handleNoteReply))
 		mux.HandleFunc("POST /api/notes/resolve", writeGuard(s.handleNoteResolve))
+		mux.HandleFunc("POST /api/notes/mark", writeGuard(s.handleNoteMark))
 		mux.HandleFunc("POST /api/notes/remove", writeGuard(s.handleNoteRemove))
 		mux.HandleFunc("POST /api/notes/clear-row", writeGuard(s.handleNoteClearRow))
 		mux.HandleFunc("GET /api/notes/row-link", s.handleNoteRowLink)
@@ -409,6 +411,50 @@ func (s *Server) handleNoteResolve(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true})
 }
 
+// handleNoteMark is the note box's Mark (spec 2026-10-12-note-meta §5.4, R12):
+// the reader's status tag — agreed / disagreed / deferred, or "" to clear —
+// written as the `status` meta key, shown through the built-in declaration.
+// It is a tag and nothing else, and only those three words: no frontend gets
+// a generic meta editor (R5). A GitHub thread is GitHub's, never marked.
+func (s *Server) handleNoteMark(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, errors.New("bad request body"))
+		return
+	}
+	switch req.Status {
+	case "", "agreed", "disagreed", "deferred":
+	default:
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown mark %q", req.Status))
+		return
+	}
+	if req.ID == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("id is required"))
+		return
+	}
+	if model.IsForgeNoteID(req.ID) {
+		writeErr(w, http.StatusConflict, errors.New("a GitHub thread cannot be marked"))
+		return
+	}
+	svc, ctx := s.service(), r.Context()
+	by := s.noteAuthor(ctx, "")
+	var err error
+	if req.Status == "" {
+		err = svc.UnsetNoteMeta(ctx, req.ID, by, []string{notemeta.StatusKey})
+	} else {
+		_, err = svc.SetNoteMeta(ctx, req.ID, by, []notemeta.KV{{Key: notemeta.StatusKey, Value: req.Status}})
+	}
+	if err != nil {
+		writeErr(w, noteErrStatus(err), err)
+		return
+	}
+	s.emitNotes()
+	writeJSON(w, map[string]any{"ok": true})
+}
+
 func (s *Server) handleNoteRemove(w http.ResponseWriter, r *http.Request) {
 	req, ok := decodeNoteReq(w, r)
 	if !ok {
@@ -488,7 +534,8 @@ func noteErrStatus(err error) int {
 	switch {
 	case errors.Is(err, domain.ErrNoteNotFound), errors.Is(err, domain.ErrReviewNotFound), errors.Is(err, domain.ErrNoSuchRemark):
 		return http.StatusNotFound
-	case errors.Is(err, domain.ErrReadOnlyNote), errors.Is(err, domain.ErrForgeResolved), errors.Is(err, domain.ErrNotResolved):
+	case errors.Is(err, domain.ErrReadOnlyNote), errors.Is(err, domain.ErrForgeResolved), errors.Is(err, domain.ErrNotResolved),
+		errors.Is(err, domain.ErrNotesNewer):
 		return http.StatusConflict
 	case errors.Is(err, domain.ErrNoteLink):
 		return http.StatusBadRequest

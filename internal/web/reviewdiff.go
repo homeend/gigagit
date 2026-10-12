@@ -44,7 +44,8 @@ func remarkRows(ns []domain.ResolvedNote) []noteRow {
 	out := make([]noteRow, 0, len(ns))
 	for _, n := range ns {
 		row := noteRow{ID: n.Note.ID, Start: n.Range[0], End: max(n.Range[1], n.Range[0]), Summary: n.Note.Summary,
-			Rationale: n.Note.Rationale, Author: n.Note.Author, ReadOnly: true}
+			Rationale: n.Note.Rationale, Author: n.Note.Author, ReadOnly: true,
+			Display: rowDisplay(domain.NoteMeta(n.Note, nil))}
 		if n.Note.Side == model.NoteSideOld {
 			row.Side = "old"
 		}

@@ -2,12 +2,15 @@ package web
 
 import (
 	"testing"
+
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 type candRowResp struct {
 	ID, Kind, Severity, Path, Side, Summary, Rationale, Sync, Skip string
 	Range                                                          [2]int
 	Code                                                           []string
+	Display                                                        *notemeta.Resolved
 }
 
 type candGroupResp struct {
@@ -55,5 +58,22 @@ func TestPRSendCandidatesEndpoint(t *testing.T) {
 	}
 	if code := getJSON(t, ts, "/api/pr/send/candidates?n=99", nil); code != 404 {
 		t.Errorf("unknown PR = %d, want 404", code)
+	}
+}
+
+// spec 2026-10-12-note-meta §6.3/§7: a row carries what its opened form
+// shows — the resolved display. Serial: sendServer.
+func TestSendCandidateRowsCarryDisplay(t *testing.T) {
+	ts, _, srv, _, _ := sendServerFull(t)
+	savePRReviewWeb(t, srv, `{"version":1,"summary":"s",
+ "display":{"severity":{"show":["badge"],"values":{"high":{"color":"red"}}}},
+ "files":[{"path":"pr7.txt","annotations":[{"newRange":[1,1],"summary":"check","meta":{"severity":"high"}}]}]}`)
+	var out candResp
+	if code := getJSON(t, ts, "/api/pr/send/candidates?n=7", &out); code != 200 || len(out.Groups) == 0 || len(out.Groups[0].Rows) == 0 {
+		t.Fatalf("code %d %+v", code, out)
+	}
+	r := out.Groups[0].Rows[0]
+	if r.Display == nil || len(r.Display.Badges) != 1 || r.Display.Badges[0].Color != "red" {
+		t.Fatalf("row display = %+v", r.Display)
 	}
 }

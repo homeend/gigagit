@@ -164,8 +164,19 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		wf = append(wf, row)
 	}
 	out["files"] = wf
-	if c, err := svc.ReviewFileCounts(ctx, rv.ID); err == nil && c != nil {
-		out["counts"] = c
+	if c, byFile, err := svc.ReviewFileMetaCounts(ctx, rv.ID); err == nil {
+		if c != nil {
+			out["counts"] = c
+		}
+		// Each file's note-meta counts: only the remarks the view places, the
+		// ones ◆N counts (spec 2026-10-12-note-meta §6.2).
+		if len(byFile) > 0 {
+			out["meta_by_file"] = byFile
+		}
+	}
+	// The header's counts: every remark of the document, as "N notes" does.
+	if mc := domain.ReviewMetaCounts(rv); len(mc.Groups) > 0 || mc.Author > 0 || mc.Reviewer > 0 {
+		out["meta_counts"] = mc
 	}
 	sums := map[string]string{}
 	for _, f := range rv.Doc.Files {
@@ -181,15 +192,20 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	}
 	out["notes"], out["note_files"] = rv.Doc.NoteCount()
 	_, out["resolved"] = rv.Tally()
-	other := []map[string]string{}
+	other := []map[string]any{}
 	if os, err := svc.ReviewOtherNotes(ctx, rv.ID); err == nil {
 		for _, o := range os {
-			row := map[string]string{"path": o.Path, "line": reviewLine(o.Side, o.Range), "summary": o.Summary}
+			row := map[string]any{"path": o.Path, "line": reviewLine(o.Side, o.Range), "summary": o.Summary}
 			if o.Changed {
 				row["changed"] = "1"
 			}
 			if o.Outdated { // its remark is gone from the re-saved review: no path:line
-				row = map[string]string{"summary": o.Summary, "outdated": "1"}
+				row = map[string]any{"summary": o.Summary, "outdated": "1"}
+			}
+			// Its chips (spec 2026-10-12-note-meta §6.2): every value above
+			// stays a string — the page compares replies === "1".
+			if d := rowDisplay(o.Meta); d != nil {
+				row["display"] = d
 			}
 			if len(o.Replies) > 0 {
 				row["replies"] = strconv.Itoa(len(o.Replies))

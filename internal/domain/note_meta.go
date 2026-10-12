@@ -90,6 +90,10 @@ func (r Review) docRemarkAt(i int) (notebatch.ReviewFile, notebatch.ReviewNote, 
 	return notebatch.ReviewFile{}, notebatch.ReviewNote{}, false
 }
 
+// ErrNotesNewer is the notes store's refusal of a write to a file a newer
+// gg wrote, for frontends (they never import internal/notes).
+var ErrNotesNewer = notes.ErrNewerFormat
+
 // ErrRemarkDisplay refuses a declaration on one remark: a declaration
 // belongs to whoever wrote the meta it describes — the review's agent.
 var ErrRemarkDisplay = errors.New("a remark's display is its review's")

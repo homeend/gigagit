@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // Sending to GitHub from the page (spec 2026-10-07 §4.2). The page names
@@ -280,6 +281,9 @@ type candidateRowWire struct {
 	Sync      string   `json:"sync"`
 	Code      []string `json:"code"`
 	Skip      string   `json:"skip"`
+	// Display is what the panel's opened row shows (spec 2026-10-12-note-meta
+	// §6.3): badges, the audience marker, the line entries. It decides nothing.
+	Display *notemeta.Resolved `json:"display,omitempty"`
 }
 
 type candidateGroupWire struct {
@@ -305,7 +309,7 @@ func candidatesWire(c domain.SendCandidates) []candidateGroupWire {
 				code = []string{}
 			}
 			gw.Rows = append(gw.Rows, candidateRowWire{ID: r.ID, Kind: r.Kind, Severity: r.Severity, Path: r.Path, Range: r.Range,
-				Side: r.Side, Summary: r.Summary, Rationale: r.Rationale, Sync: string(r.Sync), Code: code, Skip: r.Skip})
+				Side: r.Side, Summary: r.Summary, Rationale: r.Rationale, Sync: string(r.Sync), Code: code, Skip: r.Skip, Display: rowDisplay(r.Meta)})
 		}
 		out = append(out, gw)
 	}

@@ -48,7 +48,7 @@ export function panelRows(cands, ticked) {
     for (const r of rows) {
       out.push({ kind: "row", id: r.id, group: g.id, slot: g.slot || 0, tickable: !r.skip, ticked: !r.skip && ticked.has(r.id),
         severity: r.severity || "", where: whereOf(r), summary: r.summary || "", rationale: r.rationale || "",
-        code: r.code || [], skip: r.skip || "", sync: r.sync || "" });
+        code: r.code || [], skip: r.skip || "", sync: r.sync || "", display: r.display || null });
     }
   }
   return out;
