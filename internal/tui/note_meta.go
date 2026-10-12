@@ -65,9 +65,13 @@ func (r *maskRun) add(s string, c syntax.Class) {
 
 // badgeValue is what a badge says: the value verbatim (data), except the
 // built-in status values, which are gg's own words.
-func badgeValue(b notemeta.Badge) string {
-	if b.Key == notemeta.StatusKey {
-		switch b.Value {
+func badgeValue(b notemeta.Badge) string { return metaWord(b.Key, b.Value) }
+
+// metaWord is value as shown for key: verbatim (sanitized) data, except the
+// built-in status values.
+func metaWord(key, value string) string {
+	if key == notemeta.StatusKey {
+		switch value {
 		case "agreed":
 			return i18n.T("agreed")
 		case "disagreed":
@@ -76,7 +80,7 @@ func badgeValue(b notemeta.Badge) string {
 			return i18n.T("deferred")
 		}
 	}
-	return sanitizeLine(b.Value)
+	return sanitizeLine(value)
 }
 
 // badgeRun is a note's badges then its audience marker (spec §6.1), with the
@@ -166,7 +170,7 @@ func metaCountsText(c notemeta.Counts) string {
 	var parts []string
 	for _, g := range c.Groups {
 		for _, v := range g.Values {
-			parts = append(parts, strconv.Itoa(v.N)+" "+sanitizeLine(v.Value))
+			parts = append(parts, strconv.Itoa(v.N)+" "+metaWord(g.Key, v.Value))
 		}
 	}
 	if c.Author > 0 {
@@ -187,7 +191,7 @@ func metaCountsRun(c notemeta.Counts) (string, []syntax.Class) {
 			if r.b.Len() > 0 {
 				r.add(" ", 0)
 			}
-			r.add(sanitizeLine(v.Value)+" ", 0)
+			r.add(metaWord(g.Key, v.Value)+" ", 0)
 			r.add(strconv.Itoa(v.N), metaClass(v.Color, notemeta.StyleText))
 		}
 	}

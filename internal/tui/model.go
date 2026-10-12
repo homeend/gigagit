@@ -1657,6 +1657,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onReviewHint(msg)
 	case threadResolvedMsg:
 		return m.onThreadResolved(msg)
+	case noteMarkedMsg:
+		return m.onNoteMarked(msg)
+	case reviewMetaCountsMsg:
+		return m.onReviewMetaCounts(msg)
 	case remoteHeadNamesMsg:
 		p := layerOf[*remoteHeadsPopup](m)
 		if p == nil || msg.gen != m.remoteHeadsGen {
