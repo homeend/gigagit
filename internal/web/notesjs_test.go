@@ -37,7 +37,17 @@ func noteboxInline(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return strings.ReplaceAll(string(src), "export function", "function") + "\n"
+	meta, err := os.ReadFile(filepath.Join("static", "notemeta.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// noteBoxHTML also draws note meta (notemeta.js) and fits its title to
+	// the laid-out width: under node there is no layout, so the room is 0
+	// (the title renders whole) and elidePath is never reached.
+	inline := func(b []byte) string {
+		return strings.NewReplacer("export function", "function", "export const", "const").Replace(string(b))
+	}
+	return inline(src) + "\n" + inline(meta) + "\nfunction noteTitleRoom() { return 0; }\nconst elidePath = (s) => s;\n"
 }
 
 // TestNoteRowsHTMLJS runs the shipped note-row painter under node. Notes carry

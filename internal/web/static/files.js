@@ -18,7 +18,8 @@ import { saveUI } from "./uistate.js";
 import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutChanged, symOffered, symReapply, symRows } from "./symcompare.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
-import { noteMark, noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
+import { noteMark, noteTitleParts, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
+import { badgeRunCols, badgeRunHTML, fitNoteTitle, frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./notemeta.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
 import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
@@ -2754,6 +2755,19 @@ function noteShown(n) {
 }
 
 
+// noteTitleRoom is a box title's budget in columns: the diff body's width
+// (half of it for a box in one pane of the split layout), less the box's
+// border inset and the title's own padding, at the title's .92em. 0 = not
+// laid out yet: the title renders whole and the CSS ellipsis is the backstop.
+function noteTitleRoom(cols, n) {
+  const body = $("diff-body");
+  const px = body ? body.clientWidth : 0;
+  if (px <= 0) return 0;
+  const boxPx = (cols === 4 && !n.file_level ? px / 2 : px) - 64;
+  return Math.max(0, Math.floor(boxPx / (charWidth() * 0.92)) - 2);
+}
+
+
 function noteBoxHTML(n, cols, nctx = null) {
   const nc = nctx || globalNoteCtx();
   const off = state.notesAgentOff;
@@ -2778,7 +2792,14 @@ function noteBoxHTML(n, cols, nctx = null) {
   const agent = n.source === "agent";
   const kind = n.read_only ? "forge" : agent ? "agent" : "user";
   const folded = state.noteCollapsed.has(n.id);
-  const title = noteTitle(n, nc.ctx ? nc.ctx.path : "", prev, Date.now());
+  // The title leads with the note's meta chips (spec 2026-10-12-note-meta
+  // §7), then today's words and place, fitted the TUI's way: the path
+  // elided first, then the words, chips never (the CSS ellipsis backstops).
+  const parts = noteTitleParts(n, nc.ctx ? nc.ctx.path : "", prev, Date.now());
+  const meta = rootOn ? n.display : null; // a hidden root's chips go with it
+  const frame = meta ? frameClass(n.display) : "";
+  const fit = fitNoteTitle(badgeRunCols(n.display) + (mark ? 3 : 0), parts.words, parts.at + parts.tail,
+    rootOn ? noteTitleRoom(cols, n) : 0, elidePath);
   // A FORGE note is markdown, and the server sends it parsed (summary_md, md):
   // those trees are painted. A note written here is shown exactly as typed —
   // it carries no tree, so it falls to the escaped text.
@@ -2790,18 +2811,29 @@ function noteBoxHTML(n, cols, nctx = null) {
   // line and drops its body. The fold is a CLASS on the row, toggled in place
   // — never a re-render, which would reset the ‹/› stepper and jolt the scroll.
   let box =
-    `<div class="notebox ${kind}${stale ? " " + cls : ""}${slot}">` +
-    `<div class="notetitle" data-collapse="${esc(n.id)}" title="click (or z) to collapse / expand">` +
+    `<div class="notebox ${kind}${stale ? " " + cls : ""}${slot}${frame ? " " + frame : ""}">` +
+    `<div class="notetitle" data-collapse="${esc(n.id)}" title="${esc(parts.words + parts.at + parts.tail)} — click (or z) to collapse / expand">` +
     `<span class="notefold"></span>` +
     (mark ? `<span class="notemark ${mark.cls}" title="${esc(mark.tip)}">${mark.glyph}</span> ` : "") +
-    `${esc(title)}</div>`;
+    (meta ? titleMetaHTML(n.display, esc) : "") +
+    `${esc(fit.words + fit.at)}</div>`;
   // A note's link (a reply's fix) is its own line; a click opens it.
   const linkLine = (r) => (r.link ? `<div class="notelink" data-link="${esc(r.link)}" title="open">→ ${esc(r.link)}</div>` : "");
-  if (rootOn) box += part(n, "") + text(n) + linkLine(n);
+  // Line rows under the title, the details after the body (spec §6.1/§7).
+  if (rootOn) box += metaLinesHTML(n.display, esc) + part(n, "") + text(n) + linkLine(n) + metaDetailsHTML(n.display, esc);
   // A failed send keeps the note local; its error is said inside the box.
   if (rootOn && n.sync === "failed" && n.send_error) box += `<div class="notesenderr">${esc(n.send_error)}</div>`;
+  // Each reply shows its own chips, line and details rows, through its
+  // root's declaration (the server resolves it so).
   for (const r of reps) {
-    box += `<div class="notereply" data-note="${esc(r.id)}">` + part(r, "↳ " + (r.author ? r.author + ": " : "")) + text(r) + linkLine(r) + `</div>`;
+    const run = badgeRunHTML(r.display, esc);
+    box +=
+      `<div class="notereply" data-note="${esc(r.id)}">` +
+      (run ? `<div class="mrun">${badgeRunHTML(r.display, esc)}</div>` : "") +
+      metaLinesHTML(r.display, esc) +
+      part(r, "↳ " + (r.author ? r.author + ": " : "")) + text(r) + linkLine(r) +
+      metaDetailsHTML(r.display, esc) +
+      `</div>`;
   }
   box += `</div>`;
   const cell = (span) => `<td class="note" colspan="${span}">${box}</td>`;
