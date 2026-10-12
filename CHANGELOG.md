@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Export an overview as one HTML file
+
+### Added
+- **Export as HTML** turns any overview into ONE self-contained `.html` file
+  to hand to someone outside gg: an agent's in-memory overview, or the
+  stored overview of a commit, range, preview, branch or pull-request
+  review. Opened from disk, with no gg and no network, it shows the same
+  split as gg web — the overview on the left, the code on the right; a click
+  on a link opens its file with the lines marked, **n / p** walk the links,
+  **D** flips file ↔ diff, a file list opens any included file, and below
+  900 px the panes stack.
+- It carries every file a link names, in full at its frozen version (the
+  review's tip; the working tree for an agent's overview), and that file's
+  diff (the review's range; HEAD → working tree). Files no link names, and
+  **notes of any kind**, are left out; a link the export cannot open draws
+  as plain text. The page is capped at 16 MB (the error names the largest
+  files).
+- Where: **gg web** — `E` on an overview, or the `E export html` chip (a
+  download); **TUI** — the overview's `.` menu, **Export as HTML** (asks
+  where to write it); **CLI** — `gg review export [--out <path>|-] [--force]
+  <review-link|id|latest>` and `gg session overview export <id> [--out …]`.
+
+### Changed
+- gg web's embedded page is now its own package (`internal/web/static`), so
+  the export inlines the same `style.css`, `markdown.js` and `splitdiff.js`
+  gg web serves.
+
 ## TUI: n / p in an overview's file leave the overview's selection alone
 
 ### Changed

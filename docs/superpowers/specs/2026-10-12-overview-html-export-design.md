@@ -2,6 +2,18 @@
 
 Date: 2026-10-12 · Branch: `feat/overview-html-export`
 
+## Amendments (from planning, 2026-10-12 — these win over the text below)
+
+1. No `data:` module imports: each reused module is inlined as a block-scoped
+   classic script (`scopeModule`); the page loads no module at all.
+2. Dark only, like gg web (style.css has no light set) — no `prefers-color-scheme`.
+3. CLI flags `--out <path>|-` and `--force` (like `gg commit export-patch`), not `-o`.
+4. TUI entry = the overview's `.` menu row (single and split pane), not a palette row.
+5. `OverviewSource` has no `Dir`: the service is the agent overview's worktree;
+   `domain.AgentOverviewSource(docs, id, root)` is the web/TUI door.
+6. Web key `E` (x closes an overview) + an `E export html` foot chip.
+7. Stored-review title: `Review overview: <label>` (the TUI's reviewLabel words).
+
 ## Goal
 
 Export any overview as ONE self-contained `.html` file the user can hand to a
