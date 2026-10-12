@@ -6,10 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-## alt+x past an unfocused agent console
+## alt+x past an unfocused console
 
 ### Fixed
-- **alt+x opens the text templates window over an unfocused agent console**, docked or full-screen. The console used to swallow the key, so writing a text for the agent meant leaving its column first. Closing the window returns to the console. A focused (bound) console still sends alt+x to its program.
+- **alt+x opens the text templates window over an unfocused agent or terminal console**, docked or full-screen. The console used to swallow the key, so writing a text for it meant leaving its column first. Closing the window returns to the console. A focused (bound) console still sends alt+x to its program.
 
 ## gg-delegate: the worker shows its work
 
