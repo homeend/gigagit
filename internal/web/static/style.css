@@ -129,6 +129,11 @@ body.resizing { cursor: col-resize; user-select: none; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #files-meta.hidden { display: none; }
+/* A review's note-meta counts (spec 2026-10-12-note-meta §6.2): their own
+   line under the meta line, cut at the pane's edge (the full text is the tooltip). */
+#files-counts { flex: 1 0 100%; font-size: 11px; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#files-counts.hidden { display: none; }
+.rcounts { margin-left: 8px; font-size: .9em; color: var(--dim); white-space: nowrap; }
 /* The description under the date: a full-basis block like the meta line, the
    commit's own line breaks kept, clamped to three lines. What the clamp hides
    is behind the button under it — a header is a header, not the whole message. */

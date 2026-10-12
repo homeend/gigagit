@@ -197,6 +197,7 @@ function enterFilesStage() {
   diffSearchBar.reset(); // the pane is empty now; nothing to unpaint
   setFilesMeta(""); // every stage starts without a date; only a commit open sets one
   setFilesDesc(""); // …and without a description
+  setFilesCounts(""); // a review sets its counts
   // The kind badge is DERIVED, not cleared: esc from a diff re-enters this
   // stage inside the same comparison, whose badge must stay; every other
   // screen sets filesMode before coming here, so it reads as "no badge".
@@ -337,6 +338,16 @@ function setFilesMeta(text, parts) {
   // date and the author separately without re-parsing the rendered line.
   el.dataset.date = (parts && parts.date) || "";
   el.dataset.author = (parts && parts.author) || "";
+}
+
+
+// setFilesCounts draws (or hides) a review's note-meta counts line.
+export function setFilesCounts(text) {
+  const el = $("files-counts");
+  if (!el) return;
+  el.textContent = text || "";
+  el.title = text || "";
+  el.classList.toggle("hidden", !text);
 }
 
 

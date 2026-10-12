@@ -116,3 +116,24 @@ func TestViewerNoteBoxDrawsMeta(t *testing.T) {
 		}
 	}
 }
+
+// The review view: the header's counts on a line of their own, each file's
+// compact counts after its ◆N, the unplaced remarks' chips in Other notes.
+func TestReviewViewDrawsMetaCounts(t *testing.T) {
+	t.Parallel()
+	idx, css := readStatic(t, "index.html"), readStatic(t, "style.css")
+	f, r := readStatic(t, "files.js"), readStatic(t, "reviews.js")
+	for _, c := range []struct{ src, file, want string }{
+		{idx, "index.html", `<span id="files-counts" class="hidden"></span>`},
+		{css, "style.css", `#files-counts.hidden { display: none; }`},
+		{f, "files.js", `export function setFilesCounts(text)`},
+		{f, "files.js", `setFilesCounts(""); // a review sets its counts`},
+		{r, "reviews.js", `setFilesCounts(countsText(d.meta_counts))`},
+		{r, "reviews.js", `countsRunHTML((d.meta_by_file || {})[path], esc)`},
+		{r, "reviews.js", `badgeRunHTML(n.display, esc)`},
+	} {
+		if !strings.Contains(c.src, c.want) {
+			t.Errorf("%s lacks %s", c.file, c.want)
+		}
+	}
+}
