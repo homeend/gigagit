@@ -7127,8 +7127,11 @@ opened from disk with no gg and no network.
   the web/TUI door (resolves note spans in the shared `agentdocs` store);
   the CLI (`gg session overview export`) gets the text from `overview_show`
   and the spans from `note_list` over steer, then builds in-process. An
-  anchor is Missing when the review said not-OK, the file is unreadable, or
-  its lines pass the file's end; a Missing anchor draws plain.
+  anchor is Missing when the review said not-OK, the file is gone
+  (fs.ErrNotExist), or its lines pass the file's end; a Missing anchor draws
+  plain. Any other read error is a `could not read <path>: <err>`
+  placeholder; a cancelled context or a `repogate.BusyError` fails the
+  whole export (never a hollow page).
   `WorkingFileDiff` reports any binary as Changed — the page disables `D` on
   a placeholder, so this never shows.
 - **Renderer** (`internal/overviewhtml`): `Export` is the JSON blob (file

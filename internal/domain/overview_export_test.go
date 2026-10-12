@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -146,5 +147,41 @@ func TestAgentOverviewSourceResolvesNotes(t *testing.T) {
 	}
 	if _, err := AgentOverviewSource(docs, "f999999", "r"); !errors.Is(err, ErrNoAgentOverview) {
 		t.Errorf("unknown id: %v", err)
+	}
+}
+
+// A file that exists but cannot be read is a placeholder saying why — never
+// a silently dropped "missing" file (the page would read as linking no code).
+func TestExportUnreadableFileIsAPlaceholder(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("file modes do not deny reads here")
+	}
+	dir, svc := newRealRepo(t)
+	commitFile(t, dir, "a.txt", "one\ntwo\n", "add a")
+	p := filepath.Join(dir, "a.txt")
+	if err := os.Chmod(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(p, 0o644) })
+	page, _, err := svc.ExportOverviewHTML(context.Background(), OverviewSource{Title: "T", Text: "[a](a.txt:1)"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := exportBlob(t, page)
+	if len(e.Files) != 1 || !strings.HasPrefix(e.Files[0].Placeholder, "could not read a.txt:") || e.Anchors[0].Missing {
+		t.Fatalf("files = %+v anchors = %+v", e.Files, e.Anchors)
+	}
+}
+
+// A cancelled export fails as a whole instead of rendering a hollow page.
+func TestExportCancelledFails(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	commitFile(t, dir, "a.txt", "one\ntwo\n", "add a")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := svc.ExportOverviewHTML(ctx, OverviewSource{Title: "T", Text: "[a](a.txt:1)"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }

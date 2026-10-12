@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/buildinfo"
 	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/overviewhtml"
+	"github.com/homeend/gigagit/internal/repogate"
 	"github.com/homeend/gigagit/internal/syntax"
 )
 
@@ -122,8 +124,15 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 			continue
 		}
 		f, n, err := s.exportFile(rd, a.Path, &e)
-		if err != nil {
-			continue // unreadable: its anchors are marked missing below
+		var busy *repogate.BusyError
+		switch {
+		case err == nil:
+		case ctx.Err() != nil || errors.As(err, &busy):
+			return nil, "", err // a cancelled or refused read: no hollow page
+		case errors.Is(err, fs.ErrNotExist):
+			continue // gone: its anchors are marked missing below
+		default:
+			f = &overviewhtml.File{Path: a.Path, Placeholder: fmt.Sprintf("could not read %s: %v", a.Path, err)}
 		}
 		files[a.Path], lineCount[a.Path] = f, n
 		order = append(order, a.Path)
