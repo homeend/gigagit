@@ -654,6 +654,9 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 	if res.Hint.Kind == model.ReviewHintKind {
 		fmt.Fprintln(stdout, "review "+res.Hint.ID)
 	}
+	if res.Hint.Kind == model.OverviewHintKind {
+		fmt.Fprintln(stdout, "overview "+res.Hint.ID)
+	}
 	return 0
 }
 

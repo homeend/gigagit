@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v164 -->
+<!-- gg:using-gg:v165 -->
 
 # Using gg (gigagit)
 
@@ -131,6 +131,26 @@ guards against removing the worktree you are standing in.
   gg:// link; `--json` → `{id, link, warn}`. Exit 1 on input that is not a
   review document (nothing stored) or a link naming no change, 2 on a usage
   error or a malformed link.
+- `gg overview save [<gg-link>] --agent <name> (--stdin | --file <path>) [--title <t>] [--json] [--dry-run]`
+  — store a PERMANENT overview (the gg-overview document as JSON:
+  `{"version":1,"title":"…","overview":"<markdown with path:N-M links>","files":[{"path":"…","annotations":[{"newRange":[a,b],"summary":"…","rationale":"…"}]}]}`;
+  no summary, no meta, no oldRange) on HEAD, on the commit or `@ref:`
+  branch tip a link names, or on a pull request (`gg link --pr <n>`). Lines
+  are the file AT that commit. gg refuses the whole save — nothing stored,
+  every problem listed on stderr, exit 1 — for a `note:` link, a path not in
+  the commit, lines past a file's end, or (for a commit, not a PR) an
+  anchored file that differs on disk: `<path>: uncommitted changes` /
+  `<path>: differs from <sha7> on disk`. The same commit (or PR) and title
+  replaces. Prints `overview <id> stored on <where>: <title>` and the
+  overview's `gg://…?overview=<id>` link; `--json` → `{id, link, commit,
+  branch, pr, title, replaced, warn}`. A permanent overview is shown only as
+  itself: never as a note, a remark or a review, never sent to GitHub.
+- `gg overview list [--all] [--json]` — HEAD's overviews (`--all`: the
+  repository's): id, commit, `on-branch | was-tip | commit | pr`, date,
+  agent, title.
+- `gg overview show <id|link> [--json]` — the title, the commit, the link,
+  the markdown and each remark; `--json` carries the stored `document`.
+- `gg overview rm <id>` — delete one.
 - `gg review save <gg-link> --dry-run [--json]` — store nothing; print what
   the link would review and how to read it; `--json` → `{kind, label, range,
   diff, hunks, checkout}`. `kind` = preview | pair | commit | branch |

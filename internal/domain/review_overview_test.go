@@ -15,6 +15,9 @@ func TestOverviewLimitsAgree(t *testing.T) {
 	if notebatch.MaxOverviewBytes != agentdocs.MaxOverviewBytes {
 		t.Fatalf("notebatch %d != agentdocs %d", notebatch.MaxOverviewBytes, agentdocs.MaxOverviewBytes)
 	}
+	if notebatch.MaxOverviewTitle != agentdocs.MaxOverviewTitle {
+		t.Fatalf("title caps differ: notebatch %d != agentdocs %d", notebatch.MaxOverviewTitle, agentdocs.MaxOverviewTitle)
+	}
 }
 
 const overviewDoc = `{"version":1,"summary":"looks fine",

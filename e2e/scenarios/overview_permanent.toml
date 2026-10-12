@@ -1,0 +1,38 @@
+name = "overview: save on HEAD, a past-the-end save is refused whole and stores nothing, list it"
+
+# One commit adding a.txt (3 lines). An agent stores a permanent overview
+# with a remark; a second save whose link runs past the file's end is
+# refused and stores nothing; list shows the first, on-branch. (show/rm need
+# the printed id — scenarios cannot carry a value between runs — so they are
+# pinned by internal/cli TestOverviewSaveListShowRm.)
+[input]
+steps = [
+  { write = "a.txt", content = "one\ntwo\nthree\n" },
+  { commit = "add a" },
+]
+
+[[run]]
+cmd   = ["overview", "save", "--agent", "Claude Code", "--stdin"]
+stdin = '{"version":1,"title":"How a works","overview":"Start at [two](a.txt:2).","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"the middle"}]}]}'
+exit  = 0
+stdout_contains = ["stored on main @", "How a works", "?overview="]
+
+[[run]]
+cmd   = ["overview", "save", "--agent", "Claude Code", "--stdin"]
+stdin = '{"version":1,"title":"Past the end","overview":"[far](a.txt:9)"}'
+exit  = 1
+stderr_contains = ["refused — nothing stored", "a.txt:9: past the end (3 lines at"]
+
+[[run]]
+cmd   = ["overview", "list"]
+exit  = 0
+stdout_contains = ["on-branch", "Claude Code", "How a works"]
+stdout_excludes = ["Past the end"]
+
+[[run]]
+cmd   = ["overview", "list", "--all", "--json"]
+exit  = 0
+stdout_contains = ['"title":"How a works"']
+
+[expect]
+branch = "main"
