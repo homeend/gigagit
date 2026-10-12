@@ -121,3 +121,14 @@ func TestBranchOverviewSubRowOpenAndDelete(t *testing.T) {
 		t.Fatalf("enter on the sub-row opens the overview; top %T status %q", m.topLayer(), m.statusMsg)
 	}
 }
+
+// An overview sub-row keys apart from its branch and from a sibling, so a
+// reload's selection restore stays on it.
+func TestBranchOverviewSubRowKeys(t *testing.T) {
+	t.Parallel()
+	l := branchList{items: []model.Branch{{Name: "feat"}},
+		ents: []brEntry{{br: 0}, {br: 0, overview: "o1"}, {br: 0, overview: "o2"}}}
+	if l.Key(0) == l.Key(1) || l.Key(1) == l.Key(2) {
+		t.Fatalf("keys = %q %q %q", l.Key(0), l.Key(1), l.Key(2))
+	}
+}

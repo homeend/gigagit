@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -51,6 +52,9 @@ type overview struct {
 	// tip is the commit a STORED overview's anchors open at ("" = the
 	// working tree, a temporary overview); set with srcReviewOverview.
 	tip string
+	// saved is a permanent overview's save stamp (Updated) when it was
+	// read: a re-save replaces the open copy (openCommitOverview).
+	saved time.Time
 	// diff / diffPartial are the choice D and f made for the files this
 	// overview's links open (split_diff.go): held here, not by a file, so
 	// it survives link steps and the narrow viewer; forgetDiff ends it.

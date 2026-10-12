@@ -47,6 +47,12 @@ func (d *openFile) storedFrom() (fileSourceKind, string) {
 	return 0, ""
 }
 
+// dropWayBack forgets the overview d was opened from: the same file at the
+// same commit opened another way (the Files view preview, a review's file)
+// shows none of that overview's remarks or bands (R9). An anchor's open
+// sets the way back again after its open (openAnchor).
+func (d *openFile) dropWayBack() { d.from, d.anchorCur = nil, "" }
+
 // reviewOfFrom is storedFrom's id: whose remarks d carries; "" for none.
 func (d *openFile) reviewOfFrom() string {
 	_, id := d.storedFrom()

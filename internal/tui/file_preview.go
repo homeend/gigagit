@@ -149,6 +149,7 @@ func (m Model) openPreviewSrc(src fileSource, path string, load func(context.Con
 	reused := d != nil
 	if reused {
 		m = m.detachDoc(d)
+		d.dropWayBack() // a preview is not an overview's file
 	} else {
 		d = m.newOpenFile(src, path)
 	}

@@ -102,3 +102,50 @@ func TestStoredOverviewKinds(t *testing.T) {
 		t.Fatal("storedOverview")
 	}
 }
+
+// The agent re-saves the overview (same commit + title replaces) and links it
+// again: the open document shows the new text, not the one read first.
+func TestReSavedOverviewReopensFresh(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m = openCommitOverviewT(t, m, id)
+	ctx := context.Background()
+	tg, err := m.svc.HeadOverviewTarget(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := m.svc.SaveOverview(ctx, domain.SaveOverview{Target: tg, Agent: "Claude Code", Text: []byte(
+		`{"version":1,"title":"Tour of a","overview":"Revised: see [b](b.go:3).","files":[]}`)})
+	if err != nil || got.ID != id {
+		t.Fatalf("re-save = %+v %v", got, err)
+	}
+	m = openCommitOverviewT(t, m, id)
+	if ov := m.splitLayer().left.doc(); ov == nil || !strings.Contains(ov.ov.text, "Revised") {
+		t.Fatalf("the open overview kept the old text: %+v", ov.ov)
+	}
+}
+
+// R9: the file an anchor opened is the shared doc for that file at that
+// commit; opened again another way (the review view's enter, the Files view
+// preview), it shows none of the overview's remarks.
+func TestOverviewRemarksStayInTheOverview(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m = openCommitOverviewT(t, m, id)
+	rd := m.splitLayer().right.doc()
+	if rd == nil || len(rd.shownNotes()) != 1 {
+		t.Fatalf("setup: the anchored file shows the remark: %+v", rd)
+	}
+	commit, path := rd.src.rev, rd.path
+	m = pressDrain(t, m, "esc") // the overview goes to the background, still open
+	m, cmd := m.openFileAtCommit(commit, path)
+	m = drainCmds(t, m, cmd)
+	if d := topDoc(m); d == nil || d != rd || len(d.shownNotes()) != 0 {
+		t.Fatalf("opened from elsewhere, the file shows the overview's remarks: %+v", d)
+	}
+	m, cmd = m.openPreviewSrc(rd.src, path, func(context.Context) ([]byte, error) { return []byte("x\n"), nil })
+	m = drainCmds(t, m, cmd)
+	if len(rd.shownNotes()) != 0 {
+		t.Fatal("the Files view preview shows the overview's remarks")
+	}
+}

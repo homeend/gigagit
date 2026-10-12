@@ -30,12 +30,10 @@ func commitOverviewKey(id string) (fileSource, string) {
 	return fileSource{kind: srcCommitOverview, rev: id}, "overview-" + id + ".md"
 }
 
-// openCommitOverview reads overview id off the UI thread and shows it. An
-// overview already open comes to the front instead.
+// openCommitOverview reads overview id off the UI thread and shows it —
+// always read: an agent may have re-saved it (same commit + title replaces)
+// since it was opened; an open copy of the same save comes to the front.
 func (m Model) openCommitOverview(id string) (Model, tea.Cmd) {
-	if d := m.openFiles.find(m.currentWorktree, docKey(commitOverviewKey(id))); d != nil {
-		return m.showOverview(d)
-	}
 	if m.svc == nil {
 		return m, nil
 	}
@@ -58,13 +56,20 @@ func (m Model) onCommitOverview(msg commitOverviewMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	src, path := commitOverviewKey(msg.id)
+	saved := msg.ov.Updated
+	if saved.IsZero() {
+		saved = msg.ov.Created
+	}
 	if d := m.openFiles.find(m.currentWorktree, docKey(src, path)); d != nil {
-		return m.showOverview(d) // opened twice before the first read landed
+		if d.ov != nil && d.ov.saved.Equal(saved) {
+			return m.showOverview(d) // the same save: the open copy comes to the front
+		}
+		m = m.closeDoc(d) // re-saved since it was read: the stale copy goes
 	}
 	d := m.newOpenFile(src, path)
 	d.title = i18n.T("Overview: %s", msg.ov.Title)
 	d.p.prose, d.p.mode = true, modeScroll
-	d.ov = &overview{text: msg.doc.Text, sel: -1, tip: msg.ov.Commit}
+	d.ov = &overview{text: msg.doc.Text, sel: -1, tip: msg.ov.Commit, saved: saved}
 	lw, _, bh := m.splitGeom()
 	rows, inner := paneGeom(lw, bh)
 	if w, _ := m.overlayDims(); w < splitMinWidth {
