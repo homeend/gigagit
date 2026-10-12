@@ -1568,6 +1568,7 @@ func (m Model) commitIdentRowAt(i, w int, full bool, budget int) string {
 	c := m.commits[i-m.wipCount()]
 	id := commitIdentOf(c, m.trackedUpstreams())
 	id.reviewed = m.commitReviewed(c.Hash)
+	id.overview = m.commitHasOverview(c.Hash)
 	var tok string
 	if full {
 		tok = id.fullToken(w)

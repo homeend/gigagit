@@ -1,8 +1,8 @@
 local  branch main                                                                  {{root}}______________________/local
 ╭──────────────────────────────────────╮╭──────────────────────────────────────────────────────────────────────────────╮
 │ [Branches] R W P ·date↓              ││ Commits (all) 2                                                              │
-│   * main (/tmp/gg-tui-########/tui_… ││ > ●  ↓   *main second                                                        │
-│                                      ││   ●      main  first                                                         │
+│   * main (/tmp/gg-tui-########/tui_… ││ > ●  ↓    *main second                                                       │
+│                                      ││   ●       main  first                                                        │
 │                                      ││                                                                              │
 │                                      ││                                                                              │
 │                                      ││                                                                              │

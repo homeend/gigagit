@@ -1,10 +1,10 @@
 local  branch main                                                                                            {{root}}____________________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Files cb762ac grow a                              ││ Commits (all) 4                                                                                         │
-│ 2026-01-01 00:00 · gg-e2e                         ││   ●─╮  ↓   *main   Merge feature                                                                        │
-│ .                                                 ││   │ ●  ↓   feature add c  ◆ 1                                                                           │
-│ > M  a.txt                                        ││   │ ●      feature grow a                                                                               │
-│                                                   ││   ●─╯      main    add a b                                                                              │
+│ 2026-01-01 00:00 · gg-e2e                         ││   ●─╮  ↓    *main   Merge feature                                                                       │
+│ .                                                 ││   │ ●  ↓    feature add c  ◆ 1                                                                          │
+│ > M  a.txt                                        ││   │ ●       feature grow a                                                                              │
+│                                                   ││   ●─╯       main    add a b                                                                             │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

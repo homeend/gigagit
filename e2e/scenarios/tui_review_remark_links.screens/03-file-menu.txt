@@ -1,8 +1,8 @@
 local  branch main                                                                                            {{root}}____________________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Review: 16e84e5                                   ││ Commits (all) 2                                                                                         │
-│ fake · just now · 1 notes on 1 files              ││   ●  ↓ ✎ *main delete a                                                                                 │
-│   ≡ Summary                                       ││   ●      main  add a                                                                                    │
+│ fake · just now · 1 notes on 1 files              ││   ●  ↓ ✎  *main delete a                                                                                │
+│   ≡ Summary                                       ││   ●       main  add a                                                                                   │
 │ > D  a.txt  ◆ 1                                   ││                                                                                                         │
 │      deleted                                      ││                                                                                                         │
 │                                                   ││                                                                                                         │

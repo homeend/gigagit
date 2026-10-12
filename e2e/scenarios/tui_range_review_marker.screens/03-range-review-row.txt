@@ -1,9 +1,9 @@
 local  branch feature                                                                                         {{root}}____________________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Files cb762ac grow a                              ││ Commits (all) 3                                                                                         │
-│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓   *feature add c                                                                                 │
-│ > Range reviews                                   ││   ●    ✎ feature  grow a                                                                                │
-│     049ab7a..cb762ac  ◆ 1                         ││   ●  ↓   main     add a b  ◆ 1                                                                          │
+│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓    *feature add c                                                                                │
+│ > Range reviews                                   ││   ●    ✎  feature  grow a                                                                               │
+│     049ab7a..cb762ac  ◆ 1                         ││   ●  ↓    main     add a b  ◆ 1                                                                         │
 │   M  a.txt                                        ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
