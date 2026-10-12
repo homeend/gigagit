@@ -23,25 +23,27 @@ var reviewIDRE = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,80}$`)
 
 func (s *Server) handleOverviewExport(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	id, review := q.Get("id"), q.Get("review")
+	id, review, ov := q.Get("id"), q.Get("review"), q.Get("overview")
 	var src domain.OverviewSource
 	switch {
-	case id != "" && review == "" && fileIDRE.MatchString(id):
+	case id != "" && review == "" && ov == "" && fileIDRE.MatchString(id):
 		var err error
 		if src, err = domain.AgentOverviewSource(s.docs, id, s.docsRoot(r.Context())); err != nil {
 			writeErr(w, http.StatusNotFound, errors.New("no overview "+id))
 			return
 		}
-	case review != "" && id == "" && reviewIDRE.MatchString(review):
+	case review != "" && id == "" && ov == "" && reviewIDRE.MatchString(review):
 		src = domain.OverviewSource{ReviewID: review}
+	case ov != "" && id == "" && review == "" && reviewIDRE.MatchString(ov):
+		src = domain.OverviewSource{OverviewID: ov}
 	default:
-		writeErr(w, http.StatusBadRequest, errors.New("want ?id=<overview id> or ?review=<review id>"))
+		writeErr(w, http.StatusBadRequest, errors.New("want ?id=<overview id>, ?review=<review id> or ?overview=<id>"))
 		return
 	}
 	page, name, err := s.service().ExportOverviewHTML(readCtx(r), src)
 	var tl *overviewhtml.TooLargeError
 	switch {
-	case errors.Is(err, domain.ErrNoOverview), errors.Is(err, domain.ErrReviewNotFound):
+	case errors.Is(err, domain.ErrNoOverview), errors.Is(err, domain.ErrReviewNotFound), errors.Is(err, domain.ErrOverviewNotFound):
 		writeErr(w, http.StatusNotFound, err)
 		return
 	case errors.As(err, &tl):
