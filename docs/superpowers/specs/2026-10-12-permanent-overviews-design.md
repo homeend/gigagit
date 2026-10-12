@@ -42,6 +42,18 @@ like an overview, and opens again any time.
 - R7 **On an uncommitted-changes refusal the agent asks the user**: commit
   the listed files and save permanently, or keep the overview in memory only.
 - R8 Storage approach A: the same notes store as a commit review, a new tag.
+- R9 **An overview's content is shown in that overview only.** Its remarks
+  appear only in the right side of ITS overview split — never in a Files
+  view, a diff, a file opened any other way, a review view, a PR view's
+  threads, another overview, the ◆N / ✎ counts, `gg note list`, the notes
+  an agent's review brief carries, or a forge send. The overview itself is
+  reachable from the navigation surfaces of R4 / R10 (a row, a mark, a menu
+  entry); nothing it holds leaks past them.
+- R10 **Overviews of a pull request.** "Make an overview of how PR #n does
+  X" is stored on the PR, not in its review: it shows only in that PR's
+  view (an "Overview: <title>" row beside the PR's reviews), never on the
+  head commit's row, in Branches, or in a review. It is never sent to
+  GitHub.
 
 ## 3. Storage
 
@@ -56,7 +68,7 @@ in):
 | `Source` / `Author` | `agent` / the agent's name |
 | `Summary` | the title |
 | `Rationale` | the document JSON (§4) |
-| `Scope`, `Preview` | empty |
+| `Scope`, `Preview` | empty for a commit overview; a PR overview's `Preview` = the PR scope (§5a) |
 
 - `model.Note.IsOverviewNote()` = `IsCommitLevel() && NoteHasTag(n, OverviewTag)`.
   It is the ONLY test for "this is a permanent overview". `IsReviewNote`
@@ -101,16 +113,17 @@ The review document's JSON shape (`notebatch`), overview-only:
 ## 5. Save check (R6)
 
 `domain.SaveOverview(ctx, SaveOverviewCmd{Link, Title, Agent, Doc, DryRun})`
-resolves the commit (HEAD when no link; a `gg://` link must name ONE commit —
-a working-tree, staged, pair, preview or PR link is refused: "a permanent
-overview needs a commit"), then checks, collecting **every** problem:
+resolves the target — HEAD when no link; a `gg://` link naming ONE commit;
+or a pull request's link (`gg link --pr <n>`, §5a). A working-tree, staged,
+pair or merge-preview link is refused: "a permanent overview needs a commit
+or a pull request". Then it checks, collecting **every** problem:
 
 1. each overview anchor (`agentdocs.ParseOverview`) and each annotation:
    - `note:` anchor → `<dest>: a note link — link the lines instead`;
    - path not in the commit's tree → `<path>: not in <sha7>`;
    - lines past the end → `<path>:<a>-<b>: past the end (<n> lines at <sha7>)`;
-2. the anchored + annotated paths against the disk of the checkout the
-   command runs in:
+2. (a commit only — a PR skips it, §5a) the anchored + annotated paths
+   against the disk of the checkout the command runs in:
    - `git status --porcelain -- <paths>` (one invocation): any entry
      (modified, staged, deleted, untracked, renamed) →
      `<path>: uncommitted changes`;
@@ -126,6 +139,23 @@ and prints the commit, branch and title without storing.
 The lines are read through `ResolveBytes` at the commit (the same reader
 `overviewFileLines` uses); paths are matched against `git ls-tree -r
 --name-only <sha> -- <paths>` (one invocation).
+
+### 5a. A pull request's overview (R10)
+
+- Target: the PR's head commit at save time (`refs/gg/pr/<n>`, fetched as
+  the PR view fetches it). The note's `Address.Commit` = that head sha,
+  `Preview` = the PR scope `<base>...refs/gg/pr/<n>` (the same scope a PR
+  review note carries, matched by number via `SameNoteScope`),
+  `Address.Branch` = "".
+- Check 1 runs against the head's tree. Check 2 (disk) is skipped: a PR is
+  not the checkout, and the agent reads it through `gg diff` / `gg show`
+  at the PR's revs (the skill says so).
+- Replace = the same PR number + the same title.
+- After new pushes the overview stays on the head it was written for and is
+  marked older in the PR view (the `Older` rule preview reviews use).
+- In its split, `D` shows the PR's review diff of the file
+  (merge-base(target)…head — what the split diff already does for a PR
+  review).
 
 ## 6. Domain read model
 
@@ -160,11 +190,21 @@ commit-level / plain notes must treat it explicitly:
 | `notes.go:870` entry-level resolve | treat like a review note (no line to re-anchor) — verify |
 | `notes.go:1215` `storedGroup` | `"overview:" + id` (never "my draft review") |
 | `notes_overview.go:112` View all notes | its own `Overviews` group under the commit, labelled Overview |
-| `previewnotes.go:255`, PR view scope | never shown in a preview/PR (no `Preview`) — test |
+| `previewnotes.go:255`, PR view scope | a PR overview (§5a) is listed as an overview row of ITS PR only; never among the PR's notes, threads or reviews; a commit overview never in any PR/preview — test |
 | `forge_send_ledger.go:214` | skipped (not a review) — test |
 | `review_threads.go:287`, `review_notes.go:333/433` | skipped (not a review) — test |
-| `cli/note.go:708` `gg note` printing | `gg note list/show` prints it as `overview <id>: <title>`, not as a plain note |
+| `cli/note.go:708` `gg note` printing | `gg note list` skips it; `gg note show <id>` refuses: "an overview — gg overview show <id>" |
 | `notes/part_file.go:410` | entry-level part routing — commit part, verify |
+
+### 6a. Isolation (R9)
+
+The remarks live inside the document JSON, never as separate notes, so no
+generic notes reader can see them; the only reader is
+`OverviewFileNotes(id, path)`, called only by the overview split's right
+side (TUI + web). Tests pin that a file holding an overview remark shows no
+box and no count in: the Files view, the diff view, the file viewer opened
+from Commits / F, a review view of the same commit, the PR view's threads,
+`gg note list --file`, the review agent brief, and `NoteCounts`.
 
 ## 7. CLI
 
@@ -201,6 +241,9 @@ gg overview rm <id>
   this worktree` → skip), reply with the link, the title and a three-line
   summary. A permanent overview never starts `gg web`.
 - Lines are the file **at the commit**.
+- A PR overview ("an overview of how PR #n does X"): save on `gg link --pr
+  <n>`, read the PR with `gg diff` / `gg show` at its revs, lines of the
+  head; it is not a review — no summary, no verdict, nothing sent.
 - Temporary overview = today's recipe (`gg session note` + `gg session
   overview add`, starting gg web when nothing is open), used only when the
   user explicitly asks for an in-memory / temporary one.
@@ -236,12 +279,19 @@ the refusal reasons. **reviewing-with-gg**: one line pointing at it.
 - Every new string through `i18n.T`, all four bundles; new ops mapped in
   `opAffectedSources`; help + footer advertise the `.` entry.
 
+## 9a. TUI — pull request overviews
+
+The PR view lists the PR's overviews as `Overview: <title> <date> <agent>`
+rows (an `older` tag when the head moved), after its reviews; enter opens
+the split (right = the file at the stored head; `D` = the PR's review diff);
+`.` on the row = Open + Delete. Nothing else in the PR view changes.
+
 ## 10. Web
 
 Mirrors §9 in `gg web` and the hosted page: `≡` badge on commit rows; branch
 sidebar sub-row; commit context menu "Open overview: <title>"; View all notes
 group; the existing web overview split with the file at the commit + remark
-boxes, `S`, `D`; `?overview=` links; delete from the row menu. New routes:
+boxes, `S`, `D`; `?overview=` links; delete from the row menu; PR overviews as rows of the web PR view only (§9a). New routes:
 `GET /api/overviews?commit=`, `GET /api/overview/{id}` (document + resolved
 anchors), file content via `/api/file-content?overview=<id>` (remarks ride
 it, like `?review=`), `DELETE /api/overview/{id}`; wire values resolved
@@ -265,6 +315,10 @@ user before the next starts.
   stored; replace by title keeps the id; the three branch states; visible
   from a branch the commit was merged into; every §6 reader leaves it out of
   reviews / plain notes / forge sends / previews / PR view.
+- R9 isolation: the §6a surfaces show no box / count for an overview remark.
+- PR overview: saved on the head, listed only in its PR's view, older after
+  a push, absent from the head commit's row, Branches and reviews, never in
+  a send plan.
 - CLI: output, `--json`, exit codes, `--dry-run` stores nothing.
 - TUI / web: each surface; opening after the branch moved shows the file as
   it was at the commit; remark boxes; D on an untouched file.
@@ -272,5 +326,5 @@ user before the next starts.
 ## 13. Out of scope
 
 MCP tools; promoting a temporary overview (R2); overviews on a range, a
-merge preview, a PR or the working tree; sending overviews to a forge;
+merge preview or the working tree; sending overviews to a forge;
 editing an overview in gg (re-save by title replaces it).
