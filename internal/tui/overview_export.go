@@ -28,18 +28,41 @@ func (m Model) overviewExportRow(d *openFile) actionRow {
 			}
 			src = s
 		}
-		svc, title := m.svc, i18n.T("Export overview as HTML")
-		return m, func() tea.Msg {
-			ctx := context.Background()
-			data, name, err := svc.ExportOverviewHTML(ctx, src)
-			if err != nil {
-				return patchResolvedMsg{err: err, title: title}
-			}
-			dir, err := svc.ExportDefaultDir(ctx)
-			if err != nil {
-				return patchResolvedMsg{err: err, title: title}
-			}
-			return patchResolvedMsg{data: data, defaultPath: filepath.Join(dir, name), title: title}
-		}
+		return m, exportOverviewCmd(m.svc, src)
 	}}
+}
+
+// reviewOverviewExportRow is "Export as HTML" on the review view's ≡ Overview
+// row: the review's stored overview, without opening it first.
+func (m Model) reviewOverviewExportRow() (actionRow, bool) {
+	st, p := m.filesReview, m.filesView
+	if st == nil || st.overview == nil || p == nil || m.diffLayer() != nil {
+		return actionRow{}, false
+	}
+	vis := p.visible()
+	if p.sel < 0 || p.sel >= len(vis) || !vis[p.sel].overviewDoc {
+		return actionRow{}, false
+	}
+	src := domain.OverviewSource{ReviewID: st.id}
+	return actionRow{id: "overview-export", label: i18n.T("Export as HTML"), run: func(m Model) (tea.Model, tea.Cmd) {
+		return m, exportOverviewCmd(m.svc, src)
+	}}, true
+}
+
+// exportOverviewCmd builds src's page off-thread and resolves the default
+// path; patchResolvedMsg then opens the export path popup with its title.
+func exportOverviewCmd(svc *domain.Service, src domain.OverviewSource) tea.Cmd {
+	title := i18n.T("Export overview as HTML")
+	return func() tea.Msg {
+		ctx := context.Background()
+		data, name, err := svc.ExportOverviewHTML(ctx, src)
+		if err != nil {
+			return patchResolvedMsg{err: err, title: title}
+		}
+		dir, err := svc.ExportDefaultDir(ctx)
+		if err != nil {
+			return patchResolvedMsg{err: err, title: title}
+		}
+		return patchResolvedMsg{data: data, defaultPath: filepath.Join(dir, name), title: title}
+	}
 }

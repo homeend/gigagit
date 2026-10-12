@@ -24,8 +24,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   as plain text. The page is capped at 16 MB (the error names the largest
   files).
 - Where: **gg web** — `E` on an overview, or the `E export html` chip (a
-  download); **TUI** — the overview's `.` menu, **Export as HTML** (asks
-  where to write it); **CLI** — `gg review export [--out <path>|-] [--force]
+  download); **TUI** — **Export as HTML** in the `.` menu of an open
+  overview or of a review's *≡ Overview* row (asks where to write it); **CLI** — `gg review export [--out <path>|-] [--force]
   <review-link|id|latest>` and `gg session overview export <id> [--out …]`.
 
 ### Changed

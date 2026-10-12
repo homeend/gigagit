@@ -50,3 +50,19 @@ func TestOverviewMenuExportsAStoredOverview(t *testing.T) {
 		t.Fatalf("msg = err %v path %q", msg.err, msg.defaultPath)
 	}
 }
+
+// The review view's ≡ Overview row offers the export in its . menu (the
+// overview need not be opened first); a file row of the same tree does not.
+func TestReviewOverviewRowOffersExport(t *testing.T) {
+	t.Parallel()
+	m, sha := reviewWithOverview(t)
+	m = selectRow(t, m, func(l contentLine) bool { return l.overviewDoc })
+	msg := runExportRow(t, m, availableActions(m))
+	if msg.err != nil || filepath.Base(msg.defaultPath) != "review-overview-"+sha[:7]+".html" || !strings.Contains(string(msg.data), `"path":"a.go"`) {
+		t.Fatalf("msg = err %v path %q", msg.err, msg.defaultPath)
+	}
+	m = selectRow(t, m, func(l contentLine) bool { return l.path == "a.go" })
+	if _, ok := rowByID(availableActions(m), "overview-export"); ok {
+		t.Fatal("a file row must not offer the overview export")
+	}
+}
