@@ -82,8 +82,14 @@ type NoteCounts struct {
 	// newest first: never in a ◆N badge, never in Reviews (the Branches
 	// sub-rows). Unmatched — matching reads files (Service.WorkingReviews).
 	WorkingReviews []ReviewHead
-	ByCommitPath   map[string]int // commit notes, by "<sha>:<path>"
-	ByShelf        map[string]int // notes on a whole shelf entry, by entry id
+	// Overviews are the permanent overviews stored on a commit, newest
+	// first: the Commits list's ≡ and the Branches tab's overview rows. Never
+	// in a ◆N badge, never in Reviews (spec 2026-10-12 R9).
+	Overviews []OverviewHead
+	// PreviewOverviews are a pull request's overviews, by scope (R10).
+	PreviewOverviews map[string][]OverviewHead
+	ByCommitPath     map[string]int // commit notes, by "<sha>:<path>"
+	ByShelf          map[string]int // notes on a whole shelf entry, by entry id
 }
 
 // NoteScopeCount is one scope's share of a commit's notes: the scope as the
@@ -664,6 +670,17 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 			}
 			continue
 		}
+		if n.IsOverviewNote() {
+			if n.Preview != "" {
+				if c.PreviewOverviews == nil {
+					c.PreviewOverviews = map[string][]OverviewHead{}
+				}
+				c.PreviewOverviews[n.Preview] = append(c.PreviewOverviews[n.Preview], overviewHead(n))
+				continue
+			}
+			c.Overviews = append(c.Overviews, overviewHead(n))
+			continue
+		}
 		if n.IsReviewNote() {
 			// A review has its own marker (✎ in Commits, ◆ in Branches):
 			// it is never counted in the ◆N note badges.
@@ -730,6 +747,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		sort.Slice(sc, func(a, b int) bool { return sc[a].Scope < sc[b].Scope })
 	}
 	sort.SliceStable(c.Reviews, func(a, b int) bool { return c.Reviews[a].Created.After(c.Reviews[b].Created) })
+	sort.SliceStable(c.Overviews, func(a, b int) bool { return c.Overviews[a].Created.After(c.Overviews[b].Created) })
 	sort.SliceStable(c.WorkingReviews, func(a, b int) bool { return c.WorkingReviews[a].Created.After(c.WorkingReviews[b].Created) })
 	for _, hs := range c.PreviewReviews {
 		sort.SliceStable(hs, func(a, b int) bool { return hs[a].Created.After(hs[b].Created) })

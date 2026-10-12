@@ -567,7 +567,7 @@ import (
 
 // overviewRepo: main with a.go (5 lines) and b.go (3 lines), committed on
 // branch main; the notes store in a temp dir.
-func overviewRepo(t *testing.T) (string, *Service) {
+func permOvRepo(t *testing.T) (string, *Service) {
 	t.Helper()
 	dir, _ := newRealRepo(t)
 	commitFile(t, dir, "a.go", "1\n2\n3\n4\n5\n", "a")
@@ -605,7 +605,7 @@ func problems(t *testing.T, err error) []string {
 
 func TestSaveOverviewStoresOnHeadWithBranch(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	got, err := saveOv(t, svc, ovDoc("Locks", "[three](a.go:3) [y](b.go:2) [file](b.go)",
 		`[{"path":"a.go","annotations":[{"newRange":[2,4],"summary":"the gate"}]}]`))
 	if err != nil {
@@ -622,7 +622,7 @@ func TestSaveOverviewStoresOnHeadWithBranch(t *testing.T) {
 
 func TestSaveOverviewRefusesEveryProblemAtOnce(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	sha7 := revParse(t, dir, "HEAD")[:7]
 	_, err := saveOv(t, svc, ovDoc("T", "[n](note:t3) [gone](zzz.go:1) [far](a.go:9) [range](b.go:2-7)",
 		`[{"path":"a.go","annotations":[{"newRange":[6,6],"summary":"past"}]}]`))
@@ -653,7 +653,7 @@ func TestSaveOverviewRefusesUncommittedFiles(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			dir, svc := overviewRepo(t)
+			dir, svc := permOvRepo(t)
 			c.dirty(dir)
 			_, err := saveOv(t, svc, ovDoc("T", "[three](a.go:3) [y](b.go:2)", ""))
 			if got := problems(t, err); !slices.Equal(got, []string{"a.go: uncommitted changes"}) {
@@ -665,7 +665,7 @@ func TestSaveOverviewRefusesUncommittedFiles(t *testing.T) {
 
 func TestSaveOverviewOlderCommitDiffersOnDisk(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	old := revParse(t, dir, "HEAD")
 	commitFile(t, dir, "a.go", "1\n2\nNEW\n4\n5\n", "a changed")
 	got, _, err := svc.SaveOverview(context.Background(), SaveOverview{
@@ -677,7 +677,7 @@ func TestSaveOverviewOlderCommitDiffersOnDisk(t *testing.T) {
 
 func TestSaveOverviewReplacesByTitle(t *testing.T) {
 	t.Parallel()
-	_, svc := overviewRepo(t)
+	_, svc := permOvRepo(t)
 	first, err := saveOv(t, svc, ovDoc("Locks", "[a](a.go:1)", ""))
 	if err != nil {
 		t.Fatal(err)
@@ -701,7 +701,7 @@ func TestSaveOverviewReplacesByTitle(t *testing.T) {
 
 func TestSaveOverviewDetachedHead(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	runGitIn(t, dir, "checkout", "-q", "--detach")
 	got, err := saveOv(t, svc, ovDoc("T", "[a](a.go:1)", ""))
 	if err != nil {
@@ -715,7 +715,7 @@ func TestSaveOverviewDetachedHead(t *testing.T) {
 
 func TestSaveOverviewOddPaths(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	sha7 := revParse(t, dir, "HEAD")[:7]
 	// ../a.go is no anchor (plain text); ./a.go is one, never in the tree; a.go:2 is fine.
 	_, err := saveOv(t, svc, ovDoc("T", "[up](../a.go:1) [dot](./a.go:1) [ok](a.go:2)", ""))
@@ -727,7 +727,7 @@ func TestSaveOverviewOddPaths(t *testing.T) {
 
 func TestSaveOverviewReadsEachFileOnce(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	sha7 := revParse(t, dir, "HEAD")[:7]
 	_, err := saveOv(t, svc, ovDoc("T", "[1](a.go:1) [2](a.go:2-3) [3](a.go:4) [bad](a.go:6)", ""))
 	if got := problems(t, err); !slices.Equal(got, []string{"a.go:6: past the end (5 lines at " + sha7 + ")"}) {
@@ -737,7 +737,7 @@ func TestSaveOverviewReadsEachFileOnce(t *testing.T) {
 
 func TestSaveOverviewRefusesNonCommitLinks(t *testing.T) {
 	t.Parallel()
-	_, svc := overviewRepo(t)
+	_, svc := permOvRepo(t)
 	ctx := context.Background()
 	for name, res := range map[string]Resolved{
 		"working": {Addr: model.FileAddress{State: model.StateUnstaged, Path: "a.go"}},
@@ -779,7 +779,7 @@ func TestSaveOverviewOnAPullRequest(t *testing.T) {
 
 func TestSaveOverviewDryRunStoresNothing(t *testing.T) {
 	t.Parallel()
-	_, svc := overviewRepo(t)
+	_, svc := permOvRepo(t)
 	tg, _ := svc.HeadOverviewTarget(context.Background())
 	got, _, err := svc.SaveOverview(context.Background(), SaveOverview{Target: tg, Agent: "c", Text: ovDoc("T", "[a](a.go:1)", ""), DryRun: true})
 	if err != nil || got.ID != "" || got.Doc.Title != "T" {
@@ -1225,7 +1225,7 @@ import (
 
 func TestOverviewsListAndRemove(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	ctx := context.Background()
 	a, err := saveOv(t, svc, ovDoc("A", "[a](a.go:1)", ""))
 	if err != nil {
@@ -1259,7 +1259,7 @@ func TestOverviewsListAndRemove(t *testing.T) {
 
 func TestOverviewKindFollowsTheBranch(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	ctx := context.Background()
 	got, err := saveOv(t, svc, ovDoc("T", "[a](a.go:1)", ""))
 	if err != nil {
@@ -1276,7 +1276,7 @@ func TestOverviewKindFollowsTheBranch(t *testing.T) {
 
 func TestNoteCountsListOverviewsApart(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	ctx := context.Background()
 	got, err := saveOv(t, svc, ovDoc("T", "[a](a.go:1)", ""))
 	if err != nil {
@@ -1503,7 +1503,7 @@ import (
 // R9: an overview and its remarks are shown in that overview only.
 func TestOverviewInvisibleToNoteReaders(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	ctx := context.Background()
 	if _, err := saveOv(t, svc, ovDoc("T", "[a](a.go:2)",
 		`[{"path":"a.go","annotations":[{"newRange":[2,2],"summary":"remark"}]}]`)); err != nil {
@@ -1718,7 +1718,7 @@ import (
 
 func TestOverviewLinkRoundTrip(t *testing.T) {
 	t.Parallel()
-	dir, svc := overviewRepo(t)
+	dir, svc := permOvRepo(t)
 	ctx := context.Background()
 	got, err := saveOv(t, svc, ovDoc("T", "[a](a.go:1)", ""))
 	if err != nil {
