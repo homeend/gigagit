@@ -134,12 +134,24 @@ func TestAgentdocsIsALeaf(t *testing.T) {
 	t.Parallel()
 	ok := map[string]bool{
 		"github.com/homeend/gigagit/internal/markdown": true,
+		"github.com/homeend/gigagit/internal/notemeta": true,
 		"github.com/homeend/gigagit/internal/steer":    true,
 		"github.com/homeend/gigagit/internal/textdiff": true,
 	}
 	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/agentdocs") {
 		if strings.HasPrefix(imp, "github.com/homeend/gigagit/") && !ok[imp] {
-			t.Errorf("internal/agentdocs imports %s — only markdown, steer and textdiff are allowed", imp)
+			t.Errorf("internal/agentdocs imports %s — only markdown, notemeta, steer and textdiff are allowed", imp)
+		}
+	}
+}
+
+// TestNotemetaIsAStdlibLeaf pins internal/notemeta: notebatch (stdlib-only)
+// and agentdocs (a leaf) both import it, so it may import no gg package.
+func TestNotemetaIsAStdlibLeaf(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/notemeta") {
+		if strings.HasPrefix(imp, "github.com/homeend/gigagit/") {
+			t.Errorf("internal/notemeta imports %s — it must stay stdlib-only", imp)
 		}
 	}
 }
