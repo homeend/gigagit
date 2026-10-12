@@ -26,8 +26,15 @@ var (
 )
 
 func build() {
-	_, self, _, _ := runtime.Caller(0)
-	src := filepath.Join(filepath.Dir(self), "..", "testdata", "fakegh")
+	// The module root comes from go itself, not runtime.Caller: under
+	// -trimpath (test.sh sets it) a source path is module-relative.
+	gomod, err := exec.Command("go", "env", "GOMOD").Output()
+	if err != nil {
+		binErr = fmt.Errorf("go env GOMOD: %w", err)
+		return
+	}
+	root := filepath.Dir(strings.TrimSpace(string(gomod)))
+	src := filepath.Join(root, "internal", "forge", "testdata", "fakegh")
 	dir, err := os.MkdirTemp("", "gg-fakegh")
 	if err != nil {
 		binErr = err
