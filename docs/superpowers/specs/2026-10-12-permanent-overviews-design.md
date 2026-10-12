@@ -296,9 +296,12 @@ Mirrors §9 in `gg web` and the hosted page: `≡` badge on commit rows; branch
 sidebar sub-row; commit context menu "Open overview: <title>"; View all notes
 group; the existing web overview split with the file at the commit + remark
 boxes, `S`, `D`; `?overview=` links; delete from the row menu; PR overviews as rows of the web PR view only (§9a). New routes:
-`GET /api/overviews?commit=`, `GET /api/overview/{id}` (document + resolved
-anchors), file content via `/api/file-content?overview=<id>` (remarks ride
-it, like `?review=`), `DELETE /api/overview/{id}`; wire values resolved
+`GET /api/overview/{id}` (document + resolved anchors), file content via
+`/api/file-content?overview=<id>` (remarks ride it, like `?review=`), the
+same `overview=` lane on `/api/diff` and `/api/overview-export`, and
+`POST /api/overview/remove` (amended in plan 3: a JSON POST like every
+mutation, not `DELETE /api/overview/{id}`; and no `GET /api/overviews?commit=`
+— `/api/notes/counts` carries every commit overview); wire values resolved
 through the allowlist; loopback/Origin guards as every route.
 
 ## 11. Plans
