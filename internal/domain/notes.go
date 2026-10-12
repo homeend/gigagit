@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/shelf"
 )
@@ -175,6 +176,7 @@ func (c NoteCounts) PlainCommitNotes(hash string) int {
 // that already display the anchored line pass the hash so it matches exactly
 // what the user saw.
 func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error) {
+	n.Meta, _ = notemeta.CheckMeta(n.Meta) // the last guard: the CLI/MCP refused or reported
 	var lerr error
 	if n.Link, lerr = s.NoteLink(ctx, n.Link); lerr != nil {
 		return model.Note{}, lerr
@@ -369,6 +371,7 @@ func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) e
 // from non-replies, so a note whose parent is itself a reply would be dropped
 // inside Put while this call reported success.
 func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) (model.Note, error) {
+	n.Meta, _ = notemeta.CheckMeta(n.Meta)
 	var err error
 	if n.Link, err = s.NoteLink(ctx, n.Link); err != nil {
 		return model.Note{}, err

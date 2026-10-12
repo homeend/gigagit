@@ -244,8 +244,9 @@ func (s *Service) putReview(st notes.Store, t ReviewTarget, wt string, cmd SaveR
 		for _, old := range all {
 			if old.ID == n.ID {
 				// A re-save keeps what the forge already has: its moved remarks
-				// (by fingerprint) stay hidden.
-				n.Created, n.Send, n.RemarkSends = old.Created, old.Send, old.RemarkSends
+				// (by fingerprint) stay hidden. Meta added to its remarks
+				// (by fingerprint) stays with them too.
+				n.Created, n.Send, n.RemarkSends, n.Added = old.Created, old.Send, old.RemarkSends, old.Added
 			}
 		}
 	}

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -87,5 +88,100 @@ func TestWireNoteCarriesMetaAndDisplay(t *testing.T) {
 	}
 	if w := ToWireNote(ResolvedNote{Note: model.Note{ID: "b"}}); w.Display != nil {
 		t.Fatalf("a note with no meta must carry no display: %+v", w.Display)
+	}
+}
+
+// commitNote is a note by author on line 1 of a.txt at the commit tip.
+func commitNote(t *testing.T, svc *Service, tip, author string) model.Note {
+	t.Helper()
+	addr, err := svc.NoteTarget(context.Background(), "a.txt", false, tip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := svc.NoteAdd(context.Background(), model.Note{Source: model.NoteSourceAgent, Author: author,
+		Address: addr, Side: model.NoteSideNew, Range: [2]int{1, 1}, Summary: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestSetNoteMetaByAuthorRewritesInPlace(t *testing.T) {
+	t.Parallel()
+	svc, _, _, tip := metaReview(t, metaDoc)
+	ctx := context.Background()
+	n := commitNote(t, svc, tip, "Claude Code")
+	if _, err := svc.SetNoteMeta(ctx, n.ID, "Claude Code", []notemeta.KV{{Key: "kind", Value: "issue"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetNoteMeta(ctx, n.ID, "MR", []notemeta.KV{{Key: "status", Value: "agreed"}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.NoteGet(ctx, n.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model.MetaValue(got, "kind") != "issue" || len(got.Meta) != 1 {
+		t.Fatalf("author meta = %v", got.Meta)
+	}
+	if len(got.Added) != 1 || got.Added[0].By != "MR" || got.Added[0].Value != "agreed" {
+		t.Fatalf("added = %+v", got.Added)
+	}
+	if err := svc.UnsetNoteMeta(ctx, n.ID, "MR", []string{"status"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := svc.NoteGet(ctx, n.ID); len(got.Added) != 0 {
+		t.Fatalf("unset left %+v", got.Added)
+	}
+}
+
+const metaDocSwapped = `{"version":1,"summary":"x","files":[{"path":"a.txt","annotations":[
+  {"newRange":[2,2],"summary":"second","meta":{"kind":"good"}},
+  {"newRange":[1,1],"summary":"first","meta":{"kind":"issue"}}]}]}`
+
+func TestRemarkAddedMetaFollowsFingerprint(t *testing.T) {
+	t.Parallel()
+	svc, rid, tg, _ := metaReview(t, metaDoc)
+	ctx := context.Background()
+	if _, err := svc.SetNoteMeta(ctx, remarkID(rid, 1), "MR", []notemeta.KV{{Key: "status", Value: "disagreed"}}); err != nil {
+		t.Fatal(err)
+	}
+	resave(t, svc, rid, tg, metaDocSwapped)
+	r0, _, _, err := svc.NoteThread(ctx, remarkID(rid, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model.MetaValue(r0, "status") != "disagreed" {
+		t.Fatalf("the mark must follow 'second' to index 0: %+v", r0.Added)
+	}
+	r1, _, _, _ := svc.NoteThread(ctx, remarkID(rid, 1))
+	if model.MetaValue(r1, "status") != "" {
+		t.Fatalf("'first' must carry no mark: %+v", r1.Added)
+	}
+}
+
+func TestSetNoteDisplayRefusals(t *testing.T) {
+	t.Parallel()
+	svc, rid, _, _ := metaReview(t, metaDoc)
+	ctx := context.Background()
+	if err := svc.SetNoteDisplay(ctx, remarkID(rid, 0), notemeta.Display{}); !errors.Is(err, ErrRemarkDisplay) {
+		t.Fatalf("remark display = %v", err)
+	}
+	if err := svc.SetNoteDisplay(ctx, "forge:1", notemeta.Display{}); !errors.Is(err, ErrReadOnlyNote) {
+		t.Fatalf("forge display = %v", err)
+	}
+	if _, err := svc.SetNoteMeta(ctx, "nosuchid", "MR", []notemeta.KV{{Key: "a", Value: "b"}}); !errors.Is(err, ErrNoteNotFound) {
+		t.Fatalf("missing note = %v", err)
+	}
+}
+
+func TestSetNoteMetaReportsDroppedEntries(t *testing.T) {
+	t.Parallel()
+	svc, _, _, tip := metaReview(t, metaDoc)
+	ctx := context.Background()
+	n := commitNote(t, svc, tip, "A")
+	probs, err := svc.SetNoteMeta(ctx, n.ID, "A", []notemeta.KV{{Key: "ok", Value: "1"}, {Key: "bad", Value: "a\nb"}})
+	if err != nil || len(probs) != 1 {
+		t.Fatalf("probs %v err %v", probs, err)
 	}
 }
