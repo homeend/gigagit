@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -17,7 +18,8 @@ const overviewUsage = "usage: gg session overview add --title \"…\" [--file <p
 	"       gg session overview set <id> [--title \"…\"] [--file <path>] [--json]\n" +
 	"       gg session overview list [--json]\n" +
 	"       gg session overview show <id> [--json]\n" +
-	"       gg session overview rm <id>"
+	"       gg session overview rm <id>\n" +
+	"       gg session overview export <id> [--out <path>|-] [--force]   (one self-contained HTML file)"
 
 // overviewMaxBytes mirrors the TUI's limit on an overview's text.
 const overviewMaxBytes = 64 << 10
@@ -39,6 +41,8 @@ func sessionOverview(dir sessDir, svc *domain.Service, args []string, stdin io.R
 		return sessionOverviewShow(dir, svc, args[1:], stdout, stderr)
 	case "rm":
 		return sessionOverviewRm(dir, svc, args[1:], stdout, stderr)
+	case "export":
+		return sessionOverviewExport(dir, svc, args[1:], stdout, stderr)
 	}
 	fmt.Fprintln(stderr, overviewUsage)
 	return 2
@@ -226,4 +230,45 @@ func overviewCaller(svc *domain.Service) string {
 		return ""
 	}
 	return callerWorktree(svc)
+}
+
+// sessionOverviewExport writes an agent overview as one self-contained HTML
+// file: its text from the live session, its note anchors' lines from the
+// session's notes (a failed list leaves them plain), the files read here —
+// the caller's worktree is the overview's, the one overview_show names.
+func sessionOverviewExport(dir sessDir, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("session overview export", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	out := fs.String("out", "", "write here (default: the export dir); - = stdout")
+	force := fs.Bool("force", false, "overwrite an existing file")
+	pos, err := parseSteerFlags(fs, args)
+	if err != nil {
+		return 2
+	}
+	if len(pos) != 1 || !fileIDPattern.MatchString(pos[0]) || svc == nil {
+		fmt.Fprintln(stderr, overviewUsage)
+		return 2
+	}
+	r, code, ok := steerOverviews(dir, steer.Command{Cmd: "overview_show", FileID: pos[0], Worktree: overviewCaller(svc)}, stdout, stderr)
+	if !ok {
+		return code
+	}
+	if len(r.Overviews) != 1 {
+		fmt.Fprintln(stderr, "no overview "+pos[0])
+		return 1
+	}
+	o := r.Overviews[0]
+	src := domain.OverviewSource{Title: o.Title, Text: o.Text, NoteSpans: map[string]domain.NoteSpan{}}
+	if nr, _, nok := steerNotes(dir, steer.Command{Cmd: "note_list"}, io.Discard, io.Discard); nok {
+		for _, n := range nr.Notes {
+			src.NoteSpans[n.ID] = domain.NoteSpan{Path: n.Path, Start: n.Start, End: n.End}
+		}
+	}
+	ctx := context.Background()
+	page, name, err := svc.ExportOverviewHTML(ctx, src)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	return writeExport(ctx, svc, "session overview export", page, name, *out, *force, stdout, stderr)
 }
