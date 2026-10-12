@@ -203,10 +203,13 @@ func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc noteb
 		}
 	}
 	inTree := map[string]bool{}
-	if found, err := s.repo.TreePaths(ctx, t.Commit, clean); err == nil {
-		for _, p := range found {
-			inTree[p] = true
-		}
+	found, err := s.repo.TreePaths(ctx, t.Commit, clean)
+	if err != nil {
+		// Never "not in" for a check that did not run: say what failed.
+		return []string{fmt.Sprintf("could not read %s's tree: %v", sha7, err)}
+	}
+	for _, p := range found {
+		inTree[p] = true
 	}
 	type fileLines struct {
 		n      int
@@ -262,18 +265,31 @@ func (s *Service) checkOverview(ctx context.Context, t OverviewTarget, doc noteb
 			onDisk = append(onDisk, p)
 		}
 	}
+	// A disk check that cannot run refuses the save: permanence is enforced,
+	// never assumed (R6).
+	diskErr := func(err error) []string {
+		return append(out, fmt.Sprintf("could not check the files on disk: %v", err))
+	}
 	dirty := map[string]bool{}
-	if got, err := s.repo.StatusPaths(ctx, onDisk); err == nil {
-		for _, p := range got {
-			dirty[p] = true
-		}
+	got, err := s.repo.StatusPaths(ctx, onDisk)
+	if err != nil {
+		return diskErr(err)
+	}
+	for _, p := range got {
+		dirty[p] = true
 	}
 	differs := map[string]bool{}
-	if head, ok, err := s.ResolveRev(ctx, "HEAD"); err == nil && ok && strings.TrimSpace(head) != t.Commit {
-		if got, err := s.repo.DiffNamesBetween(ctx, t.Commit, "HEAD", onDisk); err == nil {
-			for _, p := range got {
-				differs[p] = true
-			}
+	head, ok, err := s.ResolveRev(ctx, "HEAD")
+	if err != nil {
+		return diskErr(err)
+	}
+	if ok && strings.TrimSpace(head) != t.Commit {
+		got, err := s.repo.DiffNamesBetween(ctx, t.Commit, "HEAD", onDisk)
+		if err != nil {
+			return diskErr(err)
+		}
+		for _, p := range got {
+			differs[p] = true
 		}
 	}
 	for _, p := range onDisk {

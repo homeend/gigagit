@@ -357,6 +357,9 @@ func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) e
 		if n.ID != id {
 			continue
 		}
+		if n.IsOverviewNote() {
+			return ErrOverviewNote
+		}
 		n.Summary, n.Rationale, n.Updated = summary, rationale, notes.Now().UTC()
 		if err := st.Put(n); err != nil {
 			return err
@@ -403,6 +406,9 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 	root, ok := byID[parentID]
 	if !ok {
 		return model.Note{}, ErrNoteNotFound
+	}
+	if root.IsOverviewNote() {
+		return model.Note{}, ErrOverviewNote
 	}
 	if root.IsRemarkReply() { // answering an answer: stay in its remark's thread
 		return s.replyInThread(ctx, root, n)
@@ -463,7 +469,8 @@ func (s *Service) NotesClear(ctx context.Context, addr model.FileAddress) (int, 
 		}
 		addr.Worktree = wt
 	}
-	dropped, err := st.Sweep(func(n model.Note) bool { return !sameNoteTarget(n.Address, addr) })
+	// A permanent overview is never a note to clear: gg overview rm (R9).
+	dropped, err := st.Sweep(func(n model.Note) bool { return n.IsOverviewNote() || !sameNoteTarget(n.Address, addr) })
 	if dropped > 0 {
 		s.invalidateNoteCounts()
 	}
@@ -1207,7 +1214,7 @@ func (s *Service) NoteAddresses(ctx context.Context) ([]model.FileAddress, error
 	seen := map[string]bool{}
 	var out []model.FileAddress
 	for _, n := range all {
-		if n.IsReply() {
+		if n.IsReply() || n.IsOverviewNote() { // an overview is gg overview's (R9)
 			continue
 		}
 		a := n.Address

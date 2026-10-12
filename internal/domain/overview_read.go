@@ -15,6 +15,10 @@ import (
 // ErrOverviewNotFound: no permanent overview has that id.
 var ErrOverviewNotFound = errors.New("overview not found")
 
+// ErrOverviewNote refuses a note verb (edit, reply) on a permanent overview:
+// it is changed only by gg overview save / rm, so it always shows as stored.
+var ErrOverviewNote = errors.New("that note is a permanent overview — change it with gg overview save, remove it with gg overview rm")
+
 // Overview is one stored permanent overview, as every frontend sees it.
 // Kind is a review's three commit states: on the branch (its tip is still
 // the commit), was the tip, or on a commit (no branch recorded).
