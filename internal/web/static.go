@@ -1,15 +1,13 @@
 package web
 
 import (
-	"embed"
 	"net/http"
+
+	"github.com/homeend/gigagit/internal/web/static"
 )
 
-//go:embed static
-var staticFS embed.FS
-
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	b, err := staticFS.ReadFile("static/index.html")
+	b, err := static.FS.ReadFile("index.html")
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

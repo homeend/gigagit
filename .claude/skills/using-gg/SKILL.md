@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v164 -->
+<!-- gg:using-gg:v165 -->
 
 # Using gg (gigagit)
 
@@ -92,6 +92,10 @@ guards against removing the worktree you are standing in.
   Exit 0 on a produced report, 1 on tool failure/empty report/no review tool
   configured, 2 on a usage error. A report the note store cannot keep is
   still printed, then `error: review not saved: …` on stderr, exit 1.
+- `gg review export [--out <path>|-] [--force] <review-link|id|latest>` — a
+  stored review's OVERVIEW as one self-contained HTML file to share outside gg
+  (every file a link names at the review's tip + its diff; no notes). Exit 1
+  `review <id> has no overview`; exit 2 on an existing file without `--force`.
 - `gg review show [--json] <review-link|id|latest>` — read a STORED review
   back (another agent's, or your own earlier one): a header line `review <id>
   · <agent> · <date> · <what it reviewed>`, the summary, then the stored
@@ -523,6 +527,12 @@ anchor they left.
 - `gg session overview list [--json]` — `<id>\t<state>\t<n> anchors\t<title>`;
   `show <id> [--json]` — `<id>\t<title>`, a blank line, the text; `rm <id>` —
   `closed <id>`. `gg session files focus <id>` brings one to the front.
+- `gg session overview export <id> [--out <path>|-] [--force]` — the overview
+  as ONE self-contained HTML file the user can share outside gg (the split,
+  offline: every file a link names, as on disk now, with its HEAD → working
+  tree diff; no notes). Default path: the export dir, `<title-slug>.html`;
+  `--out -` prints it. Prints `✓ wrote <path>`; an existing different file
+  needs `--force` (exit 2 without). Run it in the overview's worktree.
 - Answers you may get (exit 1): `no gg session for this worktree` (start gg
   first); `no overview f<n>` (the user closed it — add a new one); `20
   overviews are open; remove one first`; `gg is showing worktree <a>, not

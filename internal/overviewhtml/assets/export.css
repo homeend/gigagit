@@ -1,0 +1,20 @@
+/* The exported overview page's own layout; colours, .vline, .tk-* and .md-*
+   come from gg web's style.css, inlined above. */
+#x-top { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+#x-title { font-weight: bold; color: var(--accent); }
+#x-meta, #x-foot, .x-dim { color: var(--dim); font-size: 12px; }
+#x-foot { padding: 4px 12px; border-top: 1px solid var(--border); }
+#x-split { flex: 1; min-height: 0; display: flex; --ov-w: 40%; }
+#x-ov { width: var(--ov-w); overflow: auto; padding: 12px 16px; outline: none; }
+#x-drag { flex: none; width: 5px; cursor: col-resize; background: var(--border); }
+#x-code { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#x-codehead { display: flex; gap: 10px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+#x-codehead select, #x-codehead button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); font: inherit; padding: 1px 6px; max-width: 60%; }
+#x-status { color: var(--dim); }
+#viewer-body { flex: 1; overflow: auto; outline: none; }
+.x-notice { padding: 16px; color: var(--dim); }
+@media (max-width: 899px) {
+  #x-split { flex-direction: column; }
+  #x-ov { width: auto; max-height: 45vh; border-bottom: 1px solid var(--border); }
+  #x-drag { display: none; }
+}

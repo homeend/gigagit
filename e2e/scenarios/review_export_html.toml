@@ -1,0 +1,23 @@
+name = "review export: a stored overview becomes one self-contained HTML page — anchored files and their diffs, no notes"
+
+# A commit adding a.txt and b.txt, reviewed with a stored overview that
+# anchors a.txt:2 and a file the review never read (zzz.go). The export
+# carries a.txt (the only anchored file the review holds), marks zzz.go's
+# anchor missing, and leaves out b.txt (no anchor) and every note.
+[input]
+steps = [
+  { write = "a.txt", content = "one\ntwo\nthree\nfour\nfive\n" },
+  { write = "b.txt", content = "alpha\nbeta\ngamma\n" },
+  { commit = "add a and b" },
+]
+
+[[run]]
+cmd   = ["review", "save", "gg://{{cwd}}@{{rev:HEAD}}", "--agent", "Claude Code", "--stdin"]
+stdin = '{"version":1,"summary":"## Summary\nfine","overview":"Start at [line two](a.txt:2), then [outside](zzz.go:1).","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"why two?"}]},{"path":"b.txt","annotations":[{"newRange":[2,2],"summary":"beta?"}]}]}'
+exit  = 0
+
+[[run]]
+cmd   = ["review", "export", "--out", "-", "latest"]
+exit  = 0
+stdout_contains = ['id="gg-data"', '"path":"a.txt"', '"dest":"zzz.go:1"', '"missing":true']
+stdout_excludes = ['why two?', 'beta?', '"path":"b.txt"', '<script src', '<link']

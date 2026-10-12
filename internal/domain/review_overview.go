@@ -92,14 +92,14 @@ func (s *Service) ReviewOverview(ctx context.Context, id string) (OverviewDoc, e
 	return out, nil
 }
 
-// overviewFileLines reads path as the review's tip has it: the working file
+// overviewFileBytes reads path as the review's tip has it: the working file
 // for a working review, else the file at the tip commit.
-func (s *Service) overviewFileLines(ctx context.Context, r Review, path string) ([]string, bool) {
+func (s *Service) overviewFileBytes(ctx context.Context, r Review, path string) ([]byte, error) {
 	ref := model.FileRef{Source: model.SourceUnstaged, Path: path}
 	if r.Kind != ReviewOnWorktree {
 		t, err := s.reviewTarget(ctx, r)
 		if err != nil {
-			return nil, false
+			return nil, err
 		}
 		tip := t.Commit
 		if t.Pair != nil {
@@ -107,7 +107,12 @@ func (s *Service) overviewFileLines(ctx context.Context, r Review, path string) 
 		}
 		ref = model.FileRef{Source: model.SourceCommit, Locator: tip, Path: path}
 	}
-	data, err := s.ResolveBytes(ctx, ref)
+	return s.ResolveBytes(ctx, ref)
+}
+
+// overviewFileLines is overviewFileBytes split in lines.
+func (s *Service) overviewFileLines(ctx context.Context, r Review, path string) ([]string, bool) {
+	data, err := s.overviewFileBytes(ctx, r, path)
 	if err != nil {
 		return nil, false
 	}
