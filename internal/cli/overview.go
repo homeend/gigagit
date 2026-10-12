@@ -200,9 +200,9 @@ func overviewList(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 }
 
 // overviewByArg reads an id or an overview link.
-func overviewByArg(ctx context.Context, svc *domain.Service, arg string) (*domain.Service, domain.Overview, error) {
+func overviewByArg(ctx context.Context, svc *domain.Service, arg, verb string) (*domain.Service, domain.Overview, error) {
 	if strings.HasPrefix(arg, "gg://") {
-		res, err := resolveLinkArg(ctx, svc, arg, linkShapes{}, "overview show")
+		res, err := resolveLinkArg(ctx, svc, arg, linkShapes{}, verb)
 		if err != nil {
 			return nil, domain.Overview{}, err
 		}
@@ -233,16 +233,12 @@ func overviewExport(svc *domain.Service, args []string, stdout, stderr io.Writer
 		return 2
 	}
 	ctx := context.Background()
-	tsvc, o, err := overviewByArg(ctx, svc, fs.Arg(0))
+	tsvc, o, err := overviewByArg(ctx, svc, fs.Arg(0), "overview export")
 	if err != nil {
 		fmt.Fprintln(stderr, "overview export:", err)
 		return 1
 	}
 	page, name, err := tsvc.ExportOverviewHTML(ctx, domain.OverviewSource{OverviewID: o.ID})
-	if errors.Is(err, domain.ErrNoOverview) {
-		fmt.Fprintf(stderr, "overview export: the stored document of %s no longer parses\n", o.ID)
-		return 1
-	}
 	if err != nil {
 		fmt.Fprintln(stderr, "overview export:", err)
 		return 1
@@ -265,7 +261,7 @@ func overviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 		return 2
 	}
 	ctx := context.Background()
-	tsvc, o, err := overviewByArg(ctx, svc, pos[0])
+	tsvc, o, err := overviewByArg(ctx, svc, pos[0], "overview show")
 	if err != nil {
 		fmt.Fprintln(stderr, "overview show:", err)
 		return 1

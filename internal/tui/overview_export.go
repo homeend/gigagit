@@ -65,6 +65,9 @@ func permanentOverviewExportRow(rowID, label, id string) actionRow {
 // exportOverviewCmd builds src's page off-thread and resolves the default
 // path; patchResolvedMsg then opens the export path popup with its title.
 func exportOverviewCmd(svc *domain.Service, src domain.OverviewSource) tea.Cmd {
+	if svc == nil {
+		return nil
+	}
 	title := i18n.T("Export overview as HTML")
 	return func() tea.Msg {
 		ctx := context.Background()

@@ -56,6 +56,17 @@ func AgentOverviewSource(docs *agentdocs.Store, id, root string) (OverviewSource
 	return src, nil
 }
 
+// unparsedOverviewError is ErrNoOverview for a permanent overview whose
+// stored document no longer parses, worded as that (ErrNoOverview's own text
+// speaks of a review).
+type unparsedOverviewError string
+
+func (e unparsedOverviewError) Error() string {
+	return "the stored document of overview " + string(e) + " no longer parses"
+}
+
+func (e unparsedOverviewError) Is(target error) bool { return target == ErrNoOverview }
+
 // exportReader reads one anchored path's frozen bytes and its diff.
 type exportReader struct {
 	read func(path string) ([]byte, error)
@@ -82,6 +93,9 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 			return nil, "", err
 		}
 		ov, err := s.OverviewDocAt(ctx, src.OverviewID)
+		if errors.Is(err, ErrNoOverview) {
+			return nil, "", unparsedOverviewError(src.OverviewID)
+		}
 		if err != nil {
 			return nil, "", err
 		}

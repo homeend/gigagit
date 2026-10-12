@@ -188,9 +188,47 @@ func TestExportPROverviewDiffsTheWholePR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range exportBlob(t, page).Files {
+	files := exportBlob(t, page).Files
+	if len(files) != 2 || files[0].Path != "a.go" {
+		t.Fatalf("files = %+v, want a.go and b.go", files)
+	}
+	for _, f := range files {
 		if !f.Changed || len(f.Diff) == 0 {
 			t.Fatalf("%s unchanged in the export; want the PR's whole change", f.Path)
 		}
+	}
+}
+
+// A stored document that no longer parses fails the export as ErrNoOverview,
+// worded for an overview (ErrNoOverview's own text speaks of a review).
+func TestExportUnparsedPermanentOverview(t *testing.T) {
+	t.Parallel()
+	dir, _ := newRealRepo(t)
+	commitFile(t, dir, "a.go", "1\n2\n", "a")
+	_, svc := newRealRepoAt(t, dir)
+	nd := t.TempDir()
+	svc.UseNotesDir(nd)
+	got, err := saveOv(t, svc, ovDoc("Tour", "[a](a.go:1)", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	broke := 0
+	_ = filepath.WalkDir(nd, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || filepath.Ext(p) != ".toml" {
+			return err
+		}
+		b, _ := os.ReadFile(p)
+		if nb := strings.ReplaceAll(string(b), `\"version\": 1`, `\"version\": 99`); nb != string(b) {
+			broke++
+			return os.WriteFile(p, []byte(nb), 0o644)
+		}
+		return nil
+	})
+	if broke == 0 {
+		t.Fatal("setup: found no stored document to break")
+	}
+	_, _, err = svc.ExportOverviewHTML(context.Background(), OverviewSource{OverviewID: got.ID})
+	if !errors.Is(err, ErrNoOverview) || !strings.Contains(err.Error(), "overview "+got.ID+" no longer parses") {
+		t.Fatalf("err = %v", err)
 	}
 }
