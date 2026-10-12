@@ -58,6 +58,7 @@ const noticePushMapOffer = "web_push_mapping_offer"
 var dismissableNotices = map[string]bool{
 	noticeNarrowRefspec: true,
 	noticePushMapOffer:  true,
+	noticeNoteEdits:     true,
 }
 
 // opAddFetchMappings is the wire name of the refspec repair. PERMANENT.

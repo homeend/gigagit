@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -141,7 +142,9 @@ func newerNotesServer(t *testing.T) (*httptest.Server, *domain.Service, string) 
 	dir := t.TempDir()
 	svc := domain.Open(newRepoDir(t, 2))
 	svc.UseNotesDir(dir)
-	ts := serve(t, New(svc))
+	srv := New(svc)
+	srv.reposPath = filepath.Join(t.TempDir(), "repos.toml") // the prompt store for a dismissal
+	ts := serve(t, srv)
 	code, out := postJSONAny(t, ts, "/api/notes/add",
 		`{"path":"f.txt","rev":"","state":"unstaged","side":"new","line":1,"summary":"tighten this"}`)
 	id, _ := out["id"].(string)
@@ -172,5 +175,43 @@ func TestWebMarkRefusesANewerNotesFile(t *testing.T) {
 	ts, _, id := newerNotesServer(t)
 	if code, out := postJSONAny(t, ts, "/api/notes/mark", `{"id":"`+id+`","status":"agreed"}`); code != http.StatusConflict {
 		t.Fatalf("mark on a newer notes file = %d %v, want 409", code, out)
+	}
+}
+
+// A notes file a newer gg wrote: the centre says note-edits is unavailable
+// (the TUI's own notice id) and /api/preflight reports the feature off, so
+// the page hides Mark.
+func TestNoteEditsUnavailableNotice(t *testing.T) {
+	t.Parallel()
+	ts, _, _ := newerNotesServer(t)
+	var got noticesResp
+	if code := getJSON(t, ts, "/api/notifications", &got); code != http.StatusOK {
+		t.Fatalf("notifications = %d", code)
+	}
+	var found *noticeWire
+	for i := range got.Notices {
+		if got.Notices[i].ID == "feature_disabled_note-edits" {
+			found = &got.Notices[i]
+		}
+	}
+	if found == nil || found.Title != "note-edits is unavailable in this repository" || len(found.Detail) == 0 {
+		t.Fatalf("notices = %+v, want the note-edits notice", got.Notices)
+	}
+	var pf struct {
+		Disabled []string `json:"disabled"`
+	}
+	getJSON(t, ts, "/api/preflight", &pf)
+	if !slices.Contains(pf.Disabled, "note-edits") {
+		t.Fatalf("disabled = %v, want note-edits", pf.Disabled)
+	}
+	if code, out := postJSONAny(t, ts, "/api/notifications/dismiss", `{"id":"feature_disabled_note-edits"}`); code != http.StatusOK {
+		t.Fatalf("dismiss = %d %v", code, out)
+	}
+	got = noticesResp{}
+	getJSON(t, ts, "/api/notifications", &got)
+	for _, n := range got.Notices {
+		if n.ID == "feature_disabled_note-edits" {
+			t.Fatalf("a dismissed notice came back: %+v", n)
+		}
 	}
 }
