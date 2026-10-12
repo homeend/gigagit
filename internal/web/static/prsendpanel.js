@@ -13,6 +13,8 @@ import { opLine } from "./ops.js";
 import { landNote, openFile } from "./files.js";
 import { bodyOptions, panelRequest, panelRows, tickAllInGroup } from "./prsendrows.js";
 import { onHeadMoved, onSendDone, sendToGitHub } from "./prsend.js";
+import { badgeRunHTML, metaLinesHTML, severityColour } from "./notemeta.js";
+
 
 const kept = new Map(); // pr -> { ticked: Set, body: {kind, from, typed} }
 let panel = null; // { pr, cands, sel, open: Set(row ids unfolded), code: bool, notice }
@@ -79,14 +81,23 @@ function render() {
         );
       }
       const box = r.tickable ? `<input type="checkbox" data-id="${esc(r.id)}"${r.ticked ? " checked" : ""}>` : `<span class="pskip">–</span>`;
-      const sev = r.severity ? `<span class="psev ${esc(r.severity)}">${esc(r.severity)}</span>` : "";
+      // The severity chip takes the colour the note's resolved badges give
+      // it (spec 2026-10-12-note-meta §7); the row is otherwise unchanged (R9).
+      const sc = r.severity ? severityColour(r.display, r.severity) : "";
+      const sev = r.severity ? `<span class="psev ${esc(r.severity)}${sc ? " mc-" + sc + " ms-filled" : ""}">${esc(r.severity)}</span>` : "";
       // An open row (its ▸, or c for all) wraps, so the whole summary reads
       // above its rationale and code; a closed one is one clipped line whose
       // summary shows in full on hover.
       const open = panel.open.has(r.id) || panel.code;
+      // An opened row gains one meta row: badges, the marker, the line
+      // entries (spec §6.3). Meta decides nothing here — no tick, no filter.
+      const metaRow =
+        open && r.display && (badgeRunHTML(r.display, esc) || metaLinesHTML(r.display, esc))
+          ? `<div class="pmeta">${badgeRunHTML(r.display, esc)}${metaLinesHTML(r.display, esc)}</div>`
+          : "";
       const more =
-        open && (r.rationale || r.code.length)
-          ? `<div class="pmore">${r.rationale ? `<div class="prat">${esc(r.rationale)}</div>` : ""}${r.code.length ? `<pre class="pcode">${esc(r.code.join("\n"))}</pre>` : ""}</div>`
+        open && (r.rationale || r.code.length || metaRow)
+          ? `<div class="pmore">${metaRow}${r.rationale ? `<div class="prat">${esc(r.rationale)}</div>` : ""}${r.code.length ? `<pre class="pcode">${esc(r.code.join("\n"))}</pre>` : ""}</div>`
           : "";
       return (
         `<li class="prow g${r.slot}${sel}${r.tickable ? "" : " pdis"}${open ? " open" : ""}" data-i="${i}">${box} <span class="pfold">${open ? "▾" : "▸"}</span>${sev}` +

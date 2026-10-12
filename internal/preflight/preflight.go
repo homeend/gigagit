@@ -79,6 +79,9 @@ type Probes struct {
 	Legacy     map[string]LegacyProbe
 	GitVersion [3]int
 	Forge      *ForgeProbe // nil = not probed (yet)
+	// Newer names the machine-local stores a newer gg wrote files of (a
+	// notes part at a format above this build's): readable, never written.
+	Newer map[string]bool
 }
 
 // ForgeProbe is what detection learned about a code forge for this repo.
@@ -163,6 +166,31 @@ func (d DataFormat) Remedy(p Probes) Text {
 func (d DataFormat) RepairStore() string { return d.Store }
 
 func (d DataFormat) NeedsStoreProbes() bool { return true }
+
+// NewerLocal requires that no file of a machine-local store was written by
+// a newer gg. Unlike DataFormat it reads no git-ref marker: the files carry
+// their own format (spec 2026-10-12-note-meta §2.5), and the answer is this
+// machine's. Never repairable from inside gg.
+type NewerLocal struct{ Store string }
+
+func (n NewerLocal) Fit(p Probes) Fit {
+	if p.Newer[n.Store] {
+		return FitTooNew
+	}
+	return FitOK
+}
+
+func (n NewerLocal) Reason(p Probes) Text {
+	return Text{Format: "the %s store was written by a newer gg: it stays readable, but this build will not change it", Args: []any{n.Store}}
+}
+
+func (n NewerLocal) Remedy(p Probes) Text {
+	return Text{Format: "Upgrade gg to change it again."}
+}
+
+func (n NewerLocal) RepairStore() string { return "" }
+
+func (n NewerLocal) NeedsStoreProbes() bool { return false }
 
 // LegacyStore requires that a superseded store's data has been absorbed —
 // i.e. that its file is gone from this machine.

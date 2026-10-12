@@ -6,6 +6,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Note meta in gg web
+
+### Added
+- **gg web shows note meta the way the TUI does.**
+  - Diff note boxes, the viewer's temporary notes and a review's remark boxes now lead their title with the declared chips (filled or text, in the seven meta colours) and the audience marker (`→ author` / `for you`).
+  - The declared frame colours the border; a stale note stays dim.
+  - `line` keys are dim rows under the title, and a details row lists stored meta, added meta and display problems.
+  - Each reply shows its own chips.
+  - A too-wide title elides its path in the middle first, then cuts its words; the chips go last.
+- **Review view:**
+  - The header gains a counts line (`2 issue · 1 for author`).
+  - File rows end with a compact `issue 1` while it fits.
+  - Other notes carry their chips.
+- **Send to GitHub panel:**
+  - An opened row shows one meta row.
+  - The severity chip takes its badge colour.
+  - Nothing is ticked, filtered or dimmed by meta.
+- **Mark** in a note box's right-click menu: agreed / disagreed / deferred / clear (`POST /api/notes/mark`).
+  - It is a `status` tag only, and is never offered on a GitHub thread.
+  - Inside a review view, the counts follow the mark.
+- **The note-edits notice:** a notes file a newer gg wrote raises the TUI's own "note-edits is unavailable" notice in the notification centre.
+  - Dismissing it in either frontend silences both.
+  - Mark is hidden while note-edits is unavailable.
+
+## Note meta in the TUI
+
+### Added
+- **Note boxes show what a note is.** The declared badges (coloured chips or
+  words) and the audience marker (`→ author` / `for you`) lead the box title,
+  the declared frame colour paints the border, `line` keys are dim
+  `label: value` rows under the title, and a details row lists stored-only
+  meta, meta added later (`added: severity: high → low (MR)`) and any
+  display problems. Meta with no declaration (converted tags) shows as line
+  rows. A too-wide title elides its path in the middle first, then cuts its
+  words, the badges last. Temporary agent notes and the remark boxes of a
+  review's overview split show the same.
+- **Review view counts.** The header line counts the remarks in plain words
+  (`2 issue · 1 good · 2 for author · 1 for you`), each file row ends with a
+  compact `issue 1 note 1` while it fits, and the summary's Other notes rows
+  carry their badges.
+- **Send to GitHub panel:** an opened row (→) shows one meta row — badges,
+  audience marker, line entries. Nothing is ticked, filtered or dimmed by
+  meta.
+- **Mark…** in a note's `.` menu: agreed / disagreed / deferred / clear — a
+  `status` tag on the note (a remark's lives on its review), shown as a
+  badge. It resolves, sends and folds nothing.
+- Theme roles `meta_red` … `meta_grey` (Dark, Light, Terminal; override
+  under `[themes.<name>]`).
+- A notes file written by a newer gg raises a notice (`note-edits is
+  unavailable`): notes stay readable, this build will not change them.
+
 ## Permanent overviews in the TUI
 
 ### Added

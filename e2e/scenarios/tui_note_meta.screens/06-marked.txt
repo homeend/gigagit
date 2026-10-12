@@ -1,0 +1,40 @@
+diff: configuration.ts  @ 3e3fa0a cache config                                                                                 line 12  change 1/1  rows 1–27/27
+  1 1                                                                          │  1 1
+  2 2                                                                          │  2 2
+  3 3                                                                          │  3 3
+  4 4                                                                          │  4 4
+  5 5                                                                          │  5 5
+  6 6                                                                          │  6 6
+  7 7                                                                          │  7 7
+  8 8                                                                          │  8 8
+  9 9                                                                          │  9 9
+ 10 10                                                                         │ 10 10
+ 11 11                                                                         │ 11 11
+ 12 12                                                                         │ 12▎cache(12)
+                                                                               │╭─  issue  high  disagreed  → author · review · Claude Code · config….ts R12 ─╮
+                                                                               ││                                                                             │
+                                                                               ││ intent: checked the cache key                                               │
+                                                                               ││ Config modules are cached forever                                           │
+                                                                               ││ added: status: disagreed (gg-e2e)                                           │
+                                                                               ││                                                                             │
+                                                                               │╰─────────────────────────────────────────────────────────────────────────────╯
+ 13 13                                                                         │ 13▎esm(13)
+                                                                               │╭─  note  high  → author · review · Claude Code · configuration.ts R13 ───────╮
+                                                                               ││                                                                             │
+                                                                               ││ Unknown callers now get ESM                                                 │
+                                                                               ││                                                                             │
+                                                                               │╰─────────────────────────────────────────────────────────────────────────────╯
+ 14 14                                                                         │ 14 14
+ 15 15                                                                         │ 15 15
+
+
+
+
+
+
+
+
+  ╭────────────────╮
+  │▸ PP → prev file│
+  ╰────────────────╯
+[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] scroll  [←→] pan  [h/b] hist  [esc] back

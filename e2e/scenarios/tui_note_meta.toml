@@ -1,0 +1,89 @@
+name = "tui: a review's remarks show what they are — badges, frame, line rows, counts — and Mark tags one"
+
+# A commit changes configuration.ts and caching.ts; an agent stores a review
+# with the skills' default display block (spec 2026-10-12-note-meta §9) and
+# remarks shaped after the babel classification (Appendix B): an issue with
+# an intent, an impact note for the author, a verified "good". A stored note
+# with meta but no declaration shows its meta as a line row (R13).
+[input]
+steps = [
+  { write = "configuration.ts", content = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n" },
+  { write = "caching.ts", content = "a\nb\nc\nd\n" },
+  { commit = "base" },
+  { write = "configuration.ts", content = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\ncache(12)\nesm(13)\n14\n15\n" },
+  { write = "caching.ts", content = "a\nb\ncatch()\nd\n" },
+  { commit = "cache config" },
+]
+
+[[run]]
+cmd   = ["review", "save", "gg://{{cwd}}@{{rev:HEAD}}", "--agent", "Claude Code", "--stdin"]
+stdin = '''{"version":1,"summary":"## Summary\nconfig caching","display":{
+ "kind":{"show":["badge","count"],"order":1,"values":{"issue":{"color":"red","audience":"author"},"suggestion":{"color":"blue","audience":"author"},"nitpick":{"color":"grey","audience":"author"},"note":{"color":"yellow","audience":"reviewer"},"good":{"color":"green","audience":"reviewer"}}},
+ "severity":{"show":["badge","frame"],"order":2,"style":"text","values":{"high":{"color":"red","level":"high"},"medium":{"color":"orange","level":"medium"},"low":{"color":"grey","level":"low"}}},
+ "audience":{"as":"audience","order":3},
+ "intent":{"show":["line"],"order":4}},
+ "files":[
+  {"path":"configuration.ts","annotations":[
+   {"newRange":[12,12],"summary":"Config modules are cached forever","meta":{"kind":"issue","severity":"high","intent":"checked the cache key"}},
+   {"newRange":[13,13],"summary":"Unknown callers now get ESM","meta":{"kind":"note","severity":"high","audience":"author"}}]},
+  {"path":"caching.ts","annotations":[
+   {"newRange":[3,3],"summary":"The no-op catch only marks the promise as handled","meta":{"kind":"good","intent":"verified the rejection path"}}]}]}'''
+exit  = 0
+
+[[run]]
+cmd  = ["note", "add", "--rev", "HEAD", "--file", "caching.ts", "--new-line", "1", "--summary", "why a?", "--meta", "confidence=high"]
+exit = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "files"
+keys = ["right", "enter"]
+screen_contains = ["Reviews", "Claude Code · 0/3 resolved"]
+
+[[tui.step]]
+name = "review-view"
+keys = ["down", "enter"]
+# Each file row ends with its remarks' counts (spec §6.2).
+# The header's second line counts the remarks in plain words.
+screen_contains = ["Review: ", "1 issue · 1 note · 1 good · 2 for author", "caching.ts  ◆ 1  good 1", "configuration.ts  ◆ 2  issue 1 note 1"]
+
+[[tui.step]]
+name = "remark-boxes"
+keys = ["down", "down", "enter"]
+# Badges then the audience marker lead the title; the intent is a line row;
+# the remark's direct audience beats its kind's (spec §3.3).
+screen_contains = [" issue  high  → author · review · Claude Code · configuration.ts R12", "intent: checked the cache key",
+                   " note  high  → author · review · Claude Code · configuration.ts R13"]
+screen_excludes = ["kind:", "severity:"]
+
+[[tui.step]]
+name = "mark-choice"
+keys = [".", "Mark…"]
+screen_contains = ["> Mark…"]
+
+[[tui.step]]
+name = "mark-options"
+keys = ["enter"]
+screen_contains = ["Mark this note:", "> agreed", "disagreed", "deferred", "clear", "Cancel"]
+
+[[tui.step]]
+name = "marked"
+keys = ["down", "enter"]
+# The mark is a badge and a details row; the title gives up the path's
+# middle to keep it (spec §6.1). Nothing folds, nothing resolves.
+screen_contains = ["high  disagreed  → author · review", "added: status: disagreed (gg-e2e)", "Config modules are cached forever"]
+
+# Back on the commit's files: a stored note whose meta has no declaration
+# shows it as a line row, no badge (R13).
+[[tui.step]]
+keys = ["esc", "esc"]
+
+[[tui.step]]
+name = "undeclared-meta"
+keys = ["down", "enter"]
+screen_contains = ["agent note · agent · caching.ts R1 ─", "confidence: high", "why a?"]
+
+[expect]
+branch = "main"

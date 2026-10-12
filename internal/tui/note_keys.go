@@ -827,6 +827,9 @@ func (m Model) noteMenuRows() []actionRow {
 	rows = append(rows, actionRow{id: "note-resolve", key: "x", label: resolve, run: func(m Model) (tea.Model, tea.Cmd) {
 		return m.toggleThreadResolved()
 	}})
+	if r, ok := m.noteMarkRow(); ok {
+		rows = append(rows, r)
+	}
 	rows = append(rows, m.reviewRemarkRows()...)
 	rows = append(rows, m.forgeNoteRows()...)
 	if r, ok := m.noteDeleteRow(); ok {

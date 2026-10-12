@@ -18,10 +18,12 @@ import { saveUI } from "./uistate.js";
 import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutChanged, symOffered, symReapply, symRows } from "./symcompare.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
-import { noteMark, noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
+import { noteMark, noteTitleParts, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
+import { featureDisabled } from "./preflight.js";
+import { badgeRunCols, badgeRunHTML, fitNoteTitle, frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./notemeta.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
+import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, refreshReviewMeta, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -196,6 +198,7 @@ function enterFilesStage() {
   diffSearchBar.reset(); // the pane is empty now; nothing to unpaint
   setFilesMeta(""); // every stage starts without a date; only a commit open sets one
   setFilesDesc(""); // …and without a description
+  setFilesCounts(""); // a review sets its counts
   // The kind badge is DERIVED, not cleared: esc from a diff re-enters this
   // stage inside the same comparison, whose badge must stay; every other
   // screen sets filesMode before coming here, so it reads as "no badge".
@@ -336,6 +339,16 @@ function setFilesMeta(text, parts) {
   // date and the author separately without re-parsing the rendered line.
   el.dataset.date = (parts && parts.date) || "";
   el.dataset.author = (parts && parts.author) || "";
+}
+
+
+// setFilesCounts draws (or hides) a review's note-meta counts line.
+export function setFilesCounts(text) {
+  const el = $("files-counts");
+  if (!el) return;
+  el.textContent = text || "";
+  el.title = text || "";
+  el.classList.toggle("hidden", !text);
 }
 
 
@@ -2754,6 +2767,39 @@ function noteShown(n) {
 }
 
 
+// noteTitleRoom is a box title's budget in columns: the diff body's width
+// (half of it for a box in one pane of the split layout), less the box's
+// border inset and the title's own padding, at the title's .92em. 0 = not
+// laid out yet: the title renders whole and the CSS ellipsis is the backstop.
+function noteTitleRoom(cols, n) {
+  const body = $("diff-body");
+  const px = body ? body.clientWidth : 0;
+  if (px <= 0) return 0;
+  const boxPx = (cols === 4 && !n.file_level ? px / 2 : px) - 64;
+  return Math.max(0, Math.floor(boxPx / (charWidth() * 0.92)) - 2);
+}
+
+
+// The note titles are fitted to #diff-body's width (noteTitleRoom), so a
+// width change the window's resize does not report — the rs-detail drag, the
+// sidebar toggle — refits them. Only a diff with a note box re-renders, only
+// on a real width change, rAF-coalesced (a drag fires per pixel).
+let diffBodyW = 0;
+let diffRefitPending = false;
+new ResizeObserver(() => {
+  const w = $("diff-body").clientWidth;
+  if (!w || w === diffBodyW) return;
+  const was = diffBodyW;
+  diffBodyW = w;
+  if (!was || diffRefitPending || !$("diff-body").querySelector(".notetitle")) return;
+  diffRefitPending = true;
+  requestAnimationFrame(() => {
+    diffRefitPending = false;
+    rerenderDiffKeepingPlace(true);
+  });
+}).observe($("diff-body"));
+
+
 function noteBoxHTML(n, cols, nctx = null) {
   const nc = nctx || globalNoteCtx();
   const off = state.notesAgentOff;
@@ -2778,7 +2824,16 @@ function noteBoxHTML(n, cols, nctx = null) {
   const agent = n.source === "agent";
   const kind = n.read_only ? "forge" : agent ? "agent" : "user";
   const folded = state.noteCollapsed.has(n.id);
-  const title = noteTitle(n, nc.ctx ? nc.ctx.path : "", prev, Date.now());
+  // The title leads with the note's meta chips (spec 2026-10-12-note-meta
+  // §7), then today's words and place, fitted the TUI's way: the path
+  // elided first, then the words, chips never (the CSS ellipsis backstops).
+  const parts = noteTitleParts(n, nc.ctx ? nc.ctx.path : "", prev, Date.now());
+  const meta = rootOn ? n.display : null; // a hidden root's chips go with it
+  const frame = meta ? frameClass(n.display) : "";
+  const path = nc.ctx ? nc.ctx.path : "";
+  const room = rootOn ? noteTitleRoom(cols, n) : 0;
+  const fit = fitNoteTitle(meta ? badgeRunCols(n.display) : 0, parts.words, path,
+    parts.at.slice(path.length) + parts.tail, room > 0 && mark ? Math.max(1, room - 3) : room, elidePath); // a sync mark takes 3 columns
   // A FORGE note is markdown, and the server sends it parsed (summary_md, md):
   // those trees are painted. A note written here is shown exactly as typed —
   // it carries no tree, so it falls to the escaped text.
@@ -2790,18 +2845,29 @@ function noteBoxHTML(n, cols, nctx = null) {
   // line and drops its body. The fold is a CLASS on the row, toggled in place
   // — never a re-render, which would reset the ‹/› stepper and jolt the scroll.
   let box =
-    `<div class="notebox ${kind}${stale ? " " + cls : ""}${slot}">` +
-    `<div class="notetitle" data-collapse="${esc(n.id)}" title="click (or z) to collapse / expand">` +
+    `<div class="notebox ${kind}${stale ? " " + cls : ""}${slot}${frame ? " " + frame : ""}">` +
+    `<div class="notetitle" data-collapse="${esc(n.id)}" title="${esc(parts.words + parts.at + parts.tail)} — click (or z) to collapse / expand">` +
     `<span class="notefold"></span>` +
     (mark ? `<span class="notemark ${mark.cls}" title="${esc(mark.tip)}">${mark.glyph}</span> ` : "") +
-    `${esc(title)}</div>`;
+    (meta ? titleMetaHTML(n.display, esc) : "") +
+    `${esc(fit.words + fit.at)}</div>`;
   // A note's link (a reply's fix) is its own line; a click opens it.
   const linkLine = (r) => (r.link ? `<div class="notelink" data-link="${esc(r.link)}" title="open">→ ${esc(r.link)}</div>` : "");
-  if (rootOn) box += part(n, "") + text(n) + linkLine(n);
+  // Line rows under the title, the details after the body (spec §6.1/§7).
+  if (rootOn) box += metaLinesHTML(n.display, esc) + part(n, "") + text(n) + linkLine(n) + metaDetailsHTML(n.display, esc);
   // A failed send keeps the note local; its error is said inside the box.
   if (rootOn && n.sync === "failed" && n.send_error) box += `<div class="notesenderr">${esc(n.send_error)}</div>`;
+  // Each reply shows its own chips, line and details rows, through its
+  // root's declaration (the server resolves it so).
   for (const r of reps) {
-    box += `<div class="notereply" data-note="${esc(r.id)}">` + part(r, "↳ " + (r.author ? r.author + ": " : "")) + text(r) + linkLine(r) + `</div>`;
+    const run = badgeRunHTML(r.display, esc);
+    box +=
+      `<div class="notereply" data-note="${esc(r.id)}">` +
+      (run ? `<div class="mrun">${badgeRunHTML(r.display, esc)}</div>` : "") +
+      metaLinesHTML(r.display, esc) +
+      part(r, "↳ " + (r.author ? r.author + ": " : "")) + text(r) + linkLine(r) +
+      metaDetailsHTML(r.display, esc) +
+      `</div>`;
   }
   box += `</div>`;
   const cell = (span) => `<td class="note" colspan="${span}">${box}</td>`;
@@ -3434,6 +3500,14 @@ function resolveNote(n, resolved, root) {
   });
 }
 
+// markNote is Mark (spec 2026-10-12-note-meta §5.4, R12): the reader's
+// status tag on the note, "" clears it. A tag only — it resolves, sends,
+// folds and filters nothing; the note lanes reload, and a review view
+// re-reads its counts.
+function markNote(n, status) {
+  noteWrite("mark", "/api/notes/mark", { id: n.id, status }, () => refreshReviewMeta());
+}
+
 // noteLinks are the distinct links a thread carries (its root, its replies).
 function noteLinks(n) {
   const out = [];
@@ -3795,6 +3869,13 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   }
   if (n.source !== "forge" && !String(n.id).startsWith("forge:"))
     noteRows.push({ label: n.resolved ? "Reopen thread" : "Resolve thread", act: () => resolveNote(n, !n.resolved, rootId) });
+  // Mark ▸ the part right-clicked (a root or a reply: each has its own
+  // chips). Never a GitHub thread; not while a newer gg owns the notes file.
+  if (!String(rootId).startsWith("forge:") && n.source !== "forge" && !featureDisabled("note-edits")) {
+    noteRows.push({ sep: true }, { header: "Mark" });
+    for (const s of ["agreed", "disagreed", "deferred"]) noteRows.push({ label: s, act: () => markNote(n, s) });
+    noteRows.push({ label: "clear", act: () => markNote(n, "") }, { sep: true });
+  }
   for (const l of noteLinks(n)) noteRows.push({ label: "Open link: " + l, act: () => gotoNoteLink(l) });
   // A review REMARK (its thread root is review:<id>:<n>) copies its review
   // link and its id — the link a plain line would give names the wrong

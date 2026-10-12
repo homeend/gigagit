@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/termimg"
 )
@@ -118,6 +119,17 @@ type noteRow struct {
 	Ref       string `json:"ref"`
 	ReadOnly  bool   `json:"readonly,omitempty"` // a review's remark: no dismiss, no reference
 	Side      string `json:"side,omitempty"`     // "old": a remark on a line the review deleted (the diff lays it there)
+	// Display is what the note's meta shows (spec 2026-10-12-note-meta §7):
+	// chips, frame, line and details rows. Omitted when there is none.
+	Display *notemeta.Resolved `json:"display,omitempty"`
+}
+
+// rowDisplay is res as the wire's optional object.
+func rowDisplay(res notemeta.Resolved) *notemeta.Resolved {
+	if res.Empty() {
+		return nil
+	}
+	return &res
 }
 
 // notesFor aligns path's notes to data, the working-tree bytes just read,
@@ -132,7 +144,8 @@ func (s *Server) notesFor(ctx context.Context, path string, data []byte) []noteR
 	out := make([]noteRow, len(ns))
 	for i, n := range ns {
 		out[i] = noteRow{ID: n.ID, Start: n.Start, End: n.End, Summary: n.Summary, Rationale: n.Rationale,
-			Author: n.Author, Outdated: n.Outdated, Ref: agentdocs.NoteReference(n)}
+			Author: n.Author, Outdated: n.Outdated, Ref: agentdocs.NoteReference(n),
+			Display: rowDisplay(notemeta.Resolve(n.Meta, n.Display, n.Added))}
 	}
 	return out
 }

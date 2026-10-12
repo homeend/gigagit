@@ -1,0 +1,40 @@
+diff: configuration.ts  @ 3e3fa0a cache config                                                                                 line 12  change 1/1  rows 1–26/26
+  1 1                                                                          │  1 1
+  2 2                                                                          │  2 2
+  3 3                                                                          │  3 3
+  4 4                                                                          │  4 4
+  5 5                                                                          │  5 5
+  6 6                                                                          │  6 6
+  7 7                                                                          │  7 7
+  8 8                                                                          │  8 8
+  9 9                                                                          │  9 9
+ 10 10                                                                         │ 10 10
+ 11 11                                                                         │ 11 11
+ 12 12                                               ╔════════════════════════════════════════════════════╗
+                                                     ║                                                    ║ review · Claude Code · configuration.ts R12 ──────╮
+                                                     ║  Mark this note:                                   ║                                                   │
+                                                     ║  ◆ Claude Code: Config modules are cached forever  ║ key                                               │
+                                                     ║                                                    ║ forever                                           │
+                                                     ║  > agreed                                          ║                                                   │
+                                                     ║    disagreed                                       ║───────────────────────────────────────────────────╯
+ 13 13                                               ║    deferred                                        ║
+                                                     ║    clear                                           ║review · Claude Code · configuration.ts R13 ───────╮
+                                                     ║    Cancel                                          ║                                                   │
+                                                     ║                                                    ║SM                                                 │
+                                                     ║  [↑/↓] choose  [enter] confirm  [esc] abort        ║                                                   │
+                                                     ║                                                    ║───────────────────────────────────────────────────╯
+ 14 14                                               ╚════════════════════════════════════════════════════╝
+ 15 15
+
+
+
+
+
+
+
+
+
+
+
+
+[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] scroll  [←→] pan  [h/b] hist  [esc] back

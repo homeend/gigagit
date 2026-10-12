@@ -102,6 +102,14 @@ func TestDiffMenuParityReviewRemark(t *testing.T) {
 		func(t *testing.T, m Model) Model { return openReviewDiff(t, m, "a.go") })
 }
 
+// Mark… is a note row: single and stacked both offer it on a remark.
+func TestDiffMenuParityMarkRow(t *testing.T) {
+	t.Parallel()
+	diffMenuParity(t, "review remark mark", "note-mark",
+		func(t *testing.T) Model { m, _ := openedReviewView(t); return m },
+		func(t *testing.T, m Model) Model { return openReviewDiff(t, m, "a.go") })
+}
+
 // A commit's diff, cursor on a hand-written note.
 func TestDiffMenuParityCommitNote(t *testing.T) {
 	t.Parallel()

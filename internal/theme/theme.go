@@ -72,6 +72,11 @@ type Theme struct {
 	// group id (the TUI's groupSlot), so a review keeps its colour on GitHub.
 	NoteGroup1, NoteGroup2, NoteGroup3, NoteGroup4, NoteGroup5, NoteGroup6 string
 
+	// Meta colours (spec 2026-10-12-note-meta §6.4): the seven colour names a
+	// note's display declaration may use — badge chips, the box frame, the
+	// counts' numbers.
+	MetaRed, MetaOrange, MetaYellow, MetaGreen, MetaBlue, MetaPurple, MetaGrey string
+
 	// Attention bands: the background an agent's `gg session highlight` paints
 	// over the marked rows on one side of the diff (a band, like the note band
 	// — never a box).
@@ -100,6 +105,7 @@ func (t Theme) roles() []string {
 		t.NoteUser, t.NoteAgent, t.NoteStale, t.PickerLabel,
 		t.PickerLeft, t.PickerRight,
 		t.NoteGroup1, t.NoteGroup2, t.NoteGroup3, t.NoteGroup4, t.NoteGroup5, t.NoteGroup6,
+		t.MetaRed, t.MetaOrange, t.MetaYellow, t.MetaGreen, t.MetaBlue, t.MetaPurple, t.MetaGrey,
 		t.AttentionInfo, t.AttentionWarn, t.AttentionError,
 	}
 }
@@ -125,6 +131,7 @@ var Dark = Theme{
 	NoteUser: "75", NoteAgent: "141", NoteStale: "240", PickerLabel: "245",
 	PickerLeft: "74", PickerRight: "179",
 	NoteGroup1: "#E06C75", NoteGroup2: "#E5C07B", NoteGroup3: "#98C379", NoteGroup4: "#56B6C2", NoteGroup5: "#C678DD", NoteGroup6: "#D19A66",
+	MetaRed: "#E06C75", MetaOrange: "#E5964B", MetaYellow: "#E5C07B", MetaGreen: "#98C379", MetaBlue: "#61AFEF", MetaPurple: "#C678DD", MetaGrey: "#7F848E",
 	AttentionInfo: "24", AttentionWarn: "94", AttentionError: "89",
 	Lanes:  [7]string{"33", "208", "40", "201", "51", "220", "129"},
 	Syntax: [11]string{"", "141", "79", "222", "", "150", "215", "245", "252", "250", "180"},
@@ -151,6 +158,7 @@ var Light = Theme{
 	NoteUser: "#2F6FB8", NoteAgent: "#6B4FBB", NoteStale: "#8A8F8A", PickerLabel: "#5F6570",
 	PickerLeft: "#2F6FB8", PickerRight: "#A0682A",
 	NoteGroup1: "#B23A48", NoteGroup2: "#A07400", NoteGroup3: "#3E7D2E", NoteGroup4: "#1F7A8C", NoteGroup5: "#7D3C98", NoteGroup6: "#B35C1E",
+	MetaRed: "#B23A48", MetaOrange: "#B35C1E", MetaYellow: "#A07400", MetaGreen: "#3E7D2E", MetaBlue: "#2F6FB8", MetaPurple: "#7D3C98", MetaGrey: "#6B6F73",
 	AttentionInfo: "#D3E2F2", AttentionWarn: "#F2E8CC", AttentionError: "#EFD3DC",
 	Lanes:  [7]string{"#2F6FB8", "#C7641B", "#3E8E41", "#6B4FBB", "#2A8C8C", "#B08000", "#C0392B"},
 	Syntax: [11]string{"", "#6B4FBB", "#2A8C8C", "#B08000", "", "#3E8E41", "#C7641B", "#8A8F8A", "#33393F", "#5F6570", "#A0682A"},

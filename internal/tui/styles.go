@@ -95,6 +95,11 @@ type styles struct {
 
 	lanes  [7]lipgloss.Color
 	syntax [11]string
+
+	// note_meta.go: the seven meta colours (index = metaColours order) and
+	// the text a filled badge wears over them.
+	metaFg     [7]lipgloss.Color
+	metaFillFg lipgloss.Color
 }
 
 // legacy is the pre-theme literal for each role: what `terminal` renders.
@@ -110,6 +115,9 @@ var legacy = theme.Theme{
 	NoteUser: "75", NoteAgent: "141", NoteStale: "240", PickerLabel: "245",
 	PickerLeft: "74", PickerRight: "179",
 	NoteGroup1: "167", NoteGroup2: "179", NoteGroup3: "107", NoteGroup4: "73", NoteGroup5: "140", NoteGroup6: "173",
+	// ANSI 16 where one exists; orange and grey have none, so the 256-cube
+	// entries this table already uses elsewhere.
+	MetaRed: "9", MetaOrange: "208", MetaYellow: "11", MetaGreen: "10", MetaBlue: "12", MetaPurple: "13", MetaGrey: "245",
 	AttentionInfo: "24", AttentionWarn: "94", AttentionError: "89",
 	Lanes:  [7]string{"33", "208", "40", "201", "51", "220", "129"},
 	Syntax: [11]string{"", "141", "79", "222", "", "150", "215", "245", "252", "250", "180"},
@@ -188,6 +196,14 @@ func buildStyles(th theme.Theme) *styles {
 	} {
 		s.noteGroups[i] = ns().Foreground(pick(c[0], c[1]))
 	}
+	for i, c := range [7][2]string{
+		{th.MetaRed, legacy.MetaRed}, {th.MetaOrange, legacy.MetaOrange}, {th.MetaYellow, legacy.MetaYellow},
+		{th.MetaGreen, legacy.MetaGreen}, {th.MetaBlue, legacy.MetaBlue}, {th.MetaPurple, legacy.MetaPurple},
+		{th.MetaGrey, legacy.MetaGrey},
+	} {
+		s.metaFg[i] = pick(c[0], c[1])
+	}
+	s.metaFillFg = pick(th.Bg, "0")
 	s.noteSummary = ns().Bold(true).Foreground(bright)
 	s.noteBody = ns().Foreground(muted)
 	s.noteDim = ns().Foreground(dim)
@@ -242,6 +258,9 @@ func (s *styles) syntaxColor(c syntax.Class) string {
 func (s *styles) syntaxStyle(base lipgloss.Style, c syntax.Class) lipgloss.Style {
 	if c >= mdStrong && c < mdClassEnd {
 		return s.mdStyle(base, c)
+	}
+	if c >= metaClassStart && c < metaClassEnd {
+		return s.metaStyle(base, c)
 	}
 	if col := s.syntaxColor(c); col != "" {
 		return base.Foreground(lipgloss.Color(col))

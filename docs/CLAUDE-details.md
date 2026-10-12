@@ -7143,6 +7143,74 @@ file and remark level; nearer replaces farther key by key
 - Wire: `WireNote.Meta` + `WireNote.Display` (the `notemeta.Resolved`,
   nil when empty); `ToWireNoteIn(r, root)` for replies.
 
+### Note meta in the TUI (plan 2, 2026-10-12)
+
+- ONE paint mechanism: 14 meta pseudo-classes in the `syntax.Class` space
+  (`metaClassStart` = 200; 7 colours × text/filled), resolved by
+  `styles.syntaxStyle` → `metaStyle` (filled = colour background, theme `bg`
+  as text). Any `cls` mask paints badges: note box rows (`noteLine.badges`
+  /`badgeCls`, a reply's badge row via `noteLine.cls`), file rows, Other
+  notes rows, the send panel's opened row. A reverse-video cursor row drops
+  the mask (renderWindow rule) — badges go plain there.
+- Texts: `badgeRun` (filled chip = one column of fill each side; two text
+  badges two spaces apart; the marker two), `metaLineTexts`,
+  `metaDetailTexts`, `metaCountsText` / `metaCountsRun`; agent values are
+  verbatim, only the built-in status values translate (`metaWord`).
+- Box: line rows after the top blank, details rows after the note's body;
+  every row wears `metaFrame` (the root's `Resolved.Frame`, ignored when
+  stale). Title fit (`fitNoteTitle`): whole → path elided (≥ 8 cols) → words
+  cut → badges cut; badges and words joined by `metaTitleSep` (" · "). A
+  title with no badges keeps the old single-Render bytes.
+- Review view: header counts = `domain.ReviewMetaCounts(r)` (pure, every
+  remark, Added included, moved remarks skipped) on their own line under the
+  meta line (`filesCountsLine`, counted in `filesChromeLines` /
+  `filesPageRows`); file-row tails = `ReviewFileMetaCounts` (only the remarks
+  `reviewSplit` places — what ◆N counts), shown only while they fit in
+  cutoff mode. Both re-read after a Mark. Title fit: when the path elided to
+  8 columns still does not fit, the words BEFORE it are cut first. `ReviewOtherNote.Meta`, `SendCandidate.Meta`,
+  `agentdocs.Note.Added` (remark boxes in the overview split).
+- Mark (`note_mark.go`): `.` menu row `note-mark` → decision modal
+  (options `agreed disagreed deferred clear Cancel`, translated in
+  `optionDisplayName`) → `SetNoteMeta(id, identity name, status=…)` /
+  `UnsetNoteMeta`; never on a forge thread; reload through
+  `noteMutatedMsg`.
+- Newer notes format: `preflight.NewerLocal{Store}` reads
+  `Probes.Newer` (machine-local, from `FileStore.NewerParts`), Optional
+  non-silent feature `note-edits` → the standard feature-disabled notice.
+  `FeatureNotes` stays satisfied (notes stay readable).
+
+### Note meta in gg web (plan 3, 2026-10-12)
+
+- **One builder:** `static/notemeta.js`, import-free and node-tested.
+  - It turns the server's resolved display (`notemeta.Resolved`) into HTML: chips, marker, line rows, details rows, counts, the severity colour, and `fitNoteTitle`, a port of the TUI's.
+  - `files.js`, `viewer.js`, `reviews.js` and `prsendpanel.js` only call it.
+  - Colour names pass a 7-entry whitelist before they become a class (`mc-<c>`, `mf-<c>`).
+  - Every key, value, glyph and problem is escaped.
+- **Wire:**
+  - `WireNote.display` was already there.
+  - Plan 3 added `display` to the viewer's `noteRow` (temporary notes via `notemeta.Resolve`; remarks via `domain.NoteMeta`), the send-panel candidate rows and the review's `other` rows. Those rows' existing values stay strings.
+  - `/api/review/{id}` gained `meta_counts` (`domain.ReviewMetaCounts`, every remark) and `meta_by_file` (`ReviewFileMetaCounts`, placed remarks only, matching ◆N).
+- **Title fit:**
+  - `noteTitleParts` (notebox.js) splits the title into words / place / tail. Only the path is elided, by core's `elidePath`.
+  - The budget comes from `#diff-body`'s width (half of it in the split layout) at the title's .92em.
+  - 0 = not laid out yet: the title renders whole and the CSS ellipsis backstops.
+  - The `" · "` after the chips counts toward the width.
+- **Dim wins over the frame by source order:**
+  - The `.notebox.mf-*` rules sit BEFORE `.notebox.stale/.outdated`.
+  - `.vnote.mf-*` sit after `.vnote.remark` and before nothing that dims by colour (`.vnote.outdated` dims by opacity).
+  - `style_groups_test.go` pins both the order and the `--meta-*` tokens (the TUI's Dark roles).
+  - The web has ONE dark palette, so it has no light tokens.
+- **Mark:** `POST /api/notes/mark {id, status}`, where status is agreed | disagreed | deferred | "" (clear).
+  - Each status is the `status` key, written by the page's identity name.
+  - Refusals: 409 for a forge id, 400 for any other word, 409 for `domain.ErrNotesNewer` (the web may not import `internal/notes`).
+  - The right-click menu in `files.js` marks the clicked part (root or reply).
+  - It is hidden on forge threads and while `featureDisabled("note-edits")`.
+  - `refreshReviewMeta()` re-reads an open review's counts after a mark.
+- **Notice:**
+  - `notemeta_notice.go` registers `feature_disabled_note-edits`, the TUI's id, so one dismissal covers both frontends.
+  - `gatedFeatures` lists `note-edits`.
+- **Node harness:** `noteboxInline` (notesjs_test.go) inlines `notemeta.js` plus a 0-room `noteTitleRoom` stub for the node painters.
+
 ## Permanent overviews (2026-10-12)
 
 Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.

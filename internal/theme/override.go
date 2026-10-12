@@ -65,6 +65,14 @@ type Override struct {
 	NoteGroup5 string `toml:"note_group_5"`
 	NoteGroup6 string `toml:"note_group_6"`
 
+	MetaRed    string `toml:"meta_red"`
+	MetaOrange string `toml:"meta_orange"`
+	MetaYellow string `toml:"meta_yellow"`
+	MetaGreen  string `toml:"meta_green"`
+	MetaBlue   string `toml:"meta_blue"`
+	MetaPurple string `toml:"meta_purple"`
+	MetaGrey   string `toml:"meta_grey"`
+
 	AttentionInfo  string `toml:"attention_info_bg"`
 	AttentionWarn  string `toml:"attention_warn_bg"`
 	AttentionError string `toml:"attention_error_bg"`
@@ -141,6 +149,13 @@ var roleFields = []roleField{
 	{"note_group_4", "note group colour bar 4", func(t *Theme) *string { return &t.NoteGroup4 }, func(o *Override) *string { return &o.NoteGroup4 }},
 	{"note_group_5", "note group colour bar 5", func(t *Theme) *string { return &t.NoteGroup5 }, func(o *Override) *string { return &o.NoteGroup5 }},
 	{"note_group_6", "note group colour bar 6", func(t *Theme) *string { return &t.NoteGroup6 }, func(o *Override) *string { return &o.NoteGroup6 }},
+	{"meta_red", "note meta colour red (badges, the note box frame, count numbers)", func(t *Theme) *string { return &t.MetaRed }, func(o *Override) *string { return &o.MetaRed }},
+	{"meta_orange", "note meta colour orange", func(t *Theme) *string { return &t.MetaOrange }, func(o *Override) *string { return &o.MetaOrange }},
+	{"meta_yellow", "note meta colour yellow", func(t *Theme) *string { return &t.MetaYellow }, func(o *Override) *string { return &o.MetaYellow }},
+	{"meta_green", "note meta colour green", func(t *Theme) *string { return &t.MetaGreen }, func(o *Override) *string { return &o.MetaGreen }},
+	{"meta_blue", "note meta colour blue", func(t *Theme) *string { return &t.MetaBlue }, func(o *Override) *string { return &o.MetaBlue }},
+	{"meta_purple", "note meta colour purple", func(t *Theme) *string { return &t.MetaPurple }, func(o *Override) *string { return &o.MetaPurple }},
+	{"meta_grey", "note meta colour grey", func(t *Theme) *string { return &t.MetaGrey }, func(o *Override) *string { return &o.MetaGrey }},
 
 	{"attention_info_bg", "agent attention band background, info tone (gg session highlight)", func(t *Theme) *string { return &t.AttentionInfo }, func(o *Override) *string { return &o.AttentionInfo }},
 	{"attention_warn_bg", "agent attention band background, warn tone", func(t *Theme) *string { return &t.AttentionWarn }, func(o *Override) *string { return &o.AttentionWarn }},

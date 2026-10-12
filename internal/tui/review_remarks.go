@@ -32,7 +32,8 @@ func remarkBoxes(ns []domain.ResolvedNote) []agentdocs.Note {
 	out := make([]agentdocs.Note, 0, len(ns))
 	for _, n := range ns {
 		out = append(out, agentdocs.Note{ID: n.Note.ID, Path: n.Note.Address.Path, Start: n.Range[0], End: max(n.Range[1], n.Range[0]),
-			Summary: n.Note.Summary, Rationale: n.Note.Rationale, Author: n.Note.Author})
+			Summary: n.Note.Summary, Rationale: n.Note.Rationale, Author: n.Note.Author,
+			Meta: n.Note.Meta, Display: n.Note.Display, Added: n.Note.Added})
 	}
 	return out
 }

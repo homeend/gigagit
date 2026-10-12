@@ -11,6 +11,8 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/notemeta"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // The send panel (spec §5.3, R6, R7): every unsent local comment of a pull
@@ -577,6 +579,11 @@ func (p *sendPanel) box(m Model) string {
 		}
 		rows = append(rows, row)
 		indent := strings.Repeat(" ", panelHang)
+		if open { // the opened row's one meta row (spec 2026-10-12-note-meta §6.3)
+			if run, cls := sendMetaRun(c.Meta); run != "" {
+				rows = append(rows, winRow{text: indent + run, cls: offsetCls(cls, panelHang), hang: panelHang})
+			}
+		}
 		if open && strings.TrimSpace(c.Rationale) != "" {
 			for _, l := range strings.Split(strings.TrimSpace(c.Rationale), "\n") {
 				rows = append(rows, winRow{text: indent + sanitizeLine(l), style: st().dim, hang: panelHang})
@@ -604,6 +611,21 @@ func (p *sendPanel) box(m Model) string {
 	}
 	parts = append(parts, "", hints)
 	return popupBox(innerW, strings.Join(parts, "\n"))
+}
+
+// sendMetaRun is an opened row's meta row: badges, the audience marker,
+// then each line entry. "" when the note has none.
+func sendMetaRun(res notemeta.Resolved) (string, []syntax.Class) {
+	run, cls := badgeRun(res)
+	for _, l := range metaLineTexts(res) {
+		sep := " · "
+		if run == "" {
+			sep = ""
+		}
+		run += sep + l
+		cls = append(cls, make([]syntax.Class, len([]rune(sep+l)))...)
+	}
+	return run, cls
 }
 
 // panelHang is the column an opened row's wrapped summary, its rationale

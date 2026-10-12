@@ -37,6 +37,9 @@ type Note struct {
 	// 2026-10-12-note-meta), kept in memory with the note.
 	Meta    []notemeta.KV
 	Display notemeta.Display
+	// Added is meta written onto a review remark after its agent wrote it
+	// (a mark): set only on the remark boxes a preview draws.
+	Added []notemeta.Added
 }
 
 // NoteText is what an agent writes on a temporary note.
