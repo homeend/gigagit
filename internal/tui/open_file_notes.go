@@ -22,6 +22,11 @@ import (
 // document holds them now. The errors are English protocol prose: they go
 // back to the agent that asked.
 func (d *openFile) addNote(start, end int, summary, rationale, author string) (*agentdocs.Note, error) {
+	return d.addNoteMeta(start, end, agentdocs.NoteText{Summary: summary, Rationale: rationale, Author: author})
+}
+
+// addNoteMeta is addNote with the note's meta and display declaration.
+func (d *openFile) addNoteMeta(start, end int, t agentdocs.NoteText) (*agentdocs.Note, error) {
 	switch {
 	case d.src.kind != srcWorktree:
 		return nil, errors.New("temporary notes go on working-tree files only")
@@ -30,7 +35,7 @@ func (d *openFile) addNote(start, end int, summary, rationale, author string) (*
 	case d.docs == nil:
 		return nil, fmt.Errorf("%s is not an open file", d.path) // never: note_add registers first
 	}
-	n, err := d.docs.AddNote(d.root, d.path, rawOf(d.p.lines), start, end, summary, rationale, author)
+	n, err := d.docs.AddNoteMeta(d.root, d.path, rawOf(d.p.lines), start, end, t)
 	if err != nil {
 		return nil, err
 	}

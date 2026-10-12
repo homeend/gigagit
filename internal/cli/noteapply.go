@@ -101,6 +101,9 @@ func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin 
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
+	for _, p := range batch.Problems {
+		fmt.Fprintf(stderr, "note apply: %s (ignored)\n", p)
+	}
 	// Unanchored prose has nowhere to live in gg's model: echo it so the human
 	// still sees it, and store only what is anchored.
 	for _, c := range batch.Contexts {

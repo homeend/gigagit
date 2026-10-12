@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -17,6 +18,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // wireNoteOutputSchema is a hand-supplied, permissive object schema for the
@@ -67,17 +69,23 @@ type notesOut struct {
 
 type noteAddIn struct {
 	noteTargetIn
-	Hunk      int    `json:"hunk,omitempty"`
-	NewLine   int    `json:"new_line,omitempty"`
-	OldLine   int    `json:"old_line,omitempty"`
-	Summary   string `json:"summary"`
-	Rationale string `json:"rationale,omitempty"`
-	Author    string `json:"author,omitempty"`
+	Hunk      int               `json:"hunk,omitempty"`
+	NewLine   int               `json:"new_line,omitempty"`
+	OldLine   int               `json:"old_line,omitempty"`
+	Summary   string            `json:"summary"`
+	Rationale string            `json:"rationale,omitempty"`
+	Author    string            `json:"author,omitempty"`
+	Meta      map[string]string `json:"meta,omitempty" jsonschema:"free key/values (suggested: kind, severity, intent, audience); see the review skills"`
+	// Display is typed any, as gg_notes_apply's batch is: the SDK's schema
+	// inference has no case for json.RawMessage. Re-marshalled for ParseDisplay.
+	Display any `json:"display,omitempty" jsonschema:"how the meta keys are shown: {key: {show: [badge|frame|count|line], values: {value: {color, glyph, level, audience}}}}"`
 }
 
 type noteOut struct {
 	Repo RepoInfo        `json:"repo"`
 	Note domain.WireNote `json:"note"`
+	// Warning names the meta / display parts that were dropped.
+	Warning string `json:"warning,omitempty"`
 }
 
 type notesApplyIn struct {
@@ -96,17 +104,72 @@ type noteRmIn struct {
 }
 
 type noteReplyIn struct {
-	ID        string `json:"id" jsonschema:"the note id or review remark id (review:<id>:<n>) to reply to"`
-	Summary   string `json:"summary" jsonschema:"the reply"`
-	Rationale string `json:"rationale,omitempty" jsonschema:"the why, optional"`
-	Link      string `json:"link,omitempty" jsonschema:"a gg:// link or a commit the reply points at, e.g. the fix"`
-	Author    string `json:"author,omitempty" jsonschema:"author label (default: $GG_AGENT, else agent)"`
+	ID        string            `json:"id" jsonschema:"the note id or review remark id (review:<id>:<n>) to reply to"`
+	Summary   string            `json:"summary" jsonschema:"the reply"`
+	Rationale string            `json:"rationale,omitempty" jsonschema:"the why, optional"`
+	Link      string            `json:"link,omitempty" jsonschema:"a gg:// link or a commit the reply points at, e.g. the fix"`
+	Author    string            `json:"author,omitempty" jsonschema:"author label (default: $GG_AGENT, else agent)"`
+	Meta      map[string]string `json:"meta,omitempty" jsonschema:"free key/values (suggested: kind, severity, intent, audience); see the review skills"`
+	// Display is typed any, as gg_notes_apply's batch is: the SDK's schema
+	// inference has no case for json.RawMessage. Re-marshalled for ParseDisplay.
+	Display any `json:"display,omitempty" jsonschema:"how the meta keys are shown: {key: {show: [badge|frame|count|line], values: {value: {color, glyph, level, audience}}}}"`
 }
 
 type noteResolveIn struct {
 	ID       string `json:"id" jsonschema:"any id of the thread: its root, a reply, or a review remark (review:<id>:<n>)"`
 	Resolved bool   `json:"resolved" jsonschema:"true resolves the thread, false reopens it"`
 	Author   string `json:"author,omitempty" jsonschema:"who resolves (default: $GG_AGENT, else agent)"`
+}
+
+type noteMetaIn struct {
+	ID      string            `json:"id" jsonschema:"a stored note id or a review remark id review:<id>:<n>"`
+	Action  string            `json:"action" jsonschema:"set, unset or display"`
+	Meta    map[string]string `json:"meta,omitempty" jsonschema:"set: the key/values"`
+	Keys    []string          `json:"keys,omitempty" jsonschema:"unset: the keys"`
+	Display any               `json:"display,omitempty" jsonschema:"display: the declaration (empty clears)"`
+	Author  string            `json:"author,omitempty" jsonschema:"who writes (default: $GG_AGENT, else agent)"`
+}
+
+type noteMetaOut struct {
+	Repo     RepoInfo `json:"repo"`
+	OK       bool     `json:"ok"`
+	Problems []string `json:"problems,omitempty"`
+}
+
+// metaFromTool turns a tool's meta object and display value into gg's
+// types: keys sorted, limits checked; a malformed display is the tool's
+// error, an unknown field or a dropped entry a problem.
+func metaFromTool(m map[string]string, display any) ([]notemeta.KV, notemeta.Display, []notemeta.Problem, error) {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var kv []notemeta.KV
+	for _, k := range keys {
+		kv = append(kv, notemeta.KV{Key: k, Value: m[k]})
+	}
+	kv, probs := notemeta.CheckMeta(kv)
+	if display == nil {
+		return kv, nil, probs, nil
+	}
+	raw, err := json.Marshal(display)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("display: %v", err)
+	}
+	d, dprobs, err := notemeta.ParseDisplay(raw)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return kv, d, append(probs, dprobs...), nil
+}
+
+func problemText(ps []notemeta.Problem) string {
+	var out []string
+	for _, p := range ps {
+		out = append(out, string(p))
+	}
+	return strings.Join(out, "; ")
 }
 
 type okOut struct {
@@ -242,14 +305,19 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 			}
 			addr, side, rng = a, sd, rg
 		}
+		kv, disp, probs, merr := metaFromTool(in.Meta, in.Display)
+		if merr != nil {
+			return nil, out, merr
+		}
 		author := domain.NoteAuthorDefault(in.Author)
 		stored, err := s.svc.NoteAdd(ctx, model.Note{
 			Source: model.NoteSourceAgent, Author: author, Address: addr, Preview: preview,
-			Side: side, Range: rng, Summary: in.Summary, Rationale: in.Rationale,
+			Side: side, Range: rng, Summary: in.Summary, Rationale: in.Rationale, Meta: kv, Display: disp,
 		})
 		if err != nil {
 			return nil, out, err
 		}
+		out.Warning = problemText(probs)
 		out.Note = domain.ToWireNote(domain.ResolvedNote{Note: stored, Status: model.NoteActive, Range: stored.Range})
 		s.notifyNotesChanged()
 		return nil, out, nil
@@ -319,6 +387,12 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 			out.Skipped = skipped
 			out.Warning = fmt.Sprintf("skipped %d old-side annotation(s) — notes in a preview anchor on the new side", skipped)
 		}
+		if t := problemText(batch.Problems); t != "" {
+			if out.Warning != "" {
+				out.Warning += "; "
+			}
+			out.Warning += t
+		}
 		// Only wake the window when there is something new to show: a batch
 		// that stored nothing (contexts only) would otherwise leave a stray
 		// wire command.
@@ -343,12 +417,62 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		if in.ID == "" || strings.TrimSpace(in.Summary) == "" {
 			return nil, out, fmt.Errorf("id and summary are required")
 		}
+		kv, disp, probs, merr := metaFromTool(in.Meta, in.Display)
+		if merr != nil {
+			return nil, out, merr
+		}
 		n, err := s.svc.NoteReply(ctx, in.ID, model.Note{Source: model.NoteSourceAgent, Author: domain.NoteAuthorDefault(in.Author),
-			Summary: strings.TrimSpace(in.Summary), Rationale: strings.TrimSpace(in.Rationale), Link: in.Link})
+			Summary: strings.TrimSpace(in.Summary), Rationale: strings.TrimSpace(in.Rationale), Link: in.Link,
+			Meta: kv, Display: disp})
 		if err != nil {
 			return nil, out, err
 		}
+		out.Warning = problemText(probs)
 		out.Note = domain.ToWireNote(domain.ResolvedNote{Note: n, Status: model.NoteActive, Range: n.Range})
+		s.notifyNotesChanged()
+		return nil, out, nil
+	})
+
+	sdk.AddTool(srv, &sdk.Tool{
+		Name: "gg_note_meta",
+		Description: "Set or unset meta on a gg note (a stored note id or a review remark id review:<id>:<n>), or replace a stored note's display declaration. " +
+			"Meta is a glance aid for the reader: it never sends, resolves or blocks anything. MUTATES gg's note store.",
+		Annotations: mutatingAnnotations(),
+	}, func(ctx context.Context, _ *sdk.CallToolRequest, in noteMetaIn) (*sdk.CallToolResult, noteMetaOut, error) {
+		out := noteMetaOut{Repo: s.repoInfo()}
+		if err := s.repoCheck(); err != nil {
+			return nil, out, err
+		}
+		by := domain.NoteAuthorDefault(in.Author)
+		var err error
+		switch in.Action {
+		case "set":
+			kv, _, probs, merr := metaFromTool(in.Meta, nil)
+			if merr != nil {
+				return nil, out, merr
+			}
+			for _, p := range probs {
+				out.Problems = append(out.Problems, string(p))
+			}
+			_, err = s.svc.SetNoteMeta(ctx, in.ID, by, kv)
+		case "unset":
+			err = s.svc.UnsetNoteMeta(ctx, in.ID, by, in.Keys)
+		case "display":
+			_, d, probs, merr := metaFromTool(nil, in.Display)
+			if merr != nil {
+				return nil, out, merr
+			}
+			for _, p := range probs {
+				out.Problems = append(out.Problems, string(p))
+			}
+			err = s.svc.SetNoteDisplay(ctx, in.ID, d)
+		default:
+			return nil, out, fmt.Errorf(`action must be "set", "unset" or "display"`)
+		}
+		if err != nil {
+			return nil, out, err
+		}
+		out.OK = true
 		s.notifyNotesChanged()
 		return nil, out, nil
 	})

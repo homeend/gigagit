@@ -7,6 +7,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -95,7 +96,9 @@ func (s *Server) steerNoteAdd(ctx context.Context, c steer.Command) steer.Reply 
 		added bool
 	)
 	s.listDocs(wt, func() string {
-		if n, err = s.docs.AddNote(root, path, lines, c.Start, c.End, c.Summary, c.Rationale, c.Author); err != nil {
+		disp, _, _ := notemeta.ParseDisplay(c.Display) // the CLI refused a malformed one
+		if n, err = s.docs.AddNoteMeta(root, path, lines, c.Start, c.End, agentdocs.NoteText{Summary: c.Summary,
+			Rationale: c.Rationale, Author: c.Author, Meta: agentdocs.MetaFromMap(c.Meta), Display: disp}); err != nil {
 			return "" // before the list: a refused note lists nothing
 		}
 		if f, ev, added = s.ofs.ensureOpen(wt, k, true); added {

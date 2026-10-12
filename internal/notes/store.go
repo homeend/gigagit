@@ -25,6 +25,10 @@ var ErrNotFound = errors.New("notes: not found")
 // delete never races a reply written between two calls.
 var ErrRemoveRecord = errors.New("notes: remove this record")
 
+// ErrNewerFormat refuses a write to a notes file a newer gg wrote: this
+// build would drop the fields it does not know.
+var ErrNewerFormat = errors.New("this notes file was written by a newer gg; upgrade gg to change it")
+
 // Now is the clock seam (the snapshotNow pattern): tests override it to make
 // expiry deterministic. Package-level, so tests that set it run SERIALLY.
 var Now = clock.Now

@@ -30,7 +30,7 @@ const notesSweepBudget = 2 * time.Second
 // cmdNote dispatches `gg note <add|show|reply|rm|list|clear|apply> ...`.
 func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg note <add|show|reply|resolve|unresolve|rm|list|clear|apply> ...")
+		fmt.Fprintln(stderr, "usage: gg note <add|show|reply|resolve|unresolve|meta|rm|list|clear|apply> ...")
 		return 2
 	}
 	sub, rest := args[0], args[1:]
@@ -39,7 +39,7 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	}
 	// A NOTE link (?note=<id>) in place of an id: for reply / resolve /
 	// unresolve it names the thread and its checkout — the id replaces it.
-	if len(rest) > 0 && isLinkArg(rest[0]) && (sub == "reply" || sub == "resolve" || sub == "unresolve") {
+	if len(rest) > 0 && isLinkArg(rest[0]) && (sub == "reply" || sub == "resolve" || sub == "unresolve" || sub == "meta") {
 		if l, err := model.ParseLink(rest[0]); err == nil && l.Hint.Kind == model.NoteHintKind {
 			res, err := resolveLinkArg(context.Background(), svc, rest[0], linkShapes{Ref: true, Pair: true}, "note "+sub)
 			if err != nil {
@@ -78,6 +78,8 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 			return noteReply(svc, rest, stdout, stderr)
 		case "resolve", "unresolve":
 			return noteResolve(svc, sub == "resolve", rest, stdout, stderr)
+		case "meta":
+			return noteMetaCmd(svc, rest, stdout, stderr)
 		case "rm":
 			return noteRemove(svc, rest, stdout, stderr)
 		case "list":
@@ -127,7 +129,7 @@ func noteLinkShape(sub string, res domain.Resolved) string {
 		if !hasPath && res.Preview == nil && res.Pair == nil {
 			return "that link names a repository, not a file"
 		}
-	case "reply", "rm", "resolve", "unresolve":
+	case "reply", "rm", "resolve", "unresolve", "meta":
 		if hasPath || hasTarget {
 			return "pass the repository's link (gg://<repo> or gg:///abs/path), not a file or commit: the note id names the note"
 		}
@@ -165,7 +167,7 @@ func noteIDExit(sub, id string, svc *domain.Service, err error, stderr io.Writer
 
 // noteMutations are the sub-commands that CHANGE the store; only they are worth
 // waking a live session for. `list` reads.
-var noteMutations = map[string]bool{"add": true, "reply": true, "resolve": true, "unresolve": true, "rm": true, "clear": true, "apply": true}
+var noteMutations = map[string]bool{"add": true, "reply": true, "resolve": true, "unresolve": true, "meta": true, "rm": true, "clear": true, "apply": true}
 
 // withNotesHousekeeping applies [notes] from the effective config, runs fn, and
 // only THEN starts and briefly waits for the sweep — the caller's work must
@@ -307,6 +309,9 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 	author := fs.String("author", "", "author label (default: $GG_AGENT, else agent)")
 	source := fs.String("source", "", "user or agent (default agent)")
 	asJSON := fs.Bool("json", false, "print the created note as JSON")
+	var meta metaFlag
+	fs.Var(&meta, "meta", "meta key=value (repeatable)")
+	display := fs.String("display", "", "display declaration: JSON or @file")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -322,6 +327,14 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 	}
 	if strings.TrimSpace(*summary) == "" {
 		fmt.Fprintln(stderr, "note add: --summary is required")
+		return 2
+	}
+	kv, ok := checkedMeta("note add", meta, stderr)
+	if !ok {
+		return 2
+	}
+	disp, ok := displayArg("note add", *display, stderr)
+	if !ok {
 		return 2
 	}
 	src, err := noteSourceValue(*source)
@@ -465,6 +478,7 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 		Source: src, Author: noteAuthorDefault(*author), Address: addr, Preview: preview,
 		Side: side, Range: rng,
 		Summary: strings.TrimSpace(*summary), Rationale: strings.TrimSpace(*rationale),
+		Meta: kv, Display: disp,
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
@@ -494,6 +508,9 @@ func noteReply(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 	source := fs.String("source", "", "user or agent (default agent)")
 	link := fs.String("link", "", "a gg:// link or a commit the reply points at (e.g. the fix)")
 	asJSON := fs.Bool("json", false, "print the created reply as JSON")
+	var meta metaFlag
+	fs.Var(&meta, "meta", "meta key=value (repeatable)")
+	display := fs.String("display", "", "display declaration: JSON or @file")
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
@@ -514,12 +531,20 @@ func noteReply(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, "note reply:", err)
 		return 2
 	}
+	kv, ok := checkedMeta("note reply", meta, stderr)
+	if !ok {
+		return 2
+	}
+	disp, ok := displayArg("note reply", *display, stderr)
+	if !ok {
+		return 2
+	}
 	// The reply's anchor is the parent's: domain copies address, side, range and
 	// fingerprint, and flattens a reply-to-a-reply onto the thread root.
 	stored, err := svc.NoteReply(context.Background(), id, model.Note{
 		Source: src, Author: noteAuthorDefault(*author),
 		Summary: strings.TrimSpace(*summary), Rationale: strings.TrimSpace(*rationale),
-		Link: strings.TrimSpace(*link),
+		Link: strings.TrimSpace(*link), Meta: kv, Display: disp,
 	})
 	if errors.Is(err, domain.ErrNoteLink) {
 		fmt.Fprintln(stderr, "note reply: --link:", err)
@@ -694,9 +719,10 @@ func resolvedNotesFor(ctx context.Context, svc *domain.Service, file string, cac
 //
 // status is the word printed for r.Status: the raw one, or the preview's
 // ("outdated" for stale, spec §1.2 — the STORE is unchanged, only the word).
-func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool, status string) {
+func renderNoteLine(w io.Writer, r domain.ResolvedNote, root *model.Note, status string) {
+	defer printMetaLines(w, r, root)
 	src := noteSourceToken(r)
-	if indent {
+	if root != nil {
 		fmt.Fprintf(w, "  %s %s reply  %s\n", r.Note.ID, src, r.Note.Summary)
 		return
 	}
@@ -875,9 +901,9 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 		return 0
 	}
 	for _, r := range kept {
-		renderNoteLine(stdout, r, false, noteStatusWord(r, previewWords))
+		renderNoteLine(stdout, r, nil, noteStatusWord(r, previewWords))
 		for _, rep := range r.Replies {
-			renderNoteLine(stdout, rep, true, noteStatusWord(rep, previewWords))
+			renderNoteLine(stdout, rep, &r.Note, noteStatusWord(rep, previewWords))
 		}
 	}
 	return 0
@@ -1005,4 +1031,16 @@ func noteClear(svc *domain.Service, link *domain.Resolved, args []string, stdout
 	}
 	fmt.Fprintf(stdout, "removed %d notes\n", removed)
 	return 0
+}
+
+// printMetaLines prints a note's resolved meta under its line (4 spaces;
+// 6 under a reply, whose meta shows through its root's declaration).
+func printMetaLines(w io.Writer, r domain.ResolvedNote, root *model.Note) {
+	pad := "    "
+	if root != nil {
+		pad = "      "
+	}
+	for _, l := range noteMetaText(domain.NoteMeta(r.Note, root)) {
+		fmt.Fprintln(w, pad+l)
+	}
 }

@@ -84,7 +84,7 @@ func (s *Service) PlanNoteBatchIn(ctx context.Context, b notebatch.Batch, bt Not
 		n := model.Note{
 			Source: model.NoteSourceAgent, Author: who,
 			Summary: it.Summary, Rationale: it.Rationale,
-			Tags: it.Tags, Confidence: it.Confidence, Link: it.Link,
+			Tags: it.Tags, Meta: it.Meta, Display: it.Display, Link: it.Link,
 		}
 		if it.ReplyTo != "" {
 			// Validate the parent NOW: an unknown id must reject the batch

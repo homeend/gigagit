@@ -123,6 +123,10 @@ type Command struct {
 	Summary   string `json:"summary,omitempty"`
 	Rationale string `json:"rationale,omitempty"`
 	Author    string `json:"author,omitempty"`
+	// Meta and Display are note_add's free meta and its display
+	// declaration (raw JSON: steer knows no gg type).
+	Meta    map[string]string `json:"meta,omitempty"`
+	Display json.RawMessage   `json:"display,omitempty"`
 	// Title and Text are an overview's (overview_add, overview_set): a one-line
 	// name and its markdown. FileID names the overview for set/show/rm.
 	Title string `json:"title,omitempty"`
@@ -191,6 +195,10 @@ type FileNote struct {
 	Author    string   `json:"author,omitempty"`
 	Outdated  bool     `json:"outdated,omitempty"` // its lines are gone from the file
 	Text      []string `json:"text,omitempty"`     // note_show only: the lines it sits on
+	// Meta is the note's free meta; Display what to show for it (the
+	// resolved display, raw JSON).
+	Meta    map[string]string `json:"meta,omitempty"`
+	Display json.RawMessage   `json:"display,omitempty"`
 }
 
 // OpenFile is one file open in a live TUI: a row of `gg session files` and of

@@ -74,6 +74,9 @@ func sessionNoteAdd(dir sessDir, svc *domain.Service, args []string, stdout, std
 	rationale := fs.String("rationale", "", "the longer explanation")
 	author := fs.String("author", "", "who is speaking (default: agent)")
 	asJSON := fs.Bool("json", false, "print the new note as JSON")
+	var meta metaFlag
+	fs.Var(&meta, "meta", "meta key=value (repeatable)")
+	display := fs.String("display", "", "display declaration: JSON or @file")
 	pos, err := parseSteerFlags(fs, args)
 	if err != nil {
 		return 2
@@ -103,9 +106,26 @@ func sessionNoteAdd(dir sessDir, svc *domain.Service, args []string, stdout, std
 		fmt.Fprintln(stderr, "session note add: --summary is required")
 		return 2
 	}
+	kv, ok := checkedMeta("session note add", meta, stderr)
+	if !ok {
+		return 2
+	}
+	disp, ok := displayArg("session note add", *display, stderr)
+	if !ok {
+		return 2
+	}
 	id, path := fileTarget(mt[1])
 	c := steer.Command{Cmd: "note_add", FileID: id, File: path, Start: start, End: end,
 		Summary: *summary, Rationale: *rationale, Author: *author}
+	if len(kv) > 0 {
+		c.Meta = map[string]string{}
+		for _, e := range kv {
+			c.Meta[e.Key] = e.Value
+		}
+	}
+	if len(disp) > 0 {
+		c.Display, _ = json.Marshal(disp)
+	}
 	if svc != nil {
 		c.Worktree = callerWorktree(svc)
 	}

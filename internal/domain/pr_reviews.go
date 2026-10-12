@@ -108,9 +108,7 @@ func (s *Service) prReviewNotes(ctx context.Context, set PreviewNoteSet) map[str
 				n := model.Note{ID: fmt.Sprintf("%s%s:%d", model.ReviewNoteIDPrefix, r.ID, i), Source: model.NoteSourceAgent,
 					Author: r.Agent, Address: model.FileAddress{State: model.StateCommitted, Commit: set.Tip, Path: path},
 					Side: side, Range: rng, Summary: dn.Summary, Rationale: dn.Rationale, Created: r.Created, Updated: r.Updated}
-				for _, kv := range dn.Meta {
-					n.Tags = append(n.Tags, kv.Key+": "+kv.Value)
-				}
+				r.remarkMeta(&n, f, dn, fp)
 				sd := r.remarkSend(fp)
 				rn := ResolvedNote{Note: n, Status: model.NoteActive, Range: rng, Group: "review:" + r.ID, Sync: sd.State()}
 				if sd != nil {

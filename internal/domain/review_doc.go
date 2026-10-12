@@ -203,9 +203,7 @@ func reviewDocNotes(r Review, path string, addr model.FileAddress, oldLines, new
 			n := model.Note{ID: id, Source: model.NoteSourceAgent, Author: r.Agent, Address: addr,
 				Side: side, Range: dn.Range, Summary: dn.Summary, Rationale: dn.Rationale,
 				Created: r.Created, Updated: r.Updated}
-			for _, kv := range dn.Meta {
-				n.Tags = append(n.Tags, kv.Key+": "+kv.Value)
-			}
+			r.remarkMeta(&n, f, dn, fp)
 			sd := r.remarkSend(fp)
 			rn := ResolvedNote{Note: n, Status: model.NoteActive, Range: dn.Range, Resolution: th.Resolution,
 				Group: "review:" + r.ID, Sync: sd.State()}

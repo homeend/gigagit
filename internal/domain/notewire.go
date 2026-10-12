@@ -6,6 +6,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // WireNote is the JSON projection of one resolved note thread, shared by every
@@ -66,13 +67,22 @@ type WireNote struct {
 	// note is about, at the PR's tip (gg pr notes --json only).
 	Severity string   `json:"severity,omitempty"`
 	Code     []string `json:"code,omitempty"`
+	// Meta is the note's own meta; Display what to show for it (spec
+	// 2026-10-12-note-meta §4) — badges, frame, lines, counted values,
+	// semantics, added values and problems. Nil when there is nothing.
+	Meta    []notemeta.KV      `json:"meta,omitempty"`
+	Display *notemeta.Resolved `json:"display,omitempty"`
 }
 
 // ToWireNote flattens one resolved thread. Line and Range are the RESOLVED
 // anchor, not the stored one: a note that moved must render where its text is
 // now. Line stays the range END for the web page that already reads it; Range
 // carries both ends, which a multi-line hunk anchor needs.
-func ToWireNote(r ResolvedNote) WireNote {
+func ToWireNote(r ResolvedNote) WireNote { return ToWireNoteIn(r, nil) }
+
+// ToWireNoteIn is ToWireNote for a note whose thread root is root (nil for
+// a root): a reply with no declaration of its own shows through its root's.
+func ToWireNoteIn(r ResolvedNote, root *model.Note) WireNote {
 	w := WireNote{
 		ID: r.Note.ID, ParentID: r.Note.ParentID, Source: string(r.Note.Source),
 		Author: r.Note.Author, Path: r.Note.Address.Path, Rev: r.Note.Address.Commit,
@@ -100,12 +110,16 @@ func ToWireNote(r ResolvedNote) WireNote {
 	}
 	w.Link, w.Remark = r.Note.Link, r.Note.Remark
 	w.Sync, w.SendErr, w.Group = string(r.Sync), r.SendErr, r.Group
-	w.Severity = severityOf(r.Note.Tags)
+	w.Severity = severityOf(r.Note)
+	w.Meta = r.Note.Meta
+	if res := NoteMeta(r.Note, root); !res.Empty() {
+		w.Display = &res
+	}
 	if !r.Note.Created.IsZero() {
 		w.Created = r.Note.Created.UTC().Format(time.RFC3339)
 	}
 	for _, rep := range r.Replies {
-		w.Replies = append(w.Replies, ToWireNote(rep))
+		w.Replies = append(w.Replies, ToWireNoteIn(rep, &r.Note))
 	}
 	return w
 }

@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Note meta (core)
+
+### Added
+- Every note can carry free `meta` key/values and a `display` declaration
+  saying how each key is shown (badge, frame, count, line); a review
+  document declares it once for all its remarks (file and remark override).
+  `gg note add|reply --meta k=v --display <json|@file>`,
+  `gg note meta <id> set|unset|display`, the MCP `gg_note_meta` tool, meta
+  and display on `gg_note_add` / `gg_note_reply` / `gg_notes_apply` and on
+  `gg session note add`. `gg note show` / `list` print a note's meta. Meta
+  is a glance aid: it never sends, resolves or blocks anything.
+
+### Changed
+- Notes files are format 3: `key: value` tags and the confidence number
+  become meta when a file is read; a notes file written by a newer gg is
+  read-only. A re-saved review keeps the marks written on its remarks.
+
 ## Smaller Go build cache across worktrees
 
 ### Changed
