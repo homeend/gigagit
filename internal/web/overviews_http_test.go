@@ -107,3 +107,44 @@ func TestOverviewRoutesRefuseBadIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestCountsCarryOverviews(t *testing.T) {
+	t.Parallel()
+	ts, svc, id := overviewServer(t)
+	head, _, _ := svc.ResolveRev(context.Background(), "HEAD")
+	var c struct {
+		Overviews   []overviewHeadWire `json:"overviews"`
+		OverviewIDs []string           `json:"overview_ids"`
+	}
+	if code := getJSON(t, ts, "/api/notes/counts", &c); code != 200 || len(c.Overviews) != 1 ||
+		c.Overviews[0].ID != id || c.Overviews[0].Commit != strings.TrimSpace(head) || c.Overviews[0].Branch != "main" ||
+		c.Overviews[0].Title != "How f works" || len(c.OverviewIDs) != 1 || c.OverviewIDs[0] != id {
+		t.Fatalf("counts = %d %+v", code, c)
+	}
+	var all struct {
+		Commits []struct {
+			Hash      string             `json:"hash"`
+			Overviews []overviewHeadWire `json:"overviews"`
+		} `json:"commits"`
+	}
+	if code := getJSON(t, ts, "/api/notes/overview?on=some-other-branch", &all); code != 200 || len(all.Commits) != 1 || len(all.Commits[0].Overviews) != 1 {
+		t.Fatalf("all notes = %d %+v (R5: any branch)", code, all)
+	}
+}
+
+func TestRemoveOverview(t *testing.T) {
+	t.Parallel()
+	ts, _, id := overviewServer(t)
+	if code := postJSON(t, ts, "/api/overview/remove", `{"id":"`+id+`"}`, "application/json", "", nil); code != 200 {
+		t.Fatalf("remove = %d", code)
+	}
+	if code := postJSON(t, ts, "/api/overview/remove", `{"id":"`+id+`"}`, "application/json", "", nil); code != 404 {
+		t.Fatalf("remove again = %d, want 404", code)
+	}
+	if code := postJSON(t, ts, "/api/overview/remove", `{"id":"../x"}`, "application/json", "", nil); code != 400 {
+		t.Fatalf("bad id = %d, want 400", code)
+	}
+	if code := getJSON(t, ts, "/api/overview/"+id, nil); code != 404 {
+		t.Fatalf("after remove = %d", code)
+	}
+}
