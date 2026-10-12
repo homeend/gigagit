@@ -252,8 +252,8 @@ func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path
 	}
 	mine := make([]model.Note, 0, 8)
 	for _, n := range all {
-		if n.IsReviewNote() {
-			continue // a review is shown as the preview's review, never as a line note
+		if n.IsReviewNote() || n.IsOverviewNote() {
+			continue // a review / an overview is shown as itself, never as a line note
 		}
 		if n.Address.State != model.StateCommitted || n.Side != model.NoteSideNew {
 			continue

@@ -561,6 +561,9 @@ func (s *Service) loadNotesAt(ctx context.Context, addr model.FileAddress) ([]mo
 	}
 	mine := make([]model.Note, 0, len(all))
 	for _, n := range all {
+		if n.IsOverviewNote() {
+			continue // an overview is listed by gg overview, never as a note (R9)
+		}
 		if sameNoteTarget(n.Address, addr) {
 			mine = append(mine, n)
 		}
@@ -1232,6 +1235,9 @@ func (s *Service) NoteAddresses(ctx context.Context) ([]model.FileAddress, error
 func storedGroup(n model.Note) string {
 	if n.IsReviewNote() || n.IsWorkingReview() {
 		return "review:" + n.ID
+	}
+	if n.IsOverviewNote() {
+		return "overview:" + n.ID // never anyone's draft review
 	}
 	return GroupMine
 }
