@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"math"
 	"path"
 	"sort"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // filesMode is the files view's source mode — exactly one is active while the
@@ -1544,7 +1546,20 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		}
 		// A file row cuts the middle of its path, never the name (headings
 		// were pre-elided above); a review row is prose and cuts at its end.
-		wr[i] = winRow{text: prefix + text, style: st, elide: elide, elideHead: len([]rune(prefix))}
+		// A review's file row ends with its remarks' meta counts — only
+		// while they fit: they go before the path loses anything.
+		var cls []syntax.Class
+		if m.filesReview != nil && l.path != "" && !l.heading {
+			room := innerW - lipgloss.Width(prefix+text)
+			if p.mode != modeCutoff {
+				room = math.MaxInt32 // wrap and scroll show the whole row
+			}
+			if tail, tc := reviewFileCountsTail(m.filesReview, l.path, room); tail != "" {
+				cls = append(make([]syntax.Class, len([]rune(prefix+text))), tc...)
+				text += tail
+			}
+		}
+		wr[i] = winRow{text: prefix + text, style: st, elide: elide, elideHead: len([]rune(prefix)), cls: cls}
 	}
 
 	lines := make([]string, 0, contentH)

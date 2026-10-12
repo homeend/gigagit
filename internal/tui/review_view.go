@@ -7,13 +7,16 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
+	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/steer"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // The review view: a structured AI review (domain.Review.Doc) opens as the
@@ -45,6 +48,11 @@ type reviewViewState struct {
 	// older: a preview review of a tip its preview has since moved past —
 	// the header says so (R2: it still shows exactly what was reviewed).
 	older bool
+	// meta / metaByFile are the remarks' meta counts (spec
+	// 2026-10-12-note-meta §6.2): the header's plain words, each file row's
+	// compact tail.
+	meta       notemeta.Counts
+	metaByFile map[string]notemeta.Counts
 }
 
 // previewReturn is the preview a review view was opened from (its Reviews
@@ -89,8 +97,11 @@ type reviewViewMsg struct {
 	// overview is the review's stored overview resolved at the tip (nil =
 	// none, or one that could not be read: the summary still opens).
 	overview *domain.OverviewDoc
-	gen      int // the loading box it answers (reviewLoadingPopup.gen)
-	err      error
+	// meta / metaByFile: domain.ReviewMetaCounts of the review.
+	meta       notemeta.Counts
+	metaByFile map[string]notemeta.Counts
+	gen        int // the loading box it answers (reviewLoadingPopup.gen)
+	err        error
 	// land is the navigate a review link with a file (and line) carried: it
 	// is parked until the review's file list loads, then lands there. nil =
 	// open the review at its overview.
@@ -135,6 +146,7 @@ func (m Model) openReviewLanding(id, title string, back model.Commit, bp *previe
 		if out.review, out.err = svc.Review(ctx, id); out.err != nil || out.review.Doc == nil {
 			return out
 		}
+		out.meta, out.metaByFile = domain.ReviewMetaCounts(out.review)
 		out.base, out.tip, out.isRange = svc.ReviewRevs(ctx, out.review)
 		out.older = svc.ReviewOlder(ctx, out.review)
 		if out.review.Kind == domain.ReviewOnWorktree {
@@ -188,7 +200,8 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("not in gg review format — shown as text")
 		return m, tea.Batch(cmd, landFail)
 	}
-	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back, backPreview: msg.backPrev, older: msg.older, overview: msg.overview}
+	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, states: msg.states, back: msg.back, backPreview: msg.backPrev, older: msg.older, overview: msg.overview,
+		meta: msg.meta, metaByFile: msg.metaByFile}
 	// landErr answers a landing whose review could not open its files.
 	landErr := func(err error) tea.Cmd {
 		if msg.land == nil {
@@ -282,6 +295,9 @@ func reviewMetaLine(st *reviewViewState) string {
 	parts = append(parts, i18n.T("%d notes on %d files", notes, files))
 	if _, resolved := st.review.Tally(); resolved > 0 {
 		parts = append(parts, i18n.T("%d resolved", resolved))
+	}
+	if c := metaCountsText(st.meta); c != "" {
+		parts = append(parts, c)
 	}
 	return strings.Join(parts, " · ")
 }
@@ -408,6 +424,7 @@ func reviewSummaryLines(st *reviewViewState) []contentLine {
 		out = append(out, contentLine{text: ""}, contentLine{text: i18n.T("Other notes"), heading: true})
 		for _, l := range reviewOtherNoteLines(st) {
 			l.text = "  " + l.text
+			l.cls = offsetCls(l.cls, 2)
 			out = append(out, l)
 		}
 	}
@@ -439,7 +456,12 @@ func reviewOtherNoteLines(st *reviewViewState) []contentLine {
 			text += " (" + i18n.T("changed since the review") + ")"
 		}
 		text += threadSuffix(len(o.Replies), o.Resolution != nil)
-		out = append(out, contentLine{text: text, path: o.Path})
+		cl := contentLine{text: text, path: o.Path}
+		if run, cls := badgeRun(o.Meta); run != "" { // the remark's badges lead (spec §6.2)
+			cl.text = run + " " + text
+			cl.cls = append(cls, make([]syntax.Class, len([]rune(cl.text))-len(cls))...)
+		}
+		out = append(out, cl)
 	}
 	return out
 }
@@ -460,6 +482,20 @@ func threadSuffix(replies int, resolved bool) string {
 		return ""
 	}
 	return " — " + strings.Join(parts, " · ")
+}
+
+// reviewFileCountsTail is a review file row's compact meta counts ("  issue
+// 1 good 1", spec §6.2) with their mask, or "" when the file has none or they
+// would not fit in room — the counts go before the path is cut.
+func reviewFileCountsTail(st *reviewViewState, path string, room int) (string, []syntax.Class) {
+	if st == nil {
+		return "", nil
+	}
+	run, cls := metaCountsRun(st.metaByFile[path])
+	if run == "" || lipgloss.Width(run)+2 > room {
+		return "", nil
+	}
+	return "  " + run, append([]syntax.Class{0, 0}, cls...)
 }
 
 // reviewMetaText is meta as "key: value · key: value".
