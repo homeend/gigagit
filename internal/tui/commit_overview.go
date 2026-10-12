@@ -2,11 +2,13 @@ package tui
 
 import (
 	"context"
+	"errors"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // Permanent overviews in the TUI (spec 2026-10-12-permanent-overviews §9):
@@ -78,4 +80,59 @@ func (m Model) onCommitOverview(msg commitOverviewMsg) (Model, tea.Cmd) {
 	}
 	d.stepAnchor(1, rows) // the first resolved anchor is current on open
 	return m.showOverview(d)
+}
+
+// overviewHintMsg is steerNavigateOverview's lookup.
+type overviewHintMsg struct {
+	// svc is the repository the lookup ran against: a repo switch since
+	// (reRoot replaces m.svc) makes the answer stale.
+	svc   *domain.Service
+	cmd   steer.Command
+	found bool
+	err   error
+}
+
+// steerNavigateOverview opens the permanent overview a ?overview= link
+// names (gg session navigate, gg open, the # prompt). The overview is
+// looked up in the store, not the loaded counts: an agent that just saved
+// it links it at once. A gone overview opens its commit instead and says so.
+func (m Model) steerNavigateOverview(c steer.Command) (Model, tea.Cmd) {
+	svc := m.svc
+	if svc == nil {
+		return m, m.answerSteer(c, steerFail(c, "no repository is open"))
+	}
+	return m, func() tea.Msg {
+		_, err := svc.Overview(context.Background(), c.HintID)
+		if errors.Is(err, domain.ErrOverviewNotFound) {
+			return overviewHintMsg{svc: svc, cmd: c}
+		}
+		return overviewHintMsg{svc: svc, cmd: c, found: err == nil, err: err}
+	}
+}
+
+func (m Model) onOverviewHint(msg overviewHintMsg) (Model, tea.Cmd) {
+	c := msg.cmd
+	if msg.svc != m.svc {
+		return m, m.answerSteer(c, steerFail(c, "the repository changed before the overview opened"))
+	}
+	if !msg.found {
+		plain := c
+		plain.HintKind, plain.HintID = "", ""
+		nm, cmd := m.steerNavigate(plain)
+		if msg.err == nil {
+			nm.statusMsg = i18n.T("That overview no longer exists; opened its commit")
+		} else {
+			nm.statusMsg = i18n.T("overview: %s", msg.err.Error())
+		}
+		return nm, cmd
+	}
+	nm := m.steerToPanels()
+	nm, open := nm.openCommitOverview(c.HintID)
+	// Just saved behind this process: re-read the counts so its ≡ and rows
+	// show — and so the open overview is in them before a reload could
+	// judge it gone (dropGoneOverviews).
+	nm.svc.InvalidateNoteCounts()
+	var counts tea.Cmd
+	nm, counts = nm.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+	return nm, tea.Batch(open, counts, nm.answerSteer(c, steerOK(c, "opened overview "+c.HintID)))
 }
