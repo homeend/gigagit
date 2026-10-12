@@ -26,13 +26,13 @@ func TestParseReviewFullDocument(t *testing.T) {
 	if n.Side != "new" || n.Range != [2]int{3, 4} || n.Summary != "S" || n.Rationale != "R" {
 		t.Fatalf("%+v", n)
 	}
-	if got := n.Meta; len(got) != 2 || got[0] != (MetaKV{"confidence", "high"}) || got[1] != (MetaKV{"severity", "bug"}) {
+	if got := n.Meta; len(got) != 2 || got[0] != (MetaKV{Key: "confidence", Value: "high"}) || got[1] != (MetaKV{Key: "severity", Value: "bug"}) {
 		t.Fatalf("meta %+v (want sorted by key)", got)
 	}
 	if doc.Files[0].Notes[1].Side != "old" {
 		t.Fatal("oldRange must be the old side")
 	}
-	if len(doc.Meta) != 1 || doc.Meta[0] != (MetaKV{"verdict", "approve"}) {
+	if len(doc.Meta) != 1 || doc.Meta[0] != (MetaKV{Key: "verdict", Value: "approve"}) {
 		t.Fatalf("%+v", doc.Meta)
 	}
 	if notes, files := doc.NoteCount(); notes != 2 || files != 1 {
@@ -46,7 +46,7 @@ func TestParseReviewFoldsOldTagsAndConfidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := doc.Files[0].Notes[0].Meta
-	if len(m) != 2 || m[0] != (MetaKV{"confidence", "low"}) || m[1] != (MetaKV{"tags", "bug, nit"}) {
+	if len(m) != 2 || m[0] != (MetaKV{Key: "confidence", Value: "low"}) || m[1] != (MetaKV{Key: "tags", Value: "bug, nit"}) {
 		t.Fatalf("%+v", m)
 	}
 }
@@ -56,7 +56,7 @@ func TestParseReviewMetaKeyWinsOverFoldedField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m := doc.Files[0].Notes[0].Meta; len(m) != 1 || m[0] != (MetaKV{"confidence", "high"}) {
+	if m := doc.Files[0].Notes[0].Meta; len(m) != 1 || m[0] != (MetaKV{Key: "confidence", Value: "high"}) {
 		t.Fatalf("%+v", m)
 	}
 }
@@ -66,7 +66,7 @@ func TestParseReviewMetaValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []MetaKV{{"n", "3"}, {"o", `{"a":1}`}, {"ok", "true"}}
+	want := []MetaKV{{Key: "n", Value: "3"}, {Key: "o", Value: `{"a":1}`}, {Key: "ok", Value: "true"}}
 	if !reflect.DeepEqual(doc.Meta, want) {
 		t.Fatalf("%+v", doc.Meta)
 	}
