@@ -26,7 +26,7 @@ func TestNoteboxJS(t *testing.T) {
 		t.Fatal(err)
 	}
 	const runner = `
-import { noteTitle, noteAge, seedCollapsed, toggleCollapsed, setAllCollapsed } from "./notebox.mjs";
+import { noteTitle, noteTitleParts, noteAge, seedCollapsed, toggleCollapsed, setAllCollapsed } from "./notebox.mjs";
 const now = Date.parse("2026-09-20T12:00:00Z");
 const forge = { id: "forge:C1", source: "forge", author: "carol", side: "new", line: 3, status: "active",
   read_only: true, created: "2026-09-17T12:00:00Z" };
@@ -41,6 +41,19 @@ const titles = [
   noteTitle({ id: "n5", source: "user", side: "old", line: 4, range: [4, 4], status: "active" }, "a.go", false, now),
   noteTitle({ ...forge, line: 7, range: [5, 7] }, "a.go", true, now),
 ];
+const P = (n, p, pv, now) => { const x = noteTitleParts(n, p, pv, now); return x.words + x.at + x.tail; };
+const joined = [
+  P(forge, "a.go", true, now),
+  P({ ...forge, resolved: true, side: "old" }, "a.go", true, now),
+  P({ ...forge, file_level: true, line: 0, author: "" }, "b.txt", true, now),
+  P({ id: "n1", source: "agent", author: "bot", side: "new", line: 9, status: "stale" }, "a.go", false, now),
+  P({ id: "n2", source: "user", side: "old", line: 4, status: "outdated" }, "a.go", true, now),
+  P({ id: "n3", source: "user", side: "new", line: 4, status: "active" }, "a.go", false, now),
+  P({ id: "n4", source: "user", side: "new", line: 10, range: [8, 10], status: "active" }, "a.go", false, now),
+  P({ id: "n5", source: "user", side: "old", line: 4, range: [4, 4], status: "active" }, "a.go", false, now),
+  P({ ...forge, line: 7, range: [5, 7] }, "a.go", true, now),
+];
+const split3 = noteTitleParts({ id: "n3", source: "user", side: "new", line: 4, status: "active" }, "a.go", false, now);
 const ages = ["", "garbage", "2026-09-20T11:59:50Z", "2026-09-20T11:15:00Z", "2026-09-20T02:00:00Z", "2026-09-01T12:00:00Z", "2025-01-01T00:00:00Z"]
   .map((c) => noteAge(c, now));
 const notes = [{ id: "a", resolved: true, replies: [{ id: "a1", resolved: true }] }, { id: "b" }, { id: "c", resolved: true }];
@@ -49,7 +62,7 @@ const set = new Set();
 const t1 = toggleCollapsed(set, "b"), after1 = [...set], t2 = toggleCollapsed(set, "b"), after2 = [...set];
 const allOn = [...setAllCollapsed(new Set(), notes, true)].sort();
 const allOff = [...setAllCollapsed(new Set(["a", "zz"]), notes, false)];
-console.log(JSON.stringify({ titles, ages, seed: [...seed].sort(), t1, after1, t2, after2, allOn, allOff }));
+console.log(JSON.stringify({ titles, joined, split3, ages, seed: [...seed].sort(), t1, after1, t2, after2, allOn, allOff }));
 `
 	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(runner), 0o644); err != nil {
 		t.Fatal(err)
@@ -59,8 +72,9 @@ console.log(JSON.stringify({ titles, ages, seed: [...seed].sort(), t1, after1, t
 		t.Fatalf("node: %v\n%s", err, out)
 	}
 	var got struct {
-		Titles, Ages, Seed, After1, After2, AllOn, AllOff []string
-		T1, T2                                            bool
+		Titles, Joined, Ages, Seed, After1, After2, AllOn, AllOff []string
+		T1, T2                                                    bool
+		Split3                                                    struct{ Words, At, Tail string }
 	}
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("decode %s: %v", out, err)
@@ -85,6 +99,11 @@ console.log(JSON.stringify({ titles, ages, seed: [...seed].sort(), t1, after1, t
 		}
 	}
 	eq("titles", got.Titles, wantTitles)
+	// noteTitleParts is noteTitle in three parts: their join IS the title.
+	eq("joined parts", got.Joined, wantTitles)
+	if got.Split3.Words != "note · " || got.Split3.At != "a.go R4" || got.Split3.Tail != "" {
+		t.Errorf("parts of n3 = %+v", got.Split3)
+	}
 	eq("ages", got.Ages, []string{"", "", "now", "45m", "10h", "19d", "1y"})
 	eq("seed", got.Seed, []string{"a", "c"}) // roots only: a reply has no box of its own
 	if !got.T1 || got.T2 {

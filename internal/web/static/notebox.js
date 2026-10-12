@@ -33,17 +33,29 @@ export function noteMark(n, inPR) {
 // resolved flag; a stored note keeps "note" / "agent note" and the stale word
 // — "outdated" inside a merge preview, where a moved line is the expected
 // case.
-export function noteTitle(n, path, preview, nowMs) {
+// noteTitleParts is noteTitle in its three parts — the words before the
+// place, the place ("path R12"), the tail after it — so a box can fit the
+// title around the place (the TUI's fitNoteTitle). noteTitle is their join.
+export function noteTitleParts(n, path, preview, nowMs) {
   const side = n.side === "old" ? "L" : "R";
-  // A note over several lines names them (R8-10); one line is the number.
   const lines = n.range && n.range[1] > n.range[0] ? n.range[0] + "-" + n.range[1] : n.line;
   if (n.read_only) {
     const at = n.file_level ? path + " (file)" : path + " " + side + lines;
-    return ["review", n.author, noteAge(n.created, nowMs), at, n.resolved ? "resolved" : ""].filter(Boolean).join(" · ");
+    const pre = ["review", n.author, noteAge(n.created, nowMs)].filter(Boolean).join(" · ");
+    return { words: pre + " · ", at, tail: n.resolved ? " · resolved" : "" };
   }
   const stale = n.status === "stale" || n.status === "outdated";
   const word = stale ? (preview ? " (outdated)" : " (stale)") : "";
-  return (n.source === "agent" ? "agent note" : "note") + (n.author ? " · " + n.author : "") + " · " + path + " " + side + lines + word + (n.resolved ? " · resolved" : "");
+  return {
+    words: (n.source === "agent" ? "agent note" : "note") + (n.author ? " · " + n.author : "") + " · ",
+    at: path + " " + side + lines,
+    tail: word + (n.resolved ? " · resolved" : ""),
+  };
+}
+
+export function noteTitle(n, path, preview, nowMs) {
+  const p = noteTitleParts(n, path, preview, nowMs);
+  return p.words + p.at + p.tail;
 }
 
 // seedCollapsed is the collapse set a freshly opened diff starts with: the

@@ -3,6 +3,8 @@
   --accent: #6ea8fe; --sel: #2a3550; --border: #2a2e37;
   /* note groups (spec 2026-10-07 §1.3): the TUI's note_group_1..6 (Dark); style_groups_test.go pins them */
   --note-group-1: #E06C75; --note-group-2: #E5C07B; --note-group-3: #98C379; --note-group-4: #56B6C2; --note-group-5: #C678DD; --note-group-6: #D19A66;
+  /* note meta (spec 2026-10-12-note-meta §7): the TUI's meta_* roles (Dark); style_groups_test.go pins them */
+  --meta-red: #E06C75; --meta-orange: #E5964B; --meta-yellow: #E5C07B; --meta-green: #98C379; --meta-blue: #61AFEF; --meta-purple: #C678DD; --meta-grey: #7F848E;
   --add: #1f3d2b; --del: #46262a; --span-add: #2f6b41; --span-del: #8a3b42;
   --attn-info: #1e3350; --attn-warn: #3d3520; --attn-error: #43242a;
   --recent-bg: #1F3A26; /* blame's "changed within the last …" tint (the TUI's blame_recent_bg, Dark) */
@@ -1494,6 +1496,11 @@ table.diff tr.note td { background: none; padding: 4px 6px 6px; cursor: context-
 table.diff tr.note td.note-gap { cursor: default; }
 .notebox { position: relative; border: 1px solid var(--accent); border-radius: 6px; padding: 12px 12px 8px; margin-top: 8px; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
 .notebox.agent { border-color: #b48bff; }
+/* a declared frame (note meta) recolours the border; .stale/.outdated below win */
+.notebox.mf-red { border-color: var(--meta-red); } .notebox.mf-orange { border-color: var(--meta-orange); }
+.notebox.mf-yellow { border-color: var(--meta-yellow); } .notebox.mf-green { border-color: var(--meta-green); }
+.notebox.mf-blue { border-color: var(--meta-blue); } .notebox.mf-purple { border-color: var(--meta-purple); }
+.notebox.mf-grey { border-color: var(--meta-grey); }
 .notebox.stale { border-color: var(--dim); color: var(--dim); }
 .notetitle { position: absolute; top: -0.75em; left: 10px; padding: 0 6px; background: var(--bg); color: var(--accent); font-size: .92em; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }
 .notebox.agent .notetitle { color: #b48bff; }
@@ -1534,10 +1541,30 @@ table.diff tr.note.collapsed .notefold::before { content: "▸ "; }
 table.diff tr.note.collapsed .notesum,
 table.diff tr.note.collapsed .notetext,
 table.diff tr.note.collapsed .notelink,
+table.diff tr.note.collapsed .mline,
+table.diff tr.note.collapsed .mdetail,
+table.diff tr.note.collapsed .mrun,
 table.diff tr.note.collapsed .notereply { display: none; }
 table.diff tr.note.collapsed .notebox { padding: 8px 12px 2px; }
 .notesum { font-weight: bold; }
 .notetext { opacity: .8; margin-top: 2px; }
+/* note meta (spec 2026-10-12-note-meta §7): chips in the title, line and
+   details rows in the box. A filled chip is the colour as background with the
+   page's background as text; a text chip is the colour as text. */
+.mchip { white-space: pre; }
+.mc-red.ms-text { color: var(--meta-red); } .mc-red.ms-filled { background: var(--meta-red); color: var(--bg); }
+.mc-orange.ms-text { color: var(--meta-orange); } .mc-orange.ms-filled { background: var(--meta-orange); color: var(--bg); }
+.mc-yellow.ms-text { color: var(--meta-yellow); } .mc-yellow.ms-filled { background: var(--meta-yellow); color: var(--bg); }
+.mc-green.ms-text { color: var(--meta-green); } .mc-green.ms-filled { background: var(--meta-green); color: var(--bg); }
+.mc-blue.ms-text { color: var(--meta-blue); } .mc-blue.ms-filled { background: var(--meta-blue); color: var(--bg); }
+.mc-purple.ms-text { color: var(--meta-purple); } .mc-purple.ms-filled { background: var(--meta-purple); color: var(--bg); }
+.mc-grey.ms-text { color: var(--meta-grey); } .mc-grey.ms-filled { background: var(--meta-grey); color: var(--bg); }
+.maud, .msep { color: var(--dim); white-space: pre; }
+.mline, .mdetail { color: var(--dim); font-size: .92em; }
+.mdetail { margin-top: 4px; }
+.notereply .mrun { margin: 2px 0; }
+/* a stale/outdated box keeps its chips readable but dim, like the TUI */
+.notebox.stale .mchip, .notebox.outdated .mchip, .vnote.outdated .mchip { opacity: .7; }
 /* A note's link (a reply's fix): a click opens it the way # does. */
 .notelink { margin-top: 2px; color: var(--accent); cursor: pointer; overflow-wrap: anywhere; }
 .notelink:hover { text-decoration: underline; }
@@ -1734,6 +1761,14 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 /* a review's remark (spec 2026-10-11 §6): read-only, the review's colour */
 .vnote.remark { border-color: var(--dim); }
 .vnote.remark .vnote-title { color: var(--dim); }
+/* a declared frame (note meta) recolours a viewer box, a remark's too; outdated stays dimmed by opacity */
+.vnote.mf-red { border-color: var(--meta-red); }
+.vnote.mf-orange { border-color: var(--meta-orange); }
+.vnote.mf-yellow { border-color: var(--meta-yellow); }
+.vnote.mf-green { border-color: var(--meta-green); }
+.vnote.mf-blue { border-color: var(--meta-blue); }
+.vnote.mf-purple { border-color: var(--meta-purple); }
+.vnote.mf-grey { border-color: var(--meta-grey); }
 .vnote-acts { margin-top: 6px; display: flex; gap: 8px; }
 .vnote-acts button { font: inherit; font-size: .9em; color: var(--fg); background: none; border: 1px solid var(--border); border-radius: 3px; padding: 1px 8px; cursor: pointer; }
 .vnote-acts button:hover { border-color: var(--accent); color: var(--accent); }
