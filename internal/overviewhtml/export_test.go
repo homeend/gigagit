@@ -49,8 +49,8 @@ func TestSlug(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]string{
 		"Review overview: main 1a2b3c4": "review-overview-main-1a2b3c4",
-		"  ":                             "overview",
-		"Ünïcode / why?":                 "n-code-why",
+		"  ":                            "overview",
+		"Ünïcode / why?":                "n-code-why",
 	} {
 		if got := Slug(in); got != want {
 			t.Errorf("Slug(%q) = %q, want %q", in, got, want)
