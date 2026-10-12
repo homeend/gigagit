@@ -252,6 +252,9 @@ func (l branchList) Key(i int) string {
 	if r := l.ents[i].review; r != "" {
 		k += "\x00" + r
 	}
+	if o := l.ents[i].overview; o != "" {
+		k += "\x00" + o
+	}
 	return k
 }
 

@@ -19,7 +19,9 @@ import (
 type storedDeletedMsg struct {
 	id     string
 	review bool // a review, not a note thread: the status line says which
-	err    error
+	// overview: a permanent overview (confirmOverviewDelete).
+	overview bool
+	err      error
 }
 
 // reviewQuote is the one line a delete confirm quotes: who and which review.
@@ -105,11 +107,17 @@ func (m Model) onStoredDeleted(msg storedDeletedMsg) (Model, tea.Cmd) {
 	if msg.review {
 		m.statusMsg = i18n.T("deleted the review")
 	}
+	if msg.overview {
+		m.statusMsg = i18n.T("deleted the overview")
+	}
 	var cmds []tea.Cmd
 	if st := m.filesReview; st != nil && st.id == msg.id {
 		var c tea.Cmd
 		m, c = m.leaveReviewView()
 		cmds = append(cmds, c)
+	} else if msg.overview {
+		// Deleted off a PR view's Overviews row: the row goes with it.
+		m = m.dropFilesRows(func(l contentLine) bool { return l.overviewID == msg.id })
 	} else if msg.review {
 		// Deleted off a commit's Reviews row (or elsewhere while that list is
 		// open): the row goes with it.
@@ -184,6 +192,8 @@ func (m Model) allNotesDelete(p *allNotesPopup) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch r := vis[p.sel]; r.kind {
+	case anOverview:
+		return m.confirmOverviewDelete(r.overview.ID, reviewQuote(r.overview.Agent, r.overview.Title))
 	case anReview:
 		return m.confirmStoredDelete(r.review.ID, i18n.T("Delete this review?")+"\n"+reviewQuote(r.review.Agent, r.review.Summary), true)
 	case anNote:

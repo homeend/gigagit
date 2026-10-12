@@ -46,8 +46,8 @@ size = "160x40"
 [[tui.step]]
 name = "commits"
 keys = ["right"]
-screen_contains = ["✎ feature  grow a", "*feature add c", "add a b  ◆ 1"]
-screen_excludes = ["✎ *feature add c", "add c  ◆", "grow a  ◆", "✎ main"]
+screen_contains = ["✎  feature  grow a", "*feature add c", "add a b  ◆ 1"]
+screen_excludes = ["✎  *feature add c", "add c  ◆", "grow a  ◆", "✎  main"]
 
 # The tip's own view: its file, and nothing of the preview's review — no row,
 # no a.txt, no ◆ on c.txt.

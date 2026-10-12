@@ -117,7 +117,7 @@ func TestDiffNoticeTexts(t *testing.T) {
 		{domain.ReviewFileDiff{}, domain.ErrReviewNotFound, false, "the review is gone — D shows the file"},
 		{domain.ReviewFileDiff{}, errors.New("boom"), false, "could not read the diff — D shows the file"},
 	} {
-		if got := diffNoticeText(c.res, c.err, c.agent); got != c.want {
+		if got := diffNoticeText(c.res, c.err, c.agent, false); got != c.want {
 			t.Fatalf("notice(changed %v, %v, agent %v) = %q, want %q", c.res.Changed, c.err, c.agent, got, c.want)
 		}
 	}
@@ -139,5 +139,16 @@ func TestSameText(t *testing.T) {
 	t.Parallel()
 	if !sameText([]string{"a", "b"}, []string{"a", "b"}) || sameText([]string{"a"}, []string{"b"}) || sameText(nil, nil) || sameText([]string{"a"}, []string{"a", "b"}) {
 		t.Fatal("sameText: equal non-empty line lists only")
+	}
+}
+
+// A permanent overview's notices name its commit, not a review.
+func TestDiffNoticeTextsPermanentOverview(t *testing.T) {
+	t.Parallel()
+	if got := diffNoticeText(domain.ReviewFileDiff{}, nil, false, true); got != "no change to this file in the overview's commit — D shows the file" {
+		t.Fatalf("no change = %q", got)
+	}
+	if got := diffNoticeText(domain.ReviewFileDiff{}, domain.ErrOverviewNotFound, false, true); got != "the overview is gone — D shows the file" {
+		t.Fatalf("gone = %q", got)
 	}
 }

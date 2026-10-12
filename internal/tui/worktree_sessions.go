@@ -65,10 +65,12 @@ type brEntry struct {
 	br     int
 	sess   domain.SessionID
 	review string // an AI review of the branch's current tip: its note id
+	// overview is a permanent overview of the branch's current tip: its id.
+	overview string
 }
 
-// sub reports a sub-row (a session or a review), not a branch.
-func (e brEntry) sub() bool { return e.sess != "" || e.review != "" }
+// sub reports a sub-row (a session, a review or an overview), not a branch.
+func (e brEntry) sub() bool { return e.sess != "" || e.review != "" || e.overview != "" }
 
 // branchEntries is the Branches list in display order: each branch followed
 // by the sessions of its worktree (worktreePathOf — the same lookup the row's
@@ -92,6 +94,10 @@ func (m Model) branchEntries() []brEntry {
 		// The AI reviews of the branch's current tip (branch_reviews.go).
 		for _, r := range m.branchReviewHeads(b) {
 			out = append(out, brEntry{br: i, review: r.ID})
+		}
+		// The permanent overviews of the branch's current tip (commit_overview_rows.go).
+		for _, o := range m.branchOverviewHeads(b) {
+			out = append(out, brEntry{br: i, overview: o.ID})
 		}
 	}
 	return out

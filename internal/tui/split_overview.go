@@ -70,7 +70,7 @@ func (p *overviewPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "y":
 		return m, m.copyToClipboardCmd(i18n.T("copied"), d.ov.text)
 	case "r":
-		if d.ov.sel < 0 || d.src.kind == srcReviewOverview { // a stored overview has no store reference (A9)
+		if d.ov.sel < 0 || d.src.kind.storedOverview() { // a stored overview has no store reference (A9)
 			return m, nil
 		}
 		return m, m.copyToClipboardCmd(i18n.T("Copied anchor reference"), anchorReference(d, d.ov.anchors[d.ov.sel]))

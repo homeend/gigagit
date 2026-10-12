@@ -974,6 +974,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case reviewViewMsg:
 		return m.handleReviewViewMsg(msg)
+	case commitOverviewMsg:
+		return m.onCommitOverview(msg)
 	case reviewsFollowMsg:
 		return m.onReviewsFollow(msg)
 	case commitReviewsMsg:
@@ -1210,8 +1212,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesView.lines = reviewTreeLines(st, m.filesView.lines)
 		}
 		m.filesView.sel = 0
-		if m.filesReview == nil && m.filesPreviewSet != nil && len(m.filesPreviewReviews) > 0 {
-			m.filesView.lines = previewReviewLines(m.filesPreviewReviews, m.filesView.lines)
+		if ovs := m.previewOverviews(); m.filesReview == nil && m.filesPreviewSet != nil && (len(m.filesPreviewReviews) > 0 || len(ovs) > 0) {
+			m.filesView.lines = layPreviewBlocks(m.filesPreviewReviews, ovs, m.filesView.lines)
 			m = m.landPreviewCursor(contentLine{})
 		}
 		// A re-armed merge preview keeps the file the cursor was on when its
@@ -1655,6 +1657,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onRowNotesCleared(msg)
 	case reviewHintMsg:
 		return m.onReviewHint(msg)
+	case overviewHintMsg:
+		return m.onOverviewHint(msg)
 	case threadResolvedMsg:
 		return m.onThreadResolved(msg)
 	case noteMarkedMsg:
@@ -2161,6 +2165,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.identity = msg.value.(model.Identity)
 		case srcNotes:
 			m.noteCounts = msg.value.(domain.NoteCounts)
+			m = m.dropGoneOverviews(m.noteCounts)          // a deleted open overview closes (spec §9)
+			m = m.setPreviewReviews(m.filesPreviewReviews) // a PR view's Overviews block follows the counts
 			// The Files panel's Review row: re-match this worktree's working
 			// reviews (none → the row and the ✎ go).
 			if len(m.noteCounts.WorkingReviews) == 0 {
@@ -2924,6 +2930,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Branches: enter = the .-menu "Go to tip in commits" row (shared
 			// code path, so the key and the menu can never drift apart).
 			if m.focus == panelBranches {
+				// An overview row under a branch opens the overview.
+				if h, ok := m.selectedBranchOverview(); ok {
+					return m.openCommitOverview(h.ID)
+				}
 				// A review row under a branch opens the review.
 				if h, ok := m.selectedBranchReview(); ok {
 					return m.openReview(h.ID, h.Summary)

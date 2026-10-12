@@ -88,7 +88,8 @@ func (d *openFile) showDiff(res domain.ReviewFileDiff, err error, agent, partial
 		}
 		mode, open = old.p.mode, old.open
 	}
-	dd := &docDiff{res: res, agent: agent, partial: partial, notice: diffNoticeText(res, err, agent), open: open}
+	permanent := d.from != nil && d.from.src.kind == srcCommitOverview
+	dd := &docDiff{res: res, agent: agent, partial: partial, notice: diffNoticeText(res, err, agent, permanent), open: open}
 	dd.p = &contentPopup{title: d.path, charWrap: true, mode: mode}
 	d.diff = dd
 	if dd.notice != "" {
@@ -533,14 +534,17 @@ func (m Model) diffReadCmd(d *openFile) tea.Cmd {
 	}
 	d.diffSeq++
 	svc, tag, seq, path, slot := m.svc, d.tag, d.diffSeq, d.path, m.stamp()
-	agent, id := d.from.src.kind != srcReviewOverview, d.from.src.rev
+	agent, kind, id := !d.from.src.kind.storedOverview(), d.from.src.kind, d.from.src.rev
 	return func() tea.Msg {
 		ctx := context.Background()
 		var res domain.ReviewFileDiff
 		var err error
-		if agent {
+		switch {
+		case agent:
 			res, err = svc.WorkingFileDiff(ctx, path)
-		} else {
+		case kind == srcCommitOverview:
+			res, err = svc.OverviewFileDiff(ctx, id, path)
+		default:
 			res, err = svc.ReviewFileDiff(ctx, id, path)
 		}
 		return reviewDiffMsg{slotStamp: slot, tag: tag, seq: seq, agent: agent, res: res, err: err}

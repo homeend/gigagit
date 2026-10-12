@@ -342,6 +342,7 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.branchReviewCopyLinkRow(); ok {
 		out = append(out, r)
 	}
+	out = append(out, m.branchOverviewRows()...)
 	out = append(out, m.previewReviewRowMenu()...)
 	if r, ok := m.deleteReviewRow(); ok {
 		out = append(out, r)
@@ -395,6 +396,7 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.focusedCommitReviewRow(); ok {
 		out = append(out, r)
 	}
+	out = append(out, m.commitOverviewRows()...)
 	out = append(out, m.commitBranchRows()...)
 	if r, ok := m.commitMoveUpRow(); ok {
 		out = append(out, r)

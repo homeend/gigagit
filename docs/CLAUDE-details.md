@@ -7215,6 +7215,31 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   address-less overview hint names nothing.
 - **CLI:** `gg overview save|list|show|rm` (internal/cli/overview.go); save
   and rm post a steer `reload notes`.
+- **Split reads (plan 2, overview_view.go):** `overviewReview` presents an
+  overview to the review readers as a review of its commit (a PR's: Scope
+  `mergebase..head`), so `OverviewFileNotes` (`reviewDocNotes`),
+  `OverviewFileDiff` (`reviewFileDiffOf`) and the export
+  (`OverviewSource.OverviewID`) are the review code. `OverviewDocAt` judges
+  anchors over the WHOLE tree at the commit (one `TreePaths`, one read per
+  file) — `resolveOverviewDoc` is shared with `ReviewOverview`.
+  `PreviewNoteSet.Overviews(counts)` is a PR's overviews from loaded counts
+  (by PR number; `Older` when the head moved); `PROverviews` wraps it.
+  `NoteCommitNotes.Overviews` feeds View all notes (commit overviews only).
+- **TUI:** open-file kind `srcCommitOverview` (rev = overview id) beside
+  `srcReviewOverview`; every "stored overview" test is
+  `fileSourceKind.storedOverview()`; `storedFrom()` gives a file its way
+  back's kind + id, and the three domain calls switch on the kind
+  (`storedFileNotes`, `diffReadCmd`, `overviewExportRow`). Opening:
+  `openCommitOverview(id)` (commit_overview.go) → `showOverview`. Rows:
+  `≡` = `commitIdent.overview` (`commitMarkerW = 5`, user ruling); `.`
+  menu `commitOverviewRows`; Branches `brEntry.overview`
+  (`branchOverviewHeads`: Branch == name and tip == commit); View all notes
+  `anOverview` rows (laid out by the review-row helpers via
+  `anRowKind.stored()`); PR view `contentLine.overviewID` laid by
+  `layPreviewBlocks` (Reviews, then Overviews, then files) on every counts
+  reload. `dropGoneOverviews` closes an open overview the reloaded counts
+  lack. `?overview=` → `steerNavigateOverview` looks the overview up in the
+  store (an agent links one right after saving it) and reloads the counts.
 
 ### Overview HTML export (2026-10-12, spec `docs/superpowers/specs/2026-10-12-overview-html-export-design.md`)
 

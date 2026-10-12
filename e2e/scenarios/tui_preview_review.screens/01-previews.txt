@@ -1,8 +1,8 @@
 local  branch main                                                                                                 {{root}}_______________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ B R W [Previews]                                  ││ Commits (all) 2                                                                                         │
-│ > feature into main  feature → main  1 file  ↑1   ││   ●  ↓   feature grow a                                                                                 │
-│     └ Review: 01-02 00:00 Claude Code · 0/1 reso… ││   ●  ↓   *main   add a                                                                                  │
+│ > feature into main  feature → main  1 file  ↑1   ││   ●  ↓    feature grow a                                                                                │
+│     └ Review: 01-02 00:00 Claude Code · 0/1 reso… ││   ●  ↓    *main   add a                                                                                 │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

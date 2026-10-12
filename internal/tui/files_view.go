@@ -1303,6 +1303,9 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	if l.notedPath != "" { // a commit's Notes row: its notes read in the viewer, esc comes back here
 		return m, m.commitNotesCmd(m.filesHash, l.notedPath)
 	}
+	if l.overviewID != "" { // a PR view's Overviews entry: the overview opens over the view, esc comes back here
+		return m.openCommitOverview(l.overviewID)
+	}
 	if l.noteID != "" { // an @notes/ entry: the review opens as the review view, esc comes back here
 		if bp := m.previewReturnHere(); bp != nil && m.inCompareMode() {
 			// A preview's Reviews block: esc re-opens the preview.

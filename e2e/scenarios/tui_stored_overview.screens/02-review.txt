@@ -1,7 +1,7 @@
 local  branch main                                                                                                {{root}}________________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Review: 49ff094                                   ││ Commits (all) 1                                                                                         │
-│ Claude Code · just now · 2 notes on 2 files       ││   ●  ↓ ✎ *main add a and b                                                                              │
+│ Claude Code · just now · 2 notes on 2 files       ││   ●  ↓ ✎  *main add a and b                                                                             │
 │ > ≡ Summary                                       ││                                                                                                         │
 │   ≡ Overview                                      ││                                                                                                         │
 │   A  .gg.toml                                     ││                                                                                                         │

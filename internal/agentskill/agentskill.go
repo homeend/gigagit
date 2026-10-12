@@ -35,7 +35,7 @@ var ggOverviewBody string
 
 // Version is bumped whenever using-gg.md (or the rendered wrappers) change.
 // Installed copies carry it so init can tell new/outdated/up-to-date apart.
-const Version = 166
+const Version = 167
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
@@ -52,7 +52,7 @@ const GGReviewVersion = 5
 const GGCrossReviewVersion = 5
 
 // GGOverviewVersion is the counter for the gg-overview skill.
-const GGOverviewVersion = 6
+const GGOverviewVersion = 7
 
 // Skill is one embedded skill: its identity, its own version counter, and the
 // rendered forms init installs. Markers are per-skill ("gg:<name>:v<N>"), so
