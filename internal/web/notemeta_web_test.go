@@ -1,10 +1,18 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"io/fs"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/notemeta"
 )
 
@@ -78,5 +86,91 @@ func TestRemarkRowsCarryDisplay(t *testing.T) {
 	if row.Display == nil || len(row.Display.Badges) != 1 || row.Display.Audience != "author" ||
 		len(row.Display.Lines) != 1 || row.Display.Lines[0].Value != "high" {
 		t.Fatalf("remark row display = %+v", row.Display)
+	}
+}
+
+// Mark tags a remark with status; clear removes it; a forge thread, a
+// free-form status, a missing id and an unknown remark are refused.
+func TestWebMarkTagsAndClears(t *testing.T) {
+	t.Parallel()
+	ts, _, _, id := reviewServer(t, webReviewDoc)
+	remark := "review:" + id + ":0"
+	status := func() string {
+		var got struct {
+			Notes []struct {
+				Display *notemeta.Resolved `json:"display"`
+			} `json:"notes"`
+		}
+		getJSON(t, ts, "/api/review/notes?id="+id+"&path=f.txt&status=M", &got)
+		if len(got.Notes) != 1 || got.Notes[0].Display == nil || len(got.Notes[0].Display.Badges) == 0 {
+			return ""
+		}
+		return got.Notes[0].Display.Badges[0].Value
+	}
+	if code, out := postJSONAny(t, ts, "/api/notes/mark", `{"id":"`+remark+`","status":"disagreed"}`); code != http.StatusOK {
+		t.Fatalf("mark = %d %v", code, out)
+	}
+	if s := status(); s != "disagreed" {
+		t.Fatalf("after mark the remark's badge = %q, want disagreed (the built-in status declaration)", s)
+	}
+	if code, out := postJSONAny(t, ts, "/api/notes/mark", `{"id":"`+remark+`","status":""}`); code != http.StatusOK {
+		t.Fatalf("clear = %d %v", code, out)
+	}
+	if s := status(); s != "" {
+		t.Fatalf("after clear the badge = %q, want none", s)
+	}
+	for _, c := range []struct {
+		body string
+		want int
+	}{
+		{`{"id":"forge:C1","status":"agreed"}`, http.StatusConflict},
+		{`{"id":"` + remark + `","status":"lgtm"}`, http.StatusBadRequest},
+		{`{"status":"agreed"}`, http.StatusBadRequest},
+		{`{"id":"review:` + id + `:9","status":"agreed"}`, http.StatusNotFound},
+	} {
+		if code, out := postJSONAny(t, ts, "/api/notes/mark", c.body); code != c.want {
+			t.Errorf("mark %s = %d %v, want %d", c.body, code, out, c.want)
+		}
+	}
+}
+
+// newerNotesServer serves a repo with one stored note whose notes file a
+// newer gg wrote (format above this build's): readable, never written.
+func newerNotesServer(t *testing.T) (*httptest.Server, *domain.Service, string) {
+	t.Helper()
+	dir := t.TempDir()
+	svc := domain.Open(newRepoDir(t, 2))
+	svc.UseNotesDir(dir)
+	ts := serve(t, New(svc))
+	code, out := postJSONAny(t, ts, "/api/notes/add",
+		`{"path":"f.txt","rev":"","state":"unstaged","side":"new","line":1,"summary":"tighten this"}`)
+	id, _ := out["id"].(string)
+	if code != http.StatusOK || id == "" {
+		t.Fatalf("add = %d %v", code, out)
+	}
+	n := 0
+	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".toml") {
+			return nil
+		}
+		b, _ := os.ReadFile(p)
+		if nb := regexp.MustCompile(`(?m)^format = 3$`).ReplaceAll(b, []byte("format = 4")); !bytes.Equal(nb, b) {
+			os.WriteFile(p, nb, 0o644)
+			n++
+		}
+		return nil
+	})
+	if n == 0 {
+		t.Fatal("no notes file carried format = 3")
+	}
+	return ts, svc, id
+}
+
+// A notes file a newer gg wrote refuses the mark with the store's word.
+func TestWebMarkRefusesANewerNotesFile(t *testing.T) {
+	t.Parallel()
+	ts, _, id := newerNotesServer(t)
+	if code, out := postJSONAny(t, ts, "/api/notes/mark", `{"id":"`+id+`","status":"agreed"}`); code != http.StatusConflict {
+		t.Fatalf("mark on a newer notes file = %d %v, want 409", code, out)
 	}
 }
