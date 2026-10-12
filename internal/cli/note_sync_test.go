@@ -15,7 +15,7 @@ func TestRenderNoteLineSyncTokens(t *testing.T) {
 		Side:    model.NoteSideNew}, Range: [2]int{3, 3}, Status: model.NoteActive, Sync: model.SyncLocal}
 	line := func(r domain.ResolvedNote) string {
 		var b strings.Builder
-		renderNoteLine(&b, r, false, "active")
+		renderNoteLine(&b, r, nil, "active")
 		return b.String()
 	}
 	if got := line(base); got != "n1 [user] aaaaaaa:a.go new:3-3 active  s\n" {

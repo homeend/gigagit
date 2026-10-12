@@ -49,7 +49,8 @@ func noteShow(svc *domain.Service, args []string, stdout, stderr io.Writer) int 
 		if replies == nil {
 			replies = []model.Note{}
 		}
-		return jsonOut(stdout, stderr, map[string]any{"note": root, "replies": replies, "resolved": resolved, "link": link})
+		return jsonOut(stdout, stderr, map[string]any{"note": root, "replies": replies, "resolved": resolved, "link": link,
+			"display": domain.NoteMeta(root, nil)})
 	}
 	state := "open"
 	if resolved != nil {
@@ -70,10 +71,16 @@ func noteShow(svc *domain.Service, args []string, stdout, stderr io.Writer) int 
 	if link != "" {
 		fmt.Fprintln(stdout, "    "+link)
 	}
+	for _, l := range noteMetaText(domain.NoteMeta(root, nil)) {
+		fmt.Fprintln(stdout, "    "+l)
+	}
 	for _, r := range replies {
 		fmt.Fprintf(stdout, "  ↳ %s (%s): %s\n", r.Author, r.ID, r.Summary)
 		if t := strings.TrimSpace(r.Rationale); t != "" {
 			fmt.Fprintln(stdout, "      "+strings.ReplaceAll(t, "\n", "\n      "))
+		}
+		for _, l := range noteMetaText(domain.NoteMeta(r, &root)) {
+			fmt.Fprintln(stdout, "      "+l)
 		}
 	}
 	return 0
