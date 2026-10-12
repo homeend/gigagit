@@ -82,6 +82,8 @@ func (s *Service) probesFrom(ctx context.Context, formats map[string]int) (prefl
 			StoreReviewCommands: {Present: s.legacyReviewCommandsPresent(ctx)},
 			StoreNotes:          {Present: s.legacyNotesPresent(ctx)},
 		},
+		// Machine-local too: a notes file carries its own format.
+		Newer:      map[string]bool{StoreNotes: s.newerNotesPresent(ctx)},
 		GitVersion: ver,
 		// A snapshot, never a probe: forge detection is a network round trip
 		// and belongs to ForgeStatus, not to this synchronous resolve.
@@ -353,6 +355,13 @@ func (s *Service) legacyPreviewsPresent(ctx context.Context) bool {
 func (s *Service) legacyNotesPresent(ctx context.Context) bool {
 	fs, ok := s.notesStore(ctx).(*notes.FileStore)
 	return ok && fs.LegacyPresent()
+}
+
+// newerNotesPresent reports a notes part a newer gg wrote (one index read
+// per part, on a full resolve only). An injected non-file store has none.
+func (s *Service) newerNotesPresent(ctx context.Context) bool {
+	fs, ok := s.notesStore(ctx).(*notes.FileStore)
+	return ok && len(fs.NewerParts()) > 0
 }
 
 // migrationAction builds the BODY for one declared migration. This is the ONE

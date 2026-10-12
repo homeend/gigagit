@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"math"
 	"path"
 	"sort"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // filesMode is the files view's source mode — exactly one is active while the
@@ -157,6 +159,16 @@ func (m Model) filesMetaLineFor() string {
 		return ""
 	}
 	return filesMetaLine(m.filesCommit)
+}
+
+// filesCountsLine is the review view's second header line: its remarks'
+// meta counts in plain words (spec 2026-10-12-note-meta §6.2); "" outside a
+// review view or when nothing is counted.
+func (m Model) filesCountsLine() string {
+	if m.filesReview == nil {
+		return ""
+	}
+	return metaCountsText(m.filesReview.meta)
 }
 
 // openStashFiles opens a stash's files (mode=Stash) from a clean slate. Opens on
@@ -685,6 +697,9 @@ func (m Model) filesChromeLines() int {
 	if m.filesMetaLineFor() != "" {
 		n++
 	}
+	if m.filesCountsLine() != "" {
+		n++
+	}
 	if m.filesSearchLine() != "" {
 		n++
 	}
@@ -895,6 +910,9 @@ func shortHash(h string) string {
 func (m Model) filesPageRows() int {
 	n := m.layout().bodyH - 3
 	if m.filesMetaLineFor() != "" {
+		n--
+	}
+	if m.filesCountsLine() != "" {
 		n--
 	}
 	if n < 1 {
@@ -1547,7 +1565,20 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		}
 		// A file row cuts the middle of its path, never the name (headings
 		// were pre-elided above); a review row is prose and cuts at its end.
-		wr[i] = winRow{text: prefix + text, style: st, elide: elide, elideHead: len([]rune(prefix))}
+		// A review's file row ends with its remarks' meta counts — only
+		// while they fit: they go before the path loses anything.
+		var cls []syntax.Class
+		if m.filesReview != nil && l.path != "" && !l.heading {
+			room := innerW - lipgloss.Width(prefix+text)
+			if p.mode != modeCutoff {
+				room = math.MaxInt32 // wrap and scroll show the whole row
+			}
+			if tail, tc := reviewFileCountsTail(m.filesReview, l.path, room); tail != "" {
+				cls = append(make([]syntax.Class, len([]rune(prefix+text))), tc...)
+				text += tail
+			}
+		}
+		wr[i] = winRow{text: prefix + text, style: st, elide: elide, elideHead: len([]rune(prefix)), cls: cls}
 	}
 
 	lines := make([]string, 0, contentH)
@@ -1560,6 +1591,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		// Its own line, directly under the title: a long subject truncates the
 		// title, and the date must not be the casualty of that.
 		lines = append(lines, padRight(truncate(meta, innerW), innerW))
+	}
+	if counts := m.filesCountsLine(); counts != "" {
+		lines = append(lines, padRight(truncate(counts, innerW), innerW))
 	}
 	if search != "" {
 		lines = append(lines, padRight(truncate(search, innerW), innerW))

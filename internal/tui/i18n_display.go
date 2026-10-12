@@ -170,6 +170,14 @@ func optionDisplayName(value string) string {
 		return i18n.T("Apply patch")
 	case "Cancel":
 		return i18n.T("Cancel")
+	case "agreed": // Mark… (note_mark.go)
+		return i18n.T("agreed")
+	case "disagreed":
+		return i18n.T("disagreed")
+	case "deferred":
+		return i18n.T("deferred")
+	case "clear":
+		return i18n.T("clear")
 	case "Cherry-pick":
 		return i18n.T("Cherry-pick")
 	case "Copy absolute file path":

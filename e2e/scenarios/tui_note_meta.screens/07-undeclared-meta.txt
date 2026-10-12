@@ -1,0 +1,40 @@
+diff: caching.ts  @ 3e3fa0a cache config                                                                                        line 3  change 1/1  rows 1–10/10
+  1 a                                                                          │  1▎a
+                                                                               │╭─ agent note · agent · caching.ts R1 ────────────────────────────────────────╮
+                                                                               ││                                                                             │
+                                                                               ││ confidence: high                                                            │
+                                                                               ││ why a?                                                                      │
+                                                                               ││                                                                             │
+                                                                               │╰─────────────────────────────────────────────────────────────────────────────╯
+  2 b                                                                          │  2 b
+  3 c                                                                          │  3 catch()
+  4 d                                                                          │  4 d
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ╭────────────────╮
+  │▸ NN → next file│
+  ╰────────────────╯
+[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] scroll  [←→] pan  [h/b] hist  [esc] back

@@ -1,0 +1,55 @@
+name = "tui: the Send to GitHub panel opens untouched and shows a note's meta only in an opened row"
+
+# PR #7 as in tui_pr_send. An AI review's remark declares kind/severity/
+# intent. The panel opens with nothing ticked and no meta on the collapsed
+# row (R9); → opens the row and shows ONE meta row: badges, the audience
+# marker, the line entries (spec 2026-10-12-note-meta §6.3).
+[input]
+steps = [
+  { write = "big.txt", content = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n" },
+  { commit = "big" },
+  { branch = "feat" }, { switch = "feat" },
+  { write = "big.txt", content = "line 1\nline 2\nline 3\nline 4\nline 5 changed\nline 6\nline 7\nline 8\nline 9\nline 10\n" },
+  { commit = "change" },
+  { switch = "main" },
+  { ref = "refs/gg/pr/7", value = "feat" },
+  { write = ".git/fakegh/pr-list.json", content = '[{"number":7,"title":"Change line 5","author":{"login":"ann"},"state":"OPEN","isDraft":false,"reviewDecision":"","headRefName":"feat","isCrossRepository":false,"baseRefName":"main","baseRefOid":"","headRefOid":"{{rev:feat}}","url":"https://github.com/o/r/pull/7","createdAt":"2026-01-01T10:00:00Z","updatedAt":"2026-01-01T11:00:00Z"}]' },
+  { write = ".git/fakegh/pr-view-7.json", content = '{"number":7,"title":"Change line 5","author":{"login":"ann"},"state":"OPEN","isDraft":false,"headRefName":"feat","isCrossRepository":false,"baseRefName":"main","baseRefOid":"","headRefOid":"{{rev:feat}}","url":"https://github.com/o/r/pull/7","createdAt":"2026-01-01T10:00:00Z","updatedAt":"2026-01-01T11:00:00Z","body":""}' },
+  { write = ".git/fakegh/repo-view.json", content = '{"nameWithOwner":"o/r","url":"https://github.com/o/r","sshUrl":"git@github.com:o/r.git"}' },
+  { write = ".git/fakegh/snapshot-7.json", content = '{"data":{"repository":{"pullRequest":{"id":"PR_7","number":7,"title":"Change line 5","body":"","author":{"login":"ann"},"state":"OPEN","isDraft":false,"reviewDecision":"","headRefName":"feat","isCrossRepository":false,"headRepositoryOwner":{"login":"ann"},"headRepository":{"name":"r"},"baseRefName":"main","baseRefOid":"","headRefOid":"{{rev:feat}}","url":"https://github.com/o/r/pull/7","createdAt":"2026-01-01T10:00:00Z","updatedAt":"2026-01-01T11:00:00Z","viewerDidAuthor":false,"viewerLatestReview":null,"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]},"comments":{"pageInfo":{"hasNextPage":false},"nodes":[]},"reviews":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' },
+]
+
+[[run]]
+cmd   = ["review", "save", "gg://{{cwd}}@main...refs/gg/pr/7", "--agent", "Claude Code", "--stdin"]
+stdin = '''{"version":1,"summary":"## Summary\none issue","display":{
+ "kind":{"show":["badge","count"],"order":1,"values":{"issue":{"color":"red","audience":"author"}}},
+ "severity":{"show":["badge","frame"],"order":2,"style":"text","values":{"high":{"color":"red","level":"high"}}},
+ "intent":{"show":["line"],"order":4}},
+ "files":[{"path":"big.txt","annotations":[{"newRange":[5,5],"summary":"name it","meta":{"kind":"issue","severity":"high","intent":"checked the key"}}]}]}'''
+exit  = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "pr-tab"
+keys = ["C-right", "C-right", "C-right", "C-right"]
+wait = true
+screen_contains = ["#7", "Change line 5"]
+
+[[tui.step]]
+name = "panel"
+keys = ["i", "s"]
+wait = true
+screen_contains = ["Send to GitHub — #7", "0 ticked", "> [ ] high  big.txt:5  name it"]
+screen_excludes = ["→ author", "intent:"]
+
+# → opens the row: the meta row sits under it, before the code; still
+# nothing ticked.
+[[tui.step]]
+name = "opened-row"
+keys = ["right"]
+screen_contains = [" issue  high  → author · intent: checked the key", "0 ticked"]
+
+[expect]
+branch = "main"

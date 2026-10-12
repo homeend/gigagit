@@ -9,6 +9,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // Temporary notes on an open file: remarks an agent puts on the lines of a
@@ -194,19 +195,28 @@ func noteBoxMaxRows(rowsCap int) int { return max(rowsCap/2, 6) }
 // taller than maxRows (> 0) keeps its first rows and says how many more
 // there are; enter opens the whole note (openFileNote).
 func noteBoxLines(n agentdocs.Note, innerW, maxRows int) []noteLine {
+	res := notemeta.Resolve(n.Meta, n.Display, n.Added)
 	frame := func(kind noteRowKind, text string) noteLine {
-		return noteLine{id: n.ID, rootID: n.ID, kind: kind, side: model.NoteSideNew, text: text, stale: n.Outdated, agent: true}
+		return noteLine{id: n.ID, rootID: n.ID, kind: kind, side: model.NoteSideNew, text: text, stale: n.Outdated, agent: true, metaFrame: res.Frame}
 	}
 	r := domain.ResolvedNote{Note: model.Note{
 		ID: n.ID, Source: model.NoteSourceAgent, Author: n.Author, Side: model.NoteSideNew,
 		Summary: n.Summary, Rationale: n.Rationale,
 	}}
-	body := noteBodyLines(r, n.ID, 0, innerW, n.Outdated)
+	// The meta rows ride in the body, so the box's row cap covers them too.
+	body := noteMetaRows(res, false, true, false, innerW, "", frame)
+	body = append(body, noteBodyLines(r, n.ID, 0, innerW, n.Outdated)...)
+	body = append(body, noteMetaRows(res, false, false, true, innerW, "", frame)...)
+	for i := range body {
+		body[i].metaFrame = res.Frame
+	}
 	if keep := max(maxRows-5, 1); maxRows > 0 && len(body)+4 > maxRows && len(body) > keep {
 		more := frame(noteRowText, i18n.T("… %d more lines — [enter] full note", len(body)-keep))
 		body = append(body[:keep:keep], more)
 	}
-	rows := []noteLine{frame(noteRowTop, noteTitle(n)), frame(noteRowBlank, "")}
+	top := frame(noteRowTop, noteTitle(n))
+	top.badges, top.badgeCls = badgeRun(res)
+	rows := []noteLine{top, frame(noteRowBlank, "")}
 	rows = append(rows, body...)
 	return append(rows, frame(noteRowBlank, ""), frame(noteRowBottom, ""))
 }

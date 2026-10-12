@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // The review view's reads. A structured review (Review.Doc) is one stored note;
@@ -44,6 +45,9 @@ type ReviewOtherNote struct {
 	// (Path empty); Summary is the remark's summary as its first reply
 	// recorded it.
 	Outdated bool
+	// Meta is the remark's resolved meta (spec 2026-10-12-note-meta §6.2: a
+	// remark row wears its badges); zero for an outdated thread.
+	Meta notemeta.Resolved
 }
 
 // reviewRevs are the two revisions a review compares: base (the old side) and
@@ -242,14 +246,14 @@ func sortReviewNotes(out []ResolvedNote) {
 // reviewSplit sorts the document's notes into per-file counts (notes the view
 // places on a line) and the other notes, reading each named file's two sides
 // once.
-func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]int, []ReviewOtherNote, error) {
+func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]int, []ReviewOtherNote, map[string][]notemeta.Resolved, error) {
 	r, err := s.Review(ctx, reviewID)
 	if err != nil || r.Doc == nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	files, err := s.ReviewFiles(ctx, r)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	inView := map[string]bool{}
 	for _, f := range files {
@@ -276,6 +280,7 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 	}
 	threads, outdated := r.RemarkThreads()
 	counts := map[string]int{}
+	placed := map[string][]notemeta.Resolved{}
 	var other []ReviewOtherNote
 	i := 0
 	for _, f := range r.Doc.Files {
@@ -285,13 +290,17 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 			th := threads[i]
 			root := fmt.Sprintf("%s%s:%d", model.ReviewNoteIDPrefix, r.ID, i)
 			i++
-			if r.remarkMoved(remarkFP(f.Path, side, dn.Range, dn.Summary)) {
+			fp := remarkFP(f.Path, side, dn.Range, dn.Summary)
+			if r.remarkMoved(fp) {
 				continue // GitHub owns it now
 			}
+			var mn model.Note
+			r.remarkMeta(&mn, f, dn, fp)
+			meta := NoteMeta(mn, nil)
 			if working && match.States[p] != WorkingFileMatches {
 				_, reviewed := match.States[p]
 				other = append(other, ReviewOtherNote{Path: p, Side: side, Range: dn.Range, Summary: dn.Summary, Changed: reviewed,
-					Root: root, Replies: th.Replies, Resolution: th.Resolution})
+					Root: root, Replies: th.Replies, Resolution: th.Resolution, Meta: meta})
 				continue
 			}
 			if inView[p] {
@@ -302,18 +311,19 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 				}
 				if fitsSide(lines, dn.Range) {
 					counts[p]++
+					placed[p] = append(placed[p], meta)
 					continue
 				}
 			}
 			other = append(other, ReviewOtherNote{Path: p, Side: side, Range: dn.Range, Summary: dn.Summary,
-				Root: root, Replies: th.Replies, Resolution: th.Resolution})
+				Root: root, Replies: th.Replies, Resolution: th.Resolution, Meta: meta})
 		}
 	}
 	for _, o := range outdated {
 		other = append(other, ReviewOtherNote{Outdated: true, Root: o.Root, Summary: o.Summary,
 			Replies: o.Replies, Resolution: o.Resolution})
 	}
-	return counts, other, nil
+	return counts, other, placed, nil
 }
 
 // worktreeLines is path's text in worktree split into lines; nil when absent.
@@ -342,13 +352,29 @@ func (s *Service) revLines(ctx context.Context, rev, path string) []string {
 // review's notes it places on a line of that file. Files without notes are
 // absent.
 func (s *Service) ReviewFileCounts(ctx context.Context, reviewID string) (map[string]int, error) {
-	counts, _, err := s.reviewSplit(ctx, reviewID)
+	counts, _, _, err := s.reviewSplit(ctx, reviewID)
 	return counts, err
+}
+
+// ReviewFileMetaCounts is ReviewFileCounts plus, per file, the meta counts of
+// the same remarks — the ones the view places on that file's lines (spec
+// 2026-10-12-note-meta §6.2): a file row's tail never counts a remark its
+// ◆N does not.
+func (s *Service) ReviewFileMetaCounts(ctx context.Context, reviewID string) (map[string]int, map[string]notemeta.Counts, error) {
+	counts, _, placed, err := s.reviewSplit(ctx, reviewID)
+	if err != nil {
+		return nil, nil, err
+	}
+	byFile := make(map[string]notemeta.Counts, len(placed))
+	for p, rs := range placed {
+		byFile[p] = notemeta.Count(rs)
+	}
+	return counts, byFile, nil
 }
 
 // ReviewOtherNotes are the review's notes the view cannot place on a line, in
 // document order: on a file the review does not change, or past its end.
 func (s *Service) ReviewOtherNotes(ctx context.Context, reviewID string) ([]ReviewOtherNote, error) {
-	_, other, err := s.reviewSplit(ctx, reviewID)
+	_, other, _, err := s.reviewSplit(ctx, reviewID)
 	return other, err
 }
