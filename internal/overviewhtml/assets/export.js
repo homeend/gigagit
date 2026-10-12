@@ -46,7 +46,7 @@
     $("x-title").textContent = D.title || "Overview";
     document.title = D.title || "Overview";
     const range = D.left && D.right ? D.left + " → " + D.right : "";
-    $("x-meta").textContent = [D.repo, range, "exported " + D.exported_at + " by gg " + D.version].filter(Boolean).join(" · ");
+    $("x-meta").textContent = [D.repo, range, "exported " + D.exported_at + " by " + D.version] // version = buildinfo.String(): "gg v…".filter(Boolean).join(" · ");
     $("x-files").innerHTML = [...files.keys()].map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
   }
 
