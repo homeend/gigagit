@@ -1,6 +1,6 @@
 # Note meta: free key/values, an agent-declared display — design
 
-Date: 2026-10-12. Status: design approved in brainstorm (rulings R1–R15,
+Date: 2026-10-12. Status: design approved in brainstorm (rulings R1–R16,
 §13); this document is the spec for the user's review. Four plans follow
 (§14).
 
@@ -63,14 +63,18 @@ blocked or resolved because of a meta value (R12).
 
 ### 2.1 The note record
 
-`model.Note` gains two fields (TOML names in brackets):
+`model.Note` gains three fields (TOML names in brackets):
 
-- `Meta []MetaKV` (`[[notes.meta]]` → `key`, `value`) — ordered, keys unique.
-- `Display *Display` (`display`) — the note's own declaration, or nil.
+- `Meta []notemeta.KV` (`[[notes.meta]]` → `key`, `value`) — ordered, keys
+  unique.
+- `Display notemeta.Display` (`[notes.display.<key>]`) — the note's own
+  declaration; empty = none.
+- `Added []notemeta.Added` (`[[notes.added]]`) — meta written onto the note
+  after its author wrote it (§2.4).
 
-`MetaKV` and `Display` live in `model` (plain data); `notemeta` (§4) owns
-their rules. `notebatch.MetaKV` (today's review-document meta type) becomes
-an alias of `model.MetaKV`.
+The types live in `notemeta` (§4), a stdlib-only leaf, so `notebatch`
+(stdlib-only) and `agentdocs` (a leaf) can use them; `model` imports it.
+`notebatch.MetaKV` becomes an alias of `notemeta.KV`.
 
 ### 2.2 Review documents
 
@@ -113,53 +117,53 @@ merge — what you read in one place is what applies):
 
 ### 2.4 Added meta
 
-Stored as `[[meta]]` records in the same part file, beside `[[resolved]]`,
-keyed the way `[[resolved]]` is:
+Added meta is stored ON a stored note, in its `Added` list:
 
 ```toml
-[[meta]]
-note = 'c80e74dd'          # the stored note id (a review note for a remark)
-remark_fp = '…'            # set for a review remark, empty otherwise
+[[notes.added]]
+remark_fp = '…'            # set on a review note's entry for one remark
 key = 'status'
 value = 'agreed'
 by = 'MR'                  # the writer: the user's name or the agent's label
 at = 2026-10-12T10:41:00Z
 ```
 
-One record per (note, remark_fp, key); setting it again replaces it, an
-empty value removes it. A review remark's own meta lives in its review's
-JSON and is never rewritten: every meta written onto a remark later is a
-record here. A standalone note's meta written by its own author is
-rewritten in place (§5.1); a different writer's is a record here too. In
-the resolved display an added value for a key replaces the author's value
-for that key; the author's original stays in the note's details row
-(`severity: high (Claude Code) → low (MR)`). A record
-whose note is gone is dropped on the part's next write (the same orphan
-sweep replies get).
+- A review remark's entries live on its review note, keyed by the remark's
+  fingerprint (the `RemarkSends` precedent), so they follow the remark
+  when the review is re-saved and go when the review goes. A remark's own
+  meta stays in its review's JSON, never rewritten.
+- A standalone note's meta written by its own author (`by` = `Author`) is
+  rewritten in place in `Meta`; a different writer's goes to `Added`.
+- One entry per (remark_fp, key); setting it again replaces it, an empty
+  value removes it.
+- In the resolved display an added value for a key replaces the author's
+  value for that key; the author's original stays in the note's details
+  row (`severity: high (Claude Code) → low (MR)`).
 
 ### 2.5 Format 3 and the conversion (R10)
 
-- `NotesFormat` becomes 3, and the notes feature gains
-  `preflight.DataFormat{Store: StoreNotes, Min: 3, Max: 3}` beside its
-  `LegacyStore` requirement. From this build on, a gg that finds a newer
-  format refuses to write the notes store instead of dropping fields.
+The notes store is machine-local, so its format lives in its own files —
+never in a git-ref marker (which `domain/preflight.go` reserves for data
+shared through `.git`):
+
+- Every part file gets a top-level `format = 3`, written on every save.
+- A part whose `format` is above 3 still READS, but every write to it
+  fails with `notes.ErrNewerFormat` ("this notes file was written by a
+  newer gg; upgrade gg to change it"), so a later build's fields are never
+  dropped by this one.
 - **Known limit, accepted:** builds already installed (including an old
-  `gg mcp` an agent runs) have no notes range check. They read format 3
-  fine but drop `Meta`, `Display` and `[[meta]]` on their next save of that
-  part. The protection holds only from this build onward.
-- Today the notes marker is stamped by the split migration only. Plan 1
-  first checks how the notes store is probed (marker, data presence) and
-  makes this build stamp format 3 on its first notes write, so the range
-  check always has a marker to read.
-- **Conversion (lossless, runs without asking):** every tag of the form
-  `key: value` moves into `Meta` in tag order; `review`, `resolved` and
-  other plain tags stay tags; `Confidence > 0` becomes
-  `meta confidence = low|medium|high` (0.3/0.6/0.9, the existing mapping;
-  any other number is kept as its decimal text), and the `Confidence`
-  field leaves `model.Note` — format 3 never writes it, and its readers
-  (`WireNote`, the send body, `gg note show`) read meta instead. The legacy split
-  (format 1 → 2) and this conversion run as one migration action; a part
-  is rewritten only when something moved.
+  `gg mcp` an agent runs) have no such check. They read format 3 fine but
+  drop `Meta`, `Display` and `Added` on their next save of that part. The
+  protection holds only from this build onward.
+- **Conversion (lossless, no prompt, at read time):** whenever a part is
+  read, every tag of the form `key: value` (key = letters, digits, `_`,
+  `-`, `.`, at most 64 bytes) moves into `Meta` in tag order; `review`,
+  `resolved` and other plain tags stay tags. The old `confidence` number
+  moves into `Meta` as `confidence = low|medium|high` (0.3/0.6/0.9; any
+  other number as its decimal text). The Go field becomes the decode-only
+  `LegacyConfidence` and is never written again. A part is rewritten in
+  the new shape on its next real change; until then every reader sees the
+  converted notes.
 - After conversion a note with meta and no declaration shows its meta in
   the `line` place (§3.2) — what tags look like today (R13).
 
@@ -262,11 +266,15 @@ in the note's **problems** (`display.kind.values.issue.color: "crimson" is
 not a colour`). Problems show in the note's details row and in
 `gg note show`, so an agent can see why something did not display. The
 JSON itself must parse — a malformed `display` is a write error of the
-command that carried it (§10).
+command that carried it (§10). An unknown FIELD is named when the
+declaration is written (the CLI / MCP / batch reply); everything else is
+re-checked on every read, so it shows in the details row as long as it
+stands.
 
 ## 4. `notemeta` (new pure leaf package)
 
-Imports: stdlib, `model`. No git, no TUI/web.
+Imports: stdlib only (a DAG leaf). `model`, `notebatch`, `agentdocs`,
+`domain` and the frontends import it.
 
 - `Validate(d model.Display) (model.Display, []Problem)` — the cleaned
   declaration and what was dropped; `CheckMeta([]MetaKV) ([]MetaKV, []Problem)`.
@@ -595,6 +603,8 @@ grammar, semantics, the format-3 limit); skills with the version bump.
 - **R12** Meta and marks are glance aids — never a mechanical consequence
   (no blocking, sending, resolving, ticking). `blocking` is therefore NOT a
   semantic (it was in the approved sections; dropped after this ruling).
+- **R16** Mechanism (from the code, 2026-10-12): the format lives in each
+  notes file, added meta on the note itself, types in the `notemeta` leaf.
 - **R15** Meta written onto a note after its author wrote it — the user's
   Mark or another agent's double-check — is one mechanism: added-meta
   records; a remark's review JSON is never rewritten. `Confidence` moves
