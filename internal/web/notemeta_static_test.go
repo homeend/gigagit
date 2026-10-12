@@ -192,3 +192,24 @@ func TestDiffNoteMenuMarks(t *testing.T) {
 		t.Errorf("a Files-view note row must not offer Mark")
 	}
 }
+
+// A mark refreshes a review's counts only while the review view is what the
+// page shows: a review left for a commit keeps state.review, and its counts
+// must not land under the commit's header.
+func TestRefreshReviewMetaOnlyInTheReviewView(t *testing.T) {
+	t.Parallel()
+	body := jsFunc(t, "reviews.js", "refreshReviewMeta")
+	if strings.Count(body, "reviewActive()") < 2 {
+		t.Errorf("refreshReviewMeta must check reviewActive() before the read and after it:\n%s", body)
+	}
+}
+
+// The note titles are fitted to the pane's width: a pane drag (not a window
+// resize) must refit them.
+func TestDiffNoteTitlesRefitOnPaneResize(t *testing.T) {
+	t.Parallel()
+	f := readStatic(t, "files.js")
+	if !strings.Contains(f, `observe($("diff-body"))`) || !strings.Contains(f, "rerenderDiffKeepingPlace(true)") {
+		t.Errorf("files.js does not refit the note titles when #diff-body's width changes")
+	}
+}

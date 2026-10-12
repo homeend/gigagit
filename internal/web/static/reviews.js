@@ -497,17 +497,19 @@ function renderReviewFiles() {
 
 // refreshReviewMeta re-reads the open review after a mark: the header's
 // counts and each file's tail follow the new status (the TUI re-reads both).
-// A review closed or replaced meanwhile is left alone.
+// Only while the review view is what the page shows: a review left for a
+// commit or a PR keeps state.review, and its counts must not land under that
+// header. A review closed or replaced meanwhile is left alone.
 export async function refreshReviewMeta() {
   const rv = state.review;
-  if (!rv) return;
+  if (!rv || !reviewActive()) return;
   let d;
   try {
     d = await getJSON("/api/review/" + encodeURIComponent(rv.id));
   } catch {
     return;
   }
-  if (state.review !== rv) return;
+  if (state.review !== rv || !reviewActive()) return;
   rv.data.meta_counts = d.meta_counts;
   rv.data.meta_by_file = d.meta_by_file;
   rv.data.other = d.other;

@@ -2780,6 +2780,26 @@ function noteTitleRoom(cols, n) {
 }
 
 
+// The note titles are fitted to #diff-body's width (noteTitleRoom), so a
+// width change the window's resize does not report — the rs-detail drag, the
+// sidebar toggle — refits them. Only a diff with a note box re-renders, only
+// on a real width change, rAF-coalesced (a drag fires per pixel).
+let diffBodyW = 0;
+let diffRefitPending = false;
+new ResizeObserver(() => {
+  const w = $("diff-body").clientWidth;
+  if (!w || w === diffBodyW) return;
+  const was = diffBodyW;
+  diffBodyW = w;
+  if (!was || diffRefitPending || !$("diff-body").querySelector(".notetitle")) return;
+  diffRefitPending = true;
+  requestAnimationFrame(() => {
+    diffRefitPending = false;
+    rerenderDiffKeepingPlace(true);
+  });
+}).observe($("diff-body"));
+
+
 function noteBoxHTML(n, cols, nctx = null) {
   const nc = nctx || globalNoteCtx();
   const off = state.notesAgentOff;
