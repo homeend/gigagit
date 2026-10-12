@@ -1528,10 +1528,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.pushLayer(p), nil
 	case patchResolvedMsg:
 		if msg.err != nil {
-			m.statusMsg = i18n.T("export patch: %s", msg.err.Error())
+			if msg.title != "" {
+				m.statusMsg = i18n.T("export: %s", msg.err.Error())
+			} else {
+				m.statusMsg = i18n.T("export patch: %s", msg.err.Error())
+			}
 			return m, nil
 		}
-		p := &exportPatchPopup{data: msg.data}
+		p := &exportPatchPopup{data: msg.data, title: msg.title}
 		p.dest = newTextField(msg.defaultPath)
 		return m.pushLayer(p), nil
 	case applyPatchDirMsg:

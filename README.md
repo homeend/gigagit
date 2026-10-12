@@ -503,6 +503,13 @@ stays in the diff). Moving on the file never moves the overview's
 selection: the anchor whose block the cursor is in is marked in that
 block's colour. ctrl+\ or `gg session files focus` on an overview open it
 this way too.
+**Export as HTML** (the `.` menu of an overview or of a review's ≡ Overview row
+in the TUI; `E` in gg web;
+`gg review export <id>` / `gg session overview export <id>`) saves any
+overview — a stored review's or an agent's — as ONE self-contained `.html`
+file you can hand to someone without gg: the same split, offline, with every
+file a link names (at the review's tip, or the working tree) and its diff;
+no notes, no other files.
 `v` on either side selects characters to copy (the modal copy mode: `space`
 start, `enter`/`y` copy, `esc` leave; `tab` waits, and stacked the selection
 stays inside one file).

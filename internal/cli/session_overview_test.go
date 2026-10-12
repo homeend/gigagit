@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/steer"
@@ -194,5 +195,45 @@ func TestSessionOverviewVerbsSendTheCallersWorktree(t *testing.T) {
 		if c := <-seen; c.Worktree == "" {
 			t.Errorf("%v posted no worktree: %+v", args, c)
 		}
+	}
+}
+
+func TestSessionOverviewExport(t *testing.T) {
+	t.Parallel()
+	repo, _ := exportRepo(t, exportReviewDoc) // any repo holding a.txt
+	inbox := t.TempDir()
+	livePresence(t, inbox)
+	done := make(chan struct{})
+	t.Cleanup(func() { close(done) })
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			for _, c := range steer.Drain(inbox) {
+				r := steer.Reply{ID: c.ID, OK: true}
+				switch c.Cmd {
+				case "overview_show":
+					r.Overviews = []steer.Overview{{ID: "f7", Title: "T", Text: "[n](note:t1) [a](a.txt:1)"}}
+				case "note_list":
+					r.Notes = []steer.FileNote{{ID: "t1", Path: "a.txt", Start: 2, End: 2}}
+				}
+				if c.Wait {
+					_ = steer.PostReply(inbox, r)
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	var out, errb bytes.Buffer
+	code := runSessionIn(inbox, openCLIService(t, repo), []string{"overview", "export", "f7", "--out", "-"}, nil, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	page := out.String()
+	if !strings.Contains(page, `"dest":"note:t1","path":"a.txt","start":2,"end":2`) || strings.Contains(page, `"missing":true`) {
+		t.Fatalf("note anchor not resolved:\n%s", page[:min(len(page), 600)])
 	}
 }

@@ -124,6 +124,9 @@ func availableActions(m Model) []actionRow {
 			if r, ok := m.reviewViewCopyLinkRow(); ok {
 				rows = append(rows, r)
 			}
+			if r, ok := m.reviewOverviewExportRow(); ok {
+				rows = append(rows, r)
+			}
 			if r, ok := m.reviewFileCopyLinkRow(); ok {
 				rows = append(rows, r)
 			}

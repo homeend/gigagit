@@ -7110,3 +7110,50 @@ a stored overview's anchor to a file the review did not change is PLAIN, so
 unchanged file (a pure rename). Tests: `split_diff_rows_test.go`,
 `split_diff_test.go`, `split_diff_keys_test.go`, e2e
 `tui_overview_split_diff`.
+
+### Overview HTML export (2026-10-12, spec `docs/superpowers/specs/2026-10-12-overview-html-export-design.md`)
+
+One self-contained `.html` file per overview (agent or stored review),
+opened from disk with no gg and no network.
+
+- **Rulings:** R1 content = every ANCHORED file in full at its frozen version
+  + its diff (stored: the review's tip / `ReviewFileDiff` base→tip; agent:
+  the working tree / `WorkingFileDiff` HEAD→disk); unanchored files are NOT
+  included. R2 web + CLI + TUI over ONE builder. R3 NO notes of any kind (a
+  `note:t<n>` anchor still links to the note's lines, its text is absent).
+- **Builder:** `domain.ExportOverviewHTML(ctx, OverviewSource) (page, name,
+  err)` — `{ReviewID}` or `{Title, Text, NoteSpans}`; the service must be the
+  agent overview's worktree. `domain.AgentOverviewSource(docs, id, root)` is
+  the web/TUI door (resolves note spans in the shared `agentdocs` store);
+  the CLI (`gg session overview export`) gets the text from `overview_show`
+  and the spans from `note_list` over steer, then builds in-process. An
+  anchor is Missing when the review said not-OK, the file is gone
+  (fs.ErrNotExist), or its lines pass the file's end; a Missing anchor draws
+  plain. Any other read error is a `could not read <path>: <err>`
+  placeholder; a cancelled context or a `repogate.BusyError` fails the
+  whole export (never a hollow page).
+  `WorkingFileDiff` reports any binary as Changed — the page disables `D` on
+  a placeholder, so this never shows.
+- **Renderer** (`internal/overviewhtml`): `Export` is the JSON blob (file
+  lines = `/api/file-content`'s `{text, tok}`, diff rows = `/api/diff`'s
+  rows, so `splitdiff.unifiedRows` reads them unchanged). `Render` reads
+  `style.css`, `markdown.js`, `splitdiff.js` from `web/static.FS` and wraps
+  each module with `scopeModule` → `const MD = (() => { …; return {mdHTML};
+  })();` — NO module loading at runtime (file:// module rules differ per
+  browser). A painter that grows an `import` makes `scopeModule` fail
+  loudly (test-pinned) instead of shipping a broken page. The code pane is
+  `#viewer-body` so style.css's scoped `.tk-*` rules paint it; rows reuse
+  `.vline/.vno/.vsign/.vtext/.vd-*/.vrange`. Dark only, like gg web.
+  `json.Marshal` escapes `<>&` + U+2028/9, so file text cannot close the
+  blob's `<script>`; an inlined asset holding `</script`/`</style` is an
+  error. 16 MB cap → `*TooLargeError` naming the three largest files.
+- **Frontends:** web `GET /api/overview-export?id=|review=` (attachment,
+  413 over the cap) + `E` / the `E export html` chip in `viewer.js`
+  (`exportOverviewHTML`, a fetch → blob download so an error shows in the
+  op line); TUI `overviewExportRow` in both overview `.` menus, reusing the
+  patch export popup (`patchResolvedMsg.title`) → `engine.ExportFile`; CLI
+  `gg review export` / `gg session overview export` share `writeExport`
+  (`--out -` = stdout, `--force` = overwrite).
+- **Verification:** `e2e/scenarios/review_export_html.toml`; the browser
+  check (Playwright, file:// in Chromium + Firefox) lives only in the plan's
+  Task 9 — rerun it after changing `export.js`.
