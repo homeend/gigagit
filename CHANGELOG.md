@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: n / p in an overview's file leave the overview's selection alone
+
+### Changed
+- In the full-screen file viewer an overview's link opened (the narrow
+  terminal's way), **n / p** move the cursor and the current band only — the
+  overview's selected link stays where it was, as in the split and in gg web,
+  so backspace returns to the link you opened the file from.
+
+### Fixed
+- Two emergency state dumps (alt+U) in the same millisecond no longer write
+  one file: the second is named `state-<time>-2.txt` (created exclusively).
+- The fuzzy matcher's speed test takes the fastest of five runs, so a busy
+  moment of a parallel `-race` run no longer fails it.
+
 ## The overview split's diff: copy mode follow-ups
 
 ### Fixed
