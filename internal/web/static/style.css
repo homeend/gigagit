@@ -3,6 +3,8 @@
   --accent: #6ea8fe; --sel: #2a3550; --border: #2a2e37;
   /* note groups (spec 2026-10-07 §1.3): the TUI's note_group_1..6 (Dark); style_groups_test.go pins them */
   --note-group-1: #E06C75; --note-group-2: #E5C07B; --note-group-3: #98C379; --note-group-4: #56B6C2; --note-group-5: #C678DD; --note-group-6: #D19A66;
+  /* note meta (spec 2026-10-12-note-meta §7): the TUI's meta_* roles (Dark); style_groups_test.go pins them */
+  --meta-red: #E06C75; --meta-orange: #E5964B; --meta-yellow: #E5C07B; --meta-green: #98C379; --meta-blue: #61AFEF; --meta-purple: #C678DD; --meta-grey: #7F848E;
   --add: #1f3d2b; --del: #46262a; --span-add: #2f6b41; --span-del: #8a3b42;
   --attn-info: #1e3350; --attn-warn: #3d3520; --attn-error: #43242a;
   --recent-bg: #1F3A26; /* blame's "changed within the last …" tint (the TUI's blame_recent_bg, Dark) */
@@ -127,6 +129,11 @@ body.resizing { cursor: col-resize; user-select: none; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #files-meta.hidden { display: none; }
+/* A review's note-meta counts (spec 2026-10-12-note-meta §6.2): their own
+   line under the meta line, cut at the pane's edge (the full text is the tooltip). */
+#files-counts { flex: 1 0 100%; font-size: 11px; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#files-counts.hidden { display: none; }
+.rcounts { margin-left: 8px; font-size: .9em; color: var(--dim); white-space: nowrap; }
 /* The description under the date: a full-basis block like the meta line, the
    commit's own line breaks kept, clamped to three lines. What the clamp hides
    is behind the button under it — a header is a header, not the whole message. */
@@ -1505,6 +1512,14 @@ table.diff tr.note td.note-gap { cursor: default; }
 /* A forge review thread (a pull request's comments): read-only, its own tint. */
 .notebox.forge { border-color: #4fb3a8; }
 .notebox.forge .notetitle { color: #4fb3a8; }
+/* a declared frame (note meta) recolours the border over the kind colours
+   (user / agent / forge — a review remark is a read-only forge box); the
+   PR group colour keeps the left edge (g1..g6 below), and dim still wins */
+.notebox.mf-red { border-color: var(--meta-red); } .notebox.mf-orange { border-color: var(--meta-orange); }
+.notebox.mf-yellow { border-color: var(--meta-yellow); } .notebox.mf-green { border-color: var(--meta-green); }
+.notebox.mf-blue { border-color: var(--meta-blue); } .notebox.mf-purple { border-color: var(--meta-purple); }
+.notebox.mf-grey { border-color: var(--meta-grey); }
+.notebox.stale[class*=" mf-"], .notebox.outdated[class*=" mf-"] { border-color: var(--dim); } /* only a framed box: a stale forge thread keeps its tint */
 /* A PR's note groups (spec 2026-10-07 §1.3): the group's colour as the box's
    left edge, and as stripes on a file's ◆ badge. */
 .notebox.g1 { border-left: 4px solid var(--note-group-1); }
@@ -1534,10 +1549,30 @@ table.diff tr.note.collapsed .notefold::before { content: "▸ "; }
 table.diff tr.note.collapsed .notesum,
 table.diff tr.note.collapsed .notetext,
 table.diff tr.note.collapsed .notelink,
+table.diff tr.note.collapsed .mline,
+table.diff tr.note.collapsed .mdetail,
+table.diff tr.note.collapsed .mrun,
 table.diff tr.note.collapsed .notereply { display: none; }
 table.diff tr.note.collapsed .notebox { padding: 8px 12px 2px; }
 .notesum { font-weight: bold; }
 .notetext { opacity: .8; margin-top: 2px; }
+/* note meta (spec 2026-10-12-note-meta §7): chips in the title, line and
+   details rows in the box. A filled chip is the colour as background with the
+   page's background as text; a text chip is the colour as text. */
+.mchip { white-space: pre; }
+.mc-red.ms-text { color: var(--meta-red); } .mc-red.ms-filled { background: var(--meta-red); color: var(--bg); }
+.mc-orange.ms-text { color: var(--meta-orange); } .mc-orange.ms-filled { background: var(--meta-orange); color: var(--bg); }
+.mc-yellow.ms-text { color: var(--meta-yellow); } .mc-yellow.ms-filled { background: var(--meta-yellow); color: var(--bg); }
+.mc-green.ms-text { color: var(--meta-green); } .mc-green.ms-filled { background: var(--meta-green); color: var(--bg); }
+.mc-blue.ms-text { color: var(--meta-blue); } .mc-blue.ms-filled { background: var(--meta-blue); color: var(--bg); }
+.mc-purple.ms-text { color: var(--meta-purple); } .mc-purple.ms-filled { background: var(--meta-purple); color: var(--bg); }
+.mc-grey.ms-text { color: var(--meta-grey); } .mc-grey.ms-filled { background: var(--meta-grey); color: var(--bg); }
+.maud, .msep { color: var(--dim); white-space: pre; }
+.mline, .mdetail { color: var(--dim); font-size: .92em; }
+.mdetail { margin-top: 4px; }
+.notereply .mrun { margin: 2px 0; }
+/* a stale/outdated box keeps its chips readable but dim, like the TUI */
+.notebox.stale .mchip, .notebox.outdated .mchip, .vnote.outdated .mchip { opacity: .7; }
 /* A note's link (a reply's fix): a click opens it the way # does. */
 .notelink { margin-top: 2px; color: var(--accent); cursor: pointer; overflow-wrap: anywhere; }
 .notelink:hover { text-decoration: underline; }
@@ -1734,6 +1769,15 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 /* a review's remark (spec 2026-10-11 §6): read-only, the review's colour */
 .vnote.remark { border-color: var(--dim); }
 .vnote.remark .vnote-title { color: var(--dim); }
+/* a declared frame (note meta) recolours a viewer box, a remark's too; outdated stays dimmed by opacity */
+.vnote.mf-red { border-color: var(--meta-red); }
+.vnote.mf-orange { border-color: var(--meta-orange); }
+.vnote.mf-yellow { border-color: var(--meta-yellow); }
+.vnote.mf-green { border-color: var(--meta-green); }
+.vnote.mf-blue { border-color: var(--meta-blue); }
+.vnote.mf-purple { border-color: var(--meta-purple); }
+.vnote.mf-grey { border-color: var(--meta-grey); }
+.vnote.outdated { border-color: var(--dim); } /* dim wins over a declared frame */
 .vnote-acts { margin-top: 6px; display: flex; gap: 8px; }
 .vnote-acts button { font: inherit; font-size: .9em; color: var(--fg); background: none; border: 1px solid var(--border); border-radius: 3px; padding: 1px 8px; cursor: pointer; }
 .vnote-acts button:hover { border-color: var(--accent); color: var(--accent); }
@@ -1961,6 +2005,15 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #prsendpanel-list li.g3 { border-left-color: var(--note-group-3); } #prsendpanel-list li.g4 { border-left-color: var(--note-group-4); }
 #prsendpanel-list li.g5 { border-left-color: var(--note-group-5); } #prsendpanel-list li.g6 { border-left-color: var(--note-group-6); }
 #prsendpanel-list .psev { font-size: .85em; padding: 0 4px; border-radius: 3px; background: var(--dim); color: var(--bg); margin-right: 4px; }
+/* the severity's colour from the note's badges (note meta); id + 3 classes beat .psev */
+#prsendpanel-list .psev.mc-red.ms-filled { background: var(--meta-red); }
+#prsendpanel-list .psev.mc-orange.ms-filled { background: var(--meta-orange); }
+#prsendpanel-list .psev.mc-yellow.ms-filled { background: var(--meta-yellow); }
+#prsendpanel-list .psev.mc-green.ms-filled { background: var(--meta-green); }
+#prsendpanel-list .psev.mc-blue.ms-filled { background: var(--meta-blue); }
+#prsendpanel-list .psev.mc-purple.ms-filled { background: var(--meta-purple); }
+#prsendpanel-list .psev.mc-grey.ms-filled { background: var(--meta-grey); }
+#prsendpanel-list .pmeta { white-space: normal; }
 #prsendpanel-list .pwhere { color: var(--accent); cursor: pointer; margin-right: 6px; }
 #prsendpanel-list .pskip { display: inline-block; width: 13px; text-align: center; color: var(--dim); }
 #prsendpanel-list .pdate, #prsendpanel-list .pskipwhy { color: var(--dim); margin-left: 8px; font-weight: normal; }

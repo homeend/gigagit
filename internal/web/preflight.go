@@ -19,7 +19,7 @@ import (
 // gatedFeatures is the one-entry table (today) of feature ids whose
 // disablement the SPA cares about hiding UI for. Kept next to the handler
 // rather than scattered, same convention as MCP's tool→feature table.
-var gatedFeatures = []string{domain.FeatureVersions}
+var gatedFeatures = []string{domain.FeatureVersions, domain.FeatureNoteEdits}
 
 func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {

@@ -17,6 +17,30 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   dead key. The web's PR menu offers `copy gg link` on every PR: an
   unfetched one is fetched under the PR mask first.
 
+## Note meta in gg web
+
+### Added
+- **gg web shows note meta the way the TUI does.**
+  - Diff note boxes, the viewer's temporary notes and a review's remark boxes now lead their title with the declared chips (filled or text, in the seven meta colours) and the audience marker (`→ author` / `for you`).
+  - The declared frame colours the border; a stale note stays dim.
+  - `line` keys are dim rows under the title, and a details row lists stored meta, added meta and display problems.
+  - Each reply shows its own chips.
+  - A too-wide title elides its path in the middle first, then cuts its words; the chips go last.
+- **Review view:**
+  - The header gains a counts line (`2 issue · 1 for author`).
+  - File rows end with a compact `issue 1` while it fits.
+  - Other notes carry their chips.
+- **Send to GitHub panel:**
+  - An opened row shows one meta row.
+  - The severity chip takes its badge colour.
+  - Nothing is ticked, filtered or dimmed by meta.
+- **Mark** in a note box's right-click menu: agreed / disagreed / deferred / clear (`POST /api/notes/mark`).
+  - It is a `status` tag only, and is never offered on a GitHub thread.
+  - Inside a review view, the counts follow the mark.
+- **The note-edits notice:** a notes file a newer gg wrote raises the TUI's own "note-edits is unavailable" notice in the notification centre.
+  - Dismissing it in either frontend silences both.
+  - Mark is hidden while note-edits is unavailable.
+
 ## Note meta in the TUI
 
 ### Added
