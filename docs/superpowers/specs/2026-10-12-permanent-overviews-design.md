@@ -255,7 +255,9 @@ the refusal reasons. **reviewing-with-gg**: one line pointing at it.
 
 ## 9. TUI
 
-- **Commits**: `≡` beside the commit (and beside `✎` when both), from
+- **Commits**: `≡` in its own marker cell right of `✎` (user ruling
+  2026-10-12: the marker area is 5 cells; every commit row moves one
+  column), from
   `noteCounts.Overviews`, on any branch (no `ReviewShownOn`).
 - **Branches**: `└ Overview: <title> <date> <agent>` sub-rows (brEntry rows
   like review rows), only while the branch's tip is the overview's commit and
@@ -271,8 +273,10 @@ the refusal reasons. **reviewing-with-gg**: one line pointing at it.
   `OverviewFileNotes` boxes; ↑/↓ links, n/p bands (W5: highlight only), `S`
   stacks the linked files in first-anchored order, `D` flips to the commit's
   own change to the file (`<sha>^..<sha>`; "this commit does not change
-  <path>" on the status line when untouched — a root commit diffs against
-  the empty tree), `y` copies the overview link, esc closes. Narrow
+  <path>" in the file column when untouched — a root commit diffs against
+  the empty tree), `y` copies its text, as on every overview (amended
+  2026-10-12: the link is ctrl+l in View all notes and `gg overview
+  show`), esc closes. Narrow
   (< 60 cols) → full-screen viewer as today.
 - A steer reload / `r` refreshes note counts; a deleted overview that is
   open closes with a status line.
