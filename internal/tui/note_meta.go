@@ -193,3 +193,50 @@ func metaCountsRun(c notemeta.Counts) (string, []syntax.Class) {
 	}
 	return r.b.String(), r.cls
 }
+
+// minPathCols is the narrowest a title's path is elided to before today's
+// parts start to go: "…/x.go" still names the file.
+const minPathCols = 8
+
+// fitNoteTitle fits a box title into room columns (spec §6.1): whole when it
+// fits; else the path loses its middle (never its file name); else today's
+// parts are cut; the badges go last. badges and text sit one space apart
+// when both stay.
+func fitNoteTitle(badges string, cls []syntax.Class, text, path string, room int) (string, []syntax.Class, string) {
+	if room <= 0 {
+		return "", nil, ""
+	}
+	bw := lipgloss.Width(badges)
+	gap := 0
+	if badges != "" && text != "" {
+		gap = 1
+	}
+	if bw+gap+lipgloss.Width(text) <= room {
+		return badges, cls, text
+	}
+	textRoom := room - bw - gap
+	if path != "" && textRoom > 0 {
+		if before, after, ok := strings.Cut(text, path); ok {
+			fixed := lipgloss.Width(before) + lipgloss.Width(after)
+			if pw := textRoom - fixed; pw >= minPathCols {
+				return badges, cls, before + elidePath(path, pw) + after
+			}
+			text = before + elidePath(path, minPathCols) + after
+		}
+	}
+	if textRoom >= 1 {
+		return badges, cls, truncate(text, textRoom)
+	}
+	// Today's parts are gone; the badges take the room, cut at their end.
+	r := []rune(badges)
+	w, cut := 0, 0
+	for i, c := range r {
+		cw := lipgloss.Width(string(c))
+		if w+cw > room {
+			break
+		}
+		w += cw
+		cut = i + 1
+	}
+	return string(r[:cut]), cls[:min(cut, len(cls))], ""
+}

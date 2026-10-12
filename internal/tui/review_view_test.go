@@ -135,8 +135,19 @@ func TestReviewDiffShowsOnlyReviewNotes(t *testing.T) {
 	if v == nil || len(v.notes) != 1 || !model.IsReviewNoteID(v.notes[0].Note.ID) {
 		t.Fatalf("review diff notes %+v", v.notes)
 	}
-	if title := v.noteBoxTitle(v.notes[0]); !strings.Contains(title, "severity: nit") || !strings.Contains(title, "Claude") {
+	if title := v.noteBoxTitle(v.notes[0]); !strings.Contains(title, "Claude") {
 		t.Fatalf("title %q", title)
+	}
+	// The remark's undeclared meta is a line row in its box (R13), not a
+	// title suffix.
+	lineRow := false
+	for _, nl := range v.noteBoxLines(v.notes[0], 60, v) {
+		if nl.kind == noteRowMeta && nl.text == "severity: nit" {
+			lineRow = true
+		}
+	}
+	if !lineRow {
+		t.Fatal("the remark's meta is not a line row")
 	}
 	// The same file from the normal commit view shows only the stored note.
 	nm, cmd := m.openChangedFiles(m.commits[0])

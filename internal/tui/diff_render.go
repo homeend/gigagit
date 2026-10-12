@@ -8,6 +8,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
@@ -805,9 +806,15 @@ func noteBoxCell(nl noteLine, paneW int) string {
 	if nl.agent {
 		frame = s.noteFrameAgent
 	}
+	if c := metaClass(nl.metaFrame, notemeta.StyleText); c != 0 {
+		frame = s.metaStyle(lipgloss.NewStyle(), c) // the declared frame (spec 2026-10-12-note-meta §6.1)
+	}
 	text := s.noteBody
-	if nl.kind == noteRowSummary {
+	switch nl.kind {
+	case noteRowSummary:
 		text = s.noteSummary
+	case noteRowMeta:
+		text = s.noteDim
 	}
 	if nl.stale {
 		frame, text = s.noteFrameStale, s.noteDim
@@ -824,20 +831,48 @@ func noteBoxCell(nl noteLine, paneW int) string {
 	var cell string
 	switch nl.kind {
 	case noteRowTop:
-		title := truncate(sanitizeLine(nl.text), paneW-6) // "╭─ " + title + " ─╮" at least
-		rule := paneW - 4 - lipgloss.Width(title)
-		if rule < 1 {
-			rule = 1
+		if paneW < 7 { // no room for a title: the bare rule
+			cell = left.Render("╭") + frame.Render(strings.Repeat("─", paneW-2)+"╮")
+			break
 		}
-		cell = left.Render("╭") + frame.Render("─ "+title+" "+strings.Repeat("─", rule-1)+"╮")
+		// "╭─ " + title + " ─╮" at least: the badges first, then today's
+		// parts, the path elided before anything is cut (fitNoteTitle).
+		b, bc, title := fitNoteTitle(nl.badges, nl.badgeCls, sanitizeLine(nl.text), nl.path, paneW-6)
+		if b == "" {
+			rule := max(paneW-4-lipgloss.Width(title), 1)
+			cell = left.Render("╭") + frame.Render("─ "+title+" "+strings.Repeat("─", rule-1)+"╮")
+			break
+		}
+		head := frame.Render(b)
+		if !nl.stale { // a stale box stays dim throughout
+			rb := []rune(b)
+			head = styledRuns(rb, make([]emphLevel, len(rb)), bc, frame)
+		}
+		used := lipgloss.Width(b)
+		if title != "" {
+			head += frame.Render(" ")
+			used++
+		}
+		rule := max(paneW-4-used-lipgloss.Width(title), 1)
+		cell = left.Render("╭") + frame.Render("─ ") + head + frame.Render(title+" "+strings.Repeat("─", rule-1)+"╮")
 	case noteRowBottom:
 		cell = left.Render("╰") + frame.Render(strings.Repeat("─", paneW-2)+"╯")
 	case noteRowBlank:
 		cell = left.Render("│") + strings.Repeat(" ", paneW-2) + frame.Render("│")
 	case noteRowCollapsed:
-		// No frame: one row, led by the fold mark in the thread's frame colour.
-		body := padRight(truncate(sanitizeLine(nl.text), paneW-2), paneW-2)
-		cell = left.Render("▸") + " " + text.Render(body)
+		// No frame: one row, led by the fold mark in the thread's frame
+		// colour, then the note's badges when they leave room for the text.
+		room, lead := paneW-2, ""
+		if bw := lipgloss.Width(nl.badges); nl.badges != "" && bw+2 <= room {
+			lead = text.Render(nl.badges + " ")
+			if !nl.stale {
+				rb := []rune(nl.badges)
+				lead = styledRuns(rb, make([]emphLevel, len(rb)), nl.badgeCls, text) + text.Render(" ")
+			}
+			room -= bw + 1
+		}
+		body := padRight(truncate(sanitizeLine(nl.text), room), room)
+		cell = left.Render("▸") + " " + lead + text.Render(body)
 	default:
 		body := padRight(truncate(sanitizeLine(nl.text), inner), inner)
 		painted := text.Render(body)

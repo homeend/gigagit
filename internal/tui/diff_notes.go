@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/syntax"
 )
 
@@ -47,6 +48,17 @@ type noteLine struct {
 	group int
 	// errRow is the "send failed: …" row, painted in the error colour.
 	errRow bool
+	// badges / badgeCls are a top or collapsed row's lead-in: the note's
+	// badges and audience marker with the mask that colours them (spec
+	// 2026-10-12-note-meta §6.1). "" = none.
+	badges   string
+	badgeCls []syntax.Class
+	// path is the file path inside a top row's text: the first thing a too
+	// wide title gives up (elided in the middle, never its name).
+	path string
+	// metaFrame is the frame colour the note's meta declares ("" = the
+	// user/agent colour); a stale box ignores it.
+	metaFrame string
 }
 
 // noteRowKind is one row's role inside a note box, hunk-style: a rounded
@@ -61,6 +73,7 @@ const (
 	noteRowText                         // │ rationale │  (wraps)
 	noteRowBottom                       // ╰───────────╯
 	noteRowCollapsed                    // ▸ author: summary… (N replies) — the whole thread on one row
+	noteRowMeta                         // │ intent: …  │  (dim): a line row, a reply's badges, the details
 )
 
 // noteBoxFrame is the fixed width a box row spends on its frame and inner
@@ -434,6 +447,7 @@ func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int, owner *diffVi
 			allAgent = false
 		}
 	}
+	res := domain.NoteMeta(r.Note, nil)
 	frame := func(kind noteRowKind, text string) noteLine {
 		return noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: kind, side: r.Note.Side, text: text, stale: stale, agent: allAgent}
 	}
@@ -442,10 +456,24 @@ func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int, owner *diffVi
 	if mk := syncMark(r.Sync, inPR); mk != "" {
 		title = mk + " " + title
 	}
-	rows := []noteLine{frame(noteRowTop, title), frame(noteRowBlank, "")}
+	top := frame(noteRowTop, title)
+	top.badges, top.badgeCls = badgeRun(res)
+	top.path = sanitizeLine(owner.noteAddr.Path)
+	rootMk := func(kind noteRowKind, text string) noteLine {
+		return noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: kind, side: r.Note.Side, text: text, stale: stale,
+			agent: r.Note.Source == model.NoteSourceAgent}
+	}
+	rows := []noteLine{top, frame(noteRowBlank, "")}
+	rows = append(rows, noteMetaRows(res, false, true, false, innerW, "", rootMk)...)
 	rows = append(rows, noteBodyLines(r, r.Note.ID, 0, innerW, stale)...)
+	rows = append(rows, noteMetaRows(res, false, false, true, innerW, "", rootMk)...)
 	for _, rep := range r.Replies {
 		rows = append(rows, noteBodyLines(rep, r.Note.ID, 1, innerW, stale)...)
+		repMk := func(kind noteRowKind, text string) noteLine {
+			return noteLine{id: rep.Note.ID, rootID: r.Note.ID, depth: 1, kind: kind, side: r.Note.Side, text: text, stale: stale,
+				agent: rep.Note.Source == model.NoteSourceAgent}
+		}
+		rows = append(rows, noteMetaRows(domain.NoteMeta(rep.Note, &r.Note), true, true, true, innerW, "  ", repMk)...)
 	}
 	if r.Sync == model.SyncFailed && r.SendErr != "" {
 		// The last send's error, inside the box it failed for (spec §1.1).
@@ -456,6 +484,9 @@ func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int, owner *diffVi
 		}
 	}
 	rows = append(rows, frame(noteRowBlank, ""), frame(noteRowBottom, ""))
+	for i := range rows { // the whole box wears the root's declared frame
+		rows[i].metaFrame = res.Frame
+	}
 	if inPR {
 		slot := domain.GroupSlot(r.Group)
 		for i := range rows {
@@ -519,6 +550,9 @@ func (v *diffView) collapsedNoteLine(r domain.ResolvedNote) noteLine {
 	}
 	nl := noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: noteRowCollapsed, side: side,
 		text: sanitizeLine(text), stale: r.Status == model.NoteStale, agent: allAgent}
+	res := domain.NoteMeta(r.Note, nil)
+	nl.badges, nl.badgeCls = badgeRun(res)
+	nl.metaFrame = res.Frame
 	if v.forgePR > 0 {
 		nl.group = domain.GroupSlot(r.Group)
 	}
@@ -668,13 +702,6 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 		}
 		t += " " + i18n.T("(stale)")
 	}
-	if model.IsReviewNoteID(r.Note.ID) && len(r.Note.Meta) > 0 {
-		var kv []string
-		for _, m := range r.Note.Meta {
-			kv = append(kv, m.Key+": "+m.Value)
-		}
-		t += " · " + sanitizeLine(strings.Join(kv, " · ")) // the review's meta
-	}
 	if r.Resolution != nil {
 		t += " · " + i18n.T("resolved")
 	}
@@ -754,6 +781,35 @@ func noteBodyLines(r domain.ResolvedNote, rootID string, depth, innerW int, stal
 		for _, ln := range noteWrap(sanitizeLine("→ "+r.Note.Link), innerW-len([]rune(indent))) {
 			rows = append(rows, mk(noteRowText, indent+ln))
 		}
+	}
+	return rows
+}
+
+// noteMetaRows are one note's meta rows inside its box (spec
+// 2026-10-12-note-meta §6.1): its badges (a reply's, which have no title to
+// sit in), its line rows, its details rows — each dim, wrapped, never cut.
+func noteMetaRows(res notemeta.Resolved, badges, lines, details bool, innerW int, indent string, mk func(noteRowKind, string) noteLine) []noteLine {
+	var rows []noteLine
+	w := innerW - len([]rune(indent))
+	if badges {
+		if run, cls := badgeRun(res); run != "" {
+			nl := mk(noteRowMeta, indent+run)
+			nl.cls = offsetCls(cls, len([]rune(indent)))
+			rows = append(rows, nl)
+		}
+	}
+	add := func(texts []string) {
+		for _, t := range texts {
+			for _, ln := range noteWrap(t, w) {
+				rows = append(rows, mk(noteRowMeta, indent+ln))
+			}
+		}
+	}
+	if lines {
+		add(metaLineTexts(res))
+	}
+	if details {
+		add(metaDetailTexts(res))
 	}
 	return rows
 }
