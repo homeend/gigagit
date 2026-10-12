@@ -15,6 +15,10 @@ setlocal EnableDelayedExpansion
 rem Run from the project root (this script's directory) regardless of CWD.
 cd /d "%~dp0"
 
+rem -trimpath (as build.sh uses) keeps the checkout's path out of Go's build
+rem cache keys, so every worktree shares one cache entry per unchanged package.
+if defined GOFLAGS (set "GOFLAGS=-trimpath %GOFLAGS%") else (set "GOFLAGS=-trimpath")
+
 set "RACE="
 set "VERBOSE="
 set "TARGET=%~1"

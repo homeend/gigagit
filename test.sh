@@ -15,6 +15,11 @@ set -euo pipefail
 # Run from the project root (this script's directory) regardless of CWD.
 cd "$(dirname "$0")"
 
+# -trimpath (as build.sh uses) keeps the checkout's path out of Go's build
+# cache keys, so every worktree shares one cache entry per unchanged package
+# instead of storing its own copy — including the gg binaries tests build.
+export GOFLAGS="-trimpath${GOFLAGS:+ ${GOFLAGS}}"
+
 RACE=""
 VERBOSE=""
 

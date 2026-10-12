@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Smaller Go build cache across worktrees
+
+### Changed
+- **`test.sh` / `test.cmd` build with `-trimpath`** (as `build.sh` already
+  did). The checkout's path no longer enters Go's build-cache keys, so each
+  feature worktree reuses main's entries for every package it hasn't changed
+  instead of storing its own copy (`internal/tui` alone is ~85 MB per copy) —
+  including the gg binaries tests build. The fake `gh` the forge tests build
+  finds its source through `go env GOMOD`, since `runtime.Caller` paths are
+  module-relative under `-trimpath`.
+
 ## Permanent overviews (CLI)
 
 ### Added
