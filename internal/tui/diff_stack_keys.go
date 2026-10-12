@@ -26,7 +26,7 @@ func (m Model) buildTreeStack() []stackFile {
 			}
 			continue
 		}
-		if l.path == "" || l.noteID != "" { // a heading row, the placeholder, or an @notes/ review (not a file)
+		if l.path == "" || l.noteID != "" || l.overviewID != "" { // a heading row, the placeholder, or an @notes/ review (not a file)
 			continue
 		}
 		out = append(out, stackFile{path: l.path, oldPath: l.oldPath, status: l.status, line: l})

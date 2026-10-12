@@ -1212,8 +1212,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesView.lines = reviewTreeLines(st, m.filesView.lines)
 		}
 		m.filesView.sel = 0
-		if m.filesReview == nil && m.filesPreviewSet != nil && len(m.filesPreviewReviews) > 0 {
-			m.filesView.lines = previewReviewLines(m.filesPreviewReviews, m.filesView.lines)
+		if ovs := m.previewOverviews(); m.filesReview == nil && m.filesPreviewSet != nil && (len(m.filesPreviewReviews) > 0 || len(ovs) > 0) {
+			m.filesView.lines = layPreviewBlocks(m.filesPreviewReviews, ovs, m.filesView.lines)
 			m = m.landPreviewCursor(contentLine{})
 		}
 		// A re-armed merge preview keeps the file the cursor was on when its
@@ -2159,7 +2159,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.identity = msg.value.(model.Identity)
 		case srcNotes:
 			m.noteCounts = msg.value.(domain.NoteCounts)
-			m = m.dropGoneOverviews(m.noteCounts) // a deleted open overview closes (spec §9)
+			m = m.dropGoneOverviews(m.noteCounts)          // a deleted open overview closes (spec §9)
+			m = m.setPreviewReviews(m.filesPreviewReviews) // a PR view's Overviews block follows the counts
 			// The Files panel's Review row: re-match this worktree's working
 			// reviews (none → the row and the ✎ go).
 			if len(m.noteCounts.WorkingReviews) == 0 {

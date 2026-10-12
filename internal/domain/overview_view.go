@@ -103,16 +103,22 @@ func (s *Service) PROverviews(ctx context.Context, set PreviewNoteSet) ([]Overvi
 	if err != nil {
 		return nil, err
 	}
+	return set.Overviews(c), nil
+}
+
+// Overviews are the overviews among counts c stored on set's pull request
+// (PROverviews without a read: a frontend holding the counts asks this).
+func (set PreviewNoteSet) Overviews(c NoteCounts) []OverviewHead {
 	var out []OverviewHead
 	for scope, hs := range c.PreviewOverviews {
-		if !set.owns(scope) {
+		if !set.OK() || !set.owns(scope) {
 			continue
 		}
 		for _, h := range hs {
-			h.Older = set.Tip != "" && h.Commit != set.Tip
+			h.Older = h.Commit != set.Tip
 			out = append(out, h)
 		}
 	}
 	slices.SortStableFunc(out, func(a, b OverviewHead) int { return b.Created.Compare(a.Created) })
-	return out, nil
+	return out
 }

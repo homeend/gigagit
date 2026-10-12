@@ -139,6 +139,47 @@ func previewReviewLines(heads []domain.ReviewHead, lines []contentLine) []conten
 	return append(out, rest...)
 }
 
+// previewOverviewLines puts a PR's permanent overviews (R10) on top of
+// lines as an "Overviews" block, replacing a block already there.
+func previewOverviewLines(heads []domain.OverviewHead, lines []contentLine) []contentLine {
+	rest := lines
+	if len(rest) > 1 && rest[0].heading && rest[1].overviewID != "" {
+		i := 1
+		for i < len(rest) && rest[i].overviewID != "" {
+			i++
+		}
+		rest = rest[i:]
+	}
+	if len(heads) == 0 {
+		return rest
+	}
+	out := make([]contentLine, 0, len(heads)+1+len(rest))
+	out = append(out, contentLine{text: i18n.T("Overviews"), heading: true})
+	for _, h := range heads {
+		body := branchOverviewRowBody(h)
+		if h.Older {
+			body += " · " + i18n.T("older tip")
+		}
+		out = append(out, contentLine{text: "  " + body, overviewID: h.ID})
+	}
+	return append(out, rest...)
+}
+
+// layPreviewBlocks lays a preview's list: its Reviews block, then a PR's
+// Overviews block, then the files — each block replaced, never stacked.
+func layPreviewBlocks(reviews []domain.ReviewHead, overviews []domain.OverviewHead, lines []contentLine) []contentLine {
+	return previewReviewLines(reviews, previewOverviewLines(overviews, previewReviewLines(nil, lines)))
+}
+
+// previewOverviews are the open PR view's permanent overviews, from the
+// loaded note counts (they follow every counts reload); none outside one.
+func (m Model) previewOverviews() []domain.OverviewHead {
+	if m.filesPreviewSet == nil || m.filesReview != nil {
+		return nil
+	}
+	return m.filesPreviewSet.Overviews(m.noteCounts)
+}
+
 // setPreviewReviews stores the open scope's heads and re-lays the list on
 // screen, keeping the cursor on the row it was on; a pending landing
 // (filesLandNote: back from a review) puts it on that review's row. A list
@@ -154,7 +195,7 @@ func (m Model) setPreviewReviews(heads []domain.ReviewHead) Model {
 	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) {
 		keep = vis[p.sel]
 	}
-	p.lines = previewReviewLines(heads, p.lines)
+	p.lines = layPreviewBlocks(heads, m.previewOverviews(), p.lines)
 	return m.landPreviewCursor(keep)
 }
 

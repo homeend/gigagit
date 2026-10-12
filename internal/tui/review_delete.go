@@ -115,6 +115,9 @@ func (m Model) onStoredDeleted(msg storedDeletedMsg) (Model, tea.Cmd) {
 		var c tea.Cmd
 		m, c = m.leaveReviewView()
 		cmds = append(cmds, c)
+	} else if msg.overview {
+		// Deleted off a PR view's Overviews row: the row goes with it.
+		m = m.dropFilesRows(func(l contentLine) bool { return l.overviewID == msg.id })
 	} else if msg.review {
 		// Deleted off a commit's Reviews row (or elsewhere while that list is
 		// open): the row goes with it.
