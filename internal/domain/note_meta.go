@@ -79,11 +79,17 @@ func (s *Service) SetNoteMeta(ctx context.Context, id, by string, kv []notemeta.
 	kv, probs := notemeta.CheckMeta(kv)
 	err := s.editMeta(ctx, id, func(n *model.Note, fp string) {
 		for _, e := range kv {
-			if fp == "" && by == n.Author {
+			own := fp == "" && by == n.Author
+			switch {
+			case e.Value == "" && own: // an empty value removes the key (spec §2.4)
+				n.Meta = dropKV(n.Meta, e.Key)
+			case e.Value == "":
+				n.Added = dropAdded(n.Added, fp, e.Key)
+			case own:
 				n.Meta = upsertKV(n.Meta, e)
-				continue
+			default:
+				n.Added = upsertAdded(n.Added, notemeta.Added{RemarkFP: fp, Key: e.Key, Value: e.Value, By: by, At: notes.Now().UTC()})
 			}
-			n.Added = upsertAdded(n.Added, notemeta.Added{RemarkFP: fp, Key: e.Key, Value: e.Value, By: by, At: notes.Now().UTC()})
 		}
 		if len(n.Meta) > notemeta.MaxMetaKeys {
 			n.Meta = n.Meta[:notemeta.MaxMetaKeys]
@@ -168,6 +174,26 @@ func (s *Service) editMeta(ctx context.Context, id string, fn func(n *model.Note
 		s.invalidateNoteCounts()
 	}
 	return err
+}
+
+func dropKV(kv []notemeta.KV, key string) []notemeta.KV {
+	out := kv[:0:0]
+	for _, e := range kv {
+		if e.Key != key {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func dropAdded(as []notemeta.Added, fp, key string) []notemeta.Added {
+	out := as[:0:0]
+	for _, a := range as {
+		if a.RemarkFP != fp || a.Key != key {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 func upsertKV(kv []notemeta.KV, e notemeta.KV) []notemeta.KV {

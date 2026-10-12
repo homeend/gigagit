@@ -72,9 +72,13 @@ func reviewSave(svc *domain.Service, args []string, stdin io.Reader, stdout, std
 		fmt.Fprintln(stderr, "review save:", err)
 		return 1
 	}
-	if _, perr := notebatch.ParseReview(data); perr != nil {
+	doc, perr := notebatch.ParseReview(data)
+	if perr != nil {
 		fmt.Fprintln(stderr, "review save: not a gg review document:", perr)
 		return 1
+	}
+	for _, p := range doc.Problems {
+		fmt.Fprintf(stderr, "review save: %s (ignored)\n", p)
 	}
 	// A working review carries the fingerprints of what it read, or it would
 	// never be "current" (domain.WorkingReviewState): taken now, as the

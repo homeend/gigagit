@@ -127,3 +127,13 @@ func TestCount(t *testing.T) {
 		t.Fatalf("counts = %+v", c)
 	}
 }
+
+func TestResolveValuesListEveryEffectiveKey(t *testing.T) {
+	t.Parallel()
+	d := Display{"severity": {Show: []string{"frame"}, Values: map[string]Value{"high": {Color: "red"}}}, "kind": {Order: 1}}
+	r := Resolve([]KV{{"severity", "high"}, {"kind", "issue"}}, d, []Added{{Key: "status", Value: "agreed"}})
+	want := []KV{{"severity", "high"}, {"kind", "issue"}, {"status", "agreed"}}
+	if !reflect.DeepEqual(r.Values, want) {
+		t.Fatalf("values = %v", r.Values)
+	}
+}

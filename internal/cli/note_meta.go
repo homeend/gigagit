@@ -134,14 +134,8 @@ func noteMetaCmd(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 // shown keys, stored keys, added values with their writer, problems.
 func noteMetaText(r notemeta.Resolved) []string {
 	var shown []string
-	for _, b := range r.Badges {
-		shown = append(shown, b.Key+": "+b.Value)
-	}
-	for _, l := range r.Lines {
-		shown = append(shown, l.Label+": "+l.Value)
-	}
-	for _, s := range r.Stored {
-		shown = append(shown, s.Key+": "+s.Value)
+	for _, v := range r.Values {
+		shown = append(shown, v.Key+": "+v.Value)
 	}
 	var out []string
 	if len(shown) > 0 {

@@ -337,12 +337,14 @@ func (d ReviewDoc) NoteCount() (notes, files int) {
 	return notes, files
 }
 
-// docDisplay parses one level's declaration; malformed is not a document,
-// an unknown field is a problem the document keeps.
+// docDisplay parses one level's declaration. A declaration is never worth
+// the document (spec §3.5): a malformed one is dropped and named, like an
+// unknown field.
 func docDisplay(raw json.RawMessage, where string, probs *[]notemeta.Problem) (notemeta.Display, error) {
 	d, ps, err := notemeta.ParseDisplay(raw)
 	if err != nil {
-		return nil, notDoc("%s: %v", where, err)
+		*probs = append(*probs, notemeta.Problem(where+": "+err.Error()+" (ignored)"))
+		return nil, nil
 	}
 	for _, p := range ps {
 		*probs = append(*probs, notemeta.Problem(where+": "+string(p)))

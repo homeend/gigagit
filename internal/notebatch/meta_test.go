@@ -78,10 +78,15 @@ func TestReviewDocDisplayAtThreeLevels(t *testing.T) {
 	}
 }
 
-func TestReviewDocMalformedDisplayIsNotADoc(t *testing.T) {
+func TestReviewDocMalformedDisplayIsAProblemNotALostDoc(t *testing.T) {
 	t.Parallel()
-	if _, err := ParseReview([]byte(`{"version":1,"summary":"x","display":[1],"files":[]}`)); err == nil {
-		t.Fatal("want ErrNotReviewDoc")
+	doc, err := ParseReview([]byte(`{"version":1,"summary":"x","display":[1],
+	  "files":[{"path":"a.go","annotations":[{"newRange":[1,1],"summary":"s","display":{"kind":{"show":"badge"}}}]}]}`))
+	if err != nil {
+		t.Fatalf("a malformed display must not cost the document its remarks: %v", err)
+	}
+	if doc.Display != nil || doc.Files[0].Notes[0].Display != nil || len(doc.Problems) != 2 {
+		t.Fatalf("display %v / %v problems %v", doc.Display, doc.Files[0].Notes[0].Display, doc.Problems)
 	}
 }
 

@@ -302,3 +302,19 @@ func (fs *FileStore) Unresolve(root string) error {
 	}
 	return fs.file(p).Unresolve(root)
 }
+
+// NewerParts names the parts a newer gg wrote (format above Format): this
+// build reads them and refuses every write. Unreadable parts are skipped.
+func (fs *FileStore) NewerParts() []Part {
+	parts, err := fs.Parts()
+	if err != nil {
+		return nil
+	}
+	var out []Part
+	for _, p := range parts {
+		if idx, rerr := fs.file(p).readIndex(); rerr == nil && idx.Format > Format {
+			out = append(out, p)
+		}
+	}
+	return out
+}

@@ -86,3 +86,23 @@ func TestNoteListPrintsAMetaLine(t *testing.T) {
 		t.Fatalf("list = %q", out)
 	}
 }
+
+func TestNoteShowListsAFrameOnlyKey(t *testing.T) {
+	dir := noteRepo(t)
+	id, _, _ := runGG(t, dir, "note", "add", "--file", "a.txt", "--new-line", "1", "--summary", "s",
+		"--meta", "severity=high", "--display", `{"severity":{"show":["frame"]}}`)
+	show, _, _ := runGG(t, dir, "note", "show", strings.TrimSpace(id))
+	if !strings.Contains(show, "severity: high") {
+		t.Fatalf("show = %q", show)
+	}
+}
+
+func TestReviewSaveNamesDisplayProblems(t *testing.T) {
+	dir, link := reviewSaveRepo(t)
+	doc := `{"version":1,"summary":"fine","display":{"kind":{"show":["badge"],"colour":"x"}},
+	  "files":[{"path":"f.txt","annotations":[{"newRange":[2,2],"summary":"one"}]}]}`
+	code, _, errb := runCLIStdin(t, dir, doc, "review", "save", link, "--agent", "A", "--stdin")
+	if code != 0 || !strings.Contains(errb, "colour") {
+		t.Fatalf("save = %d %q", code, errb)
+	}
+}

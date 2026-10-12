@@ -3,10 +3,14 @@ package domain
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notemeta"
+	"github.com/homeend/gigagit/internal/notes"
 )
 
 const metaDoc = `{"version":1,"summary":"x",
@@ -183,5 +187,43 @@ func TestSetNoteMetaReportsDroppedEntries(t *testing.T) {
 	probs, err := svc.SetNoteMeta(ctx, n.ID, "A", []notemeta.KV{{Key: "ok", Value: "1"}, {Key: "bad", Value: "a\nb"}})
 	if err != nil || len(probs) != 1 {
 		t.Fatalf("probs %v err %v", probs, err)
+	}
+}
+
+func TestSetNoteMetaEmptyValueRemoves(t *testing.T) {
+	t.Parallel()
+	svc, rid, _, tip := metaReview(t, metaDoc)
+	ctx := context.Background()
+	n := commitNote(t, svc, tip, "A")
+	svc.SetNoteMeta(ctx, n.ID, "A", []notemeta.KV{{Key: "kind", Value: "issue"}})
+	svc.SetNoteMeta(ctx, n.ID, "MR", []notemeta.KV{{Key: "status", Value: "agreed"}})
+	svc.SetNoteMeta(ctx, n.ID, "A", []notemeta.KV{{Key: "kind", Value: ""}})
+	svc.SetNoteMeta(ctx, n.ID, "MR", []notemeta.KV{{Key: "status", Value: ""}})
+	if got, _ := svc.NoteGet(ctx, n.ID); len(got.Meta) != 0 || len(got.Added) != 0 {
+		t.Fatalf("empty values must remove: meta %v added %v", got.Meta, got.Added)
+	}
+	svc.SetNoteMeta(ctx, remarkID(rid, 0), "MR", []notemeta.KV{{Key: "status", Value: "agreed"}})
+	svc.SetNoteMeta(ctx, remarkID(rid, 0), "MR", []notemeta.KV{{Key: "status", Value: ""}})
+	if r := mustReview(t, svc, rid); len(r.Added) != 0 {
+		t.Fatalf("remark mark not removed: %v", r.Added)
+	}
+}
+
+func TestPRSendRefusesANewerNotesFormat(t *testing.T) {
+	t.Parallel()
+	svc, _, _, tip := metaReview(t, metaDoc)
+	dir := t.TempDir()
+	svc.UseNotesDir(dir)
+	commitNote(t, svc, tip, "A")
+	p := filepath.Join(dir, "commits.toml")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(strings.Replace(string(data), "format = 3", "format = 4", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PRSendOp(context.Background(), PRSendRequest{PR: 1}); !errors.Is(err, notes.ErrNewerFormat) {
+		t.Fatalf("PRSendOp = %v, want ErrNewerFormat before anything is posted", err)
 	}
 }

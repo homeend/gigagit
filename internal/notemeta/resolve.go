@@ -35,6 +35,9 @@ type Counted struct {
 // Resolved is what to show for one note — the one input every renderer
 // (TUI, web, CLI text, forge adapters) reads.
 type Resolved struct {
+	// Values is every effective key/value (the author's, then the added
+	// ones), shown or not: what a text listing prints.
+	Values   []KV      `json:"values,omitempty"`
 	Badges   []Badge   `json:"badges,omitempty"`
 	Frame    string    `json:"frame,omitempty"`
 	Lines    []Line    `json:"lines,omitempty"`
@@ -48,7 +51,7 @@ type Resolved struct {
 
 // Empty reports a note with nothing to show and nothing to report.
 func (r Resolved) Empty() bool {
-	return len(r.Badges) == 0 && r.Frame == "" && len(r.Lines) == 0 && len(r.Stored) == 0 &&
+	return len(r.Values) == 0 && len(r.Badges) == 0 && r.Frame == "" && len(r.Lines) == 0 && len(r.Stored) == 0 &&
 		len(r.Added) == 0 && len(r.Problems) == 0 && r.Level == "" && r.Audience == ""
 }
 
@@ -59,6 +62,9 @@ func Resolve(meta []KV, d Display, added []Added) Resolved {
 	var out Resolved
 	vals, order, changes := overlay(meta, added)
 	out.Added = changes
+	for _, k := range order {
+		out.Values = append(out.Values, KV{k, vals[k]})
+	}
 	decl, probs := validate(d)
 	out.Problems = probs
 	if len(decl) == 0 {

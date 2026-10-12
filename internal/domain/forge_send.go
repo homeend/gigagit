@@ -11,6 +11,7 @@ import (
 	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
+	"github.com/homeend/gigagit/internal/notes"
 )
 
 // Sending to a forge (spec 2026-10-07 §3): the frontend collects a
@@ -68,6 +69,13 @@ type PRSendRequest struct {
 // and renders the bodies (R12: outside the gate, right before Execute); the
 // op confirms and writes.
 func (s *Service) PRSendOp(ctx context.Context, req PRSendRequest) (engine.SendToForge, error) {
+	// A send stamps its notes as it posts; a notes file this build may not
+	// write would lose the stamps and the next send would post again.
+	if fs, ok := s.notesStore(ctx).(*notes.FileStore); ok {
+		if newer := fs.NewerParts(); len(newer) > 0 {
+			return engine.SendToForge{}, fmt.Errorf("%w (%s)", notes.ErrNewerFormat, newer[0])
+		}
+	}
 	p, err := s.provider(ctx)
 	if err != nil {
 		return engine.SendToForge{}, err
