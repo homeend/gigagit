@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/homeend/gigagit/internal/agentdocs"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -197,5 +198,37 @@ func TestCollapsedRowCarriesBadges(t *testing.T) {
 	}
 	if !strings.Contains(ansiStrip(noteBoxCell(nl, 60)), "issue") {
 		t.Fatal("the collapsed row does not paint its badges")
+	}
+}
+
+func TestOpenFileNoteBoxMeta(t *testing.T) {
+	t.Parallel()
+	_, d := declaredIssue()
+	n := agentdocs.Note{ID: "t1", Author: "Claude Code", Start: 3, End: 3, Summary: "cached forever",
+		Meta: []notemeta.KV{{Key: "kind", Value: "issue"}, {Key: "intent", Value: "checked the cache key"}}, Display: d,
+		Added: []notemeta.Added{{Key: notemeta.StatusKey, Value: "disagreed", By: "MR"}}}
+	rows := noteBoxLines(n, 60, 0)
+	if !strings.Contains(rows[0].badges, "issue") || !strings.Contains(rows[0].badges, i18n.T("disagreed")) {
+		t.Fatalf("badges = %q", rows[0].badges)
+	}
+	var texts []string
+	for _, r := range rows {
+		if r.kind == noteRowMeta {
+			texts = append(texts, r.text)
+		}
+	}
+	want := []string{"intent: checked the cache key", i18n.T("added: %s", "status: disagreed (MR)")}
+	if !reflect.DeepEqual(texts, want) {
+		t.Fatalf("meta rows = %q", texts)
+	}
+}
+
+func TestRemarkBoxesKeepMeta(t *testing.T) {
+	t.Parallel()
+	n, d := declaredIssue()
+	n.Added = []notemeta.Added{{Key: "status", Value: "agreed", By: "MR"}}
+	got := remarkBoxes([]domain.ResolvedNote{{Note: n, Range: [2]int{1, 1}}})
+	if len(got[0].Meta) != len(n.Meta) || len(got[0].Display) != len(d) || len(got[0].Added) != 1 {
+		t.Fatalf("remark box = %+v", got[0])
 	}
 }
