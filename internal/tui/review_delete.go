@@ -189,6 +189,8 @@ func (m Model) allNotesDelete(p *allNotesPopup) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch r := vis[p.sel]; r.kind {
+	case anOverview:
+		return m.confirmOverviewDelete(r.overview.ID, reviewQuote(r.overview.Agent, r.overview.Title))
 	case anReview:
 		return m.confirmStoredDelete(r.review.ID, i18n.T("Delete this review?")+"\n"+reviewQuote(r.review.Agent, r.review.Summary), true)
 	case anNote:
