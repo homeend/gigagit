@@ -191,7 +191,7 @@ func TestAllNotesListsOverviews(t *testing.T) {
 		t.Fatalf("a query on the title keeps the row: %v", got.Q)
 	}
 	a := readStatic(t, "allnotes.js")
-	for _, want := range []string{`case "overview":`, `openPermanentOverview(r.overview.id)`, `confirmDeleteOverview(r.overview.id`} {
+	for _, want := range []string{`case "overview":`, `openPermanentOverview(r.overview.id, { onClose: reshow })`, `confirmDeleteOverview(r.overview.id`} {
 		if !strings.Contains(a, want) {
 			t.Errorf("allnotes.js lacks %q", want)
 		}

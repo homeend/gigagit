@@ -6,7 +6,7 @@
 import { postJSON, state } from "./core.js";
 import { showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
-import { refreshNoteCounts } from "./files.js";
+import { refreshNoteCounts, renderFiles } from "./files.js";
 import { openPermanentOverview } from "./viewer.js";
 
 // --- overview rows (pure; guarded against Go) ---
@@ -69,7 +69,11 @@ function confirmDeleteOverview(id, { done = null } = {}) {
     } catch (e) {
       if (e.status !== 404) return opLine("delete overview: " + (e.message || e), true); // 404: already gone, the same outcome
     }
+    // A PR view's block is filled by its own read, not the counts: the row
+    // goes now (the review delete's way).
+    state.previewOverviews = (state.previewOverviews || []).filter((x) => x.id !== id);
     await refreshNoteCounts();
+    renderFiles();
     opLine("overview deleted", false);
     if (done) done();
   });

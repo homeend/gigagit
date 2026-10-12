@@ -44,7 +44,7 @@ func TestPermanentOverviewIsWired(t *testing.T) {
 	t.Parallel()
 	v := readStatic(t, "viewer.js")
 	for _, want := range []string{
-		`export async function openPermanentOverview(id)`,
+		`export async function openPermanentOverview(id, { onClose = null } = {})`,
 		`getJSON("/api/overview/" + encodeURIComponent(id))`,
 		`kind: "overview"`,
 		`function fetchContent(src, rev, path, remarks = "", init = undefined)`,

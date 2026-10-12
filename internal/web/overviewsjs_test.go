@@ -83,3 +83,36 @@ func TestPRViewOverviewsAreWired(t *testing.T) {
 		t.Error("files.js does not route a click and a right-click on an Overviews row")
 	}
 }
+
+// Final review fixes (plan 3).
+func TestOverviewReviewFixesAreWired(t *testing.T) {
+	t.Parallel()
+	a := readStatic(t, "allnotes.js")
+	// 1: the viewer and the popup share a z-index — the popup steps aside and
+	// comes back when the overview closes (the review row's way).
+	if !strings.Contains(a, `hide();
+      openPermanentOverview(r.overview.id, { onClose: reshow });`) {
+		t.Error("allnotes.js does not hide the popup and reshow it when the overview closes")
+	}
+	v := readStatic(t, "viewer.js")
+	for _, want := range []string{`export async function openPermanentOverview(id, { onClose = null } = {})`, `const after = afterClose;`} {
+		if !strings.Contains(v, want) {
+			t.Errorf("viewer.js lacks %q", want)
+		}
+	}
+	// 2: overview rows take the note columns' layout.
+	for _, want := range []string{`#allnotes-list li.an-review, #allnotes-list li.an-overview { display: flex; white-space: nowrap; }`,
+		`#allnotes-list li.an-review, #allnotes-list li.an-overview { padding-left: calc(10px + 10ch); }`} {
+		if !strings.Contains(a, want) {
+			t.Errorf("allnotes.js lacks %q", want)
+		}
+	}
+	// 3: ovTitle adds "Overview: " — the opener passes the bare title.
+	if strings.Contains(v, `title: "Overview: " + d.title`) {
+		t.Error("viewer.js doubles the Overview: prefix")
+	}
+	// 4: a delete takes the PR view's row away at once.
+	if !strings.Contains(readStatic(t, "overviews.js"), `state.previewOverviews = (state.previewOverviews || []).filter((x) => x.id !== id);`) {
+		t.Error("overviews.js does not drop a deleted overview from the PR view's block")
+	}
+}

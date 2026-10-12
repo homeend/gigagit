@@ -29,14 +29,14 @@ const CSS = `
 #allnotes-head { padding: 8px 10px; font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
 #allnotes-input { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font: inherit; font-weight: normal; }
 #allnotes-input:focus { outline: none; border-color: var(--accent); }
-#allnotes-cols, #allnotes-list li.an-note, #allnotes-list li.an-review { display: flex; white-space: nowrap; }
+#allnotes-cols, #allnotes-list li.an-note, #allnotes-list li.an-review, #allnotes-list li.an-overview { display: flex; white-space: nowrap; }
 #allnotes-cols { color: var(--dim); padding: 2px 10px 2px calc(10px + 10ch); border-bottom: 1px solid var(--border); }
 #allnotes-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
 #allnotes-list li { padding: 2px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #allnotes-list li.sel { background: var(--sel); }
 #allnotes-list li.an-head { font-weight: 600; }
 #allnotes-list li.empty { color: var(--dim); cursor: default; }
-#allnotes-list li.an-note, #allnotes-list li.an-review { padding-left: calc(10px + 10ch); }
+#allnotes-list li.an-note, #allnotes-list li.an-review, #allnotes-list li.an-overview { padding-left: calc(10px + 10ch); }
 .an-c { flex: none; overflow: hidden; text-overflow: ellipsis; padding-right: 1ch; box-sizing: border-box; }
 .an-status { width: 9ch; } .an-who { width: 10ch; } .an-where { width: 10ch; } .an-when { width: 8ch; }
 .an-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -429,8 +429,10 @@ function activate(i) {
       openReview(r.review.id, { kind: "popup", run: reshow });
       return;
     case "overview":
-      // The viewer is a layer over the popup: esc comes back here.
-      openPermanentOverview(r.overview.id);
+      // The popup steps aside (the viewer shares its z-index) and comes back
+      // when the overview closes, as from a review.
+      hide();
+      openPermanentOverview(r.overview.id, { onClose: reshow });
       return;
   }
   render();

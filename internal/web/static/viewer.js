@@ -673,16 +673,24 @@ export function openStoredOverview({ id, kind = "review", title, blocks, anchors
   showStoredOverview({ id: (kind === "overview" ? "overview:" : "review-overview:") + id, title, blocks, anchors: anchors || [], tip: tip || "", text: text || "" });
 }
 
+// afterClose runs once when the viewer next closes: a popup that stepped
+// aside for the overview it opened comes back (View all notes).
+let afterClose = null;
+
 // openPermanentOverview opens permanent overview id (spec 2026-10-12 §10):
 // the stored mode, its anchors opening the files at the overview's commit.
-export async function openPermanentOverview(id) {
+// onClose runs when the viewer closes (a popup that opened it reshows).
+export async function openPermanentOverview(id, { onClose = null } = {}) {
   let d;
   try {
     d = await getJSON("/api/overview/" + encodeURIComponent(id));
   } catch (e) {
-    return opLine(e.status === 404 ? "that overview no longer exists" : "overview: " + (e.message || e), true);
+    opLine(e.status === 404 ? "that overview no longer exists" : "overview: " + (e.message || e), true);
+    if (onClose) onClose(); // nothing opened: the popup comes straight back
+    return;
   }
-  openStoredOverview({ kind: "overview", id, title: "Overview: " + d.title, blocks: d.blocks, anchors: d.anchors || [], tip: d.commit, text: d.text || "" });
+  openStoredOverview({ kind: "overview", id, title: d.title, blocks: d.blocks, anchors: d.anchors || [], tip: d.commit, text: d.text || "" });
+  afterClose = onClose;
 }
 
 // closeGoneOverview closes the viewer when it shows a permanent overview the
@@ -747,6 +755,9 @@ function dropViewer() {
   clearTimeout(cursorTimer);
   closeLayer("viewer");
   swapFoot(false);
+  const after = afterClose;
+  afterClose = null;
+  if (after) after();
 }
 
 function backgroundViewer() {
