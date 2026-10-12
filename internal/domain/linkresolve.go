@@ -147,6 +147,12 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 			return Resolved{}, err
 		}
 	}
+	if res.Hint.Kind == model.OverviewHintKind {
+		// And an overview link: the overview exists and explains this commit.
+		if err := checkOverviewHint(ctx, reviewHintService(ctx, res.Checkout, opts), res); err != nil {
+			return Resolved{}, err
+		}
+	}
 	return res, nil
 }
 
@@ -623,6 +629,9 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 				break
 			}
 			return Resolved{}, fmt.Errorf("%w: a review hint needs the change it reviewed (@<commit> or @<base>..<tip>); %q alone names nothing", model.ErrLink, l.Hint.ID)
+		case model.OverviewHintKind:
+			// An overview IS its commit — the hint only says which overview.
+			return Resolved{}, fmt.Errorf("%w: an overview hint needs the commit it explains (@<commit>); %q alone names nothing", model.ErrLink, l.Hint.ID)
 		case model.ContentHintKind:
 			// A content link names a FILE's content; with no path it names
 			// nothing. (The remote form is refused by ParseLink already; the

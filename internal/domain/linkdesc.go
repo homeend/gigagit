@@ -152,6 +152,12 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 			}
 			return "review", r.ID, strings.TrimSpace(r.Agent + " · " + what)
 		}
+	case model.OverviewHintKind:
+		// The stored overview: "overview: <id> <agent> · <title>"; a miss
+		// falls THROUGH to the address arms.
+		if o, err := s.Overview(ctx, l.Hint.ID); err == nil {
+			return "overview", o.ID, strings.TrimSpace(o.Agent + " · " + cutLabel(o.Title))
+		}
 	case "version":
 		// The recorded version, when this store holds it; a miss (deleted,
 		// another machine) falls THROUGH to the pair arms below.
