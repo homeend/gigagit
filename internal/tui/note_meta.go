@@ -1,7 +1,11 @@
 package tui
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/syntax"
 )
@@ -43,4 +47,149 @@ func (s *styles) metaStyle(base lipgloss.Style, c syntax.Class) lipgloss.Style {
 		return base.Background(s.metaFg[i-7]).Foreground(s.metaFillFg)
 	}
 	return base.Foreground(s.metaFg[i])
+}
+
+// maskRun builds a run of text with the mask that colours it, one class per
+// rune.
+type maskRun struct {
+	b   strings.Builder
+	cls []syntax.Class
+}
+
+func (r *maskRun) add(s string, c syntax.Class) {
+	r.b.WriteString(s)
+	for range []rune(s) {
+		r.cls = append(r.cls, c)
+	}
+}
+
+// badgeValue is what a badge says: the value verbatim (data), except the
+// built-in status values, which are gg's own words.
+func badgeValue(b notemeta.Badge) string {
+	if b.Key == notemeta.StatusKey {
+		switch b.Value {
+		case "agreed":
+			return i18n.T("agreed")
+		case "disagreed":
+			return i18n.T("disagreed")
+		case "deferred":
+			return i18n.T("deferred")
+		}
+	}
+	return sanitizeLine(b.Value)
+}
+
+// badgeRun is a note's badges then its audience marker (spec §6.1), with the
+// mask that colours them: a filled chip carries one column of fill each
+// side, badges sit one space apart, the marker two. "" when the note shows
+// neither.
+func badgeRun(res notemeta.Resolved) (string, []syntax.Class) {
+	var r maskRun
+	for i, bd := range res.Badges {
+		if i > 0 {
+			r.add(" ", 0)
+		}
+		v := badgeValue(bd)
+		if bd.Glyph != "" {
+			v = bd.Glyph + " " + v
+		}
+		if bd.Style == notemeta.StyleFilled {
+			v = " " + v + " "
+		}
+		r.add(v, metaClass(bd.Color, bd.Style))
+	}
+	if m := audienceMarker(res.Audience); m != "" {
+		if r.b.Len() > 0 {
+			r.add("  ", 0)
+		}
+		r.add(m, 0)
+	}
+	return r.b.String(), r.cls
+}
+
+// audienceMarker is who a note is for (spec §3.3): the PR author, or the
+// reader alone. "" for no audience.
+func audienceMarker(a string) string {
+	switch a {
+	case "author":
+		return i18n.T("→ author")
+	case "reviewer":
+		return i18n.T("for you")
+	}
+	return ""
+}
+
+// metaLineTexts are a note's line rows: "label: value", one per entry.
+func metaLineTexts(res notemeta.Resolved) []string {
+	out := make([]string, 0, len(res.Lines))
+	for _, l := range res.Lines {
+		out = append(out, sanitizeLine(l.Label+": "+l.Value))
+	}
+	return out
+}
+
+// metaDetailTexts are a note's details rows (spec §6.1): its stored-only
+// meta, the meta added onto it (the author's value it replaced, who added
+// it) and the problems its declaration has. nil when there are none.
+func metaDetailTexts(res notemeta.Resolved) []string {
+	var out []string
+	if len(res.Stored) > 0 {
+		parts := make([]string, len(res.Stored))
+		for i, kv := range res.Stored {
+			parts[i] = sanitizeLine(kv.Key + ": " + kv.Value)
+		}
+		out = append(out, i18n.T("meta: %s", strings.Join(parts, " · ")))
+	}
+	if len(res.Added) > 0 {
+		parts := make([]string, len(res.Added))
+		for i, c := range res.Added {
+			v := c.To
+			if c.From != "" {
+				v = c.From + " → " + c.To
+			}
+			if c.By != "" {
+				v += " (" + c.By + ")"
+			}
+			parts[i] = sanitizeLine(c.Key + ": " + v)
+		}
+		out = append(out, i18n.T("added: %s", strings.Join(parts, " · ")))
+	}
+	for _, p := range res.Problems {
+		out = append(out, i18n.T("display problem: %s", sanitizeLine(string(p))))
+	}
+	return out
+}
+
+// metaCountsText is a set of notes' counts in plain words (spec §6.2):
+// "3 issue · 8 good · 5 for author · 9 for you". "" for none.
+func metaCountsText(c notemeta.Counts) string {
+	var parts []string
+	for _, g := range c.Groups {
+		for _, v := range g.Values {
+			parts = append(parts, strconv.Itoa(v.N)+" "+sanitizeLine(v.Value))
+		}
+	}
+	if c.Author > 0 {
+		parts = append(parts, i18n.T("%d for author", c.Author))
+	}
+	if c.Reviewer > 0 {
+		parts = append(parts, i18n.T("%d for you", c.Reviewer))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// metaCountsRun is the compact form a file row carries: "issue 3 good 8",
+// each number in its value's colour.
+func metaCountsRun(c notemeta.Counts) (string, []syntax.Class) {
+	var r maskRun
+	for _, g := range c.Groups {
+		for _, v := range g.Values {
+			if r.b.Len() > 0 {
+				r.add(" ", 0)
+			}
+			r.add(sanitizeLine(v.Value)+" ", 0)
+			r.add(strconv.Itoa(v.N), metaClass(v.Color, notemeta.StyleText))
+		}
+	}
+	return r.b.String(), r.cls
 }
