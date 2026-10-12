@@ -18,12 +18,13 @@ func TestReviewMetaLineCounts(t *testing.T) {
 	t.Parallel()
 	st := &reviewViewState{review: domain.Review{Agent: "Claude Code"},
 		meta: notemeta.Counts{Groups: []notemeta.CountGroup{{Key: "kind", Values: []notemeta.CountValue{{Value: "issue", N: 3}, {Value: "good", N: 8}}}}, Author: 5, Reviewer: 9}}
-	got := reviewMetaLine(st)
-	if !strings.HasSuffix(got, "3 issue · 8 good · "+i18n.T("%d for author", 5)+" · "+i18n.T("%d for you", 9)) {
-		t.Fatalf("header = %q", got)
+	var m Model
+	m.filesReview = st
+	if got := m.filesCountsLine(); got != "3 issue · 8 good · "+i18n.T("%d for author", 5)+" · "+i18n.T("%d for you", 9) {
+		t.Fatalf("counts line = %q", got)
 	}
 	st.meta = notemeta.Counts{}
-	if got := reviewMetaLine(st); strings.HasSuffix(got, " · ") || strings.Contains(got, "for you") {
+	if got := m.filesCountsLine(); got != "" {
 		t.Fatalf("no counts must add nothing: %q", got)
 	}
 }
@@ -68,8 +69,13 @@ func TestReviewViewShowsMetaCounts(t *testing.T) {
 	if m.filesReview == nil || m.filesReview.meta.Author != 2 {
 		t.Fatalf("counts = %+v", m.filesReview)
 	}
-	if !strings.Contains(reviewMetaLine(m.filesReview), "2 issue") {
-		t.Fatalf("header = %q", reviewMetaLine(m.filesReview))
+	// A file row counts only what its ◆N counts: zzz.go is not in the
+	// commit, so its remark is an Other note, on no file's tail.
+	if _, ok := m.filesReview.metaByFile["zzz.go"]; ok || m.filesReview.metaByFile["a.go"].Author != 1 {
+		t.Fatalf("byFile = %+v", m.filesReview.metaByFile)
+	}
+	if !strings.Contains(m.filesCountsLine(), "2 issue") {
+		t.Fatalf("counts = %q", m.filesCountsLine())
 	}
 	out := ansiStrip(m.renderFilesView(80, 20))
 	row := ""
@@ -85,5 +91,24 @@ func TestReviewViewShowsMetaCounts(t *testing.T) {
 	out = ansiStrip(m.renderFilesView(18, 20))
 	if strings.Contains(out, "issue 1") || !strings.Contains(out, "a.go") {
 		t.Fatalf("narrow:\n%s", out)
+	}
+}
+
+// The counts ride their own line under the review's meta line: at the
+// sidebar's width they must be on screen, not cut off its end.
+func TestReviewViewHeaderCountsVisible(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, reviewMetaDoc)
+	m, cmd := m.openReview(id, "Review")
+	m = drainCmds(t, m, cmd)
+	out := ansiStrip(m.renderFilesView(52, 20))
+	if !strings.Contains(out, "2 issue · "+i18n.T("%d for author", 2)) {
+		t.Fatalf("counts not visible:\n%s", out)
+	}
+	if strings.Contains(reviewMetaLine(m.filesReview), "2 issue") {
+		t.Fatal("the counts moved to their own line")
+	}
+	if m.filesChromeLines() != 3 {
+		t.Fatalf("chrome lines = %d, want title + meta + counts", m.filesChromeLines())
 	}
 }

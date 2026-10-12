@@ -7161,9 +7161,13 @@ file and remark level; nearer replaces farther key by key
   stale). Title fit (`fitNoteTitle`): whole → path elided (≥ 8 cols) → words
   cut → badges cut; badges and words joined by `metaTitleSep` (" · "). A
   title with no badges keeps the old single-Render bytes.
-- Review view: `domain.ReviewMetaCounts(r)` (pure, Added included, moved
-  remarks skipped) on open and again after a Mark; file-row tail only while
-  it fits in cutoff mode. `ReviewOtherNote.Meta`, `SendCandidate.Meta`,
+- Review view: header counts = `domain.ReviewMetaCounts(r)` (pure, every
+  remark, Added included, moved remarks skipped) on their own line under the
+  meta line (`filesCountsLine`, counted in `filesChromeLines` /
+  `filesPageRows`); file-row tails = `ReviewFileMetaCounts` (only the remarks
+  `reviewSplit` places — what ◆N counts), shown only while they fit in
+  cutoff mode. Both re-read after a Mark. Title fit: when the path elided to
+  8 columns still does not fit, the words BEFORE it are cut first. `ReviewOtherNote.Meta`, `SendCandidate.Meta`,
   `agentdocs.Note.Added` (remark boxes in the overview split).
 - Mark (`note_mark.go`): `.` menu row `note-mark` → decision modal
   (options `agreed disagreed deferred clear Cancel`, translated in

@@ -102,13 +102,16 @@ func (m Model) reviewMetaCountsCmd() tea.Cmd {
 	}
 	id := st.id
 	return func() tea.Msg {
-		r, err := svc.Review(context.Background(), id)
+		ctx := context.Background()
+		r, err := svc.Review(ctx, id)
 		if err != nil {
 			return nil
 		}
-		out := reviewMetaCountsMsg{id: id}
-		out.meta, out.byFile = domain.ReviewMetaCounts(r)
-		return out
+		_, byFile, err := svc.ReviewFileMetaCounts(ctx, id)
+		if err != nil {
+			return nil
+		}
+		return reviewMetaCountsMsg{id: id, meta: domain.ReviewMetaCounts(r), byFile: byFile}
 	}
 }
 

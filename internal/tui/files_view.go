@@ -161,6 +161,16 @@ func (m Model) filesMetaLineFor() string {
 	return filesMetaLine(m.filesCommit)
 }
 
+// filesCountsLine is the review view's second header line: its remarks'
+// meta counts in plain words (spec 2026-10-12-note-meta §6.2); "" outside a
+// review view or when nothing is counted.
+func (m Model) filesCountsLine() string {
+	if m.filesReview == nil {
+		return ""
+	}
+	return metaCountsText(m.filesReview.meta)
+}
+
 // openStashFiles opens a stash's files (mode=Stash) from a clean slate. Opens on
 // the stash-list side (treeFocused=false), like the commit files view.
 func (m Model) openStashFiles(ref, subject string) (Model, tea.Cmd) {
@@ -687,6 +697,9 @@ func (m Model) filesChromeLines() int {
 	if m.filesMetaLineFor() != "" {
 		n++
 	}
+	if m.filesCountsLine() != "" {
+		n++
+	}
 	if m.filesSearchLine() != "" {
 		n++
 	}
@@ -897,6 +910,9 @@ func shortHash(h string) string {
 func (m Model) filesPageRows() int {
 	n := m.layout().bodyH - 3
 	if m.filesMetaLineFor() != "" {
+		n--
+	}
+	if m.filesCountsLine() != "" {
 		n--
 	}
 	if n < 1 {
@@ -1572,6 +1588,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		// Its own line, directly under the title: a long subject truncates the
 		// title, and the date must not be the casualty of that.
 		lines = append(lines, padRight(truncate(meta, innerW), innerW))
+	}
+	if counts := m.filesCountsLine(); counts != "" {
+		lines = append(lines, padRight(truncate(counts, innerW), innerW))
 	}
 	if search != "" {
 		lines = append(lines, padRight(truncate(search, innerW), innerW))

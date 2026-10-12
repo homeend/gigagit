@@ -97,7 +97,8 @@ type reviewViewMsg struct {
 	// overview is the review's stored overview resolved at the tip (nil =
 	// none, or one that could not be read: the summary still opens).
 	overview *domain.OverviewDoc
-	// meta / metaByFile: domain.ReviewMetaCounts of the review.
+	// meta: domain.ReviewMetaCounts (every remark); metaByFile: the placed
+	// remarks per file (ReviewFileMetaCounts, what ◆N counts).
 	meta       notemeta.Counts
 	metaByFile map[string]notemeta.Counts
 	gen        int // the loading box it answers (reviewLoadingPopup.gen)
@@ -146,13 +147,13 @@ func (m Model) openReviewLanding(id, title string, back model.Commit, bp *previe
 		if out.review, out.err = svc.Review(ctx, id); out.err != nil || out.review.Doc == nil {
 			return out
 		}
-		out.meta, out.metaByFile = domain.ReviewMetaCounts(out.review)
+		out.meta = domain.ReviewMetaCounts(out.review)
 		out.base, out.tip, out.isRange = svc.ReviewRevs(ctx, out.review)
 		out.older = svc.ReviewOlder(ctx, out.review)
 		if out.review.Kind == domain.ReviewOnWorktree {
 			out.states = domain.WorkingReviewState(out.review.Worktree, out.review.Files).States
 		}
-		if out.counts, out.err = svc.ReviewFileCounts(ctx, id); out.err != nil {
+		if out.counts, out.metaByFile, out.err = svc.ReviewFileMetaCounts(ctx, id); out.err != nil {
 			return out
 		}
 		if out.review.Doc.Overview != "" {
@@ -295,9 +296,6 @@ func reviewMetaLine(st *reviewViewState) string {
 	parts = append(parts, i18n.T("%d notes on %d files", notes, files))
 	if _, resolved := st.review.Tally(); resolved > 0 {
 		parts = append(parts, i18n.T("%d resolved", resolved))
-	}
-	if c := metaCountsText(st.meta); c != "" {
-		parts = append(parts, c)
 	}
 	return strings.Join(parts, " · ")
 }

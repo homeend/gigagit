@@ -161,12 +161,12 @@ func TestMarkRefreshesReviewCounts(t *testing.T) {
 	m, id := reviewViewModel(t, doc)
 	rm, cmd := m.openReview(id, "Review")
 	m = drainCmds(t, rm, cmd)
-	if strings.Contains(reviewMetaLine(m.filesReview), "agreed") {
+	if strings.Contains(m.filesCountsLine(), "agreed") {
 		t.Fatal("no mark yet")
 	}
 	m = cursorOnANote(t, openReviewDiff(t, m, "a.go"))
 	m = mark(t, m, "agreed")
-	if got := reviewMetaLine(m.filesReview); !strings.Contains(got, "1 agreed") {
+	if got := m.filesCountsLine(); !strings.Contains(got, "1 agreed") {
 		t.Fatalf("header after the mark = %q", got)
 	}
 }

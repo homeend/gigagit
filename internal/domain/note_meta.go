@@ -23,17 +23,16 @@ func NoteMeta(n model.Note, root *model.Note) notemeta.Resolved {
 }
 
 // ReviewMetaCounts tallies review r's remarks (spec 2026-10-12-note-meta
-// §6.2): over the whole review and per file (keyed like ReviewFileCounts).
-// A remark GitHub owns now is not the review's to count. Added meta counts:
-// a mark is meta too.
-func ReviewMetaCounts(r Review) (notemeta.Counts, map[string]notemeta.Counts) {
+// §6.2), the header's counts: every remark of the document, as its "N
+// notes" does. A remark GitHub owns now is not the review's to count. Added
+// meta counts: a mark is meta too. Per-file counts are
+// ReviewFileMetaCounts (only what the view places).
+func ReviewMetaCounts(r Review) notemeta.Counts {
 	if r.Doc == nil {
-		return notemeta.Counts{}, nil
+		return notemeta.Counts{}
 	}
 	var all []notemeta.Resolved
-	per := map[string][]notemeta.Resolved{}
 	for _, f := range r.Doc.Files {
-		p := reviewPath(f.Path)
 		for _, dn := range f.Notes {
 			fp := remarkFP(f.Path, reviewSide(dn.Side), dn.Range, dn.Summary)
 			if r.remarkMoved(fp) {
@@ -41,16 +40,10 @@ func ReviewMetaCounts(r Review) (notemeta.Counts, map[string]notemeta.Counts) {
 			}
 			var n model.Note
 			r.remarkMeta(&n, f, dn, fp)
-			res := NoteMeta(n, nil)
-			all = append(all, res)
-			per[p] = append(per[p], res)
+			all = append(all, NoteMeta(n, nil))
 		}
 	}
-	byFile := make(map[string]notemeta.Counts, len(per))
-	for p, rs := range per {
-		byFile[p] = notemeta.Count(rs)
-	}
-	return notemeta.Count(all), byFile
+	return notemeta.Count(all)
 }
 
 // ownAdded is the added meta of the note itself (a review note's per-remark

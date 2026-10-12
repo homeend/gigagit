@@ -46,7 +46,8 @@ screen_contains = ["Reviews", "Claude Code · 0/3 resolved"]
 name = "review-view"
 keys = ["down", "enter"]
 # Each file row ends with its remarks' counts (spec §6.2).
-screen_contains = ["Review: ", "caching.ts  ◆ 1  good 1", "configuration.ts  ◆ 2  issue 1 note 1"]
+# The header's second line counts the remarks in plain words.
+screen_contains = ["Review: ", "1 issue · 1 note · 1 good · 2 for author", "caching.ts  ◆ 1  good 1", "configuration.ts  ◆ 2  issue 1 note 1"]
 
 [[tui.step]]
 name = "remark-boxes"

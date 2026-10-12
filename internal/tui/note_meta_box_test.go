@@ -232,3 +232,23 @@ func TestRemarkBoxesKeepMeta(t *testing.T) {
 		t.Fatalf("remark box = %+v", got[0])
 	}
 }
+
+// A 120-column terminal side by side (paneW 59) with three badges and the
+// marker: the file name and the line survive; the kind/author words go first.
+func TestFitNoteTitleKeepsFileAndLine(t *testing.T) {
+	t.Parallel()
+	b := " issue  high  disagreed  → author"
+	cls := make([]syntax.Class, len([]rune(b)))
+	path := "packages/babel-core/src/config/files/configuration.ts"
+	text := "review · Claude Code · " + path + " R12"
+	for _, pane := range []int{59, 70} {
+		gb, _, gt := fitNoteTitle(b, cls, text, path, pane-6)
+		if gb != b || !strings.HasSuffix(gt, ".ts R12") || lipgloss.Width(gb)+3+lipgloss.Width(gt) > pane-6 {
+			t.Fatalf("pane %d: %q %q", pane, gb, gt)
+		}
+		cell := noteBoxCell(noteLine{kind: noteRowTop, text: text, badges: b, badgeCls: cls, path: path}, pane)
+		if lipgloss.Width(cell) != pane {
+			t.Fatalf("pane %d: cell %d wide", pane, lipgloss.Width(cell))
+		}
+	}
+}

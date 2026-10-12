@@ -212,8 +212,8 @@ const metaTitleSep = " · "
 const minPathCols = 8
 
 // fitNoteTitle fits a box title into room columns (spec §6.1): whole when it
-// fits; else the path loses its middle (never its file name); else today's
-// parts are cut; the badges go last. badges and text are joined by
+// fits; else the path loses its middle (never its file name); else the
+// words before the path are cut, then the path's tail; the badges go last. badges and text are joined by
 // metaTitleSep when both stay.
 func fitNoteTitle(badges string, cls []syntax.Class, text, path string, room int) (string, []syntax.Class, string) {
 	if room <= 0 {
@@ -234,7 +234,13 @@ func fitNoteTitle(badges string, cls []syntax.Class, text, path string, room int
 			if pw := textRoom - fixed; pw >= minPathCols {
 				return badges, cls, before + elidePath(path, pw) + after
 			}
-			text = before + elidePath(path, minPathCols) + after
+			// The file and its line outrank the words before them: those
+			// are cut first, the path's tail only when nothing else is left.
+			tail := elidePath(path, minPathCols) + after
+			if rest := textRoom - lipgloss.Width(tail); rest >= 0 {
+				return badges, cls, truncate(before, rest) + tail
+			}
+			text = tail
 		}
 	}
 	if textRoom >= 1 {

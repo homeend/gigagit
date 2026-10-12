@@ -21,22 +21,31 @@ const countsDoc = `{"version":1,"summary":"x",
 func TestReviewMetaCounts(t *testing.T) {
 	t.Parallel()
 	svc, rid, _, _ := metaReview(t, countsDoc)
-	all, byFile := ReviewMetaCounts(mustReview(t, svc, rid))
+	all := ReviewMetaCounts(mustReview(t, svc, rid))
 	if all.Author != 2 || all.Reviewer != 1 || len(all.Groups) != 1 || all.Groups[0].Values[0].N != 2 || all.Groups[0].Values[0].Color != "red" {
 		t.Fatalf("all = %+v", all)
 	}
-	if byFile["a.txt"].Author != 1 || byFile["a.txt"].Reviewer != 1 || byFile["b.txt"].Groups[0].Values[0].Value != "issue" {
-		t.Fatalf("byFile = %+v", byFile)
+	// Per file: only the remarks the view places — what ◆N counts. b.txt is
+	// not in the commit: its remark is an Other note, on no file row.
+	counts, byFile, err := svc.ReviewFileMetaCounts(context.Background(), rid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts["a.txt"] != 2 || byFile["a.txt"].Author != 1 || byFile["a.txt"].Reviewer != 1 {
+		t.Fatalf("a.txt = %d %+v", counts["a.txt"], byFile["a.txt"])
+	}
+	if _, ok := byFile["b.txt"]; ok {
+		t.Fatalf("an unplaced remark counted on its file: %+v", byFile)
 	}
 	// Added meta counts too: a mark changes what the counts say.
 	if _, err := svc.SetNoteMeta(context.Background(), remarkID(rid, 1), "MR", []notemeta.KV{{Key: "kind", Value: "issue"}}); err != nil {
 		t.Fatal(err)
 	}
-	all, _ = ReviewMetaCounts(mustReview(t, svc, rid))
+	all = ReviewMetaCounts(mustReview(t, svc, rid))
 	if all.Groups[0].Values[0].N != 3 || all.Author != 3 {
 		t.Fatalf("after the mark = %+v", all)
 	}
-	if c, by := ReviewMetaCounts(Review{}); len(c.Groups) != 0 || by != nil {
+	if c := ReviewMetaCounts(Review{}); len(c.Groups) != 0 {
 		t.Fatal("a prose review has no counts")
 	}
 }
