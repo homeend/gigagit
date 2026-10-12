@@ -29,6 +29,7 @@ type fakeForge struct {
 	lists   int
 	baseURL string
 	gate    chan struct{} // when non-nil, ListOpen blocks until it is closed
+	entered chan struct{} // when non-nil, ListOpen signals it started (non-blocking)
 
 	comments     []model.ForgeComment
 	commentsErr  error
@@ -59,8 +60,14 @@ func (f *fakeForge) Search(_ context.Context, q forge.PRQuery) ([]model.PullRequ
 }
 func (f *fakeForge) ListOpen(ctx context.Context) ([]model.PullRequest, error) {
 	f.mu.Lock()
-	gate := f.gate
+	gate, entered := f.gate, f.entered
 	f.mu.Unlock()
+	if entered != nil {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+	}
 	if gate != nil {
 		select {
 		case <-gate:
@@ -283,7 +290,7 @@ func TestPRListProbeTimeoutIsNotFinal(t *testing.T) {
 	_, srv := prServe(t, newRepoDir(t, 1), &fakeForge{})
 	srv.prBudget = 50 * time.Millisecond
 	srv.service().SetForgeProviders([]forge.Provider{&slowForge{}})
-	srv.loadPRs(srv.service())
+	srv.loadPRs(context.Background(), srv.service())
 	if state, _, errText, _ := srv.prsSnapshot(srv.service()); state != prsUnprobed || errText == "" {
 		t.Fatalf("after a timed-out probe: state=%q err=%q, want unprobed with a reason", state, errText)
 	}
@@ -297,7 +304,7 @@ func TestPRLoadAfterRerootLeavesTheNewCacheAlone(t *testing.T) {
 	_, srv := prServe(t, newRepoDir(t, 1), f)
 	old := srv.service()
 	done := make(chan struct{})
-	go func() { defer close(done); srv.loadPRs(old) }()
+	go func() { defer close(done); srv.loadPRs(context.Background(), old) }()
 
 	other := domain.Open(newRepoDir(t, 2))
 	other.SetForgeProviders([]forge.Provider{&fakeForge{}})
@@ -310,6 +317,33 @@ func TestPRLoadAfterRerootLeavesTheNewCacheAlone(t *testing.T) {
 	srv.prs.mu.Unlock()
 	if owner != other || rows != 0 {
 		t.Fatalf("the stale listing took the cache back (owner is other: %v, rows %d)", owner == other, rows)
+	}
+}
+
+// Close waits for a listing it kicked (a finished pr-fetch re-lists): one
+// still running after the server closed writes the PR cache into a state
+// directory the test is already removing — CI saw "TempDir RemoveAll
+// cleanup: directory not empty" on TestPRNotesRefusesBadInput.
+func TestPRCloseWaitsForAKickedListing(t *testing.T) {
+	t.Parallel()
+	f := &fakeForge{open: []model.PullRequest{openPR(7, "Add a thing")}}
+	ts, srv := prServe(t, newRepoDir(t, 1), f)
+	waitPRsLoaded(t, ts)
+	gate, entered := make(chan struct{}), make(chan struct{}, 1)
+	t.Cleanup(func() { close(gate) }) // frees a listing Close left behind
+	f.mu.Lock()
+	f.gate, f.entered = gate, entered
+	f.mu.Unlock()
+
+	srv.kickPRs(srv.service(), true)
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the kicked listing never reached the forge")
+	}
+	srv.Close()
+	if _, _, _, loading := srv.prsSnapshot(srv.service()); loading {
+		t.Fatal("Close returned while the kicked listing was still running")
 	}
 }
 
