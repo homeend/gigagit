@@ -172,6 +172,13 @@ gg review save <gg-link> --dry-run [--json]
                                       # (the /gg-review <gg-link> [focus] skill, from `gg init`, drives both;
                                       # /gg-cross-review <gg-link> [2|3] [focus] runs 2–3 copies of the agent on different
                                       # models with --no-save, merges them, settles their disagreements and stores ONE review)
+gg overview save [<gg-link>] --agent <name> (--stdin | --file <path>) [--title <t>] [--json] [--dry-run]
+                                      # store an agent's overview PERMANENTLY on HEAD / a commit / a branch tip / a PR;
+                                      # refused whole (nothing stored) on a note: link, a missing path, lines past the end,
+                                      # or an anchored file with uncommitted changes
+gg overview list [--all] [--json]    # HEAD's permanent overviews (--all: the repository's)
+gg overview show <id|link> [--json]  # one overview: its markdown and remarks
+gg overview rm <id>                  # delete one
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
                                       # numbered git @@ hunks per file, over the same patch a note anchors to
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>]

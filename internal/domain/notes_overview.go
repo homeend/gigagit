@@ -105,11 +105,11 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 	var buckets []*bucket
 	byKey := map[string]*bucket{}
 	rootAddr := map[string]model.FileAddress{}
-	review := map[string]bool{} // review roots: listed as Reviews, not files
+	review := map[string]bool{} // review and overview roots: listed apart, never as files
 	for _, n := range all {
 		if !n.IsReply() {
 			rootAddr[n.ID] = n.Address
-			if n.IsReviewNote() || n.IsWorkingReview() {
+			if n.IsReviewNote() || n.IsWorkingReview() || n.IsOverviewNote() {
 				review[n.ID] = true
 			}
 		}

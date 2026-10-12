@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Smaller Go build cache across worktrees
+
+### Changed
+- **`test.sh` / `test.cmd` build with `-trimpath`** (as `build.sh` already
+  did). The checkout's path no longer enters Go's build-cache keys, so each
+  feature worktree reuses main's entries for every package it hasn't changed
+  instead of storing its own copy (`internal/tui` alone is ~85 MB per copy) —
+  including the gg binaries tests build. The fake `gh` the forge tests build
+  finds its source through `go env GOMOD`, since `runtime.Caller` paths are
+  module-relative under `-trimpath`.
+
+## Permanent overviews (CLI)
+
+### Added
+- **`gg overview save|list|show|rm`.** An agent's overview stored on a
+  commit — HEAD, a commit or branch-tip link, or a pull request — as a note
+  tagged `overview`: the gg-overview document with its remarks on lines of
+  the files at that commit. The save checks the whole document against the
+  commit and refuses it as a whole (nothing stored, every problem listed)
+  when a link names a note, a missing path or lines past a file's end, or
+  when an anchored file has uncommitted changes. The same commit and title
+  replaces. An overview is shown only as itself — never as a note, a remark
+  or a review, never sent to GitHub. `?overview=<id>` links resolve, and are
+  refused when moved onto another commit or the overview is gone. (The TUI
+  and web surfaces follow.)
+
 ## Export an overview as one HTML file
 
 ### Added

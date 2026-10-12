@@ -294,6 +294,16 @@ func (n Note) IsEntryLevel() bool {
 // TUI fills it on working-tree line notes too).
 func (n Note) IsReviewNote() bool { return n.IsCommitLevel() && NoteHasTag(n, ReviewTag) }
 
+// OverviewTag marks a commit-level note that holds a PERMANENT overview
+// (spec 2026-10-12-permanent-overviews): an explanation of the code at the
+// commit, not a review of its change.
+const OverviewTag = "overview"
+
+// IsOverviewNote reports a commit-level note tagged OverviewTag. It is the
+// ONLY test for "this is a permanent overview"; IsReviewNote stays false for
+// it, so every review reader skips it unchanged.
+func (n Note) IsOverviewNote() bool { return n.IsCommitLevel() && NoteHasTag(n, OverviewTag) }
+
 // NoteContextHash fingerprints the anchored lines: each line trimmed of
 // leading/trailing whitespace, joined with "\n" (no trailing newline), hex
 // sha256. Trimming makes re-indentation a non-event; the join makes phase-2

@@ -44,6 +44,10 @@ func noteShow(svc *domain.Service, args []string, stdout, stderr io.Writer) int 
 	if err != nil {
 		return noteIDExit("note show", id, svc, err, stderr)
 	}
+	if root.IsOverviewNote() {
+		fmt.Fprintf(stderr, "note show: %s is an overview — gg overview show %s\n", root.ID, root.ID)
+		return 1
+	}
 	link, _ := svc.NoteLinkText(ctx, root.ID)
 	if asJSON {
 		if replies == nil {

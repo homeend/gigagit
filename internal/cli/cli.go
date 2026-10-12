@@ -186,6 +186,8 @@ func dispatchOne(svc *domain.Service, workdir, cmd string, rest []string, stdin 
 		return cmdShow(svc, workdir, rest, stdout, stderr)
 	case "review":
 		return cmdReview(svc, workdir, rest, stdin, stdout, stderr)
+	case "overview":
+		return cmdOverview(svc, rest, stdin, stdout, stderr)
 	case "versions":
 		return cmdVersions(svc, rest, stdin, stdout, stderr)
 	case "migrate":
@@ -217,7 +219,7 @@ var commands = map[string]bool{
 	"remote": true, "tag": true, "compare": true, "preview": true, "pr": true, "diff": true, "show": true,
 	"inspect": true, "repo": true, "init": true, "config": true, "batch": true,
 	"review": true, "apply": true, "versions": true, "unlock": true, "migrate": true,
-	"note": true, "skill": true, "session": true, "agent": true, "link": true, "links": true, "open": true,
+	"note": true, "overview": true, "skill": true, "session": true, "agent": true, "link": true, "links": true, "open": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to

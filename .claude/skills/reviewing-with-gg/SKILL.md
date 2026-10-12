@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v17 -->
+<!-- gg:reviewing-with-gg:v18 -->
 
 # Reviewing with gg
 
@@ -319,6 +319,8 @@ overview / tour / walk-through. `gg review save` prints `unresolved:
 <dest>` for an anchor that names no file of the reviewed change or lines
 past its end; `gg review show` prints the overview after the summary and
 its JSON carries it as `"overview"` (the review's text is `"summary"`).
+A permanent overview of code that is NOT a review — "explain how X works
+at this commit" — is `gg overview save` (using-gg), not a review.
 
 Lines are 1-based and inclusive; `"newRange"` names lines of the new version,
 `"oldRange"` a removed line. `"meta"` is optional and free-form (string

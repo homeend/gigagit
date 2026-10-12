@@ -89,7 +89,7 @@ type LinkTarget struct {
 // git: there the hint is the only content source, and the link has no address
 // at all. That link cannot travel between machines, by construction.
 type LinkHint struct {
-	Kind string // one of linkHintKinds ("bookmark", "shelf", "stash", "preview", "view", "version", "review", "note"); "" = no hint
+	Kind string // one of linkHintKinds ("bookmark", "shelf", "stash", "preview", "view", "version", "review", "note", "overview"); "" = no hint
 	ID   string // the machine-local id; never empty when Kind is set
 }
 
@@ -131,7 +131,7 @@ func (h LinkHint) String() string {
 // note's own anchor — its commit, index or working-tree target, path and
 // first line — so every hint-blind verb lands on the line; the consumer
 // opens the thread. Machine-local like "review".
-var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true, "view": true, "version": true, "review": true, "note": true}
+var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true, "view": true, "version": true, "review": true, "note": true, "overview": true}
 
 // ReviewHintKind is the hint a review link carries (?review=<id>).
 const ReviewHintKind = "review"
@@ -139,6 +139,10 @@ const ReviewHintKind = "review"
 // NoteHintKind is the hint a note link carries (?note=<id>): a stored note,
 // a root or a reply.
 const NoteHintKind = "note"
+
+// OverviewHintKind is the hint a permanent overview's link carries
+// (?overview=<id>): the commit it explains plus which overview.
+const OverviewHintKind = "overview"
 
 // The content hint: gg://<repo>/<path>[:<line>]?view=content names a file's
 // CONTENT on disk in the worktree — never a diff, never a commit.
