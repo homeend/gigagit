@@ -22,8 +22,16 @@ const (
 	srcNote                                 // an AI review stored as a note; rev = note id, path = "review-<id>.md"
 	srcOverview                             // an agent's overview, held in memory (openFile.ov); path = "overview-<n>.md"
 	srcReviewOverview                       // a review's STORED overview (openFile.ov, ov.tip = the reviewed tip); rev = review id, path = "overview-<id>.md"
+	srcCommitOverview                       // a PERMANENT overview (openFile.ov, ov.tip = its commit); rev = overview id, path = "overview-<id>.md"
 	srcReviewStack                          // a review split's stacked stream (openFile.stream), never registered; rev = review id, path = "files-<id>"
 )
+
+// storedOverview reports an overview kept in gg's notes — a review's stored
+// overview or a permanent one: anchors open at ov.tip, no agent-store
+// reference (A9), remarks and diffs read from the domain by the kind.
+func (k fileSourceKind) storedOverview() bool {
+	return k == srcReviewOverview || k == srcCommitOverview
+}
 
 // fileSource names one version of a file: the working tree, a commit or a
 // shelf entry. Together with the path it is an open file's identity.
@@ -136,7 +144,7 @@ func (d *openFile) frameTitle() string {
 		return i18n.T("View %s @ %s", d.path, shortHash(d.src.rev))
 	case srcShelf:
 		return i18n.T("View %s (shelf)", d.path)
-	case srcExternal, srcNote, srcOverview, srcReviewOverview, srcReviewStack:
+	case srcExternal, srcNote, srcOverview, srcReviewOverview, srcCommitOverview, srcReviewStack:
 		if d.title != "" {
 			return d.title
 		}

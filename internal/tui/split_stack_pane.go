@@ -230,13 +230,13 @@ func (m Model) fileNotes(p *stackPane, i int) tea.Cmd {
 	if ov == nil || !f.shows() {
 		return nil
 	}
-	if ov.src.kind == srcReviewOverview {
+	if ov.src.kind.storedOverview() {
 		if m.svc == nil {
 			return nil
 		}
-		svc, id, path, lines, slot, tag, gen := m.svc, ov.src.rev, f.path, rawOf(f.lines), m.stamp(), p.d.tag, p.gen
+		svc, kind, id, path, lines, slot, tag, gen := m.svc, ov.src.kind, ov.src.rev, f.path, rawOf(f.lines), m.stamp(), p.d.tag, p.gen
 		return func() tea.Msg {
-			ns, err := svc.ReviewFileNotes(context.Background(), id, path, lines)
+			ns, err := storedFileNotes(svc, kind, id, path, lines)
 			return splitStackNotesMsg{slotStamp: slot, tag: tag, gen: gen, file: i, notes: ns, err: err}
 		}
 	}

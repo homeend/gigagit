@@ -974,6 +974,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case reviewViewMsg:
 		return m.handleReviewViewMsg(msg)
+	case commitOverviewMsg:
+		return m.onCommitOverview(msg)
 	case reviewsFollowMsg:
 		return m.onReviewsFollow(msg)
 	case commitReviewsMsg:

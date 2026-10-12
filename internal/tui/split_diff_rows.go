@@ -162,8 +162,11 @@ func foldDiffRows(all []diffRow, keep func(i int) bool, open map[int]bool) []dif
 
 // diffNoticeText is what the column says instead of rows ("" = the rows):
 // a gone review, a failed read, a binary or too large diff, or no change.
-func diffNoticeText(res domain.ReviewFileDiff, err error, agent bool) string {
+// permanent: the file was opened from a permanent overview (its commit's).
+func diffNoticeText(res domain.ReviewFileDiff, err error, agent, permanent bool) string {
 	switch {
+	case errors.Is(err, domain.ErrOverviewNotFound):
+		return i18n.T("the overview is gone — D shows the file")
 	case errors.Is(err, domain.ErrReviewNotFound):
 		return i18n.T("the review is gone — D shows the file")
 	case err != nil:
@@ -175,6 +178,9 @@ func diffNoticeText(res domain.ReviewFileDiff, err error, agent bool) string {
 	case !res.Changed || !rowsChange(res.Diff.Result.Rows):
 		if agent {
 			return i18n.T("no changes in the working tree — D shows the file")
+		}
+		if permanent {
+			return i18n.T("no change to this file in the overview's commit — D shows the file")
 		}
 		return i18n.T("no change to this file in the review — D shows the file")
 	}

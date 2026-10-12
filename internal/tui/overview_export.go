@@ -17,7 +17,10 @@ import (
 func (m Model) overviewExportRow(d *openFile) actionRow {
 	return actionRow{id: "overview-export", label: i18n.T("Export as HTML"), run: func(m Model) (tea.Model, tea.Cmd) {
 		src := domain.OverviewSource{ReviewID: d.src.rev}
-		if d.src.kind != srcReviewOverview {
+		switch {
+		case d.src.kind == srcCommitOverview:
+			src = domain.OverviewSource{OverviewID: d.src.rev}
+		case d.src.kind != srcReviewOverview:
 			if m.docs == nil {
 				return m, nil
 			}
