@@ -850,8 +850,8 @@ func noteBoxCell(nl noteLine, paneW int) string {
 		}
 		used := lipgloss.Width(b)
 		if title != "" {
-			head += frame.Render(" ")
-			used++
+			head += frame.Render(metaTitleSep)
+			used += lipgloss.Width(metaTitleSep)
 		}
 		rule := max(paneW-4-used-lipgloss.Width(title), 1)
 		cell = left.Render("╭") + frame.Render("─ ") + head + frame.Render(title+" "+strings.Repeat("─", rule-1)+"╮")
@@ -863,13 +863,13 @@ func noteBoxCell(nl noteLine, paneW int) string {
 		// No frame: one row, led by the fold mark in the thread's frame
 		// colour, then the note's badges when they leave room for the text.
 		room, lead := paneW-2, ""
-		if bw := lipgloss.Width(nl.badges); nl.badges != "" && bw+2 <= room {
-			lead = text.Render(nl.badges + " ")
+		if bw, sw := lipgloss.Width(nl.badges), lipgloss.Width(metaTitleSep); nl.badges != "" && bw+sw+1 <= room {
+			lead = text.Render(nl.badges + metaTitleSep)
 			if !nl.stale {
 				rb := []rune(nl.badges)
-				lead = styledRuns(rb, make([]emphLevel, len(rb)), nl.badgeCls, text) + text.Render(" ")
+				lead = styledRuns(rb, make([]emphLevel, len(rb)), nl.badgeCls, text) + text.Render(metaTitleSep)
 			}
-			room -= bw + 1
+			room -= bw + sw
 		}
 		body := padRight(truncate(sanitizeLine(nl.text), room), room)
 		cell = left.Render("▸") + " " + lead + text.Render(body)

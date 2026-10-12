@@ -886,7 +886,8 @@ a theme (`light`, `dark`, `terminal`), so it only applies while that theme is
 active. Run **`gg config populate`** to write the full commented list of
 roles (every key with the theme's current value and what it paints) into your
 config (`note_group_1` … `note_group_6` are the six review-group colours of a
-pull request's notes); the two list roles, `lanes` (7 graph-lane colours) and `syntax` (11
+pull request's notes; `meta_red` … `meta_grey` are the seven colours a note's
+display declaration names — badges, frames, counts); the two list roles, `lanes` (7 graph-lane colours) and `syntax` (11
 syntax classes), take arrays, where an `""` entry keeps the built-in colour.
 The global and repo files layer per key, like every other setting, so a repo
 can retune one role. An invalid value is ignored — the rest of the table

@@ -136,12 +136,12 @@ func TestFitNoteTitle(t *testing.T) {
 	}
 	// Too wide: the path loses its middle first, the file name stays.
 	gb, _, gt := fitNoteTitle(b, cls, text, path, 60)
-	if gb != b || !strings.Contains(gt, "configuration.ts R12-14") || !strings.HasPrefix(gt, "review · Claude Code · ") || lipgloss.Width(gb)+1+lipgloss.Width(gt) > 60 {
+	if gb != b || !strings.Contains(gt, "configuration.ts R12-14") || !strings.HasPrefix(gt, "review · Claude Code · ") || lipgloss.Width(gb)+3+lipgloss.Width(gt) > 60 {
 		t.Fatalf("elided = %q %q", gb, gt)
 	}
 	// Narrower: today's parts are cut, the badges kept.
 	gb, _, gt = fitNoteTitle(b, cls, text, path, 20)
-	if gb != b || gt == "" || lipgloss.Width(gb)+1+lipgloss.Width(gt) > 20 {
+	if gb != b || gt == "" || lipgloss.Width(gb)+3+lipgloss.Width(gt) > 20 {
 		t.Fatalf("cut = %q %q", gb, gt)
 	}
 	// No badges: the path still goes first.
@@ -158,7 +158,7 @@ func TestFitNoteTitleNarrow(t *testing.T) {
 		gb, gc, gt := fitNoteTitle(b, cls, "review · a.txt R1", "a.txt", room)
 		w := lipgloss.Width(gb) + lipgloss.Width(gt)
 		if gb != "" && gt != "" {
-			w++
+			w += 3
 		}
 		if w > max(room, 0) || len(gc) != len([]rune(gb)) {
 			t.Fatalf("room %d: %q %q (mask %d)", room, gb, gt, len(gc))

@@ -69,6 +69,13 @@ func TestBadgeRun(t *testing.T) {
 	if st != i18n.T("agreed") {
 		t.Fatalf("status = %q", st)
 	}
+	// Two text badges sit two spaces apart: one space would read as a phrase.
+	two, _ := badgeRun(notemeta.Resolved{Badges: []notemeta.Badge{
+		{Key: "severity", Value: "high", Color: "red", Style: notemeta.StyleText},
+		{Key: "x", Value: "low", Color: "grey", Style: notemeta.StyleText}}})
+	if two != "high  low" {
+		t.Fatalf("two text badges = %q", two)
+	}
 	only, _ := badgeRun(notemeta.Resolved{Audience: "reviewer"})
 	if only != i18n.T("for you") {
 		t.Fatalf("marker alone = %q", only)

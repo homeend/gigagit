@@ -1,4 +1,4 @@
-diff: big.txt  @ PR #7 · Change line 5                                                                                          line 5  change 1/1  rows 1–20/20
+diff: big.txt  @ PR #7 · Change line 5                                                                                          line 5  change 1/1  rows 1–21/21
   1 line 1                                                                     │  1 line 1
   2 line 2                                                                     │  2 line 2
   3 line 3                                                                     │  3 line 3
@@ -9,8 +9,9 @@ diff: big.txt  @ PR #7 · Change line 5                                         
                                                                                ││ why changed?                                                                │
                                                                                ││                                                                             │
                                                                                │╰─────────────────────────────────────────────────────────────────────────────╯
-                                                                               │╭─ ○ review · Claude Code · big.txt R5 · severity: low ───────────────────────╮
+                                                                               │╭─ ○ review · Claude Code · big.txt R5 ───────────────────────────────────────╮
                                                                                ││                                                                             │
+                                                                               ││ severity: low                                                               │
                                                                                ││ name it                                                                     │
                                                                                ││                                                                             │
                                                                                │╰─────────────────────────────────────────────────────────────────────────────╯
@@ -19,7 +20,6 @@ diff: big.txt  @ PR #7 · Change line 5                                         
   8 line 8                                                                     │  8 line 8
   9 line 9                                                                     │  9 line 9
  10 line 10                                                                    │ 10 line 10
-
 
 
 

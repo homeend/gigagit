@@ -7143,6 +7143,38 @@ file and remark level; nearer replaces farther key by key
 - Wire: `WireNote.Meta` + `WireNote.Display` (the `notemeta.Resolved`,
   nil when empty); `ToWireNoteIn(r, root)` for replies.
 
+### Note meta in the TUI (plan 2, 2026-10-12)
+
+- ONE paint mechanism: 14 meta pseudo-classes in the `syntax.Class` space
+  (`metaClassStart` = 200; 7 colours × text/filled), resolved by
+  `styles.syntaxStyle` → `metaStyle` (filled = colour background, theme `bg`
+  as text). Any `cls` mask paints badges: note box rows (`noteLine.badges`
+  /`badgeCls`, a reply's badge row via `noteLine.cls`), file rows, Other
+  notes rows, the send panel's opened row. A reverse-video cursor row drops
+  the mask (renderWindow rule) — badges go plain there.
+- Texts: `badgeRun` (filled chip = one column of fill each side; two text
+  badges two spaces apart; the marker two), `metaLineTexts`,
+  `metaDetailTexts`, `metaCountsText` / `metaCountsRun`; agent values are
+  verbatim, only the built-in status values translate (`metaWord`).
+- Box: line rows after the top blank, details rows after the note's body;
+  every row wears `metaFrame` (the root's `Resolved.Frame`, ignored when
+  stale). Title fit (`fitNoteTitle`): whole → path elided (≥ 8 cols) → words
+  cut → badges cut; badges and words joined by `metaTitleSep` (" · "). A
+  title with no badges keeps the old single-Render bytes.
+- Review view: `domain.ReviewMetaCounts(r)` (pure, Added included, moved
+  remarks skipped) on open and again after a Mark; file-row tail only while
+  it fits in cutoff mode. `ReviewOtherNote.Meta`, `SendCandidate.Meta`,
+  `agentdocs.Note.Added` (remark boxes in the overview split).
+- Mark (`note_mark.go`): `.` menu row `note-mark` → decision modal
+  (options `agreed disagreed deferred clear Cancel`, translated in
+  `optionDisplayName`) → `SetNoteMeta(id, identity name, status=…)` /
+  `UnsetNoteMeta`; never on a forge thread; reload through
+  `noteMutatedMsg`.
+- Newer notes format: `preflight.NewerLocal{Store}` reads
+  `Probes.Newer` (machine-local, from `FileStore.NewerParts`), Optional
+  non-silent feature `note-edits` → the standard feature-disabled notice.
+  `FeatureNotes` stays satisfied (notes stay readable).
+
 ## Permanent overviews (2026-10-12)
 
 Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.

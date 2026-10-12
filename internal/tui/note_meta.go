@@ -85,13 +85,18 @@ func metaWord(key, value string) string {
 
 // badgeRun is a note's badges then its audience marker (spec §6.1), with the
 // mask that colours them: a filled chip carries one column of fill each
-// side, badges sit one space apart, the marker two. "" when the note shows
+// side and sits one space from its neighbours, two text badges sit two
+// apart, the marker two. "" when the note shows
 // neither.
 func badgeRun(res notemeta.Resolved) (string, []syntax.Class) {
 	var r maskRun
 	for i, bd := range res.Badges {
-		if i > 0 {
-			r.add(" ", 0)
+		switch {
+		case i == 0:
+		case bd.Style == notemeta.StyleFilled || res.Badges[i-1].Style == notemeta.StyleFilled:
+			r.add(" ", 0) // a chip's own fill already spaces it
+		default:
+			r.add("  ", 0)
 		}
 		v := badgeValue(bd)
 		if bd.Glyph != "" {
@@ -198,14 +203,18 @@ func metaCountsRun(c notemeta.Counts) (string, []syntax.Class) {
 	return r.b.String(), r.cls
 }
 
+// metaTitleSep separates a badge run from the text after it (a box title,
+// a collapsed row): "issue  high  → author · review · …".
+const metaTitleSep = " · "
+
 // minPathCols is the narrowest a title's path is elided to before today's
 // parts start to go: "…/x.go" still names the file.
 const minPathCols = 8
 
 // fitNoteTitle fits a box title into room columns (spec §6.1): whole when it
 // fits; else the path loses its middle (never its file name); else today's
-// parts are cut; the badges go last. badges and text sit one space apart
-// when both stay.
+// parts are cut; the badges go last. badges and text are joined by
+// metaTitleSep when both stay.
 func fitNoteTitle(badges string, cls []syntax.Class, text, path string, room int) (string, []syntax.Class, string) {
 	if room <= 0 {
 		return "", nil, ""
@@ -213,7 +222,7 @@ func fitNoteTitle(badges string, cls []syntax.Class, text, path string, room int
 	bw := lipgloss.Width(badges)
 	gap := 0
 	if badges != "" && text != "" {
-		gap = 1
+		gap = lipgloss.Width(metaTitleSep)
 	}
 	if bw+gap+lipgloss.Width(text) <= room {
 		return badges, cls, text
