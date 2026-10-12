@@ -1266,7 +1266,7 @@ gives an agent in a gg console the agent tools.
    `gg branch create <name> <start-point>`.
 4. `gg worktree recycle [--on-dirty=shelve] <path> <branch>` (pass
    `--on-dirty` only when its `recycle` is `shelve`).
-5. When done: `gg worktree release <path>`.
+5. When the worker that took it has been killed: `gg worktree release <path>`.
 
 `git-lock` can appear for one listing while another reader's `git status`
 holds `index.lock` — list again before giving up on a worktree. A `claim`

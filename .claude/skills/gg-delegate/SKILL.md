@@ -47,25 +47,24 @@ servers, the web. Then:
 ### 2. Decide the kind of task
 
 Name the kind in the brief; it fixes what the worker may touch and what it
-hands back. Combine kinds in order when the task says so ("investigate, then
-fix, then report").
+shows. Combine kinds in order when the task says so ("investigate, then
+fix").
 
 | kind | worker may | worker shows as its result |
 |---|---|---|
 | **investigate** | read code, run read-only commands and tests; change nothing | findings: cause or answer, evidence as anchors, options with trade-offs |
 | **check** (verify / review) | run the build, tests, reproduce; change nothing in the tree | pass / fail per criterion with evidence; for a review, anchored review notes with `gg note` (see reviewing-with-gg) |
 | **fix** | change code and tests in its worktree; commit on its branch with gg; never push, never merge | what changed (anchors), how it was verified, the commits |
-| **report** | — (added to any kind) | the final report written as a tour (below) |
 
-Every kind ends the same way: the worker shows its result in its console
-and files it as its final `agent_report`.
+Every kind ends the same way: the worker files its result as its final
+`agent_report`, written as a tour, and shows the same text in its console.
 
 **Files — only when the user asks.** By default nothing goes to disk. When
 the user wants the instructions and/or the result in a file, put a
 `## Files` section in the brief naming each one with its full path — the
 path the user gave, else `<worktree>/BRIEF.md` and `<worktree>/REPORT.md`.
 Writing those files is allowed even for *investigate* and *check*; the
-worker never commits them.
+worker never stages or commits them.
 
 "Report as a gg-overview" (or "as a gg overview / tour") always means the
 worker's **final `agent_report`** — gg files it as a tour of the worker's
@@ -73,10 +72,13 @@ worktree (the gg-overview skill's worker section). Never write `gg session
 overview` into a brief: it targets the worktree the user's gg is showing,
 not the worker's.
 
-A fix that the investigation shows is larger or riskier than the task
-expected: stop at the report and let the overseer (you) or the user decide.
+For a *fix*, put in the brief's "Do not": if the fix proves larger or
+riskier than the task expected, stop and report — the user decides.
 
 ### 3. Plan the workers
+
+Settle the worker's tool first (step 5) — never hold a claimed worktree
+while you wait for the user's answer.
 
 - Split only into pieces a worker can finish alone, in one worktree, without
   waiting for another. One worker is usually right; several only when the
@@ -103,13 +105,13 @@ expected: stop at the report and let the overseer (you) or the user decide.
 - **A task ABOUT an existing worktree** ("describe / explain / review the
   changes in <worktree>"): the worker works IN that worktree — claim it
   (`gg worktree claim --note <source> <path>`; refused → ask the user), no
-  new branch, no recycle; Kind *investigate* (or *check*) + report. Find
+  new branch, no recycle; Kind *investigate* (or *check*). Find
   only what the brief needs — the branch and the range its work spans
   (`<base>..HEAD`, e.g. from `git merge-base` with the branch it came from)
   — and leave the reading to the worker: analysing it yourself first only
   doubles the work and fills your context. Ask for a report with one anchor
   per change.
-  `agent_start` passes your claim to the worker; it is released when the
+  `agent_start` passes your claim to the worker; it returns to you when the
   worker ends.
 - The user's `[agents] max_spawned` caps how many run at once; a worker can
   never start workers of its own.
@@ -122,7 +124,7 @@ as a tour of the worker's worktree, so links are worth adding.
 
 ```
 # <one-line goal>
-Source: <URL / issue key / file>    Kind: <investigate | check | fix> [+ report]
+Source: <URL / issue key / file>    Kind: <investigate | check | fix>
 
 ## Context
 <the task as the source states it — copied, not just linked — and what you
@@ -138,8 +140,8 @@ already know; anchors to the relevant code>
 - <checkable criteria>
 
 ## Report
-Show it in your console and finish with agent_report (final), written as a
-tour: <what the report must contain for this task>.
+Finish with agent_report (final), written as a tour, then end your turn with
+the same text under `Result`: <what the report must contain for this task>.
 
 ## Files                      (only when the user asked for files)
 - brief: <path>
@@ -162,20 +164,28 @@ session row under that worktree in gg (enter opens it; alt+a walks the
 agents). It shows the instructions first, then works, then shows the
 result there. Name the files when the brief has a `## Files` section.
 
-Then end your turn. Do not wait, do not kill the worker, do not release its
-worktree — the claim went to the worker and is released when it ends.
+Then end your turn — unless the user asked you to wait, check or tell them
+what it found: then go on to **Follow the workers**. Do not kill the worker
+and do not release its worktree (the claim went to the worker and comes back
+to you when it ends). Tell the user: when they are done with the worker, ask
+you and you kill it and release the worktree.
 
 ## Follow the workers — only when asked
 
-When the user asks you to wait for a worker, check it or tell them what it
-found — in the same prompt as the task or later.
+Do this part only when the user asks you to wait for a worker, check it or
+tell them what it found — in the same prompt as the task or later.
 
-**The result of a worker that already finished:** read it with
-`agent_screen {id}` (its `report`; `gg agent screen <id> --reports` prints
-every kept report) and show it to the user — never just point them at a
-menu. `agent_list` shows which workers reported (`report_at`).
+**"What did it find?" asked later:** `agent_list` (`report_at`,
+`report_final`, `activity`) tells you where each worker is.
+- Finished (`report_final`): read its report with `agent_screen {id}`
+  (`report`; `gg agent screen <id> --reports` prints every kept one) and
+  show its summary and main findings in your reply — never just point the
+  user at a menu. Relay only; check it (**Check and finish**) only when
+  asked to check.
+- Not finished: say what it is doing (`activity`) and any open question it
+  asked, and offer to wait. Wait only when told to.
 
-### 7. Wait — the loop
+### Wait — the loop
 
 Call `agent_wait` (no id = any of your workers) and act on the ONE event it
 returns. Leave `timeout_s` out (45 s) or keep it at 90 at most: a client
@@ -186,7 +196,7 @@ background anyway, stop that task before you wait again.
 
 | event | do |
 |---|---|
-| `report` | read `report.text`. `final` → step 8 for that worker. Not final → progress or a question: answer with `agent_send` if it asks, else wait again. |
+| `report` | read `report.text`. `final` → **Check and finish** for that worker (or, when the user asked only what it found, relay it). Not final → progress or a question: answer with `agent_send` only when the brief or the user settles it, else relay the question to the user; otherwise wait again. |
 | `question` | the worker's tool shows a dialog; `options` lists the choices. Pick the one that fits the brief's limits (never destructive or out of scope) and send its `key`: `agent_send {id, keys: ["<key>"]}`. A `pick:<i>` key cannot be pressed — move with `up` / `down` keys and send `enter`. Unsure → ask the user. |
 | `idle` | its turn ended without a report: read `agent_screen`. Finished → `agent_send` "finish with agent_report (final)". Stuck or asking in prose → answer it. |
 | `exit` | the worker is gone: read `agent_screen` for why (reports it made come first). Restart it (new `agent_start`) or report the failure. |
@@ -195,7 +205,7 @@ background anyway, stop that task before you wait again.
 Each event comes once. `agent_list` shows the current state of everything
 (`activity`, `report_at`) when you lose track.
 
-### 8. Check and finish
+### Check and finish
 
 - Verify before you trust: read the final report, then the worker's changes
   in its worktree (`cd <worktree> && gg status`, `gg diff`, `gg log`)
@@ -222,15 +232,16 @@ your console — what you show there is what they get. Then:
    (except the files its `## Files` section names); a *fix* commits on your
    branch (gg's commands, see using-gg) and never pushes or merges. A
    `## Files` section naming a brief file: write the brief there now.
-2. Work only in your worktree (your current directory). Respect "Do not".
+2. Work only in your worktree (your current directory) — and the paths the
+   brief's `## Files` names, which you never stage or commit. Respect "Do not".
    Never steer the user's window: no `gg session navigate | highlight |
    focus | reload | files | overview | note` — the user's gg shows another
    worktree, and each call raises a notice there.
-3. Blocked, or a decision the brief does not cover? Do not guess: ask one
-   clear question as your turn's last message (the user answers in your
-   console) and send the same question as a non-final `agent_report` (an
-   overseer that waits sees it there); then wait — the answer arrives as
-   typed input.
+3. Blocked, or a decision the brief does not cover? Do not guess: send one
+   clear question as a non-final `agent_report` (an overseer that waits
+   sees it there), then end your turn with the same question as your last
+   message (the user answers in your console). The answer arrives as your
+   next prompt — do not poll or sleep for it.
 4. Review notes (reviewing-with-gg's `gg note`) work from your worktree —
    they persist and the user sees them in gg's review views; skip that
    skill's `gg session` steps (see step 2). Your checkout is usually clean, so
@@ -249,8 +260,9 @@ your console — what you show there is what they get. Then:
    Do NOT use `gg session overview add` for this (see step 2).
    A `## Files` section naming a report file: write the same text there.
 6. **Show the result:** end your turn with the whole report as your last
-   message, under a heading `Result` — not just "report sent". The user reads
-   it in your console; the stored report only feeds gg's menus and a
-   waiting overseer.
+   message, under a heading `Result` — not just "report sent". The heading
+   goes only in that message, not in the `agent_report` text (its first
+   line is the summary). The user reads it in your console; the stored
+   report feeds gg's menus and a waiting overseer.
 7. Stay running after the final report — do not exit. The user (or an
    overseer) may ask a follow-up.
