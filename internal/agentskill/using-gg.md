@@ -1271,8 +1271,10 @@ a WSL/Windows pair (one repo, two hosts) is never judged dead from this side
 ### Starting another agent
 
 To hand a task to worker agents, follow the **gg-delegate** skill (the
-overseer's playbook: plan, brief, start, the wait loop, check, finish — and
-the worker protocol). This section is the tool reference.
+overseer's playbook: plan, brief, start — by default the overseer stops
+there and each worker shows its instructions and result in its own console;
+the wait loop and the check only when the user asks — and the worker
+protocol). This section is the tool reference.
 
 Inside a gg console you have gg's agent tools (MCP, via `gg mcp`) and their
 CLI twins. Outside a gg console they do not exist: `gg agent` exits 2,
@@ -1336,7 +1338,8 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   -F <file> | -F -)` — flags before the text (a `--final` inside it is
   prose) — **a worker's last act**: your result for whoever
   started you (what changed, what you skipped, what they must do; up to
-  64 KiB). `final` says you are done. You stay running until killed — do
+  64 KiB). `final` says you are done; a worker also shows the same text as
+  its turn's last message (the user reads it in its console). You stay running until killed — do
   not exit on your own: the parent may read your screen or ask more. The
   user's session row shows `done` / `reported` until someone types into
   your session. Write it as markdown: the first line a one-line summary
@@ -1344,9 +1347,9 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   important first (`[new check](src/a.go:10-30)`) — the user opens it as a
   tour of your worktree.
 
-A parent's loop: `agent_wait` → on `report` read it; on `question` answer
+A parent's loop (only when the user asked it to wait): `agent_wait` → on `report` read it; on `question` answer
 with `agent_send`; on `idle` without a report read `agent_screen`; on
-`timed_out` call again (with `activity: idle` read `agent_screen` first); `agent_kill {remove: true}` when the work is done.
+`timed_out` call again (with `activity: idle` read `agent_screen` first); `agent_kill` when the user is done with the worker.
 
 Refusals and what to do: "spawning is off" / "not in [agents] spawn" — ask
 the user to allow the command in the global config; "has no <prompt> slot" —

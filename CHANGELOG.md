@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg-delegate: the worker shows its work
+
+### Changed
+- **The overseer starts the worker and hands back** (gg-delegate v5).
+  - It prepares the worktree, writes the brief and starts the worker, then tells you where it runs. It no longer waits by default.
+  - It waits, checks or relays a result only when you ask. A result asked for later is read with `agent_screen` and shown in its reply, not left behind a menu.
+  - A finished worker is left running, so its console keeps the instructions and the result.
+- **The worker shows its instructions and its result in its own console.**
+  - Its first message prints the brief under `Instructions`; its last message prints the whole report under `Result`.
+  - It still files the final `agent_report` (Open report, a waiting overseer).
+  - A question it cannot answer from the brief is asked in its console too.
+- **Files only when asked:** a brief's `## Files` section names where the instructions and/or the result go (default `<worktree>/BRIEF.md`, `<worktree>/REPORT.md`). The worker never commits them.
+- using-gg v168 and gg-overview v8 say the same. Run `gg init --update`.
+
 ## Note meta in gg web
 
 ### Added

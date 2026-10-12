@@ -35,7 +35,7 @@ var ggOverviewBody string
 
 // Version is bumped whenever using-gg.md (or the rendered wrappers) change.
 // Installed copies carry it so init can tell new/outdated/up-to-date apart.
-const Version = 167
+const Version = 168
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
@@ -43,7 +43,7 @@ const ReviewVersion = 18
 
 // DelegateVersion is the counter for the gg-delegate skill (named delegate
 // through v3).
-const DelegateVersion = 4
+const DelegateVersion = 5
 
 // GGReviewVersion is the counter for the gg-review skill.
 const GGReviewVersion = 5
@@ -52,7 +52,7 @@ const GGReviewVersion = 5
 const GGCrossReviewVersion = 5
 
 // GGOverviewVersion is the counter for the gg-overview skill.
-const GGOverviewVersion = 7
+const GGOverviewVersion = 8
 
 // Skill is one embedded skill: its identity, its own version counter, and the
 // rendered forms init installs. Markers are per-skill ("gg:<name>:v<N>"), so
@@ -101,7 +101,7 @@ var ReviewingWithGG = newSkill("reviewing-with-gg",
 // (/gg-delegate <task>); it was named delegate until gg skills took the gg-
 // prefix (see Retired).
 var GGDelegate = newSkill("gg-delegate",
-	"Use when the user asks you to delegate a task to worker agents through gg — start workers in their own worktrees, brief them, wait for their reports and check the result; also the protocol a worker started by gg follows.",
+	"Use when the user asks you to delegate a task to worker agents through gg — prepare a worktree, brief a worker and start it (it shows its instructions and result in its own console; wait for it and check its result only when asked); also the protocol a worker started by gg follows.",
 	DelegateVersion, delegateBody)
 
 // GGReview is the user-invoked /gg-review <gg-link> [focus]: review the change

@@ -4,7 +4,7 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v7 -->
+<!-- gg:gg-overview:v8 -->
 
 # gg-overview — present a result in gg
 
@@ -151,6 +151,7 @@ which the user's gg is not showing. There, "gg-overview" in a brief means
 your **final `agent_report`**: gg files that report as a tour of your
 worktree. Write it exactly like the overview in step 5 — the one-sentence
 first line, then anchored points, most important first — and send it with
-`agent_report {text, final: true}` (`gg agent report --final -F -`). Do NOT
-run `gg session note` / `gg session overview` and do not start gg web: they
-target the user's window, not your worktree.
+`agent_report {text, final: true}` (`gg agent report --final -F -`), then
+end your turn with the same text as your last message — the user reads your
+result in your console. Do NOT run `gg session note` / `gg session overview`
+and do not start gg web: they target the user's window, not your worktree.
