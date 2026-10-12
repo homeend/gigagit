@@ -18,6 +18,9 @@ type patchResolvedMsg struct {
 	data        []byte
 	defaultPath string
 	err         error
+	// title is the popup's heading; "" = Export as patch. The overview
+	// HTML export reuses this message and popup with its own.
+	title string
 }
 
 // startExportCommitPatch resolves the whole-commit patch + default path
@@ -43,8 +46,9 @@ func (m Model) startExportCommitPatch(sha string) (Model, tea.Cmd) {
 // engine.ExportFile with the (possibly edited) full path. Mirrors tempExportPopup.
 type exportPatchPopup struct {
 	popupMax
-	dest textfield
-	data []byte
+	dest  textfield
+	data  []byte
+	title string // "" = Export as patch
 }
 
 func (p *exportPatchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -71,7 +75,11 @@ func (p *exportPatchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *exportPatchPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	var b strings.Builder
-	b.WriteString(i18n.T("Export as patch") + "\n\n")
+	title := p.title
+	if title == "" {
+		title = i18n.T("Export as patch")
+	}
+	b.WriteString(title + "\n\n")
 	b.WriteString(viewField(i18n.T("path: "), p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString(i18n.T("[type] path  [enter] write  [esc] cancel"))
 	box := st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
