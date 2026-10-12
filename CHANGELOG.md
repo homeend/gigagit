@@ -47,7 +47,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   review's tip; the working tree for an agent's overview), and that file's
   diff (the review's range; HEAD → working tree). Files no link names, and
   **notes of any kind**, are left out; a link the export cannot open draws
-  as plain text. The page is capped at 16 MB (the error names the largest
+  as plain text. The page is capped at 30 MB (the error names the largest
   files).
 - Where: **gg web** — `E` on an overview, or the `E export html` chip (a
   download); **TUI** — **Export as HTML** in the `.` menu of an open

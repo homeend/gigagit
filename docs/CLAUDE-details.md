@@ -7183,7 +7183,8 @@ opened from disk with no gg and no network.
   `.vline/.vno/.vsign/.vtext/.vd-*/.vrange`. Dark only, like gg web.
   `json.Marshal` escapes `<>&` + U+2028/9, so file text cannot close the
   blob's `<script>`; an inlined asset holding `</script`/`</style` is an
-  error. 16 MB cap → `*TooLargeError` naming the three largest files.
+  error. 30 MB cap (a guard, not a browser limit; the per-file 10 MB is gg's
+  `MaxDiffBytes`) → `*TooLargeError` naming the three largest files.
 - **Frontends:** web `GET /api/overview-export?id=|review=` (attachment,
   413 over the cap) + `E` / the `E export html` chip in `viewer.js`
   (`exportOverviewHTML`, a fetch → blob download so an error shows in the

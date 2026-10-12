@@ -101,7 +101,7 @@ Archtest: `static` is a DAG leaf (stdlib `embed` only).
     specifiers, which are fixed strings checked by a test).
   - No other `<script src>`, `<link href>`, `fetch`, or `http(s)://` in the
     output (test-enforced; the only URLs are `data:`).
-- Errors: `ErrTooLarge` when the rendered page exceeds `MaxBytes` (16 MiB),
+- Errors: `ErrTooLarge` when the rendered page exceeds `MaxBytes` (30 MiB; was 16, raised 2026-10-12 by the user),
   carrying the three largest files' paths and sizes.
 
 ### 3. The page (`export.js`, ~300 lines, vanilla ES module)
@@ -180,7 +180,7 @@ with `<svc.ExportDefaultDir>/<slug>.html`, and writes through `engine.ExportFile
 ## Error handling
 
 - Review gone / overview gone → the frontend's normal not-found message.
-- `ErrTooLarge` → "overview export is <N> MB, over the 16 MB cap; largest
+- `ErrTooLarge` → "overview export is <N> MB, over the 30 MB cap; largest
   files: a (x MB), b, c".
 - A file read failing mid-export → that file becomes a `Placeholder`
   ("could not read: <err>"), the export still succeeds.
