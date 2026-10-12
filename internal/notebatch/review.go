@@ -268,26 +268,29 @@ func unwrap(data []byte) []byte {
 type canonMeta map[string]string
 
 type canonNote struct {
-	NewRange  *[2]int   `json:"newRange,omitempty"`
-	OldRange  *[2]int   `json:"oldRange,omitempty"`
-	Summary   string    `json:"summary"`
-	Rationale string    `json:"rationale,omitempty"`
-	Meta      canonMeta `json:"meta,omitempty"`
+	NewRange  *[2]int          `json:"newRange,omitempty"`
+	OldRange  *[2]int          `json:"oldRange,omitempty"`
+	Summary   string           `json:"summary"`
+	Rationale string           `json:"rationale,omitempty"`
+	Meta      canonMeta        `json:"meta,omitempty"`
+	Display   notemeta.Display `json:"display,omitempty"`
 }
 
 type canonFile struct {
-	Path        string      `json:"path"`
-	Summary     string      `json:"summary,omitempty"`
-	Meta        canonMeta   `json:"meta,omitempty"`
-	Annotations []canonNote `json:"annotations,omitempty"`
+	Path        string           `json:"path"`
+	Summary     string           `json:"summary,omitempty"`
+	Meta        canonMeta        `json:"meta,omitempty"`
+	Display     notemeta.Display `json:"display,omitempty"`
+	Annotations []canonNote      `json:"annotations,omitempty"`
 }
 
 type canonDoc struct {
-	Version  int         `json:"version"`
-	Summary  string      `json:"summary"`
-	Overview string      `json:"overview,omitempty"`
-	Meta     canonMeta   `json:"meta,omitempty"`
-	Files    []canonFile `json:"files,omitempty"`
+	Version  int              `json:"version"`
+	Summary  string           `json:"summary"`
+	Overview string           `json:"overview,omitempty"`
+	Meta     canonMeta        `json:"meta,omitempty"`
+	Display  notemeta.Display `json:"display,omitempty"`
+	Files    []canonFile      `json:"files,omitempty"`
 }
 
 func toCanonMeta(kvs []MetaKV) canonMeta {
@@ -304,12 +307,12 @@ func toCanonMeta(kvs []MetaKV) canonMeta {
 // Canonical is the document in its documented shape, indented: what gg stores,
 // so a stored review reads the same whatever wrapping the agent used.
 func (d ReviewDoc) Canonical() []byte {
-	c := canonDoc{Version: 1, Summary: d.Summary, Overview: d.Overview, Meta: toCanonMeta(d.Meta)}
+	c := canonDoc{Version: 1, Summary: d.Summary, Overview: d.Overview, Meta: toCanonMeta(d.Meta), Display: d.Display}
 	for _, f := range d.Files {
-		cf := canonFile{Path: f.Path, Summary: f.Summary, Meta: toCanonMeta(f.Meta)}
+		cf := canonFile{Path: f.Path, Summary: f.Summary, Meta: toCanonMeta(f.Meta), Display: f.Display}
 		for _, n := range f.Notes {
 			r := n.Range
-			cn := canonNote{Summary: n.Summary, Rationale: n.Rationale, Meta: toCanonMeta(n.Meta)}
+			cn := canonNote{Summary: n.Summary, Rationale: n.Rationale, Meta: toCanonMeta(n.Meta), Display: n.Display}
 			if n.Side == "old" {
 				cn.OldRange = &r
 			} else {

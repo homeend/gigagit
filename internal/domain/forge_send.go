@@ -602,9 +602,7 @@ func (s *Service) remarkItem(ctx context.Context, plan *engine.SendPlan, r Revie
 		return
 	}
 	note := model.Note{Source: model.NoteSourceAgent, Author: r.Agent, Summary: dn.Summary, Rationale: dn.Rationale}
-	for _, kv := range dn.Meta {
-		note.Tags = append(note.Tags, kv.Key+": "+kv.Value)
-	}
+	r.remarkMeta(&note, file, dn, fp)
 	key := RemarkKey(r.ID, fp)
 	th := threadFor(path, side, rng, want, pl.hunks[path], func(q string) string { return sendBody(note, key, q) })
 	it := engine.SendItem{Key: key, Label: threadLabel(th, rng[0], dn.Summary), Kind: engine.SendThread, Thread: th,

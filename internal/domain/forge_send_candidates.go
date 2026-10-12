@@ -180,7 +180,7 @@ func sortCandidateGroups(gs []*SendCandidateGroup) {
 func (s *Service) candidateRow(ctx context.Context, r ResolvedNote, kind string, pl *sendPlace, reviews map[string]Review) SendCandidate {
 	n := r.Note
 	row := SendCandidate{ID: n.ID, Kind: kind, Path: n.Address.Path, Range: r.Range, Side: string(n.Side),
-		Summary: n.Summary, Rationale: n.Rationale, Sync: r.Sync, Severity: severityOf(n.Tags)}
+		Summary: n.Summary, Rationale: n.Rationale, Sync: r.Sync, Severity: severityOf(n)}
 	if kind == "reply" {
 		_, row.Skip = s.replySkip(n)
 	} else {
@@ -208,11 +208,4 @@ func (s *Service) candidateRow(ctx context.Context, r ResolvedNote, kind string,
 }
 
 // severityOf reads the "severity: <v>" tag a remark's meta folds into.
-func severityOf(tags []string) string {
-	for _, t := range tags {
-		if v, ok := strings.CutPrefix(t, "severity: "); ok {
-			return v
-		}
-	}
-	return ""
-}
+func severityOf(n model.Note) string { return model.MetaValue(n, "severity") }

@@ -77,8 +77,8 @@ func TestReviewNotesForAnchorsOnTheCommitDiff(t *testing.T) {
 		n.Status != model.NoteActive || n.Range != [2]int{2, 2} || n.Note.Summary != "line two" || n.Note.Rationale != "why" {
 		t.Fatalf("%+v", n)
 	}
-	if len(n.Note.Tags) != 1 || n.Note.Tags[0] != "severity: bug" {
-		t.Fatalf("tags %v, want the meta as key: value", n.Note.Tags)
+	if len(n.Note.Tags) != 0 || model.MetaValue(n.Note, "severity") != "bug" {
+		t.Fatalf("tags %v meta %v, want the remark's meta as meta", n.Note.Tags, n.Note.Meta)
 	}
 	if n.Note.Address.Commit != r.Commit || n.Note.Address.Path != "g.txt" {
 		t.Fatalf("address %+v", n.Note.Address)

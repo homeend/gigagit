@@ -84,3 +84,21 @@ func TestReviewDocMalformedDisplayIsNotADoc(t *testing.T) {
 		t.Fatal("want ErrNotReviewDoc")
 	}
 }
+
+func TestCanonicalKeepsDisplayAtEveryLevel(t *testing.T) {
+	t.Parallel()
+	doc, err := ParseReview([]byte(`{"version":1,"summary":"x","display":{"kind":{"show":["badge"]}},
+	  "files":[{"path":"a.go","display":{"kind":{"show":["count"]}},
+	    "annotations":[{"newRange":[1,1],"summary":"s","display":{"intent":{"show":["line"]}}}]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := ParseReview(doc.Canonical())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(again.Display, doc.Display) || !reflect.DeepEqual(again.Files[0].Display, doc.Files[0].Display) ||
+		!reflect.DeepEqual(again.Files[0].Notes[0].Display, doc.Files[0].Notes[0].Display) {
+		t.Fatalf("canonical lost a display:\n%s", doc.Canonical())
+	}
+}
