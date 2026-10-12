@@ -1,8 +1,8 @@
 local  branch main                                                                                            {{root}}____________________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Files a7068c4 edit a and b                        ││ Commits (all) 2                                                                                         │
-│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓ ✎ *main edit a and b                                                                             │
-│ > Reviews                                         ││   ●      main  add a and b                                                                              │
+│ 2026-01-01 00:00 · gg-e2e                         ││   ●  ↓ ✎  *main edit a and b                                                                            │
+│ > Reviews                                         ││   ●       main  add a and b                                                                             │
 │     └ 2026-01-02 00:00 Claude Code · 0/2 resolved ││                                                                                                         │
 │   M  a.txt                                        ││                                                                                                         │
 │   M  b.txt                                        ││                                                                                                         │

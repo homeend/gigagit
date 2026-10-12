@@ -144,6 +144,9 @@ guards against removing the worktree you are standing in.
 - `gg overview show <id|link> [--json]` — the title, the commit, the link,
   the markdown and each remark; `--json` carries the stored `document`.
 - `gg overview rm <id>` — delete one.
+  An agent presenting an overview stores it this way by default (the
+  gg-overview skill); a temporary `gg session overview` only when the user
+  asks for one in memory.
 - `gg review save <gg-link> --dry-run [--json]` — store nothing; print what
   the link would review and how to read it; `--json` → `{kind, label, range,
   diff, hunks, checkout}`. `kind` = preview | pair | commit | branch |

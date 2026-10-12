@@ -40,13 +40,18 @@ const (
 type anRowKind int
 
 const (
-	anGroup  anRowKind = iota // Working tree / Commits / Other (foldable)
-	anSub                     // Unstaged/Staged/Untracked, a commit, a shelf entry (foldable)
-	anDir                     // a directory heading
-	anFile                    // a file
-	anNote                    // one thread
-	anReview                  // one AI review stored on a commit (under @notes/)
+	anGroup    anRowKind = iota // Working tree / Commits / Other (foldable)
+	anSub                       // Unstaged/Staged/Untracked, a commit, a shelf entry (foldable)
+	anDir                       // a directory heading
+	anFile                      // a file
+	anNote                      // one thread
+	anReview                    // one AI review stored on a commit (under @notes/)
+	anOverview                  // one permanent overview stored on a commit
 )
+
+// stored reports a stored document's row — a review or a permanent
+// overview — laid out in the note columns (anReviewParts).
+func (k anRowKind) stored() bool { return k == anReview || k == anOverview }
 
 // anTarget is where a file or note row opens.
 type anTarget struct {
@@ -67,9 +72,10 @@ type anRow struct {
 	key      string // fold key (groups and subs)
 	span     int    // index one past the row's last descendant
 	note     *domain.ResolvedNote
-	review   *domain.Review // anReview rows
-	outdated bool           // a working review no file matches anymore
-	status   string         // a note's display status
+	review   *domain.Review   // anReview rows
+	overview *domain.Overview // anOverview rows
+	outdated bool             // a working review no file matches anymore
+	status   string           // a note's display status
 	target   anTarget
 	filter   string // lowercased text a query matches (notes only)
 }
@@ -230,6 +236,14 @@ func buildAllNotesRows(ov domain.NotesOverview, worktree string) []anRow {
 						filter: strings.ToLower(r.Summary + "\x00" + r.Agent + "\x00" + r.Branch)})
 				}
 			}
+			if len(c.Overviews) > 0 {
+				rows = append(rows, anRow{kind: anDir, depth: 2, text: i18n.T("Overviews")})
+				for i := range c.Overviews {
+					o := &c.Overviews[i]
+					rows = append(rows, anRow{kind: anOverview, depth: 3, overview: o,
+						filter: strings.ToLower(o.Title + "\x00" + o.Agent + "\x00" + o.Branch)})
+				}
+			}
 			files(2, c.Files, anTarget{commit: c.Hash, subject: shortHash(c.Hash) + " " + sanitizeLine(c.Subject), missing: c.Missing})
 		}
 	}
@@ -291,11 +305,11 @@ func (p *allNotesPopup) visible() []anRow {
 		q := strings.ToLower(p.query)
 		match := make([]bool, len(p.rows))
 		for i, r := range p.rows {
-			match[i] = (r.kind == anNote || r.kind == anReview) && strings.Contains(r.filter, q)
+			match[i] = (r.kind == anNote || r.kind.stored()) && strings.Contains(r.filter, q)
 		}
 		for i, r := range p.rows {
 			keep := match[i]
-			if r.kind != anNote && r.kind != anReview {
+			if r.kind != anNote && !r.kind.stored() {
 				for j := i + 1; j < r.span && !keep; j++ {
 					keep = match[j]
 				}
@@ -374,6 +388,12 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		svc := m.svc
 		switch r := vis[p.sel]; {
+		case r.kind == anOverview:
+			id := r.overview.ID
+			u, cmd := m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
+				return svc.OverviewLink(ctx, id)
+			}).run(m)
+			return u.(Model), cmd
 		case r.kind == anReview:
 			id := r.review.ID
 			u, cmd := m.asyncCopyLinkRow("copy-gg-link", i18n.T("Copy gg link"), func(ctx context.Context) (string, error) {
@@ -426,6 +446,10 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			// The review lives in the note: it opens (as text) even when the
 			// commit is gone.
 			return m.openReview(r.review.ID, r.review.Summary)
+		case anOverview:
+			// The overview lives in the note: it opens even when its commit
+			// is gone (its anchors then draw plain).
+			return m.openCommitOverview(r.overview.ID)
 		}
 	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 		if rs := []rune(p.query); len(rs) > 0 {
@@ -571,12 +595,23 @@ func anReviewParts(r anRow, now time.Time) (head, summary string) {
 		padRight(truncate(who, anWhoW-1), anWhoW) +
 		padRight(truncate(where, anWhereW-1), anWhereW) +
 		padRight(truncate(when, anWhenW-1), anWhenW)
-	return head, sanitizeLine(r.review.Summary)
+	return head, sanitizeLine(anStoredTitle(r))
+}
+
+// anStoredTitle is a stored row's summary: a review's, an overview's title.
+func anStoredTitle(r anRow) string {
+	if r.overview != nil {
+		return r.overview.Title
+	}
+	return r.review.Summary
 }
 
 // anReviewSummary is a review row's summary with its tally: the long form
 // when room columns hold it, else the short one ("0/2 resolved").
 func anReviewSummary(r anRow, summary string, room int) string {
+	if r.overview != nil {
+		return summary // an overview has no threads to tally
+	}
 	remarks, resolved := r.review.Tally()
 	return withTally(summary, remarks, resolved, room)
 }
@@ -584,32 +619,43 @@ func anReviewSummary(r anRow, summary string, room int) string {
 // anReviewFull is a review row's cells uncut: the bottom bar's text.
 func anReviewFull(r anRow, now time.Time) string {
 	status, who, where, when := anReviewCells(r, now)
-	return strings.Join([]string{status, who, where, when, anReviewSummary(r, sanitizeLine(r.review.Summary), tallyWide)}, " · ")
+	return strings.Join([]string{status, who, where, when, anReviewSummary(r, sanitizeLine(anStoredTitle(r)), tallyWide)}, " · ")
 }
 
 // anReviewCells is a review row's column values.
+// An overview row (r.overview) fills them the same way, STATUS "overview".
 func anReviewCells(r anRow, now time.Time) (status, who, where, when string) {
-	v := r.review
+	status = i18n.T("review")
+	var (
+		kind    domain.ReviewNoteKind
+		branch  string
+		created time.Time
+	)
+	if o := r.overview; o != nil {
+		status, kind, branch, who, created = i18n.T("overview"), o.Kind, o.Branch, o.Agent, o.Created
+	} else {
+		v := r.review
+		kind, branch, who, created = v.Kind, v.Branch, v.Agent, v.Created
+	}
 	where = i18n.T("commit")
-	switch v.Kind {
+	switch kind {
 	case domain.ReviewOnBranch:
-		where = i18n.T("branch %s", v.Branch)
+		where = i18n.T("branch %s", branch)
 	case domain.ReviewWasTip:
-		where = i18n.T("was tip %s", v.Branch)
+		where = i18n.T("was tip %s", branch)
 	case domain.ReviewOnWorktree:
 		where = i18n.T("working changes")
 		if r.outdated {
 			where = i18n.T("outdated")
 		}
 	}
-	who = v.Agent
 	if who == "" {
 		who = i18n.T("agent")
 	}
-	if !v.Created.IsZero() {
-		when = coarseAgo(now.Sub(v.Created))
+	if !created.IsZero() {
+		when = coarseAgo(now.Sub(created))
 	}
-	return i18n.T("review"), sanitizeLine(who), where, when
+	return status, sanitizeLine(who), where, when
 }
 
 // anNoteColumns renders a note row's columns (after its indent) to w: the
@@ -633,7 +679,7 @@ func (p *allNotesPopup) anRowText(r anRow, w int, now time.Time) string {
 	switch r.kind {
 	case anNote:
 		return strings.Repeat(" ", anNoteIndent) + anNoteColumns(r, w-anNoteIndent, now)
-	case anReview:
+	case anReview, anOverview:
 		head, summary := anReviewParts(r, now)
 		budget := w - anNoteIndent - lipgloss.Width(head)
 		if budget < 1 {
@@ -659,7 +705,7 @@ func anBarText(r anRow, now time.Time) string {
 		head, summary, tail := anNoteParts(r, now)
 		return head + summary + tail
 	}
-	if r.kind == anReview {
+	if r.kind.stored() {
 		return anReviewFull(r, now)
 	}
 	return r.text
@@ -672,7 +718,7 @@ func (p *allNotesPopup) anRowFull(r anRow, now time.Time) string {
 	case anNote:
 		head, summary, tail := anNoteParts(r, now)
 		return strings.Repeat(" ", anNoteIndent) + head + summary + tail
-	case anReview:
+	case anReview, anOverview:
 		return strings.Repeat(" ", anNoteIndent) + anReviewFull(r, now)
 	case anGroup, anSub:
 		mark := "▾ "
@@ -698,9 +744,9 @@ func (p *allNotesPopup) box(m Model) string {
 		i18n.T("[enter] open / fold"),
 		i18n.T("[←/→] fold"),
 	}
-	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) && (vis[p.sel].kind == anNote || vis[p.sel].kind == anReview) {
+	if vis := p.visible(); p.sel >= 0 && p.sel < len(vis) && (vis[p.sel].kind == anNote || vis[p.sel].kind.stored()) {
 		keys = append(keys, i18n.T("[ctrl+d] delete"))
-		if vis[p.sel].kind == anReview || vis[p.sel].linkable() {
+		if vis[p.sel].kind.stored() || vis[p.sel].linkable() {
 			keys = append(keys, i18n.T("[ctrl+l] copy link"))
 		}
 	}
@@ -753,7 +799,7 @@ func (p *allNotesPopup) box(m Model) string {
 			if i != p.sel && r.kind == anNote {
 				rows[i].decorate = anNoteDecorator(r)
 			}
-			if i != p.sel && r.kind == anReview {
+			if i != p.sel && r.kind.stored() {
 				rows[i].decorate = anColumnsDecorator(st().noteFrameAgent, false)
 			}
 		}
@@ -790,7 +836,7 @@ func (p *allNotesPopup) box(m Model) string {
 // anHeadCut reports whether a note/review row's fixed columns cut a value.
 func anHeadCut(r anRow, now time.Time) bool {
 	var head string
-	if r.kind == anReview {
+	if r.kind.stored() {
 		head, _ = anReviewParts(r, now)
 	} else {
 		head, _, _ = anNoteParts(r, now)
@@ -800,7 +846,7 @@ func anHeadCut(r anRow, now time.Time) bool {
 
 // anWrappedFull is the bottom bar's text for a wrapped row.
 func anWrappedFull(r anRow, now time.Time) string {
-	if r.kind == anReview {
+	if r.kind.stored() {
 		return anReviewFull(r, now)
 	}
 	return anNoteFull(r, now)
@@ -817,7 +863,7 @@ func anWrappedRow(r anRow, now time.Time) (text string, hang int, ok bool) {
 	case r.kind == anNote && !r.note.Note.IsShelfLevel():
 		head, summary, tail := anNoteParts(r, now)
 		return indent + head + summary + tail, anNoteIndent + lipgloss.Width(head), true
-	case r.kind == anReview:
+	case r.kind.stored():
 		// Wrapped, the short tally: a long one would split across lines.
 		head, summary := anReviewParts(r, now)
 		return indent + head + anReviewSummary(r, summary, tallyNarrow), anNoteIndent + lipgloss.Width(head), true
@@ -874,7 +920,7 @@ func anColumnsDecorator(who lipgloss.Style, dimStatus bool) rowDecorator {
 func (p *allNotesPopup) count() int {
 	n := 0
 	for _, r := range p.rows {
-		if r.kind == anNote || r.kind == anReview {
+		if r.kind == anNote || r.kind.stored() {
 			n++
 		}
 	}

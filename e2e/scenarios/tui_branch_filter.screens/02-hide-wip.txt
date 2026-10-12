@@ -1,7 +1,7 @@
 local  branch main                                                                                                  {{root}}______________________________/local
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ [Branches] R W P ·date↓ ▾1 no wip · 2 hidden      ││ Commits (all) 1                                                                                         │
-│ >   feat/login                                    ││   ●  ↓⁵  *main (wip/spike, wip/old-idea, feat/search, feat/login) add a                                 │
+│ >   feat/login                                    ││   ●  ↓⁵   *main (wip/spike, wip/old-idea, feat/search, feat/login) add a                                │
 │     feat/search                                   ││                                                                                                         │
 │   * main ({{root}}______________________________… ││                                                                                                         │
 │                                                   ││                                                                                                         │

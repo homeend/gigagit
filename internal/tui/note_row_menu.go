@@ -33,7 +33,7 @@ func (m Model) filesNoteRow() (contentLine, bool) {
 		return contentLine{}, false
 	}
 	l := vis[m.filesView.sel]
-	if l.noteID == "" && l.noteScope == "" && l.notedPath == "" {
+	if l.noteID == "" && l.noteScope == "" && l.notedPath == "" && l.overviewID == "" {
 		return contentLine{}, false
 	}
 	return l, true
@@ -48,6 +48,19 @@ func (m Model) noteRowMenu() ([]actionRow, bool) {
 	open := func(m Model) (tea.Model, tea.Cmd) { return m.openDiffForFileLine(l) }
 	hash, svc := m.filesHash, m.svc
 	switch {
+	case l.overviewID != "": // a PR view's Overviews entry (R10): Open + Delete
+		id, quote := l.overviewID, reviewQuote("", "")
+		for _, h := range m.previewOverviews() {
+			if h.ID == id {
+				quote = reviewQuote(h.Agent, h.Title)
+			}
+		}
+		return []actionRow{
+			{id: "open-overview", label: i18n.T("Open overview"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openCommitOverview(id) }},
+			{id: "delete-overview", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.confirmOverviewDelete(id, quote)
+			}},
+		}, true
 	case l.noteID != "":
 		id, quote := l.noteID, reviewQuote("", "")
 		for _, r := range m.noteCounts.Reviews {
@@ -171,7 +184,9 @@ func (m Model) dropFilesRows(gone func(contentLine) bool) Model {
 	if p == nil {
 		return m
 	}
-	isNote := func(l contentLine) bool { return l.noteID != "" || l.noteScope != "" || l.notedPath != "" }
+	isNote := func(l contentLine) bool {
+		return l.noteID != "" || l.noteScope != "" || l.notedPath != "" || l.overviewID != ""
+	}
 	out := make([]contentLine, 0, len(p.lines))
 	for i, l := range p.lines {
 		if gone(l) {

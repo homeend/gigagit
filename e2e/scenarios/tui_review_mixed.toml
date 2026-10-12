@@ -41,7 +41,7 @@ size = "160x40"
 [[tui.step]]
 name = "commits"
 keys = ["right"]
-screen_contains = ["✎ *feature deleted a b", "add a b  ◆ 1", "feature ◆ 1"]
+screen_contains = ["✎  *feature deleted a b", "add a b  ◆ 1", "feature ◆ 1"]
 screen_excludes = ["deleted a b  ◆"]
 
 [[tui.step]]

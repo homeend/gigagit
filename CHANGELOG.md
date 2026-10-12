@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Permanent overviews in the TUI
+
+### Added
+- A commit holding a permanent overview shows `≡` in its own marker cell
+  right of `✎` in the Commits list (from any branch). The commit's `.` menu
+  offers **Open overview: <title>** per overview; a branch whose tip is an
+  overview's commit (made on it) lists a `└ Overview: <title>` row under it
+  (enter opens it; `.` = Open overview / Delete overview, Delete asks).
+  View all notes lists a commit's overviews under **Overviews** (enter
+  opens, `ctrl+d` deletes, `ctrl+l` copies the link); a pull request's view
+  lists the PR's overviews under **Overviews** (an overview of an older
+  head says *older tip*). An overview opens as the overview split: the
+  document on the left, the file AT the overview's commit on the right with
+  the overview's remarks; `D` flips to the commit's own change of the file,
+  `S` stacks the linked files, a narrow terminal opens it full-screen.
+- `?overview=` links (`gg session navigate`, `gg open`, the `#` prompt)
+  open the overview; a removed overview's link opens its commit and says so.
+- An open overview deleted anywhere (the CLI, another window) closes when
+  the note counts reload, saying so.
+
+### Changed
+- The Commits row's marker area is 5 cells (`↓ ↑/badge ✎ ≡ space`): every
+  commit row moved one column right.
+- The gg-overview skill (v7): an overview is PERMANENT by default (`gg
+  overview save`, then `gg session navigate` to its link when a gg window
+  is open — gg web is never started for it); a temporary in-memory overview
+  only when the user asks for one. using-gg v167 says so.
+
 ## Note meta (core)
 
 ### Added

@@ -2,9 +2,9 @@ local  branch (detached)                                                        
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ [Branches] R W P ·date↓                           ││ Commits (all) 3                                                                                         │
 │ > feature                                         ││   ◇    Working tree (1)                                                                                 │
-│   main                                            ││   ●    ↓   feature feature changes a                                                                    │
-│                                                   ││   │ ●  ↓   main    main changes a                                                                       │
-│                                                   ││   ●─╯      feature add a                                                                                │
+│   main                                            ││   ●    ↓    feature feature changes a                                                                   │
+│                                                   ││   │ ●  ↓    main    main changes a                                                                      │
+│                                                   ││   ●─╯       feature add a                                                                               │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

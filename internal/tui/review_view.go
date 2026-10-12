@@ -586,6 +586,7 @@ func (m Model) openFileAtCommit(rev, path string) (Model, tea.Cmd) {
 		d = m.newOpenFile(src, path)
 	} else {
 		m = m.detachDoc(d)
+		d.dropWayBack() // an anchor's open sets it again after this call
 	}
 	m = m.pushLayer(&fileViewer{openFile: d})
 	m = m.registerDoc(d)

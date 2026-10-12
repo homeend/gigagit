@@ -37,13 +37,26 @@ func remarkBoxes(ns []domain.ResolvedNote) []agentdocs.Note {
 	return out
 }
 
-// reviewOfFrom is the review whose remarks d may carry: its way back is a
-// review's stored overview still open; "" otherwise.
-func (d *openFile) reviewOfFrom() string {
-	if f := d.from; f != nil && f.ov != nil && !f.ov.closed && f.src.kind == srcReviewOverview {
-		return f.src.rev
+// storedFrom is the stored overview whose remarks d may carry — its way
+// back is a review's stored overview or a permanent overview still open:
+// its kind and id; (0, "") otherwise.
+func (d *openFile) storedFrom() (fileSourceKind, string) {
+	if f := d.from; f != nil && f.ov != nil && !f.ov.closed && f.src.kind.storedOverview() {
+		return f.src.kind, f.src.rev
 	}
-	return ""
+	return 0, ""
+}
+
+// dropWayBack forgets the overview d was opened from: the same file at the
+// same commit opened another way (the Files view preview, a review's file)
+// shows none of that overview's remarks or bands (R9). An anchor's open
+// sets the way back again after its open (openAnchor).
+func (d *openFile) dropWayBack() { d.from, d.anchorCur = nil, "" }
+
+// reviewOfFrom is storedFrom's id: whose remarks d carries; "" for none.
+func (d *openFile) reviewOfFrom() string {
+	_, id := d.storedFrom()
+	return id
 }
 
 // shownNotes is every note drawn in d: the agent's (the store's copy), then
@@ -103,13 +116,13 @@ func (d *openFile) readOnlyText() string {
 // reviewNotesCmd fetches d's review remarks off the UI thread once its
 // lines are in; nil when d carries none to fetch.
 func (m Model) reviewNotesCmd(d *openFile) tea.Cmd {
-	id := d.reviewOfFrom()
+	kind, id := d.storedFrom()
 	if id == "" || d.stream != nil || !docLoaded(d) || d.p.img != nil || m.svc == nil {
 		return nil
 	}
 	svc, tag, path, lines, slot := m.svc, d.tag, d.path, rawOf(d.p.lines), m.stamp()
 	return func() tea.Msg {
-		ns, err := svc.ReviewFileNotes(context.Background(), id, path, lines)
+		ns, err := storedFileNotes(svc, kind, id, path, lines)
 		return reviewNotesMsg{slotStamp: slot, tag: tag, review: id, notes: ns, err: err}
 	}
 }
@@ -125,4 +138,13 @@ func (m Model) reviewNotesLanded(msg reviewNotesMsg) Model {
 	d.syncNoteRows()
 	d.p.ensureCursorVisible(m.docRows(d)) // a box above the cursor must not push the steered line out
 	return m
+}
+
+// storedFileNotes are a stored overview's remarks on path, whose text is
+// lines: a permanent overview's, else its review's.
+func storedFileNotes(svc *domain.Service, kind fileSourceKind, id, path string, lines []string) ([]domain.ResolvedNote, error) {
+	if kind == srcCommitOverview {
+		return svc.OverviewFileNotes(context.Background(), id, path, lines)
+	}
+	return svc.ReviewFileNotes(context.Background(), id, path, lines)
 }

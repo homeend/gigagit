@@ -222,12 +222,12 @@ func TestMarkerFieldReviewCell(t *testing.T) {
 		id   commitIdent
 		want string
 	}{
-		{commitIdent{}, "    "},
-		{commitIdent{reviewed: true}, "  ✎ "},
-		{commitIdent{tip: true, reviewed: true}, "↓ ✎ "},
-		{commitIdent{tip: true, count: 3, reviewed: true}, "↓³✎ "},
-		{commitIdent{tip: true, remoteTip: true, reviewed: true}, "↓↑✎ "},
-		{commitIdent{tip: true, remoteTip: true}, "↓↑  "},
+		{commitIdent{}, "     "},
+		{commitIdent{reviewed: true}, "  ✎  "},
+		{commitIdent{tip: true, reviewed: true}, "↓ ✎  "},
+		{commitIdent{tip: true, count: 3, reviewed: true}, "↓³✎  "},
+		{commitIdent{tip: true, remoteTip: true, reviewed: true}, "↓↑✎  "},
+		{commitIdent{tip: true, remoteTip: true}, "↓↑   "},
 	}
 	for _, c := range cases {
 		if got := c.id.markerField(); got != c.want || lipgloss.Width(got) != commitMarkerW {

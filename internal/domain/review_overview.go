@@ -53,8 +53,6 @@ func (s *Service) ReviewOverview(ctx context.Context, id string) (OverviewDoc, e
 	if r.Doc == nil || r.Doc.Overview == "" {
 		return OverviewDoc{}, ErrNoOverview
 	}
-	doc, anchors := agentdocs.ParseOverview(r.Doc.Overview)
-	out := OverviewDoc{Text: r.Doc.Overview, Doc: doc}
 	files, err := s.ReviewFiles(ctx, r)
 	if err != nil {
 		return OverviewDoc{}, err
@@ -63,33 +61,39 @@ func (s *Service) ReviewOverview(ctx context.Context, id string) (OverviewDoc, e
 	for _, f := range files {
 		inReview[f.Path] = true
 	}
-	lineCount := map[string]int{} // path → lines at the tip (-1 = unreadable)
-	count := func(path string) int {
-		if n, ok := lineCount[path]; ok {
-			return n
+	return resolveOverviewDoc(r.Doc.Overview, func(p string) bool { return inReview[p] }, func(p string) int {
+		if lines, ok := s.overviewFileLines(ctx, r, p); ok {
+			return len(lines)
 		}
-		n := -1
-		if lines, ok := s.overviewFileLines(ctx, r, path); ok {
-			n = len(lines)
-		}
-		lineCount[path] = n
-		return n
-	}
+		return -1
+	}), nil
+}
+
+// resolveOverviewDoc parses text and judges each anchor: OK when inScope
+// says its path counts and its lines exist (lines < 0 = unreadable). A note
+// anchor (note:t<n>) is never OK in a stored overview.
+func resolveOverviewDoc(text string, inScope func(path string) bool, lines func(path string) int) OverviewDoc {
+	doc, anchors := agentdocs.ParseOverview(text)
+	out := OverviewDoc{Text: text, Doc: doc}
+	count := map[string]int{} // path → lines at the tip (-1 = unreadable)
 	for _, a := range anchors {
 		oa := OverviewAnchor{Anchor: a}
 		switch {
-		case a.Note != "" || a.Path == "" || !inReview[a.Path]:
+		case a.Note != "" || a.Path == "" || !inScope(a.Path):
 			// plain
 		case a.Start == 0:
 			oa.OK = true
 		default:
-			n := count(a.Path)
-			last := max(a.End, a.Start)
-			oa.OK = n >= 0 && last <= n
+			n, seen := count[a.Path]
+			if !seen {
+				n = lines(a.Path)
+				count[a.Path] = n
+			}
+			oa.OK = n >= 0 && max(a.End, a.Start) <= n
 		}
 		out.Anchors = append(out.Anchors, oa)
 	}
-	return out, nil
+	return out
 }
 
 // overviewFileBytes reads path as the review's tip has it: the working file

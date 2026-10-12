@@ -1,0 +1,61 @@
+name = "tui: a permanent overview — └ Overview under its branch, ≡ on the commit, the . menu opens it as a split on the commit's files"
+
+# One commit adding a.txt (5 lines) and b.txt (3 lines); an agent stores a
+# permanent overview on HEAD (main) linking a.txt:2 (with a remark) and
+# b.txt:2. The Branches list shows a └ Overview row under main (its tip is
+# the overview's commit); the Commits row shows ≡ in its own marker cell;
+# the . menu offers "Open overview: How a and b work"; enter on it opens
+# the split — the overview left, a.txt at the commit right with the
+# remark; ↓ steers to b.txt; esc closes it.
+[input]
+steps = [
+  { write = "a.txt", content = "one\ntwo\nthree\nfour\nfive\n" },
+  { write = "b.txt", content = "alpha\nbeta\ngamma\n" },
+  { commit = "add a and b" },
+]
+
+[[run]]
+cmd   = ["overview", "save", "--agent", "Claude Code", "--stdin"]
+stdin = '{"version":1,"title":"How a and b work","overview":"Start at [two](a.txt:2), then [beta](b.txt:2).","files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"why two?"}]}]}'
+exit  = 0
+
+[tui]
+size = "160x40"
+
+[[tui.step]]
+name = "branches"
+wait = true
+screen_contains = ["└ Overview: How a and b work"]
+
+[[tui.step]]
+name = "commits"
+keys = ["right"]
+wait = true
+screen_contains = ["≡", "add a and b"]
+
+[[tui.step]]
+name = "menu"
+keys = ["."]
+screen_contains = ["Open overview: How a and b work"]
+
+# The menu filters as you type: "overview" leaves the one row, enter runs it.
+[[tui.step]]
+name = "split"
+keys = ["overview", "enter"]
+wait = true
+screen_contains = ["Overview: How a and b work", "View a.txt @", "two", "why two?"]
+
+[[tui.step]]
+name = "steer"
+keys = ["down"]
+wait = true
+screen_contains = ["View b.txt @", "beta"]
+
+[[tui.step]]
+name = "close"
+keys = ["esc"]
+screen_excludes = ["│ Overview: How a and b work", "View b.txt @"]
+screen_contains = ["└ Overview: How a and b work", "≡ *main add a and b"]
+
+[expect]
+branch = "main"

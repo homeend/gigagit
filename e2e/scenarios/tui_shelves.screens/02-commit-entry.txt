@@ -2,8 +2,8 @@ local  branch main                                                              
 ╭───────────────────────────────────────────────────╮╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Files commit / cc2b480 — the b and c change       ││ Commits (all) 2                                                                                         │
 │ .                                                 ││   ◇  Working tree (1)                                                                                   │
-│ >   b.txt                                         ││   ●  ↓   *main grow b, add c                                                                            │
-│     c.txt                                         ││   ●      main  add a b                                                                                  │
+│ >   b.txt                                         ││   ●  ↓    *main grow b, add c                                                                           │
+│     c.txt                                         ││   ●       main  add a b                                                                                 │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │
 │                                                   ││                                                                                                         │

@@ -26,10 +26,11 @@ type NoteSpan struct {
 // its note anchors — the note store lives in the live TUI or gg web). For
 // an agent overview the service must be the overview's worktree.
 type OverviewSource struct {
-	ReviewID  string
-	Title     string
-	Text      string
-	NoteSpans map[string]NoteSpan
+	ReviewID   string
+	OverviewID string // a permanent overview (gg overview)
+	Title      string
+	Text       string
+	NoteSpans  map[string]NoteSpan
 }
 
 // ErrNoAgentOverview: no overview with that id in this worktree.
@@ -75,7 +76,26 @@ func (s *Service) ExportOverviewHTML(ctx context.Context, src OverviewSource) ([
 		ok      []bool // per anchor: may it open a file at all
 		rd      exportReader
 	)
-	if src.ReviewID != "" {
+	if src.OverviewID != "" {
+		o, err := s.Overview(ctx, src.OverviewID)
+		if err != nil {
+			return nil, "", err
+		}
+		ov, err := s.OverviewDocAt(ctx, src.OverviewID)
+		if err != nil {
+			return nil, "", err
+		}
+		doc = ov.Doc
+		for _, a := range ov.Anchors {
+			anchors, ok = append(anchors, a.Anchor), append(ok, a.OK)
+		}
+		e.Kind, e.Title = "review", "Overview: "+o.Title
+		commit := o.Commit
+		rd = exportReader{
+			read: func(p string) ([]byte, error) { return s.ShowFile(ctx, commit, p) },
+			diff: func(p string) (ReviewFileDiff, error) { return s.OverviewFileDiff(ctx, src.OverviewID, p) },
+		}
+	} else if src.ReviewID != "" {
 		ov, err := s.ReviewOverview(ctx, src.ReviewID)
 		if err != nil {
 			return nil, "", err

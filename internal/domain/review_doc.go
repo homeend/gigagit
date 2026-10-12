@@ -134,16 +134,21 @@ func (s *Service) ReviewNotesFor(ctx context.Context, reviewID, path string, d D
 	if err != nil || r.Doc == nil {
 		return nil, err
 	}
+	return reviewNotesOf(r, path, d), nil
+}
+
+// reviewNotesOf is review r's remarks on both sides of d (ReviewNotesFor).
+func reviewNotesOf(r Review, path string, d Diff) []ResolvedNote {
 	addr := model.FileAddress{State: model.StateCommitted, Commit: r.Commit, Path: path}
 	if r.Kind == ReviewOnWorktree {
 		// Annotations show only on a file that still matches (spec §7).
 		if WorkingReviewState(r.Worktree, r.Files).States[reviewPath(path)] != WorkingFileMatches {
-			return nil, nil
+			return nil
 		}
 		addr = model.FileAddress{State: model.StateUnstaged, Worktree: r.Worktree, Path: path}
 	}
 	oldLines, newLines := diffSideLines(d)
-	return reviewDocNotes(r, path, addr, oldLines, newLines, false), nil
+	return reviewDocNotes(r, path, addr, oldLines, newLines, false)
 }
 
 // ReviewFileNotes is the review's remarks on path placed on the file at the

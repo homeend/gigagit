@@ -33,6 +33,9 @@ type Overview struct {
 type OverviewHead struct {
 	ID, Commit, Branch, Scope, Agent, Title string
 	Created                                 time.Time
+	// Older: a PR overview whose PR head has moved past its commit
+	// (PROverviews sets it).
+	Older bool
 }
 
 func overviewHead(n model.Note) OverviewHead {

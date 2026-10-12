@@ -4,25 +4,79 @@ description: Use when the user says gg-overview, or asks to visualise, present o
 argument-hint: "[what to present]"
 ---
 
-<!-- gg:gg-overview:v6 -->
+<!-- gg:gg-overview:v7 -->
 
 # gg-overview — present a result in gg
 
 **gg-overview** is gg's way of showing the user what you found or changed:
-temporary **notes** on the exact lines, plus an **overview** — a short
-markdown document whose links are anchors into the code. The user reads the
-overview in their gg window (the TUI, or the gg web page), tabs from anchor
+an **overview** — a short markdown document whose links are anchors into the
+code — with your remarks on the exact lines. The user reads the
+overview in their gg window, tabs from anchor
 to anchor, presses enter to open the real file at the place you named, and
 backspace brings them back. When the user says "use gg-overview", "show it
 as a gg-overview", "visualise the result in gg" or types `/gg-overview
 [what to present]`, this is what they mean: present the result this way
 instead of (not as well as) a long chat answer.
 
-The full command grammar is in the using-gg skill ("Open-file notes" and
-"Overviews"); `gg skill path using-gg` prints where it is. This skill is the
+An overview is **PERMANENT by default**: gg stores it on the commit it
+explains, and the user opens it again any time from that commit — `≡` in
+gg's Commits list, the commit's `.` menu, a `└ Overview` row under the
+branch while its tip is that commit, View all notes, or its
+`gg://…?overview=<id>` link. Make it **TEMPORARY** (in the running gg's
+memory only, gone when gg closes) only when the user says "in-memory",
+"temporary" or "don't keep it" — then follow "Temporary (in-memory)
+overview" below. Never turn one kind into the other.
+
+The full command grammar is in the using-gg skill (`gg overview save` for
+the permanent kind; "Temporary notes" and "Overviews" for the temporary
+one); `gg skill path using-gg` prints where it is. This skill is the
 recipe.
 
-## Steps
+## Steps (permanent — the default)
+
+1. **Finish first.** The overview explains a commit: make every edit and
+   commit it before you write a single anchor.
+2. **Work in the worktree whose commit you explain.** Paths are relative to
+   it, in slash form; lines are the file AT that commit (`gg show
+   <sha>:<path>` when the tree has uncommitted changes).
+3. **Write the document** as JSON:
+   `{"version":1,"title":"<short title>","overview":"<markdown>","files":[{"path":"…","annotations":[{"newRange":[a,b],"summary":"…","rationale":"…"}]}]}`.
+   The markdown is written in the order you would explain it — the anchors
+   are walked top to bottom:
+   - first line: the result in one sentence;
+   - then each point with its anchor: `[the parser](internal/x/parse.go:40-60)`,
+     `[this check](src/a.go:120)`, `[the config](config.toml)` — never
+     `note:` links (a permanent overview has no temporary notes);
+   - one `path:N` or `path:N-M` anchor per place you want seen — gg draws
+     every anchor in a file as a band and `n` / `p` step through them, so
+     prefer several precise anchors over one wide range;
+   - anchor the lines that SHOW the point, not a neighbour of them;
+   - last: what you skipped, open questions, what the user should do next.
+   Your line remarks go in `files[].annotations` (one per remark, on the
+   exact lines; summary one sentence, reasoning in `rationale`): gg draws
+   them as read-only boxes beside the file, only in this overview.
+   Limits: ≤ 64 KiB, ≤ 100 anchors.
+4. **Save it.** `gg overview save [<gg-link>] --agent "<your name>" --stdin`
+   (the JSON on stdin). No link = HEAD; a pull request: the link from `gg
+   link --pr <n>`. gg checks the WHOLE document against the commit and
+   refuses the save — nothing stored, every problem listed — for a path the
+   commit lacks, lines past a file's end or a `note:` link: fix the
+   document and save again (the same commit and title replaces). On
+   `<path>: uncommitted changes` or `<path>: differs from <sha7> on disk`
+   STOP and ask the user: commit those files and save permanently, or keep
+   the overview in memory only (then the temporary recipe below).
+5. **Show it.** When a gg window is open on the worktree, `gg session
+   navigate <the printed gg://…?overview= link>` opens it there. `no gg
+   session for this worktree` → skip this step: the overview is stored and
+   the user opens it from the commit. NEVER start gg web for a permanent
+   overview.
+6. **Reply** in chat with the link, the title and a three-line summary. Do
+   not paste the overview into the chat — it is in gg.
+
+## Temporary (in-memory) overview — only when asked
+
+Notes and overviews made this way live in the running gg's memory and are
+gone when the user closes them or quits gg.
 
 1. **Finish first.** Notes sit on a file as it is on disk at that moment —
    make every edit before you add a single note or anchor.
@@ -79,11 +133,6 @@ recipe.
    focus f<n>`.
 6. **Reply** in chat with the overview's id and title (and the gg web URL
    when you started it) and a three-line summary. Do not paste the overview into the chat — it is in gg.
-
-Notes and overviews are TEMPORARY: they live in the running gg's memory and
-are gone when the user closes them or quits gg. If the user wants the result
-kept, store a review instead (reviewing-with-gg's `gg review save`, or `gg
-note` review notes).
 
 A review can carry an overview of its own: `/gg-review <link> overview …`
 writes the same document into the review's `"overview"` field

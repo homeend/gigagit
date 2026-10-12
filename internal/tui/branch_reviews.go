@@ -142,3 +142,19 @@ func (m Model) viewBranches() []string {
 func (m Model) shownScopes(hash string) []domain.NoteScopeCount {
 	return m.noteCounts.ScopesShownOn(hash, m.viewBranches())
 }
+
+// commitHasOverview reports whether commit hash holds a permanent overview —
+// the Commits list's ≡. Shown from ANY branch (R5): an overview explains the
+// code at its commit, the same wherever the commit is. A PR's overview is
+// its PR's (never in noteCounts.Overviews).
+func (m Model) commitHasOverview(hash string) bool {
+	if hash == "" {
+		return false
+	}
+	for _, o := range m.noteCounts.Overviews {
+		if o.Commit == hash {
+			return true
+		}
+	}
+	return false
+}

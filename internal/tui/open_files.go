@@ -362,7 +362,7 @@ func (m Model) openFilesProto() []steer.OpenFile {
 			f.Source, f.Title = "result", d.title
 		case srcNote:
 			f.Source, f.Rev, f.Title = "review", d.src.rev, d.title
-		case srcOverview, srcReviewOverview:
+		case srcOverview, srcReviewOverview, srcCommitOverview:
 			f.Source, f.Title = "overview", d.title
 		}
 		if docLoaded(d) {

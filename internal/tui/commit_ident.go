@@ -25,9 +25,13 @@ func (r wipRow) text() string {
 const commitIdentW = 16
 
 // commitMarkerW is the display width of the tip-marker prefix on a commit
-// identity token: two glyph cells (local ↓, remote ↑), the review cell (✎)
-// and one separator space.
-const commitMarkerW = 4
+// identity token: two glyph cells (local ↓, remote ↑), the review cell (✎),
+// the overview cell (≡) and one separator space.
+const commitMarkerW = 5
+
+// markerOverview marks a commit that holds a permanent overview (spec
+// 2026-10-12-permanent-overviews; user ruling: its own cell right of ✎).
+const markerOverview = "≡"
 
 // markerReview marks a commit that holds a review: a stored AI review, or a
 // range review (commitReviewed).
@@ -68,18 +72,22 @@ func countBadge(n int) string {
 	return string(supRunes[n])
 }
 
-// markerField is the fixed 4-cell marker area, laid out as
-// [marker1][marker2-or-badge][review][separator]. The count badge (≥2 local tips) fills
+// markerField is the fixed 5-cell marker area, laid out as
+// [marker1][marker2-or-badge][review][overview][separator]. The count badge (≥2 local tips) fills
 // the FILLER cell next to a lone ↓ so it reads "↓³ "; when BOTH a local and a
 // remote marker are present there is no room, so the badge is dropped (the count
 // still shows via the decoration group / (+N)). The review cell holds ✎ on a
-// reviewed commit. Always exactly commitMarkerW (4) display cells.
+// reviewed commit, the overview cell ≡ on a commit holding a permanent
+// overview. Always exactly commitMarkerW (5) display cells.
 func (id commitIdent) markerField() string {
-	rv := " "
+	rv, ov := " ", " "
 	if id.reviewed {
 		rv = markerReview
 	}
-	return id.tipCells() + rv + " "
+	if id.overview {
+		ov = markerOverview
+	}
+	return id.tipCells() + rv + ov + " "
 }
 
 // tipCells is the marker field's first two cells: the tip markers, or a lone
@@ -132,6 +140,7 @@ type commitIdent struct {
 	tags      []string // tag names at this commit (RefTag), rendered in the deco group
 	count     int      // number of local-branch tips at this commit (for the count badge)
 	reviewed  bool     // the commit holds a review: an AI review or a range review (✎)
+	overview  bool     // the commit holds a permanent overview (≡)
 }
 
 // commitIdentOf derives the identity from a commit's local refs (a tip) or, when

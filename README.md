@@ -1529,7 +1529,12 @@ back; anchors the review cannot resolve are plain text. Its diffs show only
 the review's notes, read-only — `gg review --notes` keeps them as your own.
 "Delete review" in the `.` menu (in the review view or on a Branches review
 row) or `ctrl+d` in View all notes deletes a review, after asking. A
-reviewed commit carries `✎` in the Commits list (after its tip markers). The
+reviewed commit carries `✎` in the Commits list (after its tip markers), and
+a commit holding a permanent overview (`gg overview save`) `≡` in the next
+cell; its `.` menu opens it (**Open overview: <title>**), as do a
+`└ Overview` row under a branch whose tip it is, View all notes and a PR
+view's **Overviews** block — the overview on the left, the file at the
+commit on the right with the overview's remarks. The
 browser UI (`gg web`) shows the same reviews: a commit's under **Reviews**
 above its files, a branch's under its row, a pull request's under
 **Reviews** above the PR's files; clicking one opens the review view
