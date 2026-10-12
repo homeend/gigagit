@@ -143,6 +143,11 @@ guards against removing the worktree you are standing in.
   agent, title.
 - `gg overview show <id|link> [--json]` — the title, the commit, the link,
   the markdown and each remark; `--json` carries the stored `document`.
+- `gg overview export [--out <path>|-] [--force] <id|link>` — the overview
+  as one self-contained HTML file to share outside gg (every file a link
+  names at the overview's commit + its diff; no remarks). Default path = the
+  export dir; `--out -` = stdout. Exit 1 unknown overview; exit 2 on an
+  existing file without `--force`.
 - `gg overview rm <id>` — delete one.
   An agent presenting an overview stores it this way by default (the
   gg-overview skill); a temporary `gg session overview` only when the user

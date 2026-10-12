@@ -48,7 +48,7 @@ func (m Model) noteRowMenu() ([]actionRow, bool) {
 	open := func(m Model) (tea.Model, tea.Cmd) { return m.openDiffForFileLine(l) }
 	hash, svc := m.filesHash, m.svc
 	switch {
-	case l.overviewID != "": // a PR view's Overviews entry (R10): Open + Delete
+	case l.overviewID != "": // a PR view's Overviews entry (R10): Open, Export as HTML, Delete
 		id, quote := l.overviewID, reviewQuote("", "")
 		for _, h := range m.previewOverviews() {
 			if h.ID == id {
@@ -57,6 +57,7 @@ func (m Model) noteRowMenu() ([]actionRow, bool) {
 		}
 		return []actionRow{
 			{id: "open-overview", label: i18n.T("Open overview"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openCommitOverview(id) }},
+			permanentOverviewExportRow("overview-export", i18n.T("Export as HTML"), id),
 			{id: "delete-overview", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.confirmOverviewDelete(id, quote)
 			}},

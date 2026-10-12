@@ -2,9 +2,9 @@ name = "overview: save on HEAD, a past-the-end save is refused whole and stores 
 
 # One commit adding a.txt (3 lines). An agent stores a permanent overview
 # with a remark; a second save whose link runs past the file's end is
-# refused and stores nothing; list shows the first, on-branch. (show/rm need
-# the printed id — scenarios cannot carry a value between runs — so they are
-# pinned by internal/cli TestOverviewSaveListShowRm.)
+# refused and stores nothing; list shows the first, on-branch. (show/rm/export
+# need the printed id — scenarios cannot carry a value between runs — so they
+# are pinned by internal/cli TestOverviewSaveListShowRm and TestOverviewExport.)
 [input]
 steps = [
   { write = "a.txt", content = "one\ntwo\nthree\n" },

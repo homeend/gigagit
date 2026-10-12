@@ -19,6 +19,7 @@ import (
 const permOverviewUsage = `usage: gg overview save [<gg-link>] --agent <name> (--stdin | --file <path>) [--title <t>] [--json] [--dry-run]
        gg overview list [--all] [--json]
        gg overview show <id|gg-link> [--json]
+       gg overview export [--out <path>|-] [--force] <id|gg-link>
        gg overview rm <id>`
 
 // cmdOverview is `gg overview …`: permanent overviews (spec 2026-10-12).
@@ -34,6 +35,8 @@ func cmdOverview(svc *domain.Service, rest []string, stdin io.Reader, stdout, st
 		return overviewList(svc, rest[1:], stdout, stderr)
 	case "show":
 		return overviewShow(svc, rest[1:], stdout, stderr)
+	case "export":
+		return overviewExport(svc, rest[1:], stdout, stderr)
 	case "rm":
 		return overviewRm(svc, rest[1:], stdout, stderr)
 	}
@@ -212,6 +215,39 @@ func overviewByArg(ctx context.Context, svc *domain.Service, arg string) (*domai
 	}
 	o, err := svc.Overview(ctx, arg)
 	return svc, o, err
+}
+
+// overviewExport is `gg overview export`: the overview as one self-contained
+// HTML file (spec 2026-10-12-overview-html-export) — the files at its
+// commit, their diffs as the split's D shows them, no remarks.
+func overviewExport(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("overview export", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	out := fs.String("out", "", "write here (default: the export dir); - = stdout")
+	force := fs.Bool("force", false, "overwrite an existing file")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(stderr, permOverviewUsage)
+		return 2
+	}
+	ctx := context.Background()
+	tsvc, o, err := overviewByArg(ctx, svc, fs.Arg(0))
+	if err != nil {
+		fmt.Fprintln(stderr, "overview export:", err)
+		return 1
+	}
+	page, name, err := tsvc.ExportOverviewHTML(ctx, domain.OverviewSource{OverviewID: o.ID})
+	if errors.Is(err, domain.ErrNoOverview) {
+		fmt.Fprintf(stderr, "overview export: the stored document of %s no longer parses\n", o.ID)
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, "overview export:", err)
+		return 1
+	}
+	return writeExport(ctx, tsvc, "overview export", page, name, *out, *force, stdout, stderr)
 }
 
 func overviewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) int {

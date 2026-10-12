@@ -52,6 +52,16 @@ func (m Model) reviewOverviewExportRow() (actionRow, bool) {
 	}}, true
 }
 
+// permanentOverviewExportRow exports permanent overview id without opening
+// it: the Branches └ Overview row, a PR view's Overviews entry ("Export as
+// HTML") and the Commits menu ("Export as HTML: <title>", one per overview).
+func permanentOverviewExportRow(rowID, label, id string) actionRow {
+	src := domain.OverviewSource{OverviewID: id}
+	return actionRow{id: rowID, label: label, run: func(m Model) (tea.Model, tea.Cmd) {
+		return m, exportOverviewCmd(m.svc, src)
+	}}
+}
+
 // exportOverviewCmd builds src's page off-thread and resolves the default
 // path; patchResolvedMsg then opens the export path popup with its title.
 func exportOverviewCmd(svc *domain.Service, src domain.OverviewSource) tea.Cmd {
