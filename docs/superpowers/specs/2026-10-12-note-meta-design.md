@@ -1,6 +1,6 @@
 # Note meta: free key/values, an agent-declared display — design
 
-Date: 2026-10-12. Status: design approved in brainstorm (rulings R1–R14,
+Date: 2026-10-12. Status: design approved in brainstorm (rulings R1–R15,
 §13); this document is the spec for the user's review. Four plans follow
 (§14).
 
@@ -20,10 +20,12 @@ Date: 2026-10-12. Status: design approved in brainstorm (rulings R1–R14,
   meta gg itself understands; frontends and forge adapters read semantics,
   never key names. The set grows by adding a semantic and teaching each
   consumer, never by reading agents' keys.
-- **Viewer meta** — meta the person reading the note adds (v1: `status`),
-  stored beside the author's meta, never over it (§2.4).
+- **Added meta** — meta written onto a note after its author wrote it: by
+  the person reading it (the Mark use case, §5.4) or by another agent (a
+  double-check marking a remark `status: disagreed`). Stored beside the
+  author's meta, never over it (§2.4).
 - **Resolved display** — the result of evaluating a note's meta, its
-  declaration (with inheritance) and the viewer meta: a list of badges, a
+  declaration (with inheritance) and the added meta: a list of badges, a
   frame colour, line rows, count keys, semantics and the problems found.
   One pure package computes it (§4); every consumer renders it.
 
@@ -109,7 +111,7 @@ merge — what you read in one place is what applies):
 - reply: its own → its root's effective declaration;
 - standalone note, temporary note: its own only.
 
-### 2.4 Viewer meta
+### 2.4 Added meta
 
 Stored as `[[meta]]` records in the same part file, beside `[[resolved]]`,
 keyed the way `[[resolved]]` is:
@@ -120,14 +122,18 @@ note = 'c80e74dd'          # the stored note id (a review note for a remark)
 remark_fp = '…'            # set for a review remark, empty otherwise
 key = 'status'
 value = 'agreed'
-by = 'MR'
+by = 'MR'                  # the writer: the user's name or the agent's label
 at = 2026-10-12T10:41:00Z
 ```
 
 One record per (note, remark_fp, key); setting it again replaces it, an
-empty value removes it. In the resolved display a viewer value for a key
-replaces the author's value for that key; the author's original stays in
-the note's details row (`severity: high (agent) → low (you)`). A record
+empty value removes it. A review remark's own meta lives in its review's
+JSON and is never rewritten: every meta written onto a remark later is a
+record here. A standalone note's meta written by its own author is
+rewritten in place (§5.1); a different writer's is a record here too. In
+the resolved display an added value for a key replaces the author's value
+for that key; the author's original stays in the note's details row
+(`severity: high (Claude Code) → low (MR)`). A record
 whose note is gone is dropped on the part's next write (the same orphan
 sweep replies get).
 
@@ -149,7 +155,9 @@ sweep replies get).
   `key: value` moves into `Meta` in tag order; `review`, `resolved` and
   other plain tags stay tags; `Confidence > 0` becomes
   `meta confidence = low|medium|high` (0.3/0.6/0.9, the existing mapping;
-  any other number is kept as its decimal text). The legacy split
+  any other number is kept as its decimal text), and the `Confidence`
+  field leaves `model.Note` — format 3 never writes it, and its readers
+  (`WireNote`, the send body, `gg note show`) read meta instead. The legacy split
   (format 1 → 2) and this conversion run as one migration action; a part
   is rewritten only when something moved.
 - After conversion a note with meta and no declaration shows its meta in
@@ -233,7 +241,7 @@ keys giving the same semantic: the first in order wins.
 
 ### 3.4 Built-in declarations
 
-gg ships exactly one: for the viewer meta key `status` (§5.4), used when
+gg ships exactly one: for the key `status` (§5.4), used when
 the note's effective declaration has no `status` entry:
 
 ```json
@@ -263,7 +271,7 @@ Imports: stdlib, `model`. No git, no TUI/web.
 - `Validate(d model.Display) (model.Display, []Problem)` — the cleaned
   declaration and what was dropped; `CheckMeta([]MetaKV) ([]MetaKV, []Problem)`.
 - `Effective(levels ...*model.Display) model.Display` — inheritance (§2.3).
-- `Resolve(meta []MetaKV, d model.Display, viewer []MetaKV) Resolved`:
+- `Resolve(meta []MetaKV, d model.Display, added []AddedMeta) Resolved`:
 
 ```go
 type Resolved struct {
@@ -274,7 +282,7 @@ type Resolved struct {
 	Level    string   // "" when unset
 	Audience string   // "" when unset
 	Stored   []MetaKV // meta shown nowhere (details row only)
-	Viewer   []Change // Key, Author value, Viewer value
+	Added    []Change // Key, author's value, added value, by
 	Problems []Problem
 }
 ```
@@ -292,16 +300,19 @@ type Resolved struct {
 
 On the notes store's existing `Edit` path, under the part lock:
 
-- `SetNoteMeta(ctx, ref NoteRef, kv []MetaKV)` / `UnsetNoteMeta(ctx, ref, keys []string)`
+- `SetNoteMeta(ctx, ref NoteRef, by string, kv []MetaKV)` /
+  `UnsetNoteMeta(ctx, ref, by string, keys []string)` — `by` is the writer
+  (the user's name, or the agent's label from `--author`).
 - `SetNoteDisplay(ctx, ref, d *model.Display)` (nil clears)
-- `SetViewerMeta(ctx, ref, key, value string)` (empty value removes)
 
 `NoteRef` = a note id, or a review note id + remark fingerprint (the form
 `[[resolved]]` uses; `review:<id>:<n>` and `review:latest:<n>` resolve to
-it as they do for replies). A remark's own meta and display are the
-agent's and live in the stored review JSON: `SetNoteMeta` /
-`SetNoteDisplay` on a remark are refused (`a review remark's meta is its
-review's; mark it with viewer meta`); `SetViewerMeta` works on every note.
+it as they do for replies). Where the meta goes (§2.4): on a remark,
+always an added-meta record; on a standalone note, in place when `by` is
+the note's author, otherwise an added-meta record. `SetNoteDisplay` on a
+remark is refused (`a remark's display is its review's`): a declaration
+belongs to whoever wrote the meta it describes, and an added `status`
+shows through the built-in declaration (§3.4).
 
 Reads: every note-returning query (`ResolvedNote`, the wire notes, review
 show, send candidates, agentdocs notes) carries its `notemeta.Resolved`.
@@ -323,11 +334,12 @@ Legacy `tags` / `confidence` keep folding into meta (`foldMeta`).
 
 - `gg note add` / `gg note reply`: `--meta k=v` (repeatable),
   `--display <json|@file>`.
-- New `gg note meta <id|link> set k=v… | unset k… | display <json|@file> | mark <agreed|disagreed|deferred|clear>`.
+- New `gg note meta <id|link> set k=v… | unset k… | display <json|@file>`
+  (`--author <label>` names the writer, as `gg note add` does).
 - `gg note show` / `list`: meta, resolved places and problems (text and
   `--json`).
 - MCP: `gg_note_add`, `gg_note_reply`, `gg_notes_apply` accept `meta` and
-  `display`; new `gg_note_meta` (the same four actions).
+  `display`; new `gg_note_meta` (the same three actions).
 - `gg session note` (agentdocs temporary notes): `--meta`, `--display`;
   `agentdocs.Note` gains `Meta` and `Display`, memory only, rendered the
   same way.
@@ -336,7 +348,8 @@ Legacy `tags` / `confidence` keep folding into meta (`foldMeta`).
 
 A note's menu (TUI note-box `.` menu and the review view's remark rows;
 web note-box menu) gets **Mark ▸ agreed / disagreed / deferred / clear**.
-It calls `SetViewerMeta(ref, "status", …)` and shows through the built-in
+It calls `SetNoteMeta(ref, <user>, status=…)` (clear = `UnsetNoteMeta`)
+and shows through the built-in
 `status` declaration. It is a tag and nothing else: it does not resolve,
 send, reply, tick, filter or hide anything. An agent double-checking a
 review writes the same key as meta (`status: disagreed`) — same display,
@@ -359,7 +372,7 @@ No frontend gets a generic meta editor (R5).
 - **Line rows**: one dim `label: value` row per `Lines` entry, under the
   title, inside the box, before the summary.
 - **Details row** (where tags and `(stale)` live today): stored meta, the
-  viewer changes, the problems.
+  added-meta changes, the problems.
 
 ### 6.2 Review view and sidebar
 
@@ -420,7 +433,7 @@ type Comment struct {
 The forge package gets a renderer per provider —
 `RenderComment(Comment) string`, `RenderReview(ReviewBody) string` — and a
 capability list. Today's `sendBody` / `reviewSendBody` / `quoteLines`
-become the GitHub renderer. **Stored-only meta, viewer meta and the
+become the GitHub renderer. **Stored-only meta, added meta and the
 declaration never leave gg.**
 
 ### 8.2 GitHub
@@ -533,7 +546,7 @@ A test parses the default block from the skill text and validates it with
 ## 11. Tests (TDD, real git)
 
 - `notemeta`: validation (every dropped-field kind), inheritance, `as`
-  precedence, viewer overlay, counts, limits, glyph set.
+  precedence, added-meta overlay, counts, limits, glyph set.
 - Notes store: format-3 round trip (`Meta`, `Display`, `[[meta]]`), the
   conversion (tags, confidence, plain tags kept, rewrite only when
   changed), orphan `[[meta]]` sweep, marker stamping.
@@ -543,12 +556,12 @@ A test parses the default block from the skill text and validates it with
 - CLI and MCP: flags, `gg note meta`, `show` text and JSON.
 - TUI: e2e golden screens (note box with badges, frame, line rows,
   details problems; review sidebar counts; send panel expanded row; the
-  Mark menu); fixture = the babel remarks re-tagged with the default
-  vocabulary (Appendix B).
+  Mark menu); fixture = remarks re-tagged with the default vocabulary,
+  shaped after Appendix B.
 - Web: wiring tests plus a browser check asserting the chips, border and
   line rows are visible.
 - GitHub renderer: golden bodies per level, no-badge body, the
-  never-sent rule (stored/viewer meta absent from every body).
+  never-sent rule (stored/added meta absent from every body).
 - Skills: the default-block validation test.
 
 ## 12. Docs
@@ -567,7 +580,8 @@ grammar, semantics, the format-3 limit); skills with the version bump.
 - **R4** Generic from v1: every note kind, every write surface.
 - **R5** Domain offers generic operations; frontends build specific use
   cases on them, never a generic meta editor.
-- **R6** v1's viewer use case is Mark agreed/disagreed/deferred.
+- **R6** v1's viewer use case is Mark agreed/disagreed/deferred — a plain
+  tag (`status`), the same key a double-checking agent writes.
 - **R7** Meta is internal and never sent. Adapters read only gg semantics
   (`level`, `audience`), each the ones it can use; new semantics are added
   to gg and taught to adapters.
@@ -580,7 +594,11 @@ grammar, semantics, the format-3 limit); skills with the version bump.
 - **R11** v1 adapter: GitHub only; Appendix A for the rest.
 - **R12** Meta and marks are glance aids — never a mechanical consequence
   (no blocking, sending, resolving, ticking). `blocking` is therefore NOT a
-  semantic.
+  semantic (it was in the approved sections; dropped after this ruling).
+- **R15** Meta written onto a note after its author wrote it — the user's
+  Mark or another agent's double-check — is one mechanism: added-meta
+  records; a remark's review JSON is never rewritten. `Confidence` moves
+  into meta and leaves the note record.
 - **R13** Converted tags with no declaration show in `line`.
 - **R14** Glyphs optional, safe set only; the default block uses none.
 
@@ -622,4 +640,5 @@ reply, classified with §9's vocabulary: issue 11, note 13, good 8,
 suggestion 5, nitpick 4; one remark is a test leftover. The old `severity` tag does not map
 mechanically (of 19 `nit`: 4 nitpick, 8 good, 3 note, 3 suggestion,
 1 issue) — the conversion (§2.5) therefore moves tags as they are and
-never re-labels them. The re-tagged set is the TUI golden fixture.
+never re-labels them. The per-remark table is
+`2026-10-12-note-meta-babel-classification.md` beside this spec.
