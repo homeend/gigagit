@@ -116,23 +116,34 @@ export function severityColour(d, severity) {
   return b && META_COLOURS.includes(b.color) ? b.color : "";
 }
 
-// fitNoteTitle fits the words before the place and the place ("path R12")
-// into room columns after badgeCols of badges — the TUI's fitNoteTitle:
-// whole when it fits; else the path is elided in the middle (elide = core's
-// elidePath) down to MIN_PATH_COLS, then the words are cut, then the path's
-// tail. Badges are never cut here (the stylesheet's ellipsis is the backstop
-// past that). room <= 0 = an unknown width: everything whole.
-export function fitNoteTitle(badgeCols, words, at, room, elide) {
-  if (room <= 0) return { words, at };
-  const left = room - badgeCols;
-  if (cols(words) + cols(at) <= left) return { words, at };
-  const pathRoom = Math.max(MIN_PATH_COLS, left - cols(words));
-  let a = cols(at) > pathRoom ? elide(at, pathRoom) : at;
-  let w = words;
-  if (cols(w) + cols(a) > left) {
-    const wr = left - cols(a);
-    w = wr > 1 ? [...w].slice(0, wr - 1).join("") + "…" : "";
-  }
-  if (cols(w) + cols(a) > left) a = elide(at, Math.max(1, left));
-  return { words: w, at: a };
+// truncate cuts s to n columns, its last one an ellipsis.
+function truncate(s, n) {
+  if (n <= 0) return "";
+  const r = [...s];
+  return r.length <= n ? s : r.slice(0, n - 1).join("") + "…";
+}
+
+// fitNoteTitle is the TUI's fitNoteTitle (internal/tui/note_meta.go): it
+// fits words + path + after ("note · bot · ", "a/b.go", " R12 (stale)")
+// beside badgeCols of badges (and their " · ") into room columns. Whole when
+// it fits; else only the PATH loses its middle (elide = core's elidePath),
+// the place after it kept whole; below MIN_PATH_COLS the words before the
+// path are cut first, then the path's tail; the badges are never cut here
+// (the stylesheet's ellipsis backstops). room <= 0 = an unknown width:
+// everything whole. Returns {words, at} with at = the fitted path + after.
+export function fitNoteTitle(badgeCols, words, path, after, room, elide) {
+  const whole = { words, at: path + after };
+  if (room <= 0) return whole;
+  const gap = badgeCols > 0 ? cols(META_TITLE_SEP) : 0;
+  if (badgeCols + gap + cols(words) + cols(path) + cols(after) <= room) return whole;
+  const textRoom = room - badgeCols - gap;
+  if (textRoom < 1) return { words: "", at: "" };
+  const pw = textRoom - cols(words) - cols(after);
+  if (pw >= MIN_PATH_COLS) return { words, at: elide(path, pw) + after };
+  // The file and its line outrank the words before them: those are cut
+  // first, the path's tail only when nothing else is left.
+  const tail = elide(path, MIN_PATH_COLS) + after;
+  const rest = textRoom - cols(tail);
+  if (rest >= 0) return { words: truncate(words, rest), at: tail };
+  return { words: "", at: truncate(tail, textRoom) };
 }

@@ -2810,8 +2810,10 @@ function noteBoxHTML(n, cols, nctx = null) {
   const parts = noteTitleParts(n, nc.ctx ? nc.ctx.path : "", prev, Date.now());
   const meta = rootOn ? n.display : null; // a hidden root's chips go with it
   const frame = meta ? frameClass(n.display) : "";
-  const fit = fitNoteTitle(badgeRunCols(n.display) + (mark ? 3 : 0), parts.words, parts.at + parts.tail,
-    rootOn ? noteTitleRoom(cols, n) : 0, elidePath);
+  const path = nc.ctx ? nc.ctx.path : "";
+  const room = rootOn ? noteTitleRoom(cols, n) : 0;
+  const fit = fitNoteTitle(meta ? badgeRunCols(n.display) : 0, parts.words, path,
+    parts.at.slice(path.length) + parts.tail, room > 0 && mark ? Math.max(1, room - 3) : room, elidePath); // a sync mark takes 3 columns
   // A FORGE note is markdown, and the server sends it parsed (summary_md, md):
   // those trees are painted. A note written here is shown exactly as typed —
   // it carries no tree, so it falls to the escaped text.

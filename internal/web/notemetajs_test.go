@@ -51,11 +51,13 @@ const out = {
   countsRun: M.countsRunHTML({ groups: [{ key: "kind", values: [{ value: "issue", color: "red", n: 2 }] }] }, esc),
   countsNone: M.countsText(null) + "|" + M.countsRunHTML({}, esc),
   sev: [M.severityColour(d, "high"), M.severityColour(d, "low"), M.severityColour(null, "high")],
-  fitWhole: M.fitNoteTitle(10, "note · bot · ", "a/b/c.go R12", 60, elide),
-  fitPath: M.fitNoteTitle(10, "note · bot · ", "internal/deep/dir/file.go R12", 40, elide),
-  fitWords: M.fitNoteTitle(10, "note · somebody long · ", "internal/deep/dir/file.go R12", 28, elide),
-  fitTiny: M.fitNoteTitle(10, "note · bot · ", "internal/deep/dir/file.go R12", 14, elide),
-  fitNoRoom: M.fitNoteTitle(10, "note · bot · ", "a.go R1", 0, elide),
+  fitWhole: M.fitNoteTitle(10, "note · bot · ", "a/b/c.go", " R12", 60, elide),
+  fitPath: M.fitNoteTitle(10, "note · bot · ", "internal/deep/dir/file.go", " R12", 40, elide),
+  fitWords: M.fitNoteTitle(10, "note · somebody long · ", "internal/deep/dir/file.go", " R12", 28, elide),
+  fitTiny: M.fitNoteTitle(10, "note · bot · ", "internal/deep/dir/file.go", " R12", 20, elide),
+  fitNoRoom: M.fitNoteTitle(10, "note · bot · ", "a.go", " R1", 0, elide),
+  fitGone: M.fitNoteTitle(10, "note · ", "a.go", " R1", 12, elide),
+  fitNoBadge: M.fitNoteTitle(0, "note · ", "internal/deep/dir/file.go", " R12", 20, elide),
 };
 console.log(JSON.stringify(out));
 `
@@ -67,10 +69,10 @@ console.log(JSON.stringify(out));
 		t.Fatalf("node: %v\n%s", err, raw)
 	}
 	var got struct {
-		Run, Title, None, Lines, Details, Counts, CountsRun, CountsNone string
-		RunCols                                                         int
-		Frame, Aud, Sev                                                 []string
-		FitWhole, FitPath, FitWords, FitTiny, FitNoRoom                 struct{ Words, At string }
+		Run, Title, None, Lines, Details, Counts, CountsRun, CountsNone      string
+		RunCols                                                              int
+		Frame, Aud, Sev                                                      []string
+		FitWhole, FitPath, FitWords, FitTiny, FitNoRoom, FitGone, FitNoBadge struct{ Words, At string }
 	}
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("%v: %s", err, raw)
@@ -117,22 +119,28 @@ console.log(JSON.stringify(out));
 	if got.Sev[0] != "orange" || got.Sev[1] != "" || got.Sev[2] != "" {
 		t.Errorf("sev = %v", got.Sev)
 	}
-	// The TUI's fit: whole when it fits; the path elided (≥8) first; then the
-	// words before it; then the path's tail; badges never.
-	if got.FitWhole.Words != "note · bot · " || got.FitWhole.At != "a/b/c.go R12" {
-		t.Errorf("fitWhole = %+v", got.FitWhole)
-	}
-	if got.FitPath.Words != "note · bot · " || got.FitPath.At != "…/dir/file.go R12" {
-		t.Errorf("fitPath = %+v (40-10 badge cols = 30 room; words 13 → path 17)", got.FitPath)
-	}
-	// words 23 + path ≥ 8 > 18: the path stops at 8, the words take the rest.
-	if got.FitWords.At != "….go R12" || got.FitWords.Words != "note · so…" {
-		t.Errorf("fitWords = %+v", got.FitWords)
-	}
-	if got.FitTiny.Words != "" || got.FitTiny.At != "…R12" {
-		t.Errorf("fitTiny = %+v", got.FitTiny)
-	}
-	if got.FitNoRoom.Words != "note · bot · " || got.FitNoRoom.At != "a.go R1" {
-		t.Errorf("room 0 = unknown width: render whole, got %+v", got.FitNoRoom)
+	// The TUI's fitNoteTitle: whole when it fits (badges + " · " + text);
+	// else only the PATH is elided, its place (" R12") and tail kept whole;
+	// below 8 path columns the words before it are cut first; then the
+	// place itself; badges never.
+	for _, c := range []struct {
+		name      string
+		got       struct{ Words, At string }
+		words, at string
+	}{
+		{"whole", got.FitWhole, "note · bot · ", "a/b/c.go R12"},
+		// room 40 − 10 badge − 3 sep = 27; words 13 + " R12" 4 → path 10
+		{"path", got.FitPath, "note · bot · ", "…r/file.go R12"},
+		// 15 left: the path stops at 8, the words take the 3 left
+		{"words", got.FitWords, "no…", "…file.go R12"},
+		{"tiny", got.FitTiny, "", "…file.…"},
+		{"no room = unknown width: whole", got.FitNoRoom, "note · bot · ", "a.go R1"},
+		{"gone", got.FitGone, "", ""},
+		// no badges, no separator: 20 − 7 − 4 = 9 path columns
+		{"no badge", got.FitNoBadge, "note · ", "…/file.go R12"},
+	} {
+		if c.got.Words != c.words || c.got.At != c.at {
+			t.Errorf("fit %s = %+v, want {%q %q}", c.name, c.got, c.words, c.at)
+		}
 	}
 }

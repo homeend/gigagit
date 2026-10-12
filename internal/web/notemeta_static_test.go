@@ -19,7 +19,7 @@ func TestDiffNoteBoxDrawsMeta(t *testing.T) {
 		`frameClass(n.display)`,
 		`metaLinesHTML(n.display, esc)`,
 		`metaDetailsHTML(n.display, esc)`,
-		`fitNoteTitle(badgeRunCols(n.display)`,
+		`fitNoteTitle(meta ? badgeRunCols(n.display) : 0, parts.words, path,`,
 		"`<div class=\"mrun\">${badgeRunHTML(r.display, esc)}</div>`",
 		`metaLinesHTML(r.display, esc)`,
 		`metaDetailsHTML(r.display, esc)`,
