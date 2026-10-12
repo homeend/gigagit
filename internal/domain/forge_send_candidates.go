@@ -8,6 +8,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // GroupReplies is the send panel's third group: the draft replies to
@@ -48,6 +49,9 @@ type SendCandidate struct {
 	Sync      model.SyncState
 	Code      []string
 	Skip      string
+	// Meta is what the panel's opened row shows (spec 2026-10-12-note-meta
+	// §6.3): a remark's carries its review's declaration and its marks.
+	Meta notemeta.Resolved
 }
 
 // PRSendCandidates lists PR n's send candidates: each AI review newest
@@ -180,7 +184,7 @@ func sortCandidateGroups(gs []*SendCandidateGroup) {
 func (s *Service) candidateRow(ctx context.Context, r ResolvedNote, kind string, pl *sendPlace, reviews map[string]Review) SendCandidate {
 	n := r.Note
 	row := SendCandidate{ID: n.ID, Kind: kind, Path: n.Address.Path, Range: r.Range, Side: string(n.Side),
-		Summary: n.Summary, Rationale: n.Rationale, Sync: r.Sync, Severity: severityOf(n)}
+		Summary: n.Summary, Rationale: n.Rationale, Sync: r.Sync, Severity: severityOf(n), Meta: NoteMeta(n, nil)}
 	if kind == "reply" {
 		_, row.Skip = s.replySkip(n)
 	} else {

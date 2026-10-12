@@ -22,6 +22,37 @@ func NoteMeta(n model.Note, root *model.Note) notemeta.Resolved {
 	return notemeta.Resolve(n.Meta, d, ownAdded(n.Added))
 }
 
+// ReviewMetaCounts tallies review r's remarks (spec 2026-10-12-note-meta
+// §6.2): over the whole review and per file (keyed like ReviewFileCounts).
+// A remark GitHub owns now is not the review's to count. Added meta counts:
+// a mark is meta too.
+func ReviewMetaCounts(r Review) (notemeta.Counts, map[string]notemeta.Counts) {
+	if r.Doc == nil {
+		return notemeta.Counts{}, nil
+	}
+	var all []notemeta.Resolved
+	per := map[string][]notemeta.Resolved{}
+	for _, f := range r.Doc.Files {
+		p := reviewPath(f.Path)
+		for _, dn := range f.Notes {
+			fp := remarkFP(f.Path, reviewSide(dn.Side), dn.Range, dn.Summary)
+			if r.remarkMoved(fp) {
+				continue
+			}
+			var n model.Note
+			r.remarkMeta(&n, f, dn, fp)
+			res := NoteMeta(n, nil)
+			all = append(all, res)
+			per[p] = append(per[p], res)
+		}
+	}
+	byFile := make(map[string]notemeta.Counts, len(per))
+	for p, rs := range per {
+		byFile[p] = notemeta.Count(rs)
+	}
+	return notemeta.Count(all), byFile
+}
+
 // ownAdded is the added meta of the note itself (a review note's per-remark
 // entries are its remarks', never its own).
 func ownAdded(as []notemeta.Added) []notemeta.Added {

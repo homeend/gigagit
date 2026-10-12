@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
+	"github.com/homeend/gigagit/internal/notemeta"
 )
 
 // The review view's reads. A structured review (Review.Doc) is one stored note;
@@ -44,6 +45,9 @@ type ReviewOtherNote struct {
 	// (Path empty); Summary is the remark's summary as its first reply
 	// recorded it.
 	Outdated bool
+	// Meta is the remark's resolved meta (spec 2026-10-12-note-meta §6.2: a
+	// remark row wears its badges); zero for an outdated thread.
+	Meta notemeta.Resolved
 }
 
 // reviewRevs are the two revisions a review compares: base (the old side) and
@@ -280,13 +284,17 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 			th := threads[i]
 			root := fmt.Sprintf("%s%s:%d", model.ReviewNoteIDPrefix, r.ID, i)
 			i++
-			if r.remarkMoved(remarkFP(f.Path, side, dn.Range, dn.Summary)) {
+			fp := remarkFP(f.Path, side, dn.Range, dn.Summary)
+			if r.remarkMoved(fp) {
 				continue // GitHub owns it now
 			}
+			var mn model.Note
+			r.remarkMeta(&mn, f, dn, fp)
+			meta := NoteMeta(mn, nil)
 			if working && match.States[p] != WorkingFileMatches {
 				_, reviewed := match.States[p]
 				other = append(other, ReviewOtherNote{Path: p, Side: side, Range: dn.Range, Summary: dn.Summary, Changed: reviewed,
-					Root: root, Replies: th.Replies, Resolution: th.Resolution})
+					Root: root, Replies: th.Replies, Resolution: th.Resolution, Meta: meta})
 				continue
 			}
 			if inView[p] {
@@ -301,7 +309,7 @@ func (s *Service) reviewSplit(ctx context.Context, reviewID string) (map[string]
 				}
 			}
 			other = append(other, ReviewOtherNote{Path: p, Side: side, Range: dn.Range, Summary: dn.Summary,
-				Root: root, Replies: th.Replies, Resolution: th.Resolution})
+				Root: root, Replies: th.Replies, Resolution: th.Resolution, Meta: meta})
 		}
 	}
 	for _, o := range outdated {
