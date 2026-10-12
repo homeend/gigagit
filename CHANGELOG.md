@@ -17,6 +17,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   dead key. The web's PR menu offers `copy gg link` on every PR: an
   unfetched one is fetched under the PR mask first.
 
+## Export a permanent overview as HTML
+
+### Added
+- **A permanent overview exports as one HTML file**, like a review's or an
+  agent's overview: every file a link names at the overview's commit, its
+  diff as the split's **D** shows it (the commit's own change; a PR
+  overview's: merge base → head), no remarks.
+  - **TUI:** **Export as HTML** in the `.` menu of a Branches *└ Overview*
+    row and of a PR view's Overviews entry, and **Export as HTML: <title>**
+    beside each **Open overview: <title>** in the Commits `.` menu (the open
+    overview's own `.` menu already had it).
+  - **CLI:** `gg overview export [--out <path>|-] [--force] <id|gg-link>`.
+  - **gg web:** `GET /api/overview-export?overview=<id>` (the page's `E`
+    follows with the permanent overviews' web view).
+
 ## Note meta in gg web
 
 ### Added

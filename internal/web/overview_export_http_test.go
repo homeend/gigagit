@@ -1,9 +1,12 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 func TestOverviewExportAgent(t *testing.T) {
@@ -67,6 +70,42 @@ func TestOverviewExportStoredReview(t *testing.T) {
 		"/api/overview-export?review=a/b":      http.StatusBadRequest,
 	} {
 		if code, _, body := getRaw(t, ts2, path); code != want {
+			t.Errorf("%s: %d, want %d (%s)", path, code, want, body)
+		}
+	}
+}
+
+func TestOverviewExportPermanent(t *testing.T) {
+	t.Parallel()
+	svc := domain.Open(newRepoDir(t, 2))
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	tg, err := svc.HeadOverviewTarget(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, _, err := svc.SaveOverview(ctx, domain.SaveOverview{Target: tg, Agent: "Claude", Text: []byte(
+		`{"version":1,"title":"Kept tour","overview":"see [here](f.txt:1)","files":[{"path":"f.txt","annotations":[{"newRange":[1,1],"summary":"zebra-remark"}]}]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := serve(t, New(svc))
+	code, h, raw := getRaw(t, ts, "/api/overview-export?overview="+o.ID)
+	if code != http.StatusOK {
+		t.Fatalf("code %d: %s", code, raw)
+	}
+	if cd := h.Get("Content-Disposition"); cd != `attachment; filename="overview-kept-tour.html"` {
+		t.Errorf("disposition %q", cd)
+	}
+	if body := string(raw); !strings.Contains(body, `"path":"f.txt"`) || strings.Contains(body, "zebra-remark") {
+		t.Errorf("want f.txt and no remark in the page")
+	}
+	for path, want := range map[string]int{
+		"/api/overview-export?overview=nope":                  http.StatusNotFound,
+		"/api/overview-export?overview=a/b":                   http.StatusBadRequest,
+		"/api/overview-export?overview=" + o.ID + "&review=x": http.StatusBadRequest,
+	} {
+		if code, _, body := getRaw(t, ts, path); code != want {
 			t.Errorf("%s: %d, want %d (%s)", path, code, want, body)
 		}
 	}
