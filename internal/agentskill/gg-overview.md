@@ -8,7 +8,8 @@ to anchor, presses enter to open the real file at the place you named, and
 backspace brings them back. When the user says "use gg-overview", "show it
 as a gg-overview", "visualise the result in gg" or types `/gg-overview
 [what to present]`, this is what they mean: present the result this way
-instead of (not as well as) a long chat answer.
+instead of (not as well as) a long chat answer. (A worker started by gg:
+see "As a worker agent" at the end.)
 
 An overview is **PERMANENT by default**: gg stores it on the commit it
 explains, and the user opens it again any time from that commit — `≡` in
@@ -141,8 +142,10 @@ f<n>`, `gg session note show t<n>`).
 A worker started by gg (see the gg-delegate skill) works in its OWN worktree,
 which the user's gg is not showing. There, "gg-overview" in a brief means
 your **final `agent_report`**: gg files that report as a tour of your
-worktree. Write it exactly like the overview in step 5 — the one-sentence
-first line, then anchored points, most important first — and send it with
-`agent_report {text, final: true}` (`gg agent report --final -F -`). Do NOT
-run `gg session note` / `gg session overview` and do not start gg web: they
-target the user's window, not your worktree.
+worktree. Write it like the markdown `overview` of step 3 — the
+one-sentence first line, then anchored points, most important first;
+markdown only, no JSON or annotations, and no `gg overview save` — and send it with
+`agent_report {text, final: true}` (`gg agent report --final -F -`), then
+end your turn with the same text as your last message — the user reads your
+result in your console. Do NOT run `gg session note` / `gg session overview`
+and do not start gg web: they target the user's window, not your worktree.
