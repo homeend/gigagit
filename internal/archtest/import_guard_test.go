@@ -56,6 +56,8 @@ func TestLayeringDAG(t *testing.T) {
 		"gitcmd":      {"gitexec", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"gitconfdocs": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"exttool":     {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		// overviewhtml renders an export from plain data: no git, no domain, no frontend.
+		"overviewhtml": {"config", "model", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "i18n", "agentdocs"},
 		// web/static is gg web's embedded page; it imports nothing of gg.
 		"web/static": {"config", "model", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "markdown", "syntax"},
 		// agentsession is a leaf: the PTY/emulator core may reach no gigagit layer.
