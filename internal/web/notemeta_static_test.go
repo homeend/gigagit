@@ -165,3 +165,30 @@ func TestSendPanelDrawsMetaInOpenedRows(t *testing.T) {
 		t.Errorf("prsendrows.js: a row's tick is no longer only the kept set")
 	}
 }
+
+// Mark (spec §5.4, R12): a header and four rows in the diff note box's
+// menu — never on a GitHub thread, hidden while note-edits is off — and a
+// mark inside a review view re-reads the review's counts.
+func TestDiffNoteMenuMarks(t *testing.T) {
+	t.Parallel()
+	f, r := readStatic(t, "files.js"), readStatic(t, "reviews.js")
+	for _, want := range []string{
+		`import { featureDisabled } from "./preflight.js";`,
+		`{ header: "Mark" }`,
+		`for (const s of ["agreed", "disagreed", "deferred"])`,
+		`{ label: "clear", act: () => markNote(n, "") }`,
+		`!String(rootId).startsWith("forge:") && n.source !== "forge" && !featureDisabled("note-edits")`,
+		`noteWrite("mark", "/api/notes/mark", { id: n.id, status }, () => refreshReviewMeta())`,
+	} {
+		if !strings.Contains(f, want) {
+			t.Errorf("files.js lacks %s", want)
+		}
+	}
+	if !strings.Contains(r, `export async function refreshReviewMeta()`) {
+		t.Errorf("reviews.js lacks refreshReviewMeta")
+	}
+	// Open + Delete only on Files-view note rows (user ruling).
+	if i := strings.Index(r, "function notedRowMenu"); i >= 0 && strings.Contains(r[i:i+800], "/api/notes/mark") {
+		t.Errorf("a Files-view note row must not offer Mark")
+	}
+}

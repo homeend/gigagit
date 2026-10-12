@@ -19,10 +19,11 @@ import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutC
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteMark, noteTitleParts, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
+import { featureDisabled } from "./preflight.js";
 import { badgeRunCols, badgeRunHTML, fitNoteTitle, frameClass, metaDetailsHTML, metaLinesHTML, titleMetaHTML } from "./notemeta.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
 import { openShelfNotes } from "./shelfnotes.js";
-import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
+import { copyServerLink, currentWorkingReview, workingReviewMarkHTML, workingReviewedPaths, workingReviewRowHTML, leaveRangeReview, leaveReview, notedRowMenu, openNotedPath, openRangeReview, openReview, openReviewOverview, refreshReviewMeta, renderReviewFiles, reviewActive, reviewBackFromCommit, reviewMenu, reviewRowsHTML, scopeRowMenu, setReviewHeader, showReviewSummary } from "./reviews.js";
 import { renderBranches } from "./sidebar.js";
 import { hasImagePair, hasImages, imagePairHTML, nextLayout, stackImageHTML } from "./diffimages.js";
 import { activeDiff, rangeDiff, repaintStackSlots, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
@@ -3477,6 +3478,14 @@ function resolveNote(n, resolved, root) {
   });
 }
 
+// markNote is Mark (spec 2026-10-12-note-meta §5.4, R12): the reader's
+// status tag on the note, "" clears it. A tag only — it resolves, sends,
+// folds and filters nothing; the note lanes reload, and a review view
+// re-reads its counts.
+function markNote(n, status) {
+  noteWrite("mark", "/api/notes/mark", { id: n.id, status }, () => refreshReviewMeta());
+}
+
 // noteLinks are the distinct links a thread carries (its root, its replies).
 function noteLinks(n) {
   const out = [];
@@ -3838,6 +3847,13 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   }
   if (n.source !== "forge" && !String(n.id).startsWith("forge:"))
     noteRows.push({ label: n.resolved ? "Reopen thread" : "Resolve thread", act: () => resolveNote(n, !n.resolved, rootId) });
+  // Mark ▸ the part right-clicked (a root or a reply: each has its own
+  // chips). Never a GitHub thread; not while a newer gg owns the notes file.
+  if (!String(rootId).startsWith("forge:") && n.source !== "forge" && !featureDisabled("note-edits")) {
+    noteRows.push({ sep: true }, { header: "Mark" });
+    for (const s of ["agreed", "disagreed", "deferred"]) noteRows.push({ label: s, act: () => markNote(n, s) });
+    noteRows.push({ label: "clear", act: () => markNote(n, "") }, { sep: true });
+  }
   for (const l of noteLinks(n)) noteRows.push({ label: "Open link: " + l, act: () => gotoNoteLink(l) });
   // A review REMARK (its thread root is review:<id>:<n>) copies its review
   // link and its id — the link a plain line would give names the wrong

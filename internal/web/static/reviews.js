@@ -495,6 +495,27 @@ function renderReviewFiles() {
 }
 
 
+// refreshReviewMeta re-reads the open review after a mark: the header's
+// counts and each file's tail follow the new status (the TUI re-reads both).
+// A review closed or replaced meanwhile is left alone.
+export async function refreshReviewMeta() {
+  const rv = state.review;
+  if (!rv) return;
+  let d;
+  try {
+    d = await getJSON("/api/review/" + encodeURIComponent(rv.id));
+  } catch {
+    return;
+  }
+  if (state.review !== rv) return;
+  rv.data.meta_counts = d.meta_counts;
+  rv.data.meta_by_file = d.meta_by_file;
+  rv.data.other = d.other;
+  setFilesCounts(countsText(d.meta_counts));
+  renderFiles();
+}
+
+
 // reviewCountsTailHTML is a file row's compact meta counts ("issue 1 good 1",
 // placed remarks only — what ◆N counts). The path keeps its budget: the tail
 // is the first thing the row's CSS ellipsis takes.
