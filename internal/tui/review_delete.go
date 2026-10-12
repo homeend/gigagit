@@ -19,7 +19,9 @@ import (
 type storedDeletedMsg struct {
 	id     string
 	review bool // a review, not a note thread: the status line says which
-	err    error
+	// overview: a permanent overview (confirmOverviewDelete).
+	overview bool
+	err      error
 }
 
 // reviewQuote is the one line a delete confirm quotes: who and which review.
@@ -104,6 +106,9 @@ func (m Model) onStoredDeleted(msg storedDeletedMsg) (Model, tea.Cmd) {
 	m.statusMsg = i18n.T("deleted the note")
 	if msg.review {
 		m.statusMsg = i18n.T("deleted the review")
+	}
+	if msg.overview {
+		m.statusMsg = i18n.T("deleted the overview")
 	}
 	var cmds []tea.Cmd
 	if st := m.filesReview; st != nil && st.id == msg.id {

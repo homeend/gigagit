@@ -2159,6 +2159,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.identity = msg.value.(model.Identity)
 		case srcNotes:
 			m.noteCounts = msg.value.(domain.NoteCounts)
+			m = m.dropGoneOverviews(m.noteCounts) // a deleted open overview closes (spec §9)
 			// The Files panel's Review row: re-match this worktree's working
 			// reviews (none → the row and the ✎ go).
 			if len(m.noteCounts.WorkingReviews) == 0 {
@@ -2922,6 +2923,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Branches: enter = the .-menu "Go to tip in commits" row (shared
 			// code path, so the key and the menu can never drift apart).
 			if m.focus == panelBranches {
+				// An overview row under a branch opens the overview.
+				if h, ok := m.selectedBranchOverview(); ok {
+					return m.openCommitOverview(h.ID)
+				}
 				// A review row under a branch opens the review.
 				if h, ok := m.selectedBranchReview(); ok {
 					return m.openReview(h.ID, h.Summary)

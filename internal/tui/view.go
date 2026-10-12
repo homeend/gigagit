@@ -1130,6 +1130,14 @@ func (m Model) branchRowsFor(ents []brEntry) []string {
 	out := make([]string, 0, len(ents))
 	indent := strings.Repeat(" ", gutterW+2)
 	for _, e := range ents {
+		if e.overview != "" {
+			if h, ok := m.overviewHead(e.overview); ok {
+				out = append(out, indent+branchOverviewRowBody(h))
+			} else {
+				out = append(out, indent+"└ ?")
+			}
+			continue
+		}
 		if e.review != "" {
 			if h, ok := m.reviewHead(e.review); ok {
 				out = append(out, indent+branchReviewRowBody(h))
