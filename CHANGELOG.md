@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Copy a pull request's link before opening it
+
+### Fixed
+- **Copy pull request link works on a PR you never opened.** `L` on the
+  Pull requests list (and its `.` menu row and the details popup) used to
+  refuse an unfetched PR with a status line; it now fetches the PR's head
+  first, then copies. The status line wears `⏳` and the elapsed seconds from
+  the key press until the link is copied, so a slow fetch never reads as a
+  dead key. The web's PR menu offers `copy gg link` on every PR: an
+  unfetched one is fetched under the PR mask first.
+
 ## Note meta in the TUI
 
 ### Added
