@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/agentdocs"
+	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -110,7 +111,9 @@ func (m Model) steerNoteAdd(c steer.Command) (Model, tea.Cmd) {
 
 // finishNoteAdd adds the note to a loaded document and answers.
 func (m Model) finishNoteAdd(c steer.Command, d *openFile, lead string) (Model, tea.Cmd) {
-	n, err := d.addNote(c.Start, c.End, c.Summary, c.Rationale, c.Author)
+	disp, _, _ := notemeta.ParseDisplay(c.Display) // the CLI refused a malformed one
+	n, err := d.addNoteMeta(c.Start, c.End, agentdocs.NoteText{Summary: c.Summary, Rationale: c.Rationale, Author: c.Author,
+		Meta: agentdocs.MetaFromMap(c.Meta), Display: disp})
 	if err != nil {
 		return m, m.answerSteer(c, steerFail(c, err.Error()))
 	}
