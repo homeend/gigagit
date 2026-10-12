@@ -7110,3 +7110,40 @@ a stored overview's anchor to a file the review did not change is PLAIN, so
 unchanged file (a pure rename). Tests: `split_diff_rows_test.go`,
 `split_diff_test.go`, `split_diff_keys_test.go`, e2e
 `tui_overview_split_diff`.
+
+## Permanent overviews (2026-10-12)
+
+Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
+
+- **Storage.** A commit-level note tagged `overview` (`model.OverviewTag`);
+  `Note.IsOverviewNote()` is the ONLY test (`IsReviewNote` stays false, so
+  review readers skip it unchanged). Summary = title, Rationale = the
+  canonical document (`notebatch.OverviewDoc`: title, overview, files with
+  new-side remarks; no summary/meta/oldRange). A commit overview lives in
+  the commits part; a PR overview carries the PR scope in `Preview`
+  (`<base>...refs/gg/pr/<n>`), so `PartOf` routes it to the previews part.
+- **Save** (`domain.SaveOverview`, overview_save.go): target from
+  `HeadOverviewTarget` (branch recorded only when HEAD is its tip) or
+  `LinkOverviewTarget` (commit, `@ref:` tip, PR link; anything else
+  `ErrOverviewTarget`). `checkOverview` collects EVERY problem: `note:`
+  anchors, paths not in the commit (one `ls-tree` over clean paths only —
+  ls-tree fails on `..`), lines past the end / binary (one read per file),
+  then for a commit (never a PR) `git status -- <paths>` and, for an older
+  commit, `git diff --name-only <sha> HEAD -- <paths>` (`git.StatusPaths`,
+  `git.DiffNamesBetween`). Any problem → `*OverviewRefused`, nothing stored.
+  Replace = same commit (or same PR by number) + trimmed title.
+  `saveNoteWithRetry` is shared with `SaveReview`.
+- **Gotcha:** `agentdocs.ParseAnchorDest` strips a leading `./` and refuses
+  `..`, so `[x](./a.go:1)` IS a.go and `[x](../a.go:1)` is plain text; a
+  remark's path is taken as written.
+- **Readers that skip it (R9):** `loadNotesAt` (NotesFor/NotesAt/
+  ShelfNotes), `loadPreviewNotes` (PR/preview notes), `storedGroup`
+  (`overview:<id>`), `NotesOverview` buckets, `gg note list` / `note show`
+  (refuses: "an overview — gg overview show <id>"). `NoteCounts.Overviews`
+  (commit) and `PreviewOverviews` (by scope) are the only counts.
+- **Links:** `?overview=<id>` (`model.OverviewHintKind`), target = the
+  overview's commit (a PR overview's head); `checkOverviewHint` refuses a
+  moved link (`ErrOverviewLinkMismatch`) or a gone overview; an
+  address-less overview hint names nothing.
+- **CLI:** `gg overview save|list|show|rm` (internal/cli/overview.go); save
+  and rm post a steer `reload notes`.

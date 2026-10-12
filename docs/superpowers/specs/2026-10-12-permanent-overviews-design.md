@@ -299,9 +299,13 @@ through the allowlist; loopback/Origin guards as every route.
 
 ## 11. Plans
 
-1. **Domain + CLI + skills** (§3–§8) with an e2e scenario (save, refusal on
-   a dirty file, list after the branch moved, show, rm).
-2. **TUI** (§9) with golden screens.
+1. **Domain + CLI** (§3–§7) and the using-gg / reviewing-with-gg command
+   docs, with an e2e scenario (save, a refusal, list) — the dirty-file
+   refusal, show and rm are pinned by CLI tests, "was-tip" by a domain test.
+2. **TUI** (§9) with golden screens; also §6's `OverviewDocAt` /
+   `OverviewFileNotes` (they ship with their only consumers, the split's two
+   sides) and the gg-overview skill's switch to permanent-by-default (R1) —
+   it ships with the first surface that shows a stored overview.
 3. **Web** (§10) with a Playwright check.
 
 Each plan runs in this session, on its own branch off `main`, merged by the
