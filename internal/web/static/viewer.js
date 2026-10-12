@@ -1096,6 +1096,7 @@ function splitOverviewKey(e) {
     case "Enter": enterSplitFile(); break;
     case "r": copyAnchorRef(); break;
     case "y": copyText(split.ov.text, "overview text"); break;
+    case "E": exportOverviewHTML(); break;
     case "PageDown": case " ": body.scrollBy({ top: body.clientHeight - 40 }); break;
     case "PageUp": body.scrollBy({ top: -(body.clientHeight - 40) }); break;
     case "Home": case "g": body.scrollTop = 0; break;
@@ -1726,6 +1727,39 @@ async function anchorBack() {
   }
 }
 
+// exportOverviewHTML downloads the overview on screen as one self-contained
+// HTML file — the overview, its anchored files and their diffs, no notes
+// (spec 2026-10-12-overview-html-export). E, and the foot chip.
+async function exportOverviewHTML() {
+  const ov = ovDoc();
+  if (!ov) return;
+  const q = ov.stored
+    ? "review=" + encodeURIComponent(String(ov.stored.id).replace(/^review-overview:/, ""))
+    : "id=" + encodeURIComponent(split ? split.id : view.id);
+  opLine("exporting the overview…", false);
+  let res;
+  try {
+    res = await fetch("/api/overview-export?" + q);
+  } catch (e) {
+    return opLine("export failed: " + (e.message || e), true);
+  }
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { msg = (await res.json()).error || msg; } catch { /* not JSON */ }
+    return opLine("export failed: " + msg, true);
+  }
+  const name = (/filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "") || [])[1] || "overview.html";
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  opLine("exported " + name, false);
+}
+
 function copyAnchorRef() {
   const ov = ovDoc();
   if (ov.stored) return opLine("a stored overview's anchor has no reference — copy the review link instead", false);
@@ -1749,6 +1783,7 @@ function overviewKey(e) {
       break;
     case "r": copyAnchorRef(); break;
     case "y": copyText(view.ov.text, "overview text"); break;
+    case "E": exportOverviewHTML(); break;
     case "ArrowDown": case "j": scrollDoc(40); break;
     case "ArrowUp": case "k": scrollDoc(-40); break;
     case "PageDown": case " ": scrollDoc(body.clientHeight - 40); break;
@@ -2226,7 +2261,7 @@ function viewerFoot() {
     return (
       `<span>↑↓ links</span><button data-vact="sfile">enter open</button><button data-vact="sfile">tab file</button>` +
       (split.ov.stored ? "" : `<button data-vact="aref">r reference</button>`) +
-      `<button data-vact="ytext">y copy text</button><button data-vact="stack">S ${split.stack ? "single file" : "stack files"}</button>` + diffChips() +
+      `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="stack">S ${split.stack ? "single file" : "stack files"}</button>` + diffChips() +
       `<button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
@@ -2250,13 +2285,13 @@ function viewerFoot() {
   if (view.ov && view.ov.stored) {
     return (
       `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button>` +
-      `<button data-vact="ytext">y copy text</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
+      `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="close">esc close</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   if (view.ov) {
     return (
       `<span>tab shift+tab anchors</span><button data-vact="aopen">enter open</button><button data-vact="aref">r reference</button>` +
-      `<button data-vact="ytext">y copy text</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
+      `<button data-vact="ytext">y copy text</button><button data-vact="xhtml">E export html</button><button data-vact="bg">esc background</button><button data-vact="files">ctrl+\\ open files</button>`
     );
   }
   const back = view.from ? `<button data-vact="back" title="or your browser's Back">bksp back</button>` : "";
@@ -2289,6 +2324,7 @@ $("foot").addEventListener("click", (e) => {
     case "aopen": if (view.ov && view.ov.sel >= 0) openAnchorAt(view.ov.sel); else opLine("no anchor selected — tab selects one", false); break;
     case "aref": if (ovDoc()) copyAnchorRef(); break;
     case "ytext": if (ovDoc()) copyText(ovDoc().text, "overview text"); break;
+    case "xhtml": if (ovDoc()) exportOverviewHTML(); break;
     case "sfile": if (split) enterSplitFile(); break;
     case "sov": focusSplit(true); break;
     case "back": if (view.from) anchorBack(); break;
