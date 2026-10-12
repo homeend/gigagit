@@ -210,3 +210,25 @@ func TestUnfocusedConsoleLetsAltXOpenTextTemplates(t *testing.T) {
 		t.Fatalf("the window is not drawn over the full-screen console:\n%s", out)
 	}
 }
+
+// A terminal session opens in the same console: alt+x reaches gg past it
+// too once it is unfocused.
+func TestUnfocusedTerminalLetsAltXOpenTextTemplates(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	startTestSession(t, m, `sleep 5`) // installs a test session manager
+	s, err := m.svc.StartTerminal(t.Context(), "sh", m.currentWorktree, m.currentWorktree, 80, 20, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Info().Terminal {
+		t.Fatal("precondition: a terminal session")
+	}
+	m, _ = m.openConsole(s.Info().ID)
+	mm, _ := m.Update(ctrlBracket())
+	m = mm.(Model)
+	m = pressAlt(t, m, 'x')
+	if _, ok := m.topLayer().(*textTemplatesView); !ok {
+		t.Fatalf("unfocused terminal: alt+x top = %T, want the text templates window", m.topLayer())
+	}
+}
