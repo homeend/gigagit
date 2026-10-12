@@ -493,6 +493,10 @@ func (m Model) renderInterface() string {
 		if !m.opStart.IsZero() {
 			statusLine += " · " + formatElapsed(clock.Since(m.opStart))
 		}
+	} else if w := m.prLinkWait; w.n != 0 {
+		// Copy link's forge reads run off the op lane: the same ⏳ and
+		// elapsed time, or a slow resolve reads as a key that did nothing.
+		statusLine = "⏳ " + statusLine + " · " + formatElapsed(clock.Since(w.at))
 	}
 	if m.anySourceLoading() && !m.running {
 		if statusLine == "" {

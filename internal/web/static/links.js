@@ -379,7 +379,8 @@ registerRows("preview", (e) => {
 // A pull request's link: its base against gg's private head ref — the pair
 // the PR view opens on, which the SERVER names (the row's own source/target
 // are DISPLAY names; the head may live in a fork). Opening it lands in the
-// PR's view (live.js). An unfetched PR has no ref, so no link.
+// PR's view (live.js). An unfetched PR has no ref yet: copying fetches it
+// first.
 async function prLinkText(pr) {
   let p;
   try {
@@ -394,14 +395,22 @@ async function prLinkText(pr) {
   return link;
 }
 
-registerRows("pr", (pr) =>
-  !pr.fetched
-    ? []
-    : [{ label: "copy gg link", act: async () => {
-        const link = await prLinkText(pr);
-        if (link) copyLink(link, linkDesc("preview", "PR #" + pr.number, ""));
-      } }]
-);
+// prFetchedForLink fetches an unfetched PR first (under the PR mask: it takes
+// a while) and says whether its head is here. Imported at click time: prs.js
+// reaches this module back through files.js, and a static import would
+// reorder module evaluation.
+async function prFetchedForLink(pr) {
+  if (pr.fetched) return true;
+  const { fetchPRForLink } = await import("./prs.js");
+  if (!(await fetchPRForLink(pr.number))) return false; // it said why
+  pr.fetched = true;
+  return true;
+}
+
+registerRows("pr", (pr) => [{ label: "copy gg link", act: async () => {
+  const link = (await prFetchedForLink(pr)) ? await prLinkText(pr) : "";
+  if (link) copyLink(link, linkDesc("preview", "PR #" + pr.number, ""));
+} }]);
 
 // A bookmark or shelf row copies the entry's ADDRESS plus a
 // `?<kind>=<id>` hint naming the surface it came from (spec §3.3). This is

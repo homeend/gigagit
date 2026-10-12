@@ -46,7 +46,7 @@ func TestPreviewBlocksRelayout(t *testing.T) {
 }
 
 // A PR view lists the PR's overviews from the loaded counts: its . menu is
-// Open + Delete, and a counts reload without it drops the block.
+// Open, Export as HTML and Delete, and a counts reload without it drops the block.
 func TestPRViewOverviewsFollowTheCounts(t *testing.T) {
 	t.Parallel()
 	m := footerModel()
@@ -65,7 +65,7 @@ func TestPRViewOverviewsFollowTheCounts(t *testing.T) {
 	for _, r := range rows {
 		ids = append(ids, r.id)
 	}
-	if !ok || strings.Join(ids, "|") != "open-overview|delete-overview" {
+	if !ok || strings.Join(ids, "|") != "open-overview|overview-export|delete-overview" {
 		t.Fatalf("menu = %v", ids)
 	}
 	m, _ = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})

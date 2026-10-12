@@ -62,8 +62,9 @@ func (m Model) selectedBranchOverview() (domain.OverviewHead, bool) {
 	return m.overviewHead(e.overview)
 }
 
-// commitOverviewRows are the Commits .-menu's "Open overview: <title>", one
-// per permanent overview of the selected commit, newest first.
+// commitOverviewRows are the Commits .-menu's "Open overview: <title>" and
+// "Export as HTML: <title>", a pair per permanent overview of the selected
+// commit, newest first.
 func (m Model) commitOverviewRows() []actionRow {
 	if m.focus != panelCommits || m.inContentWindow() {
 		return nil
@@ -79,12 +80,14 @@ func (m Model) commitOverviewRows() []actionRow {
 		}
 		id := o.ID
 		out = append(out, actionRow{id: "open-overview-" + id, label: i18n.T("Open overview: %s", sanitizeLine(o.Title)),
-			run: func(m Model) (tea.Model, tea.Cmd) { return m.openCommitOverview(id) }})
+			run: func(m Model) (tea.Model, tea.Cmd) { return m.openCommitOverview(id) }},
+			permanentOverviewExportRow("export-overview-"+id, i18n.T("Export as HTML: %s", sanitizeLine(o.Title)), id))
 	}
 	return out
 }
 
-// branchOverviewRows are an overview sub-row's .-menu: Open and Delete.
+// branchOverviewRows are an overview sub-row's .-menu: Open, Export as
+// HTML and Delete.
 func (m Model) branchOverviewRows() []actionRow {
 	if m.focus != panelBranches || m.inContentWindow() {
 		return nil
@@ -96,6 +99,7 @@ func (m Model) branchOverviewRows() []actionRow {
 	id, quote := h.ID, reviewQuote(h.Agent, h.Title)
 	return []actionRow{
 		{id: "open-overview", label: i18n.T("Open overview"), run: func(m Model) (tea.Model, tea.Cmd) { return m.openCommitOverview(id) }},
+		permanentOverviewExportRow("overview-export", i18n.T("Export as HTML"), id),
 		{id: "delete-overview", label: i18n.T("Delete overview"), run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.confirmOverviewDelete(id, quote)
 		}},

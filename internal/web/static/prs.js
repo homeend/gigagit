@@ -364,6 +364,18 @@ function fetchPR(n) {
   });
 }
 
+// fetchPRForLink is Copy link's fetch of an unfetched PR (links.js): a PR's
+// link names the fetched head. The open's mask says what runs — the fetch
+// takes a while — and goes when it ends, whichever way.
+export async function fetchPRForLink(n) {
+  maskOn(n, "fetching " + prLabel(n) + " to copy its link\u2026");
+  try {
+    return await fetchPR(n);
+  } finally {
+    maskOff();
+  }
+}
+
 // revalidate is the background half of a cached open: the diff is already on
 // screen (from the local head), and only now is the forge asked whether that
 // head is still the PR's. A moved head is fetched and the diff re-opened — if

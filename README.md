@@ -178,6 +178,8 @@ gg overview save [<gg-link>] --agent <name> (--stdin | --file <path>) [--title <
                                       # or an anchored file with uncommitted changes
 gg overview list [--all] [--json]    # HEAD's permanent overviews (--all: the repository's)
 gg overview show <id|link> [--json]  # one overview: its markdown and remarks
+gg overview export [--out <path>|-] [--force] <id|link>
+                                      # one overview as a self-contained HTML file (files at its commit + diffs, no remarks)
 gg overview rm <id>                  # delete one
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
                                       # numbered git @@ hunks per file, over the same patch a note anchors to

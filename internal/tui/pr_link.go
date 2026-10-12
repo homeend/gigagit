@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clock"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -39,15 +40,35 @@ func (m Model) prLinkCmd(n int) tea.Cmd {
 	}
 }
 
+// prLinkWait is Copy link's chain in flight: PR n, asked at at.
+type prLinkWait struct {
+	n  int
+	at time.Time
+}
+
+// askPRLink starts Copy link on PR n: the status line wears ⏳ until the link
+// is copied — an unfetched PR is fetched first, which takes a while.
+func (m Model) askPRLink(n int) (Model, tea.Cmd) {
+	cmd := m.prLinkCmd(n)
+	if cmd == nil {
+		return m, nil
+	}
+	m.prLinkWait = prLinkWait{n: n, at: clock.Now()}
+	m.statusMsg = i18n.T("copying the link to PR #%d…", n)
+	return m, cmd
+}
+
 // handlePRLinkMsg copies the link the pair names.
 func (m Model) handlePRLinkMsg(msg prLinkMsg) (Model, tea.Cmd) {
 	if msg.gen != m.forgeGen {
 		return m, nil // asked in a repository the TUI has left
 	}
+	if !errors.Is(msg.err, domain.ErrPRNotFetched) {
+		m.prLinkWait = prLinkWait{} // the chain ends here, copied or failed
+	}
 	switch {
 	case errors.Is(msg.err, domain.ErrPRNotFetched):
-		m.statusMsg = i18n.T("PR #%d is not fetched: press enter to open it first", msg.n)
-		return m, nil
+		return m.fetchPRForLink(msg.n)
 	case msg.err != nil:
 		m.statusMsg = i18n.T("error: %s", firstLine(msg.err.Error()))
 		return m, nil
@@ -60,13 +81,54 @@ func (m Model) handlePRLinkMsg(msg prLinkMsg) (Model, tea.Cmd) {
 	return m, m.copyToClipboardCmd(i18n.T("copied link to PR #%d", msg.n), link)
 }
 
+// fetchPRForLink starts Copy link's fetch of an unfetched PR n: resolve the
+// fetch op off-thread (a forge read) → run it (startPRLinkFetch) → copy once
+// it lands (opFinishedMsg re-asks prLinkCmd).
+func (m Model) fetchPRForLink(n int) (Model, tea.Cmd) {
+	svc, gen := m.svc, m.forgeGen
+	if svc == nil {
+		return m, nil
+	}
+	pr, ok := m.listedPR(n)
+	if !ok {
+		pr = model.PullRequest{Number: n}
+	}
+	if m.prLinkWait.n != n {
+		m.prLinkWait = prLinkWait{n: n, at: clock.Now()}
+	}
+	m.statusMsg = i18n.T("fetching PR #%d to copy its link…", n)
+	return m, func() tea.Msg {
+		op, err := svc.PRFetchOp(context.Background(), n)
+		return prFetchReadyMsg{pr: pr, op: op, err: err, gen: gen, copyLink: true}
+	}
+}
+
+// startPRLinkFetch runs Copy link's fetch and arms the copy that follows it.
+func (m Model) startPRLinkFetch(msg prFetchReadyMsg) (Model, tea.Cmd) {
+	n := msg.pr.Number
+	if msg.err != nil {
+		m.prLinkWait = prLinkWait{}
+		m.statusMsg = i18n.T("error: %s", firstLine(msg.err.Error()))
+		return m, nil
+	}
+	if !m.opsIdle() {
+		m.prLinkWait = prLinkWait{}
+		m.statusMsg = i18n.T("PR #%d: an operation is running — copy the link again when it finishes", n)
+		return m, nil
+	}
+	m.pendingPRLink = n
+	m, cmd := m.startOp(msg.op)
+	m.statusMsg = i18n.T("fetching PR #%d to copy its link…", n)
+	return m, cmd
+}
+
 // copySelectedPRLink is the Pull requests panel's L.
 func (m Model) copySelectedPRLink() (Model, tea.Cmd) {
 	p, ok := m.selectedPR()
 	if !ok {
 		return m, nil
 	}
-	return m, m.prLinkCmd(p.Number)
+	return m.askPRLink(p.Number)
 }
 
 // openPRLinkRow is the open PR's "Copy pull request link": the pair on

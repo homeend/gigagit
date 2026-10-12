@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +50,7 @@ func TestTwoOverviewsTwoRows(t *testing.T) {
 	for _, r := range m.commitOverviewRows() {
 		labels = append(labels, r.label)
 	}
-	if strings.Join(labels, "|") != "Open overview: Locks|Open overview: Parsing" {
+	if strings.Join(labels, "|") != "Open overview: Locks|Export as HTML: Locks|Open overview: Parsing|Export as HTML: Parsing" {
 		t.Fatalf("menu rows = %v", labels)
 	}
 }
@@ -60,8 +61,8 @@ func TestOverviewRowsFollowReload(t *testing.T) {
 	m.filesView, m.focus = nil, panelCommits
 	m.sel[panelCommits] = 0
 	m.noteCounts.Overviews = []domain.OverviewHead{ovHead("o1", m.commits[0].Hash, "", "Locks")}
-	if len(m.commitOverviewRows()) != 1 {
-		t.Fatal("one row")
+	if len(m.commitOverviewRows()) != 2 {
+		t.Fatal("one overview: Open + Export")
 	}
 	m.noteCounts.Overviews = nil // the CLI removed it; the notes reload landed
 	if len(m.commitOverviewRows()) != 0 {
@@ -83,8 +84,9 @@ func TestGoneOverviewCloses(t *testing.T) {
 	}
 }
 
-// The └ Overview sub-row: enter opens the overview; its . menu is Open +
-// Delete only, and Delete asks (overview-remove) before RemoveOverview.
+// The └ Overview sub-row: enter opens the overview; its . menu is Open,
+// Export as HTML and Delete, and Delete asks (overview-remove) before
+// RemoveOverview.
 func TestBranchOverviewSubRowOpenAndDelete(t *testing.T) {
 	t.Parallel()
 	m, id := commitOverviewModel(t)
@@ -109,10 +111,13 @@ func TestBranchOverviewSubRowOpenAndDelete(t *testing.T) {
 	for _, r := range m.branchOverviewRows() {
 		labels = append(labels, r.id)
 	}
-	if strings.Join(labels, "|") != "open-overview|delete-overview" {
+	if strings.Join(labels, "|") != "open-overview|overview-export|delete-overview" {
 		t.Fatalf("sub-row menu = %v", labels)
 	}
-	tm, _ := m.branchOverviewRows()[1].run(m)
+	if msg := runExportRow(t, m, m.branchOverviewRows()); msg.err != nil || filepath.Base(msg.defaultPath) != "overview-tour-of-a.html" {
+		t.Fatalf("export = err %v path %q", msg.err, msg.defaultPath)
+	}
+	tm, _ := m.branchOverviewRows()[2].run(m)
 	if mm := tm.(Model); mm.modal == nil || mm.modal.req.ID != "overview-remove" || mm.modal.sel != 1 {
 		t.Fatalf("delete asks first: %+v", mm.modal)
 	}

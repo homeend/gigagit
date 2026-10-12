@@ -31,6 +31,8 @@ type prFetchReadyMsg struct {
 	op  engine.FetchPRHead
 	err error
 	gen int // m.forgeGen when asked: a repo switch drops the answer
+	// copyLink: the fetch serves Copy link (copy once it lands), not enter.
+	copyLink bool
 }
 
 // openPRCmd starts enter's chain: resolve the fetch op off-thread → run it
@@ -51,6 +53,9 @@ func (m Model) openPRCmd(p model.PullRequest) (Model, tea.Cmd) {
 func (m Model) handlePRFetchReady(msg prFetchReadyMsg) (Model, tea.Cmd) {
 	if msg.gen != m.forgeGen {
 		return m, nil // resolved for a repository the TUI has left
+	}
+	if msg.copyLink {
+		return m.startPRLinkFetch(msg)
 	}
 	if po := m.pendingPROpen; po != nil && po.Number == msg.pr.Number && m.running {
 		// This PR's fetch is already running (enter and a link's landing

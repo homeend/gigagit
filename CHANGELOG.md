@@ -16,6 +16,32 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   - An overview opens in the overview split: the file at the overview's commit, its remarks in boxes titled `overview · <agent> · line N`, D flips to the commit's change, S stacks, E exports.
   - `?overview=` links open it; a deleted overview's link opens its commit and says so. An open overview deleted elsewhere closes on the next notes refresh, saying so.
 
+## Copy a pull request's link before opening it
+
+### Fixed
+- **Copy pull request link works on a PR you never opened.** `L` on the
+  Pull requests list (and its `.` menu row and the details popup) used to
+  refuse an unfetched PR with a status line; it now fetches the PR's head
+  first, then copies. The status line wears `⏳` and the elapsed seconds from
+  the key press until the link is copied, so a slow fetch never reads as a
+  dead key. The web's PR menu offers `copy gg link` on every PR: an
+  unfetched one is fetched under the PR mask first.
+
+## Export a permanent overview as HTML
+
+### Added
+- **A permanent overview exports as one HTML file**, like a review's or an
+  agent's overview: every file a link names at the overview's commit, its
+  diff as the split's **D** shows it (the commit's own change; a PR
+  overview's: merge base → head), no remarks.
+  - **TUI:** **Export as HTML** in the `.` menu of a Branches *└ Overview*
+    row and of a PR view's Overviews entry, and **Export as HTML: <title>**
+    beside each **Open overview: <title>** in the Commits `.` menu (the open
+    overview's own `.` menu already had it).
+  - **CLI:** `gg overview export [--out <path>|-] [--force] <id|gg-link>`.
+  - **gg web:** `GET /api/overview-export?overview=<id>`; the page's `E`
+    on an open permanent overview downloads it.
+
 ## Note meta in gg web
 
 ### Added

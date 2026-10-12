@@ -7291,8 +7291,8 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
 
 ### Overview HTML export (2026-10-12, spec `docs/superpowers/specs/2026-10-12-overview-html-export-design.md`)
 
-One self-contained `.html` file per overview (agent or stored review),
-opened from disk with no gg and no network.
+One self-contained `.html` file per overview (agent, stored review or
+permanent overview), opened from disk with no gg and no network.
 
 - **Rulings:** R1 content = every ANCHORED file in full at its frozen version
   + its diff (stored: the review's tip / `ReviewFileDiff` base→tip; agent:
@@ -7300,7 +7300,11 @@ opened from disk with no gg and no network.
   included. R2 web + CLI + TUI over ONE builder. R3 NO notes of any kind (a
   `note:t<n>` anchor still links to the note's lines, its text is absent).
 - **Builder:** `domain.ExportOverviewHTML(ctx, OverviewSource) (page, name,
-  err)` — `{ReviewID}` or `{Title, Text, NoteSpans}`; the service must be the
+  err)` — `{ReviewID}`, `{OverviewID}` (a permanent overview: files via
+  `ShowFile` at its commit, anchors judged by `OverviewDocAt` against the
+  whole tree, diff = `OverviewFileDiff` — the commit's own change, a PR
+  overview's merge base..head; title "Overview: <title>") or `{Title, Text,
+  NoteSpans}`; the service must be the
   agent overview's worktree. `domain.AgentOverviewSource(docs, id, root)` is
   the web/TUI door (resolves note spans in the shared `agentdocs` store);
   the CLI (`gg session overview export`) gets the text from `overview_show`
@@ -7326,12 +7330,16 @@ opened from disk with no gg and no network.
   blob's `<script>`; an inlined asset holding `</script`/`</style` is an
   error. 30 MB cap (a guard, not a browser limit; the per-file 10 MB is gg's
   `MaxDiffBytes`) → `*TooLargeError` naming the three largest files.
-- **Frontends:** web `GET /api/overview-export?id=|review=` (attachment,
+- **Frontends:** web `GET /api/overview-export?id=|review=|overview=` (exactly one; attachment,
   413 over the cap) + `E` / the `E export html` chip in `viewer.js`
   (`exportOverviewHTML`, a fetch → blob download so an error shows in the
   op line); TUI `overviewExportRow` in both overview `.` menus, reusing the
-  patch export popup (`patchResolvedMsg.title`) → `engine.ExportFile`; CLI
-  `gg review export` / `gg session overview export` share `writeExport`
+  patch export popup (`patchResolvedMsg.title`) → `engine.ExportFile`, plus
+  `permanentOverviewExportRow` (export by id, nothing opened) on the
+  Branches └ Overview row, a PR view's Overviews entry and the Commits menu
+  (one "Export as HTML: <title>" after each "Open overview: <title>"); View
+  all notes has none (no `.` menu there — user ruling). CLI
+  `gg review export` / `gg session overview export` / `gg overview export` share `writeExport`
   (`--out -` = stdout, `--force` = overwrite).
 - **Verification:** `e2e/scenarios/review_export_html.toml`; the browser
   check (Playwright, file:// in Chromium + Firefox) lives only in the plan's
