@@ -131,7 +131,8 @@ func (s *Server) cachedPR(svc *domain.Service, n int) (model.PullRequest, bool) 
 // loadPRs is the list lane: the one place a listing talks to the forge. It
 // probes (once per service, domain caches the verdict), lists, stores and
 // tells every open page. A failed listing keeps the rows that were standing.
-func (s *Server) loadPRs(svc *domain.Service) {
+// parent is the server's background ctx: Close cancels it and waits.
+func (s *Server) loadPRs(parent context.Context, svc *domain.Service) {
 	s.prs.mu.Lock()
 	c := s.prs.at(svc)
 	if c.state == prsOff || c.loading {
@@ -145,7 +146,7 @@ func (s *Server) loadPRs(svc *domain.Service) {
 	if s.prBudget > 0 {
 		budget = s.prBudget
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	ctx, cancel := context.WithTimeout(parent, budget)
 	defer cancel()
 	state, errText := prsReady, ""
 	var rows []model.PullRequest
@@ -200,7 +201,9 @@ func (s *Server) kickPRs(svc *domain.Service, force bool) {
 	skip := c.loading || c.state == prsOff || (!force && c.state != prsUnprobed)
 	s.prs.mu.Unlock()
 	if !skip {
-		go s.loadPRs(svc)
+		// Owned by the server, never a bare goroutine: a listing that outlives
+		// Close would still write the PR cache after its caller tore down.
+		s.goBackground(func(ctx context.Context) { s.loadPRs(ctx, svc) })
 	}
 }
 
@@ -264,7 +267,7 @@ func (s *Server) handlePRs(w http.ResponseWriter, r *http.Request) {
 // so it is a guarded POST, and it answers with the fresh list.
 func (s *Server) handlePRRefresh(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
-	s.loadPRs(svc)
+	s.loadPRs(context.Background(), svc)
 	s.writePRs(w, r, svc)
 }
 
