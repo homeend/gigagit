@@ -22,6 +22,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **A file at a commit bookmarks that commit's version** (the full-screen
   viewer bookmarked the working-tree file of the same path).
 
+## Permanent overviews in gg web
+
+### Added
+- **gg web (and the page a TUI hosts) shows permanent overviews as the TUI does.**
+  - A commit holding one shows `≡` on its row, from any branch; its right-click menu offers **open overview: <title>** per overview.
+  - A branch whose tip is an overview's commit (made on it) lists a `└ Overview` row under it: a click opens it, right-click offers **Open overview** / **Delete overview** (asks first).
+  - View all notes lists a commit's overviews under **Overviews** (enter opens over the list, esc comes back; ctrl+d deletes; ctrl+l copies the link). A pull request's view lists the PR's overviews under **Overviews** (`older tip` when the head moved on).
+  - An overview opens in the overview split: the file at the overview's commit, its remarks in boxes titled `overview · <agent> · line N`, D flips to the commit's change, S stacks, E exports.
+  - `?overview=` links open it; a deleted overview's link opens its commit and says so. An open overview deleted elsewhere closes on the next notes refresh, saying so.
+
 ## gg web: the PR re-list stops with the server
 
 ### Fixed
@@ -69,8 +79,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
     beside each **Open overview: <title>** in the Commits `.` menu (the open
     overview's own `.` menu already had it).
   - **CLI:** `gg overview export [--out <path>|-] [--force] <id|gg-link>`.
-  - **gg web:** `GET /api/overview-export?overview=<id>` (the page's `E`
-    follows with the permanent overviews' web view).
+  - **gg web:** `GET /api/overview-export?overview=<id>`; the page's `E`
+    on an open permanent overview downloads it.
 
 ## Note meta in gg web
 

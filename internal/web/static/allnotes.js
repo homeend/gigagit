@@ -15,6 +15,8 @@ import { copyServerLink, openReview, openScopeRange, viewBranches } from "./revi
 import { openCommitByHash } from "./commits.js";
 import { armRangeNotes, landNote, showRangeNotes, openFile, openWorkingTree, refreshNoteCounts, setDiffBack } from "./files.js";
 import { openShelfNotes } from "./shelfnotes.js";
+import { confirmDeleteOverview } from "./overviews.js";
+import { openPermanentOverview } from "./viewer.js";
 
 // This module builds its own DOM: index.html's `hidden` class has NO global
 // rule — the overlay ships its own `#allnotes.hidden` selector. z-index 21:
@@ -27,14 +29,14 @@ const CSS = `
 #allnotes-head { padding: 8px 10px; font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
 #allnotes-input { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font: inherit; font-weight: normal; }
 #allnotes-input:focus { outline: none; border-color: var(--accent); }
-#allnotes-cols, #allnotes-list li.an-note, #allnotes-list li.an-review { display: flex; white-space: nowrap; }
+#allnotes-cols, #allnotes-list li.an-note, #allnotes-list li.an-review, #allnotes-list li.an-overview { display: flex; white-space: nowrap; }
 #allnotes-cols { color: var(--dim); padding: 2px 10px 2px calc(10px + 10ch); border-bottom: 1px solid var(--border); }
 #allnotes-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
 #allnotes-list li { padding: 2px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #allnotes-list li.sel { background: var(--sel); }
 #allnotes-list li.an-head { font-weight: 600; }
 #allnotes-list li.empty { color: var(--dim); cursor: default; }
-#allnotes-list li.an-note, #allnotes-list li.an-review { padding-left: calc(10px + 10ch); }
+#allnotes-list li.an-note, #allnotes-list li.an-review, #allnotes-list li.an-overview { padding-left: calc(10px + 10ch); }
 .an-c { flex: none; overflow: hidden; text-overflow: ellipsis; padding-right: 1ch; box-sizing: border-box; }
 .an-status { width: 9ch; } .an-who { width: 10ch; } .an-where { width: 10ch; } .an-when { width: 8ch; }
 .an-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -135,6 +137,13 @@ function anBuildRows(ov) {
             filter: (r.summary + "\0" + (r.agent || "") + "\0" + (r.branch || "")).toLowerCase() });
         }
       }
+      if ((c.overviews || []).length) {
+        rows.push({ kind: "dir", depth: 2, text: "Overviews" });
+        for (const o of c.overviews) {
+          rows.push({ kind: "overview", depth: 3, overview: o,
+            filter: (o.title + "\0" + (o.agent || "") + "\0" + (o.branch || "")).toLowerCase() });
+        }
+      }
       files(2, c.files || [], { commit: c.hash, subject: c.hash.slice(0, 7) + " " + c.subject, missing: c.missing });
     }
   }
@@ -170,6 +179,7 @@ function anBuildRows(ov) {
 function anCopyLinkURL(r) {
   if (!r) return "";
   if (r.kind === "review") return "/api/review/" + encodeURIComponent(r.review.id) + "/link";
+  if (r.kind === "overview") return "/api/overview/" + encodeURIComponent(r.overview.id) + "/link";
   if (r.kind !== "note" || !r.target || r.target.shelf || r.target.state === "shelf") return "";
   return "/api/notes/link?id=" + encodeURIComponent(r.note.id);
 }
@@ -178,7 +188,7 @@ function anVisible(rows, query, folded) {
   const out = [];
   if (query) {
     const q = query.toLowerCase();
-    const leaf = (r) => r.kind === "note" || r.kind === "review";
+    const leaf = (r) => r.kind === "note" || r.kind === "review" || r.kind === "overview";
     const match = rows.map((r) => leaf(r) && r.filter.includes(q));
     rows.forEach((r, i) => {
       let keep = match[i];
@@ -232,6 +242,14 @@ function reviewCells(r, now) {
   return { status: "review", who: v.agent || "agent", where, when, summary: v.summary, tail: tally };
 }
 
+// overviewCells is a permanent overview's row in the review columns: STATUS
+// "overview", no tally.
+function overviewCells(r, now) {
+  const o = r.overview;
+  const when = o.created ? anAgo(now - Date.parse(o.created)) : "";
+  return { status: "overview", who: o.agent || "agent", where: o.branch ? "branch " + o.branch : "commit", when, summary: o.title, tail: "" };
+}
+
 function columnsHTML(c, whoCls, dimStatus) {
   const full = [c.status, c.who, c.where, c.when, c.summary + c.tail].filter(Boolean).join(" · ");
   return {
@@ -251,14 +269,14 @@ function visible() {
 
 function render() {
   const list = $("allnotes-list");
-  const count = an.rows.filter((r) => r.kind === "note" || r.kind === "review").length;
+  const count = an.rows.filter((r) => r.kind === "note" || r.kind === "review" || r.kind === "overview").length;
   $("allnotes-title").textContent = count ? "All notes  " + count : "All notes";
   $("allnotes-notice").textContent = an.notice ? "▸ " + an.notice : "";
   $("allnotes-cols").style.display = an.loading || an.err || !an.rows.length ? "none" : "";
   const vis = an.loading || an.err ? [] : visible();
   const hints = ["↑/↓ move", "enter open / fold", "←/→ fold"];
   const cur = vis[an.sel];
-  if (cur && (cur.kind === "note" || cur.kind === "review")) hints.push("ctrl+d delete");
+  if (cur && (cur.kind === "note" || cur.kind === "review" || cur.kind === "overview")) hints.push("ctrl+d delete");
   if (anCopyLinkURL(cur)) hints.push("ctrl+l copy link");
   hints.push("type to filter", "esc close");
   $("allnotes-hints").textContent = hints.join("   ");
@@ -273,14 +291,14 @@ function render() {
   list.innerHTML = vis
     .map((r, i) => {
       const sel = i === an.sel ? " sel" : "";
-      if (r.kind === "note" || r.kind === "review") {
-        const c = r.kind === "note" ? noteCells(r, now) : reviewCells(r, now);
+      if (r.kind === "note" || r.kind === "review" || r.kind === "overview") {
+        const c = r.kind === "note" ? noteCells(r, now) : r.kind === "overview" ? overviewCells(r, now) : reviewCells(r, now);
         if (r.kind === "note" && r.target.shelf && sumCols - c.tail.length > 4) {
           // A recycle's "Recycled from <dir> (<branch>)": the path loses its
           // middle, the branch stays (the TUI's elideNoteSummary).
           c.summary = elideNoteSummary(c.summary, sumCols - c.tail.length);
         }
-        const whoCls = r.kind === "review" || r.note.source === "agent" ? "agent" : "user";
+        const whoCls = r.kind !== "note" || r.note.source === "agent" ? "agent" : "user";
         const { html, title } = columnsHTML(c, whoCls, r.kind === "note" && r.status !== "active");
         return `<li class="an-${r.kind}${sel}" data-i="${i}" title="${esc(title)}">${html}</li>`;
       }
@@ -410,6 +428,12 @@ function activate(i) {
       hide();
       openReview(r.review.id, { kind: "popup", run: reshow });
       return;
+    case "overview":
+      // The popup steps aside (the viewer shares its z-index) and comes back
+      // when the overview closes, as from a review.
+      hide();
+      openPermanentOverview(r.overview.id, { onClose: reshow });
+      return;
   }
   render();
 }
@@ -488,7 +512,8 @@ function reshow() {
 // confirm whose default is cancel.
 function deleteSelected() {
   const r = visible()[an.sel];
-  if (!r || (r.kind !== "note" && r.kind !== "review")) return;
+  if (!r || (r.kind !== "note" && r.kind !== "review" && r.kind !== "overview")) return;
+  if (r.kind === "overview") return confirmDeleteOverview(r.overview.id, { done: () => an && !an.hidden && load() });
   let id, prompt, done;
   if (r.kind === "review") {
     id = r.review.id;
@@ -588,7 +613,7 @@ registerHelp({
   key: "all notes",
   html:
     "☰ / command palette → <b>view all notes…</b>: every note this checkout can see, as a tree — " +
-    "working tree, commits (with their AI reviews), other (shelf entries, their own notes first) → directory → file → note, " +
+    "working tree, commits (with their AI reviews and permanent overviews), other (shelf entries, their own notes first) → directory → file → note, " +
     "each note with its status, author, place and age. Type to filter, ←/→ fold, enter or a click opens " +
     "a note's diff on it, a shelf entry's own note in the note window, or a review in the review view (esc comes back), <b>ctrl+d</b> deletes the thread or review under the cursor after asking, <b>ctrl+l</b> copies the note's or the review's gg link",
 });

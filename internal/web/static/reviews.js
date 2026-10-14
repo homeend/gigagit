@@ -19,7 +19,8 @@ import { focusPane } from "./keys.js";
 import { openNotesWindow } from "./shelfnotes.js";
 import { runLinkCompare } from "./linkcompare.js";
 import { copyLink } from "./links.js";
-import { openStoredOverview } from "./viewer.js";
+import { openPermanentOverview, openStoredOverview } from "./viewer.js";
+import { overviewRowText } from "./overviews.js";
 
 // --- reviews pure (guarded against Go) ---
 // reviewStamp is a review's time as the TUI prints it: local
@@ -211,6 +212,9 @@ function headRowIds() {
   return previewScopeReviews()
     .concat(commitReviewList())
     .map((r) => r.id)
+    // A PR view's Overviews rows (a PR view lists no commit reviews, so they
+    // follow its Reviews rows here as on screen).
+    .concat(previewScopeOverviews().map((o) => "overview:" + o.id))
     .concat(commitScopes().map((sc) => scopeSel(sc.scope)))
     .concat(commitNoted().map(notedSel));
 }
@@ -232,8 +236,17 @@ function reviewRowsHTML() {
         .map((r) => `<li class="rev${state.reviewSel === r.id ? " sel" : ""}" data-review="${esc(r.id)}" title="${esc(r.summary || "")}">${esc(previewReviewText(r))}</li>`)
         .join("")
     : "";
+  // …and a pull request's permanent overviews under them (R10).
+  const po = previewScopeOverviews();
+  const ovHTML = po.length
+    ? `<li class="sect">Overviews</li>` +
+      po
+        .map((o) => `<li class="rev rov${state.reviewSel === "overview:" + o.id ? " sel" : ""}" data-overview="${esc(o.id)}" title="${esc(o.title)}">${esc(overviewRowText(o) + (o.older ? " · older tip" : ""))}</li>`)
+        .join("")
+    : "";
   return (
     pvHTML +
+    ovHTML +
     (revs.length
       ? `<li class="sect">Reviews</li>` +
         revs
@@ -267,6 +280,14 @@ function previewScopeReviews() {
   return [];
 }
 
+
+// previewScopeOverviews is the open pull request's permanent overviews — its
+// view's Overviews block (R10); none in any other view.
+function previewScopeOverviews() {
+  if (state.filesMode !== "compare" || state.layout === "list") return [];
+  const po = state.previewOpen;
+  return po && po.pr && po.tip && state.compare && state.compare.bHash === po.tip ? state.previewOverviews || [] : [];
+}
 
 // notedRowsHTML is the commit's "Notes" section: one row per path with plain
 // notes here that the commit does not change. Not files (no data-i): the
@@ -334,7 +355,8 @@ function openSelectedReview() {
   if (!state.reviewSel || !headRowIds().includes(state.reviewSel)) return false;
   const sc = commitScopes().find((x) => scopeSel(x.scope) === state.reviewSel);
   const noted = commitNoted().find((p) => notedSel(p) === state.reviewSel);
-  if (sc) openRangeReview(sc.scope);
+  if (state.reviewSel.startsWith("overview:")) openPermanentOverview(state.reviewSel.slice("overview:".length));
+  else if (sc) openRangeReview(sc.scope);
   else if (noted) openNotedPath(noted);
   else openReview(state.reviewSel, previewBack(state.reviewSel) || reviewBackFromCommit(state.reviewSel));
   return true;
@@ -533,7 +555,7 @@ export function openReviewOverview() {
   const rv = state.review;
   if (!rv || !rv.data.overviewMd) return;
   const d = rv.data;
-  openStoredOverview({ id: rv.id, title: d.label || rv.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: d.overviewText || "" });
+  openStoredOverview({ kind: "review", id: rv.id, title: d.label || rv.id, blocks: d.overviewMd, anchors: d.overviewAnchors || [], tip: d.overviewTip || "", text: d.overviewText || "" });
 }
 
 // reviewSummaryHTML is the Summary: the review's markdown, its meta, the
