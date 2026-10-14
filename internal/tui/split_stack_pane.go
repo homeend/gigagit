@@ -70,6 +70,7 @@ func (m Model) newStackPane(sv *splitView) pane {
 	if len(s.files) > streamFoldOver {
 		for i := range s.files {
 			s.files[i].folded = s.files[i].path != target
+			s.files[i].autoFold = s.files[i].folded
 		}
 	}
 	d := m.newOpenFile(fileSource{kind: srcReviewStack, rev: key}, "files-"+key)
@@ -490,7 +491,18 @@ func (m Model) stepStreamAnchor(sv *splitView, p *stackPane, dir int) (Model, te
 	return m, cmd
 }
 
+// update is a key on the pane; a file the stream folded itself unfolds
+// once the key brings its header on screen or puts the cursor on it.
 func (p *stackPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	before, cur := p.visibleHeaders(m), p.cursorHeader()
+	nm, cmd := p.key(m, msg)
+	if nm.splitLayer() != p.sv || p.sv.right != p {
+		return nm, cmd // S swapped the pane, or the split closed
+	}
+	return nm, tea.Batch(cmd, p.unfoldBroughtIntoView(nm, before, cur))
+}
+
+func (p *stackPane) key(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	d := p.d
 	if s := msg.String(); s != "n" && s != "p" {
 		// A parked landing belongs to the step that parked it: any other key
@@ -519,7 +531,8 @@ func (p *stackPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		p.stream.files[fi].folded = !p.stream.files[fi].folded
-		d.p.cur = p.stream.files[fi].hdr // the cursor rests on the header it folded
+		p.stream.files[fi].autoFold = false // the reader's own fold: it stays
+		d.p.cur = p.stream.files[fi].hdr    // the cursor rests on the header it folded
 		p.rebuild(m)
 		d.p.cur = p.stream.files[fi].hdr
 		d.p.ensureCursorVisible(rows)
@@ -530,7 +543,7 @@ func (p *stackPane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			all = all && f.folded
 		}
 		for i := range p.stream.files {
-			p.stream.files[i].folded = !all
+			p.stream.files[i].folded, p.stream.files[i].autoFold = !all, false
 		}
 		p.rebuild(m)
 		return m, p.pump(m)
@@ -599,4 +612,61 @@ func (m Model) toggleReviewStacked(sv *splitView) (Model, tea.Cmd) {
 		return m, p.pump(m)
 	}
 	return m, nil
+}
+
+// visibleHeaders are the files whose header row is on the pane's screen.
+func (p *stackPane) visibleHeaders(m Model) map[int]bool {
+	rows, inner := p.sv.geomOf(m, p)
+	w := max(inner-p.d.gutterW(), 1)
+	out := map[int]bool{}
+	for r := range rows {
+		li := p.d.p.lineAtRow(r, rows, w)
+		if li < 0 {
+			continue
+		}
+		if fi := p.stream.fileAt(li); fi >= 0 && p.stream.files[fi].hdr == li {
+			out[fi] = true
+		}
+	}
+	return out
+}
+
+// cursorHeader is the file whose header the cursor sits on, or -1.
+func (p *stackPane) cursorHeader() int {
+	if fi := p.stream.fileAt(p.d.p.cur); fi >= 0 && p.stream.files[fi].hdr == p.d.p.cur {
+		return fi
+	}
+	return -1
+}
+
+// scrolled runs move (a wheel scroll) and unfolds what it brought into view.
+func (p *stackPane) scrolled(m Model, move func()) tea.Cmd {
+	before, cur := p.visibleHeaders(m), p.cursorHeader()
+	move()
+	return p.unfoldBroughtIntoView(m, before, cur)
+}
+
+// unfoldBroughtIntoView opens every file the stream folded on its own whose
+// header was not on screen before the move and is now, or whose header the
+// move put the cursor on — reading on into a file is asking for it, so a big
+// stream loads what is read like a small one. A file folded by hand stays
+// folded. It returns the loads the unfolded files need.
+func (p *stackPane) unfoldBroughtIntoView(m Model, before map[int]bool, curBefore int) tea.Cmd {
+	now, cur := p.visibleHeaders(m), p.cursorHeader()
+	changed := false
+	for i := range p.stream.files {
+		f := &p.stream.files[i]
+		if !f.folded || !f.autoFold {
+			continue
+		}
+		if (now[i] && !before[i]) || (i == cur && cur != curBefore) {
+			f.folded, f.autoFold = false, false
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	p.rebuild(m)
+	return p.pump(m)
 }

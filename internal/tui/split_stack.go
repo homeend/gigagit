@@ -21,9 +21,13 @@ type streamFile struct {
 	notes        int // the review's notes on it (◆n on the header)
 	lines        []contentLine
 	folded       bool
-	loaded       bool  // lines (or err) are final
-	loading      bool  // a load is out for it
-	err          error // the load failed, or the loader named a placeholder
+	// autoFold: folded by the stream itself (past streamFoldOver), not by
+	// the reader — it unfolds once the reader brings it into view
+	// (stackPane.unfoldBroughtIntoView). A fold by hand clears it.
+	autoFold bool
+	loaded   bool  // lines (or err) are final
+	loading  bool  // a load is out for it
+	err      error // the load failed, or the loader named a placeholder
 	// boxes are the file's notes (a review's remarks, or the agent's notes
 	// on a working-tree file), at its own 1-based lines; rebuild maps them
 	// to stream lines.
