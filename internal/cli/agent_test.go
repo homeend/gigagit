@@ -382,3 +382,19 @@ func TestAgentListShowsTheName(t *testing.T) {
 		t.Fatalf("list = %d, row %q\n%s", code, line, out)
 	}
 }
+
+// `gg agent screen --reports` with no id reads the caller's own reports.
+func TestAgentScreenWithoutAnIDIsYourself(t *testing.T) {
+	dir, _ := agentEnvFor(t, nil)
+	if code, out, errOut := runAgentCLI(t, dir, "", "report", "--final", "found the cause"); code != 0 {
+		t.Fatalf("report = %d %q %q", code, out, errOut)
+	}
+	code, out, errOut := runAgentCLI(t, dir, "", "screen", "--reports")
+	if code != 0 || !strings.Contains(out, "found the cause") || !strings.Contains(out, "(final)") {
+		t.Fatalf("screen --reports = %d %q %q", code, out, errOut)
+	}
+	code, _, errOut = runAgentCLI(t, dir, "", "screen", "a", "b")
+	if code != 2 || !strings.Contains(errOut, "usage: gg agent screen [<id>]") {
+		t.Fatalf("two ids = %d %q", code, errOut)
+	}
+}

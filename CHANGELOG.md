@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+
+## A worker reads back its own report
+
+### Added
+- **`agent_screen` / `gg agent screen` without an id is your own session.** A worker can now read back the reports it sent with `gg agent screen --reports`, without knowing its own id. Before, it needed `gg agent screen <id> --reports` and was never told its id. using-gg v170, gg-delegate v6; run `gg init --update`.
+
 ## gg web: the PR re-list stops with the server
 
 ### Fixed

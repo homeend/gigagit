@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v169 -->
+<!-- gg:using-gg:v170 -->
 
 # Using gg (gigagit)
 
@@ -1312,13 +1312,14 @@ except `gg agent list`, which lists the sessions of the running gg TUIs.
   spinner for eleven minutes (a hung model call). `activity_since` is when
   that began. `report_at` / `report_final` say the agent reported
   (`agent_report`). To wait for a worker use `agent_wait`, not a poll.
-- `agent_screen {id}` / `gg agent screen <id>` — its visible console text,
+- `agent_screen {id?}` / `gg agent screen [<id>]` — its visible console text,
   with `activity` and, at a question, `options` (`key` is the digit to
   `agent_send` as a key for a numbered choice; `pick:<i>` names a
   cursor-style choice gg cannot press for you yet — answer it with
   `up`/`down`/`enter` keys instead). `report` is its latest `agent_report`,
   `reports` all kept ones; `gg agent screen <id> --reports` prints those
-  instead of the screen.
+  instead of the screen. Without an id it is your own session: `gg agent
+  screen --reports` prints the reports you sent.
 - `agent_send {id, text?, enter?, keys?}` / `gg agent send <id> [text…]
   [--no-enter] [--key esc]…` — paste text (up to 64 KiB), then Enter (default
   when there is text), then keys (`enter esc tab up down … ctrl+c 1 space`). Only agents

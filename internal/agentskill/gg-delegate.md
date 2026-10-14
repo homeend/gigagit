@@ -256,6 +256,8 @@ your console — what you show there is what they get. Then:
    message, under a heading `Result` — not just "report sent". The heading
    goes only in that message, not in the `agent_report` text (its first
    line is the summary). The user reads it in your console; the stored
-   report feeds gg's menus and a waiting overseer.
+   report feeds gg's menus and a waiting overseer. Asked for it again
+   later? `gg agent screen --reports` (or `agent_screen` without an id)
+   prints the reports you sent.
 7. Stay running after the final report — do not exit. The user (or an
    overseer) may ask a follow-up.

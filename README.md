@@ -1221,7 +1221,9 @@ report [--final] [--] <text>` — flags before the text): the result reaches the
 and the worker's row says **reported** — **done** for a final report — in
 the attention colour until someone types into that session or it exits; the status line
 (or a toast on the web page) carries the report's first line. A report never
-ends the worker; the overseer kills it when the work is done.
+ends the worker; it is ended when you (or an overseer asked to) are done with
+it. `gg agent screen --reports` with no id prints the caller's own reports — a
+worker reads back what it sent.
 
 The brief and the latest report are also **tours**: overview documents in the
 worker's worktree whose markdown links (`[parser](src/parse.go:40-60)`) jump
