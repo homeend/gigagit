@@ -23,6 +23,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   nothing in the file pane; `esc` puts the overview (and its file) in the
   background as before.
 
+## A stacked diff loads the files the mouse wheel scrolls to
+
+### Fixed
+- **Scrolling a stacked diff with the mouse wheel left files at "(not loaded yet)".** The stack loads the files near the viewport after every key, but the wheel (and a click) never asked for them, so files past the last key-loaded window stayed empty until a key was pressed.
+
+## A click on the files tree takes the keys from the agent console
+
+### Fixed
+- **Clicking the files tree (a commit's or a review's files, an overview) beside a focused agent console now moves the focus there.** The tree shares the console's column focus, so the click lit the tree but the console kept its blue border and every key; it now steps out of the console as ctrl+] does.
+
 ## Note meta on GitHub and in the skills
 
 ### Changed

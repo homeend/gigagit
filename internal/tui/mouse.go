@@ -206,6 +206,12 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			// A stack loads what the wheel brought near the viewport, as it
+			// does after a key (diffView.update): the queue is pumped by
+			// every move, or a wheel-read stack stops at "not loaded yet".
+			if dv.stk != nil && (wheel != 0 || msg.Button == tea.MouseButtonLeft) {
+				return m.pumpStack()
+			}
 		}
 		if msg.Button == tea.MouseButtonLeft && clickEnterLayer(l) {
 			var double bool
@@ -320,6 +326,17 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// clickTree is a click's focus move onto the files tree. The tree shares
+// the Commits column's focus with a console docked beside it, so the
+// console's "focus left the column" step-out never sees it: a focused
+// console steps out here, as ctrl+] would, and the keys are gg's again.
+func (m Model) clickTree() Model {
+	if m.console != nil && m.console.focused {
+		m = m.unbindConsole()
+	}
+	return m.focusTree()
+}
+
 // mouseInFilesView routes mouse input while the commit files view is open:
 // the left column is the tree box (border y=1, title y=2, windowed rows
 // from y=3), the right column the normally-rendered Commits panel. Wheel
@@ -347,7 +364,7 @@ func (m Model) mouseInFilesView(msg tea.MouseMsg, wheel int) (tea.Model, tea.Cmd
 		// back to the commit list — never reloading a commit under an open preview.
 		return m.moveListUnderFilesView(wheel)
 	case msg.Button == tea.MouseButtonLeft && inTree:
-		m = m.focusTree()
+		m = m.clickTree()
 		i := msg.Y - 3 // box top (y=1) + border + title line
 		if i >= 0 && i < m.filesPageRows() {
 			vis := m.filesView.visible()
@@ -371,7 +388,7 @@ func (m Model) mouseInFilesView(msg tea.MouseMsg, wheel int) (tea.Model, tea.Cmd
 			return m.moveCommitUnderFilesView(idx - m.sel[panelCommits])
 		}
 	case msg.Button == tea.MouseButtonRight && inTree:
-		m = m.focusTree()
+		m = m.clickTree()
 		i := msg.Y - 3
 		if i >= 0 && i < m.filesPageRows() {
 			vis := m.filesView.visible()
