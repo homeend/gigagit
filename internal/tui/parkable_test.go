@@ -13,13 +13,13 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// The user's alt+w over a popup that can wait parks it with its worktree,
-// half-typed text included; it is back when the worktree returns.
-func TestAltWParksAParkableHalfTypedPopup(t *testing.T) {
+// alt+w over a popup is ignored (user ruling 2026-10-14): the half-typed
+// popup stays on screen with its text, the worktree stays.
+func TestAltWIgnoredOverAHalfTypedPopup(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 120, 40
-	m, other := addWorktree(t, m, "wt2")
-	m.focus = panelBranches // alt+w's first hit with the keyboard elsewhere only focuses Branches
+	m, _ = addWorktree(t, m, "wt2")
+	m.focus = panelBranches
 	m, ok := m.openBranchPopup(false)
 	if !ok {
 		t.Fatal("precondition: the branch popup did not open")
@@ -27,10 +27,30 @@ func TestAltWParksAParkableHalfTypedPopup(t *testing.T) {
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("feat")})
 	m = nm.(Model)
 	m = pressAlt(t, m, 'w')
+	p, _ := m.topLayer().(*branchPopup)
+	if m.viewed != m.home || p == nil || p.name.Value() != "feat" {
+		t.Fatalf("viewed=%q top=%T: alt+w must leave the popup and its text alone", m.viewed, m.topLayer())
+	}
+}
+
+// The user's own swap from a worktree row parks a popup that can wait,
+// half-typed text included; it is back when the worktree returns.
+func TestUserSwapParksAParkableHalfTypedPopup(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	m, ok := m.openBranchPopup(false)
+	if !ok {
+		t.Fatal("precondition: the branch popup did not open")
+	}
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("feat")})
+	m = nm.(Model)
+	m, _ = m.userSwitchView(other)
 	if m.viewed != model.KeyOf(other) || m.topLayer() != nil {
 		t.Fatalf("viewed=%q top=%T: the swap did not park the popup (%s)", m.viewed, m.topLayer(), m.statusMsg)
 	}
-	m = pressAlt(t, m, 'w')
+	m = landView(t, m)
+	m, _ = m.userSwitchView(m.viewPath(m.home))
 	p, _ := m.topLayer().(*branchPopup)
 	if m.viewed != m.home || p == nil || p.name.Value() != "feat" {
 		t.Fatalf("viewed=%q top=%T: the popup did not come back with its text", m.viewed, m.topLayer())
@@ -65,7 +85,7 @@ func TestConsoleShowStillQueuesOverAParkablePopup(t *testing.T) {
 	}
 }
 
-// A commit popup half typed in home, parked by alt+w and brought back,
+// A commit popup half typed in home, parked by the user's own swap and brought back,
 // commits in HOME when submitted — never in the worktree shown meanwhile.
 func TestParkedCommitPopupSubmitsInItsWorktree(t *testing.T) {
 	m := loadedModel(t)
@@ -80,11 +100,12 @@ func TestParkedCommitPopupSubmitsInItsWorktree(t *testing.T) {
 	}
 	m.focus = panelBranches
 	m = m.pushLayer(&commitPopup{title: newTextField("parked commit")})
-	m = pressAlt(t, m, 'w')
+	m, _ = m.userSwitchView(other)
 	if m.viewed != model.KeyOf(other) {
 		t.Fatalf("viewed=%q: %s", m.viewed, m.statusMsg)
 	}
-	m = pressAlt(t, m, 'w')
+	m = landView(t, m)
+	m, _ = m.userSwitchView(home)
 	if m.viewed != m.home || layerOf[*commitPopup](m) == nil {
 		t.Fatalf("viewed=%q top=%T", m.viewed, m.topLayer())
 	}

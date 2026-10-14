@@ -6504,8 +6504,22 @@ not leaving: the panels stay), `ret.focus = panelBranches`,
 `activateTab(panelBranches)` + `selectWorktreeBranch(viewed)`, status
 "console hidden — alt+w again for the next worktree" — no move: the
 user sees the worktree the console looked at before the ring takes them
-further. Otherwise (no first-hit step over a window or a popup — user
-ruling 2026-10-09) `activateTab(panelBranches)` and the next of the
+further. **Superseded 2026-10-14 (user ruling): alt+w closes every
+window.** `altCycleBlocked` (a popup, modal, process, action menu, an
+editor — irebase/hunk picker — or any typing) → the key is ignored; the
+same popup rule now holds for alt+a/alt+t/alt+A/alt+T (`cycleReachable`
+lost its `parkableLayer` arm; only the worktree-row swap still parks).
+Otherwise `worktreeShownInBranches(viewed)` (no console/layer/files
+view/stash list, Branches active + focused + on screen, cursor on the
+viewed worktree's branch row — or no such row) decides: false → FIRST
+HIT: hide the console (ret.view = viewed), `closeWindows` (each layer as
+its esc: history `stop`, a viewer `backgroundDoc`, a split `retire`; stops
+at a popup, which then stays on screen), `closeFilesView`,
+`closeStashView`, Branches + cursor, no move; true → the move below, and
+the ARRIVING slot's parked windows close too. Footer: `[alt+w] show
+worktree` while the press would be a first hit, `[alt+w] next worktree`
+after. (Previously: no first-hit step over a window or a popup — user
+ruling 2026-10-09.) The move: `activateTab(panelBranches)` and the next of the
 order, wrapping, through `userSwitchView` — a look, like alt+a, never
 `adoptView`: home stays — then `selectWorktreeBranch`: the Branches cursor
 (`sel[panelBranches]`, a display index over `branchEntries`, the branch row

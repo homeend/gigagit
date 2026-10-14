@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## alt+w: close every window, then walk the worktrees
+
+### Changed
+- **alt+w first shows where you are, then moves.** When the Branches tab has the keyboard and its cursor is on the shown worktree's branch, alt+w moves to the next worktree, as before. Otherwise the first press closes every window — a diff, a history, a blame, the files view (a commit's files, a compare, a pull request or its review), the stash list; an open file goes to the background; a shown agent or terminal console hides and keeps running — and shows the current worktree in the Branches tab, cursor on its branch; the next press moves on. Arriving at a worktree closes its parked windows too, so alt+w always lands on the Branches tab. Before, an open pull request kept covering the Branches tab, and alt+w over other windows moved on at once and kept them with the worktree.
+- **alt+w, alt+a, alt+t, alt+A and alt+T do nothing while a popup is open** (also during a decision, or while text is being typed). Before, a popup that could wait was parked with the worktree and came back on return; the user's own switch from a worktree row still parks it.
+
 ## Permanent overviews: the leftovers
 
 ### Added
