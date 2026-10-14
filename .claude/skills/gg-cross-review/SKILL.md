@@ -5,7 +5,7 @@ argument-hint: "<gg-link> [2|3] [what to focus on]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-cross-review:v6 -->
+<!-- gg:gg-cross-review:v7 -->
 
 # /gg-cross-review — several models review, you settle it
 
@@ -15,6 +15,12 @@ or 3), then optionally what they want looked at. Run that many copies of
 yourself on DIFFERENT models over the change the link names, merge their
 reviews, investigate every point they disagree on yourself, and store ONE
 review in gg. Do NOT launch gg's TUI or `gg web`; they belong to the user.
+
+**Wording.** Write every text the user reads — the merged summary, the
+remarks, your rulings, your reply — in ASD-STE100 (80% compatibility when possible):
+short sentences, active voice, one meaning per word, no idioms. Code,
+paths, commands and identifiers stay exactly as they are. Tell each
+reviewer the same rule in its prompt.
 
 ## Steps
 

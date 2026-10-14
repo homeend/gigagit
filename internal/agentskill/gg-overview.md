@@ -25,6 +25,11 @@ the permanent kind; "Temporary notes" and "Overviews" for the temporary
 one); `gg skill path using-gg` prints where it is. This skill is the
 recipe.
 
+**Wording.** Write every text the user reads — the overview, the notes,
+your reply — in ASD-STE100 (80% compatibility when possible): short
+sentences, active voice, one meaning per word, no idioms. Code, paths,
+commands and identifiers stay exactly as they are.
+
 ## Steps (permanent — the default)
 
 1. **Finish first.** The overview explains a commit: make every edit and

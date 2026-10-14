@@ -5,7 +5,7 @@ argument-hint: "<gg-link> [what to focus on]"
 disable-model-invocation: true
 ---
 
-<!-- gg:gg-review:v6 -->
+<!-- gg:gg-review:v7 -->
 
 # /gg-review — a full review stored in gg
 
@@ -14,6 +14,11 @@ command is a `gg://` link, the rest (optional) is what they want you to look
 at. Review the change the link names and store ONE review — a summary plus
 per-file remarks — in gg, where the user reads it beside the code. Do NOT
 launch gg's TUI or `gg web`; they belong to the user.
+
+**Wording.** Write every text the user reads — the summary, the remarks,
+the overview, your reply — in ASD-STE100 (80% compatibility when possible):
+short sentences, active voice, one meaning per word, no idioms. Code,
+paths, commands and identifiers stay exactly as they are.
 
 ## Steps
 

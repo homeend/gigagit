@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent skills: user-facing text in ASD-STE100
+
+### Changed
+- The skills that write text the user reads — reviewing-with-gg,
+  gg-review, gg-cross-review, gg-overview and gg-delegate — tell the agent
+  to write notes, summaries, overviews, briefs and reports in ASD-STE100
+  Simplified Technical English (80% compatibility when possible). Code,
+  paths and commands stay as they are. Run `gg init --update` to refresh
+  installed copies.
+
 ## Overview HTML export: small fixes
 
 ### Fixed

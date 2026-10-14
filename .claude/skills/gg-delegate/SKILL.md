@@ -3,7 +3,7 @@ name: gg-delegate
 description: Use when the user asks you to delegate a task to worker agents through gg — prepare a worktree, brief a worker and start it (it shows its instructions and result in its own console; wait for it and check its result only when asked); also the protocol a worker started by gg follows.
 ---
 
-<!-- gg:gg-delegate:v6 -->
+<!-- gg:gg-delegate:v7 -->
 
 # gg-delegate — hand work to worker agents through gg
 
@@ -24,6 +24,12 @@ The tools exist only inside a gg console (the agent channel): MCP tools
 `agent_*`, or their CLI twins `gg agent …`. If they are missing or answer
 "run this inside a gg console", tell the user — delegation needs a console
 started from gg's Start agent.
+
+**Wording.** Overseer and worker alike: write every text the user reads —
+the brief, reports, the result, notes, overviews, your reply — in
+ASD-STE100 (80% compatibility when possible): short sentences, active
+voice, one meaning per word, no idioms. Code, paths, commands and
+identifiers stay exactly as they are.
 
 ## Overseer
 

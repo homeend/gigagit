@@ -18,6 +18,12 @@ The tools exist only inside a gg console (the agent channel): MCP tools
 "run this inside a gg console", tell the user — delegation needs a console
 started from gg's Start agent.
 
+**Wording.** Overseer and worker alike: write every text the user reads —
+the brief, reports, the result, notes, overviews, your reply — in
+ASD-STE100 (80% compatibility when possible): short sentences, active
+voice, one meaning per word, no idioms. Code, paths, commands and
+identifiers stay exactly as they are.
+
 ## Overseer
 
 ### 1. Read the task — wherever it comes from
