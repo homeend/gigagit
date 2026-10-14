@@ -807,11 +807,29 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 			m.console.ret.focus = panelBranches
 		}
 		m = m.closeConsole()
+		if m.prViewShown() {
+			m = m.closePRView() // the PR beside it would keep hiding the Branches tab
+		}
 		m = m.activateTab(panelBranches).selectWorktreeBranch(viewed)
 		if n < 2 {
 			m.statusMsg = i18n.T("console hidden — this repository has one worktree, alt+w cycles them once there are more")
 		} else {
 			m.statusMsg = i18n.T("console hidden — alt+w again for the next worktree")
+		}
+		return m, nil
+	}
+	if m.prViewShown() {
+		// An open pull request (its diff or its review) replaces the left
+		// column, hiding the Branches tab this key shows: the first press
+		// closes it — never parks it with the worktree — and stays here
+		// (user ruling 2026-10-14, the console's first hit); the next press
+		// moves on.
+		m = m.closePRView()
+		m = m.activateTab(panelBranches).selectWorktreeBranch(viewed)
+		if n < 2 {
+			m.statusMsg = i18n.T("pull request closed")
+		} else {
+			m.statusMsg = i18n.T("pull request closed — alt+w again for the next worktree")
 		}
 		return m, nil
 	}
@@ -852,6 +870,41 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 		nm.statusMsg = i18n.T("%s — %d of %d worktrees", shortWorktreeName(wt.Path), next+1, n)
 	}
 	return nm, nil
+}
+
+// prViewShown reports an open pull request in the files view — its diff
+// (openPRNumber) or the review view of a PR's scope — with nothing over it
+// but views of its files (a diff, a history, a blame, the viewer): a popup
+// being filled on top keeps alt+w's ordinary walk.
+func (m Model) prViewShown() bool {
+	if m.filesView == nil {
+		return false
+	}
+	if m.openPRNumber() == 0 {
+		st := m.filesReview
+		if st == nil {
+			return false
+		}
+		if _, ok := domain.PRScopeNumber(st.review.Preview); !ok {
+			return false
+		}
+	}
+	if m.layers != nil {
+		for _, l := range m.layers.entries {
+			switch l.(type) {
+			case *diffView, *historyView, *blameView, *fileViewer:
+			default:
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// closePRView closes the open pull request with the views of its files
+// over it; the caller shows the Branches tab.
+func (m Model) closePRView() Model {
+	return m.clearLayers().closeFilesView()
 }
 
 // selectSessionRow puts the Branches cursor on the sub-row of session id
