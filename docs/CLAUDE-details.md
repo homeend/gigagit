@@ -6504,7 +6504,15 @@ not leaving: the panels stay), `ret.focus = panelBranches`,
 `activateTab(panelBranches)` + `selectWorktreeBranch(viewed)`, status
 "console hidden — alt+w again for the next worktree" — no move: the
 user sees the worktree the console looked at before the ring takes them
-further. Otherwise (no first-hit step over a window or a popup — user
+further. The ONE window kind with a first hit is an open pull request
+(user ruling 2026-10-14): `prViewShown` (the files view shows
+`openPRNumber()` or a review whose `Preview` is a PR scope, with only
+diff/history/blame layers over it — a popup or an open document keeps the
+walk) → `closePRView` (each layer popped as its esc would, then
+`closeFilesView`) — CLOSED, never parked, since the files view replaces
+the left column and hid the Branches tab alt+w activates — Branches, no
+move; under a console its first hit closes the PR too. Otherwise (no
+first-hit step over any other window or a popup — user
 ruling 2026-10-09) `activateTab(panelBranches)` and the next of the
 order, wrapping, through `userSwitchView` — a look, like alt+a, never
 `adoptView`: home stays — then `selectWorktreeBranch`: the Branches cursor

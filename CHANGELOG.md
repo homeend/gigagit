@@ -9,7 +9,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## alt+w closes an open pull request
 
 ### Fixed
-- **alt+w over an open pull request — its diff or its review — closes it and shows the Branches tab.** The PR's file list replaces the left column, so alt+w switched to Branches behind it and the PR stayed on screen (with one worktree, or after hiding a console); with more worktrees it was parked and came back on return. Now the first press closes the PR (with a diff of one of its files open over it) and stays on this worktree, like the first press under a console; the next press moves to the next worktree. Any other files view keeps alt+w's walk.
+- **alt+w over an open pull request — its diff or its review — closes it and shows the Branches tab.** The PR's file list replaces the left column, so alt+w switched to Branches behind it and the PR stayed on screen (with one worktree, or after hiding a console); with more worktrees it was parked and came back on return. Now the first press closes the PR (with a diff, history or blame of its files open over it) and stays on this worktree, like the first press under a console; the next press moves to the next worktree. Any other files view keeps alt+w's walk.
 
 ## Export an overview from where it is listed
 

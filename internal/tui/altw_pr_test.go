@@ -115,3 +115,15 @@ func TestAltWUnderAConsoleClosesThePRToo(t *testing.T) {
 		t.Fatalf("alt+w: tab=%v focus=%v, want Branches", m.activeLeftTab, m.focus)
 	}
 }
+
+// An open document (the viewer) over the PR is closed only by its own keys:
+// alt+w keeps its ordinary walk there.
+func TestAltWLeavesADocumentOverAPROpen(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m.width, m.height = 120, 40
+	m = m.pushLayer(&fileViewer{})
+	if m.prViewShown() {
+		t.Fatalf("a viewer over the PR counts as the PR alone")
+	}
+}

@@ -874,8 +874,9 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 
 // prViewShown reports an open pull request in the files view — its diff
 // (openPRNumber) or the review view of a PR's scope — with nothing over it
-// but views of its files (a diff, a history, a blame, the viewer): a popup
-// being filled on top keeps alt+w's ordinary walk.
+// but views of its files (a diff, a history, a blame): a popup being filled
+// or an open document (the viewer, closed only by its own keys) on top
+// keeps alt+w's ordinary walk.
 func (m Model) prViewShown() bool {
 	if m.filesView == nil {
 		return false
@@ -892,7 +893,7 @@ func (m Model) prViewShown() bool {
 	if m.layers != nil {
 		for _, l := range m.layers.entries {
 			switch l.(type) {
-			case *diffView, *historyView, *blameView, *fileViewer:
+			case *diffView, *historyView, *blameView:
 			default:
 				return false
 			}
@@ -902,9 +903,16 @@ func (m Model) prViewShown() bool {
 }
 
 // closePRView closes the open pull request with the views of its files
-// over it; the caller shows the Branches tab.
+// over it, each as its esc would; the caller shows the Branches tab.
 func (m Model) closePRView() Model {
-	return m.clearLayers().closeFilesView()
+	for l := m.topLayer(); l != nil; l = m.topLayer() {
+		if h, ok := l.(*historyView); ok {
+			h.stop()
+		}
+		m = m.popLayer()
+	}
+	m.diffTag = ""
+	return m.closeFilesView()
 }
 
 // selectSessionRow puts the Branches cursor on the sub-row of session id
