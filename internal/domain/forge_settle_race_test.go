@@ -244,7 +244,7 @@ func TestSettleKeepsAReviewWithAnOverview(t *testing.T) {
 		t.Fatalf("remarks moved %v, summary sent %v", allRemarksMoved(r), r.summarySent(7))
 	}
 	// …and the overview never reaches a body.
-	if b := reviewSendBody(r); strings.Contains(b, "[here](big.go:5)") {
+	if b := (forge.GitHubRenderer{}).RenderReview(reviewBodyOf(r, r.summaryText())); strings.Contains(b, "[here](big.go:5)") {
 		t.Fatalf("the send body carries the overview: %q", b)
 	}
 }
