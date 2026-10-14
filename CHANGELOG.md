@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A click on the files tree takes the keys from the agent console
+
+### Fixed
+- **Clicking the files tree (a commit's or a review's files, an overview) beside a focused agent console now moves the focus there.** The tree shares the console's column focus, so the click lit the tree but the console kept its blue border and every key; it now steps out of the console as ctrl+] does.
+
 ## Note meta on GitHub and in the skills
 
 ### Changed

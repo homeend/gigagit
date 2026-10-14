@@ -232,3 +232,27 @@ func TestConsoleChordIsNotALostRelease(t *testing.T) {
 		t.Fatal("the chord dropped the held button")
 	}
 }
+
+// A left click on the files tree beside a focused console takes the keys
+// back: the tree's border lights, the console's goes out and the next key
+// is gg's (the tree shares the console's panelCommits focus, so the
+// "focus left the column" step-out never fired).
+func TestConsoleTreeClickTakesFocus(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `printf READY; sleep 30`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "READY")
+	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}, {text: "b.go", path: "b.go"}}}
+	m.filesTreeFocused = false
+	m.console.focused = true
+	m.focus = panelCommits
+	if !m.consoleBorderFocused() {
+		t.Fatal("precondition: the console should hold the keys")
+	}
+	m = mouseAt(m, 2, 4, tea.MouseButtonLeft, tea.MouseActionPress)
+	if !m.filesTreeFocused || m.console.focused || m.consoleBorderFocused() || m.consoleOwnsKeys() {
+		t.Fatalf("tree click kept the console: tree=%v console=%v border=%v owns=%v",
+			m.filesTreeFocused, m.console.focused, m.consoleBorderFocused(), m.consoleOwnsKeys())
+	}
+}
