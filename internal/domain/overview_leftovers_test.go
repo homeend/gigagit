@@ -152,3 +152,12 @@ func TestNoteLinkTextOfAnOverviewIsItsOverviewLink(t *testing.T) {
 		t.Fatalf("link = %q, want the overview's link", text)
 	}
 }
+
+func TestCleanRepoPathKeepsLegalNames(t *testing.T) {
+	t.Parallel()
+	for p, want := range map[string]bool{"a\x00b.go": false, "dir/a\tb.go": true, "a\nb.go": true, "./a.go": false, "a/../b": false} {
+		if got := cleanRepoPath(p); got != want {
+			t.Errorf("cleanRepoPath(%q) = %v, want %v", p, got, want)
+		}
+	}
+}

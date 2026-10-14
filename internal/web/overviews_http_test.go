@@ -156,6 +156,7 @@ func TestOverviewRoutesRefuseEmptyIDs(t *testing.T) {
 	ts, _, id := overviewServer(t)
 	for _, p := range []string{
 		"/api/overview-export?overview=", "/api/diff?overview=&path=f.txt",
+		"/api/diff?overview=&sha=" + strings.Repeat("a", 40) + "&path=f.txt", "/api/diff?review=&sha=" + strings.Repeat("a", 40) + "&path=f.txt",
 		"/api/file-content?src=worktree&path=f.txt&overview=",
 		"/api/overview/%20", "/api/overview/%20/link",
 	} {

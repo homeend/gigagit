@@ -327,6 +327,9 @@ func (m Model) loadView(v *worktreeView) Model {
 	if m.layers == nil {
 		m.layers = &layerStack{}
 	}
+	// A stored overview deleted while the slot slept closes now, while its
+	// windows are live — before a console parks them out of closeDoc's reach.
+	m = m.closeGoneDocs()
 	// The windows come first: withStatus reconciles an open working-tree
 	// stack against the status it is handed, and that stack must be THIS
 	// worktree's — over the leaving one's pile it popped the leaving diff.
@@ -355,7 +358,6 @@ func (m Model) loadView(v *worktreeView) Model {
 	} else {
 		m = m.displaceUnderConsole() // a console shows: the arriving pile goes under it, as a captured one would
 	}
-	m = m.closeGoneDocs() // a stored overview deleted while the slot slept
 	// Always rebuilt: the WIP rows are derived from the status inside it,
 	// whether or not a head mark moved (both trees detached, tips off page).
 	return m.markHead(m.worktreeBranch(v.path)).rebuildCommitGraph()

@@ -23,9 +23,6 @@ type commitOverviewMsg struct {
 	ov  domain.Overview
 	doc domain.OverviewDoc
 	err error
-	// steer is the ?overview= navigate this read answers (nil = none): the
-	// read, not the lookup before it, says whether the overview opened.
-	steer *steer.Command
 }
 
 // commitOverviewKey is permanent overview id's open-file identity.
@@ -41,41 +38,47 @@ func (m Model) openCommitOverview(id string) (Model, tea.Cmd) {
 }
 
 // openCommitOverviewFor is openCommitOverview answering steer c (nil =
-// none) once the read lands.
+// none) once the read is done: the read, not the lookup before it, says
+// whether the overview opens. The answer is posted from the read itself,
+// so a message a worktree switch or a repo switch drops or parks never
+// leaves the sender waiting.
 func (m Model) openCommitOverviewFor(id string, c *steer.Command) (Model, tea.Cmd) {
 	if m.svc == nil {
 		return m, nil
 	}
 	svc, slot := m.svc, m.stamp()
+	answer := func(steer.Reply) {}
+	if c != nil {
+		cc, mm := *c, m
+		answer = func(r steer.Reply) {
+			if post := mm.answerSteer(cc, r); post != nil {
+				_ = post() // a local navigate's failure is the status line onCommitOverview writes
+			}
+		}
+	}
 	return m, func() tea.Msg {
 		ctx := context.Background()
-		msg := commitOverviewMsg{slotStamp: slot, id: id, steer: c}
-		if msg.ov, msg.err = svc.Overview(ctx, id); msg.err != nil {
-			return msg
+		msg := commitOverviewMsg{slotStamp: slot, id: id}
+		if msg.ov, msg.err = svc.Overview(ctx, id); msg.err == nil {
+			msg.doc, msg.err = svc.OverviewDocAt(ctx, id)
 		}
-		msg.doc, msg.err = svc.OverviewDocAt(ctx, id)
+		if c != nil {
+			if msg.err != nil {
+				answer(steerFail(*c, "overview "+id+": "+msg.err.Error()))
+			} else {
+				answer(steerOK(*c, "opened overview "+id))
+			}
+		}
 		return msg
 	}
 }
 
-// onCommitOverview builds the open document and shows it, answering the
-// navigate that asked for it.
+// onCommitOverview builds the open document and shows it.
 func (m Model) onCommitOverview(msg commitOverviewMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		m.statusMsg = i18n.T("overview: %s", msg.err.Error())
-		if c := msg.steer; c != nil {
-			return m, m.answerSteer(*c, steerFail(*c, "overview "+msg.id+": "+msg.err.Error()))
-		}
 		return m, nil
 	}
-	nm, cmd := m.showCommitOverview(msg)
-	if c := msg.steer; c != nil {
-		cmd = tea.Batch(cmd, nm.answerSteer(*c, steerOK(*c, "opened overview "+msg.id)))
-	}
-	return nm, cmd
-}
-
-func (m Model) showCommitOverview(msg commitOverviewMsg) (Model, tea.Cmd) {
 	src, path := commitOverviewKey(msg.id)
 	saved := msg.ov.Updated
 	if saved.IsZero() {

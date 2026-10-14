@@ -7249,8 +7249,8 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   `statusPaths`, `diffNamesBetween`) in `batchPaths` batches; a path absent
   from the tree with files under `<path>/` is "a directory"; a text file
   over `MaxDiffBytes` is "too large to show its lines"; `say` prints each
-  problem once; `cleanRepoPath` refuses control characters (`shownPath`
-  quotes them).
+  problem once; `cleanRepoPath` refuses a NUL (a tab or newline is a legal
+  name; `shownPath` quotes control characters).
 - **Readers that skip it (R9):** `loadNotesAt` (NotesFor/NotesAt/
   ShelfNotes), `loadPreviewNotes` (PR/preview notes), `storedGroup`
   (`overview:<id>`), `NotesOverview` buckets, `gg note list` / `note show`
@@ -7285,13 +7285,16 @@ Spec `docs/superpowers/specs/2026-10-12-permanent-overviews-design.md`.
   `anRowKind.stored()`); PR view `contentLine.overviewID` laid by
   `layPreviewBlocks` (Reviews, then Overviews, then files) on every counts
   reload. `dropGoneOverviews` marks every open overview the reloaded counts
-  lack `gone` in EVERY slot (`openFiles.all()`) and closes the live slot's
-  (`closeGoneDocs`); a sleeping slot's close on `loadView`. A TUI delete
+  lack `gone` in every slot OF THIS REPOSITORY (`openFiles.all()` keys in
+  `m.views`; recomputed each sweep) and closes the live slot's
+  (`closeGoneDocs`); a sleeping slot's close in `loadView` right after its
+  windows are restored — before a console parks them out of `closeDoc`'s
+  reach. A TUI delete
   closes it at once (`markOverviewsGone`), so the reload says nothing more.
   `?overview=` → `steerNavigateOverview` looks the overview up in the store
   (an agent links one right after saving it) and reloads the counts; the
-  steer is answered by `onCommitOverview` (`commitOverviewMsg.steer`), after
-  the read.
+  steer is answered by the read command itself (`openCommitOverviewFor`),
+  so a result a slot or repo switch drops never leaves the sender waiting.
 - **Web (plan 3):** routes `GET /api/overview/{id}` (document + resolved
   anchors, `pr` for a PR overview), `GET /api/overview/{id}/link`,
   `POST /api/overview/remove` (a JSON POST like every mutation, not the

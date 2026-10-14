@@ -59,3 +59,18 @@ func TestSteerOverviewAnswersAfterTheRead(t *testing.T) {
 		t.Fatal("nothing opened")
 	}
 }
+
+// The read answers the steer itself: a result a worktree or repo switch
+// drops never leaves the sender waiting.
+func TestSteerOverviewAnsweredEvenIfTheResultIsDropped(t *testing.T) {
+	t.Parallel()
+	m, id := commitOverviewModel(t)
+	m.steerDir = t.TempDir()
+	c := steer.Command{ID: "o2", Cmd: "navigate", HintKind: model.OverviewHintKind, HintID: id, Wait: true}
+	_, cmd := m.openCommitOverviewFor(id, &c)
+	_ = cmd() // the read runs; its message is never delivered
+	r, ok := steer.AwaitReply(m.steerDir, "o2", 2*time.Second)
+	if !ok || !r.OK {
+		t.Fatalf("reply = %+v ok=%v, want opened", r, ok)
+	}
+}

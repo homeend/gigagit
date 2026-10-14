@@ -364,9 +364,10 @@ func shownPath(p string) string {
 }
 
 // cleanRepoPath: a repo-relative slash path with no "." / ".." segment, no
-// leading slash and no control character — the only form an anchor may name.
+// leading slash and no NUL (git cannot be asked about one; a tab or a
+// newline is a legal file name) — the only form an anchor may name.
 func cleanRepoPath(p string) bool {
-	if p == "" || strings.HasPrefix(p, "/") || strings.TrimSpace(p) != p || strings.ContainsFunc(p, unicode.IsControl) {
+	if p == "" || strings.HasPrefix(p, "/") || strings.TrimSpace(p) != p || strings.ContainsRune(p, 0) {
 		return false
 	}
 	for _, seg := range strings.Split(p, "/") {

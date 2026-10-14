@@ -144,17 +144,34 @@ func (m Model) dropGoneOverviews(c domain.NoteCounts) Model {
 	return m.markOverviewsGone(func(id string) bool { return !have[id] })
 }
 
-// markOverviewsGone marks every open permanent overview gone(id) names, in
-// every worktree slot, and closes the live slot's at once.
+// markOverviewsGone marks every open permanent overview gone(id) names in
+// this repository's worktree slots (another repository's open files are
+// not judged by these counts) and closes the live slot's at once. The mark
+// is recomputed on every sweep, so a copy the counts hold again is kept.
 func (m Model) markOverviewsGone(gone func(id string) bool) Model {
-	for _, docs := range m.openFiles.all() {
+	for wt, docs := range m.openFiles.all() {
+		if _, ours := m.views[wt]; !ours && wt != model.KeyOf(m.currentWorktree) {
+			continue
+		}
 		for _, d := range docs {
-			if d.src.kind == srcCommitOverview && gone(d.src.rev) {
-				d.gone = true
+			if d.src.kind == srcCommitOverview {
+				d.gone = gone(d.src.rev)
 			}
 		}
 	}
 	return m.closeGoneDocs()
+}
+
+// overviewMarkedGone: an open copy of overview id is already marked gone.
+func (m Model) overviewMarkedGone(id string) bool {
+	for _, docs := range m.openFiles.all() {
+		for _, d := range docs {
+			if d.src.kind == srcCommitOverview && d.src.rev == id && d.gone {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // closeGoneDocs closes the live worktree's documents marked gone.

@@ -109,7 +109,7 @@ func (m Model) onStoredDeleted(msg storedDeletedMsg) (Model, tea.Cmd) {
 	}
 	if msg.overview {
 		// Closed here, not by the counts reload: one status line.
-		m = m.markOverviewsGone(func(id string) bool { return id == msg.id })
+		m = m.markOverviewsGone(func(id string) bool { return id == msg.id || m.overviewMarkedGone(id) })
 		m.statusMsg = i18n.T("deleted the overview")
 	}
 	var cmds []tea.Cmd

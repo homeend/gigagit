@@ -207,3 +207,45 @@ func TestBranchOverviewSubRowFooter(t *testing.T) {
 		t.Fatalf("footer = %q, want [enter] open", f)
 	}
 }
+
+// Serial: installs a process-global session manager.
+//
+// A console over the overview's split parks the split under it; the slot
+// sleeps, the overview is deleted, the slot shows again with the console
+// still up, and the console closes: the split of the deleted overview never
+// returns.
+func TestGoneOverviewUnderAConsoleStaysClosed(t *testing.T) {
+	m, id := commitOverviewModel(t)
+	m.width, m.height = 120, 40
+	m.noteCounts.Overviews = []domain.OverviewHead{{ID: id}}
+	home := m.currentWorktree
+	m = openCommitOverviewT(t, m, id)
+	m, other := addWorktree(t, m, "wt2")
+	installSessionManager(t)
+	sid := startSessionIn(t, m, home, "Shell")
+	m, _ = m.showConsole(sid, false)
+	// The UI refuses this swap today (the split owns the keyboard); the
+	// slot calls themselves pin loadView's order for any path that sleeps one.
+	swap := func(m Model, path string) Model { return m.parkView().sleepView().loadView(m.ensureView(path)) }
+	m = swap(m, other)
+	m = m.dropGoneOverviews(domain.NoteCounts{})
+	m = swap(m, home)
+	if m.console != nil {
+		m = m.closeConsole()
+	}
+	if m.splitLayer() != nil {
+		t.Fatal("the deleted overview's split came back from under the console")
+	}
+}
+
+// Another repository's open overviews are not judged by this one's counts.
+func TestGoneSweepKeepsOtherRepositories(t *testing.T) {
+	t.Parallel()
+	m, _ := commitOverviewModel(t)
+	d := &openFile{src: fileSource{kind: srcCommitOverview, rev: "elsewhere"}}
+	m.openFiles.touch("/some/other/repo", d, func(*openFile) bool { return true })
+	m = m.dropGoneOverviews(domain.NoteCounts{})
+	if d.gone {
+		t.Fatal("an open overview of another repository was marked gone")
+	}
+}
