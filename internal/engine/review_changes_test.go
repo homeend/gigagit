@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notemeta"
 	"github.com/homeend/gigagit/internal/repogate"
 )
 
@@ -141,5 +142,32 @@ func TestReviewSummaryCarriesTheFocus(t *testing.T) {
 	without := ReviewChanges{RangeLabel: "a..b"}.reviewSummary("/d.diff", "1\t0\ta.txt\n", false)
 	if strings.Contains(without, "## Focus") {
 		t.Fatalf("no focus asked, yet the brief has a focus section:\n%s", without)
+	}
+}
+
+func TestDefaultReviewDisplayIsValid(t *testing.T) {
+	d, probs, err := notemeta.ParseDisplay([]byte(DefaultReviewDisplay))
+	if err != nil || len(probs) > 0 || len(d) != 4 {
+		t.Fatalf("err %v, problems %v, keys %d", err, probs, len(d))
+	}
+	for _, k := range d {
+		for v, val := range k.Values {
+			if val.Glyph != "" {
+				t.Errorf("R14: the default block uses no glyphs (%s)", v)
+			}
+		}
+	}
+}
+
+func TestReviewOutputInstructionTeachesMeta(t *testing.T) {
+	got := ReviewOutputInstruction()
+	for _, want := range []string{`"display"`, DefaultReviewDisplay, `"kind"`, "issue | suggestion | nitpick | question | note | good",
+		"high | medium | low", `"intent"`, "author", "reviewer", "never triggers"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("ReviewOutputInstruction() lacks %q", want)
+		}
+	}
+	if strings.Contains(got, "bug | risk | design | nit") {
+		t.Error("the old severity vocabulary is gone")
 	}
 }

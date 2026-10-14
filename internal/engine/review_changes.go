@@ -131,21 +131,44 @@ func (op ReviewChanges) reviewSummary(diffPath, stat string, truncated bool) str
 	return b.String()
 }
 
+// DefaultReviewDisplay is the display declaration the review prompt and the
+// skills suggest (spec 2026-10-12-note-meta §9.3): kind and severity as
+// coloured words, no glyphs (R14). gg owns no vocabulary — this is a
+// suggestion an agent copies, validated by tests here and in agentskill.
+const DefaultReviewDisplay = `{
+  "kind": {"show": ["badge", "count"], "order": 1, "values": {
+    "issue":      {"color": "red",    "audience": "author"},
+    "suggestion": {"color": "blue",   "audience": "author"},
+    "nitpick":    {"color": "grey",   "audience": "author"},
+    "question":   {"color": "purple", "audience": "author"},
+    "note":       {"color": "yellow", "audience": "reviewer"},
+    "good":       {"color": "green",  "audience": "reviewer"}}},
+  "severity": {"show": ["badge", "frame"], "order": 2, "style": "text", "values": {
+    "high":   {"color": "red",    "level": "high"},
+    "medium": {"color": "orange", "level": "medium"},
+    "low":    {"color": "grey",   "level": "low"}}},
+  "audience": {"as": "audience", "order": 3},
+  "intent": {"show": ["line"], "order": 4}
+}`
+
 // ReviewOutputInstruction is the "Review output" section of every review
 // context document: the one shape a review agent replies in — agent-context v1
 // whose top-level summary is the markdown overview, with free-form "meta" at
-// every level. notebatch.ParseReview reads it back; the built-in review
-// templates point at this section by name.
+// every level and the suggested display declaration. notebatch.ParseReview
+// reads it back; the built-in review templates point at this section by name.
 func ReviewOutputInstruction() string {
 	return "\n## Review output\n" +
 		"Write ONLY this JSON document (no prose around it) to the file named by\n" +
 		"$GG_MESSAGE_FILE — it replaces a free-form report:\n\n" +
 		"{\n  \"version\": 1,\n  \"summary\": \"<markdown: the overall review — what changed, what matters, the verdict>\",\n" +
 		"  \"meta\": { \"verdict\": \"approve | comment | request changes\" },\n" +
+		"  \"display\": <the display declaration below>,\n" +
 		"  \"files\": [\n    { \"path\": \"<repo-relative path>\", \"summary\": \"<optional one line about this file>\",\n" +
 		"      \"annotations\": [\n        { \"newRange\": [<first>, <last>], \"summary\": \"<one line>\",\n" +
 		"          \"rationale\": \"<why it matters / how it fails>\",\n" +
-		"          \"meta\": { \"severity\": \"bug | risk | design | nit\", \"confidence\": \"low | medium | high\" } }\n" +
+		"          \"meta\": { \"kind\": \"issue | suggestion | nitpick | question | note | good\",\n" +
+		"                    \"severity\": \"high | medium | low\", \"intent\": \"<what made you write this>\",\n" +
+		"                    \"confidence\": \"low | medium | high\" } }\n" +
 		"      ] }\n  ]\n}\n\n" +
 		"\"summary\" is rendered as markdown at the top of the review view, so structure it:\n" +
 		"  ## Summary   — 1-3 sentences: what the change does.\n" +
@@ -155,9 +178,20 @@ func ReviewOutputInstruction() string {
 		"  ## Verdict   — approve, comment or request changes, with a one-line reason.\n" +
 		"Short paragraphs, no walls of text. It is a JSON string: write each line\n" +
 		"break as \\n.\n\n" +
+		"\"meta\" is free-form (string values) on the document, a file and an\n" +
+		"annotation. It is a glance aid for the reader: it never triggers anything\n" +
+		"and never leaves gg. Suggested annotation keys: \"kind\" — issue (wrong now),\n" +
+		"suggestion (fine now, could be better), nitpick (style, trivial), question\n" +
+		"(you need the author's answer), note (context or impact, nothing to fix),\n" +
+		"good (you checked it and it holds); \"severity\" — high | medium | low on\n" +
+		"issue, suggestion and note; \"intent\" — one line: what made you write the\n" +
+		"note; \"confidence\". Set \"audience\" on an annotation only to override its\n" +
+		"kind: author = the author would change code or reply because of it;\n" +
+		"reviewer = written so the user understands or trusts the change. Put this\n" +
+		"\"display\" on the document — it shows kind and severity as coloured words:\n\n" +
+		DefaultReviewDisplay + "\n\n" +
 		"Rules: line numbers are 1-based and inclusive; use \"newRange\" for a line in the\n" +
-		"new version of the file and \"oldRange\" for a removed line. \"meta\" is optional\n" +
-		"and free-form (string values). Annotate what a reader would not spot; leave\n" +
-		"\"files\" empty when there is nothing line-specific to say. Do not modify the\n" +
-		"repository and do not commit.\n"
+		"new version of the file and \"oldRange\" for a removed line. Annotate what a\n" +
+		"reader would not spot; leave \"files\" empty when there is nothing line-specific\n" +
+		"to say. Do not modify the repository and do not commit.\n"
 }
