@@ -1,6 +1,8 @@
 package tui
 
 import (
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -38,18 +40,16 @@ func (m Model) paletteReachable() bool {
 	}
 }
 
-// cycleReachable reports where alt+a / alt+t / alt+w may start a walk.
-// The base panels, or a poppable full-screen view on top (diff, history,
-// blame, file viewer — the views steerRefusal pops), parked while the
-// sessions show, or a parkable popup (the user's own swap parks it with
-// the worktree); never an editor holding an operation's input, a popup
-// with work in flight, or text being typed.
+// cycleReachable reports where alt+a / alt+t (and their shift forms) may
+// start a walk: the base panels, or a poppable full-screen view on top
+// (diff, history, blame, file viewer — the views steerRefusal pops),
+// parked while the sessions show. With a popup on screen the keys are
+// ignored (user ruling 2026-10-14), as with text being typed.
 func (m Model) cycleReachable() bool {
 	if m.filterTyping {
 		return false
 	}
-	top := m.topLayer()
-	switch l := top.(type) {
+	switch l := m.topLayer().(type) {
 	case nil, *historyView:
 		return true
 	case *diffView:
@@ -59,7 +59,40 @@ func (m Model) cycleReachable() bool {
 	case *fileViewer:
 		return l.openFile == nil || l.p == nil || !l.p.search.typing
 	}
-	return parkableLayer(top) // the user's own swap parks a popup that can wait
+	return false
+}
+
+// altCycleBlocked reports an input surface on screen, where alt+w is
+// ignored (user ruling 2026-10-14): a popup, a decision, the action menu,
+// a process, an editor holding an operation's input (interactive rebase,
+// hunk staging), or text being typed (a filter, a search, a highlight).
+// Every other window alt+w closes (closeWindows).
+func (m Model) altCycleBlocked() bool {
+	switch {
+	case m.modal != nil, m.proc != nil, m.actionMenu != nil:
+		return true
+	case m.filterTyping, m.highlightTyping, m.recallOpen:
+		return true
+	case m.filesView != nil && m.filesView.typing:
+		return true
+	case m.filesPreview != nil && m.filesPreview.p.typing:
+		return true
+	case m.stashView != nil && m.stashView.typing:
+		return true
+	}
+	switch l := m.topLayer().(type) {
+	case nil, *historyView:
+		return false
+	case *diffView:
+		return l.search.typing
+	case *blameView:
+		return l.search.typing
+	case *fileViewer:
+		return l.openFile != nil && l.p != nil && l.p.search.typing
+	case *splitView:
+		return l.focused().captures(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}, Alt: true})
+	}
+	return true
 }
 
 // parkableLayer is the whitelist of popups the USER's own swap (alt+w,

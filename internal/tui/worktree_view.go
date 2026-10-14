@@ -775,61 +775,54 @@ func touchRepoMRUCmd(path, remote string) tea.Cmd {
 	}
 }
 
-// cycleWorktrees is alt+w. Under a shown console (bound or not) the press
-// is a FIRST HIT: the console hides (the session keeps running; the panels
-// stay on the worktree they show), Branches takes focus (its border says
-// so) with its cursor on the viewed worktree's branch, and that is all.
-// Otherwise — whichever panel has the keyboard — the panels show the next
-// worktree of the Worktrees tab's order (its sort), past the last one the
-// first — the same fast switch alt+a makes for a console's worktree, no
-// session needed — and the Branches cursor moves to that worktree's
-// branch. A look, never an adoption: gg's own worktree stays home.
+// cycleWorktrees is alt+w (user ruling 2026-10-14). With an input surface
+// on screen — a popup, a decision, text being typed, an editor holding an
+// operation's input (altCycleBlocked) — the key never reaches here. Then:
+// when the Branches tab is on screen with the keyboard and its cursor on
+// the viewed worktree's branch, the panels show the NEXT worktree of the
+// Branches tab's order (its sort), past the last one the first — the
+// same fast switch alt+a makes for a console's worktree — and the cursor
+// moves to that worktree's branch. A look, never an adoption: gg's own
+// worktree stays home. Otherwise the press is a FIRST HIT: every window
+// closes (a shown console hides — the session keeps running — the diff,
+// history, blame, viewer and split views, the files view, the stash list:
+// closeWindows) and the Branches tab shows the viewed worktree, cursor on
+// its branch, without moving on; the next press moves.
 func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	order := m.worktreeOrder()
 	n := len(order)
 	viewed := m.viewPath(m.viewed)
 	at := m.worktreeIndex(viewed)
-	// Only an operation, a decision, a process or a popup with work in
-	// flight refuse (switchRefusalBy); in any other window state the press
-	// acts. Under a shown console (an agent, a terminal) the press HIDES it
-	// and shows the worktree it was looking at — its panels, the Branches
-	// cursor on its branch — without moving on: you see where you are
-	// before the ring takes you further (user ruling 2026-10-10; the
-	// session keeps running, its return point stays where it is). The next
-	// press moves to the next worktree.
-	if why := m.switchRefusalBy(true); why != "" {
-		m.statusMsg = why // refused whole: the console stays, the focus stays (userSwitchView would say the same, after the hide)
+	if m.altCycleBlocked() {
+		return m, nil // an input surface on screen: ignored
+	}
+	if !m.opsIdle() {
+		m.statusMsg = i18n.T("an operation is running — switch once it has finished") // nothing moves, nothing closes
 		return m, nil
 	}
-	if m.console != nil {
-		if m.console.ret != nil {
-			m.console.ret.view = m.viewed // hiding is not leaving: a later return point is this worktree
-			m.console.ret.focus = panelBranches
+	if !m.worktreeShownInBranches(viewed) {
+		hidden := m.console != nil
+		if hidden {
+			if m.console.ret != nil {
+				m.console.ret.view = m.viewed // hiding is not leaving: a later return point is this worktree
+				m.console.ret.focus = panelBranches
+			}
+			m = m.closeConsole()
 		}
-		m = m.closeConsole()
-		if m.prViewShown() {
-			m = m.closePRView() // the PR beside it would keep hiding the Branches tab
+		m = m.closeWindows()
+		if m.topLayer() != nil {
+			return m, nil // a popup was waiting under the windows: it is on screen now, and it keeps the keyboard
 		}
 		m = m.activateTab(panelBranches).selectWorktreeBranch(viewed)
-		if n < 2 {
+		switch {
+		case hidden && n < 2:
 			m.statusMsg = i18n.T("console hidden — this repository has one worktree, alt+w cycles them once there are more")
-		} else {
+		case hidden:
 			m.statusMsg = i18n.T("console hidden — alt+w again for the next worktree")
-		}
-		return m, nil
-	}
-	if m.prViewShown() {
-		// An open pull request (its diff or its review) replaces the left
-		// column, hiding the Branches tab this key shows: the first press
-		// closes it — never parks it with the worktree — and stays here
-		// (user ruling 2026-10-14, the console's first hit); the next press
-		// moves on.
-		m = m.closePRView()
-		m = m.activateTab(panelBranches).selectWorktreeBranch(viewed)
-		if n < 2 {
-			m.statusMsg = i18n.T("pull request closed")
-		} else {
-			m.statusMsg = i18n.T("pull request closed — alt+w again for the next worktree")
+		case n < 2:
+			m.statusMsg = i18n.T("this repository has one worktree — alt+w cycles them once there are more")
+		default:
+			m.statusMsg = i18n.T("%s — alt+w again for the next worktree", shortWorktreeName(viewed))
 		}
 		return m, nil
 	}
@@ -863,6 +856,10 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 		return nm, nil
 	}
 	nm.pendingReturnView = ""
+	nm = nm.closeWindows() // the arriving worktree's parked windows: the Branches tab is what alt+w shows
+	if nm.topLayer() == nil {
+		nm = nm.activateTab(panelBranches)
+	}
 	nm = nm.selectWorktreeBranch(wt.Path)
 	if len(skipped) > 0 {
 		nm.statusMsg = i18n.T("%s — %d of %d worktrees (skipped %s: not reachable from here)", shortWorktreeName(wt.Path), next+1, n, strings.Join(skipped, ", "))
@@ -872,47 +869,60 @@ func (m Model) cycleWorktrees() (Model, tea.Cmd) {
 	return nm, nil
 }
 
-// prViewShown reports an open pull request in the files view — its diff
-// (openPRNumber) or the review view of a PR's scope — with nothing over it
-// but views of its files (a diff, a history, a blame): a popup being filled
-// or an open document (the viewer, closed only by its own keys) on top
-// keeps alt+w's ordinary walk.
-func (m Model) prViewShown() bool {
-	if m.filesView == nil {
+// worktreeShownInBranches reports alt+w's "you are here": no window open
+// (no console, no layer, no files view, no stash list), the Branches tab on
+// screen with the keyboard, and its cursor on path's branch row — or on
+// any row when path has none to land on (detached, filtered out).
+func (m Model) worktreeShownInBranches(path string) bool {
+	if m.console != nil || m.topLayer() != nil || m.filesView != nil || m.stashView != nil {
 		return false
 	}
-	if m.openPRNumber() == 0 {
-		st := m.filesReview
-		if st == nil {
-			return false
-		}
-		if _, ok := domain.PRScopeNumber(st.review.Preview); !ok {
-			return false
-		}
+	if m.activeLeftTab != panelBranches || m.focus != panelBranches || m.layout().boxH[panelBranches] <= 0 {
+		return false
 	}
-	if m.layers != nil {
-		for _, l := range m.layers.entries {
-			switch l.(type) {
-			case *diffView, *historyView, *blameView:
-			default:
-				return false
-			}
-		}
-	}
-	return true
+	di, ok := m.worktreeBranchRow(path)
+	return !ok || m.sel[panelBranches] == di
 }
 
-// closePRView closes the open pull request with the views of its files
-// over it, each as its esc would; the caller shows the Branches tab.
-func (m Model) closePRView() Model {
+// closeWindows closes every window, each as its esc (or its background
+// key) would, top down: the diff, history and blame views, the viewer (its
+// document stays open in the background, ctrl+\ lists it) and a split
+// (its documents likewise), then the files view and the stash list. It
+// stops at a layer that is no window — a popup, an editor — which stays
+// with everything beneath it.
+func (m Model) closeWindows() Model {
 	for l := m.topLayer(); l != nil; l = m.topLayer() {
-		if h, ok := l.(*historyView); ok {
-			h.stop()
+		switch v := l.(type) {
+		case *historyView:
+			v.stop()
+			m = m.popLayer()
+		case *diffView, *blameView:
+			m = m.popLayer()
+		case *fileViewer:
+			if v.openFile != nil {
+				m = m.backgroundDoc(v.openFile)
+				if m.topLayer() == l {
+					m = m.popLayer()
+				}
+			} else {
+				m = m.popLayer()
+			}
+		case *splitView:
+			v.leaveChars()
+			v.retire()
+			m = m.removeLayer(v)
+		default:
+			return m
 		}
-		m = m.popLayer()
 	}
 	m.diffTag = ""
-	return m.closeFilesView()
+	if m.filesView != nil {
+		m = m.closeFilesView()
+	}
+	if m.stashView != nil {
+		m = m.closeStashView()
+	}
+	return m
 }
 
 // selectSessionRow puts the Branches cursor on the sub-row of session id
@@ -946,9 +956,21 @@ func (m Model) selectSessionRow(id domain.SessionID) Model {
 // has checked out — the row alt+w lands on; a detached or unlisted one
 // leaves the cursor alone, as does a filter hiding the row.
 func (m Model) selectWorktreeBranch(path string) Model {
+	if di, ok := m.worktreeBranchRow(path); ok {
+		if m.sel == nil {
+			m.sel = map[panel]int{}
+		}
+		m.sel[panelBranches] = di
+	}
+	return m
+}
+
+// worktreeBranchRow is the Branches display row of path's checked-out
+// branch (the branch row, never a sub-row); false when it has none shown.
+func (m Model) worktreeBranchRow(path string) (int, bool) {
 	name := m.worktreeBranch(path)
 	if name == "" {
-		return m
+		return 0, false
 	}
 	bi := -1
 	for i, b := range m.branches {
@@ -958,17 +980,13 @@ func (m Model) selectWorktreeBranch(path string) Model {
 		}
 	}
 	if bi < 0 {
-		return m
+		return 0, false
 	}
 	ents := m.branchEntries()
 	for di, u := range m.displayIndices(panelBranches) {
 		if u < len(ents) && ents[u].br == bi && !ents[u].sub() {
-			if m.sel == nil {
-				m.sel = map[panel]int{}
-			}
-			m.sel[panelBranches] = di
-			break
+			return di, true
 		}
 	}
-	return m
+	return 0, false
 }

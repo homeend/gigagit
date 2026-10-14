@@ -2345,7 +2345,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// alt+w cycles the worktrees themselves: the next one of the list
 		// is shown (the fast switch), around again past the last.
-		if msg.String() == "alt+w" && m.cycleReachable() {
+		if msg.String() == "alt+w" && !m.altCycleBlocked() {
 			return m.cycleWorktrees()
 		}
 		// alt+x opens the text templates window (base panels only, like

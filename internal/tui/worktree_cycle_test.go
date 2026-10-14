@@ -160,16 +160,21 @@ func TestAltWHidesABoundConsoleFirst(t *testing.T) {
 	}
 }
 
-// alt+w from any panel moves at once; Branches follows.
-func TestAltWFromAnotherPanelMovesAtOnce(t *testing.T) {
+// alt+w from another panel: the first press only shows the viewed
+// worktree in Branches (focus + cursor); the next one moves.
+func TestAltWFromAnotherPanelFirstShowsBranches(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, _ = addWorktree(t, m, "wt2")
 	m.focus = panelFiles
 	start := m.viewed
 	m = pressAlt(t, m, 'w')
-	if m.focus != panelBranches || m.activeLeftTab != panelBranches || m.viewed == start {
-		t.Fatalf("focus=%v tab=%v viewed=%q, want Branches on the next worktree", m.focus, m.activeLeftTab, m.viewed)
+	if m.focus != panelBranches || m.activeLeftTab != panelBranches || m.viewed != start {
+		t.Fatalf("first press: focus=%v tab=%v viewed=%q, want Branches on the same worktree", m.focus, m.activeLeftTab, m.viewed)
+	}
+	m = pressAlt(t, m, 'w')
+	if m.viewed == start || m.focus != panelBranches {
+		t.Fatalf("second press: focus=%v viewed=%q, want Branches on the next worktree", m.focus, m.viewed)
 	}
 }
 
@@ -188,7 +193,8 @@ func TestAltWHidesAMaximisedConsoleToo(t *testing.T) {
 }
 
 // alt+w under a console hides it; the diff the console displaced belongs
-// to home and is live again when the next press lands on home.
+// to home, and the press that lands on home closes it (alt+w closes every
+// window, user ruling 2026-10-14).
 func TestAltWUnderAConsoleRestoresHomesDiffOnTheWayBack(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
@@ -206,8 +212,8 @@ func TestAltWUnderAConsoleRestoresHomesDiffOnTheWayBack(t *testing.T) {
 		t.Fatalf("first press: console=%v viewed=%q top=%T, want hidden, wt2, no window", m.console != nil, m.viewed, m.topLayer())
 	}
 	m = pressAlt(t, m, 'w') // the ring: other → home
-	if m.viewed != m.home || m.topLayer() != layer(dv) {
-		t.Fatalf("second press: viewed=%q top=%T, want home, home's diff", m.viewed, m.topLayer())
+	if m.viewed != m.home || m.topLayer() != nil || m.focus != panelBranches {
+		t.Fatalf("second press: viewed=%q top=%T focus=%v, want home, its diff closed, Branches", m.viewed, m.topLayer(), m.focus)
 	}
 }
 
@@ -261,6 +267,7 @@ func TestAltWFollowsTheBranchesTabsSortOrder(t *testing.T) {
 			t.Fatalf("row %d is %s, order says %s", i, name, m.worktrees[sorted[i]].Branch)
 		}
 	}
+	m = m.activateTab(panelBranches).selectWorktreeBranch(m.homeWorktree()) // "you are here": each press moves
 	var visited []model.CheckoutKey
 	for range 3 {
 		m = pressAlt(t, m, 'w')
@@ -277,20 +284,24 @@ func TestAltWFollowsTheBranchesTabsSortOrder(t *testing.T) {
 }
 
 // Over a full-screen view (a diff, a history, a blame, a viewer) the
-// first-hit rule serves nothing — the Branches panel it would reveal is
-// under the view — so alt+w swaps at once; Branches is focused underneath
-// for the presses that follow.
-func TestAltWOverAFullScreenViewSwapsAtOnce(t *testing.T) {
+// first press closes it and shows the viewed worktree in Branches (user
+// ruling 2026-10-14: alt+w closes every window); the next press moves.
+func TestAltWOverAFullScreenViewClosesItFirst(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 160, 40
 	m, other := addWorktree(t, m, "wt2")
 	m.focus = panelFiles
+	start := m.viewed
 	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
 	m = pressAlt(t, m, 'w')
-	if m.viewed != model.KeyOf(other) {
-		t.Fatalf("viewed=%q: the first alt+w over a diff only focused Branches (%s)", m.viewed, m.statusMsg)
+	if m.viewed != start || m.topLayer() != nil {
+		t.Fatalf("first press: viewed=%q top=%T, want the diff closed, same worktree (%s)", m.viewed, m.topLayer(), m.statusMsg)
 	}
 	if !m.panelFocused(panelBranches) || m.activeLeftTab != panelBranches {
-		t.Fatalf("Branches is not focused underneath: focus=%v tab=%v", m.focus, m.activeLeftTab)
+		t.Fatalf("Branches is not focused: focus=%v tab=%v", m.focus, m.activeLeftTab)
+	}
+	m = pressAlt(t, m, 'w')
+	if m.viewed != model.KeyOf(other) {
+		t.Fatalf("second press: viewed=%q, want wt2", m.viewed)
 	}
 }

@@ -6504,15 +6504,20 @@ not leaving: the panels stay), `ret.focus = panelBranches`,
 `activateTab(panelBranches)` + `selectWorktreeBranch(viewed)`, status
 "console hidden — alt+w again for the next worktree" — no move: the
 user sees the worktree the console looked at before the ring takes them
-further. The ONE window kind with a first hit is an open pull request
-(user ruling 2026-10-14): `prViewShown` (the files view shows
-`openPRNumber()` or a review whose `Preview` is a PR scope, with only
-diff/history/blame layers over it — a popup or an open document keeps the
-walk) → `closePRView` (each layer popped as its esc would, then
-`closeFilesView`) — CLOSED, never parked, since the files view replaces
-the left column and hid the Branches tab alt+w activates — Branches, no
-move; under a console its first hit closes the PR too. Otherwise (no
-first-hit step over any other window or a popup — user
+further. **Superseded 2026-10-14 (user ruling): alt+w closes every
+window.** `altCycleBlocked` (a popup, modal, process, action menu, an
+editor — irebase/hunk picker — or any typing) → the key is ignored; the
+same popup rule now holds for alt+a/alt+t/alt+A/alt+T (`cycleReachable`
+lost its `parkableLayer` arm; only the worktree-row swap still parks).
+Otherwise `worktreeShownInBranches(viewed)` (no console/layer/files
+view/stash list, Branches active + focused + on screen, cursor on the
+viewed worktree's branch row — or no such row) decides: false → FIRST
+HIT: hide the console (ret.view = viewed), `closeWindows` (each layer as
+its esc: history `stop`, a viewer `backgroundDoc`, a split `retire`; stops
+at a popup, which then stays on screen), `closeFilesView`,
+`closeStashView`, Branches + cursor, no move; true → the move below, and
+the ARRIVING slot's parked windows close too. (Previously: no first-hit
+step over a window or a popup — user
 ruling 2026-10-09) `activateTab(panelBranches)` and the next of the
 order, wrapping, through `userSwitchView` — a look, like alt+a, never
 `adoptView`: home stays — then `selectWorktreeBranch`: the Branches cursor

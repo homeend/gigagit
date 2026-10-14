@@ -6,10 +6,9 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 )
 
-// alt+w over an open pull request (its files view replaces the left
-// column): the first press CLOSES the PR and shows the Branches tab of the
-// worktree on screen — the tab it activates is no longer hidden behind the
-// PR's tree. The next press moves on.
+// alt+w closes every window (user ruling 2026-10-14). An open pull request
+// (its files view replaces the left column): the first press CLOSES it and
+// shows the Branches tab of the worktree on screen. The next press moves on.
 func TestAltWClosesAnOpenPR(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
@@ -83,19 +82,6 @@ func TestAltWFromAPRFileDiffClosesBoth(t *testing.T) {
 	}
 }
 
-// Any other files view (a commit's files) is not a PR: alt+w keeps today's
-// behaviour for it.
-func TestAltWLeavesACommitFilesViewAlone(t *testing.T) {
-	t.Parallel()
-	m := prDiffModel(t)
-	m.previewOpen = nil
-	m.width, m.height = 120, 40
-	m = pressAlt(t, m, 'w')
-	if m.filesView == nil {
-		t.Fatalf("alt+w closed a non-PR files view")
-	}
-}
-
 // Under a shown console the first press hides it AND closes the PR beside
 // it: Branches is what is on screen.
 func TestAltWUnderAConsoleClosesThePRToo(t *testing.T) {
@@ -116,14 +102,117 @@ func TestAltWUnderAConsoleClosesThePRToo(t *testing.T) {
 	}
 }
 
-// An open document (the viewer) over the PR is closed only by its own keys:
-// alt+w keeps its ordinary walk there.
-func TestAltWLeavesADocumentOverAPROpen(t *testing.T) {
+// Any other files view closes as well: every window does.
+func TestAltWClosesACommitFilesView(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m.previewOpen = nil
+	m.width, m.height = 120, 40
+	m = pressAlt(t, m, 'w')
+	if m.filesView != nil || m.focus != panelBranches {
+		t.Fatalf("alt+w: filesView=%v focus=%v, want it closed, Branches", m.filesView != nil, m.focus)
+	}
+}
+
+// A viewer over the PR goes too (its document to the background).
+func TestAltWClosesAViewerAndThePRBeneath(t *testing.T) {
 	t.Parallel()
 	m := prDiffModel(t)
 	m.width, m.height = 120, 40
 	m = m.pushLayer(&fileViewer{})
-	if m.prViewShown() {
-		t.Fatalf("a viewer over the PR counts as the PR alone")
+	m = pressAlt(t, m, 'w')
+	if m.topLayer() != nil || m.filesView != nil || m.focus != panelBranches {
+		t.Fatalf("alt+w: top=%T filesView=%v focus=%v, want everything closed, Branches", m.topLayer(), m.filesView != nil, m.focus)
+	}
+}
+
+// A popup on screen: alt+w is ignored — nothing closes, nothing moves.
+func TestAltWIgnoredUnderAPopup(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	m.width, m.height = 120, 40
+	m, _ = addWorktree(t, m, "wt2")
+	viewed := m.viewed
+	pop := newContentPopup("x", nil)
+	m = m.pushLayer(pop)
+	m = pressAlt(t, m, 'w')
+	if m.topLayer() != layer(pop) || m.filesView == nil || m.viewed != viewed {
+		t.Fatalf("alt+w under a popup: top=%T filesView=%v viewed=%q, want nothing changed", m.topLayer(), m.filesView != nil, m.viewed)
+	}
+}
+
+// A popup on screen: alt+a / alt+t are ignored too — no console shows.
+func TestAltAIgnoredUnderAPopup(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	startTestSession(t, m, `sleep 5`)
+	m, ok := m.openBranchPopup(false) // a popup the walk used to park
+	if !ok {
+		t.Fatal("precondition: the branch popup did not open")
+	}
+	pop := m.topLayer()
+	for _, r := range []rune{'a', 'A', 't', 'T'} {
+		m = pressAlt(t, m, r)
+		if m.console != nil || m.topLayer() != pop {
+			t.Fatalf("alt+%c under a popup: console=%v top=%T, want ignored", r, m.console != nil, m.topLayer())
+		}
+	}
+}
+
+// Branches focused but its cursor on another branch: the first press only
+// puts the cursor on the viewed worktree's branch; the next one moves.
+func TestAltWFirstSelectsTheViewedWorktree(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, _ = addWorktree(t, m, "wt2")
+	m = m.activateTab(panelBranches)
+	home := m.viewed
+	want, ok := m.worktreeBranchRow(m.viewPath(home))
+	if !ok {
+		t.Fatalf("no branch row for home")
+	}
+	other := 0
+	if want == 0 {
+		other = 1
+	}
+	m.sel[panelBranches] = other
+	m = pressAlt(t, m, 'w')
+	if m.viewed != home || m.sel[panelBranches] != want {
+		t.Fatalf("first press: viewed=%q sel=%d, want home with sel %d (status %q)", m.viewed, m.sel[panelBranches], want, m.statusMsg)
+	}
+	m = pressAlt(t, m, 'w')
+	if m.viewed == home {
+		t.Fatalf("second press stayed home (status %q)", m.statusMsg)
+	}
+}
+
+// The arriving worktree's parked windows close as well: alt+w shows its
+// Branches row.
+func TestAltWClosesTheArrivingWorktreesWindows(t *testing.T) {
+	t.Parallel()
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m, other := addWorktree(t, m, "wt2")
+	m, ok := m.switchView(other)
+	if !ok {
+		t.Fatalf("switch to wt2: %q", m.statusMsg)
+	}
+	m = landView(t, m)
+	m = m.pushLayer(&diffView{})
+	home := m.home
+	m, ok = m.switchView(m.viewPath(home))
+	if !ok {
+		t.Fatalf("switch home: %q", m.statusMsg)
+	}
+	m = landView(t, m)
+	m = m.activateTab(panelBranches).selectWorktreeBranch(m.viewPath(home))
+	m = pressAlt(t, m, 'w')
+	if m.viewed == home {
+		t.Fatalf("alt+w stayed home (status %q)", m.statusMsg)
+	}
+	if m.topLayer() != nil || m.focus != panelBranches {
+		t.Fatalf("arrived: top=%T focus=%v, want wt2's diff closed, Branches", m.topLayer(), m.focus)
 	}
 }
