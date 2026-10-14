@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Copy a branch prefix
+
+### Added
+- **Settings → Branch prefixes: `y`** copies the selected prefix's template
+  text (e.g. `<parent-branch>_BCK_<date:yyyy-MM-dd_HH-mm>`) to the clipboard;
+  the footer and the Settings help say so.
+
 ## Export an overview from where it is listed
 
 ### Added

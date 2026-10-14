@@ -177,3 +177,47 @@ func TestPrefixSettingsCtrlDOpensFormatHelp(t *testing.T) {
 		t.Fatal("form state must survive opening the help sheet")
 	}
 }
+
+// y copies the selected prefix's value (the template text, not its scope tag).
+func TestPrefixSettingsYCopiesSelectedValue(t *testing.T) {
+	t.Parallel()
+	var got string
+	m := captureClip(Model{}, &got)
+	v := &prefixSettingsView{
+		items: []model.Prefix{
+			{ID: "a", Value: "feat/", Scope: model.ProfileScopeGlobal},
+			{ID: "b", Value: "wip/<user:issue>-", Scope: model.ProfileScopeRepo},
+		},
+		sel:  1,
+		mode: pfBrowse,
+	}
+	m = m.pushLayer(v)
+	_, cmd := v.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if cmd == nil {
+		t.Fatal("y returned no command")
+	}
+	cmd()
+	if got != "wip/<user:issue>-" {
+		t.Fatalf("copied %q, want the selected value", got)
+	}
+}
+
+// y on an empty list copies nothing.
+func TestPrefixSettingsYEmptyListNoop(t *testing.T) {
+	t.Parallel()
+	v := &prefixSettingsView{mode: pfBrowse}
+	if _, cmd := v.update(Model{}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}}); cmd != nil {
+		t.Fatal("y on an empty list must not copy")
+	}
+}
+
+// The browse footer advertises y.
+func TestPrefixSettingsFooterAdvertisesCopy(t *testing.T) {
+	t.Parallel()
+	m := Model{}
+	m.width, m.height = 160, 40
+	v := &prefixSettingsView{items: []model.Prefix{{ID: "a", Value: "feat/"}}, mode: pfBrowse}
+	if !strings.Contains(v.box(m), "[y] copy") {
+		t.Fatalf("footer lacks [y] copy:\n%s", v.box(m))
+	}
+}
